@@ -21,6 +21,11 @@ from app.routers.stock import (
     _normalize_emplacement as _stock_normalize_emplacement,
     _mp_is_laizee as _stock_mp_is_laizee,
     _mp_unite_gestion as _stock_mp_unite_gestion,
+    # Conversion des unites de saisie (adhesifs au kilo) : importee plutot que
+    # recopiee, pour que MyProd et MyStock ne puissent pas diverger sur la regle
+    # qui transforme « 1 palette » en kilos.
+    _mp_conditionnement_adhesif as _stock_mp_conditionnement_adhesif,
+    _mp_facteur_saisie as _stock_mp_facteur_saisie,
 )
 
 router = APIRouter()
@@ -175,8 +180,10 @@ def _normalize_stock_mp(row: dict) -> Optional[dict]:
         "quantite_traitee": row.get("quantite"),
         "quantite_avant": row.get("quantite_avant"),
         "quantite_apres": row.get("quantite_apres"),
-        "emplacement_source": row.get("emplacement_source") or "",
-        "emplacement_dest": row.get("emplacement_dest") or "",
+        # Plus d'emplacement sur les matieres premieres : champs conserves a vide
+        # pour ne pas casser un consommateur qui lirait encore la cle.
+        "emplacement_source": "",
+        "emplacement_dest": "",
         "matiere_id": row.get("matiere_id"),
         "matiere_reference": row.get("matiere_reference") or "",
         "matiere_designation": row.get("matiere_designation") or "",
@@ -184,6 +191,9 @@ def _normalize_stock_mp(row: dict) -> Optional[dict]:
         "ref_bl": row.get("ref_bl") or "",
         "prix_eur_m2": row.get("prix_eur_m2"),
         "laize_id": row.get("laize_id"),
+        # Geste d'origine : « 1 palette » plutot que les 1 200 kg enregistres.
+        "unite_saisie": row.get("unite_saisie") or "",
+        "quantite_saisie": row.get("quantite_saisie"),
         "note": row.get("note") or "",
     }
 
@@ -246,6 +256,7 @@ def _fetch_stock_saisies_du_jour(
           mm.created_at, mm.created_by, mm.created_by_name,
           mm.no_dossier, mm.machine, mm.client, mm.designation,
           mm.prix_eur_m2, mm.laize_id,
+          mm.unite_saisie, mm.quantite_saisie,
           mp.reference AS matiere_reference,
           mp.designation AS matiere_designation,
           mp.categorie AS matiere_categorie,
@@ -4035,16 +4046,17 @@ async def create_saisie_stock(request: Request):
             except (TypeError, ValueError):
                 raise HTTPException(400, "laize_id invalide") from None
 
-        emplacement_source = body.get("emplacement_source")
-        emplacement_dest = body.get("emplacement_dest")
-        if emplacement_source:
-            emplacement_source = str(emplacement_source).strip().upper() or None
-        if emplacement_dest:
-            emplacement_dest = str(emplacement_dest).strip().upper() or None
+        # Les matieres premieres ne se gerent plus par emplacement (decision produit,
+        # cf. migration mp_adhesif_kg). Tout emplacement encore envoye par un client
+        # non rafraichi est ignore : on n'ecrit plus que NULL.
+        emplacement_source = None
+        emplacement_dest = None
         ref_bl = (body.get("ref_bl") or "").strip() or None
 
         mp = conn.execute(
-            "SELECT id, categorie FROM matieres_premieres WHERE id=? AND actif=1",
+            """SELECT id, categorie,
+                      unites_par_palette, cartons_par_palette, kg_par_carton
+               FROM matieres_premieres WHERE id=? AND actif=1""",
             (matiere_id,),
         ).fetchone()
         if not mp:
@@ -4052,19 +4064,15 @@ async def create_saisie_stock(request: Request):
         laizee = _stock_mp_is_laizee(mp["categorie"])
         unite = _stock_mp_unite_gestion(mp["categorie"])
 
-        def _valid_or_none(code_e, *, needed):
-            if not code_e:
-                if needed and not laizee:
-                    raise HTTPException(400, "Emplacement obligatoire")
-                return None
-            if not _stock_is_valid_emplacement(code_e):
-                raise HTTPException(400, f"Format emplacement invalide : {code_e}")
-            return _stock_normalize_emplacement(code_e)
-
-        if type_mvt == "entree":
-            emplacement_dest = _valid_or_none(emplacement_dest, needed=False)
-        else:
-            emplacement_source = _valid_or_none(emplacement_source, needed=True)
+        # Unite de saisie (adhesifs : kg | carton | palette). L'operateur sort des
+        # palettes completes et remet en stock des cartons ; sans conversion, un
+        # « 1 » saisi vaudrait 1 kg au lieu de 1 200.
+        unite_saisie = (body.get("unite_saisie") or "").strip().lower() or None
+        cond_mp = _stock_mp_conditionnement_adhesif(mp)
+        facteur_mp = _stock_mp_facteur_saisie(unite_saisie, mp["categorie"], cond_mp)
+        quantite_saisie = quantite if unite_saisie else None
+        if facteur_mp != 1.0:
+            quantite = quantite * facteur_mp
 
         if laizee:
             if laize_id is None:
@@ -4130,13 +4138,15 @@ async def create_saisie_stock(request: Request):
                (matiere_id, type_mouvement, quantite, quantite_avant, quantite_apres,
                 ref_bl, note, emplacement_source, emplacement_dest,
                 created_at, created_by, created_by_name, laize_id,
-                no_dossier, machine, client, designation)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                no_dossier, machine, client, designation,
+                unite_saisie, quantite_saisie)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 matiere_id, type_mvt, quantite, quantite_avant, quantite_apres,
                 ref_bl, note, emplacement_source, emplacement_dest,
                 date_op, created_by, created_by_name, laize_id,
                 no_dossier, machine or None, client or None, designation or None,
+                unite_saisie, quantite_saisie,
             ),
         )
         mvt_id = cur.lastrowid

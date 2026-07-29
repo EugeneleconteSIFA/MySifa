@@ -2721,18 +2721,21 @@ function switchView(name){
     // (cas où le fetch initial a déjà résolu au boot).
     if(typeof setCalView === 'function') setCalView('week');
     else renderCal();
-    // Étape 2 : refetch et rerend une seconde fois. Le fetch initial peut
-    // avoir résolu avant que le container Planning ne soit visible, ce qui
-    // fait rater le positionnement absolute des events.
-    (async () => {
-      await refreshPlanning();
-      renderCal();
-      // Étape 3 : filet de sécurité — rerender après stabilisation du
-      // layout, pour couvrir les navigateurs qui calculent les
-      // dimensions tardivement.
-      setTimeout(() => { try{ renderCal(); }catch(e){} }, 150);
-      setTimeout(() => { try{ renderCal(); }catch(e){} }, 500);
-    })();
+    // v2.5.9 : refetch + rerender differes via setTimeout(0) -- refreshPlanning
+    // utilise _fmtDateISO qui est declare dans un <script> SUIVANT (ligne ~9086).
+    // Au boot, tant que script1 (init) tourne, script2 n'est pas encore parse :
+    // _fmtDateISO est undefined et refreshPlanning throw silencieusement dans son
+    // try/catch, laissant PLANNING_STATE.list vide -> calendrier vide au refresh.
+    // Le setTimeout(0) pousse l'execution apres le parsing complet des scripts.
+    setTimeout(function(){
+      (async () => {
+        await refreshPlanning();
+        renderCal();
+        // Filet de securite : rerender apres stabilisation du layout.
+        setTimeout(() => { try{ renderCal(); }catch(e){} }, 150);
+        setTimeout(() => { try{ renderCal(); }catch(e){} }, 500);
+      })();
+    }, 0);
   }
   // Vues opérateur : recharge la liste à l'arrivée.
   if(name === 'op-tasks' && typeof opLoadTasks === 'function'){

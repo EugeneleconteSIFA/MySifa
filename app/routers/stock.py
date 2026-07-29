@@ -136,11 +136,19 @@ _STOCK_MATIERES_ADMIN_ROLES = frozenset({"superadmin", "direction", "administrat
 _STOCK_VALORISATION_USD_ROLES = frozenset({"superadmin", "direction"})
 
 
+def _mp_is_adhesif(categorie: str) -> bool:
+    return (categorie or "").strip().lower() == "adhesif"
+
+
 def _mp_unite_gestion(categorie: str) -> str:
     """Unité de gestion du stock selon la catégorie matière première."""
     cat = (categorie or "").strip().lower()
     if cat in ("frontal", "glassine", "complexe"):
         return "bobine"
+    if cat == "adhesif":
+        # Depuis la migration mp_adhesif_kg : le stock adhésif se tient au kilo.
+        # La palette et le carton restent des unités de SAISIE (cf. _mp_conv_*).
+        return "kg"
     if cat == "palette":
         return "palette"
     if cat == "carton":
@@ -153,7 +161,92 @@ def _mp_unite_gestion(categorie: str) -> str:
 # Catégories qui ont une notion d'« unité d'achat » distincte de l'unité de gestion (palette).
 # Le prix saisi est à l'unité d'achat ; le conditionnement (unites_par_palette) permet
 # de calculer la valorisation = stock_palettes × unites_par_palette × prix_unitaire.
-_MP_CATEGORIES_AVEC_CONDITIONNEMENT = frozenset({"carton", "adhesif", "mandrin"})
+# L'adhésif n'en fait plus partie : son stock EST en kg et son prix EST en €/kg,
+# la valorisation est donc le simple produit des deux, sans conditionnement.
+_MP_CATEGORIES_AVEC_CONDITIONNEMENT = frozenset({"carton", "mandrin"})
+
+# Unités de saisie acceptées pour un mouvement / un inventaire d'adhésif.
+_MP_UNITES_SAISIE_ADHESIF = frozenset({"kg", "carton", "palette"})
+
+
+def _mp_conditionnement_adhesif(r) -> dict:
+    """Conditionnement à l'achat d'un adhésif, normalisé.
+
+    - cartons_par_palette / kg_par_carton : les deux champs saisis en paramètres.
+    - kg_par_palette : leur produit quand les deux sont renseignés, sinon la
+      valeur historique de `unites_par_palette` (les références antérieures à la
+      bascule ne connaissent que leur kg/palette). C'est cette valeur qui sert à
+      convertir une saisie « à la palette ».
+    """
+    keys = set(r.keys()) if hasattr(r, "keys") else set()
+
+    def _num(col):
+        if col not in keys or r[col] is None:
+            return None
+        try:
+            v = float(r[col])
+        except (TypeError, ValueError):
+            return None
+        return v if v > 0 else None
+
+    cartons = _num("cartons_par_palette")
+    kg_carton = _num("kg_par_carton")
+    kg_palette = cartons * kg_carton if (cartons and kg_carton) else _num("unites_par_palette")
+    return {
+        "cartons_par_palette": cartons,
+        "kg_par_carton": kg_carton,
+        "kg_par_palette": kg_palette,
+    }
+
+
+def _mp_unites_saisie_disponibles(categorie: str, cond: dict) -> list[str]:
+    """Unités de saisie proposables pour un mouvement, dans l'ordre d'affichage.
+
+    Le kilo est toujours disponible (c'est l'unité de stock). La palette et le
+    carton n'apparaissent que si le conditionnement correspondant est renseigné —
+    proposer « 1 palette » sans savoir combien elle pèse produirait un stock faux.
+    """
+    if not _mp_is_adhesif(categorie):
+        return []
+    dispo = ["kg"]
+    if cond.get("kg_par_carton"):
+        dispo.append("carton")
+    if cond.get("kg_par_palette"):
+        dispo.append("palette")
+    return dispo
+
+
+def _mp_facteur_saisie(unite_saisie: Optional[str], categorie: str, cond: dict) -> float:
+    """Facteur de conversion « unité de saisie → unité de gestion ».
+
+    Lève une 400 explicite plutôt que de convertir au petit bonheur : une saisie
+    à la palette sur une référence sans conditionnement doit être refusée, pas
+    silencieusement interprétée comme des kilos.
+    """
+    u = (unite_saisie or "").strip().lower()
+    if not u:
+        return 1.0
+    if not _mp_is_adhesif(categorie):
+        if u in ("", _mp_unite_gestion(categorie)):
+            return 1.0
+        raise HTTPException(400, "Unité de saisie non gérée pour cette catégorie.")
+    if u not in _MP_UNITES_SAISIE_ADHESIF:
+        raise HTTPException(400, f"Unité de saisie invalide : {unite_saisie}")
+    if u == "kg":
+        return 1.0
+    if u == "carton":
+        f = cond.get("kg_par_carton")
+        if not f:
+            raise HTTPException(
+                400, "Saisie au carton impossible : kg par carton non renseigné sur la référence."
+            )
+        return float(f)
+    f = cond.get("kg_par_palette")
+    if not f:
+        raise HTTPException(
+            400, "Saisie à la palette impossible : conditionnement non renseigné sur la référence."
+        )
+    return float(f)
 
 
 def _mp_unite_achat(categorie: str) -> str:
@@ -177,6 +270,32 @@ def _mp_unite_achat(categorie: str) -> str:
 
 def _mp_a_conditionnement(categorie: str) -> bool:
     return (categorie or "").strip().lower() in _MP_CATEGORIES_AVEC_CONDITIONNEMENT
+
+
+def _mp_parse_conditionnement_adhesif(
+    categorie: str, body: dict
+) -> tuple[Optional[float], Optional[float]]:
+    """Lit cartons_par_palette / kg_par_carton d'un payload adhésif.
+
+    Renvoie (None, None) hors catégorie adhésif : ces champs n'ont pas de sens
+    ailleurs et sont ignorés silencieusement plutôt que de faire échouer un
+    formulaire générique qui les enverrait à vide.
+    """
+    if not _mp_is_adhesif(categorie):
+        return None, None
+
+    def _read(key: str, label: str) -> Optional[float]:
+        if key not in body or body.get(key) in (None, ""):
+            return None
+        try:
+            v = float(body.get(key))
+        except (TypeError, ValueError):
+            raise HTTPException(400, f"{label} invalide.") from None
+        if v <= 0:
+            raise HTTPException(400, f"{label} doit être > 0.")
+        return v
+
+    return _read("cartons_par_palette", "Cartons par palette"), _read("kg_par_carton", "Kg par carton")
 
 
 def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
@@ -226,6 +345,14 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
         else:
             prix_ok = (prix_m2 or 0) > 0
         complete = has_laizes and prix_ok and metres_ok
+    adhesif = _mp_is_adhesif(cat)
+    cond = _mp_conditionnement_adhesif(r) if adhesif else {
+        "cartons_par_palette": None, "kg_par_carton": None, "kg_par_palette": None,
+    }
+    if adhesif:
+        # Un adhésif sans kg/palette ne peut ni se saisir à la palette ni être
+        # converti : on le signale « à compléter » comme une matière laizée sans laize.
+        complete = bool(cond["kg_par_palette"])
     sous_section = None
     if "sous_section" in r.keys() and r["sous_section"]:
         sous_section = str(r["sous_section"]).strip() or None
@@ -250,6 +377,11 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
         "avec_conditionnement": _mp_a_conditionnement(cat),
         "unites_par_palette": unites_par_palette,
         "unite_achat": _mp_unite_achat(cat) if _mp_a_conditionnement(cat) else None,
+        "adhesif": adhesif,
+        "cartons_par_palette": cond["cartons_par_palette"],
+        "kg_par_carton": cond["kg_par_carton"],
+        "kg_par_palette": cond["kg_par_palette"],
+        "unites_saisie": _mp_unites_saisie_disponibles(cat, cond),
         "complete": complete,
     }
 
@@ -712,21 +844,19 @@ _HISTORIQUE_SQL_MP = """
         mp.categorie,
         mp.reference,
         mp.designation,
+        -- Doit rester aligné sur _mp_unite_gestion() : 'complexe' et 'adhesif'
+        -- manquaient et retombaient sur 'palette'.
         CASE
-            WHEN mp.categorie IN ('frontal', 'glassine') THEN 'bobine'
-            WHEN mp.categorie = 'palette' THEN 'palette'
-            WHEN mp.categorie = 'carton' THEN 'palette'
+            WHEN mp.categorie IN ('frontal', 'glassine', 'complexe') THEN 'bobine'
+            WHEN mp.categorie = 'adhesif' THEN 'kg'
+            WHEN mp.categorie = 'autre' THEN 'unite'
             ELSE 'palette'
         END AS unite,
-        CASE
-            WHEN m.type_mouvement = 'transfert'
-                 AND TRIM(COALESCE(m.emplacement_source,'')) != ''
-                 AND TRIM(COALESCE(m.emplacement_dest,'')) != ''
-                THEN TRIM(m.emplacement_source) || ' → ' || TRIM(m.emplacement_dest)
-            WHEN TRIM(COALESCE(m.emplacement_dest,'')) != '' THEN TRIM(m.emplacement_dest)
-            WHEN TRIM(COALESCE(m.emplacement_source,'')) != '' THEN TRIM(m.emplacement_source)
-            ELSE NULL
-        END AS emplacement,
+        -- Les matières premières ne se gèrent plus par emplacement : la colonne
+        -- reste dans le SELECT (schéma commun avec les produits finis) mais n'est
+        -- plus alimentée, y compris pour les mouvements antérieurs.
+        NULL AS emplacement,
+        l.label AS laize_label,
         m.type_mouvement,
         m.quantite,
         m.quantite_avant,
@@ -737,6 +867,7 @@ _HISTORIQUE_SQL_MP = """
         m.created_by_name
     FROM mp_mouvements m
     JOIN matieres_premieres mp ON mp.id = m.matiere_id
+    LEFT JOIN mp_laizes l ON l.id = m.laize_id
     WHERE {where}
 """
 
@@ -820,6 +951,9 @@ def _historique_row_dict(r) -> dict:
         "designation": r["designation"],
         "unite": r["unite"],
         "emplacement": r["emplacement"],
+        # Présent uniquement sur les lignes matière première (mp_mouvements) :
+        # remplace l'emplacement comme discriminant entre deux mouvements.
+        "laize_label": r["laize_label"] if "laize_label" in r.keys() else None,
         "type_mouvement": r["type_mouvement"],
         "quantite": _f(r["quantite"]),
         "quantite_avant": _f(r["quantite_avant"]),
@@ -3330,6 +3464,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
                    mp.metres_lineaires_par_bobine, mp.prix_eur_m2,
                    COALESCE(mp.prix_par_laize, 0) AS prix_par_laize,
                    mp.unites_par_palette,
+                   mp.cartons_par_palette, mp.kg_par_carton,
                    mp.sous_section,
                    COALESCE(mp.intervalle_inventaire_jours, 180) AS intervalle_inventaire_jours,
                    COALESCE(s.quantite, 0) AS quantite
@@ -3474,16 +3609,25 @@ async def create_matiere_premiere(request: Request):
         if unites_par_palette <= 0:
             raise HTTPException(400, "Unités par palette doit être > 0.")
 
+    # Conditionnement à l'achat des adhésifs : cartons/palette + kg/carton.
+    # `unites_par_palette` reste renseigné (= leur produit) car c'est lui qui sert
+    # de kg/palette effectif pour convertir une saisie à la palette.
+    cartons_par_palette, kg_par_carton = _mp_parse_conditionnement_adhesif(categorie, body)
+    if cartons_par_palette and kg_par_carton:
+        unites_par_palette = cartons_par_palette * kg_par_carton
+
     with get_db() as conn:
         try:
             cur = conn.execute(
                 """
                 INSERT INTO matieres_premieres (
-                    categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section, unites_par_palette
+                    categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section,
+                    unites_par_palette, cartons_par_palette, kg_par_carton
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section, unites_par_palette),
+                (categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section,
+                 unites_par_palette, cartons_par_palette, kg_par_carton),
             )
             matiere_id = cur.lastrowid
             conn.execute(
@@ -3576,18 +3720,38 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
         sets.append("intervalle_inventaire_jours=?")
         params.append(v_int)
 
-    if not sets:
-        raise HTTPException(400, "Aucun champ à mettre à jour.")
-
-    sets.append("updated_at=strftime('%Y-%m-%dT%H:%M:%S','now','localtime')")
-    params.append(matiere_id)
-
     with get_db() as conn:
         row = conn.execute(
             "SELECT id, categorie FROM matieres_premieres WHERE id=?", (matiere_id,)
         ).fetchone()
         if not row:
             raise HTTPException(404, "Matière non trouvée.")
+
+        # Conditionnement à l'achat (adhésifs) — traité ici et non plus haut car il
+        # dépend de la catégorie, qu'on ne connaît qu'après lecture de la ligne.
+        if "cartons_par_palette" in body or "kg_par_carton" in body:
+            if not _mp_is_adhesif(row["categorie"]):
+                raise HTTPException(
+                    400, "Conditionnement cartons/palette et kg/carton réservé aux adhésifs."
+                )
+            cpp, kgc = _mp_parse_conditionnement_adhesif(row["categorie"], body)
+            sets.append("cartons_par_palette=?")
+            params.append(cpp)
+            sets.append("kg_par_carton=?")
+            params.append(kgc)
+            # kg/palette effectif = produit des deux. On ne l'écrase que si les deux
+            # sont connus : sinon on conserve la valeur historique, qui reste la
+            # seule base de conversion disponible pour cette référence.
+            if cpp and kgc:
+                sets.append("unites_par_palette=?")
+                params.append(cpp * kgc)
+
+        if not sets:
+            raise HTTPException(400, "Aucun champ à mettre à jour.")
+
+        sets.append("updated_at=strftime('%Y-%m-%dT%H:%M:%S','now','localtime')")
+        params.append(matiere_id)
+
         if "palettes_par_pile" in body:
             if row["categorie"] != "palette":
                 raise HTTPException(
@@ -3603,7 +3767,9 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
                     400,
                     "Palettes par pile doit être une valeur positive.",
                 )
-        if "unites_par_palette" in body and not _mp_a_conditionnement(row["categorie"]):
+        if ("unites_par_palette" in body
+                and not _mp_a_conditionnement(row["categorie"])
+                and not _mp_is_adhesif(row["categorie"])):
             raise HTTPException(
                 400,
                 "Unités par palette uniquement pour cartons, adhésifs et mandrins.",
@@ -3682,29 +3848,15 @@ async def mouvement_matiere_premiere(request: Request):
 
     ref_bl = (body.get("ref_bl") or "").strip() or None
     note = (body.get("note") or "").strip() or None
-    emplacement_source = body.get("emplacement_source")
-    emplacement_dest = body.get("emplacement_dest")
-    if emplacement_source is not None:
-        emplacement_source = str(emplacement_source).strip().upper() or None
-    if emplacement_dest is not None:
-        emplacement_dest = str(emplacement_dest).strip().upper() or None
+    # Les matières premières ne se gèrent plus par emplacement (décision produit) :
+    # tout emplacement encore envoyé par un ancien client est ignoré, et les colonnes
+    # emplacement_source / emplacement_dest sont désormais toujours écrites à NULL.
+    emplacement_source = None
+    emplacement_dest = None
 
-    is_fabrication_user = user.get("role") == "fabrication"
-
-    def _check_emplacement_code(code: Optional[str], allow_null: bool = False) -> Optional[str]:
-        # Emplacement optionnel pour toutes les matières premières (décision produit).
-        # Le paramètre allow_null et is_fabrication_user restent pour cohérence avec les
-        # anciens call sites mais ne changent plus le comportement : un emplacement vide
-        # est toujours accepté et vaut None.
-        if not code:
-            return None
-        if not _is_valid_emplacement(code):
-            raise HTTPException(400, f"Format emplacement invalide : {code}")
-        return _normalize_emplacement(code)
-
-    # Les contrôles d'emplacement dépendent de la catégorie (laizée ou non) et
-    # sont donc effectués une fois que la matière a été récupérée dans le bloc DB
-    # ci-dessous.
+    # Unité de saisie (adhésifs : kg | carton | palette). Absente ou vide = unité
+    # de gestion de la catégorie, c'est-à-dire le comportement historique.
+    unite_saisie = (body.get("unite_saisie") or "").strip().lower() or None
 
     if type_mvt in ("entree", "sortie") and quantite <= 0:
         raise HTTPException(400, "Quantité doit être positive.")
@@ -3739,7 +3891,8 @@ async def mouvement_matiere_premiere(request: Request):
     with get_db() as conn:
         mp = conn.execute(
             """SELECT id, categorie, COALESCE(prix_par_laize, 0) AS prix_par_laize,
-                      COALESCE(prix_eur_m2, 0) AS prix_matiere_eur_m2
+                      COALESCE(prix_eur_m2, 0) AS prix_matiere_eur_m2,
+                      unites_par_palette, cartons_par_palette, kg_par_carton
                FROM matieres_premieres WHERE id=? AND actif=1""",
             (matiere_id,),
         ).fetchone()
@@ -3749,10 +3902,14 @@ async def mouvement_matiere_premiere(request: Request):
         laizee = _mp_is_laizee(mp["categorie"])
         prix_par_laize_mode = bool(int(mp["prix_par_laize"] or 0))
 
-        if type_mvt == "entree":
-            emplacement_dest = _check_emplacement_code(emplacement_dest, allow_null=laizee)
-        elif type_mvt == "sortie":
-            emplacement_source = _check_emplacement_code(emplacement_source, allow_null=laizee)
+        # Conversion de l'unité de saisie vers l'unité de gestion. On mémorise le
+        # geste d'origine (quantite_saisie / unite_saisie) pour pouvoir réafficher
+        # « −1 palette (1 200 kg) » dans l'historique.
+        cond = _mp_conditionnement_adhesif(mp)
+        facteur = _mp_facteur_saisie(unite_saisie, mp["categorie"], cond)
+        quantite_saisie = quantite if unite_saisie else None
+        if facteur != 1.0:
+            quantite = quantite * facteur
 
         if laizee:
             if laize_id is None:
@@ -3883,8 +4040,9 @@ async def mouvement_matiere_premiere(request: Request):
                 matiere_id, type_mouvement, quantite,
                 quantite_avant, quantite_apres,
                 ref_bl, note, emplacement_source, emplacement_dest,
-                created_by, created_by_name, laize_id, prix_eur_m2
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                created_by, created_by_name, laize_id, prix_eur_m2,
+                unite_saisie, quantite_saisie
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 matiere_id,
@@ -3900,11 +4058,18 @@ async def mouvement_matiere_premiere(request: Request):
                 created_by_name,
                 laize_id,
                 prix_eur_m2_mvt,
+                unite_saisie,
+                quantite_saisie,
             ),
         )
         conn.commit()
 
-    return {"ok": True, "quantite_apres": quantite_apres, "laize_id": laize_id}
+    return {
+        "ok": True,
+        "quantite_apres": quantite_apres,
+        "laize_id": laize_id,
+        "unite": unite_mp,
+    }
 
 
 @router.get("/api/stock/matieres/{matiere_id}/mouvements")
@@ -3917,11 +4082,15 @@ def list_matiere_mouvements(matiere_id: int, request: Request):
         ).fetchone()
         if not mp:
             raise HTTPException(404, "Matière non trouvée.")
+        # La laize est jointe ici : sur une matière laizée, un mouvement sans sa
+        # laize est illisible (« +1 bob. » sur laquelle des 4 laizes ?).
         rows = conn.execute(
             """
-            SELECT m.*, mp.reference, mp.designation
+            SELECT m.*, mp.reference, mp.designation,
+                   l.label AS laize_label, l.valeur_mm AS laize_valeur_mm
             FROM mp_mouvements m
             JOIN matieres_premieres mp ON mp.id = m.matiere_id
+            LEFT JOIN mp_laizes l ON l.id = m.laize_id
             WHERE m.matiere_id=?
             ORDER BY m.created_at DESC
             LIMIT 50
@@ -3956,6 +4125,7 @@ def matieres_inventaire_liste(request: Request):
         rows = conn.execute(
             """
             SELECT mp.id, mp.reference, mp.designation, mp.categorie, mp.couleur,
+                   mp.unites_par_palette, mp.cartons_par_palette, mp.kg_par_carton,
                    COALESCE(mp.intervalle_inventaire_jours, ?) AS intervalle_jours,
                    COALESCE(s.quantite, 0) AS stock_actuel,
                    (SELECT MAX(date_validation) FROM inventaires_matieres
@@ -3986,6 +4156,11 @@ def matieres_inventaire_liste(request: Request):
         d["statut"] = _invmat_status(jours, d["intervalle_jours"])
         d["unite"] = _mp_unite_gestion(d["categorie"])
         d["laizee"] = _mp_is_laizee(d["categorie"])
+        _cond_l = _mp_conditionnement_adhesif(r)
+        d["adhesif"] = _mp_is_adhesif(d["categorie"])
+        d["kg_par_palette"] = _cond_l["kg_par_palette"]
+        d["kg_par_carton"] = _cond_l["kg_par_carton"]
+        d["unites_saisie"] = _mp_unites_saisie_disponibles(d["categorie"], _cond_l)
         result.append(d)
     return {"items": result}
 
@@ -4000,6 +4175,7 @@ def matiere_inventaire_detail(matiere_id: int, request: Request):
     with get_db() as conn:
         mp = conn.execute(
             """SELECT id, reference, designation, categorie, couleur,
+                      unites_par_palette, cartons_par_palette, kg_par_carton,
                       COALESCE(intervalle_inventaire_jours, ?) AS intervalle_jours
                FROM matieres_premieres WHERE id=? AND actif=1""",
             (_INVMAT_DEFAULT_INTERVAL_DAYS, matiere_id),
@@ -4010,6 +4186,14 @@ def matiere_inventaire_detail(matiere_id: int, request: Request):
         laizee = _mp_is_laizee(mp_d["categorie"])
         mp_d["laizee"] = laizee
         mp_d["unite"] = _mp_unite_gestion(mp_d["categorie"])
+        # Conditionnement : permet à l'UI de proposer un comptage en palettes ou
+        # en cartons plutôt qu'en kilos pour les adhésifs.
+        _cond_inv = _mp_conditionnement_adhesif(mp)
+        mp_d["adhesif"] = _mp_is_adhesif(mp_d["categorie"])
+        mp_d["cartons_par_palette"] = _cond_inv["cartons_par_palette"]
+        mp_d["kg_par_carton"] = _cond_inv["kg_par_carton"]
+        mp_d["kg_par_palette"] = _cond_inv["kg_par_palette"]
+        mp_d["unites_saisie"] = _mp_unites_saisie_disponibles(mp_d["categorie"], _cond_inv)
 
         lignes: list[dict] = []
         if laizee:
@@ -4056,10 +4240,14 @@ def matiere_inventaire_detail(matiere_id: int, request: Request):
 async def matiere_inventaire_valider(matiere_id: int, request: Request):
     """Valide l'inventaire d'une matière.
 
-    Body : { lignes: [{ laize_id, quantite_comptee, commentaire }] }.
+    Body : { lignes: [{ laize_id, quantite_comptee, unite_saisie, commentaire }] }.
     Pour chaque ligne : calcule l'écart, crée un mp_mouvements type='ajustement'
     si écart != 0 (avec note auto), met à jour mp_stock/mp_stock_laize,
     et insère un enregistrement dans inventaires_matieres.
+
+    `unite_saisie` permet de compter un adhésif en palettes ou en cartons plutôt
+    qu'en kilos ; la conversion vers l'unité de gestion est faite ici, et le geste
+    d'origine est conservé pour l'historique.
     """
     user = require_stock_write(request)
     body = await request.json()
@@ -4076,13 +4264,16 @@ async def matiere_inventaire_valider(matiere_id: int, request: Request):
 
     with get_db() as conn:
         mp = conn.execute(
-            """SELECT id, reference, categorie FROM matieres_premieres WHERE id=? AND actif=1""",
+            """SELECT id, reference, categorie,
+                      unites_par_palette, cartons_par_palette, kg_par_carton
+               FROM matieres_premieres WHERE id=? AND actif=1""",
             (matiere_id,),
         ).fetchone()
         if not mp:
             raise HTTPException(404, "Matière non trouvée.")
         laizee = _mp_is_laizee(mp["categorie"])
         unite = _mp_unite_gestion(mp["categorie"])
+        cond_inv = _mp_conditionnement_adhesif(mp)
 
         results = []
         for idx, li in enumerate(lignes_in):
@@ -4106,6 +4297,13 @@ async def matiere_inventaire_valider(matiere_id: int, request: Request):
                 raise HTTPException(400, f"Ligne {idx + 1} : quantite_comptee invalide.") from None
             if q_comptee < 0:
                 raise HTTPException(400, f"Ligne {idx + 1} : quantité négative.")
+
+            # Unité de comptage → unité de gestion
+            unite_saisie_li = (li.get("unite_saisie") or "").strip().lower() or None
+            facteur_li = _mp_facteur_saisie(unite_saisie_li, mp["categorie"], cond_inv)
+            q_saisie_li = q_comptee if unite_saisie_li else None
+            if facteur_li != 1.0:
+                q_comptee = q_comptee * facteur_li
 
             commentaire = (li.get("commentaire") or "").strip() or None
 
@@ -4173,8 +4371,9 @@ async def matiere_inventaire_valider(matiere_id: int, request: Request):
                        matiere_id, type_mouvement, quantite,
                        quantite_avant, quantite_apres,
                        ref_bl, note, emplacement_source, emplacement_dest,
-                       created_by, created_by_name, laize_id, prix_eur_m2
-                   ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       created_by, created_by_name, laize_id, prix_eur_m2,
+                       unite_saisie, quantite_saisie
+                   ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     matiere_id,
                     "ajustement",
@@ -4189,6 +4388,8 @@ async def matiere_inventaire_valider(matiere_id: int, request: Request):
                     operateur_nom,
                     laize_id,
                     None,
+                    unite_saisie_li,
+                    q_saisie_li,
                 ),
             )
             mouvement_id = cur.lastrowid
@@ -4198,8 +4399,8 @@ async def matiere_inventaire_valider(matiere_id: int, request: Request):
                 """INSERT INTO inventaires_matieres (
                        matiere_id, laize_id, quantite_avant, quantite_comptee,
                        ecart, commentaire, operateur_email, operateur_nom,
-                       date_validation, mouvement_id
-                   ) VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                       date_validation, mouvement_id, unite_saisie, quantite_saisie
+                   ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     matiere_id,
                     laize_id,
@@ -4211,6 +4412,8 @@ async def matiere_inventaire_valider(matiere_id: int, request: Request):
                     operateur_nom,
                     now,
                     mouvement_id,
+                    unite_saisie_li,
+                    q_saisie_li,
                 ),
             )
             results.append({
@@ -6921,6 +7124,16 @@ def count_matieres_incompletes(request: Request):
             WHERE mp.actif = 1 AND mp.categorie IN ('frontal','glassine','complexe')
             """
         ).fetchall()
+        # Adhésifs : « incomplet » = kg/palette inconnu, donc impossible à saisir
+        # à la palette et impossible à convertir depuis l'ancien stock en palettes.
+        rows_adh = conn.execute(
+            """
+            SELECT mp.id, mp.categorie, mp.reference, mp.designation,
+                   mp.unites_par_palette, mp.cartons_par_palette, mp.kg_par_carton
+            FROM matieres_premieres mp
+            WHERE mp.actif = 1 AND LOWER(TRIM(mp.categorie)) = 'adhesif'
+            """
+        ).fetchall()
     incomplete = []
     for r in rows:
         nb_laizes = int(r["nb_laizes"] or 0)
@@ -6928,6 +7141,14 @@ def count_matieres_incompletes(request: Request):
         has_laizes = nb_laizes > 0
         all_priced = has_laizes and nb_priced == nb_laizes
         if not _mp_is_complete(r, has_laizes, all_laizes_priced=all_priced):
+            incomplete.append({
+                "id": r["id"],
+                "categorie": r["categorie"],
+                "reference": r["reference"],
+                "designation": r["designation"],
+            })
+    for r in rows_adh:
+        if not _mp_conditionnement_adhesif(r)["kg_par_palette"]:
             incomplete.append({
                 "id": r["id"],
                 "categorie": r["categorie"],

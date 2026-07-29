@@ -7550,6 +7550,151 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 215, "mp_fiche_mapping")
 
+    # Migration 216 : MyStock — les adhésifs se gèrent au KILO, plus à la palette.
+    #
+    # GARDE-FOU PAR NOM, PAS PAR VERSION (délibéré) : le numéro 216 a déjà servi
+    # sur d'autres branches (cf. le bloc AO juste en dessous). Un garde-fou
+    # `WHERE version=216` ferait silencieusement sauter cette migration sur une
+    # base où 216 est déjà posé par une autre branche → stock adhésif jamais
+    # converti, chiffres faux et invisibles. On teste donc le NOM, qui est unique
+    # à ce chantier. Le numéro reste renseigné pour l'ordre de lecture.
+    #
+    # Ce que fait la migration :
+    #   1. Colonnes de conditionnement à l'achat sur matieres_premieres
+    #      (cartons_par_palette, kg_par_carton). `unites_par_palette` conserve son
+    #      rôle de kg/palette effectif : il reste la source utilisée pour convertir
+    #      une saisie « à la palette », et il est recalculé = cartons × kg/carton
+    #      dès que les deux nouveaux champs sont renseignés.
+    #   2. Traçabilité de l'unité de saisie sur mp_mouvements et
+    #      inventaires_matieres : l'opérateur sort « 1 palette », on stocke 1200 kg
+    #      ET le couple (1, 'palette') pour pouvoir réafficher son geste.
+    #   3. Conversion des données existantes, palettes → kg, pour chaque adhésif :
+    #      stock courant, seuil d'alerte, historique complet des mouvements et
+    #      lignes d'inventaire. L'historique est converti car la courbe de
+    #      valorisation à date passée se reconstitue depuis mp_mouvements
+    #      (quantite_avant) : le laisser en palettes fausserait le graphe.
+    #   4. Les adhésifs dont le kg/palette est inconnu ne peuvent pas être
+    #      convertis. Leur stock est remis à 0 avec un mouvement d'ajustement
+    #      explicite qui laisse une trace lisible dans l'historique, et un
+    #      inventaire est requis pour les réamorcer. Leur seuil passe à 0.
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE name='mp_adhesif_kg' LIMIT 1"
+    ).fetchone():
+        mp_cols = {r[1] for r in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
+        if "cartons_par_palette" not in mp_cols:
+            conn.execute("ALTER TABLE matieres_premieres ADD COLUMN cartons_par_palette REAL")
+        if "kg_par_carton" not in mp_cols:
+            conn.execute("ALTER TABLE matieres_premieres ADD COLUMN kg_par_carton REAL")
+
+        mvt_cols = {r[1] for r in conn.execute("PRAGMA table_info(mp_mouvements)").fetchall()}
+        if "unite_saisie" not in mvt_cols:
+            conn.execute("ALTER TABLE mp_mouvements ADD COLUMN unite_saisie TEXT")
+        if "quantite_saisie" not in mvt_cols:
+            conn.execute("ALTER TABLE mp_mouvements ADD COLUMN quantite_saisie REAL")
+
+        inv_cols = {r[1] for r in conn.execute("PRAGMA table_info(inventaires_matieres)").fetchall()}
+        if inv_cols:  # table absente sur une base très ancienne → rien à faire
+            if "unite_saisie" not in inv_cols:
+                conn.execute("ALTER TABLE inventaires_matieres ADD COLUMN unite_saisie TEXT")
+            if "quantite_saisie" not in inv_cols:
+                conn.execute("ALTER TABLE inventaires_matieres ADD COLUMN quantite_saisie REAL")
+
+        _adh_now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        _adh_rows = conn.execute(
+            """SELECT id, COALESCE(unites_par_palette, 0) AS kg_par_palette
+               FROM matieres_premieres
+               WHERE LOWER(TRIM(COALESCE(categorie, ''))) = 'adhesif'"""
+        ).fetchall()
+        _adh_converties = 0
+        _adh_bloquees = 0
+        for _adh in _adh_rows:
+            _mid = int(_adh[0])
+            try:
+                _f = float(_adh[1] or 0)
+            except (TypeError, ValueError):
+                _f = 0.0
+            if _f > 0:
+                conn.execute(
+                    "UPDATE mp_stock SET quantite = COALESCE(quantite, 0) * ? WHERE matiere_id = ?",
+                    (_f, _mid),
+                )
+                conn.execute(
+                    "UPDATE matieres_premieres SET seuil_alerte = COALESCE(seuil_alerte, 0) * ? WHERE id = ?",
+                    (_f, _mid),
+                )
+                # quantite_avant / quantite_apres peuvent être NULL sur de vieux
+                # mouvements : NULL * f reste NULL, ce qui est le comportement voulu.
+                conn.execute(
+                    """UPDATE mp_mouvements
+                       SET quantite       = COALESCE(quantite, 0) * ?,
+                           quantite_avant = quantite_avant * ?,
+                           quantite_apres = quantite_apres * ?
+                       WHERE matiere_id = ?""",
+                    (_f, _f, _f, _mid),
+                )
+                if inv_cols:
+                    conn.execute(
+                        """UPDATE inventaires_matieres
+                           SET quantite_avant   = quantite_avant * ?,
+                               quantite_comptee = quantite_comptee * ?,
+                               ecart            = ecart * ?
+                           WHERE matiere_id = ?""",
+                        (_f, _f, _f, _mid),
+                    )
+                _adh_converties += 1
+            else:
+                _st = conn.execute(
+                    "SELECT COALESCE(quantite, 0) AS q FROM mp_stock WHERE matiere_id = ?",
+                    (_mid,),
+                ).fetchone()
+                _q_avant = float(_st[0] or 0) if _st else 0.0
+                if abs(_q_avant) > 1e-9:
+                    conn.execute(
+                        """INSERT INTO mp_mouvements
+                               (matiere_id, type_mouvement, quantite,
+                                quantite_avant, quantite_apres, note,
+                                created_at, created_by_name)
+                           VALUES (?, 'ajustement', ?, ?, 0, ?, ?, 'Migration')""",
+                        (
+                            _mid,
+                            abs(_q_avant),
+                            _q_avant,
+                            "Bascule des adhésifs au kilo — conditionnement (kg/palette) "
+                            "non renseigné, stock remis à 0. Renseigne le conditionnement "
+                            "puis valide un inventaire pour réamorcer le stock.",
+                            _adh_now,
+                        ),
+                    )
+                    conn.execute(
+                        "UPDATE mp_stock SET quantite = 0 WHERE matiere_id = ?", (_mid,)
+                    )
+                conn.execute(
+                    "UPDATE matieres_premieres SET seuil_alerte = 0 WHERE id = ?", (_mid,)
+                )
+                _adh_bloquees += 1
+        # Pose du marqueur. `_record_schema_migration` fait un INSERT OR IGNORE sur
+        # `version` (clé primaire) : si une autre branche a déjà posé 216 sous un
+        # autre nom, l'insertion serait ignorée, le nom 'mp_adhesif_kg' n'existerait
+        # jamais et la conversion rejouerait à CHAQUE démarrage (stock multiplié à
+        # l'infini). On vérifie donc que le marqueur est bien là, et on le repose
+        # sur le premier numéro libre le cas échéant.
+        _record_schema_migration(conn, 216, "mp_adhesif_kg")
+        if not conn.execute(
+            "SELECT 1 FROM schema_migrations WHERE name='mp_adhesif_kg' LIMIT 1"
+        ).fetchone():
+            _free = conn.execute(
+                "SELECT COALESCE(MAX(version), 0) + 1 AS v FROM schema_migrations"
+            ).fetchone()
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_migrations (version, name, applied_at) VALUES (?,?,?)",
+                (int(_free[0]), "mp_adhesif_kg", datetime.now().isoformat()),
+            )
+        conn.commit()
+        print(
+            f"[MySifa] migration mp_adhesif_kg : {_adh_converties} adhesif(s) converti(s) "
+            f"en kg, {_adh_bloquees} en attente de conditionnement."
+        )
+
     # ── AO conditionnement (condi) + marge — schéma garde-fou sur COLONNE ────
     # ATTENTION, choix délibéré : ces colonnes NE sont PAS versionnées via
     # schema_migrations. Historique : le versionnage séquentiel entre branches
