@@ -362,9 +362,11 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-event[data-draggable="1"]{cursor:grab}
 .cal-event[data-draggable="1"]:active{cursor:grabbing}
 .cal-event.is-past{cursor:not-allowed}
-/* v2.5.25 : badge warning si aucun operateur assigne -- coin haut-droit */
-.cal-event .cal-event-noop{position:absolute;top:3px;right:3px;width:16px;height:16px;background:var(--warn,#f59e0b);color:#fff;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.35);cursor:help;z-index:6;border:1.5px solid var(--card,#111827)}
-.cal-event .cal-event-noop:hover{filter:brightness(1.1);transform:scale(1.1)}
+/* v2.5.26 : pictogramme triangle warning -- plus visible qu'un badge cercle */
+.cal-event .cal-event-noop{position:absolute;top:4px;right:4px;width:22px;height:22px;background:#fff;color:var(--warn,#f59e0b);border-radius:4px;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.4);cursor:help;z-index:6;padding:2px;transition:transform .15s,filter .15s;animation:calNoopPulse 2s ease-in-out infinite}
+.cal-event .cal-event-noop svg{width:100%;height:100%;stroke-width:2.4;fill:none;stroke:var(--warn,#f59e0b)}
+.cal-event .cal-event-noop:hover{transform:scale(1.15);filter:brightness(1.05);animation:none}
+@keyframes calNoopPulse{0%,100%{box-shadow:0 2px 6px rgba(0,0,0,.4),0 0 0 0 rgba(245,158,11,.6)}50%{box-shadow:0 2px 6px rgba(0,0,0,.4),0 0 0 6px rgba(245,158,11,0)}}
 .cal-event.is-past::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(255,255,255,.06) 8px,rgba(255,255,255,.06) 16px);pointer-events:none;border-radius:inherit}
 /* v2.5.16 : drag live -- le bloc reste visible et bouge vraiment (comme Google Calendar).
    La bordure et l'ombre appuyees signalent l'etat 'drag actif'. */
@@ -3442,11 +3444,11 @@ function _makeEventBlock(item){
     const mine = (ev.operators || []).some(o => o.id === S.me.id);
     if(mine) div.classList.add('is-mine');
   }
-  // v2.5.25 : badge warning si aucun operateur assigne (admin uniquement, evite le bruit cote operateur).
+  // v2.5.26 : pictogramme triangle warning si aucun operateur assigne (admin uniquement).
   if(MAINT_ROLE === 'admin' && !(ev.operators && ev.operators.length)){
     const noop = document.createElement('div');
     noop.className = 'cal-event-noop';
-    noop.textContent = '!';
+    noop.innerHTML = '<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
     noop.title = 'Aucun op\u00e9rateur assign\u00e9 \u2014 cliquer pour \u00e9diter';
     noop.addEventListener('click', function(e){
       e.stopPropagation();
