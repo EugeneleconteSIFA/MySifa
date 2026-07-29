@@ -5376,10 +5376,23 @@ function openOpsHistoryDetail(id){
 async function deleteOp(id){
   const item = (OPS_STATE.list || []).find(o => o.id === id);
   if(!item){ if(typeof showToast === 'function') showToast('Ligne introuvable.', 'danger'); return; }
-  // Non_planifie ou pas encore persiste en DB -> hard delete direct.
+  // Non_planifie ou pas encore persiste en DB -> modale stylisee (pas d'invalidation
+  // possible pour une op ponctuelle : elle n'existe pas dans un creneau, y a rien a preserver).
   if(item._source !== 'db' || item._event_source === 'non_planifie'){
-    if(!confirm('Supprimer cette op\u00e9ration ? Cette action est d\u00e9finitive.')) return;
-    return _hardDeleteOpFromHistory(item);
+    const summary =
+      '<div style="font-size:14px;font-weight:700;color:var(--text)">' + escHtml(item.type || '\u2014') + '</div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-top:4px">' +
+        escHtml(item.machine || '') + (item.date_saisie ? ' \u00b7 ' + escHtml(_fmtDateFRHistoric(item.date_saisie)) : '') +
+        (item.operateur ? ' \u00b7 par ' + escHtml(item.operateur) : '') +
+      '</div>';
+    _openHistoryDeleteModal({
+      title: 'Supprimer cette saisie ?',
+      summary: summary,
+      warning: 'Cette op\u00e9ration a \u00e9t\u00e9 enregistr\u00e9e hors cr\u00e9neau planifi\u00e9. Sa suppression est <strong>d\u00e9finitive</strong> et n\'affecte aucune t\u00e2che planifi\u00e9e.',
+      confirmLabel: 'Supprimer',
+      onConfirm: () => _hardDeleteOpFromHistory(item),
+    });
+    return;
   }
   // Planifie : offre le choix Invalider / Supprimer entierement.
   _openInvalidateOrDeleteOpModal(item);
@@ -5498,37 +5511,119 @@ async function _doHardDeleteFromModal(item, btn){
   }
 }
 
+// v2.5.12 : modale generique de confirmation de suppression pour toute ligne
+// d'historique (ops, alertes, controles). Style aligne sur _openDeleteCaseModal.
+// opts : { title, summary (HTML), warning (HTML), confirmLabel, onConfirm() }
+function _openHistoryDeleteModal(opts){
+  opts = opts || {};
+  const existing = document.getElementById('hist-del-modal-overlay');
+  if(existing) existing.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'hist-del-modal-overlay';
+  wrap.className = 'op-modal-overlay';
+  wrap.style.cssText = 'display:flex;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center';
+  wrap.addEventListener('click', (e) => { if(e.target === wrap) _closeHistoryDeleteModal(); });
+  const escHandler = (e) => { if(e.key === 'Escape'){ e.preventDefault(); _closeHistoryDeleteModal(); } };
+  document.addEventListener('keydown', escHandler, true);
+  wrap._escHandler = escHandler;
+
+  const title       = opts.title       || 'Supprimer cette ligne ?';
+  const summaryHtml = opts.summary     || '';
+  const warningHtml = opts.warning     || '';
+  const confirmLabel= opts.confirmLabel|| 'Supprimer';
+
+  wrap.innerHTML = ''
+    + '<div class="op-modal" role="dialog" aria-modal="true" style="max-width:520px;width:calc(100% - 40px);background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,0.4)">'
+    +   '<div style="color:var(--danger);font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">'
+    +     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>'
+    +     title
+    +   '</div>'
+    +   (summaryHtml ? '<div style="padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:14px">' + summaryHtml + '</div>' : '')
+    +   (warningHtml ? '<div style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:16px">' + warningHtml + '</div>' : '')
+    +   '<div style="display:flex;justify-content:flex-end;gap:10px">'
+    +     '<button type="button" id="hist-del-cancel-btn" style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>'
+    +     '<button type="button" id="hist-del-confirm-btn" style="background:var(--danger);color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">' + escHtml(confirmLabel) + '</button>'
+    +   '</div>'
+    + '</div>';
+
+  document.body.appendChild(wrap);
+  const cancelBtn  = document.getElementById('hist-del-cancel-btn');
+  const confirmBtn = document.getElementById('hist-del-confirm-btn');
+  if(cancelBtn)  cancelBtn.addEventListener('click', _closeHistoryDeleteModal);
+  if(confirmBtn) confirmBtn.addEventListener('click', async () => {
+    if(confirmBtn.dataset._busy === '1') return;
+    confirmBtn.dataset._busy = '1';
+    confirmBtn.disabled = true;
+    if(cancelBtn) cancelBtn.disabled = true;
+    try{
+      if(typeof opts.onConfirm === 'function') await opts.onConfirm();
+      _closeHistoryDeleteModal();
+    }catch(e){
+      confirmBtn.dataset._busy = '';
+      confirmBtn.disabled = false;
+      if(cancelBtn) cancelBtn.disabled = false;
+    }
+  });
+  requestAnimationFrame(() => { if(cancelBtn) cancelBtn.focus(); });
+}
+
+function _closeHistoryDeleteModal(){
+  const w = document.getElementById('hist-del-modal-overlay');
+  if(!w) return;
+  try{ if(w._escHandler) document.removeEventListener('keydown', w._escHandler, true); }catch(_){}
+  w.remove();
+}
+
 async function _hardDeleteOpFromHistory(item){
-  // v2.2.10 : suppression persistée en DB (avant : localStorage-only → l'op
-  // réapparaissait au prochain rebuild du cache depuis la DB).
+  // v2.5.12 : DELETE avec gestion 409 (confirm_token requis quand un event
+  // contient des ops termine -- toujours le cas pour un non_planifie puisqu'il
+  // EST l'op saisie). On retry automatiquement avec le token retourne.
   if(item._source === 'db' && item._event_id && item._op_id){
     try{
-      // Non_planifie = 1 op = 1 event → DELETE l'event entier (CASCADE nettoie l'op).
-      // Planifie = créneau partagé → DELETE juste cette op (les autres restent).
-      const url = (item._event_source === 'non_planifie')
+      // Non_planifie = 1 op = 1 event -> DELETE l'event entier.
+      // Planifie = creneau partage -> DELETE juste cette op.
+      const baseUrl = (item._event_source === 'non_planifie')
         ? '/api/maintenance/events/' + encodeURIComponent(item._event_id)
         : '/api/maintenance/events/' + encodeURIComponent(item._event_id) + '/ops/' + encodeURIComponent(item._op_id);
-      const r = await fetch(url, { method:'DELETE', credentials:'include' });
+      let r = await fetch(baseUrl, { method:'DELETE', credentials:'include' });
+      if(r.status === 409){
+        // Backend nous demande un confirm_token (protection anti-suppression
+        // de traces d'ops termine). On l'extrait et on retry -- c'est deja
+        // ce que l'admin a explicitement confirme via la modale.
+        let payload = null;
+        try{ payload = await r.json(); }catch(_){}
+        const token = payload && payload.detail && payload.detail.confirm_token;
+        if(token){
+          const retryUrl = baseUrl + (baseUrl.includes('?') ? '&' : '?') + 'confirm_token=' + encodeURIComponent(token);
+          r = await fetch(retryUrl, { method:'DELETE', credentials:'include' });
+        }
+      }
       if(!r.ok){
         if(r.status === 502 || r.status === 503){
-          if(typeof showToast === 'function') showToast('Serveur temporairement indisponible, réessaye dans un instant.', 'danger');
+          if(typeof showToast === 'function') showToast('Serveur temporairement indisponible, reessaye dans un instant.', 'danger');
           throw new Error('Serveur indisponible');
         }
-        const err = await r.json().catch(()=>({}));
-        if(typeof showToast === 'function') showToast('Erreur suppression : ' + (err.detail || r.status), 'danger');
-        throw new Error(err.detail || String(r.status));
+        let msg = String(r.status);
+        try{
+          const err = await r.json();
+          if(err && err.detail){
+            msg = (typeof err.detail === 'string') ? err.detail : (err.detail.message || JSON.stringify(err.detail));
+          }
+        }catch(_){}
+        if(typeof showToast === 'function') showToast('Erreur suppression : ' + msg, 'danger');
+        throw new Error(msg);
       }
       if(Array.isArray(_OPS_HISTORY_DB_CACHE)){
         _OPS_HISTORY_DB_CACHE = _OPS_HISTORY_DB_CACHE.filter(x => x.id !== item.id);
       }
     }catch(e){
-      if(typeof showToast === 'function') showToast('Erreur réseau : ' + (e.message || e), 'danger');
+      // showToast deja emis a l'interieur -- on relance juste pour signaler.
       throw e;
     }
   }
   OPS_STATE.list = OPS_STATE.list.filter(o => o.id !== item.id);
   renderOps();
-  if(typeof showToast === 'function') showToast('Opération supprimée.', 'success');
+  if(typeof showToast === 'function') showToast('Operation supprimee.', 'success');
   if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
   if(typeof refreshPlanning === 'function') refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
   if(typeof opLoadTasks === 'function') opLoadTasks().catch(() => {});
@@ -7468,34 +7563,63 @@ function addControle(e){
   showToast('Contrôle enregistré.', 'info');
 }
 function deleteCtrl(id){
-  if(!confirm('Supprimer ce contrôle ?')) return;
-  CTRL_STATE.list = CTRL_STATE.list.filter(c => c.id !== id);
-  saveCtrl();
-  renderCtrl();
+  // v2.5.12 : modale MySifa au lieu du confirm() natif.
+  const list = (typeof CTRL_STATE !== 'undefined' && CTRL_STATE && Array.isArray(CTRL_STATE.list)) ? CTRL_STATE.list : [];
+  const c = list.find(x => x.id === id) || {};
+  const dateFR = c.date_saisie ? _fmtDateFRHistoric(c.date_saisie) : '';
+  const summary =
+    '<div style="font-size:14px;font-weight:700;color:var(--text)">' + escHtml(c.type || 'Contr\u00f4le') + '</div>' +
+    '<div style="font-size:12px;color:var(--muted);margin-top:4px">' +
+      (c.machine ? escHtml(c.machine) : '') +
+      (dateFR ? (c.machine ? ' \u00b7 ' : '') + escHtml(dateFR) : '') +
+    '</div>';
+  _openHistoryDeleteModal({
+    title: 'Supprimer ce contr\u00f4le ?',
+    summary: summary,
+    warning: 'Cette action est d\u00e9finitive.',
+    confirmLabel: 'Supprimer',
+    onConfirm: () => {
+      CTRL_STATE.list = CTRL_STATE.list.filter(x => x.id !== id);
+      saveCtrl();
+      renderCtrl();
+      if(typeof showToast === 'function') showToast('Contr\u00f4le supprim\u00e9.', 'info');
+    },
+  });
 }
 
-async function deleteAck(prefixedId){
-  if(!confirm('Supprimer cette ligne d\'historique ?\n\nElle restera comptée pour le dernier acquittement de l\'alerte associée si c\'est la plus récente.')) return;
-  // Format prefixedId : "ack-{numeric_id}"
+function deleteAck(prefixedId){
+  // v2.5.12 : remplace le confirm() natif par une modale MySifa.
   const m = String(prefixedId).match(/^ack-(\d+)$/);
   if(!m){ showToast('Identifiant invalide.', 'danger'); return; }
   const ackId = m[1];
-  try{
-    const r = await fetch('/api/maintenance/alert-acks/' + ackId, {
-      method: 'DELETE',
-      credentials: 'same-origin',
-    });
-    if(!r.ok){
-      let msg = 'Suppression refusée';
-      try { const j = await r.json(); msg = j.detail || msg; } catch(e){}
-      showToast(msg, 'danger');
-      return;
-    }
-    showToast('Ligne supprimée.', 'info');
-    await loadCtrlAcks();
-  } catch(e){
-    showToast('Erreur réseau — réessaie.', 'danger');
-  }
+  // Retrouve la ligne pour construire un resume lisible dans la modale.
+  const list = (typeof CTRL_STATE !== 'undefined' && CTRL_STATE && Array.isArray(CTRL_STATE.list)) ? CTRL_STATE.list : [];
+  const c = list.find(x => x.id === prefixedId) || {};
+  const dateFR = c.date_saisie ? _fmtDateFRHistoric(c.date_saisie) : '';
+  const summary =
+    '<div style="font-size:14px;font-weight:700;color:var(--text)">' + escHtml(c.type || 'Alerte') + '</div>' +
+    '<div style="font-size:12px;color:var(--muted);margin-top:4px">' +
+      (c.machine ? escHtml(c.machine) : '') +
+      (dateFR ? (c.machine ? ' \u00b7 ' : '') + escHtml(dateFR) : '') +
+      (c.operateur ? ' \u00b7 par ' + escHtml(c.operateur) : '') +
+    '</div>';
+  _openHistoryDeleteModal({
+    title: 'Supprimer cette ligne d\'historique ?',
+    summary: summary,
+    warning: 'Elle restera compt\u00e9e pour le dernier acquittement de l\'alerte associ\u00e9e si c\'est la plus r\u00e9cente.',
+    confirmLabel: 'Supprimer',
+    onConfirm: async () => {
+      const r = await fetch('/api/maintenance/alert-acks/' + ackId, { method: 'DELETE', credentials: 'same-origin' });
+      if(!r.ok){
+        let msg = 'Suppression refus\u00e9e';
+        try { const j = await r.json(); msg = j.detail || msg; } catch(e){}
+        showToast(msg, 'danger');
+        throw new Error(msg);
+      }
+      showToast('Ligne supprim\u00e9e.', 'info');
+      await loadCtrlAcks();
+    },
+  });
 }
 function sortCtrl(field){
   if(CTRL_STATE.sortBy === field){
@@ -8086,7 +8210,7 @@ function renderCtrl(){
       // Actions
       let actionHtml = '';
       if(c._source === 'alert'){
-        actionHtml = '<button type="button" class="ops-row-btn del" onclick="deleteAck(\'' + escAttr(c.id) + '\')" title="Supprimer cette saisie (correction d\'erreur)">' +
+        actionHtml = '<button type="button" class="ops-row-btn del" onclick="event.stopPropagation();deleteAck(\'' + escAttr(c.id) + '\')" title="Supprimer cette saisie (correction d\'erreur)">' +
           '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
         '</button>';
       } else {
