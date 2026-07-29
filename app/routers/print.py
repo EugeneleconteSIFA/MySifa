@@ -25,6 +25,7 @@ Endpoints admin (superadmin uniquement) :
   PATCH  /api/print/templates/{id}        — édition (contenu ZPL/EPL)
   DELETE /api/print/templates/{id}        — suppression
   POST   /api/print/test                  — impression de test sur une imprimante
+  POST   /api/print/test-template         — imprime un template en cours d'édition (données d'exemple)
 
 Endpoints utilisateur (tous rôles connectés) :
   GET    /api/print/usages                — liste des usages métier disponibles
@@ -818,6 +819,13 @@ class TestPrintPayload(BaseModel):
     imprimante_id: int
 
 
+class TestTemplatePayload(BaseModel):
+    """Impression de test d'un template en cours d'edition (donnees d'exemple)."""
+    imprimante_id: int
+    contenu: str = Field(min_length=1)
+    template_id: Optional[int] = None
+
+
 # ─── Aperçu WYSIWYG d'un template ZPL via labelary.com ────────────────
 
 def _labelary_render_zpl(zpl: str, dpi: int, width_mm: int, height_mm: int) -> bytes:
@@ -849,6 +857,20 @@ def _labelary_render_zpl(zpl: str, dpi: int, width_mm: int, height_mm: int) -> b
         raise HTTPException(status_code=502, detail=f"Labelary reseau : {e.reason}")
 
 
+# Donnees d'exemple utilisees pour resoudre les placeholders dans l'apercu
+# WYSIWYG et dans l'impression de test d'un template.
+PREVIEW_MOCK_DATA = {
+    "lot_numero": "LOT-2026-07-DEMO-42",
+    "fournisseur": "Papeterie Exemple SA",
+    "fsc_label": "FSC C012345",
+    "fsc_banner": "FSC",
+    "ref_produit": "PAPIER-KRAFT-80G",
+    "code_barre": "MYSIFA-2026-07-DEMO",
+    "operateur_nom": "Eugene L.",
+    "date_reception": "20/07/2026",
+}
+
+
 class PreviewPayload(BaseModel):
     contenu: str = Field(min_length=1)
     langage: str = "zpl"
@@ -865,19 +887,8 @@ def preview_template(payload: PreviewPayload, request: Request):
     require_superadmin(request)
     if payload.langage != "zpl":
         raise HTTPException(status_code=400, detail="Apercu supporte uniquement le ZPL pour l'instant.")
-    # Donnees mock pour resoudre les placeholders
-    mock = {
-        "lot_numero": "LOT-2026-07-DEMO-42",
-        "fournisseur": "Papeterie Exemple SA",
-        "fsc_label": "FSC C012345",
-        "fsc_banner": "FSC",
-        "ref_produit": "PAPIER-KRAFT-80G",
-        "code_barre": "MYSIFA-2026-07-DEMO",
-        "operateur_nom": "Eugene L.",
-        "date_reception": "20/07/2026",
-    }
     try:
-        rendered_bytes = render_template(payload.contenu, mock, payload.langage)
+        rendered_bytes = render_template(payload.contenu, dict(PREVIEW_MOCK_DATA), payload.langage)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erreur rendu template : {e}")
     rendered_str = rendered_bytes.decode("utf-8", errors="replace")
@@ -984,6 +995,47 @@ def test_print(payload: TestPrintPayload, request: Request):
         )
         conn.commit()
     return {"ok": True, "job_id": cur.lastrowid, "message": f"Test envoyé à {imp['nom']}."}
+
+
+@router.post("/test-template")
+def test_print_template(payload: TestTemplatePayload, request: Request):
+    """Impression de test d'un template en cours d'edition.
+
+    Contrairement a /test (etiquette generique hardcodee), on envoie ici le
+    contenu exact du champ editeur, resolu avec les memes donnees d'exemple
+    que l'apercu labelary. Permet de comparer apercu ecran / rendu papier.
+    """
+    u = require_superadmin(request)
+    with get_db() as conn:
+        imp = conn.execute(
+            "SELECT id,nom,agent_id,langage,actif FROM imprimantes WHERE id=?",
+            (payload.imprimante_id,),
+        ).fetchone()
+        if not imp:
+            raise HTTPException(status_code=404, detail="Imprimante introuvable.")
+        if not imp["actif"]:
+            raise HTTPException(status_code=409, detail="Imprimante désactivée.")
+
+        import json as _json
+
+        data = dict(PREVIEW_MOCK_DATA)
+        data["nom"] = imp["nom"]
+        try:
+            payload_bytes = render_template(payload.contenu, data, imp["langage"])
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Erreur rendu template : {e}")
+
+        now = _now()
+        cur = conn.execute(
+            "INSERT INTO print_jobs (imprimante_id,agent_id,usage_key,template_id,payload,"
+            "payload_langage,status,created_at,created_by,data_json) "
+            "VALUES (?,?,?,?,?,?,'pending',?,?,?)",
+            (imp["id"], imp["agent_id"], "test", payload.template_id, payload_bytes,
+             imp["langage"], now, u.get("email"), _json.dumps(data, ensure_ascii=False)),
+        )
+        conn.commit()
+    return {"ok": True, "job_id": cur.lastrowid,
+            "message": f"Test envoyé à {imp['nom']} — données d'exemple."}
 
 
 # ═══════════════════════════════════════════════════════════════════════
