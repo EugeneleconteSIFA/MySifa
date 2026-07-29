@@ -376,12 +376,38 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 /* Nav buttons highlighted comme drop zones cross-week */
 .cal-nav button.cal-drop-target-nav{background:var(--accent);color:var(--accent-fg,#0a0e17);animation:calDropPulse .6s ease-in-out infinite alternate}
 @keyframes calDropPulse{from{box-shadow:0 0 0 0 rgba(34,211,238,.6)}to{box-shadow:0 0 0 8px rgba(34,211,238,0)}}
-.cal-event{position:absolute;background:var(--cal-ev-bg,var(--accent));color:var(--cal-ev-fg,#fff);border-radius:7px;padding:6px 10px;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:13px;font-weight:700;line-height:1.25;cursor:pointer;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.20);z-index:2;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;transition:filter .12s,box-shadow .12s,transform .08s}  /* v2.5.21 : nom centre */
+/* v2.5.22 : container queries -- le contenu s'adapte a la taille reelle de la case */
+.cal-event{position:absolute;background:var(--cal-ev-bg,var(--accent));color:var(--cal-ev-fg,#fff);border-radius:7px;padding:5px 8px;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-weight:700;line-height:1.25;cursor:pointer;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.20);z-index:2;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:2px;transition:filter .12s,box-shadow .12s,transform .08s;container-type:size;container-name:calev}
+/* Base : que le titre est visible, taille reduite. Les autres apparaissent progressivement. */
+.cal-event .cal-event-title{font-weight:800;font-size:11.5px;letter-spacing:.1px;color:inherit;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-overflow:ellipsis;word-break:normal;overflow-wrap:break-word;line-height:1.2;width:100%;max-width:100%}
+.cal-event .cal-event-sub,.cal-event .cal-event-time,.cal-event .cal-event-count{display:none;font-weight:600;color:inherit;opacity:.9;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-event .cal-event-sub{font-size:11px;opacity:.85}
+.cal-event .cal-event-time{font-size:11px;font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;letter-spacing:.2px}
+.cal-event .cal-event-count{font-size:10.5px;opacity:.75;font-style:italic}
+/* Cases plus larges : nom un peu plus gros + une seule ligne si tres large */
+@container calev (min-width: 90px){
+  .cal-event .cal-event-title{font-size:13px}
+}
+@container calev (min-width: 130px){
+  .cal-event .cal-event-title{font-size:14px}
+}
+/* Cases moyennes (assez hautes) : ajoute la machine en sous-titre */
+@container calev (min-height: 60px) and (min-width: 90px){
+  .cal-event .cal-event-sub{display:block}
+}
+/* Cases hautes : ajoute les horaires */
+@container calev (min-height: 90px) and (min-width: 90px){
+  .cal-event .cal-event-time{display:block}
+}
+/* Cases tres hautes : ajoute le compteur d'ops */
+@container calev (min-height: 130px) and (min-width: 100px){
+  .cal-event .cal-event-count{display:block}
+}
+/* Fallback pour navigateurs sans container queries : les infos secondaires restent cachees
+   -- le titre suffit largement dans ce cas. */
 .cal-event:hover{filter:brightness(1.10);box-shadow:0 4px 14px rgba(0,0,0,.36);z-index:4}
 .cal-event:active{transform:scale(.99)}
-.cal-event-title{font-weight:800;font-size:14px;letter-spacing:.2px;color:inherit;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-overflow:ellipsis;word-break:normal;overflow-wrap:break-word;line-height:1.25;width:100%}  /* v2.5.21 : 2 lignes max, ellipsis propre */
 .cal-event-machine{font-size:12.5px;font-weight:700;opacity:.96;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-flex;align-items:center;gap:4px}
-.cal-event-time{font-size:12px;font-weight:700;opacity:.92;font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;letter-spacing:.2px;margin-top:auto}
 /* v2.2.51 : ops list dans cal-event = scrollable + texte wrapable */
 .cal-event-ops{display:flex;flex-direction:column;gap:2px;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.35) transparent}
 .cal-event-ops::-webkit-scrollbar{width:5px}
@@ -3394,17 +3420,25 @@ function _makeEventBlock(item){
   // machine en fallback) + "Afficher les details". La liste des ops et l'horaire
   // sont visibles au clic dans la modale details -- pas de bruit visuel dans le
   // calendrier.
-  // v2.5.21 : contenu = juste le nom, centre vertical + horizontal, ellipsis.
-  // Nom du creneau si defini, sinon nom du modele lie, sinon machine en fallback.
+  // v2.5.22 : rendu adaptatif via container queries CSS.
+  // On injecte TOUT dans le DOM (nom + machine + horaires + compteur ops),
+  // et le CSS decide quoi afficher selon la taille reelle de la case.
+  // Petit bloc : nom seul. Bloc large : tout.
   let title = (ev.nom || '').trim();
+  let hasCustomName = !!title;
   if(!title && ev.template_id && typeof TEMPLATES_STATE !== 'undefined' && TEMPLATES_STATE && Array.isArray(TEMPLATES_STATE.list)){
     const tmpl = TEMPLATES_STATE.list.find(t => t.id === ev.template_id);
-    if(tmpl && tmpl.name) title = tmpl.name;
+    if(tmpl && tmpl.name){ title = tmpl.name; hasCustomName = true; }
   }
   if(!title) title = ev.machine || '\u2014';
-  let inner = '';
-  if(height >= 20){
-    inner += '<div class="cal-event-title">' + escHtml(title) + '</div>';
+  let inner = '<div class="cal-event-title">' + escHtml(title) + '</div>';
+  // Machine en sous-titre (seulement si le titre principal n\'est pas deja la machine)
+  if(hasCustomName && ev.machine){
+    inner += '<div class="cal-event-sub">' + escHtml(ev.machine) + '</div>';
+  }
+  inner += '<div class="cal-event-time">' + escHtml(ev.start || '') + ' \u2013 ' + escHtml(ev.end || '') + '</div>';
+  if(opsCount > 0){
+    inner += '<div class="cal-event-count">' + opsCount + ' op\u00e9ration' + (opsCount > 1 ? 's' : '') + '</div>';
   }
   div.innerHTML = inner;
   div.title = (ev.machine || '') + '\n' + ev.start + ' – ' + ev.end +
