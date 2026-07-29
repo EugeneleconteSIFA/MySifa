@@ -390,6 +390,10 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-event-ops::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.5)}
 .cal-event-op{font-size:12.5px;font-weight:600;line-height:1.3;color:inherit;opacity:.96;white-space:normal;overflow-wrap:break-word;word-break:normal;letter-spacing:.1px;padding-right:2px}  /* v2.5.19 : preserve les mots entiers */
 .cal-event-op-more{opacity:.75;font-style:italic;font-size:11.5px}
+/* v2.5.20 : sous-titre "Afficher les details" -- discret, sous le titre */
+.cal-event-hint{font-size:11.5px;font-weight:600;opacity:.75;letter-spacing:.1px;display:flex;align-items:center;gap:4px;margin-top:auto}
+.cal-event-hint::before{content:"\2192";font-size:12px;opacity:.9}
+.cal-event[data-mini="1"] .cal-event-hint{font-size:10.5px}
 .cal-event-op-more{font-size:11.5px;font-style:italic;opacity:.78;font-weight:600}
 .cal-event[data-mini="1"]{padding:5px 7px;border-radius:6px;gap:2px}
 .cal-event[data-mini="1"] .cal-event-title{font-size:12.5px;letter-spacing:.1px}
@@ -3389,31 +3393,24 @@ function _makeEventBlock(item){
   }
   const ops = Array.isArray(ev.operations) ? ev.operations.filter(o => o && (o.opName || o.opTypeId)) : [];
   const opsCount = ops.length;
-  // Lignes affichables selon hauteur disponible
-  const showTitle   = height >= 26;
-  const showOpsList = height >= 64 && opsCount > 0;
-  const showTime    = height >= 80;
+  // v2.5.20 : rendu minimaliste -- juste le nom (ou le nom du modele lie, ou la
+  // machine en fallback) + "Afficher les details". La liste des ops et l'horaire
+  // sont visibles au clic dans la modale details -- pas de bruit visuel dans le
+  // calendrier.
+  let title = (ev.nom || '').trim();
+  if(!title && ev.template_id && typeof TEMPLATES_STATE !== 'undefined' && TEMPLATES_STATE && Array.isArray(TEMPLATES_STATE.list)){
+    const tmpl = TEMPLATES_STATE.list.find(t => t.id === ev.template_id);
+    if(tmpl && tmpl.name) title = tmpl.name;
+  }
+  if(!title) title = ev.machine || '\u2014';
+  const showTitle = height >= 22;
+  const showHint  = height >= 48;
   let inner = '';
   if(showTitle){
-    const sub = (opsCount > 0) ? ' · ' + opsCount + ' op.' : '';
-    inner += '<div class="cal-event-title">' + escHtml(ev.machine || '—') + sub + '</div>';
+    inner += '<div class="cal-event-title">' + escHtml(title) + '</div>';
   }
-  if(showOpsList){
-    // v2.2.51 : plus de troncature — la liste est scrollable via CSS.
-    // On affiche toutes les ops ; l'user scroll dans la carte si besoin.
-    inner += '<div class="cal-event-ops">';
-    ops.forEach(op => {
-      inner += '<div class="cal-event-op">• ' + escHtml(op.opName || '—') + '</div>';
-    });
-    inner += '</div>';
-  } else if(opsCount > 0 && height >= 32 && !showOpsList){
-    // Trop court pour une liste : afficher la 1re op + "(+N)"
-    const first = ops[0];
-    const extra = opsCount > 1 ? ' (+' + (opsCount-1) + ')' : '';
-    inner += '<div class="cal-event-machine">' + escHtml(first.opName || '') + extra + '</div>';
-  }
-  if(showTime){
-    inner += '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
+  if(showHint){
+    inner += '<div class="cal-event-hint">Afficher les d\u00e9tails</div>';
   }
   div.innerHTML = inner;
   div.title = (ev.machine || '') + '\n' + ev.start + ' – ' + ev.end +
