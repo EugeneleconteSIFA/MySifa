@@ -2935,22 +2935,66 @@ def _ensure_matiere_laize_link(conn, matiere_id: int, laize_id: int) -> None:
 
 @router.get("/api/stock/receptions")
 def list_receptions(request: Request, limit: int = 50):
-    """Historique des réceptions de bobines."""
+    """Historique des réceptions de bobines.
+
+    Renvoie deux représentations des bobines d'un lot :
+      - `items`   : liste plate de codes-barres (format historique, conservé
+                    pour ne pas casser les appelants existants — impression
+                    d'étiquettes notamment) ;
+      - `bobines` : une entrée détaillée par bobine (référence matière,
+                    désignation, catégorie, laize, heure de scan), obtenue par
+                    jointure sur `matieres_premieres` et `mp_laizes`.
+
+    Les bobines réceptionnées avant la migration 203 n'ont pas de `matiere_id` :
+    leurs champs matière/laize valent None et sont rendus « — » côté UI. On les
+    conserve pour que le nombre de lignes corresponde toujours au nombre réel
+    de bobines du lot.
+    """
     user = require_stock(request)
     with get_db() as conn:
         lots = conn.execute(
-            """SELECT r.*, GROUP_CONCAT(i.code_barre, '||') as codes
-               FROM stock_receptions r
-               LEFT JOIN stock_reception_items i ON i.reception_id = r.id
-               GROUP BY r.id
+            """SELECT r.* FROM stock_receptions r
                ORDER BY r.created_at DESC LIMIT ?""",
             (limit,),
         ).fetchall()
+        lot_ids = [row["id"] for row in lots]
+        bobines_par_lot: dict[int, list] = {lid: [] for lid in lot_ids}
+        if lot_ids:
+            placeholders = ",".join("?" for _ in lot_ids)
+            rows = conn.execute(
+                f"""SELECT i.id, i.reception_id, i.code_barre, i.scanned_at,
+                           i.matiere_id, i.laize_id,
+                           m.reference   AS matiere_reference,
+                           m.designation AS matiere_designation,
+                           m.categorie   AS matiere_categorie,
+                           l.valeur_mm   AS laize_valeur_mm,
+                           l.label       AS laize_label
+                      FROM stock_reception_items i
+                      LEFT JOIN matieres_premieres m ON m.id = i.matiere_id
+                      LEFT JOIN mp_laizes l          ON l.id = i.laize_id
+                     WHERE i.reception_id IN ({placeholders})
+                     ORDER BY i.id""",
+                lot_ids,
+            ).fetchall()
+            for b in rows:
+                bobines_par_lot.setdefault(b["reception_id"], []).append({
+                    "id": b["id"],
+                    "code_barre": b["code_barre"],
+                    "scanned_at": b["scanned_at"],
+                    "matiere_id": b["matiere_id"],
+                    "matiere_reference": b["matiere_reference"],
+                    "matiere_designation": b["matiere_designation"],
+                    "matiere_categorie": b["matiere_categorie"],
+                    "laize_id": b["laize_id"],
+                    "laize_valeur_mm": b["laize_valeur_mm"],
+                    "laize_label": b["laize_label"],
+                })
     result = []
     for lot in lots:
         d = dict(lot)
-        raw = d.pop("codes", None)
-        d["items"] = raw.split("||") if raw else []
+        bobines = bobines_par_lot.get(d["id"], [])
+        d["bobines"] = bobines
+        d["items"] = [b["code_barre"] for b in bobines]
         result.append(d)
     return {"receptions": result}
 
@@ -3285,9 +3329,105 @@ async def patch_reception(reception_id: int, request: Request):
     return {"success": True, "id": reception_id}
 
 
+def _defalquer_bobines(conn, bobines, lot_numero, user, motif: str) -> dict:
+    """Retire du stock les bobines passées en paramètre (miroir de la réception).
+
+    `bobines` : lignes de stock_reception_items (sqlite3.Row ou dict) — seules
+    celles portant à la fois `matiere_id` et `laize_id` impactent le stock. Les
+    bobines historiques non rattachées à une matière sont ignorées : aucune
+    entrée n'avait été créée pour elles, il n'y a donc rien à reprendre.
+
+    Miroir exact de la logique de `create_reception` : décrément de
+    mp_stock_laize, recalcul de mp_stock (somme des laizes), et un mouvement
+    'sortie' par couple (matière, laize).
+
+    Plancher à zéro : si la bobine a déjà été consommée en fabrication, le
+    stock est descendu à 0 plutôt que dans le négatif — un stock négatif casse
+    les écrans qui somment les quantités. L'écart est alors inscrit dans la
+    note du mouvement pour rester traçable.
+
+    Renvoie un récapitulatif : nb de bobines ayant impacté le stock et écarts.
+    """
+    from collections import defaultdict
+
+    grouped: dict[tuple[int, int], int] = defaultdict(int)
+    for b in bobines:
+        mid = b["matiere_id"] if "matiere_id" in b.keys() else b.get("matiere_id")
+        lid = b["laize_id"] if "laize_id" in b.keys() else b.get("laize_id")
+        if mid is not None and lid is not None:
+            grouped[(int(mid), int(lid))] += 1
+
+    created_by = user.get("email")
+    created_by_name = (user.get("nom") or "").strip() or None
+    nb_impact = 0
+    ecarts: list[dict] = []
+
+    for (mid, lid), nb in grouped.items():
+        row = conn.execute(
+            "SELECT quantite FROM mp_stock_laize WHERE matiere_id=? AND laize_id=?",
+            (mid, lid),
+        ).fetchone()
+        qte_avant = float(row["quantite"]) if row else 0.0
+        qte_theorique = qte_avant - nb
+        qte_apres = max(0.0, qte_theorique)
+        manquant = round(qte_apres - qte_theorique, 6)  # > 0 si on a planché
+
+        conn.execute(
+            """INSERT INTO mp_stock_laize (matiere_id, laize_id, quantite, updated_at, updated_by_name)
+               VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%S','now','localtime'), ?)
+               ON CONFLICT(matiere_id, laize_id) DO UPDATE SET
+                   quantite=excluded.quantite,
+                   updated_at=excluded.updated_at,
+                   updated_by_name=excluded.updated_by_name""",
+            (mid, lid, qte_apres, created_by_name),
+        )
+        total_row = conn.execute(
+            "SELECT COALESCE(SUM(quantite), 0) AS s FROM mp_stock_laize WHERE matiere_id=?",
+            (mid,),
+        ).fetchone()
+        conn.execute(
+            """INSERT OR REPLACE INTO mp_stock (matiere_id, quantite, updated_at, updated_by_name)
+               VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%S','now','localtime'), ?)""",
+            (mid, float(total_row["s"] or 0), created_by_name),
+        )
+
+        note = f"{motif} lot {lot_numero or '?'}"
+        if manquant > 0:
+            note += (f" - stock insuffisant : {manquant:g} bobine(s) deja consommee(s), "
+                     f"quantite plafonnee a 0")
+            ecarts.append({"matiere_id": mid, "laize_id": lid, "manquant": manquant})
+        conn.execute(
+            """INSERT INTO mp_mouvements (
+                   matiere_id, type_mouvement, quantite,
+                   quantite_avant, quantite_apres,
+                   ref_bl, note,
+                   emplacement_source, emplacement_dest,
+                   created_by, created_by_name, laize_id, prix_eur_m2
+               ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                mid, "sortie", nb,
+                qte_avant, qte_apres,
+                lot_numero, note,
+                None, None,
+                created_by, created_by_name,
+                lid, None,
+            ),
+        )
+        nb_impact += nb
+
+    return {"nb_bobines_stock": nb_impact, "ecarts": ecarts}
+
+
 @router.delete("/api/stock/receptions/{reception_id}")
 def delete_reception(reception_id: int, request: Request):
-    """Supprime une réception + ses items (irréversible)."""
+    """Supprime une réception + ses items, et défalque le stock (irréversible).
+
+    Jusqu'ici cette route supprimait les lignes sans jamais reprendre les
+    entrées de stock créées à la réception : chaque suppression laissait du
+    stock fantôme. Elle passe désormais par `_defalquer_bobines`, comme la
+    suppression bobine par bobine — les deux boutons ne peuvent plus se
+    contredire.
+    """
     user = require_stock_write(request)
     with get_db() as conn:
         ex = conn.execute(
@@ -3297,6 +3437,13 @@ def delete_reception(reception_id: int, request: Request):
         if not ex:
             raise HTTPException(status_code=404, detail="Réception introuvable")
         exd = dict(ex)
+        bobines = conn.execute(
+            "SELECT id, code_barre, matiere_id, laize_id FROM stock_reception_items WHERE reception_id=?",
+            (reception_id,),
+        ).fetchall()
+        recap = _defalquer_bobines(
+            conn, bobines, exd.get("lot_numero"), user, "Suppression reception"
+        )
         conn.execute("DELETE FROM stock_reception_items WHERE reception_id=?", (reception_id,))
         conn.execute("DELETE FROM stock_receptions WHERE id=?", (reception_id,))
         conn.commit()
@@ -3310,10 +3457,84 @@ def delete_reception(reception_id: int, request: Request):
             "nb_bobines": exd.get("nb_bobines"),
             "fournisseur": exd.get("fournisseur"),
             "fsc_type_claim": exd.get("fsc_type_claim"),
+            "stock_defalque": recap["nb_bobines_stock"],
+            "ecarts_stock": recap["ecarts"] or None,
         },
         ip=request.client.host if request.client else None,
     )
-    return {"success": True, "id": reception_id}
+    return {"success": True, "id": reception_id, **recap}
+
+
+@router.delete("/api/stock/receptions/{reception_id}/items/{item_id}")
+def delete_reception_item(reception_id: int, item_id: int, request: Request):
+    """Supprime UNE bobine d'une réception et défalque le stock correspondant.
+
+    Sert à corriger une bobine scannée par erreur sans avoir à supprimer —
+    puis ressaisir — tout le lot. Si c'était la dernière bobine, le lot est
+    supprimé aussi : un lot à 0 bobine n'a plus d'objet dans l'historique.
+    """
+    user = require_stock_write(request)
+    with get_db() as conn:
+        lot = conn.execute(
+            "SELECT id, lot_numero, nb_bobines, fournisseur FROM stock_receptions WHERE id=?",
+            (reception_id,),
+        ).fetchone()
+        if not lot:
+            raise HTTPException(status_code=404, detail="Réception introuvable")
+        bob = conn.execute(
+            """SELECT id, code_barre, matiere_id, laize_id
+                 FROM stock_reception_items WHERE id=? AND reception_id=?""",
+            (item_id, reception_id),
+        ).fetchone()
+        if not bob:
+            raise HTTPException(status_code=404, detail="Bobine introuvable dans cette réception.")
+
+        recap = _defalquer_bobines(
+            conn, [bob], lot["lot_numero"], user, "Suppression bobine"
+        )
+        conn.execute("DELETE FROM stock_reception_items WHERE id=?", (item_id,))
+
+        # `nb_bobines` est un compteur dénormalisé : on le recale sur le compte
+        # réel plutôt que de faire -1, pour qu'un éventuel décalage se corrige.
+        restant = conn.execute(
+            "SELECT COUNT(*) AS c FROM stock_reception_items WHERE reception_id=?",
+            (reception_id,),
+        ).fetchone()["c"]
+        lot_supprime = restant == 0
+        if lot_supprime:
+            conn.execute("DELETE FROM stock_receptions WHERE id=?", (reception_id,))
+        else:
+            conn.execute(
+                "UPDATE stock_receptions SET nb_bobines=? WHERE id=?",
+                (restant, reception_id),
+            )
+        conn.commit()
+
+    log_action(
+        user=user,
+        action="DELETE",
+        module="stock",
+        objet=f"Bobine {bob['code_barre']} (réception #{reception_id})",
+        detail={
+            "lot_numero": lot["lot_numero"],
+            "code_barre": bob["code_barre"],
+            "matiere_id": bob["matiere_id"],
+            "laize_id": bob["laize_id"],
+            "stock_defalque": recap["nb_bobines_stock"],
+            "ecarts_stock": recap["ecarts"] or None,
+            "lot_supprime": lot_supprime,
+            "bobines_restantes": restant,
+        },
+        ip=request.client.host if request.client else None,
+    )
+    return {
+        "success": True,
+        "id": item_id,
+        "reception_id": reception_id,
+        "bobines_restantes": restant,
+        "lot_supprime": lot_supprime,
+        **recap,
+    }
 
 
 # ── Référentiel produits (référence + unité de vente) ─────────────

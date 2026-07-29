@@ -1188,16 +1188,19 @@ def _generate_events_for_template(conn, template_id: int, until_date) -> int:
         nxt = _compute_next_occurrence(tmpl, cursor)
         if nxt is None or nxt > until_date:
             break
+        # v2.5.15 : dedup sur template_origin_date (immuable) au lieu de
+        # date_prevue (mutable via drag&drop). Evite la re-generation d'une
+        # occurrence quand le creneau original a ete deplace ailleurs.
         exists = conn.execute(
-            "SELECT 1 FROM maintenance_events WHERE template_id=? AND date_prevue=? LIMIT 1",
+            "SELECT 1 FROM maintenance_events WHERE template_id=? AND template_origin_date=? LIMIT 1",
             (template_id, nxt.isoformat())
         ).fetchone()
         if not exists:
             cur = conn.execute(
                 "INSERT INTO maintenance_events "
-                "(machine, date_prevue, heure_debut, heure_fin, source, created_at, template_id) "
-                "VALUES (?, ?, ?, ?, 'planifie', ?, ?)",
-                (machine_csv, nxt.isoformat(), heure_debut, heure_fin, now_iso, template_id)
+                "(machine, date_prevue, heure_debut, heure_fin, source, created_at, template_id, template_origin_date) "
+                "VALUES (?, ?, ?, ?, 'planifie', ?, ?, ?)",
+                (machine_csv, nxt.isoformat(), heure_debut, heure_fin, now_iso, template_id, nxt.isoformat())
             )
             event_id = cur.lastrowid
             for op in tmpl["ops"]:
