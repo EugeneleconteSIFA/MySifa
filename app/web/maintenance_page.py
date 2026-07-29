@@ -376,10 +376,10 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 /* Nav buttons highlighted comme drop zones cross-week */
 .cal-nav button.cal-drop-target-nav{background:var(--accent);color:var(--accent-fg,#0a0e17);animation:calDropPulse .6s ease-in-out infinite alternate}
 @keyframes calDropPulse{from{box-shadow:0 0 0 0 rgba(34,211,238,.6)}to{box-shadow:0 0 0 8px rgba(34,211,238,0)}}
-.cal-event{position:absolute;background:var(--cal-ev-bg,var(--accent));color:var(--cal-ev-fg,#fff);border-radius:7px;padding:6px 8px;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:13px;font-weight:600;line-height:1.25;cursor:pointer;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.20);z-index:2;display:flex;flex-direction:column;gap:3px;transition:filter .12s,box-shadow .12s,transform .08s}  /* v2.5.19 : padding+gap reduits */
+.cal-event{position:absolute;background:var(--cal-ev-bg,var(--accent));color:var(--cal-ev-fg,#fff);border-radius:7px;padding:6px 10px;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:13px;font-weight:700;line-height:1.25;cursor:pointer;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.20);z-index:2;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;transition:filter .12s,box-shadow .12s,transform .08s}  /* v2.5.21 : nom centre */
 .cal-event:hover{filter:brightness(1.10);box-shadow:0 4px 14px rgba(0,0,0,.36);z-index:4}
 .cal-event:active{transform:scale(.99)}
-.cal-event-title{font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.2px;color:inherit}
+.cal-event-title{font-weight:800;font-size:14px;letter-spacing:.2px;color:inherit;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-overflow:ellipsis;word-break:normal;overflow-wrap:break-word;line-height:1.25;width:100%}  /* v2.5.21 : 2 lignes max, ellipsis propre */
 .cal-event-machine{font-size:12.5px;font-weight:700;opacity:.96;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-flex;align-items:center;gap:4px}
 .cal-event-time{font-size:12px;font-weight:700;opacity:.92;font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;letter-spacing:.2px;margin-top:auto}
 /* v2.2.51 : ops list dans cal-event = scrollable + texte wrapable */
@@ -391,9 +391,6 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-event-op{font-size:12.5px;font-weight:600;line-height:1.3;color:inherit;opacity:.96;white-space:normal;overflow-wrap:break-word;word-break:normal;letter-spacing:.1px;padding-right:2px}  /* v2.5.19 : preserve les mots entiers */
 .cal-event-op-more{opacity:.75;font-style:italic;font-size:11.5px}
 /* v2.5.20 : sous-titre "Afficher les details" -- discret, sous le titre */
-.cal-event-hint{font-size:11.5px;font-weight:600;opacity:.75;letter-spacing:.1px;display:flex;align-items:center;gap:4px;margin-top:auto}
-.cal-event-hint::before{content:"\2192";font-size:12px;opacity:.9}
-.cal-event[data-mini="1"] .cal-event-hint{font-size:10.5px}
 .cal-event-op-more{font-size:11.5px;font-style:italic;opacity:.78;font-weight:600}
 .cal-event[data-mini="1"]{padding:5px 7px;border-radius:6px;gap:2px}
 .cal-event[data-mini="1"] .cal-event-title{font-size:12.5px;letter-spacing:.1px}
@@ -3397,20 +3394,17 @@ function _makeEventBlock(item){
   // machine en fallback) + "Afficher les details". La liste des ops et l'horaire
   // sont visibles au clic dans la modale details -- pas de bruit visuel dans le
   // calendrier.
+  // v2.5.21 : contenu = juste le nom, centre vertical + horizontal, ellipsis.
+  // Nom du creneau si defini, sinon nom du modele lie, sinon machine en fallback.
   let title = (ev.nom || '').trim();
   if(!title && ev.template_id && typeof TEMPLATES_STATE !== 'undefined' && TEMPLATES_STATE && Array.isArray(TEMPLATES_STATE.list)){
     const tmpl = TEMPLATES_STATE.list.find(t => t.id === ev.template_id);
     if(tmpl && tmpl.name) title = tmpl.name;
   }
   if(!title) title = ev.machine || '\u2014';
-  const showTitle = height >= 22;
-  const showHint  = height >= 48;
   let inner = '';
-  if(showTitle){
+  if(height >= 20){
     inner += '<div class="cal-event-title">' + escHtml(title) + '</div>';
-  }
-  if(showHint){
-    inner += '<div class="cal-event-hint">Afficher les d\u00e9tails</div>';
   }
   div.innerHTML = inner;
   div.title = (ev.machine || '') + '\n' + ev.start + ' – ' + ev.end +
