@@ -403,30 +403,20 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 @container calev (min-height: 130px) and (min-width: 100px){
   .cal-event .cal-event-count{display:block}
 }
-/* v2.5.23 : cases hautes ET etroites (lane packing serre) -> titre en vertical.
-   writing-mode:vertical-rl rotate le texte a 90 degres clockwise (lecture top->bottom),
-   plus lisible qu'un wrap letter par letter. Les infos secondaires sont masquees.
-   Padding/gap reduits pour maximiser l'espace texte. */
-@container calev (max-width: 70px) and (min-height: 80px){
-  .cal-event{padding:4px 2px;justify-content:center;gap:0}
-  .cal-event .cal-event-sub,
-  .cal-event .cal-event-time,
-  .cal-event .cal-event-count{display:none !important}
-  .cal-event .cal-event-title{
-    writing-mode:vertical-rl;
-    text-orientation:mixed;
-    white-space:nowrap;
-    display:block;
-    -webkit-line-clamp:unset;
-    -webkit-box-orient:unset;
-    overflow:hidden;
-    text-overflow:ellipsis;
-    max-height:100%;
-    max-width:100%;
-    font-size:12px;
-    line-height:1;
-    letter-spacing:.3px;
-  }
+/* v2.5.24 : cases etroites -> reduit encore la police pour eviter le wrap ugly.
+   Plus la case est fine, plus la police baisse, avec ajustement du line-clamp
+   pour autoriser plus de lignes quand la hauteur le permet. */
+@container calev (max-width: 70px){
+  .cal-event{padding:4px 5px;gap:1px}
+  .cal-event .cal-event-title{font-size:10.5px;line-height:1.15;letter-spacing:0}
+}
+@container calev (max-width: 50px){
+  .cal-event{padding:3px 4px}
+  .cal-event .cal-event-title{font-size:9.5px;-webkit-line-clamp:3}
+}
+/* Case tres etroite ET tres haute : autorise 4 lignes pour maximiser lecture */
+@container calev (max-width: 70px) and (min-height: 140px){
+  .cal-event .cal-event-title{-webkit-line-clamp:4}
 }
 /* Fallback pour navigateurs sans container queries : les infos secondaires restent cachees
    -- le titre suffit largement dans ce cas. */
