@@ -376,20 +376,62 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 /* Nav buttons highlighted comme drop zones cross-week */
 .cal-nav button.cal-drop-target-nav{background:var(--accent);color:var(--accent-fg,#0a0e17);animation:calDropPulse .6s ease-in-out infinite alternate}
 @keyframes calDropPulse{from{box-shadow:0 0 0 0 rgba(34,211,238,.6)}to{box-shadow:0 0 0 8px rgba(34,211,238,0)}}
-.cal-event{position:absolute;background:var(--cal-ev-bg,var(--accent));color:var(--cal-ev-fg,#fff);border-radius:8px;padding:8px 11px;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:13px;font-weight:600;line-height:1.3;cursor:pointer;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.20);z-index:2;display:flex;flex-direction:column;gap:4px;transition:filter .12s,box-shadow .12s,transform .08s}
+/* v2.5.22 : container queries -- le contenu s'adapte a la taille reelle de la case */
+.cal-event{position:absolute;background:var(--cal-ev-bg,var(--accent));color:var(--cal-ev-fg,#fff);border-radius:7px;padding:5px 8px;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-weight:700;line-height:1.25;cursor:pointer;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.20);z-index:2;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;gap:2px;transition:filter .12s,box-shadow .12s,transform .08s;container-type:size;container-name:calev}
+/* Base : que le titre est visible, taille reduite. Les autres apparaissent progressivement. */
+.cal-event .cal-event-title{font-weight:800;font-size:11.5px;letter-spacing:.1px;color:inherit;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;text-overflow:ellipsis;word-break:normal;overflow-wrap:break-word;line-height:1.2;width:100%;max-width:100%}
+.cal-event .cal-event-sub,.cal-event .cal-event-time,.cal-event .cal-event-count{display:none;font-weight:600;color:inherit;opacity:.9;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-event .cal-event-sub{font-size:11px;opacity:.85}
+.cal-event .cal-event-time{font-size:11px;font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;letter-spacing:.2px}
+.cal-event .cal-event-count{font-size:10.5px;opacity:.75;font-style:italic}
+/* Cases plus larges : nom un peu plus gros + une seule ligne si tres large */
+@container calev (min-width: 90px){
+  .cal-event .cal-event-title{font-size:13px}
+}
+@container calev (min-width: 130px){
+  .cal-event .cal-event-title{font-size:14px}
+}
+/* Cases moyennes (assez hautes) : ajoute la machine en sous-titre */
+@container calev (min-height: 60px) and (min-width: 90px){
+  .cal-event .cal-event-sub{display:block}
+}
+/* Cases hautes : ajoute les horaires */
+@container calev (min-height: 90px) and (min-width: 90px){
+  .cal-event .cal-event-time{display:block}
+}
+/* Cases tres hautes : ajoute le compteur d'ops */
+@container calev (min-height: 130px) and (min-width: 100px){
+  .cal-event .cal-event-count{display:block}
+}
+/* v2.5.24 : cases etroites -> reduit encore la police pour eviter le wrap ugly.
+   Plus la case est fine, plus la police baisse, avec ajustement du line-clamp
+   pour autoriser plus de lignes quand la hauteur le permet. */
+@container calev (max-width: 70px){
+  .cal-event{padding:4px 5px;gap:1px}
+  .cal-event .cal-event-title{font-size:10.5px;line-height:1.15;letter-spacing:0}
+}
+@container calev (max-width: 50px){
+  .cal-event{padding:3px 4px}
+  .cal-event .cal-event-title{font-size:9.5px;-webkit-line-clamp:3}
+}
+/* Case tres etroite ET tres haute : autorise 4 lignes pour maximiser lecture */
+@container calev (max-width: 70px) and (min-height: 140px){
+  .cal-event .cal-event-title{-webkit-line-clamp:4}
+}
+/* Fallback pour navigateurs sans container queries : les infos secondaires restent cachees
+   -- le titre suffit largement dans ce cas. */
 .cal-event:hover{filter:brightness(1.10);box-shadow:0 4px 14px rgba(0,0,0,.36);z-index:4}
 .cal-event:active{transform:scale(.99)}
-.cal-event-title{font-weight:800;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:.2px;color:inherit}
 .cal-event-machine{font-size:12.5px;font-weight:700;opacity:.96;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-flex;align-items:center;gap:4px}
-.cal-event-time{font-size:12px;font-weight:700;opacity:.92;font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;letter-spacing:.2px;margin-top:auto}
 /* v2.2.51 : ops list dans cal-event = scrollable + texte wrapable */
 .cal-event-ops{display:flex;flex-direction:column;gap:2px;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.35) transparent}
 .cal-event-ops::-webkit-scrollbar{width:5px}
 .cal-event-ops::-webkit-scrollbar-track{background:transparent}
 .cal-event-ops::-webkit-scrollbar-thumb{background:rgba(255,255,255,.30);border-radius:3px}
 .cal-event-ops::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.5)}
-.cal-event-op{font-size:12.5px;font-weight:600;line-height:1.3;color:inherit;opacity:.96;white-space:normal;word-break:break-word;letter-spacing:.1px;padding-right:2px}
+.cal-event-op{font-size:12.5px;font-weight:600;line-height:1.3;color:inherit;opacity:.96;white-space:normal;overflow-wrap:break-word;word-break:normal;letter-spacing:.1px;padding-right:2px}  /* v2.5.19 : preserve les mots entiers */
 .cal-event-op-more{opacity:.75;font-style:italic;font-size:11.5px}
+/* v2.5.20 : sous-titre "Afficher les details" -- discret, sous le titre */
 .cal-event-op-more{font-size:11.5px;font-style:italic;opacity:.78;font-weight:600}
 .cal-event[data-mini="1"]{padding:5px 7px;border-radius:6px;gap:2px}
 .cal-event[data-mini="1"] .cal-event-title{font-size:12.5px;letter-spacing:.1px}
@@ -510,16 +552,19 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .tmpl-recur-switch-lbl{transition:color .12s}
 .tmpl-recur-switch input:checked ~ .tmpl-recur-switch-lbl{color:var(--accent)}
 /* Panel "Gestion des modèles" sous l'historique — style aligné sur Gestion des alertes */
-.tmpl-manage-panel .tmpl-manage-item{display:flex;flex-direction:column;gap:8px;padding:14px 16px;border:1px solid var(--border);border-radius:10px;background:var(--card);margin-bottom:10px;transition:border-color .12s}
+/* v2.5.18 : layout inspire des .alert-row -- une seule ligne horizontale */
+.tmpl-manage-panel .tmpl-manage-item{display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);margin-bottom:8px;transition:border-color .15s}
 .tmpl-manage-panel .tmpl-manage-item:hover{border-color:var(--accent)}
-.tmpl-manage-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.tmpl-manage-info{flex:1;min-width:0}
 .tmpl-manage-name{font-size:14px;font-weight:700;color:var(--text)}
 .tmpl-manage-desc{font-size:12px;color:var(--muted);margin-top:2px}
-.tmpl-manage-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:11px}
-.tmpl-manage-badge{padding:3px 9px;border-radius:6px;background:var(--bg);color:var(--text2);font-weight:600}
+.tmpl-manage-meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:11px;margin-top:6px}
+.tmpl-manage-badge{padding:3px 9px;border-radius:6px;background:var(--card);color:var(--text2);font-weight:600;border:1px solid var(--border)}
 .tmpl-manage-badge.recur-on{background:rgba(52,211,153,.15);color:var(--ok,#34d399);border:1px solid rgba(52,211,153,.35)}
-.tmpl-manage-badge.recur-off{background:var(--bg);color:var(--muted);border:1px solid var(--border)}
-.tmpl-manage-badge.stat{background:var(--accent-bg);color:var(--accent);font-family:ui-monospace,monospace}
+.tmpl-manage-badge.recur-off{background:var(--card);color:var(--muted);border:1px solid var(--border)}
+.tmpl-manage-badge.stat{background:var(--accent-bg);color:var(--accent);font-family:ui-monospace,monospace;border-color:transparent}
+.tmpl-manage-toggle-wrap{flex-shrink:0;display:flex;align-items:center;justify-content:center;width:38px}
+.tmpl-manage-toggle-placeholder{display:inline-block;width:38px;height:22px}  /* garde l'alignement quand pas de recurrence configuree */
 .tmpl-manage-actions{display:flex;gap:6px;flex-wrap:wrap}
 .tmpl-manage-actions button{padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;transition:all .12s;display:inline-flex;align-items:center;gap:5px}
 .tmpl-manage-actions button:hover{border-color:var(--accent);color:var(--accent)}
@@ -3386,31 +3431,29 @@ function _makeEventBlock(item){
   }
   const ops = Array.isArray(ev.operations) ? ev.operations.filter(o => o && (o.opName || o.opTypeId)) : [];
   const opsCount = ops.length;
-  // Lignes affichables selon hauteur disponible
-  const showTitle   = height >= 26;
-  const showOpsList = height >= 64 && opsCount > 0;
-  const showTime    = height >= 80;
-  let inner = '';
-  if(showTitle){
-    const sub = (opsCount > 0) ? ' · ' + opsCount + ' op.' : '';
-    inner += '<div class="cal-event-title">' + escHtml(ev.machine || '—') + sub + '</div>';
+  // v2.5.20 : rendu minimaliste -- juste le nom (ou le nom du modele lie, ou la
+  // machine en fallback) + "Afficher les details". La liste des ops et l'horaire
+  // sont visibles au clic dans la modale details -- pas de bruit visuel dans le
+  // calendrier.
+  // v2.5.22 : rendu adaptatif via container queries CSS.
+  // On injecte TOUT dans le DOM (nom + machine + horaires + compteur ops),
+  // et le CSS decide quoi afficher selon la taille reelle de la case.
+  // Petit bloc : nom seul. Bloc large : tout.
+  let title = (ev.nom || '').trim();
+  let hasCustomName = !!title;
+  if(!title && ev.template_id && typeof TEMPLATES_STATE !== 'undefined' && TEMPLATES_STATE && Array.isArray(TEMPLATES_STATE.list)){
+    const tmpl = TEMPLATES_STATE.list.find(t => t.id === ev.template_id);
+    if(tmpl && tmpl.name){ title = tmpl.name; hasCustomName = true; }
   }
-  if(showOpsList){
-    // v2.2.51 : plus de troncature — la liste est scrollable via CSS.
-    // On affiche toutes les ops ; l'user scroll dans la carte si besoin.
-    inner += '<div class="cal-event-ops">';
-    ops.forEach(op => {
-      inner += '<div class="cal-event-op">• ' + escHtml(op.opName || '—') + '</div>';
-    });
-    inner += '</div>';
-  } else if(opsCount > 0 && height >= 32 && !showOpsList){
-    // Trop court pour une liste : afficher la 1re op + "(+N)"
-    const first = ops[0];
-    const extra = opsCount > 1 ? ' (+' + (opsCount-1) + ')' : '';
-    inner += '<div class="cal-event-machine">' + escHtml(first.opName || '') + extra + '</div>';
+  if(!title) title = ev.machine || '\u2014';
+  let inner = '<div class="cal-event-title">' + escHtml(title) + '</div>';
+  // Machine en sous-titre (seulement si le titre principal n\'est pas deja la machine)
+  if(hasCustomName && ev.machine){
+    inner += '<div class="cal-event-sub">' + escHtml(ev.machine) + '</div>';
   }
-  if(showTime){
-    inner += '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
+  inner += '<div class="cal-event-time">' + escHtml(ev.start || '') + ' \u2013 ' + escHtml(ev.end || '') + '</div>';
+  if(opsCount > 0){
+    inner += '<div class="cal-event-count">' + opsCount + ' op\u00e9ration' + (opsCount > 1 ? 's' : '') + '</div>';
   }
   div.innerHTML = inner;
   div.title = (ev.machine || '') + '\n' + ev.start + ' – ' + ev.end +
@@ -12030,49 +12073,64 @@ function _fmtDateFR(iso){
   }catch(e){ return '—'; }
 }
 
+// v2.5.18 : layout inspire des .alert-row -- toggle recurrence a gauche,
+// info au milieu, actions a droite. Le toggle n'est actif que si le template
+// a bien un recurrence_type configure (sinon placeholder aligné pour ne pas
+// casser la grille -- l'admin doit passer par Editer pour le configurer).
 function renderTemplateManagePanel(){
   const box = document.getElementById('tmpl-manage-list');
   if(!box) return;
   const items = TEMPLATES_STATE.list || [];
   if(!items.length){
-    box.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucun modèle pour l\'instant. Clique sur « + Nouveau modèle » pour en créer un.</p>';
+    box.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucun mod\u00e8le pour l\'instant. Clique sur \u00ab + Nouveau mod\u00e8le \u00bb pour en cr\u00e9er un.</p>';
     return;
   }
   box.innerHTML = items.map(t => {
     const recurLbl = _fmtRecurRule(t);
-    const recurBadge = t.recurrence_active
-      ? '<span class="tmpl-manage-badge recur-on" title="' + escAttr(recurLbl) + '">🔁 ' + escHtml(recurLbl) + '</span>'
-      : '<span class="tmpl-manage-badge recur-off">Non récurrent</span>';
+    const hasRecurConfig = !!t.recurrence_type;
+    // Toggle a gauche : actif si recurrence configuree, placeholder sinon.
+    const toggleHtml = hasRecurConfig
+      ? '<label class="toggle" title="' + (t.recurrence_active ? 'D\u00e9sactiver la r\u00e9currence' : 'Activer la r\u00e9currence') + '">' +
+          '<input type="checkbox" ' + (t.recurrence_active ? 'checked' : '') + ' data-tmpl-toggle="' + escAttr(t.id) + '">' +
+          '<span class="toggle-track"><span class="toggle-thumb"></span></span>' +
+        '</label>'
+      : '<span class="tmpl-manage-toggle-placeholder" title="Aucune r\u00e9currence configur\u00e9e \u2014 passe par \u00c9diter pour la param\u00e9trer"></span>';
+    // Badges meta
+    const recurBadge = hasRecurConfig
+      ? (t.recurrence_active
+          ? '<span class="tmpl-manage-badge recur-on" title="' + escAttr(recurLbl) + '">\ud83d\udd01 ' + escHtml(recurLbl) + '</span>'
+          : '<span class="tmpl-manage-badge recur-off" title="' + escAttr(recurLbl) + '">R\u00e9currence \u00e9teinte : ' + escHtml(recurLbl) + '</span>')
+      : '<span class="tmpl-manage-badge recur-off">Non r\u00e9current</span>';
     const nextOcc = t.recurrence_active && t.next_occurrence
       ? '<span class="tmpl-manage-badge">Prochaine : ' + _fmtDateFR(t.next_occurrence) + '</span>'
       : '';
-    const stats = '<span class="tmpl-manage-badge stat">' + (t.events_count || 0) + ' créneau' +
-                  ((t.events_count || 0) > 1 ? 'x' : '') + ' créés</span>';
+    const stats = '<span class="tmpl-manage-badge stat">' + (t.events_count || 0) + ' cr\u00e9neau' +
+                  ((t.events_count || 0) > 1 ? 'x' : '') + ' cr\u00e9\u00e9s</span>';
     const lastUsed = t.last_event_date
       ? '<span class="tmpl-manage-badge">Dernier : ' + _fmtDateFR(t.last_event_date) + '</span>'
       : '';
+    const opsBadge = '<span class="tmpl-manage-badge">' + (t.ops_count || 0) + ' op.</span>';
     return '<div class="tmpl-manage-item" data-tmpl-id="' + escAttr(t.id) + '">' +
-      '<div class="tmpl-manage-row">' +
-        '<div>' +
-          '<div class="tmpl-manage-name">' + escHtml(t.name) + '</div>' +
-          (t.description ? '<div class="tmpl-manage-desc">' + escHtml(t.description) + '</div>' : '') +
-        '</div>' +
-        '<div class="tmpl-manage-meta">' +
-          '<span class="tmpl-manage-badge">' + (t.ops_count || 0) + ' op.</span>' +
-          recurBadge + nextOcc + stats + lastUsed +
-        '</div>' +
+      '<div class="tmpl-manage-toggle-wrap">' + toggleHtml + '</div>' +
+      '<div class="tmpl-manage-info">' +
+        '<div class="tmpl-manage-name">' + escHtml(t.name) + '</div>' +
+        (t.description ? '<div class="tmpl-manage-desc">' + escHtml(t.description) + '</div>' : '') +
+        '<div class="tmpl-manage-meta">' + opsBadge + recurBadge + nextOcc + stats + lastUsed + '</div>' +
       '</div>' +
-      '<div class="tmpl-manage-row" style="justify-content:flex-end">' +
-        '<div class="tmpl-manage-actions">' +
-          // v2.5.13 : toggle recurrence + generate-now retires -- l'utilisateur
-          // active/desactive la recurrence via Editer (toggle switch dans la modale).
-          '<button type="button" onclick="openTemplateEditor(' + escAttr(t.id) + ')">Éditer</button>' +
-          '<button type="button" onclick="duplicateTemplate(' + escAttr(t.id) + ')">Dupliquer</button>' +
-          '<button type="button" class="danger" onclick="confirmDeleteTemplate(' + escAttr(t.id) + ')">Supprimer</button>' +
-        '</div>' +
+      '<div class="tmpl-manage-actions">' +
+        '<button type="button" onclick="openTemplateEditor(' + escAttr(t.id) + ')">\u00c9diter</button>' +
+        '<button type="button" onclick="duplicateTemplate(' + escAttr(t.id) + ')">Dupliquer</button>' +
+        '<button type="button" class="danger" onclick="confirmDeleteTemplate(' + escAttr(t.id) + ')">Supprimer</button>' +
       '</div>' +
     '</div>';
   }).join('');
+  // Post-render : plug le change handler sur chaque toggle (pattern reutilise des alertes).
+  box.querySelectorAll('[data-tmpl-toggle]').forEach(function(el){
+    el.addEventListener('change', function(){
+      const id = parseInt(el.getAttribute('data-tmpl-toggle'), 10);
+      toggleTemplateRecurrence(id, el.checked);
+    });
+  });
 }
 
 async function toggleTemplateRecurrence(templateId, activate){
@@ -12084,13 +12142,28 @@ async function toggleTemplateRecurrence(templateId, activate){
     });
     if(!r.ok){
       const err = await r.json().catch(()=>({}));
-      throw new Error(err.detail || 'Modification refusée');
+      // Le toggle a echoue -- reload pour restaurer l'etat visuel a la valeur DB.
+      await loadTemplates(true); renderTemplatesList(); renderTemplateManagePanel();
+      throw new Error(err.detail || 'Modification refus\u00e9e');
     }
-    showToast(activate ? 'Récurrence activée.' : 'Récurrence désactivée.', 'info');
+    // v2.5.18 : lit le nombre d'events futurs nettoyes (retourne par le backend
+    // quand la recurrence est desactivee, cf. v2.5.13).
+    let toastMsg;
+    if(activate){
+      toastMsg = 'R\u00e9currence activ\u00e9e.';
+    } else {
+      let deletedFuture = 0;
+      try{ const j = await r.json(); deletedFuture = (j && j.deleted_future_events) || 0; }catch(_){}
+      toastMsg = deletedFuture
+        ? 'R\u00e9currence d\u00e9sactiv\u00e9e \u2014 ' + deletedFuture + ' cr\u00e9neau' + (deletedFuture > 1 ? 'x' : '') + ' futur' + (deletedFuture > 1 ? 's' : '') + ' nettoy' + (deletedFuture > 1 ? '\u00e9s' : '\u00e9') + '.'
+        : 'R\u00e9currence d\u00e9sactiv\u00e9e.';
+    }
+    showToast(toastMsg, 'info');
     await loadTemplates(true);
     renderTemplatesList();
     renderTemplateManagePanel();
-    if(activate){ await refreshPlanning(); renderCal(); }
+    // Refresh calendrier dans les deux cas (activation OU purge desactivation modifient le planning).
+    await refreshPlanning(); renderCal();
   }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
 }
 
