@@ -2017,6 +2017,10 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <button type="button" class="pr-sub" data-prsub="ag" onclick="prSetSub('ag')" style="background:transparent;border:none;padding:10px 14px;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;font-family:inherit">Agents locaux</button>
       </div>
 
+      <!-- Bandeau d'erreur de chargement : une source injoignable ne doit plus
+           se confondre avec « aucune imprimante configurée ». -->
+      <div id="pr-load-error" style="display:none;margin-bottom:12px;padding:10px 14px;border-radius:10px;background:var(--bg);border:1px solid var(--danger);color:var(--danger);font-size:12px"></div>
+
       <!-- Sous-panneau : Imprimantes -->
       <div id="pr-panel-imp">
         <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
@@ -6708,20 +6712,39 @@ async function unlinkBridge(mp_id) {
 
 async function initPrintersPanel() {
   // Un seul chargement d'entrée : on tire tout en parallèle.
+  //
+  // allSettled et NON all : avec Promise.all, un seul endpoint en erreur
+  // rejetait le lot entier et laissait PR.imprimantes vide -- l'écran affichait
+  // alors « Aucune imprimante configurée », comme si la config avait disparu.
+  // Chaque source est désormais indépendante : ce qui répond s'affiche, ce qui
+  // échoue est nommé explicitement dans le bandeau d'erreur.
   document.getElementById('pr-panel-ag').querySelector('#pr-ag-panel').style.display = '';
-  try {
-    const [imp, tpl, ag, us] = await Promise.all([
-      prFetch('/api/print/imprimantes'),
-      prFetch('/api/print/templates'),
-      prFetch('/api/print/agents'),
-      prFetch('/api/print/usages'),
-    ]);
-    PR.imprimantes = imp || [];
-    PR.templates = tpl || [];
-    PR.agents = ag || [];
-    PR.usages = us || [];
-  } catch (e) {
-    prToast('Chargement imprimantes: ' + e.message, 'danger');
+  const sources = [
+    { cle: 'imprimantes', url: '/api/print/imprimantes', label: 'imprimantes' },
+    { cle: 'templates',   url: '/api/print/templates',   label: 'templates' },
+    { cle: 'agents',      url: '/api/print/agents',      label: 'agents' },
+    { cle: 'usages',      url: '/api/print/usages',      label: 'usages' },
+  ];
+  const res = await Promise.allSettled(sources.map(s => prFetch(s.url)));
+  const echecs = [];
+  res.forEach((r, i) => {
+    const s = sources[i];
+    if (r.status === 'fulfilled') {
+      PR[s.cle] = r.value || [];
+    } else {
+      echecs.push(s.label + ' (' + ((r.reason && r.reason.message) || 'erreur') + ')');
+    }
+  });
+  const banner = document.getElementById('pr-load-error');
+  if (echecs.length) {
+    prToast('Chargement partiel — ' + echecs.join(', '), 'danger');
+    if (banner) {
+      banner.style.display = '';
+      banner.textContent = 'Chargement incomplet : ' + echecs.join(' · ')
+        + '. Les données affichées peuvent être partielles.';
+    }
+  } else if (banner) {
+    banner.style.display = 'none';
   }
   prRenderImprimantes();
   prRenderTemplates();
@@ -7028,7 +7051,11 @@ function prRenderImprimantes() {
   const root = document.getElementById('pr-imp-list');
   if (!root) return;
   if (!PR.imprimantes.length) {
-    root.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;background:var(--card);border:1px dashed var(--border);border-radius:12px">Aucune imprimante configurée. Clique sur « Nouvelle imprimante ».</div>';
+    const err = document.getElementById('pr-load-error');
+    const enErreur = err && err.style.display !== 'none';
+    root.innerHTML = enErreur
+      ? '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;background:var(--card);border:1px dashed var(--border);border-radius:12px">Liste indisponible — le chargement a échoué. Tes imprimantes ne sont pas supprimées : recharge la page.</div>'
+      : '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px;background:var(--card);border:1px dashed var(--border);border-radius:12px">Aucune imprimante configurée. Clique sur « Nouvelle imprimante ».</div>';
     return;
   }
   const agentMap = {};
