@@ -231,6 +231,7 @@ DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL = """^XA
 DEFAULT_TEMPLATE_GALLERY = [
     {
         "key": "bobine_full",
+        "variante": "full",
         "nom": "Étiquette bobine — complète (FSC + code-barres + QR)",
         "description": "Format A6 (102×152mm). Header SIFA, badge FSC inversé, référence produit gros, fournisseur, lot très visible, code-barres CODE128, QR code + traçabilité.",
         "langage": "zpl",
@@ -241,6 +242,7 @@ DEFAULT_TEMPLATE_GALLERY = [
     },
     {
         "key": "bobine_compact",
+        "variante": "compact",
         "nom": "Étiquette bobine — compacte (petit format 57×32mm)",
         "description": "Format ticket (57×32mm). Juste l'essentiel : lot + code-barres + FSC.",
         "langage": "zpl",
@@ -262,6 +264,7 @@ DEFAULT_TEMPLATE_GALLERY = [
     },
     {
         "key": "emplacement_stock",
+        "variante": "full",
         "nom": "Étiquette emplacement stock (grand)",
         "description": "Format A5 (102×74mm). Code emplacement en très gros + code-barres pour scan mobile.",
         "langage": "zpl",
@@ -282,6 +285,7 @@ DEFAULT_TEMPLATE_GALLERY = [
     },
     {
         "key": "colis_expedition",
+        "variante": "full",
         "nom": "Étiquette colis expédition (100×150mm)",
         "description": "Format standard colis. Client, adresse, numéro de commande, code-barres tracking.",
         "langage": "zpl",
@@ -324,6 +328,7 @@ def list_default_templates() -> list[dict]:
             "description": t["description"],
             "langage": t["langage"],
             "usage_key": t["usage_key"],
+            "variante": t.get("variante", "full"),
             "largeur_mm": t["largeur_mm"],
             "hauteur_mm": t["hauteur_mm"],
         }
@@ -339,16 +344,47 @@ def get_default_template(key: str) -> dict | None:
     return None
 
 
+# ── Variantes de template ──────────────────────────────────────────────
+# Un même usage métier peut avoir deux gabarits distincts sur une imprimante :
+#   - "full"    : première impression (bouton « Faire une réception »)
+#   - "compact" : réimpression depuis l'historique (bouton « Réimprimer »)
+# Le front envoie la variante dans le payload de POST /api/print/label ;
+# le serveur résout TOUJOURS le contenu depuis imprimante_templates. Aucun
+# ZPL n'est plus figé dans le code sur le chemin d'impression (v2.6.0) :
+# les constantes ci-dessus ne servent qu'au seed initial et à la galerie.
+VARIANTES = ("full", "compact")
+
+VARIANTE_LABELS = {
+    "full": "Impression",
+    "compact": "Réimpression",
+}
+
+
+def variante_label(key: str) -> str:
+    return VARIANTE_LABELS.get(key, key)
+
+
 def default_templates_seed() -> list[dict]:
     """Liste des templates par défaut à seeder à la première configuration
     d'une imprimante ZPL. Le seed est appliqué depuis app/routers/print.py
     quand l'admin crée sa première imprimante, pas en migration, car il faut
-    connaître l'imprimante_id."""
+    connaître l'imprimante_id.
+
+    Une entrée par variante : sans le gabarit `compact`, le bouton
+    « Réimprimer étiquettes » renverrait un 409 dès la première utilisation.
+    """
     return [
         {
             "usage_key": "reception_matiere",
+            "variante": "full",
             "nom": "Étiquette réception matière (complète)",
             "contenu": DEFAULT_TEMPLATE_RECEPTION_MATIERE_ZPL,
+        },
+        {
+            "usage_key": "reception_matiere",
+            "variante": "compact",
+            "nom": "Étiquette réception matière (réimpression)",
+            "contenu": DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL,
         },
     ]
 
@@ -364,7 +400,7 @@ USAGES = [
         "module": "stock",
         "placeholders": [
             "lot_numero", "fournisseur", "fsc_label", "fsc_banner",
-            "ref_produit", "code_barre", "operateur_nom", "date_reception",
+            "ref_produit", "laize", "code_barre", "operateur_nom", "date_reception",
             "{{barcode:code_barre}}", "{{barcode:lot_numero,CODE128,140}}",
             "{{qrcode:lot_numero}}", "{{now:%d/%m/%Y}}",
         ],
