@@ -684,6 +684,66 @@ et re-taper `git checkout` retronque à nouveau.
   après chaque commande. Le `return` sort du scriptblock sans fermer la fenêtre
   (contrairement à `exit 1`).
 
+### git depuis le mount Linux : JAMAIS de commande qui écrit l'index
+
+Observé (29 juillet 2026, session étiquettes bobines). Symptôme côté Eugène :
+
+```
+fatal: Unable to create '.../.git/index.lock': File exists.
+Another git process seems to be running in this repository...
+```
+
+…avec 7 `git.exe` visibles dans `Get-Process`, et un `.git/index.lock` de
+**0 octet vieux de deux heures**. Diagnostic initial erroné : « Cursor a planté ».
+La vraie cause était l'IA elle-même.
+
+**Le mécanisme** : `git status` et `git diff` rafraîchissent l'index et posent
+donc `.git/index.lock`. Le mount Linux **interdit la suppression de fichiers**
+(`Operation not permitted` sur `unlink`). Git crée le verrou, échoue à le
+retirer, et le laisse en place indéfiniment. Toute commande git lancée ensuite
+par Eugène depuis PowerShell se bloque derrière ce verrou fantôme — y compris
+le `git add .` du workflow de push. Les processus `git.exe` qui s'accumulent ne
+sont pas des zombies : ce sont ses propres commandes en attente, et elles se
+terminent d'elles-mêmes dès que le verrou est supprimé.
+
+Le piège est que le verrou est **invisible dans la sortie de la commande** : le
+`git status` de l'IA affiche un résultat correct, l'avertissement `unable to
+unlink` n'apparaît qu'au passage suivant. On peut donc en semer plusieurs sans
+rien remarquer, et la panne ne se manifeste que côté utilisateur, bien plus tard.
+
+**Règle** : depuis le mount, préfixer **toute** commande git de lecture par
+`--no-optional-locks` (ou exporter `GIT_OPTIONAL_LOCKS=0`). Vérifié : aucun
+verrou créé.
+
+```bash
+git --no-optional-locks status --short
+git --no-optional-locks diff --stat
+```
+
+Commandes sûres sans précaution particulière (elles ne touchent pas à l'index) :
+`git log`, `git show`, `git cat-file`, `git rev-parse`, `git branch`.
+
+Commandes à **ne jamais lancer** depuis le mount — elles écrivent l'index et
+laisseront un verrou irrécupérable : `git add`, `git commit`, `git stash`,
+`git checkout`, `git reset`, `git merge`, `git pull`. Ces opérations
+appartiennent au terminal d'Eugène, pas à l'IA.
+
+**Réflexe de fin de session** : avant de donner le bloc git de push, vérifier
+qu'aucun verrou ne traîne, et le signaler s'il y en a un.
+
+```bash
+ls -l .git/index.lock 2>/dev/null && echo "VERROU A SUPPRIMER" || echo "aucun verrou"
+```
+
+La suppression ne peut se faire que côté Windows :
+`Remove-Item .git\index.lock -Force`.
+
+**Ne jamais imputer un verrou à Cursor sans avoir d'abord vérifié l'horodatage
+du fichier** et l'avoir comparé aux commandes git lancées par l'IA. Envoyer
+l'utilisateur tuer des processus qui ne sont pas en cause lui fait perdre du
+temps et, s'il supprime un verrou pendant qu'une écriture est réellement en
+cours, expose son index à la corruption.
+
 ---
 
 ## Git — merges, conflits et cohabitation avec Cursor (leçons du 24 juillet 2026)

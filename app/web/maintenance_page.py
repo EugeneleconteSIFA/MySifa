@@ -362,6 +362,16 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-event[data-draggable="1"]{cursor:grab}
 .cal-event[data-draggable="1"]:active{cursor:grabbing}
 .cal-event.is-past{cursor:not-allowed}
+/* v2.5.28 : boutons quick-select operateurs (Tous / Travaillant ce jour) */
+.case-op-quick-btn{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .12s,transform .06s;white-space:nowrap}
+.case-op-quick-btn:hover{filter:brightness(1.08)}
+.case-op-quick-btn:active{transform:scale(.97)}
+.case-op-quick-btn:disabled{opacity:.5;cursor:wait}
+/* v2.5.26 : pictogramme triangle warning -- plus visible qu'un badge cercle */
+.cal-event .cal-event-noop{position:absolute;top:4px;left:4px;width:22px;height:22px;background:#fff;color:var(--warn,#f59e0b);border-radius:4px;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.4);cursor:help;z-index:6;padding:2px;transition:transform .15s,filter .15s;animation:calNoopPulse 2s ease-in-out infinite}  /* v2.5.27 : coin gauche pour eviter collision avec badge template */
+.cal-event .cal-event-noop svg{width:100%;height:100%;stroke-width:2.4;fill:none;stroke:var(--warn,#f59e0b)}
+.cal-event .cal-event-noop:hover{transform:scale(1.15);filter:brightness(1.05);animation:none}
+@keyframes calNoopPulse{0%,100%{box-shadow:0 2px 6px rgba(0,0,0,.4),0 0 0 0 rgba(245,158,11,.6)}50%{box-shadow:0 2px 6px rgba(0,0,0,.4),0 0 0 6px rgba(245,158,11,0)}}
 .cal-event.is-past::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(255,255,255,.06) 8px,rgba(255,255,255,.06) 16px);pointer-events:none;border-radius:inherit}
 /* v2.5.16 : drag live -- le bloc reste visible et bouge vraiment (comme Google Calendar).
    La bordure et l'ombre appuyees signalent l'etat 'drag actif'. */
@@ -2544,11 +2554,15 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           <div class="case-ops-list" id="case-mod-ops-list"></div>
         </div>
         <div class="case-ops-section">
-          <div class="case-ops-head">
-            <label class="ops-field-label">Opérateurs assignés</label>
-            <select class="ops-select" id="case-mod-operator-picker" style="width:auto;min-width:220px" onchange="addCaseOperatorFromPicker(this)">
-              <option value="">Ajouter un opérateur…</option>
-            </select>
+          <div class="case-ops-head" style="flex-wrap:wrap;gap:8px">
+            <label class="ops-field-label">Opérateurs assignés<span class="req" title="Au moins un opérateur recommandé">*</span></label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <button type="button" class="case-op-quick-btn" onclick="caseAddAllOperators()" title="Sélectionne tous les opérateurs actifs">+ Tous</button>
+              <button type="button" class="case-op-quick-btn" onclick="caseAddOperatorsOnShift()" title="Sélectionne les opérateurs travaillant ce jour selon le planning RH">+ Travaillant ce jour</button>
+              <select class="ops-select" id="case-mod-operator-picker" style="width:auto;min-width:200px" onchange="addCaseOperatorFromPicker(this)">
+                <option value="">Ajouter un opérateur…</option>
+              </select>
+            </div>
           </div>
           <div class="case-ops-list" id="case-mod-operators-list"></div>
         </div>
@@ -2679,6 +2693,19 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             </button>
           </div>
           <div class="case-ops-list" id="tmpl-ed-ops-list"></div>
+        </div>
+        <!-- v2.5.25 : operateurs par defaut pour la recurrence -->
+        <div class="case-ops-section" style="margin-top:14px">
+          <div class="case-ops-head" style="flex-wrap:wrap;gap:8px">
+            <label class="ops-field-label">Opérateurs par défaut <span style="font-size:11px;color:var(--muted);font-weight:500;text-transform:none;letter-spacing:normal">— appliqués automatiquement aux créneaux générés par la récurrence</span></label>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <button type="button" class="case-op-quick-btn" onclick="tmplAddAllDefaultOps()" title="Sélectionne tous les opérateurs actifs">+ Tous</button>
+              <select class="ops-select" id="tmpl-ed-default-op-picker" style="width:auto;min-width:200px" onchange="addTmplDefaultOpFromPicker(this)">
+                <option value="">Ajouter un opérateur…</option>
+              </select>
+            </div>
+          </div>
+          <div class="case-ops-list" id="tmpl-ed-default-op-list"></div>
         </div>
         <div id="tmpl-ed-warning" style="display:none;margin-top:12px;padding:10px 12px;border-radius:8px;background:rgba(251,191,36,.12);border:1px solid var(--warn);color:var(--warn);font-size:12px;line-height:1.5"></div>
       </div>
@@ -3429,6 +3456,20 @@ function _makeEventBlock(item){
     const mine = (ev.operators || []).some(o => o.id === S.me.id);
     if(mine) div.classList.add('is-mine');
   }
+  // v2.5.26 : pictogramme triangle warning si aucun operateur assigne (admin uniquement).
+  if(MAINT_ROLE !== 'operator' && !(ev.operators && ev.operators.length)){  /* v2.5.28 : superadmin/direction voient aussi le badge */
+    const noop = document.createElement('div');
+    noop.className = 'cal-event-noop';
+    noop.innerHTML = '<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+    noop.title = 'Aucun op\u00e9rateur assign\u00e9 \u2014 cliquer pour \u00e9diter';
+    noop.addEventListener('click', function(e){
+      e.stopPropagation();
+      if(_CAL_DRAG && _CAL_DRAG._justFinished){ _CAL_DRAG._justFinished = false; return; }
+      // Ouvre directement la modale d'edition sur ce creneau.
+      try{ editCase(ev.id); }catch(_){ openPlanningDetailsModal([ev]); }
+    });
+    div.appendChild(noop);
+  }
   const ops = Array.isArray(ev.operations) ? ev.operations.filter(o => o && (o.opName || o.opTypeId)) : [];
   const opsCount = ops.length;
   // v2.5.20 : rendu minimaliste -- juste le nom (ou le nom du modele lie, ou la
@@ -3780,7 +3821,21 @@ function _makeClusterBlock(cluster){
   const height = Math.max(28, ((endMin - startMin) / 60) * CAL_HOUR_PX - 2);
   const div = document.createElement('div');
   const single = (cluster.items.length === 1);
-  div.className = 'cal-event' + (single ? '' : ' cal-event-merged') + (ev.template_id ? ' is-from-template' : '');
+  // v2.5.27 : hoiste ev pour l'usage ci-dessous (corrige aussi le bug pre-existant qui accede a ev.template_id).
+  const _ev0 = single ? cluster.items[0] : null;
+  div.className = 'cal-event' + (single ? '' : ' cal-event-merged') + (_ev0 && _ev0.template_id ? ' is-from-template' : '');
+  // v2.5.27 : badge noop aussi cote cluster single (defensif, sur les fallbacks eventuels)
+  if(single && _ev0 && MAINT_ROLE !== 'operator' && !(_ev0.operators && _ev0.operators.length)){
+    const noop = document.createElement('div');
+    noop.className = 'cal-event-noop';
+    noop.innerHTML = '<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+    noop.title = 'Aucun op\u00e9rateur assign\u00e9 \u2014 cliquer pour \u00e9diter';
+    noop.addEventListener('click', function(e){
+      e.stopPropagation();
+      try{ editCase(_ev0.id); }catch(_){ openPlanningDetailsModal([_ev0]); }
+    });
+    div.appendChild(noop);
+  }
   div.style.top = top + 'px';
   div.style.height = height + 'px';
   if(single && cluster.items[0].opNiveau){
@@ -3952,11 +4007,19 @@ function openPlanningDetailsModal(events){
         '</div>' +
         '<div class="plan-det-case-time">' +
           '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' +
-          escHtml(ev.start) + ' – ' + escHtml(ev.end) +
+          escHtml(ev.start) + ' \u2013 ' + escHtml(ev.end) +
         '</div>' +
       '</div>' +
-      // Bloc opérateurs (nouveau : groupe assigné au créneau — partagé).
-      '<div class="plan-det-case-ops-label">Opérateurs assignés (' +
+      // v2.5.25 : bandeau warning si aucun operateur assigne (admin uniquement).
+      (MAINT_ROLE !== 'operator' && !(Array.isArray(ev.operators) && ev.operators.length)
+        ? '<div style="margin-top:10px;padding:10px 14px;border-radius:8px;background:rgba(245,158,11,.12);border:1px solid var(--warn,#f59e0b);color:var(--warn,#f59e0b);font-size:13px;line-height:1.4;display:flex;align-items:center;gap:10px">' +
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>' +
+            '<span style="flex:1"><strong>Aucun op\u00e9rateur assign\u00e9.</strong> Personne ne saura qu\'il y a une t\u00e2che.</span>' +
+            '<button type="button" onclick="editCase(\'' + escAttr(ev.id) + '\')" style="background:var(--warn,#f59e0b);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0">Assigner</button>' +
+          '</div>'
+        : '') +
+      // Bloc op\u00e9rateurs (nouveau : groupe assign\u00e9 au cr\u00e9neau \u2014 partag\u00e9).
+      '<div class="plan-det-case-ops-label">Op\u00e9rateurs assign\u00e9s (' +
         (Array.isArray(ev.operators) ? ev.operators.length : 0) + ')</div>' +
       '<div style="margin-top:6px;margin-bottom:6px">' +
         ((Array.isArray(ev.operators) && ev.operators.length)
@@ -4249,7 +4312,8 @@ function renderCaseOperators(){
   const picker = document.getElementById('case-mod-operator-picker');
   if(list){
     if(!_CASE_OPERATORS.length){
-      list.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:6px 0">Aucun opérateur assigné pour l\'instant.</div>';
+      // v2.5.25 : hint explicite en warning discret si vide.
+      list.innerHTML = '<div style="font-size:12px;color:var(--warn,#f59e0b);padding:6px 0;display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg> Aucun op\u00e9rateur assign\u00e9 \u2014 personne ne saura qu\'il y a une t\u00e2che.</div>';
     } else {
       list.innerHTML = _CASE_OPERATORS.map(op =>
         `<div class="case-op-item" style="display:inline-flex;align-items:center;gap:6px;background:var(--accent-bg);color:var(--accent);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;margin:4px 6px 0 0">${op.nom}<button type="button" onclick="removeCaseOperator(${op.id})" style="background:transparent;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 4px">×</button></div>`
@@ -4261,6 +4325,82 @@ function renderCaseOperators(){
     const available = (_OPERATORS_CATALOG || []).filter(u => !assigned.has(u.id));
     picker.innerHTML = '<option value="">Ajouter un opérateur…</option>' +
       available.map(u => `<option value="${u.id}">${u.nom}</option>`).join('');
+  }
+}
+
+// v2.5.28 : quick-select "Tous les operateurs" pour la modale case.
+function caseAddAllOperators(){
+  const all = _OPERATORS_CATALOG || [];
+  let added = 0;
+  for(const u of all){
+    if(!_CASE_OPERATORS.find(o => o.id === u.id)){
+      _CASE_OPERATORS.push({ id: u.id, nom: u.nom });
+      added++;
+    }
+  }
+  renderCaseOperators();
+  if(typeof showToast === 'function' && added){
+    showToast(added + ' op\u00e9rateur' + (added > 1 ? 's ajout\u00e9s' : ' ajout\u00e9') + '.', 'info');
+  }
+}
+
+// v2.5.28 : quick-select "Travaillant ce jour" -- croise avec rh_planning_postes.
+async function caseAddOperatorsOnShift(){
+  const dateEl = document.getElementById('case-mod-date');
+  // On lit la date depuis _PENDING_CASE (source de verite) plutot que le texte FR affiche.
+  const iso = _PENDING_CASE && _PENDING_CASE.iso;
+  if(!iso){
+    if(typeof showToast === 'function') showToast('Date du cr\u00e9neau introuvable.', 'danger');
+    return;
+  }
+  try{
+    const r = await fetch('/api/maintenance/operators/on-shift?date=' + encodeURIComponent(iso),
+                          { credentials:'include', cache: 'no-store' });
+    if(!r.ok){
+      if(typeof showToast === 'function') showToast('Erreur : chargement du planning RH.', 'danger');
+      return;
+    }
+    const d = await r.json();
+    const list = d.operators || [];
+    let added = 0;
+    for(const u of list){
+      if(!_CASE_OPERATORS.find(o => o.id === u.id)){
+        _CASE_OPERATORS.push({ id: u.id, nom: u.nom });
+        added++;
+      }
+    }
+    renderCaseOperators();
+    if(typeof showToast === 'function'){
+      const src = d.source || '';
+      const srcHint = (src.indexOf('fallback') === 0)
+        ? ' (planning RH indisponible, tous les op\u00e9rateurs ajout\u00e9s)'
+        : '';
+      if(added){
+        showToast(added + ' op\u00e9rateur' + (added > 1 ? 's ajout\u00e9s' : ' ajout\u00e9') + srcHint + '.', 'info');
+      } else if(list.length){
+        showToast('Tous les op\u00e9rateurs travaillant \u00e9taient d\u00e9j\u00e0 s\u00e9lectionn\u00e9s.', 'info');
+      } else {
+        showToast('Aucun op\u00e9rateur travaillant identifi\u00e9 ce jour.', 'info');
+      }
+    }
+  }catch(e){
+    if(typeof showToast === 'function') showToast('Erreur r\u00e9seau.', 'danger');
+  }
+}
+
+// v2.5.28 : quick-select "Tous" pour la modale template editor (operateurs par defaut).
+function tmplAddAllDefaultOps(){
+  const all = _OPERATORS_CATALOG || [];
+  let added = 0;
+  for(const u of all){
+    if(!_TMPL_DEFAULT_OPS.find(o => o.id === u.id)){
+      _TMPL_DEFAULT_OPS.push({ id: u.id, nom: u.nom });
+      added++;
+    }
+  }
+  renderTmplDefaultOps();
+  if(typeof showToast === 'function' && added){
+    showToast(added + ' op\u00e9rateur' + (added > 1 ? 's ajout\u00e9s' : ' ajout\u00e9') + '.', 'info');
   }
 }
 
@@ -12110,12 +12250,19 @@ function renderTemplateManagePanel(){
       ? '<span class="tmpl-manage-badge">Dernier : ' + _fmtDateFR(t.last_event_date) + '</span>'
       : '';
     const opsBadge = '<span class="tmpl-manage-badge">' + (t.ops_count || 0) + ' op.</span>';
+    // v2.5.25 : badge nb d'operateurs par defaut (warning si 0 pour un recurrent actif)
+    const defaultOps = Array.isArray(t.default_operators) ? t.default_operators : [];
+    const defaultOpsBadge = defaultOps.length
+      ? '<span class="tmpl-manage-badge" title="' + escAttr(defaultOps.map(u => u.nom).join(', ')) + '">\u{1F464} ' + defaultOps.length + ' op\u00e9rateur' + (defaultOps.length > 1 ? 's' : '') + ' par d\u00e9faut</span>'
+      : (t.recurrence_active
+          ? '<span class="tmpl-manage-badge" style="background:rgba(245,158,11,.18);color:var(--warn,#f59e0b);border-color:rgba(245,158,11,.35)" title="R\u00e9currence active mais aucun op\u00e9rateur par d\u00e9faut \u2014 les cr\u00e9neaux g\u00e9n\u00e9r\u00e9s seront orphelins.">\u26a0 Sans op\u00e9rateur</span>'
+          : '');
     return '<div class="tmpl-manage-item" data-tmpl-id="' + escAttr(t.id) + '">' +
       '<div class="tmpl-manage-toggle-wrap">' + toggleHtml + '</div>' +
       '<div class="tmpl-manage-info">' +
         '<div class="tmpl-manage-name">' + escHtml(t.name) + '</div>' +
         (t.description ? '<div class="tmpl-manage-desc">' + escHtml(t.description) + '</div>' : '') +
-        '<div class="tmpl-manage-meta">' + opsBadge + recurBadge + nextOcc + stats + lastUsed + '</div>' +
+        '<div class="tmpl-manage-meta">' + opsBadge + defaultOpsBadge + recurBadge + nextOcc + stats + lastUsed + '</div>' +
       '</div>' +
       '<div class="tmpl-manage-actions">' +
         '<button type="button" onclick="openTemplateEditor(' + escAttr(t.id) + ')">\u00c9diter</button>' +
@@ -12248,10 +12395,15 @@ async function saveEventAsTemplate(eventId){
 
 let _TMPL_EDIT_ID = null;
 let _TMPL_OPS = [];
+// v2.5.25 : opérateurs par défaut du template en cours d'édition [{id, nom}]
+let _TMPL_DEFAULT_OPS = [];
 
 async function openTemplateEditor(templateId){
   _TMPL_EDIT_ID = templateId || null;
   _TMPL_OPS = [];
+  _TMPL_DEFAULT_OPS = [];
+  // v2.5.25 : charge le catalogue d'operateurs en arriere-plan pour le picker.
+  try{ if(typeof _loadOperatorsCatalog === 'function') await _loadOperatorsCatalog(); }catch(_){}
   const m = document.getElementById('tmpl-editor-modal');
   const nameEl = document.getElementById('tmpl-ed-name');
   const descEl = document.getElementById('tmpl-ed-desc');
@@ -12286,6 +12438,8 @@ async function openTemplateEditor(templateId){
           machines: Array.isArray(o.machines) ? o.machines.slice() : [],
         };
       });
+      // v2.5.25 : charge les operateurs par defaut du template
+      _TMPL_DEFAULT_OPS = (t.default_operators || []).map(u => ({ id: u.id, nom: u.nom }));
       if(ttlEl) ttlEl.textContent = 'Modifier le modèle';
       if(lblEl) lblEl.textContent = 'Enregistrer';
       // Avertissement resync
@@ -12299,6 +12453,7 @@ async function openTemplateEditor(templateId){
     if(lblEl) lblEl.textContent = 'Créer';
   }
   renderTmplOpsList();
+  renderTmplDefaultOps();
   if(m){ m.classList.add('open'); m.setAttribute('aria-hidden', 'false'); }
   document.body.style.overflow = 'hidden';
   setTimeout(() => { nameEl?.focus(); }, 60);
@@ -12310,6 +12465,46 @@ function closeTemplateEditor(){
   document.body.style.overflow = '';
   _TMPL_EDIT_ID = null;
   _TMPL_OPS = [];
+  _TMPL_DEFAULT_OPS = [];
+}
+
+// v2.5.25 : rendu du picker + de la liste d'operateurs par defaut du template.
+function renderTmplDefaultOps(){
+  const list = document.getElementById('tmpl-ed-default-op-list');
+  const picker = document.getElementById('tmpl-ed-default-op-picker');
+  if(list){
+    if(!_TMPL_DEFAULT_OPS.length){
+      list.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:6px 0;font-style:italic">Aucun op\u00e9rateur par d\u00e9faut \u2014 les cr\u00e9neaux g\u00e9n\u00e9r\u00e9s seront orphelins.</div>';
+    } else {
+      list.innerHTML = _TMPL_DEFAULT_OPS.map(op =>
+        '<div style="display:inline-flex;align-items:center;gap:6px;background:var(--accent-bg);color:var(--accent);border-radius:8px;padding:4px 10px;font-size:12px;font-weight:600;margin:4px 6px 0 0">' +
+          escHtml(op.nom || '') +
+          '<button type="button" onclick="removeTmplDefaultOp(' + op.id + ')" style="background:transparent;border:none;color:inherit;cursor:pointer;font-size:14px;line-height:1;padding:0 0 0 4px">\u00d7</button>' +
+        '</div>'
+      ).join('');
+    }
+  }
+  if(picker){
+    const assigned = new Set(_TMPL_DEFAULT_OPS.map(o => o.id));
+    const available = (_OPERATORS_CATALOG || []).filter(u => !assigned.has(u.id));
+    picker.innerHTML = '<option value="">Ajouter un op\u00e9rateur\u2026</option>' +
+      available.map(u => '<option value="' + u.id + '">' + escHtml(u.nom) + '</option>').join('');
+  }
+}
+
+function addTmplDefaultOpFromPicker(sel){
+  const id = parseInt(sel.value, 10);
+  if(!id) return;
+  const user = (_OPERATORS_CATALOG || []).find(u => u.id === id);
+  if(!user) return;
+  if(_TMPL_DEFAULT_OPS.find(o => o.id === id)) return;
+  _TMPL_DEFAULT_OPS.push({ id: user.id, nom: user.nom });
+  renderTmplDefaultOps();
+}
+
+function removeTmplDefaultOp(id){
+  _TMPL_DEFAULT_OPS = _TMPL_DEFAULT_OPS.filter(o => o.id !== id);
+  renderTmplDefaultOps();
 }
 
 function addTmplOp(){
@@ -12403,7 +12598,9 @@ async function submitTemplateEditor(e){
     let r;
     // v2.4.29 : fusion avec les champs recurrence
     const recur = _readRecurFromForm();
-    const payload = Object.assign({ name, description: desc, ops }, recur);
+    // v2.5.25 : inclut la liste des ids d'operateurs par defaut
+    const defaultOpIds = (_TMPL_DEFAULT_OPS || []).map(u => u.id);
+    const payload = Object.assign({ name, description: desc, ops, default_operators: defaultOpIds }, recur);
     if(_TMPL_EDIT_ID){
       r = await fetch('/api/maintenance/templates/' + encodeURIComponent(_TMPL_EDIT_ID), {
         method:'PATCH', credentials:'include',

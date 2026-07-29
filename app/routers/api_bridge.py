@@ -10,6 +10,7 @@ Endpoints :
   GET  /api/bridge/fiches      → liste les fiches techniques importées (of:read)
 """
 import hashlib
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -21,6 +22,26 @@ from app.core.database import get_db
 from app.services.fiche_pdf import generate_fiche_pdf
 
 router = APIRouter(prefix="/api/bridge", tags=["bridge"])
+
+# Numéro racine d'un OF SIFA. Sert UNIQUEMENT de pré-filtre SQL pour ramener
+# les quelques lignes candidates ; la comparaison finale est faite sur le
+# numéro complet (cf. _of_numero_key) car « 9932056 » et « Reliquat 9932056 »
+# sont deux OF bien distincts qui doivent pouvoir coexister.
+_OF_RACINE_RE = re.compile(r"\b(99\d{5})\b")
+
+
+def _of_racine(num: Optional[str]) -> Optional[str]:
+    m = _OF_RACINE_RE.search(str(num or ""))
+    return m.group(1) if m else None
+
+
+def _of_numero_key(num: Optional[str]) -> str:
+    """Clé de comparaison d'un numéro d'OF : casse et espaces neutralisés.
+
+    « Reliquat 9932056 », « reliquat  9932056 » et « RELIQUAT 9932056 » sont le
+    même OF ; « 9932056 » en est un autre.
+    """
+    return re.sub(r"\s+", " ", str(num or "").strip()).lower()
 
 
 # ── Auth ──────────────────────────────────────────────────────────────
@@ -114,8 +135,12 @@ def push_of(
     """
     Pousse un OF depuis Access vers of_imports.
 
-    Idempotent : si of_numero existe déjà dans of_imports, retourne
-    {"inserted": false, "reason": "already_exists"} sans modifier les données.
+    Idempotent : si un OF portant exactement le même numéro (casse et espaces
+    normalisés) existe déjà dans of_imports, retourne
+    {"inserted": false, "reason": "already_exists"} sans rien modifier.
+
+    « 9932056 » et « Reliquat 9932056 » sont deux OF distincts : chacun peut
+    être créé indépendamment de l'autre.
     """
     _require_scope(x_api_key, "of:write")
 
@@ -123,18 +148,51 @@ def push_of(
     if not numero:
         raise HTTPException(status_code=400, detail="numero_of est obligatoire.")
 
+    racine = _of_racine(numero)
+    key = _of_numero_key(numero)
+
     with get_db() as conn:
-        # Vérification doublon — ne jamais écraser un OF existant
-        existing = conn.execute(
-            "SELECT id FROM of_imports WHERE TRIM(of_numero)=? LIMIT 1",
-            (numero,)
-        ).fetchone()
+        # Dédoublonnage — ne jamais écraser ni doubler un OF existant.
+        #
+        # Le match porte sur le numéro COMPLET, à la casse et aux espaces près.
+        # On ne compare surtout pas sur le numéro racine : « 9932056 » doit
+        # pouvoir être créé même si « Reliquat 9932056 » existe déjà (et
+        # inversement) — ce sont deux OF différents, avec leurs quantités et
+        # leur aperçu propres.
+        #
+        # L'ancien TRIM(of_numero)=? était sensible à la casse et aux espaces
+        # multiples, d'où des doublons qui passaient au travers. Le pré-filtre
+        # SQL sur la racine limite la lecture à quelques lignes ; le tri final
+        # est fait en Python (SQLite ne sait pas normaliser les espaces).
+        if racine:
+            rows = conn.execute(
+                """SELECT id, of_numero, pdf_filename, date_import FROM of_imports
+                   WHERE of_numero LIKE ?
+                      OR LOWER(TRIM(of_numero)) = LOWER(TRIM(?))""",
+                ("%" + racine + "%", numero),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT id, of_numero, pdf_filename, date_import FROM of_imports
+                   WHERE LOWER(TRIM(of_numero)) = LOWER(TRIM(?))""",
+                (numero,),
+            ).fetchall()
+
+        matches = [r for r in rows if _of_numero_key(r["of_numero"]) == key]
+        # Tri stable : import le plus récent d'abord, puis les OF disposant
+        # d'un vrai PDF (aperçu réel) remontent devant ceux générés sur template.
+        matches.sort(key=lambda r: str(r["date_import"] or ""), reverse=True)
+        matches.sort(key=lambda r: 0 if (r["pdf_filename"] or "").strip() else 1)
+        existing = matches[0] if matches else None
+
         if existing:
             return {
                 "inserted": False,
                 "reason": "already_exists",
                 "id": existing["id"],
                 "of_numero": numero,
+                "matched_of_numero": existing["of_numero"],
+                "has_pdf": bool(existing["pdf_filename"]),
             }
 
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -163,13 +221,29 @@ def push_of(
         conn.commit()
         new_id = cur.lastrowid
 
-    # Auto-link : relier les dossiers planning dont le numero_of correspond
+    # Auto-link : relier les dossiers planning dont le numero_of correspond.
+    #
+    # Garde-fou : on ne repointe JAMAIS un dossier déjà relié à un OF disposant
+    # d'un PDF. L'OF poussé par Access n'a pas de pdf_filename — son aperçu est
+    # un rendu sur template vierge — et il écrasait sinon l'aperçu réel importé
+    # à la main par la production.
     with get_db() as conn2:
         conn2.execute(
             """UPDATE planning_entries
                SET of_import_id = ?
                WHERE LOWER(TRIM(numero_of)) = LOWER(TRIM(?))
-                 AND (of_import_id IS NULL OR of_import_id != ?)""",
+                 AND (of_import_id IS NULL OR of_import_id != ?)
+                 AND NOT EXISTS (
+                       SELECT 1 FROM of_imports o
+                       WHERE o.id = planning_entries.of_import_id
+                         AND TRIM(COALESCE(o.pdf_filename,'')) != ''
+                 )
+                 AND NOT EXISTS (
+                       SELECT 1 FROM planning_of_links pl
+                       JOIN of_imports o2 ON o2.id = pl.of_import_id
+                       WHERE pl.planning_entry_id = planning_entries.id
+                         AND TRIM(COALESCE(o2.pdf_filename,'')) != ''
+                 )""",
             (new_id, numero, new_id),
         )
         conn2.commit()
