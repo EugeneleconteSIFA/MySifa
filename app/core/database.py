@@ -7614,6 +7614,19 @@ Ressources :
         conn.execute("ALTER TABLE maintenance_event_ops ADD COLUMN invalidated_by INTEGER")
     if "invalidated_at" not in _mo_cols:
         conn.execute("ALTER TABLE maintenance_event_ops ADD COLUMN invalidated_at TEXT")
+    # v2.5.15 : template_origin_date -- date que le generateur a INITIALEMENT
+    # assignee a une occurrence recurrente. Immuable meme si l'admin deplace
+    # ensuite le creneau via drag&drop. Le dedup du generateur se fait sur ce
+    # champ, evitant la duplication (re-generation a la date d'origine).
+    _me_cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_events)").fetchall()}
+    if "template_origin_date" not in _me_cols:
+        conn.execute("ALTER TABLE maintenance_events ADD COLUMN template_origin_date TEXT")
+        # Backfill : pour tous les creneaux recurrents existants, on considere
+        # que leur date_prevue actuelle EST leur date d'origine (pas encore deplaces).
+        conn.execute(
+            "UPDATE maintenance_events SET template_origin_date = date_prevue "
+            "WHERE template_id IS NOT NULL AND template_origin_date IS NULL"
+        )
     conn.commit()
 
 
