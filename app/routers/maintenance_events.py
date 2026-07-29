@@ -312,6 +312,56 @@ class OperatorAddBody(BaseModel):
 
 # ─── Endpoints — codes & opérateurs (utilitaires pickers) ────────
 
+@router.get("/api/maintenance/operators/on-shift")
+def list_operators_on_shift(request: Request, date: str):
+    """v2.5.28 : liste les operateurs travaillant a une date donnee.
+    Croise avec rh_planning_postes (planning RH par semaine ISO). Retourne les user_id
+    ayant au moins un creneau (matin/aprem/nuit) sur au moins une machine ce jour-la.
+    Fallback : si aucun planning defini pour cette semaine -> renvoie tous les operateurs
+    (l'admin decide)."""
+    _require_access(request)
+    try:
+        d = datetime.strptime(date, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="date invalide (format attendu YYYY-MM-DD)")
+    iso_year, iso_week, iso_weekday = d.isocalendar()
+    semaine = f"{iso_year}-W{iso_week:02d}"
+    day_bit = 1 << (iso_weekday - 1)  # Lun=bit0, Mar=bit1, ...
+    with get_db() as conn:
+        # Verifie que la table existe (peut ne pas etre presente sur toutes les instances)
+        has_table = conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='rh_planning_postes'").fetchone()
+        if not has_table:
+            # Pas de planning RH : renvoie tous les operateurs (comme list_operators)
+            rows = conn.execute(
+                "SELECT id, nom FROM users "
+                "WHERE (role = ? OR LOWER(COALESCE(nom, '')) LIKE '%lesaffre%') AND actif = 1 "
+                "ORDER BY nom",
+                (ROLE_FABRICATION,),
+            ).fetchall()
+            return {"operators": [dict(r) for r in rows], "source": "fallback_no_planning"}
+        rows = conn.execute(
+            """SELECT DISTINCT u.id, u.nom
+               FROM rh_planning_postes p
+               JOIN users u ON u.id = p.user_id
+               WHERE p.semaine = ?
+                 AND (p.jours & ?) != 0
+                 AND u.actif = 1
+               ORDER BY u.nom""",
+            (semaine, day_bit),
+        ).fetchall()
+    if not rows:
+        # Semaine sans planning defini : fallback tous les operateurs
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT id, nom FROM users "
+                "WHERE (role = ? OR LOWER(COALESCE(nom, '')) LIKE '%lesaffre%') AND actif = 1 "
+                "ORDER BY nom",
+                (ROLE_FABRICATION,),
+            ).fetchall()
+        return {"operators": [dict(r) for r in rows], "source": "fallback_empty_planning"}
+    return {"operators": [dict(r) for r in rows], "source": "rh_planning", "semaine": semaine}
+
+
 @router.get("/api/maintenance/operators")
 def list_operators(request: Request):
     """Liste des utilisateurs assignables : opérateurs fabrication + Manuel Lesaffre.

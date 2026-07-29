@@ -362,6 +362,11 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-event[data-draggable="1"]{cursor:grab}
 .cal-event[data-draggable="1"]:active{cursor:grabbing}
 .cal-event.is-past{cursor:not-allowed}
+/* v2.5.28 : boutons quick-select operateurs (Tous / Travaillant ce jour) */
+.case-op-quick-btn{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .12s,transform .06s;white-space:nowrap}
+.case-op-quick-btn:hover{filter:brightness(1.08)}
+.case-op-quick-btn:active{transform:scale(.97)}
+.case-op-quick-btn:disabled{opacity:.5;cursor:wait}
 /* v2.5.26 : pictogramme triangle warning -- plus visible qu'un badge cercle */
 .cal-event .cal-event-noop{position:absolute;top:4px;left:4px;width:22px;height:22px;background:#fff;color:var(--warn,#f59e0b);border-radius:4px;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.4);cursor:help;z-index:6;padding:2px;transition:transform .15s,filter .15s;animation:calNoopPulse 2s ease-in-out infinite}  /* v2.5.27 : coin gauche pour eviter collision avec badge template */
 .cal-event .cal-event-noop svg{width:100%;height:100%;stroke-width:2.4;fill:none;stroke:var(--warn,#f59e0b)}
@@ -2549,11 +2554,15 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           <div class="case-ops-list" id="case-mod-ops-list"></div>
         </div>
         <div class="case-ops-section">
-          <div class="case-ops-head">
+          <div class="case-ops-head" style="flex-wrap:wrap;gap:8px">
             <label class="ops-field-label">Opérateurs assignés<span class="req" title="Au moins un opérateur recommandé">*</span></label>
-            <select class="ops-select" id="case-mod-operator-picker" style="width:auto;min-width:220px" onchange="addCaseOperatorFromPicker(this)">
-              <option value="">Ajouter un opérateur…</option>
-            </select>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <button type="button" class="case-op-quick-btn" onclick="caseAddAllOperators()" title="Sélectionne tous les opérateurs actifs">+ Tous</button>
+              <button type="button" class="case-op-quick-btn" onclick="caseAddOperatorsOnShift()" title="Sélectionne les opérateurs travaillant ce jour selon le planning RH">+ Travaillant ce jour</button>
+              <select class="ops-select" id="case-mod-operator-picker" style="width:auto;min-width:200px" onchange="addCaseOperatorFromPicker(this)">
+                <option value="">Ajouter un opérateur…</option>
+              </select>
+            </div>
           </div>
           <div class="case-ops-list" id="case-mod-operators-list"></div>
         </div>
@@ -2687,11 +2696,14 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
         </div>
         <!-- v2.5.25 : operateurs par defaut pour la recurrence -->
         <div class="case-ops-section" style="margin-top:14px">
-          <div class="case-ops-head">
+          <div class="case-ops-head" style="flex-wrap:wrap;gap:8px">
             <label class="ops-field-label">Opérateurs par défaut <span style="font-size:11px;color:var(--muted);font-weight:500;text-transform:none;letter-spacing:normal">— appliqués automatiquement aux créneaux générés par la récurrence</span></label>
-            <select class="ops-select" id="tmpl-ed-default-op-picker" style="width:auto;min-width:220px" onchange="addTmplDefaultOpFromPicker(this)">
-              <option value="">Ajouter un opérateur…</option>
-            </select>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <button type="button" class="case-op-quick-btn" onclick="tmplAddAllDefaultOps()" title="Sélectionne tous les opérateurs actifs">+ Tous</button>
+              <select class="ops-select" id="tmpl-ed-default-op-picker" style="width:auto;min-width:200px" onchange="addTmplDefaultOpFromPicker(this)">
+                <option value="">Ajouter un opérateur…</option>
+              </select>
+            </div>
           </div>
           <div class="case-ops-list" id="tmpl-ed-default-op-list"></div>
         </div>
@@ -3445,7 +3457,7 @@ function _makeEventBlock(item){
     if(mine) div.classList.add('is-mine');
   }
   // v2.5.26 : pictogramme triangle warning si aucun operateur assigne (admin uniquement).
-  if(MAINT_ROLE === 'admin' && !(ev.operators && ev.operators.length)){
+  if(MAINT_ROLE !== 'operator' && !(ev.operators && ev.operators.length)){  /* v2.5.28 : superadmin/direction voient aussi le badge */
     const noop = document.createElement('div');
     noop.className = 'cal-event-noop';
     noop.innerHTML = '<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
@@ -3813,7 +3825,7 @@ function _makeClusterBlock(cluster){
   const _ev0 = single ? cluster.items[0] : null;
   div.className = 'cal-event' + (single ? '' : ' cal-event-merged') + (_ev0 && _ev0.template_id ? ' is-from-template' : '');
   // v2.5.27 : badge noop aussi cote cluster single (defensif, sur les fallbacks eventuels)
-  if(single && _ev0 && MAINT_ROLE === 'admin' && !(_ev0.operators && _ev0.operators.length)){
+  if(single && _ev0 && MAINT_ROLE !== 'operator' && !(_ev0.operators && _ev0.operators.length)){
     const noop = document.createElement('div');
     noop.className = 'cal-event-noop';
     noop.innerHTML = '<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
@@ -3999,7 +4011,7 @@ function openPlanningDetailsModal(events){
         '</div>' +
       '</div>' +
       // v2.5.25 : bandeau warning si aucun operateur assigne (admin uniquement).
-      (MAINT_ROLE === 'admin' && !(Array.isArray(ev.operators) && ev.operators.length)
+      (MAINT_ROLE !== 'operator' && !(Array.isArray(ev.operators) && ev.operators.length)
         ? '<div style="margin-top:10px;padding:10px 14px;border-radius:8px;background:rgba(245,158,11,.12);border:1px solid var(--warn,#f59e0b);color:var(--warn,#f59e0b);font-size:13px;line-height:1.4;display:flex;align-items:center;gap:10px">' +
             '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>' +
             '<span style="flex:1"><strong>Aucun op\u00e9rateur assign\u00e9.</strong> Personne ne saura qu\'il y a une t\u00e2che.</span>' +
@@ -4313,6 +4325,82 @@ function renderCaseOperators(){
     const available = (_OPERATORS_CATALOG || []).filter(u => !assigned.has(u.id));
     picker.innerHTML = '<option value="">Ajouter un opérateur…</option>' +
       available.map(u => `<option value="${u.id}">${u.nom}</option>`).join('');
+  }
+}
+
+// v2.5.28 : quick-select "Tous les operateurs" pour la modale case.
+function caseAddAllOperators(){
+  const all = _OPERATORS_CATALOG || [];
+  let added = 0;
+  for(const u of all){
+    if(!_CASE_OPERATORS.find(o => o.id === u.id)){
+      _CASE_OPERATORS.push({ id: u.id, nom: u.nom });
+      added++;
+    }
+  }
+  renderCaseOperators();
+  if(typeof showToast === 'function' && added){
+    showToast(added + ' op\u00e9rateur' + (added > 1 ? 's ajout\u00e9s' : ' ajout\u00e9') + '.', 'info');
+  }
+}
+
+// v2.5.28 : quick-select "Travaillant ce jour" -- croise avec rh_planning_postes.
+async function caseAddOperatorsOnShift(){
+  const dateEl = document.getElementById('case-mod-date');
+  // On lit la date depuis _PENDING_CASE (source de verite) plutot que le texte FR affiche.
+  const iso = _PENDING_CASE && _PENDING_CASE.iso;
+  if(!iso){
+    if(typeof showToast === 'function') showToast('Date du cr\u00e9neau introuvable.', 'danger');
+    return;
+  }
+  try{
+    const r = await fetch('/api/maintenance/operators/on-shift?date=' + encodeURIComponent(iso),
+                          { credentials:'include', cache: 'no-store' });
+    if(!r.ok){
+      if(typeof showToast === 'function') showToast('Erreur : chargement du planning RH.', 'danger');
+      return;
+    }
+    const d = await r.json();
+    const list = d.operators || [];
+    let added = 0;
+    for(const u of list){
+      if(!_CASE_OPERATORS.find(o => o.id === u.id)){
+        _CASE_OPERATORS.push({ id: u.id, nom: u.nom });
+        added++;
+      }
+    }
+    renderCaseOperators();
+    if(typeof showToast === 'function'){
+      const src = d.source || '';
+      const srcHint = (src.indexOf('fallback') === 0)
+        ? ' (planning RH indisponible, tous les op\u00e9rateurs ajout\u00e9s)'
+        : '';
+      if(added){
+        showToast(added + ' op\u00e9rateur' + (added > 1 ? 's ajout\u00e9s' : ' ajout\u00e9') + srcHint + '.', 'info');
+      } else if(list.length){
+        showToast('Tous les op\u00e9rateurs travaillant \u00e9taient d\u00e9j\u00e0 s\u00e9lectionn\u00e9s.', 'info');
+      } else {
+        showToast('Aucun op\u00e9rateur travaillant identifi\u00e9 ce jour.', 'info');
+      }
+    }
+  }catch(e){
+    if(typeof showToast === 'function') showToast('Erreur r\u00e9seau.', 'danger');
+  }
+}
+
+// v2.5.28 : quick-select "Tous" pour la modale template editor (operateurs par defaut).
+function tmplAddAllDefaultOps(){
+  const all = _OPERATORS_CATALOG || [];
+  let added = 0;
+  for(const u of all){
+    if(!_TMPL_DEFAULT_OPS.find(o => o.id === u.id)){
+      _TMPL_DEFAULT_OPS.push({ id: u.id, nom: u.nom });
+      added++;
+    }
+  }
+  renderTmplDefaultOps();
+  if(typeof showToast === 'function' && added){
+    showToast(added + ' op\u00e9rateur' + (added > 1 ? 's ajout\u00e9s' : ' ajout\u00e9') + '.', 'info');
   }
 }
 
