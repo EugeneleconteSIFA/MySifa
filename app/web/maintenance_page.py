@@ -363,7 +363,9 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-event[data-draggable="1"]:active{cursor:grabbing}
 .cal-event.is-past{cursor:not-allowed}
 .cal-event.is-past::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(255,255,255,.06) 8px,rgba(255,255,255,.06) 16px);pointer-events:none;border-radius:inherit}
-.cal-event.is-dragging{visibility:hidden;pointer-events:none}  /* v2.5.15 : cache l'original pour eviter duplication visuelle */
+/* v2.5.16 : drag live -- le bloc reste visible et bouge vraiment (comme Google Calendar).
+   La bordure et l'ombre appuyees signalent l'etat 'drag actif'. */
+.cal-event.is-dragging{pointer-events:none;box-shadow:0 12px 32px rgba(0,0,0,.45),0 0 0 2px var(--accent);z-index:10;filter:brightness(1.08)}
 .cal-event .cal-event-resize-handle{position:absolute;left:6px;right:6px;height:6px;cursor:ns-resize;z-index:5}
 .cal-event .cal-event-resize-handle.top{top:0}
 .cal-event .cal-event-resize-handle.bottom{bottom:0}
@@ -3517,7 +3519,6 @@ function _onCalDragMove(e){
     if(Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
     _CAL_DRAG.active = true;
     _CAL_DRAG.div.classList.add('is-dragging');
-    // Crée le ghost.
     const g = document.createElement('div');
     g.className = 'cal-drag-ghost';
     document.body.appendChild(g);
@@ -3527,18 +3528,14 @@ function _onCalDragMove(e){
   const el = document.elementFromPoint(e.clientX, e.clientY);
   const col = el ? el.closest('.cal-wv-day-col') : null;
   const rect = col ? col.getBoundingClientRect() : null;
-  // Vue Jour ou Semaine ? Adapte la hauteur px/heure.
   const px = (CAL_STATE && CAL_STATE.view === 'day') ? 72 : CAL_HOUR_PX;
-  // Retire highlight de l'ancienne cible.
   document.querySelectorAll('.cal-wv-day-col.drag-over').forEach(function(c){ c.classList.remove('drag-over'); });
-  // Gestion cross-week : survol prolongé sur ◀ / ▶
   _handleCrossWeekHover(el, e);
   if(col && rect){
     col.classList.add('drag-over');
     const y = e.clientY - rect.top;
     const rawMin = CAL_HOUR_START * 60 + Math.max(0, y) * 60 / px;
     if(_CAL_DRAG.mode === 'move'){
-      // Snap sur le début, conserve la durée.
       let ns = _snap15(rawMin);
       if(ns < CAL_HOUR_START*60) ns = CAL_HOUR_START*60;
       if(ns + _CAL_DRAG.duration > CAL_HOUR_END*60) ns = CAL_HOUR_END*60 - _CAL_DRAG.duration;
@@ -3551,7 +3548,7 @@ function _onCalDragMove(e){
       if(ns > _CAL_DRAG.origEndMin - 15) ns = _CAL_DRAG.origEndMin - 15;
       _CAL_DRAG.targetStartMin = ns;
       _CAL_DRAG.targetEndMin = _CAL_DRAG.origEndMin;
-      _CAL_DRAG.targetDate = _CAL_DRAG.origDate;  // resize ne change PAS la date
+      _CAL_DRAG.targetDate = _CAL_DRAG.origDate;
     } else if(_CAL_DRAG.mode === 'resize-bottom'){
       let ne = _snap15(rawMin);
       if(ne < _CAL_DRAG.origStartMin + 15) ne = _CAL_DRAG.origStartMin + 15;
@@ -3561,7 +3558,22 @@ function _onCalDragMove(e){
       _CAL_DRAG.targetDate = _CAL_DRAG.origDate;
     }
   }
-  // MAJ ghost visuel.
+  // v2.5.16 : LIVE UPDATE du bloc lui-meme dans le DOM (comme Google Calendar).
+  // - move : reparent vers la nouvelle colonne + repositionne top
+  // - resize-top : deplace top + ajuste height
+  // - resize-bottom : ajuste height uniquement
+  const div = _CAL_DRAG.div;
+  const startPx = ((_CAL_DRAG.targetStartMin - CAL_HOUR_START*60) / 60) * px;
+  const heightPx = Math.max(22, ((_CAL_DRAG.targetEndMin - _CAL_DRAG.targetStartMin) / 60) * px - 2);
+  if(_CAL_DRAG.mode === 'move' && col && col !== div.parentElement){
+    // Reparenting : passe dans la nouvelle colonne, largeur pleine (lane packing sera recalcule au drop).
+    col.appendChild(div);
+    div.style.left = '3px';
+    div.style.width = 'calc(100% - 6px)';
+  }
+  div.style.top = startPx + 'px';
+  div.style.height = heightPx + 'px';
+  // Ghost : simple label horaire qui suit le curseur (leger, non intrusif).
   if(_CAL_DRAG.ghost){
     _CAL_DRAG.ghost.style.left = (e.clientX + 14) + 'px';
     _CAL_DRAG.ghost.style.top  = (e.clientY + 14) + 'px';
