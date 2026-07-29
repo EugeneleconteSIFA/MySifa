@@ -123,12 +123,15 @@
   }
 
   function _triggerLabel(t) {
-    if (!t || !t.type) return 'Manuel';
-    if (t.type === 'manual')   return 'Manuel — déclenché par l\'opérateur';
+    if (!t || !t.type) return 'Déclencheur non défini';
+    // v2.5.6 : 'manual' est un type obsolète, retiré du formulaire. Il ne
+    // remonte plus jamais dans /alerts/active — libellé conservé pour les
+    // fiches historiques encore stockées avec.
+    if (t.type === 'manual')   return 'Manuel — obsolète, ne déclenche rien';
     if (t.type === 'periodic') {
       const m = (t.interval_minutes != null) ? t.interval_minutes
                 : (t.interval_hours != null ? Math.round(t.interval_hours * 60) : '?');
-      return 'Périodique — toutes les ' + m + ' min';
+      return 'Périodique — toutes les ' + m + ' min, en production';
     }
     if (t.type === 'calendar') return 'Calendaire — ' + (t.time || '??:??');
     if (t.type === 'event')    return 'Événementiel';
