@@ -145,6 +145,31 @@ def _serialize_imprimante(row) -> dict:
     }
 
 
+# Cache de presence de la colonne `variante` (migration 217).
+#
+# Pourquoi ce garde-fou : l'environnement de test v1 tourne avec
+# MIGRATIONS_DISABLED=1 sur la MEME base que la prod (cf. config.py). Le code
+# promu sur v1 s'execute donc contre un schema NON migre. Sans cette detection,
+# tout `SELECT ... variante ...` leve OperationalError -> 500 -> et le panneau
+# Imprimantes se vide entierement cote front (un seul appel en echec suffit).
+# Meme protection utile en prod entre le deploiement du code et le boot qui
+# joue la migration.
+_HAS_VARIANTE: bool = False
+
+
+def _variante_column_exists(conn) -> bool:
+    """True si imprimante_templates.variante existe. Le resultat positif est
+    mis en cache (une migration ne retire jamais la colonne) ; le negatif est
+    reteste a chaque appel, pour qu'un redemarrage post-migration soit vu
+    immediatement. Le PRAGMA est local et non couteux."""
+    global _HAS_VARIANTE
+    if _HAS_VARIANTE:
+        return True
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(imprimante_templates)").fetchall()}
+    _HAS_VARIANTE = "variante" in cols
+    return _HAS_VARIANTE
+
+
 def _row_variante(row) -> str:
     """Lit `variante` de facon tolerante : une base non encore migree (ou une
     requete qui ne selectionne pas la colonne) retombe sur 'full'."""
@@ -443,9 +468,15 @@ def _assert_slot_libre(conn, imprimante_id: int, usage_key: str, variante: str,
     Sans ce garde-fou, l'admin creait un doublon invisible : la resolution
     d'impression n'en prend qu'un, et rien dans l'UI n'indiquait lequel.
     """
-    q = ("SELECT id,nom FROM imprimante_templates "
-         "WHERE imprimante_id=? AND usage_key=? AND variante=? AND actif=1")
-    args: list = [imprimante_id, usage_key, variante]
+    if _variante_column_exists(conn):
+        q = ("SELECT id,nom FROM imprimante_templates "
+             "WHERE imprimante_id=? AND usage_key=? AND variante=? AND actif=1")
+        args: list = [imprimante_id, usage_key, variante]
+    else:
+        # Schema non migre : une seule ligne par (imprimante, usage) fait foi.
+        q = ("SELECT id,nom FROM imprimante_templates "
+             "WHERE imprimante_id=? AND usage_key=? AND actif=1")
+        args = [imprimante_id, usage_key]
     if exclude_id is not None:
         q += " AND id<>?"
         args.append(exclude_id)
@@ -462,13 +493,16 @@ def _assert_slot_libre(conn, imprimante_id: int, usage_key: str, variante: str,
 @router.get("/templates")
 def list_templates(request: Request, imprimante_id: Optional[int] = None):
     require_superadmin(request)
-    q = ("SELECT id,imprimante_id,usage_key,variante,nom,contenu,actif,updated_at,updated_by "
-         "FROM imprimante_templates")
-    args: list = []
-    if imprimante_id:
-        q += " WHERE imprimante_id=?"; args.append(imprimante_id)
-    q += " ORDER BY imprimante_id, usage_key, variante, nom"
     with get_db() as conn:
+        has_var = _variante_column_exists(conn)
+        col = "variante," if has_var else ""
+        order = "variante, " if has_var else ""
+        q = (f"SELECT id,imprimante_id,usage_key,{col}nom,contenu,actif,updated_at,updated_by "
+             "FROM imprimante_templates")
+        args: list = []
+        if imprimante_id:
+            q += " WHERE imprimante_id=?"; args.append(imprimante_id)
+        q += f" ORDER BY imprimante_id, usage_key, {order}nom"
         rows = conn.execute(q, args).fetchall()
     return [_serialize_template(r) for r in rows]
 
@@ -481,13 +515,22 @@ def create_template(payload: TemplateCreate, request: Request):
     usage_key = payload.usage_key.strip()
     with get_db() as conn:
         _assert_slot_libre(conn, payload.imprimante_id, usage_key, variante)
-        cur = conn.execute(
-            "INSERT INTO imprimante_templates "
-            "(imprimante_id,usage_key,variante,nom,contenu,actif,updated_at,updated_by) "
-            "VALUES (?,?,?,?,?,1,?,?)",
-            (payload.imprimante_id, usage_key, variante, payload.nom.strip(),
-             payload.contenu, now, u.get("email")),
-        )
+        if _variante_column_exists(conn):
+            cur = conn.execute(
+                "INSERT INTO imprimante_templates "
+                "(imprimante_id,usage_key,variante,nom,contenu,actif,updated_at,updated_by) "
+                "VALUES (?,?,?,?,?,1,?,?)",
+                (payload.imprimante_id, usage_key, variante, payload.nom.strip(),
+                 payload.contenu, now, u.get("email")),
+            )
+        else:
+            cur = conn.execute(
+                "INSERT INTO imprimante_templates "
+                "(imprimante_id,usage_key,nom,contenu,actif,updated_at,updated_by) "
+                "VALUES (?,?,?,?,1,?,?)",
+                (payload.imprimante_id, usage_key, payload.nom.strip(),
+                 payload.contenu, now, u.get("email")),
+            )
         conn.commit()
     return {"id": cur.lastrowid, "ok": True}
 
@@ -510,8 +553,9 @@ def patch_template(template_id: int, payload: TemplatePatch, request: Request):
     with get_db() as conn:
         # Reactiver un template ne doit pas recreer un doublon actif.
         if payload.actif:
+            _vcol = "variante" if _variante_column_exists(conn) else "'full' AS variante"
             row = conn.execute(
-                "SELECT imprimante_id,usage_key,variante FROM imprimante_templates WHERE id=?",
+                f"SELECT imprimante_id,usage_key,{_vcol} FROM imprimante_templates WHERE id=?",
                 (template_id,),
             ).fetchone()
             if not row:
@@ -656,12 +700,23 @@ def emit_label(payload: LabelRequest, request: Request):
         # une base ancienne porte encore des doublons (l'index unique partiel
         # pose en migration 217 les empeche desormais).
         variante = _assert_variante(payload.variante)
-        tpl = conn.execute(
-            "SELECT id,contenu FROM imprimante_templates "
-            "WHERE imprimante_id=? AND usage_key=? AND variante=? AND actif=1 "
-            "ORDER BY updated_at DESC, id DESC LIMIT 1",
-            (imp_id, payload.usage_key, variante),
-        ).fetchone()
+        if _variante_column_exists(conn):
+            tpl = conn.execute(
+                "SELECT id,contenu FROM imprimante_templates "
+                "WHERE imprimante_id=? AND usage_key=? AND variante=? AND actif=1 "
+                "ORDER BY updated_at DESC, id DESC LIMIT 1",
+                (imp_id, payload.usage_key, variante),
+            ).fetchone()
+        else:
+            # Schema non migre (v1 de test) : on ignore la variante et on sert
+            # l'unique template de l'usage. Degradation assumee -- une etiquette
+            # au bon contenu vaut mieux qu'un 500.
+            tpl = conn.execute(
+                "SELECT id,contenu FROM imprimante_templates "
+                "WHERE imprimante_id=? AND usage_key=? AND actif=1 "
+                "ORDER BY updated_at DESC, id DESC LIMIT 1",
+                (imp_id, payload.usage_key),
+            ).fetchone()
         if not tpl:
             raise HTTPException(
                 status_code=409,
