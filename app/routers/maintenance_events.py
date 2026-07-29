@@ -539,6 +539,17 @@ def update_event(event_id: int, body: EventUpdateBody, request: Request):
         if maint_role == "operator":
             if not _can_operator_manage_event(ev, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres interventions non planifiées")
+        # v2.5.14 : garde-fou 'past event' -- interdit toute modif de la date ou
+        # des heures d'un créneau déjà passé (aujourd'hui inclus reste modifiable).
+        # Les autres champs (ops, notes, ...) restent éditables librement.
+        _today = datetime.now(_PARIS).strftime("%Y-%m-%d")
+        _ev_date = ev.get("date_prevue") or ""
+        _time_fields = {"date_prevue", "heure_debut", "heure_fin"}
+        if _ev_date < _today and any(k in updates for k in _time_fields):
+            raise HTTPException(
+                status_code=403,
+                detail="Ce créneau est passé. La date et les horaires ne sont plus modifiables (seules les ops peuvent être corrigées).",
+            )
         updates["updated_at"] = _now_paris_iso()
         set_clause = ", ".join(f"{k}=?" for k in updates)
         conn.execute(f"UPDATE maintenance_events SET {set_clause} WHERE id=?",

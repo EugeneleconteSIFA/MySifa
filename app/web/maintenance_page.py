@@ -358,6 +358,22 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-wv-hour-row{height:62px;border-top:1px solid var(--border);transition:background .12s}
 .cal-wv-hour-row:first-child{border-top:none}
 .cal-wv-day-col.drag-over{background:var(--accent-bg);outline:2px dashed var(--accent);outline-offset:-2px;z-index:1}
+/* v2.5.14 : drag & drop planning maintenance */
+.cal-event[data-draggable="1"]{cursor:grab}
+.cal-event[data-draggable="1"]:active{cursor:grabbing}
+.cal-event.is-past{cursor:not-allowed}
+.cal-event.is-past::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(255,255,255,.06) 8px,rgba(255,255,255,.06) 16px);pointer-events:none;border-radius:inherit}
+.cal-event.is-dragging{opacity:.35;pointer-events:none}
+.cal-event .cal-event-resize-handle{position:absolute;left:6px;right:6px;height:6px;cursor:ns-resize;z-index:5}
+.cal-event .cal-event-resize-handle.top{top:0}
+.cal-event .cal-event-resize-handle.bottom{bottom:0}
+.cal-event .cal-event-resize-handle:hover{background:rgba(255,255,255,.25)}
+/* Ghost preview (suit le curseur) */
+.cal-drag-ghost{position:fixed;pointer-events:none;background:var(--card);border:2px dashed var(--accent);border-radius:8px;padding:6px 10px;font-family:'Segoe UI',system-ui,sans-serif;font-size:12px;font-weight:700;color:var(--text);z-index:99999;box-shadow:0 8px 24px rgba(0,0,0,.35);white-space:nowrap;transition:transform .08s}
+.cal-drag-ghost .cal-drag-ghost-time{display:block;font-family:'SFMono-Regular',ui-monospace,Consolas,monospace;color:var(--accent);font-size:13px;margin-top:2px}
+/* Nav buttons highlighted comme drop zones cross-week */
+.cal-nav button.cal-drop-target-nav{background:var(--accent);color:var(--accent-fg,#0a0e17);animation:calDropPulse .6s ease-in-out infinite alternate}
+@keyframes calDropPulse{from{box-shadow:0 0 0 0 rgba(34,211,238,.6)}to{box-shadow:0 0 0 8px rgba(34,211,238,0)}}
 .cal-event{position:absolute;background:var(--cal-ev-bg,var(--accent));color:var(--cal-ev-fg,#fff);border-radius:8px;padding:8px 11px;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:13px;font-weight:600;line-height:1.3;cursor:pointer;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.24);border:1px solid rgba(255,255,255,.20);z-index:2;display:flex;flex-direction:column;gap:4px;transition:filter .12s,box-shadow .12s,transform .08s}
 .cal-event:hover{filter:brightness(1.10);box-shadow:0 4px 14px rgba(0,0,0,.36);z-index:4}
 .cal-event:active{transform:scale(.99)}
@@ -3400,10 +3416,267 @@ function _makeEventBlock(item){
     '\n\nCliquer pour afficher les détails';
   div.addEventListener('click', e => {
     e.stopPropagation();
+    // v2.5.14 : si un drag vient de se terminer, on avale le click de fin.
+    if(_CAL_DRAG && _CAL_DRAG._justFinished){ _CAL_DRAG._justFinished = false; return; }
     openPlanningDetailsModal([ev]);
   });
+  // v2.5.14 : attache le drag & drop (move + resize) sauf sur créneaux passés / opérateur.
+  if(MAINT_ROLE === 'admin'){
+    _attachCalEventDragHandlers(div, ev);
+  }
   return div;
 }
+
+// v2.5.14 : drag & drop planning maintenance.
+// - Move : drag corps -> nouvelle date + heure (durée conservée)
+// - Resize : drag bordure haut/bas -> nouveau start/end (même date)
+// - Snap 15 min
+// - Cross-week : hover ~600 ms sur boutons ◀ / ▶ -> change de semaine
+// - Guard 'past event' : créneau avec date < today = non draggable
+// - Persist via PATCH, rollback visuel + toast si échec
+const _CAL_SNAP_MIN = 15;
+let _CAL_DRAG = null;
+
+function _calIsPastEvent(ev){
+  try{
+    const todayIso = _calIsoYMD(new Date());
+    return String(ev.date || '') < todayIso;
+  }catch(_){ return false; }
+}
+
+function _minsToHM(min){
+  min = Math.max(0, Math.min(24*60 - 1, min|0));
+  const h = Math.floor(min/60), m = min % 60;
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+}
+
+function _snap15(min){ return Math.round(min / _CAL_SNAP_MIN) * _CAL_SNAP_MIN; }
+
+function _attachCalEventDragHandlers(div, ev){
+  // Créneau passé = read-only pour les heures / date.
+  if(_calIsPastEvent(ev)){
+    div.classList.add('is-past');
+    div.setAttribute('title', (div.getAttribute('title') || '') + '\n(Créneau passé — date/heures non modifiables)');
+    return;
+  }
+  div.setAttribute('data-draggable', '1');
+  // Handles de resize (top + bottom).
+  const topH = document.createElement('div');
+  topH.className = 'cal-event-resize-handle top';
+  topH.setAttribute('data-drag-role', 'resize-top');
+  const botH = document.createElement('div');
+  botH.className = 'cal-event-resize-handle bottom';
+  botH.setAttribute('data-drag-role', 'resize-bottom');
+  div.appendChild(topH);
+  div.appendChild(botH);
+  // Mousedown attaché sur l'event -- détermine le mode selon la cible.
+  div.addEventListener('mousedown', function(e){
+    if(e.button !== 0) return;  // clic gauche uniquement
+    // Refuse si l'event a bouge apres refetch (page state changed).
+    const role = e.target && e.target.getAttribute && e.target.getAttribute('data-drag-role');
+    const mode = (role === 'resize-top' || role === 'resize-bottom') ? role : 'move';
+    _startCalDrag(e, div, ev, mode);
+  });
+}
+
+function _startCalDrag(e, div, ev, mode){
+  // Init l'état -- le drag ne démarre vraiment qu'après un mouvement > seuil.
+  const origStart = _hmToMins(ev.start);
+  const origEnd   = _hmToMins(ev.end);
+  if(origStart == null || origEnd == null) return;
+  _CAL_DRAG = {
+    mode: mode,
+    div: div,
+    ev: ev,
+    startX: e.clientX,
+    startY: e.clientY,
+    origDate: ev.date,
+    origStartMin: origStart,
+    origEndMin: origEnd,
+    duration: origEnd - origStart,
+    active: false,
+    ghost: null,
+    targetDate: ev.date,
+    targetStartMin: origStart,
+    targetEndMin: origEnd,
+    _navHoverTimer: null,
+    _navHoverDir: null,
+    _justFinished: false,
+  };
+  document.addEventListener('mousemove', _onCalDragMove, true);
+  document.addEventListener('mouseup', _onCalDragUp, true);
+  e.preventDefault();
+}
+
+function _onCalDragMove(e){
+  if(!_CAL_DRAG) return;
+  const dx = e.clientX - _CAL_DRAG.startX;
+  const dy = e.clientY - _CAL_DRAG.startY;
+  // Seuil de démarrage du drag : au-delà de 4 px, on considère que c'est un vrai drag.
+  if(!_CAL_DRAG.active){
+    if(Math.abs(dx) < 4 && Math.abs(dy) < 4) return;
+    _CAL_DRAG.active = true;
+    _CAL_DRAG.div.classList.add('is-dragging');
+    // Crée le ghost.
+    const g = document.createElement('div');
+    g.className = 'cal-drag-ghost';
+    document.body.appendChild(g);
+    _CAL_DRAG.ghost = g;
+  }
+  // Résout la colonne survolée (jour cible).
+  const el = document.elementFromPoint(e.clientX, e.clientY);
+  const col = el ? el.closest('.cal-wv-day-col') : null;
+  const rect = col ? col.getBoundingClientRect() : null;
+  // Vue Jour ou Semaine ? Adapte la hauteur px/heure.
+  const px = (CAL_STATE && CAL_STATE.view === 'day') ? 72 : CAL_HOUR_PX;
+  // Retire highlight de l'ancienne cible.
+  document.querySelectorAll('.cal-wv-day-col.drag-over').forEach(function(c){ c.classList.remove('drag-over'); });
+  // Gestion cross-week : survol prolongé sur ◀ / ▶
+  _handleCrossWeekHover(el, e);
+  if(col && rect){
+    col.classList.add('drag-over');
+    const y = e.clientY - rect.top;
+    const rawMin = CAL_HOUR_START * 60 + Math.max(0, y) * 60 / px;
+    if(_CAL_DRAG.mode === 'move'){
+      // Snap sur le début, conserve la durée.
+      let ns = _snap15(rawMin);
+      if(ns < CAL_HOUR_START*60) ns = CAL_HOUR_START*60;
+      if(ns + _CAL_DRAG.duration > CAL_HOUR_END*60) ns = CAL_HOUR_END*60 - _CAL_DRAG.duration;
+      _CAL_DRAG.targetStartMin = ns;
+      _CAL_DRAG.targetEndMin = ns + _CAL_DRAG.duration;
+      _CAL_DRAG.targetDate = col.getAttribute('data-date');
+    } else if(_CAL_DRAG.mode === 'resize-top'){
+      let ns = _snap15(rawMin);
+      if(ns < CAL_HOUR_START*60) ns = CAL_HOUR_START*60;
+      if(ns > _CAL_DRAG.origEndMin - 15) ns = _CAL_DRAG.origEndMin - 15;
+      _CAL_DRAG.targetStartMin = ns;
+      _CAL_DRAG.targetEndMin = _CAL_DRAG.origEndMin;
+      _CAL_DRAG.targetDate = _CAL_DRAG.origDate;  // resize ne change PAS la date
+    } else if(_CAL_DRAG.mode === 'resize-bottom'){
+      let ne = _snap15(rawMin);
+      if(ne < _CAL_DRAG.origStartMin + 15) ne = _CAL_DRAG.origStartMin + 15;
+      if(ne > CAL_HOUR_END*60) ne = CAL_HOUR_END*60;
+      _CAL_DRAG.targetStartMin = _CAL_DRAG.origStartMin;
+      _CAL_DRAG.targetEndMin = ne;
+      _CAL_DRAG.targetDate = _CAL_DRAG.origDate;
+    }
+  }
+  // MAJ ghost visuel.
+  if(_CAL_DRAG.ghost){
+    _CAL_DRAG.ghost.style.left = (e.clientX + 14) + 'px';
+    _CAL_DRAG.ghost.style.top  = (e.clientY + 14) + 'px';
+    const dateFR = _fmtIsoDateFr(_CAL_DRAG.targetDate) || _CAL_DRAG.targetDate;
+    _CAL_DRAG.ghost.innerHTML = '' +
+      '<span>' + escHtml(dateFR) + '</span>' +
+      '<span class="cal-drag-ghost-time">' +
+        _minsToHM(_CAL_DRAG.targetStartMin) + ' – ' + _minsToHM(_CAL_DRAG.targetEndMin) +
+      '</span>';
+  }
+}
+
+function _handleCrossWeekHover(el, e){
+  if(!_CAL_DRAG) return;
+  const btnPrev = el ? el.closest('button[onclick="calPrev()"]') : null;
+  const btnNext = el ? el.closest('button[onclick="calNext()"]') : null;
+  const dir = btnPrev ? 'prev' : (btnNext ? 'next' : null);
+  if(dir !== _CAL_DRAG._navHoverDir){
+    if(_CAL_DRAG._navHoverTimer){
+      clearTimeout(_CAL_DRAG._navHoverTimer);
+      _CAL_DRAG._navHoverTimer = null;
+    }
+    document.querySelectorAll('.cal-nav button.cal-drop-target-nav').forEach(function(b){
+      b.classList.remove('cal-drop-target-nav');
+    });
+    _CAL_DRAG._navHoverDir = dir;
+    if(dir){
+      const btn = (dir === 'prev') ? btnPrev : btnNext;
+      btn.classList.add('cal-drop-target-nav');
+      _CAL_DRAG._navHoverTimer = setTimeout(function(){
+        try{
+          if(dir === 'prev' && typeof calPrev === 'function') calPrev();
+          else if(dir === 'next' && typeof calNext === 'function') calNext();
+        }catch(_){}
+        btn.classList.remove('cal-drop-target-nav');
+        _CAL_DRAG._navHoverDir = null;
+        _CAL_DRAG._navHoverTimer = null;
+      }, 600);
+    }
+  }
+}
+
+function _onCalDragUp(e){
+  if(!_CAL_DRAG) return;
+  const drag = _CAL_DRAG;
+  // Nettoie handlers globaux.
+  document.removeEventListener('mousemove', _onCalDragMove, true);
+  document.removeEventListener('mouseup', _onCalDragUp, true);
+  if(drag._navHoverTimer) clearTimeout(drag._navHoverTimer);
+  document.querySelectorAll('.cal-nav button.cal-drop-target-nav').forEach(function(b){
+    b.classList.remove('cal-drop-target-nav');
+  });
+  document.querySelectorAll('.cal-wv-day-col.drag-over').forEach(function(c){ c.classList.remove('drag-over'); });
+  if(drag.ghost){ drag.ghost.remove(); drag.ghost = null; }
+  drag.div.classList.remove('is-dragging');
+  if(!drag.active){
+    // Pas un drag, laisse le click passer normalement.
+    _CAL_DRAG = null;
+    return;
+  }
+  // Le drag était actif : bloque le prochain click sur cet event.
+  drag._justFinished = true;
+  // Rien changé ? Rien à faire.
+  if(drag.targetDate === drag.origDate
+     && drag.targetStartMin === drag.origStartMin
+     && drag.targetEndMin === drag.origEndMin){
+    _CAL_DRAG = null;
+    return;
+  }
+  // Contrôle : si on déplace vers un jour passé, refuse.
+  const todayIso = _calIsoYMD(new Date());
+  if(String(drag.targetDate) < todayIso){
+    if(typeof showToast === 'function') showToast('Impossible de déplacer un créneau vers une date passée.', 'danger');
+    _CAL_DRAG = null;
+    return;
+  }
+  // PATCH la nouvelle position.
+  _persistCalDrag(drag);
+  _CAL_DRAG = null;
+}
+
+async function _persistCalDrag(drag){
+  const eventId = drag.ev.id;
+  const body = {
+    date_prevue: drag.targetDate,
+    heure_debut: _minsToHM(drag.targetStartMin),
+    heure_fin:   _minsToHM(drag.targetEndMin),
+  };
+  try{
+    const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId), {
+      method: 'PATCH', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if(!r.ok){
+      let msg = 'Modification refus\u00e9e';
+      try{ const j = await r.json(); msg = j.detail || msg; }catch(_){}
+      if(typeof showToast === 'function') showToast('Erreur : ' + msg, 'danger');
+      // Rollback visuel : refetch pour restaurer l'ancienne position.
+      await refreshPlanning(); renderCal();
+      return;
+    }
+    if(typeof showToast === 'function'){
+      const dateChanged = drag.targetDate !== drag.origDate;
+      const timeChanged = drag.targetStartMin !== drag.origStartMin || drag.targetEndMin !== drag.origEndMin;
+      const label = dateChanged ? 'Cr\u00e9neau d\u00e9plac\u00e9.' : (timeChanged ? 'Horaires mis \u00e0 jour.' : 'Cr\u00e9neau mis \u00e0 jour.');
+      showToast(label, 'info');
+    }
+    await refreshPlanning(); renderCal();
+  }catch(err){
+    if(typeof showToast === 'function') showToast('Erreur r\u00e9seau \u2014 modification annul\u00e9e.', 'danger');
+    await refreshPlanning(); renderCal();
+  }
+}
+
 function _clusterDayEvents(events){
   if(!events.length) return [];
   const sorted = events.slice()
@@ -4042,6 +4315,18 @@ function _openCaseModalInner(opts){
   const h = Math.max(0, Math.min(23, opts.defaultHour || 8));
   if(sEl) sEl.value = opts.start || (String(h).padStart(2,'0') + ':00');
   if(eEl) eEl.value = opts.end   || (String(Math.min(h+1, 23)).padStart(2,'0') + ':00');
+  // v2.5.14 : créneau passé -> horaires en lecture seule (même règle que le drag & drop).
+  try{
+    const _todayIso = _calIsoYMD(new Date());
+    const _isPast = String(opts.iso || '') < _todayIso;
+    if(isEdit && _isPast){
+      if(sEl){ sEl.readOnly = true; sEl.title = 'Cr\u00e9neau pass\u00e9 \u2014 horaires non modifiables.'; sEl.style.opacity = '.55'; sEl.style.cursor = 'not-allowed'; }
+      if(eEl){ eEl.readOnly = true; eEl.title = 'Cr\u00e9neau pass\u00e9 \u2014 horaires non modifiables.'; eEl.style.opacity = '.55'; eEl.style.cursor = 'not-allowed'; }
+    } else {
+      if(sEl){ sEl.readOnly = false; sEl.title = ''; sEl.style.opacity = ''; sEl.style.cursor = ''; }
+      if(eEl){ eEl.readOnly = false; eEl.title = ''; eEl.style.opacity = ''; eEl.style.cursor = ''; }
+    }
+  }catch(_){}
   // En édition, pré-remplit le nom depuis l'event en cours.
   if(nomEl){
     let currentNom = '';
