@@ -949,13 +949,15 @@ class TemplateCreateBody(BaseModel):
     description: Optional[str] = None
     ops: List[TemplateOpSpec] = []
     # v2.4.28 : recurrence
-    recurrence_type: Optional[str] = None       # 'weekly' | 'monthly' | 'quarterly' | 'yearly' | None
-    recurrence_dow: Optional[int] = None        # 0-6 (0=lundi)
-    recurrence_dom: Optional[int] = None        # 1-31
-    recurrence_month: Optional[int] = None      # 1-12 (yearly)
-    recurrence_time_start: Optional[str] = None # 'HH:MM'
+    recurrence_type: Optional[str] = None
+    recurrence_dow: Optional[int] = None
+    recurrence_dom: Optional[int] = None
+    recurrence_month: Optional[int] = None
+    recurrence_time_start: Optional[str] = None
     recurrence_time_end: Optional[str] = None
     recurrence_active: Optional[bool] = False
+    # v2.5.25 : operateurs par defaut appliques aux creneaux generes.
+    default_operators: Optional[List[int]] = None
 
 
 class TemplateUpdateBody(BaseModel):
@@ -969,6 +971,7 @@ class TemplateUpdateBody(BaseModel):
     recurrence_time_start: Optional[str] = None
     recurrence_time_end: Optional[str] = None
     recurrence_active: Optional[bool] = None
+    default_operators: Optional[List[int]] = None
 
 
 class SaveAsTemplateBody(BaseModel):
@@ -1102,6 +1105,22 @@ def _load_template_full(conn, template_id: int) -> Optional[dict]:
               "recurrence_time_start","recurrence_time_end"):
         d.setdefault(f, None)
     d["recurrence_active"] = bool(d.get("recurrence_active"))
+    # v2.5.25 : parse default_operators_csv en liste [{id, nom}] pour le frontend.
+    ops_ids = []
+    raw = d.get("default_operators_csv") or ""
+    for tok in str(raw).split(","):
+        tok = tok.strip()
+        if tok.isdigit():
+            ops_ids.append(int(tok))
+    if ops_ids:
+        placeholders = ",".join("?" * len(ops_ids))
+        urows = conn.execute(
+            f"SELECT id, nom FROM users WHERE id IN ({placeholders}) ORDER BY nom",
+            ops_ids,
+        ).fetchall()
+        d["default_operators"] = [dict(r) for r in urows]
+    else:
+        d["default_operators"] = []
     return d
 
 
@@ -1211,6 +1230,12 @@ def _generate_events_for_template(conn, template_id: int, until_date) -> int:
                     "(event_id, code, machines_csv, updated_at) VALUES (?, ?, ?, ?)",
                     (event_id, op["code"], op_machines_csv, now_iso)
                 )
+            # v2.5.25 : herite des operateurs par defaut du template
+            for uid in [u["id"] for u in (tmpl.get("default_operators") or [])]:
+                conn.execute(
+                    "INSERT OR IGNORE INTO maintenance_event_operators (event_id, operator_id) VALUES (?, ?)",
+                    (event_id, uid),
+                )
             count += 1
         cursor = nxt + timedelta(days=1)
     if count:
@@ -1236,9 +1261,11 @@ def _ensure_recurring_events_generated(conn, horizon_days: int = 90) -> int:
 
 
 def _resync_future_events_from_template(conn, template_id: int) -> int:
-    """Écrase les ops des créneaux futurs (date_prevue >= aujourd'hui) liés au
-    template. Retourne le nombre d'events resynchronisés.
-    Préserve : date, horaires, opérateurs, source. Écrase : liste des ops."""
+    """Écrase les ops ET les opérateurs des créneaux futurs (date_prevue >= aujourd'hui)
+    liés au template. Retourne le nombre d'events resynchronisés.
+    Préserve : date, horaires, source. Écrase : liste des ops + opérateurs assignés
+    (v2.5.25 : les opérateurs sont resync aussi, choix produit -- si l'admin modifie
+    les opérateurs par défaut du template, ils s'appliquent à tous les créneaux futurs)."""
     tmpl = _load_template_full(conn, template_id)
     if not tmpl:
         return 0
@@ -1248,18 +1275,24 @@ def _resync_future_events_from_template(conn, template_id: int) -> int:
         (template_id, today),
     ).fetchall()
     now = _now_paris_iso()
+    default_uids = [u["id"] for u in (tmpl.get("default_operators") or [])]
     for ev in events:
         eid = ev["id"]
-        # Supprime toutes les ops existantes de l'event
         conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
-        # Insère les ops du template (copie profonde des machines)
         for op in tmpl["ops"]:
             conn.execute(
                 """INSERT INTO maintenance_event_ops (event_id, code, machines_csv, updated_at)
                    VALUES (?, ?, ?, ?)""",
                 (eid, op["code"], op.get("machines_csv"), now),
             )
-            _bump_libre_usage(conn, op["code"])  # v2.2.37
+            _bump_libre_usage(conn, op["code"])
+        # v2.5.25 : ecrase les operateurs assignes par la liste default du template.
+        conn.execute("DELETE FROM maintenance_event_operators WHERE event_id = ?", (eid,))
+        for uid in default_uids:
+            conn.execute(
+                "INSERT OR IGNORE INTO maintenance_event_operators (event_id, operator_id) VALUES (?, ?)",
+                (eid, uid),
+            )
         _recompute_event_machine(conn, eid)
     return len(events)
 
@@ -1276,7 +1309,7 @@ def list_templates(request: Request):
             """SELECT t.id, t.name, t.description, t.created_at, t.updated_at,
                       t.recurrence_type, t.recurrence_dow, t.recurrence_dom,
                       t.recurrence_month, t.recurrence_time_start, t.recurrence_time_end,
-                      t.recurrence_active,
+                      t.recurrence_active, t.default_operators_csv,
                       (SELECT COUNT(*) FROM maintenance_template_ops o WHERE o.template_id=t.id) AS ops_count,
                       (SELECT COUNT(*) FROM maintenance_events e WHERE e.template_id=t.id) AS events_count,
                       (SELECT MAX(date_prevue) FROM maintenance_events e WHERE e.template_id=t.id) AS last_event_date
@@ -1289,6 +1322,21 @@ def list_templates(request: Request):
             d["recurrence_active"] = bool(d.get("recurrence_active"))
             nxt = _compute_next_occurrence(d)
             d["next_occurrence"] = nxt.isoformat() if nxt else None
+            # v2.5.25 : expose default_operators pour le badge du panel Gestion
+            uids = []
+            for tok in str(d.get("default_operators_csv") or "").split(","):
+                tok = tok.strip()
+                if tok.isdigit():
+                    uids.append(int(tok))
+            if uids:
+                placeholders = ",".join("?" * len(uids))
+                urows = conn.execute(
+                    f"SELECT id, nom FROM users WHERE id IN ({placeholders}) ORDER BY nom",
+                    uids,
+                ).fetchall()
+                d["default_operators"] = [dict(r) for r in urows]
+            else:
+                d["default_operators"] = []
             out.append(d)
     return {"templates": out}
 
@@ -1330,12 +1378,21 @@ def create_template(body: TemplateCreateBody, request: Request):
             if not mcsv:
                 raise HTTPException(status_code=400, detail=f"L'opération {code} doit être attribuée à au moins une machine")
         now = _now_paris_iso()
+        # v2.5.25 : valide + serialise default_operators en CSV
+        _def_ops_csv = None
+        if body.default_operators:
+            _valid = []
+            for uid in body.default_operators:
+                if isinstance(uid, int) and conn.execute("SELECT 1 FROM users WHERE id=?", (uid,)).fetchone():
+                    _valid.append(str(uid))
+            _def_ops_csv = ",".join(_valid) if _valid else None
         cur = conn.execute(
             """INSERT INTO maintenance_templates
                 (name, description, created_by, created_at,
                  recurrence_type, recurrence_dow, recurrence_dom, recurrence_month,
-                 recurrence_time_start, recurrence_time_end, recurrence_active)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 recurrence_time_start, recurrence_time_end, recurrence_active,
+                 default_operators_csv)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (name, body.description, user["id"], now,
              (body.recurrence_type or None),
              body.recurrence_dow,
@@ -1343,7 +1400,8 @@ def create_template(body: TemplateCreateBody, request: Request):
              body.recurrence_month,
              (body.recurrence_time_start or None),
              (body.recurrence_time_end or None),
-             1 if body.recurrence_active else 0),
+             1 if body.recurrence_active else 0,
+             _def_ops_csv),
         )
         template_id = cur.lastrowid
         for code, mcsv in seen.items():
@@ -1402,6 +1460,13 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
         deleted_future = 0
         if body.recurrence_active is not None:
             meta_updates["recurrence_active"] = 1 if body.recurrence_active else 0
+        # v2.5.25 : default_operators (liste ids -> CSV, valides contre users)
+        if body.default_operators is not None:
+            _valid = []
+            for uid in body.default_operators:
+                if isinstance(uid, int) and conn.execute("SELECT 1 FROM users WHERE id=?", (uid,)).fetchone():
+                    _valid.append(str(uid))
+            meta_updates["default_operators_csv"] = ",".join(_valid) if _valid else None
             if not body.recurrence_active:
                 today = datetime.now(_PARIS).strftime("%Y-%m-%d")
                 future_ids = [r["id"] for r in conn.execute(
@@ -1447,7 +1512,11 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
                 "UPDATE maintenance_templates SET updated_at=? WHERE id=?",
                 (now, template_id),
             )
-            # Resync des créneaux futurs liés
+            # Resync des créneaux futurs liés (ops + operateurs)
+            resynced = _resync_future_events_from_template(conn, template_id)
+        elif body.default_operators is not None:
+            # v2.5.25 : ops inchangees mais default_operators modifies -> resync operateurs
+            # sur les creneaux futurs uniquement (les ops restent car pas modifiees).
             resynced = _resync_future_events_from_template(conn, template_id)
         conn.commit()
         tmpl = _load_template_full(conn, template_id)
