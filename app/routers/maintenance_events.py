@@ -45,7 +45,7 @@ _ADMIN_ROLES = {ROLE_SUPERADMIN, ROLE_DIRECTION, ROLE_ADMINISTRATION,
                 ROLE_ADMINISTRATION_VENTES, ROLE_ADMINISTRATION_TECHNIQUE}
 _PARIS = ZoneInfo("Europe/Paris")
 
-_VALID_STATUTS = {"a_faire", "en_cours", "termine", "reporte"}
+_VALID_STATUTS = {"a_faire", "en_cours", "termine", "reporte", "invalidee"}
 _VALID_SOURCES = {"planifie", "non_planifie"}
 
 # Séparateur utilisé pour stocker plusieurs machines dans machines_csv.
@@ -184,10 +184,15 @@ def _load_event_full(conn, event_id: int) -> Optional[dict]:
         """SELECT o.id, o.code, o.statut, o.duree_reelle_min, o.pieces_changees,
                   o.observations, o.photos_json, o.done_at, o.done_by,
                   o.updated_by, o.updated_at, o.machines_csv, o.consignes,
+                  o.invalidated_by, o.invalidated_at,
                   c.label     AS code_label,
-                  c.categorie AS code_categorie
+                  c.categorie AS code_categorie,
+                  ub.nom      AS done_by_nom,
+                  ui.nom      AS invalidated_by_nom
            FROM maintenance_event_ops o
            LEFT JOIN maintenance_codes c ON c.code = o.code
+           LEFT JOIN users ub ON ub.id = o.done_by
+           LEFT JOIN users ui ON ui.id = o.invalidated_by
            WHERE o.event_id = ?
            ORDER BY o.id""",
         (event_id,),
@@ -781,6 +786,71 @@ def reset_op(event_id: int, op_id: int, request: Request):
         conn.commit()
         ev = _load_event_full(conn, event_id)
     return {"event": ev}
+
+@router.post("/api/maintenance/events/{event_id}/ops/{op_id}/invalidate")
+def invalidate_op(event_id: int, op_id: int, request: Request):
+    """Admin : marque une saisie d'op comme invalidee.
+    - Statut termine -> invalidee. Conserve done_at/done_by (traceabilite
+      historique : la saisie a bien eu lieu, on la met de cote sans effacer
+      qui l'a faite).
+    - Ecrit invalidated_by + invalidated_at (traceabilite de l'invalidation).
+    - La ligne dans get_history disparait automatiquement (filtre statut=termine).
+    - Le creneau conserve la ligne, affichee en grise avec badge Invalidee.
+    - Perms : admin uniquement (contrairement a reset_op)."""
+    user = _require_admin(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT event_id, statut FROM maintenance_event_ops WHERE id=?",
+            (op_id,),
+        ).fetchone()
+        if not row or row["event_id"] != event_id:
+            raise HTTPException(status_code=404, detail="Op introuvable dans ce creneau")
+        if row["statut"] != "termine":
+            raise HTTPException(status_code=400, detail="Seule une saisie terminee peut etre invalidee")
+        now = _now_paris_iso()
+        conn.execute(
+            """UPDATE maintenance_event_ops
+               SET statut='invalidee',
+                   invalidated_by=?,
+                   invalidated_at=?
+               WHERE id=?""",
+            (user["id"], now, op_id),
+        )
+        conn.commit()
+        ev = _load_event_full(conn, event_id)
+    return {"event": ev}
+
+
+@router.post("/api/maintenance/events/{event_id}/ops/{op_id}/revalidate")
+def revalidate_op(event_id: int, op_id: int, request: Request):
+    """Admin : reactive une saisie invalidee (invalidee -> termine).
+    Sortie de sortie de secours si on invalide par erreur. Efface
+    invalidated_by/at. Perms : admin uniquement."""
+    user = _require_admin(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT event_id, statut FROM maintenance_event_ops WHERE id=?",
+            (op_id,),
+        ).fetchone()
+        if not row or row["event_id"] != event_id:
+            raise HTTPException(status_code=404, detail="Op introuvable dans ce creneau")
+        if row["statut"] != "invalidee":
+            raise HTTPException(status_code=400, detail="Seule une saisie invalidee peut etre revalidee")
+        now = _now_paris_iso()
+        conn.execute(
+            """UPDATE maintenance_event_ops
+               SET statut='termine',
+                   invalidated_by=NULL,
+                   invalidated_at=NULL,
+                   updated_by=?,
+                   updated_at=?
+               WHERE id=?""",
+            (user["id"], now, op_id),
+        )
+        conn.commit()
+        ev = _load_event_full(conn, event_id)
+    return {"event": ev}
+
 
 
 # ─── Endpoints — event operators (le groupe) ─────────────────────
