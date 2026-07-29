@@ -58,14 +58,15 @@ from pydantic import BaseModel, Field
 from app.core.database import get_db
 from app.services.auth_service import get_current_user, require_superadmin
 from app.services.print_render import (
-    DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL,
     LANGAGES,
     USAGES,
+    VARIANTES,
     default_templates_seed,
     get_default_template,
     list_default_templates,
     render_template,
     usage_label,
+    variante_label,
 )
 
 router = APIRouter(tags=["print"], prefix="/api/print")
@@ -144,12 +145,23 @@ def _serialize_imprimante(row) -> dict:
     }
 
 
+def _row_variante(row) -> str:
+    """Lit `variante` de facon tolerante : une base non encore migree (ou une
+    requete qui ne selectionne pas la colonne) retombe sur 'full'."""
+    try:
+        return (row["variante"] or "full").strip() or "full"
+    except (IndexError, KeyError):
+        return "full"
+
+
 def _serialize_template(row) -> dict:
     return {
         "id": row["id"],
         "imprimante_id": row["imprimante_id"],
         "usage_key": row["usage_key"],
         "usage_label": usage_label(row["usage_key"]),
+        "variante": _row_variante(row),
+        "variante_label": variante_label(_row_variante(row)),
         "nom": row["nom"],
         "contenu": row["contenu"],
         "actif": bool(row["actif"]),
@@ -347,9 +359,11 @@ def create_imprimante(payload: ImprimanteBase, request: Request):
         if payload.langage == "zpl":
             for tpl in default_templates_seed():
                 conn.execute(
-                    "INSERT INTO imprimante_templates (imprimante_id,usage_key,nom,contenu,actif,updated_at,updated_by) "
-                    "VALUES (?,?,?,?,1,?,?)",
-                    (iid, tpl["usage_key"], tpl["nom"], tpl["contenu"], now, u.get("email")),
+                    "INSERT INTO imprimante_templates "
+                    "(imprimante_id,usage_key,variante,nom,contenu,actif,updated_at,updated_by) "
+                    "VALUES (?,?,?,?,?,1,?,?)",
+                    (iid, tpl["usage_key"], tpl["variante"], tpl["nom"], tpl["contenu"],
+                     now, u.get("email")),
                 )
         conn.commit()
     return {"id": iid, "ok": True}
@@ -402,6 +416,8 @@ class TemplateCreate(BaseModel):
     usage_key: str
     nom: str
     contenu: str
+    # v2.6.0 — "full" (impression) ou "compact" (reimpression depuis l'historique).
+    variante: str = "full"
 
 
 class TemplatePatch(BaseModel):
@@ -410,15 +426,48 @@ class TemplatePatch(BaseModel):
     actif: Optional[bool] = None
 
 
+def _assert_variante(variante: str) -> str:
+    v = (variante or "full").strip()
+    if v not in VARIANTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Variante invalide « {v} » (attendu : {' ou '.join(VARIANTES)}).",
+        )
+    return v
+
+
+def _assert_slot_libre(conn, imprimante_id: int, usage_key: str, variante: str,
+                       exclude_id: Optional[int] = None) -> None:
+    """Refuse un second template ACTIF sur le meme (imprimante, usage, variante).
+
+    Sans ce garde-fou, l'admin creait un doublon invisible : la resolution
+    d'impression n'en prend qu'un, et rien dans l'UI n'indiquait lequel.
+    """
+    q = ("SELECT id,nom FROM imprimante_templates "
+         "WHERE imprimante_id=? AND usage_key=? AND variante=? AND actif=1")
+    args: list = [imprimante_id, usage_key, variante]
+    if exclude_id is not None:
+        q += " AND id<>?"
+        args.append(exclude_id)
+    row = conn.execute(q + " LIMIT 1", args).fetchone()
+    if row:
+        raise HTTPException(
+            status_code=409,
+            detail=(f"Un template actif existe déjà pour cet usage en variante "
+                    f"« {variante_label(variante)} » : « {row['nom']} ». "
+                    f"Modifie-le, ou désactive-le avant d'en créer un autre."),
+        )
+
+
 @router.get("/templates")
 def list_templates(request: Request, imprimante_id: Optional[int] = None):
     require_superadmin(request)
-    q = ("SELECT id,imprimante_id,usage_key,nom,contenu,actif,updated_at,updated_by "
+    q = ("SELECT id,imprimante_id,usage_key,variante,nom,contenu,actif,updated_at,updated_by "
          "FROM imprimante_templates")
     args: list = []
     if imprimante_id:
         q += " WHERE imprimante_id=?"; args.append(imprimante_id)
-    q += " ORDER BY imprimante_id, usage_key, nom"
+    q += " ORDER BY imprimante_id, usage_key, variante, nom"
     with get_db() as conn:
         rows = conn.execute(q, args).fetchall()
     return [_serialize_template(r) for r in rows]
@@ -428,11 +477,15 @@ def list_templates(request: Request, imprimante_id: Optional[int] = None):
 def create_template(payload: TemplateCreate, request: Request):
     u = require_superadmin(request)
     now = _now()
+    variante = _assert_variante(payload.variante)
+    usage_key = payload.usage_key.strip()
     with get_db() as conn:
+        _assert_slot_libre(conn, payload.imprimante_id, usage_key, variante)
         cur = conn.execute(
-            "INSERT INTO imprimante_templates (imprimante_id,usage_key,nom,contenu,actif,updated_at,updated_by) "
-            "VALUES (?,?,?,?,1,?,?)",
-            (payload.imprimante_id, payload.usage_key.strip(), payload.nom.strip(),
+            "INSERT INTO imprimante_templates "
+            "(imprimante_id,usage_key,variante,nom,contenu,actif,updated_at,updated_by) "
+            "VALUES (?,?,?,?,?,1,?,?)",
+            (payload.imprimante_id, usage_key, variante, payload.nom.strip(),
              payload.contenu, now, u.get("email")),
         )
         conn.commit()
@@ -455,6 +508,16 @@ def patch_template(template_id: int, payload: TemplatePatch, request: Request):
     fields.append("updated_by=?"); values.append(u.get("email"))
     values.append(template_id)
     with get_db() as conn:
+        # Reactiver un template ne doit pas recreer un doublon actif.
+        if payload.actif:
+            row = conn.execute(
+                "SELECT imprimante_id,usage_key,variante FROM imprimante_templates WHERE id=?",
+                (template_id,),
+            ).fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Template introuvable.")
+            _assert_slot_libre(conn, row["imprimante_id"], row["usage_key"],
+                               _row_variante(row), exclude_id=template_id)
         cur = conn.execute(f"UPDATE imprimante_templates SET {','.join(fields)} WHERE id=?", values)
         conn.commit()
         if not cur.rowcount:
@@ -536,7 +599,10 @@ class LabelRequest(BaseModel):
     data: dict
     imprimante_id: Optional[int] = None       # override du défaut utilisateur
     copies: int = 1                            # nombre de copies (bobines à étiqueter)
-    variante: str = "full"                     # v1.7 : "full" (nouveau + defaut) ou "compact" (reimpression)
+    # v2.6.0 : selectionne le template en base, ne court-circuite plus rien.
+    #   "full"    -> premiere impression (bouton « Faire une reception »)
+    #   "compact" -> reimpression depuis l'historique
+    variante: str = "full"
 
 
 @router.post("/label")
@@ -547,8 +613,10 @@ def emit_label(payload: LabelRequest, request: Request):
         1. `imprimante_id` explicite dans le payload
         2. sinon défaut utilisateur (user_printer_defaults) pour cet usage
         3. sinon erreur 409 → le client doit demander à l'utilisateur de choisir
-    - Cherche le template associé à cette imprimante pour cet usage_key.
-      Si absent, 409 avec message explicite.
+    - Cherche le template associé à cette imprimante pour ce couple
+      (usage_key, variante). Si absent, 409 avec message explicite : aucune
+      étiquette « de secours » n'est imprimée, pour qu'une config incomplète
+      se voie immédiatement au lieu de sortir un format inattendu.
     - Crée un job par copie, statut=pending. L'agent local les récupérera.
     """
     user = get_current_user(request)
@@ -580,25 +648,29 @@ def emit_label(payload: LabelRequest, request: Request):
             raise HTTPException(status_code=404, detail="Imprimante introuvable.")
         if not imp["actif"]:
             raise HTTPException(status_code=409, detail="Imprimante désactivée.")
-        # v1.7 - Cherche le template selon la variante (full = template DB, compact = hardcode)
-        if payload.variante == "compact":
-            # Template compact hardcode (107x50mm) pour la reimpression - bypasse la DB
-            tpl_content = DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL
-            tpl_id = None
-        else:
-            tpl = conn.execute(
-                "SELECT id,contenu FROM imprimante_templates "
-                "WHERE imprimante_id=? AND usage_key=? AND actif=1 LIMIT 1",
-                (imp_id, payload.usage_key),
-            ).fetchone()
-            if not tpl:
-                raise HTTPException(
-                    status_code=409,
-                    detail=(f"Aucun template actif pour l'usage « {payload.usage_key} » "
-                            f"sur l'imprimante « {imp['nom']} ». À configurer dans /settings > Imprimantes."),
-                )
-            tpl_content = tpl["contenu"]
-            tpl_id = tpl["id"]
+        # v2.6.0 — Le template vient TOUJOURS de la base, quelle que soit la
+        # variante. Avant, `variante == "compact"` court-circuitait la DB avec un
+        # ZPL fige dans print_render.py : les templates edites dans
+        # Parametres > Imprimantes n'avaient aucun effet sur la reimpression.
+        # `ORDER BY updated_at DESC, id DESC` rend le choix deterministe meme si
+        # une base ancienne porte encore des doublons (l'index unique partiel
+        # pose en migration 217 les empeche desormais).
+        variante = _assert_variante(payload.variante)
+        tpl = conn.execute(
+            "SELECT id,contenu FROM imprimante_templates "
+            "WHERE imprimante_id=? AND usage_key=? AND variante=? AND actif=1 "
+            "ORDER BY updated_at DESC, id DESC LIMIT 1",
+            (imp_id, payload.usage_key, variante),
+        ).fetchone()
+        if not tpl:
+            raise HTTPException(
+                status_code=409,
+                detail=(f"Aucun template actif pour l'usage « {usage_label(payload.usage_key)} » "
+                        f"en variante « {variante_label(variante)} » sur l'imprimante "
+                        f"« {imp['nom']} ». À configurer dans Paramètres > Imprimantes."),
+            )
+        tpl_content = tpl["contenu"]
+        tpl_id = tpl["id"]
         # Rendu + insertion des jobs
         try:
             payload_bytes = render_template(tpl_content, payload.data or {}, imp["langage"])
