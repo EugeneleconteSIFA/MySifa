@@ -592,9 +592,16 @@
     return c === 'frontal' || c === 'glassine' || c === 'complexe';
   }
 
+  function mpIsAdhesifCategory(catOrMatiere) {
+    return mpCtx(catOrMatiere).categorie === 'adhesif';
+  }
+
   function mpUniteNom(catOrMatiere) {
     const c = mpCtx(catOrMatiere).categorie;
     if (mpIsBobineCategory(c)) return 'bobine';
+    // Adhésif : le stock se tient au kilo. Palette et carton restent des unités
+    // de SAISIE, converties côté serveur à la validation du mouvement.
+    if (c === 'adhesif') return 'kg';
     if (c === 'carton') return 'palette';
     if (c === 'palette') return 'palette';
     if (c === 'autre') return 'unite';
@@ -605,14 +612,18 @@
     const u = mpUniteNom(catOrMatiere);
     if (u === 'bobine') return 'bob.';
     if (u === 'palette') return 'pal.';
+    if (u === 'kg') return 'kg';
     if (u === 'unite') return 'u.';
     return 'pal.';
   }
 
-  function mpQuantiteFieldLabel(catOrMatiere) {
+  function mpQuantiteFieldLabel(catOrMatiere, uniteSaisie) {
+    if (uniteSaisie === 'palette') return 'Quantité (palettes)';
+    if (uniteSaisie === 'carton') return 'Quantité (cartons)';
     const u = mpUniteNom(catOrMatiere);
     if (u === 'bobine') return 'Quantité (bobines)';
     if (u === 'palette') return 'Quantité (palettes)';
+    if (u === 'kg') return 'Quantité (kg)';
     if (u === 'unite') return 'Quantité (unités)';
     return 'Quantité (palettes)';
   }
@@ -622,9 +633,63 @@
     return fN(qty) + ' ' + mpUniteShort(ctx);
   }
 
-  function mpQuantiteInputAttrs(catOrMatiere) {
+  // ── Unités de saisie des adhésifs ───────────────────────────────────────
+  // Le stock est en kg ; l'opérateur, lui, manipule des palettes complètes et
+  // rend des palettes entamées. On lui laisse donc choisir son unité, et on
+  // convertit. Palette et carton ne sont proposés que si le conditionnement
+  // correspondant est renseigné : convertir sans savoir combien pèse une palette
+  // produirait un stock faux et silencieux.
+  const MP_UNITE_SAISIE_LABELS = { kg: 'Kilos', carton: 'Cartons', palette: 'Palettes' };
+
+  function mpUnitesSaisie(matiere) {
+    if (!matiere || !mpIsAdhesifCategory(matiere)) return [];
+    if (Array.isArray(matiere.unites_saisie) && matiere.unites_saisie.length) {
+      return matiere.unites_saisie;
+    }
+    const out = ['kg'];
+    if (Number(matiere.kg_par_carton) > 0) out.push('carton');
+    if (Number(matiere.kg_par_palette || matiere.unites_par_palette || 0) > 0) out.push('palette');
+    return out;
+  }
+
+  function mpFacteurSaisie(matiere, unite) {
+    if (!matiere) return 1;
+    if (unite === 'carton') return Number(matiere.kg_par_carton) || 0;
+    if (unite === 'palette') {
+      return Number(matiere.kg_par_palette || matiere.unites_par_palette || 0);
+    }
+    return 1;
+  }
+
+  // Unité pré-sélectionnée, choisie d'après le geste réel plutôt que d'après
+  // l'unité de stock :
+  //  - sortie : toujours la palette. En atelier comme en logistique, on sort une
+  //    palette complète.
+  //  - entrée en fabrication : le carton. L'opérateur ne réceptionne pas, il
+  //    remet en stock ce qu'il n'a pas consommé, c'est-à-dire des cartons entiers
+  //    d'une palette entamée.
+  //  - entrée hors fabrication : la palette. C'est une réception fournisseur sur BL.
+  // Le kilo reste le repli quand le conditionnement visé n'est pas renseigné, et
+  // le sélecteur reste modifiable dans tous les cas (pas de verrou : il faut
+  // pouvoir saisir une pesée exacte sur un fond de palette).
+  function mpUniteSaisieDefaut(typeMvt, unites) {
+    const pref = (typeMvt === 'entree' && S.fabStockMode)
+      ? ['carton', 'palette', 'kg']
+      : ['palette', 'carton', 'kg'];
+    return pref.find(u => unites.includes(u)) || unites[0] || 'kg';
+  }
+
+  function mpQuantiteInputAttrs(catOrMatiere, uniteSaisie) {
     const c = mpCtx(catOrMatiere).categorie;
     if (c === 'palette') return { type: 'number', min: '40', step: '1' };
+    if (c === 'adhesif') {
+      // Au kilo, le décimal est nécessaire (retour d'une palette entamée) ;
+      // à la palette ou au carton, seules les unités entières ont un sens.
+      if (uniteSaisie === 'palette' || uniteSaisie === 'carton') {
+        return { type: 'number', min: '1', step: '1' };
+      }
+      return { type: 'number', min: '0', step: '0.1' };
+    }
     if (mpIsBobineCategory(c) || c === 'mandrin' || c === 'carton') {
       return { type: 'number', min: '1', step: '1' };
     }
@@ -688,6 +753,88 @@
     })();
   }
 
+  // Construit le couple « unité de saisie + quantité » d'un mouvement.
+  //
+  // Cas général : un seul champ quantité, dans l'unité de gestion de la matière.
+  // Adhésifs : un sélecteur palette / carton / kg pilote le champ quantité. Le pas
+  // et le libellé s'adaptent, et une ligne d'équivalence rappelle en permanence ce
+  // que la saisie représente en kilos — c'est le seul garde-fou visuel contre une
+  // sortie de 2 kg saisie à la place de 2 palettes.
+  //
+  // Retourne { wrap, qInp, getUnite, getQuantiteGestion, refresh }.
+  function buildMpQuantiteField(mat, typeMvt, extraChildren) {
+    const unites = mpUnitesSaisie(mat);
+    const multi = unites.length > 1;
+    let unite = multi ? mpUniteSaisieDefaut(typeMvt, unites) : (unites[0] || null);
+
+    const labelEl = el('label', null, mpQuantiteFieldLabel(mat, unite));
+    const qInp = el('input', { attrs: mpQuantiteInputAttrs(mat, unite) });
+    const equivEl = el('div', {
+      cls: 'mp-hint',
+      style: 'font-size:11px;color:var(--muted);margin-top:4px',
+    }, '');
+
+    function refreshEquivalence() {
+      if (!multi || unite === 'kg') { equivEl.style.display = 'none'; return; }
+      const f = mpFacteurSaisie(mat, unite);
+      const q = parseFloat(qInp.value);
+      equivEl.style.display = '';
+      if (!f) { equivEl.textContent = ''; return; }
+      const base = '1 ' + (unite === 'palette' ? 'palette' : 'carton') + ' = ' + fN(f) + ' kg';
+      equivEl.textContent = (!q || q <= 0) ? base : (base + ' · soit ' + fN(q * f) + ' kg');
+    }
+
+    const uniteSel = multi ? el('select', { id: 'mp-modal-unite-saisie' }) : null;
+    if (uniteSel) {
+      unites.forEach(u => uniteSel.appendChild(el('option', {
+        value: u, selected: u === unite ? true : null,
+      }, MP_UNITE_SAISIE_LABELS[u] || u)));
+      uniteSel.value = unite;
+      uniteSel.addEventListener('change', () => {
+        unite = uniteSel.value;
+        labelEl.textContent = mpQuantiteFieldLabel(mat, unite);
+        const attrs = mpQuantiteInputAttrs(mat, unite);
+        Object.entries(attrs).forEach(([k, v]) => qInp.setAttribute(k, v));
+        qInp.value = '';
+        refreshEquivalence();
+        if (typeof qInp._onMpUniteChange === 'function') qInp._onMpUniteChange();
+      });
+    }
+    qInp.addEventListener('input', refreshEquivalence);
+    refreshEquivalence();
+
+    const children = [labelEl, qInp, equivEl].concat(extraChildren || []);
+    const wrap = el('div', null,
+      uniteSel
+        ? el('div', { cls: 'mp-field' }, el('label', null, 'Unité de saisie'), uniteSel)
+        : null,
+      el('div', { cls: 'mp-field' }, ...children),
+    );
+
+    return {
+      wrap,
+      qInp,
+      getUnite: () => (multi ? unite : null),
+      // Quantité convertie dans l'unité de gestion — sert aux contrôles côté client
+      // (stock insuffisant). La conversion qui fait foi reste celle du serveur.
+      getQuantiteGestion: () => {
+        const q = parseFloat(qInp.value);
+        if (isNaN(q)) return NaN;
+        return multi ? q * (mpFacteurSaisie(mat, unite) || 1) : q;
+      },
+      refresh: refreshEquivalence,
+    };
+  }
+
+  // « Stock actuel : 1 200 kg » avec la valeur en gras (demande produit : la
+  // quantité et son unité doivent sauter aux yeux avant la saisie).
+  function mpStockActuelHint(stockActuel, mpCat) {
+    return el('div', { cls: 'mp-hint' },
+      'Stock actuel : ',
+      el('strong', { style: 'color:var(--text);font-weight:800' }, mpStockLine(stockActuel, mpCat)),
+    );
+  }
+
   function renderMpMouvementModal(type, matiere, categorieFilter) {
     const typeMvt = (type || 'entree').toLowerCase();
     const allList = (S.matieres || []).filter(m => m.actif !== 0);
@@ -729,16 +876,22 @@
     ));
     const body = el('div', { cls: 'mp-modal-mvt-body' });
 
-    // Sélecteur de type de MP (catégorie) — toujours présent
+    // Sélecteur de type de MP (catégorie) — toujours présent, et présélectionné
+    // sur la catégorie de la matière quand le mouvement part d'une fiche matière.
+    // NB : 'complexe' et 'autre' manquaient à cette liste, si bien qu'un mouvement
+    // ouvert depuis un complexe retombait sur « — Tous les types — ».
     const catSel = el('select', { id: 'mp-modal-categorie-select' });
     catSel.appendChild(el('option', { value: '' }, '— Tous les types —'));
-    const CAT_ORDER = ['frontal', 'glassine', 'mandrin', 'adhesif', 'carton', 'palette'];
+    const CAT_ORDER = ['frontal', 'glassine', 'complexe', 'mandrin', 'adhesif', 'carton', 'palette', 'autre'];
     CAT_ORDER.forEach(c => {
       catSel.appendChild(el('option', {
         value: c,
         selected: S.mpModal.categorie === c ? true : null,
       }, MP_CAT_LABELS[c] || c));
     });
+    // Filet de sécurité : si la catégorie courante n'est pas dans CAT_ORDER (future
+    // catégorie ajoutée en base), on force quand même la valeur du select.
+    if (S.mpModal.categorie) catSel.value = S.mpModal.categorie;
     catSel.addEventListener('change', () => {
       renderMpMouvementModal(typeMvt, null, catSel.value || '');
     });
@@ -824,15 +977,14 @@
       body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Matière / laize'), sel));
     }
 
-    const hintEl = el('div', { cls: 'mp-hint' }, '');
     const errEl = el('div', { cls: 'mp-hint err', style: { display: 'none' } }, '');
 
     if (typeMvt === 'entree') {
       const isLaizeeCat = mpIsLaizeeCategory(S.mpModal.categorie) || (mat && mpIsLaizeeCategory(mat.categorie));
-      const hideEmpl = !!S.fabStockMode || isLaizeeCat;
-      const emplField = hideEmpl ? null : buildMpEmplacementField();
       const blInp = el('input', { attrs: { type: 'text', placeholder: 'BL-2024-001' } });
-      const qInp = el('input', { attrs: mpQuantiteInputAttrs(mpCat) });
+      // Les matières premières ne se gèrent plus par emplacement : plus de champ.
+      const qField = buildMpQuantiteField(mpCat, 'entree');
+      const qInp = qField.qInp;
       // Prix €/m² de la réception — uniquement pour bobines laizées
       const showPrix = isLaizeeCat && !!mat;
       const prixInp = showPrix ? el('input', {
@@ -860,15 +1012,11 @@
           prixHint.textContent = 'Aucun prix courant enregistré. Si tu saisis un prix, il devient le prix de référence.';
         }
       }
-      if (emplField) body.appendChild(emplField.wrap);
       body.appendChild(el('div', { cls: 'mp-field' },
         el('label', null, 'Référence BL / Fournisseur'),
         blInp,
       ));
-      body.appendChild(el('div', { cls: 'mp-field' },
-        el('label', null, mpQuantiteFieldLabel(mpCat)),
-        qInp,
-      ));
+      body.appendChild(qField.wrap);
       if (prixInp) {
         body.appendChild(el('div', { cls: 'mp-field' },
           el('label', null, 'Prix €/m² de cette réception'),
@@ -885,10 +1033,11 @@
           matiere_id: S.mpModal.matiereId,
           type_mouvement: 'entree',
           quantite: parseFloat(qInp.value),
+          unite_saisie: qField.getUnite(),
           ref_bl: (blInp.value || '').trim() || null,
           note: null,
           emplacement_source: null,
-          emplacement_dest: emplField ? (mpEmplacementValue(emplField.emplInp) || null) : null,
+          emplacement_dest: null,
         };
         if (prixInp) {
           const raw = (prixInp.value || '').replace(',', '.').trim();
@@ -902,10 +1051,6 @@
       S.mpModal.validate = () => {
         const q = parseFloat(qInp.value);
         if (!S.mpModal.matiereId) return 'Matière obligatoire.';
-        if (emplField) {
-          const emplErr = validateMpEmplacement(mpEmplacementValue(emplField.emplInp));
-          if (emplErr) return emplErr;
-        }
         if (!q || q <= 0) return 'Quantité invalide.';
         if (prixInp && prixInp.value) {
           const raw = prixInp.value.replace(',', '.').trim();
@@ -915,14 +1060,13 @@
         return null;
       };
     } else if (typeMvt === 'sortie') {
-      const isLaizeeCat = mpIsLaizeeCategory(S.mpModal.categorie) || (mat && mpIsLaizeeCategory(mat.categorie));
-      const hideEmpl = !!S.fabStockMode || isLaizeeCat;
-      const emplField = hideEmpl ? null : buildMpEmplacementField();
-      hintEl.textContent = 'Stock actuel : ' + mpStockLine(stockActuel, mpCat);
-      const qInp = el('input', { attrs: mpQuantiteInputAttrs(mpCat) });
+      // Le contrôle de stock se fait sur la quantité CONVERTIE : saisir 2 palettes
+      // sur un stock de 1 500 kg doit alerter, même si « 2 » est petit.
+      const qField = buildMpQuantiteField(mpCat, 'sortie');
+      const qInp = qField.qInp;
       const checkQ = () => {
-        const q = parseFloat(qInp.value);
-        if (q > stockActuel) {
+        const q = qField.getQuantiteGestion();
+        if (!isNaN(q) && q > stockActuel) {
           errEl.style.display = '';
           errEl.textContent = 'Stock insuffisant.';
         } else {
@@ -930,40 +1074,36 @@
         }
       };
       qInp.addEventListener('input', checkQ);
-      if (emplField) body.appendChild(emplField.wrap);
-      body.appendChild(el('div', { cls: 'mp-field' },
-        el('label', null, mpQuantiteFieldLabel(mpCat)),
-        qInp,
-        hintEl,
+      qInp._onMpUniteChange = checkQ;
+      qField.wrap.appendChild(el('div', { cls: 'mp-field' },
+        mpStockActuelHint(stockActuel, mpCat),
         errEl,
       ));
+      body.appendChild(qField.wrap);
       S.mpModal.getBody = () => ({
         matiere_id: S.mpModal.matiereId,
         type_mouvement: 'sortie',
         quantite: parseFloat(qInp.value),
+        unite_saisie: qField.getUnite(),
         ref_bl: null,
         note: null,
-        emplacement_source: emplField ? (mpEmplacementValue(emplField.emplInp) || null) : null,
+        emplacement_source: null,
         emplacement_dest: null,
       });
       S.mpModal.validate = () => {
         const q = parseFloat(qInp.value);
         if (!S.mpModal.matiereId) return 'Matière obligatoire.';
-        if (emplField) {
-          const emplErr = validateMpEmplacement(mpEmplacementValue(emplField.emplInp));
-          if (emplErr) return emplErr;
-        }
         if (!q || q <= 0) return 'Quantité invalide.';
-        if (q > stockActuel) return 'Stock insuffisant.';
+        if (qField.getQuantiteGestion() > stockActuel) return 'Stock insuffisant.';
         return null;
       };
     } else if (typeMvt === 'ajustement') {
-      hintEl.textContent = 'Stock actuel : ' + mpStockLine(stockActuel, mpCat);
       const stepAdj = mpIsPaletteCategory(mpCat) || ['carton', 'mandrin'].includes(mpCategorieKey(mpCat?.categorie)) ? '1' : '0.5';
       const qInp = el('input', { attrs: { type: 'number', min: '0', step: stepAdj } });
+      const uniteAjLabel = mpUniteNom(mpCat) === 'kg' ? 'kg' : mpUniteNom(mpCat) + 's';
       body.appendChild(el('div', { cls: 'mp-field' },
-        hintEl,
-        el('label', null, 'Nouveau stock (' + mpUniteNom(mpCat) + 's)'),
+        mpStockActuelHint(stockActuel, mpCat),
+        el('label', null, 'Nouveau stock (' + uniteAjLabel + ')'),
         qInp,
       ));
       S.mpModal.getBody = () => ({
@@ -2045,10 +2185,16 @@
       buildMpEmplacementField: buildMpEmplacementField,
       mpQuantiteFieldLabel: mpQuantiteFieldLabel,
       mpQuantiteInputAttrs: mpQuantiteInputAttrs,
+      mpIsAdhesifCategory: mpIsAdhesifCategory,
+      mpUnitesSaisie: mpUnitesSaisie,
+      mpFacteurSaisie: mpFacteurSaisie,
+      mpUniteSaisieDefaut: mpUniteSaisieDefaut,
+      mpStockActuelHint: mpStockActuelHint,
       fmtStockParisNow: fmtStockParisNow,
     },
     // Referentiels d'affichage partages.
     constants: {
+      MP_UNITE_SAISIE_LABELS: MP_UNITE_SAISIE_LABELS,
       MP_CAT_LABELS: MP_CAT_LABELS,
       MP_MVT_TITLES: MP_MVT_TITLES,
       PF_MVT_TITLES: PF_MVT_TITLES,

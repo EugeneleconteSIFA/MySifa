@@ -3966,6 +3966,64 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
       });
       stockRefCache = { code, items };
     }catch(_){}
+    syncStockUniteSaisie();
+  }
+
+  // ── Unite de saisie des adhesifs (stock tenu au kilo) ────────────────────
+  // L'operateur sort des palettes completes et remet en stock des cartons : un
+  // « 1 » saisi sans unite vaudrait 1 kg au lieu de 1 200. Le selecteur
+  // n'apparait que sur une reference adhesif dont le conditionnement est connu ;
+  // la conversion qui fait foi est faite par /api/fabrication/saisie-stock.
+  function _currentStockMatiere(){
+    const code = (opSel.value || '').split(/\s+/)[0] || '';
+    if(code !== 'EM' && code !== 'SM') return null;
+    const ref = (stockRefInput.value || '').trim().toLowerCase();
+    if(!ref) return null;
+    const items = (stockRefCache.code === code) ? (stockRefCache.items || []) : [];
+    return items.find(it => String(it.reference || '').trim().toLowerCase() === ref) || null;
+  }
+  function _uniteSaisieOptions(mat){
+    if(!mat || String(mat.categorie || '').toLowerCase() !== 'adhesif') return [];
+    if(Array.isArray(mat.unites_saisie) && mat.unites_saisie.length) return mat.unites_saisie;
+    const out = ['kg'];
+    if(Number(mat.kg_par_carton) > 0) out.push('carton');
+    if(Number(mat.kg_par_palette || mat.unites_par_palette || 0) > 0) out.push('palette');
+    return out;
+  }
+  function syncStockUniteSaisie(){
+    const code = (opSel.value || '').split(/\s+/)[0] || '';
+    const mat = _currentStockMatiere();
+    const opts = _uniteSaisieOptions(mat);
+    const show = opts.length > 1;
+    stockUniteWrap.style.display = show ? '' : 'none';
+    if(!show){ stockUniteSelect.innerHTML = ''; stockUniteHint.textContent = ''; return; }
+    const labels = { kg:'Kilos', carton:'Cartons', palette:'Palettes' };
+    // Meme regle de defaut que MyStock : sortie a la palette, entree au carton
+    // (l'operateur remet en stock une palette entamee, il ne receptionne pas).
+    const pref = (code === 'EM') ? ['carton','palette','kg'] : ['palette','carton','kg'];
+    const defaut = pref.find(u => opts.includes(u)) || opts[0];
+    const prev = stockUniteSelect.value;
+    stockUniteSelect.innerHTML = '';
+    opts.forEach(u => {
+      const o = h('option', { value:u }, labels[u] || u);
+      stockUniteSelect.appendChild(o);
+    });
+    stockUniteSelect.value = opts.includes(prev) ? prev : defaut;
+    refreshStockUniteHint();
+  }
+  function refreshStockUniteHint(){
+    const mat = _currentStockMatiere();
+    const u = stockUniteSelect.value;
+    if(!mat || u === 'kg'){ stockUniteHint.textContent = ''; return; }
+    const f = (u === 'carton')
+      ? Number(mat.kg_par_carton || 0)
+      : Number(mat.kg_par_palette || mat.unites_par_palette || 0);
+    if(!f){ stockUniteHint.textContent = ''; return; }
+    const q = parseFloat(qteTI.value);
+    const base = '1 ' + (u === 'palette' ? 'palette' : 'carton') + ' = ' + f.toLocaleString('fr-FR') + ' kg';
+    stockUniteHint.textContent = (!q || q <= 0)
+      ? base
+      : (base + ' · soit ' + (q * f).toLocaleString('fr-FR') + ' kg');
   }
   function updateFormForOp(){
     const raw = opSel.value || '';
@@ -3988,9 +4046,18 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
     }
     // Defaults for stock
     if(isStock){
+      // EM/SM = matiere premiere : plus de notion d'emplacement.
+      const isMPCode = (code === 'EM' || code === 'SM');
+      if(formEl){
+        formEl.querySelectorAll('[data-role="stock-empl"]').forEach(el=>{ el.style.display = isMPCode ? 'none' : ''; });
+      }
+      if(isMPCode) stockEmplacementInput.value = '';
       if(code === 'EP' && !stockEmplacementInput.value) stockEmplacementInput.value = 'Z1';
       if(code !== 'EP' && stockEmplacementInput.value === 'Z1') stockEmplacementInput.value = '';
       refreshStockRefDatalist(code);
+      syncStockUniteSaisie();
+    } else {
+      stockUniteWrap.style.display = 'none';
     }
   }
   opSel.addEventListener('change', updateFormForOp);
@@ -4039,6 +4106,18 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
   const stockDatalistId = stockRefInput.getAttribute('list');
   const stockDatalist = h('datalist', { id: stockDatalistId });
   const stockEmplacementInput = h('input', { type:'text', placeholder:'ex: Z1', value:'' });
+  // Selecteur d'unite de saisie (adhesifs uniquement, masque par defaut).
+  const stockUniteSelect = h('select', null);
+  const stockUniteHint = h('div', { style:'font-size:11px;color:var(--muted);margin-top:4px' });
+  const stockUniteWrap = h('div', { 'data-role':'stock-unite', style:{display:'none'} },
+    h('label', null, 'Unite de saisie'),
+    stockUniteSelect,
+    stockUniteHint
+  );
+  stockUniteSelect.addEventListener('change', refreshStockUniteHint);
+  stockRefInput.addEventListener('input', syncStockUniteSaisie);
+  stockRefInput.addEventListener('change', syncStockUniteSaisie);
+  qteTI.addEventListener('input', refreshStockUniteHint);
   inputs.metrage_reel         = metrageReelI;
   inputs.metrage_total_debut  = metrageDebutI;
   inputs.metrage_total_fin    = metrageFinI;
@@ -4068,10 +4147,13 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
           stockRefInput,
           stockDatalist
         ),
-        h('div', null,
+        // Emplacement : produits finis uniquement. Les matieres premieres (EM/SM)
+        // ne se gerent plus par emplacement, le champ est masque pour ces codes.
+        h('div', { 'data-role':'stock-empl' },
           h('label', null, 'Emplacement'),
           stockEmplacementInput
-        )
+        ),
+        stockUniteWrap
       ),
       h('div', { className: 'form-row' },
         h('div', null, h('label', null, 'Qté traitée'), qteTI),
@@ -4129,9 +4211,13 @@ function buildSaisieForm(prefill, title, submitLabel, onSubmit, extraBtn) {
                 stockBody.produit_reference = stockRef;
                 stockBody.emplacement = empl || (code==='EP' ? 'Z1' : '');
               } else {
+                // Matiere premiere : aucun emplacement transmis (notion supprimee).
+                // L'unite de saisie n'est envoyee que si le selecteur est visible
+                // (adhesif au conditionnement connu) ; le serveur convertit.
                 stockBody.matiere_reference = stockRef;
-                if(code === 'EM') stockBody.emplacement_dest = empl || null;
-                else stockBody.emplacement_source = empl || null;
+                if(stockUniteWrap.style.display !== 'none' && stockUniteSelect.value){
+                  stockBody.unite_saisie = stockUniteSelect.value;
+                }
               }
               (async ()=>{
                 try{
@@ -4929,7 +5015,20 @@ function renderSaisies(){
     tr.appendChild(h('td',null,opName(row.operateur)));
     tr.appendChild(h('td',null,row.machine||'-'));
     tr.appendChild(h('td',null,row.no_dossier||'-'));
-    tr.appendChild(h('td',null,fN(row.quantite_traitee)));
+    // Sur un mouvement matiere saisi dans une autre unite que l'unite de stock,
+    // on rappelle le geste : « 1 200 (1 palette) » plutot qu'un 1 200 nu.
+    tr.appendChild(h('td',null,
+      fN(row.quantite_traitee)
+      + (function(){
+          const u = String(row.unite_saisie||'').toLowerCase();
+          const q = row.quantite_saisie;
+          if(!u || u === 'kg' || q == null) return '';
+          const n = Number(q);
+          const nom = (u === 'palette' ? 'palette' : u === 'carton' ? 'carton' : '');
+          if(!nom) return '';
+          return ' (' + fN(n) + ' ' + nom + (Math.abs(n) > 1 ? 's' : '') + ')';
+        })()
+    ));
     tr.appendChild(h('td',{style:{color:'var(--c3)'}},
       row._metrage_dossier!=null
         ? (()=>{
