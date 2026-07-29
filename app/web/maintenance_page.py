@@ -308,7 +308,7 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 /* ── Vue Semaine (emploi du temps) ──────────────────────────────────── */
 .cal-week-view{overflow-x:auto}
 .cal-wv-hint{font-size:13px;color:var(--text2);background:var(--accent-bg);border:1px dashed var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:14px;text-align:center;font-weight:600}
-.cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);min-width:1268px}
+.cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);scrollbar-gutter:stable}  /* v2.5.17 : min-width retire (dim clippe), scrollbar-gutter aligne header+body */
 .cal-wv-corner{}
 .cal-wv-dayhead{padding:11px 10px;text-align:center;border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--card)}
 .cal-wv-dayhead.weekend{background:rgba(167,139,250,.06)}
@@ -318,7 +318,7 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-wv-dayhead.today .cal-wv-dayname{color:var(--accent)}
 .cal-wv-daydate{font-size:17px;font-weight:800;color:var(--text);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;letter-spacing:.3px}
 .cal-wv-dayhead.today .cal-wv-daydate{color:var(--accent)}
-.cal-wv-body{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;position:relative;overflow:auto;max-height:75vh;min-width:1268px}
+.cal-wv-body{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;position:relative;overflow:auto;max-height:75vh;scrollbar-gutter:stable}  /* v2.5.17 */
 .cal-wv-times-col{display:flex;flex-direction:column}
 .cal-wv-time{height:62px;display:flex;align-items:flex-start;justify-content:flex-end;padding:3px 10px 0 0;font-size:12px;font-weight:700;color:var(--muted);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;border-right:1px solid var(--border);border-top:1px solid var(--border)}
 .cal-wv-time:first-child{border-top:none}
