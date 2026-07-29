@@ -1049,6 +1049,13 @@ body.light .ops-detail-block--comment .ops-detail-block-head{color:#b45309}
 .case-op-consignes-preview{margin-top:6px;padding:8px 12px;background:var(--bg);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;color:var(--text2);font-size:12px;font-style:italic;line-height:1.4;white-space:pre-wrap}
 body.light .case-ops-row-done{background:linear-gradient(90deg,rgba(5,150,105,.06) 0%,transparent 100%)}
 body.light .case-ops-row-done-badge{background:rgba(5,150,105,.16);color:#059669}
+/* v2.5.10 : statut invalidee (saisie mise de cote administrativement) */
+.case-ops-row-done.is-invalidee{background:linear-gradient(90deg,rgba(148,163,184,.08) 0%,transparent 100%);border-left-color:var(--muted)}
+.case-ops-row-done-badge.is-invalidee{background:rgba(148,163,184,.18);color:var(--muted)}
+.case-ops-row-done-badge.is-mixed{background:rgba(245,158,11,.18);color:var(--warn,#f59e0b)}
+body.light .case-ops-row-done.is-invalidee{background:linear-gradient(90deg,rgba(100,116,139,.08) 0%,transparent 100%)}
+body.light .case-ops-row-done-badge.is-invalidee{background:rgba(100,116,139,.20);color:#475569}
+body.light .case-ops-row-done-badge.is-mixed{background:rgba(217,119,6,.20);color:#b45309}
 .op-col-cards{display:flex;flex-direction:column;gap:12px}
 .op-col-empty{background:var(--card);border:1px dashed var(--border);border-radius:12px;text-align:center;padding:32px 20px;color:var(--muted);font-size:13px}
 .op-col-empty strong{display:block;color:var(--text2);font-size:14px;margin-bottom:4px}
@@ -2857,7 +2864,11 @@ function _apiEventToClient(ev){
       observations: o.observations,
       done_at: o.done_at,
       done_by: o.done_by,
+      done_by_nom: o.done_by_nom || null,
       updated_by: o.updated_by,
+      invalidated_at: o.invalidated_at || null,
+      invalidated_by: o.invalidated_by || null,
+      invalidated_by_nom: o.invalidated_by_nom || null,
       consignes: o.consignes || '',
     };
   });
@@ -4215,26 +4226,47 @@ function renderCaseOpsList(){
   }
   list.innerHTML = _CASE_OPS.map((op, idx) => {
     // v2 : détecte si au moins une machine de cette op (regroupée par code)
-    // est termine → ligne entière read-only pour éviter les états incohérents.
+    // est termine ou invalidee → ligne entière read-only. On distingue les deux
+    // dans le rendu (badge + couleur différents).
     const statuts = op._statuts_by_machine || {};
     const anyDone = Object.values(statuts).some(s => s === 'termine');
+    const anyInvalidated = Object.values(statuts).some(s => s === 'invalidee');
 
-    // Rendu READ-ONLY : op déjà (au moins partiellement) effectuée sur une machine.
-    if(anyDone && op.opTypeId){
+    // Rendu READ-ONLY : op déjà saisie (termine) OU mise de côté (invalidee).
+    if((anyDone || anyInvalidated) && op.opTypeId){
       const opName = op.opName || (OPS_TYPES_STATE.list.find(t => t.id === op.opTypeId) || {}).nom || op.opTypeId || '—';
       const nivBadge = op.opNiveau ? ' (N' + op.opNiveau + ')' : '';
-      // Chips figées : chaque machine assignée est affichée. Icône ✓ pour celles termine.
+      // v2.5.10 : color/badge/icone selon l'état dominant (invalidee prime : elle indique
+      // une decision explicite de l'admin, alors que termine est le defaut).
+      const isInvalid = anyInvalidated && !anyDone;
+      const isMixed   = anyInvalidated && anyDone;
+      const accentColor = isInvalid ? 'var(--muted)' : (isMixed ? 'var(--warn,#f59e0b)' : 'var(--success,#34d399)');
+      const badgeText = isInvalid ? 'Invalidée' : (isMixed ? 'Partielle' : 'Effectué');
+      const badgeClass = isInvalid ? 'case-ops-row-done-badge is-invalidee' : (isMixed ? 'case-ops-row-done-badge is-mixed' : 'case-ops-row-done-badge');
+      const headIcoPath = isInvalid
+        ? '<path d="M4.9 4.9l14.2 14.2"/><circle cx="12" cy="12" r="9"/>'  // cercle barré
+        : '<polyline points="20 6 9 17 4 12"/>';  // check
+      // Chips par machine : état individuel (termine / invalidee / a_faire).
       const chipsDone = (op.machines || []).map(m => {
-        const isMachDone = statuts[m] === 'termine';
-        const doneIco = isMachDone ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"><polyline points="20 6 9 17 4 12"/></svg>' : '';
-        return '<span class="case-mach-chip active" style="cursor:default;opacity:.85">' + doneIco + escHtml(m) + '</span>';
+        const st = statuts[m];
+        const isMachDone = (st === 'termine');
+        const isMachInv  = (st === 'invalidee');
+        const ico = isMachDone
+          ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"><polyline points="20 6 9 17 4 12"/></svg>'
+          : (isMachInv
+              ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px;opacity:.75"><line x1="5" y1="5" x2="19" y2="19"/><line x1="5" y1="19" x2="19" y2="5"/></svg>'
+              : '');
+        const chipStyle = isMachInv
+          ? 'cursor:default;opacity:.55;text-decoration:line-through'
+          : 'cursor:default;opacity:.85';
+        return '<span class="case-mach-chip active" style="' + chipStyle + '">' + ico + escHtml(m) + '</span>';
       }).join('');
-      return '<div class="case-ops-row case-ops-row-done" data-idx="' + idx + '">' +
+      return '<div class="case-ops-row case-ops-row-done ' + (isInvalid ? 'is-invalidee' : '') + '" data-idx="' + idx + '">' +
         '<div class="case-ops-row-top">' +
           '<div class="case-ops-row-done-label">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;color:var(--success,#34d399)"><polyline points="20 6 9 17 4 12"/></svg>' +
+            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;color:' + accentColor + '">' + headIcoPath + '</svg>' +
             escHtml(opName) + nivBadge +
-            '<span class="case-ops-row-done-badge">Effectué</span>' +
+            '<span class="' + badgeClass + '">' + badgeText + '</span>' +
           '</div>' +
         '</div>' +
         '<div class="case-ops-machines">' +
@@ -5308,11 +5340,140 @@ function openOpsHistoryDetail(id){
   document.body.appendChild(overlay);
 }
 
+// v2.5.10 : suppression d'une ligne d'historique.
+//   - Non_planifie (op ponctuelle enregistree hors creneau) : hard delete direct,
+//     comportement historique (rien a preserver, l'op nait et meurt en 1 ligne).
+//   - Planifie (op saisie lors d'un creneau) : modal avec 2 choix pour eviter la
+//     cascade destructive (creneau vide + tache operateur disparue). Choix :
+//        1. Invalider la saisie (statut=invalidee) : l'op reste sur le creneau,
+//           grisee, ne compte plus, disparait de l'historique et de Mes taches.
+//        2. Supprimer entierement (comportement historique, warning explicite).
 async function deleteOp(id){
   const item = (OPS_STATE.list || []).find(o => o.id === id);
   if(!item){ if(typeof showToast === 'function') showToast('Ligne introuvable.', 'danger'); return; }
-  if(!confirm('Supprimer cette opération ? Cette action est définitive.')) return;
+  // Non_planifie ou pas encore persiste en DB -> hard delete direct.
+  if(item._source !== 'db' || item._event_source === 'non_planifie'){
+    if(!confirm('Supprimer cette op\u00e9ration ? Cette action est d\u00e9finitive.')) return;
+    return _hardDeleteOpFromHistory(item);
+  }
+  // Planifie : offre le choix Invalider / Supprimer entierement.
+  _openInvalidateOrDeleteOpModal(item);
+}
 
+function _openInvalidateOrDeleteOpModal(item){
+  const existing = document.getElementById('inv-op-modal-overlay');
+  if(existing) existing.remove();
+  const wrap = document.createElement('div');
+  wrap.id = 'inv-op-modal-overlay';
+  wrap.className = 'op-modal-overlay';
+  wrap.style.cssText = 'display:flex;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center';
+  wrap.addEventListener('click', (e) => { if(e.target === wrap) _closeInvalidateOrDeleteOpModal(); });
+  const escHandler = (e) => { if(e.key === 'Escape'){ e.preventDefault(); _closeInvalidateOrDeleteOpModal(); } };
+  document.addEventListener('keydown', escHandler, true);
+  wrap._escHandler = escHandler;
+
+  const machine = escHtml(item.machine || '');
+  const type = escHtml(item.type || '');
+  const dateFR = escHtml(_fmtDateFRHistoric(item.date_saisie) || '');
+  const doneBy = escHtml(item.operateur || '');
+
+  wrap.innerHTML = ''
+    + '<div class="op-modal" role="dialog" aria-modal="true" style="max-width:560px;width:calc(100% - 40px);background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,0.4)">'
+    +   '<div style="color:var(--text);font-size:16px;font-weight:700;margin-bottom:6px">Que faire de cette saisie ?</div>'
+    +   '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Cette op\u00e9ration a \u00e9t\u00e9 saisie lors d\'un cr\u00e9neau planifi\u00e9. La suppression entraine des effets sur le cr\u00e9neau et l\'op\u00e9rateur.</div>'
+    +   '<div style="padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:16px;font-size:13px">'
+    +     '<div style="font-weight:700;color:var(--text)">' + type + '</div>'
+    +     '<div style="color:var(--muted);margin-top:4px">' + machine + (dateFR ? ' \u00b7 ' + dateFR : '') + (doneBy ? ' \u00b7 par ' + doneBy : '') + '</div>'
+    +   '</div>'
+    +   '<div style="display:flex;flex-direction:column;gap:10px">'
+    +     '<button type="button" id="inv-op-invalidate-btn" style="padding:14px 16px;text-align:left;border-radius:10px;border:1.5px solid var(--warn,#f59e0b);background:rgba(245,158,11,0.08);color:var(--text);cursor:pointer;font-family:inherit">'
+    +       '<div style="font-weight:700;font-size:14px;color:var(--warn,#f59e0b)">Invalider la saisie <span style="font-weight:600;font-size:11px;color:var(--muted);letter-spacing:.3px;text-transform:uppercase;margin-left:6px">recommand\u00e9</span></div>'
+    +       '<div style="font-size:12px;color:var(--text2);margin-top:6px;line-height:1.5">La saisie dispara\u00eet de l\'historique et de Mes t\u00e2ches. Le cr\u00e9neau conserve la ligne, gris\u00e9e avec badge \u00ab Invalid\u00e9e \u00bb (tra\u00e7abilit\u00e9 : qui/quand).</div>'
+    +     '</button>'
+    +     '<button type="button" id="inv-op-delete-btn" style="padding:14px 16px;text-align:left;border-radius:10px;border:1.5px solid var(--danger);background:rgba(248,113,113,0.08);color:var(--text);cursor:pointer;font-family:inherit">'
+    +       '<div style="font-weight:700;font-size:14px;color:var(--danger)">Supprimer enti\u00e8rement</div>'
+    +       '<div style="font-size:12px;color:var(--text2);margin-top:6px;line-height:1.5">Retire la ligne partout : historique, cr\u00e9neau (peut se retrouver vide), Mes t\u00e2ches de l\'op\u00e9rateur. Irr\u00e9versible.</div>'
+    +     '</button>'
+    +   '</div>'
+    +   '<div style="display:flex;justify-content:flex-end;margin-top:16px">'
+    +     '<button type="button" id="inv-op-cancel-btn" style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>'
+    +   '</div>'
+    + '</div>';
+
+  document.body.appendChild(wrap);
+  const invBtn = document.getElementById('inv-op-invalidate-btn');
+  const delBtn = document.getElementById('inv-op-delete-btn');
+  const cancelBtn = document.getElementById('inv-op-cancel-btn');
+  if(cancelBtn) cancelBtn.addEventListener('click', _closeInvalidateOrDeleteOpModal);
+  if(invBtn) invBtn.addEventListener('click', () => {
+    if(invBtn.dataset._busy === '1') return;
+    invBtn.dataset._busy = '1'; invBtn.disabled = true; if(delBtn) delBtn.disabled = true;
+    _doInvalidateOpFromHistory(item, invBtn);
+  });
+  if(delBtn) delBtn.addEventListener('click', () => {
+    if(delBtn.dataset._busy === '1') return;
+    delBtn.dataset._busy = '1'; delBtn.disabled = true; if(invBtn) invBtn.disabled = true;
+    _doHardDeleteFromModal(item, delBtn);
+  });
+  requestAnimationFrame(() => { if(invBtn) invBtn.focus(); });
+}
+
+function _closeInvalidateOrDeleteOpModal(){
+  const w = document.getElementById('inv-op-modal-overlay');
+  if(!w) return;
+  try{ if(w._escHandler) document.removeEventListener('keydown', w._escHandler, true); }catch(_){}
+  w.remove();
+}
+
+function _fmtDateFRHistoric(iso){
+  if(!iso) return '';
+  try{
+    const d = new Date(iso);
+    if(isNaN(d.getTime())) return '';
+    return ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth()+1)).slice(-2) + '/' + d.getFullYear();
+  }catch(e){ return ''; }
+}
+
+async function _doInvalidateOpFromHistory(item, btn){
+  try{
+    const url = '/api/maintenance/events/' + encodeURIComponent(item._event_id) +
+                '/ops/' + encodeURIComponent(item._op_id) + '/invalidate';
+    const r = await fetch(url, { method: 'POST', credentials: 'include' });
+    if(!r.ok){
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err.detail || ('Invalidation refus\u00e9e (' + r.status + ')'));
+    }
+    if(Array.isArray(_OPS_HISTORY_DB_CACHE)){
+      _OPS_HISTORY_DB_CACHE = _OPS_HISTORY_DB_CACHE.filter(x => x.id !== item.id);
+    }
+    OPS_STATE.list = OPS_STATE.list.filter(o => o.id !== item.id);
+    renderOps();
+    if(typeof showToast === 'function') showToast('Saisie invalid\u00e9e. Le cr\u00e9neau conserve la ligne.', 'info');
+    _closeInvalidateOrDeleteOpModal();
+    // Rafraichit le planning + Mes taches pour refleter le nouveau statut.
+    if(typeof refreshPlanning === 'function') refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
+    if(typeof opLoadTasks === 'function') opLoadTasks().catch(() => {});
+    if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
+  }catch(e){
+    if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
+    if(btn){ btn.dataset._busy = ''; btn.disabled = false; }
+    const other = document.getElementById('inv-op-delete-btn');
+    if(other) other.disabled = false;
+  }
+}
+
+async function _doHardDeleteFromModal(item, btn){
+  try{
+    await _hardDeleteOpFromHistory(item);
+    _closeInvalidateOrDeleteOpModal();
+  }catch(e){
+    if(btn){ btn.dataset._busy = ''; btn.disabled = false; }
+    const other = document.getElementById('inv-op-invalidate-btn');
+    if(other) other.disabled = false;
+  }
+}
+
+async function _hardDeleteOpFromHistory(item){
   // v2.2.10 : suppression persistée en DB (avant : localStorage-only → l'op
   // réapparaissait au prochain rebuild du cache depuis la DB).
   if(item._source === 'db' && item._event_id && item._op_id){
@@ -5326,28 +5487,26 @@ async function deleteOp(id){
       if(!r.ok){
         if(r.status === 502 || r.status === 503){
           if(typeof showToast === 'function') showToast('Serveur temporairement indisponible, réessaye dans un instant.', 'danger');
-          return;
+          throw new Error('Serveur indisponible');
         }
         const err = await r.json().catch(()=>({}));
         if(typeof showToast === 'function') showToast('Erreur suppression : ' + (err.detail || r.status), 'danger');
-        return;
+        throw new Error(err.detail || String(r.status));
       }
-      // Purge du cache DB local pour éviter le rebuild fantôme
       if(Array.isArray(_OPS_HISTORY_DB_CACHE)){
-        _OPS_HISTORY_DB_CACHE = _OPS_HISTORY_DB_CACHE.filter(x => x.id !== id);
+        _OPS_HISTORY_DB_CACHE = _OPS_HISTORY_DB_CACHE.filter(x => x.id !== item.id);
       }
     }catch(e){
       if(typeof showToast === 'function') showToast('Erreur réseau : ' + (e.message || e), 'danger');
-      return;
+      throw e;
     }
   }
-
-  // Retire aussi de la liste affichée (immediate visual feedback)
-  OPS_STATE.list = OPS_STATE.list.filter(o => o.id !== id);
+  OPS_STATE.list = OPS_STATE.list.filter(o => o.id !== item.id);
   renderOps();
   if(typeof showToast === 'function') showToast('Opération supprimée.', 'success');
-  // Refresh backend en arrière-plan pour recharger l'état canonique
   if(typeof refreshOpsHistoryNow === 'function') refreshOpsHistoryNow();
+  if(typeof refreshPlanning === 'function') refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
+  if(typeof opLoadTasks === 'function') opLoadTasks().catch(() => {});
 }
 function sortOps(field){
   if(OPS_STATE.sortBy === field){
@@ -8365,7 +8524,7 @@ function renderPlanningHistorique(events){
     (ev.ops || []).forEach(o => {
       const nMach = (o.machines || []).length || 1;
       total += nMach;
-      if(o.statut === 'termine') done += nMach;
+      if(o.statut === 'termine' || o.statut === 'invalidee') done += nMach;  // v2.5.10
     });
     const ratio = total > 0 ? (done / total) : 0;
     const statusColor = _histStatusColor(ratio);
@@ -9222,7 +9381,7 @@ document.addEventListener('visibilitychange', () => {
 opAutoRefreshStart();
 
 function _countRemainingOps(ev){
-  return (ev.ops || []).filter(o => o.statut !== 'termine').length;
+  return (ev.ops || []).filter(o => o.statut !== 'termine' && o.statut !== 'invalidee').length;  // v2.5.10 : invalidee = solde, ne compte pas
 }
 
 // Regroupe les ops d'un event par machine. Une op sans machine tombe dans un
@@ -9385,7 +9544,7 @@ function _bucketsForMachine(events, machine, showTermine){
     for(const op of ops){
       const machines = _opMachines(op, ev);
       if(!machines.includes(machine)) continue;
-      if(!showTermine && op.statut === 'termine') continue;
+      if(!showTermine && (op.statut === 'termine' || op.statut === 'invalidee')) continue;  // v2.5.10 : masque invalidee comme termine
       filtered.push(op);
     }
     if(!filtered.length) continue;
@@ -9395,7 +9554,7 @@ function _bucketsForMachine(events, machine, showTermine){
         nonPlanifieOps.push({ op, ev });
       }
     } else {
-      const allDone = filtered.every(o => o.statut === 'termine');
+      const allDone = filtered.every(o => o.statut === 'termine' || o.statut === 'invalidee');  // v2.5.10
       planifie.push({ ev, ops: filtered, allDone });
     }
   }
@@ -9540,7 +9699,7 @@ function _renderNonPlanifieBloc(items){
 function _isEventDone(ev){
   const ops = (ev && ev.ops) || [];
   if(!ops.length) return false;
-  return ops.every(o => o.statut === 'termine');
+  return ops.every(o => o.statut === 'termine' || o.statut === 'invalidee');  // v2.5.10 : invalidee = solde comme termine pour la completion
 }
 
 // Rendu d'une section machine (top-level).
@@ -9588,7 +9747,7 @@ function opRenderTasks(){
       const isPerso = (ev.source === 'non_planifie');
       if(isPerso && !showTermine) continue;
       for(const op of (ev.ops || [])){
-        if(!showTermine && op.statut === 'termine') continue;
+        if(!showTermine && (op.statut === 'termine' || op.statut === 'invalidee')) continue;  // v2.5.10 : masque invalidee comme termine
         n++;
       }
     }
@@ -9667,14 +9826,14 @@ function _renderCreneauBox(ev, showTermine, isToday){
   // Filtre les ops par statut selon toggle, puis skip les machines devenues vides.
   const filteredGroups = groups.map(g => ({
     machine: g.machine,
-    ops: g.ops.filter(o => showTermine || o.statut !== 'termine')
+    ops: g.ops.filter(o => showTermine || (o.statut !== 'termine' && o.statut !== 'invalidee'))  // v2.5.10
   })).filter(g => g.ops.length > 0);
   if(!filteredGroups.length) return '';
 
   const totalOps = filteredGroups.reduce((s, g) => s + g.ops.length, 0);
   const allOps = groups.reduce((arr, g) => arr.concat(g.ops), []);
   const totalAllOps = allOps.length;
-  const doneAll = allOps.length > 0 && allOps.every(o => o.statut === 'termine');
+  const doneAll = allOps.length > 0 && allOps.every(o => o.statut === 'termine' || o.statut === 'invalidee');  // v2.5.10
 
   const timeLabel = (ev.heure_debut && ev.heure_fin)
     ? (ev.heure_debut + ' – ' + ev.heure_fin)
@@ -9716,7 +9875,7 @@ function _renderPersoSection(evs, showTermine){
   const items = [];
   for(const ev of evs){
     for(const op of (ev.ops || [])){
-      if(!showTermine && op.statut === 'termine') continue;
+      if(!showTermine && (op.statut === 'termine' || op.statut === 'invalidee')) continue;  // v2.5.10 : masque invalidee comme termine
       items.push({ op, ev });
     }
   }
@@ -9775,6 +9934,19 @@ function opOpenSaisie(eventId){
         const opsHtml = g.ops.map(op => {
           const catLbl = { controles:'Contrôle', interventions:'Nettoyage', entretien:'Nettoyage', remplacements:'Intervention', suivi:'Nettoyage' }[op.code_categorie] || op.code_categorie || '';
           const isDone = op.statut === 'termine';
+          const isInvalid = op.statut === 'invalidee';
+          // v2.5.10 : op invalidee → read-only, l'operateur ne peut pas la re-saisir.
+          if(isInvalid){
+            return '<div class="op-saisie-item" data-op-id="' + op.id + '" style="border:1px solid var(--border);border-left:3px solid var(--muted);border-radius:10px;padding:14px 16px;margin-top:12px;background:linear-gradient(90deg,rgba(148,163,184,.05) 0%,var(--card) 100%);opacity:.75">' +
+              '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+                '<span class="op-code">' + escHtml(op.code || '') + '</span>' +
+                '<span class="op-cat ' + _catClass(op.code_categorie || 'autre') + '">' + escHtml(catLbl) + '</span>' +
+                '<strong style="flex:1;font-size:13px;color:var(--text2);text-decoration:line-through;text-decoration-color:var(--muted)">' + escHtml(op.code_label || '\u2014') + '</strong>' +
+                '<span style="padding:3px 9px;border-radius:6px;background:rgba(148,163,184,.18);color:var(--muted);font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px">Invalid\u00e9e</span>' +
+              '</div>' +
+              '<div style="margin-top:10px;font-size:12px;color:var(--muted);line-height:1.5">Cette saisie a \u00e9t\u00e9 mise de c\u00f4t\u00e9 par un administrateur. Aucune action requise.</div>' +
+            '</div>';
+          }
           // Fusion pieces_changees + observations pour affichage : si les 2
           // étaient renseignées avant, on concatène pour ne rien perdre.
           const prevCommentaire = ((op.pieces_changees || '').trim() + '\n' + (op.observations || '').trim()).trim();
@@ -10929,7 +11101,7 @@ function _opRenderPlanTable(events, meId){
     const nom = (ev.nom || '').trim();
     const others = (ev.operators || []).filter(o => o.id !== meId).map(o => escHtml(o.nom));
     const teamLbl = others.length ? ('avec ' + others.join(', ')) : 'seul';
-    const allDone = rows.length > 0 && rows.every(r => r.op.statut === 'termine');
+    const allDone = rows.length > 0 && rows.every(r => r.op.statut === 'termine' || r.op.statut === 'invalidee');  // v2.5.10
     const anyDone = rows.some(r => r.op.statut === 'termine');
     const statusCls = allDone ? 'done' : (anyDone ? 'progress' : '');
     const statusTxt = allDone ? '✓ Terminé' : (anyDone ? 'En cours' : 'À faire');
