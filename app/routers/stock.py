@@ -2935,22 +2935,66 @@ def _ensure_matiere_laize_link(conn, matiere_id: int, laize_id: int) -> None:
 
 @router.get("/api/stock/receptions")
 def list_receptions(request: Request, limit: int = 50):
-    """Historique des réceptions de bobines."""
+    """Historique des réceptions de bobines.
+
+    Renvoie deux représentations des bobines d'un lot :
+      - `items`   : liste plate de codes-barres (format historique, conservé
+                    pour ne pas casser les appelants existants — impression
+                    d'étiquettes notamment) ;
+      - `bobines` : une entrée détaillée par bobine (référence matière,
+                    désignation, catégorie, laize, heure de scan), obtenue par
+                    jointure sur `matieres_premieres` et `mp_laizes`.
+
+    Les bobines réceptionnées avant la migration 203 n'ont pas de `matiere_id` :
+    leurs champs matière/laize valent None et sont rendus « — » côté UI. On les
+    conserve pour que le nombre de lignes corresponde toujours au nombre réel
+    de bobines du lot.
+    """
     user = require_stock(request)
     with get_db() as conn:
         lots = conn.execute(
-            """SELECT r.*, GROUP_CONCAT(i.code_barre, '||') as codes
-               FROM stock_receptions r
-               LEFT JOIN stock_reception_items i ON i.reception_id = r.id
-               GROUP BY r.id
+            """SELECT r.* FROM stock_receptions r
                ORDER BY r.created_at DESC LIMIT ?""",
             (limit,),
         ).fetchall()
+        lot_ids = [row["id"] for row in lots]
+        bobines_par_lot: dict[int, list] = {lid: [] for lid in lot_ids}
+        if lot_ids:
+            placeholders = ",".join("?" for _ in lot_ids)
+            rows = conn.execute(
+                f"""SELECT i.id, i.reception_id, i.code_barre, i.scanned_at,
+                           i.matiere_id, i.laize_id,
+                           m.reference   AS matiere_reference,
+                           m.designation AS matiere_designation,
+                           m.categorie   AS matiere_categorie,
+                           l.valeur_mm   AS laize_valeur_mm,
+                           l.label       AS laize_label
+                      FROM stock_reception_items i
+                      LEFT JOIN matieres_premieres m ON m.id = i.matiere_id
+                      LEFT JOIN mp_laizes l          ON l.id = i.laize_id
+                     WHERE i.reception_id IN ({placeholders})
+                     ORDER BY i.id""",
+                lot_ids,
+            ).fetchall()
+            for b in rows:
+                bobines_par_lot.setdefault(b["reception_id"], []).append({
+                    "id": b["id"],
+                    "code_barre": b["code_barre"],
+                    "scanned_at": b["scanned_at"],
+                    "matiere_id": b["matiere_id"],
+                    "matiere_reference": b["matiere_reference"],
+                    "matiere_designation": b["matiere_designation"],
+                    "matiere_categorie": b["matiere_categorie"],
+                    "laize_id": b["laize_id"],
+                    "laize_valeur_mm": b["laize_valeur_mm"],
+                    "laize_label": b["laize_label"],
+                })
     result = []
     for lot in lots:
         d = dict(lot)
-        raw = d.pop("codes", None)
-        d["items"] = raw.split("||") if raw else []
+        bobines = bobines_par_lot.get(d["id"], [])
+        d["bobines"] = bobines
+        d["items"] = [b["code_barre"] for b in bobines]
         result.append(d)
     return {"receptions": result}
 

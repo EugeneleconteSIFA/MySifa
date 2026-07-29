@@ -1689,6 +1689,26 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 /* Détail lot (expandable) */
 .recep-hist-detail{padding:8px 16px 12px;display:flex;flex-wrap:wrap;gap:6px}
 .recep-hist-chip{font-family:monospace;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:3px 9px;color:var(--text2)}
+/* Tableau des bobines d'un lot */
+.recep-bob-wrap{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+.recep-bob-head{display:grid;grid-template-columns:1.2fr 1fr 1.6fr .7fr .6fr 34px;gap:10px;padding:7px 12px;background:var(--card);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.recep-bob-row{display:grid;grid-template-columns:1.2fr 1fr 1.6fr .7fr .6fr 34px;gap:10px;padding:8px 12px;align-items:center;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border)}
+.recep-bob-row:last-child{border-bottom:none}
+.recep-bob-row:hover{background:var(--card)}
+.recep-bob-code{font-family:monospace;font-size:11px;color:var(--text);word-break:break-all}
+.recep-bob-ref{font-weight:700;color:var(--text)}
+.recep-bob-des{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recep-bob-vide{color:var(--muted)}
+.recep-bob-print{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--muted);cursor:pointer;transition:all .15s;padding:0}
+.recep-bob-print:hover{color:var(--accent);border-color:var(--accent)}
+.recep-bob-print:disabled{opacity:.4;cursor:not-allowed}
+@media(max-width:760px){
+  .recep-bob-head{display:none}
+  .recep-bob-row{grid-template-columns:1fr 34px;gap:4px 10px;padding:10px 12px}
+  .recep-bob-row>*:nth-child(-n+5){grid-column:1}
+  .recep-bob-row>*:nth-child(6){grid-column:2;grid-row:1/6;align-self:start}
+  .recep-bob-des{white-space:normal}
+}
 /* Input manuel */
 .recep-manual-wrap{display:flex;gap:8px}
 .recep-manual-inp{flex:1;background:var(--bg);border:1.5px solid var(--border);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--text);font-family:monospace;outline:none;transition:border-color .15s}
@@ -13415,6 +13435,83 @@ function recepShowPrintModal(lot, isReprint) {
 // Envoie les jobs d'impression au VPS ; l'agent local les récupère et les
 // pousse sur l'imprimante réseau. Fallback navigateur (window.print) via le
 // petit bouton "Navigateur" à côté du bouton principal.
+// ── Tableau des bobines d'un lot (historique des réceptions) ─────────
+// Une ligne par bobine : la traçabilité unitaire est ce qui sert en litige
+// fournisseur ou en audit FSC. Les bobines réceptionnées avant la migration
+// 203 n'ont pas de matière rattachée : on les affiche quand même, avec « — »,
+// pour que le nombre de lignes colle toujours au nombre réel de bobines.
+function recepFormatLaize(b) {
+  if (b.laize_label) return b.laize_label;
+  if (b.laize_valeur_mm != null && b.laize_valeur_mm !== '') {
+    const v = Number(b.laize_valeur_mm);
+    return (Number.isFinite(v) ? (Number.isInteger(v) ? v : v.toFixed(1)) : b.laize_valeur_mm) + ' mm';
+  }
+  return null;
+}
+
+function recepFormatHeure(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  const pad = n => String(n).padStart(2, '0');
+  return pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+
+function recepCell(valeur, cls) {
+  const vide = valeur === null || valeur === undefined || valeur === '';
+  return el('div', { cls: vide ? 'recep-bob-vide' : (cls || '') }, vide ? '—' : String(valeur));
+}
+
+function recepRenderBobines(lot, bobines) {
+  const wrap = el('div', { cls: 'recep-bob-wrap' });
+  wrap.appendChild(el('div', { cls: 'recep-bob-head' },
+    el('div', null, 'Code-barres'),
+    el('div', null, 'Référence'),
+    el('div', null, 'Désignation'),
+    el('div', null, 'Laize'),
+    el('div', null, 'Scan'),
+    el('div', null, '')
+  ));
+  bobines.forEach(b => {
+    const row = el('div', { cls: 'recep-bob-row' },
+      recepCell(b.code_barre, 'recep-bob-code'),
+      recepCell(b.matiere_reference, 'recep-bob-ref'),
+      recepCell(b.matiere_designation, 'recep-bob-des'),
+      recepCell(recepFormatLaize(b)),
+      recepCell(recepFormatHeure(b.scanned_at))
+    );
+    const printBtn = el('button', {
+      cls: 'recep-bob-print',
+      attrs: { type: 'button', title: 'Réimprimer l\'étiquette de cette bobine' },
+      on: { click: (e) => { e.stopPropagation(); recepReprintBobine(lot, b, e.currentTarget); } },
+    }, iconEl('printer', 13));
+    row.appendChild(printBtn);
+    wrap.appendChild(row);
+  });
+  return wrap;
+}
+
+// Réimpression d'UNE bobine : évite de relancer les 12 étiquettes d'un lot
+// quand une seule est abîmée. Passe par la variante « compact » (template
+// « Réimpression » configuré dans Paramètres > Imprimantes).
+async function recepReprintBobine(lot, bobine, btn) {
+  const claimLabel = (FSC_CLAIM_LABELS && FSC_CLAIM_LABELS[lot.fsc_type_claim || 'non_fsc']) || '';
+  const refProduit = bobine.matiere_reference || '';
+  if (btn) btn.disabled = true;
+  try {
+    await recepPrintLabelsSmart({
+      lot_numero: lot.lot_numero,
+      fournisseur: lot.fournisseur || '',
+      fsc_type_claim: lot.fsc_type_claim || 'non_fsc',
+      certificat_fsc: lot.certificat_fsc || '',
+      laize: recepFormatLaize(bobine) || '',
+      code_barre: bobine.code_barre || lot.lot_numero,
+    }, refProduit, 1, claimLabel, true);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function recepPrintLabelsSmart(lot, refProduit, nbEtiquettes, claimLabel, isReprint) {
   const fscBanner = ((lot && lot.fsc_type_claim) || 'non_fsc') === 'non_fsc'
     ? 'MATIERE NON FSC' : 'MATIERE FSC';
@@ -13428,7 +13525,7 @@ async function recepPrintLabelsSmart(lot, refProduit, nbEtiquettes, claimLabel, 
     fsc_label: claimLabel || '',
     fsc_banner: fscBanner,
     ref_produit: refProduit || '',
-    code_barre: lot.lot_numero || '',
+    code_barre: lot.code_barre || lot.lot_numero || '',
     operateur_nom: operateurNom,
     date_reception: dateStr,
   laize: (lot.laize || lot.laize_mm || ''),
@@ -14188,10 +14285,12 @@ function buildReceptionHistorique() {
       histScroll.appendChild(row);
       if (isOpen) {
         const detail = el('div', { cls: 'recep-hist-detail', style: { padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '10px' } });
-        if (lot.items && lot.items.length) {
-          const chips = el('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '6px' } });
-          lot.items.forEach(code => chips.appendChild(el('span', { cls: 'recep-hist-chip' }, code)));
-          detail.appendChild(chips);
+        const bobines = (lot.bobines && lot.bobines.length)
+          ? lot.bobines
+          // Rétro-compat : un back non encore déployé ne renvoie que `items`.
+          : (lot.items || []).map(c => ({ code_barre: c }));
+        if (bobines.length) {
+          detail.appendChild(recepRenderBobines(lot, bobines));
         }
         // Bouton réimprimer les étiquettes pour ce lot
         if (lot.lot_numero) {
