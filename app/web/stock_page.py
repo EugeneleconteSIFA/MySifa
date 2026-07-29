@@ -1691,8 +1691,8 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .recep-hist-chip{font-family:monospace;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:3px 9px;color:var(--text2)}
 /* Tableau des bobines d'un lot */
 .recep-bob-wrap{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden}
-.recep-bob-head{display:grid;grid-template-columns:1.2fr 1fr 1.6fr .7fr .6fr 34px;gap:10px;padding:7px 12px;background:var(--card);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
-.recep-bob-row{display:grid;grid-template-columns:1.2fr 1fr 1.6fr .7fr .6fr 34px;gap:10px;padding:8px 12px;align-items:center;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border)}
+.recep-bob-head{display:grid;grid-template-columns:1.2fr 1fr 1.6fr .7fr .6fr 66px;gap:10px;padding:7px 12px;background:var(--card);border-bottom:1px solid var(--border);font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.recep-bob-row{display:grid;grid-template-columns:1.2fr 1fr 1.6fr .7fr .6fr 66px;gap:10px;padding:8px 12px;align-items:center;font-size:12px;color:var(--text2);border-bottom:1px solid var(--border)}
 .recep-bob-row:last-child{border-bottom:none}
 .recep-bob-row:hover{background:var(--card)}
 .recep-bob-code{font-family:monospace;font-size:11px;color:var(--text);word-break:break-all}
@@ -1702,9 +1702,11 @@ body.light .recep-fourn-sel:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .recep-bob-print{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;border:1px solid var(--border);background:var(--card);color:var(--muted);cursor:pointer;transition:all .15s;padding:0}
 .recep-bob-print:hover{color:var(--accent);border-color:var(--accent)}
 .recep-bob-print:disabled{opacity:.4;cursor:not-allowed}
+.recep-bob-actions{display:flex;gap:4px;justify-content:flex-end}
+.recep-bob-del:hover{color:var(--danger);border-color:var(--danger)}
 @media(max-width:760px){
   .recep-bob-head{display:none}
-  .recep-bob-row{grid-template-columns:1fr 34px;gap:4px 10px;padding:10px 12px}
+  .recep-bob-row{grid-template-columns:1fr 66px;gap:4px 10px;padding:10px 12px}
   .recep-bob-row>*:nth-child(-n+5){grid-column:1}
   .recep-bob-row>*:nth-child(6){grid-column:2;grid-row:1/6;align-self:start}
   .recep-bob-des{white-space:normal}
@@ -13480,12 +13482,23 @@ function recepRenderBobines(lot, bobines) {
       recepCell(recepFormatLaize(b)),
       recepCell(recepFormatHeure(b.scanned_at))
     );
-    const printBtn = el('button', {
+    const actions = el('div', { cls: 'recep-bob-actions' });
+    actions.appendChild(el('button', {
       cls: 'recep-bob-print',
       attrs: { type: 'button', title: 'Réimprimer l\'étiquette de cette bobine' },
       on: { click: (e) => { e.stopPropagation(); recepReprintBobine(lot, b, e.currentTarget); } },
-    }, iconEl('printer', 13));
-    row.appendChild(printBtn);
+    }, iconEl('printer', 13)));
+    // Suppression unitaire : réservée aux profils qui peuvent écrire, et
+    // seulement pour les bobines réellement identifiées côté serveur (les
+    // entrées reconstruites depuis `items` n'ont pas d'id).
+    if (!S.stockReadOnly && b.id) {
+      actions.appendChild(el('button', {
+        cls: 'recep-bob-print recep-bob-del',
+        attrs: { type: 'button', title: 'Supprimer cette bobine et défalquer le stock' },
+        on: { click: (e) => { e.stopPropagation(); recepDeleteBobine(lot, b, e.currentTarget); } },
+      }, iconEl('trash', 13)));
+    }
+    row.appendChild(actions);
     wrap.appendChild(row);
   });
   return wrap;
@@ -13508,6 +13521,35 @@ async function recepReprintBobine(lot, bobine, btn) {
       code_barre: bobine.code_barre || lot.lot_numero,
     }, refProduit, 1, claimLabel, true);
   } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// Suppression d'une bobine : opération irréversible qui touche le stock, donc
+// la confirmation nomme explicitement la bobine et son effet.
+async function recepDeleteBobine(lot, bobine, btn) {
+  const ref = bobine.matiere_reference ? ' (' + bobine.matiere_reference + ')' : '';
+  const impacteStock = !!(bobine.matiere_id && bobine.laize_id);
+  const effet = impacteStock
+    ? '\n\nLe stock sera défalqué d\'une bobine.'
+    : '\n\nCette bobine n\'est rattachée à aucune matière : le stock ne bouge pas.';
+  const dernier = (lot.bobines && lot.bobines.length === 1)
+    ? '\nC\'est la dernière bobine : le lot sera supprimé de l\'historique.'
+    : '';
+  if (!confirm('Supprimer la bobine ' + bobine.code_barre + ref + ' ?' + effet + dernier
+      + '\n\nCette action est irréversible.')) return;
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api('/api/stock/receptions/' + lot.id + '/items/' + bobine.id, { method: 'DELETE' });
+    if (r && r.ecarts && r.ecarts.length) {
+      showToast('Bobine supprimée — stock déjà consommé, quantité plafonnée à 0.', 'error');
+    } else {
+      showToast('Bobine supprimée.', 'success');
+    }
+    if (r && r.lot_supprime && S.recepExpandedId === lot.id) S.recepExpandedId = null;
+    await loadRecepHistory();
+  } catch (err) {
+    showToast('Erreur : ' + ((err && err.message) || 'suppression impossible'), 'error');
     if (btn) btn.disabled = false;
   }
 }
