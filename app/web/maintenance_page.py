@@ -363,7 +363,7 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-event[data-draggable="1"]:active{cursor:grabbing}
 .cal-event.is-past{cursor:not-allowed}
 .cal-event.is-past::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(255,255,255,.06) 8px,rgba(255,255,255,.06) 16px);pointer-events:none;border-radius:inherit}
-.cal-event.is-dragging{opacity:.35;pointer-events:none}
+.cal-event.is-dragging{visibility:hidden;pointer-events:none}  /* v2.5.15 : cache l'original pour eviter duplication visuelle */
 .cal-event .cal-event-resize-handle{position:absolute;left:6px;right:6px;height:6px;cursor:ns-resize;z-index:5}
 .cal-event .cal-event-resize-handle.top{top:0}
 .cal-event .cal-event-resize-handle.bottom{bottom:0}
@@ -3622,8 +3622,19 @@ function _onCalDragUp(e){
     _CAL_DRAG = null;
     return;
   }
-  // Le drag était actif : bloque le prochain click sur cet event.
+  // Le drag était actif : bloque le prochain click, peu importe la cible
+  // (peut arriver sur .cal-wv-day-col apres un resize, qui ouvrirait
+  // sinon la modale 'Nouveau creneau' via onCalCellClick).
   drag._justFinished = true;
+  const _swallowClick = function(ev){
+    ev.stopPropagation();
+    ev.preventDefault();
+    document.removeEventListener('click', _swallowClick, true);
+  };
+  document.addEventListener('click', _swallowClick, true);
+  // Filet de securite : si aucun click n'est emis (mouseup 'sec'), on retire le
+  // listener au tick suivant pour ne pas avaler un click futur sans rapport.
+  setTimeout(function(){ document.removeEventListener('click', _swallowClick, true); }, 0);
   // Rien changé ? Rien à faire.
   if(drag.targetDate === drag.origDate
      && drag.targetStartMin === drag.origStartMin
@@ -3666,8 +3677,11 @@ async function _persistCalDrag(drag){
     }
     if(typeof showToast === 'function'){
       const dateChanged = drag.targetDate !== drag.origDate;
-      const timeChanged = drag.targetStartMin !== drag.origStartMin || drag.targetEndMin !== drag.origEndMin;
-      const label = dateChanged ? 'Cr\u00e9neau d\u00e9plac\u00e9.' : (timeChanged ? 'Horaires mis \u00e0 jour.' : 'Cr\u00e9neau mis \u00e0 jour.');
+      const dateFR = _fmtIsoDateFr(drag.targetDate) || drag.targetDate;
+      const hStr = _minsToHM(drag.targetStartMin) + ' \u2013 ' + _minsToHM(drag.targetEndMin);
+      const label = dateChanged
+        ? ('Cr\u00e9neau d\u00e9plac\u00e9 au ' + dateFR + ' \u00b7 ' + hStr)
+        : ('Horaires mis \u00e0 jour : ' + hStr);
       showToast(label, 'info');
     }
     await refreshPlanning(); renderCal();
