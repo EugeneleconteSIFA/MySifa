@@ -26,6 +26,57 @@
     return await r.json();
   }
 
+  // MySifa modal de confirmation (style aligne sur _openDeleteCaseModal cote maintenance).
+  // Retourne une Promise<boolean> : true si l'utilisateur confirme, false sinon.
+  // opts : { title, summary, warning, confirmLabel, confirmColor }
+  function _prConfirmModal(opts) {
+    opts = opts || {};
+    return new Promise(function (resolve) {
+      var existing = document.getElementById('pr-confirm-overlay');
+      if (existing) existing.remove();
+      var wrap = document.createElement('div');
+      wrap.id = 'pr-confirm-overlay';
+      wrap.style.cssText = 'display:flex;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center';
+      var done = false;
+      function close(val) {
+        if (done) return; done = true;
+        try { document.removeEventListener('keydown', escHandler, true); } catch(_) {}
+        wrap.remove();
+        resolve(val);
+      }
+      function escHandler(e) { if (e.key === 'Escape') { e.preventDefault(); close(false); } }
+      document.addEventListener('keydown', escHandler, true);
+      wrap.addEventListener('click', function (e) { if (e.target === wrap) close(false); });
+
+      var title = opts.title || 'Confirmer ?';
+      var summary = opts.summary || '';
+      var warning = opts.warning || '';
+      var confirmLabel = opts.confirmLabel || 'Confirmer';
+      var confirmColor = opts.confirmColor || 'var(--danger)';
+
+      wrap.innerHTML = ''
+        + '<div role="dialog" aria-modal="true" style="max-width:520px;width:calc(100% - 40px);background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,0.4)">'
+        +   '<div style="color:' + confirmColor + ';font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">'
+        +     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>'
+        +     _prEsc(title)
+        +   '</div>'
+        +   (summary ? '<div style="padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:14px;font-size:13px;line-height:1.5;color:var(--text)">' + summary + '</div>' : '')
+        +   (warning ? '<div style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:16px">' + warning + '</div>' : '')
+        +   '<div style="display:flex;justify-content:flex-end;gap:10px">'
+        +     '<button type="button" id="pr-confirm-cancel" style="background:var(--card);color:var(--text);border:1px solid var(--border);border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">Annuler</button>'
+        +     '<button type="button" id="pr-confirm-ok" style="background:' + confirmColor + ';color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">' + _prEsc(confirmLabel) + '</button>'
+        +   '</div>'
+        + '</div>';
+
+      document.body.appendChild(wrap);
+      var cancelBtn = document.getElementById('pr-confirm-cancel');
+      var okBtn     = document.getElementById('pr-confirm-ok');
+      if (cancelBtn) cancelBtn.addEventListener('click', function () { close(false); });
+      if (okBtn)     okBtn.addEventListener('click', function () { close(true); });
+      requestAnimationFrame(function () { if (cancelBtn) cancelBtn.focus(); });
+    });
+  }
+
   async function loadPromoteStatus() {
     const v2v = document.getElementById('pr-v2-version');
     const v2h = document.getElementById('pr-v2-head');
@@ -113,7 +164,14 @@
     const btn = document.getElementById('db-sync-btn');
     const status = document.getElementById('db-sync-status');
     if (!btn) return;
-    if (!confirm('⚠ Synchroniser DB v2 → v1 ?\n\nCette action écrase intégralement la DB v1 par la copie live de v2.\nToutes les données créées sur v1 depuis la dernière resync seront perdues.\n\nUn backup pré-resync est conservé automatiquement.\nv1 redémarrera dans ~15s.\n\nContinuer ?')) return;
+    var ok = await _prConfirmModal({
+      title: 'Synchroniser DB v2 → v1 ?',
+      summary: 'Cette action <strong>écrase intégralement</strong> la DB v1 par la copie live de v2.',
+      warning: 'Toutes les données créées sur v1 depuis la dernière resync seront perdues.<br><br>Un backup pré-resync est conservé automatiquement. v1 redémarrera dans ~15s.',
+      confirmLabel: 'Synchroniser',
+      confirmColor: 'var(--danger)',
+    });
+    if (!ok) return;
     const original = btn.textContent;
     btn.disabled = true;
     btn.textContent = 'Synchronisation…';
