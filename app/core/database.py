@@ -7829,6 +7829,15 @@ Ressources :
         conn.execute("CREATE INDEX IF NOT EXISTS idx_maint_events_template_id "
                      "ON maintenance_events(template_id)")
     conn.commit()
+    # Maintenance : marque une saisie d'op comme invalidee (nouveau statut).
+    # invalidated_by + invalidated_at tracent qui/quand a mis la saisie de cote.
+    # Garde-fou par colonne (idempotent, branch-safe).
+    _mo_cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_event_ops)").fetchall()}
+    if "invalidated_by" not in _mo_cols:
+        conn.execute("ALTER TABLE maintenance_event_ops ADD COLUMN invalidated_by INTEGER")
+    if "invalidated_at" not in _mo_cols:
+        conn.execute("ALTER TABLE maintenance_event_ops ADD COLUMN invalidated_at TEXT")
+    conn.commit()
 
 
 
