@@ -6691,7 +6691,7 @@ async function unlinkBridge(mp_id) {
 <script src="/static/mysifa_impersonate.js"></script>
 <!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe
      autonome pour éviter qu'un refacto du script inline ne les supprime à nouveau. -->
-<script src="/static/mysifa_promote.js?v=2"></script>
+<script src="/static/mysifa_promote.js?v=3"></script>
 <!-- Fonctions imprimantes/templates/agents restaurees : bloc inline autonome.
      NE PAS fusionner avec le <script src> ci-dessus (contenu ignore par le navigateur). -->
 <script>

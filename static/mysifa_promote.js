@@ -125,7 +125,14 @@
     const outEl = document.getElementById('pr-output');
     const notes = (notesEl && notesEl.value || '').trim();
 
-    if (!confirm('Promouvoir v1 → v2 maintenant ?\nBackup DB, pull, bump patch, restart, healthcheck.\nRollback auto si KO.')) return;
+    var ok = await _prConfirmModal({
+      title: 'Promouvoir v1 → v2 maintenant ?',
+      summary: 'Bascule en production les commits déjà validés sur v1.',
+      warning: 'Séquence : <strong>backup DB → pull → bump patch → restart → healthcheck</strong>. Rollback automatique si le healthcheck échoue.',
+      confirmLabel: 'Promouvoir',
+      confirmColor: 'var(--accent)',
+    });
+    if (!ok) return;
 
     if (goBtn) { goBtn.disabled = true; goBtn.textContent = 'Promotion en cours…'; }
     if (outCard) outCard.style.display = 'block';
