@@ -2218,9 +2218,15 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             </div>
           </div>
 
-          <div style="display:flex;gap:8px;justify-content:space-between;margin-top:18px">
+          <div style="display:flex;gap:8px;justify-content:space-between;margin-top:18px;flex-wrap:wrap">
             <button id="pr-tpl-del" class="btn btn-ghost" style="color:var(--danger);display:none" onclick="prDeleteTemplate()">Supprimer</button>
-            <div style="display:flex;gap:8px;margin-left:auto">
+            <div style="display:flex;gap:8px;margin-left:auto;flex-wrap:wrap">
+              <button type="button" id="pr-tpl-testprint" class="btn" onclick="prTestPrintTemplate()"
+                      title="Envoie ce contenu à l'imprimante rattachée, avec les mêmes données d'exemple que l'aperçu"
+                      style="background:var(--bg);border:1px solid var(--border);color:var(--text)">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:6px;vertical-align:-2px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+                Imprimer un test
+              </button>
               <button class="btn btn-ghost" onclick="prCloseTplModal()">Annuler</button>
               <button class="btn btn-accent" onclick="prSaveTemplate()">Enregistrer</button>
             </div>
@@ -7889,6 +7895,32 @@ async function prSaveTemplate() {
     await initPrintersPanel();
   } catch (e) {
     prToast('Erreur : ' + e.message, 'danger');
+  }
+}
+
+async function prTestPrintTemplate() {
+  const impId = PR.editingTpl && PR.editingTpl.imprimanteId;
+  if (!impId) { prToast('Aucune imprimante rattachée à ce template.', 'danger'); return; }
+  const contenu = document.getElementById('pr-tpl-contenu').value;
+  if (!contenu.trim()) { prToast('Contenu vide — rien à imprimer.', 'danger'); return; }
+  const imp = PR.imprimantes.find(x => x.id === impId);
+  if (imp && !imp.actif) { prToast('Imprimante désactivée — réactive-la avant de tester.', 'danger'); return; }
+  const btn = document.getElementById('pr-tpl-testprint');
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; btn.style.cursor = 'wait'; }
+  try {
+    const r = await prFetch('/api/print/test-template', {
+      method: 'POST',
+      body: JSON.stringify({
+        imprimante_id: impId,
+        contenu,
+        template_id: (PR.editingTpl && PR.editingTpl.id) || null,
+      }),
+    });
+    prToast(r.message || 'Test envoyé.', 'success');
+  } catch (e) {
+    prToast('Erreur : ' + e.message, 'danger');
+  } finally {
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.style.cursor = ''; }
   }
 }
 

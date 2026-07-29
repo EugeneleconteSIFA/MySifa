@@ -3543,16 +3543,30 @@ function openPlanningDetailsModal(events){
     const opsHtml = groupedOps.length
       ? groupedOps.map(op => {
           const rows = op.machineData.map(md => {
+            // v2.5.11 : 3 etats visuels distincts : termine (ok), invalidee (gris),
+            // a_faire (defaut).
             const done = md.statut === 'termine';
-            const icon = done
-              ? '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--ok);color:#fff;flex-shrink:0"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>'
-              : '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border);flex-shrink:0"></span>';
-            const label = done
-              ? ('Effectuée' + (op.machineData.length === 1 ? '' : ' sur ' + escHtml(md.machine)) +
-                 (md.done_by ? ' · par ' + escHtml(_resolveName(md.done_by) || 'op. inconnu') : '') +
-                 (md.done_at ? ' à ' + escHtml(_fmtDoneAt(md.done_at)) : ''))
-              : ((op.machineData.length === 1 ? 'En attente' : escHtml(md.machine) + ' — en attente'));
-            return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;color:' + (done ? 'var(--text2)' : 'var(--muted)') + '">' +
+            const invalidated = md.statut === 'invalidee';
+            let icon, label, color;
+            if(done){
+              icon = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--ok);color:#fff;flex-shrink:0"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>';
+              label = 'Effectu\u00e9e' + (op.machineData.length === 1 ? '' : ' sur ' + escHtml(md.machine)) +
+                      (md.done_by ? ' \u00b7 par ' + escHtml(_resolveName(md.done_by) || 'op. inconnu') : '') +
+                      (md.done_at ? ' \u00e0 ' + escHtml(_fmtDoneAt(md.done_at)) : '');
+              color = 'var(--text2)';
+            } else if(invalidated){
+              icon = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--muted);color:#fff;flex-shrink:0" title="Saisie invalid\u00e9e administrativement"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="5" y1="19" x2="19" y2="5"/></svg></span>';
+              const invBy = md.invalidated_by_nom ? ' \u00b7 par ' + escHtml(md.invalidated_by_nom) : '';
+              const invAt = md.invalidated_at ? ' le ' + escHtml(_fmtDoneAt(md.invalidated_at)) : '';
+              label = 'Invalid\u00e9e' + (op.machineData.length === 1 ? '' : ' sur ' + escHtml(md.machine)) + invBy + invAt;
+              color = 'var(--muted)';
+            } else {
+              icon = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border);flex-shrink:0"></span>';
+              label = (op.machineData.length === 1 ? 'En attente' : escHtml(md.machine) + ' \u2014 en attente');
+              color = 'var(--muted)';
+            }
+            const extraStyle = invalidated ? ';text-decoration:line-through;text-decoration-color:var(--muted)' : '';
+            return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;color:' + color + extraStyle + '">' +
               icon + '<span>' + label + '</span>' +
             '</div>';
           }).join('');
@@ -4238,35 +4252,46 @@ function renderCaseOpsList(){
       const nivBadge = op.opNiveau ? ' (N' + op.opNiveau + ')' : '';
       // v2.5.10 : color/badge/icone selon l'état dominant (invalidee prime : elle indique
       // une decision explicite de l'admin, alors que termine est le defaut).
-      const isInvalid = anyInvalidated && !anyDone;
-      const isMixed   = anyInvalidated && anyDone;
-      const accentColor = isInvalid ? 'var(--muted)' : (isMixed ? 'var(--warn,#f59e0b)' : 'var(--success,#34d399)');
-      const badgeText = isInvalid ? 'Invalidée' : (isMixed ? 'Partielle' : 'Effectué');
-      const badgeClass = isInvalid ? 'case-ops-row-done-badge is-invalidee' : (isMixed ? 'case-ops-row-done-badge is-mixed' : 'case-ops-row-done-badge');
-      const headIcoPath = isInvalid
-        ? '<path d="M4.9 4.9l14.2 14.2"/><circle cx="12" cy="12" r="9"/>'  // cercle barré
-        : '<polyline points="20 6 9 17 4 12"/>';  // check
+      // v2.5.11 : le badge global n'est affiche QUE si toutes les machines de
+      // l'op sont dans le meme etat solde. Sinon (mix invalidee+a_faire par ex.)
+      // on laisse les chips par-machine parler d'elles-memes -- badge global
+      // trompeur.
+      const machineStatuses = (op.machines || []).map(m => statuts[m]).filter(s => s != null);
+      const allInvalidated = machineStatuses.length > 0 && machineStatuses.every(s => s === 'invalidee');
+      const allDone        = machineStatuses.length > 0 && machineStatuses.every(s => s === 'termine');
+      const showGlobalBadge = allInvalidated || allDone;
+      const isInvalid = allInvalidated;  // seule ce cas colore la ligne en gris
+      const accentColor = allInvalidated ? 'var(--muted)' : (allDone ? 'var(--success,#34d399)' : 'var(--warn,#f59e0b)');
+      const badgeText = allInvalidated ? 'Invalidée' : (allDone ? 'Effectué' : '');
+      const badgeClass = allInvalidated ? 'case-ops-row-done-badge is-invalidee' : (allDone ? 'case-ops-row-done-badge' : 'case-ops-row-done-badge is-mixed');
+      const headIcoPath = allInvalidated
+        ? '<path d="M4.9 4.9l14.2 14.2"/><circle cx="12" cy="12" r="9"/>'
+        : '<polyline points="20 6 9 17 4 12"/>';
       // Chips par machine : état individuel (termine / invalidee / a_faire).
       const chipsDone = (op.machines || []).map(m => {
         const st = statuts[m];
         const isMachDone = (st === 'termine');
         const isMachInv  = (st === 'invalidee');
+        // v2.5.11 : chip invalidee tres visible -- fond gris fonce, bordure marquee,
+        // X en gras, badge inline "invalidee" apres le nom pour lever tout doute.
+        if(isMachInv){
+          return '<span class="case-mach-chip is-invalidee" title="Saisie invalid\u00e9e administrativement" style="cursor:default;background:rgba(148,163,184,.25);color:var(--muted);border:1.5px solid var(--muted);text-decoration:line-through;text-decoration-color:var(--muted);text-decoration-thickness:1.5px;font-weight:600">' +
+            '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>' +
+            escHtml(m) +
+            '<span style="margin-left:6px;padding:1px 6px;border-radius:4px;background:var(--muted);color:var(--card);font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;text-decoration:none;display:inline-block">Invalid\u00e9e</span>' +
+          '</span>';
+        }
         const ico = isMachDone
           ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px"><polyline points="20 6 9 17 4 12"/></svg>'
-          : (isMachInv
-              ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:3px;opacity:.75"><line x1="5" y1="5" x2="19" y2="19"/><line x1="5" y1="19" x2="19" y2="5"/></svg>'
-              : '');
-        const chipStyle = isMachInv
-          ? 'cursor:default;opacity:.55;text-decoration:line-through'
-          : 'cursor:default;opacity:.85';
-        return '<span class="case-mach-chip active" style="' + chipStyle + '">' + ico + escHtml(m) + '</span>';
+          : '';
+        return '<span class="case-mach-chip active" style="cursor:default;opacity:.85">' + ico + escHtml(m) + '</span>';
       }).join('');
       return '<div class="case-ops-row case-ops-row-done ' + (isInvalid ? 'is-invalidee' : '') + '" data-idx="' + idx + '">' +
         '<div class="case-ops-row-top">' +
           '<div class="case-ops-row-done-label">' +
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;color:' + accentColor + '">' + headIcoPath + '</svg>' +
             escHtml(opName) + nivBadge +
-            '<span class="' + badgeClass + '">' + badgeText + '</span>' +
+            (showGlobalBadge ? '<span class="' + badgeClass + '">' + badgeText + '</span>' : '') +
           '</div>' +
         '</div>' +
         '<div class="case-ops-machines">' +
@@ -9544,7 +9569,8 @@ function _bucketsForMachine(events, machine, showTermine){
     for(const op of ops){
       const machines = _opMachines(op, ev);
       if(!machines.includes(machine)) continue;
-      if(!showTermine && (op.statut === 'termine' || op.statut === 'invalidee')) continue;  // v2.5.10 : masque invalidee comme termine
+      if(op.statut === 'invalidee') continue;  // v2.5.11 : invalidee JAMAIS visible cote operateur
+      if(!showTermine && op.statut === 'termine') continue;
       filtered.push(op);
     }
     if(!filtered.length) continue;
@@ -9747,7 +9773,8 @@ function opRenderTasks(){
       const isPerso = (ev.source === 'non_planifie');
       if(isPerso && !showTermine) continue;
       for(const op of (ev.ops || [])){
-        if(!showTermine && (op.statut === 'termine' || op.statut === 'invalidee')) continue;  // v2.5.10 : masque invalidee comme termine
+        if(op.statut === 'invalidee') continue;  // v2.5.11 : invalidee JAMAIS visible cote operateur
+        if(!showTermine && op.statut === 'termine') continue;
         n++;
       }
     }
@@ -9875,7 +9902,8 @@ function _renderPersoSection(evs, showTermine){
   const items = [];
   for(const ev of evs){
     for(const op of (ev.ops || [])){
-      if(!showTermine && (op.statut === 'termine' || op.statut === 'invalidee')) continue;  // v2.5.10 : masque invalidee comme termine
+      if(op.statut === 'invalidee') continue;  // v2.5.11 : invalidee JAMAIS visible cote operateur
+      if(!showTermine && op.statut === 'termine') continue;
       items.push({ op, ev });
     }
   }
