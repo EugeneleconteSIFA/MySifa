@@ -9448,7 +9448,7 @@ function renderOfTab(){
     ];
     acts.push(h('button',{
       style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
-      title:'Aperçu OF', onClick:()=>{window.open('/api/of/'+row.id+'/pdf-preview','_blank');}
+      title:'Aperçu OF', onClick:()=>{window.open('/api/of/'+row.id+'/pdf-preview?v='+encodeURIComponent(row.date_import||Date.now()),'_blank');}
     },iconEl('eye',13)));
     if(row.pdf_filename){
       acts.push(h('button',{

@@ -172,6 +172,126 @@ async def parse_of(request: Request, file: UploadFile = File(...)):
     return parse_of_pdf(content)
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Dédoublonnage & rattachement des OF au planning
+#
+# Deux sources de vérité coexistent pour « quel OF est affiché sur un dossier » :
+#   - planning_entries.of_import_id → lu par le slot du planning (quantité,
+#     pastille OF, traçabilité) ;
+#   - planning_of_links (ORDER BY position) → lu par le panneau OF du dossier,
+#     dont l'iframe d'aperçu.
+# L'import PDF ne mettait à jour que la première : un ré-import affichait donc
+# la bonne quantité dans le slot tout en laissant l'aperçu figé sur le PDF
+# d'origine. Les helpers ci-dessous alignent systématiquement les deux.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _of_numero_racine(num: Optional[str]) -> Optional[str]:
+    """Numéro racine 99XXXXX d'un of_numero ("Reliquat 9932056" → "9932056").
+
+    Sert de pré-filtre SQL uniquement : deux OF partageant la même racine ne
+    sont PAS le même OF (« 9932056 » vs « Reliquat 9932056 »).
+    """
+    m = _OF_RACINE_RE.search(str(num or ""))
+    return m.group(1) if m else None
+
+
+def _of_numero_key(num: Optional[str]) -> str:
+    """Clé de comparaison d'un numéro d'OF : casse et espaces neutralisés."""
+    return re.sub(r"\s+", " ", str(num or "").strip()).lower()
+
+
+def _archive_of_pdf(pdf_filename: Optional[str]) -> None:
+    """Déplace le PDF d'un OF remplacé dans of/_archive/.
+
+    On ne supprime jamais : en cas de ré-import erroné, l'ancien aperçu reste
+    récupérable à la main sur le serveur.
+    """
+    if not pdf_filename:
+        return
+    src = os.path.join(OF_UPLOAD_DIR, pdf_filename)
+    if not os.path.isfile(src):
+        return
+    try:
+        archive_dir = os.path.join(OF_UPLOAD_DIR, "_archive")
+        os.makedirs(archive_dir, exist_ok=True)
+        stamp = datetime.now(_PARIS).replace(tzinfo=None).strftime("%Y%m%d_%H%M%S")
+        os.replace(src, os.path.join(archive_dir, f"{stamp}__{pdf_filename}"))
+    except OSError:
+        pass
+
+
+def _promote_of_link(conn, entry_id: int, of_id: int, created_by: str) -> None:
+    """Fait de `of_id` l'OF actif du dossier planning `entry_id`.
+
+    Les autres liens sont décalés d'un cran (ils restent accessibles dans les
+    sous-onglets du panneau OF), celui-ci passe en position 0. Le trigger
+    trg_planning_of_links_after_insert resynchronise of_import_id sur un
+    INSERT ; sur un simple repositionnement il ne se déclenche pas, on aligne
+    donc la colonne explicitement.
+    """
+    conn.execute(
+        "UPDATE planning_of_links SET position = position + 1 "
+        "WHERE planning_entry_id = ? AND of_import_id != ?",
+        (entry_id, of_id),
+    )
+    cur = conn.execute(
+        "UPDATE planning_of_links SET position = 0 "
+        "WHERE planning_entry_id = ? AND of_import_id = ?",
+        (entry_id, of_id),
+    )
+    if cur.rowcount == 0:
+        conn.execute(
+            "INSERT INTO planning_of_links "
+            "(planning_entry_id, of_import_id, position, created_by, created_at) "
+            "VALUES (?, ?, 0, ?, ?)",
+            (entry_id, of_id, created_by, _now_paris_iso()),
+        )
+    else:
+        conn.execute(
+            "UPDATE planning_entries SET of_import_id = ? WHERE id = ?",
+            (of_id, entry_id),
+        )
+
+
+def _autolink_of_to_planning(of_id: int, of_numero: Optional[str],
+                             created_by: str = "of_import") -> int:
+    """Relie l'OF `of_id` aux dossiers planning dont le numero_of correspond.
+
+    Retourne le nombre de dossiers rattachés. Idempotent.
+    """
+    num = (of_numero or "").strip()
+    if not num:
+        return 0
+    linked = 0
+    try:
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT id FROM planning_entries "
+                "WHERE LOWER(TRIM(numero_of)) = LOWER(TRIM(?))",
+                (num,),
+            ).fetchall()
+            for r in rows:
+                _promote_of_link(conn, int(r["id"]), of_id, created_by)
+                linked += 1
+            conn.commit()
+    except Exception:
+        # Base sans planning_of_links (migration v108 non appliquée) :
+        # on retombe sur le comportement historique.
+        try:
+            with get_db() as conn_fb:
+                conn_fb.execute(
+                    """UPDATE planning_entries SET of_import_id = ?
+                       WHERE LOWER(TRIM(numero_of)) = LOWER(TRIM(?))
+                         AND (of_import_id IS NULL OR of_import_id != ?)""",
+                    (of_id, num, of_id),
+                )
+                conn_fb.commit()
+        except Exception:
+            pass
+    return linked
+
+
 @router.post("/api/of/validate")
 async def validate_of(
     request: Request,
@@ -204,33 +324,81 @@ async def validate_of(
 
     now = _now_paris_iso()
     imported_by = user.get("nom") or user.get("email") or str(user.get("id", ""))
-    cols = list(OF_DATA_FIELDS) + ["pdf_filename", "date_import", "imported_by", "statut"]
-    placeholders = ", ".join("?" * len(cols))
-    values = [fields.get(c) for c in OF_DATA_FIELDS]
-    values.extend([pdf_filename, now, imported_by, "valide"])
-
-    with get_db() as conn:
-        cur = conn.execute(
-            f"INSERT INTO of_imports ({', '.join(cols)}) VALUES ({placeholders})",
-            values,
-        )
-        conn.commit()
-        new_id = cur.lastrowid
-
-    # Auto-link : relier les dossiers planning dont le numero_of correspond
     of_num_clean = (fields.get("of_numero") or "").strip()
-    if of_num_clean:
-        with get_db() as conn2:
-            conn2.execute(
-                """UPDATE planning_entries
-                   SET of_import_id = ?
-                   WHERE LOWER(TRIM(numero_of)) = LOWER(TRIM(?))
-                     AND (of_import_id IS NULL OR of_import_id != ?)""",
-                (new_id, of_num_clean, new_id),
-            )
-            conn2.commit()
+    tail_cols = ["pdf_filename", "date_import", "imported_by", "statut"]
+    tail_vals = [pdf_filename, now, imported_by, "valide"]
 
-    return {"id": new_id, "pdf_filename": pdf_filename}
+    # Ré-import d'un numéro d'OF déjà présent → on remplace la ligne existante
+    # au lieu d'empiler un doublon. Avant, chaque ré-import créait une ligne de
+    # plus et l'aperçu continuait de pointer sur la toute première version.
+    # Le match est volontairement strict (of_numero exact, à la casse près) :
+    # « 9932056 » et « Reliquat 9932056 » restent deux OF distincts.
+    replaced_id = None
+    replaced_pdf = None
+    with get_db() as conn:
+        if of_num_clean:
+            # Comparaison sur le numéro COMPLET normalisé (casse + espaces).
+            # « Reliquat 9932056 » ne doit jamais être confondu avec
+            # « 9932056 » : ce sont deux OF distincts, chacun avec sa quantité
+            # et son aperçu. Le pré-filtre SQL sur la racine ne sert qu'à
+            # limiter la lecture à quelques lignes.
+            key = _of_numero_key(of_num_clean)
+            racine = _of_numero_racine(of_num_clean)
+            if racine:
+                cand = conn.execute(
+                    """SELECT id, of_numero, pdf_filename, date_import
+                       FROM of_imports
+                       WHERE of_numero LIKE ?
+                          OR LOWER(TRIM(of_numero)) = LOWER(TRIM(?))""",
+                    ("%" + racine + "%", of_num_clean),
+                ).fetchall()
+            else:
+                cand = conn.execute(
+                    """SELECT id, of_numero, pdf_filename, date_import
+                       FROM of_imports
+                       WHERE LOWER(TRIM(of_numero)) = LOWER(TRIM(?))""",
+                    (of_num_clean,),
+                ).fetchall()
+            matches = [r for r in cand if _of_numero_key(r["of_numero"]) == key]
+            # Tri stable : on remplace en priorité la ligne qui porte déjà un
+            # PDF, sinon la plus ancienne (celle poussée par access_bridge).
+            matches.sort(key=lambda r: int(r["id"]))
+            matches.sort(key=lambda r: 0 if (r["pdf_filename"] or "").strip() else 1)
+            if matches:
+                replaced_id = int(matches[0]["id"])
+                replaced_pdf = matches[0]["pdf_filename"]
+
+        if replaced_id is not None:
+            set_cols = list(OF_DATA_FIELDS) + tail_cols
+            set_sql = ", ".join(f"{c} = ?" for c in set_cols)
+            vals = [fields.get(c) for c in OF_DATA_FIELDS] + tail_vals + [replaced_id]
+            conn.execute(f"UPDATE of_imports SET {set_sql} WHERE id = ?", vals)
+            conn.commit()
+            new_id = replaced_id
+        else:
+            cols = list(OF_DATA_FIELDS) + tail_cols
+            placeholders = ", ".join("?" * len(cols))
+            values = [fields.get(c) for c in OF_DATA_FIELDS] + tail_vals
+            cur = conn.execute(
+                f"INSERT INTO of_imports ({', '.join(cols)}) VALUES ({placeholders})",
+                values,
+            )
+            conn.commit()
+            new_id = cur.lastrowid
+
+    if replaced_pdf and replaced_pdf != pdf_filename:
+        _archive_of_pdf(replaced_pdf)
+
+    # Auto-link : relier les dossiers planning dont le numero_of correspond,
+    # en plaçant cet OF en position 0 (slot ET aperçu pointent sur la même ligne).
+    linked = _autolink_of_to_planning(new_id, of_num_clean, created_by="of_import")
+
+    return {
+        "id": new_id,
+        "pdf_filename": pdf_filename,
+        "replaced": replaced_id is not None,
+        "linked_entries": linked,
+    }
 
 
 @router.get("/api/of/list")
@@ -578,7 +746,13 @@ def preview_of_pdf(of_id: int, request: Request):
             path,
             media_type="application/pdf",
             filename=row["pdf_filename"],
-            headers={"Content-Disposition": f'inline; filename="{row["pdf_filename"]}"'},
+            headers={
+                "Content-Disposition": f'inline; filename="{row["pdf_filename"]}"',
+                # Le contenu d'un même of_id change désormais lors d'un
+                # ré-import (upsert) : on interdit le cache navigateur, sinon
+                # l'iframe ressert l'ancien aperçu.
+                "Cache-Control": "no-store, must-revalidate",
+            },
         )
 
     # OF importé via API (pas de PDF) → générer depuis le template vierge
@@ -598,7 +772,10 @@ def preview_of_pdf(of_id: int, request: Request):
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f'inline; filename="{filename}"',
+            "Cache-Control": "no-store, must-revalidate",
+        },
     )
 
 
@@ -1022,10 +1199,16 @@ def _lookup_of_candidates(num: Optional[str], ref_produit_norm: Optional[str] = 
     with (nullcontext(conn) if conn is not None else get_db()) as c:
         # Phase 1 : exact match en cascade
         for cand in dict.fromkeys(candidates_exact):
+            # ORDER BY explicite : sans lui SQLite renvoyait le plus petit
+            # rowid, c'est-à-dire le doublon le PLUS ANCIEN. On privilégie
+            # désormais un OF disposant d'un vrai PDF, puis le plus récent.
             r = c.execute(
                 f"""SELECT {_OF_SELECT_COLS}
                     FROM of_imports
                     WHERE LOWER(TRIM(of_numero)) = LOWER(TRIM(?))
+                    ORDER BY (TRIM(COALESCE(pdf_filename,'')) != '') DESC,
+                             date_import DESC,
+                             id DESC
                     LIMIT 1""",
                 (cand,),
             ).fetchone()

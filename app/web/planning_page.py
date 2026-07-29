@@ -4008,7 +4008,7 @@ function renderPlanningOfPaneInner(){
 
   const activeOf = _ofPlanningActiveOf();
   const iframeHtml = activeOf
-    ? `<iframe class="of-preview-iframe" src="/api/of/${activeOf.id}/pdf-preview"></iframe>`
+    ? `<iframe class="of-preview-iframe" src="/api/of/${activeOf.id}/pdf-preview?v=${encodeURIComponent(activeOf.date_import || '')}"></iframe>`
     : '<div style="padding:24px;color:var(--muted);text-align:center">Sélectionne un OF</div>';
 
   const pickerHtml = st.pickerOpen ? renderPlanningOfPickerHtml() : '';
@@ -4361,8 +4361,15 @@ async function ofPlanningSubmitImport(){
   try{
     const r=await fetch('/api/of/validate',{method:'POST',credentials:'include',body:fd});
     if(!r.ok){ const j=await r.json(); throw new Error(j.detail||'Erreur import'); }
+    const res=await r.json().catch(()=>({}));
     closeOfPlanningImport();
-    showToast('OF importé et relié au dossier.','success');
+    // Recharger le panneau : sans ça l'iframe restait sur l'OF précédent et
+    // l'utilisateur croyait que son nouvel aperçu n'avait pas été pris en compte.
+    if(res && res.id){ try{ const st=window._ofPlanningState; if(st) st.activeOfId=res.id; }catch(e){} }
+    await refreshPlanningOfData();
+    showToast(res && res.replaced
+      ? 'OF remplacé et relié au dossier.'
+      : 'OF importé et relié au dossier.','success');
   }catch(e){
     showToast(e.message||'Erreur lors de l\'import.','danger');
   }

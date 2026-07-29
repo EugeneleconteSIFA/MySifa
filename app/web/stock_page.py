@@ -13099,6 +13099,18 @@ async function recepValider() {
         nb_bobines_ajoutees: added,
         nb_bobines_total: d.nb_bobines || added,
         codes: codes.slice(),
+        // Même forme que `bobines` renvoyé par GET /api/stock/receptions :
+        // permet d'imprimer une étiquette par bobine dès la première fois,
+        // avec sa propre référence et sa propre laize.
+        bobines: S.recepItems.map(i => ({
+          code_barre: i.code,
+          matiere_id: i.matiere_id || null,
+          matiere_reference: i.matiere_ref || null,
+          matiere_designation: i.matiere_designation || null,
+          laize_id: i.laize_id || null,
+          laize_label: i.laize_label || null,
+          laize_valeur_mm: i.laize_valeur_mm != null ? i.laize_valeur_mm : null,
+        })),
       };
       S.recepItems = []; S.recepNote = ''; S.recepFournisseur = ''; S.recepFournisseurSearch = ''; S.recepFournisseurOpen = false;
       S.recepFscTypeClaim = 'fsc_mix';
@@ -13359,7 +13371,13 @@ function recepShowPrintModal(lot, isReprint) {
     : { non_fsc: 'Non FSC', fsc_100: 'FSC 100%', fsc_mix_credit: 'FSC Mix Credit', fsc_mix: 'FSC Mix', fsc_recycled: 'FSC Recycled' };
   const claimLabel = claimLabels[lot.fsc_type_claim] || 'Non FSC';
 
-  const state = { refProduit: '', nbEtiquettes: String(lot.nb_bobines_ajoutees || 1) };
+  // Bobines réellement identifiées (référence matière connue). Si le lot n'en
+  // a aucune — historique ancien — on retombe sur la saisie manuelle.
+  const bobinesConnues = (lot.bobines || []).filter(b => b && b.code_barre);
+  const state = {
+    refProduit: '',
+    nbEtiquettes: String(bobinesConnues.length || lot.nb_bobines_ajoutees || 1),
+  };
 
   const overlay = el('div', { cls: 'modal-overlay recep-print-overlay', on: { click: e => { if (e.target === overlay) closeMroot(); } } });
   const successBadge = el('span', { cls: 'recep-print-success' }, iconEl('check-circle', 20));
@@ -13374,9 +13392,15 @@ function recepShowPrintModal(lot, isReprint) {
     ),
     (() => {
       const preview = el('div', { cls: 'recep-print-preview' });
+      const refs = [...new Set(bobinesConnues.map(b => b.matiere_reference).filter(Boolean))];
       const refLine = el('div', null,
         el('div', { cls: 'plabel' }, 'Référence produit'),
-        el('div', { cls: 'pval', attrs: { id: 'rpm-ref' } }, '—')
+        el('div', { cls: 'pval', attrs: { id: 'rpm-ref' } },
+          bobinesConnues.length
+            ? (refs.length === 1 ? refs[0]
+              : refs.length === 0 ? '—'
+              : refs.length + ' références différentes')
+            : '—')
       );
       preview.append(
         refLine,
@@ -13388,6 +13412,9 @@ function recepShowPrintModal(lot, isReprint) {
       return preview;
     })(),
     (() => {
+      // La référence vient de la base quand les bobines sont identifiées :
+      // retaper à la main une information déjà saisie est une source d'erreur.
+      if (bobinesConnues.length) return null;
       const wrapField = el('div', { cls: 'recep-print-field' },
         el('label', null, 'Référence produit (optionnel)'),
         (() => {
@@ -13403,6 +13430,14 @@ function recepShowPrintModal(lot, isReprint) {
       return wrapField;
     })(),
     (() => {
+      if (bobinesConnues.length) {
+        const n = bobinesConnues.length;
+        return el('div', { cls: 'recep-print-field' },
+          el('label', null, 'Étiquettes à imprimer'),
+          el('div', { style: { fontSize: '13px', color: 'var(--text2)', padding: '4px 0' } },
+            n + ' étiquette' + (n > 1 ? 's' : '') + ' — une par bobine, avec sa référence et sa laize.')
+        );
+      }
       const wrapField = el('div', { cls: 'recep-print-field' },
         el('label', null, 'Nombre d\'étiquettes à imprimer'),
         (() => {
@@ -13418,13 +13453,20 @@ function recepShowPrintModal(lot, isReprint) {
     })(),
     el('div', { cls: 'recep-print-actions' },
       el('button', { cls: 'btn-recep btn-recep-muted', on: { click: closeMroot } }, 'Fermer'),
-      el('button', { cls: 'btn-recep btn-recep-primary', on: { click: () => {
+      el('button', { cls: 'btn-recep btn-recep-primary', on: { click: (e) => {
+        // Si on connaît les bobines du lot, chacune reçoit SON étiquette :
+        // référence, laize et code-barres propres. Un lot peut mélanger
+        // plusieurs matières — N étiquettes identiques seraient fausses.
+        if (bobinesConnues.length) {
+          recepPrintLabelsParBobine(lot, bobinesConnues, claimLabel, isReprint, e.currentTarget);
+          return;
+        }
         const n = Math.max(1, parseInt(state.nbEtiquettes, 10) || 1);
         recepPrintLabelsSmart(lot, state.refProduit, n, claimLabel, isReprint);
       }}}, iconEl('printer', 14), ' Imprimer'),
       el('button', { cls: 'btn-recep btn-recep-muted', style: { fontSize: '11px', padding: '6px 10px' }, on: { click: () => {
         const n = Math.max(1, parseInt(state.nbEtiquettes, 10) || 1);
-        recepPrintLabels(lot, state.refProduit, n, claimLabel);
+        recepPrintLabels(lot, state.refProduit, n || bobinesConnues.length || 1, claimLabel);
       }}}, 'Navigateur')
     )
   );
@@ -13525,6 +13567,65 @@ async function recepReprintBobine(lot, bobine, btn) {
   }
 }
 
+
+// Impression d'une étiquette par bobine. Chaque job porte la référence, la
+// laize et le code-barres de SA bobine — un lot peut mélanger plusieurs
+// matières, N étiquettes identiques seraient fausses.
+//
+// Les jobs partent en série : le premier peut ouvrir le sélecteur d'imprimante
+// (aucun défaut utilisateur), et on veut ce choix une seule fois, pas N fois.
+// Un échec en cours de route arrête la série et le signale, plutôt que de
+// laisser croire que tout est parti.
+async function recepPrintLabelsParBobine(lot, bobines, claimLabel, isReprint, btn) {
+  // L'imprimante est résolue UNE fois pour toute la série : sans ça, un lot de
+  // 12 bobines sans imprimante par défaut ouvrirait 12 sélecteurs.
+  let impId = null;
+  try {
+    const defs = await api('/api/print/my-defaults');
+    impId = (defs && defs.reception_matiere) || null;
+  } catch (e) { /* pas de défaut lisible : on passera par le sélecteur */ }
+
+  if (!impId) {
+    _recepShowPrinterPicker(
+      lot, '', bobines.length, claimLabel, {}, 
+      'Choisis l\'imprimante : ' + bobines.length + ' étiquette(s) seront envoyées, une par bobine.',
+      isReprint,
+      (choisie) => _recepEnvoyerParBobine(lot, bobines, claimLabel, isReprint, choisie, btn)
+    );
+    return;
+  }
+  await _recepEnvoyerParBobine(lot, bobines, claimLabel, isReprint, impId, btn);
+}
+
+async function _recepEnvoyerParBobine(lot, bobines, claimLabel, isReprint, impId, btn) {
+  if (btn) btn.disabled = true;
+  let envoyees = 0;
+  try {
+    for (const b of bobines) {
+      await recepPrintLabelsSmart({
+        lot_numero: lot.lot_numero,
+        fournisseur: lot.fournisseur || '',
+        fsc_type_claim: lot.fsc_type_claim || 'non_fsc',
+        certificat_fsc: lot.certificat_fsc || '',
+        laize: recepFormatLaize(b) || '',
+        code_barre: b.code_barre || lot.lot_numero,
+        silencieux: true,   // un seul récapitulatif en fin de série
+      }, b.matiere_reference || '', 1, claimLabel, isReprint, impId);
+      envoyees++;
+    }
+    showToast(envoyees + ' étiquette' + (envoyees > 1 ? 's' : '') + ' envoyée'
+      + (envoyees > 1 ? 's' : '') + ' — une par bobine.', 'success');
+    closeMroot();
+  } catch (e) {
+    // On dit combien sont réellement parties : « interrompu après 3 » est
+    // actionnable, « erreur d'impression » ne l'est pas.
+    showToast('Impression interrompue après ' + envoyees + ' étiquette(s) sur '
+      + bobines.length + ' : ' + ((e && e.message) || e), 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 // Suppression d'une bobine : opération irréversible qui touche le stock, donc
 // la confirmation nomme explicitement la bobine et son effet.
 async function recepDeleteBobine(lot, bobine, btn) {
@@ -13554,7 +13655,9 @@ async function recepDeleteBobine(lot, bobine, btn) {
   }
 }
 
-async function recepPrintLabelsSmart(lot, refProduit, nbEtiquettes, claimLabel, isReprint) {
+// Renvoie true si le job est parti, false sinon — l'impression par bobine a
+// besoin de savoir où la série s'arrête plutôt que d'empiler des toasts.
+async function recepPrintLabelsSmart(lot, refProduit, nbEtiquettes, claimLabel, isReprint, imprimanteId) {
   const fscBanner = ((lot && lot.fsc_type_claim) || 'non_fsc') === 'non_fsc'
     ? 'MATIERE NON FSC' : 'MATIERE FSC';
   const now = new Date();
@@ -13573,28 +13676,41 @@ async function recepPrintLabelsSmart(lot, refProduit, nbEtiquettes, claimLabel, 
   laize: (lot.laize || lot.laize_mm || ''),
   };
   try {
+    const corps = { usage_key: 'reception_matiere', copies: nbEtiquettes, data, variante: isReprint ? 'compact' : 'full' };
+    if (imprimanteId) corps.imprimante_id = imprimanteId;
     const r = await api('/api/print/label', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ usage_key: 'reception_matiere', copies: nbEtiquettes, data, variante: isReprint ? 'compact' : 'full' }),
+      body: JSON.stringify(corps),
     });
-    showToast((r.copies || nbEtiquettes) + ' étiquette(s) envoyée(s) à ' + (r.imprimante || 'imprimante'), 'success');
-    closeMroot();
-    return;
+    // En impression par bobine, seul le récapitulatif final est affiché :
+    // N toasts successifs noieraient l'information utile.
+    if (!lot.silencieux) {
+      showToast((r.copies || nbEtiquettes) + ' étiquette(s) envoyée(s) à ' + (r.imprimante || 'imprimante'), 'success');
+      closeMroot();
+    }
+    return true;
   } catch (e) {
     const msg = e && e.message ? e.message : String(e);
+    // En série (impression par bobine), on ne rouvre pas un sélecteur par
+    // bobine : l'appelant a déjà résolu l'imprimante en amont.
+    if (lot.silencieux) { throw e; }
     // Erreur 409 "Aucune imprimante configurée" : proposer le picker
     if (msg && (msg.includes('Aucune imprimante') || msg.includes('template'))) {
       _recepShowPrinterPicker(lot, refProduit, nbEtiquettes, claimLabel, data, msg, isReprint);
-      return;
+      return false;
     }
     // Autres erreurs : toast + fallback proposé
     showToast('Impression cloud : ' + msg, 'error');
+    return false;
   }
 }
 
 // Picker d'imprimante affiché en cas d'absence de défaut utilisateur
-async function _recepShowPrinterPicker(lot, refProduit, nbEtiquettes, claimLabel, data, warnMsg, isReprint) {
+// `onChoose(impId)` : si fourni, le picker délègue l'impression à l'appelant
+// au lieu d'envoyer un job unique — c'est ce qui permet de choisir
+// l'imprimante UNE fois pour toute une série d'étiquettes par bobine.
+async function _recepShowPrinterPicker(lot, refProduit, nbEtiquettes, claimLabel, data, warnMsg, isReprint, onChoose) {
   let imprimantes = [];
   try {
     imprimantes = await api('/api/print/my-imprimantes');
@@ -13634,6 +13750,20 @@ async function _recepShowPrinterPicker(lot, refProduit, nbEtiquettes, claimLabel
     const impId = parseInt(card.querySelector('#_rp-picker').value, 10);
     const remember = card.querySelector('#_rp-remember').checked;
     if (!impId) return;
+    if (onChoose) {
+      if (remember) {
+        try {
+          await api('/api/print/my-defaults', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ defaults: { reception_matiere: impId } }),
+          });
+        } catch (e) {}
+      }
+      if (overlay.parentNode) document.body.removeChild(overlay);
+      await onChoose(impId);
+      return;
+    }
     try {
       const r = await api('/api/print/label', {
         method: 'POST',
@@ -14349,6 +14479,7 @@ function buildReceptionHistorique() {
                 nb_bobines_ajoutees: lot.nb_bobines || 1,
                 nb_bobines_total: lot.nb_bobines || 1,
                 codes: lot.items || [],
+                bobines: lot.bobines || [],
               }, true);  // v1.7 - isReprint=true : envoie variante=compact au serveur
             }}
           }, iconEl('printer', 14), ' Réimprimer étiquettes');

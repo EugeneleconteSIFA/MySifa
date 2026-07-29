@@ -992,6 +992,7 @@ PREVIEW_MOCK_DATA = {
     "fsc_label": "FSC C012345",
     "fsc_banner": "FSC",
     "ref_produit": "PAPIER-KRAFT-80G",
+    "laize": "510 mm",
     "code_barre": "MYSIFA-2026-07-DEMO",
     "operateur_nom": "Eugene L.",
     "date_reception": "20/07/2026",

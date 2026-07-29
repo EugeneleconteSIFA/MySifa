@@ -2196,6 +2196,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
               <div style="font-size:11px;color:var(--muted);margin-top:4px">
                 Placeholders : <code>{{champ}}</code>, <code>{{barcode:champ,CODE128,140}}</code>, <code>{{qrcode:champ}}</code>, <code>{{now:%d/%m/%Y}}</code>.
               </div>
+              <div id="pr-tpl-lint" style="display:none;margin-top:8px;padding:8px 10px;border-radius:8px;background:var(--bg);border:1px solid var(--warn);color:var(--warn);font-size:11px;line-height:1.5"></div>
             </div>
 
             <!-- Aperçu WYSIWYG -->
@@ -7005,7 +7006,33 @@ async function prLoadFromGallery() {
   }
 }
 
+// Garde-fou ZPL : un placeholder doit être précédé, sur sa ligne, d'un champ
+// de données (^FD) ou d'un bloc (^FB...^FD). Sans ça le `^` colle au texte
+// substitué, ZPL lit une commande inconnue, et le champ n'apparaît nulle part
+// — ni à l'aperçu, ni au papier. Panne silencieuse et coûteuse à diagnostiquer.
+// Avertissement seulement : des usages légitimes existent (^FN, ^SN...).
+function prTplLint() {
+  const box = document.getElementById('pr-tpl-lint');
+  const ta = document.getElementById('pr-tpl-contenu');
+  if (!box || !ta) return;
+  const lignes = (ta.value || '').split(/\r?\n/);
+  const suspectes = [];
+  lignes.forEach((ligne, i) => {
+    if (ligne.indexOf('{{') === -1) return;
+    const avant = ligne.slice(0, ligne.indexOf('{{'));
+    if (/\^F[DBHN]/.test(avant)) return;      // ^FD, ^FB, ^FH, ^FN : OK
+    if (/^\s*(\/\/|#)/.test(ligne)) return;    // ligne commentée
+    suspectes.push({ n: i + 1, texte: ligne.trim() });
+  });
+  if (!suspectes.length) { box.style.display = 'none'; box.textContent = ''; return; }
+  box.style.display = '';
+  box.innerHTML = '<strong>Placeholder sans <code>^FD</code></strong> — ces lignes ne s\'imprimeront pas :<br>'
+    + suspectes.map(s => 'Ligne ' + s.n + ' : <code>' + _escH(s.texte.slice(0, 70)) + '</code>').join('<br>')
+    + '<br>Exemple : <code>^FO0,300^A0N,48,48<strong>^FD</strong>{{ref_produit}}^FS</code>';
+}
+
 async function prTplRefreshPreview() {
+  prTplLint();
   const contenu = document.getElementById('pr-tpl-contenu').value;
   const largeur_mm = parseInt(document.getElementById('pr-tpl-prev-w').value, 10) || 102;
   const hauteur_mm = parseInt(document.getElementById('pr-tpl-prev-h').value, 10) || 152;
@@ -7838,6 +7865,7 @@ function prEditTemplate(id) {
   }
   // Reset preview et auto-charge
   prTplClearPreview();
+  prTplBindLint();
   document.getElementById('pr-tpl-modal').style.display = 'flex';
   setTimeout(() => prTplRefreshPreview(), 200);
 }
@@ -7864,7 +7892,22 @@ async function prNewTemplate(imprimanteId) {
   await prLoadGallery();
   // Reset preview
   prTplClearPreview();
+  prTplBindLint();
+  prTplLint();
   document.getElementById('pr-tpl-modal').style.display = 'flex';
+}
+
+// Le contrôle tourne à la frappe (débounce court) : l'erreur se voit pendant
+// l'édition, pas seulement au moment où on pense à rafraîchir l'aperçu.
+let _prTplLintTimer = null;
+function prTplBindLint() {
+  const ta = document.getElementById('pr-tpl-contenu');
+  if (!ta || ta.dataset.lintBound) return;
+  ta.dataset.lintBound = '1';
+  ta.addEventListener('input', () => {
+    clearTimeout(_prTplLintTimer);
+    _prTplLintTimer = setTimeout(prTplLint, 250);
+  });
 }
 
 const PR_VARIANTE_HELP = {

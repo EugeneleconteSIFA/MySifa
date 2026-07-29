@@ -1615,7 +1615,9 @@ function renderOfTab(){
     ];
     acts.push(h('button',{
       style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
-      title:'Aperçu OF', onClick:()=>{window.open('/api/of/'+row.id+'/pdf-preview','_blank');}
+      // ?v=date_import : sans cache-buster, le navigateur resservait le PDF
+      // mis en cache lors du premier aperçu même après un ré-import.
+      title:'Aperçu OF', onClick:()=>{window.open('/api/of/'+row.id+'/pdf-preview?v='+encodeURIComponent(row.date_import||Date.now()),'_blank');}
     },iconEl('eye',13)));
     if(row.pdf_filename){
       // v1.7 — bouton Imprimer : ouvre le popup partage (mysifa_print_modal.js)
