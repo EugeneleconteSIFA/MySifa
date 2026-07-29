@@ -526,6 +526,16 @@ body.light .mvt-qte-inventaire{color:#7c3aed}
 .mvt-line1-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0}
 .mvt-solde{font-size:11px;color:var(--muted);font-family:monospace;font-weight:500;line-height:1;white-space:nowrap}
 .mvt-note{font-size:11px;color:var(--text2);margin-top:2px;font-style:italic}
+/* Sections du formulaire de reference matiere. */
+.mp-form-section{border-top:1px solid var(--border);padding-top:12px;margin-top:14px}
+.mp-form-section:first-child{border-top:0;padding-top:0;margin-top:0}
+.mp-form-section-title{font-size:11px;font-weight:800;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px}
+/* Laize du mouvement : puce discrete mais lisible, la laize est l'information
+   qui distingue deux mouvements par ailleurs identiques sur une matiere laizee. */
+.mvt-laize{display:inline-block;margin-left:6px;padding:1px 6px;border-radius:5px;
+  border:1px solid var(--border);background:var(--card);color:var(--text2);
+  font-size:10px;font-weight:700;line-height:1.5;vertical-align:1px}
 .hist-solde-avant{color:var(--muted)}
 .hist-solde-arrow{color:var(--muted);margin:0 4px}
 .hist-solde-apres{color:var(--text);font-weight:800;font-family:monospace}
@@ -1966,6 +1976,9 @@ const mpIsLaizeeCategory = _SM.utils.mpIsLaizeeCategory;
 const mpIsPaletteCategory = _SM.utils.mpIsPaletteCategory;
 const mpQuantiteFieldLabel = _SM.utils.mpQuantiteFieldLabel;
 const mpQuantiteInputAttrs = _SM.utils.mpQuantiteInputAttrs;
+const mpIsAdhesifCategory = _SM.utils.mpIsAdhesifCategory;
+const mpUnitesSaisie = _SM.utils.mpUnitesSaisie;
+const mpFacteurSaisie = _SM.utils.mpFacteurSaisie;
 const mpStockLine = _SM.utils.mpStockLine;
 const mpUniteNom = _SM.utils.mpUniteNom;
 const mpUniteShort = _SM.utils.mpUniteShort;
@@ -1978,6 +1991,7 @@ const validateMpEmplacement = _SM.utils.validateMpEmplacement;
 const wireStockEmplSearch = _SM.utils.wireStockEmplSearch;
 const wireStockProduitSearch = _SM.utils.wireStockProduitSearch;
 const MP_CAT_LABELS = _SM.constants.MP_CAT_LABELS;
+const MP_UNITE_SAISIE_LABELS = _SM.constants.MP_UNITE_SAISIE_LABELS;
 const MP_MVT_TITLES = _SM.constants.MP_MVT_TITLES;
 const PF_MVT_TITLES = _SM.constants.PF_MVT_TITLES;
 const MP_CATEGORIES_LAIZEES = _SM.constants.MP_CATEGORIES_LAIZEES;
@@ -2472,6 +2486,19 @@ function stockHistRefLink(m, label) {
     cls: 'mvt-ref-link', type: 'button',
     on: { click: (e) => { e.stopPropagation(); openHistoriqueRef(m); } },
   }, txt);
+}
+
+// Colonne « Emplacement / laize » de l'historique. Les matières premières n'ont
+// plus d'emplacement : la case afficherait un tiret sur une ligne sur deux. On y
+// met la laize à la place, qui est l'information qui distingue deux mouvements
+// d'une même référence laizée. Les produits finis gardent leurs emplacements.
+function stockHistEmplOuLaizeCell(m) {
+  if ((m.type_stock || '') === 'mp') {
+    return m.laize_label
+      ? el('span', { cls: 'mvt-laize', style: 'margin-left:0' }, m.laize_label)
+      : el('span', { cls: 'hist-muted' }, '—');
+  }
+  return stockHistEmplLinks(m.emplacement);
 }
 
 function stockHistEmplLinks(raw) {
@@ -4761,6 +4788,7 @@ function mpSeuilFieldLabel(catOrMatiere) {
   const u = mpUniteNom(catOrMatiere);
   if (u === 'bobine') return 'Seuil d\'alerte (bobines)';
   if (u === 'palette') return 'Seuil d\'alerte (pal.)';
+  if (u === 'kg') return 'Seuil d\'alerte (kg)';
   if (u === 'unite') return 'Seuil d\'alerte (u.)';
   return 'Seuil d\'alerte (pal.)';
 }
@@ -4772,6 +4800,7 @@ function mpStockTotalLabel(catOrMatiere) {
 }
 function mpAdminHint(cat) {
   if (cat === 'palette') return 'Stock géré en palettes. Quantité minimale par saisie : 40.';
+  if (cat === 'adhesif') return 'Stock géré au kilo. Renseigne le conditionnement à l\'achat (cartons/palette et kg/carton) pour pouvoir saisir les mouvements à la palette ou au carton.';
   if (cat === 'carton') return 'Stock géré en palettes.';
   if (cat === 'frontal') return 'Stock géré en bobines (réception par scan possible). Une sous-section permet de regrouper les frontaux par usage.';
   if (mpIsBobineCategory(cat)) return 'Stock géré en bobines (réception par scan possible).';
@@ -4851,8 +4880,11 @@ function mpFrontalSousSections(matieres) {
 }
 
 
-// Catégories qui ont la notion d'unité d'achat + conditionnement (unités/palette)
-const MP_CATEGORIES_AVEC_CONDITIONNEMENT = new Set(['carton', 'adhesif', 'mandrin']);
+// Catégories qui ont la notion d'unité d'achat + conditionnement (unités/palette),
+// utilisée pour la valorisation : prix saisi à l'unité d'achat × unités/palette.
+// L'adhésif n'en fait plus partie : son stock EST en kg et son prix EST en €/kg,
+// la valorisation est donc le produit direct des deux (cf. migration mp_adhesif_kg).
+const MP_CATEGORIES_AVEC_CONDITIONNEMENT = new Set(['carton', 'mandrin']);
 function mpHasConditionnement(cat) {
   return MP_CATEGORIES_AVEC_CONDITIONNEMENT.has((cat || '').toLowerCase());
 }
@@ -4987,22 +5019,81 @@ function clearMatiereSel() {
   updateNavActive();
 }
 
-function mpMvtEmplacementLabel(m) {
-  const t = (m.type_mouvement || '').toLowerCase();
-  if (t === 'entree') return m.emplacement_dest || '';
-  if (t === 'sortie') return m.emplacement_source || '';
-  if (t === 'transfert') {
-    const a = m.emplacement_source || '';
-    const b = m.emplacement_dest || '';
-    if (a && b) return a + ' → ' + b;
-    return a || b;
+// Laize d'un mouvement, affichée sur les matières laizées : sans elle, un
+// « +1 bob. » ne dit pas sur laquelle des laizes de la référence il porte.
+function mpMvtLaizeLabel(m) {
+  if (m.laize_label) return String(m.laize_label);
+  if (m.laize_valeur_mm != null) return fN(m.laize_valeur_mm) + ' mm';
+  return '';
+}
+
+// Rappel du geste d'origine quand la saisie s'est faite dans une autre unité que
+// l'unité de stock : « 1 palette » plutôt que le seul « 1 200 kg » enregistré.
+function mpMvtUniteSaisieLabel(m) {
+  const u = (m.unite_saisie || '').toLowerCase();
+  const q = m.quantite_saisie;
+  if (!u || u === 'kg' || q == null) return '';
+  const noms = { palette: 'palette', carton: 'carton' };
+  const nom = noms[u];
+  if (!nom) return '';
+  const n = Number(q);
+  return 'saisi : ' + fN(n) + ' ' + nom + (Math.abs(n) > 1 ? 's' : '');
+}
+
+// Kilos par palette effectifs d'un adhésif : produit des deux champs saisis, ou
+// à défaut la valeur historique (références antérieures à la bascule au kilo).
+function mpAdhesifKgParPalette(m) {
+  if (!m) return 0;
+  return Number(m.kg_par_palette || m.unites_par_palette || 0) || 0;
+}
+
+// Libellé du conditionnement à l'achat, pour l'en-tête de la fiche matière.
+function mpAdhesifCondLabel(m) {
+  const cpp = Number(m.cartons_par_palette || 0);
+  const kgc = Number(m.kg_par_carton || 0);
+  const kgPal = mpAdhesifKgParPalette(m);
+  if (cpp > 0 && kgc > 0) {
+    return 'Conditionnement : ' + fN(cpp) + ' cartons/palette × ' + fN(kgc)
+      + ' kg/carton = ' + fN(kgPal) + ' kg/palette';
   }
-  return m.emplacement_dest || m.emplacement_source || '';
+  if (kgPal > 0) {
+    return 'Conditionnement : ' + fN(kgPal) + ' kg/palette (cartons non renseignés)';
+  }
+  return 'Conditionnement à renseigner';
+}
+
+// Équivalent palettes/cartons d'un stock en kilos — l'opérateur raisonne en
+// palettes, la valeur brute en kilos seule ne lui parle pas.
+function mpAdhesifEquivalent(qty, m) {
+  const kgPal = mpAdhesifKgParPalette(m);
+  const kgCarton = Number(m.kg_par_carton || 0);
+  const q = Number(qty || 0);
+  if (!(q > 0)) return '';
+  if (kgPal > 0) {
+    const pal = Math.floor(q / kgPal);
+    const reste = q - pal * kgPal;
+    const parts = [];
+    if (pal > 0) parts.push(fN(pal) + ' pal.');
+    if (reste > 0.0001) {
+      if (kgCarton > 0 && reste >= kgCarton) {
+        const cart = Math.floor(reste / kgCarton);
+        const resteKg = reste - cart * kgCarton;
+        parts.push(fN(cart) + ' cart.');
+        if (resteKg > 0.0001) parts.push(fN(Math.round(resteKg * 10) / 10) + ' kg');
+      } else {
+        parts.push(fN(Math.round(reste * 10) / 10) + ' kg');
+      }
+    }
+    return parts.length ? '≈ ' + parts.join(' + ') : '';
+  }
+  return '';
 }
 
 function buildMpMvtHistory(mouvements, matiere) {
   const mpCat = matiere || null;
-  return el('div', { cls: 'card' },
+  // marginTop : sépare visuellement l'historique du tableau « Stocks par laize »
+  // qui le précède sur la fiche matière (les deux cartes se touchaient).
+  return el('div', { cls: 'card', style: { marginTop: '14px' } },
     el('div', { cls: 'card-header' }, el('div', { cls: 'card-title' }, 'Historique des mouvements')),
     !mouvements.length
       ? el('div', { cls: 'card-empty' }, 'Aucun mouvement')
@@ -5014,7 +5105,10 @@ function buildMpMvtHistory(mouvements, matiere) {
           const t = isInventoryAdj ? 'inventaire' : rawType;
           const signe = t === 'entree' ? '+' : t === 'sortie' ? '−' : t === 'ajustement' ? '=' : t === 'inventaire' ? '≡' : '';
           const actor = (m.created_by_name || '').trim();
-          const empl = mpMvtEmplacementLabel(m);
+          // L'emplacement n'est plus géré sur les matières premières : il n'est
+          // donc plus affiché, remplacé par la laize (matières laizées).
+          const laize = mpMvtLaizeLabel(m);
+          const uniteSaisie = mpMvtUniteSaisieLabel(m);
           const noteParts = [];
           if (m.ref_bl) noteParts.push('BL ' + m.ref_bl);
           if (m.prix_eur_m2 != null && m.prix_eur_m2 > 0) {
@@ -5039,7 +5133,8 @@ function buildMpMvtHistory(mouvements, matiere) {
               ),
               el('div', { cls: 'mvt-line2' },
                 fD(m.created_at),
-                empl ? el('span', null, ' · ' + empl) : null,
+                laize ? el('span', { cls: 'mvt-laize' }, laize) : null,
+                uniteSaisie ? el('span', null, ' · ' + uniteSaisie) : null,
                 actor ? el('span', null, ' · ' + actor) : null,
               ),
               noteParts.length
@@ -5121,6 +5216,7 @@ function buildMatiereDetail() {
     const u = mpUniteAchat(m.categorie);
     meta.push('Conditionnement : ' + Number(m.unites_par_palette).toLocaleString('fr-FR') + ' ' + u + '/palette');
   }
+  if (mpIsAdhesifCategory(m)) meta.push(mpAdhesifCondLabel(m));
   if (seuil > 0) meta.push('Seuil min. ' + mpStockLine(seuil, m));
 
   // Détail laizes pour les matières frontal/glassine/complexe
@@ -5186,6 +5282,22 @@ function buildMatiereDetail() {
     }
   }
 
+  // Adhésif sans conditionnement : ni saisie à la palette, ni conversion possible.
+  // Même bandeau d'appel à l'action que pour une matière laizée sans laize.
+  const adhesifTodo = (mpIsAdhesifCategory(m) && !mpAdhesifKgParPalette(m))
+    ? el('div', {
+        style: 'background:rgba(251,146,60,0.10);border:1px solid rgba(251,146,60,0.40);border-radius:10px;padding:12px 14px;margin-top:14px;font-size:13px;color:var(--text)',
+      },
+        el('strong', null, 'Référence à compléter — '),
+        'le conditionnement à l\'achat n\'est pas renseigné. Édite la référence pour saisir '
+        + 'les cartons par palette et les kilos par carton : sans eux, seule la saisie au kilo est possible.'
+      )
+    : null;
+
+  // Équivalent en palettes du stock : les opérateurs raisonnent en palettes, la
+  // valeur en kilos seule ne se traduit pas mentalement.
+  const equiv = mpIsAdhesifCategory(m) ? mpAdhesifEquivalent(m.quantite, m) : '';
+
   return el('div', { cls: 'content' },
     back,
     el('div', { cls: 'scorecard' },
@@ -5202,6 +5314,9 @@ function buildMatiereDetail() {
         el('div', { cls: 'sc-stat' },
           el('div', { cls: 'sc-stat-label' }, 'Stock actuel'),
           el('div', { cls: 'sc-stat-value' }, mpStockLine(m.quantite, m)),
+          equiv
+            ? el('div', { style: { fontSize: '11px', color: 'var(--muted)', marginTop: '2px' } }, equiv)
+            : null,
         ),
         el('div', { cls: 'sc-stat' },
           el('div', { cls: 'sc-stat-label' }, 'Mouvements'),
@@ -5210,6 +5325,7 @@ function buildMatiereDetail() {
       ),
     ),
     actions,
+    adhesifTodo,
     laizeDetail,
     buildMpMvtHistory(mouvements, m),
   );
@@ -7396,6 +7512,22 @@ function matiereRefEditPayload(item, fields) {
       payload.unites_par_palette = upp;
     }
   }
+  if (fields.isAdhesif && fields.cppInp && fields.kgcInp) {
+    // Toujours envoyés (même vides) pour autoriser l'effacement d'un conditionnement.
+    const readPos = (inp, label) => {
+      const raw = (inp.value || '').replace(',', '.').trim();
+      if (raw === '') return { value: null };
+      const v = parseFloat(raw);
+      if (isNaN(v) || v <= 0) return { error: label + ' : valeur > 0 obligatoire.' };
+      return { value: v };
+    };
+    const cpp = readPos(fields.cppInp, 'Cartons par palette');
+    if (cpp.error) return { error: cpp.error };
+    const kgc = readPos(fields.kgcInp, 'Kg par carton');
+    if (kgc.error) return { error: kgc.error };
+    payload.cartons_par_palette = cpp.value;
+    payload.kg_par_carton = kgc.value;
+  }
   if (fields.intervalleInp) {
     const raw = (fields.intervalleInp.value || '').trim();
     if (raw !== '') {
@@ -7413,6 +7545,22 @@ function matiereRefEditPayload(item, fields) {
 const MP_CATEGORIES_WITH_SOUS_SECTION = new Set(['autre', 'frontal']);
 function mpCategorieHasSousSection(cat) {
   return MP_CATEGORIES_WITH_SOUS_SECTION.has(mpCategorieKey(cat));
+}
+
+// Regroupe des champs sous un intitulé. Les fiches matière empilaient une dizaine
+// de champs sans hiérarchie ; les sections rendent lisible ce qui relève de
+// l'identification, du conditionnement, des laizes ou du suivi de stock.
+// Les enfants nuls ou entièrement masqués sont ignorés : une section vide (ex.
+// conditionnement sur une catégorie qui n'en a pas) ne doit pas s'afficher.
+function mpFormSection(title, ...children) {
+  const kept = children.filter(c => c);
+  if (!kept.length) return null;
+  const visible = kept.some(c => !(c.style && c.style.display === 'none'));
+  if (!visible) return null;
+  return el('div', { cls: 'mp-form-section' },
+    el('div', { cls: 'mp-form-section-title' }, title),
+    ...kept,
+  );
 }
 
 function appendMatiereRefEditFields(parent, item) {
@@ -7655,13 +7803,52 @@ function appendMatiereRefEditFields(parent, item) {
   );
   applyPrixMode();
   renderLaizeFournisseurs();
-  // Bloc conditionnement (carton / adhésif / mandrin) — unités par palette
+  // Bloc conditionnement (carton / mandrin) — unités par palette
   const hasCond = mpHasConditionnement(item.categorie);
   const uppWrap = el('div', { cls: 'mp-field', style: { display: hasCond ? '' : 'none' } });
   const uniteAchat = mpUniteAchat(item.categorie);
   const uppInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 260' } });
   uppInp.value = String(item.unites_par_palette != null && item.unites_par_palette > 0 ? item.unites_par_palette : '');
   uppWrap.append(el('label', null, uniteAchat.charAt(0).toUpperCase() + uniteAchat.slice(1) + ' par palette'), uppInp);
+
+  // ── Conditionnement à l'achat des adhésifs ────────────────────────────────
+  // Le stock est au kilo ; ces deux champs décrivent comment l'adhésif ARRIVE
+  // (palette de N cartons de M kg). Ils rendent possibles les saisies « 1 palette »
+  // et « 3 cartons », converties en kilos à l'enregistrement.
+  const isAdhesif = mpIsAdhesifCategory(item);
+  const cppInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 24' } });
+  cppInp.value = String(item.cartons_par_palette > 0 ? item.cartons_par_palette : '');
+  const kgcInp = el('input', { attrs: { type: 'number', min: '0', step: '0.01', placeholder: 'Ex. 50' } });
+  kgcInp.value = String(item.kg_par_carton > 0 ? item.kg_par_carton : '');
+  const kgPalOut = el('div', { cls: 'mp-readonly' }, '—');
+  const kgPalHint = el('div', { cls: 'mp-hint' }, '');
+  function refreshKgPalette() {
+    const cpp = parseFloat((cppInp.value || '').replace(',', '.'));
+    const kgc = parseFloat((kgcInp.value || '').replace(',', '.'));
+    if (cpp > 0 && kgc > 0) {
+      kgPalOut.textContent = fN(cpp * kgc) + ' kg';
+      kgPalHint.textContent = 'Calculé : ' + fN(cpp) + ' × ' + fN(kgc) + '. Sert à convertir une saisie à la palette.';
+      return;
+    }
+    const legacy = Number(item.kg_par_palette || item.unites_par_palette || 0);
+    if (legacy > 0) {
+      kgPalOut.textContent = fN(legacy) + ' kg';
+      kgPalHint.textContent = 'Valeur héritée d\'avant la bascule au kilo. Renseigne les deux champs '
+        + 'ci-dessus pour la recalculer et débloquer la saisie au carton.';
+    } else {
+      kgPalOut.textContent = '—';
+      kgPalHint.textContent = 'Sans conditionnement, seule la saisie au kilo est possible sur cette référence.';
+    }
+  }
+  cppInp.addEventListener('input', refreshKgPalette);
+  kgcInp.addEventListener('input', refreshKgPalette);
+  refreshKgPalette();
+  const adhesifCondFields = isAdhesif ? [
+    el('div', { cls: 'mp-field' }, el('label', null, 'Cartons par palette'), cppInp),
+    el('div', { cls: 'mp-field' }, el('label', null, 'Kg d\'adhésif par carton'), kgcInp),
+    el('div', { cls: 'mp-field' }, el('label', null, 'Kg par palette'), kgPalOut, kgPalHint),
+  ] : [];
+
   // Sous-section (catégories autre + frontal) — cloisonnée par catégorie
   const hasSousSection = mpCategorieHasSousSection(item.categorie);
   const sousSectionSel = hasSousSection
@@ -7670,23 +7857,33 @@ function appendMatiereRefEditFields(parent, item) {
   const sousSectionWrap = hasSousSection
     ? sousSectionSel.el
     : el('div', { style: { display: 'none' } });
+
+  // Formulaire organisé en sections : la fiche mélangeait identification,
+  // conditionnement, seuils et laizes dans une seule colonne de champs.
+  const sectionConditionnement = (isAdhesif || hasCond || mpIsPaletteCategory(item))
+    ? mpFormSection('Conditionnement à l\'achat', ...adhesifCondFields, pppWrap, uppWrap)
+    : null;
+
   parent.append(
-    el('div', { cls: 'mp-field' },
-      el('label', null, 'Catégorie'),
-      el('div', { cls: 'mp-readonly' }, MP_CAT_LABELS[item.categorie] || item.categorie || '—'),
+    mpFormSection('Identification',
+      el('div', { cls: 'mp-field' },
+        el('label', null, 'Catégorie'),
+        el('div', { cls: 'mp-readonly' }, MP_CAT_LABELS[item.categorie] || item.categorie || '—'),
+      ),
+      el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
+      el('div', { cls: 'mp-field' }, el('label', null, 'Description'), desInp),
+      couleurWrap,
+      sousSectionWrap,
     ),
-    el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
-    el('div', { cls: 'mp-field' }, el('label', null, 'Description'), desInp),
-    couleurWrap,
-    pppWrap,
-    uppWrap,
-    sousSectionWrap,
-    el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item)), seuilInp),
-    laizeWrap,
-    el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
-    intervalleWrap,
+    sectionConditionnement,
+    isLaizee ? mpFormSection('Laizes & tarification', laizeWrap) : laizeWrap,
+    mpFormSection('Stock & inventaire',
+      el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item)), seuilInp),
+      el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
+      intervalleWrap,
+    ),
   );
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp, cppInp, kgcInp, isAdhesif };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -8131,6 +8328,21 @@ function renderModalInventaireMatiere(data) {
   const mroot = document.getElementById('mroot');
   if (!mroot) return;
 
+  // Unités de comptage disponibles (adhésifs : kg / carton / palette).
+  // Le comptage physique d'un adhésif se fait en palettes ou en cartons ; imposer
+  // le kilo obligerait l'opérateur à faire la conversion de tête.
+  const unitesSaisie = Array.isArray(mat.unites_saisie) ? mat.unites_saisie : [];
+  const multiUnite = unitesSaisie.length > 1;
+  // Défaut : la palette, l'unité dans laquelle un stock d'adhésif se compte.
+  let uniteComptage = multiUnite
+    ? (unitesSaisie.includes('palette') ? 'palette' : unitesSaisie[0])
+    : null;
+  const facteurComptage = () => {
+    if (uniteComptage === 'palette') return Number(mat.kg_par_palette || 0) || 1;
+    if (uniteComptage === 'carton') return Number(mat.kg_par_carton || 0) || 1;
+    return 1;
+  };
+
   // État local : { [key]: { comptee: string, commentaire: string } }
   // key = laize_id || 'g' (global)
   const st = {};
@@ -8166,6 +8378,20 @@ function renderModalInventaireMatiere(data) {
     el('div', null, derniereTxt, ' · Cadence : ', el('strong', null, String(mat.intervalle_jours || 180)), ' j')
   ));
 
+  // Sélecteur d'unité de comptage (adhésifs). Il pilote l'en-tête « Compté » et
+  // la conversion : ce qui est saisi ici est converti en unité de stock avant
+  // calcul de l'écart, pour ne jamais comparer des palettes à des kilos.
+  const comptePlaces = [];   // { li, inp, ecartCell }
+  const compteTh = el('th', {
+    style: { textAlign: 'right', padding: '6px 8px', fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' },
+  }, 'Compté');
+  function compteHeaderLabel() {
+    if (!multiUnite) return 'Compté';
+    const short = { kg: 'kg', carton: 'cartons', palette: 'palettes' }[uniteComptage] || '';
+    return 'Compté (' + short + ')';
+  }
+  compteTh.textContent = compteHeaderLabel();
+
   // Tableau des lignes (une par laize ou une seule si non laizée)
   const table = el('table', {
     style: { width: '100%', borderCollapse: 'collapse', fontSize: '13px', marginBottom: '10px' },
@@ -8173,8 +8399,8 @@ function renderModalInventaireMatiere(data) {
   table.appendChild(el('thead', null, el('tr', null,
     el('th', { style: { textAlign: 'left', padding: '6px 8px', fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' } }, mat.laizee ? 'Laize' : 'Matière'),
     el('th', { style: { textAlign: 'right', padding: '6px 8px', fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' } }, 'Stock (' + unite + ')'),
-    el('th', { style: { textAlign: 'right', padding: '6px 8px', fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' } }, 'Compté'),
-    el('th', { style: { textAlign: 'right', padding: '6px 8px', fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' } }, 'Écart')
+    compteTh,
+    el('th', { style: { textAlign: 'right', padding: '6px 8px', fontSize: '11px', color: 'var(--muted)', textTransform: 'uppercase', borderBottom: '1px solid var(--border)' } }, 'Écart (' + unite + ')')
   )));
   const tbody = el('tbody');
 
@@ -8182,6 +8408,21 @@ function renderModalInventaireMatiere(data) {
     if (v == null || isNaN(v)) return '—';
     const sign = v > 0 ? '+' : '';
     return sign + (Math.abs(v - Math.round(v)) < 1e-6 ? String(Math.round(v)) : v.toFixed(2));
+  }
+
+  function refreshEcart(place) {
+    const { li, inp, ecartCell } = place;
+    const v = parseFloat(inp.value);
+    if (isNaN(v)) {
+      ecartCell.textContent = '—';
+      ecartCell.style.color = 'var(--muted)';
+      return;
+    }
+    const ec = (v * facteurComptage()) - li.stock_actuel;
+    ecartCell.textContent = fmtEcart(ec);
+    if (Math.abs(ec) < 1e-9) { ecartCell.style.color = 'var(--muted)'; }
+    else if (ec > 0) { ecartCell.style.color = 'var(--success)'; }
+    else { ecartCell.style.color = 'var(--danger)'; }
   }
 
   lignes.forEach(li => {
@@ -8196,19 +8437,11 @@ function renderModalInventaireMatiere(data) {
         borderRadius: '6px', padding: '6px 8px', fontFamily: 'monospace', color: 'var(--text)', fontSize: '13px',
       },
     });
+    const place = { li, inp, ecartCell };
+    comptePlaces.push(place);
     inp.addEventListener('input', e => {
       st[k].comptee = e.target.value;
-      const v = parseFloat(e.target.value);
-      if (isNaN(v)) {
-        ecartCell.textContent = '—';
-        ecartCell.style.color = 'var(--muted)';
-      } else {
-        const ec = v - li.stock_actuel;
-        ecartCell.textContent = fmtEcart(ec);
-        if (Math.abs(ec) < 1e-9) { ecartCell.style.color = 'var(--muted)'; }
-        else if (ec > 0) { ecartCell.style.color = 'var(--success)'; }
-        else { ecartCell.style.color = 'var(--danger)'; }
-      }
+      refreshEcart(place);
     });
     const tr = el('tr', { style: trStyle },
       el('td', { style: { padding: '8px' } }, li.label || '—'),
@@ -8237,6 +8470,35 @@ function renderModalInventaireMatiere(data) {
     tbody.appendChild(trC);
   });
   table.appendChild(tbody);
+  if (multiUnite) {
+    const uniteSel = el('select');
+    unitesSaisie.forEach(u => uniteSel.appendChild(el('option', {
+      value: u, selected: u === uniteComptage ? true : null,
+    }, MP_UNITE_SAISIE_LABELS[u] || u)));
+    uniteSel.value = uniteComptage;
+    const uniteHint = el('div', { cls: 'mp-hint' }, '');
+    function refreshUniteHint() {
+      const f = facteurComptage();
+      uniteHint.textContent = uniteComptage === 'kg'
+        ? 'Comptage au kilo — la valeur saisie est le stock exact.'
+        : ('1 ' + (uniteComptage === 'palette' ? 'palette' : 'carton') + ' = ' + fN(f) + ' kg.');
+    }
+    uniteSel.addEventListener('change', () => {
+      uniteComptage = uniteSel.value;
+      compteTh.textContent = compteHeaderLabel();
+      // Changer d'unité rendrait les valeurs déjà tapées ambiguës : on repart à zéro.
+      comptePlaces.forEach(p => {
+        p.inp.value = '';
+        const k = p.li.laize_id != null ? String(p.li.laize_id) : 'g';
+        st[k].comptee = '';
+        refreshEcart(p);
+      });
+      refreshUniteHint();
+    });
+    refreshUniteHint();
+    body.appendChild(el('div', { cls: 'mp-field' },
+      el('label', null, 'Unité de comptage'), uniteSel, uniteHint));
+  }
   body.appendChild(table);
 
   // Actions
@@ -8256,6 +8518,9 @@ function renderModalInventaireMatiere(data) {
         payload.push({
           laize_id: li.laize_id,
           quantite_comptee: v,
+          // La conversion qui fait foi est faite côté serveur : on transmet la
+          // valeur telle que comptée et l'unité utilisée.
+          unite_saisie: multiUnite ? uniteComptage : null,
           commentaire: (st[k].commentaire || '').trim() || null,
         });
       });
@@ -8722,6 +8987,24 @@ function buildMatieresAdminAddForm() {
   const uppWrap = el('div', { cls: 'mp-field' });
   const uppInp = el('input', { attrs: { type: 'number', min: '1', step: '1', placeholder: 'Ex. 260' } });
   const uppLbl = el('label', null, 'Unités par palette');
+  // Conditionnement à l'achat des adhésifs (stock au kilo) : palette → cartons → kg.
+  const adhCondWrap = el('div', { style: { display: 'none' } });
+  const cppInp = el('input', { attrs: { type: 'number', min: '1', step: '1', placeholder: 'Ex. 24' } });
+  const kgcInp = el('input', { attrs: { type: 'number', min: '0', step: '0.01', placeholder: 'Ex. 50' } });
+  const kgPalOut = el('div', { cls: 'mp-readonly' }, '—');
+  function refreshAddKgPalette() {
+    const cpp = parseFloat((cppInp.value || '').replace(',', '.'));
+    const kgc = parseFloat((kgcInp.value || '').replace(',', '.'));
+    kgPalOut.textContent = (cpp > 0 && kgc > 0) ? (fN(cpp * kgc) + ' kg') : '—';
+  }
+  cppInp.addEventListener('input', refreshAddKgPalette);
+  kgcInp.addEventListener('input', refreshAddKgPalette);
+  adhCondWrap.append(
+    el('div', { cls: 'mp-field' }, el('label', null, 'Cartons par palette'), cppInp),
+    el('div', { cls: 'mp-field' }, el('label', null, 'Kg d\'adhésif par carton'), kgcInp),
+    el('div', { cls: 'mp-field' }, el('label', null, 'Kg par palette'), kgPalOut,
+      el('div', { cls: 'mp-hint' }, 'Calculé. Sans lui, seule la saisie au kilo sera possible.')),
+  );
   const seuilLbl = el('label', null, 'Seuil d\'alerte (0 = pas d\'alerte)');
   const hintEl = el('div', { cls: 'mp-hint' }, '');
   const errEl = el('div', { cls: 'mp-admin-err' }, S.matieresAdminAddError || '');
@@ -8775,6 +9058,7 @@ function buildMatieresAdminAddForm() {
     pppWrap.style.display = isPal ? '' : 'none';
     couleurWrap.style.display = isGlass ? '' : 'none';
     uppWrap.style.display = hasCond ? '' : 'none';
+    adhCondWrap.style.display = mpIsAdhesifCategory(cat) ? '' : 'none';
     laizeWrap.style.display = isLaizee ? '' : 'none';
     sousSectionWrap.style.display = hasSousSection ? '' : 'none';
     pppLbl.textContent = 'Palettes par pile';
@@ -8825,6 +9109,7 @@ function buildMatieresAdminAddForm() {
     couleurWrap,
     pppWrap,
     uppWrap,
+    adhCondWrap,
     sousSectionWrap,
     el('div', { cls: 'mp-field' }, seuilLbl, seuilInp),
     laizeWrap,
@@ -8874,6 +9159,12 @@ function buildMatieresAdminAddForm() {
                 payload.unites_par_palette = upp;
               }
             }
+          }
+          if (mpIsAdhesifCategory(cat)) {
+            const cpp = parseFloat((cppInp.value || '').replace(',', '.'));
+            const kgc = parseFloat((kgcInp.value || '').replace(',', '.'));
+            if (cpp > 0) payload.cartons_par_palette = cpp;
+            if (kgc > 0) payload.kg_par_carton = kgc;
           }
           if (mpCategorieHasSousSection(cat)) {
             const ss = sousSectionSel.getValue();
@@ -9375,7 +9666,7 @@ function buildHistoriqueTableRow(m) {
     el('td', null, el('div', { cls: 'hist-cell-badges' }, histStockBadge(m.type_stock), histMvtBadge(m.type_mouvement, m.note))),
     el('td', { cls: 'hist-ref' }, stockHistRefLink(m)),
     el('td', { cls: 'hist-des hist-col-optional', title: m.designation || '' }, truncStr(m.designation, 36) || '—'),
-    el('td', { cls: 'hist-empl' }, stockHistEmplLinks(m.emplacement)),
+    el('td', { cls: 'hist-empl' }, stockHistEmplOuLaizeCell(m)),
     el('td', { cls: 'hist-unite' }, histUniteLabel(m)),
     el('td', null, el('span', { cls: qteCls }, qte)),
     el('td', { cls: 'hist-col-optional' },
@@ -9395,8 +9686,8 @@ function buildHistoriqueCard(m) {
   const op = (m.created_by_name || '').trim();
   const blNote = [m.ref_bl, m.note].filter(Boolean).join(' · ');
   const stats = el('dl', { cls: 'hist-card-stats' },
-    el('dt', null, 'Emplacement'),
-    el('dd', null, stockHistEmplLinks(m.emplacement)),
+    el('dt', null, 'Emplacement / laize'),
+    el('dd', null, stockHistEmplOuLaizeCell(m)),
     el('dt', null, 'Unité'),
     el('dd', null, histUniteLabel(m)),
     el('dt', null, 'Quantité'),
@@ -9475,7 +9766,7 @@ function buildHistorique() {
     el('th', null, 'Stock / Mouvement'),
     el('th', null, 'Référence'),
     el('th', { cls: 'hist-col-optional' }, 'Désignation'),
-    el('th', null, 'Emplacement'),
+    el('th', null, 'Emplacement / laize'),
     el('th', null, 'Unité'),
     el('th', null, 'Quantité'),
     el('th', { cls: 'hist-col-optional' }, 'Solde (avant → après)'),

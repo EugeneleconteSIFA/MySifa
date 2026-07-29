@@ -133,8 +133,8 @@ def table_existe(conn, table):
 def collecter(conn, table, colonne, cutoff):
     """Renvoie la liste des corrections à appliquer pour une table/colonne."""
     if not table_existe(conn, table):
-        print("  [!] table '%s' absente — ignorée" % table)
-        return [], 0, 0
+        print("  [!] table '%s' ABSENTE de cette base" % table)
+        return None, 0, 0
 
     rows = conn.execute(
         "SELECT id, %s AS val FROM %s ORDER BY id" % (colonne, table)
@@ -220,15 +220,28 @@ def main():
     conn.row_factory = sqlite3.Row
 
     plan = []
+    absentes = 0
     for table, colonne in CIBLES:
         print("Analyse de %s.%s ..." % (table, colonne))
         corrections, illisibles, hors_bornes = collecter(conn, table, colonne, cutoff)
+        if corrections is None:
+            absentes += 1
+            continue
         print(
             "  à corriger : %-6d   déjà correctes/ignorées : %-6d   illisibles : %d"
             % (len(corrections), hors_bornes, illisibles)
         )
         if corrections:
             plan.append((table, colonne, corrections))
+
+    if absentes == len(CIBLES):
+        conn.close()
+        print("\n[ERREUR] aucune des tables cibles n'existe dans '%s'." % args.db)
+        print("         Ce n'est pas la base applicative — le script s'arrete sans rien faire.")
+        print("         Sur le VPS la base est dans app/data/, pas data/ :")
+        print("             grep DB_PATH .env")
+        print("             python3 scripts/fix_stock_timezones.py --dry-run --db app/data/production.db")
+        sys.exit(1)
 
     total = sum(len(c) for _, _, c in plan)
     if not total:
