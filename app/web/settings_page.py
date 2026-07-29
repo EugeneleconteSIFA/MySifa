@@ -2157,8 +2157,8 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <div id="pr-tpl-gallery-desc" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
           </div>
 
-          <!-- Ligne du haut : nom + usage -->
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+          <!-- Ligne du haut : nom + usage + variante -->
+          <div style="display:grid;grid-template-columns:1.4fr 1.4fr 1fr;gap:12px;margin-bottom:12px">
             <div>
               <label class="pr-lbl">Nom</label>
               <input id="pr-tpl-nom" type="text" class="pr-inp">
@@ -2166,6 +2166,14 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <div>
               <label class="pr-lbl">Usage métier</label>
               <select id="pr-tpl-usage" class="pr-inp"></select>
+            </div>
+            <div>
+              <label class="pr-lbl">Déclenché par</label>
+              <select id="pr-tpl-variante" class="pr-inp">
+                <option value="full">Impression</option>
+                <option value="compact">Réimpression</option>
+              </select>
+              <div id="pr-tpl-variante-help" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
             </div>
           </div>
 
@@ -6962,6 +6970,8 @@ async function prLoadFromGallery() {
     document.getElementById('pr-tpl-contenu').value = t.contenu;
     const usel = document.getElementById('pr-tpl-usage');
     if (t.usage_key) usel.value = t.usage_key;
+    const vsel = document.getElementById('pr-tpl-variante');
+    if (t.variante && !vsel.disabled) { vsel.value = t.variante; prRenderVarianteHelp(); }
     document.getElementById('pr-tpl-prev-w').value = t.largeur_mm || 102;
     document.getElementById('pr-tpl-prev-h').value = t.hauteur_mm || 152;
     if (desc) desc.textContent = t.description || '';
@@ -7068,8 +7078,11 @@ function prRenderTemplates() {
       ? g.templates.map(t => `
         <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg);border-radius:8px;margin-top:6px">
           <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:600;color:var(--text)">${_escH(t.nom)}</div>
-            <div style="font-size:11px;color:var(--muted)">${_escH(t.usage_label)} — ${t.actif ? 'Actif' : 'Inactif'}</div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="font-size:13px;font-weight:600;color:var(--text)">${_escH(t.nom)}</span>
+              <span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:99px;background:var(--card);border:1px solid var(--border);color:var(--muted)">${_escH(t.variante_label || 'Impression')}</span>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">${_escH(t.usage_label)} — ${t.actif ? 'Actif' : 'Inactif'}</div>
           </div>
           <button class="btn btn-ghost" style="padding:4px 10px;font-size:11px" onclick="prEditTemplate(${t.id})">Modifier</button>
         </div>`).join('')
@@ -7781,6 +7794,10 @@ function prEditTemplate(id) {
   usel.innerHTML = PR.usages.map(u => `<option value="${_escH(u.key)}">${_escH(u.label)}</option>`).join('');
   usel.value = t.usage_key;
   usel.disabled = true; // usage fixe une fois créé
+  const vsel = document.getElementById('pr-tpl-variante');
+  vsel.value = t.variante || 'full';
+  vsel.disabled = true; // variante fixe une fois créée (comme l'usage)
+  prRenderVarianteHelp();
   prRenderPlaceholders(usel.value);
   document.getElementById('pr-tpl-del').style.display = '';
   // Cache la galerie en edition (on ne change pas de modele quand on edite un existant)
@@ -7807,6 +7824,11 @@ async function prNewTemplate(imprimanteId) {
   usel.innerHTML = PR.usages.map(u => `<option value="${_escH(u.key)}">${_escH(u.label)}</option>`).join('');
   usel.value = PR.usages[0] ? PR.usages[0].key : '';
   usel.disabled = false;
+  const vsel = document.getElementById('pr-tpl-variante');
+  vsel.value = 'full';
+  vsel.disabled = false;
+  vsel.onchange = () => prRenderVarianteHelp();
+  prRenderVarianteHelp();
   prRenderPlaceholders(usel.value);
   usel.onchange = () => prRenderPlaceholders(usel.value);
   document.getElementById('pr-tpl-del').style.display = 'none';
@@ -7816,6 +7838,18 @@ async function prNewTemplate(imprimanteId) {
   // Reset preview
   prTplClearPreview();
   document.getElementById('pr-tpl-modal').style.display = 'flex';
+}
+
+const PR_VARIANTE_HELP = {
+  full: 'Bouton « Faire une réception ».',
+  compact: 'Bouton « Réimprimer étiquettes » de l\'historique.',
+};
+
+function prRenderVarianteHelp() {
+  const sel = document.getElementById('pr-tpl-variante');
+  const help = document.getElementById('pr-tpl-variante-help');
+  if (!sel || !help) return;
+  help.textContent = PR_VARIANTE_HELP[sel.value] || '';
 }
 
 function prRenderPlaceholders(usageKey) {
@@ -7873,6 +7907,7 @@ async function prSaveTemplate() {
   const nom = document.getElementById('pr-tpl-nom').value.trim();
   const contenu = document.getElementById('pr-tpl-contenu').value;
   const usage_key = document.getElementById('pr-tpl-usage').value;
+  const variante = document.getElementById('pr-tpl-variante').value || 'full';
   if (!nom) { prToast('Nom requis.', 'danger'); return; }
   if (!contenu.trim()) { prToast('Contenu requis.', 'danger'); return; }
   try {
@@ -7886,7 +7921,7 @@ async function prSaveTemplate() {
         method: 'POST',
         body: JSON.stringify({
           imprimante_id: PR.editingTpl.imprimanteId,
-          usage_key, nom, contenu,
+          usage_key, variante, nom, contenu,
         }),
       });
       prToast('Template créé.');

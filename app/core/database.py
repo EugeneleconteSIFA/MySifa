@@ -6370,6 +6370,7 @@ Ressources :
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             imprimante_id INTEGER NOT NULL REFERENCES imprimantes(id) ON DELETE CASCADE,
             usage_key TEXT NOT NULL,
+            variante TEXT NOT NULL DEFAULT 'full',
             nom TEXT NOT NULL,
             contenu TEXT NOT NULL,
             actif INTEGER NOT NULL DEFAULT 1,
@@ -7693,6 +7694,97 @@ Ressources :
         print(
             f"[MySifa] migration mp_adhesif_kg : {_adh_converties} adhesif(s) converti(s) "
             f"en kg, {_adh_bloquees} en attente de conditionnement."
+        )
+
+    # v217 -- Impression : variante de template (full / compact).
+    #
+    # Contexte du bug corrige : le bouton « Reimprimer etiquettes » envoyait
+    # `variante='compact'` a POST /api/print/label, et le serveur court-circuitait
+    # la base pour utiliser un ZPL fige dans print_render.py. Resultat : les
+    # templates edites dans Parametres > Imprimantes n'avaient AUCUN effet sur
+    # ce chemin. On rend la variante persistante pour que chaque bouton resolve
+    # son gabarit en base.
+    #
+    # Ordre des operations (important) : colonne -> backfill -> dedoublonnage
+    # -> seed du gabarit compact -> index unique. Poser l'index avant le
+    # dedoublonnage echouerait sur toute base ayant deja des doublons.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=217 LIMIT 1").fetchone():
+        _tpl_cols = {r["name"] for r in conn.execute("PRAGMA table_info(imprimante_templates)").fetchall()}
+        if "variante" not in _tpl_cols:
+            conn.execute(
+                "ALTER TABLE imprimante_templates ADD COLUMN variante TEXT NOT NULL DEFAULT 'full'"
+            )
+        # Backfill defensif : une colonne ajoutee par une autre branche pourrait
+        # etre nullable ou vide.
+        conn.execute(
+            "UPDATE imprimante_templates SET variante='full' "
+            "WHERE variante IS NULL OR TRIM(variante)=''"
+        )
+
+        # Dedoublonnage : la table n'a jamais eu de contrainte d'unicite et la
+        # resolution faisait `LIMIT 1` sans ORDER BY -- le gagnant etait donc
+        # arbitraire. On garde le plus recemment modifie et on desactive les
+        # autres (jamais de suppression : l'admin peut vouloir les recuperer).
+        _dups = conn.execute(
+            """SELECT imprimante_id, usage_key, variante
+                 FROM imprimante_templates
+                WHERE actif=1
+                GROUP BY imprimante_id, usage_key, variante
+               HAVING COUNT(*) > 1"""
+        ).fetchall()
+        _desactives = 0
+        for _d in _dups:
+            _keep = conn.execute(
+                """SELECT id FROM imprimante_templates
+                    WHERE imprimante_id=? AND usage_key=? AND variante=? AND actif=1
+                    ORDER BY updated_at DESC, id DESC LIMIT 1""",
+                (_d["imprimante_id"], _d["usage_key"], _d["variante"]),
+            ).fetchone()
+            _cur = conn.execute(
+                """UPDATE imprimante_templates SET actif=0
+                    WHERE imprimante_id=? AND usage_key=? AND variante=? AND actif=1 AND id<>?""",
+                (_d["imprimante_id"], _d["usage_key"], _d["variante"], _keep["id"]),
+            )
+            _desactives += _cur.rowcount
+
+        # Seed du gabarit `compact` pour les imprimantes ZPL existantes. Sans lui,
+        # la reimpression tomberait en 409 des le deploiement, puisque le
+        # court-circuit hardcode qui la servait jusqu'ici vient d'etre supprime.
+        from app.services.print_render import default_templates_seed as _seed
+
+        _tpl_now = datetime.now().isoformat()
+        _seedes = 0
+        for _imp in conn.execute(
+            "SELECT id FROM imprimantes WHERE langage='zpl'"
+        ).fetchall():
+            for _tpl in _seed():
+                _exists = conn.execute(
+                    """SELECT 1 FROM imprimante_templates
+                        WHERE imprimante_id=? AND usage_key=? AND variante=? AND actif=1 LIMIT 1""",
+                    (_imp["id"], _tpl["usage_key"], _tpl["variante"]),
+                ).fetchone()
+                if _exists:
+                    continue
+                conn.execute(
+                    "INSERT INTO imprimante_templates "
+                    "(imprimante_id,usage_key,variante,nom,contenu,actif,updated_at,updated_by) "
+                    "VALUES (?,?,?,?,?,1,?,?)",
+                    (_imp["id"], _tpl["usage_key"], _tpl["variante"], _tpl["nom"],
+                     _tpl["contenu"], _tpl_now, "Migration"),
+                )
+                _seedes += 1
+
+        # Index unique PARTIEL : ne contraint que les templates actifs, donc
+        # l'historique desactive ci-dessus reste en base sans bloquer la pose.
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_impr_tpl_unique_actif "
+            "ON imprimante_templates(imprimante_id, usage_key, variante) WHERE actif=1"
+        )
+        conn.commit()
+        _record_schema_migration(conn, 217, "imprimante_templates_variante")
+        print(
+            f"[MySifa] migration imprimante_templates_variante : {_seedes} template(s) "
+            f"seede(s), {_desactives} doublon(s) desactive(s)."
         )
 
     # ── AO conditionnement (condi) + marge — schéma garde-fou sur COLONNE ────
