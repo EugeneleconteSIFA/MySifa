@@ -363,7 +363,7 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-event[data-draggable="1"]:active{cursor:grabbing}
 .cal-event.is-past{cursor:not-allowed}
 /* v2.5.26 : pictogramme triangle warning -- plus visible qu'un badge cercle */
-.cal-event .cal-event-noop{position:absolute;top:4px;right:4px;width:22px;height:22px;background:#fff;color:var(--warn,#f59e0b);border-radius:4px;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.4);cursor:help;z-index:6;padding:2px;transition:transform .15s,filter .15s;animation:calNoopPulse 2s ease-in-out infinite}
+.cal-event .cal-event-noop{position:absolute;top:4px;left:4px;width:22px;height:22px;background:#fff;color:var(--warn,#f59e0b);border-radius:4px;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.4);cursor:help;z-index:6;padding:2px;transition:transform .15s,filter .15s;animation:calNoopPulse 2s ease-in-out infinite}  /* v2.5.27 : coin gauche pour eviter collision avec badge template */
 .cal-event .cal-event-noop svg{width:100%;height:100%;stroke-width:2.4;fill:none;stroke:var(--warn,#f59e0b)}
 .cal-event .cal-event-noop:hover{transform:scale(1.15);filter:brightness(1.05);animation:none}
 @keyframes calNoopPulse{0%,100%{box-shadow:0 2px 6px rgba(0,0,0,.4),0 0 0 0 rgba(245,158,11,.6)}50%{box-shadow:0 2px 6px rgba(0,0,0,.4),0 0 0 6px rgba(245,158,11,0)}}
@@ -3809,7 +3809,21 @@ function _makeClusterBlock(cluster){
   const height = Math.max(28, ((endMin - startMin) / 60) * CAL_HOUR_PX - 2);
   const div = document.createElement('div');
   const single = (cluster.items.length === 1);
-  div.className = 'cal-event' + (single ? '' : ' cal-event-merged') + (ev.template_id ? ' is-from-template' : '');
+  // v2.5.27 : hoiste ev pour l'usage ci-dessous (corrige aussi le bug pre-existant qui accede a ev.template_id).
+  const _ev0 = single ? cluster.items[0] : null;
+  div.className = 'cal-event' + (single ? '' : ' cal-event-merged') + (_ev0 && _ev0.template_id ? ' is-from-template' : '');
+  // v2.5.27 : badge noop aussi cote cluster single (defensif, sur les fallbacks eventuels)
+  if(single && _ev0 && MAINT_ROLE === 'admin' && !(_ev0.operators && _ev0.operators.length)){
+    const noop = document.createElement('div');
+    noop.className = 'cal-event-noop';
+    noop.innerHTML = '<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+    noop.title = 'Aucun op\u00e9rateur assign\u00e9 \u2014 cliquer pour \u00e9diter';
+    noop.addEventListener('click', function(e){
+      e.stopPropagation();
+      try{ editCase(_ev0.id); }catch(_){ openPlanningDetailsModal([_ev0]); }
+    });
+    div.appendChild(noop);
+  }
   div.style.top = top + 'px';
   div.style.height = height + 'px';
   if(single && cluster.items[0].opNiveau){
