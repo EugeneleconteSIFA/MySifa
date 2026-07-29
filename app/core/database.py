@@ -7946,6 +7946,13 @@ Ressources :
     _mt_cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_templates)").fetchall()}
     if "default_operators_csv" not in _mt_cols:
         conn.execute("ALTER TABLE maintenance_templates ADD COLUMN default_operators_csv TEXT")
+    # v2.5.29 : tombstone maintenance_events.deleted_at -- soft delete pour les creneaux
+    # recurrents (empeche la re-generation par _ensure_recurring_events_generated, tout
+    # en preservant les modifs manuelles pour un restore fidele).
+    _me_cols2 = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_events)").fetchall()}
+    if "deleted_at" not in _me_cols2:
+        conn.execute("ALTER TABLE maintenance_events ADD COLUMN deleted_at TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_maint_events_deleted_at ON maintenance_events(deleted_at)")
     conn.commit()
 
 
