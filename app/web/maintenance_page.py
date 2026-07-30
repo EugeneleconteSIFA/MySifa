@@ -1813,6 +1813,15 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             <p class="sub" style="margin-top:-4px;margin-bottom:14px;font-size:13px;color:var(--muted)">Modèles de créneau réutilisables. Active la récurrence pour que les occurrences futures se génèrent automatiquement dans le calendrier (3 mois glissants).</p>
             <div id="tmpl-manage-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
           </div>
+          <!-- v2.5.29 : Panel Créneaux supprimés (tombstones restorables) -->
+          <div class="tmpl-manage-panel" style="margin-top:24px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px" id="plan-deleted-panel">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+              <h2 style="margin:0;font-size:15px;font-weight:700;color:var(--text)">Créneaux supprimés</h2>
+              <span id="plan-deleted-count" style="font-size:12px;color:var(--muted);font-weight:600"></span>
+            </div>
+            <p class="sub" style="margin-top:-4px;margin-bottom:14px;font-size:13px;color:var(--muted)">Occurrences récurrentes que tu as supprimées. Restaurables individuellement sans affecter les autres créneaux générés.</p>
+            <div id="plan-deleted-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+          </div>
           <!-- v2.5.6 : Historique des creneaux avec scrollbar (aligne sur .ops-table-wrap). -->
           <div style="margin-top:24px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
             <h2 style="margin:0 0 4px;font-size:15px;font-weight:700;color:var(--text)">Historique des créneaux</h2>
@@ -4115,6 +4124,8 @@ async function _doDeletePlanningEvent(ev, token){
   await refreshPlanning();
   closePlanningDetailsModal();
   renderCal();
+  // v2.5.29 : refresh du panel Créneaux supprimés pour montrer le tombstone.
+  if(typeof loadDeletedEvents === 'function') loadDeletedEvents();
   showToast('Créneau supprimé.', 'info');
 }
 
@@ -11941,6 +11952,86 @@ async function loadTemplates(force){
 // v2.4.31 : appelle renderTemplateManagePanel si dispo (safe si div absent).
 function _maybeRenderTmplPanel(){
   try{ if(typeof renderTemplateManagePanel === 'function') renderTemplateManagePanel(); }catch(e){}
+  // v2.5.29 : rafraichit aussi le panel des creneaux supprimes.
+  try{ if(typeof loadDeletedEvents === 'function') loadDeletedEvents(); }catch(_){}
+}
+
+// v2.5.29 : etat + loader + rendu du panel Creneaux supprimes.
+const DELETED_STATE = { list: null };
+
+async function loadDeletedEvents(){
+  if(MAINT_ROLE !== 'admin'){ return; }
+  try{
+    const r = await fetch('/api/maintenance/events/deleted?_=' + Date.now(),
+                          { credentials:'include', cache: 'no-store' });
+    if(!r.ok){ DELETED_STATE.list = []; renderDeletedEventsPanel(); return; }
+    const d = await r.json();
+    DELETED_STATE.list = d.events || [];
+  }catch(_){
+    DELETED_STATE.list = [];
+  }
+  renderDeletedEventsPanel();
+}
+
+function renderDeletedEventsPanel(){
+  const box = document.getElementById('plan-deleted-list');
+  const cnt = document.getElementById('plan-deleted-count');
+  if(!box) return;
+  const items = DELETED_STATE.list || [];
+  if(cnt) cnt.textContent = items.length ? (items.length + ' cr\u00e9neau' + (items.length > 1 ? 'x supprim\u00e9s' : ' supprim\u00e9')) : '';
+  if(!items.length){
+    box.innerHTML = '<p style="color:var(--muted);font-size:13px;font-style:italic">Aucun cr\u00e9neau supprim\u00e9.</p>';
+    return;
+  }
+  // Groupe par template (nom si dispo, sinon 'Sans mod\u00e8le')
+  const groups = new Map();
+  for(const ev of items){
+    let tmplName = 'Sans mod\u00e8le';
+    if(ev.template_id && typeof TEMPLATES_STATE !== 'undefined' && TEMPLATES_STATE){
+      const t = (TEMPLATES_STATE.list || []).find(x => x.id === ev.template_id);
+      if(t && t.name) tmplName = t.name;
+      else tmplName = 'Mod\u00e8le #' + ev.template_id;
+    }
+    if(!groups.has(tmplName)) groups.set(tmplName, []);
+    groups.get(tmplName).push(ev);
+  }
+  const html = [];
+  for(const [tmplName, evs] of groups){
+    html.push('<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">' + escHtml(tmplName) + '</div>');
+    for(const ev of evs){
+      const dateFR = _fmtIsoDateFr(ev.date_prevue) || ev.date_prevue;
+      const timeRange = (ev.heure_debut || '') + ' \u2013 ' + (ev.heure_fin || '');
+      const machine = ev.machine || '\u2014';
+      const ops = (ev.operators || []).map(o => o.nom).join(', ') || '<i>aucun op\u00e9rateur</i>';
+      const deletedAt = ev.deleted_at ? (' \u00b7 supprim\u00e9 le ' + escHtml(_fmtIsoDateFr(String(ev.deleted_at).slice(0,10)) || ev.deleted_at.slice(0,10))) : '';
+      html.push('<div style="display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);margin-bottom:6px">' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-size:14px;font-weight:700;color:var(--text)">' + escHtml(dateFR) + ' \u00b7 ' + escHtml(timeRange) + '</div>' +
+          '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + escHtml(machine) + ' \u00b7 ' + ops + deletedAt + '</div>' +
+        '</div>' +
+        '<button type="button" class="btn" style="background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer" onclick="restoreEvent(' + ev.id + ')">Restaurer</button>' +
+      '</div>');
+    }
+    html.push('</div>');
+  }
+  box.innerHTML = html.join('');
+}
+
+async function restoreEvent(eventId){
+  try{
+    const r = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/restore',
+                          { method: 'POST', credentials: 'include' });
+    if(!r.ok){
+      const err = await r.json().catch(()=>({}));
+      throw new Error(err.detail || 'Restauration refus\u00e9e');
+    }
+    if(typeof showToast === 'function') showToast('Cr\u00e9neau restaur\u00e9.', 'info');
+    await loadDeletedEvents();
+    if(typeof refreshPlanning === 'function') await refreshPlanning();
+    if(typeof renderCal === 'function') renderCal();
+  }catch(e){
+    if(typeof showToast === 'function') showToast('Erreur : ' + e.message, 'danger');
+  }
 }
 
 function refreshCaseTemplatePicker(selectedId){
