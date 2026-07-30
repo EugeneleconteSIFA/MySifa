@@ -3681,7 +3681,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
         rows = conn.execute(
             f"""
             SELECT mp.id, mp.categorie, mp.reference, mp.designation,
-                   mp.abbreviation,
+                   mp.sous_categorie, mp.sous_categorie_en, mp.abbreviation,
                    mp.seuil_alerte, mp.actif, mp.palettes_par_pile, mp.couleur,
                    mp.metres_lineaires_par_bobine, mp.prix_eur_m2,
                    COALESCE(mp.prix_par_laize, 0) AS prix_par_laize,
@@ -3824,6 +3824,14 @@ async def create_matiere_premiere(request: Request):
     # designation. Cf. _with_abbrev dans app/routers/ao.py.
     abbreviation = (body.get("abbreviation") or "").strip() or None
 
+    # Sous-categorie thematique : niveau de regroupement entre categorie et
+    # reference (« Vellum », « Removable »), source normale du libelle matiere
+    # dans les references produit MyAO. Distincte de sous_section, qui pilote la
+    # navigation MyStock. Disponible sur toutes les categories.
+    sous_categorie = (body.get("sous_categorie") or "").strip() or None
+    # Libelle anglais : c'est lui qui part dans la reference produit fournisseur.
+    sous_categorie_en = (body.get("sous_categorie_en") or "").strip() or None
+
     sous_section = (body.get("sous_section") or "").strip() or None
     if categorie not in _MP_CATEGORIES_WITH_SOUS_SECTION:
         sous_section = None
@@ -3850,12 +3858,14 @@ async def create_matiere_premiere(request: Request):
                 """
                 INSERT INTO matieres_premieres (
                     categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section,
-                    unites_par_palette, cartons_par_palette, kg_par_carton, abbreviation
+                    unites_par_palette, cartons_par_palette, kg_par_carton, abbreviation,
+                    sous_categorie, sous_categorie_en
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section,
-                 unites_par_palette, cartons_par_palette, kg_par_carton, abbreviation),
+                 unites_par_palette, cartons_par_palette, kg_par_carton, abbreviation,
+                 sous_categorie, sous_categorie_en),
             )
             matiere_id = cur.lastrowid
             conn.execute(
@@ -3903,6 +3913,14 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
     if "couleur" in body:
         sets.append("couleur=?")
         params.append((body.get("couleur") or "").strip() or None)
+    if "sous_categorie" in body:
+        # Vidage autorise : sans sous-categorie, la reference produit MyAO
+        # retombe sur l'abreviation deduite de la designation.
+        sets.append("sous_categorie=?")
+        params.append((body.get("sous_categorie") or "").strip() or None)
+    if "sous_categorie_en" in body:
+        sets.append("sous_categorie_en=?")
+        params.append((body.get("sous_categorie_en") or "").strip() or None)
     if "abbreviation" in body:
         # Vidage autorise : une abreviation effacee fait retomber la composition
         # de reference produit sur le glossaire de ao_ref_produit.py.

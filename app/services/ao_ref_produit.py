@@ -41,9 +41,23 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # Glossaire d'abréviation (repli quand la colonne abbreviation est vide)
 # ---------------------------------------------------------------------------
+# Le repli ne RÉSUME pas la désignation, il en EXTRAIT la famille de matière.
+# Tout ce qui n'est pas une famille reconnue est jeté : grammage, épaisseur, code
+# fournisseur, nom commercial entre parenthèses, qualificatif commercial
+# (« fort », « spécial »). Une référence produit sert à identifier un produit
+# chez un fournisseur, pas à recopier la fiche matière.
+#
+# Historique : la première version conservait les mots inconnus « pour ne rien
+# perdre ». Résultat réel en production :
+#   « 104 x 102 mm 62gsm Vellum Remov Fort 1408 (meltavis), 1 Color, M40 mm »
+# là où on attendait :
+#   « 104 x 102 mm Vellum Removable, 1 Color, M40 mm »
+# Le bruit ne venait pas d'un mot mal traduit mais du principe de tout garder.
+#
 # Ordre significatif : les expressions les plus longues d'abord, pour que
 # « top coated » soit consommé avant « coated ». Clés normalisées (minuscules,
-# sans accents).
+# sans accents). Valeurs en mots entiers et non tronqués : « Removable », pas
+# « Remov » — c'est un fournisseur étranger qui lit.
 
 _GLOSSARY: tuple[tuple[str, str], ...] = (
     # Familles de frontaux
@@ -59,56 +73,72 @@ _GLOSSARY: tuple[tuple[str, str], ...] = (
     ("sans silicone", "Linerless"),
     ("couche", "Coated"),
     ("velin", "Vellum"),
+    ("vellum", "Vellum"),
     ("polypropylene", "PP"),
     ("polyethylene", "PE"),
     ("polyester", "PET"),
+    # Sigles déjà en forme courte dans la désignation. Le contrôle de frontière
+    # sur caractère alphanumérique évite les faux positifs : « permanent » ne
+    # matche pas « pe », « pet » n'est pas coupé en « pe ».
+    ("bopp", "BOPP"),
+    ("pvc", "PVC"),
+    ("pet", "PET"),
+    ("pp", "PP"),
+    ("pe", "PE"),
     ("papier", "Paper"),
     ("carton", "Board"),
     ("glassine", "Glassine"),
-    # Familles d'adhésifs
-    ("repositionnable", "Remov"),
-    ("enlevable", "Remov"),
-    ("amovible", "Remov"),
-    ("permanent", "Perm"),
-    ("renforce", "Reinf"),
-    ("acrylique", "Acrylic"),
-    ("hot melt", "HM"),
-    ("hotmelt", "HM"),
-    ("caoutchouc", "Rubber"),
-    ("dispersion", "Disp"),
-    # Qualificatifs
+    # Familles d'adhésifs — le type d'adhésion, pas sa chimie ni sa force
+    ("ultra removable", "Ultra Removable"),
+    ("ultra enlevable", "Ultra Removable"),
+    ("repositionnable", "Removable"),
+    ("enlevable", "Removable"),
+    ("amovible", "Removable"),
+    ("removable", "Removable"),
+    ("permanent", "Permanent"),
+    # Spécifications fonctionnelles : elles changent le produit, on les garde
     ("congelation", "Deep-Freeze"),
     ("surgele", "Deep-Freeze"),
     ("alimentaire", "Food"),
     ("securite", "Security"),
     ("pneumatique", "Tyre"),
-    ("transparent", "Clear"),
-    ("brillant", "Gloss"),
-    ("argente", "Silver"),
-    ("argent", "Silver"),
-    ("dore", "Gold"),
-    ("blanc", "White"),
-    ("noir", "Black"),
-    ("jaune", "Yellow"),
-    ("rouge", "Red"),
-    ("bleu", "Blue"),
-    ("vert", "Green"),
-    ("mat", "Matt"),
-    ("or", "Gold"),
 )
 
-# Sigles et codes gardés intacts par la mise en casse.
+# Reconnus mais VOLONTAIREMENT jetés : chimie de l'adhésif, couleur, finition,
+# intensité. Ce sont des précisions de fiche matière, pas d'identification
+# produit — et c'est ce qui alourdissait la référence. Ils figurent ici, et non
+# dans une simple absence du glossaire, pour deux raisons : documenter le choix,
+# et empêcher le repli « premiers mots parlants » de les récupérer.
+_DROPPED: frozenset[str] = frozenset({
+    "acrylique", "hotmelt", "hot melt", "caoutchouc", "dispersion", "renforce",
+    "fort", "forte", "extra", "special", "standard", "classique", "premium",
+    "blanc", "blanche", "noir", "noire", "jaune", "rouge", "bleu", "vert",
+    "argente", "argent", "dore", "or", "transparent", "brillant", "mat", "mate",
+    "adhesif", "adhesive", "support", "frontal", "matiere", "etiquette",
+    "silicone", "siliconne", "face", "dos", "recto", "verso", "qualite",
+})
+
+# Nombre maximum de familles conservées. Trois suffisent à identifier
+# (« Th Top-Coated », « Removable », « Deep-Freeze ») ; au-delà on recopie la
+# fiche matière.
+_MAX_TERMS = 3
+
+# Sigles gardés intacts par la mise en casse.
 _KEEP_AS_IS = {
     "PP", "PE", "PET", "PVC", "HM", "FSC", "PEFC", "BOPP", "TC", "UV",
     "RFID", "EAN", "OTR", "MDO", "PCR",
 }
 
 # Préfixe de code article fournisseur : « 1393299 - papier jet d'encre mat 70g ».
-# Le code n'apporte rien dans une référence produit.
 _CODE_PREFIX_RE = re.compile(r"^\s*[\w./-]*\d{3,}[\w./-]*\s*[-–—]\s*")
 
-# Grammages et épaisseurs : « 80 g », « 80g/m2 », « 23 µm » → conservés compacts.
-_GRAMMAGE_RE = re.compile(r"^(\d+(?:[.,]\d+)?)\s*(g|gsm|g/m2|gr|um|µm|mic)$", re.I)
+# Segments entre parenthèses ou crochets : nom commercial du fabricant
+# (« (meltavis) »), jamais utile dans une référence produit.
+_PARENS_RE = re.compile(r"[(\[{][^)\]}]*[)\]}]")
+
+# Grammages, épaisseurs et codes numériques : « 62gsm », « 23µm », « 1408 ».
+_GRAMMAGE_RE = re.compile(r"^\d+(?:[.,]\d+)?\s*(?:g|gsm|g/m2|gr|um|µm|mic)$", re.I)
+_CODE_TOKEN_RE = re.compile(r"^[\w./-]*\d[\w./-]*$")
 
 
 def _strip_accents(text: str) -> str:
@@ -117,38 +147,54 @@ def _strip_accents(text: str) -> str:
 
 
 def _normalize(text: str) -> str:
-    out = re.sub(r"\s+", " ", _strip_accents(str(text or "")).lower()).strip()
-    # « 80 g » et « 23 µm » sont une seule information : on recolle l'unité au
-    # nombre avant de découper en mots, sinon « g » ressort comme un mot isolé.
+    out = _strip_accents(str(text or "")).lower()
+    out = _PARENS_RE.sub(" ", out)
+    out = re.sub(r"\s+", " ", out).strip()
+    # « 62 gsm » et « 23 µm » sont une seule information : on recolle l'unité au
+    # nombre avant de découper en mots, sinon « gsm » ressort comme un mot isolé.
     return re.sub(r"(\d)\s+(g/m2|gsm|gr|g|µm|um|mic)\b", r"\1\2", out)
 
 
 def _titlecase_token(token: str) -> str:
-    """Met un mot en casse de référence, en préservant sigles et grammages."""
+    """Met un mot en casse de référence, en préservant les sigles."""
     upper = token.upper()
     if upper in _KEEP_AS_IS:
         return upper
-    m = _GRAMMAGE_RE.match(token)
-    if m:
-        unit = m.group(2).lower()
-        unit = "µm" if unit in {"um", "µm", "mic"} else ("g" if unit in {"g", "gr"} else unit)
-        return f"{m.group(1).replace(',', '.')}{unit}"
     if token.isupper() and len(token) <= 4:
         return upper
     return token[:1].upper() + token[1:]
 
 
+def _is_noise(token: str) -> bool:
+    """Un mot qui n'identifie pas la matière : code, grammage, qualificatif."""
+    if len(token) < 3:
+        return True
+    if token in _DROPPED:
+        return True
+    if _GRAMMAGE_RE.match(token) or _CODE_TOKEN_RE.match(token):
+        return True
+    return False
+
+
 def abbreviate_designation(designation: str) -> str:
-    """Réduit une désignation de matière française en forme courte anglaise.
+    """Extrait la famille de matière d'une désignation française, en anglais.
 
-    Repli heuristique, utilisé seulement quand ``abbreviation`` n'est pas saisie.
-    Les mots reconnus sont traduits et raccourcis ; les autres sont conservés,
-    parce qu'une troncature arbitraire produirait une référence illisible.
+    Repli utilisé seulement quand ``matieres_premieres.abbreviation`` est vide.
+    Ne garde que les familles du glossaire ; grammage, code fournisseur, nom
+    commercial et qualificatif sont écartés. Si aucune famille n'est reconnue, on
+    retombe sur les deux premiers mots parlants — mieux qu'un champ vide, et ça
+    signale à l'œil qu'une abréviation reste à saisir.
 
+    >>> abbreviate_designation("62gsm Vellum")
+    'Vellum'
+    >>> abbreviate_designation("Velin adhésif permanent")
+    'Vellum Permanent'
+    >>> abbreviate_designation("Removable fort 1408 (Meltavis)")
+    'Removable'
     >>> abbreviate_designation("Thermique Top Coated 80 g")
-    'Th Top-Coated 80g'
+    'Th Top-Coated'
     >>> abbreviate_designation("Adhésif permanent acrylique")
-    'Perm Acrylic'
+    'Permanent'
     """
     raw = str(designation or "").strip()
     if not raw:
@@ -159,12 +205,13 @@ def abbreviate_designation(designation: str) -> str:
     if not normalized:
         return ""
 
-    pieces: list[str] = []
-    remaining = normalized
-    # On consomme le texte de gauche à droite : à chaque position, la plus longue
-    # entrée du glossaire qui matche gagne. Les fragments non reconnus sont
-    # accumulés puis remis en casse mot par mot.
+    # Consommation de gauche à droite : à chaque position, la plus longue entrée
+    # du glossaire qui matche gagne. Ce qui n'est pas reconnu est mis de côté
+    # comme repli éventuel, jamais concaténé au résultat.
+    familles: list[str] = []
+    restes: list[str] = []
     buffer: list[str] = []
+    remaining = normalized
     while remaining:
         matched = None
         for key, value in _GLOSSARY:
@@ -175,40 +222,63 @@ def abbreviate_designation(designation: str) -> str:
                 break
         if matched:
             if buffer:
-                pieces.extend(_titlecase_token(w) for w in "".join(buffer).split())
+                restes.extend("".join(buffer).split())
                 buffer = []
-            pieces.append(matched[1])
+            familles.append(matched[1])
             remaining = remaining[len(matched[0]):].lstrip()
         else:
             buffer.append(remaining[0])
             remaining = remaining[1:]
     if buffer:
-        pieces.extend(_titlecase_token(w) for w in "".join(buffer).split())
+        restes.extend("".join(buffer).split())
+
+    if familles:
+        out = familles
+    else:
+        # Aucune famille reconnue : les deux premiers mots parlants.
+        out = [_titlecase_token(w) for w in restes if not _is_noise(w)][:2]
+        if not out and restes:
+            # Désignation entièrement composée de codes (« XZ-9000 ») : on garde
+            # le premier terme. Une référence produit sans sa matière serait plus
+            # trompeuse qu'une référence portant un code brut.
+            out = [_titlecase_token(restes[0])]
 
     # Dédoublonne en conservant l'ordre : « adhesif permanent permanent » arrive.
     seen: set[str] = set()
-    out: list[str] = []
-    for p in pieces:
+    deduped: list[str] = []
+    for p in out:
         if not p:
             continue
         key = p.lower()
         if key in seen:
             continue
         seen.add(key)
-        out.append(p)
-    # « Adhésif » / « Adhesive » n'apporte rien : la position dans la référence
-    # dit déjà qu'il s'agit de l'adhésif.
-    out = [p for p in out if p.lower() not in {"adhesif", "adhesive", "support", "frontal"}]
-    return " ".join(out)
+        deduped.append(p)
+    return " ".join(deduped[:_MAX_TERMS])
 
 
 def matiere_abbrev(row: Optional[Dict[str, Any]]) -> str:
-    """Forme courte d'une matière : colonne ``abbreviation``, sinon repli déduit."""
+    """Forme courte d'une matière, par ordre de priorité décroissante.
+
+    1. ``abbreviation`` — exception assumée, saisie pour forcer un libellé sur
+       cette matière précise et rien d'autre.
+    2. ``sous_categorie_en`` — la source normale. La référence produit part chez
+       des fournisseurs étrangers : c'est la version anglaise qui doit y figurer
+       (« Vellum », « Removable »), pas la française.
+    3. ``sous_categorie`` — le libellé français, si l'anglais n'a pas été saisi.
+       Mieux que rien, et visible à l'œil comme une traduction à compléter.
+    4. ``abbreviate_designation()`` — dernier repli, déduit de la désignation.
+       Approximatif par nature ; il ne sert qu'aux matières pas encore classées.
+
+    Ne pas confondre ``sous_categorie`` avec ``sous_section`` : la seconde pilote
+    les pastilles de navigation de MyStock et n'entre pas dans les références.
+    """
     if not row:
         return ""
-    explicit = str(row.get("abbreviation") or "").strip()
-    if explicit:
-        return explicit
+    for champ in ("abbreviation", "sous_categorie_en", "sous_categorie"):
+        valeur = str(row.get(champ) or "").strip()
+        if valeur:
+            return valeur
     return abbreviate_designation(row.get("designation") or row.get("reference") or "")
 
 
