@@ -387,7 +387,7 @@ body.reduce-anim .cal-skel{animation:none}
 .cal-event[data-draggable="1"]{cursor:grab}
 .cal-event[data-draggable="1"]:active{cursor:grabbing}
 .cal-event.is-past{cursor:not-allowed}
-/* v2.5.28 : boutons quick-select operateurs (Tous / Travaillant ce jour) */
+/* v2.5.28 : boutons quick-select operateurs. v2.6.0 : « Travaillant ce jour » retire. */
 .case-op-quick-btn{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .12s,transform .06s;white-space:nowrap}
 .case-op-quick-btn:hover{filter:brightness(1.08)}
 .case-op-quick-btn:active{transform:scale(.97)}
@@ -2632,7 +2632,6 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             <label class="ops-field-label">Opérateurs assignés<span class="req" title="Au moins un opérateur recommandé">*</span></label>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
               <button type="button" class="case-op-quick-btn" onclick="caseAddAllOperators()" title="Sélectionne tous les opérateurs actifs">+ Tous</button>
-              <button type="button" class="case-op-quick-btn" onclick="caseAddOperatorsOnShift()" title="Sélectionne les opérateurs travaillant ce jour selon le planning RH">+ Travaillant ce jour</button>
               <select class="ops-select" id="case-mod-operator-picker" style="width:auto;min-width:200px" onchange="addCaseOperatorFromPicker(this)">
                 <option value="">Ajouter un opérateur…</option>
               </select>
@@ -2768,8 +2767,11 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </div>
           <div class="case-ops-list" id="tmpl-ed-ops-list"></div>
         </div>
-        <!-- v2.5.25 : operateurs par defaut pour la recurrence -->
-        <div class="case-ops-section" style="margin-top:14px">
+        <!-- v2.5.25 : operateurs par defaut pour la recurrence.
+             v2.6.0 : masquee hors recurrence -- la liste n'est consommee que par
+             _generate_events_for_template(), qui ne tourne que si la recurrence
+             est active. Hors recurrence, la demander n'avait aucun effet. -->
+        <div class="case-ops-section" id="tmpl-ed-default-op-section" style="margin-top:14px;display:none">
           <div class="case-ops-head" style="flex-wrap:wrap;gap:8px">
             <label class="ops-field-label">Opérateurs par défaut <span style="font-size:11px;color:var(--muted);font-weight:500;text-transform:none;letter-spacing:normal">— appliqués automatiquement aux créneaux générés par la récurrence</span></label>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -4631,49 +4633,9 @@ function caseAddAllOperators(){
   }
 }
 
-// v2.5.28 : quick-select "Travaillant ce jour" -- croise avec rh_planning_postes.
-async function caseAddOperatorsOnShift(){
-  const dateEl = document.getElementById('case-mod-date');
-  // On lit la date depuis _PENDING_CASE (source de verite) plutot que le texte FR affiche.
-  const iso = _PENDING_CASE && _PENDING_CASE.iso;
-  if(!iso){
-    if(typeof showToast === 'function') showToast('Date du cr\u00e9neau introuvable.', 'danger');
-    return;
-  }
-  try{
-    const r = await fetch('/api/maintenance/operators/on-shift?date=' + encodeURIComponent(iso),
-                          { credentials:'include', cache: 'no-store' });
-    if(!r.ok){
-      if(typeof showToast === 'function') showToast('Erreur : chargement du planning RH.', 'danger');
-      return;
-    }
-    const d = await r.json();
-    const list = d.operators || [];
-    let added = 0;
-    for(const u of list){
-      if(!_CASE_OPERATORS.find(o => o.id === u.id)){
-        _CASE_OPERATORS.push({ id: u.id, nom: u.nom });
-        added++;
-      }
-    }
-    renderCaseOperators();
-    if(typeof showToast === 'function'){
-      const src = d.source || '';
-      const srcHint = (src.indexOf('fallback') === 0)
-        ? ' (planning RH indisponible, tous les op\u00e9rateurs ajout\u00e9s)'
-        : '';
-      if(added){
-        showToast(added + ' op\u00e9rateur' + (added > 1 ? 's ajout\u00e9s' : ' ajout\u00e9') + srcHint + '.', 'info');
-      } else if(list.length){
-        showToast('Tous les op\u00e9rateurs travaillant \u00e9taient d\u00e9j\u00e0 s\u00e9lectionn\u00e9s.', 'info');
-      } else {
-        showToast('Aucun op\u00e9rateur travaillant identifi\u00e9 ce jour.', 'info');
-      }
-    }
-  }catch(e){
-    if(typeof showToast === 'function') showToast('Erreur r\u00e9seau.', 'danger');
-  }
-}
+// v2.6.0 : caseAddOperatorsOnShift() retiree avec son bouton « + Travaillant ce
+// jour ». L'endpoint GET /api/maintenance/operators/on-shift est conserve tel
+// quel : il est isole et resservira si le croise avec le planning RH revient.
 
 // v2.5.28 : quick-select "Tous" pour la modale template editor (operateurs par defaut).
 function tmplAddAllDefaultOps(){
@@ -12514,8 +12476,17 @@ async function _doDeleteTemplate(templateId, btn){
 
 function onTmplRecurToggle(el){
   const wrap = document.getElementById('tmpl-ed-recur-fields');
-  if(!wrap) return;
-  wrap.classList.toggle('open', !!el.checked);
+  if(wrap) wrap.classList.toggle('open', !!el.checked);
+  _syncTmplDefaultOpsVisibility(!!el.checked);
+}
+
+// v2.6.0 : la section « Operateurs par defaut » suit l'interrupteur de
+// recurrence. On masque seulement l'affichage : _TMPL_DEFAULT_OPS et la valeur
+// en base sont conservees, donc rallumer la recurrence retrouve la liste
+// telle quelle sans ressaisie.
+function _syncTmplDefaultOpsVisibility(active){
+  const sec = document.getElementById('tmpl-ed-default-op-section');
+  if(sec) sec.style.display = active ? '' : 'none';
 }
 
 function onTmplRecurTypeChange(){
@@ -12530,6 +12501,8 @@ function _setRecurInForm(t){
   if(cb) cb.checked = !!t.recurrence_active;
   const wrap = document.getElementById('tmpl-ed-recur-fields');
   if(wrap) wrap.classList.toggle('open', !!t.recurrence_active);
+  // v2.6.0 : idem a l'ouverture du modal (creation ou edition).
+  _syncTmplDefaultOpsVisibility(!!t.recurrence_active);
   const typeEl = document.getElementById('tmpl-ed-recur-type');
   if(typeEl) typeEl.value = t.recurrence_type || 'weekly';
   const dowEl = document.getElementById('tmpl-ed-recur-dow');
