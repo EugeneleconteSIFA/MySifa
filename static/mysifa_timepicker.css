@@ -1,0 +1,120 @@
+/* ============================================================
+   MySifa — Time picker partagé  (v1.0)
+   ------------------------------------------------------------
+   Remplace <input type="time"> natif, qui affiche « 08:00 AM »
+   avec un spinner illisible et dépend de la locale du navigateur.
+   Ici : 24 h strict, mono tabulaire, popover 2 colonnes
+   (heures / minutes) + raccourcis, saisie clavier libre.
+
+   Utilisation : inclure ce CSS + mysifa_timepicker.js, les
+   <input type="time"> de la page sont enrichis automatiquement.
+   La valeur reste une chaîne « HH:MM » — el.value continue de
+   fonctionner comme avant côté code appelant.
+   ============================================================ */
+
+/* ── Champ ──────────────────────────────────────────────── */
+.mys-tp{position:relative;display:flex;align-items:stretch;width:100%;min-width:0}
+.mys-tp .mys-tp-input{
+  flex:1;min-width:0;width:100%;
+  padding-right:34px;                       /* place pour l'icône horloge */
+  font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:.6px;
+  cursor:pointer;
+}
+.mys-tp .mys-tp-input::placeholder{letter-spacing:.6px;color:var(--muted);opacity:.7}
+.mys-tp-ico{
+  position:absolute;right:10px;top:50%;transform:translateY(-50%);
+  display:inline-flex;align-items:center;justify-content:center;
+  width:16px;height:16px;color:var(--muted);pointer-events:none;
+  transition:color .12s;
+}
+.mys-tp-ico svg{width:16px;height:16px;display:block}
+.mys-tp.is-open .mys-tp-ico,
+.mys-tp .mys-tp-input:focus ~ .mys-tp-ico{color:var(--accent)}
+.mys-tp .mys-tp-input.mys-tp-invalid{border-color:var(--danger)}
+
+/* ── Popover ────────────────────────────────────────────── */
+/* position:fixed + insertion dans <body> : indispensable pour ne pas
+   être rogné par l'overflow des .modal-body scrollables. */
+.mys-tp-pop{
+  position:fixed;z-index:20050;
+  width:246px;padding:10px;
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:12px;
+  box-shadow:0 14px 38px rgba(0,0,0,.34);
+  font-family:'Segoe UI',system-ui,sans-serif;
+  opacity:0;transform:translateY(-4px);
+  transition:opacity .13s ease,transform .13s ease;
+}
+.mys-tp-pop.open{opacity:1;transform:translateY(0)}
+body.light .mys-tp-pop{box-shadow:0 14px 38px rgba(15,23,42,.16)}
+
+/* Raccourcis */
+.mys-tp-presets{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px}
+.mys-tp-preset{
+  flex:1 1 auto;min-width:52px;
+  padding:6px 4px;border-radius:7px;
+  border:1px solid var(--border);background:var(--bg);color:var(--text2);
+  font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;
+  font-variant-numeric:tabular-nums;font-size:12px;font-weight:700;
+  cursor:pointer;transition:all .12s;
+}
+.mys-tp-preset:hover{border-color:var(--accent);color:var(--accent)}
+.mys-tp-preset.is-cur{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+
+/* Colonnes */
+.mys-tp-cols{display:flex;gap:8px}
+.mys-tp-col{flex:1;min-width:0;display:flex;flex-direction:column}
+.mys-tp-col-hd{
+  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--muted);padding:0 0 5px 2px;
+}
+.mys-tp-scroll{
+  max-height:172px;overflow-y:auto;overflow-x:hidden;
+  border:1px solid var(--border);border-radius:8px;background:var(--bg);
+  padding:4px;
+  scrollbar-width:thin;scrollbar-color:var(--border) transparent;
+  overscroll-behavior:contain;
+}
+.mys-tp-scroll::-webkit-scrollbar{width:7px}
+.mys-tp-scroll::-webkit-scrollbar-track{background:transparent}
+.mys-tp-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+.mys-tp-scroll::-webkit-scrollbar-thumb:hover{background:var(--accent)}
+.mys-tp-cell{
+  display:block;width:100%;
+  padding:6px 8px;margin:0 0 2px;
+  border:1px solid transparent;border-radius:6px;
+  background:transparent;color:var(--text2);
+  font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;
+  font-variant-numeric:tabular-nums;font-size:13px;font-weight:600;
+  text-align:center;cursor:pointer;transition:background .1s,color .1s;
+}
+.mys-tp-cell:hover{background:var(--accent-bg);color:var(--accent)}
+.mys-tp-cell.is-sel{background:var(--accent);color:var(--bg);font-weight:800;border-color:var(--accent)}
+.mys-tp-cell:focus-visible{outline:none;border-color:var(--accent)}
+
+/* Pied */
+.mys-tp-foot{display:flex;align-items:center;gap:6px;margin-top:9px}
+.mys-tp-preview{
+  flex:1;min-width:0;
+  font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;
+  font-variant-numeric:tabular-nums;
+  font-size:15px;font-weight:800;color:var(--text);letter-spacing:.5px;
+}
+.mys-tp-act{
+  padding:6px 12px;border-radius:8px;
+  border:1px solid var(--border);background:var(--bg);color:var(--text2);
+  font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;
+  transition:all .12s;
+}
+.mys-tp-act:hover{border-color:var(--accent);color:var(--accent)}
+.mys-tp-act.primary{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.mys-tp-act.primary:hover{filter:brightness(1.08);color:var(--bg)}
+
+/* Mobile : popover plein largeur ancré bas d'écran */
+@media (max-width:520px){
+  .mys-tp-pop{width:calc(100vw - 24px);max-width:320px}
+  .mys-tp-scroll{max-height:200px}
+}
