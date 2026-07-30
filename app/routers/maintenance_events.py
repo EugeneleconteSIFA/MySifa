@@ -1431,14 +1431,22 @@ def _ensure_recurring_events_generated(conn, horizon_days: int = 90,
 
 
 def _resync_future_events_from_template(conn, template_id: int) -> int:
-    """Écrase les ops ET les opérateurs des créneaux futurs (date_prevue >= aujourd'hui)
-    liés au template. Retourne le nombre d'events resynchronisés.
-    Préserve : date, horaires, source. Écrase : liste des ops + opérateurs assignés
-    (v2.5.25 : les opérateurs sont resync aussi, choix produit -- si l'admin modifie
-    les opérateurs par défaut du template, ils s'appliquent à tous les créneaux futurs)."""
+    """Écrase les ops des créneaux futurs (date_prevue >= aujourd'hui) liés au
+    template. Retourne le nombre d'events resynchronisés.
+    Préserve : date, horaires, source. Écrase : liste des ops, et les opérateurs
+    assignés UNIQUEMENT si le template est récurrent.
+
+    v2.5.25 : les opérateurs étaient resync dans tous les cas.
+    v2.6.0 : restreint aux templates récurrents. La liste « opérateurs par
+    défaut » n'est consommée que par _generate_events_for_template(), donc elle
+    n'est proposée dans l'UI que quand la récurrence est active. Sur un template
+    NON récurrent elle est vide par construction : la resync inconditionnelle
+    supprimait donc les opérateurs assignés à la main sur les créneaux futurs,
+    silencieusement, à chaque simple enregistrement du modèle."""
     tmpl = _load_template_full(conn, template_id)
     if not tmpl:
         return 0
+    sync_operators = bool(tmpl.get("recurrence_active"))
     today = datetime.now(_PARIS).strftime("%Y-%m-%d")
     events = conn.execute(
         "SELECT id FROM maintenance_events WHERE template_id = ? AND date_prevue >= ? AND deleted_at IS NULL",
@@ -1456,13 +1464,15 @@ def _resync_future_events_from_template(conn, template_id: int) -> int:
                 (eid, op["code"], op.get("machines_csv"), now),
             )
             _bump_libre_usage(conn, op["code"])
-        # v2.5.25 : ecrase les operateurs assignes par la liste default du template.
-        conn.execute("DELETE FROM maintenance_event_operators WHERE event_id = ?", (eid,))
-        for uid in default_uids:
-            conn.execute(
-                "INSERT OR IGNORE INTO maintenance_event_operators (event_id, operator_id) VALUES (?, ?)",
-                (eid, uid),
-            )
+        # v2.5.25 / v2.6.0 : ecrase les operateurs par la liste default du
+        # template -- uniquement si celui-ci est recurrent (cf. docstring).
+        if sync_operators:
+            conn.execute("DELETE FROM maintenance_event_operators WHERE event_id = ?", (eid,))
+            for uid in default_uids:
+                conn.execute(
+                    "INSERT OR IGNORE INTO maintenance_event_operators (event_id, operator_id) VALUES (?, ?)",
+                    (eid, uid),
+                )
         _recompute_event_machine(conn, eid)
     return len(events)
 
