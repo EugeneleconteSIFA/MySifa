@@ -959,6 +959,10 @@ def pixel_ouverture_email(request: Request, token: str):
             if row is not None:
                 ua = request.headers.get("user-agent")
                 maintenant = ao_ev.now_paris_iso()
+                # `?e=` dit QUEL email a été ouvert (invitation, message,
+                # attribution). Absent ou inconnu : on journalise quand même,
+                # sans préciser — mieux vaut un signal imprécis que perdu.
+                ctx = str(request.query_params.get("e") or "").strip().lower()
                 fiable, motif = ao_ev.classer_ouverture(
                     row["date_envoi"], ua, maintenant
                 )
@@ -972,6 +976,7 @@ def pixel_ouverture_email(request: Request, token: str):
                     fiable=fiable,
                     motif=motif,
                     user_agent=ua,
+                    meta={"email": ctx} if ctx in ao_ev.CONTEXTES else None,
                     dedup_secondes=ao_ev.DEDUP_SECONDES,
                 )
                 conn.commit()

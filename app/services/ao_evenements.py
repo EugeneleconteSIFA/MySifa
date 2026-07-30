@@ -43,6 +43,8 @@ EV_EMAIL_OUVERT = "email_ouvert"
 EV_PORTAIL_OUVERT = "portail_ouvert"
 EV_REPONSE_DEPOSEE = "reponse_deposee"
 EV_MESSAGE_RECU = "message_recu"
+EV_EMAIL_MESSAGE = "email_message"
+EV_EMAIL_ATTRIBUTION = "email_attribution"
 # Réservés au chantier WhatsApp (webhook Meta) — déjà nommés pour que la
 # timeline et les libellés n'aient pas à bouger le jour de la bascule.
 EV_WA_ENVOYE = "wa_envoye"
@@ -57,11 +59,24 @@ LIBELLES = {
     EV_PORTAIL_OUVERT: "Portail consulté",
     EV_REPONSE_DEPOSEE: "Offre déposée",
     EV_MESSAGE_RECU: "Message reçu du fournisseur",
+    EV_EMAIL_MESSAGE: "Message envoyé par email",
+    EV_EMAIL_ATTRIBUTION: "Attribution notifiée par email",
     EV_WA_ENVOYE: "Invitation envoyée par WhatsApp",
     EV_WA_DELIVRE: "WhatsApp remis",
     EV_WA_LU: "WhatsApp lu",
     EV_WA_ECHEC: "Échec d'envoi WhatsApp",
 }
+
+# Trois emails distincts peuvent partir vers un fournisseur, et chacun porte
+# son pixel. Le code de contexte voyage dans l'URL du pixel (?e=…) pour que la
+# timeline sache LEQUEL a été ouvert : « email ouvert » sans préciser lequel ne
+# se lit pas quand une relance suit l'invitation de trois jours.
+CONTEXTES = {
+    "inv": "invitation",
+    "msg": "message",
+    "attr": "attribution",
+}
+
 
 # ─── Fiabilité des ouvertures d'email ─────────────────────────────
 
@@ -170,8 +185,13 @@ def token_pixel(conn, ao_fournisseur_id: int) -> str | None:
         return None
 
 
-def url_pixel(token: str | None) -> str | None:
-    """URL absolue du pixel de suivi, ou None si le suivi est impossible."""
+def url_pixel(token: str | None, contexte: str = "inv") -> str | None:
+    """URL absolue du pixel de suivi, ou None si le suivi est impossible.
+
+    `contexte` (clé de CONTEXTES) part en query string plutôt qu'en second
+    token : les proxys d'images transmettent l'URL complète, et cela évite une
+    table de tokens par envoi pour un besoin qui tient en trois valeurs.
+    """
     if not token:
         return None
     try:
@@ -182,7 +202,8 @@ def url_pixel(token: str | None) -> str | None:
         base = ""
     if not base:
         return None
-    return f"{base}/portail/ao/px/{token}.gif"
+    ctx = contexte if contexte in CONTEXTES else "inv"
+    return f"{base}/portail/ao/px/{token}.gif?e={ctx}"
 
 
 def log_evenement(
@@ -331,12 +352,17 @@ def timeline(conn, ao_fournisseur_id: int, limite: int = 200) -> list[dict]:
                 meta = json.loads(r["meta"])
             except Exception:
                 meta = None
+        libelle = LIBELLES.get(str(r["type_evenement"]), str(r["type_evenement"]))
+        if str(r["type_evenement"]) == EV_EMAIL_OUVERT and isinstance(meta, dict):
+            ctx = CONTEXTES.get(str(meta.get("email") or ""))
+            if ctx:
+                libelle = f"{libelle} ({ctx})"
         out.append(
             {
                 "id": int(r["id"]),
                 "canal": r["canal"],
                 "type": r["type_evenement"],
-                "libelle": LIBELLES.get(str(r["type_evenement"]), str(r["type_evenement"])),
+                "libelle": libelle,
                 "date": r["date"],
                 "fiable": int(r["fiable"] or 0) == 1,
                 "motif": r["motif"],
