@@ -7802,14 +7802,143 @@ Ressources :
     #   l'unité de vente vit désormais dans la fiche produit — conservé sans risque).
     # marge : 2e multiplicateur commercial par réponse (prix de vente =
     #   prix d'achat conditionné × coef × marge, cf. app/services/ao_pricing.py).
+    # produit_id : rattachement RÉEL de la ligne au produit du catalogue. Avant
+    #   cette colonne, le lien se faisait par comparaison de la chaîne
+    #   ao_lignes.ref_produit avec ao_produits.ref. Conséquence : renommer un
+    #   produit (ou le supprimer, ou dupliquer un AO dont la ref a bougé depuis)
+    #   orphelinait silencieusement toutes les lignes — plus de client, plus
+    #   d'étiq./bobine, et l'auto-attach des PJ sautait le produit sans erreur.
+    #   ref_produit est conservé comme libellé d'affichage et comme repli pour
+    #   les lignes qu'on n'a pas pu rattacher.
     _ao_lignes_cols = {r["name"] for r in conn.execute("PRAGMA table_info(ao_lignes)").fetchall()}
     if "condi_unite" not in _ao_lignes_cols:
         conn.execute("ALTER TABLE ao_lignes ADD COLUMN condi_unite TEXT")
     if "condi_qte" not in _ao_lignes_cols:
         conn.execute("ALTER TABLE ao_lignes ADD COLUMN condi_qte REAL")
+    if "produit_id" not in _ao_lignes_cols:
+        conn.execute("ALTER TABLE ao_lignes ADD COLUMN produit_id INTEGER")
+        # Backfill en Python, et non en SQL : LOWER() et COLLATE NOCASE de SQLite
+        # ne replient que l'ASCII. « COUCHÉ » ne s'y compare pas à « couché », et
+        # les références produit d'ici sont pleines d'accents — un backfill SQL
+        # laissait orphelines précisément les lignes qu'on veut rattraper.
+        # str.casefold() replie tout l'Unicode.
+        def _k(value: object) -> str:
+            return str(value or "").strip().casefold()
+
+        _par_ref: dict[str, int] = {}
+        for _p in conn.execute("SELECT id, ref FROM ao_produits ORDER BY id").fetchall():
+            _key = _k(_p["ref"])
+            if _key:
+                _par_ref.setdefault(_key, int(_p["id"]))
+
+        _rattachees = 0
+        _orphelines = 0
+        for _ln in conn.execute(
+            "SELECT id, ref_produit FROM ao_lignes WHERE produit_id IS NULL"
+        ).fetchall():
+            _key = _k(_ln["ref_produit"])
+            if not _key:
+                continue
+            _pid = _par_ref.get(_key)
+            if _pid is None:
+                _orphelines += 1
+                continue
+            conn.execute(
+                "UPDATE ao_lignes SET produit_id=? WHERE id=?", (_pid, int(_ln["id"]))
+            )
+            _rattachees += 1
+        print(
+            "[MySifa] migration ao_lignes.produit_id : "
+            f"{_rattachees} ligne(s) rattachee(s), "
+            f"{_orphelines} sans produit correspondant."
+        )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ao_lignes_produit ON ao_lignes(produit_id)"
+    )
+
+    # Unicité de la ref produit : jusqu'ici garantie uniquement en Python
+    # (_produit_ref_taken), donc contournable par import ou accès direct — et un
+    # doublon de ref rend le rattachement par texte non déterministe.
+    # L'index porte sur TRIM(ref) COLLATE NOCASE, comme idx_fiches_ref : il attrape
+    # les doublons ASCII. Les variantes accentuées (« Couché » / « couché ») lui
+    # échappent — c'est _produit_ref_taken, côté Python, qui les refuse.
+    # Index créé seulement si les données le permettent, pour ne jamais bloquer un boot.
+    _refs_vues: dict[str, int] = {}
+    _dup_refs = 0
+    for _p in conn.execute("SELECT ref FROM ao_produits").fetchall():
+        _key = str(_p["ref"] or "").strip().casefold()
+        if not _key:
+            continue
+        _refs_vues[_key] = _refs_vues.get(_key, 0) + 1
+        if _refs_vues[_key] == 2:
+            _dup_refs += 1
+    if _dup_refs:
+        print(
+            f"[MySifa] ao_produits : {_dup_refs} reference(s) en doublon, "
+            "index unique non cree. Dedoublonner puis redemarrer."
+        )
+    else:
+        try:
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_ao_produits_ref_unique"
+                " ON ao_produits(TRIM(ref) COLLATE NOCASE)"
+            )
+        except sqlite3.IntegrityError:
+            # Doublon ASCII que le comptage casefold ci-dessus n'a pas vu :
+            # on ne bloque pas le demarrage pour un index.
+            print(
+                "[MySifa] ao_produits : index unique sur ref non cree "
+                "(doublon residuel). Dedoublonner puis redemarrer."
+            )
+
+    # titre_manuel : le titre d'un AO est normalement dérivé de ses lignes
+    # (_regen_titre_ao). Ce drapeau marque les titres saisis à la main, que la
+    # régénération doit respecter — sinon un titre voulu était écrasé au premier
+    # ajout ou retrait de ligne, sans que rien ne le signale.
+    _ao_demandes_cols = {r["name"] for r in conn.execute("PRAGMA table_info(ao_demandes)").fetchall()}
+    if "titre_manuel" not in _ao_demandes_cols:
+        conn.execute(
+            "ALTER TABLE ao_demandes ADD COLUMN titre_manuel INTEGER NOT NULL DEFAULT 0"
+        )
+
     _ao_reponses_cols = {r["name"] for r in conn.execute("PRAGMA table_info(ao_reponses)").fetchall()}
     if "marge" not in _ao_reponses_cols:
         conn.execute("ALTER TABLE ao_reponses ADD COLUMN marge REAL NOT NULL DEFAULT 1.0")
+    # serie_id : réponse fournisseur rattachée à une série précise d'une ligne
+    # (NULL = réponse sur la ligne entière). Utilisé par app/routers/ao.py et
+    # ao_portail.py depuis la fonctionnalité « séries », mais jamais créé par
+    # aucune migration : sur une base reconstruite, toute la comparaison partait
+    # en « no such column ».
+    if "serie_id" not in _ao_reponses_cols:
+        conn.execute("ALTER TABLE ao_reponses ADD COLUMN serie_id INTEGER")
+
+    # ao_lignes_series : découpage d'une ligne d'AO en plusieurs séries chiffrées
+    # séparément. Même oubli que serie_id ci-dessus — la table était lue et
+    # écrite par le code sans jamais être créée.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS ao_lignes_series (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            ligne_id   INTEGER NOT NULL REFERENCES ao_lignes(id) ON DELETE CASCADE,
+            position   INTEGER NOT NULL DEFAULT 0,
+            libelle    TEXT    NOT NULL,
+            quantite   REAL    NOT NULL DEFAULT 0,
+            notes      TEXT,
+            created_at TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ao_lignes_series_ligne"
+        " ON ao_lignes_series(ligne_id, position)"
+    )
+
+    # matieres_premieres.abbreviation : forme courte d'une matière, destinée à la
+    # composition automatique des références produit MyAO
+    # (« 105 x 148 mm Th Top-Coated Perm, 1 Color, M40 mm »). Éditable dans
+    # MyStock ; quand elle est vide, app/services/ao_ref_produit.py retombe sur
+    # une abréviation déduite de la désignation.
+    _mp_cols = {r["name"] for r in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
+    if "abbreviation" not in _mp_cols:
+        conn.execute("ALTER TABLE matieres_premieres ADD COLUMN abbreviation TEXT")
 
     # ── Historique des promotions v1 → v2 ───────────────────────────────────
     # Trace réelle de chaque déploiement en production, écrite par
@@ -7946,6 +8075,13 @@ Ressources :
     _mt_cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_templates)").fetchall()}
     if "default_operators_csv" not in _mt_cols:
         conn.execute("ALTER TABLE maintenance_templates ADD COLUMN default_operators_csv TEXT")
+    # v2.5.29 : tombstone maintenance_events.deleted_at -- soft delete pour les creneaux
+    # recurrents (empeche la re-generation par _ensure_recurring_events_generated, tout
+    # en preservant les modifs manuelles pour un restore fidele).
+    _me_cols2 = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_events)").fetchall()}
+    if "deleted_at" not in _me_cols2:
+        conn.execute("ALTER TABLE maintenance_events ADD COLUMN deleted_at TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_maint_events_deleted_at ON maintenance_events(deleted_at)")
     conn.commit()
 
 

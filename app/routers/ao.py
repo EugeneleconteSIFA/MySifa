@@ -13,7 +13,7 @@ import sqlite3
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, File, HTTPException, Query, Request, UploadFile
@@ -43,6 +43,11 @@ from app.services.ao_produit_fiche import (
     parse_fiche,
     produit_row_to_api,
     render_fiche_html,
+)
+from app.services.ao_ref_produit import (
+    build_ref_produit,
+    matiere_abbrev,
+    unique_ref,
 )
 from database import get_db
 
@@ -170,9 +175,17 @@ def list_ao(request: Request, filter: str = ""):
                           FROM ao_lignes l
                           WHERE l.ao_id = d.id
                             AND l.ref_produit IS NOT NULL AND l.ref_produit != '') AS refs_produits,
+                       -- Le client d'un AO se déduit de ses produits. On joint sur
+                       -- produit_id, avec repli sur la référence normalisée pour
+                       -- les lignes que le backfill n'a pas rattachées. L'ancien
+                       -- « p.ref = l.ref_produit » était sensible à la casse et
+                       -- aux espaces : la moindre divergence vidait la colonne.
                        (SELECT GROUP_CONCAT(DISTINCT COALESCE(cg.raison_sociale, lc.nom))
                           FROM ao_lignes l
-                          JOIN ao_produits p ON p.ref = l.ref_produit
+                          JOIN ao_produits p
+                            ON p.id = l.produit_id
+                            OR (l.produit_id IS NULL
+                                AND LOWER(TRIM(p.ref)) = LOWER(TRIM(COALESCE(l.ref_produit,''))))
                           LEFT JOIN clients            cg ON cg.id = p.client_id
                           LEFT JOIN ao_carnet_clients  lc ON lc.id = p.client_id
                           WHERE l.ao_id = d.id) AS clients,
@@ -186,14 +199,20 @@ def list_ao(request: Request, filter: str = ""):
         out: list[dict] = []
         for r in rows:
             d = _row_dict(r)
+            # La référence affichée est celle du produit rattaché quand il existe :
+            # le résumé suit ainsi les renommages, et une ligne sans produit se
+            # repère à son drapeau orphelin.
             lignes = conn.execute(
-                """SELECT ref_produit, quantite FROM ao_lignes
-                   WHERE ao_id=? ORDER BY position, id""",
+                """SELECT l.ref_produit, l.quantite, p.ref AS produit_ref
+                     FROM ao_lignes l
+                     LEFT JOIN ao_produits p ON p.id = l.produit_id
+                    WHERE l.ao_id=? ORDER BY l.position, l.id""",
                 (int(d["id"]),),
             ).fetchall()
             d["lignes_summary"] = [
-                {"ref": (l["ref_produit"] or "").strip() or "—",
-                 "qte": (float(l["quantite"]) if l["quantite"] is not None else None)}
+                {"ref": (l["produit_ref"] or l["ref_produit"] or "").strip() or "—",
+                 "qte": (float(l["quantite"]) if l["quantite"] is not None else None),
+                 "orpheline": not (l["produit_ref"] or "").strip()}
                 for l in lignes
             ]
             out.append(d)
@@ -821,17 +840,28 @@ def _load_matieres_map(conn, ids: set[int] | None = None) -> dict[int, dict]:
     if ids:
         placeholders = ",".join("?" * len(ids))
         rows = conn.execute(
-            f"""SELECT id, categorie, reference, designation, couleur
+            f"""SELECT id, categorie, reference, designation, couleur, abbreviation
                 FROM matieres_premieres WHERE id IN ({placeholders}) AND actif=1""",
             tuple(ids),
         ).fetchall()
     else:
         rows = conn.execute(
-            """SELECT id, categorie, reference, designation, couleur
+            """SELECT id, categorie, reference, designation, couleur, abbreviation
                FROM matieres_premieres WHERE actif=1
                ORDER BY categorie, reference"""
         ).fetchall()
     return {int(r["id"]): _row_dict(r) for r in rows}
+
+
+def _with_abbrev(row: dict) -> dict:
+    """Ajoute ``abbrev`` : la forme courte effective de la matière.
+
+    Le formulaire produit compose la référence côté client ; il consomme cette
+    valeur déjà résolue plutôt que de dupliquer le glossaire d'abréviation en JS.
+    ``abbreviation`` reste exposé tel quel pour l'édition dans MyStock.
+    """
+    row["abbrev"] = matiere_abbrev(row)
+    return row
 
 
 @router.get("/matieres")
@@ -846,7 +876,7 @@ def list_matieres_ao(
             if cat not in _MP_AO_CATEGORIES:
                 raise HTTPException(status_code=400, detail="Catégorie invalide.")
             rows = conn.execute(
-                """SELECT id, categorie, reference, designation, couleur
+                """SELECT id, categorie, reference, designation, couleur, abbreviation
                    FROM matieres_premieres
                    WHERE actif=1 AND categorie=?
                    ORDER BY reference COLLATE NOCASE""",
@@ -854,14 +884,14 @@ def list_matieres_ao(
             ).fetchall()
         else:
             rows = conn.execute(
-                """SELECT id, categorie, reference, designation, couleur
+                """SELECT id, categorie, reference, designation, couleur, abbreviation
                    FROM matieres_premieres
                    WHERE actif=1 AND categorie IN (
                      'frontal','adhesif','glassine','carton','palette','mandrin'
                    )
                    ORDER BY categorie, reference COLLATE NOCASE"""
             ).fetchall()
-    return [_row_dict(r) for r in rows]
+    return [_with_abbrev(_row_dict(r)) for r in rows]
 
 
 def _client_nom(conn, client_id: int | None) -> str | None:
@@ -883,7 +913,38 @@ def _client_nom(conn, client_id: int | None) -> str | None:
     return legacy["nom"] if legacy else None
 
 
+def _ref_key(value: Any) -> str:
+    """Clé de comparaison d'une référence produit : sans espaces de bord, repliée.
+
+    ``str.casefold()`` et non ``LOWER()`` SQL : LOWER() et COLLATE NOCASE de
+    SQLite ne replient que l'ASCII, donc « COUCHÉ » ne s'y compare pas à
+    « couché ». Les références d'ici sont pleines d'accents ; comparer en SQL
+    laissait passer des doublons et ratait des rattachements.
+    """
+    return str(value or "").strip().casefold()
+
+
+def _produit_id_key(produit_id: Any) -> str | None:
+    """Clé canonique d'un produit dans produits_map. None si l'id est inutilisable."""
+    try:
+        return f"#{int(produit_id)}"
+    except (TypeError, ValueError):
+        return None
+
+
 def _produits_by_ref_map(conn) -> dict[str, dict]:
+    """Catalogue produits indexé pour la résolution des lignes d'AO.
+
+    Le dict porte deux familles de clés vers les MÊMES objets produit :
+
+      - ``"#<id>"``      clé canonique, insensible aux renommages de référence ;
+      - ``"<ref>"``      en minuscules et sans espaces de bord — repli historique
+                         pour les lignes dont ``produit_id`` est encore NULL.
+
+    Passer par ``_resolve_produit_for_ligne()`` plutôt que d'indexer à la main :
+    l'ordre de priorité entre les deux familles de clés est ce qui empêche une
+    ligne de s'orpheliner quand la référence du produit change.
+    """
     # On joint d'abord sur la nouvelle table clients (Paramètres > Clients),
     # puis on prend la valeur legacy ao_carnet_clients si la première ligne est NULL.
     rows = conn.execute(
@@ -896,10 +957,31 @@ def _produits_by_ref_map(conn) -> dict[str, dict]:
     out: dict[str, dict] = {}
     for row in rows:
         d = _row_dict(row)
-        ref_key = (d.get("ref") or "").strip().lower()
+        produit = _serialize_produit_row(d, conn)
+        id_key = _produit_id_key(d.get("id"))
+        if id_key:
+            out[id_key] = produit
+        ref_key = _ref_key(d.get("ref"))
         if ref_key and ref_key not in out:
-            out[ref_key] = _serialize_produit_row(d, conn)
+            out[ref_key] = produit
     return out
+
+
+def _resolve_produit_for_ligne(ln: dict, produits_map: dict[str, dict]) -> dict | None:
+    """Produit d'une ligne d'AO : ``produit_id`` d'abord, ``ref_produit`` en repli.
+
+    Le repli par référence couvre deux cas légitimes : les lignes antérieures à
+    la colonne ``produit_id`` que le backfill n'a pas pu rattacher, et les dicts
+    de ligne synthétiques ``{"ref_produit": ...}`` construits par les appels de
+    rattrapage. Il ne doit jamais devenir le chemin principal.
+    """
+    id_key = _produit_id_key(ln.get("produit_id"))
+    if id_key:
+        produit = produits_map.get(id_key)
+        if produit:
+            return produit
+    ref_key = _ref_key(ln.get("ref_produit"))
+    return produits_map.get(ref_key) if ref_key else None
 
 
 def _matiere_ids_from_produits(produits: dict[str, dict]) -> set[int]:
@@ -918,26 +1000,91 @@ def _matiere_ids_from_produits(produits: dict[str, dict]) -> set[int]:
 
 
 def _produit_ref_taken(conn, ref: str, exclude_id: int | None = None) -> bool:
-    ref = (ref or "").strip()
-    if not ref:
+    key = _ref_key(ref)
+    if not key:
         return False
+    # Comparaison en Python sur l'ensemble des références : le catalogue produit
+    # se compte en centaines de lignes, le coût est négligeable devant le risque
+    # de créer deux produits que tout le monde lira comme le même.
+    rows = conn.execute("SELECT id, ref FROM ao_produits").fetchall()
+    for row in rows:
+        if exclude_id is not None and int(row["id"]) == int(exclude_id):
+            continue
+        if _ref_key(row["ref"]) == key:
+            return True
+    return False
+
+
+def _fiche_matieres_map(conn, fiche: dict) -> dict[int, dict]:
+    """Lignes matieres_premieres référencées par la fiche (frontal, adhésif…)."""
+    mat = (fiche or {}).get("matiere") or {}
+    ids: set[int] = set()
+    for key in ("frontal_id", "adhesif_id", "glassine_id"):
+        try:
+            if mat.get(key) not in (None, ""):
+                ids.add(int(mat[key]))
+        except (TypeError, ValueError):
+            pass
+    return _load_matieres_map(conn, ids) if ids else {}
+
+
+def _compose_ref_produit(conn, fiche: dict) -> str:
+    """Référence composée depuis la fiche, avec les abréviations de la base."""
+    return build_ref_produit(fiche, _fiche_matieres_map(conn, fiche))
+
+
+def _existing_refs(conn, exclude_id: int | None = None) -> list[str]:
     if exclude_id is not None:
-        row = conn.execute(
-            "SELECT 1 FROM ao_produits WHERE LOWER(ref)=LOWER(?) AND id<>? LIMIT 1",
-            (ref, exclude_id),
-        ).fetchone()
+        rows = conn.execute(
+            "SELECT ref FROM ao_produits WHERE id<>?", (exclude_id,)
+        ).fetchall()
     else:
-        row = conn.execute(
-            "SELECT 1 FROM ao_produits WHERE LOWER(ref)=LOWER(?) LIMIT 1",
-            (ref,),
-        ).fetchone()
-    return row is not None
+        rows = conn.execute("SELECT ref FROM ao_produits").fetchall()
+    return [str(r["ref"] or "") for r in rows]
+
+
+@router.post("/produits/ref-auto")
+async def compose_ref_produit(request: Request):
+    """Compose la référence produit depuis une fiche, sans rien enregistrer.
+
+    Le formulaire l'appelle pour proposer la référence pendant la saisie. Le
+    calcul vit côté serveur — même code que l'enregistrement — pour que la
+    référence proposée à l'écran soit exactement celle qui sera stockée.
+
+    Body : ``{fiche: {...}, produit_id?: int}``
+    Réponse : ``{ref, ref_unique, disponible}`` — ``ref`` est la composition
+    brute, ``ref_unique`` la même éventuellement suffixée « (2) » si elle est
+    déjà prise par un autre produit.
+    """
+    _require_ao(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    fiche = body.get("fiche")
+    fiche = normalize_fiche(
+        parse_fiche(json.dumps(fiche, ensure_ascii=False))
+        if isinstance(fiche, dict) else default_fiche()
+    )
+    exclude_id = body.get("produit_id")
+    try:
+        exclude_id = int(exclude_id) if exclude_id not in (None, "") else None
+    except (TypeError, ValueError):
+        exclude_id = None
+
+    with get_db() as conn:
+        ref = _compose_ref_produit(conn, fiche)
+        if not ref:
+            return {"ref": "", "ref_unique": "", "disponible": True}
+        return {
+            "ref": ref,
+            "ref_unique": unique_ref(ref, _existing_refs(conn, exclude_id)),
+            "disponible": not _produit_ref_taken(conn, ref, exclude_id=exclude_id),
+        }
 
 
 def _produit_from_body(body: dict, conn) -> tuple[str, str, str, str | None, int | None, str]:
     ref = (body.get("ref") or "").strip()
-    if not ref:
-        raise HTTPException(status_code=400, detail="Référence produit obligatoire.")
     if isinstance(body.get("fiche"), dict):
         fiche = parse_fiche(json.dumps(body["fiche"], ensure_ascii=False))
     elif isinstance(body.get("fiche_json"), str):
@@ -945,6 +1092,20 @@ def _produit_from_body(body: dict, conn) -> tuple[str, str, str, str | None, int
     else:
         fiche = default_fiche()
     fiche = normalize_fiche(fiche)
+    if not ref:
+        # Référence laissée vide : on la compose depuis la fiche plutôt que de
+        # refuser. C'est le même calcul que celui affiché dans le formulaire, donc
+        # un client qui n'aurait pas envoyé le champ obtient la même référence.
+        ref = _compose_ref_produit(conn, fiche)
+    if not ref:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Référence produit obligatoire — elle se compose automatiquement "
+                "à partir de la laize et de la longueur, renseignez-les ou "
+                "saisissez la référence à la main."
+            ),
+        )
     client_id = body.get("client_id")
     try:
         client_id = int(client_id) if client_id not in (None, "") else None
@@ -1382,7 +1543,31 @@ async def create_produit(request: Request):
         except sqlite3.IntegrityError:
             conn.rollback()
             raise HTTPException(status_code=400, detail="Référence déjà utilisée.") from None
-        row = conn.execute("SELECT * FROM ao_produits WHERE id=?", (cur.lastrowid,)).fetchone()
+        produit_id = int(cur.lastrowid)
+
+        # Réparation : des lignes d'AO peuvent déjà porter cette référence sans
+        # produit rattaché (produit supprimé, AO dupliqué, import). Créer le
+        # produit manquant les répare, et déclenche la génération de la fiche et
+        # du BAT qui n'avaient jamais pu être produits.
+        rattachees = conn.execute(
+            """UPDATE ao_lignes SET produit_id=?
+                WHERE produit_id IS NULL
+                  AND LOWER(TRIM(COALESCE(ref_produit,''))) = LOWER(TRIM(?))""",
+            (produit_id, ref),
+        ).rowcount
+        conn.commit()
+        if rattachees:
+            logger.info(
+                "Produit %s créé : %s ligne(s) d'AO orpheline(s) rattachée(s).",
+                ref, rattachees,
+            )
+            try:
+                _regen_fiches_for_produit(conn, produit_id)
+                conn.commit()
+            except Exception:
+                logger.exception("Regen PJ auto sur create produit %s échoué", produit_id)
+
+        row = conn.execute("SELECT * FROM ao_produits WHERE id=?", (produit_id,)).fetchone()
         return _serialize_produit_row(_row_dict(row), conn)
 
 
@@ -1394,6 +1579,10 @@ async def update_produit(request: Request, produit_id: int):
         ref, designation, unite, notes, client_id, fiche_json = _produit_from_body(body, conn)
         if _produit_ref_taken(conn, ref, exclude_id=produit_id):
             raise HTTPException(status_code=400, detail="Référence déjà utilisée.")
+        ancienne = conn.execute(
+            "SELECT ref FROM ao_produits WHERE id=?", (produit_id,)
+        ).fetchone()
+        ancienne_ref = str((ancienne["ref"] if ancienne else "") or "").strip()
         try:
             cur = conn.execute(
                 """UPDATE ao_produits
@@ -1407,58 +1596,111 @@ async def update_produit(request: Request, produit_id: int):
         except sqlite3.IntegrityError:
             conn.rollback()
             raise HTTPException(status_code=400, detail="Référence déjà utilisée.") from None
+
+        # Renommage : on resynchronise le libellé des lignes d'AO. Sans ça, les
+        # lignes gardent l'ancienne référence — c'est ce qui rendait le produit
+        # « introuvable » côté AO et privait le fournisseur de la fiche et du BAT.
+        # Les AO clôturés sont laissés en l'état : ils doivent rester le reflet
+        # de ce qui a réellement été envoyé.
+        if ancienne_ref and ancienne_ref.lower() != ref.lower():
+            conn.execute(
+                """UPDATE ao_lignes SET ref_produit=?
+                    WHERE ao_id IN (SELECT id FROM ao_demandes
+                                     WHERE statut IN ('brouillon','envoyee')
+                                       AND deleted_at IS NULL)
+                      AND (produit_id = ?
+                           OR (produit_id IS NULL
+                               AND LOWER(TRIM(COALESCE(ref_produit,'')))
+                                   = LOWER(TRIM(?))))""",
+                (ref, produit_id, ancienne_ref),
+            )
+            # Rattache au passage les lignes restées sur du texte seul.
+            conn.execute(
+                """UPDATE ao_lignes SET produit_id=?
+                    WHERE produit_id IS NULL
+                      AND LOWER(TRIM(COALESCE(ref_produit,''))) = LOWER(TRIM(?))""",
+                (produit_id, ref),
+            )
+            conn.commit()
+
         row = conn.execute("SELECT * FROM ao_produits WHERE id=?", (produit_id,)).fetchone()
-        # Regénère les fiches PDF attachées aux AO ouverts qui utilisent
-        # cette référence (brouillon ou envoyé, pas clôturé) — idempotent.
+        # Regénère les PJ auto (fiche + BAT) attachées aux AO ouverts qui
+        # utilisent ce produit (brouillon ou envoyé, pas clôturé) — idempotent.
         try:
-            _regen_fiches_for_ref(conn, ref)
+            _regen_fiches_for_produit(conn, produit_id, refs_obsoletes=(ancienne_ref,))
             conn.commit()
         except Exception:
-            logger.exception("Regen fiches PDF sur update produit %s échoué", produit_id)
+            logger.exception("Regen PJ auto sur update produit %s échoué", produit_id)
         return _serialize_produit_row(_row_dict(row), conn)
 
 
-def _regen_fiches_for_ref(conn, ref_produit: str) -> None:
-    """Regénère la fiche PDF fournisseur pour tous les AO ouverts utilisant
-    cette référence. Ne touche pas aux AO clôturés."""
-    if not ref_produit:
+def _regen_fiches_for_produit(
+    conn, produit_id: int, refs_obsoletes: Sequence[str] = (),
+) -> None:
+    """Regénère les PJ auto (fiche fournisseur + BAT) de ce produit dans tous les
+    AO ouverts qui l'utilisent. Ne touche pas aux AO clôturés.
+
+    ``refs_obsoletes`` liste les anciennes références du produit : leurs PJ
+    portent l'ancien nom de fichier et doivent être supprimées, sinon un
+    renommage laisse en place un document périmé à côté du nouveau.
+    """
+    try:
+        produit_id = int(produit_id)
+    except (TypeError, ValueError):
         return
+    row = conn.execute(
+        "SELECT ref FROM ao_produits WHERE id=?", (produit_id,)
+    ).fetchone()
+    if not row:
+        return
+    ref_actuelle = str(row["ref"] or "").strip()
+
+    # Les lignes rattachées par id ET celles encore rattachées par texte seul :
+    # une base dont le backfill n'a rien trouvé doit quand même être régénérée.
     aos = conn.execute(
         """SELECT DISTINCT d.id, d.reference
            FROM ao_demandes d
            JOIN ao_lignes l ON l.ao_id = d.id
-           WHERE l.ref_produit = ?
+           WHERE (l.produit_id = ?
+                  OR LOWER(TRIM(COALESCE(l.ref_produit,''))) = LOWER(TRIM(?)))
              AND d.statut IN ('brouillon', 'envoyee')
              AND d.deleted_at IS NULL""",
-        (ref_produit,),
+        (produit_id, ref_actuelle),
     ).fetchall()
     if not aos:
         return
     produits_map = _produits_by_ref_map(conn)
     now_iso = _now_paris_iso()
+    slugs = {_auto_doc_ref_slug(r) for r in (ref_actuelle, *refs_obsoletes) if r}
+    stale_names = [
+        f"{prefix}{slug}.pdf"
+        for slug in sorted(slugs)
+        for prefix in AUTO_DOC_PREFIXES
+    ]
     for ao in aos:
-        # Supprime les PJ auto existantes pour cette ref (nom idempotent)
-        ref_clean = re.sub(r"[^\w\-]+", "_", ref_produit.split(" - ")[0])
-        fname = f"fiche_fournisseur_{ref_clean}.pdf"
-        pjs_to_del = conn.execute(
-            "SELECT id, stored_name FROM ao_pieces_jointes WHERE ao_id=? AND filename=?",
-            (int(ao["id"]), fname),
-        ).fetchall()
-        for pj in pjs_to_del:
-            try:
-                path = os.path.join(_ao_upload_dir(int(ao["id"])), pj["stored_name"])
-                if os.path.exists(path):
-                    os.remove(path)
-            except OSError:
-                pass
-        if pjs_to_del:
-            conn.execute(
-                "DELETE FROM ao_pieces_jointes WHERE ao_id=? AND filename=?",
+        # Supprime les PJ auto existantes pour cette ref (noms idempotents), afin
+        # que _auto_attach_fournisseur_pdfs les régénère juste après.
+        for fname in stale_names:
+            pjs_to_del = conn.execute(
+                "SELECT id, stored_name FROM ao_pieces_jointes"
+                " WHERE ao_id=? AND filename=?",
                 (int(ao["id"]), fname),
-            )
+            ).fetchall()
+            for pj in pjs_to_del:
+                try:
+                    path = os.path.join(_ao_upload_dir(int(ao["id"])), pj["stored_name"])
+                    if os.path.exists(path):
+                        os.remove(path)
+                except OSError:
+                    pass
+            if pjs_to_del:
+                conn.execute(
+                    "DELETE FROM ao_pieces_jointes WHERE ao_id=? AND filename=?",
+                    (int(ao["id"]), fname),
+                )
         _auto_attach_fournisseur_pdfs(
             conn, int(ao["id"]), ao["reference"],
-            [{"ref_produit": ref_produit}],
+            [{"produit_id": produit_id, "ref_produit": ref_actuelle}],
             produits_map, now_iso,
         )
 
@@ -1467,9 +1709,48 @@ def _regen_fiches_for_ref(conn, ref_produit: str) -> None:
 def delete_produit(request: Request, produit_id: int):
     _require_ao(request)
     with get_db() as conn:
-        cur = conn.execute("DELETE FROM ao_produits WHERE id=?", (produit_id,))
-        if cur.rowcount == 0:
+        row = conn.execute(
+            "SELECT ref FROM ao_produits WHERE id=?", (produit_id,)
+        ).fetchone()
+        if not row:
             raise HTTPException(status_code=404, detail="Produit introuvable")
+        ref = str(row["ref"] or "").strip()
+
+        # Un produit utilisé par un AO ouvert ne peut pas disparaître : sa
+        # suppression orphelinerait les lignes, ferait tomber le client et les
+        # étiq./bobine, et priverait le fournisseur de la fiche et du BAT — sans
+        # aucune erreur visible. On refuse en nommant les AO concernés.
+        utilisateurs = conn.execute(
+            """SELECT DISTINCT d.reference
+                 FROM ao_demandes d
+                 JOIN ao_lignes l ON l.ao_id = d.id
+                WHERE (l.produit_id = ?
+                       OR (l.produit_id IS NULL
+                           AND LOWER(TRIM(COALESCE(l.ref_produit,''))) = LOWER(TRIM(?))))
+                  AND d.statut IN ('brouillon','envoyee')
+                  AND d.deleted_at IS NULL
+                ORDER BY d.reference""",
+            (produit_id, ref),
+        ).fetchall()
+        if utilisateurs:
+            refs = ", ".join(str(r["reference"]) for r in utilisateurs[:5])
+            reste = len(utilisateurs) - 5
+            if reste > 0:
+                refs += f" et {reste} autre(s)"
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Produit utilisé par {len(utilisateurs)} appel(s) d'offres "
+                    f"en cours ({refs}). Retirez-le de ces AO avant de le supprimer."
+                ),
+            )
+
+        # AO clôturés : on garde la trace textuelle de ce qui a été envoyé, mais
+        # on coupe le lien pour ne pas laisser un produit_id pendant.
+        conn.execute(
+            "UPDATE ao_lignes SET produit_id=NULL WHERE produit_id=?", (produit_id,)
+        )
+        conn.execute("DELETE FROM ao_produits WHERE id=?", (produit_id,))
         conn.commit()
     return {"ok": True}
 
@@ -1564,8 +1845,7 @@ def _enrich_ligne_display(
     series_by_ligne: dict[int, list[dict]] | None = None,
 ) -> dict:
     """Ajoute client, étiq./bobine, séries depuis le catalogue et la DB."""
-    ref_key = (ln.get("ref_produit") or "").strip().lower()
-    produit = produits_map.get(ref_key)
+    produit = _resolve_produit_for_ligne(ln, produits_map)
     ctx = ligne_context_from_produit(
         ln.get("ref_produit") or "",
         ln.get("quantite"),
@@ -1574,6 +1854,17 @@ def _enrich_ligne_display(
     )
     ln["client_nom"] = ctx.get("client_nom")
     ln["etiquettes_par_bobine"] = ctx.get("etiquettes_par_bobine")
+    # Ligne orpheline : une référence est saisie mais ne correspond à aucun
+    # produit du catalogue. Le front affiche un badge, et l'envoi de l'AO est
+    # bloqué — sans ce signal, le fournisseur reçoit un AO sans fiche ni BAT.
+    ln["produit_id"] = (produit or {}).get("id") or ln.get("produit_id")
+    ln["produit_introuvable"] = bool(
+        (ln.get("ref_produit") or "").strip()
+    ) and produit is None
+    if produit:
+        # La ligne affiche toujours la référence actuelle du produit, même si
+        # ref_produit n'a pas encore été resynchronisé.
+        ln["ref_produit"] = produit.get("ref") or ln.get("ref_produit")
     # Séries — la somme des quantités séries doit égaler la quantité ligne (contrôle applicatif)
     series = (series_by_ligne or {}).get(int(ln.get("id") or 0), [])
     ln["series"] = series
@@ -1673,18 +1964,29 @@ async def update_ao(request: Request, ao_id: int):
         titre = (body.get("titre") or ao.get("titre") or "").strip()
         if not titre:
             raise HTTPException(status_code=400, detail="Titre obligatoire.")
+        # Un titre envoyé explicitement et différent de celui dérivé des lignes
+        # est un choix de l'utilisateur : on le protège de _regen_titre_ao.
+        # `titre_manuel: false` dans le body permet de repasser en automatique.
+        titre_manuel = int(ao.get("titre_manuel") or 0)
+        if "titre_manuel" in body:
+            titre_manuel = 1 if body.get("titre_manuel") else 0
+        elif (body.get("titre") or "").strip() and titre != (ao.get("titre") or "").strip():
+            titre_manuel = 1
         conn.execute(
             """UPDATE ao_demandes
-               SET titre=?, description=?, date_limite=?, responsable_email=?
+               SET titre=?, titre_manuel=?, description=?, date_limite=?, responsable_email=?
                WHERE id=?""",
             (
                 titre,
+                titre_manuel,
                 (body.get("description") or "").strip() or None,
                 (body.get("date_limite") or "").strip() or None,
                 (body.get("responsable_email") or "").strip() or None,
                 ao_id,
             ),
         )
+        if not titre_manuel:
+            _regen_titre_ao(conn, ao_id)
         conn.commit()
         updated = _get_ao_or_404(conn, ao_id)
     return updated
@@ -2052,40 +2354,78 @@ async def dupliquer_ao(request: Request, ao_id: int):
         new_ref = _gen_reference(conn)
         cur = conn.execute(
             """INSERT INTO ao_demandes
-               (reference, titre, description, date_creation, date_limite, statut, created_by, responsable_email)
-               VALUES (?,?,?,?,?,'brouillon',?,?)""",
+               (reference, titre, titre_manuel, description, date_creation, date_limite,
+                statut, created_by, responsable_email, prix_transport_pct)
+               VALUES (?,?,?,?,?,?,'brouillon',?,?,?)""",
             (
                 new_ref,
                 new_titre,
+                # Un titre explicitement demandé est protégé de la régénération.
+                # Sinon le « (copie) » n'est qu'un provisoire : le titre définitif
+                # est recalculé depuis les lignes juste après leur copie.
+                1 if titre_override else 0,
                 src.get("description"),
                 now,
                 src.get("date_limite"),
                 user.get("id"),
                 src.get("responsable_email"),
+                # Le % de transport est un paramètre de chiffrage de l'AO, pas une
+                # donnée de réponse : le remettre à 0 obligeait à le ressaisir à
+                # chaque duplication, avec un risque d'oubli silencieux.
+                float(src.get("prix_transport_pct") or 0),
             ),
         )
         new_id = cur.lastrowid
 
-        # Copie des lignes
+        # Copie des lignes. produit_id est repris tel quel : la copie reste
+        # rattachée au même produit du catalogue même si sa référence a changé
+        # depuis. On resynchronise au passage le libellé sur la référence
+        # actuelle du produit, pour ne pas naître avec une ref périmée.
         src_lignes = conn.execute(
-            "SELECT * FROM ao_lignes WHERE ao_id=? ORDER BY position, id",
+            """SELECT l.*, p.ref AS produit_ref
+                 FROM ao_lignes l
+                 LEFT JOIN ao_produits p ON p.id = l.produit_id
+                WHERE l.ao_id=? ORDER BY l.position, l.id""",
             (ao_id,),
         ).fetchall()
+        # Séries : perdues jusqu'ici, alors qu'elles portent le découpage
+        # quantitatif qu'on veut justement rejouer d'un AO sur l'autre.
+        series_src = _load_series_by_ligne(
+            conn, [int(ln["id"]) for ln in src_lignes]
+        )
         for ln in src_lignes:
-            conn.execute(
+            new_ligne = conn.execute(
                 """INSERT INTO ao_lignes
-                   (ao_id, ref_produit, designation, quantite, unite, notes, position)
-                   VALUES (?,?,?,?,?,?,?)""",
+                   (ao_id, produit_id, ref_produit, designation, quantite, unite,
+                    notes, position, condi_unite, condi_qte)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
                 (
                     new_id,
-                    ln["ref_produit"],
+                    ln["produit_id"],
+                    ln["produit_ref"] or ln["ref_produit"],
                     ln["designation"],
                     ln["quantite"],
                     ln["unite"],
                     ln["notes"],
                     ln["position"],
+                    ln["condi_unite"] if "condi_unite" in ln.keys() else None,
+                    ln["condi_qte"] if "condi_qte" in ln.keys() else None,
                 ),
             )
+            for serie in series_src.get(int(ln["id"]), []):
+                conn.execute(
+                    """INSERT INTO ao_lignes_series
+                       (ligne_id, position, libelle, quantite, notes, created_at)
+                       VALUES (?,?,?,?,?,?)""",
+                    (
+                        int(new_ligne.lastrowid),
+                        serie.get("position") or 0,
+                        serie.get("libelle") or "",
+                        serie.get("quantite") or 0,
+                        serie.get("notes"),
+                        now,
+                    ),
+                )
 
         # Copie des fournisseurs (sans dates d'envoi / ouverture / réponse, nouveau token, statut='invite')
         # Si fournisseur_ids est fourni : ne copier que ceux-là. Sinon : tous (si with_fournisseurs).
@@ -2103,19 +2443,31 @@ async def dupliquer_ao(request: Request, ao_id: int):
                 ).fetchall()
             for f in src_fournis:
                 src_langue = _normalize_langue(f["langue"] if "langue" in f.keys() else "fr")
+                keys = f.keys()
                 conn.execute(
                     """INSERT INTO ao_fournisseurs
-                       (ao_id, nom_fournisseur, email_contact, token, statut, langue)
-                       VALUES (?,?,?,?,'invite',?)""",
+                       (ao_id, nom_fournisseur, email_contact, token, statut, langue,
+                        fournisseur_id, fournisseur_contact_id)
+                       VALUES (?,?,?,?,'invite',?,?,?)""",
                     (
                         new_id,
                         f["nom_fournisseur"],
                         f["email_contact"],
                         str(uuid.uuid4()),
                         src_langue,
+                        # Liens vers le référentiel Paramètres > Fournisseurs :
+                        # sans eux, la copie n'était plus qu'un nom et un email
+                        # détachés de la fiche fournisseur.
+                        f["fournisseur_id"] if "fournisseur_id" in keys else None,
+                        f["fournisseur_contact_id"] if "fournisseur_contact_id" in keys else None,
                     ),
                 )
 
+        # Titre définitif de la copie : dérivé de ses lignes, comme n'importe quel
+        # AO. Sans cet appel, la copie gardait « … (copie) » jusqu'à la première
+        # modification de ligne, qui l'écrasait ensuite sans prévenir.
+        if not titre_override:
+            _regen_titre_ao(conn, new_id)
         conn.commit()
         new_ao = _get_ao_or_404(conn, new_id)
 
@@ -2169,17 +2521,75 @@ async def dupliquer_ao(request: Request, ao_id: int):
 
 def _regen_titre_ao(conn, ao_id: int) -> None:
     """Régénère le titre de l'AO à partir de ses lignes (refs concaténées).
-    Appelé après chaque INSERT/UPDATE/DELETE sur ao_lignes."""
+
+    Appelé après chaque INSERT/UPDATE/DELETE sur ao_lignes. Respecte les titres
+    saisis à la main (ao_demandes.titre_manuel = 1) : sans ce garde-fou, un titre
+    voulu — dont le « (copie) » d'une duplication — était écrasé dès la première
+    modification de ligne.
+    """
+    manuel = conn.execute(
+        "SELECT COALESCE(titre_manuel, 0) AS m FROM ao_demandes WHERE id=?",
+        (ao_id,),
+    ).fetchone()
+    if manuel and int(manuel["m"] or 0):
+        return
+    # La référence affichée suit le produit rattaché quand il existe, pour que le
+    # titre reste juste après un renommage.
     refs = [
-        (r["ref_produit"] or "").strip()
+        str(r["ref"] or "").strip()
         for r in conn.execute(
-            "SELECT ref_produit FROM ao_lignes WHERE ao_id=? ORDER BY position, id",
+            """SELECT COALESCE(p.ref, l.ref_produit) AS ref
+                 FROM ao_lignes l
+                 LEFT JOIN ao_produits p ON p.id = l.produit_id
+                WHERE l.ao_id=? ORDER BY l.position, l.id""",
             (ao_id,),
         ).fetchall()
     ]
     refs = [r for r in refs if r]
     titre = " · ".join(refs) if refs else "Nouvel appel d'offres"
     conn.execute("UPDATE ao_demandes SET titre=? WHERE id=?", (titre, ao_id))
+
+
+def _resolve_ligne_produit_ref(
+    conn, produit_id_raw: Any, ref_produit: str,
+) -> tuple[int | None, str]:
+    """Détermine le couple (produit_id, ref_produit) à stocker sur une ligne d'AO.
+
+    Le front peut envoyer un ``produit_id`` (choix dans le catalogue) et/ou une
+    ``ref_produit`` (saisie libre, ou payload historique). On privilégie l'id ;
+    à défaut on tente de retrouver le produit par sa référence. La référence
+    stockée est celle du produit résolu, pour que le libellé de la ligne ne
+    puisse pas naître déjà désynchronisé.
+    """
+    produit_id: int | None = None
+    try:
+        if produit_id_raw is not None and str(produit_id_raw).strip() != "":
+            produit_id = int(produit_id_raw)
+    except (TypeError, ValueError):
+        produit_id = None
+
+    row = None
+    if produit_id is not None:
+        row = conn.execute(
+            "SELECT id, ref FROM ao_produits WHERE id=?", (produit_id,)
+        ).fetchone()
+        if row is None:
+            raise HTTPException(status_code=400, detail="Produit introuvable.")
+    elif ref_produit:
+        # Comparaison en Python (_ref_key) et non en SQL : LOWER() de SQLite ne
+        # replie pas les accents, et « 15 x 10 mm Couché » ne se serait pas
+        # rattaché à « 15 x 10 mm couché ».
+        key = _ref_key(ref_produit)
+        for cand in conn.execute("SELECT id, ref FROM ao_produits ORDER BY id").fetchall():
+            if _ref_key(cand["ref"]) == key:
+                row = cand
+                break
+
+    if row is not None:
+        return int(row["id"]), (row["ref"] or ref_produit)
+    # Référence hors catalogue : accepté (saisie libre historique), mais la ligne
+    # sera signalée « produit introuvable ».
+    return None, ref_produit
 
 
 @router.post("/{ao_id}/lignes")
@@ -2202,6 +2612,9 @@ async def add_ligne(request: Request, ao_id: int):
     with get_db() as conn:
         ao = _get_ao_or_404(conn, ao_id)
         _require_brouillon(ao)
+        produit_id, ref_produit = _resolve_ligne_produit_ref(
+            conn, body.get("produit_id"), ref_produit,
+        )
         row = conn.execute(
             "SELECT COALESCE(MAX(position), -1) AS m FROM ao_lignes WHERE ao_id=?",
             (ao_id,),
@@ -2209,23 +2622,24 @@ async def add_ligne(request: Request, ao_id: int):
         position = int(row["m"]) + 1
         cur = conn.execute(
             """INSERT INTO ao_lignes
-               (ao_id, ref_produit, designation, quantite, unite, notes, position)
-               VALUES (?,?,?,?,?,?,?)""",
-            (ao_id, ref_produit, designation, quantite, unite, notes, position),
+               (ao_id, produit_id, ref_produit, designation, quantite, unite, notes, position)
+               VALUES (?,?,?,?,?,?,?,?)""",
+            (ao_id, produit_id, ref_produit, designation, quantite, unite, notes, position),
         )
         _regen_titre_ao(conn, ao_id)
         conn.commit()
         ligne = conn.execute(
             "SELECT * FROM ao_lignes WHERE id=?", (cur.lastrowid,)
         ).fetchone()
-        # Auto-attach : génère la fiche PDF fournisseur pour ce produit dès
-        # l'ajout de la ligne (pas seulement à l'envoi).
+        # Auto-attach : génère la fiche technique fournisseur et le BAT
+        # étiquette de ce produit dès l'ajout de la ligne (pas seulement à
+        # l'envoi), pour qu'on puisse les relire avant de partir.
         try:
             now_iso = _now_paris_iso()
             produits_map = _produits_by_ref_map(conn)
             _auto_attach_fournisseur_pdfs(
                 conn, ao_id, ao.get("reference"),
-                [{"ref_produit": ref_produit}],
+                [{"produit_id": produit_id, "ref_produit": ref_produit}],
                 produits_map, now_iso,
             )
             conn.commit()
@@ -2260,11 +2674,15 @@ async def update_ligne(request: Request, ao_id: int, ligne_id: int):
         ).fetchone()
         if not existing:
             raise HTTPException(status_code=404, detail="Ligne introuvable")
+        produit_id, ref_produit = _resolve_ligne_produit_ref(
+            conn, body.get("produit_id"), ref_produit,
+        )
         conn.execute(
             """UPDATE ao_lignes
-               SET ref_produit=?, designation=?, quantite=?, unite=?, notes=?
+               SET produit_id=?, ref_produit=?, designation=?, quantite=?, unite=?, notes=?
                WHERE id=? AND ao_id=?""",
-            (ref_produit, designation, quantite, unite, notes, ligne_id, ao_id),
+            (produit_id, ref_produit, designation, quantite, unite, notes,
+             ligne_id, ao_id),
         )
         _regen_titre_ao(conn, ao_id)
         conn.commit()
@@ -2541,6 +2959,102 @@ async def update_fournisseur_ao(request: Request, ao_id: int, fourni_id: int):
 
 # ─── Envoi ───────────────────────────────────────────────────────
 
+# Noms logiques des PJ auto-générées. Le préfixe sert de clé d'idempotence et
+# de clé de suppression lors d'une régénération : il ne doit jamais changer sans
+# migration des lignes ao_pieces_jointes existantes.
+AUTO_DOC_FICHE_PREFIX = "fiche_fournisseur_"
+AUTO_DOC_BAT_PREFIX = "bat_"
+
+# Valeurs de ao_pieces_jointes.uploaded_by identifiant une PJ auto-générée.
+AUTO_DOC_KIND_FICHE = "auto-fiche-produit"
+AUTO_DOC_KIND_BAT = "auto-bat-produit"
+
+AUTO_DOC_PREFIXES = (AUTO_DOC_FICHE_PREFIX, AUTO_DOC_BAT_PREFIX)
+
+
+def _auto_doc_ref_slug(ref: str) -> str:
+    """Fragment de nom de fichier dérivé d'une réf produit. Doit rester stable."""
+    return re.sub(r"[^\w\-]+", "_", (ref or "").split(" - ")[0])
+
+
+def _build_fiche_fournisseur_bytes(conn, prod_full, mp_map, ao_reference):
+    from app.services.fiche_pdf_fournisseur import generate_fiche_fournisseur_pdf
+
+    return generate_fiche_fournisseur_pdf(
+        prod_full, matieres_map=mp_map, ao_reference=ao_reference,
+    )
+
+
+def _build_bat_bytes(conn, prod_full, mp_map, ao_reference):
+    """BAT étiquette du produit, en français, avec bandeau « croquis automatique ».
+
+    Le bandeau est bilingue (cf. bat_etiquette.TEXTS), donc un fournisseur
+    anglophone lit l'avertissement même si le cartouche est en français : on
+    évite ainsi un appel de traduction DeepL à chaque ajout de ligne d'AO.
+    """
+    from app.services.bat_etiquette import build_bat_spec, render_bat_pdf
+
+    fiche = prod_full.get("fiche") or {}
+
+    # Fiche technique SIFA, quand la Ref SIFA est renseignée : elle est
+    # prioritaire sur la fiche produit pour la géométrie (même règle que
+    # l'endpoint /produits/{id}/bat).
+    ft = None
+    ref_sifa = str(fiche.get("ref_sifa") or prod_full.get("ref_sifa") or "").strip()
+    if ref_sifa:
+        try:
+            ft_row = conn.execute(
+                "SELECT * FROM fiches_techniques"
+                " WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
+                (ref_sifa,),
+            ).fetchone()
+            if ft_row:
+                ft = _row_dict(ft_row)
+        except Exception:
+            ft = None
+
+    spec = build_bat_spec(
+        prod_full, fiche,
+        matieres_map=mp_map,
+        fiche_technique=ft,
+        client_nom=prod_full.get("client_nom") or "",
+        ref_interne=prod_full.get("ref") or "",
+        date_bat="/".join(reversed(_now_paris_iso()[:10].split("-"))),
+        lang="fr",
+    )
+    # Sans laize ni longueur il n'y a pas de plan à dessiner : mieux vaut aucune
+    # PJ qu'un croquis d'une étiquette de 0,1 mm que le fournisseur croirait réel.
+    if not (_f_or_zero(spec.get("laize")) > 0 and _f_or_zero(spec.get("longueur")) > 0):
+        return None
+    return render_bat_pdf(spec, "fr")
+
+
+def _f_or_zero(value) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _fournisseur_doc_generators() -> list[tuple[str, str, Any]]:
+    """(kind, préfixe de nom de fichier, fabricant) pour chaque PJ auto-générée."""
+    out: list[tuple[str, str, Any]] = []
+    try:
+        import app.services.fiche_pdf_fournisseur  # noqa: F401
+
+        out.append((AUTO_DOC_KIND_FICHE, AUTO_DOC_FICHE_PREFIX,
+                    _build_fiche_fournisseur_bytes))
+    except ImportError:
+        logger.warning("fiche_pdf_fournisseur indisponible, fiche auto ignorée.")
+    try:
+        import app.services.bat_etiquette  # noqa: F401
+
+        out.append((AUTO_DOC_KIND_BAT, AUTO_DOC_BAT_PREFIX, _build_bat_bytes))
+    except ImportError:
+        logger.warning("bat_etiquette indisponible, BAT auto ignoré.")
+    return out
+
+
 def _auto_attach_fournisseur_pdfs(
     conn,
     ao_id: int,
@@ -2550,25 +3064,33 @@ def _auto_attach_fournisseur_pdfs(
     now_iso: str,
 ) -> None:
     """
-    Génère un PDF fournisseur bilingue pour chaque produit référencé dans
-    l'AO et l'insère dans `ao_pieces_jointes`. Appelé au moment de
-    l'envoi de l'AO — les PDFs apparaissent immédiatement dans l'onglet
-    Documents du portail fournisseur.
+    Génère, pour chaque produit référencé dans l'AO, les documents fournisseur
+    et les insère dans `ao_pieces_jointes` :
 
-    Idempotent : les PDFs déjà présents (nom de fichier commençant par
-    "fiche_fournisseur_<ref>") ne sont pas recréés, ce qui permet de
-    relancer l'envoi sans dupliquer les pièces jointes.
+      - `fiche_fournisseur_<ref>.pdf` — fiche technique bilingue
+      - `bat_<ref>.pdf`              — BAT étiquette (plan technique A4)
+
+    Appelé à l'ajout d'une ligne, à l'envoi de l'AO et au premier accès portail
+    (rattrapage) — les PDFs apparaissent dans l'onglet Documents du portail.
+
+    Idempotent : un document dont le nom logique est déjà présent n'est pas
+    recréé, ce qui permet de relancer l'envoi sans dupliquer les pièces jointes.
+    L'échec d'un document n'empêche pas les autres : chaque génération est
+    isolée, l'AO part même si un BAT n'a pas pu être dessiné.
     """
-    try:
-        from app.services.fiche_pdf_fournisseur import generate_fiche_fournisseur_pdf
-    except ImportError:
-        logger.warning("fiche_pdf_fournisseur indisponible, auto-attach ignoré.")
+    generators = _fournisseur_doc_generators()
+    if not generators:
         return
 
-    # Références produit uniques dans l'AO
-    refs = {(ln.get("ref_produit") or "").strip() for ln in lignes_raw}
-    refs.discard("")
-    if not refs:
+    # Produits uniques réellement rattachés aux lignes de l'AO. On résout par
+    # produit_id d'abord : une ligne dont la ref a été renommée doit continuer
+    # de produire sa fiche et son BAT.
+    produits: dict[int, dict] = {}
+    for ln in lignes_raw:
+        produit = _resolve_produit_for_ligne(ln, produits_map)
+        if produit and produit.get("id"):
+            produits[int(produit["id"])] = produit
+    if not produits:
         return
 
     # Pièces jointes déjà présentes (pour l'idempotence)
@@ -2581,14 +3103,19 @@ def _auto_attach_fournisseur_pdfs(
 
     dest_dir = _ao_upload_dir(ao_id)
 
-    for ref in sorted(refs):
-        produit = produits_map.get(ref.lower()) or produits_map.get(ref)
-        if not produit or not produit.get("id"):
+    for produit in sorted(produits.values(), key=lambda p: str(p.get("ref") or "")):
+        ref = str(produit.get("ref") or "").strip()
+        if not ref:
             continue
 
-        ref_clean = re.sub(r"[^\w\-]+", "_", ref.split(" - ")[0])
-        filename = f"fiche_fournisseur_{ref_clean}.pdf"
-        if filename in existing:
+        ref_clean = _auto_doc_ref_slug(ref)
+        wanted = [
+            (kind, fname, build)
+            for kind, suffix, build in generators
+            for fname in (f"{suffix}{ref_clean}.pdf",)
+            if fname not in existing
+        ]
+        if not wanted:
             continue
 
         # Recharge le produit avec client_nom (comme dans /export)
@@ -2618,32 +3145,33 @@ def _auto_attach_fournisseur_pdfs(
                 ids.add(int(block["matiere_id"]))
         mp_map = _load_matieres_map(conn, ids) if ids else {}
 
-        try:
-            pdf_bytes = generate_fiche_fournisseur_pdf(
-                prod_full, matieres_map=mp_map, ao_reference=ao_reference,
-            )
-        except Exception:
-            logger.exception(
-                "Échec génération PDF fournisseur pour produit %s (AO %s)",
-                ref, ao_reference,
-            )
-            continue
+        for kind, filename, build in wanted:
+            try:
+                pdf_bytes = build(conn, prod_full, mp_map, ao_reference)
+            except Exception:
+                logger.exception(
+                    "Échec génération %s pour produit %s (AO %s)",
+                    kind, ref, ao_reference,
+                )
+                continue
+            if not pdf_bytes:
+                continue
 
-        stored_name = str(uuid.uuid4()) + ".pdf"
-        dest_path = os.path.join(dest_dir, stored_name)
-        try:
-            with open(dest_path, "wb") as f:
-                f.write(pdf_bytes)
-        except OSError:
-            logger.exception("Écriture PDF fournisseur impossible : %s", dest_path)
-            continue
+            stored_name = str(uuid.uuid4()) + ".pdf"
+            dest_path = os.path.join(dest_dir, stored_name)
+            try:
+                with open(dest_path, "wb") as f:
+                    f.write(pdf_bytes)
+            except OSError:
+                logger.exception("Écriture %s impossible : %s", kind, dest_path)
+                continue
 
-        conn.execute(
-            """INSERT INTO ao_pieces_jointes
-               (ao_id, filename, stored_name, taille_octets, uploaded_by, date)
-               VALUES (?,?,?,?,?,?)""",
-            (ao_id, filename, stored_name, len(pdf_bytes), "auto-fiche-produit", now_iso),
-        )
+            conn.execute(
+                """INSERT INTO ao_pieces_jointes
+                   (ao_id, filename, stored_name, taille_octets, uploaded_by, date)
+                   VALUES (?,?,?,?,?,?)""",
+                (ao_id, filename, stored_name, len(pdf_bytes), kind, now_iso),
+            )
 
 
 @router.post("/{ao_id}/envoyer")
@@ -2663,7 +3191,8 @@ def envoyer_ao(request: Request, ao_id: int):
         lignes_raw = [
             _row_dict(r)
             for r in conn.execute(
-                "SELECT ref_produit, designation, quantite, unite FROM ao_lignes WHERE ao_id=? ORDER BY position, id",
+                "SELECT produit_id, ref_produit, designation, quantite, unite"
+                " FROM ao_lignes WHERE ao_id=? ORDER BY position, id",
                 (ao_id,),
             ).fetchall()
         ]
@@ -2675,17 +3204,39 @@ def envoyer_ao(request: Request, ao_id: int):
             _enrich_ligne_display(ln, produits_map, matieres_map)
             for ln in lignes_raw
         ]
+
+        # Garde-fou : une ligne sans produit rattaché part chez le fournisseur
+        # sans fiche technique ni BAT, et sans étiq./bobine dans le tableau de
+        # réponse. Mieux vaut refuser l'envoi que laisser partir une demande
+        # incomplète que le fournisseur ne pourra pas chiffrer.
+        orphelines = [
+            str(ln.get("ref_produit") or "?")
+            for ln in lignes if ln.get("produit_introuvable")
+        ]
+        if orphelines:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Envoi impossible — "
+                    f"{len(orphelines)} ligne(s) ne correspondent à aucun produit "
+                    f"du catalogue : {', '.join(orphelines[:5])}"
+                    + (" …" if len(orphelines) > 5 else "")
+                    + ". Créez le produit manquant ou corrigez la ligne : sans lui,"
+                    " le fournisseur ne reçoit ni fiche technique ni BAT."
+                ),
+            )
+
         fournisseurs = conn.execute(
             """SELECT * FROM ao_fournisseurs
                WHERE ao_id=? AND statut='invite' AND date_envoi IS NULL""",
             (ao_id,),
         ).fetchall()
 
-        # ── Auto-attach : génère un PDF fournisseur par produit de l'AO
-        # et l'insère dans ao_pieces_jointes (visible côté portail dans
-        # l'onglet Documents). Idempotent : ne recrée pas les PDFs déjà
-        # attachés lors d'un envoi précédent (détecté par nom de fichier
-        # commençant par "fiche_fournisseur_").
+        # ── Auto-attach : génère la fiche technique fournisseur et le BAT
+        # étiquette de chaque produit de l'AO, et les insère dans
+        # ao_pieces_jointes (visibles côté portail dans l'onglet Documents).
+        # Idempotent : ne recrée pas les PDFs déjà attachés lors d'un envoi
+        # précédent (détecté par nom de fichier, cf. AUTO_DOC_PREFIXES).
         _auto_attach_fournisseur_pdfs(conn, ao_id, ao.get("reference"),
                                       lignes_raw, produits_map, now)
 
@@ -2919,8 +3470,7 @@ def comparaison_ao(request: Request, ao_id: int):
         rows_flat: list[dict[str, Any]] = []
         for ln_row in lignes_rows:
             ln = _row_dict(ln_row)
-            ref_key = (ln.get("ref_produit") or "").strip().lower()
-            produit = produits_map.get(ref_key)
+            produit = _resolve_produit_for_ligne(ln, produits_map)
             ctx = ligne_context_from_produit(
                 ln.get("ref_produit") or "",
                 ln.get("quantite"),
@@ -3147,7 +3697,7 @@ async def patch_reponse_pricing(request: Request, ao_id: int, reponse_id: int):
             (ao_id,),
         ).fetchone()
         transport_pct2 = float(_ao_pct_row2[0]) if _ao_pct_row2 else 0.0
-        produit = produits_map.get((row["ref_produit"] or "").strip().lower())
+        produit = _resolve_produit_for_ligne(_row_dict(row), produits_map)
         ctx = ligne_context_from_produit(
             row["ref_produit"], row["quantite"], produit, matieres_map
         )

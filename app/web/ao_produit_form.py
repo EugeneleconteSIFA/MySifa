@@ -47,6 +47,17 @@ border-radius:8px;min-height:0}
 .pf-inline textarea{min-height:52px;resize:vertical}
 .pf-format-readonly{background:var(--accent-bg);border:1px solid var(--accent);border-radius:8px;
 padding:6px 10px;font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px;line-height:1.4}
+/* Référence produit : champ + bouton de régénération, et ligne d'aide dessous.
+   La grille .pf-inline n'a que 2 colonnes : le wrap tient dans la 2e, et le hint
+   occupe la 2e colonne de la ligne suivante (grid-column 2). */
+.pf-ref-wrap{display:flex;gap:6px;align-items:center}
+.pf-ref-wrap input{flex:1;min-width:0}
+.pf-ref-wrap .btn{flex:none;white-space:nowrap;padding:5px 10px;font-size:11px}
+.pf-inline > .pf-ref-hint{grid-column:2;font-size:11px;color:var(--muted);line-height:1.35;
+margin-top:2px;min-height:14px}
+.pf-ref-hint.pf-ref-auto{color:var(--accent)}
+.pf-ref-hint.pf-ref-warn{color:var(--warn)}
+.pf-ref-wrap input.pf-ref-locked{border-color:var(--warn)}
 .pf-imp-row{display:grid;grid-template-columns:minmax(72px,28%) 1fr minmax(72px,28%) 1fr;gap:6px 8px;
 margin-bottom:6px;padding:6px 8px;background:var(--bg);border-radius:8px;border:1px solid var(--border);
 align-items:center}
@@ -178,6 +189,11 @@ function produitFromApi(p) {
   return {
     id: p.id,
     ref: p.ref || '',
+    // Un produit déjà enregistré garde sa référence : on ne réécrit jamais en
+    // silence une réf qui circule peut-être déjà chez un fournisseur. Le bouton
+    // « Régénérer » est là pour la recomposer explicitement. Un produit neuf,
+    // lui, se compose tout seul pendant la saisie.
+    ref_auto: !p.id,
     client_id: p.client_id != null ? String(p.client_id) : '',
     client_label: p.client_nom || '',
     unite: p.unite || 'unité',
@@ -277,7 +293,14 @@ function renderProduitForm() {
     '</div>'+
 
     '<div class="pf-section"><div class="pf-section-title">Infos générales</div><div class="pf-card pf-general">'+
-    pfRow('Réf. produit', '<input id="pf-ref" value="'+escAttr(d.ref)+'" required>')+
+    pfRow('Réf. produit',
+      '<div class="pf-ref-wrap">'+
+        '<input id="pf-ref" value="'+escAttr(d.ref)+'" required '+
+          'placeholder="Se compose automatiquement — laize, longueur, matières…">'+
+        '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-ref-regen" '+
+          'title="Recomposer la référence depuis la fiche">Régénérer</button>'+
+      '</div>'+
+      '<div class="pf-ref-hint" id="pf-ref-hint"></div>', 'pf-inline-wide')+
     pfRow('Type', '<select id="pf-type"><option value="rouleau"'+(f.type_produit==='rouleau'?' selected':'')+'>Rouleau</option>'+
       '<option value="paravent"'+(f.type_produit==='paravent'?' selected':'')+'>Paravent</option></select>')+
     pfRow('Impressions', '<select id="pf-impressions"><option value="1"'+(f.impressions?' selected':'')+'>Oui</option>'+
@@ -626,6 +649,101 @@ function pfUpdateFormatDisplay() {
   el.textContent = fmt || 'Format — laize × longueur';
 }
 
+/* ── Référence produit auto ───────────────────────────────────────────────────
+   Gabarit : « 105 x 148 mm Th Top-Coated Perm, 1 Color, M40 mm ».
+   La composition est faite par le serveur (POST /api/ao/produits/ref-auto) et
+   non ici : c'est le même code que celui qui enregistre, donc la référence
+   affichée pendant la saisie est exactement celle qui finira en base. Le JS ne
+   fait que déclencher, afficher, et gérer le verrou manuel.                    */
+
+let pfRefTimer = null;
+let pfRefSeq = 0;
+
+function pfRefIsAuto() {
+  return !!(S.produitForm && S.produitForm.ref_auto);
+}
+
+function pfSetRefHint(text, cls) {
+  const el = document.getElementById('pf-ref-hint');
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'pf-ref-hint' + (cls ? ' ' + cls : '');
+}
+
+function pfSyncRefLockUi() {
+  const inp = document.getElementById('pf-ref');
+  const btn = document.getElementById('btn-pf-ref-regen');
+  if (!inp) return;
+  const auto = pfRefIsAuto();
+  inp.classList.toggle('pf-ref-locked', !auto);
+  if (btn) btn.classList.toggle('pf-hidden', auto);
+}
+
+function pfLockRefManuelle() {
+  if (!S.produitForm || !S.produitForm.ref_auto) { pfSyncRefLockUi(); return; }
+  S.produitForm.ref_auto = false;
+  pfSyncRefLockUi();
+  pfSetRefHint('Référence saisie à la main — « Régénérer » pour la recomposer.', 'pf-ref-warn');
+}
+
+async function pfComposeRef(opts) {
+  const force = !!(opts && opts.force);
+  if (!force && !pfRefIsAuto()) return;
+  const inp = document.getElementById('pf-ref');
+  if (!inp) return;
+
+  let body;
+  try {
+    body = collectProduitForm();
+  } catch (e) {
+    return;  // formulaire pas encore monté
+  }
+  const seq = ++pfRefSeq;
+  let data;
+  try {
+    data = await api('/api/ao/produits/ref-auto', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fiche: body.fiche,
+        produit_id: (S.produitForm && S.produitForm.id) || null
+      })
+    });
+  } catch (e) {
+    // Réseau ou serveur indisponible : on ne touche pas au champ, et on le dit
+    // plutôt que de laisser croire que la référence est à jour.
+    if (seq === pfRefSeq) pfSetRefHint('Composition automatique indisponible.', 'pf-ref-warn');
+    return;
+  }
+  // Réponse d'une frappe antérieure : périmée, on l'ignore.
+  if (seq !== pfRefSeq) return;
+
+  if (!data || !data.ref) {
+    pfSetRefHint('Renseignez la laize et la longueur pour composer la référence.', '');
+    return;
+  }
+  const propose = data.ref_unique || data.ref;
+  inp.value = propose;
+  if (propose !== data.ref) {
+    pfSetRefHint('Référence composée — « ' + data.ref + ' » est déjà prise, suffixe ajouté.',
+                 'pf-ref-warn');
+  } else {
+    pfSetRefHint('Référence composée automatiquement — modifiable.', 'pf-ref-auto');
+  }
+  if (force) {
+    S.produitForm.ref_auto = true;
+    pfSyncRefLockUi();
+  }
+}
+
+function pfScheduleComposeRef() {
+  if (!pfRefIsAuto()) return;
+  if (pfRefTimer) clearTimeout(pfRefTimer);
+  // 350 ms : assez pour ne pas appeler à chaque caractère d'une laize tapée au
+  // clavier, assez court pour que la référence suive le rythme de la saisie.
+  pfRefTimer = setTimeout(() => pfComposeRef(), 350);
+}
+
 function pfUpdateGlassineCouleur() {
   const sel = document.getElementById('pf-mat-glassine');
   const out = document.getElementById('pf-mat-couleur');
@@ -837,7 +955,37 @@ function bindProduitFormEvents() {
   document.getElementById('pf-imp-recto')?.addEventListener('change', pfRebuildImpDetails);
   document.getElementById('pf-imp-verso')?.addEventListener('change', pfRebuildImpDetails);
   try { pfUpdateGlassineCouleur(); } catch (e) { /* matières non chargées */ }
+
+  // ── Référence produit auto ────────────────────────────────────────────────
+  // Champs qui entrent dans la composition de la référence. Tout autre champ de
+  // la fiche (rayon, échenillage, conditionnement…) n'y figure pas et n'a donc
+  // pas à déclencher de recalcul.
+  ['pf-et-laize', 'pf-et-long', 'pf-bob-mand'].forEach(id => {
+    document.getElementById(id)?.addEventListener('input', pfScheduleComposeRef);
+  });
+  ['pf-mat-frontal', 'pf-mat-adhesif', 'pf-impressions',
+   'pf-imp-recto', 'pf-imp-verso'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', pfScheduleComposeRef);
+  });
   const refInp = document.getElementById('pf-ref');
+  if (refInp) {
+    // Toute frappe dans le champ passe la référence en manuel. Le `change` du
+    // bouton Régénérer repasse en auto ; on ignore donc les écritures faites par
+    // pfComposeRef, qui n'émettent pas d'événement `input`.
+    refInp.addEventListener('input', pfLockRefManuelle);
+  }
+  document.getElementById('btn-pf-ref-regen')?.addEventListener('click', () => {
+    pfComposeRef({ force: true });
+  });
+  pfSyncRefLockUi();
+  if (pfRefIsAuto()) {
+    // Produit neuf : on propose la référence dès l'ouverture si la fiche a déjà
+    // de quoi la composer (cas du retour depuis une fiche technique SIFA).
+    pfComposeRef();
+  } else if (refInp && refInp.value.trim()) {
+    pfSetRefHint('Référence enregistrée — « Régénérer » pour la recomposer depuis la fiche.', '');
+  }
+
   if (refInp && !refInp.value.trim()) {
     requestAnimationFrame(() => { refInp.focus(); });
   }
@@ -872,7 +1020,12 @@ function fillProduitFromFiche(fiche) {
   // Bobines
   if (setIfEmpty('pf-bob-nb', fiche.nb_etiq_bobin)) applied++;
   if (setIfEmpty('pf-bob-diam', fiche.dia_ext)) applied++;
-  if (setIfEmpty('pf-bob-mand', fiche.mandrin_longueur)) applied++;
+  // pf-bob-mand est le DIAMÈTRE du mandrin (fiche produit : bobines.diametre_mandrin).
+  // La fiche technique porte les deux : mandrin_dia et mandrin_longueur. On prenait
+  // la longueur — donc un mandrin de 40 mm de diamètre pouvait arriver à 100 mm.
+  // La référence produit auto reprend cette valeur (« M40 mm »), l'erreur se
+  // propageait jusque chez le fournisseur.
+  if (setIfEmpty('pf-bob-mand', fiche.mandrin_dia || fiche.mandrin_longueur)) applied++;
   // Impressions
   if (setIfEmpty('pf-imp-recto', fiche.recto)) applied++;
   if (setIfEmpty('pf-imp-verso', fiche.verso)) applied++;
@@ -885,8 +1038,17 @@ function fillProduitFromFiche(fiche) {
   if (setIfEmpty('pf-cart-etages', fiche.nb_etage)) applied++;
   if (setIfEmpty('pf-pal-sol', fiche.palette_nb_cartons_sol)) applied++;
   if (setIfEmpty('pf-pal-etages', fiche.palette_nb_cartons_hauteur)) applied++;
-  // Reference du produit : si vide et on a la ref de la fiche, la reprendre
-  if (setIfEmpty('pf-ref', fiche.reference)) applied++;
+  // Reference du produit : si vide et on a la ref de la fiche, la reprendre.
+  // Reprendre la réf SIFA est un choix explicite : on verrouille la référence
+  // pour que la composition automatique ne l'écrase pas au recalcul suivant.
+  if (setIfEmpty('pf-ref', fiche.reference)) {
+    applied++;
+    try { pfLockRefManuelle(); } catch (e) { /* formulaire non monté */ }
+  } else {
+    // Les cotes viennent de changer : la référence auto doit suivre.
+    try { pfScheduleComposeRef(); } catch (e) { /* idem */ }
+  }
+  try { pfUpdateFormatDisplay(); } catch (e) { /* idem */ }
   return {applied, skipped};
 }
 

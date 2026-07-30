@@ -125,12 +125,12 @@ def _fourni_upload_dir(ao_id: int, fourni_id: int) -> str:
 
 
 def _ensure_auto_attached_fiches(conn, ao_id: int, ao_reference: str | None) -> None:
-    """Rattrapage idempotent : génère les fiches PDF fournisseur manquantes.
+    """Rattrapage idempotent : génère les PJ auto fournisseur manquantes
+    (fiche technique + BAT étiquette).
 
-    Appelé au premier accès au portail sur un AO envoyé. Skip complet si
-    toutes les fiches sont déjà présentes.
+    Appelé au premier accès au portail sur un AO envoyé. Skip complet si tous
+    les documents sont déjà présents.
     """
-    import re
     # Références produit distinctes de l'AO
     refs = [
         (r["ref_produit"] or "").strip()
@@ -149,20 +149,25 @@ def _ensure_auto_attached_fiches(conn, ao_id: int, ao_reference: str | None) -> 
             "SELECT filename FROM ao_pieces_jointes WHERE ao_id=?", (ao_id,)
         ).fetchall()
     }
-    # Rien à faire si toutes les fiches sont là
+    # Import tardif pour éviter la dépendance circulaire
+    from app.routers.ao import (
+        AUTO_DOC_PREFIXES,
+        _auto_attach_fournisseur_pdfs,
+        _auto_doc_ref_slug,
+        _produits_by_ref_map,
+    )
+
+    # Rien à faire si tous les documents attendus sont là. Une ref dont il
+    # manque ne serait-ce qu'un document (ex. BAT ajouté après coup sur un AO
+    # déjà envoyé) est repassée à l'auto-attach, qui est idempotent par nom.
     missing = []
     for ref in refs:
-        ref_clean = re.sub(r"[^\w\-]+", "_", ref.split(" - ")[0])
-        fname = f"fiche_fournisseur_{ref_clean}.pdf"
-        if fname not in existing:
+        ref_clean = _auto_doc_ref_slug(ref)
+        if any(f"{prefix}{ref_clean}.pdf" not in existing
+               for prefix in AUTO_DOC_PREFIXES):
             missing.append(ref)
     if not missing:
         return
-    # Import tardif pour éviter la dépendance circulaire
-    from app.routers.ao import (
-        _auto_attach_fournisseur_pdfs,
-        _produits_by_ref_map,
-    )
     produits_map = _produits_by_ref_map(conn)
     lignes_raw = [
         {"ref_produit": ref, "designation": "", "quantite": None, "unite": None}

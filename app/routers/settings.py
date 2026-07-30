@@ -2339,7 +2339,14 @@ _ALERT_MAX_INTERVAL_MINUTES = 7 * 24 * 60  # 7 jours
 # périodique puisse se déclencher (constante, non paramétrable).
 ALERT_RESUME_GRACE_MINUTES = 5
 _ALERT_SIZES = {"small", "medium", "large"}
+# v2.5.6 : « manual » n'est plus proposé dans le formulaire. Il ne portait
+# aucune sémantique runtime (jamais évalué par /alerts/active) : une alerte
+# réglée sur "manuel" ne s'affichait donc JAMAIS chez l'opérateur. On continue
+# de l'ACCEPTER en entrée pour ne pas casser la relecture / le réenregistrement
+# des alertes historiques qui le portent encore en base (aucune migration :
+# ces alertes restent dormantes tant que l'admin ne choisit pas un vrai type).
 _ALERT_TRIGGER_TYPES = {"manual", "periodic", "calendar", "event"}
+_ALERT_TRIGGER_TYPES_DEPRECATED = {"manual"}
 _ALERT_TRIGGER_EVENTS = {"dossier_start", "dossier_end", "machine_change", "login", "after_calage"}
 
 # v2.3.2 : codes considérés comme "calage" pour l'alerte after_calage.
@@ -2363,7 +2370,19 @@ _ALERT_CALAGE_CODES = frozenset({
     "91",  # Changement Anilox
 })
 _ALERT_CALAGE_CODES_SQL_LIST = "(" + ",".join(f"'{c}'" for c in sorted(_ALERT_CALAGE_CODES)) + ")"
+
+# v2.5.6 : codes qui marquent la REPRISE de production apres un calage. Ce sont
+# eux qui declenchent l'alerte after_calage -- l'alerte doit sortir a la FIN du
+# calage (premier code de production), pas a son debut. Meme couple que le
+# garde-fou HTTP 423 de /api/fabrication/saisie (cf. fabrication.py).
+_ALERT_POST_CALAGE_CODES = frozenset({
+    "03",  # Production
+    "88",  # Reprise
+})
+_ALERT_POST_CALAGE_CODES_SQL_LIST = "(" + ",".join(f"'{c}'" for c in sorted(_ALERT_POST_CALAGE_CODES)) + ")"
 _ALERT_CALENDAR_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
+# Ordre canonique, indexé comme datetime.weekday() (lundi = 0 … dimanche = 6).
+_ALERT_CALENDAR_DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 
 
 def operator_should_see_alert(
@@ -2421,7 +2440,8 @@ def _validate_alert_params(params: dict) -> dict:
     trig_in = params.get("trigger") or {}
     if not isinstance(trig_in, dict):
         raise HTTPException(422, "trigger doit être un objet.")
-    t_type = (trig_in.get("type") or "manual").strip()
+    # v2.5.6 : défaut « periodic » (avant : « manual », qui ne déclenchait rien).
+    t_type = (trig_in.get("type") or "periodic").strip()
     if t_type not in _ALERT_TRIGGER_TYPES:
         raise HTTPException(422, f"Déclencheur inconnu : {t_type!r}.")
     trig = {"type": t_type}
@@ -2486,8 +2506,17 @@ def _validate_alert_params(params: dict) -> dict:
         if bad:
             raise HTTPException(422, f"days invalides : {bad}.")
         # Conserver l'ordre canonique de la semaine
-        order = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
-        trig["days"] = [d for d in order if d in days]
+        trig["days"] = [d for d in _ALERT_CALENDAR_DAY_ORDER if d in days]
+        # Sémantique du déclenchement (v2.5.6, cf. _is_calendar_alert_due) :
+        #   - L'alerte devient due à HH:MM les jours cochés, SANS condition de
+        #     production : la machine peut être à l'arrêt, l'alerte s'affiche
+        #     dès qu'un opérateur ciblé ouvre son écran (contrôle de prise de
+        #     poste typiquement).
+        #   - Elle reste due tant qu'elle n'est pas validée (ou esquivée), y
+        #     compris les jours suivants — pas de fenêtre d'expiration.
+        #   - Le compteur est par machine : chaque machine ciblée doit valider.
+        #   - Jamais rétroactive : une occurrence antérieure à la création de
+        #     l'alerte est ignorée.
     elif t_type == "event":
         ev = (trig_in.get("event") or "").strip()
         if ev not in _ALERT_TRIGGER_EVENTS:
@@ -2513,7 +2542,9 @@ def _validate_alert_params(params: dict) -> dict:
             if _delay > 999:
                 _delay = 999
             trig["delay_minutes"] = _delay
-    # type=manual : pas de params supplémentaires
+    # type=manual : déclencheur obsolète (v2.5.6), conservé en lecture seule
+    # pour les alertes historiques. Aucun param supplémentaire, aucune
+    # évaluation runtime — l'alerte reste dormante.
     out["trigger"] = trig
 
     # target — multi-machines, sans rôle (les opérateurs fabrication + le
@@ -3441,7 +3472,7 @@ def _check_blocking_alert_due(conn, user, machine: str) -> list:
         return result
     try:
         rows = conn.execute(
-            "SELECT id, nom, params, linked_maint_code FROM maintenance_alerts WHERE active=1"
+            "SELECT id, nom, params, linked_maint_code, created_at FROM maintenance_alerts WHERE active=1"
         ).fetchall()
     except Exception:
         return result
@@ -3472,6 +3503,25 @@ def _check_blocking_alert_due(conn, user, machine: str) -> list:
         if ttype == "periodic":
             try:
                 if _is_periodic_alert_due(conn, int(r["id"]), params, machine, now_paris):
+                    result.append({
+                        "id": int(r["id"]),
+                        "nom": r["nom"] if "nom" in r.keys() else "",
+                        "params": params,
+                        "linked_maint_code": (r["linked_maint_code"] if "linked_maint_code" in r.keys() else "") or "",
+                        "no_dossier": "",
+                    })
+            except Exception:
+                continue
+        elif ttype == "calendar":
+            # v2.5.6 : une alerte calendaire marquée "bloque la production"
+            # doit aussi refuser la saisie tant qu'elle n'est pas validée.
+            try:
+                _created = r["created_at"] if "created_at" in r.keys() else None
+                if _is_calendar_alert_due(
+                    conn, int(r["id"]), params, machine, now_paris,
+                    user_id=(user.get("id") if user else None),
+                    created_at_iso=_created,
+                ):
                     result.append({
                         "id": int(r["id"]),
                         "nom": r["nom"] if "nom" in r.keys() else "",
@@ -3565,7 +3615,7 @@ def _blocking_for_machine_impl(request: Request, machine: str = ""):
     with get_db() as conn:
         try:
             rows = conn.execute(
-                "SELECT id, nom, params, linked_maint_code FROM maintenance_alerts WHERE active=1"
+                "SELECT id, nom, params, linked_maint_code, created_at FROM maintenance_alerts WHERE active=1"
             ).fetchall()
         except Exception:
             return {"items": items}
@@ -3596,6 +3646,17 @@ def _blocking_for_machine_impl(request: Request, machine: str = ""):
             if ttype == "periodic":
                 try:
                     due = _is_periodic_alert_due(conn, int(r["id"]), params, machine, now_paris)
+                except Exception:
+                    due = False
+            elif ttype == "calendar":
+                # v2.5.6 : symétrique de _check_blocking_alert_due — une
+                # calendaire bloquante non validée maintient le refus 423.
+                try:
+                    due = _is_calendar_alert_due(
+                        conn, int(r["id"]), params, machine, now_paris,
+                        user_id=(user.get("id") if user else None),
+                        created_at_iso=(r["created_at"] if "created_at" in r.keys() else None),
+                    )
                 except Exception:
                     due = False
             elif ttype == "event":
@@ -4038,8 +4099,20 @@ async def maintenance_alert_settings_update(request: Request):
 #     ALERT_RESUME_GRACE_MINUTES (5 min) est appliqué après ce 88 — l'alerte
 #     ne se déclenche pas avant reprise + 5 min
 #
-# Pour les autres types (manual / calendar / event) : non implémentés en v1,
-# silencieusement ignorés.
+# Pour le type calendar (v2.5.6, cf. _is_calendar_alert_due) :
+#   - Due à HH:MM les jours cochés, SANS condition de production (la machine
+#     peut être à l'arrêt — cas d'usage : contrôle de prise de poste).
+#   - Reste due jusqu'à validation ou esquive, y compris les jours suivants.
+#     Une occurrence plus récente remplace la précédente, rien ne s'empile.
+#   - Compteur par machine ; repli sur l'user_id si aucune machine résolue.
+#   - Jamais rétroactive avant la création de l'alerte.
+#   - Bypasse min_gap_minutes (comme l'événementiel).
+#
+# Pour le type event : implémenté (dossier_start / dossier_end / after_calage).
+#
+# Pour le type manual : OBSOLÈTE depuis v2.5.6. Retiré du formulaire, toujours
+# accepté en lecture pour les alertes historiques, jamais évalué ici — une
+# alerte encore réglée sur "manual" ne se déclenche donc jamais.
 
 
 def _parse_paris_dt(s):
@@ -4214,6 +4287,105 @@ def _is_periodic_alert_due(conn, alert_id: int, params: dict, machine: str, now_
     return now_paris >= due_dt
 
 
+def _last_calendar_occurrence(trig: dict, now_paris: datetime):
+    """Dernière occurrence PASSÉE (ou en cours) d'un déclencheur calendaire.
+
+    Exemple : trigger {time: "08:00", days: ["mon","tue","wed","thu","fri"]}
+      - mardi 09:30 → mardi 08:00
+      - mardi 07:15 → lundi 08:00 (l'occurrence du jour n'est pas encore due)
+      - dimanche    → vendredi 08:00
+
+    Retourne None si le trigger est invalide ou si aucun jour n'est coché.
+    """
+    time_str = str(trig.get("time") or "").strip()
+    try:
+        hh_s, mm_s = time_str.split(":")
+        hh, mm = int(hh_s), int(mm_s)
+        if not (0 <= hh < 24 and 0 <= mm < 60):
+            return None
+    except (ValueError, AttributeError):
+        return None
+    days = trig.get("days")
+    if not isinstance(days, list) or not days:
+        days = list(_ALERT_CALENDAR_DAY_ORDER)
+    days_set = {d for d in days if d in _ALERT_CALENDAR_DAYS}
+    if not days_set:
+        return None
+    # Remonter au plus 7 jours : on tombe forcément sur un jour coché.
+    for delta in range(0, 8):
+        d = now_paris - timedelta(days=delta)
+        if _ALERT_CALENDAR_DAY_ORDER[d.weekday()] not in days_set:
+            continue
+        occ = d.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        if occ <= now_paris:
+            return occ
+    return None
+
+
+def _is_calendar_alert_due(
+    conn,
+    alert_id: int,
+    params: dict,
+    machine: str,
+    now_paris: datetime,
+    user_id=None,
+    created_at_iso: str = None,
+) -> bool:
+    """Décide si une alerte calendaire doit s'afficher maintenant.
+
+    v2.5.6 — Première implémentation réelle du type « calendaire ». Avant cette
+    version le type était validé et stocké mais JAMAIS évalué : les alertes
+    configurées à heure fixe ne se déclenchaient jamais.
+
+    Règles (arbitrées avec l'admin) :
+      1. Aucune condition de production — contrairement au périodique, la
+         machine n'a pas besoin d'être en marche (03/88). L'usage visé est le
+         contrôle de prise de poste, avant tout démarrage.
+      2. Pas de fenêtre d'expiration — l'alerte reste due jusqu'à validation
+         (ou esquive), y compris les jours suivants. Une occurrence plus
+         récente remplace simplement la précédente : rien ne s'empile.
+      3. Compteur par machine (comme le périodique). Si l'opérateur n'a pas de
+         machine résolue, on retombe sur son user_id pour que deux opérateurs
+         sans machine ne se neutralisent pas l'un l'autre.
+      4. Jamais rétroactive : une occurrence antérieure à la création de
+         l'alerte est ignorée (sinon une alerte créée à 14h « rattraperait »
+         l'occurrence de 08h le jour même).
+    """
+    trig = params.get("trigger") or {}
+    if trig.get("type") != "calendar":
+        return False
+    occ = _last_calendar_occurrence(trig, now_paris)
+    if occ is None:
+        return False
+    # 4. Plancher sur la création de l'alerte
+    created_dt = _parse_paris_dt(created_at_iso)
+    if created_dt is not None and occ < created_dt:
+        return False
+    # 3. Dernier ack (validation OU esquive : les deux insèrent une ligne dans
+    #    maintenance_alert_acks, donc les deux referment l'occurrence).
+    if machine:
+        ack_row = conn.execute(
+            "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks "
+            "WHERE alert_id=? AND machine=?",
+            (alert_id, machine),
+        ).fetchone()
+    elif user_id is not None:
+        ack_row = conn.execute(
+            "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks "
+            "WHERE alert_id=? AND COALESCE(machine,'')='' AND user_id=?",
+            (alert_id, user_id),
+        ).fetchone()
+    else:
+        ack_row = conn.execute(
+            "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks "
+            "WHERE alert_id=? AND COALESCE(machine,'')=''",
+            (alert_id,),
+        ).fetchone()
+    last_ack_dt = _parse_paris_dt(ack_row["m"]) if ack_row else None
+    # 2. Due tant que l'occurrence courante n'a pas été acquittée.
+    return last_ack_dt is None or last_ack_dt < occ
+
+
 @router.get("/api/maintenance/alerts/active")
 def maintenance_alerts_active(request: Request):
     """Liste des alertes actives à pousser sur l'écran de l'opérateur connecté.
@@ -4257,7 +4429,7 @@ def maintenance_alerts_active(request: Request):
                         gap_active = True
                         gap_until_str = gap_end.strftime("%Y-%m-%dT%H:%M:%S")
         rows = conn.execute(
-            """SELECT id, nom, params, linked_maint_code
+            """SELECT id, nom, params, linked_maint_code, created_at
                FROM maintenance_alerts
                WHERE active=1"""
         ).fetchall()
@@ -4303,6 +4475,19 @@ def maintenance_alerts_active(request: Request):
                     should_show = _is_periodic_alert_due(
                         conn, int(r["id"]), params, machine_for_check, now_paris
                     )
+            elif ttype == "calendar":
+                # v2.5.6 : implémenté. Bypass volontaire du gap min_gap_minutes
+                # (comme les événementielles) : une alerte à heure fixe ne doit
+                # pas être avalée parce qu'un autre contrôle vient d'être
+                # validé sur la machine. Aucune condition de production.
+                try:
+                    _created = r["created_at"] if "created_at" in r.keys() else None
+                except (IndexError, KeyError):
+                    _created = None
+                should_show = _is_calendar_alert_due(
+                    conn, int(r["id"]), params, user_machine or "", now_paris,
+                    user_id=user.get("id"), created_at_iso=_created,
+                )
             elif ttype == "event":
                 # Trigger evenementiel : l'alerte s'affiche quand un evenement
                 # metier correspondant s'est produit APRES le dernier ack de
@@ -4337,43 +4522,62 @@ def maintenance_alerts_active(request: Request):
                         if len(specific) == 1:
                             effective_machine = specific[0]
                 effective_operateur = operateur or (user_nom if user_role == ROLE_SUPERADMIN else "")
-                # v2.2.89 : after_calage ne remonte PLUS via le polling. L'alerte
-                # ne s'affiche qu'au moment où l'opérateur tente une saisie 03/88
-                # et que le garde-fou 423 est déclenché — c'est le front qui
-                # appelle alors /alerts/blocking-for-machine pour l'afficher.
-                if event == "after_calage":
-                    continue
-                if event == "after_calage_UNUSED" and effective_machine:
-                    _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
+                # v2.5.32 : after_calage remonte à nouveau via le polling
+                # (annule v2.2.89). Sans ça, une alerte after_calage
+                # non-bloquante (block_production=False) ne s'affichait
+                # JAMAIS puisque /blocking-for-machine filtre les alertes
+                # bloquantes. Le comportement bloquant garde son garde-fou
+                # 423 côté saisie 03/88 — ici c'est l'alerte d'écran
+                # (non-bloquante) que l'opérateur peut voir et remplir.
+                # Détection alignée sur _blocking_for_machine_impl (v2.3.2 :
+                # match par code exact via _ALERT_CALAGE_CODES). Pas de
+                # filtre opérateur : after_calage est un état machine.
+                # v2.5.6 : correction du MOMENT de declenchement (le
+                # comportement v2.5.32 ci-dessus est conserve pour tout le
+                # reste). L'ancienne condition testait « derniere saisie de la
+                # machine = code de calage » : elle devenait vraie des que
+                # l'operateur pointait son calage, donc l'alerte sortait au
+                # DEBUT du calage et disparaissait des la reprise. On ancre
+                # desormais sur le calage lui-meme, puis on exige une reprise
+                # de production (03/88) posterieure : l'alerte sort au premier
+                # code de production APRES le calage -- soit a la fin du
+                # calage -- et reste affichee jusqu'a validation quelles que
+                # soient les saisies suivantes (le verrou reste l'ack par
+                # dossier).
+                if event == "after_calage" and effective_machine:
                     _calage_window = (now_paris - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
-                    _last_row = conn.execute(
-                        """SELECT no_dossier, operation_code, operation_category, date_operation
-                           FROM production_data
-                           WHERE machine=? AND date_operation >= ?
-                           ORDER BY date_operation DESC LIMIT 1""",
-                        (effective_machine, _window),
+                    # 1. Dernier calage de la machine dans la fenetre 4h.
+                    _cal_row = conn.execute(
+                        f"""SELECT no_dossier, operation_code, date_operation
+                            FROM production_data
+                            WHERE machine=? AND date_operation >= ?
+                              AND operation_code IN {_ALERT_CALAGE_CODES_SQL_LIST}
+                            ORDER BY date_operation DESC LIMIT 1""",
+                        (effective_machine, _calage_window),
                     ).fetchone()
-                    # Nouvelle contrainte : dernière saisie = catégorie calage
-                    # avec no_dossier renseigné et dans la fenêtre 4h.
-                    _is_calage_last = (
-                        _last_row
-                        and (_last_row["operation_category"] or "").lower() == "calage"
-                        and _last_row["no_dossier"] is not None
-                        and str(_last_row["no_dossier"]).strip() != ""
-                        and _last_row["date_operation"] >= _calage_window
-                    )
-                    if _is_calage_last:
-                        _dos = str(_last_row["no_dossier"]).strip()
-                        _last_calage_at = _last_row["date_operation"]
-                        # Verrou par dossier
+                    _dos = ""
+                    if _cal_row is not None and _cal_row["no_dossier"] is not None:
+                        _dos = str(_cal_row["no_dossier"]).strip()
+                    if _dos:
+                        _last_calage_at = _cal_row["date_operation"]
+                        # 2. Reprise de production posterieure au calage :
+                        #    c'est ELLE qui marque la fin du calage.
+                        _prod_after = conn.execute(
+                            f"""SELECT 1 FROM production_data
+                                WHERE machine=? AND date_operation > ?
+                                  AND operation_code IN {_ALERT_POST_CALAGE_CODES_SQL_LIST}
+                                LIMIT 1""",
+                            (effective_machine, _last_calage_at),
+                        ).fetchone()
+                        # 3. Verrou par dossier : un seul declenchement.
                         _ack_check = conn.execute(
                             """SELECT 1 FROM maintenance_alert_acks
                                WHERE alert_id=? AND no_dossier=? LIMIT 1""",
                             (int(r["id"]), _dos),
                         ).fetchone()
-                        if not _ack_check:
-                            # Contrainte v2.2.82 conservée : calage doit être
-                            # postérieur au dernier code 89 du dossier.
+                        if _prod_after and not _ack_check:
+                            # Contrainte v2.2.82 conservee : calage doit etre
+                            # posterieur au dernier code 89 du dossier.
                             _last_89 = conn.execute(
                                 """SELECT MAX(date_operation) AS m FROM production_data
                                    WHERE no_dossier=? AND machine=? AND operation_code='89'""",
@@ -4459,7 +4663,9 @@ def maintenance_alerts_active(request: Request):
                                 should_show = False
                             elif filter_cond == "plis_only" and is_bobine:
                                 should_show = False
-            # type manual / calendar : non implémenté en v1
+            # type manual : déclencheur obsolète (v2.5.6), jamais évalué —
+            # l'alerte reste dormante jusqu'à ce que l'admin choisisse un
+            # vrai déclencheur dans le formulaire.
             if should_show:
                 # v163+ : fallback no_dossier pour toutes les alertes qui n'ont
                 # pas encore de trigger_no_dossier (typiquement les périodiques).
@@ -4770,52 +4976,38 @@ def maintenance_alert_acks_delete(ack_id: int, request: Request):
 
 
 def _auto_ack_periodic_alerts_on_arret(conn, user, machine, no_dossier, code, code_label, operation_str, exclude_saisie_id: int = None):
-    """v2.2.65 — Ferme automatiquement toutes les alertes périodiques actives dont la
-    target couvre cette machine, quand l'opérateur saisit un code non-productif
-    (arrêt, pause, calage, technique, fin dossier — tout sauf 01 et 03).
-
-    Une ligne est insérée dans maintenance_alert_acks pour chaque alerte avec le
-    motif dans le champ comment. Effet : compteur périodique reset, plus de lignes
-    vierges dans l'historique, modales à l'écran se ferment au prochain polling.
-
-    v2.3.31 : la ligne « Fermée auto » n'est plus inscrite que si l'alerte
-    était **effectivement due** juste avant la saisie (i.e. affichée à
-    l'écran de l'opérateur ou sur le point de l'être). Sinon on ne trace
-    rien — évite les lignes fantômes dans l'historique pour des alertes
-    dont l'intervalle n'était pas écoulé. `exclude_saisie_id` = id de la
-    saisie qu'on vient d'insérer, à exclure des calculs.
+    """v2.2.65 / v2.5.30 / v2.5.31 — Ferme automatiquement les alertes actives dont la
+    target couvre cette machine, quand l'operateur saisit un code non-productif.
+    v2.5.30 : etendu aux alertes EVENEMENTIELLES (dossier_end/dossier_start).
+    v2.5.31 : etendu aux alertes CALENDAIRES (time + days).
     """
     if not machine:
         return
-    from database import get_db  # noqa: F401 (import garde le style existant)
+    from database import get_db  # noqa: F401
     now_paris = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
     try:
-        rows = conn.execute(
-            "SELECT id, params FROM maintenance_alerts WHERE active=1"
-        ).fetchall()
+        rows = conn.execute("SELECT id, params FROM maintenance_alerts WHERE active=1").fetchall()
     except Exception:
         return
-    if code_label:
-        reason = f"Fermée auto : {code} – {code_label}"
-    else:
-        reason = f"Fermée auto : code {code}"
-    reason = reason[:2000]
+    reason = (f"Fermee auto : {code} - {code_label}" if code_label else f"Fermee auto : code {code}")[:2000]
     user_id = user.get("id") if user else None
     user_nom = (user.get("nom") if user else "") or (user.get("email") if user else "") or ""
     responses_json = "{}"
-    # v2.3.30 : seuil anti-doublon. Si l'alerte a déjà un ack sur cette
-    # machine dans les 60 dernières secondes (validation opérateur ou flush
-    # côté client déclenché par v2.3.29), on saute — l'auto-close n'a rien
-    # à faire, la ligne serait juste un doublon "Fermée auto : 89 – …".
     _now_dt = datetime.now(ZoneInfo("Europe/Paris")).replace(tzinfo=None)
     _skip_threshold = (_now_dt - timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%S")
+    _EVENT_TO_TRIGGER_CODE = {"dossier_end": "89", "dossier_start": "01"}
+    _WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+    _today_key = _WEEKDAY_KEYS[_now_dt.weekday()]
     for r in rows:
         try:
             params = _json_alerts.loads(r["params"] or "{}")
         except (ValueError, TypeError):
             continue
         trig = params.get("trigger") or {}
-        if trig.get("type") != "periodic":
+        ttype = trig.get("type")
+        if ttype not in ("periodic", "event", "calendar"):
+            continue
+        if ttype == "event" and str(trig.get("event") or "").strip() == "after_calage":
             continue
         target = params.get("target") or {}
         machines_target = target.get("machines")
@@ -4824,39 +5016,81 @@ def _auto_ack_periodic_alerts_on_arret(conn, user, machine, no_dossier, code, co
             machines_target = [legacy] if isinstance(legacy, str) and legacy else ["*"]
         if "*" not in machines_target and machine not in machines_target:
             continue
-        # v2.3.30 : anti-doublon (voir commentaire ci-dessus).
         try:
             recent = conn.execute(
-                """SELECT 1 FROM maintenance_alert_acks
-                   WHERE alert_id=? AND machine=? AND ack_at >= ?
-                   LIMIT 1""",
+                "SELECT 1 FROM maintenance_alert_acks WHERE alert_id=? AND machine=? AND ack_at >= ? LIMIT 1",
                 (int(r["id"]), machine, _skip_threshold),
             ).fetchone()
             if recent:
                 continue
         except Exception:
             pass
-        # v2.3.31 : ne trace que si l'alerte était réellement due juste
-        # avant cette saisie. Autrement dit : l'alerte était bien à l'écran
-        # (ou aurait dû l'être) au moment où l'op a saisi son code. Sinon
-        # on ne crée pas de ligne fantôme "Fermée auto : XX – …".
-        try:
-            was_due = _is_periodic_alert_due(
-                conn, int(r["id"]), params, machine, _now_dt,
-                exclude_saisie_id=exclude_saisie_id,
-            )
-        except Exception:
-            was_due = False
+        was_due = False
+        if ttype == "periodic":
+            try:
+                was_due = _is_periodic_alert_due(conn, int(r["id"]), params, machine, _now_dt, exclude_saisie_id=exclude_saisie_id)
+            except Exception:
+                was_due = False
+        elif ttype == "event":
+            event = str(trig.get("event") or "").strip()
+            trigger_code = _EVENT_TO_TRIGGER_CODE.get(event)
+            if not trigger_code:
+                continue
+            if str(code) == trigger_code:
+                continue
+            try:
+                last_ack = conn.execute(
+                    "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks WHERE alert_id=? AND machine=?",
+                    (int(r["id"]), machine),
+                ).fetchone()
+                last_ack_at_str = last_ack["m"] if last_ack else None
+                _excl_sql = " AND id<>?" if exclude_saisie_id is not None else ""
+                _excl_params = (int(exclude_saisie_id),) if exclude_saisie_id is not None else ()
+                q = "SELECT 1 FROM production_data WHERE machine=? AND operation_code=?"
+                pp = [machine, trigger_code]
+                if last_ack_at_str:
+                    q += " AND date_operation > ?"; pp.append(last_ack_at_str)
+                else:
+                    q += " AND date_operation >= ?"; pp.append(_now_dt.strftime("%Y-%m-%dT00:00:00"))
+                q += _excl_sql + " LIMIT 1"
+                if _excl_params:
+                    pp.extend(_excl_params)
+                recent_trigger = conn.execute(q, tuple(pp)).fetchone()
+                was_due = recent_trigger is not None
+            except Exception:
+                was_due = False
+        else:  # calendar
+            try:
+                days = trig.get("days") or []
+                if not isinstance(days, list) or _today_key not in days:
+                    continue
+                time_str = str(trig.get("time") or "").strip()
+                try:
+                    hh, mm = time_str.split(":")
+                    hh = int(hh); mm = int(mm)
+                    if not (0 <= hh < 24 and 0 <= mm < 60):
+                        raise ValueError
+                except (ValueError, AttributeError):
+                    continue
+                fire_dt = _now_dt.replace(hour=hh, minute=mm, second=0, microsecond=0)
+                if _now_dt < fire_dt:
+                    continue
+                fire_iso = fire_dt.strftime("%Y-%m-%dT%H:%M:%S")
+                ack_since = conn.execute(
+                    "SELECT 1 FROM maintenance_alert_acks WHERE alert_id=? AND machine=? AND ack_at >= ? LIMIT 1",
+                    (int(r["id"]), machine, fire_iso),
+                ).fetchone()
+                was_due = ack_since is None
+            except Exception:
+                was_due = False
         if not was_due:
             continue
         try:
             conn.execute(
                 """INSERT INTO maintenance_alert_acks
-                   (alert_id, user_id, user_nom, machine, no_dossier,
-                    ack_at, responses, comment)
+                   (alert_id, user_id, user_nom, machine, no_dossier, ack_at, responses, comment)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (int(r["id"]), user_id, user_nom, machine, no_dossier or "",
-                 now_paris, responses_json, reason),
+                (int(r["id"]), user_id, user_nom, machine, no_dossier or "", now_paris, responses_json, reason),
             )
             conn.execute(
                 "UPDATE maintenance_alerts SET last_ack_at=?, updated_at=? WHERE id=?",

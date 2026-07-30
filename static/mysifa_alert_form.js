@@ -30,12 +30,31 @@
   var toast   = window.toast   || function (m, err) { if (window.console) window.console.log('[alert-form]', m, err ? 'ERROR' : ''); };
 
   // ── _ALERT_TRIGGER_TYPES ──
+  // v2.5.6 : « Manuel » retiré. Il ne déclenchait rien (jamais évalué par
+  // /alerts/active) — une alerte réglée dessus restait invisible pour
+  // l'opérateur. Les alertes historiques qui le portent encore en base ne
+  // sont PAS migrées : le select réaffiche l'option uniquement pour
+  // celles-là (via _triggerOptsFor), avec un bandeau d'avertissement, pour
+  // qu'aucune alerte dormante ne se mette à sonner par accident au save.
   var _ALERT_TRIGGER_TYPES = [
-  { v: 'manual',   l: 'Manuel — déclenché par l\'opérateur' },
-  { v: 'periodic', l: 'Périodique — toutes les X minutes' },
+  { v: 'periodic', l: 'Périodique — toutes les X minutes, en production' },
   { v: 'calendar', l: 'Calendaire — à heure fixe' },
   { v: 'event',    l: 'Événementiel — sur action métier' },
 ];
+
+  var _ALERT_TRIGGER_TYPE_LEGACY = { v: 'manual', l: 'Manuel — obsolète, ne déclenche rien' };
+
+  function _isLegacyTriggerType(t) { return t === 'manual'; }
+
+  // Construit les <option> du select : les types courants, plus l'option
+  // obsolète en tête si (et seulement si) l'alerte ouverte l'utilise encore.
+  function _triggerOptsFor(currentType) {
+    var list = _ALERT_TRIGGER_TYPES.slice();
+    if (_isLegacyTriggerType(currentType)) list.unshift(_ALERT_TRIGGER_TYPE_LEGACY);
+    return list.map(function (t) {
+      return '<option value="' + t.v + '"' + (t.v === currentType ? ' selected' : '') + '>' + esc(t.l) + '</option>';
+    }).join('');
+  }
 
   // ── _ALERT_TRIGGER_EVENTS ──
   var _ALERT_TRIGGER_EVENTS = [
@@ -117,7 +136,8 @@
   });
   return {
     description: (typeof p.description === 'string') ? p.description : '',
-    trigger: Object.assign({ type: 'manual', interval_minutes: 120, grace_minutes: 5, time: '08:00', days: ['mon','tue','wed','thu','fri'], event: 'dossier_start' }, trig),
+    // v2.5.6 : défaut 'periodic' (avant 'manual', qui ne déclenchait rien).
+    trigger: Object.assign({ type: 'periodic', interval_minutes: 120, grace_minutes: 5, time: '08:00', days: ['mon','tue','wed','thu','fri'], event: 'dossier_start' }, trig),
     target: { machines: machines },
     validation: Object.assign({ button_label: 'Valider' }, p.validation || {}),
     dismiss_button: Object.assign({ enabled: false, label: 'Fermer l\'alerte' }, p.dismiss_button || {}),
@@ -139,16 +159,31 @@
 }
 
 
+  // ── _daysLabel ──
+  // v2.5.6 : rend les jours cochés en français court ("Lun, Mar, Mer") plutôt
+  // qu'en codes bruts ("mon, tue, wed"), et détecte les deux cas courants.
+  function _daysLabel(days) {
+    if (!Array.isArray(days) || !days.length) return 'tous les jours';
+    if (days.length === 7) return 'tous les jours';
+    const week = ['mon','tue','wed','thu','fri'];
+    if (days.length === 5 && week.every(d => days.indexOf(d) >= 0)) return 'du lundi au vendredi';
+    const map = {};
+    _ALERT_DAYS.forEach(d => { map[d.v] = d.l; });
+    return _ALERT_DAYS.filter(d => days.indexOf(d.v) >= 0).map(d => map[d.v]).join(', ');
+  }
+
+
   // ── _alertTriggerLabel ──
   function _alertTriggerLabel(t) {
-  if (!t || !t.type) return 'Manuel';
-  if (t.type === 'manual')   return 'Manuel — déclenché par l\'opérateur';
+  if (!t || !t.type) return 'Déclencheur non défini';
+  // v2.5.6 : type obsolète — signalé explicitement dans la liste des alertes.
+  if (t.type === 'manual')   return 'Manuel — obsolète, ne déclenche rien';
   if (t.type === 'periodic') {
     const m = (t.interval_minutes != null) ? t.interval_minutes
               : (t.interval_hours != null ? Math.round(t.interval_hours * 60) : '?');
-    return 'Périodique — toutes les ' + m + ' min';
+    return 'Périodique — toutes les ' + m + ' min, en production';
   }
-  if (t.type === 'calendar') return 'Calendaire — ' + (t.time || '??:??') + ' (' + (t.days || []).join(', ') + ')';
+  if (t.type === 'calendar') return 'Calendaire — ' + (t.time || '??:??') + ' (' + _daysLabel(t.days) + ')';
   if (t.type === 'event') {
     const ev = (_ALERT_TRIGGER_EVENTS.find(e => e.v === t.event) || {}).l || t.event;
     return 'Événementiel — ' + ev;
@@ -187,9 +222,16 @@
   } else {
     machinesInitialLabel = selectedMachines.length + ' machines';
   }
-  const triggerOpts = _ALERT_TRIGGER_TYPES.map(t =>
-    '<option value="' + t.v + '"' + (t.v === d.trigger.type ? ' selected' : '') + '>' + esc(t.l) + '</option>'
-  ).join('');
+  const triggerOpts = _triggerOptsFor(d.trigger.type);
+  // v2.5.6 : bandeau affiché uniquement pour les alertes encore stockées sur
+  // l'ancien déclencheur « Manuel ». Aucune migration en base n'ayant été
+  // faite, l'admin doit choisir lui-même un vrai déclencheur — le bandeau
+  // évite qu'il découvre le problème par une alerte qui ne sonne jamais.
+  const legacyTriggerBanner = _isLegacyTriggerType(d.trigger.type)
+    ? '<div class="alert-field-sub" style="border-style:solid;border-color:var(--danger);background:rgba(239,68,68,.08);margin-bottom:10px">'
+      +   '<p style="margin:0;font-size:12px;color:var(--text)"><strong>Déclencheur obsolète.</strong> Cette alerte utilise « Manuel », un type supprimé qui ne déclenchait rien : elle n\'est jamais apparue chez l\'opérateur. Choisis un déclencheur réel ci-dessous pour la rendre active.</p>'
+      + '</div>'
+    : '';
   const eventOpts = _ALERT_TRIGGER_EVENTS.map(e =>
     '<option value="' + e.v + '"' + (e.v === d.trigger.event ? ' selected' : '') + '>' + esc(e.l) + '</option>'
   ).join('');
@@ -238,9 +280,10 @@
     + '<div id="af-settings-wrap" style="display:none;margin-top:12px">'
     +   '<div class="alert-field">'
     +     '<label class="alert-field-label">Déclencheur <span style="color:var(--danger)">*</span></label>'
+    +     legacyTriggerBanner
     +     '<select id="af-trigger-type" class="alert-field-input" onchange="_afOnTriggerChange()">' + triggerOpts + '</select>'
     +     '<div id="af-trigger-sub" class="alert-field-sub">'
-    +       '<div data-trigger-for="manual" style="font-size:12px;color:var(--muted)">Aucun déclenchement automatique — l\'opérateur ouvrira l\'alerte lui-même.</div>'
+    +       '<div data-trigger-for="manual" style="font-size:12px;color:var(--muted)">Type supprimé — aucun déclenchement, l\'alerte reste dormante tant qu\'un autre déclencheur n\'est pas choisi.</div>'
     +       '<div data-trigger-for="periodic">'
     +         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
     +           '<div>'
@@ -252,7 +295,10 @@
     +             '<input type="number" id="af-trigger-grace-minutes" class="alert-field-input" min="0" max="120" step="1" value="' + (d.trigger.grace_minutes != null ? d.trigger.grace_minutes : 5) + '">'
     +           '</div>'
     +         '</div>'
-    +         '<div class="alert-field-help">La <strong>première alerte</strong> de chaque session de production s\'affiche après le délai indiqué (par défaut 5 min). Les alertes suivantes s\'affichent toutes les X minutes après la dernière validation. Une nouvelle session redémarre après chaque interruption de production. Utiliser des délais différents entre alertes pour les espacer naturellement au démarrage.</div>'
+    +         '<div class="alert-field-sub" style="border-style:solid;border-color:var(--accent);background:var(--accent-bg);margin-top:8px">'
+    +           '<p style="margin:0;font-size:12px;color:var(--text)"><strong>Ne fonctionne qu\'en production.</strong> L\'alerte n\'est évaluée que si la <strong>dernière saisie de la machine est un 03 (Production) ou un 88 (Reprise)</strong>. Machine à l\'arrêt, en calage (02), en événement personnel (86), ou simplement sur un 01 (Début de dossier) : le compteur est gelé et rien ne s\'affiche. Toute saisie hors 03/88 clôt la session en cours et remet le compteur à zéro — la prochaine reprise repart sur le délai avant 1ère alerte.</p>'
+    +         '</div>'
+    +         '<div class="alert-field-help">La <strong>première alerte</strong> de chaque session de production s\'affiche après le délai indiqué (par défaut 5 min). Les alertes suivantes s\'affichent toutes les X minutes après la dernière validation. Utiliser des délais différents entre alertes pour les espacer naturellement au démarrage.</div>'
     +       '</div>'
     +       '<div data-trigger-for="calendar">'
     +         '<div class="alert-field-row">'
@@ -261,6 +307,10 @@
     +         '</div>'
     +         '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2);margin-top:8px">Jours</label>'
     +         '<div style="display:flex;flex-wrap:wrap;gap:6px">' + daysHtml + '</div>'
+    +         '<div class="alert-field-sub" style="border-style:solid;border-color:var(--accent);background:var(--accent-bg);margin-top:10px">'
+    +           '<p style="margin:0;font-size:12px;color:var(--text)"><strong>Fonctionne machine à l\'arrêt.</strong> Contrairement au périodique, aucune condition de production : l\'alerte devient due à l\'heure indiquée et s\'affiche dès qu\'un opérateur ciblé ouvre son écran. Typiquement un contrôle de prise de poste, avant tout démarrage.</p>'
+    +         '</div>'
+    +         '<div class="alert-field-help">Un opérateur qui arrive après l\'heure voit quand même le contrôle : l\'alerte <strong>reste affichée tant qu\'elle n\'a pas été validée</strong>, y compris les jours suivants. Elle ne s\'empile pas — l\'occurrence du jour remplace celle de la veille. Chaque machine ciblée valide de son côté. Une alerte créée après l\'heure du jour ne rattrape pas l\'occurrence passée : elle démarre à la suivante.</div>'
     +       '</div>'
     +       '<div data-trigger-for="event">'
     +         '<label class="alert-field-label" style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">Événement</label>'
@@ -476,8 +526,15 @@
   // v2.3.33 : force l'ouverture de la section Paramètres pour que les
   // erreurs de validation portant sur des champs cachés soient visibles.
   try { _afOpenSettings(); } catch(_) {}
-  const t = document.getElementById('af-trigger-type').value || 'manual';
+  const t = document.getElementById('af-trigger-type').value || 'periodic';
   const trig = { type: t };
+  // v2.5.6 : garde-fou — le type obsolète ne peut pas être (re)choisi
+  // volontairement ; il n'est présent dans le select que pour les alertes
+  // historiques, et sauvegarder dans cet état laisserait l'alerte muette.
+  if (t === 'manual') {
+    toast('Choisis un déclencheur : « Manuel » est supprimé et ne déclenche rien.', true);
+    return null;
+  }
   if (t === 'periodic') {
     const mInp = document.getElementById('af-trigger-interval-minutes');
     const m = parseInt(mInp.value, 10);
@@ -603,7 +660,7 @@
 
   // ── _afOnTriggerChange ──
   function _afOnTriggerChange() {
-  const t = document.getElementById('af-trigger-type')?.value || 'manual';
+  const t = document.getElementById('af-trigger-type')?.value || 'periodic';
   document.querySelectorAll('#af-trigger-sub > [data-trigger-for]').forEach(el => {
     el.style.display = (el.getAttribute('data-trigger-for') === t) ? '' : 'none';
   });
@@ -791,6 +848,9 @@ function _afRowClick(ev, inputId) {
   try { window._afUpdateMachinesLabel = _afUpdateMachinesLabel; } catch(e) {}
   try { window._afToggleSettings = _afToggleSettings; } catch(e) {}
   try { window._afOpenSettings = _afOpenSettings; } catch(e) {}
+  try { window._daysLabel = _daysLabel; } catch(e) {}
+  try { window._triggerOptsFor = _triggerOptsFor; } catch(e) {}
+  try { window._isLegacyTriggerType = _isLegacyTriggerType; } catch(e) {}
   try { window._ALERT_TRIGGER_TYPES = _ALERT_TRIGGER_TYPES; } catch(e) {}
   try { window._ALERT_TRIGGER_EVENTS = _ALERT_TRIGGER_EVENTS; } catch(e) {}
   try { window._ALERT_MACHINES = _ALERT_MACHINES; } catch(e) {}
@@ -825,6 +885,9 @@ function _afRowClick(ev, inputId) {
     _afUpdateMachinesLabel: _afUpdateMachinesLabel,
     _afToggleSettings: _afToggleSettings,
     _afOpenSettings: _afOpenSettings,
+    _daysLabel: _daysLabel,
+    _triggerOptsFor: _triggerOptsFor,
+    _isLegacyTriggerType: _isLegacyTriggerType,
     _ALERT_TRIGGER_TYPES: _ALERT_TRIGGER_TYPES,
     _ALERT_TRIGGER_EVENTS: _ALERT_TRIGGER_EVENTS,
     _ALERT_MACHINES: _ALERT_MACHINES,

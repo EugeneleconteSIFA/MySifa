@@ -170,11 +170,28 @@ def _validate_time(s: Optional[str]) -> None:
         raise HTTPException(status_code=400, detail=f"heure attendue au format HH:MM: {s!r}")
 
 
+def _check_event_not_deleted(ev: dict) -> None:
+    """v2.5.29 : leve HTTP 410 Gone si l'event est tombstoned (soft-deleted).
+    Utilise dans toutes les mutations d'ops -- empeche l'operateur (ou toute autre
+    partie) de remplir un creneau qui a ete supprime cote admin."""
+    if ev and ev.get("deleted_at"):
+        raise HTTPException(status_code=410, detail="Ce créneau a été supprimé. Il n'est plus modifiable.")
+
+
+def _assert_event_alive(conn, event_id: int) -> None:
+    """v2.5.29 : garde-fou 410 sur toute mutation d'un event tombstoned. Query
+    directe pour eviter de charger tout _load_event_full quand on n'en a pas besoin."""
+    row = conn.execute("SELECT deleted_at FROM maintenance_events WHERE id=?", (event_id,)).fetchone()
+    if row and row["deleted_at"]:
+        raise HTTPException(status_code=410, detail="Ce créneau a été supprimé. Il n'est plus modifiable.")
+
+
 def _load_event_full(conn, event_id: int) -> Optional[dict]:
     """Retourne un dict enrichi {event, ops:[...], operators:[...]} ou None."""
     ev = conn.execute(
         """SELECT id, machine, nom, date_prevue, heure_debut, heure_fin, source,
-                  template_id, created_by, created_at, updated_at
+                  template_id, template_origin_date, created_by, created_at, updated_at,
+                  deleted_at
            FROM maintenance_events WHERE id = ?""",
         (event_id,),
     ).fetchone()
@@ -224,9 +241,11 @@ def _load_event_full(conn, event_id: int) -> Optional[dict]:
         "heure_fin": ev["heure_fin"],
         "source": ev["source"],
         "template_id": ev["template_id"],
+        "template_origin_date": ev["template_origin_date"] if "template_origin_date" in ev.keys() else None,
         "created_by": ev["created_by"],
         "created_at": ev["created_at"],
         "updated_at": ev["updated_at"],
+        "deleted_at": ev["deleted_at"] if "deleted_at" in ev.keys() else None,
         "ops": ops_out,
         "operators": [dict(r) for r in ops_rows],
     }
@@ -406,6 +425,8 @@ def list_events(
         # "Cohésio 1 · DSI"), on filtre par match partiel — un event dont
         # une des machines match est retenu.
         where.append("machine LIKE ?"); params.append(f"%{machine}%")
+    # v2.5.29 : exclut les creneaux tombstoned (soft-deleted).
+    where.append("deleted_at IS NULL")
     sql = ("SELECT id FROM maintenance_events "
            + ("WHERE " + " AND ".join(where) if where else "")
            + " ORDER BY date_prevue ASC, heure_debut ASC, id ASC")
@@ -586,6 +607,7 @@ def update_event(event_id: int, body: EventUpdateBody, request: Request):
         ev = _load_event_full(conn, event_id)
         if not ev:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
+        _check_event_not_deleted(ev)  # v2.5.29 : refuse toute modif si tombstoned
         if maint_role == "operator":
             if not _can_operator_manage_event(ev, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres interventions non planifiées")
@@ -671,11 +693,22 @@ def delete_event(event_id: int, request: Request, confirm_token: Optional[str] =
         # rows dans maintenance_event_ops et maintenance_event_operators
         # restent orphelines dans la DB (invisibles dans l'UI via JOIN mais
         # présentes physiquement).
+        # v2.5.29 : soft delete pour les creneaux issus d'un template recurrent.
+        # Preserve la row (empeche la re-generation par _ensure_recurring_events_generated,
+        # preserve toutes les modifs manuelles pour restore fidele).
+        # Standalone creneaux non-recurrents -> hard delete comme avant.
+        if ev.get("template_id"):
+            conn.execute(
+                "UPDATE maintenance_events SET deleted_at=? WHERE id=?",
+                (_now_paris_iso(), event_id),
+            )
+            conn.commit()
+            return {"deleted": event_id, "soft": True}
         conn.execute("DELETE FROM maintenance_event_ops WHERE event_id=?", (event_id,))
         conn.execute("DELETE FROM maintenance_event_operators WHERE event_id=?", (event_id,))
         conn.execute("DELETE FROM maintenance_events WHERE id=?", (event_id,))
         conn.commit()
-    return {"deleted": event_id}
+    return {"deleted": event_id, "soft": False}
 
 
 # ─── Endpoints — event ops (les opérations du créneau) ───────────
@@ -688,6 +721,7 @@ def add_op(event_id: int, body: OpAddBody, request: Request):
         ev_check = _load_event_full(conn, event_id)
         if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
+        _check_event_not_deleted(ev_check)  # v2.5.29
         if maint_role == "operator":
             if not _can_operator_manage_event(ev_check, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres interventions non planifiées")
@@ -742,6 +776,7 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
         ).fetchone()
         if not row or row["event_id"] != event_id:
             raise HTTPException(status_code=404, detail="Op introuvable dans ce créneau")
+        _assert_event_alive(conn, event_id)  # v2.5.29
 
         if maint_role == "operator" and not _user_in_group(conn, event_id, user["id"]):
             raise HTTPException(status_code=403, detail="Vous n'êtes pas assigné à ce créneau")
@@ -823,6 +858,7 @@ def reset_op(event_id: int, op_id: int, request: Request):
         ).fetchone()
         if not row or row["event_id"] != event_id:
             raise HTTPException(status_code=404, detail="Op introuvable dans ce créneau")
+        _assert_event_alive(conn, event_id)  # v2.5.29
         # Perms opérateur : dans le groupe OU créateur (cf. update_op / _can_operator_manage_event)
         if maint_role == "operator":
             ev_check = _load_event_full(conn, event_id)
@@ -866,6 +902,7 @@ def invalidate_op(event_id: int, op_id: int, request: Request):
         ).fetchone()
         if not row or row["event_id"] != event_id:
             raise HTTPException(status_code=404, detail="Op introuvable dans ce creneau")
+        _assert_event_alive(conn, event_id)  # v2.5.29
         if row["statut"] != "termine":
             raise HTTPException(status_code=400, detail="Seule une saisie terminee peut etre invalidee")
         now = _now_paris_iso()
@@ -895,6 +932,7 @@ def revalidate_op(event_id: int, op_id: int, request: Request):
         ).fetchone()
         if not row or row["event_id"] != event_id:
             raise HTTPException(status_code=404, detail="Op introuvable dans ce creneau")
+        _assert_event_alive(conn, event_id)  # v2.5.29
         if row["statut"] != "invalidee":
             raise HTTPException(status_code=400, detail="Seule une saisie invalidee peut etre revalidee")
         now = _now_paris_iso()
@@ -914,6 +952,43 @@ def revalidate_op(event_id: int, op_id: int, request: Request):
 
 
 
+@router.post("/api/maintenance/events/{event_id}/restore")
+def restore_event(event_id: int, request: Request):
+    """v2.5.29 : restore un créneau tombstoned (deleted_at NOT NULL) -> deleted_at = NULL.
+    Admin uniquement. Preserve toutes les modifs manuelles (nom, horaires, ops, operateurs)."""
+    _require_admin(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, deleted_at FROM maintenance_events WHERE id=?",
+            (event_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Créneau introuvable")
+        if not row["deleted_at"]:
+            raise HTTPException(status_code=400, detail="Ce créneau n'est pas supprimé")
+        conn.execute("UPDATE maintenance_events SET deleted_at=NULL WHERE id=?", (event_id,))
+        conn.commit()
+        ev = _load_event_full(conn, event_id)
+    return {"restored": event_id, "event": ev}
+
+
+@router.get("/api/maintenance/events/deleted")
+def list_deleted_events(request: Request, template_id: Optional[int] = None):
+    """v2.5.29 : liste les créneaux tombstoned pour le panel Restore admin.
+    Filtre optionnel par template_id."""
+    _require_admin(request)
+    where = ["deleted_at IS NOT NULL"]
+    params: List[Any] = []
+    if template_id is not None:
+        where.append("template_id = ?")
+        params.append(template_id)
+    sql = "SELECT id FROM maintenance_events WHERE " + " AND ".join(where) + " ORDER BY date_prevue DESC, heure_debut DESC"
+    with get_db() as conn:
+        ids = [r["id"] for r in conn.execute(sql, params).fetchall()]
+        events = [_load_event_full(conn, eid) for eid in ids]
+    return {"events": events}
+
+
 # ─── Endpoints — event operators (le groupe) ─────────────────────
 
 @router.post("/api/maintenance/events/{event_id}/operators")
@@ -924,6 +999,7 @@ def add_operator(event_id: int, body: OperatorAddBody, request: Request):
         ev_check = _load_event_full(conn, event_id)
         if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
+        _check_event_not_deleted(ev_check)  # v2.5.29
         if maint_role == "operator":
             if not _can_operator_manage_event(ev_check, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres événements")
@@ -947,6 +1023,7 @@ def remove_operator(event_id: int, operator_id: int, request: Request):
         ev_check = _load_event_full(conn, event_id)
         if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
+        _check_event_not_deleted(ev_check)  # v2.5.29
         if maint_role == "operator":
             if not _can_operator_manage_event(ev_check, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres événements")
@@ -1321,7 +1398,7 @@ def _resync_future_events_from_template(conn, template_id: int) -> int:
         return 0
     today = datetime.now(_PARIS).strftime("%Y-%m-%d")
     events = conn.execute(
-        "SELECT id FROM maintenance_events WHERE template_id = ? AND date_prevue >= ?",
+        "SELECT id FROM maintenance_events WHERE template_id = ? AND date_prevue >= ? AND deleted_at IS NULL",
         (template_id, today),
     ).fetchall()
     now = _now_paris_iso()
