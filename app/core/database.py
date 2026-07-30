@@ -7931,14 +7931,39 @@ Ressources :
         " ON ao_lignes_series(ligne_id, position)"
     )
 
-    # matieres_premieres.abbreviation : forme courte d'une matière, destinée à la
-    # composition automatique des références produit MyAO
-    # (« 105 x 148 mm Th Top-Coated Perm, 1 Color, M40 mm »). Éditable dans
-    # MyStock ; quand elle est vide, app/services/ao_ref_produit.py retombe sur
-    # une abréviation déduite de la désignation.
+    # ── Nommage des matières pour les références produit MyAO ────────────────
+    # Deux colonnes, dans cet ordre de priorité (cf. ao_ref_produit.matiere_abbrev) :
+    #
+    # sous_categorie / sous_categorie_en : niveau de regroupement thématique entre
+    #   `categorie` et `reference`, en deux langues. Le français s'affiche dans
+    #   MyStock (« Velin », « Enlevable », « Thermique Pro »), l'anglais alimente
+    #   la référence produit envoyée aux fournisseurs étrangers (« Vellum »,
+    #   « Removable », « Thermal Top »).
+    #
+    #   Les deux sont stockés, et non l'un déduit de l'autre, parce que la
+    #   correspondance n'est pas bijective : « Velin » et « Velin Fluo » se
+    #   distinguent en français et se rejoignent tous deux sur « Vellum ». Une
+    #   table de traduction perdrait cette nuance.
+    #
+    #   Vocabulaire contrôlé et partagé : deux matières de la même famille
+    #   composent la même référence produit. Sélectionnable par paire ou créable
+    #   à la volée dans MyStock, sur toutes les catégories.
+    #
+    #   NE PAS CONFONDRE avec `sous_section`, qui existe déjà : celle-ci pilote
+    #   les pastilles de navigation de MyStock (une pastille par couple
+    #   categorie+sous_section, cf. app/web/stock_page.py) et reste cantonnée aux
+    #   catégories `frontal` et `autre`. Les deux axes sont volontairement
+    #   séparés : on peut vouloir naviguer autrement qu'on ne nomme.
+    #
+    # abbreviation : exception par matière. Ne sert qu'à forcer un libellé
+    #   différent de la sous-catégorie sur une matière précise. Normalement vide.
     _mp_cols = {r["name"] for r in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
     if "abbreviation" not in _mp_cols:
         conn.execute("ALTER TABLE matieres_premieres ADD COLUMN abbreviation TEXT")
+    if "sous_categorie" not in _mp_cols:
+        conn.execute("ALTER TABLE matieres_premieres ADD COLUMN sous_categorie TEXT")
+    if "sous_categorie_en" not in _mp_cols:
+        conn.execute("ALTER TABLE matieres_premieres ADD COLUMN sous_categorie_en TEXT")
 
     # ── Historique des promotions v1 → v2 ───────────────────────────────────
     # Trace réelle de chaque déploiement en production, écrite par

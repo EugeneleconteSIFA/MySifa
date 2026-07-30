@@ -840,13 +840,15 @@ def _load_matieres_map(conn, ids: set[int] | None = None) -> dict[int, dict]:
     if ids:
         placeholders = ",".join("?" * len(ids))
         rows = conn.execute(
-            f"""SELECT id, categorie, reference, designation, couleur, abbreviation
+            f"""SELECT id, categorie, reference, designation, couleur,
+                       sous_categorie, sous_categorie_en, abbreviation
                 FROM matieres_premieres WHERE id IN ({placeholders}) AND actif=1""",
             tuple(ids),
         ).fetchall()
     else:
         rows = conn.execute(
-            """SELECT id, categorie, reference, designation, couleur, abbreviation
+            """SELECT id, categorie, reference, designation, couleur,
+                       sous_categorie, sous_categorie_en, abbreviation
                FROM matieres_premieres WHERE actif=1
                ORDER BY categorie, reference"""
         ).fetchall()
@@ -876,7 +878,8 @@ def list_matieres_ao(
             if cat not in _MP_AO_CATEGORIES:
                 raise HTTPException(status_code=400, detail="Catégorie invalide.")
             rows = conn.execute(
-                """SELECT id, categorie, reference, designation, couleur, abbreviation
+                """SELECT id, categorie, reference, designation, couleur,
+                       sous_categorie, sous_categorie_en, abbreviation
                    FROM matieres_premieres
                    WHERE actif=1 AND categorie=?
                    ORDER BY reference COLLATE NOCASE""",
@@ -884,7 +887,8 @@ def list_matieres_ao(
             ).fetchall()
         else:
             rows = conn.execute(
-                """SELECT id, categorie, reference, designation, couleur, abbreviation
+                """SELECT id, categorie, reference, designation, couleur,
+                       sous_categorie, sous_categorie_en, abbreviation
                    FROM matieres_premieres
                    WHERE actif=1 AND categorie IN (
                      'frontal','adhesif','glassine','carton','palette','mandrin'
