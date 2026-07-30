@@ -4512,13 +4512,17 @@ def maintenance_alerts_active(request: Request):
                         if len(specific) == 1:
                             effective_machine = specific[0]
                 effective_operateur = operateur or (user_nom if user_role == ROLE_SUPERADMIN else "")
-                # v2.2.89 : after_calage ne remonte PLUS via le polling. L'alerte
-                # ne s'affiche qu'au moment où l'opérateur tente une saisie 03/88
-                # et que le garde-fou 423 est déclenché — c'est le front qui
-                # appelle alors /alerts/blocking-for-machine pour l'afficher.
-                if event == "after_calage":
-                    continue
-                if event == "after_calage_UNUSED" and effective_machine:
+                # v2.5.32 : after_calage remonte à nouveau via le polling
+                # (annule v2.2.89). Sans ça, une alerte after_calage
+                # non-bloquante (block_production=False) ne s'affichait
+                # JAMAIS puisque /blocking-for-machine filtre les alertes
+                # bloquantes. Le comportement bloquant garde son garde-fou
+                # 423 côté saisie 03/88 — ici c'est l'alerte d'écran
+                # (non-bloquante) que l'opérateur peut voir et remplir.
+                # Détection alignée sur _blocking_for_machine_impl (v2.3.2 :
+                # match par code exact via _ALERT_CALAGE_CODES). Pas de
+                # filtre opérateur : after_calage est un état machine.
+                if event == "after_calage" and effective_machine:
                     _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
                     _calage_window = (now_paris - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
                     _last_row = conn.execute(
@@ -4528,11 +4532,9 @@ def maintenance_alerts_active(request: Request):
                            ORDER BY date_operation DESC LIMIT 1""",
                         (effective_machine, _window),
                     ).fetchone()
-                    # Nouvelle contrainte : dernière saisie = catégorie calage
-                    # avec no_dossier renseigné et dans la fenêtre 4h.
                     _is_calage_last = (
                         _last_row
-                        and (_last_row["operation_category"] or "").lower() == "calage"
+                        and str(_last_row["operation_code"] or "") in _ALERT_CALAGE_CODES
                         and _last_row["no_dossier"] is not None
                         and str(_last_row["no_dossier"]).strip() != ""
                         and _last_row["date_operation"] >= _calage_window
