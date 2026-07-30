@@ -393,8 +393,11 @@ body.reduce-anim .cal-skel{animation:none}
 .case-op-quick-btn:active{transform:scale(.97)}
 .case-op-quick-btn:disabled{opacity:.5;cursor:wait}
 /* v2.5.26 : pictogramme triangle warning -- plus visible qu'un badge cercle */
-.cal-event .cal-event-noop{position:absolute;top:4px;left:4px;width:22px;height:22px;background:#fff;color:var(--warn,#f59e0b);border-radius:4px;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.4);cursor:help;z-index:6;padding:2px;transition:transform .15s,filter .15s;animation:calNoopPulse 2s ease-in-out infinite}  /* v2.5.27 : coin gauche pour eviter collision avec badge template */
-.cal-event .cal-event-noop svg{width:100%;height:100%;stroke-width:2.4;fill:none;stroke:var(--warn,#f59e0b)}
+.cal-event .cal-event-noop{position:absolute;top:4px;left:4px;width:24px;height:24px;background:var(--warn,#f59e0b);border:1.5px solid rgba(255,255,255,.92);border-radius:6px;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.45);cursor:help;z-index:6;padding:3px;transition:transform .15s,filter .15s;animation:calNoopPulse 2s ease-in-out infinite}  /* v2.5.27 : coin gauche pour eviter collision avec badge template. v2.6.0 : pastille ambre pleine -- l'ancienne version (fond blanc, trait ambre) se noyait dans les blocs clairs. */
+.cal-event .cal-event-noop svg{width:100%;height:100%;stroke-width:2.6;fill:none;stroke:#1a1207}
+/* Bloc entier cercle d'ambre : lisible d'un coup d'oeil, meme sur un petit creneau. */
+.cal-event.has-no-op{outline:2px solid var(--warn,#f59e0b);outline-offset:-2px}
+.cal-event[data-mini="1"] .cal-event-noop{width:18px;height:18px;top:2px;left:2px;padding:2px;border-radius:5px}
 .cal-event .cal-event-noop:hover{transform:scale(1.15);filter:brightness(1.05);animation:none}
 @keyframes calNoopPulse{0%,100%{box-shadow:0 2px 6px rgba(0,0,0,.4),0 0 0 0 rgba(245,158,11,.6)}50%{box-shadow:0 2px 6px rgba(0,0,0,.4),0 0 0 6px rgba(245,158,11,0)}}
 .cal-event.is-past::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(255,255,255,.06) 8px,rgba(255,255,255,.06) 16px);pointer-events:none;border-radius:inherit}
@@ -1853,7 +1856,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </button>
           <button type="button" class="ops-subtab" data-plan-subtab="historique" onclick="setPlanSubtab('historique')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
-            Historique
+            Créneaux
           </button>
         </div>
         <div id="plan-subview-historique" style="display:none">
@@ -3691,6 +3694,30 @@ const CAL_MACHINE_PALETTE = {
 function _machinePalette(machine){
   return CAL_MACHINE_PALETTE[machine] || { bg:'#475569', fg:'#ffffff' };
 }
+// v2.6.0 : le badge « aucun operateur » etait cree AVANT `div.innerHTML = ...`,
+// qui detruit tous les enfants -- il n'a donc jamais ete visible depuis la
+// v2.5.26 (idem sur la variante cluster). Ce helper doit imperativement etre
+// appele APRES l'affectation de innerHTML.
+function _appendNoOperatorBadge(div, ev){
+  if(!div || !ev) return;
+  if(MAINT_ROLE === 'operator') return;
+  if(ev.operators && ev.operators.length) return;
+  div.classList.add('has-no-op');
+  const noop = document.createElement('div');
+  noop.className = 'cal-event-noop';
+  noop.innerHTML = '<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/>' +
+    '<line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+  noop.title = 'Aucun op\u00e9rateur assign\u00e9 \u2014 ce cr\u00e9neau ne peut pas \u00eatre r\u00e9alis\u00e9. Cliquer pour \u00e9diter.';
+  noop.setAttribute('aria-label', 'Aucun op\u00e9rateur assign\u00e9');
+  noop.addEventListener('click', function(e){
+    e.stopPropagation();
+    if(_CAL_DRAG && _CAL_DRAG._justFinished){ _CAL_DRAG._justFinished = false; return; }
+    try{ editCase(ev.id); }catch(_){ openPlanningDetailsModal([ev]); }
+  });
+  div.appendChild(noop);
+}
+
 function _makeEventBlock(item){
   const ev = item.ev;
   const startMin = item.s, endMin = item.e;
@@ -3719,20 +3746,6 @@ function _makeEventBlock(item){
     const mine = (ev.operators || []).some(o => o.id === S.me.id);
     if(mine) div.classList.add('is-mine');
   }
-  // v2.5.26 : pictogramme triangle warning si aucun operateur assigne (admin uniquement).
-  if(MAINT_ROLE !== 'operator' && !(ev.operators && ev.operators.length)){  /* v2.5.28 : superadmin/direction voient aussi le badge */
-    const noop = document.createElement('div');
-    noop.className = 'cal-event-noop';
-    noop.innerHTML = '<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
-    noop.title = 'Aucun op\u00e9rateur assign\u00e9 \u2014 cliquer pour \u00e9diter';
-    noop.addEventListener('click', function(e){
-      e.stopPropagation();
-      if(_CAL_DRAG && _CAL_DRAG._justFinished){ _CAL_DRAG._justFinished = false; return; }
-      // Ouvre directement la modale d'edition sur ce creneau.
-      try{ editCase(ev.id); }catch(_){ openPlanningDetailsModal([ev]); }
-    });
-    div.appendChild(noop);
-  }
   const ops = Array.isArray(ev.operations) ? ev.operations.filter(o => o && (o.opName || o.opTypeId)) : [];
   const opsCount = ops.length;
   // v2.5.20 : rendu minimaliste -- juste le nom (ou le nom du modele lie, ou la
@@ -3760,6 +3773,8 @@ function _makeEventBlock(item){
     inner += '<div class="cal-event-count">' + opsCount + ' op\u00e9ration' + (opsCount > 1 ? 's' : '') + '</div>';
   }
   div.innerHTML = inner;
+  // v2.5.26 / v2.6.0 : pictogramme « aucun operateur assigne ». APRES innerHTML.
+  _appendNoOperatorBadge(div, ev);
   div.title = (ev.machine || '') + '\n' + ev.start + ' – ' + ev.end +
     (ops.length ? '\n\n' + ops.map(o => '• ' + (o.opName||'—')).join('\n') : '') +
     '\n\nCliquer pour afficher les détails';
@@ -4087,18 +4102,6 @@ function _makeClusterBlock(cluster){
   // v2.5.27 : hoiste ev pour l'usage ci-dessous (corrige aussi le bug pre-existant qui accede a ev.template_id).
   const _ev0 = single ? cluster.items[0] : null;
   div.className = 'cal-event' + (single ? '' : ' cal-event-merged') + (_ev0 && _ev0.template_id ? ' is-from-template' : '');
-  // v2.5.27 : badge noop aussi cote cluster single (defensif, sur les fallbacks eventuels)
-  if(single && _ev0 && MAINT_ROLE !== 'operator' && !(_ev0.operators && _ev0.operators.length)){
-    const noop = document.createElement('div');
-    noop.className = 'cal-event-noop';
-    noop.innerHTML = '<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
-    noop.title = 'Aucun op\u00e9rateur assign\u00e9 \u2014 cliquer pour \u00e9diter';
-    noop.addEventListener('click', function(e){
-      e.stopPropagation();
-      try{ editCase(_ev0.id); }catch(_){ openPlanningDetailsModal([_ev0]); }
-    });
-    div.appendChild(noop);
-  }
   div.style.top = top + 'px';
   div.style.height = height + 'px';
   if(single && cluster.items[0].opNiveau){
@@ -4113,6 +4116,8 @@ function _makeClusterBlock(cluster){
     const machineSuffix = ev.machine ? ' · ' + ev.machine : '';
     div.innerHTML = '<div class="cal-event-title">' + escHtml((ev.opName || '—') + machineSuffix) + '</div>' +
                     '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
+    // v2.6.0 : idem -- APRES innerHTML, sinon le badge est efface.
+    _appendNoOperatorBadge(div, ev);
     div.title = 'Cliquer pour afficher les détails';
     div.addEventListener('click', e => {
       e.stopPropagation();
@@ -12607,14 +12612,11 @@ function renderTemplateManagePanel(){
           ? '<span class="tmpl-manage-badge recur-on" title="' + escAttr(recurLbl) + '">\ud83d\udd01 ' + escHtml(recurLbl) + '</span>'
           : '<span class="tmpl-manage-badge recur-off" title="' + escAttr(recurLbl) + '">R\u00e9currence \u00e9teinte : ' + escHtml(recurLbl) + '</span>')
       : '<span class="tmpl-manage-badge recur-off">Non r\u00e9current</span>';
-    const nextOcc = t.recurrence_active && t.next_occurrence
-      ? '<span class="tmpl-manage-badge">Prochaine : ' + _fmtDateFR(t.next_occurrence) + '</span>'
-      : '';
+    // v2.6.0 : badges « Prochaine : ... » et « Dernier : ... » retires -- la regle
+    // de recurrence juste a cote donne deja la cadence, et la date de derniere
+    // utilisation n'aide a aucune decision. La ligne etait sursaturee.
     const stats = '<span class="tmpl-manage-badge stat">' + (t.events_count || 0) + ' cr\u00e9neau' +
                   ((t.events_count || 0) > 1 ? 'x' : '') + ' cr\u00e9\u00e9s</span>';
-    const lastUsed = t.last_event_date
-      ? '<span class="tmpl-manage-badge">Dernier : ' + _fmtDateFR(t.last_event_date) + '</span>'
-      : '';
     const opsBadge = '<span class="tmpl-manage-badge">' + (t.ops_count || 0) + ' op.</span>';
     // v2.5.31 : point d'entree decouvrable vers les occurrences supprimees.
     // Cliquer ouvre l'edition du modele directement sur la section depliee.
@@ -12638,7 +12640,7 @@ function renderTemplateManagePanel(){
       '<div class="tmpl-manage-info">' +
         '<div class="tmpl-manage-name">' + escHtml(t.name) + '</div>' +
         (t.description ? '<div class="tmpl-manage-desc">' + escHtml(t.description) + '</div>' : '') +
-        '<div class="tmpl-manage-meta">' + opsBadge + defaultOpsBadge + recurBadge + nextOcc + stats + lastUsed + delBadge + '</div>' +
+        '<div class="tmpl-manage-meta">' + opsBadge + defaultOpsBadge + recurBadge + stats + delBadge + '</div>' +
       '</div>' +
       '<div class="tmpl-manage-actions">' +
         '<button type="button" onclick="openTemplateEditor(' + escAttr(t.id) + ')">\u00c9diter</button>' +
