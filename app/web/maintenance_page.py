@@ -107,6 +107,7 @@ MAINTENANCE_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
+<link rel="stylesheet" href="/static/mysifa_timepicker.css?v=1.0">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
@@ -581,6 +582,34 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .tmpl-manage-actions button.danger:hover{border-color:var(--danger);color:var(--danger)}
 .tmpl-manage-actions button.primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
 .tmpl-manage-actions button.primary:hover{filter:brightness(1.08);color:var(--bg)}
+/* v2.5.31 — Section pliable « Occurrences supprimées » dans la modale modèle */
+.tmpl-del-block{margin-top:14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);overflow:hidden}
+.tmpl-del-head{display:flex;align-items:center;gap:9px;width:100%;padding:11px 14px;border:none;background:var(--bg);color:var(--text);font-family:inherit;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:left;cursor:pointer;transition:background .12s}
+.tmpl-del-head:hover{background:var(--card)}
+.tmpl-del-chev{width:14px;height:14px;flex-shrink:0;color:var(--muted);transition:transform .16s}
+.tmpl-del-block.open .tmpl-del-chev{transform:rotate(90deg)}
+.tmpl-del-count{padding:2px 8px;border-radius:6px;background:rgba(251,191,36,.16);border:1px solid rgba(251,191,36,.38);color:var(--warn);font-size:11px;font-weight:800;font-family:ui-monospace,monospace;text-transform:none;letter-spacing:0}
+.tmpl-del-hint{margin-left:auto;font-size:11px;font-weight:500;color:var(--muted);text-transform:none;letter-spacing:0}
+.tmpl-del-body{display:none;padding:0 14px 12px}
+.tmpl-del-block.open .tmpl-del-body{display:block}
+.tmpl-del-sub{margin:0 0 10px;font-size:12px;color:var(--muted);line-height:1.45}
+.tmpl-del-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);margin-bottom:6px}
+.tmpl-del-row:last-child{margin-bottom:0}
+.tmpl-del-row-main{flex:1;min-width:0}
+.tmpl-del-row-when{font-size:13px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+.tmpl-del-row-meta{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.4}
+.tmpl-del-row-warn{margin-top:4px;font-size:11px;font-weight:700;color:var(--warn)}
+.tmpl-del-restore{flex-shrink:0;padding:7px 14px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:var(--bg);font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:filter .12s}
+.tmpl-del-restore:hover{filter:brightness(1.08)}
+@media (max-width:640px){
+  .tmpl-del-hint{display:none}
+  .tmpl-del-row{flex-wrap:wrap}
+  .tmpl-del-restore{width:100%}
+}
+/* Badge cliquable « N supprimée(s) » sur la carte du modèle -> ouvre l'édition
+   directement sur la section. Sert de point d'entrée découvrable. */
+.tmpl-manage-badge.del{background:rgba(251,191,36,.14);color:var(--warn);border-color:rgba(251,191,36,.36);cursor:pointer;font-family:inherit;font-size:11px;font-weight:700;transition:filter .12s}
+.tmpl-manage-badge.del:hover{filter:brightness(1.12)}
 /* Badge visuel sur créneaux calendrier issus d'un template */
 .cal-event.is-from-template::after{content:"↻";position:absolute;top:2px;right:4px;font-size:11px;color:var(--accent);opacity:.8;font-weight:900;pointer-events:none}
 .cal-event.is-from-template{border-left:3px solid var(--accent)}
@@ -1813,15 +1842,9 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             <p class="sub" style="margin-top:-4px;margin-bottom:14px;font-size:13px;color:var(--muted)">Modèles de créneau réutilisables. Active la récurrence pour que les occurrences futures se génèrent automatiquement dans le calendrier (3 mois glissants).</p>
             <div id="tmpl-manage-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
           </div>
-          <!-- v2.5.29 : Panel Créneaux supprimés (tombstones restorables) -->
-          <div class="tmpl-manage-panel" style="margin-top:24px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px" id="plan-deleted-panel">
-            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
-              <h2 style="margin:0;font-size:15px;font-weight:700;color:var(--text)">Créneaux supprimés</h2>
-              <span id="plan-deleted-count" style="font-size:12px;color:var(--muted);font-weight:600"></span>
-            </div>
-            <p class="sub" style="margin-top:-4px;margin-bottom:14px;font-size:13px;color:var(--muted)">Occurrences récurrentes que tu as supprimées. Restaurables individuellement sans affecter les autres créneaux générés.</p>
-            <div id="plan-deleted-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
-          </div>
+          <!-- v2.5.31 : le panel « Créneaux supprimés » a été déplacé dans la modale
+               d'édition du modèle concerné (cas minoritaire — il n'a pas à occuper
+               un panel entier de l'onglet Historique). Cf. #tmpl-ed-deleted-block. -->
           <!-- v2.5.6 : Historique des creneaux avec scrollbar (aligne sur .ops-table-wrap). -->
           <div style="margin-top:24px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px 22px">
             <h2 style="margin:0 0 4px;font-size:15px;font-weight:700;color:var(--text)">Historique des créneaux</h2>
@@ -2545,7 +2568,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
         <div class="ops-form-grid">
           <div class="ops-field">
             <label class="ops-field-label" for="case-mod-start">Heure de début<span class="req">*</span></label>
-            <input type="time" id="case-mod-start" class="ops-input" required>
+            <input type="time" id="case-mod-start" class="ops-input" required data-mys-tp-pair="case-mod-end">
           </div>
           <div class="ops-field">
             <label class="ops-field-label" for="case-mod-end">Heure de fin<span class="req">*</span></label>
@@ -2681,7 +2704,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             </div>
             <div class="tmpl-recur-field" style="min-width:100px;flex:0 0 100px">
               <label for="tmpl-ed-recur-start">Début</label>
-              <input type="time" id="tmpl-ed-recur-start" value="08:00">
+              <input type="time" id="tmpl-ed-recur-start" value="08:00" data-mys-tp-pair="tmpl-ed-recur-end">
             </div>
             <div class="tmpl-recur-field" style="min-width:100px;flex:0 0 100px">
               <label for="tmpl-ed-recur-end">Fin</label>
@@ -2715,6 +2738,20 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             </div>
           </div>
           <div class="case-ops-list" id="tmpl-ed-default-op-list"></div>
+        </div>
+        <!-- v2.5.31 : occurrences supprimées DE CE MODÈLE. Repliée par défaut,
+             masquée entièrement s'il n'y en a aucune (cas normal). -->
+        <div class="tmpl-del-block" id="tmpl-ed-deleted-block" style="display:none">
+          <button type="button" class="tmpl-del-head" id="tmpl-ed-deleted-toggle" onclick="toggleTmplDeleted()" aria-expanded="false" aria-controls="tmpl-ed-deleted-body">
+            <svg class="tmpl-del-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            <span>Occurrences supprimées</span>
+            <span class="tmpl-del-count" id="tmpl-ed-deleted-count">0</span>
+            <span class="tmpl-del-hint">Cliquer pour afficher / restaurer</span>
+          </button>
+          <div class="tmpl-del-body" id="tmpl-ed-deleted-body">
+            <p class="tmpl-del-sub">Occurrences de ce modèle retirées du calendrier. Les restaurer les remet à leur date d'origine sans toucher aux autres créneaux générés.</p>
+            <div id="tmpl-ed-deleted-list"></div>
+          </div>
         </div>
         <div id="tmpl-ed-warning" style="display:none;margin-top:12px;padding:10px 12px;border-radius:8px;background:rgba(251,191,36,.12);border:1px solid var(--warn);color:var(--warn);font-size:12px;line-height:1.5"></div>
       </div>
@@ -4124,8 +4161,10 @@ async function _doDeletePlanningEvent(ev, token){
   await refreshPlanning();
   closePlanningDetailsModal();
   renderCal();
-  // v2.5.29 : refresh du panel Créneaux supprimés pour montrer le tombstone.
-  if(typeof loadDeletedEvents === 'function') loadDeletedEvents();
+  // v2.5.31 : recharge les modèles pour rafraîchir le badge « N supprimée(s) »
+  // du panel Gestion des modèles (le panel dédié a été déplacé dans l'édition
+  // du modèle). loadTemplates(true) déclenche renderTemplateManagePanel().
+  try{ if(typeof loadTemplates === 'function') await loadTemplates(true); }catch(_){}
   showToast('Créneau supprimé.', 'info');
 }
 
@@ -9749,6 +9788,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=8"></script>
+<script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
 <script src="/static/mysifa_maint_form.js?v=2.4.18"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
@@ -11952,69 +11992,77 @@ async function loadTemplates(force){
 // v2.4.31 : appelle renderTemplateManagePanel si dispo (safe si div absent).
 function _maybeRenderTmplPanel(){
   try{ if(typeof renderTemplateManagePanel === 'function') renderTemplateManagePanel(); }catch(e){}
-  // v2.5.29 : rafraichit aussi le panel des creneaux supprimes.
-  try{ if(typeof loadDeletedEvents === 'function') loadDeletedEvents(); }catch(_){}
 }
 
-// v2.5.29 : etat + loader + rendu du panel Creneaux supprimes.
-const DELETED_STATE = { list: null };
+// v2.5.31 : les occurrences supprimees vivent desormais dans la modale
+// d'edition du modele concerne (section pliable en bas), et non plus dans un
+// panel dedie de l'onglet Historique -- c'est un cas minoritaire par nature.
+// L'endpoint est filtre par template_id.
+const TMPL_DELETED_STATE = { templateId: null, list: [] };
 
-async function loadDeletedEvents(){
-  if(MAINT_ROLE !== 'admin'){ return; }
+async function loadTmplDeletedOccurrences(templateId){
+  TMPL_DELETED_STATE.templateId = templateId || null;
+  TMPL_DELETED_STATE.list = [];
+  if(MAINT_ROLE !== 'admin' || !templateId){ renderTmplDeletedOccurrences(); return; }
   try{
-    const r = await fetch('/api/maintenance/events/deleted?_=' + Date.now(),
+    const r = await fetch('/api/maintenance/events/deleted?template_id=' +
+                          encodeURIComponent(templateId) + '&_=' + Date.now(),
                           { credentials:'include', cache: 'no-store' });
-    if(!r.ok){ DELETED_STATE.list = []; renderDeletedEventsPanel(); return; }
-    const d = await r.json();
-    DELETED_STATE.list = d.events || [];
-  }catch(_){
-    DELETED_STATE.list = [];
-  }
-  renderDeletedEventsPanel();
+    if(r.ok){
+      const d = await r.json();
+      TMPL_DELETED_STATE.list = d.events || [];
+    }
+  }catch(_){ /* liste vide -- la section reste masquee */ }
+  renderTmplDeletedOccurrences();
 }
 
-function renderDeletedEventsPanel(){
-  const box = document.getElementById('plan-deleted-list');
-  const cnt = document.getElementById('plan-deleted-count');
-  if(!box) return;
-  const items = DELETED_STATE.list || [];
-  if(cnt) cnt.textContent = items.length ? (items.length + ' cr\u00e9neau' + (items.length > 1 ? 'x supprim\u00e9s' : ' supprim\u00e9')) : '';
+function renderTmplDeletedOccurrences(){
+  const block = document.getElementById('tmpl-ed-deleted-block');
+  const list  = document.getElementById('tmpl-ed-deleted-list');
+  const cntEl = document.getElementById('tmpl-ed-deleted-count');
+  if(!block || !list) return;
+  const items = TMPL_DELETED_STATE.list || [];
   if(!items.length){
-    box.innerHTML = '<p style="color:var(--muted);font-size:13px;font-style:italic">Aucun cr\u00e9neau supprim\u00e9.</p>';
+    // Aucun tombstone : la section disparait completement du modal.
+    block.style.display = 'none';
+    block.classList.remove('open');
+    const head = document.getElementById('tmpl-ed-deleted-toggle');
+    if(head) head.setAttribute('aria-expanded', 'false');
+    list.innerHTML = '';
     return;
   }
-  // Groupe par template (nom si dispo, sinon 'Sans mod\u00e8le')
-  const groups = new Map();
-  for(const ev of items){
-    let tmplName = 'Sans mod\u00e8le';
-    if(ev.template_id && typeof TEMPLATES_STATE !== 'undefined' && TEMPLATES_STATE){
-      const t = (TEMPLATES_STATE.list || []).find(x => x.id === ev.template_id);
-      if(t && t.name) tmplName = t.name;
-      else tmplName = 'Mod\u00e8le #' + ev.template_id;
-    }
-    if(!groups.has(tmplName)) groups.set(tmplName, []);
-    groups.get(tmplName).push(ev);
-  }
-  const html = [];
-  for(const [tmplName, evs] of groups){
-    html.push('<div style="margin-bottom:14px"><div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">' + escHtml(tmplName) + '</div>');
-    for(const ev of evs){
-      const dateFR = _fmtIsoDateFr(ev.date_prevue) || ev.date_prevue;
-      const timeRange = (ev.heure_debut || '') + ' \u2013 ' + (ev.heure_fin || '');
-      const machine = ev.machine || '\u2014';
-      const ops = (ev.operators || []).map(o => o.nom).join(', ') || '<i>aucun op\u00e9rateur</i>';
-      const deletedAt = ev.deleted_at ? (' \u00b7 supprim\u00e9 le ' + escHtml(_fmtIsoDateFr(String(ev.deleted_at).slice(0,10)) || ev.deleted_at.slice(0,10))) : '';
-      html.push('<div style="display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg);margin-bottom:6px">' +
-        '<div style="flex:1;min-width:0">' +
-          '<div style="font-size:14px;font-weight:700;color:var(--text)">' + escHtml(dateFR) + ' \u00b7 ' + escHtml(timeRange) + '</div>' +
-          '<div style="font-size:12px;color:var(--muted);margin-top:2px">' + escHtml(machine) + ' \u00b7 ' + ops + deletedAt + '</div>' +
-        '</div>' +
-        '<button type="button" class="btn" style="background:var(--accent);color:var(--bg);border:none;border-radius:8px;padding:8px 14px;font-weight:700;font-size:12px;cursor:pointer" onclick="restoreEvent(' + ev.id + ')">Restaurer</button>' +
-      '</div>');
-    }
-    html.push('</div>');
-  }
-  box.innerHTML = html.join('');
+  block.style.display = '';
+  if(cntEl) cntEl.textContent = String(items.length);
+  list.innerHTML = items.map(ev => {
+    const dateFR  = _fmtIsoDateFr(ev.date_prevue) || ev.date_prevue || '\u2014';
+    const hours   = (ev.heure_debut || '') + (ev.heure_fin ? ' \u2013 ' + ev.heure_fin : '');
+    const machine = ev.machine || '\u2014';
+    const ops     = (ev.operators || []).map(o => o.nom).join(', ');
+    const delDay  = ev.deleted_at ? String(ev.deleted_at).slice(0,10) : '';
+    const delTxt  = delDay ? ('supprim\u00e9e le ' + (_fmtIsoDateFr(delDay) || delDay)) : '';
+    const meta    = [machine, ops || 'aucun op\u00e9rateur', delTxt].filter(Boolean).join(' \u00b7 ');
+    const nDone   = (ev.ops || []).filter(o => o.statut === 'termine').length;
+    const warn    = nDone
+      ? '<div class="tmpl-del-row-warn">' + nDone + ' op\u00e9ration' + (nDone > 1 ? 's' : '') +
+        ' d\u00e9j\u00e0 valid\u00e9e' + (nDone > 1 ? 's' : '') + ' \u2014 conserv\u00e9e' +
+        (nDone > 1 ? 's' : '') + ' \u00e0 la restauration</div>'
+      : '';
+    return '<div class="tmpl-del-row">' +
+      '<div class="tmpl-del-row-main">' +
+        '<div class="tmpl-del-row-when">' + escHtml(dateFR) + (hours ? ' \u00b7 ' + escHtml(hours) : '') + '</div>' +
+        '<div class="tmpl-del-row-meta">' + escHtml(meta) + '</div>' + warn +
+      '</div>' +
+      '<button type="button" class="tmpl-del-restore" onclick="restoreEvent(' + ev.id + ')">Restaurer</button>' +
+    '</div>';
+  }).join('');
+}
+
+function toggleTmplDeleted(){
+  const block = document.getElementById('tmpl-ed-deleted-block');
+  if(!block) return;
+  const isOpen = block.classList.toggle('open');
+  const head = document.getElementById('tmpl-ed-deleted-toggle');
+  if(head) head.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
 }
 
 async function restoreEvent(eventId){
@@ -12026,7 +12074,14 @@ async function restoreEvent(eventId){
       throw new Error(err.detail || 'Restauration refus\u00e9e');
     }
     if(typeof showToast === 'function') showToast('Cr\u00e9neau restaur\u00e9.', 'info');
-    await loadDeletedEvents();
+    const wasOpen = document.getElementById('tmpl-ed-deleted-block')?.classList.contains('open');
+    await loadTmplDeletedOccurrences(TMPL_DELETED_STATE.templateId);
+    // Garde la section ouverte s'il reste des occurrences a restaurer.
+    if(wasOpen && (TMPL_DELETED_STATE.list || []).length){
+      document.getElementById('tmpl-ed-deleted-block')?.classList.add('open');
+    }
+    // Rafraichit le badge « N supprimee(s) » du panel Gestion des modeles.
+    try{ await loadTemplates(true); }catch(_){}
     if(typeof refreshPlanning === 'function') await refreshPlanning();
     if(typeof renderCal === 'function') renderCal();
   }catch(e){
@@ -12341,6 +12396,16 @@ function renderTemplateManagePanel(){
       ? '<span class="tmpl-manage-badge">Dernier : ' + _fmtDateFR(t.last_event_date) + '</span>'
       : '';
     const opsBadge = '<span class="tmpl-manage-badge">' + (t.ops_count || 0) + ' op.</span>';
+    // v2.5.31 : point d'entree decouvrable vers les occurrences supprimees.
+    // Cliquer ouvre l'edition du modele directement sur la section depliee.
+    const nDel = t.deleted_count || 0;
+    const delBadge = nDel
+      ? '<button type="button" class="tmpl-manage-badge del" ' +
+        'title="Occurrence' + (nDel > 1 ? 's' : '') + ' retir\u00e9e' + (nDel > 1 ? 's' : '') +
+        ' du calendrier \u2014 cliquer pour les voir et les restaurer" ' +
+        'onclick="event.stopPropagation();openTemplateEditor(' + escAttr(t.id) + ', true)">' +
+        nDel + ' supprim\u00e9e' + (nDel > 1 ? 's' : '') + '</button>'
+      : '';
     // v2.5.25 : badge nb d'operateurs par defaut (warning si 0 pour un recurrent actif)
     const defaultOps = Array.isArray(t.default_operators) ? t.default_operators : [];
     const defaultOpsBadge = defaultOps.length
@@ -12353,7 +12418,7 @@ function renderTemplateManagePanel(){
       '<div class="tmpl-manage-info">' +
         '<div class="tmpl-manage-name">' + escHtml(t.name) + '</div>' +
         (t.description ? '<div class="tmpl-manage-desc">' + escHtml(t.description) + '</div>' : '') +
-        '<div class="tmpl-manage-meta">' + opsBadge + defaultOpsBadge + recurBadge + nextOcc + stats + lastUsed + '</div>' +
+        '<div class="tmpl-manage-meta">' + opsBadge + defaultOpsBadge + recurBadge + nextOcc + stats + lastUsed + delBadge + '</div>' +
       '</div>' +
       '<div class="tmpl-manage-actions">' +
         '<button type="button" onclick="openTemplateEditor(' + escAttr(t.id) + ')">\u00c9diter</button>' +
@@ -12489,7 +12554,9 @@ let _TMPL_OPS = [];
 // v2.5.25 : opérateurs par défaut du template en cours d'édition [{id, nom}]
 let _TMPL_DEFAULT_OPS = [];
 
-async function openTemplateEditor(templateId){
+// v2.5.31 : focusDeleted=true -> deplie la section « Occurrences supprimees »
+// et la fait defiler dans la vue (utilise par le badge du panel Gestion).
+async function openTemplateEditor(templateId, focusDeleted){
   _TMPL_EDIT_ID = templateId || null;
   _TMPL_OPS = [];
   _TMPL_DEFAULT_OPS = [];
@@ -12545,9 +12612,25 @@ async function openTemplateEditor(templateId){
   }
   renderTmplOpsList();
   renderTmplDefaultOps();
+  // v2.5.31 : reset immediat de la section « Occurrences supprimees » (elle est
+  // masquee tant que le fetch n'a rien renvoye), puis chargement en tache de
+  // fond pour ne pas retarder l'ouverture du modal.
+  TMPL_DELETED_STATE.templateId = templateId || null;
+  TMPL_DELETED_STATE.list = [];
+  renderTmplDeletedOccurrences();
   if(m){ m.classList.add('open'); m.setAttribute('aria-hidden', 'false'); }
   document.body.style.overflow = 'hidden';
   setTimeout(() => { nameEl?.focus(); }, 60);
+  if(templateId){
+    loadTmplDeletedOccurrences(templateId).then(() => {
+      if(!focusDeleted) return;
+      const block = document.getElementById('tmpl-ed-deleted-block');
+      if(!block || block.style.display === 'none') return;
+      block.classList.add('open');
+      document.getElementById('tmpl-ed-deleted-toggle')?.setAttribute('aria-expanded', 'true');
+      try{ block.scrollIntoView({ behavior: 'smooth', block: 'center' }); }catch(_){ block.scrollIntoView(); }
+    });
+  }
 }
 
 function closeTemplateEditor(){
@@ -12557,6 +12640,12 @@ function closeTemplateEditor(){
   _TMPL_EDIT_ID = null;
   _TMPL_OPS = [];
   _TMPL_DEFAULT_OPS = [];
+  // v2.5.31 : referme la section « Occurrences supprimees » pour la prochaine
+  // ouverture (sinon elle resterait depliee sur un autre modele).
+  TMPL_DELETED_STATE.templateId = null;
+  TMPL_DELETED_STATE.list = [];
+  const delBlock = document.getElementById('tmpl-ed-deleted-block');
+  if(delBlock){ delBlock.classList.remove('open'); delBlock.style.display = 'none'; }
 }
 
 // v2.5.25 : rendu du picker + de la liste d'operateurs par defaut du template.

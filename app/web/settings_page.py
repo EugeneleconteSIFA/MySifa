@@ -2647,6 +2647,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
 <link rel="stylesheet" href="/static/mysifa_dock.css">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
+<link rel="stylesheet" href="/static/mysifa_timepicker.css?v=1.0">
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
@@ -6698,6 +6699,7 @@ async function unlinkBridge(mp_id) {
 </script>
 <!-- v2.4.16 : scripts alert_form + alert_runtime perdus lors du retrait du bloc orphelin en v2.4.15, remis ici. -->
 <!-- v2.4.18 : mysifa_maint_form.js — CRUD codes maintenance + interventions libres (module partagé settings ↔ maintenance). -->
+<script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
 <script src="/static/mysifa_maint_form.js?v=2.4.18"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>

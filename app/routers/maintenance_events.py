@@ -439,6 +439,27 @@ def list_events(
     return {"events": events}
 
 
+# v2.5.31 : DOIT rester declaree AVANT /events/{event_id} -- FastAPI resout
+# les routes dans l'ordre de declaration, donc /events/deleted etait capture
+# par {event_id}: int et repondait 422. Le panel des creneaux supprimes
+# recevait donc toujours une liste vide.
+@router.get("/api/maintenance/events/deleted")
+def list_deleted_events(request: Request, template_id: Optional[int] = None):
+    """v2.5.29 : liste les créneaux tombstoned pour le panel Restore admin.
+    Filtre optionnel par template_id."""
+    _require_admin(request)
+    where = ["deleted_at IS NOT NULL"]
+    params: List[Any] = []
+    if template_id is not None:
+        where.append("template_id = ?")
+        params.append(template_id)
+    sql = "SELECT id FROM maintenance_events WHERE " + " AND ".join(where) + " ORDER BY date_prevue DESC, heure_debut DESC"
+    with get_db() as conn:
+        ids = [r["id"] for r in conn.execute(sql, params).fetchall()]
+        events = [_load_event_full(conn, eid) for eid in ids]
+    return {"events": events}
+
+
 @router.get("/api/maintenance/events/{event_id}")
 def get_event(event_id: int, request: Request):
     _require_access(request)
@@ -972,23 +993,6 @@ def restore_event(event_id: int, request: Request):
     return {"restored": event_id, "event": ev}
 
 
-@router.get("/api/maintenance/events/deleted")
-def list_deleted_events(request: Request, template_id: Optional[int] = None):
-    """v2.5.29 : liste les créneaux tombstoned pour le panel Restore admin.
-    Filtre optionnel par template_id."""
-    _require_admin(request)
-    where = ["deleted_at IS NOT NULL"]
-    params: List[Any] = []
-    if template_id is not None:
-        where.append("template_id = ?")
-        params.append(template_id)
-    sql = "SELECT id FROM maintenance_events WHERE " + " AND ".join(where) + " ORDER BY date_prevue DESC, heure_debut DESC"
-    with get_db() as conn:
-        ids = [r["id"] for r in conn.execute(sql, params).fetchall()]
-        events = [_load_event_full(conn, eid) for eid in ids]
-    return {"events": events}
-
-
 # ─── Endpoints — event operators (le groupe) ─────────────────────
 
 @router.post("/api/maintenance/events/{event_id}/operators")
@@ -1438,8 +1442,12 @@ def list_templates(request: Request):
                       t.recurrence_month, t.recurrence_time_start, t.recurrence_time_end,
                       t.recurrence_active, t.default_operators_csv,
                       (SELECT COUNT(*) FROM maintenance_template_ops o WHERE o.template_id=t.id) AS ops_count,
-                      (SELECT COUNT(*) FROM maintenance_events e WHERE e.template_id=t.id) AS events_count,
-                      (SELECT MAX(date_prevue) FROM maintenance_events e WHERE e.template_id=t.id) AS last_event_date
+                      (SELECT COUNT(*) FROM maintenance_events e
+                        WHERE e.template_id=t.id AND e.deleted_at IS NULL) AS events_count,
+                      (SELECT COUNT(*) FROM maintenance_events e
+                        WHERE e.template_id=t.id AND e.deleted_at IS NOT NULL) AS deleted_count,
+                      (SELECT MAX(date_prevue) FROM maintenance_events e
+                        WHERE e.template_id=t.id AND e.deleted_at IS NULL) AS last_event_date
                FROM maintenance_templates t
                ORDER BY t.name""",
         ).fetchall()
@@ -1594,17 +1602,23 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
                 if isinstance(uid, int) and conn.execute("SELECT 1 FROM users WHERE id=?", (uid,)).fetchone():
                     _valid.append(str(uid))
             meta_updates["default_operators_csv"] = ",".join(_valid) if _valid else None
-            if not body.recurrence_active:
-                today = datetime.now(_PARIS).strftime("%Y-%m-%d")
-                future_ids = [r["id"] for r in conn.execute(
-                    "SELECT id FROM maintenance_events WHERE template_id = ? AND date_prevue >= ?",
-                    (template_id, today),
-                ).fetchall()]
-                for eid in future_ids:
-                    conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
-                    conn.execute("DELETE FROM maintenance_event_operators WHERE event_id = ?", (eid,))
-                    conn.execute("DELETE FROM maintenance_events WHERE id = ?", (eid,))
-                deleted_future = len(future_ids)
+        # v2.5.31 : la purge etait imbriquee dans le bloc default_operators ci-dessus,
+        # donc le toggle du panel Gestion des modeles (qui n'envoie que
+        # recurrence_active) ne nettoyait jamais les creneaux futurs. On la
+        # declenche desormais sur la seule transition recurrence -> OFF.
+        # Les creneaux deja tombstoned sont ignores (deja hors calendrier).
+        if body.recurrence_active is False:
+            today = datetime.now(_PARIS).strftime("%Y-%m-%d")
+            future_ids = [r["id"] for r in conn.execute(
+                "SELECT id FROM maintenance_events "
+                "WHERE template_id = ? AND date_prevue >= ?",
+                (template_id, today),
+            ).fetchall()]
+            for eid in future_ids:
+                conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
+                conn.execute("DELETE FROM maintenance_event_operators WHERE event_id = ?", (eid,))
+                conn.execute("DELETE FROM maintenance_events WHERE id = ?", (eid,))
+            deleted_future = len(future_ids)
         if meta_updates:
             meta_updates["updated_at"] = now
             set_clause = ", ".join(f"{k}=?" for k in meta_updates)
@@ -1665,6 +1679,18 @@ def delete_template(template_id: int, request: Request):
             (template_id, today),
         ).fetchall()]
         for eid in future_ids:
+            conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
+            conn.execute("DELETE FROM maintenance_event_operators WHERE event_id = ?", (eid,))
+            conn.execute("DELETE FROM maintenance_events WHERE id = ?", (eid,))
+        # v2.5.31 : purge les tombstones restants (occurrences supprimées non
+        # restaurées). Sans ça, le détachement ci-dessous leur met template_id
+        # à NULL : plus aucun modèle pour les afficher, donc invisibles et
+        # irrestaurables — des lignes fantômes en base.
+        ghost_ids = [r["id"] for r in conn.execute(
+            "SELECT id FROM maintenance_events WHERE template_id = ? AND deleted_at IS NOT NULL",
+            (template_id,),
+        ).fetchall()]
+        for eid in ghost_ids:
             conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
             conn.execute("DELETE FROM maintenance_event_operators WHERE event_id = ?", (eid,))
             conn.execute("DELETE FROM maintenance_events WHERE id = ?", (eid,))
