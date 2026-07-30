@@ -4772,52 +4772,38 @@ def maintenance_alert_acks_delete(ack_id: int, request: Request):
 
 
 def _auto_ack_periodic_alerts_on_arret(conn, user, machine, no_dossier, code, code_label, operation_str, exclude_saisie_id: int = None):
-    """v2.2.65 — Ferme automatiquement toutes les alertes périodiques actives dont la
-    target couvre cette machine, quand l'opérateur saisit un code non-productif
-    (arrêt, pause, calage, technique, fin dossier — tout sauf 01 et 03).
-
-    Une ligne est insérée dans maintenance_alert_acks pour chaque alerte avec le
-    motif dans le champ comment. Effet : compteur périodique reset, plus de lignes
-    vierges dans l'historique, modales à l'écran se ferment au prochain polling.
-
-    v2.3.31 : la ligne « Fermée auto » n'est plus inscrite que si l'alerte
-    était **effectivement due** juste avant la saisie (i.e. affichée à
-    l'écran de l'opérateur ou sur le point de l'être). Sinon on ne trace
-    rien — évite les lignes fantômes dans l'historique pour des alertes
-    dont l'intervalle n'était pas écoulé. `exclude_saisie_id` = id de la
-    saisie qu'on vient d'insérer, à exclure des calculs.
+    """v2.2.65 / v2.5.30 / v2.5.31 — Ferme automatiquement les alertes actives dont la
+    target couvre cette machine, quand l'operateur saisit un code non-productif.
+    v2.5.30 : etendu aux alertes EVENEMENTIELLES (dossier_end/dossier_start).
+    v2.5.31 : etendu aux alertes CALENDAIRES (time + days).
     """
     if not machine:
         return
-    from database import get_db  # noqa: F401 (import garde le style existant)
+    from database import get_db  # noqa: F401
     now_paris = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
     try:
-        rows = conn.execute(
-            "SELECT id, params FROM maintenance_alerts WHERE active=1"
-        ).fetchall()
+        rows = conn.execute("SELECT id, params FROM maintenance_alerts WHERE active=1").fetchall()
     except Exception:
         return
-    if code_label:
-        reason = f"Fermée auto : {code} – {code_label}"
-    else:
-        reason = f"Fermée auto : code {code}"
-    reason = reason[:2000]
+    reason = (f"Fermee auto : {code} - {code_label}" if code_label else f"Fermee auto : code {code}")[:2000]
     user_id = user.get("id") if user else None
     user_nom = (user.get("nom") if user else "") or (user.get("email") if user else "") or ""
     responses_json = "{}"
-    # v2.3.30 : seuil anti-doublon. Si l'alerte a déjà un ack sur cette
-    # machine dans les 60 dernières secondes (validation opérateur ou flush
-    # côté client déclenché par v2.3.29), on saute — l'auto-close n'a rien
-    # à faire, la ligne serait juste un doublon "Fermée auto : 89 – …".
     _now_dt = datetime.now(ZoneInfo("Europe/Paris")).replace(tzinfo=None)
     _skip_threshold = (_now_dt - timedelta(seconds=60)).strftime("%Y-%m-%dT%H:%M:%S")
+    _EVENT_TO_TRIGGER_CODE = {"dossier_end": "89", "dossier_start": "01"}
+    _WEEKDAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+    _today_key = _WEEKDAY_KEYS[_now_dt.weekday()]
     for r in rows:
         try:
             params = _json_alerts.loads(r["params"] or "{}")
         except (ValueError, TypeError):
             continue
         trig = params.get("trigger") or {}
-        if trig.get("type") != "periodic":
+        ttype = trig.get("type")
+        if ttype not in ("periodic", "event", "calendar"):
+            continue
+        if ttype == "event" and str(trig.get("event") or "").strip() == "after_calage":
             continue
         target = params.get("target") or {}
         machines_target = target.get("machines")
@@ -4826,39 +4812,81 @@ def _auto_ack_periodic_alerts_on_arret(conn, user, machine, no_dossier, code, co
             machines_target = [legacy] if isinstance(legacy, str) and legacy else ["*"]
         if "*" not in machines_target and machine not in machines_target:
             continue
-        # v2.3.30 : anti-doublon (voir commentaire ci-dessus).
         try:
             recent = conn.execute(
-                """SELECT 1 FROM maintenance_alert_acks
-                   WHERE alert_id=? AND machine=? AND ack_at >= ?
-                   LIMIT 1""",
+                "SELECT 1 FROM maintenance_alert_acks WHERE alert_id=? AND machine=? AND ack_at >= ? LIMIT 1",
                 (int(r["id"]), machine, _skip_threshold),
             ).fetchone()
             if recent:
                 continue
         except Exception:
             pass
-        # v2.3.31 : ne trace que si l'alerte était réellement due juste
-        # avant cette saisie. Autrement dit : l'alerte était bien à l'écran
-        # (ou aurait dû l'être) au moment où l'op a saisi son code. Sinon
-        # on ne crée pas de ligne fantôme "Fermée auto : XX – …".
-        try:
-            was_due = _is_periodic_alert_due(
-                conn, int(r["id"]), params, machine, _now_dt,
-                exclude_saisie_id=exclude_saisie_id,
-            )
-        except Exception:
-            was_due = False
+        was_due = False
+        if ttype == "periodic":
+            try:
+                was_due = _is_periodic_alert_due(conn, int(r["id"]), params, machine, _now_dt, exclude_saisie_id=exclude_saisie_id)
+            except Exception:
+                was_due = False
+        elif ttype == "event":
+            event = str(trig.get("event") or "").strip()
+            trigger_code = _EVENT_TO_TRIGGER_CODE.get(event)
+            if not trigger_code:
+                continue
+            if str(code) == trigger_code:
+                continue
+            try:
+                last_ack = conn.execute(
+                    "SELECT MAX(ack_at) AS m FROM maintenance_alert_acks WHERE alert_id=? AND machine=?",
+                    (int(r["id"]), machine),
+                ).fetchone()
+                last_ack_at_str = last_ack["m"] if last_ack else None
+                _excl_sql = " AND id<>?" if exclude_saisie_id is not None else ""
+                _excl_params = (int(exclude_saisie_id),) if exclude_saisie_id is not None else ()
+                q = "SELECT 1 FROM production_data WHERE machine=? AND operation_code=?"
+                pp = [machine, trigger_code]
+                if last_ack_at_str:
+                    q += " AND date_operation > ?"; pp.append(last_ack_at_str)
+                else:
+                    q += " AND date_operation >= ?"; pp.append(_now_dt.strftime("%Y-%m-%dT00:00:00"))
+                q += _excl_sql + " LIMIT 1"
+                if _excl_params:
+                    pp.extend(_excl_params)
+                recent_trigger = conn.execute(q, tuple(pp)).fetchone()
+                was_due = recent_trigger is not None
+            except Exception:
+                was_due = False
+        else:  # calendar
+            try:
+                days = trig.get("days") or []
+                if not isinstance(days, list) or _today_key not in days:
+                    continue
+                time_str = str(trig.get("time") or "").strip()
+                try:
+                    hh, mm = time_str.split(":")
+                    hh = int(hh); mm = int(mm)
+                    if not (0 <= hh < 24 and 0 <= mm < 60):
+                        raise ValueError
+                except (ValueError, AttributeError):
+                    continue
+                fire_dt = _now_dt.replace(hour=hh, minute=mm, second=0, microsecond=0)
+                if _now_dt < fire_dt:
+                    continue
+                fire_iso = fire_dt.strftime("%Y-%m-%dT%H:%M:%S")
+                ack_since = conn.execute(
+                    "SELECT 1 FROM maintenance_alert_acks WHERE alert_id=? AND machine=? AND ack_at >= ? LIMIT 1",
+                    (int(r["id"]), machine, fire_iso),
+                ).fetchone()
+                was_due = ack_since is None
+            except Exception:
+                was_due = False
         if not was_due:
             continue
         try:
             conn.execute(
                 """INSERT INTO maintenance_alert_acks
-                   (alert_id, user_id, user_nom, machine, no_dossier,
-                    ack_at, responses, comment)
+                   (alert_id, user_id, user_nom, machine, no_dossier, ack_at, responses, comment)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (int(r["id"]), user_id, user_nom, machine, no_dossier or "",
-                 now_paris, responses_json, reason),
+                (int(r["id"]), user_id, user_nom, machine, no_dossier or "", now_paris, responses_json, reason),
             )
             conn.execute(
                 "UPDATE maintenance_alerts SET last_ack_at=?, updated_at=? WHERE id=?",
