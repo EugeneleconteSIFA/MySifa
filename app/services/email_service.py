@@ -266,8 +266,17 @@ def email_mysifa_layout_light(
     footer_note: str | None = None,
     footer_contact: bool = False,
     copy_link_label: str = "Si le bouton ne fonctionne pas, copiez ce lien :",
+    pixel_url: str | None = None,
 ) -> str:
-    """Enveloppe HTML email MySifa — version light, neutre, compatible Outlook/Gmail/iOS Mail."""
+    """Enveloppe HTML email MySifa — version light, neutre, compatible Outlook/Gmail/iOS Mail.
+
+    `pixel_url` : image 1x1 de suivi d'ouverture, ajoutée en toute fin de corps.
+    Placée APRES le pied de page pour qu'un client mail qui tronque le message
+    (« ... afficher le message complet » de Gmail) ne coupe pas le contenu utile
+    juste avant elle. Sans `alt` ni dimensions visibles : un lecteur d'écran ne
+    doit rien annoncer, et un client qui bloque les images ne doit pas afficher
+    de cadre vide.
+    """
     cta_block = ""
     if cta_href and cta_label:
         cta_block = f"""
@@ -295,6 +304,14 @@ def email_mysifa_layout_light(
 
     foot = footer_note or f"MySifa — {_esc(public_base_url())}"
 
+    pixel_block = ""
+    if pixel_url:
+        pixel_block = (
+            f'<img src="{_esc(pixel_url)}" width="1" height="1" border="0" alt="" '
+            f'style="display:block;width:1px;height:1px;border:0;outline:none;'
+            f'opacity:0;overflow:hidden">'
+        )
+
     return f"""<div style="background:#f1f5f9;padding:24px 12px">
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="600" style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif">
     <tr>
@@ -317,6 +334,7 @@ def email_mysifa_layout_light(
       </td>
     </tr>
   </table>
+  {pixel_block}
 </div>"""
 
 
@@ -401,6 +419,7 @@ def email_invitation_ao(
     fournisseur: dict,
     lien_portail: str,
     lignes: list[dict],
+    pixel_url: str | None = None,
 ) -> tuple[str, str]:
     """Sujet et corps HTML pour l'invitation fournisseur (single-lang d'apr&egrave;s `fournisseur['langue']`)."""
     reference = ao.get("reference") or ""
@@ -467,6 +486,7 @@ def email_invitation_ao(
         footer_note=s["footer"],
         footer_contact=True,
         copy_link_label=s["copy_link"],
+        pixel_url=pixel_url,
     )
     return subject, body
 

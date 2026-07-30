@@ -21,6 +21,7 @@ from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from app.services.audit_service import log_action
 from app.services.email_service import email_invitation_ao, send_email
+from app.services import ao_evenements as ao_ev
 from app.services.path_safety import path_is_under_directory
 from app.services.auth_service import get_current_user
 from config import (
@@ -1941,6 +1942,7 @@ def get_ao(request: Request, ao_id: int):
             (ao_id,),
         ).fetchall()
         nb_reponses = _nb_reponses(conn, ao_id)
+        engagement = ao_ev.resume_par_fournisseur(conn, ao_id)
         produits_map = _produits_by_ref_map(conn)
         mat_ids = _matiere_ids_from_produits(produits_map)
         matieres_map = _load_matieres_map(conn, mat_ids or None)
@@ -1950,10 +1952,19 @@ def get_ao(request: Request, ao_id: int):
             _enrich_ligne_display(_row_dict(r), produits_map, matieres_map, series_by_ligne)
             for r in lignes_rows
         ]
+    fournis_out = []
+    for r in fournisseurs:
+        d = _row_dict(r)
+        # Le token de pixel ne sort jamais de l'API : c'est un identifiant de
+        # suivi, il n'a rien à faire dans le JSON d'une page d'administration.
+        d.pop("token_pixel", None)
+        d["engagement"] = engagement.get(int(d["id"]), {})
+        fournis_out.append(d)
+
     return {
         "ao": ao,
         "lignes": lignes,
-        "fournisseurs": [_row_dict(r) for r in fournisseurs],
+        "fournisseurs": fournis_out,
         "nb_reponses": nb_reponses,
     }
 
@@ -2911,7 +2922,28 @@ async def add_fournisseur(request: Request, ao_id: int):
         row = conn.execute(
             "SELECT * FROM ao_fournisseurs WHERE id=?", (cur.lastrowid,)
         ).fetchone()
-    return _row_dict(row)
+    d = _row_dict(row)
+    d.pop("token_pixel", None)
+    return d
+
+
+@router.get("/{ao_id}/fournisseurs/{fourni_id}/evenements")
+def evenements_fournisseur(request: Request, ao_id: int, fourni_id: int):
+    """Timeline d'engagement d'un fournisseur : email, portail, et plus tard WhatsApp."""
+    _require_ao(request)
+    with get_db() as conn:
+        _get_ao_or_404(conn, ao_id)
+        fourni = _get_fourni_in_ao(conn, ao_id, fourni_id)
+        evts = ao_ev.timeline(conn, fourni_id)
+    return {
+        "fournisseur": {
+            "id": fourni_id,
+            "nom": fourni.get("nom_fournisseur"),
+            "email": fourni.get("email_contact"),
+            "date_envoi": fourni.get("date_envoi"),
+        },
+        "evenements": evts,
+    }
 
 
 @router.delete("/{ao_id}/fournisseurs/{fourni_id}")
@@ -3247,7 +3279,11 @@ def envoyer_ao(request: Request, ao_id: int):
         for row in fournisseurs:
             fourni = _row_dict(row)
             lien = f"{BASE_URL.rstrip('/')}/portail/ao/{fourni['token']}"
-            subject, html_body = email_invitation_ao(ao, fourni, lien, lignes)
+            # Pixel de suivi d'ouverture : token dédié, créé à la volée pour les
+            # fournisseurs antérieurs à la colonne. Si sa génération échoue,
+            # l'email part quand même — sans suivi, mais il part.
+            px = ao_ev.url_pixel(ao_ev.token_pixel(conn, int(fourni["id"])))
+            subject, html_body = email_invitation_ao(ao, fourni, lien, lignes, pixel_url=px)
             ok = send_email(fourni["email_contact"], subject, html_body)
             if ok:
                 conn.execute(
@@ -3255,8 +3291,29 @@ def envoyer_ao(request: Request, ao_id: int):
                     (now, fourni["id"]),
                 )
                 envoyes += 1
+                ao_ev.log_evenement(
+                    conn,
+                    ao_fournisseur_id=int(fourni["id"]),
+                    ao_id=ao_id,
+                    canal=ao_ev.CANAL_EMAIL,
+                    type_evenement=ao_ev.EV_EMAIL_ENVOYE,
+                    date=now,
+                    meta={"destinataire": fourni.get("email_contact"),
+                          "suivi": bool(px)},
+                )
             else:
                 erreurs += 1
+                ao_ev.log_evenement(
+                    conn,
+                    ao_fournisseur_id=int(fourni["id"]),
+                    ao_id=ao_id,
+                    canal=ao_ev.CANAL_EMAIL,
+                    type_evenement=ao_ev.EV_EMAIL_ECHEC,
+                    date=now,
+                    fiable=False,
+                    motif="envoi refusé par le fournisseur d'email",
+                    meta={"destinataire": fourni.get("email_contact")},
+                )
                 logger.warning(
                     "Échec envoi invitation AO %s → %s",
                     ao.get("reference"),
