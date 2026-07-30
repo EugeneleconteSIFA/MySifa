@@ -2370,6 +2370,16 @@ _ALERT_CALAGE_CODES = frozenset({
     "91",  # Changement Anilox
 })
 _ALERT_CALAGE_CODES_SQL_LIST = "(" + ",".join(f"'{c}'" for c in sorted(_ALERT_CALAGE_CODES)) + ")"
+
+# v2.5.6 : codes qui marquent la REPRISE de production apres un calage. Ce sont
+# eux qui declenchent l'alerte after_calage -- l'alerte doit sortir a la FIN du
+# calage (premier code de production), pas a son debut. Meme couple que le
+# garde-fou HTTP 423 de /api/fabrication/saisie (cf. fabrication.py).
+_ALERT_POST_CALAGE_CODES = frozenset({
+    "03",  # Production
+    "88",  # Reprise
+})
+_ALERT_POST_CALAGE_CODES_SQL_LIST = "(" + ",".join(f"'{c}'" for c in sorted(_ALERT_POST_CALAGE_CODES)) + ")"
 _ALERT_CALENDAR_DAYS = {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}
 # Ordre canonique, indexé comme datetime.weekday() (lundi = 0 … dimanche = 6).
 _ALERT_CALENDAR_DAY_ORDER = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
@@ -4522,35 +4532,52 @@ def maintenance_alerts_active(request: Request):
                 # Détection alignée sur _blocking_for_machine_impl (v2.3.2 :
                 # match par code exact via _ALERT_CALAGE_CODES). Pas de
                 # filtre opérateur : after_calage est un état machine.
+                # v2.5.6 : correction du MOMENT de declenchement (le
+                # comportement v2.5.32 ci-dessus est conserve pour tout le
+                # reste). L'ancienne condition testait « derniere saisie de la
+                # machine = code de calage » : elle devenait vraie des que
+                # l'operateur pointait son calage, donc l'alerte sortait au
+                # DEBUT du calage et disparaissait des la reprise. On ancre
+                # desormais sur le calage lui-meme, puis on exige une reprise
+                # de production (03/88) posterieure : l'alerte sort au premier
+                # code de production APRES le calage -- soit a la fin du
+                # calage -- et reste affichee jusqu'a validation quelles que
+                # soient les saisies suivantes (le verrou reste l'ack par
+                # dossier).
                 if event == "after_calage" and effective_machine:
-                    _window = (now_paris - timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
                     _calage_window = (now_paris - timedelta(hours=4)).strftime("%Y-%m-%dT%H:%M:%S")
-                    _last_row = conn.execute(
-                        """SELECT no_dossier, operation_code, operation_category, date_operation
-                           FROM production_data
-                           WHERE machine=? AND date_operation >= ?
-                           ORDER BY date_operation DESC LIMIT 1""",
-                        (effective_machine, _window),
+                    # 1. Dernier calage de la machine dans la fenetre 4h.
+                    _cal_row = conn.execute(
+                        f"""SELECT no_dossier, operation_code, date_operation
+                            FROM production_data
+                            WHERE machine=? AND date_operation >= ?
+                              AND operation_code IN {_ALERT_CALAGE_CODES_SQL_LIST}
+                            ORDER BY date_operation DESC LIMIT 1""",
+                        (effective_machine, _calage_window),
                     ).fetchone()
-                    _is_calage_last = (
-                        _last_row
-                        and str(_last_row["operation_code"] or "") in _ALERT_CALAGE_CODES
-                        and _last_row["no_dossier"] is not None
-                        and str(_last_row["no_dossier"]).strip() != ""
-                        and _last_row["date_operation"] >= _calage_window
-                    )
-                    if _is_calage_last:
-                        _dos = str(_last_row["no_dossier"]).strip()
-                        _last_calage_at = _last_row["date_operation"]
-                        # Verrou par dossier
+                    _dos = ""
+                    if _cal_row is not None and _cal_row["no_dossier"] is not None:
+                        _dos = str(_cal_row["no_dossier"]).strip()
+                    if _dos:
+                        _last_calage_at = _cal_row["date_operation"]
+                        # 2. Reprise de production posterieure au calage :
+                        #    c'est ELLE qui marque la fin du calage.
+                        _prod_after = conn.execute(
+                            f"""SELECT 1 FROM production_data
+                                WHERE machine=? AND date_operation > ?
+                                  AND operation_code IN {_ALERT_POST_CALAGE_CODES_SQL_LIST}
+                                LIMIT 1""",
+                            (effective_machine, _last_calage_at),
+                        ).fetchone()
+                        # 3. Verrou par dossier : un seul declenchement.
                         _ack_check = conn.execute(
                             """SELECT 1 FROM maintenance_alert_acks
                                WHERE alert_id=? AND no_dossier=? LIMIT 1""",
                             (int(r["id"]), _dos),
                         ).fetchone()
-                        if not _ack_check:
-                            # Contrainte v2.2.82 conservée : calage doit être
-                            # postérieur au dernier code 89 du dossier.
+                        if _prod_after and not _ack_check:
+                            # Contrainte v2.2.82 conservee : calage doit etre
+                            # posterieur au dernier code 89 du dossier.
                             _last_89 = conn.execute(
                                 """SELECT MAX(date_operation) AS m FROM production_data
                                    WHERE no_dossier=? AND machine=? AND operation_code='89'""",
