@@ -393,13 +393,24 @@ body.reduce-anim .cal-skel{animation:none}
 .case-op-quick-btn:active{transform:scale(.97)}
 .case-op-quick-btn:disabled{opacity:.5;cursor:wait}
 /* v2.5.26 : pictogramme triangle warning -- plus visible qu'un badge cercle */
-.cal-event .cal-event-noop{position:absolute;top:4px;left:4px;width:24px;height:24px;background:var(--warn,#f59e0b);border:1.5px solid rgba(255,255,255,.92);border-radius:6px;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.45);cursor:help;z-index:6;padding:3px;transition:transform .15s,filter .15s;animation:calNoopPulse 2s ease-in-out infinite}  /* v2.5.27 : coin gauche pour eviter collision avec badge template. v2.6.0 : pastille ambre pleine -- l'ancienne version (fond blanc, trait ambre) se noyait dans les blocs clairs. */
-.cal-event .cal-event-noop svg{width:100%;height:100%;stroke-width:2.6;fill:none;stroke:#1a1207}
-/* Bloc entier cercle d'ambre : lisible d'un coup d'oeil, meme sur un petit creneau. */
-.cal-event.has-no-op{outline:2px solid var(--warn,#f59e0b);outline-offset:-2px}
-.cal-event[data-mini="1"] .cal-event-noop{width:18px;height:18px;top:2px;left:2px;padding:2px;border-radius:5px}
+/* v2.6.0 : couleurs FIXES, volontairement hors variables de theme.
+   Le badge est pose sur un bloc dont le fond vient de CAL_MACHINE_PALETTE
+   (#0891b2, #7c3aed, #ea580c, #059669), lui aussi code en dur et independant
+   du theme : une couleur de theme n'a donc aucun moyen de garantir le
+   contraste. C'est exactement ce qui clochait -- `var(--warn)` vaut #4A8FE8
+   (bleu) sur le theme MyMaintenance, donc le badge sortait bleu sur violet.
+   Blanc + triangle rouge plein : lisible sur les cinq fonds possibles. */
+.cal-event .cal-event-noop{position:absolute;top:4px;left:4px;width:26px;height:26px;background:#ffffff;border:2px solid #dc2626;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.5);cursor:help;z-index:6;padding:3px;transition:transform .15s,filter .15s;animation:calNoopPulse 1.8s ease-in-out infinite}
+.cal-event .cal-event-noop svg{width:100%;height:100%;display:block}
+/* Liseré rouge sur tout le bloc : le créneau se repère sans chercher le badge. */
+.cal-event.has-no-op{outline:2px solid #dc2626;outline-offset:-2px}
+/* Le contenu est centré : on lui réserve de la marge des deux côtés pour qu'il
+   ne passe jamais sous le badge (cas des créneaux d'une heure ou moins). */
+.cal-event.has-no-op{padding-left:32px;padding-right:32px}
+.cal-event[data-mini="1"] .cal-event-noop{width:20px;height:20px;top:2px;left:2px;padding:2px;border-radius:5px}
+.cal-event[data-mini="1"].has-no-op{padding-left:24px;padding-right:24px}
 .cal-event .cal-event-noop:hover{transform:scale(1.15);filter:brightness(1.05);animation:none}
-@keyframes calNoopPulse{0%,100%{box-shadow:0 2px 6px rgba(0,0,0,.4),0 0 0 0 rgba(245,158,11,.6)}50%{box-shadow:0 2px 6px rgba(0,0,0,.4),0 0 0 6px rgba(245,158,11,0)}}
+@keyframes calNoopPulse{0%,100%{box-shadow:0 2px 10px rgba(0,0,0,.5),0 0 0 0 rgba(220,38,38,.75)}50%{box-shadow:0 2px 10px rgba(0,0,0,.5),0 0 0 7px rgba(220,38,38,0)}}
 .cal-event.is-past::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(255,255,255,.06) 8px,rgba(255,255,255,.06) 16px);pointer-events:none;border-radius:inherit}
 /* v2.5.16 : drag live -- le bloc reste visible et bouge vraiment (comme Google Calendar).
    La bordure et l'ombre appuyees signalent l'etat 'drag actif'. */
@@ -3705,9 +3716,13 @@ function _appendNoOperatorBadge(div, ev){
   div.classList.add('has-no-op');
   const noop = document.createElement('div');
   noop.className = 'cal-event-noop';
-  noop.innerHTML = '<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">' +
-    '<path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/>' +
-    '<line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+  // Triangle plein rouge + « ! » blanc : bien plus lisible a 26 px qu'un
+  // contour fin. Couleurs portees par le SVG, pas par le CSS de theme.
+  noop.innerHTML = '<svg viewBox="0 0 24 24">' +
+    '<path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z" ' +
+      'fill="#dc2626" stroke="#dc2626" stroke-width="2.2" stroke-linejoin="round"/>' +
+    '<line x1="12" y1="9.5" x2="12" y2="14" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round"/>' +
+    '<line x1="12" y1="17.4" x2="12.01" y2="17.4" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round"/></svg>';
   noop.title = 'Aucun op\u00e9rateur assign\u00e9 \u2014 ce cr\u00e9neau ne peut pas \u00eatre r\u00e9alis\u00e9. Cliquer pour \u00e9diter.';
   noop.setAttribute('aria-label', 'Aucun op\u00e9rateur assign\u00e9');
   noop.addEventListener('click', function(e){
