@@ -215,6 +215,11 @@ input[type=file]::file-selector-button:hover{background:var(--accent);color:var(
 .ao-series-toggle:active{transform:translateY(0)}
 .ao-series-badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-weight:600;margin-left:6px}
 .ao-series-badge.warn{background:rgba(251,191,36,.15);color:var(--warn,#a16207)}
+/* Ligne d'AO dont la référence ne correspond à aucun produit du catalogue. */
+.ao-orphan-badge{display:inline-flex;align-items:center;gap:3px;font-size:10px;padding:1px 6px;
+border-radius:999px;background:rgba(220,38,38,.13);color:var(--danger,#dc2626);font-weight:700;
+margin-left:6px;cursor:help;vertical-align:middle}
+.ao-lignes-table tr.ao-ligne-orpheline > td{background:rgba(220,38,38,.045)}
 .ao-lignes-table tr.ao-serie-sub td{background:var(--bg);border-top:1px dashed var(--border);font-size:12px;padding:6px 8px}
 .ao-lignes-table tr.ao-serie-sub td:first-child{border-top:none;background:transparent}
 .comp-table tr.comp-serie-sub td{background:var(--bg);font-size:11px;padding:6px 8px;color:var(--text2)}
@@ -326,7 +331,8 @@ function icon(name, size) {
     'building-2': '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/>',
     'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
     'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
-    'corner-down-right': '<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>'
+    'corner-down-right': '<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
+    'alert-triangle': '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'
   };
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0">'+(p[name]||'')+'</svg>';
 }
@@ -1235,7 +1241,11 @@ function renderModal() {
       const ref = refEl.value.trim();
       const designation = desEl.value.trim();
       if (!ref || !designation) { showToast('Référence et désignation obligatoires.', 'danger'); return; }
+      // produit_id quand la ligne vient du catalogue : c'est lui qui rattache la
+      // ligne au produit. À défaut, le serveur retombe sur la référence — la
+      // saisie libre reste possible, mais la ligne sera marquée orpheline.
       const body = {ref_produit: ref, designation,
+        produit_id: pickEl.value || (S.modalData && S.modalData.produit_id) || null,
         quantite: parseFloat(document.getElementById('m-qte').value), unite: uniteEl.value.trim(),
         notes: notesEl.value.trim() || null};
       try {
@@ -1988,8 +1998,17 @@ function renderLignes() {
       ? '<button class="btn btn-ghost btn-sm btn-edit-ligne" data-id="'+l.id+'">Modifier</button> <button class="btn btn-ghost btn-sm btn-del-ligne" data-id="'+l.id+'">Supprimer</button>'
       : '';
     const refLink = '<a href="#" class="ao-ligne-ref-link" data-ref="'+escAttr(l.ref_produit||'')+'">'+escHtml(l.ref_produit)+'</a>';
-    let mainRow = '<tr class="ao-ligne-row" data-lid="'+l.id+'"><td>'+escHtml(l.position)+'</td>'+
-      '<td>'+chev+refLink+seriesBadge+'</td>'+
+    // Ligne orpheline : la référence ne correspond à aucun produit du catalogue.
+    // Sans ce badge, la seule trace visible était un client et un étiq./bobine à
+    // « — », qu'on lisait comme une fiche produit incomplète plutôt que comme un
+    // produit absent. L'envoi de l'AO est refusé tant qu'il en reste une.
+    const orphanBadge = l.produit_introuvable
+      ? ' <span class="ao-orphan-badge" title="Aucun produit du catalogue ne porte cette référence.'
+        + ' Le fournisseur ne recevra ni fiche technique ni BAT, et l\'envoi de l\'AO sera refusé.'
+        + ' Créez le produit ou corrigez la ligne.">'+icon('alert-triangle',11)+' Produit introuvable</span>'
+      : '';
+    let mainRow = '<tr class="ao-ligne-row'+(l.produit_introuvable?' ao-ligne-orpheline':'')+'" data-lid="'+l.id+'"><td>'+escHtml(l.position)+'</td>'+
+      '<td>'+chev+refLink+orphanBadge+seriesBadge+'</td>'+
       '<td>'+escHtml(l.client_nom||'—')+'</td>'+
       '<td>'+formatInt(l.etiquettes_par_bobine)+'</td>'+
       '<td>'+qtyTxt+'</td>'+
@@ -2421,6 +2440,9 @@ async function openCreateAoWizard(initialState) {
     rows.forEach(row => {
       state.lignes.push({
         ref_produit: (row.querySelector('.w-l-ref')?.value || '').trim(),
+        // Le produit choisi dans le catalogue est transmis par son id : la ligne
+        // reste rattachée même si sa référence change par la suite.
+        produit_id: (row.querySelector('.w-l-pick')?.value || '') || null,
         designation: (row.querySelector('.w-l-des')?.value || '').trim(),
         quantite: (row.querySelector('.w-l-qte')?.value || '').trim(),
         unite: 'etiquettes',
@@ -2669,7 +2691,8 @@ async function openCreateAoWizard(initialState) {
             await api('/api/ao/' + ao.id + '/lignes', {
               method: 'POST', headers: {'Content-Type': 'application/json'},
               body: JSON.stringify({
-                ref_produit: ln.ref_produit, designation: ln.designation || ln.ref_produit,
+                ref_produit: ln.ref_produit, produit_id: ln.produit_id || null,
+                designation: ln.designation || ln.ref_produit,
                 quantite: parseFloat(ln.quantite), unite: ln.unite || 'etiquettes', notes: ln.notes || null,
               })
             });
@@ -3075,7 +3098,7 @@ function renderComparaison() {
   });
   const head = '<tr>'+
     '<th>Réf. produit</th><th class="comp-col-fa">Frontal</th><th class="comp-col-fa">Adhésif</th>'+
-    '<th class="comp-col-etiqbob">Étiq. / bob.</th><th>Qté étiquettes</th><th class="comp-col-fourn">Fournisseur</th>'+
+    '<th class="comp-col-etiqbob">Étiq. / bob.</th><th>Quantité</th><th class="comp-col-fourn">Fournisseur</th>'+
     '<th>Quotation</th><th>Devise</th><th class="comp-col-uquot">Unité</th>'+
     '<th>Prix calculé</th><th>Transport</th><th>Prix / mille</th><th class="comp-th-coef">Coef</th>'+
     '<th>Devise devis</th><th>Prix d\'achat</th>'+

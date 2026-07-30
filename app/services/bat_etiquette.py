@@ -42,10 +42,20 @@ COLOR_DIM = "#2F6FB5"        # cotes support
 COLOR_INK = "#111820"        # trait et texte neutres
 COLOR_MUTED = "#8A94A1"      # mention d'echelle
 COLOR_WHITE = "#FFFFFF"
- 
+
+# Bandeau "croquis automatique". Ambre plutot que rouge : le rouge est deja
+# la couleur de la decoupe, un bandeau rouge se lirait comme une cote.
+COLOR_WARN_BG = "#FFF4D6"
+COLOR_WARN_BORDER = "#D98A00"
+COLOR_WARN_INK = "#7A4A00"
+
 PAGE_W_MM = 210.0
 PAGE_H_MM = 297.0
- 
+
+# Bandeau d'avertissement (haut de page). La zone 0..21 mm est libre : le
+# contenu le plus haut du plan est la cote de laize a y0-11, avec y0 >= DRAW_TOP.
+WARN_X, WARN_Y, WARN_W, WARN_H = 14.0, 4.0, 182.0, 16.0
+
 # Zone de dessin du plan
 DRAW_TOP = 34.0
 DRAW_MAX_H = 132.0
@@ -171,6 +181,12 @@ TEXTS: Dict[str, Dict[str, Any]] = {
         "gap": "Avance",
         "scale": "Échelle {ratio}",
         "title": "Bon à tirer",
+        # Bandeau "croquis automatique" — volontairement bilingue quelle que
+        # soit la langue du BAT : le document part chez des fournisseurs
+        # etrangers et l'avertissement ne doit jamais etre illisible.
+        "warn_title": "CROQUIS AUTOMATIQUE — AUTOMATIC SKETCH",
+        "warn_fr": "Plan généré automatiquement depuis la fiche produit. Il peut contenir des erreurs : vérifiez toutes les cotes avant production.",
+        "warn_en": "Automatically generated from the product data sheet. It may contain errors: check every dimension before production.",
     },
     "en": {
         "customer": "Customer",
@@ -203,6 +219,9 @@ TEXTS: Dict[str, Dict[str, Any]] = {
         "gap": "Gap",
         "scale": "Scale {ratio}",
         "title": "Proof",
+        "warn_title": "AUTOMATIC SKETCH — CROQUIS AUTOMATIQUE",
+        "warn_fr": "Automatically generated from the product data sheet. It may contain errors: check every dimension before production.",
+        "warn_en": "Plan généré automatiquement depuis la fiche produit. Il peut contenir des erreurs : vérifiez toutes les cotes avant production.",
     },
 }
  
@@ -413,6 +432,7 @@ def build_bat_spec(
         "show_gap": True,
         "show_core": False,
         "scale_mode": "standard",  # "standard" | "fit"
+        "auto_warning": True,
         "lang": lang,
     }
     if overrides:
@@ -678,7 +698,13 @@ def build_bat_ops(spec: Dict[str, Any], lang: Optional[str] = None,
     t = _t(lang)
     g = compute_geometry(spec)
     ops: List[Dict[str, Any]] = [_rect(0, 0, PAGE_W_MM, PAGE_H_MM, fill=COLOR_WHITE)]
- 
+
+    # Avertissement "croquis automatique" : actif par defaut. Le BAT est
+    # toujours derive de la fiche produit, donc toujours a verifier ; seul un
+    # appelant qui sait ce qu'il fait peut le desactiver (spec["auto_warning"]).
+    if spec.get("auto_warning", True):
+        _build_auto_warning(ops, t)
+
     x0, y0, gw_s, th_s = g["x0"], g["y0"], g["gw_s"], g["th_s"]
     lx, lw, lh, rs = g["label_x"], g["label_w"], g["label_h"], g["radius_s"]
     scale = g["scale"]
@@ -792,6 +818,36 @@ def build_bat_ops(spec: Dict[str, Any], lang: Optional[str] = None,
     return ops
  
  
+def _build_auto_warning(ops: List[Dict[str, Any]], t: Dict[str, Any]) -> None:
+    """Bandeau haut de page : ce plan est un croquis genere automatiquement.
+
+    Dessine en premier dans la zone 4..20 mm, laissee libre par compute_geometry
+    (le contenu le plus haut du plan est a y0-11, avec y0 >= DRAW_TOP = 34).
+    Le pictogramme est un triangle vectoriel et non un caractere Unicode : les
+    polices Helvetica de base de ReportLab n'ont pas de glyphe pour "⚠".
+    """
+    x, y, w, h = WARN_X, WARN_Y, WARN_W, WARN_H
+    ops.append(_rect(x, y, w, h, rx=1.6, fill=COLOR_WARN_BG,
+                     stroke=COLOR_WARN_BORDER, sw=0.5))
+
+    # Pictogramme triangle + point d'exclamation
+    tcx, ttop, tsize = x + 8.5, y + 3.6, 8.8
+    ops.append(_poly([
+        (tcx, ttop),
+        (tcx + tsize / 2, ttop + tsize * 0.87),
+        (tcx - tsize / 2, ttop + tsize * 0.87),
+    ], fill=COLOR_WARN_BORDER, stroke=COLOR_WARN_INK, sw=0.3))
+    ops.append(_text(tcx, ttop + tsize * 0.72, "!", size=5.6, fill=COLOR_WHITE,
+                     anchor="middle", bold=True))
+
+    tx = x + 16.0
+    ops.append(_text(tx, y + 5.6, t["warn_title"], size=3.7,
+                     fill=COLOR_WARN_INK, bold=True))
+    ops.append(_text(tx, y + 10.0, t["warn_fr"], size=2.55, fill=COLOR_WARN_INK))
+    ops.append(_text(tx, y + 13.6, t["warn_en"], size=2.55, fill=COLOR_WARN_INK,
+                     italic=True))
+
+
 def _build_cartouche(ops, spec, g, t, perf_on):
     bx, by, bw, bh = BOX_X, BOX_Y, BOX_W, BOX_H
     ops.append(_rect(bx, by, bw, bh, rx=3, stroke=COLOR_INK, sw=0.45))

@@ -3681,6 +3681,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
         rows = conn.execute(
             f"""
             SELECT mp.id, mp.categorie, mp.reference, mp.designation,
+                   mp.abbreviation,
                    mp.seuil_alerte, mp.actif, mp.palettes_par_pile, mp.couleur,
                    mp.metres_lineaires_par_bobine, mp.prix_eur_m2,
                    COALESCE(mp.prix_par_laize, 0) AS prix_par_laize,
@@ -3817,6 +3818,12 @@ async def create_matiere_premiere(request: Request):
     if categorie == "glassine" and not couleur:
         couleur = designation
 
+    # Forme courte de la matiere, utilisee pour composer les references produit
+    # MyAO (« 105 x 148 mm Th Top-Coated Perm, 1 Color, M40 mm »). Facultative :
+    # a defaut, app/services/ao_ref_produit.py deduit une abreviation de la
+    # designation. Cf. _with_abbrev dans app/routers/ao.py.
+    abbreviation = (body.get("abbreviation") or "").strip() or None
+
     sous_section = (body.get("sous_section") or "").strip() or None
     if categorie not in _MP_CATEGORIES_WITH_SOUS_SECTION:
         sous_section = None
@@ -3843,12 +3850,12 @@ async def create_matiere_premiere(request: Request):
                 """
                 INSERT INTO matieres_premieres (
                     categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section,
-                    unites_par_palette, cartons_par_palette, kg_par_carton
+                    unites_par_palette, cartons_par_palette, kg_par_carton, abbreviation
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section,
-                 unites_par_palette, cartons_par_palette, kg_par_carton),
+                 unites_par_palette, cartons_par_palette, kg_par_carton, abbreviation),
             )
             matiere_id = cur.lastrowid
             conn.execute(
@@ -3896,6 +3903,11 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
     if "couleur" in body:
         sets.append("couleur=?")
         params.append((body.get("couleur") or "").strip() or None)
+    if "abbreviation" in body:
+        # Vidage autorise : une abreviation effacee fait retomber la composition
+        # de reference produit sur le glossaire de ao_ref_produit.py.
+        sets.append("abbreviation=?")
+        params.append((body.get("abbreviation") or "").strip() or None)
     if "metres_lineaires_par_bobine" in body:
         v = body.get("metres_lineaires_par_bobine")
         try:

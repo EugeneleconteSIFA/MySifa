@@ -7518,6 +7518,10 @@ function matiereRefEditPayload(item, fields) {
   if (mpIsGlassineCategory(item) && fields.couleurInp) {
     payload.couleur = fields.couleurInp.value.trim() || des;
   }
+  if (fields.hasAbbrev && fields.abbrevInp) {
+    // Toujours envoyée, même vide, pour autoriser l'effacement.
+    payload.abbreviation = fields.abbrevInp.value.trim();
+  }
   if (fields.hasSousSection && fields.sousSectionSel) {
     // sous_section toujours envoye pour les categories qui la supportent (autorise vidage)
     payload.sous_section = fields.sousSectionSel.getValue();
@@ -7610,6 +7614,24 @@ function appendMatiereRefEditFields(parent, item) {
   const couleurInp = el('input', { attrs: { type: 'text', placeholder: 'Ex. Blanc, Kraft…' } });
   couleurInp.value = item.couleur || '';
   couleurWrap.append(el('label', null, 'Couleur'), couleurInp);
+  // ── Abréviation (frontaux et adhésifs) ────────────────────────────────────
+  // Forme courte anglaise qui entre dans la référence produit MyAO :
+  // « 105 x 148 mm Th Top-Coated Perm, 1 Color, M40 mm ». Elle n'est proposée que
+  // sur les catégories qui figurent dans cette référence. Laissée vide, MyAO
+  // déduit une abréviation de la description — utilisable, mais approximative.
+  const abbrevCat = mpCategorieKey(item.categorie);
+  const hasAbbrev = abbrevCat === 'frontal' || abbrevCat === 'adhesif';
+  const abbrevInp = el('input', { attrs: { type: 'text', maxlength: '40',
+    placeholder: abbrevCat === 'adhesif' ? 'Ex. Perm' : 'Ex. Th Top-Coated' } });
+  abbrevInp.value = item.abbreviation || '';
+  const abbrevWrap = hasAbbrev
+    ? el('div', { cls: 'mp-field' },
+        el('label', null, 'Abréviation (référence produit MyAO)'),
+        abbrevInp,
+        el('div', { cls: 'mp-hint' }, 'Forme courte utilisée pour composer la référence '
+          + 'produit envoyée aux fournisseurs. Vide = déduite de la description.'),
+      )
+    : el('div', { style: { display: 'none' } });
   // Bloc laizes (frontal/glassine/complexe)
   const isLaizee = mpIsLaizeeCategory(item.categorie);
   const laizeWrap = el('div', { style: 'display:' + (isLaizee ? '' : 'none') + ';border-top:1px dashed var(--border);padding-top:10px;margin-top:6px' });
@@ -7894,6 +7916,7 @@ function appendMatiereRefEditFields(parent, item) {
       ),
       el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
       el('div', { cls: 'mp-field' }, el('label', null, 'Description'), desInp),
+      abbrevWrap,
       couleurWrap,
       sousSectionWrap,
     ),
@@ -7905,7 +7928,7 @@ function appendMatiereRefEditFields(parent, item) {
       intervalleWrap,
     ),
   );
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp, cppInp, kgcInp, isAdhesif };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp, cppInp, kgcInp, isAdhesif, abbrevInp, hasAbbrev };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
