@@ -99,6 +99,32 @@ body.light .mp-search-wrap:focus-within{
 .mp-empty{text-align:center;color:var(--muted);font-size:13px;padding:32px 16px}
 .mp-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:18px}
 .mp-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
+/* ── Fiche matiere : mise en page deux colonnes ───────────────────────────────
+   Le formulaire de reference matiere empilait identification, classement,
+   conditionnement, laizes et seuils dans une seule colonne de 480 px : il
+   fallait defiler pour voir un champ qui tient a l'ecran. Deux colonnes et des
+   sections cartonnees, sur le modele du dossier de fabrication.               */
+.mp-modal.mp-modal-fiche{max-width:900px;padding:22px}
+.mp-form-grid{column-count:2;column-gap:16px}
+.mp-modal-fiche .mp-form-section{border-top:0;padding:14px;margin:0 0 16px;
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  break-inside:avoid;-webkit-column-break-inside:avoid}
+/* Titre a barre verticale accentuee : repere visuel de section, identique au
+   modal de dossier de fabrication. */
+.mp-modal-fiche .mp-form-section-title{display:flex;align-items:center;gap:8px;
+  font-size:13px;font-weight:800;color:var(--text);text-transform:none;
+  letter-spacing:0;margin-bottom:12px}
+.mp-modal-fiche .mp-form-section-title::before{content:'';width:3px;height:15px;
+  border-radius:2px;background:var(--accent);flex:none}
+/* Lien de repli pour les reglages d'exception (abreviation forcee). */
+.mp-link-toggle{background:none;border:none;padding:0;margin:0;cursor:pointer;
+  font-family:inherit;font-size:11px;font-weight:700;color:var(--accent);text-align:left}
+.mp-link-toggle:hover{text-decoration:underline}
+.mp-advanced{margin-top:2px}
+@media (max-width:860px){
+  .mp-form-grid{column-count:1}
+  .mp-modal.mp-modal-fiche{max-width:520px}
+}
 .mp-modal > h3{margin:0 0 16px;font-size:16px;font-weight:700;color:var(--text)}
 .mp-modal.mp-modal-mvt{padding:0;overflow:visible;display:flex;flex-direction:column}
 .mp-modal-mvt-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 20px;flex-shrink:0}

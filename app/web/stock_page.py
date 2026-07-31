@@ -7629,18 +7629,34 @@ function appendMatiereRefEditFields(parent, item) {
   // déduit une abréviation de la description — utilisable, mais approximative.
   // Sous-categorie : toutes les categories, contrairement a la sous-section.
   const sousCategorieSel = buildMpSousCategorieSelector(item.sous_categorie || '', item.sous_categorie_en || '', item.categorie);
+  // Abreviation : exception par matiere, et non un second champ a remplir. Elle
+  // ne sert qu'a forcer un libelle different de la sous-categorie sur UNE
+  // matiere. Repliee derriere un lien pour ne pas laisser croire a deux champs
+  // concurrents ; depliee d'office si une valeur existe deja.
   const abbrevCat = mpCategorieKey(item.categorie);
   const hasAbbrev = abbrevCat === 'frontal' || abbrevCat === 'adhesif';
   const abbrevInp = el('input', { attrs: { type: 'text', maxlength: '40',
     placeholder: abbrevCat === 'adhesif' ? 'Ex. Perm' : 'Ex. Th Top-Coated' } });
   abbrevInp.value = item.abbreviation || '';
+  const abbrevBody = el('div', { cls: 'mp-field', style: { marginTop: '6px' } },
+    abbrevInp,
+    el('div', { cls: 'mp-hint' }, 'Remplace la sous-categorie pour cette matiere '
+      + 'uniquement. Laisse vide dans la quasi-totalite des cas.'),
+  );
+  const abbrevToggle = el('button', {
+    cls: 'mp-link-toggle', type: 'button',
+    on: { click: () => {
+      const ouvert = abbrevBody.style.display !== 'none';
+      abbrevBody.style.display = ouvert ? 'none' : '';
+      abbrevToggle.textContent = ouvert
+        ? 'Forcer un libelle different…'
+        : 'Masquer le libelle force';
+      if (!ouvert) requestAnimationFrame(() => abbrevInp.focus());
+    } },
+  }, item.abbreviation ? 'Masquer le libelle force' : 'Forcer un libelle different…');
+  if (!item.abbreviation) abbrevBody.style.display = 'none';
   const abbrevWrap = hasAbbrev
-    ? el('div', { cls: 'mp-field' },
-        el('label', null, 'Abréviation (référence produit MyAO)'),
-        abbrevInp,
-        el('div', { cls: 'mp-hint' }, 'Forme courte utilisée pour composer la référence '
-          + 'produit envoyée aux fournisseurs. Vide = déduite de la description.'),
-      )
+    ? el('div', { cls: 'mp-advanced' }, abbrevToggle, abbrevBody)
     : el('div', { style: { display: 'none' } });
   // Bloc laizes (frontal/glassine/complexe)
   const isLaizee = mpIsLaizeeCategory(item.categorie);
@@ -7918,7 +7934,15 @@ function appendMatiereRefEditFields(parent, item) {
     ? mpFormSection('Conditionnement à l\'achat', ...adhesifCondFields, pppWrap, uppWrap)
     : null;
 
-  parent.append(
+  // Mise en page deux colonnes. Identification et Classement d'un cote,
+  // Conditionnement et Stock de l'autre : ce sont deux natures d'information,
+  // l'une decrit la matiere, l'autre decrit sa gestion.
+  // Les laizes restent pleine largeur, leur grille de prix est trop dense pour
+  // une demi-colonne.
+  //
+  // Le filtrage des null est indispensable : DOM.append() convertit null en
+  // noeud texte « null », qui s'affichait tel quel sous les sections masquees.
+  const sections = [
     mpFormSection('Identification',
       el('div', { cls: 'mp-field' },
         el('label', null, 'Catégorie'),
@@ -7926,19 +7950,29 @@ function appendMatiereRefEditFields(parent, item) {
       ),
       el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
       el('div', { cls: 'mp-field' }, el('label', null, 'Description'), desInp),
-      sousCategorieSel.el,
-      abbrevWrap,
       couleurWrap,
+    ),
+    mpFormSection('Classement',
+      sousCategorieSel.el,
       sousSectionWrap,
+      abbrevWrap,
     ),
     sectionConditionnement,
-    isLaizee ? mpFormSection('Laizes & tarification', laizeWrap) : laizeWrap,
     mpFormSection('Stock & inventaire',
       el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item)), seuilInp),
       el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
       intervalleWrap,
     ),
-  );
+  ];
+  // Colonnes CSS plutot que deux conteneurs figes : le nombre de sections varie
+  // selon la categorie (un frontal n'a pas de conditionnement, une palette n'a
+  // pas de laizes). Une repartition en dur laissait une colonne a moitie vide ;
+  // le moteur de colonnes equilibre les hauteurs tout seul.
+  const grille = el('div', { cls: 'mp-form-grid' }, ...sections.filter(Boolean));
+  const sectionLaizes = isLaizee
+    ? mpFormSection('Laizes & tarification', laizeWrap)
+    : null;
+  parent.append(...[grille, sectionLaizes].filter(Boolean));
   return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp, cppInp, kgcInp, isAdhesif, abbrevInp, hasAbbrev, sousCategorieSel };
 }
 
@@ -8042,7 +8076,7 @@ function openMatiereRefEditModal(item) {
     cls: 'mp-modal-overlay',
     on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
   });
-  const box = el('div', { cls: 'mp-modal', on: { click: (e) => e.stopPropagation() } });
+  const box = el('div', { cls: 'mp-modal mp-modal-fiche', on: { click: (e) => e.stopPropagation() } });
   box.appendChild(el('div', { cls: 'mp-modal-head' },
     el('h3', null, 'Modifier la référence'),
     el('button', {
