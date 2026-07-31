@@ -136,6 +136,16 @@ select.filter.on{border-color:var(--accent);color:var(--accent);background:var(-
 .tcard{background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--border);border-radius:10px;padding:11px 12px;cursor:pointer;transition:border-color .15s,transform .1s,box-shadow .15s}
 .tcard:hover{border-color:var(--accent);box-shadow:0 4px 14px rgba(0,0,0,.18)}
 .tcard.dragging{opacity:.45}
+/* Carte active (survol ou navigation J/K) : cible des touches 1 à 5. */
+.tcard.actif{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg),0 6px 18px rgba(0,0,0,.18)}
+
+.kbd-foot{margin-top:22px;padding-top:14px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;
+  align-items:center;gap:6px 16px;font-size:11.5px;color:var(--muted)}
+.kbd-foot b{font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.5px;font-size:10px;margin-right:2px}
+.kbd-foot span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+kbd{display:inline-block;min-width:17px;padding:1px 5px;border-radius:5px;background:var(--card);
+  border:1px solid var(--border);border-bottom-width:2px;font-family:'SF Mono','Consolas',monospace;
+  font-size:10.5px;font-weight:700;color:var(--text2);text-align:center;line-height:1.5}
 .tcard.prio-critique{border-left-color:var(--danger)}
 .tcard.prio-haute{border-left-color:var(--warn)}
 .tcard.prio-normale{border-left-color:var(--accent)}
@@ -369,6 +379,11 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="6" height="18" rx="1"/><rect x="10" y="3" width="6" height="12" rx="1"/><rect x="17" y="3" width="4" height="8" rx="1"/></svg>
       Kanban
     </button>
+    <button type="button" class="nav-btn" id="nav-mes" onclick="showView('mes')">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Mes tâches
+      <span class="nav-badge" id="badge-mes" style="display:none">0</span>
+    </button>
     <button type="button" class="nav-btn" id="nav-liste" onclick="showView('liste')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       Liste
@@ -451,6 +466,16 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
         </table>
       </div>
     </div>
+
+    <div class="kbd-foot" id="kbd-foot">
+      <b>Raccourcis</b>
+      <span><kbd>N</kbd> nouvelle tâche</span>
+      <span><kbd>/</kbd> rechercher</span>
+      <span><kbd>J</kbd><kbd>K</kbd> naviguer entre les cartes</span>
+      <span><kbd>1</kbd>–<kbd>5</kbd> changer le statut de la carte active</span>
+      <span><kbd>Échap</kbd> fermer</span>
+      <span style="color:var(--text2)"><kbd>⌥</kbd><kbd>T</kbd> créer une tâche depuis n’importe quelle page de MySifa</span>
+    </div>
   </main>
 </div>
 
@@ -479,6 +504,7 @@ const S = {
   filtres: {q:'', assigne:'', priorite:'', type:'', module:'', rapide:''},
   sousTaches: true,     // vue Liste : afficher ou non les lignes de sous-tâches
   ouverts: new Set(),   // Kanban : cartes dont la pile de sous-tâches est dépliée
+  actif: null,          // carte visée par les touches 1–5 (survol ou J/K)
   tri: {champ:'ordre', sens:'asc'},
   drag: null,
   me: null,
@@ -564,14 +590,22 @@ function fmtH(h){const n=Number(h)||0;return n?(Number.isInteger(n)?n:n.toFixed(
 // Un <select multiple> natif est inutilisable au clavier comme à la souris dès
 // qu'il y a plus de trois entrées : on rend des chips + un popover cherchable.
 // `onChange(ids)` est appelé à chaque coche/décoche.
-function champAssignes(hostId, selection, onChange){
+function champAssignes(hostId, selection, onChange, connus){
   const host=document.getElementById(hostId);
   if(!host)return;
   let ids=(selection||[]).slice();
   let ouvert=false;
+  // `connus` = les assignés réels de la tâche. Seuls les super admins sont
+  // proposés à l'assignation, mais une tâche plus ancienne peut porter
+  // quelqu'un d'autre : on l'affiche quand même pour pouvoir le retirer.
+  const horsListe=(connus||[]).filter(u=>!((S.meta&&S.meta.users)||[]).some(x=>x.id===u.id));
+
+  function tousUsers(){
+    return ((S.meta&&S.meta.users)||[]).concat(horsListe);
+  }
 
   function rendre(){
-    const users=(S.meta&&S.meta.users)||[];
+    const users=tousUsers();
     const choisis=ids.map(id=>users.find(u=>u.id===id)).filter(Boolean);
     host.innerHTML=
       '<div class="asg-box'+(ouvert?' open':'')+'" tabindex="0" role="button" aria-haspopup="listbox">'+
@@ -593,7 +627,7 @@ function champAssignes(hostId, selection, onChange){
     const zone=host.querySelector('.asg-list');
     if(!zone)return;
     const q=(filtre||'').trim().toLowerCase();
-    const users=((S.meta&&S.meta.users)||[]).filter(u=>!q||String(u.nom||'').toLowerCase().includes(q));
+    const users=tousUsers().filter(u=>!q||String(u.nom||'').toLowerCase().includes(q));
     if(!users.length){
       zone.innerHTML='<div class="asg-rien">Aucun résultat pour « '+esc(filtre)+' »</div>';
       return;
@@ -695,10 +729,13 @@ function closeSidebar(){document.body.classList.remove('sb-open');}
 
 const VIEW_META={
   kanban:{titre:'Kanban',sub:"Ce que l'équipe doit faire, en cours et terminé.",guide:'taches-kanban'},
+  mes:{titre:'Mes tâches',sub:'Uniquement ce qui vous est assigné, en board.',guide:'taches-kanban'},
   liste:{titre:'Liste',sub:'Toutes les tâches actives, filtrables et triables.',guide:'taches-liste'},
   archives:{titre:'Archives',sub:'Tâches archivées — conservées pour l’historique.',guide:'taches-liste'},
 };
-const VALID_VIEWS=['kanban','liste','archives'];
+const VALID_VIEWS=['kanban','mes','liste','archives'];
+// « Mes tâches » est un Kanban filtré sur moi : même lecture, même glisser-déposer.
+function estBoard(v){return v==='kanban'||v==='mes';}
 function readView(){
   try{const h=(location.hash||'').replace(/^#/,'').trim();if(VALID_VIEWS.indexOf(h)!==-1)return h;}catch(e){}
   return 'kanban';
@@ -707,8 +744,8 @@ function showView(v,opts){
   if(VALID_VIEWS.indexOf(v)===-1)v='kanban';
   S.view=v;
   VALID_VIEWS.forEach(id=>{const n=document.getElementById('nav-'+id);if(n)n.classList.toggle('active',id===v);});
-  document.getElementById('view-kanban').style.display=(v==='kanban')?'':'none';
-  document.getElementById('view-liste').style.display=(v==='kanban')?'none':'';
+  document.getElementById('view-kanban').style.display=estBoard(v)?'':'none';
+  document.getElementById('view-liste').style.display=estBoard(v)?'none':'';
   const m=VIEW_META[v];
   document.getElementById('page-title').textContent=m.titre;
   document.getElementById('page-sub').textContent=m.sub;
@@ -716,7 +753,10 @@ function showView(v,opts){
   // Le bouton n'a de sens qu'en Liste : sur le Kanban les sous-tâches sont
   // toujours regroupées sous leur mère, jamais masquables.
   const bs=document.getElementById('btn-sous');
-  if(bs)bs.style.display=(v==='kanban')?'none':'';
+  if(bs)bs.style.display=estBoard(v)?'none':'';
+  // Le filtre « personne » n'a pas de sens dans une vue déjà filtrée sur moi.
+  const fa=document.getElementById('f-assigne');
+  if(fa)fa.style.display=(v==='mes')?'none':'';
   syncGuideBtn();
   closeSidebar();
   if(!(opts&&opts.silent)){try{if(location.hash!=='#'+v)history.replaceState(null,'','#'+v);}catch(e){}}
@@ -742,7 +782,12 @@ function queryFiltres(){
   const p=new URLSearchParams();
   const f=S.filtres;
   if(f.q)p.set('q',f.q);
-  if(f.assigne==='0')p.set('non_assignees','1');
+  if(S.view==='mes'){
+    // Vue « Mes tâches » : filtre posé côté serveur, non contournable par les
+    // listes déroulantes.
+    if(S.meta&&S.meta.moi)p.set('assigne',String(S.meta.moi.id));
+  }
+  else if(f.assigne==='0')p.set('non_assignees','1');
   else if(f.assigne)p.set('assigne',f.assigne);
   if(f.priorite)p.set('priorite',f.priorite);
   if(f.type)p.set('type',f.type);
@@ -755,6 +800,7 @@ async function chargerTaches(){
   try{
     const j=await api('/api/taches?'+queryFiltres());
     S.taches=j.taches||[];
+    renderStats();
     // « Non assignées » et les raccourcis de compteur se filtrent côté client :
     // ils ne changent pas la requête, seulement la sélection affichée.
     render();
@@ -788,27 +834,60 @@ function tachesVisibles(){
 // Rendu
 // ══════════════════════════════════════════════════════════════════
 function render(){
-  document.getElementById('badge-total').textContent=String(S.taches.length);
-  if(S.view==='kanban')renderKanban();
+  // Le badge de la nav « Liste » compte TOUTES les tâches actives, pas le
+  // résultat courant : sinon il chutait à 1 dès qu'on ouvrait « Mes tâches ».
+  const total=Object.values((S.stats&&S.stats.par_statut)||{}).reduce((a,b)=>a+b,0);
+  document.getElementById('badge-total').textContent=String(total||S.taches.length);
+  if(estBoard(S.view))renderKanban();
   else renderListe();
+}
+
+// Compteur de la nav « Mes tâches » — mêmes chiffres que la pastille du portail.
+async function chargerBadgeMes(){
+  try{
+    const j=await api('/api/taches/badge');
+    const b=document.getElementById('badge-mes');
+    if(!b)return;
+    const n=Number(j.count||0);
+    b.textContent=String(n);
+    b.style.display=n?'':'none';
+    b.classList.toggle('warn',Number(j.en_retard||0)>0);
+    b.title=Number(j.en_retard||0)>0?(j.en_retard+' en retard'):'';
+  }catch(e){}
 }
 
 function renderStats(){
   if(!S.meta)return;
   const row=document.getElementById('stats-row');
   const parts=[];
+  // Dans « Mes tâches », les compteurs se calculent sur ce qui est chargé —
+  // c'est-à-dire mes tâches. Afficher les totaux de l'équipe au-dessus d'un
+  // board filtré sur moi n'avait aucun sens.
+  const mesVues=(S.view==='mes');
+  const finaux=statutsFinaux();
+  let parStatut=S.stats.par_statut||{};
+  let enRetard=S.stats.en_retard||0;
+  if(mesVues){
+    parStatut={};
+    enRetard=0;
+    S.taches.forEach(t=>{
+      parStatut[t.statut]=(parStatut[t.statut]||0)+1;
+      if(t.echeance&&joursRestants(t.echeance)<0&&finaux.indexOf(t.statut)===-1)enRetard++;
+    });
+  }
   (S.meta.statuts||[]).forEach(st=>{
-    const n=S.stats.par_statut[st.code]||0;
+    const n=parStatut[st.code]||0;
     const on=S.filtres.rapide==='statut:'+st.code;
     parts.push('<div class="stat'+(on?' active':'')+'" data-rapide="statut:'+esc(st.code)+'">'+
       '<span class="col-dot" style="background:'+couleurVar(st.couleur)+'"></span>'+
       esc(st.label)+' <b>'+n+'</b></div>');
   });
-  if(S.stats.en_retard>0){
+  if(enRetard>0){
     const on=S.filtres.rapide==='retard';
-    parts.push('<div class="stat alert'+(on?' active':'')+'" data-rapide="retard">En retard <b>'+S.stats.en_retard+'</b></div>');
+    parts.push('<div class="stat alert'+(on?' active':'')+'" data-rapide="retard">En retard <b>'+enRetard+'</b></div>');
   }
-  if(S.stats.non_assignees>0){
+  // « Non assignées » n'a pas de sens dans une vue filtrée sur une personne.
+  if(!mesVues&&S.stats.non_assignees>0){
     const on=S.filtres.rapide==='non_assignees';
     parts.push('<div class="stat'+(on?' active':'')+'" data-rapide="non_assignees">Non assignées <b>'+S.stats.non_assignees+'</b></div>');
   }
@@ -869,7 +948,7 @@ function carteHtml(t,enfants){
     : '';
 
   return '<div class="tstack">'+
-    '<div class="tcard prio-'+esc(t.priorite||'normale')+'" draggable="true" data-id="'+t.id+'">'+
+    '<div class="tcard prio-'+esc(t.priorite||'normale')+(S.actif===t.id?' actif':'')+'" draggable="true" data-id="'+t.id+'">'+
       (tags.length?'<div class="tcard-top">'+tags.join('')+'</div>':'')+
       '<div class="tcard-title">'+esc(t.titre)+'</div>'+
       (t.parent_titre?'<div style="font-size:10.5px;color:var(--muted);margin:-4px 0 8px">↳ '+esc(t.parent_titre)+'</div>':'')+
@@ -931,6 +1010,9 @@ function renderKanban(){
   });
 
   board.querySelectorAll('.tcard').forEach(c=>{
+    // Le survol désigne la carte active : les touches 1–5 s'y appliquent sans
+    // qu'on ait à cliquer, ce qui ouvrirait la fiche.
+    c.addEventListener('mouseenter',()=>{marquerActif(Number(c.dataset.id),{scroll:false});});
     c.addEventListener('click',e=>{
       if(e.target.closest('.sous-toggle'))return;
       openDetail(Number(c.dataset.id));
@@ -1005,7 +1087,7 @@ function brancherArchivage(){
       }
       toast('Tâche archivée.');
       if(S.detail&&S.detail.tache&&S.detail.tache.id===id)closeDetail();
-      await Promise.all([chargerTaches(),chargerStats()]);
+      await Promise.all([chargerTaches(),chargerStats(),chargerBadgeMes()]);
     }catch(err){toast(err.message,'err');}
   });
 }
@@ -1013,7 +1095,7 @@ function brancherArchivage(){
 async function deplacer(id,statut,apres_id,avant_id){
   try{
     await jpost('/api/taches/'+id+'/move',{statut:statut,apres_id:apres_id,avant_id:avant_id});
-    await Promise.all([chargerTaches(),chargerStats()]);
+    await Promise.all([chargerTaches(),chargerStats(),chargerBadgeMes()]);
     if(S.detail&&S.detail.tache&&S.detail.tache.id===id)openDetail(id,{silent:true});
   }catch(e){toast(e.message,'err');chargerTaches();}
 }
@@ -1340,7 +1422,7 @@ function brancherDetail(){
     try{
       const body={};body[champ]=valeur;
       await api('/api/taches/'+t.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-      await Promise.all([chargerTaches(),chargerStats()]);
+      await Promise.all([chargerTaches(),chargerStats(),chargerBadgeMes()]);
       await openDetail(t.id,{silent:true});
     }catch(e){toast(e.message,'err');}
   }
@@ -1368,10 +1450,10 @@ function brancherDetail(){
       await api('/api/taches/'+t.id,{method:'PUT',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({assignes:ids})});
       S.detail=await api('/api/taches/'+t.id);
-      await Promise.all([chargerTaches(),chargerStats()]);
+      await Promise.all([chargerTaches(),chargerStats(),chargerBadgeMes()]);
     }catch(e){toast(e.message,'err');}
   }
-  champAssignes('d-assignes',(t.assignes||[]).map(u=>u.id),patchAssignes);
+  champAssignes('d-assignes',(t.assignes||[]).map(u=>u.id),patchAssignes,t.assignes||[]);
   bind('d-echeance','echeance',v=>v||null);
   bind('d-estimation','estimation_h',v=>v===''?null:Number(v));
 
@@ -1466,7 +1548,7 @@ function brancherDetail(){
       try{
         await jpost('/api/taches',{titre:v,parent_id:t.id,statut:'a_faire',module:t.module,type:t.type});
         sousNew.value='';
-        await Promise.all([chargerTaches(),chargerStats(),openDetail(t.id,{silent:true})]);
+        await Promise.all([chargerTaches(),chargerStats(),chargerBadgeMes(),openDetail(t.id,{silent:true})]);
         requestAnimationFrame(()=>{const n=document.getElementById('sous-new');if(n)n.focus();});
       }catch(e){toast(e.message,'err');}
     };
@@ -1481,7 +1563,7 @@ function brancherDetail(){
       const j=await jpost('/api/taches/'+t.id+'/archive',{});
       toast(j.archivee?'Tâche archivée.':'Tâche désarchivée.');
       closeDetail();
-      await Promise.all([chargerTaches(),chargerStats()]);
+      await Promise.all([chargerTaches(),chargerStats(),chargerBadgeMes()]);
     }catch(e){toast(e.message,'err');}
   };
   const del=root.querySelector('#d-delete');
@@ -1491,7 +1573,7 @@ function brancherDetail(){
         await api('/api/taches/'+t.id,{method:'DELETE'});
         toast('Tâche supprimée.');
         closeDetail();
-        await Promise.all([chargerTaches(),chargerStats()]);
+        await Promise.all([chargerTaches(),chargerStats(),chargerBadgeMes()]);
       }catch(e){toast(e.message,'err');}
     });
   };
@@ -1629,7 +1711,7 @@ function openTacheModal(_ignored,defauts){
       const j=await jpost('/api/taches',body);
       fermerModal();
       toast('Tâche créée.');
-      await Promise.all([chargerTaches(),chargerStats()]);
+      await Promise.all([chargerTaches(),chargerStats(),chargerBadgeMes()]);
       openDetail(j.id);
     }catch(err){toast(err.message,'err');}
   });
@@ -1686,6 +1768,83 @@ function resetFiltres(){
   renderStats();
   chargerTaches();
 }
+
+// ══════════════════════════════════════════════════════════════════
+// Raccourcis clavier
+// ══════════════════════════════════════════════════════════════════
+function cartesVisibles(){
+  return [...document.querySelectorAll('#board .tcard')].map(c=>Number(c.dataset.id));
+}
+function marquerActif(id,opts){
+  if(S.actif===id)return;
+  S.actif=id;
+  document.querySelectorAll('#board .tcard.actif').forEach(c=>c.classList.remove('actif'));
+  const el=document.querySelector('#board .tcard[data-id="'+id+'"]');
+  if(el){
+    el.classList.add('actif');
+    if(!opts||opts.scroll!==false)el.scrollIntoView({block:'nearest',behavior:'smooth'});
+  }
+}
+function deplacerActif(pas){
+  const ids=cartesVisibles();
+  if(!ids.length)return;
+  const i=ids.indexOf(S.actif);
+  const suivant=(i===-1)?(pas>0?0:ids.length-1):Math.min(ids.length-1,Math.max(0,i+pas));
+  marquerActif(ids[suivant]);
+}
+
+// Une frappe ne doit jamais agir « dans le dos » de l'utilisateur : on ne prend
+// la main ni dans un champ de saisie, ni quand une fiche ou une modale est
+// ouverte — le tiroir a ses propres champs et son propre Échap.
+function saisieEnCours(e){
+  const el=e.target;
+  if(!el)return false;
+  const tag=(el.tagName||'').toLowerCase();
+  return tag==='input'||tag==='textarea'||tag==='select'||el.isContentEditable;
+}
+function surcoucheOuverte(){
+  return !!(document.getElementById('modal-root').firstElementChild
+    || document.getElementById('drawer-root').firstElementChild
+    || document.querySelector('.mguide-ov')
+    || document.getElementById('mtq-root'));
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey||e.metaKey||e.altKey)return;
+  if(saisieEnCours(e)||surcoucheOuverte())return;
+
+  if(e.key==='n'||e.key==='N'){e.preventDefault();openTacheModal();return;}
+  if(e.key==='/'){
+    e.preventDefault();
+    const q=document.getElementById('f-q');
+    if(q){q.focus();q.select();}
+    return;
+  }
+  if(e.key==='Escape'){
+    if(S.actif!==null){
+      S.actif=null;
+      document.querySelectorAll('#board .tcard.actif').forEach(c=>c.classList.remove('actif'));
+    }
+    return;
+  }
+  if(!estBoard(S.view))return;   // J/K et 1–5 n'ont de sens que sur un board
+
+  if(e.key==='j'||e.key==='J'){e.preventDefault();deplacerActif(1);return;}
+  if(e.key==='k'||e.key==='K'){e.preventDefault();deplacerActif(-1);return;}
+  if(e.key==='Enter'&&S.actif!==null){e.preventDefault();openDetail(S.actif);return;}
+
+  // 1 à 5 → colonnes du référentiel, dans l'ordre affiché.
+  if(/^[1-9]$/.test(e.key)){
+    const statuts=(S.meta&&S.meta.statuts)||[];
+    const st=statuts[Number(e.key)-1];
+    if(!st||S.actif===null)return;
+    e.preventDefault();
+    const t=S.taches.find(x=>x.id===S.actif);
+    if(!t||t.statut===st.code)return;
+    deplacer(S.actif,st.code,null,null);
+    toast('→ '+st.label);
+  }
+},true);
 
 // ══════════════════════════════════════════════════════════════════
 // Guides in-app (moteur partagé mysifa_guides.js)
@@ -1810,6 +1969,7 @@ document.getElementById('btn-logout').onclick=async()=>{
   brancherArchivage();
   showView(readView(),{silent:true});
   await chargerStats();
+  await chargerBadgeMes();
   initGuides();
 })();
 window.addEventListener('hashchange',function(){try{showView(readView(),{silent:true});}catch(e){}});

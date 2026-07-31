@@ -1040,15 +1040,23 @@ def _build_cartouche(ops, spec, g, t, perf_on):
     bx, by, bw, bh = BOX_X, BOX_Y, BOX_W, BOX_H
     ops.append(_rect(bx, by, bw, bh, rx=3, stroke=COLOR_INK, sw=0.45))
  
-    ops.append(_text(bx + 5, by + 8, f"{t['customer']} : {spec.get('client') or ''}",
-                     size=3.6, bold=True))
-    ops.append(_text(bx + 73, by + 8,
+    # En-tete : la reference produit, pas le nom du client. Le BAT circule
+    # chez des fournisseurs consultes ; le client final n'a pas a y figurer,
+    # et c'est la reference qui identifie le document dans les echanges.
+    ops.append(_text(bx + 5, by + 5.2, t["our_ref"], size=1.9, fill=COLOR_MUTED))
+    ref_txt = str(spec.get("ref_interne") or "").strip() or "-"
+    max_ref_w = 64.0
+    size_ref = 3.6
+    while size_ref > 2.4 and _text_w(ref_txt, size_ref, bold=True) > max_ref_w:
+        size_ref -= 0.1
+    ops.append(_text(bx + 5, by + 10.2, _clip_text(ref_txt, size_ref, max_ref_w, bold=True),
+                     size=size_ref, bold=True))
+    ops.append(_text(bx + 73, by + 10.2,
                      t["with_printing"] if spec.get("imprime") else t["without_printing"],
                      size=3.1, bold=True))
-    ops.append(_text(bx + 5, by + 13.5, f"{t['our_ref']} {spec.get('ref_interne') or ''}", size=1.9))
-    ops.append(_text(bx + 5, by + 17.5, f"{t['your_ref']} {spec.get('ref_client') or ''}", size=1.9))
+    ops.append(_text(bx + 5, by + 16.5, f"{t['your_ref']} {spec.get('ref_client') or ''}", size=1.9))
     if spec.get("date_bat"):
-        ops.append(_text(bx + bw - 4, by + 17.5, t["produced"].format(date=spec["date_bat"]),
+        ops.append(_text(bx + bw - 4, by + 16.5, t["produced"].format(date=spec["date_bat"]),
                          size=1.9, anchor="end"))
     ops.append(_line(bx, by + 20, bx + bw, by + 20, sw=0.35))
     ops.append(_line(bx + 78, by + 20, bx + 78, by + bh, sw=0.35))
@@ -1472,7 +1480,7 @@ def render_bat_pdf(spec: Dict[str, Any], lang: Optional[str] = None,
     ops = ops if ops is not None else build_bat_ops(spec, lang, logo_path)
     buffer = io.BytesIO()
     c = rl_canvas.Canvas(buffer, pagesize=A4)
-    c.setTitle(f"BAT {spec.get('ref_interne') or ''} {spec.get('client') or ''}".strip())
+    c.setTitle(f"BAT {spec.get('ref_interne') or ''}".strip())
  
     def X(v: float) -> float:
         return v * mm
@@ -1614,8 +1622,6 @@ def bat_filename(spec: Dict[str, Any]) -> str:
     if spec.get("ref_interne"):
         parts.append(str(spec["ref_interne"]))
     parts.append(f"{fmt_mm(g['laize']).replace(',', '')}x{fmt_mm(g['longueur']).replace(',', '')}mm")
-    if spec.get("client"):
-        parts.append(str(spec["client"]))
     safe = "_".join(
         "".join(ch if (ch.isalnum() or ch in "-_") else "-" for ch in str(p)).strip("-")
         for p in parts if str(p).strip()

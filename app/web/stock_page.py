@@ -720,6 +720,43 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-tag.warn{background:color-mix(in srgb,var(--warn,#d97706) 15%,transparent);color:var(--warn,#d97706);font-weight:600}
 .bes-empty{padding:56px 24px;text-align:center;color:var(--muted);font-size:13px;background:var(--card);border:1px dashed var(--border);border-radius:12px}
 .bes-loading{padding:64px 24px;text-align:center;color:var(--muted);font-size:14px}
+/* En-tête : titre + bouton d'aide */
+.bes-title-row{display:flex;align-items:center;gap:8px;margin:0 0 6px}
+.bes-title-row h1{margin:0}
+.bes-help-btn{width:22px;height:22px;flex:0 0 22px;border-radius:50%;border:1px solid var(--border);background:var(--card);color:var(--text2);font-family:inherit;font-size:12px;font-weight:700;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;padding:0;transition:all .12s}
+.bes-help-btn:hover{border-color:var(--accent);color:var(--accent);background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.bes-help-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+/* Cellule quantité non calculable + provenance du métrage */
+.bes-na{color:var(--muted);font-style:italic;font-weight:400}
+.bes-src-badge{display:inline-block;margin-left:6px;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;vertical-align:middle}
+.bes-src-badge.of{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
+.bes-src-badge.fiche{background:color-mix(in srgb,var(--warn,#d97706) 15%,transparent);color:var(--warn,#d97706)}
+.bes-warn-note{font-size:11px;color:var(--warn,#d97706);margin-top:3px;line-height:1.4}
+/* Modal d'aide : sections repliables */
+.bes-doc-intro{font-size:13px;color:var(--text2);line-height:1.6;margin:2px 0 16px}
+.bes-doc-toolbar{display:flex;justify-content:flex-end;margin-bottom:8px}
+.bes-doc-toggle-all{border:none;background:transparent;color:var(--accent);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;padding:4px 2px}
+.bes-doc-toggle-all:hover{text-decoration:underline}
+.bes-doc-sec{border:1px solid var(--border);border-radius:8px;background:var(--card);margin-bottom:8px;overflow:hidden}
+.bes-doc-head{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;background:transparent;border:none;font-family:inherit;text-align:left;cursor:pointer;color:var(--text)}
+.bes-doc-head:hover{background:color-mix(in srgb,var(--accent) 4%,transparent)}
+.bes-doc-chev{flex:0 0 12px;color:var(--muted);font-size:10px;transition:transform .15s}
+.bes-doc-sec.open .bes-doc-chev{transform:rotate(90deg)}
+.bes-doc-titre{font-size:13px;font-weight:700}
+.bes-doc-type{padding:2px 7px;border-radius:4px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.bes-doc-type.calcul{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
+.bes-doc-type.mappe{background:color-mix(in srgb,var(--warn,#d97706) 15%,transparent);color:var(--warn,#d97706)}
+.bes-doc-resume{flex:1;text-align:right;font-size:11px;color:var(--muted);font-weight:400}
+.bes-doc-body{padding:0 14px 14px;border-top:1px solid var(--border)}
+.bes-doc-formule{margin:12px 0 4px;padding:10px 12px;background:color-mix(in srgb,var(--accent) 6%,transparent);border-radius:6px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--text);line-height:1.5;overflow-x:auto}
+.bes-doc-formule-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-top:12px}
+.bes-doc-p{font-size:12.5px;color:var(--text2);line-height:1.6;margin:8px 0 0}
+.bes-doc-vars{width:100%;border-collapse:collapse;margin-top:12px;font-size:12px}
+.bes-doc-vars th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:700;padding:0 8px 6px 0;border-bottom:1px solid var(--border)}
+.bes-doc-vars td{padding:6px 8px 6px 0;border-bottom:1px solid var(--border);color:var(--text2);vertical-align:top}
+.bes-doc-vars tr:last-child td{border-bottom:none}
+.bes-doc-vars .v-lbl{color:var(--text);font-weight:600;white-space:nowrap}
+.bes-doc-vars .v-champ{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--muted)}
 @media (max-width:900px){.bes-page{padding:18px 18px 40px}}
 @media (max-width:640px){.bes-page{padding:14px 12px 32px}.bes-header{gap:16px;margin-bottom:20px}.bes-kpis{width:100%;gap:8px}.bes-kpi{flex:1;min-width:0;padding:10px 12px}.bes-actions{margin-left:0;width:100%}.bes-card{overflow-x:auto}}
 /* Modal spécifiques */
@@ -11611,10 +11648,37 @@ function invV2BuildListItems(container, items) {
 // ── Besoins matières (onglet MyStock) — v2 visuel refactorisé ────
 // ══════════════════════════════════════════════════════════════════
 const BESOINS_KIND_LABELS = {
-  support: 'Support', adhesif: 'Adhésif', mandrin: 'Mandrin',
-  carton: 'Carton', palette: 'Palette',
+  support: 'Support', glassine: 'Glassine', adhesif: 'Adhésif',
+  mandrin: 'Mandrin', carton: 'Carton', palette: 'Palette',
 };
-const BESOINS_KIND_ORDER = ['support', 'adhesif', 'mandrin', 'carton', 'palette'];
+const BESOINS_KIND_ORDER = ['support', 'glassine', 'adhesif', 'mandrin', 'carton', 'palette'];
+// Catégories de matières premières proposées dans le sélecteur d'association,
+// par type de besoin. Doit rester aligné sur _MP_CATEGORIES (stock.py).
+const BESOINS_KIND_CATEGORIES = {
+  support: ['frontal', 'complexe'],
+  glassine: ['glassine'],
+  adhesif: ['adhesif'],
+  mandrin: ['mandrin'],
+  carton: ['carton'],
+  palette: ['palette'],
+};
+// Sous-titre d'unité affiché sur chaque section du tableau par échéance.
+const BESOINS_KIND_UNITE_NOTE = {
+  support: 'Besoin exprimé en mètres linéaires — le métrage de l’OF.',
+  glassine: 'Besoin exprimé en mètres linéaires — le métrage de l’OF.',
+  adhesif: 'Besoin exprimé en kilos — grammage × métrage × laize.',
+  mandrin: 'Besoin exprimé en unités.',
+  carton: 'Besoin exprimé en unités.',
+  palette: 'Besoin exprimé en unités.',
+};
+
+// Affichage d'une quantité de besoin. `null` signifie « pas calculable »
+// (entrée manquante) et non « zéro » : on le distingue visuellement.
+function _besQteCell(q, unite, extraCls) {
+  const cls = 'num' + (extraCls ? ' ' + extraCls : '');
+  if (q == null) return el('td', { cls: cls }, el('span', { cls: 'bes-na' }, 'n.c.'));
+  return el('td', { cls: cls }, _fmtQte(q, unite));
+}
 
 function _fmtQte(n, unite) {
   if (n == null || isNaN(n)) return '—';
@@ -11651,7 +11715,16 @@ function buildBesoinsMatieres() {
   // ── Header : titre + KPIs ──
   const header = el('div', { cls: 'bes-header' },
     el('div', {},
-      el('h1', {}, 'Besoins matières'),
+      el('div', { cls: 'bes-title-row' },
+        el('h1', {}, 'Besoins matières'),
+        el('button', {
+          cls: 'bes-help-btn',
+          type: 'button',
+          title: 'Comment ces besoins sont calculés',
+          'aria-label': 'Comment ces besoins sont calculés',
+          on: { click: () => openBesoinsHelpModal() },
+        }, '?'),
+      ),
       el('div', { cls: 'bes-sub' },
         'Calculés à partir des fiches techniques associées aux dossiers de production en cours ou en attente.',
       ),
@@ -11728,9 +11801,13 @@ function _buildBesoinsKindSection(kind, lignes) {
   const label = BESOINS_KIND_LABELS[kind] || kind;
   const section = el('div', { cls: 'bes-section' });
 
+  const unite = (lignes[0] && lignes[0].unite) || '';
   section.appendChild(el('div', { cls: 'bes-section-head' },
     el('span', { cls: 'bes-section-title' }, label),
-    el('span', { cls: 'bes-section-count' }, `${lignes.length} référence${lignes.length > 1 ? 's' : ''}`),
+    el('span', {
+      cls: 'bes-section-count',
+      title: BESOINS_KIND_UNITE_NOTE[kind] || '',
+    }, `${lignes.length} référence${lignes.length > 1 ? 's' : ''}` + (unite ? ` · en ${unite}` : '')),
   ));
 
   const table = el('table', { cls: 'bes-table' });
@@ -11754,24 +11831,42 @@ function _buildBesoinsKindSection(kind, lignes) {
     totalT += l.besoin_total || 0;
 
     const rowCls = !l.mapped ? 'bes-row-warn' : (l.manque_7j > 0 ? 'bes-row-danger' : '');
+    // La référence matière ouvre la fiche matière (Cmd/Ctrl-clic : nouvel onglet).
     const matCell = l.mapped
       ? el('td', { cls: 'bes-mp-cell' },
-          el('div', { cls: 'bes-mp-ref' }, l.matiere_ref || '—'),
+          el('div', { cls: 'bes-mp-ref' },
+            _besMpLink(l.matiere_id, l.matiere_ref || '—')),
           l.matiere_designation ? el('div', { cls: 'bes-mp-des' }, l.matiere_designation) : null,
         )
       : el('td', {}, el('span', { cls: 'bes-mp-none' }, 'Non associée'));
 
     const manqueCell = l.manque_7j != null && l.manque_7j > 0
       ? el('td', { cls: 'num' }, el('span', { cls: 'bes-manque' }, _fmtQte(l.manque_7j, l.unite)))
-      : el('td', { cls: 'num' }, el('span', { cls: 'bes-manque-zero' }, l.mapped ? '0' : '—'));
+      : el('td', { cls: 'num' }, el('span', { cls: 'bes-manque-zero' },
+          (l.mapped && l.manque_7j != null) ? '0' : '—'));
+
+    const stockCell = el('td', {
+      cls: 'num',
+      style: { color: 'var(--muted)' },
+      title: l.stock_note || '',
+    }, l.stock_actuel != null ? _fmtQte(l.stock_actuel, l.unite) : '—');
+
+    const srcCell = el('td', {},
+      el('span', { cls: 'bes-src-value' }, l.source_value || '—'),
+      l.nb_dossiers_incalculables
+        ? el('div', { cls: 'bes-warn-note' },
+            `${l.nb_dossiers_incalculables} dossier${l.nb_dossiers_incalculables > 1 ? 's' : ''} non chiffré${l.nb_dossiers_incalculables > 1 ? 's' : ''} — voir « Par dossier »`)
+        : null,
+    );
 
     tbody.appendChild(el('tr', { cls: rowCls },
-      el('td', {}, el('span', { cls: 'bes-src-value' }, l.source_value || '—')),
+      srcCell,
       matCell,
-      el('td', { cls: 'num' }, _fmtQte(l.besoin_7j, l.unite)),
-      el('td', { cls: 'num' }, _fmtQte(l.besoin_15j, l.unite)),
-      el('td', { cls: 'num', style: { fontWeight: '700' } }, _fmtQte(l.besoin_total, l.unite)),
-      el('td', { cls: 'num', style: { color: 'var(--muted)' } }, l.stock_actuel != null ? _fmtQte(l.stock_actuel, l.unite) : '—'),
+      _besQteCell(l.besoin_7j, l.unite),
+      _besQteCell(l.besoin_15j, l.unite),
+      el('td', { cls: 'num', style: { fontWeight: '700' }, title: l.formule_exemple || '' },
+        _fmtQte(l.besoin_total, l.unite)),
+      stockCell,
       manqueCell,
       el('td', { cls: 'num', style: { color: 'var(--muted)' } }, String(l.nb_dossiers || 0)),
       el('td', { style: { textAlign: 'right' } },
@@ -11796,6 +11891,49 @@ function _buildBesoinsKindSection(kind, lignes) {
   return section;
 }
 
+// Référence matière cliquable. Depuis un modal, on referme le modal avant de
+// naviguer — sauf Cmd/Ctrl-clic, qui ouvre un nouvel onglet et laisse la page.
+function _besMpLink(matiereId, label, opts) {
+  const o = opts || {};
+  const a = stockMpRefLink(matiereId, label, { title: o.title || 'Ouvrir la fiche matière' });
+  if (o.closeModal && a.tagName === 'A') {
+    a.addEventListener('click', (e) => {
+      if (typeof stockClickOpensNewTab === 'function' && stockClickOpensNewTab(e)) return;
+      closeMroot();
+    });
+  }
+  return a;
+}
+
+// Rendu d'une variable de trace de calcul : « 12 500 m », « 510 mm »…
+function _besFmtVar(v) {
+  if (!v) return '—';
+  if (v.valeur == null) return '—';
+  const n = Number(v.valeur);
+  const s = isNaN(n) ? String(v.valeur) : n.toLocaleString('fr-FR');
+  return s + (v.unite ? ' ' + v.unite : '');
+}
+
+// Métrage du dossier + provenance. Le badge dit d'où vient le chiffre :
+// « OF » (métrage lu sur l'OF) ou « fiche » (reconstitué géométriquement).
+function _besMetrageCell(d) {
+  const bobine = (d.besoins || []).find(b => b.kind === 'support' || b.kind === 'glassine');
+  const src = bobine ? bobine.source_metrage : (d.of_metrage ? 'of' : null);
+  const ml = bobine && bobine.quantite != null
+    ? bobine.quantite
+    : (d.of_metrage != null ? Number(d.of_metrage) : null);
+  if (ml == null) {
+    return el('td', { cls: 'num' }, el('span', { cls: 'bes-na' }, '—'));
+  }
+  return el('td', { cls: 'num' },
+    _fmtQte(ml, 'm'),
+    src ? el('span', { cls: 'bes-src-badge ' + src, title: src === 'of'
+      ? 'Métrage lu sur l’OF importé'
+      : 'Métrage reconstitué depuis la fiche technique (pas d’OF importé)' },
+      src === 'of' ? 'OF' : 'fiche') : null,
+  );
+}
+
 function _buildBesoinsDossierTable(dos) {
   const dossiers = dos.dossiers || [];
   if (!dossiers.length) {
@@ -11809,6 +11947,7 @@ function _buildBesoinsDossierTable(dos) {
     el('th', {}, 'Machine'),
     el('th', {}, 'Statut'),
     el('th', { cls: 'num' }, 'Étiq.'),
+    el('th', { cls: 'num' }, 'Métrage'),
     el('th', {}, 'Livraison'),
     el('th', {}, 'Besoins'),
   )));
@@ -11818,10 +11957,20 @@ function _buildBesoinsDossierTable(dos) {
   dossiers.forEach(d => {
     totalEtiq += (parseFloat(d.qte_etiquettes) || 0);
     const besoinsEls = (d.besoins || []).map(b => {
+      // Le titre déplie la trace de calcul : formule, variables, ou ce qui manque.
+      const lignesTitre = [];
+      if (b.formule) lignesTitre.push(b.formule);
+      (b.variables || []).forEach(v => {
+        lignesTitre.push('· ' + v.label + ' : ' + _besFmtVar(v) + ' (' + (v.origine || '?') + ')');
+      });
+      if ((b.manque || []).length) {
+        lignesTitre.push('Manque : ' + b.manque.join(' ; '));
+      }
+      const qte = b.quantite == null ? 'n.c.' : _fmtQte(b.quantite, b.unite);
       const tag = el('span', {
-        cls: 'bes-tag' + (b.mapped ? '' : ' warn'),
-        title: b.formule || ''
-      }, `${BESOINS_KIND_LABELS[b.kind] || b.kind} · ${b.source_value || '?'} : ${_fmtQte(b.quantite, b.unite)}`);
+        cls: 'bes-tag' + ((!b.mapped || b.quantite == null) ? ' warn' : ''),
+        title: lignesTitre.join('\n'),
+      }, `${BESOINS_KIND_LABELS[b.kind] || b.kind} · ${b.source_value || '?'} : ${qte}`);
       return tag;
     });
     const besoinsCell = besoinsEls.length
@@ -11840,6 +11989,7 @@ function _buildBesoinsDossierTable(dos) {
       el('td', {}, el('span', { cls: 'bes-statut bes-statut-' + (d.statut || 'attente') },
         d.statut === 'en_cours' ? 'En cours' : 'En attente')),
       el('td', { cls: 'num' }, d.qte_etiquettes ? Number(d.qte_etiquettes).toLocaleString('fr-FR') : '—'),
+      _besMetrageCell(d),
       el('td', {}, _fmtDate(d.date_livraison || d.planned_end)),
       besoinsCell,
     ));
@@ -11848,7 +11998,7 @@ function _buildBesoinsDossierTable(dos) {
   tbody.appendChild(el('tr', { cls: 'bes-total-row' },
     el('td', { colspan: '4' }, `Total — ${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`),
     el('td', { cls: 'num' }, totalEtiq ? Math.round(totalEtiq).toLocaleString('fr-FR') : '—'),
-    el('td', { colspan: '2' }, ''),
+    el('td', { colspan: '3' }, ''),
   ));
 
   table.appendChild(tbody);
@@ -11859,9 +12009,10 @@ function openBesoinAssocierModal(kind, sourceValue) {
   closeMroot();
   const label = BESOINS_KIND_LABELS[kind] || kind;
   const matList = S.matList || [];
-  const catFilter = { support: 'frontal', adhesif: 'adhesif', mandrin: 'mandrin', carton: 'carton', palette: 'palette' }[kind];
-  const filtered = catFilter
-    ? matList.filter(m => (m.categorie || '').toLowerCase() === catFilter)
+  // Un support peut être un frontal ou un complexe ; la glassine a sa catégorie.
+  const cats = BESOINS_KIND_CATEGORIES[kind];
+  const filtered = (cats && cats.length)
+    ? matList.filter(m => cats.includes((m.categorie || '').toLowerCase()))
     : matList;
   const suggested = filtered.length ? filtered : matList;
 
@@ -11930,7 +12081,7 @@ async function openBesoinsMappingModal() {
     el('span', { cls: 'modal-handle' }),
     el('div', { cls: 'modal-title' }, 'Correspondances fiche technique → matière première'),
     el('div', { cls: 'modal-sub' },
-      'Associe chaque valeur libre des fiches techniques (support, adhésif, mandrin, carton, palette) à une référence de matière première pour permettre le calcul des besoins.'),
+      'Associe chaque valeur libre des fiches techniques (support, glassine, adhésif, mandrin, carton, palette) à une référence de matière première pour permettre le calcul des besoins.'),
   );
 
   if (nonMappes.length) {
@@ -11962,7 +12113,8 @@ async function openBesoinsMappingModal() {
           el('span', { cls: 'bes-map-source' }, m.source_value),
           el('span', { cls: 'bes-map-arrow' }, '→'),
           el('div', { cls: 'bes-map-target' },
-            el('div', { cls: 'bes-mp-ref' }, m.matiere_ref || '—'),
+            el('div', { cls: 'bes-mp-ref' },
+              _besMpLink(m.matiere_id, m.matiere_ref || '—', { closeModal: true })),
             m.matiere_designation ? el('div', { cls: 'bes-mp-des' }, m.matiere_designation) : null,
           ),
           el('button', { cls: 'bes-map-btn-danger', on: { click: async () => {
@@ -11979,6 +12131,111 @@ async function openBesoinsMappingModal() {
     });
     sheet.appendChild(box);
   }
+
+  sheet.appendChild(el('div', { cls: 'modal-actions', style: { marginTop: '18px' } },
+    el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Fermer'),
+  ));
+  sheet.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
+}
+
+// ── Modal « ? » : mapping et formules de calcul ────────────────────
+// Le contenu vient de /api/stock/besoins-matieres/explications : le backend
+// est la source unique de vérité, le front ne fait que le mettre en forme.
+// Chaque élément calculé ou mappé a sa section, repliable indépendamment.
+
+async function openBesoinsHelpModal() {
+  closeMroot();
+  let doc = S.besoinsDoc;
+  if (!doc) {
+    try {
+      doc = await api('/api/stock/besoins-matieres/explications');
+      S.besoinsDoc = doc;
+    } catch (e) {
+      showToast('Impossible de charger les explications : ' + (e.message || 'erreur'), 'error');
+      return;
+    }
+  }
+  const sections = (doc && doc.sections) || [];
+
+  const overlay = el('div', { cls: 'modal-overlay', on: { click: e => { if (e.target === overlay) closeMroot(); } } });
+  const sheet = el('div', { cls: 'modal-sheet', style: { maxWidth: '760px', maxHeight: '86vh', overflowY: 'auto' } },
+    el('span', { cls: 'modal-handle' }),
+    el('div', { cls: 'modal-title' }, 'Comment les besoins sont calculés'),
+    doc && doc.intro ? el('div', { cls: 'bes-doc-intro' }, doc.intro) : null,
+  );
+
+  const secEls = [];
+  const toggleAll = el('button', { cls: 'bes-doc-toggle-all', type: 'button' }, 'Tout déplier');
+  toggleAll.addEventListener('click', () => {
+    const ouvrir = secEls.some(s => !s.classList.contains('open'));
+    secEls.forEach(s => s.classList.toggle('open', ouvrir));
+    secEls.forEach(s => {
+      const body = s.querySelector('.bes-doc-body');
+      if (body) body.style.display = ouvrir ? '' : 'none';
+      const head = s.querySelector('.bes-doc-head');
+      if (head) head.setAttribute('aria-expanded', ouvrir ? 'true' : 'false');
+    });
+    toggleAll.textContent = ouvrir ? 'Tout replier' : 'Tout déplier';
+  });
+  sheet.appendChild(el('div', { cls: 'bes-doc-toolbar' }, toggleAll));
+
+  sections.forEach(sec => {
+    const secEl = el('div', { cls: 'bes-doc-sec' });
+    const body = el('div', { cls: 'bes-doc-body', style: { display: 'none' } });
+
+    if (sec.formule) {
+      body.appendChild(el('div', { cls: 'bes-doc-formule' }, sec.formule));
+    }
+    if (sec.formule_repli) {
+      body.appendChild(el('div', { cls: 'bes-doc-formule-lbl' }, 'Si l’OF n’est pas importé'));
+      body.appendChild(el('div', { cls: 'bes-doc-formule' }, sec.formule_repli));
+    }
+    (sec.paragraphes || []).forEach(p => {
+      body.appendChild(el('div', { cls: 'bes-doc-p' }, p));
+    });
+    if ((sec.variables || []).length) {
+      const tbl = el('table', { cls: 'bes-doc-vars' });
+      tbl.appendChild(el('thead', {}, el('tr', {},
+        el('th', {}, 'Variable'),
+        el('th', {}, 'Champ source'),
+        el('th', {}, 'Précision'),
+      )));
+      const tb = el('tbody', {});
+      sec.variables.forEach(v => {
+        tb.appendChild(el('tr', {},
+          el('td', { cls: 'v-lbl' }, v.label + (v.unite ? ' (' + v.unite + ')' : '')),
+          el('td', { cls: 'v-champ' }, v.champ || '—'),
+          el('td', {}, v.detail || ''),
+        ));
+      });
+      tbl.appendChild(tb);
+      body.appendChild(tbl);
+    }
+
+    const head = el('button', {
+      cls: 'bes-doc-head',
+      type: 'button',
+      'aria-expanded': 'false',
+    },
+      el('span', { cls: 'bes-doc-chev' }, '▶'),
+      el('span', { cls: 'bes-doc-titre' }, sec.titre || sec.id),
+      el('span', { cls: 'bes-doc-type ' + (sec.type === 'mappe' ? 'mappe' : 'calcul') },
+        sec.type === 'mappe' ? 'Mappé' : 'Calculé'),
+      el('span', { cls: 'bes-doc-resume' }, sec.resume || ''),
+    );
+    head.addEventListener('click', () => {
+      const ouvert = secEl.classList.toggle('open');
+      body.style.display = ouvert ? '' : 'none';
+      head.setAttribute('aria-expanded', ouvert ? 'true' : 'false');
+    });
+
+    secEl.appendChild(head);
+    secEl.appendChild(body);
+    sheet.appendChild(secEl);
+    secEls.push(secEl);
+  });
 
   sheet.appendChild(el('div', { cls: 'modal-actions', style: { marginTop: '18px' } },
     el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Fermer'),
