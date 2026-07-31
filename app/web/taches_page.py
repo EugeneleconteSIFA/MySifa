@@ -148,6 +148,53 @@ select.filter.on{border-color:var(--accent);color:var(--accent);background:var(-
 .avatar{width:22px;height:22px;border-radius:50%;background:var(--accent-bg);color:var(--accent);font-size:9px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;letter-spacing:-.2px}
 .avatar img{width:100%;height:100%;object-fit:cover}
 .avatar.none{background:var(--bg);color:var(--muted);border:1px dashed var(--border)}
+/* Pile d'avatars : les visages se chevauchent pour tenir sur une carte étroite. */
+.pile{display:inline-flex;align-items:center;flex-shrink:0}
+.pile .avatar{margin-left:-6px;box-shadow:0 0 0 2px var(--bg)}
+.pile .avatar:first-child{margin-left:0}
+.pile .plus{margin-left:-6px;background:var(--border);color:var(--text2);box-shadow:0 0 0 2px var(--bg)}
+td .pile .avatar,td .pile .plus{box-shadow:0 0 0 2px var(--card)}
+
+/* Sélecteur d'assignés : chips + popover avec recherche et cases à cocher. */
+.asg-field{position:relative}
+.asg-box{display:flex;flex-wrap:wrap;align-items:center;gap:5px;min-height:38px;width:100%;
+  background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:5px 8px;cursor:pointer;transition:border-color .15s}
+.asg-box:hover,.asg-box.open{border-color:var(--accent)}
+.asg-chip{display:inline-flex;align-items:center;gap:6px;padding:2px 8px 2px 3px;border-radius:999px;
+  background:var(--accent-bg);color:var(--accent);font-size:11.5px;font-weight:600;max-width:100%}
+.asg-chip .avatar{width:18px;height:18px;font-size:8px}
+.asg-chip .x{border:none;background:transparent;color:inherit;cursor:pointer;font-size:13px;line-height:1;padding:0 1px;opacity:.7}
+.asg-chip .x:hover{opacity:1}
+.asg-vide{font-size:12.5px;color:var(--muted)}
+.asg-pop{position:absolute;z-index:40;top:calc(100% + 5px);left:0;right:0;background:var(--card);
+  border:1px solid var(--border);border-radius:11px;box-shadow:0 14px 34px rgba(0,0,0,.32);padding:8px;max-height:280px;display:flex;flex-direction:column}
+.asg-pop input.asg-q{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:7px 10px;color:var(--text);font-size:12.5px;font-family:inherit;outline:none;margin-bottom:6px;flex-shrink:0}
+.asg-pop input.asg-q:focus{border-color:var(--accent)}
+.asg-list{overflow-y:auto;flex:1}
+/* Sélecteur spécificité : les options sont des <label> posés dans un .field,
+   qui les mettrait en majuscules bloc (style des libellés de formulaire). On
+   remonte la spécificité avec `.asg-pop` plutôt que d'empiler des !important. */
+.asg-pop .asg-opt{display:flex;align-items:center;gap:9px;padding:7px 8px;border-radius:8px;
+  cursor:pointer;font-size:12.5px;font-weight:500;color:var(--text2);
+  text-transform:none;letter-spacing:0;margin-bottom:0}
+.asg-pop .asg-opt:hover,.asg-pop .asg-opt.actif{background:var(--accent-bg)}
+.asg-pop .asg-opt.actif{color:var(--accent)}
+.asg-pop .asg-opt input{width:14px;height:14px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;margin:0}
+.asg-pop .asg-opt .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.asg-rien{font-size:12px;color:var(--muted);padding:10px 8px;text-align:center}
+
+/* Corbeille d'archivage : discrète au repos, elle ne s'ouvre que pendant un
+   glisser. Posée en bas à gauche de la zone board, hors du flux des colonnes. */
+.arch-drop{position:fixed;left:calc(220px + 20px);bottom:20px;z-index:60;
+  display:flex;align-items:center;gap:9px;padding:11px 15px;border-radius:12px;
+  background:var(--card);border:1.5px dashed var(--border);color:var(--muted);
+  font-size:12px;font-weight:600;font-family:inherit;cursor:default;
+  opacity:.55;transform:translateY(4px);transition:opacity .18s,transform .18s,border-color .18s,color .18s,background .18s}
+.arch-drop svg{width:17px;height:17px;flex-shrink:0}
+body.drag-actif .arch-drop{opacity:1;transform:translateY(0);border-color:var(--accent);color:var(--accent)}
+.arch-drop.survol{background:var(--accent-bg);border-color:var(--accent);border-style:solid;color:var(--accent);transform:translateY(0) scale(1.04)}
+@media (max-width:900px){.arch-drop{left:14px;bottom:14px;padding:10px 12px}.arch-drop .lbl{display:none}}
 .tag{display:inline-flex;align-items:center;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;background:var(--bg);color:var(--muted);border:1px solid var(--border)}
 .tag.accent{background:var(--accent-bg);color:var(--accent);border-color:transparent}
 .tag.warn{background:rgba(251,191,36,.15);color:var(--warn);border-color:transparent}
@@ -172,14 +219,21 @@ tbody tr{cursor:pointer;transition:background .12s}
 tbody tr:hover td{background:var(--accent-bg)}
 td.t-titre{color:var(--text);font-weight:600;max-width:420px}
 td.t-titre .sub{display:block;font-size:11px;color:var(--muted);font-weight:400;margin-top:2px}
+/* Sous-tache : indentation + liseré gauche, pour lire le groupe d'un coup d'œil. */
+td.t-titre.est-sous{padding-left:34px;position:relative;font-weight:500}
+td.t-titre.est-sous .arbre{position:absolute;left:16px;color:var(--muted);font-weight:400}
+td.t-titre.est-sous .sub{margin-left:0}
+tr.row-sous td:first-child{box-shadow:inset 2px 0 0 var(--border)}
+tr.row-sous td{background:var(--bg)}
+tbody tr.row-sous:hover td{background:var(--accent-bg)}
 
 .empty{text-align:center;padding:44px 20px;color:var(--muted);font-size:13px}
 .empty b{display:block;color:var(--text2);font-size:14px;margin-bottom:6px}
 
 /* ── Panneau de détail ── */
-.drawer-back{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:500;backdrop-filter:blur(3px);animation:fade .15s}
+.drawer-back{position:fixed;top:var(--msf-top,0px);left:0;right:0;bottom:0;background:rgba(0,0,0,.55);z-index:500;backdrop-filter:blur(3px);animation:fade .15s}
 @keyframes fade{from{opacity:0}to{opacity:1}}
-.drawer{position:fixed;top:0;right:0;bottom:0;width:min(680px,100vw);background:var(--card);border-left:1px solid var(--border);z-index:501;display:flex;flex-direction:column;box-shadow:-16px 0 48px rgba(0,0,0,.4);animation:slideL .18s ease}
+.drawer{position:fixed;top:var(--msf-top,0px);right:0;bottom:0;width:min(680px,100vw);background:var(--card);border-left:1px solid var(--border);z-index:501;display:flex;flex-direction:column;box-shadow:-16px 0 48px rgba(0,0,0,.4);animation:slideL .18s ease}
 @keyframes slideL{from{transform:translateX(30px);opacity:.4}to{transform:translateX(0);opacity:1}}
 .dr-head{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:12px;flex-shrink:0}
 .dr-head-main{flex:1;min-width:0}
@@ -249,7 +303,7 @@ td.t-titre .sub{display:block;font-size:11px;color:var(--muted);font-weight:400;
 .act b{color:var(--text)}
 
 /* ── Modale ── */
-.modal-back{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:600;display:flex;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(3px)}
+.modal-back{position:fixed;top:var(--msf-top,0px);left:0;right:0;bottom:0;background:rgba(0,0,0,.6);z-index:600;display:flex;align-items:center;justify-content:center;padding:18px;backdrop-filter:blur(3px)}
 .modal{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;max-width:560px;width:100%;max-height:92vh;overflow:auto}
 .modal h3{margin:0 0 16px;font-size:16px;font-weight:700}
 .modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
@@ -382,6 +436,11 @@ td.t-titre .sub{display:block;font-size:11px;color:var(--muted);font-weight:400;
   </main>
 </div>
 
+<div class="arch-drop" id="arch-drop" title="Glisser une tâche ici pour l'archiver">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5" rx="1"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+  <span class="lbl">Archiver</span>
+</div>
+
 <div id="drawer-root"></div>
 <div id="modal-root"></div>
 
@@ -454,6 +513,26 @@ function avatarHtml(nom,url,titre){
   if(url)return '<span class="avatar" title="'+t+'"><img src="'+esc(url)+'" alt=""></span>';
   return '<span class="avatar" title="'+t+'">'+esc(initiales(nom))+'</span>';
 }
+// Pile d'avatars : au-delà de 3 personnes on compte le reste, sinon la carte
+// déborde sur les colonnes étroites.
+const PILE_MAX=3;
+function pileHtml(assignes,max){
+  const list=assignes||[];
+  if(!list.length)return '<span class="avatar none" title="Non assigné">—</span>';
+  const n=max||PILE_MAX;
+  const montres=list.slice(0,n),reste=list.length-montres.length;
+  return '<span class="pile">'+
+    montres.map(u=>avatarHtml(u.nom,u.avatar_url)).join('')+
+    (reste>0?'<span class="avatar plus" title="'+esc(list.slice(n).map(u=>u.nom).join(', '))+'">+'+reste+'</span>':'')+
+  '</span>';
+}
+function nomsAssignes(assignes){
+  const list=assignes||[];
+  if(!list.length)return '';
+  if(list.length===1)return list[0].nom||'';
+  return (list[0].nom||'')+' +'+(list.length-1);
+}
+
 function fmtTaille(o){
   const n=Number(o)||0;
   if(n<1024)return n+' o';
@@ -461,6 +540,120 @@ function fmtTaille(o){
   return (n/1048576).toFixed(1)+' Mo';
 }
 function fmtH(h){const n=Number(h)||0;return n?(Number.isInteger(n)?n:n.toFixed(1))+' h':'';}
+
+// ── Sélecteur multi-assignés ────────────────────────────────────────────
+// Un <select multiple> natif est inutilisable au clavier comme à la souris dès
+// qu'il y a plus de trois entrées : on rend des chips + un popover cherchable.
+// `onChange(ids)` est appelé à chaque coche/décoche.
+function champAssignes(hostId, selection, onChange){
+  const host=document.getElementById(hostId);
+  if(!host)return;
+  let ids=(selection||[]).slice();
+  let ouvert=false;
+
+  function rendre(){
+    const users=(S.meta&&S.meta.users)||[];
+    const choisis=ids.map(id=>users.find(u=>u.id===id)).filter(Boolean);
+    host.innerHTML=
+      '<div class="asg-box'+(ouvert?' open':'')+'" tabindex="0" role="button" aria-haspopup="listbox">'+
+        (choisis.length
+          ? choisis.map(u=>'<span class="asg-chip">'+avatarHtml(u.nom,u.avatar_url)+esc(u.nom||'')+
+              '<button type="button" class="x" data-retirer="'+u.id+'" aria-label="Retirer">×</button></span>').join('')
+          : '<span class="asg-vide">Personne — cliquer pour assigner</span>')+
+      '</div>'+
+      (ouvert?popHtml():'');
+    brancher();
+  }
+  function popHtml(){
+    return '<div class="asg-pop">'+
+      '<input type="text" class="asg-q" placeholder="Rechercher une personne…" autocomplete="off">'+
+      '<div class="asg-list"></div>'+
+    '</div>';
+  }
+  function rendreListe(filtre){
+    const zone=host.querySelector('.asg-list');
+    if(!zone)return;
+    const q=(filtre||'').trim().toLowerCase();
+    const users=((S.meta&&S.meta.users)||[]).filter(u=>!q||String(u.nom||'').toLowerCase().includes(q));
+    if(!users.length){
+      zone.innerHTML='<div class="asg-rien">Aucun résultat pour « '+esc(filtre)+' »</div>';
+      return;
+    }
+    zone.innerHTML=users.map(u=>{
+      const on=ids.indexOf(u.id)!==-1;
+      return '<label class="asg-opt'+(on?' actif':'')+'" data-uid="'+u.id+'">'+
+        '<input type="checkbox"'+(on?' checked':'')+'>'+
+        avatarHtml(u.nom,u.avatar_url)+
+        '<span class="n">'+esc(u.nom||'')+'</span>'+
+      '</label>';
+    }).join('');
+    zone.querySelectorAll('.asg-opt').forEach(el=>{
+      el.addEventListener('mousedown',e=>e.preventDefault());
+      el.addEventListener('click',e=>{
+        e.preventDefault();e.stopPropagation();
+        const uid=Number(el.dataset.uid);
+        const i=ids.indexOf(uid);
+        if(i===-1)ids.push(uid);else ids.splice(i,1);
+        const champ=host.querySelector('.asg-q');
+        const q2=champ?champ.value:'';
+        rendre();
+        const c2=host.querySelector('.asg-q');
+        if(c2){c2.value=q2;c2.focus();}
+        rendreListe(q2);
+        onChange(ids.slice());
+      });
+    });
+  }
+  function brancher(){
+    const box=host.querySelector('.asg-box');
+    box.addEventListener('click',e=>{
+      if(e.target.closest('[data-retirer]'))return;
+      ouvert=!ouvert;rendre();
+      if(ouvert){
+        rendreListe('');
+        requestAnimationFrame(()=>{const q=host.querySelector('.asg-q');if(q)q.focus();});
+      }
+    });
+    box.addEventListener('keydown',e=>{
+      if(e.key==='Enter'||e.key===' '){e.preventDefault();box.click();}
+    });
+    host.querySelectorAll('[data-retirer]').forEach(b=>{
+      b.addEventListener('click',e=>{
+        e.stopPropagation();
+        const uid=Number(b.dataset.retirer);
+        ids=ids.filter(x=>x!==uid);
+        rendre();
+        if(ouvert)rendreListe('');
+        onChange(ids.slice());
+      });
+    });
+    const q=host.querySelector('.asg-q');
+    if(q){
+      q.addEventListener('input',()=>rendreListe(q.value));
+      q.addEventListener('keydown',e=>{
+        // stopPropagation obligatoire : ce handler retire le popover du DOM,
+        // donc si l'événement remonte jusqu'au document, le garde-fou du tiroir
+        // ne voit plus de popover et ferme toute la fiche. Échap doit fermer un
+        // seul niveau à la fois.
+        if(e.key==='Escape'){e.preventDefault();e.stopPropagation();ouvert=false;rendre();}
+      });
+      rendreListe(q.value);
+    }
+  }
+  // Fermeture au clic extérieur — enregistrée une fois par champ.
+  // Garde-fou `isConnected` : le clic qui OUVRE le popover reconstruit le champ,
+  // donc au moment où l'événement remonte jusqu'au document, sa cible a été
+  // retirée du DOM. `host.contains()` répond alors false et le popover se
+  // refermait aussitôt qu'ouvert. On ignore les cibles détachées.
+  document.addEventListener('click',e=>{
+    if(!ouvert)return;
+    if(!e.target||!e.target.isConnected)return;
+    if(host.contains(e.target))return;
+    ouvert=false;rendre();
+  });
+  rendre();
+  return {valeur:()=>ids.slice()};
+}
 
 // ── Shell ──
 function getPrefs(){return window.MySifaTheme?MySifaTheme.loadPrefs():{mode:'dark'};}
@@ -470,6 +663,14 @@ function syncThemeBtn(){
   if(i)i.innerHTML=isLight?ICO_SUN:ICO_MOON;
   if(l)l.textContent=isLight?'Mode sombre':'Mode clair';
 }
+// Hauteur du bandeau staging v1, exposee en variable CSS pour que les elements
+// position:fixed (tiroir, modales) s'en decalent. 0 en prod : aucun bandeau.
+function syncBandeauOffset(){
+  const b=document.querySelector('.staging-bandeau');
+  const h=b?Math.round(b.getBoundingClientRect().height||24):0;
+  document.documentElement.style.setProperty('--msf-top',h+'px');
+}
+
 function toggleSidebar(){document.body.classList.toggle('sb-open');}
 function closeSidebar(){document.body.classList.remove('sb-open');}
 
@@ -518,7 +719,8 @@ function queryFiltres(){
   const p=new URLSearchParams();
   const f=S.filtres;
   if(f.q)p.set('q',f.q);
-  if(f.assigne&&f.assigne!=='0')p.set('assigne',f.assigne);
+  if(f.assigne==='0')p.set('non_assignees','1');
+  else if(f.assigne)p.set('assigne',f.assigne);
   if(f.priorite)p.set('priorite',f.priorite);
   if(f.type)p.set('type',f.type);
   if(f.module)p.set('module',f.module);
@@ -548,12 +750,11 @@ function tachesVisibles(){
   let list=S.taches.slice();
   const f=S.filtres;
   if(!S.sousTaches)list=list.filter(t=>!t.parent_id);
-  if(f.assigne==='0')list=list.filter(t=>!t.assigne_user_id);
   if(f.rapide==='retard'){
     const finaux=statutsFinaux();
     list=list.filter(t=>t.echeance&&joursRestants(t.echeance)<0&&finaux.indexOf(t.statut)===-1);
   }else if(f.rapide==='non_assignees'){
-    list=list.filter(t=>!t.assigne_user_id);
+    list=list.filter(t=>!(t.assignes&&t.assignes.length));
   }else if(f.rapide&&f.rapide.indexOf('statut:')===0){
     const code=f.rapide.slice(7);
     list=list.filter(t=>t.statut===code);
@@ -628,7 +829,7 @@ function carteHtml(t){
     (tags.length?'<div class="tcard-top">'+tags.join('')+'</div>':'')+
     '<div class="tcard-title">'+esc(t.titre)+'</div>'+
     (t.parent_titre?'<div style="font-size:10.5px;color:var(--muted);margin:-4px 0 8px">↳ '+esc(t.parent_titre)+'</div>':'')+
-    '<div class="tcard-foot">'+avatarHtml(t.assigne_nom,t.assigne_avatar)+metas.join('')+'</div>'+
+    '<div class="tcard-foot">'+pileHtml(t.assignes)+metas.join('')+'</div>'+
     prog+
   '</div>';
 }
@@ -657,10 +858,15 @@ function renderKanban(){
     c.addEventListener('dragstart',e=>{
       S.drag=Number(c.dataset.id);
       c.classList.add('dragging');
+      document.body.classList.add('drag-actif');
       try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',c.dataset.id);}catch(err){}
     });
-    c.addEventListener('dragend',()=>{c.classList.remove('dragging');S.drag=null;
-      board.querySelectorAll('.col').forEach(col=>col.classList.remove('drop'));});
+    c.addEventListener('dragend',()=>{
+      c.classList.remove('dragging');S.drag=null;
+      document.body.classList.remove('drag-actif');
+      const z=document.getElementById('arch-drop');if(z)z.classList.remove('survol');
+      board.querySelectorAll('.col').forEach(col=>col.classList.remove('drop'));
+    });
   });
   board.querySelectorAll('.col-add').forEach(b=>{
     b.addEventListener('click',()=>openTacheModal(null,{statut:b.dataset.add}));
@@ -690,6 +896,40 @@ function renderKanban(){
   });
 }
 
+// Cible d'archivage : branchée une seule fois, elle vit hors du board (qui est
+// reconstruit à chaque rendu). Elle archive — elle ne supprime pas : le contenu
+// reste consultable dans l'onglet Archives.
+function brancherArchivage(){
+  const zone=document.getElementById('arch-drop');
+  if(!zone)return;
+  zone.addEventListener('dragover',e=>{
+    if(!S.drag)return;
+    e.preventDefault();
+    try{e.dataTransfer.dropEffect='move';}catch(err){}
+    zone.classList.add('survol');
+  });
+  zone.addEventListener('dragleave',()=>zone.classList.remove('survol'));
+  zone.addEventListener('drop',async e=>{
+    e.preventDefault();
+    zone.classList.remove('survol');
+    document.body.classList.remove('drag-actif');
+    const id=S.drag;
+    S.drag=null;
+    if(!id)return;
+    try{
+      const j=await jpost('/api/taches/'+id+'/archive',{});
+      if(!j.archivee){
+        // La tâche était déjà archivée : on la remet dans cet état plutôt que
+        // de laisser le geste la désarchiver silencieusement.
+        await jpost('/api/taches/'+id+'/archive',{});
+      }
+      toast('Tâche archivée.');
+      if(S.detail&&S.detail.tache&&S.detail.tache.id===id)closeDetail();
+      await Promise.all([chargerTaches(),chargerStats()]);
+    }catch(err){toast(err.message,'err');}
+  });
+}
+
 async function deplacer(id,statut,apres_id,avant_id){
   try{
     await jpost('/api/taches/'+id+'/move',{statut:statut,apres_id:apres_id,avant_id:avant_id});
@@ -702,7 +942,7 @@ const COLONNES_LISTE=[
   {champ:'titre',label:'Tâche'},
   {champ:'statut',label:'Statut'},
   {champ:'priorite',label:'Priorité'},
-  {champ:'assigne_nom',label:'Assigné'},
+  {champ:'assignes',label:'Assigné'},
   {champ:'module',label:'Module'},
   {champ:'echeance',label:'Échéance'},
   {champ:'temps_passe_h',label:'Temps'},
@@ -724,7 +964,7 @@ function renderListe(){
     };
   });
 
-  const list=tachesVisibles().slice().sort((a,b)=>{
+  const trie=tachesVisibles().slice().sort((a,b)=>{
     const c=S.tri.champ;
     let va=a[c],vb=b[c];
     if(c==='priorite'){
@@ -735,12 +975,40 @@ function renderListe(){
       const rang=o=>(S.meta.statuts||[]).findIndex(x=>x.code===o);
       va=rang(a.statut);vb=rang(b.statut);
     }
+    if(c==='assignes'){
+      // Tri sur le 1er assigné (ordre alphabétique) ; non assigné en dernier.
+      const cle=o=>(o.assignes&&o.assignes.length)?(o.assignes[0].nom||''):'\uffff';
+      va=cle(a);vb=cle(b);
+    }
     if(va==null)va='';if(vb==null)vb='';
     let r;
     if(typeof va==='number'&&typeof vb==='number')r=va-vb;
     else r=String(va).localeCompare(String(vb),'fr',{numeric:true});
     return S.tri.sens==='asc'?r:-r;
   });
+
+  // Regroupement : une sous-tache s'affiche TOUJOURS immediatement sous sa tache
+  // mere, jamais isolee au milieu de la liste. Le tri s'applique aux racines,
+  // puis aux enfants a l'interieur de chaque groupe.
+  // Cas particulier : une sous-tache dont la mere est exclue par un filtre (ou
+  // masquee) n'a plus de groupe -- elle remonte alors au niveau racine plutot
+  // que de disparaitre, avec son fil d'Ariane pour rester comprehensible.
+  const presentes=new Set(trie.map(t=>t.id));
+  const enfantsPar=new Map();
+  const racines=[];
+  for(const t of trie){
+    if(t.parent_id&&presentes.has(t.parent_id)){
+      if(!enfantsPar.has(t.parent_id))enfantsPar.set(t.parent_id,[]);
+      enfantsPar.get(t.parent_id).push(t);
+    }else{
+      racines.push(t);
+    }
+  }
+  const list=[];
+  for(const r of racines){
+    list.push({t:r,enfant:false,orphelin:!!r.parent_id});
+    for(const c of (enfantsPar.get(r.id)||[])) list.push({t:c,enfant:true,orphelin:false});
+  }
 
   const body=document.getElementById('liste-body');
   if(!list.length){
@@ -749,21 +1017,30 @@ function renderListe(){
     return;
   }
   const finaux=statutsFinaux();
-  body.innerHTML=list.map(t=>{
+  body.innerHTML=list.map(ligne=>{
+    const t=ligne.t;
     const st=statutDef(t.statut),prio=prioriteDef(t.priorite);
     const jr=joursRestants(t.echeance);
     const clos=finaux.indexOf(t.statut)!==-1;
     let dueCls='';
     if(!clos&&jr!==null){if(jr<0)dueCls=' late';else if(jr<=2)dueCls=' soon';}
     const sousTitre=[];
-    if(t.parent_titre)sousTitre.push('↳ '+t.parent_titre);
+    // Sous une tache mere, le nom du parent est redondant : l'indentation le dit.
+    // Il n'est rappele que pour une sous-tache orpheline (mere filtree).
+    if(ligne.orphelin&&t.parent_titre)sousTitre.push('↳ '+t.parent_titre);
     if(t.type)sousTitre.push(typeLabel(t.type));
     if(t.nb_checklist)sousTitre.push('checklist '+t.nb_checklist_faits+'/'+t.nb_checklist);
-    return '<tr data-id="'+t.id+'">'+
-      '<td class="t-titre">'+esc(t.titre)+(sousTitre.length?'<span class="sub">'+esc(sousTitre.join(' · '))+'</span>':'')+'</td>'+
+    if(!ligne.enfant&&t.nb_sous_taches)sousTitre.push(t.nb_sous_taches+' sous-tâche'+(t.nb_sous_taches>1?'s':''));
+    return '<tr data-id="'+t.id+'"'+(ligne.enfant?' class="row-sous"':'')+'>'+
+      '<td class="t-titre'+(ligne.enfant?' est-sous':'')+'">'+
+        (ligne.enfant?'<span class="arbre">↳</span>':'')+esc(t.titre)+
+        (sousTitre.length?'<span class="sub">'+esc(sousTitre.join(' · '))+'</span>':'')+'</td>'+
       '<td><span class="tag '+esc(st.couleur)+'">'+esc(st.label)+'</span></td>'+
       '<td><span class="tag '+esc(prio.couleur)+'">'+esc(prio.label)+'</span></td>'+
-      '<td>'+(t.assigne_nom?('<span style="display:inline-flex;align-items:center;gap:7px">'+avatarHtml(t.assigne_nom,t.assigne_avatar)+esc(t.assigne_nom)+'</span>'):'<span style="color:var(--muted)">—</span>')+'</td>'+
+      '<td>'+((t.assignes&&t.assignes.length)
+        ?('<span style="display:inline-flex;align-items:center;gap:8px" title="'+esc((t.assignes||[]).map(u=>u.nom).join(', '))+'">'+
+            pileHtml(t.assignes,2)+esc(nomsAssignes(t.assignes))+'</span>')
+        :'<span style="color:var(--muted)">—</span>')+'</td>'+
       '<td>'+esc(t.module?moduleLabel(t.module):'—')+'</td>'+
       '<td class="due'+dueCls+'">'+(t.echeance?esc(fmtDate(t.echeance)):'—')+'</td>'+
       '<td>'+(t.temps_passe_h?esc(fmtH(t.temps_passe_h)):(t.estimation_h?'0 h':'—'))+(t.estimation_h?'<span style="color:var(--muted)"> / '+esc(fmtH(t.estimation_h))+'</span>':'')+'</td>'+
@@ -793,6 +1070,10 @@ function closeDetail(){
 function onDrawerKey(e){
   if(e.key!=='Escape')return;
   if(document.getElementById('modal-root').firstElementChild)return;
+  // Échap ferme d'abord ce qui est ouvert PAR-DESSUS le tiroir (popover
+  // d'assignation) : sinon un simple Échap dans la recherche fait perdre toute
+  // la fiche. Le champ gère sa propre fermeture, on laisse passer ce tour.
+  if(document.querySelector('.asg-pop'))return;
   closeDetail();
 }
 
@@ -857,10 +1138,8 @@ function paneDetail(d){
   '<div class="fgrid">'+
     '<div class="field"><label>Statut</label><select id="d-statut">'+opt(S.meta.statuts,t.statut)+'</select></div>'+
     '<div class="field"><label>Priorité</label><select id="d-priorite">'+opt(S.meta.priorites,t.priorite)+'</select></div>'+
-    '<div class="field"><label>Assigné à</label><select id="d-assigne"><option value="">Non assigné</option>'+
-      (S.meta.users||[]).map(u=>'<option value="'+u.id+'"'+(String(t.assigne_user_id||'')===String(u.id)?' selected':'')+'>'+esc(u.nom||'')+'</option>').join('')+
-    '</select></div>'+
     '<div class="field"><label>Échéance</label><input type="date" id="d-echeance" value="'+esc(t.echeance||'')+'"></div>'+
+    '<div class="field full asg-field"><label>Assigné à</label><div id="d-assignes"></div></div>'+
     '<div class="field"><label>Type</label><select id="d-type">'+opt(S.meta.types,t.type)+'</select></div>'+
     '<div class="field"><label>Module</label><select id="d-module">'+opt(S.meta.modules,t.module,'Aucun')+'</select></div>'+
     '<div class="field"><label>Estimation (h)</label><input type="number" step="0.25" min="0" id="d-estimation" value="'+esc(t.estimation_h!=null?t.estimation_h:'')+'"></div>'+
@@ -896,7 +1175,7 @@ function paneDetail(d){
       return '<div class="sub-item'+(clos?' done':'')+'" data-sous="'+s.id+'">'+
         '<span class="tag '+esc(sst.couleur)+'">'+esc(sst.label)+'</span>'+
         '<span class="st">'+esc(s.titre)+'</span>'+
-        (s.assigne_nom?avatarHtml(s.assigne_nom,null):'')+
+        ((s.assignes&&s.assignes.length)?pileHtml(s.assignes,2):'')+
       '</div>';
     }).join(''):'<div style="font-size:12px;color:var(--muted);padding:2px 0 4px">Aucune sous-tâche.</div>')+
     '<div class="inline-add"><input type="text" id="sous-new" placeholder="Ajouter une sous-tâche…"><button type="button" class="btn ghost small" id="sous-add">Ajouter</button></div>'+
@@ -961,6 +1240,8 @@ function paneActivite(d){
     else if(a.action==='suppression')txt='<b>'+esc(a.auteur_nom||'—')+'</b> a supprimé la tâche';
     else if(a.action==='statut')txt='<b>'+esc(a.auteur_nom||'—')+'</b> : statut '+esc(statutDef(a.avant).label)+' → '+esc(statutDef(a.apres).label);
     else if(a.action==='temps')txt='<b>'+esc(a.auteur_nom||'—')+'</b> a pointé du temps ('+esc(a.apres||'')+' h)';
+    else if(a.action==='assignation')txt='<b>'+esc(a.auteur_nom||'—')+'</b> a assigné '+esc(a.apres||'');
+    else if(a.action==='desassignation')txt='<b>'+esc(a.auteur_nom||'—')+'</b> a retiré '+esc(a.avant||'');
     else if(a.action&&a.action.indexOf('checklist')===0)txt='<b>'+esc(a.auteur_nom||'—')+'</b> · checklist : '+esc(a.avant||a.apres||'');
     else txt='<b>'+esc(a.auteur_nom||'—')+'</b> a modifié '+esc(a.champ||'')+
       (a.avant?' — <span style="color:var(--muted)">'+esc(a.avant)+'</span> →':' →')+' '+esc(a.apres||'vide');
@@ -996,7 +1277,20 @@ function brancherDetail(){
   bind('d-priorite','priorite');
   bind('d-type','type');
   bind('d-module','module',v=>v||null);
-  bind('d-assigne','assigne_user_id',v=>v?Number(v):null);
+  // Assignés : on enregistre SANS re-rendre le tiroir. `patch()` rappelle
+  // renderDrawer(), ce qui reconstruirait le champ et fermerait le popover à
+  // chaque case cochée — impossible d'assigner deux personnes d'affilée. Le
+  // champ tient son propre affichage ; on se contente de rafraîchir les données
+  // sous-jacentes pour le prochain rendu du tiroir.
+  async function patchAssignes(ids){
+    try{
+      await api('/api/taches/'+t.id,{method:'PUT',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({assignes:ids})});
+      S.detail=await api('/api/taches/'+t.id);
+      await Promise.all([chargerTaches(),chargerStats()]);
+    }catch(e){toast(e.message,'err');}
+  }
+  champAssignes('d-assignes',(t.assignes||[]).map(u=>u.id),patchAssignes);
   bind('d-echeance','echeance',v=>v||null);
   bind('d-estimation','estimation_h',v=>v===''?null:Number(v));
 
@@ -1219,9 +1513,8 @@ function openTacheModal(_ignored,defauts){
         '<div class="field"><label>Priorité</label><select id="n-priorite">'+optList(S.meta.priorites,'normale')+'</select></div>'+
         '<div class="field"><label>Type</label><select id="n-type">'+optList(S.meta.types,'evolution')+'</select></div>'+
         '<div class="field"><label>Module</label><select id="n-module">'+optList(S.meta.modules,'','Aucun')+'</select></div>'+
-        '<div class="field"><label>Assigné à</label><select id="n-assigne"><option value="">Non assigné</option>'+
-          (S.meta.users||[]).map(u=>'<option value="'+u.id+'">'+esc(u.nom||'')+'</option>').join('')+'</select></div>'+
         '<div class="field"><label>Échéance</label><input type="date" id="n-echeance"></div>'+
+        '<div class="field full asg-field"><label>Assigné à</label><div id="n-assignes"></div></div>'+
         '<div class="field"><label>Estimation (h)</label><input type="number" step="0.25" min="0" id="n-estimation" placeholder="ex. 3"></div>'+
       '</div>'+
       '<div class="modal-actions">'+
@@ -1231,6 +1524,8 @@ function openTacheModal(_ignored,defauts){
     '</form>'+
   '</div></div>';
 
+  let nouvAssignes=[];
+  champAssignes('n-assignes',[],ids=>{nouvAssignes=ids;});
   root.querySelector('#n-cancel').onclick=fermerModal;
   root.querySelector('.modal-back').onclick=e=>{if(e.target===root.querySelector('.modal-back'))fermerModal();};
   requestAnimationFrame(()=>{const el=document.getElementById('n-titre');if(el)el.focus();});
@@ -1245,7 +1540,7 @@ function openTacheModal(_ignored,defauts){
       description:(g('n-description')||'').trim()||null,
       statut:g('n-statut'),priorite:g('n-priorite'),type:g('n-type'),
       module:g('n-module')||null,
-      assigne_user_id:g('n-assigne')?Number(g('n-assigne')):null,
+      assignes:nouvAssignes.slice(),
       echeance:g('n-echeance')||null,
       estimation_h:g('n-estimation')?Number(g('n-estimation')):null,
     };
@@ -1406,6 +1701,8 @@ document.getElementById('btn-logout').onclick=async()=>{
 };
 
 (async function init(){
+  syncBandeauOffset();
+  window.addEventListener('resize',syncBandeauOffset);
   syncThemeBtn();
   try{
     S.me=await api('/api/auth/me');
@@ -1419,6 +1716,7 @@ document.getElementById('btn-logout').onclick=async()=>{
   }catch(e){toast(e.message,'err');return;}
   brancherFiltres();
   brancherSousTaches();
+  brancherArchivage();
   showView(readView(),{silent:true});
   await chargerStats();
   initGuides();
