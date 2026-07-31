@@ -61,6 +61,43 @@ body.light .mp-search-wrap:focus-within{
 }
 .mp-card-stock-total.alert{color:var(--warn)}
 .mp-card-mid{display:flex;align-items:flex-end;gap:12px;margin-top:8px}
+/* ── Badge de sous-categorie ──────────────────────────────────────────────────
+   Pose a cote du badge de categorie. Volontairement plus sobre que lui : la
+   categorie est la classification structurante et garde sa couleur, la
+   sous-categorie precise sans concurrencer.                                    */
+.dash-mp-souscat{display:inline-block;padding:2px 8px;border-radius:6px;
+  background:var(--bg);border:1px solid var(--border);color:var(--text2);
+  font-size:10px;font-weight:700;letter-spacing:.2px;line-height:1.6;
+  white-space:nowrap;cursor:help}
+/* Sur les cartes, categorie et sous-categorie s'empilent sous la reference. */
+.mp-card-badges{display:flex;flex-direction:column;align-items:flex-start;gap:4px;flex-shrink:0}
+
+/* ── Bascule cartes / liste ───────────────────────────────────────────────── */
+.mp-vue-btn{display:inline-flex;align-items:center;justify-content:center;
+  width:38px;height:38px;padding:0;flex-shrink:0;border-radius:10px;
+  border:1.5px solid var(--border);background:var(--card);color:var(--text2);
+  cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s,background .15s}
+.mp-vue-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.mp-vue-btn:active{transform:translateY(1px)}
+
+/* Mode liste : une ligne par matiere. Les cartes passent en rangees plates —
+   plus de references a l'ecran quand on cherche, moins de confort de lecture
+   quand on parcourt : c'est le compromis que le bouton laisse choisir. */
+.mp-list.mp-vue-liste{grid-template-columns:1fr;gap:6px}
+.mp-vue-liste .mp-card{display:flex;align-items:center;gap:14px;padding:8px 14px;border-radius:10px}
+.mp-vue-liste .mp-card-badges{flex-direction:row;align-items:center;gap:6px}
+.mp-vue-liste .mp-card-top{flex:1;min-width:0;gap:10px;flex-wrap:nowrap}
+.mp-vue-liste .mp-card-ref{flex:0 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-vue-liste .mp-card-mid{margin-top:0;flex:1;min-width:0;align-items:center}
+.mp-vue-liste .mp-card-side{flex-direction:row;align-items:center}
+.mp-vue-liste .mp-card-stock-mini{margin-top:0}
+@media (max-width:780px){
+  /* En dessous de 780px la grille est deja sur une colonne : le mode liste
+     n'apporterait qu'un ecrasement illisible. */
+  .mp-vue-liste .mp-card{display:block}
+  .mp-vue-liste .mp-card-mid{margin-top:8px}
+  .mp-vue-liste .mp-card-side{flex-direction:column}
+}
 .mp-card-info{flex:1;min-width:0}
 .mp-card-side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
 .mp-card-stock-mini{font-size:12px;font-weight:600;color:var(--muted);margin-top:4px;line-height:1.3}

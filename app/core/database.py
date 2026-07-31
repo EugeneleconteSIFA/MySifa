@@ -7787,6 +7787,123 @@ Ressources :
             f"seede(s), {_desactives} doublon(s) desactive(s)."
         )
 
+    # ── Gestionnaire de tâches (/taches) — suivi interne de l'équipe dev ─────
+    #
+    # GARDE-FOU PAR NOM, PAS PAR VERSION (délibéré, cf. migration `mp_adhesif_kg`
+    # plus haut) : les numéros de version se télescopent entre branches
+    # parallèles et une migration dont le numéro est déjà posé serait
+    # SILENCIEUSEMENT ignorée — ici, tables jamais créées → 500 sur toute l'app
+    # /taches. Le nom `taches_manager` est unique à ce chantier. Le numéro 218
+    # reste renseigné pour l'ordre de lecture.
+    #
+    # Cinq tables :
+    #   taches               — la tâche elle-même (statut, priorité, assignation,
+    #                          échéance, estimation, temps passé, sous-tâches via
+    #                          parent_id, position kanban via `ordre`)
+    #   taches_commentaires  — fil de discussion horodaté
+    #   taches_fichiers      — pièces jointes de contexte (fichier sur disque hors
+    #                          du mount public /uploads, servi par endpoint authentifié)
+    #   taches_checklist     — checklist de validation d'une tâche
+    #   taches_activite      — journal des changements (qui, quoi, avant → après)
+    #
+    # Suppressions TOUJOURS logiques (deleted_at) : une tâche supprimée par erreur
+    # se récupère, et l'historique d'activité reste lisible.
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE name='taches_manager' LIMIT 1"
+    ).fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS taches (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                titre             TEXT NOT NULL,
+                description       TEXT,
+                statut            TEXT NOT NULL DEFAULT 'backlog',
+                priorite          TEXT NOT NULL DEFAULT 'normale',
+                type              TEXT NOT NULL DEFAULT 'evolution',
+                module            TEXT,
+                assigne_user_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                createur_user_id  INTEGER,
+                createur_nom      TEXT,
+                parent_id         INTEGER REFERENCES taches(id) ON DELETE CASCADE,
+                echeance          TEXT,
+                estimation_h      REAL,
+                temps_passe_h     REAL NOT NULL DEFAULT 0,
+                ordre             REAL NOT NULL DEFAULT 0,
+                created_at        TEXT NOT NULL,
+                updated_at        TEXT NOT NULL,
+                started_at        TEXT,
+                done_at           TEXT,
+                archived_at       TEXT,
+                deleted_at        TEXT
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_taches_statut ON taches(statut) WHERE deleted_at IS NULL")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_taches_assigne ON taches(assigne_user_id) WHERE deleted_at IS NULL")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_taches_parent ON taches(parent_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_taches_echeance ON taches(echeance) WHERE deleted_at IS NULL")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS taches_commentaires (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                tache_id    INTEGER NOT NULL REFERENCES taches(id) ON DELETE CASCADE,
+                user_id     INTEGER,
+                auteur_nom  TEXT,
+                message     TEXT NOT NULL,
+                created_at  TEXT NOT NULL,
+                updated_at  TEXT,
+                deleted_at  TEXT
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_taches_com_tache ON taches_commentaires(tache_id)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS taches_fichiers (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                tache_id      INTEGER NOT NULL REFERENCES taches(id) ON DELETE CASCADE,
+                nom           TEXT NOT NULL,
+                fichier_path  TEXT NOT NULL,
+                taille_bytes  INTEGER,
+                mime          TEXT,
+                uploaded_by   INTEGER,
+                uploaded_nom  TEXT,
+                created_at    TEXT NOT NULL,
+                deleted_at    TEXT
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_taches_fic_tache ON taches_fichiers(tache_id)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS taches_checklist (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                tache_id     INTEGER NOT NULL REFERENCES taches(id) ON DELETE CASCADE,
+                libelle      TEXT NOT NULL,
+                fait         INTEGER NOT NULL DEFAULT 0,
+                ordre        REAL NOT NULL DEFAULT 0,
+                fait_at      TEXT,
+                fait_par_nom TEXT,
+                created_at   TEXT NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_taches_chk_tache ON taches_checklist(tache_id)")
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS taches_activite (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                tache_id    INTEGER NOT NULL REFERENCES taches(id) ON DELETE CASCADE,
+                user_id     INTEGER,
+                auteur_nom  TEXT,
+                action      TEXT NOT NULL,
+                champ       TEXT,
+                avant       TEXT,
+                apres       TEXT,
+                created_at  TEXT NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_taches_act_tache ON taches_activite(tache_id)")
+
+        conn.commit()
+        _record_schema_migration(conn, 218, "taches_manager")
+        print("[MySifa] migration taches_manager : tables du gestionnaire de taches creees.")
+
     # ── AO conditionnement (condi) + marge — schéma garde-fou sur COLONNE ────
     # ATTENTION, choix délibéré : ces colonnes NE sont PAS versionnées via
     # schema_migrations. Historique : le versionnage séquentiel entre branches

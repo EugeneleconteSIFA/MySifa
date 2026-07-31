@@ -1561,6 +1561,18 @@ function renderPortal(){
       isSuper?h('button',{
         type:'button',
         className:'portal-settings-corner',
+        'aria-label':'Gestionnaire de tâches',
+        title:'Gestionnaire de tâches',
+        onClick:()=>{window.location.href='/taches';}
+      },(function(){
+        const w=document.createElement('span');
+        w.style.display='inline-flex';w.style.alignItems='center';w.style.flexShrink='0';
+        w.innerHTML='<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>';
+        return w;
+      })()):null,
+      isSuper?h('button',{
+        type:'button',
+        className:'portal-settings-corner',
         'aria-label':'Messagerie',
         title:'Messagerie',
         onClick:async()=>{
