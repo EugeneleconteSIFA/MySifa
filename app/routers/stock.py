@@ -325,6 +325,15 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
             unites_par_palette = v if v > 0 else None
         except (TypeError, ValueError):
             unites_par_palette = None
+    # Grammage (g/m²) — caractéristique physique de la référence, saisie sur les
+    # adhésifs. Sert au calcul du besoin adhésif en kilos (besoins_matieres.py).
+    weight_gsm = None
+    if "weight_gsm" in keys and r["weight_gsm"] is not None:
+        try:
+            v = int(r["weight_gsm"])
+            weight_gsm = v if v > 0 else None
+        except (TypeError, ValueError):
+            weight_gsm = None
     laizee = _mp_is_laizee(cat)
     prix_par_laize = False
     if "prix_par_laize" in keys and r["prix_par_laize"] is not None:
@@ -391,6 +400,7 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
         "cartons_par_palette": cond["cartons_par_palette"],
         "kg_par_carton": cond["kg_par_carton"],
         "kg_par_palette": cond["kg_par_palette"],
+        "weight_gsm": weight_gsm,
         "unites_saisie": _mp_unites_saisie_disponibles(cat, cond),
         "complete": complete,
     }
@@ -3696,7 +3706,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
                    mp.metres_lineaires_par_bobine, mp.prix_eur_m2,
                    COALESCE(mp.prix_par_laize, 0) AS prix_par_laize,
                    mp.unites_par_palette,
-                   mp.cartons_par_palette, mp.kg_par_carton,
+                   mp.cartons_par_palette, mp.kg_par_carton, mp.weight_gsm,
                    mp.sous_section,
                    COALESCE(mp.intervalle_inventaire_jours, 180) AS intervalle_inventaire_jours,
                    COALESCE(s.quantite, 0) AS quantite
@@ -3862,6 +3872,16 @@ async def create_matiere_premiere(request: Request):
     if cartons_par_palette and kg_par_carton:
         unites_par_palette = cartons_par_palette * kg_par_carton
 
+    # Grammage (g/m²) — adhésifs uniquement, optionnel à la création.
+    weight_gsm = None
+    if _mp_is_adhesif(categorie) and body.get("weight_gsm") not in (None, ""):
+        try:
+            weight_gsm = int(float(body.get("weight_gsm")))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Grammage invalide.") from None
+        if weight_gsm <= 0 or weight_gsm > 99999:
+            raise HTTPException(400, "Grammage hors bornes (1–99999 g/m²).")
+
     with get_db() as conn:
         try:
             cur = conn.execute(
@@ -3869,13 +3889,13 @@ async def create_matiere_premiere(request: Request):
                 INSERT INTO matieres_premieres (
                     categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section,
                     unites_par_palette, cartons_par_palette, kg_par_carton, abbreviation,
-                    sous_categorie, sous_categorie_en
+                    sous_categorie, sous_categorie_en, weight_gsm
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section,
                  unites_par_palette, cartons_par_palette, kg_par_carton, abbreviation,
-                 sous_categorie, sous_categorie_en),
+                 sous_categorie, sous_categorie_en, weight_gsm),
             )
             matiere_id = cur.lastrowid
             conn.execute(
@@ -4006,6 +4026,21 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
             if cpp and kgc:
                 sets.append("unites_par_palette=?")
                 params.append(cpp * kgc)
+
+        # Grammage (g/m²) — comme le conditionnement, il dépend de la catégorie,
+        # donc traité ici. Une valeur vide efface le grammage (NULL).
+        if "weight_gsm" in body:
+            if not _mp_is_adhesif(row["categorie"]):
+                raise HTTPException(400, "Grammage réservé aux adhésifs.")
+            v = body.get("weight_gsm")
+            try:
+                v_int = int(float(v)) if v not in (None, "") else None
+            except (TypeError, ValueError):
+                raise HTTPException(400, "Grammage invalide.") from None
+            if v_int is not None and (v_int <= 0 or v_int > 99999):
+                raise HTTPException(400, "Grammage hors bornes (1–99999 g/m²).")
+            sets.append("weight_gsm=?")
+            params.append(v_int)
 
         if not sets:
             raise HTTPException(400, "Aucun champ à mettre à jour.")

@@ -28,8 +28,8 @@ Formules :
 - support  (ml) : métrage
 - glassine (ml) : métrage
 - adhésif  (kg) : grammage(g/m²) * métrage(m) * laize(mm)/1000 / 1000
-                  grammage = fiches_techniques.qte_au_mille (libellé
-                  « Grammage » sur le PDF de fiche technique)
+                  grammage = matieres_premieres.weight_gsm (saisi sur la fiche
+                  matière), repli fiches_techniques.qte_au_mille
                   laize    = of_imports.laize, repli fiche technique
 - mandrins (u)  : qte_etiquettes / nb_etiq_bobin
 - cartons  (u)  : mandrins / nb_bobines_carton
@@ -235,7 +235,7 @@ def _load_mapping(conn) -> dict:
     rows = conn.execute("""
         SELECT m.kind, m.source_value, m.matiere_id,
                mp.reference, mp.designation, mp.categorie,
-               mp.metres_lineaires_par_bobine, mp.weight_gsm
+               mp.metres_lineaires_par_bobine, mp.weight_gsm, mp.weight_per_m2
         FROM mp_fiche_mapping m
         JOIN matieres_premieres mp ON mp.id = m.matiere_id
     """).fetchall()
@@ -252,6 +252,7 @@ def _load_mapping(conn) -> dict:
                 if "metres_lineaires_par_bobine" in keys else None
             ),
             "weight_gsm": r["weight_gsm"] if "weight_gsm" in keys else None,
+            "weight_per_m2": r["weight_per_m2"] if "weight_per_m2" in keys else None,
         }
     return out
 
@@ -399,17 +400,24 @@ def _compute_besoins_dossier(pe: dict, mapping: dict) -> list:
     # ── Adhésif : kilos = grammage (g/m²) × surface enduite (m²) ──
     # surface = métrage (m) × laize (mm) / 1000
     if pe.get("ft_adhesif"):
-        # Grammage : la fiche technique d'abord (propre au produit), le grammage
-        # porté par la référence adhésif en repli.
-        grammage = _f(pe.get("ft_qte_au_mille"))
-        gram_champ = "fiches_techniques.qte_au_mille"
-        gram_origine = "Fiche technique"
+        # Grammage : porté par la référence adhésif (weight_gsm, g/m²). Le champ
+        # « Grammage » de la fiche technique sert de repli tant que la matière
+        # n'est pas renseignée.
+        mp_adh = mapping.get(("adhesif", str(pe["ft_adhesif"]).strip().lower()))
+        grammage = _f(mp_adh.get("weight_gsm")) if mp_adh else None
+        gram_champ = "matieres_premieres.weight_gsm"
+        gram_origine = "Matière première"
+        if not grammage and mp_adh:
+            # weight_per_m2 est en kg/m² (base de calcul du pricing) : ×1000 → g/m².
+            kg_m2 = _f(mp_adh.get("weight_per_m2"))
+            if kg_m2:
+                grammage = kg_m2 * 1000.0
+                gram_champ = "matieres_premieres.weight_per_m2 (kg/m² × 1000)"
         if not grammage:
-            mp_adh = mapping.get(("adhesif", str(pe["ft_adhesif"]).strip().lower()))
-            grammage = _f(mp_adh.get("weight_gsm")) if mp_adh else None
+            grammage = _f(pe.get("ft_qte_au_mille"))
             if grammage:
-                gram_champ = "matieres_premieres.weight_gsm"
-                gram_origine = "Matière première"
+                gram_champ = "fiches_techniques.qte_au_mille"
+                gram_origine = "Fiche technique"
         laize = lz["laize"]
         variables = list(met["variables"])
         if laize:
@@ -433,8 +441,8 @@ def _compute_besoins_dossier(pe: dict, mapping: dict) -> list:
             if not laize:
                 manque.append("Laize de l'OF (of_imports.laize) ou de la fiche technique")
             if not grammage:
-                manque.append("Grammage — ni sur la fiche technique (qte_au_mille), "
-                              "ni sur la matière (weight_gsm)")
+                manque.append("Grammage — à saisir sur la fiche matière adhésif "
+                              "(ni weight_gsm, ni qte_au_mille renseignés)")
             _add("adhesif", pe["ft_adhesif"], None,
                  "Calcul impossible", variables, manque)
 
@@ -859,9 +867,10 @@ _EXPLICATIONS = {
                 "L'adhésif se stocke et s'achète au kilo. On passe donc par la "
                 "surface enduite : le métrage multiplié par la laize donne des m², "
                 "que le grammage convertit en grammes, puis en kilos.",
-                "Le grammage est le champ « Grammage » de la fiche technique "
-                "(colonne qte_au_mille), exprimé en g/m². S'il est vide, on "
-                "utilise le grammage porté par la référence adhésif elle-même.",
+                "Le grammage (g/m²) est une caractéristique de la référence "
+                "adhésif : il se saisit sur la fiche matière. Tant qu'il n'est "
+                "pas renseigné, on utilise en repli le champ « Grammage » de la "
+                "fiche technique (colonne qte_au_mille).",
                 "La laize retenue est celle de l'OF — la laize réellement lancée. "
                 "En l'absence d'OF, on prend la laize optimale de la fiche technique, "
                 "puis la laize simple.",
@@ -869,9 +878,11 @@ _EXPLICATIONS = {
             "variables": [
                 {"label": "Valeur source", "champ": "fiches_techniques.adhesif",
                  "detail": "texte mappé vers une matière de catégorie adhésif"},
-                {"label": "Grammage", "champ": "fiches_techniques.qte_au_mille",
+                {"label": "Grammage", "champ": "matieres_premieres.weight_gsm",
                  "unite": "g/m²",
-                 "detail": "repli : matieres_premieres.weight_gsm"},
+                 "detail": "saisi sur la fiche matière ; replis successifs : "
+                           "weight_per_m2 (kg/m² × 1000), puis "
+                           "fiches_techniques.qte_au_mille"},
                 {"label": "Métrage", "champ": "voir « Métrage du dossier »", "unite": "m"},
                 {"label": "Laize", "champ": "of_imports.laize",
                  "unite": "mm",
