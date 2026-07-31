@@ -55,6 +55,9 @@ _LIGHT_GRAY = colors.HexColor("#f5f5f5")
 _BORDER     = colors.HexColor("#d1d1d1")
 _ACCENT     = colors.HexColor("#0891b2")   # même accent que MyAO
 _ACCENT_BG  = colors.HexColor("#e6f6fa")
+# Sous-titre anglais posé sur le bandeau accent : blanc désaturé, assez
+# contrasté pour rester lisible sans concurrencer le libellé français.
+_TITLE_EN   = colors.HexColor("#c9ecf5")
 
 W, H = A4
 
@@ -304,19 +307,22 @@ def _ellipsize(c: canvas.Canvas, txt: str, font: str, size: float, max_w: float)
 # ── Primitives de section ───────────────────────────────────────────
 def _section_title(c: canvas.Canvas, x: float, y: float,
                    fr: str, en: str, width: float, m: dict) -> float:
-    """Bandeau de section : accent + titre FR + sous-titre EN italique."""
+    """Bandeau de section : pleine largeur en accent, titre FR + EN en réserve.
+
+    Le bandeau porte l'accent sur toute sa largeur (et non plus un simple
+    liseré à gauche) : sur une page dense, c'est ce qui donne au lecteur la
+    séparation entre deux sections d'un seul coup d'œil.
+    """
     h_band = m["title_h"]
     y_bottom = y - h_band
 
-    c.setFillColor(_LIGHT_GRAY)
-    c.rect(x, y_bottom, width, h_band, fill=1, stroke=0)
     c.setFillColor(_ACCENT)
-    c.rect(x, y_bottom, 2.6 * mm, h_band, fill=1, stroke=0)
+    c.rect(x, y_bottom, width, h_band, fill=1, stroke=0)
 
-    tx = x + 4.6 * mm
-    max_w = width - 6 * mm
+    tx = x + 3 * mm
+    max_w = width - 5 * mm
     s_fr = _fit_size(c, fr, m["f_title"], "Helvetica-Bold", max_w * 0.7)
-    c.setFillColor(_DARK)
+    c.setFillColor(_WHITE)
     c.setFont("Helvetica-Bold", s_fr)
     c.drawString(tx, y_bottom + h_band / 2 - s_fr * 0.34, fr)
 
@@ -324,7 +330,7 @@ def _section_title(c: canvas.Canvas, x: float, y: float,
     if en and en != fr:
         s_en = _fit_size(c, "/ " + en, m["f_title_en"], "Helvetica-Oblique",
                          max(max_w - used, 10))
-        c.setFillColor(_MUTED)
+        c.setFillColor(_TITLE_EN)
         c.setFont("Helvetica-Oblique", s_en)
         c.drawString(tx + used,
                      y_bottom + h_band / 2 - s_en * 0.34,

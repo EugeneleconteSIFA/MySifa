@@ -33,6 +33,7 @@ from config import (
     TACHES_STATUTS_CODES,
     TACHES_STATUTS_FINAUX,
     TACHES_TYPES_CODES,
+    ROLE_SUPERADMIN,
     taches_modules,
     taches_priorites,
     taches_statuts,
@@ -291,11 +292,20 @@ class TempsIn(BaseModel):
 @router.get("/api/taches/meta")
 def taches_meta(request: Request):
     """Référentiels + liste des personnes assignables. Aucune valeur en dur au front."""
-    _require_taches(request)
+    user = _require_taches(request)
     with get_db() as conn:
+        # Seuls les super admins sont PROPOSÉS à l'assignation : l'app leur est
+        # réservée, assigner quelqu'un qui ne peut pas l'ouvrir n'a pas de sens.
+        #
+        # Le contrôle serveur de `_valid_assignes`, lui, reste ouvert à tout
+        # compte actif : des tâches créées avant cette restriction portent des
+        # assignés qui ne sont plus dans la liste, et il faut pouvoir les
+        # rouvrir, les modifier et les désassigner sans que l'API les rejette.
         users = conn.execute(
             """SELECT id, nom, role, avatar_url
-               FROM users WHERE actif=1 ORDER BY nom COLLATE NOCASE"""
+               FROM users WHERE actif=1 AND role=?
+               ORDER BY nom COLLATE NOCASE""",
+            (ROLE_SUPERADMIN,),
         ).fetchall()
     return {
         "statuts": taches_statuts(),
@@ -303,6 +313,7 @@ def taches_meta(request: Request):
         "types": taches_types(),
         "modules": taches_modules(),
         "users": [dict(u) for u in users],
+        "moi": {"id": user.get("id"), "nom": user.get("nom") or ""},
         "max_file_mb": TACHES_MAX_FILE_MB,
     }
 
