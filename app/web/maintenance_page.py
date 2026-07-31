@@ -344,7 +344,7 @@ body.reduce-anim .cal-skel{animation:none}
 .cal-wv-dayhead.today .cal-wv-dayname{color:var(--accent)}
 .cal-wv-daydate{font-size:17px;font-weight:800;color:var(--text);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;letter-spacing:.3px}
 .cal-wv-dayhead.today .cal-wv-daydate{color:var(--accent)}
-.cal-wv-body{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;position:relative;overflow:auto;max-height:75vh;scrollbar-gutter:stable}  /* v2.5.17 */
+.cal-wv-body{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;position:relative;overflow:auto;max-height:calc(100vh - 330px);min-height:260px;scrollbar-gutter:stable}  /* v2.5.17. v2.6.1 : 75vh -> calc() comme valeur d'amorce avant que _fitCalWeekBody() ne pose la hauteur exacte en inline. 330px = ordre de grandeur de tout ce qui entoure la grille (en-tete de page, sous-onglets, bandeau, en-tete de grille, legende, paddings) : evite un flash de grille trop haute au premier rendu. */
 .cal-wv-times-col{display:flex;flex-direction:column}
 .cal-wv-time{height:62px;display:flex;align-items:flex-start;justify-content:flex-end;padding:3px 10px 0 0;font-size:12px;font-weight:700;color:var(--muted);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;border-right:1px solid var(--border);border-top:1px solid var(--border)}
 .cal-wv-time:first-child{border-top:none}
@@ -3290,11 +3290,51 @@ function _syncCalHeaderGutter(){
   const gutter = Math.max(0, body.offsetWidth - body.clientWidth);
   head.style.paddingRight = gutter ? (gutter + 'px') : '';
 }
+// v2.6.1 : la grille horaire est bornee a la hauteur REELLEMENT disponible
+// sous elle, pour que le cadre .cal-sec tienne entierement dans la fenetre.
+//
+// Avant : `max-height:75vh` en dur dans le CSS. S'y ajoutaient l'en-tete de
+// page, les sous-onglets, le bandeau d'aide, l'en-tete de grille, la legende et
+// les 24px de padding de la section — soit bien au-dela de 100vh. Le bas du
+// cadre passait donc sous la ligne de flottaison et il fallait faire defiler la
+// PAGE pour l'atteindre, au lieu de faire defiler les heures DANS la grille.
+const CAL_WV_MIN_HEIGHT = 260;   // plancher : en dessous, la grille est inutilisable
+const CAL_WV_BOTTOM_GAP = 8;     // respiration sous le cadre
+function _fitCalWeekBody(){
+  const body = document.getElementById('cal-wv-body');
+  if(!body) return;
+  const sec = body.closest('.cal-sec');
+  if(!sec) return;
+  // Section masquee (autre vue, autre sous-onglet) : les rects valent 0, on ne
+  // calcule rien. Le prochain rendu rappellera cette fonction.
+  if(sec.offsetHeight === 0) return;
+  // Position du haut de la grille dans le DOCUMENT, pas dans le viewport : on
+  // reajoute le scroll courant. Sans ca, mesurer alors que la page est deja
+  // defilee donnerait une hauteur disponible surevaluee, la grille grandirait,
+  // la page defilerait davantage — emballement a chaque appel.
+  const scrolled = document.scrollingElement ? document.scrollingElement.scrollTop : 0;
+  const top = body.getBoundingClientRect().top + scrolled;
+  if(top <= 0) return;
+  // Ce qui doit rester visible SOUS la grille : legende + padding + marge bas.
+  const cs = getComputedStyle(sec);
+  let below = (parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.marginBottom) || 0);
+  const legend = sec.querySelector('.cal-legend');
+  if(legend && legend.offsetHeight){
+    below += legend.offsetHeight + (parseFloat(getComputedStyle(legend).marginTop) || 0);
+  }
+  const avail = window.innerHeight - top - below - CAL_WV_BOTTOM_GAP;
+  body.style.maxHeight = Math.max(CAL_WV_MIN_HEIGHT, Math.round(avail)) + 'px';
+}
+
 let _calGutterRaf = 0;
 function _scheduleCalHeaderGutterSync(){
   if(_calGutterRaf) return;
   _calGutterRaf = requestAnimationFrame(() => {
     _calGutterRaf = 0;
+    // v2.6.1 : l'ajustement de hauteur passe AVANT la synchro de gouttiere —
+    // changer la hauteur peut faire apparaitre ou disparaitre la scrollbar
+    // verticale, donc modifier la largeur de gouttiere a reporter sur le header.
+    try{ _fitCalWeekBody(); }catch(_){}
     try{ _syncCalHeaderGutter(); }catch(_){}
   });
 }
@@ -9427,6 +9467,9 @@ function setPlanSubtab(name){
   else if(name === 'calendrier'){
     // v2.6.0 : rendu immediat depuis le cache, refetch seulement si besoin.
     try { renderCalFromCacheThenRefresh(); } catch(e){ try{ renderCal(); }catch(_){} }
+    // v2.6.1 : la section vient seulement d'etre affichee (display:none jusqu'a
+    // cette ligne), donc _fitCalWeekBody n'a pas pu mesurer pendant le rendu.
+    try{ _scheduleCalHeaderGutterSync(); }catch(_){}
   }
 }
 async function loadPlanningHistorique(){
