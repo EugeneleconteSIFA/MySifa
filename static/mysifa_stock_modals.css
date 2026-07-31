@@ -124,6 +124,11 @@ body.light .mp-search-wrap:focus-within{
 .mp-modal-fiche .mp-field select,
 .mp-modal-fiche .mp-field textarea,
 .mp-modal-fiche .mp-readonly{background:var(--card)}
+/* Libelles de champ plus contrastes : var(--muted) est calibre pour du texte
+   secondaire sur fond carte. Sur les sections cartonnees de la fiche, ils
+   passaient sous le seuil de lisibilite confortable. var(--text2) reste plus
+   discret que le contenu du champ, sans devenir gris pale. */
+.mp-modal-fiche .mp-field label{color:var(--text2);font-weight:700}
 .mp-link-toggle{background:none;border:none;padding:0;margin:0;cursor:pointer;
   font-family:inherit;font-size:11px;font-weight:700;color:var(--accent);text-align:left}
 .mp-link-toggle:hover{text-decoration:underline}

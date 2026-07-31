@@ -5327,7 +5327,7 @@ function buildMatiereDetail() {
     back,
     el('div', { cls: 'scorecard' },
       el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' } },
-        dashMpCatBadge(m.categorie, m.sous_section),
+        ...[dashMpCatBadge(m.categorie, m.sous_section), dashMpSousCatBadge(m)].filter(Boolean),
         m.en_alerte ? el('span', { style: { fontSize: '12px', color: 'var(--warn)', fontWeight: '600' } }, 'Sous le seuil') : null,
       ),
       el('div', { cls: 'sc-ref' }, m.reference || ''),
@@ -8383,7 +8383,8 @@ function buildMatieres() {
       on: { click: () => loadMatiere(m.id) },
     },
       el('div', { cls: 'mp-card-top' },
-        dashMpCatBadge(m.categorie, m.sous_section),
+        el('div', { cls: 'mp-card-badges' },
+          ...[dashMpCatBadge(m.categorie, m.sous_section), dashMpSousCatBadge(m)].filter(Boolean)),
         el('span', { cls: 'mp-card-ref' }, m.reference || ''),
         el('div', { cls: 'mp-card-top-end' }, ...topEnd),
       ),
@@ -10121,6 +10122,22 @@ function dashMpCatBadge(categorie, sousSection) {
     if (k) extra = ' dash-mp-cat-frontal-' + k;
   }
   return el('span', { cls: 'dash-mp-cat dash-mp-cat-' + c + extra }, lbl);
+}
+
+// Badge de sous-categorie, a poser a cote du badge de categorie. Renvoie null
+// quand la matiere n'est pas classee : sur les listes, un badge « aucune » sur
+// chaque carte ferait plus de bruit que d'information — c'est l'ecran
+// d'administration des references qui signale les matieres a completer.
+function dashMpSousCatBadge(item) {
+  const sc = ((item && item.sous_categorie) || '').trim();
+  if (!sc) return null;
+  const en = ((item && item.sous_categorie_en) || '').trim();
+  return el('span', {
+    cls: 'dash-mp-souscat',
+    attrs: { title: en && en.toLowerCase() !== sc.toLowerCase()
+      ? 'Reference produit MyAO : ' + en
+      : 'Sous-categorie ' + sc },
+  }, sc);
 }
 
 function dashMvtBadge(type) {
