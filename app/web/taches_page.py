@@ -204,6 +204,24 @@ body.drag-actif .arch-drop{opacity:1;transform:translateY(0);border-color:var(--
 .due{font-weight:700}
 .due.late{color:var(--danger)}
 .due.soon{color:var(--warn)}
+/* Pile carte + sous-tâches : la carte reste seule à porter le drag, la pile
+   dépliée vit en dessous, dans le même bloc. */
+.tstack{display:flex;flex-direction:column}
+.sous-toggle{display:inline-flex;align-items:center;gap:4px;margin-left:auto;padding:2px 7px;border-radius:7px;
+  border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:10.5px;font-weight:700;
+  font-family:inherit;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.sous-toggle:hover{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.sous-toggle.ouvert{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.sous-toggle svg{width:11px;height:11px;transition:transform .18s}
+.sous-toggle.ouvert svg{transform:rotate(90deg)}
+.sous-pile{display:flex;flex-direction:column;gap:5px;margin:6px 0 2px 12px;padding-left:10px;border-left:2px solid var(--border)}
+.sous-carte{display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:8px;background:var(--card);
+  border:1px solid var(--border);cursor:pointer;transition:border-color .15s,background .15s}
+.sous-carte:hover{border-color:var(--accent);background:var(--accent-bg)}
+.sous-carte .st{flex:1;min-width:0;font-size:11.5px;font-weight:600;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sous-carte.close .st{text-decoration:line-through;color:var(--muted);font-weight:500}
+.sous-carte .tag{font-size:9px;padding:1px 5px}
 .progress{height:4px;border-radius:3px;background:var(--border);overflow:hidden;margin-top:8px}
 .progress i{display:block;height:100%;background:var(--accent);border-radius:3px}
 
@@ -420,7 +438,7 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
       <select class="filter" id="f-priorite"><option value="">Toutes priorités</option></select>
       <select class="filter" id="f-type"><option value="">Tous types</option></select>
       <select class="filter" id="f-module"><option value="">Tous modules</option></select>
-      <button type="button" class="btn ghost small" id="btn-sous" title="Afficher ou masquer les sous-tâches dans le board et la liste">Sous-tâches affichées</button>
+      <button type="button" class="btn ghost small" id="btn-sous" title="Vue Liste : afficher ou masquer les lignes de sous-tâches. Sur le Kanban elles sont toujours regroupées sous leur tâche mère.">Sous-tâches affichées</button>
       <button type="button" class="btn ghost small" id="btn-reset" onclick="resetFiltres()">Réinitialiser</button>
     </div>
 
@@ -459,7 +477,8 @@ const S = {
   detail: null,          // objet complet de la tâche ouverte
   detailTab: 'detail',
   filtres: {q:'', assigne:'', priorite:'', type:'', module:'', rapide:''},
-  sousTaches: true,     // les sous-tâches apparaissent aussi comme cartes / lignes
+  sousTaches: true,     // vue Liste : afficher ou non les lignes de sous-tâches
+  ouverts: new Set(),   // Kanban : cartes dont la pile de sous-tâches est dépliée
   tri: {champ:'ordre', sens:'asc'},
   drag: null,
   me: null,
@@ -694,6 +713,10 @@ function showView(v,opts){
   document.getElementById('page-title').textContent=m.titre;
   document.getElementById('page-sub').textContent=m.sub;
   const ms=document.getElementById('mobile-sub');if(ms)ms.textContent=m.titre;
+  // Le bouton n'a de sens qu'en Liste : sur le Kanban les sous-tâches sont
+  // toujours regroupées sous leur mère, jamais masquables.
+  const bs=document.getElementById('btn-sous');
+  if(bs)bs.style.display=(v==='kanban')?'none':'';
   syncGuideBtn();
   closeSidebar();
   if(!(opts&&opts.silent)){try{if(location.hash!=='#'+v)history.replaceState(null,'','#'+v);}catch(e){}}
@@ -749,7 +772,6 @@ async function chargerStats(){
 function tachesVisibles(){
   let list=S.taches.slice();
   const f=S.filtres;
-  if(!S.sousTaches)list=list.filter(t=>!t.parent_id);
   if(f.rapide==='retard'){
     const finaux=statutsFinaux();
     list=list.filter(t=>t.echeance&&joursRestants(t.echeance)<0&&finaux.indexOf(t.statut)===-1);
@@ -800,7 +822,19 @@ function renderStats(){
   });
 }
 
-function carteHtml(t){
+const SVG_CHEVRON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>';
+
+function sousCarteHtml(t){
+  const st=statutDef(t.statut);
+  const clos=statutsFinaux().indexOf(t.statut)!==-1;
+  return '<div class="sous-carte'+(clos?' close':'')+'" data-sous-id="'+t.id+'">'+
+    '<span class="tag '+esc(st.couleur)+'">'+esc(st.label)+'</span>'+
+    '<span class="st">'+esc(t.titre)+'</span>'+
+    ((t.assignes&&t.assignes.length)?pileHtml(t.assignes,2):'')+
+  '</div>';
+}
+
+function carteHtml(t,enfants){
   const prio=prioriteDef(t.priorite);
   const jr=joursRestants(t.echeance);
   const finaux=statutsFinaux();
@@ -816,7 +850,7 @@ function carteHtml(t){
   if(t.echeance)metas.push('<span class="mi due'+dueCls+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>'+esc(fmtDate(t.echeance))+'</span>');
   if(t.nb_commentaires)metas.push('<span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.2A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/></svg>'+t.nb_commentaires+'</span>');
   if(t.nb_fichiers)metas.push('<span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21.4 11.05 12.25 20.2a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.67 3.67 0 0 1 5.18 5.18l-9.2 9.19a1.83 1.83 0 0 1-2.59-2.59l8.49-8.48"/></svg>'+t.nb_fichiers+'</span>');
-  if(t.nb_sous_taches)metas.push('<span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 5h6M3 12h10M3 19h6"/><path d="M17 8v11a2 2 0 0 0 2 2h2"/></svg>'+t.nb_sous_taches_faites+'/'+t.nb_sous_taches+'</span>');
+  if(t.nb_sous_taches)metas.push('<span class="mi" title="Sous-tâches terminées"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 5h6M3 12h10M3 19h6"/><path d="M17 8v11a2 2 0 0 0 2 2h2"/></svg>'+t.nb_sous_taches_faites+'/'+t.nb_sous_taches+'</span>');
   if(t.estimation_h)metas.push('<span class="mi" title="Estimation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>'+esc(fmtH(t.estimation_h))+'</span>');
 
   let prog='';
@@ -825,12 +859,24 @@ function carteHtml(t){
     prog='<div class="progress" title="Checklist '+t.nb_checklist_faits+'/'+t.nb_checklist+'"><i style="width:'+pct+'%"></i></div>';
   }
 
-  return '<div class="tcard prio-'+esc(t.priorite||'normale')+'" draggable="true" data-id="'+t.id+'">'+
-    (tags.length?'<div class="tcard-top">'+tags.join('')+'</div>':'')+
-    '<div class="tcard-title">'+esc(t.titre)+'</div>'+
-    (t.parent_titre?'<div style="font-size:10.5px;color:var(--muted);margin:-4px 0 8px">↳ '+esc(t.parent_titre)+'</div>':'')+
-    '<div class="tcard-foot">'+pileHtml(t.assignes)+metas.join('')+'</div>'+
-    prog+
+  // Bouton chevron : replie/déplie la pile des sous-tâches sous la carte.
+  const kids=enfants||[];
+  const ouvert=S.ouverts.has(t.id);
+  const chevron=kids.length
+    ? '<button type="button" class="sous-toggle'+(ouvert?' ouvert':'')+'" data-toggle="'+t.id+'"'+
+      ' title="'+(ouvert?'Masquer':'Afficher')+' les sous-tâches" aria-expanded="'+(ouvert?'true':'false')+'">'+
+      SVG_CHEVRON+kids.length+'</button>'
+    : '';
+
+  return '<div class="tstack">'+
+    '<div class="tcard prio-'+esc(t.priorite||'normale')+'" draggable="true" data-id="'+t.id+'">'+
+      (tags.length?'<div class="tcard-top">'+tags.join('')+'</div>':'')+
+      '<div class="tcard-title">'+esc(t.titre)+'</div>'+
+      (t.parent_titre?'<div style="font-size:10.5px;color:var(--muted);margin:-4px 0 8px">↳ '+esc(t.parent_titre)+'</div>':'')+
+      '<div class="tcard-foot">'+pileHtml(t.assignes)+metas.join('')+chevron+'</div>'+
+      prog+
+    '</div>'+
+    (kids.length&&ouvert?'<div class="sous-pile">'+kids.map(sousCarteHtml).join('')+'</div>':'')+
   '</div>';
 }
 
@@ -838,8 +884,26 @@ function renderKanban(){
   const board=document.getElementById('board');
   if(!S.meta){board.innerHTML='<div class="empty">Chargement…</div>';return;}
   const list=tachesVisibles();
+
+  // Une sous-tâche n'est jamais une carte autonome : elle vit dans la pile de sa
+  // tâche mère, dépliable par le chevron. Elle apparaît donc dans la colonne du
+  // PARENT, même si son propre statut diffère — c'est le lien qui prime.
+  // Exception : si la mère est exclue par un filtre, la sous-tâche redevient une
+  // carte à part entière avec son fil d'Ariane, plutôt que de disparaître.
+  const visibles=new Set(list.map(t=>t.id));
+  const enfantsPar=new Map();
+  const cartes=[];
+  for(const t of list){
+    if(t.parent_id&&visibles.has(t.parent_id)){
+      if(!enfantsPar.has(t.parent_id))enfantsPar.set(t.parent_id,[]);
+      enfantsPar.get(t.parent_id).push(t);
+    }else{
+      cartes.push(t);
+    }
+  }
+
   board.innerHTML=(S.meta.statuts||[]).map(st=>{
-    const items=list.filter(t=>t.statut===st.code);
+    const items=cartes.filter(t=>t.statut===st.code);
     return '<section class="col" data-statut="'+esc(st.code)+'">'+
       '<div class="col-head">'+
         '<span class="col-dot" style="background:'+couleurVar(st.couleur)+'"></span>'+
@@ -847,14 +911,30 @@ function renderKanban(){
         '<span class="col-count">'+items.length+'</span>'+
       '</div>'+
       '<div class="col-body" data-statut="'+esc(st.code)+'">'+
-        (items.length?items.map(carteHtml).join(''):'<div style="font-size:11.5px;color:var(--muted);text-align:center;padding:14px 6px">Aucune tâche</div>')+
+        (items.length?items.map(t=>carteHtml(t,enfantsPar.get(t.id))).join(''):'<div style="font-size:11.5px;color:var(--muted);text-align:center;padding:14px 6px">Aucune tâche</div>')+
       '</div>'+
       '<button type="button" class="col-add" data-add="'+esc(st.code)+'">+ Ajouter une tâche</button>'+
     '</section>';
   }).join('');
 
+  board.querySelectorAll('.sous-toggle').forEach(b=>{
+    b.addEventListener('click',e=>{
+      e.stopPropagation();   // le clic ne doit pas ouvrir la fiche de la mère
+      const id=Number(b.dataset.toggle);
+      if(S.ouverts.has(id))S.ouverts.delete(id);else S.ouverts.add(id);
+      try{localStorage.setItem('mysifa_taches_ouverts',JSON.stringify([...S.ouverts]));}catch(err){}
+      renderKanban();
+    });
+  });
+  board.querySelectorAll('.sous-carte').forEach(el=>{
+    el.addEventListener('click',e=>{e.stopPropagation();openDetail(Number(el.dataset.sousId));});
+  });
+
   board.querySelectorAll('.tcard').forEach(c=>{
-    c.addEventListener('click',()=>openDetail(Number(c.dataset.id)));
+    c.addEventListener('click',e=>{
+      if(e.target.closest('.sous-toggle'))return;
+      openDetail(Number(c.dataset.id));
+    });
     c.addEventListener('dragstart',e=>{
       S.drag=Number(c.dataset.id);
       c.classList.add('dragging');
@@ -964,7 +1044,8 @@ function renderListe(){
     };
   });
 
-  const trie=tachesVisibles().slice().sort((a,b)=>{
+  const base=S.sousTaches?tachesVisibles():tachesVisibles().filter(t=>!t.parent_id);
+  const trie=base.slice().sort((a,b)=>{
     const c=S.tri.champ;
     let va=a[c],vb=b[c];
     if(c==='priorite'){
@@ -1590,6 +1671,10 @@ function brancherSousTaches(){
     sync();render();
   };
   try{if(localStorage.getItem('mysifa_taches_sous')==='0')S.sousTaches=false;}catch(e){}
+  try{
+    const brut=localStorage.getItem('mysifa_taches_ouverts');
+    if(brut)S.ouverts=new Set(JSON.parse(brut).map(Number));
+  }catch(e){}
   sync();
 }
 
