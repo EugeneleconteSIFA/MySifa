@@ -586,6 +586,8 @@
         '<td style="font-size:12px;color:var(--muted);white-space:nowrap">' + _fmtLibreDate(o.created_at) + '</td>' +
         '<td style="text-align:right;white-space:nowrap">' +
           '<button type="button" class="btn-sm btn-ghost" data-libre-rename="' + codeEsc + '">Renommer</button> ' +
+          '<button type="button" class="btn-sm btn-ghost" data-libre-attach="' + codeEsc + '" title="Rattacher ce titre a une operation recurrente existante : ses saisies deviennent des saisies recurrentes et le titre disparait.">Rattacher</button> ' +
+          '<button type="button" class="btn-sm btn-ghost" data-libre-promote="' + codeEsc + '" title="Transformer ce titre en operation recurrente du catalogue, en conservant ses saisies passees.">Transformer</button> ' +
           delBtn +
         '</td>' +
       '</tr>';
@@ -614,12 +616,358 @@
         if (it) libresRename(code, it.label);
       });
     });
+    el.querySelectorAll('[data-libre-attach]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        openLibreAttachModal(btn.getAttribute('data-libre-attach'));
+      });
+    });
+    el.querySelectorAll('[data-libre-promote]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        openLibrePromoteModal(btn.getAttribute('data-libre-promote'));
+      });
+    });
     el.querySelectorAll('[data-libre-del]').forEach(btn => {
       btn.addEventListener('click', () => {
         const code = btn.getAttribute('data-libre-del');
         const it = _libresItems.find(x => x.code === code);
         if (it) libresDelete(code, it.label);
       });
+    });
+  }
+
+  // ── Rattachement / transformation des interventions libres (v2.5.11) ──
+  //
+  // Deux sorties possibles pour un titre saisi hors catalogue :
+  //   - Rattacher  : le titre etait une operation du catalogue mal nommee.
+  //                  Ses saisies basculent sur le code recurrent choisi et le
+  //                  titre disparait (liste + historique).
+  //   - Transformer: le titre decrit une vraie operation recurrente manquante.
+  //                  Il devient un code du catalogue en gardant ses saisies.
+  // Les deux sont irreversibles hors SQL : la confirmation l'annonce et
+  // rappelle le nombre de saisies impactees.
+  //
+  // Styles : le module est partage entre /maintenance et /settings, or les
+  // classes .modal-card / .ops-input n'existent que dans maintenance_page.py.
+  // On injecte donc une feuille autonome (prefixe .mlx-) qui reprend le design
+  // system MyMaintenance a partir des variables CSS presentes sur les 2 pages.
+
+  var _MLX_CSS = [
+    '.mlx-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1600;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px)}',
+    '.mlx-card{background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:560px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.45);overflow:hidden}',
+    '.mlx-card--sm{max-width:440px}',
+    '.mlx-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:18px 22px;border-bottom:1px solid var(--border)}',
+    '.mlx-title{font-size:14px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}',
+    '.mlx-close{background:transparent;border:none;color:var(--muted);cursor:pointer;padding:6px;border-radius:8px;display:inline-flex;align-items:center;transition:.15s;line-height:1}',
+    '.mlx-close:hover{color:var(--danger);background:var(--bg)}',
+    '.mlx-body{padding:20px 22px;overflow-y:auto;flex:1}',
+    '.mlx-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 22px;border-top:1px solid var(--border);background:var(--bg)}',
+    '.mlx-intro{font-size:13px;line-height:1.55;color:var(--text2);margin:0 0 16px}',
+    '.mlx-intro strong{color:var(--text)}',
+    '.mlx-label{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}',
+    '.mlx-label .req{color:var(--danger);margin-left:3px}',
+    '.mlx-input,.mlx-select{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;transition:border-color .15s,box-shadow .15s;width:100%;box-sizing:border-box}',
+    '.mlx-input:focus,.mlx-select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}',
+    '.mlx-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px}',
+    '.mlx-field{display:flex;flex-direction:column;margin-bottom:14px}',
+    '.mlx-list{border:1px solid var(--border);border-radius:10px;background:var(--bg);max-height:232px;overflow-y:auto;padding:4px}',
+    '.mlx-opt{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--text2);transition:background .12s,color .12s}',
+    '.mlx-opt:hover{background:var(--card);color:var(--text)}',
+    '.mlx-opt.selected{background:var(--accent);color:var(--accent-fg,#fff);font-weight:600}',
+    '.mlx-opt-code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;opacity:.75;min-width:32px}',
+    '.mlx-opt-lab{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.mlx-opt-cat{font-size:10px;text-transform:uppercase;letter-spacing:.4px;opacity:.7;white-space:nowrap}',
+    '.mlx-empty{padding:16px;text-align:center;color:var(--muted);font-size:12px;font-style:italic}',
+    '.mlx-note{font-size:11px;line-height:1.55;color:var(--muted);margin:12px 0 0}',
+    '.mlx-btn{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-fg,#fff);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:.15s}',
+    '.mlx-btn:hover{filter:brightness(1.07)}',
+    '.mlx-btn:disabled{opacity:.5;cursor:not-allowed;filter:none}',
+    '.mlx-btn--danger{background:var(--danger);border-color:var(--danger);color:#fff}',
+    '.mlx-btn-ghost{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:13px;font-weight:600;font-family:inherit;cursor:pointer;transition:.15s}',
+    '.mlx-btn-ghost:hover{border-color:var(--accent);color:var(--accent)}',
+    '.mlx-recap{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin:0 0 14px;display:flex;flex-direction:column;gap:10px}',
+    '.mlx-recap-row{display:flex;gap:12px;align-items:baseline}',
+    '.mlx-recap-k{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px;min-width:72px;flex-shrink:0}',
+    '.mlx-recap-v{font-size:13px;color:var(--text);font-weight:600;line-height:1.4}',
+    '.mlx-warn{display:flex;gap:9px;align-items:flex-start;font-size:12px;line-height:1.5;color:var(--danger);background:var(--bg);border:1px solid var(--danger);border-radius:10px;padding:11px 13px}',
+    '.mlx-warn svg{flex-shrink:0;margin-top:1px}'
+  ].join('\n');
+
+  function _libresEnsureStyles() {
+    if (document.getElementById('mlx-styles')) return;
+    var st = document.createElement('style');
+    st.id = 'mlx-styles';
+    st.textContent = _MLX_CSS;
+    (document.head || document.documentElement).appendChild(st);
+  }
+
+  var _MLX_CLOSE_SVG = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  var _MLX_WARN_SVG = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
+  // Modal generique au style MyMaintenance (.modal-card).
+  function _libresModal(title, bodyHtml, okLabel, opts) {
+    _libresEnsureStyles();
+    opts = opts || {};
+    var overlay = document.createElement('div');
+    overlay.className = 'mlx-overlay';
+    overlay.innerHTML = '<div class="mlx-card' + (opts.small ? ' mlx-card--sm' : '') + '" role="dialog" aria-modal="true">'
+      + '<div class="mlx-head"><div class="mlx-title">' + title + '</div>'
+      +   '<button type="button" class="mlx-close" data-close aria-label="Fermer">' + _MLX_CLOSE_SVG + '</button></div>'
+      + '<div class="mlx-body">' + bodyHtml + '</div>'
+      + '<div class="mlx-foot">'
+      +   '<button type="button" class="mlx-btn-ghost" data-close>Annuler</button>'
+      +   '<button type="button" class="mlx-btn' + (opts.danger ? ' mlx-btn--danger' : '') + '" data-ok>' + okLabel + '</button>'
+      + '</div></div>';
+    document.body.appendChild(overlay);
+    var close = function () { overlay.remove(); document.removeEventListener('keydown', onKey); };
+    var onKey = function (e) { if (e.key === 'Escape') { close(); if (opts.onEscape) opts.onEscape(); } };
+    document.addEventListener('keydown', onKey);
+    overlay.querySelectorAll('[data-close]').forEach(function (el) {
+      el.addEventListener('click', function () { close(); if (opts.onCancel) opts.onCancel(); });
+    });
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) { close(); if (opts.onCancel) opts.onCancel(); }
+    });
+    return { overlay: overlay, close: close, okBtn: overlay.querySelector('[data-ok]') };
+  }
+
+  // Confirmation stylee (remplace window.confirm) -> Promise<boolean>.
+  function _libresConfirm(title, bodyHtml, okLabel) {
+    return new Promise(function (resolve) {
+      var done = false;
+      var settle = function (v) { if (!done) { done = true; resolve(v); } };
+      var m = _libresModal(title, bodyHtml, okLabel, {
+        small: true, danger: true,
+        onCancel: function () { settle(false); },
+        onEscape: function () { settle(false); },
+      });
+      m.okBtn.addEventListener('click', function () { m.close(); settle(true); });
+      m.okBtn.focus();
+    });
+  }
+
+  function _libresRecap(rows) {
+    return '<div class="mlx-recap">' + rows.map(function (r) {
+      return '<div class="mlx-recap-row"><div class="mlx-recap-k">' + r[0]
+        + '</div><div class="mlx-recap-v">' + r[1] + '</div></div>';
+    }).join('') + '</div>';
+  }
+
+  function _libresWarn(text) {
+    return '<div class="mlx-warn">' + _MLX_WARN_SVG + '<span>' + text + '</span></div>';
+  }
+
+  // Rafraichit tout ce qui depend du referentiel des codes apres une action.
+  async function _libresRefreshAfterAction() {
+    try { await loadLibres(); } catch (e) {}
+    try { if (typeof window.loadMaintCodes === 'function') await window.loadMaintCodes(); } catch (e) {}
+    try { if (typeof window.renderMaintList === 'function') window.renderMaintList(); } catch (e) {}
+    // Page MyMaintenance uniquement : cartes Suivi machine + historique.
+    try {
+      if (typeof window.loadOpsTypes === 'function') {
+        await window.loadOpsTypes();
+        if (typeof window.renderMaintCards === 'function') window.renderMaintCards();
+        if (typeof window.renderOpsTypes === 'function') window.renderOpsTypes();
+      }
+    } catch (e) {}
+    try { if (typeof window.refreshOpsHistoryNow === 'function') window.refreshOpsHistoryNow(); } catch (e) {}
+  }
+
+  function _libresSaisiesLabel(n) {
+    return n + ' saisie' + (n > 1 ? 's' : '');
+  }
+
+  // Codes recurrents disponibles comme cible de rattachement.
+  // /api/maintenance/codes exclut deja les libres (include_libres=0 par defaut).
+  async function _libresFetchTargets() {
+    const r = await api('/api/maintenance/codes');
+    const items = (r && Array.isArray(r.items)) ? r.items : [];
+    return items.slice().sort(function (a, b) {
+      const na = parseInt(a.code, 10), nb = parseInt(b.code, 10);
+      if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
+      return String(a.code).localeCompare(String(b.code));
+    });
+  }
+
+  // Prochain code numerique libre, pour pre-remplir la transformation.
+  function _libresNextFreeCode(items) {
+    let max = 0;
+    (items || []).forEach(function (it) {
+      const n = parseInt(it.code, 10);
+      if (!isNaN(n) && n > max) max = n;
+    });
+    return String(max + 1);
+  }
+
+  // ── Modal « Rattacher » ──
+  async function openLibreAttachModal(code) {
+    const it = (window._libresItems || []).find(function (x) { return x.code === code; });
+    if (!it) { toast('Titre introuvable', true); return; }
+    let targets;
+    try {
+      targets = await _libresFetchTargets();
+    } catch (e) {
+      toast('Impossible de charger les operations recurrentes', true); return;
+    }
+    if (!targets.length) { toast('Aucune operation recurrente disponible', true); return; }
+    const optsHtml = targets.map(function (t) {
+      return '<div class="mlx-opt" data-code="' + esc(String(t.code)) + '" role="option">'
+        + '<span class="mlx-opt-code">' + esc(String(t.code)) + '</span>'
+        + '<span class="mlx-opt-lab">' + esc(String(t.label || '')) + '</span>'
+        + '<span class="mlx-opt-cat">' + esc(_maintCatLabel(t.categorie)) + '</span>'
+        + '</div>';
+    }).join('');
+    const body =
+      '<p class="mlx-intro">Les <strong>' + _libresSaisiesLabel(it.usage_count) + '</strong> de « '
+      + esc(it.label) + ' » seront rattachees a l’operation recurrente choisie et compteront comme des saisies recurrentes classiques. Le titre inhabituel disparaitra de la liste et de l’historique.</p>'
+      + '<div class="mlx-field">'
+      +   '<label class="mlx-label" for="libre-attach-filter">Operation recurrente cible<span class="req">*</span></label>'
+      +   '<input type="search" id="libre-attach-filter" class="mlx-input" placeholder="Filtrer (code, libelle…)" style="margin-bottom:8px">'
+      +   '<div class="mlx-list" id="libre-attach-list" role="listbox">' + optsHtml
+      +     '<div class="mlx-empty" id="libre-attach-empty" style="display:none">Aucune operation pour ce filtre.</div>'
+      +   '</div>'
+      + '</div>'
+      + '<p class="mlx-note">Si un creneau contient deja une saisie du code cible, les deux saisies sont fusionnees : observations et pieces concatenees, durees additionnees.</p>';
+    const m = _libresModal('Rattacher · ' + esc(it.label), body, 'Rattacher');
+    const list = m.overlay.querySelector('#libre-attach-list');
+    const empty = m.overlay.querySelector('#libre-attach-empty');
+    const filt = m.overlay.querySelector('#libre-attach-filter');
+    let selected = null;
+    m.okBtn.disabled = true;
+    list.querySelectorAll('.mlx-opt').forEach(function (opt) {
+      opt.addEventListener('click', function () {
+        list.querySelectorAll('.mlx-opt').forEach(function (o) { o.classList.remove('selected'); });
+        opt.classList.add('selected');
+        selected = {
+          code: opt.getAttribute('data-code'),
+          label: opt.querySelector('.mlx-opt-lab').textContent,
+        };
+        m.okBtn.disabled = false;
+      });
+    });
+    filt.addEventListener('input', function () {
+      const q = filt.value.trim().toLowerCase();
+      let visible = 0;
+      list.querySelectorAll('.mlx-opt').forEach(function (o) {
+        const hit = !q || o.textContent.toLowerCase().indexOf(q) !== -1;
+        o.style.display = hit ? '' : 'none';
+        if (hit) visible++;
+      });
+      empty.style.display = visible ? 'none' : '';
+    });
+    setTimeout(function () { try { filt.focus(); } catch (e) {} }, 30);
+
+    m.okBtn.addEventListener('click', async function () {
+      if (!selected) return;
+      const ok = await _libresConfirm(
+        'Confirmer le rattachement',
+        _libresRecap([
+          ['Titre', esc(it.label) + ' <span style="color:var(--muted);font-weight:400">(' + _libresSaisiesLabel(it.usage_count) + ')</span>'],
+          ['Rattache a', esc(selected.code) + ' — ' + esc(selected.label)],
+        ])
+        + _libresWarn('Le titre inhabituel sera supprime et ses saisies compteront comme des saisies recurrentes. Action irreversible.'),
+        'Rattacher'
+      );
+      if (!ok) return;
+      m.okBtn.disabled = true;
+      try {
+        const r = await api('/api/maintenance/codes/libres/' + encodeURIComponent(code) + '/attach', {
+          method: 'POST',
+          body: JSON.stringify({ target_code: selected.code }),
+        });
+        const nb = (r && r.total) || 0;
+        const fus = (r && r.merged) || 0;
+        toast(_libresSaisiesLabel(nb) + ' rattachee' + (nb > 1 ? 's' : '')
+          + (fus ? ' (dont ' + fus + ' fusionnee' + (fus > 1 ? 's' : '') + ')' : ''));
+        m.close();
+        await _libresRefreshAfterAction();
+      } catch (e) {
+        m.okBtn.disabled = false;
+        toast(e && e.message ? e.message : 'Erreur', true);
+      }
+    });
+  }
+
+  // ── Modal « Transformer » ──
+  async function openLibrePromoteModal(code) {
+    const it = (window._libresItems || []).find(function (x) { return x.code === code; });
+    if (!it) { toast('Titre introuvable', true); return; }
+    let existing = [];
+    try { existing = await _libresFetchTargets(); } catch (e) { existing = []; }
+    const nextCode = _libresNextFreeCode(existing);
+    const cats = [['controles', 'Controles'], ['entretien', 'Nettoyage'], ['remplacements', 'Interventions']];
+    const catOpts = cats.map(function (c) {
+      const selAttr = (c[0] === (it.categorie || 'remplacements')) ? ' selected' : '';
+      return '<option value="' + c[0] + '"' + selAttr + '>' + c[1] + '</option>';
+    }).join('');
+    const nivOpts = [1, 2, 3].map(function (n) {
+      return '<option value="' + n + '"' + (n === (it.niveau || 1) ? ' selected' : '') + '>N' + n + '</option>';
+    }).join('');
+    const body =
+      '<p class="mlx-intro">« ' + esc(it.label) + ' » devient une operation recurrente du catalogue. Ses <strong>'
+      + _libresSaisiesLabel(it.usage_count) + '</strong> sont conservees : elles deviennent l’historique de la nouvelle operation, la carte Suivi machine affichera directement la derniere intervention.</p>'
+      + '<div class="mlx-grid" style="margin-bottom:14px">'
+      +   '<div class="mlx-field" style="margin-bottom:0"><label class="mlx-label" for="libre-promo-code">Code<span class="req">*</span></label>'
+      +     '<input type="text" id="libre-promo-code" class="mlx-input" value="' + esc(nextCode) + '" inputmode="numeric" maxlength="4"></div>'
+      +   '<div class="mlx-field" style="margin-bottom:0"><label class="mlx-label" for="libre-promo-niveau">Niveau</label>'
+      +     '<select id="libre-promo-niveau" class="mlx-select">' + nivOpts + '</select></div>'
+      +   '<div class="mlx-field" style="margin-bottom:0"><label class="mlx-label" for="libre-promo-cat">Categorie</label>'
+      +     '<select id="libre-promo-cat" class="mlx-select">' + catOpts + '</select></div>'
+      + '</div>'
+      + '<div class="mlx-field"><label class="mlx-label" for="libre-promo-label">Libelle<span class="req">*</span></label>'
+      +   '<input type="text" id="libre-promo-label" class="mlx-input" value="' + esc(it.label || '') + '"></div>'
+      + '<div class="mlx-field"><label class="mlx-label" for="libre-promo-intervalle">Intervalle<span class="req">*</span></label>'
+      +   '<input type="text" id="libre-promo-intervalle" class="mlx-input" placeholder="ex. Hebdo, 30 jours, 6 mois" maxlength="80"></div>'
+      + '<div class="mlx-field" style="margin-bottom:0"><label class="mlx-label" for="libre-promo-metrage">Reference metrage (optionnel)</label>'
+      +   '<input type="text" id="libre-promo-metrage" class="mlx-input" placeholder="ex. 5000 m, 10 km" maxlength="80"></div>'
+      + '<p class="mlx-note">Sans intervalle, la carte ne peut pas calculer d’echeance : le champ est donc requis.</p>';
+    const m = _libresModal('Transformer en recurrente · ' + esc(it.label), body, 'Transformer');
+    setTimeout(function () {
+      try { m.overlay.querySelector('#libre-promo-intervalle').focus(); } catch (e) {}
+    }, 30);
+
+    m.okBtn.addEventListener('click', async function () {
+      const q = function (id) { return m.overlay.querySelector(id); };
+      const newCode = q('#libre-promo-code').value.trim();
+      const label = q('#libre-promo-label').value.trim();
+      const intervalle = q('#libre-promo-intervalle').value.trim();
+      const catSel = q('#libre-promo-cat');
+      if (!newCode) { toast('Code obligatoire', true); q('#libre-promo-code').focus(); return; }
+      if (!label) { toast('Libelle obligatoire', true); q('#libre-promo-label').focus(); return; }
+      if (!intervalle) { toast('Intervalle obligatoire', true); q('#libre-promo-intervalle').focus(); return; }
+      if (existing.some(function (t) { return String(t.code) === newCode; })) {
+        toast('Le code ' + newCode + ' existe deja', true); q('#libre-promo-code').focus(); return;
+      }
+      const ok = await _libresConfirm(
+        'Confirmer la transformation',
+        _libresRecap([
+          ['Nouveau code', esc(newCode) + ' — ' + esc(label)],
+          ['Categorie', esc(catSel.options[catSel.selectedIndex].textContent) + ' · N' + q('#libre-promo-niveau').value + ' · ' + esc(intervalle)],
+          ['Historique', _libresSaisiesLabel(it.usage_count) + ' reprise' + (it.usage_count > 1 ? 's' : '')],
+        ])
+        + _libresWarn('Le titre inhabituel « ' + esc(it.label) + ' » sera remplace par ce code du catalogue. Action irreversible.'),
+        'Transformer'
+      );
+      if (!ok) return;
+      m.okBtn.disabled = true;
+      try {
+        const r = await api('/api/maintenance/codes/libres/' + encodeURIComponent(code) + '/promote', {
+          method: 'POST',
+          body: JSON.stringify({
+            new_code: newCode,
+            label: label,
+            niveau: parseInt(q('#libre-promo-niveau').value, 10) || 1,
+            categorie: catSel.value,
+            intervalle: intervalle,
+            metrage_ref: q('#libre-promo-metrage').value.trim(),
+          }),
+        });
+        toast('Operation recurrente ' + ((r && r.code) || newCode) + ' creee');
+        m.close();
+        await _libresRefreshAfterAction();
+      } catch (e) {
+        m.okBtn.disabled = false;
+        toast(e && e.message ? e.message : 'Erreur', true);
+      }
     });
   }
 
@@ -641,6 +989,8 @@
   try { window.openMaintDocsModal = openMaintDocsModal; } catch(e) {}
   try { window.loadLibres = loadLibres; } catch(e) {}
   try { window.renderLibresList = renderLibresList; } catch(e) {}
+  try { window.openLibreAttachModal = openLibreAttachModal; } catch(e) {}
+  try { window.openLibrePromoteModal = openLibrePromoteModal; } catch(e) {}
   try { window.MAINT_CODES_STORAGE_KEY = MAINT_CODES_STORAGE_KEY; } catch(e) {}
 
   window.MysifaMaintForm = {
@@ -659,6 +1009,8 @@
     openMaintDocsModal: openMaintDocsModal,
     loadLibres: loadLibres,
     renderLibresList: renderLibresList,
+    openLibreAttachModal: openLibreAttachModal,
+    openLibrePromoteModal: openLibrePromoteModal,
     MAINT_CODES_STORAGE_KEY: MAINT_CODES_STORAGE_KEY
   };
 })();

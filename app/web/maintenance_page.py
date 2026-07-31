@@ -308,7 +308,7 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 }
 
 /* ── v2.6.0 : etats de chargement du calendrier ─────────────────────── */
-.cal-week-view.cal-hide-hint .cal-wv-hint{display:none}
+/* v2.6.1 : .cal-hide-hint masquait le bandeau d'aide pendant le chargement et en erreur ; le bandeau n'existe plus. La classe reste posee par _renderPlanningLoadState() (inoffensive) au cas ou un futur bandeau la reutiliserait. */
 .cal-load-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:12px;border-radius:10px;font-size:12.5px;font-weight:600;letter-spacing:.2px}
 .cal-load-bar.is-loading{background:var(--accent-bg);border:1px dashed var(--accent);color:var(--accent)}
 .cal-load-bar.is-error{background:rgba(248,113,113,.10);border:1px solid var(--danger);color:var(--danger)}
@@ -333,7 +333,7 @@ body.reduce-anim .cal-skel{animation:none}
 
 /* ── Vue Semaine (emploi du temps) ──────────────────────────────────── */
 .cal-week-view{overflow-x:auto}
-.cal-wv-hint{font-size:13px;color:var(--text2);background:var(--accent-bg);border:1px dashed var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:14px;text-align:center;font-weight:600}
+/* v2.6.1 : .cal-wv-hint retire du HTML — regle de style supprimee. */
 .cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);box-sizing:border-box}  /* v2.5.17 : min-width retire (dim clippe). v2.6.0 : scrollbar-gutter retire -- inerte ici, la propriete ne s'applique qu'aux conteneurs de scroll, donc les 7 colonnes 1fr etaient calculees sur une largeur superieure a celles du corps (derive cumulative vers Sam/Dim). L'alignement est desormais fait par _syncCalHeaderGutter() qui reporte la largeur reelle de la gouttiere du corps sur le padding-right du header. */
 .cal-wv-corner{}
 .cal-wv-dayhead{padding:11px 10px;text-align:center;border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--card)}
@@ -344,7 +344,7 @@ body.reduce-anim .cal-skel{animation:none}
 .cal-wv-dayhead.today .cal-wv-dayname{color:var(--accent)}
 .cal-wv-daydate{font-size:17px;font-weight:800;color:var(--text);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;letter-spacing:.3px}
 .cal-wv-dayhead.today .cal-wv-daydate{color:var(--accent)}
-.cal-wv-body{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;position:relative;overflow:auto;max-height:75vh;scrollbar-gutter:stable}  /* v2.5.17 */
+.cal-wv-body{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;position:relative;overflow:auto;max-height:calc(100vh - 330px);min-height:260px;scrollbar-gutter:stable}  /* v2.5.17. v2.6.1 : 75vh -> calc() comme valeur d'amorce avant que _fitCalWeekBody() ne pose la hauteur exacte en inline. 330px = ordre de grandeur de tout ce qui entoure la grille (en-tete de page, sous-onglets, bandeau, en-tete de grille, legende, paddings) : evite un flash de grille trop haute au premier rendu. */
 .cal-wv-times-col{display:flex;flex-direction:column}
 .cal-wv-time{height:62px;display:flex;align-items:flex-start;justify-content:flex-end;padding:3px 10px 0 0;font-size:12px;font-weight:700;color:var(--muted);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;border-right:1px solid var(--border);border-top:1px solid var(--border)}
 .cal-wv-time:first-child{border-top:none}
@@ -670,7 +670,7 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 body[data-maint-role="operator"] .cal-fab,
 body[data-maint-role="operator"] .cal-fab-menu,
 body[data-maint-role="operator"] .plan-det-case-actions{display:none !important}
-body[data-maint-role="operator"] .cal-wv-hint{display:none}
+/* v2.6.1 : le bandeau d'aide etait deja masque cote operateur ; il n'existe plus pour personne. */
 /* Les cases vides du calendrier ne réagissent plus visuellement au hover */
 body[data-maint-role="operator"] .cal-wv-day-col{cursor:default}
 body[data-maint-role="operator"] .cal-wv-day-col:hover{background:transparent !important}
@@ -1944,7 +1944,11 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </div>
           <!-- Vue Semaine (emploi du temps) -->
           <div class="cal-week-view cal-wv-mode-week" id="cal-week-view">
-            <div class="cal-wv-hint">Cliquez sur une plage horaire libre pour créer un créneau de maintenance.</div>
+            <!-- v2.6.1 : bandeau d'aide « Cliquez sur une plage horaire libre… »
+                 retire. Il occupait ~54px (hauteur + marge) en permanence pour une
+                 information apprise des la premiere utilisation ; la place va a la
+                 grille. _fitCalWeekBody() mesure le haut du corps de grille au
+                 runtime, la hauteur disponible s'ajuste donc toute seule. -->
             <div class="cal-wv-header" id="cal-wv-header"></div>
             <div class="cal-wv-body" id="cal-wv-body"></div>
           </div>
@@ -3009,9 +3013,17 @@ function switchView(name){
 // =========================================================================
 // Planning — calendrier mensuel + vue Semaine (style MyProd)
 // =========================================================================
-const CAL_HOUR_START = 6;
-const CAL_HOUR_END   = 21;   // exclusif (affiche 6h → 20h)
+// v2.6.1 : journee complete. Avant 6h→21h, ce qui tronquait tout creneau
+// debordant de la plage (ex. un nettoyage 19:00–23:00 s'arretait visuellement
+// a 21:00) et rendait impossible la planification d'une intervention de nuit.
+// Toutes les positions verticales sont calculees relativement a
+// CAL_HOUR_START, donc changer ces deux constantes suffit : blocs d'evenement,
+// clic sur cellule, glisser-deposer et redimensionnement suivent.
+const CAL_HOUR_START = 0;
+const CAL_HOUR_END   = 24;   // exclusif (affiche 00h → 23h)
 const CAL_HOUR_PX    = 62;
+// Marge laissee au-dessus du premier creneau lors du recentrage automatique.
+const CAL_AUTOSCROLL_MARGIN = 28;
 function _calWeekMondayOf(d){
   const r = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const off = (r.getDay() + 6) % 7;
@@ -3290,12 +3302,116 @@ function _syncCalHeaderGutter(){
   const gutter = Math.max(0, body.offsetWidth - body.clientWidth);
   head.style.paddingRight = gutter ? (gutter + 'px') : '';
 }
+// v2.6.1 : la grille horaire est bornee a la hauteur REELLEMENT disponible
+// sous elle, pour que le cadre .cal-sec tienne entierement dans la fenetre.
+//
+// Avant : `max-height:75vh` en dur dans le CSS. S'y ajoutaient l'en-tete de
+// page, les sous-onglets, le bandeau d'aide, l'en-tete de grille, la legende et
+// les 24px de padding de la section — soit bien au-dela de 100vh. Le bas du
+// cadre passait donc sous la ligne de flottaison et il fallait faire defiler la
+// PAGE pour l'atteindre, au lieu de faire defiler les heures DANS la grille.
+const CAL_WV_MIN_HEIGHT = 260;   // plancher : en dessous, la grille est inutilisable
+const CAL_WV_BOTTOM_GAP = 8;     // respiration sous le cadre
+function _fitCalWeekBody(){
+  const body = document.getElementById('cal-wv-body');
+  if(!body) return;
+  const sec = body.closest('.cal-sec');
+  if(!sec) return;
+  // Section masquee (autre vue, autre sous-onglet) : les rects valent 0, on ne
+  // calcule rien. Le prochain rendu rappellera cette fonction.
+  if(sec.offsetHeight === 0) return;
+  // Position du haut de la grille dans le DOCUMENT, pas dans le viewport : on
+  // reajoute le scroll courant. Sans ca, mesurer alors que la page est deja
+  // defilee donnerait une hauteur disponible surevaluee, la grille grandirait,
+  // la page defilerait davantage — emballement a chaque appel.
+  const scrolled = document.scrollingElement ? document.scrollingElement.scrollTop : 0;
+  const top = body.getBoundingClientRect().top + scrolled;
+  if(top <= 0) return;
+  // Ce qui doit rester visible SOUS la grille : legende + padding + marge bas.
+  const cs = getComputedStyle(sec);
+  let below = (parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.marginBottom) || 0);
+  const legend = sec.querySelector('.cal-legend');
+  if(legend && legend.offsetHeight){
+    below += legend.offsetHeight + (parseFloat(getComputedStyle(legend).marginTop) || 0);
+  }
+  const avail = window.innerHeight - top - below - CAL_WV_BOTTOM_GAP;
+  body.style.maxHeight = Math.max(CAL_WV_MIN_HEIGHT, Math.round(avail)) + 'px';
+}
+
+// v2.6.1 : avec 24 heures affichees, la grille fait ~1490px pour une zone
+// visible de ~360px. Sans recentrage, le planning s'ouvrirait sur 00:00 et il
+// faudrait faire defiler jusqu'aux creneaux. On se cale donc sur le creneau le
+// plus tot de la periode affichee ; a defaut (semaine vide) sur l'heure
+// courante.
+//
+// Le drapeau est indispensable : le recentrage ne doit avoir lieu qu'apres un
+// RENDU (changement de semaine, de vue, arrivee sur l'onglet), jamais sur un
+// simple redimensionnement — sinon on ecraserait la position de defilement que
+// l'utilisateur vient de choisir a la main.
+let _calAutoScrollPending = false;
+let _calSavedScrollTop = null;
+// Le recentrage n'est arme que par un changement de CONTEXTE : navigation
+// (semaine/jour precedent ou suivant, Aujourd'hui), changement de vue, arrivee
+// sur l'onglet Calendrier.
+//
+// Il ne DOIT PAS l'etre par un simple re-rendu consecutif a une modification de
+// donnees — creation, deplacement ou suppression d'un creneau repassent par
+// renderCalWeek(), et rearmer ici ramenait l'utilisateur au premier creneau de
+// la semaine juste apres qu'il ait cree le sien. C'est pour ca que l'appel a
+// ete retire de la fin des fonctions de rendu.
+function _requestCalAutoScroll(){ _calAutoScrollPending = true; }
+// A appeler juste avant `body.innerHTML = ...` : le remplacement du contenu
+// remet scrollTop a 0, il faut donc memoriser la position avant, pour pouvoir
+// la rendre a l'utilisateur apres un re-rendu sans changement de contexte.
+function _saveCalScroll(){
+  if(_calAutoScrollPending){ _calSavedScrollTop = null; return; }
+  const body = document.getElementById('cal-wv-body');
+  if(body && body.clientHeight) _calSavedScrollTop = body.scrollTop;
+}
+function _autoScrollCalWeekBody(){
+  const body = document.getElementById('cal-wv-body');
+  if(!body) return;
+  // clientHeight nul = grille pas encore mesurable (section masquee) : on garde
+  // l'etat en attente pour retenter au prochain passage.
+  if(!body.clientHeight) return;
+  if(_calAutoScrollPending){
+    _calAutoScrollPending = false;
+    _calSavedScrollTop = null;
+    // On lit la position deja posee sur les blocs par _makeEventBlock plutot que
+    // de recalculer depuis le modele : une seule source de verite.
+    let target = null;
+    body.querySelectorAll('.cal-event').forEach(el => {
+      const t = parseFloat(el.style.top);
+      if(!isNaN(t) && (target === null || t < target)) target = t;
+    });
+    if(target === null){
+      const px = (CAL_STATE && CAL_STATE.view === 'day') ? 72 : CAL_HOUR_PX;
+      target = (new Date().getHours() - CAL_HOUR_START) * px;
+    }
+    body.scrollTop = Math.max(0, target - CAL_AUTOSCROLL_MARGIN);
+    return;
+  }
+  // Re-rendu sans changement de contexte : on restaure la position exacte que
+  // l'utilisateur avait avant. La restauration a lieu dans le meme
+  // requestAnimationFrame que le rendu, donc avant le paint : aucun saut visible.
+  if(_calSavedScrollTop != null){
+    body.scrollTop = _calSavedScrollTop;
+    _calSavedScrollTop = null;
+  }
+}
+
 let _calGutterRaf = 0;
 function _scheduleCalHeaderGutterSync(){
   if(_calGutterRaf) return;
   _calGutterRaf = requestAnimationFrame(() => {
     _calGutterRaf = 0;
+    // v2.6.1 : l'ajustement de hauteur passe AVANT la synchro de gouttiere —
+    // changer la hauteur peut faire apparaitre ou disparaitre la scrollbar
+    // verticale, donc modifier la largeur de gouttiere a reporter sur le header.
+    try{ _fitCalWeekBody(); }catch(_){}
     try{ _syncCalHeaderGutter(); }catch(_){}
+    // Apres la hauteur : scrollTop n'a de sens qu'une fois la zone visible connue.
+    try{ _autoScrollCalWeekBody(); }catch(_){}
   });
 }
 window.addEventListener('resize', _scheduleCalHeaderGutterSync);
@@ -3341,6 +3457,8 @@ function setCalView(v){
     wv.classList.toggle('cal-wv-mode-week', v === 'week');
     wv.classList.toggle('cal-wv-mode-day',  v === 'day');
   }
+  // v2.6.1 : changement de contexte -> recentrage legitime.
+  _requestCalAutoScroll();
   renderCalFromCacheThenRefresh();
 }
 function calPrev(){
@@ -3354,6 +3472,8 @@ function calPrev(){
     const d = CAL_STATE.dayDate;
     CAL_STATE.dayDate = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
   }
+  // v2.6.1 : changement de contexte -> recentrage legitime.
+  _requestCalAutoScroll();
   renderCalFromCacheThenRefresh();
 }
 function calNext(){
@@ -3367,6 +3487,8 @@ function calNext(){
     const d = CAL_STATE.dayDate;
     CAL_STATE.dayDate = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
   }
+  // v2.6.1 : changement de contexte -> recentrage legitime.
+  _requestCalAutoScroll();
   renderCalFromCacheThenRefresh();
 }
 function calToday(){
@@ -3379,6 +3501,8 @@ function calToday(){
   } else if(CAL_STATE.view === 'day'){
     CAL_STATE.dayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   }
+  // v2.6.1 : changement de contexte -> recentrage legitime.
+  _requestCalAutoScroll();
   renderCalFromCacheThenRefresh();
 }
 function _calIsoYMD(d){
@@ -3533,6 +3657,7 @@ function renderCalWeek(){
     }
     html += '</div>';
   }
+  try{ _saveCalScroll(); }catch(_){}
   body.innerHTML = html;
   // Lane-packing : un bloc par opération, placé côte à côte lorsqu'il y a chevauchement
   document.querySelectorAll('.cal-wv-day-col').forEach(col => {
@@ -3589,6 +3714,7 @@ function renderCalDay(){
     html += '<div class="cal-wv-hour-row" data-hour="' + h + '"></div>';
   }
   html += '</div>';
+  try{ _saveCalScroll(); }catch(_){}
   body.innerHTML = html;
   // Lane-packing
   document.querySelectorAll('.cal-wv-day-col').forEach(col => {
@@ -5980,15 +6106,23 @@ async function _dbEditPersist(original, changes){
         body: JSON.stringify({label: newTitle}),
       });
       if(!r.ok) await _throwFromResp(r, 'Renommage échoué');
-    }else if(isStandardCode && newTitle !== (original.type || '')){
-      if(typeof showToast === 'function') showToast('Le titre libre a été conservé (le type choisi correspondait à un code standard). Utilise Paramètres → Interventions libres pour renommer.', 'warn');
     }
+    // v2.5.13 : si le titre choisi correspond a un code du catalogue, ce n'est
+    // pas un renommage mais un reclassement — traite plus bas via codeChange.
   }
-  // Pour les catalogue standard : le "type" (code_label) n'est pas modifiable
-  // depuis l'historique (il vient de maintenance_codes). Si l'admin l'a changé
-  // dans le dropdown, on ignore le changement de type et on avertit.
-  else if(newTitle && newTitle !== (original.type || '')){
-    if(typeof showToast === 'function') showToast('Le type des opérations catalogue n\'est pas modifiable depuis l\'historique (change le code de l\'op via le créneau parent).', 'warn');
+  // v2.5.13 : le type EST modifiable depuis l'historique pour l'admin. La
+  // saisie est deplacee vers le code choisi (PATCH op {code}) — utile quand un
+  // operateur s'est trompe de ligne dans le catalogue. Avant, le changement
+  // etait silencieusement ignore avec un simple avertissement.
+  let codeChange = null;
+  if(newTitle && newTitle !== (original.type || '')){
+    const entry = (typeof OPS_TYPES_STATE === 'object' && Array.isArray(OPS_TYPES_STATE.list))
+      ? OPS_TYPES_STATE.list.find(t => (t.nom || '') === newTitle)
+      : null;
+    if(entry && String(entry.id) !== String(code)){
+      if(MAINT_ROLE === 'admin') codeChange = String(entry.id);
+      else if(typeof showToast === 'function') showToast('Seul un admin peut changer le type d\'une opération.', 'warn');
+    }
   }
   // 2. PATCH event : date + machine
   const evPatch = {};
@@ -6002,7 +6136,12 @@ async function _dbEditPersist(original, changes){
       if(!isNaN(d.getTime())){
         const pad = n => (n < 10 ? '0'+n : ''+n);
         const iso = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
-        evPatch.date_prevue = iso;
+        // v2.5.13 fix : n'envoyer date_prevue QUE si la date a change. Avant,
+        // elle partait systematiquement — et le garde-fou 'creneau passe' du
+        // backend renvoyait 403 des que la saisie datait de la veille, ce qui
+        // bloquait aussi la modification du commentaire ou de la duree.
+        const evDate = (original._event_date_prevue || (original.date_saisie || '').slice(0, 10));
+        if(iso !== evDate) evPatch.date_prevue = iso;
       }
     }catch(e){}
   }
@@ -6052,6 +6191,7 @@ async function _dbEditPersist(original, changes){
       }
     }catch(e){}
   }
+  if(codeChange) opPatch.code = codeChange;
   if(Object.keys(opPatch).length){
     const r3 = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + encodeURIComponent(opId), {
       method:'PATCH', credentials:'include', headers: jsonHeaders,
@@ -9426,7 +9566,11 @@ function setPlanSubtab(name){
   }
   else if(name === 'calendrier'){
     // v2.6.0 : rendu immediat depuis le cache, refetch seulement si besoin.
+    try{ _requestCalAutoScroll(); }catch(_){}
     try { renderCalFromCacheThenRefresh(); } catch(e){ try{ renderCal(); }catch(_){} }
+    // v2.6.1 : la section vient seulement d'etre affichee (display:none jusqu'a
+    // cette ligne), donc _fitCalWeekBody n'a pas pu mesurer pendant le rendu.
+    try{ _scheduleCalHeaderGutterSync(); }catch(_){}
   }
 }
 async function loadPlanningHistorique(){
@@ -10055,7 +10199,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_widget_v2.js?v=8"></script>
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
-<script src="/static/mysifa_maint_form.js?v=2.4.18"></script>
+<script src="/static/mysifa_maint_form.js?v=2.5.12"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js"></script>

@@ -37,6 +37,8 @@ from config import (
 )
 
 
+from app.services.maint_op_merge import merge_op_rows
+
 router = APIRouter(tags=["maintenance-events"])
 
 
@@ -324,6 +326,10 @@ class OpUpdateBody(BaseModel):
     # historique d'une op déjà terminée). Format ISO Paris (YYYY-MM-DDTHH:MM:SS
     # ou avec .SSSZ). Si fourni, écrase la valeur actuelle.
     done_at: Optional[str] = None
+    # v2.5.13 : reclassement d'une saisie depuis l'historique (admin). Deplace
+    # l'op vers un autre code du catalogue -- ex. un operateur a saisi
+    # "Changement couteaux bande" alors qu'il s'agissait des couteaux rives.
+    code: Optional[str] = None
 
 
 class OperatorAddBody(BaseModel):
@@ -636,10 +642,15 @@ def update_event(event_id: int, body: EventUpdateBody, request: Request):
         # v2.5.14 : garde-fou 'past event' -- interdit toute modif de la date ou
         # des heures d'un créneau déjà passé (aujourd'hui inclus reste modifiable).
         # Les autres champs (ops, notes, ...) restent éditables librement.
+        # v2.5.13 : l'admin passe outre. Il doit pouvoir corriger a posteriori
+        # une saisie mal datee par un operateur (typiquement une intervention
+        # faite la veille mais saisie le lendemain) depuis l'historique des
+        # operations. Le garde-fou reste actif pour les operateurs, qui ne
+        # doivent pas pouvoir reecrire l'historique de leurs propres saisies.
         _today = datetime.now(_PARIS).strftime("%Y-%m-%d")
         _ev_date = ev.get("date_prevue") or ""
         _time_fields = {"date_prevue", "heure_debut", "heure_fin"}
-        if _ev_date < _today and any(k in updates for k in _time_fields):
+        if maint_role != "admin" and _ev_date < _today and any(k in updates for k in _time_fields):
             raise HTTPException(
                 status_code=403,
                 detail="Ce créneau est passé. La date et les horaires ne sont plus modifiables (seules les ops peuvent être corrigées).",
@@ -793,9 +804,9 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
 
     with get_db() as conn:
         row = conn.execute(
-            "SELECT event_id, statut, done_at FROM maintenance_event_ops WHERE id=?",
-            (op_id,),
+            "SELECT * FROM maintenance_event_ops WHERE id=?", (op_id,)
         ).fetchone()
+        code_target = None
         if not row or row["event_id"] != event_id:
             raise HTTPException(status_code=404, detail="Op introuvable dans ce créneau")
         _assert_event_alive(conn, event_id)  # v2.5.29
@@ -816,8 +827,22 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
                 updates["machines_csv"] = _machines_list_to_csv(v)
                 machines_touched = True
                 continue
+            if k == "code":
+                if maint_role != "admin":
+                    raise HTTPException(status_code=403, detail="Changement de type réservé aux admins")
+                new_code = (v or "").strip()
+                if not new_code:
+                    continue
+                if not conn.execute(
+                    "SELECT 1 FROM maintenance_codes WHERE code=? LIMIT 1", (new_code,)
+                ).fetchone():
+                    raise HTTPException(status_code=404, detail=f"Code {new_code} introuvable.")
+                if new_code != row["code"]:
+                    code_target = new_code
+                continue
             updates[k] = v
-        if not updates:
+        # v2.5.13 : un changement de type seul est une mise a jour valide.
+        if not updates and not code_target:
             raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour")
 
         now = _now_paris_iso()
@@ -835,6 +860,27 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
         set_clause = ", ".join(f"{k}=?" for k in updates)
         conn.execute(f"UPDATE maintenance_event_ops SET {set_clause} WHERE id=?",
                      list(updates.values()) + [op_id])
+        # v2.5.13 : reclassement vers un autre code. La contrainte
+        # UNIQUE(event_id, code) interdit deux saisies du meme code dans un
+        # creneau : si la cible est deja presente, on fusionne les deux saisies
+        # (memes regles que le rattachement d'une intervention libre).
+        if code_target:
+            fresh = conn.execute(
+                "SELECT * FROM maintenance_event_ops WHERE id=?", (op_id,)
+            ).fetchone()
+            sibling = conn.execute(
+                "SELECT * FROM maintenance_event_ops "
+                "WHERE event_id=? AND code=? AND id<>? LIMIT 1",
+                (event_id, code_target, op_id),
+            ).fetchone()
+            if sibling:
+                merge_op_rows(conn, fresh, sibling, now)
+                op_id = sibling["id"]
+            else:
+                conn.execute(
+                    "UPDATE maintenance_event_ops SET code=?, updated_at=? WHERE id=?",
+                    (code_target, now, op_id),
+                )
         if machines_touched:
             _recompute_event_machine(conn, event_id)
         conn.commit()
