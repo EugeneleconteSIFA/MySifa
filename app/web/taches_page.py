@@ -122,7 +122,7 @@ select.filter.on{border-color:var(--accent);color:var(--accent);background:var(-
 .btn:disabled{opacity:.5;cursor:not-allowed;filter:none}
 
 /* ── Kanban ── */
-.board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(210px,1fr);gap:14px;align-items:start;overflow-x:auto;padding-bottom:14px}
+.board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(172px,1fr);gap:12px;align-items:start;overflow-x:auto;padding-bottom:14px}
 .col{min-width:0;background:var(--card);border:1px solid var(--border);border-radius:14px;display:flex;flex-direction:column;max-height:calc(100vh - 250px)}
 .col.drop{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
 .col-head{display:flex;align-items:center;gap:8px;padding:13px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
@@ -258,6 +258,13 @@ td.t-titre .sub{display:block;font-size:11px;color:var(--muted);font-weight:400;
 .toast.err{border-left-color:var(--danger)}
 @keyframes slideIn{from{transform:translateX(18px);opacity:0}to{transform:translateX(0);opacity:1}}
 
+@media (max-width:1400px) and (min-width:901px){
+  .main{padding-left:16px;padding-right:16px}
+  .board{gap:10px}
+  .col-body{padding:8px;gap:8px}
+  .col-head{padding:11px 11px}
+  .col-add{margin:0 8px 8px}
+}
 @media (max-width:900px){
   body.has-topbar .main{padding-top:74px}
   .main{padding:16px 14px 34px}
