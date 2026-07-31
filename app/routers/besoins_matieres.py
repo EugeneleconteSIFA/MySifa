@@ -10,15 +10,34 @@ au planning (statut 'attente' ou 'en_cours'). S'appuie sur :
 - `fiches_techniques` : jointes via `ref_produit_norm` avec tie-breaker
   machine — même logique que `app/routers/planning.py` (l. 3238+).
 - `mp_fiche_mapping` (v215) : table de correspondance éditable entre les
-  champs texte des fiches (support, adhesif, mandrin_dia, cartons,
+  champs texte des fiches (support, glassine, adhesif, mandrin_dia, cartons,
   palette_type) et les références de `matieres_premieres`.
 
+Unités de besoin (révision « unités métier ») :
+- matières en bobine (frontal / complexe via `support`, et `glassine`) → mètres
+  linéaires (ml) : c'est le métrage de l'OF qui traverse la machine, identique
+  pour toutes les bobines d'un même dossier.
+- adhésif → kilos : surface enduite × grammage.
+- mandrins / cartons / palettes → unités (inchangé).
+
 Formules :
-- support (m²)  : eti_laize * eti_longueur * qte_etiquettes / 1e6
-- adhésif (m²)  : qte_au_mille * qte_etiquettes / 1000     (colle au m²/1000 étiq)
+- métrage (ml)  : of_imports.metrage — la quantité d'étiquettes à produire est
+                  portée par l'OF, donc le métrage aussi. Repli géométrique
+                  quand l'OF n'est pas importé :
+                  qte_etiquettes / mod_nb_front * mod_longueur / 1000
+- support  (ml) : métrage
+- glassine (ml) : métrage
+- adhésif  (kg) : grammage(g/m²) * métrage(m) * laize(mm)/1000 / 1000
+                  grammage = fiches_techniques.qte_au_mille (libellé
+                  « Grammage » sur le PDF de fiche technique)
+                  laize    = of_imports.laize, repli fiche technique
 - mandrins (u)  : qte_etiquettes / nb_etiq_bobin
 - cartons  (u)  : mandrins / nb_bobines_carton
 - palettes (u)  : cartons / (palette_nb_cartons_sol * palette_nb_cartons_hauteur)
+
+Chaque besoin transporte sa trace de calcul (`variables`) : la liste ordonnée
+des entrées utilisées, avec leur origine (OF, fiche technique, matière) — c'est
+ce que consomme le modal d'explication côté MyStock.
 
 Fenêtre 7j / 15j : today + N comme borne. Pour un dossier à cheval sur la
 borne (planned_start < borne < planned_end), on applique une règle de trois
@@ -36,7 +55,22 @@ from app.routers.stock import require_stock_matieres_admin
 
 router = APIRouter(tags=["besoins-matieres"])
 
-_KINDS = ("support", "adhesif", "mandrin", "carton", "palette")
+_KINDS = ("support", "glassine", "adhesif", "mandrin", "carton", "palette")
+
+# Unité de besoin par kind. Les bobines se comptent en mètres linéaires,
+# l'adhésif au kilo, le reste à l'unité.
+_KIND_UNITE = {
+    "support": "ml",
+    "glassine": "ml",
+    "adhesif": "kg",
+    "mandrin": "u",
+    "carton": "u",
+    "palette": "u",
+}
+
+# Kinds dont le stock est tenu en bobines et doit être converti en ml pour être
+# comparable au besoin (via matieres_premieres.metres_lineaires_par_bobine).
+_KINDS_BOBINE = frozenset({"support", "glassine"})
 
 # ── Utilitaires ─────────────────────────────────────────────────────────
 
@@ -122,7 +156,9 @@ _SQL_PE = """
            pe.position,
            m.nom AS machine_nom,
            oi.qte_etiquettes AS qte_etiquettes,
-           oi.qte_bobines    AS qte_bobines
+           oi.qte_bobines    AS qte_bobines,
+           oi.metrage        AS of_metrage,
+           oi.laize          AS of_laize
     FROM planning_entries pe
     LEFT JOIN machines m ON m.id = pe.machine_id
     LEFT JOIN of_imports oi ON oi.id = pe.of_import_id
@@ -132,14 +168,16 @@ _SQL_PE = """
 
 _SQL_FT = """
     SELECT id, reference, ref_produit_norm, machine,
-           support, adhesif, qte_au_mille, eti_laize, eti_longueur,
+           support, glassine, adhesif, qte_au_mille, eti_laize, eti_longueur,
+           mod_longueur, mod_nb_front, laize, laize_optimale,
            mandrin_dia, nb_etiq_bobin, nb_bobines_carton, cartons,
            palette_type, palette_nb_cartons_sol, palette_nb_cartons_hauteur
     FROM fiches_techniques
 """
 
 _FT_FIELDS = (
-    "support", "adhesif", "qte_au_mille", "eti_laize", "eti_longueur",
+    "support", "glassine", "adhesif", "qte_au_mille", "eti_laize", "eti_longueur",
+    "mod_longueur", "mod_nb_front", "laize", "laize_optimale",
     "mandrin_dia", "nb_etiq_bobin", "nb_bobines_carton", "cartons",
     "palette_type", "palette_nb_cartons_sol", "palette_nb_cartons_hauteur",
 )
@@ -196,19 +234,108 @@ def _load_mapping(conn) -> dict:
     """Retourne dict {(kind, source_value_lower): {matiere_id, reference, designation, unite_stock}}."""
     rows = conn.execute("""
         SELECT m.kind, m.source_value, m.matiere_id,
-               mp.reference, mp.designation, mp.categorie
+               mp.reference, mp.designation, mp.categorie,
+               mp.metres_lineaires_par_bobine, mp.weight_gsm
         FROM mp_fiche_mapping m
         JOIN matieres_premieres mp ON mp.id = m.matiere_id
     """).fetchall()
     out = {}
     for r in rows:
+        keys = r.keys()
         out[(r["kind"], (r["source_value"] or "").strip().lower())] = {
             "matiere_id": r["matiere_id"],
             "reference": r["reference"],
             "designation": r["designation"],
             "categorie": r["categorie"],
+            "metres_lineaires_par_bobine": (
+                r["metres_lineaires_par_bobine"]
+                if "metres_lineaires_par_bobine" in keys else None
+            ),
+            "weight_gsm": r["weight_gsm"] if "weight_gsm" in keys else None,
         }
     return out
+
+
+def _n(v, unite: str = "") -> str:
+    """Formatage court d'un nombre pour les libellés de formule."""
+    if v is None:
+        return "?"
+    f = float(v)
+    s = f"{f:,.0f}".replace(",", " ") if abs(f) >= 1000 else f"{f:g}"
+    return s + (f" {unite}" if unite else "")
+
+
+def _metrage_dossier(pe: dict) -> dict:
+    """Métrage linéaire (m) du dossier + sa provenance.
+
+    L'OF porte la quantité d'étiquettes à produire, donc le métrage : c'est la
+    source de référence (`of_imports.metrage`). Quand le dossier n'a pas d'OF
+    importé, on retombe sur la géométrie de la fiche technique :
+    nb de tours = qte_etiquettes / mod_nb_front, longueur = mod_longueur (mm).
+
+    Retourne { metrage, source ('of'|'fiche'|None), variables[], manque[] }.
+    """
+    of_metrage = _f(pe.get("of_metrage"))
+    if of_metrage:
+        return {
+            "metrage": of_metrage,
+            "source": "of",
+            "variables": [
+                {"label": "Métrage OF", "champ": "of_imports.metrage",
+                 "origine": "OF", "valeur": of_metrage, "unite": "m"},
+            ],
+            "manque": [],
+        }
+
+    qte = _f(pe.get("qte_etiquettes"))
+    nb_front = _f(pe.get("ft_mod_nb_front"))
+    mod_long = _f(pe.get("ft_mod_longueur"))
+    if qte and nb_front and mod_long:
+        return {
+            "metrage": qte / nb_front * mod_long / 1000.0,
+            "source": "fiche",
+            "variables": [
+                {"label": "Quantité étiquettes", "champ": "of_imports.qte_etiquettes",
+                 "origine": "OF", "valeur": qte, "unite": "étiq"},
+                {"label": "Nb de front", "champ": "fiches_techniques.mod_nb_front",
+                 "origine": "Fiche technique", "valeur": nb_front, "unite": ""},
+                {"label": "Longueur module", "champ": "fiches_techniques.mod_longueur",
+                 "origine": "Fiche technique", "valeur": mod_long, "unite": "mm"},
+            ],
+            "manque": [],
+        }
+
+    manque = []
+    if not of_metrage:
+        manque.append("Métrage de l'OF (of_imports.metrage)")
+    if not qte:
+        manque.append("Quantité d'étiquettes de l'OF")
+    if not nb_front:
+        manque.append("Nb de front de la fiche technique (mod_nb_front)")
+    if not mod_long:
+        manque.append("Longueur module de la fiche technique (mod_longueur)")
+    return {"metrage": None, "source": None, "variables": [], "manque": manque}
+
+
+def _laize_dossier(pe: dict) -> dict:
+    """Laize retenue (mm) + provenance : l'OF d'abord, la fiche technique en repli."""
+    of_laize = _f(pe.get("of_laize"))
+    if of_laize:
+        return {"laize": of_laize, "source": "of",
+                "champ": "of_imports.laize", "origine": "OF"}
+    ft_laize = _f(pe.get("ft_laize_optimale")) or _f(pe.get("ft_laize"))
+    if ft_laize:
+        champ = ("fiches_techniques.laize_optimale"
+                 if _f(pe.get("ft_laize_optimale")) else "fiches_techniques.laize")
+        return {"laize": ft_laize, "source": "fiche",
+                "champ": champ, "origine": "Fiche technique"}
+    return {"laize": None, "source": None, "champ": None, "origine": None}
+
+
+def _matiere_ml_par_bobine(mapping: dict, kind: str, source_value: str):
+    """Métrage par bobine de la matière associée à (kind, source_value)."""
+    m = mapping.get((kind, (source_value or "").strip().lower()))
+    return m.get("metres_lineaires_par_bobine") if m else None
 
 
 def _compute_besoins_dossier(pe: dict, mapping: dict) -> list:
@@ -216,66 +343,166 @@ def _compute_besoins_dossier(pe: dict, mapping: dict) -> list:
 
     Retourne une liste de dicts :
       { kind, source_value, matiere_id?, matiere_ref?, matiere_designation?,
-        quantite, unite, mapped, formule }
+        quantite, unite, mapped, formule, variables[], source_metrage? }
+
+    `variables` est la trace de calcul : chaque entrée utilisée, son champ
+    d'origine et sa valeur. C'est ce qu'affiche le modal « ? » de MyStock.
     """
     besoins = []
     qte = _f(pe.get("qte_etiquettes")) or 0
-    if qte <= 0:
-        return besoins
 
-    def _add(kind: str, source_value, quantite: float, unite: str, formule: str):
+    met = _metrage_dossier(pe)
+    metrage = met["metrage"]
+    lz = _laize_dossier(pe)
+
+    def _add(kind: str, source_value, quantite, formule: str,
+             variables=None, manque=None):
+        # L'unité n'est pas passée par l'appelant : elle est déduite du kind,
+        # pour qu'elle ne puisse pas diverger de _KIND_UNITE.
+        unite = _KIND_UNITE.get(kind, "u")
         sv = (source_value or "").strip() if source_value else ""
-        if not sv or quantite <= 0:
+        if not sv:
             return
         key = (kind, sv.lower())
         m = mapping.get(key)
+        calculable = quantite is not None and quantite > 0
         besoins.append({
             "kind": kind,
             "source_value": sv,
             "matiere_id": m["matiere_id"] if m else None,
             "matiere_ref": m["reference"] if m else None,
             "matiere_designation": m["designation"] if m else None,
-            "quantite": round(quantite, 3),
+            "matiere_categorie": m["categorie"] if m else None,
+            "quantite": round(quantite, 3) if calculable else None,
             "unite": unite,
             "mapped": m is not None,
+            "calculable": calculable,
             "formule": formule,
+            "variables": variables or [],
+            "manque": manque or [],
+            "source_metrage": met["source"] if kind in ("support", "glassine", "adhesif") else None,
         })
 
-    # Support (papier / frontal) : surface étiquette × nb
-    L = _f(pe.get("ft_eti_laize"))
-    H = _f(pe.get("ft_eti_longueur"))
-    if pe.get("ft_support") and L and H:
-        _add("support", pe["ft_support"], L * H * qte / 1_000_000.0, "m²",
-             f"{L:g}×{H:g} mm × {int(qte)} étiq")
+    # ── Bobines (frontal / complexe / glassine) : besoin en mètres linéaires ──
+    # Toutes les bobines d'un dossier voient passer le même métrage.
+    for kind, col in (("support", "ft_support"), ("glassine", "ft_glassine")):
+        if not pe.get(col):
+            continue
+        if metrage:
+            src = "métrage OF" if met["source"] == "of" else "métrage calculé fiche"
+            _add(kind, pe[col], metrage,
+                 f"{_n(metrage, 'm')} ({src})", met["variables"])
+        else:
+            _add(kind, pe[col], None, "Métrage indisponible",
+                 met["variables"], met["manque"])
 
-    # Adhésif (colle) — qte_au_mille = m² pour 1000 étiquettes produites
-    q_mille = _f(pe.get("ft_qte_au_mille"))
-    if pe.get("ft_adhesif") and q_mille:
-        _add("adhesif", pe["ft_adhesif"], q_mille * qte / 1000.0, "m²",
-             f"{q_mille:g} m²/1000 × {int(qte)} étiq")
+    # ── Adhésif : kilos = grammage (g/m²) × surface enduite (m²) ──
+    # surface = métrage (m) × laize (mm) / 1000
+    if pe.get("ft_adhesif"):
+        # Grammage : la fiche technique d'abord (propre au produit), le grammage
+        # porté par la référence adhésif en repli.
+        grammage = _f(pe.get("ft_qte_au_mille"))
+        gram_champ = "fiches_techniques.qte_au_mille"
+        gram_origine = "Fiche technique"
+        if not grammage:
+            mp_adh = mapping.get(("adhesif", str(pe["ft_adhesif"]).strip().lower()))
+            grammage = _f(mp_adh.get("weight_gsm")) if mp_adh else None
+            if grammage:
+                gram_champ = "matieres_premieres.weight_gsm"
+                gram_origine = "Matière première"
+        laize = lz["laize"]
+        variables = list(met["variables"])
+        if laize:
+            variables.append({
+                "label": "Laize", "champ": lz["champ"],
+                "origine": lz["origine"], "valeur": laize, "unite": "mm",
+            })
+        if grammage:
+            variables.append({
+                "label": "Grammage", "champ": gram_champ,
+                "origine": gram_origine, "valeur": grammage, "unite": "g/m²",
+            })
+        if metrage and laize and grammage:
+            surface = metrage * (laize / 1000.0)
+            _add("adhesif", pe["ft_adhesif"], surface * grammage / 1000.0,
+                 f"{_n(metrage, 'm')} × {_n(laize)} mm ÷ 1000 = "
+                 f"{_n(round(surface, 1), 'm²')} × {_n(grammage)} g/m² ÷ 1000",
+                 variables)
+        else:
+            manque = list(met["manque"])
+            if not laize:
+                manque.append("Laize de l'OF (of_imports.laize) ou de la fiche technique")
+            if not grammage:
+                manque.append("Grammage — ni sur la fiche technique (qte_au_mille), "
+                              "ni sur la matière (weight_gsm)")
+            _add("adhesif", pe["ft_adhesif"], None,
+                 "Calcul impossible", variables, manque)
 
-    # Mandrins : 1 par bobine
+    # ── Mandrins : 1 par bobine ──
     nb_eb = _f(pe.get("ft_nb_etiq_bobin"))
     nb_mandrins = 0.0
-    if pe.get("ft_mandrin_dia") and nb_eb:
-        nb_mandrins = qte / nb_eb
-        _add("mandrin", pe["ft_mandrin_dia"], nb_mandrins, "u",
-             f"{int(qte)} étiq ÷ {int(nb_eb)} étiq/bobine")
+    if pe.get("ft_mandrin_dia"):
+        if qte and nb_eb:
+            nb_mandrins = qte / nb_eb
+            _add("mandrin", pe["ft_mandrin_dia"], nb_mandrins,
+                 f"{_n(qte)} étiq ÷ {_n(nb_eb)} étiq/bobine", [
+                     {"label": "Quantité étiquettes", "champ": "of_imports.qte_etiquettes",
+                      "origine": "OF", "valeur": qte, "unite": "étiq"},
+                     {"label": "Étiquettes par bobine", "champ": "fiches_techniques.nb_etiq_bobin",
+                      "origine": "Fiche technique", "valeur": nb_eb, "unite": ""},
+                 ])
+        else:
+            manque = []
+            if not qte:
+                manque.append("Quantité d'étiquettes de l'OF")
+            if not nb_eb:
+                manque.append("Étiquettes par bobine (nb_etiq_bobin)")
+            _add("mandrin", pe["ft_mandrin_dia"], None,
+                 "Calcul impossible", [], manque)
 
-    # Cartons : nb bobines / bobines par carton
+    # ── Cartons : nb bobines / bobines par carton ──
     nb_bc = _f(pe.get("ft_nb_bobines_carton"))
     nb_cartons = 0.0
-    if pe.get("ft_cartons") and nb_bc and nb_mandrins > 0:
-        nb_cartons = nb_mandrins / nb_bc
-        _add("carton", pe["ft_cartons"], nb_cartons, "u",
-             f"{nb_mandrins:.1f} bobines ÷ {int(nb_bc)} bobines/carton")
+    if pe.get("ft_cartons"):
+        if nb_bc and nb_mandrins > 0:
+            nb_cartons = nb_mandrins / nb_bc
+            _add("carton", pe["ft_cartons"], nb_cartons,
+                 f"{nb_mandrins:.1f} bobines ÷ {_n(nb_bc)} bobines/carton", [
+                     {"label": "Nb de bobines", "champ": "calculé (mandrins)",
+                      "origine": "Calcul", "valeur": round(nb_mandrins, 1), "unite": "bobines"},
+                     {"label": "Bobines par carton", "champ": "fiches_techniques.nb_bobines_carton",
+                      "origine": "Fiche technique", "valeur": nb_bc, "unite": ""},
+                 ])
+        else:
+            manque = []
+            if nb_mandrins <= 0:
+                manque.append("Nombre de bobines (dépend du calcul mandrins)")
+            if not nb_bc:
+                manque.append("Bobines par carton (nb_bobines_carton)")
+            _add("carton", pe["ft_cartons"], None, "Calcul impossible", [], manque)
 
-    # Palettes : cartons / (cartons_sol × cartons_hauteur)
+    # ── Palettes : cartons / (cartons_sol × cartons_hauteur) ──
     ncs = _f(pe.get("ft_palette_nb_cartons_sol"))
     nch = _f(pe.get("ft_palette_nb_cartons_hauteur"))
-    if pe.get("ft_palette_type") and ncs and nch and nb_cartons > 0:
-        _add("palette", pe["ft_palette_type"], nb_cartons / (ncs * nch), "u",
-             f"{nb_cartons:.1f} cartons ÷ ({int(ncs)}×{int(nch)})")
+    if pe.get("ft_palette_type"):
+        if ncs and nch and nb_cartons > 0:
+            _add("palette", pe["ft_palette_type"], nb_cartons / (ncs * nch),
+                 f"{nb_cartons:.1f} cartons ÷ ({_n(ncs)}×{_n(nch)})", [
+                     {"label": "Nb de cartons", "champ": "calculé (cartons)",
+                      "origine": "Calcul", "valeur": round(nb_cartons, 1), "unite": "cartons"},
+                     {"label": "Cartons au sol", "champ": "fiches_techniques.palette_nb_cartons_sol",
+                      "origine": "Fiche technique", "valeur": ncs, "unite": ""},
+                     {"label": "Cartons en hauteur", "champ": "fiches_techniques.palette_nb_cartons_hauteur",
+                      "origine": "Fiche technique", "valeur": nch, "unite": ""},
+                 ])
+        else:
+            manque = []
+            if nb_cartons <= 0:
+                manque.append("Nombre de cartons (dépend du calcul cartons)")
+            if not ncs or not nch:
+                manque.append("Plan de palettisation (cartons au sol × en hauteur)")
+            _add("palette", pe["ft_palette_type"], None,
+                 "Calcul impossible", [], manque)
 
     return besoins
 
@@ -307,9 +534,12 @@ def besoins_par_dossier(request: Request):
             "date_livraison": pe.get("date_livraison"),
             "qte_etiquettes": pe.get("qte_etiquettes"),
             "ft_id": pe.get("ft_id"),
+            "of_metrage": pe.get("of_metrage"),
+            "of_laize": pe.get("of_laize"),
             "besoins": besoins,
             "besoins_mapped_count": sum(1 for b in besoins if b["mapped"]),
             "besoins_total_count": len(besoins),
+            "besoins_incalculables_count": sum(1 for b in besoins if not b["calculable"]),
         })
     return {"dossiers": dossiers, "count": len(dossiers)}
 
@@ -328,13 +558,17 @@ def besoins_par_echeance(request: Request):
     with get_db() as conn:
         mapping = _load_mapping(conn)
         rows = _load_dossiers(conn)
-        # Stock actuel pour comparaison (mp_stock non laizé + mp_stock_laize agrégé)
+        # Stock actuel pour comparaison.
+        # mp_stock : catégories non laizées, dans leur unité de gestion
+        #            (kg pour l'adhésif, palette/unité pour le reste).
+        # mp_stock_laize : catégories bobine, en BOBINES — converti plus bas en
+        #            mètres linéaires pour être comparable au besoin.
         stock_map: dict = {}
+        stock_bobines: dict = {}
         for r in conn.execute("SELECT matiere_id, SUM(quantite) AS q FROM mp_stock GROUP BY matiere_id").fetchall():
             stock_map[int(r["matiere_id"])] = float(r["q"] or 0)
         for r in conn.execute("SELECT matiere_id, SUM(quantite) AS q FROM mp_stock_laize GROUP BY matiere_id").fetchall():
-            mid = int(r["matiere_id"])
-            stock_map[mid] = stock_map.get(mid, 0) + float(r["q"] or 0)
+            stock_bobines[int(r["matiere_id"])] = float(r["q"] or 0)
 
     # Agrégation par (kind, source_value)
     agg: dict = {}
@@ -351,26 +585,52 @@ def besoins_par_echeance(request: Request):
                     "matiere_id": b["matiere_id"],
                     "matiere_ref": b["matiere_ref"],
                     "matiere_designation": b["matiere_designation"],
+                    "matiere_categorie": b.get("matiere_categorie"),
                     "unite": b["unite"],
                     "besoin_7j": 0.0,
                     "besoin_15j": 0.0,
                     "besoin_total": 0.0,
                     "mapped": b["mapped"],
                     "nb_dossiers": 0,
+                    "nb_dossiers_incalculables": 0,
+                    "formule_exemple": None,
                 }
-            agg[key]["besoin_7j"] += b["quantite"] * r7
-            agg[key]["besoin_15j"] += b["quantite"] * r15
-            agg[key]["besoin_total"] += b["quantite"]
-            agg[key]["nb_dossiers"] += 1
+            a = agg[key]
+            a["nb_dossiers"] += 1
+            if not b["calculable"]:
+                a["nb_dossiers_incalculables"] += 1
+                continue
+            a["besoin_7j"] += b["quantite"] * r7
+            a["besoin_15j"] += b["quantite"] * r15
+            a["besoin_total"] += b["quantite"]
+            if not a["formule_exemple"]:
+                a["formule_exemple"] = b["formule"]
 
     lignes = []
     for a in agg.values():
         for k in ("besoin_7j", "besoin_15j", "besoin_total"):
             a[k] = round(a[k], 3)
-        a["stock_actuel"] = round(stock_map.get(a["matiere_id"], 0), 3) if a["matiere_id"] else None
+        # Stock ramené dans l'unité du besoin.
+        stock = None
+        stock_note = None
+        mid = a["matiere_id"]
+        if mid:
+            if a["kind"] in _KINDS_BOBINE:
+                bobines = stock_bobines.get(mid, 0.0) + stock_map.get(mid, 0.0)
+                ml_bobine = _f(_matiere_ml_par_bobine(mapping, a["kind"], a["source_value"]))
+                if ml_bobine:
+                    stock = round(bobines * ml_bobine, 3)
+                    stock_note = (f"{_n(bobines)} bobines × {_n(ml_bobine, 'm')}/bobine")
+                else:
+                    stock_note = ("Métrage par bobine non renseigné sur la matière — "
+                                  "stock non convertible en ml")
+            else:
+                stock = round(stock_map.get(mid, 0.0) + stock_bobines.get(mid, 0.0), 3)
+        a["stock_actuel"] = stock
+        a["stock_note"] = stock_note
         a["manque_7j"] = None
-        if a["matiere_id"]:
-            a["manque_7j"] = round(max(0, a["besoin_7j"] - (a["stock_actuel"] or 0)), 3)
+        if mid and stock is not None:
+            a["manque_7j"] = round(max(0, a["besoin_7j"] - stock), 3)
         lignes.append(a)
     # Tri : d'abord les non mappés (à corriger), puis manque décroissant, puis besoin 7j
     lignes.sort(key=lambda x: (
@@ -407,7 +667,8 @@ def list_mapping(request: Request):
     mapping_keys = {(m["kind"], (m["source_value"] or "").strip().lower()) for m in maps}
     seen: dict = {}
     for pe in rows:
-        for kind, col in (("support", "ft_support"), ("adhesif", "ft_adhesif"),
+        for kind, col in (("support", "ft_support"), ("glassine", "ft_glassine"),
+                          ("adhesif", "ft_adhesif"),
                           ("mandrin", "ft_mandrin_dia"), ("carton", "ft_cartons"),
                           ("palette", "ft_palette_type")):
             v = pe.get(col)
@@ -473,3 +734,256 @@ def delete_mapping(request: Request, map_id: int):
         conn.execute("DELETE FROM mp_fiche_mapping WHERE id=?", (map_id,))
         conn.commit()
     return {"ok": True}
+
+
+# ── Documentation du calcul (modal « ? » de MyStock) ───────────────────
+#
+# Source unique de vérité : le front n'invente rien, il affiche ce bloc.
+# Toute modification d'une formule ci-dessus doit être répercutée ici.
+
+_EXPLICATIONS = {
+    "intro": (
+        "Les besoins sont calculés à partir des dossiers du planning en statut "
+        "« en attente » ou « en cours ». Chaque dossier est rapproché de sa fiche "
+        "technique (par référence produit normalisée, avec priorité à la fiche de "
+        "la machine du dossier), puis de son OF importé quand il existe. Les "
+        "valeurs libres des fiches (support, glassine, adhésif, mandrin, carton, "
+        "palette) sont converties en références de matières premières via la table "
+        "de correspondances."
+    ),
+    "sections": [
+        {
+            "id": "mapping",
+            "titre": "Correspondances fiche technique → matière première",
+            "type": "mappe",
+            "resume": "Comment une valeur texte de fiche devient une référence MyStock.",
+            "paragraphes": [
+                "Les fiches techniques contiennent du texte libre : « PP BLANC 60 », "
+                "« GLASSINE BLANCHE 60 », « Carton 400×300 »… MyStock ne sait pas "
+                "relier ce texte à une référence tant qu'une correspondance n'a pas "
+                "été enregistrée.",
+                "La correspondance se fait sur le couple (type, valeur texte), en "
+                "ignorant la casse et les espaces de bord. Une même valeur peut donc "
+                "exister pour deux types différents sans conflit.",
+                "Tant qu'une valeur n'est pas associée, son besoin est calculé et "
+                "affiché, mais sans stock ni manque : la ligne apparaît en orange "
+                "avec le bouton « Associer ».",
+            ],
+            "variables": [
+                {"label": "Type", "champ": "mp_fiche_mapping.kind",
+                 "detail": "support, glassine, adhesif, mandrin, carton ou palette"},
+                {"label": "Valeur source", "champ": "mp_fiche_mapping.source_value",
+                 "detail": "le texte lu dans la fiche technique"},
+                {"label": "Matière", "champ": "mp_fiche_mapping.matiere_id",
+                 "detail": "la référence de matieres_premieres visée"},
+            ],
+        },
+        {
+            "id": "metrage",
+            "titre": "Métrage du dossier",
+            "type": "calcul",
+            "resume": "Base commune de tous les besoins bobine et adhésif.",
+            "formule": "Métrage = of_imports.metrage",
+            "formule_repli": "Métrage = qté étiquettes ÷ nb de front × longueur module ÷ 1000",
+            "paragraphes": [
+                "C'est l'OF qui porte la quantité d'étiquettes à produire, donc le "
+                "métrage : on lit directement le métrage de l'OF importé.",
+                "Si le dossier n'a pas d'OF importé, on reconstitue le métrage depuis "
+                "la géométrie de la fiche technique : le nombre de tours de module "
+                "(quantité ÷ nb de front) multiplié par la longueur du module, en "
+                "millimètres, ramenée en mètres.",
+                "La provenance du métrage est indiquée sur chaque ligne : « OF » ou "
+                "« fiche ».",
+            ],
+            "variables": [
+                {"label": "Métrage OF", "champ": "of_imports.metrage",
+                 "unite": "m", "detail": "source prioritaire"},
+                {"label": "Quantité étiquettes", "champ": "of_imports.qte_etiquettes",
+                 "unite": "étiq", "detail": "repli"},
+                {"label": "Nb de front", "champ": "fiches_techniques.mod_nb_front",
+                 "unite": "", "detail": "repli — étiquettes en largeur"},
+                {"label": "Longueur module", "champ": "fiches_techniques.mod_longueur",
+                 "unite": "mm", "detail": "repli — développé d'un tour"},
+            ],
+        },
+        {
+            "id": "support",
+            "titre": "Support (frontal / complexe)",
+            "type": "calcul",
+            "resume": "Besoin en mètres linéaires.",
+            "formule": "Besoin (ml) = Métrage",
+            "paragraphes": [
+                "Une matière en bobine se consomme au mètre linéaire : toute la "
+                "longueur de l'OF traverse la machine, quelle que soit la taille des "
+                "étiquettes découpées dedans.",
+                "Le stock, tenu en bobines, est converti en mètres linéaires pour "
+                "être comparable : bobines × métrage par bobine de la matière. Si le "
+                "métrage par bobine n'est pas renseigné sur la fiche matière, le "
+                "stock et le manque restent vides.",
+            ],
+            "variables": [
+                {"label": "Valeur source", "champ": "fiches_techniques.support",
+                 "detail": "texte mappé vers une matière frontal ou complexe"},
+                {"label": "Métrage", "champ": "voir « Métrage du dossier »", "unite": "m"},
+                {"label": "Métrage par bobine",
+                 "champ": "matieres_premieres.metres_lineaires_par_bobine",
+                 "unite": "m", "detail": "sert à convertir le stock en ml"},
+            ],
+        },
+        {
+            "id": "glassine",
+            "titre": "Glassine",
+            "type": "calcul",
+            "resume": "Besoin en mètres linéaires.",
+            "formule": "Besoin (ml) = Métrage",
+            "paragraphes": [
+                "Même logique que le support : la glassine (le dorsal siliconé) "
+                "défile sur toute la longueur de l'OF.",
+                "La valeur source vient du champ « Glassine » de la fiche technique, "
+                "distinct du support. Un dossier peut donc générer deux besoins "
+                "bobine du même métrage.",
+            ],
+            "variables": [
+                {"label": "Valeur source", "champ": "fiches_techniques.glassine",
+                 "detail": "texte mappé vers une matière de catégorie glassine"},
+                {"label": "Métrage", "champ": "voir « Métrage du dossier »", "unite": "m"},
+            ],
+        },
+        {
+            "id": "adhesif",
+            "titre": "Adhésif",
+            "type": "calcul",
+            "resume": "Besoin en kilos, via le grammage et la surface enduite.",
+            "formule": "Besoin (kg) = Grammage (g/m²) × Métrage (m) × Laize (mm) ÷ 1000 ÷ 1000",
+            "paragraphes": [
+                "L'adhésif se stocke et s'achète au kilo. On passe donc par la "
+                "surface enduite : le métrage multiplié par la laize donne des m², "
+                "que le grammage convertit en grammes, puis en kilos.",
+                "Le grammage est le champ « Grammage » de la fiche technique "
+                "(colonne qte_au_mille), exprimé en g/m². S'il est vide, on "
+                "utilise le grammage porté par la référence adhésif elle-même.",
+                "La laize retenue est celle de l'OF — la laize réellement lancée. "
+                "En l'absence d'OF, on prend la laize optimale de la fiche technique, "
+                "puis la laize simple.",
+            ],
+            "variables": [
+                {"label": "Valeur source", "champ": "fiches_techniques.adhesif",
+                 "detail": "texte mappé vers une matière de catégorie adhésif"},
+                {"label": "Grammage", "champ": "fiches_techniques.qte_au_mille",
+                 "unite": "g/m²",
+                 "detail": "repli : matieres_premieres.weight_gsm"},
+                {"label": "Métrage", "champ": "voir « Métrage du dossier »", "unite": "m"},
+                {"label": "Laize", "champ": "of_imports.laize",
+                 "unite": "mm",
+                 "detail": "repli : fiches_techniques.laize_optimale puis .laize"},
+            ],
+        },
+        {
+            "id": "mandrin",
+            "titre": "Mandrins",
+            "type": "calcul",
+            "resume": "Besoin en unités — un mandrin par bobine produite.",
+            "formule": "Besoin (u) = Quantité étiquettes ÷ Étiquettes par bobine",
+            "paragraphes": [
+                "Chaque bobine finie consomme un mandrin. Le nombre de bobines se "
+                "déduit de la quantité à produire divisée par le nombre d'étiquettes "
+                "par bobine défini sur la fiche technique.",
+                "Ce résultat sert aussi de base au calcul des cartons.",
+            ],
+            "variables": [
+                {"label": "Valeur source", "champ": "fiches_techniques.mandrin_dia",
+                 "detail": "diamètre mandrin, mappé vers une référence mandrin"},
+                {"label": "Quantité étiquettes", "champ": "of_imports.qte_etiquettes",
+                 "unite": "étiq"},
+                {"label": "Étiquettes par bobine", "champ": "fiches_techniques.nb_etiq_bobin",
+                 "unite": ""},
+            ],
+        },
+        {
+            "id": "carton",
+            "titre": "Cartons",
+            "type": "calcul",
+            "resume": "Besoin en unités — dépend du calcul des mandrins.",
+            "formule": "Besoin (u) = Nb de bobines ÷ Bobines par carton",
+            "paragraphes": [
+                "Le nombre de bobines est celui calculé pour les mandrins. S'il n'est "
+                "pas calculable, le besoin en cartons ne l'est pas non plus.",
+            ],
+            "variables": [
+                {"label": "Valeur source", "champ": "fiches_techniques.cartons"},
+                {"label": "Nb de bobines", "champ": "voir « Mandrins »", "unite": "bobines"},
+                {"label": "Bobines par carton", "champ": "fiches_techniques.nb_bobines_carton",
+                 "unite": ""},
+            ],
+        },
+        {
+            "id": "palette",
+            "titre": "Palettes",
+            "type": "calcul",
+            "resume": "Besoin en unités — dépend du calcul des cartons.",
+            "formule": "Besoin (u) = Nb de cartons ÷ (Cartons au sol × Cartons en hauteur)",
+            "paragraphes": [
+                "Le plan de palettisation de la fiche technique donne le nombre de "
+                "cartons par palette. Une palette entamée compte pour une fraction : "
+                "le total est arrondi à l'affichage, pas dans le calcul.",
+            ],
+            "variables": [
+                {"label": "Valeur source", "champ": "fiches_techniques.palette_type"},
+                {"label": "Nb de cartons", "champ": "voir « Cartons »", "unite": "cartons"},
+                {"label": "Cartons au sol", "champ": "fiches_techniques.palette_nb_cartons_sol"},
+                {"label": "Cartons en hauteur", "champ": "fiches_techniques.palette_nb_cartons_hauteur"},
+            ],
+        },
+        {
+            "id": "fenetres",
+            "titre": "Fenêtres 7 jours / 15 jours",
+            "type": "calcul",
+            "resume": "Comment un dossier est réparti dans le temps.",
+            "formule": "Besoin fenêtre = Besoin total × (jours du dossier dans la fenêtre ÷ durée du dossier)",
+            "paragraphes": [
+                "Un dossier entièrement contenu dans la fenêtre compte pour 100 %. "
+                "Un dossier entièrement après la borne compte pour 0 %.",
+                "Un dossier à cheval sur la borne est réparti au prorata des jours "
+                "qui tombent dans la fenêtre.",
+                "Un dossier en retard (fin prévue déjà passée) compte pour 100 % : "
+                "le besoin est immédiat. Un dossier sans aucune date compte aussi "
+                "pour 100 %.",
+            ],
+            "variables": [
+                {"label": "Début prévu", "champ": "planning_entries.planned_start"},
+                {"label": "Fin prévue", "champ": "planning_entries.planned_end",
+                 "detail": "repli : date_livraison"},
+            ],
+        },
+        {
+            "id": "stock",
+            "titre": "Stock et manque",
+            "type": "calcul",
+            "resume": "Pourquoi le stock affiché peut différer de la fiche matière.",
+            "formule": "Manque 7j = max(0 ; Besoin 7j − Stock)",
+            "paragraphes": [
+                "Le stock est toujours ramené dans l'unité du besoin, sinon la "
+                "soustraction n'aurait pas de sens.",
+                "Bobines (support, glassine) : stock en bobines × métrage par bobine "
+                "→ mètres linéaires. Sans métrage par bobine renseigné, le stock "
+                "reste vide.",
+                "Adhésif : le stock est déjà tenu au kilo, il est utilisé tel quel.",
+                "Mandrins, cartons, palettes : stock repris tel quel.",
+            ],
+            "variables": [
+                {"label": "Stock bobines", "champ": "mp_stock_laize.quantite",
+                 "unite": "bobines"},
+                {"label": "Stock autres", "champ": "mp_stock.quantite"},
+                {"label": "Métrage par bobine",
+                 "champ": "matieres_premieres.metres_lineaires_par_bobine", "unite": "m"},
+            ],
+        },
+    ],
+}
+
+
+@router.get("/api/stock/besoins-matieres/explications")
+def explications(request: Request):
+    """Documentation du mapping et des formules, consommée par le modal « ? »."""
+    require_stock_matieres_admin(request)
+    return _EXPLICATIONS
