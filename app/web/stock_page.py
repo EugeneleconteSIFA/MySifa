@@ -4946,6 +4946,25 @@ function openDashboardAddPfModal() {
 // Sentinelle pour "Sans sous-section" (string vide ou null en DB)
 const MP_SOUS_SECTION_NONE = '__none__';
 
+// Tri interne a une categorie : par sous-categorie, puis par reference.
+// Volontairement sans en-tete visuel — le regroupement se lit dans la
+// succession des badges, ajouter des bandeaux hacherait une liste deja
+// segmentee par categorie.
+// Les matieres sans sous-categorie passent en dernier : ce sont celles a
+// completer, elles n'ont pas a s'intercaler au milieu des autres.
+function mpCompareSousCategorie(a, b) {
+  const sa = ((a && a.sous_categorie) || '').trim();
+  const sb = ((b && b.sous_categorie) || '').trim();
+  if (!sa !== !sb) return sa ? -1 : 1;
+  if (sa && sb) {
+    const c = sa.localeCompare(sb, 'fr', { sensitivity: 'base' });
+    if (c !== 0) return c;
+  }
+  return String((a && a.reference) || '')
+    .localeCompare(String((b && b.reference) || ''), 'fr',
+                   { sensitivity: 'base', numeric: true });
+}
+
 function filterMatieresList() {
   const list = S.matieres || [];
   const cat = S.matieresCat || 'tout';
@@ -8421,7 +8440,7 @@ function buildMatieres() {
     //         sont éclatés par sous_section, exactement comme dans la barre de pills.
     const curCat = S.matieresCat || 'tout';
     if (curCat !== 'tout') {
-      filtered.forEach(renderMpCard);
+      filtered.slice().sort(mpCompareSousCategorie).forEach(renderMpCard);
     } else {
       // Construit des buckets par catégorie virtuelle
       const buckets = new Map();
@@ -8454,7 +8473,7 @@ function buildMatieres() {
         const b = buckets.get(k);
         list.appendChild(el('div', { cls: 'mp-section-head', style: mpSectionHeadStyle },
           b.label + ' · ' + b.items.length));
-        b.items.forEach(renderMpCard);
+        b.items.slice().sort(mpCompareSousCategorie).forEach(renderMpCard);
       });
     }
   }

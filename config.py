@@ -702,7 +702,7 @@ TACHES_MAX_FILE_MB = int(os.getenv("TACHES_MAX_FILE_MB", "25"))
 # Colonnes du Kanban. `final=True` marque les statuts qui clôturent une tâche
 # (horodatage done_at, exclusion des compteurs « ouvert »).
 TACHES_STATUTS = (
-    {"code": "backlog",  "label": "Backlog",     "couleur": "muted",  "final": False},
+    {"code": "backlog",  "label": "Boîte à idées", "couleur": "muted",  "final": False},
     {"code": "a_faire",  "label": "À faire",     "couleur": "accent", "final": False},
     {"code": "en_cours", "label": "En cours",    "couleur": "warn",   "final": False},
     {"code": "revue",    "label": "En revue",    "couleur": "accent", "final": False},

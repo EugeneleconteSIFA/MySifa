@@ -84,19 +84,32 @@ body.light .mp-search-wrap:focus-within{
    plus de references a l'ecran quand on cherche, moins de confort de lecture
    quand on parcourt : c'est le compromis que le bouton laisse choisir. */
 .mp-list.mp-vue-liste{grid-template-columns:1fr;gap:6px}
-.mp-vue-liste .mp-card{display:flex;align-items:center;gap:14px;padding:8px 14px;border-radius:10px}
-.mp-vue-liste .mp-card-badges{flex-direction:row;align-items:center;gap:6px}
-.mp-vue-liste .mp-card-top{flex:1;min-width:0;gap:10px;flex-wrap:nowrap}
-.mp-vue-liste .mp-card-ref{flex:0 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mp-vue-liste .mp-card-mid{margin-top:0;flex:1;min-width:0;align-items:center}
-.mp-vue-liste .mp-card-side{flex-direction:row;align-items:center}
-.mp-vue-liste .mp-card-stock-mini{margin-top:0}
+.mp-vue-liste .mp-card{display:flex;align-items:center;gap:12px;padding:8px 14px;border-radius:10px}
+/* display:contents dissout .mp-card-top et .mp-card-mid : leurs enfants
+   deviennent enfants directs de la carte, ce qui permet de les reordonner
+   librement alors qu'ils vivent dans deux conteneurs distincts. Sans ca, les
+   icones copier/modifier (dans -top) resteraient separees des boutons
+   Entree/Sortie (dans -mid) par toute la largeur de la ligne. */
+.mp-vue-liste .mp-card-top,
+.mp-vue-liste .mp-card-mid{display:contents}
+.mp-vue-liste .mp-card-badges{flex-direction:row;align-items:center;gap:6px;order:1}
+.mp-vue-liste .mp-card-ref{flex:0 1 auto;order:2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-vue-liste .mp-card-info{flex:1;min-width:0;order:3}
+/* Stock d'abord, puis toutes les actions d'affilee. */
+.mp-vue-liste .mp-card-top-end{order:4;margin-left:0;gap:8px}
+.mp-vue-liste .mp-card-side{order:5;flex-direction:row;align-items:center;gap:8px}
+/* Le stock est deja affiche a droite : le repeter sous la designation
+   n'apporte rien et allonge la ligne. */
+.mp-vue-liste .mp-card-stock-mini{display:none}
 @media (max-width:780px){
   /* En dessous de 780px la grille est deja sur une colonne : le mode liste
-     n'apporterait qu'un ecrasement illisible. */
+     n'apporterait qu'un ecrasement illisible. On revient a la carte empilee. */
   .mp-vue-liste .mp-card{display:block}
-  .mp-vue-liste .mp-card-mid{margin-top:8px}
-  .mp-vue-liste .mp-card-side{flex-direction:column}
+  .mp-vue-liste .mp-card-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .mp-vue-liste .mp-card-mid{display:flex;margin-top:8px}
+  .mp-vue-liste .mp-card-top-end{margin-left:auto}
+  .mp-vue-liste .mp-card-side{flex-direction:column;align-items:flex-end}
+  .mp-vue-liste .mp-card-stock-mini{display:block}
 }
 .mp-card-info{flex:1;min-width:0}
 .mp-card-side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}

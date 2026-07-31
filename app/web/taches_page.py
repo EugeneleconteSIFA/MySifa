@@ -122,8 +122,8 @@ select.filter.on{border-color:var(--accent);color:var(--accent);background:var(-
 .btn:disabled{opacity:.5;cursor:not-allowed;filter:none}
 
 /* ── Kanban ── */
-.board{display:flex;gap:14px;align-items:flex-start;overflow-x:auto;padding-bottom:14px}
-.col{flex:0 0 300px;width:300px;background:var(--card);border:1px solid var(--border);border-radius:14px;display:flex;flex-direction:column;max-height:calc(100vh - 250px)}
+.board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(172px,1fr);gap:12px;align-items:start;overflow-x:auto;padding-bottom:14px}
+.col{min-width:0;background:var(--card);border:1px solid var(--border);border-radius:14px;display:flex;flex-direction:column;max-height:calc(100vh - 250px)}
 .col.drop{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
 .col-head{display:flex;align-items:center;gap:8px;padding:13px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
 .col-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
@@ -258,11 +258,19 @@ td.t-titre .sub{display:block;font-size:11px;color:var(--muted);font-weight:400;
 .toast.err{border-left-color:var(--danger)}
 @keyframes slideIn{from{transform:translateX(18px);opacity:0}to{transform:translateX(0);opacity:1}}
 
+@media (max-width:1400px) and (min-width:901px){
+  .main{padding-left:16px;padding-right:16px}
+  .board{gap:10px}
+  .col-body{padding:8px;gap:8px}
+  .col-head{padding:11px 11px}
+  .col-add{margin:0 8px 8px}
+}
 @media (max-width:900px){
   body.has-topbar .main{padding-top:74px}
   .main{padding:16px 14px 34px}
   .sidebar{position:fixed;left:0;top:0;bottom:0;height:auto;max-height:100vh;z-index:300;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 16px 48px rgba(0,0,0,.55)}
   body.sb-open .sidebar{transform:translateX(0)}
+  .board{display:flex;overflow-x:auto}
   .col{flex:0 0 264px;width:264px;max-height:none}
   .fgrid{grid-template-columns:1fr}
   .drawer{width:100vw;border-left:none}
@@ -1307,7 +1315,7 @@ const TACHES_GUIDES = {
     {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="6" height="18" rx="1"/><rect x="10" y="3" width="6" height="12" rx="1"/><rect x="17" y="3" width="4" height="8" rx="1"/></svg>',
       title: 'Gestionnaire de tâches',
-      body: '<p>Cette application suit <strong>ce que vous demandez à l’équipe de développement</strong> : une tâche par demande, de son arrivée en <span class="mguide-tag">Backlog</span> jusqu’à <span class="mguide-tag">Terminé</span>. Elle est réservée au super administrateur.</p>',
+      body: '<p>Cette application suit <strong>ce que vous demandez à l’équipe de développement</strong> : une tâche par demande, de son arrivée en <span class="mguide-tag">Boîte à idées</span> jusqu’à <span class="mguide-tag">Terminé</span>. Elle est réservée au super administrateur.</p>',
       extra: '<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous avez à faire ici</div><ul class="mguide-svc-list"><li>Créer une tâche pour chaque demande, avec le contexte nécessaire.</li><li>Assigner la tâche à un développeur et poser une échéance.</li><li>Suivre l’avancement colonne par colonne, sans réunion.</li><li>Joindre les fichiers de contexte et commenter au fil de l’eau.</li></ul></div></div>'
     },
     {
@@ -1347,7 +1355,7 @@ const TACHES_GUIDES = {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>',
       title: 'Filtrer et chercher',
       body: '<p>La barre de recherche filtre sur le <strong>titre et la description</strong>, dès le premier caractère ; <span class="mguide-tag">Échap</span> la vide. Les listes déroulantes cumulent les critères, et les compteurs du haut sont eux aussi cliquables : un clic sur <span class="mguide-hl">En retard</span> ne garde que les tâches en retard.</p>',
-      illu: '<svg viewBox="0 0 340 160" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><rect x="14" y="14" width="70" height="26" rx="8" fill="var(--card)" stroke="var(--border)"/><text x="24" y="31" font-size="9" fill="var(--text2)">Backlog 4</text><rect x="90" y="14" width="74" height="26" rx="8" fill="var(--card)" stroke="var(--border)"/><text x="100" y="31" font-size="9" fill="var(--text2)">En cours 3</text><rect x="170" y="14" width="80" height="26" rx="8" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="180" y="31" font-size="9" fill="var(--accent)" font-weight="700">En retard 2</text><rect x="14" y="52" width="180" height="28" rx="9" fill="var(--card)" stroke="var(--accent)"/><circle cx="30" cy="66" r="5" fill="none" stroke="var(--muted)" stroke-width="1.6"/><line x1="34" y1="70" x2="38" y2="74" stroke="var(--muted)" stroke-width="1.6"/><text x="46" y="70" font-size="9" fill="var(--text2)">export</text><rect x="202" y="52" width="60" height="28" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="212" y="70" font-size="9" fill="var(--muted)">Priorité</text><rect x="270" y="52" width="56" height="28" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="280" y="70" font-size="9" fill="var(--muted)">Module</text><rect x="14" y="92" width="312" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="24" y="107" font-size="9" fill="var(--text)">Export PDF des OF</text><text x="316" y="107" font-size="9" fill="var(--danger)" text-anchor="end" font-weight="700">retard 3 j</text><rect x="14" y="118" width="312" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="24" y="133" font-size="9" fill="var(--text)">Doublon à l’entrée Z1</text><text x="316" y="133" font-size="9" fill="var(--danger)" text-anchor="end" font-weight="700">retard 1 j</text></svg>'
+      illu: '<svg viewBox="0 0 340 160" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><rect x="14" y="14" width="70" height="26" rx="8" fill="var(--card)" stroke="var(--border)"/><text x="24" y="31" font-size="9" fill="var(--text2)">Idées 4</text><rect x="90" y="14" width="74" height="26" rx="8" fill="var(--card)" stroke="var(--border)"/><text x="100" y="31" font-size="9" fill="var(--text2)">En cours 3</text><rect x="170" y="14" width="80" height="26" rx="8" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="180" y="31" font-size="9" fill="var(--accent)" font-weight="700">En retard 2</text><rect x="14" y="52" width="180" height="28" rx="9" fill="var(--card)" stroke="var(--accent)"/><circle cx="30" cy="66" r="5" fill="none" stroke="var(--muted)" stroke-width="1.6"/><line x1="34" y1="70" x2="38" y2="74" stroke="var(--muted)" stroke-width="1.6"/><text x="46" y="70" font-size="9" fill="var(--text2)">export</text><rect x="202" y="52" width="60" height="28" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="212" y="70" font-size="9" fill="var(--muted)">Priorité</text><rect x="270" y="52" width="56" height="28" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="280" y="70" font-size="9" fill="var(--muted)">Module</text><rect x="14" y="92" width="312" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="24" y="107" font-size="9" fill="var(--text)">Export PDF des OF</text><text x="316" y="107" font-size="9" fill="var(--danger)" text-anchor="end" font-weight="700">retard 3 j</text><rect x="14" y="118" width="312" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="24" y="133" font-size="9" fill="var(--text)">Doublon à l’entrée Z1</text><text x="316" y="133" font-size="9" fill="var(--danger)" text-anchor="end" font-weight="700">retard 1 j</text></svg>'
     },
     {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5" rx="1"/><line x1="10" y1="12" x2="14" y2="12"/></svg>',
