@@ -134,33 +134,66 @@
   }
 
   // ── Capture de la page ──────────────────────────────────────────────────
-  // On capture la zone visible uniquement : une page longue produirait une
-  // image de plusieurs Mo pour un contexte que personne ne lit en entier.
+  // Retourne TOUJOURS {blob, erreur} — jamais null silencieux. Une capture qui
+  // échoue sans le dire est le pire des cas : on croit avoir joint le contexte,
+  // la tâche part sans, et personne ne s'en aperçoit avant de la lire.
+  //
+  // On ne capture que la zone visible : une page longue produirait plusieurs Mo
+  // pour un contexte que personne ne lit en entier.
+  var CAPTURE_TIMEOUT_MS = 15000;
+
   function capturer() {
     return chargerH2C().then(function (h2c) {
-      if (!h2c) return null;
-      return h2c(document.body, {
+      if (!h2c) return { blob: null, erreur: 'moteur de capture indisponible' };
+
+      // NE PAS forcer scrollX/scrollY à 0 : combinés à x/y, ils décalent le
+      // rendu et produisent une image vide dès que la page est défilée.
+      // html2canvas dérive lui-même le bon décalage à partir de x/y.
+      var tache = h2c(document.body, {
         backgroundColor: getComputedStyle(document.body).backgroundColor || '#ffffff',
         scale: Math.min(window.devicePixelRatio || 1, 2),
         logging: false,
         useCORS: true,
-        allowTaint: false,
+        allowTaint: false,       // une image cross-origin est ignorée, pas « taintée » :
+        imageTimeout: 4000,      // sinon canvas.toBlob lèverait une SecurityError
         width: window.innerWidth,
         height: window.innerHeight,
         x: window.scrollX,
         y: window.scrollY,
-        scrollX: 0,
-        scrollY: 0,
         ignoreElements: function (el) {
           // Ne pas capturer nos propres surcouches (modale, toasts).
           return el.id === 'mtq-root' || (el.classList && el.classList.contains('mtq-toast'));
         }
-      }).then(function (canvas) {
+      });
+
+      // Garde-fou : sur une page très lourde html2canvas peut ne jamais rendre
+      // la main. Mieux vaut une tâche sans capture qu'une modale bloquée.
+      var minuteur = new Promise(function (_, rejeter) {
+        setTimeout(function () { rejeter(new Error('capture trop longue (> 15 s)')); }, CAPTURE_TIMEOUT_MS);
+      });
+
+      return Promise.race([tache, minuteur]).then(function (canvas) {
         return new Promise(function (resolve) {
-          canvas.toBlob(function (blob) { resolve(blob); }, 'image/png', 0.92);
+          try {
+            canvas.toBlob(function (blob) {
+              if (!blob) { resolve({ blob: null, erreur: 'image vide' }); return; }
+              var maxMo = (meta && meta.max_file_mb) || 25;
+              if (blob.size > maxMo * 1024 * 1024) {
+                resolve({ blob: null, erreur: 'image trop lourde (' + Math.round(blob.size / 1048576) + ' Mo)' });
+                return;
+              }
+              resolve({ blob: blob, erreur: null });
+            }, 'image/png');
+          } catch (e) {
+            // SecurityError = canvas contaminé par une ressource cross-origin.
+            resolve({ blob: null, erreur: (e && e.name === 'SecurityError')
+              ? 'image externe non autorisée sur la page' : (e && e.message) || 'conversion impossible' });
+          }
         });
       });
-    }).catch(function () { return null; });
+    }).catch(function (e) {
+      return { blob: null, erreur: (e && e.message) || 'erreur inattendue' };
+    });
   }
 
   function initiales(nom) {
@@ -197,7 +230,18 @@
       'font-size:13px;font-family:inherit;outline:none;transition:border-color .15s}' +
       '.mtq-f input:focus,.mtq-f select:focus,.mtq-f textarea:focus{border-color:var(--accent,#22d3ee)}' +
       '.mtq-f textarea{min-height:88px;resize:vertical;line-height:1.55}' +
-      '.mtq-who{display:flex;flex-wrap:wrap;gap:6px}' +
+      '.mtq-asg{border:1px solid var(--border,#1e293b);border-radius:10px;background:var(--bg,#0a0e17);overflow:hidden}' +
+      '.mtq-asg-sel{display:flex;flex-wrap:wrap;gap:5px;padding:7px 8px;border-bottom:1px solid var(--border,#1e293b)}' +
+      '.mtq-asg-sel:empty{display:none}' +
+      '.mtq-asg-sel .pastille{display:inline-flex;align-items:center;gap:6px;padding:3px 8px 3px 4px;border-radius:999px;' +
+      'background:var(--accent-bg,rgba(34,211,238,.12));color:var(--accent,#22d3ee);font-size:11.5px;font-weight:600}' +
+      '.mtq-asg-sel .pastille button{border:none;background:transparent;color:inherit;cursor:pointer;font-size:13px;line-height:1;padding:0 1px;opacity:.7}' +
+      '.mtq-asg-sel .pastille button:hover{opacity:1}' +
+      '.mtq-asg-q{width:100%;background:transparent;border:none;border-bottom:1px solid var(--border,#1e293b);' +
+      'padding:9px 11px;color:var(--text,#f1f5f9);font-size:12.5px;font-family:inherit;outline:none}' +
+      '.mtq-asg-q::placeholder{color:var(--muted,#94a3b8)}' +
+      '.mtq-who{display:flex;flex-wrap:wrap;gap:6px;max-height:132px;overflow-y:auto;padding:8px}' +
+      '.mtq-vide{font-size:12px;color:var(--muted,#94a3b8);padding:12px 10px;text-align:center;width:100%}' +
       '.mtq-who button{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;' +
       'border:1px solid var(--border,#1e293b);background:var(--bg,#0a0e17);color:var(--text2,#cbd5e1);' +
       'font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .15s}' +
@@ -210,6 +254,7 @@
       '.mtq-shot{grid-column:1/-1;display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;' +
       'background:var(--bg,#0a0e17);border:1px solid var(--border,#1e293b);font-size:12px;color:var(--text2,#cbd5e1)}' +
       '.mtq-shot img{width:74px;height:46px;object-fit:cover;border-radius:6px;border:1px solid var(--border,#1e293b);flex-shrink:0}' +
+      '.mtq-shot.mtq-ko{border-color:var(--warn,#fbbf24);color:var(--warn,#fbbf24)}' +
       '.mtq-shot .mtq-i{flex:1;min-width:0}' +
       '.mtq-shot label{display:inline-flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;color:var(--text2,#cbd5e1);' +
       'text-transform:none;letter-spacing:0;font-weight:500;margin:0}' +
@@ -266,6 +311,7 @@
     var statutDefaut = opts.statut || (statuts[0] && statuts[0].code) || '';
     var aMoi = opts.assignerAMoi !== false;
     var capture = opts.capture || null;
+    var captureErreur = opts.captureErreur || null;
 
     var root = document.createElement('div');
     root.id = 'mtq-root';
@@ -291,16 +337,13 @@
             '<option value="">Aucun</option>' +
             mods.map(function (m) { return '<option value="' + esc(m.code) + '"' + (m.code === modDefaut ? ' selected' : '') + '>' + esc(m.label) + '</option>'; }).join('') +
           '</select></div>' +
-          '<div class="mtq-f full"><label>Assigné à</label><div class="mtq-who" id="mtq-assigne">' +
-            (meta.users || []).map(function (u) {
-              var sel = (aMoi && moi && u.id === moi.id) || (opts.assignes || []).indexOf(u.id) !== -1;
-              return '<button type="button" class="' + (sel ? 'on' : '') + '" data-uid="' + u.id +
-                '" aria-pressed="' + (sel ? 'true' : 'false') + '">' +
-                '<span class="ini">' + (u.avatar_url
-                  ? '<img src="' + esc(u.avatar_url) + '" alt="">'
-                  : esc(initiales(u.nom))) + '</span>' + esc(u.nom || '') + '</button>';
-            }).join('') +
-          '</div></div>' +
+          '<div class="mtq-f full"><label>Assigné à</label>' +
+            '<div class="mtq-asg">' +
+              '<div class="mtq-asg-sel" id="mtq-asg-sel"></div>' +
+              '<input type="text" class="mtq-asg-q" id="mtq-asg-q" placeholder="Rechercher une personne…" autocomplete="off">' +
+              '<div class="mtq-who" id="mtq-assigne"></div>' +
+            '</div>' +
+          '</div>' +
           (capture
             ? '<div class="mtq-shot">' +
                 '<img src="' + URL.createObjectURL(capture) + '" alt="Aperçu de la capture">' +
@@ -309,7 +352,14 @@
                 '<div style="font-size:10.5px;color:var(--muted,#94a3b8);margin-top:3px">' +
                 Math.round(capture.size / 1024) + ' Ko · ajoutée aux fichiers de la tâche</div></div>' +
               '</div>'
-            : '') +
+            : (captureErreur
+              ? '<div class="mtq-shot mtq-ko">' +
+                  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:20px;height:20px;flex-shrink:0"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>' +
+                  '<div class="mtq-i"><div style="font-weight:600">Capture de la page indisponible</div>' +
+                  '<div style="font-size:10.5px;color:var(--muted,#94a3b8);margin-top:3px">' +
+                  esc(captureErreur) + ' · la tâche se crée quand même</div></div>' +
+                '</div>'
+              : '')) +
         '</div>' +
         '<div class="mtq-act">' +
           '<button type="button" class="mtq-btn ghost" id="mtq-annuler">Annuler</button>' +
@@ -325,19 +375,72 @@
     var champTitre = root.querySelector('#mtq-titre');
     requestAnimationFrame(function () { champTitre.focus(); champTitre.select(); });
 
-    root.querySelectorAll('#mtq-assigne button').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var on = b.classList.toggle('on');
-        b.setAttribute('aria-pressed', on ? 'true' : 'false');
-      });
+    // Sélecteur d'assignés : avec une trentaine de comptes, une grille de chips
+    // devient un mur illisible. Recherche + liste défilante, et les personnes
+    // déjà choisies restent visibles en haut même si le filtre les exclut.
+    var choisis = [];
+    (meta.users || []).forEach(function (u) {
+      if ((aMoi && moi && u.id === moi.id) || (opts.assignes || []).indexOf(u.id) !== -1) choisis.push(u.id);
     });
+    var zoneSel = root.querySelector('#mtq-asg-sel');
+    var zoneListe = root.querySelector('#mtq-assigne');
+    var champQ = root.querySelector('#mtq-asg-q');
+
+    function pastilleUser(u) {
+      return '<span class="ini">' + (u.avatar_url
+        ? '<img src="' + esc(u.avatar_url) + '" alt="">'
+        : esc(initiales(u.nom))) + '</span>' + esc(u.nom || '');
+    }
+    function rendreSel() {
+      var users = meta.users || [];
+      zoneSel.innerHTML = choisis.map(function (id) {
+        var u = users.find(function (x) { return x.id === id; });
+        if (!u) return '';
+        return '<span class="pastille">' + pastilleUser(u) +
+          '<button type="button" data-off="' + u.id + '" aria-label="Retirer">×</button></span>';
+      }).join('');
+      zoneSel.querySelectorAll('[data-off]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          choisis = choisis.filter(function (x) { return x !== Number(b.dataset.off); });
+          rendreSel(); rendreListe();
+        });
+      });
+    }
+    function rendreListe() {
+      var q = (champQ.value || '').trim().toLowerCase();
+      var users = (meta.users || []).filter(function (u) {
+        return !q || String(u.nom || '').toLowerCase().indexOf(q) !== -1;
+      });
+      if (!users.length) {
+        zoneListe.innerHTML = '<div class="mtq-vide">Aucun résultat pour « ' + esc(champQ.value) + ' »</div>';
+        return;
+      }
+      zoneListe.innerHTML = users.map(function (u) {
+        var on = choisis.indexOf(u.id) !== -1;
+        return '<button type="button" class="' + (on ? 'on' : '') + '" data-uid="' + u.id +
+          '" aria-pressed="' + (on ? 'true' : 'false') + '">' + pastilleUser(u) + '</button>';
+      }).join('');
+      zoneListe.querySelectorAll('[data-uid]').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var id = Number(b.dataset.uid);
+          var i = choisis.indexOf(id);
+          if (i === -1) choisis.push(id); else choisis.splice(i, 1);
+          rendreSel(); rendreListe();
+        });
+      });
+    }
+    champQ.addEventListener('input', rendreListe);
+    champQ.addEventListener('keydown', function (e) {
+      // Échap vide la recherche avant de fermer la modale (un seul niveau à la fois).
+      if (e.key === 'Escape' && champQ.value) { e.preventDefault(); e.stopPropagation(); champQ.value = ''; rendreListe(); }
+    });
+    rendreSel(); rendreListe();
 
     var btn = root.querySelector('#mtq-creer');
     function creer() {
       var titre = (champTitre.value || '').trim();
       if (!titre) { toast('Titre obligatoire.', 'err'); champTitre.focus(); return; }
-      var assignes = Array.prototype.slice.call(root.querySelectorAll('#mtq-assigne button.on'))
-        .map(function (b) { return Number(b.dataset.uid); });
+      var assignes = choisis.slice();
       var corps = {
         titre: titre,
         description: (root.querySelector('#mtq-desc').value || '').trim() || null,
@@ -358,14 +461,24 @@
         if (capture && joindre && joindre.checked) {
           var fd = new FormData();
           fd.append('fichier', capture, 'capture-' + horodatage() + '.png');
+          // L'échec d'envoi remonte : « Tâche créée. » alors que la pièce jointe
+          // est restée sur le carreau était un mensonge silencieux.
           return fetch('/api/taches/' + j.id + '/fichiers', {
             method: 'POST', credentials: 'include', body: fd
-          }).then(function () { return j; }, function () { return j; });
+          }).then(function (r) {
+            if (r.ok) { j._capture = true; return j; }
+            return r.json().then(function (e) { j._captureErr = e.detail || ('erreur ' + r.status); return j; },
+              function () { j._captureErr = 'erreur ' + r.status; return j; });
+          }, function (e) {
+            j._captureErr = (e && e.message) || 'envoi impossible';
+            return j;
+          });
         }
         return j;
       }).then(function (j) {
         fermer();
-        toast('Tâche créée.');
+        if (j._captureErr) toast('Tâche créée, mais la capture n’a pas pu être jointe : ' + j._captureErr, 'err');
+        else toast(j._capture ? 'Tâche créée avec la capture.' : 'Tâche créée.');
         // Si on est déjà sur /taches, on rafraîchit la vue plutôt que de naviguer.
         if (location.pathname.indexOf('/taches') === 0 && typeof window.chargerTaches === 'function') {
           try { window.chargerTaches(); window.chargerStats && window.chargerStats(); } catch (e) {}
@@ -408,9 +521,10 @@
     chargerRole().then(function (r) {
       if (r !== 'superadmin') return;
       toast('Capture de la page…');
-      return capturer().then(function (blob) {
+      return capturer().then(function (res) {
         return ouvrir({
-          capture: blob,
+          capture: res.blob,
+          captureErreur: res.erreur,
           type: 'evolution',
           assignerAMoi: true,
           origine: 'Depuis ' + titrePage() + ' · ' + location.pathname
