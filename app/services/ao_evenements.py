@@ -387,6 +387,7 @@ def resume_par_fournisseur(conn, ao_id: int) -> dict[int, dict]:
                 "email_ouvert_le": None,
                 "email_ouvert_dernier": None,
                 "ouvertures_ecartees": 0,
+                "motif_ecarte": None,
                 "nb_visites_portail": 0,
                 "portail_ouvert_le": None,
                 "dernier_signal": None,
@@ -408,6 +409,23 @@ def resume_par_fournisseur(conn, ao_id: int) -> dict[int, dict]:
             dernier = entry.get("dernier_signal")
             if not dernier or str(r["dernier"]) > str(dernier):
                 entry["dernier_signal"] = r["dernier"]
+
+    # Motif du dernier hit ecarte : sans lui, « Ouverture non confirmee » ne
+    # dit pas SI c'est un prechargement, un robot ou un UA manquant — or c'est
+    # exactement ce qu'on veut savoir en regardant la ligne.
+    try:
+        for r in conn.execute(
+            """SELECT ao_fournisseur_id AS fid, motif, MAX(date) AS d
+               FROM ao_evenements
+               WHERE ao_id=? AND type_evenement=? AND fiable=0
+               GROUP BY ao_fournisseur_id""",
+            (int(ao_id), EV_EMAIL_OUVERT),
+        ).fetchall():
+            entry = out.get(int(r["fid"]))
+            if entry is not None:
+                entry["motif_ecarte"] = r["motif"]
+    except Exception as exc:
+        logger.warning("ao_evenements.resume_par_fournisseur (motifs): %s", exc)
     return out
 
 

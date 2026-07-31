@@ -117,6 +117,13 @@ body.light .mp-search-wrap:focus-within{
 .mp-modal-fiche .mp-form-section-title::before{content:'';width:3px;height:15px;
   border-radius:2px;background:var(--accent);flex:none}
 /* Lien de repli pour les reglages d'exception (abreviation forcee). */
+/* Champs en blanc dans la fiche : les sections sont cartonnees sur var(--bg),
+   donc un champ sur var(--bg) s'y fondait. var(--card) et non #fff, pour rester
+   juste en theme sombre ou la carte n'est pas blanche. */
+.mp-modal-fiche .mp-field input:not([type=checkbox]):not([type=radio]),
+.mp-modal-fiche .mp-field select,
+.mp-modal-fiche .mp-field textarea,
+.mp-modal-fiche .mp-readonly{background:var(--card)}
 .mp-link-toggle{background:none;border:none;padding:0;margin:0;cursor:pointer;
   font-family:inherit;font-size:11px;font-weight:700;color:var(--accent);text-align:left}
 .mp-link-toggle:hover{text-decoration:underline}

@@ -7804,40 +7804,109 @@ function appendMatiereRefEditFields(parent, item) {
         'Aucun fournisseur enregistré. Ajoute-les dans /settings > Fournisseurs.'));
       return;
     }
+    // On n'affiche que les fournisseurs REELLEMENT associes a la laize, chacun
+    // retirable. Avant, les ~40 fournisseurs du referentiel etaient rendus en
+    // bascule pour CHAQUE laize : sur une matiere a 5 laizes, 200 pastilles a
+    // parcourir pour trouver les 3 qui comptent. La liste complete vit
+    // desormais dans le champ d'ajout, en saisie assistee.
+    const nomsPris = new Set();
     selected.forEach(({ id: lid, label }) => {
       if (!laizeFournisseursIds[lid]) laizeFournisseursIds[lid] = new Set();
       const chosen = laizeFournisseursIds[lid];
-      const chipsWrap = el('div', {
-        style: 'display:flex;flex-wrap:wrap;gap:6px;flex:1',
-      });
-      fournisseurs.forEach(f => {
-        const active = chosen.has(f.id);
-        const chip = el('button', {
+
+      const chipsWrap = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;align-items:center' });
+      const retenus = fournisseurs.filter(f => chosen.has(f.id));
+      if (!retenus.length) {
+        chipsWrap.appendChild(el('span', {
+          style: 'font-size:12px;color:var(--muted);font-style:italic',
+        }, 'Aucun fournisseur'));
+      }
+      retenus.forEach(f => {
+        const retirer = el('button', {
           type: 'button',
-          style: 'padding:4px 10px;border-radius:6px;border:1px solid ' +
-            (active ? 'var(--accent)' : 'var(--border)') + ';background:' +
-            (active ? 'var(--accent-bg)' : 'var(--bg)') + ';color:var(--text);' +
-            'font-size:12px;font-weight:600;cursor:pointer;line-height:1;' +
-            'display:inline-flex;align-items:center;gap:4px;font-family:inherit',
-        }, f.nom + (f.has_fsc ? ' · FSC' : ''));
-        chip.addEventListener('click', () => {
-          if (chosen.has(f.id)) chosen.delete(f.id);
-          else chosen.add(f.id);
+          attrs: { title: 'Retirer ' + f.nom, 'aria-label': 'Retirer ' + f.nom },
+          style: 'background:none;border:none;padding:0;margin:0 0 0 2px;cursor:pointer;' +
+            'color:var(--accent);font-size:14px;line-height:1;font-family:inherit;font-weight:700',
+        }, '\u00d7');
+        retirer.addEventListener('click', () => {
+          chosen.delete(f.id);
           renderLaizeFournisseurs();
         });
-        chipsWrap.appendChild(chip);
+        chipsWrap.appendChild(el('span', {
+          style: 'padding:4px 6px 4px 10px;border-radius:6px;border:1px solid var(--accent);' +
+            'background:var(--accent-bg);color:var(--text);font-size:12px;font-weight:600;' +
+            'line-height:1;display:inline-flex;align-items:center;gap:2px',
+        }, f.nom + (f.has_fsc ? ' \u00b7 FSC' : ''), retirer));
       });
+
+      // Champ d'ajout en saisie assistee. datalist natif : pas de dependance,
+      // et le navigateur filtre a la frappe sur les 40 references.
+      const restants = fournisseurs.filter(f => !chosen.has(f.id));
+      const dlId = 'mp-four-dl-' + lid;
+      const dl = el('datalist', { id: dlId });
+      restants.forEach(f => {
+        dl.appendChild(el('option', { value: f.nom }, f.nom + (f.has_fsc ? ' \u00b7 FSC' : '')));
+      });
+      const ajout = el('input', {
+        attrs: { type: 'text', list: dlId, placeholder: restants.length
+          ? 'Ajouter un fournisseur\u2026' : 'Tous les fournisseurs sont associes',
+          autocomplete: 'off' },
+        style: 'width:210px;padding:5px 9px;font-size:12px;border-radius:6px;' +
+          'border:1px solid var(--border);background:var(--card);color:var(--text);font-family:inherit',
+      });
+      if (!restants.length) ajout.disabled = true;
+      const ajouter = () => {
+        const saisi = (ajout.value || '').trim().toLowerCase();
+        if (!saisi) return;
+        const trouve = restants.find(f => f.nom.trim().toLowerCase() === saisi);
+        if (!trouve) return;   // saisie partielle : on attend une correspondance exacte
+        chosen.add(trouve.id);
+        ajout.value = '';
+        renderLaizeFournisseurs();
+        // Rend la saisie enchainable : on redonne le focus au champ de CETTE laize.
+        const suivant = laizeFournisseursGrid.querySelector('[data-ajout-laize="' + lid + '"]');
+        if (suivant) suivant.focus();
+      };
+      ajout.setAttribute('data-ajout-laize', String(lid));
+      ajout.addEventListener('change', ajouter);
+      ajout.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); ajouter(); }
+      });
+
+      // « Appliquer a toutes les laizes » : sur ces matieres, les laizes
+      // partagent presque toujours la meme liste de fournisseurs. Sans ce
+      // raccourci, il faut ressaisir la meme chose 5 fois.
+      const dupliquer = (selected.length > 1 && retenus.length)
+        ? el('button', {
+            cls: 'mp-link-toggle', type: 'button',
+            attrs: { title: 'Copier ces fournisseurs sur toutes les laizes cochees' },
+            on: { click: () => {
+              selected.forEach(({ id: autre }) => {
+                if (autre === lid) return;
+                laizeFournisseursIds[autre] = new Set(chosen);
+              });
+              renderLaizeFournisseurs();
+            } },
+          }, 'Appliquer a toutes les laizes')
+        : null;
+
       const row = el('div', {
-        style: 'display:flex;align-items:flex-start;gap:10px',
+        style: 'display:flex;align-items:flex-start;gap:10px;padding:8px 0;' +
+          'border-top:1px solid var(--border)',
       },
         el('div', {
           style: 'min-width:80px;font-size:12px;font-weight:700;color:var(--text);' +
             'padding:6px 10px;border:1px solid var(--accent);background:var(--accent-bg);' +
             'border-radius:6px;text-align:center;flex-shrink:0',
         }, label),
-        chipsWrap,
+        el('div', { style: 'flex:1;min-width:0;display:flex;flex-direction:column;gap:6px' },
+          chipsWrap,
+          el('div', { style: 'display:flex;align-items:center;gap:10px;flex-wrap:wrap' },
+            ajout, dl, ...(dupliquer ? [dupliquer] : [])),
+        ),
       );
       laizeFournisseursGrid.appendChild(row);
+      nomsPris.add(lid);
     });
   }
   // Recharge async si pas encore en cache
@@ -7952,7 +8021,7 @@ function appendMatiereRefEditFields(parent, item) {
       el('div', { cls: 'mp-field' }, el('label', null, 'Description'), desInp),
       couleurWrap,
     ),
-    mpFormSection('Classement',
+    mpFormSection('Catégorisation',
       sousCategorieSel.el,
       sousSectionWrap,
       abbrevWrap,
