@@ -3345,27 +3345,55 @@ function _fitCalWeekBody(){
 // simple redimensionnement — sinon on ecraserait la position de defilement que
 // l'utilisateur vient de choisir a la main.
 let _calAutoScrollPending = false;
+let _calSavedScrollTop = null;
+// Le recentrage n'est arme que par un changement de CONTEXTE : navigation
+// (semaine/jour precedent ou suivant, Aujourd'hui), changement de vue, arrivee
+// sur l'onglet Calendrier.
+//
+// Il ne DOIT PAS l'etre par un simple re-rendu consecutif a une modification de
+// donnees — creation, deplacement ou suppression d'un creneau repassent par
+// renderCalWeek(), et rearmer ici ramenait l'utilisateur au premier creneau de
+// la semaine juste apres qu'il ait cree le sien. C'est pour ca que l'appel a
+// ete retire de la fin des fonctions de rendu.
 function _requestCalAutoScroll(){ _calAutoScrollPending = true; }
+// A appeler juste avant `body.innerHTML = ...` : le remplacement du contenu
+// remet scrollTop a 0, il faut donc memoriser la position avant, pour pouvoir
+// la rendre a l'utilisateur apres un re-rendu sans changement de contexte.
+function _saveCalScroll(){
+  if(_calAutoScrollPending){ _calSavedScrollTop = null; return; }
+  const body = document.getElementById('cal-wv-body');
+  if(body && body.clientHeight) _calSavedScrollTop = body.scrollTop;
+}
 function _autoScrollCalWeekBody(){
-  if(!_calAutoScrollPending) return;
   const body = document.getElementById('cal-wv-body');
   if(!body) return;
   // clientHeight nul = grille pas encore mesurable (section masquee) : on garde
-  // le drapeau arme pour retenter au prochain passage.
+  // l'etat en attente pour retenter au prochain passage.
   if(!body.clientHeight) return;
-  _calAutoScrollPending = false;
-  // On lit la position deja posee sur les blocs par _makeEventBlock plutot que
-  // de recalculer depuis le modele : une seule source de verite.
-  let target = null;
-  body.querySelectorAll('.cal-event').forEach(el => {
-    const t = parseFloat(el.style.top);
-    if(!isNaN(t) && (target === null || t < target)) target = t;
-  });
-  if(target === null){
-    const px = (CAL_STATE && CAL_STATE.view === 'day') ? 72 : CAL_HOUR_PX;
-    target = (new Date().getHours() - CAL_HOUR_START) * px;
+  if(_calAutoScrollPending){
+    _calAutoScrollPending = false;
+    _calSavedScrollTop = null;
+    // On lit la position deja posee sur les blocs par _makeEventBlock plutot que
+    // de recalculer depuis le modele : une seule source de verite.
+    let target = null;
+    body.querySelectorAll('.cal-event').forEach(el => {
+      const t = parseFloat(el.style.top);
+      if(!isNaN(t) && (target === null || t < target)) target = t;
+    });
+    if(target === null){
+      const px = (CAL_STATE && CAL_STATE.view === 'day') ? 72 : CAL_HOUR_PX;
+      target = (new Date().getHours() - CAL_HOUR_START) * px;
+    }
+    body.scrollTop = Math.max(0, target - CAL_AUTOSCROLL_MARGIN);
+    return;
   }
-  body.scrollTop = Math.max(0, target - CAL_AUTOSCROLL_MARGIN);
+  // Re-rendu sans changement de contexte : on restaure la position exacte que
+  // l'utilisateur avait avant. La restauration a lieu dans le meme
+  // requestAnimationFrame que le rendu, donc avant le paint : aucun saut visible.
+  if(_calSavedScrollTop != null){
+    body.scrollTop = _calSavedScrollTop;
+    _calSavedScrollTop = null;
+  }
 }
 
 let _calGutterRaf = 0;
@@ -3425,6 +3453,8 @@ function setCalView(v){
     wv.classList.toggle('cal-wv-mode-week', v === 'week');
     wv.classList.toggle('cal-wv-mode-day',  v === 'day');
   }
+  // v2.6.1 : changement de contexte -> recentrage legitime.
+  _requestCalAutoScroll();
   renderCalFromCacheThenRefresh();
 }
 function calPrev(){
@@ -3438,6 +3468,8 @@ function calPrev(){
     const d = CAL_STATE.dayDate;
     CAL_STATE.dayDate = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
   }
+  // v2.6.1 : changement de contexte -> recentrage legitime.
+  _requestCalAutoScroll();
   renderCalFromCacheThenRefresh();
 }
 function calNext(){
@@ -3451,6 +3483,8 @@ function calNext(){
     const d = CAL_STATE.dayDate;
     CAL_STATE.dayDate = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
   }
+  // v2.6.1 : changement de contexte -> recentrage legitime.
+  _requestCalAutoScroll();
   renderCalFromCacheThenRefresh();
 }
 function calToday(){
@@ -3463,6 +3497,8 @@ function calToday(){
   } else if(CAL_STATE.view === 'day'){
     CAL_STATE.dayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   }
+  // v2.6.1 : changement de contexte -> recentrage legitime.
+  _requestCalAutoScroll();
   renderCalFromCacheThenRefresh();
 }
 function _calIsoYMD(d){
@@ -3617,6 +3653,7 @@ function renderCalWeek(){
     }
     html += '</div>';
   }
+  try{ _saveCalScroll(); }catch(_){}
   body.innerHTML = html;
   // Lane-packing : un bloc par opération, placé côte à côte lorsqu'il y a chevauchement
   document.querySelectorAll('.cal-wv-day-col').forEach(col => {
@@ -3633,7 +3670,7 @@ function renderCalWeek(){
   // v2.6.0 : le corps vient d'etre reconstruit -> re-aligner le header sur la
   // gouttiere de scrollbar, et repeindre l'etat de chargement (le skeleton a
   // ete efface par le innerHTML ci-dessus).
-  try{ _requestCalAutoScroll(); _syncCalHeaderGutter(); _scheduleCalHeaderGutterSync(); }catch(_){}
+  try{ _syncCalHeaderGutter(); _scheduleCalHeaderGutterSync(); }catch(_){}
   try{ _renderPlanningLoadState(); }catch(_){}
 }
 function renderCalDay(){
@@ -3673,6 +3710,7 @@ function renderCalDay(){
     html += '<div class="cal-wv-hour-row" data-hour="' + h + '"></div>';
   }
   html += '</div>';
+  try{ _saveCalScroll(); }catch(_){}
   body.innerHTML = html;
   // Lane-packing
   document.querySelectorAll('.cal-wv-day-col').forEach(col => {
@@ -3686,7 +3724,7 @@ function renderCalDay(){
     // v2.2.58 : strip flottant absolu — pas d'impact sur l'alignement
     _renderNonPlanifStrip(cIso, col, 'day');
   });
-  try{ _requestCalAutoScroll(); _syncCalHeaderGutter(); _scheduleCalHeaderGutterSync(); }catch(_){}
+  try{ _syncCalHeaderGutter(); _scheduleCalHeaderGutterSync(); }catch(_){}
   try{ _renderPlanningLoadState(); }catch(_){}
 }
 
@@ -9510,6 +9548,7 @@ function setPlanSubtab(name){
   }
   else if(name === 'calendrier'){
     // v2.6.0 : rendu immediat depuis le cache, refetch seulement si besoin.
+    try{ _requestCalAutoScroll(); }catch(_){}
     try { renderCalFromCacheThenRefresh(); } catch(e){ try{ renderCal(); }catch(_){} }
     // v2.6.1 : la section vient seulement d'etre affichee (display:none jusqu'a
     // cette ligne), donc _fitCalWeekBody n'a pas pu mesurer pendant le rendu.
