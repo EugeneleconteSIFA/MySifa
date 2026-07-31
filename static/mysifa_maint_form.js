@@ -586,6 +586,8 @@
         '<td style="font-size:12px;color:var(--muted);white-space:nowrap">' + _fmtLibreDate(o.created_at) + '</td>' +
         '<td style="text-align:right;white-space:nowrap">' +
           '<button type="button" class="btn-sm btn-ghost" data-libre-rename="' + codeEsc + '">Renommer</button> ' +
+          '<button type="button" class="btn-sm btn-ghost" data-libre-attach="' + codeEsc + '" title="Rattacher ce titre a une operation recurrente existante : ses saisies deviennent des saisies recurrentes et le titre disparait.">Rattacher</button> ' +
+          '<button type="button" class="btn-sm btn-ghost" data-libre-promote="' + codeEsc + '" title="Transformer ce titre en operation recurrente du catalogue, en conservant ses saisies passees.">Transformer</button> ' +
           delBtn +
         '</td>' +
       '</tr>';
@@ -614,12 +616,225 @@
         if (it) libresRename(code, it.label);
       });
     });
+    el.querySelectorAll('[data-libre-attach]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        openLibreAttachModal(btn.getAttribute('data-libre-attach'));
+      });
+    });
+    el.querySelectorAll('[data-libre-promote]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        openLibrePromoteModal(btn.getAttribute('data-libre-promote'));
+      });
+    });
     el.querySelectorAll('[data-libre-del]').forEach(btn => {
       btn.addEventListener('click', () => {
         const code = btn.getAttribute('data-libre-del');
         const it = _libresItems.find(x => x.code === code);
         if (it) libresDelete(code, it.label);
       });
+    });
+  }
+
+  // ── Rattachement / transformation des interventions libres (v2.5.11) ──
+  //
+  // Deux sorties possibles pour un titre saisi hors catalogue :
+  //   - Rattacher  : le titre etait une operation du catalogue mal nommee.
+  //                  Ses saisies basculent sur le code recurrent choisi et le
+  //                  titre disparait (liste + historique).
+  //   - Transformer: le titre decrit une vraie operation recurrente manquante.
+  //                  Il devient un code du catalogue en gardant ses saisies.
+  // Les deux sont irreversibles hors SQL : le modal l'annonce et rappelle le
+  // nombre de saisies impactees.
+
+  // Rafraichit tout ce qui depend du referentiel des codes apres une action.
+  async function _libresRefreshAfterAction() {
+    try { await loadLibres(); } catch (e) {}
+    try { if (typeof window.loadMaintCodes === 'function') await window.loadMaintCodes(); } catch (e) {}
+    try { if (typeof window.renderMaintList === 'function') window.renderMaintList(); } catch (e) {}
+    // Page MyMaintenance uniquement : cartes Suivi machine + historique.
+    try {
+      if (typeof window.loadOpsTypes === 'function') {
+        await window.loadOpsTypes();
+        if (typeof window.renderMaintCards === 'function') window.renderMaintCards();
+        if (typeof window.renderOpsTypes === 'function') window.renderOpsTypes();
+      }
+    } catch (e) {}
+    try { if (typeof window.refreshOpsHistoryNow === 'function') window.refreshOpsHistoryNow(); } catch (e) {}
+  }
+
+  function _libresSaisiesLabel(n) {
+    return n + ' saisie' + (n > 1 ? 's' : '');
+  }
+
+  // Codes recurrents disponibles comme cible de rattachement.
+  // /api/maintenance/codes exclut deja les libres (include_libres=0 par defaut).
+  async function _libresFetchTargets() {
+    const r = await api('/api/maintenance/codes');
+    const items = (r && Array.isArray(r.items)) ? r.items : [];
+    return items.slice().sort(function (a, b) {
+      const na = parseInt(a.code, 10), nb = parseInt(b.code, 10);
+      if (!isNaN(na) && !isNaN(nb) && na !== nb) return na - nb;
+      return String(a.code).localeCompare(String(b.code));
+    });
+  }
+
+  // Prochain code numerique libre, pour pre-remplir la transformation.
+  function _libresNextFreeCode(items) {
+    let max = 0;
+    (items || []).forEach(function (it) {
+      const n = parseInt(it.code, 10);
+      if (!isNaN(n) && n > max) max = n;
+    });
+    return String(max + 1);
+  }
+
+  function _libresModal(titleHtml, bodyHtml, okLabel) {
+    const overlay = document.createElement('div');
+    overlay.className = 'alert-modal-overlay';
+    overlay.innerHTML = '<div class="alert-modal" style="max-width:560px">'
+      + '<div class="alert-modal-head"><h3>' + titleHtml + '</h3>'
+      +   '<button type="button" class="btn-sm btn-ghost" data-close>&times;</button></div>'
+      + '<div class="alert-modal-body">' + bodyHtml + '</div>'
+      + '<div class="alert-modal-foot">'
+      +   '<button type="button" class="btn btn-sec" data-close>Annuler</button>'
+      +   '<button type="button" class="btn" data-ok>' + okLabel + '</button>'
+      + '</div></div>';
+    document.body.appendChild(overlay);
+    const close = function () { overlay.remove(); };
+    overlay.querySelectorAll('[data-close]').forEach(function (el) {
+      el.addEventListener('click', close);
+    });
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+    return { overlay: overlay, close: close, okBtn: overlay.querySelector('[data-ok]') };
+  }
+
+  // ── Modal « Rattacher » ──
+  async function openLibreAttachModal(code) {
+    const it = (window._libresItems || []).find(function (x) { return x.code === code; });
+    if (!it) { toast('Titre introuvable', true); return; }
+    let targets;
+    try {
+      targets = await _libresFetchTargets();
+    } catch (e) {
+      toast('Impossible de charger les operations recurrentes', true); return;
+    }
+    if (!targets.length) { toast('Aucune operation recurrente disponible', true); return; }
+    const opts = targets.map(function (t) {
+      return '<option value="' + esc(String(t.code)) + '">' + esc(String(t.code)) + ' — '
+        + esc(String(t.label || '')) + ' (' + esc(_maintCatLabel(t.categorie)) + ')</option>';
+    }).join('');
+    const body =
+      '<p style="font-size:13px;color:var(--text2);margin:0 0 12px">Les <strong>'
+      + _libresSaisiesLabel(it.usage_count) + '</strong> de « ' + esc(it.label)
+      + ' » seront rattachees a l’operation recurrente choisie et compteront comme des saisies recurrentes classiques. Le titre inhabituel disparaitra de la liste et de l’historique.</p>'
+      + '<label style="display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px">Operation recurrente cible</label>'
+      + '<input type="search" id="libre-attach-filter" class="op-filter" placeholder="Filtrer (code, libelle…)" style="width:100%;margin-bottom:8px">'
+      + '<select id="libre-attach-target" size="8" style="width:100%;font-size:13px">' + opts + '</select>'
+      + '<p style="font-size:11px;color:var(--muted);margin:10px 0 0">Si un creneau contient deja une saisie du code cible, les deux saisies sont fusionnees (observations et pieces concatenees, durees additionnees).<br>Action irreversible hors SQL manuel.</p>';
+    const m = _libresModal('Rattacher · ' + esc(it.label), body, 'Rattacher');
+    const sel = m.overlay.querySelector('#libre-attach-target');
+    const filt = m.overlay.querySelector('#libre-attach-filter');
+    filt.addEventListener('input', function () {
+      const q = filt.value.trim().toLowerCase();
+      Array.prototype.forEach.call(sel.options, function (o) {
+        o.hidden = q ? o.textContent.toLowerCase().indexOf(q) === -1 : false;
+      });
+    });
+    m.okBtn.addEventListener('click', async function () {
+      const target = sel.value;
+      if (!target) { toast('Choisis une operation cible', true); return; }
+      const tLabel = sel.options[sel.selectedIndex].textContent;
+      if (!confirm('Rattacher « ' + it.label + ' » (' + _libresSaisiesLabel(it.usage_count)
+        + ') a :\n' + tLabel + '\n\nLe titre inhabituel sera supprime. Action irreversible.')) return;
+      m.okBtn.disabled = true;
+      try {
+        const r = await api('/api/maintenance/codes/libres/' + encodeURIComponent(code) + '/attach', {
+          method: 'POST',
+          body: JSON.stringify({ target_code: target }),
+        });
+        const nb = (r && r.total) || 0;
+        const fus = (r && r.merged) || 0;
+        toast(_libresSaisiesLabel(nb) + ' rattachee' + (nb > 1 ? 's' : '')
+          + (fus ? ' (dont ' + fus + ' fusionnee' + (fus > 1 ? 's' : '') + ')' : ''));
+        m.close();
+        await _libresRefreshAfterAction();
+      } catch (e) {
+        m.okBtn.disabled = false;
+        toast(e && e.message ? e.message : 'Erreur', true);
+      }
+    });
+  }
+
+  // ── Modal « Transformer » ──
+  async function openLibrePromoteModal(code) {
+    const it = (window._libresItems || []).find(function (x) { return x.code === code; });
+    if (!it) { toast('Titre introuvable', true); return; }
+    let existing = [];
+    try { existing = await _libresFetchTargets(); } catch (e) { existing = []; }
+    const nextCode = _libresNextFreeCode(existing);
+    const cats = [['controles', 'Controles'], ['entretien', 'Nettoyage'], ['remplacements', 'Interventions']];
+    const catOpts = cats.map(function (c) {
+      const selAttr = (c[0] === (it.categorie || 'remplacements')) ? ' selected' : '';
+      return '<option value="' + c[0] + '"' + selAttr + '>' + c[1] + '</option>';
+    }).join('');
+    const nivOpts = [1, 2, 3].map(function (n) {
+      return '<option value="' + n + '"' + (n === (it.niveau || 1) ? ' selected' : '') + '>N' + n + '</option>';
+    }).join('');
+    const body =
+      '<p style="font-size:13px;color:var(--text2);margin:0 0 12px">« ' + esc(it.label)
+      + ' » devient une operation recurrente du catalogue. Ses <strong>'
+      + _libresSaisiesLabel(it.usage_count)
+      + '</strong> sont conservees : elles deviennent l’historique de la nouvelle operation, la carte Suivi machine affichera directement la derniere intervention.</p>'
+      + '<div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px">'
+      +   '<div><label style="display:block;font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px">Code</label>'
+      +     '<input type="text" id="libre-promo-code" value="' + esc(nextCode) + '" inputmode="numeric" maxlength="4" style="width:100%"></div>'
+      +   '<div><label style="display:block;font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px">Niveau</label>'
+      +     '<select id="libre-promo-niveau" style="width:100%">' + nivOpts + '</select></div>'
+      +   '<div><label style="display:block;font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px">Categorie</label>'
+      +     '<select id="libre-promo-cat" style="width:100%">' + catOpts + '</select></div>'
+      + '</div>'
+      + '<div style="margin-top:10px"><label style="display:block;font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px">Libelle</label>'
+      +   '<input type="text" id="libre-promo-label" value="' + esc(it.label || '') + '" style="width:100%"></div>'
+      + '<div style="margin-top:10px"><label style="display:block;font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px">Intervalle (obligatoire)</label>'
+      +   '<input type="text" id="libre-promo-intervalle" placeholder="ex. Hebdo, 30 jours, 6 mois" maxlength="80" style="width:100%"></div>'
+      + '<div style="margin-top:10px"><label style="display:block;font-size:11px;color:var(--muted);font-weight:700;margin-bottom:4px">Reference metrage (optionnel)</label>'
+      +   '<input type="text" id="libre-promo-metrage" placeholder="ex. 5000 m, 10 km" maxlength="80" style="width:100%"></div>'
+      + '<p style="font-size:11px;color:var(--muted);margin:12px 0 0">Sans intervalle, la carte ne peut pas calculer d’echeance : le champ est donc requis.<br>Action irreversible hors SQL manuel.</p>';
+    const m = _libresModal('Transformer en recurrente · ' + esc(it.label), body, 'Transformer');
+    m.okBtn.addEventListener('click', async function () {
+      const q = function (id) { return m.overlay.querySelector(id); };
+      const newCode = q('#libre-promo-code').value.trim();
+      const label = q('#libre-promo-label').value.trim();
+      const intervalle = q('#libre-promo-intervalle').value.trim();
+      if (!newCode) { toast('Code obligatoire', true); return; }
+      if (!label) { toast('Libelle obligatoire', true); return; }
+      if (!intervalle) { toast('Intervalle obligatoire', true); return; }
+      if (existing.some(function (t) { return String(t.code) === newCode; })) {
+        toast('Le code ' + newCode + ' existe deja', true); return;
+      }
+      if (!confirm('Transformer « ' + it.label + ' » en operation recurrente ' + newCode
+        + ' ?\n\n' + _libresSaisiesLabel(it.usage_count)
+        + ' reprise' + (it.usage_count > 1 ? 's' : '') + ' dans l’historique. Action irreversible.')) return;
+      m.okBtn.disabled = true;
+      try {
+        const r = await api('/api/maintenance/codes/libres/' + encodeURIComponent(code) + '/promote', {
+          method: 'POST',
+          body: JSON.stringify({
+            new_code: newCode,
+            label: label,
+            niveau: parseInt(q('#libre-promo-niveau').value, 10) || 1,
+            categorie: q('#libre-promo-cat').value,
+            intervalle: intervalle,
+            metrage_ref: q('#libre-promo-metrage').value.trim(),
+          }),
+        });
+        toast('Operation recurrente ' + ((r && r.code) || newCode) + ' creee');
+        m.close();
+        await _libresRefreshAfterAction();
+      } catch (e) {
+        m.okBtn.disabled = false;
+        toast(e && e.message ? e.message : 'Erreur', true);
+      }
     });
   }
 
@@ -641,6 +856,8 @@
   try { window.openMaintDocsModal = openMaintDocsModal; } catch(e) {}
   try { window.loadLibres = loadLibres; } catch(e) {}
   try { window.renderLibresList = renderLibresList; } catch(e) {}
+  try { window.openLibreAttachModal = openLibreAttachModal; } catch(e) {}
+  try { window.openLibrePromoteModal = openLibrePromoteModal; } catch(e) {}
   try { window.MAINT_CODES_STORAGE_KEY = MAINT_CODES_STORAGE_KEY; } catch(e) {}
 
   window.MysifaMaintForm = {
@@ -659,6 +876,8 @@
     openMaintDocsModal: openMaintDocsModal,
     loadLibres: loadLibres,
     renderLibresList: renderLibresList,
+    openLibreAttachModal: openLibreAttachModal,
+    openLibrePromoteModal: openLibrePromoteModal,
     MAINT_CODES_STORAGE_KEY: MAINT_CODES_STORAGE_KEY
   };
 })();
