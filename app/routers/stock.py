@@ -374,6 +374,16 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
         "prix_par_laize": prix_par_laize,
         "stock_par_laize": stock_par_laize if laizee else None,
         "sous_section": sous_section,
+        # Regroupement thematique (FR affiche / EN pour les references produit
+        # MyAO) + abreviation d'exception. La reponse de cette API est une liste
+        # blanche explicite : un champ absent ici n'atteint jamais le front, meme
+        # s'il est bien selectionne en SQL.
+        "sous_categorie": (r["sous_categorie"] or "").strip() or None
+            if "sous_categorie" in keys and r["sous_categorie"] else None,
+        "sous_categorie_en": (r["sous_categorie_en"] or "").strip() or None
+            if "sous_categorie_en" in keys and r["sous_categorie_en"] else None,
+        "abbreviation": (r["abbreviation"] or "").strip() or None
+            if "abbreviation" in keys and r["abbreviation"] else None,
         "avec_conditionnement": _mp_a_conditionnement(cat),
         "unites_par_palette": unites_par_palette,
         "unite_achat": _mp_unite_achat(cat) if _mp_a_conditionnement(cat) else None,
