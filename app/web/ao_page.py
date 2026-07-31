@@ -153,6 +153,7 @@ body.sb-open .sidebar-overlay{display:block}
 .tl-lib{font-size:13px;font-weight:600;color:var(--text)}
 .tl-meta{font-size:11px;color:var(--muted);margin-top:2px}
 .tl-motif{font-size:11px;color:var(--warn);margin-top:3px}
+.tl-motif-ok{color:var(--muted)}
 .tl-note{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.6}
 .empty-state{padding:48px 24px;text-align:center;color:var(--muted)}
 .empty-state strong{display:block;color:var(--text2);font-size:15px;margin-bottom:8px}
@@ -2081,8 +2082,11 @@ function engagementCell(f) {
     out += '<span class="eng-chip eng-on" title="Dernière ouverture : '+escAttr(e.email_ouvert_dernier||'')+'">'+
       'Email ouvert'+(nbMail > 1 ? ' ×'+nbMail : '')+'</span>';
   } else if (e.ouvertures_ecartees > 0) {
-    out += '<span class="eng-chip eng-doubt" title="'+escAttr(e.ouvertures_ecartees)+
-      ' chargement(s) du pixel écarté(s) : préchargement ou robot">Ouverture non confirmée</span>';
+    // Le motif est affiché, pas seulement compté : « non confirmée » sans
+    // raison oblige à ouvrir la timeline pour comprendre.
+    const pourquoi = e.motif_ecarte ? ' — ' + e.motif_ecarte : '';
+    out += '<span class="eng-chip eng-doubt" title="'+escAttr(e.ouvertures_ecartees +
+      ' chargement(s) du pixel écarté(s)' + pourquoi)+'">Ouverture non confirmée</span>';
   } else {
     out += '<span class="eng-chip eng-off">Pas d\'ouverture détectée</span>';
   }
@@ -2147,8 +2151,11 @@ async function openTimelineModal(fid) {
     } else {
       body = '<div class="tl">'+evts.map(e => {
         const cls = e.fiable ? '' : ' tl-doubt';
-        const motif = e.fiable ? '' :
-          '<div class="tl-motif">Écarté — '+escHtml(e.motif||'signal non fiable')+'</div>';
+        // Un événement RETENU peut aussi porter un motif (proxy de webmail) :
+        // l'info est utile, elle ne doit pas disparaître de la timeline.
+        const motif = !e.fiable
+          ? '<div class="tl-motif">Écarté — '+escHtml(e.motif||'signal non fiable')+'</div>'
+          : (e.motif ? '<div class="tl-motif tl-motif-ok">'+escHtml(e.motif)+'</div>' : '');
         return '<div class="tl-row'+cls+'">'+
           '<div class="tl-dot"></div>'+
           '<div class="tl-main"><div class="tl-lib">'+escHtml(e.libelle)+'</div>'+
