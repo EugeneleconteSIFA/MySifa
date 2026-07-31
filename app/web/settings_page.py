@@ -6372,6 +6372,10 @@ const _FMT_GUIDES = {
   'nc-list': 'MyQualité — Non-conformités',
   'audits': 'MyQualité — Audits client',
   'ref-rse': 'MyQualité — Référentiel RSE',
+  'planningrh-overview': 'Planning RH — Vue d\'ensemble',
+  'planningrh-operator': 'Planning RH — Ma semaine',
+  'taches-kanban': 'Gestionnaire de tâches — Kanban',
+  'taches-liste': 'Gestionnaire de tâches — Liste',
 };
 
 function _fmtGuideLabel(key){ return _FMT_GUIDES[key] || key; }

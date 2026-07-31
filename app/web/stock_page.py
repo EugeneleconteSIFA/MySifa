@@ -2243,6 +2243,7 @@ function icon(name, size=16){
   const a = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
   const p = {
     'grid': '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+    'list': '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
     'layers': '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
     'clock': '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
     'clipboard': '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>',
@@ -8221,15 +8222,26 @@ function buildMatieres() {
       el('p', { cls: 'hist-subtitle' },
         'Mandrins (pal.), frontaux et glassines (bob.), adhésifs (pal.), palettes (piles), cartons (pal.)'),
     ),
-    isMatieresAdmin()
-      ? el('div', { cls: 'hist-head-actions' },
-          el('button', {
+    el('div', { cls: 'hist-head-actions' },
+      // Le bouton montre l'icone du mode VERS lequel on bascule, pas du mode
+      // courant : c'est ce que l'utilisateur obtient en cliquant.
+      el('button', {
+        cls: 'mp-vue-btn',
+        type: 'button',
+        attrs: {
+          title: mpVueCourante() === 'liste' ? 'Afficher en cartes' : 'Afficher en liste',
+          'aria-label': mpVueCourante() === 'liste' ? 'Afficher en cartes' : 'Afficher en liste',
+        },
+        on: { click: (e) => { e.stopPropagation(); mpBasculerVue(); } },
+      }, iconEl(mpVueCourante() === 'liste' ? 'grid' : 'list', 16)),
+      isMatieresAdmin()
+        ? el('button', {
             cls: 'btn',
             type: 'button',
             on: { click: () => openMatieresAdminDrawer() },
-          }, 'Gérer les références'),
-        )
-      : null,
+          }, 'Gérer les références')
+        : null,
+    ),
   );
   // Construit la liste réelle des pills : on remplace la pill "frontal" par
   // une pill par sous-section frontale présente. La sélection actuelle est
@@ -8319,7 +8331,7 @@ function buildMatieres() {
     el('span', { cls: 'mp-search-icon', attrs: { 'aria-hidden': 'true' } }, iconEl('search', 18)),
     searchInp,
   );
-  const list = el('div', { cls: 'mp-list' });
+  const list = el('div', { cls: 'mp-list' + (mpVueCourante() === 'liste' ? ' mp-vue-liste' : '') });
   const renderMpCard = (m) => {
     const seuil = parseFloat(m.seuil_alerte) || 0;
     const alertCls = m.en_alerte ? ' alert' : '';
@@ -8963,6 +8975,26 @@ function copyMatiereRefToAddForm(item) {
     if (refInp) refInp.focus();
   });
   showToast('Référence copiée — saisis la nouvelle référence.', 'info');
+}
+
+// Mode d'affichage des matieres : cartes (defaut) ou liste dense. Persiste dans
+// localStorage — une preference d'affichage qui se reinitialise a chaque
+// rechargement se reparametre dix fois par jour.
+const LS_MP_VUE = 'mysifa.stock.matieres.vue';
+
+function mpVueCourante() {
+  if (!S.matieresVue) {
+    let stockee = null;
+    try { stockee = localStorage.getItem(LS_MP_VUE); } catch (e) { stockee = null; }
+    S.matieresVue = (stockee === 'liste') ? 'liste' : 'cartes';
+  }
+  return S.matieresVue;
+}
+
+function mpBasculerVue() {
+  S.matieresVue = (mpVueCourante() === 'liste') ? 'cartes' : 'liste';
+  try { localStorage.setItem(LS_MP_VUE, S.matieresVue); } catch (e) { /* navigation privee */ }
+  render();
 }
 
 function buildMatieresAdminRow(item) {
