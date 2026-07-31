@@ -5299,6 +5299,11 @@ function buildMatiereDetail() {
     meta.push('Conditionnement : ' + Number(m.unites_par_palette).toLocaleString('fr-FR') + ' ' + u + '/palette');
   }
   if (mpIsAdhesifCategory(m)) meta.push(mpAdhesifCondLabel(m));
+  if (mpIsAdhesifCategory(m)) {
+    meta.push(Number(m.weight_gsm) > 0
+      ? 'Grammage : ' + fN(m.weight_gsm) + ' g/m²'
+      : 'Grammage à renseigner');
+  }
   if (seuil > 0) meta.push('Seuil min. ' + mpStockLine(seuil, m));
 
   // Détail laizes pour les matières frontal/glassine/complexe
@@ -7619,6 +7624,17 @@ function matiereRefEditPayload(item, fields) {
     payload.cartons_par_palette = cpp.value;
     payload.kg_par_carton = kgc.value;
   }
+  if (fields.isAdhesif && fields.gsmInp) {
+    // Toujours envoyé, même vide : c'est ce qui permet d'effacer un grammage.
+    const raw = (fields.gsmInp.value || '').replace(',', '.').trim();
+    if (raw === '') {
+      payload.weight_gsm = null;
+    } else {
+      const g = parseFloat(raw);
+      if (isNaN(g) || g <= 0) return { error: 'Grammage : valeur > 0 obligatoire.' };
+      payload.weight_gsm = Math.round(g);
+    }
+  }
   if (fields.intervalleInp) {
     const raw = (fields.intervalleInp.value || '').trim();
     if (raw !== '') {
@@ -8018,6 +8034,10 @@ function appendMatiereRefEditFields(parent, item) {
   kgcInp.value = String(item.kg_par_carton > 0 ? item.kg_par_carton : '');
   const kgPalOut = el('div', { cls: 'mp-readonly' }, '—');
   const kgPalHint = el('div', { cls: 'mp-hint' }, '');
+  // Grammage (g/m²) : caractéristique de l'adhésif, pas du produit fini.
+  // C'est lui qui convertit la surface enduite en kilos dans Besoins matières.
+  const gsmInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 22' } });
+  gsmInp.value = String(item.weight_gsm > 0 ? item.weight_gsm : '');
   function refreshKgPalette() {
     const cpp = parseFloat((cppInp.value || '').replace(',', '.'));
     const kgc = parseFloat((kgcInp.value || '').replace(',', '.'));
@@ -8043,6 +8063,10 @@ function appendMatiereRefEditFields(parent, item) {
     el('div', { cls: 'mp-field' }, el('label', null, 'Cartons par palette'), cppInp),
     el('div', { cls: 'mp-field' }, el('label', null, 'Kg d\'adhésif par carton'), kgcInp),
     el('div', { cls: 'mp-field' }, el('label', null, 'Kg par palette'), kgPalOut, kgPalHint),
+    el('div', { cls: 'mp-field' }, el('label', null, 'Grammage (g/m²)'), gsmInp,
+      el('div', { cls: 'mp-hint' },
+        'Sert au calcul du besoin en kilos : grammage × métrage × laize. '
+        + 'Sans lui, le besoin adhésif reste non chiffré.')),
   ] : [];
 
   // Sous-section (catégories autre + frontal) — cloisonnée par catégorie
@@ -8099,7 +8123,7 @@ function appendMatiereRefEditFields(parent, item) {
     ? mpFormSection('Laizes & tarification', laizeWrap)
     : null;
   parent.append(...[grille, sectionLaizes].filter(Boolean));
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp, cppInp, kgcInp, isAdhesif, abbrevInp, hasAbbrev, sousCategorieSel };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, abbrevInp, hasAbbrev, sousCategorieSel };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -9393,11 +9417,14 @@ function buildMatieresAdminAddForm() {
   }
   cppInp.addEventListener('input', refreshAddKgPalette);
   kgcInp.addEventListener('input', refreshAddKgPalette);
+  const gsmInp = el('input', { attrs: { type: 'number', min: '1', step: '1', placeholder: 'Ex. 22' } });
   adhCondWrap.append(
     el('div', { cls: 'mp-field' }, el('label', null, 'Cartons par palette'), cppInp),
     el('div', { cls: 'mp-field' }, el('label', null, 'Kg d\'adhésif par carton'), kgcInp),
     el('div', { cls: 'mp-field' }, el('label', null, 'Kg par palette'), kgPalOut,
       el('div', { cls: 'mp-hint' }, 'Calculé. Sans lui, seule la saisie au kilo sera possible.')),
+    el('div', { cls: 'mp-field' }, el('label', null, 'Grammage (g/m²)'), gsmInp,
+      el('div', { cls: 'mp-hint' }, 'Sert au calcul du besoin en kilos dans Besoins matières.')),
   );
   const seuilLbl = el('label', null, 'Seuil d\'alerte (0 = pas d\'alerte)');
   const hintEl = el('div', { cls: 'mp-hint' }, '');
@@ -9565,6 +9592,8 @@ function buildMatieresAdminAddForm() {
             const kgc = parseFloat((kgcInp.value || '').replace(',', '.'));
             if (cpp > 0) payload.cartons_par_palette = cpp;
             if (kgc > 0) payload.kg_par_carton = kgc;
+            const gsm = parseFloat((gsmInp.value || '').replace(',', '.'));
+            if (gsm > 0) payload.weight_gsm = Math.round(gsm);
           }
           if (mpCategorieHasSousSection(cat)) {
             const ss = sousSectionSel.getValue();
