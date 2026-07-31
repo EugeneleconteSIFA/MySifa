@@ -12054,7 +12054,9 @@ function openBesoinAssocierModal(kind, sourceValue) {
       el('strong', {}, sourceValue),
     ),
     el('div', { style: { marginTop: '14px', marginBottom: '8px', fontSize: '12px', fontWeight: '600', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '.4px' } },
-      catFilter ? `Matières premières · catégorie ${catFilter}` : 'Toutes les matières'),
+      (cats && cats.length && filtered.length)
+        ? `Matières premières · catégorie ${cats.join(' ou ')}`
+        : 'Toutes les matières'),
     (function () {
       const input = el('input', { cls: 'bes-search-input', placeholder: 'Rechercher (référence ou désignation)…' });
       const listWrap = el('div', { cls: 'bes-mat-list' });
