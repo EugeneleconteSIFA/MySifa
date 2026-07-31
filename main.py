@@ -367,8 +367,19 @@ async def inject_tache_quick(request: Request, call_next):
     if p.startswith("/portail/") or _TACHE_QUICK_TAG in body:
         new_body = body
     else:
-        new_body, n = _BODY_CLOSE_RE.subn(_TACHE_QUICK_TAG + b"</body>", body, count=1)
-        if n == 0:
+        # Insertion avant le DERNIER </body>, jamais le premier. Plusieurs pages
+        # (MyStock onglet Traçabilité, Saisie prod) embarquent un document HTML
+        # complet dans une chaîne JS pour la fenêtre d'impression : un "</body>"
+        # apparaît donc au milieu du code, bien avant la vraie fermeture du
+        # document. Injecter la balise à cet endroit plaçait un "</script>" brut
+        # à l'intérieur d'un <script> — le parser HTML y ferme le script, le JS
+        # est tronqué ("Unexpected end of input") et tout le reste du code
+        # s'affiche en texte brut dans la page.
+        _closes = list(_BODY_CLOSE_RE.finditer(body))
+        if _closes:
+            _pos = _closes[-1].start()
+            new_body = body[:_pos] + _TACHE_QUICK_TAG + body[_pos:]
+        else:
             new_body = body
     headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
     return Response(
