@@ -28,11 +28,35 @@ foreach ($a in $args) {
 }
 
 function Find-GitBash {
-    @(
+    # v2.5.7 : recherche elargie. Avant, seuls les deux chemins "Program Files"
+    # etaient testes : une installation per-user (winget, scoop, installeur en
+    # mode utilisateur) faisait echouer le deploiement avec "Git Bash
+    # introuvable" alors que git etait parfaitement fonctionnel dans le PATH.
+    #
+    # Bug secondaire corrige au passage : `return` a l'interieur d'un
+    # ForEach-Object ne sort PAS de la fonction (il termine seulement
+    # l'iteration). L'ancienne version emettait donc le chemin trouve ET le
+    # $null final dans le pipeline, et renvoyait un tableau de 2 elements au
+    # lieu d'une chaine. Un `foreach` classique, lui, sort bien de la fonction.
+    $candidates = @(
         "${env:ProgramFiles}\Git\bin\bash.exe",
-        "${env:ProgramFiles(x86)}\Git\bin\bash.exe"
-    ) | ForEach-Object {
-        if (Test-Path $_) { return $_ }
+        "${env:ProgramFiles(x86)}\Git\bin\bash.exe",
+        "$env:LOCALAPPDATA\Programs\Git\bin\bash.exe",
+        "$env:USERPROFILE\scoop\apps\git\current\bin\bash.exe",
+        "$env:ProgramData\chocolatey\bin\bash.exe"
+    )
+    foreach ($c in $candidates) {
+        if ($c -and (Test-Path $c)) { return $c }
+    }
+    # Dernier recours : deduire la racine d'installation depuis le git du PATH.
+    # Couvre toute installation personnalisee (...\Git\cmd\git.exe -> ...\Git).
+    $gitCmd = Get-Command git -ErrorAction SilentlyContinue
+    if ($gitCmd -and $gitCmd.Source) {
+        $gitRoot = Split-Path -Parent (Split-Path -Parent $gitCmd.Source)
+        foreach ($sub in @("bin\bash.exe", "usr\bin\bash.exe")) {
+            $candidate = Join-Path $gitRoot $sub
+            if (Test-Path $candidate) { return $candidate }
+        }
     }
     return $null
 }
@@ -395,9 +419,14 @@ export MYSIFA_SKIP_SYNC='$skipVal'
 }
 
 # --- Point d'entree ---
-$bash = Find-GitBash
+# v2.5.7 : MYSIFA_BASH permet de forcer le chemin de bash.exe sans toucher au
+# script (utile si Git est installe dans un emplacement non standard).
+$bash = if ($env:MYSIFA_BASH -and (Test-Path $env:MYSIFA_BASH)) { $env:MYSIFA_BASH }
+        else { Find-GitBash }
 if (-not $bash) {
-    throw "Git Bash introuvable - installez Git for Windows."
+    throw ("Git Bash introuvable. Verifie l'installation de Git for Windows, ou " +
+           "force le chemin avec la variable d'environnement MYSIFA_BASH. " +
+           "Pour diagnostiquer : (Get-Command git).Source")
 }
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path

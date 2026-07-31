@@ -109,7 +109,7 @@ body.sb-open .sidebar-overlay{display:block}
 .btn-sm{padding:6px 12px;font-size:12px}
 .btn-icon{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;vertical-align:middle;transition:all .15s}
 .btn-icon:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-.btn-icon.btn-del-ao:hover{background:rgba(248,113,113,.12);color:var(--danger);border-color:var(--danger)}
+.btn-icon.btn-del-ao:hover,.btn-icon.btn-del-f:hover{background:rgba(248,113,113,.12);color:var(--danger);border-color:var(--danger)}
 .ao-actions-cell{text-align:right;white-space:nowrap}
 .ao-actions-cell .btn{vertical-align:middle}
 .ao-params-panel{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:6px 12px;margin-left:auto;box-shadow:0 1px 2px rgba(0,0,0,.04);display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px}
@@ -349,7 +349,9 @@ function icon(name, size) {
     'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
     'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
     'corner-down-right': '<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
-    'alert-triangle': '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'
+    'alert-triangle': '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+    activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+    'message-square': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'
   };
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0">'+(p[name]||'')+'</svg>';
 }
@@ -2109,11 +2111,17 @@ function renderFournisseurs() {
     const unreadBadge = nb > 0
       ? ' <span style="background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;border-radius:999px;font-weight:700;display:inline-block">'+escHtml(nb)+' msg</span>'
       : '';
-    let act = '<button class="btn btn-ghost btn-sm btn-copy" data-token="'+escAttr(f.token)+'">Copier lien</button> '+
-      '<button class="btn btn-ghost btn-sm btn-msg" data-id="'+f.id+'">Messagerie</button>';
-    if (f.date_envoi) act += ' <button class="btn btn-ghost btn-sm btn-tl" data-id="'+f.id+'">Suivi</button>';
-    if (f.statut !== 'repondu') act += ' <button class="btn btn-ghost btn-sm btn-edit-f" data-id="'+f.id+'">Modifier</button>';
-    if (f.statut !== 'repondu') act += ' <button class="btn btn-ghost btn-sm btn-del-f" data-id="'+f.id+'">Supprimer</button>';
+    // Actions en icones : cinq boutons libelles debordaient sur deux lignes et
+    // ecrasaient les colonnes de dates. `title` + `aria-label` gardent
+    // l'action nommee au survol et pour les lecteurs d'ecran.
+    const actBtn = (cls, ico, libelle, attr) =>
+      '<button class="btn-icon '+cls+'" '+attr+' title="'+escAttr(libelle)+'" aria-label="'+escAttr(libelle)+'">'+icon(ico,14)+'</button>';
+    let act = actBtn('btn-copy', 'copy', 'Copier le lien portail', 'data-token="'+escAttr(f.token)+'"')+
+      actBtn('btn-msg', 'message-square', 'Messagerie'+(nb > 0 ? ' — '+nb+' non lu(s)' : ''), 'data-id="'+f.id+'"');
+    if (f.date_envoi) act += actBtn('btn-tl', 'activity', 'Suivi d\'engagement', 'data-id="'+f.id+'"');
+    if (f.statut !== 'repondu') act += actBtn('btn-edit-f', 'edit', 'Modifier', 'data-id="'+f.id+'"');
+    if (f.statut !== 'repondu') act += actBtn('btn-del-f', 'trash', 'Supprimer', 'data-id="'+f.id+'"');
+    act = '<div style="display:flex;gap:6px;justify-content:flex-end;white-space:nowrap">'+act+'</div>';
     return '<tr><td>'+escHtml(f.nom_fournisseur)+'</td><td>'+escHtml(f.email_contact)+'</td><td>'+fourniBadge(f.statut)+unreadBadge+'</td>'+
       '<td>'+engagementCell(f)+'</td>'+
       '<td>'+escHtml(f.date_envoi||'—')+'</td><td>'+escHtml(f.date_reponse||'—')+'</td><td>'+act+'</td></tr>';

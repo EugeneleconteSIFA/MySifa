@@ -1919,6 +1919,7 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
       fwd:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>',
       pin:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14l-2-5V5a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v7z"/></svg>',
       unpin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="2" y1="2" x2="22" y2="22"/><path d="M5 17h14l-2-5V5a2 2 0 0 0-2-2H9"/></svg>',
+      tache: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
       del:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>',
     };
 
@@ -1941,6 +1942,14 @@ body.light .cw-msg-theirs{background:rgba(0,0,0,.04)}
     menu.appendChild(mkItem(ICO.reply, 'Répondre', '', ()=>cwStartReply(msg)));
     if (canEdit) menu.appendChild(mkItem(ICO.edit, 'Modifier', '', ()=>cwStartEdit(wrap,msg)));
     menu.appendChild(mkItem(ICO.fwd, 'Transférer', '', ()=>cwStartForward(msg)));
+    // Créer une tâche à partir du message — super admin uniquement, et
+    // seulement si le module de création rapide est chargé (il l'est sur toutes
+    // les pages via l'injection de main.py, mais on ne suppose rien).
+    if (CW.role === 'superadmin' && window.MySifaTacheRapide) {
+      menu.appendChild(mkItem(ICO.tache, 'Créer une tâche', '', () => {
+        window.MySifaTacheRapide.depuisMessage(msg, ch ? (ch.display_name || ch.name || '') : '');
+      }));
+    }
     if (canPin) menu.appendChild(mkItem(
       msg.pinned_at?ICO.unpin:ICO.pin,
       msg.pinned_at?'Désépingler':'Épingler', '', ()=>{

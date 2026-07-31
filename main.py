@@ -331,6 +331,65 @@ async def inject_staging_bandeau(request: Request, call_next):
     )
 
 
+# ── Création rapide de tâche (Option+T) ─────────────────────────────────────
+# Le script est injecté dans TOUTES les réponses HTML plutôt qu'ajouté page par
+# page : MySifa compte une vingtaine de pages standalone, et un raccourci global
+# qui manque sur l'une d'elles serait un bug invisible jusqu'au jour où on
+# l'utilise là. Un seul point d'insertion, aucune page oubliée.
+#
+# Coût pour les autres rôles : un <script> de 20 Ko en cache navigateur, aucun
+# appel réseau tant que le raccourci n'a pas servi (le script résout le rôle
+# paresseusement). html2canvas n'est chargé qu'à la première capture.
+_TACHE_QUICK_TAG = b'<script src="/static/mysifa_tache_quick.js?v=1" defer></script>'
+_BODY_CLOSE_RE = re.compile(rb"</body>", re.IGNORECASE)
+
+
+@app.middleware("http")
+async def inject_tache_quick(request: Request, call_next):
+    response = await call_next(request)
+    if "text/html" not in response.headers.get("content-type", "").lower():
+        return response
+    # Deux formes de réponse à gérer : le flux normal (body_iterator) et la
+    # Response déjà matérialisée que renvoie inject_staging_bandeau sur v1.
+    # Ne traiter que le flux ferait sauter l'injection sur TOUT le staging —
+    # c'est-à-dire précisément là où on teste.
+    if hasattr(response, "body_iterator"):
+        body = b""
+        async for chunk in response.body_iterator:
+            body += chunk if isinstance(chunk, (bytes, bytearray)) else chunk.encode("utf-8")
+    else:
+        body = getattr(response, "body", b"") or b""
+        if not body:
+            return response
+    # Les portails fournisseur/expédition sont publics : pas de session MySifa,
+    # donc rien à y injecter.
+    p = request.url.path
+    if p.startswith("/portail/") or _TACHE_QUICK_TAG in body:
+        new_body = body
+    else:
+        # Insertion avant le DERNIER </body>, jamais le premier. Plusieurs pages
+        # (MyStock onglet Traçabilité, Saisie prod) embarquent un document HTML
+        # complet dans une chaîne JS pour la fenêtre d'impression : un "</body>"
+        # apparaît donc au milieu du code, bien avant la vraie fermeture du
+        # document. Injecter la balise à cet endroit plaçait un "</script>" brut
+        # à l'intérieur d'un <script> — le parser HTML y ferme le script, le JS
+        # est tronqué ("Unexpected end of input") et tout le reste du code
+        # s'affiche en texte brut dans la page.
+        _closes = list(_BODY_CLOSE_RE.finditer(body))
+        if _closes:
+            _pos = _closes[-1].start()
+            new_body = body[:_pos] + _TACHE_QUICK_TAG + body[_pos:]
+        else:
+            new_body = body
+    headers = {k: v for k, v in response.headers.items() if k.lower() != "content-length"}
+    return Response(
+        content=new_body,
+        status_code=response.status_code,
+        headers=headers,
+        media_type=response.media_type,
+    )
+
+
 # Compression des reponses (>1 Ko). Ajoute en dernier => middleware le plus
 # externe : compresse apres l'injection du bandeau staging (qui lit le HTML
 # en clair). Pages HTML inline 250-780 Ko => ~5-8x plus legeres sur le reseau.
