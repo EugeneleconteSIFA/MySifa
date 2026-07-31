@@ -6705,7 +6705,7 @@ async function unlinkBridge(mp_id) {
 <!-- v2.4.18 : mysifa_maint_form.js — CRUD codes maintenance + interventions libres (module partagé settings ↔ maintenance). -->
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
-<script src="/static/mysifa_maint_form.js?v=2.4.18"></script>
+<script src="/static/mysifa_maint_form.js?v=2.5.12"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
 <script src="/static/mysifa_impersonate.js"></script>
 <!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe

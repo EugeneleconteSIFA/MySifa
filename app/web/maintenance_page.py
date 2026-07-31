@@ -3009,9 +3009,17 @@ function switchView(name){
 // =========================================================================
 // Planning — calendrier mensuel + vue Semaine (style MyProd)
 // =========================================================================
-const CAL_HOUR_START = 6;
-const CAL_HOUR_END   = 21;   // exclusif (affiche 6h → 20h)
+// v2.6.1 : journee complete. Avant 6h→21h, ce qui tronquait tout creneau
+// debordant de la plage (ex. un nettoyage 19:00–23:00 s'arretait visuellement
+// a 21:00) et rendait impossible la planification d'une intervention de nuit.
+// Toutes les positions verticales sont calculees relativement a
+// CAL_HOUR_START, donc changer ces deux constantes suffit : blocs d'evenement,
+// clic sur cellule, glisser-deposer et redimensionnement suivent.
+const CAL_HOUR_START = 0;
+const CAL_HOUR_END   = 24;   // exclusif (affiche 00h → 23h)
 const CAL_HOUR_PX    = 62;
+// Marge laissee au-dessus du premier creneau lors du recentrage automatique.
+const CAL_AUTOSCROLL_MARGIN = 28;
 function _calWeekMondayOf(d){
   const r = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const off = (r.getDay() + 6) % 7;
@@ -3326,6 +3334,40 @@ function _fitCalWeekBody(){
   body.style.maxHeight = Math.max(CAL_WV_MIN_HEIGHT, Math.round(avail)) + 'px';
 }
 
+// v2.6.1 : avec 24 heures affichees, la grille fait ~1490px pour une zone
+// visible de ~360px. Sans recentrage, le planning s'ouvrirait sur 00:00 et il
+// faudrait faire defiler jusqu'aux creneaux. On se cale donc sur le creneau le
+// plus tot de la periode affichee ; a defaut (semaine vide) sur l'heure
+// courante.
+//
+// Le drapeau est indispensable : le recentrage ne doit avoir lieu qu'apres un
+// RENDU (changement de semaine, de vue, arrivee sur l'onglet), jamais sur un
+// simple redimensionnement — sinon on ecraserait la position de defilement que
+// l'utilisateur vient de choisir a la main.
+let _calAutoScrollPending = false;
+function _requestCalAutoScroll(){ _calAutoScrollPending = true; }
+function _autoScrollCalWeekBody(){
+  if(!_calAutoScrollPending) return;
+  const body = document.getElementById('cal-wv-body');
+  if(!body) return;
+  // clientHeight nul = grille pas encore mesurable (section masquee) : on garde
+  // le drapeau arme pour retenter au prochain passage.
+  if(!body.clientHeight) return;
+  _calAutoScrollPending = false;
+  // On lit la position deja posee sur les blocs par _makeEventBlock plutot que
+  // de recalculer depuis le modele : une seule source de verite.
+  let target = null;
+  body.querySelectorAll('.cal-event').forEach(el => {
+    const t = parseFloat(el.style.top);
+    if(!isNaN(t) && (target === null || t < target)) target = t;
+  });
+  if(target === null){
+    const px = (CAL_STATE && CAL_STATE.view === 'day') ? 72 : CAL_HOUR_PX;
+    target = (new Date().getHours() - CAL_HOUR_START) * px;
+  }
+  body.scrollTop = Math.max(0, target - CAL_AUTOSCROLL_MARGIN);
+}
+
 let _calGutterRaf = 0;
 function _scheduleCalHeaderGutterSync(){
   if(_calGutterRaf) return;
@@ -3336,6 +3378,8 @@ function _scheduleCalHeaderGutterSync(){
     // verticale, donc modifier la largeur de gouttiere a reporter sur le header.
     try{ _fitCalWeekBody(); }catch(_){}
     try{ _syncCalHeaderGutter(); }catch(_){}
+    // Apres la hauteur : scrollTop n'a de sens qu'une fois la zone visible connue.
+    try{ _autoScrollCalWeekBody(); }catch(_){}
   });
 }
 window.addEventListener('resize', _scheduleCalHeaderGutterSync);
@@ -3589,7 +3633,7 @@ function renderCalWeek(){
   // v2.6.0 : le corps vient d'etre reconstruit -> re-aligner le header sur la
   // gouttiere de scrollbar, et repeindre l'etat de chargement (le skeleton a
   // ete efface par le innerHTML ci-dessus).
-  try{ _syncCalHeaderGutter(); _scheduleCalHeaderGutterSync(); }catch(_){}
+  try{ _requestCalAutoScroll(); _syncCalHeaderGutter(); _scheduleCalHeaderGutterSync(); }catch(_){}
   try{ _renderPlanningLoadState(); }catch(_){}
 }
 function renderCalDay(){
@@ -3642,7 +3686,7 @@ function renderCalDay(){
     // v2.2.58 : strip flottant absolu — pas d'impact sur l'alignement
     _renderNonPlanifStrip(cIso, col, 'day');
   });
-  try{ _syncCalHeaderGutter(); _scheduleCalHeaderGutterSync(); }catch(_){}
+  try{ _requestCalAutoScroll(); _syncCalHeaderGutter(); _scheduleCalHeaderGutterSync(); }catch(_){}
   try{ _renderPlanningLoadState(); }catch(_){}
 }
 
@@ -10098,7 +10142,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_widget_v2.js?v=8"></script>
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
-<script src="/static/mysifa_maint_form.js?v=2.4.18"></script>
+<script src="/static/mysifa_maint_form.js?v=2.5.12"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js"></script>
