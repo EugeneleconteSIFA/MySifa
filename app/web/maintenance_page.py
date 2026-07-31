@@ -763,7 +763,20 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 .maint-subtoolbar{display:flex;align-items:center;gap:12px;margin:0 0 18px 0;flex-wrap:wrap}
 .maint-subtoolbar-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 /* v2.4.19 : toolbar unifiee Machine + Categorie + Statut sur une ligne */
-.maint-machine-toolbar{display:flex;align-items:center;gap:12px;row-gap:10px;margin:8px 0 20px 0;flex-wrap:wrap}
+.maint-machine-toolbar{display:flex;flex-direction:column;align-items:stretch;gap:0;margin:8px 0 20px 0}
+/* v2.5.10 : hierarchie des filtres. Niveau 1 = Machine (ligne du haut, isolee
+   par un filet). Niveau 2 = Categorie + Statut, indentes sous la machine
+   selectionnee pour montrer qu'ils s'appliquent DANS le perimetre machine. */
+.maint-toolbar-row{display:flex;align-items:center;gap:12px;row-gap:10px;flex-wrap:wrap}
+.maint-toolbar-row--primary{padding-bottom:12px;border-bottom:1px solid var(--border)}
+.maint-toolbar-row--secondary{margin-top:12px;margin-left:3px;padding-left:15px;border-left:2px solid var(--border)}
+.maint-toolbar-sep{width:1px;align-self:stretch;min-height:24px;background:var(--border);margin:0 2px}
+.maint-toolbar-row--primary .maint-toolbar-label{color:var(--text2);font-size:11px;letter-spacing:.6px}
+.maint-toolbar-row--primary .maint-machine-btn{font-size:14px;padding:9px 20px}
+@media(max-width:720px){
+  .maint-toolbar-row--secondary{margin-left:0;padding-left:10px}
+  .maint-toolbar-sep{display:none}
+}
 .maint-toolbar-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 .maint-machine-tabs,.maint-cat-tabs{display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px}
 .maint-chip-group{display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px}
@@ -1760,16 +1773,22 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
              ligne (wrap responsive). Labels harmonises, toggles avec style
              coherent (chips), pastilles compteurs sur machine/categorie. -->
         <div class="maint-machine-toolbar">
+          <!-- Niveau 1 : perimetre machine -->
+          <div class="maint-toolbar-row maint-toolbar-row--primary">
           <label class="maint-toolbar-label">Machine</label>
           <div class="maint-machine-tabs" id="maint-machine-tabs" role="tablist">
             <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 1" onclick="setMaintMachine('Cohésio 1')">Cohésio 1<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 1" title="Opérations en retard sur cette machine">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-machine-badge-soon="Cohésio 1" title="Opérations dû bientôt sur cette machine">0</span></button>
             <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 2" onclick="setMaintMachine('Cohésio 2')">Cohésio 2<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 2" title="Opérations en retard sur cette machine">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-machine-badge-soon="Cohésio 2" title="Opérations dû bientôt sur cette machine">0</span></button>
           </div>
+          </div>
+          <!-- Niveau 2 : filtres appliques dans le perimetre machine -->
+          <div class="maint-toolbar-row maint-toolbar-row--secondary">
           <label class="maint-toolbar-label">Catégorie</label>
           <div class="maint-cat-tabs" id="maint-cat-tabs" role="tablist">
             <button type="button" class="maint-cat-btn" data-maint-cat="entretien" onclick="setMaintCatFilter('entretien')">Entretien<span class="maint-tab-badge hidden" data-maint-cat-badge="entretien" title="Opérations en retard dans cette catégorie">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-cat-badge-soon="entretien" title="Opérations dû bientôt dans cette catégorie">0</span></button>
             <button type="button" class="maint-cat-btn" data-maint-cat="remplacements" onclick="setMaintCatFilter('remplacements')">Interventions<span class="maint-tab-badge hidden" data-maint-cat-badge="remplacements" title="Opérations en retard dans cette catégorie">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-cat-badge-soon="remplacements" title="Opérations dû bientôt dans cette catégorie">0</span></button>
           </div>
+          <span class="maint-toolbar-sep" aria-hidden="true"></span>
           <label class="maint-toolbar-label">Statut</label>
           <div class="maint-chip-group" id="maint-status-chips" role="tablist">
             <button type="button" class="maint-chip active" data-status-filter="all" onclick="setMaintStatusFilter('all')">Tous<span class="maint-chip-count" data-status-count="all">0</span></button>
@@ -1777,6 +1796,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             <button type="button" class="maint-chip" data-status-filter="soon" onclick="setMaintStatusFilter('soon')">Dû bientôt<span class="maint-chip-count" data-status-count="soon">0</span></button>
             <button type="button" class="maint-chip" data-status-filter="ok" onclick="setMaintStatusFilter('ok')">À jour<span class="maint-chip-count" data-status-count="ok">0</span></button>
             <button type="button" class="maint-chip" data-status-filter="never" onclick="setMaintStatusFilter('never')">Jamais saisi<span class="maint-chip-count" data-status-count="never">0</span></button>
+          </div>
           </div>
         </div>
 
