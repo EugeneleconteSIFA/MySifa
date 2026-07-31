@@ -308,7 +308,7 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 }
 
 /* ── v2.6.0 : etats de chargement du calendrier ─────────────────────── */
-.cal-week-view.cal-hide-hint .cal-wv-hint{display:none}
+/* v2.6.1 : .cal-hide-hint masquait le bandeau d'aide pendant le chargement et en erreur ; le bandeau n'existe plus. La classe reste posee par _renderPlanningLoadState() (inoffensive) au cas ou un futur bandeau la reutiliserait. */
 .cal-load-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:12px;border-radius:10px;font-size:12.5px;font-weight:600;letter-spacing:.2px}
 .cal-load-bar.is-loading{background:var(--accent-bg);border:1px dashed var(--accent);color:var(--accent)}
 .cal-load-bar.is-error{background:rgba(248,113,113,.10);border:1px solid var(--danger);color:var(--danger)}
@@ -333,7 +333,7 @@ body.reduce-anim .cal-skel{animation:none}
 
 /* ── Vue Semaine (emploi du temps) ──────────────────────────────────── */
 .cal-week-view{overflow-x:auto}
-.cal-wv-hint{font-size:13px;color:var(--text2);background:var(--accent-bg);border:1px dashed var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:14px;text-align:center;font-weight:600}
+/* v2.6.1 : .cal-wv-hint retire du HTML — regle de style supprimee. */
 .cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);box-sizing:border-box}  /* v2.5.17 : min-width retire (dim clippe). v2.6.0 : scrollbar-gutter retire -- inerte ici, la propriete ne s'applique qu'aux conteneurs de scroll, donc les 7 colonnes 1fr etaient calculees sur une largeur superieure a celles du corps (derive cumulative vers Sam/Dim). L'alignement est desormais fait par _syncCalHeaderGutter() qui reporte la largeur reelle de la gouttiere du corps sur le padding-right du header. */
 .cal-wv-corner{}
 .cal-wv-dayhead{padding:11px 10px;text-align:center;border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--card)}
@@ -670,7 +670,7 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 body[data-maint-role="operator"] .cal-fab,
 body[data-maint-role="operator"] .cal-fab-menu,
 body[data-maint-role="operator"] .plan-det-case-actions{display:none !important}
-body[data-maint-role="operator"] .cal-wv-hint{display:none}
+/* v2.6.1 : le bandeau d'aide etait deja masque cote operateur ; il n'existe plus pour personne. */
 /* Les cases vides du calendrier ne réagissent plus visuellement au hover */
 body[data-maint-role="operator"] .cal-wv-day-col{cursor:default}
 body[data-maint-role="operator"] .cal-wv-day-col:hover{background:transparent !important}
@@ -1944,7 +1944,11 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </div>
           <!-- Vue Semaine (emploi du temps) -->
           <div class="cal-week-view cal-wv-mode-week" id="cal-week-view">
-            <div class="cal-wv-hint">Cliquez sur une plage horaire libre pour créer un créneau de maintenance.</div>
+            <!-- v2.6.1 : bandeau d'aide « Cliquez sur une plage horaire libre… »
+                 retire. Il occupait ~54px (hauteur + marge) en permanence pour une
+                 information apprise des la premiere utilisation ; la place va a la
+                 grille. _fitCalWeekBody() mesure le haut du corps de grille au
+                 runtime, la hauteur disponible s'ajuste donc toute seule. -->
             <div class="cal-wv-header" id="cal-wv-header"></div>
             <div class="cal-wv-body" id="cal-wv-body"></div>
           </div>
