@@ -2014,6 +2014,7 @@ ficheSelected:new Set(),ficheEditModal:null,
   addRowTemplate:null,
   // Messagerie interne (support)
   msgUnread:0,
+  tachesCount:0,      // mes tâches ouvertes — pastille du portail sur l'icône Tâches
   msgList:null,
   msgSelId:null,
   msgSelIds:[],
@@ -2338,11 +2339,23 @@ async function loadMessagesUnread(){
   const r=await api('/api/messages/unread-count');
   if(r && typeof r.count==='number') set({msgUnread:r.count});
 }
+// Pastille « mes tâches » : tâches ouvertes qui me sont assignées. L'endpoint
+// répond 0 plutôt qu'une erreur pour un rôle non autorisé — une pastille ne
+// doit jamais faire échouer le chargement du portail.
+async function loadTachesCount(){
+  if(!isSuperAdmin(S.user))return;
+  const r=await api('/api/taches/badge');
+  if(r && typeof r.count==='number') set({tachesCount:r.count});
+}
 function startMessagesPolling(){
   if(_msgPollStarted)return;
   _msgPollStarted=true;
   loadMessagesUnread().catch(()=>{});
-  setInterval(()=>{loadMessagesUnread().catch(()=>{});},30000);
+  loadTachesCount().catch(()=>{});
+  setInterval(()=>{
+    loadMessagesUnread().catch(()=>{});
+    loadTachesCount().catch(()=>{});
+  },30000);
 }
 function startMachineStatusPolling(){
   if(_mstInterval)return;
@@ -10800,7 +10813,9 @@ function openProfileSheet(){
     items.push(item('settings', ICO.sliders, 'Paramètres', ''));
   }
   if(isSuper){
-    items.push(item('taches', ICO.taches, 'Gestionnaire de tâches', ''));
+    const nbT=Number(S.tachesCount||0);
+    items.push(item('taches', ICO.taches, 'Gestionnaire de tâches',
+      nbT>0?(nbT>9?'9+':String(nbT)):''));
   }
   items.push(item('messagerie', ICO.mail, 'Messagerie', msgUnread>0?(msgUnread>9?'9+':String(msgUnread)):''));
   if(isSuper||isDir||isAdmin){
