@@ -7904,6 +7904,51 @@ Ressources :
         _record_schema_migration(conn, 218, "taches_manager")
         print("[MySifa] migration taches_manager : tables du gestionnaire de taches creees.")
 
+    # ── Gestionnaire de taches : multi-assignation ───────────────────────────
+    #
+    # GARDE-FOU PAR NOM (meme raison que `taches_manager` ci-dessus).
+    #
+    # Une tache pouvait porter UN assigne (colonne taches.assigne_user_id). Elle
+    # peut desormais en porter plusieurs : table de liaison dediee plutot qu'une
+    # liste JSON dans une colonne, pour que « les taches de X » reste une simple
+    # jointure indexee et non un LIKE sur du texte.
+    #
+    # `taches.assigne_user_id` n'est plus lue par le code apres cette migration.
+    # Elle est CONSERVEE en base (pas de DROP COLUMN ici) : le backfill se relit
+    # ainsi tel quel si la migration doit etre rejouee, et un rollback applicatif
+    # retrouve ses donnees. A retirer dans un lot ulterieur, conformement a la
+    # regle « colonnes orphelines » du CLAUDE.md.
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE name='taches_multi_assignes' LIMIT 1"
+    ).fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS taches_assignes (
+                tache_id    INTEGER NOT NULL REFERENCES taches(id) ON DELETE CASCADE,
+                user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                assigne_at  TEXT NOT NULL,
+                assigne_par TEXT,
+                PRIMARY KEY (tache_id, user_id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_taches_asg_user ON taches_assignes(user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_taches_asg_tache ON taches_assignes(tache_id)")
+
+        # Backfill : chaque assignation simple existante devient une ligne de
+        # liaison. INSERT OR IGNORE => rejouable sans doublon.
+        _asg = conn.execute(
+            """INSERT OR IGNORE INTO taches_assignes (tache_id, user_id, assigne_at, assigne_par)
+               SELECT t.id, t.assigne_user_id, COALESCE(t.created_at, ?), 'Migration'
+                 FROM taches t
+                WHERE t.assigne_user_id IS NOT NULL
+                  AND EXISTS (SELECT 1 FROM users u WHERE u.id = t.assigne_user_id)""",
+            (datetime.now().isoformat(),),
+        )
+        conn.commit()
+        _record_schema_migration(conn, 219, "taches_multi_assignes")
+        print(
+            f"[MySifa] migration taches_multi_assignes : {_asg.rowcount} assignation(s) reprise(s)."
+        )
+
     # ── AO conditionnement (condi) + marge — schéma garde-fou sur COLONNE ────
     # ATTENTION, choix délibéré : ces colonnes NE sont PAS versionnées via
     # schema_migrations. Historique : le versionnage séquentiel entre branches

@@ -144,6 +144,96 @@ def _module_codes() -> set:
     return {m["code"] for m in taches_modules()}
 
 
+# ─── Assignation (plusieurs personnes par tâche) ──────────────────────────
+
+def _valid_assignes(conn, ids) -> list[int]:
+    """Normalise une liste d'identifiants : dédoublonnée, ordre stable, actifs."""
+    if ids is None:
+        return []
+    if not isinstance(ids, (list, tuple, set)):
+        raise HTTPException(400, "Liste d'assignés invalide.")
+    vus: list[int] = []
+    for raw in ids:
+        try:
+            uid = int(raw)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Identifiant d'assigné invalide.")
+        if uid in vus:
+            continue
+        if not conn.execute("SELECT 1 FROM users WHERE id=? AND actif=1", (uid,)).fetchone():
+            raise HTTPException(400, "Utilisateur assigné introuvable.")
+        vus.append(uid)
+    return vus
+
+
+def _set_assignes(conn, tache_id: int, ids: list[int], user: dict) -> tuple[list[int], list[int]]:
+    """Applique la liste d'assignés et retourne (ajoutés, retirés).
+
+    Différentiel plutôt que purge + réinsertion : `assigne_at` d'une personne
+    déjà assignée n'est pas réécrit à chaque enregistrement de la tâche.
+    """
+    actuels = [
+        r["user_id"]
+        for r in conn.execute(
+            "SELECT user_id FROM taches_assignes WHERE tache_id=?", (tache_id,)
+        ).fetchall()
+    ]
+    ajoutes = [u for u in ids if u not in actuels]
+    retires = [u for u in actuels if u not in ids]
+    now = _now()
+    for uid in ajoutes:
+        conn.execute(
+            """INSERT OR IGNORE INTO taches_assignes (tache_id,user_id,assigne_at,assigne_par)
+               VALUES (?,?,?,?)""",
+            (tache_id, uid, now, _nom(user)),
+        )
+    for uid in retires:
+        conn.execute(
+            "DELETE FROM taches_assignes WHERE tache_id=? AND user_id=?", (tache_id, uid)
+        )
+    return ajoutes, retires
+
+
+def _noms_users(conn, ids: list[int]) -> str:
+    if not ids:
+        return "personne"
+    rows = conn.execute(
+        f"SELECT nom FROM users WHERE id IN ({','.join('?' * len(ids))})", ids
+    ).fetchall()
+    return ", ".join(str(r["nom"] or "") for r in rows) or "personne"
+
+
+# Assignés agrégés en une seule chaîne "id:nom:avatar|id:nom:avatar" par tâche.
+# Choix délibéré face à une 2e requête ou un JOIN qui dupliquerait les lignes :
+# la liste reste courte (quelques personnes) et le front la découpe une fois.
+_SQL_ASSIGNES = """(SELECT GROUP_CONCAT(u2.id || ':' || REPLACE(COALESCE(u2.nom,''),'|',' ')
+                            || ':' || REPLACE(COALESCE(u2.avatar_url,''),'|',' '), '|')
+                       FROM taches_assignes a2
+                       JOIN users u2 ON u2.id = a2.user_id
+                      WHERE a2.tache_id = t.id)"""
+
+
+def _parse_assignes(brut: Optional[str]) -> list[dict]:
+    out: list[dict] = []
+    for morceau in str(brut or "").split("|"):
+        if not morceau:
+            continue
+        parts = morceau.split(":", 2)
+        if len(parts) < 2:
+            continue
+        try:
+            uid = int(parts[0])
+        except ValueError:
+            continue
+        out.append({
+            "id": uid,
+            "nom": parts[1],
+            "avatar_url": parts[2] if len(parts) > 2 and parts[2] else None,
+        })
+    out.sort(key=lambda u: (u["nom"] or "").casefold())
+    return out
+
+
 # ─── Schémas ──────────────────────────────────────────────────────────────
 
 class TacheIn(BaseModel):
@@ -153,7 +243,7 @@ class TacheIn(BaseModel):
     priorite: Optional[str] = None
     type: Optional[str] = None
     module: Optional[str] = None
-    assigne_user_id: Optional[int] = None
+    assignes: Optional[list[int]] = None
     parent_id: Optional[int] = None
     echeance: Optional[str] = None
     estimation_h: Optional[float] = None
@@ -166,7 +256,7 @@ class TachePatch(BaseModel):
     priorite: Optional[str] = None
     type: Optional[str] = None
     module: Optional[str] = None
-    assigne_user_id: Optional[int] = None
+    assignes: Optional[list[int]] = None
     echeance: Optional[str] = None
     estimation_h: Optional[float] = None
     temps_passe_h: Optional[float] = None
@@ -230,19 +320,23 @@ def list_taches(
     q: Optional[str] = None,
     archivees: int = 0,
     racines: int = 0,
+    non_assignees: int = 0,
 ):
     """Liste des tâches, avec compteurs agrégés pour l'affichage carte/ligne."""
     _require_taches(request)
     where = ["t.deleted_at IS NULL"]
     params: list = []
-    if not archivees:
-        where.append("t.archived_at IS NULL")
+    # archivees=1 : l'onglet Archives ne montre QUE les tâches archivées.
+    # Les inclure en plus des tâches actives ferait doublon avec la vue Liste.
+    where.append("t.archived_at IS NOT NULL" if archivees else "t.archived_at IS NULL")
     if statut and statut in TACHES_STATUTS_CODES:
         where.append("t.statut=?")
         params.append(statut)
     if assigne:
-        where.append("t.assigne_user_id=?")
+        where.append("EXISTS (SELECT 1 FROM taches_assignes a WHERE a.tache_id=t.id AND a.user_id=?)")
         params.append(int(assigne))
+    if non_assignees:
+        where.append("NOT EXISTS (SELECT 1 FROM taches_assignes a WHERE a.tache_id=t.id)")
     if priorite and priorite in TACHES_PRIORITES_CODES:
         where.append("t.priorite=?")
         params.append(priorite)
@@ -262,7 +356,7 @@ def list_taches(
     with get_db() as conn:
         rows = conn.execute(
             f"""SELECT t.*,
-                       u.nom AS assigne_nom, u.avatar_url AS assigne_avatar,
+                       {_SQL_ASSIGNES} AS assignes_brut,
                        p.titre AS parent_titre,
                        (SELECT COUNT(*) FROM taches_commentaires c
                           WHERE c.tache_id=t.id AND c.deleted_at IS NULL) AS nb_commentaires,
@@ -278,13 +372,48 @@ def list_taches(
                             AND s.statut IN ({_FINAUX_PH})
                        ) AS nb_sous_taches_faites
                   FROM taches t
-                  LEFT JOIN users u ON u.id = t.assigne_user_id
                   LEFT JOIN taches p ON p.id = t.parent_id
                  WHERE {' AND '.join(where)}
                  ORDER BY t.ordre ASC, t.id DESC""",
             list(_FINAUX) + params,
         ).fetchall()
-    return {"taches": [dict(r) for r in rows]}
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["assignes"] = _parse_assignes(d.pop("assignes_brut", None))
+        d.pop("assigne_user_id", None)
+        out.append(d)
+    return {"taches": out}
+
+
+@router.get("/api/taches/badge")
+def taches_badge(request: Request):
+    """Compteur pour la pastille du portail : mes tâches ouvertes.
+
+    Volontairement séparé de /api/taches/stats : le portail l'interroge en
+    boucle pour tous les super admins, il doit rester une requête indexée qui ne
+    lit aucune donnée de tâche. Renvoie 0 (jamais une erreur) pour un rôle non
+    autorisé — le portail ne doit pas afficher d'échec pour une pastille.
+    """
+    try:
+        user = get_current_user(request)
+    except HTTPException:
+        return {"count": 0}
+    if not is_superadmin(user):
+        return {"count": 0}
+    today = date.today().isoformat()
+    with get_db() as conn:
+        row = conn.execute(
+            f"""SELECT COUNT(*) AS n,
+                       SUM(CASE WHEN t.echeance IS NOT NULL AND t.echeance < ? THEN 1 ELSE 0 END) AS retard
+                  FROM taches t
+                  JOIN taches_assignes a ON a.tache_id = t.id
+                 WHERE a.user_id = ?
+                   AND t.deleted_at IS NULL AND t.archived_at IS NULL
+                   AND t.statut NOT IN ({_FINAUX_PH})""",
+            [today, user.get("id")] + list(_FINAUX),
+        ).fetchone()
+    return {"count": row["n"] or 0, "en_retard": row["retard"] or 0}
 
 
 @router.get("/api/taches/stats")
@@ -306,8 +435,9 @@ def taches_stats(request: Request):
             [today] + list(_FINAUX),
         ).fetchone()
         non_assignees = conn.execute(
-            """SELECT COUNT(*) AS n FROM taches
-               WHERE deleted_at IS NULL AND archived_at IS NULL AND assigne_user_id IS NULL"""
+            """SELECT COUNT(*) AS n FROM taches t
+               WHERE t.deleted_at IS NULL AND t.archived_at IS NULL
+                 AND NOT EXISTS (SELECT 1 FROM taches_assignes a WHERE a.tache_id=t.id)"""
         ).fetchone()
     return {
         "par_statut": {r["statut"]: r["n"] for r in par_statut},
@@ -320,17 +450,19 @@ def taches_stats(request: Request):
 
 def _fetch_tache(conn, tache_id: int) -> dict:
     row = conn.execute(
-        """SELECT t.*, u.nom AS assigne_nom, u.avatar_url AS assigne_avatar,
+        f"""SELECT t.*, {_SQL_ASSIGNES} AS assignes_brut,
                   p.titre AS parent_titre
              FROM taches t
-             LEFT JOIN users u ON u.id = t.assigne_user_id
              LEFT JOIN taches p ON p.id = t.parent_id
             WHERE t.id=? AND t.deleted_at IS NULL""",
         (tache_id,),
     ).fetchone()
     if not row:
         raise HTTPException(404, "Tâche introuvable")
-    return dict(row)
+    d = dict(row)
+    d["assignes"] = _parse_assignes(d.pop("assignes_brut", None))
+    d.pop("assigne_user_id", None)
+    return d
 
 
 @router.get("/api/taches/{tache_id}")
@@ -366,9 +498,9 @@ def get_tache(tache_id: int, request: Request):
             (tache_id,),
         ).fetchall()
         sous_taches = conn.execute(
-            """SELECT t.id,t.titre,t.statut,t.priorite,t.echeance,
-                      u.nom AS assigne_nom
-                 FROM taches t LEFT JOIN users u ON u.id=t.assigne_user_id
+            f"""SELECT t.id,t.titre,t.statut,t.priorite,t.echeance,
+                       {_SQL_ASSIGNES} AS assignes_brut
+                 FROM taches t
                 WHERE t.parent_id=? AND t.deleted_at IS NULL
                 ORDER BY t.ordre ASC, t.id ASC""",
             (tache_id,),
@@ -379,7 +511,10 @@ def get_tache(tache_id: int, request: Request):
         "fichiers": [dict(r) for r in fichiers],
         "checklist": [dict(r) for r in checklist],
         "activite": [dict(r) for r in activite],
-        "sous_taches": [dict(r) for r in sous_taches],
+        "sous_taches": [
+            {**dict(r), "assignes": _parse_assignes(dict(r).pop("assignes_brut", None))}
+            for r in sous_taches
+        ],
     }
 
 
@@ -417,21 +552,17 @@ def create_tache(payload: TacheIn, request: Request):
                 raise HTTPException(400, "Tâche parente introuvable.")
             if parent["parent_id"]:
                 raise HTTPException(400, "Une sous-tâche ne peut pas avoir de sous-tâches.")
-        if payload.assigne_user_id:
-            if not conn.execute(
-                "SELECT 1 FROM users WHERE id=? AND actif=1", (int(payload.assigne_user_id),)
-            ).fetchone():
-                raise HTTPException(400, "Utilisateur assigné introuvable.")
+        assignes = _valid_assignes(conn, payload.assignes)
         cur = conn.execute(
             """INSERT INTO taches
-               (titre,description,statut,priorite,type,module,assigne_user_id,
+               (titre,description,statut,priorite,type,module,
                 createur_user_id,createur_nom,parent_id,echeance,estimation_h,
                 temps_passe_h,ordre,created_at,updated_at,started_at,done_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?)""",
             (
                 titre[:300], (payload.description or "").strip() or None,
                 statut, priorite, ttype, module,
-                payload.assigne_user_id, user.get("id"), _nom(user),
+                user.get("id"), _nom(user),
                 payload.parent_id, echeance, estimation,
                 _next_ordre(conn, statut), now, now,
                 now if statut == "en_cours" else None,
@@ -439,6 +570,8 @@ def create_tache(payload: TacheIn, request: Request):
             ),
         )
         tache_id = cur.lastrowid
+        if assignes:
+            _set_assignes(conn, tache_id, assignes, user)
         _log(conn, tache_id, user, "creation")
         conn.commit()
     return {"success": True, "id": tache_id}
@@ -447,7 +580,7 @@ def create_tache(payload: TacheIn, request: Request):
 _PATCH_LABELS = {
     "titre": "Titre", "description": "Description", "statut": "Statut",
     "priorite": "Priorité", "type": "Type", "module": "Module",
-    "assigne_user_id": "Assigné", "echeance": "Échéance",
+    "echeance": "Échéance",
     "estimation_h": "Estimation", "temps_passe_h": "Temps passé",
 }
 
@@ -486,11 +619,21 @@ def update_tache(tache_id: int, payload: TachePatch, request: Request):
     now = _now()
     with get_db() as conn:
         avant = _fetch_tache(conn, tache_id)
-        if data.get("assigne_user_id"):
-            if not conn.execute(
-                "SELECT 1 FROM users WHERE id=? AND actif=1", (int(data["assigne_user_id"]),)
-            ).fetchone():
-                raise HTTPException(400, "Utilisateur assigné introuvable.")
+
+        # L'assignation vit dans une table de liaison : elle sort du UPDATE.
+        if "assignes" in data:
+            cibles = _valid_assignes(conn, data.pop("assignes"))
+            ajoutes, retires = _set_assignes(conn, tache_id, cibles, user)
+            if ajoutes:
+                _log(conn, tache_id, user, "assignation", "Assignés",
+                     None, _noms_users(conn, ajoutes))
+            if retires:
+                _log(conn, tache_id, user, "desassignation", "Assignés",
+                     _noms_users(conn, retires), None)
+        if not data:
+            conn.execute("UPDATE taches SET updated_at=? WHERE id=?", (now, tache_id))
+            conn.commit()
+            return {"success": True}
 
         sets, params = [], []
         for champ, valeur in data.items():
