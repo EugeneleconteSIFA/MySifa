@@ -39,6 +39,37 @@ logger = logging.getLogger(__name__)
 
 _GRAPH_TOKEN = {"access_token": None, "expires_at": 0.0}
 
+# Mention d'ouverture (RGPD art. 13) : le destinataire doit savoir que l'email
+# est instrumenté. Volontairement en pied de mail, dans la même typo grise que
+# la signature automatique — informer sans transformer l'email en avertissement.
+_SUIVI_NOTE = {
+    "fr": "Cet email comporte un indicateur d'ouverture : SIFA est informé de sa consultation.",
+    "en": "This email includes an open indicator: SIFA is notified when it is viewed.",
+}
+
+
+def _suivi_blocs(pixel_url: str | None, lang: str = "fr") -> tuple[str, str]:
+    """Retourne (note_html, pixel_html) — vides si aucun suivi n'est posé.
+
+    Les deux vont ensemble : pas de pixel sans mention, pas de mention sans
+    pixel. Les dissocier produirait soit un suivi silencieux, soit un
+    avertissement mensonger.
+    """
+    if not pixel_url:
+        return "", ""
+    texte = _SUIVI_NOTE.get("en" if str(lang).lower().startswith("en") else "fr")
+    note = (
+        '<p style="margin:8px 0 0;font-size:10px;color:#cbd5e1;line-height:1.5;'
+        f'text-align:center">{_esc(texte)}</p>'
+    )
+    pixel = (
+        f'<img src="{_esc(pixel_url)}" width="1" height="1" border="0" alt="" '
+        'style="display:block;width:1px;height:1px;border:0;outline:none;'
+        'opacity:0;overflow:hidden">'
+    )
+    return note, pixel
+
+
 
 def _esc(text: object) -> str:
     return html_module.escape(str(text or ""))
@@ -52,6 +83,8 @@ def email_mysifa_layout(
     cta_label: str | None = None,
     footer_note: str | None = None,
     footer_contact: bool = False,
+    pixel_url: str | None = None,
+    lang: str = "fr",
 ) -> str:
     """Enveloppe HTML email MySifa (dark header, typo Segoe UI)."""
     cta_block = ""
@@ -76,6 +109,7 @@ def email_mysifa_layout(
       <a href="mailto:expeditions@sifa.pro" style="color:#0891b2;text-decoration:none">expeditions@sifa.pro</a>
     </p>"""
     foot = footer_note or f"Notification automatique MySifa — {_esc(public_base_url())}"
+    suivi_note, suivi_pixel = _suivi_blocs(pixel_url, lang)
     return f"""<div style="font-family:'Segoe UI',system-ui,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
   <div style="background:#0a0e17;padding:24px 32px">
     <div style="font-size:20px;font-weight:800;color:#22d3ee;letter-spacing:-.3px">MySifa</div>
@@ -88,7 +122,9 @@ def email_mysifa_layout(
     <p style="margin:20px 0 0;font-size:11px;color:#94a3b8;line-height:1.6;border-top:1px solid #e2e8f0;padding-top:14px;text-align:center">
       {foot}
     </p>
+    {suivi_note}
   </div>
+  {suivi_pixel}
 </div>"""
 
 
@@ -266,8 +302,18 @@ def email_mysifa_layout_light(
     footer_note: str | None = None,
     footer_contact: bool = False,
     copy_link_label: str = "Si le bouton ne fonctionne pas, copiez ce lien :",
+    pixel_url: str | None = None,
+    lang: str = "fr",
 ) -> str:
-    """Enveloppe HTML email MySifa — version light, neutre, compatible Outlook/Gmail/iOS Mail."""
+    """Enveloppe HTML email MySifa — version light, neutre, compatible Outlook/Gmail/iOS Mail.
+
+    `pixel_url` : image 1x1 de suivi d'ouverture, ajoutée en toute fin de corps.
+    Placée APRES le pied de page pour qu'un client mail qui tronque le message
+    (« ... afficher le message complet » de Gmail) ne coupe pas le contenu utile
+    juste avant elle. Sans `alt` ni dimensions visibles : un lecteur d'écran ne
+    doit rien annoncer, et un client qui bloque les images ne doit pas afficher
+    de cadre vide.
+    """
     cta_block = ""
     if cta_href and cta_label:
         cta_block = f"""
@@ -295,6 +341,8 @@ def email_mysifa_layout_light(
 
     foot = footer_note or f"MySifa — {_esc(public_base_url())}"
 
+    suivi_note, pixel_block = _suivi_blocs(pixel_url, lang)
+
     return f"""<div style="background:#f1f5f9;padding:24px 12px">
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="600" style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif">
     <tr>
@@ -314,9 +362,11 @@ def email_mysifa_layout_light(
         <p style="margin:22px 0 0;font-size:11px;color:#94a3b8;line-height:1.6;border-top:1px solid #e2e8f0;padding-top:16px;text-align:center">
           {foot}
         </p>
+        {suivi_note}
       </td>
     </tr>
   </table>
+  {pixel_block}
 </div>"""
 
 
@@ -401,6 +451,7 @@ def email_invitation_ao(
     fournisseur: dict,
     lien_portail: str,
     lignes: list[dict],
+    pixel_url: str | None = None,
 ) -> tuple[str, str]:
     """Sujet et corps HTML pour l'invitation fournisseur (single-lang d'apr&egrave;s `fournisseur['langue']`)."""
     reference = ao.get("reference") or ""
@@ -467,6 +518,8 @@ def email_invitation_ao(
         footer_note=s["footer"],
         footer_contact=True,
         copy_link_label=s["copy_link"],
+        pixel_url=pixel_url,
+        lang=lang,
     )
     return subject, body
 
@@ -780,38 +833,104 @@ def email_expe_devis_confirmation(
 
 
 
-def email_offre_retenue(ao: dict, fourni: dict, message_perso: str | None = None) -> tuple[str, str]:
-    """Email envoye au fournisseur retenu apres cloture de l'AO."""
+def email_offre_retenue(
+    ao: dict,
+    fourni: dict,
+    message_perso: str | None = None,
+    pixel_url: str | None = None,
+) -> tuple[str, str]:
+    """Email envoyé au fournisseur retenu après clôture de l'AO.
+
+    Corrigé le 30/07/2026 : l'appel au layout passait `title_html=` et
+    `content_html=`, deux arguments que `email_mysifa_layout()` n'a jamais
+    acceptés. Chaque clôture levait donc un TypeError, avalé par le `try/except`
+    de `cloturer_ao` — le fournisseur retenu n'a jamais reçu cet email, et seule
+    une ligne de warning dans les logs le signalait.
+    """
     langue = (fourni.get("langue") or "fr").lower()
     ref = ao.get("reference") or ""
     titre = ao.get("titre") or "Appel d\'offres"
-    nom_fournisseur = fourni.get("nom_fournisseur") or ""
+    nom_fournisseur = _esc(fourni.get("nom_fournisseur") or "")
+    perso = f"<p>{_esc(message_perso)}</p>" if message_perso else ""
 
     if langue == "en":
         subject = f"Your quote has been selected — {ref}"
-        greeting = f"Dear {nom_fournisseur},"
+        subtitle = "Quote selected"
         body_html = (
-            f"<p>{greeting}</p>"
-            f"<p>We are pleased to inform you that your quote for the RFQ <strong>{ref}</strong> ({titre}) has been selected.</p>"
-            + (f"<p>{message_perso}</p>" if message_perso else "")
+            f"<p>Dear {nom_fournisseur},</p>"
+            f"<p>We are pleased to inform you that your quote for the RFQ "
+            f"<strong>{_esc(ref)}</strong> ({_esc(titre)}) has been selected.</p>"
+            + perso
             + "<p>Our team will contact you shortly to finalize the order.</p>"
             + "<p>Best regards,</p>"
         )
     else:
-        subject = f"Votre offre a ete retenue — {ref}"
-        greeting = f"Bonjour {nom_fournisseur},"
+        subject = f"Votre offre a été retenue — {ref}"
+        subtitle = "Offre retenue"
         body_html = (
-            f"<p>{greeting}</p>"
-            f"<p>Nous avons le plaisir de vous informer que votre offre pour l\'appel d\'offres <strong>{ref}</strong> ({titre}) a ete retenue.</p>"
-            + (f"<p>{message_perso}</p>" if message_perso else "")
-            + "<p>Notre equipe reviendra vers vous rapidement pour finaliser la commande.</p>"
+            f"<p>Bonjour {nom_fournisseur},</p>"
+            f"<p>Nous avons le plaisir de vous informer que votre offre pour "
+            f"l'appel d'offres <strong>{_esc(ref)}</strong> ({_esc(titre)}) a été retenue.</p>"
+            + perso
+            + "<p>Notre équipe reviendra vers vous rapidement pour finaliser la commande.</p>"
             + "<p>Cordialement,</p>"
         )
 
     body = email_mysifa_layout(
-        title_html=subject,
-        content_html=body_html,
+        subtitle=subtitle,
+        body_html=body_html,
         footer_contact=True,
+        pixel_url=pixel_url,
+        lang=langue,
+    )
+    return subject, body
+
+
+def email_message_fournisseur(
+    reference: str,
+    message: str,
+    lien_portail: str,
+    langue: str = "fr",
+    pixel_url: str | None = None,
+) -> tuple[str, str]:
+    """Email annonçant un message interne déposé pour le fournisseur.
+
+    Reprend l'enveloppe MySifa au lieu du `<div>` brut d'origine : même
+    identité visuelle que l'invitation, bouton d'accès au portail, et suivi
+    d'ouverture — c'est en pratique l'email de relance d'un AO sans réponse.
+    """
+    en = str(langue).lower().startswith("en")
+    if en:
+        subject = f"[MySifa] New message — {reference}"
+        subtitle = "New message"
+        intro = (
+            f"<p>You have received a message regarding RFQ "
+            f"<strong>{_esc(reference)}</strong>.</p>"
+        )
+        cta = "Open the request"
+    else:
+        subject = f"[MySifa] Nouveau message — {reference}"
+        subtitle = "Nouveau message"
+        intro = (
+            f"<p>Vous avez reçu un message concernant l'appel d'offres "
+            f"<strong>{_esc(reference)}</strong>.</p>"
+        )
+        cta = "Accéder à la demande"
+
+    corps = (
+        intro
+        + '<div style="margin:18px 0;padding:14px 16px;background:#f8fafc;'
+        'border-left:3px solid #0891b2;border-radius:0 8px 8px 0;font-size:14px;'
+        f'color:#334155;line-height:1.65;white-space:pre-wrap">{_esc(message)}</div>'
+    )
+    body = email_mysifa_layout_light(
+        subtitle=subtitle,
+        body_html=corps,
+        cta_href=lien_portail,
+        cta_label=cta,
+        footer_contact=True,
+        pixel_url=pixel_url,
+        lang="en" if en else "fr",
     )
     return subject, body
 
