@@ -50,6 +50,11 @@ padding:6px 10px;font-size:12px;font-weight:700;color:var(--accent);margin-botto
 /* Référence produit : champ + bouton de régénération, et ligne d'aide dessous.
    La grille .pf-inline n'a que 2 colonnes : le wrap tient dans la 2e, et le hint
    occupe la 2e colonne de la ligne suivante (grid-column 2). */
+/* La reference composee ("105 x 148 mm Th Top-Coated Perm, 1 Color, M40 mm")
+   est longue : elle occupe la moitie de la grille d'en-tete et son libelle a
+   une largeur fixe, sinon le champ se reduit a quelques caracteres. */
+.pf-ref-row{grid-column:span 4;grid-template-columns:minmax(90px,116px) minmax(0,1fr)}
+.pf-wide-row{grid-column:span 4}
 .pf-ref-wrap{display:flex;gap:6px;align-items:center}
 .pf-ref-wrap input{flex:1;min-width:0}
 .pf-ref-wrap .btn{flex:none;white-space:nowrap;padding:5px 10px;font-size:11px}
@@ -58,11 +63,25 @@ margin-top:2px;min-height:14px}
 .pf-ref-hint.pf-ref-auto{color:var(--accent)}
 .pf-ref-hint.pf-ref-warn{color:var(--warn)}
 .pf-ref-wrap input.pf-ref-locked{border-color:var(--warn)}
-.pf-imp-row{display:grid;grid-template-columns:minmax(72px,28%) 1fr minmax(72px,28%) 1fr;gap:6px 8px;
-margin-bottom:6px;padding:6px 8px;background:var(--bg);border-radius:8px;border:1px solid var(--border);
-align-items:center}
-.pf-imp-row .pf-lbl{font-size:10px}
-.pf-imp-row input{padding:5px 8px;font-size:12px;border-radius:6px}
+/* Detail d'un passage couleur : deux champs cote a cote, libelle au-dessus.
+   Les colonnes Recto et Verso faisant 50% de largeur, une grille
+   label|champ|label|champ y etait illisible. */
+.pf-imp-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:6px 8px;
+margin-bottom:6px;padding:7px 8px;background:var(--bg);border-radius:8px;border:1px solid var(--border);
+align-items:start}
+.pf-imp-row .pf-lbl{font-size:10px;white-space:normal}
+.pf-imp-field{display:flex;flex-direction:column;gap:3px;min-width:0}
+/* Fond carte (blanc en theme clair) : sur le fond var(--bg) de la ligne, un
+   champ en var(--bg) est invisible tant qu'on ne clique pas dedans. */
+.pf-imp-row input{padding:6px 9px;font-size:12px;border-radius:6px;background:var(--card);
+border:1px solid var(--border);color:var(--text);width:100%}
+.pf-imp-row input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
+.pf-imp-row input.is-missing{border-color:var(--danger);box-shadow:0 0 0 3px rgba(248,113,113,.16)}
+.pf-imp-req{color:var(--danger);font-style:normal;font-weight:700;margin-left:2px}
+/* Ligne Aplat : pleine largeur au-dessus de la grille, pour que Recto et
+   Verso demarrent exactement a la meme hauteur. */
+.pf-imp-aplat-row{padding-bottom:8px;margin-bottom:10px;border-bottom:1px solid var(--border)}
+.pf-imp-hint{font-size:11px;color:var(--muted);margin-left:auto}
 .pf-check-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap}
 .pf-check-row input[type=checkbox]{width:auto;padding:0}
 .pf-check-row .pf-lbl{text-transform:none;letter-spacing:0;font-size:13px}
@@ -94,10 +113,13 @@ align-items:center}
 .pf-general{grid-template-columns:1fr 1fr}
 .pf-cols-2,.pf-cols-3{grid-template-columns:1fr}
 }
+@media(max-width:960px){.pf-ref-row,.pf-wide-row{grid-column:span 2}}
 @media(max-width:560px){
 .pf-general{grid-template-columns:1fr}
 .pf-inline,.pf-inline-wide{grid-template-columns:1fr;gap:4px}
-.pf-imp-row{grid-template-columns:1fr 1fr}
+.pf-ref-row,.pf-wide-row{grid-column:span 1}
+.pf-ref-row{grid-template-columns:1fr}
+.pf-imp-row{grid-template-columns:1fr}
 }
 /* Modale apercu BAT etiquette (SVG inline, meme geometrie que le PDF) */
 .pf-bat-ov{--pf-bat-vh:94vh;position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:600;
@@ -226,19 +248,40 @@ function pfRow(label, controlHtml, extraCls) {
   return '<div class="pf-inline'+(extraCls ? ' '+extraCls : '')+'">'+pfLbl(label)+controlHtml+'</div>';
 }
 
+/* Un passage = une couleur + la zone imprimee. Les deux sont obligatoires :
+   une fiche partie chez un fournisseur avec « 4 couleurs » et aucun detail
+   n'est pas chiffrable. L'attribut `required` porte l'intention, la
+   validation a l'enregistrement porte le blocage (champs hors <form>). */
 function buildImpDetailRows(kind, count, details) {
   let html = '';
   const n = Math.max(0, parseInt(count, 10) || 0);
   const k = kind.charAt(0).toUpperCase() + kind.slice(1);
+  const req = '<em class="pf-imp-req">*</em>';
   for (let i = 0; i < n; i++) {
     const d = (details && details[i]) || {};
     html += '<div class="pf-imp-row" data-imp="'+kind+'" data-idx="'+i+'">'+
-      pfLbl(k+' '+(i+1)+' couleur')+
-      '<input type="text" class="imp-couleur" value="'+escAttr(d.couleur||'')+'" placeholder="Couleur">'+
-      pfLbl('Printing area')+
-      '<input type="text" class="imp-area" value="'+escAttr(d.printing_area||'')+'" placeholder="Zone"></div>';
+      '<div class="pf-imp-field">'+pfLbl(k+' '+(i+1)+' couleur'+req)+
+      '<input type="text" class="imp-couleur" required value="'+escAttr(d.couleur||'')+
+      '" placeholder="Couleur"></div>'+
+      '<div class="pf-imp-field">'+pfLbl('Printing area'+req)+
+      '<input type="text" class="imp-area" required value="'+escAttr(d.printing_area||'')+
+      '" placeholder="Zone"></div></div>';
   }
   return html;
+}
+
+/* Compte les champs de detail vides et marque les fautifs. Silencieux quand
+   le bloc Impressions est masque (produit sans impression). */
+function pfValidateImpDetails(mark) {
+  const bloc = document.getElementById('pf-bloc-impressions');
+  if (!bloc || bloc.classList.contains('pf-hidden')) return 0;
+  let missing = 0;
+  bloc.querySelectorAll('.pf-imp-row input').forEach(function (inp) {
+    const bad = !inp.value.trim();
+    if (mark !== false) inp.classList.toggle('is-missing', bad);
+    if (bad) missing++;
+  });
+  return missing;
 }
 
 function renderProduitForm() {
@@ -300,13 +343,13 @@ function renderProduitForm() {
         '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-ref-regen" '+
           'title="Recomposer la référence depuis la fiche">Régénérer</button>'+
       '</div>'+
-      '<div class="pf-ref-hint" id="pf-ref-hint"></div>', 'pf-inline-wide')+
+      '<div class="pf-ref-hint" id="pf-ref-hint"></div>', 'pf-inline-wide pf-ref-row')+
     pfRow('Type', '<select id="pf-type"><option value="rouleau"'+(f.type_produit==='rouleau'?' selected':'')+'>Rouleau</option>'+
       '<option value="paravent"'+(f.type_produit==='paravent'?' selected':'')+'>Paravent</option></select>')+
     pfRow('Impressions', '<select id="pf-impressions"><option value="1"'+(f.impressions?' selected':'')+'>Oui</option>'+
       '<option value="0"'+(f.impressions?'':' selected')+'>Non</option></select>')+
-    pfRow('Ref SIFA', '<div class="pf-refsifa-wrap" style="position:relative;display:flex;gap:6px;align-items:center">'+'<input id="pf-refsifa" placeholder="Rechercher une fiche technique..." autocomplete="off" style="flex:1">'+'<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-refsifa-clear" title="Effacer" style="padding:4px 8px">\u00d7</button>'+'<div class="pf-refsifa-list" id="pf-refsifa-list" style="display:none;position:absolute;top:100%;left:0;right:36px;z-index:60;max-height:280px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:8px;margin-top:2px;box-shadow:0 6px 20px rgba(0,0,0,.12)"></div>'+'</div>', 'pf-inline-wide pf-client-row')+
     pfRow('Client', clientPicker, 'pf-inline-wide pf-client-row')+
+    pfRow('Ref SIFA', '<div class="pf-refsifa-wrap" style="position:relative;display:flex;gap:6px;align-items:center">'+'<input id="pf-refsifa" placeholder="Rechercher une fiche technique..." autocomplete="off" style="flex:1">'+'<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-refsifa-clear" title="Effacer" style="padding:4px 8px">\u00d7</button>'+'<div class="pf-refsifa-list" id="pf-refsifa-list" style="display:none;position:absolute;top:100%;left:0;right:36px;z-index:60;max-height:280px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:8px;margin-top:2px;box-shadow:0 6px 20px rgba(0,0,0,.12)"></div>'+'</div>', 'pf-inline-wide pf-wide-row')+
     '</div></div>'+
 
     '<div class="pf-section"><div class="pf-section-title">Fiche technique</div>'+
@@ -341,11 +384,14 @@ function renderProduitForm() {
 
     '<div class="pf-block'+(showImp?'':' pf-hidden')+'" id="pf-bloc-impressions" style="margin-bottom:10px">'+
     '<div class="pf-block-title">Impressions</div>'+
+    // Aplat sort de la colonne Recto : tant qu'il y etait, le champ Recto
+    // demarrait une ligne plus bas que le champ Verso.
+    '<div class="pf-check-row pf-imp-aplat-row"><input type="checkbox" id="pf-imp-aplat"'+(imp.aplat?' checked':'')+'>'+
+    '<label for="pf-imp-aplat" class="pf-lbl">Aplat</label>'+
+    '<input type="number" step="any" min="0" max="100" id="pf-imp-aplat-pct" value="'+escAttr(imp.aplat_pourcent)+'" placeholder="%"'+(imp.aplat?'':' disabled')+'>'+
+    '<span class="pf-imp-hint">Couleur et zone obligatoires pour chaque passage.</span></div>'+
     '<div class="pf-cols-2">'+
     '<div class="pf-imp-col">'+
-    '<div class="pf-check-row"><input type="checkbox" id="pf-imp-aplat"'+(imp.aplat?' checked':'')+'>'+
-    '<label for="pf-imp-aplat" class="pf-lbl">Aplat</label>'+
-    '<input type="number" step="any" min="0" max="100" id="pf-imp-aplat-pct" value="'+escAttr(imp.aplat_pourcent)+'" placeholder="%"'+(imp.aplat?'':' disabled')+'></div>'+
     pfRow('Recto (nb)', '<input type="number" min="0" step="1" id="pf-imp-recto" value="'+escAttr(imp.recto)+'">')+
     '<div id="pf-recto-details">'+buildImpDetailRows('recto', imp.recto, imp.recto_details)+'</div></div>'+
     '<div class="pf-imp-col">'+
@@ -798,6 +844,14 @@ async function saveProduitForm() {
     String(p.id) !== String(S.produitForm.id || '')
   );
   if (dup) { showToast('Référence déjà utilisée.', 'danger'); return; }
+  const impMissing = pfValidateImpDetails();
+  if (impMissing) {
+    showToast('Impressions : couleur et zone obligatoires — ' + impMissing +
+      (impMissing > 1 ? ' champs à compléter.' : ' champ à compléter.'), 'danger');
+    document.querySelector('#pf-bloc-impressions .is-missing')
+      ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return;
+  }
   const saveBtn = document.getElementById('btn-pf-save');
   const saveBtn2 = document.getElementById('btn-pf-save-bottom');
   [saveBtn, saveBtn2].forEach(b => { if (b) b.disabled = true; });
@@ -954,6 +1008,14 @@ function bindProduitFormEvents() {
   });
   document.getElementById('pf-imp-recto')?.addEventListener('change', pfRebuildImpDetails);
   document.getElementById('pf-imp-verso')?.addEventListener('change', pfRebuildImpDetails);
+  // Delegue : les lignes de detail sont reconstruites a chaque changement du
+  // nombre de couleurs, un listener par champ ne survivrait pas au rebuild.
+  document.getElementById('pf-bloc-impressions')?.addEventListener('input', e => {
+    const inp = e.target;
+    if (inp && inp.closest && inp.closest('.pf-imp-row') && inp.value.trim()) {
+      inp.classList.remove('is-missing');
+    }
+  });
   try { pfUpdateGlassineCouleur(); } catch (e) { /* matières non chargées */ }
 
   // ── Référence produit auto ────────────────────────────────────────────────

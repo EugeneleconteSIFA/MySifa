@@ -10,11 +10,21 @@ fiche produit.
 En-tête : logo SIFA + coordonnées.
 Corps : sections de la fiche produit avec libellés bilingues FR/EN.
 Pied de page : mentions de confidentialité + date d'édition.
+
+Mise en page — une seule page A4
+--------------------------------
+Le document est construit en deux temps : on décrit d'abord tous les blocs
+(``_build_blocks``), on mesure la hauteur qu'ils prendraient à l'échelle 1,
+puis on en déduit un facteur de compression ``k`` appliqué aux hauteurs de
+ligne, aux bandeaux de titre et aux interlignes. Une fiche complète tient
+donc sur une seule page, sans jamais rogner une information : c'est la
+densité qui s'ajuste, pas le contenu. Les polices suivent ``k`` de façon
+amortie pour rester lisibles, et un plancher (``_K_MIN``) autorise en
+dernier recours un débord sur une 2e page plutôt qu'un texte illisible.
 """
 from __future__ import annotations
 
 import os
-import re
 from datetime import datetime
 from io import BytesIO
 from typing import Any
@@ -44,10 +54,17 @@ _MUTED      = colors.HexColor("#666666")
 _LIGHT_GRAY = colors.HexColor("#f5f5f5")
 _BORDER     = colors.HexColor("#d1d1d1")
 _ACCENT     = colors.HexColor("#0891b2")   # même accent que MyAO
+_ACCENT_BG  = colors.HexColor("#e6f6fa")
 
 W, H = A4
 
 _PARIS = ZoneInfo("Europe/Paris")
+
+# Marge basse : le bandeau de pied de page commence à 22 mm.
+_CONTENT_BOTTOM = 24 * mm
+
+# Compression minimale acceptable avant de préférer une 2e page.
+_K_MIN = 0.62
 
 
 def _v(val: Any) -> str:
@@ -70,6 +87,13 @@ def _num(val: Any, suffix: str = "") -> str:
         return f"{base}{suffix}"
     except (ValueError, TypeError):
         return str(val)
+
+
+def _int(val: Any) -> int:
+    try:
+        return int(float(str(val).replace(",", ".")))
+    except (TypeError, ValueError):
+        return 0
 
 
 def _clean_reference(ref: Any) -> str:
@@ -114,11 +138,21 @@ def _tr_type_produit(v: Any) -> tuple[str, str]:
     return (fr, en)
 
 
+_ENROULEMENT_FR = {
+    "interieur": "Intérieur",
+    "intérieur": "Intérieur",
+    "exterieur": "Extérieur",
+    "extérieur": "Extérieur",
+    "int": "Intérieur",
+    "ext": "Extérieur",
+}
+
+
 def _tr_enroulement(v: Any) -> tuple[str, str]:
     if not v:
         return ("—", "—")
     s = str(v).strip()
-    fr = s.capitalize()
+    fr = _ENROULEMENT_FR.get(s.lower(), s.capitalize())
     en = _ENROULEMENT_EN.get(s.lower(), s).capitalize()
     return (fr, en)
 
@@ -148,7 +182,7 @@ def _draw_logo(c: canvas.Canvas, x: float, y_top: float, max_h: float) -> float:
         iw, ih = img.getSize()
         target_h = max_h
         target_w = iw * target_h / ih
-        max_w = 55 * mm
+        max_w = 52 * mm
         if target_w > max_w:
             target_w = max_w
             target_h = ih * target_w / iw
@@ -163,42 +197,42 @@ def _draw_logo(c: canvas.Canvas, x: float, y_top: float, max_h: float) -> float:
 
 
 def _draw_header(c: canvas.Canvas, ml: float, mr: float) -> float:
-    y_top = H - 12 * mm
-    logo_h = 18 * mm
+    y_top = H - 11 * mm
+    logo_h = 15 * mm
     _draw_logo(c, ml, y_top, logo_h)
 
     x_right = W - mr
     c.setFillColor(_DARK)
-    c.setFont("Helvetica-Bold", 9)
+    c.setFont("Helvetica-Bold", 8.5)
     c.drawRightString(x_right, y_top - 4, SIFA_NAME)
-    c.setFont("Helvetica", 8)
+    c.setFont("Helvetica", 7.5)
     c.setFillColor(_MUTED)
-    c.drawRightString(x_right, y_top - 14, SIFA_ADDRESS)
-    c.drawRightString(x_right, y_top - 24, f"Tél. : {SIFA_PHONE}")
-    c.drawRightString(x_right, y_top - 34, SIFA_EMAIL)
+    c.drawRightString(x_right, y_top - 13, SIFA_ADDRESS)
+    c.drawRightString(x_right, y_top - 22, f"Tél. : {SIFA_PHONE}")
+    c.drawRightString(x_right, y_top - 31, SIFA_EMAIL)
 
-    y_line = y_top - max(logo_h, 34) - 4 * mm
+    y_line = y_top - max(logo_h, 31) - 3 * mm
     c.setFillColor(_YELLOW)
-    c.rect(ml, y_line, W - ml - mr, 1.5 * mm, fill=1, stroke=0)
+    c.rect(ml, y_line, W - ml - mr, 1.2 * mm, fill=1, stroke=0)
     c.setFillColor(_BLACK)
     return y_line - 2 * mm
 
 
 def _draw_title(c: canvas.Canvas, y: float) -> float:
     c.setFillColor(_BLACK)
-    c.setFont("Helvetica-Bold", 15)
-    c.drawCentredString(W / 2, y - 12, "FICHE PRODUIT — APPEL D'OFFRES")
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(W / 2, y - 11, "FICHE PRODUIT — APPEL D'OFFRES")
     c.setFillColor(_MUTED)
-    c.setFont("Helvetica-Oblique", 10)
-    c.drawCentredString(W / 2, y - 26, "Product data sheet — Request for quotation")
+    c.setFont("Helvetica-Oblique", 9)
+    c.drawCentredString(W / 2, y - 22, "Product data sheet — Request for quotation")
     c.setFillColor(_BLACK)
-    return y - 34
+    return y - 29
 
 
 def _draw_ref_block(c: canvas.Canvas, ml: float, mr: float, y: float,
                     produit: dict) -> float:
     inner_w = W - ml - mr
-    block_h = 14 * mm
+    block_h = 12 * mm
     y_bottom = y - block_h
 
     c.setStrokeColor(_BLACK)
@@ -207,180 +241,341 @@ def _draw_ref_block(c: canvas.Canvas, ml: float, mr: float, y: float,
     c.rect(ml, y_bottom, inner_w, block_h, fill=1, stroke=1)
     c.setFillColor(_BLACK)
 
-    c.setFont("Helvetica-Bold", 8)
+    c.setFont("Helvetica-Bold", 7.5)
     c.setFillColor(_MUTED)
-    c.drawString(ml + 4 * mm, y - 5 * mm, "Référence produit  /  Product reference")
+    c.drawString(ml + 4 * mm, y - 4.4 * mm, "Référence produit  /  Product reference")
     c.setFillColor(_BLACK)
-    c.setFont("Helvetica-Bold", 14)
+    c.setFont("Helvetica-Bold", 13)
     ref = _clean_reference(produit.get("ref"))
-    c.drawString(ml + 4 * mm, y - 11 * mm, ref)
+    c.drawString(ml + 4 * mm, y - 9.6 * mm, ref)
 
     # Nom du client final volontairement omis dans le PDF destiné au
     # fournisseur (confidentialité — le fournisseur consulté n'a pas à
     # connaître le client final SIFA).
 
-    return y_bottom - 4 * mm
+    return y_bottom - 3 * mm
 
 
-_SECTION_TITLE_H = 6.5 * mm
-_SECTION_ROW_H = 6.8 * mm
-_SECTION_GAP = 5 * mm  # espace vertical entre deux sections empilées
+# ── Métriques de mise en page ───────────────────────────────────────
+def _metrics(k: float) -> dict:
+    """Hauteurs et corps de police pour un facteur de compression donné.
+
+    Les polices suivent ``k`` de façon amortie (fk) : une page dense reste
+    lisible parce que le texte ne rétrécit que de moitié par rapport à la
+    géométrie.
+    """
+    fk = 0.55 + 0.45 * k
+    return {
+        "k": k,
+        "title_h":   6.2 * mm * k,
+        "row_h":     6.8 * mm * k,
+        "color_h":   7.8 * mm * k,
+        "gap":       4.2 * mm * k,
+        "f_title":    9.0 * fk,
+        "f_title_en": 7.4 * fk,
+        "f_lbl":      8.2 * fk,
+        "f_lbl_en":   6.8 * fk,
+        "f_val":      8.5 * fk,
+        "f_val_en":   6.8 * fk,
+    }
 
 
+def _fit_size(c: canvas.Canvas, txt: str, base: float, font: str, max_w: float,
+              floor_ratio: float = 0.72) -> float:
+    """Réduit le corps jusqu'à ce que le texte tienne, sans descendre trop bas."""
+    if not txt:
+        return base
+    size = base
+    floor = base * floor_ratio
+    while size > floor and c.stringWidth(txt, font, size) > max_w:
+        size -= 0.25
+    return max(size, floor)
+
+
+def _ellipsize(c: canvas.Canvas, txt: str, font: str, size: float, max_w: float) -> str:
+    if c.stringWidth(txt, font, size) <= max_w:
+        return txt
+    out = txt
+    while out and c.stringWidth(out + "…", font, size) > max_w:
+        out = out[:-1]
+    return (out + "…") if out else ""
+
+
+# ── Primitives de section ───────────────────────────────────────────
 def _section_title(c: canvas.Canvas, x: float, y: float,
-                   fr: str, en: str, width: float) -> float:
+                   fr: str, en: str, width: float, m: dict) -> float:
     """Bandeau de section : accent + titre FR + sous-titre EN italique."""
-    h_band = _SECTION_TITLE_H
+    h_band = m["title_h"]
     y_bottom = y - h_band
 
-    # Bandeau clair de fond
     c.setFillColor(_LIGHT_GRAY)
     c.rect(x, y_bottom, width, h_band, fill=1, stroke=0)
-    # Accent gauche (encart plus visible)
     c.setFillColor(_ACCENT)
-    c.rect(x, y_bottom, 3 * mm, h_band, fill=1, stroke=0)
+    c.rect(x, y_bottom, 2.6 * mm, h_band, fill=1, stroke=0)
 
+    tx = x + 4.6 * mm
+    max_w = width - 6 * mm
+    s_fr = _fit_size(c, fr, m["f_title"], "Helvetica-Bold", max_w * 0.7)
     c.setFillColor(_DARK)
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(x + 5 * mm, y_bottom + h_band / 2 - 1, fr)
+    c.setFont("Helvetica-Bold", s_fr)
+    c.drawString(tx, y_bottom + h_band / 2 - s_fr * 0.34, fr)
 
-    c.setFillColor(_MUTED)
-    c.setFont("Helvetica-Oblique", 7.5)
-    c.drawString(x + 5 * mm + c.stringWidth(fr, "Helvetica-Bold", 9) + 2 * mm,
-                 y_bottom + h_band / 2 - 1, "/ " + en)
+    used = c.stringWidth(fr, "Helvetica-Bold", s_fr) + 2 * mm
+    if en and en != fr:
+        s_en = _fit_size(c, "/ " + en, m["f_title_en"], "Helvetica-Oblique",
+                         max(max_w - used, 10))
+        c.setFillColor(_MUTED)
+        c.setFont("Helvetica-Oblique", s_en)
+        c.drawString(tx + used,
+                     y_bottom + h_band / 2 - s_en * 0.34,
+                     _ellipsize(c, "/ " + en, "Helvetica-Oblique", s_en,
+                                max(max_w - used, 10)))
 
     c.setFillColor(_BLACK)
     return y_bottom
 
 
-def _draw_row(c: canvas.Canvas, x: float, y: float,
+def _draw_row(c: canvas.Canvas, x: float, y: float, width: float, m: dict,
               label_fr: str, label_en: str, value_fr: str, value_en: str,
-              striped: bool = False, width: float | None = None) -> float:
+              striped: bool = False) -> float:
     """Ligne bilingue compacte — label FR bold + EN italique dessous, valeur idem."""
-    inner_w = width if width is not None else (W - x - 15 * mm)
-    row_h = _SECTION_ROW_H
-    col_lbl = inner_w * 0.42
-    col_val = inner_w - col_lbl
-
+    row_h = m["row_h"]
+    col_lbl = width * 0.42
+    col_val = width - col_lbl
     y_bottom = y - row_h
 
     if striped:
         c.setFillColor(_LIGHT_GRAY)
-        c.rect(x, y_bottom, inner_w, row_h, fill=1, stroke=0)
+        c.rect(x, y_bottom, width, row_h, fill=1, stroke=0)
 
     c.setStrokeColor(_BORDER)
     c.setLineWidth(0.25)
     c.line(x + col_lbl, y_bottom, x + col_lbl, y)
     c.setLineWidth(0.3)
-    c.line(x, y_bottom, x + inner_w, y_bottom)
+    c.line(x, y_bottom, x + width, y_bottom)
 
-    # Deux mini-lignes dans les 6.8mm : FR bold + EN italique en dessous
-    y_fr = y - 3.1 * mm
-    y_en = y - 5.6 * mm
+    has_lbl_en = bool(label_en) and label_en != label_fr
+    has_val_en = bool(value_en) and value_en != value_fr
+    two_lines = has_lbl_en or has_val_en
 
-    # Label FR (bold) + EN (italique gris)
+    y_l1 = y - row_h * (0.46 if two_lines else 0.62)
+    y_l2 = y - row_h * 0.84
+    y_mid = y - row_h * 0.62
+
+    pad = 2.2 * mm
+    max_lbl_w = col_lbl - 2 * pad
+    max_val_w = col_val - 2 * pad
+
+    # Label
+    s = _fit_size(c, label_fr, m["f_lbl"], "Helvetica-Bold", max_lbl_w)
     c.setFillColor(_DARK)
-    c.setFont("Helvetica-Bold", 8.2)
-    c.drawString(x + 2.5 * mm, y_fr, label_fr)
-    if label_en and label_en != label_fr:
+    c.setFont("Helvetica-Bold", s)
+    c.drawString(x + pad, y_l1 if has_lbl_en else (y_l1 if two_lines else y_mid), label_fr)
+    if has_lbl_en:
+        s2 = _fit_size(c, label_en, m["f_lbl_en"], "Helvetica-Oblique", max_lbl_w)
         c.setFillColor(_MUTED)
-        c.setFont("Helvetica-Oblique", 6.8)
-        c.drawString(x + 2.5 * mm, y_en, label_en)
+        c.setFont("Helvetica-Oblique", s2)
+        c.drawString(x + pad, y_l2,
+                     _ellipsize(c, label_en, "Helvetica-Oblique", s2, max_lbl_w))
 
-    # Value FR (bold) + EN (italique gris) si différent
-    x_val = x + col_lbl + 2.5 * mm
-    max_val_w = col_val - 5 * mm
-
-    def _fit(txt: str, base: float, bold: bool) -> float:
-        font = "Helvetica-Bold" if bold else "Helvetica-Oblique"
-        for s in (base, base - 0.5, base - 1, base - 1.5, base - 2):
-            if c.stringWidth(txt, font, s) <= max_val_w:
-                return s
-        return base - 2
-
-    size_fr = _fit(value_fr, 8.5, bold=True)
+    # Valeur
+    xv = x + col_lbl + pad
+    sv = _fit_size(c, value_fr, m["f_val"], "Helvetica-Bold", max_val_w)
     c.setFillColor(_BLACK)
-    c.setFont("Helvetica-Bold", size_fr)
-    c.drawString(x_val, y_fr, value_fr)
-    if value_en and value_en != value_fr:
-        size_en = _fit(value_en, 6.8, bold=False)
+    c.setFont("Helvetica-Bold", sv)
+    c.drawString(xv, y_l1 if two_lines else y_mid,
+                 _ellipsize(c, value_fr, "Helvetica-Bold", sv, max_val_w))
+    if has_val_en:
+        sv2 = _fit_size(c, value_en, m["f_val_en"], "Helvetica-Oblique", max_val_w)
         c.setFillColor(_MUTED)
-        c.setFont("Helvetica-Oblique", size_en)
-        c.drawString(x_val, y_en, value_en)
+        c.setFont("Helvetica-Oblique", sv2)
+        c.drawString(xv, y_l2,
+                     _ellipsize(c, value_en, "Helvetica-Oblique", sv2, max_val_w))
 
     c.setFillColor(_BLACK)
     return y_bottom
 
 
-def _section_box(c: canvas.Canvas, x: float, y: float, width: float, height: float) -> None:
-    """Bordure autour d'une section (titre + rows) — trace après remplissage."""
+def _draw_color_row(c: canvas.Canvas, x: float, y: float, width: float, m: dict,
+                    num: int, couleur: str, area: str, striped: bool = False) -> float:
+    """Ligne « couleur d'impression » : pastille numérotée + encre + zone.
+
+    La zone d'impression est écrite sur toute la largeur du bloc (et non dans
+    une colonne de droite) : une mention du type « Spot 2 x 18,9 mm toutes les
+    10 étiquettes » doit rester lisible d'un coup d'œil par le fournisseur.
+    """
+    row_h = m["color_h"]
+    y_bottom = y - row_h
+
+    if striped:
+        c.setFillColor(_LIGHT_GRAY)
+        c.rect(x, y_bottom, width, row_h, fill=1, stroke=0)
+    c.setStrokeColor(_BORDER)
+    c.setLineWidth(0.3)
+    c.line(x, y_bottom, x + width, y_bottom)
+
+    pad = 2.2 * mm
+    y_name = y - row_h * 0.42
+    y_zone = y - row_h * 0.80
+
+    chip_h = min(row_h * 0.30, 3.6 * mm)
+    chip_w = max(chip_h * 1.35, 4.0 * mm)
+    chip_y = y_name - chip_h * 0.24
+    c.setFillColor(_ACCENT)
+    c.roundRect(x + pad, chip_y, chip_w, chip_h, 0.9 * mm, fill=1, stroke=0)
+    c.setFillColor(_WHITE)
+    fs = min(m["f_val_en"], chip_h * 0.62)
+    c.setFont("Helvetica-Bold", fs)
+    c.drawCentredString(x + pad + chip_w / 2, chip_y + chip_h * 0.5 - fs * 0.35, str(num))
+
+    tx = x + pad + chip_w + 1.8 * mm
+    max_w = width - (tx - x) - pad
+    lbl = couleur or "Couleur non précisée / Colour not specified"
+    s = _fit_size(c, lbl, m["f_val"], "Helvetica-Bold", max_w)
+    c.setFillColor(_BLACK)
+    c.setFont("Helvetica-Bold", s)
+    c.drawString(tx, y_name, _ellipsize(c, lbl, "Helvetica-Bold", s, max_w))
+
+    zone = f"Zone / Printing area : {area}" if area else "Zone / Printing area : —"
+    sz = _fit_size(c, zone, m["f_val_en"], "Helvetica-Oblique", max_w)
+    c.setFillColor(_MUTED)
+    c.setFont("Helvetica-Oblique", sz)
+    c.drawString(tx, y_zone, _ellipsize(c, zone, "Helvetica-Oblique", sz, max_w))
+
+    c.setFillColor(_BLACK)
+    return y_bottom
+
+
+def _draw_note_row(c: canvas.Canvas, x: float, y: float, width: float, m: dict,
+                   fr: str, en: str, striped: bool = False) -> float:
+    """Ligne pleine largeur sans colonne de label (message d'état)."""
+    row_h = m["row_h"]
+    y_bottom = y - row_h
+    if striped:
+        c.setFillColor(_LIGHT_GRAY)
+        c.rect(x, y_bottom, width, row_h, fill=1, stroke=0)
+    c.setStrokeColor(_BORDER)
+    c.setLineWidth(0.3)
+    c.line(x, y_bottom, x + width, y_bottom)
+
+    pad = 2.2 * mm
+    maxw = width - 2 * pad
+    s = _fit_size(c, fr, m["f_lbl"], "Helvetica-Bold", maxw)
+    c.setFillColor(_DARK)
+    c.setFont("Helvetica-Bold", s)
+    c.drawString(x + pad, y - row_h * 0.46, _ellipsize(c, fr, "Helvetica-Bold", s, maxw))
+    if en and en != fr:
+        s2 = _fit_size(c, en, m["f_lbl_en"], "Helvetica-Oblique", maxw)
+        c.setFillColor(_MUTED)
+        c.setFont("Helvetica-Oblique", s2)
+        c.drawString(x + pad, y - row_h * 0.84,
+                     _ellipsize(c, en, "Helvetica-Oblique", s2, maxw))
+    c.setFillColor(_BLACK)
+    return y_bottom
+
+
+def _section_box(c: canvas.Canvas, x: float, y_top: float, width: float, height: float) -> None:
     c.setStrokeColor(_BORDER)
     c.setLineWidth(0.5)
-    c.rect(x, y - height, width, height, fill=0, stroke=1)
+    c.rect(x, y_top - height, width, height, fill=0, stroke=1)
 
 
-def _draw_full_section(c: canvas.Canvas, ml: float, mr: float, y: float,
-                       fr: str, en: str, rows: list[tuple],
-                       ao_reference: str | None = None) -> float:
-    """Rend une section pleine largeur avec bordure autour."""
-    rows = _filter_meaningful(rows)
-    if not rows:
-        return y
-    inner_w = W - ml - mr
-    need = _SECTION_TITLE_H + len(rows) * _SECTION_ROW_H + _SECTION_GAP
-    y = _need_page(c, y, need, ml, mr, ao_reference)
-    y_start = y
-    y = _section_title(c, ml, y, fr, en, width=inner_w)
-    for i, (lfr, len_, vf, ve) in enumerate(rows):
-        y = _draw_row(c, ml, y, lfr, len_, vf, ve, striped=(i % 2 == 0), width=inner_w)
-    # Bordure autour de la section
-    total_h = y_start - y
-    _section_box(c, ml, y_start, inner_w, total_h)
-    return y - _SECTION_GAP
+# ── Modèle de blocs (mesure puis rendu) ─────────────────────────────
+def _kv(label_fr: str, label_en: str, value_fr: Any, value_en: Any = None) -> tuple:
+    return ("kv", label_fr, label_en, str(value_fr), str(value_en if value_en is not None else value_fr))
 
 
-def _filter_meaningful(rows: list[tuple]) -> list[tuple]:
-    """Retire les lignes dont la valeur FR ET EN sont vides ou '—'."""
-    def is_empty(v):
+def _color(num: int, couleur: str, area: str) -> tuple:
+    return ("color", num, couleur, area)
+
+
+def _note(fr: str, en: str) -> tuple:
+    return ("note", fr, en)
+
+
+def _keep(rows: list[tuple]) -> list[tuple]:
+    """Retire les lignes kv dont la valeur FR ET EN sont vides ou '—'."""
+    def empty(v):
         return v is None or str(v).strip() in ("", "—")
-    return [r for r in rows if not (is_empty(r[2]) and is_empty(r[3]))]
+    out = []
+    for r in rows:
+        if r[0] == "kv" and empty(r[3]) and empty(r[4]):
+            continue
+        out.append(r)
+    return out
 
 
-def _draw_two_col_sections(
-    c: canvas.Canvas, ml: float, mr: float, y: float,
-    left_title: tuple[str, str], left_rows: list[tuple],
-    right_title: tuple[str, str], right_rows: list[tuple],
-    ao_reference: str | None = None,
-) -> float:
-    """Rend deux sections côte à côte, chacune sur ~50% de la largeur, avec bordure."""
-    left_rows = _filter_meaningful(left_rows)
-    right_rows = _filter_meaningful(right_rows)
-    if not left_rows and not right_rows:
-        return y
-    gap = 6 * mm
+def _rows_h(rows: list[tuple], m: dict) -> float:
+    total = 0.0
+    for r in rows:
+        total += m["color_h"] if r[0] == "color" else m["row_h"]
+    return total
+
+
+def _draw_rows(c: canvas.Canvas, x: float, y: float, width: float, m: dict,
+               rows: list[tuple]) -> float:
+    for i, r in enumerate(rows):
+        striped = (i % 2 == 0)
+        if r[0] == "color":
+            y = _draw_color_row(c, x, y, width, m, r[1], r[2], r[3], striped)
+        elif r[0] == "note":
+            y = _draw_note_row(c, x, y, width, m, r[1], r[2], striped)
+        else:
+            y = _draw_row(c, x, y, width, m, r[1], r[2], r[3], r[4], striped)
+    return y
+
+
+def _block_height(b: dict, m: dict) -> float:
+    if b["t"] == "full":
+        return m["title_h"] + _rows_h(b["rows"], m) + m["gap"]
+    if b["t"] == "two":
+        return m["title_h"] + max(_rows_h(b["left"][1], m),
+                                  _rows_h(b["right"][1], m)) + m["gap"]
+    if b["t"] == "text":
+        return m["title_h"] + b["h1"] * m["k"] + 4 * mm * m["k"] + m["gap"]
+    return 0.0
+
+
+def _draw_block(c: canvas.Canvas, ml: float, mr: float, y: float, b: dict,
+                m: dict) -> float:
     inner_w = W - ml - mr
-    col_w = (inner_w - gap) / 2
-    x_left = ml
-    x_right = ml + col_w + gap
-    need = _SECTION_TITLE_H + max(len(left_rows), len(right_rows)) * _SECTION_ROW_H + _SECTION_GAP
-    y = _need_page(c, y, need, ml, mr, ao_reference)
+    if b["t"] == "full":
+        y_start = y
+        y = _section_title(c, ml, y, b["title"][0], b["title"][1], inner_w, m)
+        y = _draw_rows(c, ml, y, inner_w, m, b["rows"])
+        _section_box(c, ml, y_start, inner_w, y_start - y)
+        return y - m["gap"]
 
-    y_start = y
-    y_left = y_start
-    y_right = y_start
-    if left_rows:
-        y_left = _section_title(c, x_left, y_start, left_title[0], left_title[1], width=col_w)
-        for i, row in enumerate(left_rows):
-            fr, en, vf, ve = row
-            y_left = _draw_row(c, x_left, y_left, fr, en, vf, ve, striped=(i % 2 == 0), width=col_w)
-        _section_box(c, x_left, y_start, col_w, y_start - y_left)
-    if right_rows:
-        y_right = _section_title(c, x_right, y_start, right_title[0], right_title[1], width=col_w)
-        for i, row in enumerate(right_rows):
-            fr, en, vf, ve = row
-            y_right = _draw_row(c, x_right, y_right, fr, en, vf, ve, striped=(i % 2 == 0), width=col_w)
-        _section_box(c, x_right, y_start, col_w, y_start - y_right)
-    return min(y_left, y_right) - _SECTION_GAP
+    if b["t"] == "two":
+        gap_x = 5 * mm
+        col_w = (inner_w - gap_x) / 2
+        x_l, x_r = ml, ml + col_w + gap_x
+        body_h = max(_rows_h(b["left"][1], m), _rows_h(b["right"][1], m))
+        y_start = y
+        for x, (title, rows) in ((x_l, b["left"]), (x_r, b["right"])):
+            if not rows:
+                continue
+            yy = _section_title(c, x, y_start, title[0], title[1], col_w, m)
+            _draw_rows(c, x, yy, col_w, m, rows)
+            _section_box(c, x, y_start, col_w, m["title_h"] + body_h)
+        return y_start - m["title_h"] - body_h - m["gap"]
+
+    if b["t"] == "text":
+        y_start = y
+        y = _section_title(c, ml, y, b["title"][0], b["title"][1], inner_w, m)
+        box_h = b["h1"] * m["k"] + 4 * mm * m["k"]
+        y_box = y - box_h
+        style = ParagraphStyle("part", fontName="Helvetica",
+                               fontSize=max(6.6, 9 * m["k"]),
+                               leading=max(8.0, 11 * m["k"]),
+                               textColor=_BLACK, alignment=TA_LEFT)
+        p = Paragraph(str(b["text"]).replace("\n", "<br/>"), style)
+        _, ph = p.wrap(inner_w - 5 * mm, box_h)
+        p.drawOn(c, ml + 2.5 * mm, y_box + max(box_h - ph - 1.5 * mm, 1.5 * mm))
+        _section_box(c, ml, y_start, inner_w, y_start - y_box)
+        return y_box - m["gap"]
+
+    return y
 
 
 def _draw_footer(c: canvas.Canvas, ml: float, mr: float,
@@ -422,23 +617,6 @@ def _draw_footer(c: canvas.Canvas, ml: float, mr: float,
     c.setFillColor(_BLACK)
 
 
-# ── Rendu principal ─────────────────────────────────────────────────
-def _pw_reset(c: canvas.Canvas, ml: float, mr: float) -> float:
-    """Nouvelle page : redessine header + retourne y de départ (après titre)."""
-    y = _draw_header(c, ml, mr)
-    return y
-
-
-def _need_page(c: canvas.Canvas, y: float, needed: float, ml: float, mr: float,
-               ao_reference: str | None) -> float:
-    """Passe à une nouvelle page si y - needed < 30mm (place pour footer)."""
-    if y - needed < 30 * mm:
-        _draw_footer(c, ml, mr, ao_reference)
-        c.showPage()
-        y = _pw_reset(c, ml, mr)
-    return y
-
-
 def _mp_label(mp: dict | None) -> str:
     """Formatte une matière première depuis matieres_map."""
     if not mp:
@@ -450,6 +628,167 @@ def _mp_label(mp: dict | None) -> str:
     return ref or des or "—"
 
 
+def _plural(n: int, fr: str, en: str) -> tuple[str, str]:
+    s = "s" if n > 1 else ""
+    return (f"{n} {fr}{s}", f"{n} {en}{s}")
+
+
+def _face_rows(details: list[dict], nb: int, face: str) -> list[tuple]:
+    """Lignes d'un bloc recto ou verso : une pastille par couleur."""
+    rows: list[tuple] = []
+    details = [d for d in (details or []) if isinstance(d, dict)]
+    for i, d in enumerate(details, 1):
+        rows.append(_color(i, str(d.get("couleur") or "").strip(),
+                           str(d.get("printing_area") or "").strip()))
+    if not rows:
+        if nb > 0:
+            fr, en = _plural(nb, "couleur annoncée", "colour declared")
+            rows.append(_note(fr + " — détail non renseigné",
+                              en + " — no breakdown provided"))
+        else:
+            rows.append(_note(
+                "Aucune impression au " + face,
+                "No printing on the " + ("front" if face == "recto" else "back")))
+    return rows
+
+
+def _build_blocks(c: canvas.Canvas, produit: dict, matieres_map: dict) -> list[dict]:
+    """Décrit tous les blocs de la fiche, sans rien dessiner."""
+    fiche = produit.get("fiche") or {}
+    et   = fiche.get("etiquette") or {}
+    ech  = fiche.get("echenillage") or {}
+    mat  = fiche.get("matiere") or {}
+    bob  = fiche.get("bobines") or {}
+    imp  = fiche.get("impressions_detail") or {}
+    cond = fiche.get("conditionnement") or {}
+    cart = cond.get("carton") or {}
+    pal  = cond.get("palette") or {}
+
+    blocks: list[dict] = []
+
+    # ── Infos générales ────────────────────────────────────────────
+    type_fr, type_en = _tr_type_produit(fiche.get("type_produit"))
+    imp_fr, imp_en = _tr_bool(fiche.get("impressions"))
+    rows_1 = [
+        _kv("Type de produit", "Product type", type_fr, type_en),
+        _kv("Impressions", "Printing", imp_fr, imp_en),
+    ]
+    laize, longueur = et.get("laize"), et.get("longueur")
+    if laize is not None and longueur is not None:
+        try:
+            fmt_eti = f"{int(float(laize))} × {int(float(longueur))} mm"
+            rows_1.append(_kv("Format étiquette", "Label format", fmt_eti))
+        except (TypeError, ValueError):
+            pass
+    if fiche.get("impressions"):
+        if imp.get("aplat"):
+            pct = imp.get("aplat_pourcent")
+            rows_1.append(_kv("Aplat", "Solid ink coverage",
+                              f"Oui — {_num(pct)} %", f"Yes — {_num(pct)}%"))
+        else:
+            rows_1.append(_kv("Aplat", "Solid ink coverage", "Non", "No"))
+    blocks.append({"t": "full", "title": ("Infos générales", "General information"),
+                   "rows": _keep(rows_1)})
+
+    # ── Étiquette + Échenillage ────────────────────────────────────
+    rows_2 = _keep([
+        _kv("Laize", "Width", _num(et.get("laize"), " mm")),
+        _kv("Longueur", "Length", _num(et.get("longueur"), " mm")),
+        _kv("Rayon", "Corner radius", _num(et.get("rayon"), " mm")),
+        _kv("Perforation", "Perforation", _v(et.get("perforation"))),
+    ])
+    rows_3 = _keep([
+        _kv("Espace à droite", "Right gap", _num(ech.get("droite"), " mm")),
+        _kv("Espace à gauche", "Left gap", _num(ech.get("gauche"), " mm")),
+        _kv("En avance", "Down gap", _num(ech.get("avance"), " mm")),
+    ])
+    if rows_2 or rows_3:
+        blocks.append({"t": "two",
+                       "left": (("Étiquette", "Label"), rows_2),
+                       "right": (("Échenillage", "Matrix stripping"), rows_3)})
+
+    # ── Matière + Bobines ──────────────────────────────────────────
+    def mp_of(key: str, src: dict) -> str:
+        val = src.get(key)
+        if val is None or val == "":
+            return "—"
+        try:
+            return _mp_label(matieres_map.get(int(val)))
+        except (TypeError, ValueError):
+            return "—"
+
+    rows_4 = _keep([
+        _kv("Frontal", "Facestock", mp_of("frontal_id", mat)),
+        _kv("Adhésif", "Adhesive", mp_of("adhesif_id", mat)),
+        _kv("Grammage adhésif", "Adhesive coat weight",
+            _num(mat.get("grammage_adhesif"), " g/m²"),
+            _num(mat.get("grammage_adhesif"), " gsm")),
+        _kv("Glassine", "Release liner", mp_of("glassine_id", mat)),
+        _kv("Couleur glassine", "Liner colour", _v(mat.get("couleur_glassine"))),
+    ])
+    enr_fr, enr_en = _tr_enroulement(bob.get("enroulement"))
+    rows_5 = _keep([
+        _kv("Diamètre mandrin", "Core diameter", _num(bob.get("diametre_mandrin"), " mm")),
+        _kv("Enroulement", "Winding direction", enr_fr, enr_en),
+        _kv("Diamètre bobine", "Roll diameter", _num(bob.get("diametre_bobine"), " mm")),
+        _kv("Étiquettes / bobine", "Labels / roll", _num(bob.get("nb_etiquettes"))),
+    ])
+    if rows_4 or rows_5:
+        blocks.append({"t": "two",
+                       "left": (("Matière", "Material"), rows_4),
+                       "right": (("Bobines", "Rolls"), rows_5)})
+
+    # ── Impressions : une case recto, une case verso ───────────────
+    if fiche.get("impressions"):
+        nb_recto = _int(imp.get("recto"))
+        nb_verso = _int(imp.get("verso"))
+        d_recto = imp.get("recto_details") or []
+        d_verso = imp.get("verso_details") or []
+        n_r = len([d for d in d_recto if isinstance(d, dict)]) or nb_recto
+        n_v = len([d for d in d_verso if isinstance(d, dict)]) or nb_verso
+        t_r_fr, t_r_en = _plural(n_r, "couleur", "colour")
+        t_v_fr, t_v_en = _plural(n_v, "couleur", "colour")
+        blocks.append({
+            "t": "two",
+            "left": ((f"Recto — {t_r_fr}", f"Front — {t_r_en}"),
+                     _face_rows(d_recto, nb_recto, "recto")),
+            "right": ((f"Verso — {t_v_fr}", f"Back — {t_v_en}"),
+                      _face_rows(d_verso, nb_verso, "verso")),
+        })
+
+    # ── Cartons + Palettes ─────────────────────────────────────────
+    rows_7 = _keep([
+        _kv("Type de carton", "Box type", mp_of("matiere_id", cart)),
+        _kv("Bobines au sol", "Rolls per layer", _num(cart.get("bobines_sol"))),
+        _kv("Nombre d'étages", "Number of layers", _num(cart.get("nb_etages"))),
+        _kv("Bobines / carton", "Rolls / box", _num(cart.get("bobines_carton"))),
+    ])
+    rows_8 = _keep([
+        _kv("Type de palette", "Pallet type", mp_of("matiere_id", pal)),
+        _kv("Cartons au sol", "Boxes per layer", _num(pal.get("cartons_sol"))),
+        _kv("Étages de cartons", "Number of layers", _num(pal.get("nb_etages"))),
+        _kv("Cartons / palette", "Boxes / pallet", _num(pal.get("cartons_palette"))),
+    ])
+    if rows_7 or rows_8:
+        blocks.append({"t": "two",
+                       "left": (("Cartons", "Boxes"), rows_7),
+                       "right": (("Palettes", "Pallets"), rows_8)})
+
+    # ── Particularités ─────────────────────────────────────────────
+    part = fiche.get("particularites")
+    if part and str(part).strip():
+        style = ParagraphStyle("measure", fontName="Helvetica", fontSize=9,
+                               leading=11, alignment=TA_LEFT)
+        p = Paragraph(str(part).replace("\n", "<br/>"), style)
+        _, h1 = p.wrap(W - 30 * mm - 5 * mm, 200 * mm)
+        blocks.append({"t": "text",
+                       "title": ("Particularités", "Special requirements"),
+                       "text": str(part), "h1": max(h1, 10 * mm)})
+
+    return blocks
+
+
+# ── Rendu principal ─────────────────────────────────────────────────
 def generate_fiche_fournisseur_pdf(
     produit: dict,
     *,
@@ -464,28 +803,11 @@ def generate_fiche_fournisseur_pdf(
     - matieres_map : dict {matiere_id: {reference, designation, ...}}
       pour afficher les libellés des frontal/adhésif/glassine/carton/palette
     - ao_reference : référence de l'AO (affichée en pied de page si fourni)
+
+    Le document tient sur une seule page A4 : la densité des blocs est
+    calculée avant le rendu en fonction du volume d'informations saisi.
     """
     matieres_map = matieres_map or {}
-    fiche = produit.get("fiche") or {}
-    et   = fiche.get("etiquette") or {}
-    ech  = fiche.get("echenillage") or {}
-    mat  = fiche.get("matiere") or {}
-    bob  = fiche.get("bobines") or {}
-    imp  = fiche.get("impressions_detail") or {}
-    cond = fiche.get("conditionnement") or {}
-    cart = cond.get("carton") or {}
-    pal  = cond.get("palette") or {}
-
-    def mp(k: str) -> str:
-        mid = mat.get(k) if k in mat else (
-            cart.get(k) if k in cart else pal.get(k)
-        )
-        if mid is None:
-            return "—"
-        try:
-            return _mp_label(matieres_map.get(int(mid)))
-        except (TypeError, ValueError):
-            return "—"
 
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
@@ -493,147 +815,32 @@ def generate_fiche_fournisseur_pdf(
     c.setTitle(f"Fiche produit fournisseur — {ref_clean}")
     c.setAuthor("SIFA")
 
-    ml = 15 * mm
-    mr = 15 * mm
+    ml = mr = 15 * mm
 
     y = _draw_header(c, ml, mr)
     y = _draw_title(c, y)
-    y = _draw_ref_block(c, ml, mr, y - 4 * mm, produit)
+    y = _draw_ref_block(c, ml, mr, y - 3 * mm, produit)
 
-    type_fr, type_en = _tr_type_produit(fiche.get("type_produit"))
-    imp_fr, imp_en = _tr_bool(fiche.get("impressions"))
+    blocks = _build_blocks(c, produit, matieres_map)
 
-    # ── Section 1 : Infos générales (pleine largeur, courte) ──────
-    rows_1 = [
-        ("Type de produit",       "Product type",        type_fr, type_en),
-        ("Impressions",           "Printing",            imp_fr, imp_en),
-    ]
-    fmt_eti = ""
-    laize, longueur = et.get("laize"), et.get("longueur")
-    if laize is not None and longueur is not None:
-        try:
-            fmt_eti = f"{int(float(laize))} × {int(float(longueur))} mm"
-        except (TypeError, ValueError):
-            pass
-    if fmt_eti:
-        rows_1.append(("Format étiquette", "Label format", fmt_eti, fmt_eti))
-    y = _draw_full_section(c, ml, mr, y - 2 * mm, "Infos générales", "General information",
-                           rows_1, ao_reference=ao_reference)
+    # Facteur de compression : hauteur disponible / hauteur naturelle.
+    m1 = _metrics(1.0)
+    # Le dernier bloc ne consomme pas son interligne de fin : on le retire de
+    # la mesure, sinon une fiche qui tient tout juste bascule sur 2 pages.
+    need = max(sum(_block_height(b, m1) for b in blocks) - m1["gap"], 0.0)
+    avail = (y - _CONTENT_BOTTOM) * 0.995
+    k = 1.0 if need <= avail or need <= 0 else max(avail / need, _K_MIN)
+    m = _metrics(k)
 
-    # ── Sections 2 & 3 : Étiquette + Échenillage (côte à côte) ────
-    rows_2 = [
-        ("Laize",         "Width",        _num(et.get("laize"),    " mm"), _num(et.get("laize"),    " mm")),
-        ("Longueur",      "Length",       _num(et.get("longueur"), " mm"), _num(et.get("longueur"), " mm")),
-        ("Rayon",         "Corner radius",_num(et.get("rayon"),    " mm"), _num(et.get("rayon"),    " mm")),
-        ("Perforation",   "Perforation",  _v(et.get("perforation")),        _v(et.get("perforation"))),
-    ]
-    rows_3 = [
-        ("Espace à droite", "Right gap",   _num(ech.get("droite"), " mm"), _num(ech.get("droite"), " mm")),
-        ("Espace à gauche", "Left gap",    _num(ech.get("gauche"), " mm"), _num(ech.get("gauche"), " mm")),
-        ("En avance",       "Down gap",    _num(ech.get("avance"), " mm"), _num(ech.get("avance"), " mm")),
-    ]
-    y = _draw_two_col_sections(
-        c, ml, mr, y - 2 * mm,
-        ("Étiquette", "Label"), rows_2,
-        ("Échenillage", "Matrix stripping"), rows_3,
-        ao_reference=ao_reference,
-    )
-
-    # ── Sections 4 & 5 : Matière + Bobines (côte à côte) ──────────
-    frontal_lbl  = _mp_label(matieres_map.get(int(mat["frontal_id"])) if mat.get("frontal_id") else None)
-    adhesif_lbl  = _mp_label(matieres_map.get(int(mat["adhesif_id"])) if mat.get("adhesif_id") else None)
-    glassine_lbl = _mp_label(matieres_map.get(int(mat["glassine_id"])) if mat.get("glassine_id") else None)
-    rows_4 = [
-        ("Frontal",           "Facestock",              frontal_lbl,  frontal_lbl),
-        ("Adhésif",           "Adhesive",               adhesif_lbl,  adhesif_lbl),
-        ("Grammage adhésif",  "Adhesive coat weight",   _num(mat.get("grammage_adhesif"), " g/m²"),
-                                                        _num(mat.get("grammage_adhesif"), " gsm")),
-        ("Glassine",          "Release liner",          glassine_lbl, glassine_lbl),
-        ("Couleur glassine",  "Liner colour",           _v(mat.get("couleur_glassine")), _v(mat.get("couleur_glassine"))),
-    ]
-    enr_fr, enr_en = _tr_enroulement(bob.get("enroulement"))
-    rows_5 = [
-        ("Diamètre mandrin",   "Core diameter",     _num(bob.get("diametre_mandrin"), " mm"),
-                                                    _num(bob.get("diametre_mandrin"), " mm")),
-        ("Enroulement",        "Winding direction", enr_fr, enr_en),
-        ("Diamètre bobine",    "Roll diameter",     _num(bob.get("diametre_bobine"), " mm"),
-                                                    _num(bob.get("diametre_bobine"), " mm")),
-        ("Étiquettes / bobine","Labels / roll",     _num(bob.get("nb_etiquettes")),
-                                                    _num(bob.get("nb_etiquettes"))),
-    ]
-    y = _draw_two_col_sections(
-        c, ml, mr, y - 1 * mm,
-        ("Matière", "Material"), rows_4,
-        ("Bobines", "Rolls"), rows_5,
-        ao_reference=ao_reference,
-    )
-
-    # ── Section 6 : Impressions (si activées) ─────────────────────
-    if fiche.get("impressions"):
-        aplat_txt_fr = "Non"
-        aplat_txt_en = "No"
-        if imp.get("aplat"):
-            pct = imp.get("aplat_pourcent")
-            aplat_txt_fr = f"Oui ({_num(pct)} %)"
-            aplat_txt_en = f"Yes ({_num(pct)} %)"
-        rows_6 = [
-            ("Aplat",  "Solid ink coverage", aplat_txt_fr, aplat_txt_en),
-            ("Recto",  "Front (colours)",    _num(imp.get("recto")), _num(imp.get("recto"))),
-            ("Verso",  "Back (colours)",     _num(imp.get("verso")), _num(imp.get("verso"))),
-        ]
-        details_recto = imp.get("recto_details") or []
-        details_verso = imp.get("verso_details") or []
-        for i, d in enumerate(details_recto, 1):
-            val = f"{d.get('couleur','')} — {d.get('printing_area','')}".strip(" —")
-            rows_6.append((f"Recto {i}", f"Front {i}", val or "—", val or "—"))
-        for i, d in enumerate(details_verso, 1):
-            val = f"{d.get('couleur','')} — {d.get('printing_area','')}".strip(" —")
-            rows_6.append((f"Verso {i}", f"Back {i}", val or "—", val or "—"))
-        y = _draw_full_section(c, ml, mr, y - 1 * mm, "Impressions", "Printing details",
-                               rows_6, ao_reference=ao_reference)
-
-    # ── Sections 7 & 8 : Cartons + Palettes (côte à côte) ─────────
-    cart_lbl = _mp_label(matieres_map.get(int(cart["matiere_id"])) if cart.get("matiere_id") else None)
-    rows_7 = [
-        ("Type de carton",   "Box type",           cart_lbl, cart_lbl),
-        ("Bobines au sol",   "Rolls per layer",    _num(cart.get("bobines_sol")), _num(cart.get("bobines_sol"))),
-        ("Nombre d'étages",  "Number of layers",   _num(cart.get("nb_etages")),   _num(cart.get("nb_etages"))),
-        ("Bobines / carton", "Rolls / box",        _num(cart.get("bobines_carton")), _num(cart.get("bobines_carton"))),
-    ]
-    pal_lbl = _mp_label(matieres_map.get(int(pal["matiere_id"])) if pal.get("matiere_id") else None)
-    rows_8 = [
-        ("Type de palette",   "Pallet type",         pal_lbl, pal_lbl),
-        ("Cartons au sol",    "Boxes per layer",     _num(pal.get("cartons_sol")),     _num(pal.get("cartons_sol"))),
-        ("Étages de cartons", "Number of layers",    _num(pal.get("nb_etages")),       _num(pal.get("nb_etages"))),
-        ("Cartons / palette", "Boxes / pallet",      _num(pal.get("cartons_palette")), _num(pal.get("cartons_palette"))),
-    ]
-    y = _draw_two_col_sections(
-        c, ml, mr, y - 1 * mm,
-        ("Cartons", "Boxes"), rows_7,
-        ("Palettes", "Pallets"), rows_8,
-        ao_reference=ao_reference,
-    )
-
-    # ── Section 9 : Particularités (si renseignées) ───────────────
-    part = fiche.get("particularites")
-    if part and str(part).strip():
-        inner_w = W - ml - mr
-        box_h = 22 * mm
-        need = _SECTION_TITLE_H + box_h + _SECTION_GAP
-        y = _need_page(c, y, need, ml, mr, ao_reference)
-        y_start = y
-        y = _section_title(c, ml, y, "Particularités", "Special requirements", width=inner_w)
-        y_box = y - box_h
-        c.setStrokeColor(_BORDER)
-        c.setLineWidth(0.4)
-        c.rect(ml, y_box, inner_w, box_h, fill=0, stroke=1)
-        style = ParagraphStyle("part", fontName="Helvetica", fontSize=9,
-                               leading=11, textColor=_BLACK, alignment=TA_LEFT)
-        p = Paragraph(str(part).replace("\n", "<br/>"), style)
-        p.wrapOn(c, inner_w - 4 * mm, box_h - 2 * mm)
-        p.drawOn(c, ml + 2 * mm, y_box + 2 * mm)
-        _section_box(c, ml, y_start, inner_w, y_start - y_box)
-        y = y_box - _SECTION_GAP
+    for b in blocks:
+        h = _block_height(b, m) - m["gap"]
+        if y - h < _CONTENT_BOTTOM - 1 and y < H - 60 * mm:
+            # Filet de sécurité : fiche hors norme (texte de particularités
+            # très long). On préfère une 2e page à un contenu tronqué.
+            _draw_footer(c, ml, mr, ao_reference)
+            c.showPage()
+            y = _draw_header(c, ml, mr)
+        y = _draw_block(c, ml, mr, y, b, m)
 
     _draw_footer(c, ml, mr, ao_reference)
     c.showPage()

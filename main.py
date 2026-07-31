@@ -340,7 +340,7 @@ async def inject_staging_bandeau(request: Request, call_next):
 # Coût pour les autres rôles : un <script> de 20 Ko en cache navigateur, aucun
 # appel réseau tant que le raccourci n'a pas servi (le script résout le rôle
 # paresseusement). html2canvas n'est chargé qu'à la première capture.
-_TACHE_QUICK_TAG = b'<script src="/static/mysifa_tache_quick.js?v=1" defer></script>'
+_TACHE_QUICK_TAG = b'<script src="/static/mysifa_tache_quick.js?v=2" defer></script>'
 _BODY_CLOSE_RE = re.compile(rb"</body>", re.IGNORECASE)
 
 

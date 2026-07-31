@@ -67,6 +67,17 @@ NEIGHBOUR_BAND_MM = 17.0
  
 # Cartouche
 BOX_X, BOX_Y, BOX_W, BOX_H = 32.0, 230.0, 146.0, 59.0
+
+# Encart "detail des impressions". Occupe la bande libre a droite du logo,
+# sous la fleche de sens de sortie : le plan ne descend jamais plus bas que
+# y = 166 et la fleche s'arrete a y = 204, colonne x = 71..105. Un encart
+# ancre a droite (x >= 108) et en bas (y = 228, juste au-dessus du cartouche)
+# ne peut donc croiser aucune cote, quelle que soit l'echelle retenue.
+PRINT_PANEL_X = 108.0
+PRINT_PANEL_W = 88.0
+PRINT_PANEL_BOTTOM = 228.0
+PRINT_PANEL_TOP_MIN = 177.0
+COLOR_PANEL_BG = "#EDF3FA"
  
 # Echelles normalisees, de la plus grande a la plus petite
 STANDARD_SCALES: Tuple[Tuple[float, str], ...] = (
@@ -187,6 +198,18 @@ TEXTS: Dict[str, Dict[str, Any]] = {
         "warn_title": "CROQUIS AUTOMATIQUE — AUTOMATIC SKETCH",
         "warn_fr": "Plan généré automatiquement depuis la fiche produit. Il peut contenir des erreurs : vérifiez toutes les cotes avant production.",
         "warn_en": "Automatically generated from the product data sheet. It may contain errors: check every dimension before production.",
+        # Cote de rayon d'angle + encart detail des impressions
+        "sharp_corner": "Angles vifs",
+        "printing_title": "Impressions",
+        "front": "Recto",
+        "back": "Verso",
+        "colour": "couleur",
+        "solid": "Aplat",
+        "area": "Zone",
+        "face_none": "sans impression",
+        "print_no_detail": "Detail des couleurs non renseigne",
+        "print_more": "+{n} autre(s) couleur(s)",
+        "print_summary": "Impression {r} recto / {v} verso",
     },
     "en": {
         "customer": "Customer",
@@ -222,6 +245,17 @@ TEXTS: Dict[str, Dict[str, Any]] = {
         "warn_title": "AUTOMATIC SKETCH — CROQUIS AUTOMATIQUE",
         "warn_fr": "Automatically generated from the product data sheet. It may contain errors: check every dimension before production.",
         "warn_en": "Plan généré automatiquement depuis la fiche produit. Il peut contenir des erreurs : vérifiez toutes les cotes avant production.",
+        "sharp_corner": "Square corners",
+        "printing_title": "Printing",
+        "front": "Front",
+        "back": "Back",
+        "colour": "colour",
+        "solid": "Solid ink",
+        "area": "Area",
+        "face_none": "no printing",
+        "print_no_detail": "No colour breakdown provided",
+        "print_more": "+{n} more colour(s)",
+        "print_summary": "Printing {r} front / {v} back",
     },
 }
  
@@ -426,6 +460,13 @@ def build_bat_spec(
         # impression
         "imprime": imprime,
         "couleurs": couleurs,
+        # Volumetrie annoncee sur la fiche produit : elle peut differer du
+        # nombre de couleurs detaillees (fiche remplie a moitie). On garde les
+        # deux pour que le BAT puisse le signaler au lieu de le masquer.
+        "aplat": bool(imp.get("aplat")),
+        "aplat_pourcent": _f(imp.get("aplat_pourcent")),
+        "nb_recto": _i(imp.get("recto")),
+        "nb_verso": _i(imp.get("verso")),
         # affichage
         "show_echen": True,
         "show_pitch": True,
@@ -492,6 +533,7 @@ def _collect_colors(imp: Dict[str, Any], ft: Dict[str, Any]) -> List[Dict[str, A
                 "label": " ".join(x for x in (pantone, nom) if x).strip(),
                 "hex": _guess_hex(nom or pantone),
                 "face": "recto",
+                "area": str(ft.get(f"tete{n}_zone") or "").strip(),
             })
     if colors:
         return colors
@@ -578,6 +620,34 @@ def _arrow_v(ops: List[Dict[str, Any]], y1, y2, x, color):
     ops.append(_poly([(x, y2), (x - a * 0.45, y2 - a), (x + a * 0.45, y2 - a)], fill=color))
  
  
+def _leader(ops: List[Dict[str, Any]], x1, y1, x2, y2, color, *, sw=0.2, head=1.7):
+    """Trait de rappel termine par une pointe de fleche en (x2, y2)."""
+    ops.append(_line(x1, y1, x2, y2, stroke=color, sw=sw))
+    dx, dy = x2 - x1, y2 - y1
+    norm = math.hypot(dx, dy) or 1.0
+    ux, uy = dx / norm, dy / norm
+    nx, ny = -uy, ux
+    ops.append(_poly([
+        (x2, y2),
+        (x2 - ux * head + nx * head * 0.42, y2 - uy * head + ny * head * 0.42),
+        (x2 - ux * head - nx * head * 0.42, y2 - uy * head - ny * head * 0.42),
+    ], fill=color))
+
+
+def _text_w(text: str, size: float, bold: bool = False) -> float:
+    """Largeur approchee d'un texte Helvetica, en mm (pas de canvas ici)."""
+    return len(str(text)) * size * (0.55 if bold else 0.50)
+
+
+def _clip_text(text: str, size: float, max_w: float, bold: bool = False) -> str:
+    out = str(text)
+    if _text_w(out, size, bold) <= max_w:
+        return out
+    while out and _text_w(out + "...", size, bold) > max_w:
+        out = out[:-1]
+    return (out + "...") if out else ""
+
+
 def _dim_h(ops, x1, x2, y, label, color, *, ext_y=None, size=2.5):
     if ext_y is not None:
         ops.append(_line(x1, ext_y, x1, y + 1.2, stroke=color, sw=0.15))
@@ -790,6 +860,9 @@ def build_bat_ops(spec: Dict[str, Any], lang: Optional[str] = None,
         ops.append(_text(x0 + gw_s + 5, y0 + th_s + 3.5, t["vperf"], size=2.5,
                          fill=COLOR_CUT, bold=True))
  
+    # --- rayon / angle des etiquettes --------------------------------------
+    _build_radius_callout(ops, spec, g, t)
+
     ops.append(_text(x0 - 19, y0 - 11, t["scale"].format(ratio=g["ratio"]),
                      size=2.5, fill=COLOR_MUTED, bold=True))
  
@@ -814,8 +887,123 @@ def build_bat_ops(spec: Dict[str, Any], lang: Optional[str] = None,
     else:
         ops.append(_text(52, 214, _brand_name(), size=8, bold=True))
  
+    _build_print_panel(ops, spec, t)
     _build_cartouche(ops, spec, g, t, perf_on)
     return ops
+
+
+def _build_radius_callout(ops: List[Dict[str, Any]], spec: Dict[str, Any],
+                          g: Dict[str, Any], t: Dict[str, Any]) -> None:
+    """Fleche vers l'angle superieur gauche de l'etiquette de reference.
+
+    Le rayon figure deja dans le cartouche, mais un chiffre isole ne dit pas
+    de quel angle il s'agit : la fleche montre l'arrondi lui-meme. Rayon nul,
+    on annote quand meme, pour que "angles vifs" soit un choix lu comme tel et
+    non comme un oubli de saisie.
+    """
+    rayon = _f(spec.get("rayon"))
+    rs = g["radius_s"]
+    lx, y_top, x0, y0 = g["label_x"], g["y_main"], g["x0"], g["y0"]
+
+    if rayon > 0 and rs > 0.3:
+        cx_arc, cy_arc = lx + rs, y_top + rs
+        px = cx_arc - rs * 0.7071
+        py = cy_arc - rs * 0.7071
+        label = f"{t['radius']} {fmt_mm(rayon)} mm"
+    else:
+        px, py = lx, y_top
+        label = t["sharp_corner"]
+
+    # On reste sous la cote de laize : au-dessus, on marcherait sur l'echelle.
+    tx = x0 - 3.0
+    ty = max(y_top - 5.0, y0 - 2.0)
+    _leader(ops, tx + 0.6, ty + 0.9, px, py, COLOR_DIM, sw=0.2, head=1.5)
+    ops.append(_text(tx, ty, label, size=2.5, fill=COLOR_DIM, anchor="end", bold=True))
+
+
+def _nb_colors(n: int, t: Dict[str, Any]) -> str:
+    return f"{n} {t['colour']}" + ("s" if n > 1 else "")
+
+
+def _print_panel_lines(spec: Dict[str, Any], t: Dict[str, Any]) -> List[Tuple[str, str, Any]]:
+    """Contenu de l'encart impressions : (type, texte, couleur hex)."""
+    couleurs = spec.get("couleurs") or []
+    recto = [c for c in couleurs if (c or {}).get("face") != "verso"]
+    verso = [c for c in couleurs if (c or {}).get("face") == "verso"]
+    nb_r = _i(spec.get("nb_recto")) or len(recto)
+    nb_v = _i(spec.get("nb_verso")) or len(verso)
+
+    lines: List[Tuple[str, str, Any]] = []
+    if spec.get("aplat"):
+        pct = _f(spec.get("aplat_pourcent"))
+        lines.append(("head", f"{t['solid']} {fmt_mm(pct)} %" if pct > 0 else t["solid"], None))
+
+    for key, items, nb in (("front", recto, nb_r), ("back", verso, nb_v)):
+        if nb <= 0 and not items:
+            lines.append(("head", f"{t[key]} - {t['face_none']}", None))
+            continue
+        lines.append(("head", f"{t[key]} - {_nb_colors(nb, t)}", None))
+        if items:
+            for i, col in enumerate(items, 1):
+                txt = f"{i}. {(col.get('label') or '').strip() or '-'}"
+                area = str(col.get("area") or "").strip()
+                if area:
+                    txt += f" - {t['area']} : {area}"
+                lines.append(("color", txt, col.get("hex")))
+        else:
+            lines.append(("note", t["print_no_detail"], None))
+    return lines
+
+
+def _build_print_panel(ops: List[Dict[str, Any]], spec: Dict[str, Any],
+                       t: Dict[str, Any]) -> None:
+    """Encart detaille des impressions (une ligne par passage couleur).
+
+    Le cartouche ne portait que trois libelles de couleur tronques, sans la
+    face ni la zone imprimee : un fournisseur ne pouvait pas chiffrer un
+    verso spot sans rouvrir la fiche produit. L'encart donne face par face
+    le nombre de passages, la pastille d'encre, le libelle et la zone.
+    """
+    if not spec.get("imprime"):
+        return
+    lines = _print_panel_lines(spec, t)
+    if not lines:
+        return
+
+    title_h, pad = 5.0, 3.0
+    avail = PRINT_PANEL_BOTTOM - PRINT_PANEL_TOP_MIN - title_h - 2 * pad
+    step = 3.5
+    if len(lines) * step > avail:
+        step = max(avail / len(lines), 2.6)
+    if len(lines) * step > avail:
+        keep = max(int(avail // step), 1)
+        hidden = len(lines) - keep + 1
+        lines = lines[:keep - 1] + [("note", t["print_more"].format(n=hidden), None)]
+
+    h = title_h + len(lines) * step + pad
+    top = PRINT_PANEL_BOTTOM - h
+    x, w = PRINT_PANEL_X, PRINT_PANEL_W
+
+    ops.append(_rect(x, top, w, h, rx=1.6, fill=COLOR_WHITE, stroke=COLOR_DIM, sw=0.35))
+    ops.append(_rect(x, top, w, title_h, rx=1.6, fill=COLOR_PANEL_BG))
+    ops.append(_text(x + 3, top + 3.4, str(t["printing_title"]).upper(), size=3.0,
+                     bold=True, fill=COLOR_DIM))
+
+    y = top + title_h + 3.2
+    for kind, txt, hex_col in lines:
+        if kind == "head":
+            ops.append(_text(x + 3, y, _clip_text(txt, 2.6, w - 6, bold=True),
+                             size=2.6, bold=True, fill=COLOR_INK))
+        elif kind == "color":
+            sw_s = min(step * 0.58, 2.4)
+            ops.append(_rect(x + 4.5, y - sw_s + 0.35, sw_s, sw_s, rx=0.35,
+                             fill=hex_col or _PANTONE_FALLBACK, stroke=COLOR_MUTED, sw=0.12))
+            tx = x + 4.5 + sw_s + 1.4
+            ops.append(_text(tx, y, _clip_text(txt, 2.4, x + w - 2.5 - tx), size=2.4))
+        else:
+            ops.append(_text(x + 5, y, _clip_text(txt, 2.3, w - 8), size=2.3,
+                             italic=True, fill=COLOR_MUTED))
+        y += step
  
  
 def _build_auto_warning(ops: List[Dict[str, Any]], t: Dict[str, Any]) -> None:
@@ -884,8 +1072,16 @@ def _build_cartouche(ops, spec, g, t, perf_on):
                      if spec.get("perfo_cotee") else t["perf_full_plain"], COLOR_CUT))
     if spec.get("perfo_verticale"):
         rows.append((t["vperf"], COLOR_CUT))
-    for color in (spec.get("couleurs") or [])[:3]:
-        rows.append((str(color.get("label") or ""), COLOR_INK))
+    # Le detail des couleurs vit desormais dans l'encart Impressions : ici on
+    # ne garde que la volumetrie, qui sert au calcul du prix.
+    if spec.get("imprime"):
+        couleurs = spec.get("couleurs") or []
+        nb_r = _i(spec.get("nb_recto")) or len([c for c in couleurs if (c or {}).get("face") != "verso"])
+        nb_v = _i(spec.get("nb_verso")) or len([c for c in couleurs if (c or {}).get("face") == "verso"])
+        rows.append((t["print_summary"].format(r=nb_r, v=nb_v), COLOR_INK))
+        if spec.get("aplat"):
+            pct = _f(spec.get("aplat_pourcent"))
+            rows.append((f"{t['solid']} {fmt_mm(pct)} %" if pct > 0 else t["solid"], COLOR_INK))
     if spec.get("show_core") and _f(spec.get("mandrin")) > 0:
         rows.append((f"{t['core']} {fmt_mm(_f(spec['mandrin']))} mm", COLOR_INK))
     if spec.get("show_core") and _f(spec.get("diametre_bobine")) > 0:
@@ -1130,6 +1326,8 @@ def translate_spec_fields(spec: Dict[str, Any], conn=None, lang: str = "en",
     for color in (spec.get("couleurs") or []):
         if color.get("label"):
             color["label"] = _one(color["label"])
+        if color.get("area"):
+            color["area"] = _one(color["area"])
     return spec
 
 
