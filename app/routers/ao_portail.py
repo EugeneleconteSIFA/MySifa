@@ -963,9 +963,14 @@ def pixel_ouverture_email(request: Request, token: str):
                 # attribution). Absent ou inconnu : on journalise quand même,
                 # sans préciser — mieux vaut un signal imprécis que perdu.
                 ctx = str(request.query_params.get("e") or "").strip().lower()
-                fiable, motif = ao_ev.classer_ouverture(
-                    row["date_envoi"], ua, maintenant
+                # Reference de fraicheur : la date du DERNIER email de ce
+                # contexte, et non `date_envoi` qui reste figee sur
+                # l'invitation - sinon la fenetre de prechargement ne protege
+                # que l'invitation, jamais les relances.
+                reference = ao_ev.date_email_reference(
+                    conn, int(row["id"]), ctx, row["date_envoi"]
                 )
+                fiable, motif = ao_ev.classer_ouverture(reference, ua, maintenant)
                 ao_ev.log_evenement(
                     conn,
                     ao_fournisseur_id=int(row["id"]),

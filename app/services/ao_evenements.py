@@ -77,6 +77,15 @@ CONTEXTES = {
     "attr": "attribution",
 }
 
+# Evenements correspondant a un email reellement parti vers le fournisseur.
+EMAILS_SORTANTS = (EV_EMAIL_ENVOYE, EV_EMAIL_MESSAGE, EV_EMAIL_ATTRIBUTION)
+
+_CONTEXTE_EVENEMENT = {
+    "inv": EV_EMAIL_ENVOYE,
+    "msg": EV_EMAIL_MESSAGE,
+    "attr": EV_EMAIL_ATTRIBUTION,
+}
+
 
 # ─── Fiabilité des ouvertures d'email ─────────────────────────────
 
@@ -94,9 +103,20 @@ DEDUP_SECONDES = 90
 # Robots connus. Liste volontairement courte : chaque motif est un fetcher
 # qui s'annonce, pas une heuristique. Apple MPP, lui, ne s'annonce PAS et
 # n'est attrapé que par la fenêtre de préchargement ci-dessus.
+# Proxys d'images des webmails. Gmail et Yahoo ne prechargent PAS a la
+# livraison : ils passent l'image par leur proxy au moment ou le message est
+# affiche. Ce sont donc de vraies ouvertures - simplement depourvues de geo et
+# de device, et non repetables (l'image est mise en cache, les ouvertures
+# suivantes ne refont pas de hit). Les ecarter reviendrait a etre aveugle sur
+# tous les fournisseurs en Gmail / Google Workspace, soit pres d'un tiers des
+# ouvertures constatees.
+UA_PROXIES = {
+    "googleimageproxy": "Gmail",
+    "googleusercontent": "Gmail",
+    "yahoomailproxy": "Yahoo Mail",
+}
+
 UA_ROBOTS = (
-    "googleimageproxy",
-    "yahoomailproxy",
     "proofpoint",
     "barracuda",
     "mimecast",
@@ -135,24 +155,76 @@ def classer_ouverture(
 ) -> tuple[bool, str | None]:
     """Décide si un hit du pixel compte comme une vraie ouverture.
 
-    Retourne `(fiable, motif)`. `motif` est None quand le hit est retenu.
+    Retourne `(fiable, motif)`. `motif` est None quand le hit est retenu sans
+    reserve ; il peut etre renseigne sur un hit RETENU (proxy de webmail), la
+    fiabilite et le motif etant deux informations distinctes.
     """
     ua = (user_agent or "").strip().lower()
     for robot in UA_ROBOTS:
         if robot in ua:
             return False, f"robot ({robot.rstrip('/')})"
+
+    proxy = None
+    for empreinte, nom in UA_PROXIES.items():
+        if empreinte in ua:
+            proxy = nom
+            break
+
     if not ua:
         # Un vrai client mail envoie toujours un User-Agent en chargeant une
-        # image. Son absence signe un fetcher artisanal.
-        return False, "sans user-agent"
+        # image. Son absence n'est pas une preuve de robot pour autant : on
+        # ecarte le hit du compteur, mais le motif dit que c'est indecis.
+        return False, "sans user-agent — non concluant"
 
+    # Le prechargement prime sur tout le reste, proxy compris : un hit qui
+    # arrive dans les secondes suivant l'envoi ne vient pas d'un humain.
     envoi = _parse_iso(date_envoi)
     hit = _parse_iso(date_ouverture) or datetime.now(_PARIS).replace(tzinfo=None)
     if envoi is not None:
         delta = (hit - envoi).total_seconds()
         if 0 <= delta < PREFETCH_SECONDES:
             return False, "préchargement (moins de %ds après l'envoi)" % PREFETCH_SECONDES
+
+    if proxy:
+        # Retenu comme ouverture, mais on garde la trace : ni geo ni device, et
+        # pas de comptage des ouvertures suivantes (cache du proxy).
+        return True, f"proxifié ({proxy})"
     return True, None
+
+
+def date_email_reference(
+    conn,
+    ao_fournisseur_id: int,
+    contexte: str | None = None,
+    date_envoi: object = None,
+) -> str | None:
+    """Date de l'envoi auquel rattacher un hit du pixel.
+
+    `ao_fournisseurs.date_envoi` ne bouge plus apres l'invitation : s'y fier
+    revient a ne detecter les prechargements que sur le premier email, jamais
+    sur les relances - or c'est sur la relance qu'on regarde le plus si le
+    fournisseur a vu le message. On prend donc la date du dernier email
+    reellement parti : celui du contexte vise (`inv` / `msg` / `attr`) quand il
+    est connu, sinon le plus recent tous contextes confondus.
+    """
+    cible = _CONTEXTE_EVENEMENT.get(str(contexte or "").strip().lower())
+    tentatives = ([cible] if cible else None, list(EMAILS_SORTANTS))
+    for types in tentatives:
+        if not types:
+            continue
+        try:
+            trous = ",".join("?" * len(types))
+            row = conn.execute(
+                f"""SELECT MAX(date) AS d FROM ao_evenements
+                    WHERE ao_fournisseur_id=? AND type_evenement IN ({trous})""",
+                (int(ao_fournisseur_id), *types),
+            ).fetchone()
+        except Exception as exc:
+            logger.warning("ao_evenements.date_email_reference: %s", exc)
+            break
+        if row is not None and row["d"]:
+            return str(row["d"])
+    return str(date_envoi) if date_envoi else None
 
 
 # ─── Écriture ─────────────────────────────────────────────────────
@@ -234,11 +306,21 @@ def log_evenement(
                 seuil = (recent - timedelta(seconds=dedup_secondes)).strftime(
                     "%Y-%m-%dT%H:%M:%S"
                 )
+                # La fiabilite fait partie de la cle de dedup : sans elle, un
+                # prechargement enregistre a T ferait disparaitre la vraie
+                # ouverture arrivee a T+40s - exactement le cas que la
+                # classification est censee traiter.
                 deja = conn.execute(
                     """SELECT 1 FROM ao_evenements
-                       WHERE ao_fournisseur_id=? AND type_evenement=? AND date>=?
+                       WHERE ao_fournisseur_id=? AND type_evenement=?
+                         AND fiable=? AND date>=?
                        LIMIT 1""",
-                    (int(ao_fournisseur_id), type_evenement, seuil),
+                    (
+                        int(ao_fournisseur_id),
+                        type_evenement,
+                        1 if fiable else 0,
+                        seuil,
+                    ),
                 ).fetchone()
                 if deja:
                     return False
