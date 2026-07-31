@@ -2243,6 +2243,7 @@ function icon(name, size=16){
   const a = `width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"`;
   const p = {
     'grid': '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+    'list': '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
     'layers': '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
     'clock': '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
     'clipboard': '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>',
@@ -4945,6 +4946,25 @@ function openDashboardAddPfModal() {
 // Sentinelle pour "Sans sous-section" (string vide ou null en DB)
 const MP_SOUS_SECTION_NONE = '__none__';
 
+// Tri interne a une categorie : par sous-categorie, puis par reference.
+// Volontairement sans en-tete visuel — le regroupement se lit dans la
+// succession des badges, ajouter des bandeaux hacherait une liste deja
+// segmentee par categorie.
+// Les matieres sans sous-categorie passent en dernier : ce sont celles a
+// completer, elles n'ont pas a s'intercaler au milieu des autres.
+function mpCompareSousCategorie(a, b) {
+  const sa = ((a && a.sous_categorie) || '').trim();
+  const sb = ((b && b.sous_categorie) || '').trim();
+  if (!sa !== !sb) return sa ? -1 : 1;
+  if (sa && sb) {
+    const c = sa.localeCompare(sb, 'fr', { sensitivity: 'base' });
+    if (c !== 0) return c;
+  }
+  return String((a && a.reference) || '')
+    .localeCompare(String((b && b.reference) || ''), 'fr',
+                   { sensitivity: 'base', numeric: true });
+}
+
 function filterMatieresList() {
   const list = S.matieres || [];
   const cat = S.matieresCat || 'tout';
@@ -5327,7 +5347,7 @@ function buildMatiereDetail() {
     back,
     el('div', { cls: 'scorecard' },
       el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' } },
-        dashMpCatBadge(m.categorie, m.sous_section),
+        ...[dashMpCatBadge(m.categorie, m.sous_section), dashMpSousCatBadge(m)].filter(Boolean),
         m.en_alerte ? el('span', { style: { fontSize: '12px', color: 'var(--warn)', fontWeight: '600' } }, 'Sous le seuil') : null,
       ),
       el('div', { cls: 'sc-ref' }, m.reference || ''),
@@ -7629,18 +7649,34 @@ function appendMatiereRefEditFields(parent, item) {
   // déduit une abréviation de la description — utilisable, mais approximative.
   // Sous-categorie : toutes les categories, contrairement a la sous-section.
   const sousCategorieSel = buildMpSousCategorieSelector(item.sous_categorie || '', item.sous_categorie_en || '', item.categorie);
+  // Abreviation : exception par matiere, et non un second champ a remplir. Elle
+  // ne sert qu'a forcer un libelle different de la sous-categorie sur UNE
+  // matiere. Repliee derriere un lien pour ne pas laisser croire a deux champs
+  // concurrents ; depliee d'office si une valeur existe deja.
   const abbrevCat = mpCategorieKey(item.categorie);
   const hasAbbrev = abbrevCat === 'frontal' || abbrevCat === 'adhesif';
   const abbrevInp = el('input', { attrs: { type: 'text', maxlength: '40',
     placeholder: abbrevCat === 'adhesif' ? 'Ex. Perm' : 'Ex. Th Top-Coated' } });
   abbrevInp.value = item.abbreviation || '';
+  const abbrevBody = el('div', { cls: 'mp-field', style: { marginTop: '6px' } },
+    abbrevInp,
+    el('div', { cls: 'mp-hint' }, 'Remplace la sous-categorie pour cette matiere '
+      + 'uniquement. Laisse vide dans la quasi-totalite des cas.'),
+  );
+  const abbrevToggle = el('button', {
+    cls: 'mp-link-toggle', type: 'button',
+    on: { click: () => {
+      const ouvert = abbrevBody.style.display !== 'none';
+      abbrevBody.style.display = ouvert ? 'none' : '';
+      abbrevToggle.textContent = ouvert
+        ? 'Forcer un libelle different…'
+        : 'Masquer le libelle force';
+      if (!ouvert) requestAnimationFrame(() => abbrevInp.focus());
+    } },
+  }, item.abbreviation ? 'Masquer le libelle force' : 'Forcer un libelle different…');
+  if (!item.abbreviation) abbrevBody.style.display = 'none';
   const abbrevWrap = hasAbbrev
-    ? el('div', { cls: 'mp-field' },
-        el('label', null, 'Abréviation (référence produit MyAO)'),
-        abbrevInp,
-        el('div', { cls: 'mp-hint' }, 'Forme courte utilisée pour composer la référence '
-          + 'produit envoyée aux fournisseurs. Vide = déduite de la description.'),
-      )
+    ? el('div', { cls: 'mp-advanced' }, abbrevToggle, abbrevBody)
     : el('div', { style: { display: 'none' } });
   // Bloc laizes (frontal/glassine/complexe)
   const isLaizee = mpIsLaizeeCategory(item.categorie);
@@ -7788,40 +7824,109 @@ function appendMatiereRefEditFields(parent, item) {
         'Aucun fournisseur enregistré. Ajoute-les dans /settings > Fournisseurs.'));
       return;
     }
+    // On n'affiche que les fournisseurs REELLEMENT associes a la laize, chacun
+    // retirable. Avant, les ~40 fournisseurs du referentiel etaient rendus en
+    // bascule pour CHAQUE laize : sur une matiere a 5 laizes, 200 pastilles a
+    // parcourir pour trouver les 3 qui comptent. La liste complete vit
+    // desormais dans le champ d'ajout, en saisie assistee.
+    const nomsPris = new Set();
     selected.forEach(({ id: lid, label }) => {
       if (!laizeFournisseursIds[lid]) laizeFournisseursIds[lid] = new Set();
       const chosen = laizeFournisseursIds[lid];
-      const chipsWrap = el('div', {
-        style: 'display:flex;flex-wrap:wrap;gap:6px;flex:1',
-      });
-      fournisseurs.forEach(f => {
-        const active = chosen.has(f.id);
-        const chip = el('button', {
+
+      const chipsWrap = el('div', { style: 'display:flex;flex-wrap:wrap;gap:6px;align-items:center' });
+      const retenus = fournisseurs.filter(f => chosen.has(f.id));
+      if (!retenus.length) {
+        chipsWrap.appendChild(el('span', {
+          style: 'font-size:12px;color:var(--muted);font-style:italic',
+        }, 'Aucun fournisseur'));
+      }
+      retenus.forEach(f => {
+        const retirer = el('button', {
           type: 'button',
-          style: 'padding:4px 10px;border-radius:6px;border:1px solid ' +
-            (active ? 'var(--accent)' : 'var(--border)') + ';background:' +
-            (active ? 'var(--accent-bg)' : 'var(--bg)') + ';color:var(--text);' +
-            'font-size:12px;font-weight:600;cursor:pointer;line-height:1;' +
-            'display:inline-flex;align-items:center;gap:4px;font-family:inherit',
-        }, f.nom + (f.has_fsc ? ' · FSC' : ''));
-        chip.addEventListener('click', () => {
-          if (chosen.has(f.id)) chosen.delete(f.id);
-          else chosen.add(f.id);
+          attrs: { title: 'Retirer ' + f.nom, 'aria-label': 'Retirer ' + f.nom },
+          style: 'background:none;border:none;padding:0;margin:0 0 0 2px;cursor:pointer;' +
+            'color:var(--accent);font-size:14px;line-height:1;font-family:inherit;font-weight:700',
+        }, '\u00d7');
+        retirer.addEventListener('click', () => {
+          chosen.delete(f.id);
           renderLaizeFournisseurs();
         });
-        chipsWrap.appendChild(chip);
+        chipsWrap.appendChild(el('span', {
+          style: 'padding:4px 6px 4px 10px;border-radius:6px;border:1px solid var(--accent);' +
+            'background:var(--accent-bg);color:var(--text);font-size:12px;font-weight:600;' +
+            'line-height:1;display:inline-flex;align-items:center;gap:2px',
+        }, f.nom + (f.has_fsc ? ' \u00b7 FSC' : ''), retirer));
       });
+
+      // Champ d'ajout en saisie assistee. datalist natif : pas de dependance,
+      // et le navigateur filtre a la frappe sur les 40 references.
+      const restants = fournisseurs.filter(f => !chosen.has(f.id));
+      const dlId = 'mp-four-dl-' + lid;
+      const dl = el('datalist', { id: dlId });
+      restants.forEach(f => {
+        dl.appendChild(el('option', { value: f.nom }, f.nom + (f.has_fsc ? ' \u00b7 FSC' : '')));
+      });
+      const ajout = el('input', {
+        attrs: { type: 'text', list: dlId, placeholder: restants.length
+          ? 'Ajouter un fournisseur\u2026' : 'Tous les fournisseurs sont associes',
+          autocomplete: 'off' },
+        style: 'width:210px;padding:5px 9px;font-size:12px;border-radius:6px;' +
+          'border:1px solid var(--border);background:var(--card);color:var(--text);font-family:inherit',
+      });
+      if (!restants.length) ajout.disabled = true;
+      const ajouter = () => {
+        const saisi = (ajout.value || '').trim().toLowerCase();
+        if (!saisi) return;
+        const trouve = restants.find(f => f.nom.trim().toLowerCase() === saisi);
+        if (!trouve) return;   // saisie partielle : on attend une correspondance exacte
+        chosen.add(trouve.id);
+        ajout.value = '';
+        renderLaizeFournisseurs();
+        // Rend la saisie enchainable : on redonne le focus au champ de CETTE laize.
+        const suivant = laizeFournisseursGrid.querySelector('[data-ajout-laize="' + lid + '"]');
+        if (suivant) suivant.focus();
+      };
+      ajout.setAttribute('data-ajout-laize', String(lid));
+      ajout.addEventListener('change', ajouter);
+      ajout.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); ajouter(); }
+      });
+
+      // « Appliquer a toutes les laizes » : sur ces matieres, les laizes
+      // partagent presque toujours la meme liste de fournisseurs. Sans ce
+      // raccourci, il faut ressaisir la meme chose 5 fois.
+      const dupliquer = (selected.length > 1 && retenus.length)
+        ? el('button', {
+            cls: 'mp-link-toggle', type: 'button',
+            attrs: { title: 'Copier ces fournisseurs sur toutes les laizes cochees' },
+            on: { click: () => {
+              selected.forEach(({ id: autre }) => {
+                if (autre === lid) return;
+                laizeFournisseursIds[autre] = new Set(chosen);
+              });
+              renderLaizeFournisseurs();
+            } },
+          }, 'Appliquer a toutes les laizes')
+        : null;
+
       const row = el('div', {
-        style: 'display:flex;align-items:flex-start;gap:10px',
+        style: 'display:flex;align-items:flex-start;gap:10px;padding:8px 0;' +
+          'border-top:1px solid var(--border)',
       },
         el('div', {
           style: 'min-width:80px;font-size:12px;font-weight:700;color:var(--text);' +
             'padding:6px 10px;border:1px solid var(--accent);background:var(--accent-bg);' +
             'border-radius:6px;text-align:center;flex-shrink:0',
         }, label),
-        chipsWrap,
+        el('div', { style: 'flex:1;min-width:0;display:flex;flex-direction:column;gap:6px' },
+          chipsWrap,
+          el('div', { style: 'display:flex;align-items:center;gap:10px;flex-wrap:wrap' },
+            ajout, dl, ...(dupliquer ? [dupliquer] : [])),
+        ),
       );
       laizeFournisseursGrid.appendChild(row);
+      nomsPris.add(lid);
     });
   }
   // Recharge async si pas encore en cache
@@ -7918,7 +8023,15 @@ function appendMatiereRefEditFields(parent, item) {
     ? mpFormSection('Conditionnement à l\'achat', ...adhesifCondFields, pppWrap, uppWrap)
     : null;
 
-  parent.append(
+  // Mise en page deux colonnes. Identification et Classement d'un cote,
+  // Conditionnement et Stock de l'autre : ce sont deux natures d'information,
+  // l'une decrit la matiere, l'autre decrit sa gestion.
+  // Les laizes restent pleine largeur, leur grille de prix est trop dense pour
+  // une demi-colonne.
+  //
+  // Le filtrage des null est indispensable : DOM.append() convertit null en
+  // noeud texte « null », qui s'affichait tel quel sous les sections masquees.
+  const sections = [
     mpFormSection('Identification',
       el('div', { cls: 'mp-field' },
         el('label', null, 'Catégorie'),
@@ -7926,19 +8039,29 @@ function appendMatiereRefEditFields(parent, item) {
       ),
       el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
       el('div', { cls: 'mp-field' }, el('label', null, 'Description'), desInp),
-      sousCategorieSel.el,
-      abbrevWrap,
       couleurWrap,
+    ),
+    mpFormSection('Catégorisation',
+      sousCategorieSel.el,
       sousSectionWrap,
+      abbrevWrap,
     ),
     sectionConditionnement,
-    isLaizee ? mpFormSection('Laizes & tarification', laizeWrap) : laizeWrap,
     mpFormSection('Stock & inventaire',
       el('div', { cls: 'mp-field' }, el('label', null, mpSeuilFieldLabel(item)), seuilInp),
       el('div', { cls: 'mp-hint' }, '0 = pas d\'alerte stock bas.'),
       intervalleWrap,
     ),
-  );
+  ];
+  // Colonnes CSS plutot que deux conteneurs figes : le nombre de sections varie
+  // selon la categorie (un frontal n'a pas de conditionnement, une palette n'a
+  // pas de laizes). Une repartition en dur laissait une colonne a moitie vide ;
+  // le moteur de colonnes equilibre les hauteurs tout seul.
+  const grille = el('div', { cls: 'mp-form-grid' }, ...sections.filter(Boolean));
+  const sectionLaizes = isLaizee
+    ? mpFormSection('Laizes & tarification', laizeWrap)
+    : null;
+  parent.append(...[grille, sectionLaizes].filter(Boolean));
   return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp, cppInp, kgcInp, isAdhesif, abbrevInp, hasAbbrev, sousCategorieSel };
 }
 
@@ -8042,7 +8165,7 @@ function openMatiereRefEditModal(item) {
     cls: 'mp-modal-overlay',
     on: { click: (e) => { if (e.target === overlay) closeMroot(); } },
   });
-  const box = el('div', { cls: 'mp-modal', on: { click: (e) => e.stopPropagation() } });
+  const box = el('div', { cls: 'mp-modal mp-modal-fiche', on: { click: (e) => e.stopPropagation() } });
   box.appendChild(el('div', { cls: 'mp-modal-head' },
     el('h3', null, 'Modifier la référence'),
     el('button', {
@@ -8118,15 +8241,26 @@ function buildMatieres() {
       el('p', { cls: 'hist-subtitle' },
         'Mandrins (pal.), frontaux et glassines (bob.), adhésifs (pal.), palettes (piles), cartons (pal.)'),
     ),
-    isMatieresAdmin()
-      ? el('div', { cls: 'hist-head-actions' },
-          el('button', {
+    el('div', { cls: 'hist-head-actions' },
+      // Le bouton montre l'icone du mode VERS lequel on bascule, pas du mode
+      // courant : c'est ce que l'utilisateur obtient en cliquant.
+      el('button', {
+        cls: 'mp-vue-btn',
+        type: 'button',
+        attrs: {
+          title: mpVueCourante() === 'liste' ? 'Afficher en cartes' : 'Afficher en liste',
+          'aria-label': mpVueCourante() === 'liste' ? 'Afficher en cartes' : 'Afficher en liste',
+        },
+        on: { click: (e) => { e.stopPropagation(); mpBasculerVue(); } },
+      }, iconEl(mpVueCourante() === 'liste' ? 'grid' : 'list', 16)),
+      isMatieresAdmin()
+        ? el('button', {
             cls: 'btn',
             type: 'button',
             on: { click: () => openMatieresAdminDrawer() },
-          }, 'Gérer les références'),
-        )
-      : null,
+          }, 'Gérer les références')
+        : null,
+    ),
   );
   // Construit la liste réelle des pills : on remplace la pill "frontal" par
   // une pill par sous-section frontale présente. La sélection actuelle est
@@ -8216,7 +8350,7 @@ function buildMatieres() {
     el('span', { cls: 'mp-search-icon', attrs: { 'aria-hidden': 'true' } }, iconEl('search', 18)),
     searchInp,
   );
-  const list = el('div', { cls: 'mp-list' });
+  const list = el('div', { cls: 'mp-list' + (mpVueCourante() === 'liste' ? ' mp-vue-liste' : '') });
   const renderMpCard = (m) => {
     const seuil = parseFloat(m.seuil_alerte) || 0;
     const alertCls = m.en_alerte ? ' alert' : '';
@@ -8280,7 +8414,8 @@ function buildMatieres() {
       on: { click: () => loadMatiere(m.id) },
     },
       el('div', { cls: 'mp-card-top' },
-        dashMpCatBadge(m.categorie, m.sous_section),
+        el('div', { cls: 'mp-card-badges' },
+          ...[dashMpCatBadge(m.categorie, m.sous_section), dashMpSousCatBadge(m)].filter(Boolean)),
         el('span', { cls: 'mp-card-ref' }, m.reference || ''),
         el('div', { cls: 'mp-card-top-end' }, ...topEnd),
       ),
@@ -8305,7 +8440,7 @@ function buildMatieres() {
     //         sont éclatés par sous_section, exactement comme dans la barre de pills.
     const curCat = S.matieresCat || 'tout';
     if (curCat !== 'tout') {
-      filtered.forEach(renderMpCard);
+      filtered.slice().sort(mpCompareSousCategorie).forEach(renderMpCard);
     } else {
       // Construit des buckets par catégorie virtuelle
       const buckets = new Map();
@@ -8338,7 +8473,7 @@ function buildMatieres() {
         const b = buckets.get(k);
         list.appendChild(el('div', { cls: 'mp-section-head', style: mpSectionHeadStyle },
           b.label + ' · ' + b.items.length));
-        b.items.forEach(renderMpCard);
+        b.items.slice().sort(mpCompareSousCategorie).forEach(renderMpCard);
       });
     }
   }
@@ -8859,6 +8994,26 @@ function copyMatiereRefToAddForm(item) {
     if (refInp) refInp.focus();
   });
   showToast('Référence copiée — saisis la nouvelle référence.', 'info');
+}
+
+// Mode d'affichage des matieres : cartes (defaut) ou liste dense. Persiste dans
+// localStorage — une preference d'affichage qui se reinitialise a chaque
+// rechargement se reparametre dix fois par jour.
+const LS_MP_VUE = 'mysifa.stock.matieres.vue';
+
+function mpVueCourante() {
+  if (!S.matieresVue) {
+    let stockee = null;
+    try { stockee = localStorage.getItem(LS_MP_VUE); } catch (e) { stockee = null; }
+    S.matieresVue = (stockee === 'liste') ? 'liste' : 'cartes';
+  }
+  return S.matieresVue;
+}
+
+function mpBasculerVue() {
+  S.matieresVue = (mpVueCourante() === 'liste') ? 'cartes' : 'liste';
+  try { localStorage.setItem(LS_MP_VUE, S.matieresVue); } catch (e) { /* navigation privee */ }
+  render();
 }
 
 function buildMatieresAdminRow(item) {
@@ -10018,6 +10173,22 @@ function dashMpCatBadge(categorie, sousSection) {
     if (k) extra = ' dash-mp-cat-frontal-' + k;
   }
   return el('span', { cls: 'dash-mp-cat dash-mp-cat-' + c + extra }, lbl);
+}
+
+// Badge de sous-categorie, a poser a cote du badge de categorie. Renvoie null
+// quand la matiere n'est pas classee : sur les listes, un badge « aucune » sur
+// chaque carte ferait plus de bruit que d'information — c'est l'ecran
+// d'administration des references qui signale les matieres a completer.
+function dashMpSousCatBadge(item) {
+  const sc = ((item && item.sous_categorie) || '').trim();
+  if (!sc) return null;
+  const en = ((item && item.sous_categorie_en) || '').trim();
+  return el('span', {
+    cls: 'dash-mp-souscat',
+    attrs: { title: en && en.toLowerCase() !== sc.toLowerCase()
+      ? 'Reference produit MyAO : ' + en
+      : 'Sous-categorie ' + sc },
+  }, sc);
 }
 
 function dashMvtBadge(type) {

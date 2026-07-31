@@ -2517,6 +2517,9 @@ def _validate_alert_params(params: dict) -> dict:
         #   - Le compteur est par machine : chaque machine ciblée doit valider.
         #   - Jamais rétroactive : une occurrence antérieure à la création de
         #     l'alerte est ignorée.
+        #   - v2.5.7 : l'affichage respecte le délai entre alertes
+        #     (min_gap_minutes) ; le blocage 03/88 d'une calendaire bloquante,
+        #     lui, reste immédiat.
     elif t_type == "event":
         ev = (trig_in.get("event") or "").strip()
         if ev not in _ALERT_TRIGGER_EVENTS:
@@ -4106,7 +4109,10 @@ async def maintenance_alert_settings_update(request: Request):
 #     Une occurrence plus récente remplace la précédente, rien ne s'empile.
 #   - Compteur par machine ; repli sur l'user_id si aucune machine résolue.
 #   - Jamais rétroactive avant la création de l'alerte.
-#   - Bypasse min_gap_minutes (comme l'événementiel).
+#   - v2.5.7 : respecte min_gap_minutes (comme le périodique). Pendant le
+#     silence qui suit un ack sur la machine, l'alerte n'est pas poussée à
+#     l'écran ; elle reste due et repart au premier poll après la fin du gap.
+#     Le refus 423 sur saisie 03/88 ignore ce gap (cf. _blocking_for_machine).
 #
 # Pour le type event : implémenté (dossier_start / dossier_end / after_calage).
 #
@@ -4350,6 +4356,14 @@ def _is_calendar_alert_due(
       4. Jamais rétroactive : une occurrence antérieure à la création de
          l'alerte est ignorée (sinon une alerte créée à 14h « rattraperait »
          l'occurrence de 08h le jour même).
+
+    Note (v2.5.7) : le délai de silence min_gap_minutes n'est PAS évalué ici.
+    Cette fonction répond à « l'occurrence est-elle ouverte ? », pas à « faut-il
+    l'afficher maintenant ? ». Le gap est appliqué par l'appelant :
+    /alerts/active le respecte (l'alerte attend la fin du silence pour
+    apparaître), _blocking_for_machine et _check_blocking_alert_due l'ignorent
+    (une calendaire bloquante continue de refuser la saisie 03/88 pendant le
+    gap — sinon le gap ouvrirait une fenêtre de contournement du contrôle).
     """
     trig = params.get("trigger") or {}
     if trig.get("type") != "calendar":
@@ -4403,11 +4417,12 @@ def maintenance_alerts_active(request: Request):
     gap_active = False
     with get_db() as conn:
         user_machine = _machine_name_from_user(conn, user)
-        # Gap : calcule si un ack recent existe sur cette machine. Ne bloque
-        # QUE les alertes periodiques -- les alertes evenementielles bypassent
-        # ce silence, car elles sont declenchees par l'action metier de
-        # l'operateur (fin/debut de dossier). Sinon un operateur qui clot un
-        # dossier juste apres un ack ne verrait jamais l'alerte suivante.
+        # Gap : calcule si un ack recent existe sur cette machine. Bloque les
+        # alertes periodiques ET calendaires (v2.5.7) -- seules les alertes
+        # evenementielles bypassent ce silence, car elles sont declenchees par
+        # l'action metier de l'operateur (fin/debut de dossier). Sinon un
+        # operateur qui clot un dossier juste apres un ack ne verrait jamais
+        # l'alerte suivante.
         if user_machine:
             settings_row = conn.execute(
                 "SELECT min_gap_minutes FROM maintenance_alert_settings WHERE id=1"
@@ -4476,10 +4491,21 @@ def maintenance_alerts_active(request: Request):
                         conn, int(r["id"]), params, machine_for_check, now_paris
                     )
             elif ttype == "calendar":
-                # v2.5.6 : implémenté. Bypass volontaire du gap min_gap_minutes
-                # (comme les événementielles) : une alerte à heure fixe ne doit
-                # pas être avalée parce qu'un autre contrôle vient d'être
-                # validé sur la machine. Aucune condition de production.
+                # v2.5.6 : implémenté. Aucune condition de production.
+                # v2.5.7 : la calendaire respecte désormais min_gap_minutes,
+                # comme la périodique (avant : bypass volontaire). Elle n'est
+                # donc plus poussée à l'écran pendant le silence qui suit un
+                # ack sur la machine — elle attend la fin du gap. Aucune
+                # occurrence n'est perdue : _is_calendar_alert_due n'a pas de
+                # fenêtre d'expiration, l'alerte reste due jusqu'à validation
+                # ou esquive et repart au premier poll suivant la fin du gap.
+                # Le refus 423 sur saisie 03/88 (_blocking_for_machine_impl,
+                # _check_blocking_alert_due) ignore délibérément ce gap : une
+                # calendaire bloquante continue d'interdire la production tant
+                # qu'elle n'est pas validée, le gap n'ouvre pas de fenêtre de
+                # contournement du contrôle.
+                if gap_active:
+                    continue
                 try:
                     _created = r["created_at"] if "created_at" in r.keys() else None
                 except (IndexError, KeyError):

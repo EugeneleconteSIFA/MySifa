@@ -179,6 +179,7 @@ body.sb-open .sidebar-overlay{display:block}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
 .nav-btn--mysifa-portal{align-items:baseline;flex-wrap:wrap;gap:4px 8px;line-height:1.35}
 .nav-btn--mysifa-portal:hover{background:var(--accent-bg)}
+.nav-sep{height:1px;background:var(--border);margin:10px 4px 12px}
 .mysifa-back-preamble{font-size:13px;font-weight:500;color:var(--text2)}
 .mysifa-back-brand{font-size:14px;font-weight:800;letter-spacing:-.5px;color:var(--text);white-space:nowrap}
 .mysifa-back-accent{color:var(--accent)}
@@ -829,7 +830,20 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 .maint-subtoolbar{display:flex;align-items:center;gap:12px;margin:0 0 18px 0;flex-wrap:wrap}
 .maint-subtoolbar-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 /* v2.4.19 : toolbar unifiee Machine + Categorie + Statut sur une ligne */
-.maint-machine-toolbar{display:flex;align-items:center;gap:12px;row-gap:10px;margin:8px 0 20px 0;flex-wrap:wrap}
+.maint-machine-toolbar{display:flex;flex-direction:column;align-items:stretch;gap:0;margin:8px 0 20px 0}
+/* v2.5.10 : hierarchie des filtres. Niveau 1 = Machine (ligne du haut, isolee
+   par un filet). Niveau 2 = Categorie + Statut, indentes sous la machine
+   selectionnee pour montrer qu'ils s'appliquent DANS le perimetre machine. */
+.maint-toolbar-row{display:flex;align-items:center;gap:12px;row-gap:10px;flex-wrap:wrap}
+.maint-toolbar-row--primary{padding-bottom:12px;border-bottom:1px solid var(--border)}
+.maint-toolbar-row--secondary{margin-top:12px;margin-left:3px;padding-left:15px;border-left:2px solid var(--border)}
+.maint-toolbar-sep{width:1px;align-self:stretch;min-height:24px;background:var(--border);margin:0 2px}
+.maint-toolbar-row--primary .maint-toolbar-label{color:var(--text2);font-size:11px;letter-spacing:.6px}
+.maint-toolbar-row--primary .maint-machine-btn{font-size:14px;padding:9px 20px}
+@media(max-width:720px){
+  .maint-toolbar-row--secondary{margin-left:0;padding-left:10px}
+  .maint-toolbar-sep{display:none}
+}
 .maint-toolbar-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 .maint-machine-tabs,.maint-cat-tabs{display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px}
 .maint-chip-group{display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px}
@@ -1741,16 +1755,12 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
     </div>
     <button type="button" class="nav-btn adm-only active" data-view="maintenance" onclick="switchView('maintenance')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-      Maintenance
+      Suivi machine
       <span class="nav-btn-badge hidden" id="nav-maint-badge" title="Retards toutes machines confondues">0</span>
     </button>
     <button type="button" class="nav-btn adm-only" data-view="planning" onclick="switchView('planning')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
       Planning
-    </button>
-    <button type="button" class="nav-btn adm-only" data-view="controles" onclick="switchView('controles')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
-      Alertes
     </button>
     <button type="button" class="nav-btn adm-only" data-view="operations" onclick="switchView('operations')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
@@ -1761,6 +1771,12 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
     <button type="button" id="nav-mes-taches-admin" class="nav-btn adm-only" data-view="op-tasks" onclick="switchView('op-tasks')" style="display:none">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       Mes tâches
+    </button>
+    <!-- Alertes isolée en bas de la nav admin (séparateur au-dessus). -->
+    <div class="nav-sep adm-only"></div>
+    <button type="button" class="nav-btn adm-only" data-view="controles" onclick="switchView('controles')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      Alertes
     </button>
     <button type="button" class="nav-btn op-only active" data-view="op-tasks" onclick="switchView('op-tasks')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -1800,7 +1816,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
       </button>
       <div>
-        <div class="mobile-topbar-title">Maintenance</div>
+        <div class="mobile-topbar-title">Suivi machine</div>
         <div class="mobile-topbar-sub">En cours de développement</div>
       </div>
       <button type="button" class="mobile-home-btn" onclick="location.href='/'">⌂</button>
@@ -1824,16 +1840,22 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
              ligne (wrap responsive). Labels harmonises, toggles avec style
              coherent (chips), pastilles compteurs sur machine/categorie. -->
         <div class="maint-machine-toolbar">
+          <!-- Niveau 1 : perimetre machine -->
+          <div class="maint-toolbar-row maint-toolbar-row--primary">
           <label class="maint-toolbar-label">Machine</label>
           <div class="maint-machine-tabs" id="maint-machine-tabs" role="tablist">
             <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 1" onclick="setMaintMachine('Cohésio 1')">Cohésio 1<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 1" title="Opérations en retard sur cette machine">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-machine-badge-soon="Cohésio 1" title="Opérations dû bientôt sur cette machine">0</span></button>
             <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 2" onclick="setMaintMachine('Cohésio 2')">Cohésio 2<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 2" title="Opérations en retard sur cette machine">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-machine-badge-soon="Cohésio 2" title="Opérations dû bientôt sur cette machine">0</span></button>
           </div>
+          </div>
+          <!-- Niveau 2 : filtres appliques dans le perimetre machine -->
+          <div class="maint-toolbar-row maint-toolbar-row--secondary">
           <label class="maint-toolbar-label">Catégorie</label>
           <div class="maint-cat-tabs" id="maint-cat-tabs" role="tablist">
             <button type="button" class="maint-cat-btn" data-maint-cat="entretien" onclick="setMaintCatFilter('entretien')">Entretien<span class="maint-tab-badge hidden" data-maint-cat-badge="entretien" title="Opérations en retard dans cette catégorie">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-cat-badge-soon="entretien" title="Opérations dû bientôt dans cette catégorie">0</span></button>
             <button type="button" class="maint-cat-btn" data-maint-cat="remplacements" onclick="setMaintCatFilter('remplacements')">Interventions<span class="maint-tab-badge hidden" data-maint-cat-badge="remplacements" title="Opérations en retard dans cette catégorie">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-cat-badge-soon="remplacements" title="Opérations dû bientôt dans cette catégorie">0</span></button>
           </div>
+          <span class="maint-toolbar-sep" aria-hidden="true"></span>
           <label class="maint-toolbar-label">Statut</label>
           <div class="maint-chip-group" id="maint-status-chips" role="tablist">
             <button type="button" class="maint-chip active" data-status-filter="all" onclick="setMaintStatusFilter('all')">Tous<span class="maint-chip-count" data-status-count="all">0</span></button>
@@ -1841,6 +1863,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             <button type="button" class="maint-chip" data-status-filter="soon" onclick="setMaintStatusFilter('soon')">Dû bientôt<span class="maint-chip-count" data-status-count="soon">0</span></button>
             <button type="button" class="maint-chip" data-status-filter="ok" onclick="setMaintStatusFilter('ok')">À jour<span class="maint-chip-count" data-status-count="ok">0</span></button>
             <button type="button" class="maint-chip" data-status-filter="never" onclick="setMaintStatusFilter('never')">Jamais saisi<span class="maint-chip-count" data-status-count="never">0</span></button>
+          </div>
           </div>
         </div>
 
@@ -2828,7 +2851,7 @@ function toggleSidebar(){document.body.classList.toggle('sb-open');}
 function closeSidebar(){document.body.classList.remove('sb-open');}
 
 const VIEW_META = {
-  maintenance: { title: 'Maintenance', sub: 'En cours de développement' },
+  maintenance: { title: 'Suivi machine', sub: 'En cours de développement' },
   planning:    { title: 'Planning',    sub: 'Calendrier de maintenance' },
   controles:   { title: 'Contrôles',   sub: 'Saisie et suivi des contrôles' },
   operations:  { title: 'Opérations de maintenance', sub: 'Saisie et suivi' },
@@ -2955,9 +2978,10 @@ function switchView(name){
   if(name === 'maintenance' || name === 'operations'){
     // Invalide le cache wearparts pour forcer un nouveau fetch (sinon on garde
     // les dernieres dates / metrage en memoire alors que la DB a evolue).
-    if(typeof WEARPART_LAST_DATES_STATE === 'object' && WEARPART_LAST_DATES_STATE){
-      WEARPART_LAST_DATES_STATE.machine = null;
-    }
+    // v2.5.7 : invalidation COMPLETE. Avant on ne remettait que `machine` a
+    // null en laissant _cacheKey en place — le fetch etait alors court-circuite
+    // et les cartes restaient sur « Chargement… ».
+    if(typeof _invalidateWearPartCache === 'function') _invalidateWearPartCache();
     if(typeof loadOpsTypes === 'function' && typeof renderOpsTypes === 'function'){
       loadOpsTypes().then(() => {
         renderOpsTypes();
@@ -5724,6 +5748,11 @@ function loadOps(){
 // Bypass du cache — utilisé après une saisie/suppression pour rafraîchir tout de suite.
 function refreshOpsHistoryNow(){
   _OPS_HISTORY_LAST_FETCH = 0;
+  // v2.5.7 : le métrage parcouru des pièces d'usure est calculé côté serveur À
+  // PARTIR de la date de dernière intervention. Une saisie change cette date :
+  // sans invalidation ici, le métrage affiché resterait celui calculé depuis
+  // l'intervention précédente.
+  if(typeof _invalidateWearPartCache === 'function') _invalidateWearPartCache();
   loadOps();
 }
 
@@ -6976,9 +7005,7 @@ function setMaintMachine(m){
   if(!m) return;
   try{ localStorage.setItem(MAINT_MACHINE_KEY, m); }catch(e){}
   // Invalide le cache des dates wearparts : nouvelle machine = nouveau fetch
-  WEARPART_LAST_DATES_STATE.machine = null;
-  WEARPART_LAST_DATES_STATE.items = {};
-  WEARPART_LAST_DATES_STATE._cacheKey = null;
+  _invalidateWearPartCache();
   renderMaintCards();
 }
 
@@ -7124,7 +7151,24 @@ const WEARPART_LAST_DATES_STATE = {
   items: {},          // { piece_pos: { last_date, metrage_at_change, metrage_since } }
   current_metrage: null,
   loading: false,
+  _cacheKey: null,    // clé du dernier fetch REUSSI (machine + dates)
+  _attemptKey: null,  // clé du dernier fetch TENTE (posée avant l'appel réseau)
 };
+
+// v2.5.7 : invalidation complète du cache wearparts. À appeler dès que la
+// source des dates de dernière intervention peut avoir bougé (changement de
+// machine, arrivée sur la vue, saisie/suppression d'une intervention).
+// Réinitialiser _cacheKey ET _attemptKey est indispensable : sans ça
+// loadWearPartLastDates court-circuite le fetch alors que `machine` vient
+// d'être remis à null, et les cartes restent bloquées sur « Chargement… ».
+function _invalidateWearPartCache(){
+  if(typeof WEARPART_LAST_DATES_STATE !== 'object' || !WEARPART_LAST_DATES_STATE) return;
+  WEARPART_LAST_DATES_STATE.machine = null;
+  WEARPART_LAST_DATES_STATE.items = {};
+  WEARPART_LAST_DATES_STATE.current_metrage = null;
+  WEARPART_LAST_DATES_STATE._cacheKey = null;
+  WEARPART_LAST_DATES_STATE._attemptKey = null;
+}
 
 async function loadWearPartLastDates(machine){
   if(!machine) return;
@@ -7147,8 +7191,15 @@ async function loadWearPartLastDates(machine){
     }
   });
   // Clé de cache : machine + dates concaténées. Si rien n'a changé → skip fetch.
+  // v2.5.7 : la garde porte sur _attemptKey, posée AVANT l'appel réseau et quel
+  // que soit son issue. Avec _cacheKey seul (posée uniquement en cas de succès),
+  // un fetch en échec relançait une requête à chaque render — le `finally`
+  // déclenche renderMaintCards, qui rappelle cette fonction : boucle infinie.
   const cacheKey = machine + ':' + JSON.stringify(dates);
-  if(WEARPART_LAST_DATES_STATE._cacheKey === cacheKey && !WEARPART_LAST_DATES_STATE.loading) return;
+  if(WEARPART_LAST_DATES_STATE.loading) return;
+  if(WEARPART_LAST_DATES_STATE._attemptKey === cacheKey
+     && WEARPART_LAST_DATES_STATE.machine === machine) return;
+  WEARPART_LAST_DATES_STATE._attemptKey = cacheKey;
   WEARPART_LAST_DATES_STATE.loading = true;
   try{
     const res = await fetch('/api/maintenance/wearparts/info', {
@@ -7387,11 +7438,23 @@ function setWearPartRef(pieceId, kind, value){
 }
 
 function _renderWearPartsGroup(machine, statusFilter){
-  // Déclenche le fetch des dernières dates si la machine a changé
-  // (asynchrone : le render initial affiche "Chargement…", puis re-render au retour)
-  if(WEARPART_LAST_DATES_STATE.machine !== machine){
-    loadWearPartLastDates(machine);
-  }
+  // Déclenche le fetch des dernières dates (asynchrone : le render initial
+  // affiche "Chargement…", puis re-render au retour).
+  //
+  // v2.5.7 — BUG CORRIGE : l'appel était conditionné à un changement de MACHINE.
+  // Or les dates viennent de OPS_STATE.list, alimenté par loadOps() qui est
+  // *synchrone mais fetch en arrière-plan*. Au premier render OPS_STATE contient
+  // encore l'historique périmé : on interrogeait donc le serveur avec la date de
+  // l'intervention PRECEDENTE. Quand l'historique DB arrivait, renderMaintCards
+  // recalculait `lastDate` en direct (date fraîche, correcte) mais la machine
+  // n'ayant pas changé, aucun refetch n'avait lieu — le métrage restait celui
+  // calculé depuis l'ancienne date. Résultat à l'écran : « Dernière intervention
+  // aujourd'hui » à côté de « Parcouru 552 242 m ».
+  //
+  // L'appel est désormais inconditionnel : c'est loadWearPartLastDates qui
+  // arbitre via _attemptKey (machine + dates). Si les dates n'ont pas bougé,
+  // elle sort immédiatement — aucun trafic réseau supplémentaire.
+  loadWearPartLastDates(machine);
   // v2.4.25 : filtre les positions par statut fin (overdue/soon/ok/never).
   // - 'all'   : positions renseignees (overdue + soon + ok)
   // - 'never' : positions jamais saisies + statut unknown

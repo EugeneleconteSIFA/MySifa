@@ -61,6 +61,56 @@ body.light .mp-search-wrap:focus-within{
 }
 .mp-card-stock-total.alert{color:var(--warn)}
 .mp-card-mid{display:flex;align-items:flex-end;gap:12px;margin-top:8px}
+/* ── Badge de sous-categorie ──────────────────────────────────────────────────
+   Pose a cote du badge de categorie. Volontairement plus sobre que lui : la
+   categorie est la classification structurante et garde sa couleur, la
+   sous-categorie precise sans concurrencer.                                    */
+.dash-mp-souscat{display:inline-block;padding:2px 8px;border-radius:6px;
+  background:var(--bg);border:1px solid var(--border);color:var(--text2);
+  font-size:10px;font-weight:700;letter-spacing:.2px;line-height:1.6;
+  white-space:nowrap;cursor:help}
+/* Sur les cartes, categorie et sous-categorie s'empilent sous la reference. */
+.mp-card-badges{display:flex;flex-direction:column;align-items:flex-start;gap:4px;flex-shrink:0}
+
+/* ── Bascule cartes / liste ───────────────────────────────────────────────── */
+.mp-vue-btn{display:inline-flex;align-items:center;justify-content:center;
+  width:38px;height:38px;padding:0;flex-shrink:0;border-radius:10px;
+  border:1.5px solid var(--border);background:var(--card);color:var(--text2);
+  cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s,background .15s}
+.mp-vue-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.mp-vue-btn:active{transform:translateY(1px)}
+
+/* Mode liste : une ligne par matiere. Les cartes passent en rangees plates —
+   plus de references a l'ecran quand on cherche, moins de confort de lecture
+   quand on parcourt : c'est le compromis que le bouton laisse choisir. */
+.mp-list.mp-vue-liste{grid-template-columns:1fr;gap:6px}
+.mp-vue-liste .mp-card{display:flex;align-items:center;gap:12px;padding:8px 14px;border-radius:10px}
+/* display:contents dissout .mp-card-top et .mp-card-mid : leurs enfants
+   deviennent enfants directs de la carte, ce qui permet de les reordonner
+   librement alors qu'ils vivent dans deux conteneurs distincts. Sans ca, les
+   icones copier/modifier (dans -top) resteraient separees des boutons
+   Entree/Sortie (dans -mid) par toute la largeur de la ligne. */
+.mp-vue-liste .mp-card-top,
+.mp-vue-liste .mp-card-mid{display:contents}
+.mp-vue-liste .mp-card-badges{flex-direction:row;align-items:center;gap:6px;order:1}
+.mp-vue-liste .mp-card-ref{flex:0 1 auto;order:2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-vue-liste .mp-card-info{flex:1;min-width:0;order:3}
+/* Stock d'abord, puis toutes les actions d'affilee. */
+.mp-vue-liste .mp-card-top-end{order:4;margin-left:0;gap:8px}
+.mp-vue-liste .mp-card-side{order:5;flex-direction:row;align-items:center;gap:8px}
+/* Le stock est deja affiche a droite : le repeter sous la designation
+   n'apporte rien et allonge la ligne. */
+.mp-vue-liste .mp-card-stock-mini{display:none}
+@media (max-width:780px){
+  /* En dessous de 780px la grille est deja sur une colonne : le mode liste
+     n'apporterait qu'un ecrasement illisible. On revient a la carte empilee. */
+  .mp-vue-liste .mp-card{display:block}
+  .mp-vue-liste .mp-card-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .mp-vue-liste .mp-card-mid{display:flex;margin-top:8px}
+  .mp-vue-liste .mp-card-top-end{margin-left:auto}
+  .mp-vue-liste .mp-card-side{flex-direction:column;align-items:flex-end}
+  .mp-vue-liste .mp-card-stock-mini{display:block}
+}
 .mp-card-info{flex:1;min-width:0}
 .mp-card-side{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
 .mp-card-stock-mini{font-size:12px;font-weight:600;color:var(--muted);margin-top:4px;line-height:1.3}
@@ -99,6 +149,44 @@ body.light .mp-search-wrap:focus-within{
 .mp-empty{text-align:center;color:var(--muted);font-size:13px;padding:32px 16px}
 .mp-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:18px}
 .mp-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:20px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
+/* ── Fiche matiere : mise en page deux colonnes ───────────────────────────────
+   Le formulaire de reference matiere empilait identification, classement,
+   conditionnement, laizes et seuils dans une seule colonne de 480 px : il
+   fallait defiler pour voir un champ qui tient a l'ecran. Deux colonnes et des
+   sections cartonnees, sur le modele du dossier de fabrication.               */
+.mp-modal.mp-modal-fiche{max-width:900px;padding:22px}
+.mp-form-grid{column-count:2;column-gap:16px}
+.mp-modal-fiche .mp-form-section{border-top:0;padding:14px;margin:0 0 16px;
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  break-inside:avoid;-webkit-column-break-inside:avoid}
+/* Titre a barre verticale accentuee : repere visuel de section, identique au
+   modal de dossier de fabrication. */
+.mp-modal-fiche .mp-form-section-title{display:flex;align-items:center;gap:8px;
+  font-size:13px;font-weight:800;color:var(--text);text-transform:none;
+  letter-spacing:0;margin-bottom:12px}
+.mp-modal-fiche .mp-form-section-title::before{content:'';width:3px;height:15px;
+  border-radius:2px;background:var(--accent);flex:none}
+/* Lien de repli pour les reglages d'exception (abreviation forcee). */
+/* Champs en blanc dans la fiche : les sections sont cartonnees sur var(--bg),
+   donc un champ sur var(--bg) s'y fondait. var(--card) et non #fff, pour rester
+   juste en theme sombre ou la carte n'est pas blanche. */
+.mp-modal-fiche .mp-field input:not([type=checkbox]):not([type=radio]),
+.mp-modal-fiche .mp-field select,
+.mp-modal-fiche .mp-field textarea,
+.mp-modal-fiche .mp-readonly{background:var(--card)}
+/* Libelles de champ plus contrastes : var(--muted) est calibre pour du texte
+   secondaire sur fond carte. Sur les sections cartonnees de la fiche, ils
+   passaient sous le seuil de lisibilite confortable. var(--text2) reste plus
+   discret que le contenu du champ, sans devenir gris pale. */
+.mp-modal-fiche .mp-field label{color:var(--text2);font-weight:700}
+.mp-link-toggle{background:none;border:none;padding:0;margin:0;cursor:pointer;
+  font-family:inherit;font-size:11px;font-weight:700;color:var(--accent);text-align:left}
+.mp-link-toggle:hover{text-decoration:underline}
+.mp-advanced{margin-top:2px}
+@media (max-width:860px){
+  .mp-form-grid{column-count:1}
+  .mp-modal.mp-modal-fiche{max-width:520px}
+}
 .mp-modal > h3{margin:0 0 16px;font-size:16px;font-weight:700;color:var(--text)}
 .mp-modal.mp-modal-mvt{padding:0;overflow:visible;display:flex;flex-direction:column}
 .mp-modal-mvt-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:16px 20px;flex-shrink:0}

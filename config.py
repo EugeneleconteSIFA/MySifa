@@ -684,3 +684,99 @@ GED_BLOCKED_EXTENSIONS = {
     "dll", "sys", "drv", "ocx", "scf", "lnk", "reg", "gadget",
     "deb", "rpm", "dmg", "pkg", "iso", "img", "vbscript",
 }
+
+
+# ─── Gestionnaire de tâches (/taches) ─────────────────────────────
+# Référentiels FIGÉS et STRUCTURANTS du suivi de tâches interne : ils décrivent
+# le workflow de l'outil, pas l'entreprise cliente. Ils vivent donc ici (règle
+# Kernse « petit référentiel figé → constante Python lue via une fonction »).
+# Aucune valeur SIFA-spécifique — un client Kernse les utilise tels quels.
+#
+# Le seul référentiel potentiellement variable est TACHES_MODULES : il liste
+# les modules produit auxquels une tâche peut être rattachée. Il est surchargeable
+# via la variable d'environnement TACHES_MODULES (codes séparés par des virgules,
+# format "code:Libellé").
+
+TACHES_MAX_FILE_MB = int(os.getenv("TACHES_MAX_FILE_MB", "25"))
+
+# Colonnes du Kanban. `final=True` marque les statuts qui clôturent une tâche
+# (horodatage done_at, exclusion des compteurs « ouvert »).
+TACHES_STATUTS = (
+    {"code": "backlog",  "label": "Boîte à idées", "couleur": "muted",  "final": False},
+    {"code": "a_faire",  "label": "À faire",     "couleur": "accent", "final": False},
+    {"code": "en_cours", "label": "En cours",    "couleur": "warn",   "final": False},
+    {"code": "revue",    "label": "En revue",    "couleur": "accent", "final": False},
+    {"code": "termine",  "label": "Terminé",     "couleur": "ok",     "final": True},
+)
+
+TACHES_PRIORITES = (
+    {"code": "basse",     "label": "Basse",     "couleur": "muted",  "poids": 0},
+    {"code": "normale",   "label": "Normale",   "couleur": "accent", "poids": 1},
+    {"code": "haute",     "label": "Haute",     "couleur": "warn",   "poids": 2},
+    {"code": "critique",  "label": "Critique",  "couleur": "danger", "poids": 3},
+)
+
+TACHES_TYPES = (
+    {"code": "bug",        "label": "Bug"},
+    {"code": "evolution",  "label": "Évolution"},
+    {"code": "feature",    "label": "Nouvelle fonctionnalité"},
+    {"code": "technique",  "label": "Technique / dette"},
+    {"code": "support",    "label": "Support"},
+    {"code": "autre",      "label": "Autre"},
+)
+
+_TACHES_MODULES_DEFAUT = (
+    "portail:Portail",
+    "prod:MyProd",
+    "planning:Planning machine",
+    "stock:MyStock",
+    "fabrication:Saisie Prod",
+    "expe:MyExpé",
+    "compta:MyCompta",
+    "qualite:MyQualité",
+    "maintenance:Maintenance",
+    "ao:MyAO",
+    "bat:MyBAT",
+    "print:MyPrint",
+    "planning_rh:Planning RH",
+    "pricing:Coûts matières",
+    "coffre:Coffres",
+    "settings:Paramètres",
+    "infra:Infrastructure / déploiement",
+    "autre:Autre",
+)
+
+
+def taches_modules() -> list[dict]:
+    """Modules auxquels une tâche peut être rattachée (code + libellé).
+
+    Surcharge : TACHES_MODULES="code:Libellé,code2:Libellé 2" dans .env.
+    """
+    raw = os.getenv("TACHES_MODULES", "").strip()
+    entries = [e.strip() for e in raw.split(",") if e.strip()] if raw else list(_TACHES_MODULES_DEFAUT)
+    out: list[dict] = []
+    for entry in entries:
+        code, _, label = entry.partition(":")
+        code = code.strip()
+        if not code:
+            continue
+        out.append({"code": code, "label": (label.strip() or code)})
+    return out
+
+
+def taches_statuts() -> list[dict]:
+    return [dict(s) for s in TACHES_STATUTS]
+
+
+def taches_priorites() -> list[dict]:
+    return [dict(p) for p in TACHES_PRIORITES]
+
+
+def taches_types() -> list[dict]:
+    return [dict(t) for t in TACHES_TYPES]
+
+
+TACHES_STATUTS_CODES = {s["code"] for s in TACHES_STATUTS}
+TACHES_STATUTS_FINAUX = {s["code"] for s in TACHES_STATUTS if s["final"]}
+TACHES_PRIORITES_CODES = {p["code"] for p in TACHES_PRIORITES}
+TACHES_TYPES_CODES = {t["code"] for t in TACHES_TYPES}

@@ -343,11 +343,13 @@ def email_mysifa_layout_light(
 
     suivi_note, pixel_block = _suivi_blocs(pixel_url, lang)
 
-    return f"""<div style="background:#f1f5f9;padding:24px 12px">
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="600" style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif">
+    # #fffffe et non #ffffff : Outlook n'inverse que le blanc PUR en mode
+    # sombre. Un blanc a un point pres, invisible a l'oeil, echappe au filtre.
+    return f"""<div class="ms-bg" style="background:#f1f5f9;padding:24px 12px">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" width="600" class="ms-card" bgcolor="#fffffe" style="max-width:600px;margin:0 auto;background:#fffffe;border:1px solid #e2e8f0;border-radius:14px;overflow:hidden;font-family:'Segoe UI',Arial,sans-serif">
     <tr>
       <td style="padding:24px 36px;border-bottom:1px solid #e2e8f0">
-        <div style="font-size:18px;line-height:1.3;letter-spacing:-.2px;font-family:'Segoe UI',Arial,sans-serif">
+        <div class="ms-title" style="font-size:18px;line-height:1.3;letter-spacing:-.2px;font-family:'Segoe UI',Arial,sans-serif">
           <span style="color:#0f172a;font-weight:800">SIFA</span>
           <span style="color:#0f172a;font-weight:600"> {_esc(subtitle)}</span>
           <span style="color:#94a3b8;font-weight:500"> — via <span style="color:#0891b2;font-weight:700">MySifa</span></span>
@@ -355,7 +357,7 @@ def email_mysifa_layout_light(
       </td>
     </tr>
     <tr>
-      <td style="padding:32px 36px 28px;font-size:14px;color:#334155;line-height:1.65">
+      <td class="ms-text" style="padding:32px 36px 28px;font-size:14px;color:#334155;line-height:1.65">
         {body_html}
         {cta_block}
         {contact_block}
@@ -942,6 +944,47 @@ class _SendPreflightError(Exception):
     """
 
 
+_EMAIL_DOC_HEAD = """<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="x-apple-disable-message-reformatting">
+<!-- Rendu clair force. Sans ces declarations, Outlook.com, Apple Mail et
+     Outlook mobile en mode sombre inversent les couleurs : le fond blanc vire
+     au gris ardoise et les gris de texte deviennent illisibles. L'email SIFA
+     doit ressortir identique chez tout le monde. -->
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<style>
+  :root { color-scheme: light only; supported-color-schemes: light only; }
+  /* Outlook reecrit les couleurs inline en mode sombre et marque les elements
+     modifies : data-ogsb pour un fond, data-ogsc pour un texte. On y repose
+     les valeurs claires, seul moyen de reprendre la main sur ce client. */
+  [data-ogsb] .ms-bg   { background-color: #f1f5f9 !important; }
+  [data-ogsb] .ms-card { background-color: #fffffe !important; }
+  [data-ogsc] .ms-title { color: #0f172a !important; }
+  [data-ogsc] .ms-text  { color: #334155 !important; }
+  [data-ogsc] .ms-muted { color: #64748b !important; }
+</style>
+</head>
+<body style="margin:0;padding:0;background-color:#f1f5f9">
+"""
+
+
+def _wrap_email_document(html_body: str) -> str:
+    """Enveloppe un corps HTML dans un document complet a rendu clair force.
+
+    Applique au seul point de passage de TOUS les emails (`send_email`) plutot
+    qu'a chaque gabarit : un email construit ailleurs dans l'app en beneficie
+    sans qu'on ait a y penser. Un corps deja complet est laisse tel quel.
+    """
+    corps = str(html_body or "")
+    if "<html" in corps[:400].lower():
+        return corps
+    return _EMAIL_DOC_HEAD + corps + "\n</body>\n</html>"
+
+
 def send_email(
     to: str | list[str],
     subject: str,
@@ -969,6 +1012,8 @@ def send_email(
     if not recipients:
         logger.error("send_email: aucun destinataire")
         return False
+
+    html_body = _wrap_email_document(html_body)
 
     cc_list: list[str] = []
     if cc:
