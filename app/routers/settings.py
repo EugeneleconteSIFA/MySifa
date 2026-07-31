@@ -3232,6 +3232,309 @@ async def maintenance_libres_merge(request: Request):
     return {"winner": winner_code, "loser_removed": loser_code, "new_usage_count": new_usage}
 
 
+# ─── v2.5.11 : rattachement / transformation des interventions libres ──
+#
+# Deux actions admin depuis MyMaintenance > Operations de maintenance >
+# Gestion des operations > onglet Inhabituelles :
+#
+#   1. RATTACHER  (attach)  — le titre libre etait en fait une operation du
+#      catalogue mal nommee par l'operateur. Toutes ses saisies basculent sur
+#      le code recurrent cible, le titre libre disparait. Les saisies comptent
+#      alors comme des saisies recurrentes classiques (carte Suivi machine,
+#      derniere intervention, statut En retard / A jour).
+#
+#   2. TRANSFORMER (promote) — le titre libre decrit une vraie operation
+#      recurrente absente du catalogue. Le code LIB-xxx devient un code
+#      catalogue (nouveau code numerique, libre=0, periodique=1) et ses
+#      saisies passees deviennent l'historique de la nouvelle recurrente.
+#
+# Les deux sont irreversibles hors SQL manuel (meme regle que la fusion
+# LIB->LIB) et tracees dans le journal d'audit.
+
+# Tables portant une reference texte vers maintenance_codes(code). Le PRAGMA
+# foreign_keys n'etant pas actif globalement, le repointage est fait a la main.
+_MAINT_CODE_REF_TABLES = (
+    "maintenance_event_ops",
+    "maintenance_docs",
+    "maintenance_tasks",
+    "maintenance_template_ops",
+)
+
+
+def _maint_table_exists(conn, table: str) -> bool:
+    return bool(conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", (table,)
+    ).fetchone())
+
+
+def _maint_concat_text(a, b):
+    """Concatene deux champs texte en evitant les doublons et les vides."""
+    a = (a or "").strip()
+    b = (b or "").strip()
+    if not a:
+        return b or None
+    if not b or b == a or b in a:
+        return a
+    return a + "\n" + b
+
+
+def _maint_merge_machines(a, b):
+    """Union des machines_csv de deux saisies, ordre stable."""
+    out = []
+    for raw in ((a or ""), (b or "")):
+        for m in str(raw).split(","):
+            m = m.strip()
+            if m and m not in out:
+                out.append(m)
+    return ",".join(out) if out else None
+
+
+def _maint_merge_photos(a, b):
+    """Concatene deux listes JSON de photos. Retombe sur la 1re valide."""
+    import json as _json
+    def _load(v):
+        if not v:
+            return []
+        try:
+            parsed = _json.loads(v)
+            return parsed if isinstance(parsed, list) else []
+        except Exception:
+            return []
+    merged = _load(a) + [x for x in _load(b) if x not in _load(a)]
+    return _json.dumps(merged) if merged else None
+
+
+def _maint_move_ops(conn, src_code: str, dst_code: str, now: str):
+    """Deplace les saisies de src_code vers dst_code.
+
+    La contrainte UNIQUE(event_id, code) de maintenance_event_ops interdit deux
+    saisies du meme code dans un meme creneau : quand le creneau contient deja
+    une saisie du code cible, les deux sont FUSIONNEES en une seule (choix
+    produit) plutot que de faire echouer l'operation :
+      - observations et pieces changees concatenees,
+      - durees additionnees (les deux interventions ont bien eu lieu),
+      - machines en union,
+      - date/auteur/statut repris de la saisie la plus recente.
+
+    Retourne (nb_deplacees, nb_fusionnees).
+    """
+    moved = 0
+    merged = 0
+    cols = {c["name"] for c in conn.execute(
+        "PRAGMA table_info(maintenance_event_ops)").fetchall()}
+    has_machines = "machines_csv" in cols
+    src_ops = conn.execute(
+        "SELECT * FROM maintenance_event_ops WHERE code = ?", (src_code,)
+    ).fetchall()
+    for op in src_ops:
+        tgt = conn.execute(
+            "SELECT * FROM maintenance_event_ops WHERE event_id = ? AND code = ? LIMIT 1",
+            (op["event_id"], dst_code),
+        ).fetchone()
+        if not tgt:
+            conn.execute(
+                "UPDATE maintenance_event_ops SET code = ?, updated_at = ? WHERE id = ?",
+                (dst_code, now, op["id"]),
+            )
+            moved += 1
+            continue
+        # Collision : fusion des deux saisies dans la ligne cible.
+        src_newer = str(op["done_at"] or "") > str(tgt["done_at"] or "")
+        recent = op if src_newer else tgt
+        duree = (tgt["duree_reelle_min"] or 0) + (op["duree_reelle_min"] or 0)
+        sets = [
+            "observations = ?", "pieces_changees = ?", "duree_reelle_min = ?",
+            "photos_json = ?", "done_at = ?", "done_by = ?", "statut = ?",
+            "updated_at = ?",
+        ]
+        params = [
+            _maint_concat_text(tgt["observations"], op["observations"]),
+            _maint_concat_text(tgt["pieces_changees"], op["pieces_changees"]),
+            duree or None,
+            _maint_merge_photos(tgt["photos_json"], op["photos_json"]),
+            recent["done_at"],
+            recent["done_by"],
+            recent["statut"],
+            now,
+        ]
+        if has_machines:
+            sets.append("machines_csv = ?")
+            params.append(_maint_merge_machines(tgt["machines_csv"], op["machines_csv"]))
+        params.append(tgt["id"])
+        conn.execute(
+            "UPDATE maintenance_event_ops SET " + ", ".join(sets) + " WHERE id = ?",
+            params,
+        )
+        conn.execute("DELETE FROM maintenance_event_ops WHERE id = ?", (op["id"],))
+        merged += 1
+    # Autres tables referencant le code (docs, taches, ops de templates).
+    for table in _MAINT_CODE_REF_TABLES:
+        if table == "maintenance_event_ops" or not _maint_table_exists(conn, table):
+            continue
+        try:
+            conn.execute(
+                "UPDATE %s SET code = ? WHERE code = ?" % table, (dst_code, src_code)
+            )
+        except Exception:
+            # Une contrainte d'unicite sur une table secondaire ne doit pas
+            # faire echouer le rattachement des saisies.
+            import logging as _logging
+            _logging.warning("maint attach: repointage %s echoue (%s -> %s)",
+                             table, src_code, dst_code)
+    return moved, merged
+
+
+@router.post("/api/maintenance/codes/libres/{code}/attach")
+async def maintenance_libres_attach(code: str, request: Request):
+    """Rattache un titre libre a un code recurrent existant.
+
+    Body : {target_code}. Toutes les saisies du titre libre sont reaffectees
+    au code cible (fusion en cas de collision de creneau), puis le code libre
+    est supprime : il disparait de la liste des inhabituelles et de
+    l'historique, ses saisies comptent comme des saisies recurrentes.
+    Irreversible hors SQL manuel.
+    """
+    user = _require_maint_writer(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    target_code = (body.get("target_code") or "").strip()
+    if not target_code:
+        raise HTTPException(422, "target_code obligatoire.")
+    if target_code == code:
+        raise HTTPException(400, "Le code cible doit etre different du titre libre.")
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        src = conn.execute(
+            "SELECT code, label, libre FROM maintenance_codes WHERE code = ?", (code,)
+        ).fetchone()
+        if not src:
+            raise HTTPException(404, "Titre libre introuvable.")
+        if not src["libre"]:
+            raise HTTPException(400, "Ce code n'est pas une intervention libre.")
+        tgt = conn.execute(
+            "SELECT code, label, libre, periodique FROM maintenance_codes WHERE code = ?",
+            (target_code,),
+        ).fetchone()
+        if not tgt:
+            raise HTTPException(404, "Code recurrent cible introuvable.")
+        if tgt["libre"]:
+            raise HTTPException(
+                400,
+                "La cible est elle-meme une intervention libre : utilise la fusion.",
+            )
+        moved, merged = _maint_move_ops(conn, code, target_code, now)
+        conn.execute("DELETE FROM maintenance_codes WHERE code = ?", (code,))
+        conn.execute(
+            "UPDATE maintenance_codes SET updated_at = ? WHERE code = ?",
+            (now, target_code),
+        )
+        conn.commit()
+    try:
+        log_action(
+            user=user, action="MERGE", module="maintenance_libres",
+            objet=(
+                "Rattachement %s (%s) -> %s (%s) : %d saisie(s) deplacee(s), "
+                "%d fusionnee(s)" % (code, src["label"], target_code, tgt["label"],
+                                     moved, merged)
+            ),
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return {
+        "attached": code, "target": target_code,
+        "moved": moved, "merged": merged, "total": moved + merged,
+    }
+
+
+@router.post("/api/maintenance/codes/libres/{code}/promote")
+async def maintenance_libres_promote(code: str, request: Request):
+    """Transforme un titre libre en code recurrent du catalogue.
+
+    Body : {new_code, label, niveau, categorie, intervalle, metrage_ref}.
+    Le code LIB-xxx est remplace par le nouveau code (PK), donc toutes ses
+    saisies passees deviennent l'historique de la nouvelle operation
+    recurrente : la carte Suivi machine affiche immediatement la derniere
+    intervention et le bon statut. L'intervalle est obligatoire, sans lui la
+    carte ne peut pas calculer d'echeance.
+    """
+    user = _require_maint_writer(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    payload = dict(body)
+    payload["code"] = (body.get("new_code") or "").strip()
+    data = _normalize_maint_payload(payload)
+    if not data["intervalle"]:
+        raise HTTPException(422, "Intervalle obligatoire pour une operation recurrente.")
+    new_code = data["code"]
+    if new_code == code:
+        raise HTTPException(400, "Le nouveau code doit etre different du code libre.")
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        src = conn.execute(
+            "SELECT code, label, libre, created_at FROM maintenance_codes WHERE code = ?",
+            (code,),
+        ).fetchone()
+        if not src:
+            raise HTTPException(404, "Titre libre introuvable.")
+        if not src["libre"]:
+            raise HTTPException(400, "Ce code n'est pas une intervention libre.")
+        clash = conn.execute(
+            "SELECT 1 FROM maintenance_codes WHERE code = ? LIMIT 1", (new_code,)
+        ).fetchone()
+        if clash:
+            raise HTTPException(409, "Le code %s existe deja." % new_code)
+        cols = {c["name"] for c in conn.execute(
+            "PRAGMA table_info(maintenance_codes)").fetchall()}
+        names = ["code", "label", "niveau", "categorie", "periodique",
+                 "intervalle", "metrage_ref", "created_at", "updated_at"]
+        values = [new_code, data["label"], data["niveau"], data["categorie"],
+                  1, data["intervalle"], data["metrage_ref"],
+                  src["created_at"] or now, now]
+        if "libre" in cols:
+            names.append("libre")
+            values.append(0)
+        if "usage_count" in cols:
+            names.append("usage_count")
+            values.append(0)
+        conn.execute(
+            "INSERT INTO maintenance_codes (%s) VALUES (%s)"
+            % (",".join(names), ",".join("?" * len(names))),
+            values,
+        )
+        # Le nouveau code est neuf : aucune collision UNIQUE(event_id, code)
+        # possible, _maint_move_ops se contente donc de repointer.
+        moved, merged = _maint_move_ops(conn, code, new_code, now)
+        conn.execute("DELETE FROM maintenance_codes WHERE code = ?", (code,))
+        conn.commit()
+    try:
+        log_action(
+            user=user, action="UPDATE", module="maintenance_libres",
+            objet=(
+                "Transformation %s (%s) -> code recurrent %s (%s) : "
+                "%d saisie(s) reprises" % (code, src["label"], new_code,
+                                           data["label"], moved + merged)
+            ),
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return {
+        "promoted": code, "code": new_code, "label": data["label"],
+        "moved": moved + merged,
+    }
+
+
 @router.patch("/api/maintenance/codes/libres/{code}")
 async def maintenance_libres_rename(code: str, request: Request):
     """Renomme un code libre. Impact retroactif automatique : toutes les
