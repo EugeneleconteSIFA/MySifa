@@ -669,16 +669,16 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .dash-badge-mvt-transfert{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
 .dash-badge-mvt-inventaire{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
 /* ── Besoins matières (onglet MyStock) ── */
-.bes-page{padding:0 0 32px}
-.bes-header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:20px}
+.bes-page{padding:24px 28px 48px;max-width:1480px;margin:0 auto;box-sizing:border-box}
+.bes-header{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:28px}
 .bes-header h1{margin:0 0 6px;font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.01em}
 .bes-header .bes-sub{font-size:13px;color:var(--muted);line-height:1.5}
-.bes-kpis{display:flex;gap:10px;flex-wrap:wrap}
-.bes-kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;min-width:100px;display:flex;flex-direction:column;gap:2px}
+.bes-kpis{display:flex;gap:12px;flex-wrap:wrap}
+.bes-kpi{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 18px;min-width:110px;display:flex;flex-direction:column;gap:3px}
 .bes-kpi-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600}
 .bes-kpi-val{font-size:20px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums;line-height:1.1}
 .bes-kpi-val.warn{color:var(--warn,#d97706)}
-.bes-toolbar{display:flex;gap:10px;align-items:center;margin-bottom:18px;flex-wrap:wrap}
+.bes-toolbar{display:flex;gap:10px;align-items:center;margin-bottom:22px;flex-wrap:wrap}
 .bes-seg{display:inline-flex;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px}
 .bes-seg-btn{padding:7px 14px;border:none;background:transparent;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;border-radius:6px;font-family:inherit;transition:all .12s;white-space:nowrap}
 .bes-seg-btn:hover{color:var(--text)}
@@ -686,8 +686,8 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-actions{display:flex;gap:8px;margin-left:auto;flex-wrap:wrap}
 .bes-btn-secondary{padding:7px 14px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;border-radius:8px;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:all .12s}
 .bes-btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
-.bes-section{margin-bottom:24px}
-.bes-section-head{display:flex;align-items:baseline;justify-content:space-between;margin:0 0 10px;padding:0 4px}
+.bes-section{margin-bottom:30px}
+.bes-section-head{display:flex;align-items:baseline;justify-content:space-between;margin:0 0 12px;padding:0 4px}
 .bes-section-title{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700}
 .bes-section-count{font-size:12px;color:var(--muted);font-weight:500}
 .bes-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
@@ -718,8 +718,10 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-statut-attente{background:color-mix(in srgb,var(--muted) 15%,transparent);color:var(--text2)}
 .bes-tag{display:inline-block;padding:3px 8px;margin:2px 3px 2px 0;background:color-mix(in srgb,var(--accent) 8%,transparent);color:var(--text);border-radius:4px;font-size:11px;line-height:1.5}
 .bes-tag.warn{background:color-mix(in srgb,var(--warn,#d97706) 15%,transparent);color:var(--warn,#d97706);font-weight:600}
-.bes-empty{padding:36px 20px;text-align:center;color:var(--muted);font-size:13px;background:var(--card);border:1px dashed var(--border);border-radius:10px}
-.bes-loading{padding:40px;text-align:center;color:var(--muted);font-size:14px}
+.bes-empty{padding:56px 24px;text-align:center;color:var(--muted);font-size:13px;background:var(--card);border:1px dashed var(--border);border-radius:12px}
+.bes-loading{padding:64px 24px;text-align:center;color:var(--muted);font-size:14px}
+@media (max-width:900px){.bes-page{padding:18px 18px 40px}}
+@media (max-width:640px){.bes-page{padding:14px 12px 32px}.bes-header{gap:16px;margin-bottom:20px}.bes-kpis{width:100%;gap:8px}.bes-kpi{flex:1;min-width:0;padding:10px 12px}.bes-actions{margin-left:0;width:100%}.bes-card{overflow-x:auto}}
 /* Modal spécifiques */
 .bes-map-list{border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--card)}
 .bes-map-row{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px}
@@ -3457,6 +3459,7 @@ function goToTab(tab) {
   else if (tab === 'referentiel') loadDashboard();
   else if (tab === 'inventaire') loadInventaireList();
   else if (tab === 'matieres-inventaire') loadInventaireMatieres();
+  else if (tab === 'besoins-matieres') loadBesoinsMatieres();
   else if (tab === 'reception') loadRecepHistory();
   else if (tab === 'matieres') loadMatieres();
   else if (tab === 'produits-finis') loadProduitsFinis();
@@ -18189,7 +18192,7 @@ async function init() {
   // Onglet initial via URL param ?tab=...
   const urlParams = new URLSearchParams(window.location.search);
   const urlTab = urlParams.get('tab');
-  if (urlTab && ['dashboard','matieres','produits-finis','negoce','referentiel','stock','inventaire','reception','historique','traca','monitoring','valorisation','production','plan-entrepot'].includes(urlTab)) {
+  if (urlTab && ['dashboard','matieres','produits-finis','negoce','referentiel','stock','inventaire','matieres-inventaire','besoins-matieres','reception','historique','traca','monitoring','valorisation','production','plan-entrepot'].includes(urlTab)) {
     S.tab = urlTab;
   }
   // Deep-link sur une matière ou un produit (ouvre directement le détail)
