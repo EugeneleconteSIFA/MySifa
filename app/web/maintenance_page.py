@@ -6106,15 +6106,23 @@ async function _dbEditPersist(original, changes){
         body: JSON.stringify({label: newTitle}),
       });
       if(!r.ok) await _throwFromResp(r, 'Renommage échoué');
-    }else if(isStandardCode && newTitle !== (original.type || '')){
-      if(typeof showToast === 'function') showToast('Le titre libre a été conservé (le type choisi correspondait à un code standard). Utilise Paramètres → Interventions libres pour renommer.', 'warn');
     }
+    // v2.5.13 : si le titre choisi correspond a un code du catalogue, ce n'est
+    // pas un renommage mais un reclassement — traite plus bas via codeChange.
   }
-  // Pour les catalogue standard : le "type" (code_label) n'est pas modifiable
-  // depuis l'historique (il vient de maintenance_codes). Si l'admin l'a changé
-  // dans le dropdown, on ignore le changement de type et on avertit.
-  else if(newTitle && newTitle !== (original.type || '')){
-    if(typeof showToast === 'function') showToast('Le type des opérations catalogue n\'est pas modifiable depuis l\'historique (change le code de l\'op via le créneau parent).', 'warn');
+  // v2.5.13 : le type EST modifiable depuis l'historique pour l'admin. La
+  // saisie est deplacee vers le code choisi (PATCH op {code}) — utile quand un
+  // operateur s'est trompe de ligne dans le catalogue. Avant, le changement
+  // etait silencieusement ignore avec un simple avertissement.
+  let codeChange = null;
+  if(newTitle && newTitle !== (original.type || '')){
+    const entry = (typeof OPS_TYPES_STATE === 'object' && Array.isArray(OPS_TYPES_STATE.list))
+      ? OPS_TYPES_STATE.list.find(t => (t.nom || '') === newTitle)
+      : null;
+    if(entry && String(entry.id) !== String(code)){
+      if(MAINT_ROLE === 'admin') codeChange = String(entry.id);
+      else if(typeof showToast === 'function') showToast('Seul un admin peut changer le type d\'une opération.', 'warn');
+    }
   }
   // 2. PATCH event : date + machine
   const evPatch = {};
@@ -6128,7 +6136,12 @@ async function _dbEditPersist(original, changes){
       if(!isNaN(d.getTime())){
         const pad = n => (n < 10 ? '0'+n : ''+n);
         const iso = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
-        evPatch.date_prevue = iso;
+        // v2.5.13 fix : n'envoyer date_prevue QUE si la date a change. Avant,
+        // elle partait systematiquement — et le garde-fou 'creneau passe' du
+        // backend renvoyait 403 des que la saisie datait de la veille, ce qui
+        // bloquait aussi la modification du commentaire ou de la duree.
+        const evDate = (original._event_date_prevue || (original.date_saisie || '').slice(0, 10));
+        if(iso !== evDate) evPatch.date_prevue = iso;
       }
     }catch(e){}
   }
@@ -6178,6 +6191,7 @@ async function _dbEditPersist(original, changes){
       }
     }catch(e){}
   }
+  if(codeChange) opPatch.code = codeChange;
   if(Object.keys(opPatch).length){
     const r3 = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + encodeURIComponent(opId), {
       method:'PATCH', credentials:'include', headers: jsonHeaders,

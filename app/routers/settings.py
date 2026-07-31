@@ -34,6 +34,7 @@ from config import (
     is_known_app_module,
 )
 from app.services.audit_service import log_action
+from app.services.maint_op_merge import merge_op_rows
 from services.auth_service import get_current_user, require_settings, merged_app_access, parse_access_overrides_raw
 
 router = APIRouter(tags=["settings"])
@@ -3267,43 +3268,6 @@ def _maint_table_exists(conn, table: str) -> bool:
     ).fetchone())
 
 
-def _maint_concat_text(a, b):
-    """Concatene deux champs texte en evitant les doublons et les vides."""
-    a = (a or "").strip()
-    b = (b or "").strip()
-    if not a:
-        return b or None
-    if not b or b == a or b in a:
-        return a
-    return a + "\n" + b
-
-
-def _maint_merge_machines(a, b):
-    """Union des machines_csv de deux saisies, ordre stable."""
-    out = []
-    for raw in ((a or ""), (b or "")):
-        for m in str(raw).split(","):
-            m = m.strip()
-            if m and m not in out:
-                out.append(m)
-    return ",".join(out) if out else None
-
-
-def _maint_merge_photos(a, b):
-    """Concatene deux listes JSON de photos. Retombe sur la 1re valide."""
-    import json as _json
-    def _load(v):
-        if not v:
-            return []
-        try:
-            parsed = _json.loads(v)
-            return parsed if isinstance(parsed, list) else []
-        except Exception:
-            return []
-    merged = _load(a) + [x for x in _load(b) if x not in _load(a)]
-    return _json.dumps(merged) if merged else None
-
-
 def _maint_move_ops(conn, src_code: str, dst_code: str, now: str):
     """Deplace les saisies de src_code vers dst_code.
 
@@ -3320,9 +3284,6 @@ def _maint_move_ops(conn, src_code: str, dst_code: str, now: str):
     """
     moved = 0
     merged = 0
-    cols = {c["name"] for c in conn.execute(
-        "PRAGMA table_info(maintenance_event_ops)").fetchall()}
-    has_machines = "machines_csv" in cols
     src_ops = conn.execute(
         "SELECT * FROM maintenance_event_ops WHERE code = ?", (src_code,)
     ).fetchall()
@@ -3339,33 +3300,8 @@ def _maint_move_ops(conn, src_code: str, dst_code: str, now: str):
             moved += 1
             continue
         # Collision : fusion des deux saisies dans la ligne cible.
-        src_newer = str(op["done_at"] or "") > str(tgt["done_at"] or "")
-        recent = op if src_newer else tgt
-        duree = (tgt["duree_reelle_min"] or 0) + (op["duree_reelle_min"] or 0)
-        sets = [
-            "observations = ?", "pieces_changees = ?", "duree_reelle_min = ?",
-            "photos_json = ?", "done_at = ?", "done_by = ?", "statut = ?",
-            "updated_at = ?",
-        ]
-        params = [
-            _maint_concat_text(tgt["observations"], op["observations"]),
-            _maint_concat_text(tgt["pieces_changees"], op["pieces_changees"]),
-            duree or None,
-            _maint_merge_photos(tgt["photos_json"], op["photos_json"]),
-            recent["done_at"],
-            recent["done_by"],
-            recent["statut"],
-            now,
-        ]
-        if has_machines:
-            sets.append("machines_csv = ?")
-            params.append(_maint_merge_machines(tgt["machines_csv"], op["machines_csv"]))
-        params.append(tgt["id"])
-        conn.execute(
-            "UPDATE maintenance_event_ops SET " + ", ".join(sets) + " WHERE id = ?",
-            params,
-        )
-        conn.execute("DELETE FROM maintenance_event_ops WHERE id = ?", (op["id"],))
+        # Regles communes avec le reclassement depuis l'historique.
+        merge_op_rows(conn, op, tgt, now)
         merged += 1
     # Autres tables referencant le code (docs, taches, ops de templates).
     for table in _MAINT_CODE_REF_TABLES:
