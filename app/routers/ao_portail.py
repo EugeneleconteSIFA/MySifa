@@ -11,11 +11,12 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from app.services.ao_pricing import DEVISES, UNITES_QUOTATION
 from app.services.ao_produit_fiche import parse_fiche
 from app.services.email_service import email_accuse_reception, send_email
+from app.services import ao_evenements as ao_ev
 from app.services.path_safety import path_is_under_directory
 from app.web.ao_portail_page import (
     get_mes_demandes_html,
@@ -388,17 +389,30 @@ def portail_page(request: Request, token: str):
                     headers=_PORTAIL_HTML_HEADERS,
                 )
             ao, fourni = found
+            now = _now_paris_iso()
             if not fourni.get("date_ouverture"):
-                now = _now_paris_iso()
                 conn.execute(
                     """UPDATE ao_fournisseurs
                        SET statut='ouvert', date_ouverture=?
                        WHERE id=? AND date_ouverture IS NULL""",
                     (now, fourni["id"]),
                 )
-                conn.commit()
                 fourni["statut"] = "ouvert"
                 fourni["date_ouverture"] = now
+            # Signal fort, contrairement au pixel : personne ne charge cette
+            # page par précaution. Dédup 90 s pour ne pas compter deux fois un
+            # rafraîchissement ou un retour arrière.
+            ao_ev.log_evenement(
+                conn,
+                ao_fournisseur_id=int(fourni["id"]),
+                ao_id=int(ao.get("id") or 0) or None,
+                canal=ao_ev.CANAL_PORTAIL,
+                type_evenement=ao_ev.EV_PORTAIL_OUVERT,
+                date=now,
+                user_agent=request.headers.get("user-agent"),
+                dedup_secondes=90,
+            )
+            conn.commit()
         lang = _parse_lang(request)
         return HTMLResponse(
             get_portail_html(token, ao, fourni, lang=lang),
@@ -626,6 +640,14 @@ async def repondre_ao(request: Request, token: str):
                SET statut='repondu', date_reponse=?, commentaire_global=?
                WHERE id=?""",
             (now, commentaire_global, fourni_id),
+        )
+        ao_ev.log_evenement(
+            conn,
+            ao_fournisseur_id=int(fourni_id),
+            ao_id=int(ao_id),
+            canal=ao_ev.CANAL_PORTAIL,
+            type_evenement=ao_ev.EV_REPONSE_DEPOSEE,
+            date=now,
         )
         conn.commit()
 
@@ -889,3 +911,81 @@ def download_ao_pj(request: Request, token: str, pj_id: int):
     if not path_is_under_directory(path, root) or not os.path.isfile(path):
         raise HTTPException(status_code=404, detail="Fichier introuvable")
     return FileResponse(path=path, filename=pj.get("filename") or pj["stored_name"])
+
+
+# ─── Pixel de suivi d'ouverture d'email ───────────────────────────
+
+# GIF transparent 1x1, en dur : aucune lecture disque, aucune dépendance.
+_PIXEL_GIF = bytes([
+    0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x21, 0xF9, 0x04, 0x01, 0x00,
+    0x00, 0x00, 0x00, 0x2C, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+    0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3B,
+])
+
+_PIXEL_HEADERS = {
+    # Sans ces en-têtes, le proxy d'images de Gmail sert sa copie en cache et
+    # les ouvertures suivantes n'atteignent jamais le serveur.
+    "Cache-Control": "no-store, no-cache, must-revalidate, private, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+    "Content-Disposition": "inline",
+}
+
+
+@router_html.get("/portail/ao/px/{token}.gif", include_in_schema=False)
+def pixel_ouverture_email(request: Request, token: str):
+    """Trace l'ouverture d'un email d'invitation. Renvoie TOUJOURS le GIF.
+
+    Trois règles, toutes délibérées :
+
+    - **Jamais d'erreur.** Un token inconnu, une base indisponible, un
+      fournisseur supprimé : on renvoie le pixel quand même. Un 404 sur une
+      image d'email dessine un cadre cassé chez le destinataire et, pire,
+      signale à qui sonde l'URL quels tokens existent.
+    - **Aucun effet de bord métier.** Le pixel n'ouvre pas le portail, ne
+      change pas le statut du fournisseur, ne déclenche aucune notification.
+      Une ouverture d'email n'est qu'un indice — voir `classer_ouverture()`.
+    - **Le token ne donne accès à rien.** Il ne sert qu'à identifier la ligne
+      à journaliser ; il est distinct du token portail.
+    """
+    try:
+        with get_db() as conn:
+            row = conn.execute(
+                """SELECT id, ao_id, date_envoi FROM ao_fournisseurs
+                   WHERE token_pixel=?""",
+                (str(token or "").strip(),),
+            ).fetchone()
+            if row is not None:
+                ua = request.headers.get("user-agent")
+                maintenant = ao_ev.now_paris_iso()
+                # `?e=` dit QUEL email a été ouvert (invitation, message,
+                # attribution). Absent ou inconnu : on journalise quand même,
+                # sans préciser — mieux vaut un signal imprécis que perdu.
+                ctx = str(request.query_params.get("e") or "").strip().lower()
+                # Reference de fraicheur : la date du DERNIER email de ce
+                # contexte, et non `date_envoi` qui reste figee sur
+                # l'invitation - sinon la fenetre de prechargement ne protege
+                # que l'invitation, jamais les relances.
+                reference = ao_ev.date_email_reference(
+                    conn, int(row["id"]), ctx, row["date_envoi"]
+                )
+                fiable, motif = ao_ev.classer_ouverture(reference, ua, maintenant)
+                ao_ev.log_evenement(
+                    conn,
+                    ao_fournisseur_id=int(row["id"]),
+                    ao_id=int(row["ao_id"]) if row["ao_id"] is not None else None,
+                    canal=ao_ev.CANAL_EMAIL,
+                    type_evenement=ao_ev.EV_EMAIL_OUVERT,
+                    date=maintenant,
+                    fiable=fiable,
+                    motif=motif,
+                    user_agent=ua,
+                    meta={"email": ctx} if ctx in ao_ev.CONTEXTES else None,
+                    dedup_secondes=ao_ev.DEDUP_SECONDES,
+                )
+                conn.commit()
+    except Exception as exc:
+        logger.warning("pixel_ouverture_email: %s", exc)
+
+    return Response(content=_PIXEL_GIF, media_type="image/gif", headers=_PIXEL_HEADERS)

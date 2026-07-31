@@ -138,6 +138,22 @@ body.sb-open .sidebar-overlay{display:block}
 .badge-muted{background:rgba(148,163,184,.15);color:var(--muted)}
 .badge-warn{background:rgba(251,191,36,.15);color:var(--warn)}
 .badge-success{background:rgba(52,211,153,.15);color:var(--success)}
+.eng-chip{display:inline-block;font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px;white-space:nowrap;line-height:1.5}
+.eng-on{background:rgba(52,211,153,.15);color:var(--success)}
+.eng-strong{background:rgba(34,211,238,.15);color:var(--accent)}
+.eng-doubt{background:rgba(251,191,36,.15);color:var(--warn)}
+.eng-off{background:rgba(148,163,184,.12);color:var(--muted)}
+.eng-when{font-size:10px;color:var(--muted);margin-top:3px}
+.tl{display:flex;flex-direction:column;gap:0}
+.tl-row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.tl-row:last-child{border-bottom:none}
+.tl-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:5px;flex-shrink:0}
+.tl-doubt .tl-dot{background:var(--muted)}
+.tl-doubt .tl-lib{color:var(--muted)}
+.tl-lib{font-size:13px;font-weight:600;color:var(--text)}
+.tl-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.tl-motif{font-size:11px;color:var(--warn);margin-top:3px}
+.tl-note{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--muted);line-height:1.6}
 .empty-state{padding:48px 24px;text-align:center;color:var(--muted)}
 .empty-state strong{display:block;color:var(--text2);font-size:15px;margin-bottom:8px}
 .detail-tabs{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap;align-items:center}
@@ -2035,6 +2051,50 @@ function renderLignes() {
     (rows||'<tr><td colspan="7" style="color:var(--muted)">Aucune ligne</td></tr>')+'</tbody></table></div>';
 }
 
+// ── Engagement fournisseur (email ouvert / portail consulte) ──
+//
+// Délibérément en deux signaux distincts, et non en un seul statut : ils n'ont
+// pas la même valeur de preuve. Le portail est certain (personne n'ouvre cette
+// page par hasard) ; l'ouverture d'email est un INDICE — Outlook bloque les
+// images par défaut (faux négatif), Apple Mail et les passerelles antispam les
+// préchargent (faux positif, filtré côté serveur par ao_evenements). Les fondre
+// en « vu / pas vu » donnerait une certitude qu'on n'a pas.
+function depuisDate(s) {
+  if (!s) return '';
+  const d = new Date(String(s).replace(' ', 'T'));
+  if (isNaN(d)) return '';
+  const min = Math.floor((Date.now() - d.getTime()) / 60000);
+  if (min < 1) return "à l'instant";
+  if (min < 60) return 'il y a ' + min + ' min';
+  const h = Math.floor(min / 60);
+  if (h < 24) return 'il y a ' + h + ' h';
+  const j = Math.floor(h / 24);
+  return 'il y a ' + j + ' j';
+}
+
+function engagementCell(f) {
+  const e = f.engagement || {};
+  if (!f.date_envoi) return '<span style="color:var(--muted)">—</span>';
+  let out = '';
+  const nbMail = e.nb_ouvertures_email || 0;
+  if (nbMail > 0) {
+    out += '<span class="eng-chip eng-on" title="Dernière ouverture : '+escAttr(e.email_ouvert_dernier||'')+'">'+
+      'Email ouvert'+(nbMail > 1 ? ' ×'+nbMail : '')+'</span>';
+  } else if (e.ouvertures_ecartees > 0) {
+    out += '<span class="eng-chip eng-doubt" title="'+escAttr(e.ouvertures_ecartees)+
+      ' chargement(s) du pixel écarté(s) : préchargement ou robot">Ouverture non confirmée</span>';
+  } else {
+    out += '<span class="eng-chip eng-off">Pas d\'ouverture détectée</span>';
+  }
+  const nbP = e.nb_visites_portail || 0;
+  if (nbP > 0) {
+    out += ' <span class="eng-chip eng-strong">Portail'+(nbP > 1 ? ' ×'+nbP : '')+'</span>';
+  }
+  const dernier = e.dernier_signal;
+  if (dernier) out += '<div class="eng-when">'+escHtml(depuisDate(dernier))+'</div>';
+  return out;
+}
+
 function renderFournisseurs() {
   const ao = S.ao;
   const fournis = S.detail.fournisseurs || [];
@@ -2047,14 +2107,63 @@ function renderFournisseurs() {
       : '';
     let act = '<button class="btn btn-ghost btn-sm btn-copy" data-token="'+escAttr(f.token)+'">Copier lien</button> '+
       '<button class="btn btn-ghost btn-sm btn-msg" data-id="'+f.id+'">Messagerie</button>';
+    if (f.date_envoi) act += ' <button class="btn btn-ghost btn-sm btn-tl" data-id="'+f.id+'">Suivi</button>';
     if (f.statut !== 'repondu') act += ' <button class="btn btn-ghost btn-sm btn-edit-f" data-id="'+f.id+'">Modifier</button>';
     if (f.statut !== 'repondu') act += ' <button class="btn btn-ghost btn-sm btn-del-f" data-id="'+f.id+'">Supprimer</button>';
     return '<tr><td>'+escHtml(f.nom_fournisseur)+'</td><td>'+escHtml(f.email_contact)+'</td><td>'+fourniBadge(f.statut)+unreadBadge+'</td>'+
+      '<td>'+engagementCell(f)+'</td>'+
       '<td>'+escHtml(f.date_envoi||'—')+'</td><td>'+escHtml(f.date_reponse||'—')+'</td><td>'+act+'</td></tr>';
   }).join('');
   return '<div class="card">'+(ao.statut!=='cloturee'?'<button class="btn btn-accent btn-sm" id="btn-add-f" style="margin-bottom:12px">'+icon('plus',14)+' Ajouter un fournisseur</button>':'')+
-    '<table class="data-table"><thead><tr><th>Nom</th><th>Email</th><th>Statut</th><th>Envoi</th><th>Réponse</th><th></th></tr></thead><tbody>'+
-    (rows||'<tr><td colspan="6" style="color:var(--muted)">Aucun fournisseur</td></tr>')+'</tbody></table></div>';
+    '<table class="data-table"><thead><tr><th>Nom</th><th>Email</th><th>Statut</th><th>Engagement</th><th>Envoi</th><th>Réponse</th><th></th></tr></thead><tbody>'+
+    (rows||'<tr><td colspan="7" style="color:var(--muted)">Aucun fournisseur</td></tr>')+'</tbody></table></div>';
+}
+
+// ── Timeline d'un fournisseur ──
+async function openTimelineModal(fid) {
+  const m = document.getElementById('mroot');
+  if (!m) return;
+  m.innerHTML = '';
+  const ov = document.createElement('div'); ov.className = 'modal-overlay';
+  const box = document.createElement('div'); box.className = 'modal';
+  box.style.maxWidth = '560px';
+  box.innerHTML = '<h3 style="margin:0 0 14px">Suivi fournisseur</h3>'+
+    '<div id="tl-body" style="color:var(--muted);font-size:13px">Chargement…</div>'+
+    '<div style="margin-top:18px;text-align:right"><button class="btn btn-ghost" id="tl-close">Fermer</button></div>';
+  ov.appendChild(box); m.appendChild(ov);
+  ov.addEventListener('click', (ev) => { if (ev.target === ov) closeModal(); });
+  document.getElementById('tl-close').onclick = closeModal;
+
+  try {
+    const d = await api('/api/ao/'+S.ao.id+'/fournisseurs/'+fid+'/evenements');
+    const evts = d.evenements || [];
+    const head = '<div style="font-size:13px;color:var(--text);font-weight:600;margin-bottom:2px">'+
+      escHtml(d.fournisseur && d.fournisseur.nom || '')+'</div>'+
+      '<div style="font-size:12px;color:var(--muted);margin-bottom:14px">'+
+      escHtml(d.fournisseur && d.fournisseur.email || '')+'</div>';
+    let body;
+    if (!evts.length) {
+      body = '<div style="color:var(--muted);font-size:13px">Aucun événement enregistré.</div>';
+    } else {
+      body = '<div class="tl">'+evts.map(e => {
+        const cls = e.fiable ? '' : ' tl-doubt';
+        const motif = e.fiable ? '' :
+          '<div class="tl-motif">Écarté — '+escHtml(e.motif||'signal non fiable')+'</div>';
+        return '<div class="tl-row'+cls+'">'+
+          '<div class="tl-dot"></div>'+
+          '<div class="tl-main"><div class="tl-lib">'+escHtml(e.libelle)+'</div>'+
+          '<div class="tl-meta">'+escHtml(e.date||'')+' · '+escHtml(e.canal||'')+'</div>'+
+          motif+'</div></div>';
+      }).join('')+'</div>'+
+      '<div class="tl-note">Une ouverture d\'email n\'est pas une preuve de lecture : les images sont '+
+      'bloquées par défaut dans Outlook (ouverture invisible) et préchargées par Apple Mail et '+
+      'les filtres antispam (ouverture fictive, écartée ci-dessus). La consultation du portail, elle, est certaine.</div>';
+    }
+    document.getElementById('tl-body').innerHTML = head + body;
+  } catch (e) {
+    document.getElementById('tl-body').innerHTML =
+      '<div style="color:var(--danger);font-size:13px">'+escHtml(e.message||'Erreur')+'</div>';
+  }
 }
 
 
@@ -3398,6 +3507,9 @@ function bindDetailEvents() {
   document.querySelectorAll('.btn-msg').forEach(b => b.addEventListener('click', () => {
     S.messages_fourni = parseInt(b.dataset.id, 10);
     setTab('messages');
+  }));
+  document.querySelectorAll('.btn-tl').forEach(b => b.addEventListener('click', () => {
+    openTimelineModal(parseInt(b.dataset.id, 10));
   }));
   document.querySelectorAll('.btn-edit-f').forEach(b => {
     b.onclick = () => openEditFournisseurAoModal(parseInt(b.dataset.id, 10));

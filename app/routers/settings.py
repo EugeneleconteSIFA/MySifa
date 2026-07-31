@@ -4989,7 +4989,11 @@ def _auto_ack_periodic_alerts_on_arret(conn, user, machine, no_dossier, code, co
         rows = conn.execute("SELECT id, params FROM maintenance_alerts WHERE active=1").fetchall()
     except Exception:
         return
-    reason = (f"Fermee auto : {code} - {code_label}" if code_label else f"Fermee auto : code {code}")[:2000]
+    # v2.6.0 : accent restaure -- le reste du code (libelles UI, commentaires,
+    # filtres) parle de « Fermée auto ». Les lignes deja en base sans accent
+    # restent correctement filtrees : les deux orthographes sont testees cote
+    # saisies.py, et ctrlIsAutoClose() cote Maintenance est deja tolerant.
+    reason = (f"Fermée auto : {code} - {code_label}" if code_label else f"Fermée auto : code {code}")[:2000]
     user_id = user.get("id") if user else None
     user_nom = (user.get("nom") if user else "") or (user.get("email") if user else "") or ""
     responses_json = "{}"

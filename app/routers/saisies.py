@@ -123,8 +123,18 @@ def _fetch_alert_acks_as_saisies(
     where = ["1=1"]
     params: list = []
     # Exclusions : auto-close (backend) + esquive (bouton dismiss)
+    #
+    # v2.6.0 : le filtre ne testait que la forme ACCENTUEE « Fermée auto », alors
+    # que _auto_ack_periodic_alerts_on_arret() ecrit « Fermee auto » SANS accent
+    # (cf. app/routers/settings.py). Aucune fermeture automatique n'etait donc
+    # exclue : elles remontaient toutes dans la liste des saisies de MyProd,
+    # melangees aux vraies validations d'operateur.
+    # On teste desormais les deux orthographes, avec TRIM pour les espaces de
+    # tete -- meme tolerance que ctrlIsAutoClose() cote Maintenance, qui utilise
+    # /^\s*Ferm[eé]e\s+auto\b/i et n'a jamais eu le probleme.
     where.append("COALESCE(a.dismissed, 0) = 0")
-    where.append("COALESCE(a.comment, '') NOT LIKE 'Fermée auto%'")
+    where.append("TRIM(COALESCE(a.comment, '')) NOT LIKE 'Fermée auto%'")
+    where.append("TRIM(COALESCE(a.comment, '')) NOT LIKE 'Fermee auto%'")
     if date_from:
         where.append("a.ack_at >= ?"); params.append(date_from)
     if date_to:

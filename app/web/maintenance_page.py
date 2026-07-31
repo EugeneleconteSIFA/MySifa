@@ -306,10 +306,34 @@ select.filter-input option{background:#ffffff;color:#0f172a}
   .cal-wday{font-size:10px;padding:6px 0}
 }
 
+/* ── v2.6.0 : etats de chargement du calendrier ─────────────────────── */
+.cal-week-view.cal-hide-hint .cal-wv-hint{display:none}
+.cal-load-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:12px;border-radius:10px;font-size:12.5px;font-weight:600;letter-spacing:.2px}
+.cal-load-bar.is-loading{background:var(--accent-bg);border:1px dashed var(--accent);color:var(--accent)}
+.cal-load-bar.is-error{background:rgba(248,113,113,.10);border:1px solid var(--danger);color:var(--danger)}
+.cal-load-bar-txt{flex:1;min-width:0}
+.cal-load-spin{flex-shrink:0;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:calLoadSpin .7s linear infinite}
+@keyframes calLoadSpin{to{transform:rotate(360deg)}}
+.cal-load-retry{flex-shrink:0;padding:6px 13px;border-radius:8px;border:1px solid var(--danger);background:var(--danger);color:#fff;font-family:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:filter .12s}
+.cal-load-retry:hover{filter:brightness(1.1)}
+/* Blocs fantomes pendant le tout premier chargement : la grille ne peut plus
+   etre confondue avec un planning vide. Non cliquables, non selectionnables. */
+.cal-skel{position:absolute;border-radius:7px;pointer-events:none;user-select:none;
+  background:linear-gradient(90deg,rgba(148,163,184,.13) 25%,rgba(148,163,184,.24) 37%,rgba(148,163,184,.13) 63%);
+  background-size:400% 100%;animation:calSkel 1.3s ease-in-out infinite}
+body.light .cal-skel{background:linear-gradient(90deg,rgba(100,116,139,.11) 25%,rgba(100,116,139,.20) 37%,rgba(100,116,139,.11) 63%);background-size:400% 100%}
+@keyframes calSkel{0%{background-position:100% 0}100%{background-position:0 0}}
+.cal-skel-chip{height:16px;border-radius:5px;margin-bottom:4px;position:static}
+@media (prefers-reduced-motion:reduce){
+  .cal-skel{animation:none}
+  .cal-load-spin{animation-duration:2s}
+}
+body.reduce-anim .cal-skel{animation:none}
+
 /* ── Vue Semaine (emploi du temps) ──────────────────────────────────── */
 .cal-week-view{overflow-x:auto}
 .cal-wv-hint{font-size:13px;color:var(--text2);background:var(--accent-bg);border:1px dashed var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:14px;text-align:center;font-weight:600}
-.cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);scrollbar-gutter:stable}  /* v2.5.17 : min-width retire (dim clippe), scrollbar-gutter aligne header+body */
+.cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);box-sizing:border-box}  /* v2.5.17 : min-width retire (dim clippe). v2.6.0 : scrollbar-gutter retire -- inerte ici, la propriete ne s'applique qu'aux conteneurs de scroll, donc les 7 colonnes 1fr etaient calculees sur une largeur superieure a celles du corps (derive cumulative vers Sam/Dim). L'alignement est desormais fait par _syncCalHeaderGutter() qui reporte la largeur reelle de la gouttiere du corps sur le padding-right du header. */
 .cal-wv-corner{}
 .cal-wv-dayhead{padding:11px 10px;text-align:center;border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--card)}
 .cal-wv-dayhead.weekend{background:rgba(167,139,250,.06)}
@@ -363,16 +387,30 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .cal-event[data-draggable="1"]{cursor:grab}
 .cal-event[data-draggable="1"]:active{cursor:grabbing}
 .cal-event.is-past{cursor:not-allowed}
-/* v2.5.28 : boutons quick-select operateurs (Tous / Travaillant ce jour) */
+/* v2.5.28 : boutons quick-select operateurs. v2.6.0 : « Travaillant ce jour » retire. */
 .case-op-quick-btn{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .12s,transform .06s;white-space:nowrap}
 .case-op-quick-btn:hover{filter:brightness(1.08)}
 .case-op-quick-btn:active{transform:scale(.97)}
 .case-op-quick-btn:disabled{opacity:.5;cursor:wait}
 /* v2.5.26 : pictogramme triangle warning -- plus visible qu'un badge cercle */
-.cal-event .cal-event-noop{position:absolute;top:4px;left:4px;width:22px;height:22px;background:#fff;color:var(--warn,#f59e0b);border-radius:4px;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.4);cursor:help;z-index:6;padding:2px;transition:transform .15s,filter .15s;animation:calNoopPulse 2s ease-in-out infinite}  /* v2.5.27 : coin gauche pour eviter collision avec badge template */
-.cal-event .cal-event-noop svg{width:100%;height:100%;stroke-width:2.4;fill:none;stroke:var(--warn,#f59e0b)}
+/* v2.6.0 : couleurs FIXES, volontairement hors variables de theme.
+   Le badge est pose sur un bloc dont le fond vient de CAL_MACHINE_PALETTE
+   (#0891b2, #7c3aed, #ea580c, #059669), lui aussi code en dur et independant
+   du theme : une couleur de theme n'a donc aucun moyen de garantir le
+   contraste. C'est exactement ce qui clochait -- `var(--warn)` vaut #4A8FE8
+   (bleu) sur le theme MyMaintenance, donc le badge sortait bleu sur violet.
+   Blanc + triangle rouge plein : lisible sur les cinq fonds possibles. */
+.cal-event .cal-event-noop{position:absolute;top:4px;left:4px;width:26px;height:26px;background:#ffffff;border:2px solid #dc2626;border-radius:7px;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.5);cursor:help;z-index:6;padding:3px;transition:transform .15s,filter .15s;animation:calNoopPulse 1.8s ease-in-out infinite}
+.cal-event .cal-event-noop svg{width:100%;height:100%;display:block}
+/* Liseré rouge sur tout le bloc : le créneau se repère sans chercher le badge. */
+.cal-event.has-no-op{outline:2px solid #dc2626;outline-offset:-2px}
+/* Le contenu est centré : on lui réserve de la marge des deux côtés pour qu'il
+   ne passe jamais sous le badge (cas des créneaux d'une heure ou moins). */
+.cal-event.has-no-op{padding-left:32px;padding-right:32px}
+.cal-event[data-mini="1"] .cal-event-noop{width:20px;height:20px;top:2px;left:2px;padding:2px;border-radius:5px}
+.cal-event[data-mini="1"].has-no-op{padding-left:24px;padding-right:24px}
 .cal-event .cal-event-noop:hover{transform:scale(1.15);filter:brightness(1.05);animation:none}
-@keyframes calNoopPulse{0%,100%{box-shadow:0 2px 6px rgba(0,0,0,.4),0 0 0 0 rgba(245,158,11,.6)}50%{box-shadow:0 2px 6px rgba(0,0,0,.4),0 0 0 6px rgba(245,158,11,0)}}
+@keyframes calNoopPulse{0%,100%{box-shadow:0 2px 10px rgba(0,0,0,.5),0 0 0 0 rgba(220,38,38,.75)}50%{box-shadow:0 2px 10px rgba(0,0,0,.5),0 0 0 7px rgba(220,38,38,0)}}
 .cal-event.is-past::before{content:"";position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(255,255,255,.06) 8px,rgba(255,255,255,.06) 16px);pointer-events:none;border-radius:inherit}
 /* v2.5.16 : drag live -- le bloc reste visible et bouge vraiment (comme Google Calendar).
    La bordure et l'ombre appuyees signalent l'etat 'drag actif'. */
@@ -1829,7 +1867,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </button>
           <button type="button" class="ops-subtab" data-plan-subtab="historique" onclick="setPlanSubtab('historique')">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
-            Historique
+            Créneaux
           </button>
         </div>
         <div id="plan-subview-historique" style="display:none">
@@ -1872,6 +1910,10 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
               </div>
             </div>
           </div>
+          <!-- v2.6.0 : bandeau d'etat du chargement des creneaux. Vide (donc
+               invisible) quand tout va bien. Sert a ne JAMAIS laisser une grille
+               vide passer pour un planning reellement vide. -->
+          <div id="cal-load-state" aria-live="polite"></div>
           <!-- Vue Mois -->
           <div class="cal-month-view" id="cal-month-view" style="display:none">
             <div class="cal-week-head" id="cal-week-head"></div>
@@ -2590,7 +2632,6 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             <label class="ops-field-label">Opérateurs assignés<span class="req" title="Au moins un opérateur recommandé">*</span></label>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
               <button type="button" class="case-op-quick-btn" onclick="caseAddAllOperators()" title="Sélectionne tous les opérateurs actifs">+ Tous</button>
-              <button type="button" class="case-op-quick-btn" onclick="caseAddOperatorsOnShift()" title="Sélectionne les opérateurs travaillant ce jour selon le planning RH">+ Travaillant ce jour</button>
               <select class="ops-select" id="case-mod-operator-picker" style="width:auto;min-width:200px" onchange="addCaseOperatorFromPicker(this)">
                 <option value="">Ajouter un opérateur…</option>
               </select>
@@ -2726,8 +2767,11 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </div>
           <div class="case-ops-list" id="tmpl-ed-ops-list"></div>
         </div>
-        <!-- v2.5.25 : operateurs par defaut pour la recurrence -->
-        <div class="case-ops-section" style="margin-top:14px">
+        <!-- v2.5.25 : operateurs par defaut pour la recurrence.
+             v2.6.0 : masquee hors recurrence -- la liste n'est consommee que par
+             _generate_events_for_template(), qui ne tourne que si la recurrence
+             est active. Hors recurrence, la demander n'avait aucun effet. -->
+        <div class="case-ops-section" id="tmpl-ed-default-op-section" style="margin-top:14px;display:none">
           <div class="case-ops-head" style="flex-wrap:wrap;gap:8px">
             <label class="ops-field-label">Opérateurs par défaut <span style="font-size:11px;color:var(--muted);font-weight:500;text-transform:none;letter-spacing:normal">— appliqués automatiquement aux créneaux générés par la récurrence</span></label>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -2872,24 +2916,23 @@ function switchView(name){
       setTimeout(function(){ try{ if(typeof setPlanSubtab === 'function') setPlanSubtab('historique'); }catch(e){} }, 0);
       return;
     }
-    // Étape 1 : bascule sur la vue Semaine et rerend avec l'état courant
-    // (cas où le fetch initial a déjà résolu au boot).
+    // Bascule sur la vue Semaine. setCalView appelle desormais
+    // renderCalFromCacheThenRefresh : rendu immediat depuis le cache (aucune
+    // frame vide en revenant sur l'onglet), refetch uniquement si la plage
+    // affichee n'est pas couverte par le dernier chargement.
     if(typeof setCalView === 'function') setCalView('week');
     else renderCal();
-    // v2.5.9 : refetch + rerender differes via setTimeout(0) -- refreshPlanning
-    // utilise _fmtDateISO qui est declare dans un <script> SUIVANT (ligne ~9086).
-    // Au boot, tant que script1 (init) tourne, script2 n'est pas encore parse :
-    // _fmtDateISO est undefined et refreshPlanning throw silencieusement dans son
-    // try/catch, laissant PLANNING_STATE.list vide -> calendrier vide au refresh.
-    // Le setTimeout(0) pousse l'execution apres le parsing complet des scripts.
+    // v2.5.9 / v2.6.0 : le setTimeout(0) reste necessaire au boot -- refreshPlanning
+    // utilise _fmtDateISO, declare dans un <script> SUIVANT. Tant que script1
+    // (init) tourne, script2 n'est pas parse. On force un refresh a l'arrivee
+    // pour refleter les modifs faites ailleurs, mais l'affichage ne depend plus
+    // de ce fetch : les creneaux en cache sont deja a l'ecran, et un echec
+    // conserve desormais l'affichage au lieu de le vider.
+    // Les rerenders aveugles a 150 ms et 500 ms sont supprimes : ils masquaient
+    // le symptome sans traiter la cause (grille vide pendant le fetch) et
+    // provoquaient trois reconstructions completes du DOM par visite.
     setTimeout(function(){
-      (async () => {
-        await refreshPlanning();
-        renderCal();
-        // Filet de securite : rerender apres stabilisation du layout.
-        setTimeout(() => { try{ renderCal(); }catch(e){} }, 150);
-        setTimeout(() => { try{ renderCal(); }catch(e){} }, 500);
-      })();
+      refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
     }, 0);
   }
   // Vues opérateur : recharge la liste à l'arrivée.
@@ -2988,7 +3031,21 @@ function _opTypePalette(opTypeId){
 // loadPlanning() lance le fetch en tâche de fond puis re-render : les callers
 // peuvent rester synchrones. Pour un rafraîchissement AVANT rendu, utiliser
 // refreshPlanning() (async, à await avant renderCal).
-const PLANNING_STATE = { list: [], _lastLoad: 0 };
+// v2.6.0 : PLANNING_STATE porte desormais l'etat de chargement, la fenetre de
+// dates couverte par le dernier fetch reussi, et la promesse en vol.
+//   status  : 'idle' | 'loading' | 'loaded' | 'error'
+//   from/to : bornes ISO de la fenetre chargee -> permet de detecter qu'une
+//             navigation calendrier sort des donnees en memoire (bug ou les
+//             fleches ne refetchaient jamais : au-dela de +/-90 j, vide a vie).
+//   _inflight : promesse partagee. Deux appels concurrents (init + switchView,
+//             ou switchView + une action utilisateur) ne declenchent plus deux
+//             GET /events identiques -- chaque requete relance _ensure_schema et
+//             la generation des recurrences cote serveur, c'est le poste de
+//             lenteur qui laissait la grille vide plusieurs secondes.
+const PLANNING_STATE = {
+  list: [], _lastLoad: 0,
+  status: 'idle', from: null, to: null, _inflight: null, _everLoaded: false,
+};
 
 function _apiEventToClient(ev){
   // Convertit un event {id, machine, date_prevue, heure_debut, heure_fin,
@@ -3036,6 +3093,29 @@ function _apiEventToClient(ev){
   };
 }
 
+// Date pivot de la fenetre a charger : la date reellement affichee, pas
+// « aujourd'hui ». CAL_STATE n'a jamais eu de propriete `date`, donc l'ancien
+// code retombait systematiquement sur new Date() -- d'ou le planning vide des
+// qu'on naviguait a plus de 90 jours.
+function _planningPivotDate(){
+  if(!CAL_STATE) return new Date();
+  if(CAL_STATE.view === 'week' && CAL_STATE.weekStart) return new Date(CAL_STATE.weekStart);
+  if(CAL_STATE.view === 'day'  && CAL_STATE.dayDate)   return new Date(CAL_STATE.dayDate);
+  if(CAL_STATE.view === 'month') return new Date(CAL_STATE.year, CAL_STATE.month, 15);
+  return new Date();
+}
+
+// La plage visible a-t-elle besoin d'un nouveau fetch ? On garde une marge de
+// 14 jours pour ne pas refetcher a chaque clic sur les fleches en bord de
+// fenetre.
+function _planningNeedsFetch(){
+  if(PLANNING_STATE.status === 'idle' || !PLANNING_STATE.from || !PLANNING_STATE.to) return true;
+  const pivot = _planningPivotDate();
+  const lo = new Date(pivot); lo.setDate(pivot.getDate() - 14);
+  const hi = new Date(pivot); hi.setDate(pivot.getDate() + 14);
+  return _fmtDateISO(lo) < PLANNING_STATE.from || _fmtDateISO(hi) > PLANNING_STATE.to;
+}
+
 async function refreshPlanning(){
   // Pre-charge les templates en tache de fond (pour le badge "depuis modele").
   // v179 fix : TEMPLATES_STATE et loadTemplates sont definis dans un <script>
@@ -3047,25 +3127,171 @@ async function refreshPlanning(){
      && typeof loadTemplates === 'function'){
     loadTemplates().catch(() => {});
   }
+  // v2.6.0 : dedup. Un fetch deja en vol -> on attend le meme au lieu d'en
+  // lancer un second identique.
+  if(PLANNING_STATE._inflight) return PLANNING_STATE._inflight;
+  const pr = _doRefreshPlanning();
+  PLANNING_STATE._inflight = pr;
+  try{ await pr; }
+  finally{ PLANNING_STATE._inflight = null; }
+  return pr;
+}
 
+async function _doRefreshPlanning(){
+  // _fmtDateISO vit dans un <script> ulterieur : au boot il peut ne pas etre
+  // encore parse. On sort proprement en laissant le status a 'idle' pour qu'un
+  // appel ulterieur retente, au lieu de vider la liste.
+  if(typeof _fmtDateISO !== 'function') return;
+  PLANNING_STATE.status = 'loading';
+  try{ _renderPlanningLoadState(); }catch(_){}
+  // Charge une fenêtre large autour de la date affichée : ±90 jours.
+  const pivot = _planningPivotDate();
+  const from = new Date(pivot); from.setDate(pivot.getDate() - 90);
+  const to   = new Date(pivot); to.setDate(pivot.getDate() + 90);
+  const fromIso = _fmtDateISO(from), toIso = _fmtDateISO(to);
   try{
-    // Charge une fenêtre large autour de la date pivot : ±90 jours.
-    const pivot = (CAL_STATE && CAL_STATE.date) ? new Date(CAL_STATE.date) : new Date();
-    const from = new Date(pivot); from.setDate(pivot.getDate() - 90);
-    const to   = new Date(pivot); to.setDate(pivot.getDate() + 90);
-    const url = '/api/maintenance/events?date_from=' + _fmtDateISO(from) +
-                '&date_to=' + _fmtDateISO(to) + '&_=' + Date.now();
+    const url = '/api/maintenance/events?date_from=' + fromIso +
+                '&date_to=' + toIso + '&_=' + Date.now();
     const r = await fetch(url, { credentials: 'include', cache: 'no-store' });
-    if(!r.ok){ PLANNING_STATE.list = []; return; }
+    if(!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
     PLANNING_STATE.list = (d.events || []).map(_apiEventToClient);
+    PLANNING_STATE.from = fromIso;
+    PLANNING_STATE.to = toIso;
     PLANNING_STATE._lastLoad = Date.now();
-  }catch(e){ PLANNING_STATE.list = []; }
+    PLANNING_STATE.status = 'loaded';
+    PLANNING_STATE._everLoaded = true;
+  }catch(e){
+    // v2.6.0 : NE PLUS VIDER la liste. Une grille vide est indiscernable d'un
+    // planning reellement vide -- un utilisateur mal informe conclut qu'il n'y
+    // a rien de planifie. On conserve le dernier etat connu et on l'annonce.
+    PLANNING_STATE.status = 'error';
+  }
+  try{ _renderPlanningLoadState(); }catch(_){}
 }
+
+// ── v2.6.0 : rendu des etats de chargement du calendrier ──────────────
+// Motif de blocs fantomes, deterministe (pas de Math.random : le skeleton ne
+// doit pas sautiller entre deux rendus). Lun..Ven seulement, [heure, duree].
+const _CAL_SKEL_PATTERN = [
+  [[8,1],[13,2]], [[8,1],[16,1]], [[9,1],[14,1]],
+  [[8,1],[11,1],[15,1]], [[8,2]], [], []
+];
+
+function _clearCalSkeletons(){
+  document.querySelectorAll('.cal-skel').forEach(el => el.remove());
+}
+
+function _paintCalSkeletons(){
+  _clearCalSkeletons();
+  const px = (CAL_STATE && CAL_STATE.view === 'day') ? 72 : CAL_HOUR_PX;
+  const cols = document.querySelectorAll('#cal-wv-body .cal-wv-day-col');
+  cols.forEach((col, idx) => {
+    // En vue Jour il n'y a qu'une colonne : on prend un motif fourni.
+    const pattern = (cols.length === 1) ? _CAL_SKEL_PATTERN[3] : (_CAL_SKEL_PATTERN[idx] || []);
+    pattern.forEach(([h, dur]) => {
+      const el = document.createElement('div');
+      el.className = 'cal-skel';
+      el.style.top = ((h - CAL_HOUR_START) * px) + 'px';
+      el.style.height = Math.max(22, dur * px - 2) + 'px';
+      el.style.left = '3px';
+      el.style.right = '3px';
+      col.appendChild(el);
+    });
+  });
+  // Vue Mois : quelques chips fantomes dans les cases de semaine.
+  document.querySelectorAll('#cal-grid .cal-cell:not(.cal-cell-off) .cal-day-events')
+    .forEach((box, idx) => {
+      if(idx % 7 >= 5) return;           // pas de week-end
+      if(box.children.length) return;    // deja des vrais creneaux
+      const n = (idx % 3 === 0) ? 2 : 1;
+      for(let k = 0; k < n; k++){
+        const chip = document.createElement('div');
+        chip.className = 'cal-skel cal-skel-chip';
+        box.appendChild(chip);
+      }
+    });
+}
+
+function _renderPlanningLoadState(){
+  const box = document.getElementById('cal-load-state');
+  const st = PLANNING_STATE.status;
+  // Premier chargement de la session : skeleton. Rafraichissements suivants :
+  // silencieux, les creneaux deja affiches restent a l'ecran.
+  const firstLoad = (st === 'loading' && !PLANNING_STATE._everLoaded);
+  if(firstLoad) { try{ _paintCalSkeletons(); }catch(_){} }
+  else { try{ _clearCalSkeletons(); }catch(_){} }
+  try{
+    document.getElementById('cal-week-view')
+      ?.classList.toggle('cal-hide-hint', firstLoad || st === 'error');
+  }catch(_){}
+  if(!box) return;
+  if(firstLoad){
+    box.innerHTML = '<div class="cal-load-bar is-loading">' +
+      '<span class="cal-load-spin" aria-hidden="true"></span>' +
+      '<span class="cal-load-bar-txt">Chargement des cr\u00e9neaux\u2026</span></div>';
+    return;
+  }
+  if(st === 'error'){
+    // Message differencie : sans donnees en cache, l'utilisateur doit savoir
+    // que le vide affiche n'est PAS un planning vide.
+    const msg = PLANNING_STATE._everLoaded
+      ? 'Cr\u00e9neaux non rafra\u00eechis \u2014 l\'affichage peut \u00eatre p\u00e9rim\u00e9.'
+      : 'Impossible de charger les cr\u00e9neaux. Le calendrier ci-dessous n\'est pas \u00e0 jour \u2014 ne le consid\u00e8re pas comme vide.';
+    box.innerHTML = '<div class="cal-load-bar is-error">' +
+      '<span class="cal-load-bar-txt">\u26a0 ' + msg + '</span>' +
+      '<button type="button" class="cal-load-retry" onclick="retryPlanningLoad()">R\u00e9essayer</button></div>';
+    return;
+  }
+  box.innerHTML = '';
+}
+
+function retryPlanningLoad(){
+  PLANNING_STATE.status = 'idle';
+  refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
+}
+
+// ── v2.6.0 : alignement header / corps de la vue Semaine ───────────────
+// .cal-wv-body est un conteneur de scroll (overflow:auto) : sa gouttiere de
+// scrollbar retrecit sa boite de contenu. .cal-wv-header, lui, ne scrolle pas,
+// donc `scrollbar-gutter:stable` y est inerte (la propriete ne s'applique qu'aux
+// conteneurs de scroll). Les 7 colonnes 1fr du header etaient donc calculees sur
+// une largeur plus grande que celles du corps -> derive cumulative vers la
+// droite, visible surtout sur Sam/Dim. On reporte la largeur reelle de la
+// gouttiere sur le padding droit du header.
+function _syncCalHeaderGutter(){
+  const body = document.getElementById('cal-wv-body');
+  const head = document.getElementById('cal-wv-header');
+  if(!body || !head) return;
+  const gutter = Math.max(0, body.offsetWidth - body.clientWidth);
+  head.style.paddingRight = gutter ? (gutter + 'px') : '';
+}
+let _calGutterRaf = 0;
+function _scheduleCalHeaderGutterSync(){
+  if(_calGutterRaf) return;
+  _calGutterRaf = requestAnimationFrame(() => {
+    _calGutterRaf = 0;
+    try{ _syncCalHeaderGutter(); }catch(_){}
+  });
+}
+window.addEventListener('resize', _scheduleCalHeaderGutterSync);
 
 function loadPlanning(){
   // Sync façade : lance un refresh async en arrière-plan puis re-render à
   // l'arrivée. Les callers historiques ne changent pas de comportement.
+  refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
+}
+
+// v2.6.0 : rafraichit uniquement si la plage visible n'est pas couverte par le
+// dernier fetch. Rend d'abord depuis le cache (affichage instantane), puis
+// refetch en tache de fond si necessaire -- plus aucune frame vide en revenant
+// sur l'onglet Planning.
+function renderCalFromCacheThenRefresh(force){
+  try{ renderCal(); }catch(e){}
+  if(!force && !_planningNeedsFetch()){
+    try{ _renderPlanningLoadState(); }catch(_){}
+    return;
+  }
   refreshPlanning().then(() => { try{ renderCal(); }catch(e){} });
 }
 
@@ -3091,7 +3317,7 @@ function setCalView(v){
     wv.classList.toggle('cal-wv-mode-week', v === 'week');
     wv.classList.toggle('cal-wv-mode-day',  v === 'day');
   }
-  renderCal();
+  renderCalFromCacheThenRefresh();
 }
 function calPrev(){
   if(CAL_STATE.view === 'month'){
@@ -3104,7 +3330,7 @@ function calPrev(){
     const d = CAL_STATE.dayDate;
     CAL_STATE.dayDate = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
   }
-  renderCal();
+  renderCalFromCacheThenRefresh();
 }
 function calNext(){
   if(CAL_STATE.view === 'month'){
@@ -3117,7 +3343,7 @@ function calNext(){
     const d = CAL_STATE.dayDate;
     CAL_STATE.dayDate = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
   }
-  renderCal();
+  renderCalFromCacheThenRefresh();
 }
 function calToday(){
   const now = new Date();
@@ -3129,7 +3355,7 @@ function calToday(){
   } else if(CAL_STATE.view === 'day'){
     CAL_STATE.dayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   }
-  renderCal();
+  renderCalFromCacheThenRefresh();
 }
 function _calIsoYMD(d){
   return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
@@ -3296,6 +3522,11 @@ function renderCalWeek(){
     // v2.2.58 : strip flottant absolu dans le day col — n'affecte plus les autres jours
     _renderNonPlanifStrip(iso, col, 'week');
   });
+  // v2.6.0 : le corps vient d'etre reconstruit -> re-aligner le header sur la
+  // gouttiere de scrollbar, et repeindre l'etat de chargement (le skeleton a
+  // ete efface par le innerHTML ci-dessus).
+  try{ _syncCalHeaderGutter(); _scheduleCalHeaderGutterSync(); }catch(_){}
+  try{ _renderPlanningLoadState(); }catch(_){}
 }
 function renderCalDay(){
   const d = CAL_STATE.dayDate || new Date();
@@ -3347,6 +3578,8 @@ function renderCalDay(){
     // v2.2.58 : strip flottant absolu — pas d'impact sur l'alignement
     _renderNonPlanifStrip(cIso, col, 'day');
   });
+  try{ _syncCalHeaderGutter(); _scheduleCalHeaderGutterSync(); }catch(_){}
+  try{ _renderPlanningLoadState(); }catch(_){}
 }
 
 // v2.2.54 : bandeau non-planifié — mode 'week' (compact, replié) ou 'day' (large, déplié)
@@ -3474,6 +3707,34 @@ const CAL_MACHINE_PALETTE = {
 function _machinePalette(machine){
   return CAL_MACHINE_PALETTE[machine] || { bg:'#475569', fg:'#ffffff' };
 }
+// v2.6.0 : le badge « aucun operateur » etait cree AVANT `div.innerHTML = ...`,
+// qui detruit tous les enfants -- il n'a donc jamais ete visible depuis la
+// v2.5.26 (idem sur la variante cluster). Ce helper doit imperativement etre
+// appele APRES l'affectation de innerHTML.
+function _appendNoOperatorBadge(div, ev){
+  if(!div || !ev) return;
+  if(MAINT_ROLE === 'operator') return;
+  if(ev.operators && ev.operators.length) return;
+  div.classList.add('has-no-op');
+  const noop = document.createElement('div');
+  noop.className = 'cal-event-noop';
+  // Triangle plein rouge + « ! » blanc : bien plus lisible a 26 px qu'un
+  // contour fin. Couleurs portees par le SVG, pas par le CSS de theme.
+  noop.innerHTML = '<svg viewBox="0 0 24 24">' +
+    '<path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z" ' +
+      'fill="#dc2626" stroke="#dc2626" stroke-width="2.2" stroke-linejoin="round"/>' +
+    '<line x1="12" y1="9.5" x2="12" y2="14" stroke="#ffffff" stroke-width="2.4" stroke-linecap="round"/>' +
+    '<line x1="12" y1="17.4" x2="12.01" y2="17.4" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round"/></svg>';
+  noop.title = 'Aucun op\u00e9rateur assign\u00e9 \u2014 ce cr\u00e9neau ne peut pas \u00eatre r\u00e9alis\u00e9. Cliquer pour \u00e9diter.';
+  noop.setAttribute('aria-label', 'Aucun op\u00e9rateur assign\u00e9');
+  noop.addEventListener('click', function(e){
+    e.stopPropagation();
+    if(_CAL_DRAG && _CAL_DRAG._justFinished){ _CAL_DRAG._justFinished = false; return; }
+    try{ editCase(ev.id); }catch(_){ openPlanningDetailsModal([ev]); }
+  });
+  div.appendChild(noop);
+}
+
 function _makeEventBlock(item){
   const ev = item.ev;
   const startMin = item.s, endMin = item.e;
@@ -3502,20 +3763,6 @@ function _makeEventBlock(item){
     const mine = (ev.operators || []).some(o => o.id === S.me.id);
     if(mine) div.classList.add('is-mine');
   }
-  // v2.5.26 : pictogramme triangle warning si aucun operateur assigne (admin uniquement).
-  if(MAINT_ROLE !== 'operator' && !(ev.operators && ev.operators.length)){  /* v2.5.28 : superadmin/direction voient aussi le badge */
-    const noop = document.createElement('div');
-    noop.className = 'cal-event-noop';
-    noop.innerHTML = '<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
-    noop.title = 'Aucun op\u00e9rateur assign\u00e9 \u2014 cliquer pour \u00e9diter';
-    noop.addEventListener('click', function(e){
-      e.stopPropagation();
-      if(_CAL_DRAG && _CAL_DRAG._justFinished){ _CAL_DRAG._justFinished = false; return; }
-      // Ouvre directement la modale d'edition sur ce creneau.
-      try{ editCase(ev.id); }catch(_){ openPlanningDetailsModal([ev]); }
-    });
-    div.appendChild(noop);
-  }
   const ops = Array.isArray(ev.operations) ? ev.operations.filter(o => o && (o.opName || o.opTypeId)) : [];
   const opsCount = ops.length;
   // v2.5.20 : rendu minimaliste -- juste le nom (ou le nom du modele lie, ou la
@@ -3543,6 +3790,8 @@ function _makeEventBlock(item){
     inner += '<div class="cal-event-count">' + opsCount + ' op\u00e9ration' + (opsCount > 1 ? 's' : '') + '</div>';
   }
   div.innerHTML = inner;
+  // v2.5.26 / v2.6.0 : pictogramme « aucun operateur assigne ». APRES innerHTML.
+  _appendNoOperatorBadge(div, ev);
   div.title = (ev.machine || '') + '\n' + ev.start + ' – ' + ev.end +
     (ops.length ? '\n\n' + ops.map(o => '• ' + (o.opName||'—')).join('\n') : '') +
     '\n\nCliquer pour afficher les détails';
@@ -3870,18 +4119,6 @@ function _makeClusterBlock(cluster){
   // v2.5.27 : hoiste ev pour l'usage ci-dessous (corrige aussi le bug pre-existant qui accede a ev.template_id).
   const _ev0 = single ? cluster.items[0] : null;
   div.className = 'cal-event' + (single ? '' : ' cal-event-merged') + (_ev0 && _ev0.template_id ? ' is-from-template' : '');
-  // v2.5.27 : badge noop aussi cote cluster single (defensif, sur les fallbacks eventuels)
-  if(single && _ev0 && MAINT_ROLE !== 'operator' && !(_ev0.operators && _ev0.operators.length)){
-    const noop = document.createElement('div');
-    noop.className = 'cal-event-noop';
-    noop.innerHTML = '<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
-    noop.title = 'Aucun op\u00e9rateur assign\u00e9 \u2014 cliquer pour \u00e9diter';
-    noop.addEventListener('click', function(e){
-      e.stopPropagation();
-      try{ editCase(_ev0.id); }catch(_){ openPlanningDetailsModal([_ev0]); }
-    });
-    div.appendChild(noop);
-  }
   div.style.top = top + 'px';
   div.style.height = height + 'px';
   if(single && cluster.items[0].opNiveau){
@@ -3896,6 +4133,8 @@ function _makeClusterBlock(cluster){
     const machineSuffix = ev.machine ? ' · ' + ev.machine : '';
     div.innerHTML = '<div class="cal-event-title">' + escHtml((ev.opName || '—') + machineSuffix) + '</div>' +
                     '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
+    // v2.6.0 : idem -- APRES innerHTML, sinon le badge est efface.
+    _appendNoOperatorBadge(div, ev);
     div.title = 'Cliquer pour afficher les détails';
     div.addEventListener('click', e => {
       e.stopPropagation();
@@ -4394,49 +4633,9 @@ function caseAddAllOperators(){
   }
 }
 
-// v2.5.28 : quick-select "Travaillant ce jour" -- croise avec rh_planning_postes.
-async function caseAddOperatorsOnShift(){
-  const dateEl = document.getElementById('case-mod-date');
-  // On lit la date depuis _PENDING_CASE (source de verite) plutot que le texte FR affiche.
-  const iso = _PENDING_CASE && _PENDING_CASE.iso;
-  if(!iso){
-    if(typeof showToast === 'function') showToast('Date du cr\u00e9neau introuvable.', 'danger');
-    return;
-  }
-  try{
-    const r = await fetch('/api/maintenance/operators/on-shift?date=' + encodeURIComponent(iso),
-                          { credentials:'include', cache: 'no-store' });
-    if(!r.ok){
-      if(typeof showToast === 'function') showToast('Erreur : chargement du planning RH.', 'danger');
-      return;
-    }
-    const d = await r.json();
-    const list = d.operators || [];
-    let added = 0;
-    for(const u of list){
-      if(!_CASE_OPERATORS.find(o => o.id === u.id)){
-        _CASE_OPERATORS.push({ id: u.id, nom: u.nom });
-        added++;
-      }
-    }
-    renderCaseOperators();
-    if(typeof showToast === 'function'){
-      const src = d.source || '';
-      const srcHint = (src.indexOf('fallback') === 0)
-        ? ' (planning RH indisponible, tous les op\u00e9rateurs ajout\u00e9s)'
-        : '';
-      if(added){
-        showToast(added + ' op\u00e9rateur' + (added > 1 ? 's ajout\u00e9s' : ' ajout\u00e9') + srcHint + '.', 'info');
-      } else if(list.length){
-        showToast('Tous les op\u00e9rateurs travaillant \u00e9taient d\u00e9j\u00e0 s\u00e9lectionn\u00e9s.', 'info');
-      } else {
-        showToast('Aucun op\u00e9rateur travaillant identifi\u00e9 ce jour.', 'info');
-      }
-    }
-  }catch(e){
-    if(typeof showToast === 'function') showToast('Erreur r\u00e9seau.', 'danger');
-  }
-}
+// v2.6.0 : caseAddOperatorsOnShift() retiree avec son bouton « + Travaillant ce
+// jour ». L'endpoint GET /api/maintenance/operators/on-shift est conserve tel
+// quel : il est isole et resservira si le croise avec le planning RH revient.
 
 // v2.5.28 : quick-select "Tous" pour la modale template editor (operateurs par defaut).
 function tmplAddAllDefaultOps(){
@@ -9162,7 +9361,10 @@ function setPlanSubtab(name){
       loadTemplates(true).then(renderTemplateManagePanel).catch(function(){});
     }
   }
-  else if(name === 'calendrier'){ try { renderCal(); } catch(e){} }
+  else if(name === 'calendrier'){
+    // v2.6.0 : rendu immediat depuis le cache, refetch seulement si besoin.
+    try { renderCalFromCacheThenRefresh(); } catch(e){ try{ renderCal(); }catch(_){} }
+  }
 }
 async function loadPlanningHistorique(){
   const listEl = document.getElementById('plan-hist-list');
@@ -12274,8 +12476,17 @@ async function _doDeleteTemplate(templateId, btn){
 
 function onTmplRecurToggle(el){
   const wrap = document.getElementById('tmpl-ed-recur-fields');
-  if(!wrap) return;
-  wrap.classList.toggle('open', !!el.checked);
+  if(wrap) wrap.classList.toggle('open', !!el.checked);
+  _syncTmplDefaultOpsVisibility(!!el.checked);
+}
+
+// v2.6.0 : la section « Operateurs par defaut » suit l'interrupteur de
+// recurrence. On masque seulement l'affichage : _TMPL_DEFAULT_OPS et la valeur
+// en base sont conservees, donc rallumer la recurrence retrouve la liste
+// telle quelle sans ressaisie.
+function _syncTmplDefaultOpsVisibility(active){
+  const sec = document.getElementById('tmpl-ed-default-op-section');
+  if(sec) sec.style.display = active ? '' : 'none';
 }
 
 function onTmplRecurTypeChange(){
@@ -12290,6 +12501,8 @@ function _setRecurInForm(t){
   if(cb) cb.checked = !!t.recurrence_active;
   const wrap = document.getElementById('tmpl-ed-recur-fields');
   if(wrap) wrap.classList.toggle('open', !!t.recurrence_active);
+  // v2.6.0 : idem a l'ouverture du modal (creation ou edition).
+  _syncTmplDefaultOpsVisibility(!!t.recurrence_active);
   const typeEl = document.getElementById('tmpl-ed-recur-type');
   if(typeEl) typeEl.value = t.recurrence_type || 'weekly';
   const dowEl = document.getElementById('tmpl-ed-recur-dow');
@@ -12387,14 +12600,11 @@ function renderTemplateManagePanel(){
           ? '<span class="tmpl-manage-badge recur-on" title="' + escAttr(recurLbl) + '">\ud83d\udd01 ' + escHtml(recurLbl) + '</span>'
           : '<span class="tmpl-manage-badge recur-off" title="' + escAttr(recurLbl) + '">R\u00e9currence \u00e9teinte : ' + escHtml(recurLbl) + '</span>')
       : '<span class="tmpl-manage-badge recur-off">Non r\u00e9current</span>';
-    const nextOcc = t.recurrence_active && t.next_occurrence
-      ? '<span class="tmpl-manage-badge">Prochaine : ' + _fmtDateFR(t.next_occurrence) + '</span>'
-      : '';
+    // v2.6.0 : badges « Prochaine : ... » et « Dernier : ... » retires -- la regle
+    // de recurrence juste a cote donne deja la cadence, et la date de derniere
+    // utilisation n'aide a aucune decision. La ligne etait sursaturee.
     const stats = '<span class="tmpl-manage-badge stat">' + (t.events_count || 0) + ' cr\u00e9neau' +
                   ((t.events_count || 0) > 1 ? 'x' : '') + ' cr\u00e9\u00e9s</span>';
-    const lastUsed = t.last_event_date
-      ? '<span class="tmpl-manage-badge">Dernier : ' + _fmtDateFR(t.last_event_date) + '</span>'
-      : '';
     const opsBadge = '<span class="tmpl-manage-badge">' + (t.ops_count || 0) + ' op.</span>';
     // v2.5.31 : point d'entree decouvrable vers les occurrences supprimees.
     // Cliquer ouvre l'edition du modele directement sur la section depliee.
@@ -12418,7 +12628,7 @@ function renderTemplateManagePanel(){
       '<div class="tmpl-manage-info">' +
         '<div class="tmpl-manage-name">' + escHtml(t.name) + '</div>' +
         (t.description ? '<div class="tmpl-manage-desc">' + escHtml(t.description) + '</div>' : '') +
-        '<div class="tmpl-manage-meta">' + opsBadge + defaultOpsBadge + recurBadge + nextOcc + stats + lastUsed + delBadge + '</div>' +
+        '<div class="tmpl-manage-meta">' + opsBadge + defaultOpsBadge + recurBadge + stats + delBadge + '</div>' +
       '</div>' +
       '<div class="tmpl-manage-actions">' +
         '<button type="button" onclick="openTemplateEditor(' + escAttr(t.id) + ')">\u00c9diter</button>' +

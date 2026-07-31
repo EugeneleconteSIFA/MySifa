@@ -17,6 +17,7 @@ Contrôle d'accès :
   - Créer un event `source=non_planifie` avec lui-même comme seul opérateur.
 """
 import hashlib
+import time
 from datetime import datetime, date, timedelta
 from typing import Any, Optional, List
 from zoneinfo import ZoneInfo
@@ -1374,15 +1375,53 @@ def _generate_events_for_template(conn, template_id: int, until_date) -> int:
     return count
 
 
-def _ensure_recurring_events_generated(conn, horizon_days: int = 90) -> int:
+# v2.6.0 : garde-fou de frequence pour la generation lazy des recurrences.
+# Avant, _ensure_recurring_events_generated tournait a CHAQUE GET /events --
+# y compris le polling du planning operateur -- et lance une transaction en
+# ecriture (INSERT des occurrences) meme quand tout est deja a jour. C'est ce qui
+# rendait la premiere requete lente : cote client le calendrier restait vide
+# plusieurs secondes, indiscernable d'un planning reellement vide.
+# La generation est idempotente, donc l'espacer ne change aucun resultat : une
+# occurrence manquante est simplement creee au prochain passage (au plus tard
+# _RECUR_GEN_MIN_INTERVAL_S plus tard), et toute action explicite
+# (generate-now, PATCH template, toggle recurrence) l'invalide immediatement.
+_RECUR_GEN_MIN_INTERVAL_S = 120.0
+# -inf et non 0.0 : time.monotonic() compte depuis le boot de la machine sur
+# Linux. Un process demarre moins de 120 s apres le boot aurait vu
+# (monotonic - 0.0) < interval et saute sa toute premiere generation.
+_recur_gen_last_run: float = float("-inf")
+
+
+def _invalidate_recur_gen_throttle() -> None:
+    """Force le prochain GET /events a relancer la generation.
+    Appele des qu'une action admin peut avoir cree de nouvelles occurrences."""
+    global _recur_gen_last_run
+    _recur_gen_last_run = 0.0
+
+
+def _ensure_recurring_events_generated(conn, horizon_days: int = 90,
+                                       force: bool = False) -> int:
     """Pour chaque template recurrent actif, genere les occurrences futures
     dans une fenetre glissante de horizon_days (defaut 90 = 3 mois).
-    Idempotent. Appele en lazy trigger au load des events."""
+    Idempotent. Appele en lazy trigger au load des events.
+
+    v2.6.0 : throttle process (cf. _RECUR_GEN_MIN_INTERVAL_S). `force=True`
+    contourne le throttle pour les appels explicites."""
+    global _recur_gen_last_run
+    now = time.monotonic()
+    if not force and (now - _recur_gen_last_run) < _RECUR_GEN_MIN_INTERVAL_S:
+        return 0
+    # Marque AVANT le travail : deux requetes concurrentes ne doivent pas lancer
+    # deux generations en parallele (contention d'ecriture SQLite).
+    _recur_gen_last_run = now
     until = date.today() + timedelta(days=horizon_days)
     total = 0
-    tmpl_ids = [r["id"] for r in conn.execute(
-        "SELECT id FROM maintenance_templates WHERE recurrence_active=1 AND recurrence_type IS NOT NULL"
-    ).fetchall()]
+    try:
+        tmpl_ids = [r["id"] for r in conn.execute(
+            "SELECT id FROM maintenance_templates WHERE recurrence_active=1 AND recurrence_type IS NOT NULL"
+        ).fetchall()]
+    except Exception:
+        return 0  # ne jamais faire echouer la lecture des events a cause de ca
     for tid in tmpl_ids:
         try:
             total += _generate_events_for_template(conn, tid, until)
@@ -1392,14 +1431,22 @@ def _ensure_recurring_events_generated(conn, horizon_days: int = 90) -> int:
 
 
 def _resync_future_events_from_template(conn, template_id: int) -> int:
-    """Écrase les ops ET les opérateurs des créneaux futurs (date_prevue >= aujourd'hui)
-    liés au template. Retourne le nombre d'events resynchronisés.
-    Préserve : date, horaires, source. Écrase : liste des ops + opérateurs assignés
-    (v2.5.25 : les opérateurs sont resync aussi, choix produit -- si l'admin modifie
-    les opérateurs par défaut du template, ils s'appliquent à tous les créneaux futurs)."""
+    """Écrase les ops des créneaux futurs (date_prevue >= aujourd'hui) liés au
+    template. Retourne le nombre d'events resynchronisés.
+    Préserve : date, horaires, source. Écrase : liste des ops, et les opérateurs
+    assignés UNIQUEMENT si le template est récurrent.
+
+    v2.5.25 : les opérateurs étaient resync dans tous les cas.
+    v2.6.0 : restreint aux templates récurrents. La liste « opérateurs par
+    défaut » n'est consommée que par _generate_events_for_template(), donc elle
+    n'est proposée dans l'UI que quand la récurrence est active. Sur un template
+    NON récurrent elle est vide par construction : la resync inconditionnelle
+    supprimait donc les opérateurs assignés à la main sur les créneaux futurs,
+    silencieusement, à chaque simple enregistrement du modèle."""
     tmpl = _load_template_full(conn, template_id)
     if not tmpl:
         return 0
+    sync_operators = bool(tmpl.get("recurrence_active"))
     today = datetime.now(_PARIS).strftime("%Y-%m-%d")
     events = conn.execute(
         "SELECT id FROM maintenance_events WHERE template_id = ? AND date_prevue >= ? AND deleted_at IS NULL",
@@ -1417,13 +1464,15 @@ def _resync_future_events_from_template(conn, template_id: int) -> int:
                 (eid, op["code"], op.get("machines_csv"), now),
             )
             _bump_libre_usage(conn, op["code"])
-        # v2.5.25 : ecrase les operateurs assignes par la liste default du template.
-        conn.execute("DELETE FROM maintenance_event_operators WHERE event_id = ?", (eid,))
-        for uid in default_uids:
-            conn.execute(
-                "INSERT OR IGNORE INTO maintenance_event_operators (event_id, operator_id) VALUES (?, ?)",
-                (eid, uid),
-            )
+        # v2.5.25 / v2.6.0 : ecrase les operateurs par la liste default du
+        # template -- uniquement si celui-ci est recurrent (cf. docstring).
+        if sync_operators:
+            conn.execute("DELETE FROM maintenance_event_operators WHERE event_id = ?", (eid,))
+            for uid in default_uids:
+                conn.execute(
+                    "INSERT OR IGNORE INTO maintenance_event_operators (event_id, operator_id) VALUES (?, ?)",
+                    (eid, uid),
+                )
         _recompute_event_machine(conn, eid)
     return len(events)
 
@@ -1661,6 +1710,9 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
             resynced = _resync_future_events_from_template(conn, template_id)
         conn.commit()
         tmpl = _load_template_full(conn, template_id)
+    # v2.6.0 : la regle de recurrence a peut-etre change -> le prochain GET
+    # /events doit regenerer sans attendre la fin du throttle.
+    _invalidate_recur_gen_throttle()
     return {"template": tmpl, "resynced_events": resynced, "deleted_future_events": deleted_future}
 
 
@@ -1723,6 +1775,7 @@ def template_generate_now(template_id: int, request: Request):
                                 detail="Ce modèle n'a pas de récurrence active.")
         until = date.today() + timedelta(days=90)
         n = _generate_events_for_template(conn, template_id, until)
+        _invalidate_recur_gen_throttle()
     return {"created": n}
 
 

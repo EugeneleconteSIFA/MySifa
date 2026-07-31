@@ -7518,6 +7518,11 @@ function matiereRefEditPayload(item, fields) {
   if (mpIsGlassineCategory(item) && fields.couleurInp) {
     payload.couleur = fields.couleurInp.value.trim() || des;
   }
+  if (fields.sousCategorieSel) {
+    // Toujours envoyees, meme vides, pour autoriser l'effacement.
+    payload.sous_categorie = fields.sousCategorieSel.getValue();
+    payload.sous_categorie_en = fields.sousCategorieSel.getValueEn();
+  }
   if (fields.hasAbbrev && fields.abbrevInp) {
     // Toujours envoyée, même vide, pour autoriser l'effacement.
     payload.abbreviation = fields.abbrevInp.value.trim();
@@ -7619,6 +7624,8 @@ function appendMatiereRefEditFields(parent, item) {
   // « 105 x 148 mm Th Top-Coated Perm, 1 Color, M40 mm ». Elle n'est proposée que
   // sur les catégories qui figurent dans cette référence. Laissée vide, MyAO
   // déduit une abréviation de la description — utilisable, mais approximative.
+  // Sous-categorie : toutes les categories, contrairement a la sous-section.
+  const sousCategorieSel = buildMpSousCategorieSelector(item.sous_categorie || '', item.sous_categorie_en || '', item.categorie);
   const abbrevCat = mpCategorieKey(item.categorie);
   const hasAbbrev = abbrevCat === 'frontal' || abbrevCat === 'adhesif';
   const abbrevInp = el('input', { attrs: { type: 'text', maxlength: '40',
@@ -7916,6 +7923,7 @@ function appendMatiereRefEditFields(parent, item) {
       ),
       el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
       el('div', { cls: 'mp-field' }, el('label', null, 'Description'), desInp),
+      sousCategorieSel.el,
       abbrevWrap,
       couleurWrap,
       sousSectionWrap,
@@ -7928,7 +7936,7 @@ function appendMatiereRefEditFields(parent, item) {
       intervalleWrap,
     ),
   );
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp, cppInp, kgcInp, isAdhesif, abbrevInp, hasAbbrev };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp, cppInp, kgcInp, isAdhesif, abbrevInp, hasAbbrev, sousCategorieSel };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -8855,6 +8863,22 @@ function buildMatieresAdminRow(item) {
   const actif = item.actif !== 0;
   row.appendChild(el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
     dashMpCatBadge(item.categorie),
+    // Sous-categorie affichee entre la categorie et la reference : c'est sa
+    // place dans la hierarchie, et ca rend visible d'un coup d'oeil les matieres
+    // qui n'en ont pas encore (elles n'alimenteront pas la reference MyAO).
+    item.sous_categorie
+      ? el('span', {
+          attrs: { title: item.sous_categorie_en
+            ? 'Reference produit MyAO : ' + item.sous_categorie_en
+            : 'Traduction anglaise a completer — la reference produit MyAO reprendra le libelle francais.' },
+          style: 'display:inline-block;padding:2px 8px;border-radius:6px;background:var(--bg);'
+            + 'border:1px solid ' + (item.sous_categorie_en ? 'var(--border)' : 'var(--warn)')
+            + ';color:var(--text2);font-size:11px;font-weight:600;cursor:help',
+        }, item.sous_categorie)
+      : el('span', {
+          attrs: { title: 'Sans sous-categorie, la reference produit MyAO est deduite de la description.' },
+          style: 'display:inline-block;padding:2px 8px;border-radius:6px;background:rgba(251,191,36,.15);color:var(--warn);font-size:11px;font-weight:600;cursor:help',
+        }, 'sans sous-categorie'),
     el('strong', null, item.reference || ''),
     el('span', { style: { color: 'var(--text2)', fontSize: '13px' } }, item.designation || ''),
     mpIsGlassineCategory(item) && item.couleur
@@ -8940,6 +8964,136 @@ async function toggleMatieresActif(item) {
   } catch (e) {
     showToast(e.message, 'error');
   }
+}
+
+
+// ── Sous-categorie thematique ────────────────────────────────────────────────
+// Niveau de regroupement entre la categorie et la reference : « Vellum »,
+// « Thermal Top », « Removable »… C'est ce libelle que MyAO reprend dans la
+// reference produit envoyee aux fournisseurs.
+//
+// A ne pas confondre avec la sous-section, juste au-dessus : celle-ci pilote les
+// pastilles de navigation de MyStock et ne concerne que frontal et autre. La
+// sous-categorie existe sur TOUTES les categories et ne change rien a la
+// navigation.
+//
+// La liste des valeurs proposees est derivee des matieres deja chargees plutot
+// que d'un appel API : elle reste juste apres chaque enregistrement, sans
+// invalidation de cache a gerer.
+// Les valeurs proposees sont des PAIRES (francais, anglais) relevees sur les
+// matieres deja enregistrees. Choisir une paire ecrit les deux libelles d'un
+// coup : c'est ce qui empeche « Enlevable » de se retrouver traduit « Removable »
+// sur une matiere et « Remov » sur une autre, ce qui produirait deux references
+// produit differentes pour la meme famille.
+function mpSousCategoriePairsForCat(cat) {
+  const key = mpCategorieKey(cat);
+  const source = (S.matieresAdminList && S.matieresAdminList.length)
+    ? S.matieresAdminList
+    : (S.matieres || []);
+  const vues = new Map();
+  (source || []).forEach(m => {
+    if (mpCategorieKey(m.categorie) !== key) return;
+    const fr = (m.sous_categorie || '').trim();
+    if (!fr) return;
+    const en = (m.sous_categorie_en || '').trim();
+    const cle = fr.toLowerCase() + '|' + en.toLowerCase();
+    if (!vues.has(cle)) vues.set(cle, { fr: fr, en: en });
+  });
+  return Array.from(vues.values()).sort((a, b) => a.fr.localeCompare(b.fr, 'fr'));
+}
+
+function mpPairLabel(p) {
+  // « Velin \u2192 Vellum » : on montre la traduction, c'est elle qui partira chez le
+  // fournisseur. Sans anglais, on le signale plutot que de laisser croire a un
+  // libelle identique dans les deux langues.
+  if (!p.en) return p.fr + '  (anglais a completer)';
+  if (p.en.toLowerCase() === p.fr.toLowerCase()) return p.fr;
+  return p.fr + '  \u2192  ' + p.en;
+}
+
+function buildMpSousCategorieSelector(initialFr, initialEn, categorie) {
+  const wrap = el('div', { cls: 'mp-field' });
+  const sel = el('select');
+  const frInp = el('input', { attrs: { type: 'text', placeholder: 'Francais — ex. Velin, Enlevable' } });
+  const enInp = el('input', { attrs: { type: 'text', placeholder: 'Anglais — ex. Vellum, Removable' } });
+  // display bascule entre 'none' et 'grid' a l'ouverture du mode creation.
+  const newWrap = el('div', {
+    style: { display: 'none', marginTop: '6px',
+             gridTemplateColumns: '1fr 1fr', gap: '6px' },
+  }, frInp, enInp);
+  let currentCat = mpCategorieKey(categorie || 'autre');
+  let pairs = [];
+
+  function buildOptions(curFr, curEn) {
+    sel.innerHTML = '';
+    sel.appendChild(el('option', { value: '' }, '— Aucune —'));
+    pairs = mpSousCategoriePairsForCat(currentCat);
+    // Paire deja enregistree mais absente de la liste (categorie changee, ou
+    // seule de son espece) : on l'ajoute pour ne pas la perdre silencieusement.
+    const fr = (curFr || '').trim();
+    if (fr && !pairs.some(p => p.fr.toLowerCase() === fr.toLowerCase()
+                              && (p.en || '').toLowerCase() === (curEn || '').toLowerCase())) {
+      pairs.unshift({ fr: fr, en: (curEn || '').trim() });
+    }
+    pairs.forEach((p, i) => {
+      const selected = (p.fr.toLowerCase() === fr.toLowerCase()
+                        && (p.en || '').toLowerCase() === (curEn || '').trim().toLowerCase());
+      sel.appendChild(el('option', { value: String(i), selected: selected ? true : null },
+                         mpPairLabel(p)));
+    });
+    sel.appendChild(el('option', { value: '__new__' }, '+ Creer une nouvelle sous-categorie…'));
+  }
+  buildOptions(initialFr || '', initialEn || '');
+
+  sel.addEventListener('change', () => {
+    if (sel.value === '__new__') {
+      newWrap.style.display = 'grid';
+      requestAnimationFrame(() => frInp.focus());
+    } else {
+      newWrap.style.display = 'none';
+      frInp.value = '';
+      enInp.value = '';
+    }
+  });
+
+  wrap.append(
+    el('label', null, 'Sous-categorie'),
+    sel,
+    el('div', { cls: 'mp-hint' },
+       'Regroupement thematique. Le francais s\'affiche ici, l\'anglais part dans '
+       + 'la reference produit envoyee aux fournisseurs.'),
+    newWrap,
+  );
+
+  function lire() {
+    if (sel.value === '__new__') {
+      const fr = (frInp.value || '').trim();
+      // Sans anglais saisi, on reprend le francais : beaucoup de familles
+      // s'ecrivent pareil (« Glassine », « Intercalaire ») et exiger une saisie
+      // en double serait une corvee pour rien.
+      return { fr: fr, en: (enInp.value || '').trim() || fr };
+    }
+    const p = pairs[parseInt(sel.value, 10)];
+    return p ? { fr: p.fr, en: p.en || p.fr } : { fr: '', en: '' };
+  }
+
+  return {
+    el: wrap,
+    getValue() { return lire().fr; },
+    getValueEn() { return lire().en; },
+    refresh(curFr, curEn) {
+      buildOptions(curFr || '', curEn || '');
+      newWrap.style.display = 'none';
+      frInp.value = '';
+      enInp.value = '';
+    },
+    setCategorie(cat) {
+      const key = mpCategorieKey(cat || 'autre');
+      if (key === currentCat) return;
+      currentCat = key;
+      buildOptions('', '');
+    },
+  };
 }
 
 function buildMpSousSectionSelector(initialValue, categorie) {
@@ -9091,6 +9245,8 @@ function buildMatieresAdminAddForm() {
   const seed = S.matieresAdminAddSeed || null;
   const initialCat = (seed && seed.categorie) || catSel.value || 'mandrin';
   const sousSectionSel = buildMpSousSectionSelector((seed && seed.sous_section) || '', initialCat);
+  // Sous-categorie : presente sur toutes les categories, donc jamais masquee.
+  const sousCategorieSel = buildMpSousCategorieSelector((seed && seed.sous_categorie) || '', (seed && seed.sous_categorie_en) || '', initialCat);
   const sousSectionWrap = el('div', { style: { display: 'none' } }, sousSectionSel.el);
   function syncAdminAddFields() {
     const cat = catSel.value;
@@ -9116,6 +9272,9 @@ function buildMatieresAdminAddForm() {
     hintEl.textContent = mpAdminHint(cat);
     // Bascule la liste de sous-sections vers la bonne catégorie (jamais de mélange)
     if (hasSousSection && sousSectionSel) sousSectionSel.setCategorie(cat);
+    // Idem pour la sous-catégorie : les familles d'un frontal n'ont rien à voir
+    // avec celles d'un adhésif.
+    if (sousCategorieSel) sousCategorieSel.setCategorie(cat);
   }
   catSel.addEventListener('change', syncAdminAddFields);
   pppWrap.append(pppLbl, pppInp);
@@ -9151,6 +9310,7 @@ function buildMatieresAdminAddForm() {
     el('div', { cls: 'mp-field' }, el('label', null, 'Catégorie'), catSel),
     el('div', { cls: 'mp-field' }, el('label', null, 'Référence'), refInp),
     el('div', { cls: 'mp-field' }, el('label', null, 'Désignation'), desInp),
+    sousCategorieSel.el,
     couleurWrap,
     pppWrap,
     uppWrap,
@@ -9214,6 +9374,11 @@ function buildMatieresAdminAddForm() {
           if (mpCategorieHasSousSection(cat)) {
             const ss = sousSectionSel.getValue();
             if (ss) payload.sous_section = ss;
+          }
+          const sc = sousCategorieSel.getValue();
+          if (sc) {
+            payload.sous_categorie = sc;
+            payload.sous_categorie_en = sousCategorieSel.getValueEn();
           }
           const created = await api('/api/stock/matieres', {
             method: 'POST',

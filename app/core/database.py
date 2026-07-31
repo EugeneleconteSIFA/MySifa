@@ -7931,14 +7931,118 @@ Ressources :
         " ON ao_lignes_series(ligne_id, position)"
     )
 
-    # matieres_premieres.abbreviation : forme courte d'une matière, destinée à la
-    # composition automatique des références produit MyAO
-    # (« 105 x 148 mm Th Top-Coated Perm, 1 Color, M40 mm »). Éditable dans
-    # MyStock ; quand elle est vide, app/services/ao_ref_produit.py retombe sur
-    # une abréviation déduite de la désignation.
+    # ── MyAO : journal d'engagement fournisseur + canaux d'envoi ────────────
+    # Même choix délibéré que le bloc AO ci-dessus : garde-fou sur l'existence
+    # réelle (PRAGMA / CREATE IF NOT EXISTS) plutôt qu'un numéro dans
+    # schema_migrations — insensible aux collisions de numéro entre branches.
+    #
+    # ao_evenements : une ligne par signal laissé par un fournisseur sur un AO
+    #   (envoi, ouverture d'email, consultation du portail, dépôt d'offre, et
+    #   plus tard les statuts WhatsApp remontés par le webhook Meta). Alimente
+    #   la timeline unique du panneau fournisseur. Voir app/services/
+    #   ao_evenements.py pour le vocabulaire des types et des canaux.
+    #
+    #   `fiable` sépare les signaux exploitables des faux positifs CONNUS —
+    #   préchargement Apple Mail Privacy Protection, passerelles antispam qui
+    #   chargent les images avant que l'humain n'ouvre quoi que ce soit. On
+    #   enregistre TOUT (la trace reste consultable) mais seuls les événements
+    #   fiables alimentent les compteurs affichés. Sans cette colonne, « email
+    #   ouvert » se déclencherait à la seconde de l'envoi pour la moitié des
+    #   destinataires, et l'indicateur ne voudrait plus rien dire.
+    #
+    #   Pas d'adresse IP stockée, volontairement : le user_agent suffit à
+    #   identifier les robots, et une IP de fournisseur serait une donnée
+    #   personnelle conservée sans nécessité.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS ao_evenements (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            ao_fournisseur_id INTEGER NOT NULL REFERENCES ao_fournisseurs(id) ON DELETE CASCADE,
+            ao_id             INTEGER REFERENCES ao_demandes(id) ON DELETE CASCADE,
+            canal             TEXT NOT NULL,
+            type_evenement    TEXT NOT NULL,
+            date              TEXT NOT NULL,
+            fiable            INTEGER NOT NULL DEFAULT 1,
+            motif             TEXT,
+            user_agent        TEXT,
+            meta              TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ao_evenements_fourni"
+        " ON ao_evenements(ao_fournisseur_id, date DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ao_evenements_ao"
+        " ON ao_evenements(ao_id, type_evenement)"
+    )
+
+    # token_pixel : identifiant du pixel de suivi d'ouverture, DISTINCT du token
+    #   portail. Le pixel transite par les proxys d'images (Gmail, Outlook), qui
+    #   le mettent en cache et le journalisent : y faire passer le token d'accès
+    #   au portail reviendrait à le diffuser hors du destinataire.
+    # telephone_whatsapp / canaux : socle du second canal d'envoi. Renseignés
+    #   dès maintenant pour que l'ajout de WhatsApp ne redemande pas de
+    #   migration sur une table déjà en production.
+    _ao_fournis_cols = {
+        r["name"] for r in conn.execute("PRAGMA table_info(ao_fournisseurs)").fetchall()
+    }
+    if "token_pixel" not in _ao_fournis_cols:
+        conn.execute("ALTER TABLE ao_fournisseurs ADD COLUMN token_pixel TEXT")
+        # Backfill : les fournisseurs déjà invités gardent un suivi possible sur
+        # les relances, sans quoi seuls les nouveaux seraient traçables.
+        import uuid as _uuid_px
+
+        for _f in conn.execute(
+            "SELECT id FROM ao_fournisseurs WHERE token_pixel IS NULL"
+        ).fetchall():
+            conn.execute(
+                "UPDATE ao_fournisseurs SET token_pixel=? WHERE id=?",
+                (str(_uuid_px.uuid4()), int(_f["id"])),
+            )
+    if "telephone_whatsapp" not in _ao_fournis_cols:
+        conn.execute("ALTER TABLE ao_fournisseurs ADD COLUMN telephone_whatsapp TEXT")
+    if "canaux" not in _ao_fournis_cols:
+        conn.execute(
+            "ALTER TABLE ao_fournisseurs ADD COLUMN canaux TEXT NOT NULL DEFAULT 'email'"
+        )
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_ao_fournisseurs_token_pixel"
+        " ON ao_fournisseurs(token_pixel) WHERE token_pixel IS NOT NULL"
+    )
+
+    # ── Nommage des matières pour les références produit MyAO ────────────────
+    # Deux colonnes, dans cet ordre de priorité (cf. ao_ref_produit.matiere_abbrev) :
+    #
+    # sous_categorie / sous_categorie_en : niveau de regroupement thématique entre
+    #   `categorie` et `reference`, en deux langues. Le français s'affiche dans
+    #   MyStock (« Velin », « Enlevable », « Thermique Pro »), l'anglais alimente
+    #   la référence produit envoyée aux fournisseurs étrangers (« Vellum »,
+    #   « Removable », « Thermal Top »).
+    #
+    #   Les deux sont stockés, et non l'un déduit de l'autre, parce que la
+    #   correspondance n'est pas bijective : « Velin » et « Velin Fluo » se
+    #   distinguent en français et se rejoignent tous deux sur « Vellum ». Une
+    #   table de traduction perdrait cette nuance.
+    #
+    #   Vocabulaire contrôlé et partagé : deux matières de la même famille
+    #   composent la même référence produit. Sélectionnable par paire ou créable
+    #   à la volée dans MyStock, sur toutes les catégories.
+    #
+    #   NE PAS CONFONDRE avec `sous_section`, qui existe déjà : celle-ci pilote
+    #   les pastilles de navigation de MyStock (une pastille par couple
+    #   categorie+sous_section, cf. app/web/stock_page.py) et reste cantonnée aux
+    #   catégories `frontal` et `autre`. Les deux axes sont volontairement
+    #   séparés : on peut vouloir naviguer autrement qu'on ne nomme.
+    #
+    # abbreviation : exception par matière. Ne sert qu'à forcer un libellé
+    #   différent de la sous-catégorie sur une matière précise. Normalement vide.
     _mp_cols = {r["name"] for r in conn.execute("PRAGMA table_info(matieres_premieres)").fetchall()}
     if "abbreviation" not in _mp_cols:
         conn.execute("ALTER TABLE matieres_premieres ADD COLUMN abbreviation TEXT")
+    if "sous_categorie" not in _mp_cols:
+        conn.execute("ALTER TABLE matieres_premieres ADD COLUMN sous_categorie TEXT")
+    if "sous_categorie_en" not in _mp_cols:
+        conn.execute("ALTER TABLE matieres_premieres ADD COLUMN sous_categorie_en TEXT")
 
     # ── Historique des promotions v1 → v2 ───────────────────────────────────
     # Trace réelle de chaque déploiement en production, écrite par
