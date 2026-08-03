@@ -133,23 +133,69 @@ class TestComputeMaterialPricePerM2(unittest.TestCase):
         self.assertEqual(res.breakdown.tax_uplift, (pre * D("0.065")).quantize(D("0.0001")))
         self.assertEqual(_breakdown_sum(res), res.price_eur_per_m2)
 
-    def test_suggest_transport_from_container(self):
-        from app.services.pricing.engine import suggest_transport_unit_price
-
+    def test_transport_en_pourcentage(self):
+        """Mode PCT : transport = prix d'achat x %."""
         mat = PricingMaterial(
-            id=23,
-            name="Import USD/kg",
-            unit_price=D("3"),
+            id=24,
+            name="Import au %",
+            unit_price=D("4.0183"),
+            weight_per_m2=D("0"),
+            price_currency="EUR",
+            price_basis="PER_M2",
+            is_imported=True,
+            transport_mode="PCT",
+            transport_pct=D("6"),
+            transport_unit_price=D("999"),  # ignoré en mode PCT
+        )
+        res = compute_material_price_per_m2(mat, _settings())
+        expected_transport = (D("4.0183") * D("6") / D("100")).quantize(D("0.0001"))
+        self.assertEqual(res.breakdown.transport_src, expected_transport)
+        self.assertEqual(res.breakdown.transport_pct_effective, D("6.0000"))
+        self.assertEqual(
+            res.price_eur_per_m2, (D("4.0183") + expected_transport).quantize(D("0.0001"))
+        )
+        self.assertEqual(_breakdown_sum(res), res.price_eur_per_m2)
+
+    def test_transport_pct_sur_achat_usd_au_kilo(self):
+        """Mode PCT en USD/kg : le % porte sur le prix au kilo, puis poids et change."""
+        mat = PricingMaterial(
+            id=25,
+            name="USD au kilo",
+            unit_price=D("2"),
             weight_per_m2=D("0.05"),
             price_currency="USD",
             price_basis="PER_KG",
             is_imported=True,
-            container_cost_usd=D("4000"),
-            container_kg=D("26000"),
+            transport_mode="PCT",
+            transport_pct=D("10"),
         )
         s = _settings()
-        got = suggest_transport_unit_price(mat, s)
-        self.assertEqual(got, (D("4000") / D("26000")).quantize(D("0.0001")))
+        res = compute_material_price_per_m2(mat, s)
+        self.assertEqual(res.breakdown.transport_src, D("0.2000"))
+        expected = (D("2") + D("0.2")) * D("0.05") * s.eur_usd_rate
+        self.assertEqual(res.price_eur_per_m2, expected.quantize(D("0.0001")))
+        # transport ramené en euros au m² : 0,2 x 0,05 x 0,85
+        self.assertEqual(
+            res.breakdown.transport_eur_m2,
+            (D("0.2") * D("0.05") * s.eur_usd_rate).quantize(D("0.0001")),
+        )
+        self.assertEqual(res.breakdown.transport_pct_effective, D("10.0000"))
+
+    def test_transport_pct_ignore_si_non_importee(self):
+        mat = PricingMaterial(
+            id=26,
+            name="Locale",
+            unit_price=D("2"),
+            weight_per_m2=D("0.05"),
+            price_currency="EUR",
+            price_basis="PER_KG",
+            is_imported=False,
+            transport_mode="PCT",
+            transport_pct=D("10"),
+        )
+        res = compute_material_price_per_m2(mat, _settings())
+        self.assertEqual(res.breakdown.transport_src, D("0"))
+        self.assertEqual(res.price_eur_per_m2, D("0.1000"))
 
     def test_usd_per_m2_rare(self):
         mat = PricingMaterial(

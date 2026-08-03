@@ -21,6 +21,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 MaterialCategoryCode = Literal["FRONTAL", "ADHESIF", "SILICONE", "GLASSINE", "AUTRE"]
 PriceCurrency = Literal["EUR", "USD"]
 PriceBasis = Literal["PER_KG", "PER_M2"]
+# Transport : montant dans la devise/base d'achat, ou % du prix d'achat.
+TransportMode = Literal["AMOUNT", "PCT"]
 
 # ─── Settings (singleton key/value) ────────────────────────────────────────────
 
@@ -149,7 +151,9 @@ class McMaterialBase(BaseModel):
     price_basis: PriceBasis = "PER_KG"
     tax_incidence: Decimal = Field(default=Decimal("1"), decimal_places=4, max_digits=12)
     is_imported: bool = False
+    transport_mode: TransportMode = "AMOUNT"
     transport_unit_price: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
+    transport_pct: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
     container_kg: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     container_cost_usd: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     is_active: bool = True
@@ -171,7 +175,9 @@ class McMaterialUpdate(BaseModel):
     price_basis: Optional[PriceBasis] = None
     tax_incidence: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     is_imported: Optional[bool] = None
+    transport_mode: Optional[TransportMode] = None
     transport_unit_price: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
+    transport_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     container_kg: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     container_cost_usd: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     is_active: Optional[bool] = None

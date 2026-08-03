@@ -950,10 +950,52 @@ function darkenHex(hex,f){
   const b=Math.min(255,Math.max(0,Math.round(parseInt(m[1].slice(4,6),16)*k)));
   return '#'+[r,g,b].map(x=>pad2(x.toString(16))).join('');
 }
-function calSlotStyle(calId){
-  const fill=calColor(calId);
+function slotStyleFromColor(fill){
   if(String(fill).indexOf('var(')===0)return 'background:'+fill+';border-color:var(--border)';
   return 'background:'+fill+';border-color:'+darkenHex(fill);
+}
+function calSlotStyle(calId){
+  return slotStyleFromColor(calColor(calId));
+}
+/* Une couleur stable par utilisateur : l'angle d'or sur l'id garantit des
+   teintes bien réparties, identiques sur tous les postes, sans réglage. */
+const PERSON_HUE_STEP=137.508;
+const PERSON_SAT=68;
+const PERSON_LUM=62;
+function hslToHex(h,s,l){
+  s=s/100;l=l/100;
+  const k=n=>(n+h/30)%12;
+  const a=s*Math.min(l,1-l);
+  const f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
+  const to=x=>pad2(Math.round(255*x).toString(16));
+  return '#'+to(f(0))+to(f(8))+to(f(4));
+}
+function relLum(hex){
+  const v=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255)
+    .map(x=>x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4));
+  return 0.2126*v[0]+0.7152*v[1]+0.0722*v[2];
+}
+const SLOT_TEXT_LUM=relLum('#0a0e17');
+const SLOT_MIN_CONTRAST=4.6;
+/* Le libellé d'un créneau est écrit en #0a0e17 : on éclaircit la teinte
+   jusqu'à repasser au-dessus du seuil de contraste AA. */
+function personColor(userId){
+  const id=parseInt(userId,10);
+  if(!id)return calColor('perso');
+  const hue=(id*PERSON_HUE_STEP)%360;
+  let l=PERSON_LUM;
+  let hex=hslToHex(hue,PERSON_SAT,l);
+  while(l<86&&(relLum(hex)+0.05)/(SLOT_TEXT_LUM+0.05)<SLOT_MIN_CONTRAST){
+    l+=3;
+    hex=hslToHex(hue,PERSON_SAT,l);
+  }
+  return hex;
+}
+function evSlotStyle(ev){
+  if(ev&&ev.calendrier==='perso'&&ev.meta&&ev.meta.user_id){
+    return slotStyleFromColor(personColor(ev.meta.user_id));
+  }
+  return calSlotStyle(ev&&ev.calendrier);
 }
 
 function getPeriod(){
@@ -1738,7 +1780,7 @@ function renderAgenda(p){
         const time=evTimeLabelOnDay(ev,cur);
         html+='<div class="cal-agenda-ev-row">';
         if(time)html+='<span class="cal-agenda-time">'+esc(time)+'</span>';
-        html+='<div class="cal-pill" data-ev-id="'+esc(ev.id)+'" style="'+calSlotStyle(ev.calendrier)+'">'+esc(ev.titre)+'</div>';
+        html+='<div class="cal-pill" data-ev-id="'+esc(ev.id)+'" style="'+evSlotStyle(ev)+'">'+esc(ev.titre)+'</div>';
         html+='</div>';
       });
     }else{
@@ -1789,7 +1831,7 @@ function renderMonth(p){
         const cls='cal-pill'+(own?' cal-pill--own':'')+(isBusyPerso(ev)?' cal-pill--busy':'');
         html+='<div class="'+cls+'" data-ev-id="'+esc(ev.id)+'" '+
           (own?'title="Glisser pour changer de jour · double-clic pour modifier" ':'')+
-          'style="'+calSlotStyle(ev.calendrier)+'">'+esc(ev.titre)+
+          'style="'+evSlotStyle(ev)+'">'+esc(ev.titre)+
           (own?'<span class="cal-rs-x"></span>':'')+'</div>';
       });
       if(more)html+='<div class="cal-more">+'+more+'</div>';
@@ -1858,7 +1900,7 @@ function timedEvStyle(ev,top,h,col,total){
   const px=CAL_SLOT_PAD_X;
   const inset=px*2;
   return 'top:'+top+'px;height:'+h+'px;left:calc('+pctL+'% + '+px+'px);width:calc('+pctW+'% - '+inset+'px);'+
-    'z-index:'+(1+c)+';'+calSlotStyle(ev.calendrier);
+    'z-index:'+(1+c)+';'+evSlotStyle(ev);
 }
 
 function renderDayTimedHtml(dayTimed,day,range){
@@ -1902,7 +1944,7 @@ function renderWeekBars(days){
     const span=colEnd-colStart+1;
     const own=isOwnPerso(ev);
     const cls='cal-mbar'+(own?' cal-mbar--own':'')+(isBusyPerso(ev)?' cal-mbar--busy':'');
-    html+='<div class="'+cls+'" data-ev-id="'+esc(ev.id)+'" style="grid-column:'+colStart+' / span '+span+';grid-row:'+(ri+1)+';'+calSlotStyle(ev.calendrier)+'">'+esc(ev.titre)+
+    html+='<div class="'+cls+'" data-ev-id="'+esc(ev.id)+'" style="grid-column:'+colStart+' / span '+span+';grid-row:'+(ri+1)+';'+evSlotStyle(ev)+'">'+esc(ev.titre)+
       (own?'<span class="cal-rs-x"></span>':'')+'</div>';
   });
   html+='</div>';
@@ -1937,7 +1979,7 @@ function renderTimeGrid(p,colCount){
       const s=ymd(startOfDay(evStart(ev))),e=ymd(startOfDay(evEnd(ev)));
       return s<=dk&&e>=dk;
     }).forEach(ev=>{
-      html+='<div class="cal-allday-pill'+(isBusyPerso(ev)?' cal-allday-pill--busy':'')+'" data-ev-id="'+esc(ev.id)+'" style="'+calSlotStyle(ev.calendrier)+'">'+esc(ev.titre)+'</div>';
+      html+='<div class="cal-allday-pill'+(isBusyPerso(ev)?' cal-allday-pill--busy':'')+'" data-ev-id="'+esc(ev.id)+'" style="'+evSlotStyle(ev)+'">'+esc(ev.titre)+'</div>';
     });
   });
   html+='</div></div>';

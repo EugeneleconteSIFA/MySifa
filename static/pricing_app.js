@@ -607,9 +607,9 @@
       price_basis: "PER_KG",
       tax_incidence: "1",
       is_imported: false,
+      transport_mode: "AMOUNT",
       transport_unit_price: "0",
-      container_kg: "",
-      container_cost_usd: "",
+      transport_pct: "0",
     };
   }
 
@@ -632,10 +632,10 @@
       price_basis: m.price_basis,
       tax_incidence: String(m.tax_incidence),
       is_imported: !!m.is_imported,
+      transport_mode: m.transport_mode || "AMOUNT",
       transport_unit_price:
         m.transport_unit_price != null ? String(m.transport_unit_price) : "0",
-      container_kg: m.container_kg != null ? String(m.container_kg) : "",
-      container_cost_usd: m.container_cost_usd != null ? String(m.container_cost_usd) : "",
+      transport_pct: m.transport_pct != null ? String(m.transport_pct) : "0",
       _history: [],
     };
     try {
@@ -656,9 +656,9 @@
       price_basis: f.price_basis,
       tax_incidence: parseFloat(f.tax_incidence) || 1,
       is_imported: !!f.is_imported,
+      transport_mode: f.transport_mode || "AMOUNT",
       transport_unit_price: parseFloat(f.transport_unit_price) || 0,
-      container_kg: f.container_kg ? parseFloat(f.container_kg) : null,
-      container_cost_usd: f.container_cost_usd ? parseFloat(f.container_cost_usd) : null,
+      transport_pct: parseFloat(f.transport_pct) || 0,
     };
   }
 
@@ -670,10 +670,8 @@
         body: materialPreviewPayload(),
       });
       const el = document.getElementById("mat-recap");
-      if (el) {
-        el.innerHTML = recapTableHtml(S.matPreview);
-        bindRecapActions();
-      }
+      if (el) el.innerHTML = recapTableHtml(S.matPreview);
+      updateTransportEquivalent();
     } catch (e) {
       const el = document.getElementById("mat-recap");
       if (el) el.innerHTML = `<div class="empty" style="color:var(--danger)">${escHtml(e.message)}</div>`;
@@ -704,7 +702,9 @@
       {
         label: "Transport",
         value: hasTransport ? fmtCur(b.transport_src, cur) : "—",
-        unit: hasTransport ? unit : "",
+        unit: hasTransport
+          ? `${unit} · ${fmtPct(b.transport_pct_effective || 0)} du prix`
+          : "non imputé",
         muted: !hasTransport,
       },
       {
@@ -776,11 +776,8 @@
           : `Poids au m² non renseigné : le prix au kilo ne peut pas être ramené au m².`
       );
     }
-    if (computed.transport_suggested != null && S.canWrite) {
-      notes.push(
-        `Calculette conteneur : ${fmtCur(computed.transport_suggested, cur)} ${unit} ` +
-          `<button type="button" class="link-btn" id="btn-use-transport">utiliser cette valeur</button>`
-      );
+    if (hasTransport) {
+      notes.push(`Transport ramené en euros : ${fmtEurM2(b.transport_eur_m2 || 0)}.`);
     }
 
     return `
@@ -802,20 +799,21 @@
       </div>`;
   }
 
-  function bindRecapActions() {
-    const btn = document.getElementById("btn-use-transport");
-    if (!btn) return;
-    btn.onclick = () => {
-      const v = S.matPreview && S.matPreview.transport_suggested;
-      if (v == null) return;
-      const el = document.getElementById("f-transport");
-      if (el) {
-        el.value = String(v);
-        syncMaterialFormFromDom();
-        refreshMaterialPreview();
-        showToast("Transport repris de la calculette conteneur.", "success");
-      }
-    };
+  /** Texte d'équivalence sous le champ transport : montant €/m² et % du prix. */
+  function transportEqText(computed) {
+    if (!computed || !computed.breakdown) {
+      return "Le transport s'ajoute au prix d'achat avant conversion.";
+    }
+    const b = computed.breakdown;
+    const eur = parseFloat(b.transport_eur_m2 || 0);
+    const pct = parseFloat(b.transport_pct_effective || 0);
+    if (!eur && !pct) return "Aucun transport imputé pour l'instant.";
+    return `Soit ${fmtEurM2(eur)} · ${fmtPct(pct)} du prix d'achat`;
+  }
+
+  function updateTransportEquivalent() {
+    const el = document.getElementById("transport-eq");
+    if (el) el.textContent = transportEqText(S.matPreview);
   }
 
   function renderMaterialForm(isNew) {
@@ -835,6 +833,7 @@
       )
       .join("");
     const unit = unitLabel(f.price_currency, f.price_basis);
+    const isPct = f.transport_mode === "PCT";
 
     setContent(`
       <div class="pr-narrow">
@@ -882,15 +881,14 @@
                 </span>
               </label>
               <div id="import-fields" class="import-fields" style="${f.is_imported?"":"display:none"}">
-                <div class="field"><label>Transport <span class="lbl-unit">${escHtml(unit)}</span></label>
-                  <input type="number" step="0.0001" id="f-transport" value="${escAttr(f.transport_unit_price)}"/>
-                  <div class="field-hint">Saisi dans la devise et la base d'achat — il suit le prix dans le calcul.</div>
-                </div>
-                <div class="calc-box">
-                  <div class="calc-title">Calculette conteneur <span>facultative — propose une valeur de transport</span></div>
-                  <div class="field-row">
-                    <div class="field"><label>Coût conteneur USD</label><input type="number" step="0.01" id="f-cc" value="${escAttr(f.container_cost_usd)}" placeholder="${escAttr(S.settings ? S.settings.default_container_cost_usd : "")}"/></div>
-                    <div class="field"><label>Masse conteneur kg</label><input type="number" step="0.01" id="f-ck" value="${escAttr(f.container_kg)}" placeholder="${escAttr(S.settings ? S.settings.default_container_kg : "")}"/></div>
+                <div class="field-row">
+                  <div class="field"><label>Mode de transport</label><select id="f-tmode">
+                    <option value="AMOUNT" ${isPct?"":"selected"}>Montant — saisi en ${escHtml(unit)}</option>
+                    <option value="PCT" ${isPct?"selected":""}>Pourcentage du prix d'achat</option>
+                  </select></div>
+                  <div class="field"><label>Transport <span class="lbl-unit">${isPct ? "% du prix d'achat" : escHtml(unit)}</span></label>
+                    <input type="number" step="0.0001" id="f-transport" value="${escAttr(isPct ? f.transport_pct : f.transport_unit_price)}"/>
+                    <div class="field-hint" id="transport-eq">${transportEqText(S.matPreview)}</div>
                   </div>
                 </div>
               </div>
@@ -919,13 +917,12 @@
     `);
 
     document.getElementById("btn-back-mat").onclick = () => navigate("/pricing/materials");
-    bindRecapActions();
 
     const bindPreview = () => {
       clearTimeout(S.debounceMat);
       S.debounceMat = setTimeout(refreshMaterialPreview, 300);
     };
-    ["f-unit", "f-wm2", "f-tax", "f-transport", "f-cc", "f-ck"].forEach((id) => {
+    ["f-unit", "f-wm2", "f-tax", "f-transport"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.oninput = () => {
         syncMaterialFormFromDom();
@@ -945,7 +942,7 @@
         bindPreview();
       };
     }
-    ["f-cur", "f-basis", "f-imp"].forEach((id) => {
+    ["f-cur", "f-basis", "f-imp", "f-tmode"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.onchange = () => {
         syncMaterialFormFromDom();
@@ -991,9 +988,13 @@
     f.tax_incidence = val("f-tax") ?? f.tax_incidence;
     const imp = document.getElementById("f-imp");
     if (imp) f.is_imported = imp.checked;
-    f.transport_unit_price = val("f-transport") ?? f.transport_unit_price;
-    f.container_cost_usd = val("f-cc") ?? f.container_cost_usd;
-    f.container_kg = val("f-ck") ?? f.container_kg;
+    const mode = val("f-tmode");
+    if (mode) f.transport_mode = mode;
+    const tv = val("f-transport");
+    if (tv != null) {
+      if (f.transport_mode === "PCT") f.transport_pct = tv;
+      else f.transport_unit_price = tv;
+    }
     f.weight_per_m2 = val("f-wm2") ?? f.weight_per_m2;
     f.weight_gsm = val("f-gsm") ?? f.weight_gsm;
   }
@@ -1013,9 +1014,9 @@
       price_basis: f.price_basis,
       tax_incidence: parseFloat(f.tax_incidence) || 1,
       is_imported: !!f.is_imported,
+      transport_mode: f.transport_mode || "AMOUNT",
       transport_unit_price: parseFloat(f.transport_unit_price) || 0,
-      container_kg: f.container_kg ? parseFloat(f.container_kg) : null,
-      container_cost_usd: f.container_cost_usd ? parseFloat(f.container_cost_usd) : null,
+      transport_pct: parseFloat(f.transport_pct) || 0,
       price_history_source: "Saisie interface",
     };
     if (!body.name) {
@@ -1652,11 +1653,6 @@
             <input type="number" step="0.0001" id="s-rate" value="${escAttr(s.eur_usd_rate)}"/>
             <div class="field-hint">1 USD = ce montant en euros · Source : ${escHtml(s.eur_usd_rate_source || "—")} · MAJ : ${escHtml(fxDate)}</div>
           </div>
-          <div class="field-row">
-            <div class="field"><label>Coût conteneur <span class="lbl-unit">USD</span></label><input type="number" step="0.01" id="s-cc" value="${escAttr(s.default_container_cost_usd)}"/></div>
-            <div class="field"><label>Masse conteneur <span class="lbl-unit">kg</span></label><input type="number" step="0.01" id="s-ck" value="${escAttr(s.default_container_kg)}"/></div>
-          </div>
-          <div class="field-hint" style="margin:-4px 0 14px">Valeurs par défaut de la calculette conteneur, utilisées quand la matière ne renseigne rien.</div>
           <div class="field"><label>Marge par défaut <span class="lbl-unit">% du prix de revient</span></label>
             <input type="number" step="0.01" id="s-margin" value="${escAttr(s.default_margin_pct)}"/>
             <div class="field-hint">Appliquée à tous les produits sans marge personnalisée.</div>
@@ -1683,8 +1679,6 @@
           method: "PATCH",
           body: {
             eur_usd_rate: parseFloat(document.getElementById("s-rate").value),
-            default_container_cost_usd: parseFloat(document.getElementById("s-cc").value),
-            default_container_kg: parseFloat(document.getElementById("s-ck").value),
             default_margin_pct: parseFloat(document.getElementById("s-margin").value),
           },
         });

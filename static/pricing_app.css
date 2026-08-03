@@ -271,10 +271,6 @@ table.pr-table tr{cursor:pointer}
 .check-title{display:block;font-size:13px;font-weight:700;color:var(--text)}
 .check-sub{display:block;font-size:11px;color:var(--muted);margin-top:3px;line-height:1.5}
 .import-fields{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
-.calc-box{margin-top:12px;padding:12px 14px;border:1px dashed var(--border);border-radius:10px;background:var(--card)}
-.calc-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
-  color:var(--muted);margin-bottom:10px}
-.calc-title span{font-weight:400;text-transform:none;letter-spacing:0}
 
 /* Tableau récapitulatif horizontal du calcul */
 .recap-card{background:var(--card);border:1px solid var(--border);border-radius:12px;

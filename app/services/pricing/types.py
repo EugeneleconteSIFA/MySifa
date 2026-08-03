@@ -8,6 +8,9 @@ from typing import Literal, Optional
 
 PriceCurrency = Literal["EUR", "USD"]
 PriceBasis = Literal["PER_KG", "PER_M2"]
+# Mode de saisie du transport : montant dans la devise/base d'achat, ou
+# pourcentage du prix d'achat.
+TransportMode = Literal["AMOUNT", "PCT"]
 
 
 @dataclass(frozen=True)
@@ -52,10 +55,14 @@ class PricingMaterial:
     price_basis: PriceBasis
     tax_incidence: Decimal = Decimal("1")
     is_imported: bool = False
-    # Transport saisi, dans la DEVISE et la BASE d'achat (USD/kg si l'achat est en
-    # USD/kg, €/m² si l'achat est en €/m²). Pris en compte uniquement si is_imported.
+    # Mode de saisie du transport (ignoré si is_imported est faux).
+    transport_mode: TransportMode = "AMOUNT"
+    # Mode AMOUNT : transport dans la DEVISE et la BASE d'achat (USD/kg si l'achat
+    # est en USD/kg, €/m² si l'achat est en €/m²).
     transport_unit_price: Decimal = Decimal("0")
-    # Calculette conteneur — sert à proposer une valeur de transport, jamais au calcul.
+    # Mode PCT : transport = prix d'achat × transport_pct / 100.
+    transport_pct: Decimal = Decimal("0")
+    # Legacy conteneur — conservé en base, plus utilisé ni affiché.
     container_kg: Optional[Decimal] = None
     container_cost_usd: Optional[Decimal] = None
 
@@ -103,6 +110,10 @@ class MaterialPriceBreakdown:
     transport_src: Decimal = Decimal("0")
     subtotal_src: Decimal = Decimal("0")
     subtotal_eur: Decimal = Decimal("0")
+    # Transport ramené en €/m² (après poids et change) — affichage.
+    transport_eur_m2: Decimal = Decimal("0")
+    # Transport en % du prix d'achat, quel que soit le mode de saisie.
+    transport_pct_effective: Decimal = Decimal("0")
 
 
 @dataclass(frozen=True)
