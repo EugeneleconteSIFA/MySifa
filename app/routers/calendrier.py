@@ -5,7 +5,7 @@ from __future__ import annotations
 import calendar
 import re
 import secrets
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -759,7 +759,13 @@ def _event_to_vevent_lines(ev: dict) -> list[str]:
     titre = _ics_escape(str(ev.get("titre") or "Sans titre"))
     uid = _ics_escape(f"{eid}@mysifa")
     desc = _ics_escape(_ics_description(ev))
-    lines = ["BEGIN:VEVENT", f"UID:{uid}", f"SUMMARY:{titre}"]
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    lines = [
+        "BEGIN:VEVENT",
+        f"UID:{uid}",
+        f"DTSTAMP:{stamp}",
+        f"SUMMARY:{titre}",
+    ]
     if desc:
         lines.append(f"DESCRIPTION:{desc}")
     debut = _parse_ev_dt_for_ics(ev.get("debut") or "")
@@ -784,13 +790,20 @@ def _event_to_vevent_lines(ev: dict) -> list[str]:
     return lines
 
 
-def build_ics_calendar(events: list[dict]) -> str:
+def build_ics_calendar(
+    events: list[dict], *, nom: Optional[str] = None, ttl_minutes: int = 60
+) -> str:
+    ttl = max(15, int(ttl_minutes or 60))
     lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
         "PRODID:-//MySifa//MyCalendrier//FR",
         "CALSCALE:GREGORIAN",
         "METHOD:PUBLISH",
+        f"X-WR-CALNAME:{_ics_escape(nom or 'MySifa')}",
+        "X-WR-TIMEZONE:Europe/Paris",
+        f"REFRESH-INTERVAL;VALUE=DURATION:PT{ttl}M",
+        f"X-PUBLISHED-TTL:PT{ttl}M",
     ]
     for ev in events:
         for line in _event_to_vevent_lines(ev):
@@ -834,7 +847,7 @@ def export_ics(
     events: list[dict] = []
     if cals:
         events, _ = _fetch_calendar_events(user, d0, d1, cals)
-    body = build_ics_calendar(events)
+    body = build_ics_calendar(events, nom="MySifa")
     return Response(
         content=body.encode("utf-8"),
         media_type="text/calendar; charset=utf-8",
@@ -1292,8 +1305,21 @@ def _ensure_feed_token(conn, uid: int):
     return _feed_row(conn, uid)
 
 
-def _feed_payload(row) -> dict:
-    url = f"{public_base_url()}/api/calendrier/feed/{row['token']}.ics"
+def _feed_base_url(request: Optional[Request]) -> str:
+    """Hôte réellement appelé — évite de publier une URL de prod depuis v1."""
+    host = ""
+    if request is not None:
+        host = str(request.headers.get("host") or request.url.hostname or "").strip()
+    if not host:
+        return public_base_url()
+    low = host.lower()
+    if low.startswith("localhost") or low.startswith("127.0.0.1"):
+        return f"http://{host}"
+    return f"https://{host}"
+
+
+def _feed_payload(row, request: Optional[Request] = None) -> dict:
+    url = f"{_feed_base_url(request)}/api/calendrier/feed/{row['token']}.ics"
     return {
         "token": row["token"],
         "url": url,
@@ -1312,7 +1338,7 @@ def get_feed(request: Request):
     uid = _user_id_from_session(user)
     with get_db() as conn:
         row = _ensure_feed_token(conn, uid)
-    return _feed_payload(row)
+    return _feed_payload(row, request)
 
 
 @router.put("/api/calendrier/feed")
@@ -1339,7 +1365,7 @@ def update_feed(request: Request, body: FeedUpdate):
         )
         conn.commit()
         row = _feed_row(conn, uid)
-    return _feed_payload(row)
+    return _feed_payload(row, request)
 
 
 @router.post("/api/calendrier/feed/rotate")
@@ -1356,7 +1382,7 @@ def rotate_feed(request: Request):
         )
         conn.commit()
         row = _feed_row(conn, uid)
-    return _feed_payload(row)
+    return _feed_payload(row, request)
 
 
 @router.get("/api/calendrier/feed/{token}.ics")
@@ -1368,7 +1394,8 @@ def feed_ics(token: str):
     with get_db() as conn:
         row = conn.execute(
             """
-            SELECT f.user_id, f.calendriers, f.actif, u.role, u.actif AS user_actif
+            SELECT f.user_id, f.calendriers, f.actif, u.role, u.nom,
+                   u.actif AS user_actif
             FROM cal_feed_tokens f
             JOIN users u ON u.id = f.user_id
             WHERE f.token = ?
@@ -1385,6 +1412,7 @@ def feed_ics(token: str):
         )
         conn.commit()
         feed_user = {"id": int(row["user_id"]), "role": str(row["role"] or "")}
+        feed_nom = (row["nom"] or "").strip()
         requested = {
             c.strip()
             for c in str(row["calendriers"] or FEED_DEFAULT_CALENDARS).split(",")
@@ -1403,7 +1431,11 @@ def feed_ics(token: str):
             raise
         except Exception:
             events = []
-    body = build_ics_calendar(events)
+    body = build_ics_calendar(
+        events,
+        nom=f"MySifa — {feed_nom}" if feed_nom else "MySifa",
+        ttl_minutes=60,
+    )
     return Response(
         content=body.encode("utf-8"),
         media_type="text/calendar; charset=utf-8",

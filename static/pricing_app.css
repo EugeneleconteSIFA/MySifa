@@ -237,8 +237,8 @@ table.pr-table tr{cursor:pointer}
   cursor:pointer;font-size:18px;line-height:1;transition:background .15s,color .15s}
 .icon-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
 
-/* Champs de recherche et filtres : fond clair (blanc en thème clair). */
-.filters input,.filters select{background:var(--card)}
+/* Champs de recherche et filtres : variable dédiée du thème (blanc en clair). */
+.filters input,.filters select{background:var(--filter-input-bg)}
 .filters input:hover,.filters select:hover{border-color:var(--accent)}
 
 .cat-filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
@@ -279,9 +279,6 @@ table.pr-table tr{cursor:pointer}
   gap:12px;margin-bottom:14px}
 .recap-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
 .recap-formula{font-size:12px;color:var(--text2);margin-top:4px}
-.recap-total{text-align:right}
-.recap-total-label{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
-.recap-total-value{font-size:24px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums}
 .recap-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:10px}
 table.recap-table{width:100%;border-collapse:collapse;font-size:13px}
 table.recap-table th{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);
@@ -304,5 +301,29 @@ table.recap-table td:last-child{border-right:none}
 
 @media(max-width:900px){
   .recap-head{flex-direction:column}
-  .recap-total{text-align:left}
+  .field.f-num input,.field.f-num select,
+  .field.f-mid input,.field.f-mid select{max-width:none}
 }
+
+/* ─── Résumé en haut de fiche, champs resserrés, saisies import en blanc ─── */
+
+/* Bandeau résumé aligné à gauche, juste sous le titre de la page. */
+.mat-summary{display:flex;flex-wrap:wrap;align-items:flex-end;gap:28px;
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:14px 18px;margin-bottom:16px}
+.ms-item{min-width:0}
+.ms-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.ms-value{font-size:17px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;margin-top:3px}
+.ms-main .ms-value{font-size:26px;font-weight:800;color:var(--accent)}
+
+/* Le formulaire n'a pas besoin de la largeur du tableau récap. */
+.form-compact{max-width:900px}
+
+/* Largeurs de saisie calibrées sur le contenu attendu. */
+.field.f-num input,.field.f-num select{max-width:200px}
+.field.f-mid input,.field.f-mid select{max-width:340px}
+
+/* Bloc import : fond teinté, mais saisies sur fond clair pour la lisibilité. */
+.import-block .field input,.import-block .field select,
+.import-block .field input:focus,.import-block .field select:focus{
+  background:var(--filter-input-bg)}

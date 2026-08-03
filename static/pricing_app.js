@@ -671,6 +671,8 @@
       });
       const el = document.getElementById("mat-recap");
       if (el) el.innerHTML = recapTableHtml(S.matPreview);
+      const sum = document.getElementById("mat-summary");
+      if (sum) sum.innerHTML = matSummaryHtml(S.matPreview);
       updateTransportEquivalent();
     } catch (e) {
       const el = document.getElementById("mat-recap");
@@ -787,15 +789,32 @@
             <div class="recap-title">Détail du calcul</div>
             <div class="recap-formula">(prix d'achat + transport) × change × incidence taxes</div>
           </div>
-          <div class="recap-total">
-            <div class="recap-total-label">Prix de revient</div>
-            <div class="recap-total-value">${fmtEurM2(computed.price_eur_per_m2)}</div>
-          </div>
         </div>
         <div class="recap-scroll">
           <table class="recap-table"><thead><tr>${head}</tr></thead><tbody><tr>${body}</tr></tbody></table>
         </div>
         ${notes.length ? `<div class="recap-notes">${notes.join(" · ")}</div>` : ""}
+      </div>`;
+  }
+
+  /** Bandeau résumé en haut de la fiche matière : revient, marge, vente. */
+  function matSummaryHtml(computed) {
+    if (!computed) {
+      return `<div class="ms-item ms-main"><div class="ms-label">Prix de revient</div>
+        <div class="ms-value">—</div></div>`;
+    }
+    return `
+      <div class="ms-item ms-main">
+        <div class="ms-label">Prix de revient</div>
+        <div class="ms-value">${fmtEurM2(computed.price_eur_per_m2)}</div>
+      </div>
+      <div class="ms-item">
+        <div class="ms-label">Marge ${fmtPct(computed.margin_pct || 0)}</div>
+        <div class="ms-value">${fmtEurM2(computed.margin_eur_m2 || 0)}</div>
+      </div>
+      <div class="ms-item">
+        <div class="ms-label">Prix de vente</div>
+        <div class="ms-value">${fmtEurM2(computed.sell_price_eur_m2 || 0)}</div>
       </div>`;
   }
 
@@ -842,19 +861,20 @@
           isNew ? "" : escHtml(f.name),
           '<button type="button" class="btn btn-accent" id="btn-back-mat">Retour liste</button>'
         )}
-        <div class="form-card">
+        <div class="mat-summary" id="mat-summary">${matSummaryHtml(S.matPreview)}</div>
+        <div class="form-card form-compact">
           <div class="form-section"><h3>Identification</h3>
             <div class="field"><label>Nom</label><input id="f-name" value="${escAttr(f.name)}"/></div>
             <div class="field-row">
-              <div class="field"><label>Appellation</label><input id="f-app" value="${escAttr(f.appellation_code)}"/></div>
-              <div class="field"><label>Catégorie</label><select id="f-cat">${catOpts}</select></div>
+              <div class="field f-mid"><label>Appellation</label><input id="f-app" value="${escAttr(f.appellation_code)}"/></div>
+              <div class="field f-mid"><label>Catégorie</label><select id="f-cat">${catOpts}</select></div>
             </div>
-            <div class="field"><label>Fournisseur</label><select id="f-sup">${supOpts}</select></div>
+            <div class="field f-mid"><label>Fournisseur</label><select id="f-sup">${supOpts}</select></div>
           </div>
 
           <div class="form-section"><h3>Prix d'achat</h3>
             <div class="field-row">
-              <div class="field"><label>Devise achat</label><select id="f-cur">
+              <div class="field f-mid"><label>Devise achat</label><select id="f-cur">
                 <option value="EUR" ${f.price_currency==="EUR"?"selected":""}>EUR — euro (€)</option>
                 <option value="USD" ${f.price_currency==="USD"?"selected":""}>USD — dollar américain ($)</option>
               </select></div>
@@ -864,8 +884,8 @@
               </select></div>
             </div>
             <div class="field-row">
-              <div class="field"><label>Prix unitaire <span class="lbl-unit">${escHtml(unit)}</span></label><input type="number" step="0.0001" id="f-unit" value="${escAttr(f.unit_price)}"/></div>
-              <div class="field"><label>Incidence taxes <span class="lbl-unit">multiplicateur</span></label><input type="number" step="0.0001" id="f-tax" value="${escAttr(f.tax_incidence)}"/>
+              <div class="field f-num"><label>Prix unitaire <span class="lbl-unit">${escHtml(unit)}</span></label><input type="number" step="0.0001" id="f-unit" value="${escAttr(f.unit_price)}"/></div>
+              <div class="field f-num"><label>Incidence taxes <span class="lbl-unit">multiplicateur</span></label><input type="number" step="0.0001" id="f-tax" value="${escAttr(f.tax_incidence)}"/>
                 <div class="field-hint">1 = neutre · 1,05 = +5 % · 0,95 = −5 %</div>
               </div>
             </div>
@@ -882,11 +902,11 @@
               </label>
               <div id="import-fields" class="import-fields" style="${f.is_imported?"":"display:none"}">
                 <div class="field-row">
-                  <div class="field"><label>Mode de transport</label><select id="f-tmode">
+                  <div class="field f-mid"><label>Mode de transport</label><select id="f-tmode">
                     <option value="AMOUNT" ${isPct?"":"selected"}>Montant — saisi en ${escHtml(unit)}</option>
                     <option value="PCT" ${isPct?"selected":""}>Pourcentage du prix d'achat</option>
                   </select></div>
-                  <div class="field"><label>Transport <span class="lbl-unit">${isPct ? "% du prix d'achat" : escHtml(unit)}</span></label>
+                  <div class="field f-num"><label>Transport <span class="lbl-unit">${isPct ? "% du prix d'achat" : escHtml(unit)}</span></label>
                     <input type="number" step="0.0001" id="f-transport" value="${escAttr(isPct ? f.transport_pct : f.transport_unit_price)}"/>
                     <div class="field-hint" id="transport-eq">${transportEqText(S.matPreview)}</div>
                   </div>
@@ -897,8 +917,8 @@
 
           <div class="form-section" id="carac-section" style="${needsWeight(f)?"":"display:none"}"><h3>Caractéristiques</h3>
             <div class="field-row">
-              <div class="field"><label>Poids <span class="lbl-unit">kg/m²</span></label><input type="number" step="0.0001" id="f-wm2" value="${escAttr(f.weight_per_m2)}"/></div>
-              <div class="field"><label>Grammage <span class="lbl-unit">g/m²</span></label><input type="number" id="f-gsm" value="${escAttr(f.weight_gsm)}"/>
+              <div class="field f-num"><label>Poids <span class="lbl-unit">kg/m²</span></label><input type="number" step="0.0001" id="f-wm2" value="${escAttr(f.weight_per_m2)}"/></div>
+              <div class="field f-num"><label>Grammage <span class="lbl-unit">g/m²</span></label><input type="number" id="f-gsm" value="${escAttr(f.weight_gsm)}"/>
                 <div class="field-hint">Renseigné seul, il remplit le poids (g/m² ÷ 1000).</div>
               </div>
             </div>
