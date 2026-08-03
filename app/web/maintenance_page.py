@@ -5197,6 +5197,28 @@ function closeCaseModal(){
 // Machines disponibles pour l'atelier (source unique pour le picker).
 const CASE_MACHINES_LIST = ['Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
 
+// v2.6.1 : rend visible la ligne d'operation qui vient d'etre ajoutee.
+// Les listes (.case-ops-list) sont plafonnees a 280px avec leur propre
+// defilement : une ligne ajoutee en fin de liste tombait donc hors du cadre,
+// sans aucun signe qu'il s'etait passe quelque chose — l'utilisateur devait
+// deviner qu'il fallait faire defiler.
+//
+// focus({preventScroll:true}) puis scroll manuel : laisser le focus declencher
+// le defilement ferait bouger la MODALE entiere, pas seulement la liste.
+function _revealLastOpRow(listId){
+  setTimeout(function(){
+    const list = document.getElementById(listId);
+    if(!list) return;
+    list.scrollTop = list.scrollHeight;
+    const selects = list.querySelectorAll('select');
+    const last = selects.length ? selects[selects.length - 1] : null;
+    if(last){
+      try{ last.focus({ preventScroll: true }); }catch(_){ last.focus(); }
+    }
+    list.scrollTop = list.scrollHeight;
+  }, 40);
+}
+
 function addCaseOp(){
   // v2 : mode Catalogue par défaut, avec possibilité de switch vers Libre.
   // On laisse ajouter même sans catalogue (l'admin pourra créer une libre).
@@ -5218,14 +5240,7 @@ function addCaseOp(){
     _consignes_open: false,
   });
   renderCaseOpsList();
-  // Focus le dernier select
-  setTimeout(() => {
-    const list = document.getElementById('case-mod-ops-list');
-    if(list){
-      const selects = list.querySelectorAll('select');
-      if(selects.length) selects[selects.length - 1].focus();
-    }
-  }, 50);
+  _revealLastOpRow('case-mod-ops-list');
 }
 function updateCaseOp(idx, opTypeId){
   if(idx < 0 || idx >= _CASE_OPS.length) return;
@@ -13553,6 +13568,7 @@ function addTmplOp(){
   }
   _TMPL_OPS.push({ opTypeId: '', opName: '', opNiveau: null, opFreq: '', machines: [] });
   renderTmplOpsList();
+  _revealLastOpRow('tmpl-ed-ops-list');
 }
 
 function updateTmplOp(idx, opTypeId){
