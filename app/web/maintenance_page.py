@@ -4506,12 +4506,19 @@ function openPlanningDetailsModal(events){
           const rows = op.machineData.map(md => {
             // v2.5.11 : 3 etats visuels distincts : termine (ok), invalidee (gris),
             // a_faire (defaut).
+            // v2.6.1 : la machine est TOUJOURS nommee, meme quand l'operation
+            // n'en concerne qu'une seule. Avant, `machineData.length === 1` la
+            // masquait : sur un creneau couvrant Cohesio 1 ET Cohesio 2, une
+            // operation mono-machine s'affichait « En attente » sans dire
+            // laquelle des deux etait visee. Repli silencieux si la machine
+            // est absente de la donnee (creneaux anciens).
+            const mOn   = md.machine ? (' sur ' + escHtml(md.machine)) : '';
             const done = md.statut === 'termine';
             const invalidated = md.statut === 'invalidee';
             let icon, label, color;
             if(done){
               icon = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--ok);color:#fff;flex-shrink:0"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>';
-              label = 'Effectu\u00e9e' + (op.machineData.length === 1 ? '' : ' sur ' + escHtml(md.machine)) +
+              label = 'Effectu\u00e9e' + mOn +
                       (md.done_by ? ' \u00b7 par ' + escHtml(_resolveName(md.done_by) || 'op. inconnu') : '') +
                       (md.done_at ? ' \u00e0 ' + escHtml(_fmtDoneAt(md.done_at)) : '');
               color = 'var(--text2)';
@@ -4519,11 +4526,11 @@ function openPlanningDetailsModal(events){
               icon = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--muted);color:#fff;flex-shrink:0" title="Saisie invalid\u00e9e administrativement"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="5" y1="19" x2="19" y2="5"/></svg></span>';
               const invBy = md.invalidated_by_nom ? ' \u00b7 par ' + escHtml(md.invalidated_by_nom) : '';
               const invAt = md.invalidated_at ? ' le ' + escHtml(_fmtDoneAt(md.invalidated_at)) : '';
-              label = 'Invalid\u00e9e' + (op.machineData.length === 1 ? '' : ' sur ' + escHtml(md.machine)) + invBy + invAt;
+              label = 'Invalid\u00e9e' + mOn + invBy + invAt;
               color = 'var(--muted)';
             } else {
               icon = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border);flex-shrink:0"></span>';
-              label = (op.machineData.length === 1 ? 'En attente' : escHtml(md.machine) + ' \u2014 en attente');
+              label = md.machine ? (escHtml(md.machine) + ' \u2014 en attente') : 'En attente';
               color = 'var(--muted)';
             }
             const extraStyle = invalidated ? ';text-decoration:line-through;text-decoration-color:var(--muted)' : '';
