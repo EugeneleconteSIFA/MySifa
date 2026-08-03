@@ -483,7 +483,11 @@
   const ncChecked = isNc ? ' checked' : '';
   return '<div class="af-cl-resp-row" style="display:flex;gap:6px;align-items:center">'
     + '<input type="text" class="alert-field-input af-cl-resp-input" maxlength="100" placeholder="Ex. Nette" value="' + safeVal + '" style="flex:1;padding:6px 10px;font-size:13px">'
-    + '<label class="af-cl-nc-lbl" title="Cocher si cette réponse signale une non-conformité" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-size:11px;color:var(--text2);white-space:nowrap;user-select:none">'
+    // v2.5.20 : plus de background inline — la puce NC vit dans une .af-cl-card
+    // deja peinte en var(--bg), elle serait bleu sur bleu. Le fond est desormais
+    // pilote par le CSS (.af-cl-nc-lbl -> var(--card)), ce qui laisse aussi
+    // l'etat coche (:has(input:checked)) reprendre la main.
+    + '<label class="af-cl-nc-lbl" title="Cocher si cette réponse signale une non-conformité" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);cursor:pointer;font-size:11px;color:var(--text2);white-space:nowrap;user-select:none">'
     +   '<input type="checkbox" class="af-cl-resp-nc"' + ncChecked + ' style="width:12px;height:12px;accent-color:var(--danger);cursor:pointer">'
     +   '<span>NC</span>'
     + '</label>'
