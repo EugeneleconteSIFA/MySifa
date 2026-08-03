@@ -13503,6 +13503,39 @@ async function submitTemplateEditor(e){
   if(!ops.length){ showToast('Ajoutez au moins une opération.', 'danger'); return; }
   const missing = ops.find(o => !o.machines.length);
   if(missing){ showToast('Attribuez au moins une machine à chaque opération.', 'danger'); return; }
+  // v2.6.1 : avertissement AVANT enregistrement. La resynchronisation ecrase
+  // integralement les operations des occurrences futures generees par la
+  // recurrence (et leurs operateurs si le modele est recurrent). Elle se
+  // declenche des que des ops sont envoyees, meme inchangees — il faut donc
+  // que l'admin sache combien de creneaux il s'apprete a reinitialiser.
+  if(_TMPL_EDIT_ID){
+    try{
+      const ri = await fetch('/api/maintenance/templates/' + encodeURIComponent(_TMPL_EDIT_ID) +
+                             '/resync-impact?_=' + Date.now(), { credentials:'include', cache:'no-store' });
+      if(ri.ok){
+        const imp = await ri.json();
+        const n = (imp && imp.count) || 0;
+        if(n > 0){
+          const plur = n > 1;
+          let quand = '';
+          if(imp.first && imp.last && imp.first !== imp.last){
+            quand = ' (du ' + _fmtIsoDateFr(imp.first) + ' au ' + _fmtIsoDateFr(imp.last) + ')';
+          } else if(imp.first){
+            quand = ' (le ' + _fmtIsoDateFr(imp.first) + ')';
+          }
+          const ok = window.confirm(
+            'Enregistrer ce modèle va réinitialiser ' + n + ' créneau' + (plur ? 'x' : '') +
+            ' à venir' + quand + ', généré' + (plur ? 's' : '') + ' par sa récurrence.\n\n' +
+            'Leurs opérations seront remplacées par celles du modèle : toute retouche faite ' +
+            'directement sur ces créneaux (opération ajoutée, machine décochée, consignes) sera perdue.\n\n' +
+            'Les créneaux passés et ceux composés à la main ne sont pas concernés.\n\n' +
+            'Continuer ?'
+          );
+          if(!ok) return;
+        }
+      }
+    }catch(_){ /* impact indisponible : on n'empeche pas l'enregistrement */ }
+  }
   try{
     let r;
     // v2.4.29 : fusion avec les champs recurrence
