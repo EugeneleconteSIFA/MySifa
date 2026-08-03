@@ -1749,12 +1749,21 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
     _require_admin(request)
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id, name FROM maintenance_templates WHERE id = ?",
+            "SELECT id, name, recurrence_type, recurrence_dow, recurrence_dom, "
+            "       recurrence_month, recurrence_time_start, recurrence_time_end, "
+            "       recurrence_active "
+            "FROM maintenance_templates WHERE id = ?",
             (template_id,),
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Modèle introuvable")
         now = _now_paris_iso()
+        # v2.6.1 : etat AVANT de la regle de recurrence. Le formulaire renvoie
+        # ces champs a CHAQUE enregistrement, meme inchanges : sans comparaison,
+        # corriger une faute dans le nom du modele replacerait tout le planning.
+        _RECUR_KEYS = ("recurrence_type", "recurrence_dow", "recurrence_dom",
+                       "recurrence_month", "recurrence_time_start", "recurrence_time_end")
+        _recur_before = {k: row[k] for k in _RECUR_KEYS}
         # Métadonnées (name, description)
         meta_updates = {}
         if body.name is not None:
@@ -1820,6 +1829,46 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
                 f"UPDATE maintenance_templates SET {set_clause} WHERE id = ?",
                 list(meta_updates.values()) + [template_id],
             )
+
+        # v2.6.1 — REGLE DE RECURRENCE MODIFIEE : on replace tout.
+        #
+        # Distinction demandee cote produit :
+        #   - modifier les OPERATIONS du modele  -> n'impacte que les operations
+        #     des occurrences (cf. _resync_future_events_from_template). Les
+        #     dates ne bougent pas, un creneau deplace reste ou il est, un
+        #     creneau supprime ne ressuscite pas.
+        #   - modifier la REGLE de recurrence    -> redefinit le planning : les
+        #     occurrences futures sont purgees puis regenerees sur la nouvelle
+        #     regle.
+        #
+        # Sans cette purge, changer la recurrence du lundi au mardi laissait les
+        # anciens lundis en place ET ajoutait les mardis : la generation
+        # dedoublonne sur (template_id, template_origin_date), donc elle ne
+        # touchait jamais aux occurrences deja produites par l'ancienne regle.
+        #
+        # La purge est un DELETE reel, tombstones compris : un creneau supprime
+        # ou deplace a la main revient a sa place theorique. C'est l'arbitrage
+        # retenu — changer la regle, c'est redefinir le planning, pas l'ajuster.
+        # Elle ne touche que le FUTUR (date_prevue >= aujourd'hui) et que les
+        # occurrences GENEREES (template_origin_date IS NOT NULL) : les creneaux
+        # passes et ceux composes a la main ne sont jamais concernes.
+        recur_replaced = 0
+        _recur_changed = any(
+            k in meta_updates and meta_updates[k] != _recur_before[k] for k in _RECUR_KEYS
+        )
+        if _recur_changed and body.recurrence_active is not False:
+            today = datetime.now(_PARIS).strftime("%Y-%m-%d")
+            purge_ids = [r["id"] for r in conn.execute(
+                "SELECT id FROM maintenance_events "
+                "WHERE template_id = ? AND template_origin_date IS NOT NULL "
+                "  AND date_prevue >= ?",
+                (template_id, today),
+            ).fetchall()]
+            for eid in purge_ids:
+                conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
+                conn.execute("DELETE FROM maintenance_event_operators WHERE event_id = ?", (eid,))
+                conn.execute("DELETE FROM maintenance_events WHERE id = ?", (eid,))
+            recur_replaced = len(purge_ids)
         # Ops (si fournies, on remplace intégralement)
         resynced = 0
         if body.ops is not None:
@@ -1853,12 +1902,25 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
             # v2.5.25 : ops inchangees mais default_operators modifies -> resync operateurs
             # sur les creneaux futurs uniquement (les ops restent car pas modifiees).
             resynced = _resync_future_events_from_template(conn, template_id)
+        # v2.6.1 : regeneration immediate apres une purge de regle, pour que la
+        # reponse reflete deja le nouveau planning (sinon le calendrier reste
+        # vide jusqu'au prochain GET /events).
+        regenerated = 0
+        if recur_replaced:
+            try:
+                horizon = date.today() + timedelta(days=90)
+                regenerated = _generate_events_for_template(conn, template_id, horizon)
+            except Exception:
+                regenerated = 0  # le prochain GET /events rattrapera
         conn.commit()
         tmpl = _load_template_full(conn, template_id)
     # v2.6.0 : la regle de recurrence a peut-etre change -> le prochain GET
     # /events doit regenerer sans attendre la fin du throttle.
     _invalidate_recur_gen_throttle()
-    return {"template": tmpl, "resynced_events": resynced, "deleted_future_events": deleted_future}
+    return {"template": tmpl, "resynced_events": resynced,
+            "deleted_future_events": deleted_future,
+            "recur_replaced_events": recur_replaced,
+            "recur_regenerated_events": regenerated}
 
 
 @router.delete("/api/maintenance/templates/{template_id}")

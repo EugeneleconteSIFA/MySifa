@@ -13625,6 +13625,9 @@ async function submitTemplateEditor(e){
     }
     const d = await r.json();
     const resynced = d.resynced_events || 0;
+    // v2.6.1 : replacement du planning suite a un changement de regle.
+    const replaced = d.recur_replaced_events || 0;
+    const regen    = d.recur_regenerated_events || 0;
     // v2.5.13 : mention les creneaux futurs supprimes si la recurrence a ete desactivee.
     const deletedFuture = d && d.deleted_future_events ? d.deleted_future_events : 0;
     let toastMsg;
@@ -13634,6 +13637,7 @@ async function submitTemplateEditor(e){
       const parts = ['Mod\u00e8le enregistr\u00e9'];
       if(resynced) parts.push(resynced + ' cr\u00e9neau' + (resynced > 1 ? 'x' : '') + ' futur' + (resynced > 1 ? 's' : '') + ' resynchronis' + (resynced > 1 ? '\u00e9s' : '\u00e9'));
       if(deletedFuture) parts.push(deletedFuture + ' cr\u00e9neau' + (deletedFuture > 1 ? 'x' : '') + ' futur' + (deletedFuture > 1 ? 's' : '') + ' nettoy' + (deletedFuture > 1 ? '\u00e9s' : '\u00e9') + ' (r\u00e9currence d\u00e9sactiv\u00e9e)');
+      if(replaced) parts.push('planning replac\u00e9 : ' + replaced + ' occurrence' + (replaced > 1 ? 's' : '') + ' remplac\u00e9' + (replaced > 1 ? 'es' : 'e') + ' par ' + regen + ' nouvelle' + (regen > 1 ? 's' : ''));
       toastMsg = parts.join(' \u2014 ') + '.';
     }
     showToast(toastMsg, 'info');
