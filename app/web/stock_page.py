@@ -456,6 +456,10 @@ body.light .sm-fsc-badge.is-ecart{background:rgba(217,119,6,.10);color:#b45309;b
 .sm-fsc-value{color:var(--success,#34d399)}
 body.light .sm-fsc-value{color:#0f7c3a}
 .sm-fsc-hint{color:var(--success,#34d399)}
+/* Dérogation FSC dans l'historique : orange, sur une ligne à part, jamais
+   fondue dans le commentaire libre du mouvement. */
+.mvt-note-fsc-ecart{color:#fb923c;font-weight:700}
+body.light .mvt-note-fsc-ecart{color:#b45309}
 /* Bandeau d'écart FSC en sortie : orange, pas rouge — ce n'est pas une
    erreur bloquante, c'est une décision que l'opérateur doit assumer. */
 .sm-fsc-alert{border:1px solid rgba(251,146,60,.45);background:rgba(251,146,60,.10);
@@ -4350,6 +4354,28 @@ function renderToast() {
   document.body.appendChild(t);
 }
 
+// Badge FSC d'un MOUVEMENT (et non d'un lot).
+//
+// `m.fsc` vaut null sur tous les mouvements antérieurs à la migration 221 et
+// sur les mouvements « neutres » (correction, ajustement) qui n'engagent
+// aucun claim. On ne montre donc rien dans ce cas plutôt qu'un badge « non
+// FSC » : absence d'information et information d'absence ne sont pas la même
+// chose, et un historique de traçabilité doit distinguer les deux.
+function buildMvtFscBadge(m) {
+  if (!m || m.fsc == null) return null;
+  if (!m.fsc && !m.fsc_ecart) return null;
+  const ecart = !!m.fsc_ecart;
+  return el('span', {
+    cls: 'sm-fsc-badge' + (ecart ? ' is-ecart' : ''),
+    style: { marginLeft: '6px' },
+    attrs: {
+      title: ecart
+        ? ('Écart FSC — ' + (m.fsc_ecart_note || 'complément non certifié sur une sortie certifiée'))
+        : ('Mouvement de stock certifié FSC' + (m.no_dossier ? ' — dossier ' + m.no_dossier : '')),
+    },
+  }, 'FSC', ecart ? ' ⚠' : '');
+}
+
 function buildMvtHistory(mouvements, unite='', opts=null) {
   return el('div',{cls:'card'},
     el('div',{cls:'card-header'},el('div',{cls:'card-title'},'🕐 Historique')),
@@ -4372,6 +4398,10 @@ function buildMvtHistory(mouvements, unite='', opts=null) {
             (m.produit_id && m.reference)
               ? el('button',{cls:'mvt-ref-link',type:'button',on:{click:()=>loadProduit(m.produit_id)}},m.reference)
               : el('span',null,refTxt || '—'),
+            // Le claim voyage sur le mouvement depuis la migration 221 : un
+            // historique qui ne le montre pas oblige à rouvrir le lot pour
+            // savoir si le stock qui vient de partir était certifié.
+            buildMvtFscBadge(m),
             el('span',{cls:pfQteCls},signe+fU(m.quantite, unit))
           ),
           el('div',{cls:'mvt-line2'},
@@ -4382,7 +4412,13 @@ function buildMvtHistory(mouvements, unite='', opts=null) {
             (m.quantite_apres != null)
               ? el('span',null,' · Solde '+fU(m.quantite_apres, unit))
               : null,
+            (m.no_dossier ? el('span',null,' · dossier '+m.no_dossier) : null),
           ),
+          // Une dérogation FSC (complément non certifié sur une sortie
+          // certifiée) est affichée en clair, avec sa justification. C'est
+          // exactement ce qu'un auditeur vient chercher.
+          m.fsc_ecart ? el('div',{cls:'mvt-note mvt-note-fsc-ecart'},
+            '⚠ Écart FSC — ' + (m.fsc_ecart_note || 'complément non certifié')) : null,
           m.note?el('div',{cls:'mvt-note'},m.note):null
         )
       );
@@ -10961,6 +10997,10 @@ function buildDashboardActivite(d) {
         el('div', { cls: 'dash-act-badges' },
           dashStockTypeBadge(m.type_stock),
           dashMvtBadge(m.type_mouvement),
+          // Même badge que dans l'historique détaillé : le flux d'activité
+          // est souvent le premier endroit où on remarque qu'une sortie
+          // certifiée vient de partir avec un complément non certifié.
+          buildMvtFscBadge(m),
         ),
         mainEl,
         el('span', { cls: qteCls }, qteText),
@@ -17850,7 +17890,7 @@ async function openValorisationSettingsModal() {
   const contCostInp = mkInput('vsm-cont-cost', settings.default_container_cost_usd, '1');
   const contHalfInp = mkInput('vsm-cont-half', settings.default_half_container_cost_eur || 0, '1');
   const contKgInp = mkInput('vsm-cont-kg', settings.default_container_kg, '1');
-  const marginInp = mkInput('vsm-margin', settings.default_margin_eur_m2, '0.0001');
+  const marginInp = mkInput('vsm-margin', settings.default_margin_pct, '0.01');
 
   // Quantités m² par container (renseignées via /settings > Logistique > Importations).
   // Utilisées pour afficher "soit X EUR/m²" sous les 2 champs coût container.
@@ -17945,7 +17985,7 @@ async function openValorisationSettingsModal() {
   box.appendChild(el('div', { style: 'height:14px' }));
 
   // -- Default margin --
-  box.appendChild(mkLabel('Marge par défaut (€ / m²)'));
+  box.appendChild(mkLabel('Marge par défaut (% du prix de revient)'));
   box.appendChild(marginInp);
 
   // -- Actions --
@@ -17970,7 +18010,7 @@ async function openValorisationSettingsModal() {
         default_container_cost_usd: parseFloat(contCostInp.value),
         default_half_container_cost_eur: parseFloat(contHalfInp.value || '0'),
         default_container_kg: parseFloat(contKgInp.value),
-        default_margin_eur_m2: parseFloat(marginInp.value),
+        default_margin_pct: parseFloat(marginInp.value),
       };
       for (const k of Object.keys(payload)) {
         if (isNaN(payload[k])) {

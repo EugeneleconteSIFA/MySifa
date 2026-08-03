@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import calendar
-import json
-from datetime import date, datetime, timedelta
+import re
+import secrets
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
@@ -20,11 +21,18 @@ from app.routers.planning import (
     _load_planning_calendar_maps_range,
     _parse_planned_dt as _parse_planned_dt_planning,
 )
+from app.services.ics_service import (
+    IcsError,
+    events_from_ics,
+    fetch_ics,
+    normalize_feed_url,
+)
 from config import (
     ROLE_ADMINISTRATION,
     ROLE_DIRECTION,
     ROLE_SUPERADMIN,
     national_holidays_between,
+    public_base_url,
 )
 from database import get_db
 from services.auth_service import require_calendrier
@@ -36,6 +44,23 @@ CALENDRIER_ADMIN_CALENDARS = frozenset(
 )
 CALENDRIER_BASIC_CALENDARS = frozenset({"conges", "feries"})
 CALENDRIER_PERSO_CAL = "perso"
+
+# Calendriers externes (abonnements ICS) : identifiants dynamiques sub_<id>.
+SUB_CAL_RE = re.compile(r"^sub_(\d+)$")
+CAL_SUB_TTL_MINUTES = 30
+# Rafraichissement opportuniste pendant une requete d'affichage : timeout court.
+CAL_SUB_TIMEOUT_S = 6
+CAL_SUB_TIMEOUT_MANUEL_S = 15
+CAL_SUB_MAX = 12
+CAL_SUB_COLOR_DEFAULT = "#38bdf8"
+
+# Flux ICS sortant (abonnement Outlook / Google / Apple).
+FEED_PAST_DAYS = 120
+FEED_FUTURE_DAYS = 400
+FEED_DEFAULT_CALENDARS = "perso,conges,feries"
+
+# Libelle affiche aux autres utilisateurs pour un creneau perso masque.
+PERSO_BUSY_LABEL = "Occupé"
 
 # Codes machines (table machines) — les id numériques ne sont pas fixes en base.
 PRODUCTION_MACHINE_CODES: dict[str, str] = {
@@ -78,7 +103,19 @@ def _allowed_calendars_for_role(role: str) -> frozenset[str]:
 
 def _filter_calendars_for_role(role: str, requested: set[str]) -> set[str]:
     allowed = _allowed_calendars_for_role(role)
-    return {c for c in requested if c in allowed}
+    return {c for c in requested if c in allowed or SUB_CAL_RE.match(c)}
+
+
+def _sub_ids_from_cals(cals: set[str]) -> list[int]:
+    out: list[int] = []
+    for c in cals:
+        m = SUB_CAL_RE.match(c)
+        if m:
+            try:
+                out.append(int(m.group(1)))
+            except ValueError:
+                continue
+    return sorted(set(out))
 
 
 class PersoEventCreate(BaseModel):
@@ -87,6 +124,36 @@ class PersoEventCreate(BaseModel):
     date_fin: str
     all_day: bool = False
     note: Optional[str] = Field(None, max_length=4000)
+    prive: bool = False
+
+
+class PersoEventUpdate(BaseModel):
+    """Mise a jour partielle — seuls les champs fournis sont ecrits."""
+
+    titre: Optional[str] = Field(None, min_length=1, max_length=500)
+    date_debut: Optional[str] = None
+    date_fin: Optional[str] = None
+    all_day: Optional[bool] = None
+    note: Optional[str] = Field(None, max_length=4000)
+    prive: Optional[bool] = None
+
+
+class SubscriptionCreate(BaseModel):
+    nom: str = Field(..., min_length=1, max_length=200)
+    url: str = Field(..., min_length=5, max_length=2000)
+    couleur: Optional[str] = Field(None, max_length=9)
+
+
+class SubscriptionUpdate(BaseModel):
+    nom: Optional[str] = Field(None, min_length=1, max_length=200)
+    url: Optional[str] = Field(None, min_length=5, max_length=2000)
+    couleur: Optional[str] = Field(None, max_length=9)
+    actif: Optional[bool] = None
+
+
+class FeedUpdate(BaseModel):
+    calendriers: Optional[str] = Field(None, max_length=500)
+    actif: Optional[bool] = None
 
 
 def _parse_event_dt(s: str, field: str) -> datetime:
@@ -359,7 +426,9 @@ def _calendar_request_context(
     role = str(user.get("role") or "")
     requested = {c.strip() for c in calendriers.split(",") if c.strip()}
     cals = _filter_calendars_for_role(role, requested)
-    unknown = cals - VALID_CALENDARS
+    unknown = {
+        c for c in cals if c not in VALID_CALENDARS and not SUB_CAL_RE.match(c)
+    }
     if unknown:
         raise HTTPException(400, detail=f"Calendriers inconnus : {', '.join(sorted(unknown))}")
     return user, d0, d1, cals
@@ -570,31 +639,63 @@ def _fetch_calendar_events(
             uid = _user_id_from_session(user)
             rows = conn.execute(
                 """
-                SELECT id, titre, date_debut, date_fin, all_day, note
-                FROM cal_events_perso
-                WHERE user_id = ?
-                  AND date(substr(date_debut, 1, 10)) <= ?
-                  AND date(substr(date_fin, 1, 10)) >= ?
-                ORDER BY date_debut ASC, id ASC
+                SELECT e.id, e.user_id, e.titre, e.date_debut, e.date_fin,
+                       e.all_day, e.note, e.prive, u.nom AS user_nom
+                FROM cal_events_perso e
+                LEFT JOIN users u ON u.id = e.user_id
+                WHERE date(substr(e.date_debut, 1, 10)) <= ?
+                  AND date(substr(e.date_fin, 1, 10)) >= ?
+                  AND (e.user_id = ? OR COALESCE(u.actif, 1) = 1)
+                ORDER BY e.date_debut ASC, e.id ASC
                 """,
-                (uid, d1.isoformat(), d0.isoformat()),
+                (d1.isoformat(), d0.isoformat(), uid),
             ).fetchall()
             for r in rows:
                 debut = str(r["date_debut"] or "").strip()
                 fin = str(r["date_fin"] or "").strip() or debut
                 all_day = bool(int(r["all_day"] or 0))
                 note = (r["note"] or "").strip() or None
+                prive = bool(int(r["prive"] or 0))
+                owner_id = int(r["user_id"] or 0)
+                owner_nom = (r["user_nom"] or "").strip() or "Utilisateur"
+                own = owner_id == uid
+                titre_brut = (r["titre"] or "").strip() or "Sans titre"
+                if own:
+                    titre = titre_brut
+                elif prive:
+                    titre = f"{owner_nom} · {PERSO_BUSY_LABEL}"
+                    note = None
+                else:
+                    titre = f"{owner_nom} · {titre_brut}"
+                meta = {
+                    "own": own,
+                    "prive": prive,
+                    "user_id": owner_id,
+                    "user_nom": owner_nom,
+                }
+                if note:
+                    meta["note"] = note
+                if own:
+                    meta["titre_brut"] = titre_brut
                 out.append(
                     _event(
                         eid=f"perso-{r['id']}",
                         cal=CALENDRIER_PERSO_CAL,
-                        titre=(r["titre"] or "").strip() or "Sans titre",
+                        titre=titre,
                         debut=debut,
                         fin=fin,
                         all_day=all_day,
-                        meta={"note": note} if note else {},
+                        meta=meta,
                     )
                 )
+
+        sub_ids = _sub_ids_from_cals(cals)
+        if sub_ids:
+            out.extend(
+                _subscription_events(
+                    conn, _user_id_from_session(user), sub_ids, d0, d1
+                )
+            )
 
     out.sort(key=lambda e: (e["debut"], e["calendrier"], e["id"]))
     return out, day_windows
@@ -635,12 +736,22 @@ def _parse_ev_dt_for_ics(raw: str) -> Optional[datetime]:
 
 
 def _ics_description(ev: dict) -> str:
+    """Description lisible dans le client calendrier (pas de JSON brut)."""
     meta = ev.get("meta") or {}
-    payload = {"calendrier": ev.get("calendrier"), **meta}
-    try:
-        return json.dumps(payload, ensure_ascii=False, sort_keys=True)
-    except (TypeError, ValueError):
-        return str(payload)
+    lines: list[str] = []
+    for key, prefix in (
+        ("note", ""),
+        ("lieu", "Lieu : "),
+        ("statut", "Statut : "),
+        ("reference", "Référence : "),
+        ("type_conge", "Type : "),
+        ("source", "Source : "),
+    ):
+        val = str(meta.get(key) or "").strip()
+        if val:
+            lines.append(f"{prefix}{val}")
+    lines.append(f"MySifa · {ev.get('calendrier') or 'calendrier'}")
+    return "\n".join(lines)
 
 
 def _event_to_vevent_lines(ev: dict) -> list[str]:
@@ -648,7 +759,13 @@ def _event_to_vevent_lines(ev: dict) -> list[str]:
     titre = _ics_escape(str(ev.get("titre") or "Sans titre"))
     uid = _ics_escape(f"{eid}@mysifa")
     desc = _ics_escape(_ics_description(ev))
-    lines = ["BEGIN:VEVENT", f"UID:{uid}", f"SUMMARY:{titre}"]
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    lines = [
+        "BEGIN:VEVENT",
+        f"UID:{uid}",
+        f"DTSTAMP:{stamp}",
+        f"SUMMARY:{titre}",
+    ]
     if desc:
         lines.append(f"DESCRIPTION:{desc}")
     debut = _parse_ev_dt_for_ics(ev.get("debut") or "")
@@ -673,13 +790,20 @@ def _event_to_vevent_lines(ev: dict) -> list[str]:
     return lines
 
 
-def build_ics_calendar(events: list[dict]) -> str:
+def build_ics_calendar(
+    events: list[dict], *, nom: Optional[str] = None, ttl_minutes: int = 60
+) -> str:
+    ttl = max(15, int(ttl_minutes or 60))
     lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
         "PRODID:-//MySifa//MyCalendrier//FR",
         "CALSCALE:GREGORIAN",
         "METHOD:PUBLISH",
+        f"X-WR-CALNAME:{_ics_escape(nom or 'MySifa')}",
+        "X-WR-TIMEZONE:Europe/Paris",
+        f"REFRESH-INTERVAL;VALUE=DURATION:PT{ttl}M",
+        f"X-PUBLISHED-TTL:PT{ttl}M",
     ]
     for ev in events:
         for line in _event_to_vevent_lines(ev):
@@ -723,7 +847,7 @@ def export_ics(
     events: list[dict] = []
     if cals:
         events, _ = _fetch_calendar_events(user, d0, d1, cals)
-    body = build_ics_calendar(events)
+    body = build_ics_calendar(events, nom="MySifa")
     return Response(
         content=body.encode("utf-8"),
         media_type="text/calendar; charset=utf-8",
@@ -746,18 +870,23 @@ def create_perso_event(request: Request, body: PersoEventCreate):
         raise HTTPException(400, detail="date_fin doit être >= date_debut.")
     note = (body.note or "").strip() or None
     all_day = 1 if body.all_day else 0
+    prive = 1 if body.prive else 0
     debut_s = _fmt_dt(dt_debut)
     fin_s = _fmt_dt(dt_fin)
     with get_db() as conn:
         cur = conn.execute(
             """
-            INSERT INTO cal_events_perso (user_id, titre, date_debut, date_fin, all_day, note)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO cal_events_perso
+                (user_id, titre, date_debut, date_fin, all_day, note, prive)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (uid, titre, debut_s, fin_s, all_day, note),
+            (uid, titre, debut_s, fin_s, all_day, note, prive),
         )
         conn.commit()
         new_id = int(cur.lastrowid)
+    meta: dict[str, Any] = {"own": True, "prive": bool(prive), "user_id": uid}
+    if note:
+        meta["note"] = note
     return {
         "id": f"perso-{new_id}",
         "calendrier": CALENDRIER_PERSO_CAL,
@@ -765,7 +894,7 @@ def create_perso_event(request: Request, body: PersoEventCreate):
         "debut": debut_s,
         "fin": fin_s,
         "all_day": bool(all_day),
-        "meta": {"note": note} if note else {},
+        "meta": meta,
     }
 
 
@@ -783,3 +912,532 @@ def delete_perso_event(request: Request, event_id: int):
         conn.execute("DELETE FROM cal_events_perso WHERE id = ?", (event_id,))
         conn.commit()
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Édition d'un créneau personnel
+# ---------------------------------------------------------------------------
+
+
+@router.put("/api/calendrier/events/perso/{event_id}")
+def update_perso_event(request: Request, event_id: int, body: PersoEventUpdate):
+    """Mise à jour partielle d'un créneau personnel (propriétaire uniquement)."""
+    user = require_calendrier(request)
+    uid = _user_id_from_session(user)
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT id, titre, date_debut, date_fin, all_day, note, prive
+            FROM cal_events_perso
+            WHERE id = ? AND user_id = ?
+            """,
+            (event_id, uid),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, detail="Événement introuvable.")
+
+        titre = (row["titre"] or "").strip()
+        if body.titre is not None:
+            titre = body.titre.strip()
+            if not titre:
+                raise HTTPException(400, detail="titre est requis.")
+
+        all_day = bool(int(row["all_day"] or 0))
+        if body.all_day is not None:
+            all_day = bool(body.all_day)
+
+        dt_debut = _parse_event_dt(
+            body.date_debut if body.date_debut is not None else row["date_debut"],
+            "date_debut",
+        )
+        dt_fin = _parse_event_dt(
+            body.date_fin if body.date_fin is not None else row["date_fin"],
+            "date_fin",
+        )
+        if dt_fin < dt_debut:
+            raise HTTPException(400, detail="date_fin doit être >= date_debut.")
+
+        note = row["note"]
+        if body.note is not None:
+            note = body.note.strip() or None
+
+        prive = bool(int(row["prive"] or 0))
+        if body.prive is not None:
+            prive = bool(body.prive)
+
+        debut_s = _fmt_dt(dt_debut)
+        fin_s = _fmt_dt(dt_fin)
+        conn.execute(
+            """
+            UPDATE cal_events_perso
+               SET titre = ?, date_debut = ?, date_fin = ?, all_day = ?,
+                   note = ?, prive = ?,
+                   updated_at = strftime('%Y-%m-%dT%H:%M:%S','now','localtime')
+             WHERE id = ? AND user_id = ?
+            """,
+            (
+                titre,
+                debut_s,
+                fin_s,
+                1 if all_day else 0,
+                note,
+                1 if prive else 0,
+                event_id,
+                uid,
+            ),
+        )
+        conn.commit()
+
+    meta: dict[str, Any] = {"own": True, "prive": prive, "user_id": uid}
+    if note:
+        meta["note"] = note
+    return {
+        "id": f"perso-{event_id}",
+        "calendrier": CALENDRIER_PERSO_CAL,
+        "titre": titre,
+        "debut": debut_s,
+        "fin": fin_s,
+        "all_day": all_day,
+        "meta": meta,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Abonnements ICS entrants
+# ---------------------------------------------------------------------------
+
+
+def _valid_hex_color(value: Any) -> Optional[str]:
+    s = str(value or "").strip()
+    if re.fullmatch(r"#[0-9a-fA-F]{6}", s):
+        return s.lower()
+    return None
+
+
+def _sub_public(row) -> dict:
+    return {
+        "id": int(row["id"]),
+        "cal_id": f"sub_{int(row['id'])}",
+        "nom": (row["nom"] or "").strip(),
+        "url": (row["url"] or "").strip(),
+        "couleur": (row["couleur"] or CAL_SUB_COLOR_DEFAULT),
+        "actif": bool(int(row["actif"] or 0)),
+        "last_sync_at": row["last_sync_at"],
+        "last_status": row["last_status"],
+        "last_error": row["last_error"],
+        "nb_events": int(row["nb_events"] or 0),
+    }
+
+
+def _sub_is_stale(row) -> bool:
+    if not (row["cache_ics"] or "").strip():
+        return True
+    raw = str(row["last_sync_at"] or "").strip()
+    if not raw:
+        return True
+    try:
+        last = datetime.fromisoformat(raw[:19])
+    except ValueError:
+        return True
+    return (datetime.now() - last) > timedelta(minutes=CAL_SUB_TTL_MINUTES)
+
+
+def _sync_subscription(
+    conn, row, *, force: bool = False, timeout: int = CAL_SUB_TIMEOUT_S
+) -> Optional[str]:
+    """Rafraîchit le cache ICS d'un abonnement. Retourne le contenu utilisable."""
+    cached = (row["cache_ics"] or "") if "cache_ics" in row.keys() else ""
+    if not force and not _sub_is_stale(row):
+        return cached
+    now_s = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    try:
+        text = fetch_ics(row["url"], timeout=timeout)
+    except IcsError as e:
+        conn.execute(
+            """
+            UPDATE cal_subscriptions
+               SET last_sync_at = ?, last_status = 'erreur', last_error = ?
+             WHERE id = ?
+            """,
+            (now_s, str(e)[:400], int(row["id"])),
+        )
+        conn.commit()
+        return cached or None
+    nb = text.upper().count("BEGIN:VEVENT")
+    conn.execute(
+        """
+        UPDATE cal_subscriptions
+           SET cache_ics = ?, last_sync_at = ?, last_status = 'ok',
+               last_error = NULL, nb_events = ?
+         WHERE id = ?
+        """,
+        (text, now_s, nb, int(row["id"])),
+    )
+    conn.commit()
+    return text
+
+
+def _subscription_events(
+    conn, uid: int, sub_ids: list[int], d0: date, d1: date
+) -> list[dict]:
+    if not sub_ids:
+        return []
+    placeholders = ",".join("?" * len(sub_ids))
+    rows = conn.execute(
+        f"""
+        SELECT * FROM cal_subscriptions
+        WHERE user_id = ? AND actif = 1 AND id IN ({placeholders})
+        ORDER BY id ASC
+        """,
+        [uid, *sub_ids],
+    ).fetchall()
+    out: list[dict] = []
+    for row in rows:
+        sub_id = int(row["id"])
+        cal_key = f"sub_{sub_id}"
+        try:
+            text = _sync_subscription(conn, row)
+        except Exception:
+            text = row["cache_ics"]
+        if not text:
+            continue
+        try:
+            parsed = events_from_ics(text, d0, d1)
+        except Exception:
+            continue
+        for idx, ev in enumerate(parsed):
+            debut = ev["start"].strftime("%Y-%m-%dT%H:%M")
+            fin = ev["end"].strftime("%Y-%m-%dT%H:%M")
+            meta = {"source": (row["nom"] or "").strip(), "externe": True}
+            if ev.get("location"):
+                meta["lieu"] = ev["location"][:300]
+            if ev.get("description"):
+                meta["note"] = ev["description"][:1000]
+            out.append(
+                _event(
+                    eid=f"sub-{sub_id}-{ev.get('occurrence_key') or idx}-{idx}",
+                    cal=cal_key,
+                    titre=ev.get("summary") or "Sans titre",
+                    debut=debut,
+                    fin=fin,
+                    all_day=bool(ev.get("all_day")),
+                    meta=meta,
+                )
+            )
+    return out
+
+
+@router.get("/api/calendrier/subscriptions")
+def list_subscriptions(request: Request):
+    user = require_calendrier(request)
+    uid = _user_id_from_session(user)
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM cal_subscriptions WHERE user_id = ? ORDER BY id ASC",
+            (uid,),
+        ).fetchall()
+    return {"subscriptions": [_sub_public(r) for r in rows]}
+
+
+@router.post("/api/calendrier/subscriptions")
+def create_subscription(request: Request, body: SubscriptionCreate):
+    user = require_calendrier(request)
+    uid = _user_id_from_session(user)
+    nom = body.nom.strip()
+    if not nom:
+        raise HTTPException(400, detail="nom est requis.")
+    try:
+        url = normalize_feed_url(body.url)
+    except IcsError as e:
+        raise HTTPException(400, detail=str(e))
+    couleur = _valid_hex_color(body.couleur) or CAL_SUB_COLOR_DEFAULT
+    with get_db() as conn:
+        nb = conn.execute(
+            "SELECT COUNT(*) AS n FROM cal_subscriptions WHERE user_id = ?", (uid,)
+        ).fetchone()["n"]
+        if int(nb or 0) >= CAL_SUB_MAX:
+            raise HTTPException(
+                400, detail=f"Limite atteinte — {CAL_SUB_MAX} abonnements maximum."
+            )
+        cur = conn.execute(
+            """
+            INSERT INTO cal_subscriptions (user_id, nom, url, couleur, actif)
+            VALUES (?, ?, ?, ?, 1)
+            """,
+            (uid, nom, url, couleur),
+        )
+        conn.commit()
+        new_id = int(cur.lastrowid)
+        row = conn.execute(
+            "SELECT * FROM cal_subscriptions WHERE id = ?", (new_id,)
+        ).fetchone()
+        _sync_subscription(conn, row, force=True, timeout=CAL_SUB_TIMEOUT_MANUEL_S)
+        row = conn.execute(
+            "SELECT * FROM cal_subscriptions WHERE id = ?", (new_id,)
+        ).fetchone()
+    payload = _sub_public(row)
+    if payload["last_status"] == "erreur":
+        payload["warning"] = payload["last_error"] or "Flux injoignable."
+    return payload
+
+
+@router.put("/api/calendrier/subscriptions/{sub_id}")
+def update_subscription(request: Request, sub_id: int, body: SubscriptionUpdate):
+    user = require_calendrier(request)
+    uid = _user_id_from_session(user)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM cal_subscriptions WHERE id = ? AND user_id = ?",
+            (sub_id, uid),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, detail="Abonnement introuvable.")
+        nom = (row["nom"] or "").strip()
+        if body.nom is not None:
+            nom = body.nom.strip()
+            if not nom:
+                raise HTTPException(400, detail="nom est requis.")
+        url = row["url"]
+        url_changed = False
+        if body.url is not None:
+            try:
+                new_url = normalize_feed_url(body.url)
+            except IcsError as e:
+                raise HTTPException(400, detail=str(e))
+            url_changed = new_url != url
+            url = new_url
+        couleur = row["couleur"] or CAL_SUB_COLOR_DEFAULT
+        if body.couleur is not None:
+            couleur = _valid_hex_color(body.couleur) or couleur
+        actif = bool(int(row["actif"] or 0))
+        if body.actif is not None:
+            actif = bool(body.actif)
+        conn.execute(
+            """
+            UPDATE cal_subscriptions
+               SET nom = ?, url = ?, couleur = ?, actif = ?
+             WHERE id = ? AND user_id = ?
+            """,
+            (nom, url, couleur, 1 if actif else 0, sub_id, uid),
+        )
+        if url_changed:
+            conn.execute(
+                """
+                UPDATE cal_subscriptions
+                   SET cache_ics = NULL, last_sync_at = NULL, last_status = NULL,
+                       last_error = NULL, nb_events = 0
+                 WHERE id = ?
+                """,
+                (sub_id,),
+            )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM cal_subscriptions WHERE id = ?", (sub_id,)
+        ).fetchone()
+        if url_changed and actif:
+            _sync_subscription(conn, row, force=True, timeout=CAL_SUB_TIMEOUT_MANUEL_S)
+            row = conn.execute(
+                "SELECT * FROM cal_subscriptions WHERE id = ?", (sub_id,)
+            ).fetchone()
+    return _sub_public(row)
+
+
+@router.post("/api/calendrier/subscriptions/{sub_id}/refresh")
+def refresh_subscription(request: Request, sub_id: int):
+    user = require_calendrier(request)
+    uid = _user_id_from_session(user)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM cal_subscriptions WHERE id = ? AND user_id = ?",
+            (sub_id, uid),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, detail="Abonnement introuvable.")
+        _sync_subscription(conn, row, force=True, timeout=CAL_SUB_TIMEOUT_MANUEL_S)
+        row = conn.execute(
+            "SELECT * FROM cal_subscriptions WHERE id = ?", (sub_id,)
+        ).fetchone()
+    payload = _sub_public(row)
+    if payload["last_status"] == "erreur":
+        raise HTTPException(400, detail=payload["last_error"] or "Flux injoignable.")
+    return payload
+
+
+@router.delete("/api/calendrier/subscriptions/{sub_id}")
+def delete_subscription(request: Request, sub_id: int):
+    user = require_calendrier(request)
+    uid = _user_id_from_session(user)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM cal_subscriptions WHERE id = ? AND user_id = ?",
+            (sub_id, uid),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, detail="Abonnement introuvable.")
+        conn.execute("DELETE FROM cal_subscriptions WHERE id = ?", (sub_id,))
+        conn.commit()
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Flux ICS sortant (abonnement depuis Outlook / Google / Apple)
+# ---------------------------------------------------------------------------
+
+
+def _feed_row(conn, uid: int):
+    return conn.execute(
+        "SELECT * FROM cal_feed_tokens WHERE user_id = ?", (uid,)
+    ).fetchone()
+
+
+def _ensure_feed_token(conn, uid: int):
+    row = _feed_row(conn, uid)
+    if row:
+        return row
+    conn.execute(
+        """
+        INSERT INTO cal_feed_tokens (user_id, token, calendriers, actif)
+        VALUES (?, ?, ?, 1)
+        """,
+        (uid, secrets.token_urlsafe(32), FEED_DEFAULT_CALENDARS),
+    )
+    conn.commit()
+    return _feed_row(conn, uid)
+
+
+def _feed_base_url(request: Optional[Request]) -> str:
+    """Hôte réellement appelé — évite de publier une URL de prod depuis v1."""
+    host = ""
+    if request is not None:
+        host = str(request.headers.get("host") or request.url.hostname or "").strip()
+    if not host:
+        return public_base_url()
+    low = host.lower()
+    if low.startswith("localhost") or low.startswith("127.0.0.1"):
+        return f"http://{host}"
+    return f"https://{host}"
+
+
+def _feed_payload(row, request: Optional[Request] = None) -> dict:
+    url = f"{_feed_base_url(request)}/api/calendrier/feed/{row['token']}.ics"
+    return {
+        "token": row["token"],
+        "url": url,
+        "webcal_url": re.sub(r"^https?://", "webcal://", url),
+        "calendriers": (row["calendriers"] or FEED_DEFAULT_CALENDARS),
+        "actif": bool(int(row["actif"] or 0)),
+        "last_access_at": row["last_access_at"],
+        "hits": int(row["hits"] or 0),
+        "fenetre": {"passe_jours": FEED_PAST_DAYS, "futur_jours": FEED_FUTURE_DAYS},
+    }
+
+
+@router.get("/api/calendrier/feed")
+def get_feed(request: Request):
+    user = require_calendrier(request)
+    uid = _user_id_from_session(user)
+    with get_db() as conn:
+        row = _ensure_feed_token(conn, uid)
+    return _feed_payload(row, request)
+
+
+@router.put("/api/calendrier/feed")
+def update_feed(request: Request, body: FeedUpdate):
+    user = require_calendrier(request)
+    uid = _user_id_from_session(user)
+    role = str(user.get("role") or "")
+    with get_db() as conn:
+        row = _ensure_feed_token(conn, uid)
+        cals_s = row["calendriers"] or FEED_DEFAULT_CALENDARS
+        if body.calendriers is not None:
+            requested = {c.strip() for c in body.calendriers.split(",") if c.strip()}
+            kept = _filter_calendars_for_role(role, requested)
+            kept = {c for c in kept if c in VALID_CALENDARS or SUB_CAL_RE.match(c)}
+            if not kept:
+                raise HTTPException(400, detail="Au moins un calendrier est requis.")
+            cals_s = ",".join(sorted(kept))
+        actif = bool(int(row["actif"] or 0))
+        if body.actif is not None:
+            actif = bool(body.actif)
+        conn.execute(
+            "UPDATE cal_feed_tokens SET calendriers = ?, actif = ? WHERE user_id = ?",
+            (cals_s, 1 if actif else 0, uid),
+        )
+        conn.commit()
+        row = _feed_row(conn, uid)
+    return _feed_payload(row, request)
+
+
+@router.post("/api/calendrier/feed/rotate")
+def rotate_feed(request: Request):
+    """Révoque l'URL d'abonnement en cours et en génère une nouvelle."""
+    user = require_calendrier(request)
+    uid = _user_id_from_session(user)
+    with get_db() as conn:
+        _ensure_feed_token(conn, uid)
+        conn.execute(
+            "UPDATE cal_feed_tokens SET token = ?, hits = 0, last_access_at = NULL "
+            "WHERE user_id = ?",
+            (secrets.token_urlsafe(32), uid),
+        )
+        conn.commit()
+        row = _feed_row(conn, uid)
+    return _feed_payload(row, request)
+
+
+@router.get("/api/calendrier/feed/{token}.ics")
+def feed_ics(token: str):
+    """Flux ICS public protégé par jeton — consommé par un client calendrier."""
+    tok = str(token or "").strip()
+    if len(tok) < 20:
+        raise HTTPException(404, detail="Flux introuvable.")
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT f.user_id, f.calendriers, f.actif, u.role, u.nom,
+                   u.actif AS user_actif
+            FROM cal_feed_tokens f
+            JOIN users u ON u.id = f.user_id
+            WHERE f.token = ?
+            """,
+            (tok,),
+        ).fetchone()
+        if not row or not int(row["actif"] or 0) or not int(row["user_actif"] or 0):
+            raise HTTPException(404, detail="Flux introuvable.")
+        conn.execute(
+            "UPDATE cal_feed_tokens SET hits = hits + 1, "
+            "last_access_at = strftime('%Y-%m-%dT%H:%M:%S','now','localtime') "
+            "WHERE token = ?",
+            (tok,),
+        )
+        conn.commit()
+        feed_user = {"id": int(row["user_id"]), "role": str(row["role"] or "")}
+        feed_nom = (row["nom"] or "").strip()
+        requested = {
+            c.strip()
+            for c in str(row["calendriers"] or FEED_DEFAULT_CALENDARS).split(",")
+            if c.strip()
+        }
+
+    cals = _filter_calendars_for_role(feed_user["role"], requested)
+    today = date.today()
+    d0 = today - timedelta(days=FEED_PAST_DAYS)
+    d1 = today + timedelta(days=FEED_FUTURE_DAYS)
+    events: list[dict] = []
+    if cals:
+        try:
+            events, _ = _fetch_calendar_events(feed_user, d0, d1, cals)
+        except HTTPException:
+            raise
+        except Exception:
+            events = []
+    body = build_ics_calendar(
+        events,
+        nom=f"MySifa — {feed_nom}" if feed_nom else "MySifa",
+        ttl_minutes=60,
+    )
+    return Response(
+        content=body.encode("utf-8"),
+        media_type="text/calendar; charset=utf-8",
+        headers={"Cache-Control": "private, max-age=900"},
+    )

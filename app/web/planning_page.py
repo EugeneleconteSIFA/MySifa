@@ -23,6 +23,9 @@ from config import (
     THEME_COLOR_META,
 )
 from app.web.access_denied import access_denied_response
+# Étiquette d'avertissement FSC : gabarit + impression partagés avec la
+# saisie de production (app/web/fabrication_page.py).
+from app.web.fsc_label_js import FSC_LABEL_SCRIPT_BLOCK
 
 router = APIRouter()
 
@@ -66,6 +69,7 @@ def planning_page(request: Request, machine: Optional[int] = None):
         .replace("__V_LABEL__", f"v{APP_VERSION}")
         .replace("__FSC_REQ_OPTIONS__", fsc_req_js)
         .replace("__FSC_CLAIM_DEFAUT__", FSC_CLAIM_DEFAUT)
+        .replace("/*__FSC_LABEL__*/", FSC_LABEL_SCRIPT_BLOCK)
     )
     return HTMLResponse(content=html)
 
@@ -551,6 +555,30 @@ body.light .btn-p{color:#fff}
   0%,100%{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
   50%{border-color:var(--border2);box-shadow:none}
 }
+
+/* ── Dossier certifié FSC dans la timeline ────────────────────────
+   Anneau vert pulsant, posé en ::after pour ne jamais entrer en
+   conflit avec les `border` / `box-shadow` inline du slot (couleur du
+   dossier, pulsation du dossier actif). pointer-events:none pour ne pas
+   voler le drag & drop ni les tooltips au slot lui-même. */
+@keyframes fscRingPulse{
+  0%,100%{box-shadow:0 0 0 2px rgba(16,185,129,.95), 0 0 9px 2px rgba(16,185,129,.45)}
+  50%    {box-shadow:0 0 0 3px rgba(16,185,129,.55), 0 0 14px 4px rgba(16,185,129,.20)}
+}
+.slot.slot-fsc::after{
+  content:'';position:absolute;inset:0;border-radius:inherit;
+  pointer-events:none;z-index:6;
+  animation:fscRingPulse 1.9s ease-in-out infinite;
+}
+/* Le scintillement attire l'œil sur un écran d'atelier consulté de loin,
+   mais il ne doit pas être imposé à qui le supporte mal : anneau fixe. */
+@media (prefers-reduced-motion: reduce){
+  .slot.slot-fsc::after{animation:none;box-shadow:0 0 0 2px rgba(16,185,129,.95)}
+}
+/* À l'impression du planning, un halo ne sort pas : bordure franche. */
+@media print{
+  .slot.slot-fsc::after{animation:none;box-shadow:0 0 0 2px #0f7c3a}
+}
 /* Timeline search highlighting */
 .slot.tl-match{outline:3px solid rgba(255,255,255,.9);outline-offset:2px;z-index:12}
 .slot.tl-no-match{opacity:0.18;filter:grayscale(50%)}
@@ -692,6 +720,7 @@ window.addEventListener("unhandledrejection", (e)=>{
 });
 </script>
 <script>
+/*__FSC_LABEL__*/
 let MID=__MACHINE_ID__;
 const DN=["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
 const MIND=0.75,MAXD=720;
@@ -1432,6 +1461,7 @@ function icon(name,size=16){
     'corner-down-right': '<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
     'ban': '<circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>',
     'search': '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+    'printer': '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
     'chevron-left': '<polyline points="15 18 9 12 15 6"/>',
     'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
     'download': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
@@ -2483,6 +2513,12 @@ function mkTL(mon,slots){
     const termineSlideCls=(CAN_EDIT&&s.statut==="termine")?"slot-termine-movable":"";
     const annuleSlot=isAnnuleEntry(s);
     const annuleCls=annuleSlot?"slot-annule":"";
+    // Anneau vert animé sur les dossiers certifiés. Rendu par un ::after et
+    // non par `border` / `box-shadow` : ces deux propriétés sont posées en
+    // style INLINE sur le slot (couleur du dossier, pulsation du dossier
+    // actif), et un style inline gagne toujours contre une classe — l'anneau
+    // aurait simplement disparu sur le dossier en cours.
+    const fscCls=(s.fsc_requis===1||s.fsc_requis===true)?"slot-fsc":"";
     const resizeHint="Bord droit : ajuster la durée. Reste du créneau : réordonner (si disponible).";
     const resizeHandle=canResizeSlot?`<div class="slot-resize-handle" data-eid="${s.entry_id||idx}" data-resize="1" title="${escAttr(resizeHint)}"></div>`:"";
     const termineTitle=termineSlideCls?"Dossier terminé — glisser pour décaler le créneau sur la ligne de temps":"";
@@ -2515,7 +2551,7 @@ function mkTL(mon,slots){
       line3SlotHtml=l3parts.length?l3parts.join(" | "):"";
     }
 
-    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls} ${annuleCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${expeBrightnessStyle}${isActive?"border:2px solid var(--accent);animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
+    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls} ${annuleCls} ${fscCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${expeBrightnessStyle}${isActive?"border:2px solid var(--accent);animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
       data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?fmtQty(qteEtiq):"")}" data-nb-palettes="${escAttr(nbPalettes!=null?String(nbPalettes):"")}"`+
@@ -3530,6 +3566,29 @@ async function submitAdd(){
   }
 }
 
+/* Étiquette d'avertissement FSC (100×50 mm, N&B) depuis la modale dossier.
+   Le gabarit et la logique d'impression vivent dans app/web/fsc_label_js.py,
+   partagés avec la saisie de production : une seule définition de
+   l'étiquette pour les deux points d'impression. */
+function printFscAvertissement(id){
+  const e=S.entries.find(x=>x.id===id);
+  if(!e){ showToast("Dossier introuvable.","danger"); return; }
+  if(!(e.fsc_requis===1||e.fsc_requis===true)){
+    showToast("Ce dossier n'est pas certifié FSC.","danger");
+    return;
+  }
+  const mach=(S.machines||[]).find(m=>m.id===e.machine_id);
+  fscImprimerAvertissement({
+    no_dossier: (e.reference||e.numero_of||"").trim(),
+    numero_of: e.numero_of||"",
+    client: e.client||"",
+    ref_produit: e.ref_produit||e.description||"",
+    machine: (mach&&mach.nom)||"",
+    fsc_type_requis: fscTypeRequisLabel(e.fsc_type_requis)||"FSC",
+    operateur_nom: (window.__MYSIFA_NOM__||""),
+  });
+}
+
 async function openFscRapport(noDossier){
   const ref=(noDossier||"").trim();
   if(!ref){ showToast("Référence dossier manquante.","danger"); return; }
@@ -3667,6 +3726,21 @@ function openEdit(id){
       Rapport FSC
     </button>`
     :"";
+  // Impression de l'étiquette d'avertissement FSC (100×50 mm, N&B) depuis le
+  // planning : c'est ici que le dossier est préparé et sa pochette montée,
+  // donc c'est ici que l'étiquette doit pouvoir sortir — sans attendre que
+  // l'opérateur ait démarré la production pour la trouver dans MyProd.
+  const fscPrintBtn=(e.fsc_requis===1||e.fsc_requis===true)
+    ?`<button type="button" onclick="printFscAvertissement(${id})"
+      title="Imprimer l'etiquette d'avertissement FSC a coller sur le dossier"
+      style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;
+             border:1.5px solid var(--success,#34d399);background:rgba(52,211,153,.10);
+             color:var(--success,#34d399);
+             font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap"
+      onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
+      ${icon('printer',14)} Étiquette FSC
+    </button>`
+    :"";
   const ofEyeBtn=`<button type="button"
     onclick="openOfPreview(${id})"
     title="Voir l'OF relié à ce dossier"
@@ -3689,7 +3763,7 @@ function openEdit(id){
     ${destockIcon}
     <span>${destockDone?"Destocké":"À destocker"}</span>
   </button>`;
-  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${fscBtn}${statsBtn}${ofEyeBtn}${destockActionBtn}</div>`;
+  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${fscBtn}${fscPrintBtn}${statsBtn}${ofEyeBtn}${destockActionBtn}</div>`;
 
   // Traçabilité création/modification
   const fmtDate=(iso)=>{

@@ -2023,6 +2023,95 @@ async function loadTracabiliteDossier(ref){
   render();
 }
 
+// Parcours aval du rapport FSC : produit fini, stock, expédition.
+//
+// Le rapport ne montrait que les bobines consommées, c'est-à-dire la moitié
+// amont de la chaîne de contrôle. Un auditeur demande aussi l'aval : ce
+// dossier a produit quoi, et ce produit est parti où. Les données viennent
+// du même calcul que le traceur (app/routers/traca.py), exposées par
+// /api/fabrication/tracabilite/{ref} sous la clé `parcours`.
+//
+// Les lignes issues du backfill sont affichées en dégradé et étiquetées
+// « reconstitué » — une déduction ne doit jamais passer pour une saisie.
+function fscRapportSection(titre){
+  return h('div',{style:{fontSize:'11px',fontWeight:'800',textTransform:'uppercase',
+    letterSpacing:'.5px',color:'var(--muted)',margin:'16px 0 7px'}}, titre);
+}
+
+function fscRapportTable(entetes, lignes, vide){
+  if(!lignes || !lignes.length){
+    return h('div',{style:{fontSize:'12px',color:'var(--muted)',padding:'5px 0'}}, vide);
+  }
+  return h('div',{className:'table-wrap',style:{border:'1px solid var(--border)',borderRadius:'10px'}},
+    h('table',{className:'table-std',style:{fontSize:'12.5px'}},
+      h('thead',null,h('tr',null,...entetes.map(t=>h('th',null,t)))),
+      h('tbody',null,...lignes)
+    )
+  );
+}
+
+function fscRapportParcours(data){
+  const parc = (data && data.parcours) || {};
+  const ruptures = parc.ruptures || [];
+  const grise = (r) => r.reconstitue ? {style:{opacity:'.62'}} : null;
+  const src = (r) => h('td',{style:{fontSize:'11px',color:'var(--muted)'}},
+    r.reconstitue ? 'reconstitué' : 'saisi');
+
+  return h('div',null,
+    ruptures.length ? h('div',{style:{border:'1px solid rgba(251,146,60,.45)',
+      background:'rgba(251,146,60,.09)',borderRadius:'8px',padding:'10px 13px',
+      margin:'14px 0 4px',fontSize:'12px',color:'#c2410c'}},
+      h('div',{style:{fontWeight:'800',marginBottom:'4px'}},'Ce que ce rapport ne démontre pas'),
+      ...ruptures.map(r=>h('div',{style:{lineHeight:'1.55'}},'• '+r))
+    ) : null,
+
+    fscRapportSection('Produit fini issu de ce dossier'),
+    fscRapportTable(
+      ['Référence','Lot','Emplacement','Produit','Reste','Claim'],
+      (parc.lots||[]).map(l=>h('tr',grise(l),
+        h('td',{style:{fontWeight:'700'}}, l.produit_ref || '—'),
+        h('td',{style:{fontFamily:'ui-monospace,monospace'}}, '#'+l.id),
+        h('td',null, l.emplacement || '—'),
+        h('td',null, (l.quantite_initiale != null ? l.quantite_initiale : '—')+' '+(l.unite||'')),
+        h('td',null, (l.quantite_restante != null ? l.quantite_restante : '—')+' '+(l.unite||'')),
+        h('td',null, l.fsc
+          ? h('span',{className:'trc-fsc'+(l.fsc_ecart?' is-ecart':'')},'FSC', l.fsc_ecart?' ⚠':'')
+          : h('span',{style:{color:'var(--muted)'}},'—'))
+      )),
+      'Aucun lot de produit fini rattaché à ce dossier.'
+    ),
+
+    fscRapportSection('Parcours en stock'),
+    fscRapportTable(
+      ['Date','Mouvement','Emplacement','Quantité','Par','Source'],
+      (parc.mouvements||[]).slice(0,20).map(m=>h('tr',grise(m),
+        h('td',null, String(m.created_at||'').replace('T',' ').slice(0,16)),
+        h('td',null, m.type_mouvement === 'entree' ? 'Entrée'
+                   : m.type_mouvement === 'sortie' ? 'Sortie' : (m.type_mouvement||'—')),
+        h('td',null, m.emplacement || '—'),
+        h('td',null, m.quantite != null ? String(m.quantite) : '—'),
+        h('td',null, m.created_by_name || m.created_by || '—'),
+        src(m)
+      )),
+      'Aucun mouvement de stock enregistré pour ce dossier.'
+    ),
+
+    fscRapportSection('Expédition'),
+    fscRapportTable(
+      ['BL','Client','Transporteur','Enlèvement','Destination','Source'],
+      (parc.expeditions||[]).map(x=>h('tr',grise(x),
+        h('td',{style:{fontWeight:'700'}}, x.no_bl || ('#'+x.id)),
+        h('td',null, x.client || '—'),
+        h('td',null, x.transporteur || '—'),
+        h('td',null, x.date_enlevement || '—'),
+        h('td',null, x.code_postal_destination || '—'),
+        src(x)
+      )),
+      'Aucune expédition rattachée à ce dossier.'
+    )
+  );
+}
+
 function openFscRapportModal(data, ref){
   try{
     const syn = (data && data.synthese) ? data.synthese : {};
@@ -2096,6 +2185,7 @@ function openFscRapportModal(data, ref){
             )
           )
         ),
+        fscRapportParcours(data),
         h('div',{style:{marginTop:'14px',paddingTop:'10px',borderTop:'1px solid var(--border)',fontSize:'11px',color:'var(--muted)'}},
           'Généré le ', genAt, ' · MySifa · SIFA'
         )
@@ -2461,10 +2551,15 @@ function renderTraceur(){
   return h('div',{className:'trc-wrap'}, barre, aide, corps);
 }
 
+// Aiguillage de la page Traçabilité.
+//
+// La sous-navigation est posée ICI, autour du contenu, et pas à l'intérieur
+// de chaque vue : la vue historique comporte plusieurs points de sortie
+// (chargement, erreur, détail dossier, liste). Une première version plaçait
+// la barre d'onglets dans la seule branche « traceur » — résultat, sur
+// l'onglet par défaut la barre n'était jamais rendue et le Traceur était
+// littéralement inatteignable.
 function renderTracabilite(){
-  // Deux sous-onglets : la vue historique par dossier, et le traceur
-  // transversal. Ils répondent à deux questions différentes — « qu'a
-  // consommé ce dossier ? » et « où est passée cette matière ? ».
   const sub = S.tracaSubTab || 'dossiers';
   const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Traçabilité'},
     ...[
@@ -2477,11 +2572,16 @@ function renderTracabilite(){
       onClick: () => { set({tracaSubTab:t.key}); render(); },
     }, iconEl(t.icon,14), ' '+t.label))
   );
+  return h('div',null,
+    subNav,
+    sub === 'traceur' ? renderTraceur() : renderTracabiliteDossiersVue()
+  );
+}
 
-  if(sub === 'traceur'){
-    return h('div',null, subNav, renderTraceur());
-  }
-
+// Vue historique « par dossier » — le contenu d'origine de renderTracabilite,
+// inchangé, simplement extrait pour que l'aiguillage ci-dessus puisse
+// l'encadrer sans toucher à ses multiples returns.
+function renderTracabiliteDossiersVue(){
   // Si on a un dossier sélectionné, afficher son détail
   if(S.traceabiliteDossier !== undefined && S.traceabiliteDossier !== null){
     return renderTracabiliteDossierDetail();
@@ -8262,7 +8362,8 @@ function renderProdKpis(){
     renderDos, renderDevisForm, renderComparaison, renderLiaisonDossiers,
     renderRentabilite, renderSuivi,
     loadTracabilite, loadTracabiliteDossier,
-    renderTracabilite, renderTracabiliteDossierDetail,
+    renderTracabilite, renderTracabiliteDossiersVue, renderTracabiliteDossierDetail,
+    renderTraceur, traceurOuvrir, traceurRechercher,
     openFscRapportModal, openTracMatieresEditModal, closeTracMatieresEditModal,
     tracResolveMachineId,
     prodOfFmtDate, prodOfStatutLabel, prodOfStatutClass,

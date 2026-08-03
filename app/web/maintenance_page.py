@@ -671,11 +671,11 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .tmpl-item-btn svg{width:15px;height:15px}
 .tmpl-empty{padding:24px 16px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:13px;text-align:center;font-style:italic;background:var(--bg)}
 /* Sélecteur de modèle dans le modal Nouveau créneau */
-.case-tmpl-picker{margin-bottom:16px;padding:12px 14px;border-radius:10px;background:linear-gradient(90deg,var(--accent-bg),transparent);border:1px solid var(--accent);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.case-tmpl-picker-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--accent);flex-shrink:0}
-.case-tmpl-picker select{flex:1;min-width:180px}
-.case-tmpl-picker-btn{padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .12s}
-.case-tmpl-picker-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* v2.6.1 : styles .case-tmpl-picker* supprimes — le bloc « Modèle » du haut de
+   la modale et son bouton « Gérer » ont ete retires. L'import de modele se fait
+   desormais depuis l'en-tete « Opérations à effectuer », et la gestion des
+   modeles reste accessible par le menu « + » du calendrier ainsi que par
+   l'onglet Créneaux. */
 /* v2.6.1 : rappel des modeles deja importes dans le creneau en cours. */
 .case-tmpl-applied{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 10px 0;font-size:12px;color:var(--muted)}
 .case-tmpl-applied .case-tmpl-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;background:var(--accent-bg);color:var(--accent);border:1px solid rgba(34,211,238,.28);font-weight:700}
@@ -712,7 +712,11 @@ body[data-maint-role="operator"] .cal-event{cursor:pointer}
 .plan-det-case-machine{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg,#fff);font-size:13px;font-weight:800;letter-spacing:.2px}
 .plan-det-case-time{display:inline-flex;align-items:center;gap:5px;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;font-weight:700;font-size:13px;color:var(--text)}
 .plan-det-case-ops-label{margin-top:14px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700}
-.plan-det-case-ops-list{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.plan-det-case-ops-list{margin-top:8px;display:flex;flex-direction:column;gap:6px;max-height:38vh;overflow-y:auto;padding-right:4px}
+/* v2.6.1 : la liste d'operations defile en interne. Avant, un creneau de 14
+   operations poussait les boutons Modifier / Supprimer (.plan-det-case-actions)
+   hors de la zone visible : il fallait faire defiler tout le corps du modal
+   pour les atteindre, sans indice qu'ils existaient. */
 .plan-det-case-op{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);transition:border-color .12s}
 .plan-det-case-op:hover{border-color:var(--accent)}
 .plan-det-case-op-bullet{flex-shrink:0;width:8px;height:8px;border-radius:50%;background:var(--accent)}
@@ -768,6 +772,14 @@ body[data-maint-role="operator"] .cal-event{cursor:pointer}
 .ops-select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
 .ops-field-hint{font-size:11px;color:var(--muted);line-height:1.45}
 .ops-saisi-par{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:12px;margin-bottom:14px}
+/* v2.6.1 : bandeau date + horaires des modales creneau. Le discret « Date :
+   ... » en 12px gris pointille se confondait avec le fond ; date et horaires
+   sont l'information la plus structurante d'un creneau. */
+.ops-dt-banner{border-style:solid;border-color:var(--accent);background:var(--accent-bg);color:var(--text);font-size:14px;padding:12px 16px;gap:10px;flex-wrap:wrap}
+.ops-dt-banner strong{font-size:15px;font-weight:800;color:var(--text)}
+.ops-dt-banner .ops-dt-sep{color:var(--accent);font-weight:900;opacity:.55}
+.ops-dt-banner .ops-dt-time{font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;font-size:15px;font-weight:800;color:var(--accent);letter-spacing:.02em}
+.ops-dt-banner svg{color:var(--accent);flex-shrink:0}
 .ops-saisi-par strong{color:var(--text);font-weight:600}
 .ops-btn-add{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;border:none;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:filter .15s,background .15s,color .15s;white-space:nowrap}
 .ops-btn-add:hover{filter:brightness(1.08)}
@@ -903,6 +915,18 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 .maint-cat-btn.active:hover{filter:brightness(1.05)}
 .maint-wearparts-stack{display:grid;grid-template-columns:repeat(auto-fit,minmax(480px,1fr));gap:14px}
 .maint-wearpart{min-height:260px}
+/* v2.6.1 : la severite visuelle de la carte piece d'usure suit EXACTEMENT la
+   couleur de l'anneau (variable --wp-sev posee inline, calculee par
+   _ratioColor cote JS) — plus de bordure rouge en face d'un anneau jaune.
+   Fallback --danger si la variable n'est pas posee (carte non en retard). */
+.maint-frame.maint-wearpart.is-overdue{border-color:var(--wp-sev,var(--danger,#f87171));box-shadow:0 0 0 1px var(--wp-sev,var(--danger,#f87171)),0 4px 12px var(--wp-sev-glow,rgba(248,113,113,.20))}
+.maint-frame.maint-wearpart.is-overdue .maint-frame-head{border-bottom-color:var(--wp-sev-glow,rgba(248,113,113,.25))}
+.maint-frame.maint-wearpart.is-overdue .maint-frame-title{color:var(--wp-sev,var(--danger,#f87171))}
+.maint-frame.maint-wearpart.is-overdue-critical{border-color:var(--wp-sev,var(--danger,#dc2626));box-shadow:0 0 0 2px var(--wp-sev,var(--danger,#dc2626)),0 6px 16px var(--wp-sev-glow,rgba(220,38,38,.30))}
+/* Badge "Retard X j" (temps) aligne lui aussi. Le badge "Exces" du metrage
+   (.maint-wp-badge-info) garde son style neutre — le metrage est un supplement,
+   pas une alarme (regle produit v2.4.23). */
+.maint-frame.maint-wearpart.is-overdue .maint-wp-badge:not(.maint-wp-badge-info){background:var(--wp-sev-soft,rgba(248,113,113,.15));color:var(--wp-sev,var(--danger,#f87171))}
 .maint-wp-tabs{display:inline-flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px}
 .maint-wp-btn{border:none;background:transparent;color:var(--text2);padding:5px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s}
 .maint-wp-btn:hover{background:var(--card);color:var(--text)}
@@ -2609,9 +2633,11 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
       </button>
     </div>
     <div class="modal-body">
-      <div class="ops-saisi-par">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        <span>Date : <strong id="plan-det-date">—</strong></span>
+      <div class="ops-saisi-par ops-dt-banner">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <strong id="plan-det-date">—</strong>
+        <span class="ops-dt-sep">·</span>
+        <span class="ops-dt-time" id="plan-det-time">—</span>
       </div>
       <div class="plan-det-list" id="plan-det-list"></div>
     </div>
@@ -2632,9 +2658,11 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
     </div>
     <form id="case-mod-form" onsubmit="submitCaseModal(event)">
       <div class="modal-body">
-        <div class="ops-saisi-par">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <span>Date : <strong id="case-mod-date">—</strong></span>
+        <div class="ops-saisi-par ops-dt-banner">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <strong id="case-mod-date">—</strong>
+          <span class="ops-dt-sep">·</span>
+          <span class="ops-dt-time" id="case-mod-time-recap">—</span>
         </div>
         <div class="ops-field">
           <label class="ops-field-label" for="case-mod-nom">Nom du créneau <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(optionnel)</span></label>
@@ -2663,7 +2691,6 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                       title="Ajoute les opérations d'un modèle au créneau">
                 <option value="">+ Importer un modèle…</option>
               </select>
-              <button type="button" class="case-tmpl-picker-btn" onclick="openTemplatesModal()">Gérer</button>
               <button type="button" class="case-ops-add-btn" onclick="addCaseOp()">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Ajouter une opération
@@ -3143,6 +3170,12 @@ function _apiEventToClient(ev){
     operators: ev.operators || [],
     source: ev.source,
     template_id: ev.template_id || null,
+    // v2.6.1 : discriminant entre les deux facons d'etre lie a un modele.
+    // template_origin_date n'est pose QUE par _generate_events_for_template(),
+    // c.-a-d. par la generation d'une recurrence. Un creneau ou l'on a
+    // simplement importe un modele depuis la liste des operations porte un
+    // template_id mais PAS d'origin_date.
+    template_origin_date: ev.template_origin_date || null,
     created_at: ev.created_at,
     updated_at: ev.updated_at,
   };
@@ -4445,6 +4478,9 @@ function openPlanningDetailsModal(events){
   const listEl = document.getElementById('plan-det-list');
   if(titleEl) titleEl.textContent = 'Détails du créneau';
   if(dtEl) dtEl.textContent = _fmtIsoDateFr(ev.date);
+  // v2.6.1 : horaires dans le bandeau du haut, a cote de la date.
+  const tmEl = document.getElementById('plan-det-time');
+  if(tmEl) tmEl.textContent = (ev.start && ev.end) ? (ev.start + ' \u2013 ' + ev.end) : '—';
   if(listEl){
     const ops = Array.isArray(ev.operations) ? ev.operations : [];
     // Machines couvertes par le créneau (union des machines des ops).
@@ -4488,12 +4524,19 @@ function openPlanningDetailsModal(events){
           const rows = op.machineData.map(md => {
             // v2.5.11 : 3 etats visuels distincts : termine (ok), invalidee (gris),
             // a_faire (defaut).
+            // v2.6.1 : la machine est TOUJOURS nommee, meme quand l'operation
+            // n'en concerne qu'une seule. Avant, `machineData.length === 1` la
+            // masquait : sur un creneau couvrant Cohesio 1 ET Cohesio 2, une
+            // operation mono-machine s'affichait « En attente » sans dire
+            // laquelle des deux etait visee. Repli silencieux si la machine
+            // est absente de la donnee (creneaux anciens).
+            const mOn   = md.machine ? (' sur ' + escHtml(md.machine)) : '';
             const done = md.statut === 'termine';
             const invalidated = md.statut === 'invalidee';
             let icon, label, color;
             if(done){
               icon = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--ok);color:#fff;flex-shrink:0"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>';
-              label = 'Effectu\u00e9e' + (op.machineData.length === 1 ? '' : ' sur ' + escHtml(md.machine)) +
+              label = 'Effectu\u00e9e' + mOn +
                       (md.done_by ? ' \u00b7 par ' + escHtml(_resolveName(md.done_by) || 'op. inconnu') : '') +
                       (md.done_at ? ' \u00e0 ' + escHtml(_fmtDoneAt(md.done_at)) : '');
               color = 'var(--text2)';
@@ -4501,11 +4544,11 @@ function openPlanningDetailsModal(events){
               icon = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--muted);color:#fff;flex-shrink:0" title="Saisie invalid\u00e9e administrativement"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="5" y1="19" x2="19" y2="5"/></svg></span>';
               const invBy = md.invalidated_by_nom ? ' \u00b7 par ' + escHtml(md.invalidated_by_nom) : '';
               const invAt = md.invalidated_at ? ' le ' + escHtml(_fmtDoneAt(md.invalidated_at)) : '';
-              label = 'Invalid\u00e9e' + (op.machineData.length === 1 ? '' : ' sur ' + escHtml(md.machine)) + invBy + invAt;
+              label = 'Invalid\u00e9e' + mOn + invBy + invAt;
               color = 'var(--muted)';
             } else {
               icon = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border);flex-shrink:0"></span>';
-              label = (op.machineData.length === 1 ? 'En attente' : escHtml(md.machine) + ' \u2014 en attente');
+              label = md.machine ? (escHtml(md.machine) + ' \u2014 en attente') : 'En attente';
               color = 'var(--muted)';
             }
             const extraStyle = invalidated ? ';text-decoration:line-through;text-decoration-color:var(--muted)' : '';
@@ -4522,9 +4565,15 @@ function openPlanningDetailsModal(events){
           '</div>';
         }).join('')
       : '<div class="plan-det-case-op-empty">Aucune opération définie.</div>';
-    // Badge template si le créneau vient d'un modèle
+    // Badge « Depuis modèle » — v2.6.1 : réservé aux créneaux GÉNÉRÉS par la
+    // récurrence d'un modèle. Un créneau où l'on a simplement importé un modèle
+    // depuis la liste des opérations n'en est pas une occurrence : ses ops ont
+    // pu être retouchées, complétées par d'autres modèles, et rien ne le
+    // resynchronisera avec le modèle. Afficher « Depuis modèle » y était
+    // trompeur, l'infobulle annonçant même que le modèle « écrasera ces
+    // opérations » — ce qui ne se produit que pour les occurrences générées.
     let tmplBadge = '';
-    if(ev.template_id){
+    if(ev.template_id && ev.template_origin_date){
       const tmpl = (typeof TEMPLATES_STATE !== 'undefined' && TEMPLATES_STATE ? (TEMPLATES_STATE.list || []) : []).find(t => t.id === ev.template_id);
       const label = tmpl ? tmpl.name : ('#' + ev.template_id);
       tmplBadge = '<span class="tmpl-badge" title="Créneau lié à un modèle. Les modifs futures du modèle écraseront ces opérations.">' +
@@ -4945,7 +4994,10 @@ async function openCaseModal(opts){
   _loadOperatorsCatalog().then(() => renderCaseOperators()).catch(() => {});
   // Charge les templates puis pré-sélectionne si le créneau en est issu
   loadTemplates().then(() => refreshCaseTemplatePicker()).catch(() => {});
-  if(_PENDING_CASE) _PENDING_CASE.template_id = preselectedTemplateId;
+  // v2.6.1 : en EDITION on preserve le lien existant (une occurrence de
+  // recurrence doit rester rattachee a son modele) ; en CREATION il n'y a
+  // jamais de lien, meme via « Créer depuis un modèle » — cf. applyCaseTemplate.
+  if(_PENDING_CASE) _PENDING_CASE.template_id = opts.editId ? preselectedTemplateId : null;
   // v2.6.1 : le rappel des modeles importes repart de zero a chaque ouverture.
   // En EDITION d'un creneau deja issu d'un modele, on reaffiche son origine
   // sans reimporter ses ops (elles sont deja chargees depuis l'event).
@@ -5044,6 +5096,16 @@ function _openCaseModalInner(opts){
   const h = Math.max(0, Math.min(23, opts.defaultHour || 8));
   if(sEl) sEl.value = opts.start || (String(h).padStart(2,'0') + ':00');
   if(eEl) eEl.value = opts.end   || (String(Math.min(h+1, 23)).padStart(2,'0') + ':00');
+  // v2.6.1 : recap des horaires dans le bandeau du haut. Les champs de saisie
+  // restent la source de verite ; le bandeau se contente de les refleter, pour
+  // que date et horaires soient lisibles d'un coup d'oeil sans descendre.
+  _syncCaseTimeRecap();
+  [sEl, eEl].forEach(function(el){
+    if(!el || el._dtRecapBound) return;
+    el._dtRecapBound = true;
+    el.addEventListener('input',  _syncCaseTimeRecap);
+    el.addEventListener('change', _syncCaseTimeRecap);
+  });
   // v2.5.14 : créneau passé -> horaires en lecture seule (même règle que le drag & drop).
   try{
     const _todayIso = _calIsoYMD(new Date());
@@ -5071,7 +5133,14 @@ function _openCaseModalInner(opts){
   m.classList.add('open');
   m.setAttribute('aria-hidden','false');
   document.body.style.overflow = 'hidden';
-  setTimeout(() => { sEl?.focus(); }, 60);
+  // v2.6.1 : le focus allait sur le champ « Heure de début ». Or le timepicker
+  // maison s'ouvre sur l'evenement focus (mysifa_timepicker.js) : le panneau
+  // heures/minutes se depliait donc tout seul a chaque ouverture de modale, par
+  // dessus le formulaire, alors que les horaires par defaut conviennent le plus
+  // souvent. On donne le focus au premier champ de saisie reel — le nom du
+  // creneau — qui n'ouvre aucun panneau flottant. Le clavier entre bien dans la
+  // modale, sans rien deplier.
+  setTimeout(() => { (nomEl || sEl)?.focus(); }, 60);
 }
 function closeCaseModal(){
   const m = document.getElementById('planning-case-modal');
@@ -5352,13 +5421,33 @@ function renderCaseOpsList(){
           '<div class="libre-autocomplete-panel case-op-libre-autocomplete" data-idx="' + idx + '" style="display:none"></div>' +
         '</div>';
     } else {
+      // v2.6.1 : une operation deja presente dans le creneau est GRISEE, avec le
+      // motif. Avant, on pouvait la reselectionner et remplir toute la ligne
+      // pour rien : la dedup (par code) la fusionnait a l'enregistrement et la
+      // ligne « disparaissait », sans que l'utilisateur comprenne pourquoi.
+      //
+      // Deux precautions :
+      //  - on exclut la ligne COURANTE du calcul (i !== idx), sinon l'option
+      //    selectionnee serait elle-meme desactivee et le select perdrait sa
+      //    valeur a chaque rendu ;
+      //  - les operations deja effectuees ou invalidees, affichees en lecture
+      //    seule plus haut, comptent comme presentes — sinon on pourrait
+      //    rajouter une ligne pour une operation deja faite.
+      const _usedElsewhere = new Set(
+        _CASE_OPS.map((o, i) => (i !== idx && o.opTypeId) ? String(o.opTypeId) : null)
+                 .filter(Boolean)
+      );
       const options = '<option value="">Sélectionner une opération…</option>' +
-        OPS_TYPES_STATE.list.map(t =>
-          '<option value="' + escAttr(t.id) + '"' + (t.id === op.opTypeId ? ' selected' : '') + '>' +
+        OPS_TYPES_STATE.list.map(t => {
+          const taken = _usedElsewhere.has(String(t.id));
+          return '<option value="' + escAttr(t.id) + '"' +
+            (t.id === op.opTypeId ? ' selected' : '') +
+            (taken ? ' disabled' : '') + '>' +
             escHtml(t.nom) + (t.niveau ? ' (N' + t.niveau + ')' : '') +
             (t.frequence ? ' · ' + escHtml(t.frequence) : '') +
-          '</option>'
-        ).join('');
+            (taken ? ' — déjà dans le créneau' : '') +
+          '</option>';
+        }).join('');
       pickerHtml =
         '<select class="ops-select case-op-catalogue-select" data-idx="' + idx + '" onchange="updateCaseOp(' + idx + ', this.value)">' + options + '</select>';
     }
@@ -6992,7 +7081,7 @@ async function loadOpsTypes(){
 //   - > 200 %    : rouge plein (clamp)
 // Change par rapport à v1 : le vert restait "trop longtemps" un vert-jaune
 // dès 50 % avant, maintenant il reste pur jusqu'à 90 %.
-function _ratioColor(ratio){
+function _ratioColorRgb(ratio){
   // Stops en RATIO direct (pas de normalisation t=ratio/2 comme avant).
   const stops = [
     [0.00, [ 52, 211, 153]],   // vert franc
@@ -7011,11 +7100,21 @@ function _ratioColor(ratio){
       const red   = Math.round(ca[0] + (cb[0] - ca[0]) * lt);
       const green = Math.round(ca[1] + (cb[1] - ca[1]) * lt);
       const blue  = Math.round(ca[2] + (cb[2] - ca[2]) * lt);
-      return 'rgb(' + red + ',' + green + ',' + blue + ')';
+      return [red, green, blue];
     }
   }
   const last = stops[stops.length - 1][1];
-  return 'rgb(' + last[0] + ',' + last[1] + ',' + last[2] + ')';
+  return [last[0], last[1], last[2]];
+}
+// Wrappers CSS. _ratioColor garde exactement la signature d'avant (rgb(...)),
+// _ratioColorRgba sert a teinter bordure / titre / badge de la carte.
+function _ratioColor(ratio){
+  const c = _ratioColorRgb(ratio);
+  return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+}
+function _ratioColorRgba(ratio, alpha){
+  const c = _ratioColorRgb(ratio);
+  return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + alpha + ')';
 }
 // Compteur module-level pour générer des IDs uniques de paths SVG et filtres
 // par carte (sinon les <textPath href="#..."> peuvent référencer un path d'une
@@ -7043,31 +7142,39 @@ function _renderWearPartRings(ratios){
         '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dashoffset .35s ease,stroke .15s"/>';
       return trackBg + fg;
     }
-    // >= 100% : tour de base + court segment de stroke à la position
-    // d'avancement (longueur ~ stroke-width) avec stroke-linecap="round"
-    // pour la tête arrondie style natif, et drop-shadow pour l'effet 3D.
-    // Le départ à 12h n'est pas tracé (gap dans le dasharray) → pas de
-    // cap visible au sommet.
-    // Overflow plafonné à 0.97 pour garder le tip distinct du sommet si > 200%.
-    const overflow = Math.min(0.97, ratio - 1);
+    // >= 100% : rendu Apple Watch. Le tour precedent reste PLEIN et un nouveau
+    // tour continu part de 12h jusqu'a la position d'avancement, pose par-dessus.
+    // Les deux tours ont la meme couleur : c'est uniquement l'ombre portee sous
+    // la tete arrondie qui revele la superposition (plus de "point volant").
+    // Au-dela de 200% les tours s'empilent : on affiche la fraction du tour en
+    // cours (ratio - floor(ratio)), la tete reste donc toujours a sa position
+    // reelle sur le cadran.
     const baseLap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
       '" style="transition:stroke .15s"/>';
-    // Triple drop-shadow pour l'effet 3D : ombre dure proche, moyenne diffuse,
-    // douce large.
-    const shadowFilter = 'filter:'
-      + 'drop-shadow(0 1px 1px rgba(0,0,0,.55)) '
-      + 'drop-shadow(2px 4px 5px rgba(0,0,0,.45)) '
-      + 'drop-shadow(0 0 8px rgba(0,0,0,.25))';
-    const tipPos      = overflow * circ;
-    const tipDashLen  = sw * 0.6;
-    const dashStart   = tipPos - tipDashLen;
-    const tip = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r +
+    const frac = ratio - Math.floor(ratio);
+    // Pile sur un tour complet (100%, 200%...) : cercle plein, pas de tete.
+    if(frac <= 0.002) return trackBg + baseLap;
+    const arcLen = circ * frac;
+    // Segment court a la tete du tour en cours. Il n'est pas visible en propre
+    // (meme couleur, meme geometrie que l'arc pose juste au-dessus) : son seul
+    // role est de PROJETER l'ombre sur le tour du dessous. En limitant sa
+    // longueur, on obtient un croissant d'ombre localise sous la tete au lieu
+    // d'un halo sur tout l'anneau.
+    const shadowLen = Math.min(arcLen, sw * 1.5);
+    const shadowStyle = 'filter:'
+      + 'drop-shadow(0 0 2px rgba(0,0,0,.40)) '
+      + 'drop-shadow(1.5px 2.5px 3px rgba(0,0,0,.38))';
+    const shadowSeg = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r +
       '" fill="none" stroke="' + color + '" stroke-width="' + sw +
-      '" stroke-linecap="round" stroke-dasharray="' + tipDashLen.toFixed(2) + ' ' + (circ - tipDashLen).toFixed(2) +
-      '" stroke-dashoffset="' + (-dashStart).toFixed(2) +
-      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="' + shadowFilter +
-      ';transition:stroke-dashoffset .35s ease,stroke .15s"/>';
-    return trackBg + baseLap + tip;
+      '" stroke-linecap="round" stroke-dasharray="' + shadowLen.toFixed(2) + ' ' + (circ - shadowLen).toFixed(2) +
+      '" stroke-dashoffset="' + (-(arcLen - shadowLen)).toFixed(2) +
+      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="' + shadowStyle + '"/>';
+    // Tour en cours : arc continu de 12h jusqu'a la position reelle, extremites
+    // arrondies (le cap de depart se fond dans le tour du dessous).
+    const lap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
+      '" stroke-linecap="round" stroke-dasharray="' + arcLen.toFixed(2) + ' ' + (circ - arcLen).toFixed(2) +
+      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dasharray .35s ease,stroke .15s"/>';
+    return trackBg + baseLap + shadowSeg + lap;
   };
   // Étiquette titre à 12h (texte droit) sur chaque anneau.
   // Texte blanc, contour foncé paint-order:stroke pour rester lisible quel que
@@ -7773,6 +7880,17 @@ function _renderWearPartsGroup(machine, statusFilter){
       frameClsExtra = ' is-overdue';
       if(timeCritical) frameClsExtra += ' is-overdue-critical';
     }
+    // v2.6.1 : la bordure / le titre / le badge de retard prennent la couleur
+    // exacte de l'anneau Temps (fin du decalage "bordure rouge / anneau jaune").
+    // Plancher a 1.2 : entre 100 et 120% _ratioColor renvoie encore un
+    // vert-jaune trop clair pour lire comme une bordure d'alerte.
+    let sevStyle = '';
+    if(timeOver && refDays != null && refDays > 0 && daysSince != null){
+      const _sev = Math.max(1.2, daysSince / refDays);
+      sevStyle = ' style="--wp-sev:' + _ratioColor(_sev)
+        + ';--wp-sev-soft:' + _ratioColorRgba(_sev, .15)
+        + ';--wp-sev-glow:' + _ratioColorRgba(_sev, .22) + '"';
+    }
     let elapsedHtml = '';
     if(WEARPART_LAST_DATES_STATE.machine !== machine){
       elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Chargement…</span>';
@@ -7810,7 +7928,7 @@ function _renderWearPartsGroup(machine, statusFilter){
            (matchingPositions.indexOf('bande') !== -1 ? _b('Bande', 'bande') : '') +
            (matchingPositions.indexOf('rive')  !== -1 ? _b('Rive',  'rive')  : '') +
          '</div>');
-    return '<section class="maint-frame maint-wearpart' + frameClsExtra + '" data-wearpart="' + escAttr(p.id) + '" data-wearpart-pos="' + escAttr(pos) + '" data-maint-machine="' + escAttr(machine) + '">' +
+    return '<section class="maint-frame maint-wearpart' + frameClsExtra + '" data-wearpart="' + escAttr(p.id) + '" data-wearpart-pos="' + escAttr(pos) + '" data-maint-machine="' + escAttr(machine) + '"' + sevStyle + '>' +
       '<div class="maint-frame-head">' +
         '<div class="maint-frame-title">' + escHtml(p.label) + '</div>' +
         tabsHtml +
@@ -12699,6 +12817,15 @@ function _mergeTemplateOps(tmplOps){
   return { ajoutees, fusionnees };
 }
 
+// v2.6.1 : reporte les horaires saisis dans le bandeau date du haut de modale.
+function _syncCaseTimeRecap(){
+  const el = document.getElementById('case-mod-time-recap');
+  if(!el) return;
+  const s = (document.getElementById('case-mod-start') || {}).value || '';
+  const e = (document.getElementById('case-mod-end')   || {}).value || '';
+  el.textContent = (s && e) ? (s + ' \u2013 ' + e) : (s || e || '—');
+}
+
 async function applyCaseTemplate(templateId){
   if(!templateId) return;   // option « + Importer un modele… » : aucune action
   try{
@@ -12714,14 +12841,18 @@ async function applyCaseTemplate(templateId){
     }
     const res = _mergeTemplateOps(tmpl.ops || []);
     _CASE_TMPL_USED.push({ id: tmpl.id, name: tmpl.name });
-    // Etiquette du creneau : conservee tant qu'UN SEUL modele est importe.
-    // Des le second, on la retire — un creneau composite n'est la copie
-    // d'aucun modele, et surtout : supprimer un modele efface ses creneaux
-    // futurs. Garder l'etiquette ferait disparaitre un creneau composite en
-    // emportant les operations venues des autres modeles.
-    if(_PENDING_CASE){
-      _PENDING_CASE.template_id = (_CASE_TMPL_USED.length === 1) ? tmpl.id : null;
-    }
+    // v2.6.1 : l'import NE CREE AUCUN LIEN avec le modele. C'est un simple
+    // raccourci de saisie : il recopie des operations dans le formulaire, rien
+    // de plus. Le creneau produit est autonome.
+    //
+    // Avant, un import unique laissait template_id sur le creneau, ce qui le
+    // rendait solidaire du modele : modifier le modele ecrasait ses operations,
+    // desactiver sa recurrence ou le supprimer effacait purement le creneau —
+    // alors qu'il avait ete compose a la main. Le comportement dependait en
+    // plus du NOMBRE de modeles importes, l'etiquette tombant des le second.
+    // On ne pose donc plus rien : seules les occurrences generees par la
+    // recurrence portent un lien (template_id + template_origin_date), et
+    // elles sont creees cote serveur, jamais par ce chemin.
     renderCaseOpsList();
     renderCaseTemplatesApplied();
     let msg = 'Modèle « ' + tmpl.name + ' » importé';
@@ -12781,6 +12912,66 @@ async function confirmDeleteTemplate(templateId){
   const t = (TEMPLATES_STATE.list || []).find(x => x.id === templateId);
   if(!t) return;
   _openDeleteTemplateModal(t);
+}
+
+// v2.6.1 : confirmation au style MySifa, en remplacement de window.confirm().
+// Rend une Promise<boolean> pour rester utilisable en await dans un flux async.
+// Mise en forme alignee sur _openDeleteTemplateModal (overlay .op-modal-overlay
+// + carte .op-modal), fermeture par Echap, clic hors carte ou bouton Annuler.
+// v2.6.1 : ids coches dans la derniere confirmation (cases [data-keep]).
+let _MYS_CONFIRM_LAST_KEEP = [];
+function _mysConfirm(opts){
+  opts = opts || {};
+  return new Promise(function(resolve){
+    const prev = document.getElementById('mys-confirm-overlay');
+    if(prev) prev.remove();
+    const wrap = document.createElement('div');
+    wrap.id = 'mys-confirm-overlay';
+    wrap.className = 'op-modal-overlay';
+    wrap.style.cssText = 'display:flex;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:10000;align-items:center;justify-content:center';
+    let done = false;
+    function close(val){
+      if(done) return;
+      done = true;
+      // v2.6.1 : les cases [data-keep] du corps sont lues AVANT le retrait du
+      // DOM — apres, querySelectorAll ne trouverait plus rien. Le resultat est
+      // expose via _MYS_CONFIRM_LAST_KEEP pour l'appelant.
+      try{
+        _MYS_CONFIRM_LAST_KEEP = Array.prototype.slice
+          .call(wrap.querySelectorAll('[data-keep]'))
+          .filter(function(cb){ return cb.checked; })
+          .map(function(cb){ return parseInt(cb.getAttribute('data-keep'), 10); })
+          .filter(function(v){ return !isNaN(v); });
+      }catch(_){ _MYS_CONFIRM_LAST_KEEP = []; }
+      document.removeEventListener('keydown', esc, true);
+      try{ wrap.remove(); }catch(_){}
+      resolve(val);
+    }
+    function esc(e){ if(e.key === 'Escape'){ e.preventDefault(); close(false); } }
+    document.addEventListener('keydown', esc, true);
+    wrap.addEventListener('click', function(e){ if(e.target === wrap) close(false); });
+
+    const accent = opts.danger ? 'var(--danger)' : 'var(--warn,#f59e0b)';
+    wrap.innerHTML = ''
+      + '<div class="op-modal" role="dialog" aria-modal="true" style="max-width:520px;width:calc(100% - 40px);background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,0.4)">'
+      +   '<div style="color:' + accent + ';font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">'
+      +     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>'
+      +     escHtml(opts.title || 'Confirmer ?')
+      +   '</div>'
+      +   (opts.highlightHtml
+          ? '<div style="padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:14px">' + opts.highlightHtml + '</div>'
+          : '')
+      +   '<div style="font-size:13px;color:var(--text);line-height:1.55;margin-bottom:16px">' + (opts.bodyHtml || '') + '</div>'
+      +   '<div style="display:flex;justify-content:flex-end;gap:10px">'
+      +     '<button type="button" data-mys-cancel class="modal-btn-ghost">' + escHtml(opts.cancelLabel || 'Annuler') + '</button>'
+      +     '<button type="button" data-mys-ok style="background:' + accent + ';color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">' + escHtml(opts.okLabel || 'Continuer') + '</button>'
+      +   '</div>'
+      + '</div>';
+    wrap.querySelector('[data-mys-cancel]').addEventListener('click', function(){ close(false); });
+    wrap.querySelector('[data-mys-ok]').addEventListener('click', function(){ close(true); });
+    document.body.appendChild(wrap);
+    requestAnimationFrame(function(){ wrap.querySelector('[data-mys-cancel]').focus(); });
+  });
 }
 
 function _openDeleteTemplateModal(t){
@@ -13379,6 +13570,84 @@ async function submitTemplateEditor(e){
   if(!ops.length){ showToast('Ajoutez au moins une opération.', 'danger'); return; }
   const missing = ops.find(o => !o.machines.length);
   if(missing){ showToast('Attribuez au moins une machine à chaque opération.', 'danger'); return; }
+  // v2.6.1 : avertissement AVANT enregistrement. La resynchronisation ecrase
+  // integralement les operations des occurrences futures generees par la
+  // recurrence (et leurs operateurs si le modele est recurrent). Elle se
+  // declenche des que des ops sont envoyees, meme inchangees — il faut donc
+  // que l'admin sache combien de creneaux il s'apprete a reinitialiser.
+  let _TMPL_RESYNC_EXCLUDE = [];
+  if(_TMPL_EDIT_ID){
+    try{
+      const ri = await fetch('/api/maintenance/templates/' + encodeURIComponent(_TMPL_EDIT_ID) +
+                             '/resync-impact?_=' + Date.now(), { credentials:'include', cache:'no-store' });
+      if(ri.ok){
+        const imp = await ri.json();
+        const n = (imp && imp.count) || 0;
+        const div = (imp && imp.diverged) || [];
+        // v2.6.1 : on n'interroge l'admin QUE sur les creneaux personnalises.
+        // Les copies conformes sont resynchronisees sans question — l'operation
+        // est un no-op pour elles. Case cochee = « préserver ce créneau » :
+        // le defaut protege ce qui a ete modifie a la main, il faut un geste
+        // explicite pour ecraser.
+        if(div.length){
+          const rows = div.map(function(d){
+            const grave = d.done_ops > 0;
+            return '<label style="display:flex;gap:9px;align-items:flex-start;padding:9px 10px;border:1px solid ' +
+                     (grave ? 'var(--danger)' : 'var(--border)') + ';border-radius:9px;margin-bottom:6px;cursor:pointer;background:var(--card)">' +
+                   '<input type="checkbox" data-keep="' + escAttr(d.id) + '" checked style="margin-top:2px;flex-shrink:0">' +
+                   '<span style="flex:1">' +
+                     '<span style="font-weight:700;color:var(--text);font-size:13px">' + escHtml(_fmtIsoDateFr(d.date)) + '</span>' +
+                     '<span style="display:block;font-size:12px;color:' + (grave ? 'var(--danger)' : 'var(--muted)') + ';margin-top:2px">' +
+                       escHtml((d.reasons || []).join(' · ')) +
+                     '</span>' +
+                   '</span></label>';
+          }).join('');
+          const identical = (imp.identical_count || 0);
+          const ok = await _mysConfirm({
+            title: div.length + ' créneau' + (div.length > 1 ? 'x' : '') + ' personnalisé' + (div.length > 1 ? 's' : ''),
+            bodyHtml:
+              '<div style="margin-bottom:10px">Ces créneaux à venir ont été modifiés depuis leur génération. ' +
+              '<strong>Décoche ceux que tu veux réinitialiser</strong> avec le contenu du modèle ; ' +
+              'les cases cochées seront préservées telles quelles.</div>' +
+              '<div style="max-height:34vh;overflow-y:auto;padding-right:4px">' + rows + '</div>' +
+              (identical
+                ? '<div style="margin-top:10px;color:var(--muted);font-size:12px">' + identical +
+                  ' autre(s) créneau(x) sont identiques au modèle : ils seront resynchronisés sans changement visible.</div>'
+                : ''),
+            okLabel: 'Enregistrer',
+            cancelLabel: 'Annuler',
+          });
+          if(!ok) return;
+          _TMPL_RESYNC_EXCLUDE = _MYS_CONFIRM_LAST_KEEP.slice();
+        } else if(n > 0){
+          const plur = n > 1;
+          let quand = '';
+          if(imp.first && imp.last && imp.first !== imp.last){
+            quand = ' (du ' + _fmtIsoDateFr(imp.first) + ' au ' + _fmtIsoDateFr(imp.last) + ')';
+          } else if(imp.first){
+            quand = ' (le ' + _fmtIsoDateFr(imp.first) + ')';
+          }
+          const ok = await _mysConfirm({
+            title: 'Réinitialiser ' + n + ' créneau' + (plur ? 'x' : '') + ' à venir ?',
+            highlightHtml:
+              '<div style="font-size:14px;font-weight:700;color:var(--text)">' +
+                n + ' créneau' + (plur ? 'x' : '') + ' généré' + (plur ? 's' : '') + ' par la récurrence' +
+              '</div>' +
+              (quand ? '<div style="font-size:12px;color:var(--muted);margin-top:4px">' + escHtml(quand.trim()) + '</div>' : ''),
+            bodyHtml:
+              'Leurs opérations seront <strong>remplacées par celles du modèle</strong>. ' +
+              'Toute retouche faite directement sur ces créneaux (opération ajoutée, machine décochée, consignes) sera perdue.' +
+              '<div style="margin-top:10px;color:var(--muted);font-size:12px">' +
+                'Les créneaux passés et ceux composés à la main ne sont pas concernés.' +
+              '</div>',
+            okLabel: 'Enregistrer quand même',
+            cancelLabel: 'Annuler',
+          });
+          if(!ok) return;
+        }
+      }
+    }catch(_){ /* impact indisponible : on n'empeche pas l'enregistrement */ }
+  }
   try{
     let r;
     // v2.4.29 : fusion avec les champs recurrence
@@ -13386,6 +13655,7 @@ async function submitTemplateEditor(e){
     // v2.5.25 : inclut la liste des ids d'operateurs par defaut
     const defaultOpIds = (_TMPL_DEFAULT_OPS || []).map(u => u.id);
     const payload = Object.assign({ name, description: desc, ops, default_operators: defaultOpIds }, recur);
+    if(_TMPL_RESYNC_EXCLUDE.length) payload.resync_exclude_ids = _TMPL_RESYNC_EXCLUDE;
     if(_TMPL_EDIT_ID){
       r = await fetch('/api/maintenance/templates/' + encodeURIComponent(_TMPL_EDIT_ID), {
         method:'PATCH', credentials:'include',
@@ -13405,6 +13675,9 @@ async function submitTemplateEditor(e){
     }
     const d = await r.json();
     const resynced = d.resynced_events || 0;
+    // v2.6.1 : replacement du planning suite a un changement de regle.
+    const replaced = d.recur_replaced_events || 0;
+    const regen    = d.recur_regenerated_events || 0;
     // v2.5.13 : mention les creneaux futurs supprimes si la recurrence a ete desactivee.
     const deletedFuture = d && d.deleted_future_events ? d.deleted_future_events : 0;
     let toastMsg;
@@ -13414,6 +13687,7 @@ async function submitTemplateEditor(e){
       const parts = ['Mod\u00e8le enregistr\u00e9'];
       if(resynced) parts.push(resynced + ' cr\u00e9neau' + (resynced > 1 ? 'x' : '') + ' futur' + (resynced > 1 ? 's' : '') + ' resynchronis' + (resynced > 1 ? '\u00e9s' : '\u00e9'));
       if(deletedFuture) parts.push(deletedFuture + ' cr\u00e9neau' + (deletedFuture > 1 ? 'x' : '') + ' futur' + (deletedFuture > 1 ? 's' : '') + ' nettoy' + (deletedFuture > 1 ? '\u00e9s' : '\u00e9') + ' (r\u00e9currence d\u00e9sactiv\u00e9e)');
+      if(replaced) parts.push('planning replac\u00e9 : ' + replaced + ' occurrence' + (replaced > 1 ? 's' : '') + ' remplac\u00e9' + (replaced > 1 ? 'es' : 'e') + ' par ' + regen + ' nouvelle' + (regen > 1 ? 's' : ''));
       toastMsg = parts.join(' \u2014 ') + '.';
     }
     showToast(toastMsg, 'info');
@@ -13483,9 +13757,12 @@ async function startFromTemplate(templateId){
   closeCalFabMenu();
   const { iso, h } = _defaultIsoAndHour();
   await openCaseModal({ iso, defaultHour: h });
+  // v2.6.1 : pre-remplit les operations depuis le modele, sans creer de lien
+  // (applyCaseTemplate ne pose plus template_id). Le select revient sur son
+  // option neutre : c'est une action d'import, pas l'etat du creneau.
   await applyCaseTemplate(templateId);
   const sel = document.getElementById('case-mod-template');
-  if(sel) sel.value = String(templateId);
+  if(sel) sel.value = '';
 }
 
 

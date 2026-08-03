@@ -8,7 +8,13 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.material_cost import MC_SETTING_KEYS, MaterialCategoryCode, PriceBasis, PriceCurrency
+from app.models.material_cost import (
+    MC_SETTING_KEYS,
+    MaterialCategoryCode,
+    PriceBasis,
+    PriceCurrency,
+    TransportMode,
+)
 
 # ─── Settings ────────────────────────────────────────────────────────────────
 
@@ -17,7 +23,8 @@ class PricingSettingsOut(BaseModel):
     eur_usd_rate: Decimal
     default_container_cost_usd: Decimal
     default_container_kg: Decimal
-    default_margin_eur_m2: Decimal
+    default_margin_pct: Decimal
+    default_margin_eur_m2: Decimal = Decimal("0")
     import_tax_pct: Decimal = Decimal("0")
     transport_cost_fixed_eur: Decimal = Decimal("0")
     charge_production_pct: Decimal = Decimal("0")
@@ -33,6 +40,7 @@ class PricingSettingsPatch(BaseModel):
     eur_usd_rate: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     default_container_cost_usd: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     default_container_kg: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
+    default_margin_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     default_margin_eur_m2: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     import_tax_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     transport_cost_fixed_eur: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
@@ -81,15 +89,31 @@ class McSupplierUpdate(BaseModel):
 
 
 class MaterialBreakdownOut(BaseModel):
+    """raw + transport + fx + tax_uplift = price_eur_per_m2 (raw/transport en devise d'achat)."""
+
     raw: Decimal
     transport: Decimal
     fx: Decimal
     tax_uplift: Decimal
+    currency: PriceCurrency = "EUR"
+    price_basis: PriceBasis = "PER_KG"
+    fx_rate: Decimal = Decimal("1")
+    weight_per_m2: Decimal = Decimal("0")
+    unit_price_src: Decimal = Decimal("0")
+    transport_src: Decimal = Decimal("0")
+    subtotal_src: Decimal = Decimal("0")
+    subtotal_eur: Decimal = Decimal("0")
+    transport_eur_m2: Decimal = Decimal("0")
+    transport_pct_effective: Decimal = Decimal("0")
 
 
 class MaterialComputedOut(BaseModel):
     price_eur_per_m2: Decimal
     breakdown: MaterialBreakdownOut
+    # Marge par défaut appliquée si la matière est vendue telle quelle.
+    margin_pct: Decimal = Decimal("0")
+    margin_eur_m2: Decimal = Decimal("0")
+    sell_price_eur_m2: Decimal = Decimal("0")
 
 
 class McMaterialOut(BaseModel):
@@ -106,6 +130,9 @@ class McMaterialOut(BaseModel):
     price_basis: PriceBasis
     tax_incidence: Decimal
     is_imported: bool
+    transport_mode: TransportMode = "AMOUNT"
+    transport_unit_price: Decimal = Decimal("0")
+    transport_pct: Decimal = Decimal("0")
     container_kg: Optional[Decimal] = None
     container_cost_usd: Optional[Decimal] = None
     is_active: bool
@@ -126,6 +153,9 @@ class McMaterialCreate(BaseModel):
     price_basis: PriceBasis = "PER_KG"
     tax_incidence: Decimal = Field(default=Decimal("1"), decimal_places=4, max_digits=12)
     is_imported: bool = False
+    transport_mode: TransportMode = "AMOUNT"
+    transport_unit_price: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
+    transport_pct: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
     container_kg: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     container_cost_usd: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     price_history_source: Optional[str] = Field(None, max_length=500)
@@ -143,6 +173,9 @@ class McMaterialUpdate(BaseModel):
     price_basis: Optional[PriceBasis] = None
     tax_incidence: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     is_imported: Optional[bool] = None
+    transport_mode: Optional[TransportMode] = None
+    transport_unit_price: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
+    transport_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     container_kg: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     container_cost_usd: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     is_active: Optional[bool] = None
@@ -175,6 +208,7 @@ class ProductComponentOut(BaseModel):
 
 class ProductCostOut(BaseModel):
     total_eur_per_m2: Decimal
+    margin_pct: Decimal = Decimal("0")
     margin_eur_m2: Decimal
     sell_price_eur_m2: Decimal
     components: list[ProductComponentOut]
@@ -189,7 +223,7 @@ class McProductOut(BaseModel):
     silicone_id: Optional[int] = None
     glassine_id: Optional[int] = None
     extra_material_ids: list[int] = Field(default_factory=list)
-    custom_margin_eur_m2: Optional[Decimal] = None
+    custom_margin_pct: Optional[Decimal] = None
     is_active: bool
     created_at: str
     updated_at: str
@@ -204,7 +238,7 @@ class McProductCreate(BaseModel):
     silicone_id: Optional[int] = None
     glassine_id: Optional[int] = None
     extra_material_ids: list[int] = Field(default_factory=list)
-    custom_margin_eur_m2: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
+    custom_margin_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
 
 
 class McProductUpdate(BaseModel):
@@ -215,7 +249,7 @@ class McProductUpdate(BaseModel):
     silicone_id: Optional[int] = None
     glassine_id: Optional[int] = None
     extra_material_ids: Optional[list[int]] = None
-    custom_margin_eur_m2: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
+    custom_margin_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     is_active: Optional[bool] = None
 
 
@@ -225,7 +259,7 @@ class ProductPreviewIn(BaseModel):
     silicone_id: Optional[int] = None
     glassine_id: Optional[int] = None
     extra_material_ids: list[int] = Field(default_factory=list)
-    custom_margin_eur_m2: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
+    custom_margin_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
 
 
 class MaterialPreviewIn(BaseModel):
@@ -237,6 +271,9 @@ class MaterialPreviewIn(BaseModel):
     price_basis: PriceBasis = "PER_KG"
     tax_incidence: Decimal = Field(default=Decimal("1"), decimal_places=4, max_digits=12)
     is_imported: bool = False
+    transport_mode: TransportMode = "AMOUNT"
+    transport_unit_price: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
+    transport_pct: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
     container_kg: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     container_cost_usd: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
 

@@ -228,7 +228,61 @@ DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL = """^XA
 
 # Templates prédéfinis complémentaires (galerie de départ pour l'admin).
 # Format : liste de dicts {key, nom, description, langage, contenu}.
+# ── Avertissement FSC à agrafer au dossier physique de production ──────
+#
+# Format 100 × 50 mm, soit 800 × 400 points à 203 dpi (8 pts/mm — même
+# résolution que les gabarits bobine ci-dessus : 57 mm → ^PW456).
+#
+# Strictement monochrome. Sur une thermique, la couleur n'existe pas : la
+# hiérarchie visuelle passe par l'épaisseur du trait, le pavé plein inversé
+# (^GB rempli + ^FR) et la taille de police. Rien d'autre ne se voit.
+#
+# Le contenu est une CONSIGNE, pas une identification : l'opérateur qui prend
+# le dossier physique en main doit savoir ce qu'on attend de lui avant d'aller
+# chercher sa bobine. C'est le pendant papier du bandeau de la saisie de
+# production — et le seul support disponible quand l'écran est mobilisé par
+# une autre machine.
+#
+# Texte sans accents, comme les gabarits existants : les polices bitmap A0
+# des thermiques d'entrée de gamme les rendent mal même en ^CI28.
+DEFAULT_TEMPLATE_FSC_AVERTISSEMENT_ZPL = """^XA
+^CI28
+^PW800
+^LL400
+^LH0,0
+^FO4,4^GB792,392,4^FS
+^FO14,14^GB772,56,56^FS
+^FO26,26^FR^A0N,36,36^FDDOSSIER FSC^FS
+^FO470,30^FR^A0N,28,28^FD{{fsc_type_requis}}^FS
+^FO26,82^A0N,40,40^FD{{no_dossier}}^FS
+^FO26,128^A0N,24,24^FD{{client}}^FS
+^FO14,158^GB772,2,2^FS
+^FO26,170^A0N,24,24^FD1. Matiere certifiee FSC uniquement^FS
+^FO26,200^A0N,24,24^FD2. Scanner chaque bobine (MyProd)^FS
+^FO26,230^A0N,24,24^FD3. Entree produit fini en Z1^FS
+^FO26,268^BY2,3,58^BCN,58,N,N,N^FD{{no_dossier}}^FS
+^FO14,340^GB772,2,2^FS
+^FO26,352^A0N,20,20^FD{{ref_produit}}  {{machine}}^FS
+^FO560,352^A0N,20,20^FD{{now:%d/%m/%Y}}^FS
+^XZ
+"""
+
 DEFAULT_TEMPLATE_GALLERY = [
+    {
+        "key": "fsc_avertissement_dossier",
+        "variante": "full",
+        "nom": "Avertissement FSC — dossier de production (100×50mm, N&B)",
+        "description": (
+            "Format 100×50mm, strictement noir et blanc. Consigne à coller sur le "
+            "dossier physique : matière certifiée obligatoire, scan de chaque bobine, "
+            "entrée en Z1. Bandeau inversé, code-barres du n° de dossier."
+        ),
+        "langage": "zpl",
+        "usage_key": "fsc_avertissement_dossier",
+        "largeur_mm": 100,
+        "hauteur_mm": 50,
+        "contenu": DEFAULT_TEMPLATE_FSC_AVERTISSEMENT_ZPL,
+    },
     {
         "key": "bobine_full",
         "variante": "full",
@@ -421,6 +475,17 @@ USAGES = [
         "label": "Fiche technique (PDF)",
         "module": "prod",
         "placeholders": [],
+    },
+    {
+        "key": "fsc_avertissement_dossier",
+        "label": "Avertissement FSC — dossier de production",
+        "module": "prod",
+        "placeholders": [
+            "no_dossier", "numero_of", "client", "ref_produit", "machine",
+            "fsc_type_requis", "operateur_nom",
+            "{{barcode:no_dossier}}", "{{qrcode:no_dossier}}",
+            "{{now:%d/%m/%Y %H:%M}}",
+        ],
     },
     # À venir : etiquette_colis (MyExpé), etiquette_emplacement (MyStock), etc.
 ]

@@ -11,6 +11,9 @@ from config import APP_ORG_NAME, FSC_WARNING_PROD, STOCK_UNITE_VENTE_DEFAUT
 from app.services.auth_service import get_current_user, is_fabrication, is_admin
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
+# Étiquette d'avertissement FSC : gabarit + logique d'impression partagés
+# avec le planning de production (app/web/planning_page.py).
+from app.web.fsc_label_js import FSC_LABEL_SCRIPT_BLOCK
 # v1.7 — modal partage pour impression de PDF (OF, fiches techniques) vers
 # une imprimante bureautique via l'agent local. Cf. app/web/print_modal.py.
 from app.web.print_modal import PRINT_MODAL_CSS, PRINT_MODAL_JS
@@ -176,22 +179,43 @@ input,select,textarea{font-family:inherit;color:var(--text)}
    info (.fab-footer-info) est masqué en mode opérateur mobile, et cette
    consigne doit rester lisible sur tous les onglets et tous les écrans.
    flex-shrink:0 pour qu'il ne se fasse jamais écraser par le contenu. */
+/* Fond BLANC volontaire, y compris en thème sombre : c'est le seul élément
+   de l'écran qui ne se fond pas dans l'interface, et c'est exactement ce
+   qu'on veut d'une consigne de certification. Le bord orange scintille pour
+   accrocher l'œil d'un opérateur qui passe devant l'écran sans s'arrêter. */
+@keyframes fscBandeauPulse{
+  0%,100%{border-color:#fb923c;box-shadow:inset 0 0 0 2px rgba(251,146,60,.95), 0 0 10px rgba(251,146,60,.35)}
+  50%    {border-color:#fed7aa;box-shadow:inset 0 0 0 2px rgba(251,146,60,.35), 0 0 4px rgba(251,146,60,.12)}
+}
 .fab-fsc-bandeau{
   flex-shrink:0;
   display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  padding:9px 20px;
-  font-size:12px;font-weight:600;line-height:1.4;
-  background:rgba(52,211,153,.10);
-  color:var(--success,#34d399);
-  border-bottom:1px solid rgba(52,211,153,.35);
+  margin:8px 12px;padding:9px 16px;
+  font-size:12px;font-weight:700;line-height:1.4;
+  background:#fff;
+  color:#c2410c;
+  border:2px solid #fb923c;border-radius:10px;
+  animation:fscBandeauPulse 1.8s ease-in-out infinite;
 }
 /* Écart = dossier FSC dont la traça matière est vide ou non conforme.
    On ne bloque pas la saisie (décision produit) : on rend l'écart
-   impossible à ignorer, et il ressort tel quel dans le rapport d'audit. */
+   impossible à ignorer, et il ressort tel quel dans le rapport d'audit.
+   Même habillage — le scintillement orange marque déjà l'exigence, c'est
+   le compteur en bout de ligne qui dit si elle est tenue. */
 .fab-fsc-bandeau.is-ecart{
-  background:rgba(251,146,60,.12);
-  color:#fb923c;
-  border-bottom-color:rgba(251,146,60,.40);
+  background:#fff;
+  color:#c2410c;
+}
+.fab-fsc-bandeau .fab-fsc-badge{
+  background:rgba(251,146,60,.14);color:#c2410c;border-color:#fb923c;
+}
+.fab-fsc-bandeau .fab-fsc-bandeau-etat{
+  background:rgba(251,146,60,.20);color:#9a3412;
+}
+/* Le scintillement ne doit pas être imposé : bord orange fixe, même poids
+   visuel, aucune animation. */
+@media (prefers-reduced-motion: reduce){
+  .fab-fsc-bandeau{animation:none;box-shadow:inset 0 0 0 2px rgba(251,146,60,.95)}
 }
 .fab-fsc-bandeau-txt{flex:1;min-width:180px}
 .fab-fsc-bandeau-etat{
@@ -420,7 +444,11 @@ body.light table.fab-table tr.fab-row-last td{
 }
 .fab-picker-item:hover{border-color:var(--accent);background:var(--accent-bg)}
 .fab-picker-item--hi{border-color:var(--accent);background:var(--accent-bg);outline:2px solid rgba(34,211,238,.35);outline-offset:1px}
-.fab-picker-line1{font-size:13px;font-weight:800;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Dossier certifié dans le sélecteur : liseré vert à gauche. Discret sur
+   une liste longue, mais suffisant pour repérer les dossiers FSC d'un coup
+   d'œil sans les lire un par un. */
+.fab-picker-item--fsc{border-left:3px solid var(--success,#34d399)}
+.fab-picker-line1{font-size:13px;font-weight:800;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
 .fab-picker-line1 .fab-picker-ref{color:var(--accent)}
 .fab-picker-line1 .fab-picker-sep{color:var(--muted);font-weight:400;margin:0 4px}
 .fab-picker-line1 .fab-picker-client{color:var(--text);font-weight:600}
@@ -611,7 +639,11 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 }
 .fab-prod-z1-row:hover{border-color:var(--accent)}
 .fab-prod-z1-left{flex:1;min-width:0}
-.fab-prod-z1-ref{font-size:13px;font-weight:800;color:var(--accent);letter-spacing:.3px}
+.fab-prod-z1-ref{font-size:13px;font-weight:800;color:var(--accent);letter-spacing:.3px;
+  display:flex;align-items:center;flex-wrap:wrap}
+/* Liseré vert : sur une liste Z1 longue, il permet de compter les lignes
+   certifiées sans lire chaque badge. */
+.fab-prod-z1-row.is-fsc{border-left:3px solid var(--success,#34d399)}
 .fab-prod-z1-des{font-size:12px;color:var(--text2);margin-top:1px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fab-prod-z1-meta{display:flex;gap:12px;margin-top:4px;font-size:11px;color:var(--muted);flex-wrap:wrap}
@@ -867,7 +899,7 @@ body.has-topbar .fab-main{padding-top:74px}
   .fab-footer-info{display:none}
   /* Le bandeau FSC, lui, NE disparaît PAS sur mobile — c'est tout l'intérêt
      de l'avoir sorti du footer info. On le densifie seulement. */
-  .fab-fsc-bandeau{padding:7px 12px;font-size:11px;gap:7px}
+  .fab-fsc-bandeau{margin:6px 8px;padding:7px 11px;font-size:11px;gap:7px}
   .fab-fsc-bandeau-txt{min-width:140px}
   .fab-footer-tools{flex-direction:row;gap:6px;align-items:center;flex:1;min-width:0}
   .fab-comment-hint{display:none}
@@ -1087,6 +1119,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script>
 'use strict';
 /*__TRACA_GUIDE__*/
+/*__FSC_LABEL__*/
 
 /* ── Operations config (SQLite — Paramètres > Opérations) ───── */
 let OPS = {};
@@ -3782,6 +3815,39 @@ function _tracaBuildLabelData(m){
   };
 }
 
+/* ── Avertissement FSC à agrafer au dossier physique ───────────────
+   Le bandeau à l'écran ne suit pas le dossier quand celui-ci circule dans
+   l'atelier, ni quand l'écran est mobilisé par une autre machine. Cette
+   feuille, elle, reste avec le dossier.
+
+   Deux chemins : l'imprimante d'étiquettes configurée (usage
+   `fsc_avertissement_dossier`, template éditable dans Paramètres →
+   Imprimantes), et à défaut une impression navigateur A6 paysage. Le repli
+   existe parce qu'une consigne de certification ne doit jamais être
+   indisponible faute de configuration — mais il est explicitement présenté
+   comme un repli, pour que la config soit faite.
+   ────────────────────────────────────────────────────────────────── */
+function _fscAvertissementData(dos){
+  return {
+    no_dossier: (dos && (dos.reference || dos.numero_of)) || '',
+    numero_of: (dos && dos.numero_of) || '',
+    client: (dos && dos.client) || '',
+    ref_produit: (dos && (dos.ref_produit || dos.description)) || '',
+    machine: (dos && dos.machine_nom) || (S.machine && S.machine.nom) || '',
+    fsc_type_requis: fscTypeRequisLabel(dos && dos.fsc_type_requis) || 'FSC',
+    operateur_nom: (S.user && S.user.nom) || S.operateur || '',
+  };
+}
+
+async function imprimerAvertissementFsc(){
+  const dos = S.dossier;
+  if(!fscDossierRequis(dos)){ showToast('Ce dossier n\'est pas certifié FSC.','danger'); return; }
+  // Gabarit et logique d'impression partagés avec le planning : voir
+  // app/web/fsc_label_js.py. Rien de spécifique à la saisie de prod ici,
+  // seulement la collecte des champs du dossier courant.
+  await fscImprimerAvertissement(_fscAvertissementData(dos));
+}
+
 async function tracaReprintEtiquette(m){
   if(!m || !m.code_barre){ showToast('Code barre manquant','danger'); return; }
   const data = _tracaBuildLabelData(m);
@@ -4289,9 +4355,25 @@ function _renderStockZ1List(){
           }, svgIcon('edit',12),' Modifier'),
         ));
       }
-      return h('div',{className:'fab-prod-z1-row'},
+      // `r.fsc` vient de /api/stock/sortie-prod, qui regroupe désormais par
+      // (produit, segment FSC) : un même produit présent en certifié et en
+      // non certifié sort sur deux lignes, et c'est ce badge qui les
+      // distingue. Sans lui, l'écran afficherait deux lignes identiques avec
+      // des quantités différentes.
+      const rFsc = !!r.fsc;
+      const rEcart = !!r.fsc_ecart;
+      return h('div',{className:'fab-prod-z1-row'+(rFsc?' is-fsc':'')},
         h('div',{className:'fab-prod-z1-left'},
-          h('div',{className:'fab-prod-z1-ref'}, r.reference || '—'),
+          h('div',{className:'fab-prod-z1-ref'},
+            r.reference || '—',
+            rFsc ? h('span',{
+              className:'fab-fsc-badge'+(rEcart?' is-ecart':''),
+              style:{marginLeft:'7px'},
+              title: rEcart
+                ? 'Produit FSC — traçabilité matière incomplète ou en écart sur le dossier d\'origine'
+                : ('Produit certifié FSC' + (r.no_dossier ? ' — dossier ' + r.no_dossier : '')),
+            }, 'FSC', rEcart ? ' ⚠' : '') : null
+          ),
           h('div',{className:'fab-prod-z1-des'}, r.designation || ''),
           h('div',{className:'fab-prod-z1-meta'},
             h('span',{className:'fab-prod-z1-meta-date'},
@@ -4587,6 +4669,89 @@ function renderTracabiliteModal(data, noDossier){
     ));
   }
 
+  // ── Parcours aval : lot Z1 → déplacements → expédition ──────────────
+  // Le rapport s'arrêtait aux bobines consommées, c'est-à-dire à la moitié
+  // amont de la chaîne. Un auditeur FSC demande aussi l'aval : ce dossier a
+  // produit quoi, ce produit est parti où. Les données viennent du même
+  // calcul que le traceur (voir app/routers/traca.py).
+  const parc = data.parcours || {};
+  const secTitle = (txt) => h('div',{style:{
+    fontSize:'12px',fontWeight:'800',textTransform:'uppercase',letterSpacing:'.5px',
+    color:'var(--muted)',margin:'18px 0 8px'}}, txt);
+
+  const ruptures = (parc.ruptures || []);
+  const bloqRuptures = ruptures.length ? h('div',{style:{
+    border:'1px solid rgba(251,146,60,.45)',background:'rgba(251,146,60,.09)',
+    borderRadius:'8px',padding:'10px 13px',margin:'12px 0',fontSize:'12px',color:'#c2410c'}},
+    h('div',{style:{fontWeight:'800',marginBottom:'4px'}},'Ce que ce rapport ne démontre pas'),
+    ...ruptures.map(r=>h('div',{style:{lineHeight:'1.55'}},'• '+r))
+  ) : null;
+
+  const parcoursBloc = h('div',null,
+    bloqRuptures,
+    secTitle('Produit fini issu de ce dossier'),
+    (parc.lots && parc.lots.length)
+      ? h('table',{className:'fab-fsc-traca-table'},
+          h('thead',null,h('tr',null,
+            h('th',null,'Référence'), h('th',null,'Lot'), h('th',null,'Emplacement'),
+            h('th',null,'Produit'), h('th',null,'Reste'), h('th',null,'Claim'))),
+          h('tbody',null, ...parc.lots.map(l=>h('tr',null,
+            h('td',{style:{fontWeight:'700'}}, l.produit_ref || '—'),
+            h('td',{style:{fontFamily:'monospace'}}, '#'+l.id),
+            h('td',null, l.emplacement || '—'),
+            h('td',null, (l.quantite_initiale ?? '—')+' '+(l.unite||'')),
+            h('td',null, (l.quantite_restante ?? '—')+' '+(l.unite||'')),
+            h('td',null, l.fsc
+              ? h('span',{className:'fab-fsc-badge'+(l.fsc_ecart?' is-ecart':'')},
+                  'FSC', l.fsc_ecart ? ' ⚠' : '')
+              : h('span',{style:{color:'var(--muted)'}},'—'))
+          )))
+        )
+      : h('div',{style:{fontSize:'12px',color:'var(--muted)',padding:'6px 0'}},
+          'Aucun lot rattaché à ce dossier.'),
+
+    secTitle('Parcours en stock'),
+    (parc.mouvements && parc.mouvements.length)
+      ? h('table',{className:'fab-fsc-traca-table'},
+          h('thead',null,h('tr',null,
+            h('th',null,'Date'), h('th',null,'Mouvement'), h('th',null,'Emplacement'),
+            h('th',null,'Quantité'), h('th',null,'Par'), h('th',null,'Source'))),
+          h('tbody',null, ...parc.mouvements.slice(0,20).map(m=>h('tr',
+            m.reconstitue ? {style:{opacity:'.62'}} : null,
+            h('td',{style:{fontSize:'12px'}}, (m.created_at||'').replace('T',' ').slice(0,16)),
+            h('td',null, m.type_mouvement === 'entree' ? 'Entrée'
+                       : m.type_mouvement === 'sortie' ? 'Sortie' : (m.type_mouvement||'—')),
+            h('td',null, m.emplacement || '—'),
+            h('td',null, m.quantite != null ? String(m.quantite) : '—'),
+            h('td',{style:{fontSize:'12px'}}, m.created_by_name || m.created_by || '—'),
+            h('td',{style:{fontSize:'11px',color:'var(--muted)'}},
+              m.reconstitue ? 'reconstitué' : 'saisi')
+          )))
+        )
+      : h('div',{style:{fontSize:'12px',color:'var(--muted)',padding:'6px 0'}},
+          'Aucun mouvement de stock enregistré.'),
+
+    secTitle('Expédition'),
+    (parc.expeditions && parc.expeditions.length)
+      ? h('table',{className:'fab-fsc-traca-table'},
+          h('thead',null,h('tr',null,
+            h('th',null,'BL'), h('th',null,'Client'), h('th',null,'Transporteur'),
+            h('th',null,'Enlèvement'), h('th',null,'Destination'), h('th',null,'Source'))),
+          h('tbody',null, ...parc.expeditions.map(x=>h('tr',
+            x.reconstitue ? {style:{opacity:'.62'}} : null,
+            h('td',{style:{fontWeight:'700'}}, x.no_bl || ('#'+x.id)),
+            h('td',null, x.client || '—'),
+            h('td',null, x.transporteur || '—'),
+            h('td',null, x.date_enlevement || '—'),
+            h('td',null, x.code_postal_destination || '—'),
+            h('td',{style:{fontSize:'11px',color:'var(--muted)'}},
+              x.reconstitue ? 'reconstitué' : 'saisi')
+          )))
+        )
+      : h('div',{style:{fontSize:'12px',color:'var(--muted)',padding:'6px 0'}},
+          'Aucune expédition rattachée à ce dossier.')
+  );
+
   const overlay = h('div',{className:'fab-fsc-traca-overlay fab-modal-overlay',onClick:(e)=>{
     if(e.target===e.currentTarget) closeTracabiliteModal();
   }},
@@ -4611,10 +4776,14 @@ function renderTracabiliteModal(data, noDossier){
         border:'1px solid '+statutColor,
         color:statutColor,
       }}, statutText),
+      h('div',{style:{
+        fontSize:'12px',fontWeight:'800',textTransform:'uppercase',letterSpacing:'.5px',
+        color:'var(--muted)',margin:'14px 0 8px'}}, 'Matière consommée'),
       h('table',{className:'fab-fsc-traca-table'},
         h('thead',null, thead),
         tbody
       ),
+      parcoursBloc,
       h('div',{style:{marginTop:'16px',paddingTop:'12px',borderTop:'1px solid var(--border)',
         fontSize:'11px',color:'var(--muted)'}},
         'Généré le ', (syn.genere_a ? fmtTime(syn.genere_a) : '—'), ' · MySifa · SIFA')
@@ -4734,11 +4903,21 @@ function renderFooter(){
       d.commentaire ? h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'4px',
         overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'280px'}},
         '💬 '+d.commentaire) : null,
-      (d.fsc_requis === 1 || d.fsc_requis === true) ? h('button',{
-        className:'fab-btn fab-btn-ghost fab-btn-sm',
-        style:{marginTop:'8px',alignSelf:'flex-start',fontSize:'12px'},
-        onClick:()=>openTracabiliteModal(d.reference || d.numero_of || ''),
-      },'Rapport traçabilité FSC') : null
+      (d.fsc_requis === 1 || d.fsc_requis === true) ? h('div',{
+        style:{display:'flex',gap:'6px',flexWrap:'wrap',marginTop:'8px',alignSelf:'flex-start'},
+      },
+        h('button',{
+          className:'fab-btn fab-btn-ghost fab-btn-sm',
+          style:{fontSize:'12px'},
+          onClick:()=>openTracabiliteModal(d.reference || d.numero_of || ''),
+        },'Rapport traçabilité FSC'),
+        h('button',{
+          className:'fab-btn fab-btn-ghost fab-btn-sm',
+          style:{fontSize:'12px'},
+          title:'Imprimer la consigne FSC à agrafer au dossier papier',
+          onClick:imprimerAvertissementFsc,
+        }, svgIcon('printer',12),' Avertissement FSC')
+      ) : null
     );
   } else {
     infoSection = h('div',{className:'fab-footer-info'},
@@ -5053,11 +5232,20 @@ function _buildPickerItems(q){
     if(d.date_livraison) metaParts.push('Livr. '+fmtDate(d.date_livraison));
     if(d.duree_heures) metaParts.push(d.duree_heures+' h');
     const hi = idx === _pickerHi;
-    return h('div',{className:'fab-picker-item'+(hi?' fab-picker-item--hi':''),onClick:()=>selectDossier(d)},
+    // Le badge FSC apparaît AVANT le démarrage, pas après : c'est au moment
+    // de choisir son dossier que l'opérateur décide quelle bobine il va
+    // monter. L'information arrivant une fois la production lancée serait
+    // arrivée trop tard.
+    const dFsc = (d.fsc_requis === 1 || d.fsc_requis === true);
+    const dFscType = dFsc ? fscTypeRequisLabel(d.fsc_type_requis) : '';
+    return h('div',{className:'fab-picker-item'+(hi?' fab-picker-item--hi':'')+(dFsc?' fab-picker-item--fsc':''),onClick:()=>selectDossier(d)},
       h('div',{className:'fab-picker-line1'},
         h('span',{className:'fab-picker-ref'},d.reference),
         h('span',{className:'fab-picker-sep'},'|'),
-        h('span',{className:'fab-picker-client'},d.client||'Client non renseigné')
+        h('span',{className:'fab-picker-client'},d.client||'Client non renseigné'),
+        dFsc ? h('span',{className:'fab-fsc-badge',
+          title:'Certification FSC requise'+(dFscType?' — '+dFscType:'')},
+          'FSC'+(dFscType?' · '+dFscType:'')) : null
       ),
       line2 ? h('div',{className:'fab-picker-line2'},line2) : null,
       metaParts.length ? h('div',{className:'fab-picker-meta'},
@@ -7453,6 +7641,7 @@ init();
 </html>"""
 
 FABRICATION_HTML = FABRICATION_HTML.replace("/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK)
+FABRICATION_HTML = FABRICATION_HTML.replace("/*__FSC_LABEL__*/", FSC_LABEL_SCRIPT_BLOCK)
 
 # v1.7 — Injection du modal partage d'impression PDF (CSS + JS) juste avant la
 # fin du </head> et de </script>. On evite les placeholders et on injecte

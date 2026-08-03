@@ -21,6 +21,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 MaterialCategoryCode = Literal["FRONTAL", "ADHESIF", "SILICONE", "GLASSINE", "AUTRE"]
 PriceCurrency = Literal["EUR", "USD"]
 PriceBasis = Literal["PER_KG", "PER_M2"]
+# Transport : montant dans la devise/base d'achat, ou % du prix d'achat.
+TransportMode = Literal["AMOUNT", "PCT"]
 
 # ─── Settings (singleton key/value) ────────────────────────────────────────────
 
@@ -29,6 +31,10 @@ MC_SETTING_KEYS = frozenset(
         "eur_usd_rate",
         "default_container_cost_usd",
         "default_container_kg",
+        # Marge par défaut en % du prix de revient (v223).
+        "default_margin_pct",
+        # Legacy : marge absolue en €/m². Conservée en base pour historique,
+        # plus utilisée par le moteur de calcul.
         "default_margin_eur_m2",
         "import_tax_pct",
         "transport_cost_fixed_eur",
@@ -49,6 +55,7 @@ MC_SETTING_DEFAULTS: dict[str, Decimal] = {
     "eur_usd_rate": Decimal("0.85"),
     "default_container_cost_usd": Decimal("4000"),
     "default_container_kg": Decimal("26000"),
+    "default_margin_pct": Decimal("6"),
     "default_margin_eur_m2": Decimal("0.06"),
     "import_tax_pct": Decimal("0"),
     "transport_cost_fixed_eur": Decimal("0"),
@@ -144,6 +151,9 @@ class McMaterialBase(BaseModel):
     price_basis: PriceBasis = "PER_KG"
     tax_incidence: Decimal = Field(default=Decimal("1"), decimal_places=4, max_digits=12)
     is_imported: bool = False
+    transport_mode: TransportMode = "AMOUNT"
+    transport_unit_price: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
+    transport_pct: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
     container_kg: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     container_cost_usd: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     is_active: bool = True
@@ -165,6 +175,9 @@ class McMaterialUpdate(BaseModel):
     price_basis: Optional[PriceBasis] = None
     tax_incidence: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     is_imported: Optional[bool] = None
+    transport_mode: Optional[TransportMode] = None
+    transport_unit_price: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
+    transport_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     container_kg: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     container_cost_usd: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     is_active: Optional[bool] = None
@@ -220,7 +233,7 @@ class McProductBase(BaseModel):
     silicone_id: Optional[int] = None
     glassine_id: Optional[int] = None
     extra_material_ids: list[int] = Field(default_factory=list)
-    custom_margin_eur_m2: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
+    custom_margin_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     is_active: bool = True
 
 
@@ -236,7 +249,7 @@ class McProductUpdate(BaseModel):
     silicone_id: Optional[int] = None
     glassine_id: Optional[int] = None
     extra_material_ids: Optional[list[int]] = None
-    custom_margin_eur_m2: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
+    custom_margin_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     is_active: Optional[bool] = None
 
 
@@ -256,6 +269,7 @@ class McProductCostBreakdown(BaseModel):
 
     product_id: int
     product_code: str
+    margin_pct: Decimal
     margin_eur_m2: Decimal
     components_eur_m2: dict[str, Decimal]
     total_before_margin_eur_m2: Decimal

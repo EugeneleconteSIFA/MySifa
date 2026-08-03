@@ -26,6 +26,14 @@ def _bool(v: Any) -> bool:
     return bool(v) if v is not None else False
 
 
+def _col(row: sqlite3.Row, name: str, default: Any = None) -> Any:
+    """Lecture tolérante d'une colonne : None si absente du SELECT (compat migrations)."""
+    try:
+        return row[name]
+    except (IndexError, KeyError):
+        return default
+
+
 def ensure_settings_rows(conn: sqlite3.Connection) -> None:
     for key, val in MC_SETTING_DEFAULTS.items():
         conn.execute(
@@ -46,6 +54,7 @@ def load_pricing_settings(conn: sqlite3.Connection) -> PricingSettings:
     data = {r["key"]: _dec(r["value_decimal"]) for r in rows}
     # Clés optionnelles (default 0 si absentes) — pas bloquantes pour le calcul pricing.
     optional = {
+        "default_margin_eur_m2",
         "import_tax_pct",
         "transport_cost_fixed_eur",
         "charge_production_pct",
@@ -62,7 +71,8 @@ def load_pricing_settings(conn: sqlite3.Connection) -> PricingSettings:
         eur_usd_rate=data["eur_usd_rate"],
         default_container_cost_usd=data["default_container_cost_usd"],
         default_container_kg=data["default_container_kg"],
-        default_margin_eur_m2=data["default_margin_eur_m2"],
+        default_margin_pct=data["default_margin_pct"],
+        default_margin_eur_m2=data.get("default_margin_eur_m2", Decimal("0")),
         import_tax_pct=data.get("import_tax_pct", Decimal("0")),
         transport_cost_fixed_eur=data.get("transport_cost_fixed_eur", Decimal("0")),
         charge_production_pct=data.get("charge_production_pct", Decimal("0")),
@@ -125,6 +135,9 @@ def row_to_pricing_material(row: sqlite3.Row) -> PricingMaterial:
         price_basis=row["price_basis"],
         tax_incidence=_dec(row["tax_incidence"]),
         is_imported=_bool(row["is_imported"]),
+        transport_mode=(_col(row, "transport_mode") or "AMOUNT"),
+        transport_unit_price=_dec(_col(row, "transport_unit_price")),
+        transport_pct=_dec(_col(row, "transport_pct")),
         container_kg=_dec(row["container_kg"]) if row["container_kg"] is not None else None,
         container_cost_usd=_dec(row["container_cost_usd"])
         if row["container_cost_usd"] is not None
@@ -147,6 +160,9 @@ def material_row_to_dict(row: sqlite3.Row, *, category_code: str) -> dict[str, A
         "price_basis": row["price_basis"],
         "tax_incidence": float(row["tax_incidence"]),
         "is_imported": _bool(row["is_imported"]),
+        "transport_mode": _col(row, "transport_mode") or "AMOUNT",
+        "transport_unit_price": float(_col(row, "transport_unit_price") or 0),
+        "transport_pct": float(_col(row, "transport_pct") or 0),
         "container_kg": float(row["container_kg"]) if row["container_kg"] is not None else None,
         "container_cost_usd": float(row["container_cost_usd"])
         if row["container_cost_usd"] is not None
@@ -271,7 +287,7 @@ def product_row_to_pricing_product(row: sqlite3.Row, extra_ids: list[int]) -> Pr
         silicone_id=row["silicone_id"],
         glassine_id=row["glassine_id"],
         extra_material_ids=tuple(extra_ids),
-        custom_margin_eur_m2=_dec(row["custom_margin_eur_m2"])
-        if row["custom_margin_eur_m2"] is not None
+        custom_margin_pct=_dec(_col(row, "custom_margin_pct"))
+        if _col(row, "custom_margin_pct") is not None
         else None,
     )
