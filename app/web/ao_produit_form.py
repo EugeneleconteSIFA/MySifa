@@ -167,6 +167,13 @@ border-radius:8px;background:var(--card);color:var(--text);font-size:12px}
 .pf-bat-body{padding:8px}
 .pf-bat-refcli input{width:120px}
 }
+/* Champ signale comme manquant : bordure rouge + halo, le temps que l'oeil
+   le retrouve apres le defilement automatique. */
+.pf-field-alert{border-color:var(--danger,#dc2626)!important;
+box-shadow:0 0 0 3px rgba(220,38,38,.18)!important;
+animation:pfFieldAlert .5s ease-in-out 0s 3}
+@keyframes pfFieldAlert{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+@media(prefers-reduced-motion:reduce){.pf-field-alert{animation:none}}
 /* Modale apercu etiquette d'identification carton (100 x 50 mm).
    Reprend la charpente de la modale BAT ; seule la scene change de ratio :
    l'etiquette est un rectangle 2:1, on la borne en largeur pour qu'elle
@@ -357,14 +364,14 @@ function renderProduitForm() {
     '<div class="pf-actions">'+
     navPager+
     '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-export"'+(d.id?'':' disabled')+
-    ' title="'+escAttr(d.id ? 'Exporter la fiche PDF' : 'Enregistrez le produit pour activer l\'export PDF')+'">'+
-    icon('file-text',14)+' PDF</button>'+
+    ' title="'+escAttr(d.id ? 'Exporter la fiche technique en PDF' : 'Enregistrez le produit pour activer l\'export PDF')+'">'+
+    icon('file-text',14)+' Fiche technique</button>'+
     '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-bat"'+(d.id?'':' disabled')+
     ' title="'+escAttr(d.id ? 'Générer le BAT étiquette' : 'Enregistrez le produit pour activer le BAT')+'">'+
     icon('file-text',14)+' BAT</button>'+
     '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-etq"'+(d.id?'':' disabled')+
     ' title="'+escAttr(d.id ? 'Aperçu de l\'étiquette d\'identification carton' : 'Enregistrez le produit pour activer l\'étiquette')+'">'+
-    icon('tag',14)+' Étiquette</button>'+
+    icon('tag',14)+' Étiq. identification</button>'+
     '<button type="button" class="btn btn-accent btn-sm" id="btn-pf-save">Enregistrer</button>'+
     '</div></div>'+
     '<div class="pf-page-hdr">'+
@@ -647,9 +654,34 @@ function openBatPreview(produitId, ref) {
 --------------------------------------------------------------------- */
 let pfEtq = null;
 
+/* L'etiquette carton est identifiee par la Ref SIFA : sans elle le document
+   sortirait sans numero. On refuse d'ouvrir l'apercu et on renvoie l'oeil sur
+   le champ a remplir plutot que de produire une etiquette muette. */
+function pfAlertRefSifaManquante() {
+  showToast('Champ Ref SIFA à renseigner avant de créer une étiquette d\'identification.', 'warn');
+  const inp = document.getElementById('pf-refsifa');
+  if (!inp) return;
+  inp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  inp.classList.remove('pf-field-alert');
+  void inp.offsetWidth;            // relance l'animation si deja signale
+  inp.classList.add('pf-field-alert');
+  inp.focus({ preventScroll: true });
+  setTimeout(() => inp.classList.remove('pf-field-alert'), 2600);
+}
+
+function pfRefSifaValue() {
+  const inp = document.getElementById('pf-refsifa');
+  if (inp) return (inp.value || '').trim();
+  return (S.produitForm?.fiche?.ref_sifa || '').trim();
+}
+
+/* La Ref SIFA saisie est transmise en parametre : l'apercu et le PDF la
+   prennent en compte sans attendre un enregistrement du produit. */
 function pfEtqUrl(fmt) {
   if (!pfEtq) return '';
-  return '/api/ao/produits/' + pfEtq.id + '/etiquette-carton?fmt=' + fmt;
+  const p = new URLSearchParams({ fmt: fmt });
+  if (pfEtq.refSifa) p.set('ref_sifa', pfEtq.refSifa);
+  return '/api/ao/produits/' + pfEtq.id + '/etiquette-carton?' + p.toString();
 }
 
 function pfEtqKeydown(e) {
@@ -685,9 +717,9 @@ async function pfEtqLoad() {
   }
 }
 
-function openEtiquettePreview(produitId, ref) {
+function openEtiquettePreview(produitId, ref, refSifa) {
   closeEtiquettePreview();
-  pfEtq = { id: produitId, ref: ref || '', seq: 0 };
+  pfEtq = { id: produitId, ref: ref || '', refSifa: refSifa || '', seq: 0 };
 
   const ov = document.createElement('div');
   ov.className = 'pf-etq-ov';
@@ -1123,7 +1155,10 @@ function bindProduitFormEvents() {
   if (etqBtn && !etqBtn.disabled) {
     etqBtn.addEventListener('click', () => {
       const id = S.produitForm?.id;
-      if (id) openEtiquettePreview(id, S.produitForm?.ref || '');
+      if (!id) return;
+      const refSifa = pfRefSifaValue();
+      if (!refSifa) { pfAlertRefSifaManquante(); return; }
+      openEtiquettePreview(id, S.produitForm?.ref || '', refSifa);
     });
   }
   document.getElementById('btn-pf-client-pick')?.addEventListener('click', () => {

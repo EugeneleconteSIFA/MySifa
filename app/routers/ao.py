@@ -1538,14 +1538,17 @@ def export_produit_etiquette_carton(
     request: Request,
     produit_id: int,
     fmt: str = "svg",
+    ref_sifa: str = "",
 ):
     """Etiquette d'identification carton (100 x 50 mm) d'une fiche produit MyAO.
 
     fmt=svg → apercu inline dans la fiche produit ; fmt=pdf → page a la taille
     exacte de l'etiquette, prete pour l'imprimante d'etiquettes.
 
-    Tout le contenu vient de la fiche produit (et de la fiche technique quand
-    la Ref SIFA est renseignee) : aucun champ n'est saisi a la volee.
+    ref_sifa surcharge la Ref SIFA enregistree : la fiche produit la transmet
+    telle qu'elle est saisie, pour que l'apercu la refletent sans attendre un
+    enregistrement. Le reste du contenu vient de la fiche produit (et de la
+    fiche technique correspondante).
     """
     from app.services.etiquette_carton import (
         build_etiquette_spec, render_etiquette_svg, render_etiquette_pdf,
@@ -1571,6 +1574,15 @@ def export_produit_etiquette_carton(
         produit = _serialize_produit_row(_row_dict(row), conn)
         fiche = produit.get("fiche") or {}
 
+        # Ref SIFA saisie dans le formulaire : elle prime sur celle enregistree,
+        # y compris pour la recherche de fiche technique ci-dessous.
+        ref_sifa = str(ref_sifa or "").strip()
+        if ref_sifa:
+            fiche = dict(fiche)
+            fiche["ref_sifa"] = ref_sifa
+        else:
+            ref_sifa = str(fiche.get("ref_sifa") or produit.get("ref_sifa") or "").strip()
+
         # Libelles matieres — degradation propre si le schema differe.
         matieres_map = {}
         try:
@@ -1582,7 +1594,6 @@ def export_produit_etiquette_carton(
 
         # Enrichissement fiche technique quand la Ref SIFA est renseignee.
         ft = None
-        ref_sifa = str(fiche.get("ref_sifa") or produit.get("ref_sifa") or "").strip()
         if ref_sifa:
             try:
                 ft_row = conn.execute(
