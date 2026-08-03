@@ -1411,6 +1411,20 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .op-modal input, .op-modal select, .op-modal textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:inherit;font-size:14px;transition:border-color .15s}
 .op-modal input:focus, .op-modal select:focus, .op-modal textarea:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
 .op-modal textarea{resize:vertical;min-height:80px;font-family:inherit}
+/* v2.6.1 : lignes « préserver ce créneau » de la modale de confirmation.
+   .op-modal input{width:100%} s'appliquait a la case a cocher, qui occupait
+   toute la largeur et ejectait le texte hors du cadre ; .op-modal label impose
+   en plus uppercase + letter-spacing. On neutralise les deux ici — selecteurs
+   plus specifiques, donc prioritaires. */
+.mys-keep-row{display:flex;gap:9px;align-items:flex-start;padding:9px 11px;border:1px solid var(--border);border-radius:9px;margin-bottom:6px;cursor:pointer;background:var(--card);text-transform:none;letter-spacing:normal;font-size:13px;color:var(--text);font-weight:400}
+.mys-keep-row:hover{border-color:var(--accent)}
+.mys-keep-row.is-grave{border-color:var(--danger)}
+.op-modal .mys-keep-row input[type=checkbox]{width:16px;min-width:16px;height:16px;flex:0 0 16px;margin:2px 0 0 0;padding:0;border-radius:4px;accent-color:var(--accent);box-shadow:none}
+.mys-keep-txt{flex:1;min-width:0}
+.mys-keep-date{display:block;font-weight:700;color:var(--text);font-size:13px;text-transform:none;letter-spacing:normal}
+.mys-keep-why{display:block;font-size:12px;color:var(--muted);margin-top:3px;text-transform:none;letter-spacing:normal;font-weight:400;line-height:1.4}
+.mys-keep-row.is-grave .mys-keep-why{color:var(--danger)}
+.mys-keep-list{max-height:34vh;overflow-y:auto;padding-right:4px;margin-top:4px}
 .op-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
 .op-modal-context{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:8px 14px;font-size:12px;color:var(--text2)}
 .op-modal-context strong{color:var(--text);font-weight:700}
@@ -13104,6 +13118,22 @@ function _setRecurInForm(t){
   onTmplRecurTypeChange();
 }
 
+// v2.6.1 : empreinte des deux dimensions du modele. Le formulaire renvoie tout
+// a chaque enregistrement ; sans comparaison on ne saurait pas si l'admin a
+// touche au CONTENU (operations), a la PLANIFICATION (regle + horaires), ou
+// seulement au nom. Or ces deux dimensions n'ont pas les memes consequences et
+// ne concernent pas les memes creneaux.
+let _TMPL_INITIAL = null;
+function _snapshotTmplForm(){
+  let recur = '';
+  try{ recur = JSON.stringify(_readRecurFromForm()); }catch(_){}
+  const ops = (_TMPL_OPS || [])
+    .filter(function(o){ return o.opTypeId; })
+    .map(function(o){ return o.opTypeId + ':' + (o.machines || []).slice().sort().join('|'); })
+    .sort().join(';');
+  return { recur: recur, ops: ops };
+}
+
 function _readRecurFromForm(){
   const active = !!document.getElementById('tmpl-ed-recur-active')?.checked;
   if(!active){
@@ -13395,6 +13425,8 @@ async function openTemplateEditor(templateId, focusDeleted){
       // v2.5.25 : charge les operateurs par defaut du template
       _TMPL_DEFAULT_OPS = (t.default_operators || []).map(u => ({ id: u.id, nom: u.nom }));
       if(ttlEl) ttlEl.textContent = 'Modifier le modèle';
+      // v2.6.1 : empreinte de reference, prise une fois le formulaire rempli.
+      _TMPL_INITIAL = _snapshotTmplForm();
       if(lblEl) lblEl.textContent = 'Enregistrer';
       // Avertissement resync
       if(warnEl){
@@ -13583,43 +13615,69 @@ async function submitTemplateEditor(e){
       if(ri.ok){
         const imp = await ri.json();
         const n = (imp && imp.count) || 0;
-        const div = (imp && imp.diverged) || [];
+        const snap = _snapshotTmplForm();
+        // Si l'empreinte de reference manque (ouverture inhabituelle), on
+        // considere les deux dimensions comme modifiees : mieux vaut demander
+        // pour rien que d'ecraser en silence.
+        const opsChanged   = !_TMPL_INITIAL || snap.ops   !== _TMPL_INITIAL.ops;
+        const recurChanged = !_TMPL_INITIAL || snap.recur !== _TMPL_INITIAL.recur;
+        // Chaque dimension a SA population de creneaux a risque :
+        //  - operations modifiees -> ceux dont la liste d'ops a diverge ;
+        //  - regle modifiee       -> ceux deplaces a la main, dont la position
+        //    serait ecrasee. Un creneau reste a sa place theorique est replace
+        //    sans consequence, inutile d'en parler.
+        const div = opsChanged   ? ((imp && imp.diverged) || []) : [];
+        const mov = recurChanged ? ((imp && imp.moved)    || []) : [];
         // v2.6.1 : on n'interroge l'admin QUE sur les creneaux personnalises.
         // Les copies conformes sont resynchronisees sans question — l'operation
         // est un no-op pour elles. Case cochee = « préserver ce créneau » :
         // le defaut protege ce qui a ete modifie a la main, il faut un geste
         // explicite pour ecraser.
-        if(div.length){
-          const rows = div.map(function(d){
+        const _rows = function(items){
+          return items.map(function(d){
             const grave = d.done_ops > 0;
-            return '<label style="display:flex;gap:9px;align-items:flex-start;padding:9px 10px;border:1px solid ' +
-                     (grave ? 'var(--danger)' : 'var(--border)') + ';border-radius:9px;margin-bottom:6px;cursor:pointer;background:var(--card)">' +
-                   '<input type="checkbox" data-keep="' + escAttr(d.id) + '" checked style="margin-top:2px;flex-shrink:0">' +
-                   '<span style="flex:1">' +
-                     '<span style="font-weight:700;color:var(--text);font-size:13px">' + escHtml(_fmtIsoDateFr(d.date)) + '</span>' +
-                     '<span style="display:block;font-size:12px;color:' + (grave ? 'var(--danger)' : 'var(--muted)') + ';margin-top:2px">' +
-                       escHtml((d.reasons || []).join(' · ')) +
-                     '</span>' +
+            return '<label class="mys-keep-row' + (grave ? ' is-grave' : '') + '">' +
+                   '<input type="checkbox" data-keep="' + escAttr(d.id) + '" checked>' +
+                   '<span class="mys-keep-txt">' +
+                     '<span class="mys-keep-date">' + escHtml(_fmtIsoDateFr(d.date)) + '</span>' +
+                     '<span class="mys-keep-why">' + escHtml((d.reasons || []).join(' · ')) + '</span>' +
                    '</span></label>';
           }).join('');
-          const identical = (imp.identical_count || 0);
+        };
+        if(div.length || mov.length){
+          let body = '';
+          if(mov.length){
+            body += '<div style="margin-bottom:8px"><strong>Planification modifiée.</strong> ' +
+                    'Ces créneaux ont été déplacés à la main ; les replacer écraserait leur position. ' +
+                    'Les cases cochées restent où elles sont.</div>' +
+                    '<div class="mys-keep-list">' + _rows(mov) + '</div>';
+            if(imp.unmoved_count){
+              body += '<div style="margin:8px 0 14px;color:var(--muted);font-size:12px">' + imp.unmoved_count +
+                      ' autre(s) créneau(x) sont à leur place théorique : ils suivront la nouvelle règle, ' +
+                      'sans perdre leurs opérations.</div>';
+            }
+          }
+          if(div.length){
+            body += '<div style="margin-bottom:8px' + (mov.length ? ';margin-top:14px;padding-top:14px;border-top:1px solid var(--border)' : '') + '">' +
+                    '<strong>Opérations modifiées.</strong> ' +
+                    'Ces créneaux ont une liste d\'opérations personnalisée. ' +
+                    'Décoche ceux que tu veux réinitialiser ; les cases cochées seront préservées.</div>' +
+                    '<div class="mys-keep-list">' + _rows(div) + '</div>';
+            if(imp.identical_count){
+              body += '<div style="margin-top:8px;color:var(--muted);font-size:12px">' + imp.identical_count +
+                      ' autre(s) créneau(x) sont identiques au modèle : aucun changement visible pour eux.</div>';
+            }
+          }
+          const total = div.length + mov.length;
           const ok = await _mysConfirm({
-            title: div.length + ' créneau' + (div.length > 1 ? 'x' : '') + ' personnalisé' + (div.length > 1 ? 's' : ''),
-            bodyHtml:
-              '<div style="margin-bottom:10px">Ces créneaux à venir ont été modifiés depuis leur génération. ' +
-              '<strong>Décoche ceux que tu veux réinitialiser</strong> avec le contenu du modèle ; ' +
-              'les cases cochées seront préservées telles quelles.</div>' +
-              '<div style="max-height:34vh;overflow-y:auto;padding-right:4px">' + rows + '</div>' +
-              (identical
-                ? '<div style="margin-top:10px;color:var(--muted);font-size:12px">' + identical +
-                  ' autre(s) créneau(x) sont identiques au modèle : ils seront resynchronisés sans changement visible.</div>'
-                : ''),
+            title: total + ' créneau' + (total > 1 ? 'x' : '') + ' à confirmer',
+            bodyHtml: body,
             okLabel: 'Enregistrer',
             cancelLabel: 'Annuler',
           });
           if(!ok) return;
           _TMPL_RESYNC_EXCLUDE = _MYS_CONFIRM_LAST_KEEP.slice();
-        } else if(n > 0){
+        } else if(n > 0 && opsChanged){
           const plur = n > 1;
           let quand = '';
           if(imp.first && imp.last && imp.first !== imp.last){
