@@ -1556,8 +1556,20 @@ def _resync_future_events_from_template(conn, template_id: int) -> int:
         return 0
     sync_operators = bool(tmpl.get("recurrence_active"))
     today = datetime.now(_PARIS).strftime("%Y-%m-%d")
+    # v2.6.1 : restreint aux occurrences REELLEMENT generees par la recurrence.
+    # template_origin_date n'est pose que par _generate_events_for_template().
+    # Avant, le filtre portait sur le seul template_id : un creneau ou l'admin
+    # avait simplement IMPORTE le modele depuis la liste des operations, puis
+    # complete a la main, etait ecrase comme une occurrence — ses ajouts
+    # disparaissaient au premier enregistrement du modele. Pire, le sort du
+    # creneau dependait du NOMBRE de modeles importes : au-dela d'un seul,
+    # l'etiquette template_id tombe cote client et le creneau echappait a la
+    # resync. Comportement desormais uniforme : seules les occurrences de
+    # recurrence sont resynchronisees.
     events = conn.execute(
-        "SELECT id FROM maintenance_events WHERE template_id = ? AND date_prevue >= ? AND deleted_at IS NULL",
+        "SELECT id FROM maintenance_events "
+        "WHERE template_id = ? AND template_origin_date IS NOT NULL "
+        "  AND date_prevue >= ? AND deleted_at IS NULL",
         (template_id, today),
     ).fetchall()
     now = _now_paris_iso()
@@ -1704,6 +1716,31 @@ def create_template(body: TemplateCreateBody, request: Request):
         conn.commit()
         tmpl = _load_template_full(conn, template_id)
     return {"template": tmpl}
+
+
+@router.get("/api/maintenance/templates/{template_id}/resync-impact")
+def template_resync_impact(template_id: int, request: Request):
+    """v2.6.1 : combien de créneaux seraient réinitialisés par un enregistrement
+    de ce modèle ? Sert à avertir l'admin AVANT qu'il ne valide — la resync
+    écrase intégralement les ops (et les opérateurs si le modèle est récurrent).
+
+    Même filtre que _resync_future_events_from_template(), sinon l'annonce
+    mentirait : occurrences de récurrence uniquement, futures, non supprimées."""
+    _require_admin(request)
+    today = datetime.now(_PARIS).strftime("%Y-%m-%d")
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM maintenance_templates WHERE id = ?", (template_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Modèle introuvable")
+        rows = conn.execute(
+            "SELECT date_prevue FROM maintenance_events "
+            "WHERE template_id = ? AND template_origin_date IS NOT NULL "
+            "  AND date_prevue >= ? AND deleted_at IS NULL "
+            "ORDER BY date_prevue ASC",
+            (template_id, today),
+        ).fetchall()
+    dates = [r["date_prevue"] for r in rows]
+    return {"count": len(dates), "dates": dates[:5], "first": dates[0] if dates else None,
+            "last": dates[-1] if dates else None}
 
 
 @router.patch("/api/maintenance/templates/{template_id}")
