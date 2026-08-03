@@ -66,6 +66,7 @@ from app.services.pricing.export_pdf import build_product_pdf
 from app.services.pricing.export_xlsx import build_products_workbook
 from app.services.pricing.types import PricingProduct
 from app.services import pricing_bridge
+from app.services import mystock_prix
 
 router = APIRouter(tags=["pricing"])
 
@@ -713,9 +714,10 @@ def list_materials(
 ):
     _require_read(request)
     sql = """
-        SELECT m.*, c.code AS category_code
+        SELECT m.*, c.code AS category_code, f.nom AS fournisseur_nom
         FROM mc_material m
         JOIN mc_material_category c ON c.id = m.category_id
+        LEFT JOIN fournisseurs_fsc f ON f.id = m.fournisseur_fsc_id
         WHERE 1=1
     """
     args: list[Any] = []
@@ -725,8 +727,10 @@ def list_materials(
         sql += " AND c.code=?"
         args.append(category.strip().upper())
     if supplier_id is not None:
-        sql += " AND m.supplier_id=?"
-        args.append(supplier_id)
+        # Le sélecteur de la liste porte désormais sur l'annuaire entreprise ;
+        # on accepte encore l'ancien identifiant pour les matières non rattachées.
+        sql += " AND (m.fournisseur_fsc_id=? OR (m.fournisseur_fsc_id IS NULL AND m.supplier_id=?))"
+        args.extend([supplier_id, supplier_id])
     if q and q.strip():
         sql += " AND (m.name LIKE ? OR m.appellation_code LIKE ?)"
         pat = f"%{q.strip()}%"
@@ -761,16 +765,18 @@ def create_material(request: Request, body: McMaterialCreate):
             raise HTTPException(status_code=400, detail="Catégorie invalide.")
         cur = conn.execute(
             """INSERT INTO mc_material (
-                name, appellation_code, category_id, supplier_id, weight_per_m2, weight_gsm,
+                name, appellation_code, category_id, supplier_id, fournisseur_fsc_id,
+                weight_per_m2, weight_gsm,
                 price_currency, unit_price, price_basis, tax_incidence, is_imported,
                 transport_mode, transport_unit_price, transport_pct,
                 container_kg, container_cost_usd, is_active
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
             (
                 body.name.strip(),
                 body.appellation_code.strip(),
                 body.category_id,
                 body.supplier_id,
+                body.fournisseur_fsc_id,
                 float(body.weight_per_m2),
                 body.weight_gsm,
                 body.price_currency,
@@ -1201,6 +1207,211 @@ def preview_product_cost(request: Request, body: ProductPreviewIn):
             sell_price_eur_m2=result.sell_price_eur_m2,
             components=components,
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Annuaire fournisseurs de l'entreprise (fournisseurs_fsc)
+#
+# Coûts matières n'a plus d'annuaire à lui : il choisit dans celui de
+# l'entreprise, le même que la qualité et le FSC. La table mc_supplier reste en
+# base pour l'historique, avec la correspondance établie en migration 226.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/api/pricing/fournisseurs")
+def list_fournisseurs_entreprise(request: Request):
+    """Annuaire fournisseurs de l'entreprise, pour tous les sélecteurs de /pricing."""
+    _require_read(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, nom, COALESCE(has_fsc, 0) AS has_fsc, pays, actif
+                 FROM fournisseurs_fsc
+                ORDER BY nom COLLATE NOCASE ASC"""
+        ).fetchall()
+    return {
+        "fournisseurs": [
+            {
+                "id": int(r["id"]),
+                "nom": r["nom"],
+                "has_fsc": bool(r["has_fsc"]),
+                "pays": r["pays"],
+                "actif": bool(r["actif"]) if r["actif"] is not None else True,
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.get("/api/pricing/fournisseurs/rapprochement")
+def rapprochement_fournisseurs(request: Request):
+    """
+    État du rapprochement entre l'ancien annuaire de Coûts matières et celui de
+    l'entreprise : ce qui a trouvé son jumeau, et ce qui reste à trancher.
+    """
+    _require_read(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT s.id, s.name, s.fournisseur_fsc_id, f.nom AS fsc_nom,
+                      (SELECT COUNT(*) FROM mc_material m WHERE m.supplier_id = s.id)
+                        AS nb_matieres
+                 FROM mc_supplier s
+                 LEFT JOIN fournisseurs_fsc f ON f.id = s.fournisseur_fsc_id
+                ORDER BY s.name COLLATE NOCASE ASC"""
+        ).fetchall()
+    apparies, orphelins = [], []
+    for r in rows:
+        item = {
+            "mc_supplier_id": int(r["id"]),
+            "nom": r["name"],
+            "nb_matieres": int(r["nb_matieres"] or 0),
+            "fournisseur_id": int(r["fournisseur_fsc_id"])
+            if r["fournisseur_fsc_id"] is not None
+            else None,
+            "fournisseur_nom": r["fsc_nom"],
+        }
+        (apparies if item["fournisseur_id"] else orphelins).append(item)
+    return {
+        "apparies": apparies,
+        "orphelins": orphelins,
+        "nb_apparies": len(apparies),
+        "nb_orphelins": len(orphelins),
+    }
+
+
+@router.post("/api/pricing/fournisseurs/rapprochement")
+def set_rapprochement_fournisseur(request: Request, body: dict = Body(...)):
+    """Rattache manuellement un ancien fournisseur à celui de l'annuaire entreprise."""
+    _require_write(request)
+    try:
+        mc_id = int(body.get("mc_supplier_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="mc_supplier_id requis") from None
+    raw = body.get("fournisseur_id")
+    fid = None
+    if raw not in (None, "", 0):
+        try:
+            fid = int(raw)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="fournisseur_id invalide") from None
+    with get_db() as conn:
+        if fid is not None and not conn.execute(
+            "SELECT 1 FROM fournisseurs_fsc WHERE id=?", (fid,)
+        ).fetchone():
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable.")
+        conn.execute("UPDATE mc_supplier SET fournisseur_fsc_id=? WHERE id=?", (fid, mc_id))
+        # Les matières encore sans fournisseur d'entreprise héritent du rattachement.
+        conn.execute(
+            """UPDATE mc_material SET fournisseur_fsc_id=?
+                WHERE supplier_id=? AND fournisseur_fsc_id IS NULL""",
+            (fid, mc_id),
+        )
+        conn.commit()
+    return {"ok": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Matières MyStock — vue et écriture des prix par fournisseur
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/api/pricing/mystock/materials")
+def list_mystock_materials(
+    request: Request,
+    q: Optional[str] = None,
+    categorie: Optional[str] = None,
+    active_only: bool = Query(True),
+):
+    """Une ligne par matière MyStock, avec le détail des prix par laize et fournisseur."""
+    _require_read(request)
+    with get_db() as conn:
+        materials = mystock_prix.list_materials(
+            conn, q=q, categorie=categorie, actives_only=active_only
+        )
+        cats = [
+            r["categorie"]
+            for r in conn.execute(
+                "SELECT DISTINCT categorie FROM matieres_premieres ORDER BY categorie"
+            ).fetchall()
+        ]
+    return {"materials": materials, "categories": cats}
+
+
+def _mystock_ids(body: dict) -> tuple[int, Optional[int], Optional[int]]:
+    try:
+        matiere_id = int(body.get("matiere_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="matiere_id requis") from None
+
+    def _opt(key: str) -> Optional[int]:
+        raw = body.get(key)
+        if raw in (None, "", 0, "0"):
+            return None
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"{key} invalide") from None
+
+    return matiere_id, _opt("laize_id"), _opt("fournisseur_id")
+
+
+@router.post("/api/pricing/mystock/prix")
+def set_mystock_prix(request: Request, body: dict = Body(...)):
+    """Fixe le prix d'un fournisseur sur une matière MyStock (et son miroir si principal)."""
+    user = _require_write(request)
+    matiere_id, laize_id, fournisseur_id = _mystock_ids(body)
+    try:
+        prix = float(body.get("prix"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="prix invalide") from None
+    with get_db() as conn:
+        res = mystock_prix.set_prix(
+            conn,
+            matiere_id=matiere_id,
+            laize_id=laize_id,
+            fournisseur_id=fournisseur_id,
+            prix=prix,
+            user_id=user.get("id"),
+            user_name=user.get("nom"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Modification refusée"))
+        conn.commit()
+    return res
+
+
+@router.post("/api/pricing/mystock/principal")
+def set_mystock_principal(request: Request, body: dict = Body(...)):
+    """Désigne le fournisseur dont le prix fait foi pour cette matière/laize."""
+    user = _require_write(request)
+    matiere_id, laize_id, fournisseur_id = _mystock_ids(body)
+    with get_db() as conn:
+        res = mystock_prix.set_principal(
+            conn,
+            matiere_id=matiere_id,
+            laize_id=laize_id,
+            fournisseur_id=fournisseur_id,
+            user_id=user.get("id"),
+            user_name=user.get("nom"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Modification refusée"))
+        conn.commit()
+    return res
+
+
+@router.delete("/api/pricing/mystock/prix")
+def delete_mystock_prix(request: Request, body: dict = Body(...)):
+    """Retire un fournisseur d'une matière MyStock."""
+    _require_write(request)
+    matiere_id, laize_id, fournisseur_id = _mystock_ids(body)
+    with get_db() as conn:
+        res = mystock_prix.delete_ligne(
+            conn, matiere_id=matiere_id, laize_id=laize_id, fournisseur_id=fournisseur_id
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Suppression refusée"))
+        conn.commit()
+    return res
 
 
 # ─────────────────────────────────────────────────────────────────────────────

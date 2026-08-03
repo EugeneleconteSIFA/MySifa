@@ -57,7 +57,7 @@ CAL_SUB_COLOR_DEFAULT = "#38bdf8"
 # Flux ICS sortant (abonnement Outlook / Google / Apple).
 FEED_PAST_DAYS = 120
 FEED_FUTURE_DAYS = 400
-FEED_DEFAULT_CALENDARS = "perso,conges,feries"
+FEED_DEFAULT_CALENDARS = CALENDRIER_PERSO_CAL
 
 # Libelle affiche aux autres utilisateurs pour un creneau perso masque.
 PERSO_BUSY_LABEL = "Occupé"
@@ -439,7 +439,10 @@ def _fetch_calendar_events(
     d0: date,
     d1: date,
     cals: set[str],
+    *,
+    perso_own_only: bool = False,
 ) -> tuple[list[dict], dict[str, dict[str, float]]]:
+    """perso_own_only : flux ICS personnel — on exclut les créneaux des collègues."""
     out: list[dict] = []
     prod_machine_ids: list[int] = []
     day_windows: dict[str, dict[str, float]] = {}
@@ -637,15 +640,20 @@ def _fetch_calendar_events(
 
         if CALENDRIER_PERSO_CAL in cals:
             uid = _user_id_from_session(user)
+            scope_sql = (
+                "AND e.user_id = ?"
+                if perso_own_only
+                else "AND (e.user_id = ? OR COALESCE(u.actif, 1) = 1)"
+            )
             rows = conn.execute(
-                """
+                f"""
                 SELECT e.id, e.user_id, e.titre, e.date_debut, e.date_fin,
                        e.all_day, e.note, e.prive, u.nom AS user_nom
                 FROM cal_events_perso e
                 LEFT JOIN users u ON u.id = e.user_id
                 WHERE date(substr(e.date_debut, 1, 10)) <= ?
                   AND date(substr(e.date_fin, 1, 10)) >= ?
-                  AND (e.user_id = ? OR COALESCE(u.actif, 1) = 1)
+                  {scope_sql}
                 ORDER BY e.date_debut ASC, e.id ASC
                 """,
                 (d1.isoformat(), d0.isoformat(), uid),
@@ -1426,7 +1434,9 @@ def feed_ics(token: str):
     events: list[dict] = []
     if cals:
         try:
-            events, _ = _fetch_calendar_events(feed_user, d0, d1, cals)
+            events, _ = _fetch_calendar_events(
+                feed_user, d0, d1, cals, perso_own_only=True
+            )
         except HTTPException:
             raise
         except Exception:
