@@ -915,6 +915,18 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 .maint-cat-btn.active:hover{filter:brightness(1.05)}
 .maint-wearparts-stack{display:grid;grid-template-columns:repeat(auto-fit,minmax(480px,1fr));gap:14px}
 .maint-wearpart{min-height:260px}
+/* v2.6.1 : la severite visuelle de la carte piece d'usure suit EXACTEMENT la
+   couleur de l'anneau (variable --wp-sev posee inline, calculee par
+   _ratioColor cote JS) — plus de bordure rouge en face d'un anneau jaune.
+   Fallback --danger si la variable n'est pas posee (carte non en retard). */
+.maint-frame.maint-wearpart.is-overdue{border-color:var(--wp-sev,var(--danger,#f87171));box-shadow:0 0 0 1px var(--wp-sev,var(--danger,#f87171)),0 4px 12px var(--wp-sev-glow,rgba(248,113,113,.20))}
+.maint-frame.maint-wearpart.is-overdue .maint-frame-head{border-bottom-color:var(--wp-sev-glow,rgba(248,113,113,.25))}
+.maint-frame.maint-wearpart.is-overdue .maint-frame-title{color:var(--wp-sev,var(--danger,#f87171))}
+.maint-frame.maint-wearpart.is-overdue-critical{border-color:var(--wp-sev,var(--danger,#dc2626));box-shadow:0 0 0 2px var(--wp-sev,var(--danger,#dc2626)),0 6px 16px var(--wp-sev-glow,rgba(220,38,38,.30))}
+/* Badge "Retard X j" (temps) aligne lui aussi. Le badge "Exces" du metrage
+   (.maint-wp-badge-info) garde son style neutre — le metrage est un supplement,
+   pas une alarme (regle produit v2.4.23). */
+.maint-frame.maint-wearpart.is-overdue .maint-wp-badge:not(.maint-wp-badge-info){background:var(--wp-sev-soft,rgba(248,113,113,.15));color:var(--wp-sev,var(--danger,#f87171))}
 .maint-wp-tabs{display:inline-flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px}
 .maint-wp-btn{border:none;background:transparent;color:var(--text2);padding:5px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s}
 .maint-wp-btn:hover{background:var(--card);color:var(--text)}
@@ -7066,7 +7078,7 @@ async function loadOpsTypes(){
 //   - > 200 %    : rouge plein (clamp)
 // Change par rapport à v1 : le vert restait "trop longtemps" un vert-jaune
 // dès 50 % avant, maintenant il reste pur jusqu'à 90 %.
-function _ratioColor(ratio){
+function _ratioColorRgb(ratio){
   // Stops en RATIO direct (pas de normalisation t=ratio/2 comme avant).
   const stops = [
     [0.00, [ 52, 211, 153]],   // vert franc
@@ -7085,11 +7097,21 @@ function _ratioColor(ratio){
       const red   = Math.round(ca[0] + (cb[0] - ca[0]) * lt);
       const green = Math.round(ca[1] + (cb[1] - ca[1]) * lt);
       const blue  = Math.round(ca[2] + (cb[2] - ca[2]) * lt);
-      return 'rgb(' + red + ',' + green + ',' + blue + ')';
+      return [red, green, blue];
     }
   }
   const last = stops[stops.length - 1][1];
-  return 'rgb(' + last[0] + ',' + last[1] + ',' + last[2] + ')';
+  return [last[0], last[1], last[2]];
+}
+// Wrappers CSS. _ratioColor garde exactement la signature d'avant (rgb(...)),
+// _ratioColorRgba sert a teinter bordure / titre / badge de la carte.
+function _ratioColor(ratio){
+  const c = _ratioColorRgb(ratio);
+  return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+}
+function _ratioColorRgba(ratio, alpha){
+  const c = _ratioColorRgb(ratio);
+  return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + alpha + ')';
 }
 // Compteur module-level pour générer des IDs uniques de paths SVG et filtres
 // par carte (sinon les <textPath href="#..."> peuvent référencer un path d'une
@@ -7117,31 +7139,39 @@ function _renderWearPartRings(ratios){
         '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dashoffset .35s ease,stroke .15s"/>';
       return trackBg + fg;
     }
-    // >= 100% : tour de base + court segment de stroke à la position
-    // d'avancement (longueur ~ stroke-width) avec stroke-linecap="round"
-    // pour la tête arrondie style natif, et drop-shadow pour l'effet 3D.
-    // Le départ à 12h n'est pas tracé (gap dans le dasharray) → pas de
-    // cap visible au sommet.
-    // Overflow plafonné à 0.97 pour garder le tip distinct du sommet si > 200%.
-    const overflow = Math.min(0.97, ratio - 1);
+    // >= 100% : rendu Apple Watch. Le tour precedent reste PLEIN et un nouveau
+    // tour continu part de 12h jusqu'a la position d'avancement, pose par-dessus.
+    // Les deux tours ont la meme couleur : c'est uniquement l'ombre portee sous
+    // la tete arrondie qui revele la superposition (plus de "point volant").
+    // Au-dela de 200% les tours s'empilent : on affiche la fraction du tour en
+    // cours (ratio - floor(ratio)), la tete reste donc toujours a sa position
+    // reelle sur le cadran.
     const baseLap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
       '" style="transition:stroke .15s"/>';
-    // Triple drop-shadow pour l'effet 3D : ombre dure proche, moyenne diffuse,
-    // douce large.
-    const shadowFilter = 'filter:'
-      + 'drop-shadow(0 1px 1px rgba(0,0,0,.55)) '
-      + 'drop-shadow(2px 4px 5px rgba(0,0,0,.45)) '
-      + 'drop-shadow(0 0 8px rgba(0,0,0,.25))';
-    const tipPos      = overflow * circ;
-    const tipDashLen  = sw * 0.6;
-    const dashStart   = tipPos - tipDashLen;
-    const tip = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r +
+    const frac = ratio - Math.floor(ratio);
+    // Pile sur un tour complet (100%, 200%...) : cercle plein, pas de tete.
+    if(frac <= 0.002) return trackBg + baseLap;
+    const arcLen = circ * frac;
+    // Segment court a la tete du tour en cours. Il n'est pas visible en propre
+    // (meme couleur, meme geometrie que l'arc pose juste au-dessus) : son seul
+    // role est de PROJETER l'ombre sur le tour du dessous. En limitant sa
+    // longueur, on obtient un croissant d'ombre localise sous la tete au lieu
+    // d'un halo sur tout l'anneau.
+    const shadowLen = Math.min(arcLen, sw * 1.5);
+    const shadowStyle = 'filter:'
+      + 'drop-shadow(0 0 2px rgba(0,0,0,.40)) '
+      + 'drop-shadow(1.5px 2.5px 3px rgba(0,0,0,.38))';
+    const shadowSeg = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r +
       '" fill="none" stroke="' + color + '" stroke-width="' + sw +
-      '" stroke-linecap="round" stroke-dasharray="' + tipDashLen.toFixed(2) + ' ' + (circ - tipDashLen).toFixed(2) +
-      '" stroke-dashoffset="' + (-dashStart).toFixed(2) +
-      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="' + shadowFilter +
-      ';transition:stroke-dashoffset .35s ease,stroke .15s"/>';
-    return trackBg + baseLap + tip;
+      '" stroke-linecap="round" stroke-dasharray="' + shadowLen.toFixed(2) + ' ' + (circ - shadowLen).toFixed(2) +
+      '" stroke-dashoffset="' + (-(arcLen - shadowLen)).toFixed(2) +
+      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="' + shadowStyle + '"/>';
+    // Tour en cours : arc continu de 12h jusqu'a la position reelle, extremites
+    // arrondies (le cap de depart se fond dans le tour du dessous).
+    const lap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
+      '" stroke-linecap="round" stroke-dasharray="' + arcLen.toFixed(2) + ' ' + (circ - arcLen).toFixed(2) +
+      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dasharray .35s ease,stroke .15s"/>';
+    return trackBg + baseLap + shadowSeg + lap;
   };
   // Étiquette titre à 12h (texte droit) sur chaque anneau.
   // Texte blanc, contour foncé paint-order:stroke pour rester lisible quel que
@@ -7847,6 +7877,17 @@ function _renderWearPartsGroup(machine, statusFilter){
       frameClsExtra = ' is-overdue';
       if(timeCritical) frameClsExtra += ' is-overdue-critical';
     }
+    // v2.6.1 : la bordure / le titre / le badge de retard prennent la couleur
+    // exacte de l'anneau Temps (fin du decalage "bordure rouge / anneau jaune").
+    // Plancher a 1.2 : entre 100 et 120% _ratioColor renvoie encore un
+    // vert-jaune trop clair pour lire comme une bordure d'alerte.
+    let sevStyle = '';
+    if(timeOver && refDays != null && refDays > 0 && daysSince != null){
+      const _sev = Math.max(1.2, daysSince / refDays);
+      sevStyle = ' style="--wp-sev:' + _ratioColor(_sev)
+        + ';--wp-sev-soft:' + _ratioColorRgba(_sev, .15)
+        + ';--wp-sev-glow:' + _ratioColorRgba(_sev, .22) + '"';
+    }
     let elapsedHtml = '';
     if(WEARPART_LAST_DATES_STATE.machine !== machine){
       elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Chargement…</span>';
@@ -7884,7 +7925,7 @@ function _renderWearPartsGroup(machine, statusFilter){
            (matchingPositions.indexOf('bande') !== -1 ? _b('Bande', 'bande') : '') +
            (matchingPositions.indexOf('rive')  !== -1 ? _b('Rive',  'rive')  : '') +
          '</div>');
-    return '<section class="maint-frame maint-wearpart' + frameClsExtra + '" data-wearpart="' + escAttr(p.id) + '" data-wearpart-pos="' + escAttr(pos) + '" data-maint-machine="' + escAttr(machine) + '">' +
+    return '<section class="maint-frame maint-wearpart' + frameClsExtra + '" data-wearpart="' + escAttr(p.id) + '" data-wearpart-pos="' + escAttr(pos) + '" data-maint-machine="' + escAttr(machine) + '"' + sevStyle + '>' +
       '<div class="maint-frame-head">' +
         '<div class="maint-frame-title">' + escHtml(p.label) + '</div>' +
         tabsHtml +
