@@ -135,7 +135,9 @@ def row_to_pricing_material(row: sqlite3.Row) -> PricingMaterial:
         price_basis=row["price_basis"],
         tax_incidence=_dec(row["tax_incidence"]),
         is_imported=_bool(row["is_imported"]),
+        transport_mode=(_col(row, "transport_mode") or "AMOUNT"),
         transport_unit_price=_dec(_col(row, "transport_unit_price")),
+        transport_pct=_dec(_col(row, "transport_pct")),
         container_kg=_dec(row["container_kg"]) if row["container_kg"] is not None else None,
         container_cost_usd=_dec(row["container_cost_usd"])
         if row["container_cost_usd"] is not None
@@ -158,7 +160,9 @@ def material_row_to_dict(row: sqlite3.Row, *, category_code: str) -> dict[str, A
         "price_basis": row["price_basis"],
         "tax_incidence": float(row["tax_incidence"]),
         "is_imported": _bool(row["is_imported"]),
+        "transport_mode": _col(row, "transport_mode") or "AMOUNT",
         "transport_unit_price": float(_col(row, "transport_unit_price") or 0),
+        "transport_pct": float(_col(row, "transport_pct") or 0),
         "container_kg": float(row["container_kg"]) if row["container_kg"] is not None else None,
         "container_cost_usd": float(row["container_cost_usd"])
         if row["container_cost_usd"] is not None

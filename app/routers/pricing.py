@@ -21,7 +21,6 @@ from app.services.pricing import (
     compute_material_price_per_m2,
     compute_product_cost,
 )
-from app.services.pricing.engine import suggest_transport_unit_price
 from app.services.pricing.repository import (
     assert_materials_active_for_product,
     ensure_settings_rows,
@@ -118,6 +117,8 @@ def _breakdown_out(b) -> MaterialBreakdownOut:
         transport_src=getattr(b, "transport_src", Decimal("0")),
         subtotal_src=getattr(b, "subtotal_src", Decimal("0")),
         subtotal_eur=getattr(b, "subtotal_eur", Decimal("0")),
+        transport_eur_m2=getattr(b, "transport_eur_m2", Decimal("0")),
+        transport_pct_effective=getattr(b, "transport_pct_effective", Decimal("0")),
     )
 
 
@@ -127,16 +128,11 @@ def _material_computed(pm, settings) -> MaterialComputedOut:
         res = compute_material_price_per_m2(pm, settings)
     except PricingError as e:
         raise _pricing_error(e) from e
-    try:
-        suggested = suggest_transport_unit_price(pm, settings)
-    except PricingError:
-        suggested = None
     margin_pct = getattr(settings, "default_margin_pct", Decimal("0")) or Decimal("0")
     margin = (res.price_eur_per_m2 * margin_pct / Decimal("100")).quantize(Decimal("0.0001"))
     return MaterialComputedOut(
         price_eur_per_m2=res.price_eur_per_m2,
         breakdown=_breakdown_out(res.breakdown),
-        transport_suggested=suggested,
         margin_pct=margin_pct,
         margin_eur_m2=margin,
         sell_price_eur_m2=res.price_eur_per_m2 + margin,
@@ -503,7 +499,9 @@ def preview_material_price(request: Request, body: MaterialPreviewIn):
         price_basis=body.price_basis,
         tax_incidence=body.tax_incidence,
         is_imported=body.is_imported,
+        transport_mode=body.transport_mode,
         transport_unit_price=body.transport_unit_price,
+        transport_pct=body.transport_pct,
         container_kg=body.container_kg,
         container_cost_usd=body.container_cost_usd,
     )
@@ -765,8 +763,9 @@ def create_material(request: Request, body: McMaterialCreate):
             """INSERT INTO mc_material (
                 name, appellation_code, category_id, supplier_id, weight_per_m2, weight_gsm,
                 price_currency, unit_price, price_basis, tax_incidence, is_imported,
-                transport_unit_price, container_kg, container_cost_usd, is_active
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
+                transport_mode, transport_unit_price, transport_pct,
+                container_kg, container_cost_usd, is_active
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
             (
                 body.name.strip(),
                 body.appellation_code.strip(),
@@ -779,7 +778,9 @@ def create_material(request: Request, body: McMaterialCreate):
                 body.price_basis,
                 float(body.tax_incidence),
                 1 if body.is_imported else 0,
+                body.transport_mode or "AMOUNT",
                 float(body.transport_unit_price or 0),
+                float(body.transport_pct or 0),
                 float(body.container_kg) if body.container_kg is not None else None,
                 float(body.container_cost_usd) if body.container_cost_usd is not None else None,
             ),
@@ -831,6 +832,7 @@ def patch_material(request: Request, material_id: int, body: McMaterialUpdate):
                 "unit_price",
                 "tax_incidence",
                 "transport_unit_price",
+                "transport_pct",
                 "container_kg",
                 "container_cost_usd",
             ):

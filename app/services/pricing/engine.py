@@ -7,10 +7,11 @@ Formule (v223) :
 
     prix de revient €/m² = (prix d'achat + transport) × taux de change × incidence taxes
 
-Le transport est saisi sur la matière, dans la DEVISE et la BASE d'achat
-(USD/kg si l'achat est en USD/kg, €/m² si l'achat est en €/m²). La calculette
-conteneur (coût USD ÷ masse kg × poids) ne sert qu'à PROPOSER une valeur —
-elle n'intervient plus dans le calcul.
+Le transport est saisi sur la matière, au choix :
+  - mode AMOUNT : un montant dans la DEVISE et la BASE d'achat (USD/kg si l'achat
+    est en USD/kg, €/m² si l'achat est en €/m²) ;
+  - mode PCT    : un pourcentage du prix d'achat.
+Il n'est pris en compte que si la matière est marquée importée.
 """
 
 from __future__ import annotations
@@ -57,34 +58,17 @@ def _fx_rate(material: PricingMaterial, settings: PricingSettings) -> Decimal:
     return settings.eur_usd_rate if material.price_currency == "USD" else _ONE
 
 
-def suggest_transport_unit_price(
-    material: PricingMaterial,
-    settings: PricingSettings | Mapping[str, Any] | None,
-) -> Optional[Decimal]:
+def _transport_unit(material: PricingMaterial) -> Decimal:
     """
-    Valeur de transport proposée par la calculette conteneur, exprimée dans la
-    devise et la base d'achat de la matière (donc directement reportable dans le
-    champ « transport »). Retourne None si la calculette n'est pas exploitable.
+    Transport ramené à l'unité d'achat (par kg ou par m² selon la base), exprimé
+    dans la devise d'achat. Nul si la matière n'est pas marquée importée.
     """
-    s = validate_pricing_settings(settings)
-    cost_usd = (
-        material.container_cost_usd
-        if material.container_cost_usd is not None
-        else s.default_container_cost_usd
-    )
-    kg = material.container_kg if material.container_kg is not None else s.default_container_kg
-    if kg is None or kg <= 0 or cost_usd is None or cost_usd < 0:
-        return None
-    usd_per_kg = cost_usd / kg
-    # Conversion vers la devise d'achat
-    per_kg = usd_per_kg if material.price_currency == "USD" else usd_per_kg * s.eur_usd_rate
-    if material.price_basis == "PER_KG":
-        return _q4(per_kg)
-    if material.price_basis == "PER_M2":
-        if material.weight_per_m2 <= 0:
-            return None
-        return _q4(per_kg * material.weight_per_m2)
-    return None
+    if not material.is_imported:
+        return _ZERO
+    if material.transport_mode == "PCT":
+        pct = material.transport_pct or _ZERO
+        return material.unit_price * pct / _HUNDRED
+    return material.transport_unit_price or _ZERO
 
 
 def compute_material_price_per_m2(
@@ -107,6 +91,8 @@ def compute_material_price_per_m2(
         raise PricingError(f"tax_incidence invalide pour « {material.name} ».")
     if material.transport_unit_price is not None and material.transport_unit_price < 0:
         raise PricingError(f"Transport invalide pour « {material.name} ».")
+    if material.transport_pct is not None and material.transport_pct < 0:
+        raise PricingError(f"Transport (%) invalide pour « {material.name} ».")
 
     tax = material.tax_incidence
     w = material.weight_per_m2
@@ -123,10 +109,9 @@ def compute_material_price_per_m2(
         raise PricingError(f"price_basis inconnu pour « {material.name} ».")
 
     unit_src = material.unit_price
-    transport_src = (
-        material.transport_unit_price
-        if (material.is_imported and material.transport_unit_price)
-        else _ZERO
+    transport_src = _transport_unit(material)
+    transport_pct_eff = (
+        (transport_src / unit_src * _HUNDRED) if unit_src > 0 else _ZERO
     )
 
     raw = unit_src * factor
@@ -150,6 +135,8 @@ def compute_material_price_per_m2(
         transport_src=_q4(transport_src),
         subtotal_src=_q4(subtotal_src),
         subtotal_eur=_q4(subtotal_eur),
+        transport_eur_m2=_q4(transport * rate),
+        transport_pct_effective=_q4(transport_pct_eff),
     )
     price = _q4(total)
 
@@ -171,6 +158,8 @@ def compute_material_price_per_m2(
             transport_src=breakdown.transport_src,
             subtotal_src=breakdown.subtotal_src,
             subtotal_eur=breakdown.subtotal_eur,
+            transport_eur_m2=breakdown.transport_eur_m2,
+            transport_pct_effective=breakdown.transport_pct_effective,
         )
 
     return MaterialPriceResult(price_eur_per_m2=price, breakdown=breakdown)

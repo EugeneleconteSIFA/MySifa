@@ -8848,6 +8848,20 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 224, "calendrier_partage_et_externes")
 
+    # v225 — Coûts matières : transport saisissable en % du prix d'achat.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=225 LIMIT 1").fetchone():
+        _mc225_cols = {r["name"] for r in conn.execute("PRAGMA table_info(mc_material)").fetchall()}
+        if _mc225_cols and "transport_mode" not in _mc225_cols:
+            conn.execute(
+                "ALTER TABLE mc_material ADD COLUMN transport_mode TEXT NOT NULL DEFAULT 'AMOUNT'"
+            )
+        if _mc225_cols and "transport_pct" not in _mc225_cols:
+            conn.execute(
+                "ALTER TABLE mc_material ADD COLUMN transport_pct REAL NOT NULL DEFAULT 0"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 225, "mc_transport_mode_pct")
+
     conn.commit()
 
 
