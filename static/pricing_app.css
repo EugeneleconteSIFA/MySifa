@@ -424,3 +424,15 @@ input.ms-prix{max-width:130px;font-variant-numeric:tabular-nums;text-align:right
   color:var(--success);white-space:nowrap}
 .badge-link{cursor:pointer}
 .badge-link:hover{filter:brightness(1.08)}
+
+/* Prix d'achat et sa contrepartie dans l'autre devise. La devise d'achat reste
+   la valeur qui compte : elle est plus grasse et plus grande que sa conversion. */
+.price-pair{display:flex;align-items:center;gap:10px;flex-wrap:nowrap}
+.field.f-price input.price-main{max-width:190px;font-weight:700;font-size:15px;
+  font-variant-numeric:tabular-nums}
+.price-arrow{color:var(--muted);font-size:15px;flex-shrink:0}
+.price-alt{font-size:13px;font-weight:500;color:var(--text2);font-variant-numeric:tabular-nums;
+  background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:9px 12px;white-space:nowrap}
+.price-alt.muted{color:var(--muted);font-style:italic}
+@media(max-width:700px){.price-pair{flex-wrap:wrap}}
