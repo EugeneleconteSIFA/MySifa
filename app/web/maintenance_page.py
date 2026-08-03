@@ -3674,7 +3674,7 @@ function renderCalWeek(){
   // Lane-packing : un bloc par opération, placé côte à côte lorsqu'il y a chevauchement
   document.querySelectorAll('.cal-wv-day-col').forEach(col => {
     const iso = col.getAttribute('data-date');
-    const events = PLANNING_STATE.list.filter(ev => ev.date === iso);
+    const events = PLANNING_STATE.list.filter(ev => ev.date === iso  && !_isEventBeingDragged(ev));
     const packed = _packDayEvents(events);
     packed.forEach(item => {
       const block = _makeEventBlock(item);
@@ -3731,7 +3731,7 @@ function renderCalDay(){
   // Lane-packing
   document.querySelectorAll('.cal-wv-day-col').forEach(col => {
     const cIso = col.getAttribute('data-date');
-    const events = PLANNING_STATE.list.filter(ev => ev.date === cIso);
+    const events = PLANNING_STATE.list.filter(ev => ev.date === cIso && !_isEventBeingDragged(ev));
     const packed = _packDayEvents(events);
     packed.forEach(item => {
       const block = _makeEventBlock(item);
@@ -4132,6 +4132,23 @@ function _onCalDragMove(e){
 // un petit bouton en haut a droite alors que le creneau peut etre en bas).
 // Glisser au-dela du bord droit de dimanche = lundi suivant ; au-dela du bord
 // gauche de lundi = dimanche precedent.
+// v2.6.1 : pendant un glisser-deposer inter-semaines, le bloc en cours de
+// deplacement est gere a la main (detache du DOM par le re-rendu, puis
+// reinsere dans la colonne survolee). Il ne doit donc PAS etre redessine par
+// renderCalWeek()/renderCalDay() depuis PLANNING_STATE : en revenant sur la
+// semaine d'origine, le creneau apparaissait deux fois — celui qu'on deplace
+// et sa copie a l'emplacement d'origine.
+//
+// Le filtre ne s'applique qu'a un drag ACTIF (seuil de mouvement franchi) :
+// un simple clic ne doit pas faire disparaitre le creneau. Apres le drop,
+// _CAL_DRAG est remis a null avant le re-rendu, le bloc revient normalement.
+function _isEventBeingDragged(ev){
+  try{
+    return !!(_CAL_DRAG && _CAL_DRAG.active && _CAL_DRAG.ev && ev
+              && String(_CAL_DRAG.ev.id) === String(ev.id));
+  }catch(_){ return false; }
+}
+
 const CAL_EDGE_ZONE_PX  = 48;   // largeur des bandes sensibles
 const CAL_EDGE_DELAY_MS = 450;  // survol requis avant de changer de semaine
 
