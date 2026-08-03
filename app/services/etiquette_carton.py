@@ -44,19 +44,19 @@ PAGE_H_MM = 50.0
 X_LABEL = 1.8         # bord gauche des intitules et des filets horizontaux
 X_RULE = 23.5         # filet vertical intitules / valeurs
 X_VALUE = 25.0        # bord gauche des valeurs
-X_HDR_RULE_R = 89.0   # extremite droite du filet sous le gros numero
-X_VALUE_MAX = 79.0    # au-dela on entre dans la zone des textes pivotes
-X_DATE = 81.5         # colonne pivotee : date
-X_MADE_IN = 86.5      # colonne pivotee : Made in France
+X_HDR_RULE_R = 89.0   # extremite droite du filet sous le bandeau
+X_VALUE_MAX = 80.0    # au-dela on entre dans la zone des textes pivotes
+X_DATE = 83.0         # colonne pivotee : date
+X_MADE_IN = 88.0      # colonne pivotee : Made in France
 
-Y_HDR_RULE_L = 13.0   # filet sous "SI" (colonne de gauche uniquement)
-Y_HDR_RULE_R = 16.7   # filet sous le gros numero (colonne de droite)
+Y_HDR_RULE = 14.0     # filet unique sous le bandeau, droit sur toute la largeur
 Y_REF_CLIENT = 21.3   # bas de la ligne "Ref. client", plus haute que les autres
 ROW_H = 5.3           # hauteur des 5 lignes suivantes
 Y_BASE_SI = 8.3       # ligne de base du "SI"
 Y_BASE_REF = 11.5     # ligne de base du gros numero
-Y_TOP_DATE = 26.5     # depart des textes pivotes (lecture de haut en bas)
-Y_TOP_MADE_IN = 24.0
+# Textes pivotes : lecture de bas en haut, donc ancres sur leur extremite basse.
+Y_BOT_DATE = 37.0
+Y_BOT_MADE_IN = 38.5
 
 # Lignes sous "Ref. client", dans l'ordre d'affichage.
 ROWS = ("matiere", "adhesif", "ref_format", "condt", "quantite")
@@ -274,19 +274,19 @@ def build_etiquette_ops(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
     if ref_txt:
         text(X_VALUE, Y_BASE_REF, ref_txt, ref_size, bold=True)
 
-    # Filet sous "SI" (colonne de gauche) puis filet sous le numero, plus bas.
-    rule(X_LABEL, Y_HDR_RULE_L, X_RULE, Y_HDR_RULE_L)
-    rule(X_RULE, Y_HDR_RULE_R, X_HDR_RULE_R, Y_HDR_RULE_R)
+    # Filet unique sous le bandeau : une seule droite sur toute la largeur,
+    # pas de decrochement entre la colonne "SI" et celle du numero.
+    rule(X_LABEL, Y_HDR_RULE, X_HDR_RULE_R, Y_HDR_RULE)
 
-    # Filet vertical : du bas du bandeau gauche jusqu'a la derniere ligne.
-    rule(X_RULE, Y_HDR_RULE_L, X_RULE, y_bottom)
+    # Filet vertical : du bas du bandeau jusqu'a la derniere ligne.
+    rule(X_RULE, Y_HDR_RULE, X_RULE, y_bottom)
 
     # "Ref. client" : ligne plus haute que les autres, intitule cale en haut.
-    text(X_LABEL + 0.6, Y_HDR_RULE_L + 3.0, _ROW_LABELS["ref_client"], FS_LABEL)
+    text(X_LABEL + 0.6, Y_HDR_RULE + 3.0, _ROW_LABELS["ref_client"], FS_LABEL)
     ref_cli = _s(spec.get("ref_client"))
     if ref_cli:
         txt, size = _fit(ref_cli, X_VALUE_MAX - X_VALUE, FS_VALUE)
-        text(X_VALUE, Y_HDR_RULE_L + 3.0, txt, size)
+        text(X_VALUE, Y_HDR_RULE + 3.0, txt, size)
     rule(X_LABEL, Y_REF_CLIENT, X_RULE, Y_REF_CLIENT)
 
     # Lignes suivantes : filet horizontal sous la colonne des intitules
@@ -307,13 +307,13 @@ def build_etiquette_ops(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
             rule(X_LABEL, top + ROW_H, X_RULE, top + ROW_H)
 
     # Date et "Made in France" : deux textes pivotes cote a cote sur le bord
-    # droit, lecture de haut en bas, sans aucun filet autour.
+    # droit, lecture de bas en haut (rotation antihoraire), sans filet autour.
     date_txt = _s(spec.get("date"))
     if date_txt:
-        text(X_DATE, Y_TOP_DATE, date_txt, FS_STRIP, rot=90)
+        text(X_DATE, Y_BOT_DATE, date_txt, FS_STRIP, rot=270)
     made = _s(spec.get("made_in"))
     if made:
-        text(X_MADE_IN, Y_TOP_MADE_IN, made, FS_STRIP, rot=90)
+        text(X_MADE_IN, Y_BOT_MADE_IN, made, FS_STRIP, rot=270)
 
     return ops
 
