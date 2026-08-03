@@ -536,6 +536,25 @@ def create_event(body: EventCreateBody, request: Request):
     else:
         if src not in _VALID_SOURCES:
             raise HTTPException(status_code=400, detail=f"source invalide: {src}")
+        # v2.6.1 : on ne planifie pas dans le passe. Regle volontairement
+        # limitee a source='planifie' (le planning) : les interventions
+        # 'non_planifie' sont des CONSTATS d'operations realisees, et doivent
+        # rester saisissables a posteriori — c'est le mode de saisie normal
+        # d'une intervention faite la veille et enregistree le lendemain.
+        # Aucune exemption de role ici : le planning est deja reserve aux
+        # admins, une exemption admin n'aurait donc bloque personne.
+        # NB : la generation des recurrences n'est pas concernee, elle INSERT
+        # directement en SQL sans passer par ce endpoint (et ne produit de
+        # toute facon que des occurrences >= aujourd'hui).
+        if src == "planifie":
+            _today_iso = datetime.now(_PARIS).strftime("%Y-%m-%d")
+            if body.date_prevue < _today_iso:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Impossible de planifier un créneau à une date passée. "
+                           "Pour consigner une intervention déjà réalisée, utilise "
+                           "l'enregistrement d'opération.",
+                )
         heure_debut = body.heure_debut
         heure_fin = body.heure_fin
         if not ops_specs:
@@ -639,22 +658,46 @@ def update_event(event_id: int, body: EventUpdateBody, request: Request):
         if maint_role == "operator":
             if not _can_operator_manage_event(ev, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres interventions non planifiées")
-        # v2.5.14 : garde-fou 'past event' -- interdit toute modif de la date ou
-        # des heures d'un créneau déjà passé (aujourd'hui inclus reste modifiable).
-        # Les autres champs (ops, notes, ...) restent éditables librement.
-        # v2.5.13 : l'admin passe outre. Il doit pouvoir corriger a posteriori
-        # une saisie mal datee par un operateur (typiquement une intervention
-        # faite la veille mais saisie le lendemain) depuis l'historique des
-        # operations. Le garde-fou reste actif pour les operateurs, qui ne
-        # doivent pas pouvoir reecrire l'historique de leurs propres saisies.
+        # Garde-fou 'past event' : interdit de modifier la date ou les heures
+        # d'un créneau selon sa source. Les autres champs (ops, notes,
+        # opérateurs assignés, ...) restent éditables librement dans tous les cas.
+        #
+        # v2.6.1 — la règle ne dépend plus du RÔLE mais de la SOURCE :
+        #
+        #   planifie (planning)  : la date d'origine ET la date cible doivent
+        #       être >= aujourd'hui, pour tout le monde. Le planning sert à
+        #       planifier et à assigner du travail à venir ; un créneau passé y
+        #       est figé. L'ancienne exemption admin (v2.5.13) est supprimée :
+        #       la vue Planning étant déjà réservée aux admins, elle ne bloquait
+        #       en pratique personne et laissait passer les déplacements vers le
+        #       passé, y compris par simple maladresse de glisser-déposer.
+        #       Tester AUSSI la date cible est indispensable : l'ancien code ne
+        #       regardait que la date actuelle du créneau, si bien que déplacer
+        #       un créneau de demain vers hier passait sans encombre.
+        #
+        #   non_planifie (constats) : garde-fou opérateur inchangé — il ne doit
+        #       pas pouvoir réécrire l'historique de ses propres saisies, mais
+        #       l'admin peut corriger une intervention mal datée.
         _today = datetime.now(_PARIS).strftime("%Y-%m-%d")
         _ev_date = ev.get("date_prevue") or ""
+        _ev_source = ev.get("source") or "planifie"
         _time_fields = {"date_prevue", "heure_debut", "heure_fin"}
-        if maint_role != "admin" and _ev_date < _today and any(k in updates for k in _time_fields):
-            raise HTTPException(
-                status_code=403,
-                detail="Ce créneau est passé. La date et les horaires ne sont plus modifiables (seules les ops peuvent être corrigées).",
-            )
+        _touches_time = any(k in updates for k in _time_fields)
+        if _touches_time:
+            if _ev_source == "planifie":
+                _target_date = updates.get("date_prevue") or _ev_date
+                if _ev_date < _today or _target_date < _today:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="Le planning ne permet pas d'intervenir sur une date passée. "
+                               "Pour consigner une intervention déjà réalisée, utilise "
+                               "l'enregistrement d'opération.",
+                    )
+            elif maint_role != "admin" and _ev_date < _today:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Cette intervention est passée. La date et les horaires ne sont plus modifiables (seules les ops peuvent être corrigées).",
+                )
         updates["updated_at"] = _now_paris_iso()
         set_clause = ", ".join(f"{k}=?" for k in updates)
         conn.execute(f"UPDATE maintenance_events SET {set_clause} WHERE id=?",
