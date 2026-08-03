@@ -166,6 +166,27 @@
     PER_M2: "Au mètre carré — le prix est déjà exprimé au m²",
   };
 
+  /**
+   * Contrepartie du prix d'achat dans l'AUTRE devise.
+   * Le taux stocké est un USD → EUR (1 USD = taux €) : on multiplie pour aller
+   * du dollar vers l'euro, on divise dans l'autre sens.
+   */
+  function otherCurrencyPrice(value, currency, basis) {
+    const rate = parseFloat((S.settings && S.settings.eur_usd_rate) || 0);
+    const v = parseFloat(value);
+    if (!rate || rate <= 0 || Number.isNaN(v)) return null;
+    const cur = (currency || "EUR").toUpperCase();
+    const other = cur === "USD" ? "EUR" : "USD";
+    const converted = cur === "USD" ? v * rate : v / rate;
+    return { value: converted, currency: other, label: fmtCur(converted, other) + "/" + (basis === "PER_M2" ? "m²" : "kg") };
+  }
+
+  function otherPriceHtml(value, currency, basis) {
+    const o = otherCurrencyPrice(value, currency, basis);
+    if (!o) return '<div class="price-alt muted">taux non renseigné</div>';
+    return `<div class="price-alt">${escHtml(o.label)}</div>`;
+  }
+
   /** Le poids au m² n'est utile que si le prix est au kilo ou pour la calculette import. */
   function needsWeight(form) {
     return form.price_basis === "PER_KG" || !!form.is_imported;
@@ -1469,7 +1490,14 @@
               </select></div>
             </div>
             <div class="field-row">
-              <div class="field f-num"><label>Prix unitaire <span class="lbl-unit">${escHtml(unit)}</span></label><input type="number" step="0.0001" id="f-unit" value="${escAttr(ms ? ms.unit_price : f.unit_price)}" ${lockAttr}/></div>
+              <div class="field f-price"><label>Prix unitaire <span class="lbl-unit">${escHtml(unit)}</span></label>
+                <div class="price-pair">
+                  <input type="number" step="0.0001" id="f-unit" class="price-main" value="${escAttr(ms ? ms.unit_price : f.unit_price)}" ${lockAttr}/>
+                  <span class="price-arrow" aria-hidden="true">→</span>
+                  <span id="f-unit-alt">${otherPriceHtml(ms ? ms.unit_price : f.unit_price, ms ? ms.price_currency : f.price_currency, ms ? ms.price_basis : f.price_basis)}</span>
+                </div>
+                <div class="field-hint">Contrepartie au taux ${escHtml(fmtNum((S.settings && S.settings.eur_usd_rate) || 0, 4, 4))} USD → EUR — indicatif, non enregistré.</div>
+              </div>
               <div class="field f-num"><label>Incidence taxes <span class="lbl-unit">multiplicateur</span></label><input type="number" step="0.0001" id="f-tax" value="${escAttr(f.tax_incidence)}"/>
                 <div class="field-hint">1 = neutre · 1,05 = +5 % · 0,95 = −5 %</div>
               </div>
@@ -1539,10 +1567,18 @@
       clearTimeout(S.debounceMat);
       S.debounceMat = setTimeout(refreshMaterialPreview, 300);
     };
+    const refreshAltPrice = () => {
+      const alt = document.getElementById("f-unit-alt");
+      if (!alt) return;
+      const cur = ms ? ms.price_currency : S.formMaterial.price_currency;
+      const bas = ms ? ms.price_basis : S.formMaterial.price_basis;
+      alt.innerHTML = otherPriceHtml(S.formMaterial.unit_price, cur, bas);
+    };
     ["f-unit", "f-wm2", "f-tax", "f-transport"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.oninput = () => {
         syncMaterialFormFromDom();
+        refreshAltPrice();
         bindPreview();
       };
     });
