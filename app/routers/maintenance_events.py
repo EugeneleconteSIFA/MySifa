@@ -1212,6 +1212,9 @@ class TemplateUpdateBody(BaseModel):
     recurrence_time_end: Optional[str] = None
     recurrence_active: Optional[bool] = None
     default_operators: Optional[List[int]] = None
+    # v2.6.1 : ids de créneaux à NE PAS resynchroniser. L'admin les a coches
+    # dans la confirmation ; ils gardent leurs operations telles quelles.
+    resync_exclude_ids: Optional[List[int]] = None
 
 
 class SaveAsTemplateBody(BaseModel):
@@ -1538,7 +1541,46 @@ def _ensure_recurring_events_generated(conn, horizon_days: int = 90,
     return total
 
 
-def _resync_future_events_from_template(conn, template_id: int) -> int:
+def _event_divergence(conn, event_id: int, tmpl: dict) -> dict:
+    """v2.6.1 : en quoi les operations d'un creneau s'ecartent-elles du modele ?
+
+    Sert a n'interroger l'admin QUE sur les creneaux reellement personnalises :
+    resynchroniser un creneau identique au modele ne change rien, inutile de
+    lui poser la question.
+
+    Signale aussi les operations deja effectuees ou invalidees. C'est le cas le
+    plus grave : la resync fait DELETE puis INSERT des lignes d'operations, donc
+    statut, auteur et horodatage de realisation seraient perdus. Le filtre
+    `date_prevue >= aujourd'hui` inclut AUJOURD'HUI : un creneau du matin dont
+    l'operateur a deja valide des operations est concerne.
+    """
+    rows = conn.execute(
+        "SELECT code, machines_csv, statut FROM maintenance_event_ops WHERE event_id = ?",
+        (event_id,),
+    ).fetchall()
+    ev_ops, done = {}, 0
+    for r in rows:
+        ev_ops[r["code"]] = r["machines_csv"] or ""
+        if (r["statut"] or "") in ("termine", "invalidee"):
+            done += 1
+    tm_ops = {o["code"]: (o.get("machines_csv") or "") for o in (tmpl.get("ops") or [])}
+    added = [c for c in ev_ops if c not in tm_ops]
+    removed = [c for c in tm_ops if c not in ev_ops]
+    mdiff = [c for c in ev_ops if c in tm_ops
+             and set(_machines_csv_to_list(ev_ops[c])) != set(_machines_csv_to_list(tm_ops[c]))]
+    reasons = []
+    if done:
+        reasons.append(f"{done} opération(s) déjà effectuée(s) — historique perdu si écrasé")
+    if added:
+        reasons.append(f"{len(added)} opération(s) ajoutée(s) à la main")
+    if removed:
+        reasons.append(f"{len(removed)} opération(s) du modèle retirée(s)")
+    if mdiff:
+        reasons.append(f"{len(mdiff)} opération(s) dont les machines ont été modifiées")
+    return {"diverged": bool(reasons), "reasons": reasons, "done_ops": done}
+
+
+def _resync_future_events_from_template(conn, template_id: int, exclude_ids=None) -> int:
     """Écrase les ops des créneaux futurs (date_prevue >= aujourd'hui) liés au
     template. Retourne le nombre d'events resynchronisés.
     Préserve : date, horaires, source. Écrase : liste des ops, et les opérateurs
@@ -1574,8 +1616,13 @@ def _resync_future_events_from_template(conn, template_id: int) -> int:
     ).fetchall()
     now = _now_paris_iso()
     default_uids = [u["id"] for u in (tmpl.get("default_operators") or [])]
+    # v2.6.1 : creneaux que l'admin a choisi de preserver dans la confirmation.
+    _skip = set(int(x) for x in (exclude_ids or []))
+    _synced = 0
     for ev in events:
         eid = ev["id"]
+        if eid in _skip:
+            continue
         conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
         for op in tmpl["ops"]:
             conn.execute(
@@ -1594,7 +1641,8 @@ def _resync_future_events_from_template(conn, template_id: int) -> int:
                     (eid, uid),
                 )
         _recompute_event_machine(conn, eid)
-    return len(events)
+        _synced += 1
+    return _synced
 
 
 @router.get("/api/maintenance/templates")
@@ -1732,15 +1780,26 @@ def template_resync_impact(template_id: int, request: Request):
         if not conn.execute("SELECT 1 FROM maintenance_templates WHERE id = ?", (template_id,)).fetchone():
             raise HTTPException(status_code=404, detail="Modèle introuvable")
         rows = conn.execute(
-            "SELECT date_prevue FROM maintenance_events "
+            "SELECT id, date_prevue FROM maintenance_events "
             "WHERE template_id = ? AND template_origin_date IS NOT NULL "
             "  AND date_prevue >= ? AND deleted_at IS NULL "
             "ORDER BY date_prevue ASC",
             (template_id, today),
         ).fetchall()
+        # v2.6.1 : on ne detaille que les creneaux PERSONNALISES. Les autres
+        # sont des copies conformes : les resynchroniser ne change rien, il
+        # serait absurde de demander leur sort a l'admin.
+        tmpl = _load_template_full(conn, template_id) or {"ops": []}
+        diverged = []
+        for r in rows:
+            d = _event_divergence(conn, r["id"], tmpl)
+            if d["diverged"]:
+                diverged.append({"id": r["id"], "date": r["date_prevue"],
+                                 "reasons": d["reasons"], "done_ops": d["done_ops"]})
     dates = [r["date_prevue"] for r in rows]
     return {"count": len(dates), "dates": dates[:5], "first": dates[0] if dates else None,
-            "last": dates[-1] if dates else None}
+            "last": dates[-1] if dates else None, "diverged": diverged,
+            "identical_count": len(dates) - len(diverged)}
 
 
 @router.patch("/api/maintenance/templates/{template_id}")
@@ -1897,11 +1956,11 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
                 (now, template_id),
             )
             # Resync des créneaux futurs liés (ops + operateurs)
-            resynced = _resync_future_events_from_template(conn, template_id)
+            resynced = _resync_future_events_from_template(conn, template_id, body.resync_exclude_ids)
         elif body.default_operators is not None:
             # v2.5.25 : ops inchangees mais default_operators modifies -> resync operateurs
             # sur les creneaux futurs uniquement (les ops restent car pas modifiees).
-            resynced = _resync_future_events_from_template(conn, template_id)
+            resynced = _resync_future_events_from_template(conn, template_id, body.resync_exclude_ids)
         # v2.6.1 : regeneration immediate apres une purge de regle, pour que la
         # reponse reflete deja le nouveau planning (sinon le calendrier reste
         # vide jusqu'au prochain GET /events).

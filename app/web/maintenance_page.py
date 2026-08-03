@@ -12918,6 +12918,8 @@ async function confirmDeleteTemplate(templateId){
 // Rend une Promise<boolean> pour rester utilisable en await dans un flux async.
 // Mise en forme alignee sur _openDeleteTemplateModal (overlay .op-modal-overlay
 // + carte .op-modal), fermeture par Echap, clic hors carte ou bouton Annuler.
+// v2.6.1 : ids coches dans la derniere confirmation (cases [data-keep]).
+let _MYS_CONFIRM_LAST_KEEP = [];
 function _mysConfirm(opts){
   opts = opts || {};
   return new Promise(function(resolve){
@@ -12931,6 +12933,16 @@ function _mysConfirm(opts){
     function close(val){
       if(done) return;
       done = true;
+      // v2.6.1 : les cases [data-keep] du corps sont lues AVANT le retrait du
+      // DOM — apres, querySelectorAll ne trouverait plus rien. Le resultat est
+      // expose via _MYS_CONFIRM_LAST_KEEP pour l'appelant.
+      try{
+        _MYS_CONFIRM_LAST_KEEP = Array.prototype.slice
+          .call(wrap.querySelectorAll('[data-keep]'))
+          .filter(function(cb){ return cb.checked; })
+          .map(function(cb){ return parseInt(cb.getAttribute('data-keep'), 10); })
+          .filter(function(v){ return !isNaN(v); });
+      }catch(_){ _MYS_CONFIRM_LAST_KEEP = []; }
       document.removeEventListener('keydown', esc, true);
       try{ wrap.remove(); }catch(_){}
       resolve(val);
@@ -13563,6 +13575,7 @@ async function submitTemplateEditor(e){
   // recurrence (et leurs operateurs si le modele est recurrent). Elle se
   // declenche des que des ops sont envoyees, meme inchangees — il faut donc
   // que l'admin sache combien de creneaux il s'apprete a reinitialiser.
+  let _TMPL_RESYNC_EXCLUDE = [];
   if(_TMPL_EDIT_ID){
     try{
       const ri = await fetch('/api/maintenance/templates/' + encodeURIComponent(_TMPL_EDIT_ID) +
@@ -13570,7 +13583,43 @@ async function submitTemplateEditor(e){
       if(ri.ok){
         const imp = await ri.json();
         const n = (imp && imp.count) || 0;
-        if(n > 0){
+        const div = (imp && imp.diverged) || [];
+        // v2.6.1 : on n'interroge l'admin QUE sur les creneaux personnalises.
+        // Les copies conformes sont resynchronisees sans question — l'operation
+        // est un no-op pour elles. Case cochee = « préserver ce créneau » :
+        // le defaut protege ce qui a ete modifie a la main, il faut un geste
+        // explicite pour ecraser.
+        if(div.length){
+          const rows = div.map(function(d){
+            const grave = d.done_ops > 0;
+            return '<label style="display:flex;gap:9px;align-items:flex-start;padding:9px 10px;border:1px solid ' +
+                     (grave ? 'var(--danger)' : 'var(--border)') + ';border-radius:9px;margin-bottom:6px;cursor:pointer;background:var(--card)">' +
+                   '<input type="checkbox" data-keep="' + escAttr(d.id) + '" checked style="margin-top:2px;flex-shrink:0">' +
+                   '<span style="flex:1">' +
+                     '<span style="font-weight:700;color:var(--text);font-size:13px">' + escHtml(_fmtIsoDateFr(d.date)) + '</span>' +
+                     '<span style="display:block;font-size:12px;color:' + (grave ? 'var(--danger)' : 'var(--muted)') + ';margin-top:2px">' +
+                       escHtml((d.reasons || []).join(' · ')) +
+                     '</span>' +
+                   '</span></label>';
+          }).join('');
+          const identical = (imp.identical_count || 0);
+          const ok = await _mysConfirm({
+            title: div.length + ' créneau' + (div.length > 1 ? 'x' : '') + ' personnalisé' + (div.length > 1 ? 's' : ''),
+            bodyHtml:
+              '<div style="margin-bottom:10px">Ces créneaux à venir ont été modifiés depuis leur génération. ' +
+              '<strong>Décoche ceux que tu veux réinitialiser</strong> avec le contenu du modèle ; ' +
+              'les cases cochées seront préservées telles quelles.</div>' +
+              '<div style="max-height:34vh;overflow-y:auto;padding-right:4px">' + rows + '</div>' +
+              (identical
+                ? '<div style="margin-top:10px;color:var(--muted);font-size:12px">' + identical +
+                  ' autre(s) créneau(x) sont identiques au modèle : ils seront resynchronisés sans changement visible.</div>'
+                : ''),
+            okLabel: 'Enregistrer',
+            cancelLabel: 'Annuler',
+          });
+          if(!ok) return;
+          _TMPL_RESYNC_EXCLUDE = _MYS_CONFIRM_LAST_KEEP.slice();
+        } else if(n > 0){
           const plur = n > 1;
           let quand = '';
           if(imp.first && imp.last && imp.first !== imp.last){
@@ -13606,6 +13655,7 @@ async function submitTemplateEditor(e){
     // v2.5.25 : inclut la liste des ids d'operateurs par defaut
     const defaultOpIds = (_TMPL_DEFAULT_OPS || []).map(u => u.id);
     const payload = Object.assign({ name, description: desc, ops, default_operators: defaultOpIds }, recur);
+    if(_TMPL_RESYNC_EXCLUDE.length) payload.resync_exclude_ids = _TMPL_RESYNC_EXCLUDE;
     if(_TMPL_EDIT_ID){
       r = await fetch('/api/maintenance/templates/' + encodeURIComponent(_TMPL_EDIT_ID), {
         method:'PATCH', credentials:'include',
