@@ -436,3 +436,11 @@ input.ms-prix{max-width:130px;font-variant-numeric:tabular-nums;text-align:right
   padding:9px 12px;white-space:nowrap}
 .price-alt.muted{color:var(--muted);font-style:italic}
 @media(max-width:700px){.price-pair{flex-wrap:wrap}}
+
+/* Déclinaisons : titre de la section et appairage à la fiche Coûts matières. */
+.ms-decl-title{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.ms-decl-name{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  color:var(--text)}
+.ms-decl-pair{display:inline-flex;align-items:center;gap:10px;font-size:11px;
+  text-transform:none;letter-spacing:0;font-weight:400}
+.ms-groupe-actions{display:flex;align-items:center;gap:10px}

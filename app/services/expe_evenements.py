@@ -56,38 +56,43 @@ CANAL_INTERNE = "interne"
 EV_EMAIL_ENVOYE = "email_envoye"
 EV_EMAIL_ECHEC = "email_echec"
 EV_EMAIL_OUVERT = "email_ouvert"
+EV_EMAIL_RELANCE = "email_relance"
 EV_EMAIL_ATTRIBUTION = "email_attribution"
 EV_PORTAIL_OUVERT = "portail_ouvert"
 EV_REPONSE_DEPOSEE = "reponse_deposee"
 EV_REPONSE_SAISIE = "reponse_saisie"
 EV_OFFRE_RETENUE = "offre_retenue"
+EV_PJ_DEPOSEE = "piece_jointe_deposee"
 
 LIBELLES = {
     EV_EMAIL_ENVOYE: "Demande de tarif envoyée par email",
     EV_EMAIL_ECHEC: "Échec d'envoi de l'email",
     EV_EMAIL_OUVERT: "Email ouvert",
+    EV_EMAIL_RELANCE: "Relance envoyée par email",
     EV_EMAIL_ATTRIBUTION: "Confirmation d'attribution envoyée",
     EV_PORTAIL_OUVERT: "Portail consulté",
     EV_REPONSE_DEPOSEE: "Offre déposée sur le portail",
     EV_REPONSE_SAISIE: "Offre saisie en interne",
     EV_OFFRE_RETENUE: "Offre retenue",
+    EV_PJ_DEPOSEE: "Fichier déposé par le transporteur",
 }
 
-# Deux emails seulement partent vers un transporteur, contre trois en MyAO :
-# la demande de tarif, et la confirmation d'attribution. Le jour où une
-# relance sera ajoutée, elle prendra le code `rel` et rien d'autre ne bouge.
+# Trois emails peuvent partir vers un transporteur : la demande de tarif, la
+# relance, et la confirmation d'attribution. Chacun porte son pixel avec son
+# code de contexte — « email ouvert » sans préciser lequel ne se lit pas quand
+# une relance suit la demande de trois jours.
 CONTEXTES = {
     "rfq": "demande de tarif",
-    "attr": "attribution",
     "rel": "relance",
+    "attr": "attribution",
 }
 
-EMAILS_SORTANTS = (EV_EMAIL_ENVOYE, EV_EMAIL_ATTRIBUTION)
+EMAILS_SORTANTS = (EV_EMAIL_ENVOYE, EV_EMAIL_RELANCE, EV_EMAIL_ATTRIBUTION)
 
 _CONTEXTE_EVENEMENT = {
     "rfq": EV_EMAIL_ENVOYE,
+    "rel": EV_EMAIL_RELANCE,
     "attr": EV_EMAIL_ATTRIBUTION,
-    "rel": EV_EMAIL_ENVOYE,
 }
 
 
@@ -355,7 +360,10 @@ def resume_par_reponse(conn, demande_id: int) -> dict[int, dict]:
         elif t == EV_PORTAIL_OUVERT and fiable:
             entry["nb_visites_portail"] = int(r["n"])
             entry["portail_ouvert_le"] = r["premier"]
-        if fiable and t not in (EV_EMAIL_ENVOYE, EV_EMAIL_ATTRIBUTION):
+        # Les emails SORTANTS ne sont pas des signaux du transporteur : compter
+        # notre propre relance comme « dernier signal » ferait passer un
+        # silencieux pour un actif au moment précis où on le relance.
+        if fiable and t not in EMAILS_SORTANTS:
             dernier = entry.get("dernier_signal")
             if not dernier or str(r["dernier"]) > str(dernier):
                 entry["dernier_signal"] = r["dernier"]

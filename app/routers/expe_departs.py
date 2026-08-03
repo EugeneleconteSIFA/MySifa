@@ -18,7 +18,7 @@ from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 
 from app.services.audit_service import log_action
 from app.services.email_service import (
@@ -1642,8 +1642,8 @@ def create_transporteur(request: Request, body: dict = Body(...)):
                 contact_portail_url, contact_emails, contact_tels,
                 zone_france, zone_france_hors_paris, zone_affretement, zone_messagerie,
                 palette_max, poids_max_kg, accepte_poids, accepte_palette,
-                couleur, actif, created_at
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                couleur, actif, created_at, langue
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 nom,
                 taxe,
@@ -1664,6 +1664,7 @@ def create_transporteur(request: Request, body: dict = Body(...)):
                 _f(body, "couleur"),
                 _int_flag(body, "actif", 1),
                 now,
+                _normalize_langue(body.get("langue")),
             ),
         )
         conn.commit()
@@ -1705,6 +1706,10 @@ def update_transporteur(
         if k in body:
             sets.append(f"{k}=?")
             args.append(_f(body, k))
+
+    if "langue" in body:
+        sets.append("langue=?")
+        args.append(_normalize_langue(body.get("langue")))
 
     # Téléphones : liste [{numero, service}] — recalcule aussi contact_tel legacy
     new_tels: Optional[list[dict]] = None
@@ -3133,6 +3138,176 @@ def _next_demande_reference(conn, year: str) -> str:
     return f"{year}-{n_max + 1}"
 
 
+def _log_devis(request: Request, user: dict, action: str, objet: str) -> None:
+    """Trace d'audit du cycle devis. Ne lève jamais.
+
+    Il n'y avait qu'un seul `log_action` sur tout le module — à la retenue. Ni
+    la création, ni l'envoi, ni la saisie d'une réponse, ni la clôture, ni la
+    suppression ne laissaient de trace, ce qui se voit le jour où on cherche
+    qui a envoyé quoi.
+    """
+    try:
+        log_action(
+            user=user,
+            action=action,
+            module="expe",
+            objet=objet,
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+
+
+def _get_demande_or_404(conn, demande_id: int, *, avec_corbeille: bool = False) -> dict:
+    row = conn.execute(
+        "SELECT * FROM expe_demandes_devis WHERE id=?", (int(demande_id),)
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Demande introuvable")
+    d = dict(row)
+    if d.get("deleted_at") and not avec_corbeille:
+        raise HTTPException(status_code=404, detail="Demande dans la corbeille")
+    return d
+
+
+def _require_demande_ouverte(conn, demande_id: int) -> dict:
+    """Garde serveur : refuse toute action métier sur une demande clôturée.
+
+    L'interface masque déjà les boutons quand `statut !== 'ouverte'`, mais le
+    masquage n'est pas un contrôle : un onglet resté ouvert, un double-clic ou
+    un retour arrière suffisaient à renvoyer une demande de tarif sur une
+    affaire déjà attribuée, ou à créer un second départ pour le même transport.
+    """
+    d = _get_demande_or_404(conn, demande_id)
+    if (d.get("statut") or "") != "ouverte":
+        raise HTTPException(
+            status_code=409,
+            detail="Cette demande est clôturée — rouvrir n'est pas prévu, créer une nouvelle demande.",
+        )
+    return d
+
+
+def _valider_date_limite(value: object) -> Optional[str]:
+    """Date ISO ou None. Refuse tout le reste plutôt que de le stocker tel quel.
+
+    `_date_prefix` se contente de tronquer : « bientôt » ou « 9999-99-99 »
+    passaient et repartaient dans l'email (« Réponse attendue avant le
+    bientôt »), puis produisaient un `NaN` dans la pastille d'échéance côté
+    front, où la comparaison de chaînes classait la demande en retard au
+    hasard.
+    """
+    txt = _date_prefix(str(value or "").strip())
+    if not txt:
+        return None
+    try:
+        d = datetime.strptime(txt, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Date limite invalide (format AAAA-MM-JJ).")
+    # Re-sérialisée depuis la date parsée : `strptime` accepte « 2026-2-8 »,
+    # qui se compare mal en chaîne avec la date du jour ISO côté front.
+    return d.strftime("%Y-%m-%d")
+
+
+_DEVIS_LANGUES = ("fr", "en")
+
+_DEVIS_STATUT_LABELS = {
+    "envoyee": "Envoyée",
+    "ouvert": "Ouverte",
+    "recue": "Reçue",
+    "retenue": "Retenue",
+    "refusee": "Refusée",
+    "echec": "Échec envoi",
+}
+
+
+def _normalize_langue(value: object, defaut: str = "fr") -> str:
+    lg = str(value or "").strip().lower()[:2]
+    return lg if lg in _DEVIS_LANGUES else defaut
+
+
+def _langue_connue_pour_email(conn, email: str) -> str:
+    """Langue déjà employée pour cette adresse, chaîne vide si inconnue.
+
+    Sert au destinataire saisi à la main : si l'adresse appartient en réalité à
+    un transporteur du référentiel, on lui réécrit dans SA langue plutôt que de
+    repasser en bilingue.
+    """
+    mail = (email or "").strip().lower()
+    if not mail:
+        return ""
+    row = conn.execute(
+        """SELECT langue FROM expe_devis_reponses
+           WHERE LOWER(TRIM(COALESCE(destinataire_email,''))) = ?
+             AND COALESCE(TRIM(langue),'') <> ''
+           ORDER BY id DESC LIMIT 1""",
+        (mail,),
+    ).fetchone()
+    if row:
+        return _normalize_langue(row["langue"], "")
+    row = conn.execute(
+        """SELECT langue FROM expe_transporteurs
+           WHERE LOWER(TRIM(COALESCE(contact_email,''))) = ?
+              OR LOWER(COALESCE(contact_emails,'')) LIKE ?
+           LIMIT 1""",
+        (mail, f'%"{mail}"%'),
+    ).fetchone()
+    return _normalize_langue(row["langue"], "") if row else ""
+
+
+def _devis_langue_destinataire(conn, rep: dict) -> str:
+    """Langue d'écriture d'un destinataire.
+
+    Priorité à la langue figée sur la ligne de réponse : elle dit ce qui a
+    réellement été envoyé. À défaut — première sollicitation, ou ligne
+    antérieure à la colonne — on lit le référentiel transporteur.
+    """
+    fige = _normalize_langue(rep.get("langue"), "")
+    if fige:
+        return fige
+    tid = rep.get("transporteur_id")
+    if tid:
+        row = conn.execute(
+            "SELECT langue FROM expe_transporteurs WHERE id=?", (int(tid),)
+        ).fetchone()
+        if row:
+            return _normalize_langue(row["langue"])
+    return "fr"
+
+
+@router.get("/devis/clients-suggestions")
+def clients_suggestions_devis(request: Request, q: Optional[str] = Query(None)):
+    """Noms de clients déjà employés — alimente la liste déroulante de saisie.
+
+    On agrège trois sources plutôt que de brancher sur la seule table `clients` :
+    le référentiel ne contient pas les destinataires ponctuels, et l'historique
+    des devis et des départs porte l'orthographe réellement utilisée. Le but
+    n'est pas de contraindre la saisie mais d'éviter qu'un même client existe
+    en trois graphies.
+    """
+    _require_expe(request)
+    like = f"%{(q or '').strip()}%"
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT nom, MAX(recent) AS recent, SUM(n) AS n FROM (
+                   SELECT TRIM(client) AS nom, MAX(created_at) AS recent, COUNT(*) AS n
+                   FROM expe_demandes_devis
+                   WHERE COALESCE(TRIM(client),'') <> '' AND deleted_at IS NULL
+                   GROUP BY TRIM(client)
+                 UNION ALL
+                   SELECT TRIM(client), MAX(created_at), COUNT(*)
+                   FROM expe_departs
+                   WHERE COALESCE(TRIM(client),'') <> ''
+                   GROUP BY TRIM(client)
+               )
+               WHERE (? = '%%' OR nom LIKE ? COLLATE NOCASE)
+               GROUP BY nom COLLATE NOCASE
+               ORDER BY n DESC, recent DESC
+               LIMIT 200""",
+            (like, like),
+        ).fetchall()
+    return {"clients": [r["nom"] for r in rows if r["nom"]]}
+
+
 @router.post("/devis/demandes")
 def creer_demande_devis(request: Request, body: dict = Body(...)):
     user = _require_expe_write(request)
@@ -3147,8 +3322,8 @@ def creer_demande_devis(request: Request, body: dict = Body(...)):
             INSERT INTO expe_demandes_devis
             (depart_id, poids_total_kg, nb_palette, code_postal_destination,
              type_envoi, type_palette, contraintes, statut, created_at,
-             created_by_email, reference, client)
-            VALUES (?,?,?,?,?,?,?,'ouverte',?,?,?,?)
+             created_by_email, reference, client, date_limite)
+            VALUES (?,?,?,?,?,?,?,'ouverte',?,?,?,?,?)
             """,
             (
                 body.get("depart_id"),
@@ -3162,13 +3337,199 @@ def creer_demande_devis(request: Request, body: dict = Body(...)):
                 email,
                 reference,
                 client,
+                _valider_date_limite(body.get("date_limite")),
             ),
         )
         conn.commit()
         demande = conn.execute(
             "SELECT * FROM expe_demandes_devis WHERE id=?", (cur.lastrowid,)
         ).fetchone()
+    _log_devis(request, user, "CREATE", f"Demande devis {reference} · {client or '—'}")
     return dict(demande)
+
+
+# Champs d'entête modifiables après création. `reference`, `statut`,
+# `created_at` et `created_by_email` en sont volontairement absents : ce sont
+# des faits, pas des paramètres.
+_DEVIS_CHAMPS_EDITABLES = (
+    "client",
+    "code_postal_destination",
+    "type_envoi",
+    "poids_total_kg",
+    "nb_palette",
+    "contraintes",
+)
+
+
+@router.put("/devis/demandes/{demande_id}")
+def modifier_demande_devis(request: Request, demande_id: int, body: dict = Body(...)):
+    """Corrige l'entête d'une demande tant qu'aucun email n'est parti.
+
+    La demande était figée à la création : une coquille dans le poids ou le code
+    postal obligeait à supprimer et recréer, ce qui perdait la référence et les
+    réponses déjà reçues. On autorise donc la correction, mais seulement avant
+    le premier envoi : après, les transporteurs ont chiffré sur des données
+    qu'on n'a plus le droit de changer dans leur dos.
+    """
+    user = _require_expe_write(request)
+    sets, args = [], []
+    with get_db() as conn:
+        demande = _require_demande_ouverte(conn, demande_id)
+        deja_envoye = conn.execute(
+            "SELECT 1 FROM expe_devis_reponses WHERE demande_id=? AND sent_at IS NOT NULL LIMIT 1",
+            (demande_id,),
+        ).fetchone()
+        if deja_envoye:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Des demandes de tarif sont déjà parties : l'entête ne peut plus "
+                    "changer. Seule la date limite reste modifiable."
+                ),
+            )
+        for champ in _DEVIS_CHAMPS_EDITABLES:
+            if champ not in body:
+                continue
+            val = body.get(champ)
+            if champ in ("poids_total_kg", "nb_palette"):
+                try:
+                    val = float(val) if val not in (None, "") else None
+                except (TypeError, ValueError):
+                    raise HTTPException(status_code=400, detail=f"{champ} invalide.")
+            else:
+                val = (str(val or "").strip()) or None
+            sets.append(f"{champ}=?")
+            args.append(val)
+        if "type_palette" in body:
+            sets.append("type_palette=?")
+            args.append(_normalize_type_palette(body.get("type_palette")))
+        if "date_limite" in body:
+            sets.append("date_limite=?")
+            args.append(_valider_date_limite(body.get("date_limite")))
+        if not sets:
+            raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour.")
+        args.append(demande_id)
+        conn.execute(
+            f"UPDATE expe_demandes_devis SET {', '.join(sets)} WHERE id=?", args
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM expe_demandes_devis WHERE id=?", (demande_id,)
+        ).fetchone()
+    _log_devis(
+        request, user, "UPDATE", f"Demande devis {demande.get('reference') or demande_id}"
+    )
+    return dict(row)
+
+
+@router.patch("/devis/demandes/{demande_id}/date-limite")
+def modifier_date_limite_devis(request: Request, demande_id: int, body: dict = Body(...)):
+    """Repousse la date limite, même après envoi.
+
+    Séparé du PUT ci-dessus à dessein : décaler une échéance ne change pas ce
+    sur quoi les transporteurs ont chiffré, c'est la seule modification qui
+    reste légitime une fois les demandes parties.
+    """
+    user = _require_expe_write(request)
+    dl = _valider_date_limite(body.get("date_limite"))
+    with get_db() as conn:
+        demande = _require_demande_ouverte(conn, demande_id)
+        conn.execute(
+            "UPDATE expe_demandes_devis SET date_limite=? WHERE id=?", (dl, demande_id)
+        )
+        conn.commit()
+    _log_devis(
+        request,
+        user,
+        "UPDATE",
+        f"Demande devis {demande.get('reference') or demande_id} · date limite {dl or '—'}",
+    )
+    return {"ok": True, "date_limite": dl}
+
+
+@router.post("/devis/demandes/{demande_id}/dupliquer")
+def dupliquer_demande_devis(request: Request, demande_id: int, body: dict = Body(default={})):
+    """Crée une demande neuve à partir d'une demande passée.
+
+    Les demandes de tarif se répètent : même client, même destination, même
+    gabarit, un mois plus tard. On copie donc l'entête et les pièces jointes,
+    et on renvoie la liste des transporteurs sollicités la fois précédente pour
+    que l'interface les re-coche — mais on ne recrée AUCUNE ligne de réponse :
+    une demande dupliquée n'a encore été envoyée à personne, et pré-remplir des
+    lignes vides ferait croire à des envois qui n'ont pas eu lieu.
+    """
+    user = _require_expe_write(request)
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    email = (user.get("email") or user.get("identifiant") or "").strip() or None
+    copier_pj = bool(body.get("copier_pieces_jointes", True))
+    with get_db() as conn:
+        src = _get_demande_or_404(conn, demande_id, avec_corbeille=True)
+        reference = _next_demande_reference(conn, now[:4])
+        cur = conn.execute(
+            """INSERT INTO expe_demandes_devis
+               (depart_id, poids_total_kg, nb_palette, code_postal_destination,
+                type_envoi, type_palette, contraintes, statut, created_at,
+                created_by_email, reference, client, date_limite)
+               VALUES (NULL,?,?,?,?,?,?,'ouverte',?,?,?,?,NULL)""",
+            (
+                src.get("poids_total_kg"),
+                src.get("nb_palette"),
+                src.get("code_postal_destination"),
+                src.get("type_envoi"),
+                src.get("type_palette"),
+                src.get("contraintes"),
+                now,
+                email,
+                reference,
+                src.get("client"),
+            ),
+        )
+        new_id = int(cur.lastrowid)
+        # `depart_id` et `date_limite` volontairement non copiés : le départ
+        # d'origine n'a rien à voir avec le nouvel envoi, et une échéance
+        # recopiée serait déjà passée.
+        if copier_pj:
+            for pj in conn.execute(
+                """SELECT filename, path, taille_octets FROM expe_devis_pieces_jointes
+                   WHERE demande_id=? AND origine='sifa'""",
+                (demande_id,),
+            ).fetchall():
+                # On référence le MÊME fichier sur disque plutôt que de le
+                # dupliquer : c'est le même document, et une copie doublerait
+                # l'espace pour un contenu identique. La purge définitive en
+                # tient compte (cf. _purger_demande).
+                conn.execute(
+                    """INSERT INTO expe_devis_pieces_jointes
+                       (demande_id, reponse_id, origine, filename, path,
+                        taille_octets, created_at, created_by_email)
+                       VALUES (?,NULL,'sifa',?,?,?,?,?)""",
+                    (new_id, pj["filename"], pj["path"], pj["taille_octets"], now, email),
+                )
+        trps = [
+            {
+                "transporteur_id": r["transporteur_id"],
+                "nom": r["nom_transporteur"],
+                "email": r["destinataire_email"],
+            }
+            for r in conn.execute(
+                """SELECT DISTINCT transporteur_id, nom_transporteur, destinataire_email
+                   FROM expe_devis_reponses WHERE demande_id=?""",
+                (demande_id,),
+            ).fetchall()
+        ]
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM expe_demandes_devis WHERE id=?", (new_id,)
+        ).fetchone()
+    _log_devis(
+        request,
+        user,
+        "CREATE",
+        f"Demande devis {reference} dupliquée depuis {src.get('reference') or demande_id}",
+    )
+    out = dict(row)
+    out["destinataires_precedents"] = trps
+    return out
 
 
 # Répertoire pour les pièces jointes des demandes de devis.
@@ -3245,6 +3606,151 @@ def download_demande_devis_piece_jointe(request: Request, demande_id: int):
     )
 
 
+_DEVIS_PJ_MAX_BYTES = 20 * 1024 * 1024
+
+
+async def _devis_ecrire_pj(
+    conn,
+    *,
+    demande_id: int,
+    file: UploadFile,
+    origine: str,
+    reponse_id: Optional[int],
+    email: Optional[str],
+    now: str,
+) -> dict:
+    """Écrit un fichier sur disque et l'enregistre. Commun aux deux origines."""
+    contents = await file.read()
+    if len(contents) > _DEVIS_PJ_MAX_BYTES:
+        raise HTTPException(413, "Fichier trop volumineux (max 20 Mo).")
+    if not contents:
+        raise HTTPException(400, "Fichier vide.")
+    orig = (file.filename or "fichier").strip()
+    unique = f"{demande_id}_{uuid.uuid4().hex[:8]}_{_devis_safe_filename(orig)}"
+    path_abs = _devis_upload_dir() / unique
+    with open(path_abs, "wb") as out:
+        out.write(contents)
+    rel = f"{_DEVIS_UPLOAD_SUBDIR}/{unique}"
+    cur = conn.execute(
+        """INSERT INTO expe_devis_pieces_jointes
+           (demande_id, reponse_id, origine, filename, path, taille_octets,
+            created_at, created_by_email)
+           VALUES (?,?,?,?,?,?,?,?)""",
+        (demande_id, reponse_id, origine, orig, rel, len(contents), now, email),
+    )
+    return {
+        "id": int(cur.lastrowid),
+        "filename": orig,
+        "path": rel,
+        "taille_octets": len(contents),
+        "origine": origine,
+    }
+
+
+def _devis_pj_list(conn, demande_id: int) -> list[dict]:
+    return [
+        dict(r)
+        for r in conn.execute(
+            """SELECT id, demande_id, reponse_id, origine, filename,
+                      taille_octets, created_at, created_by_email
+               FROM expe_devis_pieces_jointes
+               WHERE demande_id=? ORDER BY origine, id""",
+            (int(demande_id),),
+        ).fetchall()
+    ]
+
+
+@router.post("/devis/demandes/{demande_id}/pieces-jointes")
+async def upload_devis_pieces_jointes(
+    request: Request, demande_id: int, files: list[UploadFile] = File(...)
+):
+    """Ajoute une ou plusieurs pièces jointes à une demande.
+
+    Remplace l'upload à colonne unique, qui écrasait silencieusement le fichier
+    précédent : le second document ne prévenait pas qu'il chassait le premier.
+    """
+    user = _require_expe_write(request)
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    email = (user.get("email") or user.get("identifiant") or "").strip() or None
+    out = []
+    with get_db() as conn:
+        demande = _require_demande_ouverte(conn, demande_id)
+        for f in files:
+            out.append(
+                await _devis_ecrire_pj(
+                    conn,
+                    demande_id=demande_id,
+                    file=f,
+                    origine="sifa",
+                    reponse_id=None,
+                    email=email,
+                    now=now,
+                )
+            )
+        conn.commit()
+    _log_devis(
+        request,
+        user,
+        "CREATE",
+        f"Demande devis {demande.get('reference') or demande_id} · {len(out)} pièce(s) jointe(s)",
+    )
+    return {"ok": True, "pieces_jointes": out}
+
+
+@router.get("/devis/demandes/{demande_id}/pieces-jointes")
+def list_devis_pieces_jointes(request: Request, demande_id: int):
+    _require_expe(request)
+    with get_db() as conn:
+        _get_demande_or_404(conn, demande_id, avec_corbeille=True)
+        return {"pieces_jointes": _devis_pj_list(conn, demande_id)}
+
+
+@router.get("/devis/pieces-jointes/{pj_id}")
+def download_devis_piece_jointe(request: Request, pj_id: int):
+    get_current_user(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT filename, path FROM expe_devis_pieces_jointes WHERE id=?", (pj_id,)
+        ).fetchone()
+    if not row:
+        raise HTTPException(404, "Pièce jointe introuvable.")
+    from config import BASE_DIR
+
+    path_abs = Path(BASE_DIR) / row["path"]
+    if not path_abs.exists():
+        raise HTTPException(404, "Fichier introuvable sur le disque.")
+    return FileResponse(path=str(path_abs), filename=row["filename"] or path_abs.name)
+
+
+@router.delete("/devis/pieces-jointes/{pj_id}")
+def delete_devis_piece_jointe(request: Request, pj_id: int):
+    user = _require_expe_write(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM expe_devis_pieces_jointes WHERE id=?", (pj_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Pièce jointe introuvable.")
+        chemin = row["path"]
+        conn.execute("DELETE FROM expe_devis_pieces_jointes WHERE id=?", (pj_id,))
+        # Le fichier n'est effacé du disque que s'il n'est plus référencé :
+        # la duplication d'une demande partage le même chemin, supprimer sans
+        # vérifier viderait la pièce jointe de la copie.
+        encore = conn.execute(
+            "SELECT 1 FROM expe_devis_pieces_jointes WHERE path=? LIMIT 1", (chemin,)
+        ).fetchone()
+        conn.commit()
+    if not encore:
+        try:
+            from config import BASE_DIR
+
+            (Path(BASE_DIR) / chemin).unlink()
+        except Exception:
+            pass
+    _log_devis(request, user, "DELETE", f"Pièce jointe devis #{pj_id} ({row['filename']})")
+    return {"ok": True}
+
+
 @router.get("/devis/reponses/{reponse_id}/retention-fichier")
 def download_retention_fichier(request: Request, reponse_id: int):
     """Telecharge le fichier joint lors de la retenue d'une offre (si present)."""
@@ -3271,19 +3777,28 @@ def download_retention_fichier(request: Request, reponse_id: int):
 def list_demandes_devis(request: Request, statut: str = "ouverte"):
     _require_expe(request)
     with get_db() as conn:
-        if statut == "toutes":
+        # `deleted_at IS NULL` partout sauf sur la corbeille : une demande
+        # supprimée ne doit réapparaître dans aucun autre filtre, pas même
+        # « toutes » — sinon la corbeille ne sert à rien.
+        if statut == "corbeille":
             rows = conn.execute(
-                "SELECT * FROM expe_demandes_devis ORDER BY created_at DESC LIMIT 100"
+                "SELECT * FROM expe_demandes_devis WHERE deleted_at IS NOT NULL "
+                "ORDER BY deleted_at DESC LIMIT 100"
+            ).fetchall()
+        elif statut == "toutes":
+            rows = conn.execute(
+                "SELECT * FROM expe_demandes_devis WHERE deleted_at IS NULL "
+                "ORDER BY created_at DESC LIMIT 100"
             ).fetchall()
         elif statut == "historique":
             # Toutes les demandes clôturées (manuellement ou via retenue).
             rows = conn.execute(
-                "SELECT * FROM expe_demandes_devis WHERE statut='cloturee' "
+                "SELECT * FROM expe_demandes_devis WHERE statut='cloturee' AND deleted_at IS NULL "
                 "ORDER BY created_at DESC LIMIT 100"
             ).fetchall()
         else:
             rows = conn.execute(
-                """SELECT * FROM expe_demandes_devis WHERE statut=?
+                """SELECT * FROM expe_demandes_devis WHERE statut=? AND deleted_at IS NULL
                    ORDER BY created_at DESC LIMIT 100""",
                 (statut,),
             ).fetchall()
@@ -3304,6 +3819,11 @@ def list_demandes_devis(request: Request, statut: str = "ouverte"):
             dd["nb_envoyes"] = counts["envoyes"] or 0
             dd["nb_recus"] = counts["recues"] or 0
             dd["nb_retenus"] = counts["retenues"] or 0
+            pj = conn.execute(
+                "SELECT COUNT(*) AS n FROM expe_devis_pieces_jointes WHERE demande_id=?",
+                (dd["id"],),
+            ).fetchone()
+            dd["nb_pieces_jointes"] = int(pj["n"] or 0)
             result.append(dd)
     return result
 
@@ -3323,6 +3843,7 @@ def get_demande_devis(request: Request, demande_id: int):
             (demande_id,),
         ).fetchall()
         engagement = expe_ev.resume_par_reponse(conn, demande_id)
+        pieces_jointes = _devis_pj_list(conn, demande_id)
 
     reponses_out = []
     for r in reponses:
@@ -3332,7 +3853,11 @@ def get_demande_devis(request: Request, demande_id: int):
         d.pop("token_pixel", None)
         d["engagement"] = engagement.get(int(d["id"]), {})
         reponses_out.append(d)
-    return {"demande": dict(demande), "reponses": reponses_out}
+    return {
+        "demande": dict(demande),
+        "reponses": reponses_out,
+        "pieces_jointes": pieces_jointes,
+    }
 
 
 @router.get("/devis/reponses/{reponse_id}/evenements")
@@ -3359,6 +3884,182 @@ def evenements_reponse_devis(request: Request, reponse_id: int):
     }
 
 
+def _pr(v: object) -> str:
+    """Échappement HTML pour la page d'impression."""
+    return (
+        str(v if v is not None else "")
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+
+
+@router.get("/devis/demandes/{demande_id}/imprimer", response_class=HTMLResponse)
+def imprimer_comparatif_devis(request: Request, demande_id: int):
+    """Comparatif des offres, en page A4 prête à imprimer.
+
+    Rendu serveur plutôt qu'impression du DOM applicatif : la page de MyExpé
+    est une SPA sombre avec sidebar et modales, dont l'impression donne un
+    résultat illisible. Ici le document est autonome — on l'ouvre, on fait
+    Ctrl+P, on le classe ou on le fait viser.
+
+    Pas de dépendance PDF : le navigateur sait produire un PDF depuis une page
+    HTML, ajouter reportlab pour un tableau de six colonnes serait payer une
+    dépendance pour un problème que le poste de travail résout déjà.
+    """
+    _require_expe(request)
+    with get_db() as conn:
+        demande = _get_demande_or_404(conn, demande_id, avec_corbeille=True)
+        reponses = [
+            dict(r)
+            for r in conn.execute(
+                """SELECT * FROM expe_devis_reponses WHERE demande_id=?
+                   ORDER BY CASE WHEN prix IS NULL THEN 1 ELSE 0 END, prix ASC, id ASC""",
+                (demande_id,),
+            ).fetchall()
+        ]
+    # `float()` défensif : une réponse saisie en interne a pu recevoir un prix
+    # non numérique avant que la validation n'existe. Un comparatif qui plante
+    # en 500 est pire qu'un comparatif qui ignore une ligne aberrante.
+    def _prix_num(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    prix = [p for p in (_prix_num(r.get("prix")) for r in reponses) if p is not None]
+    best = min(prix) if prix else None
+    ref = demande.get("reference") or f"#{demande_id}"
+
+    lignes = []
+    for r in reponses:
+        st = (r.get("statut") or "").strip()
+        p = _prix_num(r.get("prix"))
+        d_j = r.get("delai_jours")
+        try:
+            d_j = int(d_j) if d_j is not None else None
+        except (TypeError, ValueError):
+            d_j = None
+        ecart = ""
+        cls = ""
+        # `best is not None` et non `best` : une offre gratuite (0 €, cas d'un
+        # transport inclus) rendait le test faux et faisait disparaître toute
+        # la colonne Écart du comparatif.
+        if p is not None and best is not None:
+            if p == best:
+                cls = " class='best'"
+                ecart = "référence"
+            elif best > 0:
+                # L'écart relatif, pas seulement le meilleur en gras : savoir
+                # que le deuxième est à 3 % ou à 40 % ne se lit pas dans deux
+                # nombres bruts, et c'est pourtant ce qui décide.
+                ecart = f"+{(p - best) / best * 100:.1f} %"
+            else:
+                ecart = f"+{p - best:.2f} €"
+        lignes.append(
+            f"<tr{cls}>"
+            f"<td class='nom'><span class='n'>{_pr(r.get('nom_transporteur') or '—')}</span>"
+            + (
+                f"<div class='sub'>{_pr(r.get('destinataire_email') or '')}</div>"
+                if r.get("destinataire_email")
+                else ""
+            )
+            + "</td>"
+            f"<td>{_pr(_DEVIS_STATUT_LABELS.get(st, st or '—'))}</td>"
+            f"<td class='num'>{('%.2f €' % p) if p is not None else '—'}</td>"
+            f"<td class='num'>{_pr(ecart)}</td>"
+            f"<td class='num'>{('J+%d' % d_j) if d_j is not None else '—'}</td>"
+            f"<td class='cmt'>{_pr(r.get('commentaire') or '')}</td>"
+            "</tr>"
+        )
+    if not lignes:
+        lignes.append("<tr><td colspan='6' class='vide'>Aucun destinataire sollicité.</td></tr>")
+
+    entete = [
+        ("Client", demande.get("client")),
+        ("Destination (CP)", demande.get("code_postal_destination")),
+        ("Type d'envoi", demande.get("type_envoi")),
+        ("Poids total", f"{demande['poids_total_kg']} kg" if demande.get("poids_total_kg") else None),
+        ("Palettes", demande.get("nb_palette")),
+        ("Date limite", demande.get("date_limite")),
+        ("Créée le", (demande.get("created_at") or "")[:10]),
+        ("Demandeur", demande.get("created_by_email")),
+    ]
+    entete_html = "".join(
+        f"<div class='f'><dt>{_pr(k)}</dt><dd>{_pr(v)}</dd></div>"
+        for k, v in entete
+        if v not in (None, "")
+    )
+    contraintes = (demande.get("contraintes") or "").strip()
+    retenu = next((r for r in reponses if (r.get("statut") or "") == "retenue"), None)
+    bandeau = ""
+    if retenu:
+        bandeau = (
+            "<div class='retenu'><strong>Offre retenue :</strong> "
+            f"{_pr(retenu.get('nom_transporteur'))}"
+            + (f" — {float(retenu['prix']):.2f} €" if retenu.get("prix") is not None else "")
+            + "</div>"
+        )
+
+    html = f"""<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+<title>Comparatif devis {_pr(ref)} — SIFA</title>
+<style>
+@page{{size:A4 portrait;margin:14mm 13mm}}
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:"Segoe UI",Arial,sans-serif;color:#0f172a;font-size:10pt;line-height:1.45;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;padding:6mm}}
+header{{border-bottom:2px solid #0f172a;padding-bottom:4mm;margin-bottom:5mm}}
+.brand{{font-size:8pt;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;color:#0891b2}}
+h1{{font-size:17pt;font-weight:800;margin-top:1mm;letter-spacing:-.3px}}
+.meta{{font-size:9pt;color:#64748b;margin-top:1.5mm}}
+dl{{display:flex;flex-wrap:wrap;gap:3mm 8mm;margin:4mm 0 5mm}}
+.f{{min-width:34mm}}
+dt{{font-size:7.5pt;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8}}
+dd{{font-size:10pt;font-weight:600;margin-top:.5mm}}
+.contraintes{{background:#f8fafc;border-left:3px solid #cbd5e1;padding:2.5mm 4mm;margin-bottom:5mm;font-size:9.5pt}}
+.retenu{{background:#ecfdf5;border:1px solid #059669;color:#065f46;border-radius:2mm;
+  padding:2.5mm 4mm;margin-bottom:4mm;font-size:10pt}}
+table{{width:100%;border-collapse:collapse}}
+th{{font-size:7.5pt;text-transform:uppercase;letter-spacing:.5px;color:#64748b;text-align:left;
+  border-bottom:1.5px solid #0f172a;padding:2mm 2.5mm}}
+td{{padding:2.4mm 2.5mm;border-bottom:1px solid #e2e8f0;font-size:9.5pt;vertical-align:top}}
+.num{{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}}
+th.num{{text-align:right}}
+.nom{{font-weight:700}}
+.sub{{font-size:8pt;font-weight:400;color:#94a3b8}}
+.cmt{{font-size:8.5pt;color:#475569}}
+td:nth-child(2){{white-space:nowrap}}
+tr.best td{{background:#ecfdf5}}
+tr.best .n::after{{content:" ◆";color:#059669}}
+.vide{{color:#94a3b8;text-align:center;padding:8mm}}
+footer{{margin-top:6mm;padding-top:3mm;border-top:1px solid #e2e8f0;font-size:7.5pt;color:#94a3b8;
+  display:flex;justify-content:space-between}}
+@media screen{{body{{background:#e2e8f0}}
+  .sheet{{background:#fff;max-width:190mm;margin:8mm auto;padding:12mm;box-shadow:0 2px 16px rgba(0,0,0,.18)}}}}
+@media print{{.sheet{{padding:0;margin:0;box-shadow:none}} .noprint{{display:none}}}}
+</style></head><body><div class="sheet">
+<header>
+  <div class="brand">SIFA · MyExpé</div>
+  <h1>Comparatif des offres transport — {_pr(ref)}</h1>
+  <div class="meta">{len(reponses)} destinataire(s) sollicité(s) · {len(prix)} offre(s) chiffrée(s)</div>
+</header>
+<dl>{entete_html}</dl>
+{f"<div class='contraintes'><strong>Contraintes :</strong> {_pr(contraintes)}</div>" if contraintes else ""}
+{bandeau}
+<table>
+  <thead><tr><th>Transporteur</th><th>Statut</th><th class="num">Prix HT</th>
+  <th class="num">Écart</th><th class="num">Délai</th><th>Commentaire</th></tr></thead>
+  <tbody>{''.join(lignes)}</tbody>
+</table>
+<footer><span>Document interne SIFA — comparatif à la date d'impression.</span>
+<span>{_pr(ref)}</span></footer>
+</div>
+<script>window.addEventListener('load',function(){{setTimeout(function(){{window.print();}},250);}});</script>
+</body></html>"""
+    return HTMLResponse(html)
+
+
 @router.post("/devis/demandes/{demande_id}/envoyer")
 def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
     user = _require_expe_write(request)
@@ -3366,19 +4067,16 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
     reply_to = (user.get("email") or user.get("identifiant") or "").strip() or None
 
     with get_db() as conn:
-        demande_row = conn.execute(
-            "SELECT * FROM expe_demandes_devis WHERE id=?", (demande_id,)
-        ).fetchone()
-        if not demande_row:
-            raise HTTPException(status_code=404, detail="Demande introuvable")
-        demande = dict(demande_row)
+        # Garde serveur : sans elle, un onglet resté ouvert renvoyait la
+        # demande sur une affaire déjà attribuée.
+        demande = _require_demande_ouverte(conn, demande_id)
 
         destinataires: list[dict] = []
         trp_ids = body.get("transporteur_ids") or []
         if trp_ids:
             placeholders = ",".join("?" * len(trp_ids))
             trps = conn.execute(
-                f"""SELECT id, nom, contact_email, contact_emails FROM expe_transporteurs
+                f"""SELECT id, nom, contact_email, contact_emails, langue FROM expe_transporteurs
                     WHERE id IN ({placeholders}) AND actif=1""",
                 trp_ids,
             ).fetchall()
@@ -3394,6 +4092,7 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
                             "transporteur_id": t["id"],
                             "nom": t["nom"],
                             "email": email_addr,
+                            "langue": _normalize_langue(t["langue"]),
                         }
                     )
 
@@ -3405,6 +4104,13 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
                         "transporteur_id": None,
                         "nom": extra.get("nom") or email_addr,
                         "email": email_addr,
+                        # Destinataire ponctuel : langue inconnue, on double.
+                        # Se tromper de langue coûte plus cher que doubler.
+                        "langue": _normalize_langue(extra.get("langue"), ""),
+                        # …sauf si cette adresse a déjà été servie dans une
+                        # langue connue : re-saisir l'email d'un transporteur
+                        # référencé ne doit pas lui renvoyer un mail bilingue.
+                        "langue_heritee": True,
                     }
                 )
 
@@ -3495,12 +4201,19 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
                 reponse_id = int(cur.lastrowid)
                 statut_precedent = None
 
+            langue = dest.get("langue") or ""
+            if not langue and dest.get("langue_heritee"):
+                langue = _normalize_langue(
+                    (existing["langue"] if existing and "langue" in existing.keys() else None), ""
+                ) or _langue_connue_pour_email(conn, email_norm)
             px = expe_ev.url_pixel(expe_ev.token_pixel(conn, reponse_id), "rfq")
             sujet, corps_html = email_expe_rfq_transport(
                 demande=demande,
                 user=user,
                 portail_lien=portail_lien,
                 pixel_url=px,
+                langue=langue or None,
+                date_limite=(demande.get("date_limite") or None),
             )
 
             ok = send_email(
@@ -3520,11 +4233,17 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
             conn.execute(
                 """
                 UPDATE expe_devis_reponses
-                SET statut=?,
+                SET statut=?, langue=?,
                     sent_at=CASE WHEN ? IS NOT NULL THEN ? ELSE sent_at END
                 WHERE id=?
                 """,
-                (keep_statut, now if ok else None, now if ok else None, reponse_id),
+                (
+                    keep_statut,
+                    langue or None,
+                    now if ok else None,
+                    now if ok else None,
+                    reponse_id,
+                ),
             )
 
             expe_ev.log_evenement(
@@ -3538,7 +4257,7 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
                 date=now,
                 fiable=bool(ok),
                 motif=None if ok else "envoi refusé par le fournisseur d'email",
-                meta={"destinataire": email_norm, "suivi": bool(px)},
+                meta={"destinataire": email_norm, "suivi": bool(px), "langue": langue or "fr+en"},
             )
 
             if ok:
@@ -3547,6 +4266,13 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
                 envois_ko.append(dest["nom"])
         conn.commit()
 
+    _log_devis(
+        request,
+        user,
+        "UPDATE",
+        f"Demande devis {demande.get('reference') or demande_id} envoyée · "
+        f"{len(envois_ok)} OK / {len(envois_ko)} KO",
+    )
     return {
         "envoyes": len(envois_ok),
         "echecs": len(envois_ko),
@@ -3557,7 +4283,7 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
 
 @router.put("/devis/reponses/{reponse_id}")
 def saisir_reponse_devis(request: Request, reponse_id: int, body: dict = Body(...)):
-    _require_expe_write(request)
+    user = _require_expe_write(request)
     now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
     with get_db() as conn:
         rep = conn.execute(
@@ -3565,19 +4291,32 @@ def saisir_reponse_devis(request: Request, reponse_id: int, body: dict = Body(..
         ).fetchone()
         if not rep:
             raise HTTPException(status_code=404, detail="Réponse introuvable")
+        _require_demande_ouverte(conn, int(rep["demande_id"]))
+        # Validation alignée sur celle du portail. Sans elle, un prix « abc »
+        # arrivait tel quel dans une colonne REAL de SQLite (typage souple) et
+        # faisait ensuite planter le comparatif imprimable en 500.
+        try:
+            prix = float(body.get("prix"))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Prix invalide.")
+        if prix < 0:
+            raise HTTPException(status_code=400, detail="Prix invalide.")
+        try:
+            delai = int(body.get("delai_jours"))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Délai invalide.")
+        if delai < 0 or delai > 365:
+            raise HTTPException(status_code=400, detail="Délai invalide.")
+        commentaire = (body.get("commentaire") or "").strip() or None
+        if commentaire and len(commentaire) > 2000:
+            raise HTTPException(status_code=400, detail="Commentaire trop long.")
         conn.execute(
             """
             UPDATE expe_devis_reponses
             SET prix=?, delai_jours=?, commentaire=?, statut='recue', recu_at=?
             WHERE id=?
             """,
-            (
-                body.get("prix"),
-                body.get("delai_jours"),
-                (body.get("commentaire") or "").strip() or None,
-                now,
-                reponse_id,
-            ),
+            (prix, delai, commentaire, now, reponse_id),
         )
         # Distinguer la saisie interne du dépôt portail : sur la timeline, « le
         # transporteur a répondu » et « on a saisi son mail à sa place » ne
@@ -3589,7 +4328,7 @@ def saisir_reponse_devis(request: Request, reponse_id: int, body: dict = Body(..
             canal=expe_ev.CANAL_INTERNE,
             type_evenement=expe_ev.EV_REPONSE_SAISIE,
             date=now,
-            meta={"prix": body.get("prix"), "delai_jours": body.get("delai_jours")},
+            meta={"prix": prix, "delai_jours": delai},
         )
         conn.commit()
         updated = conn.execute(
@@ -3597,6 +4336,12 @@ def saisir_reponse_devis(request: Request, reponse_id: int, body: dict = Body(..
         ).fetchone()
     out = dict(updated)
     out.pop("token_pixel", None)
+    _log_devis(
+        request,
+        user,
+        "UPDATE",
+        f"Réponse saisie · {rep['nom_transporteur'] or reponse_id} · demande #{rep['demande_id']}",
+    )
     return out
 
 
@@ -3632,12 +4377,9 @@ async def retenir_reponse_devis(
         if not rep:
             raise HTTPException(status_code=404, detail="Réponse introuvable")
         demande_id = rep["demande_id"]
-        demande_row = conn.execute(
-            "SELECT * FROM expe_demandes_devis WHERE id=?", (demande_id,)
-        ).fetchone()
-        if not demande_row:
-            raise HTTPException(status_code=404, detail="Demande introuvable")
-        demande = dict(demande_row)
+        # Garde serveur : retenir deux fois sur la même demande créait un
+        # second départ pour le même transport.
+        demande = _require_demande_ouverte(conn, int(demande_id))
         rep_d = dict(rep)
 
         # Sauvegarde optionnelle : commentaire + piece jointe attaches a la
@@ -3837,32 +4579,309 @@ async def retenir_reponse_devis(
 @router.post("/devis/demandes/{demande_id}/cloturer")
 def cloturer_demande_devis(request: Request, demande_id: int):
     """Clôture manuelle d'une demande : passe en statut 'cloturee' (archive)."""
-    _require_expe_write(request)
+    user = _require_expe_write(request)
     with get_db() as conn:
-        if not conn.execute(
-            "SELECT 1 FROM expe_demandes_devis WHERE id=?", (demande_id,)
-        ).fetchone():
-            raise HTTPException(status_code=404, detail="Demande introuvable")
+        demande = _require_demande_ouverte(conn, demande_id)
         conn.execute(
             "UPDATE expe_demandes_devis SET statut='cloturee' WHERE id=?",
             (demande_id,),
         )
         conn.commit()
+    _log_devis(
+        request, user, "UPDATE", f"Demande devis {demande.get('reference') or demande_id} clôturée"
+    )
     return {"statut": "cloturee", "id": demande_id}
 
 
 @router.delete("/devis/demandes/{demande_id}")
 def supprimer_demande_devis(request: Request, demande_id: int):
-    _require_expe_write(request)
+    """Met la demande à la corbeille — réversible.
+
+    La suppression était physique et immédiate : elle emportait la référence
+    (2026-15, non réattribuée) et les offres déjà reçues, sans recours, et
+    laissait les fichiers orphelins sur le disque. On marque désormais
+    `deleted_at` ; la destruction réelle passe par `/purger`.
+    """
+    user = _require_expe_write(request)
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
     with get_db() as conn:
-        if not conn.execute(
-            "SELECT 1 FROM expe_demandes_devis WHERE id=?", (demande_id,)
-        ).fetchone():
-            raise HTTPException(status_code=404, detail="Demande introuvable")
+        demande = _get_demande_or_404(conn, demande_id)
+        conn.execute(
+            "UPDATE expe_demandes_devis SET deleted_at=? WHERE id=?", (now, demande_id)
+        )
+        conn.commit()
+    _log_devis(
+        request,
+        user,
+        "DELETE",
+        f"Demande devis {demande.get('reference') or demande_id} → corbeille",
+    )
+    return {"deleted": demande_id, "corbeille": True}
+
+
+@router.post("/devis/demandes/{demande_id}/restaurer")
+def restaurer_demande_devis(request: Request, demande_id: int):
+    user = _require_expe_write(request)
+    with get_db() as conn:
+        demande = _get_demande_or_404(conn, demande_id, avec_corbeille=True)
+        if not demande.get("deleted_at"):
+            raise HTTPException(status_code=400, detail="Cette demande n'est pas dans la corbeille.")
+        conn.execute(
+            "UPDATE expe_demandes_devis SET deleted_at=NULL WHERE id=?", (demande_id,)
+        )
+        conn.commit()
+    _log_devis(
+        request,
+        user,
+        "UPDATE",
+        f"Demande devis {demande.get('reference') or demande_id} restaurée",
+    )
+    return {"ok": True, "id": demande_id}
+
+
+@router.delete("/devis/demandes/{demande_id}/purger")
+def purger_demande_devis(request: Request, demande_id: int):
+    """Destruction définitive, réservée aux demandes déjà en corbeille.
+
+    Deux gestes plutôt qu'un : le premier est rattrapable, le second demande
+    d'aller le chercher dans la corbeille. C'est ici, et seulement ici, qu'on
+    nettoie les fichiers sur disque — l'ancienne suppression les laissait
+    s'accumuler indéfiniment.
+    """
+    user = _require_expe_write(request)
+    with get_db() as conn:
+        demande = _get_demande_or_404(conn, demande_id, avec_corbeille=True)
+        if not demande.get("deleted_at"):
+            raise HTTPException(
+                status_code=409,
+                detail="Mettre d'abord la demande à la corbeille.",
+            )
+        chemins = [
+            r["path"]
+            for r in conn.execute(
+                "SELECT path FROM expe_devis_pieces_jointes WHERE demande_id=?",
+                (demande_id,),
+            ).fetchall()
+        ]
+        for r in conn.execute(
+            """SELECT retention_file_path AS p FROM expe_devis_reponses
+               WHERE demande_id=? AND COALESCE(TRIM(retention_file_path),'') <> ''""",
+            (demande_id,),
+        ).fetchall():
+            chemins.append(r["p"])
+        legacy = (demande.get("piece_jointe_path") or "").strip()
+        if legacy:
+            chemins.append(legacy)
+        conn.execute("DELETE FROM expe_devis_pieces_jointes WHERE demande_id=?", (demande_id,))
+        conn.execute("DELETE FROM expe_devis_evenements WHERE demande_id=?", (demande_id,))
         conn.execute("DELETE FROM expe_devis_reponses WHERE demande_id=?", (demande_id,))
         conn.execute("DELETE FROM expe_demandes_devis WHERE id=?", (demande_id,))
+        # Un fichier partagé avec une demande dupliquée n'est pas effacé.
+        restants = set()
+        for c in set(chemins):
+            if conn.execute(
+                "SELECT 1 FROM expe_devis_pieces_jointes WHERE path=? LIMIT 1", (c,)
+            ).fetchone():
+                restants.add(c)
         conn.commit()
-    return {"deleted": demande_id}
+    from config import BASE_DIR
+
+    for c in set(chemins) - restants:
+        try:
+            (Path(BASE_DIR) / c).unlink()
+        except Exception:
+            pass
+    _log_devis(
+        request,
+        user,
+        "DELETE",
+        f"Demande devis {demande.get('reference') or demande_id} purgée définitivement",
+    )
+    return {"purged": demande_id}
+
+
+@router.delete("/devis/reponses/{reponse_id}")
+def retirer_destinataire_devis(request: Request, reponse_id: int):
+    """Retire un destinataire d'une demande.
+
+    Un email saisi de travers restait sur la demande jusqu'à la suppression de
+    celle-ci. On refuse en revanche de retirer un transporteur qui a chiffré :
+    son offre fait partie de l'histoire de la consultation, l'effacer
+    reviendrait à réécrire la comparaison après coup.
+    """
+    user = _require_expe_write(request)
+    with get_db() as conn:
+        rep = conn.execute(
+            "SELECT * FROM expe_devis_reponses WHERE id=?", (reponse_id,)
+        ).fetchone()
+        if not rep:
+            raise HTTPException(status_code=404, detail="Destinataire introuvable")
+        _require_demande_ouverte(conn, int(rep["demande_id"]))
+        if (rep["statut"] or "") in ("recue", "retenue"):
+            raise HTTPException(
+                status_code=409,
+                detail="Ce transporteur a répondu : sa réponse ne peut pas être retirée.",
+            )
+        # Cascade manuelle : `get_db()` n'active pas `PRAGMA foreign_keys`, le
+        # ON DELETE CASCADE déclaré au schéma ne se déclenche donc jamais. Sans
+        # ça, un transporteur ayant déposé un fichier sans chiffrer laissait sa
+        # pièce jointe orpheline, listée sans nom dans le détail.
+        fichiers = [
+            r["path"]
+            for r in conn.execute(
+                "SELECT path FROM expe_devis_pieces_jointes WHERE reponse_id=?",
+                (reponse_id,),
+            ).fetchall()
+        ]
+        conn.execute("DELETE FROM expe_devis_pieces_jointes WHERE reponse_id=?", (reponse_id,))
+        conn.execute("DELETE FROM expe_devis_evenements WHERE reponse_id=?", (reponse_id,))
+        conn.execute("DELETE FROM expe_devis_reponses WHERE id=?", (reponse_id,))
+        encore = {
+            c
+            for c in fichiers
+            if conn.execute(
+                "SELECT 1 FROM expe_devis_pieces_jointes WHERE path=? LIMIT 1", (c,)
+            ).fetchone()
+        }
+        conn.commit()
+    from config import BASE_DIR
+
+    for c in set(fichiers) - encore:
+        try:
+            (Path(BASE_DIR) / c).unlink()
+        except Exception:
+            pass
+    _log_devis(
+        request,
+        user,
+        "DELETE",
+        f"Destinataire {rep['nom_transporteur'] or rep['destinataire_email'] or reponse_id} "
+        f"retiré de la demande #{rep['demande_id']}",
+    )
+    return {"ok": True}
+
+
+@router.get("/devis/reponses/{reponse_id}/lien-portail")
+def lien_portail_destinataire(request: Request, reponse_id: int):
+    """Renvoie le lien portail du destinataire, pour le lui recopier.
+
+    Utile quand un transporteur affirme n'avoir rien reçu : plutôt que de
+    renvoyer l'email en aveugle, on lui donne le lien de vive voix.
+    """
+    _require_expe(request)
+    with get_db() as conn:
+        rep = conn.execute(
+            "SELECT destinataire_email, transporteur_id FROM expe_devis_reponses WHERE id=?",
+            (reponse_id,),
+        ).fetchone()
+        if not rep:
+            raise HTTPException(status_code=404, detail="Destinataire introuvable")
+        email = (rep["destinataire_email"] or "").strip().lower()
+        row = conn.execute(
+            "SELECT token FROM expe_portal_transporteurs WHERE LOWER(email)=? AND actif=1 LIMIT 1",
+            (email,),
+        ).fetchone()
+    if not row:
+        raise HTTPException(
+            status_code=404,
+            detail="Aucun accès portail : la demande n'a pas encore été envoyée à cette adresse.",
+        )
+    return {"lien": f"{public_base_url()}/portail/expe/{row['token']}", "email": email}
+
+
+@router.post("/devis/reponses/{reponse_id}/relancer")
+def relancer_destinataire_devis(request: Request, reponse_id: int, body: dict = Body(default={})):
+    """Renvoie la demande de tarif à un transporteur resté silencieux.
+
+    Le suivi d'ouverture rend le silence visible ; ce bouton est ce qui permet
+    d'en faire quelque chose. Le pixel part avec le contexte `rel` — distinct
+    de `rfq` — pour que la fenêtre anti-préchargement se recale sur la date de
+    la relance et non sur celle de l'envoi initial, et pour que la timeline
+    dise LEQUEL des deux emails a été ouvert.
+    """
+    user = _require_expe_write(request)
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    reply_to = (user.get("email") or user.get("identifiant") or "").strip() or None
+    message = (body.get("message") or "").strip() or None
+    with get_db() as conn:
+        rep = conn.execute(
+            "SELECT * FROM expe_devis_reponses WHERE id=?", (reponse_id,)
+        ).fetchone()
+        if not rep:
+            raise HTTPException(status_code=404, detail="Destinataire introuvable")
+        rep = dict(rep)
+        demande = _require_demande_ouverte(conn, int(rep["demande_id"]))
+        if (rep.get("statut") or "") in ("recue", "retenue"):
+            raise HTTPException(
+                status_code=409, detail="Ce transporteur a déjà répondu."
+            )
+        email_dest = (rep.get("destinataire_email") or "").strip()
+        if not email_dest or "@" not in email_dest:
+            raise HTTPException(
+                status_code=400, detail="Aucune adresse email pour ce destinataire."
+            )
+        token_row = conn.execute(
+            "SELECT token FROM expe_portal_transporteurs WHERE LOWER(email)=LOWER(?) AND actif=1 LIMIT 1",
+            (email_dest,),
+        ).fetchone()
+        if not token_row:
+            raise HTTPException(
+                status_code=409,
+                detail="Aucun accès portail pour cette adresse — renvoyer la demande depuis « Envoyer ».",
+            )
+        portail_lien = f"{public_base_url()}/portail/expe/{token_row['token']}"
+        langue = _devis_langue_destinataire(conn, rep)
+        px = expe_ev.url_pixel(expe_ev.token_pixel(conn, reponse_id), "rel")
+        sujet, corps = email_expe_rfq_transport(
+            demande=demande,
+            user=user,
+            portail_lien=portail_lien,
+            pixel_url=px,
+            langue=langue,
+            relance=True,
+            message_perso=message,
+            # La relance sert précisément à rappeler l'échéance : l'omettre
+            # ferait un mail qui insiste sans dire jusqu'à quand.
+            date_limite=(demande.get("date_limite") or None),
+        )
+        ok = send_email(
+            to=email_dest,
+            subject=sujet,
+            html_body=corps,
+            reply_to=reply_to,
+            cc=EXPE_DEVIS_CC,
+        )
+        if ok:
+            conn.execute(
+                """UPDATE expe_devis_reponses
+                   SET relances=COALESCE(relances,0)+1, last_relance_at=?, sent_at=?,
+                       statut=CASE WHEN statut='echec' THEN 'envoyee' ELSE statut END
+                   WHERE id=?""",
+                (now, now, reponse_id),
+            )
+        expe_ev.log_evenement(
+            conn,
+            reponse_id=reponse_id,
+            demande_id=int(rep["demande_id"]),
+            canal=expe_ev.CANAL_EMAIL,
+            type_evenement=(
+                expe_ev.EV_EMAIL_RELANCE if ok else expe_ev.EV_EMAIL_ECHEC
+            ),
+            date=now,
+            fiable=bool(ok),
+            motif=None if ok else "envoi refusé par le fournisseur d'email",
+            meta={"destinataire": email_dest, "suivi": bool(px), "langue": langue},
+        )
+        conn.commit()
+    _log_devis(
+        request,
+        user,
+        "UPDATE",
+        f"Relance {rep.get('nom_transporteur') or email_dest} · demande {demande.get('reference') or demande['id']} · {'OK' if ok else 'KO'}",
+    )
+    if not ok:
+        raise HTTPException(status_code=502, detail="L'email de relance n'est pas parti.")
+    return {"ok": True, "relances": int(rep.get("relances") or 0) + 1}
 
 
 # ─── Prospects transporteurs ───────────────────────────────────────

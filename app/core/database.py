@@ -8312,6 +8312,128 @@ Ressources :
         " ON expe_palettes_contestations(date_contestation DESC)"
     )
 
+    # ── MyExpé devis : cycle de vie, langue, pièces jointes multiples ────────
+    # Même convention que les blocs ci-dessus : PRAGMA + CREATE IF NOT EXISTS.
+    #
+    # date_limite : échéance de réponse. Purement informative — MyAO ne bloque
+    #   pas non plus après la date, et un prix en retard vaut mieux que pas de
+    #   prix. Elle sert à trier, à colorer, et surtout à être rappelée au
+    #   transporteur sur son portail.
+    # deleted_at : corbeille. La suppression était physique et immédiate, avec
+    #   cascade sur les réponses et abandon des fichiers sur disque. Une
+    #   demande supprimée par erreur emportait sa référence (2026-15) et les
+    #   offres déjà reçues, sans recours.
+    _expe_dem_cols = {
+        r["name"]
+        for r in conn.execute("PRAGMA table_info(expe_demandes_devis)").fetchall()
+    }
+    if _expe_dem_cols and "date_limite" not in _expe_dem_cols:
+        conn.execute("ALTER TABLE expe_demandes_devis ADD COLUMN date_limite TEXT")
+    if _expe_dem_cols and "deleted_at" not in _expe_dem_cols:
+        conn.execute("ALTER TABLE expe_demandes_devis ADD COLUMN deleted_at TEXT")
+    if _expe_dem_cols:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_expe_demandes_devis_deleted"
+            " ON expe_demandes_devis(deleted_at)"
+        )
+
+    # langue : le pack de traduction FR/EN existait déjà (expe_email_i18n) mais
+    #   n'était jamais activé faute de savoir en quelle langue écrire à qui. Le
+    #   mail partait donc bilingue, les deux versions empilées — du bruit pour
+    #   tout le monde. Défaut 'fr' : la population est majoritairement
+    #   française, et un transporteur belge ou néerlandais se corrige à la main
+    #   une fois pour toutes.
+    _expe_trp_cols = {
+        r["name"]
+        for r in conn.execute("PRAGMA table_info(expe_transporteurs)").fetchall()
+    }
+    if _expe_trp_cols and "langue" not in _expe_trp_cols:
+        conn.execute(
+            "ALTER TABLE expe_transporteurs ADD COLUMN langue TEXT NOT NULL DEFAULT 'fr'"
+        )
+
+    # Sur la ligne de réponse : la langue est FIGÉE à l'envoi, pas relue depuis
+    # le référentiel. Si on change la langue d'un transporteur après coup, le
+    # mail déjà parti ne change pas de langue rétroactivement — la trace doit
+    # dire ce qui a réellement été envoyé.
+    # relances / last_relance_at : compteur affiché sur la ligne. Sans lui, on
+    # relance deux fois le même transporteur le même jour sans le savoir.
+    _expe_rep_cols2 = {
+        r["name"]
+        for r in conn.execute("PRAGMA table_info(expe_devis_reponses)").fetchall()
+    }
+    if _expe_rep_cols2 and "langue" not in _expe_rep_cols2:
+        conn.execute("ALTER TABLE expe_devis_reponses ADD COLUMN langue TEXT")
+    if _expe_rep_cols2 and "relances" not in _expe_rep_cols2:
+        conn.execute(
+            "ALTER TABLE expe_devis_reponses ADD COLUMN relances INTEGER NOT NULL DEFAULT 0"
+        )
+    if _expe_rep_cols2 and "last_relance_at" not in _expe_rep_cols2:
+        conn.execute("ALTER TABLE expe_devis_reponses ADD COLUMN last_relance_at TEXT")
+
+    # Pièces jointes : une seule table pour les deux sens, `origine` tranche.
+    #   'sifa'         document joint à la demande (plan de chargement, photo
+    #                  de contrainte d'accès) — visible du transporteur.
+    #   'transporteur' fichier déposé par le transporteur avec son offre
+    #                  (cotation PDF), rattaché à sa ligne de réponse.
+    # Deux tables auraient dupliqué le stockage, la limite de taille et la
+    # route de téléchargement pour une seule colonne de différence.
+    #
+    # Les colonnes historiques piece_jointe_path / piece_jointe_filename sur
+    # expe_demandes_devis restent en place et sont reprises ici au premier
+    # démarrage : elles sont encore lues par du code existant, les supprimer
+    # dans la même migration reviendrait à parier sur l'exhaustivité du grep.
+    # Le backfill ne doit tourner QU'À la création de la table. Un garde par
+    # comptage (`SELECT COUNT(*) == 0`) n'est pas un garde d'idempotence :
+    # supprimer la dernière pièce jointe héritée puis redémarrer les aurait
+    # toutes ressuscitées, pointant vers des fichiers effacés du disque.
+    _pj_table_neuve = (
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='expe_devis_pieces_jointes'"
+        ).fetchone()
+        is None
+    )
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS expe_devis_pieces_jointes (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            demande_id       INTEGER NOT NULL REFERENCES expe_demandes_devis(id) ON DELETE CASCADE,
+            reponse_id       INTEGER REFERENCES expe_devis_reponses(id) ON DELETE CASCADE,
+            origine          TEXT NOT NULL DEFAULT 'sifa',
+            filename         TEXT NOT NULL,
+            path             TEXT NOT NULL,
+            taille_octets    INTEGER,
+            created_at       TEXT NOT NULL,
+            created_by_email TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_expe_devis_pj_demande"
+        " ON expe_devis_pieces_jointes(demande_id, origine)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_expe_devis_pj_reponse"
+        " ON expe_devis_pieces_jointes(reponse_id)"
+    )
+    if _pj_table_neuve and _expe_dem_cols and "piece_jointe_path" in _expe_dem_cols:
+        try:
+            conn.execute("""
+                INSERT INTO expe_devis_pieces_jointes
+                  (demande_id, reponse_id, origine, filename, path, created_at, created_by_email)
+                SELECT id, NULL, 'sifa',
+                       COALESCE(NULLIF(TRIM(piece_jointe_filename),''), 'fichier'),
+                       piece_jointe_path, created_at, created_by_email
+                FROM expe_demandes_devis
+                WHERE COALESCE(TRIM(piece_jointe_path),'') <> ''
+            """)
+        except Exception as _exc_pj:
+            # Le backfill est un confort, pas une condition de démarrage : les
+            # colonnes historiques restent lues par ailleurs.
+            import logging as _logging
+
+            _logging.getLogger(__name__).warning(
+                "backfill expe_devis_pieces_jointes: %s", _exc_pj
+            )
+
     # ── Nommage des matières pour les références produit MyAO ────────────────
     # Deux colonnes, dans cet ordre de priorité (cf. ao_ref_produit.matiere_abbrev) :
     #

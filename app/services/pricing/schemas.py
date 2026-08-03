@@ -120,6 +120,7 @@ class MaterialMystockOut(BaseModel):
     """Prix piloté par MyStock quand la matière y est appairée."""
 
     matiere_id: int
+    declinaison_id: Optional[int] = None
     reference: Optional[str] = None
     categorie: Optional[str] = None
     unit_price: Decimal

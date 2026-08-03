@@ -154,6 +154,7 @@ def material_row_to_dict(
     return {
         "mystock": {
             "matiere_id": mystock["matiere_id"],
+            "declinaison_id": mystock["declinaison_id"],
             "reference": mystock["reference"],
             "categorie": mystock["categorie"],
             "unit_price": float(mystock["unit_price"]),
@@ -206,17 +207,23 @@ def get_category_map(conn: sqlite3.Connection) -> dict[int, str]:
 # Colonnes MyStock jointes à toute lecture de matière : quand une matière est
 # appairée, c'est SON prix qui fait foi (choix produit — une seule valeur, rangée
 # côté MyStock). Voir mystock_price_for_row ci-dessous.
+# Une matière Coûts matières est pilotée par la DÉCLINAISON MyStock qui lui est
+# appairée (une laize d'un frontal, un grammage d'un adhésif…). Le prix retenu
+# est celui de son fournisseur principal.
 MYSTOCK_JOIN = """
-    LEFT JOIN matieres_premieres mp ON mp.mc_material_id = m.id
-    LEFT JOIN mp_valorisation mpv   ON mpv.matiere_id = mp.id
+    LEFT JOIN mp_matiere_declinaison msd ON msd.mc_material_id = m.id
+    LEFT JOIN matieres_premieres mp      ON mp.id = msd.matiere_id
+    LEFT JOIN mp_laizes msl              ON msl.id = msd.laize_id
+    LEFT JOIN mp_grammages msg           ON msg.id = msd.grammage_id
 """
 MYSTOCK_COLS = """
+    msd.id                         AS ms_decl_id,
     mp.id                          AS ms_id,
     mp.categorie                   AS ms_categorie,
     mp.reference                   AS ms_reference,
-    COALESCE(mp.prix_eur_m2, 0)    AS ms_prix_eur_m2,
-    COALESCE(mp.prix_par_laize, 0) AS ms_prix_par_laize,
-    COALESCE(mpv.prix_unitaire, 0) AS ms_prix_unitaire
+    msl.valeur_mm                  AS ms_laize_mm,
+    msl.label                      AS ms_laize_label,
+    msg.valeur_gsm                 AS ms_gsm
 """
 
 _MS_LAIZEES = frozenset({"frontal", "glassine", "complexe"})
@@ -224,39 +231,36 @@ _MS_LAIZEES = frozenset({"frontal", "glassine", "complexe"})
 
 def mystock_price_for_row(conn: sqlite3.Connection, row: sqlite3.Row) -> Optional[dict[str, Any]]:
     """
-    Prix MyStock applicable à une matière appairée, déjà exprimé dans l'unité du
-    moteur de calcul. Retourne None si la matière n'est pas appairée ou si
-    MyStock n'a pas de prix exploitable.
-
-    - matière laizée à prix unique  → €/m²
-    - matière laizée à prix par laize → moyenne des prix principaux des laizes, €/m²
-    - matière non laizée            → prix unitaire (€/kg pour les adhésifs)
+    Prix MyStock d'une matière appairée, exprimé dans l'unité du moteur de calcul.
+    Retourne None si aucune déclinaison n'est appairée ou si son fournisseur
+    principal n'a pas de prix.
     """
-    ms_id = _col(row, "ms_id")
-    if ms_id is None:
+    decl_id = _col(row, "ms_decl_id")
+    if decl_id is None:
+        return None
+    prix_row = conn.execute(
+        "SELECT prix FROM mp_matiere_prix WHERE declinaison_id=? AND principal=1 LIMIT 1",
+        (int(decl_id),),
+    ).fetchone()
+    if not prix_row:
+        return None
+    try:
+        prix = float(prix_row["prix"] or 0)
+    except (TypeError, ValueError):
+        return None
+    if prix <= 0:
         return None
     cat = (_col(row, "ms_categorie") or "").strip().lower()
     laizee = cat in _MS_LAIZEES
-    detail = None
-    if laizee and int(_col(row, "ms_prix_par_laize") or 0):
-        prix_rows = conn.execute(
-            """SELECT prix FROM mp_matiere_prix
-                WHERE matiere_id=? AND principal=1 AND laize_id IS NOT NULL AND prix > 0""",
-            (int(ms_id),),
-        ).fetchall()
-        vals = [float(r["prix"]) for r in prix_rows]
-        if not vals:
-            return None
-        prix = sum(vals) / len(vals)
-        detail = f"moyenne de {len(vals)} laize(s)"
-    elif laizee:
-        prix = float(_col(row, "ms_prix_eur_m2") or 0)
+    if _col(row, "ms_laize_mm") is not None:
+        detail = _col(row, "ms_laize_label") or f"laize {int(float(_col(row, 'ms_laize_mm')))} mm"
+    elif _col(row, "ms_gsm") is not None:
+        detail = f"grammage {float(_col(row, 'ms_gsm')):g} g/m²"
     else:
-        prix = float(_col(row, "ms_prix_unitaire") or 0)
-    if prix <= 0:
-        return None
+        detail = None
     return {
-        "matiere_id": int(ms_id),
+        "matiere_id": int(_col(row, "ms_id")),
+        "declinaison_id": int(decl_id),
         "reference": _col(row, "ms_reference"),
         "categorie": _col(row, "ms_categorie"),
         "unit_price": Decimal(str(round(prix, 6))),
