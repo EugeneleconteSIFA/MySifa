@@ -122,6 +122,12 @@
     const ncResp = (it && Array.isArray(it.nc_responses))
       ? it.nc_responses.filter(r => typeof r === 'string' && r.trim())
       : [];
+    // v2.5.21 : comment_responses — réponses qui exigent un commentaire de
+    // l'opérateur. Doit être préservé ici, sinon la case COM se décoche à
+    // chaque réouverture de la modale (même piège que required en v2.3.45).
+    const comResp = (it && Array.isArray(it.comment_responses))
+      ? it.comment_responses.filter(r => typeof r === 'string' && r.trim())
+      : [];
     return {
       type: 'choice',
       label: (it && it.label) || '',
@@ -129,7 +135,9 @@
       multi: (it && it.multi === false) ? false : true,
       allow_other: !!(it && it.allow_other),
       other_is_nc: !!(it && it.other_is_nc),
+      other_needs_comment: !!(it && it.other_needs_comment),
       nc_responses: ncResp,
+      comment_responses: comResp,
       // v2.3.45 : préserver required (v2.2.86 dans settings_page — oublié ici)
       required: !!(it && it.required),
     };
@@ -427,7 +435,13 @@
   // type "choice"
   const responses = (item && Array.isArray(item.responses) && item.responses.length) ? item.responses : ['Conforme'];
   const ncList = (item && Array.isArray(item.nc_responses)) ? item.nc_responses.map(String) : [];
-  const responsesHtml = responses.map((r) => _afResponseRow(r, ncList.indexOf(String(r)) !== -1)).join('');
+  // v2.5.21 : comList = réponses marquées « commentaire obligatoire » (case COM)
+  const comList = (item && Array.isArray(item.comment_responses)) ? item.comment_responses.map(String) : [];
+  const responsesHtml = responses.map((r) => _afResponseRow(
+    r,
+    ncList.indexOf(String(r)) !== -1,
+    comList.indexOf(String(r)) !== -1
+  )).join('');
   const multi = (item && item.multi === false) ? false : true;
   return '<div class="af-cl-body" data-type="choice">'
     + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap">'
@@ -447,6 +461,18 @@
     +   '<input type="checkbox" class="af-cl-other-nc"' + ((item && item.other_is_nc) ? ' checked' : '') + ' style="width:13px;height:13px;accent-color:var(--danger);cursor:pointer">'
     +   '<span>Traiter <strong style="color:var(--text)">« Autre »</strong> comme une <strong style="color:var(--danger)">non-conformité</strong></span>'
     + '</label>'
+    // v2.5.21 : équivalent COM pour la réponse « Autre ». Sa zone d'explication
+    // passe alors d'optionnelle à obligatoire.
+    + '<label class="af-cl-other-com-lbl" style="display:' + ((item && item.allow_other) ? 'flex' : 'none') + ';align-items:center;gap:8px;margin-top:4px;margin-left:22px;cursor:pointer;font-size:12px;color:var(--text2)">'
+    +   '<input type="checkbox" class="af-cl-other-com"' + ((item && item.other_needs_comment) ? ' checked' : '') + ' style="width:13px;height:13px;accent-color:var(--accent);cursor:pointer">'
+    +   '<span>Rendre l\'explication <strong style="color:var(--text)">obligatoire</strong> quand <strong style="color:var(--text)">« Autre »</strong> est choisi</span>'
+    + '</label>'
+    // v2.5.21 : légende des deux puces — sans elle, « NC » et « COM » sont
+    // deux acronymes muets pour l'admin qui découvre l'écran.
+    + '<div style="margin-top:8px;font-size:11px;color:var(--muted);line-height:1.6">'
+    +   '<strong style="color:var(--text2)">NC</strong> — la réponse marque la ligne comme non conforme dans l\'historique.<br>'
+    +   '<strong style="color:var(--text2)">COM</strong> — la réponse ouvre une zone de commentaire obligatoire ; l\'opérateur ne peut pas valider tant qu\'elle est vide.'
+    + '</div>'
     + '</div>';
 }
 
@@ -478,14 +504,27 @@
 
 
   // ── _afResponseRow ──
-  function _afResponseRow(value, isNc) {
+  function _afResponseRow(value, isNc, needsCom) {
   const safeVal = (value || '').replace(/"/g, '&quot;');
   const ncChecked = isNc ? ' checked' : '';
+  const comChecked = needsCom ? ' checked' : '';
   return '<div class="af-cl-resp-row" style="display:flex;gap:6px;align-items:center">'
     + '<input type="text" class="alert-field-input af-cl-resp-input" maxlength="100" placeholder="Ex. Nette" value="' + safeVal + '" style="flex:1;padding:6px 10px;font-size:13px">'
-    + '<label class="af-cl-nc-lbl" title="Cocher si cette réponse signale une non-conformité" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);cursor:pointer;font-size:11px;color:var(--text2);white-space:nowrap;user-select:none">'
+    // v2.5.20 : plus de background inline — la puce NC vit dans une .af-cl-card
+    // deja peinte en var(--bg), elle serait bleu sur bleu. Le fond est desormais
+    // pilote par le CSS (.af-cl-nc-lbl -> var(--card)), ce qui laisse aussi
+    // l'etat coche (:has(input:checked)) reprendre la main.
+    + '<label class="af-cl-nc-lbl" title="Cocher si cette réponse signale une non-conformité" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);cursor:pointer;font-size:11px;color:var(--text2);white-space:nowrap;user-select:none">'
     +   '<input type="checkbox" class="af-cl-resp-nc"' + ncChecked + ' style="width:12px;height:12px;accent-color:var(--danger);cursor:pointer">'
     +   '<span>NC</span>'
+    + '</label>'
+    // v2.5.21 : puce COM — quand elle est cochée, choisir cette réponse ouvre
+    // une zone de commentaire obligatoire sous le point de contrôle chez
+    // l'opérateur, et bloque Valider tant qu'elle est vide. Indépendante de NC :
+    // une réponse peut être NC seule, COM seule, ou les deux.
+    + '<label class="af-cl-com-lbl" title="Cocher si cette réponse exige un commentaire obligatoire de l\'opérateur" style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);cursor:pointer;font-size:11px;color:var(--text2);white-space:nowrap;user-select:none">'
+    +   '<input type="checkbox" class="af-cl-resp-com"' + comChecked + ' style="width:12px;height:12px;accent-color:var(--accent);cursor:pointer">'
+    +   '<span>COM</span>'
     + '</label>'
     + '<button type="button" class="btn-sm btn-ghost danger" onclick="_afRemoveResponse(this)" title="Supprimer cette réponse">×</button>'
     + '</div>';
@@ -582,21 +621,25 @@
       }
       const responses = [];
       const ncResponses = [];
+      // v2.5.21 : comResponses = réponses cochées COM (commentaire obligatoire)
+      const comResponses = [];
       card.querySelectorAll('.af-cl-resp-row').forEach(row => {
         const r = (row.querySelector('.af-cl-resp-input')?.value || '').trim();
         if (!r) return;
         responses.push(r);
         if (row.querySelector('.af-cl-resp-nc')?.checked) ncResponses.push(r);
+        if (row.querySelector('.af-cl-resp-com')?.checked) comResponses.push(r);
       });
       if (!responses.length) return;
       const multiSel = card.querySelector('.af-cl-multi-sel')?.value;
       const multi = (multiSel === 'single') ? false : true;
       const allowOther = !!card.querySelector('.af-cl-other-toggle')?.checked;
       const otherIsNc = allowOther && !!card.querySelector('.af-cl-other-nc')?.checked;
+      const otherNeedsComment = allowOther && !!card.querySelector('.af-cl-other-com')?.checked;
       // v2.3.28 : required manquait — les items requis repassaient
       // optionnels à chaque save via /maintenance.
       const _reqCk = !!card.querySelector('.af-cl-required')?.checked;
-      const _choiceItem = { type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses };
+      const _choiceItem = { type: 'choice', label: label, responses: responses, multi: multi, allow_other: allowOther, other_is_nc: otherIsNc, nc_responses: ncResponses, comment_responses: comResponses, other_needs_comment: otherNeedsComment };
       if (_reqCk) _choiceItem.required = true;
       items.push(_choiceItem);
     });
@@ -730,14 +773,18 @@ function _afRowClick(ev, inputId) {
   function _afOnOtherToggle(cb){
   const body = cb.closest('.af-cl-body');
   if(!body) return;
-  const ncLbl = body.querySelector('.af-cl-other-nc-lbl');
-  if(!ncLbl) return;
-  if(cb.checked){ ncLbl.style.display = 'flex'; }
-  else {
-    ncLbl.style.display = 'none';
-    const inp = ncLbl.querySelector('.af-cl-other-nc');
+  // v2.5.21 : les deux sous-options d'« Autre » (NC et commentaire obligatoire)
+  // suivent le même sort — affichées avec « Autre », décochées quand il part,
+  // pour ne pas laisser un flag actif sur une réponse qui n'existe plus.
+  [['.af-cl-other-nc-lbl', '.af-cl-other-nc'],
+   ['.af-cl-other-com-lbl', '.af-cl-other-com']].forEach(function(pair){
+    const lbl = body.querySelector(pair[0]);
+    if(!lbl) return;
+    if(cb.checked){ lbl.style.display = 'flex'; return; }
+    lbl.style.display = 'none';
+    const inp = lbl.querySelector(pair[1]);
     if(inp) inp.checked = false;
-  }
+  });
 }
 
 

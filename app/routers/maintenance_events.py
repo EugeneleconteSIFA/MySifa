@@ -1541,6 +1541,102 @@ def _ensure_recurring_events_generated(conn, horizon_days: int = 90,
     return total
 
 
+def _replace_recurrence_dates(conn, template_id: int, exclude_ids=None, horizon_days: int = 90) -> dict:
+    """v2.6.1 : applique une NOUVELLE regle de recurrence aux occurrences futures
+    en les DEPLACANT, au lieu de les purger puis les regenerer.
+
+    Pourquoi : les deux dimensions d'un modele sont independantes. Le contenu
+    (les operations) et la planification (regle + horaires) ne doivent jamais
+    se contaminer. L'ancienne purge supprimait les occurrences et les recreait
+    depuis le modele : une simple correction du jour de recurrence detruisait
+    donc toutes les personnalisations d'operations, ainsi que l'avancement deja
+    saisi par les operateurs — alors que seule la planification avait bouge.
+
+    Principe : les occurrences existantes sont appariees DANS L'ORDRE aux dates
+    de la nouvelle regle (la 1re du lundi devient la 1re du mardi, etc.). On ne
+    touche qu'a date_prevue et aux horaires ; les lignes d'operations, leurs
+    statuts et les operateurs assignes restent intacts.
+
+    template_origin_date est realigne sur la nouvelle date : sans cela la
+    generation, qui dedoublonne sur (template_id, template_origin_date),
+    recreerait un doublon a chaque date cible.
+
+    exclude_ids : creneaux que l'admin a choisi de laisser ou ils sont. Ils ne
+    sont ni deplaces ni supprimes ; la serie se regenere autour d'eux.
+    """
+    tmpl = _load_template_full(conn, template_id)
+    if not tmpl:
+        return {"moved": 0, "removed": 0, "created": 0}
+    today = date.today()
+    until = today + timedelta(days=horizon_days)
+    now = _now_paris_iso()
+    skip = set(int(x) for x in (exclude_ids or []))
+
+    rows = conn.execute(
+        "SELECT id, date_prevue FROM maintenance_events "
+        "WHERE template_id = ? AND template_origin_date IS NOT NULL "
+        "  AND date_prevue >= ? AND deleted_at IS NULL "
+        "ORDER BY date_prevue ASC, id ASC",
+        (template_id, today.isoformat()),
+    ).fetchall()
+    # Dates de la nouvelle regle, sur le meme horizon que la generation.
+    targets = []
+    cursor = today
+    for _ in range(500):
+        nxt = _compute_next_occurrence(tmpl, cursor)
+        if nxt is None or nxt > until:
+            break
+        targets.append(nxt)
+        cursor = nxt + timedelta(days=1)
+
+    hd = tmpl.get("recurrence_time_start") or ""
+    hf = tmpl.get("recurrence_time_end") or ""
+    # TOUTES les occurrences sont appariees aux dates cibles, y compris celles
+    # que l'admin a choisi de preserver : chacune CONSOMME une place dans la
+    # serie. Une occurrence preservee ne bouge pas, mais son
+    # template_origin_date est realigne sur la date cible qu'elle occupe.
+    #
+    # Sans ce realignement, la date cible paraissait libre a la generation
+    # (qui dedoublonne sur template_origin_date) et une occurrence y etait
+    # creee : l'admin demandait « laisse ce creneau ou il est » et se
+    # retrouvait avec son creneau ET un nouveau a cote.
+    n = min(len(rows), len(targets))
+    moved = 0
+    for i in range(n):
+        eid = int(rows[i]["id"])
+        iso = targets[i].isoformat()
+        if eid in skip:
+            # Preserve : ni date ni horaires touches. Seul l'ancrage bouge,
+            # pour reserver la place et rester marque « deplace a la main »
+            # (date_prevue <> template_origin_date).
+            conn.execute(
+                "UPDATE maintenance_events SET template_origin_date=?, updated_at=? WHERE id=?",
+                (iso, now, eid),
+            )
+            continue
+        conn.execute(
+            "UPDATE maintenance_events SET date_prevue=?, heure_debut=?, heure_fin=?, "
+            "       template_origin_date=?, updated_at=? WHERE id=?",
+            (iso, hd, hf, iso, now, eid),
+        )
+        moved += 1
+    # Occurrences en trop (la nouvelle regle en produit moins) : supprimees,
+    # sauf celles que l'admin a explicitement demande de preserver.
+    removed = 0
+    for r in rows[n:]:
+        eid = int(r["id"])
+        if eid in skip:
+            continue
+        conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
+        conn.execute("DELETE FROM maintenance_event_operators WHERE event_id = ?", (eid,))
+        conn.execute("DELETE FROM maintenance_events WHERE id = ?", (eid,))
+        removed += 1
+    # Occurrences manquantes : la generation est idempotente (dedup sur
+    # template_origin_date, desormais realigne) — elle ne cree que les trous.
+    created = _generate_events_for_template(conn, template_id, until)
+    return {"moved": moved, "removed": removed, "created": created}
+
+
 def _event_divergence(conn, event_id: int, tmpl: dict) -> dict:
     """v2.6.1 : en quoi les operations d'un creneau s'ecartent-elles du modele ?
 
@@ -1796,10 +1892,28 @@ def template_resync_impact(template_id: int, request: Request):
             if d["diverged"]:
                 diverged.append({"id": r["id"], "date": r["date_prevue"],
                                  "reasons": d["reasons"], "done_ops": d["done_ops"]})
+        # v2.6.1 : creneaux DEPLACES a la main — date_prevue s'ecarte de la date
+        # theorique (template_origin_date, immuable). Ce sont eux, et eux seuls,
+        # dont la position serait ecrasee par un changement de regle : un
+        # creneau reste a sa place theorique est replace sans consequence.
+        moved_rows = conn.execute(
+            "SELECT id, date_prevue, template_origin_date FROM maintenance_events "
+            "WHERE template_id = ? AND template_origin_date IS NOT NULL "
+            "  AND date_prevue >= ? AND deleted_at IS NULL "
+            "  AND date_prevue <> template_origin_date "
+            "ORDER BY date_prevue ASC",
+            (template_id, today),
+        ).fetchall()
+        moved = [{"id": r["id"], "date": r["date_prevue"],
+                  "origin": r["template_origin_date"],
+                  "reasons": ["déplacé du " + str(r["template_origin_date"]) +
+                              " au " + str(r["date_prevue"])], "done_ops": 0}
+                 for r in moved_rows]
     dates = [r["date_prevue"] for r in rows]
     return {"count": len(dates), "dates": dates[:5], "first": dates[0] if dates else None,
             "last": dates[-1] if dates else None, "diverged": diverged,
-            "identical_count": len(dates) - len(diverged)}
+            "identical_count": len(dates) - len(diverged),
+            "moved": moved, "unmoved_count": len(dates) - len(moved)}
 
 
 @router.patch("/api/maintenance/templates/{template_id}")
@@ -1915,19 +2029,10 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
         _recur_changed = any(
             k in meta_updates and meta_updates[k] != _recur_before[k] for k in _RECUR_KEYS
         )
+        recur_stats = {"moved": 0, "removed": 0, "created": 0}
         if _recur_changed and body.recurrence_active is not False:
-            today = datetime.now(_PARIS).strftime("%Y-%m-%d")
-            purge_ids = [r["id"] for r in conn.execute(
-                "SELECT id FROM maintenance_events "
-                "WHERE template_id = ? AND template_origin_date IS NOT NULL "
-                "  AND date_prevue >= ?",
-                (template_id, today),
-            ).fetchall()]
-            for eid in purge_ids:
-                conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
-                conn.execute("DELETE FROM maintenance_event_operators WHERE event_id = ?", (eid,))
-                conn.execute("DELETE FROM maintenance_events WHERE id = ?", (eid,))
-            recur_replaced = len(purge_ids)
+            recur_stats = _replace_recurrence_dates(conn, template_id, body.resync_exclude_ids)
+            recur_replaced = recur_stats["moved"]
         # Ops (si fournies, on remplace intégralement)
         resynced = 0
         if body.ops is not None:
@@ -1964,13 +2069,7 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
         # v2.6.1 : regeneration immediate apres une purge de regle, pour que la
         # reponse reflete deja le nouveau planning (sinon le calendrier reste
         # vide jusqu'au prochain GET /events).
-        regenerated = 0
-        if recur_replaced:
-            try:
-                horizon = date.today() + timedelta(days=90)
-                regenerated = _generate_events_for_template(conn, template_id, horizon)
-            except Exception:
-                regenerated = 0  # le prochain GET /events rattrapera
+        regenerated = recur_stats["created"]
         conn.commit()
         tmpl = _load_template_full(conn, template_id)
     # v2.6.0 : la regle de recurrence a peut-etre change -> le prochain GET
@@ -1978,6 +2077,8 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
     _invalidate_recur_gen_throttle()
     return {"template": tmpl, "resynced_events": resynced,
             "deleted_future_events": deleted_future,
+            "recur_moved_events": recur_stats["moved"],
+            "recur_removed_events": recur_stats["removed"],
             "recur_replaced_events": recur_replaced,
             "recur_regenerated_events": regenerated}
 

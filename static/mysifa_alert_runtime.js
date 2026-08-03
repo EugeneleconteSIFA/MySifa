@@ -193,12 +193,20 @@
         };
       }
       const responses = Array.isArray(it && it.responses) ? it.responses.filter(r => typeof r === 'string' && r.trim()) : [];
+      // v2.5.21 : comment_responses — réponses marquées COM par l'admin. Les
+      // choisir ouvre une zone de commentaire obligatoire sous la question et
+      // bloque Valider tant qu'elle est vide.
+      const comResponses = Array.isArray(it && it.comment_responses)
+        ? it.comment_responses.filter(r => typeof r === 'string' && r.trim())
+        : [];
       return {
         type: 'choice', label: (it && it.label) || '',
         responses: responses.length ? responses : ['Conforme'],
         multi: (it && it.multi === false) ? false : true,
         allow_other: !!(it && it.allow_other),
         required: !!(it && it.required),
+        comment_responses: comResponses,
+        other_needs_comment: !!(it && it.other_needs_comment),
       };
     });
     const description = (typeof p.description === 'string') ? p.description : '';
@@ -229,17 +237,52 @@
   }
   window._mysifaAlertOnValueInput = _onValueInput;
 
-  function _onOtherChange(inp) {
+  // v2.5.21 : handler unique pour TOUTE réponse de type "choice". Il recalcule
+  // l'état de la question à partir du DOM au lieu de se fier au seul input qui
+  // vient de changer — indispensable en mode radio, où décocher la réponse
+  // précédente n'émet aucun événement (l'ancienne version laissait la zone
+  // « Autre » ouverte après un changement de réponse).
+  function _onChoiceChange(inp) {
     const item = inp.closest('.ta-cl-item');
     if (!item) return;
-    const txt = item.querySelector('.ta-cl-other-text');
-    if (!txt) return;
-    const show = !!inp.checked;
-    txt.style.display = show ? '' : 'none';
-    if (show) { setTimeout(() => txt.focus(), 30); }
-    else { txt.value = ''; }
+    _syncChoiceItem(item);
+    // Recalcule l'état du bouton Valider : la zone de commentaire vient
+    // peut-être d'apparaître, auquel cas Valider doit se bloquer immédiatement.
+    const wrap = item.closest('.ta-sim');
+    if (wrap && wrap._alertRef) _updateValidateState(wrap, wrap._alertRef);
   }
-  window._mysifaAlertOnOtherChange = _onOtherChange;
+  window._mysifaAlertOnChoiceChange = _onChoiceChange;
+  // Alias rétro-compat : d'anciennes alertes rendues avant v2.5.21 peuvent
+  // encore référencer ce nom dans leur HTML déjà en DOM.
+  window._mysifaAlertOnOtherChange = _onChoiceChange;
+
+  // Aligne les zones dépendantes d'une question "choice" sur les réponses
+  // réellement cochées : zone « Autre » et zone de commentaire obligatoire.
+  function _syncChoiceItem(item) {
+    // 1. Zone d'explication libre attachée à « Autre »
+    const otherTxt = item.querySelector('.ta-cl-other-text');
+    if (otherTxt) {
+      const otherOn = !!item.querySelector('.ta-cl-resp-other:checked');
+      const wasHidden = otherTxt.style.display === 'none';
+      otherTxt.style.display = otherOn ? '' : 'none';
+      if (otherOn && wasHidden) { setTimeout(() => otherTxt.focus(), 30); }
+      if (!otherOn) otherTxt.value = '';
+    }
+    // 2. Zone de commentaire obligatoire — visible dès qu'au moins une réponse
+    // cochée porte data-needs-comment. Une seule zone par question, même si
+    // plusieurs réponses COM sont cochées en mode multi.
+    const comWrap = item.querySelector('.ta-cl-com-wrap');
+    if (comWrap) {
+      const comOn = !!item.querySelector('.ta-cl-resp[data-needs-comment="1"]:checked');
+      const wasHidden = comWrap.style.display === 'none';
+      comWrap.style.display = comOn ? '' : 'none';
+      const comTxt = item.querySelector('.ta-cl-com-text');
+      if (comOn && wasHidden && comTxt) { setTimeout(() => comTxt.focus(), 30); }
+      // Vidé quand la zone disparaît : sinon un commentaire fantôme, saisi puis
+      // rendu sans objet par un changement de réponse, partirait dans l'ack.
+      if (!comOn && comTxt) comTxt.value = '';
+    }
+  }
 
   function _renderChecklist(cl) {
     if (!cl.enabled || !cl.items.length) return '';
@@ -270,27 +313,47 @@
             const isMulti = it.multi !== false;
             const inputType = isMulti ? 'checkbox' : 'radio';
             const inputName = isMulti ? '' : ' name="ta-cl-resp-' + idx + '"';
-            const respHtml = it.responses.map(r =>
-              '<label class="ta-chip">'
-              + '<input type="' + inputType + '" class="ta-cl-resp" data-point="' + idx + '"' + inputName + '>'
+            // v2.5.21 : réponses marquées COM par l'admin. Le flag voyage sur
+            // l'input via data-needs-comment, ce qui évite de sérialiser une
+            // liste dans un attribut et rend la lecture triviale au runtime.
+            const comSet = Array.isArray(it.comment_responses) ? it.comment_responses.map(String) : [];
+            const respHtml = it.responses.map(r => {
+              const needsCom = comSet.indexOf(String(r)) !== -1;
+              return '<label class="ta-chip">'
+              + '<input type="' + inputType + '" class="ta-cl-resp" data-point="' + idx + '"' + inputName
+              +   (needsCom ? ' data-needs-comment="1"' : '')
+              +   ' onchange="window._mysifaAlertOnChoiceChange(this)">'
               + '<span>' + _esc(r) + '</span>'
-              + '</label>'
-            ).join('');
+              + '</label>';
+            }).join('');
             let otherHtml = '';
             if (it.allow_other) {
               otherHtml = '<label class="ta-chip ta-chip-other">'
-                + '<input type="' + inputType + '" class="ta-cl-resp ta-cl-resp-other" data-point="' + idx + '"' + inputName + ' onchange="window._mysifaAlertOnOtherChange(this)">'
+                + '<input type="' + inputType + '" class="ta-cl-resp ta-cl-resp-other" data-point="' + idx + '"' + inputName
+                +   (it.other_needs_comment ? ' data-needs-comment="1"' : '')
+                +   ' onchange="window._mysifaAlertOnChoiceChange(this)">'
                 + '<span>Autre</span>'
                 + '</label>';
             }
             const otherArea = it.allow_other
               ? '<textarea class="ta-cl-other-text" data-point="' + idx + '" rows="2" placeholder="Précise (optionnel)" style="display:none;width:100%;margin-top:6px;padding:7px 10px;border-radius:7px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
               : '';
+            // Zone de commentaire obligatoire — rendue une seule fois par
+            // question, masquée par défaut, révélée par _syncChoiceItem dès
+            // qu'une réponse COM est cochée.
+            const _hasCom = comSet.length > 0 || !!it.other_needs_comment;
+            const comArea = _hasCom
+              ? '<div class="ta-cl-com-wrap" data-point="' + idx + '" style="display:none;margin-top:6px">'
+                + '<div style="font-size:11px;font-weight:700;color:var(--danger);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Commentaire obligatoire</div>'
+                + '<textarea class="ta-cl-com-text" data-point="' + idx + '" rows="2" placeholder="Explique ce qui s\'est passé — obligatoire pour valider" style="width:100%;padding:7px 10px;border-radius:7px;border:1px solid var(--danger);background:var(--bg);color:var(--text);font-size:12px;box-sizing:border-box;resize:vertical;font-family:inherit"></textarea>'
+                + '</div>'
+              : '';
             const _reqStarC = it.required ? '<span style="color:var(--danger);font-weight:700;margin-left:2px" title="Question obligatoire">*</span>' : '';
             return '<div class="ta-cl-item" data-point-idx="' + idx + '" data-type="choice"' + (it.allow_other ? ' data-allow-other="1"' : '') + (it.required ? ' data-required="1"' : '') + '>'
               + '<div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0"></span>' + _esc(it.label) + _reqStarC + '</div>'
               + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + otherHtml + '</div>'
               + otherArea
+              + comArea
               + '</div>';
           }).join('')
       + '</div>';
@@ -318,6 +381,14 @@
           const txt = (item.querySelector('.ta-cl-other-text')?.value || '').trim();
           if (txt) responses[idx + '_other'] = txt.slice(0, 500);
         }
+        // v2.5.21 : commentaire obligatoire. Remonté seulement si la zone est
+        // visible — une zone masquée signifie qu'aucune réponse COM n'est
+        // cochée, donc rien à joindre à l'ack.
+        const comWrap = item.querySelector('.ta-cl-com-wrap');
+        if (comWrap && comWrap.style.display !== 'none') {
+          const txt = (item.querySelector('.ta-cl-com-text')?.value || '').trim();
+          if (txt) responses[idx + '_comment'] = txt.slice(0, 500);
+        }
       }
     });
     return responses;
@@ -329,6 +400,15 @@
     if (!alert.checklist.enabled) return true;
     const items = wrap.querySelectorAll('.ta-cl-item');
     for (const it of items) {
+      // v2.5.21 : le commentaire obligatoire se vérifie AVANT le filtre
+      // data-required. C'est la réponse choisie qui l'impose, pas la question :
+      // une question optionnelle dont l'opérateur coche une réponse COM doit
+      // bloquer Valider tant que la zone est vide.
+      const comWrap = it.querySelector('.ta-cl-com-wrap');
+      if (comWrap && comWrap.style.display !== 'none') {
+        const comTxt = (it.querySelector('.ta-cl-com-text')?.value || '').trim();
+        if (comTxt === '') return false;
+      }
       if (it.getAttribute('data-required') !== '1') continue;
       const t = it.getAttribute('data-type') || 'choice';
       if (t === 'value') {
@@ -761,8 +841,14 @@
     wrap.querySelector('.ta-validate').addEventListener('click', onValidate);
     // v2.2.85 : brancher les listeners d'inputs pour mettre à jour l'état disabled
     // du bouton Valider en temps réel selon les questions obligatoires.
+    // v2.5.21 : référence de l'alerte portée par le wrap, pour que le handler
+    // inline des réponses (_onChoiceChange) puisse recalculer l'état du bouton
+    // Valider sans dépendre de l'ordre d'exécution des listeners.
+    wrap._alertRef = alert;
     const _syncValidate = () => _updateValidateState(wrap, alert);
-    wrap.querySelectorAll('.ta-cl-resp, .ta-cl-val').forEach(el => {
+    // .ta-cl-com-text ajouté : taper dans la zone de commentaire obligatoire
+    // doit débloquer Valider en temps réel, sans attendre un autre événement.
+    wrap.querySelectorAll('.ta-cl-resp, .ta-cl-val, .ta-cl-com-text').forEach(el => {
       el.addEventListener('change', _syncValidate);
       el.addEventListener('input', _syncValidate);
     });

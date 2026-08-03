@@ -1411,6 +1411,20 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .op-modal input, .op-modal select, .op-modal textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:inherit;font-size:14px;transition:border-color .15s}
 .op-modal input:focus, .op-modal select:focus, .op-modal textarea:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
 .op-modal textarea{resize:vertical;min-height:80px;font-family:inherit}
+/* v2.6.1 : lignes « préserver ce créneau » de la modale de confirmation.
+   .op-modal input{width:100%} s'appliquait a la case a cocher, qui occupait
+   toute la largeur et ejectait le texte hors du cadre ; .op-modal label impose
+   en plus uppercase + letter-spacing. On neutralise les deux ici — selecteurs
+   plus specifiques, donc prioritaires. */
+.mys-keep-row{display:flex;gap:9px;align-items:flex-start;padding:9px 11px;border:1px solid var(--border);border-radius:9px;margin-bottom:6px;cursor:pointer;background:var(--card);text-transform:none;letter-spacing:normal;font-size:13px;color:var(--text);font-weight:400}
+.mys-keep-row:hover{border-color:var(--accent)}
+.mys-keep-row.is-grave{border-color:var(--danger)}
+.op-modal .mys-keep-row input[type=checkbox]{width:16px;min-width:16px;height:16px;flex:0 0 16px;margin:2px 0 0 0;padding:0;border-radius:4px;accent-color:var(--accent);box-shadow:none}
+.mys-keep-txt{flex:1;min-width:0}
+.mys-keep-date{display:block;font-weight:700;color:var(--text);font-size:13px;text-transform:none;letter-spacing:normal}
+.mys-keep-why{display:block;font-size:12px;color:var(--muted);margin-top:3px;text-transform:none;letter-spacing:normal;font-weight:400;line-height:1.4}
+.mys-keep-row.is-grave .mys-keep-why{color:var(--danger)}
+.mys-keep-list{max-height:34vh;overflow-y:auto;padding-right:4px;margin-top:4px}
 .op-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
 .op-modal-context{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:8px 14px;font-size:12px;color:var(--text2)}
 .op-modal-context strong{color:var(--text);font-weight:700}
@@ -1497,6 +1511,10 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .ta-sim-exit{position:fixed;top:12px;left:12px;z-index:2100;background:rgba(0,0,0,.7);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;pointer-events:auto}
 .ta-sim-exit:hover{background:rgba(0,0,0,.9)}
 .af-cl-nc-lbl:has(input:checked){border-color:var(--danger);background:rgba(248,113,113,0.10);color:var(--danger)}
+/* v2.5.21 : puce COM — « cette réponse exige un commentaire ». Reprend le
+   gabarit de la puce NC, en accent au lieu de danger pour que les deux se
+   distinguent d'un coup d'oeil quand elles sont cochées ensemble. */
+.af-cl-com-lbl:has(input:checked){border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
 .ta-chip{display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-weight:500;cursor:pointer;user-select:none;transition:background .12s ease,color .12s ease,border-color .12s ease;font-family:inherit;line-height:1.2}
 .ta-chip input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
 .ta-chip:hover{border-color:var(--accent)}
@@ -1523,14 +1541,30 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .alerts-panel-embed .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:16px}
 .alerts-panel-embed .btn{background:var(--accent);color:var(--accent-fg,#fff);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
 .alerts-panel-embed .btn:hover{filter:brightness(1.08)}
-.alerts-panel-embed .btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s}
-.alerts-panel-embed .btn-sec:hover{box-shadow:0 0 0 1px rgba(34,211,238,.32),0 0 20px rgba(34,211,238,.2);border-color:rgba(34,211,238,.45);color:var(--accent)}
-body.light .alerts-panel-embed .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,178,.35),0 0 18px rgba(8,145,178,.15);border-color:rgba(8,145,178,.4);color:var(--accent)}
+/* v2.5.20 : contraste bouton / fond. Règle : un bouton ne porte jamais la
+   couleur de la surface qui le contient. Inversion systématique —
+     · surface blanche (.card, .alert-modal-body) -> bouton sur var(--bg)
+     · surface teintee (.alert-row, .af-cl-card)  -> bouton sur var(--card)
+   Les lueurs de survol passent des rgba() cyan en dur a var(--accent-bg),
+   pour suivre la palette choisie (ambre, pivoine, foret, cendre, braise). */
+.alerts-panel-embed .btn-sec{background:var(--bg);border:1px solid var(--border);color:var(--text2);transition:box-shadow .2s,border-color .15s,color .15s,background .15s}
+.alerts-panel-embed .btn-sec:hover{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 1px var(--accent-bg)}
 .alerts-panel-embed .btn-sm{padding:6px 12px;font-size:11px;font-weight:700;border-radius:8px}
-.alerts-panel-embed .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2);transition:border-color .15s,color .15s,box-shadow .15s,filter .15s}
-.alerts-panel-embed .btn-ghost:hover{border-color:var(--accent);color:var(--accent);filter:none;box-shadow:0 0 0 1px rgba(34,211,238,.28),0 0 14px rgba(34,211,238,.14)}
-body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,178,.3),0 0 12px rgba(8,145,178,.1)}
-.alerts-panel-embed .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 14px rgba(248,113,113,.12)}
+.alerts-panel-embed .btn-ghost{background:var(--bg);border:1px solid var(--border);color:var(--text2);transition:border-color .15s,color .15s,box-shadow .15s,background .15s}
+.alerts-panel-embed .btn-ghost:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg);filter:none;box-shadow:0 0 0 1px var(--accent-bg)}
+.alerts-panel-embed .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger);background:var(--card);box-shadow:0 0 0 1px var(--border)}
+/* .alert-row est peinte en var(--bg) : ses boutons repassent en var(--card) */
+.alerts-panel-embed .alert-row .btn-sm,
+.alerts-panel-embed .alert-row .btn-ghost,
+.alerts-panel-embed .alert-row .btn-ghost:hover,
+.alerts-panel-embed .alert-row .btn-ghost.danger:hover{background:var(--card)}
+/* Historique des saisies (meme vue Alertes) : le bloc filtres est pose sur une
+   carte blanche, les puces de periode etaient donc blanches sur blanc. Scope
+   limite a #view-controles pour ne pas toucher les autres vues, ou ces memes
+   puces vivent deja sur var(--bg). */
+#view-controles .date-preset-chip{background:var(--bg)}
+#view-controles .date-preset-chip:hover{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+#view-controles .date-preset-chip.active{background:var(--accent-bg)}
 
 /* ═══════════════════════════════════════════════════════════ */
 /* v2.2.30 : panel Codes maintenance — CSS scopé (re-extraction propre) */
@@ -1769,12 +1803,27 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 .alert-modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border)}
 .alert-modal-overlay .btn{background:var(--accent);color:var(--accent-fg,#fff);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
 .alert-modal-overlay .btn:hover{filter:brightness(1.08)}
-.alert-modal-overlay .btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s;padding:10px 18px;font-weight:700;font-size:13px;border-radius:10px;cursor:pointer;font-family:inherit}
-.alert-modal-overlay .btn-sec:hover{border-color:rgba(34,211,238,.45);color:var(--accent)}
-.alert-modal-overlay .btn-sm{padding:6px 12px;font-size:11px;font-weight:700;border-radius:8px;background:transparent;border:1px solid var(--border);color:var(--text2);cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block;line-height:1.4;transition:border-color .12s,color .12s}
-.alert-modal-overlay .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
-.alert-modal-overlay .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
-.alert-modal-overlay .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger)}
+/* v2.5.20 : meme regle de contraste dans la modale. Le corps de la modale est
+   en var(--card) -> les boutons secondaires prennent var(--bg). */
+.alert-modal-overlay .btn-sec{background:var(--bg);border:1px solid var(--border);color:var(--text2);transition:box-shadow .2s,border-color .15s,color .15s,background .15s;padding:10px 18px;font-weight:700;font-size:13px;border-radius:10px;cursor:pointer;font-family:inherit}
+.alert-modal-overlay .btn-sec:hover{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.alert-modal-overlay .btn-sm{padding:6px 12px;font-size:11px;font-weight:700;border-radius:8px;background:var(--bg);border:1px solid var(--border);color:var(--text2);cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block;line-height:1.4;transition:border-color .12s,color .12s,background .12s}
+.alert-modal-overlay .btn-ghost{background:var(--bg);border:1px solid var(--border);color:var(--text2)}
+.alert-modal-overlay .btn-ghost:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.alert-modal-overlay .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger);background:var(--bg)}
+/* .af-cl-card (point de controle) est peinte en var(--bg) : tout ce qui vit
+   dedans — boutons, champs, puce NC — repasse en var(--card). */
+.alert-modal-overlay .af-cl-card .btn-sm,
+.alert-modal-overlay .af-cl-card .btn-ghost,
+.alert-modal-overlay .af-cl-card .btn-ghost.danger:hover,
+.alert-modal-overlay .af-cl-card .alert-field-input,
+.alert-modal-overlay .af-cl-card .alert-field-select{background:var(--card)}
+.alert-modal-overlay .af-cl-card .btn-ghost:hover{background:var(--accent-bg)}
+.af-cl-nc-lbl,.af-cl-com-lbl{background:var(--card)}
+/* Bandeau "Parametres" repliable : il porte deja var(--bg) sur fond blanc,
+   on renforce juste la lisibilite du libelle. */
+.alert-modal-overlay #af-settings-toggle{color:var(--text)}
+.alert-modal-overlay #af-settings-toggle:hover{border-color:var(--accent)}
 .alert-modal-overlay a.btn-sm{text-decoration:none}
 .alert-modal-overlay .maint-doc-add-btn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:var(--accent);color:var(--accent-fg,#fff);border:1px solid var(--accent);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:filter .12s,transform .06s;font-family:inherit;user-select:none}
 .alert-modal-overlay .maint-doc-add-btn:hover{filter:brightness(1.06)}
@@ -9097,10 +9146,21 @@ function openAckDetail(prefixedId){
             const otherHtml = (otherTxt != null && String(otherTxt).trim() !== '')
               ? '<div style="margin-top:6px;padding:6px 10px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;font-size:12px;color:var(--text2);white-space:pre-wrap">' + escHtml(String(otherTxt)) + '</div>'
               : '';
+            // v2.5.21 : commentaire obligatoire déclenché par une réponse COM.
+            // Liseré rouge et libellé explicite pour le distinguer d'une simple
+            // précision « Autre » — c'est la justification d'un cas signalé.
+            const comTxt = responses[String(idx) + '_comment'];
+            const comHtml = (comTxt != null && String(comTxt).trim() !== '')
+              ? '<div style="margin-top:6px;padding:6px 10px;border-left:3px solid var(--danger);background:rgba(220,38,38,.07);border-radius:0 6px 6px 0">'
+                + '<div style="font-size:10px;font-weight:700;color:var(--danger);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Commentaire obligatoire</div>'
+                + '<div style="font-size:12px;color:var(--text2);white-space:pre-wrap">' + escHtml(String(comTxt)) + '</div>'
+                + '</div>'
+              : '';
             return '<div class="ta-cl-item" data-type="choice">'
               + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + escHtml(it.label || '') + '</div>'
               + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + '</div>'
               + otherHtml
+              + comHtml
               + '</div>';
           }).join('')
       + '</div>';
@@ -13104,6 +13164,22 @@ function _setRecurInForm(t){
   onTmplRecurTypeChange();
 }
 
+// v2.6.1 : empreinte des deux dimensions du modele. Le formulaire renvoie tout
+// a chaque enregistrement ; sans comparaison on ne saurait pas si l'admin a
+// touche au CONTENU (operations), a la PLANIFICATION (regle + horaires), ou
+// seulement au nom. Or ces deux dimensions n'ont pas les memes consequences et
+// ne concernent pas les memes creneaux.
+let _TMPL_INITIAL = null;
+function _snapshotTmplForm(){
+  let recur = '';
+  try{ recur = JSON.stringify(_readRecurFromForm()); }catch(_){}
+  const ops = (_TMPL_OPS || [])
+    .filter(function(o){ return o.opTypeId; })
+    .map(function(o){ return o.opTypeId + ':' + (o.machines || []).slice().sort().join('|'); })
+    .sort().join(';');
+  return { recur: recur, ops: ops };
+}
+
 function _readRecurFromForm(){
   const active = !!document.getElementById('tmpl-ed-recur-active')?.checked;
   if(!active){
@@ -13395,6 +13471,8 @@ async function openTemplateEditor(templateId, focusDeleted){
       // v2.5.25 : charge les operateurs par defaut du template
       _TMPL_DEFAULT_OPS = (t.default_operators || []).map(u => ({ id: u.id, nom: u.nom }));
       if(ttlEl) ttlEl.textContent = 'Modifier le modèle';
+      // v2.6.1 : empreinte de reference, prise une fois le formulaire rempli.
+      _TMPL_INITIAL = _snapshotTmplForm();
       if(lblEl) lblEl.textContent = 'Enregistrer';
       // Avertissement resync
       if(warnEl){
@@ -13583,43 +13661,69 @@ async function submitTemplateEditor(e){
       if(ri.ok){
         const imp = await ri.json();
         const n = (imp && imp.count) || 0;
-        const div = (imp && imp.diverged) || [];
+        const snap = _snapshotTmplForm();
+        // Si l'empreinte de reference manque (ouverture inhabituelle), on
+        // considere les deux dimensions comme modifiees : mieux vaut demander
+        // pour rien que d'ecraser en silence.
+        const opsChanged   = !_TMPL_INITIAL || snap.ops   !== _TMPL_INITIAL.ops;
+        const recurChanged = !_TMPL_INITIAL || snap.recur !== _TMPL_INITIAL.recur;
+        // Chaque dimension a SA population de creneaux a risque :
+        //  - operations modifiees -> ceux dont la liste d'ops a diverge ;
+        //  - regle modifiee       -> ceux deplaces a la main, dont la position
+        //    serait ecrasee. Un creneau reste a sa place theorique est replace
+        //    sans consequence, inutile d'en parler.
+        const div = opsChanged   ? ((imp && imp.diverged) || []) : [];
+        const mov = recurChanged ? ((imp && imp.moved)    || []) : [];
         // v2.6.1 : on n'interroge l'admin QUE sur les creneaux personnalises.
         // Les copies conformes sont resynchronisees sans question — l'operation
         // est un no-op pour elles. Case cochee = « préserver ce créneau » :
         // le defaut protege ce qui a ete modifie a la main, il faut un geste
         // explicite pour ecraser.
-        if(div.length){
-          const rows = div.map(function(d){
+        const _rows = function(items){
+          return items.map(function(d){
             const grave = d.done_ops > 0;
-            return '<label style="display:flex;gap:9px;align-items:flex-start;padding:9px 10px;border:1px solid ' +
-                     (grave ? 'var(--danger)' : 'var(--border)') + ';border-radius:9px;margin-bottom:6px;cursor:pointer;background:var(--card)">' +
-                   '<input type="checkbox" data-keep="' + escAttr(d.id) + '" checked style="margin-top:2px;flex-shrink:0">' +
-                   '<span style="flex:1">' +
-                     '<span style="font-weight:700;color:var(--text);font-size:13px">' + escHtml(_fmtIsoDateFr(d.date)) + '</span>' +
-                     '<span style="display:block;font-size:12px;color:' + (grave ? 'var(--danger)' : 'var(--muted)') + ';margin-top:2px">' +
-                       escHtml((d.reasons || []).join(' · ')) +
-                     '</span>' +
+            return '<label class="mys-keep-row' + (grave ? ' is-grave' : '') + '">' +
+                   '<input type="checkbox" data-keep="' + escAttr(d.id) + '" checked>' +
+                   '<span class="mys-keep-txt">' +
+                     '<span class="mys-keep-date">' + escHtml(_fmtIsoDateFr(d.date)) + '</span>' +
+                     '<span class="mys-keep-why">' + escHtml((d.reasons || []).join(' · ')) + '</span>' +
                    '</span></label>';
           }).join('');
-          const identical = (imp.identical_count || 0);
+        };
+        if(div.length || mov.length){
+          let body = '';
+          if(mov.length){
+            body += '<div style="margin-bottom:8px"><strong>Planification modifiée.</strong> ' +
+                    'Ces créneaux ont été déplacés à la main ; les replacer écraserait leur position. ' +
+                    'Les cases cochées restent où elles sont.</div>' +
+                    '<div class="mys-keep-list">' + _rows(mov) + '</div>';
+            if(imp.unmoved_count){
+              body += '<div style="margin:8px 0 14px;color:var(--muted);font-size:12px">' + imp.unmoved_count +
+                      ' autre(s) créneau(x) sont à leur place théorique : ils suivront la nouvelle règle, ' +
+                      'sans perdre leurs opérations.</div>';
+            }
+          }
+          if(div.length){
+            body += '<div style="margin-bottom:8px' + (mov.length ? ';margin-top:14px;padding-top:14px;border-top:1px solid var(--border)' : '') + '">' +
+                    '<strong>Opérations modifiées.</strong> ' +
+                    'Ces créneaux ont une liste d\'opérations personnalisée. ' +
+                    'Décoche ceux que tu veux réinitialiser ; les cases cochées seront préservées.</div>' +
+                    '<div class="mys-keep-list">' + _rows(div) + '</div>';
+            if(imp.identical_count){
+              body += '<div style="margin-top:8px;color:var(--muted);font-size:12px">' + imp.identical_count +
+                      ' autre(s) créneau(x) sont identiques au modèle : aucun changement visible pour eux.</div>';
+            }
+          }
+          const total = div.length + mov.length;
           const ok = await _mysConfirm({
-            title: div.length + ' créneau' + (div.length > 1 ? 'x' : '') + ' personnalisé' + (div.length > 1 ? 's' : ''),
-            bodyHtml:
-              '<div style="margin-bottom:10px">Ces créneaux à venir ont été modifiés depuis leur génération. ' +
-              '<strong>Décoche ceux que tu veux réinitialiser</strong> avec le contenu du modèle ; ' +
-              'les cases cochées seront préservées telles quelles.</div>' +
-              '<div style="max-height:34vh;overflow-y:auto;padding-right:4px">' + rows + '</div>' +
-              (identical
-                ? '<div style="margin-top:10px;color:var(--muted);font-size:12px">' + identical +
-                  ' autre(s) créneau(x) sont identiques au modèle : ils seront resynchronisés sans changement visible.</div>'
-                : ''),
+            title: total + ' créneau' + (total > 1 ? 'x' : '') + ' à confirmer',
+            bodyHtml: body,
             okLabel: 'Enregistrer',
             cancelLabel: 'Annuler',
           });
           if(!ok) return;
           _TMPL_RESYNC_EXCLUDE = _MYS_CONFIRM_LAST_KEEP.slice();
-        } else if(n > 0){
+        } else if(n > 0 && opsChanged){
           const plur = n > 1;
           let quand = '';
           if(imp.first && imp.last && imp.first !== imp.last){

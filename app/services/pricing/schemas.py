@@ -116,6 +116,18 @@ class MaterialComputedOut(BaseModel):
     sell_price_eur_m2: Decimal = Decimal("0")
 
 
+class MaterialMystockOut(BaseModel):
+    """Prix piloté par MyStock quand la matière y est appairée."""
+
+    matiere_id: int
+    reference: Optional[str] = None
+    categorie: Optional[str] = None
+    unit_price: Decimal
+    price_currency: PriceCurrency = "EUR"
+    price_basis: PriceBasis = "PER_M2"
+    detail: Optional[str] = None
+
+
 class McMaterialOut(BaseModel):
     id: int
     name: str
@@ -123,6 +135,8 @@ class McMaterialOut(BaseModel):
     category_id: int
     category_code: MaterialCategoryCode
     supplier_id: Optional[int] = None
+    fournisseur_fsc_id: Optional[int] = None
+    fournisseur_nom: Optional[str] = None
     weight_per_m2: Decimal
     weight_gsm: Optional[int] = None
     price_currency: PriceCurrency
@@ -138,6 +152,7 @@ class McMaterialOut(BaseModel):
     is_active: bool
     created_at: str
     updated_at: str
+    mystock: Optional[MaterialMystockOut] = None
     computed: Optional[MaterialComputedOut] = None
 
 
@@ -146,6 +161,7 @@ class McMaterialCreate(BaseModel):
     appellation_code: str = Field(..., min_length=1, max_length=64)
     category_id: int
     supplier_id: Optional[int] = None
+    fournisseur_fsc_id: Optional[int] = None
     weight_per_m2: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
     weight_gsm: Optional[int] = Field(None, ge=0, le=99999)
     price_currency: PriceCurrency = "EUR"
@@ -166,6 +182,7 @@ class McMaterialUpdate(BaseModel):
     appellation_code: Optional[str] = Field(None, min_length=1, max_length=64)
     category_id: Optional[int] = None
     supplier_id: Optional[int] = None
+    fournisseur_fsc_id: Optional[int] = None
     weight_per_m2: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     weight_gsm: Optional[int] = Field(None, ge=0, le=99999)
     price_currency: Optional[PriceCurrency] = None

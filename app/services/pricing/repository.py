@@ -125,14 +125,17 @@ def update_settings(
     return load_settings_response(conn)
 
 
-def row_to_pricing_material(row: sqlite3.Row) -> PricingMaterial:
+def row_to_pricing_material(
+    row: sqlite3.Row, *, mystock: Optional[dict[str, Any]] = None
+) -> PricingMaterial:
+    """`mystock` (issu de mystock_price_for_row) prend le pas sur le prix local."""
     return PricingMaterial(
         id=int(row["id"]),
         name=row["name"],
-        unit_price=_dec(row["unit_price"]),
+        unit_price=_dec(mystock["unit_price"]) if mystock else _dec(row["unit_price"]),
         weight_per_m2=_dec(row["weight_per_m2"]),
-        price_currency=row["price_currency"],
-        price_basis=row["price_basis"],
+        price_currency=mystock["price_currency"] if mystock else row["price_currency"],
+        price_basis=mystock["price_basis"] if mystock else row["price_basis"],
         tax_incidence=_dec(row["tax_incidence"]),
         is_imported=_bool(row["is_imported"]),
         transport_mode=(_col(row, "transport_mode") or "AMOUNT"),
@@ -145,14 +148,29 @@ def row_to_pricing_material(row: sqlite3.Row) -> PricingMaterial:
     )
 
 
-def material_row_to_dict(row: sqlite3.Row, *, category_code: str) -> dict[str, Any]:
+def material_row_to_dict(
+    row: sqlite3.Row, *, category_code: str, mystock: Optional[dict[str, Any]] = None
+) -> dict[str, Any]:
     return {
+        "mystock": {
+            "matiere_id": mystock["matiere_id"],
+            "reference": mystock["reference"],
+            "categorie": mystock["categorie"],
+            "unit_price": float(mystock["unit_price"]),
+            "price_currency": mystock["price_currency"],
+            "price_basis": mystock["price_basis"],
+            "detail": mystock["detail"],
+        }
+        if mystock
+        else None,
         "id": row["id"],
         "name": row["name"],
         "appellation_code": row["appellation_code"],
         "category_id": row["category_id"],
         "category_code": category_code,
         "supplier_id": row["supplier_id"],
+        "fournisseur_fsc_id": _col(row, "fournisseur_fsc_id"),
+        "fournisseur_nom": _col(row, "fournisseur_nom"),
         "weight_per_m2": float(row["weight_per_m2"]),
         "weight_gsm": row["weight_gsm"],
         "price_currency": row["price_currency"],
@@ -185,11 +203,76 @@ def get_category_map(conn: sqlite3.Connection) -> dict[int, str]:
     return {int(r["id"]): r["code"] for r in rows}
 
 
+# Colonnes MyStock jointes à toute lecture de matière : quand une matière est
+# appairée, c'est SON prix qui fait foi (choix produit — une seule valeur, rangée
+# côté MyStock). Voir mystock_price_for_row ci-dessous.
+MYSTOCK_JOIN = """
+    LEFT JOIN matieres_premieres mp ON mp.mc_material_id = m.id
+    LEFT JOIN mp_valorisation mpv   ON mpv.matiere_id = mp.id
+"""
+MYSTOCK_COLS = """
+    mp.id                          AS ms_id,
+    mp.categorie                   AS ms_categorie,
+    mp.reference                   AS ms_reference,
+    COALESCE(mp.prix_eur_m2, 0)    AS ms_prix_eur_m2,
+    COALESCE(mp.prix_par_laize, 0) AS ms_prix_par_laize,
+    COALESCE(mpv.prix_unitaire, 0) AS ms_prix_unitaire
+"""
+
+_MS_LAIZEES = frozenset({"frontal", "glassine", "complexe"})
+
+
+def mystock_price_for_row(conn: sqlite3.Connection, row: sqlite3.Row) -> Optional[dict[str, Any]]:
+    """
+    Prix MyStock applicable à une matière appairée, déjà exprimé dans l'unité du
+    moteur de calcul. Retourne None si la matière n'est pas appairée ou si
+    MyStock n'a pas de prix exploitable.
+
+    - matière laizée à prix unique  → €/m²
+    - matière laizée à prix par laize → moyenne des prix principaux des laizes, €/m²
+    - matière non laizée            → prix unitaire (€/kg pour les adhésifs)
+    """
+    ms_id = _col(row, "ms_id")
+    if ms_id is None:
+        return None
+    cat = (_col(row, "ms_categorie") or "").strip().lower()
+    laizee = cat in _MS_LAIZEES
+    detail = None
+    if laizee and int(_col(row, "ms_prix_par_laize") or 0):
+        prix_rows = conn.execute(
+            """SELECT prix FROM mp_matiere_prix
+                WHERE matiere_id=? AND principal=1 AND laize_id IS NOT NULL AND prix > 0""",
+            (int(ms_id),),
+        ).fetchall()
+        vals = [float(r["prix"]) for r in prix_rows]
+        if not vals:
+            return None
+        prix = sum(vals) / len(vals)
+        detail = f"moyenne de {len(vals)} laize(s)"
+    elif laizee:
+        prix = float(_col(row, "ms_prix_eur_m2") or 0)
+    else:
+        prix = float(_col(row, "ms_prix_unitaire") or 0)
+    if prix <= 0:
+        return None
+    return {
+        "matiere_id": int(ms_id),
+        "reference": _col(row, "ms_reference"),
+        "categorie": _col(row, "ms_categorie"),
+        "unit_price": Decimal(str(round(prix, 6))),
+        "price_currency": "EUR",
+        "price_basis": "PER_M2" if laizee else "PER_KG",
+        "detail": detail,
+    }
+
+
 def fetch_material(conn: sqlite3.Connection, material_id: int, *, active_only: bool = False) -> Optional[sqlite3.Row]:
-    sql = """
-        SELECT m.*, c.code AS category_code
+    sql = f"""
+        SELECT m.*, c.code AS category_code, f.nom AS fournisseur_nom, {MYSTOCK_COLS}
         FROM mc_material m
         JOIN mc_material_category c ON c.id = m.category_id
+        LEFT JOIN fournisseurs_fsc f ON f.id = m.fournisseur_fsc_id
+        {MYSTOCK_JOIN}
         WHERE m.id=?
     """
     if active_only:
@@ -203,11 +286,16 @@ def fetch_materials_map(
     if not ids:
         return {}
     placeholders = ",".join("?" * len(ids))
-    sql = f"SELECT * FROM mc_material WHERE id IN ({placeholders})"
+    sql = f"""SELECT m.*, {MYSTOCK_COLS}
+                FROM mc_material m {MYSTOCK_JOIN}
+               WHERE m.id IN ({placeholders})"""
     if require_active:
-        sql += " AND is_active=1"
+        sql += " AND m.is_active=1"
     rows = conn.execute(sql, list(ids)).fetchall()
-    found = {int(r["id"]): row_to_pricing_material(r) for r in rows}
+    found = {
+        int(r["id"]): row_to_pricing_material(r, mystock=mystock_price_for_row(conn, r))
+        for r in rows
+    }
     if require_active and len(found) != len(ids):
         missing = ids - set(found.keys())
         raise PricingError(f"Matière(s) inactive(s) ou introuvable(s) : {sorted(missing)}.")

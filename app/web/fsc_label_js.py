@@ -72,31 +72,57 @@ function fscAvertissementHtml(d){
     + 'body{font-family:Arial,Helvetica,sans-serif;color:#000;'
     + '  -webkit-print-color-adjust:exact;print-color-adjust:exact}'
     + '.lbl{width:100mm;height:50mm;box-sizing:border-box;'
-    + '  border:0.6mm solid #000;padding:1.6mm 2.2mm;'
+    + '  border:0.6mm solid #000;padding:1.1mm 2mm;'
     + '  display:flex;flex-direction:column}'
+    /* Même hiérarchie que le ZPL : « DOSSIER FSC » reste gros, le reste de
+       l'en-tête est réduit, et les trois consignes prennent la place — c'est
+       ce que l'opérateur relit à chaque changement de bobine.
+
+       Toutes les tailles sont serrées pour que le contenu tienne dans les
+       50 mm. Une première version débordait de ~8 mm : la dernière consigne
+       passait sous le cadre et le pied de page sortait de l'étiquette. Un
+       débordement ne se voit pas à la lecture du CSS, il se mesure — voir la
+       note sur la vérification au rendu en tête de fichier. */
     + '.hd{background:#000;color:#fff;display:flex;justify-content:space-between;'
-    + '  align-items:center;padding:1.1mm 1.8mm;font-weight:900;'
-    + '  font-size:11pt;letter-spacing:.6pt}'
-    + '.hd span.t{font-size:8pt;font-weight:700}'
-    + '.dos{font-size:15pt;font-weight:900;margin-top:1.6mm;line-height:1}'
-    + '.cli{font-size:8.5pt;margin-top:.8mm}'
-    + '.sep{border-top:0.35mm solid #000;margin:1.4mm 0 1.2mm}'
-    + 'ol{margin:0;padding-left:4.4mm;font-size:8pt;line-height:1.5;font-weight:700}'
-    + '.ft{margin-top:auto;border-top:0.35mm solid #000;padding-top:.9mm;'
-    + '  font-size:6.5pt;display:flex;justify-content:space-between}'
+    + '  align-items:center;padding:.7mm 1.6mm;font-weight:900;'
+    + '  font-size:11pt;letter-spacing:.5pt}'
+    + '.hd span.t{font-size:6pt;font-weight:700}'
+    /* N° de dossier et client sur une seule ligne : le n° à gauche, le
+       client aligné à droite. Empilés, ils mangeaient une ligne entière
+       pour deux informations courtes — la place va aux consignes. */
+    + '.ids{display:flex;justify-content:space-between;align-items:baseline;'
+    + '  gap:3mm;margin-top:.8mm}'
+    + '.dos{font-size:8.5pt;font-weight:900;line-height:1.1;white-space:nowrap}'
+    + '.cli{font-size:6.5pt;line-height:1.1;text-align:right;overflow:hidden;'
+    + '  text-overflow:ellipsis;white-space:nowrap}'
+    + '.sep{border-top:0.35mm solid #000;margin:.7mm 0 .6mm}'
+    + 'ol{margin:0;padding-left:4.2mm;font-size:10pt;line-height:1.25;font-weight:700}'
+    + 'ol li{margin-bottom:.5mm}'
+    + 'ol li:last-child{margin-bottom:0}'
+    + '.ft{margin-top:auto;border-top:0.35mm solid #000;padding-top:.6mm;'
+    + '  font-size:6pt;display:flex;justify-content:space-between;align-items:baseline}'
+    + '.merci{font-size:9pt;font-weight:900}'
     + '</style></head><body><div class="lbl">'
     + '<div class="hd"><span>DOSSIER FSC</span>'
     + '<span class="t">' + e(d.fsc_type_requis) + '</span></div>'
-    + '<div class="dos">' + e(d.no_dossier) + '</div>'
-    + '<div class="cli">' + e(d.client) + '</div>'
+    + '<div class="ids">'
+    + '<span class="dos">' + e(d.no_dossier) + '</span>'
+    + '<span class="cli">' + e(d.client) + '</span>'
+    + '</div>'
     + '<div class="sep"></div>'
+    /* Sans accents, à l'identique du ZPL. Les deux supports doivent produire
+       la MÊME étiquette : un opérateur qui reçoit tantôt la version thermique
+       tantôt le repli navigateur ne doit pas avoir l'impression de lire deux
+       consignes différentes. */
     + '<ol>'
-    + '<li>Matiere certifiee FSC uniquement</li>'
-    + '<li>Scanner chaque bobine (MyProd)</li>'
-    + '<li>Entree produit fini en Z1</li>'
+    + '<li>Utiliser de la matiere avec la mention "Matiere FSC" uniquement.</li>'
+    + '<li>Pour chaque bobine utilisee (glassines et frontaux) ajouter les numeros '
+    + 'de bobine IMPERATIVEMENT dans l\'outil de traca.</li>'
+    + '<li>Effectuer les entrees de produits finis en Z1 avec l\'outil stock.</li>'
     + '</ol>'
     + '<div class="ft"><span>' + e(d.ref_produit) + ' ' + e(d.machine) + '</span>'
-    + '<span>' + e(d.date_edition || '') + '</span></div>'
+    + '<span>' + e(d.date_edition || '') + '</span>'
+    + '<span class="merci">Merci</span></div>'
     + '</div>'
     + '<scr' + 'ipt>window.onload=function(){window.focus();window.print();}</scr' + 'ipt>'
     + '</body></html>';

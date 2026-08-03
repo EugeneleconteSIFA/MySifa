@@ -6,6 +6,16 @@ matière entre les deux mondes de MySifa, une fois qu'une matière
 `matieres_premieres` (MyStock) et une matière `mc_material` (/pricing) sont
 appairées via `matieres_premieres.mc_material_id` (migration 187).
 
+OBSOLÈTE — recopie de prix
+--------------------------
+
+`sync_mp_to_mc` et `sync_mc_to_mp` ne sont plus appelées. Le prix d'une matière
+appairée n'est plus dupliqué : il est lu directement dans MyStock au moment du
+calcul (voir `mystock_price_for_row` dans app/services/pricing/repository.py).
+Les deux fonctions restent en place pour l'historique et les tests, mais ne
+doivent pas être rebranchées : elles recréeraient la divergence qu'on vient de
+supprimer, et ne couvraient de toute façon que les matières laizées en euros.
+
 Périmètre couvert par la sync automatique (Round 2)
 ---------------------------------------------------
 
