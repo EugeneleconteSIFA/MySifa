@@ -12907,6 +12907,54 @@ async function confirmDeleteTemplate(templateId){
   _openDeleteTemplateModal(t);
 }
 
+// v2.6.1 : confirmation au style MySifa, en remplacement de window.confirm().
+// Rend une Promise<boolean> pour rester utilisable en await dans un flux async.
+// Mise en forme alignee sur _openDeleteTemplateModal (overlay .op-modal-overlay
+// + carte .op-modal), fermeture par Echap, clic hors carte ou bouton Annuler.
+function _mysConfirm(opts){
+  opts = opts || {};
+  return new Promise(function(resolve){
+    const prev = document.getElementById('mys-confirm-overlay');
+    if(prev) prev.remove();
+    const wrap = document.createElement('div');
+    wrap.id = 'mys-confirm-overlay';
+    wrap.className = 'op-modal-overlay';
+    wrap.style.cssText = 'display:flex;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:10000;align-items:center;justify-content:center';
+    let done = false;
+    function close(val){
+      if(done) return;
+      done = true;
+      document.removeEventListener('keydown', esc, true);
+      try{ wrap.remove(); }catch(_){}
+      resolve(val);
+    }
+    function esc(e){ if(e.key === 'Escape'){ e.preventDefault(); close(false); } }
+    document.addEventListener('keydown', esc, true);
+    wrap.addEventListener('click', function(e){ if(e.target === wrap) close(false); });
+
+    const accent = opts.danger ? 'var(--danger)' : 'var(--warn,#f59e0b)';
+    wrap.innerHTML = ''
+      + '<div class="op-modal" role="dialog" aria-modal="true" style="max-width:520px;width:calc(100% - 40px);background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,0.4)">'
+      +   '<div style="color:' + accent + ';font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">'
+      +     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>'
+      +     escHtml(opts.title || 'Confirmer ?')
+      +   '</div>'
+      +   (opts.highlightHtml
+          ? '<div style="padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:14px">' + opts.highlightHtml + '</div>'
+          : '')
+      +   '<div style="font-size:13px;color:var(--text);line-height:1.55;margin-bottom:16px">' + (opts.bodyHtml || '') + '</div>'
+      +   '<div style="display:flex;justify-content:flex-end;gap:10px">'
+      +     '<button type="button" data-mys-cancel class="modal-btn-ghost">' + escHtml(opts.cancelLabel || 'Annuler') + '</button>'
+      +     '<button type="button" data-mys-ok style="background:' + accent + ';color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">' + escHtml(opts.okLabel || 'Continuer') + '</button>'
+      +   '</div>'
+      + '</div>';
+    wrap.querySelector('[data-mys-cancel]').addEventListener('click', function(){ close(false); });
+    wrap.querySelector('[data-mys-ok]').addEventListener('click', function(){ close(true); });
+    document.body.appendChild(wrap);
+    requestAnimationFrame(function(){ wrap.querySelector('[data-mys-cancel]').focus(); });
+  });
+}
+
 function _openDeleteTemplateModal(t){
   const existing = document.getElementById('del-tmpl-modal-overlay');
   if(existing) existing.remove();
@@ -13523,14 +13571,22 @@ async function submitTemplateEditor(e){
           } else if(imp.first){
             quand = ' (le ' + _fmtIsoDateFr(imp.first) + ')';
           }
-          const ok = window.confirm(
-            'Enregistrer ce modèle va réinitialiser ' + n + ' créneau' + (plur ? 'x' : '') +
-            ' à venir' + quand + ', généré' + (plur ? 's' : '') + ' par sa récurrence.\n\n' +
-            'Leurs opérations seront remplacées par celles du modèle : toute retouche faite ' +
-            'directement sur ces créneaux (opération ajoutée, machine décochée, consignes) sera perdue.\n\n' +
-            'Les créneaux passés et ceux composés à la main ne sont pas concernés.\n\n' +
-            'Continuer ?'
-          );
+          const ok = await _mysConfirm({
+            title: 'Réinitialiser ' + n + ' créneau' + (plur ? 'x' : '') + ' à venir ?',
+            highlightHtml:
+              '<div style="font-size:14px;font-weight:700;color:var(--text)">' +
+                n + ' créneau' + (plur ? 'x' : '') + ' généré' + (plur ? 's' : '') + ' par la récurrence' +
+              '</div>' +
+              (quand ? '<div style="font-size:12px;color:var(--muted);margin-top:4px">' + escHtml(quand.trim()) + '</div>' : ''),
+            bodyHtml:
+              'Leurs opérations seront <strong>remplacées par celles du modèle</strong>. ' +
+              'Toute retouche faite directement sur ces créneaux (opération ajoutée, machine décochée, consignes) sera perdue.' +
+              '<div style="margin-top:10px;color:var(--muted);font-size:12px">' +
+                'Les créneaux passés et ceux composés à la main ne sont pas concernés.' +
+              '</div>',
+            okLabel: 'Enregistrer quand même',
+            cancelLabel: 'Annuler',
+          });
           if(!ok) return;
         }
       }
