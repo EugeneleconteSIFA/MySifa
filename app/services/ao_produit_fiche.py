@@ -237,7 +237,6 @@ def render_fiche_html(
 
     sections.extend([
         ("Conditionnement — Cartons", [
-            _row_html("Type carton", mp_label(cart.get("matiere_id"))),
             _row_html("Bobines au sol", cart.get("bobines_sol")),
             _row_html("Nombre d'étages", cart.get("nb_etages")),
             _row_html("Bobines / carton", cart.get("bobines_carton")),
