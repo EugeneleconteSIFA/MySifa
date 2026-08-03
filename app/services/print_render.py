@@ -245,25 +245,38 @@ DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL = """^XA
 #
 # Texte sans accents, comme les gabarits existants : les polices bitmap A0
 # des thermiques d'entrée de gamme les rendent mal même en ^CI28.
+# Hiérarchie assumée : ce que l'opérateur doit FAIRE est plus gros que ce qui
+# identifie le dossier. Le n° d'OF et le client servent à retrouver la bonne
+# pochette — une fois l'étiquette en main, ils n'apprennent plus rien. Les
+# trois consignes, elles, sont relues à chaque changement de bobine.
+#
+# ^FB (field block) fait le retour à la ligne automatique : les consignes sont
+# trop longues pour tenir sur une ligne à cette taille, et un ^FD nu serait
+# tronqué au bord droit sans le moindre avertissement. Les hauteurs réservées
+# (2 / 3 / 2 lignes) sont calculées pour le pire cas.
+#
+# Le code-barres a sauté : il servait à rescanner le dossier, ce que personne
+# ne fait depuis une étiquette collée sur une pochette. La place gagnée va aux
+# consignes, qui elles sont lues.
 DEFAULT_TEMPLATE_FSC_AVERTISSEMENT_ZPL = """^XA
 ^CI28
 ^PW800
 ^LL400
 ^LH0,0
 ^FO4,4^GB792,392,4^FS
-^FO14,14^GB772,56,56^FS
-^FO26,26^FR^A0N,36,36^FDDOSSIER FSC^FS
-^FO470,30^FR^A0N,28,28^FD{{fsc_type_requis}}^FS
-^FO26,82^A0N,40,40^FD{{no_dossier}}^FS
-^FO26,128^A0N,24,24^FD{{client}}^FS
-^FO14,158^GB772,2,2^FS
-^FO26,170^A0N,24,24^FD1. Matiere certifiee FSC uniquement^FS
-^FO26,200^A0N,24,24^FD2. Scanner chaque bobine (MyProd)^FS
-^FO26,230^A0N,24,24^FD3. Entree produit fini en Z1^FS
-^FO26,268^BY2,3,58^BCN,58,N,N,N^FD{{no_dossier}}^FS
-^FO14,340^GB772,2,2^FS
-^FO26,352^A0N,20,20^FD{{ref_produit}}  {{machine}}^FS
-^FO560,352^A0N,20,20^FD{{now:%d/%m/%Y}}^FS
+^FO14,8^GB772,48,48^FS
+^FO26,14^FR^A0N,36,36^FDDOSSIER FSC^FS
+^FO560,22^FR^A0N,18,18^FD{{fsc_type_requis}}^FS
+^FO26,62^A0N,24,24^FD{{no_dossier}}^FS
+^FO26,90^A0N,18,18^FD{{client}}^FS
+^FO14,112^GB772,2,2^FS
+^FO26,120^FB748,2,2,L,0^A0N,28,28^FD1. Utiliser de la matiere avec la mention "Matiere FSC" uniquement.^FS
+^FO26,182^FB748,3,2,L,0^A0N,28,28^FD2. Pour chaque bobine utilisee (glassines et frontaux) ajouter les numeros de bobine IMPERATIVEMENT dans l'outil de traca^FS
+^FO26,274^FB748,2,2,L,0^A0N,28,28^FD3. Effectuer les entrees de produits finis en Z1 avec l'outil stock.^FS
+^FO14,338^GB772,2,2^FS
+^FO26,348^A0N,20,20^FD{{ref_produit}}  {{machine}}^FS
+^FO420,348^A0N,20,20^FD{{now:%d/%m/%Y}}^FS
+^FO670,344^A0N,28,28^FDMerci^FS
 ^XZ
 """
 

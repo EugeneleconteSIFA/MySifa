@@ -16,8 +16,14 @@
     categories: [],
     suppliers: [],
     supplierMap: {},
+    fournisseurs: [],
+    fournisseurMap: {},
     materials: [],
     materialsAll: [],
+    mystock: [],
+    mystockAll: [],
+    mystockCats: [],
+    expanded: {},
     products: [],
     settings: null,
     filters: {
@@ -25,6 +31,10 @@
       matCats: [],
       matSupplier: "",
       matActive: "1",
+      matTab: "couts",
+      msQ: "",
+      msCat: "",
+      msActive: "1",
       prodQ: "",
     },
     formMaterial: null,
@@ -414,11 +424,17 @@
   }
 
   async function loadBaseData() {
-    const [cats, sups, settings] = await Promise.all([
+    const [cats, sups, fourn, settings] = await Promise.all([
       api("/api/pricing/categories"),
       api("/api/pricing/suppliers?active_only=false"),
+      api("/api/pricing/fournisseurs"),
       api("/api/pricing/settings"),
     ]);
+    S.fournisseurs = fourn.fournisseurs || [];
+    S.fournisseurMap = {};
+    S.fournisseurs.forEach((f) => {
+      S.fournisseurMap[f.id] = f.nom;
+    });
     S.categories = cats.categories || [];
     S.suppliers = sups.suppliers || [];
     S.supplierMap = {};
@@ -502,17 +518,20 @@
       .join("");
     const supOpts =
       '<option value="">Tous fournisseurs</option>' +
-      S.suppliers
-        .filter((s) => s.is_active)
+      S.fournisseurs
         .map(
           (s) =>
-            `<option value="${s.id}" ${String(S.filters.matSupplier) === String(s.id) ? "selected" : ""}>${escHtml(s.name)}</option>`
+            `<option value="${s.id}" ${String(S.filters.matSupplier) === String(s.id) ? "selected" : ""}>${escHtml(s.nom)}</option>`
         )
         .join("");
 
     const rows = S.materials
       .map((m) => {
-        const sup = m.supplier_id ? S.supplierMap[m.supplier_id] || "—" : "—";
+        const sup =
+          m.fournisseur_nom ||
+          (m.fournisseur_fsc_id ? S.fournisseurMap[m.fournisseur_fsc_id] : null) ||
+          (m.supplier_id ? S.supplierMap[m.supplier_id] : null) ||
+          "—";
         const live = m.computed ? fmtEurM2(m.computed.price_eur_per_m2) : "—";
         const unit = `${fmtNum(m.unit_price, 4, 4)}\u00a0${m.price_currency}/${m.price_basis === "PER_M2" ? "m²" : "kg"}`;
         return `<tr data-mid="${m.id}">
@@ -544,7 +563,8 @@
         ${pageHead(
           "Matières",
           `${S.materials.length} ligne(s)`,
-          S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-mat">+ Nouvelle matière</button>' : ""
+          materialsTabsHtml() +
+            (S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-mat">+ Nouvelle matière</button>' : "")
         )}
         <div class="filters">
           <input type="search" class="search-input" id="mat-q" placeholder="Rechercher (nom, appellation…)" value="${escAttr(S.filters.matQ)}"/>
@@ -561,6 +581,8 @@
         </div>
       </div>
     `);
+
+    bindMaterialsTabs();
 
     const qEl = document.getElementById("mat-q");
     let qTimer;
@@ -609,6 +631,333 @@
     if (emptyNew) emptyNew.onclick = () => navigate("/pricing/materials/new");
   }
 
+  // ───────────────────────────────────────────────────────────────────────
+  // Onglet « Matières MyStock » : une ligne par matière, dépliable sur ses
+  // laizes et ses fournisseurs. Le prix modifié ici est écrit dans MyStock.
+  // ───────────────────────────────────────────────────────────────────────
+
+  async function loadMystockList() {
+    const params = new URLSearchParams();
+    params.set("active_only", S.filters.msActive === "1" ? "true" : "false");
+    if (S.filters.msQ) params.set("q", S.filters.msQ);
+    if (S.filters.msCat) params.set("categorie", S.filters.msCat);
+    const data = await api("/api/pricing/mystock/materials?" + params.toString());
+    S.mystockAll = data.materials || [];
+    S.mystockCats = data.categories || [];
+    applyMystockFilters();
+  }
+
+  function applyMystockFilters() {
+    let list = S.mystockAll || [];
+    if (S.filters.msActive === "0") list = list.filter((m) => !m.actif);
+    S.mystock = list;
+  }
+
+  function fmtPrixUnite(v, unite) {
+    if (v == null) return "—";
+    const s = fmtNum(v, 4, 4);
+    return s === "—" ? s : s + " " + (unite || "€");
+  }
+
+  /** Résumé du prix affiché sur la ligne repliée. */
+  function mystockPrixResume(m) {
+    if (m.prix_par_laize) {
+      if (m.prix_min == null) return '<span class="muted">à compléter</span>';
+      if (Math.abs((m.prix_max || 0) - (m.prix_min || 0)) < 1e-9) {
+        return fmtPrixUnite(m.prix_min, m.unite);
+      }
+      return `${fmtPrixUnite(m.prix_min, m.unite)} <span class="muted">à</span> ${fmtPrixUnite(m.prix_max, m.unite)}`;
+    }
+    return m.prix_principal ? fmtPrixUnite(m.prix_principal, m.unite) : '<span class="muted">à compléter</span>';
+  }
+
+  function fournisseurOptions(selectedId) {
+    return (
+      '<option value="">— Sans fournisseur —</option>' +
+      S.fournisseurs
+        .map(
+          (f) =>
+            `<option value="${f.id}" ${String(selectedId) === String(f.id) ? "selected" : ""}>${escHtml(f.nom)}</option>`
+        )
+        .join("")
+    );
+  }
+
+  /** Bloc déplié : une sous-ligne par (laize, fournisseur). */
+  function mystockDetailHtml(m) {
+    const groupes = {};
+    (m.lignes || []).forEach((l) => {
+      const key = l.laize_id == null ? "" : String(l.laize_id);
+      (groupes[key] = groupes[key] || { label: l.laize_label, lignes: [] }).lignes.push(l);
+    });
+    const keys = Object.keys(groupes);
+    if (!keys.length) {
+      return `<div class="ms-detail"><div class="empty" style="padding:16px">Aucun prix enregistré pour cette matière.</div></div>`;
+    }
+    const blocs = keys
+      .map((k) => {
+        const g = groupes[k];
+        const titre = k === "" ? "Toutes laizes" : escHtml(g.label || "Laize " + k);
+        const rows = g.lignes
+          .map((l) => {
+            const fid = l.fournisseur_id == null ? "" : l.fournisseur_id;
+            const key = `${m.id}|${k}|${fid}`;
+            return `<tr class="${l.principal ? "ms-principal" : ""}">
+              <td>${l.principal
+                  ? '<span class="badge badge-glassine">Principal</span>'
+                  : (S.canWrite
+                      ? `<button type="button" class="link-btn" data-ms-principal="${escAttr(key)}">définir principal</button>`
+                      : "")}</td>
+              <td>${S.canWrite
+                  ? `<select class="ms-inline" data-ms-fourn="${escAttr(key)}">${fournisseurOptions(l.fournisseur_id)}</select>`
+                  : escHtml(l.fournisseur_nom || "— Sans fournisseur —")}</td>
+              <td>${S.canWrite
+                  ? `<input type="number" step="0.0001" class="ms-inline ms-prix" data-ms-prix="${escAttr(key)}" value="${escAttr(l.prix)}"/>`
+                  : fmtPrixUnite(l.prix, m.unite)}</td>
+              <td class="ms-unite">${escHtml(m.unite)}</td>
+              <td class="ms-meta">${escHtml(l.updated_at ? String(l.updated_at).replace("T", " ").slice(0, 16) : "—")}${l.updated_by_name ? " · " + escHtml(l.updated_by_name) : ""}</td>
+              <td>${S.canWrite && !l.principal
+                  ? `<button type="button" class="link-btn danger" data-ms-del="${escAttr(key)}">retirer</button>`
+                  : ""}</td>
+            </tr>`;
+          })
+          .join("");
+        return `<div class="ms-groupe">
+          <div class="ms-groupe-head">${titre}
+            ${S.canWrite ? `<button type="button" class="btn btn-soft btn-sm" data-ms-add="${escAttr(m.id + "|" + k)}">+ Fournisseur</button>` : ""}
+          </div>
+          <table class="pr-table ms-table">
+            <thead><tr><th>Statut</th><th>Fournisseur</th><th>Prix</th><th>Unité</th><th>Modifié</th><th></th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+      })
+      .join("");
+    return `<div class="ms-detail">${blocs}</div>`;
+  }
+
+  function renderMystockList() {
+    const catOpts =
+      '<option value="">Toutes catégories</option>' +
+      S.mystockCats
+        .map(
+          (c) =>
+            `<option value="${escAttr(c)}" ${S.filters.msCat === c ? "selected" : ""}>${escHtml(c)}</option>`
+        )
+        .join("");
+
+    const rows = S.mystock
+      .map((m) => {
+        const open = !!S.expanded[m.id];
+        const lien = m.mc_material_id
+          ? `<span class="badge badge-frontal" title="${escAttr(m.mc_name || "")}">Appairée</span>`
+          : '<span class="muted">—</span>';
+        return `<tr class="ms-row${open ? " open" : ""}" data-ms-row="${m.id}">
+            <td class="ms-caret">${open ? "▾" : "▸"}</td>
+            <td>${categorieBadge(m.categorie)}</td>
+            <td><strong>${escHtml(m.reference)}</strong></td>
+            <td>${escHtml(m.designation)}</td>
+            <td>${m.prix_par_laize ? '<span class="badge badge-silicone">par laize</span>' : '<span class="muted">prix unique</span>'}</td>
+            <td class="ms-prix-cell">${mystockPrixResume(m)}</td>
+            <td>${m.nb_fournisseurs || 0}</td>
+            <td>${lien}</td>
+          </tr>
+          ${open ? `<tr class="ms-detail-row"><td colspan="8">${mystockDetailHtml(m)}</td></tr>` : ""}`;
+      })
+      .join("");
+
+    setContent(`
+      <div class="pr-narrow">
+        ${pageHead("Matières", `${S.mystock.length} matière(s) MyStock`, materialsTabsHtml())}
+        <div class="filters">
+          <input type="search" class="search-input" id="ms-q" placeholder="Rechercher (référence, désignation…)" value="${escAttr(S.filters.msQ)}"/>
+          <select id="ms-cat">${catOpts}</select>
+          <select id="ms-active">
+            <option value="1" ${S.filters.msActive==="1"?"selected":""}>Actives</option>
+            <option value="0" ${S.filters.msActive==="0"?"selected":""}>Inactives</option>
+            <option value="all" ${S.filters.msActive==="all"?"selected":""}>Toutes</option>
+          </select>
+        </div>
+        <div class="ms-hint">Le prix saisi ici est celui de MyStock : il est écrit directement dans la valorisation et historisé. Seul le prix du fournisseur principal fait foi.</div>
+        <div class="table-wrap">
+          <table class="pr-table">
+            <thead><tr><th style="width:28px"></th><th>Cat.</th><th>Référence</th><th>Désignation</th><th>Prix</th><th>Prix en vigueur</th><th>Fourn.</th><th>Coûts mat.</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="8" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+    `);
+
+    bindMaterialsTabs();
+
+    const qEl = document.getElementById("ms-q");
+    let t;
+    qEl.oninput = () => {
+      clearTimeout(t);
+      t = setTimeout(async () => {
+        S.filters.msQ = qEl.value;
+        await loadMystockList();
+        renderMystockList();
+      }, 300);
+    };
+    document.getElementById("ms-cat").onchange = async (e) => {
+      S.filters.msCat = e.target.value;
+      await loadMystockList();
+      renderMystockList();
+    };
+    document.getElementById("ms-active").onchange = async (e) => {
+      S.filters.msActive = e.target.value;
+      await loadMystockList();
+      renderMystockList();
+    };
+    document.querySelectorAll("[data-ms-row]").forEach((tr) => {
+      tr.onclick = (e) => {
+        if (e.target.closest("input,select,button")) return;
+        const id = tr.getAttribute("data-ms-row");
+        S.expanded[id] = !S.expanded[id];
+        renderMystockList();
+      };
+    });
+    bindMystockActions();
+  }
+
+  function parseMsKey(key) {
+    const [mid, lid, fid] = String(key).split("|");
+    return {
+      matiere_id: parseInt(mid, 10),
+      laize_id: lid === "" ? null : parseInt(lid, 10),
+      fournisseur_id: fid === "" || fid === undefined ? null : parseInt(fid, 10),
+    };
+  }
+
+  async function msCall(path, body, method) {
+    try {
+      await api(path, { method: method || "POST", body });
+      await loadMystockList();
+      renderMystockList();
+      return true;
+    } catch (e) {
+      showToast(e.message, "danger");
+      return false;
+    }
+  }
+
+  function bindMystockActions() {
+    document.querySelectorAll("[data-ms-prix]").forEach((inp) => {
+      inp.onchange = async () => {
+        const k = parseMsKey(inp.getAttribute("data-ms-prix"));
+        const prix = parseFloat(inp.value);
+        if (Number.isNaN(prix)) {
+          showToast("Prix invalide.", "danger");
+          return;
+        }
+        if (await msCall("/api/pricing/mystock/prix", { ...k, prix })) {
+          showToast("Prix enregistré dans MyStock.", "success");
+        }
+      };
+    });
+    document.querySelectorAll("[data-ms-fourn]").forEach((sel) => {
+      sel.onchange = async () => {
+        const k = parseMsKey(sel.getAttribute("data-ms-fourn"));
+        const nouveau = sel.value === "" ? null : parseInt(sel.value, 10);
+        const inp = document.querySelector(`[data-ms-prix="${sel.getAttribute("data-ms-fourn")}"]`);
+        const prix = inp ? parseFloat(inp.value) || 0 : 0;
+        // Un changement de fournisseur = nouvelle ligne + retrait de l'ancienne.
+        try {
+          await api("/api/pricing/mystock/prix", {
+            method: "POST",
+            body: { matiere_id: k.matiere_id, laize_id: k.laize_id, fournisseur_id: nouveau, prix },
+          });
+          if (k.fournisseur_id !== nouveau) {
+            await api("/api/pricing/mystock/prix", { method: "DELETE", body: k });
+          }
+          await loadMystockList();
+          renderMystockList();
+          showToast("Fournisseur enregistré dans MyStock.", "success");
+        } catch (e) {
+          showToast(e.message, "danger");
+          await loadMystockList();
+          renderMystockList();
+        }
+      };
+    });
+    document.querySelectorAll("[data-ms-principal]").forEach((btn) => {
+      btn.onclick = async () => {
+        const k = parseMsKey(btn.getAttribute("data-ms-principal"));
+        if (await msCall("/api/pricing/mystock/principal", k)) {
+          showToast("Fournisseur principal mis à jour — prix poussé dans MyStock.", "success");
+        }
+      };
+    });
+    document.querySelectorAll("[data-ms-del]").forEach((btn) => {
+      btn.onclick = async () => {
+        const k = parseMsKey(btn.getAttribute("data-ms-del"));
+        const ok = await confirmDelete("Retirer ce fournisseur de la matière ?");
+        if (!ok) return;
+        if (await msCall("/api/pricing/mystock/prix", k, "DELETE")) {
+          showToast("Fournisseur retiré.", "success");
+        }
+      };
+    });
+    document.querySelectorAll("[data-ms-add]").forEach((btn) => {
+      btn.onclick = async () => {
+        const [mid, lid] = btn.getAttribute("data-ms-add").split("|");
+        if (
+          await msCall("/api/pricing/mystock/prix", {
+            matiere_id: parseInt(mid, 10),
+            laize_id: lid === "" ? null : parseInt(lid, 10),
+            fournisseur_id: null,
+            prix: 0,
+          })
+        ) {
+          showToast("Ligne ajoutée — choisissez le fournisseur et saisissez son prix.", "info");
+        }
+      };
+    });
+  }
+
+  function categorieBadge(cat) {
+    const c = String(cat || "").toUpperCase();
+    const map = {
+      FRONTAL: "badge-frontal",
+      GLASSINE: "badge-glassine",
+      COMPLEXE: "badge-silicone",
+      ADHESIF: "badge-adhesif",
+    };
+    return `<span class="badge ${map[c] || "badge-autre"}">${escHtml(cat || "—")}</span>`;
+  }
+
+  /** Bascule entre la base Coûts matières et les matières MyStock. */
+  function materialsTabsHtml() {
+    const t = S.filters.matTab;
+    return `<div class="tabs">
+      <button type="button" class="tab${t === "couts" ? " on" : ""}" data-tab="couts">Base Coûts matières</button>
+      <button type="button" class="tab${t === "mystock" ? " on" : ""}" data-tab="mystock">Matières MyStock</button>
+    </div>`;
+  }
+
+  function bindMaterialsTabs() {
+    document.querySelectorAll("[data-tab]").forEach((b) => {
+      b.onclick = async () => {
+        const tab = b.getAttribute("data-tab");
+        if (tab === S.filters.matTab) return;
+        S.filters.matTab = tab;
+        showLoading();
+        try {
+          if (tab === "mystock") {
+            await loadMystockList();
+            renderMystockList();
+          } else {
+            await loadMaterialsList();
+            renderMaterialsList();
+          }
+        } catch (e) {
+          setContent(`<div class="empty" style="color:var(--danger);padding:24px">${escHtml(e.message)}</div>`);
+        }
+      };
+    });
+  }
+
   function defaultMaterialForm() {
     const cat = S.categories[0];
     return {
@@ -616,6 +965,7 @@
       appellation_code: "",
       category_id: cat ? cat.id : 1,
       supplier_id: "",
+      fournisseur_fsc_id: "",
       weight_per_m2: "0",
       weight_gsm: "",
       price_currency: "EUR",
@@ -641,6 +991,7 @@
       appellation_code: m.appellation_code,
       category_id: m.category_id,
       supplier_id: m.supplier_id || "",
+      fournisseur_fsc_id: m.fournisseur_fsc_id || "",
       weight_per_m2: String(m.weight_per_m2),
       weight_gsm: m.weight_gsm != null ? String(m.weight_gsm) : "",
       price_currency: m.price_currency,
@@ -925,9 +1276,17 @@
       .join("");
     const supOpts =
       '<option value="">—</option>' +
-      S.suppliers
-        .map((s) => `<option value="${s.id}" ${String(f.supplier_id) === String(s.id) ? "selected" : ""}>${escHtml(s.name)}</option>`)
+      S.fournisseurs
+        .map(
+          (s) =>
+            `<option value="${s.id}" ${String(f.fournisseur_fsc_id) === String(s.id) ? "selected" : ""}>${escHtml(s.nom)}</option>`
+        )
         .join("");
+    // Ancien fournisseur non rapproché : on le signale plutôt que de le perdre.
+    const supLegacy =
+      !f.fournisseur_fsc_id && f.supplier_id
+        ? `<div class="field-hint">Ancien fournisseur : ${escHtml(S.supplierMap[f.supplier_id] || "?")} — non rapproché à l'annuaire de l'entreprise.</div>`
+        : "";
     const hist = (f._history || [])
       .map(
         (h) =>
@@ -953,7 +1312,7 @@
               <div class="field f-mid"><label>Catégorie</label><select id="f-cat">${catOpts}</select></div>
             </div>
             <div class="field-row ident-row">
-              <div class="field f-mid"><label>Fournisseur</label><select id="f-sup">${supOpts}</select></div>
+              <div class="field f-mid"><label>Fournisseur</label><select id="f-sup">${supOpts}</select>${supLegacy}</div>
               ${inlineSettingsHtml()}
             </div>
           </div>
@@ -1088,7 +1447,7 @@
     f.appellation_code = val("f-app") ?? f.appellation_code;
     const cat = val("f-cat");
     if (cat != null) f.category_id = parseInt(cat, 10);
-    f.supplier_id = val("f-sup") ?? f.supplier_id;
+    f.fournisseur_fsc_id = val("f-sup") ?? f.fournisseur_fsc_id;
     f.price_currency = val("f-cur") ?? f.price_currency;
     f.price_basis = val("f-basis") ?? f.price_basis;
     f.unit_price = val("f-unit") ?? f.unit_price;
@@ -1113,7 +1472,7 @@
       name: f.name.trim(),
       appellation_code: f.appellation_code.trim(),
       category_id: f.category_id,
-      supplier_id: f.supplier_id ? parseInt(f.supplier_id, 10) : null,
+      fournisseur_fsc_id: f.fournisseur_fsc_id ? parseInt(f.fournisseur_fsc_id, 10) : null,
       weight_per_m2: parseFloat(f.weight_per_m2) || 0,
       weight_gsm: f.weight_gsm ? parseInt(f.weight_gsm, 10) : null,
       price_currency: f.price_currency,
@@ -1818,8 +2177,13 @@
       const r = S.route.name;
       if (r === "dashboard") await renderDashboard();
       else if (r === "materials") {
-        await loadMaterialsList();
-        renderMaterialsList();
+        if (S.filters.matTab === "mystock") {
+          await loadMystockList();
+          renderMystockList();
+        } else {
+          await loadMaterialsList();
+          renderMaterialsList();
+        }
       } else if (r === "material-new") {
         if (!S.canWrite) {
           navigate("/pricing/materials");

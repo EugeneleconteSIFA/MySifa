@@ -390,6 +390,11 @@ body.cal-dragging{user-select:none}
 .cal-extern-h{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 8px}
 .cal-extern-p{font-size:12px;color:var(--text2);line-height:1.6;margin:0 0 10px}
 .cal-extern-hint{font-size:11px;color:var(--muted);line-height:1.6;margin:8px 0 0}
+.cal-feed-cals{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.cal-feed-cal{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--border);border-radius:999px;background:var(--bg);font-size:11px;font-weight:600;color:var(--text2);cursor:pointer;user-select:none;transition:border-color .15s,color .15s}
+.cal-feed-cal:hover{border-color:var(--accent);color:var(--accent)}
+.cal-feed-cal input{width:14px;height:14px;accent-color:var(--accent);cursor:pointer;margin:0}
+.cal-feed-cal .cal-dot{width:8px;height:8px}
 .cal-url-row{display:flex;gap:8px;align-items:center}
 .cal-url-row input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 11px;color:var(--text2);font-size:11px;font-family:monospace}
 .cal-sub-row{display:flex;align-items:center;gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:10px;background:var(--bg);margin-bottom:8px}
@@ -2126,14 +2131,22 @@ function externModalBodyHtml(){
     '(« S\'abonner à un calendrier depuis le web »). Vos calendriers MySifa apparaîtront chez eux, '+
     'en lecture seule, et se mettront à jour automatiquement.</p>';
   if(feed){
+    const sel=new Set(String(feed.calendriers||'').split(',').map(s=>s.trim()).filter(Boolean));
+    html+='<div class="cal-feed-cals" id="cal-feed-cals">';
+    accessibleCalDefs().filter(c=>!c.externe).forEach(c=>{
+      html+='<label class="cal-feed-cal" style="--cal-c:'+calColor(c.id)+'">'+
+        '<input type="checkbox" data-feed-cal="'+esc(c.id)+'"'+(sel.has(c.id)?' checked':'')+'>'+
+        '<span class="cal-dot" style="background:'+calColor(c.id)+'"></span>'+esc(c.label)+'</label>';
+    });
+    html+='</div>';
     html+='<div class="cal-url-row"><input type="text" id="cal-feed-url" readonly value="'+esc(feed.url)+'">'+
       '<button type="button" class="cal-mini-btn" id="cal-feed-copy">Copier</button></div>';
     html+='<div class="cal-extern-actions">'+
       '<button type="button" class="cal-mini-btn" id="cal-feed-open">Ouvrir dans mon agenda</button>'+
       '<button type="button" class="cal-mini-btn danger" id="cal-feed-rotate">Régénérer l\'adresse</button>'+
       '</div>';
-    html+='<p class="cal-extern-hint">Calendriers publiés : '+esc(feed.calendriers)+
-      ' · fenêtre '+feed.fenetre.passe_jours+' jours passés / '+feed.fenetre.futur_jours+' jours à venir.'+
+    html+='<p class="cal-extern-hint">Fenêtre publiée : '+feed.fenetre.passe_jours+
+      ' jours passés / '+feed.fenetre.futur_jours+' jours à venir. Le calendrier Personnel ne publie que vos propres créneaux.'+
       '<br>Cette adresse vaut mot de passe — ne la partagez pas. Régénérer coupe immédiatement les abonnements existants.</p>';
   }else{
     html+='<p class="cal-extern-hint">Adresse indisponible pour le moment.</p>';
@@ -2188,6 +2201,9 @@ function bindExternModalBody(){
   };
   const rot=wrap.querySelector('#cal-feed-rotate');
   if(rot)rot.onclick=rotateFeedUrl;
+  wrap.querySelectorAll('[data-feed-cal]').forEach(inp=>{
+    inp.onchange=()=>saveFeedCalendars(inp);
+  });
   const add=wrap.querySelector('#cal-sub-add');
   if(add)add.onclick=addSubscription;
   wrap.querySelectorAll('[data-sub-refresh]').forEach(b=>{
@@ -2235,6 +2251,27 @@ function copyFeedUrl(){
   if(navigator.clipboard&&navigator.clipboard.writeText){
     navigator.clipboard.writeText(txt).then(()=>showToast('Adresse copiée.','success')).catch(fallback);
   }else fallback();
+}
+async function saveFeedCalendars(changed){
+  const boxes=Array.from(document.querySelectorAll('[data-feed-cal]'));
+  const cals=boxes.filter(b=>b.checked).map(b=>b.dataset.feedCal);
+  if(!cals.length){
+    if(changed)changed.checked=true;
+    showToast('Au moins un calendrier doit être publié.','danger');
+    return;
+  }
+  boxes.forEach(b=>{b.disabled=true;});
+  try{
+    S.feed=await api('/api/calendrier/feed',{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({calendriers:cals.join(',')})
+    });
+    showToast('Flux mis à jour.','success');
+  }catch(e){
+    showToast(e.message||'Mise à jour impossible','danger');
+  }
+  renderExternModalBody();
 }
 async function rotateFeedUrl(){
   if(!window.confirm('Régénérer l\'adresse ? Les agendas déjà abonnés cesseront de se mettre à jour.'))return;
