@@ -3164,6 +3164,24 @@ EXPE_MAIN_CSS = r"""
 .expe-pal-eur-solde-val{font-size:22px;font-family:monospace;font-weight:800;color:var(--text);
   text-transform:none;letter-spacing:0}
 .expe-pal-eur-solde-val--debt{color:var(--warn)}
+.expe-pal-eur-trp-row{cursor:pointer}
+.expe-pal-eur-trp-row:hover td{background:var(--accent-bg)}
+.expe-pal-eur-row-mois td{background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent);
+  font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;padding:7px 12px}
+.expe-pal-eur-row-total td{background:color-mix(in srgb,var(--muted) 10%,transparent);font-weight:800;
+  border-top:1px solid var(--border);font-size:12px}
+.expe-pal-eur-detail{font-size:11px;color:var(--muted);margin-top:2px}
+.expe-pal-nat{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;white-space:nowrap}
+.expe-pal-nat--out{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
+.expe-pal-nat--ok{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
+.expe-pal-nat--bad{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
+.expe-pal-nat--neutral{background:color-mix(in srgb,var(--muted) 14%,transparent);color:var(--muted)}
+/* En-têtes de tableau triables */
+.expe-sort-th{cursor:pointer;user-select:none;white-space:nowrap}
+.expe-sort-th:hover{color:var(--accent)}
+.expe-sort-th--on{color:var(--accent)}
+.expe-sort-arrow{margin-left:5px;font-size:9px;opacity:.55}
+.expe-sort-th--on .expe-sort-arrow{opacity:1}
 .expe-hist-table td{padding:6px 10px;max-width:140px}
 .expe-hist-table td:nth-child(1){max-width:110px} /* Validé le */
 .expe-hist-table td:nth-child(2){max-width:120px} /* Par */
@@ -4175,6 +4193,31 @@ const EXPE_PAL_SENS_LABELS = {
   rendue:'Restitution'
 };
 
+const EXPE_PAL_MOIS = ['janvier','février','mars','avril','mai','juin',
+  'juillet','août','septembre','octobre','novembre','décembre'];
+
+function _expePalMoisLabel(ym){
+  if(!ym||ym.length<7) return 'Sans date';
+  const m=parseInt(ym.slice(5,7),10);
+  const lbl=EXPE_PAL_MOIS[m-1]||ym.slice(5,7);
+  return lbl.charAt(0).toUpperCase()+lbl.slice(1)+' '+ym.slice(0,4);
+}
+
+// Distinguo visuel : une restitution et un départ ne se lisent pas de la même
+// façon dans une colonne de dates. La pastille porte le sens du mouvement,
+// pas son statut — le statut est dans la ligne de détail.
+function _expePalNatureTag(l){
+  if(l.type==='depart'){
+    const perdue=_expePalNum(l.perdues)>0;
+    const rendue=_expePalNum(l.rendues)>0;
+    const cls=perdue?'expe-pal-nat--bad':(rendue?'expe-pal-nat--ok':'expe-pal-nat--out');
+    return h('span',{className:'expe-pal-nat '+cls},perdue?'Départ · perdue':(rendue?'Départ · rendue':'Départ'));
+  }
+  const map={report:'expe-pal-nat--neutral',donnee:'expe-pal-nat--out',rendue:'expe-pal-nat--ok'};
+  return h('span',{className:'expe-pal-nat '+(map[l.sens]||'expe-pal-nat--neutral')},
+    EXPE_PAL_SENS_LABELS[l.sens]||l.sens||'Mouvement');
+}
+
 async function loadExpePalContestations(){
   if(S.app!=='expe')return;
   try{
@@ -4223,34 +4266,87 @@ async function ouvrirJournalPalettes(t){
     if(!lignes.length){
       body.appendChild(h('div',{style:{padding:'18px',color:'var(--muted)',textAlign:'center'}},'Aucun mouvement enregistré.'));
     }else{
-      const head=h('tr',null,...['Date','Nature','Client / libellé','Réf.','Données','Rendues','Solde',''].map(x=>h('th',null,x)));
-      const rows=lignes.map(l=>{
-        const nature = l.type==='depart' ? 'Départ' : (EXPE_PAL_SENS_LABELS[l.sens]||l.sens||'Mouvement');
-        return h('tr',{className:l.sens==='report'?'expe-pal-eur-row-report':''},
+      const supprimerMvt=async(id)=>{
+        if(!confirm('Supprimer ce mouvement ? Le solde sera recalculé.'))return;
+        try{
+          await api('/api/expe/palettes-europe/mouvements/'+id,{method:'DELETE'});
+          toast('Mouvement supprimé');
+          close(); await loadExpePalettesEurope(); ouvrirJournalPalettes(t);
+        }catch(e){ toast(e.message||'Suppression impossible','error'); }
+      };
+      const head=h('tr',null,
+        h('th',null,'Date'),h('th',null,'Nature'),h('th',null,'Client / libellé'),
+        h('th',null,'Réf.'),h('th',{style:{textAlign:'right'}},'Données'),
+        h('th',{style:{textAlign:'right'}},'Rendues'),h('th',{style:{textAlign:'right'}},'Solde'),h('th',null,''));
+      const corps=[];
+      // Le relevé est découpé par mois, comme les onglets de l'Excel : c'est
+      // l'unité à laquelle on rapproche les comptes avec un transporteur. Le
+      // report d'ouverture reste hors mois — il n'appartient à aucun d'eux.
+      let moisCourant=null, mDon=0, mRen=0, mSolde=0;
+      const cloreMois=()=>{
+        if(moisCourant===null)return;
+        corps.push(h('tr',{className:'expe-pal-eur-row-total'},
+          h('td',{colSpan:4},'Total '+_expePalMoisLabel(moisCourant)),
+          h('td',{style:{textAlign:'right',fontFamily:'monospace'}},mDon?_expePalFmt(mDon):'—'),
+          h('td',{style:{textAlign:'right',fontFamily:'monospace'}},mRen?_expePalFmt(mRen):'—'),
+          h('td',{style:{textAlign:'right',fontFamily:'monospace'}},_expePalFmt(mSolde)),
+          h('td',null,'')));
+        moisCourant=null; mDon=0; mRen=0;
+      };
+      lignes.forEach(l=>{
+        const rendu=_expePalNum(l.rendues)+_expePalNum(l.perdues);
+        if(l.sens==='report'){
+          cloreMois();
+          corps.push(h('tr',{className:'expe-pal-eur-row-report'},
+            h('td',{style:{whiteSpace:'nowrap'}},l.date||'—'),
+            h('td',null,_expePalNatureTag(l)),
+            h('td',{colSpan:2},'Antériorité reprise du suivi précédent'),
+            h('td',{style:{textAlign:'right',fontFamily:'monospace'}},_expePalFmt(l.donnees)),
+            h('td',null,''),
+            h('td',{style:{textAlign:'right',fontFamily:'monospace',fontWeight:'700'}},_expePalFmt(l.solde)),
+            h('td',{style:{textAlign:'right'}},expeCanWrite()?h('button',{type:'button',
+              className:'expe-pal-eur-act expe-pal-eur-act--bad',title:'Supprimer ce mouvement',
+              onClick:()=>void supprimerMvt(l.id)},iconEl('x',12)):null)));
+          mSolde=_expePalNum(l.solde);
+          return;
+        }
+        const mois=(l.date||'').slice(0,7);
+        if(mois!==moisCourant){
+          cloreMois();
+          moisCourant=mois;
+          corps.push(h('tr',{className:'expe-pal-eur-row-mois'},
+            h('td',{colSpan:8},_expePalMoisLabel(mois))));
+        }
+        mDon+=_expePalNum(l.donnees); mRen+=rendu; mSolde=_expePalNum(l.solde);
+        // Détail sous le libellé : statut de la palette, date de retour, note.
+        // Sans lui, deux lignes « SATO 4 pal. » à quinze jours d'écart sont
+        // indiscernables, et c'est justement ce qu'on cherche à trancher au
+        // moment de rapprocher les comptes.
+        const details=[];
+        if(l.type==='depart'){
+          details.push(_expePalEuropeStatutLabel(l.statut));
+          if(l.date_retour) details.push('retour '+l.date_retour);
+        }
+        if(l.note) details.push(l.note);
+        corps.push(h('tr',null,
           h('td',{style:{whiteSpace:'nowrap'}},l.date||'—'),
-          h('td',{style:{fontSize:'12px',color:'var(--text2)'}},nature),
-          h('td',null,escHtml(l.libelle||'—')),
+          h('td',null,_expePalNatureTag(l)),
+          h('td',null,
+            h('div',{style:{fontWeight:'600'}},escHtml(l.libelle||'—')),
+            details.length?h('div',{className:'expe-pal-eur-detail'},escHtml(details.join(' · '))):null),
           h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},escHtml(l.reference||'—')),
           h('td',{style:{textAlign:'right',fontFamily:'monospace'}},l.donnees?_expePalFmt(l.donnees):''),
-          h('td',{style:{textAlign:'right',fontFamily:'monospace',color:'var(--success)'}},
-            (l.rendues||l.perdues)?_expePalFmt(_expePalNum(l.rendues)+_expePalNum(l.perdues)):''),
+          h('td',{style:{textAlign:'right',fontFamily:'monospace',color:'var(--success)'}},rendu?_expePalFmt(rendu):''),
           h('td',{style:{textAlign:'right',fontFamily:'monospace',fontWeight:'700'}},_expePalFmt(l.solde)),
           h('td',{style:{textAlign:'right'}},
-            (l.type==='mouvement'&&expeCanWrite())?h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--bad',
-              title:'Supprimer ce mouvement',
-              onClick:async()=>{
-                if(!confirm('Supprimer ce mouvement ? Le solde sera recalculé.'))return;
-                try{
-                  await api('/api/expe/palettes-europe/mouvements/'+l.id,{method:'DELETE'});
-                  toast('Mouvement supprimé');
-                  close(); await loadExpePalettesEurope(); ouvrirJournalPalettes(t);
-                }catch(e){ toast(e.message||'Suppression impossible','error'); }
-              }
-            },iconEl('x',12)):null)
-        );
+            (l.type==='mouvement'&&expeCanWrite())?h('button',{type:'button',
+              className:'expe-pal-eur-act expe-pal-eur-act--bad',title:'Supprimer ce mouvement',
+              onClick:()=>void supprimerMvt(l.id)},iconEl('x',12)):null)
+        ));
       });
+      cloreMois();
       body.appendChild(h('div',{style:{overflowX:'auto'}},
-        h('table',{className:'table-std expe-pal-eur-journal'},h('thead',null,head),h('tbody',null,...rows))));
+        h('table',{className:'table-std expe-pal-eur-journal'},h('thead',null,head),h('tbody',null,...corps))));
     }
     const contest=(d.contestations||[]).filter(c=>c.statut==='ouverte');
     if(contest.length){
@@ -4403,7 +4499,7 @@ async function expePatchContestation(id, patch){
 
 function renderExpePalettesEurope(){
   const data = S.expePalettesEuropeData || {departs:[], recap_clients:[], recap_transporteurs:[], totaux:{}};
-  const departs = data.departs || [];
+  let departs = data.departs || [];
   const recap = data.recap_clients || [];
   const recapTrp = data.recap_transporteurs || [];
   const tot = data.totaux || {};
@@ -4456,7 +4552,15 @@ function renderExpePalettesEurope(){
   );
   const trpRows = recapTrp.length ? recapTrp.map(t=>{
     const solde=_expePalNum(t.solde);
-    return h('tr',{className:solde>0?'expe-pal-eur-trp-row--debt':''},
+    return h('tr',{className:'expe-pal-eur-trp-row'+(solde>0?' expe-pal-eur-trp-row--debt':''),
+      title:'Ouvrir le relevé de compte',
+      onClick:e=>{
+        // Les boutons d'action de la dernière colonne ont leur propre effet :
+        // sans ce garde-fou, un clic sur « saisir un mouvement » ouvrirait
+        // aussi le relevé derrière la modale.
+        if(e.target.closest('button')) return;
+        void ouvrirJournalPalettes(t);
+      }},
       h('td',{style:{fontWeight:'700'}},
         (c=>c?trpTag(t.transporteur||'—',c):(t.transporteur||'—'))(
           (function(){
@@ -4610,10 +4714,60 @@ function renderExpePalettesEurope(){
   ) : h('div',{style:{padding:'18px',color:'var(--muted)',fontSize:'13px',textAlign:'center'}},
     'Aucune palette Europe enregistrée.');
 
-  // Tableau des départs palette Europe
+  // Tableau des départs palette Europe — en-têtes triables.
+  // Le tri est CLIENT et non serveur : la liste est déjà entièrement chargée
+  // (elle est bornée par les filtres), un aller-retour réseau pour réordonner
+  // une centaine de lignes serait un temps d'attente sans contrepartie.
+  const PAL_COLS = [
+    {lbl:'Date enl.',   key:'date_enlevement', type:'txt'},
+    {lbl:'Client',      key:'client',          type:'txt'},
+    {lbl:'Transp.',     key:'transporteur',    type:'txt'},
+    {lbl:'ARC',         key:'arc',             type:'txt'},
+    {lbl:'N° BL',       key:'no_bl',           type:'txt'},
+    {lbl:'Pal.',        key:'nb_palette',      type:'num'},
+    {lbl:'Statut',      key:'palette_europe_statut', type:'txt'},
+    {lbl:'Date retour', key:'palette_europe_date_retour', type:'txt'},
+    {lbl:'Note',        key:null},
+    {lbl:'Actions',     key:null},
+  ];
+  const sortKey = S.expePalSortKey || 'date_enlevement';
+  const sortDir = S.expePalSortDir || 'desc';
   const head = h('tr',null,
-    ...['Date enl.','Client','Transp.','ARC','N° BL','Pal.','Statut','Date retour','Note','Actions'].map(t=>h('th',null,t))
+    ...PAL_COLS.map(c=>{
+      if(!c.key) return h('th',null,c.lbl);
+      const actif = sortKey===c.key;
+      const th = h('th',{className:'expe-sort-th'+(actif?' expe-sort-th--on':''),
+        title:'Trier par '+c.lbl,
+        onClick:()=>set({
+          expePalSortKey:c.key,
+          // Reclic sur la même colonne = on inverse. Colonne différente = on
+          // repart en croissant, sauf sur les dates où le récent d'abord est
+          // ce qu'on veut voir neuf fois sur dix.
+          expePalSortDir: actif ? (sortDir==='asc'?'desc':'asc')
+                                : (c.key.indexOf('date')===0||c.key.indexOf('_date')>0?'desc':'asc')
+        })});
+      th.appendChild(document.createTextNode(c.lbl));
+      th.appendChild(h('span',{className:'expe-sort-arrow'}, actif?(sortDir==='asc'?'▲':'▼'):'⇅'));
+      return th;
+    })
   );
+  const _palSortType = (PAL_COLS.find(c=>c.key===sortKey)||{}).type || 'txt';
+  departs = departs.slice().sort((a,b)=>{
+    let va=a[sortKey], vb=b[sortKey];
+    if(_palSortType==='num'){
+      va=_expePalNum(va); vb=_expePalNum(vb);
+    }else{
+      // Les cellules vides finissent toujours en bas, quel que soit le sens :
+      // une ligne sans date de retour n'est ni « avant » ni « après », elle
+      // n'a rien à dire et ne doit pas polluer le haut du tableau.
+      va=(va==null?'':String(va)).toLowerCase(); vb=(vb==null?'':String(vb)).toLowerCase();
+      if(!va&&vb) return 1;
+      if(va&&!vb) return -1;
+    }
+    if(va<vb) return sortDir==='asc'?-1:1;
+    if(va>vb) return sortDir==='asc'?1:-1;
+    return (a.id||0)-(b.id||0);
+  });
   const bodyRows = departs.length ? departs.map(r=>{
     const statut = r.palette_europe_statut || 'en_attente';
     const noteInp = h('input',{

@@ -657,9 +657,10 @@
     S.mystock = list;
   }
 
+  /** Prix en vigueur : 3 décimales à l'affichage, la saisie garde sa précision. */
   function fmtPrixUnite(v, unite) {
     if (v == null) return "—";
-    const s = fmtNum(v, 4, 4);
+    const s = fmtNum(v, 3, 3);
     return s === "—" ? s : s + " " + (unite || "€");
   }
 
