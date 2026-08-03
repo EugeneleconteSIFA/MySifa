@@ -334,6 +334,12 @@ body.reduce-anim .cal-skel{animation:none}
 /* ── Vue Semaine (emploi du temps) ──────────────────────────────────── */
 .cal-week-view{overflow-x:auto}
 /* v2.6.1 : .cal-wv-hint retire du HTML — regle de style supprimee. */
+/* v2.6.1 : bandes de bascule de semaine pendant un glisser-deposer. Le liseré
+   marque le bord vise ; la semaine change apres CAL_EDGE_DELAY_MS. box-shadow
+   inset est peint sur la padding-box : il ne defile pas avec le contenu. */
+.cal-wv-body{transition:box-shadow .12s}
+.cal-wv-body.cal-edge-prev{box-shadow:inset 5px 0 0 var(--accent)}
+.cal-wv-body.cal-edge-next{box-shadow:inset -5px 0 0 var(--accent)}
 .cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);box-sizing:border-box}  /* v2.5.17 : min-width retire (dim clippe). v2.6.0 : scrollbar-gutter retire -- inerte ici, la propriete ne s'applique qu'aux conteneurs de scroll, donc les 7 colonnes 1fr etaient calculees sur une largeur superieure a celles du corps (derive cumulative vers Sam/Dim). L'alignement est desormais fait par _syncCalHeaderGutter() qui reporte la largeur reelle de la gouttiere du corps sur le padding-right du header. */
 .cal-wv-corner{}
 .cal-wv-dayhead{padding:11px 10px;text-align:center;border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--card)}
@@ -3359,7 +3365,13 @@ let _calSavedScrollTop = null;
 // renderCalWeek(), et rearmer ici ramenait l'utilisateur au premier creneau de
 // la semaine juste apres qu'il ait cree le sien. C'est pour ca que l'appel a
 // ete retire de la fin des fonctions de rendu.
-function _requestCalAutoScroll(){ _calAutoScrollPending = true; }
+function _requestCalAutoScroll(){
+  // v2.6.1 : pendant un glisser-deposer inter-semaines, la navigation est
+  // provoquee par le geste lui-meme. Recentrer ferait glisser les colonnes
+  // sous le curseur en plein drop — on garde la position telle quelle.
+  try{ if(_CAL_DRAG && _CAL_DRAG.active) return; }catch(_){}
+  _calAutoScrollPending = true;
+}
 // A appeler juste avant `body.innerHTML = ...` : le remplacement du contenu
 // remet scrollTop a 0, il faut donc memoriser la position avant, pour pouvoir
 // la rendre a l'utilisateur apres un re-rendu sans changement de contexte.
@@ -4115,34 +4127,68 @@ function _onCalDragMove(e){
   }
 }
 
+// v2.6.1 : bascule de semaine par les BORDS de la grille, en plus du survol
+// des fleches qui existait deja (et restait peu decouvrable — il fallait viser
+// un petit bouton en haut a droite alors que le creneau peut etre en bas).
+// Glisser au-dela du bord droit de dimanche = lundi suivant ; au-dela du bord
+// gauche de lundi = dimanche precedent.
+const CAL_EDGE_ZONE_PX  = 48;   // largeur des bandes sensibles
+const CAL_EDGE_DELAY_MS = 450;  // survol requis avant de changer de semaine
+
+function _calEdgeDirection(e){
+  // Vue Jour exclue : la navigation y va de jour en jour, les bords n'ont pas
+  // le sens « semaine precedente / suivante ».
+  if(typeof CAL_STATE === 'undefined' || !CAL_STATE || CAL_STATE.view !== 'week') return null;
+  const body = document.getElementById('cal-wv-body');
+  if(!body) return null;
+  const r = body.getBoundingClientRect();
+  // Hors de la bande verticale de la grille : le geste vise autre chose.
+  if(e.clientY < r.top || e.clientY > r.bottom) return null;
+  if(e.clientX <= r.left  + CAL_EDGE_ZONE_PX) return 'prev';
+  if(e.clientX >= r.right - CAL_EDGE_ZONE_PX) return 'next';
+  return null;
+}
+
+function _clearCalEdgeCue(){
+  const body = document.getElementById('cal-wv-body');
+  if(body) body.classList.remove('cal-edge-prev', 'cal-edge-next');
+  document.querySelectorAll('.cal-nav button.cal-drop-target-nav').forEach(function(b){
+    b.classList.remove('cal-drop-target-nav');
+  });
+}
+
 function _handleCrossWeekHover(el, e){
   if(!_CAL_DRAG) return;
   const btnPrev = el ? el.closest('button[onclick="calPrev()"]') : null;
   const btnNext = el ? el.closest('button[onclick="calNext()"]') : null;
-  const dir = btnPrev ? 'prev' : (btnNext ? 'next' : null);
-  if(dir !== _CAL_DRAG._navHoverDir){
-    if(_CAL_DRAG._navHoverTimer){
-      clearTimeout(_CAL_DRAG._navHoverTimer);
-      _CAL_DRAG._navHoverTimer = null;
-    }
-    document.querySelectorAll('.cal-nav button.cal-drop-target-nav').forEach(function(b){
-      b.classList.remove('cal-drop-target-nav');
-    });
-    _CAL_DRAG._navHoverDir = dir;
-    if(dir){
-      const btn = (dir === 'prev') ? btnPrev : btnNext;
-      btn.classList.add('cal-drop-target-nav');
-      _CAL_DRAG._navHoverTimer = setTimeout(function(){
-        try{
-          if(dir === 'prev' && typeof calPrev === 'function') calPrev();
-          else if(dir === 'next' && typeof calNext === 'function') calNext();
-        }catch(_){}
-        btn.classList.remove('cal-drop-target-nav');
-        _CAL_DRAG._navHoverDir = null;
-        _CAL_DRAG._navHoverTimer = null;
-      }, 600);
-    }
+  const btn = btnPrev || btnNext;
+  const dir = btnPrev ? 'prev' : (btnNext ? 'next' : _calEdgeDirection(e));
+  // Direction inchangee : le timer en cours court toujours, on ne le relance
+  // pas. C'est aussi ce qui empeche d'enchainer les semaines sans relacher —
+  // apres une bascule, _navHoverDir reste arme tant qu'on n'a pas quitte la
+  // bande, il faut en sortir puis y revenir pour avancer d'une semaine de plus.
+  if(dir === _CAL_DRAG._navHoverDir) return;
+  if(_CAL_DRAG._navHoverTimer){
+    clearTimeout(_CAL_DRAG._navHoverTimer);
+    _CAL_DRAG._navHoverTimer = null;
   }
+  _clearCalEdgeCue();
+  _CAL_DRAG._navHoverDir = dir;
+  if(!dir) return;
+  if(btn) btn.classList.add('cal-drop-target-nav');
+  else {
+    const body = document.getElementById('cal-wv-body');
+    if(body) body.classList.add(dir === 'prev' ? 'cal-edge-prev' : 'cal-edge-next');
+  }
+  _CAL_DRAG._navHoverTimer = setTimeout(function(){
+    try{
+      if(dir === 'prev' && typeof calPrev === 'function') calPrev();
+      else if(dir === 'next' && typeof calNext === 'function') calNext();
+    }catch(_){}
+    _clearCalEdgeCue();
+    if(_CAL_DRAG) _CAL_DRAG._navHoverTimer = null;
+    // _navHoverDir volontairement CONSERVE : cf. commentaire ci-dessus.
+  }, CAL_EDGE_DELAY_MS);
 }
 
 function _onCalDragUp(e){
@@ -4152,9 +4198,7 @@ function _onCalDragUp(e){
   document.removeEventListener('mousemove', _onCalDragMove, true);
   document.removeEventListener('mouseup', _onCalDragUp, true);
   if(drag._navHoverTimer) clearTimeout(drag._navHoverTimer);
-  document.querySelectorAll('.cal-nav button.cal-drop-target-nav').forEach(function(b){
-    b.classList.remove('cal-drop-target-nav');
-  });
+  _clearCalEdgeCue();
   document.querySelectorAll('.cal-wv-day-col.drag-over').forEach(function(c){ c.classList.remove('drag-over'); });
   if(drag.ghost){ drag.ghost.remove(); drag.ghost = null; }
   drag.div.classList.remove('is-dragging');
