@@ -755,8 +755,10 @@
       .map((m) => {
         const open = !!S.expanded[m.id];
         const lien = m.mc_material_id
-          ? `<span class="badge badge-frontal" title="${escAttr(m.mc_name || "")}">Appairée</span>`
-          : '<span class="muted">—</span>';
+          ? `<span class="badge badge-frontal badge-link" data-ap-off="${m.id}" title="${escAttr((m.mc_name || "") + " — cliquer pour détacher")}">Appairée</span>`
+          : (S.canWrite
+              ? `<button type="button" class="btn btn-soft btn-sm" data-ap-on="${m.id}">Appairer</button>`
+              : '<span class="muted">—</span>');
         return `<tr class="ms-row${open ? " open" : ""}" data-ms-row="${m.id}">
             <td class="ms-caret">${open ? "▾" : "▸"}</td>
             <td>${categorieBadge(m.categorie)}</td>
@@ -821,6 +823,22 @@
         const id = tr.getAttribute("data-ms-row");
         S.expanded[id] = !S.expanded[id];
         renderMystockList();
+      };
+    });
+    document.querySelectorAll("[data-ap-on]").forEach((b) => {
+      b.onclick = (e) => {
+        e.stopPropagation();
+        const id = parseInt(b.getAttribute("data-ap-on"), 10);
+        const m = S.mystock.find((x) => x.id === id);
+        openAppairageModal(id, m ? m.reference : "");
+      };
+    });
+    document.querySelectorAll("[data-ap-off]").forEach((b) => {
+      b.onclick = (e) => {
+        e.stopPropagation();
+        const id = parseInt(b.getAttribute("data-ap-off"), 10);
+        const m = S.mystock.find((x) => x.id === id);
+        detacherAppairage(id, m ? m.reference : "");
       };
     });
     bindMystockActions();
@@ -919,6 +937,115 @@
         }
       };
     });
+  }
+
+  /**
+   * Appairage d'une matière MyStock avec une matière de la base Coûts matières.
+   * Une fois appairée, c'est le prix MyStock qui pilote le calcul du coût.
+   */
+  async function openAppairageModal(matiereId, reference) {
+    const root = document.getElementById("modal-root");
+    root.innerHTML = `
+      <div class="modal-backdrop" id="ap-back">
+        <div class="modal" style="max-width:640px">
+          <div class="modal-head">
+            <h2>Appairer « ${escHtml(reference || "")} »</h2>
+            <button type="button" class="icon-btn" id="ap-close" aria-label="Fermer">×</button>
+          </div>
+          <div class="field-hint">Choisissez la matière de la base Coûts matières qui correspond.
+            Son prix sera alors lu directement dans MyStock.</div>
+          <div class="loading-state" style="padding:24px"><div class="spinner"></div></div>
+        </div>
+      </div>`;
+    const close = () => {
+      root.innerHTML = "";
+    };
+    document.getElementById("ap-back").onclick = (e) => {
+      if (e.target.id === "ap-back") close();
+    };
+    document.getElementById("ap-close").onclick = close;
+
+    let data;
+    try {
+      data = await api("/api/pricing/bridge/suggest/" + matiereId);
+    } catch (e) {
+      showToast(e.message, "danger");
+      close();
+      return;
+    }
+    const items = data.suggestions || [];
+    const box = document.querySelector("#ap-back .modal");
+    box.querySelector(".loading-state").remove();
+    const search = document.createElement("input");
+    search.type = "search";
+    search.className = "search-input";
+    search.placeholder = "Filtrer (nom, appellation…)";
+    search.style.cssText = "width:100%;max-width:none;margin-top:12px;padding:10px 14px;" +
+      "border:1px solid var(--border);border-radius:10px;background:var(--filter-input-bg);" +
+      "color:var(--text);font-family:inherit;font-size:13px";
+    const list = document.createElement("div");
+    list.className = "ap-list";
+    box.appendChild(search);
+    box.appendChild(list);
+
+    const draw = (q) => {
+      const t = (q || "").trim().toLowerCase();
+      const shown = items.filter(
+        (m) =>
+          !t ||
+          String(m.name || "").toLowerCase().includes(t) ||
+          String(m.appellation_code || "").toLowerCase().includes(t)
+      );
+      list.innerHTML = shown.length
+        ? shown
+            .slice(0, 200)
+            .map(
+              (m) => `<div class="ap-item" data-ap="${m.id}">
+                <div>
+                  <div class="ap-name">${escHtml(m.name)}</div>
+                  <div class="ap-sub">${escHtml(m.appellation_code || "—")} · ${escHtml(m.category_code)} ·
+                    ${fmtNum(m.unit_price, 4, 4)} ${escHtml(m.price_currency)}/${m.price_basis === "PER_M2" ? "m²" : "kg"}</div>
+                </div>
+                ${m._score >= 80 ? '<div class="ap-score">correspondance forte</div>' : (m._score >= 15 ? '<div class="ap-score" style="color:var(--muted)">proche</div>' : "")}
+              </div>`
+            )
+            .join("")
+        : '<div class="empty" style="padding:20px">Aucune matière ne correspond</div>';
+      list.querySelectorAll("[data-ap]").forEach((el) => {
+        el.onclick = async () => {
+          try {
+            await api("/api/pricing/bridge/link", {
+              method: "POST",
+              body: { mp_id: matiereId, mc_id: parseInt(el.getAttribute("data-ap"), 10) },
+            });
+            close();
+            showToast("Matières appairées — le prix MyStock pilote désormais le calcul.", "success");
+            await loadMystockList();
+            renderMystockList();
+          } catch (e) {
+            showToast(e.message, "danger");
+          }
+        };
+      });
+    };
+    draw("");
+    search.oninput = () => draw(search.value);
+    search.focus();
+  }
+
+  async function detacherAppairage(matiereId, nom) {
+    const ok = await confirmDelete(
+      `Détacher « ${nom || ""} » ? La matière Coûts matières retrouvera son prix propre.`
+    );
+    if (!ok) return;
+    try {
+      await api("/api/pricing/bridge/link/" + matiereId, { method: "DELETE" });
+      showToast("Appairage retiré.", "success");
+      await loadMystockList();
+      renderMystockList();
+    } catch (e) {
+      showToast(e.message, "danger");
+    }
   }
 
   function categorieBadge(cat) {
@@ -1183,22 +1310,20 @@
       : "—";
     const stale = isFxStale(s.eur_usd_rate_updated_at);
     return `
-      <div class="settings-inline">
+      <aside class="settings-side">
         <div class="si-head">Paramètres globaux <span>appliqués à toutes les matières</span></div>
-        <div class="field-row">
-          <div class="field f-num"><label>Taux USD → EUR ${stale ? fxStaleBadgeHtml() : ""}</label>
-            <input type="number" step="0.0001" id="si-rate" value="${escAttr(s.eur_usd_rate)}"/>
-          </div>
-          <div class="field f-num"><label>Marge par défaut <span class="lbl-unit">%</span></label>
-            <input type="number" step="0.01" id="si-margin" value="${escAttr(s.default_margin_pct)}"/>
-          </div>
+        <div class="field"><label>Taux USD → EUR ${stale ? fxStaleBadgeHtml() : ""}</label>
+          <input type="number" step="0.0001" id="si-rate" value="${escAttr(s.eur_usd_rate)}"/>
+          <div class="si-meta">MAJ ${escHtml(fxDate)} · ${escHtml(s.eur_usd_rate_source || "—")}</div>
+        </div>
+        <div class="field"><label>Marge par défaut <span class="lbl-unit">%</span></label>
+          <input type="number" step="0.01" id="si-margin" value="${escAttr(s.default_margin_pct)}"/>
         </div>
         <div class="si-actions">
-          <button type="button" class="btn btn-soft btn-sm" id="si-save">Appliquer</button>
+          <button type="button" class="btn btn-accent btn-sm" id="si-save">Appliquer</button>
           <button type="button" class="btn btn-soft btn-sm" id="si-fx">Rafraîchir le taux</button>
-          <span class="si-meta">MAJ ${escHtml(fxDate)} · ${escHtml(s.eur_usd_rate_source || "—")}</span>
         </div>
-      </div>`;
+      </aside>`;
   }
 
   function bindInlineSettings(isNew) {
@@ -1314,17 +1439,15 @@
           '<button type="button" class="btn btn-accent" id="btn-back-mat">Retour liste</button>'
         )}
         <div class="mat-summary" id="mat-summary">${matSummaryHtml(S.matPreview)}</div>
-        <div class="form-card form-compact">
+        <div class="form-layout">
+        <div class="form-card">
           <div class="form-section"><h3>Identification</h3>
             <div class="field"><label>Nom</label><input id="f-name" value="${escAttr(f.name)}"/></div>
             <div class="field-row">
               <div class="field f-mid"><label>Appellation</label><input id="f-app" value="${escAttr(f.appellation_code)}"/></div>
               <div class="field f-mid"><label>Catégorie</label><select id="f-cat">${catOpts}</select></div>
             </div>
-            <div class="field-row ident-row">
-              <div class="field f-mid"><label>Fournisseur</label><select id="f-sup">${supOpts}</select>${supLegacy}</div>
-              ${inlineSettingsHtml()}
-            </div>
+            <div class="field f-mid"><label>Fournisseur</label><select id="f-sup">${supOpts}</select>${supLegacy}</div>
           </div>
 
           <div class="form-section"><h3>Prix d'achat</h3>
@@ -1390,6 +1513,9 @@
             <button type="button" class="btn btn-accent" id="btn-save-mat">Enregistrer</button>
             ${!isNew ? '<button type="button" class="btn btn-danger" id="btn-del-mat">Supprimer</button>' : ""}
           </div>` : ""}
+        </div>
+
+        ${inlineSettingsHtml()}
         </div>
 
         <div id="mat-recap">${recapTableHtml(S.matPreview)}</div>
