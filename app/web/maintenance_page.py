@@ -4994,7 +4994,10 @@ async function openCaseModal(opts){
   _loadOperatorsCatalog().then(() => renderCaseOperators()).catch(() => {});
   // Charge les templates puis pré-sélectionne si le créneau en est issu
   loadTemplates().then(() => refreshCaseTemplatePicker()).catch(() => {});
-  if(_PENDING_CASE) _PENDING_CASE.template_id = preselectedTemplateId;
+  // v2.6.1 : en EDITION on preserve le lien existant (une occurrence de
+  // recurrence doit rester rattachee a son modele) ; en CREATION il n'y a
+  // jamais de lien, meme via « Créer depuis un modèle » — cf. applyCaseTemplate.
+  if(_PENDING_CASE) _PENDING_CASE.template_id = opts.editId ? preselectedTemplateId : null;
   // v2.6.1 : le rappel des modeles importes repart de zero a chaque ouverture.
   // En EDITION d'un creneau deja issu d'un modele, on reaffiche son origine
   // sans reimporter ses ops (elles sont deja chargees depuis l'event).
@@ -12838,14 +12841,18 @@ async function applyCaseTemplate(templateId){
     }
     const res = _mergeTemplateOps(tmpl.ops || []);
     _CASE_TMPL_USED.push({ id: tmpl.id, name: tmpl.name });
-    // Etiquette du creneau : conservee tant qu'UN SEUL modele est importe.
-    // Des le second, on la retire — un creneau composite n'est la copie
-    // d'aucun modele, et surtout : supprimer un modele efface ses creneaux
-    // futurs. Garder l'etiquette ferait disparaitre un creneau composite en
-    // emportant les operations venues des autres modeles.
-    if(_PENDING_CASE){
-      _PENDING_CASE.template_id = (_CASE_TMPL_USED.length === 1) ? tmpl.id : null;
-    }
+    // v2.6.1 : l'import NE CREE AUCUN LIEN avec le modele. C'est un simple
+    // raccourci de saisie : il recopie des operations dans le formulaire, rien
+    // de plus. Le creneau produit est autonome.
+    //
+    // Avant, un import unique laissait template_id sur le creneau, ce qui le
+    // rendait solidaire du modele : modifier le modele ecrasait ses operations,
+    // desactiver sa recurrence ou le supprimer effacait purement le creneau —
+    // alors qu'il avait ete compose a la main. Le comportement dependait en
+    // plus du NOMBRE de modeles importes, l'etiquette tombant des le second.
+    // On ne pose donc plus rien : seules les occurrences generees par la
+    // recurrence portent un lien (template_id + template_origin_date), et
+    // elles sont creees cote serveur, jamais par ce chemin.
     renderCaseOpsList();
     renderCaseTemplatesApplied();
     let msg = 'Modèle « ' + tmpl.name + ' » importé';
@@ -13696,9 +13703,12 @@ async function startFromTemplate(templateId){
   closeCalFabMenu();
   const { iso, h } = _defaultIsoAndHour();
   await openCaseModal({ iso, defaultHour: h });
+  // v2.6.1 : pre-remplit les operations depuis le modele, sans creer de lien
+  // (applyCaseTemplate ne pose plus template_id). Le select revient sur son
+  // option neutre : c'est une action d'import, pas l'etat du creneau.
   await applyCaseTemplate(templateId);
   const sel = document.getElementById('case-mod-template');
-  if(sel) sel.value = String(templateId);
+  if(sel) sel.value = '';
 }
 
 
