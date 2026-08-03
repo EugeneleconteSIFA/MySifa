@@ -8,6 +8,10 @@ from typing import Any
 
 def default_fiche() -> dict[str, Any]:
     return {
+        # Reference de la fiche technique SIFA (XXX/NNNN) saisie dans la fiche
+        # produit. Identifie le produit sur l'etiquette carton et declenche
+        # l'enrichissement fiche technique (BAT, PDF fournisseur).
+        "ref_sifa": "",
         "type_produit": "rouleau",
         "impressions": True,
         "etiquette": {

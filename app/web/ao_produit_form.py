@@ -207,6 +207,10 @@ border-top:1px solid var(--border);background:var(--card)}
 AO_PRODUIT_FORM_JS = r"""
 function defaultProduitFiche() {
   return {
+    // Reference de la fiche technique SIFA (format XXX/NNNN). Elle identifie
+    // le produit sur l'etiquette carton et declenche l'enrichissement fiche
+    // technique cote serveur (BAT, PDF fournisseur).
+    ref_sifa: '',
     type_produit: 'rouleau',
     impressions: true,
     etiquette: { laize: '', longueur: '', rayon: '', perforation: '' },
@@ -386,7 +390,7 @@ function renderProduitForm() {
     pfRow('Impressions', '<select id="pf-impressions"><option value="1"'+(f.impressions?' selected':'')+'>Oui</option>'+
       '<option value="0"'+(f.impressions?'':' selected')+'>Non</option></select>')+
     pfRow('Client', clientPicker, 'pf-inline-wide pf-client-row')+
-    pfRow('Ref SIFA', '<div class="pf-refsifa-wrap" style="position:relative;display:flex;gap:6px;align-items:center">'+'<input id="pf-refsifa" placeholder="Rechercher une fiche technique..." autocomplete="off" style="flex:1">'+'<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-refsifa-clear" title="Effacer" style="padding:4px 8px">\u00d7</button>'+'<div class="pf-refsifa-list" id="pf-refsifa-list" style="display:none;position:absolute;top:100%;left:0;right:36px;z-index:60;max-height:280px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:8px;margin-top:2px;box-shadow:0 6px 20px rgba(0,0,0,.12)"></div>'+'</div>', 'pf-inline-wide pf-wide-row')+
+    pfRow('Ref SIFA', '<div class="pf-refsifa-wrap" style="position:relative;display:flex;gap:6px;align-items:center">'+'<input id="pf-refsifa" value="'+escAttr(f.ref_sifa||'')+'" placeholder="Rechercher une fiche technique..." autocomplete="off" style="flex:1">'+'<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-refsifa-clear" title="Effacer" style="padding:4px 8px">\u00d7</button>'+'<div class="pf-refsifa-list" id="pf-refsifa-list" style="display:none;position:absolute;top:100%;left:0;right:36px;z-index:60;max-height:280px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:8px;margin-top:2px;box-shadow:0 6px 20px rgba(0,0,0,.12)"></div>'+'</div>', 'pf-inline-wide pf-wide-row')+
     '</div></div>'+
 
     '<div class="pf-section"><div class="pf-section-title">Fiche technique</div>'+
@@ -749,6 +753,11 @@ function collectImpDetails(kind) {
 
 function collectProduitForm() {
   const f = S.produitForm.fiche;
+  // La Ref SIFA etait un simple autocomplete de prechargement : sa valeur
+  // n'etait ni enregistree ni rechargee, si bien que fiche.ref_sifa restait
+  // toujours vide cote serveur (enrichissement fiche technique du BAT et des
+  // PDF fournisseur inclus). On la persiste desormais.
+  f.ref_sifa = document.getElementById('pf-refsifa')?.value.trim() || '';
   f.type_produit = document.getElementById('pf-type')?.value || 'rouleau';
   f.impressions = document.getElementById('pf-impressions')?.value === '1';
   f.etiquette = {

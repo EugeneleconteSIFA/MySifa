@@ -37,25 +37,40 @@ from typing import Any, Dict, List, Optional
 PAGE_W_MM = 100.0
 PAGE_H_MM = 50.0
 
-MARGIN = 2.6          # marge blanche autour du cadre
-STRIP_W = 6.4         # bande verticale de droite (date + Made in France)
-LABEL_COL_W = 21.0    # largeur de la colonne des intitules
-HEADER_H = 11.0       # bandeau superieur (SI + reference)
-SI_COL_W = 8.5        # largeur de la case "SI" dans le bandeau
+# Le modele physique n'a NI cadre exterieur NI encadrement de la date : les
+# seuls traits sont un filet vertical separant intitules et valeurs, des
+# filets horizontaux qui ne courent que sous la colonne des intitules, et un
+# unique filet sous le gros numero. Toute ligne supplementaire s'en ecarte.
+X_LABEL = 1.8         # bord gauche des intitules et des filets horizontaux
+X_RULE = 23.5         # filet vertical intitules / valeurs
+X_VALUE = 25.0        # bord gauche des valeurs
+X_HDR_RULE_R = 89.0   # extremite droite du filet sous le gros numero
+X_VALUE_MAX = 79.0    # au-dela on entre dans la zone des textes pivotes
+X_DATE = 81.5         # colonne pivotee : date
+X_MADE_IN = 86.5      # colonne pivotee : Made in France
 
-ROWS = ("ref_client", "matiere", "adhesif", "ref_format", "condt", "quantite")
+Y_HDR_RULE_L = 13.0   # filet sous "SI" (colonne de gauche uniquement)
+Y_HDR_RULE_R = 16.7   # filet sous le gros numero (colonne de droite)
+Y_REF_CLIENT = 21.3   # bas de la ligne "Ref. client", plus haute que les autres
+ROW_H = 5.3           # hauteur des 5 lignes suivantes
+Y_BASE_SI = 8.3       # ligne de base du "SI"
+Y_BASE_REF = 11.5     # ligne de base du gros numero
+Y_TOP_DATE = 26.5     # depart des textes pivotes (lecture de haut en bas)
+Y_TOP_MADE_IN = 24.0
+
+# Lignes sous "Ref. client", dans l'ordre d'affichage.
+ROWS = ("matiere", "adhesif", "ref_format", "condt", "quantite")
 
 COLOR_INK = "#000000"
 COLOR_RULE = "#000000"
 
-RULE_W = 0.25         # epaisseur des filets du tableau
-FRAME_W = 0.35        # epaisseur du cadre exterieur
+RULE_W = 0.3          # epaisseur des filets
 
-FS_HEADER = 5.6       # taille du gros numero (mm)
+FS_HEADER = 6.2       # taille du gros numero (mm)
 FS_SI = 3.0
-FS_LABEL = 2.5
+FS_LABEL = 2.4
 FS_VALUE = 2.9
-FS_STRIP = 2.2
+FS_STRIP = 2.0
 FS_MIN = 1.7          # plancher avant troncature
 
 # Largeur moyenne d'un glyphe Helvetica, en fraction de la taille de fonte.
@@ -164,10 +179,11 @@ def build_etiquette_spec(
         return _s(row.get("designation") or row.get("libelle") or row.get("nom"))
 
     # --- reference affichee -------------------------------------------------
-    # Choix produit : la reference SIFA (XXX/NNNN) est ce qui figure sur le
-    # carton physique. Repli sur la reference MyAO composee si elle manque.
-    ref_sifa = _s(fiche.get("ref_sifa") or produit.get("ref_sifa"))
-    reference = ref_sifa or _s(produit.get("ref"))
+    # Uniquement la reference SIFA (XXX/NNNN) : c'est elle qui figure sur le
+    # carton physique. Pas de repli sur la reference MyAO composee — celle-ci
+    # decrit le produit ("85 x 55 mm Thermal Eco Permanent, M25 mm") et n'a
+    # rien a faire en identifiant de carton. Fiche sans Ref SIFA -> case vide.
+    reference = _s(fiche.get("ref_sifa") or produit.get("ref_sifa"))
 
     # --- format -------------------------------------------------------------
     laize = _f(ft.get("eti_laize")) or _f(etiquette.get("laize"))
@@ -176,7 +192,7 @@ def build_etiquette_spec(
     if laize > 0 and longueur > 0:
         format_txt = f"{_fmt_dim(laize)} x {_fmt_dim(longueur)} mm"
 
-    ref_format = " / ".join(p for p in (reference, format_txt) if p)
+    ref_format = "  /  ".join(p for p in (reference, format_txt) if p)
 
     # --- matiere / adhesif --------------------------------------------------
     matiere_txt = _s(ft.get("support")) or mp_label(matiere.get("frontal_id"))
@@ -230,79 +246,74 @@ def build_etiquette_ops(spec: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Liste d'ops en mm, origine en haut a gauche, partagee SVG / PDF."""
     ops: List[Dict[str, Any]] = []
 
-    x0 = MARGIN
-    x1 = PAGE_W_MM - MARGIN
-    y0 = MARGIN
-    y1 = PAGE_H_MM - MARGIN
+    def rule(xa, ya, xb, yb):
+        ops.append({"op": "line", "x1": xa, "y1": ya, "x2": xb, "y2": yb,
+                    "stroke": COLOR_RULE, "sw": RULE_W})
 
-    strip_x = x1 - STRIP_W              # filet separant la bande de droite
-    table_r = strip_x                   # bord droit des lignes du tableau
-    col_x = x0 + LABEL_COL_W            # separateur intitule / valeur
-    header_b = y0 + HEADER_H            # bas du bandeau
-    row_h = (y1 - header_b) / len(ROWS)
+    def text(x, y, s, size, *, bold=False, anchor="start", rot=None):
+        op = {"op": "text", "x": x, "y": y, "s": s, "size": size, "anchor": anchor}
+        if bold:
+            op["bold"] = True
+        if rot:
+            op["rot"] = rot
+        ops.append(op)
 
     # Fond blanc : le PDF peut etre imprime sur support colore.
     ops.append({"op": "rect", "x": 0, "y": 0, "w": PAGE_W_MM, "h": PAGE_H_MM,
                 "fill": "#FFFFFF"})
 
-    # Cadre exterieur
-    ops.append({"op": "rect", "x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0,
-                "stroke": COLOR_RULE, "sw": FRAME_W})
+    y_bottom = Y_REF_CLIENT + len(ROWS) * ROW_H
 
-    def rule(xa, ya, xb, yb, w=RULE_W):
-        ops.append({"op": "line", "x1": xa, "y1": ya, "x2": xb, "y2": yb,
-                    "stroke": COLOR_RULE, "sw": w})
-
-    # Bande verticale de droite
-    rule(strip_x, y0, strip_x, y1)
-
-    # Bandeau : case "SI" puis gros numero
-    rule(x0, header_b, table_r, header_b, FRAME_W)
-    rule(x0 + SI_COL_W, y0, x0 + SI_COL_W, header_b)
-
-    ops.append({"op": "text", "x": x0 + SI_COL_W / 2, "y": y0 + HEADER_H / 2 + FS_SI * 0.36,
-                "s": spec.get("site_code") or SITE_CODE, "size": FS_SI,
-                "anchor": "middle", "bold": True})
+    # Bandeau : "SI" a gauche, gros numero a droite. Aucun filet vertical ici,
+    # les deux blocs sont simplement espaces.
+    text((X_LABEL + X_RULE) / 2, Y_BASE_SI, spec.get("site_code") or SITE_CODE,
+         FS_SI, bold=True, anchor="middle")
 
     ref_txt, ref_size = _fit(spec.get("reference") or "",
-                             table_r - (x0 + SI_COL_W) - 6.0, FS_HEADER)
+                             X_HDR_RULE_R - X_VALUE, FS_HEADER)
     if ref_txt:
-        ops.append({"op": "text", "x": x0 + SI_COL_W + 3.0,
-                    "y": y0 + HEADER_H / 2 + ref_size * 0.36,
-                    "s": ref_txt, "size": ref_size, "anchor": "start", "bold": True})
+        text(X_VALUE, Y_BASE_REF, ref_txt, ref_size, bold=True)
 
-    # Colonne des intitules
-    rule(col_x, header_b, col_x, y1)
+    # Filet sous "SI" (colonne de gauche) puis filet sous le numero, plus bas.
+    rule(X_LABEL, Y_HDR_RULE_L, X_RULE, Y_HDR_RULE_L)
+    rule(X_RULE, Y_HDR_RULE_R, X_HDR_RULE_R, Y_HDR_RULE_R)
 
-    # Lignes
+    # Filet vertical : du bas du bandeau gauche jusqu'a la derniere ligne.
+    rule(X_RULE, Y_HDR_RULE_L, X_RULE, y_bottom)
+
+    # "Ref. client" : ligne plus haute que les autres, intitule cale en haut.
+    text(X_LABEL + 0.6, Y_HDR_RULE_L + 3.0, _ROW_LABELS["ref_client"], FS_LABEL)
+    ref_cli = _s(spec.get("ref_client"))
+    if ref_cli:
+        txt, size = _fit(ref_cli, X_VALUE_MAX - X_VALUE, FS_VALUE)
+        text(X_VALUE, Y_HDR_RULE_L + 3.0, txt, size)
+    rule(X_LABEL, Y_REF_CLIENT, X_RULE, Y_REF_CLIENT)
+
+    # Lignes suivantes : filet horizontal sous la colonne des intitules
+    # uniquement, et aucun filet sous la derniere.
     for idx, key in enumerate(ROWS):
-        top = header_b + idx * row_h
-        base = top + row_h / 2 + FS_VALUE * 0.34
-        if idx:
-            rule(x0, top, table_r, top)
+        top = Y_REF_CLIENT + idx * ROW_H
+        base = top + ROW_H / 2 + FS_VALUE * 0.34
 
-        ops.append({"op": "text", "x": x0 + 1.6, "y": top + row_h / 2 + FS_LABEL * 0.34,
-                    "s": _ROW_LABELS[key], "size": FS_LABEL, "anchor": "start"})
+        text(X_LABEL + 0.6, top + ROW_H / 2 + FS_LABEL * 0.34,
+             _ROW_LABELS[key], FS_LABEL)
 
         value = _s(spec.get(key))
-        if not value:
-            continue
-        txt, size = _fit(value, table_r - col_x - 3.0, FS_VALUE)
-        ops.append({"op": "text", "x": col_x + 1.6,
-                    "y": top + row_h / 2 + size * 0.34,
-                    "s": txt, "size": size, "anchor": "start"})
+        if value:
+            txt, size = _fit(value, X_VALUE_MAX - X_VALUE, FS_VALUE)
+            text(X_VALUE, base, txt, size)
 
-    # Bande verticale : date en haut, "Made in France" en bas, lecture
-    # de haut en bas (rotation horaire), comme sur l'etiquette physique.
-    strip_cx = strip_x + STRIP_W / 2
+        if idx < len(ROWS) - 1:
+            rule(X_LABEL, top + ROW_H, X_RULE, top + ROW_H)
+
+    # Date et "Made in France" : deux textes pivotes cote a cote sur le bord
+    # droit, lecture de haut en bas, sans aucun filet autour.
     date_txt = _s(spec.get("date"))
     if date_txt:
-        ops.append({"op": "text", "x": strip_cx + FS_STRIP * 0.36, "y": y0 + 1.6,
-                    "s": date_txt, "size": FS_STRIP, "anchor": "start", "rot": 90})
+        text(X_DATE, Y_TOP_DATE, date_txt, FS_STRIP, rot=90)
     made = _s(spec.get("made_in"))
     if made:
-        ops.append({"op": "text", "x": strip_cx + FS_STRIP * 0.36, "y": y1 - 1.6,
-                    "s": made, "size": FS_STRIP, "anchor": "end", "rot": 90})
+        text(X_MADE_IN, Y_TOP_MADE_IN, made, FS_STRIP, rot=90)
 
     return ops
 
