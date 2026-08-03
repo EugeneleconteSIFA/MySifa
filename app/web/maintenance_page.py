@@ -5118,7 +5118,14 @@ function _openCaseModalInner(opts){
   m.classList.add('open');
   m.setAttribute('aria-hidden','false');
   document.body.style.overflow = 'hidden';
-  setTimeout(() => { sEl?.focus(); }, 60);
+  // v2.6.1 : le focus allait sur le champ « Heure de début ». Or le timepicker
+  // maison s'ouvre sur l'evenement focus (mysifa_timepicker.js) : le panneau
+  // heures/minutes se depliait donc tout seul a chaque ouverture de modale, par
+  // dessus le formulaire, alors que les horaires par defaut conviennent le plus
+  // souvent. On donne le focus au premier champ de saisie reel — le nom du
+  // creneau — qui n'ouvre aucun panneau flottant. Le clavier entre bien dans la
+  // modale, sans rien deplier.
+  setTimeout(() => { (nomEl || sEl)?.focus(); }, 60);
 }
 function closeCaseModal(){
   const m = document.getElementById('planning-case-modal');
