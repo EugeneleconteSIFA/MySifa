@@ -676,6 +676,9 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .case-tmpl-picker select{flex:1;min-width:180px}
 .case-tmpl-picker-btn{padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .12s}
 .case-tmpl-picker-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* v2.6.1 : rappel des modeles deja importes dans le creneau en cours. */
+.case-tmpl-applied{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 10px 0;font-size:12px;color:var(--muted)}
+.case-tmpl-applied .case-tmpl-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;background:var(--accent-bg);color:var(--accent);border:1px solid rgba(34,211,238,.28);font-weight:700}
 /* Mode opérateur : masque tous les éléments d'édition dans le calendrier */
 body[data-maint-role="operator"] .cal-fab,
 body[data-maint-role="operator"] .cal-fab-menu,
@@ -2629,13 +2632,6 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
     </div>
     <form id="case-mod-form" onsubmit="submitCaseModal(event)">
       <div class="modal-body">
-        <div class="case-tmpl-picker" id="case-tmpl-picker-wrap">
-          <span class="case-tmpl-picker-label">Modèle</span>
-          <select id="case-mod-template" class="ops-select" onchange="applyCaseTemplate(this.value)">
-            <option value="">Sans modèle (créneau vierge)</option>
-          </select>
-          <button type="button" class="case-tmpl-picker-btn" onclick="openTemplatesModal()">Gérer les modèles</button>
-        </div>
         <div class="ops-saisi-par">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
           <span>Date : <strong id="case-mod-date">—</strong></span>
@@ -2655,13 +2651,26 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </div>
         </div>
         <div class="case-ops-section">
-          <div class="case-ops-head">
+          <div class="case-ops-head" style="flex-wrap:wrap;gap:8px">
             <label class="ops-field-label">Opérations à effectuer<span class="req">*</span></label>
-            <button type="button" class="case-ops-add-btn" onclick="addCaseOp()">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Ajouter une opération
-            </button>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <!-- v2.6.1 : l'import de modele a quitte le haut de la modale pour
+                   venir ici. Il AJOUTE et fusionne (plusieurs modeles possibles)
+                   au lieu de remplacer. Le select se reinitialise apres chaque
+                   import pour rester une action, pas un etat. -->
+              <select id="case-mod-template" class="ops-select" style="width:auto;min-width:190px"
+                      onchange="applyCaseTemplate(this.value); this.value='';"
+                      title="Ajoute les opérations d'un modèle au créneau">
+                <option value="">+ Importer un modèle…</option>
+              </select>
+              <button type="button" class="case-tmpl-picker-btn" onclick="openTemplatesModal()">Gérer</button>
+              <button type="button" class="case-ops-add-btn" onclick="addCaseOp()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Ajouter une opération
+              </button>
+            </div>
           </div>
+          <div id="case-tmpl-applied" class="case-tmpl-applied" style="display:none"></div>
           <div class="case-ops-list" id="case-mod-ops-list"></div>
         </div>
         <div class="case-ops-section">
@@ -4935,8 +4944,21 @@ async function openCaseModal(opts){
   // Charge le catalogue en arrière-plan puis rerender le picker.
   _loadOperatorsCatalog().then(() => renderCaseOperators()).catch(() => {});
   // Charge les templates puis pré-sélectionne si le créneau en est issu
-  loadTemplates().then(() => refreshCaseTemplatePicker(preselectedTemplateId)).catch(() => {});
+  loadTemplates().then(() => refreshCaseTemplatePicker()).catch(() => {});
   if(_PENDING_CASE) _PENDING_CASE.template_id = preselectedTemplateId;
+  // v2.6.1 : le rappel des modeles importes repart de zero a chaque ouverture.
+  // En EDITION d'un creneau deja issu d'un modele, on reaffiche son origine
+  // sans reimporter ses ops (elles sont deja chargees depuis l'event).
+  _CASE_TMPL_USED = [];
+  if(preselectedTemplateId){
+    loadTemplates().then(function(){
+      const t = (TEMPLATES_STATE.list || []).find(x => String(x.id) === String(preselectedTemplateId));
+      if(t){ _CASE_TMPL_USED = [{ id: t.id, name: t.name }]; }
+      renderCaseTemplatesApplied();
+    }).catch(function(){});
+  } else {
+    renderCaseTemplatesApplied();
+  }
   return result;
 }
 function _openCaseModalInner(opts){
@@ -12597,25 +12619,88 @@ async function restoreEvent(eventId){
   }
 }
 
-function refreshCaseTemplatePicker(selectedId){
+function refreshCaseTemplatePicker(){
   const sel = document.getElementById('case-mod-template');
   if(!sel) return;
   const list = TEMPLATES_STATE.list || [];
-  const cur = selectedId != null ? String(selectedId) : (sel.value || '');
-  sel.innerHTML = '<option value="">Sans modèle (créneau vierge)</option>' +
+  // v2.6.1 : le select est une ACTION d'import, plus un etat « modele du
+  // creneau ». Il revient donc toujours sur son option neutre, et aucun
+  // modele n'y est pre-selectionne — on peut en importer plusieurs de suite.
+  sel.innerHTML = '<option value="">+ Importer un modèle…</option>' +
     list.map(t =>
-      '<option value="' + escAttr(t.id) + '"' + (String(t.id) === cur ? ' selected' : '') + '>' +
+      '<option value="' + escAttr(t.id) + '">' +
         escHtml(t.name) + ' (' + t.ops_count + ' op.)' +
       '</option>'
     ).join('');
+  sel.value = '';
+}
+
+// v2.6.1 : modeles CUMULABLES sur un meme creneau.
+// _CASE_TMPL_USED memorise les modeles importes dans la modale en cours :
+//   - pour afficher le rappel sous la liste d'operations ;
+//   - pour decider de l'etiquette template_id du creneau (cf. plus bas).
+let _CASE_TMPL_USED = [];   // [{id, name}]
+
+function _resetCaseTemplates(){ _CASE_TMPL_USED = []; renderCaseTemplatesApplied(); }
+
+function renderCaseTemplatesApplied(){
+  const box = document.getElementById('case-tmpl-applied');
+  if(!box) return;
+  if(!_CASE_TMPL_USED.length){ box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = '';
+  box.innerHTML = 'Modèle(s) importé(s) : ' + _CASE_TMPL_USED.map(t =>
+    '<span class="case-tmpl-chip">' + escHtml(t.name) + '</span>').join(' ');
+}
+
+// Fusionne les ops d'un modele dans _CASE_OPS.
+//   - meme code deja present  -> UNION des machines (aucune n'est perdue)
+//                              + consignes concatenees si elles different
+//   - code absent             -> ajout en fin de liste
+// Retourne {ajoutees, fusionnees} pour le message de confirmation.
+function _mergeTemplateOps(tmplOps){
+  let ajoutees = 0, fusionnees = 0;
+  for(const o of (tmplOps || [])){
+    const code = o.code;
+    if(!code) continue;
+    const machines = Array.isArray(o.machines) ? o.machines.slice() : [];
+    const consignes = (o.consignes || '').trim();
+    const existing = _CASE_OPS.find(c => c.opTypeId === code);
+    if(existing){
+      // Union des machines : c'est le point qui manquait. La dedup serveur
+      // gardait les machines de la PREMIERE occurrence, donc importer deux
+      // modeles portant la meme operation sur des machines differentes en
+      // perdait une silencieusement.
+      for(const m of machines){
+        if(existing.machines.indexOf(m) === -1) existing.machines.push(m);
+      }
+      const cur = (existing.consignes || '').trim();
+      if(consignes && cur.indexOf(consignes) === -1){
+        existing.consignes = cur ? (cur + '\n' + consignes) : consignes;
+      }
+      fusionnees++;
+    } else {
+      _CASE_OPS.push({
+        _op_id: null,
+        opTypeId: code,
+        opName: o.code_label || code,
+        opNiveau: null,
+        opFreq: '',
+        machines: machines,
+        consignes: consignes,
+      });
+      ajoutees++;
+    }
+  }
+  // Réinjecte les infos riches depuis OPS_TYPES_STATE (nom, niveau, frequence).
+  for(const co of _CASE_OPS){
+    const t = OPS_TYPES_STATE.list.find(x => x.id === co.opTypeId);
+    if(t){ co.opName = t.nom; co.opNiveau = t.niveau || null; co.opFreq = t.frequence || ''; }
+  }
+  return { ajoutees, fusionnees };
 }
 
 async function applyCaseTemplate(templateId){
-  if(!templateId){
-    // « Sans modèle » : on ne touche pas aux ops déjà présentes
-    if(_PENDING_CASE) _PENDING_CASE.template_id = null;
-    return;
-  }
+  if(!templateId) return;   // option « + Importer un modele… » : aucune action
   try{
     const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId) +
                           '?_=' + Date.now(), { credentials:'include', cache: 'no-store' });
@@ -12623,23 +12708,27 @@ async function applyCaseTemplate(templateId){
     const d = await r.json();
     const tmpl = d.template;
     if(!tmpl){ showToast('Modèle vide.', 'danger'); return; }
-    // Remplace les ops actuelles par celles du modèle
-    _CASE_OPS = (tmpl.ops || []).map(o => ({
-      _op_id: null,
-      opTypeId: o.code,
-      opName: o.code_label || o.code,
-      opNiveau: null,
-      opFreq: '',
-      machines: Array.isArray(o.machines) ? o.machines.slice() : [],
-    }));
-    // Réinjecte les infos richement depuis OPS_TYPES_STATE (niveau, freq)
-    for(const co of _CASE_OPS){
-      const t = OPS_TYPES_STATE.list.find(x => x.id === co.opTypeId);
-      if(t){ co.opName = t.nom; co.opNiveau = t.niveau || null; co.opFreq = t.frequence || ''; }
+    if(_CASE_TMPL_USED.some(t => String(t.id) === String(tmpl.id))){
+      showToast('Modèle « ' + tmpl.name + ' » déjà importé.', 'info');
+      return;
     }
-    if(_PENDING_CASE) _PENDING_CASE.template_id = tmpl.id;
+    const res = _mergeTemplateOps(tmpl.ops || []);
+    _CASE_TMPL_USED.push({ id: tmpl.id, name: tmpl.name });
+    // Etiquette du creneau : conservee tant qu'UN SEUL modele est importe.
+    // Des le second, on la retire — un creneau composite n'est la copie
+    // d'aucun modele, et surtout : supprimer un modele efface ses creneaux
+    // futurs. Garder l'etiquette ferait disparaitre un creneau composite en
+    // emportant les operations venues des autres modeles.
+    if(_PENDING_CASE){
+      _PENDING_CASE.template_id = (_CASE_TMPL_USED.length === 1) ? tmpl.id : null;
+    }
     renderCaseOpsList();
-    showToast('Modèle « ' + tmpl.name + ' » appliqué.', 'info');
+    renderCaseTemplatesApplied();
+    let msg = 'Modèle « ' + tmpl.name + ' » importé';
+    if(res.ajoutees && res.fusionnees)      msg += ' : ' + res.ajoutees + ' op. ajoutée(s), ' + res.fusionnees + ' fusionnée(s)';
+    else if(res.ajoutees)                   msg += ' : ' + res.ajoutees + ' op. ajoutée(s)';
+    else if(res.fusionnees)                 msg += ' : ' + res.fusionnees + ' op. déjà présente(s), machines fusionnées';
+    showToast(msg + '.', 'info');
   }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
 }
 
