@@ -5387,13 +5387,33 @@ function renderCaseOpsList(){
           '<div class="libre-autocomplete-panel case-op-libre-autocomplete" data-idx="' + idx + '" style="display:none"></div>' +
         '</div>';
     } else {
+      // v2.6.1 : une operation deja presente dans le creneau est GRISEE, avec le
+      // motif. Avant, on pouvait la reselectionner et remplir toute la ligne
+      // pour rien : la dedup (par code) la fusionnait a l'enregistrement et la
+      // ligne « disparaissait », sans que l'utilisateur comprenne pourquoi.
+      //
+      // Deux precautions :
+      //  - on exclut la ligne COURANTE du calcul (i !== idx), sinon l'option
+      //    selectionnee serait elle-meme desactivee et le select perdrait sa
+      //    valeur a chaque rendu ;
+      //  - les operations deja effectuees ou invalidees, affichees en lecture
+      //    seule plus haut, comptent comme presentes — sinon on pourrait
+      //    rajouter une ligne pour une operation deja faite.
+      const _usedElsewhere = new Set(
+        _CASE_OPS.map((o, i) => (i !== idx && o.opTypeId) ? String(o.opTypeId) : null)
+                 .filter(Boolean)
+      );
       const options = '<option value="">Sélectionner une opération…</option>' +
-        OPS_TYPES_STATE.list.map(t =>
-          '<option value="' + escAttr(t.id) + '"' + (t.id === op.opTypeId ? ' selected' : '') + '>' +
+        OPS_TYPES_STATE.list.map(t => {
+          const taken = _usedElsewhere.has(String(t.id));
+          return '<option value="' + escAttr(t.id) + '"' +
+            (t.id === op.opTypeId ? ' selected' : '') +
+            (taken ? ' disabled' : '') + '>' +
             escHtml(t.nom) + (t.niveau ? ' (N' + t.niveau + ')' : '') +
             (t.frequence ? ' · ' + escHtml(t.frequence) : '') +
-          '</option>'
-        ).join('');
+            (taken ? ' — déjà dans le créneau' : '') +
+          '</option>';
+        }).join('');
       pickerHtml =
         '<select class="ops-select case-op-catalogue-select" data-idx="' + idx + '" onchange="updateCaseOp(' + idx + ', this.value)">' + options + '</select>';
     }
