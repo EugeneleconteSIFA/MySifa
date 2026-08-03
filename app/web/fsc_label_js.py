@@ -76,14 +76,17 @@ function fscAvertissementHtml(d){
     + '  width:100mm;height:50mm;overflow:hidden}'
     + 'body{font-family:Arial,Helvetica,sans-serif;color:#000;'
     + '  -webkit-print-color-adjust:exact;print-color-adjust:exact}'
-    /* Le cadre ne fait PAS 100×50 mais 96×46, centré : les pilotes
-       d'étiqueteuses (Zebra S4M et consorts) déclarent une zone imprimable
-       plus petite que le média physique. Un cadre à la dimension exacte de
-       l'étiquette dépasse donc systématiquement de cette zone, et le
-       navigateur bascule sur une page supplémentaire. Les 2 mm de marge
-       absorbent l'écart, quel que soit le pilote. */
-    + '.lbl{width:96mm;height:46mm;margin:2mm auto;box-sizing:border-box;'
-    + '  border:0.5mm solid #000;padding:.9mm 1.8mm;'
+    /* Le cadre occupe presque tout le média (99×49 sur 100×50).
+       Attention au piège : les pilotes d'étiqueteuses appliquent par défaut
+       un « ajuster à la zone imprimable » qui REDUIT déjà la page. Toute
+       marge ajoutée ici se cumule à cette réduction — une version à 96×46
+       sortait imprimée à ~60 % de la surface de l'étiquette, avec un grand
+       blanc à gauche. On dessine donc au plus près du média et on laisse le
+       pilote faire son ajustement, une seule fois.
+       Ce qui empêche la seconde page, ce n'est pas la marge : c'est
+       overflow:hidden + break-after:avoid ci-dessous. */
+    + '.lbl{width:99mm;height:49mm;margin:.5mm auto;box-sizing:border-box;'
+    + '  border:0.5mm solid #000;padding:.7mm 1.5mm;'
     + '  display:flex;flex-direction:column;overflow:hidden;'
     + '  page-break-inside:avoid;break-inside:avoid;'
     + '  page-break-after:avoid;break-after:avoid}'
@@ -91,29 +94,29 @@ function fscAvertissementHtml(d){
        l'en-tête est réduit, et les trois consignes prennent la place — c'est
        ce que l'opérateur relit à chaque changement de bobine.
 
-       Les tailles sont calées sur la hauteur utile réelle (46 mm), pas sur
-       le format du média. Toute retouche doit être re-mesurée : un
-       débordement d'une fraction de millimètre ne se voit pas à la lecture
-       du CSS, il crée une seconde étiquette à l'impression. */
+       Les tailles sont calées sur la hauteur utile mesurée, pas estimées.
+       Toute retouche doit être re-mesurée : un débordement d'une fraction
+       de millimètre ne se voit pas à la lecture du CSS, et il crée une
+       seconde étiquette à l'impression. */
     + '.hd{background:#000;color:#fff;display:flex;justify-content:space-between;'
     + '  align-items:center;padding:.7mm 1.6mm;font-weight:900;'
-    + '  font-size:11pt;letter-spacing:.5pt}'
-    + '.hd span.t{font-size:6pt;font-weight:700}'
+    + '  font-size:12pt;letter-spacing:.5pt}'
+    + '.hd span.t{font-size:7pt;font-weight:700}'
     /* N° de dossier et client sur une seule ligne : le n° à gauche, le
        client aligné à droite. Empilés, ils mangeaient une ligne entière
        pour deux informations courtes — la place va aux consignes. */
     + '.ids{display:flex;justify-content:space-between;align-items:baseline;'
     + '  gap:3mm;margin-top:.8mm}'
-    + '.dos{font-size:8.5pt;font-weight:900;line-height:1.1;white-space:nowrap}'
-    + '.cli{font-size:6.5pt;line-height:1.1;text-align:right;overflow:hidden;'
+    + '.dos{font-size:9.5pt;font-weight:900;line-height:1.1;white-space:nowrap}'
+    + '.cli{font-size:7.5pt;line-height:1.1;text-align:right;overflow:hidden;'
     + '  text-overflow:ellipsis;white-space:nowrap}'
     + '.sep{border-top:0.35mm solid #000;margin:.7mm 0 .6mm}'
-    + 'ol{margin:0;padding-left:4.2mm;font-size:8.5pt;line-height:1.25;font-weight:700}'
+    + 'ol{margin:0;padding-left:4.2mm;font-size:9.5pt;line-height:1.25;font-weight:700}'
     + 'ol li{margin-bottom:.5mm}'
     + 'ol li:last-child{margin-bottom:0}'
     + '.ft{margin-top:auto;border-top:0.35mm solid #000;padding-top:.6mm;'
-    + '  font-size:6pt;display:flex;justify-content:space-between;align-items:baseline}'
-    + '.merci{font-size:9pt;font-weight:900}'
+    + '  font-size:6.5pt;display:flex;justify-content:space-between;align-items:baseline}'
+    + '.merci{font-size:10pt;font-weight:900}'
     + '</style></head><body><div class="lbl">'
     + '<div class="hd"><span>DOSSIER FSC</span>'
     + '<span class="t">' + e(d.fsc_type_requis) + '</span></div>'

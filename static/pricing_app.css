@@ -358,30 +358,34 @@ table.recap-table td:last-child{border-right:none}
 
 tr.ms-row{cursor:pointer}
 tr.ms-row td{transition:background .12s}
-tr.ms-row.open td{background:var(--accent-bg);border-bottom-color:transparent;font-weight:600}
-tr.ms-row.open td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
-.ms-caret{color:var(--accent);font-size:12px;text-align:center;font-weight:700}
+/* Matière ouverte : mise en avant par la graisse, pas par la couleur. */
+tr.ms-row.open td{background:var(--card);border-bottom-color:transparent;font-weight:600}
+.ms-caret{color:var(--text2);font-size:12px;text-align:center;font-weight:700}
 .ms-prix-cell{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
 
-/* Zone dépliée : légèrement creusée, refermée par un liseré coloré qui marque
-   la fin de la matière et évite de confondre deux blocs voisins. */
-tr.ms-detail-row td{padding:0;background:var(--bg);
-  border-bottom:2px solid var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
-tr.ms-detail-row:hover td{background:var(--bg)}
-.ms-detail{padding:14px 18px 18px}
+/* Zone dépliée : même fond que la ligne pour rester lisible. Le SEUL élément
+   coloré est le liseré du bas, qui referme la matière et la sépare nettement
+   de la suivante. */
+tr.ms-detail-row td{padding:0;background:var(--card);border-bottom:2px solid var(--accent)}
+tr.ms-detail-row:hover td{background:var(--card)}
+.ms-detail{padding:4px 18px 18px}
 .ms-groupe{margin-bottom:16px}
 .ms-groupe:last-child{margin-bottom:0}
 .ms-groupe-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
   font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
   color:var(--text2);margin-bottom:8px}
-table.ms-table{background:var(--card);border:1px solid var(--border);border-radius:10px;
-  overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.06)}
-table.ms-table th{background:var(--bg)}
+/* Tableau des fournisseurs : délimité par un trait, pas par un aplat. */
+table.ms-table{background:transparent;border:1px solid var(--border);border-radius:10px;
+  overflow:hidden;box-shadow:none}
+table.ms-table th{background:transparent;color:var(--muted);
+  border-bottom:1px solid var(--border);padding-top:9px;padding-bottom:9px}
 table.ms-table tr{cursor:default}
+table.ms-table td{border-bottom:1px solid var(--border)}
 table.ms-table tr:hover td{background:transparent}
 table.ms-table tr:last-child td{border-bottom:none}
-table.ms-table tr.ms-principal td{background:var(--accent-bg)}
-table.ms-table tr.ms-principal:hover td{background:var(--accent-bg)}
+/* Le fournisseur principal se repère à son badge et à sa graisse. */
+table.ms-table tr.ms-principal td{background:transparent;font-weight:600}
+table.ms-table tr.ms-principal:hover td{background:transparent}
 .ms-inline{background:var(--filter-input-bg);border:1px solid var(--border);border-radius:8px;
   padding:6px 10px;color:var(--text);font-family:inherit;font-size:13px;max-width:220px}
 .ms-inline:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
