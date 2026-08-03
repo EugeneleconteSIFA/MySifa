@@ -2461,10 +2461,15 @@ function renderTraceur(){
   return h('div',{className:'trc-wrap'}, barre, aide, corps);
 }
 
+// Aiguillage de la page Traçabilité.
+//
+// La sous-navigation est posée ICI, autour du contenu, et pas à l'intérieur
+// de chaque vue : la vue historique comporte plusieurs points de sortie
+// (chargement, erreur, détail dossier, liste). Une première version plaçait
+// la barre d'onglets dans la seule branche « traceur » — résultat, sur
+// l'onglet par défaut la barre n'était jamais rendue et le Traceur était
+// littéralement inatteignable.
 function renderTracabilite(){
-  // Deux sous-onglets : la vue historique par dossier, et le traceur
-  // transversal. Ils répondent à deux questions différentes — « qu'a
-  // consommé ce dossier ? » et « où est passée cette matière ? ».
   const sub = S.tracaSubTab || 'dossiers';
   const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Traçabilité'},
     ...[
@@ -2477,11 +2482,16 @@ function renderTracabilite(){
       onClick: () => { set({tracaSubTab:t.key}); render(); },
     }, iconEl(t.icon,14), ' '+t.label))
   );
+  return h('div',null,
+    subNav,
+    sub === 'traceur' ? renderTraceur() : renderTracabiliteDossiersVue()
+  );
+}
 
-  if(sub === 'traceur'){
-    return h('div',null, subNav, renderTraceur());
-  }
-
+// Vue historique « par dossier » — le contenu d'origine de renderTracabilite,
+// inchangé, simplement extrait pour que l'aiguillage ci-dessus puisse
+// l'encadrer sans toucher à ses multiples returns.
+function renderTracabiliteDossiersVue(){
   // Si on a un dossier sélectionné, afficher son détail
   if(S.traceabiliteDossier !== undefined && S.traceabiliteDossier !== null){
     return renderTracabiliteDossierDetail();
@@ -8262,7 +8272,8 @@ function renderProdKpis(){
     renderDos, renderDevisForm, renderComparaison, renderLiaisonDossiers,
     renderRentabilite, renderSuivi,
     loadTracabilite, loadTracabiliteDossier,
-    renderTracabilite, renderTracabiliteDossierDetail,
+    renderTracabilite, renderTracabiliteDossiersVue, renderTracabiliteDossierDetail,
+    renderTraceur, traceurOuvrir, traceurRechercher,
     openFscRapportModal, openTracMatieresEditModal, closeTracMatieresEditModal,
     tracResolveMachineId,
     prodOfFmtDate, prodOfStatutLabel, prodOfStatutClass,

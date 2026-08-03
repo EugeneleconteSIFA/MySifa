@@ -12,10 +12,11 @@ _REQUIRED_KEYS = (
     "eur_usd_rate",
     "default_container_cost_usd",
     "default_container_kg",
-    "default_margin_eur_m2",
+    "default_margin_pct",
 )
 # Clés optionnelles (présentes mais non bloquantes — default appliqué si absent).
 _OPTIONAL_KEYS = (
+    "default_margin_eur_m2",
     "import_tax_pct",
     "transport_cost_fixed_eur",
     "charge_production_pct",
@@ -46,7 +47,7 @@ def validate_pricing_settings(
     if settings is None:
         raise PricingError(
             "Paramètres de calcul manquants — renseigner eur_usd_rate, "
-            "default_container_cost_usd, default_container_kg et default_margin_eur_m2."
+            "default_container_cost_usd, default_container_kg et default_margin_pct."
         )
 
     if isinstance(settings, PricingSettings):
@@ -59,6 +60,7 @@ def validate_pricing_settings(
                 + ", ".join(missing)
                 + "."
             )
+        legacy_margin_raw = settings.get("default_margin_eur_m2")
         tax_raw = settings.get("import_tax_pct")
         transp_raw = settings.get("transport_cost_fixed_eur")
         charge_raw = settings.get("charge_production_pct")
@@ -72,9 +74,12 @@ def validate_pricing_settings(
                 settings["default_container_cost_usd"], "default_container_cost_usd"
             ),
             default_container_kg=_to_decimal(settings["default_container_kg"], "default_container_kg"),
-            default_margin_eur_m2=_to_decimal(
-                settings["default_margin_eur_m2"], "default_margin_eur_m2"
+            default_margin_pct=_to_decimal(
+                settings["default_margin_pct"], "default_margin_pct"
             ),
+            default_margin_eur_m2=_to_decimal(legacy_margin_raw, "default_margin_eur_m2")
+            if legacy_margin_raw is not None
+            else Decimal("0"),
             import_tax_pct=_to_decimal(tax_raw, "import_tax_pct") if tax_raw is not None else Decimal("0"),
             transport_cost_fixed_eur=_to_decimal(transp_raw, "transport_cost_fixed_eur") if transp_raw is not None else Decimal("0"),
             charge_production_pct=_to_decimal(charge_raw, "charge_production_pct") if charge_raw is not None else Decimal("0"),
@@ -92,8 +97,10 @@ def validate_pricing_settings(
         raise PricingError("default_container_cost_usd ne peut pas être négatif.")
     if s.default_container_kg <= 0:
         raise PricingError("default_container_kg doit être strictement positif.")
-    if s.default_margin_eur_m2 < 0:
-        raise PricingError("default_margin_eur_m2 ne peut pas être négatif.")
+    if s.default_margin_pct < 0:
+        raise PricingError("default_margin_pct ne peut pas être négatif.")
+    if s.default_margin_pct > 1000:
+        raise PricingError("default_margin_pct doit être inférieur à 1000 %.")
     if s.import_tax_pct < 0:
         raise PricingError("import_tax_pct ne peut pas être négatif.")
     if s.import_tax_pct > 1000:

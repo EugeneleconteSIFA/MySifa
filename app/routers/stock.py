@@ -888,7 +888,17 @@ _HISTORIQUE_SQL_MP = """
         m.ref_bl,
         m.note,
         m.created_at,
-        m.created_by_name
+        m.created_by_name,
+        -- Colonnes FSC : NULL côté matière première. La certification d'une
+        -- bobine se lit sur sa RÉCEPTION (stock_receptions.fsc_type_claim),
+        -- pas sur ses mouvements internes. Les deux requêtes ne sont pas
+        -- UNIONnées en SQL (elles sont exécutées séparément puis fusionnées
+        -- en Python), mais on garde les mêmes alias des deux côtés pour que
+        -- _historique_row_dict lise un dictionnaire de forme constante.
+        NULL AS fsc,
+        NULL AS fsc_ecart,
+        NULL AS fsc_ecart_note,
+        NULL AS no_dossier
     FROM mp_mouvements m
     JOIN matieres_premieres mp ON mp.id = m.matiere_id
     LEFT JOIN mp_laizes l ON l.id = m.laize_id
@@ -912,7 +922,11 @@ _HISTORIQUE_SQL_PF = """
         NULL AS ref_bl,
         m.note,
         m.created_at,
-        m.created_by_name
+        m.created_by_name,
+        m.fsc,
+        COALESCE(m.fsc_ecart, 0) AS fsc_ecart,
+        m.fsc_ecart_note,
+        m.no_dossier
     FROM mouvements_stock m
     JOIN produits p ON p.id = m.produit_id
     WHERE {where}
@@ -986,6 +1000,13 @@ def _historique_row_dict(r) -> dict:
         "note": r["note"],
         "created_at": r["created_at"],
         "created_by_name": r["created_by_name"],
+        # `fsc` reste None sur les mouvements antérieurs à la migration 221 et
+        # sur les mouvements neutres : le front distingue « pas certifié » de
+        # « on ne sait pas » et n'affiche rien dans le second cas.
+        "fsc": r["fsc"] if "fsc" in r.keys() else None,
+        "fsc_ecart": int(r["fsc_ecart"] or 0) if "fsc_ecart" in r.keys() else 0,
+        "fsc_ecart_note": r["fsc_ecart_note"] if "fsc_ecart_note" in r.keys() else None,
+        "no_dossier": r["no_dossier"] if "no_dossier" in r.keys() else None,
     }
 
 

@@ -228,7 +228,60 @@ DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL = """^XA
 
 # Templates prédéfinis complémentaires (galerie de départ pour l'admin).
 # Format : liste de dicts {key, nom, description, langage, contenu}.
+# ── Avertissement FSC à agrafer au dossier physique de production ──────
+#
+# Format A6 paysage (152×102 mm) : assez grand pour être lu sans se pencher
+# sur l'établi, assez petit pour tenir dans une pochette de dossier.
+#
+# Le contenu est volontairement une CONSIGNE et non une simple étiquette
+# d'identification : l'opérateur qui prend le dossier physique en main doit
+# savoir ce qu'on attend de lui avant d'aller chercher sa bobine. C'est le
+# pendant papier du bandeau affiché en saisie de production — et le seul
+# support qui reste disponible quand l'écran est occupé par une autre machine.
+#
+# ^GB dessine un cadre épais : sur une imprimante thermique monochrome, la
+# couleur ne distingue rien, seul le trait le fait.
+DEFAULT_TEMPLATE_FSC_AVERTISSEMENT_ZPL = """^XA
+^CI28
+^PW1216
+^LL816
+^LH0,0
+^FO20,20^GB1176,776,6^FS
+^FO40,45^GB1136,80,80^FS
+^FO60,60^FR^A0N,52,52^FDDOSSIER CERTIFIE FSC^FS
+^FO840,68^FR^A0N,38,38^FD{{fsc_type_requis}}^FS
+^FO60,160^A0N,44,44^FDDossier : {{no_dossier}}^FS
+^FO60,215^A0N,34,34^FDClient : {{client}}^FS
+^FO60,262^A0N,30,30^FDProduit : {{ref_produit}}   Machine : {{machine}}^FS
+^FO40,310^GB1136,3,3^FS
+^FO60,335^A0N,34,34^FD1. Utiliser EXCLUSIVEMENT de la matiere certifiee FSC^FS
+^FO60,385^A0N,34,34^FD2. Scanner CHAQUE bobine dans MyProd (tracabilite)^FS
+^FO60,435^A0N,34,34^FD3. Entrer le produit fini en stock Z1^FS
+^FO60,485^A0N,34,34^FD4. Etiquette palette : cocher \\"Palette certifiee FSC\\"^FS
+^FO40,545^GB1136,3,3^FS
+^FO60,570^A0N,26,26^FDSans tracabilite matiere complete, le claim FSC de ce^FS
+^FO60,605^A0N,26,26^FDdossier ne peut pas etre justifie en audit.^FS
+^FO60,660^BY3,3,90^BCN,90,N,N,N^FD{{no_dossier}}^FS
+^FO840,745^A0N,22,22^FDEdite le {{now:%d/%m/%Y %H:%M}}^FS
+^XZ
+"""
+
 DEFAULT_TEMPLATE_GALLERY = [
+    {
+        "key": "fsc_avertissement_dossier",
+        "variante": "full",
+        "nom": "Avertissement FSC — dossier de production (A6 paysage)",
+        "description": (
+            "Format A6 paysage (152×102mm). Consigne à agrafer au dossier physique : "
+            "matière certifiée obligatoire, scan de chaque bobine, entrée en Z1, "
+            "étiquette palette FSC. Code-barres du n° de dossier en bas."
+        ),
+        "langage": "zpl",
+        "usage_key": "fsc_avertissement_dossier",
+        "largeur_mm": 152,
+        "hauteur_mm": 102,
+        "contenu": DEFAULT_TEMPLATE_FSC_AVERTISSEMENT_ZPL,
+    },
     {
         "key": "bobine_full",
         "variante": "full",
@@ -421,6 +474,17 @@ USAGES = [
         "label": "Fiche technique (PDF)",
         "module": "prod",
         "placeholders": [],
+    },
+    {
+        "key": "fsc_avertissement_dossier",
+        "label": "Avertissement FSC — dossier de production",
+        "module": "prod",
+        "placeholders": [
+            "no_dossier", "numero_of", "client", "ref_produit", "machine",
+            "fsc_type_requis", "operateur_nom",
+            "{{barcode:no_dossier}}", "{{qrcode:no_dossier}}",
+            "{{now:%d/%m/%Y %H:%M}}",
+        ],
     },
     # À venir : etiquette_colis (MyExpé), etiquette_emplacement (MyStock), etc.
 ]

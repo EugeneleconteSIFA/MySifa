@@ -21,6 +21,7 @@ from app.services.pricing import (
     compute_material_price_per_m2,
     compute_product_cost,
 )
+from app.services.pricing.engine import suggest_transport_unit_price
 from app.services.pricing.repository import (
     assert_materials_active_for_product,
     ensure_settings_rows,
@@ -94,22 +95,56 @@ def _pricing_error(exc: PricingError) -> HTTPException:
     return HTTPException(status_code=422, detail=str(exc))
 
 
-def _computed_out(mat_row, settings) -> MaterialComputedOut:
-    pm = row_to_pricing_material(mat_row)
+def _row_get(row, name: str, default=None):
+    """Lecture tolérante d'une colonne sqlite3.Row (compat pré-migration 223)."""
+    try:
+        return row[name]
+    except (IndexError, KeyError):
+        return default
+
+
+def _breakdown_out(b) -> MaterialBreakdownOut:
+    """Décomposition enrichie — alimente le tableau récap de la fiche matière."""
+    return MaterialBreakdownOut(
+        raw=b.raw,
+        transport=b.transport,
+        fx=b.fx,
+        tax_uplift=b.tax_uplift,
+        currency=getattr(b, "currency", "EUR"),
+        price_basis=getattr(b, "price_basis", "PER_KG"),
+        fx_rate=getattr(b, "fx_rate", Decimal("1")),
+        weight_per_m2=getattr(b, "weight_per_m2", Decimal("0")),
+        unit_price_src=getattr(b, "unit_price_src", Decimal("0")),
+        transport_src=getattr(b, "transport_src", Decimal("0")),
+        subtotal_src=getattr(b, "subtotal_src", Decimal("0")),
+        subtotal_eur=getattr(b, "subtotal_eur", Decimal("0")),
+    )
+
+
+def _material_computed(pm, settings) -> MaterialComputedOut:
+    """Prix calculé + marge par défaut + valeur de transport proposée."""
     try:
         res = compute_material_price_per_m2(pm, settings)
     except PricingError as e:
         raise _pricing_error(e) from e
-    b = res.breakdown
+    try:
+        suggested = suggest_transport_unit_price(pm, settings)
+    except PricingError:
+        suggested = None
+    margin_pct = getattr(settings, "default_margin_pct", Decimal("0")) or Decimal("0")
+    margin = (res.price_eur_per_m2 * margin_pct / Decimal("100")).quantize(Decimal("0.0001"))
     return MaterialComputedOut(
         price_eur_per_m2=res.price_eur_per_m2,
-        breakdown=MaterialBreakdownOut(
-            raw=b.raw,
-            transport=b.transport,
-            fx=b.fx,
-            tax_uplift=b.tax_uplift,
-        ),
+        breakdown=_breakdown_out(res.breakdown),
+        transport_suggested=suggested,
+        margin_pct=margin_pct,
+        margin_eur_m2=margin,
+        sell_price_eur_m2=res.price_eur_per_m2 + margin,
     )
+
+
+def _computed_out(mat_row, settings) -> MaterialComputedOut:
+    return _material_computed(row_to_pricing_material(mat_row), settings)
 
 
 def _material_out(row, *, settings=None, with_computed: bool = False) -> McMaterialOut:
@@ -154,10 +189,7 @@ def _build_product_cost(conn, row, extra_ids: list[int], settings) -> ProductCos
         pm = mats.get(c.material_id)
         if pm:
             comp = compute_material_price_per_m2(pm, settings)
-            b = comp.breakdown
-            breakdown = MaterialBreakdownOut(
-                raw=b.raw, transport=b.transport, fx=b.fx, tax_uplift=b.tax_uplift
-            )
+            breakdown = _breakdown_out(comp.breakdown)
         components.append(
             ProductComponentOut(
                 material_id=c.material_id,
@@ -170,6 +202,7 @@ def _build_product_cost(conn, row, extra_ids: list[int], settings) -> ProductCos
         )
     return ProductCostOut(
         total_eur_per_m2=result.total_eur_per_m2,
+        margin_pct=result.margin_pct,
         margin_eur_m2=result.margin_eur_m2,
         sell_price_eur_m2=result.sell_price_eur_m2,
         components=components,
@@ -189,8 +222,8 @@ def _product_out(conn, row, *, with_cost: bool = False) -> McProductOut:
         silicone_id=row["silicone_id"],
         glassine_id=row["glassine_id"],
         extra_material_ids=extra_ids,
-        custom_margin_eur_m2=float(row["custom_margin_eur_m2"])
-        if row["custom_margin_eur_m2"] is not None
+        custom_margin_pct=float(row["custom_margin_pct"])
+        if _row_get(row, "custom_margin_pct") is not None
         else None,
         is_active=bool(row["is_active"]),
         created_at=row["created_at"],
@@ -470,20 +503,11 @@ def preview_material_price(request: Request, body: MaterialPreviewIn):
         price_basis=body.price_basis,
         tax_incidence=body.tax_incidence,
         is_imported=body.is_imported,
+        transport_unit_price=body.transport_unit_price,
         container_kg=body.container_kg,
         container_cost_usd=body.container_cost_usd,
     )
-    try:
-        res = compute_material_price_per_m2(pm, settings)
-    except PricingError as e:
-        raise _pricing_error(e) from e
-    b = res.breakdown
-    return MaterialComputedOut(
-        price_eur_per_m2=res.price_eur_per_m2,
-        breakdown=MaterialBreakdownOut(
-            raw=b.raw, transport=b.transport, fx=b.fx, tax_uplift=b.tax_uplift
-        ),
-    )
+    return _material_computed(pm, settings)
 
 
 # ─── Settings ────────────────────────────────────────────────────────────────
@@ -741,8 +765,8 @@ def create_material(request: Request, body: McMaterialCreate):
             """INSERT INTO mc_material (
                 name, appellation_code, category_id, supplier_id, weight_per_m2, weight_gsm,
                 price_currency, unit_price, price_basis, tax_incidence, is_imported,
-                container_kg, container_cost_usd, is_active
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
+                transport_unit_price, container_kg, container_cost_usd, is_active
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
             (
                 body.name.strip(),
                 body.appellation_code.strip(),
@@ -755,6 +779,7 @@ def create_material(request: Request, body: McMaterialCreate):
                 body.price_basis,
                 float(body.tax_incidence),
                 1 if body.is_imported else 0,
+                float(body.transport_unit_price or 0),
                 float(body.container_kg) if body.container_kg is not None else None,
                 float(body.container_cost_usd) if body.container_cost_usd is not None else None,
             ),
@@ -801,7 +826,14 @@ def patch_material(request: Request, material_id: int, body: McMaterialUpdate):
             elif k == "is_active":
                 sets.append(f"{k}=?")
                 args.append(1 if v else 0)
-            elif k in ("weight_per_m2", "unit_price", "tax_incidence", "container_kg", "container_cost_usd"):
+            elif k in (
+                "weight_per_m2",
+                "unit_price",
+                "tax_incidence",
+                "transport_unit_price",
+                "container_kg",
+                "container_cost_usd",
+            ):
                 sets.append(f"{k}=?")
                 args.append(float(v) if v is not None else None)
             else:
@@ -1013,7 +1045,7 @@ def create_product(request: Request, body: McProductCreate):
             cur = conn.execute(
                 """INSERT INTO mc_product (
                     code, name, frontal_id, adhesif_id, silicone_id, glassine_id,
-                    custom_margin_eur_m2, is_active
+                    custom_margin_pct, is_active
                 ) VALUES (?,?,?,?,?,?,?,1)""",
                 (
                     body.code.strip(),
@@ -1022,7 +1054,7 @@ def create_product(request: Request, body: McProductCreate):
                     body.adhesif_id,
                     body.silicone_id,
                     body.glassine_id,
-                    float(body.custom_margin_eur_m2) if body.custom_margin_eur_m2 is not None else None,
+                    float(body.custom_margin_pct) if body.custom_margin_pct is not None else None,
                 ),
             )
             pid = cur.lastrowid
@@ -1068,7 +1100,7 @@ def patch_product(request: Request, product_id: int, body: McProductUpdate):
                 if k == "is_active":
                     sets.append(f"{k}=?")
                     args.append(1 if v else 0)
-                elif k == "custom_margin_eur_m2":
+                elif k == "custom_margin_pct":
                     sets.append(f"{k}=?")
                     args.append(float(v) if v is not None else None)
                 elif k in ("code", "name"):
@@ -1130,7 +1162,7 @@ def preview_product_cost(request: Request, body: ProductPreviewIn):
             silicone_id=body.silicone_id,
             glassine_id=body.glassine_id,
             extra_material_ids=tuple(body.extra_material_ids),
-            custom_margin_eur_m2=body.custom_margin_eur_m2,
+            custom_margin_pct=body.custom_margin_pct,
         )
         mat_ids = _collect_product_material_ids(
             body.frontal_id,
@@ -1157,16 +1189,12 @@ def preview_product_cost(request: Request, body: ProductPreviewIn):
                     role=c.role,
                     price_eur_per_m2=c.price_eur_per_m2,
                     share_pct=c.share_pct,
-                    breakdown=MaterialBreakdownOut(
-                        raw=b.raw,
-                        transport=b.transport,
-                        fx=b.fx,
-                        tax_uplift=b.tax_uplift,
-                    ),
+                    breakdown=_breakdown_out(b),
                 )
             )
         return ProductCostOut(
             total_eur_per_m2=result.total_eur_per_m2,
+            margin_pct=result.margin_pct,
             margin_eur_m2=result.margin_eur_m2,
             sell_price_eur_m2=result.sell_price_eur_m2,
             components=components,

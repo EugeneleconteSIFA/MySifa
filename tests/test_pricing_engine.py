@@ -28,7 +28,7 @@ def _settings(**overrides) -> PricingSettings:
         eur_usd_rate=D("0.85"),
         default_container_cost_usd=D("4000"),
         default_container_kg=D("26000"),
-        default_margin_eur_m2=D("0.06"),
+        default_margin_pct=D("6"),
     )
     base.update(overrides)
     return PricingSettings(**base)
@@ -60,6 +60,7 @@ class TestComputeMaterialPricePerM2(unittest.TestCase):
         self.assertEqual(_breakdown_sum(res), res.price_eur_per_m2)
 
     def test_imported_usd_per_kg_with_transport(self):
+        """(prix + transport) x poids x taux — transport saisi en USD/kg."""
         mat = PricingMaterial(
             id=2,
             name="Adhésif import",
@@ -69,15 +70,50 @@ class TestComputeMaterialPricePerM2(unittest.TestCase):
             price_basis="PER_KG",
             tax_incidence=D("1"),
             is_imported=True,
+            transport_unit_price=D("0.1538"),
         )
         s = _settings()
-        transport_usd_kg = s.default_container_cost_usd / s.default_container_kg
-        expected_pre = (D("3") + transport_usd_kg) * D("0.05") * s.eur_usd_rate
+        expected = (D("3") + D("0.1538")) * D("0.05") * s.eur_usd_rate
         res = compute_material_price_per_m2(mat, s)
-        self.assertEqual(res.price_eur_per_m2, expected_pre.quantize(D("0.0001")))
+        self.assertEqual(res.price_eur_per_m2, expected.quantize(D("0.0001")))
         self.assertGreater(res.breakdown.transport, D("0"))
         self.assertGreater(res.breakdown.raw, D("0"))
-        self.assertEqual(res.breakdown.fx, D("0"))
+        self.assertLess(res.breakdown.fx, D("0"))  # taux < 1 : le change réduit le prix
+        self.assertEqual(_breakdown_sum(res), res.price_eur_per_m2)
+
+    def test_transport_ignored_when_not_imported(self):
+        mat = PricingMaterial(
+            id=21,
+            name="Non importée",
+            unit_price=D("3"),
+            weight_per_m2=D("0.05"),
+            price_currency="EUR",
+            price_basis="PER_KG",
+            is_imported=False,
+            transport_unit_price=D("1"),
+        )
+        res = compute_material_price_per_m2(mat, _settings())
+        self.assertEqual(res.breakdown.transport, D("0"))
+        self.assertEqual(res.price_eur_per_m2, D("0.1500"))
+
+    def test_imported_eur_per_m2_with_transport(self):
+        """Cas de la matière chinoise facturée au m² : le transport doit compter."""
+        mat = PricingMaterial(
+            id=22,
+            name="Rouleau imprimé",
+            unit_price=D("4.0183"),
+            weight_per_m2=D("0"),
+            price_currency="EUR",
+            price_basis="PER_M2",
+            tax_incidence=D("0.95"),
+            is_imported=True,
+            transport_unit_price=D("0.25"),
+        )
+        res = compute_material_price_per_m2(mat, _settings())
+        expected = (D("4.0183") + D("0.25")) * D("0.95")
+        self.assertEqual(res.price_eur_per_m2, expected.quantize(D("0.0001")))
+        self.assertEqual(res.breakdown.transport, D("0.2500"))
+        self.assertLess(res.breakdown.tax_uplift, D("0"))
         self.assertEqual(_breakdown_sum(res), res.price_eur_per_m2)
 
     def test_tax_incidence_above_one(self):
@@ -97,6 +133,24 @@ class TestComputeMaterialPricePerM2(unittest.TestCase):
         self.assertEqual(res.breakdown.tax_uplift, (pre * D("0.065")).quantize(D("0.0001")))
         self.assertEqual(_breakdown_sum(res), res.price_eur_per_m2)
 
+    def test_suggest_transport_from_container(self):
+        from app.services.pricing.engine import suggest_transport_unit_price
+
+        mat = PricingMaterial(
+            id=23,
+            name="Import USD/kg",
+            unit_price=D("3"),
+            weight_per_m2=D("0.05"),
+            price_currency="USD",
+            price_basis="PER_KG",
+            is_imported=True,
+            container_cost_usd=D("4000"),
+            container_kg=D("26000"),
+        )
+        s = _settings()
+        got = suggest_transport_unit_price(mat, s)
+        self.assertEqual(got, (D("4000") / D("26000")).quantize(D("0.0001")))
+
     def test_usd_per_m2_rare(self):
         mat = PricingMaterial(
             id=4,
@@ -110,7 +164,9 @@ class TestComputeMaterialPricePerM2(unittest.TestCase):
         )
         res = compute_material_price_per_m2(mat, _settings())
         self.assertEqual(res.price_eur_per_m2, (D("1.2") * D("0.85")).quantize(D("0.0001")))
-        self.assertEqual(res.breakdown.fx, D("1.0200"))
+        # raw reste en devise d'achat, fx porte l'écart de change (0,85 - 1) x 1,2
+        self.assertEqual(res.breakdown.raw, D("1.2000"))
+        self.assertEqual(res.breakdown.fx, D("-0.1800"))
         self.assertEqual(_breakdown_sum(res), res.price_eur_per_m2)
 
     def test_missing_settings_raises(self):
@@ -200,8 +256,10 @@ class TestComputeProductCost(unittest.TestCase):
         ).quantize(D("0.0001"))
         self.assertEqual(res.total_eur_per_m2, expected_total)
         self.assertEqual(len(res.components), 4)
-        self.assertEqual(res.margin_eur_m2, s.default_margin_eur_m2)
-        self.assertEqual(res.sell_price_eur_m2, (expected_total + s.default_margin_eur_m2).quantize(D("0.0001")))
+        expected_margin = (expected_total * s.default_margin_pct / D("100")).quantize(D("0.0001"))
+        self.assertEqual(res.margin_pct, D("6.0000"))
+        self.assertEqual(res.margin_eur_m2, expected_margin)
+        self.assertEqual(res.sell_price_eur_m2, (expected_total + expected_margin).quantize(D("0.0001")))
         share_sum = sum(c.share_pct for c in res.components)
         self.assertEqual(share_sum, D("100.00"))
 
@@ -237,10 +295,15 @@ class TestComputeProductCost(unittest.TestCase):
             frontal_id=1,
             adhesif_id=2,
             glassine_id=4,
-            custom_margin_eur_m2=D("0.12"),
+            custom_margin_pct=D("12"),
         )
-        res = compute_product_cost(product, mats, _settings())
-        self.assertEqual(res.margin_eur_m2, D("0.1200"))
+        s = _settings()
+        res = compute_product_cost(product, mats, s)
+        self.assertEqual(res.margin_pct, D("12.0000"))
+        self.assertEqual(
+            res.margin_eur_m2,
+            (res.total_eur_per_m2 * D("12") / D("100")).quantize(D("0.0001")),
+        )
 
 
 if __name__ == "__main__":

@@ -551,6 +551,30 @@ body.light .btn-p{color:#fff}
   0%,100%{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
   50%{border-color:var(--border2);box-shadow:none}
 }
+
+/* ── Dossier certifié FSC dans la timeline ────────────────────────
+   Anneau vert pulsant, posé en ::after pour ne jamais entrer en
+   conflit avec les `border` / `box-shadow` inline du slot (couleur du
+   dossier, pulsation du dossier actif). pointer-events:none pour ne pas
+   voler le drag & drop ni les tooltips au slot lui-même. */
+@keyframes fscRingPulse{
+  0%,100%{box-shadow:0 0 0 2px rgba(16,185,129,.95), 0 0 9px 2px rgba(16,185,129,.45)}
+  50%    {box-shadow:0 0 0 3px rgba(16,185,129,.55), 0 0 14px 4px rgba(16,185,129,.20)}
+}
+.slot.slot-fsc::after{
+  content:'';position:absolute;inset:0;border-radius:inherit;
+  pointer-events:none;z-index:6;
+  animation:fscRingPulse 1.9s ease-in-out infinite;
+}
+/* Le scintillement attire l'œil sur un écran d'atelier consulté de loin,
+   mais il ne doit pas être imposé à qui le supporte mal : anneau fixe. */
+@media (prefers-reduced-motion: reduce){
+  .slot.slot-fsc::after{animation:none;box-shadow:0 0 0 2px rgba(16,185,129,.95)}
+}
+/* À l'impression du planning, un halo ne sort pas : bordure franche. */
+@media print{
+  .slot.slot-fsc::after{animation:none;box-shadow:0 0 0 2px #0f7c3a}
+}
 /* Timeline search highlighting */
 .slot.tl-match{outline:3px solid rgba(255,255,255,.9);outline-offset:2px;z-index:12}
 .slot.tl-no-match{opacity:0.18;filter:grayscale(50%)}
@@ -2483,6 +2507,12 @@ function mkTL(mon,slots){
     const termineSlideCls=(CAN_EDIT&&s.statut==="termine")?"slot-termine-movable":"";
     const annuleSlot=isAnnuleEntry(s);
     const annuleCls=annuleSlot?"slot-annule":"";
+    // Anneau vert animé sur les dossiers certifiés. Rendu par un ::after et
+    // non par `border` / `box-shadow` : ces deux propriétés sont posées en
+    // style INLINE sur le slot (couleur du dossier, pulsation du dossier
+    // actif), et un style inline gagne toujours contre une classe — l'anneau
+    // aurait simplement disparu sur le dossier en cours.
+    const fscCls=(s.fsc_requis===1||s.fsc_requis===true)?"slot-fsc":"";
     const resizeHint="Bord droit : ajuster la durée. Reste du créneau : réordonner (si disponible).";
     const resizeHandle=canResizeSlot?`<div class="slot-resize-handle" data-eid="${s.entry_id||idx}" data-resize="1" title="${escAttr(resizeHint)}"></div>`:"";
     const termineTitle=termineSlideCls?"Dossier terminé — glisser pour décaler le créneau sur la ligne de temps":"";
@@ -2515,7 +2545,7 @@ function mkTL(mon,slots){
       line3SlotHtml=l3parts.length?l3parts.join(" | "):"";
     }
 
-    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls} ${annuleCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${expeBrightnessStyle}${isActive?"border:2px solid var(--accent);animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
+    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls} ${annuleCls} ${fscCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${expeBrightnessStyle}${isActive?"border:2px solid var(--accent);animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
       data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?fmtQty(qteEtiq):"")}" data-nb-palettes="${escAttr(nbPalettes!=null?String(nbPalettes):"")}"`+
