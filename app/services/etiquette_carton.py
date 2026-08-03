@@ -175,8 +175,20 @@ def build_etiquette_spec(
     carton = cond.get("carton") or {}
 
     def mp_label(mid: Any) -> str:
+        """Libelle de sous-categorie en priorite.
+
+        Le carton physique porte la nature de la matiere ("Enlevable",
+        "PP blanc brillant 56u"), pas la designation commerciale du rouleau
+        ("Adhesif enlevable leger (BOSTIK)"). On retombe sur la designation
+        quand la sous-categorie n'est pas renseignee, plutot que de laisser
+        la ligne vide.
+        """
         row = mp.get(mid) or mp.get(str(mid)) or {}
-        return _s(row.get("designation") or row.get("libelle") or row.get("nom"))
+        for key in ("sous_categorie", "designation", "libelle", "nom"):
+            value = _s(row.get(key))
+            if value:
+                return value
+        return ""
 
     # --- reference affichee -------------------------------------------------
     # Uniquement la reference SIFA (XXX/NNNN) : c'est elle qui figure sur le
@@ -195,7 +207,9 @@ def build_etiquette_spec(
     ref_format = "  /  ".join(p for p in (reference, format_txt) if p)
 
     # --- matiere / adhesif --------------------------------------------------
-    matiere_txt = _s(ft.get("support")) or mp_label(matiere.get("frontal_id"))
+    # La sous-categorie du frontal prime sur le champ "support" de la fiche
+    # technique, qui est une saisie libre : ce dernier ne sert que de repli.
+    matiere_txt = mp_label(matiere.get("frontal_id")) or _s(ft.get("support"))
     adhesif_txt = mp_label(matiere.get("adhesif_id"))
 
     # --- conditionnement ----------------------------------------------------
