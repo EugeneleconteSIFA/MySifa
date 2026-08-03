@@ -1456,7 +1456,12 @@ function renderPortal(){
     const inp = e.target && e.target.querySelector && e.target.querySelector('input');
     openGoogle(inp ? inp.value : '');
   }});
-  const gInp = h('input',{type:'search',placeholder:'Rechercher sur Google…',autocomplete:'off',spellcheck:'false'});
+  // Placeholder de la recherche : Kernse (palette de commandes) ou MySifa (Google)
+  const _isKernse = document.body.classList.contains('kernse-theme');
+  const _searchPlaceholder = _isKernse
+    ? 'Tapez une commande, un dossier, une réf produit…'
+    : 'Rechercher sur Google…';
+  const gInp = h('input',{type:'search',placeholder:_searchPlaceholder,autocomplete:'off',spellcheck:'false'});
   gInp.addEventListener('keydown',(e)=>{
     if(e.key==='Enter'){
       e.preventDefault();

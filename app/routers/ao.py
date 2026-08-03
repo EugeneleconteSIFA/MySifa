@@ -1533,6 +1533,83 @@ def export_produit_bat(
     return Response(content=render_bat_svg(spec, lang), media_type="image/svg+xml")
 
 
+@router.get("/produits/{produit_id}/etiquette-carton")
+def export_produit_etiquette_carton(
+    request: Request,
+    produit_id: int,
+    fmt: str = "svg",
+):
+    """Etiquette d'identification carton (100 x 50 mm) d'une fiche produit MyAO.
+
+    fmt=svg → apercu inline dans la fiche produit ; fmt=pdf → page a la taille
+    exacte de l'etiquette, prete pour l'imprimante d'etiquettes.
+
+    Tout le contenu vient de la fiche produit (et de la fiche technique quand
+    la Ref SIFA est renseignee) : aucun champ n'est saisi a la volee.
+    """
+    from app.services.etiquette_carton import (
+        build_etiquette_spec, render_etiquette_svg, render_etiquette_pdf,
+        etiquette_filename,
+    )
+
+    _require_ao(request)
+    fmt = "pdf" if str(fmt).lower() == "pdf" else "svg"
+
+    with get_db() as conn:
+        row = conn.execute(
+            """SELECT p.*,
+                      COALESCE(cg.raison_sociale, lc.nom) AS client_nom
+               FROM ao_produits p
+               LEFT JOIN clients            cg ON cg.id = p.client_id
+               LEFT JOIN ao_carnet_clients  lc ON lc.id = p.client_id
+               WHERE p.id=?""",
+            (produit_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Produit introuvable")
+
+        produit = _serialize_produit_row(_row_dict(row), conn)
+        fiche = produit.get("fiche") or {}
+
+        # Libelles matieres — degradation propre si le schema differe.
+        matieres_map = {}
+        try:
+            for mp in conn.execute("SELECT * FROM matieres_premieres").fetchall():
+                d = _row_dict(mp)
+                matieres_map[d.get("id")] = d
+        except Exception:
+            matieres_map = {}
+
+        # Enrichissement fiche technique quand la Ref SIFA est renseignee.
+        ft = None
+        ref_sifa = str(fiche.get("ref_sifa") or produit.get("ref_sifa") or "").strip()
+        if ref_sifa:
+            try:
+                ft_row = conn.execute(
+                    "SELECT * FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
+                    (ref_sifa,),
+                ).fetchone()
+                if ft_row:
+                    ft = _row_dict(ft_row)
+            except Exception:
+                ft = None
+
+    spec = build_etiquette_spec(
+        produit, fiche,
+        matieres_map=matieres_map,
+        fiche_technique=ft,
+        date_edition="/".join(reversed(_now_paris_iso()[:10].split("-"))),
+    )
+
+    if fmt == "pdf":
+        return Response(
+            content=render_etiquette_pdf(spec),
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'inline; filename="{etiquette_filename(spec)}"'},
+        )
+    return Response(content=render_etiquette_svg(spec), media_type="image/svg+xml")
+
+
 @router.post("/produits")
 async def create_produit(request: Request):
     _require_ao(request)
