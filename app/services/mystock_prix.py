@@ -1,32 +1,39 @@
 """
-Pont Coûts matières <-> MyStock : prix d'achat par fournisseur.
+Pont Coûts matières <-> MyStock : déclinaisons et prix d'achat par fournisseur.
 
-Le prix d'une matière MyStock n'existe qu'à un seul endroit. Ce module en est
-la porte d'entrée unique, quel que soit l'écran qui écrit (MyStock ou Coûts
-matières).
+Le prix d'une matière MyStock n'existe qu'à un seul endroit. Ce module en est la
+porte d'entrée unique, quel que soit l'écran qui écrit.
 
-Modèle
-------
-`mp_matiere_prix` porte une ligne par (matière, laize, fournisseur) :
+Déclinaisons
+------------
+Une matière MyStock se décline selon sa catégorie :
 
-- `laize_id` NULL  → matière non laizée, ou matière laizée à prix unique.
-- `fournisseur_id` NULL → prix connu sans fournisseur désigné.
-- `principal = 1`  → le prix qui fait foi pour cette matière/laize.
+- frontal / glassine / complexe → par LAIZE ;
+- adhésif                        → par GRAMMAGE (g/m²), parce qu'un même adhésif
+  en 22, 25 ou 30 g/m² n'a pas le même tarif ;
+- autre                          → pas de déclinaison, une seule ligne.
 
-Miroir
-------
-Le prix principal est recopié dans les champs que la valorisation MyStock lit
-déjà (`matieres_premieres.prix_eur_m2`, `mp_matiere_laizes.prix_eur_m2`,
-`mp_valorisation.prix_unitaire`). Aucun calcul de valorisation existant n'a donc
-à être modifié : ces champs restent la source de vérité pour eux.
+Les supports logistiques (mandrin, palette, carton) ne sont pas exposés : Coûts
+matières sert à deviser des produits finis, pas de l'emballage.
+
+C'est la DÉCLINAISON qui correspond à une matière de la base Coûts matières :
+l'adhésif MyStock « 2028 » y existe en « 2028/22 », « 2028/25 », « 2028/30 ».
+L'appairage vit donc sur `mp_matiere_declinaison.mc_material_id`.
+
+Prix
+----
+`mp_matiere_prix` porte une ligne par (déclinaison, fournisseur). `principal = 1`
+désigne le prix qui fait foi. Ce prix est recopié dans les champs que la
+valorisation MyStock lit déjà (`matieres_premieres.prix_eur_m2`,
+`mp_matiere_laizes.prix_eur_m2`, `mp_valorisation.prix_unitaire`) : aucun calcul
+de valorisation existant n'a à être modifié.
 
 Attention au prix moyen pondéré
 -------------------------------
 Sur une entrée de stock avec prix, MyStock recalcule un PMP et écrit dans ces
-mêmes champs. Le prix d'un fournisseur est donc un TARIF (dernier prix d'achat
-connu), pas le PMP. On ne pousse un tarif dans le miroir que sur action
-explicite : modification du prix principal, ou désignation d'un nouveau
-principal. Une réception de stock reste libre de faire évoluer le PMP ensuite.
+mêmes champs. Le prix d'un fournisseur est donc un TARIF, pas le PMP. On ne
+pousse un tarif dans le miroir que sur action explicite : modification du prix
+principal, ou désignation d'un nouveau principal.
 """
 
 from __future__ import annotations
@@ -36,15 +43,32 @@ from datetime import datetime
 from typing import Any, Optional
 
 # Doit rester aligné avec _MP_CATEGORIES_LAIZEES dans app/routers/stock.py.
-_LAIZEES = frozenset({"frontal", "glassine", "complexe"})
+CATEGORIES_LAIZEES = frozenset({"frontal", "glassine", "complexe"})
+CATEGORIES_GRAMMAGE = frozenset({"adhesif"})
+# Catégories visibles dans Coûts matières : tout sauf les supports logistiques.
+CATEGORIES_VISIBLES = frozenset({"frontal", "glassine", "complexe", "adhesif", "autre"})
 
 
 def _now() -> str:
     return datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
 
+def _cat(categorie: Optional[str]) -> str:
+    return (categorie or "").strip().lower()
+
+
 def is_laizee(categorie: Optional[str]) -> bool:
-    return (categorie or "").strip().lower() in _LAIZEES
+    return _cat(categorie) in CATEGORIES_LAIZEES
+
+
+def type_declinaison(categorie: Optional[str]) -> Optional[str]:
+    """'LAIZE', 'GRAMMAGE' ou None si la matière ne se décline pas."""
+    c = _cat(categorie)
+    if c in CATEGORIES_LAIZEES:
+        return "LAIZE"
+    if c in CATEGORIES_GRAMMAGE:
+        return "GRAMMAGE"
+    return None
 
 
 def _f(v: Any, default: float = 0.0) -> float:
@@ -59,12 +83,21 @@ def fetch_matiere(conn: sqlite3.Connection, matiere_id: int) -> Optional[sqlite3
         """SELECT mp.id, mp.categorie, mp.reference, mp.designation, mp.actif,
                   COALESCE(mp.prix_eur_m2, 0)     AS prix_eur_m2,
                   COALESCE(mp.prix_par_laize, 0)  AS prix_par_laize,
-                  mp.mc_material_id,
                   COALESCE(v.prix_unitaire, 0)    AS prix_unitaire
              FROM matieres_premieres mp
              LEFT JOIN mp_valorisation v ON v.matiere_id = mp.id
             WHERE mp.id = ?""",
         (matiere_id,),
+    ).fetchone()
+
+
+def fetch_declinaison(conn: sqlite3.Connection, declinaison_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        """SELECT d.*, mp.categorie, mp.reference, mp.designation
+             FROM mp_matiere_declinaison d
+             JOIN matieres_premieres mp ON mp.id = d.matiere_id
+            WHERE d.id = ?""",
+        (declinaison_id,),
     ).fetchone()
 
 
@@ -80,26 +113,17 @@ def list_materials(
     categorie: Optional[str] = None,
     actives_only: bool = True,
 ) -> list[dict]:
-    """
-    Une entrée par matière MyStock, avec le détail de ses lignes de prix.
-
-    Chaque matière porte :
-      - `prix_principal` : le prix qui fait foi (None si la matière est laizée
-        avec un prix par laize — dans ce cas le prix vit sur chaque ligne) ;
-      - `lignes` : les prix, une par (laize, fournisseur).
-    """
-    args: list[Any] = []
-    sql = """
+    """Une entrée par matière visible, avec ses déclinaisons et leurs prix."""
+    args: list[Any] = list(sorted(CATEGORIES_VISIBLES))
+    placeholders = ",".join("?" for _ in CATEGORIES_VISIBLES)
+    sql = f"""
         SELECT mp.id, mp.categorie, mp.reference, mp.designation, mp.actif,
                COALESCE(mp.prix_eur_m2, 0)    AS prix_eur_m2,
                COALESCE(mp.prix_par_laize, 0) AS prix_par_laize,
-               mp.mc_material_id,
-               COALESCE(v.prix_unitaire, 0)   AS prix_unitaire,
-               mc.name                        AS mc_name
+               COALESCE(v.prix_unitaire, 0)   AS prix_unitaire
           FROM matieres_premieres mp
           LEFT JOIN mp_valorisation v ON v.matiere_id = mp.id
-          LEFT JOIN mc_material mc    ON mc.id = mp.mc_material_id
-         WHERE 1=1
+         WHERE LOWER(mp.categorie) IN ({placeholders})
     """
     if actives_only:
         sql += " AND mp.actif = 1"
@@ -113,25 +137,32 @@ def list_materials(
     sql += " ORDER BY mp.categorie ASC, mp.reference COLLATE NOCASE ASC"
     rows = conn.execute(sql, args).fetchall()
 
-    prix_rows = conn.execute(
-        """SELECT p.id, p.matiere_id, p.laize_id, p.fournisseur_id, p.prix, p.principal,
-                  p.updated_at, p.updated_by_name,
+    decl_rows = conn.execute(
+        """SELECT d.id, d.matiere_id, d.laize_id, d.grammage_id, d.mc_material_id,
                   l.valeur_mm, l.label AS laize_label, l.ordre AS laize_ordre,
+                  g.valeur_gsm, g.label AS grammage_label,
+                  mc.name AS mc_name, mc.appellation_code AS mc_appellation
+             FROM mp_matiere_declinaison d
+             LEFT JOIN mp_laizes   l  ON l.id = d.laize_id
+             LEFT JOIN mp_grammages g ON g.id = d.grammage_id
+             LEFT JOIN mc_material mc ON mc.id = d.mc_material_id
+            ORDER BY l.ordre ASC, l.valeur_mm ASC, g.valeur_gsm ASC"""
+    ).fetchall()
+
+    prix_rows = conn.execute(
+        """SELECT p.id, p.declinaison_id, p.fournisseur_id, p.prix, p.principal,
+                  p.updated_at, p.updated_by_name,
                   f.nom AS fournisseur_nom, COALESCE(f.has_fsc, 0) AS fournisseur_fsc
              FROM mp_matiere_prix p
-             LEFT JOIN mp_laizes l       ON l.id = p.laize_id
              LEFT JOIN fournisseurs_fsc f ON f.id = p.fournisseur_id
-            ORDER BY l.ordre ASC, l.valeur_mm ASC, p.principal DESC,
-                     f.nom COLLATE NOCASE ASC"""
+            WHERE p.declinaison_id IS NOT NULL
+            ORDER BY p.principal DESC, f.nom COLLATE NOCASE ASC"""
     ).fetchall()
-    by_mat: dict[int, list[dict]] = {}
+    prix_by_decl: dict[int, list[dict]] = {}
     for r in prix_rows:
-        by_mat.setdefault(int(r["matiere_id"]), []).append(
+        prix_by_decl.setdefault(int(r["declinaison_id"]), []).append(
             {
                 "id": int(r["id"]),
-                "laize_id": int(r["laize_id"]) if r["laize_id"] is not None else None,
-                "laize_label": r["laize_label"]
-                or (f"{int(r['valeur_mm'])} mm" if r["valeur_mm"] is not None else None),
                 "fournisseur_id": int(r["fournisseur_id"])
                 if r["fournisseur_id"] is not None
                 else None,
@@ -144,22 +175,48 @@ def list_materials(
             }
         )
 
+    decl_by_mat: dict[int, list[dict]] = {}
+    for r in decl_rows:
+        lignes = prix_by_decl.get(int(r["id"]), [])
+        principal = next((x for x in lignes if x["principal"]), None)
+        if r["laize_id"] is not None:
+            libelle = r["laize_label"] or (
+                f"{int(r['valeur_mm'])} mm" if r["valeur_mm"] is not None else "Laize"
+            )
+        elif r["grammage_id"] is not None:
+            libelle = r["grammage_label"] or (
+                f"{_f(r['valeur_gsm']):g} g/m²" if r["valeur_gsm"] is not None else "Grammage"
+            )
+        else:
+            libelle = "Toutes déclinaisons"
+        decl_by_mat.setdefault(int(r["matiere_id"]), []).append(
+            {
+                "id": int(r["id"]),
+                "laize_id": int(r["laize_id"]) if r["laize_id"] is not None else None,
+                "grammage_id": int(r["grammage_id"]) if r["grammage_id"] is not None else None,
+                "libelle": libelle,
+                "mc_material_id": int(r["mc_material_id"])
+                if r["mc_material_id"] is not None
+                else None,
+                "mc_name": r["mc_name"],
+                "mc_appellation": r["mc_appellation"],
+                "prix_principal": principal["prix"] if principal else None,
+                "lignes": lignes,
+            }
+        )
+
     out: list[dict] = []
     for r in rows:
         mid = int(r["id"])
-        laizee = is_laizee(r["categorie"])
-        par_laize = bool(int(r["prix_par_laize"] or 0)) and laizee
-        lignes = by_mat.get(mid, [])
-        principaux = [x for x in lignes if x["principal"]]
-        if par_laize:
-            prix_principal = None
-            prix_min = min((x["prix"] for x in principaux), default=None)
-            prix_max = max((x["prix"] for x in principaux), default=None)
-        else:
-            prix_principal = principaux[0]["prix"] if principaux else (
-                _f(r["prix_eur_m2"]) if laizee else _f(r["prix_unitaire"])
-            )
-            prix_min = prix_max = prix_principal
+        cat = _cat(r["categorie"])
+        decls = decl_by_mat.get(mid, [])
+        prix = [d["prix_principal"] for d in decls if d["prix_principal"] is not None]
+        fournisseurs = {
+            l["fournisseur_id"]
+            for d in decls
+            for l in d["lignes"]
+            if l["fournisseur_id"] is not None
+        }
         out.append(
             {
                 "id": mid,
@@ -167,51 +224,166 @@ def list_materials(
                 "reference": r["reference"],
                 "designation": r["designation"],
                 "actif": bool(r["actif"]),
-                "laizee": laizee,
-                "prix_par_laize": par_laize,
-                "unite": "€/m²" if laizee else "€/unité",
-                "prix_principal": prix_principal,
-                "prix_min": prix_min,
-                "prix_max": prix_max,
-                "nb_lignes": len(lignes),
-                "nb_fournisseurs": len({x["fournisseur_id"] for x in lignes if x["fournisseur_id"]}),
-                "mc_material_id": int(r["mc_material_id"])
-                if r["mc_material_id"] is not None
-                else None,
-                "mc_name": r["mc_name"],
-                "lignes": lignes,
+                "type_declinaison": type_declinaison(cat),
+                "unite": "€/m²" if cat in CATEGORIES_LAIZEES else "€/kg"
+                if cat in CATEGORIES_GRAMMAGE
+                else "€/unité",
+                "prix_min": min(prix) if prix else None,
+                "prix_max": max(prix) if prix else None,
+                "nb_declinaisons": len(decls),
+                "nb_appairees": sum(1 for d in decls if d["mc_material_id"]),
+                "nb_fournisseurs": len(fournisseurs),
+                "declinaisons": decls,
             }
         )
     return out
 
 
+def list_grammages(conn: sqlite3.Connection) -> list[dict]:
+    return [
+        {
+            "id": int(r["id"]),
+            "valeur_gsm": _f(r["valeur_gsm"]),
+            "label": r["label"] or f"{_f(r['valeur_gsm']):g} g/m²",
+        }
+        for r in conn.execute(
+            "SELECT id, valeur_gsm, label FROM mp_grammages WHERE actif=1 ORDER BY valeur_gsm"
+        ).fetchall()
+    ]
+
+
+def list_laizes(conn: sqlite3.Connection) -> list[dict]:
+    return [
+        {
+            "id": int(r["id"]),
+            "valeur_mm": _f(r["valeur_mm"]),
+            "label": r["label"] or f"{int(_f(r['valeur_mm']))} mm",
+        }
+        for r in conn.execute(
+            "SELECT id, valeur_mm, label FROM mp_laizes WHERE actif=1 ORDER BY ordre, valeur_mm"
+        ).fetchall()
+    ]
+
+
 # ─────────────────────────────────────────────────────────────────────────────
-# Écriture
+# Déclinaisons
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def ensure_grammage(conn: sqlite3.Connection, valeur_gsm: float) -> int:
+    """Référentiel des grammages : réutilise la valeur si elle existe déjà."""
+    v = round(_f(valeur_gsm), 4)
+    row = conn.execute("SELECT id FROM mp_grammages WHERE valeur_gsm=?", (v,)).fetchone()
+    if row:
+        return int(row["id"])
+    cur = conn.execute(
+        "INSERT INTO mp_grammages (valeur_gsm, label, ordre) VALUES (?,?,?)",
+        (v, f"{v:g} g/m²", int(v)),
+    )
+    return int(cur.lastrowid)
+
+
+def add_declinaison(
+    conn: sqlite3.Connection,
+    *,
+    matiere_id: int,
+    laize_id: Optional[int] = None,
+    valeur_gsm: Optional[float] = None,
+) -> dict:
+    mat = fetch_matiere(conn, matiere_id)
+    if not mat:
+        return {"ok": False, "reason": "matière introuvable"}
+    td = type_declinaison(mat["categorie"])
+    grammage_id = None
+    if td == "GRAMMAGE":
+        if valeur_gsm is None or _f(valeur_gsm) <= 0:
+            return {"ok": False, "reason": "grammage requis (g/m²)"}
+        grammage_id = ensure_grammage(conn, valeur_gsm)
+        conn.execute(
+            """INSERT OR IGNORE INTO mp_matiere_grammages (matiere_id, grammage_id)
+               VALUES (?,?)""",
+            (matiere_id, grammage_id),
+        )
+        laize_id = None
+    elif td == "LAIZE":
+        if not laize_id:
+            return {"ok": False, "reason": "laize requise"}
+        if not conn.execute("SELECT 1 FROM mp_laizes WHERE id=?", (laize_id,)).fetchone():
+            return {"ok": False, "reason": "laize inconnue"}
+    else:
+        return {"ok": False, "reason": "cette matière ne se décline pas"}
+
+    exist = conn.execute(
+        """SELECT id FROM mp_matiere_declinaison
+            WHERE matiere_id=? AND COALESCE(laize_id,0)=COALESCE(?,0)
+              AND COALESCE(grammage_id,0)=COALESCE(?,0)""",
+        (matiere_id, laize_id, grammage_id),
+    ).fetchone()
+    if exist:
+        return {"ok": False, "reason": "cette déclinaison existe déjà"}
+    cur = conn.execute(
+        """INSERT INTO mp_matiere_declinaison (matiere_id, laize_id, grammage_id)
+           VALUES (?,?,?)""",
+        (matiere_id, laize_id, grammage_id),
+    )
+    return {"ok": True, "declinaison_id": int(cur.lastrowid)}
+
+
+def delete_declinaison(conn: sqlite3.Connection, declinaison_id: int) -> dict:
+    d = fetch_declinaison(conn, declinaison_id)
+    if not d:
+        return {"ok": False, "reason": "déclinaison introuvable"}
+    conn.execute("DELETE FROM mp_matiere_prix WHERE declinaison_id=?", (declinaison_id,))
+    conn.execute("DELETE FROM mp_matiere_declinaison WHERE id=?", (declinaison_id,))
+    return {"ok": True}
+
+
+def set_appairage(
+    conn: sqlite3.Connection, *, declinaison_id: int, mc_material_id: Optional[int]
+) -> dict:
+    """Appaire (ou détache si mc_material_id est None) une déclinaison."""
+    d = fetch_declinaison(conn, declinaison_id)
+    if not d:
+        return {"ok": False, "reason": "déclinaison introuvable"}
+    if mc_material_id is not None:
+        if not conn.execute(
+            "SELECT 1 FROM mc_material WHERE id=?", (mc_material_id,)
+        ).fetchone():
+            return {"ok": False, "reason": "matière Coûts matières introuvable"}
+        # Une matière Coûts matières ne peut être pilotée que par une déclinaison.
+        conn.execute(
+            "UPDATE mp_matiere_declinaison SET mc_material_id=NULL WHERE mc_material_id=? AND id<>?",
+            (mc_material_id, declinaison_id),
+        )
+    conn.execute(
+        "UPDATE mp_matiere_declinaison SET mc_material_id=? WHERE id=?",
+        (mc_material_id, declinaison_id),
+    )
+    return {"ok": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Prix
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 def _mirror_principal(
     conn: sqlite3.Connection,
-    matiere_id: int,
-    laize_id: Optional[int],
+    declinaison_id: int,
     *,
     user_id: Optional[int],
     user_name: Optional[str],
     note: str,
 ) -> dict:
-    """
-    Recopie le prix principal dans les champs lus par la valorisation MyStock et
-    historise le changement. Retourne un diagnostic.
-    """
+    """Recopie le prix principal dans les champs lus par la valorisation MyStock."""
+    d = fetch_declinaison(conn, declinaison_id)
+    if not d:
+        return {"ok": False, "reason": "déclinaison introuvable"}
+    matiere_id = int(d["matiere_id"])
     mat = fetch_matiere(conn, matiere_id)
-    if not mat:
-        return {"ok": False, "reason": "matière introuvable"}
-
     row = conn.execute(
-        """SELECT prix FROM mp_matiere_prix
-            WHERE matiere_id=? AND COALESCE(laize_id,0)=COALESCE(?,0) AND principal=1
-            LIMIT 1""",
-        (matiere_id, laize_id),
+        "SELECT prix FROM mp_matiere_prix WHERE declinaison_id=? AND principal=1 LIMIT 1",
+        (declinaison_id,),
     ).fetchone()
     if not row:
         return {"ok": False, "reason": "aucun prix principal"}
@@ -219,6 +391,7 @@ def _mirror_principal(
 
     laizee = is_laizee(mat["categorie"])
     par_laize = bool(int(mat["prix_par_laize"] or 0)) and laizee
+    laize_id = d["laize_id"]
     now = _now()
 
     if laizee and par_laize and laize_id is not None:
@@ -274,32 +447,26 @@ def _mirror_principal(
 def set_prix(
     conn: sqlite3.Connection,
     *,
-    matiere_id: int,
-    laize_id: Optional[int],
+    declinaison_id: int,
     fournisseur_id: Optional[int],
     prix: float,
     user_id: Optional[int] = None,
     user_name: Optional[str] = None,
     origine: str = "Coûts matières",
 ) -> dict:
-    """
-    Fixe le prix d'un fournisseur. Si cette ligne est la principale, le prix est
-    aussitôt répercuté dans MyStock et historisé.
-    """
     if prix < 0:
         return {"ok": False, "reason": "prix négatif interdit"}
     if prix > 1_000_000:
         return {"ok": False, "reason": "prix hors limites"}
-    mat = fetch_matiere(conn, matiere_id)
-    if not mat:
-        return {"ok": False, "reason": "matière introuvable"}
+    d = fetch_declinaison(conn, declinaison_id)
+    if not d:
+        return {"ok": False, "reason": "déclinaison introuvable"}
 
     now = _now()
     existing = conn.execute(
         """SELECT id, principal FROM mp_matiere_prix
-            WHERE matiere_id=? AND COALESCE(laize_id,0)=COALESCE(?,0)
-              AND COALESCE(fournisseur_id,0)=COALESCE(?,0)""",
-        (matiere_id, laize_id, fournisseur_id),
+            WHERE declinaison_id=? AND COALESCE(fournisseur_id,0)=COALESCE(?,0)""",
+        (declinaison_id, fournisseur_id),
     ).fetchone()
     if existing:
         conn.execute(
@@ -308,77 +475,103 @@ def set_prix(
         )
         principal = bool(existing["principal"])
     else:
-        # Première ligne de prix pour cette matière/laize → elle devient principale.
         others = conn.execute(
-            """SELECT COUNT(*) AS n FROM mp_matiere_prix
-                WHERE matiere_id=? AND COALESCE(laize_id,0)=COALESCE(?,0)""",
-            (matiere_id, laize_id),
+            "SELECT COUNT(*) AS n FROM mp_matiere_prix WHERE declinaison_id=?",
+            (declinaison_id,),
         ).fetchone()
         principal = int(others["n"] or 0) == 0
         conn.execute(
             """INSERT INTO mp_matiere_prix
-               (matiere_id, laize_id, fournisseur_id, prix, principal, updated_at, updated_by_name)
-               VALUES (?,?,?,?,?,?,?)""",
-            (matiere_id, laize_id, fournisseur_id, float(prix), 1 if principal else 0,
-             now, user_name),
+               (matiere_id, laize_id, grammage_id, declinaison_id, fournisseur_id,
+                prix, principal, updated_at, updated_by_name)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (
+                int(d["matiere_id"]), d["laize_id"], d["grammage_id"], declinaison_id,
+                fournisseur_id, float(prix), 1 if principal else 0, now, user_name,
+            ),
         )
     result = {"ok": True, "principal": principal}
     if principal:
         result["miroir"] = _mirror_principal(
-            conn, matiere_id, laize_id,
-            user_id=user_id, user_name=user_name,
+            conn, declinaison_id, user_id=user_id, user_name=user_name,
             note=f"Prix modifié depuis {origine}",
         )
+    _sync_laize_fournisseurs(conn, declinaison_id)
     return result
+
+
+def set_fournisseur(
+    conn: sqlite3.Connection,
+    *,
+    declinaison_id: int,
+    fournisseur_id: Optional[int],
+    nouveau_fournisseur_id: Optional[int],
+) -> dict:
+    """
+    Change le fournisseur d'une ligne de prix existante, sur place.
+
+    On ne recrée pas la ligne : la remplacer ferait perdre son statut de
+    principal, et une déclinaison se retrouverait sans prix de référence.
+    """
+    row = conn.execute(
+        """SELECT id FROM mp_matiere_prix
+            WHERE declinaison_id=? AND COALESCE(fournisseur_id,0)=COALESCE(?,0)""",
+        (declinaison_id, fournisseur_id),
+    ).fetchone()
+    if not row:
+        return {"ok": False, "reason": "ligne de prix introuvable"}
+    if (fournisseur_id or 0) == (nouveau_fournisseur_id or 0):
+        return {"ok": True, "inchange": True}
+    deja = conn.execute(
+        """SELECT 1 FROM mp_matiere_prix
+            WHERE declinaison_id=? AND COALESCE(fournisseur_id,0)=COALESCE(?,0)""",
+        (declinaison_id, nouveau_fournisseur_id),
+    ).fetchone()
+    if deja:
+        return {"ok": False, "reason": "ce fournisseur a déjà un prix sur cette déclinaison"}
+    conn.execute(
+        "UPDATE mp_matiere_prix SET fournisseur_id=?, updated_at=? WHERE id=?",
+        (nouveau_fournisseur_id, _now(), row["id"]),
+    )
+    _sync_laize_fournisseurs(conn, declinaison_id)
+    return {"ok": True}
 
 
 def set_principal(
     conn: sqlite3.Connection,
     *,
-    matiere_id: int,
-    laize_id: Optional[int],
+    declinaison_id: int,
     fournisseur_id: Optional[int],
     user_id: Optional[int] = None,
     user_name: Optional[str] = None,
     origine: str = "Coûts matières",
 ) -> dict:
-    """Désigne le fournisseur dont le prix fait foi, et pousse son tarif dans MyStock."""
     row = conn.execute(
         """SELECT id FROM mp_matiere_prix
-            WHERE matiere_id=? AND COALESCE(laize_id,0)=COALESCE(?,0)
-              AND COALESCE(fournisseur_id,0)=COALESCE(?,0)""",
-        (matiere_id, laize_id, fournisseur_id),
+            WHERE declinaison_id=? AND COALESCE(fournisseur_id,0)=COALESCE(?,0)""",
+        (declinaison_id, fournisseur_id),
     ).fetchone()
     if not row:
         return {"ok": False, "reason": "ligne de prix introuvable"}
     conn.execute(
-        """UPDATE mp_matiere_prix SET principal=0
-            WHERE matiere_id=? AND COALESCE(laize_id,0)=COALESCE(?,0)""",
-        (matiere_id, laize_id),
+        "UPDATE mp_matiere_prix SET principal=0 WHERE declinaison_id=?", (declinaison_id,)
     )
     conn.execute("UPDATE mp_matiere_prix SET principal=1 WHERE id=?", (row["id"],))
     miroir = _mirror_principal(
-        conn, matiere_id, laize_id,
-        user_id=user_id, user_name=user_name,
+        conn, declinaison_id, user_id=user_id, user_name=user_name,
         note=f"Fournisseur principal changé depuis {origine}",
     )
-    _sync_laize_fournisseurs(conn, matiere_id, laize_id)
+    _sync_laize_fournisseurs(conn, declinaison_id)
     return {"ok": True, "miroir": miroir}
 
 
 def delete_ligne(
-    conn: sqlite3.Connection,
-    *,
-    matiere_id: int,
-    laize_id: Optional[int],
-    fournisseur_id: Optional[int],
+    conn: sqlite3.Connection, *, declinaison_id: int, fournisseur_id: Optional[int]
 ) -> dict:
-    """Retire un fournisseur de la matière. Le principal ne peut pas être retiré."""
     row = conn.execute(
         """SELECT id, principal FROM mp_matiere_prix
-            WHERE matiere_id=? AND COALESCE(laize_id,0)=COALESCE(?,0)
-              AND COALESCE(fournisseur_id,0)=COALESCE(?,0)""",
-        (matiere_id, laize_id, fournisseur_id),
+            WHERE declinaison_id=? AND COALESCE(fournisseur_id,0)=COALESCE(?,0)""",
+        (declinaison_id, fournisseur_id),
     ).fetchone()
     if not row:
         return {"ok": False, "reason": "ligne de prix introuvable"}
@@ -388,28 +581,27 @@ def delete_ligne(
             "reason": "fournisseur principal — désignez-en un autre avant de le retirer",
         }
     conn.execute("DELETE FROM mp_matiere_prix WHERE id=?", (row["id"],))
-    _sync_laize_fournisseurs(conn, matiere_id, laize_id)
+    _sync_laize_fournisseurs(conn, declinaison_id)
     return {"ok": True}
 
 
-def _sync_laize_fournisseurs(
-    conn: sqlite3.Connection, matiere_id: int, laize_id: Optional[int]
-) -> None:
+def _sync_laize_fournisseurs(conn: sqlite3.Connection, declinaison_id: int) -> None:
     """
-    Tient à jour la table historique matiere_laize_fournisseurs, encore lue par
-    les écrans MyStock (réception, guide traça). Sans laize, rien à faire :
-    cette table exige une laize.
+    Tient à jour matiere_laize_fournisseurs, encore lue par les écrans MyStock
+    (réception, guide traça). Ne concerne que les déclinaisons par laize.
     """
-    if laize_id is None:
+    d = fetch_declinaison(conn, declinaison_id)
+    if not d or d["laize_id"] is None:
         return
+    matiere_id, laize_id = int(d["matiere_id"]), int(d["laize_id"])
     conn.execute(
         "DELETE FROM matiere_laize_fournisseurs WHERE matiere_id=? AND laize_id=?",
         (matiere_id, laize_id),
     )
     for r in conn.execute(
         """SELECT DISTINCT fournisseur_id FROM mp_matiere_prix
-            WHERE matiere_id=? AND laize_id=? AND fournisseur_id IS NOT NULL""",
-        (matiere_id, laize_id),
+            WHERE declinaison_id=? AND fournisseur_id IS NOT NULL""",
+        (declinaison_id,),
     ).fetchall():
         conn.execute(
             """INSERT OR IGNORE INTO matiere_laize_fournisseurs

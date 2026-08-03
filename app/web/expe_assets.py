@@ -476,7 +476,8 @@ function openTransporteurModal(id){
       actif:tr.actif==null?true:!!Number(tr.actif),
       tarif_filename:tr.tarif_filename||'',
       tarif_url:tr.tarif_url||'',
-      couleur:tr.couleur||''
+      couleur:tr.couleur||'',
+      langue:(tr.langue||'fr')
     };
   }else{
     T.editId=null;
@@ -484,7 +485,7 @@ function openTransporteurModal(id){
       nom:'',taxe_carburant_pct:'0',contact_nom:'',
       contact_portail_url:'',contact_emails:[''],contact_tels:[{numero:'',service:''}],contact_tel:'',
       zone_france:true,zone_france_hors_paris:false,zone_affretement:false,zone_messagerie:false,
-      actif:true,tarif_filename:'',tarif_url:'',couleur:''
+      actif:true,tarif_filename:'',tarif_url:'',couleur:'',langue:'fr'
     };
   }
   T.tarifFile=null;
@@ -755,6 +756,7 @@ function expeTrpBodyFromForm(){
     zone_affretement:T.form.zone_affretement?1:0,
     zone_messagerie:T.form.zone_messagerie?1:0,
     couleur:T.form.couleur||null,
+    langue:T.form.langue||'fr',
     actif:T.form.actif?1:0
   };
 }
@@ -1131,10 +1133,22 @@ function renderExpeTransporteurModal(){
   if(isEdit&&T.modalTab==='tarifs'){
     box.appendChild(renderTarifsOnglet());
   }else{
+    // Langue des emails. Le pack de traduction FR/EN existait déjà mais
+    // n'était jamais utilisé faute de savoir à qui écrire dans quelle langue :
+    // le mail partait bilingue, les deux versions empilées.
+    const langueSel=h('select',{style:{width:'100%',padding:'12px 16px',background:'var(--bg)',
+      border:'1px solid var(--border)',borderRadius:'10px',color:'var(--text)',fontSize:'14px'}});
+    [['fr','Français'],['en','English']].forEach(([v,l])=>{
+      const o=h('option',{value:v},l);
+      if((T.form.langue||'fr')===v)o.selected=true;
+      langueSel.appendChild(o);
+    });
+    langueSel.addEventListener('change',e=>{T.form.langue=e.target.value;});
     const ident=h('div',{className:'expe-trp-sec'},
       h('div',{className:'expe-trp-sec-title'},'Identité'),
       mkText('Nom du transporteur *','nom'),
-      mkText('Taxe carburant %','taxe_carburant_pct',{type:'number',step:'0.1',min:'0'})
+      mkText('Taxe carburant %','taxe_carburant_pct',{type:'number',step:'0.1',min:'0'}),
+      h('div',{className:'expe-trp-field'},h('label',null,'Langue des emails'),langueSel)
     );
     const curColor=T.form.couleur||'';
     const swatches=TRP_PALETTE.map(c=>{
@@ -1668,17 +1682,21 @@ async function validerNouvelleDemande(){
         code_postal_destination:cp,
         type_envoi:f.type_envoi||'messagerie',
         type_palette:(f.type_palette||'').trim()||null,
-        contraintes:(f.contraintes||'').trim()||null
+        contraintes:(f.contraintes||'').trim()||null,
+        date_limite:(f.date_limite||'').trim()||null
       })
     });
+    // Nouveau client saisi : le cache de suggestions est invalidé pour que la
+    // demande suivante le propose au lieu de laisser rouvrir une graphie.
+    _expeClientsCache=null;
     // Si un fichier a été sélectionné, on l'upload après la création.
     // Le second appel ne bloque pas la création si l'upload échoue (on prévient).
     const fileObj=f.piece_jointe_file;
     if(fileObj&&fileObj instanceof File){
       try{
         const fd=new FormData();
-        fd.append('file',fileObj);
-        const r=await fetch('/api/expe/devis/demandes/'+demande.id+'/piece-jointe',{
+        fd.append('files',fileObj);
+        const r=await fetch('/api/expe/devis/demandes/'+demande.id+'/pieces-jointes',{
           method:'POST',
           credentials:'include',
           body:fd
@@ -1703,7 +1721,8 @@ async function validerNouvelleDemande(){
 async function ouvrirDetailDemande(demandeId){
   try{
     const data=await api('/api/expe/devis/demandes/'+demandeId);
-    set({expeDevisModal:{type:'detail',demandeId,demande:data.demande,reponses:data.reponses||[]}});
+    set({expeDevisModal:{type:'detail',demandeId,demande:data.demande,
+      reponses:data.reponses||[],pieces_jointes:data.pieces_jointes||[]}});
   }catch(e){
     showToast(e.message||'Chargement impossible','danger');
   }
@@ -1951,6 +1970,93 @@ function expeDevisSuiviTag(d){
   return h('span',{className:'expe-devis-pill accent'},parts.join(' / '));
 }
 
+// Pastille d'échéance. Le retard est rouge, l'imminence ambre, le reste gris :
+// une date sans code couleur oblige à la comparer mentalement à aujourd'hui
+// sur chaque carte, ce que personne ne fait en balayant une liste.
+function expeDevisEcheanceTag(d){
+  const dl=(d.date_limite||'').slice(0,10);
+  if(!dl)return null;
+  if(d.statut!=='ouverte')return h('span',{className:'expe-devis-pill muted'},'Limite '+dl);
+  const auj=expeParisDayISO();
+  let cls='muted', txt='Limite '+dl;
+  if(dl<auj){ cls='danger'; txt='En retard — '+dl; }
+  else{
+    const j=Math.round((new Date(dl+'T00:00:00')-new Date(auj+'T00:00:00'))/86400000);
+    if(j===0){ cls='warn'; txt="Limite aujourd'hui"; }
+    else if(j<=2){ cls='warn'; txt='Limite J-'+j; }
+  }
+  return h('span',{className:'expe-devis-pill '+cls,title:'Date limite de réponse'},txt);
+}
+
+async function dupliquerDemande(id,ev){
+  if(ev)ev.stopPropagation();
+  try{
+    const d=await api('/api/expe/devis/demandes/'+id+'/dupliquer',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({copier_pieces_jointes:true})});
+    const n=(d.destinataires_precedents||[]).length;
+    showToast('Demande '+(d.reference||'')+' créée'+(n?' — '+n+' destinataire(s) à re-sélectionner':''));
+    S.devis_filtre='ouverte';
+    await chargerDemandes();
+    void ouvrirDetailDemande(d.id);
+  }catch(e){ showToast(e.message||'Duplication impossible','danger'); }
+}
+
+async function restaurerDemande(id,ev){
+  if(ev)ev.stopPropagation();
+  try{
+    await api('/api/expe/devis/demandes/'+id+'/restaurer',{method:'POST'});
+    showToast('Demande restaurée');
+    await chargerDemandes();
+  }catch(e){ showToast(e.message||'Restauration impossible','danger'); }
+}
+
+async function purgerDemande(id,ev){
+  if(ev)ev.stopPropagation();
+  if(!confirm('Supprimer DÉFINITIVEMENT cette demande, ses réponses et ses fichiers ?\nCette action est irréversible.'))return;
+  try{
+    await api('/api/expe/devis/demandes/'+id+'/purger',{method:'DELETE'});
+    showToast('Demande supprimée définitivement');
+    await chargerDemandes();
+  }catch(e){ showToast(e.message||'Suppression impossible','danger'); }
+}
+
+async function supprimerDemandeDevis(id,ev){
+  if(ev)ev.stopPropagation();
+  if(!confirm('Mettre cette demande à la corbeille ? Elle reste restaurable.'))return;
+  try{
+    await api('/api/expe/devis/demandes/'+id,{method:'DELETE'});
+    showToast('Demande mise à la corbeille');
+    fermerExpeDevisModal();
+    await chargerDemandes();
+  }catch(e){ showToast(e.message||'Suppression impossible','danger'); }
+}
+
+// Liste des clients déjà employés — chargée une fois par session et partagée
+// par tous les champs client. Le but n'est pas de contraindre la saisie mais
+// d'éviter qu'un même client existe en trois graphies.
+let _expeClientsCache=null;
+async function expeClientsSuggestions(){
+  if(_expeClientsCache)return _expeClientsCache;
+  try{
+    const d=await api('/api/expe/devis/clients-suggestions');
+    _expeClientsCache=d.clients||[];
+  }catch(_e){ _expeClientsCache=[]; }
+  return _expeClientsCache;
+}
+
+function expeClientDatalist(inp){
+  const id='expe-clients-dl';
+  let dl=document.getElementById(id);
+  if(!dl){ dl=h('datalist',{id:id}); document.body.appendChild(dl); }
+  inp.setAttribute('list',id);
+  void expeClientsSuggestions().then(list=>{
+    if(dl.childElementCount===list.length)return;
+    dl.innerHTML='';
+    list.forEach(c=>dl.appendChild(h('option',{value:c})));
+  });
+  return inp;
+}
+
 // ── Engagement transporteur (email ouvert / portail consulté) ──
 //
 // Deux signaux distincts, et non un statut unique : ils n'ont pas la même
@@ -1998,6 +2104,122 @@ function expeEngagementCell(r){
     wrap.appendChild(h('div',{className:'expe-eng-when'},expeDepuisDate(e.dernier_signal)));
   }
   return wrap;
+}
+
+function ouvrirEditionDemande(d){
+  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'2000'}});
+  const box=h('div',{className:'expe-devis-modal',style:{maxWidth:'560px'}});
+  const close=()=>{try{ov.remove();}catch(_e){}};
+  const inp=(v,opts)=>h('input',Object.assign({className:'expe-devis-inp',type:'text',
+    value:(v==null?'':String(v))},opts||{}));
+  const cli=inp(d.client,{placeholder:'Nom du client',autocomplete:'off'});
+  const cp=inp(d.code_postal_destination);
+  const poids=inp(d.poids_total_kg,{type:'number',step:'0.1'});
+  const pal=inp(d.nb_palette,{type:'number',step:'1'});
+  const contr=inp(d.contraintes,{placeholder:'Délai, RDV…'});
+  const dl=inp((d.date_limite||'').slice(0,10),{type:'date'});
+  const typeSel=h('select',{className:'expe-devis-inp'},
+    ...['messagerie','ramasse','affretement'].map(v=>{
+      const o=h('option',{value:v},v.charAt(0).toUpperCase()+v.slice(1));
+      if((d.type_envoi||'')===v)o.selected=true; return o;}));
+  const palSel=h('select',{className:'expe-devis-inp'},
+    ...[['','— Non précisé —'],['europe','Palette Europe (EUR/EPAL)'],['perdue','Palette perdue'],
+        ['autre','Autre palette'],['vrac','Sans palette (vrac)']].map(([v,l])=>{
+      const o=h('option',{value:v},l);
+      if((d.type_palette||'')===v)o.selected=true; return o;}));
+  box.appendChild(h('div',{className:'expe-devis-modal-head'},
+    h('span',{style:{fontWeight:'700',fontSize:'15px'}},'Modifier '+devisRefLabel(d)),
+    h('button',{type:'button',className:'btn-ghost expe-devis-close',onClick:close},iconEl('x',16))));
+  box.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'12px'}},
+    "Possible tant qu'aucune demande n'est partie."));
+  box.appendChild(h('div',{className:'expe-devis-grid'},
+    h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Client *',expeClientDatalist(cli)),
+    h('label',{className:'expe-devis-label'},'CP destination *',cp),
+    h('label',{className:'expe-devis-label'},'Date limite',dl),
+    h('label',{className:'expe-devis-label'},'Poids (kg)',poids),
+    h('label',{className:'expe-devis-label'},'Palettes',pal),
+    h('label',{className:'expe-devis-label'},"Type d'envoi",typeSel),
+    h('label',{className:'expe-devis-label'},'Type de palette',palSel),
+    h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Contraintes',contr)
+  ));
+  box.appendChild(h('div',{className:'expe-devis-modal-foot'},
+    h('button',{type:'button',className:'btn btn-ghost',onClick:close},'Annuler'),
+    h('button',{type:'button',className:'btn btn-accent',onClick:async()=>{
+      const client=cli.value.trim(), cpv=cp.value.trim();
+      if(!client){showToast('Client obligatoire','danger');return;}
+      if(!cpv){showToast('Code postal obligatoire','danger');return;}
+      try{
+        await api('/api/expe/devis/demandes/'+d.id,{method:'PUT',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            client, code_postal_destination:cpv,
+            poids_total_kg:parseFloat(poids.value)||null,
+            nb_palette:parseFloat(pal.value)||null,
+            type_envoi:typeSel.value, type_palette:palSel.value||null,
+            contraintes:contr.value.trim()||null,
+            date_limite:dl.value||null
+          })});
+        _expeClientsCache=null;
+        showToast('Demande modifiée');
+        close(); await ouvrirDetailDemande(d.id); await chargerDemandes();
+      }catch(e){ showToast(e.message||'Modification impossible','danger'); }
+    }},'Enregistrer')));
+  ov.appendChild(box);
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  document.body.appendChild(ov);
+}
+
+async function copierLienPortail(reponseId){
+  try{
+    const d=await api('/api/expe/devis/reponses/'+reponseId+'/lien-portail');
+    let ok=false;
+    try{ await navigator.clipboard.writeText(d.lien); ok=true; }catch(_e){ ok=false; }
+    if(ok)showToast('Lien portail copié — '+d.email);
+    // Le presse-papier est refusé hors contexte sécurisé et sur certains
+    // navigateurs mobiles : plutôt qu'un échec muet, on affiche le lien pour
+    // qu'il reste sélectionnable à la main.
+    else prompt('Lien portail de '+d.email+' :', d.lien);
+  }catch(e){ showToast(e.message||'Lien indisponible','danger'); }
+}
+
+async function retirerDestinataire(r,demandeId){
+  if(!confirm('Retirer '+(r.nom_transporteur||r.destinataire_email||'ce destinataire')+' de la demande ?'))return;
+  try{
+    await api('/api/expe/devis/reponses/'+r.id,{method:'DELETE'});
+    showToast('Destinataire retiré');
+    await ouvrirDetailDemande(demandeId); await chargerDemandes();
+  }catch(e){ showToast(e.message||'Retrait impossible','danger'); }
+}
+
+function ouvrirRelanceDevis(r,demandeId){
+  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'2000'}});
+  const box=h('div',{className:'expe-devis-modal',style:{maxWidth:'480px'}});
+  const close=()=>{try{ov.remove();}catch(_e){}};
+  const msg=h('textarea',{className:'expe-devis-inp',rows:4,
+    placeholder:'Message à ajouter en tête de la relance (optionnel)',
+    style:{resize:'vertical',minHeight:'88px',fontFamily:'inherit'}});
+  box.appendChild(h('div',{className:'expe-devis-modal-head'},
+    h('span',{style:{fontWeight:'700',fontSize:'15px'}},'Relancer '+escHtml(r.nom_transporteur||'')),
+    h('button',{type:'button',className:'btn-ghost expe-devis-close',onClick:close},iconEl('x',16))));
+  box.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'12px'}},
+    escHtml(r.destinataire_email||'')+
+    (r.relances?' · '+r.relances+' relance'+(r.relances>1?'s':'')+' déjà envoyée'+(r.relances>1?'s':''):'')+
+    (r.last_relance_at?' · dernière le '+(r.last_relance_at||'').slice(0,10):'')));
+  box.appendChild(h('label',{className:'expe-devis-label'},'Message',msg));
+  box.appendChild(h('div',{className:'expe-devis-modal-foot'},
+    h('button',{type:'button',className:'btn btn-ghost',onClick:close},'Annuler'),
+    h('button',{type:'button',className:'btn btn-accent',onClick:async()=>{
+      try{
+        await api('/api/expe/devis/reponses/'+r.id+'/relancer',{method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({message:msg.value.trim()||null})});
+        showToast('Relance envoyée');
+        close(); await ouvrirDetailDemande(demandeId);
+      }catch(e){ showToast(e.message||'Relance impossible','danger'); }
+    }},'Envoyer la relance')));
+  ov.appendChild(box);
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  document.body.appendChild(ov);
 }
 
 async function ouvrirTimelineDevis(reponseId){
@@ -2091,13 +2313,20 @@ function renderExpeDevisModal(){
       h('span',{style:{fontWeight:'700',fontSize:'15px'}},'Nouvelle demande de devis'),closeBtn));
     box.appendChild(h('div',{className:'expe-devis-grid'},
       (()=>{
-        const c=h('input',{type:'text',className:'expe-devis-inp',value:f.client||'',placeholder:'Nom du client'});
+        const c=h('input',{type:'text',className:'expe-devis-inp',value:f.client||'',
+          placeholder:'Nom du client',autocomplete:'off'});
         c.addEventListener('input',e=>{m.form.client=e.target.value;});
-        return h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Client *',c);
+        return h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Client *',
+          expeClientDatalist(c));
       })(),
       mk('Poids (kg)','poids_total_kg',{type:'number',step:'0.1'}),
       mk('Palettes','nb_palette',{type:'number',step:'1'}),
       mk('CP destination *','code_postal_destination'),
+      (()=>{
+        const c=h('input',{type:'date',className:'expe-devis-inp',value:f.date_limite||''});
+        c.addEventListener('change',e=>{m.form.date_limite=e.target.value;});
+        return h('label',{className:'expe-devis-label'},'Date limite de réponse',c);
+      })(),
       h('label',{className:'expe-devis-label'},'Type d\'envoi',typeSel),
       h('label',{className:'expe-devis-label'},'Type de palette',palSel),
       (()=>{
@@ -2135,7 +2364,7 @@ function renderExpeDevisModal(){
     box.appendChild(h('div',{className:'expe-devis-modal-head'},
       h('span',{style:{fontWeight:'700',fontSize:'15px'}},devisRefLabel(d)+' — '+escHtml(d.code_postal_destination||'')),
       closeBtn));
-    box.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'16px'}},
+    box.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'10px'}},
       (d.client?escHtml(d.client)+' · ':'')+
       (d.poids_total_kg?d.poids_total_kg+' kg · ':'')+
       (d.nb_palette?d.nb_palette+' pal. · ':'')+
@@ -2143,24 +2372,136 @@ function renderExpeDevisModal(){
       (d.type_palette?' · '+escHtml(expePaletteLabel(d.type_palette)):'')+
       (d.contraintes?' · '+escHtml(d.contraintes):'')
     ));
-    // Lien vers la pièce jointe si présente
-    if(d.piece_jointe_path){
-      const a=h('a',{
-        href:'/api/expe/devis/demandes/'+d.id+'/piece-jointe',
-        target:'_blank',
-        rel:'noopener',
-        style:{display:'inline-flex',alignItems:'center',gap:'6px',marginBottom:'14px',fontSize:'13px',color:'var(--accent)',textDecoration:'none'}
-      },'Pièce jointe : '+escHtml(d.piece_jointe_filename||'fichier'));
-      box.appendChild(a);
-    }
-    if(d.statut==='ouverte'&&expeCanWrite()){
-      box.appendChild(h('div',{style:{marginBottom:'16px',display:'flex',gap:'8px',flexWrap:'wrap'}},
-        h('button',{type:'button',className:'btn btn-accent',onClick:()=>void ouvrirModalEnvoi(d.id)},'Envoyer les demandes'),
-        h('button',{type:'button',className:'btn btn-ghost',style:{color:'var(--danger)',borderColor:'var(--danger)',background:'transparent'},
+    // Échéance + compteur de réponses : « il en manque combien » est la
+    // question qu'on se pose en ouvrant le détail, elle ne doit pas obliger à
+    // compter les lignes du tableau.
+    (function(){
+      const bar=h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center',marginBottom:'14px'}});
+      const ech=expeDevisEcheanceTag(d);
+      if(ech)bar.appendChild(ech);
+      const env=reps.filter(r=>r.sent_at).length;
+      const rec=reps.filter(r=>r.prix!=null).length;
+      if(env){
+        bar.appendChild(h('span',{className:'expe-devis-pill '+(rec>=env?'ok':'accent')},
+          rec+' / '+env+' réponse'+(env>1?'s':'')+(rec>=env?' — toutes reçues':'')));
+      }
+      if(expeCanWrite()&&d.statut==='ouverte'){
+        const dl=h('input',{type:'date',value:(d.date_limite||'').slice(0,10),
+          style:{padding:'3px 8px',fontSize:'12px',background:'var(--bg)',border:'1px solid var(--border)',
+            borderRadius:'6px',color:'var(--text)'},title:'Modifier la date limite'});
+        dl.addEventListener('change',async e=>{
+          try{
+            await api('/api/expe/devis/demandes/'+d.id+'/date-limite',{method:'PATCH',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({date_limite:e.target.value||null})});
+            showToast('Date limite mise à jour');
+            await ouvrirDetailDemande(d.id); await chargerDemandes();
+          }catch(err){ showToast(err.message||'Erreur','danger'); }
+        });
+        bar.appendChild(dl);
+      }
+      if(bar.childElementCount)box.appendChild(bar);
+    })();
+
+    // Pièces jointes — liste, ajout, suppression. Auparavant une seule
+    // colonne : le second fichier chassait le premier sans le dire.
+    (function(){
+      const pjs=m.pieces_jointes||[];
+      const sifa=pjs.filter(p=>p.origine==='sifa');
+      const trp=pjs.filter(p=>p.origine==='transporteur');
+      const wrap=h('div',{className:'expe-devis-pj'});
+      const lignePJ=(p,supprimable)=>h('div',{className:'expe-devis-pj-item'},
+        h('a',{href:'/api/expe/devis/pieces-jointes/'+p.id,target:'_blank',rel:'noopener',
+          className:'expe-devis-pj-lien'},'📎 '+escHtml(p.filename||'fichier')),
+        p.taille_octets?h('span',{className:'expe-devis-pj-taille'},
+          Math.max(1,Math.round(p.taille_octets/1024))+' Ko'):null,
+        (supprimable&&expeCanWrite())?h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--bad',
+          style:{width:'22px',height:'22px'},title:'Supprimer',
+          onClick:async()=>{
+            if(!confirm('Supprimer '+(p.filename||'ce fichier')+' ?'))return;
+            try{
+              await api('/api/expe/devis/pieces-jointes/'+p.id,{method:'DELETE'});
+              showToast('Pièce jointe supprimée'); await ouvrirDetailDemande(d.id);
+            }catch(e){ showToast(e.message||'Erreur','danger'); }
+          }},iconEl('x',11)):null
+      );
+      if(sifa.length||d.statut==='ouverte'){
+        wrap.appendChild(h('div',{className:'expe-devis-pj-titre'},'Documents joints à la demande'));
+        sifa.forEach(p=>wrap.appendChild(lignePJ(p,d.statut==='ouverte')));
+        if(!sifa.length)wrap.appendChild(h('div',{className:'expe-devis-pj-vide'},'Aucun document.'));
+        if(expeCanWrite()&&d.statut==='ouverte'){
+          const fi=h('input',{type:'file',multiple:true,style:{display:'none'}});
+          fi.addEventListener('change',async e=>{
+            const fs=Array.from(e.target.files||[]);
+            if(!fs.length)return;
+            const fd=new FormData();
+            fs.forEach(f2=>fd.append('files',f2));
+            try{
+              const r=await fetch('/api/expe/devis/demandes/'+d.id+'/pieces-jointes',
+                {method:'POST',credentials:'include',body:fd});
+              if(!r.ok)throw new Error(await r.text().catch(()=>String(r.status)));
+              showToast(fs.length+' fichier(s) ajouté(s)');
+              await ouvrirDetailDemande(d.id); await chargerDemandes();
+            }catch(err){ showToast(err.message||'Envoi impossible','danger'); }
+          });
+          wrap.appendChild(h('button',{type:'button',className:'btn-ghost',
+            style:{fontSize:'12px',padding:'4px 10px',marginTop:'6px'},
+            onClick:()=>fi.click()},iconEl('plus',12),' Ajouter des fichiers'));
+          wrap.appendChild(fi);
+        }
+      }
+      if(trp.length){
+        wrap.appendChild(h('div',{className:'expe-devis-pj-titre',style:{marginTop:'10px'}},
+          'Fichiers déposés par les transporteurs'));
+        trp.forEach(p=>{
+          const rep=reps.find(r=>String(r.id)===String(p.reponse_id));
+          const l=lignePJ(p,false);
+          if(rep)l.appendChild(h('span',{className:'expe-devis-pj-taille'},'— '+escHtml(rep.nom_transporteur||'')));
+          wrap.appendChild(l);
+        });
+      }
+      if(wrap.childElementCount)box.appendChild(wrap);
+    })();
+
+    (function(){
+      const barre=h('div',{style:{marginBottom:'16px',display:'flex',gap:'8px',flexWrap:'wrap'}});
+      if(d.statut==='ouverte'&&expeCanWrite()){
+        barre.appendChild(h('button',{type:'button',className:'btn btn-accent',
+          onClick:()=>void ouvrirModalEnvoi(d.id)},'Envoyer les demandes'));
+      }
+      if(reps.length){
+        barre.appendChild(h('button',{type:'button',className:'btn btn-ghost',
+          title:'Comparatif imprimable (nouvelle fenêtre)',
+          onClick:()=>window.open('/api/expe/devis/demandes/'+d.id+'/imprimer','_blank','noopener')
+        },iconEl('printer',12),' Imprimer le comparatif'));
+      }
+      if(expeCanWrite()){
+        barre.appendChild(h('button',{type:'button',className:'btn btn-ghost',
+          title:'Créer une nouvelle demande à partir de celle-ci',
+          onClick:()=>void dupliquerDemande(d.id)},iconEl('copy',12),' Dupliquer'));
+      }
+      // Correction de l'entête, tant qu'aucun email n'est parti. Après envoi
+      // les transporteurs ont chiffré sur ces données : le serveur refuse, et
+      // le bouton disparaît pour ne pas promettre ce qui sera refusé.
+      if(d.statut==='ouverte'&&expeCanWrite()&&!reps.some(r=>r.sent_at)){
+        barre.appendChild(h('button',{type:'button',className:'btn btn-ghost',
+          title:"Corriger l'entête de la demande",
+          onClick:()=>ouvrirEditionDemande(d)},iconEl('edit',12),' Modifier'));
+      }
+      if(d.statut==='ouverte'&&expeCanWrite()){
+        barre.appendChild(h('button',{type:'button',className:'btn btn-ghost',
+          style:{color:'var(--danger)',borderColor:'var(--danger)',background:'transparent'},
           title:'Clôturer cette demande (déplace dans l’historique)',
-          onClick:()=>void cloturerDemande(d.id)},iconEl('check-circle',12),' Clôturer')
-      ));
-    }
+          onClick:()=>void cloturerDemande(d.id)},iconEl('check-circle',12),' Clôturer'));
+      }
+      if(expeCanWrite()&&!d.deleted_at){
+        barre.appendChild(h('button',{type:'button',className:'btn-ghost',
+          style:{fontSize:'12px',color:'var(--muted)',marginLeft:'auto'},
+          title:'Mettre à la corbeille (restaurable)',
+          onClick:()=>void supprimerDemandeDevis(d.id)},iconEl('x',12),' Corbeille'));
+      }
+      if(barre.childElementCount)box.appendChild(barre);
+    })();
     const {bestPrix,bestDelai}=expeDevisMeilleursReponses(reps);
     const head=h('tr',null,
       h('th',null,'Transporteur'),h('th',null,'Statut'),h('th',null,'Engagement'),h('th',null,'Prix HT'),
@@ -2173,6 +2514,21 @@ function renderExpeDevisModal(){
       if((r.statut==='envoyee'||r.statut==='echec')&&expeCanWrite())acts.push(h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px'},onClick:()=>ouvrirSaisieReponse(r.id,d.id)},'Saisir réponse'));
       if(r.sent_at)acts.push(h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px',padding:'4px 6px'},
         title:"Suivi d'engagement",onClick:()=>void ouvrirTimelineDevis(r.id)},iconEl('activity',13)));
+      const silencieux=(r.statut==='envoyee'||r.statut==='ouvert'||r.statut==='echec');
+      if(d.statut==='ouverte'&&silencieux&&r.sent_at&&expeCanWrite()){
+        acts.push(h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px',padding:'4px 6px'},
+          title:'Relancer'+(r.relances?' ('+r.relances+' déjà envoyée'+(r.relances>1?'s':'')+')':''),
+          onClick:()=>ouvrirRelanceDevis(r,d.id)},iconEl('mail',13)));
+      }
+      if(r.sent_at)acts.push(h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px',padding:'4px 6px'},
+        title:'Copier le lien portail de ce transporteur',
+        onClick:()=>void copierLienPortail(r.id)},iconEl('link',13)));
+      if(d.statut==='ouverte'&&r.statut!=='recue'&&r.statut!=='retenue'&&expeCanWrite()){
+        acts.push(h('button',{type:'button',className:'btn-ghost',
+          style:{fontSize:'12px',padding:'4px 6px',color:'var(--danger)'},
+          title:'Retirer ce destinataire de la demande',
+          onClick:()=>void retirerDestinataire(r,d.id)},iconEl('x',13)));
+      }
       const prixTxt=r.prix!=null?Number(r.prix).toFixed(2)+' €':'—';
       const delTxt=r.delai_jours!=null?'J+'+r.delai_jours:'—';
       const isBestPrix=r.prix!=null&&bestPrix!=null&&Number(r.prix)===bestPrix;
@@ -2422,13 +2778,15 @@ function renderExpeDevisSection(){
   const filtre=S.devis_filtre||'ouverte';
   const emptyMsg=filtre==='historique'
     ? 'Aucune demande clôturée.'
-    : (filtre==='toutes' ? 'Aucune demande enregistrée.' : 'Aucune demande en cours.');
+    : (filtre==='corbeille' ? 'La corbeille est vide.'
+      : (filtre==='toutes' ? 'Aucune demande enregistrée.' : 'Aucune demande en cours.'));
   const head=h('div',{className:'expe-devis-page-head'},
     expeCanWrite()?h('button',{type:'button',className:'btn btn-accent',onClick:()=>ouvrirModalNouvelleDemande(null)},iconEl('plus',14),' Nouvelle demande'):null,
     h('div',{className:'expe-devis-filtre'},
-      h('button',{type:'button',className:'btn-ghost'+(filtre==='ouverte'?' active-filtre':''),onClick:()=>{S.devis_filtre='ouverte';void chargerDemandes();}},'Ouvertes'),
-      h('button',{type:'button',className:'btn-ghost'+(filtre==='historique'?' active-filtre':''),onClick:()=>{S.devis_filtre='historique';void chargerDemandes();}},'Historique'),
-      h('button',{type:'button',className:'btn-ghost'+(filtre==='toutes'?' active-filtre':''),onClick:()=>{S.devis_filtre='toutes';void chargerDemandes();}},'Toutes')
+      ...[['ouverte','Ouvertes'],['historique','Historique'],['toutes','Toutes'],['corbeille','Corbeille']]
+        .map(([k,lbl])=>h('button',{type:'button',
+          className:'btn-ghost'+(filtre===k?' active-filtre':'')+(k==='corbeille'?' expe-devis-filtre--trash':''),
+          onClick:()=>{S.devis_filtre=k;void chargerDemandes();}},lbl))
     )
   );
   let list;
@@ -2438,18 +2796,38 @@ function renderExpeDevisSection(){
     list=h('div',{className:'expe-devis-cards'},
       ...demandes.map(d=>{
         const pills=[];
+        const ech=expeDevisEcheanceTag(d);
+        if(ech)pills.push(ech);
         const suivi=expeDevisSuiviTag(d);
         if(suivi)pills.push(suivi);
-        if(d.statut==='cloturee')pills.push(h('span',{className:'expe-devis-pill muted'},'Clôturée'));
+        if(d.nb_pieces_jointes)pills.push(h('span',{className:'expe-devis-pill muted',
+          title:d.nb_pieces_jointes+' pièce(s) jointe(s)'},'📎 '+d.nb_pieces_jointes));
+        if(d.deleted_at)pills.push(h('span',{className:'expe-devis-pill danger'},'Corbeille'));
+        else if(d.statut==='cloturee')pills.push(h('span',{className:'expe-devis-pill muted'},'Clôturée'));
         const actions=[];
-        if(d.statut==='ouverte'&&expeCanWrite()){
-          actions.push(h('button',{
-            type:'button',
-            className:'btn-ghost',
+        if(d.deleted_at&&expeCanWrite()){
+          // Deux gestes pour détruire : restaurer est à portée de clic,
+          // purger demande d'être venu jusqu'à la corbeille.
+          actions.push(h('button',{type:'button',className:'btn-ghost',
+            style:{fontSize:'12px',padding:'4px 8px'},title:'Restaurer cette demande',
+            onClick:e=>void restaurerDemande(d.id,e)},iconEl('rotate-ccw',12),' Restaurer'));
+          actions.push(h('button',{type:'button',className:'btn-ghost',
             style:{fontSize:'12px',color:'var(--danger)',padding:'4px 8px'},
-            title:'Clôturer cette demande (déplace dans l’historique)',
-            onClick:e=>void cloturerDemande(d.id,e)
-          },iconEl('check-circle',12),' Clôturer'));
+            title:'Supprimer définitivement (fichiers compris)',
+            onClick:e=>void purgerDemande(d.id,e)},iconEl('x',12),' Purger'));
+        }else if(expeCanWrite()){
+          actions.push(h('button',{type:'button',className:'btn-ghost',
+            style:{fontSize:'12px',padding:'4px 8px'},title:'Dupliquer cette demande',
+            onClick:e=>void dupliquerDemande(d.id,e)},iconEl('copy',12)));
+          if(d.statut==='ouverte'){
+            actions.push(h('button',{
+              type:'button',
+              className:'btn-ghost',
+              style:{fontSize:'12px',color:'var(--danger)',padding:'4px 8px'},
+              title:'Clôturer cette demande (déplace dans l’historique)',
+              onClick:e=>void cloturerDemande(d.id,e)
+            },iconEl('check-circle',12),' Clôturer'));
+          }
         }
         const card=h('div',{className:'expe-devis-card',onClick:()=>void ouvrirDetailDemande(d.id)},
           h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'12px'}},
@@ -2544,6 +2922,20 @@ EXPE_DEVIS_CSS = r"""
 .expe-devis-pill.accent{background:var(--accent-bg);color:var(--accent)}
 .expe-devis-pill.muted{background:color-mix(in srgb,var(--muted) 12%,transparent);color:var(--muted)}
 .expe-devis-pill.ok{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
+.expe-devis-pill.warn{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.expe-devis-pill.danger{background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger)}
+.expe-devis-filtre--trash.active-filtre{background:color-mix(in srgb,var(--danger) 12%,transparent);
+  color:var(--danger);border-color:var(--danger)}
+/* Pièces jointes d'une demande */
+.expe-devis-pj{background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:10px 14px;margin-bottom:14px}
+.expe-devis-pj-titre{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--muted);margin-bottom:6px}
+.expe-devis-pj-item{display:flex;align-items:center;gap:8px;padding:3px 0}
+.expe-devis-pj-lien{font-size:13px;color:var(--accent);text-decoration:none}
+.expe-devis-pj-lien:hover{text-decoration:underline}
+.expe-devis-pj-taille{font-size:11px;color:var(--muted)}
+.expe-devis-pj-vide{font-size:12px;color:var(--muted);font-style:italic}
 .expe-devis-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px}
 .expe-devis-table-wrap table.table-std{margin:0;font-size:13px}
 /* Engagement transporteur — chips 11px, un signal par chip */
@@ -5148,7 +5540,10 @@ function renderExpe(){
       if(sub==='jour')void loadExpeDepartJour();
       else void loadExpeDepartHistorique();
     }else if(tab==='comparateur'){if(!T.list.length&&!T.loading)void loadTransporteurs();}
-    else if(tab==='devis'){void chargerDemandes();if(!T.list.length&&!T.loading)void loadTransporteurs();}
+    // Les prospects sont chargés ici aussi : le modal d'envoi les propose
+    // comme destinataires, mais sans ce chargement leur section restait vide
+    // tant qu'on n'était pas passé par l'onglet Prospects dans la session.
+    else if(tab==='devis'){void chargerDemandes();if(!T.list.length&&!T.loading)void loadTransporteurs();if(!S.prospects)void chargerProspects();}
     else if(tab==='prospects'){void chargerProspects();}
     else if(tab==='transporteurs'&&!T.pageLoaded){T.pageLoaded=true;void loadTransporteurs();}
     else if(tab==='palettes_europe'){void loadExpePalettesEurope();}

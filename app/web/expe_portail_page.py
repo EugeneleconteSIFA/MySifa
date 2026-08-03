@@ -129,6 +129,17 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     .badge{display:inline-flex;align-items:center;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase}
     .badge-closed{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger);border:1px solid color-mix(in srgb,var(--danger) 40%,transparent)}
     .closed-note{margin-top:10px;padding:8px 12px;background:color-mix(in srgb,var(--danger) 8%,transparent);border-left:3px solid var(--danger);border-radius:6px;font-size:12px;color:var(--text2);line-height:1.55}
+    .dl{margin:8px 0 4px;font-size:12px;color:var(--text2)}
+    .dl strong{color:var(--text)}
+    .dl-late{color:var(--danger);font-weight:800}
+    .files{margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
+    .files-t{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);margin-bottom:6px}
+    .fl{display:block;font-size:13px;color:var(--accent);text-decoration:none;padding:2px 0}
+    .fl:hover{text-decoration:underline}
+    .upl{display:inline-block;margin-top:6px;font-size:12px;font-weight:700;cursor:pointer;
+      padding:6px 12px;border:1px dashed var(--border);border-radius:8px;color:var(--text2)}
+    .upl:hover{border-color:var(--accent);color:var(--accent)}
+    .files-h{font-size:11px;color:var(--text2);opacity:.8;margin-top:5px}
     .meta{font-size:12px;color:var(--text2);line-height:1.7}
     .btn{border-radius:10px;padding:10px 16px;font-weight:900;cursor:pointer;font-family:inherit;border:1px solid var(--border);background:transparent;color:var(--text);transition:filter .15s,border-color .15s,color .15s,background .15s}
     .btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
@@ -342,16 +353,48 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
       const delTxt = it.delai_jours!=null ? (t('delay')+': <strong>J+'+it.delai_jours+'</strong>') : (t('delay')+': '+t('dash'));
       const closedBadge = isClosed ? '<span class="badge badge-closed">'+esc(t('closedBadge'))+'</span>' : '';
       const closedNote = isClosed ? '<div class="closed-note">'+esc(t('closedNote'))+'</div>' : '';
+      // Échéance : le transporteur doit la voir sans relire l'email. Le retard
+      // est rouge — une date neutre déjà passée ne se remarque pas.
+      let dlNote='';
+      const dl=(it.date_limite||'').slice(0,10);
+      if(dl && !isClosed){
+        const auj=new Date().toISOString().slice(0,10);
+        dlNote = dl<auj
+          ? '<div class="dl dl-late">'+esc(t('deadlineLate'))+' — '+esc(dl)+'</div>'
+          : '<div class="dl">'+esc(t('deadline'))+' <strong>'+esc(dl)+'</strong></div>';
+      }
+      const docs=(it.pieces_jointes||[]);
+      const lien=function(p){
+        return '<a class="fl" href="/portail/expe/'+encodeURIComponent(TOKEN)+'/pj/'+p.id
+          +'" target="_blank" rel="noopener">&#128206; '+esc(p.filename||'')+'</a>';
+      };
+      const docsHtml = docs.length
+        ? '<div class="files"><div class="files-t">'+esc(t('docs'))+'</div>'+docs.map(lien).join('')+'</div>'
+        : '';
+      const mine=(it.mes_fichiers||[]);
+      const peutJoindre = !isClosed && mine.length<5;
+      const mineHtml = (mine.length||peutJoindre)
+        ? '<div class="files"><div class="files-t">'+esc(t('myFiles'))+'</div>'+mine.map(lien).join('')
+          + (peutJoindre
+              ? '<label class="upl">'+esc(t('addFile'))+'<input type="file" data-up="1" hidden></label>'
+                +'<div class="files-h">'+esc(t('fileHint'))+'</div>'
+              : '')
+          + '</div>'
+        : '';
       const html = '<div class="d'+(isClosed?' closed':'')+'"><h3>'+esc(t('request'))+' #'+it.demande_id+' — '+esc(it.code_postal_destination||'')+closedBadge+'</h3>'
         +'<div class="meta"><span class="muted">'+esc(meta||'')+'</span>'+deja+'<br>'
         +'<span class="muted">'+esc(t('created'))+' '+(it.created_at||'').slice(0,10)+'</span></div>'
+        +dlNote
         +'<div class="row" style="justify-content:space-between"><div class="meta">'+priceTxt+' · '+delTxt+'</div>'+btn+'</div>'
+        +docsHtml+mineHtml
         +closedNote+'</div>';
       const wrap=document.createElement('div');
       wrap.innerHTML=html;
       const node=wrap.firstElementChild;
       const b=node.querySelector('button[data-id]');
       if(b) b.addEventListener('click',()=>openModal(it));
+      const up=node.querySelector('input[data-up]');
+      if(up) up.addEventListener('change',function(ev){ void uploadFichier(it.demande_id, ev.target); });
       list.appendChild(node);
     });
   }
@@ -359,6 +402,27 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
   async function load(){
     S.data = await api('/api/portail/expe/'+encodeURIComponent(TOKEN));
     render();
+  }
+
+  // Dépôt d'un fichier joint à l'offre. Sans cela, la cotation PDF partait par
+  // mail à côté du portail et n'entrait jamais dans le comparatif.
+  async function uploadFichier(demandeId, input){
+    const f=(input.files&&input.files[0])||null;
+    input.value='';
+    if(!f) return;
+    if(f.size > 20*1024*1024){ showToast(t('fileTooBig'), 'bad'); return; }
+    const fd=new FormData(); fd.append('file', f);
+    try{
+      const r=await fetch('/api/portail/expe/'+encodeURIComponent(TOKEN)+'/demandes/'+demandeId+'/piece-jointe',
+        {method:'POST', body:fd});
+      if(!r.ok){
+        let msg=t('error');
+        try{ const j=await r.json(); msg=j.detail||msg; }catch(e){}
+        throw new Error(msg);
+      }
+      showToast(t('fileSent'), 'ok');
+      await load();
+    }catch(e){ showToast(e.message||t('error'), 'bad'); }
   }
 
   document.getElementById('langBtn').addEventListener('click',()=>{

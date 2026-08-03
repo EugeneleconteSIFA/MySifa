@@ -23,6 +23,8 @@
     mystock: [],
     mystockAll: [],
     mystockCats: [],
+    laizes: [],
+    grammages: [],
     expanded: {},
     products: [],
     settings: null,
@@ -657,8 +659,12 @@
   }
 
   // ───────────────────────────────────────────────────────────────────────
-  // Onglet « Matières MyStock » : une ligne par matière, dépliable sur ses
-  // laizes et ses fournisseurs. Le prix modifié ici est écrit dans MyStock.
+  // Onglet « Matières MyStock ».
+  //
+  // Une matière se décline par laize (frontal, glassine, complexe) ou par
+  // grammage (adhésif). C'est la déclinaison qui s'appaire à une matière de la
+  // base Coûts matières, et qui porte les prix par fournisseur.
+  // Les supports logistiques (mandrins, cartons, palettes) ne sont pas exposés.
   // ───────────────────────────────────────────────────────────────────────
 
   async function loadMystockList() {
@@ -669,6 +675,8 @@
     const data = await api("/api/pricing/mystock/materials?" + params.toString());
     S.mystockAll = data.materials || [];
     S.mystockCats = data.categories || [];
+    S.laizes = data.laizes || [];
+    S.grammages = data.grammages || [];
     applyMystockFilters();
   }
 
@@ -682,19 +690,15 @@
   function fmtPrixUnite(v, unite) {
     if (v == null) return "—";
     const s = fmtNum(v, 3, 3);
-    return s === "—" ? s : s + " " + (unite || "€");
+    return s === "—" ? s : s + " " + (unite || "€");
   }
 
-  /** Résumé du prix affiché sur la ligne repliée. */
   function mystockPrixResume(m) {
-    if (m.prix_par_laize) {
-      if (m.prix_min == null) return '<span class="muted">à compléter</span>';
-      if (Math.abs((m.prix_max || 0) - (m.prix_min || 0)) < 1e-9) {
-        return fmtPrixUnite(m.prix_min, m.unite);
-      }
-      return `${fmtPrixUnite(m.prix_min, m.unite)} <span class="muted">à</span> ${fmtPrixUnite(m.prix_max, m.unite)}`;
+    if (m.prix_min == null) return '<span class="muted">à compléter</span>';
+    if (Math.abs((m.prix_max || 0) - (m.prix_min || 0)) < 1e-9) {
+      return fmtPrixUnite(m.prix_min, m.unite);
     }
-    return m.prix_principal ? fmtPrixUnite(m.prix_principal, m.unite) : '<span class="muted">à compléter</span>';
+    return `${fmtPrixUnite(m.prix_min, m.unite)} <span class="muted">à</span> ${fmtPrixUnite(m.prix_max, m.unite)}`;
   }
 
   function fournisseurOptions(selectedId) {
@@ -709,25 +713,26 @@
     );
   }
 
-  /** Bloc déplié : une sous-ligne par (laize, fournisseur). */
+  const DECL_LABEL = { LAIZE: "laize", GRAMMAGE: "grammage" };
+
+  /** Bloc déplié : une section par déclinaison, avec ses fournisseurs. */
   function mystockDetailHtml(m) {
-    const groupes = {};
-    (m.lignes || []).forEach((l) => {
-      const key = l.laize_id == null ? "" : String(l.laize_id);
-      (groupes[key] = groupes[key] || { label: l.laize_label, lignes: [] }).lignes.push(l);
-    });
-    const keys = Object.keys(groupes);
-    if (!keys.length) {
-      return `<div class="ms-detail"><div class="empty" style="padding:16px">Aucun prix enregistré pour cette matière.</div></div>`;
+    const decls = m.declinaisons || [];
+    const ajout = S.canWrite && m.type_declinaison
+      ? `<button type="button" class="btn btn-soft btn-sm" data-ms-add-decl="${m.id}">+ ${escHtml(DECL_LABEL[m.type_declinaison])}</button>`
+      : "";
+    if (!decls.length) {
+      return `<div class="ms-detail">
+        <div class="empty" style="padding:16px">Aucune déclinaison. ${m.type_declinaison ? "Ajoutez-en une pour saisir un prix." : ""}</div>
+        <div class="ms-groupe-head">${ajout}</div>
+      </div>`;
     }
-    const blocs = keys
-      .map((k) => {
-        const g = groupes[k];
-        const titre = k === "" ? "Toutes laizes" : escHtml(g.label || "Laize " + k);
-        const rows = g.lignes
+    const blocs = decls
+      .map((d) => {
+        const rows = (d.lignes || [])
           .map((l) => {
             const fid = l.fournisseur_id == null ? "" : l.fournisseur_id;
-            const key = `${m.id}|${k}|${fid}`;
+            const key = `${d.id}|${fid}`;
             return `<tr class="${l.principal ? "ms-principal" : ""}">
               <td>${l.principal
                   ? '<span class="badge badge-glassine">Principal</span>'
@@ -748,18 +753,32 @@
             </tr>`;
           })
           .join("");
+        const appairage = d.mc_material_id
+          ? `<button type="button" class="link-btn" data-ms-open-mc="${d.mc_material_id}" title="Ouvrir la fiche Coûts matières">${escHtml(d.mc_name || "fiche")}</button>
+             ${S.canWrite ? `<button type="button" class="link-btn" data-ms-pair="${d.id}">changer</button>
+             <button type="button" class="link-btn danger" data-ms-unpair="${d.id}">détacher</button>` : ""}`
+          : (S.canWrite
+              ? `<button type="button" class="btn btn-soft btn-sm" data-ms-pair="${d.id}">Appairer à une fiche</button>`
+              : '<span class="muted">non appairée</span>');
         return `<div class="ms-groupe">
-          <div class="ms-groupe-head">${titre}
-            ${S.canWrite ? `<button type="button" class="btn btn-soft btn-sm" data-ms-add="${escAttr(m.id + "|" + k)}">+ Fournisseur</button>` : ""}
+          <div class="ms-groupe-head">
+            <div class="ms-decl-title">
+              <span class="ms-decl-name">${escHtml(d.libelle)}</span>
+              <span class="ms-decl-pair">${appairage}</span>
+            </div>
+            <div class="ms-groupe-actions">
+              ${S.canWrite ? `<button type="button" class="btn btn-soft btn-sm" data-ms-add-four="${d.id}">+ Fournisseur</button>` : ""}
+              ${S.canWrite && m.type_declinaison ? `<button type="button" class="link-btn danger" data-ms-del-decl="${d.id}">supprimer</button>` : ""}
+            </div>
           </div>
           <table class="pr-table ms-table">
             <thead><tr><th>Statut</th><th>Fournisseur</th><th>Prix</th><th>Unité</th><th>Modifié</th><th></th></tr></thead>
-            <tbody>${rows}</tbody>
+            <tbody>${rows || `<tr><td colspan="6" class="empty" style="padding:14px">Aucun prix — ajoutez un fournisseur.</td></tr>`}</tbody>
           </table>
         </div>`;
       })
       .join("");
-    return `<div class="ms-detail">${blocs}</div>`;
+    return `<div class="ms-detail">${blocs}<div class="ms-groupe-head" style="justify-content:flex-end">${ajout}</div></div>`;
   }
 
   function renderMystockList() {
@@ -775,22 +794,29 @@
     const rows = S.mystock
       .map((m) => {
         const open = !!S.expanded[m.id];
-        const lien = m.mc_material_id
-          ? `<span class="badge badge-frontal badge-link" data-ap-off="${m.id}" title="${escAttr((m.mc_name || "") + " — cliquer pour détacher")}">Appairée</span>`
-          : (S.canWrite
-              ? `<button type="button" class="btn btn-soft btn-sm" data-ap-on="${m.id}">Appairer</button>`
-              : '<span class="muted">—</span>');
+        const nb = m.nb_declinaisons || 0;
+        const app = m.nb_appairees || 0;
+        const lien = nb
+          ? (app === nb
+              ? `<span class="badge badge-frontal">${app}/${nb} appairée${nb > 1 ? "s" : ""}</span>`
+              : `<span class="badge ${app ? "badge-silicone" : "badge-autre"}">${app}/${nb} appairée${nb > 1 ? "s" : ""}</span>`)
+          : '<span class="muted">—</span>';
         return `<tr class="ms-row${open ? " open" : ""}" data-ms-row="${m.id}">
             <td class="ms-caret">${open ? "▾" : "▸"}</td>
             <td>${categorieBadge(m.categorie)}</td>
             <td><strong>${escHtml(m.reference)}</strong></td>
             <td>${escHtml(m.designation)}</td>
-            <td class="ms-mode">${m.prix_par_laize ? '<span class="badge badge-silicone">par laize</span>' : '<span class="badge badge-autre">prix unique</span>'}</td>
+            <td class="ms-mode">${m.type_declinaison
+                ? `<span class="badge badge-silicone">${escHtml(DECL_LABEL[m.type_declinaison])} · ${nb}</span>`
+                : '<span class="badge badge-autre">sans déclinaison</span>'}</td>
             <td class="ms-prix-cell">${mystockPrixResume(m)}</td>
             <td>${m.nb_fournisseurs || 0}</td>
             <td>${lien}</td>
+            <td class="row-actions" onclick="event.stopPropagation()">
+              <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${m.id}" target="_blank" rel="noopener" title="Ouvrir la fiche dans MyStock">MyStock ↗</a>
+            </td>
           </tr>
-          ${open ? `<tr class="ms-detail-row"><td colspan="8">${mystockDetailHtml(m)}</td></tr>` : ""}`;
+          ${open ? `<tr class="ms-detail-row"><td colspan="9">${mystockDetailHtml(m)}</td></tr>` : ""}`;
       })
       .join("");
 
@@ -806,11 +832,12 @@
             <option value="all" ${S.filters.msActive==="all"?"selected":""}>Toutes</option>
           </select>
         </div>
-        <div class="ms-hint">Le prix saisi ici est <strong>celui de MyStock</strong> : il est écrit directement dans la valorisation et historisé. Seul le prix du <strong>fournisseur principal</strong> fait foi.</div>
+        <div class="ms-hint">Le prix saisi ici est <strong>celui de MyStock</strong> : il est écrit directement dans la valorisation et historisé.
+          Chaque <strong>déclinaison</strong> — une laize, un grammage — s'appaire à une fiche Coûts matières et c'est le prix de son <strong>fournisseur principal</strong> qui fait foi.</div>
         <div class="table-wrap">
           <table class="pr-table">
-            <thead><tr><th style="width:28px"></th><th>Cat.</th><th>Référence</th><th>Désignation</th><th>Prix</th><th>Prix en vigueur</th><th>Fourn.</th><th>Coûts mat.</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="8" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
+            <thead><tr><th style="width:28px"></th><th>Cat.</th><th>Référence</th><th>Désignation</th><th>Déclinaisons</th><th>Prix en vigueur</th><th>Fourn.</th><th>Coûts mat.</th><th></th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="9" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
           </table>
         </div>
       </div>
@@ -840,36 +867,19 @@
     };
     document.querySelectorAll("[data-ms-row]").forEach((tr) => {
       tr.onclick = (e) => {
-        if (e.target.closest("input,select,button")) return;
+        if (e.target.closest("input,select,button,a")) return;
         const id = tr.getAttribute("data-ms-row");
         S.expanded[id] = !S.expanded[id];
         renderMystockList();
-      };
-    });
-    document.querySelectorAll("[data-ap-on]").forEach((b) => {
-      b.onclick = (e) => {
-        e.stopPropagation();
-        const id = parseInt(b.getAttribute("data-ap-on"), 10);
-        const m = S.mystock.find((x) => x.id === id);
-        openAppairageModal(id, m ? m.reference : "");
-      };
-    });
-    document.querySelectorAll("[data-ap-off]").forEach((b) => {
-      b.onclick = (e) => {
-        e.stopPropagation();
-        const id = parseInt(b.getAttribute("data-ap-off"), 10);
-        const m = S.mystock.find((x) => x.id === id);
-        detacherAppairage(id, m ? m.reference : "");
       };
     });
     bindMystockActions();
   }
 
   function parseMsKey(key) {
-    const [mid, lid, fid] = String(key).split("|");
+    const [decl, fid] = String(key).split("|");
     return {
-      matiere_id: parseInt(mid, 10),
-      laize_id: lid === "" ? null : parseInt(lid, 10),
+      declinaison_id: parseInt(decl, 10),
       fournisseur_id: fid === "" || fid === undefined ? null : parseInt(fid, 10),
     };
   }
@@ -884,6 +894,15 @@
       showToast(e.message, "danger");
       return false;
     }
+  }
+
+  function findDecl(declId) {
+    for (const m of S.mystock) {
+      for (const d of m.declinaisons || []) {
+        if (d.id === declId) return { matiere: m, decl: d };
+      }
+    }
+    return null;
   }
 
   function bindMystockActions() {
@@ -904,24 +923,15 @@
       sel.onchange = async () => {
         const k = parseMsKey(sel.getAttribute("data-ms-fourn"));
         const nouveau = sel.value === "" ? null : parseInt(sel.value, 10);
-        const inp = document.querySelector(`[data-ms-prix="${sel.getAttribute("data-ms-fourn")}"]`);
-        const prix = inp ? parseFloat(inp.value) || 0 : 0;
-        // Un changement de fournisseur = nouvelle ligne + retrait de l'ancienne.
-        try {
-          await api("/api/pricing/mystock/prix", {
-            method: "POST",
-            body: { matiere_id: k.matiere_id, laize_id: k.laize_id, fournisseur_id: nouveau, prix },
-          });
-          if (k.fournisseur_id !== nouveau) {
-            await api("/api/pricing/mystock/prix", { method: "DELETE", body: k });
-          }
-          await loadMystockList();
-          renderMystockList();
+        // On renomme le fournisseur de la ligne existante : la recréer lui ferait
+        // perdre son statut de principal.
+        if (
+          await msCall("/api/pricing/mystock/fournisseur", {
+            ...k,
+            nouveau_fournisseur_id: nouveau,
+          })
+        ) {
           showToast("Fournisseur enregistré dans MyStock.", "success");
-        } catch (e) {
-          showToast(e.message, "danger");
-          await loadMystockList();
-          renderMystockList();
         }
       };
     });
@@ -936,20 +946,19 @@
     document.querySelectorAll("[data-ms-del]").forEach((btn) => {
       btn.onclick = async () => {
         const k = parseMsKey(btn.getAttribute("data-ms-del"));
-        const ok = await confirmDelete("Retirer ce fournisseur de la matière ?");
+        const ok = await confirmDelete("Retirer ce fournisseur de la déclinaison ?");
         if (!ok) return;
         if (await msCall("/api/pricing/mystock/prix", k, "DELETE")) {
           showToast("Fournisseur retiré.", "success");
         }
       };
     });
-    document.querySelectorAll("[data-ms-add]").forEach((btn) => {
+    document.querySelectorAll("[data-ms-add-four]").forEach((btn) => {
       btn.onclick = async () => {
-        const [mid, lid] = btn.getAttribute("data-ms-add").split("|");
+        const id = parseInt(btn.getAttribute("data-ms-add-four"), 10);
         if (
           await msCall("/api/pricing/mystock/prix", {
-            matiere_id: parseInt(mid, 10),
-            laize_id: lid === "" ? null : parseInt(lid, 10),
+            declinaison_id: id,
             fournisseur_id: null,
             prix: 0,
           })
@@ -958,22 +967,137 @@
         }
       };
     });
+    document.querySelectorAll("[data-ms-add-decl]").forEach((btn) => {
+      btn.onclick = () => {
+        const id = parseInt(btn.getAttribute("data-ms-add-decl"), 10);
+        const m = S.mystock.find((x) => x.id === id);
+        if (m) openDeclinaisonModal(m);
+      };
+    });
+    document.querySelectorAll("[data-ms-del-decl]").forEach((btn) => {
+      btn.onclick = async () => {
+        const id = parseInt(btn.getAttribute("data-ms-del-decl"), 10);
+        const found = findDecl(id);
+        const ok = await confirmDelete(
+          `Supprimer la déclinaison « ${found ? found.decl.libelle : ""} » et ses prix ?`
+        );
+        if (!ok) return;
+        if (await msCall("/api/pricing/mystock/declinaisons/" + id, null, "DELETE")) {
+          showToast("Déclinaison supprimée.", "success");
+        }
+      };
+    });
+    document.querySelectorAll("[data-ms-pair]").forEach((btn) => {
+      btn.onclick = () => openAppairageModal(parseInt(btn.getAttribute("data-ms-pair"), 10));
+    });
+    document.querySelectorAll("[data-ms-unpair]").forEach((btn) => {
+      btn.onclick = async () => {
+        const id = parseInt(btn.getAttribute("data-ms-unpair"), 10);
+        const found = findDecl(id);
+        const ok = await confirmDelete(
+          `Détacher « ${found ? found.decl.mc_name || "" : ""} » ? Cette fiche Coûts matières retrouvera son prix propre.`
+        );
+        if (!ok) return;
+        if (
+          await msCall("/api/pricing/mystock/appairage", {
+            declinaison_id: id,
+            mc_material_id: null,
+          })
+        ) {
+          showToast("Appairage retiré.", "success");
+        }
+      };
+    });
+    document.querySelectorAll("[data-ms-open-mc]").forEach((btn) => {
+      btn.onclick = () => navigate("/pricing/materials/" + btn.getAttribute("data-ms-open-mc"));
+    });
+  }
+
+  /** Ajout d'une déclinaison : laize à choisir, ou grammage à saisir. */
+  function openDeclinaisonModal(m) {
+    const parLaize = m.type_declinaison === "LAIZE";
+    const dejaIds = new Set(
+      (m.declinaisons || []).map((d) => (parLaize ? d.laize_id : d.grammage_id))
+    );
+    const laizeOpts = S.laizes
+      .filter((l) => !dejaIds.has(l.id))
+      .map((l) => `<option value="${l.id}">${escHtml(l.label)}</option>`)
+      .join("");
+    const root = document.getElementById("modal-root");
+    root.innerHTML = `
+      <div class="modal-backdrop" id="dc-back">
+        <div class="modal" style="max-width:460px">
+          <div class="modal-head">
+            <h2>Ajouter ${escHtml(parLaize ? "une laize" : "un grammage")}</h2>
+            <button type="button" class="icon-btn" id="dc-close" aria-label="Fermer">×</button>
+          </div>
+          <div class="field-hint" style="margin-bottom:12px">${escHtml(m.reference)} — ${escHtml(m.designation)}</div>
+          ${parLaize
+            ? `<div class="field"><label>Laize</label><select id="dc-laize">${laizeOpts || '<option value="">Toutes les laizes sont déjà déclinées</option>'}</select></div>`
+            : `<div class="field"><label>Grammage <span class="lbl-unit">g/m²</span></label>
+                 <input type="number" step="0.1" min="0" id="dc-gsm" placeholder="22"/>
+                 <div class="field-hint">Les grammages déjà connus : ${S.grammages.length ? escHtml(S.grammages.map((g) => g.label).join(", ")) : "aucun pour l'instant"}.</div>
+               </div>`}
+          <div class="modal-actions">
+            <button type="button" class="btn btn-accent" id="dc-save">Ajouter</button>
+            <button type="button" class="btn btn-soft" id="dc-cancel">Annuler</button>
+          </div>
+        </div>
+      </div>`;
+    const close = () => {
+      root.innerHTML = "";
+    };
+    document.getElementById("dc-back").onclick = (e) => {
+      if (e.target.id === "dc-back") close();
+    };
+    document.getElementById("dc-close").onclick = close;
+    document.getElementById("dc-cancel").onclick = close;
+    document.getElementById("dc-save").onclick = async () => {
+      const body = { matiere_id: m.id };
+      if (parLaize) {
+        const v = document.getElementById("dc-laize").value;
+        if (!v) {
+          showToast("Aucune laize à ajouter.", "danger");
+          return;
+        }
+        body.laize_id = parseInt(v, 10);
+      } else {
+        const v = parseFloat(document.getElementById("dc-gsm").value);
+        if (!v || v <= 0) {
+          showToast("Grammage invalide.", "danger");
+          return;
+        }
+        body.valeur_gsm = v;
+      }
+      try {
+        await api("/api/pricing/mystock/declinaisons", { method: "POST", body });
+        close();
+        showToast("Déclinaison ajoutée.", "success");
+        await loadMystockList();
+        renderMystockList();
+      } catch (e) {
+        showToast(e.message, "danger");
+      }
+    };
   }
 
   /**
-   * Appairage d'une matière MyStock avec une matière de la base Coûts matières.
-   * Une fois appairée, c'est le prix MyStock qui pilote le calcul du coût.
+   * Appairage d'une déclinaison avec une fiche de la base Coûts matières.
+   * Une fiche déjà pilotée par une autre déclinaison est signalée : la choisir
+   * transfère le pilotage.
    */
-  async function openAppairageModal(matiereId, reference) {
+  async function openAppairageModal(declinaisonId) {
+    const found = findDecl(declinaisonId);
+    const titre = found ? `${found.matiere.reference} — ${found.decl.libelle}` : "";
     const root = document.getElementById("modal-root");
     root.innerHTML = `
       <div class="modal-backdrop" id="ap-back">
-        <div class="modal" style="max-width:640px">
+        <div class="modal" style="max-width:660px">
           <div class="modal-head">
-            <h2>Appairer « ${escHtml(reference || "")} »</h2>
+            <h2>Appairer « ${escHtml(titre)} »</h2>
             <button type="button" class="icon-btn" id="ap-close" aria-label="Fermer">×</button>
           </div>
-          <div class="field-hint">Choisissez la matière de la base Coûts matières qui correspond.
+          <div class="field-hint">Choisissez la fiche Coûts matières qui correspond à cette déclinaison.
             Son prix sera alors lu directement dans MyStock.</div>
           <div class="loading-state" style="padding:24px"><div class="spinner"></div></div>
         </div>
@@ -988,20 +1112,19 @@
 
     let data;
     try {
-      data = await api("/api/pricing/bridge/suggest/" + matiereId);
+      data = await api("/api/pricing/mystock/candidats/" + declinaisonId);
     } catch (e) {
       showToast(e.message, "danger");
       close();
       return;
     }
-    const items = data.suggestions || [];
+    const items = data.candidats || [];
     const box = document.querySelector("#ap-back .modal");
     box.querySelector(".loading-state").remove();
     const search = document.createElement("input");
     search.type = "search";
-    search.className = "search-input";
     search.placeholder = "Filtrer (nom, appellation…)";
-    search.style.cssText = "width:100%;max-width:none;margin-top:12px;padding:10px 14px;" +
+    search.style.cssText = "width:100%;margin-top:12px;padding:10px 14px;" +
       "border:1px solid var(--border);border-radius:10px;background:var(--filter-input-bg);" +
       "color:var(--text);font-family:inherit;font-size:13px";
     const list = document.createElement("div");
@@ -1025,22 +1148,25 @@
                 <div>
                   <div class="ap-name">${escHtml(m.name)}</div>
                   <div class="ap-sub">${escHtml(m.appellation_code || "—")} · ${escHtml(m.category_code)} ·
-                    ${fmtNum(m.unit_price, 4, 4)} ${escHtml(m.price_currency)}/${m.price_basis === "PER_M2" ? "m²" : "kg"}</div>
+                    ${fmtNum(m.unit_price, 4, 4)} ${escHtml(m.price_currency)}/${m.price_basis === "PER_M2" ? "m²" : "kg"}${m.deja_pilotee ? " · <strong>déjà pilotée</strong>" : ""}</div>
                 </div>
-                ${m._score >= 80 ? '<div class="ap-score">correspondance forte</div>' : (m._score >= 15 ? '<div class="ap-score" style="color:var(--muted)">proche</div>' : "")}
+                ${m.score >= 100 ? '<div class="ap-score">correspondance forte</div>' : (m.score >= 15 ? '<div class="ap-score" style="color:var(--muted)">proche</div>' : "")}
               </div>`
             )
             .join("")
-        : '<div class="empty" style="padding:20px">Aucune matière ne correspond</div>';
+        : '<div class="empty" style="padding:20px">Aucune fiche ne correspond</div>';
       list.querySelectorAll("[data-ap]").forEach((el) => {
         el.onclick = async () => {
           try {
-            await api("/api/pricing/bridge/link", {
+            await api("/api/pricing/mystock/appairage", {
               method: "POST",
-              body: { mp_id: matiereId, mc_id: parseInt(el.getAttribute("data-ap"), 10) },
+              body: {
+                declinaison_id: declinaisonId,
+                mc_material_id: parseInt(el.getAttribute("data-ap"), 10),
+              },
             });
             close();
-            showToast("Matières appairées — le prix MyStock pilote désormais le calcul.", "success");
+            showToast("Appairée — le prix MyStock pilote désormais cette fiche.", "success");
             await loadMystockList();
             renderMystockList();
           } catch (e) {
@@ -1052,21 +1178,6 @@
     draw("");
     search.oninput = () => draw(search.value);
     search.focus();
-  }
-
-  async function detacherAppairage(matiereId, nom) {
-    const ok = await confirmDelete(
-      `Détacher « ${nom || ""} » ? La matière Coûts matières retrouvera son prix propre.`
-    );
-    if (!ok) return;
-    try {
-      await api("/api/pricing/bridge/link/" + matiereId, { method: "DELETE" });
-      showToast("Appairage retiré.", "success");
-      await loadMystockList();
-      renderMystockList();
-    } catch (e) {
-      showToast(e.message, "danger");
-    }
   }
 
   function categorieBadge(cat) {
