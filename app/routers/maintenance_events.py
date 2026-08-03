@@ -500,20 +500,39 @@ def create_event(body: EventCreateBody, request: Request):
             tmpl = _load_template_full(tmpl_conn, template_id)
         if not tmpl:
             raise HTTPException(status_code=400, detail=f"Modèle inconnu: {template_id}")
-        # On remplace body.ops par les ops du template (ignoré si fourni côté client)
-        ops_from_tmpl = [{"code": o["code"], "machines": o.get("machines") or []} for o in tmpl["ops"]]
-        body_ops_effective = ops_from_tmpl
+        # v2.6.1 : les ops fournies par le client font desormais foi. Le client
+        # peut cumuler plusieurs modeles et retoucher la liste avant d'envoyer ;
+        # ecraser ce contenu par celui d'un seul modele annulerait la fusion.
+        # template_id ne sert plus qu'a etiqueter le creneau (pastille ↻, nom
+        # repris, rattachement pour la suppression du modele).
+        # Repli sur les ops du modele si le client n'en fournit aucune :
+        # conserve le contrat historique « instancier un modele » (v163).
+        if body.ops:
+            body_ops_effective = body.ops
+        else:
+            body_ops_effective = [{"code": o["code"], "machines": o.get("machines") or []}
+                                  for o in tmpl["ops"]]
     else:
         template_id = None  # opérateur n'utilise pas de template
         body_ops_effective = body.ops
 
     # Normalise chaque entrée en tuple (code, machines_csv_or_None), avec dedup
-    # sur le code tout en conservant les machines de la première occurrence.
+    # sur le code.
+    # v2.6.1 : les machines sont désormais UNIES au lieu de garder celles de la
+    # première occurrence. Avec la fusion de plusieurs modèles, deux entrées
+    # peuvent porter le même code sur des machines différentes ; l'ancien code
+    # perdait silencieusement les secondes.
     seen_codes = {}
     for item in body_ops_effective:
         code, mcsv = _normalize_op_spec(item)
         if code not in seen_codes:
             seen_codes[code] = mcsv
+        elif mcsv:
+            merged = _machines_csv_to_list(seen_codes[code] or "")
+            for m in _machines_csv_to_list(mcsv):
+                if m not in merged:
+                    merged.append(m)
+            seen_codes[code] = _machines_list_to_csv(merged)
     ops_specs = list(seen_codes.items())  # [(code, machines_csv_or_None), ...]
     operator_ids = list(dict.fromkeys(body.operators))
 
