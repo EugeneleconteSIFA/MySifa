@@ -1537,14 +1537,30 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .alerts-panel-embed .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:16px}
 .alerts-panel-embed .btn{background:var(--accent);color:var(--accent-fg,#fff);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
 .alerts-panel-embed .btn:hover{filter:brightness(1.08)}
-.alerts-panel-embed .btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s}
-.alerts-panel-embed .btn-sec:hover{box-shadow:0 0 0 1px rgba(34,211,238,.32),0 0 20px rgba(34,211,238,.2);border-color:rgba(34,211,238,.45);color:var(--accent)}
-body.light .alerts-panel-embed .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,178,.35),0 0 18px rgba(8,145,178,.15);border-color:rgba(8,145,178,.4);color:var(--accent)}
+/* v2.5.20 : contraste bouton / fond. Règle : un bouton ne porte jamais la
+   couleur de la surface qui le contient. Inversion systématique —
+     · surface blanche (.card, .alert-modal-body) -> bouton sur var(--bg)
+     · surface teintee (.alert-row, .af-cl-card)  -> bouton sur var(--card)
+   Les lueurs de survol passent des rgba() cyan en dur a var(--accent-bg),
+   pour suivre la palette choisie (ambre, pivoine, foret, cendre, braise). */
+.alerts-panel-embed .btn-sec{background:var(--bg);border:1px solid var(--border);color:var(--text2);transition:box-shadow .2s,border-color .15s,color .15s,background .15s}
+.alerts-panel-embed .btn-sec:hover{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 1px var(--accent-bg)}
 .alerts-panel-embed .btn-sm{padding:6px 12px;font-size:11px;font-weight:700;border-radius:8px}
-.alerts-panel-embed .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2);transition:border-color .15s,color .15s,box-shadow .15s,filter .15s}
-.alerts-panel-embed .btn-ghost:hover{border-color:var(--accent);color:var(--accent);filter:none;box-shadow:0 0 0 1px rgba(34,211,238,.28),0 0 14px rgba(34,211,238,.14)}
-body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,178,.3),0 0 12px rgba(8,145,178,.1)}
-.alerts-panel-embed .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 14px rgba(248,113,113,.12)}
+.alerts-panel-embed .btn-ghost{background:var(--bg);border:1px solid var(--border);color:var(--text2);transition:border-color .15s,color .15s,box-shadow .15s,background .15s}
+.alerts-panel-embed .btn-ghost:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg);filter:none;box-shadow:0 0 0 1px var(--accent-bg)}
+.alerts-panel-embed .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger);background:var(--card);box-shadow:0 0 0 1px var(--border)}
+/* .alert-row est peinte en var(--bg) : ses boutons repassent en var(--card) */
+.alerts-panel-embed .alert-row .btn-sm,
+.alerts-panel-embed .alert-row .btn-ghost,
+.alerts-panel-embed .alert-row .btn-ghost:hover,
+.alerts-panel-embed .alert-row .btn-ghost.danger:hover{background:var(--card)}
+/* Historique des saisies (meme vue Alertes) : le bloc filtres est pose sur une
+   carte blanche, les puces de periode etaient donc blanches sur blanc. Scope
+   limite a #view-controles pour ne pas toucher les autres vues, ou ces memes
+   puces vivent deja sur var(--bg). */
+#view-controles .date-preset-chip{background:var(--bg)}
+#view-controles .date-preset-chip:hover{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+#view-controles .date-preset-chip.active{background:var(--accent-bg)}
 
 /* ═══════════════════════════════════════════════════════════ */
 /* v2.2.30 : panel Codes maintenance — CSS scopé (re-extraction propre) */
@@ -1783,12 +1799,27 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 .alert-modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border)}
 .alert-modal-overlay .btn{background:var(--accent);color:var(--accent-fg,#fff);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
 .alert-modal-overlay .btn:hover{filter:brightness(1.08)}
-.alert-modal-overlay .btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s;padding:10px 18px;font-weight:700;font-size:13px;border-radius:10px;cursor:pointer;font-family:inherit}
-.alert-modal-overlay .btn-sec:hover{border-color:rgba(34,211,238,.45);color:var(--accent)}
-.alert-modal-overlay .btn-sm{padding:6px 12px;font-size:11px;font-weight:700;border-radius:8px;background:transparent;border:1px solid var(--border);color:var(--text2);cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block;line-height:1.4;transition:border-color .12s,color .12s}
-.alert-modal-overlay .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
-.alert-modal-overlay .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
-.alert-modal-overlay .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger)}
+/* v2.5.20 : meme regle de contraste dans la modale. Le corps de la modale est
+   en var(--card) -> les boutons secondaires prennent var(--bg). */
+.alert-modal-overlay .btn-sec{background:var(--bg);border:1px solid var(--border);color:var(--text2);transition:box-shadow .2s,border-color .15s,color .15s,background .15s;padding:10px 18px;font-weight:700;font-size:13px;border-radius:10px;cursor:pointer;font-family:inherit}
+.alert-modal-overlay .btn-sec:hover{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.alert-modal-overlay .btn-sm{padding:6px 12px;font-size:11px;font-weight:700;border-radius:8px;background:var(--bg);border:1px solid var(--border);color:var(--text2);cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block;line-height:1.4;transition:border-color .12s,color .12s,background .12s}
+.alert-modal-overlay .btn-ghost{background:var(--bg);border:1px solid var(--border);color:var(--text2)}
+.alert-modal-overlay .btn-ghost:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.alert-modal-overlay .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger);background:var(--bg)}
+/* .af-cl-card (point de controle) est peinte en var(--bg) : tout ce qui vit
+   dedans — boutons, champs, puce NC — repasse en var(--card). */
+.alert-modal-overlay .af-cl-card .btn-sm,
+.alert-modal-overlay .af-cl-card .btn-ghost,
+.alert-modal-overlay .af-cl-card .btn-ghost.danger:hover,
+.alert-modal-overlay .af-cl-card .alert-field-input,
+.alert-modal-overlay .af-cl-card .alert-field-select{background:var(--card)}
+.alert-modal-overlay .af-cl-card .btn-ghost:hover{background:var(--accent-bg)}
+.af-cl-nc-lbl{background:var(--card)}
+/* Bandeau "Parametres" repliable : il porte deja var(--bg) sur fond blanc,
+   on renforce juste la lisibilite du libelle. */
+.alert-modal-overlay #af-settings-toggle{color:var(--text)}
+.alert-modal-overlay #af-settings-toggle:hover{border-color:var(--accent)}
 .alert-modal-overlay a.btn-sm{text-decoration:none}
 .alert-modal-overlay .maint-doc-add-btn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:var(--accent);color:var(--accent-fg,#fff);border:1px solid var(--accent);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:filter .12s,transform .06s;font-family:inherit;user-select:none}
 .alert-modal-overlay .maint-doc-add-btn:hover{filter:brightness(1.06)}
