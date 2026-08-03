@@ -340,6 +340,10 @@ body.reduce-anim .cal-skel{animation:none}
 .cal-wv-body{transition:box-shadow .12s}
 .cal-wv-body.cal-edge-prev{box-shadow:inset 5px 0 0 var(--accent)}
 .cal-wv-body.cal-edge-next{box-shadow:inset -5px 0 0 var(--accent)}
+/* v2.6.1 : colonnes de dates passees — ni creation ni depot. Trame legere pour
+   que le refus soit lisible AVANT le geste, pas seulement apres. */
+.cal-wv-day-col.is-past-col{background-image:repeating-linear-gradient(45deg,transparent,transparent 7px,rgba(128,128,128,.055) 7px,rgba(128,128,128,.055) 14px);cursor:not-allowed}
+.cal-wv-day-col.cal-col-nodrop{box-shadow:inset 0 0 0 2px var(--danger,#f87171)}
 .cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);box-sizing:border-box}  /* v2.5.17 : min-width retire (dim clippe). v2.6.0 : scrollbar-gutter retire -- inerte ici, la propriete ne s'applique qu'aux conteneurs de scroll, donc les 7 colonnes 1fr etaient calculees sur une largeur superieure a celles du corps (derive cumulative vers Sam/Dim). L'alignement est desormais fait par _syncCalHeaderGutter() qui reporte la largeur reelle de la gouttiere du corps sur le padding-right du header. */
 .cal-wv-corner{}
 .cal-wv-dayhead{padding:11px 10px;text-align:center;border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--card)}
@@ -3663,7 +3667,7 @@ function renderCalWeek(){
     const isWeekend = (i >= 5);
     const isToday = (iso === todayIso);
     const colCls = 'cal-wv-day-col' + (isWeekend?' weekend':'') + (isToday?' today':'');
-    html += '<div class="' + colCls + '" data-date="' + iso + '" onclick="onCalCellClick(event)">';
+    html += '<div class="' + colCls + (_calIsPastIso(iso) ? ' is-past-col' : '') + '" data-date="' + iso + '" onclick="onCalCellClick(event)">';
     for(let h=CAL_HOUR_START; h<CAL_HOUR_END; h++){
       html += '<div class="cal-wv-hour-row" data-hour="' + h + '"></div>';
     }
@@ -3721,7 +3725,7 @@ function renderCalDay(){
   }
   html += '</div>';
   const colCls = 'cal-wv-day-col' + (isWeekend?' weekend':'') + (isToday?' today':'');
-  html += '<div class="' + colCls + '" data-date="' + iso + '" onclick="onCalCellClick(event)">';
+  html += '<div class="' + colCls + (_calIsPastIso(iso) ? ' is-past-col' : '') + '" data-date="' + iso + '" onclick="onCalCellClick(event)">';
   for(let h=CAL_HOUR_START; h<CAL_HOUR_END; h++){
     html += '<div class="cal-wv-hour-row" data-hour="' + h + '"></div>';
   }
@@ -3980,6 +3984,19 @@ function _makeEventBlock(item){
 const _CAL_SNAP_MIN = 15;
 let _CAL_DRAG = null;
 
+// v2.6.1 : une date ISO est-elle anterieure a aujourd'hui ? Aujourd'hui reste
+// une date valide (on peut planifier pour le jour meme).
+function _calIsPastIso(iso){
+  try{
+    const s = String(iso || '');
+    // Valeur absente : on ne conclut PAS au passe. La comparaison de chaines
+    // ferait sinon '' < '2026-08-03' => true, et une colonne sans data-date
+    // serait grisee et refuserait tout depot.
+    if(!s) return false;
+    return s < _calIsoYMD(new Date());
+  }catch(_){ return false; }
+}
+
 function _calIsPastEvent(ev){
   try{
     const todayIso = _calIsoYMD(new Date());
@@ -4070,8 +4087,15 @@ function _onCalDragMove(e){
   const col = el ? el.closest('.cal-wv-day-col') : null;
   const rect = col ? col.getBoundingClientRect() : null;
   const px = (CAL_STATE && CAL_STATE.view === 'day') ? 72 : CAL_HOUR_PX;
-  document.querySelectorAll('.cal-wv-day-col.drag-over').forEach(function(c){ c.classList.remove('drag-over'); });
+  document.querySelectorAll('.cal-wv-day-col.drag-over, .cal-wv-day-col.cal-col-nodrop').forEach(function(c){ c.classList.remove('drag-over', 'cal-col-nodrop'); });
   _handleCrossWeekHover(el, e);
+  // v2.6.1 : une colonne dont la date est passee n'accepte pas de depot. On ne
+  // la marque pas 'drag-over' et on ne met pas a jour targetDate : le refus est
+  // visible AVANT le lacher, plutot que par un message apres coup.
+  if(col && _calIsPastIso(col.getAttribute('data-date'))){
+    col.classList.add('cal-col-nodrop');
+    col = null;
+  }
   if(col && rect){
     col.classList.add('drag-over');
     const y = e.clientY - rect.top;
@@ -4216,7 +4240,7 @@ function _onCalDragUp(e){
   document.removeEventListener('mouseup', _onCalDragUp, true);
   if(drag._navHoverTimer) clearTimeout(drag._navHoverTimer);
   _clearCalEdgeCue();
-  document.querySelectorAll('.cal-wv-day-col.drag-over').forEach(function(c){ c.classList.remove('drag-over'); });
+  document.querySelectorAll('.cal-wv-day-col.drag-over, .cal-wv-day-col.cal-col-nodrop').forEach(function(c){ c.classList.remove('drag-over', 'cal-col-nodrop'); });
   if(drag.ghost){ drag.ghost.remove(); drag.ghost = null; }
   drag.div.classList.remove('is-dragging');
   if(!drag.active){
@@ -4245,10 +4269,15 @@ function _onCalDragUp(e){
     return;
   }
   // Contrôle : si on déplace vers un jour passé, refuse.
-  const todayIso = _calIsoYMD(new Date());
-  if(String(drag.targetDate) < todayIso){
+  if(_calIsPastIso(drag.targetDate)){
     if(typeof showToast === 'function') showToast('Impossible de déplacer un créneau vers une date passée.', 'danger');
     _CAL_DRAG = null;
+    // v2.6.1 : ROLLBACK VISUEL. Sans lui, le bloc restait a la position ou on
+    // l'avait lache — le DOM ayant ete manipule pendant le drag — alors que la
+    // donnee n'avait pas bouge. L'ecran affichait donc un creneau a une date
+    // passee, avec un message d'erreur par dessus, jusqu'au prochain rendu.
+    // Meme traitement que la branche d'echec serveur de _persistCalDrag().
+    try{ refreshPlanning().then(function(){ try{ renderCal(); }catch(_){} }); }catch(_){}
     return;
   }
   // PATCH la nouvelle position.
@@ -4782,6 +4811,15 @@ function onCalCellClick(e){
   if(!col) return;
   const iso = col.getAttribute('data-date');
   if(!iso) return;
+  // v2.6.1 : le planning sert a planifier — pas de creation dans le passe. Une
+  // intervention deja realisee se consigne via l'enregistrement d'operation,
+  // qui accepte les dates passees (source 'non_planifie').
+  if(_calIsPastIso(iso)){
+    if(typeof showToast === 'function'){
+      showToast('Le planning ne permet pas de créer un créneau à une date passée. Utilise l\'enregistrement d\'opération.', 'danger');
+    }
+    return;
+  }
   const rect = col.getBoundingClientRect();
   const y = e.clientY - rect.top;
   const hourFloat = CAL_HOUR_START + (y / CAL_HOUR_PX);
