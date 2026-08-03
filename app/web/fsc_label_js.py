@@ -68,40 +68,55 @@ function fscAvertissementHtml(d){
   return '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">'
     + '<title>Avertissement FSC ' + e(d.no_dossier) + '</title><style>'
     + '@page{size:100mm 50mm;margin:0}'
-    + 'html,body{margin:0;padding:0;background:#fff}'
+    /* overflow:hidden sur html ET body : sans lui, un dépassement d'une
+       fraction de millimètre suffit à créer une SECONDE feuille. C'est ce
+       qui se produisait — le pied de page partait sur une deuxième
+       étiquette alors que la mesure DOM disait « ça tient ». */
+    + 'html,body{margin:0;padding:0;background:#fff;'
+    + '  width:100mm;height:50mm;overflow:hidden}'
     + 'body{font-family:Arial,Helvetica,sans-serif;color:#000;'
     + '  -webkit-print-color-adjust:exact;print-color-adjust:exact}'
-    + '.lbl{width:100mm;height:50mm;box-sizing:border-box;'
-    + '  border:0.6mm solid #000;padding:1.1mm 2mm;'
-    + '  display:flex;flex-direction:column}'
+    /* Le cadre occupe presque tout le média (99×49 sur 100×50).
+       Attention au piège : les pilotes d'étiqueteuses appliquent par défaut
+       un « ajuster à la zone imprimable » qui REDUIT déjà la page. Toute
+       marge ajoutée ici se cumule à cette réduction — une version à 96×46
+       sortait imprimée à ~60 % de la surface de l'étiquette, avec un grand
+       blanc à gauche. On dessine donc au plus près du média et on laisse le
+       pilote faire son ajustement, une seule fois.
+       Ce qui empêche la seconde page, ce n'est pas la marge : c'est
+       overflow:hidden + break-after:avoid ci-dessous. */
+    + '.lbl{width:99mm;height:49mm;margin:.5mm auto;box-sizing:border-box;'
+    + '  border:0.5mm solid #000;padding:.7mm 1.5mm;'
+    + '  display:flex;flex-direction:column;overflow:hidden;'
+    + '  page-break-inside:avoid;break-inside:avoid;'
+    + '  page-break-after:avoid;break-after:avoid}'
     /* Même hiérarchie que le ZPL : « DOSSIER FSC » reste gros, le reste de
        l'en-tête est réduit, et les trois consignes prennent la place — c'est
        ce que l'opérateur relit à chaque changement de bobine.
 
-       Toutes les tailles sont serrées pour que le contenu tienne dans les
-       50 mm. Une première version débordait de ~8 mm : la dernière consigne
-       passait sous le cadre et le pied de page sortait de l'étiquette. Un
-       débordement ne se voit pas à la lecture du CSS, il se mesure — voir la
-       note sur la vérification au rendu en tête de fichier. */
+       Les tailles sont calées sur la hauteur utile mesurée, pas estimées.
+       Toute retouche doit être re-mesurée : un débordement d'une fraction
+       de millimètre ne se voit pas à la lecture du CSS, et il crée une
+       seconde étiquette à l'impression. */
     + '.hd{background:#000;color:#fff;display:flex;justify-content:space-between;'
     + '  align-items:center;padding:.7mm 1.6mm;font-weight:900;'
-    + '  font-size:11pt;letter-spacing:.5pt}'
-    + '.hd span.t{font-size:6pt;font-weight:700}'
+    + '  font-size:12pt;letter-spacing:.5pt}'
+    + '.hd span.t{font-size:7pt;font-weight:700}'
     /* N° de dossier et client sur une seule ligne : le n° à gauche, le
        client aligné à droite. Empilés, ils mangeaient une ligne entière
        pour deux informations courtes — la place va aux consignes. */
     + '.ids{display:flex;justify-content:space-between;align-items:baseline;'
     + '  gap:3mm;margin-top:.8mm}'
-    + '.dos{font-size:8.5pt;font-weight:900;line-height:1.1;white-space:nowrap}'
-    + '.cli{font-size:6.5pt;line-height:1.1;text-align:right;overflow:hidden;'
+    + '.dos{font-size:9.5pt;font-weight:900;line-height:1.1;white-space:nowrap}'
+    + '.cli{font-size:7.5pt;line-height:1.1;text-align:right;overflow:hidden;'
     + '  text-overflow:ellipsis;white-space:nowrap}'
     + '.sep{border-top:0.35mm solid #000;margin:.7mm 0 .6mm}'
-    + 'ol{margin:0;padding-left:4.2mm;font-size:10pt;line-height:1.25;font-weight:700}'
+    + 'ol{margin:0;padding-left:4.2mm;font-size:9.5pt;line-height:1.25;font-weight:700}'
     + 'ol li{margin-bottom:.5mm}'
     + 'ol li:last-child{margin-bottom:0}'
     + '.ft{margin-top:auto;border-top:0.35mm solid #000;padding-top:.6mm;'
-    + '  font-size:6pt;display:flex;justify-content:space-between;align-items:baseline}'
-    + '.merci{font-size:9pt;font-weight:900}'
+    + '  font-size:6.5pt;display:flex;justify-content:space-between;align-items:baseline}'
+    + '.merci{font-size:10pt;font-weight:900}'
     + '</style></head><body><div class="lbl">'
     + '<div class="hd"><span>DOSSIER FSC</span>'
     + '<span class="t">' + e(d.fsc_type_requis) + '</span></div>'
@@ -143,7 +158,73 @@ function fscAvertissementNavigateur(d, warn){
   );
 }
 
-async function fscImprimerAvertissement(d){
+/* Sélecteur d'imprimante — le maillon manquant.
+   ────────────────────────────────────────────────────────────────────
+   Créer le gabarit dans Paramètres → Imprimantes ne suffit PAS : il faut
+   encore qu'une imprimante par défaut soit associée à l'usage
+   `fsc_avertissement_dossier` dans user_printer_defaults. Or la seule
+   interface qui écrit cette table est codée en dur sur l'usage
+   `reception_matiere` (MyStock). Sans ce sélecteur, /api/print/label
+   répondrait 409 indéfiniment et on retomberait toujours sur le
+   navigateur, gabarit ZPL ou pas.
+
+   Le choix est mémorisé via PUT /api/print/my-defaults : on ne le
+   redemande qu'une fois par utilisateur. */
+function fscChoisirImprimante(d, imprimantes, warn){
+  const e = fscLabelEsc;
+  const anciens = document.getElementById('fsc-imp-picker');
+  if(anciens) anciens.remove();
+
+  const ov = document.createElement('div');
+  ov.id = 'fsc-imp-picker';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;'
+    + 'display:flex;align-items:center;justify-content:center;padding:20px';
+  const opts = imprimantes.map(function(i){
+    return '<option value="' + i.id + '">' + e(i.nom)
+      + (i.poste ? ' (' + e(i.poste) + ')' : '') + '</option>';
+  }).join('');
+  ov.innerHTML =
+    '<div style="background:#fff;color:#111;border-radius:12px;padding:20px;'
+    + 'max-width:440px;width:100%;box-shadow:0 12px 40px rgba(0,0,0,.4);'
+    + 'font-family:Arial,Helvetica,sans-serif" onclick="event.stopPropagation()">'
+    + '<div style="font-size:15px;font-weight:800;margin-bottom:6px">'
+    + 'Imprimante pour l\'avertissement FSC</div>'
+    + '<div style="font-size:12px;color:#555;line-height:1.5;margin-bottom:14px">'
+    + 'Choisis l\'imprimante d\'etiquettes. Le choix sera memorise pour tes '
+    + 'prochaines impressions.</div>'
+    + '<select id="fsc-imp-sel" style="width:100%;padding:9px 12px;border-radius:8px;'
+    + 'border:1.5px solid #ccc;font-size:13px;margin-bottom:14px">' + opts + '</select>'
+    + '<div style="display:flex;gap:8px;justify-content:flex-end">'
+    + '<button id="fsc-imp-nav" style="padding:8px 14px;border-radius:8px;border:1px solid #ccc;'
+    + 'background:#fff;font-size:13px;cursor:pointer">Imprimer au navigateur</button>'
+    + '<button id="fsc-imp-ok" style="padding:8px 14px;border-radius:8px;border:none;'
+    + 'background:#111;color:#fff;font-size:13px;font-weight:700;cursor:pointer">Imprimer</button>'
+    + '</div></div>';
+  ov.addEventListener('click', function(ev){ if(ev.target === ov) ov.remove(); });
+  document.body.appendChild(ov);
+
+  document.getElementById('fsc-imp-nav').onclick = function(){
+    ov.remove();
+    fscAvertissementNavigateur(d, warn);
+  };
+  document.getElementById('fsc-imp-ok').onclick = async function(){
+    const id = parseInt(document.getElementById('fsc-imp-sel').value, 10);
+    ov.remove();
+    if(!id){ fscAvertissementNavigateur(d, warn); return; }
+    try{
+      /* Mémorisation AVANT l'impression : même si le job échoue (imprimante
+         hors ligne), l'utilisateur n'aura pas à rechoisir la prochaine fois. */
+      await fetch('/api/print/my-defaults', {
+        method: 'PUT', credentials: 'include',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({defaults: {fsc_avertissement_dossier: id}}),
+      });
+    }catch(err){}
+    await fscImprimerAvertissement(d, id);
+  };
+}
+
+async function fscImprimerAvertissement(d, imprimanteId){
   if(!d || !d.no_dossier){
     fscLabelToast('Reference de dossier manquante.', 'danger');
     return;
@@ -158,36 +239,75 @@ async function fscImprimerAvertissement(d){
     operateur_nom: d.operateur_nom || '',
     date_edition: d.date_edition || new Date().toLocaleDateString('fr-FR'),
   };
+  const corps = {
+    usage_key: 'fsc_avertissement_dossier',
+    variante: 'full',
+    copies: 1,
+    data: data,
+  };
+  if(imprimanteId) corps.imprimante_id = imprimanteId;
+
+  let res;
   try{
-    const res = await fetch('/api/print/label', {
+    res = await fetch('/api/print/label', {
       method: 'POST',
       credentials: 'include',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        usage_key: 'fsc_avertissement_dossier',
-        variante: 'full',
-        copies: 1,
-        data: data,
-      }),
+      body: JSON.stringify(corps),
     });
-    if(res.ok){
-      const j = await res.json().catch(() => ({}));
-      fscLabelToast('Avertissement FSC envoye a ' + (j.imprimante || 'imprimante'), 'success');
+  }catch(err){
+    /* Reseau coupe ou agent injoignable : le repli navigateur reste utile. */
+    fscAvertissementNavigateur(data, (err && err.message) ? err.message : '');
+    return;
+  }
+
+  if(res.ok){
+    const j = await res.json().catch(function(){ return {}; });
+    fscLabelToast('Avertissement FSC envoye a ' + (j.imprimante || 'imprimante'), 'success');
+    return;
+  }
+
+  const err = await res.json().catch(function(){ return {}; });
+  const msg = typeof err.detail === 'string' ? err.detail : ('Erreur ' + res.status);
+
+  /* Deux 409 differents, deux issues differentes — les confondre enverrait
+     l'utilisateur choisir une imprimante alors que le probleme est un
+     gabarit manquant, ou l'inverse. */
+  const manqueGabarit = /template|gabarit/i.test(msg);
+  const manqueImprimante = /imprimante/i.test(msg) && !manqueGabarit;
+
+  if(manqueGabarit){
+    fscLabelToast(
+      'Aucun gabarit « Avertissement FSC » sur cette imprimante. '
+      + 'Cree-le dans Parametres > Imprimantes > Templates. Impression navigateur en attendant.',
+      'danger');
+    fscAvertissementNavigateur(data, '');
+    return;
+  }
+
+  if(manqueImprimante && !imprimanteId){
+    /* Pas de defaut enregistre pour cet usage : on propose la liste plutot
+       que de retomber silencieusement sur le navigateur. */
+    let imps = [];
+    try{
+      const r = await fetch('/api/print/my-imprimantes', {credentials: 'include'});
+      if(r.ok) imps = await r.json();
+    }catch(e){}
+    const zpl = (imps || []).filter(function(i){ return (i.langage || '') === 'zpl'; });
+    if(zpl.length){
+      fscChoisirImprimante(data, zpl, msg);
       return;
     }
-    const err = await res.json().catch(() => ({}));
-    const msg = typeof err.detail === 'string' ? err.detail : ('Erreur ' + res.status);
-    /* 409 = aucune imprimante par defaut ou aucun gabarit pour cet usage.
-       Ce n'est pas un echec metier : on imprime et on dit pourquoi. */
-    if(res.status === 409 || /imprimante|template|gabarit/i.test(msg)){
-      fscAvertissementNavigateur(data, msg);
-    }else{
-      fscLabelToast('Impression : ' + msg, 'danger');
-    }
-  }catch(e){
-    /* Reseau coupe ou agent injoignable : le repli navigateur reste utile. */
-    fscAvertissementNavigateur(data, (e && e.message) ? e.message : '');
+    fscLabelToast(
+      'Aucune imprimante d\'etiquettes configuree. Va dans Parametres > Imprimantes. '
+      + 'Impression navigateur en attendant.', 'danger');
+    fscAvertissementNavigateur(data, '');
+    return;
   }
+
+  /* Imprimante explicitement choisie et refusee (hors ligne, desactivee) :
+     on le dit, on n'imprime pas en douce ailleurs. */
+  fscLabelToast('Impression : ' + msg, 'danger');
 }
 """
 

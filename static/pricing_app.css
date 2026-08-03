@@ -318,8 +318,6 @@ table.recap-table td:last-child{border-right:none}
 .ms-value{font-size:17px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;margin-top:3px}
 .ms-main .ms-value{font-size:26px;font-weight:800;color:var(--accent)}
 
-/* Le formulaire n'a pas besoin de la largeur du tableau récap. */
-.form-compact{max-width:900px}
 
 /* Largeurs de saisie calibrées sur le contenu attendu. */
 .field.f-num input,.field.f-num select{max-width:200px}
@@ -330,47 +328,73 @@ table.recap-table td:last-child{border-right:none}
 .import-block .field input:focus,.import-block .field select:focus{
   background:var(--filter-input-bg)}
 
-/* ─── Paramètres globaux éditables, à droite de l'identification ─── */
-.ident-row{align-items:start}
-.settings-inline{border:1px dashed var(--border);border-radius:12px;padding:12px 14px;
-  background:var(--bg)}
+/* ─── Paramètres globaux : colonne à droite du formulaire, hors de la fiche ─── */
+.form-layout{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:18px;align-items:start}
+.form-layout .form-card{max-width:none}
+.settings-side{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:16px 18px;position:sticky;top:16px}
 .si-head{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
-  color:var(--muted);margin-bottom:10px}
-.si-head span{font-weight:400;text-transform:none;letter-spacing:0;display:block;margin-top:3px}
-.settings-inline .field{margin-bottom:8px}
-.settings-inline .field input{background:var(--filter-input-bg);padding:9px 12px;font-size:13px}
-.settings-inline .field-row{gap:10px}
-.si-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px}
-.si-meta{font-size:10px;color:var(--muted)}
-@media(max-width:900px){.settings-inline{margin-top:12px}}
+  color:var(--muted);margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.si-head span{font-weight:400;text-transform:none;letter-spacing:0;display:block;margin-top:4px;
+  line-height:1.5}
+.settings-side .field{margin-bottom:14px}
+.settings-side .field input{background:var(--filter-input-bg);padding:10px 12px;font-size:14px;
+  max-width:none}
+.si-actions{display:flex;flex-direction:column;gap:8px;margin-top:16px;
+  padding-top:14px;border-top:1px solid var(--border)}
+.si-actions .btn{width:100%}
+.si-meta{font-size:10px;color:var(--muted);margin-top:5px;line-height:1.5}
+@media(max-width:1100px){
+  .form-layout{grid-template-columns:1fr}
+  .settings-side{position:static}
+  .si-actions{flex-direction:row}
+  .si-actions .btn{width:auto}
+}
 
 /* ─── Onglets Matières et vue MyStock ─── */
-.tabs{display:inline-flex;gap:4px;background:var(--bg);border:1px solid var(--border);
+.tabs{display:inline-flex;gap:4px;background:var(--card);border:1px solid var(--border);
   border-radius:10px;padding:3px}
 .tab{border:none;background:transparent;color:var(--text2);font:inherit;font-size:13px;
   font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;white-space:nowrap}
 .tab:hover{color:var(--text)}
 .tab.on{background:var(--accent);color:var(--bg)}
 
-.ms-hint{font-size:12px;color:var(--muted);background:var(--card);border:1px solid var(--border);
-  border-left:3px solid var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:12px;line-height:1.6}
+.ms-hint{font-size:12px;color:var(--text2);background:var(--card);border:1px solid var(--border);
+  border-left:3px solid var(--accent);border-radius:8px;padding:11px 14px;margin-bottom:12px;line-height:1.6}
+.ms-hint strong{color:var(--text)}
 
 tr.ms-row{cursor:pointer}
-tr.ms-row.open td{background:var(--accent-bg)}
-.ms-caret{color:var(--muted);font-size:12px;text-align:center}
+tr.ms-row td{transition:background .12s}
+/* Matière ouverte : même teinte que le survol, pour la relier à son détail. */
+tr.ms-row.open td{background:var(--accent-bg);border-bottom-color:transparent;font-weight:600}
+.ms-caret{color:var(--text2);font-size:12px;text-align:center;font-weight:700}
 .ms-prix-cell{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
-tr.ms-detail-row td{padding:0;background:var(--bg)}
-tr.ms-detail-row:hover td{background:var(--bg)}
-.ms-detail{padding:12px 16px 16px}
-.ms-groupe{margin-bottom:14px}
+
+/* Zone dépliée : fond neutre. Seuls le tableau des fournisseurs et le liseré
+   du bas sont teintés — la section elle-même reste blanche pour rester lisible. */
+tr.ms-detail-row td{padding:0;background:var(--card);border-bottom:2px solid var(--accent)}
+tr.ms-detail-row:hover td{background:var(--card)}
+.ms-detail{padding:4px 18px 18px}
+.ms-groupe{margin-bottom:16px}
 .ms-groupe:last-child{margin-bottom:0}
 .ms-groupe-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
   font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
-  color:var(--muted);margin-bottom:8px}
-table.ms-table{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  color:var(--text2);margin-bottom:8px}
+/* Tableau des fournisseurs : teinté comme la ligne ouverte, en-tête détaché
+   par un trait franc. */
+table.ms-table{background:var(--accent-bg);border:1px solid var(--border);border-radius:10px;
+  overflow:hidden;box-shadow:none}
+table.ms-table th{background:transparent;color:var(--text2);font-weight:700;
+  border-bottom:2px solid var(--text2);padding-top:9px;padding-bottom:9px}
 table.ms-table tr{cursor:default}
+table.ms-table td{border-bottom:1px solid var(--border)}
 table.ms-table tr:hover td{background:transparent}
-table.ms-table tr.ms-principal td{background:var(--accent-bg)}
+table.ms-table tr:last-child td{border-bottom:none}
+/* Le fournisseur principal se repère à son badge et à sa graisse. */
+table.ms-table tr.ms-principal td{background:transparent;font-weight:600}
+table.ms-table tr.ms-principal:hover td{background:transparent}
+/* Les saisies gardent un fond blanc pour ressortir sur la teinte du tableau. */
+table.ms-table .ms-inline{background:var(--filter-input-bg)}
 .ms-inline{background:var(--filter-input-bg);border:1px solid var(--border);border-radius:8px;
   padding:6px 10px;color:var(--text);font-family:inherit;font-size:13px;max-width:220px}
 .ms-inline:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
@@ -385,3 +409,18 @@ input.ms-prix{max-width:130px;font-variant-numeric:tabular-nums;text-align:right
   border:1px solid var(--accent);border-radius:10px;padding:10px 14px;margin-bottom:14px;line-height:1.7}
 .ms-locked strong{color:var(--text)}
 .field input:disabled,.field select:disabled{opacity:.65;cursor:not-allowed;background:var(--bg)}
+.ms-mode{white-space:nowrap}
+
+/* Appairage d'une matière MyStock avec une matière Coûts matières. */
+.ap-list{max-height:52vh;overflow:auto;border:1px solid var(--border);border-radius:10px;
+  margin-top:12px}
+.ap-item{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer}
+.ap-item:last-child{border-bottom:none}
+.ap-item:hover{background:var(--accent-bg)}
+.ap-name{font-size:13px;font-weight:600;color:var(--text)}
+.ap-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.ap-score{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;
+  color:var(--success);white-space:nowrap}
+.badge-link{cursor:pointer}
+.badge-link:hover{filter:brightness(1.08)}
