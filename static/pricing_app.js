@@ -17,6 +17,7 @@
     suppliers: [],
     supplierMap: {},
     materials: [],
+    materialsAll: [],
     products: [],
     settings: null,
     filters: {
@@ -467,16 +468,28 @@
 
   async function loadMaterialsList() {
     const params = new URLSearchParams();
-    params.set("active_only", S.filters.matActive === "all" ? "false" : "true");
+    // L'API ne connaît que « actifs uniquement » ou « tout » : pour afficher les
+    // inactifs seuls, on charge tout et on tranche côté client.
+    params.set("active_only", S.filters.matActive === "1" ? "true" : "false");
     params.set("with_computed", "true");
     if (S.filters.matQ) params.set("q", S.filters.matQ);
     if (S.filters.matSupplier) params.set("supplier_id", S.filters.matSupplier);
     const data = await api("/api/pricing/materials?" + params.toString());
-    let list = data.materials || [];
+    // On conserve la liste brute : les filtres client sont rejouables sans
+    // rappeler l'API (décocher une catégorie doit restituer les lignes).
+    S.materialsAll = data.materials || [];
+    applyMaterialFilters();
+  }
+
+  /** Filtres appliqués côté client : catégories cochées et statut actif/inactif. */
+  function applyMaterialFilters() {
+    let list = S.materialsAll || [];
     if (S.filters.matCats.length) {
       const set = new Set(S.filters.matCats);
       list = list.filter((m) => set.has(m.category_code));
     }
+    if (S.filters.matActive === "1") list = list.filter((m) => m.is_active);
+    else if (S.filters.matActive === "0") list = list.filter((m) => !m.is_active);
     S.materials = list;
   }
 
@@ -484,7 +497,7 @@
     const catOpts = S.categories
       .map(
         (c) =>
-          `<label class="cat-cb"><input type="checkbox" class="mat-cat-cb" value="${escAttr(c.code)}" ${S.filters.matCats.includes(c.code) ? "checked" : ""}/>${escHtml(c.label)}</label>`
+          `<label class="cat-cb${S.filters.matCats.includes(c.code) ? " on" : ""}"><input type="checkbox" class="mat-cat-cb" value="${escAttr(c.code)}" ${S.filters.matCats.includes(c.code) ? "checked" : ""}/>${escHtml(c.label)}</label>`
       )
       .join("");
     const supOpts =
@@ -570,8 +583,11 @@
       renderMaterialsList();
     };
     document.querySelectorAll(".mat-cat-cb").forEach((cb) => {
-      cb.onchange = async () => {
-        S.filters.matCats = Array.from(document.querySelectorAll(".mat-cat-cb:checked")).map((x) => x.value);
+      cb.onchange = () => {
+        S.filters.matCats = Array.from(
+          document.querySelectorAll(".mat-cat-cb:checked")
+        ).map((x) => x.value);
+        applyMaterialFilters();
         renderMaterialsList();
       };
     });
@@ -797,6 +813,73 @@
       </div>`;
   }
 
+  /**
+   * Paramètres globaux éditables en place, posés à droite de l'identification.
+   * Ils s'appliquent à toutes les matières — d'où l'avertissement et le bouton
+   * d'application explicite (pas d'enregistrement silencieux à la frappe).
+   */
+  function inlineSettingsHtml() {
+    const s = S.settings;
+    if (!s || !S.canWrite) return "";
+    const fxDate = s.eur_usd_rate_updated_at
+      ? String(s.eur_usd_rate_updated_at).replace("T", " ").slice(0, 16)
+      : "—";
+    const stale = isFxStale(s.eur_usd_rate_updated_at);
+    return `
+      <div class="settings-inline">
+        <div class="si-head">Paramètres globaux <span>appliqués à toutes les matières</span></div>
+        <div class="field-row">
+          <div class="field f-num"><label>Taux USD → EUR ${stale ? fxStaleBadgeHtml() : ""}</label>
+            <input type="number" step="0.0001" id="si-rate" value="${escAttr(s.eur_usd_rate)}"/>
+          </div>
+          <div class="field f-num"><label>Marge par défaut <span class="lbl-unit">%</span></label>
+            <input type="number" step="0.01" id="si-margin" value="${escAttr(s.default_margin_pct)}"/>
+          </div>
+        </div>
+        <div class="si-actions">
+          <button type="button" class="btn btn-soft btn-sm" id="si-save">Appliquer</button>
+          <button type="button" class="btn btn-soft btn-sm" id="si-fx">Rafraîchir le taux</button>
+          <span class="si-meta">MAJ ${escHtml(fxDate)} · ${escHtml(s.eur_usd_rate_source || "—")}</span>
+        </div>
+      </div>`;
+  }
+
+  function bindInlineSettings(isNew) {
+    const save = document.getElementById("si-save");
+    if (save) {
+      save.onclick = async () => {
+        try {
+          S.settings = await api("/api/pricing/settings", {
+            method: "PATCH",
+            body: {
+              eur_usd_rate: parseFloat(document.getElementById("si-rate").value),
+              default_margin_pct: parseFloat(document.getElementById("si-margin").value),
+            },
+          });
+          showToast("Paramètres globaux enregistrés.", "success");
+          renderMaterialForm(isNew);
+          refreshMaterialPreview();
+        } catch (e) {
+          showToast(e.message, "danger");
+        }
+      };
+    }
+    const fx = document.getElementById("si-fx");
+    if (fx) {
+      fx.onclick = async () => {
+        try {
+          const r = await api("/api/pricing/settings/refresh-fx", { method: "POST" });
+          showToast("Taux mis à jour : " + fmtNum(r.eur_usd_rate, 4, 4), "success");
+          S.settings = await api("/api/pricing/settings");
+          renderMaterialForm(isNew);
+          refreshMaterialPreview();
+        } catch (e) {
+          showToast(e.message, "danger");
+        }
+      };
+    }
+  }
+
   /** Bandeau résumé en haut de la fiche matière : revient, marge, vente. */
   function matSummaryHtml(computed) {
     if (!computed) {
@@ -869,7 +952,10 @@
               <div class="field f-mid"><label>Appellation</label><input id="f-app" value="${escAttr(f.appellation_code)}"/></div>
               <div class="field f-mid"><label>Catégorie</label><select id="f-cat">${catOpts}</select></div>
             </div>
-            <div class="field f-mid"><label>Fournisseur</label><select id="f-sup">${supOpts}</select></div>
+            <div class="field-row ident-row">
+              <div class="field f-mid"><label>Fournisseur</label><select id="f-sup">${supOpts}</select></div>
+              ${inlineSettingsHtml()}
+            </div>
           </div>
 
           <div class="form-section"><h3>Prix d'achat</h3>
@@ -937,6 +1023,7 @@
     `);
 
     document.getElementById("btn-back-mat").onclick = () => navigate("/pricing/materials");
+    bindInlineSettings(isNew);
 
     const bindPreview = () => {
       clearTimeout(S.debounceMat);

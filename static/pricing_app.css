@@ -245,6 +245,8 @@ table.pr-table tr{cursor:pointer}
 .cat-cb{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);
   background:var(--card);border:1px solid var(--border);border-radius:999px;padding:6px 12px;cursor:pointer}
 .cat-cb:hover{border-color:var(--accent);color:var(--accent)}
+.cat-cb input{accent-color:var(--accent);cursor:pointer;margin:0}
+.cat-cb.on{border-color:var(--accent);color:var(--accent);background:var(--accent-bg);font-weight:600}
 
 /* Nom de matière cliquable dans la liste. */
 .cell-link{background:none;border:none;padding:0;margin:0;font:inherit;font-weight:600;
@@ -327,3 +329,17 @@ table.recap-table td:last-child{border-right:none}
 .import-block .field input,.import-block .field select,
 .import-block .field input:focus,.import-block .field select:focus{
   background:var(--filter-input-bg)}
+
+/* ─── Paramètres globaux éditables, à droite de l'identification ─── */
+.ident-row{align-items:start}
+.settings-inline{border:1px dashed var(--border);border-radius:12px;padding:12px 14px;
+  background:var(--bg)}
+.si-head{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  color:var(--muted);margin-bottom:10px}
+.si-head span{font-weight:400;text-transform:none;letter-spacing:0;display:block;margin-top:3px}
+.settings-inline .field{margin-bottom:8px}
+.settings-inline .field input{background:var(--filter-input-bg);padding:9px 12px;font-size:13px}
+.settings-inline .field-row{gap:10px}
+.si-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px}
+.si-meta{font-size:10px;color:var(--muted)}
+@media(max-width:900px){.settings-inline{margin-top:12px}}
