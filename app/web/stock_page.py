@@ -438,6 +438,29 @@ body.light .btn.btn-accent{color:#fff}
   background:color-mix(in srgb,var(--danger) 12%,transparent);color:var(--danger);cursor:pointer;flex-shrink:0}
 .empl-lot-out-btn:hover{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 22%,transparent)}
 .empl-lot-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
+
+/* ── Badge FSC (produit fini certifié) ─────────────────────────────
+   Vert et discret : il marque une ligne parmi d'autres, il ne doit pas
+   dominer la référence produit. La variante orange signale un écart de
+   traçabilité matière sur le dossier d'origine — le lot reste certifié,
+   mais l'anomalie ne doit pas se perdre. */
+.sm-fsc-badge{display:inline-flex;align-items:center;gap:3px;flex-shrink:0;
+  padding:1px 7px;border-radius:5px;font-size:10px;font-weight:800;letter-spacing:.5px;
+  background:rgba(52,211,153,.14);color:var(--success,#34d399);
+  border:1px solid rgba(52,211,153,.45);vertical-align:middle}
+.sm-fsc-badge.is-ecart{background:rgba(251,146,60,.14);color:#fb923c;
+  border-color:rgba(251,146,60,.45)}
+body.light .sm-fsc-badge{background:rgba(16,122,87,.10);color:#0f7c3a;border-color:rgba(16,122,87,.35)}
+body.light .sm-fsc-badge.is-ecart{background:rgba(217,119,6,.10);color:#b45309;border-color:rgba(217,119,6,.35)}
+.sm-empl-code-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sm-fsc-value{color:var(--success,#34d399)}
+body.light .sm-fsc-value{color:#0f7c3a}
+.sm-fsc-hint{color:var(--success,#34d399)}
+/* Bandeau d'écart FSC en sortie : orange, pas rouge — ce n'est pas une
+   erreur bloquante, c'est une décision que l'opérateur doit assumer. */
+.sm-fsc-alert{border:1px solid rgba(251,146,60,.45);background:rgba(251,146,60,.10);
+  color:#fb923c;border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.5;margin-top:10px}
+body.light .sm-fsc-alert{background:rgba(217,119,6,.08);color:#b45309;border-color:rgba(217,119,6,.35)}
 .empl-lot-exp-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;
   border-radius:10px;border:1px solid rgba(251,191,36,.4);
   background:rgba(251,191,36,.08);color:var(--warn);cursor:pointer;flex-shrink:0;transition:border-color .15s,background .15s}
@@ -2158,7 +2181,15 @@ async function api(p, o) {
     if (r.status === 401) { window.location.href = '/'; return null; }
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
-      throw new Error(apiErrorDetail(e.detail, r.status));
+      const err = new Error(apiErrorDetail(e.detail, r.status));
+      // On conserve le statut et le détail STRUCTURÉ sur l'objet Error.
+      // Certaines erreurs ne sont pas des échecs mais des décisions à
+      // prendre — le 409 « stock FSC insuffisant » renvoie les quantités
+      // disponibles pour que l'interface propose la confirmation au lieu
+      // d'afficher un message et de s'arrêter là.
+      err.status = r.status;
+      err.detail = e.detail;
+      throw err;
     }
     return await r.json();
   } catch(e) {
@@ -3145,7 +3176,10 @@ function buildLotTransporteurBtn(produitId, emplacement, row) {
     },
     on: { click: (ev) => {
       ev.stopPropagation();
-      sortirLot(produitId, emplacement, qLot, unite, refLabel, row.nb_lots, { expedition: true });
+      // row.fsc : depuis la séparation FSC, une ligne de stock porte son
+      // segment. Le transmettre garantit qu'on sort bien la palette qu'on
+      // voit à l'écran, et pas la plus ancienne toutes catégories confondues.
+      sortirLot(produitId, emplacement, qLot, unite, refLabel, row.nb_lots, { expedition: true, fsc: row.fsc });
     }},
   }, iconEl('truck', 18));
 }
@@ -3160,7 +3194,7 @@ function buildLotOutBtn(produitId, emplacement, row) {
     attrs: { title: 'Sortir le lot FIFO', 'aria-label': 'Sortir le lot FIFO' },
     on: { click: (ev) => {
       ev.stopPropagation();
-      sortirLot(produitId, emplacement, qLot, unite, refLabel, row.nb_lots);
+      sortirLot(produitId, emplacement, qLot, unite, refLabel, row.nb_lots, { fsc: row.fsc });
     }},
   }, iconEl('trash-2', 18));
 }
@@ -3175,9 +3209,31 @@ function buildLotMoveBtn(produitId, emplacement, row) {
     attrs: { title: 'Déplacer le lot', 'aria-label': 'Déplacer le lot' },
     on: { click: (ev) => {
       ev.stopPropagation();
-      openMoveLotModal(produitId, emplacement, qLot, unite, refLabel, row.nb_lots);
+      openMoveLotModal(produitId, emplacement, qLot, unite, refLabel, row.nb_lots, { fsc: row.fsc });
     }},
   }, iconEl('move', 18));
+}
+
+// ── Badge FSC d'une ligne de stock ────────────────────────────────
+// Depuis la séparation par segment, l'API renvoie DEUX lignes quand un même
+// produit est présent au même emplacement en certifié et en non certifié.
+// Ce badge est ce qui les rend distinguables à l'œil : sans lui, l'écran
+// afficherait deux lignes identiques avec des quantités différentes.
+//
+// `fsc_ecart` = le dossier d'origine exigeait bien la certification, mais sa
+// traçabilité matière était vide ou en écart au moment de l'entrée en stock.
+// Le lot reste FSC (le dossier fait foi), l'anomalie reste visible.
+function buildFscBadge(row) {
+  if (!row || !row.fsc) return null;
+  const ecart = !!row.fsc_ecart;
+  return el('span', {
+    cls: 'sm-fsc-badge' + (ecart ? ' is-ecart' : ''),
+    attrs: {
+      title: ecart
+        ? 'Produit FSC — traçabilité matière incomplète ou en écart sur le dossier d\'origine'
+        : 'Produit certifié FSC' + (row.no_dossier ? ' — dossier ' + row.no_dossier : ''),
+    },
+  }, 'FSC', ecart ? ' ⚠' : '');
 }
 
 function buildLotActionBtns(produitId, emplacement, row) {
@@ -4000,6 +4056,56 @@ function buildMvtModal() {
 
   const qteInp = el('input', { cls:'field-input', type:'number', placeholder:'0', min:'0', inputmode:'numeric', style:{direction:'ltr'} });
 
+  // ── Segments FSC connus pour ce couple (produit, emplacement) ────
+  // Lus depuis l'état déjà chargé (détail produit ou détail emplacement),
+  // qui renvoie désormais une ligne par segment. Pas d'appel réseau
+  // supplémentaire : la modale s'ouvre toujours depuis l'une de ces deux
+  // vues, et un aller-retour ici ralentirait une saisie d'atelier pour une
+  // information qu'on a déjà sous la main.
+  function fscSegmentsFor(pid, empl) {
+    const out = { fsc: 0, non_fsc: 0 };
+    const E = String(empl || '').trim().toUpperCase();
+    if (!E) return out;
+    if (S.selProduit && S.selProduit.produit && S.selProduit.produit.id === pid) {
+      (S.selProduit.emplacements || []).forEach(e => {
+        if (String(e.emplacement || '').toUpperCase() !== E) return;
+        out[e.fsc ? 'fsc' : 'non_fsc'] += Number(e.quantite || 0);
+      });
+    }
+    if (S.selEmpl && String(S.selEmpl.emplacement || '').toUpperCase() === E) {
+      (S.selEmpl.refs || []).forEach(r => {
+        if (r.id !== pid) return;
+        out[r.fsc ? 'fsc' : 'non_fsc'] += Number(r.quantite || 0);
+      });
+    }
+    return out;
+  }
+
+  // Inventaire d'un emplacement mixte : deux comptages distincts.
+  // Une seule quantité globale obligerait le serveur à répartir au prorata,
+  // c'est-à-dire à inventer une donnée — inacceptable sur un claim.
+  const qteFscInp = el('input', { cls:'field-input', type:'number', placeholder:'0', min:'0', inputmode:'numeric', style:{direction:'ltr'} });
+  const qteStdInp = el('input', { cls:'field-input', type:'number', placeholder:'0', min:'0', inputmode:'numeric', style:{direction:'ltr'} });
+  const splitWrap = el('div', { style:{display:'none'} },
+    el('div', { cls:'sm-fsc-alert' },
+      'Cet emplacement contient du stock certifié ET du stock non certifié. '
+      + 'Comptez les deux piles séparément : la ventilation ne peut pas être devinée.'),
+    el('div', { cls:'modal-field' },
+      el('label', { cls:'field-label' }, 'Quantité comptée — certifiée FSC'), qteFscInp),
+    el('div', { cls:'modal-field' },
+      el('label', { cls:'field-label' }, 'Quantité comptée — non certifiée'), qteStdInp)
+  );
+
+  function refreshSplitVisibility() {
+    if (type !== 'inventaire') { splitWrap.style.display = 'none'; return; }
+    const seg = fscSegmentsFor(produit_id, emplInp.value);
+    const mixte = seg.fsc > 0 && seg.non_fsc > 0;
+    splitWrap.style.display = mixte ? '' : 'none';
+    qteInp.parentElement.style.display = mixte ? 'none' : '';
+  }
+  emplInp.addEventListener('input', refreshSplitVisibility);
+  emplInp.addEventListener('change', refreshSplitVisibility);
+
   const today = new Date().toISOString().slice(0,10);
   const dateInp = el('input', { cls:'field-input', type:'date', value:today });
   const dateField = el('div', { cls:'modal-field', style:{display: type==='sortie' ? 'none' : ''} }, el('label', { cls:'field-label' }, 'Date du stock'), dateInp);
@@ -4051,10 +4157,46 @@ function buildMvtModal() {
 
   const confirmPfCls = type === 'inventaire' ? 'inventaire' : ('pf-' + type);
   const confirmBtn = el('button', { cls:'btn-confirm '+confirmPfCls, on:{ click: async () => {
-    const qte = parseFloat(qteInp.value);
     const empl = emplInp.value.trim().toUpperCase();
     if (!empl) { showToast('Emplacement requis','error'); return; }
-    if (!qte||qte<=0) { showToast('Quantité requise','error'); return; }
+
+    const splitActif = (type === 'inventaire' && splitWrap.style.display !== 'none');
+    let qte, qFsc = null, qStd = null;
+    if (splitActif) {
+      qFsc = parseFloat(qteFscInp.value);
+      qStd = parseFloat(qteStdInp.value);
+      if (Number.isNaN(qFsc) && Number.isNaN(qStd)) { showToast('Quantités requises','error'); return; }
+      qFsc = Number.isNaN(qFsc) ? 0 : qFsc;
+      qStd = Number.isNaN(qStd) ? 0 : qStd;
+      if (qFsc < 0 || qStd < 0) { showToast('Quantités négatives impossibles','error'); return; }
+      qte = qFsc + qStd;
+      if (qte <= 0) { showToast('Quantité totale doit être positive','error'); return; }
+    } else {
+      qte = parseFloat(qteInp.value);
+      if (!qte||qte<=0) { showToast('Quantité requise','error'); return; }
+    }
+
+    // Sortie sur emplacement mixte : on demande explicitement quel stock est
+    // servi. Sans cette question, le FIFO global viderait le certifié en
+    // premier (c'est souvent le plus ancien) — le stock le plus précieux et
+    // celui qu'un simple réapprovisionnement ne remplace pas.
+    let fscSortie = null;
+    if (type === 'sortie') {
+      const seg = fscSegmentsFor(produit_id, empl);
+      if (seg.fsc > 0 && seg.non_fsc > 0) {
+        const rep = confirm(
+          'Cet emplacement contient ' + fN(seg.fsc) + ' certifié(s) FSC et '
+          + fN(seg.non_fsc) + ' non certifié(s).\n\n'
+          + 'OK = sortie CERTIFIÉE FSC (puise dans le stock certifié)\n'
+          + 'Annuler = sortie ordinaire (puise dans le non certifié d\'abord)'
+        );
+        fscSortie = rep ? 1 : 0;
+      } else if (seg.fsc > 0) {
+        fscSortie = 1;
+      } else if (seg.non_fsc > 0) {
+        fscSortie = 0;
+      }
+    }
 
     // Préfixe selon case cochée
     let prefix = '';
@@ -4071,7 +4213,12 @@ function buildMvtModal() {
     const userNote = noteInp.value.trim();
     const finalNote = [prefix, userNote].filter(Boolean).join(' | ');
 
-    await submitMouvement({ produit_id, emplacement:empl, type_mouvement:S.modalType, quantite:qte, date_entree:dateInp.value||today, note:finalNote });
+    await submitMouvement({
+      produit_id, emplacement:empl, type_mouvement:S.modalType, quantite:qte,
+      date_entree:dateInp.value||today, note:finalNote,
+      ...(splitActif ? { quantite_fsc: qFsc, quantite_non_fsc: qStd } : {}),
+      ...(fscSortie != null ? { fsc: fscSortie } : {}),
+    });
   }}}, type==='entree'?'Valider entrée':type==='sortie'?'Valider sortie':'Valider inventaire');
 
   sheet.append(...[
@@ -4081,6 +4228,7 @@ function buildMvtModal() {
     typeBtns,
     el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Emplacement'), emplInp, suggWrap),
     el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Quantité'), qteInp),
+    splitWrap,
     dateField,
     origineWrap,
     expWrap,
@@ -4091,6 +4239,10 @@ function buildMvtModal() {
     )
   ].filter(Boolean));
   overlay.appendChild(sheet);
+  // L'emplacement peut être pré-rempli à l'ouverture (modale lancée depuis un
+  // détail d'emplacement) : on évalue tout de suite s'il est mixte, sinon les
+  // deux champs de comptage n'apparaîtraient qu'après une frappe inutile.
+  refreshSplitVisibility();
   return overlay;
 }
 
@@ -11011,7 +11163,10 @@ function buildProduitDetail() {
           on:{click:()=>loadEmplacement(e.emplacement)}
         },
           el('div',null,
-            el('div',{cls:stockEmplCodeClass(e.emplacement)},stockEmplLabel(e.emplacement)),
+            el('div',{cls:'sm-empl-code-row'},
+              el('div',{cls:stockEmplCodeClass(e.emplacement)},stockEmplLabel(e.emplacement)),
+              buildFscBadge(e)
+            ),
             el('div',{cls:'empl-info'},'FIFO lot : '+fD(e.date_fifo_empl)+(e.alerte_inventaire?' · inventaire':'')+(e.jours_stock!=null?' · ~'+e.jours_stock+'j':''))
           ),
           el('div',{cls:'empl-row-right'},
@@ -11095,7 +11250,15 @@ function buildEmplacementDetail() {
     el('div',{cls:'sc-des'},(sel.nb_refs||0)+' réf. · '+fN(sel.total_unites)+' u. en stock'),
     el('div',{cls:'sc-stats'},
       el('div',{cls:'sc-stat'},el('div',{cls:'sc-stat-label'},'Références'),el('div',{cls:'sc-stat-value'},String(refs.length))),
-      el('div',{cls:'sc-stat'},el('div',{cls:'sc-stat-label'},'Unités'),el('div',{cls:'sc-stat-value'},fN(sel.total_unites)))
+      el('div',{cls:'sc-stat'},el('div',{cls:'sc-stat-label'},'Unités'),el('div',{cls:'sc-stat-value'},fN(sel.total_unites))),
+      // Ventilation affichée seulement si les deux segments coexistent :
+      // sur un emplacement homogène, la répartition n'apprend rien et
+      // n'ajouterait que du bruit.
+      (sel.total_fsc > 0 && sel.total_non_fsc > 0)
+        ? el('div',{cls:'sc-stat'},
+            el('div',{cls:'sc-stat-label'},'Dont FSC'),
+            el('div',{cls:'sc-stat-value sm-fsc-value'},fN(sel.total_fsc)))
+        : null
     ),
     invInfo
   );
@@ -11108,7 +11271,13 @@ function buildEmplacementDetail() {
           cls:'empl-row',
           on:{click:()=>loadProduit(r.id)}
         },
-          el('div',null,el('div',{cls:'empl-code'},r.reference),el('div',{cls:'empl-info'},r.designation||'')),
+          el('div',null,
+            el('div',{cls:'sm-empl-code-row'},
+              el('div',{cls:'empl-code'},r.reference),
+              buildFscBadge(r)
+            ),
+            el('div',{cls:'empl-info'},r.designation||'')
+          ),
           el('div',{cls:'empl-row-right'},
             el('div',null,
               el('div',{cls:'empl-qte'},fU(r.quantite, r.unite||'')),
@@ -11196,7 +11365,7 @@ function _inp(placeholder, opts={}) {
 
 // ── 1. Logistique — Identification palette (A4 paysage) ───────────
 function buildIdPaletteA4Form() {
-  let _ref='', _qty='', _unit=allUnitLabels()[0]||'étiquettes', _qctn='';
+  let _ref='', _qty='', _unit=allUnitLabels()[0]||'étiquettes', _qctn='', _fsc=false;
   function doPrint() {
     const ref = _ref.trim(), qty = _qty.trim(), qctn = _qctn.trim();
     if (!ref) { showToast('Référence requise', 'error'); return; }
@@ -11216,8 +11385,16 @@ function buildIdPaletteA4Form() {
               font-family:'Berlin Sans FB','Berlin Sans FB Demi',Arial,sans-serif;text-transform:uppercase}
        .ref{font-size:112pt;font-weight:900;letter-spacing:1pt;word-break:break-all;line-height:1.1;text-decoration:underline}
        .quv{font-size:100pt;font-weight:800;color:#111}
-       .qctn{font-size:72pt;font-weight:700;color:#333}`,
+       .qctn{font-size:72pt;font-weight:700;color:#333}
+       /* Bandeau FSC : même code visuel que l'étiquette bobine matière, pour
+          qu'un cariste lise la même chose sur une palette et sur une bobine.
+          Contour épais et non couleur seule : les imprimantes d'atelier sont
+          en noir et blanc. */
+       .fsc-banner{font-size:34pt;font-weight:900;letter-spacing:3pt;
+                   padding:4mm 14mm;border:3mm solid #0f7c3a;border-radius:6mm;
+                   background:#e6f4ea;color:#0f7c3a}`,
       `<div class="label">
+         ${_fsc?`<div class="fsc-banner">PRODUIT CERTIFIÉ FSC</div>`:''}
          <div class="ref">${ref} FS</div>
          ${quv?`<div class="quv">${quv}</div>`:''}
          ${showCtn?`<div class="qctn">(${ctnLabel})</div>`:''}
@@ -11248,10 +11425,21 @@ function buildIdPaletteA4Form() {
     el('div',{cls:'etiq-form-field',style:{flex:'1'}},el('label',{cls:'etiq-form-label'},'Quantité'),qtyInp),
     el('div',{cls:'etiq-form-field',style:{flex:'1.6'}},el('label',{cls:'etiq-form-label'},'Unité de vente'),unitSel)
   );
+  // Case FSC : l'étiquette palette est saisie à la main (elle ne descend pas
+  // d'un lot précis), donc le claim ne peut pas être hérité automatiquement.
+  // Non cochée par défaut — sur une certification, l'oubli d'un marquage est
+  // récupérable, un marquage abusif ne l'est pas.
+  const fscChk=el('input',{attrs:{type:'checkbox',id:'palette-fsc-chk'},style:{width:'16px',height:'16px',cursor:'pointer'}});
+  fscChk.addEventListener('change',e=>{_fsc=e.target.checked;});
+  const fscRow=el('label',{cls:'etiq-form-field',style:{display:'flex',flexDirection:'row',alignItems:'center',gap:'10px',cursor:'pointer'}},
+    fscChk,
+    el('span',{cls:'etiq-form-label',style:{margin:'0'}},'Palette certifiée FSC — ajouter le bandeau sur l\'étiquette')
+  );
   return el('div',null,
     el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Référence produit *'),rInp),
     qtyUnitRow,
     el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Quantité cartons'),cInp),
+    fscRow,
     btn);
 }
 

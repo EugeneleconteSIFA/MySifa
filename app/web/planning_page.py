@@ -7,12 +7,21 @@ Ajouter dans main.py :
 Accès : /planning  ou  /planning?machine=<id SQLite réel>
 """
 
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from services.auth_service import get_current_user, user_has_app_access
-from config import APP_META_DESCRIPTION, APP_PLANNING_PAGE_TITLE, APP_VERSION, THEME_COLOR_META
+from config import (
+    APP_META_DESCRIPTION,
+    APP_PLANNING_PAGE_TITLE,
+    APP_VERSION,
+    FSC_CLAIM_DEFAUT,
+    FSC_CLAIM_LABELS,
+    FSC_CLAIMS_REQUERABLES,
+    THEME_COLOR_META,
+)
 from app.web.access_denied import access_denied_response
 
 router = APIRouter()
@@ -39,6 +48,15 @@ def planning_page(request: Request, machine: Optional[int] = None):
         if user.get("role") in {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
         else "false"
     )
+    # Claims FSC injectés depuis config.py plutôt que réécrits en dur dans le
+    # JS : la liste vivait auparavant à trois endroits du fichier (le <select>,
+    # le validateur de dossierFields, le libellé du badge) et il en manquait
+    # un — fsc_mix_credit était absent partout, donc silencieusement écrasé en
+    # fsc_mix à chaque réouverture d'un dossier Mix Credit.
+    fsc_req_js = json.dumps(
+        [[c, FSC_CLAIM_LABELS.get(c, c)] for c in FSC_CLAIMS_REQUERABLES],
+        ensure_ascii=False,
+    )
     html = (
         PLANNING_HTML.replace("__MACHINE_ID__", ssr_mid)
         .replace("__IS_OF_ADMIN__", of_admin_js)
@@ -46,6 +64,8 @@ def planning_page(request: Request, machine: Optional[int] = None):
         .replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
         .replace("__THEME_COLOR__", THEME_COLOR_META)
         .replace("__V_LABEL__", f"v{APP_VERSION}")
+        .replace("__FSC_REQ_OPTIONS__", fsc_req_js)
+        .replace("__FSC_CLAIM_DEFAUT__", FSC_CLAIM_DEFAUT)
     )
     return HTMLResponse(content=html)
 
@@ -3199,25 +3219,29 @@ function annuleBadgeHtml(e){
   const lbl=nb>1?("Annulé ×"+nb):"Annulé";
   return `<span class="badge-annule" title="${escAttr(annuleTitle(e))}">${lbl}</span>`;
 }
+// Source unique des claims FSC exigibles sur un dossier, injectée depuis
+// config.py (FSC_CLAIMS_REQUERABLES). Ne jamais réintroduire de liste en dur
+// ici : c'est exactement ce qui avait fait disparaître fsc_mix_credit.
+const FSC_REQ_OPTIONS=__FSC_REQ_OPTIONS__;
+const FSC_CLAIM_DEFAUT="__FSC_CLAIM_DEFAUT__";
+const FSC_REQ_CODES=FSC_REQ_OPTIONS.map(o=>o[0]);
+const FSC_REQ_LABELS=Object.fromEntries(FSC_REQ_OPTIONS);
+
 function fscBadgeHtml(e){
   if(!e||!(e.fsc_requis===1||e.fsc_requis===true)) return "";
-  const typ=(e.fsc_type_requis||"").trim();
-  const typeLbl=typ==="fsc_100"?"FSC 100%":typ==="fsc_mix"?"FSC Mix":typ==="fsc_recycled"?"FSC Recycled":"";
+  const typeLbl=fscTypeRequisLabel(e.fsc_type_requis);
   const title="Certification FSC requise"+(typeLbl?" — "+typeLbl:"");
   return `<span title="${escAttr(title)}" style="background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:4px;vertical-align:middle">FSC</span>`;
 }
 
 function fscTypeRequisLabel(t){
   const typ=(t||"").trim();
-  if(typ==="fsc_100") return "FSC 100%";
-  if(typ==="fsc_mix") return "FSC Mix";
-  if(typ==="fsc_recycled") return "FSC Recycled";
-  return typ;
+  return FSC_REQ_LABELS[typ]||typ;
 }
 
 function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType="",deptLivraison="",priseRdv=0,dlImposee=0,valide=0,etiqParCarton=null){
   const fscOn=fscRequis===1||fscRequis===true;
-  const fscTyp=(fscType&&["fsc_100","fsc_mix","fsc_recycled"].includes(fscType))?fscType:"fsc_mix";
+  const fscTyp=(fscType&&FSC_REQ_CODES.includes(fscType))?fscType:FSC_CLAIM_DEFAUT;
   const rdvOn=priseRdv===1||priseRdv===true;
   const dlImpOn=dlImposee===1||dlImposee===true;
   const valideOn=valide===1||valide===true;
@@ -3271,9 +3295,7 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
             <div id="fsc-type-wrap" style="display:${fscOn?"block":"none"};margin-top:8px">
               <label class="dossier-sub-lbl" style="margin-bottom:4px">Type requis</label>
               <select id="fsc-type-requis" class="form-sel" style="width:100%">
-                <option value="fsc_100" ${fscTyp==="fsc_100"?"selected":""}>FSC 100%</option>
-                <option value="fsc_mix" ${fscTyp==="fsc_mix"?"selected":""}>FSC Mix</option>
-                <option value="fsc_recycled" ${fscTyp==="fsc_recycled"?"selected":""}>FSC Recycled</option>
+                ${FSC_REQ_OPTIONS.map(([v,lbl])=>`<option value="${escAttr(v)}" ${fscTyp===v?"selected":""}>${escHtml(lbl)}</option>`).join("")}
               </select>
             </div>
           </div>
@@ -3333,7 +3355,7 @@ function getFormData(withStatut){
   const fscChk=document.getElementById("fsc-requis-chk");
   const fscOn=!!(fscChk&&fscChk.checked);
   d.fsc_requis=fscOn?1:0;
-  d.fsc_type_requis=fscOn?(document.getElementById("fsc-type-requis")?.value||"fsc_mix"):"";
+  d.fsc_type_requis=fscOn?(document.getElementById("fsc-type-requis")?.value||FSC_CLAIM_DEFAUT):"";
   if(withStatut)d.statut=document.getElementById("f-stat").value;
   return d;
 }

@@ -7,7 +7,7 @@ Page standalone (architecture identique à stock_page.py).
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from config import APP_ORG_NAME, STOCK_UNITE_VENTE_DEFAUT
+from config import APP_ORG_NAME, FSC_WARNING_PROD, STOCK_UNITE_VENTE_DEFAUT
 from app.services.auth_service import get_current_user, is_fabrication, is_admin
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
@@ -43,6 +43,10 @@ def fabrication_page(request: Request):
     html = html.replace(
         "__STOCK_UNITE_VENTE_DEFAUT__", _js_escape(STOCK_UNITE_VENTE_DEFAUT)
     )
+    # Consigne FSC atelier : texte tenu dans config.py (FSC_WARNING_PROD), pas
+    # dans le template. C'est une exigence de chaîne de contrôle FSC — elle ne
+    # doit pas pouvoir être réécrite au fil des retouches d'interface.
+    html = html.replace("__FSC_WARNING_PROD__", _js_escape(FSC_WARNING_PROD))
     return HTMLResponse(
         content=html,
         headers={
@@ -166,6 +170,47 @@ input,select,textarea{font-family:inherit;color:var(--text)}
 }
 .fab-main-title{font-size:15px;font-weight:800}
 .fab-main-sub{font-size:11px;color:var(--muted);margin-left:auto}
+
+/* ── Bandeau FSC atelier ─────────────────────────────────────────
+   Posé en PREMIER ENFANT de .fab-main, pas dans le footer : le footer
+   info (.fab-footer-info) est masqué en mode opérateur mobile, et cette
+   consigne doit rester lisible sur tous les onglets et tous les écrans.
+   flex-shrink:0 pour qu'il ne se fasse jamais écraser par le contenu. */
+.fab-fsc-bandeau{
+  flex-shrink:0;
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:9px 20px;
+  font-size:12px;font-weight:600;line-height:1.4;
+  background:rgba(52,211,153,.10);
+  color:var(--success,#34d399);
+  border-bottom:1px solid rgba(52,211,153,.35);
+}
+/* Écart = dossier FSC dont la traça matière est vide ou non conforme.
+   On ne bloque pas la saisie (décision produit) : on rend l'écart
+   impossible à ignorer, et il ressort tel quel dans le rapport d'audit. */
+.fab-fsc-bandeau.is-ecart{
+  background:rgba(251,146,60,.12);
+  color:#fb923c;
+  border-bottom-color:rgba(251,146,60,.40);
+}
+.fab-fsc-bandeau-txt{flex:1;min-width:180px}
+.fab-fsc-bandeau-etat{
+  font-size:11px;font-weight:800;letter-spacing:.3px;
+  padding:2px 8px;border-radius:20px;flex-shrink:0;
+  background:rgba(251,146,60,.18);
+}
+.fab-fsc-badge{
+  display:inline-flex;align-items:center;gap:4px;flex-shrink:0;
+  padding:2px 8px;border-radius:5px;
+  font-size:10px;font-weight:800;letter-spacing:.5px;
+  background:rgba(52,211,153,.14);
+  color:var(--success,#34d399);
+  border:1px solid rgba(52,211,153,.45);
+}
+.fab-fsc-badge.is-ecart{
+  background:rgba(251,146,60,.14);color:#fb923c;border-color:rgba(251,146,60,.45);
+}
+.fab-dossier-ref-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .fab-etat-badge{
   font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;
   text-transform:uppercase;letter-spacing:.5px;
@@ -820,6 +865,10 @@ body.has-topbar .fab-main{padding-top:74px}
   }
   .fab-footer-actions{min-width:0;width:100%}
   .fab-footer-info{display:none}
+  /* Le bandeau FSC, lui, NE disparaît PAS sur mobile — c'est tout l'intérêt
+     de l'avoir sorti du footer info. On le densifie seulement. */
+  .fab-fsc-bandeau{padding:7px 12px;font-size:11px;gap:7px}
+  .fab-fsc-bandeau-txt{min-width:140px}
   .fab-footer-tools{flex-direction:row;gap:6px;align-items:center;flex:1;min-width:0}
   .fab-comment-hint{display:none}
   /* Vue opérateur mobile : footer bas (2 lignes max) */
@@ -1156,6 +1205,10 @@ let S = {
 
   // Traça matières
   tracaMatieres: [],
+  // Synthèse FSC du dossier courant (statut_global, nb bobines conformes…).
+  // Alimentée par _fscRefreshStatut() depuis le MÊME endpoint que le rapport
+  // imprimable : une seule définition de « conforme » dans toute l'app.
+  fscStatut: null,
   tracaLoading: false,
   tracaScanning: false,
   tracaStream: null,
@@ -1281,8 +1334,14 @@ function fscClaimLabel(claim){
   return FSC_CLAIM_LABELS[c] || c;
 }
 
+// Libellé d'une EXIGENCE de dossier. Distinct de fscClaimLabel() : celui-ci
+// retombe sur « Non FSC » quand la valeur est vide (c'est le bon défaut pour
+// une bobine reçue), ce qui donnerait l'absurdité « FSC · Non FSC » sur un
+// dossier certifié dont le type n'a pas encore été choisi. Ici, vide = vide.
 function fscTypeRequisLabel(t){
-  return fscClaimLabel(t) || '—';
+  const typ = (t || '').trim();
+  if(!typ) return '';
+  return FSC_CLAIM_LABELS[typ] || typ;
 }
 
 function fabIsModalOpen(){
@@ -1649,15 +1708,21 @@ async function loadSession(opts){
   if(opts?.noRender){
     Object.assign(S, patch);
     _loadRepiquageDossiersIfNeeded();
+    _fscRefreshStatut();
     return;
   }
   if(opts?.preserveUi){
     fabRenderPreserveUi(patch);
     _loadRepiquageDossiersIfNeeded();
+    _fscRefreshStatut();
     return;
   }
   set(patch);
   _loadRepiquageDossiersIfNeeded();
+  // En arrière-plan : ne bloque pas l'affichage de la session. Le bandeau
+  // apparaît dès que le dossier est connu, puis s'enrichit de l'état de la
+  // traça au retour de l'appel.
+  _fscRefreshStatut();
 }
 
 // Charge les dossiers Repiquage en arrière-plan si la machine effective est Repiquage.
@@ -3225,6 +3290,86 @@ function renderPrintPanel(){
   );
 }
 
+/* ── Bandeau FSC atelier ──────────────────────────────────────────
+   Le dossier porte l'exigence (fsc_requis), la traça matière dit si elle
+   est tenue. Les deux sont affichés en permanence, sur tous les onglets.
+
+   Pourquoi interroger l'API plutôt que compter S.tracaMatieres : ce
+   tableau n'est peuplé que quand l'opérateur ouvre l'onglet Traça, et il
+   contient les bobines de la MACHINE, pas du DOSSIER. S'en servir aurait
+   donné un bandeau « conforme » sur un dossier dont rien n'a été scanné.
+   ────────────────────────────────────────────────────────────────── */
+const FSC_WARNING_PROD = '__FSC_WARNING_PROD__';
+let _fscStatutRef = null;
+
+function fscDossierRef(dos){
+  return dos ? String(dos.reference || dos.numero_of || '').trim() : '';
+}
+function fscDossierRequis(dos){
+  return !!(dos && (dos.fsc_requis === 1 || dos.fsc_requis === true));
+}
+
+async function _fscRefreshStatut(){
+  const dos = S.dossier;
+  const ref = fscDossierRef(dos);
+  if(!fscDossierRequis(dos) || !ref){
+    if(S.fscStatut !== null){ S.fscStatut = null; _fscStatutRef = null; render(); }
+    return;
+  }
+  if(_fscStatutRef === ref && S.fscStatut) return;  // déjà à jour
+  _fscStatutRef = ref;
+  try{
+    const d = await apiFetch('/api/fabrication/tracabilite/'+encodeURIComponent(ref));
+    S.fscStatut = (d && d.synthese) ? d.synthese : null;
+  }catch(e){
+    // Échec réseau : on laisse le bandeau en état « à vérifier » plutôt que
+    // d'afficher un faux « conforme ». Silencieux — pas de toast, l'opérateur
+    // n'a rien demandé et le bandeau porte déjà l'information.
+    S.fscStatut = null;
+  }
+  render();
+}
+
+// Invalide le cache : appelé après chaque bobine scannée ou supprimée, sinon
+// le bandeau resterait en écart alors que l'opérateur vient de régulariser.
+function _fscInvalidateStatut(){
+  _fscStatutRef = null;
+  _fscRefreshStatut();
+}
+
+function renderFscBanner(){
+  const dos = S.dossier;
+  if(!fscDossierRequis(dos)) return null;
+
+  const syn = S.fscStatut;
+  const sg  = syn ? String(syn.statut_global || '') : '';
+  const nbTotal = syn ? (syn.nb_bobines_total || 0) : 0;
+  const nbEcart = syn ? (syn.nb_bobines_non_conformes || 0) : 0;
+  // « en_attente » = dossier FSC sans aucune bobine scannée. C'est un écart
+  // au même titre qu'une bobine non conforme : sans traça, le claim de
+  // sortie n'est adossé à rien.
+  const ecart = (sg === 'non_conforme') || (sg === 'en_attente') || (sg === '' && nbTotal === 0);
+
+  let etatLbl = '';
+  if(sg === 'non_conforme')      etatLbl = nbEcart + ' bobine(s) en écart';
+  else if(sg === 'en_attente')   etatLbl = 'aucune bobine scannée';
+  else if(sg === 'conforme')     etatLbl = nbTotal + ' bobine(s) conformes';
+  else if(nbTotal === 0)         etatLbl = 'traça à vérifier';
+
+  const typeLbl = fscTypeRequisLabel(dos.fsc_type_requis);
+
+  return h('div',{
+    className:'fab-fsc-bandeau'+(ecart?' is-ecart':''),
+    role:'status',
+  },
+    h('span',{className:'fab-fsc-badge'+(ecart?' is-ecart':''),
+      title:'Claim exigé sur ce dossier'+(typeLbl?' : '+typeLbl:'')},
+      'FSC'+(typeLbl?' · '+typeLbl:'')),
+    h('span',{className:'fab-fsc-bandeau-txt'}, FSC_WARNING_PROD),
+    etatLbl ? h('span',{className:'fab-fsc-bandeau-etat'}, etatLbl) : null
+  );
+}
+
 /* ── Traça matières panel ─────────────────────────────────────── */
 async function loadMatieres(){
   set({tracaLoading:true});
@@ -3250,6 +3395,10 @@ function tracaApplyMatiereSaved(d, clean){
   S.tracaLastCode = clean;
   S.tracaManual = '';
   render();
+  // La bobine qui vient d'être scannée change le statut FSC du dossier :
+  // sans cette invalidation, le bandeau resterait bloqué sur « aucune bobine
+  // scannée » alors que l'opérateur vient précisément de régulariser.
+  _fscInvalidateStatut();
   showToast('Bobine enregistrée.','success');
 }
 
@@ -3599,6 +3748,7 @@ async function tracaDeleteMatiere(id){
     await apiFetch('/api/fabrication/matieres/'+id,{method:'DELETE'});
     S.tracaMatieres = S.tracaMatieres.filter(m=>m.id!==id);
     render();
+    _fscInvalidateStatut();
   }catch(e){ showToast(e.message,'danger'); }
 }
 
@@ -3925,19 +4075,18 @@ function renderTracaPanel(){
         fabDossierRefLabel(S.dossier)) : null,
       h('span',{className:'fab-main-sub'},machineName)
     ),
+    // Le bandeau « Dossier FSC — <type> » qui vivait ici a été remplacé par
+    // le bandeau global (renderFscBanner), injecté en tête de TOUS les
+    // onglets par render(). Il n'en reste que le raccourci vers le rapport,
+    // utile précisément quand on est dans l'onglet Traça.
     S.dossier && (S.dossier.fsc_requis === 1 || S.dossier.fsc_requis === true)
       ? h('div', {
           style: {
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            padding: '8px 14px', gap: '10px',
-            background: 'var(--accent-bg)',
+            display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+            padding: '6px 14px', gap: '10px',
             borderBottom: '1px solid var(--border)',
-            fontSize: '12px',
           }
         },
-        h('span', { style: { fontWeight: '600', color: 'var(--accent)' } },
-          'Dossier FSC — ' + fscTypeRequisLabel(S.dossier.fsc_type_requis)
-        ),
         h('button', {
           className: 'fab-btn fab-btn-ghost fab-btn-sm',
           style: { fontSize: '11px', flexShrink: '0' },
@@ -4553,9 +4702,27 @@ function renderFooter(){
     if(fictifDos) metas.push({label:'N° OF fictif',val:fictifOfDisplay(d.reference||d.numero_of||'')});
     if(d.machine_nom) metas.push({label:'Machine',val:d.machine_nom});
 
+    // Badge FSC accolé à la référence du dossier. Le bandeau porte déjà la
+    // consigne complète ; ce badge sert au coup d'œil : « ce dossier est
+    // certifié », visible sans lire la ligne de consigne.
+    const fscOn = (d.fsc_requis === 1 || d.fsc_requis === true);
+    const fscSyn = S.fscStatut;
+    const fscSg = fscSyn ? String(fscSyn.statut_global || '') : '';
+    const fscEcart = fscOn && (fscSg === 'non_conforme' || fscSg === 'en_attente'
+                               || (fscSg === '' && !fscSyn));
+    const fscTypeLbl = fscOn ? fscTypeRequisLabel(d.fsc_type_requis) : '';
+
     infoSection = h('div',{className:'fab-footer-info'},
-      h('div',{className:'fab-dossier-ref'+(fictifDos?' fab-dossier-fictif':'')},
-        fictifDos ? ('OF fictif '+fictifOfDisplay(d.reference||d.numero_of||'')) : (d.reference||'—')),
+      h('div',{className:'fab-dossier-ref-row'},
+        h('div',{className:'fab-dossier-ref'+(fictifDos?' fab-dossier-fictif':'')},
+          fictifDos ? ('OF fictif '+fictifOfDisplay(d.reference||d.numero_of||'')) : (d.reference||'—')),
+        fscOn ? h('span',{
+          className:'fab-fsc-badge'+(fscEcart?' is-ecart':''),
+          title: fscEcart
+            ? 'Certification FSC requise — traçabilité matière incomplète ou en écart'
+            : ('Certification FSC requise'+(fscTypeLbl?' — '+fscTypeLbl:'')),
+        }, 'FSC', fscEcart ? ' ⚠' : '') : null
+      ),
       h('div',{className:'fab-dossier-client'},
         fictifDos ? 'Dossier hors planning' : (d.client||'Client non renseigné')),
       h('div',{className:'fab-dossier-meta'},
@@ -7131,7 +7298,16 @@ function render(){
   }
 
   root.appendChild(renderSidebar());
-  root.appendChild(renderMain());
+  // Le bandeau FSC est injecté en tête du panneau principal, quel que soit
+  // l'onglet : renderMain() renvoie une racine différente par onglet (saisie,
+  // traça, repiquage, OF…), on préfixe donc celle qui est rendue plutôt que
+  // de dupliquer le bandeau dans chaque branche de renderMain().
+  const mainEl = renderMain();
+  const fscBanner = renderFscBanner();
+  if(fscBanner && mainEl && mainEl.insertBefore){
+    mainEl.insertBefore(fscBanner, mainEl.firstChild);
+  }
+  root.appendChild(mainEl);
   root.appendChild(renderFooter());
   root.appendChild(renderTopbar());
 

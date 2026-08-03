@@ -193,7 +193,11 @@
     try {
       const r = await api('/api/stock/mouvement', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) });
       if (!r) return;
-      showToast('Stock mis à jour → ' + fN(r.quantite_apres));
+      if (r.fsc_ecart) {
+        showToast('Sortie enregistrée AVEC écart FSC — complément non certifié tracé.', 'error');
+      } else {
+        showToast('Stock mis à jour → ' + fN(r.quantite_apres));
+      }
       S.modalMvt = null;
       S.pfModal = null;
       document.querySelector('.modal-overlay')?.remove();
@@ -204,7 +208,69 @@
       else if (S.tab === 'produits-finis') await loadProduitsFinis();
       else if (S.tab === 'production') await loadProduction();
       else if (S.tab === 'inventaire') await loadInventaireList();
-    } catch(e) { showToast(e.message, 'error'); }
+    } catch(e) {
+      // 409 « stock FSC insuffisant » : ce n'est pas une erreur de saisie,
+      // c'est un arbitrage. On rouvre la demande avec les chiffres réels et
+      // on exige une justification — après quoi le mouvement passe, marqué
+      // en écart. Bloquer sèchement immobiliserait l'atelier ; laisser
+      // passer en silence rendrait le claim FSC faux.
+      if (e && e.status === 409 && e.detail && e.detail.code === 'fsc_stock_insuffisant') {
+        openFscEcartModal(body, e.detail);
+        return;
+      }
+      showToast(e.message, 'error');
+    }
+  }
+
+  // Demande de dérogation FSC : montre l'écart chiffré, impose une
+  // justification écrite, puis rejoue le mouvement avec la confirmation.
+  function openFscEcartModal(body, detail) {
+    document.querySelector('.modal-overlay')?.remove();
+    const overlay = el('div', { cls:'modal-overlay' });
+    _bindOverlayDismiss(overlay, closeMroot);
+    const sheet = el('div', { cls:'modal-sheet', style:{ maxWidth:'480px' } });
+    sheet.addEventListener('click', e => e.stopPropagation());
+
+    const noteInp = el('textarea', {
+      cls:'field-input',
+      attrs:{ rows:'3', placeholder:'Ex : rupture fournisseur, accord client du 12/06, dérogation responsable qualité…' },
+      style:{ direction:'ltr', resize:'vertical' },
+    });
+
+    const valider = el('button', {
+      cls:'btn-confirm',
+      style:{ background:'#fb923c', color:'#fff' },
+      on:{ click: async () => {
+        const note = (noteInp.value || '').trim();
+        if (!note) { showToast('Justification obligatoire', 'error'); return; }
+        overlay.remove();
+        await submitMouvement({ ...body, fsc_ecart_confirme: true, fsc_ecart_note: note });
+      }},
+    }, 'Confirmer l\'écart et sortir');
+
+    sheet.append(
+      el('span', { cls:'modal-handle' }),
+      el('div', { cls:'modal-title' }, 'Stock FSC insuffisant'),
+      el('div', { cls:'sm-fsc-alert' },
+        el('div', { style:{fontWeight:'700', marginBottom:'6px'} },
+          fN(detail.dispo_fsc) + ' certifié(s) disponible(s) pour ' + fN(detail.demande) + ' demandé(s).'),
+        el('div', null,
+          'Compléter avec ' + fN(detail.complement_non_fsc) + ' unité(s) non certifiée(s) rendrait '
+          + 'le claim FSC de cette sortie inexact. L\'écart sera enregistré sur le mouvement '
+          + 'et apparaîtra dans le traceur de traçabilité.')
+      ),
+      el('div', { cls:'modal-field', style:{marginTop:'12px'} },
+        el('label', { cls:'field-label' }, 'Justification (obligatoire)'),
+        noteInp
+      ),
+      el('div', { cls:'modal-actions', style:{marginTop:'16px'} },
+        el('button', { cls:'btn-cancel', type:'button', on:{ click: () => overlay.remove() } }, 'Annuler la sortie'),
+        valider
+      )
+    );
+    overlay.appendChild(sheet);
+    document.body.appendChild(overlay);
+    noteInp.focus();
   }
 
   function fmtStockParisNow() {
@@ -222,9 +288,29 @@
     }
   }
 
-  async function openMoveLotModal(produitId, emplacement, qLot, unite, refLabel, nbLots) {
+  // ══════════════════════════════════════════════════════════════
+  // FSC — helpers partagés
+  // ══════════════════════════════════════════════════════════════
+  // Un lot de produit fini est certifié ou non (booléen hérité du dossier de
+  // fabrication). Deux lots d'un même produit peuvent cohabiter au même
+  // emplacement : l'API les renvoie sur DEUX lignes distinctes, jamais
+  // fusionnées, et ces helpers servent à les distinguer partout de la même
+  // manière plutôt que de réécrire un badge par écran.
+
+  function _fscSegSuffix(fscSeg) {
+    if (fscSeg === 1) return ' dans le segment certifié FSC';
+    if (fscSeg === 0) return ' dans le segment non certifié';
+    return ' à cet emplacement';
+  }
+
+  // `opts.fsc` : segment de la ligne cliquée (1 = certifié, 0 = non certifié,
+  // undefined = emplacement homogène ou appel historique). Il est transmis à
+  // l'API pour que le lot déplacé soit celui affiché, et non le plus ancien de
+  // l'emplacement tous segments confondus.
+  async function openMoveLotModal(produitId, emplacement, qLot, unite, refLabel, nbLots, opts) {
     document.querySelector('.modal-overlay')?.remove();
-  
+
+    const fscSeg = (opts && opts.fsc != null) ? (opts.fsc ? 1 : 0) : null;
     const qLabel = fU(qLot, unite || '');
     const locLbl = stockEmplLabel(emplacement);
     const loc = refLabel ? (refLabel + ' · ' + locLbl) : locLbl;
@@ -297,8 +383,13 @@
           'Déplacer ', qtyHighlight, ' vers ', destHighlight, ' ?'
         ));
         if (nbLots > 1) {
-          confirmSheet.appendChild(el('div', { cls:'mp-hint', style:{marginTop:'8px'} }, 
-            nbLots + ' lots actifs à cet emplacement — seul le plus ancien sera déplacé.'
+          confirmSheet.appendChild(el('div', { cls:'mp-hint', style:{marginTop:'8px'} },
+            nbLots + ' lots actifs' + _fscSegSuffix(fscSeg) + ' — seul le plus ancien sera déplacé.'
+          ));
+        }
+        if (fscSeg === 1) {
+          confirmSheet.appendChild(el('div', { cls:'mp-hint sm-fsc-hint', style:{marginTop:'8px'} },
+            'Le claim FSC et le dossier d\'origine suivent la palette : elle reste certifiée à destination.'
           ));
         }
       
@@ -316,6 +407,7 @@
                     produit_id: produitId,
                     emplacement_source: emplacement,
                     emplacement_destination: destEmpl,
+                    ...(fscSeg != null ? { fsc: fscSeg } : {}),
                   }),
                 });
                 if (!r) return;
@@ -344,14 +436,17 @@
       destError
     );
   
-    sheet.appendChild(el('div', { cls:'modal-title' }, 'Déplacer le lot'));
-    sheet.appendChild(el('div', { cls:'modal-sub' }, 
-      'Déplacer ', el('span', { style:{fontWeight:'700', fontSize:'16px', color:'var(--violet)'} }, qLabel), 
+    sheet.appendChild(el('div', { cls:'modal-title' },
+      'Déplacer le lot',
+      fscSeg === 1 ? el('span', { cls:'sm-fsc-badge', style:{marginLeft:'8px'} }, 'FSC') : null
+    ));
+    sheet.appendChild(el('div', { cls:'modal-sub' },
+      'Déplacer ', el('span', { style:{fontWeight:'700', fontSize:'16px', color:'var(--violet)'} }, qLabel),
       ' depuis ', el('span', { style:{fontWeight:'600'} }, loc)
     ));
     if (nbLots > 1) {
-      sheet.appendChild(el('div', { cls:'mp-hint', style:{marginTop:'8px'} }, 
-        nbLots + ' lots actifs à cet emplacement — seul le plus ancien sera déplacé.'
+      sheet.appendChild(el('div', { cls:'mp-hint', style:{marginTop:'8px'} },
+        nbLots + ' lots actifs' + _fscSegSuffix(fscSeg) + ' — seul le plus ancien sera déplacé.'
       ));
     }
     sheet.appendChild(destField);
@@ -367,17 +462,23 @@
 
   async function sortirLot(produitId, emplacement, qLot, unite, refLabel, nbLots, opts) {
     const expedition = !!(opts && opts.expedition);
+    const fscSeg = (opts && opts.fsc != null) ? (opts.fsc ? 1 : 0) : null;
     const qLabel = fU(qLot, unite || '');
     const locLbl = stockEmplLabel(emplacement);
     const loc = refLabel ? (refLabel + ' · ' + locLbl) : locLbl;
+    const segLbl = fscSeg === 1 ? ' [FSC]' : '';
     let msg = expedition
-      ? ('Expédition transporteur — sortir le lot FIFO (' + qLabel + ') — ' + loc + ' ?')
-      : ('Sortir le lot FIFO (' + qLabel + ') — ' + loc + ' ?');
+      ? ('Expédition transporteur — sortir le lot FIFO' + segLbl + ' (' + qLabel + ') — ' + loc + ' ?')
+      : ('Sortir le lot FIFO' + segLbl + ' (' + qLabel + ') — ' + loc + ' ?');
     if (nbLots > 1) {
-      msg += '\n\n' + nbLots + ' lots actifs à cet emplacement — seul le plus ancien sera retiré.';
+      msg += '\n\n' + nbLots + ' lots actifs' + _fscSegSuffix(fscSeg) + ' — seul le plus ancien sera retiré.';
     }
     if (!confirm(msg)) return;
     const payload = { produit_id: produitId, emplacement };
+    // Sans `fsc`, l'API sortirait le lot le plus ancien tous segments
+    // confondus — c'est-à-dire potentiellement du certifié alors que
+    // l'opérateur a cliqué sur la ligne non certifiée.
+    if (fscSeg != null) payload.fsc = fscSeg;
     if (expedition) {
       payload.note = 'Expédition transporteur — ' + fmtStockParisNow();
     }
