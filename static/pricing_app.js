@@ -533,7 +533,11 @@
           (m.supplier_id ? S.supplierMap[m.supplier_id] : null) ||
           "—";
         const live = m.computed ? fmtEurM2(m.computed.price_eur_per_m2) : "—";
-        const unit = `${fmtNum(m.unit_price, 4, 4)}\u00a0${m.price_currency}/${m.price_basis === "PER_M2" ? "m²" : "kg"}`;
+        const ms = m.mystock || null;
+        const unit = ms
+          ? `${fmtNum(ms.unit_price, 4, 4)}\u00a0${ms.price_currency}/${ms.price_basis === "PER_M2" ? "m²" : "kg"}` +
+            ' <span class="badge badge-frontal" title="Prix piloté par MyStock">MyStock</span>'
+          : `${fmtNum(m.unit_price, 4, 4)}\u00a0${m.price_currency}/${m.price_basis === "PER_M2" ? "m²" : "kg"}`;
         return `<tr data-mid="${m.id}">
           <td>${categoryBadge(m.category_code)}</td>
           <td><button type="button" class="cell-link" data-edit-m="${m.id}" title="Éditer cette matière">${escHtml(m.name)}</button></td>
@@ -1003,6 +1007,7 @@
       transport_unit_price:
         m.transport_unit_price != null ? String(m.transport_unit_price) : "0",
       transport_pct: m.transport_pct != null ? String(m.transport_pct) : "0",
+      _mystock: m.mystock || null,
       _history: [],
     };
     try {
@@ -1293,7 +1298,11 @@
           `<tr><td>${escHtml(h.effective_date)}</td><td>${fmt4(h.unit_price)} ${escHtml(h.price_currency)}</td><td>${escHtml(h.source || "—")}</td></tr>`
       )
       .join("");
-    const unit = unitLabel(f.price_currency, f.price_basis);
+    const ms = f._mystock || null;
+    const unit = ms
+      ? unitLabel(ms.price_currency, ms.price_basis)
+      : unitLabel(f.price_currency, f.price_basis);
+    const lockAttr = ms ? "disabled" : "";
     const isPct = f.transport_mode === "PCT";
 
     setContent(`
@@ -1318,18 +1327,25 @@
           </div>
 
           <div class="form-section"><h3>Prix d'achat</h3>
+            ${ms ? `<div class="ms-locked">
+              <strong>Prix piloté par MyStock</strong> — cette matière est appairée à
+              <strong>${escHtml(ms.reference || "?")}</strong> (${escHtml(ms.categorie || "")}).
+              Le prix utilisé pour le calcul est celui de MyStock :
+              <strong>${escHtml(fmtNum(ms.unit_price, 4, 4))} ${escHtml(ms.price_currency === "USD" ? "$" : "€")}/${ms.price_basis === "PER_M2" ? "m²" : "kg"}</strong>${ms.detail ? ` (${escHtml(ms.detail)})` : ""}.
+              <button type="button" class="link-btn" id="btn-goto-mystock">modifier dans l'onglet MyStock</button>
+            </div>` : ""}
             <div class="field-row">
-              <div class="field f-mid"><label>Devise achat</label><select id="f-cur">
+              <div class="field f-mid"><label>Devise achat</label><select id="f-cur" ${lockAttr}>
                 <option value="EUR" ${f.price_currency==="EUR"?"selected":""}>EUR — euro (€)</option>
                 <option value="USD" ${f.price_currency==="USD"?"selected":""}>USD — dollar américain ($)</option>
               </select></div>
-              <div class="field"><label>Base de prix</label><select id="f-basis">
+              <div class="field"><label>Base de prix</label><select id="f-basis" ${lockAttr}>
                 <option value="PER_KG" ${f.price_basis==="PER_KG"?"selected":""}>${escHtml(BASIS_LABEL.PER_KG)}</option>
                 <option value="PER_M2" ${f.price_basis==="PER_M2"?"selected":""}>${escHtml(BASIS_LABEL.PER_M2)}</option>
               </select></div>
             </div>
             <div class="field-row">
-              <div class="field f-num"><label>Prix unitaire <span class="lbl-unit">${escHtml(unit)}</span></label><input type="number" step="0.0001" id="f-unit" value="${escAttr(f.unit_price)}"/></div>
+              <div class="field f-num"><label>Prix unitaire <span class="lbl-unit">${escHtml(unit)}</span></label><input type="number" step="0.0001" id="f-unit" value="${escAttr(ms ? ms.unit_price : f.unit_price)}" ${lockAttr}/></div>
               <div class="field f-num"><label>Incidence taxes <span class="lbl-unit">multiplicateur</span></label><input type="number" step="0.0001" id="f-tax" value="${escAttr(f.tax_incidence)}"/>
                 <div class="field-hint">1 = neutre · 1,05 = +5 % · 0,95 = −5 %</div>
               </div>
@@ -1382,6 +1398,14 @@
     `);
 
     document.getElementById("btn-back-mat").onclick = () => navigate("/pricing/materials");
+    const goMs = document.getElementById("btn-goto-mystock");
+    if (goMs) {
+      goMs.onclick = () => {
+        S.filters.matTab = "mystock";
+        S.filters.msQ = ms && ms.reference ? ms.reference : "";
+        navigate("/pricing/materials");
+      };
+    }
     bindInlineSettings(isNew);
 
     const bindPreview = () => {
@@ -1448,9 +1472,11 @@
     const cat = val("f-cat");
     if (cat != null) f.category_id = parseInt(cat, 10);
     f.fournisseur_fsc_id = val("f-sup") ?? f.fournisseur_fsc_id;
-    f.price_currency = val("f-cur") ?? f.price_currency;
-    f.price_basis = val("f-basis") ?? f.price_basis;
-    f.unit_price = val("f-unit") ?? f.unit_price;
+    if (!f._mystock) {
+      f.price_currency = val("f-cur") ?? f.price_currency;
+      f.price_basis = val("f-basis") ?? f.price_basis;
+      f.unit_price = val("f-unit") ?? f.unit_price;
+    }
     f.tax_incidence = val("f-tax") ?? f.tax_incidence;
     const imp = document.getElementById("f-imp");
     if (imp) f.is_imported = imp.checked;

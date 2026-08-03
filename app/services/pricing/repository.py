@@ -286,11 +286,16 @@ def fetch_materials_map(
     if not ids:
         return {}
     placeholders = ",".join("?" * len(ids))
-    sql = f"SELECT * FROM mc_material WHERE id IN ({placeholders})"
+    sql = f"""SELECT m.*, {MYSTOCK_COLS}
+                FROM mc_material m {MYSTOCK_JOIN}
+               WHERE m.id IN ({placeholders})"""
     if require_active:
-        sql += " AND is_active=1"
+        sql += " AND m.is_active=1"
     rows = conn.execute(sql, list(ids)).fetchall()
-    found = {int(r["id"]): row_to_pricing_material(r) for r in rows}
+    found = {
+        int(r["id"]): row_to_pricing_material(r, mystock=mystock_price_for_row(conn, r))
+        for r in rows
+    }
     if require_active and len(found) != len(ids):
         missing = ids - set(found.keys())
         raise PricingError(f"Matière(s) inactive(s) ou introuvable(s) : {sorted(missing)}.")

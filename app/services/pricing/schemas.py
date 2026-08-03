@@ -116,6 +116,18 @@ class MaterialComputedOut(BaseModel):
     sell_price_eur_m2: Decimal = Decimal("0")
 
 
+class MaterialMystockOut(BaseModel):
+    """Prix piloté par MyStock quand la matière y est appairée."""
+
+    matiere_id: int
+    reference: Optional[str] = None
+    categorie: Optional[str] = None
+    unit_price: Decimal
+    price_currency: PriceCurrency = "EUR"
+    price_basis: PriceBasis = "PER_M2"
+    detail: Optional[str] = None
+
+
 class McMaterialOut(BaseModel):
     id: int
     name: str
@@ -140,6 +152,7 @@ class McMaterialOut(BaseModel):
     is_active: bool
     created_at: str
     updated_at: str
+    mystock: Optional[MaterialMystockOut] = None
     computed: Optional[MaterialComputedOut] = None
 
 

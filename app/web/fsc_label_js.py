@@ -87,10 +87,16 @@ function fscAvertissementHtml(d){
     + '  align-items:center;padding:.7mm 1.6mm;font-weight:900;'
     + '  font-size:11pt;letter-spacing:.5pt}'
     + '.hd span.t{font-size:6pt;font-weight:700}'
-    + '.dos{font-size:8.5pt;font-weight:900;margin-top:.8mm;line-height:1.1}'
-    + '.cli{font-size:6.5pt;margin-top:.2mm;line-height:1.1}'
+    /* N° de dossier et client sur une seule ligne : le n° à gauche, le
+       client aligné à droite. Empilés, ils mangeaient une ligne entière
+       pour deux informations courtes — la place va aux consignes. */
+    + '.ids{display:flex;justify-content:space-between;align-items:baseline;'
+    + '  gap:3mm;margin-top:.8mm}'
+    + '.dos{font-size:8.5pt;font-weight:900;line-height:1.1;white-space:nowrap}'
+    + '.cli{font-size:6.5pt;line-height:1.1;text-align:right;overflow:hidden;'
+    + '  text-overflow:ellipsis;white-space:nowrap}'
     + '.sep{border-top:0.35mm solid #000;margin:.7mm 0 .6mm}'
-    + 'ol{margin:0;padding-left:4.2mm;font-size:9pt;line-height:1.25;font-weight:700}'
+    + 'ol{margin:0;padding-left:4.2mm;font-size:10pt;line-height:1.25;font-weight:700}'
     + 'ol li{margin-bottom:.5mm}'
     + 'ol li:last-child{margin-bottom:0}'
     + '.ft{margin-top:auto;border-top:0.35mm solid #000;padding-top:.6mm;'
@@ -99,8 +105,10 @@ function fscAvertissementHtml(d){
     + '</style></head><body><div class="lbl">'
     + '<div class="hd"><span>DOSSIER FSC</span>'
     + '<span class="t">' + e(d.fsc_type_requis) + '</span></div>'
-    + '<div class="dos">' + e(d.no_dossier) + '</div>'
-    + '<div class="cli">' + e(d.client) + '</div>'
+    + '<div class="ids">'
+    + '<span class="dos">' + e(d.no_dossier) + '</span>'
+    + '<span class="cli">' + e(d.client) + '</span>'
+    + '</div>'
     + '<div class="sep"></div>'
     /* Sans accents, à l'identique du ZPL. Les deux supports doivent produire
        la MÊME étiquette : un opérateur qui reçoit tantôt la version thermique

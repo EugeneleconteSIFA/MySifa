@@ -22,6 +22,9 @@ from app.services.pricing import (
     compute_product_cost,
 )
 from app.services.pricing.repository import (
+    MYSTOCK_COLS,
+    MYSTOCK_JOIN,
+    mystock_price_for_row,
     assert_materials_active_for_product,
     ensure_settings_rows,
     fetch_material,
@@ -140,13 +143,15 @@ def _material_computed(pm, settings) -> MaterialComputedOut:
     )
 
 
-def _computed_out(mat_row, settings) -> MaterialComputedOut:
-    return _material_computed(row_to_pricing_material(mat_row), settings)
+def _computed_out(mat_row, settings, mystock=None) -> MaterialComputedOut:
+    return _material_computed(row_to_pricing_material(mat_row, mystock=mystock), settings)
 
 
-def _material_out(row, *, settings=None, with_computed: bool = False) -> McMaterialOut:
-    d = material_row_to_dict(row, category_code=row["category_code"])
-    computed = _computed_out(row, settings) if with_computed and settings else None
+def _material_out(row, *, conn=None, settings=None, with_computed: bool = False) -> McMaterialOut:
+    # Matière appairée : c'est le prix MyStock qui fait foi, pas la copie locale.
+    ms = mystock_price_for_row(conn, row) if conn is not None else None
+    d = material_row_to_dict(row, category_code=row["category_code"], mystock=ms)
+    computed = _computed_out(row, settings, ms) if with_computed and settings else None
     return McMaterialOut(**d, computed=computed)
 
 
@@ -249,7 +254,7 @@ def _load_materials_export_map(conn, material_ids: set[int], settings) -> dict[i
         row = fetch_material(conn, mid)
         if not row:
             continue
-        m = _material_out(row, settings=settings, with_computed=True)
+        m = _material_out(row, conn=conn, settings=settings, with_computed=True)
         out[mid] = m.model_dump()
     return out
 
@@ -713,11 +718,12 @@ def list_materials(
     with_computed: bool = Query(False),
 ):
     _require_read(request)
-    sql = """
-        SELECT m.*, c.code AS category_code, f.nom AS fournisseur_nom
+    sql = f"""
+        SELECT m.*, c.code AS category_code, f.nom AS fournisseur_nom, {MYSTOCK_COLS}
         FROM mc_material m
         JOIN mc_material_category c ON c.id = m.category_id
         LEFT JOIN fournisseurs_fsc f ON f.id = m.fournisseur_fsc_id
+        {MYSTOCK_JOIN}
         WHERE 1=1
     """
     args: list[Any] = []
@@ -739,7 +745,7 @@ def list_materials(
     with get_db() as conn:
         settings = load_pricing_settings(conn) if with_computed else None
         rows = conn.execute(sql, args).fetchall()
-        items = [_material_out(r, settings=settings, with_computed=with_computed) for r in rows]
+        items = [_material_out(r, conn=conn, settings=settings, with_computed=with_computed) for r in rows]
     return {"materials": items}
 
 
@@ -751,7 +757,7 @@ def get_material(request: Request, material_id: int):
         if not row:
             raise HTTPException(status_code=404, detail="Matière introuvable.")
         settings = load_pricing_settings(conn)
-        return _material_out(row, settings=settings, with_computed=True)
+        return _material_out(row, conn=conn, settings=settings, with_computed=True)
 
 
 @router.post("/api/pricing/materials", response_model=McMaterialOut, status_code=201)
@@ -805,7 +811,7 @@ def create_material(request: Request, body: McMaterialCreate):
         conn.commit()
         row = fetch_material(conn, mid)
         settings = load_pricing_settings(conn)
-        return _material_out(row, settings=settings, with_computed=True)
+        return _material_out(row, conn=conn, settings=settings, with_computed=True)
 
 
 @router.patch("/api/pricing/materials/{material_id}", response_model=McMaterialOut)
@@ -864,28 +870,12 @@ def patch_material(request: Request, material_id: int, body: McMaterialUpdate):
                 created_by=user.get("id"),
             )
         conn.commit()
-        # Sync automatique vers MyStock (matieres_premieres) si un prix a
-        # bougé et qu'un mp est appairé sur ce mc_material. Non bloquant.
-        if price_changed:
-            try:
-                actor_name = (user.get("nom") or user.get("email") or "").strip() or None
-                pricing_bridge.sync_mc_to_mp(
-                    conn,
-                    material_id,
-                    actor_id=user.get("id"),
-                    actor_name=actor_name,
-                    source_note="Coûts matières",
-                )
-                conn.commit()
-            except Exception as _sync_err:
-                import logging as _logging
-                _logging.getLogger(__name__).warning(
-                    "pricing_bridge.sync_mc_to_mp a échoué pour mc_id=%s : %s",
-                    material_id, _sync_err,
-                )
+        # Plus de recopie vers MyStock : une matière appairée n'a plus de prix
+        # propre — celui de MyStock est lu au moment du calcul. Le prix
+        # local reste en base pour les matières non appairées uniquement.
         row = fetch_material(conn, material_id)
         settings = load_pricing_settings(conn)
-        return _material_out(row, settings=settings, with_computed=True)
+        return _material_out(row, conn=conn, settings=settings, with_computed=True)
 
 
 @router.delete("/api/pricing/materials/{material_id}")
@@ -1472,12 +1462,8 @@ def bridge_link(request: Request, body: dict = Body(...)):
         # Sync immédiate : pousse le prix côté qui a la valeur la plus récente.
         # On tente les deux sens ; celui qui n'a rien à faire retournera
         # {synced: False, reason: 'prix identique'} — silencieux.
-        actor_name = (request.state.user.get("nom") if hasattr(request.state, "user") else None) or None
-        try:
-            pricing_bridge.sync_mp_to_mc(conn, mp_id, source_note="Appairage manuel")
-            conn.commit()
-        except Exception:
-            pass
+        # Rien à recopier : l'appairage suffit, le prix MyStock devient
+        # immédiatement celui utilisé par les calculs de Coûts matières.
     return result
 
 
