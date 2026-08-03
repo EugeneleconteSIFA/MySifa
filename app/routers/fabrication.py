@@ -2271,13 +2271,79 @@ def get_tracabilite_dossier(no_dossier: str, request: Request):
     if not entry and _is_fictif_dossier(ref):
         dossier_out = _build_fictif_dossier_dict(ref, None)
 
+    # ── Parcours aval : ce que le rapport ne montrait pas ────────────────
+    #
+    # Le rapport s'arrêtait aux bobines scannées. Or « traçabilité FSC » veut
+    # dire chaîne de contrôle COMPLÈTE : d'où vient la matière ET où est
+    # parti le produit. Un rapport qui s'arrête à la consommation matière ne
+    # démontre que la moitié de ce qu'un auditeur demande.
+    #
+    # On réutilise les fonctions du traceur (app/routers/traca.py) plutôt que
+    # de réécrire les requêtes : une seule définition de la chaîne dans
+    # l'application, et le rapport ne peut pas diverger du traceur.
+    #
+    # Import local et non en tête de module : traca.py importe déjà
+    # fabrication.py (pour FSC_CLAIM_HIERARCHY), un import croisé au
+    # chargement casserait le démarrage.
+    #
+    # Échec silencieux assumé : si le parcours aval n'est pas calculable, le
+    # rapport de conformité matière — qui est la partie exigible en atelier —
+    # doit continuer à sortir.
+    parcours: dict = {"lots": [], "mouvements": [], "expeditions": [], "ruptures": []}
+    try:
+        from app.routers.traca import (
+            _lots_du_dossier,
+            _mouvements_des_lots,
+            _expeditions_du_dossier,
+        )
+
+        ref_canon = (dossier_out.get("reference") or ref or "").strip()
+        with get_db() as conn:
+            lots = _lots_du_dossier(conn, ref_canon)
+            parcours["lots"] = lots
+            parcours["mouvements"] = _mouvements_des_lots(
+                conn, [l["id"] for l in lots], ref_canon
+            )
+            parcours["expeditions"] = _expeditions_du_dossier(conn, ref_canon)
+    except Exception:
+        parcours["indisponible"] = True
+
+    # Ruptures : ce que la chaîne ne démontre PAS. Affiché en tête du rapport
+    # plutôt qu'en note de bas de page — une chaîne incomplète présentée comme
+    # complète vaut moins qu'une absence de chaîne.
+    if fsc_requis:
+        if nb_total == 0:
+            parcours["ruptures"].append(
+                "Aucune bobine tracée : l'origine de la matière n'est pas démontrable."
+            )
+        elif nb_conformes < nb_total:
+            parcours["ruptures"].append(
+                f"{nb_total - nb_conformes} bobine(s) ne satisfont pas le claim exigé."
+            )
+        if not parcours["lots"]:
+            parcours["ruptures"].append(
+                "Aucun lot de produit fini rattaché — entrée en stock Z1 non faite, "
+                "ou antérieure au suivi."
+            )
+        elif not parcours["expeditions"]:
+            parcours["ruptures"].append(
+                "Aucune expédition rattachée : la chaîne s'arrête au stock."
+            )
+
     return {
         "dossier": dossier_out,
         "bobines": bobines,
+        "parcours": parcours,
         "synthese": {
             "nb_bobines_total": nb_total,
             "nb_bobines_fsc_conformes": nb_conformes if fsc_requis else None,
             "nb_bobines_non_conformes": (nb_total - nb_conformes) if fsc_requis else None,
+            "nb_lots": len(parcours["lots"]),
+            "nb_lots_fsc": sum(1 for l in parcours["lots"] if int(l.get("fsc") or 0) == 1),
+            "nb_expeditions": len(parcours["expeditions"]),
+            "quantite_produite": sum(
+                float(l.get("quantite_initiale") or 0) for l in parcours["lots"]
+            ),
             "statut_global": statut_global,
             "genere_a": datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S"),
         },

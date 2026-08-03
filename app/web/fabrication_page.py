@@ -11,6 +11,9 @@ from config import APP_ORG_NAME, FSC_WARNING_PROD, STOCK_UNITE_VENTE_DEFAUT
 from app.services.auth_service import get_current_user, is_fabrication, is_admin
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
+# Étiquette d'avertissement FSC : gabarit + logique d'impression partagés
+# avec le planning de production (app/web/planning_page.py).
+from app.web.fsc_label_js import FSC_LABEL_SCRIPT_BLOCK
 # v1.7 — modal partage pour impression de PDF (OF, fiches techniques) vers
 # une imprimante bureautique via l'agent local. Cf. app/web/print_modal.py.
 from app.web.print_modal import PRINT_MODAL_CSS, PRINT_MODAL_JS
@@ -1116,6 +1119,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script>
 'use strict';
 /*__TRACA_GUIDE__*/
+/*__FSC_LABEL__*/
 
 /* ── Operations config (SQLite — Paramètres > Opérations) ───── */
 let OPS = {};
@@ -3838,64 +3842,10 @@ function _fscAvertissementData(dos){
 async function imprimerAvertissementFsc(){
   const dos = S.dossier;
   if(!fscDossierRequis(dos)){ showToast('Ce dossier n\'est pas certifié FSC.','danger'); return; }
-  const data = _fscAvertissementData(dos);
-  try{
-    const r = await apiFetch('/api/print/label',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({usage_key:'fsc_avertissement_dossier', copies:1, data, variante:'full'}),
-    });
-    showToast('Avertissement FSC envoyé à '+(r.imprimante||'imprimante'),'success');
-  }catch(e){
-    const msg = (e && e.message) ? e.message : String(e);
-    // 409 « aucune imprimante » ou « aucun template » : on n'échoue pas, on
-    // imprime depuis le navigateur et on dit pourquoi.
-    if(msg && (msg.includes('Aucune imprimante') || msg.includes('template'))){
-      _fscAvertissementNavigateur(data, msg);
-    }else{
-      showToast('Impression : '+msg,'danger');
-    }
-  }
-}
-
-function _fscAvertissementNavigateur(data, warn){
-  const esc = (s)=>String(s==null?'':s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const w = window.open('', '_blank', 'width=900,height=650');
-  if(!w){ showToast('Fenêtre d\'impression bloquée par le navigateur.','danger'); return; }
-  w.document.write(
-    '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">'
-    + '<title>Avertissement FSC — '+esc(data.no_dossier)+'</title><style>'
-    + '@page{size:152mm 102mm;margin:0}'
-    + 'body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#111}'
-    + '.sheet{width:152mm;height:102mm;box-sizing:border-box;padding:7mm 8mm;'
-    + '  border:2.5mm solid #c2410c;display:flex;flex-direction:column;gap:2.5mm}'
-    + '.hd{background:#c2410c;color:#fff;font-weight:900;font-size:15pt;'
-    + '  letter-spacing:1pt;padding:2.5mm 3mm;display:flex;justify-content:space-between;align-items:center}'
-    + '.hd small{font-size:10pt;font-weight:700}'
-    + '.meta{font-size:11pt;line-height:1.5}'
-    + '.meta b{font-size:13pt}'
-    + 'ol{margin:0;padding-left:6mm;font-size:11pt;line-height:1.65;font-weight:700}'
-    + '.foot{margin-top:auto;font-size:8.5pt;color:#555;border-top:.4mm solid #ddd;padding-top:1.8mm}'
-    + '</style></head><body><div class="sheet">'
-    + '<div class="hd"><span>DOSSIER CERTIFIÉ FSC</span><small>'+esc(data.fsc_type_requis)+'</small></div>'
-    + '<div class="meta"><b>Dossier : '+esc(data.no_dossier)+'</b><br>'
-    + 'Client : '+esc(data.client)+'<br>'
-    + 'Produit : '+esc(data.ref_produit)+' &nbsp;·&nbsp; Machine : '+esc(data.machine)+'</div>'
-    + '<ol>'
-    + '<li>Utiliser exclusivement de la matière certifiée FSC.</li>'
-    + '<li>Scanner chaque bobine dans MyProd (traçabilité matière).</li>'
-    + '<li>Entrer le produit fini en stock Z1.</li>'
-    + '<li>Étiquette palette : cocher « Palette certifiée FSC ».</li>'
-    + '</ol>'
-    + '<div class="foot">Sans traçabilité matière complète, le claim FSC de ce dossier '
-    + 'ne peut pas être justifié en audit.<br>Édité par '+esc(data.operateur_nom)+'</div>'
-    + '</div><scr'+'ipt>window.onload=function(){window.focus();window.print();}</scr'+'ipt>'
-    + '</body></html>'
-  );
-  w.document.close();
-  showToast('Aucune imprimante configurée pour cet usage — impression navigateur. '
-    + '(' + (warn||'') + ')', 'danger');
+  // Gabarit et logique d'impression partagés avec le planning : voir
+  // app/web/fsc_label_js.py. Rien de spécifique à la saisie de prod ici,
+  // seulement la collecte des champs du dossier courant.
+  await fscImprimerAvertissement(_fscAvertissementData(dos));
 }
 
 async function tracaReprintEtiquette(m){
@@ -4719,6 +4669,89 @@ function renderTracabiliteModal(data, noDossier){
     ));
   }
 
+  // ── Parcours aval : lot Z1 → déplacements → expédition ──────────────
+  // Le rapport s'arrêtait aux bobines consommées, c'est-à-dire à la moitié
+  // amont de la chaîne. Un auditeur FSC demande aussi l'aval : ce dossier a
+  // produit quoi, ce produit est parti où. Les données viennent du même
+  // calcul que le traceur (voir app/routers/traca.py).
+  const parc = data.parcours || {};
+  const secTitle = (txt) => h('div',{style:{
+    fontSize:'12px',fontWeight:'800',textTransform:'uppercase',letterSpacing:'.5px',
+    color:'var(--muted)',margin:'18px 0 8px'}}, txt);
+
+  const ruptures = (parc.ruptures || []);
+  const bloqRuptures = ruptures.length ? h('div',{style:{
+    border:'1px solid rgba(251,146,60,.45)',background:'rgba(251,146,60,.09)',
+    borderRadius:'8px',padding:'10px 13px',margin:'12px 0',fontSize:'12px',color:'#c2410c'}},
+    h('div',{style:{fontWeight:'800',marginBottom:'4px'}},'Ce que ce rapport ne démontre pas'),
+    ...ruptures.map(r=>h('div',{style:{lineHeight:'1.55'}},'• '+r))
+  ) : null;
+
+  const parcoursBloc = h('div',null,
+    bloqRuptures,
+    secTitle('Produit fini issu de ce dossier'),
+    (parc.lots && parc.lots.length)
+      ? h('table',{className:'fab-fsc-traca-table'},
+          h('thead',null,h('tr',null,
+            h('th',null,'Référence'), h('th',null,'Lot'), h('th',null,'Emplacement'),
+            h('th',null,'Produit'), h('th',null,'Reste'), h('th',null,'Claim'))),
+          h('tbody',null, ...parc.lots.map(l=>h('tr',null,
+            h('td',{style:{fontWeight:'700'}}, l.produit_ref || '—'),
+            h('td',{style:{fontFamily:'monospace'}}, '#'+l.id),
+            h('td',null, l.emplacement || '—'),
+            h('td',null, (l.quantite_initiale ?? '—')+' '+(l.unite||'')),
+            h('td',null, (l.quantite_restante ?? '—')+' '+(l.unite||'')),
+            h('td',null, l.fsc
+              ? h('span',{className:'fab-fsc-badge'+(l.fsc_ecart?' is-ecart':'')},
+                  'FSC', l.fsc_ecart ? ' ⚠' : '')
+              : h('span',{style:{color:'var(--muted)'}},'—'))
+          )))
+        )
+      : h('div',{style:{fontSize:'12px',color:'var(--muted)',padding:'6px 0'}},
+          'Aucun lot rattaché à ce dossier.'),
+
+    secTitle('Parcours en stock'),
+    (parc.mouvements && parc.mouvements.length)
+      ? h('table',{className:'fab-fsc-traca-table'},
+          h('thead',null,h('tr',null,
+            h('th',null,'Date'), h('th',null,'Mouvement'), h('th',null,'Emplacement'),
+            h('th',null,'Quantité'), h('th',null,'Par'), h('th',null,'Source'))),
+          h('tbody',null, ...parc.mouvements.slice(0,20).map(m=>h('tr',
+            m.reconstitue ? {style:{opacity:'.62'}} : null,
+            h('td',{style:{fontSize:'12px'}}, (m.created_at||'').replace('T',' ').slice(0,16)),
+            h('td',null, m.type_mouvement === 'entree' ? 'Entrée'
+                       : m.type_mouvement === 'sortie' ? 'Sortie' : (m.type_mouvement||'—')),
+            h('td',null, m.emplacement || '—'),
+            h('td',null, m.quantite != null ? String(m.quantite) : '—'),
+            h('td',{style:{fontSize:'12px'}}, m.created_by_name || m.created_by || '—'),
+            h('td',{style:{fontSize:'11px',color:'var(--muted)'}},
+              m.reconstitue ? 'reconstitué' : 'saisi')
+          )))
+        )
+      : h('div',{style:{fontSize:'12px',color:'var(--muted)',padding:'6px 0'}},
+          'Aucun mouvement de stock enregistré.'),
+
+    secTitle('Expédition'),
+    (parc.expeditions && parc.expeditions.length)
+      ? h('table',{className:'fab-fsc-traca-table'},
+          h('thead',null,h('tr',null,
+            h('th',null,'BL'), h('th',null,'Client'), h('th',null,'Transporteur'),
+            h('th',null,'Enlèvement'), h('th',null,'Destination'), h('th',null,'Source'))),
+          h('tbody',null, ...parc.expeditions.map(x=>h('tr',
+            x.reconstitue ? {style:{opacity:'.62'}} : null,
+            h('td',{style:{fontWeight:'700'}}, x.no_bl || ('#'+x.id)),
+            h('td',null, x.client || '—'),
+            h('td',null, x.transporteur || '—'),
+            h('td',null, x.date_enlevement || '—'),
+            h('td',null, x.code_postal_destination || '—'),
+            h('td',{style:{fontSize:'11px',color:'var(--muted)'}},
+              x.reconstitue ? 'reconstitué' : 'saisi')
+          )))
+        )
+      : h('div',{style:{fontSize:'12px',color:'var(--muted)',padding:'6px 0'}},
+          'Aucune expédition rattachée à ce dossier.')
+  );
+
   const overlay = h('div',{className:'fab-fsc-traca-overlay fab-modal-overlay',onClick:(e)=>{
     if(e.target===e.currentTarget) closeTracabiliteModal();
   }},
@@ -4743,10 +4776,14 @@ function renderTracabiliteModal(data, noDossier){
         border:'1px solid '+statutColor,
         color:statutColor,
       }}, statutText),
+      h('div',{style:{
+        fontSize:'12px',fontWeight:'800',textTransform:'uppercase',letterSpacing:'.5px',
+        color:'var(--muted)',margin:'14px 0 8px'}}, 'Matière consommée'),
       h('table',{className:'fab-fsc-traca-table'},
         h('thead',null, thead),
         tbody
       ),
+      parcoursBloc,
       h('div',{style:{marginTop:'16px',paddingTop:'12px',borderTop:'1px solid var(--border)',
         fontSize:'11px',color:'var(--muted)'}},
         'Généré le ', (syn.genere_a ? fmtTime(syn.genere_a) : '—'), ' · MySifa · SIFA')
@@ -7604,6 +7641,7 @@ init();
 </html>"""
 
 FABRICATION_HTML = FABRICATION_HTML.replace("/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK)
+FABRICATION_HTML = FABRICATION_HTML.replace("/*__FSC_LABEL__*/", FSC_LABEL_SCRIPT_BLOCK)
 
 # v1.7 — Injection du modal partage d'impression PDF (CSS + JS) juste avant la
 # fin du </head> et de </script>. On evite les placeholders et on injecte

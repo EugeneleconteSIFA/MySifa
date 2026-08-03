@@ -230,39 +230,40 @@ DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL = """^XA
 # Format : liste de dicts {key, nom, description, langage, contenu}.
 # ── Avertissement FSC à agrafer au dossier physique de production ──────
 #
-# Format A6 paysage (152×102 mm) : assez grand pour être lu sans se pencher
-# sur l'établi, assez petit pour tenir dans une pochette de dossier.
+# Format 100 × 50 mm, soit 800 × 400 points à 203 dpi (8 pts/mm — même
+# résolution que les gabarits bobine ci-dessus : 57 mm → ^PW456).
 #
-# Le contenu est volontairement une CONSIGNE et non une simple étiquette
-# d'identification : l'opérateur qui prend le dossier physique en main doit
-# savoir ce qu'on attend de lui avant d'aller chercher sa bobine. C'est le
-# pendant papier du bandeau affiché en saisie de production — et le seul
-# support qui reste disponible quand l'écran est occupé par une autre machine.
+# Strictement monochrome. Sur une thermique, la couleur n'existe pas : la
+# hiérarchie visuelle passe par l'épaisseur du trait, le pavé plein inversé
+# (^GB rempli + ^FR) et la taille de police. Rien d'autre ne se voit.
 #
-# ^GB dessine un cadre épais : sur une imprimante thermique monochrome, la
-# couleur ne distingue rien, seul le trait le fait.
+# Le contenu est une CONSIGNE, pas une identification : l'opérateur qui prend
+# le dossier physique en main doit savoir ce qu'on attend de lui avant d'aller
+# chercher sa bobine. C'est le pendant papier du bandeau de la saisie de
+# production — et le seul support disponible quand l'écran est mobilisé par
+# une autre machine.
+#
+# Texte sans accents, comme les gabarits existants : les polices bitmap A0
+# des thermiques d'entrée de gamme les rendent mal même en ^CI28.
 DEFAULT_TEMPLATE_FSC_AVERTISSEMENT_ZPL = """^XA
 ^CI28
-^PW1216
-^LL816
+^PW800
+^LL400
 ^LH0,0
-^FO20,20^GB1176,776,6^FS
-^FO40,45^GB1136,80,80^FS
-^FO60,60^FR^A0N,52,52^FDDOSSIER CERTIFIE FSC^FS
-^FO840,68^FR^A0N,38,38^FD{{fsc_type_requis}}^FS
-^FO60,160^A0N,44,44^FDDossier : {{no_dossier}}^FS
-^FO60,215^A0N,34,34^FDClient : {{client}}^FS
-^FO60,262^A0N,30,30^FDProduit : {{ref_produit}}   Machine : {{machine}}^FS
-^FO40,310^GB1136,3,3^FS
-^FO60,335^A0N,34,34^FD1. Utiliser EXCLUSIVEMENT de la matiere certifiee FSC^FS
-^FO60,385^A0N,34,34^FD2. Scanner CHAQUE bobine dans MyProd (tracabilite)^FS
-^FO60,435^A0N,34,34^FD3. Entrer le produit fini en stock Z1^FS
-^FO60,485^A0N,34,34^FD4. Etiquette palette : cocher \\"Palette certifiee FSC\\"^FS
-^FO40,545^GB1136,3,3^FS
-^FO60,570^A0N,26,26^FDSans tracabilite matiere complete, le claim FSC de ce^FS
-^FO60,605^A0N,26,26^FDdossier ne peut pas etre justifie en audit.^FS
-^FO60,660^BY3,3,90^BCN,90,N,N,N^FD{{no_dossier}}^FS
-^FO840,745^A0N,22,22^FDEdite le {{now:%d/%m/%Y %H:%M}}^FS
+^FO4,4^GB792,392,4^FS
+^FO14,14^GB772,56,56^FS
+^FO26,26^FR^A0N,36,36^FDDOSSIER FSC^FS
+^FO470,30^FR^A0N,28,28^FD{{fsc_type_requis}}^FS
+^FO26,82^A0N,40,40^FD{{no_dossier}}^FS
+^FO26,128^A0N,24,24^FD{{client}}^FS
+^FO14,158^GB772,2,2^FS
+^FO26,170^A0N,24,24^FD1. Matiere certifiee FSC uniquement^FS
+^FO26,200^A0N,24,24^FD2. Scanner chaque bobine (MyProd)^FS
+^FO26,230^A0N,24,24^FD3. Entree produit fini en Z1^FS
+^FO26,268^BY2,3,58^BCN,58,N,N,N^FD{{no_dossier}}^FS
+^FO14,340^GB772,2,2^FS
+^FO26,352^A0N,20,20^FD{{ref_produit}}  {{machine}}^FS
+^FO560,352^A0N,20,20^FD{{now:%d/%m/%Y}}^FS
 ^XZ
 """
 
@@ -270,16 +271,16 @@ DEFAULT_TEMPLATE_GALLERY = [
     {
         "key": "fsc_avertissement_dossier",
         "variante": "full",
-        "nom": "Avertissement FSC — dossier de production (A6 paysage)",
+        "nom": "Avertissement FSC — dossier de production (100×50mm, N&B)",
         "description": (
-            "Format A6 paysage (152×102mm). Consigne à agrafer au dossier physique : "
-            "matière certifiée obligatoire, scan de chaque bobine, entrée en Z1, "
-            "étiquette palette FSC. Code-barres du n° de dossier en bas."
+            "Format 100×50mm, strictement noir et blanc. Consigne à coller sur le "
+            "dossier physique : matière certifiée obligatoire, scan de chaque bobine, "
+            "entrée en Z1. Bandeau inversé, code-barres du n° de dossier."
         ),
         "langage": "zpl",
         "usage_key": "fsc_avertissement_dossier",
-        "largeur_mm": 152,
-        "hauteur_mm": 102,
+        "largeur_mm": 100,
+        "hauteur_mm": 50,
         "contenu": DEFAULT_TEMPLATE_FSC_AVERTISSEMENT_ZPL,
     },
     {
