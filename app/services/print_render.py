@@ -258,6 +258,11 @@ DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL = """^XA
 # Le code-barres a sauté : il servait à rescanner le dossier, ce que personne
 # ne fait depuis une étiquette collée sur une pochette. La place gagnée va aux
 # consignes, qui elles sont lues.
+#
+# N° de dossier et client partagent une ligne — le n° à gauche, le client
+# aligné à droite via ^FB…,R (justification à droite dans la moitié droite,
+# pour que des noms de longueurs très différentes restent alignés entre eux).
+# La ligne gagnée est redonnée aux consignes sous forme d'interligne.
 DEFAULT_TEMPLATE_FSC_AVERTISSEMENT_ZPL = """^XA
 ^CI28
 ^PW800
@@ -267,16 +272,16 @@ DEFAULT_TEMPLATE_FSC_AVERTISSEMENT_ZPL = """^XA
 ^FO14,8^GB772,48,48^FS
 ^FO26,14^FR^A0N,36,36^FDDOSSIER FSC^FS
 ^FO560,22^FR^A0N,18,18^FD{{fsc_type_requis}}^FS
-^FO26,62^A0N,24,24^FD{{no_dossier}}^FS
-^FO26,90^A0N,18,18^FD{{client}}^FS
-^FO14,112^GB772,2,2^FS
-^FO26,120^FB748,2,2,L,0^A0N,28,28^FD1. Utiliser de la matiere avec la mention "Matiere FSC" uniquement.^FS
-^FO26,182^FB748,3,2,L,0^A0N,28,28^FD2. Pour chaque bobine utilisee (glassines et frontaux) ajouter les numeros de bobine IMPERATIVEMENT dans l'outil de traca^FS
-^FO26,274^FB748,2,2,L,0^A0N,28,28^FD3. Effectuer les entrees de produits finis en Z1 avec l'outil stock.^FS
-^FO14,338^GB772,2,2^FS
-^FO26,348^A0N,20,20^FD{{ref_produit}}  {{machine}}^FS
-^FO420,348^A0N,20,20^FD{{now:%d/%m/%Y}}^FS
-^FO670,344^A0N,28,28^FDMerci^FS
+^FO26,64^A0N,24,24^FD{{no_dossier}}^FS
+^FO380,70^FB394,1,0,R,0^A0N,18,18^FD{{client}}^FS
+^FO14,96^GB772,2,2^FS
+^FO26,102^FB748,2,4,L,0^A0N,28,28^FD1. Utiliser de la matiere avec la mention "Matiere FSC" uniquement.^FS
+^FO26,172^FB748,3,4,L,0^A0N,28,28^FD2. Pour chaque bobine utilisee (glassines et frontaux) ajouter les numeros de bobine IMPERATIVEMENT dans l'outil de traca^FS
+^FO26,272^FB748,2,4,L,0^A0N,28,28^FD3. Effectuer les entrees de produits finis en Z1 avec l'outil stock.^FS
+^FO14,342^GB772,2,2^FS
+^FO26,352^A0N,20,20^FD{{ref_produit}}  {{machine}}^FS
+^FO420,352^A0N,20,20^FD{{now:%d/%m/%Y}}^FS
+^FO670,348^A0N,28,28^FDMerci^FS
 ^XZ
 """
 
