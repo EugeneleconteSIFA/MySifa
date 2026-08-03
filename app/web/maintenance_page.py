@@ -3158,6 +3158,12 @@ function _apiEventToClient(ev){
     operators: ev.operators || [],
     source: ev.source,
     template_id: ev.template_id || null,
+    // v2.6.1 : discriminant entre les deux facons d'etre lie a un modele.
+    // template_origin_date n'est pose QUE par _generate_events_for_template(),
+    // c.-a-d. par la generation d'une recurrence. Un creneau ou l'on a
+    // simplement importe un modele depuis la liste des operations porte un
+    // template_id mais PAS d'origin_date.
+    template_origin_date: ev.template_origin_date || null,
     created_at: ev.created_at,
     updated_at: ev.updated_at,
   };
@@ -4547,9 +4553,15 @@ function openPlanningDetailsModal(events){
           '</div>';
         }).join('')
       : '<div class="plan-det-case-op-empty">Aucune opération définie.</div>';
-    // Badge template si le créneau vient d'un modèle
+    // Badge « Depuis modèle » — v2.6.1 : réservé aux créneaux GÉNÉRÉS par la
+    // récurrence d'un modèle. Un créneau où l'on a simplement importé un modèle
+    // depuis la liste des opérations n'en est pas une occurrence : ses ops ont
+    // pu être retouchées, complétées par d'autres modèles, et rien ne le
+    // resynchronisera avec le modèle. Afficher « Depuis modèle » y était
+    // trompeur, l'infobulle annonçant même que le modèle « écrasera ces
+    // opérations » — ce qui ne se produit que pour les occurrences générées.
     let tmplBadge = '';
-    if(ev.template_id){
+    if(ev.template_id && ev.template_origin_date){
       const tmpl = (typeof TEMPLATES_STATE !== 'undefined' && TEMPLATES_STATE ? (TEMPLATES_STATE.list || []) : []).find(t => t.id === ev.template_id);
       const label = tmpl ? tmpl.name : ('#' + ev.template_id);
       tmplBadge = '<span class="tmpl-badge" title="Créneau lié à un modèle. Les modifs futures du modèle écraseront ces opérations.">' +
