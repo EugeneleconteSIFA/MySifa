@@ -671,11 +671,11 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .tmpl-item-btn svg{width:15px;height:15px}
 .tmpl-empty{padding:24px 16px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:13px;text-align:center;font-style:italic;background:var(--bg)}
 /* Sélecteur de modèle dans le modal Nouveau créneau */
-.case-tmpl-picker{margin-bottom:16px;padding:12px 14px;border-radius:10px;background:linear-gradient(90deg,var(--accent-bg),transparent);border:1px solid var(--accent);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.case-tmpl-picker-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--accent);flex-shrink:0}
-.case-tmpl-picker select{flex:1;min-width:180px}
-.case-tmpl-picker-btn{padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .12s}
-.case-tmpl-picker-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* v2.6.1 : styles .case-tmpl-picker* supprimes — le bloc « Modèle » du haut de
+   la modale et son bouton « Gérer » ont ete retires. L'import de modele se fait
+   desormais depuis l'en-tete « Opérations à effectuer », et la gestion des
+   modeles reste accessible par le menu « + » du calendrier ainsi que par
+   l'onglet Créneaux. */
 /* v2.6.1 : rappel des modeles deja importes dans le creneau en cours. */
 .case-tmpl-applied{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 10px 0;font-size:12px;color:var(--muted)}
 .case-tmpl-applied .case-tmpl-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;background:var(--accent-bg);color:var(--accent);border:1px solid rgba(34,211,238,.28);font-weight:700}
@@ -2679,7 +2679,6 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                       title="Ajoute les opérations d'un modèle au créneau">
                 <option value="">+ Importer un modèle…</option>
               </select>
-              <button type="button" class="case-tmpl-picker-btn" onclick="openTemplatesModal()">Gérer</button>
               <button type="button" class="case-ops-add-btn" onclick="addCaseOp()">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Ajouter une opération
