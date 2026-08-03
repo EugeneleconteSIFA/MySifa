@@ -761,7 +761,7 @@
             <td>${categorieBadge(m.categorie)}</td>
             <td><strong>${escHtml(m.reference)}</strong></td>
             <td>${escHtml(m.designation)}</td>
-            <td>${m.prix_par_laize ? '<span class="badge badge-silicone">par laize</span>' : '<span class="muted">prix unique</span>'}</td>
+            <td class="ms-mode">${m.prix_par_laize ? '<span class="badge badge-silicone">par laize</span>' : '<span class="badge badge-autre">prix unique</span>'}</td>
             <td class="ms-prix-cell">${mystockPrixResume(m)}</td>
             <td>${m.nb_fournisseurs || 0}</td>
             <td>${lien}</td>
@@ -782,7 +782,7 @@
             <option value="all" ${S.filters.msActive==="all"?"selected":""}>Toutes</option>
           </select>
         </div>
-        <div class="ms-hint">Le prix saisi ici est celui de MyStock : il est écrit directement dans la valorisation et historisé. Seul le prix du fournisseur principal fait foi.</div>
+        <div class="ms-hint">Le prix saisi ici est <strong>celui de MyStock</strong> : il est écrit directement dans la valorisation et historisé. Seul le prix du <strong>fournisseur principal</strong> fait foi.</div>
         <div class="table-wrap">
           <table class="pr-table">
             <thead><tr><th style="width:28px"></th><th>Cat.</th><th>Référence</th><th>Désignation</th><th>Prix</th><th>Prix en vigueur</th><th>Fourn.</th><th>Coûts mat.</th></tr></thead>

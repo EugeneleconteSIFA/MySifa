@@ -345,32 +345,43 @@ table.recap-table td:last-child{border-right:none}
 @media(max-width:900px){.settings-inline{margin-top:12px}}
 
 /* ─── Onglets Matières et vue MyStock ─── */
-.tabs{display:inline-flex;gap:4px;background:var(--bg);border:1px solid var(--border);
+.tabs{display:inline-flex;gap:4px;background:var(--card);border:1px solid var(--border);
   border-radius:10px;padding:3px}
 .tab{border:none;background:transparent;color:var(--text2);font:inherit;font-size:13px;
   font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;white-space:nowrap}
 .tab:hover{color:var(--text)}
 .tab.on{background:var(--accent);color:var(--bg)}
 
-.ms-hint{font-size:12px;color:var(--muted);background:var(--card);border:1px solid var(--border);
-  border-left:3px solid var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:12px;line-height:1.6}
+.ms-hint{font-size:12px;color:var(--text2);background:var(--card);border:1px solid var(--border);
+  border-left:3px solid var(--accent);border-radius:8px;padding:11px 14px;margin-bottom:12px;line-height:1.6}
+.ms-hint strong{color:var(--text)}
 
 tr.ms-row{cursor:pointer}
-tr.ms-row.open td{background:var(--accent-bg)}
-.ms-caret{color:var(--muted);font-size:12px;text-align:center}
+tr.ms-row td{transition:background .12s}
+tr.ms-row.open td{background:var(--accent-bg);border-bottom-color:transparent;font-weight:600}
+tr.ms-row.open td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+.ms-caret{color:var(--accent);font-size:12px;text-align:center;font-weight:700}
 .ms-prix-cell{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
-tr.ms-detail-row td{padding:0;background:var(--bg)}
+
+/* Zone dépliée : légèrement creusée, refermée par un liseré coloré qui marque
+   la fin de la matière et évite de confondre deux blocs voisins. */
+tr.ms-detail-row td{padding:0;background:var(--bg);
+  border-bottom:2px solid var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
 tr.ms-detail-row:hover td{background:var(--bg)}
-.ms-detail{padding:12px 16px 16px}
-.ms-groupe{margin-bottom:14px}
+.ms-detail{padding:14px 18px 18px}
+.ms-groupe{margin-bottom:16px}
 .ms-groupe:last-child{margin-bottom:0}
 .ms-groupe-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
   font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
-  color:var(--muted);margin-bottom:8px}
-table.ms-table{background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  color:var(--text2);margin-bottom:8px}
+table.ms-table{background:var(--card);border:1px solid var(--border);border-radius:10px;
+  overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+table.ms-table th{background:var(--bg)}
 table.ms-table tr{cursor:default}
 table.ms-table tr:hover td{background:transparent}
+table.ms-table tr:last-child td{border-bottom:none}
 table.ms-table tr.ms-principal td{background:var(--accent-bg)}
+table.ms-table tr.ms-principal:hover td{background:var(--accent-bg)}
 .ms-inline{background:var(--filter-input-bg);border:1px solid var(--border);border-radius:8px;
   padding:6px 10px;color:var(--text);font-family:inherit;font-size:13px;max-width:220px}
 .ms-inline:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
@@ -385,3 +396,4 @@ input.ms-prix{max-width:130px;font-variant-numeric:tabular-nums;text-align:right
   border:1px solid var(--accent);border-radius:10px;padding:10px 14px;margin-bottom:14px;line-height:1.7}
 .ms-locked strong{color:var(--text)}
 .field input:disabled,.field select:disabled{opacity:.65;cursor:not-allowed;background:var(--bg)}
+.ms-mode{white-space:nowrap}

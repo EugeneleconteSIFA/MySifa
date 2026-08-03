@@ -68,21 +68,33 @@ function fscAvertissementHtml(d){
   return '<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">'
     + '<title>Avertissement FSC ' + e(d.no_dossier) + '</title><style>'
     + '@page{size:100mm 50mm;margin:0}'
-    + 'html,body{margin:0;padding:0;background:#fff}'
+    /* overflow:hidden sur html ET body : sans lui, un dépassement d'une
+       fraction de millimètre suffit à créer une SECONDE feuille. C'est ce
+       qui se produisait — le pied de page partait sur une deuxième
+       étiquette alors que la mesure DOM disait « ça tient ». */
+    + 'html,body{margin:0;padding:0;background:#fff;'
+    + '  width:100mm;height:50mm;overflow:hidden}'
     + 'body{font-family:Arial,Helvetica,sans-serif;color:#000;'
     + '  -webkit-print-color-adjust:exact;print-color-adjust:exact}'
-    + '.lbl{width:100mm;height:50mm;box-sizing:border-box;'
-    + '  border:0.6mm solid #000;padding:1.1mm 2mm;'
-    + '  display:flex;flex-direction:column}'
+    /* Le cadre ne fait PAS 100×50 mais 96×46, centré : les pilotes
+       d'étiqueteuses (Zebra S4M et consorts) déclarent une zone imprimable
+       plus petite que le média physique. Un cadre à la dimension exacte de
+       l'étiquette dépasse donc systématiquement de cette zone, et le
+       navigateur bascule sur une page supplémentaire. Les 2 mm de marge
+       absorbent l'écart, quel que soit le pilote. */
+    + '.lbl{width:96mm;height:46mm;margin:2mm auto;box-sizing:border-box;'
+    + '  border:0.5mm solid #000;padding:.9mm 1.8mm;'
+    + '  display:flex;flex-direction:column;overflow:hidden;'
+    + '  page-break-inside:avoid;break-inside:avoid;'
+    + '  page-break-after:avoid;break-after:avoid}'
     /* Même hiérarchie que le ZPL : « DOSSIER FSC » reste gros, le reste de
        l'en-tête est réduit, et les trois consignes prennent la place — c'est
        ce que l'opérateur relit à chaque changement de bobine.
 
-       Toutes les tailles sont serrées pour que le contenu tienne dans les
-       50 mm. Une première version débordait de ~8 mm : la dernière consigne
-       passait sous le cadre et le pied de page sortait de l'étiquette. Un
-       débordement ne se voit pas à la lecture du CSS, il se mesure — voir la
-       note sur la vérification au rendu en tête de fichier. */
+       Les tailles sont calées sur la hauteur utile réelle (46 mm), pas sur
+       le format du média. Toute retouche doit être re-mesurée : un
+       débordement d'une fraction de millimètre ne se voit pas à la lecture
+       du CSS, il crée une seconde étiquette à l'impression. */
     + '.hd{background:#000;color:#fff;display:flex;justify-content:space-between;'
     + '  align-items:center;padding:.7mm 1.6mm;font-weight:900;'
     + '  font-size:11pt;letter-spacing:.5pt}'
@@ -96,7 +108,7 @@ function fscAvertissementHtml(d){
     + '.cli{font-size:6.5pt;line-height:1.1;text-align:right;overflow:hidden;'
     + '  text-overflow:ellipsis;white-space:nowrap}'
     + '.sep{border-top:0.35mm solid #000;margin:.7mm 0 .6mm}'
-    + 'ol{margin:0;padding-left:4.2mm;font-size:10pt;line-height:1.25;font-weight:700}'
+    + 'ol{margin:0;padding-left:4.2mm;font-size:8.5pt;line-height:1.25;font-weight:700}'
     + 'ol li{margin-bottom:.5mm}'
     + 'ol li:last-child{margin-bottom:0}'
     + '.ft{margin-top:auto;border-top:0.35mm solid #000;padding-top:.6mm;'

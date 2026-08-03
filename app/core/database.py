@@ -8172,6 +8172,146 @@ Ressources :
         " ON ao_fournisseurs(token_pixel) WHERE token_pixel IS NOT NULL"
     )
 
+    # ── MyExpé : journal d'engagement transporteur sur les demandes de tarif ─
+    # Transposition du bloc MyAO ci-dessus. Même garde-fou sur l'existence
+    # réelle plutôt qu'un numéro de migration, et mêmes colonnes `fiable` /
+    # `motif` : le problème des ouvertures d'email fantômes (Apple MPP,
+    # passerelles antispam) est identique quel que soit le module.
+    #
+    # L'unité de suivi est la LIGNE DE RÉPONSE et non le transporteur : le
+    # même transporteur peut avoir ouvert la demande de mardi et ignoré celle
+    # de jeudi. Le token portail, lui, reste par email et transverse — les
+    # deux granularités coexistent sans se contredire.
+    #
+    # `demande_id` est dénormalisé alors qu'il se déduit de `reponse_id` :
+    # l'agrégat de la liste (« qui a ouvert quoi sur cette demande ») est la
+    # requête chaude, elle ne doit pas payer une jointure.
+    #
+    # Pas d'adresse IP, volontairement : le user_agent suffit à identifier les
+    # robots. `expe_devis_reponses.opened_ip` existe pour des raisons
+    # historiques et n'est pas repris ici.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS expe_devis_evenements (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            reponse_id     INTEGER NOT NULL REFERENCES expe_devis_reponses(id) ON DELETE CASCADE,
+            demande_id     INTEGER REFERENCES expe_demandes_devis(id) ON DELETE CASCADE,
+            canal          TEXT NOT NULL,
+            type_evenement TEXT NOT NULL,
+            date           TEXT NOT NULL,
+            fiable         INTEGER NOT NULL DEFAULT 1,
+            motif          TEXT,
+            user_agent     TEXT,
+            meta           TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_expe_devis_ev_reponse"
+        " ON expe_devis_evenements(reponse_id, date DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_expe_devis_ev_demande"
+        " ON expe_devis_evenements(demande_id, type_evenement)"
+    )
+
+    # token_pixel : identifiant du pixel de suivi, DISTINCT du token portail
+    # (expe_portal_transporteurs.token). Le pixel passe par les proxys
+    # d'images qui le mettent en cache et le journalisent ; le token portail
+    # ouvre un accès, il n'a rien à faire dans une URL d'image.
+    # Pas de backfill ici, contrairement à MyAO : un token créé après coup ne
+    # sert à rien puisque les emails déjà partis ne le contiennent pas. Il est
+    # créé paresseusement au premier envoi (cf. expe_evenements.token_pixel).
+    _expe_rep_cols = {
+        r["name"]
+        for r in conn.execute("PRAGMA table_info(expe_devis_reponses)").fetchall()
+    }
+    if _expe_rep_cols and "token_pixel" not in _expe_rep_cols:
+        conn.execute("ALTER TABLE expe_devis_reponses ADD COLUMN token_pixel TEXT")
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_expe_devis_reponses_token_pixel"
+        " ON expe_devis_reponses(token_pixel) WHERE token_pixel IS NOT NULL"
+    )
+
+    # ── MyExpé : palettes Europe — compte courant par transporteur ───────────
+    # Le suivi métier réel (fichier « SUIVI DES PALETTES.xlsx », un onglet par
+    # transporteur et par année) est un COMPTE COURANT : colonnes Données /
+    # Rendues / Solde qui court, avec report du solde de l'année précédente.
+    # Le débiteur de la palette n'est pas le client — c'est le transporteur qui
+    # emporte les palettes et c'est à lui qu'on les réclame.
+    #
+    # Le statut par départ (expe_departs.palette_europe_statut) ne suffit pas :
+    # un transporteur rend 17 palettes d'un coup, sans dire lesquelles. Cette
+    # table porte donc les mouvements que le départ ne peut pas exprimer :
+    #
+    #   'report'  solde d'ouverture — la dette antérieure à MySifa. Sans lui le
+    #             solde repart de zéro et ne correspond à rien.
+    #   'rendue'  restitution en vrac, non rattachée à un départ précis.
+    #   'donnee'  palettes remises hors départ enregistré (dépannage, reprise).
+    #
+    # Le sens est stocké en clair plutôt qu'un nb_palette signé : une saisie
+    # « -17 » se relit mal six mois plus tard, et un signe inversé est
+    # invisible à l'œil alors qu'un sens faux saute aux yeux.
+    #
+    # transporteur_id ET transporteur_nom : les départs historiques ne portent
+    # qu'un nom en texte libre (expe_departs.transporteur), le référentiel est
+    # arrivé après. Garder les deux permet de rapprocher les deux populations
+    # sans réécrire l'historique.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS expe_palettes_mouvements (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            transporteur_id  INTEGER REFERENCES expe_transporteurs(id) ON DELETE SET NULL,
+            transporteur_nom TEXT,
+            date_mvt         TEXT NOT NULL,
+            sens             TEXT NOT NULL,
+            nb_palette       REAL NOT NULL,
+            reference        TEXT,
+            client           TEXT,
+            note             TEXT,
+            created_at       TEXT NOT NULL,
+            created_by_email TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_expe_pal_mvt_trp"
+        " ON expe_palettes_mouvements(transporteur_id, date_mvt DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_expe_pal_mvt_nom"
+        " ON expe_palettes_mouvements(transporteur_nom, date_mvt DESC)"
+    )
+
+    # Contestations — le volet « Contestation de palette Europe » de l'Excel,
+    # et l'onglet mensuel « palettes non rendues ». C'est le registre qui sert
+    # à réclamer : une ligne = un litige identifié (récépissé, client, nombre,
+    # cause), pas une écriture comptable. Il est donc SÉPARÉ des mouvements et
+    # n'entre pas dans le solde : une palette contestée reste due tant que le
+    # litige n'est pas tranché, la sortir du solde reviendrait à l'abandonner.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS expe_palettes_contestations (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            transporteur_id   INTEGER REFERENCES expe_transporteurs(id) ON DELETE SET NULL,
+            transporteur_nom  TEXT,
+            depart_id         INTEGER REFERENCES expe_departs(id) ON DELETE SET NULL,
+            date_contestation TEXT NOT NULL,
+            recepisse         TEXT,
+            client            TEXT,
+            nb_palette        REAL NOT NULL,
+            cause             TEXT,
+            statut            TEXT NOT NULL DEFAULT 'ouverte',
+            note              TEXT,
+            resolved_at       TEXT,
+            created_at        TEXT NOT NULL,
+            created_by_email  TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_expe_pal_contest_trp"
+        " ON expe_palettes_contestations(transporteur_id, statut)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_expe_pal_contest_date"
+        " ON expe_palettes_contestations(date_contestation DESC)"
+    )
+
     # ── Nommage des matières pour les références produit MyAO ────────────────
     # Deux colonnes, dans cet ordre de priorité (cf. ao_ref_produit.matiere_abbrev) :
     #
