@@ -60,7 +60,11 @@ def _is_valid_emplacement(code: str) -> bool:
 # Colonnes mouvements (évite m.* + collision avec join users)
 _MVT_FIELDS = (
     "m.id, m.produit_id, m.emplacement, m.type_mouvement, m.quantite, "
-    "m.quantite_avant, m.quantite_apres, m.note, m.created_at, m.created_by, m.created_by_name"
+    "m.quantite_avant, m.quantite_apres, m.note, m.created_at, m.created_by, m.created_by_name, "
+    # Colonnes FSC exposées sur TOUS les historiques d'un coup : elles sont
+    # lues par l'historique MyStock, le détail produit, le détail emplacement
+    # et le traceur. Les ajouter ici évite quatre SELECT divergents.
+    "m.no_dossier, m.fsc, m.lot_id, m.fsc_ecart, m.fsc_ecart_note"
 )
 
 _STOCK_USER_JOIN = (
@@ -989,6 +993,101 @@ def _historique_type_stock_label(type_stock: str) -> str:
     return "Matières premières" if type_stock == "mp" else "Produits finis"
 
 
+# ══════════════════════════════════════════════════════════════════
+# FSC — claim de sortie porté par le lot de produit fini
+# ══════════════════════════════════════════════════════════════════
+#
+# Modèle : `lots_stock.fsc` est un BOOLÉEN hérité du dossier de fabrication
+# (planning_entries.fsc_requis), pas un claim typé. La finesse (fsc_100 /
+# fsc_mix / …) reste en amont, sur la bobine reçue. Ne pas confondre les deux :
+# `stock_receptions.fsc_type_claim` décrit ce qu'on a ACHETÉ, `lots_stock.fsc`
+# décrit ce qu'on peut REVENDIQUER à la vente.
+
+
+def _dossier_est_fsc(conn, no_dossier: Optional[str]) -> bool:
+    """True si le dossier de fabrication exige la certification FSC.
+
+    Rapprochement sur `reference` OU `numero_of` : selon le point de saisie,
+    MySifa envoie tantôt l'un tantôt l'autre dans `no_dossier`.
+    """
+    ref = (no_dossier or "").strip()
+    if not ref:
+        return False
+    row = conn.execute(
+        """SELECT 1 FROM planning_entries
+            WHERE COALESCE(fsc_requis,0) = 1
+              AND (TRIM(COALESCE(reference,'')) = ? OR TRIM(COALESCE(numero_of,'')) = ?)
+            LIMIT 1""",
+        (ref, ref),
+    ).fetchone()
+    return row is not None
+
+
+def _dossier_fsc_ecart(conn, no_dossier: Optional[str]) -> bool:
+    """True si le dossier est FSC mais que sa traçabilité matière ne suit pas.
+
+    Deux cas d'écart, traités à l'identique : aucune bobine scannée, ou au
+    moins une bobine dont le claim ne satisfait pas l'exigence du dossier.
+    Dans les deux cas le produit fini reste marqué FSC (le dossier l'exige,
+    c'est la décision produit) — mais l'écart voyage avec le lot jusqu'à
+    l'audit plutôt que de disparaître à l'entrée en stock.
+
+    On réutilise FSC_CLAIM_HIERARCHY de fabrication.py : une seule définition
+    de « bobine conforme » dans toute l'application. Import local pour ne pas
+    créer de dépendance circulaire entre routers au chargement.
+    """
+    ref = (no_dossier or "").strip()
+    if not ref:
+        return False
+    try:
+        from app.routers.fabrication import FSC_CLAIM_HIERARCHY
+    except Exception:
+        return False
+
+    entry = conn.execute(
+        """SELECT COALESCE(fsc_type_requis,'') AS t, TRIM(COALESCE(reference,'')) AS ref
+             FROM planning_entries
+            WHERE COALESCE(fsc_requis,0) = 1
+              AND (TRIM(COALESCE(reference,'')) = ? OR TRIM(COALESCE(numero_of,'')) = ?)
+            LIMIT 1""",
+        (ref, ref),
+    ).fetchone()
+    if not entry:
+        return False
+
+    claims = conn.execute(
+        """SELECT COALESCE(sr.fsc_type_claim, 'non_fsc') AS claim
+             FROM fab_matieres_utilisees fmu
+             LEFT JOIN stock_receptions sr ON sr.id = (
+                   SELECT i.reception_id FROM stock_reception_items i
+                    WHERE TRIM(i.code_barre) = TRIM(fmu.code_barre)
+                    ORDER BY i.scanned_at DESC, i.id DESC LIMIT 1)
+            WHERE TRIM(COALESCE(fmu.no_dossier,'')) = ?""",
+        (entry["ref"] or ref,),
+    ).fetchall()
+
+    if not claims:
+        return True  # dossier FSC sans aucune traça matière
+    autorises = FSC_CLAIM_HIERARCHY.get((entry["t"] or "").strip(), set())
+    return any((r["claim"] or "non_fsc") not in autorises for r in claims)
+
+
+def _fsc_segment_dispo(conn, produit_id: int, emplacement: str) -> dict:
+    """Quantités disponibles à un emplacement, ventilées FSC / non-FSC."""
+    rows = conn.execute(
+        """SELECT COALESCE(fsc,0) AS fsc, SUM(quantite_restante) AS q
+             FROM lots_stock
+            WHERE produit_id=? AND emplacement=? AND quantite_restante > 0
+            GROUP BY COALESCE(fsc,0)""",
+        (produit_id, emplacement),
+    ).fetchall()
+    out = {"fsc": 0.0, "non_fsc": 0.0}
+    for r in rows:
+        out["fsc" if int(r["fsc"] or 0) else "non_fsc"] += float(r["q"] or 0)
+    out["total"] = out["fsc"] + out["non_fsc"]
+    return out
+
+
 # ── Helpers FIFO ──────────────────────────────────────────────────
 def get_stock_produit_total(conn, produit_id: int) -> dict:
     """Quantité totale + date FIFO (lot le plus ancien avec restant > 0)."""
@@ -1013,16 +1112,45 @@ def apply_fifo_sortie(
     user_name: Optional[str] = None,
     note: str = "",
     no_dossier: Optional[str] = None,
+    fsc: Optional[int] = None,
+    fsc_ecart_confirme: bool = False,
+    fsc_ecart_note: Optional[str] = None,
 ) -> dict:
     """
     Consomme les lots FIFO pour un emplacement donné.
     Retourne quantite_avant, quantite_apres.
+
+    FIFO PAR SEGMENT (paramètre `fsc`) — c'est ce qui protège le claim :
+
+      fsc=1  Sortie certifiée. On ne pioche QUE dans les lots FSC. Si le
+             stock FSC ne suffit pas, on refuse par un 409 structuré tant
+             que l'opérateur n'a pas confirmé explicitement (voir plus bas).
+             Sans cette barrière, une commande FSC servie avec du stock
+             ordinaire sortirait certifiée sans que rien ne le signale : le
+             claim serait faux et l'audit le trouverait.
+
+      fsc=0  Sortie non certifiée. On consomme le non-FSC d'abord, puis on
+             complète avec du FSC si nécessaire. Ce sens-là n'est JAMAIS
+             bloqué : vendre du certifié sans revendiquer la certification
+             est autorisé (déclassement), et l'interdire immobiliserait du
+             stock pour rien. C'est noté au mouvement, pas signalé en écart.
+
+      fsc=None  Comportement historique : FIFO global toutes catégories.
+             Conservé pour les appels qui n'ont pas de notion de claim
+             (inventaires, corrections, scripts) — ne pas l'utiliser pour
+             une sortie commerciale.
+
+    Écart confirmé (fsc=1, stock FSC insuffisant) : `fsc_ecart_confirme=True`
+    + une note obligatoire. Le mouvement part alors avec fsc_ecart=1 et la
+    justification, et ressort tel quel dans le traceur. L'idée n'est pas
+    d'empêcher l'atelier de travailler, c'est qu'aucun complément non
+    certifié ne puisse passer silencieusement.
     """
     lots = conn.execute(
-        """SELECT id, quantite_restante, date_entree
+        """SELECT id, quantite_restante, date_entree, COALESCE(fsc,0) AS fsc
            FROM lots_stock
            WHERE produit_id=? AND emplacement=? AND quantite_restante > 0
-           ORDER BY date_entree ASC""",
+           ORDER BY date_entree ASC, id ASC""",
         (produit_id, emplacement),
     ).fetchall()
 
@@ -1030,19 +1158,73 @@ def apply_fifo_sortie(
     if quantite > total_dispo:
         raise HTTPException(400, f"Stock insuffisant sur {emplacement} : {total_dispo} disponibles")
 
+    lots_fsc = [l for l in lots if int(l["fsc"] or 0) == 1]
+    lots_std = [l for l in lots if int(l["fsc"] or 0) != 1]
+    dispo_fsc = sum(float(l["quantite_restante"]) for l in lots_fsc)
+    dispo_std = sum(float(l["quantite_restante"]) for l in lots_std)
+
+    ecart = 0
+    ecart_note = None
+    if fsc is None:
+        ordre = lots                       # legacy : un seul flux, ordre FIFO pur
+    elif int(fsc) == 1:
+        if quantite > dispo_fsc + 1e-9:
+            complement = round(quantite - dispo_fsc, 4)
+            if not fsc_ecart_confirme:
+                # 409 et non 400 : ce n'est pas une requête malformée, c'est
+                # un conflit d'état que l'opérateur peut lever en connaissance
+                # de cause. Le corps est structuré pour que l'interface
+                # propose la confirmation sans re-parser un message texte.
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "fsc_stock_insuffisant",
+                        "emplacement": emplacement,
+                        "demande": quantite,
+                        "dispo_fsc": dispo_fsc,
+                        "dispo_non_fsc": dispo_std,
+                        "complement_non_fsc": complement,
+                        "message": (
+                            f"Stock FSC insuffisant sur {emplacement} : "
+                            f"{dispo_fsc:g} certifié(s) disponible(s) pour {quantite:g} demandé(s). "
+                            f"Compléter avec {complement:g} non certifié(s) rendrait le claim FSC "
+                            f"de cette sortie inexact."
+                        ),
+                    },
+                )
+            justification = (fsc_ecart_note or "").strip()
+            if not justification:
+                raise HTTPException(
+                    400,
+                    "Écart FSC : une justification est obligatoire pour compléter "
+                    "une sortie certifiée avec du stock non certifié.",
+                )
+            ecart = 1
+            ecart_note = (
+                f"Complément non FSC de {complement:g} sur {quantite:g} — {justification}"
+            )
+        ordre = lots_fsc + lots_std        # certifié d'abord
+    else:
+        ordre = lots_std + lots_fsc        # déclassement autorisé, non signalé
+
     quantite_avant = total_dispo
     restant = quantite
     now = _now_paris().isoformat()
 
-    for lot in lots:
+    conso_fsc = 0.0
+    conso_std = 0.0
+    for lot in ordre:
         if restant <= 0:
             break
-        consomme = min(lot["quantite_restante"], restant)
-        nouvelle_qte = lot["quantite_restante"] - consomme
+        consomme = min(float(lot["quantite_restante"]), restant)
         conn.execute(
             "UPDATE lots_stock SET quantite_restante=? WHERE id=?",
-            (nouvelle_qte, lot["id"]),
+            (float(lot["quantite_restante"]) - consomme, lot["id"]),
         )
+        if int(lot["fsc"] or 0) == 1:
+            conso_fsc += consomme
+        else:
+            conso_std += consomme
         restant -= consomme
 
     quantite_apres = total_dispo - quantite
@@ -1058,11 +1240,21 @@ def apply_fifo_sortie(
     # Historique
     cur = conn.execute(
         """INSERT INTO mouvements_stock
-           (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name,no_dossier)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
-        (produit_id, emplacement, "sortie", quantite, quantite_avant, quantite_apres, note, now, user_email, user_name, no_dossier),
+           (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name,no_dossier,fsc,fsc_ecart,fsc_ecart_note)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (produit_id, emplacement, "sortie", quantite, quantite_avant, quantite_apres,
+         note, now, user_email, user_name, no_dossier,
+         (int(fsc) if fsc is not None else None), ecart, ecart_note),
     )
-    return {"quantite_avant": quantite_avant, "quantite_apres": quantite_apres, "mouvement_id": cur.lastrowid}
+    return {
+        "quantite_avant": quantite_avant,
+        "quantite_apres": quantite_apres,
+        "mouvement_id": cur.lastrowid,
+        "consomme_fsc": conso_fsc,
+        "consomme_non_fsc": conso_std,
+        "fsc_ecart": ecart,
+        "fsc_ecart_note": ecart_note,
+    }
 
 
 def sortir_lot_fifo(
@@ -1072,23 +1264,40 @@ def sortir_lot_fifo(
     user_email: str,
     user_name: Optional[str] = None,
     note: str = "",
+    fsc: Optional[int] = None,
 ) -> dict:
-    """Sortie du lot FIFO le plus ancien à un emplacement (quantité = lot entier)."""
-    lot = conn.execute(
-        """SELECT id, quantite_restante
-           FROM lots_stock
-           WHERE produit_id=? AND emplacement=? AND quantite_restante > 0
-           ORDER BY date_entree ASC LIMIT 1""",
-        (produit_id, emplacement),
-    ).fetchone()
+    """Sortie du lot FIFO le plus ancien à un emplacement (quantité = lot entier).
+
+    `fsc` restreint au segment demandé — même logique que deplacer_lot_fifo :
+    sortir « la plus vieille palette » sans distinction viderait le FSC en
+    premier sur un emplacement mixte, alors que c'est le stock le plus
+    précieux et le seul qui ne se remplace pas par un achat ordinaire.
+    """
+    sql = """SELECT id, quantite_restante, COALESCE(fsc,0) AS fsc
+               FROM lots_stock
+              WHERE produit_id=? AND emplacement=? AND quantite_restante > 0"""
+    params: list = [produit_id, emplacement]
+    if fsc is not None:
+        sql += " AND COALESCE(fsc,0)=?"
+        params.append(int(fsc))
+    sql += " ORDER BY date_entree ASC, id ASC LIMIT 1"
+    lot = conn.execute(sql, params).fetchone()
     if not lot:
+        if fsc is not None:
+            seg = "certifié FSC" if int(fsc) == 1 else "non certifié"
+            raise HTTPException(404, f"Aucun lot {seg} à cet emplacement")
         raise HTTPException(404, "Aucun lot actif à cet emplacement")
     qte_lot = float(lot["quantite_restante"])
     final_note = (note or "").strip() or "Sortie lot FIFO"
+    # On sort exactement ce lot : le segment est déjà celui du lot trouvé,
+    # donc aucun risque de complément non certifié à confirmer ici.
     result = apply_fifo_sortie(
-        conn, produit_id, emplacement, qte_lot, user_email, user_name, final_note
+        conn, produit_id, emplacement, qte_lot, user_email, user_name, final_note,
+        fsc=int(lot["fsc"] or 0),
+        fsc_ecart_confirme=True,
+        fsc_ecart_note="Sortie du lot entier",
     )
-    return {**result, "quantite_sortie": qte_lot}
+    return {**result, "quantite_sortie": qte_lot, "fsc": int(lot["fsc"] or 0)}
 
 
 def deplacer_lot_fifo(
@@ -1098,48 +1307,93 @@ def deplacer_lot_fifo(
     emplacement_destination: str,
     user_email: str,
     user_name: Optional[str] = None,
+    fsc: Optional[int] = None,
 ) -> dict:
-    """Déplace le lot FIFO le plus ancien d'un emplacement vers un autre."""
-    # Récupérer le lot FIFO source
-    lot = conn.execute(
-        """SELECT id, quantite_restante, date_entree
-           FROM lots_stock
-           WHERE produit_id=? AND emplacement=? AND quantite_restante > 0
-           ORDER BY date_entree ASC LIMIT 1""",
-        (produit_id, emplacement_source),
-    ).fetchone()
+    """Déplace le lot FIFO le plus ancien d'un emplacement vers un autre.
+
+    `fsc` sélectionne le SEGMENT à déplacer quand du certifié et du non
+    certifié cohabitent à l'emplacement source (1 = FSC, 0 = non FSC,
+    None = le plus ancien tous segments confondus). Sans ce paramètre,
+    l'opérateur qui voulait ranger sa palette FSC déplaçait en réalité la
+    plus ancienne palette de l'emplacement, sans moyen de le savoir ni de
+    le corriger autrement qu'en refaisant deux mouvements.
+    """
+    # Récupérer le lot FIFO source, éventuellement restreint à un segment.
+    sql = """SELECT id, quantite_restante, date_entree, COALESCE(fsc,0) AS fsc,
+                    no_dossier, fsc_ecart, fsc_link_reconstitue
+               FROM lots_stock
+              WHERE produit_id=? AND emplacement=? AND quantite_restante > 0"""
+    params: list = [produit_id, emplacement_source]
+    if fsc is not None:
+        sql += " AND COALESCE(fsc,0)=?"
+        params.append(int(fsc))
+    sql += " ORDER BY date_entree ASC, id ASC LIMIT 1"
+    lot = conn.execute(sql, params).fetchone()
     if not lot:
+        if fsc is not None:
+            seg = "certifié FSC" if int(fsc) == 1 else "non certifié"
+            raise HTTPException(
+                404, f"Aucun lot {seg} à l'emplacement source {emplacement_source}"
+            )
         raise HTTPException(404, "Aucun lot actif à l'emplacement source")
-    
+
     qte_lot = float(lot["quantite_restante"])
     lot_id = lot["id"]
     date_entree = lot["date_entree"]
+    # Le claim et son dossier voyagent AVEC la palette : un déplacement est un
+    # rangement, pas une transformation. Sans cette recopie, ranger une palette
+    # certifiée en zone A la faisait sortir non certifiée — la perte de claim
+    # la plus coûteuse possible, et la plus silencieuse.
+    lot_fsc = int(lot["fsc"] or 0)
+    lot_dossier = lot["no_dossier"]
+    lot_ecart = int(lot["fsc_ecart"] or 0)
+    lot_reconstitue = int(lot["fsc_link_reconstitue"] or 0)
     now = _now_paris().isoformat()
     
-    # Quantité avant le déplacement
-    quantite_avant_source = qte_lot
-    
+    # Quantité réellement présente à la source AVANT le déplacement.
+    #
+    # ATTENTION — correction d'un bug antérieur : le code posait
+    # `quantite_avant_source = qte_lot` puis écrivait `quantite = 0` dans
+    # stock_emplacements. Cela ne tenait que si le lot déplacé était le SEUL
+    # de l'emplacement. Dès qu'il y en avait deux, déplacer le plus ancien
+    # remettait à zéro l'agrégat de l'emplacement source alors que le second
+    # lot y était toujours physiquement : le stock disparaissait de la vue
+    # agrégée tout en restant dans lots_stock. La segmentation FSC rend ce cas
+    # ordinaire (une pile certifiée + une pile non certifiée au même endroit),
+    # donc on calcule les deux bornes depuis les lots.
+    row_avant = conn.execute(
+        """SELECT COALESCE(SUM(quantite_restante),0) AS q FROM lots_stock
+            WHERE produit_id=? AND emplacement=? AND quantite_restante > 0""",
+        (produit_id, emplacement_source),
+    ).fetchone()
+    quantite_avant_source = float(row_avant["q"] or 0)
+    quantite_apres_source = quantite_avant_source - qte_lot
+
     # Mettre à jour le lot source (quantite_restante = 0)
     conn.execute(
         "UPDATE lots_stock SET quantite_restante=? WHERE id=?",
         (0, lot_id),
     )
-    
-    # Créer un nouveau lot à la destination
+
+    # Créer un nouveau lot à la destination, claim et dossier compris.
     cursor = conn.execute(
-        """INSERT INTO lots_stock (produit_id, emplacement, quantite_initiale, quantite_restante, date_entree, created_at)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (produit_id, emplacement_destination, qte_lot, qte_lot, date_entree, now),
+        """INSERT INTO lots_stock
+             (produit_id, emplacement, quantite_initiale, quantite_restante, date_entree,
+              created_at, created_by, fsc, no_dossier, fsc_ecart, fsc_link_reconstitue)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (produit_id, emplacement_destination, qte_lot, qte_lot, date_entree, now,
+         user_email, lot_fsc, lot_dossier, lot_ecart, lot_reconstitue),
     )
-    
+    lot_dest_id = cursor.lastrowid
+
     # Mettre à jour stock_emplacements pour la source
     conn.execute(
         """UPDATE stock_emplacements
            SET quantite=?, updated_at=?, updated_by=?, commentaire='Déplacement vers ' || ?
            WHERE produit_id=? AND emplacement=?""",
-        (0, now, user_email, emplacement_destination, produit_id, emplacement_source),
+        (quantite_apres_source, now, user_email, emplacement_destination, produit_id, emplacement_source),
     )
-    
+
     # Mettre à jour ou créer stock_emplacements pour la destination
     existing_dest = conn.execute(
         "SELECT quantite FROM stock_emplacements WHERE produit_id=? AND emplacement=?",
@@ -1162,27 +1416,38 @@ def deplacer_lot_fifo(
             (produit_id, emplacement_destination, quantite_apres_dest, now, user_email, f'Déplacement depuis {emplacement_source}'),
         )
     
-    # Historique : sortie de la source
+    # Historique : sortie de la source. `lot_id` pointe le lot vidé, `fsc`
+    # porte son claim — c'est ce couple qui permet au traceur de suivre une
+    # palette d'emplacement en emplacement au lieu de perdre sa trace à
+    # chaque rangement.
     conn.execute(
         """INSERT INTO mouvements_stock
-           (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name)
-           VALUES (?,?,?,?,?,?,?,?,?,?)""",
-        (produit_id, emplacement_source, "sortie", qte_lot, quantite_avant_source, 0, f"Déplacement vers {emplacement_destination}", now, user_email, user_name),
+           (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name,no_dossier,fsc,lot_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (produit_id, emplacement_source, "sortie", qte_lot, quantite_avant_source,
+         quantite_apres_source, f"Déplacement vers {emplacement_destination}", now,
+         user_email, user_name, lot_dossier, lot_fsc, lot_id),
     )
-    
+
     # Historique : entrée à la destination
     quantite_avant_dest = quantite_apres_dest - qte_lot
     conn.execute(
         """INSERT INTO mouvements_stock
-           (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name)
-           VALUES (?,?,?,?,?,?,?,?,?,?)""",
-        (produit_id, emplacement_destination, "entree", qte_lot, quantite_avant_dest, quantite_apres_dest, f"Déplacement depuis {emplacement_source}", now, user_email, user_name),
+           (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name,no_dossier,fsc,lot_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (produit_id, emplacement_destination, "entree", qte_lot, quantite_avant_dest,
+         quantite_apres_dest, f"Déplacement depuis {emplacement_source}", now,
+         user_email, user_name, lot_dossier, lot_fsc, lot_dest_id),
     )
-    
+
     return {
         "quantite_avant": quantite_avant_source,
-        "quantite_apres": 0,
+        "quantite_apres": quantite_apres_source,
         "quantite_deplacee": qte_lot,
+        "fsc": lot_fsc,
+        "no_dossier": lot_dossier,
+        "lot_id_source": lot_id,
+        "lot_id_destination": lot_dest_id,
     }
 
 
@@ -1385,15 +1650,19 @@ def get_produit(produit_id: int, request: Request):
             raise HTTPException(404, "Produit non trouvé")
 
         # Stock par emplacement avec date FIFO par emplacement
+        # Une ligne par (emplacement, segment FSC) : voir get_emplacement().
         empls = conn.execute(
             """SELECT l.emplacement,
+                      COALESCE(l.fsc,0) as fsc,
+                      MAX(COALESCE(l.fsc_ecart,0)) as fsc_ecart,
                       SUM(l.quantite_restante) as quantite,
                       COUNT(*) as nb_lots,
                       MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) as date_fifo_empl,
                       (SELECT l2.quantite_restante FROM lots_stock l2
                        WHERE l2.produit_id=? AND l2.emplacement=l.emplacement
                          AND l2.quantite_restante > 0
-                       ORDER BY l2.date_entree ASC LIMIT 1) as quantite_lot_fifo,
+                         AND COALESCE(l2.fsc,0) = COALESCE(l.fsc,0)
+                       ORDER BY l2.date_entree ASC, l2.id ASC LIMIT 1) as quantite_lot_fifo,
                       MAX(s.derniere_inventaire) as derniere_inventaire,
                       MAX(s.updated_at) as updated_at,
                       MAX(s.updated_by) as updated_by,
@@ -1401,8 +1670,8 @@ def get_produit(produit_id: int, request: Request):
                FROM lots_stock l
                LEFT JOIN stock_emplacements s ON s.produit_id=l.produit_id AND s.emplacement=l.emplacement
                WHERE l.produit_id=? AND l.quantite_restante>0
-               GROUP BY l.emplacement
-               ORDER BY l.emplacement""",
+               GROUP BY l.emplacement, COALESCE(l.fsc,0)
+               ORDER BY l.emplacement, COALESCE(l.fsc,0) DESC""",
             (produit_id, produit_id),
         ).fetchall()
 
@@ -1455,6 +1724,8 @@ def get_produit(produit_id: int, request: Request):
         "jours_stock": jours_stock,
         "nb_lots": fifo["nb_lots"],
         "emplacements": empl_data,
+        "stock_fsc": sum(float(e["quantite"] or 0) for e in empl_data if int(e["fsc"] or 0) == 1),
+        "stock_non_fsc": sum(float(e["quantite"] or 0) for e in empl_data if int(e["fsc"] or 0) != 1),
         "mouvements": [dict(r) for r in mvts],
     }
 
@@ -1747,15 +2018,23 @@ def get_emplacement(emplacement: str, request: Request):
     emplacement = emplacement.upper()
     now = _now_paris()
     with get_db() as conn:
+        # GROUP BY (produit, segment FSC) et non plus (produit) seul : un même
+        # produit peut être présent au même emplacement en certifié ET en non
+        # certifié, et ces deux piles ne doivent jamais être additionnées en
+        # une ligne — c'est précisément la fusion qui ferait perdre le claim.
+        # Deux lignes en sortent, l'une marquée FSC, l'autre non.
         refs = conn.execute(
             """SELECT p.id, p.reference, p.designation, p.unite,
+                      COALESCE(l.fsc,0) as fsc,
+                      MAX(COALESCE(l.fsc_ecart,0)) as fsc_ecart,
                       SUM(l.quantite_restante) as quantite,
                       COUNT(*) as nb_lots,
                       MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) as date_fifo,
                       (SELECT l2.quantite_restante FROM lots_stock l2
                        WHERE l2.produit_id=l.produit_id AND l2.emplacement=?
                          AND l2.quantite_restante > 0
-                       ORDER BY l2.date_entree ASC LIMIT 1) as quantite_lot_fifo,
+                         AND COALESCE(l2.fsc,0) = COALESCE(l.fsc,0)
+                       ORDER BY l2.date_entree ASC, l2.id ASC LIMIT 1) as quantite_lot_fifo,
                       MAX(s.derniere_inventaire) as derniere_inventaire,
                       MAX(s.updated_at) as updated_at,
                       MAX(s.updated_by) as updated_by
@@ -1763,8 +2042,8 @@ def get_emplacement(emplacement: str, request: Request):
                JOIN produits p ON p.id=l.produit_id
                LEFT JOIN stock_emplacements s ON s.produit_id=l.produit_id AND s.emplacement=l.emplacement
                WHERE l.emplacement=? AND l.quantite_restante>0
-               GROUP BY l.produit_id
-               ORDER BY p.reference""",
+               GROUP BY l.produit_id, COALESCE(l.fsc,0)
+               ORDER BY p.reference, COALESCE(l.fsc,0) DESC""",
             (emplacement, emplacement),
         ).fetchall()
 
@@ -1834,7 +2113,13 @@ def get_emplacement(emplacement: str, request: Request):
         "est_sortie_prod": emplacement == STOCK_EMPLACEMENT_SORTIE_PROD,
         "refs": refs_data,
         "total_unites": sum(r["quantite"] for r in refs),
+        # nb_refs compte les LIGNES, pas les produits distincts : un produit
+        # présent en FSC et en non-FSC en génère deux. C'est ce que l'écran
+        # affiche, donc c'est ce qu'on annonce.
         "nb_refs": len(refs),
+        "nb_produits": len({r["id"] for r in refs}),
+        "total_fsc": sum(r["quantite"] for r in refs if int(r["fsc"] or 0) == 1),
+        "total_non_fsc": sum(r["quantite"] for r in refs if int(r["fsc"] or 0) != 1),
         "mouvements": [dict(r) for r in mvts],
         "last_inventaire": last_inventaire,
         "inv_jours_depuis": inv_jours_depuis,
@@ -1850,14 +2135,16 @@ def stock_a_expedier(request: Request):
     with get_db() as conn:
         refs = conn.execute(
             """SELECT p.id, p.reference, p.designation, p.unite,
+                      COALESCE(l.fsc,0) as fsc,
+                      MAX(COALESCE(l.fsc_ecart,0)) as fsc_ecart,
                       SUM(l.quantite_restante) as quantite,
                       COUNT(*) as nb_lots,
                       MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) as date_fifo
                FROM lots_stock l
                JOIN produits p ON p.id=l.produit_id
                WHERE l.emplacement=? AND l.quantite_restante>0
-               GROUP BY p.id
-               ORDER BY p.reference""",
+               GROUP BY p.id, COALESCE(l.fsc,0)
+               ORDER BY p.reference, COALESCE(l.fsc,0) DESC""",
             (empl,),
         ).fetchall()
     refs_data = [dict(r) for r in refs]
@@ -1868,6 +2155,8 @@ def stock_a_expedier(request: Request):
         "refs": refs_data,
         "total_unites": total,
         "nb_refs": len(refs_data),
+        "total_fsc": sum(float(r["quantite"] or 0) for r in refs_data if int(r["fsc"] or 0) == 1),
+        "total_non_fsc": sum(float(r["quantite"] or 0) for r in refs_data if int(r["fsc"] or 0) != 1),
     }
 
 
@@ -1880,6 +2169,8 @@ def stock_sortie_prod(request: Request):
     with get_db() as conn:
         refs = conn.execute(
             """SELECT p.id, p.reference, p.designation, p.unite,
+                      COALESCE(l.fsc,0) as fsc,
+                      MAX(COALESCE(l.fsc_ecart,0)) as fsc_ecart,
                       SUM(l.quantite_restante) as quantite,
                       COUNT(*) as nb_lots,
                       MIN(CASE WHEN l.quantite_restante>0 THEN l.date_entree END) as date_fifo,
@@ -1890,13 +2181,20 @@ def stock_sortie_prod(request: Request):
                                               LOWER(TRIM(COALESCE(l2.created_by,'')))
                          WHERE l2.produit_id = p.id AND l2.emplacement = ?
                            AND l2.quantite_restante > 0
-                         ORDER BY l2.date_entree DESC LIMIT 1) as dernier_operateur
+                           AND COALESCE(l2.fsc,0) = COALESCE(l.fsc,0)
+                         ORDER BY l2.date_entree DESC LIMIT 1) as dernier_operateur,
+                      (SELECT l3.no_dossier FROM lots_stock l3
+                         WHERE l3.produit_id = p.id AND l3.emplacement = ?
+                           AND l3.quantite_restante > 0
+                           AND COALESCE(l3.fsc,0) = COALESCE(l.fsc,0)
+                           AND TRIM(COALESCE(l3.no_dossier,'')) <> ''
+                         ORDER BY l3.date_entree DESC LIMIT 1) as no_dossier
                FROM lots_stock l
                JOIN produits p ON p.id=l.produit_id
                WHERE l.emplacement=? AND l.quantite_restante>0
-               GROUP BY p.id
-               ORDER BY MAX(l.date_entree) DESC, p.reference""",
-            (empl, empl),
+               GROUP BY p.id, COALESCE(l.fsc,0)
+               ORDER BY MAX(l.date_entree) DESC, p.reference, COALESCE(l.fsc,0) DESC""",
+            (empl, empl, empl),
         ).fetchall()
     refs_data = [dict(r) for r in refs]
     total = sum(float(r["quantite"] or 0) for r in refs_data)
@@ -1906,6 +2204,8 @@ def stock_sortie_prod(request: Request):
         "refs": refs_data,
         "total_unites": total,
         "nb_refs": len(refs_data),
+        "total_fsc": sum(float(r["quantite"] or 0) for r in refs_data if int(r["fsc"] or 0) == 1),
+        "total_non_fsc": sum(float(r["quantite"] or 0) for r in refs_data if int(r["fsc"] or 0) != 1),
     }
 
 
@@ -1938,8 +2238,18 @@ def _apply_stock_mouvement(
     note: str,
     date_entree: Optional[str] = None,
     no_dossier: Optional[str] = None,
+    quantite_fsc: Optional[float] = None,
+    quantite_non_fsc: Optional[float] = None,
+    fsc: Optional[int] = None,
+    fsc_ecart_confirme: bool = False,
+    fsc_ecart_note: Optional[str] = None,
 ) -> tuple[dict, str, str]:
-    """Applique un mouvement PF (entree / sortie / inventaire) sur la base existante."""
+    """Applique un mouvement PF (entree / sortie / inventaire) sur la base existante.
+
+    `quantite_fsc` / `quantite_non_fsc` ne concernent que l'inventaire d'un
+    emplacement mixte : l'opérateur compte les deux piles séparément. Voir la
+    branche `inventaire` pour les trois cas gérés.
+    """
     now = _now_paris().isoformat()
     date_entree = date_entree or _now_paris().strftime("%Y-%m-%d")
     created_by_name = _resolve_created_by_name(conn, user)
@@ -1963,13 +2273,23 @@ def _apply_stock_mouvement(
     ).fetchone()
     qte_avant = float(ex["quantite"]) if ex else 0.0
 
+    # Claim FSC du lot : hérité du dossier de fabrication, jamais saisi par
+    # l'opérateur. L'entrée Z1 se fait déjà avec le dossier en main (le
+    # sélecteur de dossier de la modale d'entrée), donc l'information est là
+    # sans effort supplémentaire en atelier — et une donnée qu'on ne saisit
+    # pas est une donnée qu'on n'oublie pas de saisir.
+    lot_fsc = 1 if _dossier_est_fsc(conn, no_dossier) else 0
+    lot_ecart = 1 if (lot_fsc and _dossier_fsc_ecart(conn, no_dossier)) else 0
+
     if type_mvt == "entree":
-        conn.execute(
+        cur_lot = conn.execute(
             """INSERT INTO lots_stock
-               (produit_id,emplacement,quantite_initiale,quantite_restante,date_entree,note,created_by,created_at)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (produit_id, emplacement, quantite, quantite, date_entree, note, user["email"], now),
+               (produit_id,emplacement,quantite_initiale,quantite_restante,date_entree,note,created_by,created_at,fsc,no_dossier,fsc_ecart)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            (produit_id, emplacement, quantite, quantite, date_entree, note, user["email"], now,
+             lot_fsc, (no_dossier or "").strip() or None, lot_ecart),
         )
+        lot_id_cree = cur_lot.lastrowid
         qte_apres = qte_avant + quantite
         if ex:
             conn.execute(
@@ -1987,8 +2307,8 @@ def _apply_stock_mouvement(
             )
         cur = conn.execute(
             """INSERT INTO mouvements_stock
-               (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name,no_dossier)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+               (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name,no_dossier,fsc,lot_id)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 produit_id,
                 emplacement,
@@ -2001,36 +2321,108 @@ def _apply_stock_mouvement(
                 user["email"],
                 created_by_name,
                 no_dossier,
+                lot_fsc,
+                lot_id_cree,
             ),
         )
-        result = {"quantite_avant": qte_avant, "quantite_apres": qte_apres, "mouvement_id": cur.lastrowid}
+        result = {
+            "quantite_avant": qte_avant,
+            "quantite_apres": qte_apres,
+            "mouvement_id": cur.lastrowid,
+            "lot_id": lot_id_cree,
+            "fsc": lot_fsc,
+            "fsc_ecart": lot_ecart,
+        }
 
     elif type_mvt == "sortie":
+        # `fsc=None` par défaut : une sortie de correction ou d'ajustement n'a
+        # pas de claim commercial à protéger, on garde le FIFO global. Dès que
+        # l'appelant précise le segment (sortie liée à une commande certifiée),
+        # apply_fifo_sortie bascule en FIFO segmenté et applique la barrière.
         result = apply_fifo_sortie(
             conn, produit_id, emplacement, quantite, user["email"], created_by_name, note,
             no_dossier=no_dossier,
+            fsc=fsc,
+            fsc_ecart_confirme=fsc_ecart_confirme,
+            fsc_ecart_note=fsc_ecart_note,
         )
 
     elif type_mvt == "inventaire":
+        # ── Inventaire et segmentation FSC ───────────────────────────────
+        # Le code d'origine remettait TOUS les lots de l'emplacement à zéro
+        # puis en recréait UN seul. Appliqué tel quel après cette version, un
+        # inventaire aurait effacé la séparation FSC / non-FSC à chaque
+        # comptage — et, pire, aurait fait retomber à 0 le flag d'un
+        # emplacement 100 % certifié. Trois cas désormais :
+        #
+        #   1. L'appelant fournit les deux quantités (emplacement mixte,
+        #      l'opérateur compte séparément) → on recrée deux lots.
+        #   2. Emplacement homogène → un lot, qui CONSERVE le flag existant.
+        #   3. Emplacement mixte sans détail (inventaire de masse, script) →
+        #      répartition au prorata de l'état connu, explicitement notée.
+        #      Approximatif, assumé, et infiniment préférable à verser
+        #      l'intégralité du comptage dans l'un des deux segments.
+        seg_avant = _fsc_segment_dispo(conn, produit_id, emplacement)
+        mixte = seg_avant["fsc"] > 0 and seg_avant["non_fsc"] > 0
+
+        if quantite_fsc is not None or quantite_non_fsc is not None:
+            q_fsc = float(quantite_fsc or 0)
+            q_std = float(quantite_non_fsc or 0)
+            note_split = ""
+        elif mixte:
+            ratio = seg_avant["fsc"] / seg_avant["total"] if seg_avant["total"] else 0.0
+            q_fsc = round(quantite * ratio, 4)
+            q_std = round(quantite - q_fsc, 4)
+            note_split = " — répartition FSC/non-FSC au prorata de l'état précédent"
+        else:
+            # Homogène : tout le comptage garde le claim en place.
+            tout_fsc = seg_avant["fsc"] > 0
+            q_fsc = quantite if tout_fsc else 0.0
+            q_std = 0.0 if tout_fsc else quantite
+            note_split = ""
+
+        quantite = q_fsc + q_std  # le total fait foi pour la vue agrégée
+
+        # Dossier d'origine du lot le plus récent de chaque segment : sans ça,
+        # un inventaire couperait le lien vers le dossier de fabrication et
+        # romprait la chaîne du traceur sur tout le stock inventorié.
+        def _dossier_segment(flag: int) -> Optional[str]:
+            r = conn.execute(
+                """SELECT no_dossier FROM lots_stock
+                    WHERE produit_id=? AND emplacement=? AND COALESCE(fsc,0)=?
+                      AND TRIM(COALESCE(no_dossier,'')) <> ''
+                    ORDER BY date_entree DESC, id DESC LIMIT 1""",
+                (produit_id, emplacement, flag),
+            ).fetchone()
+            return r["no_dossier"] if r else None
+
+        dos_fsc = _dossier_segment(1)
+        dos_std = _dossier_segment(0)
+
         conn.execute(
             "UPDATE lots_stock SET quantite_restante=0 WHERE produit_id=? AND emplacement=?",
             (produit_id, emplacement),
         )
-        conn.execute(
-            """INSERT INTO lots_stock
-               (produit_id,emplacement,quantite_initiale,quantite_restante,date_entree,note,created_by,created_at)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (
-                produit_id,
-                emplacement,
-                quantite,
-                quantite,
-                date_entree,
-                f"Inventaire — {note}",
-                user["email"],
-                now,
-            ),
-        )
+        for qte_seg, flag_seg, dos_seg in ((q_fsc, 1, dos_fsc), (q_std, 0, dos_std)):
+            if qte_seg <= 0:
+                continue
+            conn.execute(
+                """INSERT INTO lots_stock
+                   (produit_id,emplacement,quantite_initiale,quantite_restante,date_entree,note,created_by,created_at,fsc,no_dossier)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                (
+                    produit_id,
+                    emplacement,
+                    qte_seg,
+                    qte_seg,
+                    date_entree,
+                    f"Inventaire — {note}{note_split}",
+                    user["email"],
+                    now,
+                    flag_seg,
+                    dos_seg,
+                ),
+            )
         if ex:
             conn.execute(
                 """UPDATE stock_emplacements
@@ -2063,7 +2455,14 @@ def _apply_stock_mouvement(
                 no_dossier,
             ),
         )
-        result = {"quantite_avant": qte_avant, "quantite_apres": quantite, "mouvement_id": cur.lastrowid}
+        result = {
+            "quantite_avant": qte_avant,
+            "quantite_apres": quantite,
+            "mouvement_id": cur.lastrowid,
+            "quantite_fsc": q_fsc,
+            "quantite_non_fsc": q_std,
+            "repartition_prorata": bool(note_split),
+        }
     else:
         raise HTTPException(400, "Type de mouvement invalide.")
 
@@ -2085,10 +2484,49 @@ async def mouvement_stock(request: Request):
     no_dossier = (body.get("no_dossier") or "").strip() or None
     palettes_in = body.get("palettes") or []
 
+    # Inventaire d'un emplacement mixte : l'opérateur compte les deux piles.
+    # Absents ⇒ comportement décrit dans _apply_stock_mouvement (conservation
+    # du claim si l'emplacement est homogène, prorata sinon).
+    def _opt_qte(key: str) -> Optional[float]:
+        if key not in body or body.get(key) is None or body.get(key) == "":
+            return None
+        try:
+            v = float(body.get(key))
+        except (TypeError, ValueError):
+            raise HTTPException(400, f"{key} doit être un nombre")
+        if v < 0:
+            raise HTTPException(400, f"{key} ne peut pas être négatif")
+        return v
+
+    quantite_fsc = _opt_qte("quantite_fsc")
+    quantite_non_fsc = _opt_qte("quantite_non_fsc")
+
+    # Sortie : segment demandé + confirmation éventuelle d'un écart FSC.
+    # `fsc` absent = sortie sans claim à protéger (FIFO global historique).
+    fsc_sortie = body.get("fsc")
+    if fsc_sortie is not None and str(fsc_sortie).strip() != "":
+        try:
+            fsc_sortie = 1 if int(fsc_sortie) else 0
+        except (TypeError, ValueError):
+            raise HTTPException(400, "fsc doit valoir 0 ou 1")
+    else:
+        fsc_sortie = None
+    fsc_ecart_confirme = bool(body.get("fsc_ecart_confirme"))
+    fsc_ecart_note = (body.get("fsc_ecart_note") or "").strip() or None
+
     if not produit_id or not emplacement:
         raise HTTPException(400, "produit_id et emplacement obligatoires")
     if not _is_valid_emplacement(emplacement):
         raise HTTPException(400, f"Format emplacement invalide : {emplacement}")
+    if (quantite_fsc is not None or quantite_non_fsc is not None):
+        if type_mvt != "inventaire":
+            raise HTTPException(
+                400,
+                "quantite_fsc / quantite_non_fsc ne s'appliquent qu'à un inventaire.",
+            )
+        # Le total prime : on le recalcule plutôt que de faire confiance à un
+        # champ `quantite` que le front pourrait ne pas avoir resynchronisé.
+        quantite = (quantite_fsc or 0) + (quantite_non_fsc or 0)
     if quantite <= 0:
         raise HTTPException(400, "Quantité doit être positive")
 
@@ -2139,6 +2577,11 @@ async def mouvement_stock(request: Request):
             note,
             date_entree,
             no_dossier=no_dossier,
+            quantite_fsc=quantite_fsc,
+            quantite_non_fsc=quantite_non_fsc,
+            fsc=fsc_sortie,
+            fsc_ecart_confirme=fsc_ecart_confirme,
+            fsc_ecart_note=fsc_ecart_note,
         )
 
         # Insertion des palettes (meme transaction)
@@ -2178,6 +2621,14 @@ async def api_sortir_lot(request: Request):
     produit_id = body.get("produit_id")
     emplacement = (body.get("emplacement") or "").strip().upper()
     note = (body.get("note") or "").strip()
+    fsc_seg = body.get("fsc")
+    if fsc_seg is not None and str(fsc_seg).strip() != "":
+        try:
+            fsc_seg = 1 if int(fsc_seg) else 0
+        except (TypeError, ValueError):
+            raise HTTPException(400, "fsc doit valoir 0 ou 1")
+    else:
+        fsc_seg = None
 
     if not produit_id or not emplacement:
         raise HTTPException(400, "produit_id et emplacement obligatoires")
@@ -2194,7 +2645,8 @@ async def api_sortir_lot(request: Request):
         ref_audit = p["reference"] or ""
 
         result = sortir_lot_fifo(
-            conn, int(produit_id), emplacement, user["email"], created_by_name, note
+            conn, int(produit_id), emplacement, user["email"], created_by_name, note,
+            fsc=fsc_seg,
         )
         conn.commit()
 
@@ -2202,8 +2654,10 @@ async def api_sortir_lot(request: Request):
         user=user,
         action="UPDATE",
         module="stock",
-        objet=f"Sortie lot FIFO · {ref_audit} · {emplacement} · {result['quantite_sortie']}",
-        detail={"emplacement": emplacement, "quantite": result["quantite_sortie"]},
+        objet=f"Sortie lot FIFO · {ref_audit} · {emplacement} · {result['quantite_sortie']}"
+              + (" · FSC" if result.get("fsc") else ""),
+        detail={"emplacement": emplacement, "quantite": result["quantite_sortie"],
+                "fsc": result.get("fsc")},
         ip=request.client.host if request.client else None,
     )
     return {"success": True, **result}
@@ -2217,6 +2671,17 @@ async def api_deplacer_lot(request: Request):
     produit_id = body.get("produit_id")
     emplacement_source = (body.get("emplacement_source") or "").strip().upper()
     emplacement_destination = (body.get("emplacement_destination") or "").strip().upper()
+    # Segment à déplacer : 1 = FSC, 0 = non FSC, absent = le plus ancien tous
+    # segments confondus (comportement historique, conservé pour les
+    # emplacements homogènes où la question ne se pose pas).
+    fsc_seg = body.get("fsc")
+    if fsc_seg is not None and str(fsc_seg).strip() != "":
+        try:
+            fsc_seg = 1 if int(fsc_seg) else 0
+        except (TypeError, ValueError):
+            raise HTTPException(400, "fsc doit valoir 0 ou 1")
+    else:
+        fsc_seg = None
 
     if not produit_id or not emplacement_source or not emplacement_destination:
         raise HTTPException(400, "produit_id, emplacement_source et emplacement_destination obligatoires")
@@ -2237,7 +2702,8 @@ async def api_deplacer_lot(request: Request):
         ref_audit = p["reference"] or ""
 
         result = deplacer_lot_fifo(
-            conn, int(produit_id), emplacement_source, emplacement_destination, user["email"], created_by_name
+            conn, int(produit_id), emplacement_source, emplacement_destination,
+            user["email"], created_by_name, fsc=fsc_seg,
         )
         conn.commit()
 
@@ -2245,8 +2711,15 @@ async def api_deplacer_lot(request: Request):
         user=user,
         action="UPDATE",
         module="stock",
-        objet=f"Déplacement lot · {ref_audit} · {emplacement_source} → {emplacement_destination} · {result['quantite_deplacee']}",
-        detail={"emplacement_source": emplacement_source, "emplacement_destination": emplacement_destination, "quantite": result["quantite_deplacee"]},
+        objet=f"Déplacement lot · {ref_audit} · {emplacement_source} → {emplacement_destination} · {result['quantite_deplacee']}"
+              + (" · FSC" if result.get("fsc") else ""),
+        detail={
+            "emplacement_source": emplacement_source,
+            "emplacement_destination": emplacement_destination,
+            "quantite": result["quantite_deplacee"],
+            "fsc": result.get("fsc"),
+            "no_dossier": result.get("no_dossier"),
+        },
         ip=request.client.host if request.client else None,
     )
     return {"success": True, **result}

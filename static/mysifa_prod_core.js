@@ -144,6 +144,15 @@
     historique: null,
     production: null,
     traceabilite: null,
+    // ── Traceur (Traçabilité → sous-onglet Traceur) ──────────────
+    // `traceurCandidats` non nul et vide = recherche effectuée sans
+    // résultat ; null = aucune recherche lancée. La distinction évite
+    // d'afficher « aucune correspondance » avant toute recherche.
+    tracaSubTab: 'dossiers',
+    traceurQ: '',
+    traceurLoading: false,
+    traceurCandidats: null,
+    traceurChaine: null,
     machineStatus: null,
     saisies: null,
     imports: [],
@@ -2098,7 +2107,381 @@ function openFscRapportModal(data, ref){
   }
 }
 
+// ══════════════════════════════════════════════════════════════════
+// TRACEUR — chaîne complète d'un produit, dans les deux sens
+// ══════════════════════════════════════════════════════════════════
+//
+// Un champ, n'importe quelle clé : n° d'OF, code-barre de bobine, n° de lot
+// LOT-…, référence produit, n° de BL. Demander à l'utilisateur de choisir
+// d'abord le TYPE de recherche reviendrait à lui demander de connaître le
+// modèle de données ; l'API résout la nature de la clé et ne propose un choix
+// que si la saisie est réellement ambiguë.
+//
+// Les liens issus du backfill (rapprochements par horodatage, ref_sifa
+// reconnue) sont affichés en dégradé et étiquetés « reconstitué ». Un
+// auditeur ne doit jamais prendre une déduction pour une donnée saisie.
+
+const TRACEUR_TYPE_LABELS = {
+  dossier:    'Dossier de fabrication',
+  bobine:     'Bobine matière',
+  reception:  'Réception fournisseur',
+  expedition: 'Expédition',
+  produit:    'Référence produit',
+};
+
+function traceurSetQuery(v){ S.traceurQ = v; }
+
+async function traceurRechercher(){
+  const q = (S.traceurQ || '').trim();
+  if(q.length < 2){ showToast('Saisir au moins 2 caractères.', 'danger'); return; }
+  set({traceurLoading:true, traceurChaine:null, traceurCandidats:null});
+  try{
+    const r = await api('/api/traca/resolve?q=' + encodeURIComponent(q));
+    const cands = (r && r.candidats) || [];
+    if(cands.length === 0){
+      set({traceurLoading:false, traceurCandidats:[], traceurChaine:null});
+      return;
+    }
+    if(cands.length === 1){
+      // Cas courant : une seule interprétation possible, on enchaîne sans
+      // faire cliquer l'utilisateur sur un choix qui n'en est pas un.
+      await traceurOuvrir(cands[0].type, cands[0].id);
+      return;
+    }
+    set({traceurLoading:false, traceurCandidats:cands});
+  }catch(e){
+    set({traceurLoading:false});
+    showToast(e.message || 'Recherche impossible.', 'danger');
+  }
+}
+
+async function traceurOuvrir(type, id){
+  set({traceurLoading:true, traceurCandidats:null});
+  try{
+    const d = await api('/api/traca/chaine?type=' + encodeURIComponent(type) + '&id=' + encodeURIComponent(id));
+    set({traceurLoading:false, traceurChaine:d});
+  }catch(e){
+    set({traceurLoading:false});
+    showToast(e.message || 'Chaîne indisponible.', 'danger');
+  }
+}
+
+function traceurReset(){
+  set({traceurChaine:null, traceurCandidats:null, traceurQ:''});
+}
+
+// Petit marqueur réutilisé partout : distingue une donnée saisie d'un lien
+// déduit par le backfill. Discret mais systématique.
+function traceurReconstitueTag(flag){
+  if(!flag) return null;
+  return h('span',{className:'trc-reconst', title:
+    'Lien déduit automatiquement (rapprochement par date ou par référence), '
+    + 'et non saisi. À confirmer avant de l\'opposer à un auditeur.'},
+    'reconstitué');
+}
+
+function traceurNoeud(opts){
+  const {icone, titre, sousTitre, lignes, ton, reconstitue, onClick, badge} = opts;
+  return h('div',{
+    className:'trc-node'+(ton?' trc-node--'+ton:'')+(reconstitue?' is-reconstitue':'')+(onClick?' is-clickable':''),
+    onClick: onClick || null,
+  },
+    h('div',{className:'trc-node-ico'}, iconEl(icone||'circle', 15)),
+    h('div',{className:'trc-node-body'},
+      h('div',{className:'trc-node-head'},
+        h('span',{className:'trc-node-title'}, titre),
+        badge || null,
+        traceurReconstitueTag(reconstitue)
+      ),
+      sousTitre ? h('div',{className:'trc-node-sub'}, sousTitre) : null,
+      ...(lignes||[]).filter(Boolean).map(l => h('div',{className:'trc-node-line'}, l))
+    )
+  );
+}
+
+function traceurBadgeFsc(ok, ecart){
+  if(!ok) return null;
+  return h('span',{className:'trc-fsc'+(ecart?' is-ecart':''),
+    title: ecart ? 'Traçabilité matière incomplète ou en écart' : 'Certifié FSC'},
+    'FSC', ecart ? ' ⚠' : '');
+}
+
+function traceurFmtDate(s){
+  if(!s) return '';
+  return String(s).replace('T',' ').slice(0,16);
+}
+
+// Une branche = un dossier et tout ce qui en découle. Le même composant sert
+// pour une recherche par dossier (une branche) et pour une recherche par
+// bobine ou par BL (plusieurs branches) : la lecture reste identique quel que
+// soit le point d'entrée.
+function traceurBranche(ch, idx){
+  const dos = ch.dossier || {};
+  const syn = ch.synthese || {};
+  const ref = (ch.racine && ch.racine.id) || dos.reference || '';
+
+  const etapes = [];
+
+  // 1. Matières consommées (amont)
+  (ch.matieres || []).forEach(m => {
+    etapes.push(traceurNoeud({
+      icone:'package', ton:'matiere',
+      titre: m.code_barre || '—',
+      badge: traceurBadgeFsc((m.fsc_type_claim || 'non_fsc') !== 'non_fsc', !!m.fsc_warning),
+      sousTitre: [m.fournisseur, m.fsc_claim_label].filter(Boolean).join(' · '),
+      lignes: [
+        m.certificat_fsc ? ('Certificat ' + m.certificat_fsc) : null,
+        m.fournisseur_licence ? ('Licence ' + m.fournisseur_licence) : null,
+        m.lot_numero ? ('Lot réception ' + m.lot_numero) : null,
+        m.scanned_at ? ('Scannée le ' + traceurFmtDate(m.scanned_at)
+                        + (m.operateur ? ' par ' + m.operateur : '')) : null,
+      ],
+      onClick: () => traceurOuvrir('bobine', m.code_barre),
+    }));
+  });
+
+  // 2. Production
+  (ch.saisies || []).slice(0, 6).forEach(s => {
+    etapes.push(traceurNoeud({
+      icone:'wrench', ton:'prod',
+      titre: s.operation || 'Production',
+      sousTitre: [s.machine, s.operateur].filter(Boolean).join(' · '),
+      lignes: [
+        traceurFmtDate(s.date_operation),
+        s.quantite_traitee != null ? ('Quantité traitée : ' + s.quantite_traitee) : null,
+      ],
+    }));
+  });
+  if((ch.saisies || []).length > 6){
+    etapes.push(h('div',{className:'trc-more'},
+      '+ ' + ((ch.saisies || []).length - 6) + ' autre(s) saisie(s) de production'));
+  }
+
+  // 3. Lots de produit fini
+  (ch.lots || []).forEach(l => {
+    etapes.push(traceurNoeud({
+      icone:'layers', ton:'stock',
+      titre: (l.produit_ref || '') + ' — lot #' + l.id,
+      badge: traceurBadgeFsc(!!l.fsc, !!l.fsc_ecart),
+      reconstitue: !!l.reconstitue,
+      sousTitre: 'Emplacement ' + (l.emplacement || '—'),
+      lignes: [
+        'Produit : ' + (l.quantite_initiale != null ? l.quantite_initiale : '?')
+          + ' ' + (l.unite || '') + ' · reste ' + (l.quantite_restante != null ? l.quantite_restante : '?'),
+        l.created_at ? ('Entré en stock le ' + traceurFmtDate(l.created_at)) : null,
+      ],
+      onClick: l.produit_id ? (() => traceurOuvrir('produit', String(l.produit_id))) : null,
+    }));
+  });
+
+  // 4. Mouvements de stock
+  (ch.mouvements || []).slice(0, 10).forEach(m => {
+    const lbl = m.type_mouvement === 'entree' ? 'Entrée'
+              : m.type_mouvement === 'sortie' ? 'Sortie' : (m.type_mouvement || '');
+    etapes.push(traceurNoeud({
+      icone:'move', ton:'stock',
+      titre: lbl + ' · ' + (m.emplacement || ''),
+      badge: m.fsc_ecart ? h('span',{className:'trc-fsc is-ecart'}, 'écart FSC') : null,
+      reconstitue: !!m.reconstitue,
+      sousTitre: traceurFmtDate(m.created_at) + (m.created_by_name ? ' · ' + m.created_by_name : ''),
+      lignes: [
+        (m.quantite != null ? ('Quantité : ' + m.quantite) : null),
+        m.fsc_ecart_note || m.note || null,
+      ],
+    }));
+  });
+
+  // 5. Expéditions (aval)
+  (ch.expeditions || []).forEach(e => {
+    etapes.push(traceurNoeud({
+      icone:'truck', ton:'expe',
+      titre: 'BL ' + (e.no_bl || ('#' + e.id)),
+      reconstitue: !!e.reconstitue,
+      sousTitre: [e.client, e.transporteur].filter(Boolean).join(' · '),
+      lignes: [
+        e.date_enlevement ? ('Enlèvement ' + e.date_enlevement) : null,
+        e.code_postal_destination ? ('Destination ' + e.code_postal_destination) : null,
+        (e.nb_palette ? (e.nb_palette + ' palette(s)') : null),
+      ],
+      onClick: () => traceurOuvrir('expedition', String(e.id)),
+    }));
+  });
+
+  const ruptures = (syn.ruptures || []);
+
+  return h('div',{className:'trc-branche', key:'br'+(idx||0)},
+    h('div',{className:'trc-branche-head'},
+      h('span',{className:'trc-branche-ref'}, ref || '—'),
+      traceurBadgeFsc(!!syn.fsc_requis, false),
+      dos.client ? h('span',{className:'trc-branche-client'}, dos.client) : null,
+      dos.machine_nom ? h('span',{className:'trc-branche-meta'}, dos.machine_nom) : null
+    ),
+    // Les ruptures sont annoncées AVANT la chaîne, pas en note de bas de page :
+    // une chaîne incomplète présentée comme complète vaut moins que rien.
+    ruptures.length ? h('div',{className:'trc-ruptures'},
+      h('div',{className:'trc-ruptures-t'}, 'Ce que cette chaîne ne démontre pas'),
+      ...ruptures.map(r => h('div',{className:'trc-rupture'}, '• ' + r))
+    ) : null,
+    etapes.length
+      ? h('div',{className:'trc-timeline'}, ...etapes)
+      : h('div',{className:'card-empty'}, 'Aucune étape enregistrée pour ce dossier.')
+  );
+}
+
+function traceurSynthese(ch){
+  const s = ch.synthese || {};
+  const stats = [];
+  if(s.nb_bobines != null) stats.push(['Bobines', s.nb_bobines]);
+  if(s.nb_bobines_conformes != null) stats.push(['Dont conformes', s.nb_bobines_conformes]);
+  if(s.nb_lots != null) stats.push(['Lots produits', s.nb_lots]);
+  if(s.nb_lots_fsc != null) stats.push(['Dont FSC', s.nb_lots_fsc]);
+  if(s.nb_dossiers != null) stats.push(['Dossiers', s.nb_dossiers]);
+  if(s.nb_expeditions != null) stats.push(['Expéditions', s.nb_expeditions]);
+  if(!stats.length) return null;
+  return h('div',{className:'trc-stats'},
+    ...stats.map(([k,v]) => h('div',{className:'trc-stat'},
+      h('div',{className:'trc-stat-k'}, k),
+      h('div',{className:'trc-stat-v'}, String(v))
+    ))
+  );
+}
+
+function renderTraceur(){
+  const inp = h('input',{
+    className:'trc-input',
+    type:'text',
+    placeholder:'N° d\'OF, code-barre bobine, LOT-…, réf produit, n° de BL…',
+    value: S.traceurQ || '',
+    onInput: (e) => { traceurSetQuery(e.target.value); },
+    onKeyDown: (e) => { if(e.key === 'Enter') traceurRechercher(); },
+  });
+
+  const barre = h('div',{className:'trc-search'},
+    inp,
+    h('button',{className:'btn btn-sm', onClick: traceurRechercher, disabled: !!S.traceurLoading},
+      iconEl('search',14), ' Tracer'),
+    S.traceurChaine ? h('button',{className:'btn btn-sm btn-ghost', onClick: traceurReset},
+      'Nouvelle recherche') : null,
+    S.traceurChaine ? h('button',{className:'btn btn-sm btn-ghost trc-no-print',
+      onClick: () => window.print()}, iconEl('printer',14), ' Export PDF') : null
+  );
+
+  const aide = h('div',{className:'trc-hint'},
+    'Collez n\'importe quel identifiant : le traceur reconstitue la chaîne dans les deux sens — '
+    + 'du fournisseur jusqu\'au bon de livraison, ou l\'inverse.');
+
+  let corps = null;
+  if(S.traceurLoading){
+    corps = h('div',{className:'card-empty'}, 'Reconstitution de la chaîne…');
+  }else if(S.traceurCandidats && S.traceurCandidats.length === 0){
+    corps = h('div',{className:'card-empty'},
+      'Aucune correspondance pour « ' + (S.traceurQ || '') + ' ».');
+  }else if(S.traceurCandidats && S.traceurCandidats.length > 1){
+    // Saisie réellement ambiguë : on montre ce qu'on a trouvé plutôt que de
+    // choisir à la place de l'utilisateur.
+    corps = h('div',{className:'card'},
+      h('div',{className:'card-header'},
+        h('div',{className:'card-title'}, 'Plusieurs correspondances — préciser')),
+      ...S.traceurCandidats.map(c => h('div',{
+        className:'trc-cand',
+        onClick: () => traceurOuvrir(c.type, c.id),
+      },
+        h('div',null,
+          h('div',{className:'trc-cand-lbl'}, c.libelle || c.id),
+          h('div',{className:'trc-cand-sub'}, c.detail || '')
+        ),
+        h('span',{className:'trc-cand-type'}, TRACEUR_TYPE_LABELS[c.type] || c.type)
+      ))
+    );
+  }else if(S.traceurChaine){
+    const ch = S.traceurChaine;
+    const racine = ch.racine || {};
+    const entete = [];
+
+    if(ch.reception){
+      entete.push(traceurNoeud({
+        icone:'package', ton:'matiere',
+        titre: ch.reception.lot_numero || ('Réception #' + ch.reception.id),
+        badge: traceurBadgeFsc((ch.reception.fsc_type_claim || 'non_fsc') !== 'non_fsc', false),
+        sousTitre: [ch.reception.fournisseur, ch.reception.fsc_claim_label].filter(Boolean).join(' · '),
+        lignes: [
+          ch.reception.fournisseur_licence ? ('Licence ' + ch.reception.fournisseur_licence) : null,
+          ch.reception.certificat_fsc ? ('Certificat ' + ch.reception.certificat_fsc) : null,
+          ch.reception.pays_origine ? ('Origine ' + ch.reception.pays_origine) : null,
+          ch.reception.created_at ? ('Reçue le ' + traceurFmtDate(ch.reception.created_at)) : null,
+        ],
+      }));
+    }
+    if(ch.expedition){
+      entete.push(traceurNoeud({
+        icone:'truck', ton:'expe',
+        titre: 'BL ' + (ch.expedition.no_bl || ('#' + ch.expedition.id)),
+        reconstitue: !!ch.reconstitue,
+        sousTitre: [ch.expedition.client, ch.expedition.transporteur].filter(Boolean).join(' · '),
+        lignes: [ch.expedition.date_enlevement ? ('Enlèvement ' + ch.expedition.date_enlevement) : null],
+      }));
+    }
+    if(ch.produit){
+      entete.push(traceurNoeud({
+        icone:'layers', ton:'stock',
+        titre: ch.produit.reference || '',
+        sousTitre: ch.produit.designation || '',
+      }));
+    }
+
+    // Une chaîne « dossier » est sa propre branche ; les autres points
+    // d'entrée en agrègent plusieurs.
+    const branches = (racine.type === 'dossier') ? [ch] : (ch.dossiers || []);
+    const ruptRacine = (ch.synthese && ch.synthese.ruptures) || [];
+
+    corps = h('div',{className:'trc-result'},
+      h('div',{className:'trc-racine'},
+        h('span',{className:'trc-racine-type'}, TRACEUR_TYPE_LABELS[racine.type] || racine.type),
+        h('span',{className:'trc-racine-id'}, racine.id || '')
+      ),
+      traceurSynthese(ch),
+      (racine.type !== 'dossier' && ruptRacine.length)
+        ? h('div',{className:'trc-ruptures'},
+            h('div',{className:'trc-ruptures-t'}, 'Ce que cette chaîne ne démontre pas'),
+            ...ruptRacine.map(r => h('div',{className:'trc-rupture'}, '• ' + r)))
+        : null,
+      entete.length ? h('div',{className:'trc-timeline'}, ...entete) : null,
+      (ch.synthese && ch.synthese.tronque)
+        ? h('div',{className:'trc-ruptures'},
+            h('div',{className:'trc-rupture'},
+              '• Résultat tronqué : seules les premières branches sont affichées.'))
+        : null,
+      ...branches.map((b,i) => traceurBranche(b, i))
+    );
+  }else{
+    corps = h('div',{className:'card-empty'},
+      'Saisissez un identifiant pour reconstituer une chaîne de traçabilité.');
+  }
+
+  return h('div',{className:'trc-wrap'}, barre, aide, corps);
+}
+
 function renderTracabilite(){
+  // Deux sous-onglets : la vue historique par dossier, et le traceur
+  // transversal. Ils répondent à deux questions différentes — « qu'a
+  // consommé ce dossier ? » et « où est passée cette matière ? ».
+  const sub = S.tracaSubTab || 'dossiers';
+  const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Traçabilité'},
+    ...[
+      {key:'dossiers', label:'Par dossier', icon:'layers'},
+      {key:'traceur',  label:'Traceur',     icon:'search'},
+    ].map(t => h('button',{
+      type:'button', role:'tab',
+      'aria-selected': sub===t.key ? 'true' : 'false',
+      className:'nav-tab'+(sub===t.key?' active':''),
+      onClick: () => { set({tracaSubTab:t.key}); render(); },
+    }, iconEl(t.icon,14), ' '+t.label))
+  );
+
+  if(sub === 'traceur'){
+    return h('div',null, subNav, renderTraceur());
+  }
+
   // Si on a un dossier sélectionné, afficher son détail
   if(S.traceabiliteDossier !== undefined && S.traceabiliteDossier !== null){
     return renderTracabiliteDossierDetail();
@@ -7573,7 +7956,10 @@ function renderProdKpis(){
     const containerKids = [
       topbar,
       (function(){
-        var _gk = ({menu:'myprod-overview', production:'myprod-production'})[S.page] || '';
+        // La page Traçabilité manquait à cette table : son bouton d'aide ne
+        // s'affichait jamais, alors même que PROD_VIEW_GUIDE la référençait.
+        var _gk = ({menu:'myprod-overview', production:'myprod-production',
+                    traceabilite:'myprod-tracabilite'})[S.page] || '';
         var _t = h('h1', null, pageTitle);
         try{ if(window.MySifaGuides && _gk){ var _b = MySifaGuides.bookBtn(_gk); if(_b){ var _sp = document.createElement('span'); _sp.style.marginLeft='10px'; _sp.innerHTML=_b; _t.appendChild(_sp); } } }catch(e){}
         return _t;
@@ -7740,6 +8126,43 @@ function renderProdKpis(){
         title: 'Rentabilité et Fiches + OF',
         body: `<strong>Rentabilité</strong> compare le <span class="mguide-hl">réel</span> (temps et quantités saisis) au <span class="mguide-hl">devis</span>, dossier par dossier. <strong>Fiches + OF</strong> importe les ordres de fabrication (PDF) et les rattache aux dossiers.`,
         illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><text x="8" y="20" font-size="10" fill="var(--text)" font-weight="800">Rentabilité — DOS-4821</text><text x="18" y="44" font-size="9" fill="var(--muted)">Devis</text><rect x="60" y="34" width="140" height="14" rx="4" fill="var(--bg)" stroke="var(--border)"/><rect x="60" y="34" width="120" height="14" rx="4" fill="var(--accent)"/><text x="210" y="45" font-size="9" fill="var(--text2)">1 250 €</text><text x="18" y="66" font-size="9" fill="var(--muted)">Réel</text><rect x="60" y="56" width="140" height="14" rx="4" fill="var(--bg)" stroke="var(--border)"/><rect x="60" y="56" width="134" height="14" rx="4" fill="var(--ok,#34d399)"/><text x="210" y="67" font-size="9" fill="var(--text2)">1 390 €</text><line x1="8" y1="86" x2="332" y2="86" stroke="var(--border)"/><text x="8" y="106" font-size="10" fill="var(--text)" font-weight="800">Fiches + OF</text><rect x="8" y="116" width="150" height="44" rx="8" fill="var(--card)" stroke="var(--border)"/><rect x="18" y="126" width="24" height="30" rx="4" fill="var(--accent-bg)"/><text x="34" y="145" font-size="11" fill="var(--accent)" text-anchor="middle" font-weight="800">PDF</text><text x="52" y="136" font-size="9" fill="var(--text)" font-weight="700">OF-2231.pdf</text><text x="52" y="150" font-size="8" fill="var(--muted)">rattaché à DOS-4821</text><rect x="170" y="116" width="162" height="44" rx="8" fill="var(--bg)" stroke="var(--border)" stroke-dasharray="4 3"/><text x="251" y="142" font-size="9" fill="var(--muted)" text-anchor="middle">Glissez un PDF pour l'importer</text></svg>`
+      }
+    ]},
+
+    // PROD_VIEW_GUIDE pointait déjà vers 'myprod-tracabilite' alors que la
+    // clé n'existait pas : le bouton d'aide de l'onglet Traçabilité ne
+    // s'affichait donc jamais. Le guide est ajouté ici, et couvre les deux
+    // sous-onglets — la vue par dossier et le traceur transversal.
+    'myprod-tracabilite': { steps: [
+      {
+        icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>`,
+        title: 'Traçabilité — deux façons de chercher',
+        body: `Cet onglet répond à <strong>deux questions différentes</strong>. <span class="mguide-tag">Par dossier</span> répond à « qu'a consommé ce dossier ? ». <span class="mguide-tag">Traceur</span> répond à « où est passée cette matière ? » — et remonte aussi bien de la bobine vers le client que du bon de livraison vers le fournisseur.`,
+        extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce que vous pouvez faire ici</div><ul class="mguide-svc-list"><li>Vérifier qu'un dossier certifié a bien consommé de la matière FSC.</li><li>Retrouver toutes les expéditions issues d'un lot de bobines.</li><li>Sortir un PDF de chaîne complète pour un auditeur ou un client.</li></ul></div></div>`
+      },
+      {
+        title: 'Le traceur : un seul champ, n\'importe quelle clé',
+        body: `Collez ce que vous avez sous la main — un <span class="mguide-hl">n° d'OF</span>, un <span class="mguide-hl">code-barre de bobine</span>, un n° de lot <span class="mguide-tag">LOT-…</span>, une référence produit ou un <span class="mguide-hl">n° de BL</span>. Le traceur reconnaît la nature de la clé tout seul. Si la saisie est réellement ambiguë, il propose les correspondances au lieu de choisir à votre place.`,
+        illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI">
+          <rect x="8" y="10" width="240" height="28" rx="9" fill="var(--bg)" stroke="var(--accent)"/><text x="20" y="28" font-size="10" fill="var(--text2)">CB-001</text>
+          <rect x="256" y="10" width="76" height="28" rx="9" fill="var(--accent)"/><text x="294" y="28" font-size="10" fill="#fff" text-anchor="middle" font-weight="700">Tracer</text>
+          <g font-size="9">
+            <circle cx="20" cy="60" r="5" fill="var(--accent)"/><rect x="34" y="48" width="298" height="24" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="44" y="63" fill="var(--text)">Réception PAPETERIE X · FSC Mix</text>
+            <circle cx="20" cy="92" r="5" fill="var(--warn,#fbbf24)"/><rect x="34" y="80" width="298" height="24" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="44" y="95" fill="var(--text)">Dossier 9932314 · Cohesio 1</text>
+            <circle cx="20" cy="124" r="5" fill="#a78bfa"/><rect x="34" y="112" width="298" height="24" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="44" y="127" fill="var(--text)">Lot en stock A111 · 12 000 étiq.</text>
+            <circle cx="20" cy="156" r="5" fill="var(--ok,#34d399)"/><rect x="34" y="144" width="298" height="22" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="44" y="159" fill="var(--text)">BL-4471 · ALCYON · CEVA</text>
+          </g>
+          <line x1="20" y1="60" x2="20" y2="156" stroke="var(--border)" stroke-width="2"/>
+        </svg>`
+      },
+      {
+        title: 'Lire un résultat honnêtement',
+        body: `Deux repères comptent plus que le reste. L'encadré <span class="mguide-hl">« Ce que cette chaîne ne démontre pas »</span> liste les ruptures : bobine non tracée, lot sans dossier, expédition non rattachée. Et l'étiquette <span class="mguide-tag">reconstitué</span> marque les liens <strong>déduits</strong> par rapprochement automatique sur l'historique ancien — ils sont affichés en pointillés et délavés. Ne les opposez pas à un auditeur sans les avoir vérifiés.`,
+        extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>À retenir</div><ul class="mguide-svc-list"><li>Une chaîne sans rupture affichée est une chaîne démontrable.</li><li>Un lien « reconstitué » vient du rattrapage de l'historique, pas d'une saisie.</li><li>Les chaînes très larges sont tronquées — le traceur le signale.</li></ul></div></div>`
+      },
+      {
+        title: 'Sortir le PDF d\'audit',
+        body: `Le bouton <span class="mguide-tag">Export PDF</span> imprime la chaîne telle qu'elle est affichée, sans les commandes de recherche. C'est le document à joindre à une réponse d'audit FSC ou à une réclamation client. Les ruptures et les mentions « reconstitué » y figurent aussi : <strong>le PDF ne dit rien de plus que l'écran</strong>.`
       }
     ]},
 

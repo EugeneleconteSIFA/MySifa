@@ -120,20 +120,32 @@ select.filter.on{border-color:var(--accent);color:var(--accent);background:var(-
 .btn.danger{background:var(--danger);color:#fff}
 .btn.small{padding:6px 11px;font-size:11px;border-radius:8px}
 .btn:disabled{opacity:.5;cursor:not-allowed;filter:none}
+/* Bascule « Mes tâches » : un filtre, pas une vue — il vaut pour le Kanban
+   comme pour la Liste et se cumule avec les autres critères. */
+.btn.ghost.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.btn.ghost.on:hover{background:var(--accent-bg)}
+.btn .cnt{padding:0 6px;border-radius:8px;background:var(--border);color:var(--text2);font-size:10px;font-weight:800;line-height:1.6}
+.btn.ghost.on .cnt{background:var(--accent);color:var(--bg)}
+.btn .cnt.warn{background:rgba(251,191,36,.22);color:var(--warn)}
+.btn.ghost.on .cnt.warn{background:var(--warn);color:#3b2c00}
 
 /* ── Kanban ── */
-.board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(172px,1fr);gap:12px;align-items:start;overflow-x:auto;padding-bottom:14px}
+/* Colonnes bornées : elles ne s'étirent plus pour remplir l'écran. Une carte
+   compacte n'a pas besoin de 240 px de large, et le board reste lisible d'un
+   seul coup d'œil au lieu de s'étaler. */
+.board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(146px,200px);justify-content:start;
+  gap:10px;align-items:start;overflow-x:auto;padding-bottom:14px}
 .col{min-width:0;background:var(--card);border:1px solid var(--border);border-radius:14px;display:flex;flex-direction:column;max-height:calc(100vh - 250px)}
 .col.drop{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-bg)}
-.col-head{display:flex;align-items:center;gap:8px;padding:13px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
+.col-head{display:flex;align-items:center;gap:7px;padding:11px 11px;border-bottom:1px solid var(--border);flex-shrink:0}
 .col-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.col-title{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--text)}
-.col-count{margin-left:auto;font-size:11px;font-weight:700;color:var(--muted);background:var(--bg);padding:2px 8px;border-radius:8px}
-.col-body{padding:10px;display:flex;flex-direction:column;gap:9px;overflow-y:auto;min-height:80px;flex:1}
-.col-add{margin:0 10px 10px;padding:9px;border:1px dashed var(--border);border-radius:9px;background:transparent;color:var(--muted);font-size:12px;font-family:inherit;cursor:pointer;transition:all .15s;flex-shrink:0}
+.col-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.col-count{margin-left:auto;font-size:10.5px;font-weight:700;color:var(--muted);background:var(--bg);padding:2px 7px;border-radius:8px;flex-shrink:0}
+.col-body{padding:8px;display:flex;flex-direction:column;gap:7px;overflow-y:auto;min-height:70px;flex:1}
+.col-add{margin:0 8px 8px;padding:8px;border:1px dashed var(--border);border-radius:9px;background:transparent;color:var(--muted);font-size:11.5px;font-family:inherit;cursor:pointer;transition:all .15s;flex-shrink:0}
 .col-add:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 
-.tcard{background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--border);border-radius:10px;padding:11px 12px;cursor:pointer;transition:border-color .15s,transform .1s,box-shadow .15s}
+.tcard{background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--border);border-radius:9px;padding:8px 9px;cursor:pointer;transition:border-color .15s,transform .1s,box-shadow .15s}
 .tcard:hover{border-color:var(--accent);box-shadow:0 4px 14px rgba(0,0,0,.18)}
 .tcard.dragging{opacity:.45}
 /* Carte active (survol ou navigation J/K) : cible des touches 1 à 5. */
@@ -150,11 +162,19 @@ kbd{display:inline-block;min-width:17px;padding:1px 5px;border-radius:5px;backgr
 .tcard.prio-haute{border-left-color:var(--warn)}
 .tcard.prio-normale{border-left-color:var(--accent)}
 .tcard.prio-basse{border-left-color:var(--muted)}
-.tcard-top{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:7px}
-.tcard-title{font-size:13px;font-weight:600;color:var(--text);line-height:1.4;margin-bottom:8px;word-break:break-word}
-.tcard-foot{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
-.tcard-foot .mi{display:inline-flex;align-items:center;gap:4px}
-.tcard-foot .mi svg{width:12px;height:12px}
+/* Carte compacte : une ligne d'en-tête (assignés à gauche, alerte + chevron à
+   droite) puis le titre. Aucune étiquette texte — le type, le module, la
+   priorité et l'échéance se lisent dans la fiche ; la priorité reste donnée par
+   la couleur du liseré gauche. */
+.tcard-hd{display:flex;align-items:center;gap:4px;margin-bottom:5px;min-height:17px}
+.tcard-hd .sp{flex:1;min-width:0}
+.tcard-hd .avatar{width:17px;height:17px;font-size:7.5px;border-radius:50%}
+.tcard-hd .pile .avatar{margin-left:-5px}
+.tcard-hd .pile .plus{margin-left:-5px;font-size:7.5px}
+.tcard-retard{display:inline-flex;align-items:center;flex-shrink:0;padding:2px}
+.tcard-retard i{display:block;width:6px;height:6px;border-radius:50%;background:var(--danger);
+  box-shadow:0 0 0 3px rgba(248,113,113,.16)}
+.tcard-title{font-size:12px;font-weight:600;color:var(--text);line-height:1.35;word-break:break-word}
 .avatar{width:22px;height:22px;border-radius:50%;background:var(--accent-bg);color:var(--accent);font-size:9px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;letter-spacing:-.2px}
 .avatar img{width:100%;height:100%;object-fit:cover}
 .avatar.none{background:var(--bg);color:var(--muted);border:1px dashed var(--border)}
@@ -217,22 +237,24 @@ body.drag-actif .arch-drop{opacity:1;transform:translateY(0);border-color:var(--
 /* Pile carte + sous-tâches : la carte reste seule à porter le drag, la pile
    dépliée vit en dessous, dans le même bloc. */
 .tstack{display:flex;flex-direction:column}
-.sous-toggle{display:inline-flex;align-items:center;gap:4px;margin-left:auto;padding:2px 7px;border-radius:7px;
-  border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:10.5px;font-weight:700;
+.sous-toggle{display:inline-flex;align-items:center;gap:3px;flex-shrink:0;padding:1px 5px;border-radius:6px;
+  border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:9.5px;font-weight:700;
   font-family:inherit;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
 .sous-toggle:hover{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .sous-toggle.ouvert{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .sous-toggle svg{width:11px;height:11px;transition:transform .18s}
 .sous-toggle.ouvert svg{transform:rotate(90deg)}
-.sous-pile{display:flex;flex-direction:column;gap:5px;margin:6px 0 2px 12px;padding-left:10px;border-left:2px solid var(--border)}
-.sous-carte{display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:8px;background:var(--card);
+.sous-pile{display:flex;flex-direction:column;gap:4px;margin:5px 0 2px 8px;padding-left:8px;border-left:2px solid var(--border)}
+.sous-carte{display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:7px;background:var(--card);
   border:1px solid var(--border);cursor:pointer;transition:border-color .15s,background .15s}
 .sous-carte:hover{border-color:var(--accent);background:var(--accent-bg)}
-.sous-carte .st{flex:1;min-width:0;font-size:11.5px;font-weight:600;color:var(--text);
+.sous-carte .st{flex:1;min-width:0;font-size:11px;font-weight:600;color:var(--text);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sous-carte.close .st{text-decoration:line-through;color:var(--muted);font-weight:500}
-.sous-carte .tag{font-size:9px;padding:1px 5px}
-.progress{height:4px;border-radius:3px;background:var(--border);overflow:hidden;margin-top:8px}
+.sous-carte .pastille{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.sous-carte .avatar{width:15px;height:15px;font-size:7px}
+.sous-carte .pile .avatar{margin-left:-4px}
+.progress{height:3px;border-radius:3px;background:var(--border);overflow:hidden;margin-top:6px}
 .progress i{display:block;height:100%;background:var(--accent);border-radius:3px}
 
 /* ── Liste ── */
@@ -342,10 +364,10 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
 
 @media (max-width:1400px) and (min-width:901px){
   .main{padding-left:16px;padding-right:16px}
-  .board{gap:10px}
-  .col-body{padding:8px;gap:8px}
-  .col-head{padding:11px 11px}
-  .col-add{margin:0 8px 8px}
+  .board{gap:8px}
+  .col-body{padding:7px;gap:6px}
+  .col-head{padding:10px 9px}
+  .col-add{margin:0 7px 7px}
 }
 @media (max-width:900px){
   body.has-topbar .main{padding-top:74px}
@@ -353,7 +375,7 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
   .sidebar{position:fixed;left:0;top:0;bottom:0;height:auto;max-height:100vh;z-index:300;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 16px 48px rgba(0,0,0,.55)}
   body.sb-open .sidebar{transform:translateX(0)}
   .board{display:flex;overflow-x:auto}
-  .col{flex:0 0 264px;width:264px;max-height:none}
+  .col{flex:0 0 208px;width:208px;max-height:none}
   .fgrid{grid-template-columns:1fr}
   .drawer{width:100vw;border-left:none}
   .search-wrap{max-width:none}
@@ -378,11 +400,6 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
     <button type="button" class="nav-btn active" id="nav-kanban" onclick="showView('kanban')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="6" height="18" rx="1"/><rect x="10" y="3" width="6" height="12" rx="1"/><rect x="17" y="3" width="4" height="8" rx="1"/></svg>
       Kanban
-    </button>
-    <button type="button" class="nav-btn" id="nav-mes" onclick="showView('mes')">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-      Mes tâches
-      <span class="nav-badge" id="badge-mes" style="display:none">0</span>
     </button>
     <button type="button" class="nav-btn" id="nav-liste" onclick="showView('liste')">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
@@ -449,6 +466,11 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.7" y2="16.7"/></svg>
         <input type="text" class="search" id="f-q" placeholder="Rechercher (titre, description…)" autocomplete="off">
       </div>
+      <button type="button" class="btn ghost small" id="btn-moi" title="N’afficher que les tâches qui me sont assignées — vaut pour le Kanban comme pour la Liste">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Mes tâches
+        <span class="cnt" id="cnt-moi" style="display:none">0</span>
+      </button>
       <select class="filter" id="f-assigne"><option value="">Tout le monde</option></select>
       <select class="filter" id="f-priorite"><option value="">Toutes priorités</option></select>
       <select class="filter" id="f-type"><option value="">Tous types</option></select>
@@ -501,7 +523,9 @@ const S = {
   view: 'kanban',
   detail: null,          // objet complet de la tâche ouverte
   detailTab: 'detail',
-  filtres: {q:'', assigne:'', priorite:'', type:'', module:'', rapide:''},
+  // `moi` : bascule « Mes tâches ». C'est un filtre, pas une vue — il s'applique
+  // au Kanban comme à la Liste et survit au changement d'onglet.
+  filtres: {q:'', assigne:'', priorite:'', type:'', module:'', rapide:'', moi:false},
   sousTaches: true,     // vue Liste : afficher ou non les lignes de sous-tâches
   ouverts: new Set(),   // Kanban : cartes dont la pile de sous-tâches est dépliée
   actif: null,          // carte visée par les touches 1–5 (survol ou J/K)
@@ -729,15 +753,19 @@ function closeSidebar(){document.body.classList.remove('sb-open');}
 
 const VIEW_META={
   kanban:{titre:'Kanban',sub:"Ce que l'équipe doit faire, en cours et terminé.",guide:'taches-kanban'},
-  mes:{titre:'Mes tâches',sub:'Uniquement ce qui vous est assigné, en board.',guide:'taches-kanban'},
   liste:{titre:'Liste',sub:'Toutes les tâches actives, filtrables et triables.',guide:'taches-liste'},
   archives:{titre:'Archives',sub:'Tâches archivées — conservées pour l’historique.',guide:'taches-liste'},
 };
-const VALID_VIEWS=['kanban','mes','liste','archives'];
-// « Mes tâches » est un Kanban filtré sur moi : même lecture, même glisser-déposer.
-function estBoard(v){return v==='kanban'||v==='mes';}
+const VALID_VIEWS=['kanban','liste','archives'];
+function estBoard(v){return v==='kanban';}
 function readView(){
-  try{const h=(location.hash||'').replace(/^#/,'').trim();if(VALID_VIEWS.indexOf(h)!==-1)return h;}catch(e){}
+  try{
+    const h=(location.hash||'').replace(/^#/,'').trim();
+    // Ancien onglet « Mes tâches » : les liens et favoris en #mes atterrissent
+    // sur le Kanban avec la bascule déjà armée.
+    if(h==='mes'){S.filtres.moi=true;return 'kanban';}
+    if(VALID_VIEWS.indexOf(h)!==-1)return h;
+  }catch(e){}
   return 'kanban';
 }
 function showView(v,opts){
@@ -754,9 +782,7 @@ function showView(v,opts){
   // toujours regroupées sous leur mère, jamais masquables.
   const bs=document.getElementById('btn-sous');
   if(bs)bs.style.display=estBoard(v)?'none':'';
-  // Le filtre « personne » n'a pas de sens dans une vue déjà filtrée sur moi.
-  const fa=document.getElementById('f-assigne');
-  if(fa)fa.style.display=(v==='mes')?'none':'';
+  syncMoi();
   syncGuideBtn();
   closeSidebar();
   if(!(opts&&opts.silent)){try{if(location.hash!=='#'+v)history.replaceState(null,'','#'+v);}catch(e){}}
@@ -782,9 +808,9 @@ function queryFiltres(){
   const p=new URLSearchParams();
   const f=S.filtres;
   if(f.q)p.set('q',f.q);
-  if(S.view==='mes'){
-    // Vue « Mes tâches » : filtre posé côté serveur, non contournable par les
-    // listes déroulantes.
+  if(f.moi){
+    // Bascule « Mes tâches » : filtre posé côté serveur, prioritaire sur la
+    // liste déroulante des personnes (masquée tant que la bascule est active).
     if(S.meta&&S.meta.moi)p.set('assigne',String(S.meta.moi.id));
   }
   else if(f.assigne==='0')p.set('non_assignees','1');
@@ -842,17 +868,20 @@ function render(){
   else renderListe();
 }
 
-// Compteur de la nav « Mes tâches » — mêmes chiffres que la pastille du portail.
+// Compteur de la bascule « Mes tâches » — mêmes chiffres que la pastille du portail.
 async function chargerBadgeMes(){
   try{
     const j=await api('/api/taches/badge');
-    const b=document.getElementById('badge-mes');
+    const b=document.getElementById('cnt-moi');
     if(!b)return;
-    const n=Number(j.count||0);
+    const n=Number(j.count||0),r=Number(j.en_retard||0);
     b.textContent=String(n);
     b.style.display=n?'':'none';
-    b.classList.toggle('warn',Number(j.en_retard||0)>0);
-    b.title=Number(j.en_retard||0)>0?(j.en_retard+' en retard'):'';
+    b.classList.toggle('warn',r>0);
+    const btn=document.getElementById('btn-moi');
+    if(btn)btn.title=r>0
+      ? n+' tâche'+(n>1?'s':'')+' assignée'+(n>1?'s':'')+', dont '+r+' en retard'
+      : 'N’afficher que les tâches qui me sont assignées — vaut pour le Kanban comme pour la Liste';
   }catch(e){}
 }
 
@@ -860,10 +889,10 @@ function renderStats(){
   if(!S.meta)return;
   const row=document.getElementById('stats-row');
   const parts=[];
-  // Dans « Mes tâches », les compteurs se calculent sur ce qui est chargé —
-  // c'est-à-dire mes tâches. Afficher les totaux de l'équipe au-dessus d'un
-  // board filtré sur moi n'avait aucun sens.
-  const mesVues=(S.view==='mes');
+  // Bascule « Mes tâches » armée : les compteurs se calculent sur ce qui est
+  // chargé — c'est-à-dire mes tâches. Afficher les totaux de l'équipe au-dessus
+  // d'un board filtré sur moi n'aurait aucun sens.
+  const mesVues=!!S.filtres.moi;
   const finaux=statutsFinaux();
   let parStatut=S.stats.par_statut||{};
   let enRetard=S.stats.en_retard||0;
@@ -906,31 +935,43 @@ const SVG_CHEVRON='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 function sousCarteHtml(t){
   const st=statutDef(t.statut);
   const clos=statutsFinaux().indexOf(t.statut)!==-1;
-  return '<div class="sous-carte'+(clos?' close':'')+'" data-sous-id="'+t.id+'">'+
-    '<span class="tag '+esc(st.couleur)+'">'+esc(st.label)+'</span>'+
+  // Pastille de couleur plutôt qu'étiquette texte : le statut se lit sans manger
+  // la largeur d'une colonne étroite. Le libellé reste en infobulle.
+  return '<div class="sous-carte'+(clos?' close':'')+'" data-sous-id="'+t.id+'" title="'+esc(st.label)+' — '+esc(t.titre)+'">'+
+    '<span class="pastille" style="background:'+couleurVar(st.couleur)+'"></span>'+
     '<span class="st">'+esc(t.titre)+'</span>'+
     ((t.assignes&&t.assignes.length)?pileHtml(t.assignes,2):'')+
   '</div>';
 }
 
+// Carte compacte. Ce qui reste visible : les assignés (en haut, en petit), le
+// titre, l'alerte de retard et la progression de checklist. Ce qui disparaît :
+// les étiquettes type / module / priorité et la date d'échéance — elles se
+// lisent dans la fiche, la vue Liste ou l'infobulle de la carte. La priorité
+// reste portée par la couleur du liseré gauche.
 function carteHtml(t,enfants){
   const prio=prioriteDef(t.priorite);
   const jr=joursRestants(t.echeance);
   const finaux=statutsFinaux();
   const clos=finaux.indexOf(t.statut)!==-1;
-  let dueCls='';
-  if(!clos&&jr!==null){if(jr<0)dueCls=' late';else if(jr<=2)dueCls=' soon';}
-  const tags=[];
-  if(t.priorite&&t.priorite!=='normale')tags.push('<span class="tag '+esc(prio.couleur)+'">'+esc(prio.label)+'</span>');
-  if(t.type)tags.push('<span class="tag">'+esc(typeLabel(t.type))+'</span>');
-  if(t.module)tags.push('<span class="tag muted">'+esc(moduleLabel(t.module))+'</span>');
+  const enRetard=(!clos&&jr!==null&&jr<0);
 
-  const metas=[];
-  if(t.echeance)metas.push('<span class="mi due'+dueCls+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>'+esc(fmtDate(t.echeance))+'</span>');
-  if(t.nb_commentaires)metas.push('<span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.2A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/></svg>'+t.nb_commentaires+'</span>');
-  if(t.nb_fichiers)metas.push('<span class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21.4 11.05 12.25 20.2a5.5 5.5 0 0 1-7.78-7.78l9.19-9.19a3.67 3.67 0 0 1 5.18 5.18l-9.2 9.19a1.83 1.83 0 0 1-2.59-2.59l8.49-8.48"/></svg>'+t.nb_fichiers+'</span>');
-  if(t.nb_sous_taches)metas.push('<span class="mi" title="Sous-tâches terminées"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 5h6M3 12h10M3 19h6"/><path d="M17 8v11a2 2 0 0 0 2 2h2"/></svg>'+t.nb_sous_taches_faites+'/'+t.nb_sous_taches+'</span>');
-  if(t.estimation_h)metas.push('<span class="mi" title="Estimation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>'+esc(fmtH(t.estimation_h))+'</span>');
+  // Tout ce qu'on retire de la carte reste accessible au survol.
+  const infos=[];
+  if(t.priorite)infos.push('Priorité : '+prio.label);
+  if(t.type)infos.push(typeLabel(t.type));
+  if(t.module)infos.push(moduleLabel(t.module));
+  if(t.echeance)infos.push('Échéance : '+fmtDate(t.echeance)+(enRetard?' (en retard de '+Math.abs(jr)+' j)':''));
+  if(t.estimation_h)infos.push('Estimation : '+fmtH(t.estimation_h));
+  if(t.nb_sous_taches)infos.push(t.nb_sous_taches_faites+'/'+t.nb_sous_taches+' sous-tâches');
+  if(t.nb_commentaires)infos.push(t.nb_commentaires+' commentaire'+(t.nb_commentaires>1?'s':''));
+  if(t.nb_fichiers)infos.push(t.nb_fichiers+' fichier'+(t.nb_fichiers>1?'s':''));
+  const bulle=esc(t.titre+(infos.length?'\n'+infos.join(' · '):''));
+
+  const alerte=enRetard
+    ? '<span class="tcard-retard" title="En retard de '+Math.abs(jr)+' jour'+(Math.abs(jr)>1?'s':'')+
+      ' — échéance '+esc(fmtDate(t.echeance))+'"><i></i></span>'
+    : '';
 
   let prog='';
   if(t.nb_checklist>0){
@@ -947,12 +988,18 @@ function carteHtml(t,enfants){
       SVG_CHEVRON+kids.length+'</button>'
     : '';
 
+  // L'en-tête ne s'affiche que s'il porte quelque chose : une carte sans
+  // assigné, sans retard et sans sous-tâche n'a pas à réserver une ligne vide.
+  const pile=(t.assignes&&t.assignes.length)?pileHtml(t.assignes,3):'';
+  const tete=(pile||alerte||chevron)
+    ? '<div class="tcard-hd">'+pile+'<span class="sp"></span>'+alerte+chevron+'</div>'
+    : '';
+
   return '<div class="tstack">'+
-    '<div class="tcard prio-'+esc(t.priorite||'normale')+(S.actif===t.id?' actif':'')+'" draggable="true" data-id="'+t.id+'">'+
-      (tags.length?'<div class="tcard-top">'+tags.join('')+'</div>':'')+
+    '<div class="tcard prio-'+esc(t.priorite||'normale')+(S.actif===t.id?' actif':'')+'" draggable="true" data-id="'+t.id+'" title="'+bulle+'">'+
+      tete+
       '<div class="tcard-title">'+esc(t.titre)+'</div>'+
-      (t.parent_titre?'<div style="font-size:10.5px;color:var(--muted);margin:-4px 0 8px">↳ '+esc(t.parent_titre)+'</div>':'')+
-      '<div class="tcard-foot">'+pileHtml(t.assignes)+metas.join('')+chevron+'</div>'+
+      (t.parent_titre?'<div style="font-size:10px;color:var(--muted);margin-top:3px">↳ '+esc(t.parent_titre)+'</div>':'')+
       prog+
     '</div>'+
     (kids.length&&ouvert?'<div class="sous-pile">'+kids.map(sousCarteHtml).join('')+'</div>':'')+
@@ -1740,6 +1787,32 @@ function brancherFiltres(){
     });
   });
 }
+// ── Bascule « Mes tâches » ─────────────────────────────────────────────
+// Remplace l'ancien onglet du même nom : un filtre qui vaut pour le Kanban, la
+// Liste et les Archives, au lieu d'une vue à part.
+function syncMoi(){
+  const b=document.getElementById('btn-moi');
+  if(!b)return;
+  b.classList.toggle('on',!!S.filtres.moi);
+  b.setAttribute('aria-pressed',S.filtres.moi?'true':'false');
+  // La liste déroulante des personnes n'a pas de sens quand on est déjà filtré
+  // sur soi : on la masque plutôt que de laisser deux filtres se contredire.
+  const fa=document.getElementById('f-assigne');
+  if(fa)fa.style.display=S.filtres.moi?'none':'';
+}
+function brancherMoi(){
+  const b=document.getElementById('btn-moi');
+  if(!b)return;
+  try{if(localStorage.getItem('mysifa_taches_moi')==='1')S.filtres.moi=true;}catch(e){}
+  b.onclick=()=>{
+    S.filtres.moi=!S.filtres.moi;
+    try{localStorage.setItem('mysifa_taches_moi',S.filtres.moi?'1':'0');}catch(e){}
+    syncMoi();
+    chargerTaches();
+  };
+  syncMoi();
+}
+
 function brancherSousTaches(){
   const b=document.getElementById('btn-sous');
   if(!b)return;
@@ -1761,10 +1834,12 @@ function brancherSousTaches(){
 }
 
 function resetFiltres(){
-  S.filtres={q:'',assigne:'',priorite:'',type:'',module:'',rapide:''};
+  S.filtres={q:'',assigne:'',priorite:'',type:'',module:'',rapide:'',moi:false};
   ['f-q','f-assigne','f-priorite','f-type','f-module'].forEach(id=>{
     const el=document.getElementById(id);if(el){el.value='';el.classList.remove('on');}
   });
+  try{localStorage.setItem('mysifa_taches_moi','0');}catch(e){}
+  syncMoi();
   renderStats();
   chargerTaches();
 }
@@ -1866,8 +1941,8 @@ const TACHES_GUIDES = {
     {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>',
       title: 'Lire une carte',
-      body: '<p>Une carte affiche l’essentiel d’un coup d’œil : le <strong>liseré de gauche</strong> donne la priorité, les étiquettes le type et le module, et le pied de carte les assignés, l’échéance et les compteurs. Une échéance <span class="mguide-hl">dépassée</span> passe en rouge, à deux jours ou moins en orange.</p><p>Une sous-tâche n’est jamais une carte isolée : elle vit sous sa tâche mère, que le bouton <span class="mguide-tag">› N</span> déplie et replie.</p>',
-      illu: '<svg viewBox="0 0 340 160" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><rect x="40" y="18" width="260" height="124" rx="11" fill="var(--bg)" stroke="var(--border)"/><rect x="40" y="18" width="4" height="124" rx="2" fill="var(--danger)"/><text x="58" y="16" font-size="8" fill="var(--danger)">priorité</text><rect x="58" y="32" width="46" height="15" rx="5" fill="rgba(248,113,113,.15)"/><text x="81" y="43" font-size="8" fill="var(--danger)" text-anchor="middle" font-weight="700">CRITIQUE</text><rect x="110" y="32" width="34" height="15" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="127" y="43" font-size="8" fill="var(--muted)" text-anchor="middle">BUG</text><rect x="150" y="32" width="52" height="15" rx="5" fill="var(--card)" stroke="var(--border)"/><text x="176" y="43" font-size="8" fill="var(--muted)" text-anchor="middle">MYSTOCK</text><text x="58" y="70" font-size="11" fill="var(--text)" font-weight="700">Doublon à l’entrée Z1</text><circle cx="66" cy="96" r="10" fill="var(--accent-bg)"/><text x="66" y="99" font-size="8" fill="var(--accent)" text-anchor="middle" font-weight="800">EL</text><text x="86" y="99" font-size="9" fill="var(--danger)" font-weight="700">12 mars 2026</text><text x="176" y="99" font-size="9" fill="var(--muted)">3 commentaires</text><text x="262" y="99" font-size="9" fill="var(--muted)">2 fichiers</text><rect x="58" y="116" width="224" height="5" rx="2.5" fill="var(--border)"/><rect x="58" y="116" width="140" height="5" rx="2.5" fill="var(--accent)"/><text x="58" y="136" font-size="8" fill="var(--muted)">progression de la checklist</text></svg>'
+      body: '<p>La carte est volontairement <strong>dépouillée</strong> : les assignés en haut, le titre en dessous. Le <strong>liseré de gauche</strong> donne la priorité — rouge critique, orange haute, cyan normale, gris basse — et un <span class="mguide-hl">point rouge</span> en haut à droite signale une échéance dépassée.</p><p>Le type, le module, la date et les compteurs ne sont plus affichés pour garder des colonnes étroites : ils apparaissent <strong>au survol de la carte</strong>, et en entier dans la fiche ou la vue Liste. Une sous-tâche n’est jamais une carte isolée : elle vit sous sa tâche mère, que le bouton <span class="mguide-tag">› N</span> déplie et replie.</p>',
+      illu: '<svg viewBox="0 0 340 160" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><rect x="24" y="26" width="136" height="76" rx="9" fill="var(--bg)" stroke="var(--border)"/><rect x="24" y="26" width="4" height="76" rx="2" fill="var(--danger)"/><text x="34" y="20" font-size="8" fill="var(--danger)">priorité</text><circle cx="46" cy="44" r="8" fill="var(--accent-bg)"/><text x="46" y="47" font-size="7" fill="var(--accent)" text-anchor="middle" font-weight="800">EL</text><circle cx="58" cy="44" r="8" fill="var(--accent-bg)" stroke="var(--bg)" stroke-width="1.6"/><text x="58" y="47" font-size="7" fill="var(--accent)" text-anchor="middle" font-weight="800">LG</text><circle cx="146" cy="44" r="3.5" fill="var(--danger)"/><circle cx="146" cy="44" r="7" fill="none" stroke="var(--danger)" stroke-opacity=".25" stroke-width="3"/><text x="166" y="40" font-size="8" fill="var(--danger)">retard</text><text x="38" y="72" font-size="10" fill="var(--text)" font-weight="700">Doublon entrée Z1</text><rect x="38" y="84" width="112" height="4" rx="2" fill="var(--border)"/><rect x="38" y="84" width="70" height="4" rx="2" fill="var(--accent)"/><path d="M162 88 L196 106" stroke="var(--muted)" stroke-width="1.4" stroke-dasharray="3 3"/><rect x="190" y="100" width="140" height="52" rx="8" fill="var(--card)" stroke="var(--border)"/><text x="200" y="118" font-size="8.5" fill="var(--text2)" font-weight="700">Doublon entrée Z1</text><text x="200" y="132" font-size="8" fill="var(--muted)">Critique · Bug · MyStock</text><text x="200" y="145" font-size="8" fill="var(--muted)">Échéance 12 mars · 3 comm.</text><text x="200" y="94" font-size="8" fill="var(--muted)">au survol</text></svg>'
     },
     {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
@@ -1899,7 +1974,7 @@ const TACHES_GUIDES = {
     {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>',
       title: 'Filtrer et chercher',
-      body: '<p>La barre de recherche filtre sur le <strong>titre et la description</strong>, dès le premier caractère ; <span class="mguide-tag">Échap</span> la vide. Les listes déroulantes cumulent les critères, et les compteurs du haut sont eux aussi cliquables : un clic sur <span class="mguide-hl">En retard</span> ne garde que les tâches en retard.</p>',
+      body: '<p>La barre de recherche filtre sur le <strong>titre et la description</strong>, dès le premier caractère ; <span class="mguide-tag">Échap</span> la vide. Les listes déroulantes cumulent les critères, et les compteurs du haut sont eux aussi cliquables : un clic sur <span class="mguide-hl">En retard</span> ne garde que les tâches en retard.</p><p>Le bouton <span class="mguide-tag">Mes tâches</span> ne garde que ce qui vous est assigné. C’est un filtre, pas un onglet : il vaut aussi bien sur le <strong>Kanban</strong> que sur la <strong>Liste</strong>, il se cumule avec les autres critères et il reste armé d’une visite à l’autre. <span class="mguide-tag">Réinitialiser</span> le relâche.</p>',
       illu: '<svg viewBox="0 0 340 160" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><rect x="14" y="14" width="70" height="26" rx="8" fill="var(--card)" stroke="var(--border)"/><text x="24" y="31" font-size="9" fill="var(--text2)">Idées 4</text><rect x="90" y="14" width="74" height="26" rx="8" fill="var(--card)" stroke="var(--border)"/><text x="100" y="31" font-size="9" fill="var(--text2)">En cours 3</text><rect x="170" y="14" width="80" height="26" rx="8" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="180" y="31" font-size="9" fill="var(--accent)" font-weight="700">En retard 2</text><rect x="14" y="52" width="180" height="28" rx="9" fill="var(--card)" stroke="var(--accent)"/><circle cx="30" cy="66" r="5" fill="none" stroke="var(--muted)" stroke-width="1.6"/><line x1="34" y1="70" x2="38" y2="74" stroke="var(--muted)" stroke-width="1.6"/><text x="46" y="70" font-size="9" fill="var(--text2)">export</text><rect x="202" y="52" width="60" height="28" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="212" y="70" font-size="9" fill="var(--muted)">Priorité</text><rect x="270" y="52" width="56" height="28" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="280" y="70" font-size="9" fill="var(--muted)">Module</text><rect x="14" y="92" width="312" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="24" y="107" font-size="9" fill="var(--text)">Export PDF des OF</text><text x="316" y="107" font-size="9" fill="var(--danger)" text-anchor="end" font-weight="700">retard 3 j</text><rect x="14" y="118" width="312" height="22" rx="5" fill="var(--bg)" stroke="var(--border)"/><text x="24" y="133" font-size="9" fill="var(--text)">Doublon à l’entrée Z1</text><text x="316" y="133" font-size="9" fill="var(--danger)" text-anchor="end" font-weight="700">retard 1 j</text></svg>'
     },
     {
@@ -1965,6 +2040,7 @@ document.getElementById('btn-logout').onclick=async()=>{
     remplirFiltres();
   }catch(e){toast(e.message,'err');return;}
   brancherFiltres();
+  brancherMoi();
   brancherSousTaches();
   brancherArchivage();
   showView(readView(),{silent:true});

@@ -20,7 +20,12 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 from database import get_db
-from config import ROLE_FABRICATION, ROLE_DIRECTION, ROLE_SUPERADMIN
+from config import (
+    FSC_CLAIMS_REQUERABLES,
+    ROLE_FABRICATION,
+    ROLE_DIRECTION,
+    ROLE_SUPERADMIN,
+)
 from app.services.audit_service import log_action
 from services.auth_service import require_admin, get_current_user, user_has_app_access
 from services.dossier_stats import build_dossier_production_stats
@@ -42,7 +47,11 @@ _PLANNING_ENTRY_COL_DDLS = [
     ("valide", "ALTER TABLE planning_entries ADD COLUMN valide INTEGER DEFAULT 0"),
 ]
 
-_FSC_TYPES = frozenset({"fsc_100", "fsc_mix", "fsc_recycled"})
+# Claims exigibles sur un dossier — pilotés par config.FSC_CLAIMS_REQUERABLES.
+# Cette liste était figée à 3 valeurs alors que la matière en connaît 5 :
+# fsc_mix_credit était rejeté en 400 par l'API et effacé côté formulaire, si
+# bien qu'un dossier Mix Credit ne pouvait tout simplement pas exister.
+_FSC_TYPES = frozenset(FSC_CLAIMS_REQUERABLES)
 
 router = APIRouter(prefix="/api/planning", tags=["planning"])
 
@@ -437,7 +446,7 @@ def _parse_fsc_type_requis(raw: Any, fsc_requis: int) -> str:
     if t not in _FSC_TYPES:
         raise HTTPException(
             status_code=400,
-            detail="Type FSC invalide — valeurs : fsc_100, fsc_mix, fsc_recycled.",
+            detail="Type FSC invalide — valeurs : " + ", ".join(sorted(_FSC_TYPES)) + ".",
         )
     return t
 

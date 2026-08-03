@@ -36,7 +36,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "2.6.0"
+APP_VERSION = "2.7.0"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -232,6 +232,44 @@ STOCK_EMPLACEMENT_SORTIE_PROD_LABEL = "En attente - sortie de prod"
 # à l'entrée Z1 (aucune fiche produit préexistante). SIFA vend à l'étiquette ;
 # une instance Kernse surcharge via STOCK_UNITE_VENTE_DEFAUT dans son .env.
 STOCK_UNITE_VENTE_DEFAUT = os.getenv("STOCK_UNITE_VENTE_DEFAUT", "étiquette")
+
+# ─── Certification FSC ────────────────────────────────────────────
+# Volontairement mono-certification : FSC est le seul référentiel dont SIFA a
+# besoin aujourd'hui, et généraliser en « certifications » (PEFC, ISCC…) ferait
+# porter le coût d'une abstraction à un besoin qui n'existe pas encore. Ce qui
+# est fait ici, en revanche, c'est de sortir TOUS les libellés et le texte
+# atelier du code : une instance Kernse qui devrait basculer sur un autre
+# référentiel n'aura à toucher qu'à ce bloc et aux `.env`, pas aux templates.
+#
+# Les 5 claims sont ceux de la matière reçue (stock_receptions.fsc_type_claim).
+# Le produit fini, lui, ne porte qu'un booléen (lots_stock.fsc) : décision
+# produit assumée, la finesse du claim reste en amont, côté bobine.
+FSC_CLAIM_LABELS = {
+    "non_fsc":        "Non FSC",
+    "fsc_100":        "FSC 100%",
+    "fsc_mix":        "FSC Mix",
+    "fsc_mix_credit": "FSC Mix Credit",
+    "fsc_recycled":   "FSC Recycled",
+}
+# Claims sélectionnables comme EXIGENCE sur un dossier de fabrication : on ne
+# peut pas « exiger du non certifié », donc non_fsc est exclu de cette liste.
+FSC_CLAIMS_REQUERABLES = ("fsc_100", "fsc_mix", "fsc_mix_credit", "fsc_recycled")
+# Défaut quand on coche « Certification FSC requise » : FSC Mix est le claim
+# très majoritaire chez SIFA. Sans ce défaut explicite, le <select> retombait
+# sur sa première option (FSC 100%) et un dossier Mix partait mal étiqueté.
+FSC_CLAIM_DEFAUT = os.getenv("FSC_CLAIM_DEFAUT", "fsc_mix")
+
+# Consigne atelier affichée en permanence sur la saisie de production dès que
+# le dossier courant est FSC. Volontairement figée dans le code (pas de CRUD
+# Paramètres) : c'est une exigence de chaîne de contrôle, pas une préférence
+# d'affichage — on ne veut pas qu'elle puisse être vidée depuis l'interface.
+FSC_WARNING_PROD = os.getenv(
+    "FSC_WARNING_PROD",
+    "Dossier FSC — utiliser exclusivement de la matière certifiée FSC · "
+    "traçabilité matière impérative (scanner chaque bobine) · "
+    "entrée du produit fini en stock Z1 obligatoire",
+)
+
 ROLES_PROD  = {ROLE_DIRECTION, ROLE_FABRICATION, ROLE_EXPEDITION, ROLE_COMMERCIAL, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
 ROLES_COMPTA = {ROLE_DIRECTION, ROLE_COMPTABILITE, ROLE_SUPERADMIN}
 ROLES_EXPE = {ROLE_DIRECTION, ROLE_EXPEDITION, ROLE_LOGISTIQUE, ROLE_COMMERCIAL, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
@@ -274,6 +312,18 @@ ROLES_SETTINGS_CONTACTS = {ROLE_DIRECTION, ROLE_SUPERADMIN, ROLE_COMPTABILITE} |
 # les voient depuis Impression & déploiement / Audit & qualité).
 ROLES_SETTINGS_PRINTERS = {ROLE_DIRECTION, ROLE_SUPERADMIN, ROLE_COMPTABILITE} | ROLES_ADMINISTRATION_ALL
 ROLES_SETTINGS_FSC      = {ROLE_DIRECTION, ROLE_SUPERADMIN, ROLE_COMPTABILITE} | ROLES_ADMINISTRATION_ALL
+
+# Traceur de traçabilité (MyProd → Traçabilité → Traceur). Volontairement plus
+# fermé que ROLES_SETTINGS_FSC : l'outil reconstitue la chaîne complète d'un
+# produit, fournisseurs et prix de revient compris. La fabrication garde son
+# rapport de traçabilité par dossier (déjà accessible en atelier) mais n'a pas
+# besoin de la vue transversale.
+ROLES_TRACA_VIEWER = {
+    ROLE_SUPERADMIN,
+    ROLE_DIRECTION,
+    ROLE_ADMINISTRATION_VENTES,
+    ROLE_ADMINISTRATION_TECHNIQUE,
+}
 
 # Union : rôles autorisés à ouvrir /settings (au moins une section accessible).
 ROLES_SETTINGS = (

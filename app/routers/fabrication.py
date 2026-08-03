@@ -12,7 +12,7 @@ _PARIS = ZoneInfo("Europe/Paris")
 
 from app.services.audit_service import log_action
 from database import get_db, parse_datetime
-from config import classify_operation, STOCK_UNITE_VENTE_DEFAUT
+from config import classify_operation, FSC_CLAIM_LABELS, STOCK_UNITE_VENTE_DEFAUT
 from app.services.auth_service import get_current_user, is_fabrication, is_admin, effective_machine_id
 from app.routers.planning import _planned_end_iso_for_machine
 from app.routers.stock import (
@@ -2037,17 +2037,26 @@ async def annuler_dossier(request: Request):
 
 # ─── Traçabilité matières ─────────────────────────────────────────────────────
 
+# Claim exigé sur le dossier → claims de bobine qui le satisfont.
+# Lecture : la clé est l'EXIGENCE, la valeur l'ensemble des matières
+# acceptables. Un claim plus strict satisfait toujours un claim plus large
+# (du FSC 100% passe partout), l'inverse jamais.
+#
+# `fsc_mix_credit` a été ajouté comme EXIGENCE : il était présent en valeur
+# (une bobine Mix Credit satisfaisait une exigence Mix) mais absent en clé,
+# donc un dossier exigeant du Mix Credit n'acceptait aucune bobine — le
+# rapport de traçabilité l'aurait déclaré non conforme à 100%. Le cas ne se
+# produisait pas tant que le type n'était pas sélectionnable ; il le devient.
 FSC_CLAIM_HIERARCHY = {
     "fsc_100": {"fsc_100"},
     "fsc_mix": {"fsc_100", "fsc_mix_credit", "fsc_mix"},
+    "fsc_mix_credit": {"fsc_100", "fsc_mix_credit"},
     "fsc_recycled": {"fsc_100", "fsc_recycled"},
 }
 
-_FSC_TYPE_LABELS = {
-    "fsc_100": "FSC 100%",
-    "fsc_mix": "FSC Mix",
-    "fsc_recycled": "FSC Recycled",
-}
+# Libellés : source unique dans config.py (FSC_CLAIM_LABELS), plus de copie
+# locale — celle-ci avait déjà divergé (fsc_mix_credit manquant).
+_FSC_TYPE_LABELS = dict(FSC_CLAIM_LABELS)
 
 
 def _fsc_type_label(fsc_type: str) -> str:
