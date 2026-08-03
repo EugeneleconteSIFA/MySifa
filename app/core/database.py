@@ -8671,6 +8671,183 @@ Ressources :
             f"rattaché(s) à un dossier."
         )
 
+    # v223 — Coûts matières : transport saisi sur la matière (devise + base d'achat)
+    # et marge par défaut exprimée en % du prix de revient calculé.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=223 LIMIT 1").fetchone():
+        _mc_mat_cols = {r["name"] for r in conn.execute("PRAGMA table_info(mc_material)").fetchall()}
+        _mc_prod_cols = {r["name"] for r in conn.execute("PRAGMA table_info(mc_product)").fetchall()}
+        if _mc_mat_cols and "transport_unit_price" not in _mc_mat_cols:
+            conn.execute(
+                "ALTER TABLE mc_material ADD COLUMN transport_unit_price REAL NOT NULL DEFAULT 0"
+            )
+            _mc_mat_cols.add("transport_unit_price")
+        if _mc_prod_cols and "custom_margin_pct" not in _mc_prod_cols:
+            conn.execute("ALTER TABLE mc_product ADD COLUMN custom_margin_pct REAL")
+            _mc_prod_cols.add("custom_margin_pct")
+
+        _mc_settings = {}
+        if _mc_mat_cols:
+            conn.execute(
+                "INSERT OR IGNORE INTO mc_setting (key, value_decimal) VALUES ('default_margin_pct', 6)"
+            )
+            _mc_settings = {
+                r["key"]: float(r["value_decimal"])
+                for r in conn.execute("SELECT key, value_decimal FROM mc_setting").fetchall()
+            }
+        _mc_rate = _mc_settings.get("eur_usd_rate") or 1.0
+        _mc_def_cost = _mc_settings.get("default_container_cost_usd") or 0.0
+        _mc_def_kg = _mc_settings.get("default_container_kg") or 0.0
+
+        # Reprise du transport : la valeur que la calculette conteneur produisait
+        # devient la valeur saisie, exprimée dans la devise et la base d'achat.
+        _mc_n_transport = 0
+        if _mc_mat_cols:
+            for _m in conn.execute(
+                """SELECT id, weight_per_m2, price_currency, price_basis,
+                          container_kg, container_cost_usd
+                     FROM mc_material WHERE is_imported=1"""
+            ).fetchall():
+                _kg = _m["container_kg"] if _m["container_kg"] else _mc_def_kg
+                _cost = (
+                    _m["container_cost_usd"]
+                    if _m["container_cost_usd"] is not None
+                    else _mc_def_cost
+                )
+                try:
+                    _kg = float(_kg or 0)
+                    _cost = float(_cost or 0)
+                except (TypeError, ValueError):
+                    continue
+                if _kg <= 0 or _cost <= 0:
+                    continue
+                _usd_per_kg = _cost / _kg
+                _per_kg = (
+                    _usd_per_kg if _m["price_currency"] == "USD" else _usd_per_kg * _mc_rate
+                )
+                if _m["price_basis"] == "PER_KG":
+                    _val = _per_kg
+                else:
+                    _val = _per_kg * float(_m["weight_per_m2"] or 0)
+                if _val > 0:
+                    conn.execute(
+                        "UPDATE mc_material SET transport_unit_price=? WHERE id=?",
+                        (round(_val, 6), _m["id"]),
+                    )
+                    _mc_n_transport += 1
+
+        # Conversion des marges produit : montant €/m² -> % du prix de revient.
+        _mc_n_margin = 0
+        _mc_n_margin_skip = 0
+        if _mc_prod_cols and "custom_margin_eur_m2" in _mc_prod_cols:
+            _mc_mats = {
+                int(_r["id"]): _r
+                for _r in conn.execute(
+                    """SELECT id, unit_price, weight_per_m2, price_currency, price_basis,
+                              tax_incidence, is_imported, transport_unit_price
+                         FROM mc_material"""
+                ).fetchall()
+            }
+
+            def _mc_price_m2(_row):
+                _w = float(_row["weight_per_m2"] or 0)
+                _factor = _w if _row["price_basis"] == "PER_KG" else 1.0
+                _r8 = _mc_rate if _row["price_currency"] == "USD" else 1.0
+                _tr = float(_row["transport_unit_price"] or 0) if _row["is_imported"] else 0.0
+                return (
+                    (float(_row["unit_price"] or 0) + _tr)
+                    * _factor
+                    * _r8
+                    * float(_row["tax_incidence"] or 1)
+                )
+
+            for _p in conn.execute(
+                """SELECT id, frontal_id, adhesif_id, silicone_id, glassine_id,
+                          custom_margin_eur_m2
+                     FROM mc_product WHERE custom_margin_eur_m2 IS NOT NULL"""
+            ).fetchall():
+                _ids = [
+                    _p[_k]
+                    for _k in ("frontal_id", "adhesif_id", "silicone_id", "glassine_id")
+                    if _p[_k] is not None
+                ]
+                _ids += [
+                    int(_x["material_id"])
+                    for _x in conn.execute(
+                        "SELECT material_id FROM mc_product_extra_material WHERE product_id=?",
+                        (_p["id"],),
+                    ).fetchall()
+                ]
+                _total = sum(_mc_price_m2(_mc_mats[int(_i)]) for _i in _ids if int(_i) in _mc_mats)
+                if _total > 0:
+                    _pct = float(_p["custom_margin_eur_m2"]) / _total * 100.0
+                    conn.execute(
+                        "UPDATE mc_product SET custom_margin_pct=? WHERE id=?",
+                        (round(_pct, 4), _p["id"]),
+                    )
+                    _mc_n_margin += 1
+                else:
+                    # Prix de revient nul : pas de % calculable, le produit retombe
+                    # sur la marge globale par défaut.
+                    _mc_n_margin_skip += 1
+
+        conn.commit()
+        _record_schema_migration(conn, 223, "mc_transport_saisi_marge_pct")
+        print(
+            f"[MySifa] migration mc_transport_saisi_marge_pct : {_mc_n_transport} matière(s) "
+            f"avec transport repris, {_mc_n_margin} marge(s) produit converties en %, "
+            f"{_mc_n_margin_skip} non convertible(s)."
+        )
+
+    # v224 — MyCalendrier : partage des creneaux perso + calendriers externes
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE version=224 LIMIT 1"
+    ).fetchone():
+        _cal_cols = {
+            row[1] for row in conn.execute("PRAGMA table_info(cal_events_perso)").fetchall()
+        }
+        if _cal_cols and "prive" not in _cal_cols:
+            conn.execute(
+                "ALTER TABLE cal_events_perso ADD COLUMN prive INTEGER NOT NULL DEFAULT 0"
+            )
+        if _cal_cols and "updated_at" not in _cal_cols:
+            conn.execute("ALTER TABLE cal_events_perso ADD COLUMN updated_at TEXT")
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS cal_feed_tokens (
+                user_id        INTEGER PRIMARY KEY,
+                token          TEXT NOT NULL UNIQUE,
+                calendriers    TEXT,
+                actif          INTEGER NOT NULL DEFAULT 1,
+                created_at     TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                last_access_at TEXT,
+                hits           INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_cal_feed_tokens_token
+                ON cal_feed_tokens(token);
+
+            CREATE TABLE IF NOT EXISTS cal_subscriptions (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id      INTEGER NOT NULL,
+                nom          TEXT NOT NULL,
+                url          TEXT NOT NULL,
+                couleur      TEXT,
+                actif        INTEGER NOT NULL DEFAULT 1,
+                last_sync_at TEXT,
+                last_status  TEXT,
+                last_error   TEXT,
+                nb_events    INTEGER NOT NULL DEFAULT 0,
+                cache_ics    TEXT,
+                created_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_cal_subscriptions_user
+                ON cal_subscriptions(user_id);
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 224, "calendrier_partage_et_externes")
+
     conn.commit()
 
 

@@ -131,6 +131,35 @@
     return s === "—" ? s : s + "\u00a0€/m²";
   }
 
+  function fmtPct(n) {
+    const s = fmtNum(n, 2, 2);
+    return s === "—" ? s : s + "\u00a0%";
+  }
+
+  const CUR_SYM = { EUR: "€", USD: "$" };
+
+  /** Montant dans une devise donnée : 4,0183 $ */
+  function fmtCur(n, cur) {
+    const s = fmtNum(n, 4, 4);
+    return s === "—" ? s : s + "\u00a0" + (CUR_SYM[(cur || "EUR").toUpperCase()] || "€");
+  }
+
+  /** Unité d'achat lisible : $/kg, €/m²… */
+  function unitLabel(cur, basis) {
+    const sym = CUR_SYM[(cur || "EUR").toUpperCase()] || "€";
+    return sym + "/" + (basis === "PER_M2" ? "m²" : "kg");
+  }
+
+  const BASIS_LABEL = {
+    PER_KG: "Au kilo — le prix est saisi par kg, converti au m² via le poids",
+    PER_M2: "Au mètre carré — le prix est déjà exprimé au m²",
+  };
+
+  /** Le poids au m² n'est utile que si le prix est au kilo ou pour la calculette import. */
+  function needsWeight(form) {
+    return form.price_basis === "PER_KG" || !!form.is_imported;
+  }
+
   function isFxStale(updatedAt) {
     if (!updatedAt) return true;
     const raw = String(updatedAt).replace(" ", "T");
@@ -152,7 +181,7 @@
             <h2>Confirmation</h2>
             <p style="font-size:13px;color:var(--text2);line-height:1.6;margin:0 0 16px">${escHtml(message)}</p>
             <div style="display:flex;gap:10px;justify-content:flex-end">
-              <button type="button" class="btn btn-ghost" id="cfm-no">Annuler</button>
+              <button type="button" class="btn btn-soft" id="cfm-no">Annuler</button>
               <button type="button" class="btn btn-danger" id="cfm-yes">Supprimer</button>
             </div>
           </div>
@@ -357,8 +386,24 @@
     document.getElementById("mobile-sub").textContent = t[1];
   }
 
+  /**
+   * En-tête de page commun. `sub` et `actions` acceptent du HTML.
+   * L'engrenage Paramètres est présent sur toutes les pages (droits en écriture).
+   */
+  function pageHead(title, sub, actions) {
+    const gear = S.canWrite
+      ? `<button type="button" class="icon-btn" id="btn-open-settings" title="Paramètres">${icon("settings", 16)}</button>`
+      : "";
+    return `<div class="page-head">
+        <div><h1>${escHtml(title)}</h1>${sub ? `<div class="sub">${sub}</div>` : ""}</div>
+        <div class="page-head-actions">${actions || ""}${gear}</div>
+      </div>`;
+  }
+
   function setContent(html) {
     document.getElementById("content").innerHTML = html;
+    const gear = document.getElementById("btn-open-settings");
+    if (gear) gear.onclick = () => openSettingsModal();
   }
 
   function showLoading() {
@@ -382,66 +427,6 @@
     S.settings = settings;
   }
 
-  function renderCategoryTiles(cats) {
-    if (!cats.length) return "";
-    const tiles = cats.map(c => {
-      const price = c.avg_price_eur_per_kg_or_m2;
-      const basis = c.price_basis_dominant === "PER_M2" ? "€/m²" : "€/kg";
-      const pv = c.variation_pct_30d != null ? parseFloat(c.variation_pct_30d) : null;
-      let vHtml = '<span class="cat-var muted">—</span>';
-      if (pv != null) {
-        const color = Math.abs(pv) < 0.5 ? "muted" : (pv > 0 ? "danger" : "success");
-        const arrow = pv > 0 ? "▲" : (pv < 0 ? "▼" : "•");
-        const abs = Math.abs(pv).toFixed(2);
-        vHtml = `<span class="cat-var ${color}">${arrow} ${abs}%</span>`;
-      }
-      return `<div class="cat-tile">
-        <div class="cat-tile-head">
-          <div class="cat-tile-label">${escHtml(c.label)}</div>
-          <div class="cat-tile-count">${c.count_materials} réf.</div>
-        </div>
-        <div class="cat-tile-value">${price != null ? fmtNum(price, 4, 4) : "—"} <span class="cat-tile-unit">${basis}</span></div>
-        <div class="cat-tile-var">Variation 30j : ${vHtml}</div>
-      </div>`;
-    }).join("");
-    return `<div class="section-title">Prix matières par catégorie <span style="font-size:11px;font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">— moyenne des références actives</span></div>
-      <div class="cat-grid">${tiles}</div>`;
-  }
-
-  function renderRecentMovers(movers, totalMaterials) {
-    if (!movers.length) {
-      return `<div class="chart-card" style="margin-top:16px">
-        <h2>Matières à surveiller <span style="font-size:12px;color:var(--muted);font-weight:400">— variations sur les 30 derniers jours</span></h2>
-        <div class="empty" style="padding:24px;text-align:center;color:var(--muted);font-size:13px">
-          Aucune variation détectée sur les ${totalMaterials || 0} matières actives.<br>
-          <span style="font-size:11px">Modifiez un prix côté MyStock ou Coûts matières pour voir les variations remonter ici.</span>
-        </div>
-      </div>`;
-    }
-    const rows = movers.map(m => {
-      const pct = parseFloat(m.variation_pct);
-      const color = pct > 0 ? "danger" : "success";
-      const arrow = pct > 0 ? "▲" : "▼";
-      const abs = Math.abs(pct).toFixed(2);
-      return `<div class="mover-row" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--border)">
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:600;font-size:13px;color:var(--text)">${escHtml(m.name)}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">${escHtml(m.category_code)} · il y a ${m.days_ago} j</div>
-        </div>
-        <div style="text-align:right;font-size:12px;color:var(--muted)">
-          ${fmtNum(m.old_price, 4, 4)} → <strong style="color:var(--text)">${fmtNum(m.new_price, 4, 4)}</strong>
-        </div>
-        <div class="cat-var ${color}" style="min-width:80px;text-align:right;font-weight:700;font-size:13px">
-          ${arrow} ${abs}%
-        </div>
-      </div>`;
-    }).join("");
-    return `<div class="chart-card" style="margin-top:16px">
-      <h2>Matières à surveiller <span style="font-size:12px;color:var(--muted);font-weight:400">— variations sur les 30 derniers jours</span></h2>
-      <div>${rows}</div>
-    </div>`;
-  }
-
   async function renderDashboard() {
     S.dashboard = await api("/api/pricing/dashboard");
     const d = S.dashboard;
@@ -451,37 +436,27 @@
     const fxSrc = d.eur_usd_rate_source || "—";
     const fxStale = isFxStale(d.eur_usd_rate_updated_at);
     setContent(`
-      <div class="page-head">
-        <div><h1>Tableau de bord</h1><div class="sub">Calcul des coûts matières</div></div>
-      </div>
-      <div class="kpi-grid">
-        <div class="kpi-card"><div class="kpi-label">Matières actives</div><div class="kpi-value">${d.materials_active}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Produits actifs</div><div class="kpi-value">${d.products_active}</div></div>
-        <div class="kpi-card">
-          <div class="kpi-label">Taux EUR / USD ${fxStale ? fxStaleBadgeHtml() : ""}</div>
-          <div class="kpi-value">${fmtNum(d.eur_usd_rate, 4, 4)}</div>
-          <div class="kpi-meta">MAJ : ${escHtml(fxDate)} · ${escHtml(fxSrc)}</div>
-          ${S.canWrite ? '<button type="button" class="btn btn-ghost btn-sm" id="dash-fx-btn" style="margin-top:8px">Rafraîchir</button>' : ""}
+      <div class="pr-narrow">
+        ${pageHead("Tableau de bord", "Calcul des coûts matières")}
+        <div class="kpi-grid kpi-grid-3">
+          <div class="kpi-card"><div class="kpi-label">Matières actives</div><div class="kpi-value">${d.materials_active}</div></div>
+          <div class="kpi-card"><div class="kpi-label">Produits actifs</div><div class="kpi-value">${d.products_active}</div></div>
+          <div class="kpi-card">
+            <div class="kpi-label">Taux USD / EUR ${fxStale ? fxStaleBadgeHtml() : ""}</div>
+            <div class="kpi-value">${fmtNum(d.eur_usd_rate, 4, 4)}</div>
+            <div class="kpi-meta">1 USD = ${fmtNum(d.eur_usd_rate, 4, 4)} € · MAJ : ${escHtml(fxDate)} · ${escHtml(fxSrc)}</div>
+            ${S.canWrite ? '<button type="button" class="btn btn-soft btn-sm" id="dash-fx-btn" style="margin-top:10px">Rafraîchir</button>' : ""}
+          </div>
         </div>
-        <div class="kpi-card"><div class="kpi-label">Prix de vente moyen</div><div class="kpi-value">${d.avg_sell_price_eur_m2 != null ? fmtEurM2(d.avg_sell_price_eur_m2) : "—"}</div><div class="kpi-meta">produits actifs</div></div>
       </div>
-      <div class="quick-links">
-        <button type="button" class="btn btn-accent" data-nav="/pricing/materials">Matières</button>
-        <button type="button" class="btn btn-accent" data-nav="/pricing/products">Produits</button>
-        ${S.canWrite ? '<button type="button" class="btn btn-ghost" data-nav="/pricing/settings">Paramètres</button>' : ""}
-      </div>
-      ${renderCategoryTiles(d.variations_by_category || [])}
-      ${renderRecentMovers(d.recent_movers || [], (d.materials_active || 0))}
     `);
-    document.querySelectorAll("[data-nav]").forEach((b) => {
-      b.onclick = () => navigate(b.getAttribute("data-nav"));
-    });
     const fxBtn = document.getElementById("dash-fx-btn");
     if (fxBtn) {
       fxBtn.onclick = async () => {
         try {
           await api("/api/pricing/settings/refresh-fx", { method: "POST" });
-          showToast("Taux EUR/USD mis à jour.", "success");
+          showToast("Taux USD/EUR mis à jour.", "success");
+          S.settings = await api("/api/pricing/settings");
           await renderDashboard();
         } catch (e) {
           showToast(e.message, "danger");
@@ -509,9 +484,7 @@
     const catOpts = S.categories
       .map(
         (c) =>
-          `<label style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-size:12px">
-            <input type="checkbox" class="mat-cat-cb" value="${escAttr(c.code)}" ${S.filters.matCats.includes(c.code) ? "checked" : ""}/>${escHtml(c.label)}
-          </label>`
+          `<label class="cat-cb"><input type="checkbox" class="mat-cat-cb" value="${escAttr(c.code)}" ${S.filters.matCats.includes(c.code) ? "checked" : ""}/>${escHtml(c.label)}</label>`
       )
       .join("");
     const supOpts =
@@ -531,15 +504,15 @@
         const unit = `${fmtNum(m.unit_price, 4, 4)}\u00a0${m.price_currency}/${m.price_basis === "PER_M2" ? "m²" : "kg"}`;
         return `<tr data-mid="${m.id}">
           <td>${categoryBadge(m.category_code)}</td>
-          <td>${escHtml(m.name)}</td>
+          <td><button type="button" class="cell-link" data-edit-m="${m.id}" title="Éditer cette matière">${escHtml(m.name)}</button></td>
           <td>${escHtml(m.appellation_code)}</td>
           <td>${escHtml(sup)}</td>
           <td>${unit}</td>
           <td><strong>${live}</strong></td>
           <td>${m.is_active ? '<span class="badge badge-glassine">Actif</span>' : '<span class="badge badge-inactive">Inactif</span>'}</td>
           <td class="row-actions" onclick="event.stopPropagation()">
-            <button type="button" class="btn btn-ghost btn-sm" data-hist="${m.id}">Historique</button>
-            ${S.canWrite ? `<button type="button" class="btn btn-ghost btn-sm" data-edit-m="${m.id}">Éditer</button>` : ""}
+            <button type="button" class="btn btn-soft btn-sm" data-hist="${m.id}">Historique</button>
+            ${S.canWrite ? `<button type="button" class="btn btn-soft btn-sm" data-edit-m="${m.id}">Éditer</button>` : ""}
           </td>
         </tr>`;
       })
@@ -554,22 +527,25 @@
         : "";
 
     setContent(`
-      <div class="page-head">
-        <div><h1>Matières</h1><div class="sub">${S.materials.length} ligne(s)</div></div>
-        ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-mat">+ Nouvelle matière</button>' : ""}
-      </div>
-      <div class="filters">
-        <input type="search" class="search-input" id="mat-q" placeholder="Rechercher (nom, appellation…)" value="${escAttr(S.filters.matQ)}"/>
-        <select id="mat-sup">${supOpts}</select>
-        <select id="mat-active"><option value="1" ${S.filters.matActive==="1"?"selected":""}>Actifs</option><option value="0" ${S.filters.matActive==="0"?"selected":""}>Inactifs</option><option value="all" ${S.filters.matActive==="all"?"selected":""}>Tous</option></select>
-      </div>
-      <div style="margin-bottom:12px">${catOpts}</div>
-      ${emptyBlock}
-      <div class="table-wrap" ${emptyBlock ? 'style="display:none"' : ""}>
-        <table class="pr-table">
-          <thead><tr><th>Cat.</th><th>Nom</th><th>Appellation</th><th>Fournisseur</th><th>Prix unit.</th><th>€/m²</th><th>Statut</th><th></th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="8" class="empty">Aucun résultat pour ce filtre</td></tr>'}</tbody>
-        </table>
+      <div class="pr-narrow">
+        ${pageHead(
+          "Matières",
+          `${S.materials.length} ligne(s)`,
+          S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-mat">+ Nouvelle matière</button>' : ""
+        )}
+        <div class="filters">
+          <input type="search" class="search-input" id="mat-q" placeholder="Rechercher (nom, appellation…)" value="${escAttr(S.filters.matQ)}"/>
+          <select id="mat-sup">${supOpts}</select>
+          <select id="mat-active"><option value="1" ${S.filters.matActive==="1"?"selected":""}>Actifs</option><option value="0" ${S.filters.matActive==="0"?"selected":""}>Inactifs</option><option value="all" ${S.filters.matActive==="all"?"selected":""}>Tous</option></select>
+        </div>
+        <div class="cat-filters">${catOpts}</div>
+        ${emptyBlock}
+        <div class="table-wrap" ${emptyBlock ? 'style="display:none"' : ""}>
+          <table class="pr-table">
+            <thead><tr><th>Cat.</th><th>Nom</th><th>Appellation</th><th>Fournisseur</th><th>Prix unit.</th><th>€/m²</th><th>Statut</th><th></th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="8" class="empty">Aucun résultat pour ce filtre</td></tr>'}</tbody>
+          </table>
+        </div>
       </div>
     `);
 
@@ -606,7 +582,10 @@
       b.onclick = () => openPriceHistoryModal(b.getAttribute("data-hist"));
     });
     document.querySelectorAll("[data-edit-m]").forEach((b) => {
-      b.onclick = () => navigate("/pricing/materials/" + b.getAttribute("data-edit-m"));
+      b.onclick = (e) => {
+        e.stopPropagation();
+        navigate("/pricing/materials/" + b.getAttribute("data-edit-m"));
+      };
     });
     const btnNew = document.getElementById("btn-new-mat");
     if (btnNew) btnNew.onclick = () => navigate("/pricing/materials/new");
@@ -628,6 +607,7 @@
       price_basis: "PER_KG",
       tax_incidence: "1",
       is_imported: false,
+      transport_unit_price: "0",
       container_kg: "",
       container_cost_usd: "",
     };
@@ -652,6 +632,8 @@
       price_basis: m.price_basis,
       tax_incidence: String(m.tax_incidence),
       is_imported: !!m.is_imported,
+      transport_unit_price:
+        m.transport_unit_price != null ? String(m.transport_unit_price) : "0",
       container_kg: m.container_kg != null ? String(m.container_kg) : "",
       container_cost_usd: m.container_cost_usd != null ? String(m.container_cost_usd) : "",
       _history: [],
@@ -674,6 +656,7 @@
       price_basis: f.price_basis,
       tax_incidence: parseFloat(f.tax_incidence) || 1,
       is_imported: !!f.is_imported,
+      transport_unit_price: parseFloat(f.transport_unit_price) || 0,
       container_kg: f.container_kg ? parseFloat(f.container_kg) : null,
       container_cost_usd: f.container_cost_usd ? parseFloat(f.container_cost_usd) : null,
     };
@@ -686,28 +669,153 @@
         method: "POST",
         body: materialPreviewPayload(),
       });
-      const el = document.getElementById("mat-live-price");
+      const el = document.getElementById("mat-recap");
       if (el) {
-        el.innerHTML = previewPanelHtml(S.matPreview);
+        el.innerHTML = recapTableHtml(S.matPreview);
+        bindRecapActions();
       }
     } catch (e) {
-      const el = document.getElementById("mat-live-price");
+      const el = document.getElementById("mat-recap");
       if (el) el.innerHTML = `<div class="empty" style="color:var(--danger)">${escHtml(e.message)}</div>`;
     }
   }
 
-  function previewPanelHtml(computed) {
+  /**
+   * Tableau récapitulatif horizontal du calcul :
+   * (prix d'achat + transport) x taux de change x incidence taxes, puis marge.
+   */
+  function recapTableHtml(computed) {
     if (!computed) return '<div class="empty">—</div>';
-    const b = computed.breakdown;
+    const b = computed.breakdown || {};
+    const cur = (b.currency || "EUR").toUpperCase();
+    const basis = b.price_basis || "PER_KG";
+    const unit = unitLabel(cur, basis);
+    const perM2 = basis === "PER_M2";
+    const rate = parseFloat(b.fx_rate || 1);
+    const taxRatio =
+      parseFloat(b.subtotal_eur || 0) !== 0
+        ? parseFloat(computed.price_eur_per_m2) / parseFloat(b.subtotal_eur)
+        : 1;
+    const w = parseFloat(b.weight_per_m2 || 0);
+    const hasTransport = parseFloat(b.transport_src || 0) > 0;
+
+    const cells = [
+      { label: "Prix d'achat", value: fmtCur(b.unit_price_src, cur), unit: unit },
+      {
+        label: "Transport",
+        value: hasTransport ? fmtCur(b.transport_src, cur) : "—",
+        unit: hasTransport ? unit : "",
+        muted: !hasTransport,
+      },
+      {
+        label: "Sous-total achat",
+        value: fmtCur(parseFloat(b.unit_price_src || 0) + parseFloat(b.transport_src || 0), cur),
+        unit: unit,
+      },
+    ];
+    if (!perM2) {
+      // Prix au kilo : on montre explicitement le passage au m² via le poids.
+      cells.push({
+        label: "Ramené au m²",
+        value: fmtCur(parseFloat(b.raw || 0) + parseFloat(b.transport || 0), cur),
+        unit: `${CUR_SYM[cur] || "€"}/m² · × ${fmtNum(w, 4, 4)} kg/m²`,
+      });
+    }
+    cells.push(
+      {
+        label: "Change",
+        value: cur === "USD" ? "× " + fmtNum(rate, 4, 4) : "—",
+        unit: cur === "USD" ? "USD → EUR" : "achat en €",
+        muted: cur !== "USD",
+      },
+      {
+        label: "Achat converti",
+        value: fmtNum(parseFloat(b.raw || 0) + parseFloat(b.transport || 0) + parseFloat(b.fx || 0), 4, 4),
+        unit: "€/m²",
+      },
+      {
+        label: "Incidence taxes",
+        value: "× " + fmtNum(taxRatio, 4, 4),
+        unit: parseFloat(b.tax_uplift || 0) >= 0 ? "majoration" : "minoration",
+      },
+      {
+        label: "Prix de revient",
+        value: fmtNum(computed.price_eur_per_m2, 4, 4),
+        unit: "€/m²",
+        strong: true,
+      },
+      {
+        label: `Marge (${fmtNum(computed.margin_pct || 0, 2, 2)} %)`,
+        value: fmtNum(computed.margin_eur_m2 || 0, 4, 4),
+        unit: "€/m²",
+      },
+      {
+        label: "Prix de vente",
+        value: fmtNum(computed.sell_price_eur_m2 || 0, 4, 4),
+        unit: "€/m²",
+        strong: true,
+      }
+    );
+
+    const head = cells.map((c) => `<th>${escHtml(c.label)}</th>`).join("");
+    const body = cells
+      .map(
+        (c) =>
+          `<td class="${c.strong ? "recap-strong" : ""}${c.muted ? " recap-muted" : ""}">` +
+          `<div class="recap-value">${escHtml(c.value)}</div>` +
+          (c.unit ? `<div class="recap-unit">${escHtml(c.unit)}</div>` : "") +
+          "</td>"
+      )
+      .join("");
+
+    const notes = [];
+    if (!perM2) {
+      notes.push(
+        w > 0
+          ? `Prix au kilo ramené au m² via le poids : × ${fmtNum(w, 4, 4)} kg/m².`
+          : `Poids au m² non renseigné : le prix au kilo ne peut pas être ramené au m².`
+      );
+    }
+    if (computed.transport_suggested != null && S.canWrite) {
+      notes.push(
+        `Calculette conteneur : ${fmtCur(computed.transport_suggested, cur)} ${unit} ` +
+          `<button type="button" class="link-btn" id="btn-use-transport">utiliser cette valeur</button>`
+      );
+    }
+
     return `
-      <div class="big-label">Prix calculé</div>
-      <div class="big-price">${fmtEurM2(computed.price_eur_per_m2)}</div>
-      <div class="breakdown-legend" style="margin-top:12px">
-        <div><span>Brut</span><span>${fmtEur(b.raw)}</span></div>
-        <div><span>Transport</span><span>${fmtEur(b.transport)}</span></div>
-        <div><span>Change</span><span>${fmtEur(b.fx)}</span></div>
-        <div><span>Taxes</span><span>${fmtEur(b.tax_uplift)}</span></div>
+      <div class="recap-card">
+        <div class="recap-head">
+          <div>
+            <div class="recap-title">Détail du calcul</div>
+            <div class="recap-formula">(prix d'achat + transport) × change × incidence taxes</div>
+          </div>
+          <div class="recap-total">
+            <div class="recap-total-label">Prix de revient</div>
+            <div class="recap-total-value">${fmtEurM2(computed.price_eur_per_m2)}</div>
+          </div>
+        </div>
+        <div class="recap-scroll">
+          <table class="recap-table"><thead><tr>${head}</tr></thead><tbody><tr>${body}</tr></tbody></table>
+        </div>
+        ${notes.length ? `<div class="recap-notes">${notes.join(" · ")}</div>` : ""}
       </div>`;
+  }
+
+  function bindRecapActions() {
+    const btn = document.getElementById("btn-use-transport");
+    if (!btn) return;
+    btn.onclick = () => {
+      const v = S.matPreview && S.matPreview.transport_suggested;
+      if (v == null) return;
+      const el = document.getElementById("f-transport");
+      if (el) {
+        el.value = String(v);
+        syncMaterialFormFromDom();
+        refreshMaterialPreview();
+        showToast("Transport repris de la calculette conteneur.", "success");
+      }
+    };
   }
 
   function renderMaterialForm(isNew) {
@@ -726,14 +834,16 @@
           `<tr><td>${escHtml(h.effective_date)}</td><td>${fmt4(h.unit_price)} ${escHtml(h.price_currency)}</td><td>${escHtml(h.source || "—")}</td></tr>`
       )
       .join("");
+    const unit = unitLabel(f.price_currency, f.price_basis);
 
     setContent(`
-      <div class="page-head">
-        <div><h1>${isNew ? "Nouvelle matière" : "Éditer matière"}</h1></div>
-        <button type="button" class="btn btn-ghost" id="btn-back-mat">Retour liste</button>
-      </div>
-      <div class="form-grid">
-        <div class="form-card" id="mat-form-fields">
+      <div class="pr-narrow">
+        ${pageHead(
+          isNew ? "Nouvelle matière" : "Éditer matière",
+          isNew ? "" : escHtml(f.name),
+          '<button type="button" class="btn btn-accent" id="btn-back-mat">Retour liste</button>'
+        )}
+        <div class="form-card">
           <div class="form-section"><h3>Identification</h3>
             <div class="field"><label>Nom</label><input id="f-name" value="${escAttr(f.name)}"/></div>
             <div class="field-row">
@@ -742,61 +852,105 @@
             </div>
             <div class="field"><label>Fournisseur</label><select id="f-sup">${supOpts}</select></div>
           </div>
-          <div class="form-section"><h3>Prix</h3>
+
+          <div class="form-section"><h3>Prix d'achat</h3>
             <div class="field-row">
-              <div class="field"><label>Devise</label><select id="f-cur"><option value="EUR" ${f.price_currency==="EUR"?"selected":""}>EUR</option><option value="USD" ${f.price_currency==="USD"?"selected":""}>USD</option></select></div>
-              <div class="field"><label>Base</label><select id="f-basis"><option value="PER_KG" ${f.price_basis==="PER_KG"?"selected":""}>€ ou $ / kg</option><option value="PER_M2" ${f.price_basis==="PER_M2"?"selected":""}>€ ou $ / m²</option></select></div>
+              <div class="field"><label>Devise achat</label><select id="f-cur">
+                <option value="EUR" ${f.price_currency==="EUR"?"selected":""}>EUR — euro (€)</option>
+                <option value="USD" ${f.price_currency==="USD"?"selected":""}>USD — dollar américain ($)</option>
+              </select></div>
+              <div class="field"><label>Base de prix</label><select id="f-basis">
+                <option value="PER_KG" ${f.price_basis==="PER_KG"?"selected":""}>${escHtml(BASIS_LABEL.PER_KG)}</option>
+                <option value="PER_M2" ${f.price_basis==="PER_M2"?"selected":""}>${escHtml(BASIS_LABEL.PER_M2)}</option>
+              </select></div>
             </div>
             <div class="field-row">
-              <div class="field"><label>Prix unitaire</label><input type="number" step="0.0001" id="f-unit" value="${escAttr(f.unit_price)}"/></div>
-              <div class="field"><label>Incidence taxes</label><input type="number" step="0.0001" id="f-tax" value="${escAttr(f.tax_incidence)}"/></div>
-            </div>
-          </div>
-          <div class="form-section"><h3>Import</h3>
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="f-imp" ${f.is_imported?"checked":""}/> Matière importée (transport conteneur)</label>
-            <div id="import-fields" style="margin-top:10px;${f.is_imported?"":"display:none"}">
-              <div class="field-row">
-                <div class="field"><label>Coût conteneur USD</label><input type="number" step="0.01" id="f-cc" value="${escAttr(f.container_cost_usd)}"/></div>
-                <div class="field"><label>Masse conteneur kg</label><input type="number" step="0.01" id="f-ck" value="${escAttr(f.container_kg)}"/></div>
+              <div class="field"><label>Prix unitaire <span class="lbl-unit">${escHtml(unit)}</span></label><input type="number" step="0.0001" id="f-unit" value="${escAttr(f.unit_price)}"/></div>
+              <div class="field"><label>Incidence taxes <span class="lbl-unit">multiplicateur</span></label><input type="number" step="0.0001" id="f-tax" value="${escAttr(f.tax_incidence)}"/>
+                <div class="field-hint">1 = neutre · 1,05 = +5 % · 0,95 = −5 %</div>
               </div>
             </div>
           </div>
-          <div class="form-section"><h3>Caractéristiques</h3>
-            <div class="field-row">
-              <div class="field"><label>Poids kg/m²</label><input type="number" step="0.0001" id="f-wm2" value="${escAttr(f.weight_per_m2)}"/></div>
-              <div class="field"><label>Grammage (g/m²)</label><input type="number" id="f-gsm" value="${escAttr(f.weight_gsm)}"/></div>
+
+          <div class="form-section">
+            <div class="import-block${f.is_imported ? " on" : ""}" id="import-block">
+              <label class="check-row">
+                <input type="checkbox" id="f-imp" ${f.is_imported?"checked":""}/>
+                <span>
+                  <span class="check-title">Matière importée</span>
+                  <span class="check-sub">Un coût de transport s'ajoute au prix d'achat avant conversion.</span>
+                </span>
+              </label>
+              <div id="import-fields" class="import-fields" style="${f.is_imported?"":"display:none"}">
+                <div class="field"><label>Transport <span class="lbl-unit">${escHtml(unit)}</span></label>
+                  <input type="number" step="0.0001" id="f-transport" value="${escAttr(f.transport_unit_price)}"/>
+                  <div class="field-hint">Saisi dans la devise et la base d'achat — il suit le prix dans le calcul.</div>
+                </div>
+                <div class="calc-box">
+                  <div class="calc-title">Calculette conteneur <span>facultative — propose une valeur de transport</span></div>
+                  <div class="field-row">
+                    <div class="field"><label>Coût conteneur USD</label><input type="number" step="0.01" id="f-cc" value="${escAttr(f.container_cost_usd)}" placeholder="${escAttr(S.settings ? S.settings.default_container_cost_usd : "")}"/></div>
+                    <div class="field"><label>Masse conteneur kg</label><input type="number" step="0.01" id="f-ck" value="${escAttr(f.container_kg)}" placeholder="${escAttr(S.settings ? S.settings.default_container_kg : "")}"/></div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          ${S.canWrite ? `<div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+
+          <div class="form-section" id="carac-section" style="${needsWeight(f)?"":"display:none"}"><h3>Caractéristiques</h3>
+            <div class="field-row">
+              <div class="field"><label>Poids <span class="lbl-unit">kg/m²</span></label><input type="number" step="0.0001" id="f-wm2" value="${escAttr(f.weight_per_m2)}"/></div>
+              <div class="field"><label>Grammage <span class="lbl-unit">g/m²</span></label><input type="number" id="f-gsm" value="${escAttr(f.weight_gsm)}"/>
+                <div class="field-hint">Renseigné seul, il remplit le poids (g/m² ÷ 1000).</div>
+              </div>
+            </div>
+          </div>
+
+          ${S.canWrite ? `<div class="form-actions">
             <button type="button" class="btn btn-accent" id="btn-save-mat">Enregistrer</button>
             ${!isNew ? '<button type="button" class="btn btn-danger" id="btn-del-mat">Supprimer</button>' : ""}
           </div>` : ""}
-          ${!isNew && hist ? `<div class="form-section" style="margin-top:24px"><h3>Historique prix (10 derniers)</h3><table class="pr-table"><thead><tr><th>Date</th><th>Prix</th><th>Source</th></tr></thead><tbody>${hist}</tbody></table></div>` : ""}
         </div>
-        <div class="side-panel" id="mat-live-price">${previewPanelHtml(S.matPreview)}</div>
+
+        <div id="mat-recap">${recapTableHtml(S.matPreview)}</div>
+
+        ${!isNew && hist ? `<div class="form-card" style="margin-top:16px"><div class="form-section" style="margin:0"><h3>Historique prix (10 derniers)</h3><div class="table-wrap"><table class="pr-table"><thead><tr><th>Date</th><th>Prix</th><th>Source</th></tr></thead><tbody>${hist}</tbody></table></div></div></div>` : ""}
       </div>
     `);
 
     document.getElementById("btn-back-mat").onclick = () => navigate("/pricing/materials");
+    bindRecapActions();
 
     const bindPreview = () => {
       clearTimeout(S.debounceMat);
       S.debounceMat = setTimeout(refreshMaterialPreview, 300);
     };
-    ["f-unit", "f-wm2", "f-tax", "f-cc", "f-ck"].forEach((id) => {
+    ["f-unit", "f-wm2", "f-tax", "f-transport", "f-cc", "f-ck"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.oninput = () => {
         syncMaterialFormFromDom();
         bindPreview();
       };
     });
+    const gsm = document.getElementById("f-gsm");
+    if (gsm) {
+      gsm.oninput = () => {
+        const g = parseFloat(gsm.value);
+        const wEl = document.getElementById("f-wm2");
+        if (wEl && !Number.isNaN(g) && (!parseFloat(wEl.value) || wEl.dataset.auto === "1")) {
+          wEl.value = String(Math.round((g / 1000) * 10000) / 10000);
+          wEl.dataset.auto = "1";
+        }
+        syncMaterialFormFromDom();
+        bindPreview();
+      };
+    }
     ["f-cur", "f-basis", "f-imp"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.onchange = () => {
         syncMaterialFormFromDom();
-        const impFields = document.getElementById("import-fields");
-        if (impFields) impFields.style.display = document.getElementById("f-imp").checked ? "" : "none";
-        bindPreview();
+        renderMaterialForm(isNew);
+        refreshMaterialPreview();
       };
     });
 
@@ -822,19 +976,26 @@
 
   function syncMaterialFormFromDom() {
     const f = S.formMaterial;
-    f.name = document.getElementById("f-name").value;
-    f.appellation_code = document.getElementById("f-app").value;
-    f.category_id = parseInt(document.getElementById("f-cat").value, 10);
-    f.supplier_id = document.getElementById("f-sup").value;
-    f.price_currency = document.getElementById("f-cur").value;
-    f.price_basis = document.getElementById("f-basis").value;
-    f.unit_price = document.getElementById("f-unit").value;
-    f.tax_incidence = document.getElementById("f-tax").value;
-    f.is_imported = document.getElementById("f-imp").checked;
-    f.container_cost_usd = document.getElementById("f-cc").value;
-    f.container_kg = document.getElementById("f-ck").value;
-    f.weight_per_m2 = document.getElementById("f-wm2").value;
-    f.weight_gsm = document.getElementById("f-gsm").value;
+    const val = (id) => {
+      const el = document.getElementById(id);
+      return el ? el.value : null;
+    };
+    f.name = val("f-name") ?? f.name;
+    f.appellation_code = val("f-app") ?? f.appellation_code;
+    const cat = val("f-cat");
+    if (cat != null) f.category_id = parseInt(cat, 10);
+    f.supplier_id = val("f-sup") ?? f.supplier_id;
+    f.price_currency = val("f-cur") ?? f.price_currency;
+    f.price_basis = val("f-basis") ?? f.price_basis;
+    f.unit_price = val("f-unit") ?? f.unit_price;
+    f.tax_incidence = val("f-tax") ?? f.tax_incidence;
+    const imp = document.getElementById("f-imp");
+    if (imp) f.is_imported = imp.checked;
+    f.transport_unit_price = val("f-transport") ?? f.transport_unit_price;
+    f.container_cost_usd = val("f-cc") ?? f.container_cost_usd;
+    f.container_kg = val("f-ck") ?? f.container_kg;
+    f.weight_per_m2 = val("f-wm2") ?? f.weight_per_m2;
+    f.weight_gsm = val("f-gsm") ?? f.weight_gsm;
   }
 
   async function saveMaterialForm(isNew) {
@@ -852,10 +1013,19 @@
       price_basis: f.price_basis,
       tax_incidence: parseFloat(f.tax_incidence) || 1,
       is_imported: !!f.is_imported,
+      transport_unit_price: parseFloat(f.transport_unit_price) || 0,
       container_kg: f.container_kg ? parseFloat(f.container_kg) : null,
       container_cost_usd: f.container_cost_usd ? parseFloat(f.container_cost_usd) : null,
       price_history_source: "Saisie interface",
     };
+    if (!body.name) {
+      showToast("Nom requis.", "danger");
+      return;
+    }
+    if (body.price_basis === "PER_KG" && !(body.weight_per_m2 > 0)) {
+      showToast("Poids kg/m² requis : le prix est saisi au kilo.", "danger");
+      return;
+    }
     try {
       if (isNew) {
         const r = await api("/api/pricing/materials", { method: "POST", body });
@@ -882,7 +1052,7 @@
         <p style="color:var(--muted);font-size:13px">${categoryBadge(m.category_code)} · ${escHtml(m.appellation_code)}</p>
         <p style="margin:16px 0"><strong>${m.computed ? fmtEurM2(m.computed.price_eur_per_m2) : "—"}</strong></p>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button type="button" class="btn btn-ghost btn-sm" id="dw-hist">Historique</button>
+          <button type="button" class="btn btn-soft btn-sm" id="dw-hist">Historique</button>
           ${S.canWrite ? `<button type="button" class="btn btn-accent btn-sm" id="dw-edit">Éditer</button>` : ""}
         </div>
       </div>`;
@@ -941,7 +1111,7 @@
           <canvas class="history-chart" id="hist-canvas" width="560" height="200"></canvas>
           <table class="pr-table"><thead><tr><th>Date</th><th>Prix</th><th>Taxe</th><th>Source</th></tr></thead>
           <tbody>${rows || '<tr><td colspan="4" class="empty">Aucun historique</td></tr>'}</tbody></table>
-          <button type="button" class="btn btn-ghost" style="margin-top:12px" id="modal-close">Fermer</button>
+          <button type="button" class="btn btn-soft" style="margin-top:12px" id="modal-close">Fermer</button>
         </div>
       </div>`;
     document.getElementById("modal-back").onclick = (e) => {
@@ -998,10 +1168,10 @@
           <td>${sell}</td>
           <td>${margin}</td>
           <td class="row-actions" onclick="event.stopPropagation()">
-            <button type="button" class="btn btn-ghost btn-sm" data-dup="${p.id}">Dupliquer</button>
-            <button type="button" class="btn btn-ghost btn-sm" data-xls="${p.id}">Excel</button>
-            <button type="button" class="btn btn-ghost btn-sm" data-pdf="${p.id}">PDF</button>
-            ${S.canWrite ? `<button type="button" class="btn btn-ghost btn-sm" data-edit-p="${p.id}">Éditer</button>` : ""}
+            <button type="button" class="btn btn-soft btn-sm" data-dup="${p.id}">Dupliquer</button>
+            <button type="button" class="btn btn-soft btn-sm" data-xls="${p.id}">Excel</button>
+            <button type="button" class="btn btn-soft btn-sm" data-pdf="${p.id}">PDF</button>
+            ${S.canWrite ? `<button type="button" class="btn btn-soft btn-sm" data-edit-p="${p.id}">Éditer</button>` : ""}
           </td>
         </tr>`;
       })
@@ -1016,14 +1186,15 @@
         : "";
 
     setContent(`
-      <div class="page-head">
-        <div><h1>Produits</h1><div class="sub">${S.products.length} produit(s)</div></div>
-        ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-prod">+ Nouveau produit</button>' : ""}
-      </div>
+      ${pageHead(
+        "Produits",
+        `${S.products.length} produit(s)`,
+        S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-prod">+ Nouveau produit</button>' : ""
+      )}
       <div class="filters">
         <input type="search" class="search-input" id="prod-q" placeholder="Rechercher (code, nom…)" value="${escAttr(S.filters.prodQ)}"/>
         <button type="button" class="btn btn-accent" id="prod-export-sel">Exporter sélection (Excel)</button>
-        <button type="button" class="btn btn-ghost" id="prod-export-all">Exporter liste CSV</button>
+        <button type="button" class="btn btn-soft" id="prod-export-all">Exporter liste CSV</button>
       </div>
       ${prodEmpty}
       <div class="table-wrap" ${prodEmpty ? 'style="display:none"' : ""}>
@@ -1061,7 +1232,7 @@
           silicone_id: p.silicone_id,
           glassine_id: p.glassine_id,
           extra_material_ids: [...(p.extra_material_ids || [])],
-          custom_margin_eur_m2: p.custom_margin_eur_m2 != null ? String(p.custom_margin_eur_m2) : "",
+          custom_margin_pct: p.custom_margin_pct != null ? String(p.custom_margin_pct) : "",
         };
         navigate("/pricing/products/new");
         await bootRoute();
@@ -1216,7 +1387,7 @@
         silicone_id: "",
         glassine_id: "",
         extra_material_ids: [],
-        custom_margin_eur_m2: "",
+        custom_margin_pct: "",
       }
     );
   }
@@ -1236,7 +1407,7 @@
       silicone_id: p.silicone_id || "",
       glassine_id: p.glassine_id || "",
       extra_material_ids: p.extra_material_ids || [],
-      custom_margin_eur_m2: p.custom_margin_eur_m2 != null ? String(p.custom_margin_eur_m2) : "",
+      custom_margin_pct: p.custom_margin_pct != null ? String(p.custom_margin_pct) : "",
     };
     S.prodPreview = p.cost || null;
   }
@@ -1316,7 +1487,9 @@
       silicone_id: f.silicone_id ? parseInt(f.silicone_id, 10) : null,
       glassine_id: f.glassine_id ? parseInt(f.glassine_id, 10) : null,
       extra_material_ids: f.extra_material_ids || [],
-      custom_margin_eur_m2: f.custom_margin_eur_m2 ? parseFloat(f.custom_margin_eur_m2) : null,
+      custom_margin_pct: f.custom_margin_pct !== "" && f.custom_margin_pct != null
+        ? parseFloat(f.custom_margin_pct)
+        : null,
     };
   }
 
@@ -1344,20 +1517,21 @@
       <div class="big-price">${fmtEurM2(cost.total_eur_per_m2)}</div>
       ${priceBreakdownHtml({ components: comps, total: cost.total_eur_per_m2 })}
       <div class="breakdown-legend" style="margin-top:14px">
-        <div><span>Marge</span><span>${fmtEurM2(cost.margin_eur_m2)}</span></div>
+        <div><span>Marge (${fmtNum(cost.margin_pct || 0, 2, 2)} %)</span><span>${fmtEurM2(cost.margin_eur_m2)}</span></div>
         <div><span>Prix de vente</span><span><strong>${fmtEurM2(cost.sell_price_eur_m2)}</strong></span></div>
       </div>`;
   }
 
   function renderProductForm(isNew) {
     const f = S.formProduct;
-    const defMargin = S.settings ? fmtEurM2(S.settings.default_margin_eur_m2) : "—";
+    const defMargin = S.settings ? fmtNum(S.settings.default_margin_pct, 2, 2) : "—";
 
     setContent(`
-      <div class="page-head">
-        <div><h1>${isNew ? "Nouveau produit" : "Éditer produit"}</h1></div>
-        <button type="button" class="btn btn-ghost" id="btn-back-prod">Retour liste</button>
-      </div>
+      ${pageHead(
+        isNew ? "Nouveau produit" : "Éditer produit",
+        "",
+        '<button type="button" class="btn btn-accent" id="btn-back-prod">Retour liste</button>'
+      )}
       <div class="form-grid">
         <div class="form-card">
           <div class="field-row">
@@ -1368,12 +1542,13 @@
           ${materialComboboxHtml("p-adhesif", "ADHESIF", f.adhesif_id)}
           ${materialComboboxHtml("p-silicone", "SILICONE", f.silicone_id)}
           ${materialComboboxHtml("p-glassine", "GLASSINE", f.glassine_id)}
-          <div class="field"><label>Marge custom €/m² (optionnel)</label>
-            <input type="number" step="0.0001" id="p-margin" value="${escAttr(f.custom_margin_eur_m2)}" placeholder="Défaut : ${escAttr(defMargin)}"/>
+          <div class="field"><label>Marge personnalisée <span class="lbl-unit">% du prix de revient</span></label>
+            <input type="number" step="0.01" id="p-margin" value="${escAttr(f.custom_margin_pct)}" placeholder="Défaut : ${escAttr(defMargin)} %"/>
+            <div class="field-hint">Laisser vide pour appliquer la marge par défaut des paramètres.</div>
           </div>
           ${S.canWrite ? `<div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
             <button type="button" class="btn btn-accent" id="btn-save-prod">Enregistrer</button>
-            <button type="button" class="btn btn-ghost" id="btn-print-prod">Exporter PDF</button>
+            <button type="button" class="btn btn-soft" id="btn-print-prod">Exporter PDF</button>
             ${!isNew ? '<button type="button" class="btn btn-danger" id="btn-del-prod">Supprimer</button>' : ""}
           </div>` : ""}
         </div>
@@ -1424,7 +1599,7 @@
     f.adhesif_id = document.getElementById("p-adhesif").value;
     f.silicone_id = document.getElementById("p-silicone").value;
     f.glassine_id = document.getElementById("p-glassine").value;
-    f.custom_margin_eur_m2 = document.getElementById("p-margin").value;
+    f.custom_margin_pct = document.getElementById("p-margin").value;
   }
 
   async function saveProductForm(isNew) {
@@ -1438,7 +1613,9 @@
       silicone_id: f.silicone_id ? parseInt(f.silicone_id, 10) : null,
       glassine_id: f.glassine_id ? parseInt(f.glassine_id, 10) : null,
       extra_material_ids: f.extra_material_ids || [],
-      custom_margin_eur_m2: f.custom_margin_eur_m2 ? parseFloat(f.custom_margin_eur_m2) : null,
+      custom_margin_pct: f.custom_margin_pct !== "" && f.custom_margin_pct != null
+        ? parseFloat(f.custom_margin_pct)
+        : null,
     };
     try {
       if (isNew) {
@@ -1456,28 +1633,50 @@
     }
   }
 
-  function renderSettings() {
-    const s = S.settings;
-    if (!s) return;
+  function openSettingsModal() {
+    if (!S.canWrite) return;
+    const s = S.settings || {};
     const fxDate = s.eur_usd_rate_updated_at
       ? String(s.eur_usd_rate_updated_at).replace("T", " ").slice(0, 16)
       : "—";
     const fxStale = isFxStale(s.eur_usd_rate_updated_at);
-    setContent(`
-      <div class="page-head"><div><h1>Paramètres</h1><div class="sub">Taux, conteneur et marge par défaut</div></div></div>
-      <div class="form-card" style="max-width:520px">
-        <div class="field"><label>Taux EUR / USD ${fxStale ? fxStaleBadgeHtml() : ""}</label><input type="number" step="0.0001" id="s-rate" value="${escAttr(s.eur_usd_rate)}"/>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">Source : ${escHtml(s.eur_usd_rate_source || "—")} · MAJ : ${escHtml(fxDate)}</div>
+    const root = document.getElementById("modal-root");
+    root.innerHTML = `
+      <div class="modal-backdrop" id="set-back">
+        <div class="modal" id="set-modal" style="max-width:520px">
+          <div class="modal-head">
+            <h2>Paramètres</h2>
+            <button type="button" class="icon-btn" id="set-close" aria-label="Fermer">×</button>
+          </div>
+          <div class="field"><label>Taux USD → EUR ${fxStale ? fxStaleBadgeHtml() : ""}</label>
+            <input type="number" step="0.0001" id="s-rate" value="${escAttr(s.eur_usd_rate)}"/>
+            <div class="field-hint">1 USD = ce montant en euros · Source : ${escHtml(s.eur_usd_rate_source || "—")} · MAJ : ${escHtml(fxDate)}</div>
+          </div>
+          <div class="field-row">
+            <div class="field"><label>Coût conteneur <span class="lbl-unit">USD</span></label><input type="number" step="0.01" id="s-cc" value="${escAttr(s.default_container_cost_usd)}"/></div>
+            <div class="field"><label>Masse conteneur <span class="lbl-unit">kg</span></label><input type="number" step="0.01" id="s-ck" value="${escAttr(s.default_container_kg)}"/></div>
+          </div>
+          <div class="field-hint" style="margin:-4px 0 14px">Valeurs par défaut de la calculette conteneur, utilisées quand la matière ne renseigne rien.</div>
+          <div class="field"><label>Marge par défaut <span class="lbl-unit">% du prix de revient</span></label>
+            <input type="number" step="0.01" id="s-margin" value="${escAttr(s.default_margin_pct)}"/>
+            <div class="field-hint">Appliquée à tous les produits sans marge personnalisée.</div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-accent" id="s-save">Enregistrer</button>
+            <button type="button" class="btn btn-soft" id="s-fx">Rafraîchir le taux</button>
+            <button type="button" class="btn btn-soft" id="s-cancel">Annuler</button>
+          </div>
         </div>
-        <div class="field"><label>Coût conteneur USD</label><input type="number" step="0.01" id="s-cc" value="${escAttr(s.default_container_cost_usd)}"/></div>
-        <div class="field"><label>Masse conteneur kg</label><input type="number" step="0.01" id="s-ck" value="${escAttr(s.default_container_kg)}"/></div>
-        <div class="field"><label>Marge par défaut €/m²</label><input type="number" step="0.0001" id="s-margin" value="${escAttr(s.default_margin_eur_m2)}"/></div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
-          <button type="button" class="btn btn-accent" id="s-save">Enregistrer</button>
-          <button type="button" class="btn btn-ghost" id="s-fx">Rafraîchir taux EUR/USD</button>
-        </div>
-      </div>
-    `);
+      </div>`;
+
+    const close = () => {
+      root.innerHTML = "";
+    };
+    document.getElementById("set-back").onclick = (e) => {
+      if (e.target.id === "set-back") close();
+    };
+    document.getElementById("set-close").onclick = close;
+    document.getElementById("s-cancel").onclick = close;
     document.getElementById("s-save").onclick = async () => {
       try {
         S.settings = await api("/api/pricing/settings", {
@@ -1486,11 +1685,12 @@
             eur_usd_rate: parseFloat(document.getElementById("s-rate").value),
             default_container_cost_usd: parseFloat(document.getElementById("s-cc").value),
             default_container_kg: parseFloat(document.getElementById("s-ck").value),
-            default_margin_eur_m2: parseFloat(document.getElementById("s-margin").value),
+            default_margin_pct: parseFloat(document.getElementById("s-margin").value),
           },
         });
         showToast("Paramètres enregistrés.", "success");
-        renderSettings();
+        close();
+        await bootRoute();
       } catch (e) {
         showToast(e.message, "danger");
       }
@@ -1500,7 +1700,7 @@
         const r = await api("/api/pricing/settings/refresh-fx", { method: "POST" });
         showToast("Taux mis à jour : " + fmtNum(r.eur_usd_rate, 4, 4), "success");
         S.settings = await api("/api/pricing/settings");
-        renderSettings();
+        openSettingsModal();
       } catch (e) {
         showToast(e.message, "danger");
       }
@@ -1549,7 +1749,8 @@
           navigate("/pricing");
           return;
         }
-        renderSettings();
+        await renderDashboard();
+        openSettingsModal();
       } else await renderDashboard();
     } catch (e) {
       setContent(`<div class="empty" style="color:var(--danger);padding:24px">${escHtml(e.message)}</div>`);

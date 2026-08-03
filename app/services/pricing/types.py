@@ -17,7 +17,9 @@ class PricingSettings:
     eur_usd_rate: Decimal
     default_container_cost_usd: Decimal
     default_container_kg: Decimal
-    default_margin_eur_m2: Decimal
+    # Marge par défaut, en % du prix de revient calculé (v223 — remplace
+    # default_margin_eur_m2 qui était un montant absolu en €/m²).
+    default_margin_pct: Decimal
     # Taxe d'importation appliquée à la valorisation MP quand le flag est coché sur
     # une référence (multiplicatif : prix × (1 + import_tax_pct / 100)). 0 par défaut.
     import_tax_pct: Decimal = Decimal("0")
@@ -34,6 +36,8 @@ class PricingSettings:
     # Quantités m² de matière par container (renseignées via /settings > Logistique).
     logistique_qte_m2_container_complet: Decimal = Decimal("0")
     logistique_qte_m2_demi_container: Decimal = Decimal("0")
+    # Legacy — conservé pour compatibilité de lecture, plus utilisé par le moteur.
+    default_margin_eur_m2: Decimal = Decimal("0")
 
 
 @dataclass(frozen=True)
@@ -48,13 +52,17 @@ class PricingMaterial:
     price_basis: PriceBasis
     tax_incidence: Decimal = Decimal("1")
     is_imported: bool = False
+    # Transport saisi, dans la DEVISE et la BASE d'achat (USD/kg si l'achat est en
+    # USD/kg, €/m² si l'achat est en €/m²). Pris en compte uniquement si is_imported.
+    transport_unit_price: Decimal = Decimal("0")
+    # Calculette conteneur — sert à proposer une valeur de transport, jamais au calcul.
     container_kg: Optional[Decimal] = None
     container_cost_usd: Optional[Decimal] = None
 
 
 @dataclass(frozen=True)
 class PricingProduct:
-    """Produit fini — composition et marge optionnelle."""
+    """Produit fini — composition et marge optionnelle (en % du prix de revient)."""
 
     id: int
     code: str
@@ -64,17 +72,37 @@ class PricingProduct:
     silicone_id: Optional[int] = None
     glassine_id: Optional[int] = None
     extra_material_ids: tuple[int, ...] = ()
-    custom_margin_eur_m2: Optional[Decimal] = None
+    custom_margin_pct: Optional[Decimal] = None
 
 
 @dataclass(frozen=True)
 class MaterialPriceBreakdown:
-    """Décomposition €/m² avant taxe : raw + transport + fx + tax_uplift = price_eur_per_m2."""
+    """
+    Décomposition du prix €/m².
+
+    Invariant : raw + transport + fx + tax_uplift = price_eur_per_m2.
+
+    - raw       : prix d'achat ramené au m², exprimé dans la devise d'achat
+    - transport : transport ramené au m², exprimé dans la devise d'achat
+    - fx        : impact du change (0 si l'achat est déjà en EUR)
+    - tax_uplift: impact de l'incidence taxes (négatif si incidence < 1)
+
+    Les champs suffixés _src sont les valeurs saisies (devise et base d'achat),
+    conservées pour l'affichage du tableau récapitulatif.
+    """
 
     raw: Decimal
     transport: Decimal
     fx: Decimal
     tax_uplift: Decimal
+    currency: str = "EUR"
+    price_basis: str = "PER_KG"
+    fx_rate: Decimal = Decimal("1")
+    weight_per_m2: Decimal = Decimal("0")
+    unit_price_src: Decimal = Decimal("0")
+    transport_src: Decimal = Decimal("0")
+    subtotal_src: Decimal = Decimal("0")
+    subtotal_eur: Decimal = Decimal("0")
 
 
 @dataclass(frozen=True)
@@ -96,5 +124,6 @@ class ProductComponentCost:
 class ProductCostResult:
     total_eur_per_m2: Decimal
     components: tuple[ProductComponentCost, ...]
+    margin_pct: Decimal
     margin_eur_m2: Decimal
     sell_price_eur_m2: Decimal

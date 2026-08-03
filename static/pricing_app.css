@@ -218,3 +218,95 @@ table.pr-table tr{cursor:pointer}
   color: var(--text);
   margin: 24px 0 4px;
 }
+
+/* ─── v223 — Coûts matières : largeur contenue, récap horizontal, modal params ─── */
+
+/* Largeur de lecture : les pages ne s'étalent plus sur tout l'écran. */
+.pr-narrow{max-width:1180px;margin:0 auto}
+
+.page-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+/* Bouton "posé sur la page" — fond explicite, jamais transparent au repos. */
+.btn-soft{background:var(--card);border:1px solid var(--border);color:var(--text2)}
+.btn-soft:hover{background:var(--bg);color:var(--text)}
+.modal .btn-soft,.form-card .btn-soft,.recap-card .btn-soft{background:var(--bg)}
+.modal .btn-soft:hover,.form-card .btn-soft:hover,.recap-card .btn-soft:hover{background:var(--card)}
+
+.icon-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;
+  border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);
+  cursor:pointer;font-size:18px;line-height:1;transition:background .15s,color .15s}
+.icon-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+
+/* Champs de recherche et filtres : fond clair (blanc en thème clair). */
+.filters input,.filters select{background:var(--card)}
+.filters input:hover,.filters select:hover{border-color:var(--accent)}
+
+.cat-filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.cat-cb{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);
+  background:var(--card);border:1px solid var(--border);border-radius:999px;padding:6px 12px;cursor:pointer}
+.cat-cb:hover{border-color:var(--accent);color:var(--accent)}
+
+/* Nom de matière cliquable dans la liste. */
+.cell-link{background:none;border:none;padding:0;margin:0;font:inherit;font-weight:600;
+  color:var(--text);text-align:left;cursor:pointer;text-decoration:underline;
+  text-decoration-color:transparent;text-underline-offset:3px;transition:color .15s,text-decoration-color .15s}
+.cell-link:hover{color:var(--accent);text-decoration-color:currentColor}
+
+.link-btn{background:none;border:none;padding:0;font:inherit;color:var(--accent);
+  cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+
+.kpi-grid-3{grid-template-columns:repeat(auto-fit,minmax(230px,1fr));max-width:900px}
+
+/* Formulaire */
+.lbl-unit{font-weight:600;color:var(--text2);text-transform:none;letter-spacing:0}
+.field-hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5}
+.form-actions{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;
+  padding-top:16px;border-top:1px solid var(--border)}
+
+/* Bloc import mis en avant */
+.import-block{border:1px solid var(--border);border-radius:12px;padding:14px 16px;background:var(--bg)}
+.import-block.on{border-color:var(--accent);background:var(--accent-bg)}
+.check-row{display:flex;align-items:flex-start;gap:10px;cursor:pointer}
+.check-row input[type=checkbox]{width:18px;height:18px;margin-top:1px;accent-color:var(--accent);cursor:pointer}
+.check-title{display:block;font-size:13px;font-weight:700;color:var(--text)}
+.check-sub{display:block;font-size:11px;color:var(--muted);margin-top:3px;line-height:1.5}
+.import-fields{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+.calc-box{margin-top:12px;padding:12px 14px;border:1px dashed var(--border);border-radius:10px;background:var(--card)}
+.calc-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  color:var(--muted);margin-bottom:10px}
+.calc-title span{font-weight:400;text-transform:none;letter-spacing:0}
+
+/* Tableau récapitulatif horizontal du calcul */
+.recap-card{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:16px 18px;margin-top:16px}
+.recap-head{display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;
+  gap:12px;margin-bottom:14px}
+.recap-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.recap-formula{font-size:12px;color:var(--text2);margin-top:4px}
+.recap-total{text-align:right}
+.recap-total-label{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.recap-total-value{font-size:24px;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums}
+.recap-scroll{overflow-x:auto;border:1px solid var(--border);border-radius:10px}
+table.recap-table{width:100%;border-collapse:collapse;font-size:13px}
+table.recap-table th{font-size:10px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);
+  font-weight:600;background:var(--bg);padding:9px 12px;text-align:left;white-space:nowrap;
+  border-bottom:1px solid var(--border)}
+table.recap-table td{padding:10px 12px;text-align:left;white-space:nowrap;
+  border-right:1px solid var(--border);vertical-align:top}
+table.recap-table td:last-child{border-right:none}
+.recap-value{font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+.recap-unit{font-size:10px;color:var(--muted);margin-top:3px}
+.recap-strong .recap-value{color:var(--accent);font-size:15px}
+.recap-muted .recap-value{color:var(--muted);font-weight:600}
+.recap-notes{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6}
+
+/* Modal paramètres */
+.modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+.modal-head h2{margin:0}
+.modal-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;
+  padding-top:16px;border-top:1px solid var(--border)}
+
+@media(max-width:900px){
+  .recap-head{flex-direction:column}
+  .recap-total{text-align:left}
+}
