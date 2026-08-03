@@ -2718,13 +2718,37 @@ def _validate_alert_params(params: dict) -> dict:
                 if rs and rs in seen_r_set and rs not in seen_nc:
                     clean_nc.append(rs)
                     seen_nc.add(rs)
+        # v2.5.21 : comment_responses — sous-ensemble des réponses proposées
+        # qui, lorsqu'elles sont cochées par l'opérateur, déclenchent une zone
+        # de commentaire OBLIGATOIRE sous le point de contrôle. Tant qu'elle
+        # est vide, le bouton Valider reste bloqué côté runtime. Même forme et
+        # même normalisation que nc_responses : on ne conserve que des libellés
+        # qui existent réellement dans clean_responses, pour qu'un renommage de
+        # réponse côté admin ne laisse pas de référence orpheline.
+        com_in = it.get("comment_responses") or []
+        clean_com = []
+        if isinstance(com_in, list):
+            _resp_set = set(clean_responses)
+            seen_com = set()
+            for r in com_in:
+                if not isinstance(r, str):
+                    continue
+                rs = r.strip()[:100]
+                if rs and rs in _resp_set and rs not in seen_com:
+                    clean_com.append(rs)
+                    seen_com.add(rs)
+        # v2.5.21 : other_needs_comment — même mécanique appliquée à la réponse
+        # « Autre ». Pertinent uniquement quand allow_other est activé.
+        other_needs_comment = bool(it.get("other_needs_comment", False)) and allow_other
         # v2.2.85 : required (bool). Défaut false.
         required_choice = bool(it.get("required", False))
         _choice_item = {"type": "choice", "label": label,
                         "responses": clean_responses, "multi": multi,
                         "allow_other": allow_other,
                         "other_is_nc": other_is_nc,
-                        "nc_responses": clean_nc}
+                        "nc_responses": clean_nc,
+                        "comment_responses": clean_com,
+                        "other_needs_comment": other_needs_comment}
         if required_choice:
             _choice_item["required"] = True
         clean_items.append(_choice_item)

@@ -418,6 +418,8 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .ta-sim-exit{position:fixed;top:12px;left:12px;z-index:2100;background:rgba(0,0,0,.7);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;pointer-events:auto}
 .ta-sim-exit:hover{background:rgba(0,0,0,.9)}
 .af-cl-nc-lbl:has(input:checked){border-color:var(--danger);background:rgba(248,113,113,0.10);color:var(--danger)}
+/* v2.5.21 : puce COM — « cette réponse exige un commentaire obligatoire ». */
+.af-cl-com-lbl:has(input:checked){border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
 /* v2.5.20 : contraste bouton / fond dans la section Alertes. Un bouton ne
    porte jamais la couleur de la surface qui le contient — inversion :
    surface blanche -> bouton var(--bg) ; surface teintee -> bouton var(--card). */
@@ -437,7 +439,7 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .alert-modal-overlay .af-cl-card .alert-field-input,
 .alert-modal-overlay .af-cl-card .alert-field-select{background:var(--card)}
 .alert-modal-overlay .af-cl-card .btn-ghost:hover{background:var(--accent-bg)}
-.af-cl-nc-lbl{background:var(--card)}
+.af-cl-nc-lbl,.af-cl-com-lbl{background:var(--card)}
 .ta-chip{display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-weight:500;cursor:pointer;user-select:none;transition:background .12s ease,color .12s ease,border-color .12s ease;font-family:inherit;line-height:1.2}
 .ta-chip input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
 .ta-chip:hover{border-color:var(--accent)}
