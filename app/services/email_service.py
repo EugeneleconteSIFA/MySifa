@@ -261,6 +261,7 @@ def email_expe_rfq_transport(
     demande: dict,
     user: dict,
     portail_lien: str,
+    pixel_url: str | None = None,
 ) -> tuple[str, str]:
     """Sujet et corps HTML — demande de tarif transport (MyExpé → transporteur, FR/EN)."""
     from app.services.expe_email_i18n import expe_rfq_email_strings
@@ -282,6 +283,9 @@ def email_expe_rfq_transport(
 
     subject = f"Demande de tarif transport / Transport quote — SIFA — {cp}"
 
+    # `lang="fr"` implicite alors que le mail est bilingue : la mention
+    # d'ouverture est unique en pied et il faut trancher. Le français est la
+    # langue par défaut du destinataire, l'anglais n'est qu'un doublage.
     body = email_mysifa_layout(
         subtitle="Demande de tarif / Transport quote",
         body_html=inner,
@@ -289,6 +293,7 @@ def email_expe_rfq_transport(
         cta_label=None,
         footer_note=f"{s_fr['footer']} / {s_en['footer']}",
         footer_contact=True,
+        pixel_url=pixel_url,
     )
     return subject, body
 
@@ -723,6 +728,7 @@ def email_expe_devis_confirmation(
     user: dict,
     retention_comment: str | None = None,
     retention_file_name: str | None = None,
+    pixel_url: str | None = None,
 ) -> tuple[str, str]:
     """Sujet et corps HTML — confirmation transporteur : sa proposition de
     devis a été retenue, voici le récap de la mission. Envoyé au transporteur
@@ -830,6 +836,7 @@ def email_expe_devis_confirmation(
         cta_href=None,
         cta_label=None,
         footer_contact=True,
+        pixel_url=pixel_url,
     )
     return subject, body
 

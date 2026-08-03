@@ -8,17 +8,21 @@ Objectif:
 
 from __future__ import annotations
 
+import logging
 import time
 from datetime import datetime
 from typing import Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Body, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 
 from database import get_db
 from app.web.expe_portail_page import get_portail_404_html, get_portail_html
 from app.services.email_service import email_expe_reponse_recue, send_email
+from app.services import expe_evenements as expe_ev
+
+logger = logging.getLogger(__name__)
 
 EXPE_DEVIS_CC = "expeditions@sifa.pro"
 
@@ -116,7 +120,7 @@ def _dedupe_portail_demandes(rows: list[dict]) -> list[dict]:
     return out
 
 
-def _mark_opened(conn, *, acc: dict, ip: str) -> None:
+def _mark_opened(conn, *, acc: dict, ip: str, user_agent: str | None = None) -> None:
     now = _now_paris_iso()
     email = _account_email(acc)
     # Best-effort: marquer l'ouverture dans le compte + sur les lignes de réponse
@@ -154,6 +158,21 @@ def _mark_opened(conn, *, acc: dict, ip: str) -> None:
             """,
             (now, ip, email, int(tid)),
         )
+    # `opened_at` ci-dessus est un one-shot : il ne retient que la PREMIÈRE
+    # visite, et se tait sur les suivantes. Le journal, lui, en garde une par
+    # passage — c'est ce qui distingue « il a jeté un œil une fois » de « il
+    # revient tous les jours sans répondre ». Signal fort, contrairement au
+    # pixel : personne ne charge ce portail par précaution. Dédup 90 s pour ne
+    # pas compter deux fois un rafraîchissement ou un retour arrière.
+    expe_ev.log_par_email(
+        conn,
+        email=email,
+        canal=expe_ev.CANAL_PORTAIL,
+        type_evenement=expe_ev.EV_PORTAIL_OUVERT,
+        date=now,
+        user_agent=user_agent,
+        dedup_secondes=90,
+    )
 
 
 def _find_reponse_row(
@@ -220,7 +239,9 @@ def portail_expe_page(request: Request, token: str):
             acc = _lookup_token(conn, token, ip)
             if not acc:
                 return HTMLResponse(content=get_portail_404_html(), status_code=404)
-            _mark_opened(conn, acc=acc, ip=ip)
+            _mark_opened(
+                conn, acc=acc, ip=ip, user_agent=request.headers.get("user-agent")
+            )
             conn.commit()
         lang = (request.query_params.get("lang") or "fr").strip().lower()
         if lang not in ("fr", "en"):
@@ -237,7 +258,9 @@ def portail_expe_data(request: Request, token: str):
     ip = _client_ip(request)
     with get_db() as conn:
         acc = _get_account_or_404(conn, token, ip=ip)
-        _mark_opened(conn, acc=acc, ip=ip)
+        _mark_opened(
+            conn, acc=acc, ip=ip, user_agent=request.headers.get("user-agent")
+        )
         conn.commit()
 
         email = _account_email(acc)
@@ -340,6 +363,17 @@ def portail_expe_repondre(
             """,
             (now, ip, token),
         )
+        # Sans dédup : une offre corrigée est une information, pas un doublon.
+        # La timeline doit montrer qu'un transporteur a repris son prix.
+        expe_ev.log_evenement(
+            conn,
+            reponse_id=int(rep["id"]),
+            demande_id=int(demande_id),
+            canal=expe_ev.CANAL_PORTAIL,
+            type_evenement=expe_ev.EV_REPONSE_DEPOSEE,
+            date=now,
+            meta={"prix": prix, "delai_jours": delai},
+        )
         conn.commit()
 
         # Notification interne (best-effort) : auteur + copie expéditions.
@@ -372,4 +406,81 @@ def portail_expe_repondre(
             pass
 
     return {"success": True}
+
+
+# ─── Pixel de suivi d'ouverture d'email ───────────────────────────
+
+# GIF transparent 1x1, en dur : aucune lecture disque, aucune dépendance.
+_PIXEL_GIF = bytes([
+    0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00, 0x01, 0x00, 0x80, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x21, 0xF9, 0x04, 0x01, 0x00,
+    0x00, 0x00, 0x00, 0x2C, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00,
+    0x00, 0x02, 0x02, 0x44, 0x01, 0x00, 0x3B,
+])
+
+_PIXEL_HEADERS = {
+    # Sans ces en-têtes, le proxy d'images de Gmail sert sa copie en cache et
+    # les ouvertures suivantes n'atteignent jamais le serveur.
+    "Cache-Control": "no-store, no-cache, must-revalidate, private, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+    "Content-Disposition": "inline",
+}
+
+
+@router_html.get("/portail/expe/px/{token}.gif", include_in_schema=False)
+def pixel_ouverture_email_expe(request: Request, token: str):
+    """Trace l'ouverture d'un email de demande de tarif. Renvoie TOUJOURS le GIF.
+
+    Trois règles, reprises telles quelles de MyAO :
+
+    - **Jamais d'erreur.** Token inconnu, base indisponible, ligne supprimée :
+      on renvoie le pixel quand même. Un 404 sur une image d'email dessine un
+      cadre cassé chez le transporteur et, pire, signale à qui sonde l'URL
+      quels tokens existent.
+    - **Aucun effet de bord métier.** Le pixel ne fait pas passer la réponse en
+      statut `ouvert` et ne remplit pas `opened_at` : ces deux-là veulent dire
+      « le portail a été consulté », ce qui est certain. Une ouverture d'email
+      n'est qu'un indice — voir `classer_ouverture()`.
+    - **Le token ne donne accès à rien.** Il n'identifie que la ligne à
+      journaliser ; il est distinct du token portail.
+    """
+    try:
+        with get_db() as conn:
+            row = conn.execute(
+                """SELECT id, demande_id, sent_at FROM expe_devis_reponses
+                   WHERE token_pixel=?""",
+                (str(token or "").strip(),),
+            ).fetchone()
+            if row is not None:
+                ua = request.headers.get("user-agent")
+                maintenant = expe_ev.now_paris_iso()
+                # `?e=` dit QUEL email a été ouvert (demande, attribution).
+                # Absent ou inconnu : on journalise quand même sans préciser —
+                # mieux vaut un signal imprécis que perdu.
+                ctx = str(request.query_params.get("e") or "").strip().lower()
+                reference = expe_ev.date_email_reference(
+                    conn, int(row["id"]), ctx, row["sent_at"]
+                )
+                fiable, motif = expe_ev.classer_ouverture(reference, ua, maintenant)
+                expe_ev.log_evenement(
+                    conn,
+                    reponse_id=int(row["id"]),
+                    demande_id=(
+                        int(row["demande_id"]) if row["demande_id"] is not None else None
+                    ),
+                    canal=expe_ev.CANAL_EMAIL,
+                    type_evenement=expe_ev.EV_EMAIL_OUVERT,
+                    date=maintenant,
+                    fiable=fiable,
+                    motif=motif,
+                    user_agent=ua,
+                    meta={"email": ctx} if ctx in expe_ev.CONTEXTES else None,
+                    dedup_secondes=expe_ev.DEDUP_SECONDES,
+                )
+                conn.commit()
+    except Exception as exc:
+        logger.warning("pixel_ouverture_email_expe: %s", exc)
+
+    return Response(content=_PIXEL_GIF, media_type="image/gif", headers=_PIXEL_HEADERS)
 

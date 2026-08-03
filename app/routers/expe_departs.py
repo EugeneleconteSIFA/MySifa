@@ -27,6 +27,7 @@ from app.services.email_service import (
     send_email,
 )
 from config import public_base_url
+from app.services import expe_evenements as expe_ev
 from app.services.expe_transporteurs_seed import seed_expe_transporteurs_if_empty
 from database import get_db
 from services.auth_service import get_current_user, user_can_write_expe, user_has_app_access
@@ -958,8 +959,15 @@ def list_palettes_europe(
                ORDER BY nb_pal_en_attente DESC, client COLLATE NOCASE ASC"""
         ).fetchall()
 
+        recap_trp = _recap_palettes_transporteurs(conn)
+
     departs = [_depart_dict(r) for r in rows]
     recap = [dict(r) for r in recap_rows]
+    # Les totaux restent calculés sur le récap CLIENT et non transporteur :
+    # les deux populations donnent le même total de palettes envoyées, mais le
+    # récap transporteur y ajoute reports et restitutions en vrac, qui n'ont
+    # pas de contrepartie côté client. Mélanger les deux ferait un bandeau
+    # dont aucune colonne ne s'additionne.
     totaux = {
         "nb_departs": sum(int(r["nb_departs"]) for r in recap),
         "nb_pal_envoyees": sum(float(r["nb_pal_envoyees"] or 0) for r in recap),
@@ -967,7 +975,536 @@ def list_palettes_europe(
         "nb_pal_perdues": sum(float(r["nb_pal_perdues"] or 0) for r in recap),
         "nb_pal_en_attente": sum(float(r["nb_pal_en_attente"] or 0) for r in recap),
     }
-    return {"departs": departs, "recap_clients": recap, "totaux": totaux}
+    totaux["solde_transporteurs"] = round(
+        sum(float(t["solde"] or 0) for t in recap_trp), 2
+    )
+    totaux["nb_pal_contestees"] = round(
+        sum(float(t["nb_pal_contestees"] or 0) for t in recap_trp), 2
+    )
+    return {
+        "departs": departs,
+        "recap_clients": recap,
+        "recap_transporteurs": recap_trp,
+        "totaux": totaux,
+    }
+
+
+# ─── Palettes Europe : compte courant par transporteur ─────────────
+#
+# Modèle repris du suivi métier historique (un onglet Excel par transporteur et
+# par année, colonnes Données / Rendues / Solde). Le débiteur d'une palette
+# Europe est le transporteur qui l'emporte, pas le client livré : c'est au
+# transporteur qu'on la réclame, et c'est avec lui qu'on rapproche les comptes.
+#
+#   solde = report + données − rendues − perdues
+#
+# `perdues` sort du solde parce qu'une palette déclarée perdue est passée en
+# perte : la laisser dedans reviendrait à la réclamer indéfiniment. Les
+# palettes CONTESTÉES, elles, restent dans le solde — c'est tout l'intérêt
+# d'ouvrir une contestation plutôt que de solder.
+
+_PAL_SENS = ("report", "donnee", "rendue")
+
+
+def _pal_norm_nom(nom: object) -> str:
+    """Clé de rapprochement d'un nom de transporteur : casse, accents, espaces.
+
+    « Coquelle TB », « COQUELLE TB » et « Coquelle  TB » désignent le même
+    compte. Sans cette normalisation, le récap afficherait trois soldes
+    partiels dont aucun n'est juste.
+    """
+    txt = str(nom or "").strip()
+    if not txt:
+        return ""
+    txt = unicodedata.normalize("NFKD", txt)
+    txt = "".join(c for c in txt if not unicodedata.combining(c))
+    return " ".join(txt.upper().split())
+
+
+def _pal_trp_key(trp_id: object, nom: object, id_par_nom: dict[str, int]) -> str:
+    """Identité d'un compte transporteur, `transporteur_id` prioritaire.
+
+    Les départs antérieurs au référentiel ne portent qu'un nom en texte libre.
+    On les rattache au référentiel par le nom quand c'est possible, pour que
+    l'historique et les mouvements récents tombent sur le même compte.
+    """
+    try:
+        tid = int(trp_id) if trp_id not in (None, "") else None
+    except (TypeError, ValueError):
+        tid = None
+    norm = _pal_norm_nom(nom)
+    if tid is None and norm:
+        tid = id_par_nom.get(norm)
+    return f"id:{tid}" if tid is not None else (f"nom:{norm}" if norm else "nom:")
+
+
+def _recap_palettes_transporteurs(conn) -> list[dict]:
+    """Compte courant palettes Europe, un poste par transporteur."""
+    id_par_nom: dict[str, int] = {}
+    ref_nom: dict[int, str] = {}
+    for t in conn.execute("SELECT id, nom FROM expe_transporteurs").fetchall():
+        norm = _pal_norm_nom(t["nom"])
+        if norm:
+            id_par_nom.setdefault(norm, int(t["id"]))
+        ref_nom[int(t["id"])] = (t["nom"] or "").strip()
+
+    postes: dict[str, dict] = {}
+
+    def poste(trp_id, nom) -> dict:
+        key = _pal_trp_key(trp_id, nom, id_par_nom)
+        p = postes.get(key)
+        if p is None:
+            tid = None
+            if key.startswith("id:"):
+                try:
+                    tid = int(key[3:])
+                except ValueError:
+                    tid = None
+            p = {
+                "key": key,
+                "transporteur_id": tid,
+                "transporteur": (
+                    ref_nom.get(tid) or (str(nom or "").strip() or "— Sans transporteur —")
+                ),
+                "report": 0.0,
+                "donnees": 0.0,
+                "rendues": 0.0,
+                "perdues": 0.0,
+                "nb_departs": 0,
+                "nb_pal_contestees": 0.0,
+                "nb_contestations": 0,
+                "dernier_mouvement": None,
+            }
+            postes[key] = p
+        return p
+
+    for r in conn.execute(
+        """SELECT transporteur_id, transporteur,
+                  COUNT(*) AS nb_departs,
+                  COALESCE(SUM(COALESCE(nb_palette,0)), 0) AS donnees,
+                  COALESCE(SUM(CASE WHEN palette_europe_statut='retournee'
+                                    THEN COALESCE(nb_palette,0) ELSE 0 END), 0) AS rendues,
+                  COALESCE(SUM(CASE WHEN palette_europe_statut='perdue'
+                                    THEN COALESCE(nb_palette,0) ELSE 0 END), 0) AS perdues,
+                  MAX(date_enlevement) AS dernier
+           FROM expe_departs
+           WHERE palette_europe = 1
+           GROUP BY transporteur_id, transporteur"""
+    ).fetchall():
+        p = poste(r["transporteur_id"], r["transporteur"])
+        p["nb_departs"] += int(r["nb_departs"] or 0)
+        p["donnees"] += float(r["donnees"] or 0)
+        p["rendues"] += float(r["rendues"] or 0)
+        p["perdues"] += float(r["perdues"] or 0)
+        if r["dernier"] and (not p["dernier_mouvement"] or str(r["dernier"]) > p["dernier_mouvement"]):
+            p["dernier_mouvement"] = str(r["dernier"])
+
+    for r in conn.execute(
+        """SELECT transporteur_id, transporteur_nom, sens,
+                  COALESCE(SUM(COALESCE(nb_palette,0)), 0) AS n,
+                  MAX(date_mvt) AS dernier
+           FROM expe_palettes_mouvements
+           GROUP BY transporteur_id, transporteur_nom, sens"""
+    ).fetchall():
+        p = poste(r["transporteur_id"], r["transporteur_nom"])
+        sens = str(r["sens"] or "")
+        if sens == "report":
+            p["report"] += float(r["n"] or 0)
+        elif sens == "donnee":
+            p["donnees"] += float(r["n"] or 0)
+        elif sens == "rendue":
+            p["rendues"] += float(r["n"] or 0)
+        if r["dernier"] and (not p["dernier_mouvement"] or str(r["dernier"]) > p["dernier_mouvement"]):
+            p["dernier_mouvement"] = str(r["dernier"])
+
+    for r in conn.execute(
+        """SELECT transporteur_id, transporteur_nom,
+                  COUNT(*) AS nb,
+                  COALESCE(SUM(COALESCE(nb_palette,0)), 0) AS n
+           FROM expe_palettes_contestations
+           WHERE statut='ouverte'
+           GROUP BY transporteur_id, transporteur_nom"""
+    ).fetchall():
+        p = poste(r["transporteur_id"], r["transporteur_nom"])
+        p["nb_contestations"] += int(r["nb"] or 0)
+        p["nb_pal_contestees"] += float(r["n"] or 0)
+
+    out = []
+    for p in postes.values():
+        p["solde"] = round(
+            p["report"] + p["donnees"] - p["rendues"] - p["perdues"], 2
+        )
+        for k in ("report", "donnees", "rendues", "perdues", "nb_pal_contestees"):
+            p[k] = round(p[k], 2)
+        out.append(p)
+    # Le solde le plus lourd en premier : c'est le transporteur qu'on rappelle.
+    out.sort(key=lambda p: (-p["solde"], p["transporteur"].upper()))
+    return out
+
+
+def _pal_resolve_transporteur(conn, body: dict) -> tuple[Optional[int], str]:
+    """Extrait (transporteur_id, transporteur_nom) d'un body de saisie."""
+    tid = body.get("transporteur_id")
+    try:
+        tid = int(tid) if tid not in (None, "") else None
+    except (TypeError, ValueError):
+        tid = None
+    nom = (body.get("transporteur") or body.get("transporteur_nom") or "").strip()
+    if tid is not None:
+        row = conn.execute(
+            "SELECT nom FROM expe_transporteurs WHERE id=?", (tid,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=400, detail="Transporteur introuvable.")
+        nom = (row["nom"] or "").strip() or nom
+    elif nom:
+        # Saisie libre : on rattache au référentiel si le nom y correspond,
+        # sinon on garde le texte. Un transporteur ponctuel n'a pas à être créé
+        # dans le référentiel pour qu'on tienne son compte palettes.
+        row = conn.execute(
+            "SELECT id, nom FROM expe_transporteurs WHERE UPPER(TRIM(nom))=UPPER(TRIM(?)) LIMIT 1",
+            (nom,),
+        ).fetchone()
+        if row:
+            tid = int(row["id"])
+            nom = (row["nom"] or "").strip()
+    if tid is None and not nom:
+        raise HTTPException(status_code=400, detail="Transporteur obligatoire.")
+    return tid, nom
+
+
+def _pal_nb(value: object, champ: str = "Nombre de palettes") -> float:
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail=f"{champ} invalide.")
+    if n <= 0:
+        raise HTTPException(status_code=400, detail=f"{champ} doit être positif.")
+    return n
+
+
+@router.get("/palettes-europe/journal")
+def journal_palettes_transporteur(
+    request: Request,
+    transporteur_id: Optional[int] = Query(None),
+    transporteur: Optional[str] = Query(None),
+):
+    """Relevé de compte d'un transporteur : mouvements + départs, solde qui court.
+
+    C'est la transposition d'un onglet de l'Excel : une ligne par événement,
+    dans l'ordre chronologique, avec le solde recalculé à chaque ligne. Le
+    solde n'est PAS stocké — le recalculer interdit qu'il diverge des
+    écritures, ce qui est le défaut classique du tableur.
+    """
+    _require_expe(request)
+    with get_db() as conn:
+        id_par_nom = {
+            _pal_norm_nom(t["nom"]): int(t["id"])
+            for t in conn.execute("SELECT id, nom FROM expe_transporteurs").fetchall()
+            if _pal_norm_nom(t["nom"])
+        }
+        cible = _pal_trp_key(transporteur_id, transporteur, id_par_nom)
+
+        lignes: list[dict] = []
+        for r in conn.execute(
+            """SELECT id, date_enlevement, transporteur_id, transporteur, client,
+                      arc, no_bl, nb_palette, palette_europe_statut,
+                      palette_europe_date_retour, palette_europe_note
+               FROM expe_departs WHERE palette_europe = 1"""
+        ).fetchall():
+            if _pal_trp_key(r["transporteur_id"], r["transporteur"], id_par_nom) != cible:
+                continue
+            nb = float(r["nb_palette"] or 0)
+            statut = r["palette_europe_statut"] or "en_attente"
+            lignes.append({
+                "type": "depart",
+                "id": int(r["id"]),
+                "date": (r["date_enlevement"] or "")[:10],
+                "libelle": (r["client"] or "—"),
+                "reference": r["arc"] or r["no_bl"] or None,
+                "donnees": nb,
+                "rendues": nb if statut == "retournee" else 0.0,
+                "perdues": nb if statut == "perdue" else 0.0,
+                "statut": statut,
+                "note": r["palette_europe_note"],
+                "date_retour": (r["palette_europe_date_retour"] or "")[:10] or None,
+            })
+        for r in conn.execute(
+            """SELECT id, date_mvt, transporteur_id, transporteur_nom, sens,
+                      nb_palette, reference, client, note
+               FROM expe_palettes_mouvements"""
+        ).fetchall():
+            if _pal_trp_key(r["transporteur_id"], r["transporteur_nom"], id_par_nom) != cible:
+                continue
+            nb = float(r["nb_palette"] or 0)
+            sens = str(r["sens"] or "")
+            lignes.append({
+                "type": "mouvement",
+                "id": int(r["id"]),
+                "sens": sens,
+                "date": (r["date_mvt"] or "")[:10],
+                "libelle": (r["client"] or "").strip() or {
+                    "report": "Solde d'ouverture",
+                    "donnee": "Palettes remises",
+                    "rendue": "Restitution",
+                }.get(sens, sens),
+                "reference": r["reference"],
+                "donnees": nb if sens in ("donnee", "report") else 0.0,
+                "rendues": nb if sens == "rendue" else 0.0,
+                "perdues": 0.0,
+                "report": nb if sens == "report" else 0.0,
+                "note": r["note"],
+            })
+        contestations = [
+            dict(r)
+            for r in conn.execute(
+                """SELECT * FROM expe_palettes_contestations
+                   ORDER BY date_contestation DESC, id DESC"""
+            ).fetchall()
+            if _pal_trp_key(r["transporteur_id"], r["transporteur_nom"], id_par_nom) == cible
+        ]
+
+    # Le report d'abord quelle que soit sa date : il représente l'antériorité,
+    # l'afficher au milieu du relevé rendrait la colonne solde illisible.
+    lignes.sort(key=lambda x: (0 if x.get("sens") == "report" else 1, x["date"] or "", x["id"]))
+    solde = 0.0
+    for ligne in lignes:
+        solde += ligne.get("donnees", 0.0) - ligne.get("rendues", 0.0) - ligne.get("perdues", 0.0)
+        ligne["solde"] = round(solde, 2)
+    return {
+        "lignes": lignes,
+        "contestations": contestations,
+        "solde": round(solde, 2),
+    }
+
+
+@router.post("/palettes-europe/mouvements")
+def create_palette_mouvement(request: Request, body: dict = Body(...)):
+    """Saisie d'un mouvement : report d'ouverture, restitution, remise hors départ."""
+    user = _require_expe_write(request)
+    sens = (body.get("sens") or "").strip().lower()
+    if sens not in _PAL_SENS:
+        raise HTTPException(
+            status_code=400,
+            detail="Sens invalide (report, donnee ou rendue).",
+        )
+    nb = _pal_nb(body.get("nb_palette"))
+    date_mvt = _date_prefix(str(body.get("date_mvt") or "").strip()) or datetime.now(
+        _PARIS
+    ).strftime("%Y-%m-%d")
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        tid, nom = _pal_resolve_transporteur(conn, body)
+        cur = conn.execute(
+            """INSERT INTO expe_palettes_mouvements
+               (transporteur_id, transporteur_nom, date_mvt, sens, nb_palette,
+                reference, client, note, created_at, created_by_email)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (
+                tid,
+                nom or None,
+                date_mvt,
+                sens,
+                nb,
+                (body.get("reference") or "").strip() or None,
+                (body.get("client") or "").strip() or None,
+                (body.get("note") or "").strip() or None,
+                now,
+                (user.get("email") or user.get("identifiant") or "").strip() or None,
+            ),
+        )
+        conn.commit()
+        mvt_id = int(cur.lastrowid)
+    log_action(
+        user=user,
+        action="CREATE",
+        module="expe",
+        objet=f"Palettes Europe · {sens} {nb:g} · {nom or '—'}",
+        ip=request.client.host if request.client else None,
+    )
+    return {"ok": True, "id": mvt_id}
+
+
+@router.delete("/palettes-europe/mouvements/{mouvement_id}")
+def delete_palette_mouvement(request: Request, mouvement_id: int):
+    user = _require_expe_write(request)
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT sens, nb_palette, transporteur_nom FROM expe_palettes_mouvements WHERE id=?",
+            (mouvement_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Mouvement introuvable")
+        conn.execute(
+            "DELETE FROM expe_palettes_mouvements WHERE id=?", (mouvement_id,)
+        )
+        conn.commit()
+    log_action(
+        user=user,
+        action="DELETE",
+        module="expe",
+        objet=(
+            f"Palettes Europe · mouvement #{mouvement_id} "
+            f"({row['sens']} {float(row['nb_palette'] or 0):g} · {row['transporteur_nom'] or '—'})"
+        ),
+        ip=request.client.host if request.client else None,
+    )
+    return {"ok": True}
+
+
+@router.get("/palettes-europe/contestations")
+def list_palette_contestations(
+    request: Request,
+    statut: Optional[str] = Query(None, description="ouverte | resolue | abandonnee"),
+):
+    """Registre des palettes non rendues / contestées — la base des réclamations."""
+    _require_expe(request)
+    where, params = [], []
+    if statut:
+        st = (statut or "").strip().lower()
+        if st not in ("ouverte", "resolue", "abandonnee"):
+            raise HTTPException(status_code=400, detail="Statut invalide.")
+        where.append("statut=?")
+        params.append(st)
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    with get_db() as conn:
+        rows = conn.execute(
+            f"""SELECT * FROM expe_palettes_contestations{where_sql}
+                ORDER BY date_contestation DESC, id DESC LIMIT 500""",
+            params,
+        ).fetchall()
+        tot = conn.execute(
+            """SELECT COUNT(*) AS nb, COALESCE(SUM(COALESCE(nb_palette,0)),0) AS n
+               FROM expe_palettes_contestations WHERE statut='ouverte'"""
+        ).fetchone()
+    return {
+        "contestations": [dict(r) for r in rows],
+        "totaux": {
+            "nb_ouvertes": int(tot["nb"] or 0),
+            "nb_pal_ouvertes": round(float(tot["n"] or 0), 2),
+        },
+    }
+
+
+@router.post("/palettes-europe/contestations")
+def create_palette_contestation(request: Request, body: dict = Body(...)):
+    user = _require_expe_write(request)
+    nb = _pal_nb(body.get("nb_palette"))
+    date_c = _date_prefix(str(body.get("date_contestation") or "").strip()) or datetime.now(
+        _PARIS
+    ).strftime("%Y-%m-%d")
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    depart_id = body.get("depart_id")
+    try:
+        depart_id = int(depart_id) if depart_id not in (None, "") else None
+    except (TypeError, ValueError):
+        depart_id = None
+    with get_db() as conn:
+        tid, nom = _pal_resolve_transporteur(conn, body)
+        cur = conn.execute(
+            """INSERT INTO expe_palettes_contestations
+               (transporteur_id, transporteur_nom, depart_id, date_contestation,
+                recepisse, client, nb_palette, cause, statut, note,
+                created_at, created_by_email)
+               VALUES (?,?,?,?,?,?,?,?, 'ouverte', ?,?,?)""",
+            (
+                tid,
+                nom or None,
+                depart_id,
+                date_c,
+                (body.get("recepisse") or "").strip() or None,
+                (body.get("client") or "").strip() or None,
+                nb,
+                (body.get("cause") or "Palette non rendue").strip() or None,
+                (body.get("note") or "").strip() or None,
+                now,
+                (user.get("email") or user.get("identifiant") or "").strip() or None,
+            ),
+        )
+        conn.commit()
+        cid = int(cur.lastrowid)
+    log_action(
+        user=user,
+        action="CREATE",
+        module="expe",
+        objet=f"Contestation palettes · {nb:g} pal. · {nom or '—'}",
+        ip=request.client.host if request.client else None,
+    )
+    return {"ok": True, "id": cid}
+
+
+@router.patch("/palettes-europe/contestations/{contestation_id}")
+def update_palette_contestation(
+    request: Request, contestation_id: int, body: dict = Body(...)
+):
+    """Met à jour une contestation (statut, cause, note, nombre)."""
+    user = _require_expe_write(request)
+    now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
+    sets, args = [], []
+    if "statut" in body:
+        st = (body.get("statut") or "").strip().lower()
+        if st not in ("ouverte", "resolue", "abandonnee"):
+            raise HTTPException(status_code=400, detail="Statut invalide.")
+        sets.append("statut=?")
+        args.append(st)
+        # `resolved_at` est remis à NULL quand on rouvre : une contestation
+        # rouverte qui garde sa date de résolution se lit comme close.
+        sets.append("resolved_at=?")
+        args.append(now if st in ("resolue", "abandonnee") else None)
+    for champ in ("recepisse", "client", "cause", "note"):
+        if champ in body:
+            sets.append(f"{champ}=?")
+            args.append((body.get(champ) or "").strip() or None)
+    if "nb_palette" in body:
+        sets.append("nb_palette=?")
+        args.append(_pal_nb(body.get("nb_palette")))
+    if not sets:
+        raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour.")
+    args.append(contestation_id)
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT id FROM expe_palettes_contestations WHERE id=?", (contestation_id,)
+        ).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Contestation introuvable")
+        conn.execute(
+            f"UPDATE expe_palettes_contestations SET {', '.join(sets)} WHERE id=?", args
+        )
+        conn.commit()
+        row = conn.execute(
+            "SELECT * FROM expe_palettes_contestations WHERE id=?", (contestation_id,)
+        ).fetchone()
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="expe",
+        objet=f"Contestation palettes #{contestation_id}",
+        ip=request.client.host if request.client else None,
+    )
+    return dict(row)
+
+
+@router.delete("/palettes-europe/contestations/{contestation_id}")
+def delete_palette_contestation(request: Request, contestation_id: int):
+    user = _require_expe_write(request)
+    with get_db() as conn:
+        ex = conn.execute(
+            "SELECT id FROM expe_palettes_contestations WHERE id=?", (contestation_id,)
+        ).fetchone()
+        if not ex:
+            raise HTTPException(status_code=404, detail="Contestation introuvable")
+        conn.execute(
+            "DELETE FROM expe_palettes_contestations WHERE id=?", (contestation_id,)
+        )
+        conn.commit()
+    log_action(
+        user=user,
+        action="DELETE",
+        module="expe",
+        objet=f"Contestation palettes #{contestation_id}",
+        ip=request.client.host if request.client else None,
+    )
+    return {"ok": True}
 
 
 @router.patch("/matieres-palettes/{matiere_id}/europe")
@@ -2785,7 +3322,41 @@ def get_demande_devis(request: Request, demande_id: int):
                ORDER BY sent_at""",
             (demande_id,),
         ).fetchall()
-    return {"demande": dict(demande), "reponses": [dict(r) for r in reponses]}
+        engagement = expe_ev.resume_par_reponse(conn, demande_id)
+
+    reponses_out = []
+    for r in reponses:
+        d = dict(r)
+        # Le token de pixel ne sort jamais de l'API : c'est un identifiant de
+        # suivi, il n'a rien à faire dans le JSON d'une page d'administration.
+        d.pop("token_pixel", None)
+        d["engagement"] = engagement.get(int(d["id"]), {})
+        reponses_out.append(d)
+    return {"demande": dict(demande), "reponses": reponses_out}
+
+
+@router.get("/devis/reponses/{reponse_id}/evenements")
+def evenements_reponse_devis(request: Request, reponse_id: int):
+    """Timeline d'engagement d'un transporteur sur une demande de tarif."""
+    _require_expe(request)
+    with get_db() as conn:
+        rep = conn.execute(
+            """SELECT id, demande_id, nom_transporteur, destinataire_email, sent_at
+               FROM expe_devis_reponses WHERE id=?""",
+            (int(reponse_id),),
+        ).fetchone()
+        if not rep:
+            raise HTTPException(status_code=404, detail="Réponse introuvable")
+        evts = expe_ev.timeline(conn, int(reponse_id))
+    return {
+        "destinataire": {
+            "id": int(rep["id"]),
+            "nom": rep["nom_transporteur"],
+            "email": rep["destinataire_email"],
+            "sent_at": rep["sent_at"],
+        },
+        "evenements": evts,
+    }
 
 
 @router.post("/devis/demandes/{demande_id}/envoyer")
@@ -2878,18 +3449,14 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
                 if row2 and row2["token"]:
                     token = str(row2["token"])
             portail_lien = f"{public_base_url()}/portail/expe/{token}"
-            sujet, corps_html = email_expe_rfq_transport(
-                demande=demande, user=user, portail_lien=portail_lien
-            )
 
-            ok = send_email(
-                to=dest["email"],
-                subject=sujet,
-                html_body=corps_html,
-                reply_to=reply_to,
-                cc=EXPE_DEVIS_CC,
-            )
-            statut_envoi = "envoyee" if ok else "echec"
+            # La ligne de réponse est créée AVANT l'envoi, et non après comme
+            # auparavant : le pixel de suivi a besoin de son id pour exister,
+            # et un pixel posé après le départ du mail ne sert plus à rien.
+            # L'ordre est donc : upsert de la ligne → token pixel → email →
+            # envoi → mise à jour du statut. Une ligne créée dont l'envoi
+            # échoue reste correcte : elle porte le statut `echec`, qui est
+            # précisément l'information à afficher.
             existing = conn.execute(
                 """
                 SELECT id, statut, prix FROM expe_devis_reponses
@@ -2901,43 +3468,79 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
                 (demande_id, email_norm),
             ).fetchone()
             if existing:
-                keep_statut = existing["statut"]
-                if keep_statut not in ("recue", "retenue"):
-                    keep_statut = statut_envoi
+                reponse_id = int(existing["id"])
                 conn.execute(
                     """
                     UPDATE expe_devis_reponses
-                    SET transporteur_id=?, nom_transporteur=?, statut=?,
-                        sent_at=CASE WHEN ? IS NOT NULL THEN ? ELSE sent_at END,
-                        destinataire_email=?
+                    SET transporteur_id=?, nom_transporteur=?, destinataire_email=?
                     WHERE id=?
                     """,
-                    (
-                        dest["transporteur_id"],
-                        dest["nom"],
-                        keep_statut,
-                        now if ok else None,
-                        now if ok else None,
-                        email_norm,
-                        int(existing["id"]),
-                    ),
+                    (dest["transporteur_id"], dest["nom"], email_norm, reponse_id),
                 )
+                statut_precedent = existing["statut"]
             else:
-                conn.execute(
+                cur = conn.execute(
                     """
                     INSERT INTO expe_devis_reponses
-                    (demande_id, transporteur_id, nom_transporteur, statut, sent_at, destinataire_email)
-                    VALUES (?,?,?,?,?,?)
+                    (demande_id, transporteur_id, nom_transporteur, statut, destinataire_email)
+                    VALUES (?,?,?,'envoyee',?)
                     """,
                     (
                         demande_id,
                         dest["transporteur_id"],
                         dest["nom"],
-                        statut_envoi,
-                        now if ok else None,
                         email_norm,
                     ),
                 )
+                reponse_id = int(cur.lastrowid)
+                statut_precedent = None
+
+            px = expe_ev.url_pixel(expe_ev.token_pixel(conn, reponse_id), "rfq")
+            sujet, corps_html = email_expe_rfq_transport(
+                demande=demande,
+                user=user,
+                portail_lien=portail_lien,
+                pixel_url=px,
+            )
+
+            ok = send_email(
+                to=dest["email"],
+                subject=sujet,
+                html_body=corps_html,
+                reply_to=reply_to,
+                cc=EXPE_DEVIS_CC,
+            )
+            statut_envoi = "envoyee" if ok else "echec"
+            # Un transporteur qui a déjà chiffré ne repasse pas « envoyée »
+            # parce qu'on lui renvoie la demande : sa réponse resterait
+            # affichée mais le statut mentirait.
+            keep_statut = statut_envoi
+            if statut_precedent in ("recue", "retenue"):
+                keep_statut = statut_precedent
+            conn.execute(
+                """
+                UPDATE expe_devis_reponses
+                SET statut=?,
+                    sent_at=CASE WHEN ? IS NOT NULL THEN ? ELSE sent_at END
+                WHERE id=?
+                """,
+                (keep_statut, now if ok else None, now if ok else None, reponse_id),
+            )
+
+            expe_ev.log_evenement(
+                conn,
+                reponse_id=reponse_id,
+                demande_id=demande_id,
+                canal=expe_ev.CANAL_EMAIL,
+                type_evenement=(
+                    expe_ev.EV_EMAIL_ENVOYE if ok else expe_ev.EV_EMAIL_ECHEC
+                ),
+                date=now,
+                fiable=bool(ok),
+                motif=None if ok else "envoi refusé par le fournisseur d'email",
+                meta={"destinataire": email_norm, "suivi": bool(px)},
+            )
+
             if ok:
                 envois_ok.append(dest["nom"])
             else:
@@ -2976,11 +3579,25 @@ def saisir_reponse_devis(request: Request, reponse_id: int, body: dict = Body(..
                 reponse_id,
             ),
         )
+        # Distinguer la saisie interne du dépôt portail : sur la timeline, « le
+        # transporteur a répondu » et « on a saisi son mail à sa place » ne
+        # racontent pas la même chose sur son engagement réel.
+        expe_ev.log_evenement(
+            conn,
+            reponse_id=int(reponse_id),
+            demande_id=int(rep["demande_id"]) if rep["demande_id"] is not None else None,
+            canal=expe_ev.CANAL_INTERNE,
+            type_evenement=expe_ev.EV_REPONSE_SAISIE,
+            date=now,
+            meta={"prix": body.get("prix"), "delai_jours": body.get("delai_jours")},
+        )
         conn.commit()
         updated = conn.execute(
             "SELECT * FROM expe_devis_reponses WHERE id=?", (reponse_id,)
         ).fetchone()
-    return dict(updated)
+    out = dict(updated)
+    out.pop("token_pixel", None)
+    return out
 
 
 @router.post("/devis/reponses/{reponse_id}/retenir")
@@ -3121,7 +3738,16 @@ async def retenir_reponse_devis(
                     dest_email = addrs[0]
     email_sent = False
     email_error: str | None = None
+    px_attr = None
     if dest_email and "@" in dest_email:
+        try:
+            with get_db() as conn:
+                px_attr = expe_ev.url_pixel(
+                    expe_ev.token_pixel(conn, reponse_id), "attr"
+                )
+                conn.commit()
+        except Exception:
+            px_attr = None
         try:
             subject, body_html = email_expe_devis_confirmation(
                 demande=demande,
@@ -3130,6 +3756,7 @@ async def retenir_reponse_devis(
                 user=user,
                 retention_comment=retention_comment,
                 retention_file_name=retention_file_name,
+                pixel_url=px_attr,
             )
             atts = None
             if retention_file_bytes and retention_file_name:
@@ -3152,6 +3779,34 @@ async def retenir_reponse_devis(
             email_error = f"{type(_e).__name__}: {_e}"[:200]
     else:
         email_error = "destinataire_email_absent"
+
+    # Journal : l'attribution est un fait métier, la notification n'en est que
+    # le véhicule. On trace donc les deux — « retenue » toujours, « email
+    # d'attribution » seulement s'il est parti.
+    try:
+        with get_db() as conn:
+            expe_ev.log_evenement(
+                conn,
+                reponse_id=reponse_id,
+                demande_id=demande_id,
+                canal=expe_ev.CANAL_INTERNE,
+                type_evenement=expe_ev.EV_OFFRE_RETENUE,
+                date=now,
+                meta={"depart_id": depart_id, "par": email_user},
+            )
+            if email_sent:
+                expe_ev.log_evenement(
+                    conn,
+                    reponse_id=reponse_id,
+                    demande_id=demande_id,
+                    canal=expe_ev.CANAL_EMAIL,
+                    type_evenement=expe_ev.EV_EMAIL_ATTRIBUTION,
+                    date=now,
+                    meta={"destinataire": dest_email, "suivi": bool(px_attr)},
+                )
+            conn.commit()
+    except Exception:
+        pass
 
     try:
         log_action(
