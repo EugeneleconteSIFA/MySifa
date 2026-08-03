@@ -1579,8 +1579,6 @@ def _replace_recurrence_dates(conn, template_id: int, exclude_ids=None, horizon_
         "ORDER BY date_prevue ASC, id ASC",
         (template_id, today.isoformat()),
     ).fetchall()
-    movable = [r for r in rows if int(r["id"]) not in skip]
-
     # Dates de la nouvelle regle, sur le meme horizon que la generation.
     targets = []
     cursor = today
@@ -1593,20 +1591,42 @@ def _replace_recurrence_dates(conn, template_id: int, exclude_ids=None, horizon_
 
     hd = tmpl.get("recurrence_time_start") or ""
     hf = tmpl.get("recurrence_time_end") or ""
-    n = min(len(movable), len(targets))
+    # TOUTES les occurrences sont appariees aux dates cibles, y compris celles
+    # que l'admin a choisi de preserver : chacune CONSOMME une place dans la
+    # serie. Une occurrence preservee ne bouge pas, mais son
+    # template_origin_date est realigne sur la date cible qu'elle occupe.
+    #
+    # Sans ce realignement, la date cible paraissait libre a la generation
+    # (qui dedoublonne sur template_origin_date) et une occurrence y etait
+    # creee : l'admin demandait « laisse ce creneau ou il est » et se
+    # retrouvait avec son creneau ET un nouveau a cote.
+    n = min(len(rows), len(targets))
     moved = 0
     for i in range(n):
+        eid = int(rows[i]["id"])
         iso = targets[i].isoformat()
+        if eid in skip:
+            # Preserve : ni date ni horaires touches. Seul l'ancrage bouge,
+            # pour reserver la place et rester marque « deplace a la main »
+            # (date_prevue <> template_origin_date).
+            conn.execute(
+                "UPDATE maintenance_events SET template_origin_date=?, updated_at=? WHERE id=?",
+                (iso, now, eid),
+            )
+            continue
         conn.execute(
             "UPDATE maintenance_events SET date_prevue=?, heure_debut=?, heure_fin=?, "
             "       template_origin_date=?, updated_at=? WHERE id=?",
-            (iso, hd, hf, iso, now, int(movable[i]["id"])),
+            (iso, hd, hf, iso, now, eid),
         )
         moved += 1
-    # Occurrences en trop (la nouvelle regle en produit moins) : supprimees.
+    # Occurrences en trop (la nouvelle regle en produit moins) : supprimees,
+    # sauf celles que l'admin a explicitement demande de preserver.
     removed = 0
-    for r in movable[n:]:
+    for r in rows[n:]:
         eid = int(r["id"])
+        if eid in skip:
+            continue
         conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
         conn.execute("DELETE FROM maintenance_event_operators WHERE event_id = ?", (eid,))
         conn.execute("DELETE FROM maintenance_events WHERE id = ?", (eid,))
