@@ -8449,6 +8449,228 @@ Ressources :
     except Exception:
         pass
 
+    # ══════════════════════════════════════════════════════════════════════
+    # CHAÎNE FSC — produits certifiés / non certifiés (3 migrations)
+    # ══════════════════════════════════════════════════════════════════════
+    #
+    # GARDE-FOU PAR NOM (et non par numéro de version) : même raison que
+    # `taches_multi_assignes` plus haut. Le versionnage séquentiel a déjà
+    # produit une collision (216 = `ao_lignes_condi` sur une branche et
+    # `fab_matieres_commentaire` sur une autre), et la 2e migration portant
+    # le même numéro est SILENCIEUSEMENT ignorée. Ces trois-là arrivent
+    # depuis une branche parallèle : un garde-fou par nom les rend
+    # insensibles à l'ordre de merge.
+    #
+    # Rappel du modèle métier, parce qu'il n'est pas intuitif :
+    #   - `stock_receptions.fsc_type_claim` = certification de la MATIÈRE
+    #     reçue du fournisseur (5 claims : fsc_100, fsc_mix, fsc_mix_credit,
+    #     fsc_recycled, non_fsc).
+    #   - `lots_stock.fsc` = claim de SORTIE du PRODUIT FINI, hérité du
+    #     dossier de fabrication (planning_entries.fsc_requis). C'est un
+    #     booléen, pas un claim typé : décision produit, la finesse du claim
+    #     reste côté matière.
+    # Les deux ne sont pas la même chose et ne doivent jamais être fusionnés.
+
+    # ── FSC 1/3 : lots_stock porte le claim de sortie + son dossier ──────
+    #
+    # `no_dossier` sur le lot est le maillon qui manquait au traceur : sans
+    # lui, remonter d'une palette expédiée jusqu'aux bobines consommées
+    # imposait de deviner par (produit, emplacement, date), ce qui casse dès
+    # qu'un même produit entre deux fois le même jour.
+    #
+    # `fsc_ecart` : le lot est bien FSC (le dossier l'exige) MAIS la traça
+    # matière était vide ou non conforme au moment de l'entrée en stock. On
+    # ne bloque pas — décision produit — on rend l'écart visible et
+    # traçable jusqu'à l'audit.
+    #
+    # `fsc_link_reconstitue` : 1 = le lien dossier a été DÉDUIT par le
+    # backfill ci-dessous, pas saisi. Un auditeur FSC ne doit jamais prendre
+    # une déduction pour une donnée d'origine : l'interface affiche ces
+    # liens en dégradé et étiquetés « reconstitué ».
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE name='fsc_lots_stock' LIMIT 1"
+    ).fetchone():
+        _ls_cols = {r[1] for r in conn.execute("PRAGMA table_info(lots_stock)").fetchall()}
+        if "fsc" not in _ls_cols:
+            conn.execute("ALTER TABLE lots_stock ADD COLUMN fsc INTEGER NOT NULL DEFAULT 0")
+        if "no_dossier" not in _ls_cols:
+            conn.execute("ALTER TABLE lots_stock ADD COLUMN no_dossier TEXT")
+        if "fsc_ecart" not in _ls_cols:
+            conn.execute("ALTER TABLE lots_stock ADD COLUMN fsc_ecart INTEGER NOT NULL DEFAULT 0")
+        if "fsc_link_reconstitue" not in _ls_cols:
+            conn.execute(
+                "ALTER TABLE lots_stock ADD COLUMN fsc_link_reconstitue INTEGER NOT NULL DEFAULT 0"
+            )
+        # Index sur le triplet réellement interrogé par MyStock : les vues
+        # regroupent désormais par (produit, emplacement, fsc) et non plus
+        # par (produit, emplacement) — deux lignes distinctes au même
+        # emplacement quand du FSC et du non-FSC cohabitent.
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_lots_produit_empl_fsc "
+            "ON lots_stock(produit_id, emplacement, fsc)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_lots_no_dossier ON lots_stock(no_dossier)"
+        )
+
+        # Backfill 1 : rattacher chaque lot à son dossier via le mouvement
+        # d'entrée correspondant. `lots_stock.created_at` et
+        # `mouvements_stock.created_at` sont écrits avec la MÊME variable
+        # `now` dans _apply_stock_mouvement() — l'égalité stricte est donc
+        # fiable et évite les faux positifs d'un rapprochement à la journée.
+        _bf_dos = conn.execute(
+            """UPDATE lots_stock
+                  SET no_dossier = (
+                        SELECT m.no_dossier
+                          FROM mouvements_stock m
+                         WHERE m.produit_id   = lots_stock.produit_id
+                           AND m.emplacement  = lots_stock.emplacement
+                           AND m.created_at   = lots_stock.created_at
+                           AND m.type_mouvement = 'entree'
+                           AND TRIM(COALESCE(m.no_dossier,'')) <> ''
+                         LIMIT 1),
+                      fsc_link_reconstitue = 1
+                WHERE TRIM(COALESCE(no_dossier,'')) = ''
+                  AND EXISTS (
+                        SELECT 1 FROM mouvements_stock m2
+                         WHERE m2.produit_id   = lots_stock.produit_id
+                           AND m2.emplacement  = lots_stock.emplacement
+                           AND m2.created_at   = lots_stock.created_at
+                           AND m2.type_mouvement = 'entree'
+                           AND TRIM(COALESCE(m2.no_dossier,'')) <> '')"""
+        )
+
+        # Backfill 2 : un lot rattaché à un dossier FSC devient FSC. On
+        # accepte le rapprochement sur `reference` OU `numero_of` : selon le
+        # point de saisie, MySifa stocke tantôt l'un tantôt l'autre dans
+        # mouvements_stock.no_dossier.
+        _bf_fsc = conn.execute(
+            """UPDATE lots_stock
+                  SET fsc = 1
+                WHERE fsc = 0
+                  AND TRIM(COALESCE(no_dossier,'')) <> ''
+                  AND EXISTS (
+                        SELECT 1 FROM planning_entries pe
+                         WHERE COALESCE(pe.fsc_requis,0) = 1
+                           AND (TRIM(COALESCE(pe.reference,'')) = TRIM(lots_stock.no_dossier)
+                             OR TRIM(COALESCE(pe.numero_of,'')) = TRIM(lots_stock.no_dossier)))"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 220, "fsc_lots_stock")
+        print(
+            f"[MySifa] migration fsc_lots_stock : {_bf_dos.rowcount} lot(s) rattaché(s) "
+            f"à un dossier, {_bf_fsc.rowcount} marqué(s) FSC."
+        )
+
+    # ── FSC 2/3 : mouvements_stock référence son lot + porte l'écart ─────
+    #
+    # `lot_id` : aucun mouvement ne référençait son lot jusqu'ici. C'est LE
+    # maillon manquant du traceur bidirectionnel — sans lui, un déplacement
+    # de palette est un couple (sortie, entrée) que rien ne relie au lot
+    # déplacé, et la chaîne se rompt à chaque changement d'emplacement.
+    #
+    # `fsc_ecart` / `fsc_ecart_note` : trace la dérogation quand une sortie
+    # FSC a dû être complétée avec du stock non certifié. L'opérateur
+    # confirme explicitement, la note est obligatoire côté API, et l'écart
+    # remonte tel quel dans le rapport d'audit. Rien ne passe en silence.
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE name='fsc_mouvements_stock' LIMIT 1"
+    ).fetchone():
+        _ms_cols = {r[1] for r in conn.execute("PRAGMA table_info(mouvements_stock)").fetchall()}
+        if "fsc" not in _ms_cols:
+            conn.execute("ALTER TABLE mouvements_stock ADD COLUMN fsc INTEGER")
+        if "lot_id" not in _ms_cols:
+            conn.execute("ALTER TABLE mouvements_stock ADD COLUMN lot_id INTEGER")
+        if "fsc_ecart" not in _ms_cols:
+            conn.execute(
+                "ALTER TABLE mouvements_stock ADD COLUMN fsc_ecart INTEGER NOT NULL DEFAULT 0"
+            )
+        if "fsc_ecart_note" not in _ms_cols:
+            conn.execute("ALTER TABLE mouvements_stock ADD COLUMN fsc_ecart_note TEXT")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mvt_lot ON mouvements_stock(lot_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mvt_no_dossier ON mouvements_stock(no_dossier)"
+        )
+
+        # Backfill : même clé de rapprochement que la migration précédente
+        # (created_at strictement égal). Ne concerne que les entrées : une
+        # sortie FIFO touche potentiellement plusieurs lots, on ne devine
+        # pas lequel rétroactivement.
+        _bf_lot = conn.execute(
+            """UPDATE mouvements_stock
+                  SET lot_id = (
+                        SELECT l.id FROM lots_stock l
+                         WHERE l.produit_id  = mouvements_stock.produit_id
+                           AND l.emplacement = mouvements_stock.emplacement
+                           AND l.created_at  = mouvements_stock.created_at
+                         LIMIT 1)
+                WHERE lot_id IS NULL
+                  AND type_mouvement = 'entree'"""
+        )
+        _bf_mfsc = conn.execute(
+            """UPDATE mouvements_stock
+                  SET fsc = (SELECT l.fsc FROM lots_stock l WHERE l.id = mouvements_stock.lot_id)
+                WHERE fsc IS NULL AND lot_id IS NOT NULL"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 221, "fsc_mouvements_stock")
+        print(
+            f"[MySifa] migration fsc_mouvements_stock : {_bf_lot.rowcount} mouvement(s) "
+            f"relié(s) à leur lot, {_bf_mfsc.rowcount} claim(s) propagé(s)."
+        )
+
+    # ── FSC 3/3 : expe_departs pointe vers son dossier ──────────────────
+    #
+    # Le lien expédition ↔ dossier passait par `ref_sifa`, champ TEXTE
+    # LIBRE : personne ne garantit qu'il contient une référence de dossier
+    # exploitable. Le traceur ne peut pas s'appuyer là-dessus pour clore la
+    # chaîne (« cette bobine est partie chez qui, quel jour, par quel
+    # transporteur ? »).
+    #
+    # `no_dossier_source` distingue explicitement une saisie ('saisi') d'un
+    # rapprochement automatique ('reconstitue'). Même principe que
+    # `fsc_link_reconstitue` : une déduction reste identifiée comme telle.
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE name='fsc_expe_departs_dossier' LIMIT 1"
+    ).fetchone():
+        _ed_cols = {r[1] for r in conn.execute("PRAGMA table_info(expe_departs)").fetchall()}
+        if "no_dossier" not in _ed_cols:
+            conn.execute("ALTER TABLE expe_departs ADD COLUMN no_dossier TEXT")
+        if "no_dossier_source" not in _ed_cols:
+            conn.execute("ALTER TABLE expe_departs ADD COLUMN no_dossier_source TEXT")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_expe_departs_dossier ON expe_departs(no_dossier)"
+        )
+
+        # Backfill : on ne retient QUE les correspondances exactes avec une
+        # référence de dossier connue. Un ref_sifa approchant est laissé
+        # vide plutôt que rapproché au jugé — un faux lien dans une chaîne
+        # de traçabilité coûte plus cher qu'un lien absent.
+        _bf_exp = conn.execute(
+            """UPDATE expe_departs
+                  SET no_dossier = (
+                        SELECT TRIM(COALESCE(pe.reference,''))
+                          FROM planning_entries pe
+                         WHERE TRIM(COALESCE(pe.reference,'')) = TRIM(COALESCE(expe_departs.ref_sifa,''))
+                            OR TRIM(COALESCE(pe.numero_of,'')) = TRIM(COALESCE(expe_departs.ref_sifa,''))
+                         LIMIT 1),
+                      no_dossier_source = 'reconstitue'
+                WHERE TRIM(COALESCE(no_dossier,'')) = ''
+                  AND TRIM(COALESCE(ref_sifa,'')) <> ''
+                  AND EXISTS (
+                        SELECT 1 FROM planning_entries pe2
+                         WHERE TRIM(COALESCE(pe2.reference,'')) = TRIM(COALESCE(expe_departs.ref_sifa,''))
+                            OR TRIM(COALESCE(pe2.numero_of,'')) = TRIM(COALESCE(expe_departs.ref_sifa,'')))"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 222, "fsc_expe_departs_dossier")
+        print(
+            f"[MySifa] migration fsc_expe_departs_dossier : {_bf_exp.rowcount} départ(s) "
+            f"rattaché(s) à un dossier."
+        )
+
     conn.commit()
 
 
