@@ -334,6 +334,16 @@ body.reduce-anim .cal-skel{animation:none}
 /* ── Vue Semaine (emploi du temps) ──────────────────────────────────── */
 .cal-week-view{overflow-x:auto}
 /* v2.6.1 : .cal-wv-hint retire du HTML — regle de style supprimee. */
+/* v2.6.1 : bandes de bascule de semaine pendant un glisser-deposer. Le liseré
+   marque le bord vise ; la semaine change apres CAL_EDGE_DELAY_MS. box-shadow
+   inset est peint sur la padding-box : il ne defile pas avec le contenu. */
+.cal-wv-body{transition:box-shadow .12s}
+.cal-wv-body.cal-edge-prev{box-shadow:inset 5px 0 0 var(--accent)}
+.cal-wv-body.cal-edge-next{box-shadow:inset -5px 0 0 var(--accent)}
+/* v2.6.1 : colonnes de dates passees — ni creation ni depot. Trame legere pour
+   que le refus soit lisible AVANT le geste, pas seulement apres. */
+.cal-wv-day-col.is-past-col{background-image:repeating-linear-gradient(45deg,transparent,transparent 7px,rgba(128,128,128,.055) 7px,rgba(128,128,128,.055) 14px);cursor:not-allowed}
+.cal-wv-day-col.cal-col-nodrop{box-shadow:inset 0 0 0 2px var(--danger,#f87171)}
 .cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);box-sizing:border-box}  /* v2.5.17 : min-width retire (dim clippe). v2.6.0 : scrollbar-gutter retire -- inerte ici, la propriete ne s'applique qu'aux conteneurs de scroll, donc les 7 colonnes 1fr etaient calculees sur une largeur superieure a celles du corps (derive cumulative vers Sam/Dim). L'alignement est desormais fait par _syncCalHeaderGutter() qui reporte la largeur reelle de la gouttiere du corps sur le padding-right du header. */
 .cal-wv-corner{}
 .cal-wv-dayhead{padding:11px 10px;text-align:center;border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--card)}
@@ -3359,7 +3369,13 @@ let _calSavedScrollTop = null;
 // renderCalWeek(), et rearmer ici ramenait l'utilisateur au premier creneau de
 // la semaine juste apres qu'il ait cree le sien. C'est pour ca que l'appel a
 // ete retire de la fin des fonctions de rendu.
-function _requestCalAutoScroll(){ _calAutoScrollPending = true; }
+function _requestCalAutoScroll(){
+  // v2.6.1 : pendant un glisser-deposer inter-semaines, la navigation est
+  // provoquee par le geste lui-meme. Recentrer ferait glisser les colonnes
+  // sous le curseur en plein drop — on garde la position telle quelle.
+  try{ if(_CAL_DRAG && _CAL_DRAG.active) return; }catch(_){}
+  _calAutoScrollPending = true;
+}
 // A appeler juste avant `body.innerHTML = ...` : le remplacement du contenu
 // remet scrollTop a 0, il faut donc memoriser la position avant, pour pouvoir
 // la rendre a l'utilisateur apres un re-rendu sans changement de contexte.
@@ -3651,7 +3667,7 @@ function renderCalWeek(){
     const isWeekend = (i >= 5);
     const isToday = (iso === todayIso);
     const colCls = 'cal-wv-day-col' + (isWeekend?' weekend':'') + (isToday?' today':'');
-    html += '<div class="' + colCls + '" data-date="' + iso + '" onclick="onCalCellClick(event)">';
+    html += '<div class="' + colCls + (_calIsPastIso(iso) ? ' is-past-col' : '') + '" data-date="' + iso + '" onclick="onCalCellClick(event)">';
     for(let h=CAL_HOUR_START; h<CAL_HOUR_END; h++){
       html += '<div class="cal-wv-hour-row" data-hour="' + h + '"></div>';
     }
@@ -3662,7 +3678,7 @@ function renderCalWeek(){
   // Lane-packing : un bloc par opération, placé côte à côte lorsqu'il y a chevauchement
   document.querySelectorAll('.cal-wv-day-col').forEach(col => {
     const iso = col.getAttribute('data-date');
-    const events = PLANNING_STATE.list.filter(ev => ev.date === iso);
+    const events = PLANNING_STATE.list.filter(ev => ev.date === iso  && !_isEventBeingDragged(ev));
     const packed = _packDayEvents(events);
     packed.forEach(item => {
       const block = _makeEventBlock(item);
@@ -3709,7 +3725,7 @@ function renderCalDay(){
   }
   html += '</div>';
   const colCls = 'cal-wv-day-col' + (isWeekend?' weekend':'') + (isToday?' today':'');
-  html += '<div class="' + colCls + '" data-date="' + iso + '" onclick="onCalCellClick(event)">';
+  html += '<div class="' + colCls + (_calIsPastIso(iso) ? ' is-past-col' : '') + '" data-date="' + iso + '" onclick="onCalCellClick(event)">';
   for(let h=CAL_HOUR_START; h<CAL_HOUR_END; h++){
     html += '<div class="cal-wv-hour-row" data-hour="' + h + '"></div>';
   }
@@ -3719,7 +3735,7 @@ function renderCalDay(){
   // Lane-packing
   document.querySelectorAll('.cal-wv-day-col').forEach(col => {
     const cIso = col.getAttribute('data-date');
-    const events = PLANNING_STATE.list.filter(ev => ev.date === cIso);
+    const events = PLANNING_STATE.list.filter(ev => ev.date === cIso && !_isEventBeingDragged(ev));
     const packed = _packDayEvents(events);
     packed.forEach(item => {
       const block = _makeEventBlock(item);
@@ -3968,6 +3984,19 @@ function _makeEventBlock(item){
 const _CAL_SNAP_MIN = 15;
 let _CAL_DRAG = null;
 
+// v2.6.1 : une date ISO est-elle anterieure a aujourd'hui ? Aujourd'hui reste
+// une date valide (on peut planifier pour le jour meme).
+function _calIsPastIso(iso){
+  try{
+    const s = String(iso || '');
+    // Valeur absente : on ne conclut PAS au passe. La comparaison de chaines
+    // ferait sinon '' < '2026-08-03' => true, et une colonne sans data-date
+    // serait grisee et refuserait tout depot.
+    if(!s) return false;
+    return s < _calIsoYMD(new Date());
+  }catch(_){ return false; }
+}
+
 function _calIsPastEvent(ev){
   try{
     const todayIso = _calIsoYMD(new Date());
@@ -4058,8 +4087,15 @@ function _onCalDragMove(e){
   const col = el ? el.closest('.cal-wv-day-col') : null;
   const rect = col ? col.getBoundingClientRect() : null;
   const px = (CAL_STATE && CAL_STATE.view === 'day') ? 72 : CAL_HOUR_PX;
-  document.querySelectorAll('.cal-wv-day-col.drag-over').forEach(function(c){ c.classList.remove('drag-over'); });
+  document.querySelectorAll('.cal-wv-day-col.drag-over, .cal-wv-day-col.cal-col-nodrop').forEach(function(c){ c.classList.remove('drag-over', 'cal-col-nodrop'); });
   _handleCrossWeekHover(el, e);
+  // v2.6.1 : une colonne dont la date est passee n'accepte pas de depot. On ne
+  // la marque pas 'drag-over' et on ne met pas a jour targetDate : le refus est
+  // visible AVANT le lacher, plutot que par un message apres coup.
+  if(col && _calIsPastIso(col.getAttribute('data-date'))){
+    col.classList.add('cal-col-nodrop');
+    col = null;
+  }
   if(col && rect){
     col.classList.add('drag-over');
     const y = e.clientY - rect.top;
@@ -4115,34 +4151,85 @@ function _onCalDragMove(e){
   }
 }
 
+// v2.6.1 : bascule de semaine par les BORDS de la grille, en plus du survol
+// des fleches qui existait deja (et restait peu decouvrable — il fallait viser
+// un petit bouton en haut a droite alors que le creneau peut etre en bas).
+// Glisser au-dela du bord droit de dimanche = lundi suivant ; au-dela du bord
+// gauche de lundi = dimanche precedent.
+// v2.6.1 : pendant un glisser-deposer inter-semaines, le bloc en cours de
+// deplacement est gere a la main (detache du DOM par le re-rendu, puis
+// reinsere dans la colonne survolee). Il ne doit donc PAS etre redessine par
+// renderCalWeek()/renderCalDay() depuis PLANNING_STATE : en revenant sur la
+// semaine d'origine, le creneau apparaissait deux fois — celui qu'on deplace
+// et sa copie a l'emplacement d'origine.
+//
+// Le filtre ne s'applique qu'a un drag ACTIF (seuil de mouvement franchi) :
+// un simple clic ne doit pas faire disparaitre le creneau. Apres le drop,
+// _CAL_DRAG est remis a null avant le re-rendu, le bloc revient normalement.
+function _isEventBeingDragged(ev){
+  try{
+    return !!(_CAL_DRAG && _CAL_DRAG.active && _CAL_DRAG.ev && ev
+              && String(_CAL_DRAG.ev.id) === String(ev.id));
+  }catch(_){ return false; }
+}
+
+const CAL_EDGE_ZONE_PX  = 48;   // largeur des bandes sensibles
+const CAL_EDGE_DELAY_MS = 450;  // survol requis avant de changer de semaine
+
+function _calEdgeDirection(e){
+  // Vue Jour exclue : la navigation y va de jour en jour, les bords n'ont pas
+  // le sens « semaine precedente / suivante ».
+  if(typeof CAL_STATE === 'undefined' || !CAL_STATE || CAL_STATE.view !== 'week') return null;
+  const body = document.getElementById('cal-wv-body');
+  if(!body) return null;
+  const r = body.getBoundingClientRect();
+  // Hors de la bande verticale de la grille : le geste vise autre chose.
+  if(e.clientY < r.top || e.clientY > r.bottom) return null;
+  if(e.clientX <= r.left  + CAL_EDGE_ZONE_PX) return 'prev';
+  if(e.clientX >= r.right - CAL_EDGE_ZONE_PX) return 'next';
+  return null;
+}
+
+function _clearCalEdgeCue(){
+  const body = document.getElementById('cal-wv-body');
+  if(body) body.classList.remove('cal-edge-prev', 'cal-edge-next');
+  document.querySelectorAll('.cal-nav button.cal-drop-target-nav').forEach(function(b){
+    b.classList.remove('cal-drop-target-nav');
+  });
+}
+
 function _handleCrossWeekHover(el, e){
   if(!_CAL_DRAG) return;
   const btnPrev = el ? el.closest('button[onclick="calPrev()"]') : null;
   const btnNext = el ? el.closest('button[onclick="calNext()"]') : null;
-  const dir = btnPrev ? 'prev' : (btnNext ? 'next' : null);
-  if(dir !== _CAL_DRAG._navHoverDir){
-    if(_CAL_DRAG._navHoverTimer){
-      clearTimeout(_CAL_DRAG._navHoverTimer);
-      _CAL_DRAG._navHoverTimer = null;
-    }
-    document.querySelectorAll('.cal-nav button.cal-drop-target-nav').forEach(function(b){
-      b.classList.remove('cal-drop-target-nav');
-    });
-    _CAL_DRAG._navHoverDir = dir;
-    if(dir){
-      const btn = (dir === 'prev') ? btnPrev : btnNext;
-      btn.classList.add('cal-drop-target-nav');
-      _CAL_DRAG._navHoverTimer = setTimeout(function(){
-        try{
-          if(dir === 'prev' && typeof calPrev === 'function') calPrev();
-          else if(dir === 'next' && typeof calNext === 'function') calNext();
-        }catch(_){}
-        btn.classList.remove('cal-drop-target-nav');
-        _CAL_DRAG._navHoverDir = null;
-        _CAL_DRAG._navHoverTimer = null;
-      }, 600);
-    }
+  const btn = btnPrev || btnNext;
+  const dir = btnPrev ? 'prev' : (btnNext ? 'next' : _calEdgeDirection(e));
+  // Direction inchangee : le timer en cours court toujours, on ne le relance
+  // pas. C'est aussi ce qui empeche d'enchainer les semaines sans relacher —
+  // apres une bascule, _navHoverDir reste arme tant qu'on n'a pas quitte la
+  // bande, il faut en sortir puis y revenir pour avancer d'une semaine de plus.
+  if(dir === _CAL_DRAG._navHoverDir) return;
+  if(_CAL_DRAG._navHoverTimer){
+    clearTimeout(_CAL_DRAG._navHoverTimer);
+    _CAL_DRAG._navHoverTimer = null;
   }
+  _clearCalEdgeCue();
+  _CAL_DRAG._navHoverDir = dir;
+  if(!dir) return;
+  if(btn) btn.classList.add('cal-drop-target-nav');
+  else {
+    const body = document.getElementById('cal-wv-body');
+    if(body) body.classList.add(dir === 'prev' ? 'cal-edge-prev' : 'cal-edge-next');
+  }
+  _CAL_DRAG._navHoverTimer = setTimeout(function(){
+    try{
+      if(dir === 'prev' && typeof calPrev === 'function') calPrev();
+      else if(dir === 'next' && typeof calNext === 'function') calNext();
+    }catch(_){}
+    _clearCalEdgeCue();
+    if(_CAL_DRAG) _CAL_DRAG._navHoverTimer = null;
+    // _navHoverDir volontairement CONSERVE : cf. commentaire ci-dessus.
+  }, CAL_EDGE_DELAY_MS);
 }
 
 function _onCalDragUp(e){
@@ -4152,10 +4239,8 @@ function _onCalDragUp(e){
   document.removeEventListener('mousemove', _onCalDragMove, true);
   document.removeEventListener('mouseup', _onCalDragUp, true);
   if(drag._navHoverTimer) clearTimeout(drag._navHoverTimer);
-  document.querySelectorAll('.cal-nav button.cal-drop-target-nav').forEach(function(b){
-    b.classList.remove('cal-drop-target-nav');
-  });
-  document.querySelectorAll('.cal-wv-day-col.drag-over').forEach(function(c){ c.classList.remove('drag-over'); });
+  _clearCalEdgeCue();
+  document.querySelectorAll('.cal-wv-day-col.drag-over, .cal-wv-day-col.cal-col-nodrop').forEach(function(c){ c.classList.remove('drag-over', 'cal-col-nodrop'); });
   if(drag.ghost){ drag.ghost.remove(); drag.ghost = null; }
   drag.div.classList.remove('is-dragging');
   if(!drag.active){
@@ -4184,10 +4269,15 @@ function _onCalDragUp(e){
     return;
   }
   // Contrôle : si on déplace vers un jour passé, refuse.
-  const todayIso = _calIsoYMD(new Date());
-  if(String(drag.targetDate) < todayIso){
+  if(_calIsPastIso(drag.targetDate)){
     if(typeof showToast === 'function') showToast('Impossible de déplacer un créneau vers une date passée.', 'danger');
     _CAL_DRAG = null;
+    // v2.6.1 : ROLLBACK VISUEL. Sans lui, le bloc restait a la position ou on
+    // l'avait lache — le DOM ayant ete manipule pendant le drag — alors que la
+    // donnee n'avait pas bouge. L'ecran affichait donc un creneau a une date
+    // passee, avec un message d'erreur par dessus, jusqu'au prochain rendu.
+    // Meme traitement que la branche d'echec serveur de _persistCalDrag().
+    try{ refreshPlanning().then(function(){ try{ renderCal(); }catch(_){} }); }catch(_){}
     return;
   }
   // PATCH la nouvelle position.
@@ -4721,6 +4811,15 @@ function onCalCellClick(e){
   if(!col) return;
   const iso = col.getAttribute('data-date');
   if(!iso) return;
+  // v2.6.1 : le planning sert a planifier — pas de creation dans le passe. Une
+  // intervention deja realisee se consigne via l'enregistrement d'operation,
+  // qui accepte les dates passees (source 'non_planifie').
+  if(_calIsPastIso(iso)){
+    if(typeof showToast === 'function'){
+      showToast('Le planning ne permet pas de créer un créneau à une date passée. Utilise l\'enregistrement d\'opération.', 'danger');
+    }
+    return;
+  }
   const rect = col.getBoundingClientRect();
   const y = e.clientY - rect.top;
   const hourFloat = CAL_HOUR_START + (y / CAL_HOUR_PX);

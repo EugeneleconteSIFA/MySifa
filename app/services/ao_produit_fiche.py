@@ -8,6 +8,10 @@ from typing import Any
 
 def default_fiche() -> dict[str, Any]:
     return {
+        # Reference de la fiche technique SIFA (XXX/NNNN) saisie dans la fiche
+        # produit. Identifie le produit sur l'etiquette carton et declenche
+        # l'enrichissement fiche technique (BAT, PDF fournisseur).
+        "ref_sifa": "",
         "type_produit": "rouleau",
         "impressions": True,
         "etiquette": {
@@ -237,7 +241,6 @@ def render_fiche_html(
 
     sections.extend([
         ("Conditionnement — Cartons", [
-            _row_html("Type carton", mp_label(cart.get("matiere_id"))),
             _row_html("Bobines au sol", cart.get("bobines_sol")),
             _row_html("Nombre d'étages", cart.get("nb_etages")),
             _row_html("Bobines / carton", cart.get("bobines_carton")),
