@@ -712,7 +712,11 @@ body[data-maint-role="operator"] .cal-event{cursor:pointer}
 .plan-det-case-machine{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg,#fff);font-size:13px;font-weight:800;letter-spacing:.2px}
 .plan-det-case-time{display:inline-flex;align-items:center;gap:5px;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;font-weight:700;font-size:13px;color:var(--text)}
 .plan-det-case-ops-label{margin-top:14px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700}
-.plan-det-case-ops-list{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.plan-det-case-ops-list{margin-top:8px;display:flex;flex-direction:column;gap:6px;max-height:38vh;overflow-y:auto;padding-right:4px}
+/* v2.6.1 : la liste d'operations defile en interne. Avant, un creneau de 14
+   operations poussait les boutons Modifier / Supprimer (.plan-det-case-actions)
+   hors de la zone visible : il fallait faire defiler tout le corps du modal
+   pour les atteindre, sans indice qu'ils existaient. */
 .plan-det-case-op{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);transition:border-color .12s}
 .plan-det-case-op:hover{border-color:var(--accent)}
 .plan-det-case-op-bullet{flex-shrink:0;width:8px;height:8px;border-radius:50%;background:var(--accent)}
@@ -768,6 +772,14 @@ body[data-maint-role="operator"] .cal-event{cursor:pointer}
 .ops-select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
 .ops-field-hint{font-size:11px;color:var(--muted);line-height:1.45}
 .ops-saisi-par{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:12px;margin-bottom:14px}
+/* v2.6.1 : bandeau date + horaires des modales creneau. Le discret « Date :
+   ... » en 12px gris pointille se confondait avec le fond ; date et horaires
+   sont l'information la plus structurante d'un creneau. */
+.ops-dt-banner{border-style:solid;border-color:var(--accent);background:var(--accent-bg);color:var(--text);font-size:14px;padding:12px 16px;gap:10px;flex-wrap:wrap}
+.ops-dt-banner strong{font-size:15px;font-weight:800;color:var(--text)}
+.ops-dt-banner .ops-dt-sep{color:var(--accent);font-weight:900;opacity:.55}
+.ops-dt-banner .ops-dt-time{font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;font-size:15px;font-weight:800;color:var(--accent);letter-spacing:.02em}
+.ops-dt-banner svg{color:var(--accent);flex-shrink:0}
 .ops-saisi-par strong{color:var(--text);font-weight:600}
 .ops-btn-add{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;border:none;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:filter .15s,background .15s,color .15s;white-space:nowrap}
 .ops-btn-add:hover{filter:brightness(1.08)}
@@ -2609,9 +2621,11 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
       </button>
     </div>
     <div class="modal-body">
-      <div class="ops-saisi-par">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        <span>Date : <strong id="plan-det-date">—</strong></span>
+      <div class="ops-saisi-par ops-dt-banner">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <strong id="plan-det-date">—</strong>
+        <span class="ops-dt-sep">·</span>
+        <span class="ops-dt-time" id="plan-det-time">—</span>
       </div>
       <div class="plan-det-list" id="plan-det-list"></div>
     </div>
@@ -2632,9 +2646,11 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
     </div>
     <form id="case-mod-form" onsubmit="submitCaseModal(event)">
       <div class="modal-body">
-        <div class="ops-saisi-par">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <span>Date : <strong id="case-mod-date">—</strong></span>
+        <div class="ops-saisi-par ops-dt-banner">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <strong id="case-mod-date">—</strong>
+          <span class="ops-dt-sep">·</span>
+          <span class="ops-dt-time" id="case-mod-time-recap">—</span>
         </div>
         <div class="ops-field">
           <label class="ops-field-label" for="case-mod-nom">Nom du créneau <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(optionnel)</span></label>
@@ -4445,6 +4461,9 @@ function openPlanningDetailsModal(events){
   const listEl = document.getElementById('plan-det-list');
   if(titleEl) titleEl.textContent = 'Détails du créneau';
   if(dtEl) dtEl.textContent = _fmtIsoDateFr(ev.date);
+  // v2.6.1 : horaires dans le bandeau du haut, a cote de la date.
+  const tmEl = document.getElementById('plan-det-time');
+  if(tmEl) tmEl.textContent = (ev.start && ev.end) ? (ev.start + ' \u2013 ' + ev.end) : '—';
   if(listEl){
     const ops = Array.isArray(ev.operations) ? ev.operations : [];
     // Machines couvertes par le créneau (union des machines des ops).
@@ -5044,6 +5063,16 @@ function _openCaseModalInner(opts){
   const h = Math.max(0, Math.min(23, opts.defaultHour || 8));
   if(sEl) sEl.value = opts.start || (String(h).padStart(2,'0') + ':00');
   if(eEl) eEl.value = opts.end   || (String(Math.min(h+1, 23)).padStart(2,'0') + ':00');
+  // v2.6.1 : recap des horaires dans le bandeau du haut. Les champs de saisie
+  // restent la source de verite ; le bandeau se contente de les refleter, pour
+  // que date et horaires soient lisibles d'un coup d'oeil sans descendre.
+  _syncCaseTimeRecap();
+  [sEl, eEl].forEach(function(el){
+    if(!el || el._dtRecapBound) return;
+    el._dtRecapBound = true;
+    el.addEventListener('input',  _syncCaseTimeRecap);
+    el.addEventListener('change', _syncCaseTimeRecap);
+  });
   // v2.5.14 : créneau passé -> horaires en lecture seule (même règle que le drag & drop).
   try{
     const _todayIso = _calIsoYMD(new Date());
@@ -12697,6 +12726,15 @@ function _mergeTemplateOps(tmplOps){
     if(t){ co.opName = t.nom; co.opNiveau = t.niveau || null; co.opFreq = t.frequence || ''; }
   }
   return { ajoutees, fusionnees };
+}
+
+// v2.6.1 : reporte les horaires saisis dans le bandeau date du haut de modale.
+function _syncCaseTimeRecap(){
+  const el = document.getElementById('case-mod-time-recap');
+  if(!el) return;
+  const s = (document.getElementById('case-mod-start') || {}).value || '';
+  const e = (document.getElementById('case-mod-end')   || {}).value || '';
+  el.textContent = (s && e) ? (s + ' \u2013 ' + e) : (s || e || '—');
 }
 
 async function applyCaseTemplate(templateId){
