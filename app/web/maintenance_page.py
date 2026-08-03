@@ -1511,6 +1511,10 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .ta-sim-exit{position:fixed;top:12px;left:12px;z-index:2100;background:rgba(0,0,0,.7);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;pointer-events:auto}
 .ta-sim-exit:hover{background:rgba(0,0,0,.9)}
 .af-cl-nc-lbl:has(input:checked){border-color:var(--danger);background:rgba(248,113,113,0.10);color:var(--danger)}
+/* v2.5.21 : puce COM — « cette réponse exige un commentaire ». Reprend le
+   gabarit de la puce NC, en accent au lieu de danger pour que les deux se
+   distinguent d'un coup d'oeil quand elles sont cochées ensemble. */
+.af-cl-com-lbl:has(input:checked){border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
 .ta-chip{display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-weight:500;cursor:pointer;user-select:none;transition:background .12s ease,color .12s ease,border-color .12s ease;font-family:inherit;line-height:1.2}
 .ta-chip input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
 .ta-chip:hover{border-color:var(--accent)}
@@ -1815,7 +1819,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 .alert-modal-overlay .af-cl-card .alert-field-input,
 .alert-modal-overlay .af-cl-card .alert-field-select{background:var(--card)}
 .alert-modal-overlay .af-cl-card .btn-ghost:hover{background:var(--accent-bg)}
-.af-cl-nc-lbl{background:var(--card)}
+.af-cl-nc-lbl,.af-cl-com-lbl{background:var(--card)}
 /* Bandeau "Parametres" repliable : il porte deja var(--bg) sur fond blanc,
    on renforce juste la lisibilite du libelle. */
 .alert-modal-overlay #af-settings-toggle{color:var(--text)}
@@ -5197,28 +5201,6 @@ function closeCaseModal(){
 // Machines disponibles pour l'atelier (source unique pour le picker).
 const CASE_MACHINES_LIST = ['Cohésio 1', 'Cohésio 2', 'DSI', 'Repiquage'];
 
-// v2.6.1 : rend visible la ligne d'operation qui vient d'etre ajoutee.
-// Les listes (.case-ops-list) sont plafonnees a 280px avec leur propre
-// defilement : une ligne ajoutee en fin de liste tombait donc hors du cadre,
-// sans aucun signe qu'il s'etait passe quelque chose — l'utilisateur devait
-// deviner qu'il fallait faire defiler.
-//
-// focus({preventScroll:true}) puis scroll manuel : laisser le focus declencher
-// le defilement ferait bouger la MODALE entiere, pas seulement la liste.
-function _revealLastOpRow(listId){
-  setTimeout(function(){
-    const list = document.getElementById(listId);
-    if(!list) return;
-    list.scrollTop = list.scrollHeight;
-    const selects = list.querySelectorAll('select');
-    const last = selects.length ? selects[selects.length - 1] : null;
-    if(last){
-      try{ last.focus({ preventScroll: true }); }catch(_){ last.focus(); }
-    }
-    list.scrollTop = list.scrollHeight;
-  }, 40);
-}
-
 function addCaseOp(){
   // v2 : mode Catalogue par défaut, avec possibilité de switch vers Libre.
   // On laisse ajouter même sans catalogue (l'admin pourra créer une libre).
@@ -5240,7 +5222,14 @@ function addCaseOp(){
     _consignes_open: false,
   });
   renderCaseOpsList();
-  _revealLastOpRow('case-mod-ops-list');
+  // Focus le dernier select
+  setTimeout(() => {
+    const list = document.getElementById('case-mod-ops-list');
+    if(list){
+      const selects = list.querySelectorAll('select');
+      if(selects.length) selects[selects.length - 1].focus();
+    }
+  }, 50);
 }
 function updateCaseOp(idx, opTypeId){
   if(idx < 0 || idx >= _CASE_OPS.length) return;
@@ -9157,10 +9146,21 @@ function openAckDetail(prefixedId){
             const otherHtml = (otherTxt != null && String(otherTxt).trim() !== '')
               ? '<div style="margin-top:6px;padding:6px 10px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;font-size:12px;color:var(--text2);white-space:pre-wrap">' + escHtml(String(otherTxt)) + '</div>'
               : '';
+            // v2.5.21 : commentaire obligatoire déclenché par une réponse COM.
+            // Liseré rouge et libellé explicite pour le distinguer d'une simple
+            // précision « Autre » — c'est la justification d'un cas signalé.
+            const comTxt = responses[String(idx) + '_comment'];
+            const comHtml = (comTxt != null && String(comTxt).trim() !== '')
+              ? '<div style="margin-top:6px;padding:6px 10px;border-left:3px solid var(--danger);background:rgba(220,38,38,.07);border-radius:0 6px 6px 0">'
+                + '<div style="font-size:10px;font-weight:700;color:var(--danger);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Commentaire obligatoire</div>'
+                + '<div style="font-size:12px;color:var(--text2);white-space:pre-wrap">' + escHtml(String(comTxt)) + '</div>'
+                + '</div>'
+              : '';
             return '<div class="ta-cl-item" data-type="choice">'
               + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + escHtml(it.label || '') + '</div>'
               + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + '</div>'
               + otherHtml
+              + comHtml
               + '</div>';
           }).join('')
       + '</div>';
@@ -13568,7 +13568,6 @@ function addTmplOp(){
   }
   _TMPL_OPS.push({ opTypeId: '', opName: '', opNiveau: null, opFreq: '', machines: [] });
   renderTmplOpsList();
-  _revealLastOpRow('tmpl-ed-ops-list');
 }
 
 function updateTmplOp(idx, opTypeId){
