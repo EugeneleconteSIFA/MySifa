@@ -111,7 +111,7 @@ sur un plan Kernse Atelier générique, activables via un pack vertical.
 - **Frontend** : HTML/CSS/JS vanilla, généré côté serveur en chaînes Python (dans `app/web/*.py`)
 - **Base de données** : SQLite unique — fichier actif : `data/production.db` (chemin défini par `DB_PATH` dans `config.py`)
 - **Auth** : sessions cookie (`sifa_token`), durée 6h
-- **Migrations DB** : pattern `_migrate()` dans `app/core/database.py`, versionnées via la table `schema_migrations`
+- **Migrations DB** : un fichier par migration dans `app/core/migrations/`, identifiée par son `NOM` (table `schema_migrations_fichiers`). Les migrations historiques 1→225 restent dans `_migrate()` de `app/core/database.py` — voir la section « Migrations de base de données »
 
 **Rôles disponibles :**
 `superadmin`, `direction`, `administration`, `fabrication`, `logistique`, `comptabilite`, `expedition`, `commercial`
@@ -202,7 +202,8 @@ MySifa/
 │
 ├── app/
 │   ├── core/
-│   │   └── database.py       # Schéma DB, migrations, helpers get_db() — NE PAS DUPLIQUER
+│   │   ├── database.py       # Schéma DB, migrations historiques, get_db() — NE PAS DUPLIQUER
+│   │   └── migrations/       # UNE MIGRATION = UN FICHIER (toute nouvelle migration va ici)
 │   ├── routers/              # Tous les endpoints FastAPI (source réelle)
 │   │   ├── auth.py
 │   │   ├── fabrication.py    # API saisie de production
@@ -261,7 +262,7 @@ Ces règles ont été violées deux fois par des IA (Cursor puis Claude) et ont 
 - `date_operation` est stocké en `"%Y-%m-%dT%H:%M:%S"` heure Paris (pas de timezone dans la chaîne)
 
 **Python (backend)**
-- Migrations DB : `if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=N LIMIT 1").fetchone()`
+- Migrations DB : un fichier dans `app/core/migrations/` avec `NOM` + `appliquer(conn)` — jamais de nouveau numéro dans `_migrate()`
 - Seeds idempotents : toujours `INSERT OR IGNORE`
 - Ne jamais bloquer une saisie pour une erreur de mise à jour planning : `try/except: pass`
 - Imports de config toujours depuis `config` (racine), jamais depuis `app.config`
@@ -568,13 +569,88 @@ Le message (`message` field) doit être en **HTML** et respecter les codes visue
 
 ---
 
+## Migrations de base de données — une migration = un fichier
+
+**Règle depuis le 3 août 2026 : toute NOUVELLE migration va dans un fichier de
+`app/core/migrations/`, jamais dans `_migrate()`.** Les migrations historiques
+numérotées 1 à 225 restent dans `app/core/database.py` et n'ont pas à bouger.
+
+### Pourquoi ce changement
+
+Deux chantiers menés en parallèle (deux conversations Claude, ou Claude + Cursor)
+se marchaient systématiquement dessus :
+
+1. **Collision de numéros.** Chacun choisit le même numéro de son côté. Après
+   fusion, la seconde migration ne s'exécute **jamais** : son garde-fou voit le
+   numéro de l'autre déjà enregistré. Cas réel : le doublon v195 — le bloc
+   `imprimantes_type_connexion_windows_local` est resté muet pendant des mois sur
+   toutes les bases où `backfill_libres_usage_count` était passé avant lui.
+2. **Fichier partagé.** `database.py` fait ~9 000 lignes. Deux sessions qui y
+   écrivent s'écrasent mutuellement, et git n'a aucun moyen de trancher. Cas réel
+   (3 août 2026) : une migration entière effacée entre deux tours de
+   conversation, découverte par une erreur 500 en production.
+
+### Écrire une migration
+
+Créer `app/core/migrations/AAAA_MM_JJ_sujet.py` :
+
+```python
+"""
+Ce que fait la migration, et pourquoi.
+"""
+
+NOM = "sujet_explicite"              # clé unique et DÉFINITIVE
+DEPEND = ["autre_migration"]         # facultatif — à passer avant celle-ci
+
+def appliquer(conn):
+    conn.execute("ALTER TABLE ... ")
+    conn.commit()
+```
+
+- **`NOM` est la clé.** Il ne change JAMAIS une fois la migration partie en
+  production — c'est lui qui dit si elle est déjà passée. Deux chantiers ne
+  choisiront pas le même nom s'ils décrivent ce qu'ils font.
+- **Le préfixe de date ne sert qu'à ordonner par défaut.** Ce n'est pas une clé :
+  deux migrations datées du même jour ne se gênent pas.
+- **`DEPEND` dès qu'une migration en attend une autre** (elle touche une table que
+  l'autre crée). Ne jamais compter sur l'ordre alphabétique : le chantier voisin
+  ne contrôle pas ton nom de fichier, et toi pas le sien.
+- **Toujours rejouable.** `CREATE TABLE IF NOT EXISTS`, test de présence de
+  colonne avant `ALTER TABLE`, `INSERT OR IGNORE` pour les seeds. Une migration
+  doit pouvoir tourner deux fois sans rien casser.
+- **Un `print()` de bilan** en fin de migration quand elle transforme des données
+  (`f"[MySifa] migration X : {n} ligne(s) reprise(s)."`) — c'est ce qui permet de
+  vérifier au démarrage que la reprise a bien eu lieu.
+
+### Ce que fait le lanceur
+
+`app/core/migrations/__init__.py`, appelé en fin de `_migrate()` :
+
+- suit les migrations passées dans `schema_migrations_fichiers` (clé = `nom`) ;
+- lit **aussi** l'ancienne table `schema_migrations` : une migration déplacée
+  depuis `database.py` y est déjà enregistrée sous le même nom et n'est donc pas
+  rejouée sur les bases existantes ;
+- refuse de démarrer si deux fichiers portent le même `NOM`, si un `DEPEND` pointe
+  vers une migration inexistante, ou si les dépendances tournent en rond.
+
+Test associé : `python3 tests/test_migrations_fichiers.py` (application, absence
+de rejeu, reprise d'une base migrée par l'ancien mécanisme, respect de `DEPEND`).
+
+### Ce qu'il ne faut plus faire
+
+- ❌ Ajouter un `if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=N")` dans `_migrate()`
+- ❌ Choisir un numéro de migration, même « libre » sur `origin/staging`
+- ❌ Renuméroter une migration déjà partie en production (le `NOM` la remplace)
+
+---
+
 ## Points d'attention critiques
 
 **Base de données**
 - `duree_heures` est `REAL` — toujours `parseFloat()` côté JS
 - `date_operation` stocké en `"%Y-%m-%dT%H:%M:%S"` heure Paris (pas de timezone dans la chaîne)
 - `TERMINE_KEEP = 2` : les 2 derniers dossiers terminés restent visibles dans la liste
-- Toute nouvelle colonne doit être ajoutée via une migration numérotée dans `_migrate()`
+- Toute nouvelle colonne doit être ajoutée via une migration fichier dans `app/core/migrations/`
 
 **Frontend**
 - La scroll position doit être préservée après tout `renderEntries()` ou drag & drop
@@ -671,11 +747,12 @@ et re-taper `git checkout` retronque à nouveau.
    mount) : demander à l'utilisateur de le supprimer depuis PowerShell avec
    `Remove-Item .git\index.lock -Force`.
 
-**Conflits de numérotation de migration** :
-- Toujours vérifier `origin/staging` avant de choisir un numéro de migration
-  (`git fetch origin && git show origin/staging:app/core/database.py | grep -n "_record_schema_migration(conn, 1[6-9][0-9]"`).
-- Si conflit détecté (deux branches ont utilisé le même numéro), renuméroter
-  la nôtre côté staging local **avant** de merger `origin/staging`, pas après.
+**Conflits de migration** :
+- Le problème est réglé à la source : une nouvelle migration est un fichier de
+  `app/core/migrations/` identifié par son `NOM`, plus par un numéro. Deux
+  chantiers parallèles ne se disputent ni un numéro, ni ce fichier.
+- Si un fichier `database.py` en conflit contient encore une migration numérotée
+  non partie en production, la déplacer vers un fichier plutôt que la renuméroter.
 
 **PowerShell vs bash** :
 - Les blocs bash du CLAUDE.md (`if [[ ]]`, `&& \`, `if/then/fi`) ne fonctionnent
@@ -1279,9 +1356,9 @@ vont dans `kernse/docs/archives/`.
 
 **Base de données — hygiène**
 
-- Toute modification de schéma passe par une migration numérotée dans
-  `_migrate()` (racine `app/core/database.py`). Jamais de `ALTER TABLE`
-  à la main sur prod ni sur v1.
+- Toute modification de schéma passe par une migration fichier dans
+  `app/core/migrations/`. Jamais de `ALTER TABLE` à la main sur prod ni sur v1,
+  jamais de nouveau numéro dans `_migrate()`.
 - **VACUUM + ANALYZE mensuel automatisé** via cron VPS
   (`/etc/cron.d/mysifa-db-maintenance`). Récupère l'espace, met à jour
   les stats de l'optimiseur.

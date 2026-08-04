@@ -2205,6 +2205,10 @@ function icon(name,size=16){
     // Lucide activity — tracé d'électrocardiogramme, utilisé pour les timelines
     // de suivi d'engagement (MyAO et MyExpé devis).
     'activity': '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+    // Lucide paperclip — pièces jointes. Un trombone dessiné au trait, dans le
+    // même jeu que le reste : l'emoji 📎 dépend de la police du poste et casse
+    // l'alignement des lignes où il apparaît.
+    'paperclip': '<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
     'external': '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
     'link': '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
     'globe': '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',

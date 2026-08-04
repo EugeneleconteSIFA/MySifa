@@ -374,15 +374,11 @@ tr.ms-row.open td{background:var(--accent-bg);border-bottom-color:transparent;fo
    du bas sont teintés — la section elle-même reste blanche pour rester lisible. */
 tr.ms-detail-row td{padding:0;background:var(--card);border-bottom:2px solid var(--accent)}
 tr.ms-detail-row:hover td{background:var(--card)}
-.ms-detail{padding:4px 18px 18px}
-.ms-groupe{margin-bottom:16px}
-.ms-groupe:last-child{margin-bottom:0}
-.ms-groupe-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
-  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
-  color:var(--text2);margin-bottom:8px}
-/* Tableau des fournisseurs : teinté comme la ligne ouverte, en-tête détaché
-   par un trait franc. */
-table.ms-table{background:var(--accent-bg);border:1px solid var(--border);border-radius:10px;
+/* La table occupe toute la cellule dépliée : plus rien autour d'elle. */
+.ms-detail{padding:0}
+/* Tableau unique : teinté comme la ligne ouverte, en-tête détaché par un trait
+   franc. Tout est dedans — déclinaison, fournisseur, prix, fiche, actions. */
+table.ms-table{width:100%;background:var(--accent-bg);border:none;border-radius:0;
   overflow:hidden;box-shadow:none}
 table.ms-table th{background:transparent;color:var(--text2);font-weight:700;
   border-bottom:2px solid var(--text2);padding-top:9px;padding-bottom:9px}
@@ -444,3 +440,20 @@ input.ms-prix{max-width:130px;font-variant-numeric:tabular-nums;text-align:right
 .ms-decl-pair{display:inline-flex;align-items:center;gap:10px;font-size:11px;
   text-transform:none;letter-spacing:0;font-weight:400}
 .ms-groupe-actions{display:flex;align-items:center;gap:10px}
+
+/* Boutons d'action en icône seule (la bulle d'aide dit ce qu'ils font). */
+.ico-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;
+  border-radius:7px;border:1px solid transparent;background:transparent;color:var(--text2);
+  cursor:pointer;transition:background .12s,color .12s,border-color .12s}
+.ico-btn:hover{background:var(--card);border-color:var(--border);color:var(--accent)}
+.ico-btn.danger:hover{color:var(--danger);border-color:var(--danger)}
+td.ms-actions{white-space:nowrap;text-align:right}
+th.ms-actions{width:1%}
+td.ms-statut{white-space:nowrap}
+.ms-decl-cell{white-space:nowrap}
+.ms-decl-input{max-width:150px}
+input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
+/* Lignes suivantes d'une même déclinaison : un simple rappel, la valeur ne se
+   saisit qu'une fois. */
+.ms-decl-rappel{color:var(--muted);padding-left:14px}
+.ms-fiche{white-space:nowrap}

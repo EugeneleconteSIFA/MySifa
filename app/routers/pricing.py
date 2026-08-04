@@ -1371,6 +1371,40 @@ def add_mystock_declinaison(request: Request, body: dict = Body(...)):
     return res
 
 
+@router.post("/api/pricing/mystock/declinaisons/valeur")
+def set_mystock_declinaison_valeur(request: Request, body: dict = Body(...)):
+    """Change le grammage (ou la laize) d'une déclinaison, saisi dans sa ligne."""
+    _require_write(request)
+    gsm = body.get("valeur_gsm")
+    with get_db() as conn:
+        res = mystock_prix.set_declinaison_valeur(
+            conn,
+            declinaison_id=_decl_id(body),
+            laize_id=_opt_int(body, "laize_id"),
+            valeur_gsm=float(gsm) if gsm not in (None, "") else None,
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Modification refusée"))
+        conn.commit()
+    return res
+
+
+@router.post("/api/pricing/mystock/prix/dupliquer")
+def dupliquer_mystock_ligne(request: Request, body: dict = Body(...)):
+    """Duplique une ligne de prix sur la même déclinaison, sans fournisseur."""
+    _require_write(request)
+    with get_db() as conn:
+        res = mystock_prix.dupliquer_ligne(
+            conn,
+            declinaison_id=_decl_id(body),
+            fournisseur_id=_opt_int(body, "fournisseur_id"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Duplication refusée"))
+        conn.commit()
+    return res
+
+
 @router.delete("/api/pricing/mystock/declinaisons/{declinaison_id}")
 def delete_mystock_declinaison(request: Request, declinaison_id: int):
     """Retire une déclinaison et les prix qui lui sont rattachés."""
