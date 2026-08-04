@@ -153,7 +153,7 @@ _SQL_PE = """
     SELECT pe.id, pe.machine_id, pe.reference, pe.client, pe.description,
            pe.ref_produit, pe.ref_produit_norm, pe.numero_of, pe.statut,
            pe.planned_start, pe.planned_end, pe.date_livraison, pe.duree_heures,
-           pe.position,
+           pe.position, pe.of_import_id,
            m.nom AS machine_nom,
            oi.qte_etiquettes AS qte_etiquettes,
            oi.qte_bobines    AS qte_bobines,
@@ -624,6 +624,9 @@ def besoins_par_dossier(request: Request):
             "date_livraison": pe.get("date_livraison"),
             "qte_etiquettes": pe.get("qte_etiquettes"),
             "ft_id": pe.get("ft_id"),
+            # Les deux documents consultables depuis la vue par dossier : l'OF
+            # importé et la fiche technique rapprochée.
+            "of_import_id": pe.get("of_import_id"),
             "of_metrage": pe.get("of_metrage"),
             "of_laize": pe.get("of_laize"),
             "besoins": besoins,
