@@ -121,25 +121,87 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     .banner p{font-size:13px;color:var(--text2);line-height:1.65;margin:0}
     .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 16px 14px}
     .muted{color:var(--muted)}
-    .list{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;margin-top:12px}
-    .d{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px;position:relative}
-    .d h3{font-size:14px;font-weight:900;margin-bottom:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-    .d.closed{opacity:.72;background:color-mix(in srgb,var(--muted) 8%,var(--bg))}
-    .d.closed h3{color:var(--text2)}
-    .badge{display:inline-flex;align-items:center;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:800;letter-spacing:.4px;text-transform:uppercase}
+    .list{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;margin-top:12px}
+    /* Carte demande — une hiérarchie explicite plutôt qu'un empilement de
+       lignes grises : en-tête, faits chiffrés, contrainte, échéance, offre,
+       documents. Une seule couleur d'accent (le CP et les liens), une seule
+       couleur d'alerte à la fois. */
+    .d{background:var(--bg);border:1px solid var(--border);border-radius:14px;overflow:hidden;
+      display:flex;flex-direction:column}
+    .d.closed{opacity:.7}
+    .d-head{padding:14px 16px;border-bottom:1px solid var(--border);
+      background:color-mix(in srgb,var(--card) 55%,transparent)}
+    .d-ref{font-size:12px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
+      color:var(--muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .d-cp{display:flex;align-items:baseline;gap:10px;margin-top:6px}
+    .d-cp-lbl{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted)}
+    .d-cp-val{font-size:26px;font-weight:800;letter-spacing:-.5px;color:var(--accent);line-height:1.1}
+    .d.closed .d-cp-val{color:var(--text2)}
+    .badge{display:inline-flex;align-items:center;padding:2px 10px;border-radius:20px;font-size:10px;font-weight:800;letter-spacing:.4px;text-transform:uppercase}
     .badge-closed{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger);border:1px solid color-mix(in srgb,var(--danger) 40%,transparent)}
-    .closed-note{margin-top:10px;padding:8px 12px;background:color-mix(in srgb,var(--danger) 8%,transparent);border-left:3px solid var(--danger);border-radius:6px;font-size:12px;color:var(--text2);line-height:1.55}
-    .dl{margin:8px 0 4px;font-size:12px;color:var(--text2)}
-    .dl strong{color:var(--text)}
-    .dl-late{color:var(--danger);font-weight:800}
-    .files{margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
-    .files-t{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);margin-bottom:6px}
-    .fl{display:block;font-size:13px;color:var(--accent);text-decoration:none;padding:2px 0}
-    .fl:hover{text-decoration:underline}
-    .upl{display:inline-block;margin-top:6px;font-size:12px;font-weight:700;cursor:pointer;
-      padding:6px 12px;border:1px dashed var(--border);border-radius:8px;color:var(--text2)}
-    .upl:hover{border-color:var(--accent);color:var(--accent)}
-    .files-h{font-size:11px;color:var(--text2);opacity:.8;margin-top:5px}
+    /* Faits chiffrés : les cinq informations étaient concaténées avec des
+       points médians, rien ne distinguait un poids d'une contrainte. */
+    /* Filets par `gap` sur fond bordure plutôt que `border-right` : les
+       tuiles reviennent à la ligne selon la largeur de la carte, et un
+       border-right laisserait des filets orphelins en bout de rangée. */
+    /* Deux colonnes fixes et non `auto-fit` : la largeur qui compte est celle
+       de la CARTE, pas celle de la fenêtre, et `auto-fit` laissait des cases
+       vides en fin de rangée — qui se voient, puisque le fond du conteneur
+       fait le filet. */
+    .facts{display:grid;grid-template-columns:repeat(2,1fr);
+      gap:1px;background:var(--border);border-bottom:1px solid var(--border)}
+    .fact{padding:9px 12px;background:var(--bg);display:flex;flex-direction:column;gap:3px;min-width:0}
+    /* Nombre impair de faits : la dernière tuile prend la rangée entière. */
+    .fact:last-child:nth-child(odd){grid-column:1 / -1}
+    .fact-l{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .fact-v{font-size:14px;font-weight:700;color:var(--text);line-height:1.3;overflow-wrap:anywhere}
+    .note{padding:10px 16px;border-bottom:1px solid var(--border);
+      background:color-mix(in srgb,var(--warn) 6%,transparent)}
+    .note-l{display:block;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
+      color:var(--warn);margin-bottom:3px}
+    .note-v{font-size:13px;color:var(--text2);line-height:1.5}
+    .dl{display:flex;align-items:center;justify-content:space-between;gap:10px;
+      padding:9px 16px;border-bottom:1px solid var(--border);font-size:12px}
+    .dl-l{font-weight:700;color:var(--text2);text-transform:uppercase;font-size:10px;letter-spacing:.5px}
+    .dl-v{font-size:14px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
+    .dl-late{background:color-mix(in srgb,var(--danger) 10%,transparent)}
+    .dl-late .dl-l,.dl-late .dl-v{color:var(--danger)}
+    /* Le bloc offre : c'est l'action attendue, il doit se voir en premier
+       coup d'œil et ne pas ressembler au reste de la carte. */
+    .offer{padding:14px 16px;border-bottom:1px solid var(--border)}
+    .offer-t{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
+      color:var(--muted);margin-bottom:8px}
+    .offer-todo{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+    .offer-ask{font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5}
+    .offer-done{background:color-mix(in srgb,var(--success) 7%,transparent)}
+    .offer-vals{display:flex;align-items:baseline;gap:10px}
+    .offer-v{font-size:20px;font-weight:800;color:var(--success);font-variant-numeric:tabular-nums}
+    .offer-sep{color:var(--muted)}
+    .offer-c{font-size:12px;color:var(--text2);margin-top:6px;line-height:1.5}
+    .btn-sm{padding:6px 12px;font-size:12px;margin-top:10px}
+    .sect{padding:12px 16px;border-bottom:1px solid var(--border)}
+    .sect-t{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
+      color:var(--muted);margin-bottom:7px}
+    .d-foot{padding:9px 16px;font-size:11px;color:var(--muted);margin-top:auto}
+    .closed-note{margin:12px 16px;padding:8px 12px;background:color-mix(in srgb,var(--danger) 8%,transparent);border-left:3px solid var(--danger);border-radius:6px;font-size:12px;color:var(--text2);line-height:1.55}
+    .fl{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--accent);
+      text-decoration:none;padding:3px 0;line-height:1.4}
+    .fl svg{flex-shrink:0}
+    .fl:hover span{text-decoration:underline}
+    .upl{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:700;cursor:pointer;
+      padding:8px 14px;border:1px dashed var(--border);border-radius:9px;color:var(--text2)}
+    .upl:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+    .files-h{font-size:11px;color:var(--muted);margin-top:7px;line-height:1.5}
+    /* Fichier choisi mais pas encore parti : il doit se distinguer d'un
+       fichier déjà déposé, sinon on croit l'envoi déjà fait. */
+    .fl-pending{color:var(--text2);cursor:default}
+    .fl-pending span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .fl-tag{font-style:normal;font-size:10px;font-weight:800;text-transform:uppercase;
+      letter-spacing:.5px;color:var(--warn);white-space:nowrap}
+    .fl-x{width:22px;height:22px;flex-shrink:0;border-radius:6px;border:1px solid var(--border);
+      background:transparent;color:var(--muted);cursor:pointer;font-size:14px;line-height:1}
+    .fl-x:hover{border-color:var(--danger);color:var(--danger)}
     .meta{font-size:12px;color:var(--text2);line-height:1.7}
     .btn{border-radius:10px;padding:10px 16px;font-weight:900;cursor:pointer;font-family:inherit;border:1px solid var(--border);background:transparent;color:var(--text);transition:filter .15s,border-color .15s,color .15s,background .15s}
     .btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
@@ -222,6 +284,13 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
         <label id="i18n-label-com">Commentaire (optionnel)</label>
         <textarea id="com" rows="3"></textarea>
       </div>
+      <div style="margin-top:12px">
+        <label id="i18n-label-files">Pièces jointes (optionnel)</label>
+        <div id="m-files"></div>
+        <label class="upl" for="m-file-input" id="i18n-add-file">Joindre un fichier</label>
+        <input type="file" id="m-file-input" hidden>
+        <div class="files-h" id="i18n-file-hint"></div>
+      </div>
       <div class="row" style="justify-content:flex-end;margin-top:12px">
         <button class="btn btn-ghost" type="button" id="cancel">Annuler</button>
         <button class="btn btn-accent" type="button" id="save">Enregistrer</button>
@@ -235,7 +304,7 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
   const TOKEN = __TOKEN_JS__;
   const INIT_LANG = __LANG_JS__;
   const I18N = __I18N_JS__;
-  const S = { data:null, editing:null, lang: INIT_LANG };
+  const S = { data:null, editing:null, lang: INIT_LANG, pendingFiles: [] };
 
   const FLAG_FR = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="18" viewBox="0 0 3 2" aria-hidden="true"><rect width="1" height="2" fill="#002395"/><rect x="1" width="1" height="2" fill="#fff"/><rect x="2" width="1" height="2" fill="#ED2939"/></svg>';
   const FLAG_GB = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="18" viewBox="0 0 60 30" aria-hidden="true"><rect width="60" height="30" fill="#012169"/><path d="M0,0 L60,30 M60,0 L0,30" stroke="#fff" stroke-width="6"/><path d="M0,0 L60,30 M60,0 L0,30" stroke="#C8102E" stroke-width="3"/><path d="M30,0 V30 M0,15 H60" stroke="#fff" stroke-width="10"/><path d="M30,0 V30 M0,15 H60" stroke="#C8102E" stroke-width="6"/></svg>';
@@ -278,6 +347,9 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     const lp=document.getElementById('i18n-label-prix'); if(lp) lp.textContent=t('labelPrice');
     const ld=document.getElementById('i18n-label-delai'); if(ld) ld.textContent=t('labelDelay');
     const lc=document.getElementById('i18n-label-com'); if(lc) lc.textContent=t('labelComment');
+    const lf=document.getElementById('i18n-label-files'); if(lf) lf.textContent=t('labelFiles');
+    const af=document.getElementById('i18n-add-file'); if(af) af.innerHTML=CLIP+' '+esc(t('addFile'));
+    const fh=document.getElementById('i18n-file-hint'); if(fh) fh.textContent=t('fileHint');
     const com=document.getElementById('com'); if(com) com.placeholder=t('commentPh');
     const ca=document.getElementById('cancel'); if(ca) ca.textContent=t('cancel');
     const sa=document.getElementById('save'); if(sa) sa.textContent=t('save');
@@ -312,16 +384,61 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     if(!r.ok) throw new Error(apiErr(j,txt)||('HTTP '+r.status));
     return j;
   }
+  // Fichiers choisis dans le modal mais pas encore partis. Ils ne sont envoyés
+  // qu'APRÈS l'enregistrement de l'offre : si le prix est refusé, on ne laisse
+  // pas un fichier orphelin rattaché à une réponse qui n'existe pas encore.
+  function renderModalFiles(){
+    const zone=document.getElementById('m-files');
+    const it=S.editing;
+    if(!zone) return;
+    zone.innerHTML='';
+    const deja=(it&&it.mes_fichiers)||[];
+    deja.forEach(function(p){
+      const a=document.createElement('a');
+      a.className='fl';
+      a.href='/portail/expe/'+encodeURIComponent(TOKEN)+'/pj/'+p.id;
+      a.target='_blank'; a.rel='noopener';
+      a.innerHTML=CLIP+'<span>'+esc(p.filename||'')+'</span>';
+      zone.appendChild(a);
+    });
+    S.pendingFiles.forEach(function(f,i){
+      const row=document.createElement('div');
+      row.className='fl fl-pending';
+      row.innerHTML=CLIP+'<span>'+esc(f.name)+'</span>'
+        +'<em class="fl-tag">'+esc(t('pendingFiles'))+'</em>';
+      const del=document.createElement('button');
+      del.type='button'; del.className='fl-x'; del.textContent='×'; del.title=t('remove');
+      del.addEventListener('click',function(){ S.pendingFiles.splice(i,1); renderModalFiles(); });
+      row.appendChild(del);
+      zone.appendChild(row);
+    });
+    const add=document.getElementById('i18n-add-file');
+    if(add) add.style.display=(deja.length+S.pendingFiles.length>=5)?'none':'inline-flex';
+  }
+
   function openModal(item){
     S.editing=item;
-    document.getElementById('mt').textContent=t('request')+' #'+item.demande_id+' — '+(item.code_postal_destination||'');
+    S.pendingFiles=[];
+    const ref = item.reference ? (t('request')+' '+item.reference) : (t('request')+' #'+item.demande_id);
+    document.getElementById('mt').textContent=ref+' — '+(item.code_postal_destination||'');
     document.getElementById('prix').value = item.prix!=null ? String(item.prix) : '';
     document.getElementById('delai').value = item.delai_jours!=null ? String(item.delai_jours) : '';
     document.getElementById('com').value = item.commentaire||'';
+    renderModalFiles();
     document.getElementById('ov').style.display='flex';
     setTimeout(()=>{ document.getElementById('prix').focus(); },0);
   }
-  function closeModal(){ document.getElementById('ov').style.display='none'; S.editing=null; }
+  function closeModal(){
+    document.getElementById('ov').style.display='none';
+    S.editing=null; S.pendingFiles=[];
+  }
+
+  // Trombone en SVG inline plutôt qu'en emoji : l'emoji dépend de la police
+  // installée sur le poste du transporteur et casse l'alignement des lignes.
+  const CLIP='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    +'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" '
+    +'><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19'
+    +'a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
 
   function render(){
     const who=document.getElementById('who');
@@ -338,63 +455,95 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
       const paletteKey = it.type_palette ? String(it.type_palette).trim().toLowerCase() : '';
       const paletteLabelKey = paletteKey ? ('pallet_'+paletteKey) : '';
       const paletteLabel = paletteLabelKey && t(paletteLabelKey)!==paletteLabelKey ? t(paletteLabelKey) : paletteKey;
-      const meta = [
-        it.poids_total_kg!=null ? (it.poids_total_kg+' kg') : null,
-        it.nb_palette!=null ? (it.nb_palette+' '+t('pallets')) : null,
-        paletteLabel ? (t('palletType')+' : '+paletteLabel) : null,
-        it.type_envoi ? typeLabel(it.type_envoi) : null,
-        it.contraintes ? (t('constraints')+': '+it.contraintes) : null,
-      ].filter(Boolean).join(' · ');
       const isClosed = it.demande_statut==='cloturee';
-      const canReply = !isClosed && !['retenue','recue'].includes(it.reponse_statut);
-      const btn = canReply ? '<button class="btn btn-accent" data-id="'+it.demande_id+'">'+esc(t('reply'))+'</button>' : '';
-      const deja = !canReply && !isClosed && it.prix!=null ? '<span class="muted">'+esc(t('saved'))+'</span>' : '';
-      const priceTxt = it.prix!=null ? (t('price')+': <strong>'+Number(it.prix).toFixed(2)+' €</strong>') : (t('price')+': '+t('dash'));
-      const delTxt = it.delai_jours!=null ? (t('delay')+': <strong>J+'+it.delai_jours+'</strong>') : (t('delay')+': '+t('dash'));
+      const aRepondu = it.prix!=null;
+      const canReply = !isClosed;
+
+      // ── En-tête : référence + code postal en évidence ──
+      // Le CP est LA donnée sur laquelle un transporteur décide s'il chiffre
+      // ou non. Il était noyé dans le titre, il devient le point d'ancrage.
+      const ref = it.reference ? (t('request')+' '+it.reference) : (t('request')+' #'+it.demande_id);
       const closedBadge = isClosed ? '<span class="badge badge-closed">'+esc(t('closedBadge'))+'</span>' : '';
-      const closedNote = isClosed ? '<div class="closed-note">'+esc(t('closedNote'))+'</div>' : '';
-      // Échéance : le transporteur doit la voir sans relire l'email. Le retard
-      // est rouge — une date neutre déjà passée ne se remarque pas.
+      const head = '<div class="d-head">'
+        +'<div class="d-ref">'+esc(ref)+closedBadge+'</div>'
+        +'<div class="d-cp"><span class="d-cp-lbl">'+esc(t('destination'))+'</span>'
+        +'<span class="d-cp-val">'+esc(it.code_postal_destination||t('dash'))+'</span></div>'
+        +'</div>';
+
+      // ── Faits : une tuile par donnée, plutôt qu'une ligne grise unique ──
+      // Les cinq informations étaient concaténées avec des points médians :
+      // rien ne distinguait le poids d'une contrainte de livraison.
+      const fait=function(lbl,val){
+        return val ? '<div class="fact"><span class="fact-l">'+esc(lbl)+'</span>'
+          +'<span class="fact-v">'+esc(val)+'</span></div>' : '';
+      };
+      const facts = '<div class="facts">'
+        + fait(t('weight'), it.poids_total_kg!=null ? (it.poids_total_kg+' kg') : '')
+        + fait(t('pallets'), it.nb_palette!=null ? String(it.nb_palette) : '')
+        + fait(t('shipmentType'), it.type_envoi ? typeLabel(it.type_envoi) : '')
+        + fait(t('palletType'), paletteLabel)
+        + '</div>';
+
+      // ── Contraintes : encadré à part, jamais fondu dans les faits ──
+      const note = it.contraintes
+        ? '<div class="note"><span class="note-l">'+esc(t('constraints'))+'</span>'
+          +'<span class="note-v">'+esc(it.contraintes)+'</span></div>'
+        : '';
+
+      // ── Échéance : un seul bandeau, une seule couleur à la fois ──
       let dlNote='';
       const dl=(it.date_limite||'').slice(0,10);
       if(dl && !isClosed){
         const auj=new Date().toISOString().slice(0,10);
-        dlNote = dl<auj
-          ? '<div class="dl dl-late">'+esc(t('deadlineLate'))+' — '+esc(dl)+'</div>'
-          : '<div class="dl">'+esc(t('deadline'))+' <strong>'+esc(dl)+'</strong></div>';
+        const tard = dl<auj;
+        dlNote = '<div class="dl'+(tard?' dl-late':'')+'">'
+          +'<span class="dl-l">'+esc(tard?t('deadlineLate'):t('deadline'))+'</span>'
+          +'<span class="dl-v">'+esc(dl)+'</span></div>';
       }
+
+      // ── Votre offre : le bloc qui appelle à l'action ──
+      let offre;
+      if(aRepondu){
+        offre = '<div class="offer offer-done">'
+          +'<div class="offer-t">'+esc(t('yourOffer'))+'</div>'
+          +'<div class="offer-vals"><span class="offer-v">'+Number(it.prix).toFixed(2)+' €</span>'
+          +'<span class="offer-sep">·</span><span class="offer-v">J+'+esc(it.delai_jours)+'</span></div>'
+          + (it.commentaire ? '<div class="offer-c">'+esc(it.commentaire)+'</div>' : '')
+          + (canReply ? '<button class="btn btn-ghost btn-sm" data-id="'+it.demande_id+'">'+esc(t('editReply'))+'</button>' : '')
+          +'</div>';
+      }else if(canReply){
+        offre = '<div class="offer offer-todo">'
+          +'<div class="offer-t">'+esc(t('yourOffer'))+'</div>'
+          +'<div class="offer-ask">'+esc(t('awaitingOffer'))+'</div>'
+          +'<button class="btn btn-accent" data-id="'+it.demande_id+'">'+esc(t('reply'))+'</button>'
+          +'</div>';
+      }else{
+        offre = '';
+      }
+
+      // ── Documents ──
       const docs=(it.pieces_jointes||[]);
+      const mine=(it.mes_fichiers||[]);
       const lien=function(p){
         return '<a class="fl" href="/portail/expe/'+encodeURIComponent(TOKEN)+'/pj/'+p.id
-          +'" target="_blank" rel="noopener">&#128206; '+esc(p.filename||'')+'</a>';
+          +'" target="_blank" rel="noopener">'+CLIP+'<span>'+esc(p.filename||'')+'</span></a>';
       };
-      const docsHtml = docs.length
-        ? '<div class="files"><div class="files-t">'+esc(t('docs'))+'</div>'+docs.map(lien).join('')+'</div>'
-        : '';
-      const mine=(it.mes_fichiers||[]);
-      const peutJoindre = !isClosed && mine.length<5;
-      const mineHtml = (mine.length||peutJoindre)
-        ? '<div class="files"><div class="files-t">'+esc(t('myFiles'))+'</div>'+mine.map(lien).join('')
-          + (peutJoindre
-              ? '<label class="upl">'+esc(t('addFile'))+'<input type="file" data-up="1" hidden></label>'
-                +'<div class="files-h">'+esc(t('fileHint'))+'</div>'
-              : '')
-          + '</div>'
-        : '';
-      const html = '<div class="d'+(isClosed?' closed':'')+'"><h3>'+esc(t('request'))+' #'+it.demande_id+' — '+esc(it.code_postal_destination||'')+closedBadge+'</h3>'
-        +'<div class="meta"><span class="muted">'+esc(meta||'')+'</span>'+deja+'<br>'
-        +'<span class="muted">'+esc(t('created'))+' '+(it.created_at||'').slice(0,10)+'</span></div>'
-        +dlNote
-        +'<div class="row" style="justify-content:space-between"><div class="meta">'+priceTxt+' · '+delTxt+'</div>'+btn+'</div>'
-        +docsHtml+mineHtml
-        +closedNote+'</div>';
+      const sect=function(titre,contenu){
+        return '<div class="sect"><div class="sect-t">'+esc(titre)+'</div>'+contenu+'</div>';
+      };
+      const docsHtml = docs.length ? sect(t('docs'), docs.map(lien).join('')) : '';
+      const mineHtml = mine.length ? sect(t('myFiles'), mine.map(lien).join('')) : '';
+
+      const closedNote = isClosed ? '<div class="closed-note">'+esc(t('closedNote'))+'</div>' : '';
+      const cree = '<div class="d-foot">'+esc(t('created'))+' '+esc((it.created_at||'').slice(0,10))+'</div>';
+
       const wrap=document.createElement('div');
-      wrap.innerHTML=html;
+      wrap.innerHTML = '<div class="d'+(isClosed?' closed':'')+'">'
+        +head+facts+note+dlNote+offre+docsHtml+mineHtml+closedNote+cree+'</div>';
       const node=wrap.firstElementChild;
-      const b=node.querySelector('button[data-id]');
-      if(b) b.addEventListener('click',()=>openModal(it));
-      const up=node.querySelector('input[data-up]');
-      if(up) up.addEventListener('change',function(ev){ void uploadFichier(it.demande_id, ev.target); });
+      node.querySelectorAll('button[data-id]').forEach(function(b){
+        b.addEventListener('click',()=>openModal(it));
+      });
       list.appendChild(node);
     });
   }
@@ -406,11 +555,9 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
 
   // Dépôt d'un fichier joint à l'offre. Sans cela, la cotation PDF partait par
   // mail à côté du portail et n'entrait jamais dans le comparatif.
-  async function uploadFichier(demandeId, input){
-    const f=(input.files&&input.files[0])||null;
-    input.value='';
-    if(!f) return;
-    if(f.size > 20*1024*1024){ showToast(t('fileTooBig'), 'bad'); return; }
+  // Retourne true/false plutôt que de lever : l'appelant enchaîne plusieurs
+  // fichiers et un échec sur l'un ne doit pas annuler les autres.
+  async function envoyerFichier(demandeId, f){
     const fd=new FormData(); fd.append('file', f);
     try{
       const r=await fetch('/api/portail/expe/'+encodeURIComponent(TOKEN)+'/demandes/'+demandeId+'/piece-jointe',
@@ -418,11 +565,11 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
       if(!r.ok){
         let msg=t('error');
         try{ const j=await r.json(); msg=j.detail||msg; }catch(e){}
-        throw new Error(msg);
+        showToast(msg, 'bad');
+        return false;
       }
-      showToast(t('fileSent'), 'ok');
-      await load();
-    }catch(e){ showToast(e.message||t('error'), 'bad'); }
+      return true;
+    }catch(e){ showToast(e.message||t('error'), 'bad'); return false; }
   }
 
   document.getElementById('langBtn').addEventListener('click',()=>{
@@ -448,10 +595,26 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
           commentaire: (document.getElementById('com').value||'').trim()||null
         })
       });
-      showToast(t('toastSaved'), 'ok');
+      // L'offre est enregistrée : on peut envoyer les fichiers. Un échec
+      // d'upload ne remet pas l'offre en cause, il est signalé à part.
+      let ko=0;
+      for(const f of S.pendingFiles){
+        const ok=await envoyerFichier(it.demande_id, f);
+        if(!ok) ko++;
+      }
+      showToast(ko?(t('toastSaved')+' — '+ko+' '+t('error')):t('toastSaved'), ko?'bad':'ok');
       closeModal();
       await load();
     }catch(e){ showToast(e.message||t('error'), 'bad'); }
+  });
+
+  document.getElementById('m-file-input').addEventListener('change',function(ev){
+    const f=(ev.target.files&&ev.target.files[0])||null;
+    ev.target.value='';
+    if(!f) return;
+    if(f.size > 20*1024*1024){ showToast(t('fileTooBig'), 'bad'); return; }
+    S.pendingFiles.push(f);
+    renderModalFiles();
   });
 
   document.getElementById('themeBtn').addEventListener('click',()=>{
