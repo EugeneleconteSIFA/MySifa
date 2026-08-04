@@ -340,6 +340,10 @@ body.reduce-anim .cal-skel{animation:none}
 .cal-wv-body{transition:box-shadow .12s}
 .cal-wv-body.cal-edge-prev{box-shadow:inset 5px 0 0 var(--accent)}
 .cal-wv-body.cal-edge-next{box-shadow:inset -5px 0 0 var(--accent)}
+/* v2.7.1 : bord ROUGE = la bascule de periode est verrouillee pour l'occurrence
+   en cours de deplacement (elle doit rester dans sa semaine / son mois). */
+.cal-wv-body.cal-edge-blocked-prev{box-shadow:inset 5px 0 0 var(--danger,#f87171)}
+.cal-wv-body.cal-edge-blocked-next{box-shadow:inset -5px 0 0 var(--danger,#f87171)}
 /* v2.6.1 : colonnes de dates passees — ni creation ni depot. Trame legere pour
    que le refus soit lisible AVANT le geste, pas seulement apres. */
 .cal-wv-day-col.is-past-col{background-image:repeating-linear-gradient(45deg,transparent,transparent 7px,rgba(128,128,128,.055) 7px,rgba(128,128,128,.055) 14px);cursor:not-allowed}
@@ -4360,9 +4364,43 @@ function _calEdgeDirection(e){
   return null;
 }
 
+// v2.7.1 : la bascule de periode (bandes de bord + fleches) doit-elle rester
+// active pendant ce drag ? Non si la periode visee ne contient AUCUNE date
+// atteignable pour l'occurrence en cours.
+//
+// La nuance compte : une occurrence HEBDOMADAIRE ne peut jamais sortir de sa
+// semaine, donc toute navigation est inutile. Une occurrence MENSUELLE, elle,
+// peut parfaitement traverser des semaines a l'interieur de son mois — on ne
+// bloque alors que les semaines entierement hors du mois.
+function _calWeekNavAllowed(dir){
+  if(!_CAL_DRAG) return true;
+  const rt = _calRecurTypeOf(_CAL_DRAG.ev);
+  if(!rt) return true;                       // creneau libre : navigation libre
+  const p = _calPeriodKey(_CAL_DRAG.origDate, rt);
+  if(!p) return true;
+  const step = (dir === 'prev') ? -1 : 1;
+  let base;
+  try{
+    if(CAL_STATE.view === 'day'){
+      const d = CAL_STATE.dayDate;
+      base = new Date(d.getFullYear(), d.getMonth(), d.getDate() + step);
+      return _calPeriodKey(base, rt) === p;
+    }
+    const ws = CAL_STATE.weekStart;
+    base = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + 7 * step);
+  }catch(_){ return true; }
+  // Au moins un jour de la semaine visee appartient-il a la meme periode ?
+  for(let i = 0; i < 7; i++){
+    const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i);
+    if(_calPeriodKey(d, rt) === p) return true;
+  }
+  return false;
+}
+
 function _clearCalEdgeCue(){
   const body = document.getElementById('cal-wv-body');
-  if(body) body.classList.remove('cal-edge-prev', 'cal-edge-next');
+  if(body) body.classList.remove('cal-edge-prev', 'cal-edge-next',
+                                 'cal-edge-blocked-prev', 'cal-edge-blocked-next');
   document.querySelectorAll('.cal-nav button.cal-drop-target-nav').forEach(function(b){
     b.classList.remove('cal-drop-target-nav');
   });
@@ -4373,7 +4411,17 @@ function _handleCrossWeekHover(el, e){
   const btnPrev = el ? el.closest('button[onclick="calPrev()"]') : null;
   const btnNext = el ? el.closest('button[onclick="calNext()"]') : null;
   const btn = btnPrev || btnNext;
-  const dir = btnPrev ? 'prev' : (btnNext ? 'next' : _calEdgeDirection(e));
+  let dir = btnPrev ? 'prev' : (btnNext ? 'next' : _calEdgeDirection(e));
+  // v2.7.1 : navigation refusee -> on signale le blocage au lieu de laisser
+  // croire que le depot sera possible de l'autre cote.
+  if(dir && !_calWeekNavAllowed(dir)){
+    const _b = document.getElementById('cal-wv-body');
+    if(_b) _b.classList.add(dir === 'prev' ? 'cal-edge-blocked-prev' : 'cal-edge-blocked-next');
+    dir = null;
+  } else {
+    const _b = document.getElementById('cal-wv-body');
+    if(_b) _b.classList.remove('cal-edge-blocked-prev', 'cal-edge-blocked-next');
+  }
   // Direction inchangee : le timer en cours court toujours, on ne le relance
   // pas. C'est aussi ce qui empeche d'enchainer les semaines sans relacher —
   // apres une bascule, _navHoverDir reste arme tant qu'on n'a pas quitte la
