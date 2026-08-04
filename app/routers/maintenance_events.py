@@ -1590,28 +1590,46 @@ def _ensure_recurring_events_generated(conn, horizon_days: int = 90,
     return total
 
 
+def _period_key(d, rtype: str) -> str:
+    """v2.6.1 : periode de recurrence a laquelle appartient une date.
+
+    Une recurrence produit AU PLUS UNE occurrence par periode : une par semaine
+    en hebdomadaire, une par mois en mensuel, etc. C'est cette contrainte qui
+    remplace l'ancien appariement positionnel entre occurrences et dates cibles
+    — appariement qui decalait toute la serie des qu'une occurrence etait
+    preservee ou manquante, et pouvait produire deux creneaux la meme semaine.
+    """
+    if rtype == "monthly":
+        return f"{d.year}-M{d.month:02d}"
+    if rtype == "quarterly":
+        return f"{d.year}-Q{(d.month - 1) // 3 + 1}"
+    if rtype == "yearly":
+        return f"{d.year}"
+    y, w, _ = d.isocalendar()   # weekly (defaut) : semaine ISO
+    return f"{y}-W{w:02d}"
+
+
 def _replace_recurrence_dates(conn, template_id: int, exclude_ids=None, horizon_days: int = 90) -> dict:
     """v2.6.1 : applique une NOUVELLE regle de recurrence aux occurrences futures
-    en les DEPLACANT, au lieu de les purger puis les regenerer.
+    en les DEPLACANT dans leur propre periode, au lieu de les purger.
 
-    Pourquoi : les deux dimensions d'un modele sont independantes. Le contenu
-    (les operations) et la planification (regle + horaires) ne doivent jamais
-    se contaminer. L'ancienne purge supprimait les occurrences et les recreait
-    depuis le modele : une simple correction du jour de recurrence detruisait
-    donc toutes les personnalisations d'operations, ainsi que l'avancement deja
-    saisi par les operateurs — alors que seule la planification avait bouge.
+    Les deux dimensions d'un modele sont independantes : le contenu (les
+    operations) et la planification (regle + horaires) ne se contaminent pas.
+    Une purge/regeneration detruirait les personnalisations d'operations et
+    l'avancement saisi par les operateurs, alors que seule la planification a
+    change.
 
-    Principe : les occurrences existantes sont appariees DANS L'ORDRE aux dates
-    de la nouvelle regle (la 1re du lundi devient la 1re du mardi, etc.). On ne
-    touche qu'a date_prevue et aux horaires ; les lignes d'operations, leurs
-    statuts et les operateurs assignes restent intacts.
+    Principe : UNE occurrence par periode (cf. _period_key). Chaque occurrence
+    existante est rattachee a sa periode et deplacee vers la date cible de
+    CETTE periode. Elle ne peut donc ni changer de semaine, ni se retrouver a
+    cote d'une autre.
 
-    template_origin_date est realigne sur la nouvelle date : sans cela la
-    generation, qui dedoublonne sur (template_id, template_origin_date),
-    recreerait un doublon a chaque date cible.
+    template_origin_date est realigne sur la date cible : la generation
+    dedoublonne dessus, sans quoi elle recreerait un doublon a chaque cible.
 
-    exclude_ids : creneaux que l'admin a choisi de laisser ou ils sont. Ils ne
-    sont ni deplaces ni supprimes ; la serie se regenere autour d'eux.
+    exclude_ids : occurrences que l'admin a choisi de laisser en place. Elles ne
+    bougent pas, mais OCCUPENT leur periode — leur ancrage y est realigne, ce
+    qui empeche la generation d'ajouter un creneau a cote d'elles.
     """
     tmpl = _load_template_full(conn, template_id)
     if not tmpl:
@@ -1620,6 +1638,13 @@ def _replace_recurrence_dates(conn, template_id: int, exclude_ids=None, horizon_
     until = today + timedelta(days=horizon_days)
     now = _now_paris_iso()
     skip = set(int(x) for x in (exclude_ids or []))
+    rtype = tmpl.get("recurrence_type") or "weekly"
+
+    def _d(iso_str):
+        try:
+            return date.fromisoformat(str(iso_str)[:10])
+        except (ValueError, TypeError):
+            return None
 
     rows = conn.execute(
         "SELECT id, date_prevue FROM maintenance_events "
@@ -1628,63 +1653,75 @@ def _replace_recurrence_dates(conn, template_id: int, exclude_ids=None, horizon_
         "ORDER BY date_prevue ASC, id ASC",
         (template_id, today.isoformat()),
     ).fetchall()
-    # Dates de la nouvelle regle, sur le meme horizon que la generation.
-    targets = []
+
+    # Dates cibles de la nouvelle regle, indexees par periode.
+    targets_by_period = {}
     cursor = today
     for _ in range(500):
         nxt = _compute_next_occurrence(tmpl, cursor)
         if nxt is None or nxt > until:
             break
-        targets.append(nxt)
+        targets_by_period.setdefault(_period_key(nxt, rtype), nxt)
         cursor = nxt + timedelta(days=1)
+
+    # Occurrences existantes regroupees par periode.
+    by_period = {}
+    for r in rows:
+        d = _d(r["date_prevue"])
+        if d is None:
+            continue
+        by_period.setdefault(_period_key(d, rtype), []).append(r)
 
     hd = tmpl.get("recurrence_time_start") or ""
     hf = tmpl.get("recurrence_time_end") or ""
-    # TOUTES les occurrences sont appariees aux dates cibles, y compris celles
-    # que l'admin a choisi de preserver : chacune CONSOMME une place dans la
-    # serie. Une occurrence preservee ne bouge pas, mais son
-    # template_origin_date est realigne sur la date cible qu'elle occupe.
-    #
-    # Sans ce realignement, la date cible paraissait libre a la generation
-    # (qui dedoublonne sur template_origin_date) et une occurrence y etait
-    # creee : l'admin demandait « laisse ce creneau ou il est » et se
-    # retrouvait avec son creneau ET un nouveau a cote.
-    n = min(len(rows), len(targets))
-    moved = 0
-    for i in range(n):
-        eid = int(rows[i]["id"])
-        iso = targets[i].isoformat()
-        if eid in skip:
-            # Preserve : ni date ni horaires touches. Seul l'ancrage bouge,
-            # pour reserver la place et rester marque « deplace a la main »
-            # (date_prevue <> template_origin_date).
-            conn.execute(
-                "UPDATE maintenance_events SET template_origin_date=?, updated_at=? WHERE id=?",
-                (iso, now, eid),
-            )
-            continue
-        conn.execute(
-            "UPDATE maintenance_events SET date_prevue=?, heure_debut=?, heure_fin=?, "
-            "       template_origin_date=?, updated_at=? WHERE id=?",
-            (iso, hd, hf, iso, now, eid),
-        )
-        moved += 1
-    # Occurrences en trop (la nouvelle regle en produit moins) : supprimees,
-    # sauf celles que l'admin a explicitement demande de preserver.
-    removed = 0
-    for r in rows[n:]:
-        eid = int(r["id"])
-        if eid in skip:
-            continue
+
+    def _drop(eid: int):
         conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
         conn.execute("DELETE FROM maintenance_event_operators WHERE event_id = ?", (eid,))
         conn.execute("DELETE FROM maintenance_events WHERE id = ?", (eid,))
-        removed += 1
-    # Occurrences manquantes : la generation est idempotente (dedup sur
-    # template_origin_date, desormais realigne) — elle ne cree que les trous.
+
+    moved = removed = 0
+    for period, occs in by_period.items():
+        tgt = targets_by_period.get(period)
+        # Dans une periode qui en contient plusieurs (changement de frequence,
+        # doublon historique), on garde UNE occurrence : une preservee en
+        # priorite, sinon la plus ancienne. Le reste part.
+        occs = sorted(occs, key=lambda r: (0 if int(r["id"]) in skip else 1, r["date_prevue"]))
+        keeper, extras = occs[0], occs[1:]
+        if tgt is None:
+            # Periode que la nouvelle regle ne couvre pas : rien a y faire.
+            for r in occs:
+                if int(r["id"]) in skip:
+                    continue
+                _drop(int(r["id"]))
+                removed += 1
+            continue
+        kid = int(keeper["id"])
+        iso = tgt.isoformat()
+        if kid in skip:
+            # Preservee : ni date ni horaires touches, mais elle occupe la
+            # periode — l'ancrage y est realigne pour bloquer la generation.
+            conn.execute(
+                "UPDATE maintenance_events SET template_origin_date=?, updated_at=? WHERE id=?",
+                (iso, now, kid),
+            )
+        else:
+            conn.execute(
+                "UPDATE maintenance_events SET date_prevue=?, heure_debut=?, heure_fin=?, "
+                "       template_origin_date=?, updated_at=? WHERE id=?",
+                (iso, hd, hf, iso, now, kid),
+            )
+            moved += 1
+        for r in extras:
+            if int(r["id"]) in skip:
+                continue
+            _drop(int(r["id"]))
+            removed += 1
+
+    # Periodes sans occurrence : la generation les cree (idempotente, dedup sur
+    # template_origin_date, desormais realigne).
     created = _generate_events_for_template(conn, template_id, until)
     return {"moved": moved, "removed": removed, "created": created}
-
 
 def _event_divergence(conn, event_id: int, tmpl: dict) -> dict:
     """v2.6.1 : en quoi les operations d'un creneau s'ecartent-elles du modele ?
