@@ -48,6 +48,20 @@ def _table_existe(conn: sqlite3.Connection, table: str) -> bool:
     ).fetchone() is not None
 
 
+def _index(conn: sqlite3.Connection, nom: str, table: str, colonnes: list[str]) -> None:
+    """Crée un index seulement si TOUTES ses colonnes existent.
+
+    Une migration doit pouvoir tourner sur une base en retard sans exploser :
+    indexer une colonne absente ferait échouer toute la migration, y compris
+    les ALTER TABLE déjà réussis avant elle.
+    """
+    presentes = _colonnes(conn, table)
+    if all(c in presentes for c in colonnes):
+        conn.execute(
+            f"CREATE INDEX IF NOT EXISTS {nom} ON {table}({', '.join(colonnes)})"
+        )
+
+
 def appliquer(conn: sqlite3.Connection) -> None:
     # ── 1. Expéditions : origine partenaire et claims ────────────────────
     if _table_existe(conn, "expe_departs"):
@@ -81,16 +95,11 @@ def appliquer(conn: sqlite3.Connection) -> None:
                 "INTEGER NOT NULL DEFAULT 0"
             )
 
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_expe_fsc_fourn "
-            "ON expe_departs(fsc_fournisseur_id)"
-        )
+        _index(conn, "idx_expe_fsc_fourn", "expe_departs", ["fsc_fournisseur_id"])
         # Les départs A2 sont ceux qu'un auditeur voudra lister : index dédié
         # plutôt qu'un balayage complet de la table à chaque contrôle.
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_expe_fsc_direct "
-            "ON expe_departs(fsc_sans_transit, date_enlevement)"
-        )
+        _index(conn, "idx_expe_fsc_direct", "expe_departs",
+               ["fsc_sans_transit", "date_enlevement"])
 
     # ── 2. Réception de produit fini : verdict de certificat figé ────────
     #
@@ -114,21 +123,9 @@ def appliquer(conn: sqlite3.Connection) -> None:
         if "certificat_note" not in cols:
             conn.execute("ALTER TABLE pf_receptions ADD COLUMN certificat_note TEXT")
 
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_pf_recep_fourn "
-            "ON pf_receptions(fournisseur_id)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_pf_recep_date "
-            "ON pf_receptions(date_reception)"
-        )
+        _index(conn, "idx_pf_recep_fourn", "pf_receptions", ["fournisseur_id"])
+        _index(conn, "idx_pf_recep_date", "pf_receptions", ["date_reception"])
 
     if _table_existe(conn, "pf_reception_items"):
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_pf_recep_items_recep "
-            "ON pf_reception_items(reception_id)"
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_pf_recep_items_lot "
-            "ON pf_reception_items(lot_stock_id)"
-        )
+        _index(conn, "idx_pf_recep_items_recep", "pf_reception_items", ["reception_id"])
+        _index(conn, "idx_pf_recep_items_lot", "pf_reception_items", ["lot_stock_id"])

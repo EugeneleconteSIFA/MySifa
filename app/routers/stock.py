@@ -5918,6 +5918,26 @@ def delete_negoce_produit(reference: str, request: Request):
             raise HTTPException(
                 409, "Impossible de supprimer : stock non nul. Soldez le stock d'abord."
             )
+
+        # Retention FSC : un stock solde n'efface pas l'historique. Si ce
+        # produit a porte des lots ou des mouvements certifies, les supprimer
+        # romprait la chaine reception -> lot -> expedition sur des ventes
+        # deja facturees avec un claim.
+        fsc_hist = conn.execute(
+            """SELECT (SELECT COUNT(*) FROM lots_stock
+                        WHERE produit_id=? AND COALESCE(fsc,0)=1)
+                     + (SELECT COUNT(*) FROM mouvements_stock
+                        WHERE produit_id=? AND COALESCE(fsc,0)=1) AS n""",
+            (cat["id"], cat["id"]),
+        ).fetchone()["n"]
+        if fsc_hist:
+            raise HTTPException(
+                409,
+                f"Suppression impossible : {ref} porte {fsc_hist} "
+                "enregistrement(s) FSC. Ces traces doivent etre conservees 5 ans. "
+                "Desactiver la reference plutot que la supprimer."
+            )
+
         conn.execute("DELETE FROM stock_emplacements WHERE produit_id=?", (cat["id"],))
         conn.execute("DELETE FROM lots_stock WHERE produit_id=?", (cat["id"],))
         conn.execute("DELETE FROM produits WHERE id=?", (cat["id"],))

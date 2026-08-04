@@ -4381,46 +4381,36 @@ function renderRefDetail(){
   const cov = S.currentRefFour;
   const covLbl = {valide:'Valide', expire_bientot:'Expire bientôt', sans_date:'Sans date', expire:'Expiré'};
   const covCls = {valide:'', expire_bientot:'soon', sans_date:'nod', expire:'soon'};
-  const fournDocsHtml = !cov ? '' : `
-    <div class="ref-block">
-      <h3>Documents fournisseurs <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(${cov.documents.length}) — certificats tagués « ${escHtml(f.acronyme||f.nom)} »</span></h3>
-      ${cov.documents.length ? cov.documents.map(d=>`
-        <div class="ref-doc-item">
-          <span class="res-has-badge ${covCls[d.statut]||''}">${escHtml(covLbl[d.statut]||d.statut)}</span>
-          <div class="who">
-            <div class="f">${escHtml(d.fournisseur_nom||'—')}${d.groupe_ref?` <span style="font-weight:400;color:var(--muted)">· groupe ${escHtml(d.groupe_ref)}</span>`:(d.fournisseur_branche?` <span style="font-weight:400;color:var(--muted)">· ${escHtml(d.fournisseur_branche)}</span>`:'')}</div>
-            <div class="t">${escHtml(d.titre||d.original_name||'')}${d.date_expiration?' · expire le '+escHtml(d.date_expiration):' · sans date d\'expiration'}</div>
-          </div>
-          <a class="dl" href="/api/qualite/ressources/certificats/${d.id}/download" target="_blank" rel="noopener" onclick="event.stopPropagation()">Ouvrir</a>
-        </div>`).join('')
-      : '<div class="ref-cov-empty">Aucun certificat fournisseur n\'est tagué sur cette fiche. Le tag se pose à l\'ajout d\'un certificat, dans Ressources fournisseurs.</div>'}
+  // Ligne compacte : le nom porte le groupe/branche en title plutôt que sur
+  // une seconde ligne — avec 30 fournisseurs, deux lignes par entrée font
+  // défiler la page pour une information qu'on relit rarement.
+  const covItem = (x, ok) => {
+    const rat = x.groupe ? escAttr(x.groupe + (x.branche ? ' · ' + x.branche : '')) : '';
+    const pastille = ok
+      ? `<span class="res-has-badge ${covCls[x.statut]||''}">${escHtml(covLbl[x.statut]||'')}</span>`
+      : `<span class="res-miss-badge ${x.raison==='expire'?'exp':''}">${x.raison==='expire'?'Expiré':'Aucun'}</span>`;
+    return `<div class="ref-cov-item" onclick="openRessourceFournisseur(${x.id})" title="${rat?rat+' — ':''}Ouvrir le dossier fournisseur">
+      <span class="nm">${escHtml(x.nom||'')}</span>${pastille}
     </div>`;
-
-  const covItem = (x, ok) => `<div class="ref-cov-item" onclick="openRessourceFournisseur(${x.id})" title="Ouvrir le dossier fournisseur">
-      <div>
-        <div class="nm">${escHtml(x.nom||'')}</div>
-        <div class="sub">${x.groupe?escHtml(x.groupe)+(x.branche?' · '+escHtml(x.branche):''):'&nbsp;'}</div>
-      </div>
-      ${ok
-        ? `<span class="res-has-badge ${covCls[x.statut]||''}">${escHtml(covLbl[x.statut]||'')}</span>`
-        : `<span class="res-miss-badge ${x.raison==='expire'?'exp':''}">${x.raison==='expire'?'Expiré':'Aucun document'}</span>`}
-    </div>`;
+  };
   const couvertureHtml = !cov ? '' : `
     <div class="ref-block">
-      <h3>Couverture fournisseurs <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">— fournisseurs actifs</span></h3>
-      <div class="ref-cov-stats">
-        <div class="ref-cov-stat neutre"><div class="n">${cov.stats.fournisseurs}</div><div class="l">Fournisseurs</div></div>
-        <div class="ref-cov-stat ok"><div class="n">${cov.stats.valides}</div><div class="l">Validés</div></div>
-        <div class="ref-cov-stat ko"><div class="n">${cov.stats.manquants}</div><div class="l">Manquants</div></div>
-      </div>
+      <h3>Couverture fournisseurs
+        <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">— ${cov.stats.fournisseurs} fournisseurs actifs ·
+          <b style="color:var(--success)">${cov.stats.valides} validés</b> ·
+          <b style="color:var(--danger)">${cov.stats.manquants} manquants</b></span></h3>
       <div class="ref-cov-cols">
         <div class="ref-cov-col ok">
-          <div class="ref-cov-col-hd"><span class="dot"></span>Fournisseurs validés (${cov.valides.length})</div>
-          ${cov.valides.length ? cov.valides.map(x=>covItem(x,true)).join('') : '<div class="ref-cov-empty">Aucun fournisseur ne porte cette certification.</div>'}
+          <div class="ref-cov-col-hd"><span class="dot"></span>Validés (${cov.valides.length})</div>
+          ${cov.valides.length
+            ? `<div class="ref-cov-list">${cov.valides.map(x=>covItem(x,true)).join('')}</div>`
+            : '<div class="ref-cov-empty">Aucun fournisseur ne porte cette certification.</div>'}
         </div>
         <div class="ref-cov-col ko">
-          <div class="ref-cov-col-hd"><span class="dot"></span>Fournisseurs manquants (${cov.manquants.length})</div>
-          ${cov.manquants.length ? cov.manquants.map(x=>covItem(x,false)).join('') : '<div class="ref-cov-empty">Tous les fournisseurs actifs sont couverts.</div>'}
+          <div class="ref-cov-col-hd"><span class="dot"></span>Manquants (${cov.manquants.length})</div>
+          ${cov.manquants.length
+            ? `<div class="ref-cov-list">${cov.manquants.map(x=>covItem(x,false)).join('')}</div>`
+            : '<div class="ref-cov-empty">Tous les fournisseurs actifs sont couverts.</div>'}
         </div>
       </div>
     </div>`;
@@ -4464,7 +4454,6 @@ function renderRefDetail(){
     ${questionsHtml}
     ${auditsHtml}
     ${filesHtml}
-    ${fournDocsHtml}
     ${couvertureHtml}
     ${metaFoot}
   `;
@@ -4771,37 +4760,35 @@ document.addEventListener('keydown', function(ev){
     .res-has-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(52,211,153,.14);color:var(--success);border:1px solid rgba(52,211,153,.32);border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:700}
     .res-has-badge.soon{background:rgba(251,191,36,.16);color:var(--warn);border-color:rgba(251,191,36,.4)}
     .res-has-badge.nod{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
-    .res-cats{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
-    .res-cat-pill{background:var(--bg);border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:2px 8px;font-size:10.5px;font-weight:600}
+    /* Categories : posees a cote du nom, volontairement dissemblables des
+       pastilles de certificats (rondes et remplies) — ici rectangulaires,
+       sans fond, en capitales. Deux informations de nature differente ne
+       doivent pas porter la meme forme. */
+    .res-cats-inline{display:inline-flex;gap:4px;flex-wrap:wrap;vertical-align:middle;margin-left:7px}
+    .res-cat-pill{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:4px;
+      padding:1px 6px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;line-height:1.5;white-space:nowrap}
 
-    /* ── Fiche referentiel : couverture fournisseurs ────────────────────── */
-    .ref-cov-stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-    .ref-cov-stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 14px;min-width:96px}
-    .ref-cov-stat .n{font-size:19px;font-weight:800;line-height:1.1}
-    .ref-cov-stat .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:600;margin-top:2px}
-    .ref-cov-stat.ok .n{color:var(--success)}
-    .ref-cov-stat.ko .n{color:var(--danger)}
-    .ref-cov-stat.neutre .n{color:var(--text)}
+    /* ── Fiche referentiel : couverture fournisseurs ─────────────────────
+       Deux sections cote a cote, chacune sur deux colonnes de fournisseurs :
+       une trentaine de noms tiennent ainsi sans faire defiler la fiche. */
     .ref-cov-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-    @media(max-width:760px){.ref-cov-cols{grid-template-columns:1fr}}
-    .ref-cov-col{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px}
-    .ref-cov-col-hd{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-bottom:9px}
-    .ref-cov-col-hd .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .ref-cov-col{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px}
+    .ref-cov-col-hd{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;margin-bottom:7px;text-transform:uppercase;letter-spacing:.4px}
+    .ref-cov-col-hd .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
     .ref-cov-col.ok .ref-cov-col-hd{color:var(--success)}
     .ref-cov-col.ok .dot{background:var(--success)}
     .ref-cov-col.ko .ref-cov-col-hd{color:var(--danger)}
     .ref-cov-col.ko .dot{background:var(--danger)}
-    .ref-cov-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:7px;cursor:pointer;transition:background .12s}
+    .ref-cov-list{display:grid;grid-template-columns:1fr 1fr;gap:1px 8px}
+    .ref-cov-item{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:3px 6px;border-radius:6px;cursor:pointer;transition:background .12s;min-width:0}
     .ref-cov-item:hover{background:var(--card)}
-    .ref-cov-item .nm{font-size:12.5px;color:var(--text);font-weight:600}
-    .ref-cov-item .sub{font-size:10.5px;color:var(--muted)}
-    .ref-cov-empty{font-size:12px;color:var(--muted);padding:8px 4px;font-style:italic}
-    .ref-doc-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:9px;margin-bottom:6px;background:var(--bg)}
-    .ref-doc-item .who{flex:1;min-width:0}
-    .ref-doc-item .who .f{font-size:12.5px;font-weight:700;color:var(--text)}
-    .ref-doc-item .who .t{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .ref-doc-item a.dl{font-size:11.5px;color:var(--accent);text-decoration:none;font-weight:600;white-space:nowrap}
-    .ref-doc-item a.dl:hover{text-decoration:underline}
+    .ref-cov-item .nm{font-size:12px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+    .ref-cov-empty{font-size:12px;color:var(--muted);padding:6px 4px;font-style:italic}
+    /* Sous 1100px les 4 colonnes deviennent illisibles : on repasse a 1 par
+       section, puis a une seule section par ligne sous 760px. */
+    @media(max-width:1100px){.ref-cov-list{grid-template-columns:1fr}}
+    @media(max-width:760px){.ref-cov-cols{grid-template-columns:1fr}.ref-cov-list{grid-template-columns:1fr 1fr}}
+    @media(max-width:520px){.ref-cov-list{grid-template-columns:1fr}}
     .ref-audit-origin{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;background:var(--accent-bg);color:var(--accent);border-radius:999px;padding:2px 7px;margin-left:7px;vertical-align:middle}
     .res-branch-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:border-color .12s}
     .res-branch-row:hover{border-color:var(--accent)}
@@ -6369,7 +6356,7 @@ function resCatsHTML(item){
   if(!S.resShowCats) return '';
   const cats = item.categories||[];
   if(!cats.length) return '';
-  return `<div class="res-cats">${cats.map(c=>`<span class="res-cat-pill">${escHtml(resCatLabel(c))}</span>`).join('')}</div>`;
+  return `<span class="res-cats-inline">${cats.map(c=>`<span class="res-cat-pill">${escHtml(resCatLabel(c))}</span>`).join('')}</span>`;
 }
 
 function _resPills(s){
@@ -6418,20 +6405,20 @@ function renderRessourcesList(){
       const nb = (g.branches||[]).length;
       return `<div class="res-card res-card-group${cls}" onclick="openRessourceGroupe('${encodeURIComponent(g.groupe)}')">
         <div class="res-card-hd">
-          <div class="res-card-nom">${escHtml(g.groupe||'')}</div>
+          <div class="res-card-nom">${escHtml(g.groupe||'')}${resCatsHTML(g)}</div>
           <span class="res-group-badge">Groupe · ${nb} branche${nb>1?'s':''}</span>
         </div>
         <div class="res-card-lic">${(g.branches||[]).slice(0,3).map(b=>escHtml(b.branche||b.nom||'')).join(' · ')}${nb>3?' · +'+(nb-3):''}</div>
         <div class="res-card-stats">${_resPills(g.stats)}</div>
-        ${extra||''}${resCatsHTML(g)}
+        ${extra||''}
       </div>`;
     }
     const f = it.data;
     return `<div class="res-card${cls}" onclick="openRessourceFournisseur(${f.id})">
-      <div class="res-card-nom">${escHtml(f.nom||'')}</div>
+      <div class="res-card-nom">${escHtml(f.nom||'')}${resCatsHTML(f)}</div>
       <div class="res-card-lic">${escHtml(f.licence||'')}${f.certificat?' · '+escHtml(f.certificat):''}</div>
       <div class="res-card-stats">${_resPills(f.cert_stats)}</div>
-      ${extra||''}${resCatsHTML(f)}
+      ${extra||''}
     </div>`;
   };
 
