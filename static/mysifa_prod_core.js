@@ -4965,10 +4965,20 @@ function openEditStockModal(row){
   const actions = h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:'20px',gap:'12px'}});
   const delBtn = h('button',{className:'btn-danger',style:{padding:'10px 16px',borderRadius:'8px',fontWeight:'600'}},'Supprimer');
   delBtn.addEventListener('click', async ()=>{
-    if(!confirm('Supprimer cette saisie stock ? Le stock sera restaure a la valeur precedente.')) return;
+    // Une entree FSC n'est pas effacee : le serveur la compense par une sortie
+    // tracee, parce que l'enregistrement doit survivre 5 ans. Annoncer
+    // « supprimee » serait faux, et l'operateur chercherait ensuite une ligne
+    // disparue qui est toujours la.
+    const estFsc = !!(row.fsc || row.fsc_requis);
+    const question = estFsc
+      ? 'Annuler cette entree FSC ? Une sortie de meme quantite sera enregistree.\n'
+        + 'L entree restera visible dans l historique : les enregistrements FSC '
+        + 'doivent etre conserves 5 ans.'
+      : 'Supprimer cette saisie stock ? Le stock sera restaure a la valeur precedente.';
+    if(!confirm(question)) return;
     try{
-      await api('/api/fabrication/saisie-stock/'+kind+'/'+row.id,{method:'DELETE'});
-      toast('Saisie supprimee');
+      const res = await api('/api/fabrication/saisie-stock/'+kind+'/'+row.id,{method:'DELETE'});
+      toast((res && res.message) ? res.message : 'Saisie supprimee');
       overlay.remove();
       await loadSaisies();
     }catch(e){ toast(e.message||'Erreur suppression','danger'); }

@@ -155,6 +155,11 @@ def _normalize_stock_pf(row: dict) -> Optional[dict]:
         "produit_designation": row.get("produit_designation") or "",
         "produit_unite": row.get("produit_unite") or "",
         "note": row.get("note") or "",
+        # Expose le marquage FSC : c'est lui qui change la conduite a tenir cote
+        # ecran (annulation par sortie tracee, et non suppression) et qui permet
+        # d'annoncer a l'operateur ce qui va reellement se passer.
+        "fsc": 1 if int(row.get("fsc") or 0) == 1 else 0,
+        "lot_id": row.get("lot_id"),
     }
 
 
@@ -224,6 +229,7 @@ def _fetch_stock_saisies_du_jour(
           ms.id, ms.produit_id, ms.emplacement, ms.type_mouvement, ms.quantite,
           ms.quantite_avant, ms.quantite_apres, ms.note, ms.created_at,
           ms.created_by, ms.created_by_name, ms.no_dossier,
+          COALESCE(ms.fsc,0) AS fsc, ms.lot_id,
           p.reference AS produit_reference,
           p.designation AS produit_designation,
           p.unite AS produit_unite,
@@ -4524,17 +4530,115 @@ def delete_saisie_stock(kind: str, mvt_id: int, request: Request):
                     f"Suppression non supportee pour type_mouvement={type_mvt!r}"
                 )
 
-            # Rétention FSC : annuler une entrée certifiee supprimerait le lot
-            # ET son mouvement, c'est-a-dire les deux maillons de la chaine de
-            # preuve. Une erreur de saisie sur un lot FSC se corrige par un
-            # mouvement inverse trace, jamais par un effacement.
+            # ── Entree FSC : on annule par un mouvement inverse ─────────────
+            # Effacer le lot et son mouvement supprimerait les deux maillons de
+            # la chaine de preuve, ce qu'interdit la retention 5 ans. Mais
+            # refuser tout court laisserait l'operateur bloque avec une saisie
+            # fausse en stock — pire encore.
+            #
+            # On fait donc ce que ferait un magasinier : une SORTIE de meme
+            # quantite, tracee, qui solde le lot. Le stock redescend a la bonne
+            # valeur, l'erreur reste visible dans l'historique, et rien n'est
+            # perdu. C'est la seule facon d'etre a la fois juste et utilisable.
             if int(row_d.get("fsc") or 0) == 1:
-                raise HTTPException(
-                    409,
-                    "Suppression impossible : cette entree porte la mention FSC. "
-                    "Les enregistrements FSC doivent etre conserves 5 ans. "
-                    "Corriger par un mouvement inverse dans MyStock."
+                produit_id = row_d["produit_id"]
+                emplacement = row_d["emplacement"]
+                quantite = float(row_d.get("quantite") or 0)
+
+                lot_id = row_d.get("lot_id")
+                lot = None
+                if lot_id:
+                    lot = conn.execute(
+                        "SELECT * FROM lots_stock WHERE id=?", (lot_id,)
+                    ).fetchone()
+                if lot is None:
+                    # Entree anterieure au rattachement lot_id : on retrouve le
+                    # lot par les memes criteres que la reversion classique.
+                    same_day = str(row_d.get("created_at") or "")[:10]
+                    lot = conn.execute(
+                        """SELECT * FROM lots_stock
+                            WHERE produit_id=? AND emplacement=? AND created_by=?
+                              AND quantite_initiale=? AND substr(created_at,1,10)=?
+                            ORDER BY id DESC LIMIT 1""",
+                        (produit_id, emplacement, row_d.get("created_by"),
+                         quantite, same_day),
+                    ).fetchone()
+
+                # Si le lot a deja ete entame, une sortie de la quantite totale
+                # creerait du stock negatif. On sort ce qui reste et on le dit.
+                restant = float(dict(lot).get("quantite_restante") or 0) if lot else 0.0
+                a_sortir = min(quantite, restant) if lot else quantite
+                if lot and a_sortir <= 0:
+                    raise HTTPException(
+                        409,
+                        "Annulation impossible : ce lot certifie est deja entierement "
+                        "consomme. La quantite est partie en production ou en expedition ; "
+                        "il n'y a plus rien a sortir."
+                    )
+
+                agg = conn.execute(
+                    "SELECT quantite FROM stock_emplacements WHERE produit_id=? AND emplacement=?",
+                    (produit_id, emplacement),
+                ).fetchone()
+                qte_avant = float(agg["quantite"] or 0) if agg else 0.0
+                qte_apres = max(0.0, qte_avant - a_sortir)
+
+                if lot:
+                    conn.execute(
+                        "UPDATE lots_stock SET quantite_restante=? WHERE id=?",
+                        (max(0.0, restant - a_sortir), lot["id"]),
+                    )
+                if agg:
+                    conn.execute(
+                        """UPDATE stock_emplacements SET quantite=?, updated_at=?, updated_by=?
+                            WHERE produit_id=? AND emplacement=?""",
+                        (qte_apres, now, user.get("email") or "system",
+                         produit_id, emplacement),
+                    )
+
+                note_annul = (
+                    f"Annulation de l'entree #{mvt_id} du "
+                    f"{str(row_d.get('created_at') or '')[:10]}"
                 )
+                if a_sortir < quantite:
+                    note_annul += f" (entree {quantite:g}, sortie limitee au restant {a_sortir:g})"
+                cur_annul = conn.execute(
+                    """INSERT INTO mouvements_stock
+                         (produit_id, emplacement, type_mouvement, quantite,
+                          quantite_avant, quantite_apres, note, created_at,
+                          created_by, created_by_name, no_dossier, fsc, lot_id)
+                       VALUES (?,?,'sortie',?,?,?,?,?,?,?,?,1,?)""",
+                    (produit_id, emplacement, a_sortir, qte_avant, qte_apres,
+                     note_annul, now, user.get("email") or "system",
+                     (user.get("nom") or "").strip() or None,
+                     row_d.get("no_dossier"), (lot["id"] if lot else None)),
+                )
+                conn.commit()
+
+                log_action(
+                    user=user, action="UPDATE", module="fabrication",
+                    objet=f"annulation FSC par sortie - entree #{mvt_id} - produit {produit_id} - {a_sortir}",
+                    detail={
+                        "kind": "stock_pf", "entree_id": mvt_id,
+                        "sortie_id": cur_annul.lastrowid,
+                        "produit_id": produit_id, "emplacement": emplacement,
+                        "quantite_entree": quantite, "quantite_sortie": a_sortir,
+                        "lot_id": (lot["id"] if lot else None),
+                        "no_dossier": row_d.get("no_dossier"),
+                    },
+                    ip=request.client.host if request.client else None,
+                )
+                return {
+                    "ok": True, "kind": "stock_pf", "id": mvt_id,
+                    "mode": "sortie_compensatoire",
+                    "sortie_id": cur_annul.lastrowid,
+                    "quantite_sortie": a_sortir,
+                    "quantite_apres_reversion": qte_apres,
+                    "message": (
+                        f"Entree FSC annulee par une sortie de {a_sortir:g}. "
+                        "L'entree reste visible dans l'historique (retention FSC 5 ans)."
+                    ),
+                }
 
             # PF entree : rembobiner
             produit_id = row_d["produit_id"]
