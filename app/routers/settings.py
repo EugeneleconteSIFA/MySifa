@@ -1849,6 +1849,7 @@ async def import_emplacements_csv(request: Request, file: UploadFile = File(...)
 # liste les commits en avance, et exécute scripts/promote_v2.sh quand demandé.
 
 import asyncio
+import datetime as _dt
 import shutil as _shutil
 import subprocess as _subprocess
 from fastapi.responses import StreamingResponse
@@ -1894,6 +1895,204 @@ def _read_origin_app_version() -> Optional[str]:
         return _parse_version_from_text(out)
     except Exception:
         return None
+
+
+# ─── Santé du dépôt et du schéma ───────────────────────────────────────────────
+# Vue de CONSULTATION uniquement : aucune commande git qui écrit, aucune action
+# destructive. Elle sert à vérifier avant de promouvoir que le schéma est à jour,
+# qu'aucune branche morte ne traîne et que le dossier de travail est propre.
+
+
+def _git_lire(*args: str, defaut: str = "") -> str:
+    """Commande git en LECTURE seule. Jamais d'écriture depuis l'interface."""
+    try:
+        return _subprocess.check_output(
+            [_GIT_BIN, "-C", V2_REPO_PATH, *args],
+            text=True, timeout=15, stderr=_subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return defaut
+
+
+def _jours_depuis(iso: str) -> Optional[int]:
+    try:
+        d = _dt.datetime.strptime(iso[:10], "%Y-%m-%d")
+        return (_dt.datetime.now() - d).days
+    except Exception:
+        return None
+
+
+def _migrations_etat() -> dict:
+    """
+    Migrations appliquées sur CETTE instance, et celles présentes dans le code
+    mais pas encore jouées. Signale aussi les numéros historiques en double :
+    une migration qui partage son numéro avec une autre ne s'exécute jamais.
+    """
+    appliquees: list[dict] = []
+    doublons: list[dict] = []
+    noms_faits: set[str] = set()
+    with get_db() as conn:
+        try:
+            for r in conn.execute(
+                "SELECT version, name, applied_at FROM schema_migrations ORDER BY version"
+            ).fetchall():
+                appliquees.append({
+                    "cle": str(r["version"]),
+                    "nom": r["name"],
+                    "date": r["applied_at"],
+                    "source": "numérotée",
+                })
+                if r["name"]:
+                    noms_faits.add(r["name"])
+            vus: dict = {}
+            for m in appliquees:
+                vus.setdefault(m["cle"], []).append(m["nom"])
+            for cle, noms in vus.items():
+                if len(noms) > 1:
+                    doublons.append({"cle": cle, "noms": noms})
+        except Exception:
+            pass
+        try:
+            for r in conn.execute(
+                "SELECT nom, applique_le FROM schema_migrations_fichiers ORDER BY applique_le"
+            ).fetchall():
+                appliquees.append({
+                    "cle": r["nom"], "nom": r["nom"],
+                    "date": r["applique_le"], "source": "fichier",
+                })
+                noms_faits.add(r["nom"])
+        except Exception:
+            pass
+
+    # Migrations déclarées dans le code : celles en fichiers sont lisibles sans
+    # les exécuter, les historiques numérotées ne le sont pas.
+    en_attente: list[dict] = []
+    total_fichiers = 0
+    try:
+        import app.core.migrations as _mig_pkg
+        import importlib
+        import pkgutil
+
+        for m in sorted(x.name for x in pkgutil.iter_modules(_mig_pkg.__path__)):
+            if m.startswith("_"):
+                continue
+            total_fichiers += 1
+            mod = importlib.import_module(f"app.core.migrations.{m}")
+            nom = getattr(mod, "NOM", None)
+            if nom and nom not in noms_faits:
+                en_attente.append({"nom": nom, "fichier": m + ".py"})
+    except Exception:
+        pass
+
+    appliquees.sort(key=lambda x: (x["date"] or ""), reverse=True)
+    return {
+        "appliquees": appliquees[:40],
+        "nb_appliquees": len(appliquees),
+        "derniere": appliquees[0] if appliquees else None,
+        "en_attente": en_attente,
+        "nb_fichiers": total_fichiers,
+        "doublons": doublons,
+    }
+
+
+def _branches_etat() -> list[dict]:
+    """Branches distantes, leur âge et leur état de fusion dans staging."""
+    fusionnees = set()
+    for ligne in _git_lire("branch", "-r", "--merged", "origin/staging").split("\n"):
+        ref = ligne.strip().replace("origin/", "", 1)
+        if ref and "->" not in ref:
+            fusionnees.add(ref)
+    sortie = _git_lire(
+        "for-each-ref", "--sort=-committerdate", "refs/remotes/origin",
+        "--format=%(refname:short)|%(committerdate:format:%Y-%m-%d %H:%M)|%(authorname)|%(subject)",
+    )
+    branches: list[dict] = []
+    for ligne in sortie.split("\n"):
+        if not ligne or "->" in ligne:
+            continue
+        parts = ligne.split("|", 3)
+        if len(parts) != 4:
+            continue
+        nom = parts[0].replace("origin/", "", 1)
+        if nom in ("HEAD",):
+            continue
+        jours = _jours_depuis(parts[1])
+        est_fusionnee = nom in fusionnees
+        branches.append({
+            "nom": nom,
+            "date": parts[1],
+            "auteur": parts[2],
+            "dernier_commit": parts[3],
+            "jours": jours,
+            "fusionnee": est_fusionnee,
+            "protegee": nom in ("main", "staging"),
+            # Une branche fusionnée et sans activité depuis deux semaines n'a
+            # plus de raison d'exister : c'est le signal de ménage.
+            "a_nettoyer": est_fusionnee and nom not in ("main", "staging")
+                          and (jours is not None and jours >= 14),
+        })
+    return branches
+
+
+def _dossier_etat() -> dict:
+    """Propreté du dossier de travail de l'instance qui répond."""
+    porcelain = _git_lire("status", "--porcelain")
+    modifies, non_suivis = [], []
+    for ligne in porcelain.split("\n"):
+        if not ligne.strip():
+            continue
+        code, _, chemin = ligne.partition(" ")
+        (non_suivis if ligne.startswith("??") else modifies).append(chemin.strip() or ligne)
+    verrou = (Path(V2_REPO_PATH) / ".git" / "index.lock").exists()
+    return {
+        "branche": _git_lire("rev-parse", "--abbrev-ref", "HEAD", defaut="?"),
+        "nb_modifies": len(modifies),
+        "nb_non_suivis": len(non_suivis),
+        "modifies": modifies[:20],
+        "non_suivis": non_suivis[:20],
+        "verrou_git": verrou,
+        "propre": not modifies and not non_suivis and not verrou,
+    }
+
+
+@router.get("/api/deploiement/sante")
+def deploiement_sante(request: Request):
+    """Migrations, branches et propreté du dossier — consultation seule."""
+    require_settings(request)
+    migrations = _migrations_etat()
+    branches = _branches_etat()
+    dossier = _dossier_etat()
+
+    alertes: list[str] = []
+    if migrations["en_attente"]:
+        alertes.append(
+            f"{len(migrations['en_attente'])} migration(s) présente(s) dans le code mais "
+            "pas encore appliquée(s) sur cette instance."
+        )
+    if migrations["doublons"]:
+        alertes.append(
+            f"{len(migrations['doublons'])} numéro(s) de migration en double dans l'historique — "
+            "la seconde de chaque paire ne s'est jamais exécutée."
+        )
+    a_nettoyer = [b for b in branches if b["a_nettoyer"]]
+    if a_nettoyer:
+        alertes.append(
+            f"{len(a_nettoyer)} branche(s) fusionnée(s) dans staging et sans activité "
+            "depuis plus de deux semaines."
+        )
+    if dossier["verrou_git"]:
+        alertes.append("Un verrou git traîne dans le dépôt (.git/index.lock).")
+    if dossier["nb_modifies"]:
+        alertes.append(f"{dossier['nb_modifies']} fichier(s) modifié(s) non commité(s).")
+
+    return {
+        "instance": ENV_NAME,
+        "version_app": APP_VERSION,
+        "migrations": migrations,
+        "branches": branches,
+        "dossier": dossier,
+        "alertes": alertes,
+    }
 
 
 @router.get("/api/promote/status")

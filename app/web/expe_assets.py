@@ -2390,7 +2390,10 @@ function renderExpeDevisModal(){
   if(!m)return null;
   const overlay=h('div',{className:'expe-devis-modal-overlay'});
   overlay.addEventListener('click',e=>{if(e.target===overlay)fermerExpeDevisModal();});
-  const box=h('div',{className:'expe-devis-modal'});
+  // Le détail porte un comparatif à sept colonnes : à 720 px il faut faire
+  // défiler pour atteindre les actions. On l'élargit, sans toucher aux autres
+  // modales qui, elles, n'ont qu'un formulaire à afficher.
+  const box=h('div',{className:'expe-devis-modal'+(m.type==='detail'?' expe-devis-modal--large':'')});
   const closeBtn=h('button',{type:'button',className:'btn-ghost expe-devis-close',onClick:fermerExpeDevisModal},iconEl('x',16));
 
   if(m.type==='nouvelle'){
@@ -2665,8 +2668,8 @@ function renderExpeDevisModal(){
         h('td',null,...acts)
       );
     }):[h('tr',null,h('td',{colSpan:7,style:{color:'var(--muted)',fontStyle:'italic'}},'Aucune réponse.'))];
-    box.appendChild(h('div',{className:'expe-devis-table-wrap'},
-      h('table',{className:'table-std'},h('thead',null,head),h('tbody',null,...body))
+    box.appendChild(h('div',{className:'expe-devis-table-wrap expe-devis-comp-wrap'},
+      h('table',{className:'table-std expe-devis-comp'},h('thead',null,head),h('tbody',null,...body))
     ));
   }else if(m.type==='envoi'){
     const trps=(T.list||[]).filter(t=>{
@@ -3009,6 +3012,30 @@ EXPE_DEVIS_CSS = r"""
   display:flex;align-items:center;justify-content:center;padding:16px}
 .expe-devis-modal{width:100%;max-width:720px;max-height:min(92vh,900px);overflow:auto;background:var(--card);
   border:1px solid var(--border);border-radius:12px;padding:18px}
+.expe-devis-modal--large{max-width:min(1180px,96vw)}
+/* Comparatif : les deux colonnes qui portent le sens restent en place quand
+   le tableau défile horizontalement. Sans la première, on lit « pas
+   d'ouverture détectée » sans savoir de QUI il s'agit ; sans la dernière,
+   les actions sortent de l'écran — c'est exactement ce qui arrivait. */
+.expe-devis-comp th:first-child,.expe-devis-comp td:first-child{
+  position:sticky;left:0;z-index:2;background:var(--card)}
+.expe-devis-comp th:last-child,.expe-devis-comp td:last-child{
+  position:sticky;right:0;z-index:2;background:var(--card);white-space:nowrap;text-align:right}
+.expe-devis-comp th:first-child,.expe-devis-comp th:last-child{z-index:3}
+/* Filet d'ombre : signale que le contenu passe DESSOUS la colonne figée,
+   sinon la superposition se lit comme un défaut d'alignement. */
+.expe-devis-comp td:first-child::after,.expe-devis-comp th:first-child::after{
+  content:'';position:absolute;top:0;right:0;bottom:0;width:6px;pointer-events:none;
+  background:linear-gradient(to right,color-mix(in srgb,var(--bg) 45%,transparent),transparent)}
+.expe-devis-comp td:last-child::before,.expe-devis-comp th:last-child::before{
+  content:'';position:absolute;top:0;left:0;bottom:0;width:6px;pointer-events:none;
+  background:linear-gradient(to left,color-mix(in srgb,var(--bg) 45%,transparent),transparent)}
+/* Le hover de ligne repeint les cellules ordinaires : les cellules figées
+   doivent suivre, sinon la ligne survolée apparaît coupée en trois. */
+.expe-devis-comp tr:hover td:first-child,.expe-devis-comp tr:hover td:last-child{
+  background:color-mix(in srgb,var(--accent-bg) 100%,var(--card))}
+.expe-devis-comp td:last-child .btn-ghost{padding:4px 7px}
+.expe-devis-comp td:last-child>*{margin-left:3px}
 .expe-devis-modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px}
 .expe-devis-close{padding:6px 8px}
 .expe-devis-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
