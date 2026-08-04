@@ -1311,44 +1311,98 @@ def list_mystock_materials(
     categorie: Optional[str] = None,
     active_only: bool = Query(True),
 ):
-    """Une ligne par matière MyStock, avec le détail des prix par laize et fournisseur."""
+    """Une ligne par matière MyStock devisable, avec ses déclinaisons et prix."""
     _require_read(request)
     with get_db() as conn:
         materials = mystock_prix.list_materials(
             conn, q=q, categorie=categorie, actives_only=active_only
         )
-        cats = [
+        cats = sorted(
             r["categorie"]
             for r in conn.execute(
-                "SELECT DISTINCT categorie FROM matieres_premieres ORDER BY categorie"
+                "SELECT DISTINCT categorie FROM matieres_premieres"
             ).fetchall()
-        ]
-    return {"materials": materials, "categories": cats}
+            if (r["categorie"] or "").strip().lower() in mystock_prix.CATEGORIES_VISIBLES
+        )
+        return {
+            "materials": materials,
+            "categories": cats,
+            "laizes": mystock_prix.list_laizes(conn),
+            "grammages": mystock_prix.list_grammages(conn),
+        }
 
 
-def _mystock_ids(body: dict) -> tuple[int, Optional[int], Optional[int]]:
+def _decl_id(body: dict) -> int:
+    try:
+        return int(body.get("declinaison_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="declinaison_id requis") from None
+
+
+def _opt_int(body: dict, key: str) -> Optional[int]:
+    raw = body.get(key)
+    if raw in (None, "", 0, "0"):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail=f"{key} invalide") from None
+
+
+@router.post("/api/pricing/mystock/declinaisons")
+def add_mystock_declinaison(request: Request, body: dict = Body(...)):
+    """Ajoute une laize (frontal, glassine, complexe) ou un grammage (adhésif)."""
+    _require_write(request)
     try:
         matiere_id = int(body.get("matiere_id"))
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="matiere_id requis") from None
+    gsm = body.get("valeur_gsm")
+    with get_db() as conn:
+        res = mystock_prix.add_declinaison(
+            conn,
+            matiere_id=matiere_id,
+            laize_id=_opt_int(body, "laize_id"),
+            valeur_gsm=float(gsm) if gsm not in (None, "") else None,
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Ajout refusé"))
+        conn.commit()
+    return res
 
-    def _opt(key: str) -> Optional[int]:
-        raw = body.get(key)
-        if raw in (None, "", 0, "0"):
-            return None
-        try:
-            return int(raw)
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=400, detail=f"{key} invalide") from None
 
-    return matiere_id, _opt("laize_id"), _opt("fournisseur_id")
+@router.delete("/api/pricing/mystock/declinaisons/{declinaison_id}")
+def delete_mystock_declinaison(request: Request, declinaison_id: int):
+    """Retire une déclinaison et les prix qui lui sont rattachés."""
+    _require_write(request)
+    with get_db() as conn:
+        res = mystock_prix.delete_declinaison(conn, declinaison_id)
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Suppression refusée"))
+        conn.commit()
+    return res
+
+
+@router.post("/api/pricing/mystock/appairage")
+def set_mystock_appairage(request: Request, body: dict = Body(...)):
+    """Appaire une déclinaison à une matière Coûts matières, ou la détache."""
+    _require_write(request)
+    with get_db() as conn:
+        res = mystock_prix.set_appairage(
+            conn,
+            declinaison_id=_decl_id(body),
+            mc_material_id=_opt_int(body, "mc_material_id"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Appairage refusé"))
+        conn.commit()
+    return res
 
 
 @router.post("/api/pricing/mystock/prix")
 def set_mystock_prix(request: Request, body: dict = Body(...)):
-    """Fixe le prix d'un fournisseur sur une matière MyStock (et son miroir si principal)."""
+    """Fixe le prix d'un fournisseur sur une déclinaison (et son miroir si principal)."""
     user = _require_write(request)
-    matiere_id, laize_id, fournisseur_id = _mystock_ids(body)
     try:
         prix = float(body.get("prix"))
     except (TypeError, ValueError):
@@ -1356,9 +1410,8 @@ def set_mystock_prix(request: Request, body: dict = Body(...)):
     with get_db() as conn:
         res = mystock_prix.set_prix(
             conn,
-            matiere_id=matiere_id,
-            laize_id=laize_id,
-            fournisseur_id=fournisseur_id,
+            declinaison_id=_decl_id(body),
+            fournisseur_id=_opt_int(body, "fournisseur_id"),
             prix=prix,
             user_id=user.get("id"),
             user_name=user.get("nom"),
@@ -1369,17 +1422,32 @@ def set_mystock_prix(request: Request, body: dict = Body(...)):
     return res
 
 
+@router.post("/api/pricing/mystock/fournisseur")
+def set_mystock_fournisseur(request: Request, body: dict = Body(...)):
+    """Change le fournisseur d'une ligne de prix, sans lui faire perdre son statut."""
+    _require_write(request)
+    with get_db() as conn:
+        res = mystock_prix.set_fournisseur(
+            conn,
+            declinaison_id=_decl_id(body),
+            fournisseur_id=_opt_int(body, "fournisseur_id"),
+            nouveau_fournisseur_id=_opt_int(body, "nouveau_fournisseur_id"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Modification refusée"))
+        conn.commit()
+    return res
+
+
 @router.post("/api/pricing/mystock/principal")
 def set_mystock_principal(request: Request, body: dict = Body(...)):
-    """Désigne le fournisseur dont le prix fait foi pour cette matière/laize."""
+    """Désigne le fournisseur dont le prix fait foi pour cette déclinaison."""
     user = _require_write(request)
-    matiere_id, laize_id, fournisseur_id = _mystock_ids(body)
     with get_db() as conn:
         res = mystock_prix.set_principal(
             conn,
-            matiere_id=matiere_id,
-            laize_id=laize_id,
-            fournisseur_id=fournisseur_id,
+            declinaison_id=_decl_id(body),
+            fournisseur_id=_opt_int(body, "fournisseur_id"),
             user_id=user.get("id"),
             user_name=user.get("nom"),
         )
@@ -1391,17 +1459,72 @@ def set_mystock_principal(request: Request, body: dict = Body(...)):
 
 @router.delete("/api/pricing/mystock/prix")
 def delete_mystock_prix(request: Request, body: dict = Body(...)):
-    """Retire un fournisseur d'une matière MyStock."""
+    """Retire un fournisseur d'une déclinaison."""
     _require_write(request)
-    matiere_id, laize_id, fournisseur_id = _mystock_ids(body)
     with get_db() as conn:
         res = mystock_prix.delete_ligne(
-            conn, matiere_id=matiere_id, laize_id=laize_id, fournisseur_id=fournisseur_id
+            conn,
+            declinaison_id=_decl_id(body),
+            fournisseur_id=_opt_int(body, "fournisseur_id"),
         )
         if not res.get("ok"):
             raise HTTPException(status_code=400, detail=res.get("reason", "Suppression refusée"))
         conn.commit()
     return res
+
+
+@router.get("/api/pricing/mystock/candidats/{declinaison_id}")
+def mystock_candidats(request: Request, declinaison_id: int):
+    """
+    Matières Coûts matières proposées pour appairer une déclinaison, les plus
+    probables d'abord : appellation identique à la référence MyStock, puis nom
+    proche, puis le reste. Celles déjà pilotées par une autre déclinaison sont
+    signalées.
+    """
+    _require_read(request)
+    with get_db() as conn:
+        d = mystock_prix.fetch_declinaison(conn, declinaison_id)
+        if not d:
+            raise HTTPException(status_code=404, detail="Déclinaison introuvable.")
+        ref = (d["reference"] or "").strip().lower()
+        des = (d["designation"] or "").strip().lower()
+        rows = conn.execute(
+            """SELECT m.id, m.name, m.appellation_code, c.code AS category_code,
+                      m.unit_price, m.price_basis, m.price_currency,
+                      (SELECT dd.id FROM mp_matiere_declinaison dd
+                        WHERE dd.mc_material_id = m.id LIMIT 1) AS deja_pilotee
+                 FROM mc_material m
+                 JOIN mc_material_category c ON c.id = m.category_id
+                WHERE m.is_active = 1"""
+        ).fetchall()
+        out = []
+        for r in rows:
+            app = (r["appellation_code"] or "").strip().lower()
+            name = (r["name"] or "").strip().lower()
+            score = 0
+            if ref and app and ref == app:
+                score += 100
+            elif ref and app and (ref in app or app in ref):
+                score += 40
+            if des and name and des == name:
+                score += 30
+            elif des and name and (des in name or name in des):
+                score += 15
+            out.append(
+                {
+                    "id": int(r["id"]),
+                    "name": r["name"],
+                    "appellation_code": r["appellation_code"],
+                    "category_code": r["category_code"],
+                    "unit_price": float(r["unit_price"] or 0),
+                    "price_basis": r["price_basis"],
+                    "price_currency": r["price_currency"],
+                    "deja_pilotee": r["deja_pilotee"] is not None,
+                    "score": score,
+                }
+            )
+        out.sort(key=lambda x: (-x["score"], (x["name"] or "").lower()))
+    return {"candidats": out}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
