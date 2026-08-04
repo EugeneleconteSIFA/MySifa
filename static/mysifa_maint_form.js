@@ -325,6 +325,170 @@
     _maintRefreshUsureUI(position || '');
   }
 
+  // ── Administration du référentiel des pièces d'usure (v229) ────────────
+  // Écran Paramètres → Maintenance → Pièces d'usure. Le DOM n'existe que sur
+  // /settings : toutes les fonctions sortent proprement si l'élément est absent,
+  // ce qui permet au module partagé de rester chargé sur /maintenance.
+  window._usurePiecesAdmin = window._usurePiecesAdmin || [];
+  let _usureEditId = null;
+
+  async function loadUsurePiecesAdmin() {
+    const box = document.getElementById('usure-list');
+    if (!box) return;
+    try {
+      const r = await api('/api/maintenance/usure-pieces?include_inactifs=true');
+      window._usurePiecesAdmin = (r && Array.isArray(r.items)) ? r.items : [];
+      if (r && r.migrated === false) {
+        box.innerHTML = '<p style="color:var(--danger,#f87171);font-size:13px">Migration DB manquante : la table des pièces d\'usure n\'existe pas encore sur cette instance.</p>';
+        return;
+      }
+    } catch (e) {
+      box.innerHTML = '<p style="color:var(--danger,#f87171);font-size:13px">Erreur de chargement : ' + esc(e && e.message ? e.message : String(e)) + '</p>';
+      return;
+    }
+    renderUsurePiecesList();
+  }
+
+  function renderUsurePiecesList() {
+    const el = document.getElementById('usure-list');
+    if (!el) return;
+    const items = window._usurePiecesAdmin || [];
+    if (!items.length) {
+      el.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucune pièce d\'usure. Ajoute-en une pour la voir apparaître sur l\'accueil Maintenance.</p>';
+      return;
+    }
+    let body = '';
+    items.forEach(p => {
+      const positions = Array.isArray(p.positions) ? p.positions : [];
+      const posHtml = positions.length
+        ? positions.map(x => '<span class="op-pill" style="margin-right:4px">' + esc(x.charAt(0).toUpperCase() + x.slice(1)) + '</span>').join('')
+        : '<span style="color:var(--muted);font-style:italic">aucune (pièce unique)</span>';
+      // Le compteur dit combien de codes pointent sur la pièce. Une pièce à 2
+      // positions et 1 seul code = une position orpheline, visible sur la carte
+      // comme « aucun code rattaché ».
+      const attendu = positions.length || 1;
+      const n = p.codes_count || 0;
+      const cntColor = (n === 0) ? 'var(--danger,#f87171)' : (n < attendu ? 'var(--warning,#fbbf24)' : 'var(--text)');
+      const cntTitle = (n === 0) ? 'Aucun code rattaché : la carte restera vide'
+                     : (n < attendu ? 'Certaines positions n\'ont pas de code rattaché' : '');
+      body += '<tr' + (p.actif ? '' : ' style="opacity:.5"') + '>'
+        + '<td class="op-lbl-cell">' + esc(p.label) + (p.actif ? '' : ' <span style="font-size:10px;color:var(--muted)">(désactivée)</span>') + '</td>'
+        + '<td><code style="font-size:11px;color:var(--muted)">' + esc(p.cle) + '</code></td>'
+        + '<td>' + posHtml + '</td>'
+        + '<td style="color:' + cntColor + '" title="' + esc(cntTitle) + '">' + n + ' / ' + attendu + '</td>'
+        + '<td>' + (p.ordre || 0) + '</td>'
+        + '<td><div class="op-act">'
+        +   '<button type="button" class="btn-sm btn-ghost" data-usure-edit="' + esc(String(p.id)) + '">Modifier</button>'
+        +   '<button type="button" class="btn-sm btn-ghost" data-usure-toggle="' + esc(String(p.id)) + '">' + (p.actif ? 'Désactiver' : 'Réactiver') + '</button>'
+        +   '<button type="button" class="btn-sm btn-ghost danger" data-usure-del="' + esc(String(p.id)) + '">Supprimer</button>'
+        + '</div></td></tr>';
+    });
+    el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
+      + '<th>Pièce</th><th>Clé</th><th>Positions</th><th title="Codes rattachés / positions à couvrir">Codes</th><th>Ordre</th><th>Actions</th>'
+      + '</tr></thead><tbody>' + body + '</tbody></table></div>';
+    el.querySelectorAll('[data-usure-edit]').forEach(b => b.addEventListener('click', () => openUsurePieceForm(b.getAttribute('data-usure-edit'))));
+    el.querySelectorAll('[data-usure-toggle]').forEach(b => b.addEventListener('click', () => toggleUsurePiece(b.getAttribute('data-usure-toggle'))));
+    el.querySelectorAll('[data-usure-del]').forEach(b => b.addEventListener('click', () => deleteUsurePiece(b.getAttribute('data-usure-del'))));
+  }
+
+  function _usurePieceAdminById(id) {
+    return (window._usurePiecesAdmin || []).find(p => String(p.id) === String(id)) || null;
+  }
+
+  function openUsurePieceForm(id) {
+    const wrap = document.getElementById('usure-form-wrap');
+    if (!wrap) return;
+    _usureEditId = id || null;
+    wrap.classList.remove('hidden');
+    const title = document.getElementById('usure-form-title');
+    const lab = document.getElementById('usure-label');
+    const pos = document.getElementById('usure-positions');
+    const ord = document.getElementById('usure-ordre');
+    if (id) {
+      const p = _usurePieceAdminById(id);
+      if (!p) return;
+      if (title) title.textContent = 'Modifier « ' + p.label + ' »';
+      if (lab) lab.value = p.label || '';
+      if (pos) pos.value = (Array.isArray(p.positions) ? p.positions : []).join(', ');
+      if (ord) ord.value = String(p.ordre || 0);
+    } else {
+      if (title) title.textContent = 'Nouvelle pièce';
+      if (lab) lab.value = '';
+      if (pos) pos.value = '';
+      if (ord) ord.value = '';
+    }
+    if (lab) lab.focus();
+  }
+
+  function closeUsurePieceForm() {
+    _usureEditId = null;
+    const wrap = document.getElementById('usure-form-wrap');
+    if (wrap) wrap.classList.add('hidden');
+  }
+
+  async function saveUsurePieceForm() {
+    const label = (document.getElementById('usure-label')?.value || '').trim();
+    const posRaw = (document.getElementById('usure-positions')?.value || '').trim();
+    const ordRaw = (document.getElementById('usure-ordre')?.value || '').trim();
+    if (!label) { toast('Libellé obligatoire', true); return; }
+    const positions = posRaw ? posRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const payload = { label: label, positions: positions };
+    if (ordRaw !== '') payload.ordre = parseInt(ordRaw, 10) || 0;
+    try {
+      if (_usureEditId) {
+        await api('/api/maintenance/usure-pieces/' + encodeURIComponent(_usureEditId), {
+          method: 'PUT', body: JSON.stringify(payload),
+        });
+      } else {
+        await api('/api/maintenance/usure-pieces', {
+          method: 'POST', body: JSON.stringify(payload),
+        });
+      }
+      toast('Pièce enregistrée');
+    } catch (e) {
+      toast(e && e.message ? e.message : 'Erreur', true);
+      return;
+    }
+    closeUsurePieceForm();
+    await loadUsurePiecesAdmin();
+    // Le référentiel utilisé par le formulaire des codes ET par la colonne
+    // « Pièce d'usure » doit refléter le changement sans rechargement de page.
+    await loadUsurePieces();
+    if (typeof renderMaintList === 'function') renderMaintList();
+  }
+
+  async function toggleUsurePiece(id) {
+    const p = _usurePieceAdminById(id);
+    if (!p) return;
+    try {
+      await api('/api/maintenance/usure-pieces/' + encodeURIComponent(id), {
+        method: 'PUT', body: JSON.stringify({ actif: !p.actif }),
+      });
+    } catch (e) {
+      toast(e && e.message ? e.message : 'Erreur', true);
+      return;
+    }
+    await loadUsurePiecesAdmin();
+    await loadUsurePieces();
+    if (typeof renderMaintList === 'function') renderMaintList();
+  }
+
+  async function deleteUsurePiece(id) {
+    const p = _usurePieceAdminById(id);
+    if (!p) return;
+    if (!confirm('Supprimer la pièce « ' + p.label + ' » ?\n\nSa carte disparaîtra de l\'accueil Maintenance. Les codes maintenance ne sont pas supprimés — il faut les avoir détachés au préalable.')) return;
+    try {
+      await api('/api/maintenance/usure-pieces/' + encodeURIComponent(id), { method: 'DELETE' });
+      toast('Pièce supprimée');
+    } catch (e) {
+      toast(e && e.message ? e.message : 'Erreur', true);
+      return;
+    }
+    await loadUsurePiecesAdmin();
+    await loadUsurePieces();
+    if (typeof renderMaintList === 'function') renderMaintList();
+  }
+
   // ── loadMaintCodes ──
   async function loadMaintCodes() {
     // Le référentiel des pièces alimente le select du formulaire ET le badge
@@ -364,18 +528,26 @@
     renderMaintList();
   }
 
-  // Badge « pièce d'usure » dans la liste des codes — c'est la réponse
-  // visuelle à « comment reconnaître un code pièce d'usure ». Avant v229 il
-  // n'y avait rien à afficher : l'information n'existait nulle part en base.
-  function _maintUsureBadge(o) {
-    if (!o || o.usure_piece_id === null || o.usure_piece_id === undefined) return '';
+  // Contenu de la colonne « Pièce d'usure » — c'est la réponse à « comment
+  // reconnaître un code pièce d'usure ». Avant v229 il n'y avait rien à
+  // afficher : l'information n'existait nulle part en base.
+  //
+  // Colonne et non badge collé au libellé : les libellés d'aujourd'hui
+  // répètent le nom de la pièce ("Changement couteaux bande"), ce qui faisait
+  // lire le badge comme une redondance. En colonne, on balaie le rattachement
+  // réel d'un coup d'œil — y compris les codes qui n'en ont pas.
+  function _maintUsureCell(o) {
+    const none = '<span style="color:var(--muted)">—</span>';
+    if (!o || o.usure_piece_id === null || o.usure_piece_id === undefined) return none;
     const piece = _maintUsurePieceById(o.usure_piece_id);
-    if (!piece) return '';
+    // Pièce désactivée ou supprimée : on le dit, plutôt que d'afficher « — »
+    // qui laisserait croire que le code n'a jamais été rattaché.
+    if (!piece) return '<span style="color:var(--danger,#f87171)" title="La pièce référencée n\'existe plus ou est désactivée">pièce introuvable</span>';
     const pos = (o.usure_position || '').trim();
     const txt = piece.label + (pos ? ' · ' + pos.charAt(0).toUpperCase() + pos.slice(1) : '');
-    return ' <span style="display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;'
+    return '<span style="display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:5px;'
          + 'background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent);'
-         + 'margin-left:6px;vertical-align:middle;white-space:nowrap">' + esc(txt) + '</span>';
+         + 'white-space:nowrap">' + esc(txt) + '</span>';
   }
 
   // ── renderMaintList ──
@@ -404,7 +576,14 @@
           _maintCatLabel(o.categorie).toLowerCase().includes(q) ||
           // v2.2.17 — periodique retiré du filtre
           String(o.intervalle || '').toLowerCase().includes(q) ||
-          String(o.metrage_ref || '').toLowerCase().includes(q);
+          String(o.metrage_ref || '').toLowerCase().includes(q) ||
+          // v229 : filtrer par nom de pièce ("couteaux") remonte tous ses codes,
+          // même si leur libellé ne contient pas le mot.
+          (function(){
+            const pc = _maintUsurePieceById(o.usure_piece_id);
+            if (!pc) return false;
+            return (pc.label + ' ' + (o.usure_position || '')).toLowerCase().includes(q);
+          })();
       });
     }
     // Ordre des catégories : Contrôles → Entretien → Remplacements. Les codes
@@ -435,7 +614,7 @@
     let body = '';
     ['controles', 'entretien', 'remplacements'].forEach(cat => {
       if (!byCat[cat].length) return;
-      body += '<tr class="op-cat-row"><td colspan="8">' + esc(_maintCatLabel(cat)) + '</td></tr>';
+      body += '<tr class="op-cat-row"><td colspan="9">' + esc(_maintCatLabel(cat)) + '</td></tr>';
       byCat[cat].forEach(o => {
         const c = esc(String(o.code));
         const niv = parseInt(o.niveau, 10) || 1;
@@ -445,9 +624,10 @@
         const metrageDisplay = o.metrage_ref ? esc(o.metrage_ref) : '<span style="color:var(--muted);font-style:italic">À compléter</span>';
         body += '<tr>'
           + '<td class="op-code-cell">' + c + '</td>'
-          + '<td class="op-lbl-cell">' + esc(o.label || '') + _maintUsureBadge(o) + '</td>'
+          + '<td class="op-lbl-cell">' + esc(o.label || '') + '</td>'
           + '<td><span class="niv-badge" data-niv="' + niv + '">N' + niv + '</span></td>'
           + '<td><span class="op-pill ' + catCls + '">' + esc(_maintCatLabel(cat)) + '</span></td>'
+          + '<td>' + _maintUsureCell(o) + '</td>'
           + '<td>' + intervalleDisplay + '</td>'
           + '<td>' + metrageDisplay + '</td>'
           + '<td><button type="button" class="btn-sm btn-ghost maint-docs-btn" data-maint-docs="' + c + '" title="Gerer les documents attaches a ce code">'
@@ -461,7 +641,7 @@
       });
     });
     el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
-      + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Intervalle de temps</th><th>Réf. métrage</th><th>Documents</th><th>Actions</th>'
+      + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Pièce d\'usure</th><th>Intervalle de temps</th><th>Réf. métrage</th><th>Documents</th><th>Actions</th>'
       + '</tr></thead><tbody>' + body + '</tbody></table></div>';
     el.querySelectorAll('[data-maint-edit]').forEach(btn => {
       btn.addEventListener('click', () => openMaintForm(btn.getAttribute('data-maint-edit')));
@@ -1095,6 +1275,14 @@
   try { window.openMaintForm = openMaintForm; } catch(e) {}
   try { window.loadUsurePieces = loadUsurePieces; } catch(e) {}
   try { window._maintFillUsureSelects = _maintFillUsureSelects; } catch(e) {}
+  try { window._maintUsureCell = _maintUsureCell; } catch(e) {}
+  try { window.loadUsurePiecesAdmin = loadUsurePiecesAdmin; } catch(e) {}
+  try { window.renderUsurePiecesList = renderUsurePiecesList; } catch(e) {}
+  try { window.openUsurePieceForm = openUsurePieceForm; } catch(e) {}
+  try { window.closeUsurePieceForm = closeUsurePieceForm; } catch(e) {}
+  try { window.saveUsurePieceForm = saveUsurePieceForm; } catch(e) {}
+  try { window.toggleUsurePiece = toggleUsurePiece; } catch(e) {}
+  try { window.deleteUsurePiece = deleteUsurePiece; } catch(e) {}
   try { window._maintRefreshUsureUI = _maintRefreshUsureUI; } catch(e) {}
   try { window._maintOnUsurePieceChange = _maintOnUsurePieceChange; } catch(e) {}
   try { window._maintOnUsurePositionChange = _maintOnUsurePositionChange; } catch(e) {}
@@ -1122,6 +1310,10 @@
     openMaintDocsModal: openMaintDocsModal,
     loadUsurePieces: loadUsurePieces,
     _maintFillUsureSelects: _maintFillUsureSelects,
+    loadUsurePiecesAdmin: loadUsurePiecesAdmin,
+    renderUsurePiecesList: renderUsurePiecesList,
+    openUsurePieceForm: openUsurePieceForm,
+    saveUsurePieceForm: saveUsurePieceForm,
     _maintRefreshUsureUI: _maintRefreshUsureUI,
     _maintUsurePieceById: _maintUsurePieceById,
     loadLibres: loadLibres,
