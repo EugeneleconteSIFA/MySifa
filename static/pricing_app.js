@@ -26,6 +26,10 @@
     laizes: [],
     grammages: [],
     expanded: {},
+    // Fiche de paramétrage d'une déclinaison MyStock (route /pricing/mystock/:id).
+    declForm: null,
+    declPreview: null,
+    declDirty: false,
     products: [],
     settings: null,
     filters: {
@@ -303,6 +307,9 @@
       if (parts[2] === "new") return { name: "product-new", id: null };
       if (parts[2] && /^\d+$/.test(parts[2])) return { name: "product-edit", id: parts[2] };
       return { name: "products", id: null };
+    }
+    if (seg === "mystock" && parts[2] && /^\d+$/.test(parts[2])) {
+      return { name: "mystock-edit", id: parts[2] };
     }
     if (seg === "settings") return { name: "settings", id: null };
     return { name: "dashboard", id: null };
@@ -769,9 +776,11 @@
       (d.lignes || []).forEach((l, i) => {
         const fid = l.fournisseur_id == null ? "" : l.fournisseur_id;
         const key = `${d.id}|${fid}`;
-        const fiche = d.mc_material_id
-          ? `<button type="button" class="link-btn" data-ms-open-mc="${d.mc_material_id}" title="Ouvrir la fiche Coûts matières">${escHtml(d.mc_name || "fiche")}</button>`
-          : '<span class="muted">non appairée</span>';
+        // Le coût au m² est le vrai résultat attendu : il ouvre la fiche de
+        // paramétrage de la déclinaison.
+        const cout = d.cout_eur_m2 != null && d.cout_eur_m2 > 0
+          ? `<button type="button" class="link-btn" data-ms-open="${d.id}" title="Ouvrir le paramétrage de cette déclinaison">${escHtml(fmtEurM2(d.cout_eur_m2))}</button>`
+          : `<button type="button" class="link-btn muted" data-ms-open="${d.id}" title="Renseigner poids, devise, taxes et transport">à paramétrer</button>`;
         lignes.push(`<tr class="${l.principal ? "ms-principal" : ""}">
           <td class="ms-statut">${l.principal
               ? `<span class="badge badge-glassine" title="Ce prix fait foi">Principal</span>`
@@ -784,11 +793,10 @@
               ? `<input type="number" step="0.0001" class="ms-inline ms-prix" data-ms-prix="${escAttr(key)}" value="${escAttr(l.prix)}"/>`
               : fmtPrixUnite(l.prix, m.unite)}</td>
           <td class="ms-unite">${escHtml(m.unite)}</td>
-          <td class="ms-fiche">${fiche}</td>
+          <td class="ms-fiche">${i === 0 ? cout : ""}</td>
           <td class="ms-meta">${escHtml(l.updated_at ? String(l.updated_at).replace("T", " ").slice(0, 16) : "—")}${l.updated_by_name ? " · " + escHtml(l.updated_by_name) : ""}</td>
           <td class="ms-actions">${S.canWrite
-              ? actionBtn("data-ms-pair", d.id, "link", d.mc_material_id ? "Changer la fiche Coûts matières appairée" : "Appairer à une fiche Coûts matières") +
-                (d.mc_material_id ? actionBtn("data-ms-unpair", d.id, "unlink", "Détacher la fiche Coûts matières", true) : "") +
+              ? actionBtn("data-ms-open", d.id, "edit", "Ouvrir le paramétrage de cette déclinaison") +
                 actionBtn("data-ms-dup", key, "copy", "Dupliquer cette ligne pour un autre fournisseur") +
                 (m.type_declinaison ? actionBtn("data-ms-new", m.id, "plus", `Créer un nouveau ${DECL_LABEL[m.type_declinaison]}`) : "") +
                 actionBtn("data-ms-del", key, "trash", "Supprimer cette ligne", true)
@@ -799,7 +807,7 @@
     if (!lignes.length) {
       return `<div class="ms-detail">
         <table class="pr-table ms-table">
-          <thead><tr>${colonnes}<th>Fournisseur</th><th>Prix</th><th>Unité</th><th>Fiche Coûts mat.</th><th>Modifié</th><th class="ms-actions"></th></tr></thead>
+          <thead><tr>${colonnes}<th>Fournisseur</th><th>Prix</th><th>Unité</th><th>Coût €/m²</th><th>Modifié</th><th class="ms-actions"></th></tr></thead>
           <tbody><tr><td colspan="8" class="empty" style="padding:18px">Aucune déclinaison.
             ${S.canWrite && m.type_declinaison
               ? `<button type="button" class="btn btn-soft btn-sm" data-ms-new="${m.id}" style="margin-left:8px">Créer ${escHtml(DECL_LABEL[m.type_declinaison] === "laize" ? "une laize" : "un grammage")}</button>`
@@ -808,7 +816,7 @@
     }
     return `<div class="ms-detail">
       <table class="pr-table ms-table">
-        <thead><tr>${colonnes}<th>Fournisseur</th><th>Prix</th><th>Unité</th><th>Fiche Coûts mat.</th><th>Modifié</th><th class="ms-actions"></th></tr></thead>
+        <thead><tr>${colonnes}<th>Fournisseur</th><th>Prix</th><th>Unité</th><th>Coût €/m²</th><th>Modifié</th><th class="ms-actions"></th></tr></thead>
         <tbody>${lignes.join("")}</tbody>
       </table>
     </div>`;
@@ -828,11 +836,11 @@
       .map((m) => {
         const open = !!S.expanded[m.id];
         const nb = m.nb_declinaisons || 0;
-        const app = m.nb_appairees || 0;
+        const prets = m.nb_parametrees || 0;
         const lien = nb
-          ? (app === nb
-              ? `<span class="badge badge-frontal">${app}/${nb} appairée${nb > 1 ? "s" : ""}</span>`
-              : `<span class="badge ${app ? "badge-silicone" : "badge-autre"}">${app}/${nb} appairée${nb > 1 ? "s" : ""}</span>`)
+          ? (prets === nb
+              ? `<span class="badge badge-frontal">${prets}/${nb} réglée${nb > 1 ? "s" : ""}</span>`
+              : `<span class="badge ${prets ? "badge-silicone" : "badge-autre"}">${prets}/${nb} réglée${nb > 1 ? "s" : ""}</span>`)
           : '<span class="muted">—</span>';
         return `<tr class="ms-row${open ? " open" : ""}" data-ms-row="${m.id}">
             <td class="ms-caret">${open ? "▾" : "▸"}</td>
@@ -866,10 +874,11 @@
           </select>
         </div>
         <div class="ms-hint">Le prix saisi ici est <strong>celui de MyStock</strong> : il est écrit directement dans la valorisation et historisé.
-          Chaque <strong>déclinaison</strong> — une laize, un grammage — s'appaire à une fiche Coûts matières et c'est le prix de son <strong>fournisseur principal</strong> qui fait foi.</div>
+          C'est le prix du <strong>fournisseur principal</strong> qui fait foi. Chaque <strong>déclinaison</strong> — une laize, un grammage —
+          a sa propre fiche : clique sur son coût pour régler poids, devise, taxes et transport d'import.</div>
         <div class="table-wrap">
           <table class="pr-table">
-            <thead><tr><th style="width:28px"></th><th>Cat.</th><th>Référence</th><th>Désignation</th><th>Déclinaisons</th><th>Prix en vigueur</th><th>Fourn.</th><th>Coûts mat.</th><th></th></tr></thead>
+            <thead><tr><th style="width:28px"></th><th>Cat.</th><th>Référence</th><th>Désignation</th><th>Déclinaisons</th><th>Prix en vigueur</th><th>Fourn.</th><th>Réglées</th><th></th></tr></thead>
             <tbody>${rows || '<tr><td colspan="9" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
           </table>
         </div>
@@ -927,15 +936,6 @@
       showToast(e.message, "danger");
       return false;
     }
-  }
-
-  function findDecl(declId) {
-    for (const m of S.mystock) {
-      for (const d of m.declinaisons || []) {
-        if (d.id === declId) return { matiere: m, decl: d };
-      }
-    }
-    return null;
   }
 
   function bindMystockActions() {
@@ -1034,130 +1034,12 @@
         }
       };
     });
-    document.querySelectorAll("[data-ms-pair]").forEach((btn) => {
-      btn.onclick = () => openAppairageModal(parseInt(btn.getAttribute("data-ms-pair"), 10));
-    });
-    document.querySelectorAll("[data-ms-unpair]").forEach((btn) => {
-      btn.onclick = async () => {
-        const id = parseInt(btn.getAttribute("data-ms-unpair"), 10);
-        const found = findDecl(id);
-        const ok = await confirmDelete(
-          `Détacher « ${found ? found.decl.mc_name || "" : ""} » ? Cette fiche Coûts matières retrouvera son prix propre.`
-        );
-        if (!ok) return;
-        if (
-          await msCall("/api/pricing/mystock/appairage", {
-            declinaison_id: id,
-            mc_material_id: null,
-          })
-        ) {
-          showToast("Appairage retiré.", "success");
-        }
-      };
-    });
-    document.querySelectorAll("[data-ms-open-mc]").forEach((btn) => {
-      btn.onclick = () => navigate("/pricing/materials/" + btn.getAttribute("data-ms-open-mc"));
+    // Ouverture de la fiche de paramétrage de la déclinaison.
+    document.querySelectorAll("[data-ms-open]").forEach((btn) => {
+      btn.onclick = () => navigate("/pricing/mystock/" + btn.getAttribute("data-ms-open"));
     });
   }
 
-  /**
-   * Appairage d'une déclinaison avec une fiche de la base Coûts matières.
-   * Une fiche déjà pilotée par une autre déclinaison est signalée : la choisir
-   * transfère le pilotage.
-   */
-  async function openAppairageModal(declinaisonId) {
-    const found = findDecl(declinaisonId);
-    const titre = found ? `${found.matiere.reference} — ${found.decl.libelle}` : "";
-    const root = document.getElementById("modal-root");
-    root.innerHTML = `
-      <div class="modal-backdrop" id="ap-back">
-        <div class="modal" style="max-width:660px">
-          <div class="modal-head">
-            <h2>Appairer « ${escHtml(titre)} »</h2>
-            <button type="button" class="icon-btn" id="ap-close" aria-label="Fermer">×</button>
-          </div>
-          <div class="field-hint">Choisissez la fiche Coûts matières qui correspond à cette déclinaison.
-            Son prix sera alors lu directement dans MyStock.</div>
-          <div class="loading-state" style="padding:24px"><div class="spinner"></div></div>
-        </div>
-      </div>`;
-    const close = () => {
-      root.innerHTML = "";
-    };
-    document.getElementById("ap-back").onclick = (e) => {
-      if (e.target.id === "ap-back") close();
-    };
-    document.getElementById("ap-close").onclick = close;
-
-    let data;
-    try {
-      data = await api("/api/pricing/mystock/candidats/" + declinaisonId);
-    } catch (e) {
-      showToast(e.message, "danger");
-      close();
-      return;
-    }
-    const items = data.candidats || [];
-    const box = document.querySelector("#ap-back .modal");
-    box.querySelector(".loading-state").remove();
-    const search = document.createElement("input");
-    search.type = "search";
-    search.placeholder = "Filtrer (nom, appellation…)";
-    search.style.cssText = "width:100%;margin-top:12px;padding:10px 14px;" +
-      "border:1px solid var(--border);border-radius:10px;background:var(--filter-input-bg);" +
-      "color:var(--text);font-family:inherit;font-size:13px";
-    const list = document.createElement("div");
-    list.className = "ap-list";
-    box.appendChild(search);
-    box.appendChild(list);
-
-    const draw = (q) => {
-      const t = (q || "").trim().toLowerCase();
-      const shown = items.filter(
-        (m) =>
-          !t ||
-          String(m.name || "").toLowerCase().includes(t) ||
-          String(m.appellation_code || "").toLowerCase().includes(t)
-      );
-      list.innerHTML = shown.length
-        ? shown
-            .slice(0, 200)
-            .map(
-              (m) => `<div class="ap-item" data-ap="${m.id}">
-                <div>
-                  <div class="ap-name">${escHtml(m.name)}</div>
-                  <div class="ap-sub">${escHtml(m.appellation_code || "—")} · ${escHtml(m.category_code)} ·
-                    ${fmtNum(m.unit_price, 4, 4)} ${escHtml(m.price_currency)}/${m.price_basis === "PER_M2" ? "m²" : "kg"}${m.deja_pilotee ? " · <strong>déjà pilotée</strong>" : ""}</div>
-                </div>
-                ${m.score >= 100 ? '<div class="ap-score">correspondance forte</div>' : (m.score >= 15 ? '<div class="ap-score" style="color:var(--muted)">proche</div>' : "")}
-              </div>`
-            )
-            .join("")
-        : '<div class="empty" style="padding:20px">Aucune fiche ne correspond</div>';
-      list.querySelectorAll("[data-ap]").forEach((el) => {
-        el.onclick = async () => {
-          try {
-            await api("/api/pricing/mystock/appairage", {
-              method: "POST",
-              body: {
-                declinaison_id: declinaisonId,
-                mc_material_id: parseInt(el.getAttribute("data-ap"), 10),
-              },
-            });
-            close();
-            showToast("Appairée — le prix MyStock pilote désormais cette fiche.", "success");
-            await loadMystockList();
-            renderMystockList();
-          } catch (e) {
-            showToast(e.message, "danger");
-          }
-        };
-      });
-    };
-    draw("");
-    search.oninput = () => draw(search.value);
-    search.focus();
-  }
 
   function categorieBadge(cat) {
     const c = String(cat || "").toUpperCase();
@@ -2476,6 +2358,248 @@
     };
   }
 
+  // ─── Fiche d'une déclinaison MyStock ────────────────────────────────────
+  // L'équivalent d'une fiche de la base Coûts matières, mais pour une matière
+  // MyStock : le prix vient du fournisseur principal, les réglages qui en font
+  // un coût au m² (poids, devise, base, taxes, import) vivent sur la
+  // déclinaison. Aucune fiche de la base historique n'est nécessaire.
+
+  async function loadDeclinaisonForm(id) {
+    S.declDirty = false;
+    S.declForm = await api("/api/pricing/mystock/declinaisons/" + id + "/parametrage");
+    S.declPreview = S.declForm.computed || null;
+  }
+
+  /** Recopie l'état des champs de la page dans S.declForm. */
+  function syncDeclFormFromDom() {
+    const f = S.declForm;
+    const g = (id) => document.getElementById(id);
+    if (g("d-cur")) f.price_currency = g("d-cur").value;
+    if (g("d-basis")) f.price_basis = g("d-basis").value;
+    if (g("d-tax")) f.tax_incidence = g("d-tax").value;
+    if (g("d-imp")) f.is_imported = g("d-imp").checked;
+    if (g("d-tmode")) f.transport_mode = g("d-tmode").value;
+    if (g("d-transport")) {
+      const v = g("d-transport").value;
+      if (f.transport_mode === "PCT") f.transport_pct = v;
+      else f.transport_unit_price = v;
+    }
+    if (g("d-wm2")) f.weight_per_m2 = g("d-wm2").value;
+    if (g("d-gsm")) f.weight_gsm = g("d-gsm").value;
+  }
+
+  /** Recalcule le coût sans rien enregistrer — même endpoint que la base CM. */
+  async function refreshDeclPreview() {
+    const f = S.declForm;
+    try {
+      S.declPreview = await api("/api/pricing/materials/preview", {
+        method: "POST",
+        body: {
+          unit_price: parseFloat(f.unit_price) || 0,
+          weight_per_m2: parseFloat(f.weight_per_m2) || 0,
+          price_currency: f.price_currency,
+          price_basis: f.price_basis,
+          tax_incidence: parseFloat(f.tax_incidence) || 1,
+          is_imported: !!f.is_imported,
+          transport_mode: f.transport_mode || "AMOUNT",
+          transport_unit_price: parseFloat(f.transport_unit_price) || 0,
+          transport_pct: parseFloat(f.transport_pct) || 0,
+        },
+      });
+    } catch (e) {
+      return;
+    }
+    const sum = document.getElementById("decl-summary");
+    if (sum) sum.innerHTML = matSummaryHtml(S.declPreview);
+    const rec = document.getElementById("decl-recap");
+    if (rec) rec.innerHTML = recapTableHtml(S.declPreview);
+    const eq = document.getElementById("d-transport-eq");
+    if (eq) eq.innerHTML = transportEqText(S.declPreview);
+  }
+
+  function declSaveBarHtml() {
+    const dirty = S.declDirty ? "" : " hidden";
+    return `<div class="pr-savebar">
+        <button type="button" class="btn btn-soft btn-sm" id="btn-back-decl">${icon("arrow-left", 14)} Retour liste</button>
+        <div class="savebar-state" id="decl-dirty"${dirty}><span class="dot"></span>Modifications non enregistrées</div>
+        <div class="savebar-actions">
+          <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${S.declForm.matiere_id}" target="_blank" rel="noopener" title="Ouvrir la matière dans MyStock">MyStock ↗</a>
+          ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-save-decl">Enregistrer</button>' : ""}
+        </div>
+      </div>`;
+  }
+
+  function renderDeclinaisonForm() {
+    const f = S.declForm;
+    const unit = unitLabel(f.price_currency, f.price_basis);
+    const isPct = f.transport_mode === "PCT";
+    const prixTxt = `${fmtNum(f.unit_price, 4, 4)} ${unit}`;
+
+    setContent(`
+      <div class="pr-narrow">
+        ${pageHead(
+          "Matière MyStock",
+          `${escHtml(f.reference)} — ${escHtml(f.libelle)}`
+        )}
+        ${declSaveBarHtml()}
+        <div class="mat-summary" id="decl-summary">${matSummaryHtml(S.declPreview)}</div>
+        <div class="form-layout">
+        <div class="form-card">
+
+          <div class="form-section"><h3>Identification</h3>
+            <div class="ms-locked">
+              <strong>${escHtml(f.reference)}</strong> — ${escHtml(f.designation || "")}
+              · ${escHtml(f.libelle)} · ${escHtml(f.categorie || "")}
+              <br>Prix en vigueur : <strong>${escHtml(prixTxt)}</strong>${
+                f.fournisseur_nom ? ` chez <strong>${escHtml(f.fournisseur_nom)}</strong>` : " (aucun fournisseur principal)"
+              }.
+              Le prix se modifie dans l'onglet Matières MyStock, où vivent les fournisseurs.
+            </div>
+          </div>
+
+          <div class="form-section"><h3>Prix d'achat</h3>
+            <div class="field-row">
+              <div class="field f-mid"><label>Devise achat</label><select id="d-cur">
+                <option value="EUR" ${f.price_currency==="EUR"?"selected":""}>EUR — euro (€)</option>
+                <option value="USD" ${f.price_currency==="USD"?"selected":""}>USD — dollar américain ($)</option>
+              </select></div>
+              <div class="field"><label>Base de prix</label><select id="d-basis">
+                <option value="PER_KG" ${f.price_basis==="PER_KG"?"selected":""}>${escHtml(BASIS_LABEL.PER_KG)}</option>
+                <option value="PER_M2" ${f.price_basis==="PER_M2"?"selected":""}>${escHtml(BASIS_LABEL.PER_M2)}</option>
+              </select></div>
+            </div>
+            <div class="field f-num"><label>Incidence taxes <span class="lbl-unit">multiplicateur</span></label>
+              <input type="number" step="0.0001" id="d-tax" value="${escAttr(f.tax_incidence)}"/>
+              <div class="field-hint">1 = neutre · 1,05 = +5 % · 0,95 = −5 %</div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <div class="import-block${f.is_imported ? " on" : ""}" id="d-import-block">
+              <label class="check-row">
+                <input type="checkbox" id="d-imp" ${f.is_imported?"checked":""}/>
+                <span>
+                  <span class="check-title">Matière importée</span>
+                  <span class="check-sub">Un coût de transport s'ajoute au prix d'achat avant conversion.</span>
+                </span>
+              </label>
+              <div id="d-import-fields" class="import-fields" style="${f.is_imported?"":"display:none"}">
+                <div class="field-row">
+                  <div class="field f-mid"><label>Mode de transport</label><select id="d-tmode">
+                    <option value="AMOUNT" ${isPct?"":"selected"}>Montant — saisi en ${escHtml(unit)}</option>
+                    <option value="PCT" ${isPct?"selected":""}>Pourcentage du prix d'achat</option>
+                  </select></div>
+                  <div class="field f-num"><label>Transport <span class="lbl-unit">${isPct ? "% du prix d'achat" : escHtml(unit)}</span></label>
+                    <input type="number" step="0.0001" id="d-transport" value="${escAttr(isPct ? f.transport_pct : f.transport_unit_price)}"/>
+                    <div class="field-hint" id="d-transport-eq">${transportEqText(S.declPreview)}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section" id="d-carac" style="${needsWeight(f)?"":"display:none"}"><h3>Caractéristiques</h3>
+            <div class="field-row">
+              <div class="field f-num"><label>Poids <span class="lbl-unit">kg/m²</span></label>
+                <input type="number" step="0.0001" id="d-wm2" value="${escAttr(f.weight_per_m2)}"/></div>
+              <div class="field f-num"><label>Grammage <span class="lbl-unit">g/m²</span></label>
+                <input type="number" id="d-gsm" value="${escAttr(f.weight_gsm == null ? "" : f.weight_gsm)}"/>
+                <div class="field-hint">Renseigné seul, il remplit le poids (g/m² ÷ 1000).</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        ${inlineSettingsHtml()}
+        </div>
+
+        <div id="decl-recap">${recapTableHtml(S.declPreview)}</div>
+      </div>
+    `);
+
+    document.getElementById("btn-back-decl").onclick = () => navigate("/pricing/materials");
+    bindInlineSettings();
+
+    const marquer = () => {
+      if (S.declDirty) return;
+      S.declDirty = true;
+      const t = document.getElementById("decl-dirty");
+      if (t) t.hidden = false;
+    };
+
+    // Saisie libre : on recalcule à la volée, sans re-render (le curseur reste
+    // dans le champ).
+    ["d-tax", "d-transport", "d-wm2"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.oninput = () => {
+        marquer();
+        syncDeclFormFromDom();
+        clearTimeout(S.debounceDecl);
+        S.debounceDecl = setTimeout(refreshDeclPreview, 300);
+      };
+    });
+    const gsm = document.getElementById("d-gsm");
+    if (gsm) {
+      gsm.oninput = () => {
+        marquer();
+        const g = parseFloat(gsm.value);
+        const w = document.getElementById("d-wm2");
+        if (w && !Number.isNaN(g) && (!parseFloat(w.value) || w.dataset.auto === "1")) {
+          w.value = String(Math.round((g / 1000) * 10000) / 10000);
+          w.dataset.auto = "1";
+        }
+        syncDeclFormFromDom();
+        clearTimeout(S.debounceDecl);
+        S.debounceDecl = setTimeout(refreshDeclPreview, 300);
+      };
+    }
+    // Ces champs changent les unités affichées partout : on re-rend.
+    ["d-cur", "d-basis", "d-imp", "d-tmode"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.onchange = () => {
+        marquer();
+        syncDeclFormFromDom();
+        renderDeclinaisonForm();
+        refreshDeclPreview();
+      };
+    });
+
+    const save = document.getElementById("btn-save-decl");
+    if (save) save.onclick = () => saveDeclinaisonForm();
+  }
+
+  async function saveDeclinaisonForm() {
+    syncDeclFormFromDom();
+    const f = S.declForm;
+    try {
+      const maj = await api(
+        "/api/pricing/mystock/declinaisons/" + f.declinaison_id + "/parametrage",
+        {
+          method: "PATCH",
+          body: {
+            price_currency: f.price_currency,
+            price_basis: f.price_basis,
+            tax_incidence: parseFloat(f.tax_incidence) || 1,
+            is_imported: !!f.is_imported,
+            transport_mode: f.transport_mode || "AMOUNT",
+            transport_unit_price: parseFloat(f.transport_unit_price) || 0,
+            transport_pct: parseFloat(f.transport_pct) || 0,
+            weight_per_m2: parseFloat(f.weight_per_m2) || 0,
+            weight_gsm: f.weight_gsm === "" || f.weight_gsm == null ? null : parseInt(f.weight_gsm, 10),
+          },
+        }
+      );
+      S.declForm = maj;
+      S.declPreview = maj.computed || null;
+      S.declDirty = false;
+      showToast("Réglages enregistrés.", "success");
+      renderDeclinaisonForm();
+    } catch (e) {
+      showToast(e.message, "danger");
+    }
+  }
+
   async function bootRoute() {
     S.route = parseRoute();
     renderSidebar();
@@ -2503,6 +2627,9 @@
       } else if (r === "material-edit") {
         await loadMaterialForm(S.route.id);
         renderMaterialForm(false);
+      } else if (r === "mystock-edit") {
+        await loadDeclinaisonForm(S.route.id);
+        renderDeclinaisonForm();
       } else if (r === "products") {
         await loadProductsList();
         await renderProductsList();

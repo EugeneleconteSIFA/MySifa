@@ -1317,6 +1317,31 @@ def list_mystock_materials(
         materials = mystock_prix.list_materials(
             conn, q=q, categorie=categorie, actives_only=active_only
         )
+        # Coût au m² de chaque déclinaison : c'est la colonne qui rend la liste
+        # utile, sinon il faut ouvrir chaque fiche pour savoir ce que la matière
+        # coûte réellement.
+        from app.services.pricing.repository import declinaison_to_pricing_material
+
+        reglages = load_pricing_settings(conn)
+        for m in materials:
+            for d in m.get("declinaisons", []):
+                d["cout_eur_m2"] = None
+                if not d.get("unit_price"):
+                    continue
+                try:
+                    d["cout_eur_m2"] = float(
+                        compute_material_price_per_m2(
+                            declinaison_to_pricing_material(
+                                {**d, "declinaison_id": d["id"],
+                                 "reference": m["reference"], "libelle": d["libelle"]}
+                            ),
+                            reglages,
+                        ).price_eur_per_m2
+                    )
+                except PricingError:
+                    # Réglages incomplets : la fiche le dira, la liste ne doit
+                    # pas tomber pour autant.
+                    pass
         cats = sorted(
             r["categorie"]
             for r in conn.execute(
@@ -1505,6 +1530,50 @@ def delete_mystock_prix(request: Request, body: dict = Body(...)):
             raise HTTPException(status_code=400, detail=res.get("reason", "Suppression refusée"))
         conn.commit()
     return res
+
+
+def _cout_declinaison(conn, param: dict) -> MaterialComputedOut:
+    """Coût au m² d'une déclinaison, à partir de ses propres réglages."""
+    from app.services.pricing.repository import declinaison_to_pricing_material
+
+    return _material_computed(
+        declinaison_to_pricing_material(param), load_pricing_settings(conn)
+    )
+
+
+@router.get("/api/pricing/mystock/declinaisons/{declinaison_id}/parametrage")
+def get_mystock_parametrage(request: Request, declinaison_id: int):
+    """
+    Fiche d'une déclinaison MyStock : identité, prix d'achat par fournisseur,
+    réglages de calcul et coût de revient au m². C'est l'équivalent d'une fiche
+    de la base Coûts matières, mais pilotée par MyStock.
+    """
+    _require_read(request)
+    with get_db() as conn:
+        param = mystock_prix.parametrage(conn, declinaison_id)
+        if not param:
+            raise HTTPException(status_code=404, detail="Déclinaison introuvable.")
+        param["computed"] = _cout_declinaison(conn, param)
+    return param
+
+
+@router.patch("/api/pricing/mystock/declinaisons/{declinaison_id}/parametrage")
+def patch_mystock_parametrage(request: Request, declinaison_id: int, body: dict = Body(...)):
+    """Enregistre les réglages de calcul d'une déclinaison."""
+    user = _require_write(request)
+    with get_db() as conn:
+        res = mystock_prix.set_parametrage(
+            conn,
+            declinaison_id=declinaison_id,
+            patch=body,
+            user_name=user.get("nom"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Modification refusée"))
+        conn.commit()
+        param = res["parametrage"]
+        param["computed"] = _cout_declinaison(conn, param)
+    return param
 
 
 @router.get("/api/pricing/mystock/candidats/{declinaison_id}")
