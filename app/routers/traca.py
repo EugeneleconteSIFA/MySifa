@@ -371,6 +371,42 @@ def _reception_de_la_bobine(conn, code_barre: str) -> Optional[dict]:
     return d
 
 
+def _negoce_du_produit(conn, produit_id: int) -> list[dict]:
+    """Réceptions de négoce (produit fini acheté) portant sur ce produit.
+
+    Un produit acheté fini n'a ni bobine ni dossier de fabrication : sa chaîne
+    s'arrête au BL du partenaire, et c'est normal. Sans cette requête, le
+    traceur conclurait « aucun lot rattaché à un dossier » — une phrase exacte
+    mais qui se lit comme un trou de traçabilité alors que la chaîne est
+    complète, simplement plus courte.
+    """
+    try:
+        rows = conn.execute(
+            """SELECT r.id, r.lot_numero, r.date_reception, r.bon_livraison,
+                      COALESCE(r.fsc_type_claim,'non_fsc') AS fsc_type_claim,
+                      r.licence_fournisseur, r.certificat_valide, r.certificat_note,
+                      f.nom AS fournisseur_nom,
+                      i.id AS item_id, i.quantite, i.unite, i.emplacement,
+                      i.lot_fournisseur, i.lot_stock_id
+                 FROM pf_reception_items i
+                 JOIN pf_receptions r ON r.id = i.reception_id
+                 LEFT JOIN fournisseurs_fsc f ON f.id = r.fournisseur_id
+                WHERE i.produit_id=?
+                ORDER BY r.date_reception DESC, r.id DESC
+                LIMIT ?""",
+            (produit_id, _MAX_NOEUDS),
+        ).fetchall()
+    except Exception:
+        # Base antérieure à la migration négoce : absence de trace, pas erreur.
+        return []
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["fsc_claim_label"] = _claim_label(d.get("fsc_type_claim"))
+        out.append(d)
+    return out
+
+
 def _bobines_de_la_reception(conn, reception_id: int) -> list[str]:
     rows = conn.execute(
         "SELECT code_barre FROM stock_reception_items WHERE reception_id=? LIMIT ?",
@@ -534,17 +570,53 @@ def traca_chaine(request: Request, type: str = "", id: str = ""):
             d_exp = dict(exp)
             ref = (d_exp.get("no_dossier") or "").strip()
             branche = _chaine_dossier(conn, ref) if ref else None
+
+            # Livraison directe (régime A2) : rien n'a transité par SIFA, donc
+            # l'absence de dossier et de lot est la situation NORMALE. La
+            # preuve du claim est le BL du partenaire, et c'est lui qu'il faut
+            # exiger — pas un dossier de fabrication qui n'existera jamais.
+            negoce_direct = None
+            if int(d_exp.get("fsc_sans_transit") or 0) == 1:
+                fourn = None
+                if d_exp.get("fsc_fournisseur_id"):
+                    fourn = conn.execute(
+                        "SELECT id, nom, licence, certificat FROM fournisseurs_fsc WHERE id=?",
+                        (d_exp.get("fsc_fournisseur_id"),),
+                    ).fetchone()
+                negoce_direct = {
+                    "fournisseur": dict(fourn) if fourn else None,
+                    "bl_fournisseur": (d_exp.get("fsc_bl_fournisseur") or "").strip() or None,
+                    "claim_entrant": d_exp.get("fsc_claim_entrant"),
+                    "claim_sortant": d_exp.get("fsc_claim_sortant"),
+                    "claim_label": _claim_label(d_exp.get("fsc_claim_sortant")),
+                }
+
+            if negoce_direct:
+                ruptures_e = (
+                    []
+                    if negoce_direct["bl_fournisseur"]
+                    else [
+                        "Livraison directe sans n° de BL partenaire : le claim facturé "
+                        "au client n'est adossé à aucun document."
+                    ]
+                )
+            elif ref:
+                ruptures_e = []
+            else:
+                ruptures_e = [
+                    "Cette expédition n'est rattachée à aucun dossier : "
+                    "la chaîne ne peut pas remonter jusqu'à la matière."
+                ]
             return {
                 "racine": {"type": "expedition", "id": key},
                 "expedition": d_exp,
                 "reconstitue": (d_exp.get("no_dossier_source") or "") == "reconstitue",
+                "negoce_direct": negoce_direct,
                 "dossiers": [branche] if branche else [],
                 "synthese": {
                     "nb_dossiers": 1 if branche else 0,
-                    "ruptures": [] if ref else [
-                        "Cette expédition n'est rattachée à aucun dossier : "
-                        "la chaîne ne peut pas remonter jusqu'à la matière."
-                    ],
+                    "origine": "negoce_direct" if negoce_direct else ("fabrication" if ref else "inconnue"),
+                    "ruptures": ruptures_e,
                     "tronque": False,
                 },
             }
@@ -575,16 +647,37 @@ def traca_chaine(request: Request, type: str = "", id: str = ""):
                 ).fetchall()
             ]
             branches = [_chaine_dossier(conn, r) for r in refs]
+            negoce = _negoce_du_produit(conn, pid)
+
+            # Un produit acheté fini a une chaîne courte mais complète. On ne
+            # signale une rupture que s'il n'a NI dossier de fabrication NI
+            # réception de négoce — c'est-à-dire si son origine est vraiment
+            # inconnue.
+            if refs:
+                ruptures_p: list[str] = []
+            elif negoce:
+                ruptures_p = []
+            else:
+                ruptures_p = [
+                    "Aucune origine connue pour ce produit : ni dossier de fabrication, "
+                    "ni réception de négoce."
+                ]
             return {
                 "racine": {"type": "produit", "id": key},
                 "produit": dict(prod),
                 "dossiers": branches,
+                "negoce": negoce,
                 "synthese": {
                     "nb_dossiers": len(refs),
                     "nb_expeditions": sum(len(b["expeditions"]) for b in branches),
-                    "ruptures": [] if refs else [
-                        "Aucun lot de ce produit n'est rattaché à un dossier de fabrication."
-                    ],
+                    "nb_receptions_negoce": len(negoce),
+                    "origine": (
+                        "fabrication" if refs and not negoce
+                        else "negoce" if negoce and not refs
+                        else "mixte" if refs and negoce
+                        else "inconnue"
+                    ),
+                    "ruptures": ruptures_p,
                     "tronque": len(refs) >= _MAX_NOEUDS,
                 },
             }

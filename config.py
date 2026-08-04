@@ -325,6 +325,26 @@ ROLES_TRACA_VIEWER = {
     ROLE_ADMINISTRATION_TECHNIQUE,
 }
 
+# Code de licence FSC de SIFA — celui qui doit figurer sur TOUT document de
+# vente portant un claim (facture et/ou BL). Il n'est volontairement pas codé
+# en dur : renseigné par variable d'environnement FSC_LICENCE_SIFA, il reste
+# vide tant qu'il n'a pas été saisi, et l'API le signale comme un écart plutôt
+# que d'imprimer un numéro faux — ce qui serait pire que pas de numéro du tout.
+FSC_LICENCE_SIFA = os.getenv("FSC_LICENCE_SIFA", "").strip()
+
+# Négoce FSC — réception de produit fini certifié (A1) et rattachement d'une
+# livraison directe partenaire → client (A2).
+# Volontairement plus étroit que ROLES_STOCK : ces saisies engagent un claim
+# FSC opposable à un auditeur, ce n'est pas de la manutention de stock.
+# `fabrication` en est exclu (l'atelier ne réceptionne pas d'achat négoce) et
+# `commercial` aussi (lecture seule sur le stock).
+ROLES_FSC_NEGOCE_WRITE = {
+    ROLE_SUPERADMIN,
+    ROLE_DIRECTION,
+    ROLE_LOGISTIQUE,
+    ROLE_EXPEDITION,
+} | ROLES_ADMINISTRATION_ALL
+
 # Union : rôles autorisés à ouvrir /settings (au moins une section accessible).
 ROLES_SETTINGS = (
     ROLES_SETTINGS_ACCESS
