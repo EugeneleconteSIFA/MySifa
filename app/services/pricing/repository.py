@@ -26,6 +26,11 @@ def _bool(v: Any) -> bool:
     return bool(v) if v is not None else False
 
 
+def _bool_defaut_vrai(v: Any) -> bool:
+    """Colonne absente ou NULL = vrai : la marge s'applique sauf mention contraire."""
+    return True if v is None else bool(v)
+
+
 def _col(row: sqlite3.Row, name: str, default: Any = None) -> Any:
     """Lecture tolérante d'une colonne : None si absente du SELECT (compat migrations)."""
     try:
@@ -136,8 +141,9 @@ def row_to_pricing_material(
         weight_per_m2=_dec(row["weight_per_m2"]),
         price_currency=mystock["price_currency"] if mystock else row["price_currency"],
         price_basis=mystock["price_basis"] if mystock else row["price_basis"],
-        tax_incidence=_dec(row["tax_incidence"]),
+        taxe_pct=_dec(_col(row, "taxe_pct")),
         is_imported=_bool(row["is_imported"]),
+        applique_marge=_bool_defaut_vrai(_col(row, "applique_marge")),
         transport_mode=(_col(row, "transport_mode") or "AMOUNT"),
         transport_unit_price=_dec(_col(row, "transport_unit_price")),
         transport_pct=_dec(_col(row, "transport_pct")),
@@ -174,11 +180,14 @@ def material_row_to_dict(
         "fournisseur_nom": _col(row, "fournisseur_nom"),
         "weight_per_m2": float(row["weight_per_m2"]),
         "weight_gsm": row["weight_gsm"],
+        "grammage_gsm": float(_col(row, "grammage_gsm") or 0),
+        "perte_pct": float(_col(row, "perte_pct") or 0),
         "price_currency": row["price_currency"],
         "unit_price": float(row["unit_price"]),
         "price_basis": row["price_basis"],
-        "tax_incidence": float(row["tax_incidence"]),
+        "taxe_pct": float(_col(row, "taxe_pct") or 0),
         "is_imported": _bool(row["is_imported"]),
+        "applique_marge": _bool_defaut_vrai(_col(row, "applique_marge")),
         "transport_mode": _col(row, "transport_mode") or "AMOUNT",
         "transport_unit_price": float(_col(row, "transport_unit_price") or 0),
         "transport_pct": float(_col(row, "transport_pct") or 0),
@@ -284,8 +293,9 @@ def declinaison_to_pricing_material(param: dict) -> PricingMaterial:
         weight_per_m2=_dec(param.get("weight_per_m2")),
         price_currency=param.get("price_currency") or "EUR",
         price_basis=param.get("price_basis") or "PER_KG",
-        tax_incidence=_dec(param.get("tax_incidence") or 1),
+        taxe_pct=_dec(param.get("taxe_pct")),
         is_imported=bool(param.get("is_imported")),
+        applique_marge=_bool_defaut_vrai(param.get("applique_marge")),
         transport_mode=param.get("transport_mode") or "AMOUNT",
         transport_unit_price=_dec(param.get("transport_unit_price")),
         transport_pct=_dec(param.get("transport_pct")),
@@ -370,20 +380,22 @@ def insert_price_history(
     material_id: int,
     unit_price: Decimal,
     price_currency: str,
-    tax_incidence: Decimal,
+    taxe_pct: Decimal,
     effective_date: str,
     source: Optional[str],
     created_by: Optional[int],
 ) -> None:
     conn.execute(
         """INSERT INTO mc_material_price_history
+           -- La colonne s'appelle encore tax_incidence : elle porte désormais un
+           -- POURCENTAGE (6 = +6 %), pas un multiplicateur.
            (material_id, unit_price, price_currency, tax_incidence, effective_date, source, created_by)
            VALUES (?,?,?,?,?,?,?)""",
         (
             material_id,
             float(unit_price),
             price_currency,
-            float(tax_incidence),
+            float(taxe_pct),
             effective_date,
             source,
             created_by,

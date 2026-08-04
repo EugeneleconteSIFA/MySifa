@@ -395,6 +395,10 @@ body.reduce-anim .cal-skel{animation:none}
 .cal-wv-hour-row:first-child{border-top:none}
 .cal-wv-day-col.drag-over{background:var(--accent-bg);outline:2px dashed var(--accent);outline-offset:-2px;z-index:1}
 /* v2.5.14 : drag & drop planning maintenance */
+.cal-event.is-closed{opacity:.72}
+.cal-event-closed-badge{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:rgba(148,163,184,.22);color:var(--text2,var(--muted));margin-left:6px;vertical-align:middle}
+.plan-det-closed{margin-top:14px;padding:12px 14px;border-radius:8px;background:rgba(148,163,184,.10);border:1px solid var(--border);color:var(--text2,var(--muted));font-size:13px;line-height:1.5}
+.plan-det-closed strong{color:var(--text)}
 .cal-event[data-draggable="1"]{cursor:grab}
 .cal-event[data-draggable="1"]:active{cursor:grabbing}
 .cal-event.is-past{cursor:not-allowed}
@@ -4028,7 +4032,8 @@ function _makeEventBlock(item){
   const lanesCount = item.lanesCount || 1;
   const lane = item.lane || 0;
   const div = document.createElement('div');
-  div.className = 'cal-event' + (ev.template_id ? ' is-from-template' : '');
+  div.className = 'cal-event' + (ev.template_id ? ' is-from-template' : '')
+                              + (_calIsPastEvent(ev) ? ' is-closed' : '');  // v2.7.0
   div.style.top = top + 'px';
   div.style.height = height + 'px';
   div.style.left = 'calc(' + (lane * (100 / lanesCount)) + '% + 3px)';
@@ -4044,7 +4049,13 @@ function _makeEventBlock(item){
     const mine = (ev.operators || []).some(o => o.id === S.me.id);
     if(mine) div.classList.add('is-mine');
   }
-  const ops = Array.isArray(ev.operations) ? ev.operations.filter(o => o && (o.opName || o.opTypeId)) : [];
+  // v2.7.0 : une operation invalidee est mise de cote — elle ne compte plus
+  // dans le creneau. Le compteur de la tuile suit donc l'historique : invalider
+  // une saisie depuis l'historique fait bien decroitre le nombre affiche ici
+  // (refreshPlanning + renderCal sont deja rappeles par l'action).
+  const ops = Array.isArray(ev.operations)
+    ? ev.operations.filter(o => o && (o.opName || o.opTypeId) && o.statut !== 'invalidee')
+    : [];
   const opsCount = ops.length;
   // v2.5.20 : rendu minimaliste -- juste le nom (ou le nom du modele lie, ou la
   // machine en fallback) + "Afficher les details". La liste des ops et l'horaire
@@ -4061,7 +4072,9 @@ function _makeEventBlock(item){
     if(tmpl && tmpl.name){ title = tmpl.name; hasCustomName = true; }
   }
   if(!title) title = ev.machine || '\u2014';
-  let inner = '<div class="cal-event-title">' + escHtml(title) + '</div>';
+  let inner = '<div class="cal-event-title">' + escHtml(title) +
+    (_calIsPastEvent(ev) ? '<span class="cal-event-closed-badge">Clôturé</span>' : '') +
+    '</div>';
   // Machine en sous-titre (seulement si le titre principal n\'est pas deja la machine)
   if(hasCustomName && ev.machine){
     inner += '<div class="cal-event-sub">' + escHtml(ev.machine) + '</div>';
@@ -4072,7 +4085,7 @@ function _makeEventBlock(item){
   }
   div.innerHTML = inner;
   // v2.5.26 / v2.6.0 : pictogramme « aucun operateur assigne ». APRES innerHTML.
-  _appendNoOperatorBadge(div, ev);
+  if(!_calIsPastEvent(ev)) _appendNoOperatorBadge(div, ev);  // v2.7.0
   div.title = (ev.machine || '') + '\n' + ev.start + ' – ' + ev.end +
     (ops.length ? '\n\n' + ops.map(o => '• ' + (o.opName||'—')).join('\n') : '') +
     '\n\nCliquer pour afficher les détails';
@@ -4489,7 +4502,7 @@ function _makeClusterBlock(cluster){
     div.innerHTML = '<div class="cal-event-title">' + escHtml((ev.opName || '—') + machineSuffix) + '</div>' +
                     '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
     // v2.6.0 : idem -- APRES innerHTML, sinon le badge est efface.
-    _appendNoOperatorBadge(div, ev);
+    if(!_calIsPastEvent(ev)) _appendNoOperatorBadge(div, ev);  // v2.7.0
     div.title = 'Cliquer pour afficher les détails';
     div.addEventListener('click', e => {
       e.stopPropagation();
@@ -4619,6 +4632,11 @@ function openPlanningDetailsModal(events){
               const invAt = md.invalidated_at ? ' le ' + escHtml(_fmtDoneAt(md.invalidated_at)) : '';
               label = 'Invalid\u00e9e' + mOn + invBy + invAt;
               color = 'var(--muted)';
+            } else if(_calIsPastEvent(ev)){
+              // v2.7.1 : créneau clôturé -> l'opération ne sera jamais saisie.
+              icon = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--danger,#f87171);color:var(--danger,#f87171);flex-shrink:0;font-size:11px;font-weight:800;line-height:1">!</span>';
+              label = md.machine ? (escHtml(md.machine) + ' \u2014 non r\u00e9alis\u00e9e') : 'Non r\u00e9alis\u00e9e';
+              color = 'var(--danger,#f87171)';
             } else {
               icon = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border);flex-shrink:0"></span>';
               label = md.machine ? (escHtml(md.machine) + ' \u2014 en attente') : 'En attente';
@@ -4667,7 +4685,7 @@ function openPlanningDetailsModal(events){
         '</div>' +
       '</div>' +
       // v2.5.25 : bandeau warning si aucun operateur assigne (admin uniquement).
-      (MAINT_ROLE !== 'operator' && !(Array.isArray(ev.operators) && ev.operators.length)
+      (MAINT_ROLE !== 'operator' && !_calIsPastEvent(ev) && !(Array.isArray(ev.operators) && ev.operators.length)
         ? '<div style="margin-top:10px;padding:10px 14px;border-radius:8px;background:rgba(245,158,11,.12);border:1px solid var(--warn,#f59e0b);color:var(--warn,#f59e0b);font-size:13px;line-height:1.4;display:flex;align-items:center;gap:10px">' +
             '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>' +
             '<span style="flex:1"><strong>Aucun op\u00e9rateur assign\u00e9.</strong> Personne ne saura qu\'il y a une t\u00e2che.</span>' +
@@ -4685,16 +4703,25 @@ function openPlanningDetailsModal(events){
       '</div>' +
       '<div class="plan-det-case-ops-label">Opérations à effectuer (' + ops.length + ')</div>' +
       '<div class="plan-det-case-ops-list">' + opsHtml + '</div>' +
-      '<div class="plan-det-case-actions">' +
-        '<button type="button" class="case-action-btn edit" onclick="editCase(\'' + escAttr(ev.id) + '\')">' +
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
-          ' Modifier' +
-        '</button>' +
-        '<button type="button" class="case-action-btn del" onclick="confirmDeleteCase(\'' + escAttr(ev.id) + '\')">' +
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-          ' Supprimer' +
-        '</button>' +
-      '</div>';
+      // v2.7.0 : créneau clôturé -> plus d'actions de planification, un
+      // bandeau qui dit pourquoi et où consigner une intervention faite.
+      (_calIsPastEvent(ev)
+        ? '<div class="plan-det-closed">' +
+            '<strong>Créneau clôturé.</strong> Sa date est passée : il ne peut plus être ' +
+            'déplacé, modifié ni supprimé. Pour consigner une intervention déjà ' +
+            'réalisée, utilise l\'enregistrement d\'opération. Une saisie déjà ' +
+            'enregistrée reste corrigeable depuis l\'historique des opérations.' +
+          '</div>'
+        : '<div class="plan-det-case-actions">' +
+            '<button type="button" class="case-action-btn edit" onclick="editCase(\'' + escAttr(ev.id) + '\')">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+              ' Modifier' +
+            '</button>' +
+            '<button type="button" class="case-action-btn del" onclick="confirmDeleteCase(\'' + escAttr(ev.id) + '\')">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+              ' Supprimer' +
+            '</button>' +
+          '</div>');
   }
   m.classList.add('open');
   m.setAttribute('aria-hidden','false');
@@ -4922,6 +4949,13 @@ function _closeDeleteCaseModal(){
 function editCase(id){
   const ev = PLANNING_STATE.list.find(e => String(e.id) === String(id));
   if(!ev){ showToast('Créneau introuvable.', 'danger'); return; }
+  // v2.7.0 : la modale de créneau EST le formulaire de planification. Sur un
+  // créneau clôturé elle n'a plus d'objet — le serveur refuserait de toute
+  // façon. La consultation reste ouverte via la modale de détails.
+  if(_calIsPastEvent(ev)){
+    showToast('Créneau passé : il est clôturé et n\'est plus modifiable.', 'info');
+    return;
+  }
   closePlanningDetailsModal();
   openCaseModal({
     editId: ev.id,
@@ -10792,7 +10826,35 @@ function _maintCatCssFront(cat){
   return 'controles';
 }
 function _statutLabel(s){
-  return { a_faire:'À faire', en_cours:'En cours', termine:'Terminé', reporte:'Reporté' }[s] || s;
+  // 'invalidee' manquait : le repli `|| s` affichait le libellé brut.
+  return { a_faire:'À faire', en_cours:'En cours', termine:'Terminé',
+           reporte:'Reporté', invalidee:'Invalidée' }[s] || s;
+}
+
+// v2.7.1 — Statut AFFICHÉ d'une opération, dérivé du créneau qui la porte.
+//
+// Une opération jamais saisie sur un créneau clôturé n'est pas « À faire » :
+// elle ne le sera jamais. Elle s'affichait pourtant avec le même libellé et la
+// même pastille grise qu'une opération d'un créneau de demain — impossible de
+// distinguer « pas encore fait » de « jamais fait » sans aller lire la date.
+//
+// On le DÉRIVE plutôt que de l'écrire en base : aucune migration, aucun
+// déclencheur à maintenir (ni job, ni écriture opportuniste au chargement), et
+// rien à rétro-corriger le jour où la règle change. Le statut réel reste
+// `a_faire` — une requête SQL ne verra donc pas « Non réalisé », c'est le prix
+// assumé de la solution dérivée.
+//
+// `evOrDate` accepte un event ({date} côté calendrier, {date_prevue} côté
+// serveur) ou directement une date ISO.
+function _opStatutView(statut, evOrDate){
+  const s = statut || 'a_faire';
+  const d = (typeof evOrDate === 'string')
+    ? evOrDate
+    : ((evOrDate && (evOrDate.date || evOrDate.date_prevue)) || '');
+  if((s === 'a_faire' || s === 'en_cours') && d && _calIsPastIso(d)){
+    return { cls: 'reporte', label: 'Non réalisé' };
+  }
+  return { cls: s, label: _statutLabel(s) };
 }
 
 async function opFetchCodes(){
@@ -10964,9 +11026,10 @@ function _renderOpCard(ev, opts){
     let opsInThisGroup = 0;
     for(const o of g.ops){
       if(previewLines.length >= MAX_LINES){ printedTruncated = true; break; }
+      const _sv = _opStatutView(o.statut, ev);
       const statusPill = singleOp
         ? ''
-        : `<span class="op-status op-status-${o.statut}" style="position:static;font-size:9px;padding:2px 5px">${_statutLabel(o.statut)}</span>`;
+        : `<span class="op-status op-status-${_sv.cls}" style="position:static;font-size:9px;padding:2px 5px">${_sv.label}</span>`;
       previewLines.push(`<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:5px">
         <span class="op-code" style="font-size:11px;padding:2px 7px">${o.code}</span>
         <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.code_label || '—'}</span>
@@ -10982,11 +11045,14 @@ function _renderOpCard(ev, opts){
     ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">+ ${remainingOps} autre${remainingOps > 1 ? 's' : ''} opération${remainingOps > 1 ? 's' : ''}</div>`
     : '';
   const srcBadge = (ev.source === 'non_planifie') ? '<span class="op-badge-source">Non planifiée</span>' : '';
+  const _cardClos = _calIsPastIso(ev.date_prevue || ev.date || '');
   const summary = doneAll
     ? '<span class="op-status op-status-termine" style="position:static">Terminé</span>'
-    : (remaining < totalOps
-        ? `<span class="op-status op-status-en_cours" style="position:static">${remaining} restant${remaining > 1 ? 'es' : 'e'}</span>`
-        : `<span class="op-status op-status-a_faire" style="position:static">À faire</span>`);
+    : (_cardClos
+        ? '<span class="op-status op-status-reporte" style="position:static">Non réalisé</span>'
+        : (remaining < totalOps
+            ? `<span class="op-status op-status-en_cours" style="position:static">${remaining} restant${remaining > 1 ? 'es' : 'e'}</span>`
+            : `<span class="op-status op-status-a_faire" style="position:static">À faire</span>`));
   const dateLine = isToday ? '' : `<div style="font-size:12px;color:var(--muted);margin-top:2px">${_fmtDateFrShort(ev.date_prevue)}</div>`;
   const cta = isToday
     ? `<button type="button" class="btn op-btn-accent op-card-cta" onclick="event.stopPropagation();opOpenSaisie(${ev.id})">
@@ -11108,7 +11174,7 @@ function _renderOpCardIndividual(op, ev, opts){
   opts = opts || {};
   const showMachine = !!opts.showMachine;
   const isDone = op.statut === 'termine';
-  const statusLabel = _statutLabel(op.statut);
+  const statusLabel = _opStatutView(op.statut, ev).label;
   // Actions Modifier/Supprimer visibles uniquement sur les cartes d'ops
   // non_planifie créées par l'user courant (interventions déclarées via
   // "Enregistrer une opération").
@@ -12634,13 +12700,16 @@ function _opRenderPlanTable(events, meId){
     const allDone = rows.length > 0 && rows.every(r => r.op.statut === 'termine' || r.op.statut === 'invalidee');  // v2.5.10
     const anyDone = rows.some(r => r.op.statut === 'termine');
     const statusCls = allDone ? 'done' : (anyDone ? 'progress' : '');
-    const statusTxt = allDone ? '✓ Terminé' : (anyDone ? 'En cours' : 'À faire');
+    const statusTxt = allDone
+      ? '✓ Terminé'
+      : (_calIsPastIso(ev.date_prevue || ev.date || '') ? 'Non réalisé'
+                                                        : (anyDone ? 'En cours' : 'À faire'));
 
     const tbodyHtml = rows.map(r => `<tr>
       <td class="op-plan-cell-mac">${r.machines.map(m => escHtml(m)).join(' · ')}</td>
       <td><span class="op-code">${r.op.code}</span></td>
       <td class="op-plan-cell-lbl">${escHtml(r.op.code_label || '—')}</td>
-      <td><span class="op-status op-status-${r.op.statut}" style="position:static">${_statutLabel(r.op.statut)}</span></td>
+      <td><span class="op-status op-status-${_opStatutView(r.op.statut, ev).cls}" style="position:static">${_opStatutView(r.op.statut, ev).label}</span></td>
     </tr>`).join('');
 
     return `<div class="op-plan-creneau-card" onclick="opOpenPlanDetail(${ev.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();opOpenPlanDetail(${ev.id});}">

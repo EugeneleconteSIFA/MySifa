@@ -1,0 +1,468 @@
+﻿Base   : \\IDEFIX\sifa_pub\Fiches techniques Access\of.mdb
+Table  : t_of
+Cle    : numero_of = 9931861
+PowerShell : 5.1.26100.8875  |  Process 64 bits : True
+Provider   : Microsoft.ACE.OLEDB.16.0
+
+==============================================================================
+1. COLONNES DE [t_of]
+==============================================================================
+114 colonne(s)
+
+  1   id_of                               Entier long     4
+  2   numero_of                           Texte           50
+  3   date_creation                       Date            8
+  4   date_delai                          Date            8
+  5   numero_commande                     Texte           50
+  6   format                              Texte           50
+  7   numero_plaque                       Texte           50
+  8   conditionnement                     Texte           50
+  9   matiere                             Texte           50
+  10  choix_laize_matiere                 Texte           250
+  11  autre_carton                        Texte           255
+  12  theorique_quantite                  Entier long     4
+  13  theorique_quantite_bobines          Simple          4
+  14  theorique_metrage_necessaire        Double          8
+  15  theorique_mandrins                  Texte           50
+  16  theorique_cartons                   Texte           50
+  17  theorique_autre_carton              Texte           50
+  18  theorique_tubes                     Texte           50
+  19  consommation_quantite               Texte           50
+  20  consommation_quantite_bobines       Texte           50
+  21  consommation_metrage_necessaire     Texte           50
+  22  consommation_mandrins               Texte           50
+  23  consommation_cartons                Texte           50
+  24  consommation_autre_carton           Texte           50
+  25  consommation_tubes                  Texte           50
+  26  temps1_jour                         Date            8
+  27  temps1_calage                       Entier long     4
+  28  temps1_am_debut                     Date            8
+  29  temps1_am_fin                       Date            8
+  30  temps1_pm_debut                     Date            8
+  31  temps1_pm_fin                       Date            8
+  32  temps1_total                        Date            8
+  33  temps2_jour                         Date            8
+  34  temps2_calage                       Entier long     4
+  35  temps2_am_debut                     Date            8
+  36  temps2_am_fin                       Date            8
+  37  temps2_pm_debut                     Date            8
+  38  temps2_pm_fin                       Date            8
+  39  temps2_total                        Date            8
+  40  temps3_jour                         Date            8
+  41  temps3_calage                       Entier long     4
+  42  temps3_am_debut                     Date            8
+  43  temps3_am_fin                       Date            8
+  44  temps3_pm_debut                     Date            8
+  45  temps3_pm_fin                       Date            8
+  46  temps3_total                        Date            8
+  47  temps4_jour                         Date            8
+  48  temps4_calage                       Entier long     4
+  49  temps4_am_debut                     Date            8
+  50  temps4_am_fin                       Date            8
+  51  temps4_pm_debut                     Date            8
+  52  temps4_pm_fin                       Date            8
+  53  temps4_total                        Date            8
+  54  temps5_jour                         Date            8
+  55  temps5_calage                       Entier long     4
+  56  temps5_am_debut                     Date            8
+  57  temps5_am_fin                       Date            8
+  58  temps5_pm_debut                     Date            8
+  59  temps5_pm_fin                       Date            8
+  60  temps5_total                        Date            8
+  61  temps6_jour                         Date            8
+  62  temps6_calage                       Entier long     4
+  63  temps6_am_debut                     Date            8
+  64  temps6_am_fin                       Date            8
+  65  temps6_pm_debut                     Date            8
+  66  temps6_pm_fin                       Date            8
+  67  temps6_total                        Date            8
+  68  temps7_jour                         Date            8
+  69  temps7_calage                       Entier long     4
+  70  temps7_am_debut                     Date            8
+  71  temps7_am_fin                       Date            8
+  72  temps7_pm_debut                     Date            8
+  73  temps7_pm_fin                       Date            8
+  74  temps7_total                        Date            8
+  75  observations                        Memo            536870910
+  76  bob1_nb                             Entier long     4
+  77  bob2_nb                             Entier long     4
+  78  bob3_nb                             Entier long     4
+  79  bob4_nb                             Entier long     4
+  80  bob5_nb                             Entier long     4
+  81  bob6_nb                             Entier long     4
+  82  bob7_nb                             Entier long     4
+  83  bob8_nb                             Entier long     4
+  84  bob1_etiq                           Entier long     4
+  85  bob2_etiq                           Entier long     4
+  86  bob3_etiq                           Entier long     4
+  87  bob4_etiq                           Entier long     4
+  88  bob5_etiq                           Entier long     4
+  89  bob6_etiq                           Entier long     4
+  90  bob7_etiq                           Entier long     4
+  91  bob8_etiq                           Entier long     4
+  92  bob1_total                          Entier long     4
+  93  bob2_total                          Entier long     4
+  94  bob3_total                          Entier long     4
+  95  bob4_total                          Entier long     4
+  96  bob5_total                          Entier long     4
+  97  bob6_total                          Entier long     4
+  98  bob7_total                          Entier long     4
+  99  bob8_total                          Entier long     4
+  100 bob_total                           Texte           50
+  101 reglage_enrouleur                   Texte           10
+  102 reglage_derouleur                   Texte           10
+  103 reglage_echenillage                 Texte           10
+  104 reglage_capstand                    Texte           10
+  105 reglage_vitesse                     Texte           10
+  106 reglage_presseur_avant              Texte           10
+  107 reglage_presseur_arriere            Texte           10
+  108 reglage_pression_axe                Texte           10
+  109 reglage_pression_outil              Texte           10
+  110 reglage_barre                       Texte           10
+  111 reglage_dia_axe                     Texte           10
+  112 matiere_specifique                  Booleen         2
+  113 terminé                             Booleen         2
+  114 galets_pression                     Booleen         2
+
+==============================================================================
+2. CONTENU COMPLET DE numero_of = 9931861
+==============================================================================
+  id_of                                = 18192
+  numero_of                            = 9931861
+  date_creation                        = 05/15/2026 00:00:00
+  date_delai                           = 06/08/2026 00:00:00
+  numero_commande                      = <vide>
+  format                               = 24/0023 - COHESIO1
+  numero_plaque                        = <vide>
+  conditionnement                      = <vide>
+  matiere                              = <vide>
+  choix_laize_matiere                  = Laize optionnelle
+  autre_carton                         = <vide>
+  theorique_quantite                   = 660000
+  theorique_quantite_bobines           = 165
+  theorique_metrage_necessaire         = 7124.03978347778
+  theorique_mandrins                   = 165
+  theorique_cartons                    = 55
+  theorique_autre_carton               = <vide>
+  theorique_tubes                      = <vide>
+  consommation_quantite                = <vide>
+  consommation_quantite_bobines        = <vide>
+  consommation_metrage_necessaire      = <vide>
+  consommation_mandrins                = <vide>
+  consommation_cartons                 = <vide>
+  consommation_autre_carton            = <vide>
+  consommation_tubes                   = <vide>
+  temps1_jour                          = <vide>
+  temps1_calage                        = <vide>
+  temps1_am_debut                      = <vide>
+  temps1_am_fin                        = <vide>
+  temps1_pm_debut                      = <vide>
+  temps1_pm_fin                        = <vide>
+  temps1_total                         = <vide>
+  temps2_jour                          = <vide>
+  temps2_calage                        = <vide>
+  temps2_am_debut                      = <vide>
+  temps2_am_fin                        = <vide>
+  temps2_pm_debut                      = <vide>
+  temps2_pm_fin                        = <vide>
+  temps2_total                         = <vide>
+  temps3_jour                          = <vide>
+  temps3_calage                        = <vide>
+  temps3_am_debut                      = <vide>
+  temps3_am_fin                        = <vide>
+  temps3_pm_debut                      = <vide>
+  temps3_pm_fin                        = <vide>
+  temps3_total                         = <vide>
+  temps4_jour                          = <vide>
+  temps4_calage                        = <vide>
+  temps4_am_debut                      = <vide>
+  temps4_am_fin                        = <vide>
+  temps4_pm_debut                      = <vide>
+  temps4_pm_fin                        = <vide>
+  temps4_total                         = <vide>
+  temps5_jour                          = <vide>
+  temps5_calage                        = <vide>
+  temps5_am_debut                      = <vide>
+  temps5_am_fin                        = <vide>
+  temps5_pm_debut                      = <vide>
+  temps5_pm_fin                        = <vide>
+  temps5_total                         = <vide>
+  temps6_jour                          = <vide>
+  temps6_calage                        = <vide>
+  temps6_am_debut                      = <vide>
+  temps6_am_fin                        = <vide>
+  temps6_pm_debut                      = <vide>
+  temps6_pm_fin                        = <vide>
+  temps6_total                         = <vide>
+  temps7_jour                          = <vide>
+  temps7_calage                        = <vide>
+  temps7_am_debut                      = <vide>
+  temps7_am_fin                        = <vide>
+  temps7_pm_debut                      = <vide>
+  temps7_pm_fin                        = <vide>
+  temps7_total                         = <vide>
+  observations                         = <vide>
+  bob1_nb                              = <vide>
+  bob2_nb                              = <vide>
+  bob3_nb                              = <vide>
+  bob4_nb                              = <vide>
+  bob5_nb                              = <vide>
+  bob6_nb                              = <vide>
+  bob7_nb                              = <vide>
+  bob8_nb                              = <vide>
+  bob1_etiq                            = <vide>
+  bob2_etiq                            = <vide>
+  bob3_etiq                            = <vide>
+  bob4_etiq                            = <vide>
+  bob5_etiq                            = <vide>
+  bob6_etiq                            = <vide>
+  bob7_etiq                            = <vide>
+  bob8_etiq                            = <vide>
+  bob1_total                           = <vide>
+  bob2_total                           = <vide>
+  bob3_total                           = <vide>
+  bob4_total                           = <vide>
+  bob5_total                           = <vide>
+  bob6_total                           = <vide>
+  bob7_total                           = <vide>
+  bob8_total                           = <vide>
+  bob_total                            = <vide>
+  reglage_enrouleur                    = <vide>
+  reglage_derouleur                    = <vide>
+  reglage_echenillage                  = <vide>
+  reglage_capstand                     = <vide>
+  reglage_vitesse                      = <vide>
+  reglage_presseur_avant               = <vide>
+  reglage_presseur_arriere             = <vide>
+  reglage_pression_axe                 = <vide>
+  reglage_pression_outil               = <vide>
+  reglage_barre                        = <vide>
+  reglage_dia_axe                      = <vide>
+  matiere_specifique                   = False
+  terminé                              = False
+  galets_pression                      = False
+
+==============================================================================
+3. RAPPROCHEMENT AVEC L'IMPRESSION PAPIER (tolerance 1 %)
+==============================================================================
+  660000       -> theorique_quantite=660000
+  165          -> theorique_quantite_bobines=165 | theorique_mandrins=165
+  7124         -> theorique_metrage_necessaire=7124.03978347778
+  10,8         -> AUCUNE COLONNE
+  470          -> AUCUNE COLONNE
+  33           -> AUCUNE COLONNE
+  55           -> theorique_cartons=55
+  165          -> theorique_quantite_bobines=165 | theorique_mandrins=165
+  19           -> AUCUNE COLONNE
+  63,6         -> AUCUNE COLONNE
+  68           -> AUCUNE COLONNE
+
+==============================================================================
+3bis. COLONNES TEXTE NON VIDES
+==============================================================================
+  numero_of                            = 9931861
+  format                               = 24/0023 - COHESIO1
+  choix_laize_matiere                  = Laize optionnelle
+  theorique_mandrins                   = 165
+  theorique_cartons                    = 55
+
+==============================================================================
+4. SQL DES REQUETES ACCESS (metrage, adhesif, matiere)
+==============================================================================
+  C'est ici que se trouve la formule officielle, deja ecrite cote SIFA.
+
+  --- adhesif_necessaire ------------------------------------------------
+    SELECT Adhesif.reference, Sum([Adhesif]![grammage]*[of_non_termines_inferieure_a_date]![theorique_metrage_necessaire]*CInt(Trim(Replace([matlaizestandard],"mm","")))/1000000) AS total_grammage, of_non_termines_inferieure_a_date.valeur_param AS date_previsionnelle
+    FROM of_non_termines_inferieure_a_date LEFT JOIN (t_fiches_techniques LEFT JOIN Adhesif ON t_fiches_techniques.matadhesif = Adhesif.type) ON of_non_termines_inferieure_a_date.format = t_fiches_techniques.reference
+    GROUP BY Adhesif.reference, of_non_termines_inferieure_a_date.valeur_param
+    HAVING (((Adhesif.reference) Is Not Null));
+    
+
+  --- adhesif_necessaire_sans_date_prev ---------------------------------
+    SELECT Adhesif.reference, Sum([Adhesif]![grammage]*[t_of]![theorique_metrage_necessaire]*CInt(Trim(Replace([matlaizestandard],"mm","")))/1000000) AS total_grammage
+    FROM (t_of LEFT JOIN t_fiches_techniques ON t_of.format = t_fiches_techniques.reference) LEFT JOIN Adhesif ON t_fiches_techniques.matadhesif = Adhesif.type
+    GROUP BY Adhesif.reference, t_of.terminé
+    HAVING (((Adhesif.reference) Is Not Null) AND ((t_of.terminé)=False));
+    
+
+  --- Copie de adhesif_necessaire ---------------------------------------
+    SELECT Adhesif.reference, Sum([Adhesif]![grammage]*[of_non_termines_inferieure_a_date]![theorique_metrage_necessaire]*CInt(Trim(Replace([matlaizestandard],"mm","")))/1000000) AS total_grammage, of_non_termines_inferieure_a_date.valeur_param AS date_previsionnelle
+    FROM of_non_termines_inferieure_a_date LEFT JOIN (t_fiches_techniques LEFT JOIN Adhesif ON t_fiches_techniques.matadhesif=Adhesif.type) ON of_non_termines_inferieure_a_date.format=t_fiches_techniques.reference
+    GROUP BY Adhesif.reference, of_non_termines_inferieure_a_date.valeur_param
+    HAVING (((Adhesif.reference) Is Not Null));
+    
+
+  --- Copie de matiere_necessaire_sans_date_prev ------------------------
+    SELECT t_fiches_techniques.matsupport, t_fiches_techniques.matlaizestandard, Sum(t_of.theorique_metrage_necessaire) AS SommeDetheorique_metrage_necessaire, t_of.date_delai
+    FROM t_fiches_techniques RIGHT JOIN t_of ON t_fiches_techniques.reference = t_of.format
+    GROUP BY t_fiches_techniques.matsupport, t_fiches_techniques.matlaizestandard, t_of.terminé, t_of.date_delai
+    HAVING (((t_fiches_techniques.matsupport) Is Not Null) AND ((t_of.terminé)=False));
+    
+
+  --- date derniere modif Matières RVGI ---------------------------------
+    SELECT mat_mat.CODE1, mat_mat.CODE2, mat_mat.CODE3, mat_mat.TYPE, Max(mat_mat.DTEM) AS MaxDeDTEM
+    FROM mat_mat
+    WHERE (((mat_mat.CORBEILLE)=0))
+    GROUP BY mat_mat.CODE1, mat_mat.CODE2, mat_mat.CODE3, mat_mat.TYPE
+    HAVING (((mat_mat.TYPE)<800));
+    
+
+  --- matiere_necessaire ------------------------------------------------
+    SELECT t_fiches_techniques.matsupport, t_fiches_techniques.matlaizestandard, Sum(of_non_termines_inferieure_a_date.theorique_metrage_necessaire) AS SommeDetheorique_metrage_necessaire, of_non_termines_inferieure_a_date.valeur_param AS date_previsionnelle
+    FROM of_non_termines_inferieure_a_date LEFT JOIN t_fiches_techniques ON of_non_termines_inferieure_a_date.format=t_fiches_techniques.reference
+    GROUP BY t_fiches_techniques.matsupport, t_fiches_techniques.matlaizestandard, of_non_termines_inferieure_a_date.valeur_param
+    HAVING (((t_fiches_techniques.matsupport) Is Not Null));
+    
+
+  --- matiere_necessaire_sans_date_prev ---------------------------------
+    SELECT t_fiches_techniques.matsupport, t_fiches_techniques.matlaizestandard, Sum(t_of.theorique_metrage_necessaire) AS SommeDetheorique_metrage_necessaire
+    FROM t_fiches_techniques RIGHT JOIN t_of ON t_fiches_techniques.reference = t_of.format
+    GROUP BY t_fiches_techniques.matsupport, t_fiches_techniques.matlaizestandard, t_of.terminé
+    HAVING (((t_fiches_techniques.matsupport) Is Not Null) AND ((t_of.terminé)=False));
+    
+
+  --- Matières RVGI -----------------------------------------------------
+    SELECT [date derniere modif Matières RVGI].CODE1, [date derniere modif Matières RVGI].CODE2, [date derniere modif Matières RVGI].CODE3, mat_mat.LIBC1, mat_mat.TYPE
+    FROM [date derniere modif Matières RVGI] INNER JOIN mat_mat ON ([date derniere modif Matières RVGI].MaxDeDTEM=mat_mat.DTEM) AND ([date derniere modif Matières RVGI].CODE3=mat_mat.CODE3) AND ([date derniere modif Matières RVGI].CODE2=mat_mat.CODE2) AND ([date derniere modif Matières RVGI].CODE1=mat_mat.CODE1)
+    WHERE (((mat_mat.CORBEILLE)=0) AND ((mat_mat.TYPE)<800));
+    
+
+  --- Métrage nécessaire ------------------------------------------------
+    SELECT t_of.numero_of, t_of.Format, t_fiches_techniques.matsupport, t_fiches_techniques.matlaizestandard, t_of.theorique_metrage_necessaire
+    FROM t_fiches_techniques INNER JOIN t_of ON t_fiches_techniques.reference = t_of.format
+    WHERE (((t_of.terminé)=False));
+    
+
+  --- Métrage nécessaire par matière ------------------------------------
+    SELECT t_fiches_techniques.matsupport, t_fiches_techniques.matlaizestandard, Sum(t_of.theorique_metrage_necessaire) AS SommeDetheorique_metrage_necessaire
+    FROM t_fiches_techniques INNER JOIN t_of ON t_fiches_techniques.reference=t_of.format
+    GROUP BY t_fiches_techniques.matsupport, t_fiches_techniques.matlaizestandard, t_of.terminé
+    HAVING (((t_of.terminé)=False));
+    
+
+  --- OLD_adhesif_necessaire_avec_replace -------------------------------
+    SELECT Adhesif.reference, Sum([Adhesif]![grammage]*[of_non_termines_inferieure_a_date]![theorique_metrage_necessaire]*CInt(Trim(Replace([matlaizestandard],"mm","")))/1000000) AS total_grammage, of_non_termines_inferieure_a_date.valeur_param AS date_previsionnelle
+    FROM of_non_termines_inferieure_a_date LEFT JOIN (t_fiches_techniques LEFT JOIN Adhesif ON t_fiches_techniques.matadhesif = Adhesif.type) ON of_non_termines_inferieure_a_date.format = t_fiches_techniques.reference
+    GROUP BY Adhesif.reference, of_non_termines_inferieure_a_date.valeur_param
+    HAVING (((Adhesif.reference) Is Not Null));
+    
+
+==============================================================================
+5. TAUX DE REMPLISSAGE (500 dernieres lignes)
+==============================================================================
+  Une colonne vide a 100 % n'est jamais saisie -> inutile de la lire.
+
+  id_of                                100 %  ####################
+  numero_of                            100 %  ####################
+  date_creation                        100 %  ####################
+  date_delai                            85 %  #################
+  numero_commande                        0 %  
+  format                               100 %  ####################
+  numero_plaque                         81 %  ################
+  conditionnement                        0 %  
+  matiere                                0 %  
+  choix_laize_matiere                  100 %  ####################
+  autre_carton                           0 %  
+  theorique_quantite                    96 %  ###################
+  theorique_quantite_bobines            90 %  ##################
+  theorique_metrage_necessaire          97 %  ###################
+  theorique_mandrins                    92 %  ##################
+  theorique_cartons                     80 %  ################
+  theorique_autre_carton                 1 %  
+  theorique_tubes                       50 %  ##########
+  consommation_quantite                  0 %  
+  consommation_quantite_bobines          0 %  
+  consommation_metrage_necessaire        0 %  
+  consommation_mandrins                  0 %  
+  consommation_cartons                   0 %  
+  consommation_autre_carton              0 %  
+  consommation_tubes                     0 %  
+  temps1_jour                            1 %  
+  temps1_calage                          1 %  
+  temps1_am_debut                        1 %  
+  temps1_am_fin                          1 %  
+  temps1_pm_debut                        0 %  
+  temps1_pm_fin                          0 %  
+  temps1_total                           1 %  
+  temps2_jour                            0 %  
+  temps2_calage                          0 %  
+  temps2_am_debut                        0 %  
+  temps2_am_fin                          0 %  
+  temps2_pm_debut                        0 %  
+  temps2_pm_fin                          0 %  
+  temps2_total                           0 %  
+  temps3_jour                            0 %  
+  temps3_calage                          0 %  
+  temps3_am_debut                        0 %  
+  temps3_am_fin                          0 %  
+  temps3_pm_debut                        0 %  
+  temps3_pm_fin                          0 %  
+  temps3_total                           0 %  
+  temps4_jour                            0 %  
+  temps4_calage                          0 %  
+  temps4_am_debut                        0 %  
+  temps4_am_fin                          0 %  
+  temps4_pm_debut                        0 %  
+  temps4_pm_fin                          0 %  
+  temps4_total                           0 %  
+  temps5_jour                            0 %  
+  temps5_calage                          0 %  
+  temps5_am_debut                        0 %  
+  temps5_am_fin                          0 %  
+  temps5_pm_debut                        0 %  
+  temps5_pm_fin                          0 %  
+  temps5_total                           0 %  
+  temps6_jour                            0 %  
+  temps6_calage                          0 %  
+  temps6_am_debut                        0 %  
+  temps6_am_fin                          0 %  
+  temps6_pm_debut                        0 %  
+  temps6_pm_fin                          0 %  
+  temps6_total                           0 %  
+  temps7_jour                            0 %  
+  temps7_calage                          0 %  
+  temps7_am_debut                        0 %  
+  temps7_am_fin                          0 %  
+  temps7_pm_debut                        0 %  
+  temps7_pm_fin                          0 %  
+  temps7_total                           0 %  
+  observations                           3 %  
+  bob1_nb                                1 %  
+  bob2_nb                                0 %  
+  bob3_nb                                0 %  
+  bob4_nb                                0 %  
+  bob5_nb                                0 %  
+  bob6_nb                                0 %  
+  bob7_nb                                0 %  
+  bob8_nb                                0 %  
+  bob1_etiq                              1 %  
+  bob2_etiq                              0 %  
+  bob3_etiq                              0 %  
+  bob4_etiq                              0 %  
+  bob5_etiq                              0 %  
+  bob6_etiq                              0 %  
+  bob7_etiq                              0 %  
+  bob8_etiq                              0 %  
+  bob1_total                             1 %  
+  bob2_total                             0 %  
+  bob3_total                             0 %  
+  bob4_total                             0 %  
+  bob5_total                             0 %  
+  bob6_total                             0 %  
+  bob7_total                             0 %  
+  bob8_total                             0 %  
+  bob_total                              1 %  
+  reglage_enrouleur                      0 %  
+  reglage_derouleur                      0 %  
+  reglage_echenillage                    0 %  
+  reglage_capstand                       0 %  
+  reglage_vitesse                        0 %  
+  reglage_presseur_avant                 0 %  
+  reglage_presseur_arriere               0 %  
+  reglage_pression_axe                   0 %  
+  reglage_pression_outil                 0 %  
+  reglage_barre                          0 %  
+  reglage_dia_axe                        0 %  
+  matiere_specifique                     2 %  
+  terminé                              100 %  ####################
+  galets_pression                        0 %  

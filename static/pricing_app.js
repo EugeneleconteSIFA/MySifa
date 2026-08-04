@@ -42,7 +42,14 @@
       msCat: "",
       msActive: "1",
       prodQ: "",
+      // Onglet actif de la page Produits : base Coûts matières ou MyStock.
+      prodTab: "couts",
+      msProdQ: "",
     },
+    msDecls: [],
+    msProducts: [],
+    formMsProduct: null,
+    msProdPreview: null,
     formMaterial: null,
     formProduct: null,
     matPreview: null,
@@ -207,6 +214,26 @@
   }
 
   /** Le poids au m² n'est utile que si le prix est au kilo ou pour la calculette import. */
+  // Perte matière par défaut, alignée sur mystock_prix.PERTE_DEFAUT.
+  const PERTE_DEFAUT = 9;
+
+  /**
+   * Poids au m² (kg) réellement consommé : le grammage majoré de la perte.
+   * On produit rarement au gramme près — chute et calage font qu'un frontal de
+   * 70 g/m² en consomme davantage. C'est ce poids qui entre dans le calcul.
+   */
+  function poidsRetenu(grammageGsm, pertePct) {
+    const g = parseFloat(grammageGsm) || 0;
+    const p = parseFloat(pertePct) || 0;
+    return Math.round(g * (1 + p / 100) * 1000) / 1e6;
+  }
+
+  function grammageRetenu(grammageGsm, pertePct) {
+    const g = parseFloat(grammageGsm) || 0;
+    const p = parseFloat(pertePct) || 0;
+    return Math.round(g * (1 + p / 100) * 100) / 100;
+  }
+
   function needsWeight(form) {
     return form.price_basis === "PER_KG" || !!form.is_imported;
   }
@@ -308,8 +335,13 @@
       if (parts[2] && /^\d+$/.test(parts[2])) return { name: "product-edit", id: parts[2] };
       return { name: "products", id: null };
     }
-    if (seg === "mystock" && parts[2] && /^\d+$/.test(parts[2])) {
-      return { name: "mystock-edit", id: parts[2] };
+    if (seg === "mystock") {
+      if (parts[2] === "produit") {
+        if (parts[3] === "new") return { name: "msproduct-new", id: null };
+        if (parts[3] && /^\d+$/.test(parts[3])) return { name: "msproduct-edit", id: parts[3] };
+        return { name: "products", id: null };
+      }
+      if (parts[2] && /^\d+$/.test(parts[2])) return { name: "mystock-edit", id: parts[2] };
     }
     if (seg === "settings") return { name: "settings", id: null };
     return { name: "dashboard", id: null };
@@ -1091,13 +1123,14 @@
       category_id: cat ? cat.id : 1,
       supplier_id: "",
       fournisseur_fsc_id: "",
-      weight_per_m2: "0",
-      weight_gsm: "",
+      grammage_gsm: "0",
+      perte_pct: String(PERTE_DEFAUT),
       price_currency: "EUR",
       unit_price: "0",
       price_basis: "PER_KG",
-      tax_incidence: "1",
+      taxe_pct: "0",
       is_imported: false,
+      applique_marge: true,
       transport_mode: "AMOUNT",
       transport_unit_price: "0",
       transport_pct: "0",
@@ -1118,12 +1151,13 @@
       category_id: m.category_id,
       supplier_id: m.supplier_id || "",
       fournisseur_fsc_id: m.fournisseur_fsc_id || "",
-      weight_per_m2: String(m.weight_per_m2),
-      weight_gsm: m.weight_gsm != null ? String(m.weight_gsm) : "",
+      grammage_gsm: String(m.grammage_gsm != null ? m.grammage_gsm : 0),
+      perte_pct: String(m.perte_pct != null ? m.perte_pct : 0),
       price_currency: m.price_currency,
       unit_price: String(m.unit_price),
       price_basis: m.price_basis,
-      tax_incidence: String(m.tax_incidence),
+      taxe_pct: String(m.taxe_pct != null ? m.taxe_pct : 0),
+      applique_marge: m.applique_marge !== false,
       is_imported: !!m.is_imported,
       transport_mode: m.transport_mode || "AMOUNT",
       transport_unit_price:
@@ -1145,11 +1179,12 @@
     const f = S.formMaterial;
     return {
       unit_price: parseFloat(f.unit_price) || 0,
-      weight_per_m2: parseFloat(f.weight_per_m2) || 0,
+      weight_per_m2: poidsRetenu(f.grammage_gsm, f.perte_pct),
       price_currency: f.price_currency,
       price_basis: f.price_basis,
-      tax_incidence: parseFloat(f.tax_incidence) || 1,
+      taxe_pct: parseFloat(f.taxe_pct) || 0,
       is_imported: !!f.is_imported,
+      applique_marge: f.applique_marge !== false,
       transport_mode: f.transport_mode || "AMOUNT",
       transport_unit_price: parseFloat(f.transport_unit_price) || 0,
       transport_pct: parseFloat(f.transport_pct) || 0,
@@ -1176,7 +1211,7 @@
 
   /**
    * Tableau récapitulatif horizontal du calcul :
-   * (prix d'achat + transport) x taux de change x incidence taxes, puis marge.
+   * (prix d'achat + transport + taxes) x taux de change, puis marge.
    */
   function recapTableHtml(computed) {
     if (!computed) return '<div class="empty">—</div>';
@@ -1186,12 +1221,10 @@
     const unit = unitLabel(cur, basis);
     const perM2 = basis === "PER_M2";
     const rate = parseFloat(b.fx_rate || 1);
-    const taxRatio =
-      parseFloat(b.subtotal_eur || 0) !== 0
-        ? parseFloat(computed.price_eur_per_m2) / parseFloat(b.subtotal_eur)
-        : 1;
     const w = parseFloat(b.weight_per_m2 || 0);
     const hasTransport = parseFloat(b.transport_src || 0) > 0;
+    const taxePct = parseFloat(b.taxe_pct || 0);
+    const taxesSrc = parseFloat(b.taxes_src || 0);
 
     const cells = [
       { label: "Prix d'achat", value: fmtCur(b.unit_price_src, cur), unit: unit },
@@ -1204,8 +1237,17 @@
         muted: !hasTransport,
       },
       {
+        label: "Taxes",
+        value: taxePct ? fmtCur(taxesSrc, cur) : "—",
+        unit: taxePct ? `${unit} · ${fmtPct(taxePct)} du sous-total` : "non imputées",
+        muted: !taxePct,
+      },
+      {
         label: "Sous-total achat",
-        value: fmtCur(parseFloat(b.unit_price_src || 0) + parseFloat(b.transport_src || 0), cur),
+        value: fmtCur(
+          parseFloat(b.unit_price_src || 0) + parseFloat(b.transport_src || 0) + taxesSrc,
+          cur
+        ),
         unit: unit,
       },
     ];
@@ -1213,8 +1255,11 @@
       // Prix au kilo : on montre explicitement le passage au m² via le poids.
       cells.push({
         label: "Ramené au m²",
-        value: fmtCur(parseFloat(b.raw || 0) + parseFloat(b.transport || 0), cur),
-        unit: `${CUR_SYM[cur] || "€"}/m² · × ${fmtNum(w, 4, 4)} kg/m²`,
+        value: fmtCur(
+          parseFloat(b.raw || 0) + parseFloat(b.transport || 0) + taxesSrc * w,
+          cur
+        ),
+        unit: `${CUR_SYM[cur] || "€"}/m² · × ${fmtNum(w * 1000, 1, 1)} g/m²`,
       });
     }
     cells.push(
@@ -1223,16 +1268,6 @@
         value: cur === "USD" ? "× " + fmtNum(rate, 4, 4) : "—",
         unit: cur === "USD" ? "USD → EUR" : "achat en €",
         muted: cur !== "USD",
-      },
-      {
-        label: "Achat converti",
-        value: fmtNum(parseFloat(b.raw || 0) + parseFloat(b.transport || 0) + parseFloat(b.fx || 0), 4, 4),
-        unit: "€/m²",
-      },
-      {
-        label: "Incidence taxes",
-        value: "× " + fmtNum(taxRatio, 4, 4),
-        unit: parseFloat(b.tax_uplift || 0) >= 0 ? "majoration" : "minoration",
       },
       {
         label: "Prix de revient",
@@ -1281,7 +1316,7 @@
         <div class="recap-head">
           <div>
             <div class="recap-title">Détail du calcul</div>
-            <div class="recap-formula">(prix d'achat + transport) × change × incidence taxes</div>
+            <div class="recap-formula">(prix d'achat + transport + taxes) × change</div>
           </div>
         </div>
         <div class="recap-scroll">
@@ -1461,6 +1496,21 @@
             <div class="field f-mid"><label>Fournisseur</label><select id="f-sup">${supOpts}</select>${supLegacy}</div>
           </div>
 
+          <div class="form-section" id="carac-section" style="${needsWeight(f)?"":"display:none"}"><h3>Caractéristiques</h3>
+            <div class="field-row">
+              <div class="field f-num"><label>Grammage <span class="lbl-unit">g/m²</span></label>
+                <input type="number" step="0.01" id="f-gsm" value="${escAttr(f.grammage_gsm)}"/></div>
+              <div class="gram-arrow" aria-hidden="true">→</div>
+              <div class="field f-num"><label>Perte <span class="lbl-unit">%</span></label>
+                <input type="number" step="0.1" id="f-perte" value="${escAttr(f.perte_pct)}"/></div>
+              <div class="gram-arrow" aria-hidden="true">→</div>
+              <div class="field f-num"><label>Grammage dont perte <span class="lbl-unit">g/m²</span></label>
+                <div class="gram-out" id="f-gram-out">${escHtml(fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2))}</div>
+                <div class="field-hint">Grammage réellement consommé — c'est lui qui entre dans le calcul.</div>
+              </div>
+            </div>
+          </div>
+
           <div class="form-section"><h3>Prix d'achat</h3>
             ${ms ? `<div class="ms-locked">
               <strong>Prix piloté par MyStock</strong> — cette matière est appairée à
@@ -1488,8 +1538,14 @@
                 </div>
                 <div class="field-hint">Contrepartie au taux ${escHtml(fmtNum((S.settings && S.settings.eur_usd_rate) || 0, 4, 4))} USD → EUR — indicatif, non enregistré.</div>
               </div>
-              <div class="field f-num"><label>Incidence taxes <span class="lbl-unit">multiplicateur</span></label><input type="number" step="0.0001" id="f-tax" value="${escAttr(f.tax_incidence)}"/>
-                <div class="field-hint">1 = neutre · 1,05 = +5 % · 0,95 = −5 %</div>
+              <div class="field f-num">
+                <label class="check-row check-inline">
+                  <input type="checkbox" id="f-marge" ${f.applique_marge !== false ? "checked" : ""}/>
+                  <span>
+                    <span class="check-title">Appliquer la marge</span>
+                    <span class="check-sub">Décoché, la matière entre dans le prix de revient mais on ne marge pas dessus.</span>
+                  </span>
+                </label>
               </div>
             </div>
           </div>
@@ -1513,16 +1569,11 @@
                     <input type="number" step="0.0001" id="f-transport" value="${escAttr(isPct ? f.transport_pct : f.transport_unit_price)}"/>
                     <div class="field-hint" id="transport-eq">${transportEqText(S.matPreview)}</div>
                   </div>
+                  <div class="field f-num"><label>Taxes <span class="lbl-unit">% du sous-total</span></label>
+                    <input type="number" step="0.01" id="f-tax" value="${escAttr(f.taxe_pct)}"/>
+                    <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-section" id="carac-section" style="${needsWeight(f)?"":"display:none"}"><h3>Caractéristiques</h3>
-            <div class="field-row">
-              <div class="field f-num"><label>Poids <span class="lbl-unit">kg/m²</span></label><input type="number" step="0.0001" id="f-wm2" value="${escAttr(f.weight_per_m2)}"/></div>
-              <div class="field f-num"><label>Grammage <span class="lbl-unit">g/m²</span></label><input type="number" id="f-gsm" value="${escAttr(f.weight_gsm)}"/>
-                <div class="field-hint">Renseigné seul, il remplit le poids (g/m² ÷ 1000).</div>
               </div>
             </div>
           </div>
@@ -1560,27 +1611,25 @@
       const bas = ms ? ms.price_basis : S.formMaterial.price_basis;
       alt.innerHTML = otherPriceHtml(S.formMaterial.unit_price, cur, bas);
     };
-    ["f-unit", "f-wm2", "f-tax", "f-transport"].forEach((id) => {
+    // Le grammage retenu n'est pas saisi : il se recalcule sous les yeux.
+    const majGrammage = () => {
+      const out = document.getElementById("f-gram-out");
+      if (out) out.textContent = fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2);
+    };
+    ["f-unit", "f-tax", "f-transport", "f-gsm", "f-perte"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.oninput = () => {
         syncMaterialFormFromDom();
         refreshAltPrice();
+        majGrammage();
         bindPreview();
       };
     });
-    const gsm = document.getElementById("f-gsm");
-    if (gsm) {
-      gsm.oninput = () => {
-        const g = parseFloat(gsm.value);
-        const wEl = document.getElementById("f-wm2");
-        if (wEl && !Number.isNaN(g) && (!parseFloat(wEl.value) || wEl.dataset.auto === "1")) {
-          wEl.value = String(Math.round((g / 1000) * 10000) / 10000);
-          wEl.dataset.auto = "1";
-        }
-        syncMaterialFormFromDom();
-        bindPreview();
-      };
-    }
+    const chkMarge = document.getElementById("f-marge");
+    if (chkMarge) chkMarge.onchange = () => {
+      syncMaterialFormFromDom();
+      bindPreview();
+    };
     ["f-cur", "f-basis", "f-imp", "f-tmode"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.onchange = () => {
@@ -1641,9 +1690,13 @@
       f.price_basis = val("f-basis") ?? f.price_basis;
       f.unit_price = val("f-unit") ?? f.unit_price;
     }
-    f.tax_incidence = val("f-tax") ?? f.tax_incidence;
+    f.taxe_pct = val("f-tax") ?? f.taxe_pct;
+    f.grammage_gsm = val("f-gsm") ?? f.grammage_gsm;
+    f.perte_pct = val("f-perte") ?? f.perte_pct;
     const imp = document.getElementById("f-imp");
     if (imp) f.is_imported = imp.checked;
+    const marge = document.getElementById("f-marge");
+    if (marge) f.applique_marge = marge.checked;
     const mode = val("f-tmode");
     if (mode) f.transport_mode = mode;
     const tv = val("f-transport");
@@ -1651,8 +1704,6 @@
       if (f.transport_mode === "PCT") f.transport_pct = tv;
       else f.transport_unit_price = tv;
     }
-    f.weight_per_m2 = val("f-wm2") ?? f.weight_per_m2;
-    f.weight_gsm = val("f-gsm") ?? f.weight_gsm;
   }
 
   async function saveMaterialForm(isNew) {
@@ -1663,13 +1714,14 @@
       appellation_code: f.appellation_code.trim(),
       category_id: f.category_id,
       fournisseur_fsc_id: f.fournisseur_fsc_id ? parseInt(f.fournisseur_fsc_id, 10) : null,
-      weight_per_m2: parseFloat(f.weight_per_m2) || 0,
-      weight_gsm: f.weight_gsm ? parseInt(f.weight_gsm, 10) : null,
+      grammage_gsm: parseFloat(f.grammage_gsm) || 0,
+      perte_pct: parseFloat(f.perte_pct) || 0,
       price_currency: f.price_currency,
       unit_price: parseFloat(f.unit_price) || 0,
       price_basis: f.price_basis,
-      tax_incidence: parseFloat(f.tax_incidence) || 1,
+      taxe_pct: parseFloat(f.taxe_pct) || 0,
       is_imported: !!f.is_imported,
+      applique_marge: f.applique_marge !== false,
       transport_mode: f.transport_mode || "AMOUNT",
       transport_unit_price: parseFloat(f.transport_unit_price) || 0,
       transport_pct: parseFloat(f.transport_pct) || 0,
@@ -1679,8 +1731,8 @@
       showToast("Nom requis.", "danger");
       return;
     }
-    if (body.price_basis === "PER_KG" && !(body.weight_per_m2 > 0)) {
-      showToast("Poids kg/m² requis : le prix est saisi au kilo.", "danger");
+    if (body.price_basis === "PER_KG" && !(body.grammage_gsm > 0)) {
+      showToast("Grammage requis : le prix est saisi au kilo.", "danger");
       return;
     }
     try {
@@ -1758,7 +1810,7 @@
     const rows = history
       .map(
         (x) =>
-          `<tr><td>${escHtml(x.effective_date)}</td><td>${fmt4(x.unit_price)} ${currencyBadge(x.price_currency)}</td><td>${fmt4(x.tax_incidence)}</td><td>${escHtml(x.source || "—")}</td></tr>`
+          `<tr><td>${escHtml(x.effective_date)}</td><td>${fmt4(x.unit_price)} ${currencyBadge(x.price_currency)}</td><td>${fmt4(x.taxe_pct)} %</td><td>${escHtml(x.source || "—")}</td></tr>`
       )
       .join("");
     const root = document.getElementById("modal-root");
@@ -1847,7 +1899,8 @@
       ${pageHead(
         "Produits",
         `${S.products.length} produit(s)`,
-        S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-prod">+ Nouveau produit</button>' : ""
+        productsTabsHtml() +
+          (S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-prod">+ Nouveau produit</button>' : "")
       )}
       <div class="filters">
         <input type="search" class="search-input" id="prod-q" placeholder="Rechercher (code, nom…)" value="${escAttr(S.filters.prodQ)}"/>
@@ -1863,6 +1916,7 @@
       </div>
     `);
 
+    bindProductsTabs();
     document.getElementById("prod-q").oninput = (e) => {
       clearTimeout(S.debounceProd);
       S.debounceProd = setTimeout(async () => {
@@ -2376,16 +2430,17 @@
     const g = (id) => document.getElementById(id);
     if (g("d-cur")) f.price_currency = g("d-cur").value;
     if (g("d-basis")) f.price_basis = g("d-basis").value;
-    if (g("d-tax")) f.tax_incidence = g("d-tax").value;
+    if (g("d-tax")) f.taxe_pct = g("d-tax").value;
     if (g("d-imp")) f.is_imported = g("d-imp").checked;
+    if (g("d-marge")) f.applique_marge = g("d-marge").checked;
     if (g("d-tmode")) f.transport_mode = g("d-tmode").value;
     if (g("d-transport")) {
       const v = g("d-transport").value;
       if (f.transport_mode === "PCT") f.transport_pct = v;
       else f.transport_unit_price = v;
     }
-    if (g("d-wm2")) f.weight_per_m2 = g("d-wm2").value;
-    if (g("d-gsm")) f.weight_gsm = g("d-gsm").value;
+    if (g("d-gsm")) f.grammage_gsm = g("d-gsm").value;
+    if (g("d-perte")) f.perte_pct = g("d-perte").value;
   }
 
   /** Recalcule le coût sans rien enregistrer — même endpoint que la base CM. */
@@ -2396,11 +2451,12 @@
         method: "POST",
         body: {
           unit_price: parseFloat(f.unit_price) || 0,
-          weight_per_m2: parseFloat(f.weight_per_m2) || 0,
+          weight_per_m2: poidsRetenu(f.grammage_gsm, f.perte_pct),
           price_currency: f.price_currency,
           price_basis: f.price_basis,
-          tax_incidence: parseFloat(f.tax_incidence) || 1,
+          taxe_pct: parseFloat(f.taxe_pct) || 0,
           is_imported: !!f.is_imported,
+          applique_marge: f.applique_marge !== false,
           transport_mode: f.transport_mode || "AMOUNT",
           transport_unit_price: parseFloat(f.transport_unit_price) || 0,
           transport_pct: parseFloat(f.transport_pct) || 0,
@@ -2457,6 +2513,21 @@
             </div>
           </div>
 
+          <div class="form-section" id="d-carac" style="${needsWeight(f)?"":"display:none"}"><h3>Caractéristiques</h3>
+            <div class="field-row">
+              <div class="field f-num"><label>Grammage <span class="lbl-unit">g/m²</span></label>
+                <input type="number" step="0.01" id="d-gsm" value="${escAttr(f.grammage_gsm)}"/></div>
+              <div class="gram-arrow" aria-hidden="true">→</div>
+              <div class="field f-num"><label>Perte <span class="lbl-unit">%</span></label>
+                <input type="number" step="0.1" id="d-perte" value="${escAttr(f.perte_pct)}"/></div>
+              <div class="gram-arrow" aria-hidden="true">→</div>
+              <div class="field f-num"><label>Grammage dont perte <span class="lbl-unit">g/m²</span></label>
+                <div class="gram-out" id="d-gram-out">${escHtml(fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2))}</div>
+                <div class="field-hint">Grammage réellement consommé — c'est lui qui entre dans le calcul.</div>
+              </div>
+            </div>
+          </div>
+
           <div class="form-section"><h3>Prix d'achat</h3>
             <div class="field-row">
               <div class="field f-mid"><label>Devise achat</label><select id="d-cur">
@@ -2468,10 +2539,13 @@
                 <option value="PER_M2" ${f.price_basis==="PER_M2"?"selected":""}>${escHtml(BASIS_LABEL.PER_M2)}</option>
               </select></div>
             </div>
-            <div class="field f-num"><label>Incidence taxes <span class="lbl-unit">multiplicateur</span></label>
-              <input type="number" step="0.0001" id="d-tax" value="${escAttr(f.tax_incidence)}"/>
-              <div class="field-hint">1 = neutre · 1,05 = +5 % · 0,95 = −5 %</div>
-            </div>
+            <label class="check-row check-inline">
+              <input type="checkbox" id="d-marge" ${f.applique_marge !== false ? "checked" : ""}/>
+              <span>
+                <span class="check-title">Appliquer la marge</span>
+                <span class="check-sub">Décoché, la matière entre dans le prix de revient mais on ne marge pas dessus.</span>
+              </span>
+            </label>
           </div>
 
           <div class="form-section">
@@ -2493,18 +2567,11 @@
                     <input type="number" step="0.0001" id="d-transport" value="${escAttr(isPct ? f.transport_pct : f.transport_unit_price)}"/>
                     <div class="field-hint" id="d-transport-eq">${transportEqText(S.declPreview)}</div>
                   </div>
+                  <div class="field f-num"><label>Taxes <span class="lbl-unit">% du sous-total</span></label>
+                    <input type="number" step="0.01" id="d-tax" value="${escAttr(f.taxe_pct)}"/>
+                    <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="form-section" id="d-carac" style="${needsWeight(f)?"":"display:none"}"><h3>Caractéristiques</h3>
-            <div class="field-row">
-              <div class="field f-num"><label>Poids <span class="lbl-unit">kg/m²</span></label>
-                <input type="number" step="0.0001" id="d-wm2" value="${escAttr(f.weight_per_m2)}"/></div>
-              <div class="field f-num"><label>Grammage <span class="lbl-unit">g/m²</span></label>
-                <input type="number" id="d-gsm" value="${escAttr(f.weight_gsm == null ? "" : f.weight_gsm)}"/>
-                <div class="field-hint">Renseigné seul, il remplit le poids (g/m² ÷ 1000).</div>
               </div>
             </div>
           </div>
@@ -2530,30 +2597,26 @@
 
     // Saisie libre : on recalcule à la volée, sans re-render (le curseur reste
     // dans le champ).
-    ["d-tax", "d-transport", "d-wm2"].forEach((id) => {
+    const majGrammage = () => {
+      const out = document.getElementById("d-gram-out");
+      if (out) out.textContent = fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2);
+    };
+    ["d-tax", "d-transport", "d-gsm", "d-perte"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.oninput = () => {
         marquer();
         syncDeclFormFromDom();
+        majGrammage();
         clearTimeout(S.debounceDecl);
         S.debounceDecl = setTimeout(refreshDeclPreview, 300);
       };
     });
-    const gsm = document.getElementById("d-gsm");
-    if (gsm) {
-      gsm.oninput = () => {
-        marquer();
-        const g = parseFloat(gsm.value);
-        const w = document.getElementById("d-wm2");
-        if (w && !Number.isNaN(g) && (!parseFloat(w.value) || w.dataset.auto === "1")) {
-          w.value = String(Math.round((g / 1000) * 10000) / 10000);
-          w.dataset.auto = "1";
-        }
-        syncDeclFormFromDom();
-        clearTimeout(S.debounceDecl);
-        S.debounceDecl = setTimeout(refreshDeclPreview, 300);
-      };
-    }
+    const chkMarge = document.getElementById("d-marge");
+    if (chkMarge) chkMarge.onchange = () => {
+      marquer();
+      syncDeclFormFromDom();
+      refreshDeclPreview();
+    };
     // Ces champs changent les unités affichées partout : on re-rend.
     ["d-cur", "d-basis", "d-imp", "d-tmode"].forEach((id) => {
       const el = document.getElementById(id);
@@ -2580,13 +2643,14 @@
           body: {
             price_currency: f.price_currency,
             price_basis: f.price_basis,
-            tax_incidence: parseFloat(f.tax_incidence) || 1,
+            taxe_pct: parseFloat(f.taxe_pct) || 0,
             is_imported: !!f.is_imported,
+            applique_marge: f.applique_marge !== false,
             transport_mode: f.transport_mode || "AMOUNT",
             transport_unit_price: parseFloat(f.transport_unit_price) || 0,
             transport_pct: parseFloat(f.transport_pct) || 0,
-            weight_per_m2: parseFloat(f.weight_per_m2) || 0,
-            weight_gsm: f.weight_gsm === "" || f.weight_gsm == null ? null : parseInt(f.weight_gsm, 10),
+            grammage_gsm: parseFloat(f.grammage_gsm) || 0,
+            perte_pct: parseFloat(f.perte_pct) || 0,
           },
         }
       );
@@ -2598,6 +2662,368 @@
     } catch (e) {
       showToast(e.message, "danger");
     }
+  }
+
+  // ─── Produits devisés à partir des matières MyStock ─────────────────────
+  // Même idée que les produits de la base Coûts matières, mais composés de
+  // DÉCLINAISONS : une laize précise d'un frontal, un grammage précis d'un
+  // adhésif. MyStock ne connaît pas de catégorie « silicone » : les trois
+  // emplacements nommés sont frontal, adhésif et glassine, le reste s'ajoute
+  // librement (complexe, autre…).
+
+  const MSP_ROLES = [
+    { role: "FRONTAL", label: "Frontal", categorie: "frontal" },
+    { role: "ADHESIF", label: "Adhésif", categorie: "adhesif" },
+    { role: "GLASSINE", label: "Glassine", categorie: "glassine" },
+  ];
+
+  /** Bascule entre les produits de la base CM et ceux composés depuis MyStock. */
+  function productsTabsHtml() {
+    const t = S.filters.prodTab;
+    return `<div class="tabs">
+      <button type="button" class="tab${t === "couts" ? " on" : ""}" data-ptab="couts">Base Coûts matières</button>
+      <button type="button" class="tab${t === "mystock" ? " on" : ""}" data-ptab="mystock">Produits MyStock</button>
+    </div>`;
+  }
+
+  function bindProductsTabs() {
+    document.querySelectorAll("[data-ptab]").forEach((b) => {
+      b.onclick = async () => {
+        const t = b.getAttribute("data-ptab");
+        if (t === S.filters.prodTab) return;
+        S.filters.prodTab = t;
+        await bootRoute();
+      };
+    });
+  }
+
+  function defaultMsProductForm() {
+    return { code: "", designation: "", roles: {}, autres: [], custom_margin_pct: "" };
+  }
+
+  async function loadMsDeclinaisons() {
+    const data = await api("/api/pricing/mystock/declinaisons");
+    S.msDecls = data.declinaisons || [];
+  }
+
+  async function loadMsProductsList() {
+    const params = new URLSearchParams();
+    params.set("with_cost", "true");
+    if (S.filters.msProdQ) params.set("q", S.filters.msProdQ);
+    const data = await api("/api/pricing/mystock/produits?" + params.toString());
+    S.msProducts = data.produits || [];
+  }
+
+  async function loadMsProductForm(id) {
+    await loadMsDeclinaisons();
+    if (!id) {
+      if (!S.formMsProduct) S.formMsProduct = defaultMsProductForm();
+      S.msProdPreview = null;
+      return;
+    }
+    const p = await api("/api/pricing/mystock/produits/" + id);
+    const roles = {};
+    const autres = [];
+    (p.composants || []).forEach((c) => {
+      if (MSP_ROLES.some((r) => r.role === c.role)) roles[c.role] = c.declinaison_id;
+      else autres.push(c.declinaison_id);
+    });
+    S.formMsProduct = {
+      code: p.code,
+      designation: p.designation,
+      roles,
+      autres,
+      custom_margin_pct: p.custom_margin_pct != null ? String(p.custom_margin_pct) : "",
+    };
+    S.msProdPreview = p.cost || null;
+  }
+
+  function msDeclLabel(d) {
+    const cout = d.cout_eur_m2 != null ? ` — ${fmtEurM2(d.cout_eur_m2)}` : " — à paramétrer";
+    return `${d.reference} · ${d.libelle}${cout}`;
+  }
+
+  function msDeclOptions(categorie, selectedId) {
+    const list = categorie
+      ? S.msDecls.filter((d) => (d.categorie || "").toLowerCase() === categorie)
+      : S.msDecls;
+    const opts = list
+      .map(
+        (d) =>
+          `<option value="${d.id}" ${String(d.id) === String(selectedId) ? "selected" : ""}>${escHtml(msDeclLabel(d))}</option>`
+      )
+      .join("");
+    return `<option value="">— Aucun —</option>${opts}`;
+  }
+
+  function msProductFormHtml(isNew) {
+    const f = S.formMsProduct;
+    const defMargin = S.settings ? fmtNum(S.settings.default_margin_pct, 2, 2) : "—";
+    const slots = MSP_ROLES.map(
+      (r) => `<div class="field"><label>${escHtml(r.label)}</label>
+        <select id="msp-${r.role.toLowerCase()}" data-msp-role="${r.role}">${msDeclOptions(r.categorie, f.roles[r.role])}</select>
+      </div>`
+    ).join("");
+    const autres = f.autres
+      .map(
+        (id, i) => `<div class="field-row msp-autre" data-msp-idx="${i}">
+          <div class="field" style="flex:1"><select data-msp-autre="${i}">${msDeclOptions(null, id)}</select></div>
+          <button type="button" class="icon-btn" data-msp-del="${i}" title="Retirer cette matière">${icon("trash", 15)}</button>
+        </div>`
+      )
+      .join("");
+    return `
+      ${pageHead(isNew ? "Nouveau produit MyStock" : "Éditer produit MyStock",
+                 isNew ? "" : escHtml(f.code))}
+      <div class="pr-savebar">
+        <button type="button" class="btn btn-soft btn-sm" id="btn-back-msprod">${icon("arrow-left", 14)} Retour liste</button>
+        <div class="savebar-actions">
+          ${!isNew && S.canWrite ? '<button type="button" class="btn btn-danger btn-sm" id="btn-del-msprod">Supprimer</button>' : ""}
+          ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-save-msprod">Enregistrer</button>' : ""}
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="form-card">
+          <div class="field-row">
+            <div class="field"><label>Code</label><input id="msp-code" value="${escAttr(f.code)}"/></div>
+            <div class="field"><label>Désignation</label><input id="msp-designation" value="${escAttr(f.designation)}"/></div>
+          </div>
+          ${slots}
+          <div class="form-section" style="margin-top:14px"><h3>Autres matières</h3>
+            <div id="msp-autres">${autres || '<div class="empty" style="padding:8px 0">Aucune autre matière.</div>'}</div>
+            ${S.canWrite ? `<button type="button" class="btn btn-soft btn-sm" id="msp-add-autre">${icon("plus", 14)} Ajouter une matière</button>` : ""}
+          </div>
+          <div class="field"><label>Marge personnalisée <span class="lbl-unit">% du prix de revient</span></label>
+            <input type="number" step="0.01" id="msp-margin" value="${escAttr(f.custom_margin_pct)}" placeholder="Défaut : ${escAttr(defMargin)} %"/>
+            <div class="field-hint">Laisser vide pour appliquer la marge par défaut des paramètres.</div>
+          </div>
+        </div>
+        <div class="side-panel" id="msp-recap">${productRecapHtml(S.msProdPreview)}</div>
+      </div>`;
+  }
+
+  function syncMsProductFromDom() {
+    const f = S.formMsProduct;
+    f.code = document.getElementById("msp-code").value;
+    f.designation = document.getElementById("msp-designation").value;
+    f.custom_margin_pct = document.getElementById("msp-margin").value;
+    f.roles = {};
+    MSP_ROLES.forEach((r) => {
+      const el = document.getElementById("msp-" + r.role.toLowerCase());
+      if (el && el.value) f.roles[r.role] = parseInt(el.value, 10);
+    });
+    f.autres = [];
+    document.querySelectorAll("[data-msp-autre]").forEach((sel) => {
+      if (sel.value) f.autres.push(parseInt(sel.value, 10));
+    });
+  }
+
+  /** Composition envoyée à l'API : un tableau {declinaison_id, role}. */
+  function msProductComposants() {
+    const f = S.formMsProduct;
+    const out = [];
+    MSP_ROLES.forEach((r) => {
+      if (f.roles[r.role]) out.push({ declinaison_id: f.roles[r.role], role: r.role });
+    });
+    f.autres.forEach((id) => {
+      if (id) out.push({ declinaison_id: id, role: "AUTRE" });
+    });
+    return out;
+  }
+
+  /**
+   * Aperçu du coût sans enregistrer : on additionne les coûts déjà calculés par
+   * l'API pour chaque déclinaison. Pas d'aller-retour serveur à chaque clic, et
+   * la formule reste celle du moteur (somme des composants + marge en %).
+   */
+  function refreshMsProductPreview() {
+    const f = S.formMsProduct;
+    const comps = msProductComposants();
+    if (!comps.length) {
+      S.msProdPreview = null;
+    } else {
+      let total = 0;
+      let complet = true;
+      const components = comps.map((c) => {
+        const d = S.msDecls.find((x) => x.id === c.declinaison_id);
+        const prix = d && d.cout_eur_m2 != null ? d.cout_eur_m2 : null;
+        if (prix == null) complet = false;
+        total += prix || 0;
+        return {
+          material_id: c.declinaison_id,
+          name: d ? `${d.reference} · ${d.libelle}` : "#" + c.declinaison_id,
+          role: c.role.toLowerCase(),
+          price_eur_per_m2: prix || 0,
+          share_pct: 0,
+        };
+      });
+      components.forEach((c) => {
+        c.share_pct = total ? Math.round((c.price_eur_per_m2 / total) * 10000) / 100 : 0;
+      });
+      const saisie = parseFloat(f.custom_margin_pct);
+      const marge = Number.isNaN(saisie)
+        ? parseFloat((S.settings && S.settings.default_margin_pct) || 0)
+        : saisie;
+      S.msProdPreview = {
+        total_eur_per_m2: total,
+        margin_pct: marge,
+        margin_eur_m2: (total * marge) / 100,
+        sell_price_eur_m2: total * (1 + marge / 100),
+        components,
+        incomplet: !complet,
+      };
+    }
+    const rec = document.getElementById("msp-recap");
+    if (rec) {
+      rec.innerHTML =
+        productRecapHtml(S.msProdPreview) +
+        (S.msProdPreview && S.msProdPreview.incomplet
+          ? '<div class="field-hint" style="color:var(--warn);margin-top:10px">Une matière n\'a pas encore de coût : ouvre sa fiche pour la paramétrer.</div>'
+          : "");
+    }
+  }
+
+  function renderMsProductForm(isNew) {
+    setContent(msProductFormHtml(isNew));
+
+    document.getElementById("btn-back-msprod").onclick = () => navigate("/pricing/products");
+
+    const majAperçu = () => {
+      syncMsProductFromDom();
+      refreshMsProductPreview();
+    };
+    ["msp-code", "msp-designation", "msp-margin"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.oninput = majAperçu;
+    });
+    document.querySelectorAll("[data-msp-role], [data-msp-autre]").forEach((sel) => {
+      sel.onchange = majAperçu;
+    });
+    const add = document.getElementById("msp-add-autre");
+    if (add) {
+      add.onclick = () => {
+        syncMsProductFromDom();
+        S.formMsProduct.autres.push("");
+        renderMsProductForm(isNew);
+      };
+    }
+    document.querySelectorAll("[data-msp-del]").forEach((btn) => {
+      btn.onclick = () => {
+        syncMsProductFromDom();
+        S.formMsProduct.autres.splice(parseInt(btn.getAttribute("data-msp-del"), 10), 1);
+        renderMsProductForm(isNew);
+      };
+    });
+
+    const save = document.getElementById("btn-save-msprod");
+    if (save) save.onclick = () => saveMsProductForm(isNew);
+    const del = document.getElementById("btn-del-msprod");
+    if (del) {
+      del.onclick = async () => {
+        if (!(await confirmDelete("Désactiver ce produit ?"))) return;
+        try {
+          await api("/api/pricing/mystock/produits/" + S.route.id, { method: "DELETE" });
+          showToast("Produit désactivé.", "success");
+          navigate("/pricing/products");
+        } catch (e) {
+          showToast(e.message, "danger");
+        }
+      };
+    }
+    refreshMsProductPreview();
+  }
+
+  async function saveMsProductForm(isNew) {
+    syncMsProductFromDom();
+    const f = S.formMsProduct;
+    const body = {
+      code: (f.code || "").trim(),
+      designation: (f.designation || "").trim(),
+      composants: msProductComposants(),
+      custom_margin_pct: f.custom_margin_pct === "" ? null : parseFloat(f.custom_margin_pct),
+    };
+    try {
+      if (isNew) {
+        const p = await api("/api/pricing/mystock/produits", { method: "POST", body });
+        S.formMsProduct = null;
+        showToast("Produit créé.", "success");
+        navigate("/pricing/mystock/produit/" + p.id);
+      } else {
+        await api("/api/pricing/mystock/produits/" + S.route.id, { method: "PATCH", body });
+        showToast("Produit enregistré.", "success");
+        await loadMsProductForm(S.route.id);
+        renderMsProductForm(false);
+      }
+    } catch (e) {
+      showToast(e.message, "danger");
+    }
+  }
+
+  function msProductCompLabel(produit, role) {
+    const c = (produit.composants || []).find((x) => x.role === role);
+    if (!c) return '<span style="color:var(--muted)">—</span>';
+    return escHtml(`${c.reference} · ${c.libelle}`);
+  }
+
+  function renderMsProductsList() {
+    const rows = S.msProducts
+      .map((p) => {
+        const c = p.cost;
+        const autres = (p.composants || []).filter((x) => x.role === "AUTRE").length;
+        return `<tr data-msp-id="${p.id}">
+          <td><strong>${escHtml(p.code)}</strong></td>
+          <td>${escHtml(p.designation)}</td>
+          <td>${msProductCompLabel(p, "FRONTAL")}</td>
+          <td>${msProductCompLabel(p, "ADHESIF")}</td>
+          <td>${msProductCompLabel(p, "GLASSINE")}</td>
+          <td>${autres || '<span style="color:var(--muted)">—</span>'}</td>
+          <td>${c ? fmtEurM2(c.total_eur_per_m2) : '<span style="color:var(--muted)">—</span>'}</td>
+          <td>${c ? fmtEurM2(c.sell_price_eur_m2) : "—"}</td>
+          <td>${c ? fmtPct(c.margin_pct) : "—"}</td>
+        </tr>`;
+      })
+      .join("");
+
+    setContent(`
+      <div class="pr-narrow">
+        ${pageHead("Produits", `${S.msProducts.length} produit(s) MyStock`, productsTabsHtml())}
+        <div class="filters">
+          <input type="search" class="search-input" id="msp-q" placeholder="Rechercher (code, désignation…)" value="${escAttr(S.filters.msProdQ)}"/>
+          ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-msprod">+ Nouveau produit</button>' : ""}
+        </div>
+        <div class="ms-hint">Ces produits sont composés de <strong>déclinaisons MyStock</strong> : une laize précise d'un frontal,
+          un grammage précis d'un adhésif. Leur coût suit automatiquement le prix du fournisseur principal de chaque matière.</div>
+        <div class="table-wrap">
+          <table class="pr-table">
+            <thead><tr><th>Code</th><th>Désignation</th><th>Frontal</th><th>Adhésif</th><th>Glassine</th><th>Autres</th><th>Coût</th><th>Vente</th><th>Marge</th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="9" class="empty">Aucun produit MyStock. Crée le premier avec le bouton ci-dessus.</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+    `);
+
+    bindProductsTabs();
+    const q = document.getElementById("msp-q");
+    if (q) {
+      q.oninput = (e) => {
+        clearTimeout(S.debounceMsProd);
+        S.debounceMsProd = setTimeout(async () => {
+          S.filters.msProdQ = e.target.value;
+          await loadMsProductsList();
+          renderMsProductsList();
+        }, 300);
+      };
+    }
+    const nouveau = document.getElementById("btn-new-msprod");
+    if (nouveau) {
+      nouveau.onclick = () => {
+        S.formMsProduct = defaultMsProductForm();
+        navigate("/pricing/mystock/produit/new");
+      };
+    }
+    document.querySelectorAll("tr[data-msp-id]").forEach((tr) => {
+      tr.onclick = () => navigate("/pricing/mystock/produit/" + tr.getAttribute("data-msp-id"));
+    });
   }
 
   async function bootRoute() {
@@ -2631,8 +3057,25 @@
         await loadDeclinaisonForm(S.route.id);
         renderDeclinaisonForm();
       } else if (r === "products") {
-        await loadProductsList();
-        await renderProductsList();
+        if (S.filters.prodTab === "mystock") {
+          await loadMsProductsList();
+          renderMsProductsList();
+        } else {
+          await loadProductsList();
+          await renderProductsList();
+        }
+      } else if (r === "msproduct-new") {
+        if (!S.canWrite) {
+          navigate("/pricing/products");
+          return;
+        }
+        S.filters.prodTab = "mystock";
+        await loadMsProductForm(null);
+        renderMsProductForm(true);
+      } else if (r === "msproduct-edit") {
+        S.filters.prodTab = "mystock";
+        await loadMsProductForm(S.route.id);
+        renderMsProductForm(false);
       } else if (r === "product-new") {
         if (!S.canWrite) {
           navigate("/pricing/products");

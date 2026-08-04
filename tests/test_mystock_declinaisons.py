@@ -232,9 +232,11 @@ with dbmod.get_db() as conn:
     print("\n--- fiche non appairée ---")
     row10 = fetch_material(conn, 10)
     check("aucun pilotage", mystock_price_for_row(conn, row10), None)
+    # Sa taxe de -5 % ne compte plus : la matière n'est pas marquée importée, et
+    # une taxe d'importation ne s'applique qu'à ce qui est importé.
     check("garde son prix propre",
           float(compute_material_price_per_m2(row_to_pricing_material(row10), reglages)
-                .price_eur_per_m2), round(4.0183 * 0.95, 4))
+                .price_eur_per_m2), 4.0183)
 
     print("\n--- laize : renommage du fournisseur, miroir, historisation ---")
     mats = {m["reference"]: m for m in MP.list_materials(conn)}
@@ -377,41 +379,58 @@ with dbmod.get_db() as conn:
     check("et reste à paramétrer", p500["parametre"], False)
     check("un prix au m² ignore le poids", cout(dl500["id"]), 1.45)
 
-    # Un grammage EST un poids : le saisir suffit, on ne le redemande pas.
+    # Un grammage EST un poids : le saisir suffit, on ne le redemande pas. Une
+    # déclinaison neuve part avec la perte par défaut (9 %), les anciennes ont
+    # été reprises à 0 pour ne pas renchérir les prix existants.
     r35 = MP.add_declinaison(conn, matiere_id=1, valeur_gsm=35)
     conn.commit()
     p35 = MP.parametrage(conn, r35["declinaison_id"])
-    check("le grammage remplit le poids tout seul", p35["weight_per_m2"], 0.035)
-    check("et le grammage lui-même", p35["weight_gsm"], 35)
+    check("le grammage est repris tel quel", p35["grammage_gsm"], 35.0)
+    check("perte par défaut sur une nouvelle déclinaison", p35["perte_pct"], MP.PERTE_DEFAUT)
+    check("le poids retenu inclut la perte", p35["weight_per_m2"], round(35 * 1.09 / 1000, 6))
+    check("les anciennes déclinaisons gardent une perte nulle", p22["perte_pct"], 0.0)
 
     print("\n--- édition des réglages ---")
     check("devise inconnue refusée",
           MP.set_parametrage(conn, declinaison_id=d22["id"],
                              patch={"price_currency": "GBP"})["ok"], False)
+    check("perte au-delà de 100 % refusée",
+          MP.set_parametrage(conn, declinaison_id=d22["id"],
+                             patch={"perte_pct": 150})["ok"], False)
     check("base de prix inconnue refusée",
           MP.set_parametrage(conn, declinaison_id=d22["id"],
                              patch={"price_basis": "PER_M3"})["ok"], False)
-    check("poids négatif refusé",
+    check("grammage négatif refusé",
           MP.set_parametrage(conn, declinaison_id=d22["id"],
-                             patch={"weight_per_m2": -1})["ok"], False)
+                             patch={"grammage_gsm": -1})["ok"], False)
     check("déclinaison inexistante refusée",
           MP.set_parametrage(conn, declinaison_id=999999,
-                             patch={"weight_per_m2": 1})["ok"], False)
+                             patch={"grammage_gsm": 1})["ok"], False)
     check("un patch vide ne fait rien",
           MP.set_parametrage(conn, declinaison_id=d22["id"], patch={})["ok"], False)
 
     # Import en USD avec transport au pourcentage : (prix + transport) × taux.
     MP.set_parametrage(conn, declinaison_id=d22["id"], patch={
-        "price_currency": "USD", "is_imported": True,
-        "transport_mode": "PCT", "transport_pct": 10, "weight_per_m2": 0.03,
+        "price_currency": "USD", "is_imported": True, "taxe_pct": 6,
+        "transport_mode": "PCT", "transport_pct": 10,
+        "grammage_gsm": 30, "perte_pct": 0,
     }, user_name="Test")
     conn.commit()
     p22 = MP.parametrage(conn, d22["id"])
     check("devise enregistrée", p22["price_currency"], "USD")
     check("transport en pourcentage enregistré", p22["transport_pct"], 10.0)
+    check("taxe en pourcentage enregistrée", p22["taxe_pct"], 6.0)
+    check("le poids découle du grammage", p22["weight_per_m2"], 0.03)
     check("auteur tracé", p22["updated_by_name"], "Test")
-    attendu = round(2.95 * 1.10 * 0.03 * float(reglages.eur_usd_rate), 4)
-    check("coût = (prix + transport) × devise × poids", cout(d22["id"]), attendu)
+    attendu = round(2.95 * 1.10 * 1.06 * 0.03 * float(reglages.eur_usd_rate), 4)
+    check("coût = (prix + transport + taxes) × devise × poids", cout(d22["id"]), attendu)
+
+    # Une taxe sur une matière qui n'est plus importée ne doit pas continuer à
+    # gonfler le prix en douce : le champ n'est même plus visible.
+    MP.set_parametrage(conn, declinaison_id=d22["id"], patch={"is_imported": False})
+    conn.commit()
+    check("taxe ignorée hors import",
+          cout(d22["id"]), round(2.95 * 0.03 * float(reglages.eur_usd_rate), 4))
 
     # Les réglages sont propres à chaque déclinaison : 22 en USD ne déteint pas
     # sur 30, qui est la même matière MyStock.
@@ -419,8 +438,9 @@ with dbmod.get_db() as conn:
           MP.parametrage(conn, d30["id"])["price_currency"], "EUR")
 
     MP.set_parametrage(conn, declinaison_id=d22["id"], patch={
-        "price_currency": "EUR", "is_imported": False,
-        "transport_mode": "AMOUNT", "transport_pct": 0, "weight_per_m2": 0.028,
+        "price_currency": "EUR", "is_imported": False, "taxe_pct": 0,
+        "transport_mode": "AMOUNT", "transport_pct": 0,
+        "grammage_gsm": 28, "perte_pct": 0,
     })
     conn.commit()
 
@@ -438,11 +458,13 @@ with dbmod.get_db() as conn:
         CREATE TABLE mc_material (id INTEGER PRIMARY KEY, weight_per_m2 REAL, weight_gsm INTEGER,
             price_currency TEXT, price_basis TEXT, tax_incidence REAL, is_imported INTEGER,
             transport_mode TEXT, transport_unit_price REAL, transport_pct REAL);
+        CREATE TABLE mp_laizes (id INTEGER PRIMARY KEY, valeur_mm REAL);
         CREATE TABLE mp_matiere_declinaison (id INTEGER PRIMARY KEY, matiere_id INTEGER,
             laize_id INTEGER, grammage_id INTEGER, mc_material_id INTEGER);
         INSERT INTO matieres_premieres VALUES (1,'adhesif'), (2,'frontal');
         INSERT INTO mp_grammages VALUES (1, 25);
         INSERT INTO mc_material VALUES (7, 0.031, 31, 'USD', 'PER_KG', 1.065, 1, 'PCT', 0, 12);
+        INSERT INTO mp_laizes VALUES (5, 330);
         INSERT INTO mp_matiere_declinaison VALUES (1, 1, NULL, 1, 7);
         INSERT INTO mp_matiere_declinaison VALUES (2, 2, 5, NULL, NULL);
     """)
@@ -452,6 +474,13 @@ with dbmod.get_db() as conn:
     check("poids repris de la fiche", reprise["weight_per_m2"], 0.031)
     check("devise reprise", reprise["price_currency"], "USD")
     check("incidence taxes reprise", reprise["tax_incidence"], 1.065)
+    mig_taxe = importlib.import_module("app.core.migrations.2026_08_04_taxe_marge_grammage")
+    mig_taxe.appliquer(old)
+    reprise = old.execute("SELECT * FROM mp_matiere_declinaison WHERE id=1").fetchone()
+    check("multiplicateur converti en pourcentage", reprise["taxe_pct"], 6.5)
+    check("marge appliquée par défaut", reprise["applique_marge"], 1)
+    check("grammage repris depuis le poids", reprise["grammage_gsm"], 31.0)
+    check("perte remise à zéro pour ne rien renchérir", reprise["perte_pct"], 0.0)
     check("import repris", reprise["is_imported"], 1)
     check("transport en pourcentage repris", reprise["transport_pct"], 12.0)
     check("la fiche appairée compte comme paramétrée", reprise["parametre"], 1)
@@ -500,6 +529,97 @@ with dbmod.get_db() as conn:
     conn.commit()
     check("suppression de la dernière ligne acceptée", res["ok"], True)
     check("la déclinaison part avec", res.get("declinaison_supprimee"), True)
+
+    print("\n--- produits devisés depuis MyStock ---")
+    from app.services import mystock_produits as PROD  # noqa: E402
+
+    compo = [
+        {"declinaison_id": dl["id"], "role": "FRONTAL"},
+        {"declinaison_id": d22["id"], "role": "ADHESIF"},
+    ]
+    r = PROD.creer_produit(conn, code="MS-1", designation="Étiquette test",
+                           composants=compo, user_name="Test")
+    conn.commit()
+    check("produit créé", r["ok"], True)
+    prod = r["produit"]
+    check("les deux composants sont enregistrés", len(prod["composants"]), 2)
+    check("le libellé de la déclinaison suit",
+          sorted(c["libelle"] for c in prod["composants"]), ["22 g/m²", "330 mm"])
+
+    c = PROD.cout_produit(conn, prod, reglages)
+    attendu = round(1.62 + 2.95 * 0.028, 4)
+    check("coût = somme des déclinaisons", float(c.total_eur_per_m2), attendu)
+    check("un composant par rôle", sorted(x.role for x in c.components), ["adhesif", "frontal"])
+    check("les parts font 100 %", float(sum(x.share_pct for x in c.components)), 100.0)
+    check("marge par défaut appliquée",
+          float(c.margin_pct), float(reglages.default_margin_pct))
+
+    print("\n--- garde-fous du produit ---")
+    check("code déjà pris refusé",
+          PROD.creer_produit(conn, code="ms-1", designation="Doublon")["ok"], False)
+    check("code vide refusé",
+          PROD.creer_produit(conn, code="  ", designation="X")["ok"], False)
+    check("désignation vide refusée",
+          PROD.creer_produit(conn, code="MS-2", designation="")["ok"], False)
+    check("deux matières pour le même rôle refusées",
+          PROD.creer_produit(conn, code="MS-3", designation="X", composants=[
+              {"declinaison_id": dl["id"], "role": "FRONTAL"},
+              {"declinaison_id": dl500["id"], "role": "FRONTAL"},
+          ])["ok"], False)
+    check("la même déclinaison deux fois refusée",
+          PROD.creer_produit(conn, code="MS-4", designation="X", composants=[
+              {"declinaison_id": dl["id"], "role": "FRONTAL"},
+              {"declinaison_id": dl["id"], "role": "AUTRE"},
+          ])["ok"], False)
+    check("déclinaison inexistante refusée",
+          PROD.creer_produit(conn, code="MS-5", designation="X", composants=[
+              {"declinaison_id": 999999, "role": "FRONTAL"},
+          ])["ok"], False)
+    check("rôle inconnu refusé",
+          PROD.creer_produit(conn, code="MS-6", designation="X", composants=[
+              {"declinaison_id": dl["id"], "role": "CARTON"},
+          ])["ok"], False)
+    check("marge hors limites refusée",
+          PROD.creer_produit(conn, code="MS-7", designation="X",
+                             custom_margin_pct=5000)["ok"], False)
+
+    print("\n--- édition complète du produit ---")
+    m = PROD.modifier_produit(conn, prod["id"], patch={
+        "custom_margin_pct": 12,
+        "composants": compo + [{"declinaison_id": dl500["id"], "role": "AUTRE"}],
+    }, user_name="Test")
+    conn.commit()
+    check("modification acceptée", m["ok"], True)
+    prod2 = m["produit"]
+    check("une matière libre s'ajoute", len(prod2["composants"]), 3)
+    c2 = PROD.cout_produit(conn, prod2, reglages)
+    check("le coût suit la nouvelle composition",
+          float(c2.total_eur_per_m2), round(attendu + 1.45, 4))
+    check("la marge du produit prend le pas", float(c2.margin_pct), 12.0)
+    check("prix de vente = revient + marge", float(c2.sell_price_eur_m2),
+          round(float(c2.total_eur_per_m2) * 1.12, 4))
+
+    # Se réattribuer son propre code doit passer : la garde d'unicité exclut le
+    # produit qu'on est en train de modifier.
+    check("un produit garde son propre code",
+          PROD.modifier_produit(conn, prod["id"], patch={"code": "MS-1"})["ok"], True)
+    r8 = PROD.creer_produit(conn, code="MS-8", designation="Autre")
+    conn.commit()
+    check("un autre produit ne peut pas prendre ce code",
+          PROD.modifier_produit(conn, r8["produit"]["id"], patch={"code": "MS-1"})["ok"], False)
+    check("patch vide refusé",
+          PROD.modifier_produit(conn, prod["id"], patch={})["ok"], False)
+    check("produit inconnu refusé",
+          PROD.modifier_produit(conn, 999999, patch={"designation": "X"})["ok"], False)
+
+    check("désactivation", PROD.supprimer_produit(conn, r8["produit"]["id"])["ok"], True)
+    conn.commit()
+    check("le produit désactivé sort de la liste",
+          [p["code"] for p in PROD.list_produits(conn)], ["MS-1"])
+    check("mais reste consultable",
+          PROD.get_produit(conn, r8["produit"]["id"])["actif"], False)
+    check("recherche par code", len(PROD.list_produits(conn, q="MS-1")), 1)
+    check("recherche sans résultat", len(PROD.list_produits(conn, q="zzz")), 0)
 
     print("\n--- migrations rejouables ---")
     avant = conn.execute("SELECT COUNT(*) FROM mp_matiere_declinaison").fetchone()[0]

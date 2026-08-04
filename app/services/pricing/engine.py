@@ -3,9 +3,17 @@ Calcul pur des coûts matières €/m².
 
 Aucun accès DB ni HTTP — entrées typées, sorties arrondies à 4 décimales.
 
-Formule (v223) :
+Formule :
 
-    prix de revient €/m² = (prix d'achat + transport) × taux de change × incidence taxes
+    prix de revient €/m² = (prix d'achat + transport + taxes) × taux de change
+
+Les taxes sont un POURCENTAGE du sous-total d'achat (6 = +6 %). Elles ne
+s'appliquent qu'aux matières importées : une taxe d'importation sur une matière
+locale n'aurait pas de sens, et le champ n'est visible que dans l'encadré import.
+
+Les appliquer avant le change plutôt qu'après ne change pas le résultat (une
+suite de multiplications), mais donne une lecture directe : ce qu'on paie au
+fournisseur, dans sa devise, puis une seule conversion.
 
 Le transport est saisi sur la matière, au choix :
   - mode AMOUNT : un montant dans la DEVISE et la BASE d'achat (USD/kg si l'achat
@@ -87,14 +95,15 @@ def compute_material_price_per_m2(
         raise PricingError(f"Poids au m² invalide pour « {material.name} ».")
     if material.unit_price < 0:
         raise PricingError(f"Prix unitaire invalide pour « {material.name} ».")
-    if material.tax_incidence <= 0:
-        raise PricingError(f"tax_incidence invalide pour « {material.name} ».")
+    if material.taxe_pct is not None and material.taxe_pct < -100:
+        raise PricingError(f"Taxe (%) invalide pour « {material.name} ».")
     if material.transport_unit_price is not None and material.transport_unit_price < 0:
         raise PricingError(f"Transport invalide pour « {material.name} ».")
     if material.transport_pct is not None and material.transport_pct < 0:
         raise PricingError(f"Transport (%) invalide pour « {material.name} ».")
 
-    tax = material.tax_incidence
+    # Une taxe d'importation ne s'applique qu'à une matière importée.
+    taxe_pct = (material.taxe_pct or _ZERO) if material.is_imported else _ZERO
     w = material.weight_per_m2
     rate = _fx_rate(material, s)
 
@@ -116,11 +125,13 @@ def compute_material_price_per_m2(
 
     raw = unit_src * factor
     transport = transport_src * factor
-    subtotal_src = raw + transport
+    achat_src = raw + transport
+    taxes_src = achat_src * taxe_pct / _HUNDRED
+    subtotal_src = achat_src + taxes_src
     fx = subtotal_src * (rate - _ONE)
     subtotal_eur = subtotal_src * rate
-    uplift = subtotal_eur * (tax - _ONE)
-    total = subtotal_eur * tax
+    uplift = taxes_src * rate
+    total = subtotal_eur
 
     breakdown = MaterialPriceBreakdown(
         raw=_q4(raw),
@@ -137,6 +148,8 @@ def compute_material_price_per_m2(
         subtotal_eur=_q4(subtotal_eur),
         transport_eur_m2=_q4(transport * rate),
         transport_pct_effective=_q4(transport_pct_eff),
+        taxes_src=_q4(taxes_src),
+        taxe_pct=_q4(taxe_pct),
     )
     price = _q4(total)
 
@@ -160,6 +173,8 @@ def compute_material_price_per_m2(
             subtotal_eur=breakdown.subtotal_eur,
             transport_eur_m2=breakdown.transport_eur_m2,
             transport_pct_effective=breakdown.transport_pct_effective,
+            taxes_src=breakdown.taxes_src,
+            taxe_pct=breakdown.taxe_pct,
         )
 
     return MaterialPriceResult(price_eur_per_m2=price, breakdown=breakdown)
@@ -179,6 +194,9 @@ def compute_product_cost(
 
     components: list[ProductComponentCost] = []
     total = _ZERO
+    # Assiette de marge : seules les matières marquées « marge appliquée » y
+    # entrent. Le prix de revient, lui, reste la somme de tout.
+    base_marge = _ZERO
 
     for field_name, role in _COMPONENT_ROLES:
         mat_id = getattr(product, field_name)
@@ -191,6 +209,8 @@ def compute_product_cost(
             )
         result = compute_material_price_per_m2(mat, s)
         total += result.price_eur_per_m2
+        if mat.applique_marge:
+            base_marge += result.price_eur_per_m2
         components.append(
             ProductComponentCost(
                 material_id=mat.id,
@@ -209,6 +229,8 @@ def compute_product_cost(
             )
         result = compute_material_price_per_m2(mat, s)
         total += result.price_eur_per_m2
+        if mat.applique_marge:
+            base_marge += result.price_eur_per_m2
         role = f"extra_{idx + 1}"
         components.append(
             ProductComponentCost(
@@ -231,7 +253,7 @@ def compute_product_cost(
     if margin_pct < 0:
         raise PricingError(f"Marge négative pour le produit « {product.code} ».")
     margin_pct_q = _q4(margin_pct)
-    margin_q = _q4(total_q * margin_pct_q / _HUNDRED)
+    margin_q = _q4(_q4(base_marge) * margin_pct_q / _HUNDRED)
     sell = _q4(total_q + margin_q)
 
     if total_q > 0:

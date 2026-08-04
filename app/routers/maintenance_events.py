@@ -189,6 +189,69 @@ def _assert_event_alive(conn, event_id: int) -> None:
         raise HTTPException(status_code=410, detail="Ce créneau a été supprimé. Il n'est plus modifiable.")
 
 
+def _today_paris() -> str:
+    return datetime.now(_PARIS).strftime("%Y-%m-%d")
+
+
+def _event_is_closed(ev) -> bool:
+    """Un créneau dont la date est passée est CLÔTURÉ.
+
+    v2.7.0 — règle unique. Elle remplace les quatre garde-fous qui se
+    superposaient jusqu'ici : la source (planifie / non_planifie), le rôle
+    (admin / opérateur), la nature du champ (temporel vs contenu) et l'état des
+    opérations. Personne ne pouvait les retenir, et chacun laissait passer un
+    cas que les autres bloquaient.
+
+    La clôture se DÉDUIT de la date : rien n'est stocké, rien n'est à
+    déclencher, aucun créneau ne peut être clôturé par erreur ni oublié
+    non clôturé. Le planning planifie ; pour consigner une intervention déjà
+    réalisée, l'enregistrement d'opération reste la voie normale.
+    """
+    if not ev:
+        return False
+    return (ev.get("date_prevue") or "") < _today_paris()
+
+
+def _check_event_not_closed(ev) -> None:
+    """403 si le créneau est passé. Aucune exception de rôle ni de source."""
+    if _event_is_closed(ev):
+        raise HTTPException(
+            status_code=403,
+            detail="Ce créneau est passé : il est clôturé et n'est plus modifiable. "
+                   "Pour consigner une intervention déjà réalisée, utilise "
+                   "l'enregistrement d'opération.",
+        )
+
+
+def _event_closed_by_id(conn, event_id: int) -> bool:
+    row = conn.execute(
+        "SELECT date_prevue FROM maintenance_events WHERE id=?", (event_id,)
+    ).fetchone()
+    return _event_is_closed({"date_prevue": row["date_prevue"]}) if row else False
+
+
+def _assert_correction_allowed(conn, event_id: int, maint_role: str) -> None:
+    """Créneau clôturé : la CORRECTION d'une saisie reste possible, à l'admin.
+
+    v2.7.0 — la clôture gèle la planification (date, horaires, composition du
+    créneau, opérateurs) et la saisie (solder une opération après coup). Elle ne
+    gèle PAS la correction de ce qui a déjà été enregistré : invalider une saisie
+    douteuse, la revalider, la remettre à zéro, la reclasser vers le bon code,
+    retirer une ligne saisie par erreur.
+
+    Sans cette porte, l'édition de l'historique deviendrait impossible : elle
+    porte par construction sur des opérations passées. Un créneau reste le
+    reflet de ses opérations — quand l'une est invalidée ou supprimée,
+    l'affichage du créneau suit.
+    """
+    if _event_closed_by_id(conn, event_id) and maint_role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Ce créneau est passé : il est clôturé. Seul un administrateur "
+                   "peut encore corriger une saisie déjà enregistrée.",
+        )
+
+
 def _load_event_full(conn, event_id: int) -> Optional[dict]:
     """Retourne un dict enrichi {event, ops:[...], operators:[...]} ou None."""
     ev = conn.execute(
@@ -674,49 +737,19 @@ def update_event(event_id: int, body: EventUpdateBody, request: Request):
         if not ev:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
         _check_event_not_deleted(ev)  # v2.5.29 : refuse toute modif si tombstoned
+        _check_event_not_closed(ev)   # v2.7.0 : créneau passé = clôturé
         if maint_role == "operator":
             if not _can_operator_manage_event(ev, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres interventions non planifiées")
-        # Garde-fou 'past event' : interdit de modifier la date ou les heures
-        # d'un créneau selon sa source. Les autres champs (ops, notes,
-        # opérateurs assignés, ...) restent éditables librement dans tous les cas.
-        #
-        # v2.6.1 — la règle ne dépend plus du RÔLE mais de la SOURCE :
-        #
-        #   planifie (planning)  : la date d'origine ET la date cible doivent
-        #       être >= aujourd'hui, pour tout le monde. Le planning sert à
-        #       planifier et à assigner du travail à venir ; un créneau passé y
-        #       est figé. L'ancienne exemption admin (v2.5.13) est supprimée :
-        #       la vue Planning étant déjà réservée aux admins, elle ne bloquait
-        #       en pratique personne et laissait passer les déplacements vers le
-        #       passé, y compris par simple maladresse de glisser-déposer.
-        #       Tester AUSSI la date cible est indispensable : l'ancien code ne
-        #       regardait que la date actuelle du créneau, si bien que déplacer
-        #       un créneau de demain vers hier passait sans encombre.
-        #
-        #   non_planifie (constats) : garde-fou opérateur inchangé — il ne doit
-        #       pas pouvoir réécrire l'historique de ses propres saisies, mais
-        #       l'admin peut corriger une intervention mal datée.
-        _today = datetime.now(_PARIS).strftime("%Y-%m-%d")
-        _ev_date = ev.get("date_prevue") or ""
-        _ev_source = ev.get("source") or "planifie"
-        _time_fields = {"date_prevue", "heure_debut", "heure_fin"}
-        _touches_time = any(k in updates for k in _time_fields)
-        if _touches_time:
-            if _ev_source == "planifie":
-                _target_date = updates.get("date_prevue") or _ev_date
-                if _ev_date < _today or _target_date < _today:
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Le planning ne permet pas d'intervenir sur une date passée. "
-                               "Pour consigner une intervention déjà réalisée, utilise "
-                               "l'enregistrement d'opération.",
-                    )
-            elif maint_role != "admin" and _ev_date < _today:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Cette intervention est passée. La date et les horaires ne sont plus modifiables (seules les ops peuvent être corrigées).",
-                )
+        # Déplacer un créneau OUVERT vers une date passée reste refusé : il
+        # deviendrait clôturé dans la seconde, donc définitivement inéditable —
+        # par une simple maladresse de glisser-déposer.
+        if body.date_prevue is not None and body.date_prevue < _today_paris():
+            raise HTTPException(
+                status_code=403,
+                detail="Impossible de déplacer un créneau vers une date passée : "
+                       "il serait immédiatement clôturé.",
+            )
         updates["updated_at"] = _now_paris_iso()
         set_clause = ", ".join(f"{k}=?" for k in updates)
         conn.execute(f"UPDATE maintenance_events SET {set_clause} WHERE id=?",
@@ -745,6 +778,7 @@ def delete_event(event_id: int, request: Request, confirm_token: Optional[str] =
         ev = _load_event_full(conn, event_id)
         if not ev:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
+        _check_event_not_closed(ev)   # v2.7.0 : un créneau passé ne se supprime plus
         if maint_role == "operator":
             if not _can_operator_manage_event(ev, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que vos propres interventions non planifiées")
@@ -817,6 +851,7 @@ def add_op(event_id: int, body: OpAddBody, request: Request):
         if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
         _check_event_not_deleted(ev_check)  # v2.5.29
+        _check_event_not_closed(ev_check)   # v2.7.0
         if maint_role == "operator":
             if not _can_operator_manage_event(ev_check, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres interventions non planifiées")
@@ -872,6 +907,16 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
         if not row or row["event_id"] != event_id:
             raise HTTPException(status_code=404, detail="Op introuvable dans ce créneau")
         _assert_event_alive(conn, event_id)  # v2.5.29
+        # v2.7.0 : créneau clôturé -> correction admin uniquement. Et on ne
+        # solde plus une opération jamais saisie : ce serait de la saisie
+        # rétroactive, pas une correction.
+        _assert_correction_allowed(conn, event_id, maint_role)
+        if _event_closed_by_id(conn, event_id) and (row["statut"] or "") not in ("termine", "invalidee"):
+            raise HTTPException(
+                status_code=403,
+                detail="Ce créneau est passé : une opération qui n'a pas été saisie "
+                       "ne peut plus l'être. Utilise l'enregistrement d'opération.",
+            )
 
         if maint_role == "operator" and not _user_in_group(conn, event_id, user["id"]):
             raise HTTPException(status_code=403, detail="Vous n'êtes pas assigné à ce créneau")
@@ -960,6 +1005,7 @@ def delete_op(event_id: int, op_id: int, request: Request):
         ).fetchone()
         if not row or row["event_id"] != event_id:
             raise HTTPException(status_code=404, detail="Op introuvable dans ce créneau")
+        _assert_correction_allowed(conn, event_id, maint_role)  # v2.7.0
         if maint_role == "operator":
             ev_check = _load_event_full(conn, event_id)
             if not _can_operator_manage_event(ev_check, user["id"]):
@@ -989,6 +1035,7 @@ def reset_op(event_id: int, op_id: int, request: Request):
         if not row or row["event_id"] != event_id:
             raise HTTPException(status_code=404, detail="Op introuvable dans ce créneau")
         _assert_event_alive(conn, event_id)  # v2.5.29
+        _assert_correction_allowed(conn, event_id, maint_role)  # v2.7.0
         # Perms opérateur : dans le groupe OU créateur (cf. update_op / _can_operator_manage_event)
         if maint_role == "operator":
             ev_check = _load_event_full(conn, event_id)
@@ -1113,6 +1160,7 @@ def add_operator(event_id: int, body: OperatorAddBody, request: Request):
         if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
         _check_event_not_deleted(ev_check)  # v2.5.29
+        _check_event_not_closed(ev_check)   # v2.7.0
         if maint_role == "operator":
             if not _can_operator_manage_event(ev_check, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres événements")
@@ -1137,6 +1185,7 @@ def remove_operator(event_id: int, operator_id: int, request: Request):
         if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
         _check_event_not_deleted(ev_check)  # v2.5.29
+        _check_event_not_closed(ev_check)   # v2.7.0
         if maint_role == "operator":
             if not _can_operator_manage_event(ev_check, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres événements")
@@ -1541,28 +1590,46 @@ def _ensure_recurring_events_generated(conn, horizon_days: int = 90,
     return total
 
 
+def _period_key(d, rtype: str) -> str:
+    """v2.6.1 : periode de recurrence a laquelle appartient une date.
+
+    Une recurrence produit AU PLUS UNE occurrence par periode : une par semaine
+    en hebdomadaire, une par mois en mensuel, etc. C'est cette contrainte qui
+    remplace l'ancien appariement positionnel entre occurrences et dates cibles
+    — appariement qui decalait toute la serie des qu'une occurrence etait
+    preservee ou manquante, et pouvait produire deux creneaux la meme semaine.
+    """
+    if rtype == "monthly":
+        return f"{d.year}-M{d.month:02d}"
+    if rtype == "quarterly":
+        return f"{d.year}-Q{(d.month - 1) // 3 + 1}"
+    if rtype == "yearly":
+        return f"{d.year}"
+    y, w, _ = d.isocalendar()   # weekly (defaut) : semaine ISO
+    return f"{y}-W{w:02d}"
+
+
 def _replace_recurrence_dates(conn, template_id: int, exclude_ids=None, horizon_days: int = 90) -> dict:
     """v2.6.1 : applique une NOUVELLE regle de recurrence aux occurrences futures
-    en les DEPLACANT, au lieu de les purger puis les regenerer.
+    en les DEPLACANT dans leur propre periode, au lieu de les purger.
 
-    Pourquoi : les deux dimensions d'un modele sont independantes. Le contenu
-    (les operations) et la planification (regle + horaires) ne doivent jamais
-    se contaminer. L'ancienne purge supprimait les occurrences et les recreait
-    depuis le modele : une simple correction du jour de recurrence detruisait
-    donc toutes les personnalisations d'operations, ainsi que l'avancement deja
-    saisi par les operateurs — alors que seule la planification avait bouge.
+    Les deux dimensions d'un modele sont independantes : le contenu (les
+    operations) et la planification (regle + horaires) ne se contaminent pas.
+    Une purge/regeneration detruirait les personnalisations d'operations et
+    l'avancement saisi par les operateurs, alors que seule la planification a
+    change.
 
-    Principe : les occurrences existantes sont appariees DANS L'ORDRE aux dates
-    de la nouvelle regle (la 1re du lundi devient la 1re du mardi, etc.). On ne
-    touche qu'a date_prevue et aux horaires ; les lignes d'operations, leurs
-    statuts et les operateurs assignes restent intacts.
+    Principe : UNE occurrence par periode (cf. _period_key). Chaque occurrence
+    existante est rattachee a sa periode et deplacee vers la date cible de
+    CETTE periode. Elle ne peut donc ni changer de semaine, ni se retrouver a
+    cote d'une autre.
 
-    template_origin_date est realigne sur la nouvelle date : sans cela la
-    generation, qui dedoublonne sur (template_id, template_origin_date),
-    recreerait un doublon a chaque date cible.
+    template_origin_date est realigne sur la date cible : la generation
+    dedoublonne dessus, sans quoi elle recreerait un doublon a chaque cible.
 
-    exclude_ids : creneaux que l'admin a choisi de laisser ou ils sont. Ils ne
-    sont ni deplaces ni supprimes ; la serie se regenere autour d'eux.
+    exclude_ids : occurrences que l'admin a choisi de laisser en place. Elles ne
+    bougent pas, mais OCCUPENT leur periode — leur ancrage y est realigne, ce
+    qui empeche la generation d'ajouter un creneau a cote d'elles.
     """
     tmpl = _load_template_full(conn, template_id)
     if not tmpl:
@@ -1571,6 +1638,13 @@ def _replace_recurrence_dates(conn, template_id: int, exclude_ids=None, horizon_
     until = today + timedelta(days=horizon_days)
     now = _now_paris_iso()
     skip = set(int(x) for x in (exclude_ids or []))
+    rtype = tmpl.get("recurrence_type") or "weekly"
+
+    def _d(iso_str):
+        try:
+            return date.fromisoformat(str(iso_str)[:10])
+        except (ValueError, TypeError):
+            return None
 
     rows = conn.execute(
         "SELECT id, date_prevue FROM maintenance_events "
@@ -1579,63 +1653,75 @@ def _replace_recurrence_dates(conn, template_id: int, exclude_ids=None, horizon_
         "ORDER BY date_prevue ASC, id ASC",
         (template_id, today.isoformat()),
     ).fetchall()
-    # Dates de la nouvelle regle, sur le meme horizon que la generation.
-    targets = []
+
+    # Dates cibles de la nouvelle regle, indexees par periode.
+    targets_by_period = {}
     cursor = today
     for _ in range(500):
         nxt = _compute_next_occurrence(tmpl, cursor)
         if nxt is None or nxt > until:
             break
-        targets.append(nxt)
+        targets_by_period.setdefault(_period_key(nxt, rtype), nxt)
         cursor = nxt + timedelta(days=1)
+
+    # Occurrences existantes regroupees par periode.
+    by_period = {}
+    for r in rows:
+        d = _d(r["date_prevue"])
+        if d is None:
+            continue
+        by_period.setdefault(_period_key(d, rtype), []).append(r)
 
     hd = tmpl.get("recurrence_time_start") or ""
     hf = tmpl.get("recurrence_time_end") or ""
-    # TOUTES les occurrences sont appariees aux dates cibles, y compris celles
-    # que l'admin a choisi de preserver : chacune CONSOMME une place dans la
-    # serie. Une occurrence preservee ne bouge pas, mais son
-    # template_origin_date est realigne sur la date cible qu'elle occupe.
-    #
-    # Sans ce realignement, la date cible paraissait libre a la generation
-    # (qui dedoublonne sur template_origin_date) et une occurrence y etait
-    # creee : l'admin demandait « laisse ce creneau ou il est » et se
-    # retrouvait avec son creneau ET un nouveau a cote.
-    n = min(len(rows), len(targets))
-    moved = 0
-    for i in range(n):
-        eid = int(rows[i]["id"])
-        iso = targets[i].isoformat()
-        if eid in skip:
-            # Preserve : ni date ni horaires touches. Seul l'ancrage bouge,
-            # pour reserver la place et rester marque « deplace a la main »
-            # (date_prevue <> template_origin_date).
-            conn.execute(
-                "UPDATE maintenance_events SET template_origin_date=?, updated_at=? WHERE id=?",
-                (iso, now, eid),
-            )
-            continue
-        conn.execute(
-            "UPDATE maintenance_events SET date_prevue=?, heure_debut=?, heure_fin=?, "
-            "       template_origin_date=?, updated_at=? WHERE id=?",
-            (iso, hd, hf, iso, now, eid),
-        )
-        moved += 1
-    # Occurrences en trop (la nouvelle regle en produit moins) : supprimees,
-    # sauf celles que l'admin a explicitement demande de preserver.
-    removed = 0
-    for r in rows[n:]:
-        eid = int(r["id"])
-        if eid in skip:
-            continue
+
+    def _drop(eid: int):
         conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
         conn.execute("DELETE FROM maintenance_event_operators WHERE event_id = ?", (eid,))
         conn.execute("DELETE FROM maintenance_events WHERE id = ?", (eid,))
-        removed += 1
-    # Occurrences manquantes : la generation est idempotente (dedup sur
-    # template_origin_date, desormais realigne) — elle ne cree que les trous.
+
+    moved = removed = 0
+    for period, occs in by_period.items():
+        tgt = targets_by_period.get(period)
+        # Dans une periode qui en contient plusieurs (changement de frequence,
+        # doublon historique), on garde UNE occurrence : une preservee en
+        # priorite, sinon la plus ancienne. Le reste part.
+        occs = sorted(occs, key=lambda r: (0 if int(r["id"]) in skip else 1, r["date_prevue"]))
+        keeper, extras = occs[0], occs[1:]
+        if tgt is None:
+            # Periode que la nouvelle regle ne couvre pas : rien a y faire.
+            for r in occs:
+                if int(r["id"]) in skip:
+                    continue
+                _drop(int(r["id"]))
+                removed += 1
+            continue
+        kid = int(keeper["id"])
+        iso = tgt.isoformat()
+        if kid in skip:
+            # Preservee : ni date ni horaires touches, mais elle occupe la
+            # periode — l'ancrage y est realigne pour bloquer la generation.
+            conn.execute(
+                "UPDATE maintenance_events SET template_origin_date=?, updated_at=? WHERE id=?",
+                (iso, now, kid),
+            )
+        else:
+            conn.execute(
+                "UPDATE maintenance_events SET date_prevue=?, heure_debut=?, heure_fin=?, "
+                "       template_origin_date=?, updated_at=? WHERE id=?",
+                (iso, hd, hf, iso, now, kid),
+            )
+            moved += 1
+        for r in extras:
+            if int(r["id"]) in skip:
+                continue
+            _drop(int(r["id"]))
+            removed += 1
+
+    # Periodes sans occurrence : la generation les cree (idempotente, dedup sur
+    # template_origin_date, desormais realigne).
     created = _generate_events_for_template(conn, template_id, until)
     return {"moved": moved, "removed": removed, "created": created}
-
 
 def _event_divergence(conn, event_id: int, tmpl: dict) -> dict:
     """v2.6.1 : en quoi les operations d'un creneau s'ecartent-elles du modele ?
