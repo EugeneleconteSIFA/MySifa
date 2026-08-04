@@ -557,7 +557,19 @@ def list_fournisseurs(request: Request):
     import json
     with get_db() as conn:
         rows = conn.execute(
+            # ── Champs FSC : absents de ce SELECT jusqu'ici ────────────────
+            # `fsc_date_expiration`, `sous_traitant` et `categories` existent
+            # en base (migrations 209 et 213) et l'interface les édite déjà —
+            # mais l'API ne les renvoyait pas et ne les écrivait pas. Trois
+            # conséquences silencieuses : la case « Sous-traitant » se perdait
+            # au rechargement, les catégories aussi, et surtout le badge
+            # « Certificat FSC expire le… » (settings_page.py) ne s'est jamais
+            # affiché puisque la donnée n'arrivait jamais au front.
+            #
+            # La validité du certificat À LA DATE DU BL est une exigence de
+            # chaîne de contrôle : sans cette colonne, aucun contrôle possible.
             """SELECT ff.id, ff.nom, ff.licence, ff.certificat, ff.has_fsc,
+                      ff.fsc_date_expiration, ff.sous_traitant, ff.categories,
                       ff.traca_photo_url, ff.traca_explication, ff.traca_exemple_code,
                       ff.groupe, ff.branche,
                       ff.adresse, ff.code_postal, ff.ville, ff.pays,
@@ -579,8 +591,32 @@ def list_fournisseurs(request: Request):
                 d["tags"] = []
         else:
             d["tags"] = []
+        # `categories` est stocké en JSON (migration 213). Le front attend une
+        # liste ; on la lui donne parsée plutôt que de lui faire deviner.
+        raw_cat = d.get("categories")
+        if raw_cat:
+            try:
+                parsed_c = json.loads(raw_cat)
+                d["categories"] = parsed_c if isinstance(parsed_c, list) else []
+            except (json.JSONDecodeError, TypeError):
+                d["categories"] = []
+        else:
+            d["categories"] = []
+        d["sous_traitant"] = int(d.get("sous_traitant") or 0)
         out.append(d)
     return out
+
+
+@router.get("/api/fournisseurs/categories")
+def list_fournisseur_categories(request: Request):
+    """Référentiel des catégories fournisseurs (source de vérité du front).
+
+    Déclaré avant les routes paramétrées `/api/fournisseurs/{...}` pour ne
+    pas être capté par un segment variable.
+    """
+    require_settings(request)
+    from config import fournisseur_categories
+    return fournisseur_categories()
 
 
 @router.get("/api/fournisseurs/groupes")
@@ -624,6 +660,74 @@ def _normalize_langue_fournisseur(raw):
     return v if v in ("fr", "en") else "fr"
 
 
+# ── Champs FSC du fournisseur ────────────────────────────────────────
+# `sous_traitant` et `categories` disent la même chose sous deux formes : la
+# migration 213 a introduit `categories` (liste JSON) en gardant la colonne
+# booléenne pour la rétrocompatibilité. On les tient synchronisées ici, dans
+# UN seul endroit — deux sources de vérité qui divergent, c'est exactement
+# comment la case a fini par ne plus rien vouloir dire.
+# Le référentiel des catégories vit dans config.py (FOURNISSEUR_CATEGORIES),
+# lu ici comme côté client via GET /api/fournisseurs/categories. Il y avait
+# jusqu'ici deux vocabulaires concurrents — une constante morte côté serveur
+# et une liste codée en dur dans settings_page.py — et aucun endpoint pour les
+# départager : le front tombait systématiquement sur son repli. Conséquence :
+# tout code stocké hors de ce repli restait affiché en brut et impossible à
+# décocher (le picker le conservait dans sa sélection), ce qui se lit très
+# exactement comme « changer la catégorie ne prend pas ».
+
+
+def _parse_fournisseur_categories(raw):
+    """Normalise la liste de catégories. Renvoie (liste, json, sous_traitant).
+
+    Les codes inconnus du référentiel sont écartés : conserver un code
+    qu'aucune interface ne sait ni nommer ni décocher revient à le rendre
+    définitif.
+    """
+    import json as _json
+    from config import FOURNISSEUR_CATEGORIES_CODES
+    cats = []
+    if isinstance(raw, list):
+        cats = [str(c).strip() for c in raw if str(c).strip()]
+    elif isinstance(raw, str) and raw.strip():
+        try:
+            parsed = _json.loads(raw)
+            if isinstance(parsed, list):
+                cats = [str(c).strip() for c in parsed if str(c).strip()]
+        except (ValueError, TypeError):
+            cats = [c.strip() for c in raw.split(",") if c.strip()]
+    # Doublons retirés, ordre d'apparition conservé (lisibilité côté UI).
+    vus, propres = set(), []
+    for c in cats:
+        if c in vus or c not in FOURNISSEUR_CATEGORIES_CODES:
+            continue
+        vus.add(c)
+        propres.append(c)
+    return propres, (_json.dumps(propres, ensure_ascii=False) if propres else None), \
+        (1 if "sous_traitant" in propres else 0)
+
+
+def _parse_fsc_date_expiration(raw):
+    """Date d'expiration du certificat FSC — format ISO AAAA-MM-JJ.
+
+    Refusée si mal formée plutôt que stockée telle quelle : une date que le
+    contrôle de validité ne saura pas lire équivaut à une absence de contrôle,
+    en donnant l'illusion inverse.
+    """
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    try:
+        datetime.strptime(s, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Date d'expiration du certificat FSC invalide (attendu AAAA-MM-JJ).",
+        )
+    return s
+
+
 @router.post("/api/fournisseurs")
 async def create_fournisseur(request: Request):
     user = require_settings(request)
@@ -648,6 +752,10 @@ async def create_fournisseur(request: Request):
     tags_json = json.dumps(tags_list, ensure_ascii=False) if tags_list else None
     notes = (body.get("notes") or "").strip() or None
     actif = 1 if bool(body.get("actif", True)) else 0
+    cat_list, cat_json, sous_traitant = _parse_fournisseur_categories(body.get("categories"))
+    fsc_date_expiration = _parse_fsc_date_expiration(body.get("fsc_date_expiration"))
+    if not has_fsc:
+        fsc_date_expiration = None
     if not nom:
         raise HTTPException(status_code=400, detail="Nom du fournisseur requis")
     now = datetime.now().isoformat()
@@ -657,11 +765,13 @@ async def create_fournisseur(request: Request):
                 """INSERT INTO fournisseurs_fsc
                    (nom, licence, certificat, has_fsc, groupe, branche,
                     adresse, code_postal, ville, pays, langue_default, tags,
-                    notes, actif, updated_at)
-                   VALUES (?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?)""",
+                    notes, actif, updated_at,
+                    fsc_date_expiration, sous_traitant, categories)
+                   VALUES (?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?, ?,?,?)""",
                 (nom, licence, certificat, has_fsc, groupe, branche,
                  adresse, code_postal, ville, pays, langue_default, tags_json,
-                 notes, actif, now),
+                 notes, actif, now,
+                 fsc_date_expiration, sous_traitant, cat_json),
             )
             conn.commit()
             log_action(
@@ -671,7 +781,9 @@ async def create_fournisseur(request: Request):
                 objet=f"Fournisseur {nom}",
                 detail={"has_fsc": bool(has_fsc), "langue_default": langue_default,
                         "tags": tags_list, "ville": ville, "pays": pays,
-                        "actif": bool(actif)},
+                        "actif": bool(actif), "categories": cat_list,
+                        "sous_traitant": bool(sous_traitant),
+                        "fsc_date_expiration": fsc_date_expiration},
                 ip=request.client.host if request.client else None,
             )
             return {"success": True, "id": cur.lastrowid}
@@ -744,6 +856,25 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
         actif_prev = int(ex["actif"] if "actif" in ex_cols and ex["actif"] is not None else 1)
         actif = 1 if bool(body.get("actif", actif_prev)) else 0
 
+        # Champs FSC : on ne les écrase que s'ils sont explicitement fournis.
+        # Le front n'envoie pas toujours l'objet complet (édition partielle
+        # depuis la fiche contact, par exemple) — sans ce garde-fou, une
+        # sauvegarde partielle effacerait la date d'expiration du certificat.
+        if "categories" in body:
+            cat_list, cat_json, sous_traitant = _parse_fournisseur_categories(body.get("categories"))
+        else:
+            cat_json = ex["categories"] if "categories" in ex_cols else None
+            cat_list, cat_json, sous_traitant = _parse_fournisseur_categories(cat_json)
+        if "fsc_date_expiration" in body:
+            fsc_date_expiration = _parse_fsc_date_expiration(body.get("fsc_date_expiration"))
+        else:
+            fsc_date_expiration = ex["fsc_date_expiration"] if "fsc_date_expiration" in ex_cols else None
+        # Un fournisseur non certifié ne peut pas porter de date d'expiration
+        # de certificat : la garder laisserait une donnée orpheline que le
+        # contrôle de validité interpréterait de travers.
+        if not has_fsc:
+            fsc_date_expiration = None
+
         now = datetime.now().isoformat()
 
         changed = {}
@@ -753,6 +884,12 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
             ("langue_default", (ex["langue_default"] if "langue_default" in ex_cols else None), langue_default),
             ("ville", (ex["ville"] if "ville" in ex_cols else None), ville),
             ("actif", actif_prev, actif),
+            ("sous_traitant",
+             (int(ex["sous_traitant"] or 0) if "sous_traitant" in ex_cols else 0),
+             sous_traitant),
+            ("fsc_date_expiration",
+             (ex["fsc_date_expiration"] if "fsc_date_expiration" in ex_cols else None),
+             fsc_date_expiration),
         ]
         for name, before, after in _pairs:
             if before != after:
@@ -764,12 +901,14 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
                        nom=?, licence=?, certificat=?, has_fsc=?,
                        traca_explication=?, traca_exemple_code=?, groupe=?, branche=?,
                        adresse=?, code_postal=?, ville=?, pays=?,
-                       langue_default=?, tags=?, notes=?, actif=?, updated_at=?
+                       langue_default=?, tags=?, notes=?, actif=?, updated_at=?,
+                       fsc_date_expiration=?, sous_traitant=?, categories=?
                    WHERE id=?""",
                 (nom, licence, certificat, has_fsc,
                  traca_explication, traca_exemple_code, groupe, branche,
                  adresse, code_postal, ville, pays,
                  langue_default, tags_json, notes, actif, now,
+                 fsc_date_expiration, sous_traitant, cat_json,
                  fournisseur_id),
             )
             conn.commit()
@@ -778,7 +917,7 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
                 action="UPDATE",
                 module="settings",
                 objet=f"Fournisseur {nom}",
-                detail={"changed": changed, "tags": tags_list},
+                detail={"changed": changed, "tags": tags_list, "categories": cat_list},
                 ip=request.client.host if request.client else None,
             )
             return {"success": True}
@@ -1928,6 +2067,8 @@ def _migrations_etat() -> dict:
     mais pas encore jouées. Signale aussi les numéros historiques en double :
     une migration qui partage son numéro avec une autre ne s'exécute jamais.
     """
+    from database import get_db
+
     appliquees: list[dict] = []
     doublons: list[dict] = []
     noms_faits: set[str] = set()
@@ -2059,9 +2200,23 @@ def _dossier_etat() -> dict:
 def deploiement_sante(request: Request):
     """Migrations, branches et propreté du dossier — consultation seule."""
     require_settings(request)
-    migrations = _migrations_etat()
-    branches = _branches_etat()
-    dossier = _dossier_etat()
+
+    def _sans_casser(fn, defaut):
+        try:
+            return fn()
+        except Exception as exc:  # noqa: BLE001 — vue de consultation
+            print(f"[MySifa] santé du dépôt — {fn.__name__} indisponible : {exc}")
+            return defaut
+
+    migrations = _sans_casser(_migrations_etat, {
+        "appliquees": [], "nb_appliquees": 0, "derniere": None,
+        "en_attente": [], "nb_fichiers": 0, "doublons": [],
+    })
+    branches = _sans_casser(_branches_etat, [])
+    dossier = _sans_casser(_dossier_etat, {
+        "branche": "?", "nb_modifies": 0, "nb_non_suivis": 0,
+        "modifies": [], "non_suivis": [], "verrou_git": False, "propre": True,
+    })
 
     alertes: list[str] = []
     if migrations["en_attente"]:

@@ -24,6 +24,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -47,6 +48,37 @@ def ok(libelle, valeur, attendu=_RIEN):
     print(("ok   " if bon else "ECHEC") + " " + libelle.ljust(56) + " " + repr(valeur))
 
 
+def noms_globaux_non_definis(chemin, fonctions):
+    """
+    Noms que les fonctions vont chercher dans le module sans qu'ils y existent.
+
+    `symtable` applique les vraies règles de portée de Python : un nom importé
+    DANS la fonction est local, un nom seulement supposé présent est global. On
+    compare donc les globaux référencés à ce que le module définit réellement.
+    """
+    import builtins
+    import symtable
+
+    src = io.open(chemin, encoding="utf-8").read()
+    table = symtable.symtable(src, chemin.name, "exec")
+    connus = {s.get_name() for s in table.get_symbols()
+              if s.is_assigned() or s.is_imported()} | set(dir(builtins))
+
+    manquants = []
+
+    def visiter(t):
+        for sym in t.get_symbols():
+            if sym.is_global() and sym.is_referenced() and sym.get_name() not in connus:
+                manquants.append(t.get_name() + " -> " + sym.get_name())
+        for enfant in t.get_children():
+            visiter(enfant)
+
+    for enfant in table.get_children():
+        if enfant.get_name() in fonctions:
+            visiter(enfant)
+    return sorted(set(manquants))
+
+
 def charger(depot, conn):
     """Extrait les fonctions du routeur et les câble sur un dépôt/DB de test."""
     src = io.open(ROOT / "app/routers/settings.py", encoding="utf-8").read()
@@ -65,6 +97,12 @@ def charger(depot, conn):
         def __exit__(self, *a):
             return False
 
+    # Les fonctions du routeur font `from database import get_db` : on présente
+    # un module `database` de test plutôt que d'ouvrir la vraie base.
+    faux = types.ModuleType("database")
+    faux.get_db = lambda: _DB()
+    sys.modules["database"] = faux
+
     ns = {
         "_subprocess": subprocess,
         "_GIT_BIN": "git",
@@ -72,7 +110,6 @@ def charger(depot, conn):
         "_dt": _dt,
         "Path": Path,
         "Optional": __import__("typing").Optional,
-        "get_db": lambda: _DB(),
     }
     for s in segments:
         exec(s, ns)
@@ -139,6 +176,15 @@ def db_de_test(chemin):
 
 
 def main():
+    print("--- noms résolus dans le vrai module ---")
+    # Le reste du test exécute les fonctions dans un espace de noms fabriqué :
+    # il ne verrait pas un nom absent de settings.py. Chaque nom global
+    # référencé doit donc exister au niveau module — `get_db`, lui, s'importe
+    # localement dans chaque fonction (convention du fichier), et l'oublier a
+    # déjà provoqué une 500 sur cette vue.
+    ok("aucun nom global non défini",
+       noms_globaux_non_definis(ROOT / "app/routers/settings.py", FONCTIONS), [])
+
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         depot = depot_de_test(tmp / "depot")
