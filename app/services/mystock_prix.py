@@ -377,9 +377,15 @@ def add_declinaison(
 
 def _poids_depuis_grammage(conn: sqlite3.Connection, declinaison_id: int, grammage_id: int) -> None:
     """
-    Un grammage EST un poids : 22 g/m² = 0,022 kg/m². Le recopier évite de
-    demander deux fois la même information — et sans poids, un prix au kilo ne
-    peut pas devenir un coût au m². On ne touche pas à un poids déjà saisi.
+    Le grammage d'une déclinaison EST son grammage de calcul.
+
+    « 1225 en 22 g/m² » ne peut pas peser autre chose que 22 g/m² : c'est une
+    seule et même information. La ligne du tableau et la fiche de paramétrage
+    écrivent donc dans le même endroit — sinon la fiche annonce 25 pendant que
+    la liste affiche 22, et personne ne sait laquelle fait foi.
+
+    La perte, elle, reste propre au paramétrage : c'est ce qu'on consomme en
+    plus, pas ce qu'on achète.
     """
     row = conn.execute(
         "SELECT valeur_gsm FROM mp_grammages WHERE id=?", (grammage_id,)
@@ -387,15 +393,15 @@ def _poids_depuis_grammage(conn: sqlite3.Connection, declinaison_id: int, gramma
     if not row or _f(row["valeur_gsm"]) <= 0:
         return
     gsm = _f(row["valeur_gsm"])
-    row = conn.execute(
+    d = conn.execute(
         "SELECT COALESCE(perte_pct,0) AS perte FROM mp_matiere_declinaison WHERE id=?",
         (declinaison_id,),
     ).fetchone()
-    perte = _f(row["perte"]) if row else 0.0
+    perte = _f(d["perte"]) if d else 0.0
     conn.execute(
         """UPDATE mp_matiere_declinaison
               SET weight_gsm=?, grammage_gsm=?, weight_per_m2=?
-            WHERE id=? AND COALESCE(weight_per_m2,0)=0""",
+            WHERE id=?""",
         (int(gsm), gsm, poids_retenu(gsm, perte), declinaison_id),
     )
 
@@ -678,8 +684,23 @@ def set_parametrage(
     que corrigées en silence — un « PER_M3 » accepté puis ignoré donnerait un
     coût faux sans le dire.
     """
-    if not fetch_declinaison_complete(conn, declinaison_id):
+    actuelle = fetch_declinaison_complete(conn, declinaison_id)
+    if not actuelle:
         return {"ok": False, "reason": "déclinaison introuvable"}
+
+    # Sur un adhésif, le grammage saisi ici EST la valeur de la déclinaison :
+    # le changer déplace la déclinaison, exactement comme dans le tableau. Sans
+    # ça, la fiche et la ligne afficheraient deux grammages différents.
+    if "grammage_gsm" in patch and type_declinaison(actuelle["categorie"]) == "GRAMMAGE":
+        cible = _f(patch["grammage_gsm"])
+        if cible != _f(_col(actuelle, "grammage_gsm")) or actuelle["grammage_id"] is None:
+            if cible <= 0:
+                return {"ok": False, "reason": "grammage invalide"}
+            res = set_declinaison_valeur(
+                conn, declinaison_id=declinaison_id, valeur_gsm=cible
+            )
+            if not res.get("ok"):
+                return res
 
     sets: list[str] = []
     args: list[Any] = []

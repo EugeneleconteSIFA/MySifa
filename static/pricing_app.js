@@ -1497,7 +1497,7 @@
           </div>
 
           <div class="form-section" id="carac-section" style="${needsWeight(f)?"":"display:none"}"><h3>Caractéristiques</h3>
-            <div class="field-row">
+            <div class="gram-row">
               <div class="field f-num"><label>Grammage <span class="lbl-unit">g/m²</span></label>
                 <input type="number" step="0.01" id="f-gsm" value="${escAttr(f.grammage_gsm)}"/></div>
               <div class="gram-arrow" aria-hidden="true">→</div>
@@ -1506,7 +1506,7 @@
               <div class="gram-arrow" aria-hidden="true">→</div>
               <div class="field f-num"><label>Grammage dont perte <span class="lbl-unit">g/m²</span></label>
                 <div class="gram-out" id="f-gram-out">${escHtml(fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2))}</div>
-                <div class="field-hint">Grammage réellement consommé — c'est lui qui entre dans le calcul.</div>
+                <div class="field-hint">C'est lui qui entre dans le calcul.</div>
               </div>
             </div>
           </div>
@@ -2514,7 +2514,7 @@
           </div>
 
           <div class="form-section" id="d-carac" style="${needsWeight(f)?"":"display:none"}"><h3>Caractéristiques</h3>
-            <div class="field-row">
+            <div class="gram-row">
               <div class="field f-num"><label>Grammage <span class="lbl-unit">g/m²</span></label>
                 <input type="number" step="0.01" id="d-gsm" value="${escAttr(f.grammage_gsm)}"/></div>
               <div class="gram-arrow" aria-hidden="true">→</div>
@@ -2523,7 +2523,7 @@
               <div class="gram-arrow" aria-hidden="true">→</div>
               <div class="field f-num"><label>Grammage dont perte <span class="lbl-unit">g/m²</span></label>
                 <div class="gram-out" id="d-gram-out">${escHtml(fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2))}</div>
-                <div class="field-hint">Grammage réellement consommé — c'est lui qui entre dans le calcul.</div>
+                <div class="field-hint">C'est lui qui entre dans le calcul.</div>
               </div>
             </div>
           </div>
