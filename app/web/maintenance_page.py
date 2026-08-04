@@ -4632,6 +4632,11 @@ function openPlanningDetailsModal(events){
               const invAt = md.invalidated_at ? ' le ' + escHtml(_fmtDoneAt(md.invalidated_at)) : '';
               label = 'Invalid\u00e9e' + mOn + invBy + invAt;
               color = 'var(--muted)';
+            } else if(_calIsPastEvent(ev)){
+              // v2.7.1 : créneau clôturé -> l'opération ne sera jamais saisie.
+              icon = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--danger,#f87171);color:var(--danger,#f87171);flex-shrink:0;font-size:11px;font-weight:800;line-height:1">!</span>';
+              label = md.machine ? (escHtml(md.machine) + ' \u2014 non r\u00e9alis\u00e9e') : 'Non r\u00e9alis\u00e9e';
+              color = 'var(--danger,#f87171)';
             } else {
               icon = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border);flex-shrink:0"></span>';
               label = md.machine ? (escHtml(md.machine) + ' \u2014 en attente') : 'En attente';
@@ -10821,7 +10826,35 @@ function _maintCatCssFront(cat){
   return 'controles';
 }
 function _statutLabel(s){
-  return { a_faire:'À faire', en_cours:'En cours', termine:'Terminé', reporte:'Reporté' }[s] || s;
+  // 'invalidee' manquait : le repli `|| s` affichait le libellé brut.
+  return { a_faire:'À faire', en_cours:'En cours', termine:'Terminé',
+           reporte:'Reporté', invalidee:'Invalidée' }[s] || s;
+}
+
+// v2.7.1 — Statut AFFICHÉ d'une opération, dérivé du créneau qui la porte.
+//
+// Une opération jamais saisie sur un créneau clôturé n'est pas « À faire » :
+// elle ne le sera jamais. Elle s'affichait pourtant avec le même libellé et la
+// même pastille grise qu'une opération d'un créneau de demain — impossible de
+// distinguer « pas encore fait » de « jamais fait » sans aller lire la date.
+//
+// On le DÉRIVE plutôt que de l'écrire en base : aucune migration, aucun
+// déclencheur à maintenir (ni job, ni écriture opportuniste au chargement), et
+// rien à rétro-corriger le jour où la règle change. Le statut réel reste
+// `a_faire` — une requête SQL ne verra donc pas « Non réalisé », c'est le prix
+// assumé de la solution dérivée.
+//
+// `evOrDate` accepte un event ({date} côté calendrier, {date_prevue} côté
+// serveur) ou directement une date ISO.
+function _opStatutView(statut, evOrDate){
+  const s = statut || 'a_faire';
+  const d = (typeof evOrDate === 'string')
+    ? evOrDate
+    : ((evOrDate && (evOrDate.date || evOrDate.date_prevue)) || '');
+  if((s === 'a_faire' || s === 'en_cours') && d && _calIsPastIso(d)){
+    return { cls: 'reporte', label: 'Non réalisé' };
+  }
+  return { cls: s, label: _statutLabel(s) };
 }
 
 async function opFetchCodes(){
@@ -10993,9 +11026,10 @@ function _renderOpCard(ev, opts){
     let opsInThisGroup = 0;
     for(const o of g.ops){
       if(previewLines.length >= MAX_LINES){ printedTruncated = true; break; }
+      const _sv = _opStatutView(o.statut, ev);
       const statusPill = singleOp
         ? ''
-        : `<span class="op-status op-status-${o.statut}" style="position:static;font-size:9px;padding:2px 5px">${_statutLabel(o.statut)}</span>`;
+        : `<span class="op-status op-status-${_sv.cls}" style="position:static;font-size:9px;padding:2px 5px">${_sv.label}</span>`;
       previewLines.push(`<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:5px">
         <span class="op-code" style="font-size:11px;padding:2px 7px">${o.code}</span>
         <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.code_label || '—'}</span>
@@ -11011,11 +11045,14 @@ function _renderOpCard(ev, opts){
     ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">+ ${remainingOps} autre${remainingOps > 1 ? 's' : ''} opération${remainingOps > 1 ? 's' : ''}</div>`
     : '';
   const srcBadge = (ev.source === 'non_planifie') ? '<span class="op-badge-source">Non planifiée</span>' : '';
+  const _cardClos = _calIsPastIso(ev.date_prevue || ev.date || '');
   const summary = doneAll
     ? '<span class="op-status op-status-termine" style="position:static">Terminé</span>'
-    : (remaining < totalOps
-        ? `<span class="op-status op-status-en_cours" style="position:static">${remaining} restant${remaining > 1 ? 'es' : 'e'}</span>`
-        : `<span class="op-status op-status-a_faire" style="position:static">À faire</span>`);
+    : (_cardClos
+        ? '<span class="op-status op-status-reporte" style="position:static">Non réalisé</span>'
+        : (remaining < totalOps
+            ? `<span class="op-status op-status-en_cours" style="position:static">${remaining} restant${remaining > 1 ? 'es' : 'e'}</span>`
+            : `<span class="op-status op-status-a_faire" style="position:static">À faire</span>`));
   const dateLine = isToday ? '' : `<div style="font-size:12px;color:var(--muted);margin-top:2px">${_fmtDateFrShort(ev.date_prevue)}</div>`;
   const cta = isToday
     ? `<button type="button" class="btn op-btn-accent op-card-cta" onclick="event.stopPropagation();opOpenSaisie(${ev.id})">
@@ -11137,7 +11174,7 @@ function _renderOpCardIndividual(op, ev, opts){
   opts = opts || {};
   const showMachine = !!opts.showMachine;
   const isDone = op.statut === 'termine';
-  const statusLabel = _statutLabel(op.statut);
+  const statusLabel = _opStatutView(op.statut, ev).label;
   // Actions Modifier/Supprimer visibles uniquement sur les cartes d'ops
   // non_planifie créées par l'user courant (interventions déclarées via
   // "Enregistrer une opération").
@@ -12663,13 +12700,16 @@ function _opRenderPlanTable(events, meId){
     const allDone = rows.length > 0 && rows.every(r => r.op.statut === 'termine' || r.op.statut === 'invalidee');  // v2.5.10
     const anyDone = rows.some(r => r.op.statut === 'termine');
     const statusCls = allDone ? 'done' : (anyDone ? 'progress' : '');
-    const statusTxt = allDone ? '✓ Terminé' : (anyDone ? 'En cours' : 'À faire');
+    const statusTxt = allDone
+      ? '✓ Terminé'
+      : (_calIsPastIso(ev.date_prevue || ev.date || '') ? 'Non réalisé'
+                                                        : (anyDone ? 'En cours' : 'À faire'));
 
     const tbodyHtml = rows.map(r => `<tr>
       <td class="op-plan-cell-mac">${r.machines.map(m => escHtml(m)).join(' · ')}</td>
       <td><span class="op-code">${r.op.code}</span></td>
       <td class="op-plan-cell-lbl">${escHtml(r.op.code_label || '—')}</td>
-      <td><span class="op-status op-status-${r.op.statut}" style="position:static">${_statutLabel(r.op.statut)}</span></td>
+      <td><span class="op-status op-status-${_opStatutView(r.op.statut, ev).cls}" style="position:static">${_opStatutView(r.op.statut, ev).label}</span></td>
     </tr>`).join('');
 
     return `<div class="op-plan-creneau-card" onclick="opOpenPlanDetail(${ev.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();opOpenPlanDetail(${ev.id});}">
