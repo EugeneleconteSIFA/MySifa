@@ -1,19 +1,48 @@
 """
 Synchronisation Access → MySifa : table t_of
 --------------------------------------------
-Ce script lit les OFs créés après le 01/11/2025 dans la base Access
-et les pousse vers MySifa via l'API bridge.
+Ce script lit les OFs créés après DATE_DEPUIS dans la base Access et les
+pousse vers MySifa via l'API bridge.
 
-Un OF déjà présent dans MySifa (même numero_of) est ignoré — pas d'écrasement.
+Un OF déjà présent dans MySifa (même numero_of) n'est jamais écrasé. Avec
+ENRICHIR_EXISTANTS = True, ses colonnes restées vides sont simplement
+complétées — utile pour rattraper les OF poussés avant l'ajout du métrage.
+
+Ce que le script récupère, et d'où
+-----------------------------------
+Le métrage est STOCKÉ dans Access : t_of.theorique_metrage_necessaire. Il n'y
+a rien à recalculer. (Vérifié sur l'OF 9931861 : 7124,0398 en base pour 7124
+imprimé sur le papier.)
+
+La quantité d'adhésif, elle, est calculée. La formule vient de la vue Access
+[adhesif_necessaire_sans_date_prev], reprise ici telle quelle :
+
+    kg = Adhesif.grammage × theorique_metrage_necessaire × matlaizestandard / 1e6
+
+Vérifié sur l'OF 9931861 : 19 g/m² × 7124,04 m × 470 mm / 1e6 = 63,618 kg,
+pour 63,6 kg imprimé.
+
+ATTENTION — la laize utilisée est matlaizestandard, PAS matlaize. Sur ce même
+OF, matlaize vaut 453 et donnerait 61,3 kg, ce qui est faux. Le libellé
+« Laize optionnelle » porté par t_of.choix_laize_matiere est un intitulé de
+formulaire, pas le choix d'une laize alternative.
+
+Toutes les matières n'ont pas de grammage : quand matadhesif vaut simplement
+« Permanent », sans référence, la jointure sur Adhesif ne donne rien et les
+champs adhésif restent vides. C'est le comportement attendu — sur ces OF, les
+cases adhésif du papier sont vides elles aussi. Environ 30 % des OF sont dans
+ce cas.
 
 Dépendances :
     pip install pyodbc requests
 
 Configuration :
-    Renseigner ACCESS_DB_PATH et MYSIFA_API_KEY ci-dessous.
-    MYSIFA_BASE_URL : URL du VPS sans slash final.
+    ACCESS_DB_PATH ci-dessous, et la clé API dans la variable
+    d'environnement MYSIFA_API_KEY (jamais en clair dans le fichier).
 """
 
+import os
+import re
 import pyodbc
 import requests
 from datetime import datetime
@@ -21,9 +50,11 @@ from datetime import datetime
 # ── Configuration ────────────────────────────────────────────────────
 ACCESS_DB_PATH  = r"\\IDEFIX\sifa_pub\Fiches techniques Access\of.mdb"
 MYSIFA_BASE_URL = "https://mysifa.com"
-MYSIFA_API_KEY  = "msk_REMPLACER_PAR_NOUVELLE_CLE"    # ← générer dans /settings > Clés API
+# Clé API : setx MYSIFA_API_KEY "msk_..." puis rouvrir le terminal.
+MYSIFA_API_KEY  = os.environ.get("MYSIFA_API_KEY", "")
 
-DATE_DEPUIS     = "2025-11-01"   # OFs créés strictement après cette date
+DATE_DEPUIS        = "2025-11-01"   # OFs créés strictement après cette date
+ENRICHIR_EXISTANTS = True           # compléter les colonnes vides des OF déjà importés
 
 HEADERS = {
     "X-Api-Key":    MYSIFA_API_KEY,
@@ -36,51 +67,140 @@ CONN_STR = (
     f"DBQ={ACCESS_DB_PATH};"
 )
 
+# t_fiches_techniques et Adhesif vivent toutes deux dans of.mdb : la première
+# est une table liée vers sifa_fiches_techniques.mdb, la seconde est locale.
+# La jointure se fait donc en une seule requête, sans seconde connexion.
+SQL_OF = """
+    SELECT t_of.numero_of                     AS numero_of,
+           t_of.date_creation                 AS date_creation,
+           t_of.date_delai                    AS date_delai,
+           t_of.format                        AS format,
+           t_of.theorique_quantite            AS qte,
+           t_of.theorique_quantite_bobines    AS bobines,
+           t_of.theorique_metrage_necessaire  AS metrage,
+           t_of.theorique_mandrins            AS mandrins,
+           t_of.theorique_cartons             AS cartons,
+           t_of.theorique_tubes               AS tubes,
+           f.matsupport                       AS matiere,
+           f.matglassine                      AS glassine,
+           f.matlaizestandard                 AS laize,
+           f.matquantite                      AS qte_mille,
+           f.matquantite_type                 AS qte_mille_type,
+           f.matadhesif                       AS adhesif_label,
+           f.machine                          AS machine,
+           a.reference                        AS adhesif_ref,
+           a.grammage                         AS adhesif_grammage
+    FROM   (t_of LEFT JOIN t_fiches_techniques AS f
+                 ON t_of.format = f.reference)
+           LEFT JOIN Adhesif AS a
+                 ON f.matadhesif = a.type
+    WHERE  t_of.date_creation > ?
+    ORDER  BY t_of.date_creation ASC
+"""
+
 
 def get_access_of():
-    """Lit les OFs de t_of créés après DATE_DEPUIS."""
+    """Lit les OFs de t_of créés après DATE_DEPUIS, fiche technique jointe."""
     conn = pyodbc.connect(CONN_STR)
     cur  = conn.cursor()
-    cur.execute(
-        """
-        SELECT [id_of],
-               [numero_of],
-               [date_creation],
-               [format],
-               [theorique_quantite],
-               [theorique_quantite_bobines]
-        FROM   [t_of]
-        WHERE  [date_creation] > ?
-        ORDER  BY [date_creation] ASC
-        """,
-        (DATE_DEPUIS,)
-    )
+    cur.execute(SQL_OF, (DATE_DEPUIS,))
     rows = cur.fetchall()
     conn.close()
     return rows
 
 
-def format_date(val) -> str | None:
+# ── Conversions ──────────────────────────────────────────────────────
+
+def to_float(val):
+    """Convertit une valeur Access en float. Tolère « 470mm », « 10,794 », « 1 234 »."""
+    if val is None:
+        return None
+    if isinstance(val, (int, float)):
+        return float(val)
+    txt = re.sub(r"[^0-9,.\-]", "", str(val)).replace(",", ".")
+    if txt in ("", "-", "."):
+        return None
+    try:
+        return float(txt)
+    except ValueError:
+        return None
+
+
+def to_int(val):
+    f = to_float(val)
+    return int(round(f)) if f is not None else None
+
+
+def to_str(val):
+    if val is None:
+        return None
+    return str(val).strip() or None
+
+
+def format_date(val):
     """Convertit une date Access (datetime ou string) en 'YYYY-MM-DD'."""
     if val is None:
         return None
     if isinstance(val, datetime):
         return val.strftime("%Y-%m-%d")
-    try:
-        # Access stocke parfois en string "DD/MM/YYYY"
-        return datetime.strptime(str(val).strip(), "%d/%m/%Y").strftime("%Y-%m-%d")
-    except ValueError:
-        return str(val).strip()[:10]  # tronquer si déjà ISO
+    brut = str(val).strip()[:10]
+    for fmt in ("%d/%m/%Y", "%m/%d/%Y", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(brut, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    return brut
 
+
+def qte_adhesif_kg(grammage, metrage, laize_mm):
+    """Formule de la vue Access [adhesif_necessaire_sans_date_prev].
+
+    grammage en g/m², metrage en m, laize en mm → kg.
+    Retourne None dès qu'un ingrédient manque : mieux vaut une case vide
+    qu'un tonnage faux dans les besoins matières.
+    """
+    if grammage is None or metrage is None or laize_mm is None:
+        return None
+    return round(grammage * metrage * laize_mm / 1_000_000, 3)
+
+
+# ── Envoi ────────────────────────────────────────────────────────────
 
 def push_of(row) -> dict:
     """Envoie un OF vers MySifa. Retourne la réponse JSON."""
+    metrage  = to_float(row.metrage)
+    laize    = to_float(row.laize)
+    grammage = to_float(row.adhesif_grammage)
+
+    # matquantite ne vaut « quantité au mille » que si matquantite_type le dit.
+    # Sur un autre type (au cent, à l'unité…), l'envoyer tel quel fausserait
+    # tout calcul en aval.
+    qte_mille = None
+    if (row.qte_mille_type or "").strip().lower().startswith("au mille"):
+        qte_mille = to_float(row.qte_mille)
+
     payload = {
-        "numero_of":      str(row.numero_of).strip(),
-        "date_creation":  format_date(row.date_creation),
-        "format":         str(row.format).strip() if row.format else None,
-        "qte_etiquettes": float(row.theorique_quantite)        if row.theorique_quantite        is not None else None,
-        "qte_bobines":    float(row.theorique_quantite_bobines) if row.theorique_quantite_bobines is not None else None,
+        "numero_of":        str(row.numero_of).strip(),
+        "date_creation":    format_date(row.date_creation),
+        "delai_client":     format_date(row.date_delai),
+        "format":           to_str(row.format),
+        "reference":        to_str(row.format),   # t_of.format = fiches.reference
+        "machine":          to_str(row.machine),
+        "matiere":          to_str(row.matiere),
+        "glassine":         to_str(row.glassine),
+        "laize":            laize,
+        "qte_etiquettes":   to_float(row.qte),
+        "qte_bobines":      to_float(row.bobines),
+        "metrage":          metrage,
+        "qte_au_mille":     qte_mille,
+        "adhesif_label":    to_str(row.adhesif_label),
+        "ref_adhesif":      to_str(row.adhesif_ref),
+        "qte_adhesif_g":    grammage,
+        "qte_adhesif_kg":   qte_adhesif_kg(grammage, metrage, laize),
+        "nb_mandrins":      to_int(row.mandrins),
+        "nb_cartons":       to_int(row.cartons),
+        "nb_tubes":         to_int(row.tubes),
+        "enrich_if_exists": ENRICHIR_EXISTANTS,
     }
     resp = requests.post(
         f"{MYSIFA_BASE_URL}/api/bridge/of",
@@ -93,32 +213,48 @@ def push_of(row) -> dict:
 
 
 def main():
+    if not MYSIFA_API_KEY:
+        print("Clé API absente. Définir la variable d'environnement MYSIFA_API_KEY :")
+        print('  setx MYSIFA_API_KEY "msk_..."   puis rouvrir le terminal.')
+        return
+
     print(f"Connexion à Access : {ACCESS_DB_PATH}")
     rows = get_access_of()
     print(f"{len(rows)} OF(s) trouvé(s) après le {DATE_DEPUIS}.\n")
 
-    inserted = 0
-    skipped  = 0
-    errors   = 0
+    inserted = enriched = skipped = errors = 0
+    sans_metrage = sans_adhesif = 0
 
     for row in rows:
         numero = str(row.numero_of).strip()
+        if to_float(row.metrage) is None:
+            sans_metrage += 1
+        if to_float(row.adhesif_grammage) is None:
+            sans_adhesif += 1
         try:
             result = push_of(row)
             if result.get("inserted"):
-                print(f"  [OK]     OF {numero} → importé (id MySifa : {result['id']})")
+                print(f"  [OK]       OF {numero} → importé (id MySifa : {result['id']})")
                 inserted += 1
+            elif result.get("reason") == "enriched":
+                champs = ", ".join(result.get("enriched_fields") or [])
+                print(f"  [COMPLÉTÉ] OF {numero} → {champs}")
+                enriched += 1
             else:
-                print(f"  [IGNORÉ] OF {numero} → déjà dans MySifa (id : {result['id']})")
+                print(f"  [IGNORÉ]   OF {numero} → déjà complet (id : {result['id']})")
                 skipped += 1
         except requests.HTTPError as e:
-            print(f"  [ERREUR] OF {numero} → HTTP {e.response.status_code} : {e.response.text[:120]}")
+            print(f"  [ERREUR]   OF {numero} → HTTP {e.response.status_code} : {e.response.text[:120]}")
             errors += 1
         except Exception as e:
-            print(f"  [ERREUR] OF {numero} → {e}")
+            print(f"  [ERREUR]   OF {numero} → {e}")
             errors += 1
 
-    print(f"\nRésultat — Importés : {inserted}  |  Ignorés (déjà présents) : {skipped}  |  Erreurs : {errors}")
+    print(f"\nRésultat — Importés : {inserted}  |  Complétés : {enriched}"
+          f"  |  Inchangés : {skipped}  |  Erreurs : {errors}")
+    print(f"Sans métrage en base : {sans_metrage}  |  "
+          f"Sans grammage adhésif : {sans_adhesif} "
+          f"(normal quand matadhesif = « Permanent » sans référence)")
 
 
 if __name__ == "__main__":

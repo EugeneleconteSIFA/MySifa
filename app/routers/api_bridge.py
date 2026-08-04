@@ -82,13 +82,54 @@ class OFPushIn(BaseModel):
     date_creation: Optional[str] = None     # t_of.date_creation
     format: Optional[str] = None            # t_of.format
     qte_etiquettes: Optional[float] = None  # t_of.theorique_quantite
-    qte_bobines: Optional[float] = None     # t_of.theorique_quantite_bobine
+    qte_bobines: Optional[float] = None     # t_of.theorique_quantite_bobines
     # Champs optionnels supplémentaires (extensible)
     reference: Optional[str] = None
     machine: Optional[str] = None
-    laize: Optional[float] = None
+    laize: Optional[float] = None           # fiches.matlaizestandard (PAS matlaize)
     matiere: Optional[str] = None
     delai_client: Optional[str] = None
+    # ── Métrage et adhésif ────────────────────────────────────────────
+    # Le métrage est STOCKÉ dans Access (t_of.theorique_metrage_necessaire),
+    # il n'a pas à être recalculé. Vérifié sur OF 9931861 : 7124,0398 en base
+    # pour 7124 imprimé, et 660000/1000 × 10,794 redonne la même valeur.
+    #
+    # La quantité d'adhésif est en revanche calculée, d'après la vue Access
+    # [adhesif_necessaire_sans_date_prev] :
+    #     Adhesif.grammage × theorique_metrage_necessaire × matlaizestandard / 1e6
+    # Jointures : t_of.format = fiches.reference, puis fiches.matadhesif
+    # = Adhesif.type. Vérifié : 19 × 7124,04 × 470 / 1e6 = 63,618 kg pour
+    # 63,6 imprimé.
+    #
+    # ATTENTION : la laize est matlaizestandard, PAS matlaize. Sur l'OF 9931861
+    # matlaize vaut 453 et donnerait 61,3 kg — faux. Le libellé « Laize
+    # optionnelle » de t_of.choix_laize_matiere est un intitulé de formulaire,
+    # pas le choix d'une laize alternative.
+    metrage: Optional[float] = None         # t_of.theorique_metrage_necessaire
+    qte_au_mille: Optional[float] = None    # fiches.matquantite (si type « au mille »)
+    glassine: Optional[str] = None          # fiches.matglassine
+    adhesif_label: Optional[str] = None     # fiches.matadhesif, ex. « Permanent 2028Y - 19 »
+    ref_adhesif: Optional[str] = None       # Adhesif.reference,  ex. « 2028Y »
+    qte_adhesif_g: Optional[float] = None   # Adhesif.grammage, en g/m²
+    qte_adhesif_kg: Optional[float] = None  # calculé côté script Access
+    nb_mandrins: Optional[int] = None       # t_of.theorique_mandrins
+    nb_cartons: Optional[int] = None        # t_of.theorique_cartons
+    nb_tubes: Optional[int] = None          # t_of.theorique_tubes
+    # Si l'OF existe déjà : compléter ses colonnes NULL au lieu de ne rien
+    # faire. Ne remplace JAMAIS une valeur existante — un OF importé par PDF
+    # garde les siennes. Sert à rattraper les OF poussés avant l'ajout du
+    # métrage, sans avoir à les supprimer pour les réimporter.
+    enrich_if_exists: bool = False
+
+
+# Colonnes que enrich_if_exists a le droit de compléter quand elles sont NULL.
+# of_numero, pdf_filename, date_import et statut en sont volontairement exclus.
+_ENRICHISSABLES = (
+    "date_creation", "delai_client", "reference", "machine", "laize", "format",
+    "matiere", "glassine", "ref_adhesif", "qte_adhesif_g", "qte_adhesif_kg",
+    "adhesif_label", "qte_au_mille", "qte_etiquettes", "qte_bobines", "metrage",
+    "nb_cartons", "nb_mandrins", "nb_tubes",
+)
 
 
 # ── Endpoints ────────────────────────────────────────────────────────
@@ -186,13 +227,37 @@ def push_of(
         existing = matches[0] if matches else None
 
         if existing:
+            enrichis = []
+            if body.enrich_if_exists:
+                # Complète uniquement les colonnes NULL. Une valeur déjà en base
+                # — saisie à la main ou extraite d'un vrai PDF — fait autorité et
+                # n'est jamais écrasée.
+                actuel = conn.execute(
+                    "SELECT * FROM of_imports WHERE id=?", (existing["id"],)
+                ).fetchone()
+                dispo = {
+                    col: getattr(body, col, None) for col in _ENRICHISSABLES
+                }
+                a_ecrire = {
+                    col: val for col, val in dispo.items()
+                    if val is not None and actuel[col] is None
+                }
+                if a_ecrire:
+                    set_sql = ", ".join(f"{col}=?" for col in a_ecrire)
+                    conn.execute(
+                        f"UPDATE of_imports SET {set_sql} WHERE id=?",
+                        (*a_ecrire.values(), existing["id"]),
+                    )
+                    conn.commit()
+                    enrichis = sorted(a_ecrire)
             return {
                 "inserted": False,
-                "reason": "already_exists",
+                "reason": "enriched" if enrichis else "already_exists",
                 "id": existing["id"],
                 "of_numero": numero,
                 "matched_of_numero": existing["of_numero"],
                 "has_pdf": bool(existing["pdf_filename"]),
+                "enriched_fields": enrichis,
             }
 
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -200,8 +265,11 @@ def push_of(
             """INSERT INTO of_imports
                (of_numero, date_creation, format, qte_etiquettes, qte_bobines,
                 reference, machine, laize, matiere, delai_client,
+                metrage, qte_au_mille, glassine, adhesif_label,
+                ref_adhesif, qte_adhesif_g, qte_adhesif_kg,
+                nb_mandrins, nb_cartons, nb_tubes,
                 date_import, imported_by, statut)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 numero,
                 body.date_creation,
@@ -213,6 +281,16 @@ def push_of(
                 body.laize,
                 body.matiere,
                 body.delai_client,
+                body.metrage,
+                body.qte_au_mille,
+                body.glassine,
+                body.adhesif_label,
+                body.ref_adhesif,
+                body.qte_adhesif_g,
+                body.qte_adhesif_kg,
+                body.nb_mandrins,
+                body.nb_cartons,
+                body.nb_tubes,
                 now,
                 "access_bridge",
                 "en_attente",
