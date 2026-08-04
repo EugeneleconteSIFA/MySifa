@@ -1844,13 +1844,13 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
       Suivi machine
       <span class="nav-btn-badge hidden" id="nav-maint-badge" title="Retards toutes machines confondues">0</span>
     </button>
-    <button type="button" class="nav-btn adm-only" data-view="planning" onclick="switchView('planning')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-      Planning
-    </button>
     <button type="button" class="nav-btn adm-only" data-view="operations" onclick="switchView('operations')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
       Opérations de maintenance
+    </button>
+    <button type="button" class="nav-btn adm-only" data-view="planning" onclick="switchView('planning')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Planning
     </button>
     <!-- v2.2.45 : "Mes tâches" admin est réservée à Manuel Lesaffre. Cachée par défaut,
          révélée en JS après loadMe() si S.me.nom contient "lesaffre" (case-insensitive). -->
