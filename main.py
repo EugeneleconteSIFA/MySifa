@@ -211,7 +211,7 @@ _STAGING_BANDEAU_CSS = (
 )
 _STAGING_BANDEAU_HTML = (
     '<div class="staging-bandeau">'
-    'v1 — Environnement de test — DB partagée avec la prod'
+    'v1 — Bac à sable · ce qui est saisi ici sera effacé cette nuit'
     '</div>'
 )
 _BODY_OPEN_RE = re.compile(rb"(<body[^>]*>)", re.IGNORECASE)

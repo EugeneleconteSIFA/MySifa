@@ -147,9 +147,9 @@ def _serialize_imprimante(row) -> dict:
 
 # Cache de presence de la colonne `variante` (migration 217).
 #
-# Pourquoi ce garde-fou : l'environnement de test v1 tourne avec
-# MIGRATIONS_DISABLED=1 sur la MEME base que la prod (cf. config.py). Le code
-# promu sur v1 s'execute donc contre un schema NON migre. Sans cette detection,
+# Pourquoi ce garde-fou : v1 tourne avec MIGRATIONS_DISABLED=1 (cf. config.py)
+# et son schema est celui que la resync nocturne lui apporte. Le code promu sur
+# v1 s'execute donc contre un schema qui peut etre en retard d'une migration. Sans cette detection,
 # tout `SELECT ... variante ...` leve OperationalError -> 500 -> et le panneau
 # Imprimantes se vide entierement cote front (un seul appel en echec suffit).
 # Meme protection utile en prod entre le deploiement du code et le boot qui
