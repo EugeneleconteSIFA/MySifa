@@ -694,8 +694,49 @@ temps que les fiches historiques finissent de vivre.
 
 Un prix à 0 côté MyStock veut dire « pas renseigné » : il n'écrase jamais un tarif.
 
+### Comment un prix d'achat devient un coût au m²
+
+    prix de revient €/m² = (prix d'achat + transport + taxes) × taux de change
+
+Les mêmes réglages sur les deux fiches (base CM et MyStock) :
+
+- **Grammage (g/m²) + perte (%)** — le poids n'est jamais saisi. Il découle du
+  grammage majoré de la perte : on produit rarement au gramme près, la chute et
+  le calage font qu'un frontal de 70 g/m² en consomme davantage. Perte par
+  défaut : 9 % sur toute nouvelle matière.
+- **Taxes en %** (6 = +6 %), plus un multiplicateur. Elles vivent dans l'encadré
+  « Matière importée » et **ne comptent que si la matière est importée** — une
+  taxe invisible qui gonfle le prix d'une matière locale serait un piège.
+- **Appliquer la marge** — décochée, la matière entre dans le prix de revient
+  mais sort de l'assiette de marge. Utile pour ce qu'on refacture à l'euro près.
+
+La colonne `tax_incidence` reste en base (multiplicateur historique) mais n'est
+plus lue : le calcul passe par `taxe_pct`. Reprise faite par
+`mc_taxe_pct_marge_grammage`, qui met la perte des matières existantes à **0** —
+appliquer 9 % d'un coup aurait renchéri tout le catalogue sans le dire.
+
+Tests : `python3 tests/test_pricing_engine.py`,
+`node tests/test_pricing_reglages_matiere.js`.
+
+### Produits devisés depuis MyStock
+
+`mp_produit` + `mp_produit_composant` : un produit composé de **déclinaisons**,
+l'équivalent MyStock de `mc_product`. Onglet **Produits → Produits MyStock**,
+fiche à `/pricing/mystock/produit/<id>`.
+
+MyStock ne connaît pas de catégorie « silicone » : les emplacements nommés sont
+**frontal, adhésif, glassine**, et toute autre matière (complexe, autre) s'ajoute
+en composant libre. Le calcul ne réécrit rien — les déclinaisons sont habillées en
+`PricingMaterial` et passées à `compute_product_cost`, le même moteur que la base
+CM. Une seule formule de prix de revient dans l'application.
+
+Deux refus volontaires à la création : deux matières sur un même rôle, et la même
+déclinaison deux fois. Dans les deux cas le coût serait faux sans que rien ne le
+signale à l'écran.
+
 Tests : `python3 tests/test_mystock_declinaisons.py`,
-`node tests/test_pricing_declinaison.js`.
+`node tests/test_pricing_declinaison.js`,
+`node tests/test_pricing_produits_mystock.js`.
 
 ---
 

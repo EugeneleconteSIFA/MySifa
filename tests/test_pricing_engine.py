@@ -48,7 +48,7 @@ class TestComputeMaterialPricePerM2(unittest.TestCase):
             weight_per_m2=D("0.1"),
             price_currency="EUR",
             price_basis="PER_KG",
-            tax_incidence=D("1"),
+            taxe_pct=D("0"),
             is_imported=False,
         )
         res = compute_material_price_per_m2(mat, _settings())
@@ -68,7 +68,7 @@ class TestComputeMaterialPricePerM2(unittest.TestCase):
             weight_per_m2=D("0.05"),
             price_currency="USD",
             price_basis="PER_KG",
-            tax_incidence=D("1"),
+            taxe_pct=D("0"),
             is_imported=True,
             transport_unit_price=D("0.1538"),
         )
@@ -105,7 +105,7 @@ class TestComputeMaterialPricePerM2(unittest.TestCase):
             weight_per_m2=D("0"),
             price_currency="EUR",
             price_basis="PER_M2",
-            tax_incidence=D("0.95"),
+            taxe_pct=D("-5"),
             is_imported=True,
             transport_unit_price=D("0.25"),
         )
@@ -116,7 +116,8 @@ class TestComputeMaterialPricePerM2(unittest.TestCase):
         self.assertLess(res.breakdown.tax_uplift, D("0"))
         self.assertEqual(_breakdown_sum(res), res.price_eur_per_m2)
 
-    def test_tax_incidence_above_one(self):
+    def test_taxe_en_pourcentage(self):
+        """6,5 se lit +6,5 % — plus de multiplicateur à traduire dans sa tête."""
         mat = PricingMaterial(
             id=3,
             name="Glassine taxée",
@@ -124,8 +125,8 @@ class TestComputeMaterialPricePerM2(unittest.TestCase):
             weight_per_m2=D("0.08"),
             price_currency="EUR",
             price_basis="PER_KG",
-            tax_incidence=D("1.065"),
-            is_imported=False,
+            taxe_pct=D("6.5"),
+            is_imported=True,
         )
         res = compute_material_price_per_m2(mat, _settings())
         pre = D("1.5") * D("0.08")
@@ -205,7 +206,7 @@ class TestComputeMaterialPricePerM2(unittest.TestCase):
             weight_per_m2=D("0.02"),
             price_currency="USD",
             price_basis="PER_M2",
-            tax_incidence=D("1"),
+            taxe_pct=D("0"),
             is_imported=False,
         )
         res = compute_material_price_per_m2(mat, _settings())
@@ -214,6 +215,47 @@ class TestComputeMaterialPricePerM2(unittest.TestCase):
         self.assertEqual(res.breakdown.raw, D("1.2000"))
         self.assertEqual(res.breakdown.fx, D("-0.1800"))
         self.assertEqual(_breakdown_sum(res), res.price_eur_per_m2)
+
+    def test_taxe_uniquement_si_importee(self):
+        """Une taxe d'importation ne s'applique qu'à une matière importée."""
+        base = dict(
+            id=20,
+            name="Frontal taxé",
+            unit_price=D("2"),
+            weight_per_m2=D("0.1"),
+            price_currency="EUR",
+            price_basis="PER_KG",
+            taxe_pct=D("10"),
+        )
+        locale = compute_material_price_per_m2(
+            PricingMaterial(**base, is_imported=False), _settings()
+        )
+        importee = compute_material_price_per_m2(
+            PricingMaterial(**base, is_imported=True), _settings()
+        )
+        self.assertEqual(locale.price_eur_per_m2, D("0.2000"))
+        self.assertEqual(importee.price_eur_per_m2, D("0.2200"))
+        self.assertEqual(locale.breakdown.tax_uplift, D("0"))
+        self.assertEqual(importee.breakdown.tax_uplift, D("0.0200"))
+
+    def test_taxe_avant_le_change(self):
+        """Taxes puis change, ou l'inverse : même résultat, lecture plus simple."""
+        mat = PricingMaterial(
+            id=21,
+            name="Import USD taxé",
+            unit_price=D("10"),
+            weight_per_m2=D("0.1"),
+            price_currency="USD",
+            price_basis="PER_KG",
+            taxe_pct=D("6"),
+            is_imported=True,
+        )
+        s = _settings()
+        res = compute_material_price_per_m2(mat, s)
+        attendu = (D("10") * D("1.06") * D("0.1") * s.eur_usd_rate).quantize(D("0.0001"))
+        self.assertEqual(res.price_eur_per_m2, attendu)
+        self.assertEqual(res.breakdown.taxe_pct, D("6.0000"))
+        self.assertGreater(res.breakdown.taxes_src, D("0"))
 
     def test_missing_settings_raises(self):
         mat = PricingMaterial(
@@ -252,7 +294,7 @@ class TestComputeProductCost(unittest.TestCase):
                 weight_per_m2=D("0.10"),
                 price_currency="EUR",
                 price_basis="PER_KG",
-                tax_incidence=D("1"),
+                taxe_pct=D("0"),
             ),
             2: PricingMaterial(
                 id=2,
@@ -261,7 +303,7 @@ class TestComputeProductCost(unittest.TestCase):
                 weight_per_m2=D("0.05"),
                 price_currency="EUR",
                 price_basis="PER_KG",
-                tax_incidence=D("1"),
+                taxe_pct=D("0"),
             ),
             3: PricingMaterial(
                 id=3,
@@ -270,7 +312,7 @@ class TestComputeProductCost(unittest.TestCase):
                 weight_per_m2=D("0.02"),
                 price_currency="EUR",
                 price_basis="PER_KG",
-                tax_incidence=D("1"),
+                taxe_pct=D("0"),
             ),
             4: PricingMaterial(
                 id=4,
@@ -279,7 +321,7 @@ class TestComputeProductCost(unittest.TestCase):
                 weight_per_m2=D("0.09"),
                 price_currency="EUR",
                 price_basis="PER_KG",
-                tax_incidence=D("1"),
+                taxe_pct=D("0"),
             ),
         }
 
@@ -331,6 +373,35 @@ class TestComputeProductCost(unittest.TestCase):
             + compute_material_price_per_m2(mats[4], s).price_eur_per_m2
         ).quantize(D("0.0001"))
         self.assertEqual(res.total_eur_per_m2, partial)
+
+    def test_matiere_hors_assiette_de_marge(self):
+        """Une matière exclue entre dans le prix de revient, pas dans la marge."""
+        mats = self._four_materials()
+        mats[3] = PricingMaterial(
+            id=3,
+            name="Silicone refacturé",
+            unit_price=D("0.5"),
+            weight_per_m2=D("0.02"),
+            price_currency="EUR",
+            price_basis="PER_KG",
+            taxe_pct=D("0"),
+            applique_marge=False,
+        )
+        product = PricingProduct(
+            id=13, code="1015", name="Avec refacturation",
+            frontal_id=1, adhesif_id=2, silicone_id=3, glassine_id=4,
+        )
+        s = _settings()
+        res = compute_product_cost(product, mats, s)
+        total = sum(
+            compute_material_price_per_m2(m, s).price_eur_per_m2 for m in mats.values()
+        ).quantize(D("0.0001"))
+        hors = compute_material_price_per_m2(mats[3], s).price_eur_per_m2
+        self.assertEqual(res.total_eur_per_m2, total)
+        # La marge ne porte que sur les trois autres matières.
+        attendu = ((total - hors) * s.default_margin_pct / D("100")).quantize(D("0.0001"))
+        self.assertEqual(res.margin_eur_m2, attendu)
+        self.assertEqual(res.sell_price_eur_m2, (total + attendu).quantize(D("0.0001")))
 
     def test_custom_margin(self):
         mats = self._four_materials()

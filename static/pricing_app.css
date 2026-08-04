@@ -228,6 +228,16 @@ table.pr-table tr{cursor:pointer}
 /* Largeur de lecture : les pages ne s'étalent plus sur tout l'écran. */
 .pr-narrow{max-width:1180px;margin:0 auto}
 
+/* Grammage → perte → grammage retenu : la flèche dit que le dernier découle
+   des deux premiers, et qu'il ne se saisit pas. */
+.gram-arrow{align-self:center;color:var(--muted);font-size:16px;padding:14px 2px 0;flex-shrink:0}
+.gram-out{background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:9px 14px;font-size:14px;font-weight:700;color:var(--text);min-height:38px;
+  display:flex;align-items:center}
+/* Case à cocher posée dans une grille de champs : même hauteur que ses voisins. */
+.check-inline{margin-top:22px}
+@media(max-width:720px){ .gram-arrow{display:none} }
+
 /* Bandeau d'actions collé en haut de la fiche matière (repris de la fiche
    produit MyAO) : sur un formulaire long, Enregistrer reste sous la main. */
 .pr-savebar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;gap:10px;align-items:center;

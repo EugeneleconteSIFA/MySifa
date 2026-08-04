@@ -53,8 +53,14 @@ class PricingMaterial:
     weight_per_m2: Decimal
     price_currency: PriceCurrency
     price_basis: PriceBasis
-    tax_incidence: Decimal = Decimal("1")
+    # Taxes d'importation, en POURCENTAGE du sous-total d'achat (6 = +6 %).
+    # Ignorées si la matière n'est pas importée.
+    taxe_pct: Decimal = Decimal("0")
     is_imported: bool = False
+    # Une matière peut être exclue de l'assiette de marge : elle entre dans le
+    # prix de revient mais on ne cherche pas à marger dessus (refacturation
+    # à l'euro près, matière fournie par le client…).
+    applique_marge: bool = True
     # Mode de saisie du transport (ignoré si is_imported est faux).
     transport_mode: TransportMode = "AMOUNT"
     # Mode AMOUNT : transport dans la DEVISE et la BASE d'achat (USD/kg si l'achat
@@ -92,7 +98,7 @@ class MaterialPriceBreakdown:
     - raw       : prix d'achat ramené au m², exprimé dans la devise d'achat
     - transport : transport ramené au m², exprimé dans la devise d'achat
     - fx        : impact du change (0 si l'achat est déjà en EUR)
-    - tax_uplift: impact de l'incidence taxes (négatif si incidence < 1)
+    - tax_uplift: impact des taxes d'importation, en EUR (négatif si taxe < 0)
 
     Les champs suffixés _src sont les valeurs saisies (devise et base d'achat),
     conservées pour l'affichage du tableau récapitulatif.
@@ -114,6 +120,9 @@ class MaterialPriceBreakdown:
     transport_eur_m2: Decimal = Decimal("0")
     # Transport en % du prix d'achat, quel que soit le mode de saisie.
     transport_pct_effective: Decimal = Decimal("0")
+    # Taxes dans la devise et la base d'achat, et le taux retenu.
+    taxes_src: Decimal = Decimal("0")
+    taxe_pct: Decimal = Decimal("0")
 
 
 @dataclass(frozen=True)
