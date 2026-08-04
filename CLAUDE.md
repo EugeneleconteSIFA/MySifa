@@ -636,6 +636,24 @@ def appliquer(conn):
 Test associé : `python3 tests/test_migrations_fichiers.py` (application, absence
 de rejeu, reprise d'une base migrée par l'ancien mécanisme, respect de `DEPEND`).
 
+### Vérifier l'état sans ouvrir la base
+
+**Paramètres → Promouvoir → Déployer → « Santé du dépôt »** (`GET /api/deploiement/sante`,
+rendu par `static/mysifa_promote.js`) affiche, pour l'instance qui répond :
+
+- les migrations **appliquées** (numérotées et fichiers confondus) et celles
+  **présentes dans le code mais pas encore jouées** ;
+- les **numéros historiques en double** — deux migrations sur le même numéro : la
+  seconde ne s'exécute jamais, c'est un piège silencieux ;
+- les **branches distantes**, leur âge et leur état de fusion dans `staging`, avec
+  un marqueur « à supprimer » pour celles fusionnées et dormantes depuis 15 jours ;
+- la **propreté du dossier de travail** : fichiers modifiés, non suivis, verrou
+  `.git/index.lock`.
+
+La vue est en **consultation seule** : elle ne lance que des commandes git en
+lecture (`for-each-ref`, `status`, `branch --merged`). Le ménage se fait au
+terminal. Test associé : `python3 tests/test_deploiement_sante.py`.
+
 ### Ce qu'il ne faut plus faire
 
 - ❌ Ajouter un `if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=N")` dans `_migrate()`

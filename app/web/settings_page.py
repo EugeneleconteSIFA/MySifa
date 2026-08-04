@@ -1934,6 +1934,22 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <pre id="pr-output" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:12px;line-height:1.5;color:var(--text2);font-family:'SFMono-Regular',Menlo,monospace;max-height:420px;overflow:auto;margin:0;white-space:pre-wrap;word-break:break-word"></pre>
       </div>
 
+      <!-- ── Santé du dépôt : migrations, branches, propreté ──────────────── -->
+      <div class="card" id="ds-card" style="margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+          <div>
+            <div style="font-size:17px;font-weight:700;color:var(--text)">Santé du dépôt</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px">Migrations, branches et propreté du dossier de travail. Consultation seule&nbsp;— rien n'est modifié ici.</div>
+          </div>
+          <button type="button" class="btn btn-sec" id="ds-refresh-btn" onclick="loadDeploiementSante()" style="font-size:12px">
+            Rafraîchir
+          </button>
+        </div>
+        <div id="ds-body">
+          <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Chargement&hellip;</div>
+        </div>
+      </div>
+
       <!-- v2 : bloc Synchroniser DB v2 → v1 (déplacé depuis Maintenance) -->
       <div class="card" style="margin-top:16px">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
@@ -6710,7 +6726,7 @@ async function unlinkBridge(mp_id) {
 <script src="/static/mysifa_impersonate.js"></script>
 <!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe
      autonome pour éviter qu'un refacto du script inline ne les supprime à nouveau. -->
-<script src="/static/mysifa_promote.js?v=3"></script>
+<script src="/static/mysifa_promote.js?v=4"></script>
 <!-- Fonctions imprimantes/templates/agents restaurees : bloc inline autonome.
      NE PAS fusionner avec le <script src> ci-dessus (contenu ignore par le navigateur). -->
 <script>
