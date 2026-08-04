@@ -751,6 +751,13 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-kind-cell.unmapped{background:color-mix(in srgb,var(--warn,#d97706) 9%,transparent);cursor:pointer}
 .bes-kind-cell.unmapped:hover{background:color-mix(in srgb,var(--warn,#d97706) 16%,transparent)}
 .bes-kind-cell .bes-kind-src.tolink{color:var(--warn,#d97706);font-weight:600}
+/* Boutons documents de la vue par dossier (OF, fiche technique). Desactives
+   quand le document n'est pas rattache : visible mais inerte, plutot que masque. */
+.bes-act-cell{white-space:nowrap;text-align:right}
+.bes-act-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;margin-left:6px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;font-weight:600;font-family:inherit;border-radius:6px;cursor:pointer;transition:all .12s}
+.bes-act-btn:hover{border-color:var(--accent);color:var(--accent)}
+.bes-act-btn.off{opacity:.35;cursor:not-allowed}
+.bes-act-btn.off:hover{border-color:var(--border);color:var(--text2)}
 .bes-dossier-meta{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4}
 .bes-statut{display:inline-flex;align-items:center;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
 .bes-statut-en_cours{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
@@ -12274,23 +12281,6 @@ function _besFmtVar(v) {
 
 // Métrage du dossier + provenance. Le badge dit d'où vient le chiffre :
 // « OF » (métrage lu sur l'OF) ou « fiche » (reconstitué géométriquement).
-function _besMetrageCell(d) {
-  const bobine = (d.besoins || []).find(b => b.kind === 'support' || b.kind === 'glassine');
-  const src = bobine ? bobine.source_metrage : (d.of_metrage ? 'of' : null);
-  const ml = bobine && bobine.quantite != null
-    ? bobine.quantite
-    : (d.of_metrage != null ? Number(d.of_metrage) : null);
-  if (ml == null) {
-    return el('td', { cls: 'num' }, el('span', { cls: 'bes-na' }, '—'));
-  }
-  return el('td', { cls: 'num' },
-    _fmtQte(ml, 'm'),
-    src ? el('span', { cls: 'bes-src-badge ' + src, title: src === 'of'
-      ? 'Métrage lu sur l’OF importé'
-      : 'Métrage reconstitué depuis la fiche technique (pas d’OF importé)' },
-      src === 'of' ? 'OF' : 'fiche') : null,
-  );
-}
 
 // En-tetes des colonnes matiere de la vue par dossier. Le kind « support »
 // s'affiche « Frontal » : c'est le mot de l'atelier, et la categorie MyStock
@@ -12340,6 +12330,26 @@ function _besKindCell(b) {
   return cell;
 }
 
+// Bouton d'ouverture d'un document (OF ou fiche technique) dans un nouvel
+// onglet. Sans document rattache, le bouton reste visible mais desactive :
+// l'absence est une information, la masquer laisserait croire a un oubli d'UI.
+function _besDocBtn(label, ico, url, titre) {
+  const dispo = !!url;
+  const b = el('button', {
+    cls: 'bes-act-btn' + (dispo ? '' : ' off'),
+    type: 'button',
+    title: dispo ? titre : titre + ' — aucun document rattaché à ce dossier',
+    attrs: dispo ? {} : { disabled: 'disabled' },
+  }, iconEl(ico, 13), el('span', {}, label));
+  if (dispo) {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      window.open(url, '_blank', 'noopener');
+    });
+  }
+  return b;
+}
+
 function _buildBesoinsDossierTable(dos) {
   const dossiers = dos.dossiers || [];
   if (!dossiers.length) {
@@ -12349,19 +12359,14 @@ function _buildBesoinsDossierTable(dos) {
   const table = el('table', { cls: 'bes-table' });
   table.appendChild(el('thead', {}, el('tr', {},
     el('th', {}, 'Dossier'),
-    el('th', {}, 'Client'),
-    el('th', {}, 'Machine'),
-    el('th', {}, 'Statut'),
-    el('th', { cls: 'num' }, 'Étiq.'),
-    el('th', { cls: 'num' }, 'Métrage'),
     el('th', {}, 'Livraison'),
     ...BESOINS_KIND_ORDER.map(k => el('th', {
       title: BESOINS_KIND_UNITE_NOTE[k] || '',
     }, BESOINS_KIND_COL_LABELS[k] || k)),
+    el('th', { cls: 'bes-act-cell' }, 'Documents'),
   )));
 
   const tbody = el('tbody', {});
-  let totalEtiq = 0;
   // Totaux par categorie : les unites sont homogenes a l'interieur d'un kind
   // (ml, kg, u), donc la somme a un sens. Les dossiers non chiffres sont comptes
   // a part pour ne pas laisser croire que le total couvre tout.
@@ -12369,7 +12374,6 @@ function _buildBesoinsDossierTable(dos) {
   BESOINS_KIND_ORDER.forEach(k => { totaux[k] = { q: 0, unite: '', nc: 0 }; });
 
   dossiers.forEach(d => {
-    totalEtiq += (parseFloat(d.qte_etiquettes) || 0);
     const parKind = {};
     (d.besoins || []).forEach(b => { parKind[b.kind] = b; });
     BESOINS_KIND_ORDER.forEach(k => {
@@ -12389,32 +12393,29 @@ function _buildBesoinsDossierTable(dos) {
         sansBesoin ? el('div', { cls: 'bes-warn-note' },
           'Fiche technique manquante ou incomplète') : null,
       ),
-      el('td', {}, d.client || '—'),
-      el('td', {}, d.machine_nom || '—'),
-      el('td', {}, el('span', { cls: 'bes-statut bes-statut-' + (d.statut || 'attente') },
-        d.statut === 'en_cours' ? 'En cours' : 'En attente')),
-      el('td', { cls: 'num' }, d.qte_etiquettes ? Number(d.qte_etiquettes).toLocaleString('fr-FR') : '—'),
-      _besMetrageCell(d),
       el('td', {}, _fmtDate(d.date_livraison || d.planned_end)),
       ...BESOINS_KIND_ORDER.map(k => _besKindCell(parKind[k])),
+      el('td', { cls: 'bes-act-cell' },
+        _besDocBtn('OF', 'file-text',
+          d.of_import_id ? '/api/of/' + d.of_import_id + '/pdf-preview' : null,
+          'Ouvrir l\'OF'),
+        _besDocBtn('Fiche', 'clipboard',
+          d.ft_id ? '/api/fiches-techniques/' + d.ft_id + '/pdf-preview' : null,
+          'Ouvrir la fiche technique'),
+      ),
     ));
   });
 
   tbody.appendChild(el('tr', { cls: 'bes-total-row' },
-    el('td', { colspan: '4' }, `Total — ${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`),
-    el('td', { cls: 'num' }, totalEtiq ? Math.round(totalEtiq).toLocaleString('fr-FR') : '—'),
-    el('td', { colspan: '2' }, ''),
+    el('td', { colspan: '2' }, `Total — ${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`),
     ...BESOINS_KIND_ORDER.map(k => el('td', {
       cls: 'bes-kind-cell',
-      title: totaux[k].nc
-        ? totaux[k].nc + ' dossier(s) non chiffré(s), hors total'
-        : '',
+      title: totaux[k].nc ? totaux[k].nc + ' dossier(s) non chiffré(s), hors total' : '',
     },
       el('div', { cls: 'bes-kind-qte' }, totaux[k].q ? _fmtQte(totaux[k].q, totaux[k].unite) : '—'),
-      totaux[k].nc
-        ? el('div', { cls: 'bes-warn-note' }, totaux[k].nc + ' n.c.')
-        : null,
+      totaux[k].nc ? el('div', { cls: 'bes-warn-note' }, totaux[k].nc + ' n.c.') : null,
     )),
+    el('td', {}, ''),
   ));
 
   table.appendChild(tbody);
