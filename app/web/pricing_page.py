@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -21,6 +23,34 @@ _NO_CACHE = {
 }
 
 
+_ASSETS_PRICING = ("static/pricing_app.css", "static/pricing_app.js")
+_EMPREINTE_CACHE: dict[str, str] = {}
+
+
+def _empreinte_assets() -> str:
+    """
+    Empreinte courte du CSS et du JS du module.
+
+    Sans elle, un correctif d'affichage peut être en production sans que
+    personne ne le voie : le navigateur ressert son fichier en cache et on
+    cherche le bug dans le code. La date de modification suffit — on ne relit
+    pas le contenu à chaque page.
+    """
+    try:
+        marques = []
+        for chemin in _ASSETS_PRICING:
+            f = Path(__file__).resolve().parents[2] / chemin
+            marques.append(f"{chemin}:{f.stat().st_mtime_ns}")
+        cle = "|".join(marques)
+    except OSError:
+        # Fichier illisible : on ne bloque pas la page, on renonce au cache.
+        return APP_VERSION
+    if cle not in _EMPREINTE_CACHE:
+        _EMPREINTE_CACHE.clear()
+        _EMPREINTE_CACHE[cle] = hashlib.sha1(cle.encode()).hexdigest()[:10]
+    return _EMPREINTE_CACHE[cle]
+
+
 def _pricing_html_response(request: Request) -> HTMLResponse:
     try:
         user = get_current_user(request)
@@ -36,6 +66,9 @@ def _pricing_html_response(request: Request) -> HTMLResponse:
     can_write = user.get("role") in ROLES_PRICING_WRITE
     html = (
         PRICING_SHELL.replace("__V__", f"v{APP_VERSION}")
+        # Empreinte des fichiers statiques : elle change dès qu'on touche au CSS
+        # ou au JS, donc le navigateur recharge au lieu de servir son cache.
+        .replace("__ASSETS__", _empreinte_assets())
         .replace("__CAN_WRITE__", "true" if can_write else "false")
         .replace(
             "__USER__",
@@ -86,7 +119,7 @@ PRICING_SHELL = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
-<link rel="stylesheet" href="/static/pricing_app.css">
+<link rel="stylesheet" href="/static/pricing_app.css?v=__ASSETS__">
 </head>
 <body class="has-topbar mysifa-app-pricing">
 <div id="toast-root"></div>
@@ -133,7 +166,7 @@ PRICING_SHELL = r"""<!DOCTYPE html>
 <script>window.__PRICING__={canWrite:__CAN_WRITE__,user:__USER__};</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
-<script src="/static/pricing_app.js" defer></script>
+<script src="/static/pricing_app.js?v=__ASSETS__" defer></script>
 <script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>"""

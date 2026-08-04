@@ -2692,6 +2692,19 @@ async function moveEntry(entryId,delta){
   }
 }
 
+// Diamètre du mandrin, extrait du libellé de la fiche technique.
+// « Tube 1500x76 » décrit un tube de 1 500 mm de long en diamètre 76 : sur un
+// slot, seul le diamètre parle à l'opérateur, la longueur du tube appartient à
+// la fiche matière. Libellé brut conservé si aucun nombre n'est lisible.
+function mandrinDiaTxt(raw){
+  const s=String(raw||"").trim();
+  if(!s) return "";
+  const sep=s.match(/[x×*]\s*(\d+(?:[.,]\d+)?)/i);
+  const n=sep?sep[1]:((s.match(/\d+(?:[.,]\d+)?/g)||[]).pop());
+  if(!n) return s;
+  return String(n).replace(",",".")+" mm";
+}
+
 // ── Tooltip ──
 let tipEl=null;
 let _hoveredSlotEid=null;
@@ -2722,7 +2735,7 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
   const supTxt=(d.support||"").trim();
   const adhTxt=(d.adhesif||"").trim();
   const palTxt=(d.paletteType||"").trim();
-  const manTxt=(d.mandrin||"").trim();
+  const manTxt=mandrinDiaTxt(d.mandrin);
   const qteTxt=(d.qteEtiq||"").trim();
   const condTxt=(d.cond||"").trim();
   // Colonne technique (vue prod)
