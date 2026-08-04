@@ -16,6 +16,7 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 
+from app.services import mystock_prix as _mystock_prix
 from app.services.audit_service import log_action
 from config import (
     STOCK_EMPLACEMENT_AU_SOL,
@@ -4873,6 +4874,12 @@ async def mouvement_matiere_premiere(request: Request):
                     "UPDATE matieres_premieres SET prix_eur_m2=? WHERE id=?",
                     (round(nouveau_prix, 6), matiere_id),
                 )
+            # Le PMP devient le prix MyStock de la matière : il fait foi, donc il
+            # descend aussi dans les déclinaisons lues par Coûts matières.
+            _mystock_prix.resync_depuis_mystock(
+                conn, matiere_id, user_name=created_by_name,
+                origine="MyStock — PMP entrée en stock",
+            )
         conn.execute(
             """
             INSERT INTO mp_mouvements (
@@ -6775,9 +6782,14 @@ async def update_valorisation(matiere_id: int, request: Request):
                     (matiere_id, prix_avant, prix, note, now, user_id, user_name),
                 )
             conn.commit()
-        # Plus de recopie du prix vers Coûts matières : depuis la refonte du pont, une
-        # matière appairée fait lire son prix directement ici au moment du
-        # calcul. Dupliquer la valeur ne ferait que recréer la divergence.
+        # Coûts matières lit le prix dans la ligne principale de mp_matiere_prix :
+        # un prix corrigé ici doit y redescendre, sinon le devis continue de
+        # tourner sur l'ancienne valeur. Sens retour du miroir Coûts matières -> MyStock.
+        _mystock_prix.resync_depuis_mystock(
+            conn, matiere_id, user_id=user_id, user_name=user_name,
+            origine="MyStock — valorisation",
+        )
+        conn.commit()
         items = _valorisation_query(conn)
         can_see_usd = _user_can_see_valorisation_usd(user)
         taux = _get_taux_eur_usd(conn) if can_see_usd else 0.0
@@ -8132,6 +8144,11 @@ async def set_matiere_laizes(matiere_id: int, request: Request):
                     "UPDATE mp_matiere_laizes SET prix_eur_m2=? WHERE matiere_id=? AND laize_id=?",
                     (fv, matiere_id, lid),
                 )
+        # Même règle : le prix saisi ici fait foi, il redescend dans les
+        # déclinaisons que Coûts matières interroge.
+        _mystock_prix.resync_depuis_mystock(
+            conn, matiere_id, origine="MyStock — fiche matière",
+        )
         conn.commit()
         laizes = _mp_laizes_for_matiere(conn, matiere_id)
     return {"ok": True, "laizes": laizes}

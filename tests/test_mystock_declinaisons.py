@@ -295,6 +295,67 @@ with dbmod.get_db() as conn:
     check("une modification MyStock se voit sans recopie",
           float(cout.total_eur_per_m2), round(1.55 + 2.70 * 0.028, 4))
 
+    print("\n--- MyStock -> Coûts matières : le sens retour ---")
+    # Un prix corrigé dans MyStock (valorisation, fiche matière, PMP) doit
+    # redescendre dans la ligne principale que Coûts matières interroge.
+    def _principal(decl_id):
+        return conn.execute(
+            "SELECT prix FROM mp_matiere_prix WHERE declinaison_id=? AND principal=1",
+            (decl_id,),
+        ).fetchone()[0]
+
+    dl500 = next(d for d in mats["F70"]["declinaisons"] if "500" in d["libelle"])
+    conn.execute("UPDATE mp_matiere_laizes SET prix_eur_m2=1.62 WHERE matiere_id=2 AND laize_id=?",
+                 (laize[330],))
+    conn.commit()
+    r = MP.resync_depuis_mystock(conn, 2, user_name="MyStock")
+    conn.commit()
+    check("le tarif de la laize suit MyStock", _principal(dl["id"]), 1.62)
+    check("la laize voisine n'est pas touchée", _principal(dl500["id"]), 1.45)
+    check("une seule ligne modifiée", r["mises_a_jour"], 1)
+    check("rien à refaire au second passage",
+          MP.resync_depuis_mystock(conn, 2)["mises_a_jour"], 0)
+
+    # Un zéro côté MyStock veut dire « pas renseigné », pas « gratuit » : il ne
+    # doit jamais effacer un tarif connu.
+    conn.execute("UPDATE mp_matiere_laizes SET prix_eur_m2=0 WHERE matiere_id=2 AND laize_id=?",
+                 (laize[330],))
+    conn.commit()
+    MP.resync_depuis_mystock(conn, 2)
+    conn.commit()
+    check("un prix vide n'efface pas le tarif", _principal(dl["id"]), 1.62)
+    conn.execute("UPDATE mp_matiere_laizes SET prix_eur_m2=1.62 WHERE matiere_id=2 AND laize_id=?",
+                 (laize[330],))
+    conn.commit()
+
+    # Matière non laizée : MyStock ne tient qu'un prix, toutes ses déclinaisons
+    # le suivent.
+    conn.execute("UPDATE mp_valorisation SET prix_unitaire=2.95 WHERE matiere_id=1")
+    conn.commit()
+    MP.resync_depuis_mystock(conn, 1, user_name="MyStock")
+    conn.commit()
+    check("le grammage appairé suit", _principal(d22["id"]), 2.95)
+    check("les autres grammages aussi", _principal(d30["id"]), 2.95)
+
+    # Le sens retour lit MyStock, il n'y réécrit rien : pas d'aller-retour.
+    check("MyStock n'est pas réécrit au passage",
+          conn.execute("SELECT prix_unitaire FROM mp_valorisation WHERE matiere_id=1")
+          .fetchone()[0], 2.95)
+    check("ni le prix de la laize",
+          conn.execute("SELECT prix_eur_m2 FROM mp_matiere_laizes WHERE matiere_id=2 AND laize_id=?",
+                       (laize[330],)).fetchone()[0], 1.62)
+
+    cout = compute_product_cost(produit, fetch_materials_map(conn, {9, 1}, require_active=True),
+                                reglages)
+    check("le coût produit repart sur les prix MyStock",
+          float(cout.total_eur_per_m2), round(1.62 + 2.95 * 0.028, 4))
+
+    # Les trois écrans MyStock qui écrivent un prix doivent appeler ce retour,
+    # sinon la correction reste invisible côté Coûts matières.
+    _stock = io.open(RACINE / "app/routers/stock.py", encoding="utf-8").read()
+    check("les écrans MyStock déclenchent le retour",
+          _stock.count("_mystock_prix.resync_depuis_mystock("), 3)
+
     print("\n--- garde-fous ---")
     check("prix négatif refusé",
           MP.set_prix(conn, declinaison_id=d22["id"], fournisseur_id=None, prix=-1)["ok"], False)

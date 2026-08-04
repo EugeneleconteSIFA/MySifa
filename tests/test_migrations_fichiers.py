@@ -26,6 +26,11 @@ import app.core.database as dbmod; dbmod.DB_PATH = db
 with contextlib.redirect_stdout(io.StringIO()):
     dbmod.init_db()
 
+# Le dossier grossit à chaque chantier : on compte les fichiers plutôt que de
+# figer un nombre, sinon ce test tombe dès qu'un collègue ajoute une migration.
+FICHIERS = sorted(m for m in os.listdir("app/core/migrations")
+                  if m.endswith(".py") and not m.startswith("__"))
+
 print("--- premier demarrage ---")
 with dbmod.get_db() as conn:
     faites = {r[0] for r in conn.execute("SELECT nom FROM schema_migrations_fichiers")}
@@ -39,8 +44,9 @@ with dbmod.get_db() as conn:
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(imprimantes)").fetchall()}
     check("colonne type_connexion enfin ajoutee", "type_connexion" in cols, True)
     check("colonne nom_queue_windows ajoutee", "nom_queue_windows" in cols, True)
-    check("4 migrations enregistrees",
-          conn.execute("SELECT COUNT(*) FROM schema_migrations_fichiers").fetchone()[0], 4)
+    check("toutes les migrations du dossier sont enregistrees",
+          conn.execute("SELECT COUNT(*) FROM schema_migrations_fichiers").fetchone()[0],
+          len(FICHIERS))
 
 print("\n--- second demarrage : rien ne doit se rejouer ---")
 buf2 = io.StringIO()
@@ -72,12 +78,12 @@ from app.core.migrations import appliquer_migrations
 faites = appliquer_migrations(conn2)
 check("migration deja passee sous son ancien numero -> ignoree",
       "mp_declinaisons_appairage" in faites, False)
-check("les autres restent a appliquer", len(faites), 3)
+check("les autres restent a appliquer", len(faites), len(FICHIERS) - 1)
 conn2.close(); os.unlink(db2)
 
 print("\n--- garde-fous du lanceur ---")
 import app.core.migrations as M
-mods = sorted(m for m in os.listdir("app/core/migrations") if m.endswith(".py") and not m.startswith("__"))
+mods = FICHIERS
 noms = []
 for f in mods:
     ns = {}
