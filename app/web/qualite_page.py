@@ -624,6 +624,12 @@ const S = {
   currentRes: null,           // {fournisseur:{...}, certificats:[...]} - vue fournisseur
   currentGroupe: null,        // {groupe, branches:[...], certificats:[...]} - vue groupe
   resAlerts: null,            // {expired:[],j30:[],j60:[]}
+  resCertifs: [],             // catalogue referentiel RSE [{id,nom,acronyme,...}]
+  resCatsCatalogue: [],       // catalogue categories fournisseurs [{code,label}]
+  resFiltreCertifs: [],       // ids de fiches mises en avant (multi-selection)
+  resShowCats: false,         // afficher les categories sur les cartes
+  resFiltrePanel: false,      // panneau de selection des certifications ouvert
+  currentRefFour: null,       // couverture fournisseurs de la fiche referentiel
   // ── Audit matrice (v1.6) ────────────────────────────────────────
   auditMatrice: null,         // {fournisseurs, certifications, cells, resume}
   auditMatricePickers: null,  // {fournisseurs, fiches, selection}
@@ -4197,8 +4203,18 @@ async function openRef(id){
     S.currentRef = await r.json();
     S.refEdit = false;
     S.refEditBuf = null;
+    S.currentRefFour = null;
     closeRefSuggests();
     setView('ref-detail');
+    // Couverture fournisseurs : chargee apres l affichage pour ne pas retarder
+    // la fiche elle-meme. Un echec ici ne doit pas empecher de lire la norme.
+    try{
+      const rf = await api('/api/qualite/ref/fiches/'+id+'/fournisseurs');
+      if(rf.ok){
+        S.currentRefFour = await rf.json();
+        if(S.view==='ref-detail' && S.currentRef && S.currentRef.id===id) renderRefDetail();
+      }
+    }catch(e){}
   }catch(e){}
 }
 
@@ -4330,24 +4346,83 @@ function renderRefDetail(){
       </div>
     </div>`;
 
-  // Audits liés
+  // Audits liés — liens manuels et audits dont la matrice porte cette
+  // certification, dans une seule liste. Le badge dit d'où vient le lien ;
+  // seul un lien manuel se délie ici (un lien « matrice » se retire depuis
+  // l'audit, sinon on le verrait revenir au prochain chargement).
   const auditsHtml = `
     <div class="ref-block">
       <h3>Audits client liés <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(${(f.audits||[]).length})</span></h3>
       <div class="ref-audits-list">
-        ${(f.audits||[]).map(a=>`<div class="ref-audit-item" onclick="location.href='/qualite?audit=${a.id}'">
+        ${(f.audits||[]).map(a=>{
+          const auto = a.origine==='matrice' || a.origine==='les_deux';
+          const badge = auto?`<span class="ref-audit-origin" title="Cette certification figure dans la matrice de l'audit">via matrice</span>`:'';
+          const canUnlink = a.origine==='manuel' || a.origine==='les_deux';
+          return `<div class="ref-audit-item" onclick="location.href='/qualite?audit=${a.id}'">
             <div>
-              <div class="num">${escHtml(a.numero)}</div>
-              <div class="client">${escHtml(a.client_nom)}</div>
+              <div class="num">${escHtml(a.numero)}${badge}</div>
+              <div class="client">${escHtml(a.client_nom||'')}</div>
               ${a.note?`<div style="font-size:12px;color:var(--text2);margin-top:4px">${escHtml(a.note)}</div>`:''}
             </div>
             <div style="display:flex;align-items:center;gap:10px">
               <div class="date">${escHtml(a.date_audit||'')}</div>
-              <span class="x" onclick="event.stopPropagation();unlinkRefAudit(${f.id},${a.id})" title="Délier">×</span>
+              ${canUnlink?`<span class="x" onclick="event.stopPropagation();unlinkRefAudit(${f.id},${a.id})" title="Retirer le lien manuel">×</span>`:''}
             </div>
-          </div>`).join('')||'<div style="font-size:12px;color:var(--muted);padding:6px 0">Aucun audit client lié.</div>'}
+          </div>`;
+        }).join('')||'<div style="font-size:12px;color:var(--muted);padding:6px 0">Aucun audit client lié.</div>'}
       </div>
       <button class="btn btn-ghost" style="margin-top:10px" onclick="openLinkAuditModal(${f.id})">+ Lier un audit</button>
+    </div>`;
+
+  // ── Documents fournisseurs + couverture ────────────────────────────────
+  // Tout certificat déposé dans Ressources fournisseurs et tagué sur cette
+  // fiche remonte ici. Rien à re-téléverser : la pièce reste dans le dossier
+  // du fournisseur, cette page n'en est qu'une vue.
+  const cov = S.currentRefFour;
+  const covLbl = {valide:'Valide', expire_bientot:'Expire bientôt', sans_date:'Sans date', expire:'Expiré'};
+  const covCls = {valide:'', expire_bientot:'soon', sans_date:'nod', expire:'soon'};
+  const fournDocsHtml = !cov ? '' : `
+    <div class="ref-block">
+      <h3>Documents fournisseurs <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">(${cov.documents.length}) — certificats tagués « ${escHtml(f.acronyme||f.nom)} »</span></h3>
+      ${cov.documents.length ? cov.documents.map(d=>`
+        <div class="ref-doc-item">
+          <span class="res-has-badge ${covCls[d.statut]||''}">${escHtml(covLbl[d.statut]||d.statut)}</span>
+          <div class="who">
+            <div class="f">${escHtml(d.fournisseur_nom||'—')}${d.groupe_ref?` <span style="font-weight:400;color:var(--muted)">· groupe ${escHtml(d.groupe_ref)}</span>`:(d.fournisseur_branche?` <span style="font-weight:400;color:var(--muted)">· ${escHtml(d.fournisseur_branche)}</span>`:'')}</div>
+            <div class="t">${escHtml(d.titre||d.original_name||'')}${d.date_expiration?' · expire le '+escHtml(d.date_expiration):' · sans date d\'expiration'}</div>
+          </div>
+          <a class="dl" href="/api/qualite/ressources/certificats/${d.id}/download" target="_blank" rel="noopener" onclick="event.stopPropagation()">Ouvrir</a>
+        </div>`).join('')
+      : '<div class="ref-cov-empty">Aucun certificat fournisseur n\'est tagué sur cette fiche. Le tag se pose à l\'ajout d\'un certificat, dans Ressources fournisseurs.</div>'}
+    </div>`;
+
+  const covItem = (x, ok) => `<div class="ref-cov-item" onclick="openRessourceFournisseur(${x.id})" title="Ouvrir le dossier fournisseur">
+      <div>
+        <div class="nm">${escHtml(x.nom||'')}</div>
+        <div class="sub">${x.groupe?escHtml(x.groupe)+(x.branche?' · '+escHtml(x.branche):''):'&nbsp;'}</div>
+      </div>
+      ${ok
+        ? `<span class="res-has-badge ${covCls[x.statut]||''}">${escHtml(covLbl[x.statut]||'')}</span>`
+        : `<span class="res-miss-badge ${x.raison==='expire'?'exp':''}">${x.raison==='expire'?'Expiré':'Aucun document'}</span>`}
+    </div>`;
+  const couvertureHtml = !cov ? '' : `
+    <div class="ref-block">
+      <h3>Couverture fournisseurs <span style="font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">— fournisseurs actifs</span></h3>
+      <div class="ref-cov-stats">
+        <div class="ref-cov-stat neutre"><div class="n">${cov.stats.fournisseurs}</div><div class="l">Fournisseurs</div></div>
+        <div class="ref-cov-stat ok"><div class="n">${cov.stats.valides}</div><div class="l">Validés</div></div>
+        <div class="ref-cov-stat ko"><div class="n">${cov.stats.manquants}</div><div class="l">Manquants</div></div>
+      </div>
+      <div class="ref-cov-cols">
+        <div class="ref-cov-col ok">
+          <div class="ref-cov-col-hd"><span class="dot"></span>Fournisseurs validés (${cov.valides.length})</div>
+          ${cov.valides.length ? cov.valides.map(x=>covItem(x,true)).join('') : '<div class="ref-cov-empty">Aucun fournisseur ne porte cette certification.</div>'}
+        </div>
+        <div class="ref-cov-col ko">
+          <div class="ref-cov-col-hd"><span class="dot"></span>Fournisseurs manquants (${cov.manquants.length})</div>
+          ${cov.manquants.length ? cov.manquants.map(x=>covItem(x,false)).join('') : '<div class="ref-cov-empty">Tous les fournisseurs actifs sont couverts.</div>'}
+        </div>
+      </div>
     </div>`;
 
   // Fichiers
@@ -4389,6 +4464,8 @@ function renderRefDetail(){
     ${questionsHtml}
     ${auditsHtml}
     ${filesHtml}
+    ${fournDocsHtml}
+    ${couvertureHtml}
     ${metaFoot}
   `;
 }
@@ -4661,6 +4738,71 @@ document.addEventListener('keydown', function(ev){
     .res-card-group:hover{border-left-color:var(--accent)}
     .res-card-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px}
     .res-group-badge{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:999px;flex-shrink:0}
+
+    /* ── Ressources : searchbar, filtre certifications, sections ───────── */
+    .res-search-input{width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:inherit;font-size:13px;transition:border-color .15s}
+    .res-search-input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+    .res-toolbar-btn{display:inline-flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 14px;color:var(--text);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer;transition:background .15s,border-color .15s}
+    .res-toolbar-btn:hover{background:var(--bg);border-color:var(--accent)}
+    .res-toolbar-btn.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+    .res-toolbar-btn .cnt{background:var(--accent);color:var(--bg);border-radius:999px;padding:0 6px;font-size:11px;font-weight:800}
+    .res-cbx{display:inline-flex;align-items:center;gap:7px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 13px;font-size:12.5px;color:var(--text);cursor:pointer;user-select:none;transition:background .15s,border-color .15s}
+    .res-cbx:hover{background:var(--bg);border-color:var(--accent)}
+    .res-cbx input{width:15px;height:15px;cursor:pointer;accent-color:var(--accent)}
+    .res-certpanel{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px}
+    .res-certpanel-hd{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:10px}
+    .res-certpanel-list{display:flex;flex-wrap:wrap;gap:7px}
+    .res-certchip{display:inline-flex;align-items:center;gap:6px;background:var(--bg);border:1px solid var(--border);border-radius:999px;padding:5px 12px;font-size:12px;font-weight:600;color:var(--text2);cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+    .res-certchip:hover{border-color:var(--accent);color:var(--text)}
+    .res-certchip.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+    .res-certpanel-actions{display:flex;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border)}
+    .res-section{margin:18px 0 10px}
+    .res-section-hd{display:flex;align-items:center;gap:9px;margin-bottom:10px;flex-wrap:wrap}
+    .res-section-ttl{font-size:14px;font-weight:700;color:var(--text)}
+    .res-section-cnt{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px}
+    .res-section-cnt.ok{background:rgba(52,211,153,.15);color:var(--success)}
+    .res-section-cnt.ko{background:rgba(248,113,113,.18);color:var(--danger)}
+    .res-section-sub{font-size:12px;color:var(--muted)}
+    .res-card.ko{border-left:3px solid var(--danger)}
+    .res-card.okc{border-left:3px solid var(--success)}
+    .res-miss{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px}
+    .res-miss-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(248,113,113,.15);color:var(--danger);border:1px solid rgba(248,113,113,.35);border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:700}
+    .res-miss-badge.exp{background:rgba(251,191,36,.16);color:var(--warn);border-color:rgba(251,191,36,.4)}
+    .res-has-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(52,211,153,.14);color:var(--success);border:1px solid rgba(52,211,153,.32);border-radius:999px;padding:2px 9px;font-size:10.5px;font-weight:700}
+    .res-has-badge.soon{background:rgba(251,191,36,.16);color:var(--warn);border-color:rgba(251,191,36,.4)}
+    .res-has-badge.nod{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+    .res-cats{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+    .res-cat-pill{background:var(--bg);border:1px solid var(--border);color:var(--text2);border-radius:6px;padding:2px 8px;font-size:10.5px;font-weight:600}
+
+    /* ── Fiche referentiel : couverture fournisseurs ────────────────────── */
+    .ref-cov-stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+    .ref-cov-stat{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 14px;min-width:96px}
+    .ref-cov-stat .n{font-size:19px;font-weight:800;line-height:1.1}
+    .ref-cov-stat .l{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;font-weight:600;margin-top:2px}
+    .ref-cov-stat.ok .n{color:var(--success)}
+    .ref-cov-stat.ko .n{color:var(--danger)}
+    .ref-cov-stat.neutre .n{color:var(--text)}
+    .ref-cov-cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    @media(max-width:760px){.ref-cov-cols{grid-template-columns:1fr}}
+    .ref-cov-col{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px}
+    .ref-cov-col-hd{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;margin-bottom:9px}
+    .ref-cov-col-hd .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .ref-cov-col.ok .ref-cov-col-hd{color:var(--success)}
+    .ref-cov-col.ok .dot{background:var(--success)}
+    .ref-cov-col.ko .ref-cov-col-hd{color:var(--danger)}
+    .ref-cov-col.ko .dot{background:var(--danger)}
+    .ref-cov-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 8px;border-radius:7px;cursor:pointer;transition:background .12s}
+    .ref-cov-item:hover{background:var(--card)}
+    .ref-cov-item .nm{font-size:12.5px;color:var(--text);font-weight:600}
+    .ref-cov-item .sub{font-size:10.5px;color:var(--muted)}
+    .ref-cov-empty{font-size:12px;color:var(--muted);padding:8px 4px;font-style:italic}
+    .ref-doc-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:9px;margin-bottom:6px;background:var(--bg)}
+    .ref-doc-item .who{flex:1;min-width:0}
+    .ref-doc-item .who .f{font-size:12.5px;font-weight:700;color:var(--text)}
+    .ref-doc-item .who .t{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .ref-doc-item a.dl{font-size:11.5px;color:var(--accent);text-decoration:none;font-weight:600;white-space:nowrap}
+    .ref-doc-item a.dl:hover{text-decoration:underline}
+    .ref-audit-origin{font-size:9.5px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;background:var(--accent-bg);color:var(--accent);border-radius:999px;padding:2px 7px;margin-left:7px;vertical-align:middle}
     .res-branch-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:border-color .12s}
     .res-branch-row:hover{border-color:var(--accent)}
     .res-branch-nom{font-weight:600;color:var(--text);font-size:13px}
@@ -6132,7 +6274,10 @@ async function loadRessources(){
       S.resGroupes = data.groupes || [];
       S.resList = data.fournisseurs || [];
       S.resOrder = data.order || [];
+      S.resCertifs = data.certifications || [];
+      S.resCatsCatalogue = data.categories_catalogue || [];
     }
+    try{ S.resShowCats = localStorage.getItem('mysifa_res_cats')==='1'; }catch(e){}
     try{
       const r2 = await api('/api/qualite/ressources/expiration-alerts');
       if(r2.ok) S.resAlerts = await r2.json();
@@ -6146,12 +6291,85 @@ function ressourcesFiltered(){
   const groupes = S.resGroupes||[];
   const list = S.resList||[];
   if(!q) return {groupes, list};
+  const cat = c => resCatLabel(c).toLowerCase();
   const fg = groupes.filter(g =>
     (g.groupe||'').toLowerCase().includes(q) ||
+    (g.categories||[]).some(c => cat(c).includes(q)) ||
     (g.branches||[]).some(b => (b.nom||'').toLowerCase().includes(q) || (b.branche||'').toLowerCase().includes(q))
   );
-  const fl = list.filter(f => (f.nom||'').toLowerCase().includes(q) || (f.licence||'').toLowerCase().includes(q));
+  const fl = list.filter(f =>
+    (f.nom||'').toLowerCase().includes(q) ||
+    (f.licence||'').toLowerCase().includes(q) ||
+    (f.categories||[]).some(c => cat(c).includes(q))
+  );
   return {groupes: fg, list: fl};
+}
+
+// ── Filtre certifications & catégories ──────────────────────────────────
+function resCatLabel(code){
+  const c = (S.resCatsCatalogue||[]).find(x=>x.code===code);
+  return c ? c.label : code;
+}
+function resCertifLabel(id){
+  const f = (S.resCertifs||[]).find(x=>String(x.id)===String(id));
+  return f ? (f.acronyme || f.nom) : ('#'+id);
+}
+function toggleResCertif(id){
+  const i = S.resFiltreCertifs.indexOf(id);
+  if(i>=0) S.resFiltreCertifs.splice(i,1); else S.resFiltreCertifs.push(id);
+  renderRessourcesList();
+}
+function clearResCertifs(){ S.resFiltreCertifs = []; renderRessourcesList(); }
+function toggleResCertPanel(){ S.resFiltrePanel = !S.resFiltrePanel; renderRessourcesList(); }
+function toggleResCats(on){
+  S.resShowCats = !!on;
+  try{ localStorage.setItem('mysifa_res_cats', on?'1':'0'); }catch(e){}
+  renderRessourcesList();
+}
+
+// Etat d une certification pour un item (fournisseur isole ou groupe).
+// Renvoie null si aucun certificat tagué, sinon le statut du meilleur.
+function resCertStatut(item, ficheId){
+  const m = item.certifs || {};
+  return m[String(ficheId)] || m[ficheId] || null;
+}
+// Un item est "certifié" pour la sélection s il porte, pour CHAQUE
+// certification cochée, au moins un certificat non expiré. Un certificat
+// périmé ne couvre rien : il compte comme manquant, signalé à part.
+function resEstCertifie(item){
+  return S.resFiltreCertifs.every(id => {
+    const st = resCertStatut(item, id);
+    return st && st !== 'expire';
+  });
+}
+function resManquantsHTML(item){
+  const bits = S.resFiltreCertifs.map(id => {
+    const st = resCertStatut(item, id);
+    if(st && st !== 'expire') return '';
+    return `<span class="res-miss-badge ${st==='expire'?'exp':''}" title="${st==='expire'?'Certificat expiré':'Aucun certificat tagué'}">${escHtml(resCertifLabel(id))}${st==='expire'?' · expiré':''}</span>`;
+  }).filter(Boolean);
+  return bits.length ? `<div class="res-miss">${bits.join('')}</div>` : '';
+}
+function resPossedesHTML(item, nbBranches){
+  const lbl = {valide:'', expire_bientot:' · bientôt', sans_date:' · sans date'};
+  const cls = {valide:'', expire_bientot:'soon', sans_date:'nod'};
+  const bits = S.resFiltreCertifs.map(id => {
+    const st = resCertStatut(item, id);
+    if(!st || st==='expire') return '';
+    let part = '';
+    if(nbBranches){
+      const n = (item.certifs_branches||{})[String(id)] || 0;
+      if(n && n < nbBranches) part = ` · ${n}/${nbBranches} branches`;
+    }
+    return `<span class="res-has-badge ${cls[st]||''}">${escHtml(resCertifLabel(id))}${lbl[st]||''}${part}</span>`;
+  }).filter(Boolean);
+  return bits.length ? `<div class="res-miss">${bits.join('')}</div>` : '';
+}
+function resCatsHTML(item){
+  if(!S.resShowCats) return '';
+  const cats = item.categories||[];
+  if(!cats.length) return '';
+  return `<div class="res-cats">${cats.map(c=>`<span class="res-cat-pill">${escHtml(resCatLabel(c))}</span>`).join('')}</div>`;
 }
 
 function _resPills(s){
@@ -6192,6 +6410,31 @@ function renderRessourcesList(){
     alertHtml = parts.join('');
   }
 
+  // Carte d un item (groupe ou fournisseur isolé). `extra` = badges de
+  // certification, `cls` = liseré de section.
+  const carte = (it, extra, cls) => {
+    if(it.kind==='groupe'){
+      const g = it.data;
+      const nb = (g.branches||[]).length;
+      return `<div class="res-card res-card-group${cls}" onclick="openRessourceGroupe('${encodeURIComponent(g.groupe)}')">
+        <div class="res-card-hd">
+          <div class="res-card-nom">${escHtml(g.groupe||'')}</div>
+          <span class="res-group-badge">Groupe · ${nb} branche${nb>1?'s':''}</span>
+        </div>
+        <div class="res-card-lic">${(g.branches||[]).slice(0,3).map(b=>escHtml(b.branche||b.nom||'')).join(' · ')}${nb>3?' · +'+(nb-3):''}</div>
+        <div class="res-card-stats">${_resPills(g.stats)}</div>
+        ${extra||''}${resCatsHTML(g)}
+      </div>`;
+    }
+    const f = it.data;
+    return `<div class="res-card${cls}" onclick="openRessourceFournisseur(${f.id})">
+      <div class="res-card-nom">${escHtml(f.nom||'')}</div>
+      <div class="res-card-lic">${escHtml(f.licence||'')}${f.certificat?' · '+escHtml(f.certificat):''}</div>
+      <div class="res-card-stats">${_resPills(f.cert_stats)}</div>
+      ${extra||''}${resCatsHTML(f)}
+    </div>`;
+  };
+
   let body = '';
   if(!groupes.length && !list.length){
     body = `<div class="aud-emp"><div class="emp-title">${S.resSearch?'Aucun résultat pour « '+escHtml(S.resSearch)+' »':'Aucun fournisseur'}</div>
@@ -6206,28 +6449,54 @@ function renderRessourcesList(){
       items.push({kind:'four', key:(f.nom||'').toLowerCase(), data:f});
     }
     items.sort((a,b)=>a.key.localeCompare(b.key));
-    body = `<div class="res-grid">${items.map(it=>{
-      if(it.kind==='groupe'){
-        const g = it.data;
-        const nb = (g.branches||[]).length;
-        return `<div class="res-card res-card-group" onclick="openRessourceGroupe('${encodeURIComponent(g.groupe)}')">
-          <div class="res-card-hd">
-            <div class="res-card-nom">${escHtml(g.groupe||'')}</div>
-            <span class="res-group-badge">Groupe · ${nb} branche${nb>1?'s':''}</span>
+
+    if(!S.resFiltreCertifs.length){
+      body = `<div class="res-grid">${items.map(it=>carte(it,'','')).join('')}</div>`;
+    } else {
+      // Deux sections : qui couvre TOUTES les certifications mises en avant,
+      // et qui ne les couvre pas — avec le détail de ce qui manque.
+      const oui = [], non = [];
+      for(const it of items){ (resEstCertifie(it.data) ? oui : non).push(it); }
+      const nbSel = S.resFiltreCertifs.length;
+      const libelles = S.resFiltreCertifs.map(id=>escHtml(resCertifLabel(id))).join(' · ');
+      const sect = (titre, arr, cls, sub, rend) => `
+        <div class="res-section">
+          <div class="res-section-hd">
+            <span class="res-section-ttl">${titre}</span>
+            <span class="res-section-cnt ${cls}">${arr.length}</span>
+            <span class="res-section-sub">${sub}</span>
           </div>
-          <div class="res-card-lic">${(g.branches||[]).slice(0,3).map(b=>escHtml(b.branche||b.nom||'')).join(' · ')}${nb>3?' · +'+(nb-3):''}</div>
-          <div class="res-card-stats">${_resPills(g.stats)}</div>
+          ${arr.length
+            ? `<div class="res-grid">${arr.map(rend).join('')}</div>`
+            : '<div class="ref-cov-empty">Aucun fournisseur dans cette section.</div>'}
         </div>`;
-      } else {
-        const f = it.data;
-        return `<div class="res-card" onclick="openRessourceFournisseur(${f.id})">
-          <div class="res-card-nom">${escHtml(f.nom||'')}</div>
-          <div class="res-card-lic">${escHtml(f.licence||'')}${f.certificat?' · '+escHtml(f.certificat):''}</div>
-          <div class="res-card-stats">${_resPills(f.cert_stats)}</div>
-        </div>`;
-      }
-    }).join('')}</div>`;
+      body =
+        sect('Fournisseurs certifiés', oui, 'ok',
+             nbSel>1?`Couvrent les ${nbSel} certifications : ${libelles}`:`Couvrent : ${libelles}`,
+             it => carte(it, resPossedesHTML(it.data, it.kind==='groupe'?(it.data.branches||[]).length:0), ' okc')) +
+        sect('Fournisseurs non certifiés', non, 'ko',
+             'Certifications manquantes signalées sur chaque carte',
+             it => carte(it, resManquantsHTML(it.data) + resPossedesHTML(it.data, it.kind==='groupe'?(it.data.branches||[]).length:0), ' ko'));
+    }
   }
+
+  // Panneau de sélection des certifications à mettre en avant
+  const certs = S.resCertifs||[];
+  const panelHtml = !S.resFiltrePanel ? '' : `
+    <div class="res-certpanel">
+      <div class="res-certpanel-hd">Certifications à mettre en avant</div>
+      ${certs.length ? `<div class="res-certpanel-list">${certs.map(c=>{
+        const on = S.resFiltreCertifs.includes(c.id);
+        return `<span class="res-certchip${on?' on':''}" onclick="toggleResCertif(${c.id})" role="checkbox" tabindex="0" aria-checked="${on?'true':'false'}"
+          onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleResCertif(${c.id});}"
+          title="${escAttr(c.nom||'')}">${escHtml(c.acronyme||c.nom||'')}</span>`;
+      }).join('')}</div>`
+      : '<div class="ref-cov-empty">Aucune fiche dans le Référentiel RSE. Créez-en une pour pouvoir filtrer.</div>'}
+      <div class="res-certpanel-actions">
+        <button type="button" class="res-toolbar-btn" onclick="clearResCertifs()">Tout décocher</button>
+        <button type="button" class="res-toolbar-btn" onclick="toggleResCertPanel()">Fermer</button>
+      </div>
+    </div>`;
 
   root.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px">
@@ -6242,12 +6511,21 @@ function renderRessourcesList(){
     ${alertHtml}
     <div class="aud-toolbar">
       <div class="search-wrap" style="position:relative">
-        <input type="search" id="res-search" placeholder="Rechercher un fournisseur..." value="${escAttr(S.resSearch)}"
+        <input type="search" id="res-search" class="res-search-input" placeholder="Rechercher (fournisseur, licence, catégorie…)" value="${escAttr(S.resSearch)}"
           oninput="S.resSearch=this.value;renderRessourcesList()"
-          onkeydown="if(event.key==='Escape'){S.resSearch='';this.value='';renderRessourcesList();}"
-          style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:inherit;font-size:13px">
+          onkeydown="if(event.key==='Escape'){S.resSearch='';this.value='';renderRessourcesList();}">
       </div>
+      <button type="button" class="res-toolbar-btn${S.resFiltreCertifs.length?' on':''}" onclick="toggleResCertPanel()"
+        title="Mettre en avant une ou plusieurs certifications du Référentiel RSE">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+        Certifications${S.resFiltreCertifs.length?` <span class="cnt">${S.resFiltreCertifs.length}</span>`:''}
+      </button>
+      <label class="res-cbx" title="Afficher les catégories de chaque fournisseur sur les cartes">
+        <input type="checkbox" ${S.resShowCats?'checked':''} onchange="toggleResCats(this.checked)">
+        Catégories
+      </label>
     </div>
+    ${panelHtml}
     ${body}
   `;
   if(fid){const el=document.getElementById(fid);if(el){el.focus();if(cs!=null){try{el.setSelectionRange(cs,ce);}catch(e){}}}}

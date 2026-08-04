@@ -4031,9 +4031,9 @@ let fourFilterCat = '';
 // Getter courant du picker du panneau d'ajout (setté après le premier chargement des catégories)
 let _cfCatsGetSelected = () => [];
 
-// Fallback hardcodé — utilisé si l'API /api/fournisseurs/categories est down
-// ou pas encore déployée. Doit rester synchro avec FOURNISSEUR_CATEGORIES dans
-// app/routers/settings.py.
+// Fallback hardcodé — utilisé si l'API /api/fournisseurs/categories est down.
+// Doit rester synchro avec FOURNISSEUR_CATEGORIES dans config.py (source de
+// vérité, servie par GET /api/fournisseurs/categories).
 const _FOURNISSEUR_CATS_FALLBACK = [
   {code:'mandrin', label:'Mandrin'}, {code:'palette', label:'Palette'},
   {code:'adhesif', label:'Adhésif'}, {code:'carton', label:'Carton'},
@@ -4063,7 +4063,11 @@ async function _loadFournisseurCategories(){
 
 function _renderCategoryPicker(container, initialSelected){
   const cats = window.__FOURNISSEUR_CATS__ || [];
-  const sel = new Set(initialSelected || []);
+  // Sélection filtrée sur le référentiel : un code stocké en base mais absent
+  // du référentiel n'a aucune puce, donc aucun moyen d'être décoché — il
+  // survivait à chaque enregistrement et masquait le changement demandé.
+  const connus = new Set(cats.map(c => c.code));
+  const sel = new Set((initialSelected || []).filter(c => connus.has(c)));
   container.innerHTML = cats.map(c => {
     const cls = ['four-cat-chip'];
     if (c.code === 'negoce') cls.push('cat-neg');

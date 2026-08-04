@@ -1945,6 +1945,55 @@ def delete_produit(produit_id: int, request: Request):
         if not prow:
             raise HTTPException(404, "Produit non trouvé")
         ref_audit = prow["reference"] or ""
+
+        # -- Conservation des enregistrements FSC (5 ans) -------------------
+        #
+        # Cet endpoint effacait physiquement lots_stock, stock_emplacements ET
+        # mouvements_stock pour la reference. Sur un produit ayant porte un
+        # claim FSC, cela detruit definitivement la chaine de controle : plus
+        # de lot, plus de mouvement, plus rien a opposer a un auditeur -- et
+        # l'action etait accessible en un clic a tout utilisateur ayant le
+        # droit d'ecriture stock.
+        #
+        # La CoC impose de conserver ces enregistrements 5 ans. On refuse donc
+        # la suppression des qu'un enregistrement FSC existe, plutot que de
+        # supprimer « au mieux ». Un produit qu'on ne peut plus supprimer se
+        # contourne (renommer, desactiver) ; un historique detruit, non.
+        fsc_lots = conn.execute(
+            "SELECT COUNT(*) AS n FROM lots_stock WHERE produit_id=? AND COALESCE(fsc,0)=1",
+            (produit_id,),
+        ).fetchone()["n"]
+        fsc_mvts = conn.execute(
+            "SELECT COUNT(*) AS n FROM mouvements_stock WHERE produit_id=? AND COALESCE(fsc,0)=1",
+            (produit_id,),
+        ).fetchone()["n"]
+        if fsc_lots or fsc_mvts:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Suppression impossible : {ref_audit} porte des enregistrements FSC "
+                    f"({fsc_lots} lot(s), {fsc_mvts} mouvement(s)). La chaine de controle "
+                    f"doit etre conservee 5 ans. Mettez la reference hors service plutot "
+                    f"que de la supprimer."
+                ),
+            )
+
+        # Meme sans FSC, un historique de mouvements reste une trace comptable
+        # et operationnelle. On avertit explicitement plutot que de l'effacer
+        # en silence : le front peut confirmer via ?force=1 sur ce 409.
+        nb_mvts = conn.execute(
+            "SELECT COUNT(*) AS n FROM mouvements_stock WHERE produit_id=?", (produit_id,)
+        ).fetchone()["n"]
+        force = str(request.query_params.get("force", "")).strip().lower() in {"1", "true", "yes"}
+        if nb_mvts and not force:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"{ref_audit} porte {nb_mvts} mouvement(s) de stock historiques. "
+                    f"Confirmer la suppression effacera cet historique definitivement."
+                ),
+            )
+
         conn.execute("DELETE FROM lots_stock WHERE produit_id=?", (produit_id,))
         conn.execute("DELETE FROM stock_emplacements WHERE produit_id=?", (produit_id,))
         conn.execute("DELETE FROM mouvements_stock WHERE produit_id=?", (produit_id,))
@@ -1954,7 +2003,8 @@ def delete_produit(produit_id: int, request: Request):
         user=user,
         action="DELETE",
         module="stock",
-        objet=f"Produit {ref_audit} supprimé",
+        objet=f"Produit {ref_audit} supprime",
+        detail={"mouvements_effaces": nb_mvts, "force": force},
         ip=request.client.host if request.client else None,
     )
     return {"success": True}

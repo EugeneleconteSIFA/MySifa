@@ -830,3 +830,62 @@ TACHES_STATUTS_CODES = {s["code"] for s in TACHES_STATUTS}
 TACHES_STATUTS_FINAUX = {s["code"] for s in TACHES_STATUTS if s["final"]}
 TACHES_PRIORITES_CODES = {p["code"] for p in TACHES_PRIORITES}
 TACHES_TYPES_CODES = {t["code"] for t in TACHES_TYPES}
+
+
+# ─── Catégories fournisseurs ──────────────────────────────────────
+# Ce que le fournisseur nous fournit. Référentiel court et structurant :
+# une constante lue par une fonction, jamais interpolée en dur dans un
+# template (règle CLAUDE.md). Les valeurs ci-dessous sont celles de SIFA ;
+# une instance Kernse surcharge via FOURNISSEUR_CATEGORIES (JSON) dans .env.
+#
+# Cette liste est la SOURCE DE VÉRITÉ unique, côté serveur comme côté client
+# (servie par GET /api/fournisseurs/categories). Un code absent d'ici est un
+# code fantôme : il ne peut être ni affiché lisiblement, ni décoché.
+_FOURNISSEUR_CATEGORIES_DEFAUT = (
+    {"code": "mandrin",       "label": "Mandrin"},
+    {"code": "palette",       "label": "Palette"},
+    {"code": "adhesif",       "label": "Adhésif"},
+    {"code": "carton",        "label": "Carton"},
+    {"code": "frontal",       "label": "Frontal"},
+    {"code": "glassine",      "label": "Glassine"},
+    {"code": "complexe",      "label": "Complexe"},
+    {"code": "autre",         "label": "Autre"},
+    {"code": "negoce",        "label": "Négoce"},
+    {"code": "sous_traitant", "label": "Sous-traitant"},
+)
+
+
+def _charger_fournisseur_categories() -> tuple:
+    """Lit FOURNISSEUR_CATEGORIES depuis l'env (JSON), sinon défaut SIFA."""
+    brut = os.getenv("FOURNISSEUR_CATEGORIES", "").strip()
+    if not brut:
+        return _FOURNISSEUR_CATEGORIES_DEFAUT
+    try:
+        import json as _json
+        items = _json.loads(brut)
+        propres = []
+        for it in items:
+            code = str(it.get("code", "")).strip()
+            if not code:
+                continue
+            propres.append({"code": code, "label": str(it.get("label") or code).strip()})
+        return tuple(propres) or _FOURNISSEUR_CATEGORIES_DEFAUT
+    except Exception:
+        # Un .env mal formé ne doit pas priver l'app de son référentiel :
+        # on retombe sur le défaut plutôt que de démarrer sans catégories.
+        return _FOURNISSEUR_CATEGORIES_DEFAUT
+
+
+FOURNISSEUR_CATEGORIES = _charger_fournisseur_categories()
+FOURNISSEUR_CATEGORIES_CODES = {c["code"] for c in FOURNISSEUR_CATEGORIES}
+
+
+def fournisseur_categories() -> list[dict]:
+    return [dict(c) for c in FOURNISSEUR_CATEGORIES]
+
+
+def fournisseur_categorie_label(code: str) -> str:
+    for c in FOURNISSEUR_CATEGORIES:
+        if c["code"] == code:
+            return c["label"]
+    return code
