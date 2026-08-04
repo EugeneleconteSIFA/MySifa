@@ -2456,6 +2456,16 @@ def _validate_usure_link(conn, data: dict, current_code: str = "") -> None:
     piece_id = data.get("usure_piece_id")
     if piece_id is None:
         return
+    # v231 : réservé à la catégorie Interventions. C'est la seule dont les
+    # cartes remontent sur l'accueil Maintenance (showWearParts est conditionné
+    # au filtre « Remplacements ») : un code rattaché ailleurs porterait un
+    # rattachement que personne ne verrait jamais.
+    if (data.get("categorie") or "") != "remplacements":
+        raise HTTPException(
+            422,
+            "Le rattachement à une pièce d'usure n'est possible que sur la "
+            "catégorie Interventions.",
+        )
     if not _ensure_usure_table(conn):
         raise HTTPException(
             500, "Migration DB manquante (maintenance_usure_pieces absente)."

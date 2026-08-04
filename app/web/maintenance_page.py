@@ -2337,16 +2337,16 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                 <option value="2">N2</option>
                 <option value="3">N3</option>
               </select>
-              <select id="maint-categorie">
+              <select id="maint-categorie" onchange="_maintOnCategorieChange()">
                 <option value="controles">Contrôles</option>
                 <option value="entretien">Nettoyage</option>
                 <option value="remplacements">Interventions</option>
               </select>
               <input type="text" id="maint-intervalle" placeholder="Intervalle (ex. Hebdo, 30 jours, 6 mois)" maxlength="80">
             </div>
-            <div style="margin-top:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg)">
+            <div id="maint-usure-block" style="margin-top:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg)">
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text)">
-                <input type="checkbox" id="maint-usure-on" onchange="_maintOnUsureToggle()">
+                <input type="checkbox" id="maint-usure-on" onchange="_maintOnUsureToggle()" style="width:16px;height:16px;flex:0 0 auto;margin:0;padding:0;cursor:pointer">
                 C'est une pièce d'usure
               </label>
               <div id="maint-usure-fields" style="display:none;margin-top:12px">
@@ -2357,7 +2357,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                   <input type="text" id="maint-metrage-ref" placeholder="Réf. métrage (ex. 5000 m, 10 km)" maxlength="80">
                 </div>
                 <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:10px;cursor:pointer;color:var(--text)">
-                  <input type="checkbox" id="maint-usure-haspos" onchange="_maintOnUsureHasPosChange()">
+                  <input type="checkbox" id="maint-usure-haspos" onchange="_maintOnUsureHasPosChange()" style="width:16px;height:16px;flex:0 0 auto;margin:0;padding:0;cursor:pointer">
                   Position particulière sur la pièce
                 </label>
                 <div id="maint-usure-pos-wrap" style="display:none;margin-top:8px">
@@ -10613,7 +10613,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_widget_v2.js?v=8"></script>
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
-<script src="/static/mysifa_maint_form.js?v=2.7.2-usure"></script>
+<script src="/static/mysifa_maint_form.js?v=2.7.3-usure"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js"></script>
