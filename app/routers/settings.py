@@ -5740,7 +5740,18 @@ def _usure_parse_positions(body: dict) -> str:
     out = []
     for v in raw:
         s = str(v or "").strip().lower()[:40]
-        if s and s not in out:
+        if not s:
+            continue
+        # Une position sert d'étiquette d'onglet ET de clé (cache, localStorage,
+        # attribut data-pos). On la contraint à un charset sûr plutôt que de
+        # devoir échapper correctement à chacun de ces trois endroits.
+        if not _re.fullmatch(r"[a-z0-9][a-z0-9 _-]*", s):
+            raise HTTPException(
+                422,
+                f"Position « {s} » invalide : lettres non accentuées, chiffres, "
+                "espace, tiret et underscore uniquement.",
+            )
+        if s not in out:
             out.append(s)
     if len(out) > 8:
         raise HTTPException(422, "8 positions maximum par pièce.")

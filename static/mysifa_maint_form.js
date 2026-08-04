@@ -237,8 +237,99 @@
     if (inp) inp.click();
   }
 
+  // ── Pièces d'usure (v229) ──────────────────────────────────────────────
+  // Le rattachement d'un code à une pièce d'usure était auparavant DEVINÉ à
+  // partir du libellé ("couteaux" + "bande" + absence de "contre"...). Il est
+  // désormais explicite : deux selects, une relation en base. Renommer un code
+  // n'a plus aucun effet sur sa carte.
+  window._maintUsurePieces = window._maintUsurePieces || [];
+
+  async function loadUsurePieces() {
+    try {
+      const r = await api('/api/maintenance/usure-pieces');
+      window._maintUsurePieces = (r && Array.isArray(r.items)) ? r.items : [];
+    } catch (e) {
+      // Non bloquant : sans le référentiel, le select reste sur "aucune" et le
+      // reste du formulaire fonctionne normalement.
+      window._maintUsurePieces = [];
+    }
+    return window._maintUsurePieces;
+  }
+
+  function _maintUsurePieceById(id) {
+    if (id === null || id === undefined || id === '') return null;
+    return (window._maintUsurePieces || []).find(p => String(p.id) === String(id)) || null;
+  }
+
+  // Reconstruit le select Position + la visibilité de Réf. métrage + le bandeau
+  // d'aide, à partir de la pièce actuellement choisie. `keepPos` sert à
+  // restaurer la position d'un code en cours d'édition.
+  function _maintRefreshUsureUI(keepPos) {
+    const pieceSel = document.getElementById('maint-usure-piece');
+    const posSel   = document.getElementById('maint-usure-position');
+    const mInp     = document.getElementById('maint-metrage-ref');
+    const hint     = document.getElementById('maint-usure-hint');
+    if (!pieceSel || !posSel) return;
+    const piece = _maintUsurePieceById(pieceSel.value);
+    const positions = piece && Array.isArray(piece.positions) ? piece.positions : [];
+
+    const want = (keepPos !== undefined && keepPos !== null) ? String(keepPos) : posSel.value;
+    posSel.innerHTML = positions.length
+      ? positions.map(p => '<option value="' + esc(p) + '">' + esc(p.charAt(0).toUpperCase() + p.slice(1)) + '</option>').join('')
+      : '<option value="">Position : —</option>';
+    posSel.disabled = !piece || positions.length === 0;
+    if (positions.length && positions.indexOf(want) !== -1) posSel.value = want;
+    else if (positions.length) posSel.value = positions[0];
+    else posSel.value = '';
+
+    // Réf. métrage : exclusive aux pièces d'usure depuis v229. Le backend la
+    // vide si le code n'est pas rattaché — on masque plutôt que de laisser
+    // saisir une valeur qui serait silencieusement jetée.
+    if (mInp) {
+      mInp.style.display = piece ? '' : 'none';
+      if (!piece) mInp.value = '';
+    }
+
+    if (!hint) return;
+    if (!piece) { hint.style.display = 'none'; hint.innerHTML = ''; return; }
+    const msgs = [];
+    if (mInp && !(mInp.value || '').trim()) {
+      msgs.push("Sans référence métrage, l'anneau Métrage de la carte restera vide — la pièce fonctionnera sur le temps seul.");
+    }
+    // L'accueil Maintenance n'affiche les cartes pièces d'usure que sous
+    // l'onglet Remplacements. Un code rattaché mais classé ailleurs serait
+    // invisible sans le moindre message : on prévient au moment du choix.
+    const catSel = document.getElementById('maint-categorie');
+    if (catSel && catSel.value !== 'remplacements') {
+      msgs.push("Ce code n'est pas en catégorie Interventions : sa carte ne sera pas visible sur l'accueil Maintenance, qui n'affiche les pièces d'usure que sous cet onglet.");
+    }
+    if (!msgs.length) { hint.style.display = 'none'; hint.innerHTML = ''; return; }
+    hint.style.display = '';
+    hint.innerHTML = msgs.map(m => '<div>· ' + esc(m) + '</div>').join('');
+  }
+
+  function _maintOnUsurePieceChange() { _maintRefreshUsureUI(null); }
+  function _maintOnUsurePositionChange() { _maintRefreshUsureUI(); }
+
+  // Remplit les 2 selects à l'ouverture du formulaire.
+  function _maintFillUsureSelects(pieceId, position) {
+    const pieceSel = document.getElementById('maint-usure-piece');
+    if (!pieceSel) return;
+    const pieces = window._maintUsurePieces || [];
+    pieceSel.innerHTML = "<option value=\"\">Pièce d'usure : aucune</option>"
+      + pieces.map(p => '<option value="' + esc(String(p.id)) + '">' + esc(p.label) + '</option>').join('');
+    pieceSel.value = (pieceId === null || pieceId === undefined) ? '' : String(pieceId);
+    // Pièce désactivée ou supprimée entre-temps : le select retombe sur
+    // "aucune" plutôt que d'afficher une valeur fantôme.
+    if (pieceSel.value && !_maintUsurePieceById(pieceSel.value)) pieceSel.value = '';
+    _maintRefreshUsureUI(position || '');
+  }
+
   // ── loadMaintCodes ──
   async function loadMaintCodes() {
+    // Le référentiel des pièces alimente le select du formulaire ET le badge
+    // de la liste : il doit être chargé avant le premier renderMaintList.
+    await loadUsurePieces();
     try {
       const r = await api('/api/maintenance/codes');
       window._maintItems = (r && Array.isArray(r.items)) ? r.items : [];
@@ -271,6 +362,20 @@
       } catch (e) {}
     }
     renderMaintList();
+  }
+
+  // Badge « pièce d'usure » dans la liste des codes — c'est la réponse
+  // visuelle à « comment reconnaître un code pièce d'usure ». Avant v229 il
+  // n'y avait rien à afficher : l'information n'existait nulle part en base.
+  function _maintUsureBadge(o) {
+    if (!o || o.usure_piece_id === null || o.usure_piece_id === undefined) return '';
+    const piece = _maintUsurePieceById(o.usure_piece_id);
+    if (!piece) return '';
+    const pos = (o.usure_position || '').trim();
+    const txt = piece.label + (pos ? ' · ' + pos.charAt(0).toUpperCase() + pos.slice(1) : '');
+    return ' <span style="display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;'
+         + 'background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent);'
+         + 'margin-left:6px;vertical-align:middle;white-space:nowrap">' + esc(txt) + '</span>';
   }
 
   // ── renderMaintList ──
@@ -340,7 +445,7 @@
         const metrageDisplay = o.metrage_ref ? esc(o.metrage_ref) : '<span style="color:var(--muted);font-style:italic">À compléter</span>';
         body += '<tr>'
           + '<td class="op-code-cell">' + c + '</td>'
-          + '<td class="op-lbl-cell">' + esc(o.label || '') + '</td>'
+          + '<td class="op-lbl-cell">' + esc(o.label || '') + _maintUsureBadge(o) + '</td>'
           + '<td><span class="niv-badge" data-niv="' + niv + '">N' + niv + '</span></td>'
           + '<td><span class="op-pill ' + catCls + '">' + esc(_maintCatLabel(cat)) + '</span></td>'
           + '<td>' + intervalleDisplay + '</td>'
@@ -400,6 +505,7 @@
       }
       if (intInp) intInp.value = o.intervalle || '';
       if (mInp)   mInp.value   = o.metrage_ref || '';
+      _maintFillUsureSelects(o.usure_piece_id, o.usure_position || '');
     } else {
       title.textContent = 'Nouveau code';
       codeInp.value = '';
@@ -409,6 +515,7 @@
       if (catSel) catSel.value = 'controles';
       if (intInp) intInp.value = '';
       if (mInp)   mInp.value   = '';
+      _maintFillUsureSelects(null, '');
     }
     // Section Documents : visible dans les 2 modes.
     // En creation : la liste est masquee (aucun doc encore), l'upload est
@@ -986,6 +1093,12 @@
   try { window.loadMaintCodes = loadMaintCodes; } catch(e) {}
   try { window.renderMaintList = renderMaintList; } catch(e) {}
   try { window.openMaintForm = openMaintForm; } catch(e) {}
+  try { window.loadUsurePieces = loadUsurePieces; } catch(e) {}
+  try { window._maintFillUsureSelects = _maintFillUsureSelects; } catch(e) {}
+  try { window._maintRefreshUsureUI = _maintRefreshUsureUI; } catch(e) {}
+  try { window._maintOnUsurePieceChange = _maintOnUsurePieceChange; } catch(e) {}
+  try { window._maintOnUsurePositionChange = _maintOnUsurePositionChange; } catch(e) {}
+  try { window._maintUsurePieceById = _maintUsurePieceById; } catch(e) {}
   try { window.openMaintDocsModal = openMaintDocsModal; } catch(e) {}
   try { window.loadLibres = loadLibres; } catch(e) {}
   try { window.renderLibresList = renderLibresList; } catch(e) {}
@@ -1007,6 +1120,10 @@
     renderMaintList: renderMaintList,
     openMaintForm: openMaintForm,
     openMaintDocsModal: openMaintDocsModal,
+    loadUsurePieces: loadUsurePieces,
+    _maintFillUsureSelects: _maintFillUsureSelects,
+    _maintRefreshUsureUI: _maintRefreshUsureUI,
+    _maintUsurePieceById: _maintUsurePieceById,
     loadLibres: loadLibres,
     renderLibresList: renderLibresList,
     openLibreAttachModal: openLibreAttachModal,

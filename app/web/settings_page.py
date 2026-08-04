@@ -5899,7 +5899,13 @@ async function saveMaintForm() {
   if (!code) { toast('Code obligatoire', true); return; }
   if (!label) { toast('Libellé obligatoire', true); return; }
   if (niveau < 1 || niveau > 3) { toast('Niveau invalide (1-3)', true); return; }
-  const payload = { code, label, niveau, categorie, periodique, intervalle, metrage_ref };
+  // v229 : rattachement pièce d'usure. Chaîne vide => null (le backend
+  // normalise), et metrage_ref est ignoré côté serveur si non rattaché —
+  // inutile de le vider ici, le champ est déjà masqué par _maintRefreshUsureUI.
+  const usure_piece_id = (document.getElementById('maint-usure-piece')?.value || '').trim();
+  const usure_position = (document.getElementById('maint-usure-position')?.value || '').trim();
+  const payload = { code, label, niveau, categorie, periodique, intervalle, metrage_ref,
+                    usure_piece_id: usure_piece_id || null, usure_position };
   try {
     if (_maintEditCode) {
       await api('/api/maintenance/codes/' + encodeURIComponent(_maintEditCode), {

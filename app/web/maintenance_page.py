@@ -7053,6 +7053,35 @@ function _lastInterventionFor(label, machine, sourceList){
   return latest;
 }
 
+// v229 — Variante par CODE, utilisée par les pièces d'usure. Le rattachement
+// par libellé fonctionnait (l'historique fait un JOIN sur maintenance_codes et
+// suit donc les renommages) mais restait indirect : deux codes homonymes se
+// mélangeaient, et la comparaison portait sur du texte alors que chaque saisie
+// porte déjà son code. Repli sur le libellé UNIQUEMENT si aucune entrée de la
+// source ne porte de code (saisies locales legacy).
+function _lastInterventionForCode(code, label, machine, sourceList){
+  if(!code || !machine || !Array.isArray(sourceList)) return null;
+  const codeStr = String(code);
+  const machLc = String(machine).toLowerCase().trim();
+  const machMatch = (m) => {
+    const s = String(m || '').toLowerCase().trim();
+    return s === machLc
+      || s.split('·').map(x => x.trim()).includes(machLc)
+      || s.split(',').map(x => x.trim()).includes(machLc);
+  };
+  let latest = null, sawAnyCode = false;
+  for(const it of sourceList){
+    if(!it || it._code == null || it._code === '') continue;
+    sawAnyCode = true;
+    if(String(it._code) !== codeStr) continue;
+    if(!machMatch(it.machine)) continue;
+    const d = it.date_saisie;
+    if(d && (!latest || d > latest)) latest = d;
+  }
+  if(latest == null && !sawAnyCode) return _lastInterventionFor(label, machine, sourceList);
+  return latest;
+}
+
 // Variante pour le catalogue "Liste de contrôles" : un contrôle peut être
 // rempli soit manuellement (CTRL_STATE.list, matché par label === type), soit
 // via une alerte opérateur (CTRL_STATE.acks, matché par code === _maint_code).
@@ -7107,6 +7136,10 @@ async function loadOpsTypes(){
     // Liste d'opérations : Entretien + Remplacements (toutes) + Contrôles avec periodique=OUI.
     OPS_TYPES_STATE.list = items
       .filter(it => {
+        // v229 : un code rattaché à une pièce d'usure est TOUJOURS retenu,
+        // quelle que soit sa catégorie — sinon _findWearPartCode ne le
+        // trouverait pas et la carte se viderait sans explication.
+        if(it.usure_piece_id != null) return true;
         const cn = normCat(it.categorie);
         return (cn === 'entretien') || (cn === 'remplacements') || (cn === 'controles' && !!it.periodique);
       })
@@ -7118,6 +7151,8 @@ async function loadOpsTypes(){
         periodique: !!it.periodique,
         intervalle: (it.intervalle || '').toString(),
         metrage_ref: (it.metrage_ref || '').toString(),
+        usure_piece_id: (it.usure_piece_id != null ? it.usure_piece_id : null),
+        usure_position: (it.usure_position || '').toString(),
         frequence: (it.intervalle || '').toString(),  // alias compat _parseFrequenceDays
         detail: '',
         docs_count: parseInt(it.docs_count, 10) || 0,
@@ -7274,41 +7309,31 @@ function _renderWearPartRings(ratios){
          '</svg>';
 }
 
-// Trouve le code Intervention correspondant à une pièce d'usure (par pattern
-// sur le libellé). pieceId = 'couteaux' | 'contre_couteaux' ; pos = 'bande' | 'rive'.
-// Cherche dans OPS_TYPES_STATE.list (qui contient Entretien + Remplacements).
-// Normalise vers { label, intervalle, metrage_ref } pour rester compatible
-// avec l'ancien retour de _findSuiviCodeForWearPart.
+// v229 — Retrouve le code maintenance rattaché à une pièce d'usure.
+//
+// Avant : on parcourait tous les codes en lisant leur LIBELLÉ à la recherche de
+// 'couteaux' / 'contre' / 'bande' / 'rive' / 'landberg' / 'cutter'. Renommer un
+// code détachait sa carte, et deux codes matchant la même position se masquaient
+// l'un l'autre (premier arrivé, premier servi, en silence).
+//
+// Après : lecture directe de la relation posée en base. pieceId = la CLE de la
+// pièce ('couteaux'…) ; pos = une position déclarée, ou 'single'.
 function _findWearPartCode(pieceId, pos){
-  const list = OPS_TYPES_STATE.list || [];
-  const single = _wearPartIsSingle(pieceId);
-  for(const t of list){
-    // Depuis v178, on cherche dans Entretien + Remplacements (les deux
-    // héritent des propriétés de l'ancienne catégorie Interventions).
-    if(t.categorie !== 'entretien' && t.categorie !== 'remplacements' && t.categorie !== 'interventions') continue;
-    const lbl = (t.nom || '').toLowerCase();
-    let isMatch = false;
-    if(single){
-      // Pièces sans position : matching par mot-clé principal
-      if(pieceId === 'cutters')            isMatch = lbl.indexOf('cutter')   !== -1;
-      else if(pieceId === 'couteaux_landberg') isMatch = lbl.indexOf('landberg') !== -1;
-    } else {
-      if(!lbl.includes(pos)) continue;
-      const hasContre = (lbl.indexOf('contre') !== -1);
-      isMatch = (pieceId === 'contre_couteaux')
-        ? (hasContre && lbl.indexOf('couteaux') !== -1)
-        : (!hasContre && lbl.indexOf('couteaux') !== -1 && lbl.indexOf('landberg') === -1);
-    }
-    if(isMatch){
-      return {
-        code: t.id,
-        label: t.nom,
-        intervalle: t.intervalle || '',
-        metrage_ref: t.metrage_ref || '',
-      };
-    }
-  }
-  return null;
+  const def = _wearPartDef(pieceId);
+  if(!def) return null;
+  const wantPos = def.no_position ? '' : String(pos || '');
+  const t = (OPS_TYPES_STATE.list || []).find(x =>
+    x.usure_piece_id != null
+    && String(x.usure_piece_id) === String(def.pieceId)
+    && String(x.usure_position || '') === wantPos
+  );
+  if(!t) return null;
+  return {
+    code: t.id,
+    label: t.nom,
+    intervalle: t.intervalle || '',
+    metrage_ref: t.metrage_ref || '',
+  };
 }
 // Conservé pour compat (no-op : géré dans Paramètres → Maintenance).
 function saveOpsTypes(){ /* géré côté serveur via /api/maintenance/codes */ }
@@ -7605,12 +7630,12 @@ async function loadWearPartLastDates(machine){
     if(p.no_position){
       const k = p.id + '_single';
       const c = _findWearPartCode(p.id, 'single');
-      dates[k] = c ? _lastInterventionFor(c.label, machine, OPS_STATE.list) : null;
+      dates[k] = c ? _lastInterventionForCode(c.code, c.label, machine, OPS_STATE.list) : null;
     } else {
-      ['bande','rive'].forEach(pos => {
+      _wearPartPositionsOf(p).forEach(pos => {
         const k = p.id + '_' + pos;
         const c = _findWearPartCode(p.id, pos);
-        dates[k] = c ? _lastInterventionFor(c.label, machine, OPS_STATE.list) : null;
+        dates[k] = c ? _lastInterventionForCode(c.code, c.label, machine, OPS_STATE.list) : null;
       });
     }
   });
@@ -7700,12 +7725,43 @@ function _fmtDateOnly(iso){
 // Une carte par pièce, position mémorisée par machine + par pièce.
 // État localStorage : { "<piece>": { "<machine>": "bande"|"rive" } }
 const WEARPART_KEY = 'mysifa_maint_wearparts_v1';
-const WEARPART_PIECES = [
-  { id: 'couteaux',         label: 'Couteaux' },
-  { id: 'contre_couteaux',  label: 'Contre-couteaux' },
-  { id: 'cutters',          label: 'Cutters',           no_position: true },
-  { id: 'couteaux_landberg',label: 'Couteaux Landberg', no_position: true },
-];
+// v229 : le référentiel vient de /api/maintenance/usure-pieces au lieu d'être
+// figé ici. `id` reste la CLE de la pièce (couteaux, contre_couteaux…), la même
+// qu'avant : le localStorage des utilisateurs (onglet Bande/Rive mémorisé par
+// machine) reste donc valide. `pieceId` porte l'id numérique en base, seul
+// utilisé pour retrouver le code rattaché.
+let WEARPART_PIECES = [];
+let _WP_PIECES_LOADED = false;
+let _WP_PIECES_LOADING = false;
+
+async function loadWearPartPieces(){
+  if(_WP_PIECES_LOADING) return;
+  _WP_PIECES_LOADING = true;
+  try{
+    const r = await fetch('/api/maintenance/usure-pieces', { credentials: 'include' });
+    if(r.ok){
+      const d = await r.json();
+      WEARPART_PIECES = (d && Array.isArray(d.items) ? d.items : []).map(p => {
+        const positions = Array.isArray(p.positions) ? p.positions : [];
+        return {
+          id: p.cle,
+          pieceId: p.id,
+          label: p.label,
+          positions: positions,
+          no_position: positions.length === 0,
+        };
+      });
+    }
+  }catch(e){
+    // Non bloquant : sans référentiel, la section Pièces d'usure ne s'affiche
+    // simplement pas — le reste de l'accueil Maintenance reste fonctionnel.
+    WEARPART_PIECES = [];
+  }finally{
+    _WP_PIECES_LOADED = true;
+    _WP_PIECES_LOADING = false;
+    if(typeof renderMaintCards === 'function') renderMaintCards();
+  }
+}
 
 // --- v2.4.21 : filtrage pieces d'usure par statut ("Tous" / "Jamais saisi") -
 // Une position est "renseignee" si _lastInterventionFor renvoie une date non
@@ -7716,12 +7772,12 @@ const WEARPART_PIECES = [
 //   - En 'never' : montrer seulement les pieces avec >=1 position vide,
 //                  et forcer la position affichee sur une vide.
 function _wearPartPositionsOf(piece){
-  return piece.no_position ? ['single'] : ['bande', 'rive'];
+  return piece.no_position ? ['single'] : (piece.positions || []).slice();
 }
 function _wearPartHasData(pieceId, pos, machine){
   const wpCode = _findWearPartCode(pieceId, pos);
   if(!wpCode) return false;
-  const last = _lastInterventionFor(wpCode.label, machine, OPS_STATE.list);
+  const last = _lastInterventionForCode(wpCode.code, wpCode.label, machine, OPS_STATE.list);
   return last != null;
 }
 // Retourne pour chaque piece : positions renseignees / non renseignees.
@@ -7744,7 +7800,7 @@ function _wearPartPositionStatus(pieceId, pos, machine){
   const wpCode = _findWearPartCode(pieceId, pos);
   if(!wpCode) return 'unknown';
   const refDays = _parseFrequenceDays(wpCode.intervalle || '');
-  const lastDate = _lastInterventionFor(wpCode.label, machine, OPS_STATE.list);
+  const lastDate = _lastInterventionForCode(wpCode.code, wpCode.label, machine, OPS_STATE.list);
   const daysSince = _daysSinceFromIso(lastDate);
   return _maintComputeStatus(refDays, daysSince);
 }
@@ -7781,11 +7837,19 @@ function _saveWearPartMap(m){
 }
 function getWearPartPos(pieceId, machine){
   if(_wearPartIsSingle(pieceId)) return 'single';
+  const def = _wearPartDef(pieceId);
+  const positions = def ? (def.positions || []) : [];
   const m = _loadWearPartMap();
-  return (m[pieceId] && m[pieceId][machine]) || 'bande';
+  const saved = (m[pieceId] && m[pieceId][machine]) || '';
+  // v229 : le défaut est la 1re position DÉCLARÉE, plus 'bande' en dur. Une
+  // valeur mémorisée qui n'existe plus (position retirée de la pièce) retombe
+  // sur ce défaut au lieu de sélectionner un onglet fantôme.
+  if(saved && positions.indexOf(saved) !== -1) return saved;
+  return positions[0] || '';
 }
 function setWearPartPos(pieceId, pos){
-  if(pos !== 'bande' && pos !== 'rive') return;
+  const _def = _wearPartDef(pieceId);
+  if(!_def || (_def.positions || []).indexOf(pos) === -1) return;
   const machine = getMaintMachine();
   const m = _loadWearPartMap();
   if(!m[pieceId]) m[pieceId] = {};
@@ -7862,6 +7926,10 @@ function setWearPartRef(pieceId, kind, value){
 }
 
 function _renderWearPartsGroup(machine, statusFilter){
+  // v229 : le référentiel des pièces est distant. Tant qu'il n'est pas arrivé,
+  // la section n'est pas rendue ; loadWearPartPieces rappelle renderMaintCards
+  // en sortie, et le drapeau _WP_PIECES_LOADED empêche toute boucle.
+  if(!_WP_PIECES_LOADED){ loadWearPartPieces(); return ''; }
   // Déclenche le fetch des dernières dates (asynchrone : le render initial
   // affiche "Chargement…", puis re-render au retour).
   //
@@ -7910,7 +7978,7 @@ function _renderWearPartsGroup(machine, statusFilter){
     // Le métrage parcouru depuis cette date est calculé côté serveur via le
     // cache WEARPART_LAST_DATES_STATE (clé piece_pos).
     const lastDate = wpCode
-      ? _lastInterventionFor(wpCode.label, machine, OPS_STATE.list)
+      ? _lastInterventionForCode(wpCode.code, wpCode.label, machine, OPS_STATE.list)
       : null;
     const wpItem = (WEARPART_LAST_DATES_STATE.machine === machine)
       ? _getWearPartItem(p.id, pos)
@@ -7951,7 +8019,7 @@ function _renderWearPartsGroup(machine, statusFilter){
     if(WEARPART_LAST_DATES_STATE.machine !== machine){
       elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Chargement…</span>';
     } else if(daysSince == null){
-      elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Aucun changement enregistré dans MyProd</span>';
+      elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Aucune saisie de maintenance pour ce code</span>';
     } else {
       const lbl = daysSince === 0 ? 'Aujourd\'hui'
                 : daysSince === 1 ? 'Hier (1 jour)'
@@ -7971,18 +8039,22 @@ function _renderWearPartsGroup(machine, statusFilter){
     }
     const _b = (label, value) => {
       const active = (pos === value) ? ' active' : '';
-      return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + value + '">' + label + '</button>';
+      return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + escAttr(value) + '">' + label + '</button>';
     };
     // v2.4.22 : ne montrer que les onglets des positions qui matchent le filtre.
     // Cas typique : Couteaux avec seulement Rive renseigné en filtre "Tous" →
     // le bouton Bande disparait (avant il était visible mais menait a une vue vide).
     // Si les 2 positions matchent, on montre les 2 (choix reel entre bande/rive).
     // Si une seule matche, seul son bouton apparait (agit comme un badge de position).
+    // v229 : les onglets sont générés depuis les positions DÉCLARÉES sur la
+    // pièce, plus depuis 'bande'/'rive' en dur. Une pièce à 3 positions rend
+    // 3 onglets sans toucher au code.
     const tabsHtml = p.no_position
       ? ''
       : ('<div class="maint-wp-tabs" role="tablist" aria-label="Position">' +
-           (matchingPositions.indexOf('bande') !== -1 ? _b('Bande', 'bande') : '') +
-           (matchingPositions.indexOf('rive')  !== -1 ? _b('Rive',  'rive')  : '') +
+           matchingPositions.map(mp =>
+             _b(escHtml(mp.charAt(0).toUpperCase() + mp.slice(1)), mp)
+           ).join('') +
          '</div>');
     return '<section class="maint-frame maint-wearpart' + frameClsExtra + '" data-wearpart="' + escAttr(p.id) + '" data-wearpart-pos="' + escAttr(pos) + '" data-maint-machine="' + escAttr(machine) + '"' + sevStyle + '>' +
       '<div class="maint-frame-head">' +
@@ -8147,7 +8219,7 @@ function renderMaintCards(){
   const wearPartCodeIds = new Set();
   if(showWearParts){
     WEARPART_PIECES.forEach(p => {
-      const positions = p.no_position ? ['single'] : ['bande','rive'];
+      const positions = _wearPartPositionsOf(p);
       positions.forEach(pos => {
         const c = _findWearPartCode(p.id, pos);
         if(c && c.code) wearPartCodeIds.add(String(c.code));
@@ -14079,7 +14151,13 @@ async function saveMaintForm() {
   if (!code) { toast('Code obligatoire', true); return; }
   if (!label) { toast('Libellé obligatoire', true); return; }
   if (niveau < 1 || niveau > 3) { toast('Niveau invalide (1-3)', true); return; }
-  const payload = { code, label, niveau, categorie, periodique, intervalle, metrage_ref };
+  // v229 : rattachement pièce d'usure. Chaîne vide => null (le backend
+  // normalise), et metrage_ref est ignoré côté serveur si non rattaché —
+  // inutile de le vider ici, le champ est déjà masqué par _maintRefreshUsureUI.
+  const usure_piece_id = (document.getElementById('maint-usure-piece')?.value || '').trim();
+  const usure_position = (document.getElementById('maint-usure-position')?.value || '').trim();
+  const payload = { code, label, niveau, categorie, periodique, intervalle, metrage_ref,
+                    usure_piece_id: usure_piece_id || null, usure_position };
   try {
     if (_maintEditCode) {
       await api('/api/maintenance/codes/' + encodeURIComponent(_maintEditCode), {
