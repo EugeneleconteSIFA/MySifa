@@ -4114,6 +4114,36 @@ let _CAL_DRAG = null;
 
 // v2.6.1 : une date ISO est-elle anterieure a aujourd'hui ? Aujourd'hui reste
 // une date valide (on peut planifier pour le jour meme).
+// v2.7.1 : miroir client de _period_key() (maintenance_events.py). Une
+// occurrence de recurrence appartient a une periode — semaine ISO, mois,
+// trimestre ou annee — et ne doit pas en sortir. Le serveur refuse en 403 ;
+// ici on rend le refus visible AVANT le lacher, plutot qu'apres coup.
+function _isoWeekKey(d){
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  // Jeudi de la semaine ISO : determine l'annee ISO (norme ISO-8601).
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  const w = Math.ceil(((t - y0) / 86400000 + 1) / 7);
+  return t.getUTCFullYear() + '-W' + String(w).padStart(2, '0');
+}
+function _calPeriodKey(iso, rtype){
+  const d = (typeof iso === 'string') ? new Date(iso + 'T00:00:00') : iso;
+  if(!d || isNaN(d.getTime())) return null;
+  if(rtype === 'monthly')   return d.getFullYear() + '-M' + String(d.getMonth() + 1).padStart(2, '0');
+  if(rtype === 'quarterly') return d.getFullYear() + '-Q' + (Math.floor(d.getMonth() / 3) + 1);
+  if(rtype === 'yearly')    return String(d.getFullYear());
+  return _isoWeekKey(d);
+}
+// Type de recurrence du modele dont l'evenement est issu, ou null si ce n'est
+// pas une occurrence generee (creneau compose a la main : aucune contrainte).
+function _calRecurTypeOf(ev){
+  if(!ev || !ev.template_origin_date || !ev.template_id) return null;
+  try{
+    const t = (TEMPLATES_STATE.list || []).find(x => String(x.id) === String(ev.template_id));
+    return (t && t.recurrence_type) || 'weekly';
+  }catch(_){ return 'weekly'; }
+}
+
 function _calIsPastIso(iso){
   try{
     const s = String(iso || '');
@@ -4223,6 +4253,18 @@ function _onCalDragMove(e){
   if(col && _calIsPastIso(col.getAttribute('data-date'))){
     col.classList.add('cal-col-nodrop');
     col = null;
+  }
+  // v2.7.1 : hors de la periode d'une occurrence de recurrence -> depot refuse.
+  if(col){
+    const _rt = _calRecurTypeOf(_CAL_DRAG.ev);
+    if(_rt){
+      const _pFrom = _calPeriodKey(_CAL_DRAG.origDate, _rt);
+      const _pTo   = _calPeriodKey(col.getAttribute('data-date'), _rt);
+      if(_pFrom && _pTo && _pFrom !== _pTo){
+        col.classList.add('cal-col-nodrop');
+        col = null;
+      }
+    }
   }
   if(col && rect){
     col.classList.add('drag-over');
@@ -4395,6 +4437,25 @@ function _onCalDragUp(e){
      && drag.targetEndMin === drag.origEndMin){
     _CAL_DRAG = null;
     return;
+  }
+  // v2.7.1 : hors periode -> message explicite. Le survol a deja refuse la
+  // colonne, donc targetDate ne devrait plus sortir de la periode ; ce garde-fou
+  // couvre les chemins ou le lacher se fait sans survol valide prealable.
+  const _rtDrop = _calRecurTypeOf(drag.ev);
+  if(_rtDrop){
+    const _a = _calPeriodKey(drag.origDate, _rtDrop);
+    const _b = _calPeriodKey(drag.targetDate, _rtDrop);
+    if(_a && _b && _a !== _b){
+      const _quoi = (_rtDrop === 'monthly') ? 'son mois'
+                  : (_rtDrop === 'quarterly') ? 'son trimestre'
+                  : (_rtDrop === 'yearly') ? 'son année' : 'sa semaine';
+      if(typeof showToast === 'function'){
+        showToast('Ce créneau vient d\'une récurrence : il doit rester dans ' + _quoi + '.', 'danger');
+      }
+      _CAL_DRAG = null;
+      try{ refreshPlanning().then(function(){ try{ renderCal(); }catch(_){} }); }catch(_){}
+      return;
+    }
   }
   // Contrôle : si on déplace vers un jour passé, refuse.
   if(_calIsPastIso(drag.targetDate)){

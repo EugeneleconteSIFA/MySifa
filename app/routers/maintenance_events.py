@@ -750,6 +750,37 @@ def update_event(event_id: int, body: EventUpdateBody, request: Request):
                 detail="Impossible de déplacer un créneau vers une date passée : "
                        "il serait immédiatement clôturé.",
             )
+        # v2.7.1 : une OCCURRENCE DE RECURRENCE reste dans SA periode.
+        #
+        # Une occurrence hebdomadaire appartient a sa semaine, une mensuelle a
+        # son mois. La deplacer ailleurs cassait l'invariant « une occurrence
+        # par periode » : deux creneaux dans la periode d'arrivee, aucun dans
+        # celle de depart. _replace_recurrence_dates() devait ensuite demeler ce
+        # desordre a chaque changement de regle, en supprimant silencieusement
+        # les occurrences excedentaires. On bloque a la source plutot que de
+        # gerer les consequences.
+        #
+        # Ne concerne QUE les occurrences generees (template_origin_date non
+        # nul) : un creneau compose a la main reste librement deplacable.
+        if body.date_prevue is not None and ev.get("template_origin_date"):
+            _tmpl_row = conn.execute(
+                "SELECT recurrence_type FROM maintenance_templates WHERE id = ?",
+                (ev.get("template_id"),),
+            ).fetchone() if ev.get("template_id") else None
+            _rtype = (_tmpl_row["recurrence_type"] if _tmpl_row else None) or "weekly"
+            try:
+                _from = date.fromisoformat(str(ev.get("date_prevue") or "")[:10])
+                _to = date.fromisoformat(str(body.date_prevue)[:10])
+            except (ValueError, TypeError):
+                _from = _to = None
+            if _from and _to and _period_key(_from, _rtype) != _period_key(_to, _rtype):
+                _quoi = {"monthly": "son mois", "quarterly": "son trimestre",
+                         "yearly": "son année"}.get(_rtype, "sa semaine")
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Ce créneau vient d'une récurrence : il doit rester dans {_quoi}. "
+                           f"Pour le décaler au-delà, supprime-le et crée un créneau ponctuel.",
+                )
         updates["updated_at"] = _now_paris_iso()
         set_clause = ", ".join(f"{k}=?" for k in updates)
         conn.execute(f"UPDATE maintenance_events SET {set_clause} WHERE id=?",
