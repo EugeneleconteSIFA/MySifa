@@ -7936,6 +7936,153 @@ Ressources :
             f"[MySifa] migration taches_multi_assignes : {_asg.rowcount} assignation(s) reprise(s)."
         )
 
+    # v229 — Pièces d'usure : rattachement STRUCTUREL des codes maintenance.
+    #
+    # Avant : l'accueil Maintenance devinait à chaque render qu'un code était une
+    # pièce d'usure en lisant son LIBELLÉ (présence de "couteaux" / "contre" /
+    # "bande" / "rive" / "landberg" / "cutter" dans _findWearPartCode). Renommer
+    # un code détachait donc silencieusement sa carte, et deux codes matchant la
+    # même position se masquaient l'un l'autre (premier arrivé, premier servi).
+    #
+    # Après : le rattachement est une RELATION. Un code est une pièce d'usure si
+    # et seulement si usure_piece_id IS NOT NULL — pas de booléen séparé, donc
+    # pas d'état incohérent possible (flag posé sans rattachement). Le libellé
+    # redevient un simple libellé, librement modifiable.
+    #
+    # Le garde-fou porte sur le NOM et non sur le numéro de version : deux
+    # branches parallèles ont déjà collisionné sur un même numéro (cf. le bloc AO
+    # juste en dessous), et une migration silencieusement ignorée laisserait ici
+    # une table absente → 500 au chargement de Paramètres.
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE name='maintenance_usure_pieces' LIMIT 1"
+    ).fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS maintenance_usure_pieces (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                cle         TEXT NOT NULL UNIQUE,
+                label       TEXT NOT NULL,
+                positions   TEXT NOT NULL DEFAULT '[]',
+                ordre       INTEGER NOT NULL DEFAULT 0,
+                actif       INTEGER NOT NULL DEFAULT 1,
+                created_at  TEXT NOT NULL,
+                updated_at  TEXT
+            )
+        """)
+        _mc_cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
+        if "usure_piece_id" not in _mc_cols:
+            conn.execute("ALTER TABLE maintenance_codes ADD COLUMN usure_piece_id INTEGER")
+        if "usure_position" not in _mc_cols:
+            conn.execute("ALTER TABLE maintenance_codes ADD COLUMN usure_position TEXT")
+        # Index unique PARTIEL : deux codes ne peuvent pas revendiquer le même
+        # couple (pièce, position). Le WHERE exclut les codes non rattachés,
+        # sinon toutes les lignes NULL entreraient en collision entre elles.
+        # usure_position vaut '' (jamais NULL) pour une pièce sans position :
+        # SQLite considère deux NULL comme distincts, ce qui laisserait passer
+        # deux codes sur la même pièce sans position.
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_maint_usure_unique
+            ON maintenance_codes(usure_piece_id, usure_position)
+            WHERE usure_piece_id IS NOT NULL
+        """)
+
+        _now_usure = datetime.now().isoformat()
+
+        # Seed SIFA — conditionné. Les 4 pièces ci-dessous et le vocabulaire
+        # bande/rive sont du référentiel SIFA, pas du générique : un client
+        # Kernse démarre avec une table VIDE que l'onboarding remplit.
+        _seeded = 0
+        _already = conn.execute(
+            "SELECT COUNT(*) AS n FROM maintenance_usure_pieces"
+        ).fetchone()["n"]
+        if _already == 0 and ENV_NAME in ("v1", "v2"):
+            for _cle, _lab, _pos_json, _ordre in (
+                ("couteaux",          "Couteaux",          '["bande","rive"]', 1),
+                ("contre_couteaux",   "Contre-couteaux",   '["bande","rive"]', 2),
+                ("cutters",           "Cutters",           '[]',               3),
+                ("couteaux_landberg", "Couteaux Landberg", '[]',               4),
+            ):
+                conn.execute(
+                    """INSERT OR IGNORE INTO maintenance_usure_pieces
+                       (cle,label,positions,ordre,actif,created_at)
+                       VALUES (?,?,?,?,1,?)""",
+                    (_cle, _lab, _pos_json, _ordre, _now_usure),
+                )
+                _seeded += 1
+
+        # Backfill — on applique UNE DERNIÈRE FOIS la logique de matching par
+        # libellé du front, puis elle disparaît du code. Les clés de pièces sont
+        # volontairement identiques aux anciens `pieceId` du localStorage
+        # (mysifa_maint_wearparts_v1) : l'onglet Bande/Rive mémorisé par chaque
+        # utilisateur reste donc valide après la mise à jour.
+        _pieces_by_cle = {
+            r["cle"]: r["id"]
+            for r in conn.execute("SELECT id, cle FROM maintenance_usure_pieces").fetchall()
+        }
+        _linked, _dups = 0, []
+        if _pieces_by_cle:
+            _taken = set()
+            _rows = conn.execute(
+                """SELECT code, label FROM maintenance_codes
+                   WHERE categorie IN ('entretien','remplacements','interventions','suivi')
+                     AND usure_piece_id IS NULL
+                   ORDER BY code"""
+            ).fetchall()
+            for _r in _rows:
+                _lbl = str(_r["label"] or "").casefold()
+                _cle, _pos = None, ""
+                if "landberg" in _lbl:
+                    _cle = "couteaux_landberg"
+                elif "cutter" in _lbl:
+                    _cle = "cutters"
+                elif "couteau" in _lbl:
+                    # Sans position identifiable, on ne devine pas : le code
+                    # reste non rattaché et l'admin le rattache à la main.
+                    if "bande" in _lbl:
+                        _pos = "bande"
+                    elif "rive" in _lbl:
+                        _pos = "rive"
+                    else:
+                        continue
+                    _cle = "contre_couteaux" if "contre" in _lbl else "couteaux"
+                if not _cle:
+                    continue
+                _pid = _pieces_by_cle.get(_cle)
+                if not _pid:
+                    continue
+                if (_pid, _pos) in _taken:
+                    # Collision : deux codes revendiquent la même position. Avant
+                    # cette migration le premier gagnait EN SILENCE. On garde le
+                    # même arbitrage pour ne rien changer à l'affichage, mais on
+                    # le trace pour que l'admin puisse trancher.
+                    _dups.append(f"{_r['code']} ({_r['label']})")
+                    continue
+                _taken.add((_pid, _pos))
+                conn.execute(
+                    "UPDATE maintenance_codes SET usure_piece_id=?, usure_position=? WHERE code=?",
+                    (_pid, _pos, _r["code"]),
+                )
+                _linked += 1
+
+        # metrage_ref devient exclusif aux pièces d'usure. On COMPTE les codes
+        # non rattachés qui en portent encore un, sans les purger : la valeur
+        # était déjà ignorée en lecture (seule la carte pièce d'usure la lit),
+        # et une purge destructive n'a pas sa place dans une migration de
+        # structure. À traiter dans un lot de nettoyage une fois le compte connu.
+        _orphan_metrage = conn.execute(
+            """SELECT COUNT(*) AS n FROM maintenance_codes
+               WHERE usure_piece_id IS NULL AND COALESCE(metrage_ref,'') <> ''"""
+        ).fetchone()["n"]
+
+        conn.commit()
+        _record_schema_migration(conn, 229, "maintenance_usure_pieces")
+        print(
+            f"[MySifa] migration maintenance_usure_pieces : {_seeded} piece(s) seedee(s), "
+            f"{_linked} code(s) rattache(s), {len(_dups)} doublon(s) ignore(s), "
+            f"{_orphan_metrage} metrage_ref orphelin(s)."
+        )
+        if _dups:
+            print("[MySifa]   codes non rattaches (position deja prise) : " + ", ".join(_dups))
+
     # ── AO conditionnement (condi) + marge — schéma garde-fou sur COLONNE ────
     # ATTENTION, choix délibéré : ces colonnes NE sont PAS versionnées via
     # schema_migrations. Historique : le versionnage séquentiel entre branches
