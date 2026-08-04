@@ -4524,6 +4524,18 @@ def delete_saisie_stock(kind: str, mvt_id: int, request: Request):
                     f"Suppression non supportee pour type_mouvement={type_mvt!r}"
                 )
 
+            # Rétention FSC : annuler une entrée certifiee supprimerait le lot
+            # ET son mouvement, c'est-a-dire les deux maillons de la chaine de
+            # preuve. Une erreur de saisie sur un lot FSC se corrige par un
+            # mouvement inverse trace, jamais par un effacement.
+            if int(row_d.get("fsc") or 0) == 1:
+                raise HTTPException(
+                    409,
+                    "Suppression impossible : cette entree porte la mention FSC. "
+                    "Les enregistrements FSC doivent etre conserves 5 ans. "
+                    "Corriger par un mouvement inverse dans MyStock."
+                )
+
             # PF entree : rembobiner
             produit_id = row_d["produit_id"]
             emplacement = row_d["emplacement"]
