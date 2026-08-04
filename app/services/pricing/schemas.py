@@ -105,6 +105,8 @@ class MaterialBreakdownOut(BaseModel):
     subtotal_eur: Decimal = Decimal("0")
     transport_eur_m2: Decimal = Decimal("0")
     transport_pct_effective: Decimal = Decimal("0")
+    taxes_src: Decimal = Decimal("0")
+    taxe_pct: Decimal = Decimal("0")
 
 
 class MaterialComputedOut(BaseModel):
@@ -143,8 +145,14 @@ class McMaterialOut(BaseModel):
     price_currency: PriceCurrency
     unit_price: Decimal
     price_basis: PriceBasis
-    tax_incidence: Decimal
+    # Taxes d'importation en % du sous-total d'achat (6 = +6 %).
+    taxe_pct: Decimal = Decimal("0")
     is_imported: bool
+    # La matière entre-t-elle dans l'assiette de marge ?
+    applique_marge: bool = True
+    # Grammage saisi (g/m²) et perte (%) : weight_per_m2 en découle.
+    grammage_gsm: Decimal = Decimal("0")
+    perte_pct: Decimal = Decimal("0")
     transport_mode: TransportMode = "AMOUNT"
     transport_unit_price: Decimal = Decimal("0")
     transport_pct: Decimal = Decimal("0")
@@ -168,8 +176,11 @@ class McMaterialCreate(BaseModel):
     price_currency: PriceCurrency = "EUR"
     unit_price: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
     price_basis: PriceBasis = "PER_KG"
-    tax_incidence: Decimal = Field(default=Decimal("1"), decimal_places=4, max_digits=12)
+    taxe_pct: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
     is_imported: bool = False
+    applique_marge: bool = True
+    grammage_gsm: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
+    perte_pct: Decimal = Field(default=Decimal("9"), decimal_places=4, max_digits=12)
     transport_mode: TransportMode = "AMOUNT"
     transport_unit_price: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
     transport_pct: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
@@ -189,8 +200,11 @@ class McMaterialUpdate(BaseModel):
     price_currency: Optional[PriceCurrency] = None
     unit_price: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     price_basis: Optional[PriceBasis] = None
-    tax_incidence: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
+    taxe_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     is_imported: Optional[bool] = None
+    applique_marge: Optional[bool] = None
+    grammage_gsm: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
+    perte_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     transport_mode: Optional[TransportMode] = None
     transport_unit_price: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     transport_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
@@ -205,7 +219,8 @@ class McMaterialPriceHistoryOut(BaseModel):
     material_id: int
     unit_price: Decimal
     price_currency: PriceCurrency
-    tax_incidence: Decimal
+    # Pourcentage de taxes en vigueur à la date de l'enregistrement.
+    taxe_pct: Decimal
     effective_date: str
     source: Optional[str] = None
     created_by: Optional[int] = None
@@ -287,8 +302,9 @@ class MaterialPreviewIn(BaseModel):
     weight_per_m2: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
     price_currency: PriceCurrency = "EUR"
     price_basis: PriceBasis = "PER_KG"
-    tax_incidence: Decimal = Field(default=Decimal("1"), decimal_places=4, max_digits=12)
+    taxe_pct: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
     is_imported: bool = False
+    applique_marge: bool = True
     transport_mode: TransportMode = "AMOUNT"
     transport_unit_price: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
     transport_pct: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)

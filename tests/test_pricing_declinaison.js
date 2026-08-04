@@ -61,13 +61,15 @@ check('colonne Coût €/m² dans le tableau', (src.match(/<th>Coût €\/m²<\/
 
 // ─── Le formulaire envoie bien ce que l'API attend ──────────────────────────
 const save = extraire('saveDeclinaisonForm');
-for (const champ of ['price_currency', 'price_basis', 'tax_incidence', 'is_imported',
-                     'transport_mode', 'transport_unit_price', 'transport_pct',
-                     'weight_per_m2', 'weight_gsm']) {
+for (const champ of ['price_currency', 'price_basis', 'taxe_pct', 'is_imported',
+                     'applique_marge', 'transport_mode', 'transport_unit_price',
+                     'transport_pct', 'grammage_gsm', 'perte_pct']) {
   check('champ envoyé : ' + champ, save.includes(champ + ':'), true);
 }
 check('méthode PATCH', save.includes("method: \"PATCH\""), true);
 check('drapeau remis à zéro après enregistrement', save.includes('S.declDirty = false'), true);
+// Le poids n'est plus saisi : il découle du grammage et de la perte.
+check('plus de poids envoyé à la main', save.includes('weight_per_m2'), false);
 
 console.log(ko === 0 ? '\nTOUT EST VERT' : '\n' + ko + ' ECHEC(S)');
 process.exit(ko === 0 ? 0 : 1);

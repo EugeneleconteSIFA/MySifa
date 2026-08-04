@@ -139,8 +139,9 @@ def list_materials(
 
     decl_rows = conn.execute(
         """SELECT d.id, d.matiere_id, d.laize_id, d.grammage_id, d.mc_material_id,
-                  d.weight_per_m2, d.weight_gsm, d.price_currency, d.price_basis,
-                  d.tax_incidence, d.is_imported, d.transport_mode,
+                  d.weight_per_m2, d.grammage_gsm, d.perte_pct,
+                  d.price_currency, d.price_basis,
+                  d.taxe_pct, d.is_imported, d.applique_marge, d.transport_mode,
                   d.transport_unit_price, d.transport_pct, d.parametre,
                   l.valeur_mm, l.label AS laize_label, l.ordre AS laize_ordre,
                   g.valeur_gsm, g.label AS grammage_label,
@@ -210,11 +211,13 @@ def list_materials(
                 "unit_price": principal["prix"] if principal else 0.0,
                 "parametre": bool(_col(r, "parametre")),
                 "weight_per_m2": _f(_col(r, "weight_per_m2")),
-                "weight_gsm": int(_col(r, "weight_gsm")) if _col(r, "weight_gsm") is not None else None,
+                "grammage_gsm": _f(_col(r, "grammage_gsm")),
+                "perte_pct": _f(_col(r, "perte_pct")),
                 "price_currency": _col(r, "price_currency") or "EUR",
                 "price_basis": _col(r, "price_basis") or "PER_KG",
-                "tax_incidence": _f(_col(r, "tax_incidence"), 1.0),
+                "taxe_pct": _f(_col(r, "taxe_pct")),
                 "is_imported": bool(_col(r, "is_imported")),
+                "applique_marge": _col(r, "applique_marge") is None or bool(_col(r, "applique_marge")),
                 "transport_mode": _col(r, "transport_mode") or "AMOUNT",
                 "transport_unit_price": _f(_col(r, "transport_unit_price")),
                 "transport_pct": _f(_col(r, "transport_pct")),
@@ -384,11 +387,16 @@ def _poids_depuis_grammage(conn: sqlite3.Connection, declinaison_id: int, gramma
     if not row or _f(row["valeur_gsm"]) <= 0:
         return
     gsm = _f(row["valeur_gsm"])
+    row = conn.execute(
+        "SELECT COALESCE(perte_pct,0) AS perte FROM mp_matiere_declinaison WHERE id=?",
+        (declinaison_id,),
+    ).fetchone()
+    perte = _f(row["perte"]) if row else 0.0
     conn.execute(
         """UPDATE mp_matiere_declinaison
-              SET weight_gsm=?, weight_per_m2=?
+              SET weight_gsm=?, grammage_gsm=?, weight_per_m2=?
             WHERE id=? AND COALESCE(weight_per_m2,0)=0""",
-        (int(gsm), round(gsm / 1000.0, 6), declinaison_id),
+        (int(gsm), gsm, poids_retenu(gsm, perte), declinaison_id),
     )
 
 
@@ -526,16 +534,33 @@ def set_appairage(
 # « Coûts matières ».
 
 CHAMPS_PARAM = (
-    "weight_per_m2",
-    "weight_gsm",
+    "grammage_gsm",
+    "perte_pct",
     "price_currency",
     "price_basis",
-    "tax_incidence",
+    "taxe_pct",
     "is_imported",
+    "applique_marge",
     "transport_mode",
     "transport_unit_price",
     "transport_pct",
 )
+
+# Perte matière par défaut sur une nouvelle déclinaison, en %.
+PERTE_DEFAUT = 9.0
+
+
+def poids_retenu(grammage_gsm: Any, perte_pct: Any) -> float:
+    """
+    Poids au m² (kg) réellement consommé : le grammage majoré de la perte.
+
+    On produit rarement au gramme près — la chute et le déchet de calage font
+    qu'un frontal de 70 g/m² en consomme davantage. C'est ce poids-là qui doit
+    entrer dans le prix de revient, pas le grammage théorique.
+    """
+    g = _f(grammage_gsm)
+    p = _f(perte_pct)
+    return round(g * (1 + p / 100.0) / 1000.0, 6)
 
 _DEVISES = ("EUR", "USD")
 _BASES = ("PER_KG", "PER_M2")
@@ -625,11 +650,13 @@ def parametrage(conn: sqlite3.Connection, declinaison_id: int) -> Optional[dict]
         "updated_at": _col(d, "updated_at"),
         "updated_by_name": _col(d, "updated_by_name"),
         "weight_per_m2": _f(_col(d, "weight_per_m2")),
-        "weight_gsm": int(_col(d, "weight_gsm")) if _col(d, "weight_gsm") is not None else None,
+        "grammage_gsm": _f(_col(d, "grammage_gsm")),
+        "perte_pct": _f(_col(d, "perte_pct")),
         "price_currency": _col(d, "price_currency") or "EUR",
         "price_basis": _col(d, "price_basis") or "PER_KG",
-        "tax_incidence": _f(_col(d, "tax_incidence"), 1.0),
+        "taxe_pct": _f(_col(d, "taxe_pct")),
         "is_imported": bool(_col(d, "is_imported")),
+        "applique_marge": _col(d, "applique_marge") is None or bool(_col(d, "applique_marge")),
         "transport_mode": _col(d, "transport_mode") or "AMOUNT",
         "transport_unit_price": _f(_col(d, "transport_unit_price")),
         "transport_pct": _f(_col(d, "transport_pct")),
@@ -677,32 +704,35 @@ def set_parametrage(
             return {"ok": False, "reason": f"mode de transport inconnu : {v or '(vide)'}"}
         poser("transport_mode", v)
 
-    for champ, maxi in (
-        ("weight_per_m2", 1000),
-        ("tax_incidence", 100),
-        ("transport_unit_price", 1_000_000),
-        ("transport_pct", 1000),
+    for champ, mini, maxi in (
+        ("grammage_gsm", 0, 99999),
+        ("perte_pct", 0, 100),
+        ("taxe_pct", -100, 1000),
+        ("transport_unit_price", 0, 1_000_000),
+        ("transport_pct", 0, 1000),
     ):
         if champ in patch:
-            v = _f(patch[champ], -1)
-            if v < 0 or v > maxi:
+            v = _f(patch[champ], None)
+            if v is None or v < mini or v > maxi:
                 return {"ok": False, "reason": f"{champ} hors limites"}
             poser(champ, v)
 
-    if "weight_gsm" in patch:
-        raw = patch["weight_gsm"]
-        if raw in (None, "", "null"):
-            poser("weight_gsm", None)
-        else:
-            v = _f(raw, -1)
-            if v < 0 or v > 99999:
-                return {"ok": False, "reason": "grammage hors limites"}
-            poser("weight_gsm", int(v))
     if "is_imported" in patch:
         poser("is_imported", 1 if patch["is_imported"] else 0)
+    if "applique_marge" in patch:
+        poser("applique_marge", 1 if patch["applique_marge"] else 0)
 
     if not sets:
         return {"ok": False, "reason": "aucun réglage à modifier"}
+
+    # Le poids n'est pas saisi : il découle du grammage et de la perte. Le
+    # recalculer ici garantit qu'aucun écran ne peut enregistrer un poids
+    # incohérent avec ce qui est affiché.
+    actuel = fetch_declinaison_complete(conn, declinaison_id)
+    g = patch.get("grammage_gsm", _col(actuel, "grammage_gsm"))
+    p = patch.get("perte_pct", _col(actuel, "perte_pct"))
+    poser("weight_per_m2", poids_retenu(g, p))
+    poser("weight_gsm", int(_f(g)) if _f(g) > 0 else None)
 
     poser("parametre", 1)
     poser("updated_at", _now())
