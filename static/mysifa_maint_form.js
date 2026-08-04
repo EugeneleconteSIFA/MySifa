@@ -279,9 +279,34 @@
     return sel ? _maintUsurePieceById(sel.value) : null;
   }
 
+  // v231 : le rattachement pièce d'usure n'existe QUE sur la catégorie
+  // Interventions — c'est la seule dont les cartes s'affichent sur l'accueil
+  // Maintenance. Ailleurs, le bloc n'est pas grisé mais absent : proposer une
+  // option qui ne produira rien visuellement n'aide personne.
+  function _maintUsureAllowed() {
+    const catSel = document.getElementById('maint-categorie');
+    return !!catSel && catSel.value === 'remplacements';
+  }
+
+  function _maintOnCategorieChange() {
+    const on = document.getElementById('maint-usure-on');
+    if (!_maintUsureAllowed() && on && on.checked) {
+      // Détacher en silence ferait perdre un rattachement sans que personne
+      // ne s'en aperçoive à l'enregistrement. On le dit.
+      on.checked = false;
+      const sel = document.getElementById('maint-usure-piece');
+      if (sel) sel.value = '';
+      const hp = document.getElementById('maint-usure-haspos');
+      if (hp) hp.checked = false;
+      toast('Rattachement pièce d\'usure retiré : réservé à la catégorie Interventions.');
+    }
+    _maintRefreshUsureUI();
+  }
+
   function _maintRefreshUsureUI() {
     const on      = document.getElementById('maint-usure-on');
     const fields  = document.getElementById('maint-usure-fields');
+    const block   = document.getElementById('maint-usure-block');
     const hasPos  = document.getElementById('maint-usure-haspos');
     const posWrap = document.getElementById('maint-usure-pos-wrap');
     const posInp  = document.getElementById('maint-usure-position');
@@ -290,6 +315,14 @@
     const hint    = document.getElementById('maint-usure-hint');
     if (!on || !fields) return;
 
+    const allowed = _maintUsureAllowed();
+    if (block) block.style.display = allowed ? '' : 'none';
+    if (!allowed) {
+      if (on.checked) on.checked = false;
+      const mi = document.getElementById('maint-metrage-ref');
+      if (mi) mi.value = '';
+      return;
+    }
     fields.style.display = on.checked ? '' : 'none';
     if (!on.checked && mInp) mInp.value = '';
     if (posWrap) posWrap.style.display = (on.checked && hasPos && hasPos.checked) ? '' : 'none';
@@ -318,10 +351,6 @@
         }
         if (mInp && !(mInp.value || '').trim()) {
           msgs.push('Sans référence métrage, l\'anneau Métrage de la carte restera vide — la pièce fonctionnera sur le temps seul.');
-        }
-        const catSel = document.getElementById('maint-categorie');
-        if (catSel && catSel.value !== 'remplacements') {
-          msgs.push('Ce code n\'est pas en catégorie Interventions : sa carte ne sera pas visible sur l\'accueil Maintenance, qui n\'affiche les pièces d\'usure que sous cet onglet.');
         }
       }
     }
@@ -1371,6 +1400,8 @@
   try { window._maintRefreshUsureUI = _maintRefreshUsureUI; } catch(e) {}
   try { window._maintOnUsurePieceChange = _maintOnUsurePieceChange; } catch(e) {}
   try { window._maintOnUsureToggle = _maintOnUsureToggle; } catch(e) {}
+  try { window._maintOnCategorieChange = _maintOnCategorieChange; } catch(e) {}
+  try { window._maintUsureAllowed = _maintUsureAllowed; } catch(e) {}
   try { window._maintOnUsureHasPosChange = _maintOnUsureHasPosChange; } catch(e) {}
   try { window._maintOnUsurePositionInput = _maintOnUsurePositionInput; } catch(e) {}
   try { window._maintUsurePayload = _maintUsurePayload; } catch(e) {}
