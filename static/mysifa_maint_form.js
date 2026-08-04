@@ -269,7 +269,7 @@
   // « bande » et « bandes » créent deux onglets pour la même chose.
   function _maintFillPieceOptions(sel) {
     const pieces = window._maintUsurePieces || [];
-    sel.innerHTML = '<option value="">— Choisir une pièce —</option>'
+    sel.innerHTML = '<option value="">— Choisir —</option>'
       + pieces.map(p => '<option value="' + esc(String(p.id)) + '">' + esc(p.label) + '</option>').join('')
       + '<option value="__new__">+ Nouvelle pièce…</option>';
   }
@@ -316,16 +316,16 @@
     if (!on || !fields) return;
 
     const allowed = _maintUsureAllowed();
-    if (block) block.style.display = allowed ? '' : 'none';
+    if (block) block.style.display = allowed ? 'flex' : 'none';
     if (!allowed) {
       if (on.checked) on.checked = false;
       const mi = document.getElementById('maint-metrage-ref');
       if (mi) mi.value = '';
       return;
     }
-    fields.style.display = on.checked ? '' : 'none';
+    fields.style.display = on.checked ? 'flex' : 'none';
     if (!on.checked && mInp) mInp.value = '';
-    if (posWrap) posWrap.style.display = (on.checked && hasPos && hasPos.checked) ? '' : 'none';
+    if (posWrap) posWrap.style.display = (on.checked && hasPos && hasPos.checked) ? 'inline-block' : 'none';
     if (!(hasPos && hasPos.checked) && posInp) posInp.value = '';
 
     const piece = _maintSelectedUsurePiece();
@@ -741,8 +741,8 @@
           + '<td class="op-lbl-cell">' + esc(o.label || '') + '</td>'
           + '<td><span class="niv-badge" data-niv="' + niv + '">N' + niv + '</span></td>'
           + '<td><span class="op-pill ' + catCls + '">' + esc(_maintCatLabel(cat)) + '</span></td>'
-          + '<td>' + _maintUsureCell(o) + '</td>'
           + '<td>' + intervalleDisplay + '</td>'
+          + '<td>' + _maintUsureCell(o) + '</td>'
           + '<td>' + metrageDisplay + '</td>'
           + '<td><button type="button" class="btn-sm btn-ghost maint-docs-btn" data-maint-docs="' + c + '" title="Gerer les documents attaches a ce code">'
           +   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>'
@@ -755,7 +755,7 @@
       });
     });
     el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
-      + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Pièce d\'usure</th><th>Intervalle de temps</th><th>Réf. métrage</th><th>Documents</th><th>Actions</th>'
+      + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Intervalle de temps</th><th>Pièce d\'usure</th><th>Réf. métrage</th><th>Documents</th><th>Actions</th>'
       + '</tr></thead><tbody>' + body + '</tbody></table></div>';
     el.querySelectorAll('[data-maint-edit]').forEach(btn => {
       btn.addEventListener('click', () => openMaintForm(btn.getAttribute('data-maint-edit')));
