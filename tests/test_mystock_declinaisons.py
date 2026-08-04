@@ -356,6 +356,113 @@ with dbmod.get_db() as conn:
     check("les écrans MyStock déclenchent le retour",
           _stock.count("_mystock_prix.resync_depuis_mystock("), 3)
 
+    print("\n--- paramétrage porté par la déclinaison ---")
+    from app.services.pricing.repository import declinaison_to_pricing_material  # noqa: E402
+
+    def cout(decl_id):
+        return float(compute_material_price_per_m2(
+            declinaison_to_pricing_material(MP.parametrage(conn, decl_id)), reglages
+        ).price_eur_per_m2)
+
+    p22 = MP.parametrage(conn, d22["id"])
+    check("un adhésif part au kilo", p22["price_basis"], "PER_KG")
+    check("poids déduit du grammage déclaré", p22["weight_per_m2"], 0.022)
+    check("tant que personne n'a réglé la fiche", p22["parametre"], False)
+    check("le prix du fournisseur principal remonte", p22["unit_price"], 2.95)
+    check("libellé de la déclinaison", p22["libelle"], "22 g/m²")
+    check("coût au m² sans passer par une fiche", cout(d22["id"]), round(2.95 * 0.022, 4))
+
+    p500 = MP.parametrage(conn, dl500["id"])
+    check("une laize non appairée part au m²", p500["price_basis"], "PER_M2")
+    check("et reste à paramétrer", p500["parametre"], False)
+    check("un prix au m² ignore le poids", cout(dl500["id"]), 1.45)
+
+    # Un grammage EST un poids : le saisir suffit, on ne le redemande pas.
+    r35 = MP.add_declinaison(conn, matiere_id=1, valeur_gsm=35)
+    conn.commit()
+    p35 = MP.parametrage(conn, r35["declinaison_id"])
+    check("le grammage remplit le poids tout seul", p35["weight_per_m2"], 0.035)
+    check("et le grammage lui-même", p35["weight_gsm"], 35)
+
+    print("\n--- édition des réglages ---")
+    check("devise inconnue refusée",
+          MP.set_parametrage(conn, declinaison_id=d22["id"],
+                             patch={"price_currency": "GBP"})["ok"], False)
+    check("base de prix inconnue refusée",
+          MP.set_parametrage(conn, declinaison_id=d22["id"],
+                             patch={"price_basis": "PER_M3"})["ok"], False)
+    check("poids négatif refusé",
+          MP.set_parametrage(conn, declinaison_id=d22["id"],
+                             patch={"weight_per_m2": -1})["ok"], False)
+    check("déclinaison inexistante refusée",
+          MP.set_parametrage(conn, declinaison_id=999999,
+                             patch={"weight_per_m2": 1})["ok"], False)
+    check("un patch vide ne fait rien",
+          MP.set_parametrage(conn, declinaison_id=d22["id"], patch={})["ok"], False)
+
+    # Import en USD avec transport au pourcentage : (prix + transport) × taux.
+    MP.set_parametrage(conn, declinaison_id=d22["id"], patch={
+        "price_currency": "USD", "is_imported": True,
+        "transport_mode": "PCT", "transport_pct": 10, "weight_per_m2": 0.03,
+    }, user_name="Test")
+    conn.commit()
+    p22 = MP.parametrage(conn, d22["id"])
+    check("devise enregistrée", p22["price_currency"], "USD")
+    check("transport en pourcentage enregistré", p22["transport_pct"], 10.0)
+    check("auteur tracé", p22["updated_by_name"], "Test")
+    attendu = round(2.95 * 1.10 * 0.03 * float(reglages.eur_usd_rate), 4)
+    check("coût = (prix + transport) × devise × poids", cout(d22["id"]), attendu)
+
+    # Les réglages sont propres à chaque déclinaison : 22 en USD ne déteint pas
+    # sur 30, qui est la même matière MyStock.
+    check("l'autre grammage garde ses réglages",
+          MP.parametrage(conn, d30["id"])["price_currency"], "EUR")
+
+    MP.set_parametrage(conn, declinaison_id=d22["id"], patch={
+        "price_currency": "EUR", "is_imported": False,
+        "transport_mode": "AMOUNT", "transport_pct": 0, "weight_per_m2": 0.028,
+    })
+    conn.commit()
+
+    print("\n--- reprise des fiches déjà appairées (migration) ---")
+    # Sur la vraie base, des déclinaisons sont appairées depuis des semaines :
+    # elles doivent hériter des réglages de leur fiche, pas repartir de zéro.
+    import importlib  # noqa: E402
+
+    mig = importlib.import_module("app.core.migrations.2026_08_04_declinaison_parametrage")
+    old = sqlite3.connect(":memory:")
+    old.row_factory = sqlite3.Row
+    old.executescript("""
+        CREATE TABLE matieres_premieres (id INTEGER PRIMARY KEY, categorie TEXT);
+        CREATE TABLE mp_grammages (id INTEGER PRIMARY KEY, valeur_gsm REAL);
+        CREATE TABLE mc_material (id INTEGER PRIMARY KEY, weight_per_m2 REAL, weight_gsm INTEGER,
+            price_currency TEXT, price_basis TEXT, tax_incidence REAL, is_imported INTEGER,
+            transport_mode TEXT, transport_unit_price REAL, transport_pct REAL);
+        CREATE TABLE mp_matiere_declinaison (id INTEGER PRIMARY KEY, matiere_id INTEGER,
+            laize_id INTEGER, grammage_id INTEGER, mc_material_id INTEGER);
+        INSERT INTO matieres_premieres VALUES (1,'adhesif'), (2,'frontal');
+        INSERT INTO mp_grammages VALUES (1, 25);
+        INSERT INTO mc_material VALUES (7, 0.031, 31, 'USD', 'PER_KG', 1.065, 1, 'PCT', 0, 12);
+        INSERT INTO mp_matiere_declinaison VALUES (1, 1, NULL, 1, 7);
+        INSERT INTO mp_matiere_declinaison VALUES (2, 2, 5, NULL, NULL);
+    """)
+    mig.appliquer(old)
+    reprise = old.execute("SELECT * FROM mp_matiere_declinaison WHERE id=1").fetchone()
+    libre = old.execute("SELECT * FROM mp_matiere_declinaison WHERE id=2").fetchone()
+    check("poids repris de la fiche", reprise["weight_per_m2"], 0.031)
+    check("devise reprise", reprise["price_currency"], "USD")
+    check("incidence taxes reprise", reprise["tax_incidence"], 1.065)
+    check("import repris", reprise["is_imported"], 1)
+    check("transport en pourcentage repris", reprise["transport_pct"], 12.0)
+    check("la fiche appairée compte comme paramétrée", reprise["parametre"], 1)
+    check("une laize sans fiche part au m²", libre["price_basis"], "PER_M2")
+    check("et reste à paramétrer", libre["parametre"], 0)
+    mig.appliquer(old)
+    check("migration rejouable sans dégât",
+          old.execute("SELECT weight_per_m2 FROM mp_matiere_declinaison WHERE id=1").fetchone()[0],
+          0.031)
+    old.close()
+
     print("\n--- garde-fous ---")
     check("prix négatif refusé",
           MP.set_prix(conn, declinaison_id=d22["id"], fournisseur_id=None, prix=-1)["ok"], False)

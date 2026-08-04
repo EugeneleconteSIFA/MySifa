@@ -139,6 +139,9 @@ def list_materials(
 
     decl_rows = conn.execute(
         """SELECT d.id, d.matiere_id, d.laize_id, d.grammage_id, d.mc_material_id,
+                  d.weight_per_m2, d.weight_gsm, d.price_currency, d.price_basis,
+                  d.tax_incidence, d.is_imported, d.transport_mode,
+                  d.transport_unit_price, d.transport_pct, d.parametre,
                   l.valeur_mm, l.label AS laize_label, l.ordre AS laize_ordre,
                   g.valeur_gsm, g.label AS grammage_label,
                   mc.name AS mc_name, mc.appellation_code AS mc_appellation
@@ -202,6 +205,19 @@ def list_materials(
                 "mc_appellation": r["mc_appellation"],
                 "prix_principal": principal["prix"] if principal else None,
                 "lignes": lignes,
+                # Réglages de calcul portés par la déclinaison : ils suffisent à
+                # en tirer un coût au m², sans fiche Coûts matières.
+                "unit_price": principal["prix"] if principal else 0.0,
+                "parametre": bool(_col(r, "parametre")),
+                "weight_per_m2": _f(_col(r, "weight_per_m2")),
+                "weight_gsm": int(_col(r, "weight_gsm")) if _col(r, "weight_gsm") is not None else None,
+                "price_currency": _col(r, "price_currency") or "EUR",
+                "price_basis": _col(r, "price_basis") or "PER_KG",
+                "tax_incidence": _f(_col(r, "tax_incidence"), 1.0),
+                "is_imported": bool(_col(r, "is_imported")),
+                "transport_mode": _col(r, "transport_mode") or "AMOUNT",
+                "transport_unit_price": _f(_col(r, "transport_unit_price")),
+                "transport_pct": _f(_col(r, "transport_pct")),
             }
         )
 
@@ -232,6 +248,7 @@ def list_materials(
                 "prix_max": max(prix) if prix else None,
                 "nb_declinaisons": len(decls),
                 "nb_appairees": sum(1 for d in decls if d["mc_material_id"]),
+                "nb_parametrees": sum(1 for d in decls if d["parametre"]),
                 "nb_fournisseurs": len(fournisseurs),
                 "declinaisons": decls,
             }
@@ -331,12 +348,18 @@ def add_declinaison(
             if grammage_id is None and laize_id is None
             else "cette déclinaison existe déjà",
         }
+    # Réglages de départ déduits de la catégorie : une matière laizée se tarife
+    # au m², un adhésif au kilo. Sans ça, une nouvelle déclinaison naîtrait en
+    # €/kg avec un poids nul et afficherait un coût de 0 sans raison visible.
     cur = conn.execute(
-        """INSERT INTO mp_matiere_declinaison (matiere_id, laize_id, grammage_id)
-           VALUES (?,?,?)""",
-        (matiere_id, laize_id, grammage_id),
+        """INSERT INTO mp_matiere_declinaison
+           (matiere_id, laize_id, grammage_id, price_basis)
+           VALUES (?,?,?,?)""",
+        (matiere_id, laize_id, grammage_id, "PER_M2" if td == "LAIZE" else "PER_KG"),
     )
     decl_id = int(cur.lastrowid)
+    if grammage_id is not None:
+        _poids_depuis_grammage(conn, decl_id, grammage_id)
     # Une déclinaison sans ligne de prix serait invisible dans le tableau : on
     # amorce une ligne vide, prête à recevoir fournisseur et prix.
     conn.execute(
@@ -347,6 +370,26 @@ def add_declinaison(
         (matiere_id, laize_id, grammage_id, decl_id, _now()),
     )
     return {"ok": True, "declinaison_id": decl_id}
+
+
+def _poids_depuis_grammage(conn: sqlite3.Connection, declinaison_id: int, grammage_id: int) -> None:
+    """
+    Un grammage EST un poids : 22 g/m² = 0,022 kg/m². Le recopier évite de
+    demander deux fois la même information — et sans poids, un prix au kilo ne
+    peut pas devenir un coût au m². On ne touche pas à un poids déjà saisi.
+    """
+    row = conn.execute(
+        "SELECT valeur_gsm FROM mp_grammages WHERE id=?", (grammage_id,)
+    ).fetchone()
+    if not row or _f(row["valeur_gsm"]) <= 0:
+        return
+    gsm = _f(row["valeur_gsm"])
+    conn.execute(
+        """UPDATE mp_matiere_declinaison
+              SET weight_gsm=?, weight_per_m2=?
+            WHERE id=? AND COALESCE(weight_per_m2,0)=0""",
+        (int(gsm), round(gsm / 1000.0, 6), declinaison_id),
+    )
 
 
 def set_declinaison_valeur(
@@ -398,6 +441,8 @@ def set_declinaison_valeur(
         "UPDATE mp_matiere_declinaison SET laize_id=?, grammage_id=? WHERE id=?",
         (cible_laize, cible_grammage, declinaison_id),
     )
+    if cible_grammage is not None:
+        _poids_depuis_grammage(conn, declinaison_id, cible_grammage)
     conn.execute(
         "UPDATE mp_matiere_prix SET laize_id=?, grammage_id=? WHERE declinaison_id=?",
         (cible_laize, cible_grammage, declinaison_id),
@@ -470,6 +515,203 @@ def set_appairage(
 # ─────────────────────────────────────────────────────────────────────────────
 # Prix
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Paramétrage de prix d'une déclinaison
+# ─────────────────────────────────────────────────────────────────────────────
+# Comment un prix d'achat devient un coût au m² : poids, devise, base de prix,
+# incidence des taxes, transport d'import. Ces réglages vivent sur la
+# déclinaison — une matière MyStock se devise sans passer par la base historique
+# « Coûts matières ».
+
+CHAMPS_PARAM = (
+    "weight_per_m2",
+    "weight_gsm",
+    "price_currency",
+    "price_basis",
+    "tax_incidence",
+    "is_imported",
+    "transport_mode",
+    "transport_unit_price",
+    "transport_pct",
+)
+
+_DEVISES = ("EUR", "USD")
+_BASES = ("PER_KG", "PER_M2")
+_MODES_TRANSPORT = ("AMOUNT", "PCT")
+
+
+def libelle_declinaison(row: Any) -> str:
+    """« 330 mm », « 22 g/m² », ou « Toutes déclinaisons » si la valeur manque."""
+    laize_id = _col(row, "laize_id")
+    gram_id = _col(row, "grammage_id")
+    if laize_id is not None:
+        return _col(row, "laize_label") or (
+            f"{int(_f(_col(row, 'valeur_mm')))} mm" if _col(row, "valeur_mm") is not None else "Laize"
+        )
+    if gram_id is not None:
+        return _col(row, "grammage_label") or (
+            f"{_f(_col(row, 'valeur_gsm')):g} g/m²" if _col(row, "valeur_gsm") is not None else "Grammage"
+        )
+    return "Toutes déclinaisons"
+
+
+def _col(row: Any, nom: str, defaut: Any = None) -> Any:
+    """Lecture tolérante : la même fonction sert sur un sqlite3.Row et un dict."""
+    if isinstance(row, dict):
+        return row.get(nom, defaut)
+    try:
+        return row[nom]
+    except (IndexError, KeyError):
+        return defaut
+
+
+def fetch_declinaison_complete(conn: sqlite3.Connection, declinaison_id: int) -> Optional[sqlite3.Row]:
+    return conn.execute(
+        """SELECT d.*, mp.categorie, mp.reference, mp.designation,
+                  mp.actif AS matiere_active,
+                  l.valeur_mm, l.label AS laize_label,
+                  g.valeur_gsm, g.label AS grammage_label
+             FROM mp_matiere_declinaison d
+             JOIN matieres_premieres mp ON mp.id = d.matiere_id
+             LEFT JOIN mp_laizes    l ON l.id = d.laize_id
+             LEFT JOIN mp_grammages g ON g.id = d.grammage_id
+            WHERE d.id = ?""",
+        (declinaison_id,),
+    ).fetchone()
+
+
+def parametrage(conn: sqlite3.Connection, declinaison_id: int) -> Optional[dict]:
+    """Fiche complète d'une déclinaison : identité, prix d'achat, réglages."""
+    d = fetch_declinaison_complete(conn, declinaison_id)
+    if not d:
+        return None
+    lignes = [
+        {
+            "fournisseur_id": int(r["fournisseur_id"]) if r["fournisseur_id"] is not None else None,
+            "fournisseur_nom": r["fournisseur_nom"],
+            "prix": _f(r["prix"]),
+            "principal": bool(r["principal"]),
+            "updated_at": r["updated_at"],
+            "updated_by_name": r["updated_by_name"],
+        }
+        for r in conn.execute(
+            """SELECT p.fournisseur_id, p.prix, p.principal, p.updated_at, p.updated_by_name,
+                      f.nom AS fournisseur_nom
+                 FROM mp_matiere_prix p
+                 LEFT JOIN fournisseurs_fsc f ON f.id = p.fournisseur_id
+                WHERE p.declinaison_id = ?
+                ORDER BY p.principal DESC, f.nom COLLATE NOCASE ASC""",
+            (declinaison_id,),
+        ).fetchall()
+    ]
+    principal = next((x for x in lignes if x["principal"]), None)
+    cat = _cat(d["categorie"])
+    return {
+        "declinaison_id": int(d["id"]),
+        "matiere_id": int(d["matiere_id"]),
+        "reference": d["reference"],
+        "designation": d["designation"],
+        "categorie": d["categorie"],
+        "matiere_active": bool(d["matiere_active"]),
+        "type_declinaison": type_declinaison(cat),
+        "libelle": libelle_declinaison(d),
+        "unit_price": principal["prix"] if principal else 0.0,
+        "fournisseur_nom": principal["fournisseur_nom"] if principal else None,
+        "prix_updated_at": principal["updated_at"] if principal else None,
+        "lignes_prix": lignes,
+        "parametre": bool(_col(d, "parametre")),
+        "updated_at": _col(d, "updated_at"),
+        "updated_by_name": _col(d, "updated_by_name"),
+        "weight_per_m2": _f(_col(d, "weight_per_m2")),
+        "weight_gsm": int(_col(d, "weight_gsm")) if _col(d, "weight_gsm") is not None else None,
+        "price_currency": _col(d, "price_currency") or "EUR",
+        "price_basis": _col(d, "price_basis") or "PER_KG",
+        "tax_incidence": _f(_col(d, "tax_incidence"), 1.0),
+        "is_imported": bool(_col(d, "is_imported")),
+        "transport_mode": _col(d, "transport_mode") or "AMOUNT",
+        "transport_unit_price": _f(_col(d, "transport_unit_price")),
+        "transport_pct": _f(_col(d, "transport_pct")),
+    }
+
+
+def set_parametrage(
+    conn: sqlite3.Connection,
+    *,
+    declinaison_id: int,
+    patch: dict,
+    user_name: Optional[str] = None,
+) -> dict:
+    """
+    Enregistre les réglages de calcul d'une déclinaison.
+
+    Seuls les champs présents dans `patch` bougent : la page peut n'envoyer que
+    ce que l'utilisateur a touché. Les valeurs hors domaine sont refusées plutôt
+    que corrigées en silence — un « PER_M3 » accepté puis ignoré donnerait un
+    coût faux sans le dire.
+    """
+    if not fetch_declinaison_complete(conn, declinaison_id):
+        return {"ok": False, "reason": "déclinaison introuvable"}
+
+    sets: list[str] = []
+    args: list[Any] = []
+
+    def poser(champ, valeur):
+        sets.append(f"{champ}=?")
+        args.append(valeur)
+
+    if "price_currency" in patch:
+        v = str(patch["price_currency"] or "").upper()
+        if v not in _DEVISES:
+            return {"ok": False, "reason": f"devise inconnue : {v or '(vide)'}"}
+        poser("price_currency", v)
+    if "price_basis" in patch:
+        v = str(patch["price_basis"] or "").upper()
+        if v not in _BASES:
+            return {"ok": False, "reason": f"base de prix inconnue : {v or '(vide)'}"}
+        poser("price_basis", v)
+    if "transport_mode" in patch:
+        v = str(patch["transport_mode"] or "").upper()
+        if v not in _MODES_TRANSPORT:
+            return {"ok": False, "reason": f"mode de transport inconnu : {v or '(vide)'}"}
+        poser("transport_mode", v)
+
+    for champ, maxi in (
+        ("weight_per_m2", 1000),
+        ("tax_incidence", 100),
+        ("transport_unit_price", 1_000_000),
+        ("transport_pct", 1000),
+    ):
+        if champ in patch:
+            v = _f(patch[champ], -1)
+            if v < 0 or v > maxi:
+                return {"ok": False, "reason": f"{champ} hors limites"}
+            poser(champ, v)
+
+    if "weight_gsm" in patch:
+        raw = patch["weight_gsm"]
+        if raw in (None, "", "null"):
+            poser("weight_gsm", None)
+        else:
+            v = _f(raw, -1)
+            if v < 0 or v > 99999:
+                return {"ok": False, "reason": "grammage hors limites"}
+            poser("weight_gsm", int(v))
+    if "is_imported" in patch:
+        poser("is_imported", 1 if patch["is_imported"] else 0)
+
+    if not sets:
+        return {"ok": False, "reason": "aucun réglage à modifier"}
+
+    poser("parametre", 1)
+    poser("updated_at", _now())
+    poser("updated_by_name", user_name)
+    args.append(declinaison_id)
+    conn.execute(
+        f"UPDATE mp_matiere_declinaison SET {', '.join(sets)} WHERE id=?", args
+    )
+    return {"ok": True, "parametrage": parametrage(conn, declinaison_id)}
 
 
 def _mirror_principal(

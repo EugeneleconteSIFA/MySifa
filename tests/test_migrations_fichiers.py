@@ -67,10 +67,18 @@ for _ddl in (
     "CREATE TABLE mp_matiere_laizes (matiere_id INTEGER, laize_id INTEGER, prix_eur_m2 REAL)",
     "CREATE TABLE matiere_laize_fournisseurs (matiere_id INTEGER, laize_id INTEGER, fournisseur_id INTEGER)",
     "CREATE TABLE mp_laizes (id INTEGER PRIMARY KEY, valeur_mm REAL, label TEXT, ordre INTEGER, actif INTEGER)",
-    "CREATE TABLE mc_material (id INTEGER PRIMARY KEY, name TEXT, appellation_code TEXT, supplier_id INTEGER, category_id INTEGER, is_active INTEGER)",
+    "CREATE TABLE mc_material (id INTEGER PRIMARY KEY, name TEXT, appellation_code TEXT,"
+    " supplier_id INTEGER, category_id INTEGER, is_active INTEGER, weight_per_m2 REAL,"
+    " weight_gsm INTEGER, price_currency TEXT, price_basis TEXT, tax_incidence REAL,"
+    " is_imported INTEGER)",
     "CREATE TABLE mc_supplier (id INTEGER PRIMARY KEY, name TEXT)",
     "CREATE TABLE fournisseurs_fsc (id INTEGER PRIMARY KEY, nom TEXT)",
     "CREATE TABLE imprimantes (id INTEGER PRIMARY KEY)",
+    # La base pretend avoir deja joue mp_declinaisons_appairage : ses tables
+    # doivent donc exister, sinon la simulation est incoherente.
+    "CREATE TABLE mp_matiere_declinaison (id INTEGER PRIMARY KEY, matiere_id INTEGER,"
+    " laize_id INTEGER, grammage_id INTEGER, mc_material_id INTEGER)",
+    "CREATE TABLE mp_grammages (id INTEGER PRIMARY KEY, valeur_gsm REAL)",
 ): conn2.execute(_ddl)
 conn2.execute("INSERT INTO schema_migrations VALUES (228,'mp_declinaisons_appairage','2026-01-01')")
 conn2.commit()

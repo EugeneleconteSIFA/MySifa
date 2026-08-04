@@ -270,6 +270,28 @@ def mystock_price_for_row(conn: sqlite3.Connection, row: sqlite3.Row) -> Optiona
     }
 
 
+def declinaison_to_pricing_material(param: dict) -> PricingMaterial:
+    """
+    Une déclinaison MyStock paramétrée, vue par le moteur de calcul.
+
+    Le prix vient du fournisseur principal, les réglages de la déclinaison
+    elle-même : plus besoin d'une fiche mc_material pour deviser une matière.
+    """
+    return PricingMaterial(
+        id=int(param["declinaison_id"]),
+        name=f'{param["reference"]} — {param["libelle"]}',
+        unit_price=_dec(param.get("unit_price")),
+        weight_per_m2=_dec(param.get("weight_per_m2")),
+        price_currency=param.get("price_currency") or "EUR",
+        price_basis=param.get("price_basis") or "PER_KG",
+        tax_incidence=_dec(param.get("tax_incidence") or 1),
+        is_imported=bool(param.get("is_imported")),
+        transport_mode=param.get("transport_mode") or "AMOUNT",
+        transport_unit_price=_dec(param.get("transport_unit_price")),
+        transport_pct=_dec(param.get("transport_pct")),
+    )
+
+
 def fetch_material(conn: sqlite3.Connection, material_id: int, *, active_only: bool = False) -> Optional[sqlite3.Row]:
     sql = f"""
         SELECT m.*, c.code AS category_code, f.nom AS fournisseur_nom, {MYSTOCK_COLS}
