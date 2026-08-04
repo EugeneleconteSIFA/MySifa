@@ -189,6 +189,69 @@ def _assert_event_alive(conn, event_id: int) -> None:
         raise HTTPException(status_code=410, detail="Ce créneau a été supprimé. Il n'est plus modifiable.")
 
 
+def _today_paris() -> str:
+    return datetime.now(_PARIS).strftime("%Y-%m-%d")
+
+
+def _event_is_closed(ev) -> bool:
+    """Un créneau dont la date est passée est CLÔTURÉ.
+
+    v2.7.0 — règle unique. Elle remplace les quatre garde-fous qui se
+    superposaient jusqu'ici : la source (planifie / non_planifie), le rôle
+    (admin / opérateur), la nature du champ (temporel vs contenu) et l'état des
+    opérations. Personne ne pouvait les retenir, et chacun laissait passer un
+    cas que les autres bloquaient.
+
+    La clôture se DÉDUIT de la date : rien n'est stocké, rien n'est à
+    déclencher, aucun créneau ne peut être clôturé par erreur ni oublié
+    non clôturé. Le planning planifie ; pour consigner une intervention déjà
+    réalisée, l'enregistrement d'opération reste la voie normale.
+    """
+    if not ev:
+        return False
+    return (ev.get("date_prevue") or "") < _today_paris()
+
+
+def _check_event_not_closed(ev) -> None:
+    """403 si le créneau est passé. Aucune exception de rôle ni de source."""
+    if _event_is_closed(ev):
+        raise HTTPException(
+            status_code=403,
+            detail="Ce créneau est passé : il est clôturé et n'est plus modifiable. "
+                   "Pour consigner une intervention déjà réalisée, utilise "
+                   "l'enregistrement d'opération.",
+        )
+
+
+def _event_closed_by_id(conn, event_id: int) -> bool:
+    row = conn.execute(
+        "SELECT date_prevue FROM maintenance_events WHERE id=?", (event_id,)
+    ).fetchone()
+    return _event_is_closed({"date_prevue": row["date_prevue"]}) if row else False
+
+
+def _assert_correction_allowed(conn, event_id: int, maint_role: str) -> None:
+    """Créneau clôturé : la CORRECTION d'une saisie reste possible, à l'admin.
+
+    v2.7.0 — la clôture gèle la planification (date, horaires, composition du
+    créneau, opérateurs) et la saisie (solder une opération après coup). Elle ne
+    gèle PAS la correction de ce qui a déjà été enregistré : invalider une saisie
+    douteuse, la revalider, la remettre à zéro, la reclasser vers le bon code,
+    retirer une ligne saisie par erreur.
+
+    Sans cette porte, l'édition de l'historique deviendrait impossible : elle
+    porte par construction sur des opérations passées. Un créneau reste le
+    reflet de ses opérations — quand l'une est invalidée ou supprimée,
+    l'affichage du créneau suit.
+    """
+    if _event_closed_by_id(conn, event_id) and maint_role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Ce créneau est passé : il est clôturé. Seul un administrateur "
+                   "peut encore corriger une saisie déjà enregistrée.",
+        )
+
+
 def _load_event_full(conn, event_id: int) -> Optional[dict]:
     """Retourne un dict enrichi {event, ops:[...], operators:[...]} ou None."""
     ev = conn.execute(
@@ -674,49 +737,19 @@ def update_event(event_id: int, body: EventUpdateBody, request: Request):
         if not ev:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
         _check_event_not_deleted(ev)  # v2.5.29 : refuse toute modif si tombstoned
+        _check_event_not_closed(ev)   # v2.7.0 : créneau passé = clôturé
         if maint_role == "operator":
             if not _can_operator_manage_event(ev, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres interventions non planifiées")
-        # Garde-fou 'past event' : interdit de modifier la date ou les heures
-        # d'un créneau selon sa source. Les autres champs (ops, notes,
-        # opérateurs assignés, ...) restent éditables librement dans tous les cas.
-        #
-        # v2.6.1 — la règle ne dépend plus du RÔLE mais de la SOURCE :
-        #
-        #   planifie (planning)  : la date d'origine ET la date cible doivent
-        #       être >= aujourd'hui, pour tout le monde. Le planning sert à
-        #       planifier et à assigner du travail à venir ; un créneau passé y
-        #       est figé. L'ancienne exemption admin (v2.5.13) est supprimée :
-        #       la vue Planning étant déjà réservée aux admins, elle ne bloquait
-        #       en pratique personne et laissait passer les déplacements vers le
-        #       passé, y compris par simple maladresse de glisser-déposer.
-        #       Tester AUSSI la date cible est indispensable : l'ancien code ne
-        #       regardait que la date actuelle du créneau, si bien que déplacer
-        #       un créneau de demain vers hier passait sans encombre.
-        #
-        #   non_planifie (constats) : garde-fou opérateur inchangé — il ne doit
-        #       pas pouvoir réécrire l'historique de ses propres saisies, mais
-        #       l'admin peut corriger une intervention mal datée.
-        _today = datetime.now(_PARIS).strftime("%Y-%m-%d")
-        _ev_date = ev.get("date_prevue") or ""
-        _ev_source = ev.get("source") or "planifie"
-        _time_fields = {"date_prevue", "heure_debut", "heure_fin"}
-        _touches_time = any(k in updates for k in _time_fields)
-        if _touches_time:
-            if _ev_source == "planifie":
-                _target_date = updates.get("date_prevue") or _ev_date
-                if _ev_date < _today or _target_date < _today:
-                    raise HTTPException(
-                        status_code=403,
-                        detail="Le planning ne permet pas d'intervenir sur une date passée. "
-                               "Pour consigner une intervention déjà réalisée, utilise "
-                               "l'enregistrement d'opération.",
-                    )
-            elif maint_role != "admin" and _ev_date < _today:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Cette intervention est passée. La date et les horaires ne sont plus modifiables (seules les ops peuvent être corrigées).",
-                )
+        # Déplacer un créneau OUVERT vers une date passée reste refusé : il
+        # deviendrait clôturé dans la seconde, donc définitivement inéditable —
+        # par une simple maladresse de glisser-déposer.
+        if body.date_prevue is not None and body.date_prevue < _today_paris():
+            raise HTTPException(
+                status_code=403,
+                detail="Impossible de déplacer un créneau vers une date passée : "
+                       "il serait immédiatement clôturé.",
+            )
         updates["updated_at"] = _now_paris_iso()
         set_clause = ", ".join(f"{k}=?" for k in updates)
         conn.execute(f"UPDATE maintenance_events SET {set_clause} WHERE id=?",
@@ -745,6 +778,7 @@ def delete_event(event_id: int, request: Request, confirm_token: Optional[str] =
         ev = _load_event_full(conn, event_id)
         if not ev:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
+        _check_event_not_closed(ev)   # v2.7.0 : un créneau passé ne se supprime plus
         if maint_role == "operator":
             if not _can_operator_manage_event(ev, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que vos propres interventions non planifiées")
@@ -817,6 +851,7 @@ def add_op(event_id: int, body: OpAddBody, request: Request):
         if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
         _check_event_not_deleted(ev_check)  # v2.5.29
+        _check_event_not_closed(ev_check)   # v2.7.0
         if maint_role == "operator":
             if not _can_operator_manage_event(ev_check, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres interventions non planifiées")
@@ -872,6 +907,16 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
         if not row or row["event_id"] != event_id:
             raise HTTPException(status_code=404, detail="Op introuvable dans ce créneau")
         _assert_event_alive(conn, event_id)  # v2.5.29
+        # v2.7.0 : créneau clôturé -> correction admin uniquement. Et on ne
+        # solde plus une opération jamais saisie : ce serait de la saisie
+        # rétroactive, pas une correction.
+        _assert_correction_allowed(conn, event_id, maint_role)
+        if _event_closed_by_id(conn, event_id) and (row["statut"] or "") not in ("termine", "invalidee"):
+            raise HTTPException(
+                status_code=403,
+                detail="Ce créneau est passé : une opération qui n'a pas été saisie "
+                       "ne peut plus l'être. Utilise l'enregistrement d'opération.",
+            )
 
         if maint_role == "operator" and not _user_in_group(conn, event_id, user["id"]):
             raise HTTPException(status_code=403, detail="Vous n'êtes pas assigné à ce créneau")
@@ -960,6 +1005,7 @@ def delete_op(event_id: int, op_id: int, request: Request):
         ).fetchone()
         if not row or row["event_id"] != event_id:
             raise HTTPException(status_code=404, detail="Op introuvable dans ce créneau")
+        _assert_correction_allowed(conn, event_id, maint_role)  # v2.7.0
         if maint_role == "operator":
             ev_check = _load_event_full(conn, event_id)
             if not _can_operator_manage_event(ev_check, user["id"]):
@@ -989,6 +1035,7 @@ def reset_op(event_id: int, op_id: int, request: Request):
         if not row or row["event_id"] != event_id:
             raise HTTPException(status_code=404, detail="Op introuvable dans ce créneau")
         _assert_event_alive(conn, event_id)  # v2.5.29
+        _assert_correction_allowed(conn, event_id, maint_role)  # v2.7.0
         # Perms opérateur : dans le groupe OU créateur (cf. update_op / _can_operator_manage_event)
         if maint_role == "operator":
             ev_check = _load_event_full(conn, event_id)
@@ -1113,6 +1160,7 @@ def add_operator(event_id: int, body: OperatorAddBody, request: Request):
         if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
         _check_event_not_deleted(ev_check)  # v2.5.29
+        _check_event_not_closed(ev_check)   # v2.7.0
         if maint_role == "operator":
             if not _can_operator_manage_event(ev_check, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres événements")
@@ -1137,6 +1185,7 @@ def remove_operator(event_id: int, operator_id: int, request: Request):
         if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
         _check_event_not_deleted(ev_check)  # v2.5.29
+        _check_event_not_closed(ev_check)   # v2.7.0
         if maint_role == "operator":
             if not _can_operator_manage_event(ev_check, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres événements")
