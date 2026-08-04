@@ -1698,15 +1698,30 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
               <option value="remplacements">Interventions</option>
             </select>
             <input type="text" id="maint-intervalle" placeholder="Intervalle (ex. Hebdo, 30 jours, 6 mois)" maxlength="80">
-            <select id="maint-usure-piece" onchange="_maintOnUsurePieceChange()" title="Rattacher ce code a une piece d'usure">
-              <option value="">Piece d'usure : aucune</option>
-            </select>
-            <select id="maint-usure-position" onchange="_maintOnUsurePositionChange()" title="Position sur la piece">
-              <option value="">Position : —</option>
-            </select>
-            <input type="text" id="maint-metrage-ref" placeholder="Réf. métrage (ex. 5000 m, 10 km)" maxlength="80">
           </div>
-          <div id="maint-usure-hint" style="display:none;font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px"></div>
+          <div style="margin-top:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg)">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text)">
+              <input type="checkbox" id="maint-usure-on" onchange="_maintOnUsureToggle()">
+              C'est une pièce d'usure
+            </label>
+            <div id="maint-usure-fields" style="display:none;margin-top:12px">
+              <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(190px,1fr))">
+                <select id="maint-usure-piece" onchange="_maintOnUsurePieceChange()" title="Pièce d'usure à laquelle ce code est rattaché">
+                  <option value="">— Choisir une pièce —</option>
+                </select>
+                <input type="text" id="maint-metrage-ref" placeholder="Réf. métrage (ex. 5000 m, 10 km)" maxlength="80">
+              </div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:10px;cursor:pointer;color:var(--text)">
+                <input type="checkbox" id="maint-usure-haspos" onchange="_maintOnUsureHasPosChange()">
+                Position particulière sur la pièce
+              </label>
+              <div id="maint-usure-pos-wrap" style="display:none;margin-top:8px">
+                <input type="text" id="maint-usure-position" list="maint-usure-position-list" placeholder="Nom de la position (ex. bande, rive)" maxlength="40" oninput="_maintOnUsurePositionInput()" style="max-width:320px">
+                <datalist id="maint-usure-position-list"></datalist>
+              </div>
+              <div id="maint-usure-hint" style="display:none;font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5"></div>
+            </div>
+          </div>
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
             <button type="button" class="btn" onclick="saveMaintForm()">Enregistrer</button>
             <button type="button" class="btn btn-sec" onclick="closeMaintForm()">Annuler</button>
@@ -1764,16 +1779,15 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <h2 style="margin:0">Pièces d'usure</h2>
             <button type="button" class="btn" onclick="openUsurePieceForm()">+ Ajouter une pièce</button>
           </div>
-          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Chaque pièce donne une carte sur l'accueil Maintenance, avec ses deux anneaux Temps et Métrage. Les positions (Bande, Rive…) deviennent les onglets de la carte : une position = un code maintenance distinct, rattaché depuis l'onglet Codes. Une pièce sans position n'a pas d'onglet et ne porte qu'un seul code.</p>
+          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Chaque pièce donne une carte sur l'accueil Maintenance, avec ses deux anneaux Temps et Métrage. La colonne Positions est un reflet : elle liste ce que les codes rattachés déclarent, chaque position devenant un onglet de la carte. Une pièce sans position ne porte qu'un seul code et n'a pas d'onglet.</p>
           <div id="usure-form-wrap" class="hidden op-form-panel">
             <h3 id="usure-form-title">Nouvelle pièce</h3>
             <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
               <input type="text" id="usure-label" placeholder="Libellé (ex. Couteaux)" maxlength="80">
-              <input type="text" id="usure-positions" placeholder="Positions, séparées par des virgules (ex. bande, rive)" maxlength="200">
               <input type="number" id="usure-ordre" placeholder="Ordre d'affichage" min="0" step="1">
             </div>
             <div id="usure-form-hint" style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
-              Laisse les positions vides pour une pièce unique (comme Cutters). Sinon il en faut au moins deux — avec une seule, la notion d'onglet n'apporte rien. Lettres non accentuées, chiffres, espace, tiret et underscore uniquement.
+              Les positions (Bande, Rive…) ne se déclarent pas ici : elles se saisissent sur chaque code, dans l'onglet Codes. Cette pièce les reflétera automatiquement.
             </div>
             <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
               <button type="button" class="btn" onclick="saveUsurePieceForm()">Enregistrer</button>
@@ -5954,13 +5968,20 @@ async function saveMaintForm() {
   if (!code) { toast('Code obligatoire', true); return; }
   if (!label) { toast('Libellé obligatoire', true); return; }
   if (niveau < 1 || niveau > 3) { toast('Niveau invalide (1-3)', true); return; }
-  // v229 : rattachement pièce d'usure. Chaîne vide => null (le backend
-  // normalise), et metrage_ref est ignoré côté serveur si non rattaché —
-  // inutile de le vider ici, le champ est déjà masqué par _maintRefreshUsureUI.
-  const usure_piece_id = (document.getElementById('maint-usure-piece')?.value || '').trim();
-  const usure_position = (document.getElementById('maint-usure-position')?.value || '').trim();
+  // v230 : l'état des 2 cases à cocher est traduit en payload par le module
+  // partagé — une seule source de vérité pour les 2 pages hôtes.
+  const _usure = (typeof _maintUsurePayload === 'function')
+    ? _maintUsurePayload()
+    : { usure_piece_id: null, usure_position: '' };
+  if (document.getElementById('maint-usure-on')?.checked && !_usure.usure_piece_id) {
+    toast('Choisis une pièce d\'usure, ou décoche la case.', true); return;
+  }
+  if (_usure.usure_piece_id && document.getElementById('maint-usure-haspos')?.checked
+      && !_usure.usure_position) {
+    toast('Renseigne le nom de la position, ou décoche « Position particulière ».', true); return;
+  }
   const payload = { code, label, niveau, categorie, periodique, intervalle, metrage_ref,
-                    usure_piece_id: usure_piece_id || null, usure_position };
+                    usure_piece_id: _usure.usure_piece_id, usure_position: _usure.usure_position };
   try {
     if (_maintEditCode) {
       await api('/api/maintenance/codes/' + encodeURIComponent(_maintEditCode), {
@@ -6799,7 +6820,7 @@ async function unlinkBridge(mp_id) {
 <!-- v2.4.18 : mysifa_maint_form.js — CRUD codes maintenance + interventions libres (module partagé settings ↔ maintenance). -->
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
-<script src="/static/mysifa_maint_form.js?v=2.7.1-usure"></script>
+<script src="/static/mysifa_maint_form.js?v=2.7.2-usure"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
 <script src="/static/mysifa_impersonate.js"></script>
 <!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe

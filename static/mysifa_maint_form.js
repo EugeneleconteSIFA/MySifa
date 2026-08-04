@@ -261,68 +261,152 @@
     return (window._maintUsurePieces || []).find(p => String(p.id) === String(id)) || null;
   }
 
-  // Reconstruit le select Position + la visibilité de Réf. métrage + le bandeau
-  // d'aide, à partir de la pièce actuellement choisie. `keepPos` sert à
-  // restaurer la position d'un code en cours d'édition.
-  function _maintRefreshUsureUI(keepPos) {
-    const pieceSel = document.getElementById('maint-usure-piece');
-    const posSel   = document.getElementById('maint-usure-position');
-    const mInp     = document.getElementById('maint-metrage-ref');
-    const hint     = document.getElementById('maint-usure-hint');
-    if (!pieceSel || !posSel) return;
-    const piece = _maintUsurePieceById(pieceSel.value);
-    const positions = piece && Array.isArray(piece.positions) ? piece.positions : [];
+  // v230 — Divulgation progressive. Un code ordinaire ne voit qu'une case à
+  // cocher. Cochée, elle révèle la pièce et la Réf. métrage ; une seconde case
+  // révèle la position. La position est saisie LIBREMENT (elle n'est plus
+  // choisie dans une liste déclarée sur la pièce) : le champ propose en
+  // suggestions les positions déjà en usage sur la pièce, pour éviter que
+  // « bande » et « bandes » créent deux onglets pour la même chose.
+  function _maintFillPieceOptions(sel) {
+    const pieces = window._maintUsurePieces || [];
+    sel.innerHTML = '<option value="">— Choisir une pièce —</option>'
+      + pieces.map(p => '<option value="' + esc(String(p.id)) + '">' + esc(p.label) + '</option>').join('')
+      + '<option value="__new__">+ Nouvelle pièce…</option>';
+  }
 
-    const want = (keepPos !== undefined && keepPos !== null) ? String(keepPos) : posSel.value;
-    posSel.innerHTML = positions.length
-      ? positions.map(p => '<option value="' + esc(p) + '">' + esc(p.charAt(0).toUpperCase() + p.slice(1)) + '</option>').join('')
-      : '<option value="">Position : —</option>';
-    posSel.disabled = !piece || positions.length === 0;
-    if (positions.length && positions.indexOf(want) !== -1) posSel.value = want;
-    else if (positions.length) posSel.value = positions[0];
-    else posSel.value = '';
+  function _maintSelectedUsurePiece() {
+    const sel = document.getElementById('maint-usure-piece');
+    return sel ? _maintUsurePieceById(sel.value) : null;
+  }
 
-    // Réf. métrage : exclusive aux pièces d'usure depuis v229. Le backend la
-    // vide si le code n'est pas rattaché — on masque plutôt que de laisser
-    // saisir une valeur qui serait silencieusement jetée.
-    if (mInp) {
-      mInp.style.display = piece ? '' : 'none';
-      if (!piece) mInp.value = '';
+  function _maintRefreshUsureUI() {
+    const on      = document.getElementById('maint-usure-on');
+    const fields  = document.getElementById('maint-usure-fields');
+    const hasPos  = document.getElementById('maint-usure-haspos');
+    const posWrap = document.getElementById('maint-usure-pos-wrap');
+    const posInp  = document.getElementById('maint-usure-position');
+    const dl      = document.getElementById('maint-usure-position-list');
+    const mInp    = document.getElementById('maint-metrage-ref');
+    const hint    = document.getElementById('maint-usure-hint');
+    if (!on || !fields) return;
+
+    fields.style.display = on.checked ? '' : 'none';
+    if (!on.checked && mInp) mInp.value = '';
+    if (posWrap) posWrap.style.display = (on.checked && hasPos && hasPos.checked) ? '' : 'none';
+    if (!(hasPos && hasPos.checked) && posInp) posInp.value = '';
+
+    const piece = _maintSelectedUsurePiece();
+    const positions = (piece && Array.isArray(piece.positions)) ? piece.positions : [];
+    if (dl) {
+      dl.innerHTML = positions
+        .map(x => '<option value="' + esc(x) + '"></option>').join('');
     }
 
     if (!hint) return;
-    if (!piece) { hint.style.display = 'none'; hint.innerHTML = ''; return; }
     const msgs = [];
-    if (mInp && !(mInp.value || '').trim()) {
-      msgs.push("Sans référence métrage, l'anneau Métrage de la carte restera vide — la pièce fonctionnera sur le temps seul.");
-    }
-    // L'accueil Maintenance n'affiche les cartes pièces d'usure que sous
-    // l'onglet Remplacements. Un code rattaché mais classé ailleurs serait
-    // invisible sans le moindre message : on prévient au moment du choix.
-    const catSel = document.getElementById('maint-categorie');
-    if (catSel && catSel.value !== 'remplacements') {
-      msgs.push("Ce code n'est pas en catégorie Interventions : sa carte ne sera pas visible sur l'accueil Maintenance, qui n'affiche les pièces d'usure que sous cet onglet.");
+    if (on.checked) {
+      if (!piece) {
+        msgs.push('Choisis une pièce : sans rattachement, ce code reste une opération ordinaire.');
+      } else {
+        // Cohérence du mode : le serveur refuse de mélanger, autant le dire ici.
+        const posOn = !!(hasPos && hasPos.checked);
+        if (positions.length && !posOn) {
+          msgs.push('« ' + piece.label + ' » utilise déjà des positions (' + positions.join(', ') + '). Un code sans position sera refusé.');
+        }
+        if (!positions.length && posOn && (piece.codes_count || 0) > 0) {
+          msgs.push('« ' + piece.label + ' » a déjà un code sans position. Ajouter une position ici sera refusé tant que l\'autre code n\'en a pas.');
+        }
+        if (mInp && !(mInp.value || '').trim()) {
+          msgs.push('Sans référence métrage, l\'anneau Métrage de la carte restera vide — la pièce fonctionnera sur le temps seul.');
+        }
+        const catSel = document.getElementById('maint-categorie');
+        if (catSel && catSel.value !== 'remplacements') {
+          msgs.push('Ce code n\'est pas en catégorie Interventions : sa carte ne sera pas visible sur l\'accueil Maintenance, qui n\'affiche les pièces d\'usure que sous cet onglet.');
+        }
+      }
     }
     if (!msgs.length) { hint.style.display = 'none'; hint.innerHTML = ''; return; }
     hint.style.display = '';
     hint.innerHTML = msgs.map(m => '<div>· ' + esc(m) + '</div>').join('');
   }
 
-  function _maintOnUsurePieceChange() { _maintRefreshUsureUI(null); }
-  function _maintOnUsurePositionChange() { _maintRefreshUsureUI(); }
+  function _maintOnUsureToggle() {
+    const on = document.getElementById('maint-usure-on');
+    const sel = document.getElementById('maint-usure-piece');
+    if (on && !on.checked) {
+      // Décocher détache réellement : sinon un code garderait un rattachement
+      // invisible, que le formulaire renverrait tel quel à l'enregistrement.
+      if (sel) sel.value = '';
+      const hp = document.getElementById('maint-usure-haspos');
+      if (hp) hp.checked = false;
+    } else if (on && on.checked && sel && !sel.options.length) {
+      _maintFillPieceOptions(sel);
+    }
+    _maintRefreshUsureUI();
+  }
 
-  // Remplit les 2 selects à l'ouverture du formulaire.
+  function _maintOnUsureHasPosChange() { _maintRefreshUsureUI(); }
+  function _maintOnUsurePositionInput() { _maintRefreshUsureUI(); }
+
+  async function _maintOnUsurePieceChange() {
+    const sel = document.getElementById('maint-usure-piece');
+    if (sel && sel.value === '__new__') {
+      // On ne laisse jamais « __new__ » sélectionné : en cas d'annulation le
+      // select doit revenir à un état valide, pas à une valeur sentinelle qui
+      // partirait dans le payload.
+      sel.value = '';
+      const label = prompt('Nom de la nouvelle pièce d\'usure (ex. Galets de pression) :', '');
+      if (label && label.trim()) {
+        try {
+          const r = await api('/api/maintenance/usure-pieces', {
+            method: 'POST', body: JSON.stringify({ label: label.trim() }),
+          });
+          await loadUsurePieces();
+          _maintFillPieceOptions(sel);
+          if (r && r.id) sel.value = String(r.id);
+          toast('Pièce créée');
+          if (typeof renderUsurePiecesList === 'function'
+              && document.getElementById('usure-list')) {
+            await loadUsurePiecesAdmin();
+          }
+        } catch (e) {
+          toast(e && e.message ? e.message : 'Erreur', true);
+        }
+      }
+    }
+    _maintRefreshUsureUI();
+  }
+
+  // Remplit les contrôles à l'ouverture du formulaire.
   function _maintFillUsureSelects(pieceId, position) {
-    const pieceSel = document.getElementById('maint-usure-piece');
-    if (!pieceSel) return;
-    const pieces = window._maintUsurePieces || [];
-    pieceSel.innerHTML = "<option value=\"\">Pièce d'usure : aucune</option>"
-      + pieces.map(p => '<option value="' + esc(String(p.id)) + '">' + esc(p.label) + '</option>').join('');
-    pieceSel.value = (pieceId === null || pieceId === undefined) ? '' : String(pieceId);
-    // Pièce désactivée ou supprimée entre-temps : le select retombe sur
-    // "aucune" plutôt que d'afficher une valeur fantôme.
-    if (pieceSel.value && !_maintUsurePieceById(pieceSel.value)) pieceSel.value = '';
-    _maintRefreshUsureUI(position || '');
+    const on  = document.getElementById('maint-usure-on');
+    const sel = document.getElementById('maint-usure-piece');
+    const hp  = document.getElementById('maint-usure-haspos');
+    const pi  = document.getElementById('maint-usure-position');
+    if (!on || !sel) return;
+    _maintFillPieceOptions(sel);
+    sel.value = (pieceId === null || pieceId === undefined) ? '' : String(pieceId);
+    // Pièce désactivée ou supprimée entre-temps : on retombe sur « aucune »
+    // plutôt que d'afficher une valeur fantôme.
+    if (sel.value && !_maintUsurePieceById(sel.value)) sel.value = '';
+    on.checked = !!sel.value;
+    const pos = (position || '').trim();
+    if (hp) hp.checked = !!pos;
+    if (pi) pi.value = pos;
+    _maintRefreshUsureUI();
+  }
+
+  // Lu par saveMaintForm des 2 pages hôtes : une seule source de vérité pour
+  // traduire l'état des cases en payload.
+  function _maintUsurePayload() {
+    const on = document.getElementById('maint-usure-on');
+    if (!on || !on.checked) return { usure_piece_id: null, usure_position: '' };
+    const sel = document.getElementById('maint-usure-piece');
+    const hp  = document.getElementById('maint-usure-haspos');
+    const pi  = document.getElementById('maint-usure-position');
+    const pid = (sel && sel.value && sel.value !== '__new__') ? sel.value : '';
+    const pos = (hp && hp.checked && pi) ? (pi.value || '').trim() : '';
+    return { usure_piece_id: pid || null, usure_position: pos };
   }
 
   // ── Administration du référentiel des pièces d'usure (v229) ────────────
@@ -360,22 +444,19 @@
     let body = '';
     items.forEach(p => {
       const positions = Array.isArray(p.positions) ? p.positions : [];
+      // v230 : les positions sont un REFLET des codes rattachés, plus une
+      // liste déclarée — d'où la lecture seule ici.
       const posHtml = positions.length
         ? positions.map(x => '<span class="op-pill" style="margin-right:4px">' + esc(x.charAt(0).toUpperCase() + x.slice(1)) + '</span>').join('')
-        : '<span style="color:var(--muted);font-style:italic">aucune (pièce unique)</span>';
-      // Le compteur dit combien de codes pointent sur la pièce. Une pièce à 2
-      // positions et 1 seul code = une position orpheline, visible sur la carte
-      // comme « aucun code rattaché ».
-      const attendu = positions.length || 1;
+        : '<span style="color:var(--muted);font-style:italic">sans position</span>';
       const n = p.codes_count || 0;
-      const cntColor = (n === 0) ? 'var(--danger,#f87171)' : (n < attendu ? 'var(--warning,#fbbf24)' : 'var(--text)');
-      const cntTitle = (n === 0) ? 'Aucun code rattaché : la carte restera vide'
-                     : (n < attendu ? 'Certaines positions n\'ont pas de code rattaché' : '');
+      const cntColor = (n === 0) ? 'var(--danger,#f87171)' : 'var(--text)';
+      const cntTitle = (n === 0) ? 'Aucun code rattaché : la carte restera vide' : '';
       body += '<tr' + (p.actif ? '' : ' style="opacity:.5"') + '>'
         + '<td class="op-lbl-cell">' + esc(p.label) + (p.actif ? '' : ' <span style="font-size:10px;color:var(--muted)">(désactivée)</span>') + '</td>'
         + '<td><code style="font-size:11px;color:var(--muted)">' + esc(p.cle) + '</code></td>'
         + '<td>' + posHtml + '</td>'
-        + '<td style="color:' + cntColor + '" title="' + esc(cntTitle) + '">' + n + ' / ' + attendu + '</td>'
+        + '<td style="color:' + cntColor + '" title="' + esc(cntTitle) + '">' + n + '</td>'
         + '<td>' + (p.ordre || 0) + '</td>'
         + '<td><div class="op-act">'
         +   '<button type="button" class="btn-sm btn-ghost" data-usure-edit="' + esc(String(p.id)) + '">Modifier</button>'
@@ -384,7 +465,7 @@
         + '</div></td></tr>';
     });
     el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
-      + '<th>Pièce</th><th>Clé</th><th>Positions</th><th title="Codes rattachés / positions à couvrir">Codes</th><th>Ordre</th><th>Actions</th>'
+      + '<th>Pièce</th><th>Clé</th><th>Positions</th><th title="Nombre de codes maintenance rattachés à cette pièce">Codes</th><th>Ordre</th><th>Actions</th>'
       + '</tr></thead><tbody>' + body + '</tbody></table></div>';
     el.querySelectorAll('[data-usure-edit]').forEach(b => b.addEventListener('click', () => openUsurePieceForm(b.getAttribute('data-usure-edit'))));
     el.querySelectorAll('[data-usure-toggle]').forEach(b => b.addEventListener('click', () => toggleUsurePiece(b.getAttribute('data-usure-toggle'))));
@@ -402,19 +483,16 @@
     wrap.classList.remove('hidden');
     const title = document.getElementById('usure-form-title');
     const lab = document.getElementById('usure-label');
-    const pos = document.getElementById('usure-positions');
     const ord = document.getElementById('usure-ordre');
     if (id) {
       const p = _usurePieceAdminById(id);
       if (!p) return;
       if (title) title.textContent = 'Modifier « ' + p.label + ' »';
       if (lab) lab.value = p.label || '';
-      if (pos) pos.value = (Array.isArray(p.positions) ? p.positions : []).join(', ');
       if (ord) ord.value = String(p.ordre || 0);
     } else {
       if (title) title.textContent = 'Nouvelle pièce';
       if (lab) lab.value = '';
-      if (pos) pos.value = '';
       if (ord) ord.value = '';
     }
     if (lab) lab.focus();
@@ -428,11 +506,11 @@
 
   async function saveUsurePieceForm() {
     const label = (document.getElementById('usure-label')?.value || '').trim();
-    const posRaw = (document.getElementById('usure-positions')?.value || '').trim();
     const ordRaw = (document.getElementById('usure-ordre')?.value || '').trim();
     if (!label) { toast('Libellé obligatoire', true); return; }
-    const positions = posRaw ? posRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
-    const payload = { label: label, positions: positions };
+    // v230 : les positions ne se déclarent plus ici — elles se saisissent sur
+    // chaque code et la pièce ne fait que les refléter.
+    const payload = { label: label };
     if (ordRaw !== '') payload.ordre = parseInt(ordRaw, 10) || 0;
     try {
       if (_usureEditId) {
@@ -621,7 +699,14 @@
         const catCls = cat;
         // v2.2.17 — Périodicité retirée : tous les codes sont périodiques.
         const intervalleDisplay = o.intervalle ? esc(o.intervalle) : '<span style="color:var(--muted);font-style:italic">À compléter</span>';
-        const metrageDisplay = o.metrage_ref ? esc(o.metrage_ref) : '<span style="color:var(--muted);font-style:italic">À compléter</span>';
+        // v230 : la réf. métrage n'existe que pour les pièces d'usure. Pour un
+        // code ordinaire, un tiret — « À compléter » laissait croire qu'il
+        // manquait une information alors que le champ ne le concerne pas.
+        const _estUsure = (o.usure_piece_id !== null && o.usure_piece_id !== undefined);
+        const metrageDisplay = !_estUsure
+          ? '<span style="color:var(--muted)">—</span>'
+          : (o.metrage_ref ? esc(o.metrage_ref)
+                           : '<span style="color:var(--muted);font-style:italic">À compléter</span>');
         body += '<tr>'
           + '<td class="op-code-cell">' + c + '</td>'
           + '<td class="op-lbl-cell">' + esc(o.label || '') + '</td>'
@@ -1285,7 +1370,10 @@
   try { window.deleteUsurePiece = deleteUsurePiece; } catch(e) {}
   try { window._maintRefreshUsureUI = _maintRefreshUsureUI; } catch(e) {}
   try { window._maintOnUsurePieceChange = _maintOnUsurePieceChange; } catch(e) {}
-  try { window._maintOnUsurePositionChange = _maintOnUsurePositionChange; } catch(e) {}
+  try { window._maintOnUsureToggle = _maintOnUsureToggle; } catch(e) {}
+  try { window._maintOnUsureHasPosChange = _maintOnUsureHasPosChange; } catch(e) {}
+  try { window._maintOnUsurePositionInput = _maintOnUsurePositionInput; } catch(e) {}
+  try { window._maintUsurePayload = _maintUsurePayload; } catch(e) {}
   try { window._maintUsurePieceById = _maintUsurePieceById; } catch(e) {}
   try { window.openMaintDocsModal = openMaintDocsModal; } catch(e) {}
   try { window.loadLibres = loadLibres; } catch(e) {}
