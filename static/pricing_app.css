@@ -228,6 +228,28 @@ table.pr-table tr{cursor:pointer}
 /* Largeur de lecture : les pages ne s'étalent plus sur tout l'écran. */
 .pr-narrow{max-width:1180px;margin:0 auto}
 
+/* Bandeau d'actions collé en haut de la fiche matière (repris de la fiche
+   produit MyAO) : sur un formulaire long, Enregistrer reste sous la main. */
+.pr-savebar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+  padding:10px 14px;margin-bottom:16px;
+  background:linear-gradient(135deg,var(--card) 0%,var(--accent-bg) 100%);
+  border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;
+  box-shadow:0 2px 8px rgba(15,23,42,.06)}
+/* .content a 20px de padding haut : sans ce cache, la page défilerait en clair
+   dans la bande au-dessus du bandeau une fois celui-ci collé. */
+.pr-savebar::before{content:"";position:absolute;left:-1px;right:-1px;bottom:100%;
+  height:24px;background:var(--bg)}
+.pr-savebar .savebar-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto}
+.pr-savebar .btn-soft{background:var(--card)}
+.pr-savebar .btn-soft:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+.savebar-state{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--warn)}
+.savebar-state .dot{width:7px;height:7px;border-radius:50%;background:var(--warn);flex-shrink:0}
+.savebar-state[hidden]{display:none}
+@media(max-width:640px){
+  .pr-savebar{gap:8px}
+  .pr-savebar .savebar-state{order:3;width:100%}
+}
+
 .page-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 
 /* Bouton "posé sur la page" — fond explicite, jamais transparent au repos. */

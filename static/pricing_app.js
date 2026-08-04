@@ -121,6 +121,8 @@
         '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
       unlink:
         '<path d="M18.84 12.25l1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M5.17 11.75l-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/><line x1="8" y1="2" x2="8" y2="5"/><line x1="2" y1="8" x2="5" y2="8"/><line x1="16" y1="19" x2="16" y2="22"/><line x1="19" y1="16" x2="22" y2="16"/>',
+      "arrow-left":
+        '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
       star:
         '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
     };
@@ -1221,6 +1223,7 @@
   }
 
   async function loadMaterialForm(id) {
+    S.matDirty = false;
     if (!id) {
       S.formMaterial = defaultMaterialForm();
       S.matPreview = null;
@@ -1509,6 +1512,23 @@
     if (el) el.textContent = transportEqText(S.matPreview);
   }
 
+  /**
+   * Bandeau d'actions collé en haut de la fiche matière (même principe que la
+   * fiche produit MyAO) : sur un formulaire long, le bouton Enregistrer ne doit
+   * pas obliger à redescendre en bas de page.
+   */
+  function matSaveBarHtml(isNew) {
+    const dirty = S.matDirty ? "" : " hidden";
+    return `<div class="pr-savebar">
+        <button type="button" class="btn btn-soft btn-sm" id="btn-back-mat">${icon("arrow-left", 14)} Retour liste</button>
+        <div class="savebar-state" id="mat-dirty"${dirty}><span class="dot"></span>Modifications non enregistrées</div>
+        <div class="savebar-actions">
+          ${!isNew && S.canWrite ? '<button type="button" class="btn btn-danger btn-sm" id="btn-del-mat">Supprimer</button>' : ""}
+          ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-save-mat">Enregistrer</button>' : ""}
+        </div>
+      </div>`;
+  }
+
   function renderMaterialForm(isNew) {
     const f = S.formMaterial;
     const catOpts = S.categories
@@ -1544,9 +1564,9 @@
       <div class="pr-narrow">
         ${pageHead(
           isNew ? "Nouvelle matière" : "Éditer matière",
-          isNew ? "" : escHtml(f.name),
-          '<button type="button" class="btn btn-accent" id="btn-back-mat">Retour liste</button>'
+          isNew ? "" : escHtml(f.name)
         )}
+        ${matSaveBarHtml(isNew)}
         <div class="mat-summary" id="mat-summary">${matSummaryHtml(S.matPreview)}</div>
         <div class="form-layout">
         <div class="form-card">
@@ -1625,10 +1645,6 @@
             </div>
           </div>
 
-          ${S.canWrite ? `<div class="form-actions">
-            <button type="button" class="btn btn-accent" id="btn-save-mat">Enregistrer</button>
-            ${!isNew ? '<button type="button" class="btn btn-danger" id="btn-del-mat">Supprimer</button>' : ""}
-          </div>` : ""}
         </div>
 
         ${inlineSettingsHtml()}
@@ -1691,6 +1707,21 @@
         refreshMaterialPreview();
       };
     });
+
+    // Le bandeau signale qu'une saisie attend d'être enregistrée. Le drapeau
+    // vit dans S : le formulaire se re-rend tout seul quand la devise ou la base
+    // de prix change, un état local serait perdu à chaque fois.
+    const carte = document.querySelector(".form-layout > .form-card");
+    if (carte) {
+      const marquer = () => {
+        if (S.matDirty) return;
+        S.matDirty = true;
+        const t = document.getElementById("mat-dirty");
+        if (t) t.hidden = false;
+      };
+      carte.addEventListener("input", marquer);
+      carte.addEventListener("change", marquer);
+    }
 
     if (S.canWrite) {
       document.getElementById("btn-save-mat").onclick = () => saveMaterialForm(isNew);
@@ -1778,6 +1809,7 @@
       } else {
         await api("/api/pricing/materials/" + S.route.id, { method: "PATCH", body });
         showToast("Matière enregistrée.", "success");
+        S.matDirty = false;
         await loadMaterialForm(S.route.id);
         renderMaterialForm(false);
       }

@@ -4779,9 +4779,19 @@ document.addEventListener('keydown', function(ev){
     .ref-cov-col.ok .dot{background:var(--success)}
     .ref-cov-col.ko .ref-cov-col-hd{color:var(--danger)}
     .ref-cov-col.ko .dot{background:var(--danger)}
-    .ref-cov-list{display:grid;grid-template-columns:1fr 1fr;gap:1px 8px}
-    .ref-cov-item{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:3px 6px;border-radius:6px;cursor:pointer;transition:background .12s;min-width:0}
-    .ref-cov-item:hover{background:var(--card)}
+    /* Chaque fournisseur est une cellule fermee (fond + bordure) : sur deux
+       colonnes, un simple espacement laissait douter de quel nom depend
+       quelle pastille. La cellule tranche la question sans avoir a viser. */
+    .ref-cov-list{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+    .ref-cov-item{display:flex;align-items:center;justify-content:space-between;gap:8px;
+      padding:5px 8px;border:1px solid var(--border);border-left:3px solid var(--border);
+      border-radius:7px;background:var(--card);cursor:pointer;min-width:0;
+      transition:border-color .12s,transform .12s}
+    .ref-cov-col.ok .ref-cov-item{border-left-color:var(--success)}
+    .ref-cov-col.ko .ref-cov-item{border-left-color:var(--danger)}
+    .ref-cov-item:hover{border-color:var(--accent);transform:translateX(1px)}
+    .ref-cov-col.ok .ref-cov-item:hover{border-left-color:var(--success)}
+    .ref-cov-col.ko .ref-cov-item:hover{border-left-color:var(--danger)}
     .ref-cov-item .nm{font-size:12px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
     .ref-cov-empty{font-size:12px;color:var(--muted);padding:6px 4px;font-style:italic}
     /* Sous 1100px les 4 colonnes deviennent illisibles : on repasse a 1 par

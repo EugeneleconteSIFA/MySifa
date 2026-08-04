@@ -549,6 +549,119 @@ def _mirror_principal(
     return {"ok": True, "cible": cible, "prix_avant": avant, "prix_apres": prix, "changed": changed}
 
 
+def _prix_mystock_de_reference(
+    conn: sqlite3.Connection, mat: sqlite3.Row, laize_id: Optional[int]
+) -> float:
+    """
+    Le prix qui fait foi côté MyStock pour une déclinaison donnée.
+
+    Miroir exact de la cible choisie par `_mirror_principal` : on relit le champ
+    dans lequel ce dernier écrirait, pour que les deux sens parlent du même
+    endroit.
+    """
+    laizee = is_laizee(mat["categorie"])
+    par_laize = bool(int(mat["prix_par_laize"] or 0)) and laizee
+    if laizee and par_laize and laize_id is not None:
+        row = conn.execute(
+            "SELECT prix_eur_m2 FROM mp_matiere_laizes WHERE matiere_id=? AND laize_id=?",
+            (int(mat["id"]), int(laize_id)),
+        ).fetchone()
+        return _f(row["prix_eur_m2"]) if row else 0.0
+    if laizee:
+        return _f(mat["prix_eur_m2"])
+    return _f(mat["prix_unitaire"])
+
+
+def resync_depuis_mystock(
+    conn: sqlite3.Connection,
+    matiere_id: int,
+    *,
+    user_id: Optional[int] = None,
+    user_name: Optional[str] = None,
+    origine: str = "MyStock",
+) -> dict:
+    """
+    MyStock -> Coûts matières : le sens retour de `_mirror_principal`.
+
+    Coûts matières lit le prix d'une matière appairée dans la ligne principale de
+    `mp_matiere_prix`. Un prix corrigé côté MyStock — saisie sur la valorisation,
+    prix par laize de la fiche matière, PMP recalculé à l'entrée en stock — doit
+    donc redescendre dans cette ligne, sans quoi Coûts matières continue
+    d'afficher l'ancienne valeur.
+
+    Le prix n'est pas passé en paramètre : la fonction relit elle-même le champ
+    qui fait foi pour chaque déclinaison. L'appelant n'a qu'à signaler que la
+    matière a bougé, il ne peut pas se tromper de champ.
+
+    Un prix à 0 ne remplace rien : côté MyStock il veut dire « pas encore
+    renseigné », pas « gratuit ». Écraser un tarif connu avec un zéro ferait
+    disparaître le prix de revient d'un produit.
+    """
+    mat = fetch_matiere(conn, matiere_id)
+    if not mat:
+        return {"ok": False, "reason": "matière introuvable"}
+
+    declinaisons = conn.execute(
+        "SELECT id, laize_id FROM mp_matiere_declinaison WHERE matiere_id=?",
+        (matiere_id,),
+    ).fetchall()
+    if not declinaisons:
+        return {"ok": True, "declinaisons": 0, "mises_a_jour": 0}
+
+    now = _now()
+    note = f"Prix repris depuis {origine}"
+    mises_a_jour = 0
+
+    for d in declinaisons:
+        prix = _prix_mystock_de_reference(conn, mat, d["laize_id"])
+        if prix <= 0 or prix > 1_000_000:
+            continue
+        decl_id = int(d["id"])
+
+        ligne = conn.execute(
+            "SELECT id, prix FROM mp_matiere_prix WHERE declinaison_id=? AND principal=1 LIMIT 1",
+            (decl_id,),
+        ).fetchone()
+        if ligne is None:
+            # Pas de principal désigné : on promeut la première ligne existante
+            # plutôt que d'en créer une seconde sans fournisseur.
+            ligne = conn.execute(
+                "SELECT id, prix FROM mp_matiere_prix WHERE declinaison_id=? ORDER BY id LIMIT 1",
+                (decl_id,),
+            ).fetchone()
+            if ligne is not None:
+                conn.execute(
+                    "UPDATE mp_matiere_prix SET principal=1 WHERE id=?", (int(ligne["id"]),)
+                )
+
+        if ligne is None:
+            conn.execute(
+                """INSERT INTO mp_matiere_prix
+                   (matiere_id, laize_id, grammage_id, declinaison_id, fournisseur_id,
+                    prix, principal, note, updated_at, updated_by_name)
+                   VALUES (?,?,?,?,NULL,?,1,?,?,?)""",
+                (matiere_id, d["laize_id"], None, decl_id, prix, note, now, user_name),
+            )
+            mises_a_jour += 1
+            continue
+
+        if abs(_f(ligne["prix"]) - prix) <= 1e-9:
+            continue  # déjà à la bonne valeur : ni écriture ni bruit dans l'historique
+        conn.execute(
+            """UPDATE mp_matiere_prix
+                  SET prix=?, note=?, updated_at=?, updated_by_name=?
+                WHERE id=?""",
+            (prix, note, now, user_name, int(ligne["id"])),
+        )
+        mises_a_jour += 1
+
+    return {
+        "ok": True,
+        "declinaisons": len(declinaisons),
+        "mises_a_jour": mises_a_jour,
+    }
+
+
 def set_prix(
     conn: sqlite3.Connection,
     *,
