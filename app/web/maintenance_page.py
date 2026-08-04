@@ -953,6 +953,10 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 .maint-wp-row .val{font-size:13px;color:var(--text);font-weight:600;word-break:break-word;min-width:0}
 .maint-wp-row .val.muted{color:var(--muted);font-weight:400;font-style:italic;font-size:12px}
 .maint-wp-row .sub{font-size:11px;color:var(--muted);font-weight:500}
+.maint-wp-empty{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;padding:18px 20px;border:1px dashed var(--border);border-radius:10px;background:rgba(148,163,184,.05)}
+.maint-wp-empty-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.maint-wp-empty-txt{font-size:13px;color:var(--text2,var(--muted));line-height:1.55}
+.maint-wp-empty-txt strong{color:var(--text);font-weight:600}
 .maint-wp-badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(248,113,113,.15);color:var(--danger,#f87171);text-transform:uppercase;letter-spacing:.3px;margin-left:4px}
 .maint-wp-rings{display:flex;justify-content:center;align-items:center}
 .maint-wp-rings svg{display:block;max-width:100%;height:auto}
@@ -8068,12 +8072,29 @@ function _renderWearPartsGroup(machine, statusFilter){
         //     l'anneau correspondant.
         //   - Droite : 2 anneaux concentriques. Extérieur cyan = temps,
         //     intérieur ambre = métrage. Couleurs assorties aux sections.
+        // v229 : la position est déclarée sur la pièce mais aucun code ne la
+        // porte (code supprimé, ou pièce configurée avant ses codes). On
+        // affichait deux sections vides et « aucun code intervention », sans
+        // dire quoi faire. On remplace le corps par un état vide qui NOMME la
+        // position concernée et donne le chemin de correction.
+        if(!wpCode){
+          const _posLbl = p.no_position
+            ? escHtml(p.label)
+            : escHtml(p.label) + ' · ' + escHtml(pos.charAt(0).toUpperCase() + pos.slice(1));
+          return '<div class="maint-wp-body">' +
+            '<div class="maint-wp-empty">' +
+              '<div class="maint-wp-empty-title">Aucun code rattaché</div>' +
+              '<div class="maint-wp-empty-txt">Aucune opération de maintenance n\'est rattachée à <strong>' +
+                _posLbl + '</strong>. Cette position ne peut donc ni afficher d\'échéance, ni recevoir de saisie.</div>' +
+              '<div class="maint-wp-empty-txt">Rattachez-en une depuis <strong>Paramètres → Maintenance</strong>, ' +
+                'champ « Pièce d\'usure » du code concerné — ou retirez la position de la pièce ' +
+                'si elle n\'a plus lieu d\'être.</div>' +
+            '</div>' +
+          '</div>';
+        }
         const _refVal = (v) => v
           ? '<span class="val">' + escHtml(v) + '</span>'
-          : (wpCode
-              ? '<span class="val muted">à compléter</span>'
-              : '<span class="val muted">aucun code intervention</span>'
-            );
+          : '<span class="val muted">à compléter</span>';
         // Section TEMPS
         let lastSub = '';
         let lastVal;
@@ -10577,7 +10598,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_widget_v2.js?v=8"></script>
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
-<script src="/static/mysifa_maint_form.js?v=2.6.2-usure"></script>
+<script src="/static/mysifa_maint_form.js?v=2.7.1-usure"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js"></script>

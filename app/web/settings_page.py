@@ -1660,6 +1660,10 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         Codes
       </button>
+      <button type="button" class="btn btn-sec sub-tab-btn" data-maintsub="maint-subtab-usure">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
+        Pièces d'usure
+      </button>
       <button type="button" class="btn btn-sec sub-tab-btn" data-maintsub="maint-subtab-libres">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
         Interventions libres
@@ -1746,6 +1750,37 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <input type="search" id="alerts-filter-q" class="op-filter" placeholder="Filtrer par nom d'alerte…" oninput="renderAlertsList()">
           </div>
           <div id="alerts-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+        </div>
+      </div>
+      <!-- v229 : Sous-onglet Pièces d'usure — référentiel des pièces suivies
+           par anneaux (Couteaux, Contre-couteaux…). Une pièce regroupe un ou
+           plusieurs codes sous une seule carte de l'accueil Maintenance ; quand
+           elle déclare des positions, chaque position est portée par un code
+           distinct. Avant ce référentiel, les 4 pièces étaient figées dans le
+           code source et le rattachement était deviné depuis les libellés. -->
+      <div id="maint-subtab-usure" class="maint-subtab" style="display:none">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+            <h2 style="margin:0">Pièces d'usure</h2>
+            <button type="button" class="btn" onclick="openUsurePieceForm()">+ Ajouter une pièce</button>
+          </div>
+          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Chaque pièce donne une carte sur l'accueil Maintenance, avec ses deux anneaux Temps et Métrage. Les positions (Bande, Rive…) deviennent les onglets de la carte : une position = un code maintenance distinct, rattaché depuis l'onglet Codes. Une pièce sans position n'a pas d'onglet et ne porte qu'un seul code.</p>
+          <div id="usure-form-wrap" class="hidden op-form-panel">
+            <h3 id="usure-form-title">Nouvelle pièce</h3>
+            <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
+              <input type="text" id="usure-label" placeholder="Libellé (ex. Couteaux)" maxlength="80">
+              <input type="text" id="usure-positions" placeholder="Positions, séparées par des virgules (ex. bande, rive)" maxlength="200">
+              <input type="number" id="usure-ordre" placeholder="Ordre d'affichage" min="0" step="1">
+            </div>
+            <div id="usure-form-hint" style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
+              Laisse les positions vides pour une pièce unique (comme Cutters). Sinon il en faut au moins deux — avec une seule, la notion d'onglet n'apporte rien. Lettres non accentuées, chiffres, espace, tiret et underscore uniquement.
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+              <button type="button" class="btn" onclick="saveUsurePieceForm()">Enregistrer</button>
+              <button type="button" class="btn btn-sec" onclick="closeUsurePieceForm()">Annuler</button>
+            </div>
+          </div>
+          <div id="usure-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
         </div>
       </div>
       <!-- v182 Lot 2 : Sous-onglet Interventions libres -->
@@ -5974,6 +6009,10 @@ document.addEventListener('click', (ev) => {
   if (target === 'maint-subtab-libres' && typeof loadLibres === 'function') {
     loadLibres();
   }
+  // v229 : le référentiel des pièces d'usure se charge à la première ouverture.
+  if (target === 'maint-subtab-usure' && typeof loadUsurePiecesAdmin === 'function') {
+    loadUsurePiecesAdmin();
+  }
 });
 
 // ── Alertes maintenance (gestion super admin) ──────────────────────
@@ -6756,7 +6795,7 @@ async function unlinkBridge(mp_id) {
 <!-- v2.4.18 : mysifa_maint_form.js — CRUD codes maintenance + interventions libres (module partagé settings ↔ maintenance). -->
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
-<script src="/static/mysifa_maint_form.js?v=2.6.2-usure"></script>
+<script src="/static/mysifa_maint_form.js?v=2.7.1-usure"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
 <script src="/static/mysifa_impersonate.js"></script>
 <!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe
