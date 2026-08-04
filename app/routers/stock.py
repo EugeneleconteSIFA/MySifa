@@ -276,6 +276,16 @@ def _mp_a_conditionnement(categorie: str) -> bool:
     return (categorie or "").strip().lower() in _MP_CATEGORIES_AVEC_CONDITIONNEMENT
 
 
+def _mp_est_mandrin(categorie: str) -> bool:
+    """Un mandrin s'achete en tube, qu'on redecoupe a la laize du module.
+
+    C'est la seule categorie qui porte `longueur_tube_mm` : la longueur du tube
+    achete, indispensable pour convertir un besoin en mandrins en un nombre de
+    tubes, donc de palettes, a commander.
+    """
+    return (categorie or "").strip().lower() == "mandrin"
+
+
 def _mp_parse_conditionnement_adhesif(
     categorie: str, body: dict
 ) -> tuple[Optional[float], Optional[float]]:
@@ -329,6 +339,15 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
             unites_par_palette = v if v > 0 else None
         except (TypeError, ValueError):
             unites_par_palette = None
+    # Longueur du tube acheté (mm) — mandrins uniquement. Sert à convertir un
+    # besoin en mandrins en nombre de tubes, donc de palettes (besoins_matieres.py).
+    longueur_tube_mm = None
+    if "longueur_tube_mm" in keys and r["longueur_tube_mm"] is not None:
+        try:
+            v = float(r["longueur_tube_mm"])
+            longueur_tube_mm = v if v > 0 else None
+        except (TypeError, ValueError):
+            longueur_tube_mm = None
     # Grammage (g/m²) — caractéristique physique de la référence, saisie sur les
     # adhésifs. Sert au calcul du besoin adhésif en kilos (besoins_matieres.py).
     weight_gsm = None
@@ -399,6 +418,8 @@ def _mp_row_dict(r, stock_par_laize: Optional[list[dict]] = None) -> dict:
             if "abbreviation" in keys and r["abbreviation"] else None,
         "avec_conditionnement": _mp_a_conditionnement(cat),
         "unites_par_palette": unites_par_palette,
+        "longueur_tube_mm": longueur_tube_mm,
+        "est_mandrin": _mp_est_mandrin(cat),
         "unite_achat": _mp_unite_achat(cat) if _mp_a_conditionnement(cat) else None,
         "adhesif": adhesif,
         "cartons_par_palette": cond["cartons_par_palette"],
@@ -4236,6 +4257,81 @@ def _apply_produits_import_row(conn, r: dict, now: str) -> str:
 
 
 # ── Matières premières ────────────────────────────────────────────
+# ── Réglages d'atelier MyStock (table clé/valeur `stock_config`) ──────────
+# Aucune valeur métier n'est écrite en dur : le code lit un réglage, il ne le
+# contient pas. Un nouveau réglage = une entrée dans _STOCK_CONFIG_DEFAUTS + un
+# champ dans Paramètres, rien d'autre.
+
+_STOCK_CONFIG_DEFAUTS: dict[str, float] = {
+    # Perte de coupe sur un tube de mandrin (%) : chutes de début et de fin de
+    # tube. Retirée de la longueur du tube avant de compter les mandrins.
+    "mandrin_perte_coupe_pct": 10.0,
+}
+
+
+def stock_config_float(conn, cle: str) -> float:
+    """Réglage numérique de `stock_config`, avec repli sur la valeur par défaut.
+
+    Tolère l'absence de la table : une base qui n'a pas encore joué la migration
+    doit continuer à répondre, avec les valeurs par défaut.
+    """
+    defaut = _STOCK_CONFIG_DEFAUTS.get(cle, 0.0)
+    try:
+        row = conn.execute(
+            "SELECT valeur FROM stock_config WHERE cle=? LIMIT 1", (cle,)
+        ).fetchone()
+    except Exception:
+        return defaut
+    if not row or row["valeur"] in (None, ""):
+        return defaut
+    try:
+        return float(str(row["valeur"]).replace(",", "."))
+    except (TypeError, ValueError):
+        return defaut
+
+
+@router.get("/api/stock/config")
+def get_stock_config(request: Request):
+    """Réglages d'atelier MyStock. Une clé absente en base sort à sa valeur par
+    défaut, jamais à zéro."""
+    require_stock(request)
+    with get_db() as conn:
+        return {cle: stock_config_float(conn, cle) for cle in _STOCK_CONFIG_DEFAUTS}
+
+
+@router.patch("/api/stock/config")
+async def patch_stock_config(request: Request):
+    """Met à jour un ou plusieurs réglages. Toute clé hors liste est refusée."""
+    require_stock_matieres_admin(request)
+    body = await request.json()
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Corps de requête invalide.")
+    a_ecrire: dict[str, float] = {}
+    for cle, brut in body.items():
+        if cle not in _STOCK_CONFIG_DEFAUTS:
+            raise HTTPException(400, f"Réglage inconnu : {cle}.")
+        try:
+            v = float(str(brut).replace(",", "."))
+        except (TypeError, ValueError):
+            raise HTTPException(400, f"Valeur invalide pour {cle}.") from None
+        if cle.endswith("_pct") and not (0 <= v < 100):
+            raise HTTPException(400, "La perte de coupe doit être comprise entre 0 et 99 %.")
+        a_ecrire[cle] = v
+    if not a_ecrire:
+        raise HTTPException(400, "Aucun réglage à mettre à jour.")
+    with get_db() as conn:
+        for cle, v in a_ecrire.items():
+            conn.execute(
+                """INSERT INTO stock_config (cle, valeur, updated_at)
+                   VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
+                   ON CONFLICT(cle) DO UPDATE SET
+                     valeur=excluded.valeur, updated_at=excluded.updated_at""",
+                (cle, str(v)),
+            )
+        conn.commit()
+        return {cle: stock_config_float(conn, cle) for cle in _STOCK_CONFIG_DEFAUTS}
+
+
 @router.get("/api/stock/matieres")
 def list_matieres_premieres(request: Request, all: int = 0):
     user = require_stock(request)
@@ -4249,7 +4345,7 @@ def list_matieres_premieres(request: Request, all: int = 0):
                    mp.seuil_alerte, mp.actif, mp.palettes_par_pile, mp.couleur,
                    mp.metres_lineaires_par_bobine, mp.prix_eur_m2,
                    COALESCE(mp.prix_par_laize, 0) AS prix_par_laize,
-                   mp.unites_par_palette,
+                   mp.unites_par_palette, mp.longueur_tube_mm,
                    mp.cartons_par_palette, mp.kg_par_carton, mp.weight_gsm,
                    mp.sous_section,
                    COALESCE(mp.intervalle_inventaire_jours, 180) AS intervalle_inventaire_jours,
@@ -4416,6 +4512,16 @@ async def create_matiere_premiere(request: Request):
     if cartons_par_palette and kg_par_carton:
         unites_par_palette = cartons_par_palette * kg_par_carton
 
+    # Longueur du tube acheté (mm) — mandrins uniquement, optionnel à la création.
+    longueur_tube_mm = None
+    if _mp_est_mandrin(categorie) and body.get("longueur_tube_mm") not in (None, ""):
+        try:
+            longueur_tube_mm = float(body.get("longueur_tube_mm"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "Longueur tube invalide.") from None
+        if longueur_tube_mm <= 0:
+            raise HTTPException(400, "Longueur tube doit être > 0.")
+
     # Grammage (g/m²) — adhésifs uniquement, optionnel à la création.
     weight_gsm = None
     if _mp_is_adhesif(categorie) and body.get("weight_gsm") not in (None, ""):
@@ -4433,13 +4539,13 @@ async def create_matiere_premiere(request: Request):
                 INSERT INTO matieres_premieres (
                     categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section,
                     unites_par_palette, cartons_par_palette, kg_par_carton, abbreviation,
-                    sous_categorie, sous_categorie_en, weight_gsm
+                    sous_categorie, sous_categorie_en, weight_gsm, longueur_tube_mm
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (categorie, reference, designation, seuil_alerte, palettes_par_pile, couleur, sous_section,
                  unites_par_palette, cartons_par_palette, kg_par_carton, abbreviation,
-                 sous_categorie, sous_categorie_en, weight_gsm),
+                 sous_categorie, sous_categorie_en, weight_gsm, longueur_tube_mm),
             )
             matiere_id = cur.lastrowid
             conn.execute(
@@ -4570,6 +4676,22 @@ async def update_matiere_premiere(matiere_id: int, request: Request):
             if cpp and kgc:
                 sets.append("unites_par_palette=?")
                 params.append(cpp * kgc)
+
+        # Longueur du tube acheté — dépend de la catégorie, donc traitée ici.
+        # Une valeur vide efface la longueur (NULL) : le besoin en tubes redevient
+        # « non chiffré » plutôt que faux.
+        if "longueur_tube_mm" in body:
+            if not _mp_est_mandrin(row["categorie"]):
+                raise HTTPException(400, "Longueur tube réservée aux mandrins.")
+            v = body.get("longueur_tube_mm")
+            try:
+                v_f = float(v) if v not in (None, "") else None
+            except (TypeError, ValueError):
+                raise HTTPException(400, "Longueur tube invalide.") from None
+            if v_f is not None and (v_f <= 0 or v_f > 100000):
+                raise HTTPException(400, "Longueur tube hors bornes (1–100000 mm).")
+            sets.append("longueur_tube_mm=?")
+            params.append(v_f)
 
         # Grammage (g/m²) — comme le conditionnement, il dépend de la catégorie,
         # donc traité ici. Une valeur vide efface le grammage (NULL).

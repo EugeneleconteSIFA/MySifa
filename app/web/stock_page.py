@@ -739,6 +739,18 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-btn-associate.mapped:hover{border-color:var(--accent);color:var(--accent)}
 .bes-total-row td{background:color-mix(in srgb,var(--accent) 5%,transparent);font-weight:700;color:var(--text);border-top:1px solid var(--border)}
 .bes-dossier-ref{font-weight:700;color:var(--text)}
+/* Vue par dossier : une colonne par categorie matiere. Le tableau depasse
+   la largeur d'ecran sur petit portable -> defilement horizontal plutot que
+   colonnes ecrasees. */
+.bes-scroll-x{overflow-x:auto}
+.bes-kind-cell{min-width:112px;vertical-align:top}
+.bes-kind-qte{font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.bes-kind-qte.nc{color:var(--warn,#d97706)}
+.bes-kind-src{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.35;word-break:break-word}
+.bes-kind-none{color:var(--border);font-size:12px}
+.bes-kind-cell.unmapped{background:color-mix(in srgb,var(--warn,#d97706) 9%,transparent);cursor:pointer}
+.bes-kind-cell.unmapped:hover{background:color-mix(in srgb,var(--warn,#d97706) 16%,transparent)}
+.bes-kind-cell .bes-kind-src.tolink{color:var(--warn,#d97706);font-weight:600}
 .bes-dossier-meta{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4}
 .bes-statut{display:inline-flex;align-items:center;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
 .bes-statut-en_cours{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
@@ -12280,6 +12292,54 @@ function _besMetrageCell(d) {
   );
 }
 
+// En-tetes des colonnes matiere de la vue par dossier. Le kind « support »
+// s'affiche « Frontal » : c'est le mot de l'atelier, et la categorie MyStock
+// correspondante. Les autres reprennent BESOINS_KIND_LABELS.
+const BESOINS_KIND_COL_LABELS = {
+  support: 'Frontal', glassine: 'Glassine', adhesif: 'Adhésif',
+  mandrin: 'Mandrin', carton: 'Carton', palette: 'Palette',
+};
+
+// Trace de calcul d'un besoin, affichee en infobulle : formule, variables
+// utilisees avec leur origine, puis ce qui manque quand rien n'est chiffrable.
+function _besTraceTitle(b) {
+  const lignes = [];
+  if (b.formule) lignes.push(b.formule);
+  (b.variables || []).forEach(v => {
+    lignes.push('· ' + v.label + ' : ' + _besFmtVar(v) + ' (' + (v.origine || '?') + ')');
+  });
+  if ((b.manque || []).length) lignes.push('Manque : ' + b.manque.join(' ; '));
+  if (!b.mapped) lignes.push('Valeur non associée à une matière première — cliquer pour l\'associer.');
+  return lignes.join('\n');
+}
+
+// Cellule « une categorie matiere pour un dossier ». Trois etats : pas de besoin
+// de cette categorie sur ce dossier, besoin chiffre, besoin non chiffrable.
+function _besKindCell(b) {
+  if (!b) return el('td', { cls: 'bes-kind-cell' }, el('span', { cls: 'bes-kind-none' }, '—'));
+  const nc = b.quantite == null;
+  const cell = el('td', {
+    cls: 'bes-kind-cell' + (b.mapped ? '' : ' unmapped'),
+    title: _besTraceTitle(b),
+  },
+    el('div', { cls: 'bes-kind-qte' + (nc ? ' nc' : '') },
+      nc ? 'n.c.' : _fmtQte(b.quantite, b.unite)),
+    // Les mandrins se commandent en tubes : sans la conversion, le chiffre
+    // n'est pas actionnable pour passer commande.
+    (b.kind === 'mandrin' && b.besoin_tubes)
+      ? el('div', { cls: 'bes-sub-conv' },
+          Math.ceil(b.besoin_tubes) + ' tubes'
+          + (b.besoin_palettes ? ' · ' + _fmtQte(b.besoin_palettes, 'pal.') : ''))
+      : null,
+    el('div', { cls: 'bes-kind-src' + (b.mapped ? '' : ' tolink') },
+      (b.source_value || '?') + (b.mapped ? '' : ' · à associer')),
+  );
+  if (!b.mapped) {
+    cell.addEventListener('click', () => openBesoinAssocierModal(b.kind, b.source_value));
+  }
+  return cell;
+}
+
 function _buildBesoinsDossierTable(dos) {
   const dossiers = dos.dossiers || [];
   if (!dossiers.length) {
@@ -12295,40 +12355,39 @@ function _buildBesoinsDossierTable(dos) {
     el('th', { cls: 'num' }, 'Étiq.'),
     el('th', { cls: 'num' }, 'Métrage'),
     el('th', {}, 'Livraison'),
-    el('th', {}, 'Besoins'),
+    ...BESOINS_KIND_ORDER.map(k => el('th', {
+      title: BESOINS_KIND_UNITE_NOTE[k] || '',
+    }, BESOINS_KIND_COL_LABELS[k] || k)),
   )));
 
   const tbody = el('tbody', {});
   let totalEtiq = 0;
+  // Totaux par categorie : les unites sont homogenes a l'interieur d'un kind
+  // (ml, kg, u), donc la somme a un sens. Les dossiers non chiffres sont comptes
+  // a part pour ne pas laisser croire que le total couvre tout.
+  const totaux = {};
+  BESOINS_KIND_ORDER.forEach(k => { totaux[k] = { q: 0, unite: '', nc: 0 }; });
+
   dossiers.forEach(d => {
     totalEtiq += (parseFloat(d.qte_etiquettes) || 0);
-    const besoinsEls = (d.besoins || []).map(b => {
-      // Le titre déplie la trace de calcul : formule, variables, ou ce qui manque.
-      const lignesTitre = [];
-      if (b.formule) lignesTitre.push(b.formule);
-      (b.variables || []).forEach(v => {
-        lignesTitre.push('· ' + v.label + ' : ' + _besFmtVar(v) + ' (' + (v.origine || '?') + ')');
-      });
-      if ((b.manque || []).length) {
-        lignesTitre.push('Manque : ' + b.manque.join(' ; '));
-      }
-      const qte = b.quantite == null ? 'n.c.' : _fmtQte(b.quantite, b.unite);
-      const tag = el('span', {
-        cls: 'bes-tag' + ((!b.mapped || b.quantite == null) ? ' warn' : ''),
-        title: lignesTitre.join('\n'),
-      }, `${BESOINS_KIND_LABELS[b.kind] || b.kind} · ${b.source_value || '?'} : ${qte}`);
-      return tag;
+    const parKind = {};
+    (d.besoins || []).forEach(b => { parKind[b.kind] = b; });
+    BESOINS_KIND_ORDER.forEach(k => {
+      const b = parKind[k];
+      if (!b) return;
+      if (b.quantite == null) { totaux[k].nc++; return; }
+      totaux[k].q += b.quantite;
+      totaux[k].unite = b.unite;
     });
-    const besoinsCell = besoinsEls.length
-      ? el('td', {}, ...besoinsEls)
-      : el('td', { style: { color: 'var(--muted)', fontStyle: 'italic', fontSize: '12px' } },
-          'Aucun besoin calculé (fiche technique manquante ou incomplète)');
+    const sansBesoin = !(d.besoins || []).length;
 
     tbody.appendChild(el('tr', {},
       el('td', {},
         el('div', { cls: 'bes-dossier-ref' }, d.reference || '—'),
         (d.numero_of || d.ref_produit) ? el('div', { cls: 'bes-dossier-meta' },
           [d.numero_of ? 'OF ' + d.numero_of : null, d.ref_produit].filter(Boolean).join(' · ')) : null,
+        sansBesoin ? el('div', { cls: 'bes-warn-note' },
+          'Fiche technique manquante ou incomplète') : null,
       ),
       el('td', {}, d.client || '—'),
       el('td', {}, d.machine_nom || '—'),
@@ -12337,18 +12396,29 @@ function _buildBesoinsDossierTable(dos) {
       el('td', { cls: 'num' }, d.qte_etiquettes ? Number(d.qte_etiquettes).toLocaleString('fr-FR') : '—'),
       _besMetrageCell(d),
       el('td', {}, _fmtDate(d.date_livraison || d.planned_end)),
-      besoinsCell,
+      ...BESOINS_KIND_ORDER.map(k => _besKindCell(parKind[k])),
     ));
   });
 
   tbody.appendChild(el('tr', { cls: 'bes-total-row' },
     el('td', { colspan: '4' }, `Total — ${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`),
     el('td', { cls: 'num' }, totalEtiq ? Math.round(totalEtiq).toLocaleString('fr-FR') : '—'),
-    el('td', { colspan: '3' }, ''),
+    el('td', { colspan: '2' }, ''),
+    ...BESOINS_KIND_ORDER.map(k => el('td', {
+      cls: 'bes-kind-cell',
+      title: totaux[k].nc
+        ? totaux[k].nc + ' dossier(s) non chiffré(s), hors total'
+        : '',
+    },
+      el('div', { cls: 'bes-kind-qte' }, totaux[k].q ? _fmtQte(totaux[k].q, totaux[k].unite) : '—'),
+      totaux[k].nc
+        ? el('div', { cls: 'bes-warn-note' }, totaux[k].nc + ' n.c.')
+        : null,
+    )),
   ));
 
   table.appendChild(tbody);
-  return el('div', { cls: 'bes-card' }, table);
+  return el('div', { cls: 'bes-card bes-scroll-x' }, table);
 }
 
 function openBesoinAssocierModal(kind, sourceValue) {

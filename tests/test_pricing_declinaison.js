@@ -3,7 +3,7 @@
 const path = require('path');
 process.chdir(path.join(__dirname, '..'));
 const fs = require('fs'), vm = require('vm');
-const src = fs.readFileSync('static/pricing_app.js', 'utf8');
+const src = fs.readFileSync('static/pricing_app.js', 'utf8').replace(/\r\n/g, '\n');
 
 function extraire(nom) {
   const i = src.indexOf('function ' + nom + '(');
