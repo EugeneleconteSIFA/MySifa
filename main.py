@@ -47,6 +47,7 @@ from app.routers.fabrication import router as fabrication_api_router
 # Traceur de traçabilité FSC (MyProd → Traçabilité → Traceur) : reconstitue la
 # chaîne bobine → dossier → stock → expédition dans les deux sens.
 from app.routers.traca import router as traca_api_router
+from app.routers.fsc_negoce import router as fsc_negoce_router
 from app.routers.of_import import router as of_import_router
 from app.web.fabrication_page import router as fabrication_page_router
 from app.routers.planning_rh import router as planning_rh_api_router
@@ -427,6 +428,7 @@ app.include_router(clients_api_router)
 app.include_router(settings_page_router)
 app.include_router(fabrication_api_router)
 app.include_router(traca_api_router)
+app.include_router(fsc_negoce_router)
 app.include_router(of_import_router, prefix="")
 app.include_router(fabrication_page_router)
 app.include_router(planning_rh_api_router)
