@@ -131,14 +131,24 @@ PORT        = int(os.getenv("PORT", 8000))
 
 # ─── Environnement (v1 staging / v2 prod) ────────────────────────────
 # ENV_NAME : "v2" (prod, défaut) ou "v1" (staging). Les deux instances tournent
-# côte à côte sur le VPS (v2:8000, v1:8002) et partagent la même DB.
+# côte à côte sur le VPS (v2:8000, v1:8002).
+#
+# v1 a sa PROPRE base : un script (mysifa-v1-resync-db.sh, hors dépôt) la
+# remplace chaque nuit par une copie de celle de v2. Écrire sur v1 ne touche
+# donc jamais la production — en revanche tout ce qui y est saisi disparaît à
+# la resync suivante. C'est ce que doit dire le bandeau, et rien d'autre.
+#
 # Toute valeur autre que "v1" est traitée comme prod (sécurité par défaut).
 ENV_NAME = os.getenv("ENV_NAME", "v2").strip().lower()
 IS_STAGING = (ENV_NAME == "v1")
 
-# MIGRATIONS_DISABLED : désactive les migrations de schéma au boot. Obligatoire
-# sur v1 pour ne pas modifier la DB partagée avec la prod. Valeur par défaut :
-# désactivé sur v1, actif sur v2.
+# MIGRATIONS_DISABLED : désactive les migrations de schéma au boot.
+#
+# Actif par défaut sur v1. Conséquence à connaître : une migration livrée sur
+# v1 ne s'y applique PAS. Le schéma de v1 est celui que la resync nocturne lui
+# apporte, donc celui de la prod. Tester sur v1 une fonctionnalité qui ajoute
+# des colonnes suppose donc soit de lancer v1 avec MIGRATIONS_DISABLED=0, soit
+# d'attendre que la prod ait migré puis resynchronisé.
 _migrations_default = "1" if IS_STAGING else "0"
 MIGRATIONS_DISABLED = os.getenv("MIGRATIONS_DISABLED", _migrations_default) in {"1", "true", "True", "yes", "YES"}
 

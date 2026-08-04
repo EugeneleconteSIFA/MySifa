@@ -11198,7 +11198,7 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         staging_body_class = "has-staging-bandeau"
         staging_initial_class = ""  # rouge par défaut (staging)
         staging_initial_hidden = ""
-        staging_initial_msg = "v1 — Environnement de test — DB partagée avec la prod"
+        staging_initial_msg = "v1 — Bac à sable · ce qui est saisi ici sera effacé cette nuit"
     else:
         staging_body_class = ""
         staging_initial_class = "env-prod"

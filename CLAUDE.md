@@ -662,6 +662,43 @@ terminal. Test associé : `python3 tests/test_deploiement_sante.py`.
 
 ---
 
+## Coûts matières — où vit le prix d'une matière
+
+Deux bases cohabitent, et une seule fait foi.
+
+**MyStock est la source.** Une matière MyStock se décline (`mp_matiere_declinaison`) :
+par **laize** pour un frontal, une glassine ou un complexe, par **grammage** pour un
+adhésif. La déclinaison porte tout ce qui fait un coût :
+
+- son **prix d'achat** : une ligne par fournisseur dans `mp_matiere_prix`, celle
+  marquée `principal = 1` est le prix en vigueur ;
+- son **paramétrage** : poids, grammage, devise, base de prix, incidence des taxes,
+  import et transport — des colonnes de `mp_matiere_declinaison` depuis le
+  4 août 2026.
+
+De là, `compute_material_price_per_m2` sort un coût au m² sans qu'aucune fiche de
+la base historique n'intervienne. La page se trouve à `/pricing/mystock/<id>` —
+c'est le lien sur le coût, dans l'onglet **Matières MyStock**.
+
+**La base « Coûts matières » (`mc_material`) est l'ancêtre**, destinée à
+disparaître. L'appairage d'une déclinaison à une fiche n'est plus proposé dans
+l'interface ; la colonne `mc_material_id` et `mystock_price_for_row` restent le
+temps que les fiches historiques finissent de vivre.
+
+**Les deux sens du prix sont branchés** :
+
+- Coûts matières → MyStock : `_mirror_principal` recopie le prix principal dans les
+  champs que la valorisation lit déjà ;
+- MyStock → Coûts matières : `resync_depuis_mystock` fait redescendre un prix
+  corrigé sur la valorisation, la fiche matière ou par le PMP.
+
+Un prix à 0 côté MyStock veut dire « pas renseigné » : il n'écrase jamais un tarif.
+
+Tests : `python3 tests/test_mystock_declinaisons.py`,
+`node tests/test_pricing_declinaison.js`.
+
+---
+
 ## Points d'attention critiques
 
 **Base de données**
