@@ -704,6 +704,10 @@ Les mêmes réglages sur les deux fiches (base CM et MyStock) :
   grammage majoré de la perte : on produit rarement au gramme près, la chute et
   le calage font qu'un frontal de 70 g/m² en consomme davantage. Perte par
   défaut : 9 % sur toute nouvelle matière.
+  Sur un **adhésif**, ce grammage EST la valeur de la déclinaison : « 1225 en
+  22 g/m² » ne peut pas peser autre chose. La ligne du tableau et la fiche
+  écrivent au même endroit, dans les deux sens. Sur une matière **laizée**, la
+  déclinaison vaut une laize et le grammage reste indépendant.
 - **Taxes en %** (6 = +6 %), plus un multiplicateur. Elles vivent dans l'encadré
   « Matière importée » et **ne comptent que si la matière est importée** — une
   taxe invisible qui gonfle le prix d'une matière locale serait un piège.

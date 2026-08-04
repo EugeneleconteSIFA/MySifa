@@ -413,16 +413,16 @@ with dbmod.get_db() as conn:
     MP.set_parametrage(conn, declinaison_id=d22["id"], patch={
         "price_currency": "USD", "is_imported": True, "taxe_pct": 6,
         "transport_mode": "PCT", "transport_pct": 10,
-        "grammage_gsm": 30, "perte_pct": 0,
+        "grammage_gsm": 27, "perte_pct": 0,
     }, user_name="Test")
     conn.commit()
     p22 = MP.parametrage(conn, d22["id"])
     check("devise enregistrée", p22["price_currency"], "USD")
     check("transport en pourcentage enregistré", p22["transport_pct"], 10.0)
     check("taxe en pourcentage enregistrée", p22["taxe_pct"], 6.0)
-    check("le poids découle du grammage", p22["weight_per_m2"], 0.03)
+    check("le poids découle du grammage", p22["weight_per_m2"], 0.027)
     check("auteur tracé", p22["updated_by_name"], "Test")
-    attendu = round(2.95 * 1.10 * 1.06 * 0.03 * float(reglages.eur_usd_rate), 4)
+    attendu = round(2.95 * 1.10 * 1.06 * 0.027 * float(reglages.eur_usd_rate), 4)
     check("coût = (prix + transport + taxes) × devise × poids", cout(d22["id"]), attendu)
 
     # Une taxe sur une matière qui n'est plus importée ne doit pas continuer à
@@ -430,7 +430,7 @@ with dbmod.get_db() as conn:
     MP.set_parametrage(conn, declinaison_id=d22["id"], patch={"is_imported": False})
     conn.commit()
     check("taxe ignorée hors import",
-          cout(d22["id"]), round(2.95 * 0.03 * float(reglages.eur_usd_rate), 4))
+          cout(d22["id"]), round(2.95 * 0.027 * float(reglages.eur_usd_rate), 4))
 
     # Les réglages sont propres à chaque déclinaison : 22 en USD ne déteint pas
     # sur 30, qui est la même matière MyStock.
@@ -440,9 +440,66 @@ with dbmod.get_db() as conn:
     MP.set_parametrage(conn, declinaison_id=d22["id"], patch={
         "price_currency": "EUR", "is_imported": False, "taxe_pct": 0,
         "transport_mode": "AMOUNT", "transport_pct": 0,
-        "grammage_gsm": 28, "perte_pct": 0,
+        "grammage_gsm": 22, "perte_pct": 0,
     })
     conn.commit()
+
+    print("\n--- grammage : une seule valeur, deux écrans ---")
+    # « 1225 en 22 g/m² » ne peut pas peser autre chose que 22 g/m². La ligne du
+    # tableau et la fiche de paramétrage doivent écrire au même endroit.
+    def gram_de_la_ligne(decl_id):
+        return conn.execute(
+            """SELECT g.valeur_gsm FROM mp_matiere_declinaison d
+                 JOIN mp_grammages g ON g.id = d.grammage_id WHERE d.id=?""",
+            (decl_id,),
+        ).fetchone()[0]
+
+    # Depuis la fiche : le grammage descend dans la déclinaison.
+    r = MP.set_parametrage(conn, declinaison_id=d22["id"],
+                           patch={"grammage_gsm": 24}, user_name="Test")
+    conn.commit()
+    check("saisie acceptée sur la fiche", r["ok"], True)
+    check("la ligne du tableau suit", gram_de_la_ligne(d22["id"]), 24.0)
+    check("le libellé de la déclinaison suit", r["parametrage"]["libelle"], "24 g/m²")
+    check("le poids est recalculé", r["parametrage"]["weight_per_m2"], 0.024)
+
+    # Depuis le tableau : le grammage remonte dans la fiche.
+    MP.set_declinaison_valeur(conn, declinaison_id=d22["id"], valeur_gsm=26)
+    conn.commit()
+    p26 = MP.parametrage(conn, d22["id"])
+    check("la fiche suit le tableau", p26["grammage_gsm"], 26.0)
+    check("et son poids aussi", p26["weight_per_m2"], 0.026)
+
+    # La perte reste propre au paramétrage : elle ne bouge pas avec la valeur.
+    MP.set_parametrage(conn, declinaison_id=d22["id"], patch={"perte_pct": 8})
+    conn.commit()
+    MP.set_declinaison_valeur(conn, declinaison_id=d22["id"], valeur_gsm=20)
+    conn.commit()
+    p20 = MP.parametrage(conn, d22["id"])
+    check("la perte survit au changement de grammage", p20["perte_pct"], 8.0)
+    check("le poids retenu l'intègre", p20["weight_per_m2"], round(20 * 1.08 / 1000, 6))
+
+    # Un grammage déjà pris par une autre déclinaison doit être refusé des deux
+    # côtés, sinon deux lignes porteraient le même nom.
+    conflit = MP.set_parametrage(conn, declinaison_id=d22["id"],
+                                 patch={"grammage_gsm": 30})
+    check("grammage déjà décliné refusé depuis la fiche", conflit["ok"], False)
+    check("la fiche n'a pas bougé", MP.parametrage(conn, d22["id"])["grammage_gsm"], 20.0)
+    check("la ligne non plus", gram_de_la_ligne(d22["id"]), 20.0)
+
+    # Sur une matière laizée, la déclinaison vaut une laize : le grammage de la
+    # fiche est le poids du frontal, il n'a rien à voir avec elle.
+    MP.set_parametrage(conn, declinaison_id=dl["id"], patch={"grammage_gsm": 70})
+    conn.commit()
+    check("un frontal garde sa laize", MP.parametrage(conn, dl["id"])["libelle"], "330 mm")
+    check("et prend le grammage saisi", MP.parametrage(conn, dl["id"])["grammage_gsm"], 70.0)
+
+    # On rend la déclinaison à son grammage d'origine : la suite du scénario
+    # compte dessus.
+    MP.set_parametrage(conn, declinaison_id=d22["id"],
+                       patch={"grammage_gsm": 22, "perte_pct": 0})
+    conn.commit()
+    check("retour au grammage d'origine", gram_de_la_ligne(d22["id"]), 22.0)
 
     print("\n--- reprise des fiches déjà appairées (migration) ---")
     # Sur la vraie base, des déclinaisons sont appairées depuis des semaines :
@@ -547,7 +604,7 @@ with dbmod.get_db() as conn:
           sorted(c["libelle"] for c in prod["composants"]), ["22 g/m²", "330 mm"])
 
     c = PROD.cout_produit(conn, prod, reglages)
-    attendu = round(1.62 + 2.95 * 0.028, 4)
+    attendu = round(1.62 + 2.95 * 0.022, 4)
     check("coût = somme des déclinaisons", float(c.total_eur_per_m2), attendu)
     check("un composant par rôle", sorted(x.role for x in c.components), ["adhesif", "frontal"])
     check("les parts font 100 %", float(sum(x.share_pct for x in c.components)), 100.0)

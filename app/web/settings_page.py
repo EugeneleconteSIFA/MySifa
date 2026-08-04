@@ -730,6 +730,10 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 12 22 12"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="10" y1="7" x2="10" y2="17"/><line x1="14" y1="9" x2="14" y2="15"/><line x1="18" y1="7" x2="18" y2="17"/></svg>
         Laizes matières
       </button>
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="mandrins">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><ellipse cx="12" cy="6" rx="3" ry="1.2"/></svg>
+        Mandrins
+      </button>
       <button type="button" class="nav-btn" data-req-section="logistique" data-tab="importations">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
         Importations
@@ -898,6 +902,11 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <button type="button" class="menu-item" data-goto="laizes">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 12 22 12"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="10" y1="7" x2="10" y2="17"/><line x1="14" y1="9" x2="14" y2="15"/><line x1="18" y1="7" x2="18" y2="17"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Laizes matières</span><span class="mi-desc">Formats standards par matière.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button type="button" class="menu-item" data-goto="mandrins">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><ellipse cx="12" cy="6" rx="3" ry="1.2"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Mandrins</span><span class="mi-desc">Perte de coupe appliquée aux tubes.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
             <button type="button" class="menu-item" data-goto="importations">
@@ -1567,6 +1576,29 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         </form>
         <div id="laizes-list" style="display:flex;flex-direction:column;gap:8px"></div>
         <p id="laizes-empty" class="sub" style="display:none;margin:16px 0 4px;font-size:13px">Aucune laize définie.</p>
+      </div>
+    </section>
+
+    <section id="panel-mandrins" class="hidden">
+      <div class="card">
+        <div style="margin-bottom:16px">
+          <h2 style="margin:0 0 4px">Mandrins</h2>
+          <p class="sub" style="margin:0;font-size:12px">Les mandrins se découpent dans des tubes. La perte de coupe retirée de la longueur du tube couvre les chutes de début et de fin. Utilisée par MyStock → Besoins matières pour convertir un besoin en mandrins en tubes, puis en palettes à commander.</p>
+        </div>
+        <div id="mandrins-loading" class="sub" style="padding:12px 0;font-size:13px">Chargement…</div>
+        <form id="mandrins-form" style="display:none;flex-direction:column;gap:16px;max-width:520px">
+          <div>
+            <label for="mand-perte" style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Perte de coupe sur un tube (%)</label>
+            <input type="number" id="mand-perte" min="0" max="99" step="0.5" placeholder="Ex. 10"
+              style="width:100%;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;outline:none;transition:border-color .15s;font-variant-numeric:tabular-nums">
+            <p class="sub" style="margin:6px 0 0;font-size:12px">Nombre de tubes = mandrins × laize module ÷ (longueur du tube − perte). La longueur du tube et le nombre de tubes par palette se saisissent sur chaque fiche matière mandrin, dans MyStock.</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button type="submit" class="btn" id="mand-save-btn">Enregistrer</button>
+            <span id="mand-status" class="sub" style="font-size:12px"></span>
+          </div>
+        </form>
+        <div id="mandrins-error" class="sub" style="display:none;color:var(--danger);font-size:13px;padding:12px 0"></div>
       </div>
     </section>
 
@@ -2828,6 +2860,7 @@ function syncSettingsPageHead(tabId) {
     machines:     { title: 'Machines',        sub: 'Horaires, capacité, rentabilité' },
     emplacements: { title: 'Emplacements',    sub: 'Plan du magasin' },
     laizes:       { title: 'Laizes matières', sub: 'Formats standards' },
+    mandrins:     { title: 'Mandrins',        sub: 'Perte de coupe sur les tubes' },
     importations: { title: 'Importations',    sub: 'Grilles tarifaires transporteurs' },
     updates:      { title: 'Mises à jour',    sub: 'Annonces de release' },
     audit:        { title: 'Audit',           sub: 'Log d\'activité' },
@@ -2850,7 +2883,7 @@ function syncSettingsPageHead(tabId) {
   }
 }
 
-const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','maintenance','machines','emplacements','laizes','importations','bridge','updates','audit','fsc','dashboards','api','promote','printers','formations'];
+const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','maintenance','machines','emplacements','laizes','mandrins','importations','bridge','updates','audit','fsc','dashboards','api','promote','printers','formations'];
 
 function setTab(id, opts) {
   if (!VALID_TABS.includes(id)) id = 'menu';
@@ -2868,7 +2901,7 @@ function setTab(id, opts) {
       }
     } catch(e){}
   }
-  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'maintenance', 'machines', 'emplacements', 'laizes', 'importations', 'bridge', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations'].forEach(p => {
+  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'maintenance', 'machines', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -2881,6 +2914,7 @@ loadFournisseursGroupes();
   if (id === 'machines') initMachinesPanel();
   if (id === 'emplacements') initEmplacementsPanel();
   if (id === 'laizes') initLaizesPanel();
+  if (id === 'mandrins') initMandrinsPanel();
   if (id === 'importations') initImportationsPanel();
   if (id === 'bridge') initBridgePanel();
   if (id === 'updates') loadUpdates();
@@ -7573,6 +7607,72 @@ function initFscPanel() {
   loadFscRegistre();
 }
 
+async function initMandrinsPanel() {
+  const loading = document.getElementById('mandrins-loading');
+  const form = document.getElementById('mandrins-form');
+  const errBox = document.getElementById('mandrins-error');
+  const inp = document.getElementById('mand-perte');
+  const saveBtn = document.getElementById('mand-save-btn');
+  const status = document.getElementById('mand-status');
+  if (!form || !inp) return;
+
+  const showError = (msg) => {
+    if (loading) loading.style.display = 'none';
+    form.style.display = 'none';
+    if (errBox) { errBox.style.display = 'block'; errBox.textContent = msg; }
+  };
+
+  try {
+    const r = await fetch('/api/stock/config', { credentials: 'include' });
+    if (r.status === 403) { showError('Accès réservé à la Direction et à l\'Administration.'); return; }
+    if (!r.ok) { showError('Erreur de chargement (' + r.status + ').'); return; }
+    const data = await r.json();
+    inp.value = String(Number(data.mandrin_perte_coupe_pct || 0));
+    if (loading) loading.style.display = 'none';
+    if (errBox) errBox.style.display = 'none';
+    form.style.display = 'flex';
+  } catch (e) {
+    showError('Erreur de chargement : ' + (e?.message || 'inconnue'));
+    return;
+  }
+
+  if (_mandReady) return;
+  _mandReady = true;
+
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const pct = parseFloat((inp.value || '').replace(',', '.'));
+    if (isNaN(pct) || pct < 0 || pct >= 100) {
+      status.textContent = 'Perte de coupe invalide — valeur entre 0 et 99 %.';
+      status.style.color = 'var(--danger)';
+      return;
+    }
+    saveBtn.disabled = true;
+    status.textContent = 'Enregistrement…';
+    status.style.color = 'var(--muted)';
+    try {
+      const r = await fetch('/api/stock/config', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mandrin_perte_coupe_pct: pct }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.detail || ('HTTP ' + r.status));
+      }
+      status.textContent = 'Enregistré.';
+      status.style.color = 'var(--ok, #34d399)';
+      setTimeout(() => { status.textContent = ''; }, 2500);
+    } catch (e) {
+      status.textContent = 'Erreur : ' + (e?.message || 'enregistrement impossible');
+      status.style.color = 'var(--danger)';
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
+}
+
 async function initImportationsPanel() {
   const loading = document.getElementById('importations-loading');
   const form = document.getElementById('importations-form');
@@ -9113,6 +9213,7 @@ function renderLaizesList() {
 
 // ── Importations (Logistique) ─────────────────────────────────
 let _impReady = false;
+let _mandReady = false;
 
 // ---- Etat + helpers restaures depuis bb89336 ----
 const PR = {

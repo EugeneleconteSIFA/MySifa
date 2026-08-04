@@ -759,6 +759,8 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-src-badge.of{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
 .bes-src-badge.fiche{background:color-mix(in srgb,var(--warn,#d97706) 15%,transparent);color:var(--warn,#d97706)}
 .bes-warn-note{font-size:11px;color:var(--warn,#d97706);margin-top:3px;line-height:1.4}
+/* Conversion secondaire d'une ligne de besoin (mandrins -> tubes -> palettes) */
+.bes-sub-conv{font-size:11px;font-weight:600;color:var(--muted);margin-top:3px;line-height:1.4}
 /* Modal d'aide : sections repliables */
 .bes-doc-intro{font-size:13px;color:var(--text2);line-height:1.6;margin:2px 0 16px}
 .bes-doc-toolbar{display:flex;justify-content:flex-end;margin-bottom:8px}
@@ -5139,6 +5141,15 @@ const MP_CATEGORIES_AVEC_CONDITIONNEMENT = new Set(['carton', 'mandrin']);
 function mpHasConditionnement(cat) {
   return MP_CATEGORIES_AVEC_CONDITIONNEMENT.has((cat || '').toLowerCase());
 }
+function mpIsMandrinCategory(cat) {
+  return (cat || '').toLowerCase() === 'mandrin';
+}
+// « Cartons par palette », « Tubes par palette » : le libelle est au pluriel,
+// l'unite d'achat renvoyee par mpUniteAchat() est au singulier.
+function mpLabelUnitesParPalette(cat) {
+  const u = mpUniteAchat(cat);
+  return u.charAt(0).toUpperCase() + u.slice(1) + 's par palette';
+}
 function mpUniteAchat(cat) {
   const c = (cat || '').toLowerCase();
   if (c === 'carton') return 'carton';
@@ -7724,6 +7735,7 @@ async function openMatiereCopyFromCard(m) {
     metres_lineaires_par_bobine: m.metres_lineaires_par_bobine || null,
     prix_eur_m2: m.prix_eur_m2 || null,
     unites_par_palette: m.unites_par_palette || null,
+    longueur_tube_mm: m.longueur_tube_mm || null,
     stock_par_laize: Array.isArray(m.stock_par_laize) ? m.stock_par_laize.slice() : [],
   };
   await Promise.all([loadMatieresAdminList(), loadMpSousSections()]);
@@ -7799,6 +7811,19 @@ function matiereRefEditPayload(item, fields) {
         return { error: 'Unités par palette : valeur > 0 obligatoire.' };
       }
       payload.unites_par_palette = upp;
+    }
+  }
+  if (fields.isMandrin && fields.ltInp) {
+    // Toujours envoyée, même vide, pour autoriser l'effacement de la longueur.
+    const raw = (fields.ltInp.value || '').replace(',', '.').trim();
+    if (raw === '') {
+      payload.longueur_tube_mm = null;
+    } else {
+      const lt = parseFloat(raw);
+      if (isNaN(lt) || lt <= 0) {
+        return { error: 'Longueur tube : valeur > 0 obligatoire.' };
+      }
+      payload.longueur_tube_mm = lt;
     }
   }
   if (fields.isAdhesif && fields.cppInp && fields.kgcInp) {
@@ -8214,7 +8239,35 @@ function appendMatiereRefEditFields(parent, item) {
   const uniteAchat = mpUniteAchat(item.categorie);
   const uppInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 260' } });
   uppInp.value = String(item.unites_par_palette != null && item.unites_par_palette > 0 ? item.unites_par_palette : '');
-  uppWrap.append(el('label', null, uniteAchat.charAt(0).toUpperCase() + uniteAchat.slice(1) + ' par palette'), uppInp);
+  uppWrap.append(el('label', null, mpLabelUnitesParPalette(item.categorie)), uppInp);
+
+  // ── Mandrins : longueur du tube acheté ────────────────────────────────────
+  // Un mandrin ne s'achète pas à l'unité : on achète des tubes qu'on redécoupe
+  // à la laize du module. Sans cette longueur, Besoins matières sait combien de
+  // mandrins il faut, mais pas combien de tubes commander.
+  const isMandrin = mpIsMandrinCategory(item.categorie);
+  const ltWrap = el('div', { cls: 'mp-field', style: { display: isMandrin ? '' : 'none' } });
+  const ltInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 1500' } });
+  ltInp.value = String(item.longueur_tube_mm > 0 ? item.longueur_tube_mm : '');
+  const ltHint = el('div', { cls: 'mp-hint' }, '');
+  function refreshLongueurTube() {
+    const lt = parseFloat((ltInp.value || '').replace(',', '.'));
+    const upp = parseFloat((uppInp.value || '').replace(',', '.'));
+    if (lt > 0 && upp > 0) {
+      ltHint.textContent = 'Une palette représente ' + fN(upp) + ' tubes, soit '
+        + fN(Math.round(lt * upp / 1000)) + ' m de mandrin à découper.';
+    } else if (lt > 0) {
+      ltHint.textContent = 'Renseigne aussi les tubes par palette pour connaître '
+        + 'le métrage de mandrin d\'une palette.';
+    } else {
+      ltHint.textContent = 'Longueur du tube acheté. Sans elle, le besoin en tubes '
+        + 'reste non chiffré dans Besoins matières.';
+    }
+  }
+  ltInp.addEventListener('input', refreshLongueurTube);
+  uppInp.addEventListener('input', refreshLongueurTube);
+  refreshLongueurTube();
+  ltWrap.append(el('label', null, 'Longueur tube (mm)'), ltInp, ltHint);
 
   // ── Conditionnement à l'achat des adhésifs ────────────────────────────────
   // Le stock est au kilo ; ces deux champs décrivent comment l'adhésif ARRIVE
@@ -8274,7 +8327,7 @@ function appendMatiereRefEditFields(parent, item) {
   // Formulaire organisé en sections : la fiche mélangeait identification,
   // conditionnement, seuils et laizes dans une seule colonne de champs.
   const sectionConditionnement = (isAdhesif || hasCond || mpIsPaletteCategory(item))
-    ? mpFormSection('Conditionnement à l\'achat', ...adhesifCondFields, pppWrap, uppWrap)
+    ? mpFormSection('Conditionnement à l\'achat', ...adhesifCondFields, pppWrap, uppWrap, ltWrap)
     : null;
 
   // Mise en page deux colonnes. Identification et Classement d'un cote,
@@ -8316,7 +8369,7 @@ function appendMatiereRefEditFields(parent, item) {
     ? mpFormSection('Laizes & tarification', laizeWrap)
     : null;
   parent.append(...[grille, sectionLaizes].filter(Boolean));
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, abbrevInp, hasAbbrev, sousCategorieSel };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, abbrevInp, hasAbbrev, sousCategorieSel };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -9598,6 +9651,11 @@ function buildMatieresAdminAddForm() {
   const uppWrap = el('div', { cls: 'mp-field' });
   const uppInp = el('input', { attrs: { type: 'number', min: '1', step: '1', placeholder: 'Ex. 260' } });
   const uppLbl = el('label', null, 'Unités par palette');
+  // Mandrins : longueur du tube acheté (détail sur la fiche matière).
+  const ltWrap = el('div', { cls: 'mp-field', style: { display: 'none' } });
+  const ltInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 1500' } });
+  ltWrap.append(el('label', null, 'Longueur tube (mm)'), ltInp,
+    el('div', { cls: 'mp-hint' }, 'Longueur du tube acheté, redécoupé à la laize du module.'));
   // Conditionnement à l'achat des adhésifs (stock au kilo) : palette → cartons → kg.
   const adhCondWrap = el('div', { style: { display: 'none' } });
   const cppInp = el('input', { attrs: { type: 'number', min: '1', step: '1', placeholder: 'Ex. 24' } });
@@ -9674,13 +9732,13 @@ function buildMatieresAdminAddForm() {
     pppWrap.style.display = isPal ? '' : 'none';
     couleurWrap.style.display = isGlass ? '' : 'none';
     uppWrap.style.display = hasCond ? '' : 'none';
+    ltWrap.style.display = mpIsMandrinCategory(cat) ? '' : 'none';
     adhCondWrap.style.display = mpIsAdhesifCategory(cat) ? '' : 'none';
     laizeWrap.style.display = isLaizee ? '' : 'none';
     sousSectionWrap.style.display = hasSousSection ? '' : 'none';
     pppLbl.textContent = 'Palettes par pile';
     if (hasCond) {
-      const u = mpUniteAchat(cat);
-      uppLbl.textContent = u.charAt(0).toUpperCase() + u.slice(1) + ' par palette';
+      uppLbl.textContent = mpLabelUnitesParPalette(cat);
     }
     seuilLbl.textContent = mpSeuilFieldLabel(cat);
     seuilInp.step = isPal || isCarton || cat === 'mandrin' || mpIsBobineCategory(cat) ? '1' : '0.5';
@@ -9706,6 +9764,7 @@ function buildMatieresAdminAddForm() {
     if (seed.metres_lineaires_par_bobine) metresInp.value = String(seed.metres_lineaires_par_bobine);
     if (seed.prix_eur_m2) prixM2Inp.value = String(seed.prix_eur_m2);
     if (seed.unites_par_palette) uppInp.value = String(seed.unites_par_palette);
+    if (seed.longueur_tube_mm) ltInp.value = String(seed.longueur_tube_mm);
     if (Array.isArray(seed.stock_par_laize)) {
       const seedLaizeIds = new Set(seed.stock_par_laize.map(s => s.laize_id));
       laizeChecks.querySelectorAll('input[type=checkbox]').forEach(inp => {
@@ -9729,6 +9788,7 @@ function buildMatieresAdminAddForm() {
     couleurWrap,
     pppWrap,
     uppWrap,
+    ltWrap,
     adhCondWrap,
     sousSectionWrap,
     el('div', { cls: 'mp-field' }, seuilLbl, seuilInp),
@@ -9779,6 +9839,10 @@ function buildMatieresAdminAddForm() {
                 payload.unites_par_palette = upp;
               }
             }
+          }
+          if (mpIsMandrinCategory(cat)) {
+            const lt = parseFloat((ltInp.value || '').replace(',', '.'));
+            if (lt > 0) payload.longueur_tube_mm = lt;
           }
           if (mpIsAdhesifCategory(cat)) {
             const cpp = parseFloat((cppInp.value || '').replace(',', '.'));
@@ -11929,7 +11993,8 @@ const BESOINS_KIND_UNITE_NOTE = {
   support: 'Besoin exprimé en mètres linéaires — le métrage de l’OF.',
   glassine: 'Besoin exprimé en mètres linéaires — le métrage de l’OF.',
   adhesif: 'Besoin exprimé en kilos — grammage × métrage × laize.',
-  mandrin: 'Besoin exprimé en unités.',
+  mandrin: 'Besoin exprimé en mandrins — un par bobine produite. '
+    + 'La traduction en tubes puis en palettes à commander s’affiche sous le total.',
   carton: 'Besoin exprimé en unités.',
   palette: 'Besoin exprimé en unités.',
 };
@@ -12111,7 +12176,13 @@ function _buildBesoinsKindSection(kind, lignes) {
       cls: 'num',
       style: { color: 'var(--muted)' },
       title: l.stock_note || '',
-    }, l.stock_actuel != null ? _fmtQte(l.stock_actuel, l.unite) : '—');
+    }, l.stock_actuel != null ? _fmtQte(l.stock_actuel, l.unite) : '—',
+      // Mandrins : le stock se tient en palettes de tubes, le besoin en mandrins.
+      // On affiche sous la conversion la quantité réellement en magasin, sinon
+      // l'opérateur ne peut pas rapprocher l'écran de ce qu'il a devant lui.
+      (l.kind === 'mandrin' && l.stock_palettes != null)
+        ? el('div', { cls: 'bes-sub-conv' }, _fmtQte(l.stock_palettes, 'pal.'))
+        : null);
 
     const srcCell = el('td', {},
       el('span', { cls: 'bes-src-value' }, l.source_value || '—'),
@@ -12127,7 +12198,20 @@ function _buildBesoinsKindSection(kind, lignes) {
       _besQteCell(l.besoin_7j, l.unite),
       _besQteCell(l.besoin_15j, l.unite),
       el('td', { cls: 'num', style: { fontWeight: '700' }, title: l.formule_exemple || '' },
-        _fmtQte(l.besoin_total, l.unite)),
+        _fmtQte(l.besoin_total, l.unite),
+        // Les mandrins se commandent en tubes, jamais à l'unité : la conversion
+        // est la seule information actionnable pour passer commande.
+        (l.kind === 'mandrin' && l.besoin_total_tubes)
+          ? el('div', { cls: 'bes-sub-conv' },
+              Math.ceil(l.besoin_total_tubes) + ' tubes'
+              + (l.besoin_total_palettes ? ' · ' + _fmtQte(l.besoin_total_palettes, 'pal.') : ''))
+          : null,
+        (l.kind === 'mandrin' && l.nb_dossiers_sans_tubes)
+          ? el('div', { cls: 'bes-warn-note' },
+              l.nb_dossiers_sans_tubes + ' dossier'
+              + (l.nb_dossiers_sans_tubes > 1 ? 's' : '')
+              + ' sans conversion — longueur tube ou laize module manquante')
+          : null),
       stockCell,
       manqueCell,
       el('td', { cls: 'num', style: { color: 'var(--muted)' } }, String(l.nb_dossiers || 0)),
