@@ -2338,11 +2338,28 @@ def _normalize_maint_payload(body: dict) -> dict:
             usure_piece_id = None
     # Jamais NULL quand la pièce est renseignée : l'index unique partiel
     # considérerait deux NULL comme distincts et laisserait passer un doublon.
+    #
+    # v230 : la position est désormais saisie librement SUR LE CODE (elle n'est
+    # plus choisie dans une liste déclarée sur la pièce). On la stocke en
+    # minuscules : c'est une clé — index unique, cache front, localStorage de
+    # l'onglet mémorisé. « Bande » et « bande » doivent être la même position,
+    # sinon la carte afficherait deux onglets pour la même chose. L'affichage
+    # remet la majuscule initiale.
     usure_position = (body.get("usure_position") or "").strip().lower()
     if len(usure_position) > 40:
         usure_position = usure_position[:40]
     if usure_piece_id is None:
         usure_position = ""
+    if usure_position:
+        import re as _re_pos
+        # Même charset que l'ancien référentiel : la position sert d'étiquette
+        # d'onglet ET de clé, on évite d'avoir à l'échapper partout.
+        if not _re_pos.fullmatch(r"[a-z0-9][a-z0-9 _-]*", usure_position):
+            raise HTTPException(
+                422,
+                f"Position « {usure_position} » invalide : lettres non accentuées, "
+                "chiffres, espace, tiret et underscore uniquement.",
+            )
 
     # Référence métrage : texte libre (ex. "5000 m"). v229 — devenue EXCLUSIVE
     # aux pièces d'usure. Elle n'a jamais été lue ailleurs (seule la carte
@@ -2377,29 +2394,39 @@ def _normalize_maint_payload(body: dict) -> dict:
 # un code distinct : c'est ce qui permet à une carte d'avoir des onglets sans
 # que le code ait à deviner quoi que ce soit à partir des libellés.
 
-def _usure_positions_of(row) -> list:
-    """Positions déclarées sur une pièce, lues depuis la colonne JSON."""
-    import json as _json  # module importé localement partout dans ce fichier
-    try:
-        raw = _json.loads(row["positions"] or "[]")
-    except (ValueError, TypeError, IndexError, KeyError):
-        return []
-    if not isinstance(raw, list):
-        return []
-    out = []
-    for v in raw:
-        s = str(v or "").strip().lower()
-        if s and s not in out:
-            out.append(s[:40])
-    return out
+def _usure_positions_from_codes(conn, piece_id: int) -> list:
+    """Positions RÉELLEMENT en usage sur une pièce, déduites de ses codes.
+
+    v230 — inversion du modèle. Les positions étaient déclarées sur la pièce
+    (colonne `positions`, JSON) et le code en choisissait une. Elles sont
+    maintenant saisies librement sur le code, et la pièce ne fait que les
+    refléter. Conséquence voulue : une position ne peut plus exister sans code,
+    donc plus de carte fantôme « pièce · position » sans opération derrière —
+    c'est exactement le cas qui rendait l'écran incompréhensible après la
+    suppression d'un code.
+
+    La colonne `positions` de maintenance_usure_pieces n'est plus lue ni
+    écrite. Elle est conservée en base (donnée historique, aucun coût) plutôt
+    que supprimée : un DROP COLUMN n'est pas disponible sur toutes les
+    versions de SQLite déployées.
+    """
+    rows = conn.execute(
+        """SELECT DISTINCT COALESCE(usure_position,'') AS pos
+           FROM maintenance_codes
+           WHERE usure_piece_id=? AND COALESCE(usure_position,'') <> ''
+           ORDER BY pos""",
+        (piece_id,),
+    ).fetchall()
+    return [r["pos"] for r in rows]
 
 
-def _usure_piece_row_to_dict(row, codes_count: int = 0) -> dict:
+def _usure_piece_row_to_dict(row, codes_count: int = 0, positions=None) -> dict:
     return {
         "id": int(row["id"]),
         "cle": row["cle"],
         "label": row["label"],
-        "positions": _usure_positions_of(row),
+        # v230 : reflet des positions en usage, jamais une liste déclarée.
+        "positions": list(positions or []),
         "ordre": int(row["ordre"] or 0),
         "actif": bool(row["actif"]),
         "codes_count": codes_count,
@@ -2416,11 +2443,15 @@ def _ensure_usure_table(conn) -> bool:
 def _validate_usure_link(conn, data: dict, current_code: str = "") -> None:
     """Vérifie le couple (pièce, position) avant écriture d'un code.
 
-    Trois refus possibles, tous explicites — l'ancien matching par libellé
-    échouait en silence dans les trois cas :
+    v230 — la position n'est plus validée contre une liste déclarée sur la
+    pièce (elle est saisie librement). Restent trois refus, tous explicites :
       - la pièce n'existe pas / est désactivée
-      - la position n'est pas déclarée sur cette pièce (ou en manque une)
-      - le couple est déjà porté par un autre code
+      - le couple (pièce, position) est déjà porté par un autre code
+      - la pièce mélangerait des codes avec et sans position
+
+    Le dernier point mérite un mot : une carte est soit à onglets, soit sans
+    onglet. Un code sans position sur une pièce qui en a déjà (ou l'inverse)
+    donnerait une carte dont une partie du contenu serait inatteignable.
     """
     piece_id = data.get("usure_piece_id")
     if piece_id is None:
@@ -2430,24 +2461,38 @@ def _validate_usure_link(conn, data: dict, current_code: str = "") -> None:
             500, "Migration DB manquante (maintenance_usure_pieces absente)."
         )
     row = conn.execute(
-        "SELECT id, cle, label, positions, ordre, actif FROM maintenance_usure_pieces WHERE id=?",
+        "SELECT id, cle, label, ordre, actif FROM maintenance_usure_pieces WHERE id=?",
         (piece_id,),
     ).fetchone()
     if not row:
         raise HTTPException(422, "Pièce d'usure introuvable.")
     if not row["actif"]:
         raise HTTPException(422, f"La pièce « {row['label']} » est désactivée.")
-    positions = _usure_positions_of(row)
     pos = data.get("usure_position") or ""
-    if positions and pos not in positions:
-        raise HTTPException(
-            422,
-            f"Position invalide pour « {row['label']} ». Attendu : {', '.join(positions)}.",
-        )
-    if not positions and pos:
-        raise HTTPException(
-            422, f"La pièce « {row['label']} » ne gère pas de position."
-        )
+    # Cohérence du mode : la pièce est à onglets ou elle ne l'est pas.
+    others = conn.execute(
+        """SELECT code, label, COALESCE(usure_position,'') AS pos
+           FROM maintenance_codes
+           WHERE usure_piece_id=? AND code<>?""",
+        (piece_id, current_code or ""),
+    ).fetchall()
+    if others:
+        others_positioned = any((o["pos"] or "") for o in others)
+        if pos and not others_positioned:
+            _o = others[0]
+            raise HTTPException(
+                422,
+                f"« {row['label']} » est déjà porté par le code {_o['code']} sans position. "
+                "Une pièce a soit des positions sur tous ses codes, soit aucune : "
+                f"ajoutez une position au code {_o['code']}, ou retirez celle-ci.",
+            )
+        if not pos and others_positioned:
+            _named = ", ".join(f"{o['code']} ({o['pos']})" for o in others if o["pos"])
+            raise HTTPException(
+                422,
+                f"« {row['label']} » a déjà des positions ({_named}). "
+                "Renseignez une position pour ce code, ou retirez-la des autres.",
+            )
     clash = conn.execute(
         """SELECT code, label FROM maintenance_codes
            WHERE usure_piece_id=? AND COALESCE(usure_position,'')=? AND code<>?
@@ -5726,44 +5771,6 @@ def _usure_slugify(label: str, taken: set) -> str:
     return s
 
 
-def _usure_parse_positions(body: dict) -> str:
-    """Normalise la liste de positions en JSON prêt à stocker."""
-    import json as _json
-    import re as _re
-    raw = body.get("positions")
-    if raw is None:
-        raw = []
-    if isinstance(raw, str):
-        raw = [x for x in _re.split(r"[,;]", raw)]
-    if not isinstance(raw, list):
-        raise HTTPException(422, "positions doit être une liste.")
-    out = []
-    for v in raw:
-        s = str(v or "").strip().lower()[:40]
-        if not s:
-            continue
-        # Une position sert d'étiquette d'onglet ET de clé (cache, localStorage,
-        # attribut data-pos). On la contraint à un charset sûr plutôt que de
-        # devoir échapper correctement à chacun de ces trois endroits.
-        if not _re.fullmatch(r"[a-z0-9][a-z0-9 _-]*", s):
-            raise HTTPException(
-                422,
-                f"Position « {s} » invalide : lettres non accentuées, chiffres, "
-                "espace, tiret et underscore uniquement.",
-            )
-        if s not in out:
-            out.append(s)
-    if len(out) > 8:
-        raise HTTPException(422, "8 positions maximum par pièce.")
-    if len(out) == 1:
-        raise HTTPException(
-            422,
-            "Une pièce a soit aucune position, soit au moins deux. "
-            "Avec une seule, la position n'apporte rien — laissez la liste vide.",
-        )
-    return _json.dumps(out, ensure_ascii=False)
-
-
 @router.get("/api/maintenance/usure-pieces")
 def usure_pieces_list(request: Request, include_inactifs: bool = False):
     """Référentiel des pièces d'usure. Lecture ouverte à tout utilisateur
@@ -5775,7 +5782,7 @@ def usure_pieces_list(request: Request, include_inactifs: bool = False):
             return {"items": [], "migrated": False}
         where = "" if include_inactifs else "WHERE actif = 1"
         rows = conn.execute(
-            f"""SELECT id, cle, label, positions, ordre, actif
+            f"""SELECT id, cle, label, ordre, actif
                 FROM maintenance_usure_pieces
                 {where}
                 ORDER BY ordre ASC, label ASC"""
@@ -5790,7 +5797,16 @@ def usure_pieces_list(request: Request, include_inactifs: bool = False):
                 counts[int(cr["pid"])] = int(cr["n"])
         except Exception:
             counts = {}
-    items = [_usure_piece_row_to_dict(r, counts.get(int(r["id"]), 0)) for r in rows]
+        # v230 : positions déduites des codes rattachés, pièce par pièce.
+        positions_by_piece = {
+            int(r["id"]): _usure_positions_from_codes(conn, int(r["id"])) for r in rows
+        }
+    items = [
+        _usure_piece_row_to_dict(
+            r, counts.get(int(r["id"]), 0), positions_by_piece.get(int(r["id"]), [])
+        )
+        for r in rows
+    ]
     return {"items": items, "migrated": True}
 
 
@@ -5801,7 +5817,6 @@ async def usure_pieces_create(request: Request):
     label = (body.get("label") or "").strip()[:80]
     if not label:
         raise HTTPException(422, "Libellé obligatoire.")
-    positions_json = _usure_parse_positions(body)
     try:
         ordre = int(body.get("ordre") or 0)
     except (TypeError, ValueError):
@@ -5821,8 +5836,8 @@ async def usure_pieces_create(request: Request):
         cur = conn.execute(
             """INSERT INTO maintenance_usure_pieces
                (cle,label,positions,ordre,actif,created_at,updated_at)
-               VALUES (?,?,?,?,1,?,?)""",
-            (cle, label, positions_json, ordre, now, now),
+               VALUES (?,?,'[]',?,1,?,?)""",
+            (cle, label, ordre, now, now),
         )
         conn.commit()
         new_id = cur.lastrowid
@@ -5846,7 +5861,7 @@ async def usure_pieces_update(piece_id: int, request: Request):
         if not _ensure_usure_table(conn):
             raise HTTPException(500, "Migration DB manquante (maintenance_usure_pieces absente).")
         row = conn.execute(
-            "SELECT id, cle, label, positions, ordre, actif FROM maintenance_usure_pieces WHERE id=?",
+            "SELECT id, cle, label, ordre, actif FROM maintenance_usure_pieces WHERE id=?",
             (piece_id,),
         ).fetchone()
         if not row:
@@ -5854,28 +5869,9 @@ async def usure_pieces_update(piece_id: int, request: Request):
         label = (body.get("label") or row["label"]).strip()[:80]
         if not label:
             raise HTTPException(422, "Libellé obligatoire.")
-        positions_json = row["positions"]
-        if "positions" in body:
-            positions_json = _usure_parse_positions(body)
-            # Retirer une position encore portée par un code laisserait ce code
-            # rattaché à une position qui n'existe plus — donc une carte avec un
-            # onglet fantôme. On refuse en nommant les codes à traiter d'abord.
-            import json as _json
-            new_positions = _json.loads(positions_json)
-            used = conn.execute(
-                """SELECT code, label, COALESCE(usure_position,'') AS pos
-                   FROM maintenance_codes WHERE usure_piece_id=?""",
-                (piece_id,),
-            ).fetchall()
-            orphans = [u for u in used if (u["pos"] or "") not in new_positions
-                       and not (u["pos"] == "" and not new_positions)]
-            if orphans:
-                detail = ", ".join(f"{o['code']} ({o['pos'] or 'sans position'})" for o in orphans[:5])
-                raise HTTPException(
-                    409,
-                    f"{len(orphans)} code(s) utilisent encore une position retirée : {detail}. "
-                    "Détachez-les ou changez leur position avant de modifier la pièce.",
-                )
+        # v230 : `positions` n'est plus modifiable ici — elle se déduit des
+        # codes. Un client qui l'enverrait encore est ignoré silencieusement
+        # plutôt que refusé : le champ n'existe plus dans le formulaire.
         try:
             ordre = int(body["ordre"]) if "ordre" in body else int(row["ordre"] or 0)
         except (TypeError, ValueError):
@@ -5894,9 +5890,9 @@ async def usure_pieces_update(piece_id: int, request: Request):
                 )
         conn.execute(
             """UPDATE maintenance_usure_pieces
-               SET label=?, positions=?, ordre=?, actif=?, updated_at=?
+               SET label=?, ordre=?, actif=?, updated_at=?
                WHERE id=?""",
-            (label, positions_json, ordre, actif, now, piece_id),
+            (label, ordre, actif, now, piece_id),
         )
         conn.commit()
         cle = row["cle"]
