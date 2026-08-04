@@ -395,6 +395,10 @@ body.reduce-anim .cal-skel{animation:none}
 .cal-wv-hour-row:first-child{border-top:none}
 .cal-wv-day-col.drag-over{background:var(--accent-bg);outline:2px dashed var(--accent);outline-offset:-2px;z-index:1}
 /* v2.5.14 : drag & drop planning maintenance */
+.cal-event.is-closed{opacity:.72}
+.cal-event-closed-badge{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:rgba(148,163,184,.22);color:var(--text2,var(--muted));margin-left:6px;vertical-align:middle}
+.plan-det-closed{margin-top:14px;padding:12px 14px;border-radius:8px;background:rgba(148,163,184,.10);border:1px solid var(--border);color:var(--text2,var(--muted));font-size:13px;line-height:1.5}
+.plan-det-closed strong{color:var(--text)}
 .cal-event[data-draggable="1"]{cursor:grab}
 .cal-event[data-draggable="1"]:active{cursor:grabbing}
 .cal-event.is-past{cursor:not-allowed}
@@ -4028,7 +4032,8 @@ function _makeEventBlock(item){
   const lanesCount = item.lanesCount || 1;
   const lane = item.lane || 0;
   const div = document.createElement('div');
-  div.className = 'cal-event' + (ev.template_id ? ' is-from-template' : '');
+  div.className = 'cal-event' + (ev.template_id ? ' is-from-template' : '')
+                              + (_calIsPastEvent(ev) ? ' is-closed' : '');  // v2.7.0
   div.style.top = top + 'px';
   div.style.height = height + 'px';
   div.style.left = 'calc(' + (lane * (100 / lanesCount)) + '% + 3px)';
@@ -4044,7 +4049,13 @@ function _makeEventBlock(item){
     const mine = (ev.operators || []).some(o => o.id === S.me.id);
     if(mine) div.classList.add('is-mine');
   }
-  const ops = Array.isArray(ev.operations) ? ev.operations.filter(o => o && (o.opName || o.opTypeId)) : [];
+  // v2.7.0 : une operation invalidee est mise de cote — elle ne compte plus
+  // dans le creneau. Le compteur de la tuile suit donc l'historique : invalider
+  // une saisie depuis l'historique fait bien decroitre le nombre affiche ici
+  // (refreshPlanning + renderCal sont deja rappeles par l'action).
+  const ops = Array.isArray(ev.operations)
+    ? ev.operations.filter(o => o && (o.opName || o.opTypeId) && o.statut !== 'invalidee')
+    : [];
   const opsCount = ops.length;
   // v2.5.20 : rendu minimaliste -- juste le nom (ou le nom du modele lie, ou la
   // machine en fallback) + "Afficher les details". La liste des ops et l'horaire
@@ -4061,7 +4072,9 @@ function _makeEventBlock(item){
     if(tmpl && tmpl.name){ title = tmpl.name; hasCustomName = true; }
   }
   if(!title) title = ev.machine || '\u2014';
-  let inner = '<div class="cal-event-title">' + escHtml(title) + '</div>';
+  let inner = '<div class="cal-event-title">' + escHtml(title) +
+    (_calIsPastEvent(ev) ? '<span class="cal-event-closed-badge">Clôturé</span>' : '') +
+    '</div>';
   // Machine en sous-titre (seulement si le titre principal n\'est pas deja la machine)
   if(hasCustomName && ev.machine){
     inner += '<div class="cal-event-sub">' + escHtml(ev.machine) + '</div>';
@@ -4072,7 +4085,7 @@ function _makeEventBlock(item){
   }
   div.innerHTML = inner;
   // v2.5.26 / v2.6.0 : pictogramme « aucun operateur assigne ». APRES innerHTML.
-  _appendNoOperatorBadge(div, ev);
+  if(!_calIsPastEvent(ev)) _appendNoOperatorBadge(div, ev);  // v2.7.0
   div.title = (ev.machine || '') + '\n' + ev.start + ' – ' + ev.end +
     (ops.length ? '\n\n' + ops.map(o => '• ' + (o.opName||'—')).join('\n') : '') +
     '\n\nCliquer pour afficher les détails';
@@ -4489,7 +4502,7 @@ function _makeClusterBlock(cluster){
     div.innerHTML = '<div class="cal-event-title">' + escHtml((ev.opName || '—') + machineSuffix) + '</div>' +
                     '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
     // v2.6.0 : idem -- APRES innerHTML, sinon le badge est efface.
-    _appendNoOperatorBadge(div, ev);
+    if(!_calIsPastEvent(ev)) _appendNoOperatorBadge(div, ev);  // v2.7.0
     div.title = 'Cliquer pour afficher les détails';
     div.addEventListener('click', e => {
       e.stopPropagation();
@@ -4667,7 +4680,7 @@ function openPlanningDetailsModal(events){
         '</div>' +
       '</div>' +
       // v2.5.25 : bandeau warning si aucun operateur assigne (admin uniquement).
-      (MAINT_ROLE !== 'operator' && !(Array.isArray(ev.operators) && ev.operators.length)
+      (MAINT_ROLE !== 'operator' && !_calIsPastEvent(ev) && !(Array.isArray(ev.operators) && ev.operators.length)
         ? '<div style="margin-top:10px;padding:10px 14px;border-radius:8px;background:rgba(245,158,11,.12);border:1px solid var(--warn,#f59e0b);color:var(--warn,#f59e0b);font-size:13px;line-height:1.4;display:flex;align-items:center;gap:10px">' +
             '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>' +
             '<span style="flex:1"><strong>Aucun op\u00e9rateur assign\u00e9.</strong> Personne ne saura qu\'il y a une t\u00e2che.</span>' +
@@ -4685,16 +4698,25 @@ function openPlanningDetailsModal(events){
       '</div>' +
       '<div class="plan-det-case-ops-label">Opérations à effectuer (' + ops.length + ')</div>' +
       '<div class="plan-det-case-ops-list">' + opsHtml + '</div>' +
-      '<div class="plan-det-case-actions">' +
-        '<button type="button" class="case-action-btn edit" onclick="editCase(\'' + escAttr(ev.id) + '\')">' +
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
-          ' Modifier' +
-        '</button>' +
-        '<button type="button" class="case-action-btn del" onclick="confirmDeleteCase(\'' + escAttr(ev.id) + '\')">' +
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-          ' Supprimer' +
-        '</button>' +
-      '</div>';
+      // v2.7.0 : créneau clôturé -> plus d'actions de planification, un
+      // bandeau qui dit pourquoi et où consigner une intervention faite.
+      (_calIsPastEvent(ev)
+        ? '<div class="plan-det-closed">' +
+            '<strong>Créneau clôturé.</strong> Sa date est passée : il ne peut plus être ' +
+            'déplacé, modifié ni supprimé. Pour consigner une intervention déjà ' +
+            'réalisée, utilise l\'enregistrement d\'opération. Une saisie déjà ' +
+            'enregistrée reste corrigeable depuis l\'historique des opérations.' +
+          '</div>'
+        : '<div class="plan-det-case-actions">' +
+            '<button type="button" class="case-action-btn edit" onclick="editCase(\'' + escAttr(ev.id) + '\')">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+              ' Modifier' +
+            '</button>' +
+            '<button type="button" class="case-action-btn del" onclick="confirmDeleteCase(\'' + escAttr(ev.id) + '\')">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+              ' Supprimer' +
+            '</button>' +
+          '</div>');
   }
   m.classList.add('open');
   m.setAttribute('aria-hidden','false');
@@ -4922,6 +4944,13 @@ function _closeDeleteCaseModal(){
 function editCase(id){
   const ev = PLANNING_STATE.list.find(e => String(e.id) === String(id));
   if(!ev){ showToast('Créneau introuvable.', 'danger'); return; }
+  // v2.7.0 : la modale de créneau EST le formulaire de planification. Sur un
+  // créneau clôturé elle n'a plus d'objet — le serveur refuserait de toute
+  // façon. La consultation reste ouverte via la modale de détails.
+  if(_calIsPastEvent(ev)){
+    showToast('Créneau passé : il est clôturé et n\'est plus modifiable.', 'info');
+    return;
+  }
   closePlanningDetailsModal();
   openCaseModal({
     editId: ev.id,
