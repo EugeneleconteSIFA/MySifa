@@ -2339,8 +2339,15 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                 <option value="remplacements">Interventions</option>
               </select>
               <input type="text" id="maint-intervalle" placeholder="Intervalle (ex. Hebdo, 30 jours, 6 mois)" maxlength="80">
+              <select id="maint-usure-piece" onchange="_maintOnUsurePieceChange()" title="Rattacher ce code a une piece d'usure">
+                <option value="">Piece d'usure : aucune</option>
+              </select>
+              <select id="maint-usure-position" onchange="_maintOnUsurePositionChange()" title="Position sur la piece">
+                <option value="">Position : —</option>
+              </select>
               <input type="text" id="maint-metrage-ref" placeholder="Réf. métrage (ex. 5000 m, 10 km)" maxlength="80">
             </div>
+            <div id="maint-usure-hint" style="display:none;font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px"></div>
             <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
               <button type="button" class="btn" onclick="saveMaintForm()">Enregistrer</button>
               <button type="button" class="btn btn-sec" onclick="closeMaintForm()">Annuler</button>
@@ -10498,7 +10505,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_widget_v2.js?v=8"></script>
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
-<script src="/static/mysifa_maint_form.js?v=2.5.12"></script>
+<script src="/static/mysifa_maint_form.js?v=2.6.2-usure"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js"></script>

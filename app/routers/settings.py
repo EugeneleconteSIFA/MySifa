@@ -2271,6 +2271,17 @@ def _maint_row_to_dict(r) -> dict:
         usage_v = int(r["usage_count"] or 0)
     except (IndexError, KeyError, TypeError, ValueError):
         usage_v = 0
+    # v229 : rattachement pièce d'usure. usure_piece_id NULL = pas une pièce
+    # d'usure — c'est le flag lui-même, il n'y a pas de booléen séparé.
+    try:
+        _upid = r["usure_piece_id"]
+        usure_piece_id = int(_upid) if _upid is not None else None
+    except (IndexError, KeyError, TypeError, ValueError):
+        usure_piece_id = None
+    try:
+        usure_position = r["usure_position"] or ""
+    except (IndexError, KeyError):
+        usure_position = ""
     return {
         "code": r["code"],
         "label": r["label"],
@@ -2281,6 +2292,8 @@ def _maint_row_to_dict(r) -> dict:
         "metrage_ref": metrage_ref or "",
         "libre": libre_v,
         "usage_count": usage_v,
+        "usure_piece_id": usure_piece_id,
+        "usure_position": usure_position if usure_piece_id is not None else "",
         "created_at": r["created_at"],
         "updated_at": r["updated_at"],
     }
@@ -2309,12 +2322,37 @@ def _normalize_maint_payload(body: dict) -> dict:
     intervalle = (body.get("intervalle") or "").strip()
     if len(intervalle) > 80:
         intervalle = intervalle[:80]
-    # Référence métrage : texte libre (ex. "5000 m"), surtout utile pour la
-    # catégorie "Suivi" (pièces d'usure). On le garde sur les autres catégories
-    # si l'utilisateur le saisit, mais il sera ignoré par l'UI consommatrice.
+    # v229 — Rattachement à une pièce d'usure. usure_piece_id NULL = code
+    # ordinaire. La cohérence (pièce existante, position déclarée sur la pièce,
+    # couple non déjà pris) est vérifiée par _validate_usure_link, qui a besoin
+    # d'une connexion : elle est appelée par les endpoints, pas ici.
+    _raw_piece = body.get("usure_piece_id")
+    if _raw_piece in (None, "", "null"):
+        usure_piece_id = None
+    else:
+        try:
+            usure_piece_id = int(_raw_piece)
+        except (TypeError, ValueError):
+            raise HTTPException(422, "Pièce d'usure invalide.")
+        if usure_piece_id <= 0:
+            usure_piece_id = None
+    # Jamais NULL quand la pièce est renseignée : l'index unique partiel
+    # considérerait deux NULL comme distincts et laisserait passer un doublon.
+    usure_position = (body.get("usure_position") or "").strip().lower()
+    if len(usure_position) > 40:
+        usure_position = usure_position[:40]
+    if usure_piece_id is None:
+        usure_position = ""
+
+    # Référence métrage : texte libre (ex. "5000 m"). v229 — devenue EXCLUSIVE
+    # aux pièces d'usure. Elle n'a jamais été lue ailleurs (seule la carte
+    # pièce d'usure la consomme) : on cesse simplement de l'accepter sur un
+    # code non rattaché, au lieu de la stocker pour rien.
     metrage_ref = (body.get("metrage_ref") or "").strip()
     if len(metrage_ref) > 80:
         metrage_ref = metrage_ref[:80]
+    if usure_piece_id is None:
+        metrage_ref = ""
     if not code:
         raise HTTPException(422, "Code obligatoire.")
     if not label:
@@ -2327,7 +2365,101 @@ def _normalize_maint_payload(body: dict) -> dict:
         "periodique": periodique,
         "intervalle": intervalle,
         "metrage_ref": metrage_ref,
+        "usure_piece_id": usure_piece_id,
+        "usure_position": usure_position,
     }
+
+
+# ─── Pièces d'usure — référentiel + validation du rattachement ────────────────
+# Une « pièce d'usure » (Couteaux, Contre-couteaux…) regroupe un ou plusieurs
+# codes maintenance sous une seule carte de l'accueil Maintenance. Quand la
+# pièce déclare des positions (Bande / Rive…), chaque position est portée par
+# un code distinct : c'est ce qui permet à une carte d'avoir des onglets sans
+# que le code ait à deviner quoi que ce soit à partir des libellés.
+
+def _usure_positions_of(row) -> list:
+    """Positions déclarées sur une pièce, lues depuis la colonne JSON."""
+    import json as _json  # module importé localement partout dans ce fichier
+    try:
+        raw = _json.loads(row["positions"] or "[]")
+    except (ValueError, TypeError, IndexError, KeyError):
+        return []
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for v in raw:
+        s = str(v or "").strip().lower()
+        if s and s not in out:
+            out.append(s[:40])
+    return out
+
+
+def _usure_piece_row_to_dict(row, codes_count: int = 0) -> dict:
+    return {
+        "id": int(row["id"]),
+        "cle": row["cle"],
+        "label": row["label"],
+        "positions": _usure_positions_of(row),
+        "ordre": int(row["ordre"] or 0),
+        "actif": bool(row["actif"]),
+        "codes_count": codes_count,
+    }
+
+
+def _ensure_usure_table(conn) -> bool:
+    """True si la migration v229 a bien tourné sur cette instance."""
+    return bool(conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='maintenance_usure_pieces'"
+    ).fetchone())
+
+
+def _validate_usure_link(conn, data: dict, current_code: str = "") -> None:
+    """Vérifie le couple (pièce, position) avant écriture d'un code.
+
+    Trois refus possibles, tous explicites — l'ancien matching par libellé
+    échouait en silence dans les trois cas :
+      - la pièce n'existe pas / est désactivée
+      - la position n'est pas déclarée sur cette pièce (ou en manque une)
+      - le couple est déjà porté par un autre code
+    """
+    piece_id = data.get("usure_piece_id")
+    if piece_id is None:
+        return
+    if not _ensure_usure_table(conn):
+        raise HTTPException(
+            500, "Migration DB manquante (maintenance_usure_pieces absente)."
+        )
+    row = conn.execute(
+        "SELECT id, cle, label, positions, ordre, actif FROM maintenance_usure_pieces WHERE id=?",
+        (piece_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(422, "Pièce d'usure introuvable.")
+    if not row["actif"]:
+        raise HTTPException(422, f"La pièce « {row['label']} » est désactivée.")
+    positions = _usure_positions_of(row)
+    pos = data.get("usure_position") or ""
+    if positions and pos not in positions:
+        raise HTTPException(
+            422,
+            f"Position invalide pour « {row['label']} ». Attendu : {', '.join(positions)}.",
+        )
+    if not positions and pos:
+        raise HTTPException(
+            422, f"La pièce « {row['label']} » ne gère pas de position."
+        )
+    clash = conn.execute(
+        """SELECT code, label FROM maintenance_codes
+           WHERE usure_piece_id=? AND COALESCE(usure_position,'')=? AND code<>?
+           LIMIT 1""",
+        (piece_id, pos, current_code or ""),
+    ).fetchone()
+    if clash:
+        _where = f"« {row['label']} · {pos.capitalize()} »" if pos else f"« {row['label']} »"
+        raise HTTPException(
+            409,
+            f"{_where} est déjà rattaché au code {clash['code']} ({clash['label']}).",
+        )
 
 
 _ALERT_PLACEMENTS = {"center", "top-right", "bottom-right"}
@@ -2815,6 +2947,9 @@ def maintenance_codes_list(request: Request, include_libres: int = 0):
         sel_extra = ""
         if has_libre: sel_extra += ",libre"
         if has_usage: sel_extra += ",usage_count"
+        # v229 : rattachement pièce d'usure (absent des DB pas encore migrées).
+        if "usure_piece_id" in cols: sel_extra += ",usure_piece_id"
+        if "usure_position" in cols: sel_extra += ",usure_position"
         where = ""
         if has_libre and not include_libres:
             where = "WHERE libre = 0"
@@ -2858,13 +2993,21 @@ async def maintenance_codes_create(request: Request):
         ).fetchone()
         if existing:
             raise HTTPException(409, f"Le code {data['code']} existe deja.")
+        _validate_usure_link(conn, data)
+        _cols = {c["name"] for c in conn.execute(
+            "PRAGMA table_info(maintenance_codes)").fetchall()}
+        _names = ["code", "label", "niveau", "categorie", "periodique",
+                  "intervalle", "metrage_ref", "created_at", "updated_at"]
+        _values = [data["code"], data["label"], data["niveau"], data["categorie"],
+                   data["periodique"], data["intervalle"], data["metrage_ref"], now, now]
+        if "usure_piece_id" in _cols:
+            _names.append("usure_piece_id"); _values.append(data["usure_piece_id"])
+        if "usure_position" in _cols:
+            _names.append("usure_position"); _values.append(data["usure_position"])
         conn.execute(
-            """INSERT INTO maintenance_codes
-               (code,label,niveau,categorie,periodique,intervalle,metrage_ref,
-                created_at,updated_at)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
-            (data["code"], data["label"], data["niveau"], data["categorie"],
-             data["periodique"], data["intervalle"], data["metrage_ref"], now, now),
+            "INSERT INTO maintenance_codes (%s) VALUES (%s)"
+            % (",".join(_names), ",".join("?" * len(_names))),
+            _values,
         )
         _sync_alert_for_code(conn, data["code"], data["label"],
                              data["categorie"], data["periodique"], now)
@@ -2884,13 +3027,21 @@ async def maintenance_codes_update(code: str, request: Request):
     from database import get_db
     now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
     with get_db() as conn:
+        _validate_usure_link(conn, data, current_code=data["code"])
+        _cols = {c["name"] for c in conn.execute(
+            "PRAGMA table_info(maintenance_codes)").fetchall()}
+        _sets = ["label=?", "niveau=?", "categorie=?", "periodique=?",
+                 "intervalle=?", "metrage_ref=?", "updated_at=?"]
+        _values = [data["label"], data["niveau"], data["categorie"],
+                   data["periodique"], data["intervalle"], data["metrage_ref"], now]
+        if "usure_piece_id" in _cols:
+            _sets.append("usure_piece_id=?"); _values.append(data["usure_piece_id"])
+        if "usure_position" in _cols:
+            _sets.append("usure_position=?"); _values.append(data["usure_position"])
+        _values.append(data["code"])
         cur = conn.execute(
-            """UPDATE maintenance_codes
-               SET label=?, niveau=?, categorie=?, periodique=?, intervalle=?,
-                   metrage_ref=?, updated_at=?
-               WHERE code=?""",
-            (data["label"], data["niveau"], data["categorie"],
-             data["periodique"], data["intervalle"], data["metrage_ref"], now, data["code"]),
+            "UPDATE maintenance_codes SET %s WHERE code=?" % ", ".join(_sets),
+            _values,
         )
         if cur.rowcount == 0:
             conn.rollback()
@@ -3467,6 +3618,16 @@ async def maintenance_libres_promote(code: str, request: Request):
         if "usage_count" in cols:
             names.append("usage_count")
             values.append(0)
+        # v229 : la promotion peut rattacher directement le nouveau code à une
+        # pièce d'usure. Sans rattachement, _normalize_maint_payload a déjà vidé
+        # metrage_ref — la référence métrage n'existe plus que pour ces pièces.
+        _validate_usure_link(conn, data, current_code=new_code)
+        if "usure_piece_id" in cols:
+            names.append("usure_piece_id")
+            values.append(data["usure_piece_id"])
+        if "usure_position" in cols:
+            names.append("usure_position")
+            values.append(data["usure_position"])
         conn.execute(
             "INSERT INTO maintenance_codes (%s) VALUES (%s)"
             % (",".join(names), ",".join("?" * len(names))),
@@ -5538,56 +5699,228 @@ async def maintenance_alerts_dismiss(alert_id: int, request: Request):
     return {"ok": True, "dismissed": True}
 
 
-@router.get("/api/maintenance/wearparts/last")
-def maintenance_wearparts_last(request: Request, machine: str = ""):
-    """Dernières opérations couteaux pour une machine."""
+# ─── Pièces d'usure — CRUD du référentiel (v229) ─────────────────────────────
+# Remplace les 4 pièces qui vivaient en dur dans WEARPART_PIECES (front) et le
+# matching par libellé qui les reliait aux codes. L'ancien endpoint
+# /api/maintenance/wearparts/last vivait ici : il scannait production_data avec
+# des LIKE '%contre%couteaux%bande%' et n'était plus appelé par personne depuis
+# le passage à /wearparts/info — supprimé avec le reste du matching textuel.
+
+
+def _usure_slugify(label: str, taken: set) -> str:
+    """Clé stable dérivée du libellé, unique dans la table.
+
+    La clé ne change JAMAIS ensuite : c'est elle qui indexe le cache et le
+    localStorage du front (mysifa_maint_wearparts_v1). Renommer une pièce doit
+    rester sans conséquence sur l'onglet mémorisé par chaque utilisateur.
+    """
+    import re as _re
+    import unicodedata
+    s = unicodedata.normalize("NFD", str(label or ""))
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn").lower()
+    s = _re.sub(r"[^a-z0-9]+", "_", s).strip("_")[:40] or "piece"
+    base, i = s, 2
+    while s in taken:
+        s = f"{base}_{i}"[:40]
+        i += 1
+    return s
+
+
+def _usure_parse_positions(body: dict) -> str:
+    """Normalise la liste de positions en JSON prêt à stocker."""
+    import json as _json
+    import re as _re
+    raw = body.get("positions")
+    if raw is None:
+        raw = []
+    if isinstance(raw, str):
+        raw = [x for x in _re.split(r"[,;]", raw)]
+    if not isinstance(raw, list):
+        raise HTTPException(422, "positions doit être une liste.")
+    out = []
+    for v in raw:
+        s = str(v or "").strip().lower()[:40]
+        if s and s not in out:
+            out.append(s)
+    if len(out) > 8:
+        raise HTTPException(422, "8 positions maximum par pièce.")
+    if len(out) == 1:
+        raise HTTPException(
+            422,
+            "Une pièce a soit aucune position, soit au moins deux. "
+            "Avec une seule, la position n'apporte rien — laissez la liste vide.",
+        )
+    return _json.dumps(out, ensure_ascii=False)
+
+
+@router.get("/api/maintenance/usure-pieces")
+def usure_pieces_list(request: Request, include_inactifs: bool = False):
+    """Référentiel des pièces d'usure. Lecture ouverte à tout utilisateur
+    connecté : l'accueil Maintenance en a besoin pour rendre ses cartes."""
     get_current_user(request)
-    machine = (machine or "").strip()
-    if not machine:
-        raise HTTPException(422, "Param 'machine' requis.")
     from database import get_db
-    queries = [
-        ("couteaux_bande",         "%couteaux%bande%", "%contre%couteaux%bande%"),
-        ("couteaux_rive",          "%couteaux%rive%",  "%contre%couteaux%rive%"),
-        ("contre_couteaux_bande",  "%contre%couteaux%bande%", None),
-        ("contre_couteaux_rive",   "%contre%couteaux%rive%",  None),
-    ]
-    items = {}
     with get_db() as conn:
-        m_row = conn.execute(
-            "SELECT dernier_metrage FROM machines WHERE nom=? AND actif=1 LIMIT 1",
-            (machine,),
+        if not _ensure_usure_table(conn):
+            return {"items": [], "migrated": False}
+        where = "" if include_inactifs else "WHERE actif = 1"
+        rows = conn.execute(
+            f"""SELECT id, cle, label, positions, ordre, actif
+                FROM maintenance_usure_pieces
+                {where}
+                ORDER BY ordre ASC, label ASC"""
+        ).fetchall()
+        counts = {}
+        try:
+            for cr in conn.execute(
+                """SELECT usure_piece_id AS pid, COUNT(*) AS n
+                   FROM maintenance_codes WHERE usure_piece_id IS NOT NULL
+                   GROUP BY usure_piece_id"""
+            ).fetchall():
+                counts[int(cr["pid"])] = int(cr["n"])
+        except Exception:
+            counts = {}
+    items = [_usure_piece_row_to_dict(r, counts.get(int(r["id"]), 0)) for r in rows]
+    return {"items": items, "migrated": True}
+
+
+@router.post("/api/maintenance/usure-pieces")
+async def usure_pieces_create(request: Request):
+    user = _require_maint_writer(request)
+    body = await request.json()
+    label = (body.get("label") or "").strip()[:80]
+    if not label:
+        raise HTTPException(422, "Libellé obligatoire.")
+    positions_json = _usure_parse_positions(body)
+    try:
+        ordre = int(body.get("ordre") or 0)
+    except (TypeError, ValueError):
+        ordre = 0
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        if not _ensure_usure_table(conn):
+            raise HTTPException(500, "Migration DB manquante (maintenance_usure_pieces absente).")
+        taken = {r["cle"] for r in conn.execute(
+            "SELECT cle FROM maintenance_usure_pieces").fetchall()}
+        cle = _usure_slugify(label, taken)
+        if ordre <= 0:
+            row = conn.execute(
+                "SELECT COALESCE(MAX(ordre),0) AS m FROM maintenance_usure_pieces").fetchone()
+            ordre = int(row["m"] or 0) + 1
+        cur = conn.execute(
+            """INSERT INTO maintenance_usure_pieces
+               (cle,label,positions,ordre,actif,created_at,updated_at)
+               VALUES (?,?,?,?,1,?,?)""",
+            (cle, label, positions_json, ordre, now, now),
+        )
+        conn.commit()
+        new_id = cur.lastrowid
+    log_action(user=user, action="CREATE", module="maintenance_usure_pieces",
+               objet=cle, detail=label)
+    return {"ok": True, "id": new_id, "cle": cle}
+
+
+@router.put("/api/maintenance/usure-pieces/{piece_id}")
+async def usure_pieces_update(piece_id: int, request: Request):
+    """Renommer, réordonner, activer/désactiver, changer les positions.
+
+    La `cle` n'est jamais modifiée : c'est le point qui rend le renommage
+    inoffensif côté front (cache + localStorage indexés dessus).
+    """
+    user = _require_maint_writer(request)
+    body = await request.json()
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        if not _ensure_usure_table(conn):
+            raise HTTPException(500, "Migration DB manquante (maintenance_usure_pieces absente).")
+        row = conn.execute(
+            "SELECT id, cle, label, positions, ordre, actif FROM maintenance_usure_pieces WHERE id=?",
+            (piece_id,),
         ).fetchone()
-        current_metrage = m_row["dernier_metrage"] if m_row else None
-        for key, pat, exclude in queries:
-            sql = "SELECT date_operation FROM production_data WHERE machine=? AND LOWER(operation) LIKE LOWER(?)"
-            params = [machine, pat]
-            if exclude:
-                sql += " AND LOWER(operation) NOT LIKE LOWER(?)"
-                params.append(exclude)
-            sql += " ORDER BY date_operation DESC LIMIT 1"
-            row = conn.execute(sql, params).fetchone()
-            if not row or not row["date_operation"]:
-                items[key] = {"last_date": None, "metrage_at_change": None, "metrage_since": None}
-                continue
-            change_date = row["date_operation"]
-            m_at_row = conn.execute(
-                "SELECT COALESCE(metrage_total_fin, metrage_total_debut) AS m FROM production_data "
-                "WHERE machine=? AND operation_code IN ('01','89') AND date_operation <= ? "
-                "AND (metrage_total_fin IS NOT NULL OR metrage_total_debut IS NOT NULL) "
-                "ORDER BY date_operation DESC, id DESC LIMIT 1",
-                (machine, change_date),
-            ).fetchone()
-            m_at_change = m_at_row["m"] if m_at_row else None
-            metrage_since = None
-            if current_metrage is not None and m_at_change is not None:
-                try:
-                    metrage_since = max(0.0, float(current_metrage) - float(m_at_change))
-                except (TypeError, ValueError):
-                    metrage_since = None
-            items[key] = {"last_date": change_date, "metrage_at_change": m_at_change, "metrage_since": metrage_since}
-    dates = {k: v["last_date"] for k, v in items.items()}
-    return {"machine": machine, "current_metrage": current_metrage, "dates": dates, "items": items}
+        if not row:
+            raise HTTPException(404, "Pièce introuvable.")
+        label = (body.get("label") or row["label"]).strip()[:80]
+        if not label:
+            raise HTTPException(422, "Libellé obligatoire.")
+        positions_json = row["positions"]
+        if "positions" in body:
+            positions_json = _usure_parse_positions(body)
+            # Retirer une position encore portée par un code laisserait ce code
+            # rattaché à une position qui n'existe plus — donc une carte avec un
+            # onglet fantôme. On refuse en nommant les codes à traiter d'abord.
+            import json as _json
+            new_positions = _json.loads(positions_json)
+            used = conn.execute(
+                """SELECT code, label, COALESCE(usure_position,'') AS pos
+                   FROM maintenance_codes WHERE usure_piece_id=?""",
+                (piece_id,),
+            ).fetchall()
+            orphans = [u for u in used if (u["pos"] or "") not in new_positions
+                       and not (u["pos"] == "" and not new_positions)]
+            if orphans:
+                detail = ", ".join(f"{o['code']} ({o['pos'] or 'sans position'})" for o in orphans[:5])
+                raise HTTPException(
+                    409,
+                    f"{len(orphans)} code(s) utilisent encore une position retirée : {detail}. "
+                    "Détachez-les ou changez leur position avant de modifier la pièce.",
+                )
+        try:
+            ordre = int(body["ordre"]) if "ordre" in body else int(row["ordre"] or 0)
+        except (TypeError, ValueError):
+            ordre = int(row["ordre"] or 0)
+        actif = int(bool(body["actif"])) if "actif" in body else int(bool(row["actif"]))
+        if not actif:
+            n_used = conn.execute(
+                "SELECT COUNT(*) AS n FROM maintenance_codes WHERE usure_piece_id=?",
+                (piece_id,),
+            ).fetchone()["n"]
+            if n_used:
+                raise HTTPException(
+                    409,
+                    f"{n_used} code(s) sont encore rattachés à « {row['label']} ». "
+                    "Détachez-les avant de désactiver la pièce.",
+                )
+        conn.execute(
+            """UPDATE maintenance_usure_pieces
+               SET label=?, positions=?, ordre=?, actif=?, updated_at=?
+               WHERE id=?""",
+            (label, positions_json, ordre, actif, now, piece_id),
+        )
+        conn.commit()
+        cle = row["cle"]
+    log_action(user=user, action="UPDATE", module="maintenance_usure_pieces",
+               objet=cle, detail=label)
+    return {"ok": True}
+
+
+@router.delete("/api/maintenance/usure-pieces/{piece_id}")
+def usure_pieces_delete(piece_id: int, request: Request):
+    user = _require_maint_writer(request)
+    from database import get_db
+    with get_db() as conn:
+        if not _ensure_usure_table(conn):
+            raise HTTPException(500, "Migration DB manquante (maintenance_usure_pieces absente).")
+        row = conn.execute(
+            "SELECT cle, label FROM maintenance_usure_pieces WHERE id=?", (piece_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Pièce introuvable.")
+        n_used = conn.execute(
+            "SELECT COUNT(*) AS n FROM maintenance_codes WHERE usure_piece_id=?",
+            (piece_id,),
+        ).fetchone()["n"]
+        if n_used:
+            raise HTTPException(
+                409,
+                f"{n_used} code(s) sont rattachés à « {row['label']} ». "
+                "Détachez-les avant de supprimer la pièce.",
+            )
+        conn.execute("DELETE FROM maintenance_usure_pieces WHERE id=?", (piece_id,))
+        conn.commit()
+    log_action(user=user, action="DELETE", module="maintenance_usure_pieces",
+               objet=row["cle"], detail=row["label"])
+    return {"ok": True}
 
 
 @router.post("/api/maintenance/wearparts/info")
