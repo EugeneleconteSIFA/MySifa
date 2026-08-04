@@ -1699,29 +1699,27 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             </select>
             <input type="text" id="maint-intervalle" placeholder="Intervalle (ex. Hebdo, 30 jours, 6 mois)" maxlength="80">
           </div>
-          <div id="maint-usure-block" style="margin-top:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;background:var(--bg)">
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text)">
+          <div id="maint-usure-block" style="margin-top:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text);white-space:nowrap">
               <input type="checkbox" id="maint-usure-on" onchange="_maintOnUsureToggle()" style="width:16px;height:16px;flex:0 0 auto;margin:0;padding:0;cursor:pointer">
-              C'est une pièce d'usure
+              Pièce d'usure
             </label>
-            <div id="maint-usure-fields" style="display:none;margin-top:12px">
-              <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(190px,1fr))">
-                <select id="maint-usure-piece" onchange="_maintOnUsurePieceChange()" title="Pièce d'usure à laquelle ce code est rattaché">
-                  <option value="">— Choisir une pièce —</option>
-                </select>
-                <input type="text" id="maint-metrage-ref" placeholder="Réf. métrage (ex. 5000 m, 10 km)" maxlength="80">
-              </div>
-              <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:10px;cursor:pointer;color:var(--text)">
+            <div id="maint-usure-fields" style="display:none;align-items:center;gap:12px;flex-wrap:wrap">
+              <select id="maint-usure-piece" onchange="_maintOnUsurePieceChange()" title="Pièce d'usure à laquelle ce code est rattaché" style="width:auto;min-width:150px;padding:6px 10px;font-size:12px">
+                <option value="">— Choisir —</option>
+              </select>
+              <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;color:var(--text);white-space:nowrap">
                 <input type="checkbox" id="maint-usure-haspos" onchange="_maintOnUsureHasPosChange()" style="width:16px;height:16px;flex:0 0 auto;margin:0;padding:0;cursor:pointer">
-                Position particulière sur la pièce
+                Position
               </label>
-              <div id="maint-usure-pos-wrap" style="display:none;margin-top:8px">
-                <input type="text" id="maint-usure-position" list="maint-usure-position-list" placeholder="Nom de la position (ex. bande, rive)" maxlength="40" oninput="_maintOnUsurePositionInput()" style="max-width:320px">
+              <span id="maint-usure-pos-wrap" style="display:none">
+                <input type="text" id="maint-usure-position" list="maint-usure-position-list" placeholder="ex. bande" maxlength="40" oninput="_maintOnUsurePositionInput()" style="width:120px;padding:6px 10px;font-size:12px">
                 <datalist id="maint-usure-position-list"></datalist>
-              </div>
-              <div id="maint-usure-hint" style="display:none;font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5"></div>
+              </span>
+              <input type="text" id="maint-metrage-ref" placeholder="Réf. métrage (ex. 5000 m)" maxlength="80" style="width:180px;padding:6px 10px;font-size:12px">
             </div>
           </div>
+          <div id="maint-usure-hint" style="display:none;font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5"></div>
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
             <button type="button" class="btn" onclick="saveMaintForm()">Enregistrer</button>
             <button type="button" class="btn btn-sec" onclick="closeMaintForm()">Annuler</button>
@@ -6820,7 +6818,7 @@ async function unlinkBridge(mp_id) {
 <!-- v2.4.18 : mysifa_maint_form.js — CRUD codes maintenance + interventions libres (module partagé settings ↔ maintenance). -->
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
-<script src="/static/mysifa_maint_form.js?v=2.7.3-usure"></script>
+<script src="/static/mysifa_maint_form.js?v=2.7.4-usure"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
 <script src="/static/mysifa_impersonate.js"></script>
 <!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe
