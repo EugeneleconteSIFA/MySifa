@@ -1918,9 +1918,16 @@ def _ref_enrich_light(conn, fiches: List[dict]) -> List[dict]:
         ids,
     ).fetchall()
     qmap = {r["fiche_id"]: r["n"] for r in quests}
+    # Compteur audits : union des liens manuels et des audits dont la matrice
+    # demande cette certification. Compter les deux tables separement puis les
+    # additionner double-compterait un audit present des deux cotes.
     liens = conn.execute(
-        f"SELECT fiche_id, COUNT(*) AS n FROM qualite_ref_audit_liens WHERE fiche_id IN ({ph}) GROUP BY fiche_id",
-        ids,
+        f"""SELECT fiche_id, COUNT(*) AS n FROM (
+                SELECT fiche_id, audit_id FROM qualite_ref_audit_liens WHERE fiche_id IN ({ph})
+                UNION
+                SELECT fiche_id, audit_id FROM audit_certifications_demandees WHERE fiche_id IN ({ph})
+            ) GROUP BY fiche_id""",
+        ids + ids,
     ).fetchall()
     lmap = {r["fiche_id"]: r["n"] for r in liens}
     for f in fiches:
@@ -2025,18 +2032,46 @@ def ref_get_fiche(fiche_id: int, request: Request):
                 (fiche_id,),
             ).fetchall()
         ]
-        # Audits lies
-        f["audits"] = [
-            dict(r) for r in conn.execute(
-                """SELECT a.id, a.numero, a.client_nom, a.date_audit, a.statut,
-                          l.note, l.created_at AS linked_at
-                   FROM qualite_ref_audit_liens l
-                   JOIN audit_dossiers a ON a.id = l.audit_id
-                   WHERE l.fiche_id=?
-                   ORDER BY a.date_audit DESC""",
-                (fiche_id,),
-            ).fetchall()
-        ]
+        # Audits lies — deux origines fusionnees en une seule liste :
+        #  - "manuel"  : lien pose a la main depuis la fiche (qualite_ref_audit_liens)
+        #  - "matrice" : l auditeur a inscrit cette certification dans la matrice
+        #                de l audit (audit_certifications_demandees)
+        # Le second cas est la reponse a "quels audits ont porte sur cette
+        # certification ?" : il ne demande aucune ressaisie et ne peut pas etre
+        # oublie. Un audit present des deux cotes porte origine="les_deux" et
+        # reste deliable (seul le lien manuel disparait).
+        audits_map = {}
+        for r in conn.execute(
+            """SELECT a.id, a.numero, a.client_nom, a.date_audit, a.statut,
+                      l.note, l.created_at AS linked_at
+               FROM qualite_ref_audit_liens l
+               JOIN audit_dossiers a ON a.id = l.audit_id
+               WHERE l.fiche_id=?""",
+            (fiche_id,),
+        ).fetchall():
+            d = dict(r)
+            d["origine"] = "manuel"
+            audits_map[d["id"]] = d
+        for r in conn.execute(
+            """SELECT a.id, a.numero, a.client_nom, a.date_audit, a.statut
+               FROM audit_certifications_demandees c
+               JOIN audit_dossiers a ON a.id = c.audit_id
+               WHERE c.fiche_id=?""",
+            (fiche_id,),
+        ).fetchall():
+            d = dict(r)
+            if d["id"] in audits_map:
+                audits_map[d["id"]]["origine"] = "les_deux"
+            else:
+                d["note"] = None
+                d["linked_at"] = None
+                d["origine"] = "matrice"
+                audits_map[d["id"]] = d
+        f["audits"] = sorted(
+            audits_map.values(),
+            key=lambda a: (a.get("date_audit") or ""),
+            reverse=True,
+        )
         # Nom du createur / validateur (pour affichage)
         for uid_field in ("created_by", "updated_by", "validated_by"):
             uid = f.get(uid_field)
@@ -2460,6 +2495,142 @@ def ref_delete_fichier(fid: int, request: Request):
     return {"ok": True}
 
 
+# ─── Fiche referentiel : couverture fournisseurs ──────────────────────────
+# Une fiche du referentiel (FSC, ISO 14001...) est une exigence. La question
+# qui vient juste apres "qu est-ce que FSC ?" est "et qui, chez nos
+# fournisseurs, l a ?". Cet endpoint y repond sans ressaisie : il relit les
+# certificats deja deposes dans Ressources fournisseurs et taggues sur cette
+# fiche (table qualite_fournisseur_certificat_fiches).
+
+def _fourn_categories_list(raw) -> List[str]:
+    """Colonne fournisseurs_fsc.categories (JSON) -> liste de codes connus.
+
+    Les codes absents du referentiel (config.FOURNISSEUR_CATEGORIES) sont
+    ecartes : ils ne sont ni affichables lisiblement, ni filtrables.
+    """
+    import json as _json
+    if not raw:
+        return []
+    try:
+        parsed = _json.loads(raw) if isinstance(raw, str) else raw
+    except (ValueError, TypeError):
+        return []
+    if not isinstance(parsed, list):
+        return []
+    from config import FOURNISSEUR_CATEGORIES_CODES
+    return [str(c).strip() for c in parsed
+            if str(c).strip() and str(c).strip() in FOURNISSEUR_CATEGORIES_CODES]
+
+
+# Ordre de gravite : un fournisseur couvert par plusieurs certificats prend
+# le meilleur des statuts. "sans_date" passe devant "expire" — un certificat
+# sans date d expiration est douteux, pas caduc.
+_COUV_RANG = {"valide": 0, "expire_bientot": 1, "sans_date": 2, "expire": 3}
+
+
+@router.get("/api/qualite/ref/fiches/{fiche_id}/fournisseurs")
+def ref_fiche_fournisseurs(fiche_id: int, request: Request):
+    """Documents fournisseurs taggues sur cette fiche + couverture fournisseurs.
+
+    Perimetre : tous les fournisseurs actifs. Un fournisseur est "valide" des
+    lors qu il porte au moins un certificat non expire taggue sur cette fiche ;
+    il est "manquant" s il n en a aucun (raison="aucun") ou si tous les siens
+    sont expires (raison="expire") — un certificat perime ne couvre rien, le
+    ranger parmi les valides donnerait une fausse assurance.
+    """
+    _require_qualite_view(request)
+    with get_db() as conn:
+        fiche = conn.execute(
+            "SELECT id, nom, acronyme, slug, categorie FROM qualite_ref_fiches WHERE id=?",
+            (fiche_id,),
+        ).fetchone()
+        if not fiche:
+            raise HTTPException(status_code=404, detail="Fiche introuvable")
+
+        fours = [dict(r) for r in conn.execute(
+            """SELECT id, nom, groupe, branche, licence, certificat, categories
+               FROM fournisseurs_fsc
+               WHERE COALESCE(actif, 1) = 1
+               ORDER BY nom COLLATE NOCASE ASC"""
+        ).fetchall()]
+
+        docs = [dict(r) for r in conn.execute(
+            """SELECT c.id, c.fournisseur_id, c.titre, c.original_name, c.mime_type,
+                      c.size_bytes, c.date_emission, c.date_expiration, c.commentaire,
+                      c.uploaded_at, c.groupe_ref,
+                      f.nom AS fournisseur_nom, f.groupe AS fournisseur_groupe,
+                      f.branche AS fournisseur_branche,
+                      u.nom AS uploaded_by_nom
+               FROM qualite_fournisseur_certificat_fiches l
+               JOIN qualite_fournisseur_certificats c ON c.id = l.certificat_id
+               LEFT JOIN fournisseurs_fsc f ON f.id = c.fournisseur_id
+               LEFT JOIN users u ON u.id = c.uploaded_by
+               WHERE l.fiche_id=?
+               ORDER BY COALESCE(c.date_expiration, c.uploaded_at) DESC, c.id DESC""",
+            (fiche_id,),
+        ).fetchall()]
+
+    for d in docs:
+        d["statut"] = _compute_cert_status(d.get("date_expiration"))
+
+    # Index groupe -> fournisseurs, pour propager un certificat depose au
+    # niveau groupe a toutes ses branches (c est le sens de groupe_ref).
+    par_groupe = {}
+    for f in fours:
+        g = (f.get("groupe") or "").strip().lower()
+        if g:
+            par_groupe.setdefault(g, []).append(f["id"])
+
+    couverture = {}  # fournisseur_id -> {"statut":..., "docs":[ids]}
+
+    def _couvrir(fid, doc):
+        if fid is None:
+            return
+        cur = couverture.setdefault(fid, {"statut": None, "docs": []})
+        cur["docs"].append(doc["id"])
+        st = doc["statut"]
+        if cur["statut"] is None or _COUV_RANG.get(st, 9) < _COUV_RANG.get(cur["statut"], 9):
+            cur["statut"] = st
+
+    for d in docs:
+        gref = (d.get("groupe_ref") or "").strip().lower()
+        if gref and gref in par_groupe:
+            for fid in par_groupe[gref]:
+                _couvrir(fid, d)
+        else:
+            _couvrir(d.get("fournisseur_id"), d)
+
+    valides, manquants = [], []
+    for f in fours:
+        cov = couverture.get(f["id"])
+        base = {
+            "id": f["id"], "nom": f["nom"],
+            "groupe": f.get("groupe"), "branche": f.get("branche"),
+            "categories": _fourn_categories_list(f.get("categories")),
+        }
+        if cov and cov["statut"] != "expire":
+            base["statut"] = cov["statut"]
+            base["nb_docs"] = len(cov["docs"])
+            valides.append(base)
+        else:
+            base["raison"] = "expire" if cov else "aucun"
+            base["nb_docs"] = len(cov["docs"]) if cov else 0
+            manquants.append(base)
+
+    return {
+        "fiche": dict(fiche),
+        "documents": docs,
+        "valides": valides,
+        "manquants": manquants,
+        "stats": {
+            "fournisseurs": len(fours),
+            "valides": len(valides),
+            "manquants": len(manquants),
+            "documents": len(docs),
+        },
+    }
+
+
 # ============================================================================
 # RESSOURCES FOURNISSEURS — un dossier par fournisseur avec certificats
 # ============================================================================
@@ -2505,21 +2676,37 @@ def ressources_list_fournisseurs(request: Request):
     with get_db() as conn:
         # Charger fournisseurs + certifs en 2 requetes puis agreger
         fours = [dict(r) for r in conn.execute(
-            """SELECT id, nom, licence, certificat, groupe, branche, pays_origine
+            """SELECT id, nom, licence, certificat, groupe, branche, pays_origine, categories
                FROM fournisseurs_fsc
                ORDER BY groupe COLLATE NOCASE ASC, nom COLLATE NOCASE ASC"""
         ).fetchall()]
         # Charger toutes les dates d'expiration + groupe_ref
         cert_rows = conn.execute(
-            """SELECT fournisseur_id, date_expiration, groupe_ref
+            """SELECT id, fournisseur_id, date_expiration, groupe_ref
                FROM qualite_fournisseur_certificats"""
         ).fetchall()
         certs_by_four = {}
+        cert_meta = {}
         for cr in cert_rows:
+            cert_meta[cr["id"]] = {
+                "fournisseur_id": cr["fournisseur_id"],
+                "date_expiration": cr["date_expiration"],
+                "groupe_ref": cr["groupe_ref"],
+            }
             certs_by_four.setdefault(cr["fournisseur_id"], []).append({
                 "date_expiration": cr["date_expiration"],
                 "groupe_ref": cr["groupe_ref"],
             })
+        # Referentiel RSE : catalogue des certifications + rattachement des
+        # certificats deposes. C est ce qui permet de repondre "qui a FSC ?"
+        # depuis la liste, sans ouvrir chaque dossier fournisseur.
+        fiches_cat = [dict(r) for r in conn.execute(
+            """SELECT id, nom, acronyme, slug, categorie, statut_sifa
+               FROM qualite_ref_fiches ORDER BY nom COLLATE NOCASE ASC"""
+        ).fetchall()]
+        liens = conn.execute(
+            "SELECT certificat_id, fiche_id FROM qualite_fournisseur_certificat_fiches"
+        ).fetchall()
 
     def _stats(cert_list):
         s = {"total": 0, "valide": 0, "soon": 0, "exp": 0, "nod": 0}
@@ -2532,33 +2719,85 @@ def ressources_list_fournisseurs(request: Request):
             elif st == "sans_date": s["nod"] += 1
         return s
 
+    # Couverture certifications : fournisseur -> {fiche_id: statut}. Un
+    # certificat depose au niveau groupe (groupe_ref) couvre toutes les
+    # branches du groupe, pas seulement celle qui l a televerse.
+    par_groupe_ids = {}
+    for f in fours:
+        g = (f.get("groupe") or "").strip().lower()
+        if g:
+            par_groupe_ids.setdefault(g, []).append(f["id"])
+
+    couv = {}  # fournisseur_id -> {fiche_id: statut}
+
+    def _pose(fid, fiche_id, statut):
+        if fid is None:
+            return
+        d = couv.setdefault(fid, {})
+        actuel = d.get(fiche_id)
+        if actuel is None or _COUV_RANG.get(statut, 9) < _COUV_RANG.get(actuel, 9):
+            d[fiche_id] = statut
+
+    for lk in liens:
+        meta = cert_meta.get(lk["certificat_id"])
+        if not meta:
+            continue
+        st = _compute_cert_status(meta["date_expiration"])
+        gref = (meta.get("groupe_ref") or "").strip().lower()
+        cibles = par_groupe_ids.get(gref) if gref else None
+        for fid in (cibles or [meta["fournisseur_id"]]):
+            _pose(fid, lk["fiche_id"], st)
+
     # Separer groupes vs fournisseurs isolés
     groupes_map = {}
     fournisseurs_indep = []
     for f in fours:
         f_certs = certs_by_four.get(f["id"], [])
         f_stats = _stats(f_certs)
+        f_cats = _fourn_categories_list(f.get("categories"))
+        f_couv = couv.get(f["id"], {})
         g = (f.get("groupe") or "").strip()
         if g:
             if g not in groupes_map:
                 groupes_map[g] = {
                     "groupe": g,
                     "branches": [],
+                    "categories": [],
+                    "certifs": {},
+                    "certifs_branches": {},
                     "stats": {"total": 0, "valide": 0, "soon": 0, "exp": 0, "nod": 0},
                 }
             groupes_map[g]["branches"].append({
                 "id": f["id"], "nom": f["nom"], "branche": f.get("branche"),
                 "licence": f.get("licence"), "certificat": f.get("certificat"),
                 "pays_origine": f.get("pays_origine"),
+                "categories": f_cats,
+                "certifs": f_couv,
                 "cert_stats": f_stats,
             })
             for k in ("total", "valide", "soon", "exp", "nod"):
                 groupes_map[g]["stats"][k] += f_stats[k]
+            for c in f_cats:
+                if c not in groupes_map[g]["categories"]:
+                    groupes_map[g]["categories"].append(c)
+            # Au niveau groupe : union des branches (meilleur statut retenu)
+            # + compteur de branches couvertes, pour distinguer un groupe
+            # entierement couvert d un groupe couvert a moitie.
+            for fid_fiche, st in f_couv.items():
+                k = str(fid_fiche)
+                actuel = groupes_map[g]["certifs"].get(k)
+                if actuel is None or _COUV_RANG.get(st, 9) < _COUV_RANG.get(actuel, 9):
+                    groupes_map[g]["certifs"][k] = st
+                if st != "expire":
+                    groupes_map[g]["certifs_branches"][k] = \
+                        groupes_map[g]["certifs_branches"].get(k, 0) + 1
         else:
             fournisseurs_indep.append({
                 "id": f["id"], "nom": f["nom"],
                 "licence": f.get("licence"), "certificat": f.get("certificat"),
                 "pays_origine": f.get("pays_origine"),
+                "categories": f_cats,
+                "certifs": {str(k): v for k, v in f_couv.items()},
                 "cert_stats": f_stats,
             })
 
@@ -2569,7 +2808,14 @@ def ressources_list_fournisseurs(request: Request):
         flat.append((key, f["id"]))
     flat.sort(key=lambda x: x[0])
     order = [fid for _, fid in flat]
-    return {"groupes": groupes, "fournisseurs": fournisseurs_indep, "order": order}
+    from config import fournisseur_categories as _fc
+    return {
+        "groupes": groupes,
+        "fournisseurs": fournisseurs_indep,
+        "order": order,
+        "certifications": fiches_cat,
+        "categories_catalogue": _fc(),
+    }
 
 
 

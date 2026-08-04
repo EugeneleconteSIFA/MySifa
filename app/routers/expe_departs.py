@@ -1548,6 +1548,34 @@ def delete_depart(request: Request, depart_id: int):
             raise HTTPException(status_code=404, detail="Départ introuvable")
         if ex["statut"] not in ("en_attente", "valide"):
             raise HTTPException(status_code=409, detail="Suppression impossible : départ annulé")
+
+        # Rétention FSC : un départ portant un claim est la PREUVE d'une vente
+        # certifiée. FSC-STD-40-004 impose de conserver ces enregistrements
+        # 5 ans ; les effacer rend la vente indémontrable en audit. En négoce
+        # direct (A2) c'est même la seule trace existante — aucun lot, aucun
+        # mouvement de stock ne subsiste ailleurs.
+        try:
+            fsc = conn.execute(
+                """SELECT TRIM(COALESCE(fsc_claim_sortant,'')) AS claim,
+                          TRIM(COALESCE(fsc_bl_fournisseur,'')) AS bl,
+                          COALESCE(fsc_sans_transit,0) AS direct
+                     FROM expe_departs WHERE id=?""",
+                (depart_id,),
+            ).fetchone()
+        except Exception:
+            fsc = None
+        if fsc and (
+            (fsc["claim"] and fsc["claim"] != "non_fsc") or fsc["bl"] or int(fsc["direct"] or 0)
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Suppression impossible : ce départ porte un claim FSC. "
+                    "Ces enregistrements doivent être conservés 5 ans. "
+                    "Annuler le départ plutôt que le supprimer."
+                ),
+            )
+
         client_nom = (ex["client"] or "").strip() or "—"
         conn.execute("DELETE FROM expe_departs WHERE id=?", (depart_id,))
         conn.commit()

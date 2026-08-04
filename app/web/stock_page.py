@@ -6341,9 +6341,14 @@ function closePfModals() {
 }
 
 function renderPfMvtModal() {
-  closePfModals();
+  // closePfModals() remet S.pfModal a null : il faut donc capturer la modale
+  // AVANT de fermer, puis la restaurer. Sans cela le test `if (!modal)` sortait
+  // systematiquement et les boutons Entree / Sortie ne faisaient rien du tout,
+  // sans la moindre erreur en console.
   const modal = S.pfModal;
   if (!modal) return;
+  closePfModals();
+  S.pfModal = modal;
   const mroot = document.getElementById('mroot');
   if (!mroot) return;
   const typeMvt = modal.type;

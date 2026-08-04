@@ -16,6 +16,7 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 from fastapi.responses import StreamingResponse
 
+from app.services import mystock_prix as _mystock_prix
 from app.services.audit_service import log_action
 from config import (
     STOCK_EMPLACEMENT_AU_SOL,
@@ -1945,6 +1946,55 @@ def delete_produit(produit_id: int, request: Request):
         if not prow:
             raise HTTPException(404, "Produit non trouvé")
         ref_audit = prow["reference"] or ""
+
+        # -- Conservation des enregistrements FSC (5 ans) -------------------
+        #
+        # Cet endpoint effacait physiquement lots_stock, stock_emplacements ET
+        # mouvements_stock pour la reference. Sur un produit ayant porte un
+        # claim FSC, cela detruit definitivement la chaine de controle : plus
+        # de lot, plus de mouvement, plus rien a opposer a un auditeur -- et
+        # l'action etait accessible en un clic a tout utilisateur ayant le
+        # droit d'ecriture stock.
+        #
+        # La CoC impose de conserver ces enregistrements 5 ans. On refuse donc
+        # la suppression des qu'un enregistrement FSC existe, plutot que de
+        # supprimer « au mieux ». Un produit qu'on ne peut plus supprimer se
+        # contourne (renommer, desactiver) ; un historique detruit, non.
+        fsc_lots = conn.execute(
+            "SELECT COUNT(*) AS n FROM lots_stock WHERE produit_id=? AND COALESCE(fsc,0)=1",
+            (produit_id,),
+        ).fetchone()["n"]
+        fsc_mvts = conn.execute(
+            "SELECT COUNT(*) AS n FROM mouvements_stock WHERE produit_id=? AND COALESCE(fsc,0)=1",
+            (produit_id,),
+        ).fetchone()["n"]
+        if fsc_lots or fsc_mvts:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Suppression impossible : {ref_audit} porte des enregistrements FSC "
+                    f"({fsc_lots} lot(s), {fsc_mvts} mouvement(s)). La chaine de controle "
+                    f"doit etre conservee 5 ans. Mettez la reference hors service plutot "
+                    f"que de la supprimer."
+                ),
+            )
+
+        # Meme sans FSC, un historique de mouvements reste une trace comptable
+        # et operationnelle. On avertit explicitement plutot que de l'effacer
+        # en silence : le front peut confirmer via ?force=1 sur ce 409.
+        nb_mvts = conn.execute(
+            "SELECT COUNT(*) AS n FROM mouvements_stock WHERE produit_id=?", (produit_id,)
+        ).fetchone()["n"]
+        force = str(request.query_params.get("force", "")).strip().lower() in {"1", "true", "yes"}
+        if nb_mvts and not force:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"{ref_audit} porte {nb_mvts} mouvement(s) de stock historiques. "
+                    f"Confirmer la suppression effacera cet historique definitivement."
+                ),
+            )
+
         conn.execute("DELETE FROM lots_stock WHERE produit_id=?", (produit_id,))
         conn.execute("DELETE FROM stock_emplacements WHERE produit_id=?", (produit_id,))
         conn.execute("DELETE FROM mouvements_stock WHERE produit_id=?", (produit_id,))
@@ -1954,7 +2004,8 @@ def delete_produit(produit_id: int, request: Request):
         user=user,
         action="DELETE",
         module="stock",
-        objet=f"Produit {ref_audit} supprimé",
+        objet=f"Produit {ref_audit} supprime",
+        detail={"mouvements_effaces": nb_mvts, "force": force},
         ip=request.client.host if request.client else None,
     )
     return {"success": True}
@@ -4823,6 +4874,12 @@ async def mouvement_matiere_premiere(request: Request):
                     "UPDATE matieres_premieres SET prix_eur_m2=? WHERE id=?",
                     (round(nouveau_prix, 6), matiere_id),
                 )
+            # Le PMP devient le prix MyStock de la matière : il fait foi, donc il
+            # descend aussi dans les déclinaisons lues par Coûts matières.
+            _mystock_prix.resync_depuis_mystock(
+                conn, matiere_id, user_name=created_by_name,
+                origine="MyStock — PMP entrée en stock",
+            )
         conn.execute(
             """
             INSERT INTO mp_mouvements (
@@ -5868,6 +5925,26 @@ def delete_negoce_produit(reference: str, request: Request):
             raise HTTPException(
                 409, "Impossible de supprimer : stock non nul. Soldez le stock d'abord."
             )
+
+        # Retention FSC : un stock solde n'efface pas l'historique. Si ce
+        # produit a porte des lots ou des mouvements certifies, les supprimer
+        # romprait la chaine reception -> lot -> expedition sur des ventes
+        # deja facturees avec un claim.
+        fsc_hist = conn.execute(
+            """SELECT (SELECT COUNT(*) FROM lots_stock
+                        WHERE produit_id=? AND COALESCE(fsc,0)=1)
+                     + (SELECT COUNT(*) FROM mouvements_stock
+                        WHERE produit_id=? AND COALESCE(fsc,0)=1) AS n""",
+            (cat["id"], cat["id"]),
+        ).fetchone()["n"]
+        if fsc_hist:
+            raise HTTPException(
+                409,
+                f"Suppression impossible : {ref} porte {fsc_hist} "
+                "enregistrement(s) FSC. Ces traces doivent etre conservees 5 ans. "
+                "Desactiver la reference plutot que la supprimer."
+            )
+
         conn.execute("DELETE FROM stock_emplacements WHERE produit_id=?", (cat["id"],))
         conn.execute("DELETE FROM lots_stock WHERE produit_id=?", (cat["id"],))
         conn.execute("DELETE FROM produits WHERE id=?", (cat["id"],))
@@ -6705,9 +6782,14 @@ async def update_valorisation(matiere_id: int, request: Request):
                     (matiere_id, prix_avant, prix, note, now, user_id, user_name),
                 )
             conn.commit()
-        # Plus de recopie du prix vers Coûts matières : depuis la refonte du pont, une
-        # matière appairée fait lire son prix directement ici au moment du
-        # calcul. Dupliquer la valeur ne ferait que recréer la divergence.
+        # Coûts matières lit le prix dans la ligne principale de mp_matiere_prix :
+        # un prix corrigé ici doit y redescendre, sinon le devis continue de
+        # tourner sur l'ancienne valeur. Sens retour du miroir Coûts matières -> MyStock.
+        _mystock_prix.resync_depuis_mystock(
+            conn, matiere_id, user_id=user_id, user_name=user_name,
+            origine="MyStock — valorisation",
+        )
+        conn.commit()
         items = _valorisation_query(conn)
         can_see_usd = _user_can_see_valorisation_usd(user)
         taux = _get_taux_eur_usd(conn) if can_see_usd else 0.0
@@ -8062,6 +8144,11 @@ async def set_matiere_laizes(matiere_id: int, request: Request):
                     "UPDATE mp_matiere_laizes SET prix_eur_m2=? WHERE matiere_id=? AND laize_id=?",
                     (fv, matiere_id, lid),
                 )
+        # Même règle : le prix saisi ici fait foi, il redescend dans les
+        # déclinaisons que Coûts matières interroge.
+        _mystock_prix.resync_depuis_mystock(
+            conn, matiere_id, origine="MyStock — fiche matière",
+        )
         conn.commit()
         laizes = _mp_laizes_for_matiere(conn, matiere_id)
     return {"ok": True, "laizes": laizes}

@@ -1660,6 +1660,10 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         Codes
       </button>
+      <button type="button" class="btn btn-sec sub-tab-btn" data-maintsub="maint-subtab-usure">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
+        Pièces d'usure
+      </button>
       <button type="button" class="btn btn-sec sub-tab-btn" data-maintsub="maint-subtab-libres">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
         Interventions libres
@@ -1688,14 +1692,34 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
               <option value="2">N2</option>
               <option value="3">N3</option>
             </select>
-            <select id="maint-categorie">
+            <select id="maint-categorie" onchange="_maintOnCategorieChange()">
               <option value="controles">Contrôles</option>
               <option value="entretien">Nettoyage</option>
               <option value="remplacements">Interventions</option>
             </select>
             <input type="text" id="maint-intervalle" placeholder="Intervalle (ex. Hebdo, 30 jours, 6 mois)" maxlength="80">
-            <input type="text" id="maint-metrage-ref" placeholder="Réf. métrage (ex. 5000 m, 10 km)" maxlength="80">
           </div>
+          <div id="maint-usure-block" style="margin-top:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text);white-space:nowrap">
+              <input type="checkbox" id="maint-usure-on" onchange="_maintOnUsureToggle()" style="width:16px;height:16px;flex:0 0 auto;margin:0;padding:0;cursor:pointer">
+              Pièce d'usure
+            </label>
+            <div id="maint-usure-fields" style="display:none;align-items:center;gap:12px;flex-wrap:wrap">
+              <select id="maint-usure-piece" onchange="_maintOnUsurePieceChange()" title="Pièce d'usure à laquelle ce code est rattaché" style="width:auto;min-width:150px;padding:6px 10px;font-size:12px">
+                <option value="">— Choisir —</option>
+              </select>
+              <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;color:var(--text);white-space:nowrap">
+                <input type="checkbox" id="maint-usure-haspos" onchange="_maintOnUsureHasPosChange()" style="width:16px;height:16px;flex:0 0 auto;margin:0;padding:0;cursor:pointer">
+                Position
+              </label>
+              <span id="maint-usure-pos-wrap" style="display:none">
+                <input type="text" id="maint-usure-position" list="maint-usure-position-list" placeholder="ex. bande" maxlength="40" oninput="_maintOnUsurePositionInput()" style="width:120px;padding:6px 10px;font-size:12px">
+                <datalist id="maint-usure-position-list"></datalist>
+              </span>
+              <input type="text" id="maint-metrage-ref" placeholder="Réf. métrage (ex. 5000 m)" maxlength="80" style="width:180px;padding:6px 10px;font-size:12px">
+            </div>
+          </div>
+          <div id="maint-usure-hint" style="display:none;font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5"></div>
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
             <button type="button" class="btn" onclick="saveMaintForm()">Enregistrer</button>
             <button type="button" class="btn btn-sec" onclick="closeMaintForm()">Annuler</button>
@@ -1739,6 +1763,36 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <input type="search" id="alerts-filter-q" class="op-filter" placeholder="Filtrer par nom d'alerte…" oninput="renderAlertsList()">
           </div>
           <div id="alerts-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+        </div>
+      </div>
+      <!-- v229 : Sous-onglet Pièces d'usure — référentiel des pièces suivies
+           par anneaux (Couteaux, Contre-couteaux…). Une pièce regroupe un ou
+           plusieurs codes sous une seule carte de l'accueil Maintenance ; quand
+           elle déclare des positions, chaque position est portée par un code
+           distinct. Avant ce référentiel, les 4 pièces étaient figées dans le
+           code source et le rattachement était deviné depuis les libellés. -->
+      <div id="maint-subtab-usure" class="maint-subtab" style="display:none">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+            <h2 style="margin:0">Pièces d'usure</h2>
+            <button type="button" class="btn" onclick="openUsurePieceForm()">+ Ajouter une pièce</button>
+          </div>
+          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Chaque pièce donne une carte sur l'accueil Maintenance, avec ses deux anneaux Temps et Métrage. La colonne Positions est un reflet : elle liste ce que les codes rattachés déclarent, chaque position devenant un onglet de la carte. Une pièce sans position ne porte qu'un seul code et n'a pas d'onglet.</p>
+          <div id="usure-form-wrap" class="hidden op-form-panel">
+            <h3 id="usure-form-title">Nouvelle pièce</h3>
+            <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
+              <input type="text" id="usure-label" placeholder="Libellé (ex. Couteaux)" maxlength="80">
+              <input type="number" id="usure-ordre" placeholder="Ordre d'affichage" min="0" step="1">
+            </div>
+            <div id="usure-form-hint" style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
+              Les positions (Bande, Rive…) ne se déclarent pas ici : elles se saisissent sur chaque code, dans l'onglet Codes. Cette pièce les reflétera automatiquement.
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+              <button type="button" class="btn" onclick="saveUsurePieceForm()">Enregistrer</button>
+              <button type="button" class="btn btn-sec" onclick="closeUsurePieceForm()">Annuler</button>
+            </div>
+          </div>
+          <div id="usure-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
         </div>
       </div>
       <!-- v182 Lot 2 : Sous-onglet Interventions libres -->
@@ -1954,6 +2008,22 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
       <div class="card" id="pr-output-card" style="display:none">
         <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Sortie du script</div>
         <pre id="pr-output" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:12px;line-height:1.5;color:var(--text2);font-family:'SFMono-Regular',Menlo,monospace;max-height:420px;overflow:auto;margin:0;white-space:pre-wrap;word-break:break-word"></pre>
+      </div>
+
+      <!-- ── Santé du dépôt : migrations, branches, propreté ──────────────── -->
+      <div class="card" id="ds-card" style="margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+          <div>
+            <div style="font-size:17px;font-weight:700;color:var(--text)">Santé du dépôt</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px">Migrations, branches et propreté du dossier de travail. Consultation seule&nbsp;— rien n'est modifié ici.</div>
+          </div>
+          <button type="button" class="btn btn-sec" id="ds-refresh-btn" onclick="loadDeploiementSante()" style="font-size:12px">
+            Rafraîchir
+          </button>
+        </div>
+        <div id="ds-body">
+          <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Chargement&hellip;</div>
+        </div>
       </div>
 
       <!-- v2 : bloc Synchroniser DB v2 → v1 (déplacé depuis Maintenance) -->
@@ -3973,9 +4043,9 @@ let fourFilterCat = '';
 // Getter courant du picker du panneau d'ajout (setté après le premier chargement des catégories)
 let _cfCatsGetSelected = () => [];
 
-// Fallback hardcodé — utilisé si l'API /api/fournisseurs/categories est down
-// ou pas encore déployée. Doit rester synchro avec FOURNISSEUR_CATEGORIES dans
-// app/routers/settings.py.
+// Fallback hardcodé — utilisé si l'API /api/fournisseurs/categories est down.
+// Doit rester synchro avec FOURNISSEUR_CATEGORIES dans config.py (source de
+// vérité, servie par GET /api/fournisseurs/categories).
 const _FOURNISSEUR_CATS_FALLBACK = [
   {code:'mandrin', label:'Mandrin'}, {code:'palette', label:'Palette'},
   {code:'adhesif', label:'Adhésif'}, {code:'carton', label:'Carton'},
@@ -4005,7 +4075,11 @@ async function _loadFournisseurCategories(){
 
 function _renderCategoryPicker(container, initialSelected){
   const cats = window.__FOURNISSEUR_CATS__ || [];
-  const sel = new Set(initialSelected || []);
+  // Sélection filtrée sur le référentiel : un code stocké en base mais absent
+  // du référentiel n'a aucune puce, donc aucun moyen d'être décoché — il
+  // survivait à chaque enregistrement et masquait le changement demandé.
+  const connus = new Set(cats.map(c => c.code));
+  const sel = new Set((initialSelected || []).filter(c => connus.has(c)));
   container.innerHTML = cats.map(c => {
     const cls = ['four-cat-chip'];
     if (c.code === 'negoce') cls.push('cat-neg');
@@ -5892,7 +5966,20 @@ async function saveMaintForm() {
   if (!code) { toast('Code obligatoire', true); return; }
   if (!label) { toast('Libellé obligatoire', true); return; }
   if (niveau < 1 || niveau > 3) { toast('Niveau invalide (1-3)', true); return; }
-  const payload = { code, label, niveau, categorie, periodique, intervalle, metrage_ref };
+  // v230 : l'état des 2 cases à cocher est traduit en payload par le module
+  // partagé — une seule source de vérité pour les 2 pages hôtes.
+  const _usure = (typeof _maintUsurePayload === 'function')
+    ? _maintUsurePayload()
+    : { usure_piece_id: null, usure_position: '' };
+  if (document.getElementById('maint-usure-on')?.checked && !_usure.usure_piece_id) {
+    toast('Choisis une pièce d\'usure, ou décoche la case.', true); return;
+  }
+  if (_usure.usure_piece_id && document.getElementById('maint-usure-haspos')?.checked
+      && !_usure.usure_position) {
+    toast('Renseigne le nom de la position, ou décoche « Position particulière ».', true); return;
+  }
+  const payload = { code, label, niveau, categorie, periodique, intervalle, metrage_ref,
+                    usure_piece_id: _usure.usure_piece_id, usure_position: _usure.usure_position };
   try {
     if (_maintEditCode) {
       await api('/api/maintenance/codes/' + encodeURIComponent(_maintEditCode), {
@@ -5944,6 +6031,10 @@ document.addEventListener('click', (ev) => {
   // v182 Lot 2 : charge la liste des libres a la premiere ouverture du sous-onglet
   if (target === 'maint-subtab-libres' && typeof loadLibres === 'function') {
     loadLibres();
+  }
+  // v229 : le référentiel des pièces d'usure se charge à la première ouverture.
+  if (target === 'maint-subtab-usure' && typeof loadUsurePiecesAdmin === 'function') {
+    loadUsurePiecesAdmin();
   }
 });
 
@@ -6727,12 +6818,12 @@ async function unlinkBridge(mp_id) {
 <!-- v2.4.18 : mysifa_maint_form.js — CRUD codes maintenance + interventions libres (module partagé settings ↔ maintenance). -->
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
-<script src="/static/mysifa_maint_form.js?v=2.5.12"></script>
+<script src="/static/mysifa_maint_form.js?v=2.7.4-usure"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
 <script src="/static/mysifa_impersonate.js"></script>
 <!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe
      autonome pour éviter qu'un refacto du script inline ne les supprime à nouveau. -->
-<script src="/static/mysifa_promote.js?v=3"></script>
+<script src="/static/mysifa_promote.js?v=4"></script>
 <!-- Fonctions imprimantes/templates/agents restaurees : bloc inline autonome.
      NE PAS fusionner avec le <script src> ci-dessus (contenu ignore par le navigateur). -->
 <script>

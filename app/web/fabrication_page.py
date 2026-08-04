@@ -4262,16 +4262,27 @@ function _wireStockModals(){
   });
   _stockModalsWired = true;
 }
-function _stockGoTo(action){
+function _stockGoTo(action, produit){
   // Ouvre la modale MyStock correspondante sans quitter Saisie Prod.
   // action = 'entree-mp' | 'sortie-mp' | 'entree-z1' | 'sortie-z1'
+  // `produit` (facultatif) pre-remplit la modale : c'est ce que font les
+  // boutons Ajouter / Retirer d'une ligne Z1, qui visent une reference precise.
   _wireStockModals();
   if(!_stockModalsWired) return;
   try{
-    window.MySifaStockModals.open(action);
+    if(produit){
+      const t = String(action||'').indexOf('sortie') === 0 ? 'sortie' : 'entree';
+      window.MySifaStockModals.openPf(t, produit, 'Z1');
+    } else {
+      window.MySifaStockModals.open(action);
+    }
   }catch(e){
     showToast(e?.message || 'Impossible d ouvrir la saisie.','danger');
   }
+}
+function _z1Produit(r){
+  // Forme attendue par la modale produit fini de MyStock.
+  return { id:r.id, reference:r.reference, designation:r.designation, unite:r.unite };
 }
 async function _loadStockEmplacements(){
   if(S.stockEmplacements) return;
@@ -4345,14 +4356,18 @@ function _renderStockZ1List(){
             className:'fab-prod-z1-btn fab-prod-z1-btn-add',
             type:'button',
             title:'Ajouter une quantité à cette référence',
-            onClick:(ev)=>{ ev.stopPropagation(); _stockGoTo('add-to:'+r.id); },
+            onClick:(ev)=>{ ev.stopPropagation(); _stockGoTo('entree-z1', _z1Produit(r)); },
           }, svgIcon('plus-circle',12),' Ajouter'),
           h('button',{
             className:'fab-prod-z1-btn fab-prod-z1-btn-edit',
             type:'button',
-            title:'Modifier la quantité totale en Z1',
-            onClick:(ev)=>{ ev.stopPropagation(); _stockGoTo('edit:'+r.id); },
-          }, svgIcon('edit',12),' Modifier'),
+            // « Retirer » et non « Modifier » : on corrige une quantité par un
+            // mouvement de sortie trace, jamais en réécrivant le total. C'est
+            // la seule correction compatible avec la traçabilité FSC, et elle
+            // vaut pour tout le monde — pas seulement pour les lots certifiés.
+            title:'Retirer une quantité de cette référence (sortie tracée)',
+            onClick:(ev)=>{ ev.stopPropagation(); _stockGoTo('sortie-z1', _z1Produit(r)); },
+          }, svgIcon('minus-circle',12),' Retirer'),
         ));
       }
       // `r.fsc` vient de /api/stock/sortie-prod, qui regroupe désormais par

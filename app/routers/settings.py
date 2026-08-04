@@ -557,7 +557,19 @@ def list_fournisseurs(request: Request):
     import json
     with get_db() as conn:
         rows = conn.execute(
+            # ── Champs FSC : absents de ce SELECT jusqu'ici ────────────────
+            # `fsc_date_expiration`, `sous_traitant` et `categories` existent
+            # en base (migrations 209 et 213) et l'interface les édite déjà —
+            # mais l'API ne les renvoyait pas et ne les écrivait pas. Trois
+            # conséquences silencieuses : la case « Sous-traitant » se perdait
+            # au rechargement, les catégories aussi, et surtout le badge
+            # « Certificat FSC expire le… » (settings_page.py) ne s'est jamais
+            # affiché puisque la donnée n'arrivait jamais au front.
+            #
+            # La validité du certificat À LA DATE DU BL est une exigence de
+            # chaîne de contrôle : sans cette colonne, aucun contrôle possible.
             """SELECT ff.id, ff.nom, ff.licence, ff.certificat, ff.has_fsc,
+                      ff.fsc_date_expiration, ff.sous_traitant, ff.categories,
                       ff.traca_photo_url, ff.traca_explication, ff.traca_exemple_code,
                       ff.groupe, ff.branche,
                       ff.adresse, ff.code_postal, ff.ville, ff.pays,
@@ -579,8 +591,32 @@ def list_fournisseurs(request: Request):
                 d["tags"] = []
         else:
             d["tags"] = []
+        # `categories` est stocké en JSON (migration 213). Le front attend une
+        # liste ; on la lui donne parsée plutôt que de lui faire deviner.
+        raw_cat = d.get("categories")
+        if raw_cat:
+            try:
+                parsed_c = json.loads(raw_cat)
+                d["categories"] = parsed_c if isinstance(parsed_c, list) else []
+            except (json.JSONDecodeError, TypeError):
+                d["categories"] = []
+        else:
+            d["categories"] = []
+        d["sous_traitant"] = int(d.get("sous_traitant") or 0)
         out.append(d)
     return out
+
+
+@router.get("/api/fournisseurs/categories")
+def list_fournisseur_categories(request: Request):
+    """Référentiel des catégories fournisseurs (source de vérité du front).
+
+    Déclaré avant les routes paramétrées `/api/fournisseurs/{...}` pour ne
+    pas être capté par un segment variable.
+    """
+    require_settings(request)
+    from config import fournisseur_categories
+    return fournisseur_categories()
 
 
 @router.get("/api/fournisseurs/groupes")
@@ -624,6 +660,74 @@ def _normalize_langue_fournisseur(raw):
     return v if v in ("fr", "en") else "fr"
 
 
+# ── Champs FSC du fournisseur ────────────────────────────────────────
+# `sous_traitant` et `categories` disent la même chose sous deux formes : la
+# migration 213 a introduit `categories` (liste JSON) en gardant la colonne
+# booléenne pour la rétrocompatibilité. On les tient synchronisées ici, dans
+# UN seul endroit — deux sources de vérité qui divergent, c'est exactement
+# comment la case a fini par ne plus rien vouloir dire.
+# Le référentiel des catégories vit dans config.py (FOURNISSEUR_CATEGORIES),
+# lu ici comme côté client via GET /api/fournisseurs/categories. Il y avait
+# jusqu'ici deux vocabulaires concurrents — une constante morte côté serveur
+# et une liste codée en dur dans settings_page.py — et aucun endpoint pour les
+# départager : le front tombait systématiquement sur son repli. Conséquence :
+# tout code stocké hors de ce repli restait affiché en brut et impossible à
+# décocher (le picker le conservait dans sa sélection), ce qui se lit très
+# exactement comme « changer la catégorie ne prend pas ».
+
+
+def _parse_fournisseur_categories(raw):
+    """Normalise la liste de catégories. Renvoie (liste, json, sous_traitant).
+
+    Les codes inconnus du référentiel sont écartés : conserver un code
+    qu'aucune interface ne sait ni nommer ni décocher revient à le rendre
+    définitif.
+    """
+    import json as _json
+    from config import FOURNISSEUR_CATEGORIES_CODES
+    cats = []
+    if isinstance(raw, list):
+        cats = [str(c).strip() for c in raw if str(c).strip()]
+    elif isinstance(raw, str) and raw.strip():
+        try:
+            parsed = _json.loads(raw)
+            if isinstance(parsed, list):
+                cats = [str(c).strip() for c in parsed if str(c).strip()]
+        except (ValueError, TypeError):
+            cats = [c.strip() for c in raw.split(",") if c.strip()]
+    # Doublons retirés, ordre d'apparition conservé (lisibilité côté UI).
+    vus, propres = set(), []
+    for c in cats:
+        if c in vus or c not in FOURNISSEUR_CATEGORIES_CODES:
+            continue
+        vus.add(c)
+        propres.append(c)
+    return propres, (_json.dumps(propres, ensure_ascii=False) if propres else None), \
+        (1 if "sous_traitant" in propres else 0)
+
+
+def _parse_fsc_date_expiration(raw):
+    """Date d'expiration du certificat FSC — format ISO AAAA-MM-JJ.
+
+    Refusée si mal formée plutôt que stockée telle quelle : une date que le
+    contrôle de validité ne saura pas lire équivaut à une absence de contrôle,
+    en donnant l'illusion inverse.
+    """
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    if not s:
+        return None
+    try:
+        datetime.strptime(s, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="Date d'expiration du certificat FSC invalide (attendu AAAA-MM-JJ).",
+        )
+    return s
+
+
 @router.post("/api/fournisseurs")
 async def create_fournisseur(request: Request):
     user = require_settings(request)
@@ -648,6 +752,10 @@ async def create_fournisseur(request: Request):
     tags_json = json.dumps(tags_list, ensure_ascii=False) if tags_list else None
     notes = (body.get("notes") or "").strip() or None
     actif = 1 if bool(body.get("actif", True)) else 0
+    cat_list, cat_json, sous_traitant = _parse_fournisseur_categories(body.get("categories"))
+    fsc_date_expiration = _parse_fsc_date_expiration(body.get("fsc_date_expiration"))
+    if not has_fsc:
+        fsc_date_expiration = None
     if not nom:
         raise HTTPException(status_code=400, detail="Nom du fournisseur requis")
     now = datetime.now().isoformat()
@@ -657,11 +765,13 @@ async def create_fournisseur(request: Request):
                 """INSERT INTO fournisseurs_fsc
                    (nom, licence, certificat, has_fsc, groupe, branche,
                     adresse, code_postal, ville, pays, langue_default, tags,
-                    notes, actif, updated_at)
-                   VALUES (?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?)""",
+                    notes, actif, updated_at,
+                    fsc_date_expiration, sous_traitant, categories)
+                   VALUES (?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?, ?,?,?)""",
                 (nom, licence, certificat, has_fsc, groupe, branche,
                  adresse, code_postal, ville, pays, langue_default, tags_json,
-                 notes, actif, now),
+                 notes, actif, now,
+                 fsc_date_expiration, sous_traitant, cat_json),
             )
             conn.commit()
             log_action(
@@ -671,7 +781,9 @@ async def create_fournisseur(request: Request):
                 objet=f"Fournisseur {nom}",
                 detail={"has_fsc": bool(has_fsc), "langue_default": langue_default,
                         "tags": tags_list, "ville": ville, "pays": pays,
-                        "actif": bool(actif)},
+                        "actif": bool(actif), "categories": cat_list,
+                        "sous_traitant": bool(sous_traitant),
+                        "fsc_date_expiration": fsc_date_expiration},
                 ip=request.client.host if request.client else None,
             )
             return {"success": True, "id": cur.lastrowid}
@@ -744,6 +856,25 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
         actif_prev = int(ex["actif"] if "actif" in ex_cols and ex["actif"] is not None else 1)
         actif = 1 if bool(body.get("actif", actif_prev)) else 0
 
+        # Champs FSC : on ne les écrase que s'ils sont explicitement fournis.
+        # Le front n'envoie pas toujours l'objet complet (édition partielle
+        # depuis la fiche contact, par exemple) — sans ce garde-fou, une
+        # sauvegarde partielle effacerait la date d'expiration du certificat.
+        if "categories" in body:
+            cat_list, cat_json, sous_traitant = _parse_fournisseur_categories(body.get("categories"))
+        else:
+            cat_json = ex["categories"] if "categories" in ex_cols else None
+            cat_list, cat_json, sous_traitant = _parse_fournisseur_categories(cat_json)
+        if "fsc_date_expiration" in body:
+            fsc_date_expiration = _parse_fsc_date_expiration(body.get("fsc_date_expiration"))
+        else:
+            fsc_date_expiration = ex["fsc_date_expiration"] if "fsc_date_expiration" in ex_cols else None
+        # Un fournisseur non certifié ne peut pas porter de date d'expiration
+        # de certificat : la garder laisserait une donnée orpheline que le
+        # contrôle de validité interpréterait de travers.
+        if not has_fsc:
+            fsc_date_expiration = None
+
         now = datetime.now().isoformat()
 
         changed = {}
@@ -753,6 +884,12 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
             ("langue_default", (ex["langue_default"] if "langue_default" in ex_cols else None), langue_default),
             ("ville", (ex["ville"] if "ville" in ex_cols else None), ville),
             ("actif", actif_prev, actif),
+            ("sous_traitant",
+             (int(ex["sous_traitant"] or 0) if "sous_traitant" in ex_cols else 0),
+             sous_traitant),
+            ("fsc_date_expiration",
+             (ex["fsc_date_expiration"] if "fsc_date_expiration" in ex_cols else None),
+             fsc_date_expiration),
         ]
         for name, before, after in _pairs:
             if before != after:
@@ -764,12 +901,14 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
                        nom=?, licence=?, certificat=?, has_fsc=?,
                        traca_explication=?, traca_exemple_code=?, groupe=?, branche=?,
                        adresse=?, code_postal=?, ville=?, pays=?,
-                       langue_default=?, tags=?, notes=?, actif=?, updated_at=?
+                       langue_default=?, tags=?, notes=?, actif=?, updated_at=?,
+                       fsc_date_expiration=?, sous_traitant=?, categories=?
                    WHERE id=?""",
                 (nom, licence, certificat, has_fsc,
                  traca_explication, traca_exemple_code, groupe, branche,
                  adresse, code_postal, ville, pays,
                  langue_default, tags_json, notes, actif, now,
+                 fsc_date_expiration, sous_traitant, cat_json,
                  fournisseur_id),
             )
             conn.commit()
@@ -778,7 +917,7 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
                 action="UPDATE",
                 module="settings",
                 objet=f"Fournisseur {nom}",
-                detail={"changed": changed, "tags": tags_list},
+                detail={"changed": changed, "tags": tags_list, "categories": cat_list},
                 ip=request.client.host if request.client else None,
             )
             return {"success": True}
@@ -1849,6 +1988,7 @@ async def import_emplacements_csv(request: Request, file: UploadFile = File(...)
 # liste les commits en avance, et exécute scripts/promote_v2.sh quand demandé.
 
 import asyncio
+import datetime as _dt
 import shutil as _shutil
 import subprocess as _subprocess
 from fastapi.responses import StreamingResponse
@@ -1894,6 +2034,220 @@ def _read_origin_app_version() -> Optional[str]:
         return _parse_version_from_text(out)
     except Exception:
         return None
+
+
+# ─── Santé du dépôt et du schéma ───────────────────────────────────────────────
+# Vue de CONSULTATION uniquement : aucune commande git qui écrit, aucune action
+# destructive. Elle sert à vérifier avant de promouvoir que le schéma est à jour,
+# qu'aucune branche morte ne traîne et que le dossier de travail est propre.
+
+
+def _git_lire(*args: str, defaut: str = "") -> str:
+    """Commande git en LECTURE seule. Jamais d'écriture depuis l'interface."""
+    try:
+        return _subprocess.check_output(
+            [_GIT_BIN, "-C", V2_REPO_PATH, *args],
+            text=True, timeout=15, stderr=_subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        return defaut
+
+
+def _jours_depuis(iso: str) -> Optional[int]:
+    try:
+        d = _dt.datetime.strptime(iso[:10], "%Y-%m-%d")
+        return (_dt.datetime.now() - d).days
+    except Exception:
+        return None
+
+
+def _migrations_etat() -> dict:
+    """
+    Migrations appliquées sur CETTE instance, et celles présentes dans le code
+    mais pas encore jouées. Signale aussi les numéros historiques en double :
+    une migration qui partage son numéro avec une autre ne s'exécute jamais.
+    """
+    from database import get_db
+
+    appliquees: list[dict] = []
+    doublons: list[dict] = []
+    noms_faits: set[str] = set()
+    with get_db() as conn:
+        try:
+            for r in conn.execute(
+                "SELECT version, name, applied_at FROM schema_migrations ORDER BY version"
+            ).fetchall():
+                appliquees.append({
+                    "cle": str(r["version"]),
+                    "nom": r["name"],
+                    "date": r["applied_at"],
+                    "source": "numérotée",
+                })
+                if r["name"]:
+                    noms_faits.add(r["name"])
+            vus: dict = {}
+            for m in appliquees:
+                vus.setdefault(m["cle"], []).append(m["nom"])
+            for cle, noms in vus.items():
+                if len(noms) > 1:
+                    doublons.append({"cle": cle, "noms": noms})
+        except Exception:
+            pass
+        try:
+            for r in conn.execute(
+                "SELECT nom, applique_le FROM schema_migrations_fichiers ORDER BY applique_le"
+            ).fetchall():
+                appliquees.append({
+                    "cle": r["nom"], "nom": r["nom"],
+                    "date": r["applique_le"], "source": "fichier",
+                })
+                noms_faits.add(r["nom"])
+        except Exception:
+            pass
+
+    # Migrations déclarées dans le code : celles en fichiers sont lisibles sans
+    # les exécuter, les historiques numérotées ne le sont pas.
+    en_attente: list[dict] = []
+    total_fichiers = 0
+    try:
+        import app.core.migrations as _mig_pkg
+        import importlib
+        import pkgutil
+
+        for m in sorted(x.name for x in pkgutil.iter_modules(_mig_pkg.__path__)):
+            if m.startswith("_"):
+                continue
+            total_fichiers += 1
+            mod = importlib.import_module(f"app.core.migrations.{m}")
+            nom = getattr(mod, "NOM", None)
+            if nom and nom not in noms_faits:
+                en_attente.append({"nom": nom, "fichier": m + ".py"})
+    except Exception:
+        pass
+
+    appliquees.sort(key=lambda x: (x["date"] or ""), reverse=True)
+    return {
+        "appliquees": appliquees[:40],
+        "nb_appliquees": len(appliquees),
+        "derniere": appliquees[0] if appliquees else None,
+        "en_attente": en_attente,
+        "nb_fichiers": total_fichiers,
+        "doublons": doublons,
+    }
+
+
+def _branches_etat() -> list[dict]:
+    """Branches distantes, leur âge et leur état de fusion dans staging."""
+    fusionnees = set()
+    for ligne in _git_lire("branch", "-r", "--merged", "origin/staging").split("\n"):
+        ref = ligne.strip().replace("origin/", "", 1)
+        if ref and "->" not in ref:
+            fusionnees.add(ref)
+    sortie = _git_lire(
+        "for-each-ref", "--sort=-committerdate", "refs/remotes/origin",
+        "--format=%(refname:short)|%(committerdate:format:%Y-%m-%d %H:%M)|%(authorname)|%(subject)",
+    )
+    branches: list[dict] = []
+    for ligne in sortie.split("\n"):
+        if not ligne or "->" in ligne:
+            continue
+        parts = ligne.split("|", 3)
+        if len(parts) != 4:
+            continue
+        nom = parts[0].replace("origin/", "", 1)
+        if nom in ("HEAD",):
+            continue
+        jours = _jours_depuis(parts[1])
+        est_fusionnee = nom in fusionnees
+        branches.append({
+            "nom": nom,
+            "date": parts[1],
+            "auteur": parts[2],
+            "dernier_commit": parts[3],
+            "jours": jours,
+            "fusionnee": est_fusionnee,
+            "protegee": nom in ("main", "staging"),
+            # Une branche fusionnée et sans activité depuis deux semaines n'a
+            # plus de raison d'exister : c'est le signal de ménage.
+            "a_nettoyer": est_fusionnee and nom not in ("main", "staging")
+                          and (jours is not None and jours >= 14),
+        })
+    return branches
+
+
+def _dossier_etat() -> dict:
+    """Propreté du dossier de travail de l'instance qui répond."""
+    porcelain = _git_lire("status", "--porcelain")
+    modifies, non_suivis = [], []
+    for ligne in porcelain.split("\n"):
+        if not ligne.strip():
+            continue
+        code, _, chemin = ligne.partition(" ")
+        (non_suivis if ligne.startswith("??") else modifies).append(chemin.strip() or ligne)
+    verrou = (Path(V2_REPO_PATH) / ".git" / "index.lock").exists()
+    return {
+        "branche": _git_lire("rev-parse", "--abbrev-ref", "HEAD", defaut="?"),
+        "nb_modifies": len(modifies),
+        "nb_non_suivis": len(non_suivis),
+        "modifies": modifies[:20],
+        "non_suivis": non_suivis[:20],
+        "verrou_git": verrou,
+        "propre": not modifies and not non_suivis and not verrou,
+    }
+
+
+@router.get("/api/deploiement/sante")
+def deploiement_sante(request: Request):
+    """Migrations, branches et propreté du dossier — consultation seule."""
+    require_settings(request)
+
+    def _sans_casser(fn, defaut):
+        try:
+            return fn()
+        except Exception as exc:  # noqa: BLE001 — vue de consultation
+            print(f"[MySifa] santé du dépôt — {fn.__name__} indisponible : {exc}")
+            return defaut
+
+    migrations = _sans_casser(_migrations_etat, {
+        "appliquees": [], "nb_appliquees": 0, "derniere": None,
+        "en_attente": [], "nb_fichiers": 0, "doublons": [],
+    })
+    branches = _sans_casser(_branches_etat, [])
+    dossier = _sans_casser(_dossier_etat, {
+        "branche": "?", "nb_modifies": 0, "nb_non_suivis": 0,
+        "modifies": [], "non_suivis": [], "verrou_git": False, "propre": True,
+    })
+
+    alertes: list[str] = []
+    if migrations["en_attente"]:
+        alertes.append(
+            f"{len(migrations['en_attente'])} migration(s) présente(s) dans le code mais "
+            "pas encore appliquée(s) sur cette instance."
+        )
+    if migrations["doublons"]:
+        alertes.append(
+            f"{len(migrations['doublons'])} numéro(s) de migration en double dans l'historique — "
+            "la seconde de chaque paire ne s'est jamais exécutée."
+        )
+    a_nettoyer = [b for b in branches if b["a_nettoyer"]]
+    if a_nettoyer:
+        alertes.append(
+            f"{len(a_nettoyer)} branche(s) fusionnée(s) dans staging et sans activité "
+            "depuis plus de deux semaines."
+        )
+    if dossier["verrou_git"]:
+        alertes.append("Un verrou git traîne dans le dépôt (.git/index.lock).")
+    if dossier["nb_modifies"]:
+        alertes.append(f"{dossier['nb_modifies']} fichier(s) modifié(s) non commité(s).")
+
+    return {
+        "instance": ENV_NAME,
+        "version_app": APP_VERSION,
+        "migrations": migrations,
+        "branches": branches,
+        "dossier": dossier,
+        "alertes": alertes,
+    }
 
 
 @router.get("/api/promote/status")
@@ -2271,6 +2625,17 @@ def _maint_row_to_dict(r) -> dict:
         usage_v = int(r["usage_count"] or 0)
     except (IndexError, KeyError, TypeError, ValueError):
         usage_v = 0
+    # v229 : rattachement pièce d'usure. usure_piece_id NULL = pas une pièce
+    # d'usure — c'est le flag lui-même, il n'y a pas de booléen séparé.
+    try:
+        _upid = r["usure_piece_id"]
+        usure_piece_id = int(_upid) if _upid is not None else None
+    except (IndexError, KeyError, TypeError, ValueError):
+        usure_piece_id = None
+    try:
+        usure_position = r["usure_position"] or ""
+    except (IndexError, KeyError):
+        usure_position = ""
     return {
         "code": r["code"],
         "label": r["label"],
@@ -2281,6 +2646,8 @@ def _maint_row_to_dict(r) -> dict:
         "metrage_ref": metrage_ref or "",
         "libre": libre_v,
         "usage_count": usage_v,
+        "usure_piece_id": usure_piece_id,
+        "usure_position": usure_position if usure_piece_id is not None else "",
         "created_at": r["created_at"],
         "updated_at": r["updated_at"],
     }
@@ -2309,12 +2676,54 @@ def _normalize_maint_payload(body: dict) -> dict:
     intervalle = (body.get("intervalle") or "").strip()
     if len(intervalle) > 80:
         intervalle = intervalle[:80]
-    # Référence métrage : texte libre (ex. "5000 m"), surtout utile pour la
-    # catégorie "Suivi" (pièces d'usure). On le garde sur les autres catégories
-    # si l'utilisateur le saisit, mais il sera ignoré par l'UI consommatrice.
+    # v229 — Rattachement à une pièce d'usure. usure_piece_id NULL = code
+    # ordinaire. La cohérence (pièce existante, position déclarée sur la pièce,
+    # couple non déjà pris) est vérifiée par _validate_usure_link, qui a besoin
+    # d'une connexion : elle est appelée par les endpoints, pas ici.
+    _raw_piece = body.get("usure_piece_id")
+    if _raw_piece in (None, "", "null"):
+        usure_piece_id = None
+    else:
+        try:
+            usure_piece_id = int(_raw_piece)
+        except (TypeError, ValueError):
+            raise HTTPException(422, "Pièce d'usure invalide.")
+        if usure_piece_id <= 0:
+            usure_piece_id = None
+    # Jamais NULL quand la pièce est renseignée : l'index unique partiel
+    # considérerait deux NULL comme distincts et laisserait passer un doublon.
+    #
+    # v230 : la position est désormais saisie librement SUR LE CODE (elle n'est
+    # plus choisie dans une liste déclarée sur la pièce). On la stocke en
+    # minuscules : c'est une clé — index unique, cache front, localStorage de
+    # l'onglet mémorisé. « Bande » et « bande » doivent être la même position,
+    # sinon la carte afficherait deux onglets pour la même chose. L'affichage
+    # remet la majuscule initiale.
+    usure_position = (body.get("usure_position") or "").strip().lower()
+    if len(usure_position) > 40:
+        usure_position = usure_position[:40]
+    if usure_piece_id is None:
+        usure_position = ""
+    if usure_position:
+        import re as _re_pos
+        # Même charset que l'ancien référentiel : la position sert d'étiquette
+        # d'onglet ET de clé, on évite d'avoir à l'échapper partout.
+        if not _re_pos.fullmatch(r"[a-z0-9][a-z0-9 _-]*", usure_position):
+            raise HTTPException(
+                422,
+                f"Position « {usure_position} » invalide : lettres non accentuées, "
+                "chiffres, espace, tiret et underscore uniquement.",
+            )
+
+    # Référence métrage : texte libre (ex. "5000 m"). v229 — devenue EXCLUSIVE
+    # aux pièces d'usure. Elle n'a jamais été lue ailleurs (seule la carte
+    # pièce d'usure la consomme) : on cesse simplement de l'accepter sur un
+    # code non rattaché, au lieu de la stocker pour rien.
     metrage_ref = (body.get("metrage_ref") or "").strip()
     if len(metrage_ref) > 80:
         metrage_ref = metrage_ref[:80]
+    if usure_piece_id is None:
+        metrage_ref = ""
     if not code:
         raise HTTPException(422, "Code obligatoire.")
     if not label:
@@ -2327,7 +2736,139 @@ def _normalize_maint_payload(body: dict) -> dict:
         "periodique": periodique,
         "intervalle": intervalle,
         "metrage_ref": metrage_ref,
+        "usure_piece_id": usure_piece_id,
+        "usure_position": usure_position,
     }
+
+
+# ─── Pièces d'usure — référentiel + validation du rattachement ────────────────
+# Une « pièce d'usure » (Couteaux, Contre-couteaux…) regroupe un ou plusieurs
+# codes maintenance sous une seule carte de l'accueil Maintenance. Quand la
+# pièce déclare des positions (Bande / Rive…), chaque position est portée par
+# un code distinct : c'est ce qui permet à une carte d'avoir des onglets sans
+# que le code ait à deviner quoi que ce soit à partir des libellés.
+
+def _usure_positions_from_codes(conn, piece_id: int) -> list:
+    """Positions RÉELLEMENT en usage sur une pièce, déduites de ses codes.
+
+    v230 — inversion du modèle. Les positions étaient déclarées sur la pièce
+    (colonne `positions`, JSON) et le code en choisissait une. Elles sont
+    maintenant saisies librement sur le code, et la pièce ne fait que les
+    refléter. Conséquence voulue : une position ne peut plus exister sans code,
+    donc plus de carte fantôme « pièce · position » sans opération derrière —
+    c'est exactement le cas qui rendait l'écran incompréhensible après la
+    suppression d'un code.
+
+    La colonne `positions` de maintenance_usure_pieces n'est plus lue ni
+    écrite. Elle est conservée en base (donnée historique, aucun coût) plutôt
+    que supprimée : un DROP COLUMN n'est pas disponible sur toutes les
+    versions de SQLite déployées.
+    """
+    rows = conn.execute(
+        """SELECT DISTINCT COALESCE(usure_position,'') AS pos
+           FROM maintenance_codes
+           WHERE usure_piece_id=? AND COALESCE(usure_position,'') <> ''
+           ORDER BY pos""",
+        (piece_id,),
+    ).fetchall()
+    return [r["pos"] for r in rows]
+
+
+def _usure_piece_row_to_dict(row, codes_count: int = 0, positions=None) -> dict:
+    return {
+        "id": int(row["id"]),
+        "cle": row["cle"],
+        "label": row["label"],
+        # v230 : reflet des positions en usage, jamais une liste déclarée.
+        "positions": list(positions or []),
+        "ordre": int(row["ordre"] or 0),
+        "actif": bool(row["actif"]),
+        "codes_count": codes_count,
+    }
+
+
+def _ensure_usure_table(conn) -> bool:
+    """True si la migration v229 a bien tourné sur cette instance."""
+    return bool(conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='maintenance_usure_pieces'"
+    ).fetchone())
+
+
+def _validate_usure_link(conn, data: dict, current_code: str = "") -> None:
+    """Vérifie le couple (pièce, position) avant écriture d'un code.
+
+    v230 — la position n'est plus validée contre une liste déclarée sur la
+    pièce (elle est saisie librement). Restent trois refus, tous explicites :
+      - la pièce n'existe pas / est désactivée
+      - le couple (pièce, position) est déjà porté par un autre code
+      - la pièce mélangerait des codes avec et sans position
+
+    Le dernier point mérite un mot : une carte est soit à onglets, soit sans
+    onglet. Un code sans position sur une pièce qui en a déjà (ou l'inverse)
+    donnerait une carte dont une partie du contenu serait inatteignable.
+    """
+    piece_id = data.get("usure_piece_id")
+    if piece_id is None:
+        return
+    # v231 : réservé à la catégorie Interventions. C'est la seule dont les
+    # cartes remontent sur l'accueil Maintenance (showWearParts est conditionné
+    # au filtre « Remplacements ») : un code rattaché ailleurs porterait un
+    # rattachement que personne ne verrait jamais.
+    if (data.get("categorie") or "") != "remplacements":
+        raise HTTPException(
+            422,
+            "Le rattachement à une pièce d'usure n'est possible que sur la "
+            "catégorie Interventions.",
+        )
+    if not _ensure_usure_table(conn):
+        raise HTTPException(
+            500, "Migration DB manquante (maintenance_usure_pieces absente)."
+        )
+    row = conn.execute(
+        "SELECT id, cle, label, ordre, actif FROM maintenance_usure_pieces WHERE id=?",
+        (piece_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(422, "Pièce d'usure introuvable.")
+    if not row["actif"]:
+        raise HTTPException(422, f"La pièce « {row['label']} » est désactivée.")
+    pos = data.get("usure_position") or ""
+    # Cohérence du mode : la pièce est à onglets ou elle ne l'est pas.
+    others = conn.execute(
+        """SELECT code, label, COALESCE(usure_position,'') AS pos
+           FROM maintenance_codes
+           WHERE usure_piece_id=? AND code<>?""",
+        (piece_id, current_code or ""),
+    ).fetchall()
+    if others:
+        others_positioned = any((o["pos"] or "") for o in others)
+        if pos and not others_positioned:
+            _o = others[0]
+            raise HTTPException(
+                422,
+                f"« {row['label']} » est déjà porté par le code {_o['code']} sans position. "
+                "Une pièce a soit des positions sur tous ses codes, soit aucune : "
+                f"ajoutez une position au code {_o['code']}, ou retirez celle-ci.",
+            )
+        if not pos and others_positioned:
+            _named = ", ".join(f"{o['code']} ({o['pos']})" for o in others if o["pos"])
+            raise HTTPException(
+                422,
+                f"« {row['label']} » a déjà des positions ({_named}). "
+                "Renseignez une position pour ce code, ou retirez-la des autres.",
+            )
+    clash = conn.execute(
+        """SELECT code, label FROM maintenance_codes
+           WHERE usure_piece_id=? AND COALESCE(usure_position,'')=? AND code<>?
+           LIMIT 1""",
+        (piece_id, pos, current_code or ""),
+    ).fetchone()
+    if clash:
+        _where = f"« {row['label']} · {pos.capitalize()} »" if pos else f"« {row['label']} »"
+        raise HTTPException(
+            409,
+            f"{_where} est déjà rattaché au code {clash['code']} ({clash['label']}).",
+        )
 
 
 _ALERT_PLACEMENTS = {"center", "top-right", "bottom-right"}
@@ -2815,6 +3356,9 @@ def maintenance_codes_list(request: Request, include_libres: int = 0):
         sel_extra = ""
         if has_libre: sel_extra += ",libre"
         if has_usage: sel_extra += ",usage_count"
+        # v229 : rattachement pièce d'usure (absent des DB pas encore migrées).
+        if "usure_piece_id" in cols: sel_extra += ",usure_piece_id"
+        if "usure_position" in cols: sel_extra += ",usure_position"
         where = ""
         if has_libre and not include_libres:
             where = "WHERE libre = 0"
@@ -2858,13 +3402,21 @@ async def maintenance_codes_create(request: Request):
         ).fetchone()
         if existing:
             raise HTTPException(409, f"Le code {data['code']} existe deja.")
+        _validate_usure_link(conn, data)
+        _cols = {c["name"] for c in conn.execute(
+            "PRAGMA table_info(maintenance_codes)").fetchall()}
+        _names = ["code", "label", "niveau", "categorie", "periodique",
+                  "intervalle", "metrage_ref", "created_at", "updated_at"]
+        _values = [data["code"], data["label"], data["niveau"], data["categorie"],
+                   data["periodique"], data["intervalle"], data["metrage_ref"], now, now]
+        if "usure_piece_id" in _cols:
+            _names.append("usure_piece_id"); _values.append(data["usure_piece_id"])
+        if "usure_position" in _cols:
+            _names.append("usure_position"); _values.append(data["usure_position"])
         conn.execute(
-            """INSERT INTO maintenance_codes
-               (code,label,niveau,categorie,periodique,intervalle,metrage_ref,
-                created_at,updated_at)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
-            (data["code"], data["label"], data["niveau"], data["categorie"],
-             data["periodique"], data["intervalle"], data["metrage_ref"], now, now),
+            "INSERT INTO maintenance_codes (%s) VALUES (%s)"
+            % (",".join(_names), ",".join("?" * len(_names))),
+            _values,
         )
         _sync_alert_for_code(conn, data["code"], data["label"],
                              data["categorie"], data["periodique"], now)
@@ -2884,13 +3436,21 @@ async def maintenance_codes_update(code: str, request: Request):
     from database import get_db
     now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
     with get_db() as conn:
+        _validate_usure_link(conn, data, current_code=data["code"])
+        _cols = {c["name"] for c in conn.execute(
+            "PRAGMA table_info(maintenance_codes)").fetchall()}
+        _sets = ["label=?", "niveau=?", "categorie=?", "periodique=?",
+                 "intervalle=?", "metrage_ref=?", "updated_at=?"]
+        _values = [data["label"], data["niveau"], data["categorie"],
+                   data["periodique"], data["intervalle"], data["metrage_ref"], now]
+        if "usure_piece_id" in _cols:
+            _sets.append("usure_piece_id=?"); _values.append(data["usure_piece_id"])
+        if "usure_position" in _cols:
+            _sets.append("usure_position=?"); _values.append(data["usure_position"])
+        _values.append(data["code"])
         cur = conn.execute(
-            """UPDATE maintenance_codes
-               SET label=?, niveau=?, categorie=?, periodique=?, intervalle=?,
-                   metrage_ref=?, updated_at=?
-               WHERE code=?""",
-            (data["label"], data["niveau"], data["categorie"],
-             data["periodique"], data["intervalle"], data["metrage_ref"], now, data["code"]),
+            "UPDATE maintenance_codes SET %s WHERE code=?" % ", ".join(_sets),
+            _values,
         )
         if cur.rowcount == 0:
             conn.rollback()
@@ -3467,6 +4027,16 @@ async def maintenance_libres_promote(code: str, request: Request):
         if "usage_count" in cols:
             names.append("usage_count")
             values.append(0)
+        # v229 : la promotion peut rattacher directement le nouveau code à une
+        # pièce d'usure. Sans rattachement, _normalize_maint_payload a déjà vidé
+        # metrage_ref — la référence métrage n'existe plus que pour ces pièces.
+        _validate_usure_link(conn, data, current_code=new_code)
+        if "usure_piece_id" in cols:
+            names.append("usure_piece_id")
+            values.append(data["usure_piece_id"])
+        if "usure_position" in cols:
+            names.append("usure_position")
+            values.append(data["usure_position"])
         conn.execute(
             "INSERT INTO maintenance_codes (%s) VALUES (%s)"
             % (",".join(names), ",".join("?" * len(names))),
@@ -5538,56 +6108,190 @@ async def maintenance_alerts_dismiss(alert_id: int, request: Request):
     return {"ok": True, "dismissed": True}
 
 
-@router.get("/api/maintenance/wearparts/last")
-def maintenance_wearparts_last(request: Request, machine: str = ""):
-    """Dernières opérations couteaux pour une machine."""
+# ─── Pièces d'usure — CRUD du référentiel (v229) ─────────────────────────────
+# Remplace les 4 pièces qui vivaient en dur dans WEARPART_PIECES (front) et le
+# matching par libellé qui les reliait aux codes. L'ancien endpoint
+# /api/maintenance/wearparts/last vivait ici : il scannait production_data avec
+# des LIKE '%contre%couteaux%bande%' et n'était plus appelé par personne depuis
+# le passage à /wearparts/info — supprimé avec le reste du matching textuel.
+
+
+def _usure_slugify(label: str, taken: set) -> str:
+    """Clé stable dérivée du libellé, unique dans la table.
+
+    La clé ne change JAMAIS ensuite : c'est elle qui indexe le cache et le
+    localStorage du front (mysifa_maint_wearparts_v1). Renommer une pièce doit
+    rester sans conséquence sur l'onglet mémorisé par chaque utilisateur.
+    """
+    import re as _re
+    import unicodedata
+    s = unicodedata.normalize("NFD", str(label or ""))
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn").lower()
+    s = _re.sub(r"[^a-z0-9]+", "_", s).strip("_")[:40] or "piece"
+    base, i = s, 2
+    while s in taken:
+        s = f"{base}_{i}"[:40]
+        i += 1
+    return s
+
+
+@router.get("/api/maintenance/usure-pieces")
+def usure_pieces_list(request: Request, include_inactifs: bool = False):
+    """Référentiel des pièces d'usure. Lecture ouverte à tout utilisateur
+    connecté : l'accueil Maintenance en a besoin pour rendre ses cartes."""
     get_current_user(request)
-    machine = (machine or "").strip()
-    if not machine:
-        raise HTTPException(422, "Param 'machine' requis.")
     from database import get_db
-    queries = [
-        ("couteaux_bande",         "%couteaux%bande%", "%contre%couteaux%bande%"),
-        ("couteaux_rive",          "%couteaux%rive%",  "%contre%couteaux%rive%"),
-        ("contre_couteaux_bande",  "%contre%couteaux%bande%", None),
-        ("contre_couteaux_rive",   "%contre%couteaux%rive%",  None),
-    ]
-    items = {}
     with get_db() as conn:
-        m_row = conn.execute(
-            "SELECT dernier_metrage FROM machines WHERE nom=? AND actif=1 LIMIT 1",
-            (machine,),
+        if not _ensure_usure_table(conn):
+            return {"items": [], "migrated": False}
+        where = "" if include_inactifs else "WHERE actif = 1"
+        rows = conn.execute(
+            f"""SELECT id, cle, label, ordre, actif
+                FROM maintenance_usure_pieces
+                {where}
+                ORDER BY ordre ASC, label ASC"""
+        ).fetchall()
+        counts = {}
+        try:
+            for cr in conn.execute(
+                """SELECT usure_piece_id AS pid, COUNT(*) AS n
+                   FROM maintenance_codes WHERE usure_piece_id IS NOT NULL
+                   GROUP BY usure_piece_id"""
+            ).fetchall():
+                counts[int(cr["pid"])] = int(cr["n"])
+        except Exception:
+            counts = {}
+        # v230 : positions déduites des codes rattachés, pièce par pièce.
+        positions_by_piece = {
+            int(r["id"]): _usure_positions_from_codes(conn, int(r["id"])) for r in rows
+        }
+    items = [
+        _usure_piece_row_to_dict(
+            r, counts.get(int(r["id"]), 0), positions_by_piece.get(int(r["id"]), [])
+        )
+        for r in rows
+    ]
+    return {"items": items, "migrated": True}
+
+
+@router.post("/api/maintenance/usure-pieces")
+async def usure_pieces_create(request: Request):
+    user = _require_maint_writer(request)
+    body = await request.json()
+    label = (body.get("label") or "").strip()[:80]
+    if not label:
+        raise HTTPException(422, "Libellé obligatoire.")
+    try:
+        ordre = int(body.get("ordre") or 0)
+    except (TypeError, ValueError):
+        ordre = 0
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        if not _ensure_usure_table(conn):
+            raise HTTPException(500, "Migration DB manquante (maintenance_usure_pieces absente).")
+        taken = {r["cle"] for r in conn.execute(
+            "SELECT cle FROM maintenance_usure_pieces").fetchall()}
+        cle = _usure_slugify(label, taken)
+        if ordre <= 0:
+            row = conn.execute(
+                "SELECT COALESCE(MAX(ordre),0) AS m FROM maintenance_usure_pieces").fetchone()
+            ordre = int(row["m"] or 0) + 1
+        cur = conn.execute(
+            """INSERT INTO maintenance_usure_pieces
+               (cle,label,positions,ordre,actif,created_at,updated_at)
+               VALUES (?,?,'[]',?,1,?,?)""",
+            (cle, label, ordre, now, now),
+        )
+        conn.commit()
+        new_id = cur.lastrowid
+    log_action(user=user, action="CREATE", module="maintenance_usure_pieces",
+               objet=cle, detail=label)
+    return {"ok": True, "id": new_id, "cle": cle}
+
+
+@router.put("/api/maintenance/usure-pieces/{piece_id}")
+async def usure_pieces_update(piece_id: int, request: Request):
+    """Renommer, réordonner, activer/désactiver, changer les positions.
+
+    La `cle` n'est jamais modifiée : c'est le point qui rend le renommage
+    inoffensif côté front (cache + localStorage indexés dessus).
+    """
+    user = _require_maint_writer(request)
+    body = await request.json()
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        if not _ensure_usure_table(conn):
+            raise HTTPException(500, "Migration DB manquante (maintenance_usure_pieces absente).")
+        row = conn.execute(
+            "SELECT id, cle, label, ordre, actif FROM maintenance_usure_pieces WHERE id=?",
+            (piece_id,),
         ).fetchone()
-        current_metrage = m_row["dernier_metrage"] if m_row else None
-        for key, pat, exclude in queries:
-            sql = "SELECT date_operation FROM production_data WHERE machine=? AND LOWER(operation) LIKE LOWER(?)"
-            params = [machine, pat]
-            if exclude:
-                sql += " AND LOWER(operation) NOT LIKE LOWER(?)"
-                params.append(exclude)
-            sql += " ORDER BY date_operation DESC LIMIT 1"
-            row = conn.execute(sql, params).fetchone()
-            if not row or not row["date_operation"]:
-                items[key] = {"last_date": None, "metrage_at_change": None, "metrage_since": None}
-                continue
-            change_date = row["date_operation"]
-            m_at_row = conn.execute(
-                "SELECT COALESCE(metrage_total_fin, metrage_total_debut) AS m FROM production_data "
-                "WHERE machine=? AND operation_code IN ('01','89') AND date_operation <= ? "
-                "AND (metrage_total_fin IS NOT NULL OR metrage_total_debut IS NOT NULL) "
-                "ORDER BY date_operation DESC, id DESC LIMIT 1",
-                (machine, change_date),
-            ).fetchone()
-            m_at_change = m_at_row["m"] if m_at_row else None
-            metrage_since = None
-            if current_metrage is not None and m_at_change is not None:
-                try:
-                    metrage_since = max(0.0, float(current_metrage) - float(m_at_change))
-                except (TypeError, ValueError):
-                    metrage_since = None
-            items[key] = {"last_date": change_date, "metrage_at_change": m_at_change, "metrage_since": metrage_since}
-    dates = {k: v["last_date"] for k, v in items.items()}
-    return {"machine": machine, "current_metrage": current_metrage, "dates": dates, "items": items}
+        if not row:
+            raise HTTPException(404, "Pièce introuvable.")
+        label = (body.get("label") or row["label"]).strip()[:80]
+        if not label:
+            raise HTTPException(422, "Libellé obligatoire.")
+        # v230 : `positions` n'est plus modifiable ici — elle se déduit des
+        # codes. Un client qui l'enverrait encore est ignoré silencieusement
+        # plutôt que refusé : le champ n'existe plus dans le formulaire.
+        try:
+            ordre = int(body["ordre"]) if "ordre" in body else int(row["ordre"] or 0)
+        except (TypeError, ValueError):
+            ordre = int(row["ordre"] or 0)
+        actif = int(bool(body["actif"])) if "actif" in body else int(bool(row["actif"]))
+        if not actif:
+            n_used = conn.execute(
+                "SELECT COUNT(*) AS n FROM maintenance_codes WHERE usure_piece_id=?",
+                (piece_id,),
+            ).fetchone()["n"]
+            if n_used:
+                raise HTTPException(
+                    409,
+                    f"{n_used} code(s) sont encore rattachés à « {row['label']} ». "
+                    "Détachez-les avant de désactiver la pièce.",
+                )
+        conn.execute(
+            """UPDATE maintenance_usure_pieces
+               SET label=?, ordre=?, actif=?, updated_at=?
+               WHERE id=?""",
+            (label, ordre, actif, now, piece_id),
+        )
+        conn.commit()
+        cle = row["cle"]
+    log_action(user=user, action="UPDATE", module="maintenance_usure_pieces",
+               objet=cle, detail=label)
+    return {"ok": True}
+
+
+@router.delete("/api/maintenance/usure-pieces/{piece_id}")
+def usure_pieces_delete(piece_id: int, request: Request):
+    user = _require_maint_writer(request)
+    from database import get_db
+    with get_db() as conn:
+        if not _ensure_usure_table(conn):
+            raise HTTPException(500, "Migration DB manquante (maintenance_usure_pieces absente).")
+        row = conn.execute(
+            "SELECT cle, label FROM maintenance_usure_pieces WHERE id=?", (piece_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "Pièce introuvable.")
+        n_used = conn.execute(
+            "SELECT COUNT(*) AS n FROM maintenance_codes WHERE usure_piece_id=?",
+            (piece_id,),
+        ).fetchone()["n"]
+        if n_used:
+            raise HTTPException(
+                409,
+                f"{n_used} code(s) sont rattachés à « {row['label']} ». "
+                "Détachez-les avant de supprimer la pièce.",
+            )
+        conn.execute("DELETE FROM maintenance_usure_pieces WHERE id=?", (piece_id,))
+        conn.commit()
+    log_action(user=user, action="DELETE", module="maintenance_usure_pieces",
+               objet=row["cle"], detail=row["label"])
+    return {"ok": True}
 
 
 @router.post("/api/maintenance/wearparts/info")

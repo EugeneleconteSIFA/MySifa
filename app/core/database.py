@@ -7167,19 +7167,6 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 195, "backfill_libres_usage_count")
 
-    # v195 — Impression : support imprimantes Windows locales (USB / LPT).
-    # Jusqu'ici, les imprimantes etaient forcement atteignables en TCP:9100. Ajoute
-    # `type_connexion` = 'tcp_ip' | 'windows_local' + `nom_queue_windows` pour
-    # cibler une queue installee sur le PC hote (le driver Windows gere USB/LPT/etc).
-    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=195 LIMIT 1").fetchone():
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(imprimantes)").fetchall()}
-        if "type_connexion" not in cols:
-            conn.execute("ALTER TABLE imprimantes ADD COLUMN type_connexion TEXT NOT NULL DEFAULT 'tcp_ip'")
-        if "nom_queue_windows" not in cols:
-            conn.execute("ALTER TABLE imprimantes ADD COLUMN nom_queue_windows TEXT")
-        conn.commit()
-        _record_schema_migration(conn, 195, "imprimantes_type_connexion_windows_local")
-
     # v196 -- MyExpe (devis transporteurs) : type de palette sur les demandes,
     # commentaire + fichier joint lors de la retenue d'une offre. Colonnes
     # nullable, seedees a NULL pour ne rien casser en prod.
@@ -7948,6 +7935,153 @@ Ressources :
         print(
             f"[MySifa] migration taches_multi_assignes : {_asg.rowcount} assignation(s) reprise(s)."
         )
+
+    # v229 — Pièces d'usure : rattachement STRUCTUREL des codes maintenance.
+    #
+    # Avant : l'accueil Maintenance devinait à chaque render qu'un code était une
+    # pièce d'usure en lisant son LIBELLÉ (présence de "couteaux" / "contre" /
+    # "bande" / "rive" / "landberg" / "cutter" dans _findWearPartCode). Renommer
+    # un code détachait donc silencieusement sa carte, et deux codes matchant la
+    # même position se masquaient l'un l'autre (premier arrivé, premier servi).
+    #
+    # Après : le rattachement est une RELATION. Un code est une pièce d'usure si
+    # et seulement si usure_piece_id IS NOT NULL — pas de booléen séparé, donc
+    # pas d'état incohérent possible (flag posé sans rattachement). Le libellé
+    # redevient un simple libellé, librement modifiable.
+    #
+    # Le garde-fou porte sur le NOM et non sur le numéro de version : deux
+    # branches parallèles ont déjà collisionné sur un même numéro (cf. le bloc AO
+    # juste en dessous), et une migration silencieusement ignorée laisserait ici
+    # une table absente → 500 au chargement de Paramètres.
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE name='maintenance_usure_pieces' LIMIT 1"
+    ).fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS maintenance_usure_pieces (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                cle         TEXT NOT NULL UNIQUE,
+                label       TEXT NOT NULL,
+                positions   TEXT NOT NULL DEFAULT '[]',
+                ordre       INTEGER NOT NULL DEFAULT 0,
+                actif       INTEGER NOT NULL DEFAULT 1,
+                created_at  TEXT NOT NULL,
+                updated_at  TEXT
+            )
+        """)
+        _mc_cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
+        if "usure_piece_id" not in _mc_cols:
+            conn.execute("ALTER TABLE maintenance_codes ADD COLUMN usure_piece_id INTEGER")
+        if "usure_position" not in _mc_cols:
+            conn.execute("ALTER TABLE maintenance_codes ADD COLUMN usure_position TEXT")
+        # Index unique PARTIEL : deux codes ne peuvent pas revendiquer le même
+        # couple (pièce, position). Le WHERE exclut les codes non rattachés,
+        # sinon toutes les lignes NULL entreraient en collision entre elles.
+        # usure_position vaut '' (jamais NULL) pour une pièce sans position :
+        # SQLite considère deux NULL comme distincts, ce qui laisserait passer
+        # deux codes sur la même pièce sans position.
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_maint_usure_unique
+            ON maintenance_codes(usure_piece_id, usure_position)
+            WHERE usure_piece_id IS NOT NULL
+        """)
+
+        _now_usure = datetime.now().isoformat()
+
+        # Seed SIFA — conditionné. Les 4 pièces ci-dessous et le vocabulaire
+        # bande/rive sont du référentiel SIFA, pas du générique : un client
+        # Kernse démarre avec une table VIDE que l'onboarding remplit.
+        _seeded = 0
+        _already = conn.execute(
+            "SELECT COUNT(*) AS n FROM maintenance_usure_pieces"
+        ).fetchone()["n"]
+        if _already == 0 and ENV_NAME in ("v1", "v2"):
+            for _cle, _lab, _pos_json, _ordre in (
+                ("couteaux",          "Couteaux",          '["bande","rive"]', 1),
+                ("contre_couteaux",   "Contre-couteaux",   '["bande","rive"]', 2),
+                ("cutters",           "Cutters",           '[]',               3),
+                ("couteaux_landberg", "Couteaux Landberg", '[]',               4),
+            ):
+                conn.execute(
+                    """INSERT OR IGNORE INTO maintenance_usure_pieces
+                       (cle,label,positions,ordre,actif,created_at)
+                       VALUES (?,?,?,?,1,?)""",
+                    (_cle, _lab, _pos_json, _ordre, _now_usure),
+                )
+                _seeded += 1
+
+        # Backfill — on applique UNE DERNIÈRE FOIS la logique de matching par
+        # libellé du front, puis elle disparaît du code. Les clés de pièces sont
+        # volontairement identiques aux anciens `pieceId` du localStorage
+        # (mysifa_maint_wearparts_v1) : l'onglet Bande/Rive mémorisé par chaque
+        # utilisateur reste donc valide après la mise à jour.
+        _pieces_by_cle = {
+            r["cle"]: r["id"]
+            for r in conn.execute("SELECT id, cle FROM maintenance_usure_pieces").fetchall()
+        }
+        _linked, _dups = 0, []
+        if _pieces_by_cle:
+            _taken = set()
+            _rows = conn.execute(
+                """SELECT code, label FROM maintenance_codes
+                   WHERE categorie IN ('entretien','remplacements','interventions','suivi')
+                     AND usure_piece_id IS NULL
+                   ORDER BY code"""
+            ).fetchall()
+            for _r in _rows:
+                _lbl = str(_r["label"] or "").casefold()
+                _cle, _pos = None, ""
+                if "landberg" in _lbl:
+                    _cle = "couteaux_landberg"
+                elif "cutter" in _lbl:
+                    _cle = "cutters"
+                elif "couteau" in _lbl:
+                    # Sans position identifiable, on ne devine pas : le code
+                    # reste non rattaché et l'admin le rattache à la main.
+                    if "bande" in _lbl:
+                        _pos = "bande"
+                    elif "rive" in _lbl:
+                        _pos = "rive"
+                    else:
+                        continue
+                    _cle = "contre_couteaux" if "contre" in _lbl else "couteaux"
+                if not _cle:
+                    continue
+                _pid = _pieces_by_cle.get(_cle)
+                if not _pid:
+                    continue
+                if (_pid, _pos) in _taken:
+                    # Collision : deux codes revendiquent la même position. Avant
+                    # cette migration le premier gagnait EN SILENCE. On garde le
+                    # même arbitrage pour ne rien changer à l'affichage, mais on
+                    # le trace pour que l'admin puisse trancher.
+                    _dups.append(f"{_r['code']} ({_r['label']})")
+                    continue
+                _taken.add((_pid, _pos))
+                conn.execute(
+                    "UPDATE maintenance_codes SET usure_piece_id=?, usure_position=? WHERE code=?",
+                    (_pid, _pos, _r["code"]),
+                )
+                _linked += 1
+
+        # metrage_ref devient exclusif aux pièces d'usure. On COMPTE les codes
+        # non rattachés qui en portent encore un, sans les purger : la valeur
+        # était déjà ignorée en lecture (seule la carte pièce d'usure la lit),
+        # et une purge destructive n'a pas sa place dans une migration de
+        # structure. À traiter dans un lot de nettoyage une fois le compte connu.
+        _orphan_metrage = conn.execute(
+            """SELECT COUNT(*) AS n FROM maintenance_codes
+               WHERE usure_piece_id IS NULL AND COALESCE(metrage_ref,'') <> ''"""
+        ).fetchone()["n"]
+
+        conn.commit()
+        _record_schema_migration(conn, 229, "maintenance_usure_pieces")
+        print(
+            f"[MySifa] migration maintenance_usure_pieces : {_seeded} piece(s) seedee(s), "
+            f"{_linked} code(s) rattache(s), {len(_dups)} doublon(s) ignore(s), "
+            f"{_orphan_metrage} metrage_ref orphelin(s)."
+        )
+        if _dups:
+            print("[MySifa]   codes non rattaches (position deja prise) : " + ", ".join(_dups))
 
     # ── AO conditionnement (condi) + marge — schéma garde-fou sur COLONNE ────
     # ATTENTION, choix délibéré : ces colonnes NE sont PAS versionnées via
@@ -9124,275 +9258,16 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 225, "mc_transport_mode_pct")
 
-    # v226 — Coûts matières : bascule sur l'annuaire fournisseurs de l'entreprise
-    # (fournisseurs_fsc). La table mc_supplier est conservée pour l'historique,
-    # mais chaque entrée est rapprochée de son homologue par le nom normalisé.
-    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=226 LIMIT 1").fetchone():
-        _sup_cols = {r["name"] for r in conn.execute("PRAGMA table_info(mc_supplier)").fetchall()}
-        _mat226_cols = {r["name"] for r in conn.execute("PRAGMA table_info(mc_material)").fetchall()}
-        if _sup_cols and "fournisseur_fsc_id" not in _sup_cols:
-            conn.execute("ALTER TABLE mc_supplier ADD COLUMN fournisseur_fsc_id INTEGER")
-        if _mat226_cols and "fournisseur_fsc_id" not in _mat226_cols:
-            conn.execute("ALTER TABLE mc_material ADD COLUMN fournisseur_fsc_id INTEGER")
-
-        def _norm226(s):
-            import unicodedata
-
-            s = unicodedata.normalize("NFKD", str(s or ""))
-            s = "".join(c for c in s if not unicodedata.combining(c))
-            s = s.lower()
-            out = []
-            for ch in s:
-                out.append(ch if ch.isalnum() else " ")
-            # Formes juridiques et initiales isolées ignorées : « JAOUR S.A. »
-            # doit retrouver « Jaour ».
-            _stop = ("sa", "sas", "sarl", "sasu", "gmbh", "ltd", "bv", "nv", "spa", "srl", "inc")
-            mots = [m for m in "".join(out).split() if m not in _stop and len(m) > 1]
-            return " ".join(mots) or " ".join("".join(out).split())
-
-        _matched226 = 0
-        if _sup_cols and _mat226_cols:
-            _fsc = {}
-            for _r in conn.execute("SELECT id, nom FROM fournisseurs_fsc").fetchall():
-                _fsc.setdefault(_norm226(_r["nom"]), int(_r["id"]))
-            for _r in conn.execute(
-                "SELECT id, name FROM mc_supplier WHERE fournisseur_fsc_id IS NULL"
-            ).fetchall():
-                _fid = _fsc.get(_norm226(_r["name"]))
-                if _fid:
-                    conn.execute(
-                        "UPDATE mc_supplier SET fournisseur_fsc_id=? WHERE id=?", (_fid, _r["id"])
-                    )
-                    _matched226 += 1
-            # Report du fournisseur rapproché sur les matières déjà rattachées.
-            conn.execute(
-                """UPDATE mc_material
-                      SET fournisseur_fsc_id = (
-                            SELECT s.fournisseur_fsc_id FROM mc_supplier s
-                             WHERE s.id = mc_material.supplier_id)
-                    WHERE fournisseur_fsc_id IS NULL AND supplier_id IS NOT NULL"""
-            )
-        _unmatched226 = 0
-        if _sup_cols:
-            _row = conn.execute(
-                "SELECT COUNT(*) AS n FROM mc_supplier WHERE fournisseur_fsc_id IS NULL"
-            ).fetchone()
-            _unmatched226 = int(_row["n"] or 0) if _row else 0
-        conn.commit()
-        _record_schema_migration(conn, 226, "mc_fournisseurs_annuaire_entreprise")
-        print(
-            f"[MySifa] migration mc_fournisseurs_annuaire_entreprise : {_matched226} "
-            f"fournisseur(s) rapproché(s), {_unmatched226} sans correspondance."
-        )
-
-    # v227 — Prix d'achat par fournisseur (et par laize quand la matière est laizée).
-    #
-    # Modèle : une ligne par (matière, laize, fournisseur). laize_id NULL = matière
-    # non laizée ou prix unique toutes laizes. fournisseur_id NULL = prix connu sans
-    # fournisseur désigné (reprise de l'existant).
-    #
-    # Le prix « principal » est celui qui fait foi : il est recopié dans les champs
-    # historiques de MyStock (matieres_premieres.prix_eur_m2, mp_matiere_laizes.
-    # prix_eur_m2, mp_valorisation.prix_unitaire) que toute la valorisation lit déjà.
-    # Aucun code de valorisation existant n'a donc à être modifié.
-    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=227 LIMIT 1").fetchone():
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS mp_matiere_prix (
-                id              INTEGER PRIMARY KEY AUTOINCREMENT,
-                matiere_id      INTEGER NOT NULL
-                                REFERENCES matieres_premieres(id) ON DELETE CASCADE,
-                laize_id        INTEGER REFERENCES mp_laizes(id) ON DELETE CASCADE,
-                fournisseur_id  INTEGER REFERENCES fournisseurs_fsc(id) ON DELETE SET NULL,
-                prix            REAL NOT NULL DEFAULT 0,
-                principal       INTEGER NOT NULL DEFAULT 0,
-                note            TEXT,
-                updated_at      TEXT NOT NULL
-                                DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
-                updated_by_name TEXT
-            );
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_mmp_unique
-                ON mp_matiere_prix(matiere_id, COALESCE(laize_id,0), COALESCE(fournisseur_id,0));
-            CREATE INDEX IF NOT EXISTS idx_mmp_matiere ON mp_matiere_prix(matiere_id);
-            CREATE INDEX IF NOT EXISTS idx_mmp_principal
-                ON mp_matiere_prix(matiere_id, principal);
-            """
-        )
-
-        _LAIZEES227 = ("frontal", "glassine", "complexe")
-        _n_prix227 = 0
-
-        def _ins227(mat_id, laize_id, fournisseur_id, prix, principal):
-            conn.execute(
-                """INSERT OR IGNORE INTO mp_matiere_prix
-                   (matiere_id, laize_id, fournisseur_id, prix, principal, note, updated_by_name)
-                   VALUES (?,?,?,?,?,?,?)""",
-                (mat_id, laize_id, fournisseur_id, float(prix or 0), 1 if principal else 0,
-                 "Reprise de l'existant", "migration"),
-            )
-
-        # Fournisseurs déjà connus, par (matière, laize).
-        _fourn227 = {}
-        for _r in conn.execute(
-            "SELECT matiere_id, laize_id, fournisseur_id FROM matiere_laize_fournisseurs"
-        ).fetchall():
-            _fourn227.setdefault((int(_r["matiere_id"]), int(_r["laize_id"])), []).append(
-                int(_r["fournisseur_id"])
-            )
-
-        for _m in conn.execute(
-            """SELECT mp.id, mp.categorie, COALESCE(mp.prix_eur_m2,0) AS prix_m2,
-                      COALESCE(mp.prix_par_laize,0) AS par_laize,
-                      COALESCE(v.prix_unitaire,0) AS prix_unit
-                 FROM matieres_premieres mp
-                 LEFT JOIN mp_valorisation v ON v.matiere_id = mp.id"""
-        ).fetchall():
-            _mid = int(_m["id"])
-            _cat = (_m["categorie"] or "").strip().lower()
-            if _cat in _LAIZEES227:
-                _laizes = [
-                    (int(_l["laize_id"]), _l["prix_eur_m2"])
-                    for _l in conn.execute(
-                        "SELECT laize_id, prix_eur_m2 FROM mp_matiere_laizes WHERE matiere_id=?",
-                        (_mid,),
-                    ).fetchall()
-                ]
-                if _laizes and int(_m["par_laize"] or 0):
-                    # Un prix par laize : une ligne par laize et par fournisseur.
-                    for _lid, _lprix in _laizes:
-                        _fs = _fourn227.get((_mid, _lid)) or [None]
-                        for _i, _fid in enumerate(_fs):
-                            _ins227(_mid, _lid, _fid, _lprix, _i == 0)
-                            _n_prix227 += 1
-                    continue
-                # Prix unique toutes laizes : une seule ligne sans laize, avec
-                # l'ensemble des fournisseurs connus sur les laizes de la matière.
-                _fs = []
-                for _lid, _ in _laizes:
-                    for _fid in _fourn227.get((_mid, _lid)) or []:
-                        if _fid not in _fs:
-                            _fs.append(_fid)
-                for _i, _fid in enumerate(_fs or [None]):
-                    _ins227(_mid, None, _fid, _m["prix_m2"], _i == 0)
-                    _n_prix227 += 1
-            else:
-                _ins227(_mid, None, None, _m["prix_unit"], True)
-                _n_prix227 += 1
-
-        conn.commit()
-        _record_schema_migration(conn, 227, "mp_matiere_prix_par_fournisseur")
-        print(
-            f"[MySifa] migration mp_matiere_prix_par_fournisseur : {_n_prix227} prix repris."
-        )
-
-    # v228 — Déclinaisons de matière et appairage au niveau de la déclinaison.
-    #
-    # Une matière MyStock se décline :
-    #   - par LAIZE pour les frontaux, glassines et complexes,
-    #   - par GRAMMAGE pour les adhésifs (un même adhésif en 22, 25 ou 30 g/m²
-    #     n'a pas le même tarif).
-    # C'est la déclinaison — et non la matière — qui correspond à une matière de
-    # la base Coûts matières : l'adhésif MyStock « 2028 » y existe en « 2028/22 »,
-    # « 2028/25 » et « 2028/30 ». L'appairage migre donc sur la déclinaison.
-    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=228 LIMIT 1").fetchone():
-        conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS mp_grammages (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                valeur_gsm REAL NOT NULL UNIQUE,
-                label      TEXT,
-                ordre      INTEGER NOT NULL DEFAULT 0,
-                actif      INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL
-                           DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
-            );
-
-            CREATE TABLE IF NOT EXISTS mp_matiere_grammages (
-                matiere_id  INTEGER NOT NULL
-                            REFERENCES matieres_premieres(id) ON DELETE CASCADE,
-                grammage_id INTEGER NOT NULL REFERENCES mp_grammages(id) ON DELETE RESTRICT,
-                PRIMARY KEY (matiere_id, grammage_id)
-            );
-
-            CREATE TABLE IF NOT EXISTS mp_matiere_declinaison (
-                id             INTEGER PRIMARY KEY AUTOINCREMENT,
-                matiere_id     INTEGER NOT NULL
-                               REFERENCES matieres_premieres(id) ON DELETE CASCADE,
-                laize_id       INTEGER REFERENCES mp_laizes(id) ON DELETE CASCADE,
-                grammage_id    INTEGER REFERENCES mp_grammages(id) ON DELETE CASCADE,
-                mc_material_id INTEGER REFERENCES mc_material(id) ON DELETE SET NULL,
-                created_at     TEXT NOT NULL
-                               DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime'))
-            );
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_mmd_unique
-                ON mp_matiere_declinaison(matiere_id, COALESCE(laize_id,0), COALESCE(grammage_id,0));
-            CREATE INDEX IF NOT EXISTS idx_mmd_matiere ON mp_matiere_declinaison(matiere_id);
-            CREATE INDEX IF NOT EXISTS idx_mmd_mc ON mp_matiere_declinaison(mc_material_id);
-            """
-        )
-        _prix228 = {r["name"] for r in conn.execute("PRAGMA table_info(mp_matiere_prix)").fetchall()}
-        if _prix228 and "declinaison_id" not in _prix228:
-            conn.execute("ALTER TABLE mp_matiere_prix ADD COLUMN declinaison_id INTEGER")
-        if _prix228 and "grammage_id" not in _prix228:
-            conn.execute("ALTER TABLE mp_matiere_prix ADD COLUMN grammage_id INTEGER")
-
-        # Une déclinaison par couple (matière, laize) déjà présent dans les prix.
-        _n_decl = 0
-        for _r in conn.execute(
-            "SELECT DISTINCT matiere_id, laize_id FROM mp_matiere_prix"
-        ).fetchall():
-            conn.execute(
-                """INSERT OR IGNORE INTO mp_matiere_declinaison (matiere_id, laize_id)
-                   VALUES (?,?)""",
-                (int(_r["matiere_id"]), _r["laize_id"]),
-            )
-            _n_decl += 1
-        conn.execute(
-            """UPDATE mp_matiere_prix SET declinaison_id = (
-                   SELECT d.id FROM mp_matiere_declinaison d
-                    WHERE d.matiere_id = mp_matiere_prix.matiere_id
-                      AND COALESCE(d.laize_id,0) = COALESCE(mp_matiere_prix.laize_id,0)
-                      AND d.grammage_id IS NULL)
-                WHERE declinaison_id IS NULL"""
-        )
-
-        # L'unicité d'un prix se joue désormais sur (déclinaison, fournisseur) :
-        # l'ancien index ignorait le grammage et refusait deux grammages du même
-        # adhésif chez le même fournisseur.
-        conn.execute("DROP INDEX IF EXISTS idx_mmp_unique")
-        conn.execute(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_mmp_decl_unique "
-            "ON mp_matiere_prix(declinaison_id, COALESCE(fournisseur_id,0))"
-        )
-
-        # Reprise de l'appairage : il ne peut descendre sans ambiguïté que sur une
-        # matière qui n'a qu'une seule déclinaison. Les autres sont à réappairer
-        # à la main, déclinaison par déclinaison — c'est justement le point que
-        # l'appairage au niveau matière ne savait pas exprimer.
-        _n_pair, _n_ambigu = 0, 0
-        for _m in conn.execute(
-            "SELECT id, mc_material_id FROM matieres_premieres WHERE mc_material_id IS NOT NULL"
-        ).fetchall():
-            _decls = conn.execute(
-                "SELECT id FROM mp_matiere_declinaison WHERE matiere_id=?", (int(_m["id"]),)
-            ).fetchall()
-            if len(_decls) == 1:
-                conn.execute(
-                    "UPDATE mp_matiere_declinaison SET mc_material_id=? WHERE id=?",
-                    (int(_m["mc_material_id"]), int(_decls[0]["id"])),
-                )
-                _n_pair += 1
-            elif len(_decls) > 1:
-                _n_ambigu += 1
-
-        conn.commit()
-        _record_schema_migration(conn, 228, "mp_declinaisons_appairage")
-        print(
-            f"[MySifa] migration mp_declinaisons_appairage : {_n_decl} déclinaison(s) créée(s), "
-            f"{_n_pair} appairage(s) repris, {_n_ambigu} matière(s) à réappairer par déclinaison."
-        )
-
     conn.commit()
+
+    # Migrations en fichiers (app/core/migrations/), identifiées par leur nom.
+    # Les numéros ci-dessus sont figés : toute NOUVELLE migration va dans un
+    # fichier, pour que deux chantiers menés en parallèle ne se disputent ni un
+    # numéro ni ce fichier. Voir app/core/migrations/__init__.py.
+    from app.core.migrations import appliquer_migrations
+
+    for _nom in appliquer_migrations(conn):
+        print(f"[MySifa] migration {_nom} appliquée.")
 
 
 def create_default_admin():

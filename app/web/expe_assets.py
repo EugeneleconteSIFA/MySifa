@@ -2044,17 +2044,83 @@ async function expeClientsSuggestions(){
   return _expeClientsCache;
 }
 
-function expeClientDatalist(inp){
-  const id='expe-clients-dl';
-  let dl=document.getElementById(id);
-  if(!dl){ dl=h('datalist',{id:id}); document.body.appendChild(dl); }
-  inp.setAttribute('list',id);
-  void expeClientsSuggestions().then(list=>{
-    if(dl.childElementCount===list.length)return;
-    dl.innerHTML='';
-    list.forEach(c=>dl.appendChild(h('option',{value:c})));
+// Combobox client. Le <datalist> natif était le choix simple, mais son menu
+// est rendu par le navigateur : ni la police, ni les couleurs, ni le thème
+// sombre de MySifa ne s'y appliquent, et il tombait en blanc sur blanc. On
+// redessine donc la liste nous-mêmes.
+//
+// La liste est en `position:fixed` et non `absolute` : le modal a
+// `overflow:auto`, une liste en flux absolu s'y ferait couper au bord.
+function expeClientCombo(inp){
+  const wrap=h('div',{className:'expe-combo'});
+  inp.classList.add('expe-devis-inp');
+  inp.setAttribute('autocomplete','off');
+  const menu=h('div',{className:'expe-combo-menu'});
+  let items=[], idx=-1, ouvert=false;
+
+  const placer=()=>{
+    const r=inp.getBoundingClientRect();
+    menu.style.left=r.left+'px';
+    menu.style.width=r.width+'px';
+    // Sous le champ, sauf s'il n'y a pas la place : au-dessus alors.
+    const dispoBas=window.innerHeight-r.bottom;
+    if(dispoBas<180&&r.top>dispoBas){
+      menu.style.top='auto';
+      menu.style.bottom=(window.innerHeight-r.top+4)+'px';
+      menu.style.maxHeight=Math.min(240,r.top-12)+'px';
+    }else{
+      menu.style.bottom='auto';
+      menu.style.top=(r.bottom+4)+'px';
+      menu.style.maxHeight=Math.min(240,dispoBas-12)+'px';
+    }
+  };
+  const fermer=()=>{ ouvert=false; idx=-1; try{menu.remove();}catch(_e){} };
+  const choisir=v=>{
+    inp.value=v;
+    inp.dispatchEvent(new Event('input',{bubbles:true}));
+    fermer(); inp.focus();
+  };
+  const surligne=()=>{
+    Array.from(menu.children).forEach((el,i)=>el.classList.toggle('on',i===idx));
+    if(idx>=0&&menu.children[idx])menu.children[idx].scrollIntoView({block:'nearest'});
+  };
+  const ouvrir=async()=>{
+    const all=await expeClientsSuggestions();
+    const q=(inp.value||'').trim().toLowerCase();
+    items=q?all.filter(c=>c.toLowerCase().indexOf(q)>=0).slice(0,40):all.slice(0,40);
+    menu.innerHTML='';
+    if(!items.length){
+      // Pas de menu vide qui flotte : s'il n'y a rien à proposer, le champ
+      // reste un champ texte ordinaire.
+      fermer(); return;
+    }
+    items.forEach((c,i)=>{
+      const o=h('div',{className:'expe-combo-item'},c);
+      o.addEventListener('mousedown',e=>{e.preventDefault();choisir(c);});
+      o.addEventListener('mouseenter',()=>{idx=i;surligne();});
+      menu.appendChild(o);
+    });
+    if(!ouvert){ document.body.appendChild(menu); ouvert=true; }
+    placer(); idx=-1; surligne();
+  };
+
+  inp.addEventListener('input',()=>{ void ouvrir(); });
+  inp.addEventListener('focus',()=>{ void ouvrir(); });
+  inp.addEventListener('blur',()=>{ setTimeout(fermer,120); });
+  inp.addEventListener('keydown',e=>{
+    if(!ouvert){
+      if(e.key==='ArrowDown'){ e.preventDefault(); void ouvrir(); }
+      return;
+    }
+    if(e.key==='ArrowDown'){ e.preventDefault(); idx=Math.min(idx+1,items.length-1); surligne(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); idx=Math.max(idx-1,0); surligne(); }
+    else if(e.key==='Enter'&&idx>=0){ e.preventDefault(); choisir(items[idx]); }
+    else if(e.key==='Escape'){ fermer(); }
   });
-  return inp;
+  window.addEventListener('scroll',()=>{ if(ouvert)placer(); },true);
+  window.addEventListener('resize',()=>{ if(ouvert)placer(); });
+  wrap.appendChild(inp);
+  return wrap;
 }
 
 // ── Engagement transporteur (email ouvert / portail consulté) ──
@@ -2106,8 +2172,49 @@ function expeEngagementCell(r){
   return wrap;
 }
 
+// Popover d'édition de la date limite. Détaché du modal « Modifier » parce
+// que décaler une échéance reste légitime après envoi, contrairement au reste
+// de l'entête.
+function ouvrirEditionDateLimite(d,ancre){
+  const pop=h('div',{className:'expe-pop'});
+  const inp=h('input',{type:'date',className:'expe-devis-inp',
+    value:(d.date_limite||'').slice(0,10),style:{padding:'8px 12px',fontSize:'13px'}});
+  const fermer=()=>{try{pop.remove();}catch(_e){} document.removeEventListener('mousedown',dehors,true);};
+  const dehors=e=>{ if(!pop.contains(e.target)&&e.target!==ancre)fermer(); };
+  const enregistrer=async(val)=>{
+    try{
+      await api('/api/expe/devis/demandes/'+d.id+'/date-limite',{method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({date_limite:val||null})});
+      showToast(val?'Date limite mise à jour':'Date limite retirée');
+      fermer();
+      await ouvrirDetailDemande(d.id); await chargerDemandes();
+    }catch(e){ showToast(e.message||'Erreur','danger'); }
+  };
+  pop.appendChild(h('div',{className:'expe-pop-t'},'Date limite de réponse'));
+  pop.appendChild(inp);
+  pop.appendChild(h('div',{className:'expe-pop-foot'},
+    d.date_limite?h('button',{type:'button',className:'btn-ghost',
+      style:{fontSize:'12px',color:'var(--danger)'},onClick:()=>void enregistrer('')},'Retirer'):null,
+    h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px',marginLeft:'auto'},
+      onClick:fermer},'Annuler'),
+    h('button',{type:'button',className:'btn btn-accent',style:{fontSize:'12px',padding:'6px 14px'},
+      onClick:()=>void enregistrer(inp.value)},'Enregistrer')));
+  document.body.appendChild(pop);
+  const r=ancre.getBoundingClientRect();
+  pop.style.top=(Math.min(r.bottom+6,window.innerHeight-160))+'px';
+  pop.style.left=(Math.min(r.left,window.innerWidth-280))+'px';
+  inp.focus();
+  // La touche Entrée valide : sur un champ date, c'est le geste attendu.
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();void enregistrer(inp.value);}
+    else if(e.key==='Escape'){fermer();}
+  });
+  setTimeout(()=>document.addEventListener('mousedown',dehors,true),0);
+}
+
 function ouvrirEditionDemande(d){
-  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'2000'}});
+  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'12200'}});
   const box=h('div',{className:'expe-devis-modal',style:{maxWidth:'560px'}});
   const close=()=>{try{ov.remove();}catch(_e){}};
   const inp=(v,opts)=>h('input',Object.assign({className:'expe-devis-inp',type:'text',
@@ -2133,7 +2240,7 @@ function ouvrirEditionDemande(d){
   box.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'12px'}},
     "Possible tant qu'aucune demande n'est partie."));
   box.appendChild(h('div',{className:'expe-devis-grid'},
-    h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Client *',expeClientDatalist(cli)),
+    h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Client *',expeClientCombo(cli)),
     h('label',{className:'expe-devis-label'},'CP destination *',cp),
     h('label',{className:'expe-devis-label'},'Date limite',dl),
     h('label',{className:'expe-devis-label'},'Poids (kg)',poids),
@@ -2192,7 +2299,7 @@ async function retirerDestinataire(r,demandeId){
 }
 
 function ouvrirRelanceDevis(r,demandeId){
-  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'2000'}});
+  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'12200'}});
   const box=h('div',{className:'expe-devis-modal',style:{maxWidth:'480px'}});
   const close=()=>{try{ov.remove();}catch(_e){}};
   const msg=h('textarea',{className:'expe-devis-inp',rows:4,
@@ -2226,7 +2333,7 @@ async function ouvrirTimelineDevis(reponseId){
   // Overlay autonome empilé au-dessus du modal de détail : passer par
   // S.expeDevisModal fermerait le détail, et on perdrait le contexte au
   // moment précis où on veut le croiser avec la timeline.
-  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'2000'}});
+  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'12200'}});
   const box=h('div',{className:'expe-devis-modal',style:{maxWidth:'560px'}});
   const body=h('div',{id:'expe-tl-body',style:{color:'var(--muted)',fontSize:'13px'}},'Chargement…');
   const close=()=>{try{ov.remove();}catch(_e){}};
@@ -2283,7 +2390,10 @@ function renderExpeDevisModal(){
   if(!m)return null;
   const overlay=h('div',{className:'expe-devis-modal-overlay'});
   overlay.addEventListener('click',e=>{if(e.target===overlay)fermerExpeDevisModal();});
-  const box=h('div',{className:'expe-devis-modal'});
+  // Le détail porte un comparatif à sept colonnes : à 720 px il faut faire
+  // défiler pour atteindre les actions. On l'élargit, sans toucher aux autres
+  // modales qui, elles, n'ont qu'un formulaire à afficher.
+  const box=h('div',{className:'expe-devis-modal'+(m.type==='detail'?' expe-devis-modal--large':'')});
   const closeBtn=h('button',{type:'button',className:'btn-ghost expe-devis-close',onClick:fermerExpeDevisModal},iconEl('x',16));
 
   if(m.type==='nouvelle'){
@@ -2317,7 +2427,7 @@ function renderExpeDevisModal(){
           placeholder:'Nom du client',autocomplete:'off'});
         c.addEventListener('input',e=>{m.form.client=e.target.value;});
         return h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Client *',
-          expeClientDatalist(c));
+          expeClientCombo(c));
       })(),
       mk('Poids (kg)','poids_total_kg',{type:'number',step:'0.1'}),
       mk('Palettes','nb_palette',{type:'number',step:'1'}),
@@ -2377,28 +2487,28 @@ function renderExpeDevisModal(){
     // compter les lignes du tableau.
     (function(){
       const bar=h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center',marginBottom:'14px'}});
-      const ech=expeDevisEcheanceTag(d);
-      if(ech)bar.appendChild(ech);
+      const modifiable=expeCanWrite()&&d.statut==='ouverte';
+      // Une seule représentation de l'échéance, pas deux. Il y avait la
+      // pastille ET un champ date juste en dessous : outre le doublon,
+      // l'`input type=date` déclenche son `change` sur une saisie clavier
+      // partielle, donc une date tapée à la main partait au serveur avant
+      // d'être finie. La pastille devient le point d'entrée, et l'édition
+      // passe par un popover qui ne valide qu'à la demande.
+      const ech=expeDevisEcheanceTag(d)
+        ||(modifiable?h('span',{className:'expe-devis-pill muted'},'Sans date limite'):null);
+      if(ech){
+        if(modifiable){
+          ech.classList.add('expe-pill-edit');
+          ech.title='Modifier la date limite';
+          ech.addEventListener('click',ev=>{ev.stopPropagation();ouvrirEditionDateLimite(d,ech);});
+        }
+        bar.appendChild(ech);
+      }
       const env=reps.filter(r=>r.sent_at).length;
       const rec=reps.filter(r=>r.prix!=null).length;
       if(env){
         bar.appendChild(h('span',{className:'expe-devis-pill '+(rec>=env?'ok':'accent')},
           rec+' / '+env+' réponse'+(env>1?'s':'')+(rec>=env?' — toutes reçues':'')));
-      }
-      if(expeCanWrite()&&d.statut==='ouverte'){
-        const dl=h('input',{type:'date',value:(d.date_limite||'').slice(0,10),
-          style:{padding:'3px 8px',fontSize:'12px',background:'var(--bg)',border:'1px solid var(--border)',
-            borderRadius:'6px',color:'var(--text)'},title:'Modifier la date limite'});
-        dl.addEventListener('change',async e=>{
-          try{
-            await api('/api/expe/devis/demandes/'+d.id+'/date-limite',{method:'PATCH',
-              headers:{'Content-Type':'application/json'},
-              body:JSON.stringify({date_limite:e.target.value||null})});
-            showToast('Date limite mise à jour');
-            await ouvrirDetailDemande(d.id); await chargerDemandes();
-          }catch(err){ showToast(err.message||'Erreur','danger'); }
-        });
-        bar.appendChild(dl);
       }
       if(bar.childElementCount)box.appendChild(bar);
     })();
@@ -2412,7 +2522,7 @@ function renderExpeDevisModal(){
       const wrap=h('div',{className:'expe-devis-pj'});
       const lignePJ=(p,supprimable)=>h('div',{className:'expe-devis-pj-item'},
         h('a',{href:'/api/expe/devis/pieces-jointes/'+p.id,target:'_blank',rel:'noopener',
-          className:'expe-devis-pj-lien'},'📎 '+escHtml(p.filename||'fichier')),
+          className:'expe-devis-pj-lien'},iconEl('paperclip',12),escHtml(p.filename||'fichier')),
         p.taille_octets?h('span',{className:'expe-devis-pj-taille'},
           Math.max(1,Math.round(p.taille_octets/1024))+' Ko'):null,
         (supprimable&&expeCanWrite())?h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--bad',
@@ -2558,8 +2668,8 @@ function renderExpeDevisModal(){
         h('td',null,...acts)
       );
     }):[h('tr',null,h('td',{colSpan:7,style:{color:'var(--muted)',fontStyle:'italic'}},'Aucune réponse.'))];
-    box.appendChild(h('div',{className:'expe-devis-table-wrap'},
-      h('table',{className:'table-std'},h('thead',null,head),h('tbody',null,...body))
+    box.appendChild(h('div',{className:'expe-devis-table-wrap expe-devis-comp-wrap'},
+      h('table',{className:'table-std expe-devis-comp'},h('thead',null,head),h('tbody',null,...body))
     ));
   }else if(m.type==='envoi'){
     const trps=(T.list||[]).filter(t=>{
@@ -2800,8 +2910,9 @@ function renderExpeDevisSection(){
         if(ech)pills.push(ech);
         const suivi=expeDevisSuiviTag(d);
         if(suivi)pills.push(suivi);
-        if(d.nb_pieces_jointes)pills.push(h('span',{className:'expe-devis-pill muted',
-          title:d.nb_pieces_jointes+' pièce(s) jointe(s)'},'📎 '+d.nb_pieces_jointes));
+        if(d.nb_pieces_jointes)pills.push(h('span',{className:'expe-devis-pill muted expe-devis-pill-pj',
+          title:d.nb_pieces_jointes+' pièce(s) jointe(s)'},
+          iconEl('paperclip',11),String(d.nb_pieces_jointes)));
         if(d.deleted_at)pills.push(h('span',{className:'expe-devis-pill danger'},'Corbeille'));
         else if(d.statut==='cloturee')pills.push(h('span',{className:'expe-devis-pill muted'},'Clôturée'));
         const actions=[];
@@ -2901,6 +3012,30 @@ EXPE_DEVIS_CSS = r"""
   display:flex;align-items:center;justify-content:center;padding:16px}
 .expe-devis-modal{width:100%;max-width:720px;max-height:min(92vh,900px);overflow:auto;background:var(--card);
   border:1px solid var(--border);border-radius:12px;padding:18px}
+.expe-devis-modal--large{max-width:min(1180px,96vw)}
+/* Comparatif : les deux colonnes qui portent le sens restent en place quand
+   le tableau défile horizontalement. Sans la première, on lit « pas
+   d'ouverture détectée » sans savoir de QUI il s'agit ; sans la dernière,
+   les actions sortent de l'écran — c'est exactement ce qui arrivait. */
+.expe-devis-comp th:first-child,.expe-devis-comp td:first-child{
+  position:sticky;left:0;z-index:2;background:var(--card)}
+.expe-devis-comp th:last-child,.expe-devis-comp td:last-child{
+  position:sticky;right:0;z-index:2;background:var(--card);white-space:nowrap;text-align:right}
+.expe-devis-comp th:first-child,.expe-devis-comp th:last-child{z-index:3}
+/* Filet d'ombre : signale que le contenu passe DESSOUS la colonne figée,
+   sinon la superposition se lit comme un défaut d'alignement. */
+.expe-devis-comp td:first-child::after,.expe-devis-comp th:first-child::after{
+  content:'';position:absolute;top:0;right:0;bottom:0;width:6px;pointer-events:none;
+  background:linear-gradient(to right,color-mix(in srgb,var(--bg) 45%,transparent),transparent)}
+.expe-devis-comp td:last-child::before,.expe-devis-comp th:last-child::before{
+  content:'';position:absolute;top:0;left:0;bottom:0;width:6px;pointer-events:none;
+  background:linear-gradient(to left,color-mix(in srgb,var(--bg) 45%,transparent),transparent)}
+/* Le hover de ligne repeint les cellules ordinaires : les cellules figées
+   doivent suivre, sinon la ligne survolée apparaît coupée en trois. */
+.expe-devis-comp tr:hover td:first-child,.expe-devis-comp tr:hover td:last-child{
+  background:color-mix(in srgb,var(--accent-bg) 100%,var(--card))}
+.expe-devis-comp td:last-child .btn-ghost{padding:4px 7px}
+.expe-devis-comp td:last-child>*{margin-left:3px}
 .expe-devis-modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px}
 .expe-devis-close{padding:6px 8px}
 .expe-devis-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
@@ -2913,6 +3048,10 @@ EXPE_DEVIS_CSS = r"""
 .expe-devis-modal-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
 .expe-devis-page-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px}
 .expe-devis-filtre{display:flex;gap:6px}
+/* Fond opaque et non transparent : posés sur le fond pointillé de la page,
+   ces boutons se lisaient comme du texte flottant plutôt que comme un
+   groupe de bascules. */
+.expe-devis-filtre .btn-ghost{background:var(--card)}
 .expe-devis-filtre .active-filtre{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
 .expe-devis-cards{display:flex;flex-direction:column;gap:8px}
 .expe-devis-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 20px;cursor:pointer;
@@ -2936,6 +3075,27 @@ EXPE_DEVIS_CSS = r"""
 .expe-devis-pj-lien:hover{text-decoration:underline}
 .expe-devis-pj-taille{font-size:11px;color:var(--muted)}
 .expe-devis-pj-vide{font-size:12px;color:var(--muted);font-style:italic}
+.expe-devis-pj-lien{display:inline-flex;align-items:center;gap:6px}
+.expe-devis-pill-pj{display:inline-flex;align-items:center;gap:4px}
+/* Combobox client — le menu du <datalist> natif ignore le thème MySifa.
+   Menu en position:fixed : le modal a overflow:auto, un menu en flux absolu
+   s'y ferait couper au bord. */
+.expe-combo{position:relative;width:100%}
+.expe-combo-menu{position:fixed;z-index:12400;overflow-y:auto;background:var(--card);
+  border:1px solid var(--border);border-radius:10px;padding:4px;
+  box-shadow:0 12px 32px color-mix(in srgb,var(--bg) 60%,transparent)}
+.expe-combo-item{padding:8px 12px;border-radius:7px;font-size:13px;color:var(--text);
+  cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.expe-combo-item.on{background:var(--accent-bg);color:var(--accent)}
+/* Popover d'édition rapide (date limite) */
+.expe-pop{position:fixed;z-index:12400;min-width:250px;background:var(--card);
+  border:1px solid var(--border);border-radius:12px;padding:14px;
+  box-shadow:0 16px 40px color-mix(in srgb,var(--bg) 65%,transparent)}
+.expe-pop-t{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--muted);margin-bottom:8px}
+.expe-pop-foot{display:flex;gap:6px;align-items:center;margin-top:12px}
+.expe-pill-edit{cursor:pointer}
+.expe-pill-edit:hover{outline:1px solid var(--accent);outline-offset:1px}
 .expe-devis-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px}
 .expe-devis-table-wrap table.table-std{margin:0;font-size:13px}
 /* Engagement transporteur — chips 11px, un signal par chip */
@@ -4629,7 +4789,7 @@ function _expePalTrpParams(t){
 }
 
 async function ouvrirJournalPalettes(t){
-  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'2000'}});
+  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'12200'}});
   const box=h('div',{className:'expe-devis-modal',style:{maxWidth:'900px'}});
   const body=h('div',{style:{color:'var(--muted)',fontSize:'13px'}},'Chargement…');
   const close=()=>{try{ov.remove();}catch(_e){}};
@@ -4772,7 +4932,7 @@ function _expePalTrpOptions(selectedId, selectedNom){
 
 function ouvrirSaisieMouvementPalettes(t){
   t = t || {};
-  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'2100'}});
+  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'12300'}});
   const box=h('div',{className:'expe-devis-modal',style:{maxWidth:'520px'}});
   const close=()=>{try{ov.remove();}catch(_e){}};
   const sensSel=h('select',{className:'expe-devis-inp'});
@@ -4828,7 +4988,7 @@ function ouvrirSaisieMouvementPalettes(t){
 
 function ouvrirSaisieContestation(prefill){
   prefill = prefill || {};
-  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'2100'}});
+  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'12300'}});
   const box=h('div',{className:'expe-devis-modal',style:{maxWidth:'520px'}});
   const close=()=>{try{ov.remove();}catch(_e){}};
   const trpSel=_expePalTrpOptions(prefill.transporteur_id, prefill.transporteur);

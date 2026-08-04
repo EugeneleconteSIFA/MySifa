@@ -136,12 +136,16 @@ table.pr-table tr{cursor:pointer}
 .modal{background:var(--card);border:1px solid var(--border);border-radius:12px;max-width:640px;width:100%;max-height:90vh;overflow:auto;padding:20px}
 .modal h2{margin:0 0 14px;font-size:16px}
 .history-chart{width:100%;height:200px;display:block;margin:12px 0}
-.toast-root{position:fixed;bottom:20px;right:20px;z-index:200;display:flex;flex-direction:column;gap:8px}
-.toast{padding:12px 16px;border-radius:10px;font-size:13px;font-weight:600;background:var(--card);border:1px solid var(--border);box-shadow:0 8px 24px rgba(0,0,0,.3);animation:pr-toast-in .2s ease}
+#toast-root,.toast-root{position:fixed;bottom:20px;right:20px;z-index:400;
+  display:flex;flex-direction:column;align-items:flex-end;gap:8px;
+  pointer-events:none}
+.toast{padding:11px 15px;border-radius:10px;font-size:13px;font-weight:600;max-width:340px;
+  background:var(--card);border:1px solid var(--border);box-shadow:0 8px 24px rgba(0,0,0,.18);
+  animation:pr-toast-in .2s ease;pointer-events:auto}
 .toast.success{border-color:var(--success);color:var(--success)}
 .toast.danger{border-color:var(--danger);color:var(--danger)}
 .toast.info{border-color:var(--accent);color:var(--accent)}
-@keyframes pr-toast-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes pr-toast-in{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:none}}
 .skeleton{background:linear-gradient(90deg,var(--border) 25%,var(--card) 50%,var(--border) 75%);background-size:200% 100%;animation:pr-sk 1.2s infinite;border-radius:8px;height:20px}
 @keyframes pr-sk{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .empty{padding:32px;text-align:center;color:var(--muted);font-size:14px}
@@ -223,6 +227,28 @@ table.pr-table tr{cursor:pointer}
 
 /* Largeur de lecture : les pages ne s'étalent plus sur tout l'écran. */
 .pr-narrow{max-width:1180px;margin:0 auto}
+
+/* Bandeau d'actions collé en haut de la fiche matière (repris de la fiche
+   produit MyAO) : sur un formulaire long, Enregistrer reste sous la main. */
+.pr-savebar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+  padding:10px 14px;margin-bottom:16px;
+  background:linear-gradient(135deg,var(--card) 0%,var(--accent-bg) 100%);
+  border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;
+  box-shadow:0 2px 8px rgba(15,23,42,.06)}
+/* .content a 20px de padding haut : sans ce cache, la page défilerait en clair
+   dans la bande au-dessus du bandeau une fois celui-ci collé. */
+.pr-savebar::before{content:"";position:absolute;left:-1px;right:-1px;bottom:100%;
+  height:24px;background:var(--bg)}
+.pr-savebar .savebar-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto}
+.pr-savebar .btn-soft{background:var(--card)}
+.pr-savebar .btn-soft:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+.savebar-state{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--warn)}
+.savebar-state .dot{width:7px;height:7px;border-radius:50%;background:var(--warn);flex-shrink:0}
+.savebar-state[hidden]{display:none}
+@media(max-width:640px){
+  .pr-savebar{gap:8px}
+  .pr-savebar .savebar-state{order:3;width:100%}
+}
 
 .page-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 
@@ -372,20 +398,21 @@ tr.ms-row.open td{background:var(--accent-bg);border-bottom-color:transparent;fo
 
 /* Zone dépliée : fond neutre. Seuls le tableau des fournisseurs et le liseré
    du bas sont teintés — la section elle-même reste blanche pour rester lisible. */
-tr.ms-detail-row td{padding:0;background:var(--card);border-bottom:2px solid var(--accent)}
+/* Filet très discret entre la ligne de la matière et sa table de déclinaisons. */
+tr.ms-detail-row td{padding:0;background:var(--card);
+  border-top:1px solid var(--border);border-bottom:2px solid var(--accent)}
 tr.ms-detail-row:hover td{background:var(--card)}
-.ms-detail{padding:4px 18px 18px}
-.ms-groupe{margin-bottom:16px}
-.ms-groupe:last-child{margin-bottom:0}
-.ms-groupe-head{display:flex;align-items:center;justify-content:space-between;gap:12px;
-  font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
-  color:var(--text2);margin-bottom:8px}
-/* Tableau des fournisseurs : teinté comme la ligne ouverte, en-tête détaché
-   par un trait franc. */
-table.ms-table{background:var(--accent-bg);border:1px solid var(--border);border-radius:10px;
+/* La table occupe toute la cellule dépliée, avec juste ce qu'il faut d'air. */
+.ms-detail{padding:10px 0 14px}
+/* Tableau unique : teinté comme la ligne ouverte, en-tête détaché par un trait
+   franc. Tout est dedans — déclinaison, fournisseur, prix, fiche, actions. */
+table.ms-table{width:100%;background:var(--accent-bg);border:none;border-radius:0;
   overflow:hidden;box-shadow:none}
-table.ms-table th{background:transparent;color:var(--text2);font-weight:700;
-  border-bottom:2px solid var(--text2);padding-top:9px;padding-bottom:9px}
+table.ms-table th{background:transparent;color:var(--muted);font-weight:600;
+  border-bottom:1px solid var(--border);padding:9px 16px}
+table.ms-table td{padding:13px 16px}
+table.ms-table th:first-child,table.ms-table td:first-child{padding-left:22px}
+table.ms-table th:last-child,table.ms-table td:last-child{padding-right:22px}
 table.ms-table tr{cursor:default}
 table.ms-table td{border-bottom:1px solid var(--border)}
 table.ms-table tr:hover td{background:transparent}
@@ -444,3 +471,20 @@ input.ms-prix{max-width:130px;font-variant-numeric:tabular-nums;text-align:right
 .ms-decl-pair{display:inline-flex;align-items:center;gap:10px;font-size:11px;
   text-transform:none;letter-spacing:0;font-weight:400}
 .ms-groupe-actions{display:flex;align-items:center;gap:10px}
+
+/* Boutons d'action en icône seule (la bulle d'aide dit ce qu'ils font). */
+.ico-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;
+  border-radius:7px;border:1px solid transparent;background:transparent;color:var(--text2);
+  cursor:pointer;transition:background .12s,color .12s,border-color .12s}
+.ico-btn:hover{background:var(--card);border-color:var(--border);color:var(--accent)}
+.ico-btn.danger:hover{color:var(--danger);border-color:var(--danger)}
+td.ms-actions{white-space:nowrap;text-align:right}
+th.ms-actions{width:1%}
+td.ms-statut{white-space:nowrap}
+.ms-decl-cell{white-space:nowrap}
+.ms-decl-input{max-width:150px}
+input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
+/* Lignes suivantes d'une même déclinaison : un simple rappel, la valeur ne se
+   saisit qu'une fois. */
+.ms-decl-rappel{color:var(--muted);padding-left:14px}
+.ms-fiche{white-space:nowrap}

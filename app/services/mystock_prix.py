@@ -296,19 +296,24 @@ def add_declinaison(
     td = type_declinaison(mat["categorie"])
     grammage_id = None
     if td == "GRAMMAGE":
-        if valeur_gsm is None or _f(valeur_gsm) <= 0:
-            return {"ok": False, "reason": "grammage requis (g/m²)"}
-        grammage_id = ensure_grammage(conn, valeur_gsm)
-        conn.execute(
-            """INSERT OR IGNORE INTO mp_matiere_grammages (matiere_id, grammage_id)
-               VALUES (?,?)""",
-            (matiere_id, grammage_id),
-        )
+        if laize_id:
+            return {"ok": False, "reason": "cette matière se décline au grammage, pas à la laize"}
+        # Valeur facultative : la déclinaison peut naître vide, le grammage se
+        # saisit ensuite directement dans la ligne du tableau.
+        if valeur_gsm is not None and _f(valeur_gsm) > 0:
+            grammage_id = ensure_grammage(conn, valeur_gsm)
+            conn.execute(
+                """INSERT OR IGNORE INTO mp_matiere_grammages (matiere_id, grammage_id)
+                   VALUES (?,?)""",
+                (matiere_id, grammage_id),
+            )
         laize_id = None
     elif td == "LAIZE":
-        if not laize_id:
-            return {"ok": False, "reason": "laize requise"}
-        if not conn.execute("SELECT 1 FROM mp_laizes WHERE id=?", (laize_id,)).fetchone():
+        if valeur_gsm is not None:
+            return {"ok": False, "reason": "cette matière se décline à la laize, pas au grammage"}
+        if laize_id and not conn.execute(
+            "SELECT 1 FROM mp_laizes WHERE id=?", (laize_id,)
+        ).fetchone():
             return {"ok": False, "reason": "laize inconnue"}
     else:
         return {"ok": False, "reason": "cette matière ne se décline pas"}
@@ -320,13 +325,113 @@ def add_declinaison(
         (matiere_id, laize_id, grammage_id),
     ).fetchone()
     if exist:
-        return {"ok": False, "reason": "cette déclinaison existe déjà"}
+        return {
+            "ok": False,
+            "reason": "une déclinaison sans valeur existe déjà — renseignez-la d'abord"
+            if grammage_id is None and laize_id is None
+            else "cette déclinaison existe déjà",
+        }
     cur = conn.execute(
         """INSERT INTO mp_matiere_declinaison (matiere_id, laize_id, grammage_id)
            VALUES (?,?,?)""",
         (matiere_id, laize_id, grammage_id),
     )
-    return {"ok": True, "declinaison_id": int(cur.lastrowid)}
+    decl_id = int(cur.lastrowid)
+    # Une déclinaison sans ligne de prix serait invisible dans le tableau : on
+    # amorce une ligne vide, prête à recevoir fournisseur et prix.
+    conn.execute(
+        """INSERT INTO mp_matiere_prix
+           (matiere_id, laize_id, grammage_id, declinaison_id, fournisseur_id,
+            prix, principal, updated_at)
+           VALUES (?,?,?,?,NULL,0,1,?)""",
+        (matiere_id, laize_id, grammage_id, decl_id, _now()),
+    )
+    return {"ok": True, "declinaison_id": decl_id}
+
+
+def set_declinaison_valeur(
+    conn: sqlite3.Connection,
+    *,
+    declinaison_id: int,
+    laize_id: Optional[int] = None,
+    valeur_gsm: Optional[float] = None,
+) -> dict:
+    """
+    Change la valeur d'une déclinaison (son grammage ou sa laize) sur place.
+
+    Modifier plutôt que recréer : la déclinaison garde son appairage, ses prix et
+    l'historique de ses fournisseurs.
+    """
+    d = fetch_declinaison(conn, declinaison_id)
+    if not d:
+        return {"ok": False, "reason": "déclinaison introuvable"}
+    matiere_id = int(d["matiere_id"])
+    td = type_declinaison(d["categorie"])
+    if td == "GRAMMAGE":
+        if valeur_gsm is None or _f(valeur_gsm) <= 0:
+            return {"ok": False, "reason": "grammage invalide"}
+        cible_grammage = ensure_grammage(conn, valeur_gsm)
+        cible_laize = None
+        conn.execute(
+            "INSERT OR IGNORE INTO mp_matiere_grammages (matiere_id, grammage_id) VALUES (?,?)",
+            (matiere_id, cible_grammage),
+        )
+    elif td == "LAIZE":
+        if not laize_id:
+            return {"ok": False, "reason": "laize requise"}
+        if not conn.execute("SELECT 1 FROM mp_laizes WHERE id=?", (laize_id,)).fetchone():
+            return {"ok": False, "reason": "laize inconnue"}
+        cible_laize, cible_grammage = laize_id, None
+    else:
+        return {"ok": False, "reason": "cette matière ne se décline pas"}
+
+    conflit = conn.execute(
+        """SELECT 1 FROM mp_matiere_declinaison
+            WHERE matiere_id=? AND id<>? AND COALESCE(laize_id,0)=COALESCE(?,0)
+              AND COALESCE(grammage_id,0)=COALESCE(?,0)""",
+        (matiere_id, declinaison_id, cible_laize, cible_grammage),
+    ).fetchone()
+    if conflit:
+        return {"ok": False, "reason": "cette valeur est déjà déclinée sur cette matière"}
+
+    conn.execute(
+        "UPDATE mp_matiere_declinaison SET laize_id=?, grammage_id=? WHERE id=?",
+        (cible_laize, cible_grammage, declinaison_id),
+    )
+    conn.execute(
+        "UPDATE mp_matiere_prix SET laize_id=?, grammage_id=? WHERE declinaison_id=?",
+        (cible_laize, cible_grammage, declinaison_id),
+    )
+    _sync_laize_fournisseurs(conn, declinaison_id)
+    return {"ok": True}
+
+
+def dupliquer_ligne(
+    conn: sqlite3.Connection, *, declinaison_id: int, fournisseur_id: Optional[int]
+) -> dict:
+    """Copie une ligne de prix sur la même déclinaison, sans fournisseur."""
+    src_row = conn.execute(
+        """SELECT prix FROM mp_matiere_prix
+            WHERE declinaison_id=? AND COALESCE(fournisseur_id,0)=COALESCE(?,0)""",
+        (declinaison_id, fournisseur_id),
+    ).fetchone()
+    if not src_row:
+        return {"ok": False, "reason": "ligne de prix introuvable"}
+    if conn.execute(
+        "SELECT 1 FROM mp_matiere_prix WHERE declinaison_id=? AND fournisseur_id IS NULL",
+        (declinaison_id,),
+    ).fetchone():
+        return {"ok": False, "reason": "une ligne sans fournisseur existe déjà ici"}
+    d = fetch_declinaison(conn, declinaison_id)
+    conn.execute(
+        """INSERT INTO mp_matiere_prix
+           (matiere_id, laize_id, grammage_id, declinaison_id, fournisseur_id,
+            prix, principal, updated_at)
+           VALUES (?,?,?,?,NULL,?,0,?)""",
+        (int(d["matiere_id"]), d["laize_id"], d["grammage_id"], declinaison_id,
+         _f(src_row["prix"]), _now()),
+    )
+    return {"ok": True}
 
 
 def delete_declinaison(conn: sqlite3.Connection, declinaison_id: int) -> dict:
@@ -444,6 +549,119 @@ def _mirror_principal(
     return {"ok": True, "cible": cible, "prix_avant": avant, "prix_apres": prix, "changed": changed}
 
 
+def _prix_mystock_de_reference(
+    conn: sqlite3.Connection, mat: sqlite3.Row, laize_id: Optional[int]
+) -> float:
+    """
+    Le prix qui fait foi côté MyStock pour une déclinaison donnée.
+
+    Miroir exact de la cible choisie par `_mirror_principal` : on relit le champ
+    dans lequel ce dernier écrirait, pour que les deux sens parlent du même
+    endroit.
+    """
+    laizee = is_laizee(mat["categorie"])
+    par_laize = bool(int(mat["prix_par_laize"] or 0)) and laizee
+    if laizee and par_laize and laize_id is not None:
+        row = conn.execute(
+            "SELECT prix_eur_m2 FROM mp_matiere_laizes WHERE matiere_id=? AND laize_id=?",
+            (int(mat["id"]), int(laize_id)),
+        ).fetchone()
+        return _f(row["prix_eur_m2"]) if row else 0.0
+    if laizee:
+        return _f(mat["prix_eur_m2"])
+    return _f(mat["prix_unitaire"])
+
+
+def resync_depuis_mystock(
+    conn: sqlite3.Connection,
+    matiere_id: int,
+    *,
+    user_id: Optional[int] = None,
+    user_name: Optional[str] = None,
+    origine: str = "MyStock",
+) -> dict:
+    """
+    MyStock -> Coûts matières : le sens retour de `_mirror_principal`.
+
+    Coûts matières lit le prix d'une matière appairée dans la ligne principale de
+    `mp_matiere_prix`. Un prix corrigé côté MyStock — saisie sur la valorisation,
+    prix par laize de la fiche matière, PMP recalculé à l'entrée en stock — doit
+    donc redescendre dans cette ligne, sans quoi Coûts matières continue
+    d'afficher l'ancienne valeur.
+
+    Le prix n'est pas passé en paramètre : la fonction relit elle-même le champ
+    qui fait foi pour chaque déclinaison. L'appelant n'a qu'à signaler que la
+    matière a bougé, il ne peut pas se tromper de champ.
+
+    Un prix à 0 ne remplace rien : côté MyStock il veut dire « pas encore
+    renseigné », pas « gratuit ». Écraser un tarif connu avec un zéro ferait
+    disparaître le prix de revient d'un produit.
+    """
+    mat = fetch_matiere(conn, matiere_id)
+    if not mat:
+        return {"ok": False, "reason": "matière introuvable"}
+
+    declinaisons = conn.execute(
+        "SELECT id, laize_id FROM mp_matiere_declinaison WHERE matiere_id=?",
+        (matiere_id,),
+    ).fetchall()
+    if not declinaisons:
+        return {"ok": True, "declinaisons": 0, "mises_a_jour": 0}
+
+    now = _now()
+    note = f"Prix repris depuis {origine}"
+    mises_a_jour = 0
+
+    for d in declinaisons:
+        prix = _prix_mystock_de_reference(conn, mat, d["laize_id"])
+        if prix <= 0 or prix > 1_000_000:
+            continue
+        decl_id = int(d["id"])
+
+        ligne = conn.execute(
+            "SELECT id, prix FROM mp_matiere_prix WHERE declinaison_id=? AND principal=1 LIMIT 1",
+            (decl_id,),
+        ).fetchone()
+        if ligne is None:
+            # Pas de principal désigné : on promeut la première ligne existante
+            # plutôt que d'en créer une seconde sans fournisseur.
+            ligne = conn.execute(
+                "SELECT id, prix FROM mp_matiere_prix WHERE declinaison_id=? ORDER BY id LIMIT 1",
+                (decl_id,),
+            ).fetchone()
+            if ligne is not None:
+                conn.execute(
+                    "UPDATE mp_matiere_prix SET principal=1 WHERE id=?", (int(ligne["id"]),)
+                )
+
+        if ligne is None:
+            conn.execute(
+                """INSERT INTO mp_matiere_prix
+                   (matiere_id, laize_id, grammage_id, declinaison_id, fournisseur_id,
+                    prix, principal, note, updated_at, updated_by_name)
+                   VALUES (?,?,?,?,NULL,?,1,?,?,?)""",
+                (matiere_id, d["laize_id"], None, decl_id, prix, note, now, user_name),
+            )
+            mises_a_jour += 1
+            continue
+
+        if abs(_f(ligne["prix"]) - prix) <= 1e-9:
+            continue  # déjà à la bonne valeur : ni écriture ni bruit dans l'historique
+        conn.execute(
+            """UPDATE mp_matiere_prix
+                  SET prix=?, note=?, updated_at=?, updated_by_name=?
+                WHERE id=?""",
+            (prix, note, now, user_name, int(ligne["id"])),
+        )
+        mises_a_jour += 1
+
+    return {
+        "ok": True,
+        "declinaisons": len(declinaisons),
+        "mises_a_jour": mises_a_jour,
+    }
+
+
 def set_prix(
     conn: sqlite3.Connection,
     *,
@@ -490,6 +708,27 @@ def set_prix(
                 fournisseur_id, float(prix), 1 if principal else 0, now, user_name,
             ),
         )
+    # Un prix à zéro n'est pas un prix de référence : si le principal actuel est
+    # vide et que cette ligne porte enfin un montant, elle prend la main. Sans
+    # ça, la ligne amorcée à la création d'une déclinaison resterait principale
+    # à 0 € et la matière n'aurait aucun prix en vigueur.
+    if not principal and prix > 0:
+        actuel = conn.execute(
+            "SELECT prix FROM mp_matiere_prix WHERE declinaison_id=? AND principal=1 LIMIT 1",
+            (declinaison_id,),
+        ).fetchone()
+        if not actuel or _f(actuel["prix"]) <= 0:
+            conn.execute(
+                "UPDATE mp_matiere_prix SET principal=0 WHERE declinaison_id=?",
+                (declinaison_id,),
+            )
+            conn.execute(
+                """UPDATE mp_matiere_prix SET principal=1
+                    WHERE declinaison_id=? AND COALESCE(fournisseur_id,0)=COALESCE(?,0)""",
+                (declinaison_id, fournisseur_id),
+            )
+            principal = True
+
     result = {"ok": True, "principal": principal}
     if principal:
         result["miroir"] = _mirror_principal(
@@ -575,12 +814,20 @@ def delete_ligne(
     ).fetchone()
     if not row:
         return {"ok": False, "reason": "ligne de prix introuvable"}
-    if int(row["principal"] or 0):
+    reste = conn.execute(
+        "SELECT COUNT(*) AS n FROM mp_matiere_prix WHERE declinaison_id=?", (declinaison_id,)
+    ).fetchone()
+    derniere = int(reste["n"] or 0) <= 1
+    if int(row["principal"] or 0) and not derniere:
         return {
             "ok": False,
             "reason": "fournisseur principal — désignez-en un autre avant de le retirer",
         }
     conn.execute("DELETE FROM mp_matiere_prix WHERE id=?", (row["id"],))
+    if derniere:
+        # Plus aucun prix : la déclinaison n'a plus de raison d'exister.
+        conn.execute("DELETE FROM mp_matiere_declinaison WHERE id=?", (declinaison_id,))
+        return {"ok": True, "declinaison_supprimee": True}
     _sync_laize_fournisseurs(conn, declinaison_id)
     return {"ok": True}
 

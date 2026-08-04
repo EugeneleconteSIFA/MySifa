@@ -112,6 +112,19 @@
       "log-out":
         '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
       edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
+      trash:
+        '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+      copy:
+        '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+      plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+      link:
+        '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+      unlink:
+        '<path d="M18.84 12.25l1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M5.17 11.75l-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/><line x1="8" y1="2" x2="8" y2="5"/><line x1="2" y1="8" x2="5" y2="8"/><line x1="16" y1="19" x2="16" y2="22"/><line x1="19" y1="16" x2="22" y2="16"/>',
+      "arrow-left":
+        '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+      star:
+        '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
     };
     return "<svg " + a + ">" + (p[name] || p.grid) + "</svg>";
   }
@@ -715,70 +728,90 @@
 
   const DECL_LABEL = { LAIZE: "laize", GRAMMAGE: "grammage" };
 
-  /** Bloc déplié : une section par déclinaison, avec ses fournisseurs. */
+  /** Bouton d'action en icône seule, avec bulle d'aide au survol. */
+  function actionBtn(attr, valeur, nom, titre, danger) {
+    return `<button type="button" class="ico-btn${danger ? " danger" : ""}" ${attr}="${escAttr(valeur)}" title="${escAttr(titre)}" aria-label="${escAttr(titre)}">${icon(nom, 15)}</button>`;
+  }
+
+  /** Cellule de déclinaison : liste de laizes, ou grammage à saisir. */
+  function declinaisonCell(m, d) {
+    if (!S.canWrite) return escHtml(d.libelle);
+    if (m.type_declinaison === "LAIZE") {
+      const opts =
+        '<option value="">— à choisir —</option>' +
+        S.laizes
+          .map(
+            (l) =>
+              `<option value="${l.id}" ${String(d.laize_id) === String(l.id) ? "selected" : ""}>${escHtml(l.label)}</option>`
+          )
+          .join("");
+      return `<select class="ms-inline ms-decl-input" data-ms-decl-laize="${d.id}">${opts}</select>`;
+    }
+    if (m.type_declinaison === "GRAMMAGE") {
+      const v = d.grammage_id ? String(d.libelle).replace(/[^\d.,]/g, "").replace(",", ".") : "";
+      return `<input type="number" step="0.1" min="0" class="ms-inline ms-decl-input ms-gsm"
+                data-ms-decl-gsm="${d.id}" value="${escAttr(v)}" placeholder="g/m²"/>`;
+    }
+    return '<span class="muted">—</span>';
+  }
+
+  /**
+   * Zone dépliée : une seule table à plat. Chaque ligne porte sa déclinaison,
+   * son fournisseur, son prix, sa fiche appairée et ses actions.
+   */
   function mystockDetailHtml(m) {
     const decls = m.declinaisons || [];
-    const ajout = S.canWrite && m.type_declinaison
-      ? `<button type="button" class="btn btn-soft btn-sm" data-ms-add-decl="${m.id}">+ ${escHtml(DECL_LABEL[m.type_declinaison])}</button>`
-      : "";
-    if (!decls.length) {
+    const colonnes = m.type_declinaison
+      ? `<th style="width:34px"></th><th>${escHtml(DECL_LABEL[m.type_declinaison])}</th>`
+      : '<th style="width:34px"></th><th>Déclinaison</th>';
+    const lignes = [];
+    decls.forEach((d) => {
+      (d.lignes || []).forEach((l, i) => {
+        const fid = l.fournisseur_id == null ? "" : l.fournisseur_id;
+        const key = `${d.id}|${fid}`;
+        const fiche = d.mc_material_id
+          ? `<button type="button" class="link-btn" data-ms-open-mc="${d.mc_material_id}" title="Ouvrir la fiche Coûts matières">${escHtml(d.mc_name || "fiche")}</button>`
+          : '<span class="muted">non appairée</span>';
+        lignes.push(`<tr class="${l.principal ? "ms-principal" : ""}">
+          <td class="ms-statut">${l.principal
+              ? `<span class="badge badge-glassine" title="Ce prix fait foi">Principal</span>`
+              : (S.canWrite ? actionBtn("data-ms-principal", key, "star", "Faire de ce prix celui qui fait foi") : "")}</td>
+          <td class="ms-decl-cell">${i === 0 ? declinaisonCell(m, d) : '<span class="ms-decl-rappel">↳</span>'}</td>
+          <td>${S.canWrite
+              ? `<select class="ms-inline" data-ms-fourn="${escAttr(key)}">${fournisseurOptions(l.fournisseur_id)}</select>`
+              : escHtml(l.fournisseur_nom || "— Sans fournisseur —")}</td>
+          <td>${S.canWrite
+              ? `<input type="number" step="0.0001" class="ms-inline ms-prix" data-ms-prix="${escAttr(key)}" value="${escAttr(l.prix)}"/>`
+              : fmtPrixUnite(l.prix, m.unite)}</td>
+          <td class="ms-unite">${escHtml(m.unite)}</td>
+          <td class="ms-fiche">${fiche}</td>
+          <td class="ms-meta">${escHtml(l.updated_at ? String(l.updated_at).replace("T", " ").slice(0, 16) : "—")}${l.updated_by_name ? " · " + escHtml(l.updated_by_name) : ""}</td>
+          <td class="ms-actions">${S.canWrite
+              ? actionBtn("data-ms-pair", d.id, "link", d.mc_material_id ? "Changer la fiche Coûts matières appairée" : "Appairer à une fiche Coûts matières") +
+                (d.mc_material_id ? actionBtn("data-ms-unpair", d.id, "unlink", "Détacher la fiche Coûts matières", true) : "") +
+                actionBtn("data-ms-dup", key, "copy", "Dupliquer cette ligne pour un autre fournisseur") +
+                (m.type_declinaison ? actionBtn("data-ms-new", m.id, "plus", `Créer un nouveau ${DECL_LABEL[m.type_declinaison]}`) : "") +
+                actionBtn("data-ms-del", key, "trash", "Supprimer cette ligne", true)
+              : ""}</td>
+        </tr>`);
+      });
+    });
+    if (!lignes.length) {
       return `<div class="ms-detail">
-        <div class="empty" style="padding:16px">Aucune déclinaison. ${m.type_declinaison ? "Ajoutez-en une pour saisir un prix." : ""}</div>
-        <div class="ms-groupe-head">${ajout}</div>
-      </div>`;
+        <table class="pr-table ms-table">
+          <thead><tr>${colonnes}<th>Fournisseur</th><th>Prix</th><th>Unité</th><th>Fiche Coûts mat.</th><th>Modifié</th><th class="ms-actions"></th></tr></thead>
+          <tbody><tr><td colspan="8" class="empty" style="padding:18px">Aucune déclinaison.
+            ${S.canWrite && m.type_declinaison
+              ? `<button type="button" class="btn btn-soft btn-sm" data-ms-new="${m.id}" style="margin-left:8px">Créer ${escHtml(DECL_LABEL[m.type_declinaison] === "laize" ? "une laize" : "un grammage")}</button>`
+              : ""}</td></tr></tbody>
+        </table></div>`;
     }
-    const blocs = decls
-      .map((d) => {
-        const rows = (d.lignes || [])
-          .map((l) => {
-            const fid = l.fournisseur_id == null ? "" : l.fournisseur_id;
-            const key = `${d.id}|${fid}`;
-            return `<tr class="${l.principal ? "ms-principal" : ""}">
-              <td>${l.principal
-                  ? '<span class="badge badge-glassine">Principal</span>'
-                  : (S.canWrite
-                      ? `<button type="button" class="link-btn" data-ms-principal="${escAttr(key)}">définir principal</button>`
-                      : "")}</td>
-              <td>${S.canWrite
-                  ? `<select class="ms-inline" data-ms-fourn="${escAttr(key)}">${fournisseurOptions(l.fournisseur_id)}</select>`
-                  : escHtml(l.fournisseur_nom || "— Sans fournisseur —")}</td>
-              <td>${S.canWrite
-                  ? `<input type="number" step="0.0001" class="ms-inline ms-prix" data-ms-prix="${escAttr(key)}" value="${escAttr(l.prix)}"/>`
-                  : fmtPrixUnite(l.prix, m.unite)}</td>
-              <td class="ms-unite">${escHtml(m.unite)}</td>
-              <td class="ms-meta">${escHtml(l.updated_at ? String(l.updated_at).replace("T", " ").slice(0, 16) : "—")}${l.updated_by_name ? " · " + escHtml(l.updated_by_name) : ""}</td>
-              <td>${S.canWrite && !l.principal
-                  ? `<button type="button" class="link-btn danger" data-ms-del="${escAttr(key)}">retirer</button>`
-                  : ""}</td>
-            </tr>`;
-          })
-          .join("");
-        const appairage = d.mc_material_id
-          ? `<button type="button" class="link-btn" data-ms-open-mc="${d.mc_material_id}" title="Ouvrir la fiche Coûts matières">${escHtml(d.mc_name || "fiche")}</button>
-             ${S.canWrite ? `<button type="button" class="link-btn" data-ms-pair="${d.id}">changer</button>
-             <button type="button" class="link-btn danger" data-ms-unpair="${d.id}">détacher</button>` : ""}`
-          : (S.canWrite
-              ? `<button type="button" class="btn btn-soft btn-sm" data-ms-pair="${d.id}">Appairer à une fiche</button>`
-              : '<span class="muted">non appairée</span>');
-        return `<div class="ms-groupe">
-          <div class="ms-groupe-head">
-            <div class="ms-decl-title">
-              <span class="ms-decl-name">${escHtml(d.libelle)}</span>
-              <span class="ms-decl-pair">${appairage}</span>
-            </div>
-            <div class="ms-groupe-actions">
-              ${S.canWrite ? `<button type="button" class="btn btn-soft btn-sm" data-ms-add-four="${d.id}">+ Fournisseur</button>` : ""}
-              ${S.canWrite && m.type_declinaison ? `<button type="button" class="link-btn danger" data-ms-del-decl="${d.id}">supprimer</button>` : ""}
-            </div>
-          </div>
-          <table class="pr-table ms-table">
-            <thead><tr><th>Statut</th><th>Fournisseur</th><th>Prix</th><th>Unité</th><th>Modifié</th><th></th></tr></thead>
-            <tbody>${rows || `<tr><td colspan="6" class="empty" style="padding:14px">Aucun prix — ajoutez un fournisseur.</td></tr>`}</tbody>
-          </table>
-        </div>`;
-      })
-      .join("");
-    return `<div class="ms-detail">${blocs}<div class="ms-groupe-head" style="justify-content:flex-end">${ajout}</div></div>`;
+    return `<div class="ms-detail">
+      <table class="pr-table ms-table">
+        <thead><tr>${colonnes}<th>Fournisseur</th><th>Prix</th><th>Unité</th><th>Fiche Coûts mat.</th><th>Modifié</th><th class="ms-actions"></th></tr></thead>
+        <tbody>${lignes.join("")}</tbody>
+      </table>
+    </div>`;
   }
 
   function renderMystockList() {
@@ -946,44 +979,58 @@
     document.querySelectorAll("[data-ms-del]").forEach((btn) => {
       btn.onclick = async () => {
         const k = parseMsKey(btn.getAttribute("data-ms-del"));
-        const ok = await confirmDelete("Retirer ce fournisseur de la déclinaison ?");
-        if (!ok) return;
-        if (await msCall("/api/pricing/mystock/prix", k, "DELETE")) {
-          showToast("Fournisseur retiré.", "success");
-        }
-      };
-    });
-    document.querySelectorAll("[data-ms-add-four]").forEach((btn) => {
-      btn.onclick = async () => {
-        const id = parseInt(btn.getAttribute("data-ms-add-four"), 10);
-        if (
-          await msCall("/api/pricing/mystock/prix", {
-            declinaison_id: id,
-            fournisseur_id: null,
-            prix: 0,
-          })
-        ) {
-          showToast("Ligne ajoutée — choisissez le fournisseur et saisissez son prix.", "info");
-        }
-      };
-    });
-    document.querySelectorAll("[data-ms-add-decl]").forEach((btn) => {
-      btn.onclick = () => {
-        const id = parseInt(btn.getAttribute("data-ms-add-decl"), 10);
-        const m = S.mystock.find((x) => x.id === id);
-        if (m) openDeclinaisonModal(m);
-      };
-    });
-    document.querySelectorAll("[data-ms-del-decl]").forEach((btn) => {
-      btn.onclick = async () => {
-        const id = parseInt(btn.getAttribute("data-ms-del-decl"), 10);
-        const found = findDecl(id);
         const ok = await confirmDelete(
-          `Supprimer la déclinaison « ${found ? found.decl.libelle : ""} » et ses prix ?`
+          "Supprimer cette ligne ? Si c'est la dernière de la déclinaison, la déclinaison part avec."
         );
         if (!ok) return;
-        if (await msCall("/api/pricing/mystock/declinaisons/" + id, null, "DELETE")) {
-          showToast("Déclinaison supprimée.", "success");
+        if (await msCall("/api/pricing/mystock/prix", k, "DELETE")) {
+          showToast("Ligne supprimée.", "success");
+        }
+      };
+    });
+    document.querySelectorAll("[data-ms-dup]").forEach((btn) => {
+      btn.onclick = async () => {
+        const k = parseMsKey(btn.getAttribute("data-ms-dup"));
+        if (await msCall("/api/pricing/mystock/prix/dupliquer", k)) {
+          showToast("Ligne dupliquée — choisissez l'autre fournisseur.", "success");
+        }
+      };
+    });
+    document.querySelectorAll("[data-ms-new]").forEach((btn) => {
+      btn.onclick = async () => {
+        const id = parseInt(btn.getAttribute("data-ms-new"), 10);
+        if (await msCall("/api/pricing/mystock/declinaisons", { matiere_id: id })) {
+          showToast("Déclinaison créée — renseignez sa valeur dans la ligne.", "info");
+        }
+      };
+    });
+    document.querySelectorAll("[data-ms-decl-gsm]").forEach((inp) => {
+      inp.onchange = async () => {
+        const v = parseFloat(inp.value);
+        if (!v || v <= 0) {
+          showToast("Grammage invalide.", "danger");
+          return;
+        }
+        if (
+          await msCall("/api/pricing/mystock/declinaisons/valeur", {
+            declinaison_id: parseInt(inp.getAttribute("data-ms-decl-gsm"), 10),
+            valeur_gsm: v,
+          })
+        ) {
+          showToast("Grammage enregistré.", "success");
+        }
+      };
+    });
+    document.querySelectorAll("[data-ms-decl-laize]").forEach((sel) => {
+      sel.onchange = async () => {
+        if (!sel.value) return;
+        if (
+          await msCall("/api/pricing/mystock/declinaisons/valeur", {
+            declinaison_id: parseInt(sel.getAttribute("data-ms-decl-laize"), 10),
+            laize_id: parseInt(sel.value, 10),
+          })
+        ) {
+          showToast("Laize enregistrée.", "success");
         }
       };
     });
@@ -1011,74 +1058,6 @@
     document.querySelectorAll("[data-ms-open-mc]").forEach((btn) => {
       btn.onclick = () => navigate("/pricing/materials/" + btn.getAttribute("data-ms-open-mc"));
     });
-  }
-
-  /** Ajout d'une déclinaison : laize à choisir, ou grammage à saisir. */
-  function openDeclinaisonModal(m) {
-    const parLaize = m.type_declinaison === "LAIZE";
-    const dejaIds = new Set(
-      (m.declinaisons || []).map((d) => (parLaize ? d.laize_id : d.grammage_id))
-    );
-    const laizeOpts = S.laizes
-      .filter((l) => !dejaIds.has(l.id))
-      .map((l) => `<option value="${l.id}">${escHtml(l.label)}</option>`)
-      .join("");
-    const root = document.getElementById("modal-root");
-    root.innerHTML = `
-      <div class="modal-backdrop" id="dc-back">
-        <div class="modal" style="max-width:460px">
-          <div class="modal-head">
-            <h2>Ajouter ${escHtml(parLaize ? "une laize" : "un grammage")}</h2>
-            <button type="button" class="icon-btn" id="dc-close" aria-label="Fermer">×</button>
-          </div>
-          <div class="field-hint" style="margin-bottom:12px">${escHtml(m.reference)} — ${escHtml(m.designation)}</div>
-          ${parLaize
-            ? `<div class="field"><label>Laize</label><select id="dc-laize">${laizeOpts || '<option value="">Toutes les laizes sont déjà déclinées</option>'}</select></div>`
-            : `<div class="field"><label>Grammage <span class="lbl-unit">g/m²</span></label>
-                 <input type="number" step="0.1" min="0" id="dc-gsm" placeholder="22"/>
-                 <div class="field-hint">Les grammages déjà connus : ${S.grammages.length ? escHtml(S.grammages.map((g) => g.label).join(", ")) : "aucun pour l'instant"}.</div>
-               </div>`}
-          <div class="modal-actions">
-            <button type="button" class="btn btn-accent" id="dc-save">Ajouter</button>
-            <button type="button" class="btn btn-soft" id="dc-cancel">Annuler</button>
-          </div>
-        </div>
-      </div>`;
-    const close = () => {
-      root.innerHTML = "";
-    };
-    document.getElementById("dc-back").onclick = (e) => {
-      if (e.target.id === "dc-back") close();
-    };
-    document.getElementById("dc-close").onclick = close;
-    document.getElementById("dc-cancel").onclick = close;
-    document.getElementById("dc-save").onclick = async () => {
-      const body = { matiere_id: m.id };
-      if (parLaize) {
-        const v = document.getElementById("dc-laize").value;
-        if (!v) {
-          showToast("Aucune laize à ajouter.", "danger");
-          return;
-        }
-        body.laize_id = parseInt(v, 10);
-      } else {
-        const v = parseFloat(document.getElementById("dc-gsm").value);
-        if (!v || v <= 0) {
-          showToast("Grammage invalide.", "danger");
-          return;
-        }
-        body.valeur_gsm = v;
-      }
-      try {
-        await api("/api/pricing/mystock/declinaisons", { method: "POST", body });
-        close();
-        showToast("Déclinaison ajoutée.", "success");
-        await loadMystockList();
-        renderMystockList();
-      } catch (e) {
-        showToast(e.message, "danger");
-      }
-    };
   }
 
   /**
@@ -1244,6 +1223,7 @@
   }
 
   async function loadMaterialForm(id) {
+    S.matDirty = false;
     if (!id) {
       S.formMaterial = defaultMaterialForm();
       S.matPreview = null;
@@ -1532,6 +1512,23 @@
     if (el) el.textContent = transportEqText(S.matPreview);
   }
 
+  /**
+   * Bandeau d'actions collé en haut de la fiche matière (même principe que la
+   * fiche produit MyAO) : sur un formulaire long, le bouton Enregistrer ne doit
+   * pas obliger à redescendre en bas de page.
+   */
+  function matSaveBarHtml(isNew) {
+    const dirty = S.matDirty ? "" : " hidden";
+    return `<div class="pr-savebar">
+        <button type="button" class="btn btn-soft btn-sm" id="btn-back-mat">${icon("arrow-left", 14)} Retour liste</button>
+        <div class="savebar-state" id="mat-dirty"${dirty}><span class="dot"></span>Modifications non enregistrées</div>
+        <div class="savebar-actions">
+          ${!isNew && S.canWrite ? '<button type="button" class="btn btn-danger btn-sm" id="btn-del-mat">Supprimer</button>' : ""}
+          ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-save-mat">Enregistrer</button>' : ""}
+        </div>
+      </div>`;
+  }
+
   function renderMaterialForm(isNew) {
     const f = S.formMaterial;
     const catOpts = S.categories
@@ -1567,9 +1564,9 @@
       <div class="pr-narrow">
         ${pageHead(
           isNew ? "Nouvelle matière" : "Éditer matière",
-          isNew ? "" : escHtml(f.name),
-          '<button type="button" class="btn btn-accent" id="btn-back-mat">Retour liste</button>'
+          isNew ? "" : escHtml(f.name)
         )}
+        ${matSaveBarHtml(isNew)}
         <div class="mat-summary" id="mat-summary">${matSummaryHtml(S.matPreview)}</div>
         <div class="form-layout">
         <div class="form-card">
@@ -1648,10 +1645,6 @@
             </div>
           </div>
 
-          ${S.canWrite ? `<div class="form-actions">
-            <button type="button" class="btn btn-accent" id="btn-save-mat">Enregistrer</button>
-            ${!isNew ? '<button type="button" class="btn btn-danger" id="btn-del-mat">Supprimer</button>' : ""}
-          </div>` : ""}
         </div>
 
         ${inlineSettingsHtml()}
@@ -1714,6 +1707,21 @@
         refreshMaterialPreview();
       };
     });
+
+    // Le bandeau signale qu'une saisie attend d'être enregistrée. Le drapeau
+    // vit dans S : le formulaire se re-rend tout seul quand la devise ou la base
+    // de prix change, un état local serait perdu à chaque fois.
+    const carte = document.querySelector(".form-layout > .form-card");
+    if (carte) {
+      const marquer = () => {
+        if (S.matDirty) return;
+        S.matDirty = true;
+        const t = document.getElementById("mat-dirty");
+        if (t) t.hidden = false;
+      };
+      carte.addEventListener("input", marquer);
+      carte.addEventListener("change", marquer);
+    }
 
     if (S.canWrite) {
       document.getElementById("btn-save-mat").onclick = () => saveMaterialForm(isNew);
@@ -1801,6 +1809,7 @@
       } else {
         await api("/api/pricing/materials/" + S.route.id, { method: "PATCH", body });
         showToast("Matière enregistrée.", "success");
+        S.matDirty = false;
         await loadMaterialForm(S.route.id);
         renderMaterialForm(false);
       }
