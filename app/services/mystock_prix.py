@@ -296,6 +296,8 @@ def add_declinaison(
     td = type_declinaison(mat["categorie"])
     grammage_id = None
     if td == "GRAMMAGE":
+        if laize_id:
+            return {"ok": False, "reason": "cette matière se décline au grammage, pas à la laize"}
         # Valeur facultative : la déclinaison peut naître vide, le grammage se
         # saisit ensuite directement dans la ligne du tableau.
         if valeur_gsm is not None and _f(valeur_gsm) > 0:
@@ -307,6 +309,8 @@ def add_declinaison(
             )
         laize_id = None
     elif td == "LAIZE":
+        if valeur_gsm is not None:
+            return {"ok": False, "reason": "cette matière se décline à la laize, pas au grammage"}
         if laize_id and not conn.execute(
             "SELECT 1 FROM mp_laizes WHERE id=?", (laize_id,)
         ).fetchone():
