@@ -55,20 +55,31 @@ if str(RACINE) not in sys.path:
 #   "nom du catalogue": "référence MyStock"
 
 FRONTAUX = {
-    # "Thermique Pro 70g": "",
+    "Couché Brillant 80g": "80gsm Coated Paper",
+    "Synthé. 95µm 71g": "PP blanc mat 95µm",
+    "Thermique Eco 70g": "70g Eco Thermal",
+    "Thermique Eco Bicolore 74g": "Thermique Bicolore",
+    # Le stock ne connaît que du 105 gsm — c'est le plus proche du 108 g
+    # commercial, et il n'y a pas d'autre thermique pro épais.
+    "Thermique Pro 108g": "TOP Thermal 105gsm",
+    "Thermique Pro 70g": "70gsm TOP Thermal",
+    "Velin 62g": "62gsm Vellum",
+    "Velin 68g": "68gsm Vellum",
+    # Aucun vélin fluo en 90 g au stock : c'est le couché 90 fluo qui part.
+    "Velin Jaune Fluo 90g": "couché 90gsm fluo jaune",
 }
 
 # « toujours le même enlevable, toujours le même congélation » : une seule
 # matière MyStock par famille, le grammage fait la déclinaison.
 ADHESIFS = {
-    # "Enlevable": "",
-    # "Permanent": "",
-    # "Congélation": "",
-    # "Permanent Pneu": "",
+    "Enlevable": "1408",        # enlevable fort (MELTAVIS)
+    "Permanent": "2028Y",       # permanent (JAOUR)
+    "Congélation": "2030",      # congélation (JAOUR)
+    "Permanent Pneu": "2288M",  # pneu (JAOUR)
 }
 
 # Une seule glassine pour tout le catalogue.
-GLASSINE = ""
+GLASSINE = "60gsm glassine jaune siliconné"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Catalogue
@@ -136,6 +147,28 @@ def _sans_accents(txt: str) -> str:
 
 _PETITS = {"de", "du", "la", "le", "les", "et", "en", "g", "gr", "gsm", "um", "micron", "microns"}
 
+# Les références MyStock sont en anglais technique, le catalogue en français
+# commercial : « 62gsm Vellum » et « Velin 62g » désignent la même chose. Sans
+# ce petit lexique, la proposition automatique passe à côté de l'essentiel.
+_LEXIQUE = {
+    "vellum": "velin",
+    "coated": "couche",
+    "paper": "papier",
+    "thermal": "thermique",
+    "top": "pro",
+    "yellow": "jaune",
+    "white": "blanc",
+    "matt": "mat",
+    "freezer": "congelation",
+    "removable": "enlevable",
+    "permanent": "permanent",
+    "tyre": "pneu",
+    "tire": "pneu",
+    "pp": "synthe",
+    "synthetique": "synthe",
+    "bicolore": "bicolore",
+}
+
 
 def _mots(txt: str) -> set[str]:
     """
@@ -148,7 +181,9 @@ def _mots(txt: str) -> set[str]:
     t = _sans_accents(str(txt or "")).lower().replace("µ", "u")
     t = re.sub(r"[^a-z0-9]+", " ", t)
     t = re.sub(r"(?<=[a-z])(?=[0-9])|(?<=[0-9])(?=[a-z])", " ", t)
-    return {m for m in t.split() if m and m not in _PETITS}
+    return {
+        _LEXIQUE.get(m, m) for m in t.split() if m and m not in _PETITS
+    }
 
 
 def _correspond(a: str, b: str) -> bool:
@@ -189,6 +224,40 @@ def proposer(cible: str, matieres: list[sqlite3.Row]) -> tuple[str, float]:
 # ─────────────────────────────────────────────────────────────────────────────
 # Lecture de la base
 # ─────────────────────────────────────────────────────────────────────────────
+
+
+# Le chemin par défaut vient de config.py. Sur le serveur, l'instance de test
+# tourne sur la base de la production via une variable d'environnement : lancé à
+# la main, le script ne la voit pas et tombe sur un fichier vide.
+_AIDE_BASE = """
+Le chemin par défaut vient de config.py (DB_PATH). Si l'application tourne avec
+une autre base — c'est le cas quand une instance de test partage celle de la
+production — passez-la explicitement :
+
+    python3 scripts/import_catalogue_produits.py --inventaire --db /chemin/production.db
+
+Pour retrouver le chemin utilisé par l'application en service :
+
+    tr '\\0' '\\n' < /proc/$(pgrep -f uvicorn | head -1)/environ | grep DB_PATH
+"""
+
+TABLES_REQUISES = (
+    "matieres_premieres",
+    "mp_matiere_declinaison",
+    "mp_matiere_prix",
+    "mp_produit",
+)
+
+
+def tables_manquantes(conn) -> list[str]:
+    """Vérifie que la base est bien celle de l'application, avant tout travail."""
+    presentes = {
+        r["name"]
+        for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+    return [t for t in TABLES_REQUISES if t not in presentes]
 
 
 def matieres_par_categorie(conn, categorie: str) -> list[sqlite3.Row]:
@@ -431,9 +500,18 @@ def main() -> int:
         from config import DB_PATH
         chemin = DB_PATH
     print(f"Base : {chemin}\n")
+    if not Path(chemin).exists():
+        print("Cette base n'existe pas.\n" + _AIDE_BASE)
+        return 2
     conn = sqlite3.connect(chemin)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
+    manquantes = tables_manquantes(conn)
+    if manquantes:
+        conn.close()
+        print("Cette base ne contient pas " + ", ".join(manquantes) + ".")
+        print("Ce n'est pas la base de l'application.\n" + _AIDE_BASE)
+        return 2
     try:
         if args.inventaire:
             return inventaire(conn)

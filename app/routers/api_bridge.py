@@ -120,6 +120,12 @@ class OFPushIn(BaseModel):
     # garde les siennes. Sert à rattraper les OF poussés avant l'ajout du
     # métrage, sans avoir à les supprimer pour les réimporter.
     enrich_if_exists: bool = False
+    # Va plus loin que enrich_if_exists : met a jour les champs Access dont la
+    # valeur a CHANGE cote Access. Strictement limite aux OF qui n'ont ni PDF
+    # rattache ni passage humain (imported_by = 'access_bridge') : des qu'un
+    # PDF ou une correction manuelle existe, ils font autorite et rien n'est
+    # touche. Sans ce flag, une quantite corrigee dans Access n'arrivait jamais.
+    refresh_access_fields: bool = False
 
 
 # Colonnes que enrich_if_exists a le droit de compléter quand elles sont NULL.
@@ -130,6 +136,25 @@ _ENRICHISSABLES = (
     "adhesif_label", "qte_au_mille", "qte_etiquettes", "qte_bobines", "metrage",
     "nb_cartons", "nb_mandrins", "nb_tubes",
 )
+
+
+def _of_purement_access(row) -> bool:
+    """Vrai si l'OF n'a jamais été touché autrement que par le pont Access.
+
+    Un PDF rattaché ou un `imported_by` différent signale un passage humain :
+    dans ce cas Access n'est plus la source de vérité et on ne rafraîchit rien.
+    """
+    if (row["pdf_filename"] or "").strip():
+        return False
+    return (row["imported_by"] or "").strip() == "access_bridge"
+
+
+def _valeur_differente(ancien, nouveau) -> bool:
+    """Comparaison tolérante : évite de réécrire 7124.0 sur 7124.0398 arrondi."""
+    try:
+        return abs(float(ancien) - float(nouveau)) > 1e-6
+    except (TypeError, ValueError):
+        return str(ancien).strip() != str(nouveau).strip()
 
 
 # ── Endpoints ────────────────────────────────────────────────────────
@@ -227,21 +252,40 @@ def push_of(
         existing = matches[0] if matches else None
 
         if existing:
-            enrichis = []
-            if body.enrich_if_exists:
-                # Complète uniquement les colonnes NULL. Une valeur déjà en base
-                # — saisie à la main ou extraite d'un vrai PDF — fait autorité et
-                # n'est jamais écrasée.
+            enrichis: list = []
+            rafraichis: list = []
+            if body.enrich_if_exists or body.refresh_access_fields:
                 actuel = conn.execute(
                     "SELECT * FROM of_imports WHERE id=?", (existing["id"],)
                 ).fetchone()
                 dispo = {
                     col: getattr(body, col, None) for col in _ENRICHISSABLES
                 }
-                a_ecrire = {
-                    col: val for col, val in dispo.items()
-                    if val is not None and actuel[col] is None
-                }
+                a_ecrire: dict = {}
+
+                # 1. Complète les colonnes NULL. Une valeur déjà en base — saisie
+                #    à la main ou extraite d'un vrai PDF — fait autorité.
+                if body.enrich_if_exists:
+                    a_ecrire.update({
+                        col: val for col, val in dispo.items()
+                        if val is not None and actuel[col] is None
+                    })
+                    enrichis = sorted(a_ecrire)
+
+                # 2. Rafraîchit les valeurs qui ont changé côté Access, mais
+                #    seulement sur un OF resté purement Access : ni PDF, ni
+                #    correction humaine. Sinon on écraserait du travail.
+                if body.refresh_access_fields and _of_purement_access(actuel):
+                    maj = {
+                        col: val for col, val in dispo.items()
+                        if val is not None
+                        and col not in a_ecrire
+                        and actuel[col] is not None
+                        and _valeur_differente(actuel[col], val)
+                    }
+                    a_ecrire.update(maj)
+                    rafraichis = sorted(maj)
+
                 if a_ecrire:
                     set_sql = ", ".join(f"{col}=?" for col in a_ecrire)
                     conn.execute(
@@ -249,15 +293,22 @@ def push_of(
                         (*a_ecrire.values(), existing["id"]),
                     )
                     conn.commit()
-                    enrichis = sorted(a_ecrire)
+
+            if rafraichis:
+                reason = "refreshed"
+            elif enrichis:
+                reason = "enriched"
+            else:
+                reason = "already_exists"
             return {
                 "inserted": False,
-                "reason": "enriched" if enrichis else "already_exists",
+                "reason": reason,
                 "id": existing["id"],
                 "of_numero": numero,
                 "matched_of_numero": existing["of_numero"],
                 "has_pdf": bool(existing["pdf_filename"]),
                 "enriched_fields": enrichis,
+                "refreshed_fields": rafraichis,
             }
 
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")

@@ -36,6 +36,24 @@ OF_INT_FIELDS = frozenset({
     "nb_mandrins", "nb_tubes",
 })
 
+def _coerce_of_value(field: str, value):
+    """Applique a une valeur saisie la meme conversion que le parsing PDF.
+
+    Sans ca une laize tapee « 332,5 » arrivait telle quelle, en texte, dans une
+    colonne REAL. Defini apres OF_REAL_FIELDS / OF_INT_FIELDS, utilise par le
+    PATCH.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str) and not value.strip():
+        return None
+    if field in OF_REAL_FIELDS:
+        return _clean_num(value)
+    if field in OF_INT_FIELDS:
+        return _clean_int(value)
+    return value.strip() if isinstance(value, str) else value
+
+
 OF_DATA_FIELDS = [
     "of_numero", "date_creation", "delai_client", "reference", "machine",
     "laize", "format", "matiere", "ref_matiere", "glassine", "ref_adhesif",
@@ -55,7 +73,9 @@ _PATTERNS = {
     "delai_client": r"D[eé]lai client\s*([\d/]+)",
     "reference": r"R[eé]f\s*:\s*([\w/]+)",
     "machine": r"Machine\s*:\s*(.+?)(?:\n|$)",
-    "laize": r"Laize\s+(\d+)",
+    # ([\d,\.]+) et non (\d+) : une laize "332,5" etait tronquee a 332,
+    # et l'erreur se propageait dans le calcul adhesif de MyStock.
+    "laize": r"Laize\s+([\d,\.]+)",
     "format": r"Format\s*:\s*([\d x]+mm)",
     "matiere": r"Mati[eè]re\s+(.+?)(?:\n|$)",
     "ref_adhesif": r"R[eé]f,?\s*Adh[eé]sif\s+(\d+)",
@@ -67,7 +87,7 @@ _PATTERNS = {
     "qte_bobines": r"Quantit[eé] bobines\s+([\d,\.]+)",
     "metrage": r"M[eé]trage\s+([\d\s]+)",
     "conditionnement": r"Conditionnement\s+(.+?)(?:\n|$)",
-    "tolerance": r"Tolerance\s+(.+?)(?:\n|$)",
+    "tolerance": r"Tol[eé]rance\s+(.+?)(?:\n|$)",
     "cartons_type": r"Cartons\s+(Carton.+?)(?:\n|$)",
     "mandrins_dia": r"Mandrins dia\.\s+(.+?)(?:Long\.|$)",
     "mandrin_longueur": r"Long\.\s+([\d,\.]+)",
@@ -492,15 +512,22 @@ async def update_of_import(of_id: int, request: Request):
     _require_of_access(request)
     body = await request.json()
 
-    EDITABLE = {
-        "of_numero", "reference", "machine", "delai_client",
-        "format", "date_creation", "qte_etiquettes", "qte_bobines", "metrage",
-        "matiere", "conditionnement", "outil_1_numero",
-        "nb_mandrins", "nb_cartons", "nb_tubes",
-    }
-    updates = {k: v for k, v in body.items() if k in EDITABLE}
+    # Tous les champs metier de l'OF sont corrigeables. L'ancienne liste de 15
+    # champs filtrait les 27 autres EN SILENCE : la modale postait 42 cles,
+    # l'interface affichait « OF mis a jour » et la valeur ne bougeait pas.
+    # `laize` en faisait partie, alors qu'elle alimente le calcul adhesif MyStock.
+    EDITABLE = frozenset(OF_DATA_FIELDS)
+    # Cles techniques que la modale peut renvoyer sans qu'il faille les ecrire.
+    IGNORABLES = frozenset({"id", "statut", "pdf_filename", "date_import", "imported_by"})
+
+    updates = {k: _coerce_of_value(k, v) for k, v in body.items() if k in EDITABLE}
+    ignores = sorted(k for k in body if k not in EDITABLE and k not in IGNORABLES)
     if not updates:
-        raise HTTPException(status_code=400, detail="Aucun champ modifiable fourni.")
+        raise HTTPException(
+            status_code=400,
+            detail="Aucun champ modifiable fourni."
+                   + (" Champs inconnus : " + ", ".join(ignores) if ignores else ""),
+        )
 
     with get_db() as conn:
         row = conn.execute("SELECT id FROM of_imports WHERE id=?", (of_id,)).fetchone()
@@ -512,7 +539,10 @@ async def update_of_import(of_id: int, request: Request):
             list(updates.values()) + [of_id],
         )
         conn.commit()
-    return {"updated": True, "id": of_id}
+    # `ignored` non vide = des champs postes n'ont pas ete ecrits. On le remonte
+    # plutot que de laisser croire a une mise a jour complete.
+    return {"updated": True, "id": of_id,
+            "updated_fields": sorted(updates), "ignored": ignores}
 
 
 @router.get("/api/of/planning/{entry_id}")

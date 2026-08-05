@@ -486,17 +486,51 @@ def list_dossiers_disponibles_expe(request: Request):
                       m.nom AS machine_nom, m.code AS machine_code,
                       (SELECT COUNT(*) FROM expe_departs ed
                          WHERE ed.planning_entry_id = pe.id) AS departs_count,
-                      ft.palette_type AS ft_palette_type,
-                      ft.palette_nb_cartons_sol AS ft_palette_nb_cartons_sol,
-                      ft.palette_nb_cartons_hauteur AS ft_palette_nb_cartons_hauteur,
-                      ft.nb_au_sol AS ft_nb_au_sol,
-                      ft.nb_etage AS ft_nb_etage
+                      COALESCE(ftm.palette_type, fta.palette_type)
+                        AS ft_palette_type,
+                      COALESCE(ftm.palette_nb_cartons_sol, fta.palette_nb_cartons_sol)
+                        AS ft_palette_nb_cartons_sol,
+                      COALESCE(ftm.palette_nb_cartons_hauteur, fta.palette_nb_cartons_hauteur)
+                        AS ft_palette_nb_cartons_hauteur,
+                      COALESCE(ftm.nb_au_sol, fta.nb_au_sol) AS ft_nb_au_sol,
+                      COALESCE(ftm.nb_etage, fta.nb_etage) AS ft_nb_etage
                FROM planning_entries pe
                JOIN machines m ON m.id = pe.machine_id
-               LEFT JOIN fiches_techniques ft
-                      ON LOWER(TRIM(COALESCE(ft.reference, ''))) =
-                         LOWER(TRIM(COALESCE(pe.ref_produit, '')))
-                      AND COALESCE(pe.ref_produit, '') != ''
+               -- Rapprochement fiche technique par clé produit normalisée
+               -- (XXX/NNNN), avec repli sur la référence textuelle. MyExpé était
+               -- le dernier module à joindre sur `reference` brute : il ratait
+               -- toutes les fiches dont le libellé porte une variante machine ou
+               -- laize ("1315/0004 - COHESIO 1 - L570").
+               --
+               -- Deux tables dérivées plutôt qu'une sous-requête corrélée :
+               -- SQLite n'autorise pas un ON à référencer l'alias `m`, et le
+               -- MIN(id) par clé garantit une seule fiche — donc jamais de
+               -- ligne de dossier dupliquée.
+               --   ftm = la fiche de la machine du dossier (prioritaire)
+               --   fta = n'importe quelle fiche de ce produit (repli)
+               LEFT JOIN (
+                   SELECT MIN(id) AS id,
+                          COALESCE(NULLIF(TRIM(ref_produit_norm), ''),
+                                   LOWER(TRIM(COALESCE(reference, '')))) AS k,
+                          LOWER(TRIM(COALESCE(machine, ''))) AS mk
+                   FROM fiches_techniques
+                   GROUP BY k, mk
+               ) km ON km.k = COALESCE(NULLIF(TRIM(pe.ref_produit_norm), ''),
+                                       LOWER(TRIM(COALESCE(pe.ref_produit, ''))))
+                   AND km.mk = LOWER(TRIM(COALESCE(m.nom, '')))
+                   AND km.mk != ''
+                   AND COALESCE(pe.ref_produit, '') != ''
+               LEFT JOIN fiches_techniques ftm ON ftm.id = km.id
+               LEFT JOIN (
+                   SELECT MIN(id) AS id,
+                          COALESCE(NULLIF(TRIM(ref_produit_norm), ''),
+                                   LOWER(TRIM(COALESCE(reference, '')))) AS k
+                   FROM fiches_techniques
+                   GROUP BY k
+               ) ka ON ka.k = COALESCE(NULLIF(TRIM(pe.ref_produit_norm), ''),
+                                       LOWER(TRIM(COALESCE(pe.ref_produit, ''))))
+                   AND COALESCE(pe.ref_produit, '') != ''
+               LEFT JOIN fiches_techniques fta ON fta.id = ka.id
                ORDER BY pe.position ASC, pe.id ASC"""
         ).fetchall()
 
