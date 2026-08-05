@@ -1465,7 +1465,9 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .mys-keep-row{display:flex;gap:9px;align-items:flex-start;padding:9px 11px;border:1px solid var(--border);border-radius:9px;margin-bottom:6px;cursor:pointer;background:var(--card);text-transform:none;letter-spacing:normal;font-size:13px;color:var(--text);font-weight:400}
 .mys-keep-row:hover{border-color:var(--accent)}
 .mys-keep-row.is-grave{border-color:var(--danger)}
-.op-modal .mys-keep-row input[type=checkbox]{width:16px;min-width:16px;height:16px;flex:0 0 16px;margin:2px 0 0 0;padding:0;border-radius:4px;accent-color:var(--accent);box-shadow:none}
+/* Geometrie seule : l'apparence (boite blanche + coche accent) vient de la
+   regle commune « cases a cocher natives » plus bas dans cette feuille. */
+.op-modal .mys-keep-row input[type=checkbox]{width:16px;min-width:16px;height:16px;flex:0 0 16px;margin:2px 0 0 0;padding:0;box-shadow:none}
 .mys-keep-txt{flex:1;min-width:0}
 .mys-keep-date{display:block;font-weight:700;color:var(--text);font-size:13px;text-transform:none;letter-spacing:normal}
 .mys-keep-why{display:block;font-size:12px;color:var(--muted);margin-top:3px;text-transform:none;letter-spacing:normal;font-weight:400;line-height:1.4}
@@ -1630,19 +1632,36 @@ body.light .maint-codes-panel-embed th {background:#f1f5f9}
 .maint-codes-panel-embed .dot.no {background:var(--border)}
 .maint-codes-panel-embed .chk-edit {width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
 .maint-codes-panel-embed .cell-ov {font-size:9px;color:var(--accent);font-weight:700;letter-spacing:.02em;margin-left:6px;text-transform:uppercase}
-/* v2.7.4 : les deux cases a cocher du bloc « Piece d'usure » utilisaient le
-   rendu natif du navigateur, donc un carre bleu — pose sur le fond bleu clair
-   du bloc, le contraste etait quasi nul. On les redessine : boite blanche,
-   bordure discrete, coche a la couleur d'accent du module. Les dimensions
-   restent celles posees en inline sur les inputs (16px), on ne touche pas au
-   HTML. Regle portee par le conteneur : toute case ajoutee ici en herite. */
-#maint-usure-block input[type=checkbox]{-webkit-appearance:none;appearance:none;box-sizing:border-box;border:1.5px solid var(--border);border-radius:4px;background:#fff;display:inline-grid;place-content:center;transition:border-color .12s,box-shadow .12s}
-#maint-usure-block input[type=checkbox]::before{content:"";width:10px;height:10px;transform:scale(0);transition:transform .12s ease-out;background:var(--accent);clip-path:polygon(14% 44%,0 60%,39% 100%,100% 18%,84% 0,39% 68%)}
-#maint-usure-block input[type=checkbox]:checked{border-color:var(--accent)}
-#maint-usure-block input[type=checkbox]:checked::before{transform:scale(1)}
-#maint-usure-block input[type=checkbox]:hover{border-color:var(--accent)}
-#maint-usure-block input[type=checkbox]:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-bg)}
-#maint-usure-block input[type=checkbox]:disabled{opacity:.5;cursor:not-allowed}
+/* ── Cases a cocher natives du module ─────────────────────────────────────
+   v2.7.4 : elles utilisaient le rendu natif du navigateur, donc un carre bleu.
+   Sur le fond bleu clair du bloc « Piece d'usure », le contraste etait quasi
+   nul ; dans la modale de confirmation, accent-color donnait une boite pleine
+   d'une autre couleur encore. Rendu unique pour les deux : boite blanche,
+   bordure discrete, coche a la couleur d'accent du module.
+
+   Liste de selecteurs explicite, et NON un balayage de tous les
+   input[type=checkbox] : les interrupteurs a bascule (.toggle des alertes et
+   des modeles, .op-toggle-termine, .tmpl-recur-switch) et les chips .ta-chip
+   masquent leur input pour dessiner un rail ou une pastille a la place. Un
+   selecteur global reafficherait ces inputs par-dessus leur propre rendu.
+
+   Cette regle ne fait que l'apparence ; les dimensions restent posees la ou
+   elles l'etaient (inline pour le bloc piece d'usure, regle dediee pour la
+   modale). */
+#maint-usure-block input[type=checkbox],
+.op-modal .mys-keep-row input[type=checkbox]{-webkit-appearance:none;appearance:none;box-sizing:border-box;border:1.5px solid var(--border);border-radius:4px;background:#fff;display:inline-grid;place-content:center;cursor:pointer;transition:border-color .12s,box-shadow .12s}
+#maint-usure-block input[type=checkbox]::before,
+.op-modal .mys-keep-row input[type=checkbox]::before{content:"";width:10px;height:10px;transform:scale(0);transition:transform .12s ease-out;background:var(--accent);clip-path:polygon(14% 44%,0 60%,39% 100%,100% 18%,84% 0,39% 68%)}
+#maint-usure-block input[type=checkbox]:checked,
+.op-modal .mys-keep-row input[type=checkbox]:checked{border-color:var(--accent)}
+#maint-usure-block input[type=checkbox]:checked::before,
+.op-modal .mys-keep-row input[type=checkbox]:checked::before{transform:scale(1)}
+#maint-usure-block input[type=checkbox]:hover,
+.op-modal .mys-keep-row input[type=checkbox]:hover{border-color:var(--accent)}
+#maint-usure-block input[type=checkbox]:focus-visible,
+.op-modal .mys-keep-row input[type=checkbox]:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-bg)}
+#maint-usure-block input[type=checkbox]:disabled,
+.op-modal .mys-keep-row input[type=checkbox]:disabled{opacity:.5;cursor:not-allowed}
 .maint-codes-panel-embed .acc-matrix {width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
 .maint-codes-panel-embed .acc-matrix th {padding:8px 10px}
 .maint-codes-panel-embed .acc-matrix .acc-th-lbl {margin-right:6px}
