@@ -14091,7 +14091,17 @@ async function submitTemplateEditor(e){
     renderTemplatesList();
     refreshCaseTemplatePicker();
     // v2.5.13 : refresh calendrier si des events ont bouge (resync OU purge desactivation)
-    if(resynced > 0 || deletedFuture > 0){ await refreshPlanning(); renderCal(); }
+    // v2.7.1 : le rechargement du calendrier ne tenait compte que des
+    // operations resynchronisees et des creneaux supprimes. Un changement de
+    // REGLE de recurrence deplace les occurrences sans rien resynchroniser ni
+    // supprimer : la condition etait donc fausse, le planning restait affiche
+    // avec les dates d'avant, et l'utilisateur croyait le replacement rate
+    // alors qu'il avait bien eu lieu en base.
+    if(resynced > 0 || deletedFuture > 0 || replaced > 0 || regen > 0
+       || (d.recur_moved_events || 0) > 0 || (d.recur_removed_events || 0) > 0){
+      await refreshPlanning();
+      renderCal();
+    }
   }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
 }
 
