@@ -1179,6 +1179,12 @@ function renderPortal(){
   // Paramètres : accès sectionné (config.py ROLES_SETTINGS_* → union ROLES_SETTINGS).
   // aa.settings reflète déjà cette union côté serveur (default_app_access_for_role),
   // donc l'icône suit exactement ce que can_access_settings() autorise sur /settings.
+  // Gestionnaire de tâches : niveau lu dans la matrice (access_map), pas dans
+  // le rôle. Ouvrir l'app à un service se fait dans Paramètres → Accès, et
+  // l'icône doit suivre sans qu'on retouche cette ligne.
+  const amap = (S.user && S.user.access_map) || null;
+  const nivTaches = (amap && amap.taches && amap.taches._app) || (isSuper ? 'admin' : 'none');
+  const isTaches = nivTaches !== 'none';
   const isSettings = aa ? !!aa.settings : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','comptabilite'].includes(urole)));
   const isAo = isSuper || urole === 'direction';
   const isBAT = isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','commercial'].includes(urole));
@@ -1567,7 +1573,7 @@ function renderPortal(){
         title:'Paramètres',
         onClick:()=>{window.location.href='/settings';}
       },iconEl('sliders',24)):null,
-      isSuper?h('button',{
+      isTaches?h('button',{
         type:'button',
         className:'portal-settings-corner',
         'aria-label':'Gestionnaire de tâches',

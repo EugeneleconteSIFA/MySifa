@@ -10851,6 +10851,9 @@ function _sheetRoles(){
     // Parametres : acces sectionne (config.py ROLES_SETTINGS_* -> union ROLES_SETTINGS),
     // deja reflete par app_access.settings cote serveur.
     canSettings: aa ? !!aa.settings : (role==='superadmin'||role==='direction'),
+    // Tâches : niveau issu de la matrice d'accès, pas du rôle.
+    canTaches: (((S.user&&S.user.access_map&&S.user.access_map.taches)||{})._app
+                || (role==='superadmin'?'admin':'none')) !== 'none',
     role,
   };
 }
@@ -10858,7 +10861,7 @@ function openProfileSheet(){
   const sheet=document.getElementById('msf-sheet-root');
   const bd=document.getElementById('msf-sheet-backdrop');
   if(!sheet||!bd) return;
-  const {isSuper,isDir,isAdmin,canSettings,role}=_sheetRoles();
+  const {isSuper,isDir,isAdmin,canSettings,canTaches,role}=_sheetRoles();
   const nom=(S.user&&S.user.nom)||'';
   const initials=_mnbInitials(nom);
   const msgUnread=Number(S.msgUnread||0);
@@ -10883,7 +10886,7 @@ function openProfileSheet(){
   if(canSettings){
     items.push(item('settings', ICO.sliders, 'Paramètres', ''));
   }
-  if(isSuper){
+  if(canTaches){
     const nbT=Number(S.tachesCount||0);
     items.push(item('taches', ICO.taches, 'Gestionnaire de tâches',
       nbT>0?(nbT>9?'9+':String(nbT)):''));

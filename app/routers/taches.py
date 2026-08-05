@@ -4,8 +4,17 @@ Suivi interne des demandes faites à l'équipe de développement : tâches,
 statuts, priorités, assignation, échéances, sous-tâches, checklist, fichiers
 de contexte, commentaires et journal d'activité.
 
-Accès : super administrateur uniquement (rôle effectif — un superadmin qui
-simule un autre rôle perd l'accès, cohérent avec la tuile du portail).
+Accès : piloté par la matrice database-driven (Paramètres → Accès), app
+`taches`. Trois niveaux, trois périmètres :
+
+- `read`  : mes tâches — celles où je suis assigné ou que j'ai créées ;
+- `write` : celles-là plus toutes les tâches de mon service, en écriture ;
+- `admin` : tous les services (direction, super administrateur).
+
+Le périmètre est calculé à un seul endroit (`_scope_sql`) et appliqué par
+`_fetch_tache` : tout endpoint qui charge une tâche par son identifiant est
+couvert sans contrôle supplémentaire. Hors périmètre, la réponse est 404 et
+non 403 — l'existence d'une tâche d'un autre service ne se déduit pas.
 
 Les référentiels (statuts, priorités, types, modules) vivent dans `config.py`
 et sont exposés par `GET /api/taches/meta` — aucune valeur en dur côté front.
@@ -34,13 +43,21 @@ from config import (
     TACHES_STATUTS_FINAUX,
     TACHES_TYPES_CODES,
     ROLE_SUPERADMIN,
+    TACHES_SERVICES_CODES,
+    role_label,
     taches_modules,
     taches_priorites,
+    taches_services,
     taches_statuts,
     taches_types,
 )
 from database import get_db
-from services.auth_service import get_current_user, is_superadmin
+from services.auth_service import (
+    effective_role,
+    get_current_user,
+    user_access_level,
+    user_can,
+)
 
 router = APIRouter(tags=["taches"])
 
@@ -60,12 +77,47 @@ _FINAUX_PH = ",".join("?" * len(_FINAUX))
 
 # ─── Accès ────────────────────────────────────────────────────────────────
 
-def _require_taches(request: Request) -> dict:
-    """Super administrateur (rôle effectif) uniquement."""
+APP = "taches"
+
+
+def _niveau(user: dict) -> str:
+    """none / read / write / admin sur l'app taches."""
+    return user_access_level(user, APP)
+
+
+def _service(user: dict) -> str:
+    """Service de l'utilisateur — c'est son rôle effectif (cf. config.taches_services)."""
+    return effective_role(user) or ""
+
+
+def _require_taches(request: Request, min_level: str = "read") -> dict:
     user = get_current_user(request)
-    if not is_superadmin(user):
-        raise HTTPException(status_code=403, detail="Accès réservé au super administrateur")
+    if not user_can(user, APP, "_app", min_level):
+        raise HTTPException(
+            status_code=403,
+            detail="Accès refusé — gestionnaire de tâches",
+        )
     return user
+
+
+def _scope_sql(user: dict, alias: str = "t") -> tuple[str, list]:
+    """Clause SQL du périmètre visible, et ses paramètres.
+
+    Point unique de vérité du cloisonnement : `list`, `stats` et `_fetch_tache`
+    l'appellent, personne ne réécrit la règle dans son coin.
+    """
+    niveau = _niveau(user)
+    if niveau == "admin":
+        return "1=1", []
+    uid = user.get("id")
+    miennes = (
+        f"(EXISTS (SELECT 1 FROM taches_assignes sc WHERE sc.tache_id={alias}.id"
+        f"                                            AND sc.user_id=?)"
+        f" OR {alias}.createur_user_id=?)"
+    )
+    if niveau == "write":
+        return f"({alias}.service=? OR {miennes})", [_service(user), uid, uid]
+    return miennes, [uid, uid]
 
 
 def _now() -> str:
@@ -130,6 +182,21 @@ def _valid_heures(value: Any, champ: str) -> Optional[float]:
     if h < 0 or h > 9999:
         raise HTTPException(400, f"{champ} invalide — valeur entre 0 et 9999 h.")
     return round(h, 2)
+
+
+def _valid_service(user: dict, valeur: Optional[str]) -> str:
+    """Service rattaché à une tâche, contrôlé contre le périmètre de l'auteur.
+
+    Sans valeur : le service de l'auteur. Un non-admin qui en vise un autre est
+    refusé — sinon il déposerait une tâche dans un périmètre qu'il ne voit pas,
+    et la perdrait de vue aussitôt créée.
+    """
+    service = (valeur or "").strip() or _service(user)
+    if service not in TACHES_SERVICES_CODES:
+        raise HTTPException(400, "Service inconnu.")
+    if _niveau(user) != "admin" and service != _service(user):
+        raise HTTPException(403, "Une tâche ne peut être rattachée qu'à votre service.")
+    return service
 
 
 def _next_ordre(conn, statut: str) -> float:
@@ -235,6 +302,48 @@ def _parse_assignes(brut: Optional[str]) -> list[dict]:
     return out
 
 
+# ─── Personnes assignables ────────────────────────────────────────────────
+
+def _users_assignables(conn, user: dict) -> list:
+    """Comptes actifs qu'on peut assigner : ceux qui peuvent ouvrir l'app.
+
+    Assigner quelqu'un qui recevra un 403 en cliquant n'a pas de sens. La liste
+    se déduit donc de la matrice d'accès, pas d'un rôle en dur. Un non-admin ne
+    voit que son propre service.
+
+    Le contrôle serveur de `_valid_assignes` reste, lui, ouvert à tout compte
+    actif : des tâches plus anciennes portent des assignés qui ne sont plus
+    proposés ici, et il faut pouvoir les rouvrir et les désassigner.
+    """
+    filtres = ["u.actif=1"]
+    params: list = []
+    if _niveau(user) != "admin":
+        filtres.append("u.role=?")
+        params.append(_service(user))
+
+    a_matrice = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='role_access_defaults'"
+    ).fetchone()
+    if a_matrice:
+        filtres.append(
+            "(u.role=?"
+            " OR EXISTS (SELECT 1 FROM role_access_defaults r"
+            "             WHERE r.role=u.role AND r.app_id=? AND r.module_id='_app'"
+            "               AND r.level<>'none')"
+            " OR EXISTS (SELECT 1 FROM user_access_overrides o"
+            "             WHERE o.user_id=u.id AND o.app_id=? AND o.module_id='_app'"
+            "               AND o.level<>'none'))"
+        )
+        params.extend([ROLE_SUPERADMIN, APP, APP])
+
+    return conn.execute(
+        f"""SELECT id, nom, role, avatar_url FROM users u
+             WHERE {' AND '.join(filtres)}
+             ORDER BY nom COLLATE NOCASE""",
+        params,
+    ).fetchall()
+
+
 # ─── Schémas ──────────────────────────────────────────────────────────────
 
 class TacheIn(BaseModel):
@@ -244,6 +353,7 @@ class TacheIn(BaseModel):
     priorite: Optional[str] = None
     type: Optional[str] = None
     module: Optional[str] = None
+    service: Optional[str] = None
     assignes: Optional[list[int]] = None
     parent_id: Optional[int] = None
     echeance: Optional[str] = None
@@ -257,6 +367,7 @@ class TachePatch(BaseModel):
     priorite: Optional[str] = None
     type: Optional[str] = None
     module: Optional[str] = None
+    service: Optional[str] = None
     assignes: Optional[list[int]] = None
     echeance: Optional[str] = None
     estimation_h: Optional[float] = None
@@ -293,27 +404,31 @@ class TempsIn(BaseModel):
 def taches_meta(request: Request):
     """Référentiels + liste des personnes assignables. Aucune valeur en dur au front."""
     user = _require_taches(request)
+    niveau = _niveau(user)
+    mon_service = _service(user)
     with get_db() as conn:
-        # Seuls les super admins sont PROPOSÉS à l'assignation : l'app leur est
-        # réservée, assigner quelqu'un qui ne peut pas l'ouvrir n'a pas de sens.
-        #
-        # Le contrôle serveur de `_valid_assignes`, lui, reste ouvert à tout
-        # compte actif : des tâches créées avant cette restriction portent des
-        # assignés qui ne sont plus dans la liste, et il faut pouvoir les
-        # rouvrir, les modifier et les désassigner sans que l'API les rejette.
-        users = conn.execute(
-            """SELECT id, nom, role, avatar_url
-               FROM users WHERE actif=1 AND role=?
-               ORDER BY nom COLLATE NOCASE""",
-            (ROLE_SUPERADMIN,),
-        ).fetchall()
+        users = [dict(u) for u in _users_assignables(conn, user)]
+    for u in users:
+        u["service_label"] = role_label(u.get("role") or "")
+    # Un non-admin ne rattache une tâche qu'à son propre service : lui proposer
+    # les autres reviendrait à afficher un choix que l'API refusera.
+    services = taches_services() if niveau == "admin" else [
+        {"code": mon_service, "label": role_label(mon_service)}
+    ]
     return {
         "statuts": taches_statuts(),
         "priorites": taches_priorites(),
         "types": taches_types(),
         "modules": taches_modules(),
-        "users": [dict(u) for u in users],
-        "moi": {"id": user.get("id"), "nom": user.get("nom") or ""},
+        "services": services,
+        "users": users,
+        "niveau": niveau,
+        "moi": {
+            "id": user.get("id"),
+            "nom": user.get("nom") or "",
+            "service": mon_service,
+            "service_label": role_label(mon_service),
+        },
         "max_file_mb": TACHES_MAX_FILE_MB,
     }
 
@@ -328,13 +443,14 @@ def list_taches(
     priorite: Optional[str] = None,
     type: Optional[str] = None,
     module: Optional[str] = None,
+    service: Optional[str] = None,
     q: Optional[str] = None,
     archivees: int = 0,
     racines: int = 0,
     non_assignees: int = 0,
 ):
     """Liste des tâches, avec compteurs agrégés pour l'affichage carte/ligne."""
-    _require_taches(request)
+    user = _require_taches(request)
     where = ["t.deleted_at IS NULL"]
     params: list = []
     # archivees=1 : l'onglet Archives ne montre QUE les tâches archivées.
@@ -357,12 +473,21 @@ def list_taches(
     if module:
         where.append("t.module=?")
         params.append(module)
+    # Filtre d'affichage seulement : il restreint À L'INTÉRIEUR du périmètre,
+    # il ne l'élargit jamais — la clause de périmètre est ajoutée après.
+    if service:
+        where.append("t.service=?")
+        params.append(service)
     if racines:
         where.append("t.parent_id IS NULL")
     if q:
         terme = f"%{q.strip()}%"
         where.append("(t.titre LIKE ? OR t.description LIKE ?)")
         params.extend([terme, terme])
+
+    scope, scope_params = _scope_sql(user)
+    where.append(scope)
+    params.extend(scope_params)
 
     with get_db() as conn:
         rows = conn.execute(
@@ -402,15 +527,18 @@ def taches_badge(request: Request):
     """Compteur pour la pastille du portail : mes tâches ouvertes.
 
     Volontairement séparé de /api/taches/stats : le portail l'interroge en
-    boucle pour tous les super admins, il doit rester une requête indexée qui ne
+    boucle pour tous les utilisateurs, il doit rester une requête indexée qui ne
     lit aucune donnée de tâche. Renvoie 0 (jamais une erreur) pour un rôle non
     autorisé — le portail ne doit pas afficher d'échec pour une pastille.
+
+    Pas de clause de périmètre ici : le compteur ne porte que sur les tâches
+    assignées à l'utilisateur, qui sont dans son périmètre par construction.
     """
     try:
         user = get_current_user(request)
     except HTTPException:
         return {"count": 0}
-    if not is_superadmin(user):
+    if not user_can(user, APP, "_app", "read"):
         return {"count": 0}
     today = date.today().isoformat()
     with get_db() as conn:
@@ -429,26 +557,35 @@ def taches_badge(request: Request):
 
 @router.get("/api/taches/stats")
 def taches_stats(request: Request):
-    """Compteurs d'en-tête : par statut, en retard, non assignées."""
-    _require_taches(request)
+    """Compteurs d'en-tête : par statut, en retard, non assignées.
+
+    Comptés dans le périmètre de l'utilisateur : un chiffre d'en-tête qui
+    inclurait des tâches invisibles dans la liste en dessous serait un bug de
+    lecture, pas une information.
+    """
+    user = _require_taches(request)
     today = date.today().isoformat()
+    scope, sp = _scope_sql(user)
     with get_db() as conn:
         par_statut = conn.execute(
-            """SELECT statut, COUNT(*) AS n FROM taches
-               WHERE deleted_at IS NULL AND archived_at IS NULL
-               GROUP BY statut"""
+            f"""SELECT t.statut AS statut, COUNT(*) AS n FROM taches t
+                WHERE t.deleted_at IS NULL AND t.archived_at IS NULL AND {scope}
+                GROUP BY t.statut""",
+            sp,
         ).fetchall()
         retard = conn.execute(
-            f"""SELECT COUNT(*) AS n FROM taches
-                WHERE deleted_at IS NULL AND archived_at IS NULL
-                  AND echeance IS NOT NULL AND echeance < ?
-                  AND statut NOT IN ({_FINAUX_PH})""",
-            [today] + list(_FINAUX),
+            f"""SELECT COUNT(*) AS n FROM taches t
+                WHERE t.deleted_at IS NULL AND t.archived_at IS NULL
+                  AND t.echeance IS NOT NULL AND t.echeance < ?
+                  AND t.statut NOT IN ({_FINAUX_PH}) AND {scope}""",
+            [today] + list(_FINAUX) + sp,
         ).fetchone()
         non_assignees = conn.execute(
-            """SELECT COUNT(*) AS n FROM taches t
-               WHERE t.deleted_at IS NULL AND t.archived_at IS NULL
-                 AND NOT EXISTS (SELECT 1 FROM taches_assignes a WHERE a.tache_id=t.id)"""
+            f"""SELECT COUNT(*) AS n FROM taches t
+                WHERE t.deleted_at IS NULL AND t.archived_at IS NULL
+                  AND NOT EXISTS (SELECT 1 FROM taches_assignes a WHERE a.tache_id=t.id)
+                  AND {scope}""",
+            sp,
         ).fetchone()
     return {
         "par_statut": {r["statut"]: r["n"] for r in par_statut},
@@ -459,14 +596,20 @@ def taches_stats(request: Request):
 
 # ─── Détail ───────────────────────────────────────────────────────────────
 
-def _fetch_tache(conn, tache_id: int) -> dict:
+def _fetch_tache(conn, tache_id: int, user: dict) -> dict:
+    """Charge une tâche DANS le périmètre de l'utilisateur, 404 sinon.
+
+    Tous les endpoints qui manipulent une tâche passent par ici : le contrôle
+    de périmètre ne peut pas être oublié sur l'un d'eux.
+    """
+    scope, scope_params = _scope_sql(user)
     row = conn.execute(
         f"""SELECT t.*, {_SQL_ASSIGNES} AS assignes_brut,
                   p.titre AS parent_titre
              FROM taches t
              LEFT JOIN taches p ON p.id = t.parent_id
-            WHERE t.id=? AND t.deleted_at IS NULL""",
-        (tache_id,),
+            WHERE t.id=? AND t.deleted_at IS NULL AND {scope}""",
+        [tache_id] + scope_params,
     ).fetchone()
     if not row:
         raise HTTPException(404, "Tâche introuvable")
@@ -478,9 +621,9 @@ def _fetch_tache(conn, tache_id: int) -> dict:
 
 @router.get("/api/taches/{tache_id}")
 def get_tache(tache_id: int, request: Request):
-    _require_taches(request)
+    user = _require_taches(request)
     with get_db() as conn:
-        tache = _fetch_tache(conn, tache_id)
+        tache = _fetch_tache(conn, tache_id, user)
         commentaires = conn.execute(
             """SELECT c.*, u.avatar_url AS auteur_avatar
                  FROM taches_commentaires c
@@ -533,7 +676,7 @@ def get_tache(tache_id: int, request: Request):
 
 @router.post("/api/taches")
 def create_tache(payload: TacheIn, request: Request):
-    user = _require_taches(request)
+    user = _require_taches(request, "write")
     titre = (payload.titre or "").strip()
     if not titre:
         raise HTTPException(400, "Titre obligatoire.")
@@ -551,28 +694,30 @@ def create_tache(payload: TacheIn, request: Request):
         raise HTTPException(400, "Module inconnu.")
     echeance = _valid_date(payload.echeance, "Échéance")
     estimation = _valid_heures(payload.estimation_h, "Estimation")
+    service = _valid_service(user, payload.service)
     now = _now()
 
     with get_db() as conn:
         if payload.parent_id:
-            parent = conn.execute(
-                "SELECT id,parent_id FROM taches WHERE id=? AND deleted_at IS NULL",
-                (int(payload.parent_id),),
-            ).fetchone()
-            if not parent:
-                raise HTTPException(400, "Tâche parente introuvable.")
-            if parent["parent_id"]:
+            # Le parent doit être dans le périmètre : on ne greffe pas une
+            # sous-tâche sur une tâche qu'on n'a pas le droit de voir.
+            parent = _fetch_tache(conn, int(payload.parent_id), user)
+            if parent.get("parent_id"):
                 raise HTTPException(400, "Une sous-tâche ne peut pas avoir de sous-tâches.")
+            # Une sous-tâche appartient au service de sa mère : sans ça, la
+            # mère et sa fille pourraient se retrouver dans deux périmètres
+            # différents et l'arborescence apparaîtrait tronquée.
+            service = parent.get("service") or service
         assignes = _valid_assignes(conn, payload.assignes)
         cur = conn.execute(
             """INSERT INTO taches
-               (titre,description,statut,priorite,type,module,
+               (titre,description,statut,priorite,type,module,service,
                 createur_user_id,createur_nom,parent_id,echeance,estimation_h,
                 temps_passe_h,ordre,created_at,updated_at,started_at,done_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?)""",
             (
                 titre[:300], (payload.description or "").strip() or None,
-                statut, priorite, ttype, module,
+                statut, priorite, ttype, module, service,
                 user.get("id"), _nom(user),
                 payload.parent_id, echeance, estimation,
                 _next_ordre(conn, statut), now, now,
@@ -591,7 +736,7 @@ def create_tache(payload: TacheIn, request: Request):
 _PATCH_LABELS = {
     "titre": "Titre", "description": "Description", "statut": "Statut",
     "priorite": "Priorité", "type": "Type", "module": "Module",
-    "echeance": "Échéance",
+    "service": "Service", "echeance": "Échéance",
     "estimation_h": "Estimation", "temps_passe_h": "Temps passé",
 }
 
@@ -599,7 +744,7 @@ _PATCH_LABELS = {
 @router.put("/api/taches/{tache_id}")
 def update_tache(tache_id: int, payload: TachePatch, request: Request):
     """Mise à jour partielle : seuls les champs fournis sont écrits."""
-    user = _require_taches(request)
+    user = _require_taches(request, "write")
     data = payload.model_dump(exclude_unset=True)
     if not data:
         return {"success": True, "modifie": 0}
@@ -614,6 +759,10 @@ def update_tache(tache_id: int, payload: TachePatch, request: Request):
         data["module"] = (data["module"] or "").strip() or None
         if data["module"] and data["module"] not in _module_codes():
             raise HTTPException(400, "Module inconnu.")
+    if "service" in data:
+        # Transférer une tâche à un autre service, c'est la faire sortir de son
+        # propre périmètre : réservé au niveau admin.
+        data["service"] = _valid_service(user, data["service"])
     if "echeance" in data:
         data["echeance"] = _valid_date(data["echeance"], "Échéance")
     if "estimation_h" in data:
@@ -629,7 +778,7 @@ def update_tache(tache_id: int, payload: TachePatch, request: Request):
 
     now = _now()
     with get_db() as conn:
-        avant = _fetch_tache(conn, tache_id)
+        avant = _fetch_tache(conn, tache_id, user)
 
         # L'assignation vit dans une table de liaison : elle sort du UPDATE.
         if "assignes" in data:
@@ -680,12 +829,12 @@ def update_tache(tache_id: int, payload: TachePatch, request: Request):
 @router.post("/api/taches/{tache_id}/move")
 def move_tache(tache_id: int, payload: MoveIn, request: Request):
     """Déplacement kanban : change le statut et/ou la position dans la colonne."""
-    user = _require_taches(request)
+    user = _require_taches(request, "write")
     if payload.statut not in TACHES_STATUTS_CODES:
         raise HTTPException(400, "Statut inconnu.")
     now = _now()
     with get_db() as conn:
-        avant = _fetch_tache(conn, tache_id)
+        avant = _fetch_tache(conn, tache_id, user)
 
         # Position : entre `apres_id` et `avant_id` s'ils sont fournis, sinon en tête.
         bornes = []
@@ -728,9 +877,9 @@ def move_tache(tache_id: int, payload: MoveIn, request: Request):
 
 @router.post("/api/taches/{tache_id}/archive")
 def archive_tache(tache_id: int, request: Request):
-    user = _require_taches(request)
+    user = _require_taches(request, "write")
     with get_db() as conn:
-        tache = _fetch_tache(conn, tache_id)
+        tache = _fetch_tache(conn, tache_id, user)
         nouvel_etat = None if tache.get("archived_at") else _now()
         conn.execute(
             "UPDATE taches SET archived_at=?, updated_at=? WHERE id=?",
@@ -744,10 +893,10 @@ def archive_tache(tache_id: int, request: Request):
 @router.delete("/api/taches/{tache_id}")
 def delete_tache(tache_id: int, request: Request):
     """Suppression logique — les sous-tâches suivent."""
-    user = _require_taches(request)
+    user = _require_taches(request, "write")
     now = _now()
     with get_db() as conn:
-        _fetch_tache(conn, tache_id)
+        _fetch_tache(conn, tache_id, user)
         conn.execute("UPDATE taches SET deleted_at=? WHERE id=?", (now, tache_id))
         conn.execute(
             "UPDATE taches SET deleted_at=? WHERE parent_id=? AND deleted_at IS NULL",
@@ -761,12 +910,12 @@ def delete_tache(tache_id: int, request: Request):
 @router.post("/api/taches/{tache_id}/temps")
 def add_temps(tache_id: int, payload: TempsIn, request: Request):
     """Ajoute des heures au temps passé (incrément, jamais un remplacement)."""
-    user = _require_taches(request)
+    user = _require_taches(request, "write")
     heures = _valid_heures(payload.heures, "Temps")
     if not heures:
         raise HTTPException(400, "Temps invalide — valeur supérieure à 0 attendue.")
     with get_db() as conn:
-        tache = _fetch_tache(conn, tache_id)
+        tache = _fetch_tache(conn, tache_id, user)
         total = round(float(tache.get("temps_passe_h") or 0) + heures, 2)
         conn.execute(
             "UPDATE taches SET temps_passe_h=?, updated_at=? WHERE id=?",
@@ -790,12 +939,14 @@ def add_temps(tache_id: int, payload: TempsIn, request: Request):
 
 @router.post("/api/taches/{tache_id}/commentaires")
 def add_commentaire(tache_id: int, payload: CommentaireIn, request: Request):
+    # `read` suffit : quelqu'un d'assigné doit pouvoir répondre sans avoir le
+    # droit de modifier la tâche.
     user = _require_taches(request)
     message = (payload.message or "").strip()
     if not message:
         raise HTTPException(400, "Commentaire vide.")
     with get_db() as conn:
-        _fetch_tache(conn, tache_id)
+        _fetch_tache(conn, tache_id, user)
         cur = conn.execute(
             """INSERT INTO taches_commentaires
                (tache_id,user_id,auteur_nom,message,created_at)
@@ -812,11 +963,17 @@ def delete_commentaire(commentaire_id: int, request: Request):
     user = _require_taches(request)
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id,tache_id FROM taches_commentaires WHERE id=? AND deleted_at IS NULL",
+            "SELECT id,tache_id,user_id FROM taches_commentaires "
+            "WHERE id=? AND deleted_at IS NULL",
             (commentaire_id,),
         ).fetchone()
         if not row:
             raise HTTPException(404, "Commentaire introuvable")
+        # Périmètre de la tâche porteuse, puis propriété du message : on ne
+        # supprime pas la parole de quelqu'un d'autre sans être admin.
+        _fetch_tache(conn, row["tache_id"], user)
+        if row["user_id"] != user.get("id") and _niveau(user) != "admin":
+            raise HTTPException(403, "Seul l'auteur peut supprimer son commentaire.")
         conn.execute(
             "UPDATE taches_commentaires SET deleted_at=? WHERE id=?", (_now(), commentaire_id)
         )
@@ -829,7 +986,7 @@ def delete_commentaire(commentaire_id: int, request: Request):
 
 @router.post("/api/taches/{tache_id}/fichiers")
 async def upload_fichier(tache_id: int, request: Request, fichier: UploadFile = File(...)):
-    user = _require_taches(request)
+    user = _require_taches(request, "write")
     if not fichier.filename:
         raise HTTPException(400, "Aucun fichier reçu.")
     _check_extension(fichier.filename)
@@ -840,7 +997,7 @@ async def upload_fichier(tache_id: int, request: Request, fichier: UploadFile = 
         raise HTTPException(400, "Fichier vide.")
 
     with get_db() as conn:
-        _fetch_tache(conn, tache_id)
+        _fetch_tache(conn, tache_id, user)
         dossier = TACHES_ROOT / str(tache_id)
         dossier.mkdir(parents=True, exist_ok=True)
         nom_sur = _sanitize_filename(fichier.filename)
@@ -864,14 +1021,18 @@ async def upload_fichier(tache_id: int, request: Request, fichier: UploadFile = 
 @router.get("/api/taches/fichiers/{fichier_id}/download")
 def download_fichier(fichier_id: int, request: Request, inline: bool = False):
     """Télécharge ou prévisualise (?inline=1) une pièce jointe."""
-    _require_taches(request)
+    user = _require_taches(request)
     with get_db() as conn:
         row = conn.execute(
-            "SELECT nom,fichier_path FROM taches_fichiers WHERE id=? AND deleted_at IS NULL",
+            "SELECT nom,fichier_path,tache_id FROM taches_fichiers "
+            "WHERE id=? AND deleted_at IS NULL",
             (fichier_id,),
         ).fetchone()
-    if not row:
-        raise HTTPException(404, "Fichier introuvable")
+        if not row:
+            raise HTTPException(404, "Fichier introuvable")
+        # Une pièce jointe suit le périmètre de sa tâche : sans ce contrôle,
+        # une URL devinée servirait le fichier d'un autre service.
+        _fetch_tache(conn, row["tache_id"], user)
     chemin = Path(row["fichier_path"])
     if not chemin.is_file():
         raise HTTPException(410, "Fichier absent du serveur")
@@ -889,7 +1050,7 @@ def download_fichier(fichier_id: int, request: Request, inline: bool = False):
 
 @router.delete("/api/taches/fichiers/{fichier_id}")
 def delete_fichier(fichier_id: int, request: Request):
-    user = _require_taches(request)
+    user = _require_taches(request, "write")
     with get_db() as conn:
         row = conn.execute(
             "SELECT id,tache_id,nom FROM taches_fichiers WHERE id=? AND deleted_at IS NULL",
@@ -897,6 +1058,7 @@ def delete_fichier(fichier_id: int, request: Request):
         ).fetchone()
         if not row:
             raise HTTPException(404, "Fichier introuvable")
+        _fetch_tache(conn, row["tache_id"], user)
         conn.execute("UPDATE taches_fichiers SET deleted_at=? WHERE id=?", (_now(), fichier_id))
         _log(conn, row["tache_id"], user, "fichier_supprime", "Fichier", row["nom"], None)
         conn.commit()
@@ -907,12 +1069,12 @@ def delete_fichier(fichier_id: int, request: Request):
 
 @router.post("/api/taches/{tache_id}/checklist")
 def add_checklist(tache_id: int, payload: ChecklistIn, request: Request):
-    user = _require_taches(request)
+    user = _require_taches(request, "write")
     libelle = (payload.libelle or "").strip()
     if not libelle:
         raise HTTPException(400, "Libellé vide.")
     with get_db() as conn:
-        _fetch_tache(conn, tache_id)
+        _fetch_tache(conn, tache_id, user)
         row = conn.execute(
             "SELECT MAX(ordre) AS m FROM taches_checklist WHERE tache_id=?", (tache_id,)
         ).fetchone()
@@ -929,7 +1091,7 @@ def add_checklist(tache_id: int, payload: ChecklistIn, request: Request):
 
 @router.put("/api/taches/checklist/{item_id}")
 def update_checklist(item_id: int, payload: ChecklistPatch, request: Request):
-    user = _require_taches(request)
+    user = _require_taches(request, "write")
     data = payload.model_dump(exclude_unset=True)
     if not data:
         return {"success": True}
@@ -939,6 +1101,7 @@ def update_checklist(item_id: int, payload: ChecklistPatch, request: Request):
         ).fetchone()
         if not row:
             raise HTTPException(404, "Élément introuvable")
+        _fetch_tache(conn, row["tache_id"], user)
         sets, params = [], []
         if "libelle" in data:
             libelle = (data["libelle"] or "").strip()
@@ -962,13 +1125,14 @@ def update_checklist(item_id: int, payload: ChecklistPatch, request: Request):
 
 @router.delete("/api/taches/checklist/{item_id}")
 def delete_checklist(item_id: int, request: Request):
-    user = _require_taches(request)
+    user = _require_taches(request, "write")
     with get_db() as conn:
         row = conn.execute(
             "SELECT id,tache_id,libelle FROM taches_checklist WHERE id=?", (item_id,)
         ).fetchone()
         if not row:
             raise HTTPException(404, "Élément introuvable")
+        _fetch_tache(conn, row["tache_id"], user)
         conn.execute("DELETE FROM taches_checklist WHERE id=?", (item_id,))
         _log(conn, row["tache_id"], user, "checklist_supprime", "Checklist", row["libelle"], None)
         conn.commit()
