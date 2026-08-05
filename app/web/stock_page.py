@@ -780,6 +780,10 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-act-btn:hover{border-color:var(--accent);color:var(--accent)}
 .bes-act-btn.off{opacity:.35;cursor:not-allowed}
 .bes-act-btn.off:hover{border-color:var(--border);color:var(--text2)}
+/* Vue par matiere : sources de fiche technique agregees sous la reference */
+.bes-mat-sources{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.45}
+.bes-mat-sources b{font-weight:600;color:var(--text2)}
+.bes-mat-cat{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--text2)}
 .bes-dossier-meta{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4}
 .bes-statut{display:inline-flex;align-items:center;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
 .bes-statut-en_cours{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
@@ -12168,6 +12172,10 @@ function buildBesoinsMatieres() {
         on: { click: () => { S.besoinsView = 'echeance'; renderContent(); } }
       }, 'Par échéance'),
       el('button', {
+        cls: 'bes-seg-btn' + (view === 'matiere' ? ' active' : ''),
+        on: { click: () => { S.besoinsView = 'matiere'; renderContent(); } }
+      }, 'Par matière'),
+      el('button', {
         cls: 'bes-seg-btn' + (view === 'dossier' ? ' active' : ''),
         on: { click: () => { S.besoinsView = 'dossier'; renderContent(); } }
       }, 'Par dossier'),
@@ -12183,10 +12191,149 @@ function buildBesoinsMatieres() {
 
   if (view === 'echeance') {
     wrap.appendChild(_buildBesoinsEcheanceTable(ech));
+  } else if (view === 'matiere') {
+    wrap.appendChild(_buildBesoinsMatiereTable(ech));
   } else {
     wrap.appendChild(_buildBesoinsDossierTable(dos));
   }
   return wrap;
+}
+
+// ── Vue « par matière » ───────────────────────────────────────────────────
+// La vue par échéance raisonne en valeurs de fiche technique, parce qu'on y
+// corrige les associations. Ici on raisonne en références MySifa : c'est
+// l'unité de la commande fournisseur, et deux valeurs de fiche mappées sur la
+// même référence doivent s'additionner avant qu'on décide d'acheter.
+function _buildBesoinsMatiereTable(ech) {
+  const matieres = ech.matieres || [];
+  const orphelins = ech.non_associees || [];
+  if (!matieres.length && !orphelins.length) {
+    return el('div', { cls: 'bes-empty' },
+      'Aucun besoin matière détecté pour les dossiers en cours ou en attente.');
+  }
+
+  const container = el('div', {});
+
+  if (matieres.length) {
+    const section = el('div', { cls: 'bes-section' });
+    section.appendChild(el('div', { cls: 'bes-section-head' },
+      el('span', { cls: 'bes-section-title' }, 'Références MySifa'),
+      el('span', { cls: 'bes-section-count' },
+        `${matieres.length} référence${matieres.length > 1 ? 's' : ''} à approvisionner`),
+    ));
+
+    const table = el('table', { cls: 'bes-table' });
+    table.appendChild(el('thead', {}, el('tr', {},
+      el('th', {}, 'Référence'),
+      el('th', {}, 'Catégorie'),
+      el('th', { cls: 'num' }, 'Besoin 7j'),
+      el('th', { cls: 'num' }, 'Besoin 15j'),
+      el('th', { cls: 'num' }, 'Total'),
+      el('th', { cls: 'num' }, 'Stock'),
+      el('th', { cls: 'num' }, 'Manque 7j'),
+      el('th', { cls: 'num' }, 'Dossiers'),
+    )));
+
+    const tbody = el('tbody', {});
+    matieres.forEach(m => {
+      const rowCls = (m.manque_7j != null && m.manque_7j > 0) ? 'bes-row-danger' : '';
+      // Les valeurs de fiche technique qui alimentent cette référence : c'est
+      // la seule façon de comprendre d'où sort un total agrégé.
+      const srcTxt = (m.sources || [])
+        .map(s => s.source_value + (s.besoin_total ? ' (' + _fmtQte(s.besoin_total, m.unite) + ')' : ''))
+        .join(' · ');
+
+      tbody.appendChild(el('tr', { cls: rowCls },
+        el('td', { cls: 'bes-mp-cell' },
+          el('div', { cls: 'bes-mp-ref' }, _besMpLink(m.matiere_id, m.matiere_ref || '—')),
+          m.matiere_designation ? el('div', { cls: 'bes-mp-des' }, m.matiere_designation) : null,
+          srcTxt ? el('div', { cls: 'bes-mat-sources' },
+            el('b', {}, (m.sources.length > 1 ? m.sources.length + ' valeurs de fiche : ' : 'Fiche : ')),
+            srcTxt) : null,
+          m.nb_dossiers_incalculables
+            ? el('div', { cls: 'bes-warn-note' },
+                `${m.nb_dossiers_incalculables} dossier${m.nb_dossiers_incalculables > 1 ? 's' : ''} non chiffré${m.nb_dossiers_incalculables > 1 ? 's' : ''}, hors total`)
+            : null,
+        ),
+        el('td', {}, el('span', { cls: 'bes-mat-cat' },
+          BESOINS_KIND_LABELS[m.kind] || m.matiere_categorie || m.kind)),
+        _besQteCell(m.besoin_7j, m.unite),
+        _besQteCell(m.besoin_15j, m.unite),
+        el('td', { cls: 'num', style: { fontWeight: '700' } },
+          _fmtQte(m.besoin_total, m.unite),
+          (m.kind === 'mandrin' && m.besoin_total_tubes)
+            ? el('div', { cls: 'bes-sub-conv' },
+                Math.ceil(m.besoin_total_tubes) + ' tubes'
+                + (m.besoin_total_palettes ? ' · ' + _fmtQte(m.besoin_total_palettes, 'pal.') : ''))
+            : null),
+        el('td', { cls: 'num', style: { color: 'var(--muted)' }, title: m.stock_note || '' },
+          m.stock_actuel != null ? _fmtQte(m.stock_actuel, m.unite) : '—',
+          (m.kind === 'mandrin' && m.stock_palettes != null)
+            ? el('div', { cls: 'bes-sub-conv' }, _fmtQte(m.stock_palettes, 'pal.'))
+            : null),
+        (m.manque_7j != null && m.manque_7j > 0)
+          ? el('td', { cls: 'num' }, el('span', { cls: 'bes-manque' }, _fmtQte(m.manque_7j, m.unite)))
+          : el('td', { cls: 'num' }, el('span', { cls: 'bes-manque-zero' },
+              m.manque_7j != null ? '0' : '—')),
+        el('td', { cls: 'num', style: { color: 'var(--muted)' } }, String(m.nb_dossiers || 0)),
+      ));
+    });
+    table.appendChild(tbody);
+    section.appendChild(el('div', { cls: 'bes-card' }, table));
+    container.appendChild(section);
+  }
+
+  // ── Besoins sans référence associée ─────────────────────────────────────
+  // En fin de vue, jamais mélangés aux références : ils n'appellent pas la même
+  // action. On ne commande pas ces lignes, on les associe.
+  if (orphelins.length) {
+    const section = el('div', { cls: 'bes-section' });
+    section.appendChild(el('div', { cls: 'bes-section-head' },
+      el('span', { cls: 'bes-section-title' }, 'Besoins non associés'),
+      el('span', { cls: 'bes-section-count' },
+        `${orphelins.length} valeur${orphelins.length > 1 ? 's' : ''} de fiche technique sans référence MySifa`),
+    ));
+
+    const table = el('table', { cls: 'bes-table' });
+    table.appendChild(el('thead', {}, el('tr', {},
+      el('th', {}, 'Valeur fiche technique'),
+      el('th', {}, 'Catégorie'),
+      el('th', { cls: 'num' }, 'Besoin 7j'),
+      el('th', { cls: 'num' }, 'Besoin 15j'),
+      el('th', { cls: 'num' }, 'Total'),
+      el('th', { cls: 'num' }, 'Dossiers'),
+      el('th', {}, ''),
+    )));
+
+    const tbody = el('tbody', {});
+    orphelins.forEach(o => {
+      tbody.appendChild(el('tr', { cls: 'bes-row-warn' },
+        el('td', {},
+          el('span', { cls: 'bes-src-value' }, o.source_value || '—'),
+          o.nb_dossiers_incalculables
+            ? el('div', { cls: 'bes-warn-note' },
+                `${o.nb_dossiers_incalculables} dossier${o.nb_dossiers_incalculables > 1 ? 's' : ''} non chiffré${o.nb_dossiers_incalculables > 1 ? 's' : ''}`)
+            : null,
+        ),
+        el('td', {}, el('span', { cls: 'bes-mat-cat' }, BESOINS_KIND_LABELS[o.kind] || o.kind)),
+        _besQteCell(o.besoin_7j, o.unite),
+        _besQteCell(o.besoin_15j, o.unite),
+        el('td', { cls: 'num', style: { fontWeight: '700' } }, _fmtQte(o.besoin_total, o.unite)),
+        el('td', { cls: 'num', style: { color: 'var(--muted)' } }, String(o.nb_dossiers || 0)),
+        el('td', { style: { textAlign: 'right' } },
+          el('button', {
+            cls: 'bes-btn-associate',
+            on: { click: () => openBesoinAssocierModal(o.kind, o.source_value) },
+          }, 'Associer'),
+        ),
+      ));
+    });
+    table.appendChild(tbody);
+    section.appendChild(el('div', { cls: 'bes-card' }, table));
+    container.appendChild(section);
+  }
+
+  return container;
 }
 
 function _buildBesoinsEcheanceTable(ech) {

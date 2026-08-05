@@ -886,13 +886,105 @@ def besoins_par_echeance(request: Request):
         -(x.get("manque_7j") or 0),
         -x["besoin_7j"],
     ))
+    groupe = _regrouper_par_matiere(lignes)
     return {
         "lignes": lignes,
         "count": len(lignes),
+        # Vue « par matière » : même calcul, regroupé sur la référence MySifa.
+        # Servi par le même endpoint pour que les trois vues montrent toujours
+        # les mêmes chiffres, à la même seconde.
+        "matieres": groupe["matieres"],
+        "non_associees": groupe["non_associees"],
         "today": today.isoformat(),
         "borne_7j": borne_7.isoformat(),
         "borne_15j": borne_15.isoformat(),
     }
+
+
+def _regrouper_par_matiere(lignes: list) -> dict:
+    """Regroupe les lignes de besoin par référence matière MySifa.
+
+    Plusieurs valeurs de fiche technique peuvent pointer vers la même référence
+    (« Couché », « Couché 80 »). C'est au niveau de la référence qu'on commande,
+    donc c'est ce total-là qui compte pour l'appro — la vue par échéance, elle,
+    reste au niveau de la valeur de fiche pour pouvoir corriger un mapping.
+
+    Retourne { matieres: [...], non_associees: [...] }. Les besoins sans matière
+    associée ne sont pas noyés dans le tableau : ils sortent à part, en fin de
+    vue, car ils appellent une action différente (associer, pas commander).
+    """
+    par_mat: dict = {}
+    non_associees: list = []
+
+    for a in lignes:
+        if not a.get("mapped") or not a.get("matiere_id"):
+            non_associees.append({
+                "kind": a["kind"],
+                "source_value": a["source_value"],
+                "unite": a["unite"],
+                "besoin_7j": a["besoin_7j"],
+                "besoin_15j": a["besoin_15j"],
+                "besoin_total": a["besoin_total"],
+                "nb_dossiers": a["nb_dossiers"],
+                "nb_dossiers_incalculables": a["nb_dossiers_incalculables"],
+            })
+            continue
+
+        mid = a["matiere_id"]
+        m = par_mat.get(mid)
+        if m is None:
+            # Le stock est porté par la référence, pas par la valeur de fiche :
+            # on le prend une fois et on ne l'additionne jamais, sinon deux
+            # valeurs mappées sur la même référence le compteraient deux fois.
+            m = par_mat[mid] = {
+                "matiere_id": mid,
+                "matiere_ref": a["matiere_ref"],
+                "matiere_designation": a["matiere_designation"],
+                "matiere_categorie": a.get("matiere_categorie"),
+                "kind": a["kind"],
+                "unite": a["unite"],
+                "besoin_7j": 0.0,
+                "besoin_15j": 0.0,
+                "besoin_total": 0.0,
+                "stock_actuel": a.get("stock_actuel"),
+                "stock_note": a.get("stock_note"),
+                "stock_palettes": a.get("stock_palettes"),
+                "besoin_total_tubes": None,
+                "besoin_total_palettes": None,
+                "nb_dossiers": 0,
+                "nb_dossiers_incalculables": 0,
+                "sources": [],
+            }
+        m["besoin_7j"] += a["besoin_7j"]
+        m["besoin_15j"] += a["besoin_15j"]
+        m["besoin_total"] += a["besoin_total"]
+        m["nb_dossiers"] += a["nb_dossiers"]
+        m["nb_dossiers_incalculables"] += a["nb_dossiers_incalculables"]
+        for cle in ("besoin_total_tubes", "besoin_total_palettes"):
+            v = a.get(cle)
+            if v:
+                m[cle] = (m[cle] or 0.0) + v
+        m["sources"].append({
+            "source_value": a["source_value"],
+            "besoin_total": a["besoin_total"],
+            "nb_dossiers": a["nb_dossiers"],
+        })
+
+    matieres = []
+    for m in par_mat.values():
+        for k in ("besoin_7j", "besoin_15j", "besoin_total",
+                  "besoin_total_tubes", "besoin_total_palettes"):
+            if m[k] is not None:
+                m[k] = round(m[k], 3)
+        m["manque_7j"] = (round(max(0.0, m["besoin_7j"] - m["stock_actuel"]), 3)
+                          if m["stock_actuel"] is not None else None)
+        m["sources"].sort(key=lambda s: -(s["besoin_total"] or 0))
+        matieres.append(m)
+
+    # Ce qui manque d'abord, puis le besoin le plus proche : l'ordre de l'appro.
+    matieres.sort(key=lambda x: (-(x.get("manque_7j") or 0), -x["besoin_7j"]))
+    non_associees.sort(key=lambda x: (-(x["besoin_total"] or 0), -x["nb_dossiers"]))
+    return {"matieres": matieres, "non_associees": non_associees}
 
 
 @router.get("/api/stock/besoins-matieres/mapping")
