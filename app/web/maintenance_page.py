@@ -1743,6 +1743,19 @@ body.light .maint-codes-panel-embed .op-filter:focus {box-shadow:0 0 0 3px rgba(
 .maint-codes-panel-embed .maint-doc-row-del:hover {border-color:var(--danger);background:rgba(248,113,113,.08)}
 .maint-codes-panel-embed .op-form-panel {margin-bottom:16px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--bg)}
 .maint-codes-panel-embed .op-form-panel h3 {margin:0 0 12px;font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+/* v2.7.4 : les champs du formulaire de code etaient en background:var(--bg),
+   exactement la couleur du panneau qui les contient (.op-form-panel, ligne
+   au-dessus). Champs et fond se confondaient : en clair, des cases bleues sur
+   un fond bleu, seule la bordure les distinguait. On les pose sur var(--card),
+   la surface "au-dessus du fond" du theme : blanc en mode clair, gris fonce en
+   mode sombre. Le champ de filtre du tableau, lui, est deja sur une carte
+   blanche : il garde var(--bg), qui l'y detache correctement.
+   Le selecteur est porte par .op-form-panel pour ne toucher QUE ce
+   formulaire, pas les autres champs du panneau des codes. */
+.maint-codes-panel-embed .op-form-panel input,
+.maint-codes-panel-embed .op-form-panel select{background:var(--card)}
+.maint-codes-panel-embed .op-form-panel input:focus,
+.maint-codes-panel-embed .op-form-panel select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 .maint-codes-panel-embed .op-table-wrap {margin-top:4px}
 .maint-codes-panel-embed .op-table {font-size:12px}
 .maint-codes-panel-embed .op-table th {font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:10px 12px;white-space:nowrap}
