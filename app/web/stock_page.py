@@ -2243,7 +2243,11 @@ function fournisseurSuggestions(query) {
 // ── API ─────────────────────────────────────────────────────────
 async function api(p, o) {
   try {
-    const r = await fetch(API + p, { credentials: 'include', ...o });
+    // cache: 'no-store' — MyStock lit des données vivantes. Le serveur envoie
+    // déjà les en-têtes anti-cache, ceci couvre le cas d'un proxy intercalé et
+    // les navigateurs qui gardent une réponse en mémoire pour un même onglet.
+    // `...o` reste après, pour qu'un appel puisse redemander le cache s'il veut.
+    const r = await fetch(API + p, { credentials: 'include', cache: 'no-store', ...o });
     if (r.status === 401) { window.location.href = '/'; return null; }
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
