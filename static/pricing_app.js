@@ -47,6 +47,7 @@
     },
     msDecls: [],
     msProducts: [],
+    expandedProd: {},
     formMsProduct: null,
     msProdPreview: null,
     formMaterial: null,
@@ -2919,28 +2920,92 @@
     }
   }
 
+  const MSP_ROLE_LABEL = {
+    frontal: "Frontal",
+    adhesif: "Adhésif",
+    silicone: "Silicone",
+    glassine: "Glassine",
+  };
+
+  /**
+   * Étiquette courte d'un composant dans la liste.
+   *
+   * « Toutes déclinaisons » n'apprend rien : quand la déclinaison n'a pas de
+   * valeur, on n'affiche que la référence de la matière.
+   */
   function msProductCompLabel(produit, role) {
     const c = (produit.composants || []).find((x) => x.role === role);
     if (!c) return '<span style="color:var(--muted)">—</span>';
-    return escHtml(`${c.reference} · ${c.libelle}`);
+    const val = c.libelle && c.libelle !== "Toutes déclinaisons"
+      ? ` <span class="msp-decl">${escHtml(c.libelle)}</span>`
+      : "";
+    return escHtml(c.reference) + val;
+  }
+
+  /**
+   * Résumé déplié d'un produit : d'où vient chaque euro de son prix de revient.
+   * C'est la fiche produit ramenée à l'essentiel — on veut comprendre sans
+   * quitter la liste.
+   */
+  function msProductDetailHtml(p) {
+    const c = p.cost;
+    if (!c || !c.components || !c.components.length) {
+      return `<div class="ms-detail"><div class="empty" style="padding:16px 22px">
+        Aucun coût calculable : les matières de ce produit n'ont pas encore de prix.
+      </div></div>`;
+    }
+    const lignes = c.components
+      .map((x) => {
+        const prix = parseFloat(x.price_eur_per_m2 || 0);
+        const part = parseFloat(x.share_pct || 0);
+        return `<tr>
+          <td class="msp-role">${escHtml(MSP_ROLE_LABEL[x.role] || x.role)}</td>
+          <td>${escHtml(x.name)}</td>
+          <td class="msp-num">${prix > 0 ? escHtml(fmtEurM2(prix)) : '<span class="muted">sans prix</span>'}</td>
+          <td class="msp-part">
+            <span class="msp-jauge"><i style="width:${Math.max(0, Math.min(100, part))}%"></i></span>
+            <span class="msp-part-val">${escHtml(fmtPct(part))}</span>
+          </td>
+        </tr>`;
+      })
+      .join("");
+    const manquants = c.components.filter((x) => !(parseFloat(x.price_eur_per_m2) > 0)).length;
+    return `<div class="ms-detail">
+      <table class="pr-table ms-table">
+        <thead><tr><th>Rôle</th><th>Matière MyStock</th><th class="msp-num">Coût €/m²</th><th class="msp-part">Part</th></tr></thead>
+        <tbody>${lignes}</tbody>
+      </table>
+      <div class="msp-totaux">
+        <span>Prix de revient <strong>${escHtml(fmtEurM2(c.total_eur_per_m2))}</strong></span>
+        <span>Marge ${escHtml(fmtPct(c.margin_pct))} <strong>${escHtml(fmtEurM2(c.margin_eur_m2))}</strong></span>
+        <span>Prix de vente <strong>${escHtml(fmtEurM2(c.sell_price_eur_m2))}</strong></span>
+        ${manquants ? `<span class="msp-alerte">${manquants} matière(s) sans prix — le coût est sous-évalué</span>` : ""}
+      </div>
+    </div>`;
   }
 
   function renderMsProductsList() {
     const rows = S.msProducts
       .map((p) => {
         const c = p.cost;
+        const open = !!S.expandedProd[p.id];
         const autres = (p.composants || []).filter((x) => x.role === "AUTRE").length;
-        return `<tr data-msp-id="${p.id}">
-          <td><strong>${escHtml(p.code)}</strong></td>
-          <td>${escHtml(p.designation)}</td>
-          <td>${msProductCompLabel(p, "FRONTAL")}</td>
-          <td>${msProductCompLabel(p, "ADHESIF")}</td>
-          <td>${msProductCompLabel(p, "GLASSINE")}</td>
-          <td>${autres || '<span style="color:var(--muted)">—</span>'}</td>
-          <td>${c ? fmtEurM2(c.total_eur_per_m2) : '<span style="color:var(--muted)">—</span>'}</td>
-          <td>${c ? fmtEurM2(c.sell_price_eur_m2) : "—"}</td>
-          <td>${c ? fmtPct(c.margin_pct) : "—"}</td>
-        </tr>`;
+        return `<tr class="ms-row${open ? " open" : ""}" data-msp-row="${p.id}">
+            <td class="ms-caret">${open ? "▾" : "▸"}</td>
+            <td><strong>${escHtml(p.code)}</strong></td>
+            <td>${escHtml(p.designation)}</td>
+            <td>${msProductCompLabel(p, "FRONTAL")}</td>
+            <td>${msProductCompLabel(p, "ADHESIF")}</td>
+            <td>${msProductCompLabel(p, "GLASSINE")}</td>
+            <td>${autres || '<span style="color:var(--muted)">—</span>'}</td>
+            <td class="ms-prix-cell">${c ? fmtEurM2(c.total_eur_per_m2) : '<span style="color:var(--muted)">—</span>'}</td>
+            <td class="ms-prix-cell">${c ? fmtEurM2(c.sell_price_eur_m2) : "—"}</td>
+            <td class="ms-meta">${c ? fmtPct(c.margin_pct) : "—"}</td>
+            <td class="row-actions" onclick="event.stopPropagation()">
+              <button type="button" class="btn btn-soft btn-sm" data-msp-edit="${p.id}">Éditer</button>
+            </td>
+          </tr>
+          ${open ? `<tr class="ms-detail-row"><td colspan="11">${msProductDetailHtml(p)}</td></tr>` : ""}`;
       })
       .join("");
 
@@ -2952,11 +3017,12 @@
           ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-msprod">+ Nouveau produit</button>' : ""}
         </div>
         <div class="ms-hint">Ces produits sont composés de <strong>déclinaisons MyStock</strong> : une laize précise d'un frontal,
-          un grammage précis d'un adhésif. Leur coût suit automatiquement le prix du fournisseur principal de chaque matière.</div>
+          un grammage précis d'un adhésif. Leur coût suit automatiquement le prix du fournisseur principal de chaque matière.
+          Clique sur une ligne pour voir d'où vient son prix de revient.</div>
         <div class="table-wrap">
-          <table class="pr-table">
-            <thead><tr><th>Code</th><th>Désignation</th><th>Frontal</th><th>Adhésif</th><th>Glassine</th><th>Autres</th><th>Coût</th><th>Vente</th><th>Marge</th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="9" class="empty">Aucun produit MyStock. Crée le premier avec le bouton ci-dessus.</td></tr>'}</tbody>
+          <table class="pr-table msp-table">
+            <thead><tr><th style="width:28px"></th><th>Code</th><th>Désignation</th><th>Frontal</th><th>Adhésif</th><th>Glassine</th><th>Autres</th><th>Coût</th><th>Vente</th><th>Marge</th><th></th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="11" class="empty">Aucun produit MyStock. Crée le premier avec le bouton ci-dessus.</td></tr>'}</tbody>
           </table>
         </div>
       </div>
@@ -2981,8 +3047,18 @@
         navigate("/pricing/mystock/produit/new");
       };
     }
-    document.querySelectorAll("tr[data-msp-id]").forEach((tr) => {
-      tr.onclick = () => navigate("/pricing/mystock/produit/" + tr.getAttribute("data-msp-id"));
+    // La ligne déplie le détail ; l'édition passe par son bouton. Comme dans
+    // la liste des matières MyStock, pour ne pas avoir deux gestes différents
+    // d'un onglet à l'autre.
+    document.querySelectorAll("tr[data-msp-row]").forEach((tr) => {
+      tr.onclick = () => {
+        const id = tr.getAttribute("data-msp-row");
+        S.expandedProd[id] = !S.expandedProd[id];
+        renderMsProductsList();
+      };
+    });
+    document.querySelectorAll("[data-msp-edit]").forEach((b) => {
+      b.onclick = () => navigate("/pricing/mystock/produit/" + b.getAttribute("data-msp-edit"));
     });
   }
 

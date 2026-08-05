@@ -288,7 +288,13 @@ def declinaison_to_pricing_material(param: dict) -> PricingMaterial:
     """
     return PricingMaterial(
         id=int(param["declinaison_id"]),
-        name=f'{param["reference"]} — {param["libelle"]}',
+        # « Toutes déclinaisons » n'apprend rien : sur une matière qui ne se
+        # décline pas, le nom se limite à sa référence.
+        name=(
+            f'{param["reference"]} — {param["libelle"]}'
+            if param.get("libelle") and param["libelle"] != "Toutes déclinaisons"
+            else str(param["reference"])
+        ),
         unit_price=_dec(param.get("unit_price")),
         weight_per_m2=_dec(param.get("weight_per_m2")),
         price_currency=param.get("price_currency") or "EUR",
