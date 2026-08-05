@@ -417,6 +417,15 @@ body.reduce-anim .cal-skel{animation:none}
 .cal-week-view.cal-wv-mode-day .cal-wv-allday-cell .cal-wv-nonpl-chip-time{font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:var(--text2);white-space:nowrap;flex-shrink:0}
 .cal-week-view.cal-wv-mode-day .cal-wv-allday-cell .cal-wv-nonpl-chip-status{width:18px;height:18px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;background:var(--bg);border:1.5px solid var(--border)}
 .cal-week-view.cal-wv-mode-day .cal-wv-allday-cell .cal-wv-nonpl-chip[data-statut="termine"] .cal-wv-nonpl-chip-status{background:var(--ok,#34d399);border-color:var(--ok,#34d399);color:#fff}
+/* v2.7.3 fix : les regles mode-jour ci-dessus pesent 4 classes, alors que la
+   regle de masquage `.cal-wv-allday:not(.is-open) .cal-wv-nonpl-chip` n'en pese
+   que 3 (:not() ne compte que son argument). En vue Jour, replier la bande ne
+   masquait donc rien : le chevron tournait, la pastille de comptage
+   apparaissait, mais les puces restaient affichees — etat visuellement
+   contradictoire. On repose le masquage et la geometrie repliee au meme niveau
+   de specificite que le mode jour, apres lui. */
+.cal-week-view.cal-wv-mode-day .cal-wv-allday:not(.is-open) .cal-wv-allday-cell .cal-wv-nonpl-chip{display:none}
+.cal-week-view.cal-wv-mode-day .cal-wv-allday:not(.is-open) .cal-wv-allday-cell{max-height:none;overflow:visible;padding:4px;gap:3px}
 .cal-wv-hour-row{height:62px;border-top:1px solid var(--border);transition:background .12s}
 .cal-wv-hour-row:first-child{border-top:none}
 .cal-wv-day-col.drag-over{background:var(--accent-bg);outline:2px dashed var(--accent);outline-offset:-2px;z-index:1}
