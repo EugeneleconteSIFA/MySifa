@@ -1400,6 +1400,7 @@ def get_mystock_parametrage(request: Request, declinaison_id: int):
         if not param:
             raise HTTPException(status_code=404, detail="Déclinaison introuvable.")
         param["computed"] = _cout_declinaison(conn, param)
+        param["historique"] = mystock_prix.historique_prix(conn, declinaison_id)
     return param
 
 
@@ -1419,6 +1420,7 @@ def patch_mystock_parametrage(request: Request, declinaison_id: int, body: dict 
         conn.commit()
         param = res["parametrage"]
         param["computed"] = _cout_declinaison(conn, param)
+        param["historique"] = mystock_prix.historique_prix(conn, declinaison_id)
     return param
 
 

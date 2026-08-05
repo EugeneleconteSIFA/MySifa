@@ -685,6 +685,29 @@ disparaître. L'appairage d'une déclinaison à une fiche n'est plus proposé da
 l'interface ; la colonne `mc_material_id` et `mystock_price_for_row` restent le
 temps que les fiches historiques finissent de vivre.
 
+### Ce qui circule entre MyStock et Coûts matières : le sous-total d'achat
+
+Coûts matières saisit un **prix d'achat** fournisseur. La valorisation MyStock
+affiche ce que la matière coûte **rendue** : le **sous-total d'achat**, soit
+`prix + transport + taxes`, dans la devise et la base d'achat.
+
+C'est cette valeur-là qui circule entre les deux écrans, pas le prix nu — sinon
+les deux applications montrent deux chiffres pour la même matière.
+`sous_total_achat()` et `prix_depuis_sous_total()` sont l'inverse exacte l'une de
+l'autre (test d'aller-retour sur cinq configurations). La seconde renvoie `None`
+quand la décomposition n'a pas de solution positive — un sous-total inférieur au
+seul transport : on refuse plutôt que d'écrire un prix d'achat négatif.
+
+Changer transport ou taxes déplace le sous-total **sans toucher au prix d'achat** :
+`set_parametrage` pousse alors le nouveau sous-total vers la valorisation.
+
+**Historique** — `mp_prix_historique`, au niveau de la déclinaison, avec la date,
+**l'écran d'origine**, l'auteur, le fournisseur, prix avant/après ET sous-total
+avant/après. Les deux valeurs, parce qu'un changement de paramétrage fait bouger
+la seconde seule. Affiché en bas de la fiche `/pricing/mystock/<id>`.
+`mp_valorisation_historique` reste en place : elle trace au niveau de la matière,
+pour les écrans MyStock.
+
 **Les deux sens du prix sont branchés** :
 
 - Coûts matières → MyStock : `_mirror_principal` recopie le prix principal dans les
