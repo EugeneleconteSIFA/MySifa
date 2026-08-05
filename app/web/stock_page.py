@@ -12086,7 +12086,7 @@ const BESOINS_KIND_UNITE_NOTE = {
   adhesif: 'Besoin exprimé en kilos — grammage × métrage × laize.',
   mandrin: 'Besoin exprimé en mandrins — un par bobine produite. '
     + 'La traduction en tubes puis en palettes à commander s’affiche sous le total.',
-  carton: 'Besoin exprimé en unités.',
+  carton: 'Besoin exprimé en cartons. Le stock est tenu en palettes : il est converti via « Cartons par palette » de la fiche matière.',
   palette: 'Besoin exprimé en unités.',
 };
 
@@ -12268,7 +12268,7 @@ function _buildBesoinsMatiereTable(ech) {
             : null),
         el('td', { cls: 'num', style: { color: 'var(--muted)' }, title: m.stock_note || '' },
           m.stock_actuel != null ? _fmtQte(m.stock_actuel, m.unite) : '—',
-          (m.kind === 'mandrin' && m.stock_palettes != null)
+          (m.stock_palettes != null)
             ? el('div', { cls: 'bes-sub-conv' }, _fmtQte(m.stock_palettes, 'pal.'))
             : null),
         (m.manque_7j != null && m.manque_7j > 0)
@@ -12411,10 +12411,10 @@ function _buildBesoinsKindSection(kind, lignes) {
       style: { color: 'var(--muted)' },
       title: l.stock_note || '',
     }, l.stock_actuel != null ? _fmtQte(l.stock_actuel, l.unite) : '—',
-      // Mandrins : le stock se tient en palettes de tubes, le besoin en mandrins.
+      // Mandrins et cartons se stockent à la palette et se consomment à l'unité.
       // On affiche sous la conversion la quantité réellement en magasin, sinon
       // l'opérateur ne peut pas rapprocher l'écran de ce qu'il a devant lui.
-      (l.kind === 'mandrin' && l.stock_palettes != null)
+      (l.stock_palettes != null)
         ? el('div', { cls: 'bes-sub-conv' }, _fmtQte(l.stock_palettes, 'pal.'))
         : null);
 

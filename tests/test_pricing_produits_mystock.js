@@ -170,5 +170,31 @@ check('la jauge est bornée à 100 %',
 check('la ligne déplie, le bouton édite',
   src.includes('data-msp-row') && src.includes('data-msp-edit'), true);
 
+// ─── Actions de la liste ────────────────────────────────────────────────────
+check('modifier et dupliquer sont des icônes',
+  src.includes('actionBtn("data-msp-edit"') && src.includes('actionBtn("data-msp-dup"'), true);
+// Les autres listes gardent leur bouton texte : on ne regarde que celle-ci.
+const listeMs = src.slice(src.indexOf('function renderMsProductsList('),
+                          src.indexOf('function saveMsProductForm('));
+check('plus de bouton texte dans cette liste', listeMs.includes('>Éditer</button>'), false);
+check('la duplication ouvre le formulaire de création',
+  src.includes('navigate("/pricing/mystock/produit/new")'), true);
+check('le formulaire pré-rempli survit au chargement',
+  src.includes('if (!S.formMsProduct) S.formMsProduct = defaultMsProductForm();'), true);
+const dup = src.slice(src.indexOf('data-msp-dup]'), src.indexOf('data-msp-mat]'));
+for (const champ of ['code:', 'designation:', 'roles', 'autres', 'custom_margin_pct:']) {
+  check('la copie reprend : ' + champ, dup.includes(champ), true);
+}
+check('le code copié est signalé', dup.includes('"-copie"'), true);
+
+// ─── Aucun survol coloré dans la zone dépliée ───────────────────────────────
+const css = fs.readFileSync('static/pricing_app.css', 'utf8');
+// La cellule qui CONTIENT le détail doit être couverte, sinon la règle
+// générique `table.pr-table tr:hover td` la teinte au passage de la souris.
+check('la cellule conteneur est protégée',
+  css.includes('table.pr-table tr.msp-detail-row:hover td'), true);
+check('les lignes du détail aussi',
+  css.includes('tr.msp-detail-row table.msp-detail tr:hover td'), true);
+
 console.log(ko === 0 ? '\nTOUT EST VERT' : '\n' + ko + ' ECHEC(S)');
 process.exit(ko === 0 ? 0 : 1);

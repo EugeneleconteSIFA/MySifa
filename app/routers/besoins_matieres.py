@@ -872,6 +872,21 @@ def besoins_par_echeance(request: Request):
                 else:
                     stock_note = ("Longueur tube ou laize module manquante — "
                                   "stock non convertible en mandrins")
+            elif a["kind"] == "carton":
+                # Un carton se stocke à la palette mais se consomme à l'unité :
+                # sans la conversion, une palette de 672 cartons s'affichait
+                # « 1 u » en face d'un besoin de 672, et tout ressortait en manque.
+                palettes_stock = stock_map.get(mid, 0.0) + stock_bobines.get(mid, 0.0)
+                mp_cart = mapping.get((a["kind"], (a["source_value"] or "").strip().lower())) or {}
+                cpp = _f(mp_cart.get("unites_par_palette"))
+                a["stock_palettes"] = round(palettes_stock, 3)
+                if cpp:
+                    stock = round(palettes_stock * cpp, 3)
+                    stock_note = (f"{_n(palettes_stock)} palettes × {_n(cpp)} cartons/palette "
+                                  f"= {_n(stock)} cartons")
+                else:
+                    stock_note = ("Cartons par palette non renseigné sur la matière — "
+                                  "stock non convertible en cartons")
             else:
                 stock = round(stock_map.get(mid, 0.0) + stock_bobines.get(mid, 0.0), 3)
         a["stock_actuel"] = stock
@@ -1281,6 +1296,10 @@ _EXPLICATIONS = {
                 "foi : elle décrit la commande réelle, pas une reconstitution.",
                 "Sinon, le nombre de bobines est celui calculé pour les mandrins. S'il "
                 "n'est pas calculable, le besoin en cartons ne l'est pas non plus.",
+                "Le stock, lui, est tenu en palettes : il est converti en cartons via "
+                "« Cartons par palette » de la fiche matière. Sans ce champ, le stock "
+                "reste affiché comme non comparable plutôt que confondu avec un "
+                "nombre de palettes.",
             ],
             "variables": [
                 {"label": "Valeur source", "champ": "fiches_techniques.cartons"},
@@ -1289,6 +1308,8 @@ _EXPLICATIONS = {
                 {"label": "Nb de bobines", "champ": "voir « Mandrins »", "unite": "bobines"},
                 {"label": "Bobines par carton", "champ": "fiches_techniques.nb_bobines_carton",
                  "unite": ""},
+                {"label": "Cartons par palette", "champ": "matieres_premieres.unites_par_palette",
+                 "unite": "", "detail": "conversion du stock, tenu en palettes"},
             ],
         },
         {
