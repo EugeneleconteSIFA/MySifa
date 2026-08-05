@@ -779,7 +779,26 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-act-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;margin-left:6px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;font-weight:600;font-family:inherit;border-radius:6px;cursor:pointer;transition:all .12s}
 .bes-act-btn:hover{border-color:var(--accent);color:var(--accent)}
 .bes-act-btn.off{opacity:.35;cursor:not-allowed}
+.bes-act-btn.manque{border-color:var(--warn,#d97706);color:var(--warn,#d97706);background:color-mix(in srgb,var(--warn,#d97706) 8%,transparent)}
+.bes-act-btn.manque:hover{background:color-mix(in srgb,var(--warn,#d97706) 18%,transparent)}
+/* Modale de rattachement des documents d'un dossier non chiffre */
+.bes-doc-tabs{display:flex;gap:6px;margin:14px 0 10px}
+.bes-doc-tab{flex:1;padding:8px 12px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:13px;font-weight:600;font-family:inherit;border-radius:8px;cursor:pointer}
+.bes-doc-tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.bes-doc-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;transition:border-color .12s,background .12s}
+.bes-doc-item:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.bes-doc-item-main{flex:1;min-width:0}
+.bes-doc-item-ref{font-weight:700;color:var(--text);font-size:13px}
+.bes-doc-item-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.bes-doc-list{max-height:300px;overflow-y:auto;margin-top:8px}
+.bes-doc-import{margin-top:12px;padding:12px;border:1px dashed var(--border);border-radius:8px}
+.bes-doc-import-hd{font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px}
+.bes-doc-status{font-size:12px;margin-top:8px;line-height:1.5}
 .bes-act-btn.off:hover{border-color:var(--border);color:var(--text2)}
+/* Vue par matiere : sources de fiche technique agregees sous la reference */
+.bes-mat-sources{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.45}
+.bes-mat-sources b{font-weight:600;color:var(--text2)}
+.bes-mat-cat{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--text2)}
 .bes-dossier-meta{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4}
 .bes-statut{display:inline-flex;align-items:center;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
 .bes-statut-en_cours{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
@@ -2224,7 +2243,11 @@ function fournisseurSuggestions(query) {
 // ── API ─────────────────────────────────────────────────────────
 async function api(p, o) {
   try {
-    const r = await fetch(API + p, { credentials: 'include', ...o });
+    // cache: 'no-store' — MyStock lit des données vivantes. Le serveur envoie
+    // déjà les en-têtes anti-cache, ceci couvre le cas d'un proxy intercalé et
+    // les navigateurs qui gardent une réponse en mémoire pour un même onglet.
+    // `...o` reste après, pour qu'un appel puisse redemander le cache s'il veut.
+    const r = await fetch(API + p, { credentials: 'include', cache: 'no-store', ...o });
     if (r.status === 401) { window.location.href = '/'; return null; }
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
@@ -12082,7 +12105,7 @@ const BESOINS_KIND_UNITE_NOTE = {
   adhesif: 'Besoin exprimé en kilos — grammage × métrage × laize.',
   mandrin: 'Besoin exprimé en mandrins — un par bobine produite. '
     + 'La traduction en tubes puis en palettes à commander s’affiche sous le total.',
-  carton: 'Besoin exprimé en unités.',
+  carton: 'Besoin exprimé en cartons. Le stock est tenu en palettes : il est converti via « Cartons par palette » de la fiche matière.',
   palette: 'Besoin exprimé en unités.',
 };
 
@@ -12168,6 +12191,10 @@ function buildBesoinsMatieres() {
         on: { click: () => { S.besoinsView = 'echeance'; renderContent(); } }
       }, 'Par échéance'),
       el('button', {
+        cls: 'bes-seg-btn' + (view === 'matiere' ? ' active' : ''),
+        on: { click: () => { S.besoinsView = 'matiere'; renderContent(); } }
+      }, 'Par matière'),
+      el('button', {
         cls: 'bes-seg-btn' + (view === 'dossier' ? ' active' : ''),
         on: { click: () => { S.besoinsView = 'dossier'; renderContent(); } }
       }, 'Par dossier'),
@@ -12183,10 +12210,149 @@ function buildBesoinsMatieres() {
 
   if (view === 'echeance') {
     wrap.appendChild(_buildBesoinsEcheanceTable(ech));
+  } else if (view === 'matiere') {
+    wrap.appendChild(_buildBesoinsMatiereTable(ech));
   } else {
     wrap.appendChild(_buildBesoinsDossierTable(dos));
   }
   return wrap;
+}
+
+// ── Vue « par matière » ───────────────────────────────────────────────────
+// La vue par échéance raisonne en valeurs de fiche technique, parce qu'on y
+// corrige les associations. Ici on raisonne en références MySifa : c'est
+// l'unité de la commande fournisseur, et deux valeurs de fiche mappées sur la
+// même référence doivent s'additionner avant qu'on décide d'acheter.
+function _buildBesoinsMatiereTable(ech) {
+  const matieres = ech.matieres || [];
+  const orphelins = ech.non_associees || [];
+  if (!matieres.length && !orphelins.length) {
+    return el('div', { cls: 'bes-empty' },
+      'Aucun besoin matière détecté pour les dossiers en cours ou en attente.');
+  }
+
+  const container = el('div', {});
+
+  if (matieres.length) {
+    const section = el('div', { cls: 'bes-section' });
+    section.appendChild(el('div', { cls: 'bes-section-head' },
+      el('span', { cls: 'bes-section-title' }, 'Références MySifa'),
+      el('span', { cls: 'bes-section-count' },
+        `${matieres.length} référence${matieres.length > 1 ? 's' : ''} à approvisionner`),
+    ));
+
+    const table = el('table', { cls: 'bes-table' });
+    table.appendChild(el('thead', {}, el('tr', {},
+      el('th', {}, 'Référence'),
+      el('th', {}, 'Catégorie'),
+      el('th', { cls: 'num' }, 'Besoin 7j'),
+      el('th', { cls: 'num' }, 'Besoin 15j'),
+      el('th', { cls: 'num' }, 'Total'),
+      el('th', { cls: 'num' }, 'Stock'),
+      el('th', { cls: 'num' }, 'Manque 7j'),
+      el('th', { cls: 'num' }, 'Dossiers'),
+    )));
+
+    const tbody = el('tbody', {});
+    matieres.forEach(m => {
+      const rowCls = (m.manque_7j != null && m.manque_7j > 0) ? 'bes-row-danger' : '';
+      // Les valeurs de fiche technique qui alimentent cette référence : c'est
+      // la seule façon de comprendre d'où sort un total agrégé.
+      const srcTxt = (m.sources || [])
+        .map(s => s.source_value + (s.besoin_total ? ' (' + _fmtQte(s.besoin_total, m.unite) + ')' : ''))
+        .join(' · ');
+
+      tbody.appendChild(el('tr', { cls: rowCls },
+        el('td', { cls: 'bes-mp-cell' },
+          el('div', { cls: 'bes-mp-ref' }, _besMpLink(m.matiere_id, m.matiere_ref || '—')),
+          m.matiere_designation ? el('div', { cls: 'bes-mp-des' }, m.matiere_designation) : null,
+          srcTxt ? el('div', { cls: 'bes-mat-sources' },
+            el('b', {}, (m.sources.length > 1 ? m.sources.length + ' valeurs de fiche : ' : 'Fiche : ')),
+            srcTxt) : null,
+          m.nb_dossiers_incalculables
+            ? el('div', { cls: 'bes-warn-note' },
+                `${m.nb_dossiers_incalculables} dossier${m.nb_dossiers_incalculables > 1 ? 's' : ''} non chiffré${m.nb_dossiers_incalculables > 1 ? 's' : ''}, hors total`)
+            : null,
+        ),
+        el('td', {}, el('span', { cls: 'bes-mat-cat' },
+          BESOINS_KIND_LABELS[m.kind] || m.matiere_categorie || m.kind)),
+        _besQteCell(m.besoin_7j, m.unite),
+        _besQteCell(m.besoin_15j, m.unite),
+        el('td', { cls: 'num', style: { fontWeight: '700' } },
+          _fmtQte(m.besoin_total, m.unite),
+          (m.kind === 'mandrin' && m.besoin_total_tubes)
+            ? el('div', { cls: 'bes-sub-conv' },
+                Math.ceil(m.besoin_total_tubes) + ' tubes'
+                + (m.besoin_total_palettes ? ' · ' + _fmtQte(m.besoin_total_palettes, 'pal.') : ''))
+            : null),
+        el('td', { cls: 'num', style: { color: 'var(--muted)' }, title: m.stock_note || '' },
+          m.stock_actuel != null ? _fmtQte(m.stock_actuel, m.unite) : '—',
+          (m.stock_palettes != null)
+            ? el('div', { cls: 'bes-sub-conv' }, _fmtQte(m.stock_palettes, 'pal.'))
+            : null),
+        (m.manque_7j != null && m.manque_7j > 0)
+          ? el('td', { cls: 'num' }, el('span', { cls: 'bes-manque' }, _fmtQte(m.manque_7j, m.unite)))
+          : el('td', { cls: 'num' }, el('span', { cls: 'bes-manque-zero' },
+              m.manque_7j != null ? '0' : '—')),
+        el('td', { cls: 'num', style: { color: 'var(--muted)' } }, String(m.nb_dossiers || 0)),
+      ));
+    });
+    table.appendChild(tbody);
+    section.appendChild(el('div', { cls: 'bes-card' }, table));
+    container.appendChild(section);
+  }
+
+  // ── Besoins sans référence associée ─────────────────────────────────────
+  // En fin de vue, jamais mélangés aux références : ils n'appellent pas la même
+  // action. On ne commande pas ces lignes, on les associe.
+  if (orphelins.length) {
+    const section = el('div', { cls: 'bes-section' });
+    section.appendChild(el('div', { cls: 'bes-section-head' },
+      el('span', { cls: 'bes-section-title' }, 'Besoins non associés'),
+      el('span', { cls: 'bes-section-count' },
+        `${orphelins.length} valeur${orphelins.length > 1 ? 's' : ''} de fiche technique sans référence MySifa`),
+    ));
+
+    const table = el('table', { cls: 'bes-table' });
+    table.appendChild(el('thead', {}, el('tr', {},
+      el('th', {}, 'Valeur fiche technique'),
+      el('th', {}, 'Catégorie'),
+      el('th', { cls: 'num' }, 'Besoin 7j'),
+      el('th', { cls: 'num' }, 'Besoin 15j'),
+      el('th', { cls: 'num' }, 'Total'),
+      el('th', { cls: 'num' }, 'Dossiers'),
+      el('th', {}, ''),
+    )));
+
+    const tbody = el('tbody', {});
+    orphelins.forEach(o => {
+      tbody.appendChild(el('tr', { cls: 'bes-row-warn' },
+        el('td', {},
+          el('span', { cls: 'bes-src-value' }, o.source_value || '—'),
+          o.nb_dossiers_incalculables
+            ? el('div', { cls: 'bes-warn-note' },
+                `${o.nb_dossiers_incalculables} dossier${o.nb_dossiers_incalculables > 1 ? 's' : ''} non chiffré${o.nb_dossiers_incalculables > 1 ? 's' : ''}`)
+            : null,
+        ),
+        el('td', {}, el('span', { cls: 'bes-mat-cat' }, BESOINS_KIND_LABELS[o.kind] || o.kind)),
+        _besQteCell(o.besoin_7j, o.unite),
+        _besQteCell(o.besoin_15j, o.unite),
+        el('td', { cls: 'num', style: { fontWeight: '700' } }, _fmtQte(o.besoin_total, o.unite)),
+        el('td', { cls: 'num', style: { color: 'var(--muted)' } }, String(o.nb_dossiers || 0)),
+        el('td', { style: { textAlign: 'right' } },
+          el('button', {
+            cls: 'bes-btn-associate',
+            on: { click: () => openBesoinAssocierModal(o.kind, o.source_value) },
+          }, 'Associer'),
+        ),
+      ));
+    });
+    table.appendChild(tbody);
+    section.appendChild(el('div', { cls: 'bes-card' }, table));
+    container.appendChild(section);
+  }
+
+  return container;
 }
 
 function _buildBesoinsEcheanceTable(ech) {
@@ -12264,10 +12430,10 @@ function _buildBesoinsKindSection(kind, lignes) {
       style: { color: 'var(--muted)' },
       title: l.stock_note || '',
     }, l.stock_actuel != null ? _fmtQte(l.stock_actuel, l.unite) : '—',
-      // Mandrins : le stock se tient en palettes de tubes, le besoin en mandrins.
+      // Mandrins et cartons se stockent à la palette et se consomment à l'unité.
       // On affiche sous la conversion la quantité réellement en magasin, sinon
       // l'opérateur ne peut pas rapprocher l'écran de ce qu'il a devant lui.
-      (l.kind === 'mandrin' && l.stock_palettes != null)
+      (l.stock_palettes != null)
         ? el('div', { cls: 'bes-sub-conv' }, _fmtQte(l.stock_palettes, 'pal.'))
         : null);
 
@@ -12418,6 +12584,36 @@ function _besDocBtn(label, ico, url, titre) {
   return b;
 }
 
+// Bouton d'un document manquant. Il n'est pas grisé : c'est une action, pas
+// une absence subie — c'est depuis cette ligne qu'on répare le dossier.
+function _besDocManquantBtn(label, ico, dossier, onglet) {
+  if (!isMatieresAdmin() || S.stockReadOnly) {
+    return _besDocBtn(label, ico, null, 'Ouvrir ' + label);
+  }
+  const b = el('button', {
+    cls: 'bes-act-btn manque',
+    type: 'button',
+    title: 'Aucun ' + label + ' rattaché à ce dossier — cliquer pour en rattacher un',
+  }, iconEl('plus-circle', 13), el('span', {}, label));
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openBesoinDocModal(dossier, onglet);
+  });
+  return b;
+}
+
+function _besDocCell(d) {
+  return el('td', { cls: 'bes-act-cell' },
+    d.of_import_id
+      ? _besDocBtn('OF', 'file-text', '/api/of/' + d.of_import_id + '/pdf-preview', 'Ouvrir l\'OF')
+      : _besDocManquantBtn('OF', 'file-text', d, 'of'),
+    d.ft_id
+      ? _besDocBtn('Fiche', 'clipboard', '/api/fiches-techniques/' + d.ft_id + '/pdf-preview',
+          'Ouvrir la fiche technique')
+      : _besDocManquantBtn('Fiche', 'clipboard', d, 'fiche'),
+  );
+}
+
 function _buildBesoinsDossierTable(dos) {
   const dossiers = dos.dossiers || [];
   if (!dossiers.length) {
@@ -12459,18 +12655,13 @@ function _buildBesoinsDossierTable(dos) {
         (d.numero_of || d.ref_produit) ? el('div', { cls: 'bes-dossier-meta' },
           [d.numero_of ? 'OF ' + d.numero_of : null, d.ref_produit].filter(Boolean).join(' · ')) : null,
         sansBesoin ? el('div', { cls: 'bes-warn-note' },
-          'Fiche technique manquante ou incomplète') : null,
+          (!d.of_import_id && !d.ft_id) ? 'Ni OF ni fiche technique rattachés'
+            : (!d.ft_id ? 'Fiche technique non rapprochée'
+                        : 'Fiche technique incomplète')) : null,
       ),
       el('td', {}, _fmtDate(d.date_livraison || d.planned_end)),
       ...BESOINS_KIND_ORDER.map(k => _besKindCell(parKind[k])),
-      el('td', { cls: 'bes-act-cell' },
-        _besDocBtn('OF', 'file-text',
-          d.of_import_id ? '/api/of/' + d.of_import_id + '/pdf-preview' : null,
-          'Ouvrir l\'OF'),
-        _besDocBtn('Fiche', 'clipboard',
-          d.ft_id ? '/api/fiches-techniques/' + d.ft_id + '/pdf-preview' : null,
-          'Ouvrir la fiche technique'),
-      ),
+      _besDocCell(d),
     ));
   });
 
@@ -12488,6 +12679,171 @@ function _buildBesoinsDossierTable(dos) {
 
   table.appendChild(tbody);
   return el('div', { cls: 'bes-card bes-scroll-x' }, table);
+}
+
+// ── Rattacher les documents d'un dossier non chiffré ──────────────────────
+// Deux causes possibles à un « n.c. » : pas d'OF, ou pas de fiche technique
+// rapprochée. Les deux se réparent ici, et l'écriture va dans les tables de
+// référence — le dossier redevient complet dans MyProd et sur le planning, pas
+// seulement dans cet écran.
+async function openBesoinDocModal(dossier, ongletInitial) {
+  closeMroot();
+  const planningId = dossier.id;
+  let onglet = ongletInitial === 'fiche' ? 'fiche' : 'of';
+  let data = null;
+
+  const overlay = el('div', { cls: 'modal-overlay', on: { click: e => { if (e.target === overlay) closeMroot(); } } });
+  const listWrap = el('div', { cls: 'bes-doc-list' });
+  const statut = el('div', { cls: 'bes-doc-status' });
+  const search = el('input', { cls: 'bes-search-input', placeholder: 'Rechercher…' });
+
+  const tabOf = el('button', { cls: 'bes-doc-tab', type: 'button' }, 'Ordre de fabrication');
+  const tabFt = el('button', { cls: 'bes-doc-tab', type: 'button' }, 'Fiche technique');
+
+  // ── Import d'un OF externe (PDF) ───────────────────────────────────────
+  // On réutilise le moteur d'import de MyProd : /api/of/parse lit le PDF,
+  // /api/of/validate crée l'OF. Le rattachement explicite qui suit couvre le
+  // cas où le numéro d'OF du PDF ne correspond pas au libellé du dossier.
+  const fileInp = el('input', { type: 'file', attrs: { accept: '.pdf' }, style: { display: 'none' } });
+  const importBtn = el('button', { cls: 'btn btn-sec btn-sm', type: 'button' },
+    iconEl('upload', 13), el('span', {}, ' Importer un PDF'));
+  const importWrap = el('div', { cls: 'bes-doc-import' },
+    el('div', { cls: 'bes-doc-import-hd' }, 'L\'OF n\'est pas encore dans MySifa ?'),
+    el('div', { style: { fontSize: '12px', color: 'var(--muted)', marginBottom: '8px' } },
+      'Dépose le PDF : il est lu, enregistré comme OF, puis rattaché à ce dossier.'),
+    importBtn, fileInp,
+  );
+
+  function setStatut(txt, couleur) {
+    statut.textContent = txt || '';
+    statut.style.color = couleur || 'var(--muted)';
+  }
+
+  async function charger(q) {
+    setStatut('Chargement…');
+    try {
+      data = await api('/api/stock/besoins-matieres/dossier/' + planningId
+        + '/documents' + (q ? '?q=' + encodeURIComponent(q) : ''));
+      setStatut('');
+    } catch (e) {
+      setStatut('Erreur : ' + (e.message || 'chargement impossible'), 'var(--danger)');
+      data = null;
+    }
+    rendre();
+  }
+
+  async function rattacher(url, corps, libelle) {
+    setStatut('Rattachement…');
+    try {
+      await api(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(corps),
+      });
+      closeMroot();
+      showToast(libelle + ' rattaché — le dossier est mis à jour partout dans MySifa.', 'success');
+      await loadBesoinsMatieres();
+    } catch (e) {
+      setStatut('Erreur : ' + (e.message || 'rattachement impossible'), 'var(--danger)');
+    }
+  }
+
+  function rendre() {
+    tabOf.classList.toggle('active', onglet === 'of');
+    tabFt.classList.toggle('active', onglet === 'fiche');
+    importWrap.style.display = onglet === 'of' ? '' : 'none';
+    search.placeholder = onglet === 'of'
+      ? 'Rechercher un OF (n°, référence, machine)…'
+      : 'Rechercher une fiche (référence, désignation, client)…';
+
+    listWrap.innerHTML = '';
+    const items = !data ? [] : (onglet === 'of' ? (data.ofs || []) : (data.fiches || []));
+    if (!items.length) {
+      listWrap.appendChild(el('div', {
+        style: { padding: '16px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' },
+      }, data ? 'Aucun document trouvé — essaie une recherche.' : '—'));
+      return;
+    }
+    items.forEach(it => {
+      const ref = onglet === 'of' ? (it.of_numero || '—') : (it.reference || '—');
+      const meta = onglet === 'of'
+        ? [it.reference, it.machine,
+           it.qte_etiquettes ? Number(it.qte_etiquettes).toLocaleString('fr-FR') + ' étiq.' : null,
+           it.date_creation].filter(Boolean).join(' · ')
+        : [it.designation, it.client, it.machine].filter(Boolean).join(' · ');
+      listWrap.appendChild(el('div', {
+        cls: 'bes-doc-item',
+        on: { click: () => onglet === 'of'
+          ? rattacher('/api/stock/besoins-matieres/dossier/' + planningId + '/rattacher-of',
+              { of_id: it.id }, 'OF ' + ref)
+          : rattacher('/api/stock/besoins-matieres/dossier/' + planningId + '/rattacher-fiche',
+              { fiche_id: it.id }, 'Fiche ' + ref) },
+      },
+        el('div', { cls: 'bes-doc-item-main' },
+          el('div', { cls: 'bes-doc-item-ref' }, ref),
+          meta ? el('div', { cls: 'bes-doc-item-meta' }, meta) : null,
+        ),
+        el('span', { cls: 'bes-btn-associate' }, 'Rattacher'),
+      ));
+    });
+  }
+
+  tabOf.addEventListener('click', () => { onglet = 'of'; search.value = ''; charger(''); });
+  tabFt.addEventListener('click', () => { onglet = 'fiche'; search.value = ''; charger(''); });
+
+  let tmr = null;
+  search.addEventListener('input', () => {
+    clearTimeout(tmr);
+    tmr = setTimeout(() => charger((search.value || '').trim()), 250);
+  });
+
+  importBtn.addEventListener('click', () => fileInp.click());
+  fileInp.addEventListener('change', async () => {
+    const f = fileInp.files && fileInp.files[0];
+    if (!f) return;
+    importBtn.disabled = true;
+    try {
+      setStatut('Lecture du PDF…');
+      const fd = new FormData();
+      fd.append('file', f);
+      const champs = await api('/api/of/parse', { method: 'POST', body: fd });
+      setStatut('OF n° ' + (champs.of_numero || '?') + ' lu — enregistrement…');
+      const fd2 = new FormData();
+      fd2.append('file', f);
+      fd2.append('data', JSON.stringify(champs));
+      const cree = await api('/api/of/validate', { method: 'POST', body: fd2 });
+      await rattacher('/api/stock/besoins-matieres/dossier/' + planningId + '/rattacher-of',
+        { of_id: cree.id }, 'OF ' + (champs.of_numero || cree.id));
+    } catch (e) {
+      setStatut('Import impossible : ' + (e.message || 'erreur inconnue'), 'var(--danger)');
+    } finally {
+      importBtn.disabled = false;
+      fileInp.value = '';
+    }
+  });
+
+  const sheet = el('div', { cls: 'modal-sheet', style: { maxWidth: '620px' } },
+    el('span', { cls: 'modal-handle' }),
+    el('div', { cls: 'modal-title' }, 'Rattacher les documents du dossier'),
+    el('div', { cls: 'modal-sub' },
+      el('strong', {}, dossier.reference || '—'),
+      [dossier.numero_of ? ' · OF ' + dossier.numero_of : '',
+       dossier.ref_produit ? ' · ' + dossier.ref_produit : ''].join(''),
+    ),
+    el('div', { cls: 'bes-doc-tabs' }, tabOf, tabFt),
+    search,
+    listWrap,
+    importWrap,
+    statut,
+    el('div', { cls: 'modal-actions', style: { marginTop: '14px' } },
+      el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Fermer'),
+    ),
+  );
+  sheet.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
+  rendre();
+  charger('');
 }
 
 function openBesoinAssocierModal(kind, sourceValue) {

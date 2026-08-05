@@ -55,6 +55,8 @@ MYSIFA_API_KEY  = os.environ.get("MYSIFA_API_KEY", "")
 
 DATE_DEPUIS        = "2025-11-01"   # OFs créés strictement après cette date
 ENRICHIR_EXISTANTS = True           # compléter les colonnes vides des OF déjà importés
+RAFRAICHIR_ACCESS  = True           # propager aussi les valeurs CHANGÉES dans Access
+                                    # (sans effet sur un OF ayant un PDF ou une saisie manuelle)
 
 HEADERS = {
     "X-Api-Key":    MYSIFA_API_KEY,
@@ -200,7 +202,8 @@ def push_of(row) -> dict:
         "nb_mandrins":      to_int(row.mandrins),
         "nb_cartons":       to_int(row.cartons),
         "nb_tubes":         to_int(row.tubes),
-        "enrich_if_exists": ENRICHIR_EXISTANTS,
+        "enrich_if_exists":     ENRICHIR_EXISTANTS,
+        "refresh_access_fields": RAFRAICHIR_ACCESS,
     }
     resp = requests.post(
         f"{MYSIFA_BASE_URL}/api/bridge/of",
@@ -236,6 +239,11 @@ def main():
             if result.get("inserted"):
                 print(f"  [OK]       OF {numero} → importé (id MySifa : {result['id']})")
                 inserted += 1
+            elif result.get("reason") == "refreshed":
+                champs = ", ".join(sorted(set((result.get("refreshed_fields") or [])
+                                              + (result.get("enriched_fields") or []))))
+                print(f"  [MAJ]      OF {numero} → {champs}")
+                enriched += 1
             elif result.get("reason") == "enriched":
                 champs = ", ".join(result.get("enriched_fields") or [])
                 print(f"  [COMPLÉTÉ] OF {numero} → {champs}")

@@ -367,34 +367,65 @@ body.reduce-anim .cal-skel{animation:none}
 .cal-wv-day-col.today{background:var(--accent-bg)}
 /* v2.2.53 : min-width:0 + overflow:hidden empêche les chips d'étirer la colonne */
 .cal-wv-day-col{min-width:0}
-/* Bandeau non-planifié repliable en haut de chaque jour (Week/Day view) */
-.cal-wv-nonpl-strip{position:absolute;top:0;left:0;right:0;z-index:3;background:var(--card);border-bottom:1px dashed var(--border);display:flex;flex-direction:column;gap:0;max-width:100%;min-width:0;overflow:hidden;box-sizing:border-box}
-.cal-wv-nonpl-strip:empty{display:none}
-.cal-wv-nonpl-header{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 8px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;cursor:pointer;user-select:none;background:rgba(148,163,184,.05);transition:background .12s}
-.cal-wv-nonpl-header:hover{background:rgba(148,163,184,.12);color:var(--text2)}
-.cal-wv-nonpl-header-lbl{display:flex;align-items:center;gap:5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cal-wv-nonpl-header-chev{transition:transform .18s}
-.cal-wv-nonpl-strip.is-open .cal-wv-nonpl-header-chev{transform:rotate(90deg)}
-.cal-wv-nonpl-list{display:none;flex-direction:column;gap:3px;padding:4px 4px 6px;max-height:200px;min-width:0;overflow-y:auto;overflow-x:hidden}
-.cal-wv-nonpl-strip.is-open .cal-wv-nonpl-list{display:flex}
+/* v2.7.3 : puces des operations non planifiees. Le conteneur repliable qui les
+   portait (absolu au sommet de chaque colonne de jour) a ete remplace par la
+   bande .cal-wv-allday, hors zone de scroll. Seules les regles des puces
+   restent : la bande les reutilise telles quelles. */
 .cal-wv-nonpl-chip{display:block;padding:4px 8px;border-radius:5px;background:rgba(148,163,184,.15);color:var(--text2);border-left:3px solid var(--muted);font-size:11px;font-weight:600;cursor:pointer;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:100%;width:100%;box-sizing:border-box;transition:background .15s,color .15s}
 .cal-wv-nonpl-chip:hover{background:rgba(148,163,184,.28);color:var(--text)}
 .cal-wv-nonpl-chip[data-statut="termine"]{background:rgba(52,211,153,.15);color:var(--ok,#059669);border-left-color:var(--ok,#34d399)}
 .cal-wv-nonpl-chip[data-statut="termine"]:hover{background:rgba(52,211,153,.28)}
 .cal-wv-nonpl-chip .cal-wv-nonpl-icon{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:5px;vertical-align:middle;flex-shrink:0}
 .cal-wv-nonpl-chip[data-statut="termine"] .cal-wv-nonpl-icon{background:var(--ok,#34d399)}
-/* v2.2.54 : variante Day view — bandeau plus visible, déplié par défaut */
-.cal-wv-nonpl-strip.mode-day{border:1px solid var(--accent);border-radius:8px;margin:8px 8px 12px;background:var(--card);box-shadow:0 2px 8px rgba(0,0,0,.06)}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-header{background:var(--accent);color:var(--accent-fg,#fff);padding:8px 12px;font-size:12px;font-weight:800;letter-spacing:.5px;border-radius:7px 7px 0 0}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-header:hover{filter:brightness(1.08);color:var(--accent-fg,#fff)}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-header-chev{stroke-width:3.4}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-list{padding:8px 10px;max-height:none;gap:6px}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:13px;white-space:normal;line-height:1.4}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip-main{flex:1;min-width:0;font-weight:700;color:var(--text)}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip-sub{font-size:11px;color:var(--muted);font-weight:600;margin-top:2px;font-weight:500}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip-time{font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:var(--text2);white-space:nowrap;flex-shrink:0}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip-status{width:18px;height:18px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;background:var(--bg);border:1.5px solid var(--border)}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip[data-statut="termine"] .cal-wv-nonpl-chip-status{background:var(--ok,#34d399);border-color:var(--ok,#34d399);color:#fff}
+/* v2.7.3 : bande « non planifie ». Le bandeau precedent vivait en
+   position:absolute au sommet de chaque colonne de jour, DANS la zone de
+   defilement. Tant que la grille allait de 6h a 21h, « en haut » restait a
+   portee ; depuis le passage en journee complete, le sommet de colonne est
+   00:00, soit ~1490px au-dessus de la zone que le calendrier recentre — les
+   operations non planifiees etaient invisibles sans remonter jusqu'a minuit.
+   La bande est desormais un troisieme frere de .cal-wv-header /
+   .cal-wv-body : meme grille de colonnes, mais HORS du conteneur de scroll,
+   donc toujours a l'ecran. Elle ne peut pas etre simplement sticky dans la
+   colonne : sticky implique d'etre dans le flux, ce qui decalerait les lignes
+   horaires et casserait leur alignement avec la colonne des heures. */
+.cal-wv-allday{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;box-sizing:border-box;border-bottom:1px solid var(--border);background:var(--card)}
+.cal-wv-allday[hidden]{display:none}
+.cal-wv-allday-corner{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:3px;padding:6px 6px 6px 8px;border:0;background:rgba(148,163,184,.05);color:var(--muted);font-family:inherit;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;line-height:1.15;text-align:left;cursor:pointer;user-select:none;transition:background .12s,color .12s}
+.cal-wv-allday-corner:hover{background:rgba(148,163,184,.12);color:var(--text2)}
+.cal-wv-allday-corner-top{display:flex;align-items:center;gap:4px;min-width:0}
+.cal-wv-allday-chev{transition:transform .18s;flex-shrink:0}
+.cal-wv-allday.is-open .cal-wv-allday-chev{transform:rotate(90deg)}
+.cal-wv-allday-total{font-size:10px;font-weight:800;color:var(--accent);letter-spacing:0}
+.cal-wv-allday-cell{display:flex;flex-direction:column;gap:3px;padding:5px 4px;border-left:1px solid var(--border);min-width:0;max-height:132px;overflow-y:auto;overflow-x:hidden}
+/* Sans flex:0 0 auto, les puces se compriment quand le contenu depasse
+   max-height : au lieu de defiler, la colonne ecrase 13 puces en bandes de
+   10px illisibles (constate au harnais de rendu). */
+.cal-wv-allday-cell > *{flex:0 0 auto}
+.cal-wv-allday-cell.weekend{background:rgba(167,139,250,.04)}
+.cal-wv-allday-cell.today{background:var(--accent-bg)}
+/* Replie : les puces disparaissent, seule la pastille de comptage reste. */
+.cal-wv-allday:not(.is-open) .cal-wv-allday-cell{max-height:none;overflow:visible;padding:4px}
+.cal-wv-allday:not(.is-open) .cal-wv-nonpl-chip{display:none}
+.cal-wv-allday-pill{display:none;align-self:flex-start;padding:2px 7px;border-radius:9px;background:rgba(148,163,184,.2);color:var(--text2);font-size:10px;font-weight:800;line-height:1.5;cursor:pointer;border:0;font-family:inherit}
+.cal-wv-allday-pill:hover{background:rgba(148,163,184,.34);color:var(--text)}
+.cal-wv-allday:not(.is-open) .cal-wv-allday-pill{display:inline-block}
+/* Vue Jour : une seule colonne, on peut se permettre le rendu enrichi. */
+.cal-week-view.cal-wv-mode-day .cal-wv-allday-cell{max-height:200px;padding:8px 10px;gap:6px}
+.cal-week-view.cal-wv-mode-day .cal-wv-allday-cell .cal-wv-nonpl-chip{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:13px;white-space:normal;line-height:1.4}
+.cal-week-view.cal-wv-mode-day .cal-wv-allday-cell .cal-wv-nonpl-chip-main{flex:1;min-width:0;font-weight:700;color:var(--text)}
+.cal-week-view.cal-wv-mode-day .cal-wv-allday-cell .cal-wv-nonpl-chip-sub{font-size:11px;color:var(--muted);font-weight:500;margin-top:2px}
+.cal-week-view.cal-wv-mode-day .cal-wv-allday-cell .cal-wv-nonpl-chip-time{font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:var(--text2);white-space:nowrap;flex-shrink:0}
+.cal-week-view.cal-wv-mode-day .cal-wv-allday-cell .cal-wv-nonpl-chip-status{width:18px;height:18px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;background:var(--bg);border:1.5px solid var(--border)}
+.cal-week-view.cal-wv-mode-day .cal-wv-allday-cell .cal-wv-nonpl-chip[data-statut="termine"] .cal-wv-nonpl-chip-status{background:var(--ok,#34d399);border-color:var(--ok,#34d399);color:#fff}
+/* v2.7.3 fix : les regles mode-jour ci-dessus pesent 4 classes, alors que la
+   regle de masquage `.cal-wv-allday:not(.is-open) .cal-wv-nonpl-chip` n'en pese
+   que 3 (:not() ne compte que son argument). En vue Jour, replier la bande ne
+   masquait donc rien : le chevron tournait, la pastille de comptage
+   apparaissait, mais les puces restaient affichees — etat visuellement
+   contradictoire. On repose le masquage et la geometrie repliee au meme niveau
+   de specificite que le mode jour, apres lui. */
+.cal-week-view.cal-wv-mode-day .cal-wv-allday:not(.is-open) .cal-wv-allday-cell .cal-wv-nonpl-chip{display:none}
+.cal-week-view.cal-wv-mode-day .cal-wv-allday:not(.is-open) .cal-wv-allday-cell{max-height:none;overflow:visible;padding:4px;gap:3px}
 .cal-wv-hour-row{height:62px;border-top:1px solid var(--border);transition:background .12s}
 .cal-wv-hour-row:first-child{border-top:none}
 .cal-wv-day-col.drag-over{background:var(--accent-bg);outline:2px dashed var(--accent);outline-offset:-2px;z-index:1}
@@ -529,6 +560,7 @@ body:not(.light) .cal-event-item-niv-2 .cal-event-item-time{color:#fcd34d}
 body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 /* Mode vue Jour : 1 colonne large */
 .cal-week-view.cal-wv-mode-day .cal-wv-header,
+.cal-week-view.cal-wv-mode-day .cal-wv-allday,
 .cal-week-view.cal-wv-mode-day .cal-wv-body{grid-template-columns:70px 1fr}
 .cal-week-view.cal-wv-mode-day .cal-event{font-size:14.5px;padding:10px 14px}
 .cal-week-view.cal-wv-mode-day .cal-event-title{font-size:16px}
@@ -541,6 +573,7 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .cal-week-view.cal-wv-mode-day .cal-wv-time,
 .cal-week-view.cal-wv-mode-day .cal-wv-hour-row{height:72px}
 .cal-week-view.cal-wv-mode-day .cal-wv-header,
+.cal-week-view.cal-wv-mode-day .cal-wv-allday,
 .cal-week-view.cal-wv-mode-day .cal-wv-body{grid-template-columns:90px 1fr;min-width:0}
 /* Modale Créneau : section liste d'opérations */
 .case-modal-card{max-width:640px;width:92vw;max-height:92vh;display:flex;flex-direction:column}
@@ -764,7 +797,7 @@ body[data-maint-role="operator"] .cal-event{cursor:pointer}
 @media(max-width:720px){
   .cal-wv-body{max-height:60vh}
   .cal-wv-time{font-size:9px;padding-right:5px}
-  .cal-wv-header,.cal-wv-body{grid-template-columns:54px repeat(7,1fr)}
+  .cal-wv-header,.cal-wv-allday,.cal-wv-body{grid-template-columns:54px repeat(7,1fr)}
   .cal-wv-daydate{font-size:12px}
 }
 
@@ -918,6 +951,7 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 .maint-machine-btn.active:hover{background:var(--accent);color:var(--bg);filter:brightness(1.05)}
 .maint-cat-btn{border:none;background:transparent;color:var(--text2);padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,box-shadow .15s}
 .maint-cat-btn:hover{background:var(--bg);color:var(--text)}
+.maint-cat-btn[data-maint-cat="all"].active{background:var(--accent);color:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .maint-cat-btn[data-maint-cat="entretien"].active{background:#a78bfa;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .maint-cat-btn[data-maint-cat="remplacements"].active{background:#fb923c;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .maint-cat-btn.active:hover{filter:brightness(1.05)}
@@ -1950,6 +1984,11 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           <div class="maint-toolbar-row maint-toolbar-row--secondary">
           <label class="maint-toolbar-label">Catégorie</label>
           <div class="maint-cat-tabs" id="maint-cat-tabs" role="tablist">
+            <!-- v2.7.4 : troisieme etat « Tous ». Les deux categories etaient
+                 mutuellement exclusives : impossible de voir l'entretien et les
+                 interventions sur le meme ecran. Meme logique que la ligne Statut
+                 juste a cote (selection unique parmi N, dont un « Tous »). -->
+            <button type="button" class="maint-cat-btn" data-maint-cat="all" onclick="setMaintCatFilter('all')">Tous<span class="maint-tab-badge hidden" data-maint-cat-badge="all" title="Opérations en retard, toutes catégories">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-cat-badge-soon="all" title="Opérations dû bientôt, toutes catégories">0</span></button>
             <button type="button" class="maint-cat-btn" data-maint-cat="entretien" onclick="setMaintCatFilter('entretien')">Entretien<span class="maint-tab-badge hidden" data-maint-cat-badge="entretien" title="Opérations en retard dans cette catégorie">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-cat-badge-soon="entretien" title="Opérations dû bientôt dans cette catégorie">0</span></button>
             <button type="button" class="maint-cat-btn" data-maint-cat="remplacements" onclick="setMaintCatFilter('remplacements')">Interventions<span class="maint-tab-badge hidden" data-maint-cat-badge="remplacements" title="Opérations en retard dans cette catégorie">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-cat-badge-soon="remplacements" title="Opérations dû bientôt dans cette catégorie">0</span></button>
           </div>
@@ -2048,6 +2087,10 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                  grille. _fitCalWeekBody() mesure le haut du corps de grille au
                  runtime, la hauteur disponible s'ajuste donc toute seule. -->
             <div class="cal-wv-header" id="cal-wv-header"></div>
+            <!-- v2.7.3 : bande des operations non planifiees, entre les en-tetes
+                 de jours et la grille horaire. Hors du conteneur de scroll :
+                 elle reste visible quelle que soit l'heure affichee. -->
+            <div class="cal-wv-allday is-open" id="cal-wv-allday" hidden></div>
             <div class="cal-wv-body" id="cal-wv-body"></div>
           </div>
 
@@ -3434,6 +3477,10 @@ function _syncCalHeaderGutter(){
   if(!body || !head) return;
   const gutter = Math.max(0, body.offsetWidth - body.clientWidth);
   head.style.paddingRight = gutter ? (gutter + 'px') : '';
+  // v2.7.3 : la bande « non planifie » est un troisieme frere sur la meme
+  // grille de colonnes et ne scrolle pas non plus -> meme correction.
+  const band = document.getElementById('cal-wv-allday');
+  if(band) band.style.paddingRight = gutter ? (gutter + 'px') : '';
 }
 // v2.6.1 : la grille horaire est bornee a la hauteur REELLEMENT disponible
 // sous elle, pour que le cadre .cal-sec tienne entierement dans la fenetre.
@@ -3807,9 +3854,15 @@ function renderCalWeek(){
       const block = _makeEventBlock(item);
       if(block) col.appendChild(block);
     });
-    // v2.2.58 : strip flottant absolu dans le day col — n'affecte plus les autres jours
-    _renderNonPlanifStrip(iso, col, 'week');
   });
+  // v2.7.3 : bande unique hors zone de scroll, alimentee par les 7 jours.
+  try{
+    const _isos = [];
+    for(let k=0;k<7;k++){
+      _isos.push(_calIsoYMD(new Date(ws.getFullYear(), ws.getMonth(), ws.getDate()+k)));
+    }
+    _renderNonPlanifBand(_isos, 'week');
+  }catch(_){}
   // v2.6.0 : le corps vient d'etre reconstruit -> re-aligner le header sur la
   // gouttiere de scrollbar, et repeindre l'etat de chargement (le skeleton a
   // ete efface par le innerHTML ci-dessus).
@@ -3864,83 +3917,133 @@ function renderCalDay(){
       const block = _makeEventBlock(item);
       if(block) col.appendChild(block);
     });
-    // v2.2.58 : strip flottant absolu — pas d'impact sur l'alignement
-    _renderNonPlanifStrip(cIso, col, 'day');
   });
+  // v2.7.3 : meme bande qu'en vue Semaine, avec le rendu enrichi mono-colonne.
+  try{ _renderNonPlanifBand([iso], 'day'); }catch(_){}
   try{ _syncCalHeaderGutter(); _scheduleCalHeaderGutterSync(); }catch(_){}
   try{ _renderPlanningLoadState(); }catch(_){}
 }
 
-// v2.2.54 : bandeau non-planifié — mode 'week' (compact, replié) ou 'day' (large, déplié)
-function _renderNonPlanifStrip(iso, col, mode){
-  if(!col) return;
-  const events = (PLANNING_STATE.list || []).filter(ev =>
+// v2.7.3 : rendu des operations saisies hors creneau (source 'non_planifie').
+//
+// Avant : un bandeau absolu au sommet de CHAQUE colonne de jour, donc a
+// l'interieur du conteneur de scroll. Avec la plage 0h-24h, ce sommet est a
+// 00:00 : il fallait remonter d'environ 1490px pour voir ces operations.
+// Maintenant : une bande unique entre les en-tetes de jours et la grille
+// horaire, hors zone de defilement, donc toujours a l'ecran.
+//
+// L'etat de pliage est un module-level : il survit aux re-rendus (navigation,
+// creation d'un creneau, refresh), sinon chaque repaint le remettrait a zero.
+let _CAL_NONPL_OPEN = true;
+
+function _nonPlanifOpsOf(iso){
+  const evs = (PLANNING_STATE.list || []).filter(ev =>
     ev.date === iso && ev.source === 'non_planifie'
   );
-  if(!events.length) return;
-  let opsCount = 0;
-  events.forEach(ev => { opsCount += (ev.operations || []).length; });
-  if(!opsCount) return;
-  const isDay = (mode === 'day');
-  const strip = document.createElement('div');
-  strip.className = 'cal-wv-nonpl-strip' + (isDay ? ' mode-day is-open' : '');
-  // Header
-  const header = document.createElement('div');
-  header.className = 'cal-wv-nonpl-header';
-  header.title = 'Cliquer pour ' + (opsCount > 1 ? 'déplier/replier' : 'voir') + ' les ops non planifiées de ce jour';
-  header.innerHTML =
-    '<span class="cal-wv-nonpl-header-lbl">' +
-      '<svg class="cal-wv-nonpl-header-chev" width="' + (isDay ? 11 : 9) + '" height="' + (isDay ? 11 : 9) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>' +
-      '<span>' + opsCount + ' opération' + (opsCount > 1 ? 's' : '') + ' non planifiée' + (opsCount > 1 ? 's' : '') + '</span>' +
-    '</span>';
-  header.addEventListener('click', e => {
-    e.stopPropagation();
-    strip.classList.toggle('is-open');
-  });
-  strip.appendChild(header);
-  // Liste
-  const list = document.createElement('div');
-  list.className = 'cal-wv-nonpl-list';
-  // helper heure done_at
+  let n = 0;
+  evs.forEach(ev => { n += (ev.operations || []).length; });
+  return { iso: iso, evs: evs, n: n };
+}
+
+function _makeNonPlanifChip(ev, op, isDay){
+  const chip = document.createElement('div');
+  chip.className = 'cal-wv-nonpl-chip';
+  chip.setAttribute('data-statut', op.statut || 'a_faire');
+  chip.setAttribute('data-event-id', ev.id);
+  const machine = (op.machines && op.machines[0]) || ev.machine || '';
   const _fmtHM = (iso2) => {
     if(!iso2) return '';
     const m = String(iso2).match(/T(\d{2}):(\d{2})/);
     return m ? (m[1] + ':' + m[2]) : '';
   };
-  events.forEach(ev => {
-    (ev.operations || []).forEach(op => {
-      const chip = document.createElement('div');
-      chip.className = 'cal-wv-nonpl-chip';
-      chip.setAttribute('data-statut', op.statut || 'a_faire');
-      chip.setAttribute('data-event-id', ev.id);
-      const machine = (op.machines && op.machines[0]) || ev.machine || '';
-      const timeStr = (op.statut === 'termine') ? _fmtHM(op.done_at) : '';
-      chip.title = (op.opName || '') + (machine ? ' — ' + machine : '') + '\n(Non planifiée · cliquer pour voir le détail)';
-      if(isDay){
-        // Rendu enrichi mode Day
-        const statusIcon = (op.statut === 'termine')
-          ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
-          : '';
-        chip.innerHTML =
-          '<span class="cal-wv-nonpl-chip-status">' + statusIcon + '</span>' +
-          '<div class="cal-wv-nonpl-chip-main">' +
-            escHtml(op.opName || '—') +
-            (machine ? '<div class="cal-wv-nonpl-chip-sub">' + escHtml(machine) + '</div>' : '') +
-          '</div>' +
-          (timeStr ? '<span class="cal-wv-nonpl-chip-time">' + escHtml(timeStr) + '</span>' : '');
-      } else {
-        // Rendu compact mode Week
-        chip.innerHTML = '<span class="cal-wv-nonpl-icon"></span>' + escHtml(op.opName || '—') + (machine ? ' · ' + escHtml(machine) : '');
-      }
-      chip.addEventListener('click', e => {
-        e.stopPropagation();
-        openPlanningDetailsModal([ev]);
-      });
-      list.appendChild(chip);
-    });
+  const timeStr = (op.statut === 'termine') ? _fmtHM(op.done_at) : '';
+  chip.title = (op.opName || '') + (machine ? ' — ' + machine : '') +
+               '\n(Non planifiée · cliquer pour voir le détail)';
+  if(isDay){
+    const statusIcon = (op.statut === 'termine')
+      ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+      : '';
+    chip.innerHTML =
+      '<span class="cal-wv-nonpl-chip-status">' + statusIcon + '</span>' +
+      '<div class="cal-wv-nonpl-chip-main">' +
+        escHtml(op.opName || '—') +
+        (machine ? '<div class="cal-wv-nonpl-chip-sub">' + escHtml(machine) + '</div>' : '') +
+      '</div>' +
+      (timeStr ? '<span class="cal-wv-nonpl-chip-time">' + escHtml(timeStr) + '</span>' : '');
+  } else {
+    chip.innerHTML = '<span class="cal-wv-nonpl-icon"></span>' + escHtml(op.opName || '—') +
+                     (machine ? ' · ' + escHtml(machine) : '');
+  }
+  chip.addEventListener('click', e => {
+    e.stopPropagation();
+    openPlanningDetailsModal([ev]);
   });
-  strip.appendChild(list);
-  col.insertBefore(strip, col.firstChild);
+  return chip;
+}
+
+function _setNonPlanifOpen(band, open){
+  _CAL_NONPL_OPEN = !!open;
+  band.classList.toggle('is-open', _CAL_NONPL_OPEN);
+  // Plier/deplier change la hauteur de la bande, donc la hauteur restante pour
+  // la grille : _fitCalWeekBody() mesure le haut du corps, il faut la relancer.
+  try{ _scheduleCalHeaderGutterSync(); }catch(_){}
+}
+
+function _renderNonPlanifBand(isos, mode){
+  const band = document.getElementById('cal-wv-allday');
+  if(!band) return;
+  band.innerHTML = '';
+  const isDay = (mode === 'day');
+  const days = (isos || []).map(_nonPlanifOpsOf);
+  const total = days.reduce((a, d) => a + d.n, 0);
+  // Aucune operation hors creneau sur la periode : la bande disparait plutot
+  // que de laisser une ligne vide manger la hauteur de la grille.
+  if(!total){ band.hidden = true; return; }
+  band.hidden = false;
+  band.classList.toggle('is-open', !!_CAL_NONPL_OPEN);
+
+  const todayIso = _calIsoYMD(new Date());
+  const corner = document.createElement('button');
+  corner.type = 'button';
+  corner.className = 'cal-wv-allday-corner';
+  corner.title = 'Opérations saisies hors créneau — cliquer pour plier ou déplier';
+  corner.innerHTML =
+    '<span class="cal-wv-allday-corner-top">' +
+      '<svg class="cal-wv-allday-chev" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>' +
+      '<span>Non planifi\u00e9</span>' +
+    '</span>' +
+    '<span class="cal-wv-allday-total">' + total + ' op.</span>';
+  corner.addEventListener('click', e => {
+    e.stopPropagation();
+    _setNonPlanifOpen(band, !_CAL_NONPL_OPEN);
+  });
+  band.appendChild(corner);
+
+  days.forEach(d => {
+    const dt = new Date(d.iso + 'T00:00:00');
+    const wd = (dt.getDay() + 6) % 7;
+    const cell = document.createElement('div');
+    cell.className = 'cal-wv-allday-cell' + (wd >= 5 ? ' weekend' : '') +
+                     (d.iso === todayIso ? ' today' : '');
+    cell.setAttribute('data-date', d.iso);
+    if(d.n){
+      // Visible uniquement quand la bande est repliee (bascule CSS) : donne le
+      // volume par jour sans deplier, et deplie au clic.
+      const pill = document.createElement('button');
+      pill.type = 'button';
+      pill.className = 'cal-wv-allday-pill';
+      pill.textContent = String(d.n);
+      pill.title = d.n + ' op\u00e9ration' + (d.n > 1 ? 's' : '') +
+                   ' non planifi\u00e9e' + (d.n > 1 ? 's' : '') + ' — cliquer pour d\u00e9plier';
+      pill.addEventListener('click', e => { e.stopPropagation(); _setNonPlanifOpen(band, true); });
+      cell.appendChild(pill);
+      d.evs.forEach(ev => {
+        (ev.operations || []).forEach(op => cell.appendChild(_makeNonPlanifChip(ev, op, isDay)));
+      });
+    }
+    band.appendChild(cell);
+  });
+  try{ _syncCalHeaderGutter(); }catch(_){}
 }
 
 // ── Lane packing (Google-Calendar style) ──────────────────────────────
@@ -4036,7 +4139,11 @@ function _makeEventBlock(item){
   const lanesCount = item.lanesCount || 1;
   const lane = item.lane || 0;
   const div = document.createElement('div');
-  div.className = 'cal-event' + (ev.template_id ? ' is-from-template' : '')
+  // v2.7.2 : la pastille recurrence suivait template_id seul, donc elle
+  // s'affichait aussi sur les creneaux composes a la main ayant simplement
+  // importe un modele. Seul template_origin_date atteste d'une occurrence
+  // reellement generee par une recurrence.
+  div.className = 'cal-event' + (_calIsRecurOccurrence(ev) ? ' is-from-template' : '')
                               + (_calIsPastEvent(ev) ? ' is-closed' : '');  // v2.7.0
   div.style.top = top + 'px';
   div.style.height = height + 'px';
@@ -4140,6 +4247,13 @@ function _calPeriodKey(iso, rtype){
 }
 // Type de recurrence du modele dont l'evenement est issu, ou null si ce n'est
 // pas une occurrence generee (creneau compose a la main : aucune contrainte).
+// v2.7.2 : un creneau n'est une occurrence de recurrence que s'il porte a la
+// fois template_id ET template_origin_date. template_id seul signifie
+// « un modele a ete importe dans la liste d'operations » : simple raccourci
+// de saisie, sans lien de vie avec le modele.
+function _calIsRecurOccurrence(ev){
+  return !!(ev && ev.template_id && ev.template_origin_date);
+}
 function _calRecurTypeOf(ev){
   if(!ev || !ev.template_origin_date || !ev.template_id) return null;
   try{
@@ -4595,7 +4709,7 @@ function _makeClusterBlock(cluster){
   const single = (cluster.items.length === 1);
   // v2.5.27 : hoiste ev pour l'usage ci-dessous (corrige aussi le bug pre-existant qui accede a ev.template_id).
   const _ev0 = single ? cluster.items[0] : null;
-  div.className = 'cal-event' + (single ? '' : ' cal-event-merged') + (_ev0 && _ev0.template_id ? ' is-from-template' : '');
+  div.className = 'cal-event' + (single ? '' : ' cal-event-merged') + (_calIsRecurOccurrence(_ev0) ? ' is-from-template' : '');  // v2.7.2
   div.style.top = top + 'px';
   div.style.height = height + 'px';
   if(single && cluster.items[0].opNiveau){
@@ -7589,19 +7703,23 @@ function saveOpsTypeDetails(e){
 // Vue Maintenance (accueil) : cartes par opération périodique, par machine
 // =========================================================================
 const MAINT_MACHINE_KEY = 'mysifa_maint_home_machine_v1';
-// Toggle Entretien/Remplacements (v178) — filtre les cartes de la vue
-// Maintenance pour n'afficher qu'une seule des deux catégories à la fois.
+// Filtre de catégorie de la vue Maintenance (v178, élargi en v2.7.4).
+// Trois états : « Tous », « Entretien », « Interventions ».
 // Les contrôles ne sont JAMAIS visibles dans cette vue.
 const MAINT_CAT_FILTER_KEY = 'mysifa_maint_home_cat_filter_v1';
 
+// v2.7.4 : trois etats desormais — 'all' (les deux categories), 'entretien',
+// 'remplacements'. La valeur deja stockee chez les utilisateurs existants est
+// l'une des deux anciennes : elle reste valide, aucune migration necessaire.
 function getMaintCatFilter(){
   try{
     const v = localStorage.getItem(MAINT_CAT_FILTER_KEY);
-    return (v === 'remplacements') ? 'remplacements' : 'entretien';
+    if(v === 'remplacements' || v === 'all') return v;
+    return 'entretien';
   }catch(e){ return 'entretien'; }
 }
 function setMaintCatFilter(c){
-  if(c !== 'entretien' && c !== 'remplacements') return;
+  if(c !== 'all' && c !== 'entretien' && c !== 'remplacements') return;
   try{ localStorage.setItem(MAINT_CAT_FILTER_KEY, c); }catch(e){}
   renderMaintCards();
 }
@@ -7735,6 +7853,9 @@ function _refreshMaintCounters(){
       else if(st === 'soon') cats.remplacements.s++;
     });
   });
+  // v2.7.4 : le bouton « Tous » porte le cumul des deux categories.
+  cats.all = { o: cats.entretien.o + cats.remplacements.o,
+               s: cats.entretien.s + cats.remplacements.s };
   Object.keys(cats).forEach(cat => {
     setBadge(document.querySelector('[data-maint-cat-badge="' + cat + '"]'), cats[cat].o);
     setBadge(document.querySelector('[data-maint-cat-badge-soon="' + cat + '"]'), cats[cat].s);
@@ -8369,9 +8490,9 @@ function renderMaintCards(){
   document.querySelectorAll('.maint-machine-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-maint-machine') === machine);
   });
-  // Toggle Entretien/Remplacements (v178) — filtre les cartes pour n'afficher
-  // qu'une seule des deux catégories à la fois. Les contrôles ne sont JAMAIS
-  // visibles ici. Les pièces d'usure ne sont visibles que sur "Remplacements".
+  // Filtre de catégorie (v178, élargi en v2.7.4) : « Tous », « Entretien » ou
+  // « Interventions ». Les contrôles ne sont JAMAIS visibles ici. Les pièces
+  // d'usure apparaissent sur « Interventions » et sur « Tous ».
   const catFilter = getMaintCatFilter();
   document.querySelectorAll('.maint-cat-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-maint-cat') === catFilter);
@@ -8381,7 +8502,9 @@ function renderMaintCards(){
   const grouping = 'status';  // v2.4.6 : toggle retire, groupement fixe par statut
   _refreshMaintChipState();
   _refreshMaintCounters();
-  const showWearParts = (catFilter === 'remplacements');
+  // v2.7.4 : les pieces d'usure appartiennent a la categorie Interventions ;
+  // elles doivent donc rester visibles quand on affiche les deux categories.
+  const showWearParts = (catFilter === 'remplacements' || catFilter === 'all');
   // v2.4.25 : les pieces d'usure sont maintenant comptees + affichees dans
   // TOUS les filtres statut (leur logique de retard temps est integree au
   // systeme unifie overdue/soon/ok/never). _renderWearPartsGroup renvoie ''
@@ -8409,10 +8532,14 @@ function renderMaintCards(){
     if(!it.periodique) return false;
     if(wearPartCodeIds.has(String(it.id))) return false;
     const cat = it.categorie;
-    if(catFilter === 'entretien'){
-      return cat === 'controles' || cat === 'entretien' || cat === 'interventions' || cat === 'suivi';
-    }
-    return cat === 'remplacements';
+    // Les codes legacy 'interventions' et 'suivi' sont ranges avec 'entretien',
+    // comme partout ailleurs dans le module.
+    const isEntretien = (cat === 'controles' || cat === 'entretien' ||
+                         cat === 'interventions' || cat === 'suivi');
+    const isRemplacement = (cat === 'remplacements');
+    if(catFilter === 'all') return isEntretien || isRemplacement;
+    if(catFilter === 'entretien') return isEntretien;
+    return isRemplacement;
   });
   if(!baseItems.length){
     grid.innerHTML = wearPartsHtml +
@@ -13767,7 +13894,7 @@ async function openTemplateEditor(templateId, focusDeleted){
       if(lblEl) lblEl.textContent = 'Enregistrer';
       // Avertissement resync
       if(warnEl){
-        warnEl.innerHTML = '<strong>Attention :</strong> modifier ce modèle écrasera automatiquement les opérations des créneaux futurs qui en dépendent (les horaires, opérateurs et statuts sont préservés).';
+        warnEl.innerHTML = '<strong>Attention :</strong> les modifications se répercutent sur les créneaux futurs issus de la récurrence de ce modèle. Changer la <strong>liste d\'opérations</strong> resynchronise leurs opérations, sans toucher aux dates ni aux horaires. Changer la <strong>règle de récurrence</strong> replace ces créneaux aux nouvelles dates. Les créneaux composés à la main, même après import de ce modèle, ne sont jamais touchés.';
         warnEl.style.display = 'block';
       }
     }catch(e){ showToast('Erreur : ' + e.message, 'danger'); return; }
@@ -14091,7 +14218,17 @@ async function submitTemplateEditor(e){
     renderTemplatesList();
     refreshCaseTemplatePicker();
     // v2.5.13 : refresh calendrier si des events ont bouge (resync OU purge desactivation)
-    if(resynced > 0 || deletedFuture > 0){ await refreshPlanning(); renderCal(); }
+    // v2.7.1 : le rechargement du calendrier ne tenait compte que des
+    // operations resynchronisees et des creneaux supprimes. Un changement de
+    // REGLE de recurrence deplace les occurrences sans rien resynchroniser ni
+    // supprimer : la condition etait donc fausse, le planning restait affiche
+    // avec les dates d'avant, et l'utilisateur croyait le replacement rate
+    // alors qu'il avait bien eu lieu en base.
+    if(resynced > 0 || deletedFuture > 0 || replaced > 0 || regen > 0
+       || (d.recur_moved_events || 0) > 0 || (d.recur_removed_events || 0) > 0){
+      await refreshPlanning();
+      renderCal();
+    }
   }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
 }
 

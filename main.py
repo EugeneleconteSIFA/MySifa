@@ -153,11 +153,19 @@ app.add_middleware(
 
 @app.middleware("http")
 async def no_cache_planning(request: Request, call_next):
-    """Évite cache navigateur / proxy sur le planning (données toujours lues en base)."""
+    """Évite cache navigateur / proxy sur les données vivantes.
+
+    MyStock a rejoint la liste : ses quantités, ses besoins et ses rattachements
+    de documents changent à chaque geste d'un opérateur. Sans en-tête explicite,
+    le navigateur applique son cache heuristique et sert une réponse périmée —
+    concrètement, un OF rattaché n'apparaissait qu'après un rechargement forcé.
+    """
     response = await call_next(request)
     p = request.url.path
     if (p.startswith("/api/planning") or p == "/planning" or p.startswith("/portail/ao/")
-            or p.startswith("/api/maintenance/")):
+            or p.startswith("/api/maintenance/")
+            or p.startswith("/api/stock/") or p.startswith("/api/of/")
+            or p.startswith("/api/fiches-techniques/")):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
     elif p.startswith("/static/"):

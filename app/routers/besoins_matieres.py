@@ -31,6 +31,10 @@ Formules :
                   grammage = matieres_premieres.weight_gsm (saisi sur la fiche
                   matière), repli fiches_techniques.qte_au_mille
                   laize    = of_imports.laize, repli fiche technique
+Postes sans matière première (repiquage) : frontal, glassine et adhésif ne
+sont pas comptés — la matière a été consommée en amont. Mandrins, cartons et
+palettes restent calculés : le conditionnement, lui, est bien consommé.
+
 - mandrins (u)  : of_imports.nb_mandrins, sinon of_imports.qte_bobines,
                   sinon qte_etiquettes / nb_etiq_bobin (champ de la fiche, ou
                   nombre relu dans la phrase de conditionnement)
@@ -158,6 +162,7 @@ _SQL_PE = """
            pe.planned_start, pe.planned_end, pe.date_livraison, pe.duree_heures,
            pe.position, pe.of_import_id,
            m.nom AS machine_nom,
+           COALESCE(m.sans_matiere_premiere, 0) AS poste_sans_matiere,
            oi.qte_etiquettes AS qte_etiquettes,
            oi.qte_bobines    AS qte_bobines,
            oi.metrage        AS of_metrage,
@@ -544,9 +549,18 @@ def _compute_besoins_dossier(pe: dict, mapping: dict,
             **(extra or {}),
         })
 
+    # Postes sans matière première : le repiquage est un atelier, on y
+    # surimprime des étiquettes déjà fabriquées. Le frontal, la glassine et
+    # l'adhésif ont été consommés en amont — les recompter ici serait un
+    # doublon. Le conditionnement, lui, est bien consommé : les étiquettes
+    # repiquées sont rembobinées sur mandrin, mises en carton et palettisées.
+    sans_mp = bool(pe.get("poste_sans_matiere"))
+
     # ── Bobines (frontal / complexe / glassine) : besoin en mètres linéaires ──
     # Toutes les bobines d'un dossier voient passer le même métrage.
     for kind, col in (("support", "ft_support"), ("glassine", "ft_glassine")):
+        if sans_mp:
+            break
         if not pe.get(col):
             continue
         if metrage:
@@ -559,7 +573,7 @@ def _compute_besoins_dossier(pe: dict, mapping: dict,
 
     # ── Adhésif : kilos = grammage (g/m²) × surface enduite (m²) ──
     # surface = métrage (m) × laize (mm) / 1000
-    if pe.get("ft_adhesif"):
+    if pe.get("ft_adhesif") and not sans_mp:
         # Grammage : porté par la référence adhésif (weight_gsm, g/m²). Le champ
         # « Grammage » de la fiche technique sert de repli tant que la matière
         # n'est pas renseignée.
@@ -872,6 +886,21 @@ def besoins_par_echeance(request: Request):
                 else:
                     stock_note = ("Longueur tube ou laize module manquante — "
                                   "stock non convertible en mandrins")
+            elif a["kind"] == "carton":
+                # Un carton se stocke à la palette mais se consomme à l'unité :
+                # sans la conversion, une palette de 672 cartons s'affichait
+                # « 1 u » en face d'un besoin de 672, et tout ressortait en manque.
+                palettes_stock = stock_map.get(mid, 0.0) + stock_bobines.get(mid, 0.0)
+                mp_cart = mapping.get((a["kind"], (a["source_value"] or "").strip().lower())) or {}
+                cpp = _f(mp_cart.get("unites_par_palette"))
+                a["stock_palettes"] = round(palettes_stock, 3)
+                if cpp:
+                    stock = round(palettes_stock * cpp, 3)
+                    stock_note = (f"{_n(palettes_stock)} palettes × {_n(cpp)} cartons/palette "
+                                  f"= {_n(stock)} cartons")
+                else:
+                    stock_note = ("Cartons par palette non renseigné sur la matière — "
+                                  "stock non convertible en cartons")
             else:
                 stock = round(stock_map.get(mid, 0.0) + stock_bobines.get(mid, 0.0), 3)
         a["stock_actuel"] = stock
@@ -886,13 +915,288 @@ def besoins_par_echeance(request: Request):
         -(x.get("manque_7j") or 0),
         -x["besoin_7j"],
     ))
+    groupe = _regrouper_par_matiere(lignes)
     return {
         "lignes": lignes,
         "count": len(lignes),
+        # Vue « par matière » : même calcul, regroupé sur la référence MySifa.
+        # Servi par le même endpoint pour que les trois vues montrent toujours
+        # les mêmes chiffres, à la même seconde.
+        "matieres": groupe["matieres"],
+        "non_associees": groupe["non_associees"],
         "today": today.isoformat(),
         "borne_7j": borne_7.isoformat(),
         "borne_15j": borne_15.isoformat(),
     }
+
+
+def _regrouper_par_matiere(lignes: list) -> dict:
+    """Regroupe les lignes de besoin par référence matière MySifa.
+
+    Plusieurs valeurs de fiche technique peuvent pointer vers la même référence
+    (« Couché », « Couché 80 »). C'est au niveau de la référence qu'on commande,
+    donc c'est ce total-là qui compte pour l'appro — la vue par échéance, elle,
+    reste au niveau de la valeur de fiche pour pouvoir corriger un mapping.
+
+    Retourne { matieres: [...], non_associees: [...] }. Les besoins sans matière
+    associée ne sont pas noyés dans le tableau : ils sortent à part, en fin de
+    vue, car ils appellent une action différente (associer, pas commander).
+    """
+    par_mat: dict = {}
+    non_associees: list = []
+
+    for a in lignes:
+        if not a.get("mapped") or not a.get("matiere_id"):
+            non_associees.append({
+                "kind": a["kind"],
+                "source_value": a["source_value"],
+                "unite": a["unite"],
+                "besoin_7j": a["besoin_7j"],
+                "besoin_15j": a["besoin_15j"],
+                "besoin_total": a["besoin_total"],
+                "nb_dossiers": a["nb_dossiers"],
+                "nb_dossiers_incalculables": a["nb_dossiers_incalculables"],
+            })
+            continue
+
+        mid = a["matiere_id"]
+        m = par_mat.get(mid)
+        if m is None:
+            # Le stock est porté par la référence, pas par la valeur de fiche :
+            # on le prend une fois et on ne l'additionne jamais, sinon deux
+            # valeurs mappées sur la même référence le compteraient deux fois.
+            m = par_mat[mid] = {
+                "matiere_id": mid,
+                "matiere_ref": a["matiere_ref"],
+                "matiere_designation": a["matiere_designation"],
+                "matiere_categorie": a.get("matiere_categorie"),
+                "kind": a["kind"],
+                "unite": a["unite"],
+                "besoin_7j": 0.0,
+                "besoin_15j": 0.0,
+                "besoin_total": 0.0,
+                "stock_actuel": a.get("stock_actuel"),
+                "stock_note": a.get("stock_note"),
+                "stock_palettes": a.get("stock_palettes"),
+                "besoin_total_tubes": None,
+                "besoin_total_palettes": None,
+                "nb_dossiers": 0,
+                "nb_dossiers_incalculables": 0,
+                "sources": [],
+            }
+        m["besoin_7j"] += a["besoin_7j"]
+        m["besoin_15j"] += a["besoin_15j"]
+        m["besoin_total"] += a["besoin_total"]
+        m["nb_dossiers"] += a["nb_dossiers"]
+        m["nb_dossiers_incalculables"] += a["nb_dossiers_incalculables"]
+        for cle in ("besoin_total_tubes", "besoin_total_palettes"):
+            v = a.get(cle)
+            if v:
+                m[cle] = (m[cle] or 0.0) + v
+        m["sources"].append({
+            "source_value": a["source_value"],
+            "besoin_total": a["besoin_total"],
+            "nb_dossiers": a["nb_dossiers"],
+        })
+
+    matieres = []
+    for m in par_mat.values():
+        for k in ("besoin_7j", "besoin_15j", "besoin_total",
+                  "besoin_total_tubes", "besoin_total_palettes"):
+            if m[k] is not None:
+                m[k] = round(m[k], 3)
+        m["manque_7j"] = (round(max(0.0, m["besoin_7j"] - m["stock_actuel"]), 3)
+                          if m["stock_actuel"] is not None else None)
+        m["sources"].sort(key=lambda s: -(s["besoin_total"] or 0))
+        matieres.append(m)
+
+    # Ce qui manque d'abord, puis le besoin le plus proche : l'ordre de l'appro.
+    matieres.sort(key=lambda x: (-(x.get("manque_7j") or 0), -x["besoin_7j"]))
+    non_associees.sort(key=lambda x: (-(x["besoin_total"] or 0), -x["nb_dossiers"]))
+    return {"matieres": matieres, "non_associees": non_associees}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Rattachement des documents d'un dossier non chiffré
+#
+# Un dossier sort « n.c. » pour deux raisons seulement : aucun OF rattaché, ou
+# aucune fiche technique rapprochée. Les deux se corrigent depuis la ligne, sans
+# quitter Besoins matières — et surtout, la correction s'écrit dans les tables
+# de référence, donc elle vaut pour MyProd, le planning et l'expédition, pas
+# seulement pour cet écran.
+#
+# - OF : `_promote_of_link` (of_import.py) aligne `planning_of_links` ET
+#   `planning_entries.of_import_id`. Les deux sont nécessaires : le slot du
+#   planning lit la colonne, le panneau OF lit la table de liens.
+# - Fiche technique : le rapprochement se fait sur `ref_produit_norm`. On aligne
+#   cette clé sans toucher à `ref_produit`, qui reste ce que l'atelier lit.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _dossier_ou_404(conn, planning_id: int):
+    row = conn.execute(
+        """SELECT pe.id, pe.reference, pe.numero_of, pe.ref_produit,
+                  pe.ref_produit_norm, pe.of_import_id, pe.statut,
+                  m.nom AS machine_nom
+           FROM planning_entries pe
+           LEFT JOIN machines m ON m.id = pe.machine_id
+           WHERE pe.id = ?""",
+        (planning_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, "Dossier introuvable.")
+    return row
+
+
+def _like(v) -> str:
+    return "%" + str(v or "").strip() + "%"
+
+
+@router.get("/api/stock/besoins-matieres/dossier/{planning_id}/documents")
+def dossier_documents(planning_id: int, request: Request):
+    """OF et fiches techniques rattachables à un dossier.
+
+    Sans `q`, on propose ce que le dossier laisse deviner : son numéro d'OF et
+    sa référence produit. Avec `q`, c'est une recherche libre — le cas où le
+    document existe sous un libellé qui ne ressemble à rien de ce qu'on attend.
+    """
+    require_stock_matieres_admin(request)
+    q = (request.query_params.get("q") or "").strip()
+
+    with get_db() as conn:
+        pe = _dossier_ou_404(conn, planning_id)
+
+        if q:
+            ofs = conn.execute(
+                """SELECT id, of_numero, reference, machine, qte_etiquettes,
+                          qte_bobines, date_creation, date_import
+                   FROM of_imports
+                   WHERE LOWER(COALESCE(of_numero,'')) LIKE LOWER(?)
+                      OR LOWER(COALESCE(reference,''))  LIKE LOWER(?)
+                      OR LOWER(COALESCE(machine,''))    LIKE LOWER(?)
+                   ORDER BY date_import DESC, id DESC LIMIT 25""",
+                (_like(q), _like(q), _like(q)),
+            ).fetchall()
+            fiches = conn.execute(
+                """SELECT id, reference, designation, client, machine, ref_produit_norm
+                   FROM fiches_techniques
+                   WHERE LOWER(COALESCE(reference,''))   LIKE LOWER(?)
+                      OR LOWER(COALESCE(designation,'')) LIKE LOWER(?)
+                      OR LOWER(COALESCE(client,''))      LIKE LOWER(?)
+                   ORDER BY reference COLLATE NOCASE LIMIT 25""",
+                (_like(q), _like(q), _like(q)),
+            ).fetchall()
+        else:
+            num = (pe["numero_of"] or "").strip()
+            ref = (pe["ref_produit"] or "").strip()
+            ofs = conn.execute(
+                """SELECT id, of_numero, reference, machine, qte_etiquettes,
+                          qte_bobines, date_creation, date_import
+                   FROM of_imports
+                   WHERE (? != '' AND LOWER(COALESCE(of_numero,'')) LIKE LOWER(?))
+                      OR (? != '' AND LOWER(COALESCE(reference,'')) LIKE LOWER(?))
+                   ORDER BY date_import DESC, id DESC LIMIT 25""",
+                (num, _like(num), ref, _like(ref)),
+            ).fetchall()
+            norm = (pe["ref_produit_norm"] or "").strip()
+            fiches = conn.execute(
+                """SELECT id, reference, designation, client, machine, ref_produit_norm
+                   FROM fiches_techniques
+                   WHERE (? != '' AND ref_produit_norm = ?)
+                      OR (? != '' AND LOWER(COALESCE(reference,'')) LIKE LOWER(?))
+                   ORDER BY reference COLLATE NOCASE LIMIT 25""",
+                (norm, norm, ref, _like(ref)),
+            ).fetchall()
+
+    return {
+        "dossier": {
+            "planning_id": pe["id"],
+            "reference": pe["reference"],
+            "numero_of": pe["numero_of"],
+            "ref_produit": pe["ref_produit"],
+            "machine": pe["machine_nom"],
+            "of_import_id": pe["of_import_id"],
+            "a_un_of": pe["of_import_id"] is not None,
+        },
+        "recherche": q,
+        "ofs": [dict(r) for r in ofs],
+        "fiches": [dict(r) for r in fiches],
+    }
+
+
+@router.post("/api/stock/besoins-matieres/dossier/{planning_id}/rattacher-of")
+async def rattacher_of(planning_id: int, request: Request):
+    """Fait d'un OF existant l'OF actif du dossier. Body : { of_id }."""
+    user = require_stock_matieres_admin(request)
+    body = await request.json()
+    of_id = body.get("of_id")
+    if not isinstance(of_id, int):
+        raise HTTPException(400, "of_id (entier) requis.")
+
+    # Import local : of_import.py n'a pas à connaître Besoins matières, et un
+    # import au niveau module créerait un cycle le jour où l'inverse arrivera.
+    from app.routers.of_import import _promote_of_link
+
+    qui = (user.get("nom") or user.get("email") or "besoins_matieres")
+    with get_db() as conn:
+        _dossier_ou_404(conn, planning_id)
+        oi = conn.execute(
+            "SELECT id, of_numero FROM of_imports WHERE id=?", (of_id,)
+        ).fetchone()
+        if not oi:
+            raise HTTPException(404, "OF introuvable.")
+        _promote_of_link(conn, planning_id, of_id, qui)
+        # Rattachement décidé par un humain : l'auto-link ne doit plus le défaire.
+        try:
+            conn.execute(
+                "UPDATE planning_entries SET of_link_user_managed=1 WHERE id=?",
+                (planning_id,),
+            )
+        except Exception:
+            pass  # colonne absente sur une base ancienne : le lien reste valide
+        conn.commit()
+    return {"ok": True, "planning_id": planning_id, "of_id": of_id,
+            "of_numero": oi["of_numero"]}
+
+
+@router.post("/api/stock/besoins-matieres/dossier/{planning_id}/rattacher-fiche")
+async def rattacher_fiche(planning_id: int, request: Request):
+    """Rapproche une fiche technique d'un dossier. Body : { fiche_id }.
+
+    On aligne `ref_produit_norm` — la clé de jointure — sans toucher à
+    `ref_produit`, le libellé que l'atelier lit sur le planning. Attention : une
+    modification ultérieure de `ref_produit` recalcule la clé par trigger et
+    défait ce rapprochement ; c'est le prix à payer pour ne pas réécrire le
+    libellé du dossier dans le dos de l'utilisateur.
+    """
+    require_stock_matieres_admin(request)
+    body = await request.json()
+    fiche_id = body.get("fiche_id")
+    if not isinstance(fiche_id, int):
+        raise HTTPException(400, "fiche_id (entier) requis.")
+
+    with get_db() as conn:
+        _dossier_ou_404(conn, planning_id)
+        ft = conn.execute(
+            "SELECT id, reference, ref_produit_norm FROM fiches_techniques WHERE id=?",
+            (fiche_id,),
+        ).fetchone()
+        if not ft:
+            raise HTTPException(404, "Fiche technique introuvable.")
+        norm = (ft["ref_produit_norm"] or "").strip()
+        if not norm:
+            raise HTTPException(
+                400,
+                "Cette fiche n'a pas de clé produit normalisée — corrigez sa "
+                "référence dans MyProd avant de la rapprocher.",
+            )
+        conn.execute(
+            "UPDATE planning_entries SET ref_produit_norm=? WHERE id=?",
+            (norm, planning_id),
+        )
+        conn.commit()
+    return {"ok": True, "planning_id": planning_id, "fiche_id": fiche_id,
+            "reference": ft["reference"]}
 
 
 @router.get("/api/stock/besoins-matieres/mapping")
@@ -1189,6 +1493,10 @@ _EXPLICATIONS = {
                 "foi : elle décrit la commande réelle, pas une reconstitution.",
                 "Sinon, le nombre de bobines est celui calculé pour les mandrins. S'il "
                 "n'est pas calculable, le besoin en cartons ne l'est pas non plus.",
+                "Le stock, lui, est tenu en palettes : il est converti en cartons via "
+                "« Cartons par palette » de la fiche matière. Sans ce champ, le stock "
+                "reste affiché comme non comparable plutôt que confondu avec un "
+                "nombre de palettes.",
             ],
             "variables": [
                 {"label": "Valeur source", "champ": "fiches_techniques.cartons"},
@@ -1197,6 +1505,8 @@ _EXPLICATIONS = {
                 {"label": "Nb de bobines", "champ": "voir « Mandrins »", "unite": "bobines"},
                 {"label": "Bobines par carton", "champ": "fiches_techniques.nb_bobines_carton",
                  "unite": ""},
+                {"label": "Cartons par palette", "champ": "matieres_premieres.unites_par_palette",
+                 "unite": "", "detail": "conversion du stock, tenu en palettes"},
             ],
         },
         {

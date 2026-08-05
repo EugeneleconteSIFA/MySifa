@@ -167,22 +167,61 @@ with dbmod.get_db() as conn:
     )
     conn.commit()
 
-    # Correspondances : ce qu'Eugène recopiera depuis --inventaire.
+    print("--- rapprochement automatique sur une base jouet ---")
+    noms = sorted({c[2] for c in IMP.CATALOGUE})
+    auto = {nom: ref for ref, des in FRONTAUX_MYSTOCK
+            for nom in noms
+            if IMP._score(nom, des) >= 0.75 or IMP._score(nom, ref) >= 0.75}
+    check("les 9 frontaux du catalogue sont rapprochés", len(auto), len(noms))
+    check("le synthétique tombe juste malgré l'orthographe",
+          auto.get("Synthé. 95µm 71g"), "SYNTH95")
+    check("Velin 62g ne se confond pas avec Velin 68g", auto.get("Velin 62g"), "VEL62")
+    check("ni avec le Velin fluo", auto.get("Velin Jaune Fluo 90g"), "VELFLUO90")
+
+    print("\n--- lexique : références réelles du stock SIFA ---")
+    # Les références MyStock sont en anglais technique, le catalogue en français
+    # commercial. Sans lexique, 3 frontaux sur 9 seulement se rapprochaient.
+    REELLES = [
+        "62gsm Vellum", "68gsm Vellum", "70g Eco Thermal", "70gsm TOP Thermal",
+        "70gsm Vellum fluo jaune", "80gsm Coated Paper", "95gsm TOP Thermal",
+        "couché 70gsm satiné", "couché 90gsm fluo jaune",
+        "Eco Thermal 70gsm Torraspapel", "PP blanc mat 120µm", "PP blanc mat 200µm",
+        "PP blanc mat 95µm", "Thermique Bicolore", "TOP Thermal 105gsm",
+    ]
+
+    def meilleur(cible):
+        return max(REELLES, key=lambda r: IMP._score(cible, r))
+
+    for cible, veut in [
+        ("Velin 62g", "62gsm Vellum"),
+        ("Velin 68g", "68gsm Vellum"),
+        ("Couché Brillant 80g", "80gsm Coated Paper"),
+        ("Thermique Pro 70g", "70gsm TOP Thermal"),
+        ("Thermique Eco 70g", "70g Eco Thermal"),
+        ("Synthé. 95µm 71g", "PP blanc mat 95µm"),
+    ]:
+        check(f"{cible} -> stock", meilleur(cible), veut)
+    # Un vélin de 62 ne doit jamais partir sur le 68 : sur un nombre, seule
+    # l'égalité compte.
+    check("62 et 68 ne se confondent pas",
+          meilleur("Velin 62g") != meilleur("Velin 68g"), True)
+
+    print("\n--- correspondances figées pour ce catalogue ---")
+    check("les 9 frontaux sont renseignés", len(IMP.FRONTAUX), 9)
+    check("les 4 familles d'adhésif aussi", len(IMP.ADHESIFS), 4)
+    check("une glassine est choisie", bool(IMP.GLASSINE), True)
+    check("chaque frontal du catalogue a sa ligne",
+          sorted(IMP.FRONTAUX) == sorted({c[2] for c in IMP.CATALOGUE}), True)
+    check("chaque famille d'adhésif aussi",
+          sorted(IMP.ADHESIFS) == sorted({c[3] for c in IMP.CATALOGUE}), True)
+
+    # Le test tourne ensuite sur ses propres correspondances.
     IMP.FRONTAUX = {nom: ref for ref, des in FRONTAUX_MYSTOCK
                     for nom in [n for n in {c[2] for c in IMP.CATALOGUE}
                                 if IMP._score(n, des) >= 0.75 or IMP._score(n, ref) >= 0.75]}
     IMP.ADHESIFS = {"Enlevable": "ADH-ENL", "Permanent": "ADH-PERM",
                     "Congélation": "ADH-CONG", "Permanent Pneu": "ADH-PNEU"}
     IMP.GLASSINE = "GLJ60"
-
-    print("--- rapprochement automatique des frontaux ---")
-    noms = sorted({c[2] for c in IMP.CATALOGUE})
-    check("les 9 frontaux du catalogue sont rapprochés", len(IMP.FRONTAUX), len(noms))
-    check("le synthétique tombe juste malgré l'orthographe",
-          IMP.FRONTAUX.get("Synthé. 95µm 71g"), "SYNTH95")
-    check("Velin 62g ne se confond pas avec Velin 68g",
-          IMP.FRONTAUX.get("Velin 62g"), "VEL62")
-    check("ni avec le Velin fluo", IMP.FRONTAUX.get("Velin Jaune Fluo 90g"), "VELFLUO90")
 
     print("\n--- simulation ---")
     with contextlib.redirect_stdout(io.StringIO()) as sortie:
@@ -250,6 +289,19 @@ with dbmod.get_db() as conn:
           conn.execute("""SELECT COUNT(*) FROM (
                             SELECT produit_id FROM mp_produit_composant
                              GROUP BY produit_id HAVING COUNT(*)<>3)""").fetchone()[0], 0)
+
+    print("\n--- base qui n'est pas celle de l'application ---")
+    # Lancé à la main, le script peut viser un fichier vide : il doit le dire,
+    # pas partir en traceback sur « no such table ».
+    import sqlite3 as _sq
+
+    vide = _sq.connect(":memory:")
+    vide.row_factory = _sq.Row
+    check("les tables attendues sont listées",
+          IMP.tables_manquantes(vide), list(IMP.TABLES_REQUISES))
+    vide.close()
+    check("aucune table ne manque sur la vraie base", IMP.tables_manquantes(conn), [])
+    check("l'aide cite l'option --db", "--db" in IMP._AIDE_BASE, True)
 
     print("\n--- correspondance manquante ---")
     IMP.ADHESIFS = dict(IMP.ADHESIFS, **{"Congélation": "NEXISTEPAS"})

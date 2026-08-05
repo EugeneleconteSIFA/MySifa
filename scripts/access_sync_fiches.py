@@ -8,8 +8,10 @@ Dépendances :
     pip install pyodbc requests
 
 Configuration :
-    Adapter ACCESS_DB_PATH, TABLE_NAME et MYSIFA_API_KEY ci-dessous.
+    ACCESS_DB_PATH et TABLE_NAME ci-dessous, et la clé API dans la variable
+    d'environnement MYSIFA_API_KEY (jamais en clair dans le fichier).
 """
+import os
 import pyodbc
 import requests
 from datetime import datetime
@@ -19,7 +21,8 @@ ACCESS_DB_PATH  = r"\\IDEFIX\sifa_pub\Fiches techniques Access\sifa_fiches_techn
 LAST_RUN_FILE   = r"\\IDEFIX\sifa_pub\Fiches techniques Access\last_sync_fiches.txt"
 TABLE_NAME      = "fiches_techniques"
 MYSIFA_BASE_URL = "https://mysifa.com"
-MYSIFA_API_KEY  = "msk_b5ffcec1a8d91e7f46a6bcfe305360f704d6da503f37d5e9fadd31421f47e83d"
+# Clé API : setx MYSIFA_API_KEY "msk_..." puis rouvrir le terminal.
+MYSIFA_API_KEY  = os.environ.get("MYSIFA_API_KEY", "")
 DATE_FALLBACK   = "2025-01-01"     # première sync : fiches depuis 2025
 
 HEADERS = {
@@ -223,6 +226,11 @@ def push_fiche(payload: dict) -> dict:
 # ── Main ─────────────────────────────────────────────────────────────
 
 def main():
+
+    if not MYSIFA_API_KEY:
+        print("Clé API absente. Définir la variable d'environnement MYSIFA_API_KEY :")
+        print('  setx MYSIFA_API_KEY "msk_..."   puis rouvrir le terminal.')
+        return
     date_depuis = get_date_depuis()
     print(f"Connexion à Access : {ACCESS_DB_PATH}")
     print(f"Table             : {TABLE_NAME}")

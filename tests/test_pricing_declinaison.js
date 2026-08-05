@@ -75,5 +75,41 @@ check('drapeau remis à zéro après enregistrement', save.includes('S.declDirty
 // Le poids n'est plus saisi : il découle du grammage et de la perte.
 check('plus de poids envoyé à la main', save.includes('weight_per_m2'), false);
 
+// ─── Historique des prix ────────────────────────────────────────────────────
+vm.runInContext([
+  extraire('escHtml'), extraire('fmtNum'), extraire('fmt4'),
+  extraire('fmtDateHeure'), extraire('declHistoriqueHtml'),
+].join('\n'), ctx);
+
+check('date lisible', ctx.fmtDateHeure('2026-08-05T07:42:11'), '05/08/2026 · 07:42');
+check('date absente sans plantage', ctx.fmtDateHeure(null), '');
+
+const vide = ctx.declHistoriqueHtml([]);
+check('historique vide : message clair', vide.includes('Aucun mouvement'), true);
+check('et pas de tableau', vide.includes('<table'), false);
+
+const hist = ctx.declHistoriqueHtml([
+  { date: '2026-08-05T07:42:11', origine: 'MyStock — valorisation', auteur: 'Eugene',
+    fournisseur_nom: 'Meltavis', prix_avant: 2.0, prix_apres: 2.31,
+    sous_total_avant: 2.0, sous_total_apres: 2.31, note: null },
+  { date: '2026-08-04T09:00:00', origine: 'Coûts matières — paramétrage', auteur: 'Eugene',
+    prix_avant: 2.0, prix_apres: 2.0, sous_total_avant: 2.0, sous_total_apres: 2.12,
+    note: 'transport / taxes modifiés' },
+  { date: '2026-08-03T08:00:00', origine: 'Coûts matières', auteur: null,
+    prix_avant: 2.5, prix_apres: 2.0, sous_total_apres: 2.0, note: null },
+]);
+for (const attendu of ['MyStock — valorisation', 'Coûts matières — paramétrage',
+                       'Eugene', 'Meltavis', 'transport / taxes modifiés',
+                       '05/08/2026', 'Sous-total']) {
+  check('historique montre : ' + attendu, hist.includes(attendu), true);
+}
+check('une hausse est signalée', hist.includes('hist-hausse'), true);
+check('une baisse aussi', hist.includes('hist-baisse'), true);
+check('un prix inchangé n\'est ni l\'un ni l\'autre',
+  (hist.match(/hist-hausse|hist-baisse/g) || []).length, 2);
+check('auteur inconnu reste neutre', hist.includes('—'), true);
+check('les balises sont équilibrées',
+  (hist.match(/<td/g) || []).length, (hist.match(/<\/td>/g) || []).length);
+
 console.log(ko === 0 ? '\nTOUT EST VERT' : '\n' + ko + ' ECHEC(S)');
 process.exit(ko === 0 ? 0 : 1);

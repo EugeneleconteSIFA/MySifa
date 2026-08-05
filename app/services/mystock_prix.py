@@ -649,6 +649,10 @@ def parametrage(conn: sqlite3.Connection, declinaison_id: int) -> Optional[dict]
         "type_declinaison": type_declinaison(cat),
         "libelle": libelle_declinaison(d),
         "unit_price": principal["prix"] if principal else 0.0,
+        # Ce que la valorisation MyStock affiche pour cette matière.
+        "sous_total_achat": sous_total_achat(
+            principal["prix"] if principal else 0, **_reglages_declinaison(d)
+        ),
         "fournisseur_nom": principal["fournisseur_nom"] if principal else None,
         "prix_updated_at": principal["updated_at"] if principal else None,
         "lignes_prix": lignes,
@@ -759,10 +763,191 @@ def set_parametrage(
     poser("updated_at", _now())
     poser("updated_by_name", user_name)
     args.append(declinaison_id)
+    st_avant = sous_total_declinaison(conn, declinaison_id)
     conn.execute(
         f"UPDATE mp_matiere_declinaison SET {', '.join(sets)} WHERE id=?", args
     )
+    # Transport et taxes déplacent le sous-total sans toucher au prix d'achat :
+    # la valorisation MyStock doit suivre, et l'historique doit le dire.
+    st_apres = sous_total_declinaison(conn, declinaison_id)
+    if abs(st_avant - st_apres) > 1e-9:
+        prix_row = conn.execute(
+            "SELECT prix FROM mp_matiere_prix WHERE declinaison_id=? AND principal=1 LIMIT 1",
+            (declinaison_id,),
+        ).fetchone()
+        prix = _f(prix_row["prix"]) if prix_row else None
+        journaliser_prix(
+            conn, declinaison_id=declinaison_id,
+            prix_avant=prix, prix_apres=prix,
+            sous_total_avant=st_avant, sous_total_apres=st_apres,
+            origine="Coûts matières — paramétrage",
+            note="transport / taxes modifiés", user_name=user_name,
+        )
+        _mirror_principal(
+            conn, declinaison_id, user_id=None, user_name=user_name,
+            note="Paramétrage modifié depuis Coûts matières",
+        )
     return {"ok": True, "parametrage": parametrage(conn, declinaison_id)}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sous-total d'achat — la valeur commune aux deux applications
+# ─────────────────────────────────────────────────────────────────────────────
+# Coûts matières saisit un PRIX D'ACHAT fournisseur, auquel s'ajoutent le
+# transport d'import et les taxes. La valorisation MyStock, elle, raisonne sur ce
+# que la matière coûte rendue : c'est le SOUS-TOTAL D'ACHAT.
+#
+# C'est donc lui qui circule entre les deux écrans, pas le prix nu. Les deux sens
+# passent par les deux fonctions ci-dessous, qui sont l'inverse l'une de l'autre.
+
+
+def sous_total_achat(
+    prix: Any,
+    *,
+    is_imported: Any = False,
+    transport_mode: Optional[str] = "AMOUNT",
+    transport_unit_price: Any = 0,
+    transport_pct: Any = 0,
+    taxe_pct: Any = 0,
+) -> float:
+    """Prix d'achat + transport + taxes, dans la devise et la base d'achat."""
+    p = _f(prix)
+    if not is_imported:
+        return round(p, 6)
+    if (transport_mode or "AMOUNT").upper() == "PCT":
+        transport = p * _f(transport_pct) / 100.0
+    else:
+        transport = _f(transport_unit_price)
+    return round((p + transport) * (1 + _f(taxe_pct) / 100.0), 6)
+
+
+def prix_depuis_sous_total(
+    sous_total: Any,
+    *,
+    is_imported: Any = False,
+    transport_mode: Optional[str] = "AMOUNT",
+    transport_unit_price: Any = 0,
+    transport_pct: Any = 0,
+    taxe_pct: Any = 0,
+) -> Optional[float]:
+    """
+    Chemin inverse : de la valeur affichée en valorisation au prix fournisseur.
+
+    Renvoie None quand la décomposition n'a pas de solution acceptable — un
+    sous-total inférieur au seul transport, par exemple. Mieux vaut refuser que
+    d'inscrire un prix d'achat négatif que personne ne comprendrait.
+    """
+    st = _f(sous_total)
+    if not is_imported:
+        return round(st, 6) if st >= 0 else None
+    facteur_taxe = 1 + _f(taxe_pct) / 100.0
+    if facteur_taxe <= 0:
+        return None
+    hors_taxe = st / facteur_taxe
+    if (transport_mode or "AMOUNT").upper() == "PCT":
+        facteur_transport = 1 + _f(transport_pct) / 100.0
+        if facteur_transport <= 0:
+            return None
+        p = hors_taxe / facteur_transport
+    else:
+        p = hors_taxe - _f(transport_unit_price)
+    return round(p, 6) if p >= 0 else None
+
+
+def _reglages_declinaison(row: Any) -> dict:
+    """Les réglages qui font passer du prix d'achat au sous-total."""
+    return {
+        "is_imported": bool(_col(row, "is_imported")),
+        "transport_mode": _col(row, "transport_mode") or "AMOUNT",
+        "transport_unit_price": _f(_col(row, "transport_unit_price")),
+        "transport_pct": _f(_col(row, "transport_pct")),
+        "taxe_pct": _f(_col(row, "taxe_pct")),
+    }
+
+
+def sous_total_declinaison(conn: sqlite3.Connection, declinaison_id: int,
+                           prix: Optional[Any] = None) -> float:
+    """Sous-total d'une déclinaison, à partir de son prix principal par défaut."""
+    d = fetch_declinaison_complete(conn, declinaison_id)
+    if not d:
+        return 0.0
+    if prix is None:
+        row = conn.execute(
+            "SELECT prix FROM mp_matiere_prix WHERE declinaison_id=? AND principal=1 LIMIT 1",
+            (declinaison_id,),
+        ).fetchone()
+        prix = row["prix"] if row else 0
+    return sous_total_achat(prix, **_reglages_declinaison(d))
+
+
+def journaliser_prix(
+    conn: sqlite3.Connection,
+    *,
+    declinaison_id: int,
+    fournisseur_id: Optional[int] = None,
+    prix_avant: Optional[float] = None,
+    prix_apres: Optional[float] = None,
+    sous_total_avant: Optional[float] = None,
+    sous_total_apres: Optional[float] = None,
+    origine: str,
+    note: Optional[str] = None,
+    user_id: Optional[int] = None,
+    user_name: Optional[str] = None,
+) -> None:
+    """
+    Trace un mouvement de prix, avec l'écran d'où il vient.
+
+    Rien n'est écrit si ni le prix ni le sous-total n'ont bougé : l'historique
+    doit se lire, pas se dérouler.
+    """
+    bouge = (
+        prix_avant is None
+        or abs(_f(prix_avant) - _f(prix_apres)) > 1e-9
+        or abs(_f(sous_total_avant) - _f(sous_total_apres)) > 1e-9
+    )
+    if not bouge:
+        return
+    d = fetch_declinaison_complete(conn, declinaison_id)
+    conn.execute(
+        """INSERT INTO mp_prix_historique
+           (declinaison_id, matiere_id, fournisseur_id, prix_avant, prix_apres,
+            sous_total_avant, sous_total_apres, origine, note,
+            created_at, created_by, created_by_name)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (
+            declinaison_id,
+            int(d["matiere_id"]) if d else None,
+            fournisseur_id,
+            prix_avant, prix_apres, sous_total_avant, sous_total_apres,
+            origine, note, _now(), user_id, user_name,
+        ),
+    )
+
+
+def historique_prix(conn: sqlite3.Connection, declinaison_id: int, limite: int = 50) -> list[dict]:
+    rows = conn.execute(
+        """SELECT h.*, f.nom AS fournisseur_nom
+             FROM mp_prix_historique h
+             LEFT JOIN fournisseurs_fsc f ON f.id = h.fournisseur_id
+            WHERE h.declinaison_id = ?
+            ORDER BY h.created_at DESC, h.id DESC
+            LIMIT ?""",
+        (declinaison_id, int(limite)),
+    ).fetchall()
+    return [
+        {
+            "date": r["created_at"],
+            "origine": r["origine"],
+            "auteur": r["created_by_name"],
+            "fournisseur_nom": r["fournisseur_nom"],
+            "prix_avant": _f(r["prix_avant"]) if r["prix_avant"] is not None else None,
+            "prix_apres": _f(r["prix_apres"]) if r["prix_apres"] is not None else None,
+            "sous_total_avant": _f(r["sous_total_avant"]) if r["sous_total_avant"] is not None else None,
+            "sous_total_apres": _f(r["sous_total_apres"]) if r["sous_total_apres"] is not None else None,
+            "note": r["note"],
+        }
+        for r in rows
+    ]
 
 
 def _mirror_principal(
@@ -773,8 +958,15 @@ def _mirror_principal(
     user_name: Optional[str],
     note: str,
 ) -> dict:
-    """Recopie le prix principal dans les champs lus par la valorisation MyStock."""
-    d = fetch_declinaison(conn, declinaison_id)
+    """
+    Pousse le SOUS-TOTAL D'ACHAT dans les champs lus par la valorisation MyStock.
+
+    Pas le prix nu : la valorisation raisonne sur ce que la matière coûte rendue,
+    transport d'import et taxes compris. C'est cette valeur-là qui doit
+    apparaître des deux côtés, sinon les deux écrans affichent deux chiffres
+    différents pour la même matière.
+    """
+    d = fetch_declinaison_complete(conn, declinaison_id)
     if not d:
         return {"ok": False, "reason": "déclinaison introuvable"}
     matiere_id = int(d["matiere_id"])
@@ -785,7 +977,7 @@ def _mirror_principal(
     ).fetchone()
     if not row:
         return {"ok": False, "reason": "aucun prix principal"}
-    prix = _f(row["prix"])
+    prix = sous_total_achat(row["prix"], **_reglages_declinaison(d))
 
     laizee = is_laizee(mat["categorie"])
     par_laize = bool(int(mat["prix_par_laize"] or 0)) and laizee
@@ -906,10 +1098,18 @@ def resync_depuis_mystock(
     mises_a_jour = 0
 
     for d in declinaisons:
-        prix = _prix_mystock_de_reference(conn, mat, d["laize_id"])
-        if prix <= 0 or prix > 1_000_000:
+        # Côté MyStock, la valeur affichée est un SOUS-TOTAL : on remonte au prix
+        # d'achat en retirant transport et taxes, sinon on écrirait un tarif
+        # fournisseur gonflé de ses propres frais.
+        sous_total = _prix_mystock_de_reference(conn, mat, d["laize_id"])
+        if sous_total <= 0 or sous_total > 1_000_000:
             continue
         decl_id = int(d["id"])
+        complete = fetch_declinaison_complete(conn, decl_id)
+        prix = prix_depuis_sous_total(sous_total, **_reglages_declinaison(complete))
+        if prix is None:
+            # Le sous-total ne couvre même pas le transport : on ne devine pas.
+            continue
 
         ligne = conn.execute(
             "SELECT id, prix FROM mp_matiere_prix WHERE declinaison_id=? AND principal=1 LIMIT 1",
@@ -940,11 +1140,19 @@ def resync_depuis_mystock(
 
         if abs(_f(ligne["prix"]) - prix) <= 1e-9:
             continue  # déjà à la bonne valeur : ni écriture ni bruit dans l'historique
+        avant = _f(ligne["prix"])
         conn.execute(
             """UPDATE mp_matiere_prix
                   SET prix=?, note=?, updated_at=?, updated_by_name=?
                 WHERE id=?""",
             (prix, note, now, user_name, int(ligne["id"])),
+        )
+        journaliser_prix(
+            conn, declinaison_id=decl_id,
+            prix_avant=avant, prix_apres=prix,
+            sous_total_avant=sous_total_achat(avant, **_reglages_declinaison(complete)),
+            sous_total_apres=sous_total,
+            origine=origine, user_id=user_id, user_name=user_name,
         )
         mises_a_jour += 1
 
@@ -974,11 +1182,14 @@ def set_prix(
         return {"ok": False, "reason": "déclinaison introuvable"}
 
     now = _now()
+    complete = fetch_declinaison_complete(conn, declinaison_id)
+    reglages = _reglages_declinaison(complete)
     existing = conn.execute(
-        """SELECT id, principal FROM mp_matiere_prix
+        """SELECT id, principal, prix FROM mp_matiere_prix
             WHERE declinaison_id=? AND COALESCE(fournisseur_id,0)=COALESCE(?,0)""",
         (declinaison_id, fournisseur_id),
     ).fetchone()
+    avant = _f(existing["prix"]) if existing else None
     if existing:
         conn.execute(
             "UPDATE mp_matiere_prix SET prix=?, updated_at=?, updated_by_name=? WHERE id=?",
@@ -1022,6 +1233,13 @@ def set_prix(
             )
             principal = True
 
+    journaliser_prix(
+        conn, declinaison_id=declinaison_id, fournisseur_id=fournisseur_id,
+        prix_avant=avant, prix_apres=float(prix),
+        sous_total_avant=sous_total_achat(avant, **reglages) if avant is not None else None,
+        sous_total_apres=sous_total_achat(prix, **reglages),
+        origine=origine, user_id=user_id, user_name=user_name,
+    )
     result = {"ok": True, "principal": principal}
     if principal:
         result["miroir"] = _mirror_principal(

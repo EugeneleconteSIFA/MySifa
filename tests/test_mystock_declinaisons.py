@@ -390,6 +390,21 @@ with dbmod.get_db() as conn:
     check("le poids retenu inclut la perte", p35["weight_per_m2"], round(35 * 1.09 / 1000, 6))
     check("les anciennes déclinaisons gardent une perte nulle", p22["perte_pct"], 0.0)
 
+    print("\n--- le grammage ne sert qu'aux prix au kilo ---")
+    # Le poids ne sert qu'à passer du kilo au m². On le garde en base quand la
+    # matière passe au m² — le champ disparaît de l'écran, pas la donnée.
+    avant_g = MP.parametrage(conn, d22["id"])["grammage_gsm"]
+    MP.set_parametrage(conn, declinaison_id=d22["id"], patch={"price_basis": "PER_M2"})
+    conn.commit()
+    check("le grammage survit au passage au m²",
+          MP.parametrage(conn, d22["id"])["grammage_gsm"], avant_g)
+    check("un prix au m² ignore le poids dans le calcul",
+          cout(d22["id"]), round(2.95, 4))
+    MP.set_parametrage(conn, declinaison_id=d22["id"], patch={"price_basis": "PER_KG"})
+    conn.commit()
+    check("et le calcul le reprend au retour au kilo",
+          cout(d22["id"]), round(2.95 * avant_g / 1000, 4))
+
     print("\n--- édition des réglages ---")
     check("devise inconnue refusée",
           MP.set_parametrage(conn, declinaison_id=d22["id"],
@@ -500,6 +515,130 @@ with dbmod.get_db() as conn:
                        patch={"grammage_gsm": 22, "perte_pct": 0})
     conn.commit()
     check("retour au grammage d'origine", gram_de_la_ligne(d22["id"]), 22.0)
+
+    print("\n--- sous-total d'achat : la valeur commune aux deux écrans ---")
+    # Coûts matières saisit un prix fournisseur ; la valorisation MyStock affiche
+    # ce que la matière coûte rendue. Les deux fonctions doivent être exactement
+    # l'inverse l'une de l'autre, sinon un aller-retour dérive.
+    CAS = [
+        # (libellé, prix, réglages)
+        ("locale, sans frais", 4.20, dict(is_imported=False)),
+        ("import, transport au montant", 4.20,
+         dict(is_imported=True, transport_mode="AMOUNT", transport_unit_price=0.378)),
+        ("import, transport en pourcentage", 4.20,
+         dict(is_imported=True, transport_mode="PCT", transport_pct=9)),
+        ("import, transport et taxes", 4.20,
+         dict(is_imported=True, transport_mode="PCT", transport_pct=9, taxe_pct=6)),
+        ("taxe négative (remise)", 4.20,
+         dict(is_imported=True, transport_mode="AMOUNT", transport_unit_price=0.2, taxe_pct=-5)),
+    ]
+    for libelle, prix, reg in CAS:
+        st = MP.sous_total_achat(prix, **reg)
+        retour = MP.prix_depuis_sous_total(st, **reg)
+        check(f"aller-retour — {libelle}", round(retour, 4), prix)
+    check("transport au montant : 4,20 + 0,378",
+          MP.sous_total_achat(4.20, is_imported=True, transport_mode="AMOUNT",
+                              transport_unit_price=0.378), 4.578)
+    check("9 % de transport sur 4,20",
+          MP.sous_total_achat(4.20, is_imported=True, transport_mode="PCT",
+                              transport_pct=9), 4.578)
+    check("une matière locale ignore transport et taxes",
+          MP.sous_total_achat(4.20, is_imported=False, transport_mode="PCT",
+                              transport_pct=9, taxe_pct=6), 4.2)
+    # Un sous-total qui ne couvre pas le transport n'a pas de solution : mieux
+    # vaut refuser que d'inscrire un prix d'achat négatif.
+    check("sous-total inférieur au transport refusé",
+          MP.prix_depuis_sous_total(0.1, is_imported=True, transport_mode="AMOUNT",
+                                    transport_unit_price=0.5), None)
+    check("taxe de -100 % refusée",
+          MP.prix_depuis_sous_total(1, is_imported=True, taxe_pct=-100), None)
+
+    # Le sous-total du service doit coller au moteur de calcul, au centime près.
+    d_test = dl["id"]
+    MP.set_parametrage(conn, declinaison_id=d_test, patch={
+        "is_imported": True, "transport_mode": "PCT", "transport_pct": 9, "taxe_pct": 6,
+    })
+    conn.commit()
+    p_test = MP.parametrage(conn, d_test)
+    moteur = compute_material_price_per_m2(
+        declinaison_to_pricing_material(p_test), reglages
+    ).breakdown
+    check("le sous-total du service = celui du moteur",
+          round(p_test["sous_total_achat"], 4), round(float(moteur.subtotal_src), 4))
+
+    print("\n--- le pont dans les deux sens ---")
+    # Coûts matières -> MyStock : c'est le sous-total qui part, pas le prix nu.
+    MP.set_prix(conn, declinaison_id=d_test, fournisseur_id=f["Meltavis"], prix=2.0,
+                user_name="Test", origine="Coûts matières — fiche matière")
+    conn.commit()
+    miroir = conn.execute(
+        "SELECT prix_eur_m2 FROM mp_matiere_laizes WHERE matiere_id=2 AND laize_id=?",
+        (laize[330],),
+    ).fetchone()[0]
+    attendu_st = round(2.0 * 1.09 * 1.06, 6)
+    check("la valorisation reçoit le sous-total", round(miroir, 4), round(attendu_st, 4))
+    check("et non le prix d'achat", abs(miroir - 2.0) > 0.01, True)
+
+    # MyStock -> Coûts matières : la valeur saisie est un sous-total, on remonte.
+    conn.execute("UPDATE mp_matiere_laizes SET prix_eur_m2=? WHERE matiere_id=2 AND laize_id=?",
+                 (2.31, laize[330]))
+    conn.commit()
+    MP.resync_depuis_mystock(conn, 2, user_name="Valo", origine="MyStock — valorisation")
+    conn.commit()
+    principal = conn.execute(
+        "SELECT prix FROM mp_matiere_prix WHERE declinaison_id=? AND principal=1",
+        (d_test,),
+    ).fetchone()[0]
+    check("le prix d'achat est recalculé sans les frais",
+          round(principal, 4), round(2.31 / 1.09 / 1.06, 4))
+    check("et le sous-total retombe sur la valeur saisie",
+          round(MP.sous_total_declinaison(conn, d_test), 2), 2.31)
+
+    # Changer transport ou taxes déplace le sous-total sans toucher au prix.
+    avant_prix = principal
+    MP.set_parametrage(conn, declinaison_id=d_test, patch={"transport_pct": 20},
+                       user_name="Test")
+    conn.commit()
+    apres_prix = conn.execute(
+        "SELECT prix FROM mp_matiere_prix WHERE declinaison_id=? AND principal=1",
+        (d_test,),
+    ).fetchone()[0]
+    check("le prix d'achat ne bouge pas", round(apres_prix, 6), round(avant_prix, 6))
+    check("mais la valorisation suit",
+          round(conn.execute(
+              "SELECT prix_eur_m2 FROM mp_matiere_laizes WHERE matiere_id=2 AND laize_id=?",
+              (laize[330],)).fetchone()[0], 4),
+          round(avant_prix * 1.20 * 1.06, 4))
+
+    print("\n--- historique des prix ---")
+    hist = MP.historique_prix(conn, d_test)
+    check("les mouvements sont tracés", len(hist) >= 3, True)
+    origines = {h["origine"] for h in hist}
+    check("l'écran d'origine est enregistré",
+          "Coûts matières — fiche matière" in origines and "MyStock — valorisation" in origines,
+          True)
+    check("le paramétrage aussi", "Coûts matières — paramétrage" in origines, True)
+    check("l'auteur est tracé", hist[0]["auteur"] is not None, True)
+    check("le plus récent en premier", hist[0]["date"] >= hist[-1]["date"], True)
+    param_hist = next(h for h in hist if h["origine"] == "Coûts matières — paramétrage")
+    check("un changement de paramétrage laisse le prix identique",
+          round(param_hist["prix_avant"], 6), round(param_hist["prix_apres"], 6))
+    check("mais déplace le sous-total",
+          param_hist["sous_total_avant"] != param_hist["sous_total_apres"], True)
+    # Réenregistrer la même valeur ne doit rien ajouter.
+    n = len(MP.historique_prix(conn, d_test))
+    MP.set_prix(conn, declinaison_id=d_test, fournisseur_id=f["Meltavis"],
+                prix=apres_prix, user_name="Test")
+    conn.commit()
+    check("un prix inchangé n'encombre pas l'historique",
+          len(MP.historique_prix(conn, d_test)), n)
+
+    # On remet la déclinaison dans son état d'origine pour la suite du scénario.
+    MP.set_parametrage(conn, declinaison_id=d_test, patch={
+        "is_imported": False, "transport_pct": 0, "taxe_pct": 0,
+    })
+    MP.set_prix(conn, declinaison_id=d_test, fournisseur_id=f["Meltavis"], prix=1.62)
+    conn.commit()
 
     print("\n--- reprise des fiches déjà appairées (migration) ---")
     # Sur la vraie base, des déclinaisons sont appairées depuis des semaines :

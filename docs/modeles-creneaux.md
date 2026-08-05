@@ -101,14 +101,20 @@ la confirmation au prochain changement de règle.
 
 ## 5. Désactiver la récurrence / supprimer le modèle
 
-- **Désactiver la récurrence** : les créneaux futurs liés sont supprimés.
-- **Supprimer le modèle** : idem, les créneaux passés sont conservés et
+- **Désactiver la récurrence** : les occurrences futures de la récurrence sont
+  supprimées.
+- **Supprimer le modèle** : idem ; les créneaux passés sont conservés et
   détachés (`template_id` → NULL).
 
-⚠️ Ces deux opérations filtrent encore sur le seul `template_id`, sans vérifier
-`template_origin_date`. Sans conséquence pour les créneaux créés depuis la
-v2.6.1 (ils n'en portent plus), mais un créneau plus ancien ayant hérité d'une
-étiquette reste exposé.
+Depuis la v2.7.2, ces deux opérations filtrent sur `template_id` **et**
+`template_origin_date IS NOT NULL` : seules les occurrences réellement générées
+par la récurrence sont emportées. Un créneau composé à la main ayant hérité
+d'une étiquette `template_id` (avant la v2.6.1) survit et se retrouve
+simplement détaché.
+
+Les compteurs de la carte du modèle (« N créneaux créés », « N supprimées ») et
+le panneau de restauration comptent la même population — sinon la modale de
+suppression annoncerait plus de créneaux qu'elle n'en supprime.
 
 ## 6. Ce qui n'est jamais touché
 
@@ -122,6 +128,8 @@ v2.6.1 (ils n'en portent plus), mais un créneau plus ancien ayant hérité d'un
 - **Appariement positionnel** : si une occurrence est supprimée au milieu de la
   série puis que la règle change, le décalage se propage — la 4e occurrence
   restante prend la 4e date théorique, pas la 5e.
-- **Suppression / désactivation** : voir l'avertissement du §5.
+- **Conversion hebdomadaire → mensuel** : l'invariant « une occurrence par
+  période » ne garde qu'un créneau par mois, les trois autres disparaissent
+  sans avertissement dédié.
 - Les **interventions libres** (décrites à la main) ne sont pas dédupliquées :
   elles se distinguent par leur titre, pas par un code.

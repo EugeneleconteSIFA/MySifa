@@ -409,6 +409,63 @@ table.recap-table td:last-child{border-right:none}
   border-left:3px solid var(--accent);border-radius:8px;padding:11px 14px;margin-bottom:12px;line-height:1.6}
 .ms-hint strong{color:var(--text)}
 
+/* Liste des produits MyStock : lignes plus aérées que la table générique —
+   les désignations tiennent souvent sur deux lignes, il leur faut de l'air. */
+table.msp-table th{padding:11px 14px}
+table.msp-table td{padding:15px 14px;vertical-align:middle}
+table.msp-table td:first-child,table.msp-table th:first-child{padding-left:16px}
+/* La déclinaison est une précision, pas le nom de la matière. */
+.msp-decl{color:var(--muted);font-size:12px;white-space:nowrap}
+/* Détail déplié : rôle en petites capitales, part en jauge. */
+.msp-role{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  color:var(--muted);white-space:nowrap}
+.msp-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.msp-part{width:190px}
+.msp-jauge{display:inline-block;width:110px;height:8px;border-radius:4px;
+  background:var(--border);overflow:hidden;vertical-align:middle;margin-right:8px}
+.msp-jauge i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.msp-part-val{font-size:12px;font-variant-numeric:tabular-nums;color:var(--text2)}
+/* Le détail n'est pas cliquable : aucune ligne ne doit réagir au survol.
+   Sans ça, la teinte de survol de .pr-table s'invite par-dessus le fond du
+   tableau déplié et donne des bandes claires au passage de la souris. */
+/* Sélecteurs volontairement plus précis que `table.pr-table tr:hover td` (0,2,3) :
+   la règle générique de survol des tableaux ne doit pas pouvoir gagner ici. La
+   cellule qui CONTIENT le bloc déplié compte aussi — c'est elle qui se teintait
+   quand on promenait la souris dans le détail. */
+table.pr-table tr.msp-detail-row td,
+table.pr-table tr.msp-detail-row:hover td,
+tr.msp-detail-row td,
+tr.msp-detail-row:hover td,
+tr.msp-detail-row table.msp-detail td,
+tr.msp-detail-row table.msp-detail tr:hover td,
+tr.msp-detail-row table.msp-detail tr.ms-principal td{background:var(--card)}
+tr.msp-detail-row table.msp-detail,
+tr.msp-detail-row table.msp-detail tr,
+tr.msp-detail-row table.msp-detail td{cursor:default;background:var(--card)}
+tr.msp-detail-row table.msp-detail th{background:var(--bg)}
+/* Seul un lien vers une matière réagit. */
+.msp-lien{color:var(--accent);text-decoration:none;font-weight:600;cursor:pointer;
+  background:none;border:none;padding:0;font-family:inherit;font-size:inherit;text-align:left}
+.msp-lien:hover{text-decoration:underline}
+
+/* Historique des prix d'une déclinaison : deux écrans y écrivent, la colonne
+   « Depuis » est ce qui rend l'écart explicable. */
+table.hist-table td,table.hist-table th{padding:9px 12px}
+table.hist-table tr{cursor:default}
+table.hist-table tr:hover td{background:var(--accent-bg)}
+.hist-date{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--text2)}
+.hist-note{color:var(--muted);font-size:12px}
+.hist-hausse{color:var(--danger);font-weight:700}
+.hist-baisse{color:var(--success);font-weight:700}
+
+/* Bandeau de totaux sous le détail. */
+.msp-totaux{display:flex;flex-wrap:wrap;gap:22px;align-items:center;
+  padding:12px 22px 2px;font-size:12px;color:var(--muted)}
+.msp-totaux strong{color:var(--text);font-size:14px;font-variant-numeric:tabular-nums;
+  margin-left:6px}
+.msp-alerte{color:var(--warn);font-weight:600}
+@media(max-width:900px){ .msp-part{width:auto} .msp-jauge{display:none} }
+
 tr.ms-row{cursor:pointer}
 tr.ms-row td{transition:background .12s}
 /* Matière ouverte : même teinte que le survol, pour la relier à son détail. */
@@ -421,6 +478,8 @@ tr.ms-row.open td{background:var(--accent-bg);border-bottom-color:transparent;fo
 /* Filet très discret entre la ligne de la matière et sa table de déclinaisons. */
 tr.ms-detail-row td{padding:0;background:var(--card);
   border-top:1px solid var(--border);border-bottom:2px solid var(--accent)}
+table.pr-table tr.ms-detail-row td,
+table.pr-table tr.ms-detail-row:hover td,
 tr.ms-detail-row:hover td{background:var(--card)}
 /* La table occupe toute la cellule dépliée, avec juste ce qu'il faut d'air. */
 .ms-detail{padding:10px 0 14px}

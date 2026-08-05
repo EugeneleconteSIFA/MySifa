@@ -37,12 +37,16 @@ check('une perte de 100 % double le grammage', ctx.grammageRetenu(50, 100), 100)
 check('grammage saisi avec décimales', ctx.grammageRetenu(22.5, 9), 24.53);
 
 // ─── La section n'apparaît que si le poids sert ─────────────────────────────
+// Le grammage ne sert qu'à passer du kilo au m² : un prix déjà au m² n'en a
+// aucun usage, importé ou pas.
 check('prix au kilo : le grammage est nécessaire',
   ctx.needsWeight({ price_basis: 'PER_KG', is_imported: false }), true);
-check('prix au m² sans import : inutile',
+check('prix au kilo importé : toujours nécessaire',
+  ctx.needsWeight({ price_basis: 'PER_KG', is_imported: true }), true);
+check('prix au m² : inutile',
   ctx.needsWeight({ price_basis: 'PER_M2', is_imported: false }), false);
-check('prix au m² importé : nécessaire pour le transport',
-  ctx.needsWeight({ price_basis: 'PER_M2', is_imported: true }), true);
+check('prix au m² importé : inutile aussi',
+  ctx.needsWeight({ price_basis: 'PER_M2', is_imported: true }), false);
 
 // ─── Ce que les deux fiches envoient au serveur ─────────────────────────────
 for (const [nom, fn] of [['fiche matière', 'saveMaterialForm'], ['fiche MyStock', 'saveDeclinaisonForm']]) {
