@@ -2327,9 +2327,9 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
               </select>
             </div>
             <div class="filter-group">
-              <label for="filt-operations-type">Type d'opération</label>
+              <label for="filt-operations-type">Nom de l'opération</label>
               <select id="filt-operations-type" class="filter-input">
-                <option value="">Tous les types</option>
+                <option value="">Toutes les opérations</option>
               </select>
             </div>
             <div class="filter-group">
@@ -7208,11 +7208,38 @@ function refreshOpsFiltersOptions(){
   const typeSel = document.getElementById('filt-operations-type');
   const opeSel  = document.getElementById('filt-operations-operateur');
   if(typeSel){
-    const cur = typeSel.value;
-    const types = OPS_TYPES_STATE.list.map(t => t.nom).filter(Boolean).sort((a,b) => a.localeCompare(b, 'fr'));
-    typeSel.innerHTML = '<option value="">Tous les types</option>' +
-      types.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
-    if(cur && types.includes(cur)) typeSel.value = cur;
+    const cur  = typeSel.value;
+    // v2.7.1 : le select "Nom de l'opération" liste les codes catalogue ET les
+    // interventions libres présentes dans l'historique. Le filtre "Type de
+    // saisie" restreint la liste au type sélectionné (codes / libres).
+    const kind = (document.getElementById('filt-operations-kind')?.value || 'all');
+    const sortFr = arr => arr.sort((a,b) => a.localeCompare(b, 'fr'));
+    const codes  = sortFr(Array.from(new Set(
+      OPS_TYPES_STATE.list.map(t => t.nom).filter(Boolean)
+    )));
+    const libres = sortFr(Array.from(new Set(
+      OPS_STATE.list.filter(o => o._libre).map(o => o.type).filter(Boolean)
+    )));
+    const opt = n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>';
+    const grp = (label, items) => items.length
+      ? '<optgroup label="' + escAttr(label) + '">' + items.map(opt).join('') + '</optgroup>'
+      : '';
+    let html = '<option value="">Toutes les opérations</option>';
+    let allowed = [];
+    if(kind === 'codes'){
+      html += codes.map(opt).join('');
+      allowed = codes;
+    } else if(kind === 'libres'){
+      html += libres.map(opt).join('');
+      allowed = libres;
+    } else {
+      html += grp('Codes catalogue', codes) + grp('Interventions libres', libres);
+      allowed = codes.concat(libres);
+    }
+    typeSel.innerHTML = html;
+    // Si la sélection courante n'existe plus dans le jeu restreint, on repasse
+    // sur "Toutes les opérations" plutôt que de laisser un filtre fantôme.
+    typeSel.value = (cur && allowed.includes(cur)) ? cur : '';
   }
   if(opeSel){
     const cur = opeSel.value;
