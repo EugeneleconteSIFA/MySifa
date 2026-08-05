@@ -794,6 +794,15 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-doc-import{margin-top:12px;padding:12px;border:1px dashed var(--border);border-radius:8px}
 .bes-doc-import-hd{font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px}
 .bes-doc-status{font-size:12px;margin-top:8px;line-height:1.5}
+/* Pastille de validation d'un document (OF, fiche technique) */
+.bes-doc-pair{display:inline-flex;align-items:center;margin-left:6px}
+.bes-doc-pair .bes-act-btn{margin-left:0;border-top-right-radius:0;border-bottom-right-radius:0}
+.bes-valid-btn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:27px;border:1px solid var(--warn,#d97706);border-left:none;background:color-mix(in srgb,var(--warn,#d97706) 10%,transparent);color:var(--warn,#d97706);font-size:12px;font-weight:800;font-family:inherit;cursor:pointer;border-radius:0 6px 6px 0;transition:all .12s}
+.bes-valid-btn.ok{border-color:var(--success,#22c55e);color:var(--success,#22c55e);background:color-mix(in srgb,var(--success,#22c55e) 12%,transparent)}
+.bes-valid-btn:disabled{cursor:default;opacity:.75}
+.bes-valid-btn:not(:disabled):hover{filter:brightness(1.15)}
+.bes-destock-ok{color:var(--success,#22c55e);font-weight:700;font-size:12px}
+.bes-destock-todo{color:var(--warn,#d97706);font-weight:700;font-size:12px}
 .bes-act-btn.off:hover{border-color:var(--border);color:var(--text2)}
 /* Vue par matiere : sources de fiche technique agregees sous la reference */
 .bes-mat-sources{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.45}
@@ -2784,6 +2793,22 @@ async function loadBesoinsMatieres() {
   } catch(e) {
     S.besoinsEcheance = { lignes: [] };
     S.besoinsDossiers = { dossiers: [] };
+    showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
+  } finally {
+    S.besoinsLoading = false;
+    renderContent();
+  }
+}
+
+// Les dossiers passés se chargent à la demande : ils peuvent être nombreux et
+// n'intéressent que le déstockage, pas l'approvisionnement quotidien.
+async function loadBesoinsPasses() {
+  S.besoinsLoading = true;
+  renderContent();
+  try {
+    S.besoinsPasses = await api('/api/stock/besoins-matieres/par-dossier-passes');
+  } catch (e) {
+    S.besoinsPasses = { dossiers: [] };
     showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
   } finally {
     S.besoinsLoading = false;
@@ -12198,7 +12223,33 @@ function buildBesoinsMatieres() {
         cls: 'bes-seg-btn' + (view === 'dossier' ? ' active' : ''),
         on: { click: () => { S.besoinsView = 'dossier'; renderContent(); } }
       }, 'Par dossier'),
+      el('button', {
+        cls: 'bes-seg-btn' + (view === 'passes' ? ' active' : ''),
+        title: 'Productions terminées : ce qui reste à déstocker et ce qui l\'est déjà',
+        on: { click: () => { S.besoinsView = 'passes'; loadBesoinsPasses(); } }
+      }, 'Dossiers passés'),
     ),
+    (function () {
+      const inp = el('input', {
+        cls: 'bes-search-input',
+        style: { maxWidth: '260px', margin: '0' },
+        placeholder: 'Filtrer — n\'importe quel champ…',
+      });
+      inp.value = S.besoinsFiltre || '';
+      let t = null;
+      inp.addEventListener('input', () => {
+        clearTimeout(t);
+        t = setTimeout(() => {
+          S.besoinsFiltre = (inp.value || '').trim();
+          renderContent();
+          // Le re-rendu recrée l'input : on lui rend le focus et le curseur,
+          // sinon on ne peut pas taper deux caractères de suite.
+          const n = document.querySelector('.bes-toolbar .bes-search-input');
+          if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); }
+        }, 250);
+      });
+      return inp;
+    })(),
     el('div', { cls: 'bes-actions' },
       el('button', { cls: 'bes-btn-secondary', on: { click: () => openBesoinsMappingModal() } },
         iconEl('list-checks', 14), el('span', {}, 'Correspondances')),
@@ -12212,6 +12263,8 @@ function buildBesoinsMatieres() {
     wrap.appendChild(_buildBesoinsEcheanceTable(ech));
   } else if (view === 'matiere') {
     wrap.appendChild(_buildBesoinsMatiereTable(ech));
+  } else if (view === 'passes') {
+    wrap.appendChild(_buildBesoinsPassesTable(S.besoinsPasses));
   } else {
     wrap.appendChild(_buildBesoinsDossierTable(dos));
   }
@@ -12224,8 +12277,9 @@ function buildBesoinsMatieres() {
 // l'unité de la commande fournisseur, et deux valeurs de fiche mappées sur la
 // même référence doivent s'additionner avant qu'on décide d'acheter.
 function _buildBesoinsMatiereTable(ech) {
-  const matieres = ech.matieres || [];
-  const orphelins = ech.non_associees || [];
+  const q = S.besoinsFiltre;
+  const matieres = (ech.matieres || []).filter(m => _besMatchFiltre(m, q));
+  const orphelins = (ech.non_associees || []).filter(o => _besMatchFiltre(o, q));
   if (!matieres.length && !orphelins.length) {
     return el('div', { cls: 'bes-empty' },
       'Aucun besoin matière détecté pour les dossiers en cours ou en attente.');
@@ -12356,7 +12410,7 @@ function _buildBesoinsMatiereTable(ech) {
 }
 
 function _buildBesoinsEcheanceTable(ech) {
-  const lignes = ech.lignes || [];
+  const lignes = (ech.lignes || []).filter(l => _besMatchFiltre(l, S.besoinsFiltre));
   if (!lignes.length) {
     return el('div', { cls: 'bes-empty' },
       'Aucun besoin matière détecté pour les dossiers en cours ou en attente.');
@@ -12524,6 +12578,26 @@ const BESOINS_KIND_COL_LABELS = {
   mandrin: 'Mandrin', carton: 'Carton', palette: 'Palette',
 };
 
+// Filtre « n'importe quel champ contient ». Plutot qu'une liste de champs a
+// maintenir — et a oublier d'etendre au prochain ajout de colonne — on aplatit
+// l'objet et on cherche dedans. Chaque mot doit etre present : « roquette 993 »
+// trouve le dossier Roquette dont la reference commence par 993, quel que soit
+// l'ordre des mots.
+function _besAplati(o, prof) {
+  if (o == null) return '';
+  if (typeof o !== 'object') return String(o) + ' ';
+  if (prof > 2) return '';
+  let s = '';
+  if (Array.isArray(o)) { o.forEach(v => { s += _besAplati(v, prof + 1); }); return s; }
+  Object.keys(o).forEach(k => { s += _besAplati(o[k], prof + 1); });
+  return s;
+}
+function _besMatchFiltre(obj, q) {
+  if (!q) return true;
+  const hay = _besAplati(obj, 0).toLowerCase();
+  return q.toLowerCase().split(/\s+/).filter(Boolean).every(mot => hay.includes(mot));
+}
+
 // Trace de calcul d'un besoin, affichee en infobulle : formule, variables
 // utilisees avec leur origine, puis ce qui manque quand rien n'est chiffrable.
 function _besTraceTitle(b) {
@@ -12603,19 +12677,148 @@ function _besDocManquantBtn(label, ico, dossier, onglet) {
 }
 
 function _besDocCell(d) {
+  // Chaque document porte son état de validation : c'est lui qui autorisera le
+  // déstockage en fin de production, autant le voir dès l'approvisionnement.
   return el('td', { cls: 'bes-act-cell' },
     d.of_import_id
-      ? _besDocBtn('OF', 'file-text', '/api/of/' + d.of_import_id + '/pdf-preview', 'Ouvrir l\'OF')
+      ? el('span', { cls: 'bes-doc-pair' },
+          _besDocBtn('OF', 'file-text', '/api/of/' + d.of_import_id + '/pdf-preview', 'Ouvrir l\'OF'),
+          _besValidBtn('of', d.of_import_id, d.of_valide, d.of_valide_par, 'OF'))
       : _besDocManquantBtn('OF', 'file-text', d, 'of'),
     d.ft_id
-      ? _besDocBtn('Fiche', 'clipboard', '/api/fiches-techniques/' + d.ft_id + '/pdf-preview',
-          'Ouvrir la fiche technique')
+      ? el('span', { cls: 'bes-doc-pair' },
+          _besDocBtn('Fiche', 'clipboard', '/api/fiches-techniques/' + d.ft_id + '/pdf-preview',
+            'Ouvrir la fiche technique'),
+          _besValidBtn('fiche', d.ft_id, d.ft_valide, d.ft_valide_par, 'Fiche technique'))
       : _besDocManquantBtn('Fiche', 'clipboard', d, 'fiche'),
   );
 }
 
+// ── Validation des documents d'un dossier ─────────────────────────────────
+// Le déstockage lit l'OF et la fiche technique pour décider ce qui sort du
+// stock : tant que personne ne les a relus, on ne bouge rien. La validation se
+// fait donc ici, là où le blocage se constate.
+async function basculerValidationDoc(type, docId, valide) {
+  try {
+    await api('/api/stock/besoins-matieres/' + type + '/' + docId + '/validation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valide: !!valide }),
+    });
+    showToast(valide ? 'Document validé.' : 'Validation retirée.', 'success');
+    if (S.besoinsView === 'passes') await loadBesoinsPasses();
+    else await loadBesoinsMatieres();
+  } catch (e) {
+    showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
+  }
+}
+
+// Pastille de validation : cliquable pour l'administration, simple témoin
+// sinon. Un document non validé se voit, même pour qui ne peut pas le valider.
+function _besValidBtn(type, docId, valide, quiValide, libelle) {
+  if (!docId) return null;
+  const peut = isMatieresAdmin() && !S.stockReadOnly;
+  const b = el('button', {
+    cls: 'bes-valid-btn' + (valide ? ' ok' : ''),
+    type: 'button',
+    attrs: peut ? {} : { disabled: 'disabled' },
+    title: valide
+      ? (libelle + ' validé' + (quiValide ? ' par ' + quiValide : '')
+         + (peut ? ' — cliquer pour retirer la validation' : ''))
+      : (libelle + ' non validé' + (peut ? ' — cliquer pour valider' : '')),
+  }, valide ? '✓' : '!');
+  if (peut) {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      basculerValidationDoc(type, docId, !valide);
+    });
+  }
+  return b;
+}
+
+// ── Dossiers passés ───────────────────────────────────────────────────────
+// La vue par dossier ne montre que la production en cours : c'est ce qu'il faut
+// pour approvisionner. Mais le déstockage se fait après, donc sur des dossiers
+// qui ont justement quitté ce périmètre — sans cette vue, ils devenaient
+// introuvables une fois terminés.
+function _buildBesoinsPassesTable(dos) {
+  if (!dos) {
+    return el('div', { cls: 'bes-empty' }, 'Chargement des dossiers terminés…');
+  }
+  const dossiers = (dos.dossiers || []).filter(d => _besMatchFiltre(d, S.besoinsFiltre));
+  if (!dossiers.length) {
+    return el('div', { cls: 'bes-empty' },
+      S.besoinsFiltre ? 'Aucun dossier terminé ne correspond à ce filtre.'
+                      : 'Aucun dossier terminé.');
+  }
+
+  const aFaire = dossiers.filter(d => d.destockage !== 'done').length;
+  const section = el('div', { cls: 'bes-section' });
+  section.appendChild(el('div', { cls: 'bes-section-head' },
+    el('span', { cls: 'bes-section-title' }, 'Productions terminées'),
+    el('span', { cls: 'bes-section-count' },
+      `${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`
+      + (aFaire ? ` · ${aFaire} à déstocker` : ' · tous déstockés')),
+  ));
+
+  const table = el('table', { cls: 'bes-table' });
+  table.appendChild(el('thead', {}, el('tr', {},
+    el('th', {}, 'Dossier'),
+    el('th', {}, 'Client'),
+    el('th', {}, 'Machine'),
+    el('th', {}, 'Fin'),
+    el('th', {}, 'Documents'),
+    el('th', {}, 'Déstockage'),
+  )));
+
+  const tbody = el('tbody', {});
+  dossiers.forEach(d => {
+    const fait = d.destockage === 'done';
+    const etat = fait
+      ? el('td', {},
+          el('span', { cls: 'bes-destock-ok' }, '✓ Déstocké'),
+          (d.destocke_par || d.destocke_at)
+            ? el('div', { cls: 'bes-dossier-meta' },
+                [d.destocke_par ? 'par ' + d.destocke_par : null,
+                 d.destocke_at ? 'le ' + _fmtDate(d.destocke_at) : null].filter(Boolean).join(' '))
+            : null)
+      : el('td', {},
+          el('span', { cls: 'bes-destock-todo' }, 'À déstocker'),
+          d.blocage ? el('div', { cls: 'bes-warn-note' }, d.blocage) : null);
+
+    tbody.appendChild(el('tr', { cls: (fait || d.destockable) ? '' : 'bes-row-warn' },
+      el('td', {},
+        el('div', { cls: 'bes-dossier-ref' }, d.reference || '—'),
+        (d.numero_of || d.ref_produit) ? el('div', { cls: 'bes-dossier-meta' },
+          [d.numero_of ? 'OF ' + d.numero_of : null, d.ref_produit].filter(Boolean).join(' · ')) : null,
+      ),
+      el('td', {}, d.client || '—'),
+      el('td', {}, d.machine_nom || '—'),
+      el('td', {}, _fmtDate(d.planned_end || d.date_livraison)),
+      el('td', { cls: 'bes-act-cell' },
+        d.of_import_id
+          ? el('span', { cls: 'bes-doc-pair' },
+              _besDocBtn('OF', 'file-text', '/api/of/' + d.of_import_id + '/pdf-preview',
+                'Ouvrir l\'OF'),
+              _besValidBtn('of', d.of_import_id, d.of_valide, d.of_valide_par, 'OF'))
+          : el('span', { cls: 'bes-mp-none' }, 'Pas d\'OF'),
+        d.ft_id
+          ? el('span', { cls: 'bes-doc-pair' },
+              _besDocBtn('Fiche', 'clipboard', '/api/fiches-techniques/' + d.ft_id + '/pdf-preview',
+                'Ouvrir la fiche technique'),
+              _besValidBtn('fiche', d.ft_id, d.ft_valide, d.ft_valide_par, 'Fiche technique'))
+          : el('span', { cls: 'bes-mp-none' }, 'Pas de fiche'),
+      ),
+      etat,
+    ));
+  });
+  table.appendChild(tbody);
+  section.appendChild(el('div', { cls: 'bes-card bes-scroll-x' }, table));
+  return section;
+}
+
 function _buildBesoinsDossierTable(dos) {
-  const dossiers = dos.dossiers || [];
+  const dossiers = (dos.dossiers || []).filter(d => _besMatchFiltre(d, S.besoinsFiltre));
   if (!dossiers.length) {
     return el('div', { cls: 'bes-empty' }, 'Aucun dossier de production en cours ou en attente.');
   }

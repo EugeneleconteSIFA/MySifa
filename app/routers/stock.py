@@ -4290,6 +4290,115 @@ def stock_config_float(conn, cle: str) -> float:
         return defaut
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# Mouvement de matière première réutilisable
+#
+# `mouvement_matiere_premiere` (l'endpoint) fait beaucoup : conversion d'unité
+# de saisie, prix moyen pondéré, audit. Le déstockage de production n'a besoin
+# que du cœur — bouger le stock et écrire au journal — mais il en a besoin
+# depuis un autre module, dans une transaction qu'il contrôle (une production
+# déstocke cinq matières : soit les cinq passent, soit aucune).
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def appliquer_mouvement_mp(
+    conn: sqlite3.Connection,
+    user: dict,
+    matiere_id: int,
+    type_mvt: str,
+    quantite: float,
+    *,
+    laize_id: Optional[int] = None,
+    note: Optional[str] = None,
+    planning_entry_id: Optional[int] = None,
+    no_dossier: Optional[str] = None,
+    annule_mouvement_id: Optional[int] = None,
+    autoriser_negatif: bool = False,
+) -> dict:
+    """Applique une entrée ou une sortie sur une matière et journalise.
+
+    Ne committe pas : l'appelant maîtrise sa transaction.
+
+    `autoriser_negatif` existe pour le déstockage de production : la matière a
+    réellement été consommée. Refuser de l'enregistrer parce que le stock
+    théorique est déjà à zéro rendrait le stock plus faux, pas moins — on
+    enregistre, et c'est l'écart négatif qui alerte.
+    """
+    if type_mvt not in ("entree", "sortie"):
+        raise HTTPException(400, "Type de mouvement non géré ici.")
+    if quantite <= 0:
+        raise HTTPException(400, "Quantité doit être positive.")
+
+    mp = conn.execute(
+        "SELECT id, categorie FROM matieres_premieres WHERE id=?", (matiere_id,)
+    ).fetchone()
+    if not mp:
+        raise HTTPException(404, "Matière non trouvée.")
+
+    unite = _mp_unite_gestion(mp["categorie"])
+    laizee = _mp_is_laizee(mp["categorie"])
+    nom = _resolve_created_by_name(conn, user)
+
+    if laizee:
+        if laize_id is None:
+            raise HTTPException(400, "Laize obligatoire pour cette catégorie.")
+        ligne = conn.execute(
+            "SELECT quantite FROM mp_stock_laize WHERE matiere_id=? AND laize_id=?",
+            (matiere_id, laize_id),
+        ).fetchone()
+    else:
+        ligne = conn.execute(
+            "SELECT quantite FROM mp_stock WHERE matiere_id=?", (matiere_id,)
+        ).fetchone()
+    avant = float(ligne["quantite"]) if ligne else 0.0
+    apres = avant + quantite if type_mvt == "entree" else avant - quantite
+    if apres < 0 and not autoriser_negatif:
+        raise HTTPException(400, f"Stock insuffisant — stock actuel : {avant:g} {unite}.")
+
+    if laizee:
+        conn.execute(
+            """INSERT INTO mp_stock_laize (matiere_id, laize_id, quantite, updated_at, updated_by_name)
+               VALUES (?,?,?,strftime('%Y-%m-%dT%H:%M:%S','now','localtime'),?)
+               ON CONFLICT(matiere_id, laize_id) DO UPDATE SET
+                 quantite=excluded.quantite, updated_at=excluded.updated_at,
+                 updated_by_name=excluded.updated_by_name""",
+            (matiere_id, laize_id, apres, nom),
+        )
+        total = conn.execute(
+            "SELECT COALESCE(SUM(quantite), 0) AS s FROM mp_stock_laize WHERE matiere_id=?",
+            (matiere_id,),
+        ).fetchone()
+        conn.execute(
+            """INSERT OR REPLACE INTO mp_stock(matiere_id, quantite, updated_at, updated_by_name)
+               VALUES (?,?,strftime('%Y-%m-%dT%H:%M:%S','now','localtime'),?)""",
+            (matiere_id, float(total["s"] or 0), nom),
+        )
+    else:
+        conn.execute(
+            """INSERT OR REPLACE INTO mp_stock(matiere_id, quantite, updated_at, updated_by_name)
+               VALUES (?,?,strftime('%Y-%m-%dT%H:%M:%S','now','localtime'),?)""",
+            (matiere_id, apres, nom),
+        )
+
+    cur = conn.execute(
+        """INSERT INTO mp_mouvements (
+               matiere_id, type_mouvement, quantite, quantite_avant, quantite_apres,
+               note, created_by, created_by_name, laize_id,
+               planning_entry_id, no_dossier, annule_mouvement_id
+           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (matiere_id, type_mvt, quantite, avant, apres, note,
+         user.get("id"), nom, laize_id,
+         planning_entry_id, (no_dossier or "").strip() or None, annule_mouvement_id),
+    )
+    return {
+        "mouvement_id": cur.lastrowid,
+        "quantite_avant": round(avant, 4),
+        "quantite_apres": round(apres, 4),
+        "unite": unite,
+        "negatif": apres < 0,
+    }
+
+
 @router.get("/api/stock/config")
 def get_stock_config(request: Request):
     """Réglages d'atelier MyStock. Une clé absente en base sort à sa valeur par
