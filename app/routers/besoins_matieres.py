@@ -31,6 +31,10 @@ Formules :
                   grammage = matieres_premieres.weight_gsm (saisi sur la fiche
                   matière), repli fiches_techniques.qte_au_mille
                   laize    = of_imports.laize, repli fiche technique
+Postes sans matière première (repiquage) : frontal, glassine et adhésif ne
+sont pas comptés — la matière a été consommée en amont. Mandrins, cartons et
+palettes restent calculés : le conditionnement, lui, est bien consommé.
+
 - mandrins (u)  : of_imports.nb_mandrins, sinon of_imports.qte_bobines,
                   sinon qte_etiquettes / nb_etiq_bobin (champ de la fiche, ou
                   nombre relu dans la phrase de conditionnement)
@@ -158,6 +162,7 @@ _SQL_PE = """
            pe.planned_start, pe.planned_end, pe.date_livraison, pe.duree_heures,
            pe.position, pe.of_import_id,
            m.nom AS machine_nom,
+           COALESCE(m.sans_matiere_premiere, 0) AS poste_sans_matiere,
            oi.qte_etiquettes AS qte_etiquettes,
            oi.qte_bobines    AS qte_bobines,
            oi.metrage        AS of_metrage,
@@ -544,9 +549,18 @@ def _compute_besoins_dossier(pe: dict, mapping: dict,
             **(extra or {}),
         })
 
+    # Postes sans matière première : le repiquage est un atelier, on y
+    # surimprime des étiquettes déjà fabriquées. Le frontal, la glassine et
+    # l'adhésif ont été consommés en amont — les recompter ici serait un
+    # doublon. Le conditionnement, lui, est bien consommé : les étiquettes
+    # repiquées sont rembobinées sur mandrin, mises en carton et palettisées.
+    sans_mp = bool(pe.get("poste_sans_matiere"))
+
     # ── Bobines (frontal / complexe / glassine) : besoin en mètres linéaires ──
     # Toutes les bobines d'un dossier voient passer le même métrage.
     for kind, col in (("support", "ft_support"), ("glassine", "ft_glassine")):
+        if sans_mp:
+            break
         if not pe.get(col):
             continue
         if metrage:
@@ -559,7 +573,7 @@ def _compute_besoins_dossier(pe: dict, mapping: dict,
 
     # ── Adhésif : kilos = grammage (g/m²) × surface enduite (m²) ──
     # surface = métrage (m) × laize (mm) / 1000
-    if pe.get("ft_adhesif"):
+    if pe.get("ft_adhesif") and not sans_mp:
         # Grammage : porté par la référence adhésif (weight_gsm, g/m²). Le champ
         # « Grammage » de la fiche technique sert de repli tant que la matière
         # n'est pas renseignée.

@@ -3020,6 +3020,47 @@ async def set_day_horaires(machine_id: int, request: Request):
 # JOURNÉE ENTIÈRE — default machine
 # ═══════════════════════════════════════════════════════════════
 
+@router.put("/machines/{machine_id}/sans-matiere-premiere")
+async def set_machine_sans_matiere_premiere(machine_id: int, request: Request):
+    """Marque un poste comme ne consommant pas de matière première.
+
+    Body: {"sans_matiere_premiere": 0|1}
+    Toutes les lignes du planning ne sont pas des machines de production : le
+    repiquage est un atelier, où l'on surimprime des étiquettes déjà fabriquées.
+    Le frontal, la glassine et l'adhésif ont été consommés en amont — les
+    recompter dans MyStock → Besoins matières serait un doublon. Le
+    conditionnement (mandrin, carton, palette) reste calculé : les étiquettes
+    repiquées sont bien rembobinées, emballées et palettisées.
+    """
+    user = require_admin(request)
+    body = await request.json()
+    try:
+        smp = 1 if int(body.get("sans_matiere_premiere", 0) or 0) == 1 else 0
+    except (TypeError, ValueError):
+        smp = 0
+    with get_db() as conn:
+        ex = conn.execute("SELECT id, nom FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not ex:
+            raise HTTPException(404, "Machine non trouvée")
+        conn.execute(
+            "UPDATE machines SET sans_matiere_premiere=? WHERE id=?",
+            (smp, machine_id),
+        )
+        conn.commit()
+    try:
+        log_action(
+            user=user,
+            action="UPDATE",
+            module="planning",
+            objet=f"Matière première poste {ex['nom']}",
+            detail={"sans_matiere_premiere": smp},
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return {"success": True, "sans_matiere_premiere": smp}
+
+
 @router.put("/machines/{machine_id}/journee-entiere")
 async def set_machine_journee_entiere(machine_id: int, request: Request):
     """Active/désactive la journée entière par défaut sur une machine.
