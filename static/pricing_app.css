@@ -425,6 +425,27 @@ table.msp-table td:first-child,table.msp-table th:first-child{padding-left:16px}
   background:var(--border);overflow:hidden;vertical-align:middle;margin-right:8px}
 .msp-jauge i{display:block;height:100%;background:var(--accent);border-radius:4px}
 .msp-part-val{font-size:12px;font-variant-numeric:tabular-nums;color:var(--text2)}
+/* Le détail n'est pas cliquable : aucune ligne ne doit réagir au survol.
+   Sans ça, la teinte de survol de .pr-table s'invite par-dessus le fond du
+   tableau déplié et donne des bandes claires au passage de la souris. */
+table.msp-detail tr,table.msp-detail tr:hover td,table.msp-detail td{cursor:default}
+table.msp-detail tr:hover td{background:transparent}
+tr.msp-detail-row td,tr.msp-detail-row:hover td{background:var(--card)}
+/* Seul un lien vers une matière réagit. */
+.msp-lien{color:var(--accent);text-decoration:none;font-weight:600;cursor:pointer;
+  background:none;border:none;padding:0;font-family:inherit;font-size:inherit;text-align:left}
+.msp-lien:hover{text-decoration:underline}
+
+/* Historique des prix d'une déclinaison : deux écrans y écrivent, la colonne
+   « Depuis » est ce qui rend l'écart explicable. */
+table.hist-table td,table.hist-table th{padding:9px 12px}
+table.hist-table tr{cursor:default}
+table.hist-table tr:hover td{background:var(--accent-bg)}
+.hist-date{white-space:nowrap;font-variant-numeric:tabular-nums;color:var(--text2)}
+.hist-note{color:var(--muted);font-size:12px}
+.hist-hausse{color:var(--danger);font-weight:700}
+.hist-baisse{color:var(--success);font-weight:700}
+
 /* Bandeau de totaux sous le détail. */
 .msp-totaux{display:flex;flex-wrap:wrap;gap:22px;align-items:center;
   padding:12px 22px 2px;font-size:12px;color:var(--muted)}

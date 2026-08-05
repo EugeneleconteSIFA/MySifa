@@ -36,13 +36,14 @@
       matCats: [],
       matSupplier: "",
       matActive: "1",
-      matTab: "couts",
+      // MyStock est la source des prix : c'est la vue qu'on veut par défaut.
+      matTab: "mystock",
       msQ: "",
       msCat: "",
       msActive: "1",
       prodQ: "",
       // Onglet actif de la page Produits : base Coûts matières ou MyStock.
-      prodTab: "couts",
+      prodTab: "mystock",
       msProdQ: "",
     },
     msDecls: [],
@@ -2434,6 +2435,55 @@
     if (eq) eq.innerHTML = transportEqText(S.declPreview);
   }
 
+  /**
+   * Historique des prix d'une déclinaison.
+   *
+   * Deux applications écrivent le même prix — la valorisation MyStock et cette
+   * fiche. Sans la colonne « Depuis », un écart se constate sans jamais
+   * s'expliquer.
+   */
+  function declHistoriqueHtml(lignes) {
+    if (!lignes || !lignes.length) {
+      return `<div class="form-card" style="margin-top:16px"><div class="form-section" style="margin:0">
+        <h3>Historique des prix</h3>
+        <div class="empty" style="padding:14px 0">Aucun mouvement enregistré pour l'instant.</div>
+      </div></div>`;
+    }
+    const corps = lignes
+      .map((h) => {
+        const dp = h.prix_apres != null && h.prix_avant != null
+          ? h.prix_apres - h.prix_avant : 0;
+        const sens = Math.abs(dp) < 1e-9 ? "" : (dp > 0 ? " hist-hausse" : " hist-baisse");
+        const fleche = Math.abs(dp) < 1e-9 ? "" : (dp > 0 ? "▲ " : "▼ ");
+        return `<tr>
+          <td class="hist-date">${escHtml(fmtDateHeure(h.date))}</td>
+          <td>${escHtml(h.origine || "—")}</td>
+          <td>${escHtml(h.auteur || "—")}${h.fournisseur_nom ? ` <span class="muted">· ${escHtml(h.fournisseur_nom)}</span>` : ""}</td>
+          <td class="msp-num">${h.prix_avant != null ? escHtml(fmt4(h.prix_avant)) : "—"}</td>
+          <td class="msp-num${sens}">${fleche}${h.prix_apres != null ? escHtml(fmt4(h.prix_apres)) : "—"}</td>
+          <td class="msp-num">${h.sous_total_apres != null ? escHtml(fmt4(h.sous_total_apres)) : "—"}</td>
+          <td class="hist-note">${escHtml(h.note || "")}</td>
+        </tr>`;
+      })
+      .join("");
+    return `<div class="form-card" style="margin-top:16px"><div class="form-section" style="margin:0">
+      <h3>Historique des prix</h3>
+      <div class="field-hint" style="margin:-6px 0 10px">Le sous-total d'achat est la valeur affichée par la valorisation MyStock.</div>
+      <div class="table-wrap"><table class="pr-table hist-table">
+        <thead><tr><th>Date</th><th>Depuis</th><th>Par</th>
+          <th class="msp-num">Prix avant</th><th class="msp-num">Prix après</th>
+          <th class="msp-num">Sous-total</th><th>Note</th></tr></thead>
+        <tbody>${corps}</tbody>
+      </table></div>
+    </div></div>`;
+  }
+
+  /** « 2026-08-05T07:42:11 » → « 05/08/2026 · 07:42 ». */
+  function fmtDateHeure(raw) {
+    const m = String(raw || "").match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+    return m ? `${m[3]}/${m[2]}/${m[1]} · ${m[4]}:${m[5]}` : String(raw || "");
+  }
+
   function declSaveBarHtml() {
     const dirty = S.declDirty ? "" : " hidden";
     return `<div class="pr-savebar">
@@ -2470,7 +2520,9 @@
               <br>Prix en vigueur : <strong>${escHtml(prixTxt)}</strong>${
                 f.fournisseur_nom ? ` chez <strong>${escHtml(f.fournisseur_nom)}</strong>` : " (aucun fournisseur principal)"
               }.
-              Le prix se modifie dans l'onglet Matières MyStock, où vivent les fournisseurs.
+              Sous-total d'achat : <strong>${escHtml(fmtNum(f.sous_total_achat, 4, 4))} ${escHtml(unit)}</strong>
+              — c'est cette valeur que la valorisation MyStock affiche.
+              <br>Le prix se modifie dans l'onglet Matières MyStock, où vivent les fournisseurs.
             </div>
           </div>
 
@@ -2543,6 +2595,7 @@
         </div>
 
         <div id="decl-recap">${recapTableHtml(S.declPreview)}</div>
+        ${declHistoriqueHtml(f.historique)}
       </div>
     `);
 
@@ -2960,7 +3013,8 @@
         const part = parseFloat(x.share_pct || 0);
         return `<tr>
           <td class="msp-role">${escHtml(MSP_ROLE_LABEL[x.role] || x.role)}</td>
-          <td>${escHtml(x.name)}</td>
+          <td><button type="button" class="msp-lien" data-msp-mat="${x.material_id}"
+                title="Ouvrir le paramétrage de cette matière">${escHtml(x.name)}</button></td>
           <td class="msp-num">${prix > 0 ? escHtml(fmtEurM2(prix)) : '<span class="muted">sans prix</span>'}</td>
           <td class="msp-part">
             <span class="msp-jauge"><i style="width:${Math.max(0, Math.min(100, part))}%"></i></span>
@@ -2971,7 +3025,7 @@
       .join("");
     const manquants = c.components.filter((x) => !(parseFloat(x.price_eur_per_m2) > 0)).length;
     return `<div class="ms-detail">
-      <table class="pr-table ms-table">
+      <table class="pr-table ms-table msp-detail">
         <thead><tr><th>Rôle</th><th>Matière MyStock</th><th class="msp-num">Coût €/m²</th><th class="msp-part">Part</th></tr></thead>
         <tbody>${lignes}</tbody>
       </table>
@@ -3005,7 +3059,7 @@
               <button type="button" class="btn btn-soft btn-sm" data-msp-edit="${p.id}">Éditer</button>
             </td>
           </tr>
-          ${open ? `<tr class="ms-detail-row"><td colspan="11">${msProductDetailHtml(p)}</td></tr>` : ""}`;
+          ${open ? `<tr class="ms-detail-row msp-detail-row"><td colspan="11">${msProductDetailHtml(p)}</td></tr>` : ""}`;
       })
       .join("");
 
@@ -3059,6 +3113,13 @@
     });
     document.querySelectorAll("[data-msp-edit]").forEach((b) => {
       b.onclick = () => navigate("/pricing/mystock/produit/" + b.getAttribute("data-msp-edit"));
+    });
+    // Depuis le détail, on saute directement au paramétrage de la matière.
+    document.querySelectorAll("[data-msp-mat]").forEach((b) => {
+      b.onclick = (ev) => {
+        ev.stopPropagation();
+        navigate("/pricing/mystock/" + b.getAttribute("data-msp-mat"));
+      };
     });
   }
 
