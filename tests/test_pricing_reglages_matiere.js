@@ -84,5 +84,36 @@ check('plus de ligne « incidence taxes »', recap.includes('Incidence taxes'), 
 check('formule mise à jour',
   src.includes("(prix d'achat + transport + taxes) × change"), true);
 
+// ─── Méthodes de transport ──────────────────────────────────────────────────
+const modes = src.slice(src.indexOf('const TRANSPORT_MODES ='),
+                        src.indexOf('];', src.indexOf('const TRANSPORT_MODES =')));
+for (const m of ['AMOUNT', 'PCT', 'CONTENEUR', 'FORFAIT']) {
+  check('méthode proposée : ' + m, modes.includes('"' + m + '"'), true);
+}
+const champs = extraire('transportChampsHtml');
+check('le pourcentage a son champ', champs.includes('% du prix'), true);
+check('conteneur et forfait ont coût + quantité',
+  champs.includes('-tcout') && champs.includes('-tqte'), true);
+check('les libellés changent selon la méthode',
+  src.includes('Coût du conteneur') && src.includes('Forfait de commande'), true);
+for (const [nom, fn] of [['fiche matière', 'saveMaterialForm'], ['fiche MyStock', 'saveDeclinaisonForm']]) {
+  const code = extraire(fn);
+  check(nom + ' : coût envoyé', code.includes('transport_cout:'), true);
+  check(nom + ' : quantité envoyée', code.includes('transport_quantite:'), true);
+}
+
+// ─── Créer une déclinaison : dériver ou vierge ──────────────────────────────
+check('la flèche coudée existe', src.includes('"corner-down-right"'), true);
+check('dériver reprend les réglages', src.includes('data-ms-deriver'), true);
+check('le + crée une déclinaison vierge', src.includes('vierge'), true);
+check('plus de duplication de ligne fournisseur', src.includes('data-ms-dup"'), false);
+
+// ─── Bandeaux d'explication retirés ─────────────────────────────────────────
+check('plus de note sur la page Matières MyStock',
+  src.includes('Le prix saisi ici est'), false);
+check('plus de note sur la page Produits MyStock',
+  src.includes('Ces produits sont composés de'), false);
+check('colonne fournisseur principal', src.includes('Fournisseur principal'), true);
+
 console.log(ko === 0 ? '\nTOUT EST VERT' : '\n' + ko + ' ECHEC(S)');
 process.exit(ko === 0 ? 0 : 1);

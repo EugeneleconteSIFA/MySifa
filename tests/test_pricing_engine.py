@@ -257,6 +257,40 @@ class TestComputeMaterialPricePerM2(unittest.TestCase):
         self.assertEqual(res.breakdown.taxe_pct, D("6.0000"))
         self.assertGreater(res.breakdown.taxes_src, D("0"))
 
+    def test_transport_par_conteneur(self):
+        """Le coût d'un conteneur se répartit sur ce qu'il transporte."""
+        mat = PricingMaterial(
+            id=30, name="Import conteneur", unit_price=D("3"), weight_per_m2=D("0.05"),
+            price_currency="EUR", price_basis="PER_KG", is_imported=True,
+            transport_mode="CONTENEUR",
+            transport_cout=D("4000"), transport_quantite=D("20000"),
+        )
+        res = compute_material_price_per_m2(mat, _settings())
+        # 4000 / 20000 = 0,20 €/kg de transport
+        self.assertEqual(res.breakdown.transport_src, D("0.2000"))
+        self.assertEqual(res.price_eur_per_m2, ((D("3") + D("0.2")) * D("0.05")).quantize(D("0.0001")))
+
+    def test_transport_forfait(self):
+        """Un forfait de commande se répartit sur la quantité commandée."""
+        mat = PricingMaterial(
+            id=31, name="Import forfait", unit_price=D("3"), weight_per_m2=D("0.05"),
+            price_currency="EUR", price_basis="PER_KG", is_imported=True,
+            transport_mode="FORFAIT",
+            transport_cout=D("250"), transport_quantite=D("1000"),
+        )
+        res = compute_material_price_per_m2(mat, _settings())
+        self.assertEqual(res.breakdown.transport_src, D("0.2500"))
+
+    def test_transport_sans_quantite_ne_divise_pas_par_zero(self):
+        """Quantité oubliée : transport nul, jamais d'erreur de division."""
+        mat = PricingMaterial(
+            id=32, name="Quantité oubliée", unit_price=D("3"), weight_per_m2=D("0.05"),
+            price_currency="EUR", price_basis="PER_KG", is_imported=True,
+            transport_mode="CONTENEUR", transport_cout=D("4000"),
+        )
+        res = compute_material_price_per_m2(mat, _settings())
+        self.assertEqual(res.breakdown.transport_src, D("0"))
+
     def test_missing_settings_raises(self):
         mat = PricingMaterial(
             id=5,

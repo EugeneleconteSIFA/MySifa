@@ -156,6 +156,8 @@ class McMaterialOut(BaseModel):
     transport_mode: TransportMode = "AMOUNT"
     transport_unit_price: Decimal = Decimal("0")
     transport_pct: Decimal = Decimal("0")
+    transport_cout: Decimal = Decimal("0")
+    transport_quantite: Decimal = Decimal("0")
     container_kg: Optional[Decimal] = None
     container_cost_usd: Optional[Decimal] = None
     is_active: bool
@@ -184,6 +186,8 @@ class McMaterialCreate(BaseModel):
     transport_mode: TransportMode = "AMOUNT"
     transport_unit_price: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
     transport_pct: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
+    transport_cout: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=14)
+    transport_quantite: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=14)
     container_kg: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     container_cost_usd: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     price_history_source: Optional[str] = Field(None, max_length=500)
@@ -208,6 +212,8 @@ class McMaterialUpdate(BaseModel):
     transport_mode: Optional[TransportMode] = None
     transport_unit_price: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     transport_pct: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
+    transport_cout: Optional[Decimal] = Field(None, decimal_places=4, max_digits=14)
+    transport_quantite: Optional[Decimal] = Field(None, decimal_places=4, max_digits=14)
     container_kg: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     container_cost_usd: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     is_active: Optional[bool] = None
@@ -308,6 +314,8 @@ class MaterialPreviewIn(BaseModel):
     transport_mode: TransportMode = "AMOUNT"
     transport_unit_price: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
     transport_pct: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=12)
+    transport_cout: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=14)
+    transport_quantite: Decimal = Field(default=Decimal("0"), decimal_places=4, max_digits=14)
     container_kg: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
     container_cost_usd: Optional[Decimal] = Field(None, decimal_places=4, max_digits=12)
 

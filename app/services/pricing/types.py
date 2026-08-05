@@ -10,7 +10,11 @@ PriceCurrency = Literal["EUR", "USD"]
 PriceBasis = Literal["PER_KG", "PER_M2"]
 # Mode de saisie du transport : montant dans la devise/base d'achat, ou
 # pourcentage du prix d'achat.
-TransportMode = Literal["AMOUNT", "PCT"]
+# AMOUNT    : montant à l'unité d'achat (€/kg ou €/m²)
+# PCT       : pourcentage du prix d'achat
+# CONTENEUR : coût d'un conteneur ÷ quantité qu'il transporte
+# FORFAIT   : forfait de commande ÷ quantité commandée
+TransportMode = Literal["AMOUNT", "PCT", "CONTENEUR", "FORFAIT"]
 
 
 @dataclass(frozen=True)
@@ -68,6 +72,9 @@ class PricingMaterial:
     transport_unit_price: Decimal = Decimal("0")
     # Mode PCT : transport = prix d'achat × transport_pct / 100.
     transport_pct: Decimal = Decimal("0")
+    # Modes CONTENEUR et FORFAIT : un coût réparti sur une quantité.
+    transport_cout: Decimal = Decimal("0")
+    transport_quantite: Decimal = Decimal("0")
     # Legacy conteneur — conservé en base, plus utilisé ni affiché.
     container_kg: Optional[Decimal] = None
     container_cost_usd: Optional[Decimal] = None

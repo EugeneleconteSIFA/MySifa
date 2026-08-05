@@ -342,6 +342,8 @@ def preview_material_price(request: Request, body: MaterialPreviewIn):
         transport_mode=body.transport_mode,
         transport_unit_price=body.transport_unit_price,
         transport_pct=body.transport_pct,
+        transport_cout=body.transport_cout,
+        transport_quantite=body.transport_quantite,
         container_kg=body.container_kg,
         container_cost_usd=body.container_cost_usd,
     )
@@ -609,8 +611,9 @@ def create_material(request: Request, body: McMaterialCreate):
                 weight_per_m2, weight_gsm, grammage_gsm, perte_pct,
                 price_currency, unit_price, price_basis, taxe_pct, is_imported,
                 applique_marge, transport_mode, transport_unit_price, transport_pct,
+                transport_cout, transport_quantite,
                 container_kg, container_cost_usd, is_active
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
             (
                 body.name.strip(),
                 body.appellation_code.strip(),
@@ -631,6 +634,8 @@ def create_material(request: Request, body: McMaterialCreate):
                 body.transport_mode or "AMOUNT",
                 float(body.transport_unit_price or 0),
                 float(body.transport_pct or 0),
+                float(body.transport_cout or 0),
+                float(body.transport_quantite or 0),
                 float(body.container_kg) if body.container_kg is not None else None,
                 float(body.container_cost_usd) if body.container_cost_usd is not None else None,
             ),
@@ -682,6 +687,8 @@ def patch_material(request: Request, material_id: int, body: McMaterialUpdate):
                 "perte_pct",
                 "transport_unit_price",
                 "transport_pct",
+                "transport_cout",
+                "transport_quantite",
                 "container_kg",
                 "container_cost_usd",
             ):
@@ -1256,6 +1263,20 @@ def set_mystock_declinaison_valeur(request: Request, body: dict = Body(...)):
         )
         if not res.get("ok"):
             raise HTTPException(status_code=400, detail=res.get("reason", "Modification refusée"))
+        conn.commit()
+    return res
+
+
+@router.post("/api/pricing/mystock/declinaisons/deriver")
+def deriver_mystock_declinaison(request: Request, body: dict = Body(...)):
+    """Nouvelle déclinaison reprenant tous les réglages d'une autre, sauf sa valeur."""
+    user = _require_write(request)
+    with get_db() as conn:
+        res = mystock_prix.deriver_declinaison(
+            conn, declinaison_id=_decl_id(body), user_name=user.get("nom")
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Création refusée"))
         conn.commit()
     return res
 

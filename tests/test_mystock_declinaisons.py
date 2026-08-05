@@ -566,6 +566,69 @@ with dbmod.get_db() as conn:
     check("le sous-total du service = celui du moteur",
           round(p_test["sous_total_achat"], 4), round(float(moteur.subtotal_src), 4))
 
+    print("\n--- méthodes de transport ---")
+    # Le service et le moteur calculent le même transport : deux implémentations,
+    # une seule formule.
+    for mode, reg, attendu in (
+        ("AMOUNT", dict(transport_unit_price=0.5), 0.5),
+        ("PCT", dict(transport_pct=10), 0.4),
+        ("CONTENEUR", dict(transport_cout=4000, transport_quantite=20000), 0.2),
+        ("FORFAIT", dict(transport_cout=250, transport_quantite=1000), 0.25),
+        ("CONTENEUR", dict(transport_cout=4000), 0.0),  # quantité oubliée
+    ):
+        st = MP.sous_total_achat(4.0, is_imported=True, transport_mode=mode, **reg)
+        check(f"transport {mode} {reg}", round(st - 4.0, 4), attendu)
+        check(f"aller-retour {mode}",
+              round(MP.prix_depuis_sous_total(st, is_imported=True,
+                                              transport_mode=mode, **reg), 4), 4.0)
+    check("méthode inconnue refusée",
+          MP.set_parametrage(conn, declinaison_id=dl["id"],
+                             patch={"transport_mode": "AVION"})["ok"], False)
+    for m in ("AMOUNT", "PCT", "CONTENEUR", "FORFAIT"):
+        check(f"méthode {m} acceptée",
+              MP.set_parametrage(conn, declinaison_id=dl["id"],
+                                 patch={"transport_mode": m})["ok"], True)
+    # On rend la déclinaison à ses réglages : la suite du scénario compte dessus.
+    MP.set_parametrage(conn, declinaison_id=dl["id"],
+                       patch={"transport_mode": "PCT", "transport_pct": 9, "taxe_pct": 6})
+    conn.commit()
+
+    print("\n--- dériver une déclinaison ---")
+    MP.set_parametrage(conn, declinaison_id=d30["id"], patch={
+        "perte_pct": 7, "taxe_pct": 4, "is_imported": True,
+        "transport_mode": "CONTENEUR", "transport_cout": 4000, "transport_quantite": 20000,
+    }, user_name="Test")
+    conn.commit()
+    r = MP.deriver_declinaison(conn, declinaison_id=d30["id"], user_name="Test")
+    conn.commit()
+    check("dérivation acceptée", r["ok"], True)
+    fille = MP.parametrage(conn, r["declinaison_id"])
+    mere = MP.parametrage(conn, d30["id"])
+    for champ in ("perte_pct", "taxe_pct", "is_imported", "transport_mode",
+                  "transport_cout", "transport_quantite", "price_basis", "price_currency"):
+        check(f"réglage repris : {champ}", fille[champ], mere[champ])
+    check("le grammage, lui, reste à saisir", fille["libelle"], "Toutes déclinaisons")
+    check("le fournisseur suit", fille["fournisseur_nom"], mere["fournisseur_nom"])
+    check("le prix aussi", fille["unit_price"], mere["unit_price"])
+    check("une seconde dérivation est refusée tant que la valeur manque",
+          MP.deriver_declinaison(conn, declinaison_id=d30["id"])["ok"], False)
+    MP.set_declinaison_valeur(conn, declinaison_id=r["declinaison_id"], valeur_gsm=33)
+    conn.commit()
+    check("une fois nommée, on peut dériver à nouveau",
+          MP.deriver_declinaison(conn, declinaison_id=d30["id"])["ok"], True)
+    conn.commit()
+    check("déclinaison inexistante refusée",
+          MP.deriver_declinaison(conn, declinaison_id=999999)["ok"], False)
+    # On nettoie pour la suite du scénario.
+    for row in conn.execute(
+        "SELECT id FROM mp_matiere_declinaison WHERE matiere_id=1 AND grammage_id IS NULL"
+    ).fetchall():
+        MP.delete_declinaison(conn, int(row["id"]))
+    MP.set_parametrage(conn, declinaison_id=d30["id"], patch={
+        "perte_pct": 0, "taxe_pct": 0, "is_imported": False, "transport_mode": "AMOUNT",
+    })
+    conn.commit()
+
     print("\n--- le pont dans les deux sens ---")
     # Coûts matières -> MyStock : c'est le sous-total qui part, pas le prix nu.
     MP.set_prix(conn, declinaison_id=d_test, fournisseur_id=f["Meltavis"], prix=2.0,
