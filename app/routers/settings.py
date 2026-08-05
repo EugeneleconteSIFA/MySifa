@@ -28,6 +28,7 @@ from config import (
     SUPERADMIN_EMAIL,
     default_app_access_for_role,
     APPS_CATALOG,
+    ROLE_LABELS,
     ACCESS_LEVELS,
     LEVEL_LABELS,
     LEVEL_ORDER,
@@ -84,18 +85,9 @@ def _traca_file_from_url(url: str) -> Optional[Path]:
 
 # ─── Labels rôles (partagés par les endpoints d'accès) ────────────
 
-_ROLE_LABELS = {
-    ROLE_DIRECTION: "Direction",
-    ROLE_ADMINISTRATION: "Administration",
-    ROLE_ADMINISTRATION_VENTES: "Administration des ventes",
-    ROLE_ADMINISTRATION_TECHNIQUE: "Administration technique",
-    ROLE_FABRICATION: "Fabrication",
-    ROLE_LOGISTIQUE: "Logistique",
-    ROLE_COMPTABILITE: "Comptabilité",
-    ROLE_EXPEDITION: "Expédition",
-    ROLE_COMMERCIAL: "Commercial",
-    ROLE_SUPERADMIN: "Super admin",
-}
+# Déplacé dans config.py (source de vérité) : le gestionnaire de tâches affiche
+# les mêmes libellés, deux dictionnaires auraient divergé au premier rôle ajouté.
+_ROLE_LABELS = ROLE_LABELS
 
 
 def _load_all_access(conn):
