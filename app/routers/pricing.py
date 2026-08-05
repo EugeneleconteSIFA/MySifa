@@ -54,10 +54,6 @@ from app.services.pricing.schemas import (
     McSupplierCreate,
     McSupplierOut,
     McSupplierUpdate,
-    CategoryVariationOut,
-    MaterialMoverOut,
-    PricingDashboardOut,
-    PricingDashboardProductRow,
     PricingFxRefreshOut,
     PricingSettingsOut,
     PricingSettingsPatch,
@@ -306,7 +302,7 @@ def _load_products_export_payload(
     return products, materials_map
 
 
-# ─── Dashboard & référentiels ────────────────────────────────────────────────
+# ─── Référentiels ────────────────────────────────────────────────────────────
 
 
 @router.get("/api/pricing/categories")
@@ -324,182 +320,6 @@ def list_material_categories(request: Request):
             for r in rows
         ]
     }
-
-
-@router.get("/api/pricing/dashboard", response_model=PricingDashboardOut)
-def pricing_dashboard(request: Request):
-    _require_read(request)
-    with get_db() as conn:
-        n_mat = conn.execute(
-            "SELECT COUNT(*) AS c FROM mc_material WHERE is_active=1"
-        ).fetchone()["c"]
-        n_prod = conn.execute(
-            "SELECT COUNT(*) AS c FROM mc_product WHERE is_active=1"
-        ).fetchone()["c"]
-        settings_data = load_settings_response(conn)
-        settings = load_pricing_settings(conn)
-        rows = conn.execute("SELECT * FROM mc_product WHERE is_active=1").fetchall()
-        ranked: list[tuple[Decimal, PricingDashboardProductRow]] = []
-        sell_sum = Decimal("0")
-        sell_n = 0
-        for row in rows:
-            try:
-                extra = load_product_extra_ids(conn, int(row["id"]))
-                cost = _build_product_cost(conn, row, extra, settings)
-            except HTTPException:
-                continue
-            except PricingError:
-                # Matière inactive / introuvable : on ignore ce produit du dashboard
-                # plutôt que faire crasher toute la page.
-                continue
-            except Exception as _dash_exc:
-                import logging as _logging
-                _logging.getLogger(__name__).warning(
-                    "pricing_dashboard : produit id=%s ignoré (%s: %s)",
-                    row["id"], type(_dash_exc).__name__, _dash_exc,
-                )
-                continue
-            except PricingError:
-                # Matière inactive / introuvable : on ignore ce produit du dashboard
-                # plutôt que faire crasher toute la page.
-                continue
-            except Exception as _dash_exc:
-                # Filet ultime : données incohérentes (sync mp<->mc défectueuse etc.)
-                # ne doivent pas casser le dashboard direction.
-                import logging as _logging
-                _logging.getLogger(__name__).warning(
-                    "pricing_dashboard : produit id=%s ignoré (%s: %s)",
-                    row["id"], type(_dash_exc).__name__, _dash_exc,
-                )
-                continue
-            sell_sum += cost.sell_price_eur_m2
-            sell_n += 1
-            ranked.append(
-                (
-                    cost.total_eur_per_m2,
-                    PricingDashboardProductRow(
-                        id=row["id"],
-                        code=row["code"],
-                        name=row["name"],
-                        total_eur_per_m2=cost.total_eur_per_m2,
-                        sell_price_eur_per_m2=cost.sell_price_eur_m2,
-                    ),
-                )
-            )
-        ranked.sort(key=lambda x: x[0], reverse=True)
-        top = [r[1] for r in ranked[:10]]
-        avg_sell = (sell_sum / sell_n).quantize(Decimal("0.0001")) if sell_n else None
-        variations, movers = _compute_dashboard_kpis(conn)
-    return PricingDashboardOut(
-        materials_active=int(n_mat),
-        products_active=int(n_prod),
-        eur_usd_rate=Decimal(str(settings_data["eur_usd_rate"])),
-        eur_usd_rate_updated_at=settings_data.get("eur_usd_rate_updated_at"),
-        eur_usd_rate_source=settings_data.get("eur_usd_rate_source"),
-        avg_sell_price_eur_m2=avg_sell,
-        top_products=top,
-        variations_by_category=variations,
-        recent_movers=movers,
-    )
-
-
-def _compute_dashboard_kpis(conn) -> tuple[list, list]:
-    """KPI direction : prix moyen par catégorie + variation 30j + top movers."""
-    from collections import defaultdict
-
-    cat_rows = conn.execute(
-        "SELECT c.code, c.label, m.id, m.unit_price, m.price_basis "
-        "FROM mc_material m "
-        "JOIN mc_material_category c ON c.id = m.category_id "
-        "WHERE m.is_active = 1 AND m.unit_price > 0"
-    ).fetchall()
-
-    by_cat: dict = defaultdict(
-        lambda: {"label": "", "prices": [], "basis_counts": defaultdict(int)}
-    )
-    for r in cat_rows:
-        code = r["code"]
-        by_cat[code]["label"] = r["label"]
-        by_cat[code]["prices"].append(float(r["unit_price"]))
-        by_cat[code]["basis_counts"][r["price_basis"] or "PER_KG"] += 1
-
-    thirty_days_ago = (date.today() - _dt_timedelta(days=30)).isoformat()
-    hist_rows = conn.execute(
-        "SELECT h.material_id, h.unit_price, h.effective_date, "
-        "       m.name, c.code AS category_code "
-        "FROM mc_material_price_history h "
-        "JOIN mc_material m ON m.id = h.material_id "
-        "JOIN mc_material_category c ON c.id = m.category_id "
-        "WHERE h.effective_date <= ? AND m.is_active = 1 "
-        "ORDER BY h.material_id, h.effective_date DESC",
-        (thirty_days_ago,),
-    ).fetchall()
-
-    latest_old: dict = {}
-    for h in hist_rows:
-        mid = int(h["material_id"])
-        if mid not in latest_old:
-            latest_old[mid] = {
-                "old_price": float(h["unit_price"]),
-                "effective_date": h["effective_date"],
-                "name": h["name"],
-                "category_code": h["category_code"],
-            }
-
-    current_prices: dict = {int(r["id"]): float(r["unit_price"]) for r in cat_rows}
-
-    movers = []
-    variations_by_cat = defaultdict(list)
-    for mid, old in latest_old.items():
-        new = current_prices.get(mid)
-        if new is None or old["old_price"] <= 0:
-            continue
-        pct = (new - old["old_price"]) / old["old_price"] * 100.0
-        variations_by_cat[old["category_code"]].append(pct)
-        # N'ajoute pas aux movers si variation < 0.01% (bruit de calcul).
-        if abs(pct) < 0.01:
-            continue
-        try:
-            eff = datetime.strptime(old["effective_date"][:10], "%Y-%m-%d").date()
-            days = max(0, (date.today() - eff).days)
-        except (ValueError, TypeError):
-            days = 30
-        movers.append((
-            abs(pct),
-            MaterialMoverOut(
-                id=mid,
-                name=old["name"],
-                category_code=old["category_code"],
-                old_price=Decimal(str(round(old["old_price"], 4))),
-                new_price=Decimal(str(round(new, 4))),
-                variation_pct=Decimal(str(round(pct, 2))),
-                days_ago=days,
-            ),
-        ))
-
-    variations = []
-    for code, data in by_cat.items():
-        prices = data["prices"]
-        avg = sum(prices) / len(prices) if prices else None
-        dom_basis = None
-        if data["basis_counts"]:
-            dom_basis = max(data["basis_counts"].items(), key=lambda x: x[1])[0]
-        var_pcts = variations_by_cat.get(code, [])
-        avg_var = sum(var_pcts) / len(var_pcts) if var_pcts else None
-        variations.append(CategoryVariationOut(
-            code=code,
-            label=data["label"] or code,
-            count_materials=len(prices),
-            avg_price_eur_per_kg_or_m2=Decimal(str(round(avg, 4))) if avg is not None else None,
-            price_basis_dominant=dom_basis,
-            variation_pct_30d=Decimal(str(round(avg_var, 2))) if avg_var is not None else None,
-        ))
-    variations.sort(key=lambda v: v.code)
-
-    movers.sort(key=lambda t: -t[0])
-    top_movers = [m for _, m in movers[:10]]
-
-    return variations, top_movers
 
 
 @router.post("/api/pricing/materials/preview", response_model=MaterialComputedOut)

@@ -640,12 +640,38 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
   .dash-quick-btn-label{font-size:11px}
 }
 .dash-section{border-top:1px solid var(--border);padding-top:22px;margin-top:22px}
-.dash-section-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;
-  color:var(--muted);margin:0 0 14px;display:flex;align-items:center;justify-content:space-between}
-.dash-section-toggle{background:none;border:1px solid var(--border);border-radius:6px;
-  color:var(--muted);font-size:11px;font-weight:500;padding:3px 8px;cursor:pointer;
-  text-transform:none;letter-spacing:0;transition:border-color .15s,color .15s;line-height:1.4}
-.dash-section-toggle:hover{border-color:var(--accent);color:var(--accent)}
+.dash-section-title{font-size:16px;font-weight:700;text-transform:none;letter-spacing:0;
+  color:var(--text);margin:0 0 14px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.dash-section-title>span:first-child{display:inline-flex;align-items:center;gap:10px;min-width:0}
+.dash-section-title>span:first-child::before{content:"";flex-shrink:0;width:4px;height:20px;
+  border-radius:3px;background:var(--accent)}
+/* Fond plein au repos : un bouton transparent sur le fond de page est
+   invisible tant que le curseur n'est pas dessus. */
+.dash-section-toggle{background:var(--card);border:1px solid var(--border);border-radius:8px;
+  color:var(--text2);font-size:12px;font-weight:600;padding:5px 12px;cursor:pointer;
+  text-transform:none;letter-spacing:0;transition:background .15s,border-color .15s,color .15s;line-height:1.4;
+  font-family:inherit;flex-shrink:0}
+.dash-section-toggle:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+
+/* ── Fiche matière première : barre haute (retour + navigation) ───────────── */
+.mp-detail-topbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.btn-ghost.mp-back-btn{background:var(--card);color:var(--text);border:1px solid var(--border)}
+.btn-ghost.mp-back-btn:hover{background:var(--bg);border-color:var(--accent);color:var(--text)}
+.mp-nav{display:flex;align-items:center;gap:8px;margin-left:auto}
+.mp-nav-pos{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mp-nav-btn{display:inline-flex;align-items:center;gap:6px;background:var(--card);color:var(--text);
+  border:1px solid var(--border);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;
+  cursor:pointer;font-family:inherit;transition:background .15s,border-color .15s,color .15s;white-space:nowrap}
+.mp-nav-btn:hover:not(:disabled){background:var(--bg);border-color:var(--accent);color:var(--text)}
+.mp-nav-btn:disabled{opacity:.4;cursor:not-allowed}
+.mp-nav-arrow{font-size:15px;line-height:1;color:var(--muted)}
+.mp-act-icon.mp-act-icon--neutral{background:var(--card);color:var(--text);border:1px solid var(--border)}
+.mp-act-icon.mp-act-icon--neutral:hover{background:var(--bg);border-color:var(--accent);color:var(--text);filter:none}
+@media (max-width:640px){
+  .mp-detail-topbar{flex-direction:column;align-items:stretch}
+  .mp-nav{margin-left:0;justify-content:space-between}
+  .mp-nav-btn{flex:1;justify-content:center}
+}
 .dash-alert-block{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;
   display:flex;flex-direction:column;min-height:100px}
 .dash-alert-block h4{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 12px;flex-shrink:0}
@@ -5446,6 +5472,49 @@ function buildMpMvtHistory(mouvements, matiere) {
   );
 }
 
+// Ordre de navigation précédent/suivant sur une fiche matière : on suit la liste
+// telle qu'elle est affichée (filtres de catégorie + recherche en cours) quand
+// la matière courante y figure. Sinon (arrivée depuis le tableau de bord ou une
+// URL directe), on retombe sur le référentiel complet.
+function mpNavListe(id) {
+  const filtered = filterMatieresList() || [];
+  if (filtered.some(x => x && x.id === id)) return filtered;
+  return S.matieres || [];
+}
+
+function buildMatiereNav(m) {
+  if (!m) return null;
+  const list = mpNavListe(m.id);
+  const idx = list.findIndex(x => x && x.id === m.id);
+  if (idx < 0 || list.length < 2) return null;
+  const prev = idx > 0 ? list[idx - 1] : null;
+  const next = idx < list.length - 1 ? list[idx + 1] : null;
+  const mk = (target, label, dir) => {
+    const cible = target ? (target.reference || target.designation || '') : '';
+    const b = el('button', {
+      cls: 'mp-nav-btn',
+      type: 'button',
+      attrs: target
+        ? { title: label + ' \u2014 ' + cible, 'aria-label': label + ' : ' + cible }
+        : { disabled: 'disabled', title: dir === 'prev' ? 'Première référence de la liste' : 'Dernière référence de la liste' },
+      on: target ? { click: () => loadMatiere(target.id) } : {},
+    });
+    if (dir === 'prev') {
+      b.appendChild(el('span', { cls: 'mp-nav-arrow' }, '\u2039'));
+      b.appendChild(el('span', null, label));
+    } else {
+      b.appendChild(el('span', null, label));
+      b.appendChild(el('span', { cls: 'mp-nav-arrow' }, '\u203a'));
+    }
+    return b;
+  };
+  return el('div', { cls: 'mp-nav' },
+    mk(prev, 'Précédent', 'prev'),
+    el('span', { cls: 'mp-nav-pos' }, (idx + 1) + ' / ' + list.length),
+    mk(next, 'Suivant', 'next'),
+  );
+}
+
 function buildMatiereDetail() {
   const sel = S.selMatiere;
   if (!sel || !sel.matiere) {
@@ -5457,10 +5526,10 @@ function buildMatiereDetail() {
 
   const back = el('button', {
     cls: 'btn-ghost mp-back-btn',
-    style: { marginBottom: '14px' },
     type: 'button',
     on: { click: clearMatiereSel },
   }, '← Retour aux matières premières');
+  const topbar = el('div', { cls: 'mp-detail-topbar' }, back, buildMatiereNav(m));
 
   const actionBtns = [];
   if (!S.stockReadOnly) {
@@ -5497,7 +5566,7 @@ function buildMatiereDetail() {
   }
   if (isMatieresAdmin()) {
     actionBtns.push(el('button', {
-      cls: 'mp-act-icon',
+      cls: 'mp-act-icon mp-act-icon--neutral',
       type: 'button',
       style: { flex: '0 0 auto', minWidth: '44px' },
       attrs: { title: 'Modifier la référence', 'aria-label': 'Modifier la référence' },
@@ -5604,7 +5673,7 @@ function buildMatiereDetail() {
   const equiv = mpIsAdhesifCategory(m) ? mpAdhesifEquivalent(m.quantite, m) : '';
 
   return el('div', { cls: 'content' },
-    back,
+    topbar,
     el('div', { cls: 'scorecard' },
       el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' } },
         ...[dashMpCatBadge(m.categorie, m.sous_section), dashMpSousCatBadge(m)].filter(Boolean),
@@ -11012,7 +11081,10 @@ function buildDashboardAlertes(d) {
   const mpRows = alertesMp.length
       ? el('div', { cls: 'dash-alert-rows' }, ...alertesMp.map(a => el('div', {
           cls: 'dash-alert-row',
-          on: { click: () => goToTab('matieres') },
+          attrs: { title: 'Ouvrir la fiche ' + (a.reference || '') },
+          // La ligne cite une référence précise : renvoyer vers la liste
+          // complète obligeait à la retrouver à la main.
+          on: { click: () => (a.id ? loadMatiere(a.id) : goToTab('matieres')) },
         },
           dashMpCatBadge(a.categorie),
           el('span', { cls: 'dash-alert-main' },

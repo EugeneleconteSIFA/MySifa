@@ -738,6 +738,15 @@ Deux refus volontaires à la création : deux matières sur un même rôle, et l
 déclinaison deux fois. Dans les deux cas le coût serait faux sans que rien ne le
 signale à l'écran.
 
+Le module n'a **pas de tableau de bord** : `/pricing` ouvre directement les
+matières. La page et son endpoint ont été retirés le 4 août 2026, ils
+n'apportaient rien que les deux listes ne montrent déjà.
+
+**Import en masse** — `scripts/import_catalogue_produits.py` crée les produits
+depuis le catalogue commercial, en trois temps : `--inventaire` (propose les
+correspondances de noms), `--simulation` (rejoue sans écrire), `--appliquer`.
+Relançable sans doublon. Test : `python3 tests/test_import_catalogue.py`.
+
 Tests : `python3 tests/test_mystock_declinaisons.py`,
 `node tests/test_pricing_declinaison.js`,
 `node tests/test_pricing_produits_mystock.js`.
