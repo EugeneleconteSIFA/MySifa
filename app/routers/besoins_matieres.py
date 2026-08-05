@@ -579,13 +579,17 @@ def _compute_besoins_dossier(pe: dict, mapping: dict,
             break
         if not pe.get(col):
             continue
+        # La laize voyage avec le besoin : une bobine ne se commande pas, ne se
+        # stocke pas et ne se déstocke pas hors de sa laize. L'agréger sans elle
+        # donnait un total juste en mètres, mais inutilisable pour commander.
+        extra_lz = {"laize_mm": lz.get("laize")}
         if metrage:
             src = "métrage OF" if met["source"] == "of" else "métrage calculé fiche"
             _add(kind, pe[col], metrage,
-                 f"{_n(metrage, 'm')} ({src})", met["variables"])
+                 f"{_n(metrage, 'm')} ({src})", met["variables"], extra=extra_lz)
         else:
             _add(kind, pe[col], None, "Métrage indisponible",
-                 met["variables"], met["manque"])
+                 met["variables"], met["manque"], extra=extra_lz)
 
     # ── Adhésif : kilos = grammage (g/m²) × surface enduite (m²) ──
     # surface = métrage (m) × laize (mm) / 1000
@@ -756,6 +760,9 @@ def besoins_par_dossier(request: Request):
             "date_livraison": pe.get("date_livraison"),
             "qte_etiquettes": pe.get("qte_etiquettes"),
             "ft_id": pe.get("ft_id"),
+            # La laize du dossier : c'est elle qui décide quelle bobine sortira
+            # du stock, donc elle a sa place à côté des besoins.
+            "laize": _laize_dossier(pe).get("laize"),
             # Les deux documents consultables depuis la vue par dossier : l'OF
             # importé et la fiche technique rapprochée.
             "of_import_id": pe.get("of_import_id"),
@@ -884,6 +891,16 @@ def besoins_par_echeance(request: Request):
             stock_map[int(r["matiere_id"])] = float(r["q"] or 0)
         for r in conn.execute("SELECT matiere_id, SUM(quantite) AS q FROM mp_stock_laize GROUP BY matiere_id").fetchall():
             stock_bobines[int(r["matiere_id"])] = float(r["q"] or 0)
+        # Détail par laize : c'est le stock réellement mobilisable pour un
+        # dossier, celui qu'on compare au besoin d'une laize précise.
+        stock_par_laize: dict = {}
+        for r in conn.execute(
+            """SELECT s.matiere_id, l.valeur_mm, l.label, s.quantite
+               FROM mp_stock_laize s JOIN mp_laizes l ON l.id = s.laize_id"""
+        ).fetchall():
+            stock_par_laize[(int(r["matiere_id"]), float(r["valeur_mm"] or 0))] = {
+                "quantite": float(r["quantite"] or 0), "label": r["label"],
+            }
 
     # Agrégation par (kind, source_value)
     agg: dict = {}
@@ -917,6 +934,9 @@ def besoins_par_echeance(request: Request):
                     "besoin_total_tubes": 0.0,
                     "besoin_total_palettes": 0.0,
                     "nb_dossiers_sans_tubes": 0,
+                    # Ventilation par laize (bobines uniquement) : le total en
+                    # mètres ne dit pas quelle bobine commander.
+                    "par_laize": {},
                 }
             a = agg[key]
             a["nb_dossiers"] += 1
@@ -926,6 +946,17 @@ def besoins_par_echeance(request: Request):
             a["besoin_7j"] += b["quantite"] * r7
             a["besoin_15j"] += b["quantite"] * r15
             a["besoin_total"] += b["quantite"]
+            if b["kind"] in _KINDS_BOBINE:
+                cle_lz = b.get("laize_mm")
+                cle_lz = float(cle_lz) if cle_lz else None
+                pl = a["par_laize"].setdefault(cle_lz, {
+                    "laize_mm": cle_lz, "besoin_7j": 0.0, "besoin_15j": 0.0,
+                    "besoin_total": 0.0, "nb_dossiers": 0,
+                })
+                pl["besoin_7j"] += b["quantite"] * r7
+                pl["besoin_15j"] += b["quantite"] * r15
+                pl["besoin_total"] += b["quantite"]
+                pl["nb_dossiers"] += 1
             bt = b.get("besoin_tubes")
             if bt is None:
                 if b["kind"] == "mandrin":
@@ -959,6 +990,7 @@ def besoins_par_echeance(request: Request):
             if a["kind"] in _KINDS_BOBINE:
                 bobines = stock_bobines.get(mid, 0.0) + stock_map.get(mid, 0.0)
                 ml_bobine = _f(_matiere_ml_par_bobine(mapping, a["kind"], a["source_value"]))
+                a["ml_par_bobine"] = ml_bobine
                 if ml_bobine:
                     stock = round(bobines * ml_bobine, 3)
                     stock_note = (f"{_n(bobines)} bobines × {_n(ml_bobine, 'm')}/bobine")
@@ -1020,7 +1052,7 @@ def besoins_par_echeance(request: Request):
         -(x.get("manque_7j") or 0),
         -x["besoin_7j"],
     ))
-    groupe = _regrouper_par_matiere(lignes)
+    groupe = _regrouper_par_matiere(lignes, stock_par_laize)
     return {
         "lignes": lignes,
         "count": len(lignes),
@@ -1035,7 +1067,16 @@ def besoins_par_echeance(request: Request):
     }
 
 
-def _regrouper_par_matiere(lignes: list) -> dict:
+def _ml_par_bobine_ligne(a: dict) -> Optional[float]:
+    """Mètres linéaires par bobine de la matière d'une ligne agrégée.
+
+    Posé par l'agrégation par échéance, qui l'a déjà lu sur la matière. On ne
+    le redemande pas à la base : la ligne le porte, c'est la même valeur.
+    """
+    return _f(a.get("ml_par_bobine"))
+
+
+def _regrouper_par_matiere(lignes: list, stock_par_laize: Optional[dict] = None) -> dict:
     """Regroupe les lignes de besoin par référence matière MySifa.
 
     Plusieurs valeurs de fiche technique peuvent pointer vers la même référence
@@ -1043,12 +1084,65 @@ def _regrouper_par_matiere(lignes: list) -> dict:
     donc c'est ce total-là qui compte pour l'appro — la vue par échéance, elle,
     reste au niveau de la valeur de fiche pour pouvoir corriger un mapping.
 
+    Les bobines font exception : une référence frontal, glassine ou complexe
+    sort en **une ligne par laize**. Une bobine de 306 ne remplace pas une
+    bobine de 500, et le stock lui-même est tenu laize par laize — agréger les
+    deux donnait un total juste en mètres mais impossible à commander.
+
     Retourne { matieres: [...], non_associees: [...] }. Les besoins sans matière
     associée ne sont pas noyés dans le tableau : ils sortent à part, en fin de
     vue, car ils appellent une action différente (associer, pas commander).
     """
+    stock_par_laize = stock_par_laize or {}
     par_mat: dict = {}
     non_associees: list = []
+
+    def _entree(cle, a, laize_mm):
+        """Crée (ou retrouve) la ligne agrégée d'une référence, laize comprise."""
+        m = par_mat.get(cle)
+        if m is not None:
+            return m
+        # Le stock est porté par la référence, pas par la valeur de fiche : on le
+        # prend une fois et on ne l'additionne jamais, sinon deux valeurs mappées
+        # sur la même référence le compteraient deux fois.
+        stock = a.get("stock_actuel")
+        note = a.get("stock_note")
+        if laize_mm is not None:
+            # Stock de CETTE laize, converti en mètres pour rester comparable au
+            # besoin. Sans conversion on afficherait des bobines face à des ml.
+            info = stock_par_laize.get((a["matiere_id"], laize_mm))
+            ml = _ml_par_bobine_ligne(a)
+            if info is None:
+                stock, note = None, ("Laize absente de cette matière — "
+                                     "stock non comparable")
+            elif ml:
+                stock = round(info["quantite"] * ml, 3)
+                note = (f"{_n(info['quantite'])} bobines de {_n(laize_mm)} mm "
+                        f"× {_n(ml, 'm')}/bobine")
+            else:
+                stock, note = None, ("Métrage par bobine non renseigné — "
+                                     "stock non convertible en ml")
+        m = par_mat[cle] = {
+            "matiere_id": a["matiere_id"],
+            "matiere_ref": a["matiere_ref"],
+            "matiere_designation": a["matiere_designation"],
+            "matiere_categorie": a.get("matiere_categorie"),
+            "kind": a["kind"],
+            "unite": a["unite"],
+            "laize_mm": laize_mm,
+            "besoin_7j": 0.0,
+            "besoin_15j": 0.0,
+            "besoin_total": 0.0,
+            "stock_actuel": stock,
+            "stock_note": note,
+            "stock_palettes": a.get("stock_palettes"),
+            "besoin_total_tubes": None,
+            "besoin_total_palettes": None,
+            "nb_dossiers": 0,
+            "nb_dossiers_incalculables": 0,
+            "sources": [],
+        }
+        return m
 
     for a in lignes:
         if not a.get("mapped") or not a.get("matiere_id"):
@@ -1065,30 +1159,30 @@ def _regrouper_par_matiere(lignes: list) -> dict:
             continue
 
         mid = a["matiere_id"]
-        m = par_mat.get(mid)
-        if m is None:
-            # Le stock est porté par la référence, pas par la valeur de fiche :
-            # on le prend une fois et on ne l'additionne jamais, sinon deux
-            # valeurs mappées sur la même référence le compteraient deux fois.
-            m = par_mat[mid] = {
-                "matiere_id": mid,
-                "matiere_ref": a["matiere_ref"],
-                "matiere_designation": a["matiere_designation"],
-                "matiere_categorie": a.get("matiere_categorie"),
-                "kind": a["kind"],
-                "unite": a["unite"],
-                "besoin_7j": 0.0,
-                "besoin_15j": 0.0,
-                "besoin_total": 0.0,
-                "stock_actuel": a.get("stock_actuel"),
-                "stock_note": a.get("stock_note"),
-                "stock_palettes": a.get("stock_palettes"),
-                "besoin_total_tubes": None,
-                "besoin_total_palettes": None,
-                "nb_dossiers": 0,
-                "nb_dossiers_incalculables": 0,
-                "sources": [],
-            }
+        bobine = a["kind"] in _KINDS_BOBINE
+        ventil = (a.get("par_laize") or {}) if bobine else {}
+
+        if bobine and ventil:
+            for laize_mm, part in ventil.items():
+                m = _entree((mid, laize_mm), a, laize_mm)
+                m["besoin_7j"] += part["besoin_7j"]
+                m["besoin_15j"] += part["besoin_15j"]
+                m["besoin_total"] += part["besoin_total"]
+                m["nb_dossiers"] += part["nb_dossiers"]
+                m["sources"].append({
+                    "source_value": a["source_value"],
+                    "besoin_total": round(part["besoin_total"], 3),
+                    "nb_dossiers": part["nb_dossiers"],
+                })
+            # Les dossiers non chiffrés n'ont pas de laize à eux : ils restent
+            # rattachés à la première ligne de la référence, signalés hors total.
+            if a["nb_dossiers_incalculables"]:
+                prem = next((par_mat[(mid, lz)] for lz in ventil), None)
+                if prem is not None:
+                    prem["nb_dossiers_incalculables"] += a["nb_dossiers_incalculables"]
+            continue
+
+        m = _entree(mid, a, None)
         m["besoin_7j"] += a["besoin_7j"]
         m["besoin_15j"] += a["besoin_15j"]
         m["besoin_total"] += a["besoin_total"]
