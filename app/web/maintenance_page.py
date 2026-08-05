@@ -243,7 +243,11 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .filters-apply-btn:active{transform:translateY(1px)}
 .filters-date-presets{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:10px 0 0;margin-top:12px;border-top:1px dashed var(--border)}
 .filters-date-presets-label{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-right:4px;padding-top:8px}
-.date-preset-chip{padding:5px 12px;font-size:11px;font-weight:600;border-radius:14px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;white-space:nowrap;transition:all 120ms;margin-top:6px}
+/* v2.7.4 : background:transparent laissait remonter le fond de page (--bg),
+   donc des puces bleues sur un fond bleu. var(--card) les detache : blanches
+   en mode clair, gris fonce en mode sombre. L'etat .active garde sa teinte
+   d'accent, c'est lui qui doit trancher avec les autres. */
+.date-preset-chip{padding:5px 12px;font-size:11px;font-weight:600;border-radius:14px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;white-space:nowrap;transition:all 120ms;margin-top:6px}
 .date-preset-chip:hover{border-color:var(--accent);color:var(--accent)}
 .date-preset-chip.active{font-weight:700;border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
 @media(max-width:560px){.filter-group{flex:1 1 100%}.filter-input,select.filter-input{min-width:0;width:100%}.filters-apply-btn{width:100%}}
@@ -1756,6 +1760,11 @@ body.light .maint-codes-panel-embed .op-filter:focus {box-shadow:0 0 0 3px rgba(
 .maint-codes-panel-embed .op-form-panel select{background:var(--card)}
 .maint-codes-panel-embed .op-form-panel input:focus,
 .maint-codes-panel-embed .op-form-panel select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+/* Meme raison pour le bouton Annuler : il etait en background:transparent,
+   donc de la couleur du panneau. Scope sur .op-form-panel pour ne pas
+   toucher les autres boutons secondaires du panneau des codes, qui eux
+   sont deja poses sur la carte blanche. */
+.maint-codes-panel-embed .op-form-panel .btn-sec{background:var(--card)}
 .maint-codes-panel-embed .op-table-wrap {margin-top:4px}
 .maint-codes-panel-embed .op-table {font-size:12px}
 .maint-codes-panel-embed .op-table th {font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:10px 12px;white-space:nowrap}
@@ -2327,9 +2336,9 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
               </select>
             </div>
             <div class="filter-group">
-              <label for="filt-operations-type">Type d'opération</label>
+              <label for="filt-operations-type">Nom de l'opération</label>
               <select id="filt-operations-type" class="filter-input">
-                <option value="">Tous les types</option>
+                <option value="">Toutes les opérations</option>
               </select>
             </div>
             <div class="filter-group">
@@ -7208,11 +7217,38 @@ function refreshOpsFiltersOptions(){
   const typeSel = document.getElementById('filt-operations-type');
   const opeSel  = document.getElementById('filt-operations-operateur');
   if(typeSel){
-    const cur = typeSel.value;
-    const types = OPS_TYPES_STATE.list.map(t => t.nom).filter(Boolean).sort((a,b) => a.localeCompare(b, 'fr'));
-    typeSel.innerHTML = '<option value="">Tous les types</option>' +
-      types.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
-    if(cur && types.includes(cur)) typeSel.value = cur;
+    const cur  = typeSel.value;
+    // v2.7.5 : le select "Nom de l'opération" liste les codes catalogue ET les
+    // interventions libres présentes dans l'historique. Le filtre "Type de
+    // saisie" restreint la liste au type sélectionné (codes / libres).
+    const kind = (document.getElementById('filt-operations-kind')?.value || 'all');
+    const sortFr = arr => arr.sort((a,b) => a.localeCompare(b, 'fr'));
+    const codes  = sortFr(Array.from(new Set(
+      OPS_TYPES_STATE.list.map(t => t.nom).filter(Boolean)
+    )));
+    const libres = sortFr(Array.from(new Set(
+      OPS_STATE.list.filter(o => o._libre).map(o => o.type).filter(Boolean)
+    )));
+    const opt = n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>';
+    const grp = (label, items) => items.length
+      ? '<optgroup label="' + escAttr(label) + '">' + items.map(opt).join('') + '</optgroup>'
+      : '';
+    let html = '<option value="">Toutes les opérations</option>';
+    let allowed = [];
+    if(kind === 'codes'){
+      html += codes.map(opt).join('');
+      allowed = codes;
+    } else if(kind === 'libres'){
+      html += libres.map(opt).join('');
+      allowed = libres;
+    } else {
+      html += grp('Codes catalogue', codes) + grp('Interventions libres', libres);
+      allowed = codes.concat(libres);
+    }
+    typeSel.innerHTML = html;
+    // Si la sélection courante n'existe plus dans le jeu restreint, on repasse
+    // sur "Toutes les opérations" plutôt que de laisser un filtre fantôme.
+    typeSel.value = (cur && allowed.includes(cur)) ? cur : '';
   }
   if(opeSel){
     const cur = opeSel.value;
