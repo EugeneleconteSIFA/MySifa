@@ -2406,7 +2406,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                 </select>
                 <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;color:var(--text);white-space:nowrap">
                   <input type="checkbox" id="maint-usure-haspos" onchange="_maintOnUsureHasPosChange()" style="width:16px;height:16px;flex:0 0 auto;margin:0;padding:0;cursor:pointer">
-                  Position
+                  Position particulière
                 </label>
                 <span id="maint-usure-pos-wrap" style="display:none">
                   <input type="text" id="maint-usure-position" list="maint-usure-position-list" placeholder="ex. bande" maxlength="40" oninput="_maintOnUsurePositionInput()" style="width:120px;padding:6px 10px;font-size:12px">
