@@ -951,6 +951,7 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 .maint-machine-btn.active:hover{background:var(--accent);color:var(--bg);filter:brightness(1.05)}
 .maint-cat-btn{border:none;background:transparent;color:var(--text2);padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,box-shadow .15s}
 .maint-cat-btn:hover{background:var(--bg);color:var(--text)}
+.maint-cat-btn[data-maint-cat="all"].active{background:var(--accent);color:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .maint-cat-btn[data-maint-cat="entretien"].active{background:#a78bfa;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .maint-cat-btn[data-maint-cat="remplacements"].active{background:#fb923c;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .maint-cat-btn.active:hover{filter:brightness(1.05)}
@@ -1983,6 +1984,11 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           <div class="maint-toolbar-row maint-toolbar-row--secondary">
           <label class="maint-toolbar-label">Catégorie</label>
           <div class="maint-cat-tabs" id="maint-cat-tabs" role="tablist">
+            <!-- v2.7.4 : troisieme etat « Tous ». Les deux categories etaient
+                 mutuellement exclusives : impossible de voir l'entretien et les
+                 interventions sur le meme ecran. Meme logique que la ligne Statut
+                 juste a cote (selection unique parmi N, dont un « Tous »). -->
+            <button type="button" class="maint-cat-btn" data-maint-cat="all" onclick="setMaintCatFilter('all')">Tous<span class="maint-tab-badge hidden" data-maint-cat-badge="all" title="Opérations en retard, toutes catégories">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-cat-badge-soon="all" title="Opérations dû bientôt, toutes catégories">0</span></button>
             <button type="button" class="maint-cat-btn" data-maint-cat="entretien" onclick="setMaintCatFilter('entretien')">Entretien<span class="maint-tab-badge hidden" data-maint-cat-badge="entretien" title="Opérations en retard dans cette catégorie">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-cat-badge-soon="entretien" title="Opérations dû bientôt dans cette catégorie">0</span></button>
             <button type="button" class="maint-cat-btn" data-maint-cat="remplacements" onclick="setMaintCatFilter('remplacements')">Interventions<span class="maint-tab-badge hidden" data-maint-cat-badge="remplacements" title="Opérations en retard dans cette catégorie">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-cat-badge-soon="remplacements" title="Opérations dû bientôt dans cette catégorie">0</span></button>
           </div>
@@ -7697,19 +7703,23 @@ function saveOpsTypeDetails(e){
 // Vue Maintenance (accueil) : cartes par opération périodique, par machine
 // =========================================================================
 const MAINT_MACHINE_KEY = 'mysifa_maint_home_machine_v1';
-// Toggle Entretien/Remplacements (v178) — filtre les cartes de la vue
-// Maintenance pour n'afficher qu'une seule des deux catégories à la fois.
+// Filtre de catégorie de la vue Maintenance (v178, élargi en v2.7.4).
+// Trois états : « Tous », « Entretien », « Interventions ».
 // Les contrôles ne sont JAMAIS visibles dans cette vue.
 const MAINT_CAT_FILTER_KEY = 'mysifa_maint_home_cat_filter_v1';
 
+// v2.7.4 : trois etats desormais — 'all' (les deux categories), 'entretien',
+// 'remplacements'. La valeur deja stockee chez les utilisateurs existants est
+// l'une des deux anciennes : elle reste valide, aucune migration necessaire.
 function getMaintCatFilter(){
   try{
     const v = localStorage.getItem(MAINT_CAT_FILTER_KEY);
-    return (v === 'remplacements') ? 'remplacements' : 'entretien';
+    if(v === 'remplacements' || v === 'all') return v;
+    return 'entretien';
   }catch(e){ return 'entretien'; }
 }
 function setMaintCatFilter(c){
-  if(c !== 'entretien' && c !== 'remplacements') return;
+  if(c !== 'all' && c !== 'entretien' && c !== 'remplacements') return;
   try{ localStorage.setItem(MAINT_CAT_FILTER_KEY, c); }catch(e){}
   renderMaintCards();
 }
@@ -7843,6 +7853,9 @@ function _refreshMaintCounters(){
       else if(st === 'soon') cats.remplacements.s++;
     });
   });
+  // v2.7.4 : le bouton « Tous » porte le cumul des deux categories.
+  cats.all = { o: cats.entretien.o + cats.remplacements.o,
+               s: cats.entretien.s + cats.remplacements.s };
   Object.keys(cats).forEach(cat => {
     setBadge(document.querySelector('[data-maint-cat-badge="' + cat + '"]'), cats[cat].o);
     setBadge(document.querySelector('[data-maint-cat-badge-soon="' + cat + '"]'), cats[cat].s);
@@ -8477,9 +8490,9 @@ function renderMaintCards(){
   document.querySelectorAll('.maint-machine-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-maint-machine') === machine);
   });
-  // Toggle Entretien/Remplacements (v178) — filtre les cartes pour n'afficher
-  // qu'une seule des deux catégories à la fois. Les contrôles ne sont JAMAIS
-  // visibles ici. Les pièces d'usure ne sont visibles que sur "Remplacements".
+  // Filtre de catégorie (v178, élargi en v2.7.4) : « Tous », « Entretien » ou
+  // « Interventions ». Les contrôles ne sont JAMAIS visibles ici. Les pièces
+  // d'usure apparaissent sur « Interventions » et sur « Tous ».
   const catFilter = getMaintCatFilter();
   document.querySelectorAll('.maint-cat-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-maint-cat') === catFilter);
@@ -8489,7 +8502,9 @@ function renderMaintCards(){
   const grouping = 'status';  // v2.4.6 : toggle retire, groupement fixe par statut
   _refreshMaintChipState();
   _refreshMaintCounters();
-  const showWearParts = (catFilter === 'remplacements');
+  // v2.7.4 : les pieces d'usure appartiennent a la categorie Interventions ;
+  // elles doivent donc rester visibles quand on affiche les deux categories.
+  const showWearParts = (catFilter === 'remplacements' || catFilter === 'all');
   // v2.4.25 : les pieces d'usure sont maintenant comptees + affichees dans
   // TOUS les filtres statut (leur logique de retard temps est integree au
   // systeme unifie overdue/soon/ok/never). _renderWearPartsGroup renvoie ''
@@ -8517,10 +8532,14 @@ function renderMaintCards(){
     if(!it.periodique) return false;
     if(wearPartCodeIds.has(String(it.id))) return false;
     const cat = it.categorie;
-    if(catFilter === 'entretien'){
-      return cat === 'controles' || cat === 'entretien' || cat === 'interventions' || cat === 'suivi';
-    }
-    return cat === 'remplacements';
+    // Les codes legacy 'interventions' et 'suivi' sont ranges avec 'entretien',
+    // comme partout ailleurs dans le module.
+    const isEntretien = (cat === 'controles' || cat === 'entretien' ||
+                         cat === 'interventions' || cat === 'suivi');
+    const isRemplacement = (cat === 'remplacements');
+    if(catFilter === 'all') return isEntretien || isRemplacement;
+    if(catFilter === 'entretien') return isEntretien;
+    return isRemplacement;
   });
   if(!baseItems.length){
     grid.innerHTML = wearPartsHtml +
