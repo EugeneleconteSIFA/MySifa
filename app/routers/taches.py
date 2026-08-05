@@ -308,8 +308,13 @@ def _users_assignables(conn, user: dict) -> list:
     """Comptes actifs qu'on peut assigner : ceux qui peuvent ouvrir l'app.
 
     Assigner quelqu'un qui recevra un 403 en cliquant n'a pas de sens. La liste
-    se déduit donc de la matrice d'accès, pas d'un rôle en dur. Un non-admin ne
-    voit que son propre service.
+    se déduit donc de la matrice d'accès, pas d'un rôle en dur.
+
+    Tous services confondus, volontairement : une tâche se confie à la personne
+    qui sait la traiter, pas à un organigramme. L'assigné la voit à titre
+    personnel (clause « mes tâches » du périmètre) sans que la tâche entre pour
+    autant dans le périmètre de son service — la confier à quelqu'un ne la
+    publie pas à toute son équipe.
 
     Le contrôle serveur de `_valid_assignes` reste, lui, ouvert à tout compte
     actif : des tâches plus anciennes portent des assignés qui ne sont plus
@@ -317,9 +322,6 @@ def _users_assignables(conn, user: dict) -> list:
     """
     filtres = ["u.actif=1"]
     params: list = []
-    if _niveau(user) != "admin":
-        filtres.append("u.role=?")
-        params.append(_service(user))
 
     a_matrice = conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='role_access_defaults'"
