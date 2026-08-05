@@ -1630,6 +1630,19 @@ body.light .maint-codes-panel-embed th {background:#f1f5f9}
 .maint-codes-panel-embed .dot.no {background:var(--border)}
 .maint-codes-panel-embed .chk-edit {width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
 .maint-codes-panel-embed .cell-ov {font-size:9px;color:var(--accent);font-weight:700;letter-spacing:.02em;margin-left:6px;text-transform:uppercase}
+/* v2.7.4 : les deux cases a cocher du bloc « Piece d'usure » utilisaient le
+   rendu natif du navigateur, donc un carre bleu — pose sur le fond bleu clair
+   du bloc, le contraste etait quasi nul. On les redessine : boite blanche,
+   bordure discrete, coche a la couleur d'accent du module. Les dimensions
+   restent celles posees en inline sur les inputs (16px), on ne touche pas au
+   HTML. Regle portee par le conteneur : toute case ajoutee ici en herite. */
+#maint-usure-block input[type=checkbox]{-webkit-appearance:none;appearance:none;box-sizing:border-box;border:1.5px solid var(--border);border-radius:4px;background:#fff;display:inline-grid;place-content:center;transition:border-color .12s,box-shadow .12s}
+#maint-usure-block input[type=checkbox]::before{content:"";width:10px;height:10px;transform:scale(0);transition:transform .12s ease-out;background:var(--accent);clip-path:polygon(14% 44%,0 60%,39% 100%,100% 18%,84% 0,39% 68%)}
+#maint-usure-block input[type=checkbox]:checked{border-color:var(--accent)}
+#maint-usure-block input[type=checkbox]:checked::before{transform:scale(1)}
+#maint-usure-block input[type=checkbox]:hover{border-color:var(--accent)}
+#maint-usure-block input[type=checkbox]:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-bg)}
+#maint-usure-block input[type=checkbox]:disabled{opacity:.5;cursor:not-allowed}
 .maint-codes-panel-embed .acc-matrix {width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
 .maint-codes-panel-embed .acc-matrix th {padding:8px 10px}
 .maint-codes-panel-embed .acc-matrix .acc-th-lbl {margin-right:6px}
