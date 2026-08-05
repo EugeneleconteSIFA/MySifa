@@ -107,5 +107,68 @@ for (const champ of ['code', 'designation', 'composants', 'custom_margin_pct']) 
 check('création en POST', save.includes('method: "POST"'), true);
 check('modification en PATCH', save.includes('method: "PATCH"'), true);
 
+// ─── Liste dépliable ────────────────────────────────────────────────────────
+vm.runInContext([
+  extraire('escHtml'), extraire('escAttr'), extraire('fmtNum'),
+  extraire('fmtEurM2'), extraire('fmtPct'),
+  src.slice(src.indexOf('const MSP_ROLE_LABEL ='),
+            src.indexOf('};', src.indexOf('const MSP_ROLE_LABEL =')) + 2),
+  extraire('msProductCompLabel'), extraire('msProductDetailHtml'),
+  'globalThis.CUR_SYM = {EUR:"\u20ac",USD:"$"};',
+].join('\n'), ctx);
+
+const produit = {
+  id: 1, code: '886-0001', designation: 'Thermique Pro 70g',
+  composants: [
+    { role: 'FRONTAL', reference: '70gsm TOP Thermal', libelle: 'Toutes déclinaisons' },
+    { role: 'ADHESIF', reference: '1408', libelle: '22 g/m²' },
+  ],
+  cost: {
+    total_eur_per_m2: 0.2993, margin_pct: 6, margin_eur_m2: 0.018,
+    sell_price_eur_m2: 0.3173,
+    components: [
+      { role: 'frontal', name: '70gsm TOP Thermal', price_eur_per_m2: 0.1512, share_pct: 50.52 },
+      { role: 'adhesif', name: '1408 — 22 g/m²', price_eur_per_m2: 0.1053, share_pct: 35.18 },
+    ],
+  },
+};
+
+// « Toutes déclinaisons » n'apprend rien : la colonne ne montre que la référence.
+check('une matière sans déclinaison affiche sa seule référence',
+  ctx.msProductCompLabel(produit, 'FRONTAL'), '70gsm TOP Thermal');
+check('une déclinaison porteuse de sens est affichée',
+  ctx.msProductCompLabel(produit, 'ADHESIF').includes('22 g/m²'), true);
+check('un emplacement vide reste neutre',
+  ctx.msProductCompLabel(produit, 'GLASSINE').includes('—'), true);
+
+const detail = ctx.msProductDetailHtml(produit);
+for (const attendu of ['Frontal', 'Adhésif', '0,1512', '50,52', 'Prix de revient',
+                       'Prix de vente', 'msp-jauge']) {
+  check('le détail montre : ' + attendu, detail.includes(attendu), true);
+}
+check('les balises du détail sont équilibrées',
+  (detail.match(/<div/g) || []).length, (detail.match(/<\/div>/g) || []).length);
+check('pas de matière sans prix ici', detail.includes('msp-alerte'), false);
+
+// Une matière sans prix ne doit pas passer pour gratuite en silence.
+const incomplet = JSON.parse(JSON.stringify(produit));
+incomplet.cost.components[1].price_eur_per_m2 = 0;
+const detail2 = ctx.msProductDetailHtml(incomplet);
+check('une matière sans prix est signalée', detail2.includes('msp-alerte'), true);
+check('et dite telle quelle dans la ligne', detail2.includes('sans prix'), true);
+
+const vide = { id: 2, code: 'X', designation: 'Y', composants: [], cost: null };
+check('un produit sans coût ne casse pas le rendu',
+  ctx.msProductDetailHtml(vide).includes('Aucun coût calculable'), true);
+
+// La jauge ne doit jamais déborder, même sur une part aberrante.
+const fou = JSON.parse(JSON.stringify(produit));
+fou.cost.components[0].share_pct = 240;
+check('la jauge est bornée à 100 %',
+  ctx.msProductDetailHtml(fou).includes('width:100%'), true);
+
+check('la ligne déplie, le bouton édite',
+  src.includes('data-msp-row') && src.includes('data-msp-edit'), true);
+
 console.log(ko === 0 ? '\nTOUT EST VERT' : '\n' + ko + ' ECHEC(S)');
 process.exit(ko === 0 ? 0 : 1);

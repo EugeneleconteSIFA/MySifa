@@ -409,6 +409,30 @@ table.recap-table td:last-child{border-right:none}
   border-left:3px solid var(--accent);border-radius:8px;padding:11px 14px;margin-bottom:12px;line-height:1.6}
 .ms-hint strong{color:var(--text)}
 
+/* Liste des produits MyStock : lignes plus aérées que la table générique —
+   les désignations tiennent souvent sur deux lignes, il leur faut de l'air. */
+table.msp-table th{padding:11px 14px}
+table.msp-table td{padding:15px 14px;vertical-align:middle}
+table.msp-table td:first-child,table.msp-table th:first-child{padding-left:16px}
+/* La déclinaison est une précision, pas le nom de la matière. */
+.msp-decl{color:var(--muted);font-size:12px;white-space:nowrap}
+/* Détail déplié : rôle en petites capitales, part en jauge. */
+.msp-role{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  color:var(--muted);white-space:nowrap}
+.msp-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.msp-part{width:190px}
+.msp-jauge{display:inline-block;width:110px;height:8px;border-radius:4px;
+  background:var(--border);overflow:hidden;vertical-align:middle;margin-right:8px}
+.msp-jauge i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.msp-part-val{font-size:12px;font-variant-numeric:tabular-nums;color:var(--text2)}
+/* Bandeau de totaux sous le détail. */
+.msp-totaux{display:flex;flex-wrap:wrap;gap:22px;align-items:center;
+  padding:12px 22px 2px;font-size:12px;color:var(--muted)}
+.msp-totaux strong{color:var(--text);font-size:14px;font-variant-numeric:tabular-nums;
+  margin-left:6px}
+.msp-alerte{color:var(--warn);font-weight:600}
+@media(max-width:900px){ .msp-part{width:auto} .msp-jauge{display:none} }
+
 tr.ms-row{cursor:pointer}
 tr.ms-row td{transition:background .12s}
 /* Matière ouverte : même teinte que le survol, pour la relier à son détail. */
