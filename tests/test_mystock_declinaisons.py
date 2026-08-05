@@ -390,6 +390,21 @@ with dbmod.get_db() as conn:
     check("le poids retenu inclut la perte", p35["weight_per_m2"], round(35 * 1.09 / 1000, 6))
     check("les anciennes déclinaisons gardent une perte nulle", p22["perte_pct"], 0.0)
 
+    print("\n--- le grammage ne sert qu'aux prix au kilo ---")
+    # Le poids ne sert qu'à passer du kilo au m². On le garde en base quand la
+    # matière passe au m² — le champ disparaît de l'écran, pas la donnée.
+    avant_g = MP.parametrage(conn, d22["id"])["grammage_gsm"]
+    MP.set_parametrage(conn, declinaison_id=d22["id"], patch={"price_basis": "PER_M2"})
+    conn.commit()
+    check("le grammage survit au passage au m²",
+          MP.parametrage(conn, d22["id"])["grammage_gsm"], avant_g)
+    check("un prix au m² ignore le poids dans le calcul",
+          cout(d22["id"]), round(2.95, 4))
+    MP.set_parametrage(conn, declinaison_id=d22["id"], patch={"price_basis": "PER_KG"})
+    conn.commit()
+    check("et le calcul le reprend au retour au kilo",
+          cout(d22["id"]), round(2.95 * avant_g / 1000, 4))
+
     print("\n--- édition des réglages ---")
     check("devise inconnue refusée",
           MP.set_parametrage(conn, declinaison_id=d22["id"],

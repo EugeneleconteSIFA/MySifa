@@ -235,8 +235,13 @@
     return Math.round(g * (1 + p / 100) * 100) / 100;
   }
 
+  /**
+   * Le grammage ne sert qu'à une chose : passer d'un prix au KILO à un prix au
+   * m². Un prix déjà exprimé au m² n'en a aucun usage — la section n'a donc de
+   * sens que pour les matières tarifées au poids, c'est-à-dire les adhésifs.
+   */
   function needsWeight(form) {
-    return form.price_basis === "PER_KG" || !!form.is_imported;
+    return form.price_basis === "PER_KG";
   }
 
   function isFxStale(updatedAt) {
@@ -3056,7 +3061,8 @@
             <td class="ms-prix-cell">${c ? fmtEurM2(c.sell_price_eur_m2) : "—"}</td>
             <td class="ms-meta">${c ? fmtPct(c.margin_pct) : "—"}</td>
             <td class="row-actions" onclick="event.stopPropagation()">
-              <button type="button" class="btn btn-soft btn-sm" data-msp-edit="${p.id}">Éditer</button>
+              ${actionBtn("data-msp-edit", p.id, "edit", "Modifier ce produit")}
+              ${actionBtn("data-msp-dup", p.id, "copy", "Dupliquer — créer un produit similaire")}
             </td>
           </tr>
           ${open ? `<tr class="ms-detail-row msp-detail-row"><td colspan="11">${msProductDetailHtml(p)}</td></tr>` : ""}`;
@@ -3113,6 +3119,30 @@
     });
     document.querySelectorAll("[data-msp-edit]").forEach((b) => {
       b.onclick = () => navigate("/pricing/mystock/produit/" + b.getAttribute("data-msp-edit"));
+    });
+    // Dupliquer : on ouvre le formulaire de création pré-rempli. Rien n'est écrit
+    // tant qu'on n'enregistre pas — le code et la désignation portent « copie »
+    // pour qu'on ne se retrouve pas avec deux produits au nom identique.
+    document.querySelectorAll("[data-msp-dup]").forEach((b) => {
+      b.onclick = () => {
+        const src = S.msProducts.find((x) => String(x.id) === b.getAttribute("data-msp-dup"));
+        if (!src) return;
+        const roles = {};
+        const autres = [];
+        (src.composants || []).forEach((c) => {
+          if (MSP_ROLES.some((r) => r.role === c.role)) roles[c.role] = c.declinaison_id;
+          else autres.push(c.declinaison_id);
+        });
+        S.formMsProduct = {
+          code: src.code + "-copie",
+          designation: src.designation + " (copie)",
+          roles,
+          autres,
+          custom_margin_pct:
+            src.custom_margin_pct != null ? String(src.custom_margin_pct) : "",
+        };
+        navigate("/pricing/mystock/produit/new");
+      };
     });
     // Depuis le détail, on saute directement au paramétrage de la matière.
     document.querySelectorAll("[data-msp-mat]").forEach((b) => {
