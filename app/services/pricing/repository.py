@@ -147,6 +147,8 @@ def row_to_pricing_material(
         transport_mode=(_col(row, "transport_mode") or "AMOUNT"),
         transport_unit_price=_dec(_col(row, "transport_unit_price")),
         transport_pct=_dec(_col(row, "transport_pct")),
+        transport_cout=_dec(_col(row, "transport_cout")),
+        transport_quantite=_dec(_col(row, "transport_quantite")),
         container_kg=_dec(row["container_kg"]) if row["container_kg"] is not None else None,
         container_cost_usd=_dec(row["container_cost_usd"])
         if row["container_cost_usd"] is not None
@@ -191,6 +193,8 @@ def material_row_to_dict(
         "transport_mode": _col(row, "transport_mode") or "AMOUNT",
         "transport_unit_price": float(_col(row, "transport_unit_price") or 0),
         "transport_pct": float(_col(row, "transport_pct") or 0),
+        "transport_cout": float(_col(row, "transport_cout") or 0),
+        "transport_quantite": float(_col(row, "transport_quantite") or 0),
         "container_kg": float(row["container_kg"]) if row["container_kg"] is not None else None,
         "container_cost_usd": float(row["container_cost_usd"])
         if row["container_cost_usd"] is not None
@@ -305,6 +309,8 @@ def declinaison_to_pricing_material(param: dict) -> PricingMaterial:
         transport_mode=param.get("transport_mode") or "AMOUNT",
         transport_unit_price=_dec(param.get("transport_unit_price")),
         transport_pct=_dec(param.get("transport_pct")),
+        transport_cout=_dec(param.get("transport_cout")),
+        transport_quantite=_dec(param.get("transport_quantite")),
     )
 
 

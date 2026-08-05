@@ -133,6 +133,9 @@
         '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
       unlink:
         '<path d="M18.84 12.25l1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M5.17 11.75l-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/><line x1="8" y1="2" x2="8" y2="5"/><line x1="2" y1="8" x2="5" y2="8"/><line x1="16" y1="19" x2="16" y2="22"/><line x1="19" y1="16" x2="22" y2="16"/>',
+      // Flèche coudée : « dérivé de la ligne du dessus ».
+      "corner-down-right":
+        '<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
       "arrow-left":
         '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
       star:
@@ -186,6 +189,54 @@
   function unitLabel(cur, basis) {
     const sym = CUR_SYM[(cur || "EUR").toUpperCase()] || "€";
     return sym + "/" + (basis === "PER_M2" ? "m²" : "kg");
+  }
+
+  /**
+   * Méthodes de calcul du transport d'import.
+   *
+   * CONTENEUR et FORFAIT partagent la même arithmétique — un coût divisé par une
+   * quantité — mais pas le même vocabulaire : un champ « coût conteneur » ne
+   * doit pas servir à saisir un forfait de livraison.
+   */
+  const TRANSPORT_MODES = [
+    { v: "AMOUNT", label: "Montant à l'unité d'achat" },
+    { v: "PCT", label: "Pourcentage du prix d'achat" },
+    { v: "CONTENEUR", label: "Coût d'un conteneur ÷ ce qu'il transporte" },
+    { v: "FORFAIT", label: "Forfait de commande ÷ quantité commandée" },
+  ];
+  const TRANSPORT_CHAMPS = {
+    CONTENEUR: { cout: "Coût du conteneur", qte: "Quantité par conteneur" },
+    FORFAIT: { cout: "Forfait de commande", qte: "Quantité commandée" },
+  };
+
+  function transportModeOptions(actuel) {
+    return TRANSPORT_MODES.map(
+      (m) => `<option value="${m.v}" ${actuel === m.v ? "selected" : ""}>${escHtml(m.label)}</option>`
+    ).join("");
+  }
+
+  /** Les champs de saisie du transport dépendent de la méthode choisie. */
+  function transportChampsHtml(prefixe, f, unit, apercu) {
+    const mode = f.transport_mode || "AMOUNT";
+    if (mode === "PCT") {
+      return `<div class="field f-num"><label>Transport <span class="lbl-unit">% du prix d'achat</span></label>
+        <input type="number" step="0.0001" id="${prefixe}-transport" value="${escAttr(f.transport_pct)}"/>
+        <div class="field-hint" id="${prefixe}-transport-eq">${transportEqText(apercu)}</div>
+      </div>`;
+    }
+    if (mode === "CONTENEUR" || mode === "FORFAIT") {
+      const l = TRANSPORT_CHAMPS[mode];
+      return `<div class="field f-num"><label>${escHtml(l.cout)} <span class="lbl-unit">${escHtml(CUR_SYM[(f.price_currency || "EUR").toUpperCase()] || "€")}</span></label>
+          <input type="number" step="0.01" id="${prefixe}-tcout" value="${escAttr(f.transport_cout)}"/></div>
+        <div class="field f-num"><label>${escHtml(l.qte)} <span class="lbl-unit">${escHtml(f.price_basis === "PER_M2" ? "m²" : "kg")}</span></label>
+          <input type="number" step="0.01" id="${prefixe}-tqte" value="${escAttr(f.transport_quantite)}"/>
+          <div class="field-hint" id="${prefixe}-transport-eq">${transportEqText(apercu)}</div>
+        </div>`;
+    }
+    return `<div class="field f-num"><label>Transport <span class="lbl-unit">${escHtml(unit)}</span></label>
+      <input type="number" step="0.0001" id="${prefixe}-transport" value="${escAttr(f.transport_unit_price)}"/>
+      <div class="field-hint" id="${prefixe}-transport-eq">${transportEqText(apercu)}</div>
+    </div>`;
   }
 
   const BASIS_LABEL = {
@@ -796,8 +847,12 @@
           <td class="ms-meta">${escHtml(l.updated_at ? String(l.updated_at).replace("T", " ").slice(0, 16) : "—")}${l.updated_by_name ? " · " + escHtml(l.updated_by_name) : ""}</td>
           <td class="ms-actions">${S.canWrite
               ? actionBtn("data-ms-open", d.id, "edit", "Ouvrir le paramétrage de cette déclinaison") +
-                actionBtn("data-ms-dup", key, "copy", "Dupliquer cette ligne pour un autre fournisseur") +
-                (m.type_declinaison ? actionBtn("data-ms-new", m.id, "plus", `Créer un nouveau ${DECL_LABEL[m.type_declinaison]}`) : "") +
+                (m.type_declinaison
+                  ? actionBtn("data-ms-deriver", d.id, "corner-down-right",
+                      `Dériver : nouveau ${DECL_LABEL[m.type_declinaison]} avec les mêmes réglages`) +
+                    actionBtn("data-ms-new", m.id, "plus",
+                      `Créer un ${DECL_LABEL[m.type_declinaison]} vierge`)
+                  : "") +
                 actionBtn("data-ms-del", key, "trash", "Supprimer cette ligne", true)
               : ""}</td>
         </tr>`);
@@ -997,11 +1052,12 @@
         }
       };
     });
-    document.querySelectorAll("[data-ms-dup]").forEach((btn) => {
+    // Dériver : tout est repris sauf la valeur, qui reste à saisir.
+    document.querySelectorAll("[data-ms-deriver]").forEach((btn) => {
       btn.onclick = async () => {
-        const k = parseMsKey(btn.getAttribute("data-ms-dup"));
-        if (await msCall("/api/pricing/mystock/prix/dupliquer", k)) {
-          showToast("Ligne dupliquée — choisissez l'autre fournisseur.", "success");
+        const id = parseInt(btn.getAttribute("data-ms-deriver"), 10);
+        if (await msCall("/api/pricing/mystock/declinaisons/deriver", { declinaison_id: id })) {
+          showToast("Déclinaison dérivée — reste à saisir sa valeur.", "success");
         }
       };
     });
@@ -1111,6 +1167,8 @@
       transport_mode: "AMOUNT",
       transport_unit_price: "0",
       transport_pct: "0",
+      transport_cout: "0",
+      transport_quantite: "0",
     };
   }
 
@@ -1140,6 +1198,8 @@
       transport_unit_price:
         m.transport_unit_price != null ? String(m.transport_unit_price) : "0",
       transport_pct: m.transport_pct != null ? String(m.transport_pct) : "0",
+      transport_cout: m.transport_cout != null ? String(m.transport_cout) : "0",
+      transport_quantite: m.transport_quantite != null ? String(m.transport_quantite) : "0",
       _mystock: m.mystock || null,
       _history: [],
     };
@@ -1165,6 +1225,8 @@
       transport_mode: f.transport_mode || "AMOUNT",
       transport_unit_price: parseFloat(f.transport_unit_price) || 0,
       transport_pct: parseFloat(f.transport_pct) || 0,
+      transport_cout: parseFloat(f.transport_cout) || 0,
+      transport_quantite: parseFloat(f.transport_quantite) || 0,
     };
   }
 
@@ -1452,7 +1514,6 @@
       ? unitLabel(ms.price_currency, ms.price_basis)
       : unitLabel(f.price_currency, f.price_basis);
     const lockAttr = ms ? "disabled" : "";
-    const isPct = f.transport_mode === "PCT";
 
     setContent(`
       <div class="pr-narrow">
@@ -1538,14 +1599,9 @@
               </label>
               <div id="import-fields" class="import-fields" style="${f.is_imported?"":"display:none"}">
                 <div class="field-row">
-                  <div class="field f-mid"><label>Mode de transport</label><select id="f-tmode">
-                    <option value="AMOUNT" ${isPct?"":"selected"}>Montant — saisi en ${escHtml(unit)}</option>
-                    <option value="PCT" ${isPct?"selected":""}>Pourcentage du prix d'achat</option>
-                  </select></div>
-                  <div class="field f-num"><label>Transport <span class="lbl-unit">${isPct ? "% du prix d'achat" : escHtml(unit)}</span></label>
-                    <input type="number" step="0.0001" id="f-transport" value="${escAttr(isPct ? f.transport_pct : f.transport_unit_price)}"/>
-                    <div class="field-hint" id="transport-eq">${transportEqText(S.matPreview)}</div>
-                  </div>
+                  <div class="field f-mid"><label>Méthode de transport</label>
+                    <select id="f-tmode">${transportModeOptions(f.transport_mode || "AMOUNT")}</select></div>
+                  ${transportChampsHtml("f", f, unit, S.matPreview)}
                   <div class="field f-num"><label>Taxes <span class="lbl-unit">% du sous-total</span></label>
                     <input type="number" step="0.01" id="f-tax" value="${escAttr(f.taxe_pct)}"/>
                     <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
@@ -1593,7 +1649,7 @@
       const out = document.getElementById("f-gram-out");
       if (out) out.textContent = fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2);
     };
-    ["f-unit", "f-tax", "f-transport", "f-gsm", "f-perte"].forEach((id) => {
+    ["f-unit", "f-tax", "f-transport", "f-tcout", "f-tqte", "f-gsm", "f-perte"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.oninput = () => {
         syncMaterialFormFromDom();
@@ -1681,6 +1737,8 @@
       if (f.transport_mode === "PCT") f.transport_pct = tv;
       else f.transport_unit_price = tv;
     }
+    f.transport_cout = val("f-tcout") ?? f.transport_cout;
+    f.transport_quantite = val("f-tqte") ?? f.transport_quantite;
   }
 
   async function saveMaterialForm(isNew) {
@@ -1702,6 +1760,8 @@
       transport_mode: f.transport_mode || "AMOUNT",
       transport_unit_price: parseFloat(f.transport_unit_price) || 0,
       transport_pct: parseFloat(f.transport_pct) || 0,
+      transport_cout: parseFloat(f.transport_cout) || 0,
+      transport_quantite: parseFloat(f.transport_quantite) || 0,
       price_history_source: "Saisie interface",
     };
     if (!body.name) {
@@ -2416,6 +2476,8 @@
       if (f.transport_mode === "PCT") f.transport_pct = v;
       else f.transport_unit_price = v;
     }
+    if (g("d-tcout")) f.transport_cout = g("d-tcout").value;
+    if (g("d-tqte")) f.transport_quantite = g("d-tqte").value;
     if (g("d-gsm")) f.grammage_gsm = g("d-gsm").value;
     if (g("d-perte")) f.perte_pct = g("d-perte").value;
   }
@@ -2437,6 +2499,8 @@
           transport_mode: f.transport_mode || "AMOUNT",
           transport_unit_price: parseFloat(f.transport_unit_price) || 0,
           transport_pct: parseFloat(f.transport_pct) || 0,
+          transport_cout: parseFloat(f.transport_cout) || 0,
+          transport_quantite: parseFloat(f.transport_quantite) || 0,
         },
       });
     } catch (e) {
@@ -2514,7 +2578,6 @@
   function renderDeclinaisonForm() {
     const f = S.declForm;
     const unit = unitLabel(f.price_currency, f.price_basis);
-    const isPct = f.transport_mode === "PCT";
     const prixTxt = `${fmtNum(f.unit_price, 4, 4)} ${unit}`;
 
     setContent(`
@@ -2587,14 +2650,9 @@
               </label>
               <div id="d-import-fields" class="import-fields" style="${f.is_imported?"":"display:none"}">
                 <div class="field-row">
-                  <div class="field f-mid"><label>Mode de transport</label><select id="d-tmode">
-                    <option value="AMOUNT" ${isPct?"":"selected"}>Montant — saisi en ${escHtml(unit)}</option>
-                    <option value="PCT" ${isPct?"selected":""}>Pourcentage du prix d'achat</option>
-                  </select></div>
-                  <div class="field f-num"><label>Transport <span class="lbl-unit">${isPct ? "% du prix d'achat" : escHtml(unit)}</span></label>
-                    <input type="number" step="0.0001" id="d-transport" value="${escAttr(isPct ? f.transport_pct : f.transport_unit_price)}"/>
-                    <div class="field-hint" id="d-transport-eq">${transportEqText(S.declPreview)}</div>
-                  </div>
+                  <div class="field f-mid"><label>Méthode de transport</label>
+                    <select id="d-tmode">${transportModeOptions(f.transport_mode || "AMOUNT")}</select></div>
+                  ${transportChampsHtml("d", f, unit, S.declPreview)}
                   <div class="field f-num"><label>Taxes <span class="lbl-unit">% du sous-total</span></label>
                     <input type="number" step="0.01" id="d-tax" value="${escAttr(f.taxe_pct)}"/>
                     <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
@@ -2630,7 +2688,7 @@
       const out = document.getElementById("d-gram-out");
       if (out) out.textContent = fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2);
     };
-    ["d-tax", "d-transport", "d-gsm", "d-perte"].forEach((id) => {
+    ["d-tax", "d-transport", "d-tcout", "d-tqte", "d-gsm", "d-perte"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.oninput = () => {
         marquer();
@@ -2678,6 +2736,8 @@
             transport_mode: f.transport_mode || "AMOUNT",
             transport_unit_price: parseFloat(f.transport_unit_price) || 0,
             transport_pct: parseFloat(f.transport_pct) || 0,
+            transport_cout: parseFloat(f.transport_cout) || 0,
+            transport_quantite: parseFloat(f.transport_quantite) || 0,
             grammage_gsm: parseFloat(f.grammage_gsm) || 0,
             perte_pct: parseFloat(f.perte_pct) || 0,
           },

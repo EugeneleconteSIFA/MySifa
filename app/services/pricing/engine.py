@@ -18,7 +18,9 @@ fournisseur, dans sa devise, puis une seule conversion.
 Le transport est saisi sur la matière, au choix :
   - mode AMOUNT : un montant dans la DEVISE et la BASE d'achat (USD/kg si l'achat
     est en USD/kg, €/m² si l'achat est en €/m²) ;
-  - mode PCT    : un pourcentage du prix d'achat.
+  - mode PCT       : un pourcentage du prix d'achat ;
+  - mode CONTENEUR : le coût d'un conteneur divisé par ce qu'il transporte ;
+  - mode FORFAIT   : un forfait de commande divisé par la quantité commandée.
 Il n'est pris en compte que si la matière est marquée importée.
 """
 
@@ -73,9 +75,17 @@ def _transport_unit(material: PricingMaterial) -> Decimal:
     """
     if not material.is_imported:
         return _ZERO
-    if material.transport_mode == "PCT":
+    mode = material.transport_mode or "AMOUNT"
+    if mode == "PCT":
         pct = material.transport_pct or _ZERO
         return material.unit_price * pct / _HUNDRED
+    if mode in ("CONTENEUR", "FORFAIT"):
+        # Un coût global réparti sur une quantité. Sans quantité, on ne divise
+        # pas par zéro : le transport vaut zéro et la fiche le montre.
+        quantite = material.transport_quantite or _ZERO
+        if quantite <= _ZERO:
+            return _ZERO
+        return (material.transport_cout or _ZERO) / quantite
     return material.transport_unit_price or _ZERO
 
 

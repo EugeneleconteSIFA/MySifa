@@ -1176,6 +1176,10 @@ function renderPortal(){
   const isComptaPlan = urole === 'comptabilite';
   const isPaie = isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','comptabilite'].includes(urole));
   const isPricing = aa ? !!(aa.pricing ?? aa.devis) : (isSuper || urole==='direction');
+  // Paramètres : accès sectionné (config.py ROLES_SETTINGS_* → union ROLES_SETTINGS).
+  // aa.settings reflète déjà cette union côté serveur (default_app_access_for_role),
+  // donc l'icône suit exactement ce que can_access_settings() autorise sur /settings.
+  const isSettings = aa ? !!aa.settings : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','comptabilite'].includes(urole)));
   const isAo = isSuper || urole === 'direction';
   const isBAT = isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','commercial'].includes(urole));
   const isQualite = isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','commercial'].includes(urole));
@@ -1556,7 +1560,7 @@ function renderPortal(){
         title:profTitle,
         onClick:()=>{window.location.href='/profil';}
       },profRingBadge,profHumeurBadge,iconEl('user',24)),
-      (isSuper||urole==='direction')?h('button',{
+      isSettings?h('button',{
         type:'button',
         className:'portal-settings-corner',
         'aria-label':'Paramètres',
