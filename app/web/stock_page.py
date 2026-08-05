@@ -640,12 +640,34 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
   .dash-quick-btn-label{font-size:11px}
 }
 .dash-section{border-top:1px solid var(--border);padding-top:22px;margin-top:22px}
-.dash-section-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;
-  color:var(--muted);margin:0 0 14px;display:flex;align-items:center;justify-content:space-between}
-.dash-section-toggle{background:none;border:1px solid var(--border);border-radius:6px;
-  color:var(--muted);font-size:11px;font-weight:500;padding:3px 8px;cursor:pointer;
-  text-transform:none;letter-spacing:0;transition:border-color .15s,color .15s;line-height:1.4}
-.dash-section-toggle:hover{border-color:var(--accent);color:var(--accent)}
+.dash-section-title{font-size:16px;font-weight:700;text-transform:none;letter-spacing:0;
+  color:var(--text);margin:0 0 14px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.dash-section-title>span:first-child{display:inline-flex;align-items:center;gap:10px;min-width:0}
+.dash-section-title>span:first-child::before{content:"";flex-shrink:0;width:4px;height:20px;
+  border-radius:3px;background:var(--accent)}
+/* Fond plein au repos : un bouton transparent sur le fond de page est
+   invisible tant que le curseur n'est pas dessus. */
+.dash-section-toggle{background:var(--card);border:1px solid var(--border);border-radius:8px;
+  color:var(--text2);font-size:12px;font-weight:600;padding:5px 12px;cursor:pointer;
+  text-transform:none;letter-spacing:0;transition:background .15s,border-color .15s,color .15s;line-height:1.4;
+  font-family:inherit;flex-shrink:0}
+.dash-section-toggle:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+
+/* ── Fiche matière première : barre haute (retour + navigation) ───────────── */
+.mp-detail-topbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.mp-nav{display:flex;align-items:center;gap:8px;margin-left:auto}
+.mp-nav-pos{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mp-nav-btn{display:inline-flex;align-items:center;gap:6px;background:var(--card);color:var(--text);
+  border:1px solid var(--border);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;
+  cursor:pointer;font-family:inherit;transition:background .15s,border-color .15s,color .15s;white-space:nowrap}
+.mp-nav-btn:hover:not(:disabled){background:var(--bg);border-color:var(--accent);color:var(--text)}
+.mp-nav-btn:disabled{opacity:.4;cursor:not-allowed}
+.mp-nav-arrow{font-size:15px;line-height:1;color:var(--muted)}
+@media (max-width:640px){
+  .mp-detail-topbar{flex-direction:column;align-items:stretch}
+  .mp-nav{margin-left:0;justify-content:space-between}
+  .mp-nav-btn{flex:1;justify-content:center}
+}
 .dash-alert-block{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;
   display:flex;flex-direction:column;min-height:100px}
 .dash-alert-block h4{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 12px;flex-shrink:0}
@@ -739,6 +761,25 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-btn-associate.mapped:hover{border-color:var(--accent);color:var(--accent)}
 .bes-total-row td{background:color-mix(in srgb,var(--accent) 5%,transparent);font-weight:700;color:var(--text);border-top:1px solid var(--border)}
 .bes-dossier-ref{font-weight:700;color:var(--text)}
+/* Vue par dossier : une colonne par categorie matiere. Le tableau depasse
+   la largeur d'ecran sur petit portable -> defilement horizontal plutot que
+   colonnes ecrasees. */
+.bes-scroll-x{overflow-x:auto}
+.bes-kind-cell{min-width:112px;vertical-align:top}
+.bes-kind-qte{font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.bes-kind-qte.nc{color:var(--warn,#d97706)}
+.bes-kind-src{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.35;word-break:break-word}
+.bes-kind-none{color:var(--border);font-size:12px}
+.bes-kind-cell.unmapped{background:color-mix(in srgb,var(--warn,#d97706) 9%,transparent);cursor:pointer}
+.bes-kind-cell.unmapped:hover{background:color-mix(in srgb,var(--warn,#d97706) 16%,transparent)}
+.bes-kind-cell .bes-kind-src.tolink{color:var(--warn,#d97706);font-weight:600}
+/* Boutons documents de la vue par dossier (OF, fiche technique). Desactives
+   quand le document n'est pas rattache : visible mais inerte, plutot que masque. */
+.bes-act-cell{white-space:nowrap;text-align:right}
+.bes-act-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;margin-left:6px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;font-weight:600;font-family:inherit;border-radius:6px;cursor:pointer;transition:all .12s}
+.bes-act-btn:hover{border-color:var(--accent);color:var(--accent)}
+.bes-act-btn.off{opacity:.35;cursor:not-allowed}
+.bes-act-btn.off:hover{border-color:var(--border);color:var(--text2)}
 .bes-dossier-meta{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4}
 .bes-statut{display:inline-flex;align-items:center;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
 .bes-statut-en_cours{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
@@ -759,6 +800,8 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-src-badge.of{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
 .bes-src-badge.fiche{background:color-mix(in srgb,var(--warn,#d97706) 15%,transparent);color:var(--warn,#d97706)}
 .bes-warn-note{font-size:11px;color:var(--warn,#d97706);margin-top:3px;line-height:1.4}
+/* Conversion secondaire d'une ligne de besoin (mandrins -> tubes -> palettes) */
+.bes-sub-conv{font-size:11px;font-weight:600;color:var(--muted);margin-top:3px;line-height:1.4}
 /* Modal d'aide : sections repliables */
 .bes-doc-intro{font-size:13px;color:var(--text2);line-height:1.6;margin:2px 0 16px}
 .bes-doc-toolbar{display:flex;justify-content:flex-end;margin-bottom:8px}
@@ -5139,6 +5182,15 @@ const MP_CATEGORIES_AVEC_CONDITIONNEMENT = new Set(['carton', 'mandrin']);
 function mpHasConditionnement(cat) {
   return MP_CATEGORIES_AVEC_CONDITIONNEMENT.has((cat || '').toLowerCase());
 }
+function mpIsMandrinCategory(cat) {
+  return (cat || '').toLowerCase() === 'mandrin';
+}
+// « Cartons par palette », « Tubes par palette » : le libelle est au pluriel,
+// l'unite d'achat renvoyee par mpUniteAchat() est au singulier.
+function mpLabelUnitesParPalette(cat) {
+  const u = mpUniteAchat(cat);
+  return u.charAt(0).toUpperCase() + u.slice(1) + 's par palette';
+}
 function mpUniteAchat(cat) {
   const c = (cat || '').toLowerCase();
   if (c === 'carton') return 'carton';
@@ -5416,6 +5468,49 @@ function buildMpMvtHistory(mouvements, matiere) {
   );
 }
 
+// Ordre de navigation précédent/suivant sur une fiche matière : on suit la liste
+// telle qu'elle est affichée (filtres de catégorie + recherche en cours) quand
+// la matière courante y figure. Sinon (arrivée depuis le tableau de bord ou une
+// URL directe), on retombe sur le référentiel complet.
+function mpNavListe(id) {
+  const filtered = filterMatieresList() || [];
+  if (filtered.some(x => x && x.id === id)) return filtered;
+  return S.matieres || [];
+}
+
+function buildMatiereNav(m) {
+  if (!m) return null;
+  const list = mpNavListe(m.id);
+  const idx = list.findIndex(x => x && x.id === m.id);
+  if (idx < 0 || list.length < 2) return null;
+  const prev = idx > 0 ? list[idx - 1] : null;
+  const next = idx < list.length - 1 ? list[idx + 1] : null;
+  const mk = (target, label, dir) => {
+    const cible = target ? (target.reference || target.designation || '') : '';
+    const b = el('button', {
+      cls: 'mp-nav-btn',
+      type: 'button',
+      attrs: target
+        ? { title: label + ' \u2014 ' + cible, 'aria-label': label + ' : ' + cible }
+        : { disabled: 'disabled', title: dir === 'prev' ? 'Première référence de la liste' : 'Dernière référence de la liste' },
+      on: target ? { click: () => loadMatiere(target.id) } : {},
+    });
+    if (dir === 'prev') {
+      b.appendChild(el('span', { cls: 'mp-nav-arrow' }, '\u2039'));
+      b.appendChild(el('span', null, label));
+    } else {
+      b.appendChild(el('span', null, label));
+      b.appendChild(el('span', { cls: 'mp-nav-arrow' }, '\u203a'));
+    }
+    return b;
+  };
+  return el('div', { cls: 'mp-nav' },
+    mk(prev, 'Précédent', 'prev'),
+    el('span', { cls: 'mp-nav-pos' }, (idx + 1) + ' / ' + list.length),
+    mk(next, 'Suivant', 'next'),
+  );
+}
+
 function buildMatiereDetail() {
   const sel = S.selMatiere;
   if (!sel || !sel.matiere) {
@@ -5427,10 +5522,10 @@ function buildMatiereDetail() {
 
   const back = el('button', {
     cls: 'btn-ghost mp-back-btn',
-    style: { marginBottom: '14px' },
     type: 'button',
     on: { click: clearMatiereSel },
   }, '← Retour aux matières premières');
+  const topbar = el('div', { cls: 'mp-detail-topbar' }, back, buildMatiereNav(m));
 
   const actionBtns = [];
   if (!S.stockReadOnly) {
@@ -5467,7 +5562,7 @@ function buildMatiereDetail() {
   }
   if (isMatieresAdmin()) {
     actionBtns.push(el('button', {
-      cls: 'mp-act-icon',
+      cls: 'mp-act-icon mp-act-icon--neutral',
       type: 'button',
       style: { flex: '0 0 auto', minWidth: '44px' },
       attrs: { title: 'Modifier la référence', 'aria-label': 'Modifier la référence' },
@@ -5574,7 +5669,7 @@ function buildMatiereDetail() {
   const equiv = mpIsAdhesifCategory(m) ? mpAdhesifEquivalent(m.quantite, m) : '';
 
   return el('div', { cls: 'content' },
-    back,
+    topbar,
     el('div', { cls: 'scorecard' },
       el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' } },
         ...[dashMpCatBadge(m.categorie, m.sous_section), dashMpSousCatBadge(m)].filter(Boolean),
@@ -7724,6 +7819,7 @@ async function openMatiereCopyFromCard(m) {
     metres_lineaires_par_bobine: m.metres_lineaires_par_bobine || null,
     prix_eur_m2: m.prix_eur_m2 || null,
     unites_par_palette: m.unites_par_palette || null,
+    longueur_tube_mm: m.longueur_tube_mm || null,
     stock_par_laize: Array.isArray(m.stock_par_laize) ? m.stock_par_laize.slice() : [],
   };
   await Promise.all([loadMatieresAdminList(), loadMpSousSections()]);
@@ -7799,6 +7895,19 @@ function matiereRefEditPayload(item, fields) {
         return { error: 'Unités par palette : valeur > 0 obligatoire.' };
       }
       payload.unites_par_palette = upp;
+    }
+  }
+  if (fields.isMandrin && fields.ltInp) {
+    // Toujours envoyée, même vide, pour autoriser l'effacement de la longueur.
+    const raw = (fields.ltInp.value || '').replace(',', '.').trim();
+    if (raw === '') {
+      payload.longueur_tube_mm = null;
+    } else {
+      const lt = parseFloat(raw);
+      if (isNaN(lt) || lt <= 0) {
+        return { error: 'Longueur tube : valeur > 0 obligatoire.' };
+      }
+      payload.longueur_tube_mm = lt;
     }
   }
   if (fields.isAdhesif && fields.cppInp && fields.kgcInp) {
@@ -8214,7 +8323,35 @@ function appendMatiereRefEditFields(parent, item) {
   const uniteAchat = mpUniteAchat(item.categorie);
   const uppInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 260' } });
   uppInp.value = String(item.unites_par_palette != null && item.unites_par_palette > 0 ? item.unites_par_palette : '');
-  uppWrap.append(el('label', null, uniteAchat.charAt(0).toUpperCase() + uniteAchat.slice(1) + ' par palette'), uppInp);
+  uppWrap.append(el('label', null, mpLabelUnitesParPalette(item.categorie)), uppInp);
+
+  // ── Mandrins : longueur du tube acheté ────────────────────────────────────
+  // Un mandrin ne s'achète pas à l'unité : on achète des tubes qu'on redécoupe
+  // à la laize du module. Sans cette longueur, Besoins matières sait combien de
+  // mandrins il faut, mais pas combien de tubes commander.
+  const isMandrin = mpIsMandrinCategory(item.categorie);
+  const ltWrap = el('div', { cls: 'mp-field', style: { display: isMandrin ? '' : 'none' } });
+  const ltInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 1500' } });
+  ltInp.value = String(item.longueur_tube_mm > 0 ? item.longueur_tube_mm : '');
+  const ltHint = el('div', { cls: 'mp-hint' }, '');
+  function refreshLongueurTube() {
+    const lt = parseFloat((ltInp.value || '').replace(',', '.'));
+    const upp = parseFloat((uppInp.value || '').replace(',', '.'));
+    if (lt > 0 && upp > 0) {
+      ltHint.textContent = 'Une palette représente ' + fN(upp) + ' tubes, soit '
+        + fN(Math.round(lt * upp / 1000)) + ' m de mandrin à découper.';
+    } else if (lt > 0) {
+      ltHint.textContent = 'Renseigne aussi les tubes par palette pour connaître '
+        + 'le métrage de mandrin d\'une palette.';
+    } else {
+      ltHint.textContent = 'Longueur du tube acheté. Sans elle, le besoin en tubes '
+        + 'reste non chiffré dans Besoins matières.';
+    }
+  }
+  ltInp.addEventListener('input', refreshLongueurTube);
+  uppInp.addEventListener('input', refreshLongueurTube);
+  refreshLongueurTube();
+  ltWrap.append(el('label', null, 'Longueur tube (mm)'), ltInp, ltHint);
 
   // ── Conditionnement à l'achat des adhésifs ────────────────────────────────
   // Le stock est au kilo ; ces deux champs décrivent comment l'adhésif ARRIVE
@@ -8274,7 +8411,7 @@ function appendMatiereRefEditFields(parent, item) {
   // Formulaire organisé en sections : la fiche mélangeait identification,
   // conditionnement, seuils et laizes dans une seule colonne de champs.
   const sectionConditionnement = (isAdhesif || hasCond || mpIsPaletteCategory(item))
-    ? mpFormSection('Conditionnement à l\'achat', ...adhesifCondFields, pppWrap, uppWrap)
+    ? mpFormSection('Conditionnement à l\'achat', ...adhesifCondFields, pppWrap, uppWrap, ltWrap)
     : null;
 
   // Mise en page deux colonnes. Identification et Classement d'un cote,
@@ -8316,7 +8453,7 @@ function appendMatiereRefEditFields(parent, item) {
     ? mpFormSection('Laizes & tarification', laizeWrap)
     : null;
   parent.append(...[grille, sectionLaizes].filter(Boolean));
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, abbrevInp, hasAbbrev, sousCategorieSel };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, abbrevInp, hasAbbrev, sousCategorieSel };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -9598,6 +9735,11 @@ function buildMatieresAdminAddForm() {
   const uppWrap = el('div', { cls: 'mp-field' });
   const uppInp = el('input', { attrs: { type: 'number', min: '1', step: '1', placeholder: 'Ex. 260' } });
   const uppLbl = el('label', null, 'Unités par palette');
+  // Mandrins : longueur du tube acheté (détail sur la fiche matière).
+  const ltWrap = el('div', { cls: 'mp-field', style: { display: 'none' } });
+  const ltInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 1500' } });
+  ltWrap.append(el('label', null, 'Longueur tube (mm)'), ltInp,
+    el('div', { cls: 'mp-hint' }, 'Longueur du tube acheté, redécoupé à la laize du module.'));
   // Conditionnement à l'achat des adhésifs (stock au kilo) : palette → cartons → kg.
   const adhCondWrap = el('div', { style: { display: 'none' } });
   const cppInp = el('input', { attrs: { type: 'number', min: '1', step: '1', placeholder: 'Ex. 24' } });
@@ -9674,13 +9816,13 @@ function buildMatieresAdminAddForm() {
     pppWrap.style.display = isPal ? '' : 'none';
     couleurWrap.style.display = isGlass ? '' : 'none';
     uppWrap.style.display = hasCond ? '' : 'none';
+    ltWrap.style.display = mpIsMandrinCategory(cat) ? '' : 'none';
     adhCondWrap.style.display = mpIsAdhesifCategory(cat) ? '' : 'none';
     laizeWrap.style.display = isLaizee ? '' : 'none';
     sousSectionWrap.style.display = hasSousSection ? '' : 'none';
     pppLbl.textContent = 'Palettes par pile';
     if (hasCond) {
-      const u = mpUniteAchat(cat);
-      uppLbl.textContent = u.charAt(0).toUpperCase() + u.slice(1) + ' par palette';
+      uppLbl.textContent = mpLabelUnitesParPalette(cat);
     }
     seuilLbl.textContent = mpSeuilFieldLabel(cat);
     seuilInp.step = isPal || isCarton || cat === 'mandrin' || mpIsBobineCategory(cat) ? '1' : '0.5';
@@ -9706,6 +9848,7 @@ function buildMatieresAdminAddForm() {
     if (seed.metres_lineaires_par_bobine) metresInp.value = String(seed.metres_lineaires_par_bobine);
     if (seed.prix_eur_m2) prixM2Inp.value = String(seed.prix_eur_m2);
     if (seed.unites_par_palette) uppInp.value = String(seed.unites_par_palette);
+    if (seed.longueur_tube_mm) ltInp.value = String(seed.longueur_tube_mm);
     if (Array.isArray(seed.stock_par_laize)) {
       const seedLaizeIds = new Set(seed.stock_par_laize.map(s => s.laize_id));
       laizeChecks.querySelectorAll('input[type=checkbox]').forEach(inp => {
@@ -9729,6 +9872,7 @@ function buildMatieresAdminAddForm() {
     couleurWrap,
     pppWrap,
     uppWrap,
+    ltWrap,
     adhCondWrap,
     sousSectionWrap,
     el('div', { cls: 'mp-field' }, seuilLbl, seuilInp),
@@ -9779,6 +9923,10 @@ function buildMatieresAdminAddForm() {
                 payload.unites_par_palette = upp;
               }
             }
+          }
+          if (mpIsMandrinCategory(cat)) {
+            const lt = parseFloat((ltInp.value || '').replace(',', '.'));
+            if (lt > 0) payload.longueur_tube_mm = lt;
           }
           if (mpIsAdhesifCategory(cat)) {
             const cpp = parseFloat((cppInp.value || '').replace(',', '.'));
@@ -10929,7 +11077,10 @@ function buildDashboardAlertes(d) {
   const mpRows = alertesMp.length
       ? el('div', { cls: 'dash-alert-rows' }, ...alertesMp.map(a => el('div', {
           cls: 'dash-alert-row',
-          on: { click: () => goToTab('matieres') },
+          attrs: { title: 'Ouvrir la fiche ' + (a.reference || '') },
+          // La ligne cite une référence précise : renvoyer vers la liste
+          // complète obligeait à la retrouver à la main.
+          on: { click: () => (a.id ? loadMatiere(a.id) : goToTab('matieres')) },
         },
           dashMpCatBadge(a.categorie),
           el('span', { cls: 'dash-alert-main' },
@@ -11929,7 +12080,8 @@ const BESOINS_KIND_UNITE_NOTE = {
   support: 'Besoin exprimé en mètres linéaires — le métrage de l’OF.',
   glassine: 'Besoin exprimé en mètres linéaires — le métrage de l’OF.',
   adhesif: 'Besoin exprimé en kilos — grammage × métrage × laize.',
-  mandrin: 'Besoin exprimé en unités.',
+  mandrin: 'Besoin exprimé en mandrins — un par bobine produite. '
+    + 'La traduction en tubes puis en palettes à commander s’affiche sous le total.',
   carton: 'Besoin exprimé en unités.',
   palette: 'Besoin exprimé en unités.',
 };
@@ -12111,7 +12263,13 @@ function _buildBesoinsKindSection(kind, lignes) {
       cls: 'num',
       style: { color: 'var(--muted)' },
       title: l.stock_note || '',
-    }, l.stock_actuel != null ? _fmtQte(l.stock_actuel, l.unite) : '—');
+    }, l.stock_actuel != null ? _fmtQte(l.stock_actuel, l.unite) : '—',
+      // Mandrins : le stock se tient en palettes de tubes, le besoin en mandrins.
+      // On affiche sous la conversion la quantité réellement en magasin, sinon
+      // l'opérateur ne peut pas rapprocher l'écran de ce qu'il a devant lui.
+      (l.kind === 'mandrin' && l.stock_palettes != null)
+        ? el('div', { cls: 'bes-sub-conv' }, _fmtQte(l.stock_palettes, 'pal.'))
+        : null);
 
     const srcCell = el('td', {},
       el('span', { cls: 'bes-src-value' }, l.source_value || '—'),
@@ -12127,7 +12285,20 @@ function _buildBesoinsKindSection(kind, lignes) {
       _besQteCell(l.besoin_7j, l.unite),
       _besQteCell(l.besoin_15j, l.unite),
       el('td', { cls: 'num', style: { fontWeight: '700' }, title: l.formule_exemple || '' },
-        _fmtQte(l.besoin_total, l.unite)),
+        _fmtQte(l.besoin_total, l.unite),
+        // Les mandrins se commandent en tubes, jamais à l'unité : la conversion
+        // est la seule information actionnable pour passer commande.
+        (l.kind === 'mandrin' && l.besoin_total_tubes)
+          ? el('div', { cls: 'bes-sub-conv' },
+              Math.ceil(l.besoin_total_tubes) + ' tubes'
+              + (l.besoin_total_palettes ? ' · ' + _fmtQte(l.besoin_total_palettes, 'pal.') : ''))
+          : null,
+        (l.kind === 'mandrin' && l.nb_dossiers_sans_tubes)
+          ? el('div', { cls: 'bes-warn-note' },
+              l.nb_dossiers_sans_tubes + ' dossier'
+              + (l.nb_dossiers_sans_tubes > 1 ? 's' : '')
+              + ' sans conversion — longueur tube ou laize module manquante')
+          : null),
       stockCell,
       manqueCell,
       el('td', { cls: 'num', style: { color: 'var(--muted)' } }, String(l.nb_dossiers || 0)),
@@ -12178,22 +12349,73 @@ function _besFmtVar(v) {
 
 // Métrage du dossier + provenance. Le badge dit d'où vient le chiffre :
 // « OF » (métrage lu sur l'OF) ou « fiche » (reconstitué géométriquement).
-function _besMetrageCell(d) {
-  const bobine = (d.besoins || []).find(b => b.kind === 'support' || b.kind === 'glassine');
-  const src = bobine ? bobine.source_metrage : (d.of_metrage ? 'of' : null);
-  const ml = bobine && bobine.quantite != null
-    ? bobine.quantite
-    : (d.of_metrage != null ? Number(d.of_metrage) : null);
-  if (ml == null) {
-    return el('td', { cls: 'num' }, el('span', { cls: 'bes-na' }, '—'));
-  }
-  return el('td', { cls: 'num' },
-    _fmtQte(ml, 'm'),
-    src ? el('span', { cls: 'bes-src-badge ' + src, title: src === 'of'
-      ? 'Métrage lu sur l’OF importé'
-      : 'Métrage reconstitué depuis la fiche technique (pas d’OF importé)' },
-      src === 'of' ? 'OF' : 'fiche') : null,
+
+// En-tetes des colonnes matiere de la vue par dossier. Le kind « support »
+// s'affiche « Frontal » : c'est le mot de l'atelier, et la categorie MyStock
+// correspondante. Les autres reprennent BESOINS_KIND_LABELS.
+const BESOINS_KIND_COL_LABELS = {
+  support: 'Frontal', glassine: 'Glassine', adhesif: 'Adhésif',
+  mandrin: 'Mandrin', carton: 'Carton', palette: 'Palette',
+};
+
+// Trace de calcul d'un besoin, affichee en infobulle : formule, variables
+// utilisees avec leur origine, puis ce qui manque quand rien n'est chiffrable.
+function _besTraceTitle(b) {
+  const lignes = [];
+  if (b.formule) lignes.push(b.formule);
+  (b.variables || []).forEach(v => {
+    lignes.push('· ' + v.label + ' : ' + _besFmtVar(v) + ' (' + (v.origine || '?') + ')');
+  });
+  if ((b.manque || []).length) lignes.push('Manque : ' + b.manque.join(' ; '));
+  if (!b.mapped) lignes.push('Valeur non associée à une matière première — cliquer pour l\'associer.');
+  return lignes.join('\n');
+}
+
+// Cellule « une categorie matiere pour un dossier ». Trois etats : pas de besoin
+// de cette categorie sur ce dossier, besoin chiffre, besoin non chiffrable.
+function _besKindCell(b) {
+  if (!b) return el('td', { cls: 'bes-kind-cell' }, el('span', { cls: 'bes-kind-none' }, '—'));
+  const nc = b.quantite == null;
+  const cell = el('td', {
+    cls: 'bes-kind-cell' + (b.mapped ? '' : ' unmapped'),
+    title: _besTraceTitle(b),
+  },
+    el('div', { cls: 'bes-kind-qte' + (nc ? ' nc' : '') },
+      nc ? 'n.c.' : _fmtQte(b.quantite, b.unite)),
+    // Les mandrins se commandent en tubes : sans la conversion, le chiffre
+    // n'est pas actionnable pour passer commande.
+    (b.kind === 'mandrin' && b.besoin_tubes)
+      ? el('div', { cls: 'bes-sub-conv' },
+          Math.ceil(b.besoin_tubes) + ' tubes'
+          + (b.besoin_palettes ? ' · ' + _fmtQte(b.besoin_palettes, 'pal.') : ''))
+      : null,
+    el('div', { cls: 'bes-kind-src' + (b.mapped ? '' : ' tolink') },
+      (b.source_value || '?') + (b.mapped ? '' : ' · à associer')),
   );
+  if (!b.mapped) {
+    cell.addEventListener('click', () => openBesoinAssocierModal(b.kind, b.source_value));
+  }
+  return cell;
+}
+
+// Bouton d'ouverture d'un document (OF ou fiche technique) dans un nouvel
+// onglet. Sans document rattache, le bouton reste visible mais desactive :
+// l'absence est une information, la masquer laisserait croire a un oubli d'UI.
+function _besDocBtn(label, ico, url, titre) {
+  const dispo = !!url;
+  const b = el('button', {
+    cls: 'bes-act-btn' + (dispo ? '' : ' off'),
+    type: 'button',
+    title: dispo ? titre : titre + ' — aucun document rattaché à ce dossier',
+    attrs: dispo ? {} : { disabled: 'disabled' },
+  }, iconEl(ico, 13), el('span', {}, label));
+  if (dispo) {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      window.open(url, '_blank', 'noopener');
+    });
+  }
+  return b;
 }
 
 function _buildBesoinsDossierTable(dos) {
@@ -12205,66 +12427,67 @@ function _buildBesoinsDossierTable(dos) {
   const table = el('table', { cls: 'bes-table' });
   table.appendChild(el('thead', {}, el('tr', {},
     el('th', {}, 'Dossier'),
-    el('th', {}, 'Client'),
-    el('th', {}, 'Machine'),
-    el('th', {}, 'Statut'),
-    el('th', { cls: 'num' }, 'Étiq.'),
-    el('th', { cls: 'num' }, 'Métrage'),
     el('th', {}, 'Livraison'),
-    el('th', {}, 'Besoins'),
+    ...BESOINS_KIND_ORDER.map(k => el('th', {
+      title: BESOINS_KIND_UNITE_NOTE[k] || '',
+    }, BESOINS_KIND_COL_LABELS[k] || k)),
+    el('th', { cls: 'bes-act-cell' }, 'Documents'),
   )));
 
   const tbody = el('tbody', {});
-  let totalEtiq = 0;
+  // Totaux par categorie : les unites sont homogenes a l'interieur d'un kind
+  // (ml, kg, u), donc la somme a un sens. Les dossiers non chiffres sont comptes
+  // a part pour ne pas laisser croire que le total couvre tout.
+  const totaux = {};
+  BESOINS_KIND_ORDER.forEach(k => { totaux[k] = { q: 0, unite: '', nc: 0 }; });
+
   dossiers.forEach(d => {
-    totalEtiq += (parseFloat(d.qte_etiquettes) || 0);
-    const besoinsEls = (d.besoins || []).map(b => {
-      // Le titre déplie la trace de calcul : formule, variables, ou ce qui manque.
-      const lignesTitre = [];
-      if (b.formule) lignesTitre.push(b.formule);
-      (b.variables || []).forEach(v => {
-        lignesTitre.push('· ' + v.label + ' : ' + _besFmtVar(v) + ' (' + (v.origine || '?') + ')');
-      });
-      if ((b.manque || []).length) {
-        lignesTitre.push('Manque : ' + b.manque.join(' ; '));
-      }
-      const qte = b.quantite == null ? 'n.c.' : _fmtQte(b.quantite, b.unite);
-      const tag = el('span', {
-        cls: 'bes-tag' + ((!b.mapped || b.quantite == null) ? ' warn' : ''),
-        title: lignesTitre.join('\n'),
-      }, `${BESOINS_KIND_LABELS[b.kind] || b.kind} · ${b.source_value || '?'} : ${qte}`);
-      return tag;
+    const parKind = {};
+    (d.besoins || []).forEach(b => { parKind[b.kind] = b; });
+    BESOINS_KIND_ORDER.forEach(k => {
+      const b = parKind[k];
+      if (!b) return;
+      if (b.quantite == null) { totaux[k].nc++; return; }
+      totaux[k].q += b.quantite;
+      totaux[k].unite = b.unite;
     });
-    const besoinsCell = besoinsEls.length
-      ? el('td', {}, ...besoinsEls)
-      : el('td', { style: { color: 'var(--muted)', fontStyle: 'italic', fontSize: '12px' } },
-          'Aucun besoin calculé (fiche technique manquante ou incomplète)');
+    const sansBesoin = !(d.besoins || []).length;
 
     tbody.appendChild(el('tr', {},
       el('td', {},
         el('div', { cls: 'bes-dossier-ref' }, d.reference || '—'),
         (d.numero_of || d.ref_produit) ? el('div', { cls: 'bes-dossier-meta' },
           [d.numero_of ? 'OF ' + d.numero_of : null, d.ref_produit].filter(Boolean).join(' · ')) : null,
+        sansBesoin ? el('div', { cls: 'bes-warn-note' },
+          'Fiche technique manquante ou incomplète') : null,
       ),
-      el('td', {}, d.client || '—'),
-      el('td', {}, d.machine_nom || '—'),
-      el('td', {}, el('span', { cls: 'bes-statut bes-statut-' + (d.statut || 'attente') },
-        d.statut === 'en_cours' ? 'En cours' : 'En attente')),
-      el('td', { cls: 'num' }, d.qte_etiquettes ? Number(d.qte_etiquettes).toLocaleString('fr-FR') : '—'),
-      _besMetrageCell(d),
       el('td', {}, _fmtDate(d.date_livraison || d.planned_end)),
-      besoinsCell,
+      ...BESOINS_KIND_ORDER.map(k => _besKindCell(parKind[k])),
+      el('td', { cls: 'bes-act-cell' },
+        _besDocBtn('OF', 'file-text',
+          d.of_import_id ? '/api/of/' + d.of_import_id + '/pdf-preview' : null,
+          'Ouvrir l\'OF'),
+        _besDocBtn('Fiche', 'clipboard',
+          d.ft_id ? '/api/fiches-techniques/' + d.ft_id + '/pdf-preview' : null,
+          'Ouvrir la fiche technique'),
+      ),
     ));
   });
 
   tbody.appendChild(el('tr', { cls: 'bes-total-row' },
-    el('td', { colspan: '4' }, `Total — ${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`),
-    el('td', { cls: 'num' }, totalEtiq ? Math.round(totalEtiq).toLocaleString('fr-FR') : '—'),
-    el('td', { colspan: '3' }, ''),
+    el('td', { colspan: '2' }, `Total — ${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`),
+    ...BESOINS_KIND_ORDER.map(k => el('td', {
+      cls: 'bes-kind-cell',
+      title: totaux[k].nc ? totaux[k].nc + ' dossier(s) non chiffré(s), hors total' : '',
+    },
+      el('div', { cls: 'bes-kind-qte' }, totaux[k].q ? _fmtQte(totaux[k].q, totaux[k].unite) : '—'),
+      totaux[k].nc ? el('div', { cls: 'bes-warn-note' }, totaux[k].nc + ' n.c.') : null,
+    )),
+    el('td', {}, ''),
   ));
 
   table.appendChild(tbody);
-  return el('div', { cls: 'bes-card' }, table);
+  return el('div', { cls: 'bes-card bes-scroll-x' }, table);
 }
 
 function openBesoinAssocierModal(kind, sourceValue) {

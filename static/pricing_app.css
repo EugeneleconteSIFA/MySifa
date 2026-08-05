@@ -228,15 +228,25 @@ table.pr-table tr{cursor:pointer}
 /* Largeur de lecture : les pages ne s'étalent plus sur tout l'écran. */
 .pr-narrow{max-width:1180px;margin:0 auto}
 
-/* Grammage → perte → grammage retenu : la flèche dit que le dernier découle
-   des deux premiers, et qu'il ne se saisit pas. */
-.gram-arrow{align-self:center;color:var(--muted);font-size:16px;padding:14px 2px 0;flex-shrink:0}
+/* Grammage → perte → grammage retenu, sur une seule ligne. .field-row est une
+   grille à DEUX colonnes : cette suite en a cinq (trois champs, deux flèches),
+   d'où sa propre grille — sinon les champs s'empilent. */
+.gram-row{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:12px;align-items:start}
+.gram-row .field{margin-bottom:0;min-width:0}
+.gram-row .field.f-num input{max-width:none}
+/* La flèche se cale sur la ligne des champs, pas sur celle des étiquettes. */
+.gram-arrow{color:var(--muted);font-size:17px;line-height:44px;padding-top:23px;
+  text-align:center;user-select:none}
 .gram-out{background:var(--bg);border:1px solid var(--border);border-radius:10px;
-  padding:9px 14px;font-size:14px;font-weight:700;color:var(--text);min-height:38px;
-  display:flex;align-items:center}
-/* Case à cocher posée dans une grille de champs : même hauteur que ses voisins. */
-.check-inline{margin-top:22px}
-@media(max-width:720px){ .gram-arrow{display:none} }
+  padding:12px 14px;font-size:14px;font-weight:700;color:var(--text);
+  font-variant-numeric:tabular-nums}
+/* Case à cocher posée dans une grille de champs : alignée sur ses voisins. */
+.check-inline{margin-top:24px}
+@media(max-width:860px){
+  .gram-row{grid-template-columns:1fr 1fr;gap:12px}
+  .gram-arrow{display:none}
+  .gram-row .field{margin-bottom:12px}
+}
 
 /* Bandeau d'actions collé en haut de la fiche matière (repris de la fiche
    produit MyAO) : sur un formulaire long, Enregistrer reste sous la main. */

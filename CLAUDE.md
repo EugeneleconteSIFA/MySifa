@@ -704,6 +704,10 @@ Les mêmes réglages sur les deux fiches (base CM et MyStock) :
   grammage majoré de la perte : on produit rarement au gramme près, la chute et
   le calage font qu'un frontal de 70 g/m² en consomme davantage. Perte par
   défaut : 9 % sur toute nouvelle matière.
+  Sur un **adhésif**, ce grammage EST la valeur de la déclinaison : « 1225 en
+  22 g/m² » ne peut pas peser autre chose. La ligne du tableau et la fiche
+  écrivent au même endroit, dans les deux sens. Sur une matière **laizée**, la
+  déclinaison vaut une laize et le grammage reste indépendant.
 - **Taxes en %** (6 = +6 %), plus un multiplicateur. Elles vivent dans l'encadré
   « Matière importée » et **ne comptent que si la matière est importée** — une
   taxe invisible qui gonfle le prix d'une matière locale serait un piège.
@@ -733,6 +737,15 @@ CM. Une seule formule de prix de revient dans l'application.
 Deux refus volontaires à la création : deux matières sur un même rôle, et la même
 déclinaison deux fois. Dans les deux cas le coût serait faux sans que rien ne le
 signale à l'écran.
+
+Le module n'a **pas de tableau de bord** : `/pricing` ouvre directement les
+matières. La page et son endpoint ont été retirés le 4 août 2026, ils
+n'apportaient rien que les deux listes ne montrent déjà.
+
+**Import en masse** — `scripts/import_catalogue_produits.py` crée les produits
+depuis le catalogue commercial, en trois temps : `--inventaire` (propose les
+correspondances de noms), `--simulation` (rejoue sans écrire), `--appliquer`.
+Relançable sans doublon. Test : `python3 tests/test_import_catalogue.py`.
 
 Tests : `python3 tests/test_mystock_declinaisons.py`,
 `node tests/test_pricing_declinaison.js`,

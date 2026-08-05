@@ -3,7 +3,7 @@
 const path = require('path');
 process.chdir(path.join(__dirname, '..'));
 const fs = require('fs'), vm = require('vm');
-const src = fs.readFileSync('static/pricing_app.js', 'utf8');
+const src = fs.readFileSync('static/pricing_app.js', 'utf8').replace(/\r\n/g, '\n');
 
 function extraire(nom) {
   const i = src.indexOf('function ' + nom + '(');
@@ -67,6 +67,10 @@ check('plus de champ poids kg/m²', form.includes('id="f-wm2"'), false);
 check('un seul champ grammage', (form.match(/id="f-gsm"/g) || []).length, 1);
 check('champ perte présent', form.includes('id="f-perte"'), true);
 check('grammage retenu non saisissable', form.includes('id="f-gram-out"'), true);
+// .field-row est une grille à 2 colonnes : la suite en a 5, elle a sa grille.
+check('la ligne grammage a sa propre grille', form.includes('class="gram-row"'), true);
+check('les deux fiches utilisent la même grille',
+  (src.match(/class="gram-row"/g) || []).length, 2);
 
 // ─── Tableau récapitulatif ──────────────────────────────────────────────────
 const recap = extraire('recapTableHtml');

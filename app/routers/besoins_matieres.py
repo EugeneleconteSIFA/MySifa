@@ -31,7 +31,9 @@ Formules :
                   grammage = matieres_premieres.weight_gsm (saisi sur la fiche
                   matière), repli fiches_techniques.qte_au_mille
                   laize    = of_imports.laize, repli fiche technique
-- mandrins (u)  : qte_etiquettes / nb_etiq_bobin
+- mandrins (u)  : of_imports.nb_mandrins, sinon of_imports.qte_bobines,
+                  sinon qte_etiquettes / nb_etiq_bobin (champ de la fiche, ou
+                  nombre relu dans la phrase de conditionnement)
 - cartons  (u)  : mandrins / nb_bobines_carton
 - palettes (u)  : cartons / (palette_nb_cartons_sol * palette_nb_cartons_hauteur)
 
@@ -45,13 +47,14 @@ sur la durée qui tombe dans la fenêtre.
 
 Accès : rôles _STOCK_MATIERES_ADMIN_ROLES (voir stock.py).
 """
+import re
 from datetime import date, datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
 
 from app.core.database import get_db
-from app.routers.stock import require_stock_matieres_admin
+from app.routers.stock import require_stock_matieres_admin, stock_config_float
 
 router = APIRouter(tags=["besoins-matieres"])
 
@@ -153,12 +156,17 @@ _SQL_PE = """
     SELECT pe.id, pe.machine_id, pe.reference, pe.client, pe.description,
            pe.ref_produit, pe.ref_produit_norm, pe.numero_of, pe.statut,
            pe.planned_start, pe.planned_end, pe.date_livraison, pe.duree_heures,
-           pe.position,
+           pe.position, pe.of_import_id,
            m.nom AS machine_nom,
            oi.qte_etiquettes AS qte_etiquettes,
            oi.qte_bobines    AS qte_bobines,
            oi.metrage        AS of_metrage,
-           oi.laize          AS of_laize
+           oi.laize          AS of_laize,
+           -- L'OF chiffre souvent lui-meme le conditionnement : ces valeurs
+           -- priment sur toute reconstitution a partir de la fiche technique.
+           oi.nb_mandrins    AS of_nb_mandrins,
+           oi.nb_cartons     AS of_nb_cartons,
+           oi.conditionnement AS of_conditionnement
     FROM planning_entries pe
     LEFT JOIN machines m ON m.id = pe.machine_id
     LEFT JOIN of_imports oi ON oi.id = pe.of_import_id
@@ -169,16 +177,18 @@ _SQL_PE = """
 _SQL_FT = """
     SELECT id, reference, ref_produit_norm, machine,
            support, glassine, adhesif, qte_au_mille, eti_laize, eti_longueur,
-           mod_longueur, mod_nb_front, laize, laize_optimale,
+           mod_laize, mod_longueur, mod_nb_front, laize, laize_optimale,
            mandrin_dia, nb_etiq_bobin, nb_bobines_carton, cartons,
+           conditionnement,
            palette_type, palette_nb_cartons_sol, palette_nb_cartons_hauteur
     FROM fiches_techniques
 """
 
 _FT_FIELDS = (
     "support", "glassine", "adhesif", "qte_au_mille", "eti_laize", "eti_longueur",
-    "mod_longueur", "mod_nb_front", "laize", "laize_optimale",
+    "mod_laize", "mod_longueur", "mod_nb_front", "laize", "laize_optimale",
     "mandrin_dia", "nb_etiq_bobin", "nb_bobines_carton", "cartons",
+    "conditionnement",
     "palette_type", "palette_nb_cartons_sol", "palette_nb_cartons_hauteur",
 )
 
@@ -235,7 +245,8 @@ def _load_mapping(conn) -> dict:
     rows = conn.execute("""
         SELECT m.kind, m.source_value, m.matiere_id,
                mp.reference, mp.designation, mp.categorie,
-               mp.metres_lineaires_par_bobine, mp.weight_gsm, mp.weight_per_m2
+               mp.metres_lineaires_par_bobine, mp.weight_gsm, mp.weight_per_m2,
+               mp.longueur_tube_mm, mp.unites_par_palette
         FROM mp_fiche_mapping m
         JOIN matieres_premieres mp ON mp.id = m.matiere_id
     """).fetchall()
@@ -253,6 +264,11 @@ def _load_mapping(conn) -> dict:
             ),
             "weight_gsm": r["weight_gsm"] if "weight_gsm" in keys else None,
             "weight_per_m2": r["weight_per_m2"] if "weight_per_m2" in keys else None,
+            # Mandrins : longueur du tube acheté et nombre de tubes par palette.
+            # Ce sont les deux seules données qui traduisent un besoin en mandrins
+            # en une commande de tubes, puis de palettes.
+            "longueur_tube_mm": r["longueur_tube_mm"] if "longueur_tube_mm" in keys else None,
+            "unites_par_palette": r["unites_par_palette"] if "unites_par_palette" in keys else None,
         }
     return out
 
@@ -339,7 +355,150 @@ def _matiere_ml_par_bobine(mapping: dict, kind: str, source_value: str):
     return m.get("metres_lineaires_par_bobine") if m else None
 
 
-def _compute_besoins_dossier(pe: dict, mapping: dict) -> list:
+# « Bobine de 1.000 étiquettes », « Bobines de 1 000 etiq. » : la phrase de
+# conditionnement porte le nombre d'étiquettes par bobine bien plus souvent que
+# le champ dédié de la fiche technique, laissé vide dans la plupart des fiches.
+_RE_ETIQ_BOBINE = re.compile(
+    r"bobines?\s*(?:de|:)?\s*(\d[\d\s\u202f\u00a0.,]*)\s*(?:é|e)tiq",
+    re.IGNORECASE,
+)
+
+
+def _entier_fr(txt) -> Optional[int]:
+    """« 1.000 », « 1 000 », « 1 000 » → 1000.
+
+    Les séparateurs de milliers français (point, espace, espace fine) sont
+    retirés sans distinction : un nombre d'étiquettes par bobine est toujours
+    entier, aucun risque de confondre avec une décimale.
+    """
+    chiffres = re.sub(r"\D", "", str(txt or ""))
+    if not chiffres:
+        return None
+    try:
+        v = int(chiffres)
+    except ValueError:
+        return None
+    return v if v > 0 else None
+
+
+def _etiq_par_bobine(pe: dict) -> dict:
+    """Étiquettes par bobine, avec sa provenance.
+
+    Le champ dédié `nb_etiq_bobin` est vide sur beaucoup de fiches alors que la
+    phrase de conditionnement porte l'information. On lit dans l'ordre : le
+    champ, la phrase de la fiche, puis celle de l'OF.
+    """
+    v = _f(pe.get("ft_nb_etiq_bobin"))
+    if v:
+        return {"valeur": v, "champ": "fiches_techniques.nb_etiq_bobin",
+                "origine": "Fiche technique"}
+    for cle, champ, origine in (
+        ("ft_conditionnement", "fiches_techniques.conditionnement",
+         "Fiche technique (conditionnement)"),
+        ("of_conditionnement", "of_imports.conditionnement", "OF (conditionnement)"),
+    ):
+        m = _RE_ETIQ_BOBINE.search(str(pe.get(cle) or ""))
+        if m:
+            n = _entier_fr(m.group(1))
+            if n:
+                return {"valeur": float(n), "champ": champ, "origine": origine}
+    return {"valeur": None, "champ": None, "origine": None}
+
+
+def _nb_bobines_dossier(pe: dict, qte: Optional[float]) -> dict:
+    """Nombre de bobines produites — c'est aussi le nombre de mandrins consommés.
+
+    Trois sources, de la plus directe à la plus reconstituée :
+    l'OF quand il chiffre lui-même les mandrins, la quantité de bobines de l'OF,
+    puis la quantité d'étiquettes divisée par les étiquettes par bobine.
+    """
+    n = _f(pe.get("of_nb_mandrins"))
+    if n:
+        return {"nb": n, "formule": f"{_n(n)} mandrins (chiffrés sur l'OF)",
+                "variables": [
+                    {"label": "Mandrins", "champ": "of_imports.nb_mandrins",
+                     "origine": "OF", "valeur": n, "unite": "u"}],
+                "manque": []}
+
+    nb_bob = _f(pe.get("qte_bobines"))
+    if nb_bob:
+        return {"nb": nb_bob,
+                "formule": f"{_n(nb_bob)} bobines (OF) × 1 mandrin/bobine",
+                "variables": [
+                    {"label": "Quantité bobines", "champ": "of_imports.qte_bobines",
+                     "origine": "OF", "valeur": nb_bob, "unite": "bobines"}],
+                "manque": []}
+
+    eb = _etiq_par_bobine(pe)
+    if qte and eb["valeur"]:
+        return {"nb": qte / eb["valeur"],
+                "formule": f"{_n(qte)} étiq ÷ {_n(eb['valeur'])} étiq/bobine",
+                "variables": [
+                    {"label": "Quantité étiquettes", "champ": "of_imports.qte_etiquettes",
+                     "origine": "OF", "valeur": qte, "unite": "étiq"},
+                    {"label": "Étiquettes par bobine", "champ": eb["champ"],
+                     "origine": eb["origine"], "valeur": eb["valeur"], "unite": ""}],
+                "manque": []}
+
+    manque = []
+    if not qte and not nb_bob:
+        manque.append("Quantité d'étiquettes ou de bobines de l'OF")
+    if not eb["valeur"]:
+        manque.append("Étiquettes par bobine — champ « Nb étiq./bobine » vide sur la "
+                      "fiche et phrase de conditionnement non exploitable")
+    return {"nb": None, "formule": "Calcul impossible", "variables": [], "manque": manque}
+
+
+def _mandrin_tubes(pe: dict, mapping: dict, nb_mandrins: float,
+                   perte_pct: float) -> dict:
+    """Traduit un besoin en mandrins en nombre de tubes, puis de palettes.
+
+    Les mandrins s'achètent en tubes qu'on redécoupe à la laize du module : un
+    tube de L mm rend, une fois la perte de coupe retirée, L × (1 − perte) de
+    longueur utile, dont on tire des mandrins de `mod_laize` mm de haut.
+
+    Le besoin reste exprimé en mandrins — c'est l'unité de l'atelier. Les tubes
+    et les palettes sont la traduction à l'achat, affichée à côté.
+    """
+    vide = {"tubes": None, "palettes": None, "mandrins_par_tube": None,
+            "detail_tubes": None, "manque_tubes": []}
+    m = mapping.get(("mandrin", str(pe.get("ft_mandrin_dia") or "").strip().lower()))
+    laize_mod = _f(pe.get("ft_mod_laize"))
+    lg_tube = _f(m.get("longueur_tube_mm")) if m else None
+    upp = _f(m.get("unites_par_palette")) if m else None
+
+    manque = []
+    if not laize_mod:
+        manque.append("Laize module de la fiche technique (mod_laize)")
+    if not lg_tube:
+        manque.append("Longueur tube — à saisir sur la fiche matière mandrin")
+    if not laize_mod or not lg_tube or not nb_mandrins:
+        return {**vide, "manque_tubes": manque}
+
+    utile = lg_tube * (1.0 - perte_pct / 100.0)
+    if utile <= 0:
+        return {**vide, "manque_tubes": ["Perte de coupe ≥ 100 % — réglage à corriger"]}
+
+    tubes = nb_mandrins * laize_mod / utile
+    palettes = tubes / upp if upp else None
+    detail = (f"{_n(round(nb_mandrins, 1))} mandrins × {_n(laize_mod)} mm "
+              f"÷ ({_n(lg_tube)} mm − {_n(perte_pct)} %) = "
+              f"{_n(round(tubes, 1))} tubes")
+    if palettes is not None:
+        detail += f" ÷ {_n(upp)} tubes/palette = {_n(round(palettes, 2))} palettes"
+    else:
+        manque.append("Tubes par palette — à saisir sur la fiche matière mandrin")
+    return {
+        "tubes": round(tubes, 3),
+        "palettes": round(palettes, 3) if palettes is not None else None,
+        "mandrins_par_tube": round(utile / laize_mod, 2),
+        "detail_tubes": detail,
+        "manque_tubes": manque,
+    }
+
+
+def _compute_besoins_dossier(pe: dict, mapping: dict,
+                             perte_pct: float = 10.0) -> list:
     """Calcule la liste des besoins MP pour un dossier de prod.
 
     Retourne une liste de dicts :
@@ -357,7 +516,7 @@ def _compute_besoins_dossier(pe: dict, mapping: dict) -> list:
     lz = _laize_dossier(pe)
 
     def _add(kind: str, source_value, quantite, formule: str,
-             variables=None, manque=None):
+             variables=None, manque=None, extra=None):
         # L'unité n'est pas passée par l'appelant : elle est déduite du kind,
         # pour qu'elle ne puisse pas diverger de _KIND_UNITE.
         unite = _KIND_UNITE.get(kind, "u")
@@ -382,6 +541,7 @@ def _compute_besoins_dossier(pe: dict, mapping: dict) -> list:
             "variables": variables or [],
             "manque": manque or [],
             "source_metrage": met["source"] if kind in ("support", "glassine", "adhesif") else None,
+            **(extra or {}),
         })
 
     # ── Bobines (frontal / complexe / glassine) : besoin en mètres linéaires ──
@@ -447,32 +607,54 @@ def _compute_besoins_dossier(pe: dict, mapping: dict) -> list:
                  "Calcul impossible", variables, manque)
 
     # ── Mandrins : 1 par bobine ──
-    nb_eb = _f(pe.get("ft_nb_etiq_bobin"))
-    nb_mandrins = 0.0
+    bob = _nb_bobines_dossier(pe, qte)
+    nb_mandrins = bob["nb"] or 0.0
     if pe.get("ft_mandrin_dia"):
-        if qte and nb_eb:
-            nb_mandrins = qte / nb_eb
-            _add("mandrin", pe["ft_mandrin_dia"], nb_mandrins,
-                 f"{_n(qte)} étiq ÷ {_n(nb_eb)} étiq/bobine", [
-                     {"label": "Quantité étiquettes", "champ": "of_imports.qte_etiquettes",
-                      "origine": "OF", "valeur": qte, "unite": "étiq"},
-                     {"label": "Étiquettes par bobine", "champ": "fiches_techniques.nb_etiq_bobin",
-                      "origine": "Fiche technique", "valeur": nb_eb, "unite": ""},
-                 ])
+        if bob["nb"]:
+            tub = _mandrin_tubes(pe, mapping, nb_mandrins, perte_pct)
+            variables = list(bob["variables"])
+            formule = bob["formule"]
+            if tub["tubes"] is not None:
+                # La conversion en tubes n'est pas le besoin : c'est ce qu'il faut
+                # commander pour le couvrir. On l'expose à côté, jamais à la place.
+                mp_man = mapping.get(
+                    ("mandrin", str(pe.get("ft_mandrin_dia") or "").strip().lower())) or {}
+                variables += [
+                    {"label": "Laize module", "champ": "fiches_techniques.mod_laize",
+                     "origine": "Fiche technique", "valeur": _f(pe.get("ft_mod_laize")),
+                     "unite": "mm"},
+                    {"label": "Longueur tube", "champ": "matieres_premieres.longueur_tube_mm",
+                     "origine": "Matière première",
+                     "valeur": _f(mp_man.get("longueur_tube_mm")), "unite": "mm"},
+                    {"label": "Perte de coupe", "champ": "stock_config.mandrin_perte_coupe_pct",
+                     "origine": "Paramètres", "valeur": perte_pct, "unite": "%"},
+                    {"label": "Mandrins par tube", "champ": "calculé",
+                     "origine": "Calcul", "valeur": tub["mandrins_par_tube"], "unite": ""},
+                ]
+                formule += " · " + tub["detail_tubes"]
+            _add("mandrin", pe["ft_mandrin_dia"], nb_mandrins, formule, variables,
+                 tub["manque_tubes"] or None, extra={
+                     "besoin_tubes": tub["tubes"],
+                     "besoin_palettes": tub["palettes"],
+                     "mandrins_par_tube": tub["mandrins_par_tube"],
+                 })
         else:
-            manque = []
-            if not qte:
-                manque.append("Quantité d'étiquettes de l'OF")
-            if not nb_eb:
-                manque.append("Étiquettes par bobine (nb_etiq_bobin)")
             _add("mandrin", pe["ft_mandrin_dia"], None,
-                 "Calcul impossible", [], manque)
+                 bob["formule"], bob["variables"], bob["manque"])
 
-    # ── Cartons : nb bobines / bobines par carton ──
+    # ── Cartons : chiffrés sur l'OF, sinon nb bobines / bobines par carton ──
     nb_bc = _f(pe.get("ft_nb_bobines_carton"))
+    of_cart = _f(pe.get("of_nb_cartons"))
     nb_cartons = 0.0
     if pe.get("ft_cartons"):
-        if nb_bc and nb_mandrins > 0:
+        if of_cart:
+            nb_cartons = of_cart
+            _add("carton", pe["ft_cartons"], nb_cartons,
+                 f"{_n(of_cart)} cartons (chiffrés sur l'OF)", [
+                     {"label": "Cartons", "champ": "of_imports.nb_cartons",
+                      "origine": "OF", "valeur": of_cart, "unite": "u"},
+                 ])
+        elif nb_bc and nb_mandrins > 0:
             nb_cartons = nb_mandrins / nb_bc
             _add("carton", pe["ft_cartons"], nb_cartons,
                  f"{nb_mandrins:.1f} bobines ÷ {_n(nb_bc)} bobines/carton", [
@@ -488,6 +670,7 @@ def _compute_besoins_dossier(pe: dict, mapping: dict) -> list:
             if not nb_bc:
                 manque.append("Bobines par carton (nb_bobines_carton)")
             _add("carton", pe["ft_cartons"], None, "Calcul impossible", [], manque)
+
 
     # ── Palettes : cartons / (cartons_sol × cartons_hauteur) ──
     ncs = _f(pe.get("ft_palette_nb_cartons_sol"))
@@ -525,9 +708,10 @@ def besoins_par_dossier(request: Request):
     with get_db() as conn:
         mapping = _load_mapping(conn)
         rows = _load_dossiers(conn)
+        perte_pct = stock_config_float(conn, "mandrin_perte_coupe_pct")
     dossiers = []
     for pe in rows:
-        besoins = _compute_besoins_dossier(pe, mapping)
+        besoins = _compute_besoins_dossier(pe, mapping, perte_pct)
         dossiers.append({
             "id": pe["id"],
             "reference": pe.get("reference"),
@@ -542,6 +726,9 @@ def besoins_par_dossier(request: Request):
             "date_livraison": pe.get("date_livraison"),
             "qte_etiquettes": pe.get("qte_etiquettes"),
             "ft_id": pe.get("ft_id"),
+            # Les deux documents consultables depuis la vue par dossier : l'OF
+            # importé et la fiche technique rapprochée.
+            "of_import_id": pe.get("of_import_id"),
             "of_metrage": pe.get("of_metrage"),
             "of_laize": pe.get("of_laize"),
             "besoins": besoins,
@@ -571,6 +758,7 @@ def besoins_par_echeance(request: Request):
         #            (kg pour l'adhésif, palette/unité pour le reste).
         # mp_stock_laize : catégories bobine, en BOBINES — converti plus bas en
         #            mètres linéaires pour être comparable au besoin.
+        perte_pct = stock_config_float(conn, "mandrin_perte_coupe_pct")
         stock_map: dict = {}
         stock_bobines: dict = {}
         for r in conn.execute("SELECT matiere_id, SUM(quantite) AS q FROM mp_stock GROUP BY matiere_id").fetchall():
@@ -583,7 +771,7 @@ def besoins_par_echeance(request: Request):
     for pe in rows:
         r7 = _ratio_dans_fenetre(pe, today, borne_7)
         r15 = _ratio_dans_fenetre(pe, today, borne_15)
-        besoins = _compute_besoins_dossier(pe, mapping)
+        besoins = _compute_besoins_dossier(pe, mapping, perte_pct)
         for b in besoins:
             key = (b["kind"], (b["source_value"] or "").strip().lower())
             if key not in agg:
@@ -602,6 +790,14 @@ def besoins_par_echeance(request: Request):
                     "nb_dossiers": 0,
                     "nb_dossiers_incalculables": 0,
                     "formule_exemple": None,
+                    # Mandrins : traduction du besoin à l'achat. Chaque dossier a
+                    # sa propre laize de module, donc ses propres tubes — on somme
+                    # les tubes dossier par dossier, jamais après coup.
+                    "besoin_7j_tubes": 0.0,
+                    "besoin_15j_tubes": 0.0,
+                    "besoin_total_tubes": 0.0,
+                    "besoin_total_palettes": 0.0,
+                    "nb_dossiers_sans_tubes": 0,
                 }
             a = agg[key]
             a["nb_dossiers"] += 1
@@ -611,13 +807,31 @@ def besoins_par_echeance(request: Request):
             a["besoin_7j"] += b["quantite"] * r7
             a["besoin_15j"] += b["quantite"] * r15
             a["besoin_total"] += b["quantite"]
+            bt = b.get("besoin_tubes")
+            if bt is None:
+                if b["kind"] == "mandrin":
+                    a["nb_dossiers_sans_tubes"] += 1
+            else:
+                a["besoin_7j_tubes"] += bt * r7
+                a["besoin_15j_tubes"] += bt * r15
+                a["besoin_total_tubes"] += bt
+                a["besoin_total_palettes"] += b.get("besoin_palettes") or 0.0
             if not a["formule_exemple"]:
                 a["formule_exemple"] = b["formule"]
 
     lignes = []
     for a in agg.values():
-        for k in ("besoin_7j", "besoin_15j", "besoin_total"):
+        for k in ("besoin_7j", "besoin_15j", "besoin_total",
+                  "besoin_7j_tubes", "besoin_15j_tubes",
+                  "besoin_total_tubes", "besoin_total_palettes"):
             a[k] = round(a[k], 3)
+        if a["kind"] != "mandrin":
+            # Hors mandrins, la notion de tube n'existe pas : on ne laisse pas
+            # traîner des zéros que le front pourrait afficher.
+            for k in ("besoin_7j_tubes", "besoin_15j_tubes",
+                      "besoin_total_tubes", "besoin_total_palettes",
+                      "nb_dossiers_sans_tubes"):
+                a[k] = None
         # Stock ramené dans l'unité du besoin.
         stock = None
         stock_note = None
@@ -632,6 +846,32 @@ def besoins_par_echeance(request: Request):
                 else:
                     stock_note = ("Métrage par bobine non renseigné sur la matière — "
                                   "stock non convertible en ml")
+            elif a["kind"] == "mandrin":
+                # Le stock d'un mandrin se tient en palettes de tubes, le besoin en
+                # mandrins. Sans la longueur de tube ni le nombre de tubes par
+                # palette, les deux ne sont pas comparables : on le dit plutôt que
+                # d'afficher des palettes en face de mandrins.
+                palettes_stock = stock_map.get(mid, 0.0) + stock_bobines.get(mid, 0.0)
+                mp_man = mapping.get((a["kind"], (a["source_value"] or "").strip().lower())) or {}
+                upp = _f(mp_man.get("unites_par_palette"))
+                tubes_besoin = a["besoin_total_tubes"] or 0
+                ratio = (a["besoin_total"] / tubes_besoin) if tubes_besoin > 0 else None
+                a["stock_palettes"] = round(palettes_stock, 3)
+                if upp and ratio:
+                    tubes_stock = palettes_stock * upp
+                    stock = round(tubes_stock * ratio, 3)
+                    a["stock_tubes"] = round(tubes_stock, 3)
+                    stock_note = (
+                        f"{_n(palettes_stock)} palettes × {_n(upp)} tubes/palette = "
+                        f"{_n(round(tubes_stock, 1))} tubes ≈ {_n(round(stock, 0))} mandrins "
+                        f"(à {_n(round(ratio, 2))} mandrins/tube sur les dossiers en cours)"
+                    )
+                elif not upp:
+                    stock_note = ("Tubes par palette non renseigné sur la matière — "
+                                  "stock non convertible en mandrins")
+                else:
+                    stock_note = ("Longueur tube ou laize module manquante — "
+                                  "stock non convertible en mandrins")
             else:
                 stock = round(stock_map.get(mid, 0.0) + stock_bobines.get(mid, 0.0), 3)
         a["stock_actuel"] = stock
@@ -893,12 +1133,26 @@ _EXPLICATIONS = {
             "id": "mandrin",
             "titre": "Mandrins",
             "type": "calcul",
-            "resume": "Besoin en unités — un mandrin par bobine produite.",
-            "formule": "Besoin (u) = Quantité étiquettes ÷ Étiquettes par bobine",
+            "resume": "Besoin en mandrins — un par bobine produite, traduit en "
+                      "tubes puis en palettes à commander.",
+            "formule": "Besoin (u) = Quantité étiquettes ÷ Étiquettes par bobine · "
+                       "Tubes = Mandrins × Laize module ÷ (Longueur tube − perte de coupe)",
             "paragraphes": [
-                "Chaque bobine finie consomme un mandrin. Le nombre de bobines se "
-                "déduit de la quantité à produire divisée par le nombre d'étiquettes "
-                "par bobine défini sur la fiche technique.",
+                "Chaque bobine finie consomme un mandrin. Le nombre de bobines a "
+                "trois sources possibles, lues dans cet ordre : le nombre de mandrins "
+                "chiffré sur l'OF, la quantité de bobines de l'OF, puis la quantité "
+                "d'étiquettes divisée par le nombre d'étiquettes par bobine.",
+                "Ce dernier nombre vient du champ « Nb étiq./bobine » de la fiche "
+                "technique ; s'il est vide, il est relu dans la phrase de "
+                "conditionnement (« Bobine de 1.000 étiquettes »), sur la fiche puis "
+                "sur l'OF. C'est ce qui évite qu'une fiche complète par ailleurs "
+                "sorte « n.c. » sur les mandrins, les cartons et les palettes.",
+                "Les mandrins ne s'achètent pas à l'unité : ils sont découpés dans "
+                "des tubes. Un tube donne, une fois la perte de coupe retirée, autant "
+                "de mandrins que la laize du module tient de fois dans sa longueur. "
+                "La longueur du tube et le nombre de tubes par palette se saisissent "
+                "sur la fiche matière du mandrin, la perte de coupe dans "
+                "Paramètres → Mandrins.",
                 "Ce résultat sert aussi de base au calcul des cartons.",
             ],
             "variables": [
@@ -906,22 +1160,40 @@ _EXPLICATIONS = {
                  "detail": "diamètre mandrin, mappé vers une référence mandrin"},
                 {"label": "Quantité étiquettes", "champ": "of_imports.qte_etiquettes",
                  "unite": "étiq"},
-                {"label": "Étiquettes par bobine", "champ": "fiches_techniques.nb_etiq_bobin",
+                {"label": "Étiquettes par bobine",
+                 "champ": "fiches_techniques.nb_etiq_bobin ou conditionnement",
+                 "unite": "", "detail": "repli sur « Bobine de N étiquettes »"},
+                {"label": "Mandrins / bobines de l'OF",
+                 "champ": "of_imports.nb_mandrins ou qte_bobines",
+                 "detail": "prioritaires quand l'OF les renseigne"},
+                {"label": "Laize module", "champ": "fiches_techniques.mod_laize",
+                 "unite": "mm", "detail": "hauteur du mandrin découpé dans le tube"},
+                {"label": "Longueur tube", "champ": "matieres_premieres.longueur_tube_mm",
+                 "unite": "mm"},
+                {"label": "Tubes par palette", "champ": "matieres_premieres.unites_par_palette",
                  "unite": ""},
+                {"label": "Perte de coupe", "champ": "stock_config.mandrin_perte_coupe_pct",
+                 "unite": "%"},
             ],
         },
         {
             "id": "carton",
             "titre": "Cartons",
             "type": "calcul",
-            "resume": "Besoin en unités — dépend du calcul des mandrins.",
-            "formule": "Besoin (u) = Nb de bobines ÷ Bobines par carton",
+            "resume": "Besoin en unités — chiffré sur l'OF, sinon reconstruit "
+                      "depuis le calcul des mandrins.",
+            "formule": "Besoin (u) = Nb de cartons de l'OF, "
+                       "sinon Nb de bobines ÷ Bobines par carton",
             "paragraphes": [
-                "Le nombre de bobines est celui calculé pour les mandrins. S'il n'est "
-                "pas calculable, le besoin en cartons ne l'est pas non plus.",
+                "Quand l'OF chiffre lui-même les cartons, c'est cette valeur qui fait "
+                "foi : elle décrit la commande réelle, pas une reconstitution.",
+                "Sinon, le nombre de bobines est celui calculé pour les mandrins. S'il "
+                "n'est pas calculable, le besoin en cartons ne l'est pas non plus.",
             ],
             "variables": [
                 {"label": "Valeur source", "champ": "fiches_techniques.cartons"},
+                {"label": "Cartons de l'OF", "champ": "of_imports.nb_cartons",
+                 "detail": "prioritaire quand l'OF le renseigne"},
                 {"label": "Nb de bobines", "champ": "voir « Mandrins »", "unite": "bobines"},
                 {"label": "Bobines par carton", "champ": "fiches_techniques.nb_bobines_carton",
                  "unite": ""},

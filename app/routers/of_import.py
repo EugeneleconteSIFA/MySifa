@@ -6,6 +6,7 @@ import json
 import os
 import re
 import time
+import unicodedata
 from contextlib import nullcontext
 from datetime import datetime
 from io import BytesIO
@@ -271,8 +272,33 @@ def _autolink_of_to_planning(of_id: int, of_numero: Optional[str],
                 "WHERE LOWER(TRIM(numero_of)) = LOWER(TRIM(?))",
                 (num,),
             ).fetchall()
-            for r in rows:
-                _promote_of_link(conn, int(r["id"]), of_id, created_by)
+            targets = {int(r["id"]) for r in rows}
+
+            # Élargissement : un dossier nommé "9932163 Reliquat 2" ou
+            # "9932376-377" ne matche pas l'égalité stricte. On rattrape par
+            # token numérique, en se limitant aux dossiers encore non liés et
+            # non arbitrés manuellement — on ne vole jamais un lien existant.
+            try:
+                tokens = _of_tokens(num)
+                if tokens:
+                    like_sql = " OR ".join(["numero_of LIKE ?"] * len(tokens))
+                    extra = conn.execute(
+                        "SELECT id, numero_of FROM planning_entries "
+                        "WHERE (" + like_sql + ") "
+                        "AND of_import_id IS NULL "
+                        "AND COALESCE(of_link_user_managed, 0) = 0",
+                        tuple("%" + t + "%" for t in tokens),
+                    ).fetchall()
+                    for r in extra:
+                        if int(r["id"]) in targets:
+                            continue
+                        if any(_of_token_present(t, r["numero_of"]) for t in tokens):
+                            targets.add(int(r["id"]))
+            except Exception:
+                pass  # colonne absente / base ancienne : on garde l'exact
+
+            for entry_id in sorted(targets):
+                _promote_of_link(conn, entry_id, of_id, created_by)
                 linked += 1
             conn.commit()
     except Exception:
@@ -1143,7 +1169,9 @@ def admin_backfill_ref_produit_norm(request: Request):
 # Lecture seule (SELECT). Retourne None si rien ne matche.
 # ─────────────────────────────────────────────────────────────────────────────
 
-_OF_RACINE_RE = re.compile(r"\b(99\d{5})\b")
+# Normalisation commune aux deux sens du rapprochement (dossier ↔ OF).
+_OF_TOKEN_RE  = re.compile(r"\d{5,}")
+_OF_RACINE_RE = re.compile(r"\b(99\d{5})\b")   # conservé : dédoublonnage à l'import
 _OF_PREFIX_RE = re.compile(r"^\s*OF\s+(.+?)\s*$", re.IGNORECASE)
 
 _OF_SELECT_COLS = (
@@ -1152,18 +1180,56 @@ _OF_SELECT_COLS = (
 )
 
 
-def _lookup_of_candidates(num: Optional[str], ref_produit_norm: Optional[str] = None, conn=None):
+def _of_norm_key(value) -> str:
+    """Clé de comparaison d'un numéro d'OF : majuscules, sans accents, sans
+    préfixe « OF », ponctuation réduite à un espace.
+
+        "OF 9932376-377"     → "9932376 377"
+        "9932163 Reliquat 2" → "9932163 RELIQUAT 2"
+    """
+    s = unicodedata.normalize("NFKD", str(value or ""))
+    s = "".join(ch for ch in s if not unicodedata.combining(ch))
+    s = _OF_PREFIX_RE.sub(r"\1", s.strip()).upper()
+    s = re.sub(r"[^A-Z0-9]+", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def _of_tokens(value) -> list:
+    """Tokens numériques de 5 chiffres et plus, dans l'ordre, dédoublonnés.
+
+    C'est ce qui permet de rapprocher "9932376-377" ou "9932163 Reliquat 2"
+    de l'OF 9932376 / 9932163 — l'égalité stricte, elle, échoue.
+    """
+    return list(dict.fromkeys(_OF_TOKEN_RE.findall(str(value or ""))))
+
+
+def _of_token_present(token: str, haystack) -> bool:
+    """Vrai si `token` apparaît dans `haystack` sans être collé à d'autres
+    chiffres — garde-fou pour que 9932163 ne matche pas 19932163."""
+    if not token or not haystack:
+        return False
+    return re.search(r"(?<!\d)" + re.escape(token) + r"(?!\d)", str(haystack)) is not None
+
+
+def _lookup_of_candidates(num: Optional[str], ref_produit_norm: Optional[str] = None,
+                          conn=None, machine: Optional[str] = None):
     """Lookup OF en cascade — distingue match certain vs ambigu.
 
     Retourne un tuple (certain_row_or_None, candidates_list).
 
-    - Phase 1 (match exact, avec ou sans préfixe "OF ") → (row, [])
-    - Phase 2 (extraction racine 99XXXXX), 1 seul candidat → (row, [])
-    - Phase 2 avec 2+ candidats et désambiguïsation par ref_produit_norm
-      identifie UN unique gagnant → (row, [])
-    - Phase 2 avec 2+ candidats sans désambiguïsation possible
-      → (None, candidates_list)  [le caller doit demander un choix humain]
-    - Aucun match → (None, [])
+    Cascade de collecte :
+      1. égalité stricte sur `of_numero` (cas nominal, le moins coûteux)
+      2. inclusion par token numérique de 5+ chiffres — couvre les deux sens :
+         le numéro du dossier contient celui de l'OF ("9932376-377" → 9932376)
+         comme l'inverse ("9932376" → OF "9932376-377")
+      3. à défaut de tout token numérique, rapprochement par référence produit
+         (dossiers nommés "1068/0001 - Reliquat 2 - Marché 745")
+
+    Désambiguïsation quand plusieurs candidats subsistent, dans cet ordre :
+      a. clé normalisée identique   b. référence produit identique
+      c. même jeu de tokens          d. machine identique
+    Un seul survivant → match certain. Sinon → liste triée pour arbitrage
+    humain (onglet « Mappings à valider »).
 
     Lecture seule.
     """
@@ -1173,20 +1239,8 @@ def _lookup_of_candidates(num: Optional[str], ref_produit_norm: Optional[str] = 
     if not s:
         return (None, [])
 
-    candidates_exact: list = [s]
-    try:
-        candidates_exact.append(str(int(float(s))))
-    except (ValueError, OverflowError):
-        pass
-
-    m_prefix = _OF_PREFIX_RE.match(s)
-    if m_prefix:
-        inner = m_prefix.group(1).strip()
-        candidates_exact.append(inner)
-        try:
-            candidates_exact.append(str(int(float(inner))))
-        except (ValueError, OverflowError):
-            pass
+    key = _of_norm_key(s)
+    tokens = _of_tokens(s)
 
     try:
         from app.services.fiche_ref_parser import normalize_ref_produit
@@ -1197,7 +1251,22 @@ def _lookup_of_candidates(num: Optional[str], ref_produit_norm: Optional[str] = 
     # une connexion SQLite par appel — c'était la cause des ~600 ms du badge
     # of-link-pending (une connexion + cascade de requêtes PAR dossier).
     with (nullcontext(conn) if conn is not None else get_db()) as c:
-        # Phase 1 : exact match en cascade
+        # ── Étape 1 : égalité stricte, avec ou sans préfixe "OF " ────────────
+        candidates_exact: list = [s]
+        try:
+            candidates_exact.append(str(int(float(s))))
+        except (ValueError, OverflowError):
+            pass
+
+        m_prefix = _OF_PREFIX_RE.match(s)
+        if m_prefix:
+            inner = m_prefix.group(1).strip()
+            candidates_exact.append(inner)
+            try:
+                candidates_exact.append(str(int(float(inner))))
+            except (ValueError, OverflowError):
+                pass
+
         for cand in dict.fromkeys(candidates_exact):
             # ORDER BY explicite : sans lui SQLite renvoyait le plus petit
             # rowid, c'est-à-dire le doublon le PLUS ANCIEN. On privilégie
@@ -1215,47 +1284,62 @@ def _lookup_of_candidates(num: Optional[str], ref_produit_norm: Optional[str] = 
             if r:
                 return (r, [])
 
-        # Phase 2 : extraction du numéro racine 99XXXXX
-        m = _OF_RACINE_RE.search(s)
-        if not m:
-            return (None, [])
-        racine = m.group(1)
+        # ── Étape 2 : inclusion par token numérique ──────────────────────────
+        rows: list = []
+        if tokens:
+            like_sql = " OR ".join(["of_numero LIKE ?"] * len(tokens))
+            found = c.execute(
+                f"SELECT {_OF_SELECT_COLS} FROM of_imports WHERE {like_sql}",
+                tuple("%" + t + "%" for t in tokens),
+            ).fetchall()
+            # garde-fou : le token doit être isolé, pas noyé dans un plus long
+            rows = [r for r in found
+                    if any(_of_token_present(t, r["of_numero"]) for t in tokens)]
 
-        rows = c.execute(
-            f"""SELECT {_OF_SELECT_COLS}
-                FROM of_imports
-                WHERE of_numero LIKE ?
-                ORDER BY
-                  CASE WHEN TRIM(of_numero) = ? THEN 0
-                       WHEN of_numero LIKE ? THEN 1
-                       ELSE 2
-                  END,
-                  date_import DESC,
-                  id DESC""",
-            ("%" + racine + "%", racine, racine + "%"),
-        ).fetchall()
+        # ── Étape 3 : aucun token → rapprochement par référence produit ──────
+        if not rows and not tokens and ref_produit_norm and normalize_ref_produit is not None:
+            by_ref = c.execute(
+                f"""SELECT {_OF_SELECT_COLS} FROM of_imports
+                    WHERE TRIM(COALESCE(reference,'')) != ''"""
+            ).fetchall()
+            rows = [r for r in by_ref
+                    if normalize_ref_produit(r["reference"]) == ref_produit_norm]
 
         if not rows:
             return (None, [])
-
         if len(rows) == 1:
             return (rows[0], [])
 
-        # Plusieurs candidats : essayer la désambiguïsation par ref_produit_norm
-        if ref_produit_norm and normalize_ref_produit is not None:
-            matched_by_ref = []
-            for r in rows:
-                if not r["reference"]:
-                    continue
-                r_norm = normalize_ref_produit(r["reference"])
-                if r_norm and r_norm == ref_produit_norm:
-                    matched_by_ref.append(r)
-            if len(matched_by_ref) == 1:
-                return (matched_by_ref[0], [])
+        # ── Désambiguïsation ─────────────────────────────────────────────────
+        def _unique(subset):
+            return subset[0] if len(subset) == 1 else None
 
-        # Pas de désambiguïsation possible → ambigu (human-in-the-loop)
+        win = _unique([r for r in rows if _of_norm_key(r["of_numero"]) == key])
+
+        if win is None and ref_produit_norm and normalize_ref_produit is not None:
+            win = _unique([r for r in rows
+                           if r["reference"]
+                           and normalize_ref_produit(r["reference"]) == ref_produit_norm])
+
+        if win is None and tokens:
+            tset = set(tokens)
+            win = _unique([r for r in rows if set(_of_tokens(r["of_numero"])) == tset])
+
+        if win is None and machine:
+            mk = _of_norm_key(machine)
+            win = _unique([r for r in rows
+                           if r["machine"] and _of_norm_key(r["machine"]) == mk])
+
+        if win is not None:
+            return (win, [])
+
+        # Pas de désambiguïsation possible → ambigu (human-in-the-loop).
+        # Tri : OF avec PDF d'abord, puis le plus récent.
+        rows = sorted(rows, key=lambda r: (
+            0 if (r["pdf_filename"] or "").strip() else 1,
+            -(int(r["id"]) if r["id"] is not None else 0),
+        ))
         return (None, [dict(r) for r in rows])
-
 
 def _lookup_of_by_numero(num: Optional[str], ref_produit_norm: Optional[str] = None):
     """Variante "match certain uniquement" pour les appels qui ne gèrent pas
@@ -1283,7 +1367,9 @@ def _lookup_of_by_numero(num: Optional[str], ref_produit_norm: Optional[str] = N
 
 @router.post("/api/admin/relink-of")
 def admin_relink_of(request: Request):
-    require_superadmin(request)
+    # Ouvert aux admins OF (et non plus au seul superadmin) : c'est l'action
+    # « Relancer le mapping automatique » du bouton de l'onglet Dossiers sans OF.
+    _require_of_access(request)
 
     dry_run = (request.query_params.get("dry_run") or "").lower() in ("1", "true", "yes", "on")
 
@@ -1297,6 +1383,7 @@ def admin_relink_of(request: Request):
     already_linked = 0
     unmatched = 0
     pending_for_review = 0
+    repaired_links = 0
     preview: list = []
     pending_preview: list = []
 
@@ -1305,14 +1392,38 @@ def admin_relink_of(request: Request):
         has_norm = "ref_produit_norm" in pe_cols
 
         sql = (
-            "SELECT id, numero_of, ref_produit, "
-            + ("ref_produit_norm, " if has_norm else "")
-            + "of_import_id "
-            "FROM planning_entries "
-            "WHERE numero_of IS NOT NULL AND TRIM(numero_of) != ''"
+            "SELECT pe.id, pe.numero_of, pe.ref_produit, "
+            + ("pe.ref_produit_norm, " if has_norm else "")
+            + "pe.of_import_id, m.nom AS machine_nom "
+            "FROM planning_entries pe "
+            "LEFT JOIN machines m ON m.id = pe.machine_id "
+            "WHERE pe.numero_of IS NOT NULL AND TRIM(pe.numero_of) != ''"
         )
         rows = conn.execute(sql).fetchall()
         total = len(rows)
+
+        # Réparation préalable : le pont Access n'écrit que
+        # planning_entries.of_import_id, jamais planning_of_links. Ces dossiers
+        # sont pourtant liés — sans cette reprise ils comptent « sans OF ».
+        try:
+            orphans = conn.execute(
+                "SELECT pe.id, pe.of_import_id FROM planning_entries pe "
+                "JOIN of_imports oi ON oi.id = pe.of_import_id "
+                "WHERE pe.of_import_id IS NOT NULL "
+                "AND NOT EXISTS (SELECT 1 FROM planning_of_links pl "
+                "                WHERE pl.planning_entry_id = pe.id)"
+            ).fetchall()
+            for o in orphans:
+                if not dry_run:
+                    conn.execute(
+                        "INSERT OR IGNORE INTO planning_of_links "
+                        "(planning_entry_id, of_import_id, position, created_by, created_at) "
+                        "VALUES (?, ?, 0, 'access_bridge_repair', ?)",
+                        (o["id"], o["of_import_id"], _now_paris_iso()),
+                    )
+                repaired_links += 1
+        except Exception:
+            repaired_links = 0
 
         for row in rows:
             # Si lien déjà en place et OF existe, on saute
@@ -1332,7 +1443,8 @@ def admin_relink_of(request: Request):
             if not ref_norm and normalize_ref_produit is not None:
                 ref_norm = normalize_ref_produit(row["ref_produit"])
 
-            certain, candidates = _lookup_of_candidates(row["numero_of"], ref_norm, conn=conn)
+            certain, candidates = _lookup_of_candidates(
+                row["numero_of"], ref_norm, conn=conn, machine=row["machine_nom"])
 
             if certain:
                 relinked += 1
@@ -1379,6 +1491,7 @@ def admin_relink_of(request: Request):
         "dry_run": dry_run,
         "total_with_numero_of": total,
         "already_linked": already_linked,
+        "repaired_links": repaired_links,
         "relinked": relinked,
         "pending_for_review": pending_for_review,
         "pending_preview": pending_preview,
@@ -1431,7 +1544,8 @@ def _iter_pending_planning_rows(conn):
         if not ref_norm and normalize_ref_produit is not None:
             ref_norm = normalize_ref_produit(row["ref_produit"])
 
-        certain, candidates = _lookup_of_candidates(row["numero_of"], ref_norm, conn=conn)
+        certain, candidates = _lookup_of_candidates(
+            row["numero_of"], ref_norm, conn=conn, machine=row["machine_nom"])
         if certain:
             continue
         if not candidates or len(candidates) < 2:
@@ -1548,11 +1662,19 @@ async def admin_link_planning_of(request: Request):
 # Dossiers sans aucun OF lié (planning_of_links vide)
 # ─────────────────────────────────────────────────────────────────────────────
 
-_DOSSIERS_SANS_OF_COUNT_SQL = (
-    "SELECT COUNT(*) FROM planning_entries pe "
+# Un dossier n'est « sans OF » que s'il n'a NI ligne dans planning_of_links,
+# NI of_import_id pointant sur un OF réel : le pont Access ne renseigne que la
+# seconde colonne, ses dossiers étaient donc comptés à tort.
+_DOSSIERS_SANS_OF_WHERE = (
     "WHERE NOT EXISTS (SELECT 1 FROM planning_of_links pl "
     "                  WHERE pl.planning_entry_id = pe.id) "
+    "AND NOT EXISTS (SELECT 1 FROM of_imports oi "
+    "                WHERE oi.id = pe.of_import_id) "
     "AND COALESCE(pe.statut, '') != 'termine'"
+)
+
+_DOSSIERS_SANS_OF_COUNT_SQL = (
+    "SELECT COUNT(*) FROM planning_entries pe " + _DOSSIERS_SANS_OF_WHERE
 )
 
 
@@ -1570,30 +1692,38 @@ def admin_dossiers_sans_of(request: Request):
     rows = []
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT pe.id, pe.numero_of, pe.ref_produit, pe.ref_produit_norm,
-                       pe.machine_id, m.nom AS machine_nom,
-                       pe.created_at AS planning_created_at,
-                       pe.statut, pe.duree_heures, pe.format_l, pe.format_h
-               FROM planning_entries pe
-               LEFT JOIN machines m ON m.id = pe.machine_id
-               WHERE NOT EXISTS (
-                  SELECT 1 FROM planning_of_links pl
-                  WHERE pl.planning_entry_id = pe.id
-               )
-               AND COALESCE(pe.statut, '') != 'termine'
-               ORDER BY pe.created_at DESC, pe.id DESC"""
+            "SELECT pe.id, pe.numero_of, pe.ref_produit, pe.ref_produit_norm, "
+            "       pe.machine_id, m.nom AS machine_nom, "
+            "       pe.created_at AS planning_created_at, "
+            "       pe.statut, pe.duree_heures, pe.format_l, pe.format_h "
+            "FROM planning_entries pe "
+            "LEFT JOIN machines m ON m.id = pe.machine_id "
+            + _DOSSIERS_SANS_OF_WHERE
+            + " ORDER BY pe.created_at DESC, pe.id DESC"
         ).fetchall()
-    items = [{
-        "planning_id": r["id"],
-        "numero_of": r["numero_of"],
-        "ref_produit": r["ref_produit"],
-        "ref_produit_norm": r["ref_produit_norm"],
-        "machine": r["machine_nom"],
-        "statut": r["statut"],
-        "duree_heures": r["duree_heures"],
-        "created_at": r["planning_created_at"],
-    } for r in rows]
-    return {"total": len(items), "items": items}
+    items = []
+    for r in rows:
+        # « rapprochable » = il y a de quoi tenter un mapping automatique.
+        # "Marché 761" n'a ni token numérique ni référence produit : aucun
+        # algorithme ne le retrouvera, il faut l'attacher à la main.
+        has_token = bool(_of_tokens(r["numero_of"]))
+        has_ref = bool((r["ref_produit_norm"] or "").strip())
+        items.append({
+            "planning_id": r["id"],
+            "numero_of": r["numero_of"],
+            "ref_produit": r["ref_produit"],
+            "ref_produit_norm": r["ref_produit_norm"],
+            "machine": r["machine_nom"],
+            "statut": r["statut"],
+            "duree_heures": r["duree_heures"],
+            "created_at": r["planning_created_at"],
+            "rapprochable": has_token or has_ref,
+        })
+    return {
+        "total": len(items),
+        "rapprochables": sum(1 for i in items if i["rapprochable"]),
+        "items": items,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────

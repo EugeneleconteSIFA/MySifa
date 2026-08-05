@@ -3,9 +3,16 @@
  * Charge par /stock et /fabrication ; accompagne mysifa_stock_modals.js.
  */
 
-.btn-ghost.mp-back-btn{background:var(--accent-bg);color:var(--accent);border-color:color-mix(in srgb,var(--accent) 35%,transparent);font-weight:700}
-.btn-ghost.mp-back-btn:hover{background:color-mix(in srgb,var(--accent) 20%,transparent);border-color:var(--accent);color:var(--accent)}
-body.light .btn-ghost.mp-back-btn{color:var(--accent)}
+/* Bouton de retour et bouton "Modifier la reference" : fond plein neutre.
+ * En accent, ils tiraient l'oeil autant que les actions Entree/Sortie, qui
+ * sont les vrais gestes de la fiche. */
+.btn-ghost.mp-back-btn{background:var(--card);color:var(--text);border-color:var(--border);font-weight:600}
+.btn-ghost.mp-back-btn:hover{background:var(--bg);border-color:var(--accent);color:var(--text)}
+body.light .btn-ghost.mp-back-btn{color:var(--text)}
+body.light .btn-ghost.mp-back-btn:hover{color:var(--text)}
+.mp-act-icon.mp-act-icon--neutral{background:var(--card);color:var(--text);border-color:var(--border)}
+.mp-act-icon.mp-act-icon--neutral:hover{background:var(--bg);border-color:var(--accent);color:var(--text);filter:none}
+body.light .mp-act-icon.mp-act-icon--neutral{color:var(--text)}
 
 /* ── Matières premières ── */
 .mp-page{padding:0 0 24px}

@@ -340,6 +340,10 @@ body.reduce-anim .cal-skel{animation:none}
 .cal-wv-body{transition:box-shadow .12s}
 .cal-wv-body.cal-edge-prev{box-shadow:inset 5px 0 0 var(--accent)}
 .cal-wv-body.cal-edge-next{box-shadow:inset -5px 0 0 var(--accent)}
+/* v2.7.1 : bord ROUGE = la bascule de periode est verrouillee pour l'occurrence
+   en cours de deplacement (elle doit rester dans sa semaine / son mois). */
+.cal-wv-body.cal-edge-blocked-prev{box-shadow:inset 5px 0 0 var(--danger,#f87171)}
+.cal-wv-body.cal-edge-blocked-next{box-shadow:inset -5px 0 0 var(--danger,#f87171)}
 /* v2.6.1 : colonnes de dates passees — ni creation ni depot. Trame legere pour
    que le refus soit lisible AVANT le geste, pas seulement apres. */
 .cal-wv-day-col.is-past-col{background-image:repeating-linear-gradient(45deg,transparent,transparent 7px,rgba(128,128,128,.055) 7px,rgba(128,128,128,.055) 14px);cursor:not-allowed}
@@ -4114,6 +4118,36 @@ let _CAL_DRAG = null;
 
 // v2.6.1 : une date ISO est-elle anterieure a aujourd'hui ? Aujourd'hui reste
 // une date valide (on peut planifier pour le jour meme).
+// v2.7.1 : miroir client de _period_key() (maintenance_events.py). Une
+// occurrence de recurrence appartient a une periode — semaine ISO, mois,
+// trimestre ou annee — et ne doit pas en sortir. Le serveur refuse en 403 ;
+// ici on rend le refus visible AVANT le lacher, plutot qu'apres coup.
+function _isoWeekKey(d){
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  // Jeudi de la semaine ISO : determine l'annee ISO (norme ISO-8601).
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  const w = Math.ceil(((t - y0) / 86400000 + 1) / 7);
+  return t.getUTCFullYear() + '-W' + String(w).padStart(2, '0');
+}
+function _calPeriodKey(iso, rtype){
+  const d = (typeof iso === 'string') ? new Date(iso + 'T00:00:00') : iso;
+  if(!d || isNaN(d.getTime())) return null;
+  if(rtype === 'monthly')   return d.getFullYear() + '-M' + String(d.getMonth() + 1).padStart(2, '0');
+  if(rtype === 'quarterly') return d.getFullYear() + '-Q' + (Math.floor(d.getMonth() / 3) + 1);
+  if(rtype === 'yearly')    return String(d.getFullYear());
+  return _isoWeekKey(d);
+}
+// Type de recurrence du modele dont l'evenement est issu, ou null si ce n'est
+// pas une occurrence generee (creneau compose a la main : aucune contrainte).
+function _calRecurTypeOf(ev){
+  if(!ev || !ev.template_origin_date || !ev.template_id) return null;
+  try{
+    const t = (TEMPLATES_STATE.list || []).find(x => String(x.id) === String(ev.template_id));
+    return (t && t.recurrence_type) || 'weekly';
+  }catch(_){ return 'weekly'; }
+}
+
 function _calIsPastIso(iso){
   try{
     const s = String(iso || '');
@@ -4224,6 +4258,18 @@ function _onCalDragMove(e){
     col.classList.add('cal-col-nodrop');
     col = null;
   }
+  // v2.7.1 : hors de la periode d'une occurrence de recurrence -> depot refuse.
+  if(col){
+    const _rt = _calRecurTypeOf(_CAL_DRAG.ev);
+    if(_rt){
+      const _pFrom = _calPeriodKey(_CAL_DRAG.origDate, _rt);
+      const _pTo   = _calPeriodKey(col.getAttribute('data-date'), _rt);
+      if(_pFrom && _pTo && _pFrom !== _pTo){
+        col.classList.add('cal-col-nodrop');
+        col = null;
+      }
+    }
+  }
   if(col && rect){
     col.classList.add('drag-over');
     const y = e.clientY - rect.top;
@@ -4318,9 +4364,43 @@ function _calEdgeDirection(e){
   return null;
 }
 
+// v2.7.1 : la bascule de periode (bandes de bord + fleches) doit-elle rester
+// active pendant ce drag ? Non si la periode visee ne contient AUCUNE date
+// atteignable pour l'occurrence en cours.
+//
+// La nuance compte : une occurrence HEBDOMADAIRE ne peut jamais sortir de sa
+// semaine, donc toute navigation est inutile. Une occurrence MENSUELLE, elle,
+// peut parfaitement traverser des semaines a l'interieur de son mois — on ne
+// bloque alors que les semaines entierement hors du mois.
+function _calWeekNavAllowed(dir){
+  if(!_CAL_DRAG) return true;
+  const rt = _calRecurTypeOf(_CAL_DRAG.ev);
+  if(!rt) return true;                       // creneau libre : navigation libre
+  const p = _calPeriodKey(_CAL_DRAG.origDate, rt);
+  if(!p) return true;
+  const step = (dir === 'prev') ? -1 : 1;
+  let base;
+  try{
+    if(CAL_STATE.view === 'day'){
+      const d = CAL_STATE.dayDate;
+      base = new Date(d.getFullYear(), d.getMonth(), d.getDate() + step);
+      return _calPeriodKey(base, rt) === p;
+    }
+    const ws = CAL_STATE.weekStart;
+    base = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + 7 * step);
+  }catch(_){ return true; }
+  // Au moins un jour de la semaine visee appartient-il a la meme periode ?
+  for(let i = 0; i < 7; i++){
+    const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i);
+    if(_calPeriodKey(d, rt) === p) return true;
+  }
+  return false;
+}
+
 function _clearCalEdgeCue(){
   const body = document.getElementById('cal-wv-body');
-  if(body) body.classList.remove('cal-edge-prev', 'cal-edge-next');
+  if(body) body.classList.remove('cal-edge-prev', 'cal-edge-next',
+                                 'cal-edge-blocked-prev', 'cal-edge-blocked-next');
   document.querySelectorAll('.cal-nav button.cal-drop-target-nav').forEach(function(b){
     b.classList.remove('cal-drop-target-nav');
   });
@@ -4331,7 +4411,17 @@ function _handleCrossWeekHover(el, e){
   const btnPrev = el ? el.closest('button[onclick="calPrev()"]') : null;
   const btnNext = el ? el.closest('button[onclick="calNext()"]') : null;
   const btn = btnPrev || btnNext;
-  const dir = btnPrev ? 'prev' : (btnNext ? 'next' : _calEdgeDirection(e));
+  let dir = btnPrev ? 'prev' : (btnNext ? 'next' : _calEdgeDirection(e));
+  // v2.7.1 : navigation refusee -> on signale le blocage au lieu de laisser
+  // croire que le depot sera possible de l'autre cote.
+  if(dir && !_calWeekNavAllowed(dir)){
+    const _b = document.getElementById('cal-wv-body');
+    if(_b) _b.classList.add(dir === 'prev' ? 'cal-edge-blocked-prev' : 'cal-edge-blocked-next');
+    dir = null;
+  } else {
+    const _b = document.getElementById('cal-wv-body');
+    if(_b) _b.classList.remove('cal-edge-blocked-prev', 'cal-edge-blocked-next');
+  }
   // Direction inchangee : le timer en cours court toujours, on ne le relance
   // pas. C'est aussi ce qui empeche d'enchainer les semaines sans relacher —
   // apres une bascule, _navHoverDir reste arme tant qu'on n'a pas quitte la
@@ -4395,6 +4485,25 @@ function _onCalDragUp(e){
      && drag.targetEndMin === drag.origEndMin){
     _CAL_DRAG = null;
     return;
+  }
+  // v2.7.1 : hors periode -> message explicite. Le survol a deja refuse la
+  // colonne, donc targetDate ne devrait plus sortir de la periode ; ce garde-fou
+  // couvre les chemins ou le lacher se fait sans survol valide prealable.
+  const _rtDrop = _calRecurTypeOf(drag.ev);
+  if(_rtDrop){
+    const _a = _calPeriodKey(drag.origDate, _rtDrop);
+    const _b = _calPeriodKey(drag.targetDate, _rtDrop);
+    if(_a && _b && _a !== _b){
+      const _quoi = (_rtDrop === 'monthly') ? 'son mois'
+                  : (_rtDrop === 'quarterly') ? 'son trimestre'
+                  : (_rtDrop === 'yearly') ? 'son année' : 'sa semaine';
+      if(typeof showToast === 'function'){
+        showToast('Ce créneau vient d\'une récurrence : il doit rester dans ' + _quoi + '.', 'danger');
+      }
+      _CAL_DRAG = null;
+      try{ refreshPlanning().then(function(){ try{ renderCal(); }catch(_){} }); }catch(_){}
+      return;
+    }
   }
   // Contrôle : si on déplace vers un jour passé, refuse.
   if(_calIsPastIso(drag.targetDate)){
