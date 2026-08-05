@@ -31,10 +31,14 @@ vm.runInContext(extraire('parseRoute') + '\n' + extraire('icon') + '\n' + extrai
 
 function route(p) { ctx.window.location.pathname = p; return ctx.parseRoute(); }
 check('une déclinaison ouvre sa fiche', route('/pricing/mystock/12'), { name: 'mystock-edit', id: '12' });
-check('sans identifiant on retombe sur le tableau de bord',
-  route('/pricing/mystock'), { name: 'dashboard', id: null });
+// Plus de tableau de bord : la liste des matières est la page d'accueil.
+check('sans identifiant on retombe sur la liste',
+  route('/pricing/mystock'), { name: 'materials', id: null });
 check('un identifiant non numérique est refusé',
-  route('/pricing/mystock/abc'), { name: 'dashboard', id: null });
+  route('/pricing/mystock/abc'), { name: 'materials', id: null });
+check('la racine du module ouvre les matières',
+  route('/pricing'), { name: 'materials', id: null });
+check('plus de route tableau de bord', src.includes('renderDashboard'), false);
 check('les routes existantes ne bougent pas',
   route('/pricing/materials/7'), { name: 'material-edit', id: '7' });
 

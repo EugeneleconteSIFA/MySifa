@@ -10,9 +10,8 @@
   const S = {
     canWrite: !!INIT.canWrite,
     user: INIT.user || {},
-    route: { name: "dashboard", id: null },
+    route: { name: "materials", id: null },
     loading: true,
-    dashboard: null,
     categories: [],
     suppliers: [],
     supplierMap: {},
@@ -321,8 +320,9 @@
   function parseRoute() {
     const p = window.location.pathname.replace(/\/+$/, "") || "/pricing";
     const parts = p.split("/").filter(Boolean);
+    // Plus de tableau de bord : /pricing ouvre directement les matières.
     if (parts.length <= 1 || parts[0] !== "pricing") {
-      return { name: "dashboard", id: null };
+      return { name: "materials", id: null };
     }
     const seg = parts[1];
     if (seg === "materials") {
@@ -344,7 +344,7 @@
       if (parts[2] && /^\d+$/.test(parts[2])) return { name: "mystock-edit", id: parts[2] };
     }
     if (seg === "settings") return { name: "settings", id: null };
-    return { name: "dashboard", id: null };
+    return { name: "materials", id: null };
   }
 
   function navigate(path) {
@@ -430,7 +430,6 @@
   function renderSidebar() {
     const nav = document.getElementById("sidebar-nav");
     const items = [
-      { path: "/pricing", label: "Tableau de bord", route: "dashboard", icon: "grid" },
       { path: "/pricing/materials", label: "Matières", route: "materials", icon: "package" },
       { path: "/pricing/products", label: "Produits", route: "products", icon: "layers" },
     ];
@@ -458,7 +457,6 @@
     updateChromeControls();
 
     const titles = {
-      dashboard: ["Coûts matières", "Tableau de bord"],
       materials: ["Matières", "Liste"],
       "material-new": ["Matière", "Nouvelle"],
       "material-edit": ["Matière", "Édition"],
@@ -467,7 +465,7 @@
       "product-edit": ["Produit", "Édition"],
       settings: ["Paramètres", "Coûts matières"],
     };
-    const t = titles[active] || titles.dashboard;
+    const t = titles[active] || titles.materials;
     document.getElementById("mobile-title").textContent = t[0];
     document.getElementById("mobile-sub").textContent = t[1];
   }
@@ -517,44 +515,6 @@
       S.supplierMap[s.id] = s.name;
     });
     S.settings = settings;
-  }
-
-  async function renderDashboard() {
-    S.dashboard = await api("/api/pricing/dashboard");
-    const d = S.dashboard;
-    const fxDate = d.eur_usd_rate_updated_at
-      ? String(d.eur_usd_rate_updated_at).replace("T", " ").slice(0, 16)
-      : "—";
-    const fxSrc = d.eur_usd_rate_source || "—";
-    const fxStale = isFxStale(d.eur_usd_rate_updated_at);
-    setContent(`
-      <div class="pr-narrow">
-        ${pageHead("Tableau de bord", "Calcul des coûts matières")}
-        <div class="kpi-grid kpi-grid-3">
-          <div class="kpi-card"><div class="kpi-label">Matières actives</div><div class="kpi-value">${d.materials_active}</div></div>
-          <div class="kpi-card"><div class="kpi-label">Produits actifs</div><div class="kpi-value">${d.products_active}</div></div>
-          <div class="kpi-card">
-            <div class="kpi-label">Taux USD / EUR ${fxStale ? fxStaleBadgeHtml() : ""}</div>
-            <div class="kpi-value">${fmtNum(d.eur_usd_rate, 4, 4)}</div>
-            <div class="kpi-meta">1 USD = ${fmtNum(d.eur_usd_rate, 4, 4)} € · MAJ : ${escHtml(fxDate)} · ${escHtml(fxSrc)}</div>
-            ${S.canWrite ? '<button type="button" class="btn btn-soft btn-sm" id="dash-fx-btn" style="margin-top:10px">Rafraîchir</button>' : ""}
-          </div>
-        </div>
-      </div>
-    `);
-    const fxBtn = document.getElementById("dash-fx-btn");
-    if (fxBtn) {
-      fxBtn.onclick = async () => {
-        try {
-          await api("/api/pricing/settings/refresh-fx", { method: "POST" });
-          showToast("Taux USD/EUR mis à jour.", "success");
-          S.settings = await api("/api/pricing/settings");
-          await renderDashboard();
-        } catch (e) {
-          showToast(e.message, "danger");
-        }
-      };
-    }
   }
 
   async function loadMaterialsList() {
@@ -3034,8 +2994,7 @@
       if (!S.categories.length) await loadBaseData();
 
       const r = S.route.name;
-      if (r === "dashboard") await renderDashboard();
-      else if (r === "materials") {
+      if (r === "materials") {
         if (S.filters.matTab === "mystock") {
           await loadMystockList();
           renderMystockList();
@@ -3093,9 +3052,14 @@
           navigate("/pricing");
           return;
         }
-        await renderDashboard();
+        // Les paramètres sont une modale : elle s'ouvre par-dessus la liste.
+        await loadMaterialsList();
+        renderMaterialsList();
         openSettingsModal();
-      } else await renderDashboard();
+      } else {
+        await loadMaterialsList();
+        renderMaterialsList();
+      }
     } catch (e) {
       setContent(`<div class="empty" style="color:var(--danger);padding:24px">${escHtml(e.message)}</div>`);
       if (e.status === 401) window.location.href = "/?next=" + encodeURIComponent(window.location.pathname);

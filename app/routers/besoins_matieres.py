@@ -31,7 +31,9 @@ Formules :
                   grammage = matieres_premieres.weight_gsm (saisi sur la fiche
                   matière), repli fiches_techniques.qte_au_mille
                   laize    = of_imports.laize, repli fiche technique
-- mandrins (u)  : qte_etiquettes / nb_etiq_bobin
+- mandrins (u)  : of_imports.nb_mandrins, sinon of_imports.qte_bobines,
+                  sinon qte_etiquettes / nb_etiq_bobin (champ de la fiche, ou
+                  nombre relu dans la phrase de conditionnement)
 - cartons  (u)  : mandrins / nb_bobines_carton
 - palettes (u)  : cartons / (palette_nb_cartons_sol * palette_nb_cartons_hauteur)
 
@@ -45,6 +47,7 @@ sur la durée qui tombe dans la fenêtre.
 
 Accès : rôles _STOCK_MATIERES_ADMIN_ROLES (voir stock.py).
 """
+import re
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -158,7 +161,12 @@ _SQL_PE = """
            oi.qte_etiquettes AS qte_etiquettes,
            oi.qte_bobines    AS qte_bobines,
            oi.metrage        AS of_metrage,
-           oi.laize          AS of_laize
+           oi.laize          AS of_laize,
+           -- L'OF chiffre souvent lui-meme le conditionnement : ces valeurs
+           -- priment sur toute reconstitution a partir de la fiche technique.
+           oi.nb_mandrins    AS of_nb_mandrins,
+           oi.nb_cartons     AS of_nb_cartons,
+           oi.conditionnement AS of_conditionnement
     FROM planning_entries pe
     LEFT JOIN machines m ON m.id = pe.machine_id
     LEFT JOIN of_imports oi ON oi.id = pe.of_import_id
@@ -171,6 +179,7 @@ _SQL_FT = """
            support, glassine, adhesif, qte_au_mille, eti_laize, eti_longueur,
            mod_laize, mod_longueur, mod_nb_front, laize, laize_optimale,
            mandrin_dia, nb_etiq_bobin, nb_bobines_carton, cartons,
+           conditionnement,
            palette_type, palette_nb_cartons_sol, palette_nb_cartons_hauteur
     FROM fiches_techniques
 """
@@ -179,6 +188,7 @@ _FT_FIELDS = (
     "support", "glassine", "adhesif", "qte_au_mille", "eti_laize", "eti_longueur",
     "mod_laize", "mod_longueur", "mod_nb_front", "laize", "laize_optimale",
     "mandrin_dia", "nb_etiq_bobin", "nb_bobines_carton", "cartons",
+    "conditionnement",
     "palette_type", "palette_nb_cartons_sol", "palette_nb_cartons_hauteur",
 )
 
@@ -345,6 +355,100 @@ def _matiere_ml_par_bobine(mapping: dict, kind: str, source_value: str):
     return m.get("metres_lineaires_par_bobine") if m else None
 
 
+# « Bobine de 1.000 étiquettes », « Bobines de 1 000 etiq. » : la phrase de
+# conditionnement porte le nombre d'étiquettes par bobine bien plus souvent que
+# le champ dédié de la fiche technique, laissé vide dans la plupart des fiches.
+_RE_ETIQ_BOBINE = re.compile(
+    r"bobines?\s*(?:de|:)?\s*(\d[\d\s\u202f\u00a0.,]*)\s*(?:é|e)tiq",
+    re.IGNORECASE,
+)
+
+
+def _entier_fr(txt) -> Optional[int]:
+    """« 1.000 », « 1 000 », « 1 000 » → 1000.
+
+    Les séparateurs de milliers français (point, espace, espace fine) sont
+    retirés sans distinction : un nombre d'étiquettes par bobine est toujours
+    entier, aucun risque de confondre avec une décimale.
+    """
+    chiffres = re.sub(r"\D", "", str(txt or ""))
+    if not chiffres:
+        return None
+    try:
+        v = int(chiffres)
+    except ValueError:
+        return None
+    return v if v > 0 else None
+
+
+def _etiq_par_bobine(pe: dict) -> dict:
+    """Étiquettes par bobine, avec sa provenance.
+
+    Le champ dédié `nb_etiq_bobin` est vide sur beaucoup de fiches alors que la
+    phrase de conditionnement porte l'information. On lit dans l'ordre : le
+    champ, la phrase de la fiche, puis celle de l'OF.
+    """
+    v = _f(pe.get("ft_nb_etiq_bobin"))
+    if v:
+        return {"valeur": v, "champ": "fiches_techniques.nb_etiq_bobin",
+                "origine": "Fiche technique"}
+    for cle, champ, origine in (
+        ("ft_conditionnement", "fiches_techniques.conditionnement",
+         "Fiche technique (conditionnement)"),
+        ("of_conditionnement", "of_imports.conditionnement", "OF (conditionnement)"),
+    ):
+        m = _RE_ETIQ_BOBINE.search(str(pe.get(cle) or ""))
+        if m:
+            n = _entier_fr(m.group(1))
+            if n:
+                return {"valeur": float(n), "champ": champ, "origine": origine}
+    return {"valeur": None, "champ": None, "origine": None}
+
+
+def _nb_bobines_dossier(pe: dict, qte: Optional[float]) -> dict:
+    """Nombre de bobines produites — c'est aussi le nombre de mandrins consommés.
+
+    Trois sources, de la plus directe à la plus reconstituée :
+    l'OF quand il chiffre lui-même les mandrins, la quantité de bobines de l'OF,
+    puis la quantité d'étiquettes divisée par les étiquettes par bobine.
+    """
+    n = _f(pe.get("of_nb_mandrins"))
+    if n:
+        return {"nb": n, "formule": f"{_n(n)} mandrins (chiffrés sur l'OF)",
+                "variables": [
+                    {"label": "Mandrins", "champ": "of_imports.nb_mandrins",
+                     "origine": "OF", "valeur": n, "unite": "u"}],
+                "manque": []}
+
+    nb_bob = _f(pe.get("qte_bobines"))
+    if nb_bob:
+        return {"nb": nb_bob,
+                "formule": f"{_n(nb_bob)} bobines (OF) × 1 mandrin/bobine",
+                "variables": [
+                    {"label": "Quantité bobines", "champ": "of_imports.qte_bobines",
+                     "origine": "OF", "valeur": nb_bob, "unite": "bobines"}],
+                "manque": []}
+
+    eb = _etiq_par_bobine(pe)
+    if qte and eb["valeur"]:
+        return {"nb": qte / eb["valeur"],
+                "formule": f"{_n(qte)} étiq ÷ {_n(eb['valeur'])} étiq/bobine",
+                "variables": [
+                    {"label": "Quantité étiquettes", "champ": "of_imports.qte_etiquettes",
+                     "origine": "OF", "valeur": qte, "unite": "étiq"},
+                    {"label": "Étiquettes par bobine", "champ": eb["champ"],
+                     "origine": eb["origine"], "valeur": eb["valeur"], "unite": ""}],
+                "manque": []}
+
+    manque = []
+    if not qte and not nb_bob:
+        manque.append("Quantité d'étiquettes ou de bobines de l'OF")
+    if not eb["valeur"]:
+        manque.append("Étiquettes par bobine — champ « Nb étiq./bobine » vide sur la "
+                      "fiche et phrase de conditionnement non exploitable")
+    return {"nb": None, "formule": "Calcul impossible", "variables": [], "manque": manque}
+
+
 def _mandrin_tubes(pe: dict, mapping: dict, nb_mandrins: float,
                    perte_pct: float) -> dict:
     """Traduit un besoin en mandrins en nombre de tubes, puis de palettes.
@@ -503,19 +607,13 @@ def _compute_besoins_dossier(pe: dict, mapping: dict,
                  "Calcul impossible", variables, manque)
 
     # ── Mandrins : 1 par bobine ──
-    nb_eb = _f(pe.get("ft_nb_etiq_bobin"))
-    nb_mandrins = 0.0
+    bob = _nb_bobines_dossier(pe, qte)
+    nb_mandrins = bob["nb"] or 0.0
     if pe.get("ft_mandrin_dia"):
-        if qte and nb_eb:
-            nb_mandrins = qte / nb_eb
+        if bob["nb"]:
             tub = _mandrin_tubes(pe, mapping, nb_mandrins, perte_pct)
-            variables = [
-                {"label": "Quantité étiquettes", "champ": "of_imports.qte_etiquettes",
-                 "origine": "OF", "valeur": qte, "unite": "étiq"},
-                {"label": "Étiquettes par bobine", "champ": "fiches_techniques.nb_etiq_bobin",
-                 "origine": "Fiche technique", "valeur": nb_eb, "unite": ""},
-            ]
-            formule = f"{_n(qte)} étiq ÷ {_n(nb_eb)} étiq/bobine"
+            variables = list(bob["variables"])
+            formule = bob["formule"]
             if tub["tubes"] is not None:
                 # La conversion en tubes n'est pas le besoin : c'est ce qu'il faut
                 # commander pour le couvrir. On l'expose à côté, jamais à la place.
@@ -541,19 +639,22 @@ def _compute_besoins_dossier(pe: dict, mapping: dict,
                      "mandrins_par_tube": tub["mandrins_par_tube"],
                  })
         else:
-            manque = []
-            if not qte:
-                manque.append("Quantité d'étiquettes de l'OF")
-            if not nb_eb:
-                manque.append("Étiquettes par bobine (nb_etiq_bobin)")
             _add("mandrin", pe["ft_mandrin_dia"], None,
-                 "Calcul impossible", [], manque)
+                 bob["formule"], bob["variables"], bob["manque"])
 
-    # ── Cartons : nb bobines / bobines par carton ──
+    # ── Cartons : chiffrés sur l'OF, sinon nb bobines / bobines par carton ──
     nb_bc = _f(pe.get("ft_nb_bobines_carton"))
+    of_cart = _f(pe.get("of_nb_cartons"))
     nb_cartons = 0.0
     if pe.get("ft_cartons"):
-        if nb_bc and nb_mandrins > 0:
+        if of_cart:
+            nb_cartons = of_cart
+            _add("carton", pe["ft_cartons"], nb_cartons,
+                 f"{_n(of_cart)} cartons (chiffrés sur l'OF)", [
+                     {"label": "Cartons", "champ": "of_imports.nb_cartons",
+                      "origine": "OF", "valeur": of_cart, "unite": "u"},
+                 ])
+        elif nb_bc and nb_mandrins > 0:
             nb_cartons = nb_mandrins / nb_bc
             _add("carton", pe["ft_cartons"], nb_cartons,
                  f"{nb_mandrins:.1f} bobines ÷ {_n(nb_bc)} bobines/carton", [
@@ -569,6 +670,7 @@ def _compute_besoins_dossier(pe: dict, mapping: dict,
             if not nb_bc:
                 manque.append("Bobines par carton (nb_bobines_carton)")
             _add("carton", pe["ft_cartons"], None, "Calcul impossible", [], manque)
+
 
     # ── Palettes : cartons / (cartons_sol × cartons_hauteur) ──
     ncs = _f(pe.get("ft_palette_nb_cartons_sol"))
@@ -1036,9 +1138,15 @@ _EXPLICATIONS = {
             "formule": "Besoin (u) = Quantité étiquettes ÷ Étiquettes par bobine · "
                        "Tubes = Mandrins × Laize module ÷ (Longueur tube − perte de coupe)",
             "paragraphes": [
-                "Chaque bobine finie consomme un mandrin. Le nombre de bobines se "
-                "déduit de la quantité à produire divisée par le nombre d'étiquettes "
-                "par bobine défini sur la fiche technique.",
+                "Chaque bobine finie consomme un mandrin. Le nombre de bobines a "
+                "trois sources possibles, lues dans cet ordre : le nombre de mandrins "
+                "chiffré sur l'OF, la quantité de bobines de l'OF, puis la quantité "
+                "d'étiquettes divisée par le nombre d'étiquettes par bobine.",
+                "Ce dernier nombre vient du champ « Nb étiq./bobine » de la fiche "
+                "technique ; s'il est vide, il est relu dans la phrase de "
+                "conditionnement (« Bobine de 1.000 étiquettes »), sur la fiche puis "
+                "sur l'OF. C'est ce qui évite qu'une fiche complète par ailleurs "
+                "sorte « n.c. » sur les mandrins, les cartons et les palettes.",
                 "Les mandrins ne s'achètent pas à l'unité : ils sont découpés dans "
                 "des tubes. Un tube donne, une fois la perte de coupe retirée, autant "
                 "de mandrins que la laize du module tient de fois dans sa longueur. "
@@ -1052,8 +1160,12 @@ _EXPLICATIONS = {
                  "detail": "diamètre mandrin, mappé vers une référence mandrin"},
                 {"label": "Quantité étiquettes", "champ": "of_imports.qte_etiquettes",
                  "unite": "étiq"},
-                {"label": "Étiquettes par bobine", "champ": "fiches_techniques.nb_etiq_bobin",
-                 "unite": ""},
+                {"label": "Étiquettes par bobine",
+                 "champ": "fiches_techniques.nb_etiq_bobin ou conditionnement",
+                 "unite": "", "detail": "repli sur « Bobine de N étiquettes »"},
+                {"label": "Mandrins / bobines de l'OF",
+                 "champ": "of_imports.nb_mandrins ou qte_bobines",
+                 "detail": "prioritaires quand l'OF les renseigne"},
                 {"label": "Laize module", "champ": "fiches_techniques.mod_laize",
                  "unite": "mm", "detail": "hauteur du mandrin découpé dans le tube"},
                 {"label": "Longueur tube", "champ": "matieres_premieres.longueur_tube_mm",
@@ -1068,14 +1180,20 @@ _EXPLICATIONS = {
             "id": "carton",
             "titre": "Cartons",
             "type": "calcul",
-            "resume": "Besoin en unités — dépend du calcul des mandrins.",
-            "formule": "Besoin (u) = Nb de bobines ÷ Bobines par carton",
+            "resume": "Besoin en unités — chiffré sur l'OF, sinon reconstruit "
+                      "depuis le calcul des mandrins.",
+            "formule": "Besoin (u) = Nb de cartons de l'OF, "
+                       "sinon Nb de bobines ÷ Bobines par carton",
             "paragraphes": [
-                "Le nombre de bobines est celui calculé pour les mandrins. S'il n'est "
-                "pas calculable, le besoin en cartons ne l'est pas non plus.",
+                "Quand l'OF chiffre lui-même les cartons, c'est cette valeur qui fait "
+                "foi : elle décrit la commande réelle, pas une reconstitution.",
+                "Sinon, le nombre de bobines est celui calculé pour les mandrins. S'il "
+                "n'est pas calculable, le besoin en cartons ne l'est pas non plus.",
             ],
             "variables": [
                 {"label": "Valeur source", "champ": "fiches_techniques.cartons"},
+                {"label": "Cartons de l'OF", "champ": "of_imports.nb_cartons",
+                 "detail": "prioritaire quand l'OF le renseigne"},
                 {"label": "Nb de bobines", "champ": "voir « Mandrins »", "unite": "bobines"},
                 {"label": "Bobines par carton", "champ": "fiches_techniques.nb_bobines_carton",
                  "unite": ""},

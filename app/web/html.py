@@ -8550,11 +8550,52 @@ async function loadDossiersSansOf(){
     const data=await api('/api/admin/dossiers-sans-of');
     set({
       dossiersSansOf:Array.isArray(data&&data.items)?data.items:[],
+      dossiersSansOfRapprochables:Number(data&&data.rapprochables||0),
       dossiersSansOfLoading:false,
     });
   }catch(e){
     set({dossiersSansOfLoading:false});
     toast(e.message||'Erreur chargement dossiers sans OF','error');
+  }
+}
+
+// Relance le rapprochement automatique dossier <-> OF sur tout le planning.
+// Simulation d'abord (dry_run), application ensuite apres confirmation : la
+// cascade elargie peut creer beaucoup de liens d'un coup, on montre donc le
+// resultat avant d'ecrire quoi que ce soit.
+async function relancerMappingAuto(){
+  if(S.relinkRunning) return;
+  set({relinkRunning:true});
+  try{
+    const sim=await api('/api/admin/relink-of?dry_run=1',{method:'POST'});
+    const aLier  =Number(sim&&sim.relinked||0);
+    const aRepar =Number(sim&&sim.repaired_links||0);
+    const ambigus=Number(sim&&sim.pending_for_review||0);
+    const lignes=[];
+    if(aLier)  lignes.push('\u00b7 '+aLier+' dossier'+(aLier>1?'s':'')+' rattaché'+(aLier>1?'s':'')+' automatiquement');
+    if(aRepar) lignes.push('\u00b7 '+aRepar+' lien'+(aRepar>1?'s':'')+' Access réparé'+(aRepar>1?'s':''));
+    if(!lignes.length){
+      toast(ambigus
+        ? ambigus+' dossier'+(ambigus>1?'s':'')+' ambigu'+(ambigus>1?'s':'')+' — à arbitrer dans « Mappings à valider »'
+        : 'Rien de plus à rapprocher automatiquement.');
+      return;
+    }
+    let msg='Simulation du rapprochement automatique :\n\n'+lignes.join('\n');
+    if(ambigus) msg+='\n\n'+ambigus+' cas ambigu'+(ambigus>1?'s':'')+' resteront à arbitrer manuellement.';
+    msg+='\n\nAppliquer ces changements ?';
+    if(!confirm(msg)) return;
+    const res=await api('/api/admin/relink-of',{method:'POST'});
+    const n=Number(res&&res.relinked||0), r=Number(res&&res.repaired_links||0);
+    toast(n+' dossier'+(n>1?'s':'')+' rattaché'+(n>1?'s':'')
+          +(r?' \u00b7 '+r+' lien'+(r>1?'s':'')+' réparé'+(r>1?'s':''):'')+'.');
+    await loadDossiersSansOf();
+    await loadPendingOfMappings();
+    loadPendingOfCount();
+  }catch(e){
+    toast(e.message||'Erreur pendant le rapprochement','error');
+  }finally{
+    set({relinkRunning:false});
+    render();
   }
 }
 
@@ -8653,10 +8694,31 @@ function renderDossiersSansOfTab(){
       h('div',null,'Tous les dossiers actifs ont au moins un OF lié.')
     );
   }
-  const intro=h('div',{style:{marginBottom:'16px',padding:'12px 16px',background:'var(--accent-bg)',border:'1px solid var(--border)',borderRadius:'10px',fontSize:'13px',color:'var(--text2)',lineHeight:1.6}},
+  const nbRappro=Number(S.dossiersSansOfRapprochables||0);
+  const nbManuel=Math.max(0, items.length-nbRappro);
+  const introTxt=[
     h('div',{style:{fontWeight:600,color:'var(--text)',marginBottom:'4px'}},
       items.length+' dossier'+(items.length>1?'s':'')+' actif'+(items.length>1?'s':'')+' sans OF lié'),
-    'Recherche dans tous les OF existants pour en attacher un (ou plusieurs), ou importe un nouvel OF PDF.'
+    h('div',null,'Recherche dans tous les OF existants pour en attacher un (ou plusieurs), ou importe un nouvel OF PDF.'),
+  ];
+  if(nbRappro){
+    introTxt.push(h('div',{style:'margin-top:5px;font-size:12px'},
+      h('b',{style:'color:var(--text)'},nbRappro+' rapprochable'+(nbRappro>1?'s':'')+' automatiquement'),
+      nbManuel? ' \u00b7 '+nbManuel+' sans numéro d\u2019OF exploitable (à attacher à la main)' : ''
+    ));
+  }
+  const busy=!!S.relinkRunning;
+  const intro=h('div',{style:{marginBottom:'16px',padding:'12px 16px',background:'var(--accent-bg)',border:'1px solid var(--border)',borderRadius:'10px',fontSize:'13px',color:'var(--text2)',lineHeight:1.6}},
+    h('div',{style:'display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap'},
+      h('div',{style:'min-width:0;flex:1'}, ...introTxt),
+      h('button',{
+        style:'padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;white-space:nowrap;'
+             +'cursor:'+(busy?'wait':'pointer')+';opacity:'+(busy?'0.55':'1'),
+        disabled:busy,
+        onClick:relancerMappingAuto,
+        title:'Simule puis applique le rapprochement automatique sur tous les dossiers du planning'
+      }, busy?'Rapprochement…':'\u21bb Relancer le mapping automatique')
+    )
   );
 
   const cards=items.map(it=>{
