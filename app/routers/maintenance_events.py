@@ -1793,7 +1793,7 @@ def _event_divergence(conn, event_id: int, tmpl: dict) -> dict:
     return {"diverged": bool(reasons), "reasons": reasons, "done_ops": done}
 
 
-def _resync_future_events_from_template(conn, template_id: int, exclude_ids=None) -> int:
+def _resync_future_events_from_template(conn, template_id: int, exclude_ids=None, sync_ops: bool = True) -> int:
     """Écrase les ops des créneaux futurs (date_prevue >= aujourd'hui) liés au
     template. Retourne le nombre d'events resynchronisés.
     Préserve : date, horaires, source. Écrase : liste des ops, et les opérateurs
@@ -1836,14 +1836,19 @@ def _resync_future_events_from_template(conn, template_id: int, exclude_ids=None
         eid = ev["id"]
         if eid in _skip:
             continue
-        conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
-        for op in tmpl["ops"]:
-            conn.execute(
-                """INSERT INTO maintenance_event_ops (event_id, code, machines_csv, updated_at)
-                   VALUES (?, ?, ?, ?)""",
-                (eid, op["code"], op.get("machines_csv"), now),
-            )
-            _bump_libre_usage(conn, op["code"])
+        # v2.7.1 : sync_ops=False quand SEULS les operateurs par defaut ont
+        # change. Sans ce garde-fou, la branche « default_operators modifies »
+        # passait quand meme par ce DELETE/INSERT et ecrasait les operations
+        # personnalisees des occurrences, alors que les ops n'avaient pas bouge.
+        if sync_ops:
+            conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
+            for op in tmpl["ops"]:
+                conn.execute(
+                    """INSERT INTO maintenance_event_ops (event_id, code, machines_csv, updated_at)
+                       VALUES (?, ?, ?, ?)""",
+                    (eid, op["code"], op.get("machines_csv"), now),
+                )
+                _bump_libre_usage(conn, op["code"])
         # v2.5.25 / v2.6.0 : ecrase les operateurs par la liste default du
         # template -- uniquement si celui-ci est recurrent (cf. docstring).
         if sync_operators:
@@ -2089,12 +2094,24 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
         if body.recurrence_active is not None:
             meta_updates["recurrence_active"] = 1 if body.recurrence_active else 0
         # v2.5.25 : default_operators (liste ids -> CSV, valides contre users)
+        # v2.7.1 : meme logique que pour les ops — le formulaire renvoie toujours
+        # default_operators, on ne declenche que sur un changement reel.
+        _default_ops_changed = False
         if body.default_operators is not None:
             _valid = []
             for uid in body.default_operators:
                 if isinstance(uid, int) and conn.execute("SELECT 1 FROM users WHERE id=?", (uid,)).fetchone():
                     _valid.append(str(uid))
-            meta_updates["default_operators_csv"] = ",".join(_valid) if _valid else None
+            _new_csv = ",".join(_valid) if _valid else None
+            _old_csv = conn.execute(
+                "SELECT default_operators_csv FROM maintenance_templates WHERE id = ?",
+                (template_id,),
+            ).fetchone()
+            _old_csv = _old_csv["default_operators_csv"] if _old_csv else None
+            _default_ops_changed = (
+                set((_old_csv or "").split(",")) - {""} != set((_new_csv or "").split(",")) - {""}
+            )
+            meta_updates["default_operators_csv"] = _new_csv
         # v2.5.31 : la purge etait imbriquee dans le bloc default_operators ci-dessus,
         # donc le toggle du panel Gestion des modeles (qui n'envoie que
         # recurrence_active) ne nettoyait jamais les creneaux futurs. On la
@@ -2167,22 +2184,44 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
                     raise HTTPException(status_code=400, detail=f"code inconnu: {code}")
                 if not mcsv:
                     raise HTTPException(status_code=400, detail=f"L'opération {code} doit être attribuée à au moins une machine")
-            conn.execute("DELETE FROM maintenance_template_ops WHERE template_id = ?", (template_id,))
-            for code, mcsv in seen.items():
-                conn.execute(
-                    "INSERT INTO maintenance_template_ops (template_id, code, machines_csv) VALUES (?, ?, ?)",
-                    (template_id, code, mcsv),
-                )
-            conn.execute(
-                "UPDATE maintenance_templates SET updated_at=? WHERE id=?",
-                (now, template_id),
+            # v2.7.1 : la resync ne part QUE si les operations ont reellement
+            # change. Le formulaire renvoie `ops` a chaque enregistrement, meme
+            # intactes : `if body.ops is not None` etait donc toujours vrai, et
+            # ouvrir un modele puis cliquer « Enregistrer » suffisait a ecraser
+            # les operations personnalisees de toutes les occurrences futures —
+            # sans confirmation, puisque le client ne detectait aucun changement
+            # et n'affichait donc pas la modale.
+            _before = {r["code"]: (r["machines_csv"] or "") for r in conn.execute(
+                "SELECT code, machines_csv FROM maintenance_template_ops WHERE template_id = ?",
+                (template_id,),
+            ).fetchall()}
+            _after = {c: (m or "") for c, m in seen.items()}
+            _ops_changed = set(_before) != set(_after) or any(
+                set(_machines_csv_to_list(_before[c])) != set(_machines_csv_to_list(_after[c]))
+                for c in _after
             )
-            # Resync des créneaux futurs liés (ops + operateurs)
-            resynced = _resync_future_events_from_template(conn, template_id, body.resync_exclude_ids)
-        elif body.default_operators is not None:
-            # v2.5.25 : ops inchangees mais default_operators modifies -> resync operateurs
-            # sur les creneaux futurs uniquement (les ops restent car pas modifiees).
-            resynced = _resync_future_events_from_template(conn, template_id, body.resync_exclude_ids)
+            if _ops_changed:
+                conn.execute("DELETE FROM maintenance_template_ops WHERE template_id = ?", (template_id,))
+                for code, mcsv in seen.items():
+                    conn.execute(
+                        "INSERT INTO maintenance_template_ops (template_id, code, machines_csv) VALUES (?, ?, ?)",
+                        (template_id, code, mcsv),
+                    )
+                conn.execute(
+                    "UPDATE maintenance_templates SET updated_at=? WHERE id=?",
+                    (now, template_id),
+                )
+                # Resync des créneaux futurs liés (ops + operateurs)
+                resynced = _resync_future_events_from_template(conn, template_id, body.resync_exclude_ids)
+            elif _default_ops_changed:
+                # Ops intactes, operateurs par defaut modifies : on ne touche
+                # QU'AUX operateurs (sync_ops=False).
+                resynced = _resync_future_events_from_template(
+                    conn, template_id, body.resync_exclude_ids, sync_ops=False)
+        elif _default_ops_changed:
+            # v2.5.25 : ops non fournies mais default_operators modifies.
+            resynced = _resync_future_events_from_template(
+                conn, template_id, body.resync_exclude_ids, sync_ops=False)
         # v2.6.1 : regeneration immediate apres une purge de regle, pour que la
         # reponse reflete deja le nouveau planning (sinon le calendrier reste
         # vide jusqu'au prochain GET /events).
