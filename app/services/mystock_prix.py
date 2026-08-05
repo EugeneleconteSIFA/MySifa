@@ -406,6 +406,74 @@ def _poids_depuis_grammage(conn: sqlite3.Connection, declinaison_id: int, gramma
     )
 
 
+def deriver_declinaison(
+    conn: sqlite3.Connection,
+    *,
+    declinaison_id: int,
+    user_name: Optional[str] = None,
+) -> dict:
+    """
+    Crée une déclinaison sœur : tout est repris, sauf sa valeur.
+
+    Un adhésif décliné en 17, 19 et 22 g/m² a le même fournisseur, le même
+    tarif, la même perte, les mêmes taxes — seul le grammage change. Repartir
+    d'une déclinaison existante évite de ressaisir sept réglages pour changer
+    un chiffre.
+
+    La valeur (grammage ou laize) reste vide : c'est la seule chose à saisir,
+    et c'est justement ce qui distingue la nouvelle de son modèle.
+    """
+    source = fetch_declinaison_complete(conn, declinaison_id)
+    if not source:
+        return {"ok": False, "reason": "déclinaison introuvable"}
+    matiere_id = int(source["matiere_id"])
+
+    if conn.execute(
+        """SELECT 1 FROM mp_matiere_declinaison
+            WHERE matiere_id=? AND laize_id IS NULL AND grammage_id IS NULL""",
+        (matiere_id,),
+    ).fetchone():
+        return {
+            "ok": False,
+            "reason": "une déclinaison sans valeur existe déjà — renseignez-la d'abord",
+        }
+
+    colonnes = [c for c in CHAMPS_PARAM if c != "grammage_gsm"] + ["parametre"]
+    valeurs = [_col(source, c) for c in colonnes]
+    cur = conn.execute(
+        f"""INSERT INTO mp_matiere_declinaison (matiere_id, {", ".join(colonnes)})
+            VALUES (?{", ?" * len(colonnes)})""",
+        (matiere_id, *valeurs),
+    )
+    nouvelle = int(cur.lastrowid)
+
+    # Les lignes de prix suivent : même fournisseur, même tarif, même principal.
+    lignes = conn.execute(
+        """SELECT fournisseur_id, prix, principal, note FROM mp_matiere_prix
+            WHERE declinaison_id=? ORDER BY principal DESC, id""",
+        (declinaison_id,),
+    ).fetchall()
+    now = _now()
+    if not lignes:
+        conn.execute(
+            """INSERT INTO mp_matiere_prix
+               (matiere_id, laize_id, grammage_id, declinaison_id, fournisseur_id,
+                prix, principal, updated_at, updated_by_name)
+               VALUES (?,NULL,NULL,?,NULL,0,1,?,?)""",
+            (matiere_id, nouvelle, now, user_name),
+        )
+    for l in lignes:
+        conn.execute(
+            """INSERT INTO mp_matiere_prix
+               (matiere_id, laize_id, grammage_id, declinaison_id, fournisseur_id,
+                prix, principal, note, updated_at, updated_by_name)
+               VALUES (?,NULL,NULL,?,?,?,?,?,?,?)""",
+            (matiere_id, nouvelle, l["fournisseur_id"], l["prix"], l["principal"],
+             l["note"], now, user_name),
+        )
+    return {"ok": True, "declinaison_id": nouvelle, "source_id": declinaison_id}
+
+
 def set_declinaison_valeur(
     conn: sqlite3.Connection,
     *,

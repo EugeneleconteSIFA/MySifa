@@ -836,6 +836,19 @@
         const open = !!S.expanded[m.id];
         const nb = m.nb_declinaisons || 0;
         const prets = m.nb_parametrees || 0;
+        // Le fournisseur dont le prix fait foi. Plusieurs déclinaisons peuvent
+        // en avoir des différents : on ne nomme que s'il n'y en a qu'un.
+        const principaux = [...new Set(
+          (m.declinaisons || [])
+            .map((d) => (d.lignes || []).find((l) => l.principal))
+            .filter((l) => l && l.fournisseur_nom)
+            .map((l) => l.fournisseur_nom)
+        )];
+        const fournPrincipal = principaux.length === 1
+          ? escHtml(principaux[0])
+          : (principaux.length
+              ? `<span class="muted">${principaux.length} fournisseurs</span>`
+              : '<span class="muted">—</span>');
         const lien = nb
           ? (prets === nb
               ? `<span class="badge badge-frontal">${prets}/${nb} réglée${nb > 1 ? "s" : ""}</span>`
@@ -850,7 +863,7 @@
                 ? `<span class="badge badge-silicone">${escHtml(DECL_LABEL[m.type_declinaison])} · ${nb}</span>`
                 : '<span class="badge badge-autre">sans déclinaison</span>'}</td>
             <td class="ms-prix-cell">${mystockPrixResume(m)}</td>
-            <td>${m.nb_fournisseurs || 0}</td>
+            <td>${fournPrincipal}</td>
             <td>${lien}</td>
             <td class="row-actions" onclick="event.stopPropagation()">
               <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${m.id}" target="_blank" rel="noopener" title="Ouvrir la fiche dans MyStock">MyStock ↗</a>
@@ -872,12 +885,9 @@
             <option value="all" ${S.filters.msActive==="all"?"selected":""}>Toutes</option>
           </select>
         </div>
-        <div class="ms-hint">Le prix saisi ici est <strong>celui de MyStock</strong> : il est écrit directement dans la valorisation et historisé.
-          C'est le prix du <strong>fournisseur principal</strong> qui fait foi. Chaque <strong>déclinaison</strong> — une laize, un grammage —
-          a sa propre fiche : clique sur son coût pour régler poids, devise, taxes et transport d'import.</div>
         <div class="table-wrap">
           <table class="pr-table">
-            <thead><tr><th style="width:28px"></th><th>Cat.</th><th>Référence</th><th>Désignation</th><th>Déclinaisons</th><th>Prix en vigueur</th><th>Fourn.</th><th>Réglées</th><th></th></tr></thead>
+            <thead><tr><th style="width:28px"></th><th>Cat.</th><th>Référence</th><th>Désignation</th><th>Déclinaisons</th><th>Prix en vigueur</th><th>Fournisseur principal</th><th>Réglées</th><th></th></tr></thead>
             <tbody>${rows || '<tr><td colspan="9" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
           </table>
         </div>
@@ -3076,9 +3086,6 @@
           <input type="search" class="search-input" id="msp-q" placeholder="Rechercher (code, désignation…)" value="${escAttr(S.filters.msProdQ)}"/>
           ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-msprod">+ Nouveau produit</button>' : ""}
         </div>
-        <div class="ms-hint">Ces produits sont composés de <strong>déclinaisons MyStock</strong> : une laize précise d'un frontal,
-          un grammage précis d'un adhésif. Leur coût suit automatiquement le prix du fournisseur principal de chaque matière.
-          Clique sur une ligne pour voir d'où vient son prix de revient.</div>
         <div class="table-wrap">
           <table class="pr-table msp-table">
             <thead><tr><th style="width:28px"></th><th>Code</th><th>Désignation</th><th>Frontal</th><th>Adhésif</th><th>Glassine</th><th>Autres</th><th>Coût</th><th>Vente</th><th>Marge</th><th></th></tr></thead>
