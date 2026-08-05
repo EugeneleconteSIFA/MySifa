@@ -1002,6 +1002,189 @@ def _regrouper_par_matiere(lignes: list) -> dict:
     return {"matieres": matieres, "non_associees": non_associees}
 
 
+# ─────────────────────────────────────────────────────────────────────────
+# Rattachement des documents d'un dossier non chiffré
+#
+# Un dossier sort « n.c. » pour deux raisons seulement : aucun OF rattaché, ou
+# aucune fiche technique rapprochée. Les deux se corrigent depuis la ligne, sans
+# quitter Besoins matières — et surtout, la correction s'écrit dans les tables
+# de référence, donc elle vaut pour MyProd, le planning et l'expédition, pas
+# seulement pour cet écran.
+#
+# - OF : `_promote_of_link` (of_import.py) aligne `planning_of_links` ET
+#   `planning_entries.of_import_id`. Les deux sont nécessaires : le slot du
+#   planning lit la colonne, le panneau OF lit la table de liens.
+# - Fiche technique : le rapprochement se fait sur `ref_produit_norm`. On aligne
+#   cette clé sans toucher à `ref_produit`, qui reste ce que l'atelier lit.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _dossier_ou_404(conn, planning_id: int):
+    row = conn.execute(
+        """SELECT pe.id, pe.reference, pe.numero_of, pe.ref_produit,
+                  pe.ref_produit_norm, pe.of_import_id, pe.statut,
+                  m.nom AS machine_nom
+           FROM planning_entries pe
+           LEFT JOIN machines m ON m.id = pe.machine_id
+           WHERE pe.id = ?""",
+        (planning_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, "Dossier introuvable.")
+    return row
+
+
+def _like(v) -> str:
+    return "%" + str(v or "").strip() + "%"
+
+
+@router.get("/api/stock/besoins-matieres/dossier/{planning_id}/documents")
+def dossier_documents(planning_id: int, request: Request):
+    """OF et fiches techniques rattachables à un dossier.
+
+    Sans `q`, on propose ce que le dossier laisse deviner : son numéro d'OF et
+    sa référence produit. Avec `q`, c'est une recherche libre — le cas où le
+    document existe sous un libellé qui ne ressemble à rien de ce qu'on attend.
+    """
+    require_stock_matieres_admin(request)
+    q = (request.query_params.get("q") or "").strip()
+
+    with get_db() as conn:
+        pe = _dossier_ou_404(conn, planning_id)
+
+        if q:
+            ofs = conn.execute(
+                """SELECT id, of_numero, reference, machine, qte_etiquettes,
+                          qte_bobines, date_creation, date_import
+                   FROM of_imports
+                   WHERE LOWER(COALESCE(of_numero,'')) LIKE LOWER(?)
+                      OR LOWER(COALESCE(reference,''))  LIKE LOWER(?)
+                      OR LOWER(COALESCE(machine,''))    LIKE LOWER(?)
+                   ORDER BY date_import DESC, id DESC LIMIT 25""",
+                (_like(q), _like(q), _like(q)),
+            ).fetchall()
+            fiches = conn.execute(
+                """SELECT id, reference, designation, client, machine, ref_produit_norm
+                   FROM fiches_techniques
+                   WHERE LOWER(COALESCE(reference,''))   LIKE LOWER(?)
+                      OR LOWER(COALESCE(designation,'')) LIKE LOWER(?)
+                      OR LOWER(COALESCE(client,''))      LIKE LOWER(?)
+                   ORDER BY reference COLLATE NOCASE LIMIT 25""",
+                (_like(q), _like(q), _like(q)),
+            ).fetchall()
+        else:
+            num = (pe["numero_of"] or "").strip()
+            ref = (pe["ref_produit"] or "").strip()
+            ofs = conn.execute(
+                """SELECT id, of_numero, reference, machine, qte_etiquettes,
+                          qte_bobines, date_creation, date_import
+                   FROM of_imports
+                   WHERE (? != '' AND LOWER(COALESCE(of_numero,'')) LIKE LOWER(?))
+                      OR (? != '' AND LOWER(COALESCE(reference,'')) LIKE LOWER(?))
+                   ORDER BY date_import DESC, id DESC LIMIT 25""",
+                (num, _like(num), ref, _like(ref)),
+            ).fetchall()
+            norm = (pe["ref_produit_norm"] or "").strip()
+            fiches = conn.execute(
+                """SELECT id, reference, designation, client, machine, ref_produit_norm
+                   FROM fiches_techniques
+                   WHERE (? != '' AND ref_produit_norm = ?)
+                      OR (? != '' AND LOWER(COALESCE(reference,'')) LIKE LOWER(?))
+                   ORDER BY reference COLLATE NOCASE LIMIT 25""",
+                (norm, norm, ref, _like(ref)),
+            ).fetchall()
+
+    return {
+        "dossier": {
+            "planning_id": pe["id"],
+            "reference": pe["reference"],
+            "numero_of": pe["numero_of"],
+            "ref_produit": pe["ref_produit"],
+            "machine": pe["machine_nom"],
+            "of_import_id": pe["of_import_id"],
+            "a_un_of": pe["of_import_id"] is not None,
+        },
+        "recherche": q,
+        "ofs": [dict(r) for r in ofs],
+        "fiches": [dict(r) for r in fiches],
+    }
+
+
+@router.post("/api/stock/besoins-matieres/dossier/{planning_id}/rattacher-of")
+async def rattacher_of(planning_id: int, request: Request):
+    """Fait d'un OF existant l'OF actif du dossier. Body : { of_id }."""
+    user = require_stock_matieres_admin(request)
+    body = await request.json()
+    of_id = body.get("of_id")
+    if not isinstance(of_id, int):
+        raise HTTPException(400, "of_id (entier) requis.")
+
+    # Import local : of_import.py n'a pas à connaître Besoins matières, et un
+    # import au niveau module créerait un cycle le jour où l'inverse arrivera.
+    from app.routers.of_import import _promote_of_link
+
+    qui = (user.get("nom") or user.get("email") or "besoins_matieres")
+    with get_db() as conn:
+        _dossier_ou_404(conn, planning_id)
+        oi = conn.execute(
+            "SELECT id, of_numero FROM of_imports WHERE id=?", (of_id,)
+        ).fetchone()
+        if not oi:
+            raise HTTPException(404, "OF introuvable.")
+        _promote_of_link(conn, planning_id, of_id, qui)
+        # Rattachement décidé par un humain : l'auto-link ne doit plus le défaire.
+        try:
+            conn.execute(
+                "UPDATE planning_entries SET of_link_user_managed=1 WHERE id=?",
+                (planning_id,),
+            )
+        except Exception:
+            pass  # colonne absente sur une base ancienne : le lien reste valide
+        conn.commit()
+    return {"ok": True, "planning_id": planning_id, "of_id": of_id,
+            "of_numero": oi["of_numero"]}
+
+
+@router.post("/api/stock/besoins-matieres/dossier/{planning_id}/rattacher-fiche")
+async def rattacher_fiche(planning_id: int, request: Request):
+    """Rapproche une fiche technique d'un dossier. Body : { fiche_id }.
+
+    On aligne `ref_produit_norm` — la clé de jointure — sans toucher à
+    `ref_produit`, le libellé que l'atelier lit sur le planning. Attention : une
+    modification ultérieure de `ref_produit` recalcule la clé par trigger et
+    défait ce rapprochement ; c'est le prix à payer pour ne pas réécrire le
+    libellé du dossier dans le dos de l'utilisateur.
+    """
+    require_stock_matieres_admin(request)
+    body = await request.json()
+    fiche_id = body.get("fiche_id")
+    if not isinstance(fiche_id, int):
+        raise HTTPException(400, "fiche_id (entier) requis.")
+
+    with get_db() as conn:
+        _dossier_ou_404(conn, planning_id)
+        ft = conn.execute(
+            "SELECT id, reference, ref_produit_norm FROM fiches_techniques WHERE id=?",
+            (fiche_id,),
+        ).fetchone()
+        if not ft:
+            raise HTTPException(404, "Fiche technique introuvable.")
+        norm = (ft["ref_produit_norm"] or "").strip()
+        if not norm:
+            raise HTTPException(
+                400,
+                "Cette fiche n'a pas de clé produit normalisée — corrigez sa "
+                "référence dans MyProd avant de la rapprocher.",
+            )
+        conn.execute(
+            "UPDATE planning_entries SET ref_produit_norm=? WHERE id=?",
+            (norm, planning_id),
+        )
+        conn.commit()
+    return {"ok": True, "planning_id": planning_id, "fiche_id": fiche_id,
+            "reference": ft["reference"]}
+
+
 @router.get("/api/stock/besoins-matieres/mapping")
 def list_mapping(request: Request):
     """Liste toutes les correspondances FT→MP + valeurs FT non mappées détectées

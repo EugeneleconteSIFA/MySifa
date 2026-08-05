@@ -779,6 +779,21 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-act-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;margin-left:6px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;font-weight:600;font-family:inherit;border-radius:6px;cursor:pointer;transition:all .12s}
 .bes-act-btn:hover{border-color:var(--accent);color:var(--accent)}
 .bes-act-btn.off{opacity:.35;cursor:not-allowed}
+.bes-act-btn.manque{border-color:var(--warn,#d97706);color:var(--warn,#d97706);background:color-mix(in srgb,var(--warn,#d97706) 8%,transparent)}
+.bes-act-btn.manque:hover{background:color-mix(in srgb,var(--warn,#d97706) 18%,transparent)}
+/* Modale de rattachement des documents d'un dossier non chiffre */
+.bes-doc-tabs{display:flex;gap:6px;margin:14px 0 10px}
+.bes-doc-tab{flex:1;padding:8px 12px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:13px;font-weight:600;font-family:inherit;border-radius:8px;cursor:pointer}
+.bes-doc-tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.bes-doc-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;transition:border-color .12s,background .12s}
+.bes-doc-item:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.bes-doc-item-main{flex:1;min-width:0}
+.bes-doc-item-ref{font-weight:700;color:var(--text);font-size:13px}
+.bes-doc-item-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.bes-doc-list{max-height:300px;overflow-y:auto;margin-top:8px}
+.bes-doc-import{margin-top:12px;padding:12px;border:1px dashed var(--border);border-radius:8px}
+.bes-doc-import-hd{font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px}
+.bes-doc-status{font-size:12px;margin-top:8px;line-height:1.5}
 .bes-act-btn.off:hover{border-color:var(--border);color:var(--text2)}
 /* Vue par matiere : sources de fiche technique agregees sous la reference */
 .bes-mat-sources{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.45}
@@ -12565,6 +12580,36 @@ function _besDocBtn(label, ico, url, titre) {
   return b;
 }
 
+// Bouton d'un document manquant. Il n'est pas grisé : c'est une action, pas
+// une absence subie — c'est depuis cette ligne qu'on répare le dossier.
+function _besDocManquantBtn(label, ico, dossier, onglet) {
+  if (!isMatieresAdmin() || S.stockReadOnly) {
+    return _besDocBtn(label, ico, null, 'Ouvrir ' + label);
+  }
+  const b = el('button', {
+    cls: 'bes-act-btn manque',
+    type: 'button',
+    title: 'Aucun ' + label + ' rattaché à ce dossier — cliquer pour en rattacher un',
+  }, iconEl('plus-circle', 13), el('span', {}, label));
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openBesoinDocModal(dossier, onglet);
+  });
+  return b;
+}
+
+function _besDocCell(d) {
+  return el('td', { cls: 'bes-act-cell' },
+    d.of_import_id
+      ? _besDocBtn('OF', 'file-text', '/api/of/' + d.of_import_id + '/pdf-preview', 'Ouvrir l\'OF')
+      : _besDocManquantBtn('OF', 'file-text', d, 'of'),
+    d.ft_id
+      ? _besDocBtn('Fiche', 'clipboard', '/api/fiches-techniques/' + d.ft_id + '/pdf-preview',
+          'Ouvrir la fiche technique')
+      : _besDocManquantBtn('Fiche', 'clipboard', d, 'fiche'),
+  );
+}
+
 function _buildBesoinsDossierTable(dos) {
   const dossiers = dos.dossiers || [];
   if (!dossiers.length) {
@@ -12606,18 +12651,13 @@ function _buildBesoinsDossierTable(dos) {
         (d.numero_of || d.ref_produit) ? el('div', { cls: 'bes-dossier-meta' },
           [d.numero_of ? 'OF ' + d.numero_of : null, d.ref_produit].filter(Boolean).join(' · ')) : null,
         sansBesoin ? el('div', { cls: 'bes-warn-note' },
-          'Fiche technique manquante ou incomplète') : null,
+          (!d.of_import_id && !d.ft_id) ? 'Ni OF ni fiche technique rattachés'
+            : (!d.ft_id ? 'Fiche technique non rapprochée'
+                        : 'Fiche technique incomplète')) : null,
       ),
       el('td', {}, _fmtDate(d.date_livraison || d.planned_end)),
       ...BESOINS_KIND_ORDER.map(k => _besKindCell(parKind[k])),
-      el('td', { cls: 'bes-act-cell' },
-        _besDocBtn('OF', 'file-text',
-          d.of_import_id ? '/api/of/' + d.of_import_id + '/pdf-preview' : null,
-          'Ouvrir l\'OF'),
-        _besDocBtn('Fiche', 'clipboard',
-          d.ft_id ? '/api/fiches-techniques/' + d.ft_id + '/pdf-preview' : null,
-          'Ouvrir la fiche technique'),
-      ),
+      _besDocCell(d),
     ));
   });
 
@@ -12635,6 +12675,171 @@ function _buildBesoinsDossierTable(dos) {
 
   table.appendChild(tbody);
   return el('div', { cls: 'bes-card bes-scroll-x' }, table);
+}
+
+// ── Rattacher les documents d'un dossier non chiffré ──────────────────────
+// Deux causes possibles à un « n.c. » : pas d'OF, ou pas de fiche technique
+// rapprochée. Les deux se réparent ici, et l'écriture va dans les tables de
+// référence — le dossier redevient complet dans MyProd et sur le planning, pas
+// seulement dans cet écran.
+async function openBesoinDocModal(dossier, ongletInitial) {
+  closeMroot();
+  const planningId = dossier.id;
+  let onglet = ongletInitial === 'fiche' ? 'fiche' : 'of';
+  let data = null;
+
+  const overlay = el('div', { cls: 'modal-overlay', on: { click: e => { if (e.target === overlay) closeMroot(); } } });
+  const listWrap = el('div', { cls: 'bes-doc-list' });
+  const statut = el('div', { cls: 'bes-doc-status' });
+  const search = el('input', { cls: 'bes-search-input', placeholder: 'Rechercher…' });
+
+  const tabOf = el('button', { cls: 'bes-doc-tab', type: 'button' }, 'Ordre de fabrication');
+  const tabFt = el('button', { cls: 'bes-doc-tab', type: 'button' }, 'Fiche technique');
+
+  // ── Import d'un OF externe (PDF) ───────────────────────────────────────
+  // On réutilise le moteur d'import de MyProd : /api/of/parse lit le PDF,
+  // /api/of/validate crée l'OF. Le rattachement explicite qui suit couvre le
+  // cas où le numéro d'OF du PDF ne correspond pas au libellé du dossier.
+  const fileInp = el('input', { type: 'file', attrs: { accept: '.pdf' }, style: { display: 'none' } });
+  const importBtn = el('button', { cls: 'btn btn-sec btn-sm', type: 'button' },
+    iconEl('upload', 13), el('span', {}, ' Importer un PDF'));
+  const importWrap = el('div', { cls: 'bes-doc-import' },
+    el('div', { cls: 'bes-doc-import-hd' }, 'L\'OF n\'est pas encore dans MySifa ?'),
+    el('div', { style: { fontSize: '12px', color: 'var(--muted)', marginBottom: '8px' } },
+      'Dépose le PDF : il est lu, enregistré comme OF, puis rattaché à ce dossier.'),
+    importBtn, fileInp,
+  );
+
+  function setStatut(txt, couleur) {
+    statut.textContent = txt || '';
+    statut.style.color = couleur || 'var(--muted)';
+  }
+
+  async function charger(q) {
+    setStatut('Chargement…');
+    try {
+      data = await api('/api/stock/besoins-matieres/dossier/' + planningId
+        + '/documents' + (q ? '?q=' + encodeURIComponent(q) : ''));
+      setStatut('');
+    } catch (e) {
+      setStatut('Erreur : ' + (e.message || 'chargement impossible'), 'var(--danger)');
+      data = null;
+    }
+    rendre();
+  }
+
+  async function rattacher(url, corps, libelle) {
+    setStatut('Rattachement…');
+    try {
+      await api(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(corps),
+      });
+      closeMroot();
+      showToast(libelle + ' rattaché — le dossier est mis à jour partout dans MySifa.', 'success');
+      await loadBesoinsMatieres();
+    } catch (e) {
+      setStatut('Erreur : ' + (e.message || 'rattachement impossible'), 'var(--danger)');
+    }
+  }
+
+  function rendre() {
+    tabOf.classList.toggle('active', onglet === 'of');
+    tabFt.classList.toggle('active', onglet === 'fiche');
+    importWrap.style.display = onglet === 'of' ? '' : 'none';
+    search.placeholder = onglet === 'of'
+      ? 'Rechercher un OF (n°, référence, machine)…'
+      : 'Rechercher une fiche (référence, désignation, client)…';
+
+    listWrap.innerHTML = '';
+    const items = !data ? [] : (onglet === 'of' ? (data.ofs || []) : (data.fiches || []));
+    if (!items.length) {
+      listWrap.appendChild(el('div', {
+        style: { padding: '16px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' },
+      }, data ? 'Aucun document trouvé — essaie une recherche.' : '—'));
+      return;
+    }
+    items.forEach(it => {
+      const ref = onglet === 'of' ? (it.of_numero || '—') : (it.reference || '—');
+      const meta = onglet === 'of'
+        ? [it.reference, it.machine,
+           it.qte_etiquettes ? Number(it.qte_etiquettes).toLocaleString('fr-FR') + ' étiq.' : null,
+           it.date_creation].filter(Boolean).join(' · ')
+        : [it.designation, it.client, it.machine].filter(Boolean).join(' · ');
+      listWrap.appendChild(el('div', {
+        cls: 'bes-doc-item',
+        on: { click: () => onglet === 'of'
+          ? rattacher('/api/stock/besoins-matieres/dossier/' + planningId + '/rattacher-of',
+              { of_id: it.id }, 'OF ' + ref)
+          : rattacher('/api/stock/besoins-matieres/dossier/' + planningId + '/rattacher-fiche',
+              { fiche_id: it.id }, 'Fiche ' + ref) },
+      },
+        el('div', { cls: 'bes-doc-item-main' },
+          el('div', { cls: 'bes-doc-item-ref' }, ref),
+          meta ? el('div', { cls: 'bes-doc-item-meta' }, meta) : null,
+        ),
+        el('span', { cls: 'bes-btn-associate' }, 'Rattacher'),
+      ));
+    });
+  }
+
+  tabOf.addEventListener('click', () => { onglet = 'of'; search.value = ''; charger(''); });
+  tabFt.addEventListener('click', () => { onglet = 'fiche'; search.value = ''; charger(''); });
+
+  let tmr = null;
+  search.addEventListener('input', () => {
+    clearTimeout(tmr);
+    tmr = setTimeout(() => charger((search.value || '').trim()), 250);
+  });
+
+  importBtn.addEventListener('click', () => fileInp.click());
+  fileInp.addEventListener('change', async () => {
+    const f = fileInp.files && fileInp.files[0];
+    if (!f) return;
+    importBtn.disabled = true;
+    try {
+      setStatut('Lecture du PDF…');
+      const fd = new FormData();
+      fd.append('file', f);
+      const champs = await api('/api/of/parse', { method: 'POST', body: fd });
+      setStatut('OF n° ' + (champs.of_numero || '?') + ' lu — enregistrement…');
+      const fd2 = new FormData();
+      fd2.append('file', f);
+      fd2.append('data', JSON.stringify(champs));
+      const cree = await api('/api/of/validate', { method: 'POST', body: fd2 });
+      await rattacher('/api/stock/besoins-matieres/dossier/' + planningId + '/rattacher-of',
+        { of_id: cree.id }, 'OF ' + (champs.of_numero || cree.id));
+    } catch (e) {
+      setStatut('Import impossible : ' + (e.message || 'erreur inconnue'), 'var(--danger)');
+    } finally {
+      importBtn.disabled = false;
+      fileInp.value = '';
+    }
+  });
+
+  const sheet = el('div', { cls: 'modal-sheet', style: { maxWidth: '620px' } },
+    el('span', { cls: 'modal-handle' }),
+    el('div', { cls: 'modal-title' }, 'Rattacher les documents du dossier'),
+    el('div', { cls: 'modal-sub' },
+      el('strong', {}, dossier.reference || '—'),
+      [dossier.numero_of ? ' · OF ' + dossier.numero_of : '',
+       dossier.ref_produit ? ' · ' + dossier.ref_produit : ''].join(''),
+    ),
+    el('div', { cls: 'bes-doc-tabs' }, tabOf, tabFt),
+    search,
+    listWrap,
+    importWrap,
+    statut,
+    el('div', { cls: 'modal-actions', style: { marginTop: '14px' } },
+      el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Fermer'),
+    ),
+  );
+  sheet.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
+  rendre();
+  charger('');
 }
 
 function openBesoinAssocierModal(kind, sourceValue) {
