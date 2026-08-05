@@ -2349,8 +2349,17 @@ async function loadMessagesUnread(){
 // Pastille « mes tâches » : tâches ouvertes qui me sont assignées. L'endpoint
 // répond 0 plutôt qu'une erreur pour un rôle non autorisé — une pastille ne
 // doit jamais faire échouer le chargement du portail.
+//
+// Le compteur suit la matrice d'accès, pas le rôle : quiconque peut ouvrir
+// l'app doit voir ses tâches en attente. Le garde-fou `isSuperAdmin` d'origine
+// laissait la pastille muette pour tous les autres services.
+function _peutVoirTaches(u){
+  const m=(u&&u.access_map&&u.access_map.taches)||{};
+  const niv=m._app||(isSuperAdmin(u)?'admin':'none');
+  return niv!=='none';
+}
 async function loadTachesCount(){
-  if(!isSuperAdmin(S.user))return;
+  if(!_peutVoirTaches(S.user))return;
   const r=await api('/api/taches/badge');
   if(r && typeof r.count==='number') set({tachesCount:r.count});
 }

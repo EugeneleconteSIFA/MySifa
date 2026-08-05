@@ -15,10 +15,14 @@ tâches existantes : le service du créateur, donc `superadmin` pour l'historiqu
 de dev — invisible aux autres services, ce qui est le comportement voulu.
 
 **Le seed de la matrice d'accès.** L'app `taches` entre dans
-`role_access_defaults` avec `none` partout sauf direction et superadmin, qui
-gardent l'accès total qu'ils avaient déjà. Autrement dit : après cette
-migration, RIEN ne change pour personne. L'ouverture d'un service se fait
-ensuite dans Paramètres → Accès, sans redéploiement.
+`role_access_defaults` avec `write` pour chaque service et `admin` pour la
+direction et le super administrateur. C'est l'objectif du chantier : chacun
+gère ses tâches et celles de son service. Une tâche peut être assignée à
+n'importe qui, donc tout le monde doit pouvoir ouvrir l'application — un
+assigné qui reçoit un 403 en cliquant sur sa pastille n'aurait aucun sens.
+
+Un service qu'on ne veut pas encore ouvrir se repasse à `none` dans
+Paramètres → Accès, avant promotion et sans redéploiement.
 
 `INSERT OR IGNORE` : un niveau déjà réglé à la main n'est jamais réécrit, la
 migration peut donc être rejouée sans annuler une ouverture déjà décidée.
@@ -62,13 +66,15 @@ def appliquer(conn):
             ROLE_SUPERADMIN,
         )
         maintenant = datetime.now().isoformat(timespec="seconds")
+        # admin = tous services (transfert d'une tâche d'un service à l'autre).
+        # write = son propre service, ce que fait un service au quotidien.
         acces_total = {ROLE_DIRECTION, ROLE_SUPERADMIN}
         for role in sorted(ASSIGNABLE_ROLES | acces_total):
             cur = conn.execute(
                 "INSERT OR IGNORE INTO role_access_defaults "
                 "(role, app_id, module_id, level, updated_at, updated_by) "
                 "VALUES (?,'taches','_app',?,?,?)",
-                (role, "admin" if role in acces_total else "none",
+                (role, "admin" if role in acces_total else "write",
                  maintenant, "migration " + NOM),
             )
             seedes += cur.rowcount

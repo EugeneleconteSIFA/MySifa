@@ -224,6 +224,11 @@ td .pile .avatar,td .pile .plus{box-shadow:0 0 0 2px var(--card)}
 .asg-pop .asg-opt.actif{color:var(--accent)}
 .asg-pop .asg-opt input{width:14px;height:14px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;margin:0}
 .asg-pop .asg-opt .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Service de la personne : la liste couvre tous les services, deux prénoms
+   identiques doivent rester distinguables d'un coup d'œil. */
+.asg-pop .asg-opt .asg-svc{flex-shrink:0;font-size:10.5px;color:var(--muted);
+  background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:1px 6px}
+.asg-pop .asg-opt.actif .asg-svc{color:var(--accent);border-color:var(--accent)}
 .asg-rien{font-size:12px;color:var(--muted);padding:10px 8px;text-align:center}
 
 /* Corbeille d'archivage : discrète au repos, elle ne s'ouvre que pendant un
@@ -638,9 +643,9 @@ function champAssignes(hostId, selection, onChange, connus){
   if(!host)return;
   let ids=(selection||[]).slice();
   let ouvert=false;
-  // `connus` = les assignés réels de la tâche. Seuls les super admins sont
-  // proposés à l'assignation, mais une tâche plus ancienne peut porter
-  // quelqu'un d'autre : on l'affiche quand même pour pouvoir le retirer.
+  // `connus` = les assignés réels de la tâche. La liste proposée couvre tous
+  // les services, mais une tâche plus ancienne peut porter quelqu'un qui n'y
+  // figure plus : on l'affiche quand même pour pouvoir le retirer.
   const horsListe=(connus||[]).filter(u=>!((S.meta&&S.meta.users)||[]).some(x=>x.id===u.id));
 
   function tousUsers(){
@@ -662,7 +667,7 @@ function champAssignes(hostId, selection, onChange, connus){
   }
   function popHtml(){
     return '<div class="asg-pop">'+
-      '<input type="text" class="asg-q" placeholder="Rechercher une personne…" autocomplete="off">'+
+      '<input type="text" class="asg-q" placeholder="Rechercher (nom, service…)" autocomplete="off">'+
       '<div class="asg-list"></div>'+
     '</div>';
   }
@@ -670,7 +675,9 @@ function champAssignes(hostId, selection, onChange, connus){
     const zone=host.querySelector('.asg-list');
     if(!zone)return;
     const q=(filtre||'').trim().toLowerCase();
-    const users=tousUsers().filter(u=>!q||String(u.nom||'').toLowerCase().includes(q));
+    const users=tousUsers().filter(u=>!q
+      ||String(u.nom||'').toLowerCase().includes(q)
+      ||String(u.service_label||'').toLowerCase().includes(q));
     if(!users.length){
       zone.innerHTML='<div class="asg-rien">Aucun résultat pour « '+esc(filtre)+' »</div>';
       return;
@@ -681,6 +688,7 @@ function champAssignes(hostId, selection, onChange, connus){
         '<input type="checkbox"'+(on?' checked':'')+'>'+
         avatarHtml(u.nom,u.avatar_url)+
         '<span class="n">'+esc(u.nom||'')+'</span>'+
+        (u.service_label?'<span class="asg-svc">'+esc(u.service_label)+'</span>':'')+
       '</label>';
     }).join('');
     zone.querySelectorAll('.asg-opt').forEach(el=>{
