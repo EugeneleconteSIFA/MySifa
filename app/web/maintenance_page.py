@@ -4036,7 +4036,11 @@ function _makeEventBlock(item){
   const lanesCount = item.lanesCount || 1;
   const lane = item.lane || 0;
   const div = document.createElement('div');
-  div.className = 'cal-event' + (ev.template_id ? ' is-from-template' : '')
+  // v2.7.2 : la pastille recurrence suivait template_id seul, donc elle
+  // s'affichait aussi sur les creneaux composes a la main ayant simplement
+  // importe un modele. Seul template_origin_date atteste d'une occurrence
+  // reellement generee par une recurrence.
+  div.className = 'cal-event' + (_calIsRecurOccurrence(ev) ? ' is-from-template' : '')
                               + (_calIsPastEvent(ev) ? ' is-closed' : '');  // v2.7.0
   div.style.top = top + 'px';
   div.style.height = height + 'px';
@@ -4140,6 +4144,13 @@ function _calPeriodKey(iso, rtype){
 }
 // Type de recurrence du modele dont l'evenement est issu, ou null si ce n'est
 // pas une occurrence generee (creneau compose a la main : aucune contrainte).
+// v2.7.2 : un creneau n'est une occurrence de recurrence que s'il porte a la
+// fois template_id ET template_origin_date. template_id seul signifie
+// « un modele a ete importe dans la liste d'operations » : simple raccourci
+// de saisie, sans lien de vie avec le modele.
+function _calIsRecurOccurrence(ev){
+  return !!(ev && ev.template_id && ev.template_origin_date);
+}
 function _calRecurTypeOf(ev){
   if(!ev || !ev.template_origin_date || !ev.template_id) return null;
   try{
@@ -4595,7 +4606,7 @@ function _makeClusterBlock(cluster){
   const single = (cluster.items.length === 1);
   // v2.5.27 : hoiste ev pour l'usage ci-dessous (corrige aussi le bug pre-existant qui accede a ev.template_id).
   const _ev0 = single ? cluster.items[0] : null;
-  div.className = 'cal-event' + (single ? '' : ' cal-event-merged') + (_ev0 && _ev0.template_id ? ' is-from-template' : '');
+  div.className = 'cal-event' + (single ? '' : ' cal-event-merged') + (_calIsRecurOccurrence(_ev0) ? ' is-from-template' : '');  // v2.7.2
   div.style.top = top + 'px';
   div.style.height = height + 'px';
   if(single && cluster.items[0].opNiveau){
@@ -13767,7 +13778,7 @@ async function openTemplateEditor(templateId, focusDeleted){
       if(lblEl) lblEl.textContent = 'Enregistrer';
       // Avertissement resync
       if(warnEl){
-        warnEl.innerHTML = '<strong>Attention :</strong> modifier ce modèle écrasera automatiquement les opérations des créneaux futurs qui en dépendent (les horaires, opérateurs et statuts sont préservés).';
+        warnEl.innerHTML = '<strong>Attention :</strong> les modifications se répercutent sur les créneaux futurs issus de la récurrence de ce modèle. Changer la <strong>liste d\'opérations</strong> resynchronise leurs opérations, sans toucher aux dates ni aux horaires. Changer la <strong>règle de récurrence</strong> replace ces créneaux aux nouvelles dates. Les créneaux composés à la main, même après import de ce modèle, ne sont jamais touchés.';
         warnEl.style.display = 'block';
       }
     }catch(e){ showToast('Erreur : ' + e.message, 'danger'); return; }

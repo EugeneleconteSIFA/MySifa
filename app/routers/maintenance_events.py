@@ -521,7 +521,11 @@ def list_deleted_events(request: Request, template_id: Optional[int] = None):
     where = ["deleted_at IS NOT NULL"]
     params: List[Any] = []
     if template_id is not None:
+        # v2.7.2 : filtre aligne sur deleted_count. Sans template_origin_date, le
+        # panel listait aussi les creneaux manuels ayant importe ce modele, alors
+        # que le badge ne les compte pas -- comptage et liste se contredisaient.
         where.append("template_id = ?")
+        where.append("template_origin_date IS NOT NULL")
         params.append(template_id)
     sql = "SELECT id FROM maintenance_events WHERE " + " AND ".join(where) + " ORDER BY date_prevue DESC, heure_debut DESC"
     with get_db() as conn:
@@ -1877,12 +1881,20 @@ def list_templates(request: Request):
                       t.recurrence_month, t.recurrence_time_start, t.recurrence_time_end,
                       t.recurrence_active, t.default_operators_csv,
                       (SELECT COUNT(*) FROM maintenance_template_ops o WHERE o.template_id=t.id) AS ops_count,
+                      -- v2.7.2 : ces compteurs alimentent le badge « N creneaux crees »
+                      -- et la modale de suppression, qui annonce combien de creneaux
+                      -- vont disparaitre. Depuis que la cascade ne touche que les
+                      -- occurrences generees, ils doivent compter la meme population,
+                      -- sinon la modale promet plus de suppressions qu'il n'y en a.
                       (SELECT COUNT(*) FROM maintenance_events e
-                        WHERE e.template_id=t.id AND e.deleted_at IS NULL) AS events_count,
+                        WHERE e.template_id=t.id AND e.template_origin_date IS NOT NULL
+                          AND e.deleted_at IS NULL) AS events_count,
                       (SELECT COUNT(*) FROM maintenance_events e
-                        WHERE e.template_id=t.id AND e.deleted_at IS NOT NULL) AS deleted_count,
+                        WHERE e.template_id=t.id AND e.template_origin_date IS NOT NULL
+                          AND e.deleted_at IS NOT NULL) AS deleted_count,
                       (SELECT MAX(date_prevue) FROM maintenance_events e
-                        WHERE e.template_id=t.id AND e.deleted_at IS NULL) AS last_event_date
+                        WHERE e.template_id=t.id AND e.template_origin_date IS NOT NULL
+                          AND e.deleted_at IS NULL) AS last_event_date
                FROM maintenance_templates t
                ORDER BY t.name""",
         ).fetchall()
@@ -2119,9 +2131,14 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
         # Les creneaux deja tombstoned sont ignores (deja hors calendrier).
         if body.recurrence_active is False:
             today = datetime.now(_PARIS).strftime("%Y-%m-%d")
+            # v2.7.2 : le filtre portait sur template_id seul. Un creneau compose
+            # a la main qui avait simplement importe ce modele (raccourci de
+            # saisie) etait donc supprime avec les occurrences. On restreint aux
+            # occurrences reellement generees par la recurrence.
             future_ids = [r["id"] for r in conn.execute(
                 "SELECT id FROM maintenance_events "
-                "WHERE template_id = ? AND date_prevue >= ?",
+                "WHERE template_id = ? AND template_origin_date IS NOT NULL "
+                "  AND date_prevue >= ?",
                 (template_id, today),
             ).fetchall()]
             for eid in future_ids:
@@ -2241,16 +2258,24 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
 
 @router.delete("/api/maintenance/templates/{template_id}")
 def delete_template(template_id: int, request: Request):
-    """Supprime un template et, en cascade, les créneaux futurs qui en dépendent.
-    (Les créneaux passés restent, avec template_id → NULL.)"""
+    """Supprime un template et, en cascade, les occurrences futures de sa
+    récurrence (template_origin_date renseigné).
+    Les créneaux passés, ainsi que les créneaux composés à la main ayant
+    seulement importé ce modèle, survivent avec template_id → NULL."""
     _require_admin(request)
     with get_db() as conn:
         if not conn.execute("SELECT 1 FROM maintenance_templates WHERE id = ?", (template_id,)).fetchone():
             raise HTTPException(status_code=404, detail="Modèle introuvable")
         today = datetime.now(_PARIS).strftime("%Y-%m-%d")
         # Cascade sur les créneaux futurs (>= aujourd'hui)
+        # v2.7.2 : meme correctif que sur la desactivation de recurrence. La
+        # cascade emportait les creneaux composes a la main ayant importe ce
+        # modele. Ils sont desormais preserves : le UPDATE de detachement plus
+        # bas leur met simplement template_id a NULL.
         future_ids = [r["id"] for r in conn.execute(
-            "SELECT id FROM maintenance_events WHERE template_id = ? AND date_prevue >= ?",
+            "SELECT id FROM maintenance_events "
+            "WHERE template_id = ? AND template_origin_date IS NOT NULL "
+            "  AND date_prevue >= ?",
             (template_id, today),
         ).fetchall()]
         for eid in future_ids:
@@ -2261,8 +2286,13 @@ def delete_template(template_id: int, request: Request):
         # restaurées). Sans ça, le détachement ci-dessous leur met template_id
         # à NULL : plus aucun modèle pour les afficher, donc invisibles et
         # irrestaurables — des lignes fantômes en base.
+        # v2.7.2 : restreint aux occurrences generees. Le tombstone d'un creneau
+        # compose a la main est une suppression ordinaire, il doit survivre au
+        # detachement comme n'importe quel creneau manuel.
         ghost_ids = [r["id"] for r in conn.execute(
-            "SELECT id FROM maintenance_events WHERE template_id = ? AND deleted_at IS NOT NULL",
+            "SELECT id FROM maintenance_events "
+            "WHERE template_id = ? AND template_origin_date IS NOT NULL "
+            "  AND deleted_at IS NOT NULL",
             (template_id,),
         ).fetchall()]
         for eid in ghost_ids:
