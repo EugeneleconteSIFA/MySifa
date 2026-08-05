@@ -10843,10 +10843,14 @@ function renderMobileNavbar(){
 // ══════════════════════════════════════════════════════════════════
 function _sheetRoles(){
   const role=(S.user&&S.user.role)||'';
+  const aa=(S.user&&S.user.app_access)||null;
   return {
     isSuper: role==='superadmin',
     isDir: role==='direction',
     isAdmin: (role==='administration'||role==='administration_ventes'||role==='administration_technique'),
+    // Parametres : acces sectionne (config.py ROLES_SETTINGS_* -> union ROLES_SETTINGS),
+    // deja reflete par app_access.settings cote serveur.
+    canSettings: aa ? !!aa.settings : (role==='superadmin'||role==='direction'),
     role,
   };
 }
@@ -10854,7 +10858,7 @@ function openProfileSheet(){
   const sheet=document.getElementById('msf-sheet-root');
   const bd=document.getElementById('msf-sheet-backdrop');
   if(!sheet||!bd) return;
-  const {isSuper,isDir,isAdmin,role}=_sheetRoles();
+  const {isSuper,isDir,isAdmin,canSettings,role}=_sheetRoles();
   const nom=(S.user&&S.user.nom)||'';
   const initials=_mnbInitials(nom);
   const msgUnread=Number(S.msgUnread||0);
@@ -10876,7 +10880,7 @@ function openProfileSheet(){
   }
   const items=[];
   items.push(item('profil', ICO.user, 'Mon profil', ''));
-  if(isSuper||isDir){
+  if(canSettings){
     items.push(item('settings', ICO.sliders, 'Paramètres', ''));
   }
   if(isSuper){

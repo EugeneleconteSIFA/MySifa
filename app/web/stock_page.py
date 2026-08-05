@@ -803,6 +803,8 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-valid-btn:not(:disabled):hover{filter:brightness(1.15)}
 .bes-destock-ok{color:var(--success,#22c55e);font-weight:700;font-size:12px}
 .bes-destock-todo{color:var(--warn,#d97706);font-weight:700;font-size:12px}
+/* Laize : une bobine ne se commande, ne se stocke et ne se destocke que dans sa laize */
+.bes-laize-chip{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--text2)}
 .bes-act-btn.off:hover{border-color:var(--border);color:var(--text2)}
 /* Vue par matiere : sources de fiche technique agregees sous la reference */
 .bes-mat-sources{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.45}
@@ -12299,6 +12301,7 @@ function _buildBesoinsMatiereTable(ech) {
     table.appendChild(el('thead', {}, el('tr', {},
       el('th', {}, 'Référence'),
       el('th', {}, 'Catégorie'),
+      el('th', {}, 'Laize'),
       el('th', { cls: 'num' }, 'Besoin 7j'),
       el('th', { cls: 'num' }, 'Besoin 15j'),
       el('th', { cls: 'num' }, 'Total'),
@@ -12330,6 +12333,11 @@ function _buildBesoinsMatiereTable(ech) {
         ),
         el('td', {}, el('span', { cls: 'bes-mat-cat' },
           BESOINS_KIND_LABELS[m.kind] || m.matiere_categorie || m.kind)),
+        // Une bobine se commande par laize : deux laizes d'une même référence
+        // sont deux lignes distinctes, chacune avec son stock et son manque.
+        el('td', {}, m.laize_mm
+          ? el('span', { cls: 'bes-laize-chip' }, _fmtQte(m.laize_mm, 'mm'))
+          : el('span', { style: { color: 'var(--border)' } }, '—')),
         _besQteCell(m.besoin_7j, m.unite),
         _besQteCell(m.besoin_15j, m.unite),
         el('td', { cls: 'num', style: { fontWeight: '700' } },
@@ -12826,6 +12834,7 @@ function _buildBesoinsDossierTable(dos) {
   const table = el('table', { cls: 'bes-table' });
   table.appendChild(el('thead', {}, el('tr', {},
     el('th', {}, 'Dossier'),
+    el('th', {}, 'Laize'),
     el('th', {}, 'Livraison'),
     ...BESOINS_KIND_ORDER.map(k => el('th', {
       title: BESOINS_KIND_UNITE_NOTE[k] || '',
@@ -12862,6 +12871,9 @@ function _buildBesoinsDossierTable(dos) {
             : (!d.ft_id ? 'Fiche technique non rapprochée'
                         : 'Fiche technique incomplète')) : null,
       ),
+      el('td', {}, d.laize
+        ? el('span', { cls: 'bes-laize-chip' }, _fmtQte(d.laize, 'mm'))
+        : el('span', { style: { color: 'var(--border)' } }, '—')),
       el('td', {}, _fmtDate(d.date_livraison || d.planned_end)),
       ...BESOINS_KIND_ORDER.map(k => _besKindCell(parKind[k])),
       _besDocCell(d),
@@ -12869,7 +12881,7 @@ function _buildBesoinsDossierTable(dos) {
   });
 
   tbody.appendChild(el('tr', { cls: 'bes-total-row' },
-    el('td', { colspan: '2' }, `Total — ${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`),
+    el('td', { colspan: '3' }, `Total — ${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`),
     ...BESOINS_KIND_ORDER.map(k => el('td', {
       cls: 'bes-kind-cell',
       title: totaux[k].nc ? totaux[k].nc + ' dossier(s) non chiffré(s), hors total' : '',
