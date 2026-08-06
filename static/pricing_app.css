@@ -442,6 +442,40 @@ table.recap-table td:last-child{border-right:none}
 .tab:hover{color:var(--text)}
 .tab.on{background:var(--accent);color:var(--bg)}
 
+/* Bascule d'affichage des matières MyStock : groupé par référence, ou une ligne
+   par déclinaison. Même boîtier que .tabs — c'est le même geste, en icônes :
+   deux choix seulement, et le pictogramme dit la forme du tableau mieux qu'un
+   mot. Le libellé complet vit dans l'infobulle. */
+.view-switch{display:inline-flex;gap:3px;background:var(--card);border:1px solid var(--border);
+  border-radius:10px;padding:3px}
+.vs-btn{border:none;background:transparent;color:var(--muted);font:inherit;cursor:pointer;
+  width:34px;height:34px;border-radius:8px;display:inline-flex;align-items:center;
+  justify-content:center;transition:background .15s,color .15s}
+.vs-btn:hover{color:var(--text);background:var(--bg)}
+.vs-btn.on{background:var(--accent);color:var(--bg)}
+.vs-btn.on:hover{background:var(--accent);color:var(--bg)}
+
+/* ─── Vue liste : une ligne par déclinaison ─── */
+/* Vue de lecture : on y cherche un coût, on y compare deux grammages. D'où des
+   lignes plus aérées, le coût €/m² mis en avant, et rien à saisir. */
+table.msl-table td{padding:12px}
+.msl-row{cursor:pointer}
+.msl-ref{font-family:monospace;white-space:nowrap}
+.msl-des{color:var(--text2);max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msl-decl{white-space:nowrap}
+.msl-prix{font-variant-numeric:tabular-nums;white-space:nowrap}
+.msl-coutcell{white-space:nowrap}
+.msl-cout{font-weight:700;font-size:14px;color:var(--accent);font-variant-numeric:tabular-nums}
+/* « +2 » : d'autres fournisseurs existent sur cette déclinaison, ils se voient
+   dans la vue par référence. Discret — ce n'est pas l'objet de cette vue. */
+.msl-plus{display:inline-block;margin-left:5px;padding:1px 6px;border-radius:5px;
+  background:var(--bg);border:1px solid var(--border);color:var(--muted);
+  font-size:10px;font-weight:700}
+/* Référence sans aucune déclinaison : elle reste dans la liste, sinon on
+   l'oublie — mais elle ne se donne pas des airs de ligne complète. */
+.msl-vide{cursor:default}
+.msl-vide td{opacity:.72}
+
 .ms-hint{font-size:12px;color:var(--text2);background:var(--card);border:1px solid var(--border);
   border-left:3px solid var(--accent);border-radius:8px;padding:11px 14px;margin-bottom:12px;line-height:1.6}
 .ms-hint strong{color:var(--text)}
