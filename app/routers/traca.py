@@ -34,7 +34,7 @@ from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 
-from config import FSC_CLAIM_LABELS, ROLES_TRACA_VIEWER
+from config import EXPE_MOTIFS_SANS_DOSSIER, FSC_CLAIM_LABELS, ROLES_TRACA_VIEWER
 from database import get_db
 from services.auth_service import get_current_user
 
@@ -732,17 +732,39 @@ def traca_chaine(request: Request, type: str = "", id: str = ""):
                 )
             elif ref:
                 ruptures_e = []
+            elif int(d_exp.get("sans_dossier") or 0) == 1:
+                # Déclaré hors production : chaîne courte mais COMPLÈTE. Le
+                # motif tient lieu de preuve, comme le BL partenaire tient lieu
+                # de preuve pour une livraison directe. Signaler une rupture
+                # ici reviendrait à reprocher à une expédition de palettes
+                # vides de ne pas avoir consommé de bobines.
+                ruptures_e = []
             else:
                 ruptures_e = [
-                    "Cette expédition n'est rattachée à aucun dossier : "
-                    "la chaîne ne peut pas remonter jusqu'à la matière."
+                    "Cette expédition n'est rattachée à aucun dossier et ne déclare "
+                    "aucun motif : la chaîne ne peut pas remonter jusqu'à la matière, "
+                    "et rien ne dit si c'est normal."
                 ]
+
+            hors_production = (
+                None if int(d_exp.get("sans_dossier") or 0) != 1
+                else {
+                    "motif": d_exp.get("sans_dossier_motif"),
+                    "motif_label": EXPE_MOTIFS_SANS_DOSSIER.get(
+                        (d_exp.get("sans_dossier_motif") or ""),
+                        d_exp.get("sans_dossier_motif") or "",
+                    ),
+                    "note": d_exp.get("sans_dossier_note"),
+                    "declare_par": d_exp.get("sans_dossier_par"),
+                    "declare_le": d_exp.get("sans_dossier_le"),
+                }
+            )
 
             # Une expédition de marchandise fabriquée sans lot rattaché n'est
             # pas fausse — c'est le cas de toutes celles antérieures au suivi.
             # Mais l'auditeur doit savoir qu'il lit une déduction par le
             # dossier et non la sortie physique elle-même.
-            if not negoce_direct and not lots_expedies:
+            if not negoce_direct and not hors_production and not lots_expedies:
                 ruptures_e = ruptures_e + [
                     "Aucun lot rattaché à cette sortie : le lien entre les palettes "
                     "parties et le dossier repose sur une déduction, pas sur "
@@ -754,6 +776,7 @@ def traca_chaine(request: Request, type: str = "", id: str = ""):
                 "expedition": d_exp,
                 "reconstitue": (d_exp.get("dossier_source") or "") == "reconstitue",
                 "negoce_direct": negoce_direct,
+                "hors_production": hors_production,
                 "lots_expedies": lots_expedies,
                 "dossiers": [branche] if branche else [],
                 "synthese": {
@@ -763,7 +786,12 @@ def traca_chaine(request: Request, type: str = "", id: str = ""):
                         float(l.get("quantite") or 0) for l in lots_expedies
                     ),
                     "preuve_sortie": "directe" if lots_expedies else "deduite",
-                    "origine": "negoce_direct" if negoce_direct else ("fabrication" if ref else "inconnue"),
+                    "origine": (
+                        "negoce_direct" if negoce_direct
+                        else "fabrication" if ref
+                        else "hors_production" if hors_production
+                        else "inconnue"
+                    ),
                     "ruptures": ruptures_e,
                     "tronque": False,
                 },

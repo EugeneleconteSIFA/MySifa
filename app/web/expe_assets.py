@@ -3540,6 +3540,13 @@ EXPE_MAIN_CSS = r"""
 .expe-field label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
 .expe-field input,.expe-field select{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;font-family:inherit;outline:none}
 .expe-field input:focus,.expe-field select:focus{border-color:var(--accent)}
+/* Rattachement production — occupe toute la largeur : c'est la première
+   décision du formulaire, pas un champ parmi douze. */
+.expe-field--wide{grid-column:1/-1}
+.expe-field--wide select{margin-top:6px}
+.expe-field--wide input{margin-top:6px}
+.expe-rattach-ok{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:8px;
+  background:var(--accent-bg,rgba(58,123,213,.1));color:var(--accent);font-size:12px;font-weight:600}
 .expe-help{font-size:10px;color:var(--muted);margin-top:4px}
 .expe-departs-table tbody tr:nth-child(even) td{background:rgba(148,163,184,.06)}
 .expe-departs-table tbody tr:hover td{background:rgba(34,211,238,.06)}
@@ -4305,6 +4312,9 @@ function expeOpenDepartModal(prefill, mode){
       poids_total_kg: (src.poids_total_kg!=null && src.poids_total_kg!=='') ? String(src.poids_total_kg) : '',
       date_livraison: (src.date_livraison||'') ? String(src.date_livraison).slice(0,10) : '',
       planning_entry_id: (src.planning_entry_id!=null && src.planning_entry_id!=='') ? String(src.planning_entry_id) : '',
+      sans_dossier: src.sans_dossier ? 1 : 0,
+      sans_dossier_motif: src.sans_dossier_motif || '',
+      sans_dossier_note: src.sans_dossier_note || '',
       palette_europe: src.palette_europe ? 1 : 0,
     }
   });
@@ -4358,6 +4368,9 @@ function expeSelectDossier(d){
   f.ref_sifa = d.ref_produit || f.ref_sifa || '';
   f.date_livraison = (d.date_livraison||'').slice(0,10) || f.date_livraison || '';
   f.planning_entry_id = d.id ? String(d.id) : '';
+  // Le dossier prime : une déclaration « non lié à une production » devient
+  // sans objet dès qu'un dossier est désigné.
+  f.sans_dossier = 0; f.sans_dossier_motif = ''; f.sans_dossier_note = '';
   // Estimation nb palettes via fiche technique si dispo (cartons sol × hauteur ÷ ratio)
   // Si pas de donnée fiche : laisser vide pour saisie manuelle
   if(!f.nb_palette){
@@ -4535,9 +4548,26 @@ function renderExpeDepartModal(){
       poids_total_kg:(S.expeDepartForm.poids_total_kg||'').trim()||null,
       date_livraison:(S.expeDepartForm.date_livraison||'').trim()||null,
       planning_entry_id:(S.expeDepartForm.planning_entry_id||'').trim()||null,
+      sans_dossier: S.expeDepartForm.sans_dossier ? 1 : 0,
+      sans_dossier_motif:(S.expeDepartForm.sans_dossier_motif||'').trim()||null,
+      sans_dossier_note:(S.expeDepartForm.sans_dossier_note||'').trim()||null,
       palette_europe: S.expeDepartForm.palette_europe ? 1 : 0
     };
     if(!body.date_enlevement){toast("Date d'enlèvement obligatoire",'error');return;}
+    // Contrôle côté écran : l'API refuse de toute façon, mais autant le dire
+    // avant d'avoir tout ressaisi.
+    if(!body.planning_entry_id && !body.sans_dossier){
+      toast('Sélectionnez le dossier, ou cochez « Envoi non lié à une production »','error');
+      return;
+    }
+    if(body.sans_dossier && !body.sans_dossier_motif){
+      toast('Précisez le motif de l\'envoi non lié à une production','error');
+      return;
+    }
+    if(body.sans_dossier_motif==='autre' && !body.sans_dossier_note){
+      toast('Motif « Autre » : précisez la raison','error');
+      return;
+    }
     set({expeDepartSubmitting:true});
     try{
       if(isEdit){
@@ -4573,7 +4603,77 @@ function renderExpeDepartModal(){
     )
   );
 
+  // ── Rattachement production ────────────────────────────────────
+  // Un départ remonte à un dossier de fabrication, ou dit pourquoi il n'y
+  // remonte pas. Sans l'un des deux, l'expédition est indémontrable en audit
+  // FSC — et c'était le cas de 2764 départs sur 2783 avant ce champ.
+  const MOTIFS_SANS_DOSSIER = [
+    ['stock_ancien',    'Stock ancien — production antérieure au suivi'],
+    ['sous_traitance',  'Sous-traitance / façonnage extérieur'],
+    ['negoce',          'Négoce — produit fini acheté'],
+    ['echantillon',     'Échantillon, présérie ou maquette'],
+    ['retour_client',   'Retour ou réexpédition client'],
+    ['non_marchandise', 'Envoi non marchand (palettes vides, matériel, documents)'],
+    ['autre',           'Autre (préciser)'],
+  ];
+  const aDossier = !!((f.planning_entry_id||'').toString().trim());
+  const sansDossierCheck = h('input',{type:'checkbox',id:'expe-form-sans-dossier'});
+  sansDossierCheck.checked = !aDossier && !!(f.sans_dossier);
+  sansDossierCheck.disabled = aDossier;   // un départ rattaché n'a rien à déclarer
+  sansDossierCheck.addEventListener('change',e=>{
+    S.expeDepartForm.sans_dossier = e.target.checked ? 1 : 0;
+    if(!e.target.checked){
+      S.expeDepartForm.sans_dossier_motif = '';
+      S.expeDepartForm.sans_dossier_note = '';
+    }
+    expeScheduleSaveLocal();
+    render();
+  });
+  const motifSel = h('select',{name:'sans_dossier_motif'});
+  motifSel.appendChild(h('option',{value:''},'— Motif —'));
+  MOTIFS_SANS_DOSSIER.forEach(([v,lbl])=>{
+    const o=h('option',{value:v},lbl);
+    if(String(f.sans_dossier_motif||'')===v) o.selected=true;
+    motifSel.appendChild(o);
+  });
+  motifSel.addEventListener('change',e=>{
+    S.expeDepartForm.sans_dossier_motif = e.target.value;
+    expeScheduleSaveLocal();
+    render();
+  });
+  const motifNote = h('input',{type:'text',placeholder:'Préciser la raison',
+    value:(f.sans_dossier_note!=null?String(f.sans_dossier_note):'')});
+  motifNote.addEventListener('input',e=>{
+    S.expeDepartForm.sans_dossier_note = e.target.value;
+    expeScheduleSaveLocal();
+  });
+
+  const rattachKids = [];
+  if(aDossier){
+    rattachKids.push(h('div',{className:'expe-rattach-ok'},
+      iconEl('folder',13),
+      ' Rattaché au dossier '+((f.arc||'').trim()||'sélectionné')));
+  }else{
+    rattachKids.push(h('div',{style:{display:'flex',alignItems:'center',gap:'8px',padding:'8px 0'}},
+      sansDossierCheck,
+      h('label',{htmlFor:'expe-form-sans-dossier',style:{fontSize:'12px',color:'var(--text2)',cursor:'pointer'}},
+        'Envoi non lié à une production')));
+    if(f.sans_dossier){
+      rattachKids.push(motifSel);
+      if(String(f.sans_dossier_motif||'')==='autre') rattachKids.push(motifNote);
+    }else{
+      rattachKids.push(h('div',{style:{fontSize:'12px',color:'var(--muted)'}},
+        'Sélectionnez un dossier dans l\'onglet « Depuis un dossier », ou cochez '
+        + 'ci-dessus si cet envoi ne sort pas d\'une production.'));
+    }
+  }
+  const rattachField = h('div',{className:'expe-field expe-field--wide'},
+    h('label',null,'Rattachement production'),
+    h('div',null,...rattachKids)
+  );
+
   const fields=h('div',{className:'expe-fields'},
+    rattachField,
     mk("Date d'enlèvement",'date_enlevement','date'),
     mk('Affréteurs','affreteurs'),
     mk('Transporteur','transporteur'),

@@ -672,6 +672,36 @@ def controles_fsc(request: Request, jours: int = 60):
         except Exception:
             recep_sans_fournisseur = []
 
+        # LE compteur à faire descendre. Un départ ni rattaché ni déclaré est
+        # une expédition dont personne ne peut dire si elle aurait dû remonter
+        # à un dossier. C'est le seul de ces contrôles qui se répare par
+        # l'usage et non par du code.
+        try:
+            r = conn.execute(
+                """SELECT COUNT(*) AS n,
+                          SUM(CASE WHEN date_enlevement >= date('now','-90 days')
+                                   THEN 1 ELSE 0 END) AS n_90j
+                     FROM expe_departs
+                    WHERE TRIM(COALESCE(no_dossier,'')) = ''
+                      AND planning_entry_id IS NULL
+                      AND COALESCE(sans_dossier,0) = 0"""
+            ).fetchone()
+            departs_muets = {"total": int(r["n"] or 0), "derniers_90j": int(r["n_90j"] or 0)}
+            departs_muets_recents = [
+                dict(x)
+                for x in conn.execute(
+                    """SELECT id, no_bl, client, date_enlevement, arc, ref_sifa
+                         FROM expe_departs
+                        WHERE TRIM(COALESCE(no_dossier,'')) = ''
+                          AND planning_entry_id IS NULL
+                          AND COALESCE(sans_dossier,0) = 0
+                        ORDER BY date_enlevement DESC LIMIT 200"""
+                ).fetchall()
+            ]
+        except Exception:
+            departs_muets = {"total": 0, "derniers_90j": 0}
+            departs_muets_recents = []
+
     return {
         "certificats_a_renouveler": certifs,
         "fournisseurs_sans_date_certificat": sans_date,
@@ -681,6 +711,7 @@ def controles_fsc(request: Request, jours: int = 60):
         "bl_doublons": bl_doublons,
         "codes_barres_ambigus": codes_ambigus,
         "receptions_fournisseur_hors_annuaire": recep_sans_fournisseur,
+        "departs_sans_rattachement_ni_motif": departs_muets_recents,
         "synthese": {
             "nb_certificats_a_renouveler": len(certifs),
             "nb_expires": sum(1 for c in certifs if c["expire"]),
@@ -691,6 +722,8 @@ def controles_fsc(request: Request, jours: int = 60):
             "nb_bl_doublons": len(bl_doublons),
             "nb_codes_barres_ambigus": len(codes_ambigus),
             "nb_receptions_fournisseur_hors_annuaire": len(recep_sans_fournisseur),
+            "nb_departs_sans_rattachement_ni_motif": departs_muets["total"],
+            "nb_departs_sans_rattachement_90j": departs_muets["derniers_90j"],
             "genere_a": _now(),
         },
     }
