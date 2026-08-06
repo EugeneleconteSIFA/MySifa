@@ -151,7 +151,11 @@ check('la référence est la seule élastique', zoneListe.includes('<col>'), tru
 // mangeait la largeur sans rien apprendre. Retirée du tableau, gardée en
 // infobulle — l'information reste à un survol.
 check('plus de colonne Désignation', zoneListe.includes('<th>Désignation</th>'), false);
-check('plus de cellule Désignation', src.includes('class="msl-des"'), false);
+// Sur la ligne à plat elle-même : la classe `msl-des` sert encore ailleurs
+// (fiche tarif fournisseur), on ne la cherche donc pas dans tout le fichier.
+const ligneAPlat = src.slice(src.indexOf('function mystockFlatRowHtml('),
+                             src.indexOf('function renderMystockList('));
+check('plus de cellule Désignation', ligneAPlat.includes('class="msl-des"'), false);
 check('la désignation survit en infobulle',
   l0.includes('class="msl-ref" title="Adhésif enlevable fort"'), true);
 // Autant d'en-têtes que de cellules, autant de <col> que d'en-têtes : une

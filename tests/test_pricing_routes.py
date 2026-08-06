@@ -75,6 +75,8 @@ def main():
         ("mystock-edit", "/pricing/mystock/90"),
         ("msproduct-new", "/pricing/mystock/produit/new"),
         ("msproduct-edit", "/pricing/mystock/produit/12"),
+        ("fournisseurs (liste)", "/pricing/fournisseurs"),
+        ("fournisseur-edit", "/pricing/fournisseurs/3"),
         ("settings", "/pricing/settings"),
     ]
 
@@ -97,7 +99,8 @@ def main():
 
     print("\n--- un identifiant qui n'en est pas un ne tombe pas en 404 ---")
     for nom in ("pricing_material_edit", "pricing_product_edit",
-                "pricing_mystock_produit_edit", "pricing_mystock_declinaison"):
+                "pricing_mystock_produit_edit", "pricing_mystock_declinaison",
+                "pricing_fournisseur_tarif"):
         corps = page[page.index("def " + nom + "("):]
         corps = corps[:corps.index("\n\n\n")] if "\n\n\n" in corps else corps
         check(nom + " renvoie vers la liste",

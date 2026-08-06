@@ -1066,6 +1066,11 @@ def list_fournisseurs_entreprise(request: Request):
     """Annuaire fournisseurs de l'entreprise, pour tous les sélecteurs de /pricing."""
     _require_read(request)
     with get_db() as conn:
+        # La devise d'achat vit sur le fournisseur depuis la migration
+        # `mc_tarif_fournisseur`. `COALESCE` plutôt qu'une colonne nue : sur une
+        # base non migrée elle n'existe pas, et l'annuaire doit répondre quand
+        # même.
+        devises = mystock_prix.devises_fournisseurs(conn)
         rows = conn.execute(
             """SELECT id, nom, COALESCE(has_fsc, 0) AS has_fsc, pays, actif
                  FROM fournisseurs_fsc
@@ -1079,10 +1084,154 @@ def list_fournisseurs_entreprise(request: Request):
                 "has_fsc": bool(r["has_fsc"]),
                 "pays": r["pays"],
                 "actif": bool(r["actif"]) if r["actif"] is not None else True,
+                "price_currency": devises.get(int(r["id"]), "EUR"),
             }
             for r in rows
         ]
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tarifs fournisseurs
+# ─────────────────────────────────────────────────────────────────────────────
+# Un tarif ne dépend ni de la laize ni du grammage : il dépend de chez qui on
+# achète et de ce qu'on lui achète. La devise se règle au fournisseur, le reste
+# — base de prix, transport, taxes — au couple (fournisseur, matière).
+
+
+@router.get("/api/pricing/tarifs/fournisseurs")
+def list_tarifs_fournisseurs(request: Request):
+    """
+    L'annuaire vu sous l'angle des coûts : qui vend quoi, à quelle devise, et
+    combien de ses matières attendent encore un tarif.
+    """
+    _require_read(request)
+    with get_db() as conn:
+        devises = mystock_prix.devises_fournisseurs(conn)
+        dispo = mystock_prix.tarifs_disponibles(conn)
+        rows = conn.execute(
+            """SELECT f.id, f.nom, COALESCE(f.has_fsc,0) AS has_fsc, f.pays, f.actif,
+                      COUNT(DISTINCT d.matiere_id)  AS nb_matieres,
+                      COUNT(DISTINCT p.declinaison_id) AS nb_declinaisons,
+                      SUM(CASE WHEN p.principal=1 THEN 1 ELSE 0 END) AS nb_principal
+                 FROM fournisseurs_fsc f
+                 LEFT JOIN mp_matiere_prix p ON p.fournisseur_id = f.id
+                 LEFT JOIN mp_matiere_declinaison d ON d.id = p.declinaison_id
+                GROUP BY f.id
+                ORDER BY f.nom COLLATE NOCASE ASC"""
+        ).fetchall()
+        poses = {}
+        if dispo:
+            poses = {
+                int(r["fournisseur_id"]): int(r["n"])
+                for r in conn.execute(
+                    """SELECT fournisseur_id, COUNT(*) AS n
+                         FROM mc_tarif_fournisseur GROUP BY fournisseur_id"""
+                ).fetchall()
+            }
+    return {
+        "tarifs_disponibles": dispo,
+        "fournisseurs": [
+            {
+                "id": int(r["id"]),
+                "nom": r["nom"],
+                "has_fsc": bool(r["has_fsc"]),
+                "pays": r["pays"],
+                "actif": bool(r["actif"]) if r["actif"] is not None else True,
+                "price_currency": devises.get(int(r["id"]), "EUR"),
+                "nb_matieres": int(r["nb_matieres"] or 0),
+                "nb_declinaisons": int(r["nb_declinaisons"] or 0),
+                "nb_principal": int(r["nb_principal"] or 0),
+                "nb_tarifs": poses.get(int(r["id"]), 0),
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/api/pricing/tarifs/fournisseur/{fournisseur_id}")
+def tarifs_fournisseur(request: Request, fournisseur_id: int):
+    """La fiche tarif d'un fournisseur : sa devise, et une ligne par matière."""
+    _require_read(request)
+    with get_db() as conn:
+        f = conn.execute(
+            "SELECT id, nom, pays FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)
+        ).fetchone()
+        if not f:
+            raise HTTPException(404, "Fournisseur introuvable.")
+        devises = mystock_prix.devises_fournisseurs(conn)
+        return {
+            "fournisseur": {
+                "id": int(f["id"]),
+                "nom": f["nom"],
+                "pays": f["pays"],
+                "price_currency": devises.get(int(f["id"]), "EUR"),
+            },
+            "tarifs_disponibles": mystock_prix.tarifs_disponibles(conn),
+            "matieres": mystock_prix.tarifs_du_fournisseur(conn, fournisseur_id),
+        }
+
+
+@router.get("/api/pricing/tarifs/matiere/{matiere_id}")
+def tarifs_matiere(request: Request, matiere_id: int):
+    """La vue symétrique : les fournisseurs d'une matière et leurs tarifs."""
+    _require_read(request)
+    with get_db() as conn:
+        mat = conn.execute(
+            "SELECT id, reference, designation, categorie FROM matieres_premieres WHERE id=?",
+            (matiere_id,),
+        ).fetchone()
+        if not mat:
+            raise HTTPException(404, "Matière introuvable.")
+        return {
+            "matiere_id": int(mat["id"]),
+            "reference": mat["reference"],
+            "designation": mat["designation"],
+            "categorie": mat["categorie"],
+            "tarifs_disponibles": mystock_prix.tarifs_disponibles(conn),
+            "fournisseurs": mystock_prix.fournisseurs_de_la_matiere(conn, matiere_id),
+        }
+
+
+@router.patch("/api/pricing/tarifs/fournisseur/{fournisseur_id}/devise")
+async def maj_devise_fournisseur(request: Request, fournisseur_id: int):
+    """La devise d'achat d'un fournisseur — elle vaut pour tout ce qu'il vend."""
+    _require_write(request)
+    body = await request.json()
+    with get_db() as conn:
+        r = mystock_prix.set_devise_fournisseur(
+            conn, fournisseur_id=fournisseur_id, devise=body.get("price_currency")
+        )
+        if not r.get("ok"):
+            raise HTTPException(400, r.get("reason") or "Devise refusée.")
+        conn.commit()
+    return r
+
+
+@router.patch("/api/pricing/tarifs/{fournisseur_id}/{matiere_id}")
+async def maj_tarif(request: Request, fournisseur_id: int, matiere_id: int):
+    """
+    Le tarif d'un fournisseur pour une matière.
+
+    La réponse dit combien de déclinaisons en ont vu leur sous-total bouger :
+    changer un transport ne touche aucun prix d'achat, mais déplace tout ce que
+    la valorisation MyStock affiche là où ce fournisseur fait foi.
+    """
+    user = _require_write(request)
+    body = await request.json()
+    with get_db() as conn:
+        r = mystock_prix.set_tarif(
+            conn,
+            fournisseur_id=fournisseur_id,
+            matiere_id=matiere_id,
+            patch=body,
+            user_id=user.get("id"),
+            user_name=(user.get("nom") or user.get("email") or "").strip() or None,
+        )
+        if not r.get("ok"):
+            raise HTTPException(400, r.get("reason") or "Tarif refusé.")
+        conn.commit()
+    return r
 
 
 @router.get("/api/pricing/fournisseurs/rapprochement")

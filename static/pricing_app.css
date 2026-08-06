@@ -649,6 +649,18 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 /* Lignes suivantes d'une même déclinaison : un simple rappel, la valeur ne se
    saisit qu'une fois. */
 .ms-decl-rappel{color:var(--muted);padding-left:14px}
+/* Le camion posé à côté d'un fournisseur ouvre son tarif pour cette matière.
+   La pastille signale qu'il n'en a pas encore : ses coûts sont alors calculés
+   sur un repli hérité de la déclinaison, ce qu'il vaut mieux savoir. */
+.ms-tarif-btn{border:none;background:transparent;color:var(--muted);cursor:pointer;
+  padding:3px 4px;margin-left:4px;border-radius:6px;position:relative;
+  display:inline-flex;align-items:center;vertical-align:middle}
+.ms-tarif-btn:hover{color:var(--accent);background:var(--accent-bg)}
+.ms-tarif-manquant{position:absolute;top:1px;right:1px;width:6px;height:6px;
+  border-radius:50%;background:var(--warn)}
+/* Résumé du tarif dans la fiche fournisseur : une ligne, jamais deux. */
+.tarif-resume{color:var(--text2);font-size:12px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;max-width:340px}
 .ms-fiche{white-space:nowrap}
 /* Coût au m² d'un fournisseur qui n'est pas le principal : c'est une hypothèse
    — « voilà ce que ça coûterait si on prenait celui-là ». D'où le retrait. */
