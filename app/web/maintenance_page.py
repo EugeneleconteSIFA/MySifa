@@ -11774,7 +11774,21 @@ function opRenderTasks(){
       if(ev.source === 'non_planifie') persos.push(ev);
       else creneaux.push(ev);
     }
+    // v2.7.2 — tri par DATE puis heure.
+    //
+    // Le tri ne portait que sur heure_debut. Sans conséquence dans « Aujourd'hui »
+    // (une seule date), mais « À venir » couvre 30 jours : un créneau de 08:00
+    // dans trois semaines passait devant un créneau de 14:00 demain. Les
+    // récurrences de modèle rendent le désordre systématique — elles produisent
+    // justement des créneaux qui partagent le même horaire sur des dates
+    // différentes, donc tous départagés par le seul tie-break de l'id.
+    //
+    // 'zz' place les créneaux sans horaire en fin de journée plutôt qu'au
+    // début : un créneau sans heure n'est pas un créneau de minuit.
     creneaux.sort((a, b) => {
+      const da = a.date_prevue || '';
+      const db = b.date_prevue || '';
+      if(da !== db) return da.localeCompare(db);
       const ha = a.heure_debut || 'zz';
       const hb = b.heure_debut || 'zz';
       if(ha !== hb) return ha.localeCompare(hb);
@@ -11788,10 +11802,13 @@ function opRenderTasks(){
     const creneauBoxes = creneaux
       .map(ev => _renderCreneauBox(ev, showTermine, isToday))
       .filter(Boolean);
+    // v2.7.2 : « Aujourd'hui » se lit du plus récent au plus ancien (ce qui
+    // vient d'être saisi remonte). « À venir » se lit dans l'autre sens : le
+    // plus proche d'abord. Le même tri DESC servait aux deux.
     // v2.2.71 : la section perso est toujours affichée si des ops perso 'à faire'
     // existent. Le toggle contrôle uniquement l'inclusion des ops terminées (filtre
     // interne dans _renderPersoSection).
-    const persoHtml = _renderPersoSection(persos, showTermine);
+    const persoHtml = _renderPersoSection(persos, showTermine, !isToday);
     return { creneauBoxes, persoHtml };
   };
 
@@ -11865,7 +11882,7 @@ function _renderCreneauBox(ev, showTermine, isToday){
 }
 
 // v2.2.62 : section « Opérations personnelles » (source=non_planifie) — en bas, seulement si toggle ON.
-function _renderPersoSection(evs, showTermine){
+function _renderPersoSection(evs, showTermine, chronoAsc){
   if(!evs.length) return '';
   const items = [];
   for(const ev of evs){
@@ -11876,12 +11893,15 @@ function _renderPersoSection(evs, showTermine){
     }
   }
   if(!items.length) return '';
-  // Trie : date_prevue DESC (plus récent en premier), tie-break id DESC
+  // Trie : date_prevue DESC par défaut (plus récent en premier), tie-break
+  // id DESC. chronoAsc inverse le sens pour l'onglet « À venir », où c'est
+  // l'échéance la plus proche qui doit arriver en tête.
   items.sort((a, b) => {
     const da = a.ev.date_prevue || '';
     const db = b.ev.date_prevue || '';
-    if(da !== db) return db.localeCompare(da);
-    return (b.ev.id || 0) - (a.ev.id || 0);
+    if(da !== db) return chronoAsc ? da.localeCompare(db) : db.localeCompare(da);
+    const ia = a.ev.id || 0, ib = b.ev.id || 0;
+    return chronoAsc ? (ia - ib) : (ib - ia);
   });
   const cards = items.map(({op, ev}) => _renderOpCardIndividual(op, ev, {showMachine:true})).join('');
   return `<section class="op-perso-section">
