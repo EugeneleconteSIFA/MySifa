@@ -2429,6 +2429,8 @@ function icon(name, size=16){
     'shopping-cart': '<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>',
     'trash': '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
     'euro': '<path d="M4 10h12"/><path d="M4 14h9"/><path d="M19 6a7.7 7.7 0 0 0-5.2-2A7.9 7.9 0 0 0 6 12c0 4.4 3.5 8 7.8 8 2 0 3.8-.8 5.2-2"/>',
+    'external-link': '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
+    'lock': '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
     // dollar-sign (Lucide) — utilisé pour le toggle « prix en USD » de la valorisation
     'dollar-sign': '<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>',
     'alert-triangle': '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
@@ -2442,6 +2444,45 @@ function iconEl(name, size=16){
   s.style.cssText = 'display:inline-flex;align-items:center;flex-shrink:0';
   s.innerHTML = icon(name, size);
   return s;
+}
+
+/**
+ * Verrouille un champ de saisie de prix dans MyStock.
+ *
+ * Les prix matière ne s'écrivent plus qu'à un seul endroit : Coûts matières, où
+ * vivent les fournisseurs, la devise, le transport et les taxes. Ici la valeur
+ * reste AFFICHÉE (et renvoyée telle quelle à l'enregistrement, pour ne rien
+ * perdre) mais n'est plus saisissable.
+ */
+function mpVerrouillerPrix(input) {
+  if (!input) return input;
+  input.readOnly = true;
+  input.tabIndex = -1;
+  input.title = 'Le prix se modifie dans Coûts matières';
+  input.style.opacity = '.65';
+  input.style.cursor = 'not-allowed';
+  input.style.background = 'var(--bg)';
+  input.addEventListener('mousedown', (e) => { e.preventDefault(); });
+  input.addEventListener('focus', () => { input.blur(); });
+  return input;
+}
+
+/** Renvoi vers Coûts matières, posé sous un champ prix verrouillé. */
+function mpNotePrixVerrouille(reference) {
+  const ref = reference || '';
+  const note = el('div', {
+    style: 'font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5;display:flex;'
+      + 'align-items:center;gap:5px;flex-wrap:wrap',
+  });
+  note.appendChild(iconEl('lock', 11));
+  note.appendChild(el('span', null, 'Le prix se modifie dans'));
+  const a = el('a', {
+    href: '/pricing/materials' + (ref ? '?ref=' + encodeURIComponent(ref) : ''),
+    target: '_blank', rel: 'noopener',
+    style: 'color:var(--accent);font-weight:600;text-decoration:none',
+  }, 'Coûts matières');
+  note.appendChild(a);
+  return note;
 }
 
 // ── DOM helper — safe contre null/false ─────────────────────────
@@ -8090,8 +8131,10 @@ function appendMatiereRefEditFields(parent, item) {
   metresInp.value = String(item.metres_lineaires_par_bobine != null ? item.metres_lineaires_par_bobine : '');
   const prixM2Inp = el('input', { attrs: { type: 'number', min: '0', step: '0.0001', placeholder: 'Ex. 0,0550' } });
   prixM2Inp.value = String(item.prix_eur_m2 != null ? item.prix_eur_m2 : '');
+  mpVerrouillerPrix(prixM2Inp);
   const prixM2Field = el('div', { cls: 'mp-field' },
-    el('label', null, 'Prix au m² (€) — commun à toutes les laizes'), prixM2Inp);
+    el('label', null, 'Prix au m² (€) — commun à toutes les laizes'), prixM2Inp,
+    mpNotePrixVerrouille(item.reference));
   // Radio « prix unique / prix par laize »
   const prixModeName = 'prixmode-' + item.id;
   const prixModeUniInp = el('input', { type: 'radio', name: prixModeName, value: '0' });
@@ -8191,6 +8234,7 @@ function appendMatiereRefEditFields(parent, item) {
         style: 'flex:1;min-width:120px;padding:8px 12px;font-size:13px',
       });
       if (laizePriceValues[id] != null) priceInp.value = laizePriceValues[id];
+      mpVerrouillerPrix(priceInp);
       laizePriceInputs[id] = priceInp;
       const row = el('div', {
         style: 'display:flex;align-items:center;gap:10px',
@@ -9842,7 +9886,10 @@ function buildMatieresAdminAddForm() {
   rebuildLaizeChecks();
   laizeWrap.append(
     el('div', { cls: 'mp-field' }, el('label', null, 'Mètres linéaires par bobine'), metresInp),
-    el('div', { cls: 'mp-field' }, el('label', null, 'Prix au m² (€)'), prixM2Inp),
+    // Le prix n'est pas saisi à la création : la référence se crée ici, son prix
+    // se pose dans Coûts matières (fournisseur, devise, transport, taxes).
+    el('div', { cls: 'mp-field' }, el('label', null, 'Prix au m² (€)'),
+      mpVerrouillerPrix(prixM2Inp), mpNotePrixVerrouille()),
     el('div', { cls: 'mp-field' },
       el('label', null, 'Laizes disponibles'),
       laizeChecks,
@@ -16925,96 +16972,12 @@ function buildValorisationCategoriePills() {
   return wrap;
 }
 
-async function toggleValorisationUSD(matiereId) {
-  const v = valEnsureState();
-  try {
-    const data = await api('/api/stock/valorisation/' + matiereId + '/prix-en-usd', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    });
-    // Mise à jour locale : toutes les lignes (matières laizées : plusieurs lignes par matière)
-    if (data?.items_matiere && Array.isArray(data.items_matiere)) {
-      const newByKey = new Map(data.items_matiere.map(x => [x.row_key, x]));
-      v.items = (v.items || []).map(x => newByKey.has(x.row_key) ? newByKey.get(x.row_key) : x);
-    }
-    if (data?.summary) v.summary = data.summary;
-    renderValorisationView(true);
-    showToast(data.prix_en_usd ? 'Référence marquée USD.' : 'Conversion USD retirée.', 'success');
-  } catch (e) {
-    showToast('Erreur : ' + (e?.message || 'changement impossible'), 'danger');
-  }
-}
-
-async function toggleValorisationTransport(matiereId) {
-  const v = valEnsureState();
-  try {
-    const data = await api('/api/stock/valorisation/' + matiereId + '/cout-transport', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    });
-    if (data?.items_matiere && Array.isArray(data.items_matiere)) {
-      const newByKey = new Map(data.items_matiere.map(x => [x.row_key, x]));
-      v.items = (v.items || []).map(x => newByKey.has(x.row_key) ? newByKey.get(x.row_key) : x);
-    }
-    if (data?.summary) v.summary = data.summary;
-    renderValorisationView(true);
-    const st = Number(data?.cout_transport_inclus || 0);
-    const msg = st === 1 ? 'Transport container complet appliqué.'
-      : st === 2 ? 'Transport demi-container appliqué.'
-      : 'Transport retiré.';
-    showToast(msg, 'success');
-  } catch (e) {
-    showToast('Erreur : ' + (e?.message || 'changement impossible'), 'danger');
-  }
-}
-
-async function toggleValorisationTaxe(matiereId) {
-  const v = valEnsureState();
-  try {
-    const data = await api('/api/stock/valorisation/' + matiereId + '/taxe-importation', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({}),
-    });
-    if (data?.items_matiere && Array.isArray(data.items_matiere)) {
-      const newByKey = new Map(data.items_matiere.map(x => [x.row_key, x]));
-      v.items = (v.items || []).map(x => newByKey.has(x.row_key) ? newByKey.get(x.row_key) : x);
-    }
-    if (data?.summary) v.summary = data.summary;
-    renderValorisationView(true);
-    showToast(data.taxe_importation ? 'Taxe d\'importation appliquée.' : 'Taxe d\'importation retirée.', 'success');
-  } catch (e) {
-    showToast('Erreur : ' + (e?.message || 'changement impossible'), 'danger');
-  }
-}
-
-async function saveValorisationPrice(matiereId, newPrice, inputEl) {
-  const v = valEnsureState();
-  try {
-    const data = await api('/api/stock/valorisation/' + matiereId, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prix_unitaire: newPrice }) });
-    // Mise à jour locale silencieuse (pas de full re-render pour préserver le focus)
-    if (data?.item) {
-      const idx = v.items.findIndex(x => x.id === matiereId);
-      if (idx >= 0) v.items[idx] = data.item;
-    }
-    if (data?.summary) v.summary = data.summary;
-    // Met à jour les cellules dépendantes (valorisation ligne + KPIs + pills)
-    renderValorisationView(true);
-    showToast('Prix enregistré.', 'success');
-  } catch (e) {
-    showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
-    // Restaurer l'ancienne valeur si possible
-    if (inputEl) {
-      const item = v.items.find(x => x.id === matiereId);
-      if (item) inputEl.value = (Number(item.prix_unitaire) || 0).toString().replace('.', ',');
-    }
-  }
-}
+// Les bascules USD / taxe d'importation / coût transport container et la saisie
+// inline du prix unitaire vivaient ici. Elles ont été retirées : les prix
+// matière ne s'écrivent plus que dans Coûts matières, qui porte déjà la devise
+// d'achat, les taxes et les quatre méthodes de transport. La valorisation lit
+// ces valeurs et les affiche — les endpoints correspondants restent en place
+// côté serveur pour les reprises et les scripts.
 
 function buildValorisationTableRow(item) {
   const rowKey = item.row_key || ('m' + item.id);
@@ -17066,18 +17029,20 @@ function buildValorisationTableRow(item) {
       ' · ',
       (item.metres_lineaires_par_bobine || 0) > 0 ? (item.metres_lineaires_par_bobine.toLocaleString('fr-FR') + ' m') : 'métrage ?',
     );
+    // Le métrage par bobine reste éditable ici (c'est du conditionnement) ;
+    // le prix au m², lui, vient de Coûts matières.
     const editBtn = el('button', {
-      type: 'button', title: 'Éditer prix m² et métrage',
+      type: 'button', title: 'Éditer le métrage par bobine',
       style: 'background:var(--card);border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:11px;margin-top:4px;display:inline-flex;align-items:center;gap:4px',
       on: { click: () => openValorisationParamsModal(item.matiere_id) },
     });
     editBtn.appendChild(iconEl('edit', 11));
-    editBtn.appendChild(el('span', null, 'Modifier'));
+    editBtn.appendChild(el('span', null, 'Métrage'));
     tdPrix = el('td', { style: 'padding:10px 12px;text-align:right' },
       el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end' },
         el('div', { style: 'font-size:13px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums' }, display),
         params,
-        editBtn,
+        el('div', { style: 'display:flex;gap:6px;align-items:center' }, editBtn, valLienCoutsMatieres(item)),
       )
     );
   } else if (item.avec_conditionnement) {
@@ -17101,50 +17066,36 @@ function buildValorisationTableRow(item) {
       : 'conditionnement ?';
     const params = el('div', { style: 'font-size:10px;color:var(--muted);margin-top:2px' },
       prixUnitTxt, ' · ', upTxt);
+    // Le conditionnement (unités par palette) reste éditable ici ; le prix
+    // unitaire d'achat, lui, vient de Coûts matières.
     const editBtn = el('button', {
-      type: 'button', title: 'Éditer prix unitaire et conditionnement',
+      type: 'button', title: 'Éditer le conditionnement (' + uniteAchat + ' par palette)',
       style: 'background:var(--card);border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);font-size:11px;margin-top:4px;display:inline-flex;align-items:center;gap:4px',
       on: { click: () => openValorisationConditionnementModal(item.matiere_id || item.id) },
     });
     editBtn.appendChild(iconEl('edit', 11));
-    editBtn.appendChild(el('span', null, 'Modifier'));
+    editBtn.appendChild(el('span', null, 'Conditionnement'));
     tdPrix = el('td', { style: 'padding:10px 12px;text-align:right' },
       el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end' },
         el('div', { style: 'font-size:13px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums' }, display),
         params,
-        editBtn,
+        el('div', { style: 'display:flex;gap:6px;align-items:center' }, editBtn, valLienCoutsMatieres(item)),
       )
     );
   } else {
-    const inpId = 'val-price-' + rowKey;
-    const inp = el('input', {
-      type: 'text', id: inpId, value: (Number(item.prix_unitaire) || 0).toString().replace('.', ','),
-        inputmode: 'decimal',
-        style: 'width:110px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;font-variant-numeric:tabular-nums;text-align:right;transition:border-color .15s' });
-    const commit = async () => {
-      const raw = (inp.value || '').trim().replace(/\s/g, '').replace(',', '.');
-      const num = parseFloat(raw);
-      const current = Number(item.prix_unitaire) || 0;
-      if (isNaN(num) || num < 0) {
-        inp.value = current.toString().replace('.', ',');
-        showToast('Prix invalide.', 'danger');
-        return;
-      }
-      if (Math.abs(num - current) < 0.00001) return;
-      await saveValorisationPrice(item.matiere_id || item.id, num, inp);
-    };
-    inp.addEventListener('blur', commit);
-    inp.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
-      if (e.key === 'Escape') {
-        inp.value = (Number(item.prix_unitaire) || 0).toString().replace('.', ',');
-        inp.blur();
-      }
-    });
-    inp.addEventListener('focus', () => inp.select());
+    // Palette / autre : le prix n'a ni conditionnement ni métrage à régler ici,
+    // il est simplement affiché — la saisie se fait dans Coûts matières.
+    const prixUnit = Number(item.prix_unitaire) || 0;
+    const display = prixUnit > 0
+      ? el('span', null,
+          valFormatPrixDetail(prixUnit),
+          el('span', { style: 'margin-left:4px;font-size:11px;color:var(--muted);font-weight:500' }, '€/' + (item.unite || '')))
+      : el('span', { style: 'color:var(--muted);font-weight:500' }, 'non valorisé');
     tdPrix = el('td', { style: 'padding:10px 12px;text-align:right' },
-      inp,
-      el('span', { style: 'margin-left:6px;font-size:11px;color:var(--muted)' }, '€/' + (item.unite || ''))
+      el('div', { style: 'display:flex;flex-direction:column;align-items:flex-end' },
+        el('div', { style: 'font-size:13px;font-weight:600;color:var(--text);font-variant-numeric:tabular-nums' }, display),
+        valLienCoutsMatieres(item),
+      )
     );
   }
 
@@ -17243,9 +17194,15 @@ function buildValorisationTableRow(item) {
   }
 
   // ── Colonne « Actions » ──
-  // Action 1 : horloge → historique des prix
-  // Action 2 : $ → toggle prix_en_usd (vert si actif)
-  // Action 3 : package → toggle taxe_importation (vert si actif)
+  // Une seule action : l'historique des prix.
+  //
+  // Les bascules $ (référence saisie en USD), taxe d'importation et coût de
+  // transport container vivaient ici : elles ont été retirées. Elles faisaient
+  // doublon avec les réglages de la fiche Coûts matières (devise d'achat,
+  // taxes %, méthode de transport), qui les traite avec plus de finesse — et
+  // deux endroits pour le même réglage, c'est un écart qui finit par arriver.
+  // Les valeurs déjà posées restent lues : la colonne « Prix unit. réel » les
+  // affiche toujours, en lecture seule.
   const histBtn = el('button', {
     type: 'button', title: 'Voir l\'historique des prix de cette référence',
     style: 'background:var(--card);border:1px solid var(--border);border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);transition:all .15s',
@@ -17258,114 +17215,6 @@ function buildValorisationTableRow(item) {
   histBtn.appendChild(iconEl('clock', 14));
 
   const actionsChildren = [histBtn];
-  if (canSeeUSD) {
-    // -- Action USD --
-    const usdOn = !!item.prix_en_usd;
-    const tauxRaw = Number((S.valorisation && S.valorisation.summary && S.valorisation.summary.taux_eur_usd) || 0);
-    const tauxTxt = tauxRaw > 0 ? tauxRaw.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 4 }) : null;
-    const usdTitle = usdOn
-      ? 'Référence USD — cliquer pour repasser en saisie EUR'
-      + (tauxTxt ? ' (taux courant 1 USD = ' + tauxTxt + ' €)' : '')
-      : 'Marquer cette référence comme saisie en USD'
-      + (tauxTxt ? ' — le prix réel sera multiplié par 1 USD = ' + tauxTxt + ' €' : ' — taux EUR/USD à configurer dans Paramètres');
-    const usdBtn = el('button', {
-      type: 'button', title: usdTitle,
-      style:
-        'border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;'
-        + (usdOn
-            ? 'background:rgba(34,197,94,0.12);border:1px solid #16a34a;color:#16a34a'
-            : 'background:var(--card);border:1px solid var(--border);color:var(--text2)'),
-      on: {
-        click: () => toggleValorisationUSD(item.matiere_id || item.id),
-        mouseenter: (e) => {
-          if (!usdOn) { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; }
-        },
-        mouseleave: (e) => {
-          if (!usdOn) { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; }
-        },
-      },
-    });
-    usdBtn.appendChild(iconEl('dollar-sign', 14));
-    actionsChildren.push(usdBtn);
-
-    // -- Action Taxe d'importation (adhésifs uniquement) --
-    const catLower = String(item.categorie || '').toLowerCase();
-    if (catLower === 'adhesif') {
-      const taxOn = !!item.taxe_importation;
-      const taxRaw = Number((S.valorisation && S.valorisation.summary && S.valorisation.summary.import_tax_pct) || 0);
-      const taxTxt = taxRaw > 0 ? taxRaw.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' %' : null;
-      const taxTitle = taxOn
-        ? 'Taxe d\'importation appliquée — cliquer pour la retirer'
-        + (taxTxt ? ' (taux courant ' + taxTxt + ')' : '')
-        : 'Appliquer la taxe d\'importation à cette référence'
-        + (taxTxt ? ' (' + taxTxt + ')' : ' — taux à configurer dans Paramètres');
-      const taxBtn = el('button', {
-        type: 'button', title: taxTitle,
-        style:
-          'border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;'
-          + (taxOn
-              ? 'background:rgba(34,197,94,0.12);border:1px solid #16a34a;color:#16a34a'
-              : 'background:var(--card);border:1px solid var(--border);color:var(--text2)'),
-        on: {
-          click: () => toggleValorisationTaxe(item.matiere_id || item.id),
-          mouseenter: (e) => {
-            if (!taxOn) { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; }
-          },
-          mouseleave: (e) => {
-            if (!taxOn) { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; }
-          },
-        },
-      });
-      taxBtn.appendChild(iconEl('package', 14));
-      actionsChildren.push(taxBtn);
-    }
-
-    // -- Action Coût transport container (bobines uniquement : frontal, glassine, complexe) --
-    // 3 états : 0 off (gris) → 1 container complet (camion vert) → 2 demi-container (½ camion vert) → 0
-    if (catLower === 'frontal' || catLower === 'glassine' || catLower === 'complexe') {
-      const trState = Number(item.cout_transport_inclus || 0);
-      const summ = (S.valorisation && S.valorisation.summary) || {};
-      const suppFull = Number(summ.container_supplement_eur_per_m2_full || 0);
-      const suppHalf = Number(summ.container_supplement_eur_per_m2_half || 0);
-      const fmtEur = (n) => n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-      let trTitle;
-      if (trState === 1) {
-        trTitle = 'Transport container complet appliqué — cliquer pour passer au demi-container'
-          + (suppFull > 0 ? ' (+ ' + fmtEur(suppFull) + ' €/m²)' : ' — coût container / qté m² à configurer');
-      } else if (trState === 2) {
-        trTitle = 'Transport demi-container appliqué — cliquer pour retirer le transport'
-          + (suppHalf > 0 ? ' (+ ' + fmtEur(suppHalf) + ' €/m²)' : ' — coût demi-container / qté m² à configurer');
-      } else {
-        trTitle = 'Cliquer pour appliquer un transport container complet'
-          + (suppFull > 0 ? ' (+ ' + fmtEur(suppFull) + ' €/m²)' : '');
-      }
-      const trActive = trState > 0;
-      const trBtn = el('button', {
-        type: 'button', title: trTitle,
-        style:
-          'border-radius:8px;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;'
-          + (trActive
-              ? 'background:rgba(34,197,94,0.12);border:1px solid #16a34a;color:#16a34a'
-              : 'background:var(--card);border:1px solid var(--border);color:var(--text2)'),
-        on: {
-          click: () => toggleValorisationTransport(item.matiere_id || item.id),
-          mouseenter: (e) => {
-            if (!trActive) { e.currentTarget.style.background = 'var(--bg)'; e.currentTarget.style.color = 'var(--text)'; }
-          },
-          mouseleave: (e) => {
-            if (!trActive) { e.currentTarget.style.background = 'var(--card)'; e.currentTarget.style.color = 'var(--text2)'; }
-          },
-        },
-      });
-      // Icône : camion (état 0/1) ou demi-camion custom (état 2)
-      if (trState === 2) {
-        trBtn.innerHTML = '<svg width="20" height="14" viewBox="0 0 32 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><text x="0" y="18" font-size="17" font-weight="800" font-family="system-ui,-apple-system,sans-serif" stroke="none" fill="currentColor">½</text><rect x="15" y="9" width="9" height="7" rx="0.5"/><path d="M24 11h3l3 3v2h-1"/><circle cx="18.5" cy="18" r="1.7"/><circle cx="27" cy="18" r="1.7"/></svg>';
-      } else {
-        trBtn.appendChild(iconEl('truck', 14));
-      }
-      actionsChildren.push(trBtn);
-    }
-  }
   const tdHist = el('td', {
     style: 'padding:10px 12px;text-align:center;white-space:nowrap'
   }, el('div', { style: 'display:inline-flex;gap:6px;align-items:center' }, ...actionsChildren));
@@ -17378,9 +17227,38 @@ function buildValorisationTableRow(item) {
   return tr;
 }
 
+// ── Les prix ne se saisissent plus dans MyStock ────────────────────────────
+// Une seule application écrit les prix matière : Coûts matières, où vivent les
+// fournisseurs, les devises, le transport et les taxes. La valorisation les lit
+// et les affiche. Sans cette règle, deux écrans écrivaient la même valeur et
+// l'écart se constatait sans jamais s'expliquer.
+//
+// Ce qui reste modifiable ici : le CONDITIONNEMENT (unités par palette, mètres
+// linéaires par bobine), qui décrit la logistique du stock, pas le prix d'achat.
+
+function valLienCoutsMatieres(item, libelle) {
+  const ref = item.reference || '';
+  const a = el('a', {
+    href: '/pricing/materials' + (ref ? '?ref=' + encodeURIComponent(ref) : ''),
+    target: '_blank', rel: 'noopener',
+    title: 'Le prix se modifie dans Coûts matières' + (ref ? ' — ouvrir ' + ref : ''),
+    style: 'background:var(--card);border:1px solid var(--border);border-radius:6px;padding:4px 8px;'
+      + 'cursor:pointer;color:var(--text2);font-size:11px;margin-top:4px;display:inline-flex;'
+      + 'align-items:center;gap:4px;text-decoration:none',
+    on: {
+      mouseenter: (e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; },
+      mouseleave: (e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text2)'; },
+    },
+  });
+  a.appendChild(iconEl('external-link', 11));
+  a.appendChild(el('span', null, libelle || 'Prix : Coûts matières'));
+  return a;
+}
+
 async function openValorisationConditionnementModal(matiereId) {
-  // Modal d'édition prix unitaire d'achat + unités par palette.
+  // Modal d'édition du conditionnement : unités par palette.
   // Pour les catégories carton / adhésif / mandrin.
+  // Le prix unitaire est en lecture seule — il se modifie dans Coûts matières.
   const v = valEnsureState();
   const item = (v.items || []).find(x => (x.matiere_id || x.id) === matiereId);
   if (!item) { showToast('Référence introuvable.', 'danger'); return; }
@@ -17392,31 +17270,31 @@ async function openValorisationConditionnementModal(matiereId) {
     on: { click: (e) => { if (e.target === overlay) { root.innerHTML = ''; } } },
   });
   const box = el('div', { style: 'background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:480px;padding:22px' });
-  box.appendChild(el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px' }, 'Prix & conditionnement'));
+  box.appendChild(el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px' }, 'Conditionnement'));
   box.appendChild(el('div', { style: 'font-size:15px;font-weight:700;color:var(--text);margin-bottom:18px' },
     (item.reference || '') + ' — ' + (item.designation || '')));
 
   const uniteAchat = item.unite_achat || 'unité';
-  const prixInp = el('input', { type: 'number', step: '0.0001', min: '0',
-    style: 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums' });
-  prixInp.value = String(Number(item.prix_unitaire || 0) || '');
+  const prixUnit = Number(item.prix_unitaire || 0);
   const uppInp = el('input', { type: 'number', step: '1', min: '0',
     style: 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums' });
   uppInp.value = String(Number(item.unites_par_palette || 0) || '');
 
-  box.appendChild(el('label', { style: 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px' }, 'Prix unitaire (€ / ' + uniteAchat + ')'));
-  box.appendChild(prixInp);
+  box.appendChild(valBlocPrixLectureSeule(item,
+    prixUnit > 0
+      ? prixUnit.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' €/' + uniteAchat
+      : 'non valorisé'));
   box.appendChild(el('div', { style: 'height:14px' }));
   box.appendChild(el('label', { style: 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px' }, uniteAchat + ' par palette'));
   box.appendChild(uppInp);
 
-  // Aperçu prix palette calculé
+  // Aperçu prix palette : le prix vient de Coûts matières, seul le
+  // conditionnement bouge ici.
   const preview = el('div', { style: 'margin-top:12px;font-size:12px;color:var(--text2);background:var(--bg);border:1px dashed var(--border);border-radius:8px;padding:10px 12px' });
   const updatePreview = () => {
-    const p = parseFloat((prixInp.value || '').replace(',', '.')) || 0;
     const u = parseFloat((uppInp.value || '').replace(',', '.')) || 0;
-    if (p > 0 && u > 0) {
-      const total = p * u;
+    if (prixUnit > 0 && u > 0) {
+      const total = prixUnit * u;
       preview.innerHTML = '';
       preview.append(
         el('span', { style: 'color:var(--muted)' }, 'Prix palette calculé : '),
@@ -17427,14 +17305,9 @@ async function openValorisationConditionnementModal(matiereId) {
       preview.textContent = 'Prix palette : —';
     }
   };
-  prixInp.addEventListener('input', updatePreview);
   uppInp.addEventListener('input', updatePreview);
   updatePreview();
   box.appendChild(preview);
-
-  const noteInp = el('input', { type: 'text', placeholder: 'Note optionnelle (motif du changement)',
-    style: 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;margin-top:14px' });
-  box.appendChild(noteInp);
 
   const actions = el('div', { style: 'display:flex;justify-content:flex-end;gap:8px;margin-top:18px' });
   actions.appendChild(el('button', {
@@ -17446,27 +17319,15 @@ async function openValorisationConditionnementModal(matiereId) {
     type: 'button',
     style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:700;cursor:pointer',
     on: { click: async () => {
-      const prix = parseFloat((prixInp.value || '').replace(',', '.'));
       const upp = parseFloat((uppInp.value || '').replace(',', '.'));
-      if (isNaN(prix) || prix < 0) { showToast('Prix invalide.', 'danger'); return; }
       if (isNaN(upp) || upp <= 0) { showToast('Conditionnement (> 0) obligatoire.', 'danger'); return; }
       try {
-        // 1) Conditionnement
         await api('/api/stock/matieres/' + matiereId, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ unites_par_palette: upp }),
         });
-        // 2) Prix unitaire d'achat (avec historique)
-        await api('/api/stock/valorisation/' + matiereId, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prix_unitaire: prix,
-            note: noteInp.value.trim() || null,
-          }),
-        });
-        showToast('Enregistré.', 'success');
+        showToast('Conditionnement enregistré.', 'success');
         root.innerHTML = '';
         await loadValorisation();
       } catch (e) {
@@ -17479,11 +17340,37 @@ async function openValorisationConditionnementModal(matiereId) {
 
   overlay.appendChild(box);
   root.appendChild(overlay);
-  setTimeout(() => prixInp.focus(), 50);
+  setTimeout(() => uppInp.focus(), 50);
+}
+
+/**
+ * Encadré « prix en lecture seule » des modales de valorisation : la valeur telle
+ * qu'elle est appliquée, et le chemin pour aller la corriger.
+ */
+function valBlocPrixLectureSeule(item, texte) {
+  const bloc = el('div', {
+    style: 'background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--accent);'
+      + 'border-radius:8px;padding:11px 13px',
+  });
+  const entete = el('div', { style: 'display:flex;align-items:center;gap:7px;margin-bottom:4px' });
+  entete.appendChild(iconEl('lock', 12));
+  entete.appendChild(el('span', {
+    style: 'font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px',
+  }, 'Prix appliqué'));
+  bloc.appendChild(entete);
+  bloc.appendChild(el('div', {
+    style: 'font-size:15px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums',
+  }, texte));
+  bloc.appendChild(el('div', { style: 'font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5' },
+    'Le prix se modifie dans Coûts matières, où vivent les fournisseurs, la devise, le transport et les taxes.'));
+  bloc.appendChild(valLienCoutsMatieres(item, 'Ouvrir dans Coûts matières'));
+  return bloc;
 }
 
 async function openValorisationParamsModal(matiereId) {
-  // Charge l'état courant (prix m² + métrage) et ouvre un modal d'édition
+  // Édition du métrage par bobine. Le prix au m² est affiché en lecture seule :
+  // il se saisit dans Coûts matières. Le PUT n'envoie donc plus `prix_eur_m2`,
+  // et l'endpoint ne met à jour que les champs présents dans le corps.
   let info = null;
   try {
     info = await api('/api/stock/matieres/' + matiereId + '/laizes');
@@ -17499,19 +17386,19 @@ async function openValorisationParamsModal(matiereId) {
     on: { click: (e) => { if (e.target === overlay) { root.innerHTML = ''; } } },
   });
   const box = el('div', { style: 'background:var(--card);border:1px solid var(--border);border-radius:14px;width:100%;max-width:480px;padding:22px' });
-  box.appendChild(el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px' }, 'Paramètres valorisation'));
+  box.appendChild(el('div', { style: 'font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px' }, 'Métrage par bobine'));
   box.appendChild(el('div', { style: 'font-size:15px;font-weight:700;color:var(--text);margin-bottom:18px' },
     (info.reference || '') + ' — ' + (info.designation || '')));
 
-  const prixInp = el('input', { type: 'number', step: '0.0001', min: '0',
-    style: 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums' });
-  prixInp.value = String(info.prix_eur_m2 || '');
+  const prixM2 = Number(info.prix_eur_m2 || 0);
   const metresInp = el('input', { type: 'number', step: '1', min: '0',
     style: 'width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:14px;font-variant-numeric:tabular-nums' });
   metresInp.value = String(info.metres_lineaires_par_bobine || '');
 
-  box.appendChild(el('label', { style: 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px' }, 'Prix au m² (€)'));
-  box.appendChild(prixInp);
+  box.appendChild(valBlocPrixLectureSeule(info,
+    prixM2 > 0
+      ? prixM2.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' €/m²'
+      : 'non valorisé'));
   box.appendChild(el('div', { style: 'height:14px' }));
   box.appendChild(el('label', { style: 'display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px' }, 'Mètres linéaires par bobine'));
   box.appendChild(metresInp);
@@ -17530,19 +17417,17 @@ async function openValorisationParamsModal(matiereId) {
     type: 'button',
     style: 'padding:9px 16px;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:#fff;font-weight:700;cursor:pointer',
     on: { click: async () => {
-      const prix = parseFloat((prixInp.value || '').replace(',', '.')) || 0;
       const metres = parseFloat((metresInp.value || '').replace(',', '.')) || 0;
       try {
         await api('/api/stock/valorisation/' + matiereId, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            prix_eur_m2: prix,
             metres_lineaires_par_bobine: metres,
             note: noteInp.value.trim() || null,
           }),
         });
-        showToast('Paramètres enregistrés.', 'success');
+        showToast('Métrage enregistré.', 'success');
         root.innerHTML = '';
         await loadValorisation();
         loadMatieresIncompleteCount();
@@ -17556,7 +17441,7 @@ async function openValorisationParamsModal(matiereId) {
 
   overlay.appendChild(box);
   root.appendChild(overlay);
-  setTimeout(() => prixInp.focus(), 50);
+  setTimeout(() => metresInp.focus(), 50);
 }
 
 function buildValorisationTable() {
@@ -17829,29 +17714,10 @@ function valTogglePFSort(column) {
   renderValorisationPFTableOnly();
 }
 
-async function savePFPrice(produitId, newPrice, inputEl) {
-  const pf = valPFEnsureState();
-  try {
-    const data = await api('/api/stock/valorisation/pf/' + produitId, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prix_unitaire_ht: newPrice }),
-    });
-    if (data?.item) {
-      const idx = pf.items.findIndex(x => x.id === produitId);
-      if (idx >= 0) pf.items[idx] = data.item;
-    }
-    if (data?.summary) pf.summary = data.summary;
-    renderValorisationView(true);
-    showToast('Prix enregistré.', 'success');
-  } catch (e) {
-    showToast('Erreur : ' + (e?.message || 'enregistrement impossible'), 'danger');
-    if (inputEl) {
-      const item = pf.items.find(x => x.id === produitId);
-      if (item) inputEl.value = (Number(item.prix_unitaire_ht) || 0).toString().replace('.', ',');
-    }
-  }
-}
+// `savePFPrice` a été retirée : les prix HT des produits finis ne se saisissent
+// plus ligne à ligne dans la valorisation. Ils arrivent par l'import de la
+// feuille de facturation, seule source de vérité. L'endpoint
+// PUT /api/stock/valorisation/pf/{id} reste en place côté serveur.
 
 async function openPFHistorique(produitId) {
   const pf = valPFEnsureState();
@@ -18158,41 +18024,22 @@ function buildValorisationPFTableRow(item) {
     el('span', { style: 'margin-left:5px;font-size:11px;color:var(--muted);font-weight:500' }, item.unite || ''),
   );
 
-  // Prix unitaire HT — éditable inline
-  const inpId = 'val-pf-price-' + item.id;
-  const inp = el('input', {
-    type: 'text', id: inpId,
-    value: (Number(item.prix_unitaire_ht) || 0).toString().replace('.', ','),
-    inputmode: 'decimal',
-    style: 'width:120px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text);font-size:13px;font-variant-numeric:tabular-nums;text-align:right;transition:border-color .15s',
-  });
-  const commit = async () => {
-    const raw = (inp.value || '').trim().replace(/\s/g, '').replace(',', '.');
-    const num = parseFloat(raw);
-    const current = Number(item.prix_unitaire_ht) || 0;
-    if (isNaN(num) || num < 0) {
-      inp.value = current.toString().replace('.', ',');
-      showToast('Prix invalide.', 'danger');
-      return;
-    }
-    if (Math.abs(num - current) < 0.00001) return;
-    await savePFPrice(item.id, num, inp);
-  };
-  inp.addEventListener('blur', commit);
-  inp.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); inp.blur(); }
-    if (e.key === 'Escape') {
-      inp.value = (Number(item.prix_unitaire_ht) || 0).toString().replace('.', ',');
-      inp.blur();
-    }
-  });
-  inp.addEventListener('focus', () => inp.select());
+  // Prix unitaire HT — lecture seule.
+  //
+  // Comme pour les matières premières, la valorisation ne saisit plus de prix :
+  // elle affiche ce que la source de vérité lui donne. Ici cette source est
+  // l'import de la feuille de facturation (bouton « Importer Excel » au-dessus
+  // du tableau), pas une saisie ligne à ligne.
   const uniteLow = (item.unite || '').toLowerCase()
     .replace(/é/g, 'e').replace(/è/g, 'e').replace(/ê/g, 'e');
   const parMille = item.par_mille || uniteLow === 'etiquette' || uniteLow === 'etiquettes';
   const prixUniteLabel = parMille ? 'Mille' : (item.unite || '');
+  const prixHt = Number(item.prix_unitaire_ht) || 0;
   const tdPrix = el('td', { style: 'padding:10px 12px;text-align:right' },
-    inp,
+    el('span', {
+      style: 'font-size:13px;font-weight:600;color:' + (prixHt > 0 ? 'var(--text)' : 'var(--muted)')
+        + ';font-variant-numeric:tabular-nums',
+    }, prixHt > 0 ? valFormatPrixDetail(prixHt) : '—'),
     el('span', { style: 'margin-left:6px;font-size:11px;color:var(--muted)' }, '€ HT/' + prixUniteLabel),
   );
 

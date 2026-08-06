@@ -1086,13 +1086,21 @@
       // Les matières premières ne se gèrent plus par emplacement : plus de champ.
       const qField = buildMpQuantiteField(mpCat, 'entree');
       const qInp = qField.qInp;
-      // Prix €/m² de la réception — uniquement pour bobines laizées
+      // Prix €/m² de la réception — désormais en LECTURE SEULE.
+      //
+      // Ce champ recalculait un prix moyen pondéré et réécrivait, sans trace
+      // dans l'historique de valorisation, le prix de référence de la matière.
+      // Autrement dit : une saisie de réception pouvait changer un prix de
+      // revient à l'insu de tout le monde. Les prix matière ne s'écrivent plus
+      // que dans Coûts matières ; la réception se contente d'afficher le prix
+      // en vigueur, pour que celui qui saisit voie à quoi il valorise.
       const showPrix = isLaizeeCat && !!mat;
-      const prixInp = showPrix ? el('input', {
-        attrs: { type: 'number', min: '0', step: '0.0001', placeholder: 'Ex. 0,0550' }
-      }) : null;
       const prixHint = showPrix ? el('div', { cls: 'mp-hint',
         style: 'font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4' }, '') : null;
+      const prixLecture = showPrix ? el('div', {
+        style: 'padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg);'
+          + 'color:var(--text);font-size:13px;font-weight:600;font-variant-numeric:tabular-nums',
+      }, '—') : null;
       function computeCurrentPrix() {
         if (!mat) return 0;
         const parLaize = !!mat.prix_par_laize;
@@ -1103,14 +1111,15 @@
         return parseFloat(mat.prix_eur_m2 || 0);
       }
       function refreshPrixHint() {
-        if (!prixHint) return;
+        if (!prixHint || !prixLecture) return;
         const p = computeCurrentPrix();
-        const modeTxt = mat.prix_par_laize ? ' (par laize)' : ' (matière)';
+        const modeTxt = mat.prix_par_laize ? 'par laize' : 'matière';
         if (p > 0) {
-          prixHint.textContent = 'Prix courant' + modeTxt + ' : ' + p.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
-            + ' €/m². Laisser vide pour le conserver, sinon le PMP sera recalculé automatiquement.';
+          prixLecture.textContent = p.toLocaleString('fr-FR', { minimumFractionDigits: 4, maximumFractionDigits: 4 }) + ' €/m²';
+          prixHint.textContent = 'Prix en vigueur (' + modeTxt + '). Il se modifie dans Coûts matières — cette réception ne le change pas.';
         } else {
-          prixHint.textContent = 'Aucun prix courant enregistré. Si tu saisis un prix, il devient le prix de référence.';
+          prixLecture.textContent = 'non valorisé';
+          prixHint.textContent = 'Aucun prix enregistré pour cette matière. Il se pose dans Coûts matières.';
         }
       }
       body.appendChild(el('div', { cls: 'mp-field' },
@@ -1118,10 +1127,10 @@
         blInp,
       ));
       body.appendChild(qField.wrap);
-      if (prixInp) {
+      if (prixLecture) {
         body.appendChild(el('div', { cls: 'mp-field' },
-          el('label', null, 'Prix €/m² de cette réception'),
-          prixInp,
+          el('label', null, 'Prix €/m² appliqué'),
+          prixLecture,
           prixHint,
         ));
         refreshPrixHint();
@@ -1140,24 +1149,14 @@
           emplacement_source: null,
           emplacement_dest: null,
         };
-        if (prixInp) {
-          const raw = (prixInp.value || '').replace(',', '.').trim();
-          if (raw !== '') {
-            const v = parseFloat(raw);
-            if (!isNaN(v) && v >= 0) b.prix_eur_m2 = v;
-          }
-        }
+        // `prix_eur_m2` n'est plus envoyé : une réception ne redéfinit plus le
+        // prix de référence de la matière (recalcul PMP côté serveur).
         return b;
       };
       S.mpModal.validate = () => {
         const q = parseFloat(qInp.value);
         if (!S.mpModal.matiereId) return 'Matière obligatoire.';
         if (!q || q <= 0) return 'Quantité invalide.';
-        if (prixInp && prixInp.value) {
-          const raw = prixInp.value.replace(',', '.').trim();
-          const v = parseFloat(raw);
-          if (isNaN(v) || v < 0) return 'Prix €/m² invalide.';
-        }
         return null;
       };
     } else if (typeMvt === 'sortie') {

@@ -653,7 +653,7 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
 }
 .mytraduction-usage-cached{color:var(--success);font-weight:600}
 .mytraduction-btn{
-  background:var(--accent);color:#000;border:0;border-radius:10px;
+  background:var(--accent);color:var(--bg);border:0;border-radius:10px;
   padding:10px 22px;font-weight:700;font-size:13px;cursor:pointer;
   display:inline-flex;align-items:center;gap:8px;transition:filter .15s
 }
