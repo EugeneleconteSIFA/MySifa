@@ -240,34 +240,45 @@ table.pr-table tr{cursor:pointer}
 .gram-out{background:var(--bg);border:1px solid var(--border);border-radius:10px;
   padding:12px 14px;font-size:14px;font-weight:700;color:var(--text);
   font-variant-numeric:tabular-nums}
-/* Case à cocher posée dans une grille de champs : alignée sur ses voisins. */
-.check-inline{margin-top:24px}
 @media(max-width:860px){
   .gram-row{grid-template-columns:1fr 1fr;gap:12px}
   .gram-arrow{display:none}
   .gram-row .field{margin-bottom:12px}
 }
 
-/* Bandeau d'actions collé en haut de la fiche matière (repris de la fiche
-   produit MyAO) : sur un formulaire long, Enregistrer reste sous la main. */
-.pr-savebar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;gap:10px;align-items:center;
-  padding:10px 14px;margin-bottom:16px;
-  background:linear-gradient(135deg,var(--card) 0%,var(--accent-bg) 100%);
+/* Bandeau d'actions de la fiche matière (repris de la fiche produit MyAO).
+   En `fixed` plutôt qu'en `sticky` : Enregistrer reste visible en permanence,
+   qu'on soit en haut de la fiche ou dans le récapitulatif tout en bas. Le fond
+   doit être OPAQUE — `--accent-bg` est un rgba, un simple dégradé laisserait la
+   page défiler en transparence derrière le bandeau. */
+.pr-savebar{position:fixed;top:14px;left:244px;right:24px;max-width:1180px;margin:0 auto;
+  z-index:60;display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+  padding:10px 14px;
+  background-color:var(--card);
+  background-image:linear-gradient(135deg,var(--card) 0%,var(--accent-bg) 100%);
   border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;
-  box-shadow:0 2px 8px rgba(15,23,42,.06)}
-/* .content a 20px de padding haut : sans ce cache, la page défilerait en clair
-   dans la bande au-dessus du bandeau une fois celui-ci collé. */
-.pr-savebar::before{content:"";position:absolute;left:-1px;right:-1px;bottom:100%;
-  height:24px;background:var(--bg)}
+  box-shadow:0 6px 18px rgba(15,23,42,.14)}
+/* Sorti du flux, le bandeau masquerait le haut de la page : cet espaceur lui
+   tient la place. Hauteur de repli ici, hauteur réelle posée par
+   `syncSavebarSpacer` (le bandeau passe sur deux lignes en écran étroit). */
+.savebar-spacer{height:82px}
 .pr-savebar .savebar-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto}
 .pr-savebar .btn-soft{background:var(--card)}
 .pr-savebar .btn-soft:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
 .savebar-state{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--warn)}
 .savebar-state .dot{width:7px;height:7px;border-radius:50%;background:var(--warn);flex-shrink:0}
 .savebar-state[hidden]{display:none}
+/* Sous 900px la barre latérale passe en tiroir : le bandeau reprend la largeur. */
+@media(max-width:900px){
+  .pr-savebar{left:16px;right:16px}
+}
 @media(max-width:640px){
-  .pr-savebar{gap:8px}
+  .pr-savebar{gap:8px;top:10px}
   .pr-savebar .savebar-state{order:3;width:100%}
+  .savebar-spacer{height:118px}
+}
+@media print{
+  .pr-savebar,.savebar-spacer{display:none!important}
 }
 
 .page-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -308,6 +319,14 @@ table.pr-table tr{cursor:pointer}
 /* Formulaire */
 .lbl-unit{font-weight:600;color:var(--text2);text-transform:none;letter-spacing:0}
 .field-hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5}
+/* Explication de la méthode de transport choisie : ce qu'elle calcule, puis un
+   exemple chiffré. L'exemple est détaché pour se repérer d'un coup d'œil. */
+.transport-aide{margin-top:8px}
+.transport-aide .aide-ex{display:block;margin-top:6px;padding:6px 9px;border-radius:7px;
+  background:var(--bg);border-left:2px solid var(--accent);color:var(--text2);
+  font-variant-numeric:tabular-nums}
+.transport-aide .aide-ex strong{color:var(--text)}
+.transport-aide .aide-quand{display:block;margin-top:6px;font-style:italic}
 .form-actions{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;
   padding-top:16px;border-top:1px solid var(--border)}
 
@@ -378,11 +397,23 @@ table.recap-table td:last-child{border-right:none}
 .form-layout{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:18px;align-items:start}
 .form-layout .form-card{max-width:none}
 .settings-side{background:var(--card);border:1px solid var(--border);border-radius:12px;
-  padding:16px 18px;position:sticky;top:16px}
+  padding:16px 18px;position:sticky;top:110px}
 .si-head{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
   color:var(--muted);margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)}
 .si-head span{font-weight:400;text-transform:none;letter-spacing:0;display:block;margin-top:4px;
   line-height:1.5}
+/* Le panneau réunit deux portées : un réglage de la fiche ouverte, puis les
+   réglages valables partout. Les blocs titrés évitent la confusion — le bouton
+   « Appliquer » ne concerne que le second. */
+.si-block + .si-block{margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
+.si-sub{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--accent);margin-bottom:10px}
+.settings-side .check-side{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.settings-side .check-side input{margin-top:2px;flex-shrink:0;width:16px;height:16px;
+  accent-color:var(--accent);cursor:pointer}
+.settings-side .check-side .check-title{display:block;font-size:13px;font-weight:600;color:var(--text)}
+.settings-side .check-side .check-sub{display:block;font-size:11px;color:var(--muted);
+  margin-top:3px;line-height:1.5}
 .settings-side .field{margin-bottom:14px}
 .settings-side .field input{background:var(--filter-input-bg);padding:10px 12px;font-size:14px;
   max-width:none}

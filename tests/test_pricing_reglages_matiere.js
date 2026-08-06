@@ -59,6 +59,23 @@ for (const [nom, fn] of [['fiche matière', 'saveMaterialForm'], ['fiche MyStock
   check(nom + ' : plus de poids saisi', code.includes('weight_per_m2:'), false);
 }
 
+// ─── Chaque méthode de transport est expliquée, exemple à l'appui ───────────
+// Quatre méthodes dont deux font la même division sur des données différentes :
+// sans explication ni exemple chiffré, le choix se fait au hasard.
+const aide = src.slice(src.indexOf('const TRANSPORT_AIDE = {'), src.indexOf('function transportModeOptions('));
+for (const m of ['AMOUNT', 'PCT', 'CONTENEUR', 'FORFAIT']) {
+  const bloc = aide.slice(aide.indexOf(m + ': {'), aide.indexOf('},', aide.indexOf(m + ': {')));
+  check('méthode expliquée : ' + m, bloc.includes('quoi:'), true);
+  check('exemple chiffré : ' + m, /exemple:\s*"[^"]*\d/.test(bloc), true);
+}
+check('l\'aide est rendue sous le sélecteur', src.includes('function transportAideHtml('), true);
+for (const prefixe of ['f', 'd']) {
+  check('sélecteur ' + prefixe + '-tmode suivi de son aide',
+    new RegExp('id="' + prefixe + '-tmode">\\$\\{transportModeOptions[^]{0,80}transportAideHtml').test(src), true);
+}
+// L'aide dépend de la méthode : le formulaire doit se re-rendre au changement.
+check('changer de méthode redessine la fiche', /"f-cur", "f-basis", "f-imp", "f-tmode"/.test(src), true);
+
 // ─── Placement demandé dans le formulaire ───────────────────────────────────
 const form = src.slice(src.indexOf('function renderMaterialForm('), src.indexOf('function syncMaterialFormFromDom('));
 check('caractéristiques avant prix d\'achat',
@@ -66,7 +83,17 @@ check('caractéristiques avant prix d\'achat',
 const importBloc = form.slice(form.indexOf('id="import-block"'), form.indexOf('id="carac-section"') > form.indexOf('id="import-block"')
   ? form.indexOf('id="carac-section"') : form.length);
 check('la taxe est dans l\'encadré import', importBloc.includes('id="f-tax"'), true);
-check('la case marge est dans le bloc prix', form.includes('id="f-marge"'), true);
+// La case « Appliquer la marge » a quitté le bloc Prix d'achat : elle vit
+// maintenant dans le panneau latéral Paramètres, bloc « Cette matière ».
+const panneau = src.slice(src.indexOf('function inlineSettingsHtml('), src.indexOf('function bindInlineSettings('));
+check('la case marge n\'est plus dans le corps du formulaire', form.includes('id="f-marge"'), false);
+check('le formulaire monte le panneau Paramètres', form.includes('inlineSettingsHtml("f", f)'), true);
+check('la fiche MyStock monte le même panneau', src.includes('inlineSettingsHtml("d", f)'), true);
+check('la case marge est dans le panneau Paramètres', panneau.includes('${prefixe}-marge'), true);
+check('le panneau distingue les deux portées',
+  panneau.includes('Cette matière') && panneau.includes('Toutes les matières'), true);
+check('le panneau ne s\'appelle plus « Paramètres globaux »',
+  panneau.includes('Paramètres globaux'), false);
 check('plus de champ poids kg/m²', form.includes('id="f-wm2"'), false);
 check('un seul champ grammage', (form.match(/id="f-gsm"/g) || []).length, 1);
 check('champ perte présent', form.includes('id="f-perte"'), true);
