@@ -626,6 +626,343 @@ def list_fournisseurs_groupes(request: Request):
     return [{"groupe": r["groupe"], "n": r["n"]} for r in rows]
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Certifications fournisseurs — miroir de MyQualité › Ressources
+# fournisseurs. AUCUNE table nouvelle : on lit `qualite_ref_fiches`
+# (catalogue du référentiel RSE), `qualite_fournisseur_certificats`
+# (documents déposés) et `qualite_fournisseur_certificat_fiches` (le
+# tag document → certification). Le dépôt et l'édition restent dans
+# MyQualité : ici c'est lecture seule.
+#
+# Règle héritée de MyQualité et rendue visible dans la fiche : un
+# certificat portant `groupe_ref` couvre TOUTES les branches du groupe,
+# pas seulement celle qui l'a téléversé.
+# ═══════════════════════════════════════════════════════════════════════
+
+# Ordre de préséance quand deux documents couvrent la même certification :
+# le meilleur statut gagne. Identique à _COUV_RANG dans routers/qualite.py.
+_FOUR_CERT_RANG = {"valide": 0, "soon": 1, "nod": 2, "exp": 3}
+
+
+def _four_cert_statut(date_expiration):
+    """'valide' | 'soon' (<=60 j) | 'exp' | 'nod' (pas de date).
+
+    Mêmes seuils que _compute_cert_status (routers/qualite.py) — les deux
+    écrans doivent afficher le même statut pour le même document.
+    """
+    if not date_expiration:
+        return "nod"
+    try:
+        dexp = datetime.strptime(str(date_expiration)[:10], "%Y-%m-%d").date()
+    except Exception:
+        return "nod"
+    today = datetime.now().date()
+    if dexp < today:
+        return "exp"
+    return "soon" if (dexp - today).days <= 60 else "valide"
+
+
+def _four_load_referentiel(conn):
+    """Catalogue des certifications (qualite_ref_fiches).
+
+    Renvoie [] si la table n'existe pas encore — le module Qualité peut ne
+    pas être initialisé sur une base fraîche, et l'onglet Certifications
+    doit alors se dégrader proprement au lieu de casser la page entière.
+    """
+    try:
+        rows = conn.execute(
+            """SELECT id, slug, nom, acronyme, categorie, statut_sifa
+               FROM qualite_ref_fiches
+               ORDER BY categorie ASC, nom COLLATE NOCASE ASC"""
+        ).fetchall()
+    except Exception:
+        return []
+    return [dict(r) for r in rows]
+
+
+def _four_load_couverture(conn):
+    """Couverture par fournisseur : {fournisseur_id: {fiche_id: entry}}.
+
+    entry = {statut, niveau ('branche'|'groupe'), titre, date_expiration,
+             certificat_id, filename}
+    """
+    try:
+        certs = conn.execute(
+            """SELECT id, fournisseur_id, titre, original_name,
+                      date_emission, date_expiration, groupe_ref
+               FROM qualite_fournisseur_certificats"""
+        ).fetchall()
+        liens = conn.execute(
+            "SELECT certificat_id, fiche_id FROM qualite_fournisseur_certificat_fiches"
+        ).fetchall()
+    except Exception:
+        return {}, {}
+
+    meta = {c["id"]: dict(c) for c in certs}
+
+    # groupe (minuscule) -> [fournisseur_id...] : cible d'un certificat groupe
+    par_groupe = {}
+    for r in conn.execute(
+        """SELECT id, groupe FROM fournisseurs_fsc
+           WHERE groupe IS NOT NULL AND TRIM(groupe) <> ''"""
+    ).fetchall():
+        par_groupe.setdefault(r["groupe"].strip().lower(), []).append(r["id"])
+
+    couv = {}
+
+    def _pose(fid, fiche_id, entry):
+        if fid is None:
+            return
+        d = couv.setdefault(fid, {})
+        cur = d.get(fiche_id)
+        if cur is None or _FOUR_CERT_RANG.get(entry["statut"], 9) < _FOUR_CERT_RANG.get(cur["statut"], 9):
+            d[fiche_id] = entry
+
+    for lk in liens:
+        m = meta.get(lk["certificat_id"])
+        if not m:
+            continue
+        gref = (m.get("groupe_ref") or "").strip().lower()
+        cibles = par_groupe.get(gref) if gref else None
+        entry_base = {
+            "statut": _four_cert_statut(m.get("date_expiration")),
+            "niveau": "groupe" if cibles else "branche",
+            "titre": m.get("titre") or m.get("original_name") or "",
+            "date_emission": m.get("date_emission"),
+            "date_expiration": m.get("date_expiration"),
+            "certificat_id": m["id"],
+            "filename": m.get("original_name") or "",
+            "groupe_ref": m.get("groupe_ref") or None,
+        }
+        for fid in (cibles or [m["fournisseur_id"]]):
+            _pose(fid, lk["fiche_id"], dict(entry_base))
+
+    return couv, meta
+
+
+def _four_stats_couverture(entries, total_referentiel):
+    s = {"couvert": 0, "valide": 0, "soon": 0, "exp": 0, "nod": 0,
+         "total": total_referentiel}
+    for e in (entries or {}).values():
+        s["couvert"] += 1
+        s[e["statut"]] = s.get(e["statut"], 0) + 1
+    return s
+
+
+@router.get("/api/fournisseurs/referentiel-certifications")
+def list_referentiel_certifications(request: Request):
+    """Catalogue du référentiel RSE + couverture agrégée de chaque fournisseur.
+
+    Un seul appel pour peindre la colonne « Certifications » de la liste :
+    32 fournisseurs × N certifications en une requête plutôt qu'un aller-retour
+    par ligne.
+
+    Déclaré avant les routes paramétrées `/api/fournisseurs/{...}` pour ne pas
+    être capté par un segment variable.
+    """
+    require_settings(request)
+    from database import get_db
+    with get_db() as conn:
+        ref = _four_load_referentiel(conn)
+        couv, _meta = _four_load_couverture(conn)
+        ids = [r["id"] for r in conn.execute("SELECT id FROM fournisseurs_fsc").fetchall()]
+
+    by_id = {r["id"]: r for r in ref}
+    out = {}
+    for fid in ids:
+        entries = couv.get(fid, {})
+        st = _four_stats_couverture(entries, len(ref))
+        # Les 3 acronymes les plus « sains » d'abord : c'est ce que la
+        # cellule de liste affiche avant le « +N ».
+        top = sorted(
+            (
+                {
+                    "fiche_id": k,
+                    "acronyme": (by_id.get(k, {}).get("acronyme")
+                                 or by_id.get(k, {}).get("nom") or "?"),
+                    "statut": v["statut"],
+                    "niveau": v["niveau"],
+                }
+                for k, v in entries.items() if k in by_id
+            ),
+            key=lambda x: (_FOUR_CERT_RANG.get(x["statut"], 9), x["acronyme"]),
+        )
+        out[str(fid)] = {"stats": st, "top": top}
+    return {"referentiel": ref, "couverture": out}
+
+
+@router.get("/api/fournisseurs/{fournisseur_id}/certifications")
+def fournisseur_certifications(fournisseur_id: int, request: Request):
+    """Détail Certifications d'un fournisseur : catalogue + couverture + documents.
+
+    `documents` contient ses propres certificats ET ceux déposés au niveau de
+    son groupe : ces derniers portent niveau='groupe' et ne sont pas stockés
+    sur lui — ils s'affichent parce qu'ils le couvrent.
+    """
+    require_settings(request)
+    from database import get_db
+    with get_db() as conn:
+        four = conn.execute(
+            "SELECT id, nom, groupe, branche FROM fournisseurs_fsc WHERE id=?",
+            (fournisseur_id,),
+        ).fetchone()
+        if not four:
+            raise HTTPException(status_code=404, detail="Fournisseur non trouvé")
+        ref = _four_load_referentiel(conn)
+        couv, meta = _four_load_couverture(conn)
+        try:
+            liens = conn.execute(
+                """SELECT l.certificat_id, l.fiche_id, f.nom, f.acronyme
+                   FROM qualite_fournisseur_certificat_fiches l
+                   JOIN qualite_ref_fiches f ON f.id = l.fiche_id"""
+            ).fetchall()
+        except Exception:
+            liens = []
+
+    groupe = (four["groupe"] or "").strip().lower()
+    fiches_par_cert = {}
+    for lk in liens:
+        fiches_par_cert.setdefault(lk["certificat_id"], []).append(
+            {"fiche_id": lk["fiche_id"], "nom": lk["nom"], "acronyme": lk["acronyme"]}
+        )
+
+    documents = []
+    for cid, m in meta.items():
+        gref = (m.get("groupe_ref") or "").strip().lower()
+        est_groupe = bool(gref)
+        # Retenu si c'est un document de ce fournisseur, ou un document
+        # groupe portant le groupe auquel il est rattaché.
+        if not (m["fournisseur_id"] == fournisseur_id or (est_groupe and gref and gref == groupe)):
+            continue
+        documents.append({
+            "id": cid,
+            "titre": m.get("titre") or m.get("original_name") or "",
+            "filename": m.get("original_name") or "",
+            "date_emission": m.get("date_emission"),
+            "date_expiration": m.get("date_expiration"),
+            "statut": _four_cert_statut(m.get("date_expiration")),
+            "niveau": "groupe" if est_groupe else "branche",
+            "fiches": fiches_par_cert.get(cid, []),
+        })
+    documents.sort(key=lambda d: (d["niveau"] != "branche", d["titre"].lower()))
+
+    entries = couv.get(fournisseur_id, {})
+    return {
+        "fournisseur": dict(four),
+        "referentiel": ref,
+        "couverture": {str(k): v for k, v in entries.items()},
+        "documents": documents,
+        "stats": _four_stats_couverture(entries, len(ref)),
+    }
+
+
+@router.get("/api/fournisseurs/groupe/{groupe}/fiche")
+def fournisseur_groupe_fiche(groupe: str, request: Request):
+    """Fiche consolidée d'un groupe : branches, agrégats et documents groupe.
+
+    Le groupe n'est pas une ligne en base — c'est la colonne `groupe` de
+    fournisseurs_fsc. Cette route l'expose comme une entité pour que la fiche
+    groupe existe côté UI sans migration.
+    """
+    require_settings(request)
+    from database import get_db
+    import json
+    g = (groupe or "").strip()
+    if not g:
+        raise HTTPException(status_code=400, detail="Groupe requis")
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, nom, groupe, branche, licence, certificat, has_fsc,
+                      fsc_date_expiration, categories, ville, pays, actif,
+                      traca_exemple_code, traca_photo_url, traca_explication,
+                      (SELECT COUNT(*) FROM fournisseur_contacts fc
+                       WHERE fc.fournisseur_id = fournisseurs_fsc.id AND fc.actif=1) AS nb_contacts
+               FROM fournisseurs_fsc
+               WHERE LOWER(TRIM(groupe)) = LOWER(?)
+               ORDER BY COALESCE(NULLIF(TRIM(branche),''), nom) COLLATE NOCASE ASC""",
+            (g,),
+        ).fetchall()
+        if not rows:
+            raise HTTPException(status_code=404, detail="Groupe non trouvé")
+        ref = _four_load_referentiel(conn)
+        couv, meta = _four_load_couverture(conn)
+        try:
+            liens = conn.execute(
+                """SELECT l.certificat_id, l.fiche_id, f.nom, f.acronyme
+                   FROM qualite_fournisseur_certificat_fiches l
+                   JOIN qualite_ref_fiches f ON f.id = l.fiche_id"""
+            ).fetchall()
+        except Exception:
+            liens = []
+        # Réceptions : même source que GET /{id}/receptions — stock_receptions,
+        # rapproché par NOM de fournisseur (pas par id : la table n'a pas de FK).
+        nb_rec = {}
+        for r in rows:
+            try:
+                nb_rec[r["id"]] = conn.execute(
+                    "SELECT COUNT(*) AS n FROM stock_receptions WHERE fournisseur = ?",
+                    (r["nom"],),
+                ).fetchone()["n"]
+            except Exception:
+                nb_rec[r["id"]] = 0
+
+    fiches_par_cert = {}
+    for lk in liens:
+        fiches_par_cert.setdefault(lk["certificat_id"], []).append(
+            {"fiche_id": lk["fiche_id"], "nom": lk["nom"], "acronyme": lk["acronyme"]}
+        )
+
+    branches = []
+    union = {}
+    for r in rows:
+        d = dict(r)
+        try:
+            d["categories"] = json.loads(d["categories"]) if d.get("categories") else []
+        except (json.JSONDecodeError, TypeError):
+            d["categories"] = []
+        entries = couv.get(r["id"], {})
+        d["couverture"] = {str(k): v for k, v in entries.items()}
+        d["stats"] = _four_stats_couverture(entries, len(ref))
+        d["nb_receptions"] = nb_rec.get(r["id"], 0)
+        branches.append(d)
+        for k, v in entries.items():
+            cur = union.get(k)
+            if cur is None or _FOUR_CERT_RANG.get(v["statut"], 9) < _FOUR_CERT_RANG.get(cur["statut"], 9):
+                union[k] = v
+
+    gl = g.lower()
+    documents_groupe = []
+    for cid, m in meta.items():
+        if (m.get("groupe_ref") or "").strip().lower() != gl:
+            continue
+        documents_groupe.append({
+            "id": cid,
+            "titre": m.get("titre") or m.get("original_name") or "",
+            "filename": m.get("original_name") or "",
+            "date_emission": m.get("date_emission"),
+            "date_expiration": m.get("date_expiration"),
+            "statut": _four_cert_statut(m.get("date_expiration")),
+            "fiches": fiches_par_cert.get(cid, []),
+        })
+    documents_groupe.sort(key=lambda d: d["titre"].lower())
+
+    return {
+        "groupe": rows[0]["groupe"],
+        "branches": branches,
+        "referentiel": ref,
+        "documents_groupe": documents_groupe,
+        "union": {str(k): v for k, v in union.items()},
+        "stats": {
+            "nb_branches": len(branches),
+            "nb_actives": sum(1 for b in branches if (b.get("actif") is None or b["actif"])),
+            "nb_receptions": sum(b["nb_receptions"] for b in branches),
+            "nb_contacts": sum(int(b.get("nb_contacts") or 0) for b in branches),
+            "couvert": len(union),
+            "total": len(ref),
+        },
+    }
+
+
 def _parse_fournisseur_tags(raw):
     """Parse tags depuis body : accepte list JSON ou string séparée par virgules."""
     import json as _json
@@ -815,8 +1152,14 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
         if not has_fsc:
             licence = None
             certificat = None
-        traca_explication = (body.get("traca_explication") or "").strip() or None
-        traca_exemple_code = (body.get("traca_exemple_code") or "").strip() or None
+        # Traçabilité : même garde-fou que les autres champs. Ces deux colonnes
+        # étaient écrasées à NULL dès qu'un enregistrement partiel ne les
+        # portait pas — la fiche v2 édite bloc par bloc, donc chaque save
+        # aurait effacé le guide opérateur du fournisseur.
+        traca_explication = _pick("traca_explication")
+        traca_exemple_code = _pick("traca_exemple_code")
+        if isinstance(traca_explication, str): traca_explication = traca_explication.strip() or None
+        if isinstance(traca_exemple_code, str): traca_exemple_code = traca_exemple_code.strip() or None
         groupe = _pick("groupe")
         branche = _pick("branche")
         if isinstance(groupe, str): groupe = groupe.strip() or None

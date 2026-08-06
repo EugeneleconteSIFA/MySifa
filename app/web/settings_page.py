@@ -518,6 +518,7 @@ body.light .menu-item:hover{background:rgba(8,145,178,.06);border-color:rgba(8,1
 body.light .four-toolbar{box-shadow:0 6px 8px -8px rgba(0,0,0,.12)}
 .four-toolbar input.four-search,.four-toolbar select.four-filter{padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
 .four-toolbar input.four-search{flex:1;min-width:240px}
+.four-toolbar select.four-filter{width:auto;min-width:150px;max-width:230px;flex:0 1 auto}
 .four-toolbar input.four-search:focus,.four-toolbar select.four-filter:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12)}
 body.light .four-toolbar input.four-search:focus,body.light .four-toolbar select.four-filter:focus{box-shadow:0 0 0 3px rgba(8,145,178,.1)}
 .four-view-toggle{display:inline-flex;border:1.5px solid var(--border);border-radius:10px;overflow:hidden}
@@ -682,6 +683,176 @@ tr.four-row-inactif td.four-nom-cell strong{text-decoration:line-through;color:v
 .four-cat-pill.cat-sous_traitant{background:rgba(167,139,250,.14);color:#a78bfa;border-color:rgba(167,139,250,.35)}
 body.light .four-cat-pill.cat-negoce{color:#b45309}
 body.light .four-cat-pill.cat-sous_traitant{color:#6d28d9}
+
+/* ═══════════════════════════════════════════════════════════════
+   Fournisseurs v2 — liste maître → fiche. Les 3 sous-onglets
+   (Répertoire / Historique réceptions / Contacts & infos)
+   listaient trois fois les mêmes fournisseurs ; ici une seule
+   liste, une seule fiche, et le groupe comme entité.
+   ═══════════════════════════════════════════════════════════════ */
+.f2-hide{display:none!important}
+.f2-violet{--f2v:#a78bfa;--f2vbg:rgba(167,139,250,.14)}
+body.light .f2-violet{--f2v:#7c3aed;--f2vbg:rgba(124,58,237,.10)}
+
+/* Liste */
+.f2-row{cursor:pointer;transition:background .12s}
+.f2-row:hover td{background:var(--accent-bg)}
+.f2-row td{vertical-align:middle;white-space:normal}
+.f2-nom{font-weight:600;font-size:13px;color:var(--text)}
+.f2-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.f2-chev{color:var(--muted);opacity:0;transition:opacity .12s}
+.f2-row:hover .f2-chev{opacity:1;color:var(--accent)}
+tr.f2-grp{cursor:pointer}
+tr.f2-grp td{background:var(--bg);font-size:11px;font-weight:700;color:var(--accent);
+  letter-spacing:.06em;text-transform:uppercase;padding:8px 12px;white-space:nowrap}
+tr.f2-grp:hover td{background:rgba(167,139,250,.12);color:#a78bfa}
+body.light tr.f2-grp:hover td{background:rgba(124,58,237,.08);color:#7c3aed}
+.f2-grp-open{font-weight:600;font-size:10.5px;letter-spacing:0;text-transform:none;
+  margin-left:8px;opacity:0;transition:opacity .12s}
+tr.f2-grp:hover .f2-grp-open{opacity:1}
+td.f2-branch{padding-left:26px!important;position:relative}
+td.f2-branch::before{content:'';position:absolute;left:12px;top:0;bottom:0;width:1px;
+  background:rgba(167,139,250,.3)}
+.f2-mini{display:flex;gap:3px;align-items:center;flex-wrap:wrap}
+.f2-chip{font-size:9.5px;font-weight:700;padding:1.5px 5px;border-radius:5px;
+  border:1px solid transparent;letter-spacing:.02em;white-space:nowrap}
+.f2-chip.st-valide{background:rgba(52,211,153,.12);color:var(--ok);border-color:rgba(52,211,153,.35)}
+.f2-chip.st-soon{background:rgba(251,191,36,.12);color:var(--warn);border-color:rgba(251,191,36,.35)}
+.f2-chip.st-exp{background:rgba(248,113,113,.12);color:var(--danger);border-color:rgba(248,113,113,.35)}
+.f2-chip.st-nod,.f2-chip.st-none{background:transparent;color:var(--muted);border-color:var(--border)}
+.f2-health{display:flex;gap:3px;align-items:center;white-space:nowrap}
+.f2-dot{width:7px;height:7px;border-radius:50%;background:var(--border);flex-shrink:0}
+.f2-dot.on{background:var(--ok)}
+.f2-dot.off{background:var(--danger)}
+
+/* Fiche */
+.f2-crumb{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-bottom:14px;flex-wrap:wrap}
+.f2-crumb button.f2-back{background:none;border:none;color:var(--accent);font-size:12.5px;cursor:pointer;
+  font-family:inherit;padding:0;display:inline-flex;align-items:center;gap:5px}
+.f2-crumb button.f2-back:hover{text-decoration:underline}
+.f2-nav{margin-left:auto;display:flex;gap:6px;align-items:center}
+.f2-kbd{font-size:10px;color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-family:monospace}
+.f2-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;flex-wrap:wrap;
+  padding-bottom:18px;border-bottom:1px solid var(--border);margin-bottom:18px}
+.f2-ident{display:flex;gap:14px;align-items:flex-start}
+.f2-avatar{width:52px;height:52px;border-radius:13px;background:var(--accent-bg);color:var(--accent);
+  display:flex;align-items:center;justify-content:center;font-size:19px;font-weight:800;flex-shrink:0;
+  border:1px solid rgba(34,211,238,.25)}
+.f2-avatar.grp{background:rgba(167,139,250,.14);color:#a78bfa;border-color:rgba(167,139,250,.25)}
+.f2-title{font-size:21px;font-weight:700;margin:0 0 6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.f2-meta{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--muted)}
+.f2-meta .sep{opacity:.35}
+.f2-acts{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+
+.f2-banner{display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:rgba(167,139,250,.12);
+  border:1px solid rgba(167,139,250,.28);border-radius:11px;padding:10px 14px;margin-bottom:18px;
+  font-size:12.5px;color:var(--text2)}
+.f2-banner strong{color:#a78bfa}
+body.light .f2-banner strong{color:#7c3aed}
+.f2-switch{display:flex;gap:5px;flex-wrap:wrap;margin-left:auto}
+.f2-switch button{border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:11.5px;
+  font-weight:600;padding:4px 10px;border-radius:7px;cursor:pointer;font-family:inherit}
+.f2-switch button:hover{border-color:#a78bfa;color:#a78bfa}
+.f2-switch button.cur{background:rgba(167,139,250,.14);border-color:rgba(167,139,250,.4);color:#a78bfa;cursor:default}
+
+.f2-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:20px}
+.f2-kpi{background:var(--bg);border:1px solid var(--border);border-radius:11px;padding:12px 14px}
+.f2-kpi-l{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:700;margin-bottom:6px}
+.f2-kpi-v{font-size:18px;font-weight:700;line-height:1.15}
+.f2-kpi-v.sm{font-size:14px}
+.f2-kpi-n{font-size:11px;color:var(--muted);margin-top:3px}
+
+.f2-tabs{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:20px;overflow-x:auto;scrollbar-width:none}
+.f2-tabs::-webkit-scrollbar{display:none}
+.f2-tab{border:none;background:transparent;color:var(--muted);font-size:13px;font-weight:600;padding:10px 15px;
+  cursor:pointer;font-family:inherit;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap;
+  display:inline-flex;align-items:center;gap:7px}
+.f2-tab:hover{color:var(--text2)}
+.f2-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.f2-tab .cnt{font-size:10.5px;background:var(--bg);border:1px solid var(--border);border-radius:20px;
+  padding:1px 7px;color:var(--muted);font-weight:700}
+.f2-tab.active .cnt{background:var(--accent-bg);border-color:transparent;color:var(--accent)}
+
+.f2-blocks{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px;align-items:start}
+.f2-block{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+.f2-block.full{grid-column:1/-1}
+.f2-block.warn{border-color:rgba(251,191,36,.35)}
+.f2-bh{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.f2-bh h3{font-size:12px;margin:0;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700}
+.f2-bh h3.warn{color:var(--warn)}
+.f2-kv{display:grid;grid-template-columns:140px 1fr;gap:9px 14px;font-size:13px;align-items:baseline}
+.f2-kv dt{color:var(--muted);font-size:12px}
+.f2-kv dd{margin:0;color:var(--text);word-break:break-word}
+.f2-empty{color:var(--muted);font-size:12.5px;font-style:italic;padding:6px 0}
+.f2-hint{font-size:11.5px;color:var(--muted);line-height:1.5;margin:10px 0 0;padding-top:10px;border-top:1px dashed var(--border)}
+.f2-form{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.f2-form .span2{grid-column:span 2}
+.f2-form label.sub{display:block;font-size:11px;margin-bottom:3px}
+.f2-form input,.f2-form select,.f2-form textarea{width:100%;padding:7px 9px;border-radius:8px;
+  border:1px solid var(--border);background:var(--card);color:var(--text);font-family:inherit;font-size:13px;box-sizing:border-box}
+.f2-form textarea{min-height:70px;resize:vertical}
+.f2-formacts{display:flex;gap:8px;justify-content:flex-end;margin-top:14px}
+
+/* Contacts */
+.f2-contact{display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--border)}
+.f2-contact:last-child{border-bottom:none;padding-bottom:0}
+.f2-cav{width:34px;height:34px;border-radius:9px;background:rgba(167,139,250,.14);color:#a78bfa;
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0}
+.f2-cbody{flex:1;min-width:0}
+.f2-cname{font-size:13.5px;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.f2-crole{font-size:11.5px;color:var(--muted);margin-top:1px}
+.f2-clinks{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px;font-size:12px}
+.f2-clinks a{color:var(--accent);text-decoration:none}
+.f2-clinks a:hover{text-decoration:underline}
+
+/* Timeline */
+.f2-tl{position:relative;padding-left:22px}
+.f2-tl::before{content:'';position:absolute;left:5px;top:6px;bottom:6px;width:1px;background:var(--border)}
+.f2-tli{position:relative;padding:0 0 16px}
+.f2-tli:last-child{padding-bottom:0}
+.f2-tli::before{content:'';position:absolute;left:-21px;top:5px;width:9px;height:9px;border-radius:50%;
+  background:var(--accent);border:2px solid var(--card)}
+.f2-tld{font-size:11px;color:var(--muted);font-weight:600}
+.f2-tlt{font-size:13px;font-weight:600;margin:2px 0 3px}
+.f2-tls{font-size:11.5px;color:var(--muted)}
+
+/* Certifications */
+.f2-cat{margin-bottom:18px}
+.f2-cat:last-child{margin-bottom:0}
+.f2-cath{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700;
+  margin-bottom:8px;display:flex;align-items:center;gap:8px}
+.f2-cath::after{content:'';flex:1;height:1px;background:var(--border)}
+.f2-cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:8px}
+.f2-cc{display:flex;align-items:center;gap:9px;padding:9px 11px;border:1px solid var(--border);
+  border-radius:9px;background:var(--card);font-size:12.5px}
+.f2-cc.absent{opacity:.5}
+.f2-ccd{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.f2-ccd.st-valide{background:var(--ok)}
+.f2-ccd.st-soon{background:var(--warn)}
+.f2-ccd.st-exp{background:var(--danger)}
+.f2-ccd.st-nod{background:var(--muted)}
+.f2-ccd.st-none{background:transparent;border:1.5px dashed var(--muted)}
+.f2-ccb{flex:1;min-width:0}
+.f2-ccn{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.f2-ccs{font-size:10.5px;color:var(--muted);margin-top:1px}
+.f2-herit{font-size:9.5px;color:#a78bfa;font-weight:700;letter-spacing:.03em}
+body.light .f2-herit{color:#7c3aed}
+.f2-covbar{display:flex;height:6px;border-radius:4px;overflow:hidden;background:var(--border);margin:8px 0 4px}
+.f2-covbar i{display:block}
+.f2-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;color:var(--muted);align-items:center}
+.f2-legend span{display:inline-flex;align-items:center;gap:5px}
+.f2-mat td{text-align:center}
+.f2-mat td.lbl{text-align:left}
+
+/* Traçabilité */
+.f2-traca{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap}
+.f2-tphoto{width:200px;border-radius:10px;border:1px dashed var(--border);background:var(--card);
+  display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11.5px;text-align:center;
+  padding:12px;min-height:120px;flex-shrink:0}
+.f2-tphoto img{max-width:100%;max-height:220px;border-radius:8px;display:block}
+.f2-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;background:var(--card);
+  border:1px solid var(--border);border-radius:8px;padding:8px 12px;display:inline-block;color:var(--accent);letter-spacing:.04em}
+@media(max-width:900px){.f2-kv{grid-template-columns:1fr}.f2-form{grid-template-columns:1fr}.f2-form .span2{grid-column:span 1}}
 </style>
 </head>
 <body>
@@ -1152,31 +1323,19 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
     </section>
 
     <section id="panel-fournisseurs" class="hidden">
-    <div class="tabs" style="margin-bottom:14px">
-      <button type="button" class="btn btn-sec four-sub-btn active" data-foursub="four-certifs">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        Répertoire
-      </button>
-      <button type="button" class="btn btn-sec four-sub-btn" data-foursub="four-hist">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        Historique réceptions
-      </button>
-      <button type="button" class="btn btn-sec four-sub-btn" data-foursub="four-contacts">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        Contacts & infos
-      </button>
-    </div>
-      <div id="four-certifs">
+
+      <!-- ═══ VUE 1 : liste maître ═══════════════════════════════════ -->
+      <div id="f2-view-list">
         <div class="card">
           <div class="four-head">
             <div class="four-head-info">
               <h2>Fournisseurs</h2>
-              <p>Certifications FSC, rattachement de groupe et guide de traçabilité utilisés par MyStock, MyProd et le registre FSC. <span id="four-count" class="four-count"></span></p>
+              <p>Identité, certification FSC, certifications RSE, contacts, réceptions et traçabilité. Cette base alimente MyStock, MyProd, MyAO, MyQualité et le registre FSC. <span id="four-count" class="four-count"></span></p>
             </div>
             <div class="four-head-actions">
               <div class="four-view-toggle" role="tablist" aria-label="Mode d'affichage">
                 <button type="button" data-fourview="flat" class="active" title="Liste alphabétique">Liste</button>
-                <button type="button" data-fourview="groupe" title="Groupé par maison mère">Par groupe</button>
+                <button type="button" data-fourview="groupe" title="Groupé par maison mère — l'entête de groupe ouvre la fiche groupe">Par groupe</button>
               </div>
               <button type="button" class="btn btn-sec btn-sm" id="four-doublons" title="Détecter les fournisseurs en doublon">Doublons</button>
               <button type="button" class="btn btn-sec btn-sm" id="four-export-csv" title="Exporter la liste en CSV">Export CSV</button>
@@ -1185,18 +1344,26 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           </div>
 
           <div class="four-toolbar">
-            <input type="text" id="four-search" class="four-search" placeholder="Rechercher (nom, licence, certificat, groupe...)" autocomplete="off">
+            <input type="text" id="four-search" class="four-search" placeholder="Rechercher (nom, licence, certificat, groupe, ville, contact...)" autocomplete="off">
             <select id="four-filter-fsc" class="four-filter" title="Filtrer par certification FSC">
-              <option value="">Tous</option>
+              <option value="">FSC : tous</option>
               <option value="1">Certifiés FSC</option>
               <option value="0">Non certifiés</option>
+              <option value="exp">Certificat expiré</option>
+              <option value="soon">Expire sous 60 j</option>
             </select>
             <select id="four-filter-groupe" class="four-filter" title="Filtrer par groupe"><option value="">Tous les groupes</option></select>
             <select id="four-filter-cat" class="four-filter" title="Filtrer par catégorie fournie"><option value="">Catégorie : toutes</option></select>
+            <select id="four-filter-cert" class="four-filter" title="Filtrer par certification du référentiel RSE"><option value="">Certification : toutes</option></select>
             <select id="four-filter-traca" class="four-filter" title="Filtrer par guide traçabilité">
               <option value="">Traçabilité : tous</option>
               <option value="1">Guide renseigné</option>
               <option value="0">Guide manquant</option>
+            </select>
+            <select id="four-filter-actif" class="four-filter" title="Filtrer par statut">
+              <option value="1" selected>Actifs</option>
+              <option value="">Tous</option>
+              <option value="0">Inactifs</option>
             </select>
           </div>
 
@@ -1223,7 +1390,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
               <label class="sub" style="display:block;font-size:12px;font-weight:600;color:var(--text);margin-bottom:2px">Catégories fournies <span style="color:var(--muted);font-weight:400;font-size:11px">— plusieurs choix possibles</span></label>
               <div id="cf-categories-picker" class="four-cat-picker"></div>
             </div>
-            <p class="sub" style="margin:10px 0 0;font-size:11px">Le guide de traçabilité (photo, code exemple) se configure ensuite via « Modifier ».</p>
+            <p class="sub" style="margin:10px 0 0;font-size:11px">Adresse, contacts et guide de traçabilité se renseignent ensuite depuis la fiche du fournisseur.</p>
             <div class="four-add-actions">
               <button type="button" class="btn btn-sec btn-sm" id="cf-cancel">Annuler</button>
               <button type="button" class="btn btn-sm" id="cf-go">Ajouter le fournisseur</button>
@@ -1231,48 +1398,72 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           </div>
 
           <div class="table-wrap" id="four-table-wrap"></div>
+          <div class="f2-legend" style="margin-top:10px">
+            <span><span class="f2-dot on"></span> Identité · FSC · Contacts · Adresse · Traçabilité</span>
+            <span><span class="f2-dot off"></span> manquant</span>
+            <span id="f2-list-hint"></span>
+          </div>
         </div>
       </div>
-      <div id="four-hist" class="hidden">
+
+      <!-- ═══ VUE 2 : fiche fournisseur ══════════════════════════════ -->
+      <div id="f2-view-fiche" class="f2-hide">
+        <div class="f2-crumb">
+          <button type="button" class="f2-back" id="f2-back-list">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+            Fournisseurs
+          </button>
+          <span>/</span>
+          <span id="f2-crumb-name" style="color:var(--text2)"></span>
+          <span class="f2-nav">
+            <button type="button" class="btn btn-sec btn-sm" id="f2-prev" title="Fournisseur précédent (k)">&uarr;</button>
+            <button type="button" class="btn btn-sec btn-sm" id="f2-next" title="Fournisseur suivant (j)">&darr;</button>
+            <span class="f2-kbd">j / k</span>
+          </span>
+        </div>
         <div class="card">
-          <h2>Historique des réceptions par fournisseur</h2>
-          <p class="sub" style="margin-top:-8px">Les 50 dernières réceptions enregistrées dans MyStock, tous opérateurs confondus.</p>
-          <div class="form-grid" style="margin-bottom:12px;grid-template-columns:1fr">
-            <select id="fh-four"><option value="">— Choisir un fournisseur —</option></select>
+          <div class="f2-head">
+            <div class="f2-ident">
+              <div class="f2-avatar" id="f2-avatar">—</div>
+              <div>
+                <h2 class="f2-title"><span id="f2-nom"></span><span id="f2-statut"></span></h2>
+                <div class="f2-meta" id="f2-meta"></div>
+              </div>
+            </div>
+            <div class="f2-acts" id="f2-actions"></div>
           </div>
-          <div id="fh-results"></div>
+          <div id="f2-banner"></div>
+          <div class="f2-kpis" id="f2-kpis"></div>
+          <div class="f2-tabs" id="f2-tabs"></div>
+          <div id="f2-body"></div>
         </div>
       </div>
-      <div id="four-contacts" class="hidden">
+
+      <!-- ═══ VUE 3 : fiche groupe ═══════════════════════════════════ -->
+      <div id="f2-view-groupe" class="f2-hide">
+        <div class="f2-crumb">
+          <button type="button" class="f2-back" id="f2-back-list-2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+            Fournisseurs
+          </button>
+          <span>/</span><span style="color:var(--text2)">Groupe</span><span>/</span>
+          <span id="f2-gcrumb-name" style="color:var(--text2)"></span>
+        </div>
         <div class="card">
-          <div class="four-head">
-            <div class="four-head-info">
-              <h2>Contacts &amp; infos fournisseurs</h2>
-              <p>Coordonnées postales, contacts multiples par fournisseur, langue par défaut (FR/EN) pour le portail AO et tags de spécialités. <span id="four-contacts-count" class="four-count"></span></p>
-            </div>
-            <div class="four-head-actions">
-              <button type="button" class="btn btn-sec btn-sm" id="four-contacts-export">Exporter CSV</button>
+          <div class="f2-head">
+            <div class="f2-ident">
+              <div class="f2-avatar grp" id="f2-gavatar">—</div>
+              <div>
+                <h2 class="f2-title"><span id="f2-gnom"></span><span class="four-cat-pill cat-sous_traitant">Groupe</span></h2>
+                <div class="f2-meta" id="f2-gmeta"></div>
+              </div>
             </div>
           </div>
-          <div class="four-toolbar">
-            <input type="text" id="four-contacts-search" class="four-search" placeholder="Rechercher (nom, ville, tag, contact…)" autocomplete="off">
-            <select id="four-contacts-filter-langue" class="four-filter" title="Filtrer par langue par défaut">
-              <option value="">Langue : toutes</option>
-              <option value="fr">FR</option>
-              <option value="en">EN</option>
-            </select>
-            <select id="four-contacts-filter-tag" class="four-filter" title="Filtrer par tag / spécialité">
-              <option value="">Tag : tous</option>
-            </select>
-            <select id="four-contacts-filter-actif" class="four-filter" title="Filtrer par statut">
-              <option value="">Statut : tous</option>
-              <option value="1" selected>Actifs</option>
-              <option value="0">Inactifs</option>
-            </select>
-          </div>
-          <div id="four-contacts-table-wrap"></div>
+          <div class="f2-kpis" id="f2-gkpis"></div>
+          <div id="f2-gbody"></div>
         </div>
       </div>
+
     </section>
 
     <section id="panel-clients" class="hidden">
@@ -2877,7 +3068,7 @@ function syncSettingsPageHead(tabId) {
     users:        { title: 'Paramètres',      sub: 'Comptes utilisateurs et accès' },
     matrix:       { title: 'Paramètres',      sub: 'Matrice des accès applicatifs' },
     defaults:     { title: 'Paramètres',      sub: 'Référentiel des rôles' },
-    fournisseurs: { title: 'Fournisseurs',    sub: 'Répertoire, certifications FSC et traçabilité' },
+    fournisseurs: { title: 'Fournisseurs',    sub: 'Fiche complète : FSC, certifications, contacts, réceptions, traçabilité' },
     clients:      { title: 'Clients',         sub: 'Référentiel ERP' },
     operations:   { title: 'Opérations',      sub: 'Codes saisis en production' },
     maintenance:  { title: 'Maintenance',     sub: 'Codes opérations et alertes opérateurs' },
@@ -2930,8 +3121,9 @@ function setTab(id, opts) {
     if (el) el.classList.toggle('hidden', p !== id);
   });
   syncSettingsPageHead(id);
-  if (id === 'fournisseurs') loadFournisseurs();
-loadFournisseursGroupes();
+  // loadFournisseursGroupes() était appelé hors du if : il repartait à
+  // chaque changement d'onglet, y compris sur des panneaux sans rapport.
+  if (id === 'fournisseurs') { loadFournisseurs(); loadFournisseursGroupes(); }
   if (id === 'clients') initClientsPanel();
   if (id === 'operations') loadOperationCodes();
   if (id === 'maintenance') { loadMaintCodes(); loadAlerts(); }
@@ -4085,20 +4277,24 @@ async function loadRoleDefaults() {
 
 // ─── Fournisseurs FSC ──────────────────────────────────────────────
 
-let fournisseursAll = [];
+// ═══════════════════════════════════════════════════════════════════
+// FOURNISSEURS v2 — liste maître → fiche
+//
+// Les 3 sous-onglets (Répertoire / Historique réceptions / Contacts &
+// infos) listaient trois fois les mêmes fournisseurs avec des colonnes
+// différentes, et la fiche existait en double : un drawer latéral ET
+// une modale « Modifier ». Ici : une liste, une fiche, et le groupe
+// comme entité à part entière.
+//
+// L'édition se fait bloc par bloc dans la fiche (PUT partiel — voir le
+// garde-fou _pick() côté routers/settings.py). Les certifications sont
+// en LECTURE SEULE : le dépôt reste dans MyQualité › Ressources
+// fournisseurs, qui est la source de vérité.
+// ═══════════════════════════════════════════════════════════════════
 
-// Sub-tab navigation for fournisseurs
-document.querySelectorAll('.four-sub-btn').forEach(b => {
-  b.addEventListener('click', () => {
-    document.querySelectorAll('.four-sub-btn').forEach(x => x.classList.toggle('active', x.dataset.foursub === b.dataset.foursub));
-    ['four-certifs', 'four-hist', 'four-contacts'].forEach(id => {
-      if (id === 'four-contacts' && b.dataset.foursub === 'four-contacts') { renderFournisseursContactsTable(); }
-      const el = document.getElementById(id);
-      if (el) el.classList.toggle('hidden', id !== b.dataset.foursub);
-    });
-    if (b.dataset.foursub === 'four-hist') fillFourHistSelect();
-  });
-});
+let fournisseursAll = [];
+let fourRefCertifs = [];    // catalogue qualite_ref_fiches
+let fourCouverture = {};    // { "<id>": { stats, top } }
 
 let fourViewMode = 'flat';
 let fourSearchQuery = '';
@@ -4106,8 +4302,15 @@ let fourFilterFsc = '';
 let fourFilterGroupe = '';
 let fourFilterTraca = '';
 let fourFilterCat = '';
+let fourFilterCert = '';
+let fourFilterActif = '1';
 
-// Getter courant du picker du panneau d'ajout (setté après le premier chargement des catégories)
+let f2Id = null;          // fiche fournisseur ouverte
+let f2Groupe = null;      // fiche groupe ouverte
+let f2Tab = 'synthese';
+let f2Cache = {};         // id -> { contacts, receptions, certifs }
+
+// Getter courant du picker du panneau d'ajout
 let _cfCatsGetSelected = () => [];
 
 // Fallback hardcodé — utilisé si l'API /api/fournisseurs/categories est down.
@@ -4121,8 +4324,22 @@ const _FOURNISSEUR_CATS_FALLBACK = [
   {code:'negoce', label:'Négoce'}, {code:'sous_traitant', label:'Sous-traitant'},
 ];
 
+const F2_CERT_LABEL = {
+  valide: 'Valide', soon: 'Expire bientôt', exp: 'Expiré',
+  nod: 'Sans date', none: 'Aucun document',
+};
+const F2_REF_CATS = {
+  environnement: 'Environnement', social: 'Social & éthique',
+  qualite: 'Qualité', tracabilite: 'Traçabilité', securite: 'Sécurité',
+  autre: 'Autres',
+};
+const F2_REF_CAT_ORDER = Object.keys(F2_REF_CATS);
+function _f2CatOrder(a, b){
+  const ia = F2_REF_CAT_ORDER.indexOf(a), ib = F2_REF_CAT_ORDER.indexOf(b);
+  return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);
+}
+
 async function _loadFournisseurCategories(){
-  // Skip UNIQUEMENT si déjà chargé ET non-vide — sinon retente à chaque appel.
   if (window.__FOURNISSEUR_CATS__ && window.__FOURNISSEUR_CATS__.length) {
     return window.__FOURNISSEUR_CATS__;
   }
@@ -4143,8 +4360,7 @@ async function _loadFournisseurCategories(){
 function _renderCategoryPicker(container, initialSelected){
   const cats = window.__FOURNISSEUR_CATS__ || [];
   // Sélection filtrée sur le référentiel : un code stocké en base mais absent
-  // du référentiel n'a aucune puce, donc aucun moyen d'être décoché — il
-  // survivait à chaque enregistrement et masquait le changement demandé.
+  // du référentiel n'a aucune puce, donc aucun moyen d'être décoché.
   const connus = new Set(cats.map(c => c.code));
   const sel = new Set((initialSelected || []).filter(c => connus.has(c)));
   container.innerHTML = cats.map(c => {
@@ -4152,7 +4368,7 @@ function _renderCategoryPicker(container, initialSelected){
     if (c.code === 'negoce') cls.push('cat-neg');
     if (c.code === 'sous_traitant') cls.push('cat-st');
     if (sel.has(c.code)) cls.push('selected');
-    return '<span class="' + cls.join(' ') + '" data-catcode="' + esc(c.code) + '" role="checkbox" tabindex="0" aria-checked="' + (sel.has(c.code) ? 'true':'false') + '">' + esc(c.label) + '</span>';
+    return '<span class="' + cls.join(' ') + '" data-catcode="' + escAttr(c.code) + '" role="checkbox" tabindex="0" aria-checked="' + (sel.has(c.code) ? 'true':'false') + '">' + esc(c.label) + '</span>';
   }).join('');
   function toggle(chip){
     const code = chip.dataset.catcode;
@@ -4168,31 +4384,97 @@ function _renderCategoryPicker(container, initialSelected){
   return () => Array.from(sel);
 }
 
+function _fourCatLabels(){
+  return (window.__FOURNISSEUR_CATS__ || []).reduce((m,c)=>{m[c.code]=c.label;return m;},{});
+}
 function _fourCatsCellHTML(cats){
   if (!Array.isArray(cats) || !cats.length) return '<span style="color:var(--muted);font-size:11px">—</span>';
-  const labels = window.__FOURNISSEUR_CATS__ || [];
-  const map = {}; labels.forEach(c => { map[c.code] = c.label; });
-  return '<div class="four-cats-cell">' + cats.map(c => {
-    const lbl = map[c] || c;
-    return '<span class="four-cat-pill cat-' + esc(c) + '">' + esc(lbl) + '</span>';
-  }).join('') + '</div>';
+  const map = _fourCatLabels();
+  return '<div class="four-cats-cell">' + cats.map(c =>
+    '<span class="four-cat-pill cat-' + escAttr(c) + '">' + esc(map[c] || c) + '</span>'
+  ).join('') + '</div>';
 }
 
+// ─── Statut FSC (chaîne de contrôle) ──────────────────────────────
+// Seuils alignés sur MyQualité : <0 expiré, <=30 critique, <=60 à surveiller.
+function _fscExpirationInfo(f){
+  if (!f || !f.fsc_date_expiration) return null;
+  try {
+    const d = new Date(f.fsc_date_expiration + 'T00:00:00');
+    if (isNaN(d.getTime())) return null;
+    const today = new Date(); today.setHours(0,0,0,0);
+    const days = Math.round((d.getTime() - today.getTime()) / 86400000);
+    if (days < 0) return { days, cls: 'fsc-exp', label: 'Expiré ' + Math.abs(days) + 'j' };
+    if (days <= 30) return { days, cls: 'fsc-crit', label: days + 'j' };
+    if (days <= 60) return { days, cls: 'fsc-warn', label: days + 'j' };
+    return { days, cls: 'fsc', label: '' };
+  } catch(e) { return null; }
+}
+function _fscBadgeHTML(f){
+  const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
+  if (!hasFsc) return '<span class="four-pill nofsc">— Non certifié</span>';
+  const info = _fscExpirationInfo(f);
+  if (!info) return '<span class="four-pill fsc" title="Aucune date d\'expiration en base : aucun contrôle de validité au BL n\'est possible">FSC · échéance inconnue</span>';
+  const title = 'Certificat FSC expire le ' + f.fsc_date_expiration + (info.days < 0 ? ' (expiré)' : ' (' + info.days + ' jours)');
+  const lbl = info.label ? ('FSC · ' + info.label) : 'FSC · à jour';
+  return '<span class="four-pill ' + info.cls + '" title="' + escAttr(title) + '">' + esc(lbl) + '</span>';
+}
+
+function _fourHasTraca(f){ return !!(f.traca_photo_url || f.traca_explication || f.traca_exemple_code); }
+
+// Complétude de la fiche — 5 points, affichés en pastilles dans la liste
+// et détaillés dans le bloc « À compléter » de la Synthèse.
+function _f2Completude(f){
+  const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
+  return [
+    { k: 'Identité',    tab: 'identite', ok: !!(f.nom && String(f.nom).trim()) },
+    { k: 'FSC',         tab: 'fsc',      ok: !hasFsc || !!(f.licence && f.certificat && f.fsc_date_expiration) },
+    { k: 'Contacts',    tab: 'contacts', ok: (f.nb_contacts || 0) > 0 },
+    { k: 'Adresse',     tab: 'identite', ok: !!(f.ville && String(f.ville).trim()) },
+    { k: 'Traçabilité', tab: 'traca',    ok: _fourHasTraca(f) },
+  ];
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Chargement
+// ═══════════════════════════════════════════════════════════════════
 async function loadFournisseurs() {
+  f2Cache = {};
   try {
     await _loadFournisseurCategories();
     const data = await api('/api/fournisseurs');
     fournisseursAll = Array.isArray(data) ? data : [];
   } catch (e) { fournisseursAll = []; toast(e.message, true); }
+  // Couverture certifications : un seul appel pour toute la liste.
+  // Non bloquant — si MyQualité n'est pas initialisé, la colonne se vide
+  // mais le répertoire reste utilisable.
+  try {
+    const r = await api('/api/fournisseurs/referentiel-certifications');
+    fourRefCertifs = (r && r.referentiel) || [];
+    fourCouverture = (r && r.couverture) || {};
+  } catch(e) { fourRefCertifs = []; fourCouverture = {}; }
   fillFourGroupeFilter();
   fillFourCatFilter();
-  // Une fois les selects remplis, on applique les filtres depuis l'URL
+  fillFourCertFilter();
   _fourReadURL();
-  renderFournisseursTable();
-  fillFourHistSelect();
-  // Init/refresh du picker de catégories dans le panneau d'ajout
   const cfCatBox = document.getElementById('cf-categories-picker');
   if (cfCatBox) _cfCatsGetSelected = _renderCategoryPicker(cfCatBox, []);
+  // Deep-link : ?f=<id> ou ?fgroupe=<nom> rouvre directement la fiche
+  if (f2Groupe) { await openGroupeFiche(f2Groupe, true); }
+  else if (f2Id && fournisseursAll.some(x => x.id === f2Id)) { await openFournisseurFiche(f2Id, true); }
+  else { f2Id = null; f2Groupe = null; _f2Show('list'); renderFournisseursTable(); }
+}
+
+async function loadFournisseursGroupes(){
+  try{
+    // api() renvoie déjà le JSON parsé — l'ancien code testait r.ok sur un
+    // tableau, donc le datalist d'autocomplétion des groupes restait vide.
+    const groupes = await api('/api/fournisseurs/groupes');
+    const dl = document.getElementById('four-groupes-dl');
+    if (dl && Array.isArray(groupes)) {
+      dl.innerHTML = groupes.map(g => '<option value="' + escAttr(g.groupe) + '">').join('');
+    }
+  }catch(e){}
 }
 
 function fillFourCatFilter(){
@@ -4201,7 +4483,7 @@ function fillFourCatFilter(){
   const cur = sel.value;
   const cats = window.__FOURNISSEUR_CATS__ || [];
   sel.innerHTML = '<option value="">Catégorie : toutes</option>' +
-    cats.map(c => '<option value="' + esc(c.code) + '">' + esc(c.label) + '</option>').join('');
+    cats.map(c => '<option value="' + escAttr(c.code) + '">' + esc(c.label) + '</option>').join('');
   if (cats.some(c => c.code === cur)) sel.value = cur;
 }
 
@@ -4213,57 +4495,77 @@ function fillFourGroupeFilter() {
   fournisseursAll.forEach(f => { if (f.groupe && f.groupe.trim()) groupes.add(f.groupe.trim()); });
   const list = [...groupes].sort((a,b) => a.localeCompare(b, 'fr', {sensitivity:'base'}));
   sel.innerHTML = '<option value="">Tous les groupes</option>' +
-    list.map(g => '<option value="' + esc(g) + '">' + esc(g) + '</option>').join('');
+    list.map(g => '<option value="' + escAttr(g) + '">' + esc(g) + '</option>').join('');
   if (list.includes(cur)) sel.value = cur;
 }
 
+function fillFourCertFilter(){
+  const sel = document.getElementById('four-filter-cert');
+  if (!sel) return;
+  const cur = sel.value;
+  const byCat = {};
+  fourRefCertifs.forEach(r => { (byCat[r.categorie || 'autre'] = byCat[r.categorie || 'autre'] || []).push(r); });
+  let html = '<option value="">Certification : toutes</option>';
+  Object.keys(byCat).sort(_f2CatOrder).forEach(k => {
+    html += '<optgroup label="' + escAttr(F2_REF_CATS[k] || k) + '">' +
+      byCat[k].map(r => '<option value="' + r.id + '">' + esc(r.nom) + '</option>').join('') +
+      '</optgroup>';
+  });
+  html += '<optgroup label="Manquant">' +
+    '<option value="!none">Aucun document déposé</option>' +
+    '<option value="!exp">A une certification expirée</option>' +
+    '<option value="!soon">A une certification qui expire sous 60 j</option>' +
+    '</optgroup>';
+  sel.innerHTML = html;
+  sel.value = cur;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Liste
+// ═══════════════════════════════════════════════════════════════════
 function _fourNorm(s){
-  return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'');
 }
 function _fourHay(f){
   const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
-  const catLabels = (window.__FOURNISSEUR_CATS__ || []).reduce((m,c)=>{m[c.code]=c.label;return m;},{});
+  const catLabels = _fourCatLabels();
   const catsStr = (Array.isArray(f.categories) ? f.categories : []).map(c => catLabels[c] || c).join(' ');
-  return _fourNorm([f.nom, f.groupe, f.branche, catsStr, hasFsc ? f.licence : '', hasFsc ? f.certificat : '', hasFsc ? 'fsc certifie' : 'non certifie'].filter(Boolean).join(' '));
-}
-function _fourHasTraca(f){ return !!(f.traca_photo_url || f.traca_explication || f.traca_exemple_code); }
-
-// Retourne { days, cls, label } pour l'affichage du badge FSC selon la date d'expiration.
-// null si pas de date. cls = classe CSS suffixe (fsc, fsc-warn, fsc-crit, fsc-exp).
-function _fscExpirationInfo(f){
-  if (!f || !f.fsc_date_expiration) return null;
-  try {
-    const d = new Date(f.fsc_date_expiration + 'T00:00:00');
-    if (isNaN(d.getTime())) return null;
-    const today = new Date(); today.setHours(0,0,0,0);
-    const diffMs = d.getTime() - today.getTime();
-    const days = Math.round(diffMs / 86400000);
-    if (days < 0) return { days, cls: 'fsc-exp', label: 'Expiré ' + Math.abs(days) + 'j' };
-    if (days <= 30) return { days, cls: 'fsc-crit', label: days + 'j' };
-    if (days <= 60) return { days, cls: 'fsc-warn', label: days + 'j' };
-    return { days, cls: 'fsc', label: '' };
-  } catch(e) { return null; }
-}
-function _fscBadgeHTML(f){
-  const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
-  if (!hasFsc) return '<span class="four-pill nofsc">— Non</span>';
-  const info = _fscExpirationInfo(f);
-  if (!info) return '<span class="four-pill fsc">FSC</span>';
-  const title = 'Certificat FSC expire le ' + f.fsc_date_expiration + (info.days < 0 ? ' (expiré)' : ' (' + info.days + ' jours)');
-  const lbl = info.label ? ('FSC · ' + info.label) : 'FSC';
-  return '<span class="four-pill ' + info.cls + '" title="' + esc(title) + '">' + esc(lbl) + '</span>';
+  const certStr = ((fourCouverture[String(f.id)] || {}).top || []).map(t => t.acronyme).join(' ');
+  return _fourNorm([f.nom, f.groupe, f.branche, f.ville, f.code_postal, f.pays, f.siret,
+                    catsStr, certStr, (f.tags||[]).join(' '),
+                    hasFsc ? f.licence : '', hasFsc ? f.certificat : '',
+                    hasFsc ? 'fsc certifie' : 'non certifie'].filter(Boolean).join(' '));
 }
 
 function _fourFiltered(){
   const q = _fourNorm(fourSearchQuery).trim();
   return fournisseursAll.filter(f => {
     const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
+    const actif = (f.actif == null) ? 1 : (f.actif ? 1 : 0);
+    if (fourFilterActif !== '' && String(actif) !== fourFilterActif) return false;
     if (fourFilterFsc === '1' && !hasFsc) return false;
     if (fourFilterFsc === '0' && hasFsc) return false;
+    if (fourFilterFsc === 'exp' || fourFilterFsc === 'soon') {
+      const info = hasFsc ? _fscExpirationInfo(f) : null;
+      if (!info) return false;
+      if (fourFilterFsc === 'exp' && info.cls !== 'fsc-exp') return false;
+      if (fourFilterFsc === 'soon' && info.cls !== 'fsc-crit' && info.cls !== 'fsc-warn') return false;
+    }
     if (fourFilterGroupe && (f.groupe || '') !== fourFilterGroupe) return false;
     if (fourFilterCat) {
       const cats = Array.isArray(f.categories) ? f.categories : [];
       if (!cats.includes(fourFilterCat)) return false;
+    }
+    if (fourFilterCert) {
+      const cov = fourCouverture[String(f.id)] || { stats:{}, top:[] };
+      const top = cov.top || [];
+      if (fourFilterCert === '!none') { if (top.length) return false; }
+      else if (fourFilterCert === '!exp') { if (!top.some(t => t.statut === 'exp')) return false; }
+      else if (fourFilterCert === '!soon') { if (!top.some(t => t.statut === 'soon')) return false; }
+      else {
+        const hit = top.find(t => String(t.fiche_id) === String(fourFilterCert));
+        if (!hit || hit.statut === 'exp') return false;
+      }
     }
     const hasT = _fourHasTraca(f);
     if (fourFilterTraca === '1' && !hasT) return false;
@@ -4273,54 +4575,77 @@ function _fourFiltered(){
   });
 }
 
-function _fourRowHTML(f){
-  const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
-  const fscBadge = _fscBadgeHTML(f);
-  const groupeCell = f.groupe
-    ? '<span class="four-groupe-tag">' + esc(f.groupe) + (f.branche ? '<span class="fgt-branche">· ' + esc(f.branche) + '</span>' : '') + '</span>'
-    : '<span style="color:var(--muted);font-size:11px">—</span>';
-  const tracaCell = _fourHasTraca(f)
-    ? '<span class="four-pill traca">✓ Guide</span>'
-    : '<span class="four-pill traca-no">—</span>';
-  const catsCell = _fourCatsCellHTML(f.categories);
+function _f2CertCell(f){
+  const cov = fourCouverture[String(f.id)];
+  if (!fourRefCertifs.length) return '<span style="color:var(--muted);font-size:11px">—</span>';
+  if (!cov || !cov.top || !cov.top.length) {
+    return '<span class="f2-chip st-none">Aucun document</span>';
+  }
+  const st = cov.stats || {};
+  const shown = cov.top.slice(0, 3);
+  const rest = cov.top.length - shown.length;
+  const notes = [];
+  if (st.exp) notes.push('<span style="color:var(--danger)">' + st.exp + ' expiré' + (st.exp>1?'s':'') + '</span>');
+  if (st.soon) notes.push('<span style="color:var(--warn)">' + st.soon + ' à renouveler</span>');
+  return '<div class="f2-mini">' +
+    shown.map(t => '<span class="f2-chip st-' + escAttr(t.statut) + '"' +
+      (t.niveau === 'groupe' ? ' title="Couvert par un document déposé au niveau groupe"' : '') + '>' +
+      esc(t.acronyme) + (t.niveau === 'groupe' ? ' &#8962;' : '') + '</span>').join('') +
+    (rest > 0 ? '<span class="f2-chip st-nod">+' + rest + '</span>' : '') +
+    '</div><div class="f2-sub">' + (st.couvert || 0) + '/' + (st.total || fourRefCertifs.length) +
+    ' du référentiel' + (notes.length ? ' · ' + notes.join(' · ') : '') + '</div>';
+}
+
+function _fourRowHTML(f, indent){
+  const comp = _f2Completude(f);
+  const miss = comp.filter(x => !x.ok).length;
   const actif = (f.actif == null) ? true : !!f.actif;
-  const rowCls = actif ? '' : ' class="four-row-inactif"';
-  const smallBits = [];
-  if (f.branche && !f.groupe) smallBits.push('Branche : ' + esc(f.branche));
-  if (f.siret) smallBits.push('SIRET ' + esc(f.siret));
-  const smallHTML = smallBits.length ? '<small>' + smallBits.join(' · ') + '</small>' : '';
-  return '<tr' + rowCls + '>' +
-    '<td class="four-nom-cell"><strong>' + esc(f.nom) + '</strong>' + smallHTML + '</td>' +
-    '<td>' + fscBadge + '</td>' +
-    '<td class="four-code-cell"><code>' + esc(hasFsc ? (f.licence || '—') : '—') + '</code></td>' +
-    '<td class="four-code-cell"><code>' + esc(hasFsc ? (f.certificat || '—') : '—') + '</code></td>' +
-    '<td>' + groupeCell + '</td>' +
-    '<td>' + catsCell + '</td>' +
-    '<td>' + tracaCell + '</td>' +
-    '<td class="four-act">' +
-      '<label class="four-actif-toggle" title="' + (actif ? 'Actif — cliquer pour désactiver' : 'Inactif — cliquer pour réactiver') + '">' +
-        '<input type="checkbox" data-factif="' + f.id + '"' + (actif ? ' checked' : '') + '>' +
-        '<span class="fat-slider"></span>' +
-      '</label>' +
-      '<button type="button" class="btn btn-sec btn-sm" data-fopen="' + f.id + '" title="Ouvrir la fiche complète">Fiche</button>' +
-      '<button type="button" class="btn btn-sec btn-sm" data-fedit="' + f.id + '">Modifier</button>' +
-      '<button type="button" class="btn btn-sec btn-sm" data-fmerge="' + f.id + '" title="Fusionner dans un autre fournisseur">Fusionner</button>' +
-      '<button type="button" class="btn btn-sec btn-sm" data-fdel="' + f.id + '" style="color:var(--danger)">Suppr.</button>' +
-    '</td></tr>';
+  const nbC = f.nb_contacts || 0;
+  const sub = f.groupe
+    ? (indent ? 'Branche <strong style="color:#a78bfa">' + esc(f.branche || '—') + '</strong>'
+              : esc(f.groupe) + (f.branche ? ' · ' + esc(f.branche) : ''))
+    : (f.ville ? esc(f.ville) + (f.pays && f.pays !== 'FR' ? ', ' + esc(f.pays) : '') : '');
+  return '<tr class="f2-row" data-fopen="' + f.id + '"' + (actif ? '' : ' style="opacity:.55"') + '>' +
+    '<td' + (indent ? ' class="f2-branch"' : '') + '>' +
+      '<div class="f2-nom">' + esc(f.nom) + (actif ? '' : ' <span class="four-pill nofsc">Inactif</span>') + '</div>' +
+      (sub ? '<div class="f2-sub">' + sub + '</div>' : '') +
+    '</td>' +
+    '<td>' + _fscBadgeHTML(f) +
+      ((f.has_fsc == null || f.has_fsc) && f.licence
+        ? '<div class="f2-sub" style="font-family:monospace">' + esc(f.licence) + '</div>' : '') +
+    '</td>' +
+    '<td>' + _f2CertCell(f) + '</td>' +
+    '<td>' + _fourCatsCellHTML(f.categories) + '</td>' +
+    '<td>' + (nbC
+      ? '<strong>' + nbC + '</strong> <span style="color:var(--muted)">contact' + (nbC>1?'s':'') + '</span>'
+      : '<span class="f2-chip st-soon">Aucun</span>') + '</td>' +
+    '<td>' + (_fourHasTraca(f)
+      ? '<span class="four-pill traca">&#10003; Guide</span>'
+      : '<span class="four-pill traca-no">—</span>') + '</td>' +
+    '<td><div class="f2-health" title="' + escAttr(comp.map(x => (x.ok ? '✓ ' : '✗ ') + x.k).join('   ')) + '">' +
+      comp.map(x => '<span class="f2-dot ' + (x.ok ? 'on' : 'off') + '"></span>').join('') +
+      '<span class="f2-sub" style="margin:0 0 0 6px">' + (miss ? miss + ' manque' + (miss>1?'nt':'') : 'complet') + '</span>' +
+    '</div></td>' +
+    '<td style="width:24px"><svg class="f2-chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg></td>' +
+  '</tr>';
 }
 
 function renderFournisseursTable() {
   const wrap = document.getElementById('four-table-wrap');
   const countEl = document.getElementById('four-count');
+  const hintEl = document.getElementById('f2-list-hint');
   if (!wrap) return;
   const rows = _fourFiltered();
+  const total = fournisseursAll.length;
   if (countEl) {
-    const total = fournisseursAll.length;
     countEl.textContent = rows.length === total
       ? '· ' + total + ' fournisseur' + (total>1?'s':'')
       : '· ' + rows.length + ' / ' + total + ' fournisseur' + (total>1?'s':'');
   }
-  if (!fournisseursAll.length) {
+  if (hintEl) hintEl.textContent = fourRefCertifs.length
+    ? '· référentiel : ' + fourRefCertifs.length + ' certifications'
+    : '';
+  if (!total) {
     wrap.innerHTML = '<div class="four-empty"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>Aucun fournisseur enregistré. Cliquez « Nouveau fournisseur » pour commencer.</div>';
     return;
   }
@@ -4328,27 +4653,32 @@ function renderFournisseursTable() {
     wrap.innerHTML = '<div class="four-empty">Aucun fournisseur ne correspond aux filtres.<br><button type="button" class="btn btn-sec btn-sm" style="margin-top:12px" id="four-reset-filters">Réinitialiser les filtres</button></div>';
     const btn = document.getElementById('four-reset-filters');
     if (btn) btn.onclick = () => {
-      fourSearchQuery=''; fourFilterFsc=''; fourFilterGroupe=''; fourFilterTraca=''; fourFilterCat='';
-      const s=document.getElementById('four-search'); if(s) s.value='';
-      const f=document.getElementById('four-filter-fsc'); if(f) f.value='';
-      const g=document.getElementById('four-filter-groupe'); if(g) g.value='';
-      const c=document.getElementById('four-filter-cat'); if(c) c.value='';
-      const t=document.getElementById('four-filter-traca'); if(t) t.value='';
-      renderFournisseursTable();
-      _fourSyncURL();
+      fourSearchQuery=''; fourFilterFsc=''; fourFilterGroupe=''; fourFilterTraca='';
+      fourFilterCat=''; fourFilterCert=''; fourFilterActif='';
+      [['four-search',''],['four-filter-fsc',''],['four-filter-groupe',''],
+       ['four-filter-cat',''],['four-filter-cert',''],['four-filter-traca',''],
+       ['four-filter-actif','']].forEach(([id,v]) => {
+        const el = document.getElementById(id); if (el) el.value = v;
+      });
+      renderFournisseursTable(); _fourSyncURL();
     };
     return;
   }
   const head = '<table class="four-table"><thead><tr>' +
-    '<th>Nom</th><th>FSC</th><th>Licence FSC</th><th>Certificat FSC</th><th>Groupe / branche</th><th>Catégories</th><th>Traçabilité</th><th></th>' +
+    '<th style="width:22%">Fournisseur</th>' +
+    '<th style="width:13%">FSC — chaîne de contrôle</th>' +
+    '<th style="width:19%">Certifications</th>' +
+    '<th style="width:14%">Catégories</th>' +
+    '<th style="width:10%">Contacts</th>' +
+    '<th style="width:9%">Traçabilité</th>' +
+    '<th style="width:13%">Fiche</th><th></th>' +
     '</tr></thead>';
   let body = '';
   if (fourViewMode === 'groupe') {
     const grouped = {};
     rows.forEach(f => {
       const k = (f.groupe && f.groupe.trim()) || '__none__';
-      if (!grouped[k]) grouped[k] = [];
-      grouped[k].push(f);
+      (grouped[k] = grouped[k] || []).push(f);
     });
     const keys = Object.keys(grouped).sort((a,b) => {
       if (a === '__none__') return 1;
@@ -4356,46 +4686,28 @@ function renderFournisseursTable() {
       return a.localeCompare(b, 'fr', {sensitivity:'base'});
     });
     body = '<tbody>' + keys.map(k => {
-      const label = k === '__none__' ? 'Sans groupe' : k;
-      const items = grouped[k].sort((a,b) => (a.nom||'').localeCompare(b.nom||'', 'fr', {sensitivity:'base'}));
-      return '<tr class="four-groupe-row"><td colspan="8">' + esc(label) + '<span class="fgh-count">· ' + items.length + '</span></td></tr>' +
-        items.map(_fourRowHTML).join('');
+      const isG = k !== '__none__';
+      const label = isG ? k : 'Sans groupe';
+      const items = grouped[k].slice().sort((a,b) => (a.nom||'').localeCompare(b.nom||'', 'fr', {sensitivity:'base'}));
+      const noun = isG ? ('branche' + (items.length>1?'s':'')) : ('fournisseur' + (items.length>1?'s':''));
+      return '<tr class="' + (isG ? 'f2-grp' : '') + '"' + (isG ? ' data-fgrp="' + escAttr(k) + '"' : '') + '>' +
+          '<td colspan="8">' + esc(label) + ' · ' + items.length + ' ' + noun +
+          (isG ? '<span class="f2-grp-open">Ouvrir la fiche groupe &rarr;</span>' : '') +
+        '</td></tr>' +
+        items.map(f => _fourRowHTML(f, isG)).join('');
     }).join('') + '</tbody>';
   } else {
     const sorted = rows.slice().sort((a,b) => (a.nom||'').localeCompare(b.nom||'', 'fr', {sensitivity:'base'}));
-    body = '<tbody>' + sorted.map(_fourRowHTML).join('') + '</tbody>';
+    body = '<tbody>' + sorted.map(f => _fourRowHTML(f, false)).join('') + '</tbody>';
   }
   wrap.innerHTML = head + body + '</table>';
-  wrap.querySelectorAll('[data-fedit]').forEach(b => b.onclick = () => openEditFournisseur(Number(b.dataset.fedit)));
-  wrap.querySelectorAll('[data-fdel]').forEach(b => b.onclick = () => deleteFournisseur(Number(b.dataset.fdel)));
-  wrap.querySelectorAll('[data-fopen]').forEach(b => b.onclick = () => openFournisseurDrawer(Number(b.dataset.fopen)));
-  wrap.querySelectorAll('[data-fmerge]').forEach(b => b.onclick = () => openMergeFournisseurModal(Number(b.dataset.fmerge)));
-  wrap.querySelectorAll('[data-factif]').forEach(cb => cb.onchange = () => toggleFournisseurActif(Number(cb.dataset.factif), cb));
+  wrap.querySelectorAll('[data-fopen]').forEach(tr =>
+    tr.onclick = () => openFournisseurFiche(Number(tr.dataset.fopen)));
+  wrap.querySelectorAll('[data-fgrp]').forEach(tr =>
+    tr.onclick = () => openGroupeFiche(tr.dataset.fgrp));
 }
 
-async function toggleFournisseurActif(id, cbEl){
-  const desired = !!cbEl.checked;
-  cbEl.disabled = true;
-  try {
-    const res = await api('/api/fournisseurs/' + id + '/actif', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ actif: desired }),
-    });
-    const fi = fournisseursAll.find(x => x.id === id);
-    if (fi) fi.actif = desired ? 1 : 0;
-    toast(desired ? 'Fournisseur activé' : 'Fournisseur désactivé');
-    // Repeindre pour appliquer la classe four-row-inactif sans reload
-    renderFournisseursTable();
-  } catch(e) {
-    cbEl.checked = !desired;
-    toast(e.message || 'Erreur toggle actif', true);
-  } finally {
-    cbEl.disabled = false;
-  }
-}
-
-// URL persistence des filtres Répertoire fournisseurs
+// ─── Persistance URL ──────────────────────────────────────────────
 function _fourSyncURL(){
   try {
     const url = new URL(window.location.href);
@@ -4405,8 +4717,12 @@ function _fourSyncURL(){
     setOrDel('ffsc', fourFilterFsc);
     setOrDel('fgrp', fourFilterGroupe);
     setOrDel('fcat', fourFilterCat);
+    setOrDel('fcert', fourFilterCert);
     setOrDel('ftra', fourFilterTraca);
+    setOrDel('fact', fourFilterActif !== '1' ? (fourFilterActif || 'all') : '');
     setOrDel('fview', fourViewMode !== 'flat' ? fourViewMode : '');
+    setOrDel('f', f2Id ? String(f2Id) : '');
+    setOrDel('fgroupe', f2Groupe || '');
     window.history.replaceState(null, '', url.toString());
   } catch(e) {}
 }
@@ -4418,32 +4734,46 @@ function _fourReadURL(){
     fourFilterFsc = p.get('ffsc') || '';
     fourFilterGroupe = p.get('fgrp') || '';
     fourFilterCat = p.get('fcat') || '';
+    fourFilterCert = p.get('fcert') || '';
     fourFilterTraca = p.get('ftra') || '';
-    const v = p.get('fview'); if (v === 'groupe') fourViewMode = 'groupe';
-    // Reflète dans les inputs
-    const s = document.getElementById('four-search'); if (s) s.value = fourSearchQuery;
-    const f = document.getElementById('four-filter-fsc'); if (f) f.value = fourFilterFsc;
-    const g = document.getElementById('four-filter-groupe'); if (g) g.value = fourFilterGroupe;
-    const c = document.getElementById('four-filter-cat'); if (c) c.value = fourFilterCat;
-    const t = document.getElementById('four-filter-traca'); if (t) t.value = fourFilterTraca;
+    const fa = p.get('fact');
+    fourFilterActif = (fa === 'all') ? '' : (fa === '0' ? '0' : '1');
+    if (p.get('fview') === 'groupe') fourViewMode = 'groupe';
+    const fid = Number(p.get('f') || 0);
+    if (fid) f2Id = fid;
+    const fg = p.get('fgroupe');
+    if (fg) f2Groupe = fg;
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+    set('four-search', fourSearchQuery);
+    set('four-filter-fsc', fourFilterFsc);
+    set('four-filter-groupe', fourFilterGroupe);
+    set('four-filter-cat', fourFilterCat);
+    set('four-filter-cert', fourFilterCert);
+    set('four-filter-traca', fourFilterTraca);
+    set('four-filter-actif', fourFilterActif);
     document.querySelectorAll('.four-view-toggle [data-fourview]').forEach(x =>
       x.classList.toggle('active', x.dataset.fourview === fourViewMode));
   } catch(e) {}
 }
 
-// Raccourci "/" pour focus la recherche fournisseurs — actif uniquement quand
-// l'onglet Fournisseurs est affiché et qu'aucun input n'a le focus.
+// ─── Toolbar ──────────────────────────────────────────────────────
 document.addEventListener('keydown', (e) => {
-  if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
-  const ae = document.activeElement;
-  if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable)) return;
   const panel = document.getElementById('panel-fournisseurs');
   if (!panel || panel.classList.contains('hidden')) return;
-  const s = document.getElementById('four-search');
-  if (s) { e.preventDefault(); s.focus(); s.select(); }
+  const ae = document.activeElement;
+  const inField = ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT' || ae.isContentEditable);
+  if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !inField) {
+    const s = document.getElementById('four-search');
+    if (s) { e.preventDefault(); s.focus(); s.select(); }
+    return;
+  }
+  if (inField || e.ctrlKey || e.metaKey || e.altKey) return;
+  // Navigation clavier dans la fiche : j/k pour changer de fournisseur
+  // sans repasser par la liste, Échap pour revenir.
+  if (f2Id && (e.key === 'j' || e.key === 'k')) { e.preventDefault(); _f2Step(e.key === 'j' ? 1 : -1); }
+  else if ((f2Id || f2Groupe) && e.key === 'Escape') { e.preventDefault(); f2BackToList(); }
 });
 
-// Toolbar : recherche + filtres
 (function bindFourToolbar(){
   const s = document.getElementById('four-search');
   if (s) s.addEventListener('input', () => {
@@ -4458,32 +4788,37 @@ document.addEventListener('keydown', (e) => {
       if (el) { el.focus(); if (caret) try { el.setSelectionRange(caret[0], caret[1]); } catch(e){} }
     }
   });
-  const fFsc = document.getElementById('four-filter-fsc');
-  if (fFsc) fFsc.addEventListener('change', () => { fourFilterFsc = fFsc.value; renderFournisseursTable(); _fourSyncURL(); });
-  const fGrp = document.getElementById('four-filter-groupe');
-  if (fGrp) fGrp.addEventListener('change', () => { fourFilterGroupe = fGrp.value; renderFournisseursTable(); _fourSyncURL(); });
-  const fCat = document.getElementById('four-filter-cat');
-  if (fCat) fCat.addEventListener('change', () => { fourFilterCat = fCat.value; renderFournisseursTable(); _fourSyncURL(); });
-  const fTra = document.getElementById('four-filter-traca');
-  if (fTra) fTra.addEventListener('change', () => { fourFilterTraca = fTra.value; renderFournisseursTable(); _fourSyncURL(); });
+  const bind = (id, setter) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => { setter(el.value); renderFournisseursTable(); _fourSyncURL(); });
+  };
+  bind('four-filter-fsc',    v => fourFilterFsc = v);
+  bind('four-filter-groupe', v => fourFilterGroupe = v);
+  bind('four-filter-cat',    v => fourFilterCat = v);
+  bind('four-filter-cert',   v => fourFilterCert = v);
+  bind('four-filter-traca',  v => fourFilterTraca = v);
+  bind('four-filter-actif',  v => fourFilterActif = v);
   document.querySelectorAll('.four-view-toggle [data-fourview]').forEach(b => {
     b.addEventListener('click', () => {
       fourViewMode = b.dataset.fourview;
-      document.querySelectorAll('.four-view-toggle [data-fourview]').forEach(x => x.classList.toggle('active', x.dataset.fourview === fourViewMode));
+      document.querySelectorAll('.four-view-toggle [data-fourview]').forEach(x =>
+        x.classList.toggle('active', x.dataset.fourview === fourViewMode));
       renderFournisseursTable();
       _fourSyncURL();
     });
   });
-  // Export CSV — appuie sur l'endpoint /api/fournisseurs/export.csv
   const btnExport = document.getElementById('four-export-csv');
   if (btnExport) btnExport.addEventListener('click', () => {
     try { window.location.href = API + '/api/fournisseurs/export.csv'; }
     catch(e) { toast('Erreur téléchargement', true); }
   });
-  // Doublons — ouvre modale de détection
   const btnDoublons = document.getElementById('four-doublons');
   if (btnDoublons) btnDoublons.addEventListener('click', openDoublonsModal);
-  // Panneau ajout collapsible
+  const backs = ['f2-back-list', 'f2-back-list-2'];
+  backs.forEach(id => { const b = document.getElementById(id); if (b) b.onclick = f2BackToList; });
+  const bp = document.getElementById('f2-prev'); if (bp) bp.onclick = () => _f2Step(-1);
+  const bn = document.getElementById('f2-next'); if (bn) bn.onclick = () => _f2Step(1);
+
   const addToggle = document.getElementById('four-add-toggle');
   const addPanel = document.getElementById('four-add-panel');
   const addCancel = document.getElementById('cf-cancel');
@@ -4500,7 +4835,6 @@ document.addEventListener('keydown', (e) => {
   }
   if (addToggle && addPanel) addToggle.addEventListener('click', () => showAdd(addPanel.classList.contains('hidden')));
   if (addCancel) addCancel.addEventListener('click', () => showAdd(false));
-  // Toggle FSC : masquer/afficher les champs licence/certificat dans l'ajout
   const cfFsc = document.getElementById('cf-has-fsc');
   const cfFscFields = document.getElementById('cf-fsc-fields');
   if (cfFsc && cfFscFields) {
@@ -4513,233 +4847,231 @@ document.addEventListener('keydown', (e) => {
   }
 })();
 
-document.getElementById('cf-go').onclick = async () => {
-  const nom = document.getElementById('cf-nom').value.trim();
-  const licence = document.getElementById('cf-licence').value.trim();
-  const certificat = document.getElementById('cf-certificat').value.trim();
+const _cfGoBtn = document.getElementById('cf-go');
+if (_cfGoBtn) _cfGoBtn.onclick = async () => {
+  const val = id => (document.getElementById(id)?.value || '').trim();
+  const nom = val('cf-nom');
   const has_fsc = !!(document.getElementById('cf-has-fsc') || {}).checked;
-  const groupe = (document.getElementById('cf-groupe')?.value || '').trim();
-  const branche = (document.getElementById('cf-branche')?.value || '').trim();
-  const siret = (document.getElementById('cf-siret')?.value || '').trim();
-  const tva_intracom = (document.getElementById('cf-tva')?.value || '').trim();
-  const fsc_date_expiration = (document.getElementById('cf-fsc-exp')?.value || '').trim();
   const categories = (typeof _cfCatsGetSelected === 'function') ? _cfCatsGetSelected() : [];
   if (!nom) return toast('Nom du fournisseur requis', true);
   try {
     await api('/api/fournisseurs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nom, licence, certificat, has_fsc, groupe, branche,
-                             siret, tva_intracom, fsc_date_expiration, categories }),
+      body: JSON.stringify({
+        nom, has_fsc, categories,
+        licence: val('cf-licence'), certificat: val('cf-certificat'),
+        groupe: val('cf-groupe'), branche: val('cf-branche'),
+        siret: val('cf-siret'), tva_intracom: val('cf-tva'),
+        fsc_date_expiration: val('cf-fsc-exp'),
+      }),
     });
     toast('Fournisseur ajouté');
-    document.getElementById('cf-nom').value = '';
-    document.getElementById('cf-licence').value = '';
-    document.getElementById('cf-certificat').value = '';
+    ['cf-nom','cf-licence','cf-certificat','cf-groupe','cf-branche','cf-siret','cf-tva','cf-fsc-exp']
+      .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
     const cbo = document.getElementById('cf-has-fsc'); if (cbo) cbo.checked = true;
-    const cg = document.getElementById('cf-groupe'); if(cg) cg.value = '';
-    const cb = document.getElementById('cf-branche'); if(cb) cb.value = '';
-    const csi = document.getElementById('cf-siret'); if(csi) csi.value = '';
-    const cti = document.getElementById('cf-tva'); if(cti) cti.value = '';
-    const cfe = document.getElementById('cf-fsc-exp'); if(cfe) cfe.value = '';
     const cpBox = document.getElementById('cf-categories-picker');
     if (cpBox) _cfCatsGetSelected = _renderCategoryPicker(cpBox, []);
     await loadFournisseurs();
     await loadFournisseursGroupes();
-    // Replier le panneau d'ajout après succès
-    try {
-      const ap = document.getElementById('four-add-panel');
-      if (ap) { ap.style.maxHeight=''; ap.classList.add('hidden'); }
-    } catch(e){}
+    const ap = document.getElementById('four-add-panel');
+    if (ap) { ap.style.maxHeight=''; ap.classList.add('hidden'); }
   } catch (e) { toast(e.message, true); }
 };
 
-async function loadFournisseursGroupes(){
-  try{
-    const r = await api('/api/fournisseurs/groupes');
-    if(!r.ok) return;
-    const groupes = await r.json();
-    const dl = document.getElementById('four-groupes-dl');
-    if(dl) dl.innerHTML = groupes.map(g => `<option value="${esc(g.groupe)}">`).join('');
-  }catch(e){}
+// ═══════════════════════════════════════════════════════════════════
+// Fiche fournisseur
+// ═══════════════════════════════════════════════════════════════════
+function _f2Show(view){
+  const map = { list: 'f2-view-list', fiche: 'f2-view-fiche', groupe: 'f2-view-groupe' };
+  Object.keys(map).forEach(k => {
+    const el = document.getElementById(map[k]);
+    if (el) el.classList.toggle('f2-hide', k !== view);
+  });
 }
 
-async function openEditFournisseur(id) {
+function f2BackToList(){
+  f2Id = null; f2Groupe = null;
+  _f2Show('list');
+  renderFournisseursTable();
+  _fourSyncURL();
+  try { document.querySelector('.main')?.scrollTo(0,0); window.scrollTo(0,0); } catch(e){}
+}
+
+function _f2Step(delta){
+  const rows = _fourFiltered().slice().sort((a,b) => (a.nom||'').localeCompare(b.nom||'', 'fr', {sensitivity:'base'}));
+  if (!rows.length) return;
+  const i = rows.findIndex(x => x.id === f2Id);
+  const next = rows[((i < 0 ? 0 : i) + delta + rows.length) % rows.length];
+  if (next) openFournisseurFiche(next.id);
+}
+
+function _f2Initials(n){
+  return String(n||'?').split(/[\s\/\-]+/).filter(Boolean).slice(0,2).map(w => w[0]).join('').toUpperCase();
+}
+function _f2Date(s){
+  if (!s) return '—';
+  const m = String(s).slice(0,10).split('-');
+  return m.length === 3 ? (m[2] + '/' + m[1] + '/' + m[0]) : String(s);
+}
+
+const F2_TABS = [
+  { k:'synthese',   l:'Synthèse' },
+  { k:'identite',   l:'Identité & fiscalité' },
+  { k:'fsc',        l:'FSC' },
+  { k:'certifs',    l:'Certifications', cnt: () => (f2Cache[f2Id]?.certifs?.stats?.couvert ?? null) },
+  { k:'contacts',   l:'Contacts',       cnt: () => (f2Cache[f2Id]?.contacts?.length ?? null) },
+  { k:'receptions', l:'Réceptions',     cnt: () => (f2Cache[f2Id]?.receptions?.length ?? null) },
+  { k:'traca',      l:'Traçabilité' },
+];
+
+async function openFournisseurFiche(id, keepTab){
   const f = fournisseursAll.find(x => x.id === id);
   if (!f) return;
-  const backdrop = document.createElement('div');
-  backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:800;display:flex;align-items:center;justify-content:center;padding:16px';
-  const dlg = document.createElement('div');
-  dlg.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;max-width:440px;width:100%;max-height:90vh;overflow:auto';
-  const hasFscInit = (f.has_fsc == null) ? true : !!f.has_fsc;
-  dlg.innerHTML = '<h3 style="margin:0 0 12px;font-size:16px">Modifier le fournisseur</h3>' +
-    '<label class="sub">Nom</label><input id="ef-nom" value="' + esc(f.nom) + '" style="margin-bottom:10px">' +
-    '<label style="display:flex;align-items:center;gap:8px;margin:6px 0 12px;font-size:13px;color:var(--text);cursor:pointer">' +
-      '<input type="checkbox" id="ef-has-fsc" ' + (hasFscInit ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer">' +
-      'Fournisseur certifié FSC</label>' +
-    '<div id="ef-fsc-fields" style="' + (hasFscInit ? '' : 'opacity:.4;pointer-events:none') + '">' +
-    '<label class="sub">Licence FSC</label><input id="ef-licence" value="' + esc(f.licence || '') + '" style="margin-bottom:10px" placeholder="ex: FSC-C004451">' +
-    '<label class="sub">Certificat FSC</label><input id="ef-certificat" value="' + esc(f.certificat || '') + '" style="margin-bottom:10px" placeholder="ex: CU-COC-807907">' +
-    '<label class="sub">Date d\'expiration du certificat FSC</label><input type="date" id="ef-fsc-exp" value="' + esc(f.fsc_date_expiration || '') + '" style="margin-bottom:10px">' +
-    '</div>' +
-    '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">' +
-    '<p style="margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text)">Identité fiscale</p>' +
-    '<label class="sub">SIRET (14 chiffres)</label><input id="ef-siret" value="' + esc(f.siret || '') + '" style="margin-bottom:10px" placeholder="ex: 12345678901234" inputmode="numeric" maxlength="17">' +
-    '<label class="sub">TVA intracommunautaire</label><input id="ef-tva" value="' + esc(f.tva_intracom || '') + '" style="margin-bottom:10px" placeholder="ex: FR12345678901">' +
-    '</div>' +
-    '<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">' +
-    '<p style="margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text)">Rattachement à un groupe</p>' +
-    '<p style="margin:0 0 10px;font-size:12px;color:var(--text2)">Si ce fournisseur est une branche d\'un groupe (ex: Fedrigoni Italy → groupe Fedrigoni, branche Italy).</p>' +
-    '<label class="sub">Groupe</label><input id="ef-groupe" value="' + esc(f.groupe || '') + '" style="margin-bottom:10px" placeholder="ex: Fedrigoni" list="four-groupes-dl">' +
-    '<label class="sub">Branche</label><input id="ef-branche" value="' + esc(f.branche || '') + '" style="margin-bottom:10px" placeholder="ex: Italy">' +
-    '</div>' +
-    '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">' +
-    '<p style="margin:0 0 6px;font-size:13px;font-weight:600;color:var(--text)">Catégories fournies</p>' +
-    '<p style="margin:0 0 10px;font-size:12px;color:var(--text2)">Plusieurs choix possibles. « Sous-traitant » active automatiquement le fournisseur pour les réceptions de produits finis sous-traités.</p>' +
-    '<div id="ef-categories-picker" class="four-cat-picker"></div>' +
-    '</div>' +
-    '<div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">' +
-    '<p style="margin:0 0 10px;font-size:13px;font-weight:600;color:var(--text)">Code-barre de traçabilité</p>' +
-    '<p style="margin:0 0 10px;font-size:12px;color:var(--text2)">Aide pour les opérateurs : quel code scanner sur les bobines de ce fournisseur.</p>' +
-    '<label class="sub">Photo de l\'étiquette</label>' +
-    '<div id="ef-photo-preview" style="margin-bottom:10px"></div>' +
-    '<input type="file" id="ef-photo-input" accept="image/*" style="display:none">' +
-    '<div style="display:flex;gap:8px;margin-bottom:12px">' +
-    '<button type="button" class="btn btn-sec" id="ef-photo-pick" style="font-size:12px">Choisir une photo</button>' +
-    '<button type="button" class="btn btn-sec" id="ef-photo-del" style="font-size:12px;color:var(--danger);display:none">Supprimer la photo</button></div>' +
-    '<label class="sub">Explication (emplacement, description du code)</label>' +
-    '<textarea id="ef-traca-exp" placeholder="Ex: Scanner le code en bas à gauche de l\'étiquette bobine — code EAN-13 commençant par 376" ' +
-    'style="width:100%;min-height:72px;resize:vertical;margin-bottom:10px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;box-sizing:border-box"></textarea>' +
-    '<label class="sub">Exemple de code (scanner une vraie étiquette pour le remplir)</label>' +
-    '<div style="display:flex;gap:8px;align-items:center;margin-bottom:4px">' +
-    '<input type="text" id="ef-traca-code" placeholder="Ex: 3760123456789" style="flex:1;font-family:monospace">' +
-    '<button type="button" class="btn btn-sec" id="ef-scan-example" style="font-size:12px;white-space:nowrap">Scanner</button></div>' +
-    '<p class="sub" style="margin-top:4px;font-size:11px">Utilisez « Scanner » pour remplir automatiquement en scannant une vraie bobine.</p></div>' +
-    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">' +
-    '<button type="button" class="btn btn-sec" id="ef-cancel">Annuler</button>' +
-    '<button type="button" class="btn" id="ef-save">Enregistrer</button></div>';
-
-  const expEl = dlg.querySelector('#ef-traca-exp');
-  const codeEl = dlg.querySelector('#ef-traca-code');
-  const photoPreview = dlg.querySelector('#ef-photo-preview');
-  const photoInput = dlg.querySelector('#ef-photo-input');
-  const photoDelBtn = dlg.querySelector('#ef-photo-del');
-  const catBox = dlg.querySelector('#ef-categories-picker');
-  await _loadFournisseurCategories();
-  const efCatsGetSelected = catBox ? _renderCategoryPicker(catBox, Array.isArray(f.categories) ? f.categories : []) : (() => Array.isArray(f.categories) ? f.categories : []);
-  expEl.value = f.traca_explication || '';
-  codeEl.value = f.traca_exemple_code || '';
-
-  function refreshPhotoPreview(url) {
-    if (url) {
-      photoPreview.innerHTML = '<img src="' + esc(url) + '" alt="" style="max-width:100%;max-height:200px;border-radius:8px;border:1px solid var(--border);display:block;margin-bottom:4px">';
-      photoDelBtn.style.display = '';
-    } else {
-      photoPreview.innerHTML = '<p class="sub" style="margin:0 0 8px;font-size:12px">Aucune photo</p>';
-      photoDelBtn.style.display = 'none';
-    }
-  }
-  refreshPhotoPreview(f.traca_photo_url || null);
-
-  dlg.querySelector('#ef-photo-pick').onclick = () => photoInput.click();
-  photoInput.onchange = async () => {
-    const file = photoInput.files[0];
-    photoInput.value = '';
-    if (!file) return;
-    const fd = new FormData();
-    fd.append('photo', file);
-    try {
-      const res = await fetch(API + '/api/fournisseurs/' + id + '/traca-photo', { method: 'POST', credentials: 'include', body: fd });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const d = j.detail;
-        const msg = typeof d === 'string' ? d : (Array.isArray(d) && d[0] && d[0].msg ? d[0].msg : 'Erreur upload');
-        throw new Error(msg);
-      }
-      refreshPhotoPreview(j.url);
-      const fi = fournisseursAll.find(x => x.id === id);
-      if (fi) fi.traca_photo_url = j.url;
-      toast('Photo enregistrée');
-    } catch (e) { toast(e.message, true); }
-  };
-
-  photoDelBtn.onclick = async () => {
-    if (!confirm('Supprimer la photo ?')) return;
-    try {
-      const res = await fetch(API + '/api/fournisseurs/' + id + '/traca-photo', { method: 'DELETE', credentials: 'include' });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Erreur');
-      refreshPhotoPreview(null);
-      const fi = fournisseursAll.find(x => x.id === id);
-      if (fi) fi.traca_photo_url = null;
-      toast('Photo supprimée');
-    } catch (e) { toast(e.message, true); }
-  };
-
-  dlg.querySelector('#ef-scan-example').onclick = async () => {
-    try {
-      if (typeof startTracaExampleScan !== 'function') return;
-      await startTracaExampleScan(function(code) { if (code) codeEl.value = code; });
-    } catch (e) {}
-  };
-
-  const efHasFscCbo = dlg.querySelector('#ef-has-fsc');
-  const efFscFields = dlg.querySelector('#ef-fsc-fields');
-  if (efHasFscCbo) efHasFscCbo.onchange = () => {
-    if (!efFscFields) return;
-    efFscFields.style.opacity = efHasFscCbo.checked ? '' : '.4';
-    efFscFields.style.pointerEvents = efHasFscCbo.checked ? '' : 'none';
-  };
-
-  dlg.querySelector('#ef-cancel').onclick = () => backdrop.remove();
-  dlg.querySelector('#ef-save').onclick = async () => {
-    const has_fsc = efHasFscCbo ? !!efHasFscCbo.checked : true;
-    const body = {
-      nom: dlg.querySelector('#ef-nom').value.trim(),
-      licence: has_fsc ? dlg.querySelector('#ef-licence').value.trim() : '',
-      certificat: has_fsc ? dlg.querySelector('#ef-certificat').value.trim() : '',
-      fsc_date_expiration: has_fsc ? (dlg.querySelector('#ef-fsc-exp')?.value || '').trim() : '',
-      has_fsc,
-      traca_explication: expEl.value.trim(),
-      traca_exemple_code: codeEl.value.trim(),
-      groupe: (dlg.querySelector('#ef-groupe')?.value || '').trim(),
-      branche: (dlg.querySelector('#ef-branche')?.value || '').trim(),
-      siret: (dlg.querySelector('#ef-siret')?.value || '').trim(),
-      tva_intracom: (dlg.querySelector('#ef-tva')?.value || '').trim(),
-      categories: efCatsGetSelected(),
+  f2Id = id; f2Groupe = null;
+  if (!keepTab) f2Tab = 'synthese';
+  _f2Show('fiche');
+  try { window.scrollTo(0,0); } catch(e){}
+  _f2PaintFiche();
+  if (!f2Cache[id]) {
+    // 3 appels en parallèle, une seule fois par fiche : contacts,
+    // réceptions MyStock et certifications MyQualité.
+    const [contacts, rec, certifs] = await Promise.all([
+      api('/api/fournisseurs/' + id + '/contacts').catch(() => []),
+      api('/api/fournisseurs/' + id + '/receptions').catch(() => ({receptions:[]})),
+      api('/api/fournisseurs/' + id + '/certifications').catch(() => null),
+    ]);
+    f2Cache[id] = {
+      contacts: Array.isArray(contacts) ? contacts : [],
+      receptions: (rec && rec.receptions) || [],
+      certifs: certifs,
     };
-    if (!body.nom) return toast('Nom requis', true);
-    try {
-      await api('/api/fournisseurs/' + id, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      const fi = fournisseursAll.find(x => x.id === id);
-      if (fi) {
-        fi.traca_explication = body.traca_explication || null;
-        fi.traca_exemple_code = body.traca_exemple_code || null;
-        fi.nom = body.nom;
-        fi.licence = body.licence || null;
-        fi.certificat = body.certificat || null;
-        fi.has_fsc = body.has_fsc ? 1 : 0;
-        fi.groupe = body.groupe || null;
-        fi.branche = body.branche || null;
-        fi.categories = body.categories || [];
-        fi.sous_traitant = body.categories.includes('sous_traitant') ? 1 : 0;
-        fi.siret = body.siret || null;
-        fi.tva_intracom = body.tva_intracom || null;
-        fi.fsc_date_expiration = body.fsc_date_expiration || null;
-      }
-      await loadFournisseursGroupes();
-      toast('Fournisseur mis à jour');
-      backdrop.remove();
-      await loadFournisseurs();
-    } catch (e) { toast(e.message, true); }
+    // nb_contacts vient de la liste : on le réaligne sur la vérité
+    const nb = f2Cache[id].contacts.filter(c => c.actif == null || c.actif).length;
+    const fi = fournisseursAll.find(x => x.id === id);
+    if (fi) fi.nb_contacts = nb;
+    if (f2Id === id) _f2PaintFiche();
+  }
+  _fourSyncURL();
+}
+
+function _f2PaintFiche(){
+  const f = fournisseursAll.find(x => x.id === f2Id);
+  if (!f) return;
+  const cache = f2Cache[f2Id] || {};
+  const comp = _f2Completude(f);
+  const miss = comp.filter(x => !x.ok);
+  const actif = (f.actif == null) ? true : !!f.actif;
+
+  document.getElementById('f2-crumb-name').textContent = f.nom || '';
+  document.getElementById('f2-avatar').textContent = _f2Initials(f.nom);
+  document.getElementById('f2-nom').textContent = f.nom || '';
+  document.getElementById('f2-statut').innerHTML = actif
+    ? '<span class="four-pill fsc">Actif</span>'
+    : '<span class="four-pill nofsc">Inactif</span>';
+
+  const metaBits = [];
+  if (f.groupe) metaBits.push('<span class="four-cat-pill cat-sous_traitant">' + esc(f.groupe) + (f.branche ? ' · ' + esc(f.branche) : '') + '</span>');
+  const catMap = _fourCatLabels();
+  (f.categories || []).forEach(c => metaBits.push('<span class="four-cat-pill cat-' + escAttr(c) + '">' + esc(catMap[c] || c) + '</span>'));
+  if (f.ville) metaBits.push('<span>' + esc(f.ville) + (f.pays && f.pays !== 'FR' ? ', ' + esc(f.pays) : '') + '</span>');
+  metaBits.push('<span>Langue portail AO : <strong style="color:var(--text2)">' + esc((f.langue_default || 'fr').toUpperCase()) + '</strong></span>');
+  document.getElementById('f2-meta').innerHTML = metaBits.join('<span class="sep">•</span>');
+
+  const acts = document.getElementById('f2-actions');
+  acts.innerHTML =
+    '<button type="button" class="btn btn-sec btn-sm" id="f2-a-merge">Fusionner…</button>' +
+    '<button type="button" class="btn btn-sec btn-sm" id="f2-a-actif">' + (actif ? 'Désactiver' : 'Réactiver') + '</button>' +
+    '<button type="button" class="btn btn-sec btn-sm" id="f2-a-del" style="color:var(--danger)">Supprimer</button>';
+  acts.querySelector('#f2-a-merge').onclick = () => openMergeFournisseurModal(f.id);
+  acts.querySelector('#f2-a-actif').onclick = () => _f2ToggleActif(f.id, !actif);
+  acts.querySelector('#f2-a-del').onclick = () => deleteFournisseur(f.id);
+
+  // Bandeau groupe : rattachement, documents hérités, bascule entre branches
+  const banner = document.getElementById('f2-banner');
+  if (f.groupe) {
+    const sib = fournisseursAll.filter(x => (x.groupe || '') === f.groupe)
+      .sort((a,b) => (a.branche||a.nom||'').localeCompare(b.branche||b.nom||'', 'fr', {sensitivity:'base'}));
+    const nbGrp = ((cache.certifs && cache.certifs.documents) || []).filter(d => d.niveau === 'groupe').length;
+    banner.innerHTML = '<div class="f2-banner">' +
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#a78bfa" aria-hidden="true"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg>' +
+      '<span>Branche <strong>' + esc(f.branche || '—') + '</strong> du groupe <strong>' + esc(f.groupe) + '</strong>' +
+        (nbGrp ? ' — ' + nbGrp + ' document' + (nbGrp>1?'s':'') + ' déposé' + (nbGrp>1?'s':'') + ' au niveau groupe, hérité' + (nbGrp>1?'s':'') + ' par cette branche' : '') +
+      '</span>' +
+      '<button type="button" class="btn btn-sec btn-sm" id="f2-b-grp">Fiche groupe &rarr;</button>' +
+      (sib.length > 1 ? '<div class="f2-switch">' + sib.map(x =>
+        '<button type="button" class="' + (x.id === f.id ? 'cur' : '') + '"' +
+        (x.id === f.id ? '' : ' data-fsib="' + x.id + '"') + '>' + esc(x.branche || x.nom) + '</button>'
+      ).join('') + '</div>' : '') +
+    '</div>';
+    banner.querySelector('#f2-b-grp').onclick = () => openGroupeFiche(f.groupe);
+    banner.querySelectorAll('[data-fsib]').forEach(b =>
+      b.onclick = () => openFournisseurFiche(Number(b.dataset.fsib)));
+  } else banner.innerHTML = '';
+
+  // KPI
+  const last = (cache.receptions || [])[0];
+  const cst = (cache.certifs && cache.certifs.stats) || null;
+  const certNote = cst
+    ? ([cst.exp ? cst.exp + ' expiré' + (cst.exp>1?'s':'') : '', cst.soon ? cst.soon + ' à renouveler' : '']
+        .filter(Boolean).join(' · ') || (cst.couvert ? 'Toutes valides' : 'Aucun document déposé'))
+    : 'Chargement…';
+  document.getElementById('f2-kpis').innerHTML =
+    _f2Kpi('Statut FSC', _fscBadgeHTML(f), f.has_fsc && f.fsc_date_expiration
+      ? 'Expire le ' + _f2Date(f.fsc_date_expiration)
+      : (f.has_fsc ? 'Aucune date en base — contrôle au BL impossible' : 'Non certifié'), true) +
+    _f2Kpi('Réceptions', String((cache.receptions || []).length),
+      last ? 'Dernière le ' + _f2Date((last.created_at || '').slice(0,10)) : 'Jamais reçu') +
+    _f2Kpi('Certifications', cst ? (cst.couvert + '<span style="font-size:13px;color:var(--muted)"> / ' + cst.total + '</span>') : '…', certNote) +
+    _f2Kpi('Contacts', String((cache.contacts || []).length),
+      ((cache.contacts || []).find(c => c.is_principal) || {}).nom || 'Aucun contact principal') +
+    _f2Kpi('Fiche complète', (comp.length - miss.length) + '<span style="font-size:13px;color:var(--muted)"> / ' + comp.length + '</span>',
+      miss.length ? 'Manque : ' + miss.map(x => x.k).join(', ') : 'Rien à compléter');
+
+  // Onglets
+  document.getElementById('f2-tabs').innerHTML = F2_TABS.map(t => {
+    const n = t.cnt ? t.cnt() : null;
+    return '<button type="button" class="f2-tab' + (t.k === f2Tab ? ' active' : '') + '" data-f2tab="' + t.k + '">' +
+      esc(t.l) + (n !== null && n !== undefined ? '<span class="cnt">' + n + '</span>' : '') + '</button>';
+  }).join('');
+  document.getElementById('f2-tabs').querySelectorAll('[data-f2tab]').forEach(b =>
+    b.onclick = () => { f2Tab = b.dataset.f2tab; _f2PaintFiche(); });
+
+  const renderers = {
+    synthese: _f2TabSynthese, identite: _f2TabIdentite, fsc: _f2TabFsc,
+    certifs: _f2TabCertifs, contacts: _f2TabContacts,
+    receptions: _f2TabReceptions, traca: _f2TabTraca,
   };
-  backdrop.appendChild(dlg);
-  backdrop.onclick = (e) => { if (e.target === backdrop) backdrop.remove(); };
-  document.body.appendChild(backdrop);
+  const body = document.getElementById('f2-body');
+  body.innerHTML = (renderers[f2Tab] || _f2TabSynthese)(f, cache);
+  const post = { identite: _f2BindIdentite, fsc: _f2BindFsc, certifs: _f2BindCertifs,
+                 contacts: _f2BindContacts, traca: _f2BindTraca, synthese: _f2BindSynthese };
+  if (post[f2Tab]) post[f2Tab](f, cache);
+}
+
+function _f2Kpi(label, value, note, isHtmlSmall){
+  return '<div class="f2-kpi"><div class="f2-kpi-l">' + esc(label) + '</div>' +
+    '<div class="f2-kpi-v' + (isHtmlSmall ? ' sm' : '') + '">' + value + '</div>' +
+    '<div class="f2-kpi-n">' + esc(note || '') + '</div></div>';
+}
+function _f2Kv(label, value){
+  return '<dt>' + esc(label) + '</dt><dd>' + (value || '<span style="color:var(--muted)">—</span>') + '</dd>';
+}
+function _f2EditBtn(key, label){
+  return '<button type="button" class="btn btn-sec btn-sm" data-f2edit="' + escAttr(key) + '">' + esc(label || 'Modifier') + '</button>';
+}
+
+async function _f2ToggleActif(id, desired){
+  try {
+    await api('/api/fournisseurs/' + id + '/actif', {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ actif: !!desired }),
+    });
+    const fi = fournisseursAll.find(x => x.id === id);
+    if (fi) fi.actif = desired ? 1 : 0;
+    toast(desired ? 'Fournisseur activé' : 'Fournisseur désactivé');
+    _f2PaintFiche();
+  } catch(e) { toast(e.message || 'Erreur', true); }
 }
 
 async function deleteFournisseur(id) {
@@ -4749,11 +5081,598 @@ async function deleteFournisseur(id) {
   try {
     await api('/api/fournisseurs/' + id, { method: 'DELETE' });
     toast('Fournisseur supprimé');
+    f2Id = null;
     await loadFournisseurs();
   } catch (e) { toast(e.message, true); }
 }
 
-// ─── Fusion de fournisseurs ────────────────────────────────────────
+// ─── Édition en place, bloc par bloc ──────────────────────────────
+// Le PUT est partiel côté API (_pick garde la valeur existante quand le
+// champ est absent du body) : chaque bloc n'envoie que ses propres champs.
+let _f2EditingBlock = null;
+
+async function _f2SavePartial(id, body, okMsg){
+  try {
+    await api('/api/fournisseurs/' + id, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const fi = fournisseursAll.find(x => x.id === id);
+    if (fi) Object.keys(body).forEach(k => {
+      if (k === 'has_fsc' || k === 'actif') fi[k] = body[k] ? 1 : 0;
+      else if (k === 'tags') fi.tags = String(body.tags || '').split(',').map(s => s.trim()).filter(Boolean);
+      else fi[k] = body[k] === '' ? null : body[k];
+    });
+    if (fi && Array.isArray(body.categories)) fi.sous_traitant = body.categories.includes('sous_traitant') ? 1 : 0;
+    toast(okMsg || 'Fournisseur mis à jour');
+    _f2EditingBlock = null;
+    await loadFournisseursGroupes();
+    fillFourGroupeFilter();
+    _f2PaintFiche();
+    return true;
+  } catch(e) { toast(e.message || 'Erreur', true); return false; }
+}
+
+function _f2BindEditButtons(f){
+  document.getElementById('f2-body').querySelectorAll('[data-f2edit]').forEach(b => {
+    b.onclick = () => { _f2EditingBlock = b.dataset.f2edit; _f2PaintFiche(); };
+  });
+  document.getElementById('f2-body').querySelectorAll('[data-f2cancel]').forEach(b => {
+    b.onclick = () => { _f2EditingBlock = null; _f2PaintFiche(); };
+  });
+}
+
+// ─── Onglet Synthèse ──────────────────────────────────────────────
+function _f2TabSynthese(f, cache){
+  const comp = _f2Completude(f);
+  const miss = comp.filter(x => !x.ok);
+  const recs = (cache.receptions || []).slice(0, 3);
+  const editingNotes = _f2EditingBlock === 'notes';
+  const cst = (cache.certifs && cache.certifs.stats) || null;
+
+  const notesBlock = editingNotes
+    ? '<div class="f2-block"><div class="f2-bh"><h3>Notes internes</h3></div>' +
+        '<textarea id="f2-e-notes" style="width:100%;min-height:90px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-family:inherit;font-size:13px;box-sizing:border-box">' + esc(f.notes || '') + '</textarea>' +
+        '<div class="f2-formacts"><button type="button" class="btn btn-sec btn-sm" data-f2cancel="1">Annuler</button>' +
+        '<button type="button" class="btn btn-sm" id="f2-save-notes">Enregistrer</button></div></div>'
+    : '<div class="f2-block"><div class="f2-bh"><h3>Notes internes</h3>' + _f2EditBtn('notes') + '</div>' +
+        (f.notes ? '<div style="font-size:13px;line-height:1.6;color:var(--text2);white-space:pre-wrap">' + esc(f.notes) + '</div>'
+                 : '<div class="f2-empty">Aucune note.</div>') + '</div>';
+
+  return '<div style="display:grid;grid-template-columns:1.4fr 1fr;gap:14px;align-items:start" class="f2-synth">' +
+    '<div>' +
+      '<div class="f2-block" style="margin-bottom:14px">' +
+        '<div class="f2-bh"><h3>Dernières réceptions</h3>' +
+          ((cache.receptions || []).length ? '<button type="button" class="btn btn-sec btn-sm" data-f2goto="receptions">Tout voir &rarr;</button>' : '') +
+        '</div>' +
+        (recs.length
+          ? '<div class="f2-tl">' + recs.map(r =>
+              '<div class="f2-tli"><div class="f2-tld">' + esc(_f2Date((r.created_at||'').slice(0,10))) +
+              (r.certificat_fsc ? ' · cert. ' + esc(r.certificat_fsc) : '') + '</div>' +
+              '<div class="f2-tlt">' + esc(r.nb_bobines || 0) + ' bobine' + ((r.nb_bobines||0)>1?'s':'') + '</div>' +
+              '<div class="f2-tls">' + esc(r.created_by_name || 'opérateur inconnu') +
+              (r.note ? ' — ' + esc(r.note) : '') + '</div></div>').join('') + '</div>'
+          : '<div class="f2-empty">Aucune réception enregistrée dans MyStock pour ce fournisseur.</div>') +
+      '</div>' + notesBlock +
+    '</div>' +
+    '<div>' +
+      (miss.length
+        ? '<div class="f2-block warn" style="margin-bottom:14px"><div class="f2-bh"><h3 class="warn">À compléter</h3></div>' +
+          '<div style="display:flex;flex-direction:column;gap:8px">' +
+          miss.map(m => '<button type="button" class="btn btn-sec btn-sm" style="justify-content:space-between;width:100%" data-f2goto="' + m.tab + '">' + esc(m.k) + '<span>&rarr;</span></button>').join('') +
+          '</div></div>'
+        : '') +
+      '<div class="f2-block"><div class="f2-bh"><h3>Repères</h3></div><dl class="f2-kv">' +
+        _f2Kv('Certification', _fscBadgeHTML(f)) +
+        _f2Kv('Licence FSC', f.licence ? '<code>' + esc(f.licence) + '</code>' : '') +
+        _f2Kv('Certifications', cst ? (cst.couvert + ' / ' + cst.total + ' du référentiel') : 'Chargement…') +
+        _f2Kv('Catégories', _fourCatsCellHTML(f.categories)) +
+        _f2Kv('Tags', (f.tags || []).length ? (f.tags || []).map(t => '<span class="four-cat-pill">' + esc(t) + '</span>').join(' ') : '') +
+        _f2Kv('SIRET', f.siret ? '<code>' + esc(f.siret) + '</code>' : '') +
+      '</dl></div>' +
+    '</div></div>';
+}
+function _f2BindSynthese(f){
+  const body = document.getElementById('f2-body');
+  body.querySelectorAll('[data-f2goto]').forEach(b =>
+    b.onclick = () => { f2Tab = b.dataset.f2goto; _f2PaintFiche(); });
+  _f2BindEditButtons(f);
+  const sv = body.querySelector('#f2-save-notes');
+  if (sv) sv.onclick = () => _f2SavePartial(f.id, { notes: body.querySelector('#f2-e-notes').value.trim() }, 'Notes enregistrées');
+}
+
+// ─── Onglet Identité & fiscalité ──────────────────────────────────
+function _f2TabIdentite(f){
+  const ed = _f2EditingBlock;
+  const catMap = _fourCatLabels();
+
+  const blocIdentite = (ed === 'identite')
+    ? '<div class="f2-block"><div class="f2-bh"><h3>Identité</h3></div><div class="f2-form">' +
+        '<div class="span2"><label class="sub">Nom *</label><input id="f2-e-nom" value="' + escAttr(f.nom || '') + '"></div>' +
+        '<div><label class="sub">Groupe</label><input id="f2-e-groupe" value="' + escAttr(f.groupe || '') + '" list="four-groupes-dl" placeholder="ex: Fedrigoni"></div>' +
+        '<div><label class="sub">Branche</label><input id="f2-e-branche" value="' + escAttr(f.branche || '') + '" placeholder="ex: Italy"></div>' +
+        '<div><label class="sub">Langue portail AO</label><select id="f2-e-langue">' +
+          '<option value="fr"' + ((f.langue_default||'fr')==='fr'?' selected':'') + '>Français</option>' +
+          '<option value="en"' + ((f.langue_default||'fr')==='en'?' selected':'') + '>English</option></select></div>' +
+        '<div class="span2"><label class="sub">Tags / spécialités <span style="color:var(--muted);font-weight:400">(séparés par des virgules)</span></label>' +
+          '<input id="f2-e-tags" value="' + escAttr((f.tags||[]).join(', ')) + '"></div>' +
+        '</div><div class="f2-formacts"><button type="button" class="btn btn-sec btn-sm" data-f2cancel="1">Annuler</button>' +
+        '<button type="button" class="btn btn-sm" id="f2-save-identite">Enregistrer</button></div></div>'
+    : '<div class="f2-block"><div class="f2-bh"><h3>Identité</h3>' + _f2EditBtn('identite') + '</div><dl class="f2-kv">' +
+        _f2Kv('Nom', esc(f.nom || '')) +
+        _f2Kv('Groupe', f.groupe ? esc(f.groupe) : '') +
+        _f2Kv('Branche', f.branche ? esc(f.branche) : '') +
+        _f2Kv('Langue portail AO', esc((f.langue_default || 'fr').toUpperCase())) +
+        _f2Kv('Tags', (f.tags||[]).length ? (f.tags||[]).map(t => '<span class="four-cat-pill">' + esc(t) + '</span>').join(' ') : '') +
+      '</dl><p class="f2-hint">Le rattachement à un groupe alimente la vue « Par groupe » et la fiche groupe : les branches d\'une même maison mère y sont consolidées, et un certificat déposé au niveau groupe les couvre toutes.</p></div>';
+
+  const addr = [f.adresse, [f.code_postal, f.ville].filter(Boolean).join(' '),
+                (f.pays && f.pays !== 'FR') ? f.pays : ''].filter(Boolean).join(', ');
+  const blocAdresse = (ed === 'adresse')
+    ? '<div class="f2-block"><div class="f2-bh"><h3>Adresse</h3></div><div class="f2-form">' +
+        '<div class="span2"><label class="sub">Adresse</label><input id="f2-e-adresse" value="' + escAttr(f.adresse || '') + '"></div>' +
+        '<div><label class="sub">Code postal</label><input id="f2-e-cp" value="' + escAttr(f.code_postal || '') + '"></div>' +
+        '<div><label class="sub">Ville</label><input id="f2-e-ville" value="' + escAttr(f.ville || '') + '"></div>' +
+        '<div><label class="sub">Pays</label><input id="f2-e-pays" value="' + escAttr(f.pays || 'FR') + '"></div>' +
+        '</div><div class="f2-formacts"><button type="button" class="btn btn-sec btn-sm" data-f2cancel="1">Annuler</button>' +
+        '<button type="button" class="btn btn-sm" id="f2-save-adresse">Enregistrer</button></div></div>'
+    : '<div class="f2-block"><div class="f2-bh"><h3>Adresse</h3>' + _f2EditBtn('adresse') + '</div>' +
+        (addr ? '<dl class="f2-kv">' + _f2Kv('Adresse', esc(addr)) + '</dl>'
+              : '<div class="f2-empty">Aucune adresse renseignée.</div>') + '</div>';
+
+  const blocFiscal = (ed === 'fiscal')
+    ? '<div class="f2-block"><div class="f2-bh"><h3>Identité fiscale</h3></div><div class="f2-form">' +
+        '<div><label class="sub">SIRET (14 chiffres)</label><input id="f2-e-siret" value="' + escAttr(f.siret || '') + '" inputmode="numeric" maxlength="17"></div>' +
+        '<div><label class="sub">TVA intracommunautaire</label><input id="f2-e-tva" value="' + escAttr(f.tva_intracom || '') + '"></div>' +
+        '</div><div class="f2-formacts"><button type="button" class="btn btn-sec btn-sm" data-f2cancel="1">Annuler</button>' +
+        '<button type="button" class="btn btn-sm" id="f2-save-fiscal">Enregistrer</button></div></div>'
+    : '<div class="f2-block"><div class="f2-bh"><h3>Identité fiscale</h3>' + _f2EditBtn('fiscal') + '</div><dl class="f2-kv">' +
+        _f2Kv('SIRET', f.siret ? '<code>' + esc(f.siret) + '</code>' : '') +
+        _f2Kv('TVA intracom.', f.tva_intracom ? '<code>' + esc(f.tva_intracom) + '</code>' : '') +
+      '</dl></div>';
+
+  const blocCats = (ed === 'categories')
+    ? '<div class="f2-block"><div class="f2-bh"><h3>Catégories fournies</h3></div>' +
+        '<div id="f2-e-cats" class="four-cat-picker"></div>' +
+        '<div class="f2-formacts"><button type="button" class="btn btn-sec btn-sm" data-f2cancel="1">Annuler</button>' +
+        '<button type="button" class="btn btn-sm" id="f2-save-cats">Enregistrer</button></div></div>'
+    : '<div class="f2-block"><div class="f2-bh"><h3>Catégories fournies</h3>' + _f2EditBtn('categories') + '</div>' +
+        ((f.categories || []).length ? _fourCatsCellHTML(f.categories) : '<div class="f2-empty">Aucune catégorie.</div>') +
+        '<p class="f2-hint">« Sous-traitant » active automatiquement ce fournisseur pour les réceptions de produits finis sous-traités.</p></div>';
+
+  return '<div class="f2-blocks">' + blocIdentite + blocAdresse + blocFiscal + blocCats + '</div>';
+}
+
+function _f2BindIdentite(f){
+  const body = document.getElementById('f2-body');
+  _f2BindEditButtons(f);
+  const g = id => body.querySelector(id);
+  if (g('#f2-save-identite')) g('#f2-save-identite').onclick = () => {
+    const nom = g('#f2-e-nom').value.trim();
+    if (!nom) return toast('Nom requis', true);
+    _f2SavePartial(f.id, {
+      nom, groupe: g('#f2-e-groupe').value.trim(), branche: g('#f2-e-branche').value.trim(),
+      langue_default: g('#f2-e-langue').value, tags: g('#f2-e-tags').value,
+    });
+  };
+  if (g('#f2-save-adresse')) g('#f2-save-adresse').onclick = () => _f2SavePartial(f.id, {
+    adresse: g('#f2-e-adresse').value.trim(), code_postal: g('#f2-e-cp').value.trim(),
+    ville: g('#f2-e-ville').value.trim(), pays: g('#f2-e-pays').value.trim() || 'FR',
+  });
+  if (g('#f2-save-fiscal')) g('#f2-save-fiscal').onclick = () => _f2SavePartial(f.id, {
+    siret: g('#f2-e-siret').value.trim(), tva_intracom: g('#f2-e-tva').value.trim(),
+  });
+  const catBox = g('#f2-e-cats');
+  if (catBox) {
+    const getSel = _renderCategoryPicker(catBox, Array.isArray(f.categories) ? f.categories : []);
+    g('#f2-save-cats').onclick = () => _f2SavePartial(f.id, { categories: getSel() });
+  }
+}
+
+// ─── Onglet FSC ───────────────────────────────────────────────────
+function _f2TabFsc(f){
+  const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
+  if (_f2EditingBlock === 'fsc') {
+    return '<div class="f2-blocks"><div class="f2-block full"><div class="f2-bh"><h3>Certification FSC — chaîne de contrôle</h3></div>' +
+      '<label style="display:inline-flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;cursor:pointer">' +
+        '<input type="checkbox" id="f2-e-hasfsc"' + (hasFsc ? ' checked' : '') + ' style="width:16px;height:16px;cursor:pointer"> Fournisseur certifié FSC</label>' +
+      '<div class="f2-form" id="f2-e-fscfields"' + (hasFsc ? '' : ' style="opacity:.4;pointer-events:none"') + '>' +
+        '<div><label class="sub">Code licence FSC</label><input id="f2-e-licence" value="' + escAttr(f.licence || '') + '" placeholder="ex: FSC-C004451"></div>' +
+        '<div><label class="sub">Code certificat FSC</label><input id="f2-e-certificat" value="' + escAttr(f.certificat || '') + '" placeholder="ex: CU-COC-807907"></div>' +
+        '<div class="span2"><label class="sub">Date d\'expiration du certificat</label><input type="date" id="f2-e-fscexp" value="' + escAttr(f.fsc_date_expiration || '') + '"></div>' +
+      '</div><div class="f2-formacts"><button type="button" class="btn btn-sec btn-sm" data-f2cancel="1">Annuler</button>' +
+      '<button type="button" class="btn btn-sm" id="f2-save-fsc">Enregistrer</button></div></div></div>';
+  }
+  if (!hasFsc) {
+    return '<div class="f2-blocks"><div class="f2-block full">' +
+      '<div class="f2-bh"><h3>Certification FSC — chaîne de contrôle</h3>' + _f2EditBtn('fsc') + '</div>' +
+      '<div class="f2-empty">Ce fournisseur n\'est pas déclaré certifié FSC.</div>' +
+      '<p class="f2-hint">Une matière reçue d\'un fournisseur non certifié ne peut pas entrer dans un flux FSC : le registre l\'exclut automatiquement.</p></div></div>';
+  }
+  return '<div class="f2-blocks"><div class="f2-block full">' +
+    '<div class="f2-bh"><h3>Certification FSC — chaîne de contrôle</h3>' + _f2EditBtn('fsc') + '</div><dl class="f2-kv">' +
+      _f2Kv('Statut', _fscBadgeHTML(f)) +
+      _f2Kv('Code licence', f.licence ? '<code>' + esc(f.licence) + '</code>' : '<span class="f2-chip st-soon">Manquant</span>') +
+      _f2Kv('Code certificat', f.certificat ? '<code>' + esc(f.certificat) + '</code>' : '<span class="f2-chip st-soon">Manquant</span>') +
+      _f2Kv('Expiration', f.fsc_date_expiration ? esc(_f2Date(f.fsc_date_expiration)) : '<span class="f2-chip st-soon">Non renseignée</span>') +
+    '</dl><p class="f2-hint">La validité du certificat <strong>à la date du BL</strong> est une exigence de chaîne de contrôle (FSC-STD-40-004). Sans date d\'expiration en base, aucun contrôle automatique n\'est possible au moment de la réception.</p></div></div>';
+}
+function _f2BindFsc(f){
+  const body = document.getElementById('f2-body');
+  _f2BindEditButtons(f);
+  const cb = body.querySelector('#f2-e-hasfsc');
+  const fields = body.querySelector('#f2-e-fscfields');
+  if (cb && fields) cb.onchange = () => {
+    fields.style.opacity = cb.checked ? '' : '.4';
+    fields.style.pointerEvents = cb.checked ? '' : 'none';
+  };
+  const sv = body.querySelector('#f2-save-fsc');
+  if (sv) sv.onclick = () => {
+    const has = cb ? !!cb.checked : true;
+    _f2SavePartial(f.id, {
+      has_fsc: has,
+      licence: has ? body.querySelector('#f2-e-licence').value.trim() : '',
+      certificat: has ? body.querySelector('#f2-e-certificat').value.trim() : '',
+      fsc_date_expiration: has ? body.querySelector('#f2-e-fscexp').value.trim() : '',
+    });
+  };
+}
+
+// ─── Onglet Certifications (lecture seule — source : MyQualité) ───
+function _f2TabCertifs(f, cache){
+  const data = cache.certifs;
+  if (!data) return '<div class="f2-block full"><div class="f2-empty">Chargement des certifications…</div></div>';
+  const ref = data.referentiel || [];
+  if (!ref.length) {
+    return '<div class="f2-block full"><div class="f2-bh"><h3>Certifications</h3></div>' +
+      '<div class="f2-empty">Le référentiel RSE de MyQualité est vide ou indisponible.</div>' +
+      '<p class="f2-hint">Le catalogue des certifications est géré dans MyQualité › Référentiel RSE.</p></div>';
+  }
+  const couv = data.couverture || {};
+  const st = data.stats || {};
+  const docs = data.documents || [];
+  const pct = n => (st.total ? ((n || 0) / st.total * 100).toFixed(2) : 0) + '%';
+
+  const byCat = {};
+  ref.forEach(r => { (byCat[r.categorie || 'autre'] = byCat[r.categorie || 'autre'] || []).push(r); });
+  const grid = Object.keys(byCat).sort(_f2CatOrder).map(catk =>
+    '<div class="f2-cat"><div class="f2-cath">' + esc(F2_REF_CATS[catk] || catk) + '</div><div class="f2-cgrid">' +
+    byCat[catk].map(r => {
+      const c = couv[String(r.id)];
+      const k = c ? c.statut : 'none';
+      return '<div class="f2-cc' + (c ? '' : ' absent') + '">' +
+        '<span class="f2-ccd st-' + escAttr(k) + '"></span>' +
+        '<div class="f2-ccb"><div class="f2-ccn" title="' + escAttr(r.nom) + '">' + esc(r.nom) + '</div>' +
+        '<div class="f2-ccs">' + esc(F2_CERT_LABEL[k] || k) +
+          (c && c.date_expiration ? ' · ' + esc(_f2Date(c.date_expiration)) : '') +
+          (c && c.niveau === 'groupe' ? ' <span class="f2-herit">&#8962; GROUPE</span>' : '') +
+        '</div></div></div>';
+    }).join('') + '</div></div>').join('');
+
+  const nonCouv = (st.total || 0) - (st.couvert || 0);
+  return '<div class="f2-block full" style="margin-bottom:14px">' +
+    '<div class="f2-bh"><h3>Couverture du référentiel (' + (st.couvert||0) + ' / ' + (st.total||0) + ')</h3>' +
+      '<button type="button" class="btn btn-sec btn-sm" id="f2-goto-qualite">Gérer dans MyQualité &rarr;</button></div>' +
+    '<div class="f2-covbar">' +
+      '<i style="width:' + pct(st.valide) + ';background:var(--ok)"></i>' +
+      '<i style="width:' + pct(st.soon) + ';background:var(--warn)"></i>' +
+      '<i style="width:' + pct(st.exp) + ';background:var(--danger)"></i>' +
+      '<i style="width:' + pct(st.nod) + ';background:var(--muted)"></i>' +
+    '</div>' +
+    '<div class="f2-legend" style="margin-bottom:16px">' +
+      '<span><span class="f2-ccd st-valide"></span> ' + (st.valide||0) + ' valide' + ((st.valide||0)>1?'s':'') + '</span>' +
+      '<span><span class="f2-ccd st-soon"></span> ' + (st.soon||0) + ' expire sous 60 j</span>' +
+      '<span><span class="f2-ccd st-exp"></span> ' + (st.exp||0) + ' expiré' + ((st.exp||0)>1?'s':'') + '</span>' +
+      '<span><span class="f2-ccd st-nod"></span> ' + (st.nod||0) + ' sans date</span>' +
+      '<span><span class="f2-ccd st-none"></span> ' + nonCouv + ' non couvert' + (nonCouv>1?'s':'') + '</span>' +
+    '</div>' + grid +
+    '<p class="f2-hint">Catalogue issu du <strong>Référentiel RSE</strong> de MyQualité. Un certificat déposé au niveau <strong>groupe</strong> (&#8962;) couvre automatiquement toutes ses branches. Le dépôt et l\'édition se font dans MyQualité › Ressources fournisseurs — cette vue est en lecture seule.</p>' +
+  '</div>' +
+  '<div class="f2-block full"><div class="f2-bh"><h3>Documents déposés (' + docs.length + ')</h3></div>' +
+    (docs.length
+      ? '<div class="table-wrap"><table class="four-table"><thead><tr><th>Document</th><th>Certifications taguées</th><th>Émission</th><th>Expiration</th><th>Niveau</th><th></th></tr></thead><tbody>' +
+        docs.map(d => '<tr>' +
+          '<td class="four-nom-cell"><strong>' + esc(d.titre || '(sans titre)') + '</strong>' +
+            (d.filename ? '<small style="font-family:monospace">' + esc(d.filename) + '</small>' : '') + '</td>' +
+          '<td><div class="f2-mini">' + (d.fiches || []).map(x =>
+            '<span class="f2-chip st-nod">' + esc(x.acronyme || x.nom) + '</span>').join('') + '</div></td>' +
+          '<td>' + esc(_f2Date(d.date_emission)) + '</td>' +
+          '<td><span class="f2-chip st-' + escAttr(d.statut) + '">' + (d.date_expiration ? esc(_f2Date(d.date_expiration)) : 'Sans date') + '</span></td>' +
+          '<td>' + (d.niveau === 'groupe'
+            ? '<span class="four-cat-pill cat-sous_traitant">&#8962; Groupe</span>'
+            : '<span class="four-cat-pill">Branche</span>') + '</td>' +
+          '<td><a class="btn btn-sec btn-sm" href="' + API + '/api/qualite/ressources/certificats/' + d.id + '/download">Télécharger</a></td>' +
+        '</tr>').join('') + '</tbody></table></div>' +
+        '<p class="f2-hint">Les documents « &#8962; Groupe » ne sont pas stockés sur cette branche : ils appartiennent au dossier groupe et s\'affichent ici parce qu\'ils la couvrent.</p>'
+      : '<div class="f2-empty">Aucun certificat déposé pour ce fournisseur.</div>') +
+  '</div>';
+}
+function _f2BindCertifs(f){
+  const b = document.getElementById('f2-body').querySelector('#f2-goto-qualite');
+  if (b) b.onclick = () => { window.open('/qualite#ressources-list', '_blank'); };
+}
+
+// ─── Onglet Contacts ──────────────────────────────────────────────
+function _f2TabContacts(f, cache){
+  const list = cache.contacts;
+  if (!list) return '<div class="f2-block full"><div class="f2-empty">Chargement…</div></div>';
+  return '<div class="f2-block full"><div class="f2-bh"><h3>Contacts (' + list.length + ')</h3>' +
+    '<button type="button" class="btn btn-sm" id="f2-c-add">+ Ajouter un contact</button></div>' +
+    (list.length
+      ? list.map(c => {
+          const emails = Array.isArray(c.emails) ? c.emails : [];
+          const tels = Array.isArray(c.tels) ? c.tels : [];
+          return '<div class="f2-contact">' +
+            '<div class="f2-cav">' + esc(_f2Initials(c.nom)) + '</div>' +
+            '<div class="f2-cbody">' +
+              '<div class="f2-cname">' + esc(c.nom || '(sans nom)') +
+                (c.is_principal ? '<span class="four-pill fsc">Principal</span>' : '') +
+                (c.actif ? '' : '<span class="four-pill nofsc">Archivé</span>') +
+                '<span class="four-cat-pill">' + esc((c.langue || 'fr').toUpperCase()) + '</span>' +
+              '</div>' +
+              (c.fonction ? '<div class="f2-crole">' + esc(c.fonction) + '</div>' : '') +
+              ((emails.length || tels.length) ? '<div class="f2-clinks">' +
+                emails.map(e => '<a href="mailto:' + escAttr(e) + '">' + esc(e) + '</a>').join('') +
+                tels.map(t => '<span style="color:var(--text2)">' + esc(t) + '</span>').join('') +
+              '</div>' : '') +
+              (c.notes ? '<div class="f2-crole" style="margin-top:4px;font-style:italic">' + esc(c.notes) + '</div>' : '') +
+            '</div>' +
+            '<div style="display:flex;gap:6px">' +
+              '<button type="button" class="btn btn-sec btn-sm" data-fc-edit="' + c.id + '">Modifier</button>' +
+              '<button type="button" class="btn btn-sec btn-sm" style="color:var(--danger)" data-fc-del="' + c.id + '">Suppr.</button>' +
+            '</div></div>';
+        }).join('')
+      : '<div class="f2-empty">Aucun contact enregistré. Le portail MyAO ne pourra pas consulter ce fournisseur.</div>') +
+  '</div>';
+}
+function _f2BindContacts(f){
+  const body = document.getElementById('f2-body');
+  const refresh = async () => {
+    try {
+      const list = await api('/api/fournisseurs/' + f.id + '/contacts');
+      f2Cache[f.id].contacts = Array.isArray(list) ? list : [];
+      const fi = fournisseursAll.find(x => x.id === f.id);
+      if (fi) fi.nb_contacts = f2Cache[f.id].contacts.filter(c => c.actif == null || c.actif).length;
+      _f2PaintFiche();
+    } catch(e) { toast(e.message, true); }
+  };
+  const add = body.querySelector('#f2-c-add');
+  if (add) add.onclick = () => openContactSubModal(f.id, null, refresh);
+  body.querySelectorAll('[data-fc-edit]').forEach(b =>
+    b.onclick = () => openContactSubModal(f.id, Number(b.dataset.fcEdit), refresh));
+  body.querySelectorAll('[data-fc-del]').forEach(b => b.onclick = async () => {
+    if (!confirm('Supprimer ce contact ?')) return;
+    try {
+      await api('/api/fournisseurs/' + f.id + '/contacts/' + Number(b.dataset.fcDel), { method: 'DELETE' });
+      await refresh();
+    } catch(e) { toast(e.message, true); }
+  });
+}
+
+// ─── Onglet Réceptions ────────────────────────────────────────────
+function _f2TabReceptions(f, cache){
+  const recs = cache.receptions;
+  if (!recs) return '<div class="f2-block full"><div class="f2-empty">Chargement…</div></div>';
+  return '<div class="f2-block full"><div class="f2-bh"><h3>Historique des réceptions (' +
+    recs.length + (recs.length >= 50 ? ' — 50 dernières' : '') + ')</h3></div>' +
+    (recs.length
+      ? '<div class="table-wrap"><table class="four-table"><thead><tr><th>Date</th><th>Opérateur</th><th>Bobines</th><th>Certificat FSC</th><th>Note</th></tr></thead><tbody>' +
+        recs.map(r => '<tr>' +
+          '<td style="font-family:monospace;font-size:12px">' + esc((r.created_at || '').slice(0,16).replace('T',' ')) + '</td>' +
+          '<td>' + esc(r.created_by_name || '—') + '</td>' +
+          '<td>' + esc(String(r.nb_bobines == null ? '—' : r.nb_bobines)) + '</td>' +
+          '<td><code>' + esc(r.certificat_fsc || '—') + '</code></td>' +
+          '<td style="max-width:260px;white-space:normal">' + esc(r.note || '') + '</td>' +
+        '</tr>').join('') + '</tbody></table></div>'
+      : '<div class="f2-empty">Aucune réception enregistrée dans MyStock pour ce fournisseur.</div>') +
+    '<p class="f2-hint">Source : réceptions MyStock, tous opérateurs confondus, rapprochées par nom de fournisseur. L\'ancien sous-onglet « Historique réceptions » (un menu déroulant seul dans une page) est remplacé par cet onglet.</p></div>';
+}
+
+// ─── Onglet Traçabilité ───────────────────────────────────────────
+function _f2TabTraca(f){
+  if (_f2EditingBlock === 'traca') {
+    return '<div class="f2-block full"><div class="f2-bh"><h3>Guide de traçabilité opérateur</h3></div>' +
+      '<div class="f2-traca"><div style="flex-shrink:0">' +
+        '<div class="f2-tphoto" id="f2-e-photo"></div>' +
+        '<input type="file" id="f2-e-photo-input" accept="image/*" style="display:none">' +
+        '<div style="display:flex;gap:8px;margin-top:8px">' +
+          '<button type="button" class="btn btn-sec btn-sm" id="f2-e-photo-pick">Choisir une photo</button>' +
+          '<button type="button" class="btn btn-sec btn-sm" id="f2-e-photo-del" style="color:var(--danger);display:none">Supprimer</button>' +
+        '</div></div>' +
+        '<div style="flex:1;min-width:240px">' +
+          '<label class="sub" style="display:block;font-size:11px;margin-bottom:3px">Explication affichée à l\'opérateur</label>' +
+          '<textarea id="f2-e-traca-exp" style="width:100%;min-height:80px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-family:inherit;font-size:13px;box-sizing:border-box" placeholder="Ex: Scanner le code en bas à gauche de l\'étiquette bobine — code EAN-13 commençant par 376">' + esc(f.traca_explication || '') + '</textarea>' +
+          '<label class="sub" style="display:block;font-size:11px;margin:10px 0 3px">Exemple de code</label>' +
+          '<div style="display:flex;gap:8px;align-items:center">' +
+            '<input type="text" id="f2-e-traca-code" value="' + escAttr(f.traca_exemple_code || '') + '" placeholder="Ex: 3760123456789" style="flex:1;font-family:monospace;padding:7px 9px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px">' +
+            '<button type="button" class="btn btn-sec btn-sm" id="f2-e-scan" style="white-space:nowrap">Scanner</button>' +
+          '</div>' +
+        '</div></div>' +
+      '<div class="f2-formacts"><button type="button" class="btn btn-sec btn-sm" data-f2cancel="1">Annuler</button>' +
+      '<button type="button" class="btn btn-sm" id="f2-save-traca">Enregistrer</button></div>' +
+      '<p class="f2-hint">La photo est enregistrée immédiatement au moment du choix ; le texte et le code le sont au clic sur Enregistrer.</p></div>';
+  }
+  return '<div class="f2-block full"><div class="f2-bh"><h3>Guide de traçabilité opérateur</h3>' + _f2EditBtn('traca') + '</div>' +
+    '<div class="f2-traca">' +
+      '<div class="f2-tphoto' + (f.traca_photo_url ? '' : '') + '">' +
+        (f.traca_photo_url
+          ? '<img src="' + escAttr(f.traca_photo_url) + '" alt="Étiquette fournisseur">'
+          : 'Aucune photo — les opérateurs n\'ont pas de repère visuel') + '</div>' +
+      '<div style="flex:1;min-width:240px">' +
+        '<dl class="f2-kv" style="grid-template-columns:120px 1fr">' +
+          _f2Kv('Code exemple', f.traca_exemple_code ? '<span class="f2-code">' + esc(f.traca_exemple_code) + '</span>' : '<span class="f2-chip st-soon">Non renseigné</span>') +
+        '</dl>' +
+        '<div style="margin-top:14px"><div style="font-size:12px;color:var(--muted);margin-bottom:6px">Explication affichée à l\'opérateur</div>' +
+        (f.traca_explication
+          ? '<div style="font-size:13px;line-height:1.6;color:var(--text2);white-space:pre-wrap">' + esc(f.traca_explication) + '</div>'
+          : '<div class="f2-empty">Aucune explication.</div>') + '</div>' +
+      '</div>' +
+    '</div>' +
+    '<p class="f2-hint">Ce guide s\'affiche dans MyStock au moment de la saisie d\'une réception, pour indiquer à l\'opérateur quel code scanner sur la bobine. C\'est le maillon faible de la traçabilité matière quand il manque.</p></div>';
+}
+
+function _f2BindTraca(f){
+  const body = document.getElementById('f2-body');
+  _f2BindEditButtons(f);
+  const box = body.querySelector('#f2-e-photo');
+  if (!box) return;
+  const input = body.querySelector('#f2-e-photo-input');
+  const delBtn = body.querySelector('#f2-e-photo-del');
+  const paint = (url) => {
+    box.innerHTML = url ? '<img src="' + escAttr(url) + '" alt="Étiquette fournisseur">' : 'Aucune photo';
+    delBtn.style.display = url ? '' : 'none';
+  };
+  paint(f.traca_photo_url || null);
+  body.querySelector('#f2-e-photo-pick').onclick = () => input.click();
+  input.onchange = async () => {
+    const file = input.files[0];
+    input.value = '';
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('photo', file);
+    try {
+      const res = await fetch(API + '/api/fournisseurs/' + f.id + '/traca-photo', { method: 'POST', credentials: 'include', body: fd });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const d = j.detail;
+        throw new Error(typeof d === 'string' ? d : (Array.isArray(d) && d[0] && d[0].msg ? d[0].msg : 'Erreur upload'));
+      }
+      const fi = fournisseursAll.find(x => x.id === f.id);
+      if (fi) fi.traca_photo_url = j.url;
+      paint(j.url);
+      toast('Photo enregistrée');
+    } catch(e) { toast(e.message, true); }
+  };
+  delBtn.onclick = async () => {
+    if (!confirm('Supprimer la photo ?')) return;
+    try {
+      const res = await fetch(API + '/api/fournisseurs/' + f.id + '/traca-photo', { method: 'DELETE', credentials: 'include' });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(typeof j.detail === 'string' ? j.detail : 'Erreur');
+      const fi = fournisseursAll.find(x => x.id === f.id);
+      if (fi) fi.traca_photo_url = null;
+      paint(null);
+      toast('Photo supprimée');
+    } catch(e) { toast(e.message, true); }
+  };
+  const scan = body.querySelector('#f2-e-scan');
+  if (scan) scan.onclick = async () => {
+    try {
+      if (typeof startTracaExampleScan !== 'function') return;
+      await startTracaExampleScan(function(code){
+        if (code) body.querySelector('#f2-e-traca-code').value = code;
+      });
+    } catch(e) {}
+  };
+  body.querySelector('#f2-save-traca').onclick = () => _f2SavePartial(f.id, {
+    traca_explication: body.querySelector('#f2-e-traca-exp').value.trim(),
+    traca_exemple_code: body.querySelector('#f2-e-traca-code').value.trim(),
+  }, 'Guide de traçabilité enregistré');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Fiche groupe
+// ═══════════════════════════════════════════════════════════════════
+async function openGroupeFiche(nom, keep){
+  f2Groupe = nom; f2Id = null;
+  _f2Show('groupe');
+  try { window.scrollTo(0,0); } catch(e){}
+  document.getElementById('f2-gcrumb-name').textContent = nom;
+  document.getElementById('f2-gavatar').textContent = _f2Initials(nom);
+  document.getElementById('f2-gnom').textContent = nom;
+  document.getElementById('f2-gmeta').innerHTML = '';
+  document.getElementById('f2-gkpis').innerHTML = '';
+  document.getElementById('f2-gbody').innerHTML = '<div class="f2-block full"><div class="f2-empty">Chargement du groupe…</div></div>';
+  _fourSyncURL();
+  let data;
+  try {
+    data = await api('/api/fournisseurs/groupe/' + encodeURIComponent(nom) + '/fiche');
+  } catch(e) {
+    document.getElementById('f2-gbody').innerHTML =
+      '<div class="f2-block full"><div class="f2-empty" style="color:var(--danger)">Erreur : ' + esc(e.message || '') + '</div></div>';
+    return;
+  }
+  if (f2Groupe !== nom) return;   // l'utilisateur a navigué entre-temps
+  _f2PaintGroupe(data);
+}
+
+function _f2PaintGroupe(data){
+  const br = data.branches || [];
+  const ref = data.referentiel || [];
+  const st = data.stats || {};
+  const docs = data.documents_groupe || [];
+  const union = data.union || {};
+
+  document.getElementById('f2-gnom').textContent = data.groupe;
+  document.getElementById('f2-gmeta').innerHTML =
+    '<span>' + br.length + ' branche' + (br.length>1?'s':'') + ' : ' +
+    esc(br.map(b => b.branche || b.nom).join(' · ')) + '</span>';
+
+  document.getElementById('f2-gkpis').innerHTML =
+    _f2Kpi('Branches', String(st.nb_branches || 0), (st.nb_actives || 0) + ' active' + ((st.nb_actives||0)>1?'s':'')) +
+    _f2Kpi('Documents groupe', String(docs.length), docs.length ? 'Hérités par toutes les branches' : 'Chaque branche doit fournir les siens') +
+    _f2Kpi('Couverture consolidée', (st.couvert || 0) + '<span style="font-size:13px;color:var(--muted)"> / ' + (st.total || 0) + '</span>', 'Union des branches') +
+    _f2Kpi('Réceptions', String(st.nb_receptions || 0), 'Toutes branches confondues') +
+    _f2Kpi('Contacts', String(st.nb_contacts || 0), 'Toutes branches confondues');
+
+  // Colonnes de la matrice : uniquement les certifications réellement en jeu
+  // dans le groupe — un tableau de 40 colonnes vides n'apprend rien.
+  const cols = ref.filter(r => union[String(r.id)] ||
+    docs.some(d => (d.fiches || []).some(x => x.fiche_id === r.id)));
+
+  const matrice = '<div class="f2-block full" style="margin-bottom:14px">' +
+    '<div class="f2-bh"><h3>Matrice branches &times; certifications</h3></div>' +
+    (cols.length
+      ? '<div class="table-wrap"><table class="four-table f2-mat"><thead><tr><th class="lbl">Branche</th>' +
+        cols.map(r => '<th style="text-align:center" title="' + escAttr(r.nom) + '">' + esc(r.acronyme || r.nom) + '</th>').join('') +
+        '<th class="lbl">FSC CoC</th><th class="lbl">Contacts</th><th class="lbl">Réceptions</th></tr></thead><tbody>' +
+        br.map(b => '<tr class="f2-row" data-fopen="' + b.id + '">' +
+          '<td class="lbl"><div class="f2-nom">' + esc(b.branche || b.nom) + '</div>' +
+            '<div class="f2-sub">' + esc(b.nom) + (b.ville ? ' · ' + esc(b.ville) : '') + '</div></td>' +
+          cols.map(r => {
+            const c = (b.couverture || {})[String(r.id)];
+            const k = c ? c.statut : 'none';
+            return '<td title="' + escAttr(r.nom + ' — ' + (F2_CERT_LABEL[k] || k) + (c && c.niveau === 'groupe' ? ' (groupe)' : '')) + '">' +
+              '<span class="f2-ccd st-' + escAttr(k) + '" style="display:inline-block"></span>' +
+              (c && c.niveau === 'groupe' ? '<div class="f2-herit">&#8962;</div>' : '') + '</td>';
+          }).join('') +
+          '<td class="lbl">' + _fscBadgeHTML(b) + '</td>' +
+          '<td class="lbl">' + (b.nb_contacts || 0) + '</td>' +
+          '<td class="lbl">' + (b.nb_receptions || 0) + '</td>' +
+        '</tr>').join('') + '</tbody></table></div>' +
+        '<p class="f2-hint">&#8962; = couverture héritée d\'un document déposé au niveau groupe. Une colonne entièrement verte signifie que le groupe est couvert sur toutes ses branches ; une colonne mixte signale la branche à relancer.</p>'
+      : '<div class="f2-empty">Aucune certification déposée sur ce groupe ni sur ses branches.</div>') +
+  '</div>';
+
+  const docsBlock = '<div class="f2-block full">' +
+    '<div class="f2-bh"><h3>Documents déposés au niveau groupe (' + docs.length + ')</h3>' +
+      '<button type="button" class="btn btn-sec btn-sm" id="f2-g-qualite">Gérer dans MyQualité &rarr;</button></div>' +
+    (docs.length
+      ? '<div class="table-wrap"><table class="four-table"><thead><tr><th>Document</th><th>Certifications taguées</th><th>Émission</th><th>Expiration</th><th>Couvre</th><th></th></tr></thead><tbody>' +
+        docs.map(d => '<tr>' +
+          '<td class="four-nom-cell"><strong>' + esc(d.titre || '(sans titre)') + '</strong>' +
+            (d.filename ? '<small style="font-family:monospace">' + esc(d.filename) + '</small>' : '') + '</td>' +
+          '<td><div class="f2-mini">' + (d.fiches || []).map(x =>
+            '<span class="f2-chip st-nod">' + esc(x.acronyme || x.nom) + '</span>').join('') + '</div></td>' +
+          '<td>' + esc(_f2Date(d.date_emission)) + '</td>' +
+          '<td><span class="f2-chip st-' + escAttr(d.statut) + '">' + (d.date_expiration ? esc(_f2Date(d.date_expiration)) : 'Sans date') + '</span></td>' +
+          '<td><span class="four-cat-pill cat-sous_traitant">' + br.length + ' branche' + (br.length>1?'s':'') + '</span></td>' +
+          '<td><a class="btn btn-sec btn-sm" href="' + API + '/api/qualite/ressources/certificats/' + d.id + '/download">Télécharger</a></td>' +
+        '</tr>').join('') + '</tbody></table></div>'
+      : '<div class="f2-empty">Aucun document au niveau groupe. Chaque branche doit alors fournir ses propres certificats.</div>') +
+  '</div>';
+
+  const gb = document.getElementById('f2-gbody');
+  gb.innerHTML = matrice + docsBlock;
+  gb.querySelectorAll('[data-fopen]').forEach(tr =>
+    tr.onclick = () => openFournisseurFiche(Number(tr.dataset.fopen)));
+  const q = gb.querySelector('#f2-g-qualite');
+  if (q) q.onclick = () => window.open('/qualite#ressources-list', '_blank');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Fusion / doublons / contacts — inchangés
+// ═══════════════════════════════════════════════════════════════════
 function openMergeFournisseurModal(sourceId){
   const src = fournisseursAll.find(x => x.id === sourceId);
   if (!src) return;
@@ -4761,8 +5680,7 @@ function openMergeFournisseurModal(sourceId){
   backdrop.className = 'four-modal-backdrop';
   const dlg = document.createElement('div');
   dlg.className = 'four-modal';
-  // Trie candidats par ressemblance (norm nom en commun)
-  const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\b(sasu|sarl|eurl|sas|snc|sa|scop|scp|gie)\b/g,'').replace(/[^a-z0-9]/g,'');
+  const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\b(sasu|sarl|eurl|sas|snc|sa|scop|scp|gie)\b/g,'').replace(/[^a-z0-9]/g,'');
   const srcN = norm(src.nom);
   const candidates = fournisseursAll
     .filter(x => x.id !== sourceId)
@@ -4813,6 +5731,8 @@ function openMergeFournisseurModal(sourceId){
       if (r.json_rewrites) parts.push(r.json_rewrites + ' JSON réécritures');
       if (rep) rep.innerHTML = '<div style="background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.3);padding:10px;border-radius:8px;font-size:12px;color:var(--ok)">Fusion réussie. Réassignations : ' + esc(parts.join(' · ') || 'aucune référence à réassigner') + '</div>';
       toast('Fusion réussie');
+      // La fiche ouverte pouvait être la source : elle n'existe plus.
+      if (f2Id === sourceId) f2Id = targetId;
       await loadFournisseurs();
       setTimeout(close, 1800);
     } catch(e) {
@@ -4823,7 +5743,6 @@ function openMergeFournisseurModal(sourceId){
   };
 }
 
-// ─── Doublons potentiels ──────────────────────────────────────────
 async function openDoublonsModal(){
   const backdrop = document.createElement('div');
   backdrop.className = 'four-modal-backdrop';
@@ -4833,7 +5752,7 @@ async function openDoublonsModal(){
   dlg.innerHTML =
     '<h3>Doublons potentiels</h3>' +
     '<p class="sub" style="margin-top:-8px;font-size:12px">Regroupement par nom normalisé (accents, formes juridiques ignorées) et par SIRET identique.</p>' +
-    '<div id="fd-results" style="margin-top:12px"><div class="four-drawer-empty">Analyse en cours…</div></div>' +
+    '<div id="fd-results" style="margin-top:12px"><div class="f2-empty">Analyse en cours…</div></div>' +
     '<div class="actions"><button type="button" class="btn btn-sec" id="fd-close">Fermer</button></div>';
   backdrop.appendChild(dlg);
   document.body.appendChild(backdrop);
@@ -4844,7 +5763,7 @@ async function openDoublonsModal(){
     const r = await api('/api/fournisseurs/doublons');
     const box = dlg.querySelector('#fd-results');
     if (!r || !r.groups || !r.groups.length) {
-      box.innerHTML = '<div class="four-drawer-empty">✓ Aucun doublon détecté.</div>';
+      box.innerHTML = '<div class="f2-empty">&#10003; Aucun doublon détecté.</div>';
       return;
     }
     box.innerHTML = r.groups.map(g => {
@@ -4873,506 +5792,12 @@ async function openDoublonsModal(){
       openMergeFournisseurModal(Number(b.dataset.fdmerge));
     });
   } catch(e) {
-    dlg.querySelector('#fd-results').innerHTML = '<div class="four-drawer-empty" style="color:var(--danger)">Erreur : ' + esc(e.message || '') + '</div>';
+    dlg.querySelector('#fd-results').innerHTML = '<div class="f2-empty" style="color:var(--danger)">Erreur : ' + esc(e.message || '') + '</div>';
   }
-}
-
-// ─── Drawer : fiche fournisseur unifiée ───────────────────────────
-let _fourDrawerCurrentId = null;
-
-function _ensureFourDrawer(){
-  let bd = document.getElementById('four-drawer-backdrop');
-  if (bd) return { backdrop: bd, drawer: document.getElementById('four-drawer') };
-  bd = document.createElement('div');
-  bd.id = 'four-drawer-backdrop';
-  bd.className = 'four-drawer-backdrop';
-  const dr = document.createElement('div');
-  dr.id = 'four-drawer';
-  dr.className = 'four-drawer';
-  dr.innerHTML =
-    '<div class="four-drawer-head">' +
-      '<div><h3 id="fd-title">Fournisseur</h3><p class="sub" id="fd-sub"></p></div>' +
-      '<button type="button" class="four-drawer-close" id="fd-close-btn" title="Fermer">×</button>' +
-    '</div>' +
-    '<div class="four-drawer-tabs" role="tablist">' +
-      '<button type="button" class="four-drawer-tab active" data-fdtab="identite">Identité</button>' +
-      '<button type="button" class="four-drawer-tab" data-fdtab="fsc">FSC</button>' +
-      '<button type="button" class="four-drawer-tab" data-fdtab="contacts">Contacts</button>' +
-      '<button type="button" class="four-drawer-tab" data-fdtab="receptions">Réceptions</button>' +
-      '<button type="button" class="four-drawer-tab" data-fdtab="traca">Traçabilité</button>' +
-    '</div>' +
-    '<div class="four-drawer-body" id="fd-body"></div>';
-  document.body.appendChild(bd);
-  document.body.appendChild(dr);
-  const close = () => { bd.classList.remove('open'); dr.classList.remove('open'); _fourDrawerCurrentId = null; };
-  bd.addEventListener('click', close);
-  dr.querySelector('#fd-close-btn').addEventListener('click', close);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && dr.classList.contains('open')) close(); });
-  dr.querySelectorAll('[data-fdtab]').forEach(btn => btn.addEventListener('click', () => {
-    dr.querySelectorAll('[data-fdtab]').forEach(x => x.classList.toggle('active', x.dataset.fdtab === btn.dataset.fdtab));
-    _fourDrawerRenderTab(btn.dataset.fdtab);
-  }));
-  return { backdrop: bd, drawer: dr };
-}
-
-function openFournisseurDrawer(id){
-  const f = fournisseursAll.find(x => x.id === id);
-  if (!f) return;
-  _fourDrawerCurrentId = id;
-  const { backdrop, drawer } = _ensureFourDrawer();
-  drawer.querySelector('#fd-title').textContent = f.nom || '(sans nom)';
-  const bits = [];
-  if (f.groupe) bits.push('Groupe ' + f.groupe + (f.branche ? ' · ' + f.branche : ''));
-  if (f.ville) bits.push(f.ville + (f.pays && f.pays !== 'FR' ? ' (' + f.pays + ')' : ''));
-  if (!f.actif) bits.push('INACTIF');
-  drawer.querySelector('#fd-sub').textContent = bits.join(' — ');
-  // Reset onglet Identité par défaut
-  drawer.querySelectorAll('[data-fdtab]').forEach(x => x.classList.toggle('active', x.dataset.fdtab === 'identite'));
-  _fourDrawerRenderTab('identite');
-  backdrop.classList.add('open');
-  drawer.classList.add('open');
-}
-
-// _fdKV(label, value, {html:true}) : pass html:true quand value contient déjà
-// du HTML pré-formaté (badges, code, spans). Par défaut la valeur string est
-// escapée pour éviter les XSS.
-function _fdKV(label, value, opts){
-  if (value === null || value === undefined || value === '') return '';
-  const useHtml = opts && opts.html;
-  const rendered = (typeof value === 'string' && !useHtml) ? esc(value) : value;
-  return '<dt>' + esc(label) + '</dt><dd>' + rendered + '</dd>';
-}
-
-async function _fourDrawerRenderTab(tab){
-  const id = _fourDrawerCurrentId;
-  if (!id) return;
-  const f = fournisseursAll.find(x => x.id === id);
-  if (!f) return;
-  const body = document.getElementById('fd-body');
-  if (!body) return;
-
-  if (tab === 'identite') {
-    const catLbls = (window.__FOURNISSEUR_CATS__ || []).reduce((m,c)=>{m[c.code]=c.label;return m;},{});
-    const catsHTML = (Array.isArray(f.categories) && f.categories.length)
-      ? '<div class="four-cats-cell" style="max-width:none">' + f.categories.map(c => '<span class="four-cat-pill cat-' + esc(c) + '">' + esc(catLbls[c] || c) + '</span>').join('') + '</div>'
-      : '<span style="color:var(--muted)">—</span>';
-    const addr = [f.adresse, [f.code_postal, f.ville].filter(Boolean).join(' '), f.pays && f.pays !== 'FR' ? f.pays : ''].filter(Boolean).join(', ');
-    body.innerHTML =
-      '<h4>Identité</h4>' +
-      '<dl class="kv">' +
-        _fdKV('Nom', f.nom) +
-        _fdKV('Statut', (f.actif == null || f.actif) ? '<span class="four-pill fsc">Actif</span>' : '<span class="four-pill nofsc">Inactif</span>', {html:true}) +
-        _fdKV('Groupe', f.groupe) +
-        _fdKV('Branche', f.branche) +
-        _fdKV('SIRET', f.siret) +
-        _fdKV('TVA intra.', f.tva_intracom) +
-        _fdKV('Langue', (f.langue_default || 'fr').toUpperCase()) +
-      '</dl>' +
-      '<h4>Adresse</h4>' +
-      '<dl class="kv">' + _fdKV('Adresse', addr || '—') + '</dl>' +
-      '<h4>Catégories</h4>' +
-      '<div style="margin-bottom:14px">' + catsHTML + '</div>' +
-      '<h4>Actions</h4>' +
-      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
-        '<button type="button" class="btn btn-sec btn-sm" id="fd-act-edit">Modifier</button>' +
-        '<button type="button" class="btn btn-sec btn-sm" id="fd-act-merge">Fusionner…</button>' +
-        '<button type="button" class="btn btn-sec btn-sm" id="fd-act-actif">' + (f.actif ? 'Désactiver' : 'Réactiver') + '</button>' +
-      '</div>';
-    body.querySelector('#fd-act-edit').onclick = () => openEditFournisseur(id);
-    body.querySelector('#fd-act-merge').onclick = () => openMergeFournisseurModal(id);
-    body.querySelector('#fd-act-actif').onclick = async () => {
-      try {
-        await api('/api/fournisseurs/' + id + '/actif', {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ actif: !f.actif }),
-        });
-        f.actif = f.actif ? 0 : 1;
-        toast(f.actif ? 'Fournisseur activé' : 'Fournisseur désactivé');
-        _fourDrawerRenderTab('identite');
-        renderFournisseursTable();
-      } catch(e) { toast(e.message || 'Erreur', true); }
-    };
-    return;
-  }
-
-  if (tab === 'fsc') {
-    const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
-    body.innerHTML =
-      '<h4>Certification FSC</h4>' +
-      '<div style="margin-bottom:14px">' + _fscBadgeHTML(f) + '</div>' +
-      (hasFsc
-        ? '<dl class="kv">' +
-            _fdKV('Licence', f.licence ? '<code>' + esc(f.licence) + '</code>' : '<span style="color:var(--muted)">— manquant</span>', {html:true}) +
-            _fdKV('Certificat', f.certificat ? '<code>' + esc(f.certificat) + '</code>' : '<span style="color:var(--muted)">— manquant</span>', {html:true}) +
-            _fdKV('Expiration', f.fsc_date_expiration ? esc(f.fsc_date_expiration) : '<span style="color:var(--muted)">— non renseignée</span>', {html:true}) +
-          '</dl>'
-        : '<div class="four-drawer-empty">Ce fournisseur n\'est pas certifié FSC.</div>');
-    return;
-  }
-
-  if (tab === 'contacts') {
-    body.innerHTML = '<div class="four-drawer-empty">Chargement…</div>';
-    try {
-      const list = await api('/api/fournisseurs/' + id + '/contacts');
-      if (!Array.isArray(list) || !list.length) {
-        body.innerHTML = '<h4>Contacts (0)</h4><div class="four-drawer-empty">Aucun contact enregistré.<br><br>Utilisez l\'onglet « Contacts & infos » pour en ajouter.</div>';
-        return;
-      }
-      body.innerHTML =
-        '<h4>Contacts (' + list.length + ')</h4>' +
-        '<div class="four-drawer-list">' +
-        list.map(c => {
-          const emails = Array.isArray(c.emails) ? c.emails.join(', ') : '';
-          const tels = Array.isArray(c.tels) ? c.tels.join(', ') : '';
-          return '<div class="four-drawer-list-item">' +
-            '<div><strong>' + esc(c.nom || '(sans nom)') + '</strong>' +
-              (c.is_principal ? '<span class="four-pill fsc" style="margin-left:6px">Principal</span>' : '') +
-              (c.actif ? '' : '<span class="four-pill nofsc" style="margin-left:6px">Inactif</span>') +
-            '</div>' +
-            (c.role ? '<div style="color:var(--muted);font-size:11px;margin-top:2px">' + esc(c.role) + '</div>' : '') +
-            (emails ? '<div style="margin-top:4px">✉ ' + esc(emails) + '</div>' : '') +
-            (tels ? '<div>☎ ' + esc(tels) + '</div>' : '') +
-          '</div>';
-        }).join('') +
-        '</div>';
-    } catch(e) {
-      body.innerHTML = '<div class="four-drawer-empty" style="color:var(--danger)">Erreur : ' + esc(e.message || '') + '</div>';
-    }
-    return;
-  }
-
-  if (tab === 'receptions') {
-    body.innerHTML = '<div class="four-drawer-empty">Chargement…</div>';
-    try {
-      const r = await api('/api/fournisseurs/' + id + '/receptions');
-      const recs = (r && r.receptions) || [];
-      if (!recs.length) {
-        body.innerHTML = '<h4>Historique réceptions</h4><div class="four-drawer-empty">Aucune réception enregistrée dans MyStock pour ce fournisseur.</div>';
-        return;
-      }
-      body.innerHTML =
-        '<h4>Historique réceptions (' + recs.length + (recs.length >= 50 ? ' — 50 dernières' : '') + ')</h4>' +
-        '<div class="four-drawer-list">' +
-        recs.map(rec => {
-          const d = rec.created_at ? new Date(rec.created_at).toLocaleString('fr-FR') : '—';
-          const codes = Array.isArray(rec.items) ? rec.items.filter(Boolean) : [];
-          return '<div class="four-drawer-list-item">' +
-            '<div style="display:flex;justify-content:space-between;gap:8px">' +
-              '<strong>' + esc(d) + '</strong>' +
-              '<span style="color:var(--muted);font-size:11px">' + (rec.nb_bobines || codes.length) + ' bobine(s)</span>' +
-            '</div>' +
-            (rec.created_by_name ? '<div style="color:var(--muted);font-size:11px">' + esc(rec.created_by_name) + '</div>' : '') +
-            (rec.certificat_fsc ? '<div style="margin-top:4px;font-size:11px">Cert. FSC : <code>' + esc(rec.certificat_fsc) + '</code></div>' : '') +
-            (rec.note ? '<div style="margin-top:4px;font-size:11px;font-style:italic">' + esc(rec.note) + '</div>' : '') +
-          '</div>';
-        }).join('') +
-        '</div>';
-    } catch(e) {
-      body.innerHTML = '<div class="four-drawer-empty" style="color:var(--danger)">Erreur : ' + esc(e.message || '') + '</div>';
-    }
-    return;
-  }
-
-  if (tab === 'traca') {
-    const has = !!(f.traca_photo_url || f.traca_explication || f.traca_exemple_code);
-    if (!has) {
-      body.innerHTML = '<h4>Guide traçabilité</h4><div class="four-drawer-empty">Aucun guide de traçabilité configuré. Utilisez « Modifier » pour ajouter une photo et un exemple de code-barre.</div>';
-      return;
-    }
-    body.innerHTML =
-      '<h4>Guide traçabilité</h4>' +
-      (f.traca_photo_url ? '<div style="margin-bottom:14px"><img src="' + esc(f.traca_photo_url) + '" alt="" style="max-width:100%;max-height:280px;border-radius:8px;border:1px solid var(--border)"></div>' : '') +
-      '<dl class="kv">' +
-        _fdKV('Explication', f.traca_explication ? esc(f.traca_explication).replace(/\n/g, '<br>') : '<span style="color:var(--muted)">—</span>', {html:true}) +
-        _fdKV('Exemple de code', f.traca_exemple_code ? '<code>' + esc(f.traca_exemple_code) + '</code>' : '<span style="color:var(--muted)">—</span>', {html:true}) +
-      '</dl>';
-    return;
-  }
-}
-
-// Historique par fournisseur
-function fillFourHistSelect() {
-  const sel = document.getElementById('fh-four');
-  if (!sel) return;
-  const val = sel.value;
-  sel.innerHTML = '<option value="">— Choisir un fournisseur —</option>' +
-    fournisseursAll.map(f => '<option value="' + f.id + '">' + esc(f.nom) + '</option>').join('');
-  sel.value = val;
-}
-
-document.getElementById('fh-four').addEventListener('change', async function() {
-  const id = Number(this.value);
-  const box = document.getElementById('fh-results');
-  if (!id) { box.innerHTML = ''; return; }
-  box.innerHTML = '<p class="sub">Chargement…</p>';
-  try {
-    const data = await api('/api/fournisseurs/' + id + '/receptions');
-    const recs = data.receptions || [];
-    if (!recs.length) {
-      box.innerHTML = '<p class="sub">Aucune réception pour ce fournisseur.</p>';
-      return;
-    }
-    box.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Date</th><th>Opérateur</th><th>Bobines</th><th>Certificat FSC</th><th>Note</th></tr></thead><tbody>' +
-      recs.map(r => '<tr>' +
-        '<td style="font-family:monospace;font-size:12px">' + esc((r.created_at || '').slice(0, 16).replace('T', ' ')) + '</td>' +
-        '<td>' + esc(r.created_by_name || '—') + '</td>' +
-        '<td>' + esc(r.nb_bobines) + '</td>' +
-        '<td><code>' + esc(r.certificat_fsc || '—') + '</code></td>' +
-        '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis">' + esc(r.note || '') + '</td>' +
-      '</tr>').join('') + '</tbody></table></div>';
-  } catch (e) { box.innerHTML = '<p class="sub" style="color:var(--danger)">' + esc(e.message) + '</p>'; }
-});
-
-// ── Fournisseurs — Contacts & infos (Phase 2) ─────────────────────
-let fourContactsSearch = '';
-let fourContactsFilterLangue = '';
-let fourContactsFilterTag = '';
-let fourContactsFilterActif = '1';
-let _fourContactsCache = {}; // fournisseur_id → contacts[]
-
-function _fourContactsRebuildTagOptions() {
-  const sel = document.getElementById('four-contacts-filter-tag');
-  if (!sel) return;
-  const tags = new Set();
-  (fournisseursAll || []).forEach(f => {
-    (f.tags || []).forEach(t => { if (t) tags.add(t); });
-  });
-  const cur = sel.value;
-  const opts = ['<option value="">Tag : tous</option>']
-    .concat([...tags].sort((a,b)=>a.localeCompare(b,'fr',{sensitivity:'base'}))
-      .map(t => '<option value="' + escAttr(t) + '">' + esc(t) + '</option>'));
-  sel.innerHTML = opts.join('');
-  sel.value = cur;
-}
-
-function _fourContactsFilter() {
-  const q = (fourContactsSearch || '').trim().toLowerCase();
-  const langue = fourContactsFilterLangue;
-  const tag = fourContactsFilterTag;
-  const actif = fourContactsFilterActif;
-  return (fournisseursAll || []).filter(f => {
-    if (actif !== '' && String(actif) !== String(f.actif == null ? 1 : (f.actif ? 1 : 0))) return false;
-    if (langue && (f.langue_default || 'fr') !== langue) return false;
-    if (tag && !((f.tags || []).includes(tag))) return false;
-    if (q) {
-      const hay = [f.nom, f.ville, f.code_postal, f.groupe, f.branche, f.notes,
-                   (f.tags || []).join(' ')].filter(Boolean).join(' ').toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    return true;
-  });
-}
-
-function _fourContactsRowHTML(f) {
-  const actif = f.actif == null || f.actif;
-  const nbC = f.nb_contacts || 0;
-  const tagsHtml = (f.tags && f.tags.length)
-    ? f.tags.slice(0, 3).map(t => '<span class="four-groupe-tag" style="background:var(--accent-bg);color:var(--accent);border-color:var(--accent)">' + esc(t) + '</span>').join(' ')
-      + (f.tags.length > 3 ? ' <span class="sub" style="font-size:10px">+' + (f.tags.length - 3) + '</span>' : '')
-    : '<span style="color:var(--muted);font-size:11px">—</span>';
-  const langueBadge = '<span class="four-pill" style="background:var(--bg);color:var(--text2);border:1px solid var(--border)">'
-    + ((f.langue_default || 'fr').toUpperCase()) + '</span>';
-  const villeCell = f.ville
-    ? esc(f.ville) + (f.code_postal ? '<small style="color:var(--muted);display:block;font-size:10px">' + esc(f.code_postal) + '</small>' : '')
-    : '<span style="color:var(--muted);font-size:11px">—</span>';
-  const actifBadge = actif
-    ? '<span class="four-pill fsc" style="background:rgba(52,211,153,.12);color:var(--ok)">✓ Actif</span>'
-    : '<span class="four-pill nofsc">Archivé</span>';
-  return '<tr>' +
-    '<td class="four-nom-cell"><strong>' + esc(f.nom) + '</strong>' +
-      (f.groupe ? '<small>' + esc(f.groupe) + (f.branche ? ' · ' + esc(f.branche) : '') + '</small>' : '') + '</td>' +
-    '<td>' + villeCell + '</td>' +
-    '<td>' + langueBadge + '</td>' +
-    '<td style="max-width:220px">' + tagsHtml + '</td>' +
-    '<td style="text-align:center;font-weight:600">' + nbC + '</td>' +
-    '<td>' + actifBadge + '</td>' +
-    '<td class="four-act">' +
-      '<button type="button" class="btn btn-sec btn-sm" data-fcontacts-edit="' + f.id + '">Modifier</button>' +
-    '</td></tr>';
-}
-
-function renderFournisseursContactsTable() {
-  const wrap = document.getElementById('four-contacts-table-wrap');
-  const countEl = document.getElementById('four-contacts-count');
-  if (!wrap) return;
-  _fourContactsRebuildTagOptions();
-  const rows = _fourContactsFilter();
-  if (countEl) {
-    const total = (fournisseursAll || []).length;
-    countEl.textContent = rows.length === total
-      ? '· ' + total + ' fournisseur' + (total>1?'s':'')
-      : '· ' + rows.length + ' / ' + total + ' fournisseur' + (total>1?'s':'');
-  }
-  if (!(fournisseursAll || []).length) {
-    wrap.innerHTML = '<div class="four-empty">Aucun fournisseur. Créez-en depuis l\'onglet Répertoire.</div>';
-    return;
-  }
-  if (!rows.length) {
-    wrap.innerHTML = '<div class="four-empty">Aucun fournisseur ne correspond aux filtres.</div>';
-    return;
-  }
-  const sorted = rows.slice().sort((a,b) => (a.nom||'').localeCompare(b.nom||'', 'fr', {sensitivity:'base'}));
-  wrap.innerHTML = '<table class="four-table"><thead><tr>' +
-    '<th>Nom</th><th>Ville</th><th>Langue</th><th>Tags</th><th style="text-align:center">Contacts</th><th>Statut</th><th></th>' +
-    '</tr></thead><tbody>' +
-    sorted.map(_fourContactsRowHTML).join('') +
-    '</tbody></table>';
-  wrap.querySelectorAll('[data-fcontacts-edit]').forEach(b => {
-    b.onclick = () => openEditFournisseurInfos(Number(b.dataset['fcontactsEdit']));
-  });
-}
-
-// Toolbar bindings for contacts sub-tab
-(function bindFourContactsToolbar(){
-  const s = document.getElementById('four-contacts-search');
-  if (s) s.addEventListener('input', () => {
-    const ae = document.activeElement;
-    const caret = (ae && ae.id === 'four-contacts-search') ? [ae.selectionStart, ae.selectionEnd] : null;
-    fourContactsSearch = s.value;
-    renderFournisseursContactsTable();
-    if (caret) {
-      const el = document.getElementById('four-contacts-search');
-      if (el) { el.focus(); try { el.setSelectionRange(caret[0], caret[1]); } catch(e){} }
-    }
-  });
-  const fL = document.getElementById('four-contacts-filter-langue');
-  if (fL) fL.addEventListener('change', () => { fourContactsFilterLangue = fL.value; renderFournisseursContactsTable(); });
-  const fT = document.getElementById('four-contacts-filter-tag');
-  if (fT) fT.addEventListener('change', () => { fourContactsFilterTag = fT.value; renderFournisseursContactsTable(); });
-  const fA = document.getElementById('four-contacts-filter-actif');
-  if (fA) fA.addEventListener('change', () => { fourContactsFilterActif = fA.value; renderFournisseursContactsTable(); });
-  const btnCsv = document.getElementById('four-contacts-export');
-  if (btnCsv) btnCsv.onclick = () => {
-    window.location.href = API + '/api/fournisseurs/export.csv';
-  };
-})();
-
-async function openEditFournisseurInfos(id) {
-  const f = (fournisseursAll || []).find(x => x.id === id);
-  if (!f) return;
-  let contacts = _fourContactsCache[id];
-  if (!contacts) {
-    try {
-      contacts = await api('/api/fournisseurs/' + id + '/contacts');
-      _fourContactsCache[id] = contacts;
-    } catch (e) { toast(e.message, true); return; }
-  }
-
-  const backdrop = document.createElement('div');
-  backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:800;display:flex;align-items:center;justify-content:center;padding:16px';
-  const dlg = document.createElement('div');
-  dlg.style.cssText = 'background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;max-width:640px;width:100%;max-height:90vh;overflow:auto';
-  const actif = f.actif == null || f.actif;
-  const langue = f.langue_default || 'fr';
-  const tagsCsv = (f.tags || []).join(', ');
-
-  dlg.innerHTML = '<h3 style="margin:0 0 4px;font-size:16px">Modifier — ' + esc(f.nom) + '</h3>' +
-    '<p class="sub" style="margin:0 0 14px">Adresse, langue, tags & contacts. La partie FSC/traçabilité reste dans l\'onglet Répertoire.</p>' +
-    '<div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px">' +
-    '<div><label class="sub">Nom</label><input id="fi-nom" value="' + escAttr(f.nom) + '"></div>' +
-    '<div><label class="sub">Langue AO</label><select id="fi-langue"><option value="fr"' + (langue==='fr'?' selected':'') + '>Français</option><option value="en"' + (langue==='en'?' selected':'') + '>English</option></select></div>' +
-    '<div style="grid-column:span 2"><label class="sub">Adresse</label><input id="fi-adresse" value="' + escAttr(f.adresse || '') + '" placeholder="12 rue de l\'Industrie"></div>' +
-    '<div><label class="sub">Code postal</label><input id="fi-cp" value="' + escAttr(f.code_postal || '') + '"></div>' +
-    '<div><label class="sub">Ville</label><input id="fi-ville" value="' + escAttr(f.ville || '') + '"></div>' +
-    '<div><label class="sub">Pays</label><input id="fi-pays" value="' + escAttr(f.pays || 'FR') + '" placeholder="FR"></div>' +
-    '<div style="display:flex;align-items:end"><label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;user-select:none"><input type="checkbox" id="fi-actif" ' + (actif?'checked':'') + ' style="width:16px;height:16px;cursor:pointer">Actif</label></div>' +
-    '<div style="grid-column:span 2"><label class="sub">Tags / spécialités <span style="color:var(--muted);font-weight:400">(séparés par virgules — ex: adhesif, frontal, complexes)</span></label><input id="fi-tags" value="' + escAttr(tagsCsv) + '"></div>' +
-    '<div style="grid-column:span 2"><label class="sub">Notes</label><textarea id="fi-notes" style="width:100%;min-height:60px;padding:8px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit;font-size:13px;box-sizing:border-box">' + esc(f.notes || '') + '</textarea></div>' +
-    '</div>' +
-    '<div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">' +
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">' +
-    '<strong style="font-size:14px">Contacts (' + contacts.length + ')</strong>' +
-    '<button type="button" class="btn btn-sec btn-sm" id="fi-add-contact">+ Nouveau contact</button>' +
-    '</div>' +
-    '<div id="fi-contacts-list"></div>' +
-    '</div>' +
-    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">' +
-    '<button type="button" class="btn btn-sec" id="fi-cancel">Fermer</button>' +
-    '<button type="button" class="btn" id="fi-save">Enregistrer les infos</button>' +
-    '</div>';
-
-  backdrop.appendChild(dlg);
-  document.body.appendChild(backdrop);
-  const close = () => backdrop.remove();
-  backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
-  dlg.querySelector('#fi-cancel').onclick = close;
-
-  function renderContactsList() {
-    const wrap = dlg.querySelector('#fi-contacts-list');
-    if (!contacts.length) {
-      wrap.innerHTML = '<p class="sub" style="text-align:center;padding:14px;background:var(--bg);border-radius:8px;border:1px dashed var(--border)">Aucun contact enregistré.</p>';
-      return;
-    }
-    wrap.innerHTML = contacts.map(c => {
-      const emails = (c.emails || []).map(e => '<span style="display:inline-block;padding:1px 8px;border-radius:6px;background:var(--accent-bg);color:var(--accent);font-size:11px;margin:1px 2px">' + esc(e) + '</span>').join('');
-      const tels = (c.tels || []).map(t => '<span style="display:inline-block;padding:1px 8px;border-radius:6px;background:var(--bg);border:1px solid var(--border);font-size:11px;margin:1px 2px">' + esc(t) + '</span>').join('');
-      const pill = c.is_principal ? '<span class="four-pill fsc" style="background:rgba(34,211,238,.14);color:var(--accent);margin-right:6px">★ Principal</span>' : '';
-      const inactif = !c.actif ? '<span class="four-pill nofsc" style="margin-right:6px">Archivé</span>' : '';
-      return '<div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:6px;background:var(--bg)">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">' +
-          '<div>' + pill + inactif + '<strong style="font-size:13px">' + esc(c.nom) + '</strong>' +
-            (c.fonction ? '<span class="sub" style="margin-left:6px">· ' + esc(c.fonction) + '</span>' : '') +
-            '<span class="sub" style="margin-left:6px">· ' + (c.langue || 'fr').toUpperCase() + '</span>' +
-          '</div>' +
-          '<div>' +
-            '<button type="button" class="btn btn-sec" style="padding:3px 8px;font-size:11px" data-fic-edit="' + c.id + '">Modifier</button> ' +
-            '<button type="button" class="btn btn-sec" style="padding:3px 8px;font-size:11px;color:var(--danger)" data-fic-del="' + c.id + '">Suppr.</button>' +
-          '</div>' +
-        '</div>' +
-        (emails ? '<div style="margin-top:4px">' + emails + '</div>' : '') +
-        (tels ? '<div style="margin-top:4px">' + tels + '</div>' : '') +
-      '</div>';
-    }).join('');
-    wrap.querySelectorAll('[data-fic-edit]').forEach(b => b.onclick = () => openContactSubModal(id, Number(b.dataset.ficEdit), refreshContacts));
-    wrap.querySelectorAll('[data-fic-del]').forEach(b => b.onclick = async () => {
-      const cid = Number(b.dataset.ficDel);
-      if (!confirm('Supprimer ce contact ?')) return;
-      try {
-        await api('/api/fournisseurs/' + id + '/contacts/' + cid, {method: 'DELETE'});
-        await refreshContacts();
-      } catch (e) { toast(e.message, true); }
-    });
-  }
-
-  async function refreshContacts() {
-    try {
-      contacts = await api('/api/fournisseurs/' + id + '/contacts');
-      _fourContactsCache[id] = contacts;
-      dlg.querySelector('#fi-contacts-list').closest('div').previousElementSibling
-        ?.querySelector('strong')?.replaceChildren(document.createTextNode('Contacts (' + contacts.length + ')'));
-      renderContactsList();
-    } catch (e) { toast(e.message, true); }
-  }
-  renderContactsList();
-
-  dlg.querySelector('#fi-add-contact').onclick = () => openContactSubModal(id, null, refreshContacts);
-
-  dlg.querySelector('#fi-save').onclick = async () => {
-    const body = {
-      nom: dlg.querySelector('#fi-nom').value.trim(),
-      langue_default: dlg.querySelector('#fi-langue').value,
-      adresse: dlg.querySelector('#fi-adresse').value.trim(),
-      code_postal: dlg.querySelector('#fi-cp').value.trim(),
-      ville: dlg.querySelector('#fi-ville').value.trim(),
-      pays: dlg.querySelector('#fi-pays').value.trim() || 'FR',
-      tags: dlg.querySelector('#fi-tags').value,
-      notes: dlg.querySelector('#fi-notes').value.trim(),
-      actif: dlg.querySelector('#fi-actif').checked,
-    };
-    if (!body.nom) return toast('Nom requis', true);
-    try {
-      await api('/api/fournisseurs/' + id, {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
-      toast('Fournisseur mis à jour');
-      close();
-      await loadFournisseurs();
-      renderFournisseursContactsTable();
-    } catch (e) { toast(e.message, true); }
-  };
 }
 
 function openContactSubModal(fournisseurId, contactId, onSaved) {
-  const contacts = _fourContactsCache[fournisseurId] || [];
+  const contacts = (f2Cache[fournisseurId] || {}).contacts || [];
   const c = contactId ? contacts.find(x => x.id === contactId) : null;
   const backdrop = document.createElement('div');
   backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:850;display:flex;align-items:center;justify-content:center;padding:16px';
@@ -5425,17 +5850,6 @@ function openContactSubModal(fournisseurId, contactId, onSaved) {
     } catch (e) { toast(e.message, true); }
   };
 }
-
-// Reset cache when the fournisseurs list reloads
-const _origLoadFour = loadFournisseurs;
-loadFournisseurs = async function() {
-  _fourContactsCache = {};
-  await _origLoadFour();
-  if (typeof renderFournisseursContactsTable === 'function') {
-    renderFournisseursContactsTable();
-  }
-};
-
 
 (async function init() {
   try {
