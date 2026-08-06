@@ -602,7 +602,11 @@
     // de la liste : il doit être chargé avant le premier renderMaintList.
     await loadUsurePieces();
     try {
-      const r = await api('/api/maintenance/codes');
+      // v2.7.1 : include_archived=1 — les codes archives doivent rester
+      // visibles ICI (c'est le seul endroit d'ou on peut les reactiver),
+      // mais ils sont masques par defaut au rendu et restent exclus partout
+      // ailleurs, ou l'API les filtre deja.
+      const r = await api('/api/maintenance/codes?include_archived=1');
       window._maintItems = (r && Array.isArray(r.items)) ? r.items : [];
     } catch (e) {
       toast('Erreur de chargement des codes maintenance : ' + (e && e.message ? e.message : e), true);
@@ -623,7 +627,7 @@
               });
               toast((res?.imported || 0) + ' code(s) importe(s)');
               try { localStorage.removeItem(MAINT_CODES_STORAGE_KEY); } catch (e) {}
-              const r2 = await api('/api/maintenance/codes');
+              const r2 = await api('/api/maintenance/codes?include_archived=1');
               window._maintItems = (r2 && Array.isArray(r2.items)) ? r2.items : [];
             } catch (e) {
               toast('Echec de l\'import : ' + (e && e.message ? e.message : e), true);
@@ -672,6 +676,13 @@
     }
     const q = (document.getElementById('maint-filter')?.value || '').trim().toLowerCase();
     let items = _maintItems.slice();
+    // v2.7.1 : les codes archives sont hors catalogue. On les garde en memoire
+    // pour pouvoir les reactiver, mais ils n'encombrent la liste que si on les
+    // demande explicitement.
+    const _archives = items.filter(o => o && o.archived);
+    if (!window._maintShowArchived) {
+      items = items.filter(o => !(o && o.archived));
+    }
     // Normaliser la catégorie sur les anciens enregistrements
     items.forEach(o => { if (!o.categorie) o.categorie = 'controles'; });
     if (q) {
@@ -736,9 +747,15 @@
           ? '<span style="color:var(--muted)">—</span>'
           : (o.metrage_ref ? esc(o.metrage_ref)
                            : '<span style="color:var(--muted);font-style:italic">À compléter</span>');
-        body += '<tr>'
+        const _arch = !!o.archived;
+        const _archChip = _arch
+          ? ' <span class="maint-arch-chip" title="Code archive : il porte des saisies, '
+            + 'son libelle reste lisible dans l\'historique mais il n\'est plus '
+            + 'proposé à la saisie.">archivé</span>'
+          : '';
+        body += '<tr' + (_arch ? ' class="maint-row-archived"' : '') + '>'
           + '<td class="op-code-cell">' + c + '</td>'
-          + '<td class="op-lbl-cell">' + esc(o.label || '') + '</td>'
+          + '<td class="op-lbl-cell">' + esc(o.label || '') + _archChip + '</td>'
           + '<td><span class="niv-badge" data-niv="' + niv + '">N' + niv + '</span></td>'
           + '<td><span class="op-pill ' + catCls + '">' + esc(_maintCatLabel(cat)) + '</span></td>'
           + '<td>' + intervalleDisplay + '</td>'
@@ -749,14 +766,32 @@
           +   ' <span class="maint-docs-count" data-count="' + (o.docs_count || 0) + '">' + (o.docs_count || 0) + '</span>'
           + '</button></td>'
           + '<td><div class="op-act">'
-          + '<button type="button" class="btn-sm btn-ghost" data-maint-edit="' + c + '">Modifier</button>'
-          + '<button type="button" class="btn-sm btn-ghost danger" data-maint-del="' + c + '">Supprimer</button>'
+          + (_arch
+              ? '<button type="button" class="btn-sm btn-ghost" data-maint-restore="' + c + '">Réactiver</button>'
+              : '<button type="button" class="btn-sm btn-ghost" data-maint-edit="' + c + '">Modifier</button>'
+                + '<button type="button" class="btn-sm btn-ghost danger" data-maint-del="' + c + '">Supprimer</button>')
           + '</div></td></tr>';
       });
     });
-    el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
+    // Le bandeau est la seule trace visible des codes archives : sans lui,
+    // un code disparu du catalogue passerait pour supprime.
+    let bandeau = '';
+    if (_archives.length) {
+      bandeau = '<div class="maint-arch-bar">'
+        + '<span>' + _archives.length + ' code(s) archivé(s)'
+        + ' — retirés du catalogue, mais toujours lisibles dans l\'historique.</span>'
+        + '<button type="button" class="btn-sm btn-ghost" id="maint-arch-toggle">'
+        + (window._maintShowArchived ? 'Masquer' : 'Afficher') + '</button>'
+        + '</div>';
+    }
+    el.innerHTML = bandeau + '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
       + '<th>Code</th><th>Libellé</th><th>Niveau</th><th>Catégorie</th><th>Intervalle de temps</th><th>Pièce d\'usure</th><th>Réf. métrage</th><th>Documents</th><th>Actions</th>'
       + '</tr></thead><tbody>' + body + '</tbody></table></div>';
+    const _tgl = document.getElementById('maint-arch-toggle');
+    if (_tgl) _tgl.addEventListener('click', () => {
+      window._maintShowArchived = !window._maintShowArchived;
+      renderMaintList();
+    });
     el.querySelectorAll('[data-maint-edit]').forEach(btn => {
       btn.addEventListener('click', () => openMaintForm(btn.getAttribute('data-maint-edit')));
     });
@@ -766,6 +801,29 @@
     el.querySelectorAll('[data-maint-docs]').forEach(btn => {
       btn.addEventListener('click', () => openMaintDocsModal(btn.getAttribute('data-maint-docs')));
     });
+    el.querySelectorAll('[data-maint-restore]').forEach(btn => {
+      btn.addEventListener('click', () => restoreMaintCode(btn.getAttribute('data-maint-restore')));
+    });
+  }
+
+  // ── restoreMaintCode ──
+  // Sortie de secours de l'archivage : le code repasse dans le catalogue avec
+  // son historique intact. Vit dans le module partage (et non dans les deux
+  // pages hotes) pour ne pas recreer la duplication que ce fichier a supprimee.
+  async function restoreMaintCode(code) {
+    if (!code) return;
+    if (!confirm('Réactiver le code ' + code + ' ?\n\n'
+               + 'Il redevient disponible à la saisie et retrouve son historique.')) return;
+    try {
+      await api('/api/maintenance/codes/' + encodeURIComponent(code) + '/restore',
+                { method: 'POST' });
+      toast('Code ' + code + ' réactivé');
+    } catch (e) {
+      toast(e && e.message ? e.message : 'Erreur lors de la réactivation', true);
+      return;
+    }
+    await loadMaintCodes();
+    if (typeof window.loadAlerts === 'function') { try { await window.loadAlerts(); } catch (e) {} }
   }
 
   // ── openMaintForm ──
@@ -1385,6 +1443,7 @@
   try { window._maintOnDocFileChange = _maintOnDocFileChange; } catch(e) {}
   try { window._maintTriggerDocPicker = _maintTriggerDocPicker; } catch(e) {}
   try { window.loadMaintCodes = loadMaintCodes; } catch(e) {}
+  try { window.restoreMaintCode = restoreMaintCode; } catch(e) {}
   try { window.renderMaintList = renderMaintList; } catch(e) {}
   try { window.openMaintForm = openMaintForm; } catch(e) {}
   try { window.loadUsurePieces = loadUsurePieces; } catch(e) {}
@@ -1424,6 +1483,7 @@
     _maintOnDocFileChange: _maintOnDocFileChange,
     _maintTriggerDocPicker: _maintTriggerDocPicker,
     loadMaintCodes: loadMaintCodes,
+    restoreMaintCode: restoreMaintCode,
     renderMaintList: renderMaintList,
     openMaintForm: openMaintForm,
     openMaintDocsModal: openMaintDocsModal,

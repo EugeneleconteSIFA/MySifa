@@ -2636,6 +2636,12 @@ def _maint_row_to_dict(r) -> dict:
         usure_position = r["usure_position"] or ""
     except (IndexError, KeyError):
         usure_position = ""
+    # v2.7.1 : archived_at. Un code encore utilise n'est plus supprime mais
+    # archive — il sort du catalogue sans orpheliner l'historique.
+    try:
+        archived_v = r["archived_at"] or None
+    except (IndexError, KeyError):
+        archived_v = None
     return {
         "code": r["code"],
         "label": r["label"],
@@ -2648,8 +2654,38 @@ def _maint_row_to_dict(r) -> dict:
         "usage_count": usage_v,
         "usure_piece_id": usure_piece_id,
         "usure_position": usure_position if usure_piece_id is not None else "",
+        "archived_at": archived_v,
+        "archived": bool(archived_v),
         "created_at": r["created_at"],
         "updated_at": r["updated_at"],
+    }
+
+
+def _maint_code_usages(conn, code: str) -> dict:
+    """Compte ce qui serait orpheline par la suppression du code.
+
+    Le total conditionne le comportement de DELETE : zero usage = suppression
+    reelle, sinon archivage. On regarde les saisies ET les modeles de creneau :
+    supprimer un code encore reference par un modele casserait la planification
+    aussi surement qu'il casserait l'historique.
+    """
+    def _count(sql: str) -> int:
+        try:
+            row = conn.execute(sql, (code,)).fetchone()
+            return int(row["n"] or 0) if row else 0
+        except Exception:
+            return 0  # table absente sur une DB pas encore migree
+    saisies = _count(
+        "SELECT COUNT(*) AS n FROM maintenance_event_ops WHERE code = ?")
+    modeles = _count(
+        "SELECT COUNT(*) AS n FROM maintenance_template_ops WHERE code = ?")
+    docs = _count(
+        "SELECT COUNT(*) AS n FROM maintenance_docs WHERE code = ?")
+    return {
+        "saisies": saisies,
+        "modeles": modeles,
+        "docs": docs,
+        "total": saisies + modeles,
     }
 
 
@@ -3339,10 +3375,15 @@ def _sync_alert_for_code(conn, code: str, label: str, categorie: str, periodique
 
 
 @router.get("/api/maintenance/codes")
-def maintenance_codes_list(request: Request, include_libres: int = 0):
+def maintenance_codes_list(request: Request, include_libres: int = 0,
+                           include_archived: int = 0):
     """Liste des codes maintenance du catalogue standard.
     Depuis v180, les codes libres (libre=1) sont exclus par defaut. Pour les
     inclure (ex. panneau admin dedié), passer include_libres=1.
+    Depuis v2.7.1, les codes archives sont exclus par defaut : ils ne doivent
+    plus etre proposes a la saisie, mais leur ligne reste en base pour que
+    l'historique continue de resoudre leur libelle. include_archived=1 les
+    ramene (panneau catalogue, filtre « archives »).
     """
     get_current_user(request)
     from database import get_db
@@ -3359,9 +3400,14 @@ def maintenance_codes_list(request: Request, include_libres: int = 0):
         # v229 : rattachement pièce d'usure (absent des DB pas encore migrées).
         if "usure_piece_id" in cols: sel_extra += ",usure_piece_id"
         if "usure_position" in cols: sel_extra += ",usure_position"
-        where = ""
+        has_archived = "archived_at" in cols
+        if has_archived: sel_extra += ",archived_at"
+        conds = []
         if has_libre and not include_libres:
-            where = "WHERE libre = 0"
+            conds.append("libre = 0")
+        if has_archived and not include_archived:
+            conds.append("archived_at IS NULL")
+        where = ("WHERE " + " AND ".join(conds)) if conds else ""
         rows = conn.execute(
             f"""SELECT code,label,niveau,categorie,periodique,intervalle,metrage_ref,
                       created_at,updated_at{sel_extra}
@@ -3397,10 +3443,35 @@ async def maintenance_codes_create(request: Request):
     from database import get_db
     now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
     with get_db() as conn:
+        _ecols = {c["name"] for c in conn.execute(
+            "PRAGMA table_info(maintenance_codes)").fetchall()}
+        _arch_sel = ",archived_at" if "archived_at" in _ecols else ""
         existing = conn.execute(
-            "SELECT 1 FROM maintenance_codes WHERE code=? LIMIT 1", (data["code"],)
+            f"SELECT label{_arch_sel} FROM maintenance_codes WHERE code=? LIMIT 1",
+            (data["code"],),
         ).fetchone()
         if existing:
+            # v2.7.1 : un identifiant archive n'est pas « libre ». Le laisser
+            # se recreer, c'est exactement le bug qu'on corrige : les saisies
+            # de l'ancien code se rattachaient au nouveau libelle et
+            # l'historique affichait une intervention qui n'a jamais eu lieu.
+            _arch = None
+            if _arch_sel:
+                try:
+                    _arch = existing["archived_at"]
+                except (IndexError, KeyError):
+                    _arch = None
+            if _arch:
+                raise HTTPException(409, {
+                    "message": (
+                        f"Le code {data['code']} a ete archive (il porte encore "
+                        f"des saisies). Reactive-le au lieu de le recreer, ou "
+                        f"choisis un autre identifiant."
+                    ),
+                    "archived": True,
+                    "code": data["code"],
+                    "label": existing["label"],
+                })
             raise HTTPException(409, f"Le code {data['code']} existe deja.")
         _validate_usure_link(conn, data)
         _cols = {c["name"] for c in conn.execute(
@@ -3465,20 +3536,94 @@ async def maintenance_codes_update(code: str, request: Request):
 
 @router.delete("/api/maintenance/codes/{code}")
 def maintenance_codes_delete(code: str, request: Request):
+    """Supprime un code — ou l'archive s'il porte deja des saisies.
+
+    Avant v2.7.1, cette route faisait un DELETE sec sur maintenance_codes.
+    Les saisies de maintenance_event_ops y survivaient (la cle etrangere est
+    inerte : get_db() n'active pas PRAGMA foreign_keys=ON), et l'historique,
+    qui resout le libelle a la volee par LEFT JOIN sur le code, les affichait
+    avec le code brut. Recreer le meme identifiant les rattachait au nouveau
+    libelle : l'historique racontait alors une intervention qui n'avait jamais
+    eu lieu.
+
+    Regle desormais : zero usage = suppression reelle (identifiant
+    immediatement reutilisable) ; au moins une saisie ou un modele = archivage.
+    Le code sort du catalogue, son libelle continue de resoudre dans
+    l'historique, et l'identifiant reste pris tant qu'il n'est pas reactive.
+    C'est le meme garde-fou que celui deja en place sur les interventions
+    libres (maintenance_libres_delete).
+    """
     user = _require_maint_writer(request)
     from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
     with get_db() as conn:
-        cur = conn.execute("DELETE FROM maintenance_codes WHERE code=?", (code,))
-        if cur.rowcount == 0:
-            conn.rollback()
+        row = conn.execute(
+            "SELECT label FROM maintenance_codes WHERE code=? LIMIT 1", (code,)
+        ).fetchone()
+        if not row:
             raise HTTPException(404, f"Code {code} introuvable.")
+        usages = _maint_code_usages(conn, code)
+        has_archived = "archived_at" in {
+            c["name"] for c in conn.execute(
+                "PRAGMA table_info(maintenance_codes)").fetchall()}
+        if usages["total"] > 0 and has_archived:
+            conn.execute(
+                "UPDATE maintenance_codes SET archived_at=?, updated_at=? WHERE code=?",
+                (now, now, code),
+            )
+            conn.commit()
+            log_action(user=user, action="ARCHIVE", module="maintenance_codes",
+                       objet=code,
+                       detail=f"{row['label']} — {usages['saisies']} saisie(s), "
+                              f"{usages['modeles']} modele(s)")
+            return {"ok": True, "archived": True, "code": code,
+                    "label": row["label"], "usages": usages}
+        # Aucun usage : suppression reelle. On purge au passage les documents
+        # attaches, dont le ON DELETE CASCADE declare est tout aussi inerte
+        # que la cle etrangere des saisies.
+        try:
+            conn.execute("DELETE FROM maintenance_docs WHERE code=?", (code,))
+        except Exception:
+            pass  # table absente sur une DB pas encore migree
+        conn.execute("DELETE FROM maintenance_codes WHERE code=?", (code,))
         # v2.2.15 — Plus de cascade sur les alertes (le système auto a été
         # retiré). Les alertes classiques (manuelles) ne sont jamais liées
         # à un code, donc rien à supprimer côté maintenance_alerts.
         conn.commit()
     log_action(user=user, action="DELETE", module="maintenance_codes",
                objet=code, detail="")
-    return {"ok": True}
+    return {"ok": True, "archived": False, "code": code}
+
+
+@router.post("/api/maintenance/codes/{code}/restore")
+def maintenance_codes_restore(code: str, request: Request):
+    """Reactive un code archive : il repasse dans le catalogue avec son
+    historique. C'est la sortie de secours quand l'archivage a ete fait par
+    erreur, ou quand l'operation redevient d'actualite."""
+    user = _require_maint_writer(request)
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        cols = {c["name"] for c in conn.execute(
+            "PRAGMA table_info(maintenance_codes)").fetchall()}
+        if "archived_at" not in cols:
+            raise HTTPException(400, "Base pas encore migree (archived_at absent).")
+        row = conn.execute(
+            "SELECT label, archived_at FROM maintenance_codes WHERE code=? LIMIT 1",
+            (code,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, f"Code {code} introuvable.")
+        if not row["archived_at"]:
+            return {"ok": True, "code": code, "already_active": True}
+        conn.execute(
+            "UPDATE maintenance_codes SET archived_at=NULL, updated_at=? WHERE code=?",
+            (now, code),
+        )
+        conn.commit()
+    log_action(user=user, action="RESTORE", module="maintenance_codes",
+               objet=code, detail=row["label"])
+    return {"ok": True, "code": code, "label": row["label"]}
 
 
 class _MaintBulkImport(BaseModel):

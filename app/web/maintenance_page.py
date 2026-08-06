@@ -1353,6 +1353,14 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
 .libre-inline-btn:hover{background:var(--bg);color:var(--accent);border-color:var(--border)}
 body[data-maint-role="operator"] .libre-inline-btn{display:none}
 body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
+/* v2.7.1 — Codes archivés (catalogue maintenance).
+   Un code archivé n'est ni actif ni supprimé : il est sorti du catalogue mais
+   son libellé continue de résoudre dans l'historique. La ligne est donc
+   estompée sans être barrée — barrer laisserait croire à une suppression. */
+.maint-arch-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;background:rgba(148,163,184,.18);color:var(--muted);margin-left:6px;vertical-align:middle}
+.maint-row-archived td{opacity:.55}
+.maint-row-archived:hover td{opacity:.85}
+.maint-arch-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 12px;margin-bottom:10px;border:1px dashed var(--border);border-radius:8px;background:var(--card);color:var(--muted);font-size:12px}
 /* v180 : mini-modal Intervention libre + autocomplete */
 .libre-titre-wrap{position:relative}
 .libre-autocomplete-panel{position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;margin-top:4px;box-shadow:0 6px 20px rgba(0,0,0,.18)}
@@ -7218,13 +7226,18 @@ function refreshOpsFiltersOptions(){
   const opeSel  = document.getElementById('filt-operations-operateur');
   if(typeSel){
     const cur  = typeSel.value;
-    // v2.7.5 : le select "Nom de l'opération" liste les codes catalogue ET les
+    // v2.7.1 : le select "Nom de l'opération" liste les codes catalogue ET les
     // interventions libres présentes dans l'historique. Le filtre "Type de
     // saisie" restreint la liste au type sélectionné (codes / libres).
     const kind = (document.getElementById('filt-operations-kind')?.value || 'all');
     const sortFr = arr => arr.sort((a,b) => a.localeCompare(b, 'fr'));
+    // Union catalogue + historique, et non le seul catalogue : un code archivé
+    // (v2.7.1) sort de OPS_TYPES_STATE mais ses saisies restent dans le tableau.
+    // Sans cette union, elles seraient visibles sans être filtrables.
     const codes  = sortFr(Array.from(new Set(
-      OPS_TYPES_STATE.list.map(t => t.nom).filter(Boolean)
+      OPS_TYPES_STATE.list.map(t => t.nom).filter(Boolean).concat(
+        OPS_STATE.list.filter(o => !o._libre).map(o => o.type).filter(Boolean)
+      )
     )));
     const libres = sortFr(Array.from(new Set(
       OPS_STATE.list.filter(o => o._libre).map(o => o.type).filter(Boolean)
@@ -10537,7 +10550,15 @@ if (typeof api !== 'function') {
     if (r.status === 401) { location.href = '/?next=/maintenance'; return null; }
     const ct = r.headers.get('content-type') || '';
     const j = ct.includes('json') ? await r.json().catch(() => ({})) : {};
-    if (!r.ok) throw new Error(j.detail || ('Erreur ' + r.status));
+    if (!r.ok) {
+      // v2.7.1 : cf. settings_page.py — un detail structuré ({message, ...})
+      // doit rester lisible dans le toast.
+      const d = j.detail;
+      const msg = (d && typeof d === 'object') ? (d.message || JSON.stringify(d)) : d;
+      const err = new Error(msg || ('Erreur ' + r.status));
+      err.detail = d; err.status = r.status;
+      throw err;
+    }
     return j;
   };
 }
@@ -14620,10 +14641,27 @@ async function saveMaintForm() {
   if(typeof loadAlerts === 'function') await loadAlerts();
 }
 async function deleteMaintCode(code) {
-  if (!confirm('Supprimer le code ' + code + ' ?')) return;
+  // v2.7.1 : le serveur tranche entre suppression réelle et archivage selon
+  // les saisies rattachées. On ne l'anticipe pas ici (ça ferait un aller-retour
+  // de plus pour une information que la réponse porte déjà), mais le message
+  // final doit dire ce qui s'est réellement passé : un utilisateur à qui on
+  // annonce « supprimé » alors que le code est archivé le recréera.
+  if (!confirm('Supprimer le code ' + code + ' ?\n\n'
+             + 'S\'il porte déjà des saisies, il sera archivé au lieu d\'être '
+             + 'supprimé : l\'historique doit rester lisible.')) return;
   try {
-    await api('/api/maintenance/codes/' + encodeURIComponent(code), { method: 'DELETE' });
-    toast('Code supprimé');
+    const res = await api('/api/maintenance/codes/' + encodeURIComponent(code),
+                          { method: 'DELETE' });
+    if (res && res.archived) {
+      const u = res.usages || {};
+      const bouts = [];
+      if (u.saisies) bouts.push(u.saisies + ' saisie(s)');
+      if (u.modeles) bouts.push(u.modeles + ' modèle(s) de créneau');
+      toast('Code ' + code + ' archivé — ' + (bouts.join(' et ') || 'usages existants')
+          + '. Il reste lisible dans l\'historique.');
+    } else {
+      toast('Code supprimé');
+    }
   } catch (e) {
     toast(e && e.message ? e.message : 'Erreur lors de la suppression', true);
     return;

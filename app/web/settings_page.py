@@ -202,6 +202,14 @@ body.light .op-table tr.op-cat-row td{background:rgba(8,145,178,.06)}
   border:1px solid var(--border);text-transform:uppercase;letter-spacing:.3px;line-height:1.3
 }
 .op-pill.info{color:var(--text2);border-color:rgba(148,163,184,.4);background:rgba(148,163,184,.1)}
+/* v2.7.1 — Codes archivés (catalogue maintenance).
+   Un code archivé n'est ni actif ni supprimé : il est sorti du catalogue mais
+   son libellé continue de résoudre dans l'historique. La ligne est donc
+   estompée sans être barrée — barrer laisserait croire à une suppression. */
+.maint-arch-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;background:rgba(148,163,184,.18);color:var(--muted);margin-left:6px;vertical-align:middle}
+.maint-row-archived td{opacity:.55}
+.maint-row-archived:hover td{opacity:.85}
+.maint-arch-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 12px;margin-bottom:10px;border:1px dashed var(--border);border-radius:8px;background:var(--card);color:var(--muted);font-size:12px}
 .op-pill.attention{color:var(--warn);border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.12)}
 .op-pill.critique{color:var(--danger);border-color:rgba(248,113,113,.45);background:rgba(248,113,113,.12)}
 .op-pill.calage{color:var(--ok);border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.1)}
@@ -2793,7 +2801,16 @@ async function api(path, opt) {
   if (r.status === 401) { location.href = '/?next=/settings'; return null; }
   const ct = r.headers.get('content-type') || '';
   const j = ct.includes('json') ? await r.json().catch(() => ({})) : {};
-  if (!r.ok) throw new Error(j.detail || ('Erreur ' + r.status));
+  if (!r.ok) {
+    // v2.7.1 : certains 409 renvoient un detail structuré ({message, ...})
+    // pour que l'appelant puisse réagir. Sans ce déballage, new Error(objet)
+    // affichait « [object Object] » à l'utilisateur.
+    const d = j.detail;
+    const msg = (d && typeof d === 'object') ? (d.message || JSON.stringify(d)) : d;
+    const err = new Error(msg || ('Erreur ' + r.status));
+    err.detail = d; err.status = r.status;
+    throw err;
+  }
   return j;
 }
 function toast(msg, err) {
@@ -6055,10 +6072,27 @@ async function saveMaintForm() {
   if(typeof loadAlerts === 'function') await loadAlerts();
 }
 async function deleteMaintCode(code) {
-  if (!confirm('Supprimer le code ' + code + ' ?')) return;
+  // v2.7.1 : le serveur tranche entre suppression réelle et archivage selon
+  // les saisies rattachées. On ne l'anticipe pas ici (ça ferait un aller-retour
+  // de plus pour une information que la réponse porte déjà), mais le message
+  // final doit dire ce qui s'est réellement passé : un utilisateur à qui on
+  // annonce « supprimé » alors que le code est archivé le recréera.
+  if (!confirm('Supprimer le code ' + code + ' ?\n\n'
+             + 'S\'il porte déjà des saisies, il sera archivé au lieu d\'être '
+             + 'supprimé : l\'historique doit rester lisible.')) return;
   try {
-    await api('/api/maintenance/codes/' + encodeURIComponent(code), { method: 'DELETE' });
-    toast('Code supprimé');
+    const res = await api('/api/maintenance/codes/' + encodeURIComponent(code),
+                          { method: 'DELETE' });
+    if (res && res.archived) {
+      const u = res.usages || {};
+      const bouts = [];
+      if (u.saisies) bouts.push(u.saisies + ' saisie(s)');
+      if (u.modeles) bouts.push(u.modeles + ' modèle(s) de créneau');
+      toast('Code ' + code + ' archivé — ' + (bouts.join(' et ') || 'usages existants')
+          + '. Il reste lisible dans l\'historique.');
+    } else {
+      toast('Code supprimé');
+    }
   } catch (e) {
     toast(e && e.message ? e.message : 'Erreur lors de la suppression', true);
     return;
