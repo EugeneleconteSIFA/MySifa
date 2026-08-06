@@ -1388,6 +1388,10 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .op-status-en_cours{background:rgba(251,191,36,.16);color:#f59e0b}
 .op-status-termine{background:rgba(52,211,153,.16);color:#10b981}
 .op-status-reporte{background:rgba(248,113,113,.16);color:var(--danger)}
+/* v2.7.2 : créneau à venir — le CTA laisse place à une mention inerte.
+   Pas un bouton désactivé : un bouton grisé invite à cliquer et laisse
+   croire à une panne. Ici c'est un état, et il porte sa date. */
+.op-op-card-cta.is-locked{display:flex;align-items:center;justify-content:center;gap:6px;cursor:default;background:var(--bg);color:var(--muted);border:1px dashed var(--border);font-weight:600}
 .op-badge-source{display:inline-block;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(251,191,36,.14);color:#f59e0b;text-transform:uppercase;letter-spacing:.4px}
 
 /* ── État vide (aucune tâche) ───────────────────────────────────── */
@@ -11602,6 +11606,19 @@ function _renderOpCardIndividual(op, ev, opts){
   const machineChip = (showMachine && machinesList.length)
     ? `<div class="op-op-card-machine"><span class="op-op-card-machine-dot"></span><span class="op-op-card-machine-lbl">${machinesList.map(m => escHtml(m)).join(' · ')}</span></div>`
     : '';
+  // v2.7.2 : un créneau qui n'est pas encore arrivé ne se solde pas. On
+  // remplace le bouton par la date d'ouverture plutôt que de le désactiver
+  // sans explication — l'opérateur doit comprendre pourquoi, pas buter.
+  const dateEv = ev.date_prevue || ev.date || '';
+  const aVenir = !isDone && dateEv && dateEv > _fmtDateISO(new Date());
+  const ctaHtml = aVenir
+    ? `<div class="op-op-card-cta is-locked" title="Cette opération pourra être validée le jour du créneau">
+         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+         À valider le ${escHtml(_fmtDateFrShort(dateEv))}
+       </div>`
+    : `<button type="button" class="op-op-card-cta ${isDone ? 'is-done' : ''}" onclick="opOpenSingleOpModal(${ev.id}, ${op.id})">
+      ${isDone ? 'Voir / modifier' : 'Marquer comme terminée'}
+    </button>`;
   return `<div class="op-op-card ${isDone ? 'is-done' : ''}">
     <div class="op-op-card-head">
       <span class="op-code">${op.code}</span>
@@ -11610,9 +11627,7 @@ function _renderOpCardIndividual(op, ev, opts){
     <div class="op-op-card-title">${escHtml(op.code_label || '—')}</div>
     ${machineChip}
     ${consignesChip}
-    <button type="button" class="op-op-card-cta ${isDone ? 'is-done' : ''}" onclick="opOpenSingleOpModal(${ev.id}, ${op.id})">
-      ${isDone ? 'Voir / modifier' : 'Marquer comme terminée'}
-    </button>
+    ${ctaHtml}
     ${actionsHtml}
   </div>`;
 }
@@ -12928,6 +12943,17 @@ function opOpenSingleOpModal(eventId, opId){
   if(!ev){ return; }
   const op = (ev.ops || []).find(o => o.id === opId);
   if(!op){ return; }
+  // v2.7.2 : second verrou. La carte n'affiche déjà plus de bouton sur un
+  // créneau à venir, mais la modale reste atteignable par un autre chemin
+  // (rendu obsolète, appel direct). Le serveur refuse de toute façon.
+  const _dEv = ev.date_prevue || ev.date || '';
+  if(op.statut !== 'termine' && _dEv && _dEv > _fmtDateISO(new Date())){
+    if(typeof showToast === 'function'){
+      showToast('Créneau prévu le ' + _fmtDateFrShort(_dEv)
+              + ' : la validation sera possible ce jour-là.', 'info');
+    }
+    return;
+  }
   MAINT_STATE.singleOpTarget = { eventId, opId, _wasDone: (op.statut === 'termine') };
   const timeLabel = (ev.heure_debut && ev.heure_fin)
     ? (ev.heure_debut + ' – ' + ev.heure_fin)
