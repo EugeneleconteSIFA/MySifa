@@ -795,6 +795,33 @@ body.light .f2-herit{color:#7c3aed}
 .f2-tphoto img{max-width:100%;max-height:220px;border-radius:8px;display:block}
 .f2-code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;background:var(--card);
   border:1px solid var(--border);border-radius:8px;padding:8px 12px;display:inline-block;color:var(--accent);letter-spacing:.04em}
+/* Aucun bouton ne doit avoir le fond de la surface qui le porte : sur les
+   blocs (fond var(--bg)) les boutons prennent le fond de la carte pour
+   rester lisibles, en clair comme en sombre. */
+.f2-block .btn-sec,.f2-block .btn-ghost,.f2-block a.btn-sec,
+.f2-banner .btn-sec,.f2-banner a.btn-sec,
+.f2-kpi .btn-sec,.f2-cc .btn-sec{background:var(--card);border-color:var(--border)}
+.f2-block .btn-sec:hover,.f2-banner .btn-sec:hover{background:var(--card)}
+.f2-goto{display:flex;align-items:center;justify-content:space-between;width:100%;text-align:left}
+
+/* Repli des certifications non couvertes — le référentiel fait 32 entrées,
+   les afficher toutes noie les 6 qui comptent. */
+.f2-fold{margin-top:8px}
+.f2-fold-btn{display:inline-flex;align-items:center;gap:7px;background:var(--card);
+  border:1px dashed var(--border);color:var(--muted);font-size:11.5px;font-weight:600;
+  padding:6px 12px;border-radius:8px;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s}
+.f2-fold-btn:hover{border-color:var(--accent);color:var(--accent)}
+.f2-fold-btn .chev{transition:transform .15s;display:inline-block}
+.f2-fold-btn.open .chev{transform:rotate(90deg)}
+.f2-fold-body{margin-top:8px}
+
+/* Origine d'une donnée reprise d'un autre module */
+.f2-src{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;
+  letter-spacing:.02em;color:#a78bfa;background:rgba(167,139,250,.12);
+  border:1px solid rgba(167,139,250,.3);border-radius:6px;padding:2px 7px;white-space:nowrap}
+body.light .f2-src{color:#7c3aed;background:rgba(124,58,237,.08);border-color:rgba(124,58,237,.25)}
+.f2-lock{opacity:.6;pointer-events:none}
+
 @media(max-width:900px){.f2-kv{grid-template-columns:1fr}.f2-form{grid-template-columns:1fr}.f2-form .span2{grid-column:span 1}}
 </style>
 </head>
@@ -4252,6 +4279,7 @@ let f2Id = null;          // fiche fournisseur ouverte
 let f2Groupe = null;      // fiche groupe ouverte
 let f2Tab = 'synthese';
 let f2Cache = {};         // id -> { contacts, receptions, certifs }
+let f2FoldOpen = {};      // catégorie -> true si les non couvertes sont dépliées
 
 // Getter courant du picker du panneau d'ajout
 let _cfCatsGetSelected = () => [];
@@ -4353,11 +4381,22 @@ function _fscExpirationInfo(f){
     return { days, cls: 'fsc', label: '' };
   } catch(e) { return null; }
 }
+// Certificat FSC déposé dans MyQualité pour ce fournisseur, s'il existe.
+// C'est lui qui porte la date : la colonne fsc_date_expiration en est le reflet.
+function _f2FscDoc(f){
+  const c = f2Cache[f.id];
+  if (c && c.certifs && c.certifs.fsc_doc) return c.certifs.fsc_doc;
+  const cov = fourCouverture[String(f.id)];
+  return (cov && cov.fsc_doc) || null;
+}
+
 function _fscBadgeHTML(f){
   const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
   if (!hasFsc) return '<span class="four-pill nofsc">— Non certifié</span>';
   const info = _fscExpirationInfo(f);
-  if (!info) return '<span class="four-pill fsc" title="Aucune date d\'expiration en base : aucun contrôle de validité au BL n\'est possible">FSC · échéance inconnue</span>';
+  // Échéance inconnue = trou de conformité, pas un statut sain : la pastille
+  // était verte alors que la fiche affiche « Manquant » juste à côté.
+  if (!info) return '<span class="four-pill fsc-warn" title="Aucune date d\'expiration : ni saisie, ni portée par un certificat déposé dans MyQualité. Aucun contrôle de validité au BL n\'est possible.">FSC · échéance inconnue</span>';
   const title = 'Certificat FSC expire le ' + f.fsc_date_expiration + (info.days < 0 ? ' (expiré)' : ' (' + info.days + ' jours)');
   const lbl = info.label ? ('FSC · ' + info.label) : 'FSC · à jour';
   return '<span class="four-pill ' + info.cls + '" title="' + escAttr(title) + '">' + esc(lbl) + '</span>';
@@ -4388,6 +4427,10 @@ async function loadFournisseurs() {
     const data = await api('/api/fournisseurs');
     fournisseursAll = Array.isArray(data) ? data : [];
   } catch (e) { fournisseursAll = []; toast(e.message, true); }
+  // Le certificat FSC déposé dans MyQualité fait foi : on réaligne la colonne
+  // fsc_date_expiration avant de lire, sinon le badge afficherait « échéance
+  // inconnue » alors qu'un certificat valide est déposé. Idempotent et muet.
+  try { await api('/api/fournisseurs/sync-fsc-certificats', { method: 'POST' }); } catch(e) {}
   // Couverture certifications : un seul appel pour toute la liste.
   // Non bloquant — si MyQualité n'est pas initialisé, la colonne se vide
   // mais le répertoire reste utilisable.
@@ -5102,7 +5145,7 @@ function _f2TabSynthese(f, cache){
       (miss.length
         ? '<div class="f2-block warn" style="margin-bottom:14px"><div class="f2-bh"><h3 class="warn">À compléter</h3></div>' +
           '<div style="display:flex;flex-direction:column;gap:8px">' +
-          miss.map(m => '<button type="button" class="btn btn-sec btn-sm" style="justify-content:space-between;width:100%" data-f2goto="' + m.tab + '">' + esc(m.k) + '<span>&rarr;</span></button>').join('') +
+          miss.map(m => '<button type="button" class="btn btn-sec btn-sm f2-goto" data-f2goto="' + m.tab + '">' + esc(m.k) + '<span>&rarr;</span></button>').join('') +
           '</div></div>'
         : '') +
       '<div class="f2-block"><div class="f2-bh"><h3>Repères</h3></div><dl class="f2-kv">' +
@@ -5213,8 +5256,17 @@ function _f2BindIdentite(f){
 }
 
 // ─── Onglet FSC ───────────────────────────────────────────────────
-function _f2TabFsc(f){
+// La date d'expiration n'est plus saisissable dès qu'un certificat tagué FSC
+// est déposé dans MyQualité : ce document fait foi, la colonne n'est que son
+// reflet (resynchronisée à chaque chargement). Sans document déposé, le champ
+// reste saisissable — sinon on perdrait le contrôle au BL sur ces fournisseurs.
+function _f2TabFsc(f, cache){
   const hasFsc = (f.has_fsc == null) ? true : !!f.has_fsc;
+  const doc = _f2FscDoc(f);
+  const dateVerrouillee = !!(doc && doc.date_expiration);
+  const srcBadge = '<span class="f2-src" title="Cette donnée vient du certificat déposé dans MyQualité, pas d\'une saisie ici">' +
+    'source : MyQualité' + (doc && doc.niveau === 'groupe' ? ' &#8962; groupe' : '') + '</span>';
+
   if (_f2EditingBlock === 'fsc') {
     return '<div class="f2-blocks"><div class="f2-block full"><div class="f2-bh"><h3>Certification FSC — chaîne de contrôle</h3></div>' +
       '<label style="display:inline-flex;align-items:center;gap:8px;margin-bottom:12px;font-size:13px;cursor:pointer">' +
@@ -5222,8 +5274,15 @@ function _f2TabFsc(f){
       '<div class="f2-form" id="f2-e-fscfields"' + (hasFsc ? '' : ' style="opacity:.4;pointer-events:none"') + '>' +
         '<div><label class="sub">Code licence FSC</label><input id="f2-e-licence" value="' + escAttr(f.licence || '') + '" placeholder="ex: FSC-C004451"></div>' +
         '<div><label class="sub">Code certificat FSC</label><input id="f2-e-certificat" value="' + escAttr(f.certificat || '') + '" placeholder="ex: CU-COC-807907"></div>' +
-        '<div class="span2"><label class="sub">Date d\'expiration du certificat</label><input type="date" id="f2-e-fscexp" value="' + escAttr(f.fsc_date_expiration || '') + '"></div>' +
-      '</div><div class="f2-formacts"><button type="button" class="btn btn-sec btn-sm" data-f2cancel="1">Annuler</button>' +
+        '<div class="span2"><label class="sub">Date d\'expiration du certificat ' + (dateVerrouillee ? srcBadge : '') + '</label>' +
+          '<input type="date" id="f2-e-fscexp" value="' + escAttr(f.fsc_date_expiration || '') + '"' + (dateVerrouillee ? ' disabled class="f2-lock"' : '') + '></div>' +
+      '</div>' +
+      (dateVerrouillee
+        ? '<p class="f2-hint">La date vient du certificat <strong>' + esc(doc.titre || 'FSC') + '</strong> déposé dans MyQualité' +
+          (doc.niveau === 'groupe' ? ' au niveau du groupe' : '') +
+          '. Elle n\'est plus saisissable ici : pour la changer, remplacez le certificat dans MyQualité › Ressources fournisseurs — la colonne se réaligne au chargement suivant.</p>'
+        : '<p class="f2-hint">Aucun certificat FSC déposé dans MyQualité pour ce fournisseur : la date reste saisie à la main ici. Dès qu\'un certificat sera déposé et tagué FSC, il prendra la main.</p>') +
+      '<div class="f2-formacts"><button type="button" class="btn btn-sec btn-sm" data-f2cancel="1">Annuler</button>' +
       '<button type="button" class="btn btn-sm" id="f2-save-fsc">Enregistrer</button></div></div></div>';
   }
   if (!hasFsc) {
@@ -5232,13 +5291,25 @@ function _f2TabFsc(f){
       '<div class="f2-empty">Ce fournisseur n\'est pas déclaré certifié FSC.</div>' +
       '<p class="f2-hint">Une matière reçue d\'un fournisseur non certifié ne peut pas entrer dans un flux FSC : le registre l\'exclut automatiquement.</p></div></div>';
   }
+  const dateCell = f.fsc_date_expiration
+    ? esc(_f2Date(f.fsc_date_expiration)) + (dateVerrouillee ? ' ' + srcBadge : '')
+    : '<span class="f2-chip st-soon">Non renseignée</span>';
   return '<div class="f2-blocks"><div class="f2-block full">' +
     '<div class="f2-bh"><h3>Certification FSC — chaîne de contrôle</h3>' + _f2EditBtn('fsc') + '</div><dl class="f2-kv">' +
       _f2Kv('Statut', _fscBadgeHTML(f)) +
       _f2Kv('Code licence', f.licence ? '<code>' + esc(f.licence) + '</code>' : '<span class="f2-chip st-soon">Manquant</span>') +
       _f2Kv('Code certificat', f.certificat ? '<code>' + esc(f.certificat) + '</code>' : '<span class="f2-chip st-soon">Manquant</span>') +
-      _f2Kv('Expiration', f.fsc_date_expiration ? esc(_f2Date(f.fsc_date_expiration)) : '<span class="f2-chip st-soon">Non renseignée</span>') +
-    '</dl><p class="f2-hint">La validité du certificat <strong>à la date du BL</strong> est une exigence de chaîne de contrôle (FSC-STD-40-004). Sans date d\'expiration en base, aucun contrôle automatique n\'est possible au moment de la réception.</p></div></div>';
+      _f2Kv('Expiration', dateCell) +
+      (dateVerrouillee
+        ? _f2Kv('Document source', '<button type="button" class="btn btn-sec btn-sm" id="f2-dl-fsc">' + esc(doc.titre || 'Certificat FSC') + ' &darr;</button>')
+        : '') +
+    '</dl>' +
+    (dateVerrouillee
+      ? '<p class="f2-hint">La date d\'expiration est reprise du certificat déposé dans MyQualité' +
+        (doc.niveau === 'groupe' ? ' <strong>au niveau du groupe</strong> — elle couvre donc toutes ses branches' : '') +
+        ' : une seule saisie, un seul endroit à tenir à jour. Les <strong>codes</strong> licence et certificat, eux, ne sont stockés qu\'ici — le document déposé ne porte pas de numéro, MyQualité écrit dans les mêmes colonnes.</p>'
+      : '<p class="f2-hint">La validité du certificat <strong>à la date du BL</strong> est une exigence de chaîne de contrôle (FSC-STD-40-004). Déposez le certificat dans MyQualité pour que sa date pilote automatiquement ce contrôle.</p>') +
+  '</div></div>';
 }
 function _f2BindFsc(f){
   const body = document.getElementById('f2-body');
@@ -5249,15 +5320,23 @@ function _f2BindFsc(f){
     fields.style.opacity = cb.checked ? '' : '.4';
     fields.style.pointerEvents = cb.checked ? '' : 'none';
   };
+  const dl = body.querySelector('#f2-dl-fsc');
+  const doc = _f2FscDoc(f);
+  if (dl && doc) dl.onclick = () =>
+    window.open(API + '/api/qualite/ressources/certificats/' + doc.certificat_id + '/download', '_blank');
   const sv = body.querySelector('#f2-save-fsc');
   if (sv) sv.onclick = () => {
     const has = cb ? !!cb.checked : true;
-    _f2SavePartial(f.id, {
+    const payload = {
       has_fsc: has,
       licence: has ? body.querySelector('#f2-e-licence').value.trim() : '',
       certificat: has ? body.querySelector('#f2-e-certificat').value.trim() : '',
-      fsc_date_expiration: has ? body.querySelector('#f2-e-fscexp').value.trim() : '',
-    });
+    };
+    // Le champ date n'est envoyé que s'il est encore la source : quand un
+    // certificat est déposé, l'API l'écraserait de toute façon.
+    const inp = body.querySelector('#f2-e-fscexp');
+    if (inp && !inp.disabled) payload.fsc_date_expiration = has ? inp.value.trim() : '';
+    _f2SavePartial(f.id, payload);
   };
 }
 
@@ -5278,19 +5357,38 @@ function _f2TabCertifs(f, cache){
 
   const byCat = {};
   ref.forEach(r => { (byCat[r.categorie || 'autre'] = byCat[r.categorie || 'autre'] || []).push(r); });
-  const grid = Object.keys(byCat).sort(_f2CatOrder).map(catk =>
-    '<div class="f2-cat"><div class="f2-cath">' + esc(F2_REF_CATS[catk] || catk) + '</div><div class="f2-cgrid">' +
-    byCat[catk].map(r => {
-      const c = couv[String(r.id)];
-      const k = c ? c.statut : 'none';
-      return '<div class="f2-cc' + (c ? '' : ' absent') + '">' +
-        '<span class="f2-ccd st-' + escAttr(k) + '"></span>' +
-        '<div class="f2-ccb"><div class="f2-ccn" title="' + escAttr(r.nom) + '">' + esc(r.nom) + '</div>' +
-        '<div class="f2-ccs">' + esc(F2_CERT_LABEL[k] || k) +
-          (c && c.date_expiration ? ' · ' + esc(_f2Date(c.date_expiration)) : '') +
-          (c && c.niveau === 'groupe' ? ' <span class="f2-herit">&#8962; GROUPE</span>' : '') +
-        '</div></div></div>';
-    }).join('') + '</div></div>').join('');
+  const carte = r => {
+    const c = couv[String(r.id)];
+    const k = c ? c.statut : 'none';
+    return '<div class="f2-cc' + (c ? '' : ' absent') + '">' +
+      '<span class="f2-ccd st-' + escAttr(k) + '"></span>' +
+      '<div class="f2-ccb"><div class="f2-ccn" title="' + escAttr(r.nom) + '">' + esc(r.nom) + '</div>' +
+      '<div class="f2-ccs">' + esc(F2_CERT_LABEL[k] || k) +
+        (c && c.date_expiration ? ' · ' + esc(_f2Date(c.date_expiration)) : '') +
+        (c && c.niveau === 'groupe' ? ' <span class="f2-herit">&#8962; GROUPE</span>' : '') +
+      '</div></div></div>';
+  };
+  // Le référentiel dépasse la trentaine d'entrées : afficher les 30 « aucun
+  // document » à côté des 6 qui comptent noie l'information. On garde les
+  // couvertes visibles et on replie le reste par catégorie.
+  const grid = Object.keys(byCat).sort(_f2CatOrder).map(catk => {
+    const couvertes = byCat[catk].filter(r => couv[String(r.id)]);
+    const vides = byCat[catk].filter(r => !couv[String(r.id)]);
+    const ouvert = !!f2FoldOpen[catk];
+    return '<div class="f2-cat"><div class="f2-cath">' + esc(F2_REF_CATS[catk] || catk) +
+      (couvertes.length ? '' : ' <span style="font-weight:400;text-transform:none;letter-spacing:0">— aucune couverte</span>') +
+      '</div>' +
+      (couvertes.length ? '<div class="f2-cgrid">' + couvertes.map(carte).join('') + '</div>' : '') +
+      (vides.length
+        ? '<div class="f2-fold">' +
+            '<button type="button" class="f2-fold-btn' + (ouvert ? ' open' : '') + '" data-f2fold="' + escAttr(catk) + '">' +
+              '<span class="chev">&#9656;</span>' + vides.length + ' non couverte' + (vides.length > 1 ? 's' : '') +
+            '</button>' +
+            (ouvert ? '<div class="f2-fold-body"><div class="f2-cgrid">' + vides.map(carte).join('') + '</div></div>' : '') +
+          '</div>'
+        : '') +
+    '</div>';
+  }).join('');
 
   const nonCouv = (st.total || 0) - (st.couvert || 0);
   return '<div class="f2-block full" style="margin-bottom:14px">' +
@@ -5331,8 +5429,14 @@ function _f2TabCertifs(f, cache){
   '</div>';
 }
 function _f2BindCertifs(f){
-  const b = document.getElementById('f2-body').querySelector('#f2-goto-qualite');
+  const body = document.getElementById('f2-body');
+  const b = body.querySelector('#f2-goto-qualite');
   if (b) b.onclick = () => { window.open('/qualite#ressources-list', '_blank'); };
+  body.querySelectorAll('[data-f2fold]').forEach(btn => btn.onclick = () => {
+    const k = btn.dataset.f2fold;
+    f2FoldOpen[k] = !f2FoldOpen[k];
+    _f2PaintFiche();
+  });
 }
 
 // ─── Onglet Contacts ──────────────────────────────────────────────
