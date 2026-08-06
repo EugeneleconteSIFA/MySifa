@@ -1942,7 +1942,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
-<script src="/static/chat_widget_v2.js?v=8"></script>
+<script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script>
 /*__TRACA_GUIDE__*/

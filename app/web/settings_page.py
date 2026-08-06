@@ -2792,7 +2792,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
-<script src="/static/chat_widget_v2.js?v=8"></script>
+<script src="/static/chat_widget_v2.js?v=9"></script>
 <script>
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;

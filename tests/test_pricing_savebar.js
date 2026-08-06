@@ -74,6 +74,11 @@ check('le bandeau est fixe', regleBar.includes('position:fixed'), true);
 check('il n\'est plus seulement collant', regleBar.includes('position:sticky'), false);
 check('son fond est opaque', regleBar.includes('background-color:var(--card)'), true);
 check('l\'espaceur a une hauteur de repli', /\.savebar-spacer\{height:\d+px\}/.test(css), true);
+// Le bandeau rouge de staging est fixe lui aussi : le `padding-top` posé sur le
+// body décale le flux, pas un élément fixe. Sans règle dédiée, le bandeau
+// d'actions passait par-dessus le rouge.
+check('le bandeau passe sous celui de staging',
+  css.includes('body.has-staging-bandeau .pr-savebar{top:44px}'), true);
 check('chaque bandeau a son espaceur',
   (src.match(/class="savebar-spacer"/g) || []).length,
   (src.match(/class="pr-savebar"/g) || []).length);

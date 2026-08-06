@@ -1572,7 +1572,9 @@
     const spacer = document.querySelector(".savebar-spacer");
     if (!bar || !spacer) return;
     const maj = () => {
-      spacer.style.height = bar.offsetHeight + 24 + "px";
+      // Hauteur du bandeau + l'espace qui le séparait du contenu quand il était
+      // encore dans le flux.
+      spacer.style.height = bar.offsetHeight + 16 + "px";
     };
     maj();
     if (typeof ResizeObserver === "function") {

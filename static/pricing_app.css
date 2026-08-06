@@ -251,7 +251,7 @@ table.pr-table tr{cursor:pointer}
    qu'on soit en haut de la fiche ou dans le récapitulatif tout en bas. Le fond
    doit être OPAQUE — `--accent-bg` est un rgba, un simple dégradé laisserait la
    page défiler en transparence derrière le bandeau. */
-.pr-savebar{position:fixed;top:14px;left:244px;right:24px;max-width:1180px;margin:0 auto;
+.pr-savebar{position:fixed;top:20px;left:244px;right:24px;max-width:1180px;margin:0 auto;
   z-index:60;display:flex;flex-wrap:wrap;gap:10px;align-items:center;
   padding:10px 14px;
   background-color:var(--card);
@@ -262,6 +262,11 @@ table.pr-table tr{cursor:pointer}
    tient la place. Hauteur de repli ici, hauteur réelle posée par
    `syncSavebarSpacer` (le bandeau passe sur deux lignes en écran étroit). */
 .savebar-spacer{height:82px}
+/* Le bandeau rouge de staging est lui aussi `fixed`, 24px de haut. Le
+   `padding-top` que `mysifa_impersonate.js` pose sur le body décale le flux
+   normal, pas un élément fixe : sans cette règle, le bandeau d'actions passe
+   par-dessus le rouge. Le décalage aligne le bandeau sur le haut du contenu. */
+body.has-staging-bandeau .pr-savebar{top:44px}
 .pr-savebar .savebar-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto}
 .pr-savebar .btn-soft{background:var(--card)}
 .pr-savebar .btn-soft:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
@@ -273,7 +278,8 @@ table.pr-table tr{cursor:pointer}
   .pr-savebar{left:16px;right:16px}
 }
 @media(max-width:640px){
-  .pr-savebar{gap:8px;top:10px}
+  .pr-savebar{gap:8px;top:14px}
+  body.has-staging-bandeau .pr-savebar{top:38px}
   .pr-savebar .savebar-state{order:3;width:100%}
   .savebar-spacer{height:118px}
 }
