@@ -749,6 +749,98 @@ def _four_stats_couverture(entries, total_referentiel):
     return s
 
 
+# ─── Date d'expiration FSC : le document déposé fait foi ─────────────
+#
+# La date vivait à deux endroits : `fournisseurs_fsc.fsc_date_expiration`
+# (saisie à la main dans les Paramètres) et le certificat PDF déposé dans
+# MyQualité, qui porte sa propre `date_expiration`. Deux saisies, deux
+# chances de diverger — et c'est arrivé (badge « échéance inconnue » alors
+# que le certificat déposé était valide jusqu'en 2027).
+#
+# Règle retenue : le document fait foi. La colonne reste écrite parce que
+# tout l'aval la lit (contrôle au BL, registre FSC), mais elle devient
+# DÉRIVÉE — resynchronisée depuis le document, plus saisie.
+
+def _four_fiche_fsc_id(ref):
+    """id de la fiche « FSC » dans le référentiel RSE, ou None."""
+    for r in ref:
+        if (r.get("slug") or "").strip().lower() == "fsc":
+            return r["id"]
+    for r in ref:
+        if (r.get("acronyme") or "").strip().upper() == "FSC":
+            return r["id"]
+    return None
+
+
+def _four_fsc_doc(entries, fiche_fsc_id):
+    """Entrée de couverture correspondant au certificat FSC, ou None."""
+    if not fiche_fsc_id:
+        return None
+    return (entries or {}).get(fiche_fsc_id)
+
+
+def _four_sync_fsc_dates(conn, ref, couv, only_id=None):
+    """Aligne fsc_date_expiration sur la date du certificat FSC déposé.
+
+    N'écrit que s'il y a une différence, et jamais dans l'autre sens : un
+    fournisseur sans certificat déposé garde sa date saisie à la main.
+    Renvoie la liste des changements pour le journal d'audit.
+    """
+    fiche_id = _four_fiche_fsc_id(ref)
+    if not fiche_id:
+        return []
+    q = "SELECT id, nom, fsc_date_expiration, has_fsc FROM fournisseurs_fsc"
+    params = ()
+    if only_id is not None:
+        q += " WHERE id=?"
+        params = (only_id,)
+    changes = []
+    for row in conn.execute(q, params).fetchall():
+        doc = _four_fsc_doc(couv.get(row["id"]), fiche_id)
+        if not doc or not doc.get("date_expiration"):
+            continue
+        avant = row["fsc_date_expiration"]
+        apres = str(doc["date_expiration"])[:10]
+        if avant == apres:
+            continue
+        conn.execute(
+            "UPDATE fournisseurs_fsc SET fsc_date_expiration=? WHERE id=?",
+            (apres, row["id"]),
+        )
+        changes.append({"id": row["id"], "nom": row["nom"],
+                        "avant": avant, "apres": apres,
+                        "certificat_id": doc.get("certificat_id"),
+                        "niveau": doc.get("niveau")})
+    if changes:
+        conn.commit()
+    return changes
+
+
+@router.post("/api/fournisseurs/sync-fsc-certificats")
+def sync_fsc_certificats(request: Request):
+    """Resynchronise les dates d'expiration FSC depuis les certificats déposés.
+
+    Appelé silencieusement à l'ouverture de l'onglet Fournisseurs, et
+    disponible en bouton pour voir le rapport. Idempotent.
+    """
+    user = require_settings(request)
+    from database import get_db
+    with get_db() as conn:
+        ref = _four_load_referentiel(conn)
+        couv, _meta = _four_load_couverture(conn)
+        changes = _four_sync_fsc_dates(conn, ref, couv)
+    if changes:
+        log_action(
+            user=user,
+            action="UPDATE",
+            module="settings",
+            objet=f"Sync FSC depuis certificats ({len(changes)})",
+            detail={"changes": changes},
+            ip=request.client.host if request.client else None,
+        )
+    return {"success": True, "updated": changes, "count": len(changes)}
+
+
 @router.get("/api/fournisseurs/referentiel-certifications")
 def list_referentiel_certifications(request: Request):
     """Catalogue du référentiel RSE + couverture agrégée de chaque fournisseur.
@@ -767,11 +859,13 @@ def list_referentiel_certifications(request: Request):
         couv, _meta = _four_load_couverture(conn)
         ids = [r["id"] for r in conn.execute("SELECT id FROM fournisseurs_fsc").fetchall()]
 
+    fiche_fsc = _four_fiche_fsc_id(ref)
     by_id = {r["id"]: r for r in ref}
     out = {}
     for fid in ids:
         entries = couv.get(fid, {})
         st = _four_stats_couverture(entries, len(ref))
+        doc_fsc = _four_fsc_doc(entries, fiche_fsc)
         # Les 3 acronymes les plus « sains » d'abord : c'est ce que la
         # cellule de liste affiche avant le « +N ».
         top = sorted(
@@ -787,8 +881,8 @@ def list_referentiel_certifications(request: Request):
             ),
             key=lambda x: (_FOUR_CERT_RANG.get(x["statut"], 9), x["acronyme"]),
         )
-        out[str(fid)] = {"stats": st, "top": top}
-    return {"referentiel": ref, "couverture": out}
+        out[str(fid)] = {"stats": st, "top": top, "fsc_doc": doc_fsc}
+    return {"referentiel": ref, "couverture": out, "fiche_fsc_id": fiche_fsc}
 
 
 @router.get("/api/fournisseurs/{fournisseur_id}/certifications")
@@ -847,12 +941,18 @@ def fournisseur_certifications(fournisseur_id: int, request: Request):
     documents.sort(key=lambda d: (d["niveau"] != "branche", d["titre"].lower()))
 
     entries = couv.get(fournisseur_id, {})
+    fiche_fsc = _four_fiche_fsc_id(ref)
     return {
         "fournisseur": dict(four),
         "referentiel": ref,
         "couverture": {str(k): v for k, v in entries.items()},
         "documents": documents,
         "stats": _four_stats_couverture(entries, len(ref)),
+        # Le certificat qui porte la date d'expiration FSC. Quand il existe,
+        # le champ date des Paramètres passe en lecture seule : c'est lui la
+        # source, la colonne n'en est que le reflet.
+        "fiche_fsc_id": fiche_fsc,
+        "fsc_doc": _four_fsc_doc(entries, fiche_fsc),
     }
 
 
@@ -1204,6 +1304,21 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
             fsc_date_expiration = _parse_fsc_date_expiration(body.get("fsc_date_expiration"))
         else:
             fsc_date_expiration = ex["fsc_date_expiration"] if "fsc_date_expiration" in ex_cols else None
+
+        # Le certificat déposé dans MyQualité fait foi. Si ce fournisseur en a
+        # un, sa date écrase ce que le body propose : sans ce garde-fou, un
+        # onglet resté ouvert (ou un appel direct à l'API) pourrait réintroduire
+        # la divergence que la synchro vient de corriger.
+        try:
+            ref_rse = _four_load_referentiel(conn)
+            fiche_fsc = _four_fiche_fsc_id(ref_rse)
+            if fiche_fsc:
+                couv_all, _m = _four_load_couverture(conn)
+                doc_fsc = _four_fsc_doc(couv_all.get(fournisseur_id), fiche_fsc)
+                if doc_fsc and doc_fsc.get("date_expiration"):
+                    fsc_date_expiration = str(doc_fsc["date_expiration"])[:10]
+        except Exception:
+            pass  # MyQualité absent : on garde la saisie manuelle
         # Un fournisseur non certifié ne peut pas porter de date d'expiration
         # de certificat : la garder laisserait une donnée orpheline que le
         # contrôle de validité interpréterait de travers.
