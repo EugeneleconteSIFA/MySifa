@@ -230,6 +230,39 @@ def _event_closed_by_id(conn, event_id: int) -> bool:
     return _event_is_closed({"date_prevue": row["date_prevue"]}) if row else False
 
 
+def _event_source_by_id(conn, event_id: int) -> str:
+    row = conn.execute(
+        "SELECT source FROM maintenance_events WHERE id=?", (event_id,)
+    ).fetchone()
+    return (row["source"] or "") if row else ""
+
+
+def _operateur_proprietaire_constat(conn, event_id: int, user_id: int) -> bool:
+    """Vrai si ce creneau est un constat cree par CET operateur.
+
+    Meme regle que _can_operator_manage_event, en une requete au lieu d'un
+    _load_event_full complet : on n'a besoin que de la source et du createur.
+    """
+    row = conn.execute(
+        "SELECT source, created_by FROM maintenance_events WHERE id=?", (event_id,)
+    ).fetchone()
+    if not row:
+        return False
+    return (row["source"] or "") == "non_planifie" and row["created_by"] == user_id
+
+
+def _event_est_constat(conn, event_id: int) -> bool:
+    """Vrai si le creneau est un CONSTAT d'operation realisee, pas du planning.
+
+    Distinction posee en v2.6.1 dans create_event : `planifie` = le planning,
+    qu'on n'ecrit pas dans le passe ; toute autre source = l'enregistrement
+    d'une intervention deja faite, qui doit rester saisissable a posteriori.
+    C'est le mode de saisie normal d'une intervention faite la veille et
+    enregistree le lendemain.
+    """
+    return _event_source_by_id(conn, event_id) != "planifie"
+
+
 def _assert_correction_allowed(conn, event_id: int, maint_role: str) -> None:
     """Créneau clôturé : la CORRECTION d'une saisie reste possible, à l'admin.
 
@@ -945,12 +978,42 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
         # v2.7.0 : créneau clôturé -> correction admin uniquement. Et on ne
         # solde plus une opération jamais saisie : ce serait de la saisie
         # rétroactive, pas une correction.
-        _assert_correction_allowed(conn, event_id, maint_role)
-        if _event_closed_by_id(conn, event_id) and (row["statut"] or "") not in ("termine", "invalidee"):
+        #
+        # v2.7.2 : une exception, et une seule — la SAISIE INITIALE par un
+        # opérateur de son propre constat. Consigner l'intervention qu'on a
+        # faite la veille n'est pas corriger l'historique de quelqu'un
+        # d'autre : c'est l'écrire pour la première fois. Sans cette porte,
+        # l'opérateur qui oublie de saisir sa journée doit passer par un admin
+        # le lendemain, alors que POST /events l'autorise à créer le constat.
+        # La condition « jamais soldée » est ce qui distingue les deux : dès
+        # qu'une saisie existe, on retombe sur la règle admin.
+        _saisie_initiale_operateur = (
+            maint_role == "operator"
+            and (row["statut"] or "") not in ("termine", "invalidee")
+            and _operateur_proprietaire_constat(conn, event_id, user["id"])
+        )
+        if not _saisie_initiale_operateur:
+            _assert_correction_allowed(conn, event_id, maint_role)
+        # v2.7.2 — la regle ne vaut que pour le PLANNING (source='planifie').
+        #
+        # « Enregistrer une operation » cree un creneau `non_planifie` a la date
+        # de l'intervention, puis solde son op par ce PATCH. Sur une date passee,
+        # le garde-fou ci-dessous se declenchait et renvoyait un message qui
+        # recommandait... l'enregistrement d'operation, c'est-a-dire exactement
+        # ce que l'utilisateur etait en train de faire. Enregistrer une
+        # intervention passee etait donc impossible depuis v2.7.0.
+        #
+        # create_event pose deja la meme distinction (v2.6.1) : il refuse une
+        # date passee pour `planifie` et l'autorise explicitement pour les
+        # constats. Ce garde-fou s'aligne dessus.
+        if (_event_closed_by_id(conn, event_id)
+                and not _event_est_constat(conn, event_id)
+                and (row["statut"] or "") not in ("termine", "invalidee")):
             raise HTTPException(
                 status_code=403,
-                detail="Ce créneau est passé : une opération qui n'a pas été saisie "
-                       "ne peut plus l'être. Utilise l'enregistrement d'opération.",
+                detail="Ce créneau passé était planifié : une opération qui n'a pas "
+                       "été saisie ne peut plus l'être. Utilise l'enregistrement "
+                       "d'opération pour consigner ce qui a réellement été fait.",
             )
 
         if maint_role == "operator" and not _user_in_group(conn, event_id, user["id"]):
