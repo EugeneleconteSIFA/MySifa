@@ -14,6 +14,118 @@
   let mentionFocusIdx = -1;
   let v2Patched = false;
   let cwReplyTo = null; // { id, user_nom, body }
+  let cwPasteBound = false;
+
+  // Contraintes alignées sur app/routers/chat.py
+  // (_ALLOWED_ATTACHMENT_EXT et _MAX_ATTACHMENT).
+  const CW_ATTACH_EXT = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.pdf', '.doc', '.docx',
+                         '.xls', '.xlsx', '.ppt', '.pptx', '.txt', '.csv', '.zip'];
+  const CW_ATTACH_MAX = 10 * 1024 * 1024;
+
+  function cwv2Toast(msg, type) {
+    try {
+      if (typeof window.showToast === 'function') { window.showToast(msg, type); return; }
+    } catch (e) {}
+    let el = document.getElementById('cw-mini-toast');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'cw-mini-toast';
+      el.style.cssText = 'position:fixed;bottom:88px;left:50%;transform:translateX(-50%);z-index:9999;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 16px;box-shadow:0 6px 20px rgba(0,0,0,.25);color:var(--text);font-family:inherit;font-size:13px;font-weight:600';
+      document.body.appendChild(el);
+    }
+    el.textContent = msg;
+    el.style.borderColor = (type === 'danger') ? 'var(--danger)' : (type === 'success' ? 'var(--success)' : 'var(--border)');
+    el.style.opacity = '1';
+    clearTimeout(el._t);
+    el._t = setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity .3s'; }, 2600);
+  }
+
+  function cwFileExt(name) {
+    const s = String(name || '');
+    const i = s.lastIndexOf('.');
+    return i < 0 ? '' : s.slice(i).toLowerCase();
+  }
+
+  // Image collée sans nom exploitable (capture d'écran, image copiée depuis
+  // une page web) → capture-AAAAMMJJ-HHMMSS.<ext>.
+  function cwNameBlob(f) {
+    const raw = f.name || '';
+    if (raw && raw !== 'image.png' && raw !== 'blob' && cwFileExt(raw)) return f;
+    const t = (f.type || 'image/png').split(';')[0];
+    let ext = '.' + (t.split('/')[1] || 'png').split('+')[0];
+    if (ext === '.jpeg') ext = '.jpg';
+    const d = new Date();
+    const p2 = (n) => String(n).padStart(2, '0');
+    const nom = 'capture-' + d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + '-' +
+                p2(d.getHours()) + p2(d.getMinutes()) + p2(d.getSeconds()) + ext;
+    try { return new File([f], nom, { type: t }); } catch (e) { return f; }
+  }
+
+  // Affiche (ou retire) le chip "fichier en attente" du widget.
+  function cwRenderPending(CW, f) {
+    CW.pendingFile = f || null;
+    const row = document.getElementById('cw-pending-row');
+    if (!row) return;
+    if (!f) {
+      row.classList.remove('cw-show');
+      row.innerHTML = '';
+      return;
+    }
+    row.classList.add('cw-show');
+    row.innerHTML = '<div class="cw-pending-chip"><span>' + CW.escCW(f.name) +
+                    '</span><button type="button" aria-label="Retirer">×</button></div>';
+    row.querySelector('button')?.addEventListener('click', () => cwRenderPending(CW, null));
+  }
+
+  // Valide puis arme un fichier en pièce jointe. Renvoie true si accepté.
+  function cwAcceptFile(CW, file) {
+    if (!file) return false;
+    const f = cwNameBlob(file);
+    const ext = cwFileExt(f.name);
+    if (CW_ATTACH_EXT.indexOf(ext) < 0) {
+      cwv2Toast('Format refusé' + (ext ? ' (' + ext + ')' : '') + ' — images, PDF, Office, txt, csv, zip.', 'danger');
+      return false;
+    }
+    if (f.size > CW_ATTACH_MAX) {
+      cwv2Toast('Fichier trop volumineux — 10 Mo maximum.', 'danger');
+      return false;
+    }
+    cwRenderPending(CW, f);
+    return true;
+  }
+
+  // Collage d'un fichier (Cmd/Ctrl+V) — actif seulement quand le panneau
+  // est ouvert sur une conversation.
+  function cwBindPaste(CW) {
+    if (cwPasteBound) return;
+    cwPasteBound = true;
+    document.addEventListener('paste', (e) => {
+      if (!CW.activeId) return;
+      const panel = document.getElementById('cw-panel');
+      if (!panel || panel.classList.contains('cw-hidden')) return;
+      const t = e.target;
+      if (t && t.closest && t.closest('input,textarea,[contenteditable="true"]') && t.id !== 'cw-input') return;
+      const dt = e.clipboardData;
+      if (!dt) return;
+      const types = dt.types ? Array.prototype.slice.call(dt.types) : [];
+      if (types.indexOf('Files') < 0) return; // collage de texte : natif
+      const files = [];
+      if (dt.files && dt.files.length) {
+        for (let i = 0; i < dt.files.length; i++) files.push(dt.files[i]);
+      } else if (dt.items && dt.items.length) {
+        for (let i = 0; i < dt.items.length; i++) {
+          if (dt.items[i].kind === 'file') {
+            const f = dt.items[i].getAsFile();
+            if (f) files.push(f);
+          }
+        }
+      }
+      if (!files.length) return;
+      e.preventDefault();
+      if (files.length > 1) cwv2Toast('Un seul fichier par message — le premier a été joint.', 'info');
+      if (cwAcceptFile(CW, files[0])) document.getElementById('cw-input')?.focus();
+    });
+  }
 
   function waitCW() {
     return new Promise((resolve) => {
@@ -131,7 +243,7 @@
       '<input type="file" id="cw-file-input" accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip">' +
       '<button type="button" id="cw-action-expand" aria-label="Plus d\'options">+</button>' +
       '<div id="cw-action-btns">' +
-      '<button type="button" id="cw-attach" aria-label="Pièce jointe" title="Pièce jointe">' +
+      '<button type="button" id="cw-attach" aria-label="Pièce jointe" title="Pièce jointe — ou collez un fichier avec Cmd/Ctrl+V">' +
       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button>' +
       '<button type="button" id="cw-poll-btn" aria-label="Sondage" title="Sondage">' +
       '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 8 8 4" fill="none"/><line x1="12" y1="6" x2="21" y2="6"/><rect x="3" y="10" width="6" height="4" rx="1" fill="none"/><line x1="12" y1="12" x2="21" y2="12"/><rect x="3" y="16" width="6" height="4" rx="1" fill="none"/><line x1="12" y1="18" x2="21" y2="18"/></svg></button>' +
@@ -145,28 +257,12 @@
     if (fileInp) {
       fileInp.addEventListener('change', () => {
         const f = fileInp.files && fileInp.files[0];
-        CW.pendingFile = f || null;
-        const row = document.getElementById('cw-pending-row');
-        if (row) {
-          if (!f) {
-            row.classList.remove('cw-show');
-            row.innerHTML = '';
-          } else {
-            row.classList.add('cw-show');
-            row.innerHTML =
-              '<div class="cw-pending-chip"><span>' +
-              CW.escCW(f.name) +
-              '</span><button type="button" aria-label="Retirer">×</button></div>';
-            row.querySelector('button')?.addEventListener('click', () => {
-              CW.pendingFile = null;
-              row.classList.remove('cw-show');
-              row.innerHTML = '';
-            });
-          }
-        }
+        if (f) cwAcceptFile(CW, f);
+        else cwRenderPending(CW, null);
         fileInp.value = '';
       });
     }
+    cwBindPaste(CW);
     document.getElementById('cw-action-expand')?.addEventListener('click', toggleActions);
     document.getElementById('cw-gif-btn')?.addEventListener('click', () => {
       closeActions();

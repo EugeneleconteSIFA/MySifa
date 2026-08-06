@@ -85,11 +85,20 @@ def _pricing_html_response(request: Request) -> HTMLResponse:
     return HTMLResponse(content=html, headers=_NO_CACHE)
 
 
+# Le routage se fait côté client (`parseRoute` dans pricing_app.js) : la
+# navigation interne passe par `history.pushState`, le serveur n'est pas
+# sollicité. Un rechargement forcé, un favori ou un lien collé, eux, arrivent
+# bien ici — et toute URL sans route déclarée renvoyait un
+# `{"detail":"Not Found"}` sur fond noir. Chaque route cliente doit donc avoir
+# sa route serveur, qui rend la même coquille : `tests/test_pricing_routes.py`
+# compare les deux listes.
 @router.get("/pricing", response_class=HTMLResponse)
 @router.get("/pricing/materials", response_class=HTMLResponse)
 @router.get("/pricing/materials/new", response_class=HTMLResponse)
 @router.get("/pricing/products", response_class=HTMLResponse)
 @router.get("/pricing/products/new", response_class=HTMLResponse)
+@router.get("/pricing/mystock", response_class=HTMLResponse)
+@router.get("/pricing/mystock/produit/new", response_class=HTMLResponse)
 @router.get("/pricing/settings", response_class=HTMLResponse)
 def pricing_shell(request: Request):
     return _pricing_html_response(request)
@@ -106,6 +115,22 @@ def pricing_material_edit(request: Request, material_id: str):
 def pricing_product_edit(request: Request, product_id: str):
     if product_id == "new" or not re.fullmatch(r"\d+", product_id):
         return RedirectResponse(url="/pricing/products", status_code=302)
+    return _pricing_html_response(request)
+
+
+# Déclarée AVANT `/pricing/mystock/{declinaison_id}` : FastAPI retient la
+# première route qui correspond, et `{declinaison_id}` avalerait « produit ».
+@router.get("/pricing/mystock/produit/{produit_id}", response_class=HTMLResponse)
+def pricing_mystock_produit_edit(request: Request, produit_id: str):
+    if produit_id == "new" or not re.fullmatch(r"\d+", produit_id):
+        return RedirectResponse(url="/pricing/products", status_code=302)
+    return _pricing_html_response(request)
+
+
+@router.get("/pricing/mystock/{declinaison_id}", response_class=HTMLResponse)
+def pricing_mystock_declinaison(request: Request, declinaison_id: str):
+    if not re.fullmatch(r"\d+", declinaison_id):
+        return RedirectResponse(url="/pricing/materials", status_code=302)
     return _pricing_html_response(request)
 
 
