@@ -26,7 +26,11 @@ from app.services.email_service import (
     email_expe_rfq_transport,
     send_email,
 )
-from config import public_base_url
+from config import (
+    EXPE_MOTIF_SANS_DOSSIER_NOTE_REQUISE,
+    EXPE_MOTIFS_SANS_DOSSIER,
+    public_base_url,
+)
 from app.services import expe_evenements as expe_ev
 from app.services.expe_transporteurs_seed import seed_expe_transporteurs_if_empty
 from database import get_db
@@ -462,6 +466,84 @@ def _validate_planning_entry_id(conn, value) -> Optional[int]:
     return pid
 
 
+def _resoudre_rattachement(conn, body: dict, user: dict,
+                           depart_id: Optional[int] = None) -> dict:
+    """Un départ est rattaché à un dossier, ou il déclare pourquoi il ne l'est pas.
+
+    Il n'y a pas de troisième possibilité, et c'est tout l'objet de cette
+    fonction. La mesure sur la base de production a montré 19 départs rattachés
+    sur 2783 : le lien existait dans l'écran, personne ne le remplissait, et
+    aucune expédition n'était remontable jusqu'à la matière. Rendre le
+    rattachement obligatoire sans porte de sortie aurait bloqué les envois qui
+    n'ont légitimement pas de dossier — stock ancien, sous-traitance,
+    échantillons, palettes vides. D'où la déclaration.
+
+    La déclaration n'est pas un contournement : elle produit une chaîne courte
+    mais complète, adossée à un motif, exactement comme une livraison directe
+    du module négoce. Ce qu'elle remplace, c'est le silence — et le silence est
+    la seule chose qu'un auditeur ne peut pas interpréter.
+
+    Renvoie les champs à écrire. Lève un 400 explicite si ni l'un ni l'autre.
+    """
+    a_dossier = _validate_planning_entry_id(conn, body.get("planning_entry_id")) is not None
+
+    # En modification, on ne juge que ce qui est effectivement envoyé : un PUT
+    # qui ne touche qu'au poids ne doit pas exiger de re-motiver le départ.
+    if depart_id is not None:
+        touche = "planning_entry_id" in body or "sans_dossier" in body
+        if not touche:
+            return {}
+        if not a_dossier and "planning_entry_id" not in body:
+            ex = conn.execute(
+                "SELECT planning_entry_id FROM expe_departs WHERE id=?", (depart_id,)
+            ).fetchone()
+            a_dossier = bool(ex and ex["planning_entry_id"])
+
+    # Un départ rattaché n'a rien à déclarer : le dossier prime, et on efface
+    # une éventuelle déclaration devenue sans objet.
+    if a_dossier:
+        return {"sans_dossier": 0, "sans_dossier_motif": None, "sans_dossier_note": None,
+                "sans_dossier_par": None, "sans_dossier_le": None}
+
+    declare = body.get("sans_dossier") in (1, True, "1", "true", "True")
+    if not declare:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Rattachement manquant : sélectionnez le dossier de fabrication, "
+                "ou cochez « Envoi non lié à une production » en précisant le motif. "
+                "Sans l'un des deux, cette expédition ne pourra pas être remontée "
+                "jusqu'à la matière lors d'un audit FSC."
+            ),
+        )
+
+    motif = (body.get("sans_dossier_motif") or "").strip()
+    if motif not in EXPE_MOTIFS_SANS_DOSSIER:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Motif invalide. Valeurs attendues : "
+                + ", ".join(EXPE_MOTIFS_SANS_DOSSIER) + "."
+            ),
+        )
+    note = (body.get("sans_dossier_note") or "").strip() or None
+    if motif in EXPE_MOTIF_SANS_DOSSIER_NOTE_REQUISE and not note:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Motif « {EXPE_MOTIFS_SANS_DOSSIER[motif]} » : précisez la raison.",
+        )
+
+    return {
+        "sans_dossier": 1,
+        "sans_dossier_motif": motif,
+        "sans_dossier_note": note,
+        # Qui a déclaré, et quand. Une régularisation d'historique est une
+        # écriture sur le passé : non tracée, elle est indéfendable en audit.
+        "sans_dossier_par": (user.get("email") or user.get("identifiant") or "").strip() or None,
+        "sans_dossier_le": datetime.now(_PARIS).replace(tzinfo=None).isoformat(timespec="seconds"),
+    }
+
+
 def _cle_no_bl(valeur: Any) -> str:
     """Forme normalisée d'un n° de BL, pour la comparaison seulement.
 
@@ -736,6 +818,7 @@ def create_depart(request: Request, body: dict = Body(...)):
         palette_europe_note = _f("palette_europe_note") if palette_europe else None
         if not body.get("no_bl_doublon_confirme"):
             _check_no_bl_unique(conn, body.get("no_bl"))
+        rattachement = _resoudre_rattachement(conn, body, user)
         cur = conn.execute(
             """INSERT INTO expe_departs (
                 date_enlevement, affreteurs, transporteur, transporteur_id, client,
@@ -772,10 +855,18 @@ def create_depart(request: Request, body: dict = Body(...)):
             ),
         )
         rid = cur.lastrowid
-        # Avant le commit : le départ et sa référence de dossier entrent en base
-        # dans la même transaction. Un départ enregistré sans son `no_dossier`,
-        # même une fraction de seconde, est un trou dans la chaîne de contrôle.
+        # Avant le commit : le départ, sa référence de dossier et, à défaut, sa
+        # déclaration entrent en base dans la même transaction. Un départ
+        # enregistré sans l'un des deux, même une fraction de seconde, est un
+        # trou dans la chaîne de contrôle.
         _sync_no_dossier(conn, rid)
+        if rattachement:
+            conn.execute(
+                "UPDATE expe_departs SET "
+                + ", ".join(f"{k}=?" for k in rattachement)
+                + " WHERE id=?",
+                (*rattachement.values(), rid),
+            )
         conn.commit()
         row = conn.execute(
             f"{_DEPARTS_SELECT} WHERE d.id=?", (rid,)
@@ -948,7 +1039,11 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
         sets.append("palette_europe_note=?")
         args.append(body.get("palette_europe_note") or None)
 
-    if not sets:
+    # `sans_dossier` seul est une modification légitime : c'est le geste de
+    # régularisation d'un départ historique, où rien d'autre ne change. Les
+    # colonnes correspondantes sont ajoutées à `sets` plus bas, une fois la
+    # connexion ouverte (la validation du motif a besoin de la base).
+    if not sets and "sans_dossier" not in body:
         raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour")
 
     with get_db() as conn:
@@ -972,6 +1067,9 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
             raise HTTPException(status_code=409, detail="Modification impossible : départ annulé")
         if "no_bl" in body and not body.get("no_bl_doublon_confirme"):
             _check_no_bl_unique(conn, body.get("no_bl"), exclure_id=depart_id)
+        for champ, valeur in _resoudre_rattachement(conn, body, user, depart_id).items():
+            sets.append(f"{champ}=?")
+            args.append(valeur)
 
         conn.execute(f"UPDATE expe_departs SET {', '.join(sets)} WHERE id=?", (*args, depart_id))
         if "planning_entry_id" in body:

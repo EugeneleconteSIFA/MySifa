@@ -280,6 +280,29 @@ FSC_WARNING_PROD = os.getenv(
     "entrée du produit fini en stock Z1 obligatoire",
 )
 
+# Motifs d'un départ NON rattaché à un dossier de fabrication.
+#
+# Toutes les expéditions ne sortent pas d'une production : on expédie du stock
+# ancien, de la sous-traitance, des échantillons, des palettes vides. Ces
+# départs-là n'ont pas de dossier, et c'est normal.
+#
+# Ce qui ne l'est pas, c'est de ne pas savoir lequel est lequel. Une case
+# « pas lié à une production » sans motif produit deux mille lignes muettes
+# dont un auditeur ne peut rien tirer. Avec un motif, chaque ligne se défend
+# seule — et si « autre » domine, c'est que cette liste est incomplète.
+EXPE_MOTIFS_SANS_DOSSIER = {
+    "stock_ancien":   "Stock ancien — production antérieure au suivi",
+    "sous_traitance": "Sous-traitance / façonnage extérieur",
+    "negoce":         "Négoce — produit fini acheté",
+    "echantillon":    "Échantillon, présérie ou maquette",
+    "retour_client":  "Retour ou réexpédition client",
+    "non_marchandise": "Envoi non marchand (palettes vides, matériel, documents)",
+    "autre":          "Autre (préciser)",
+}
+# Seul motif qui exige une justification écrite : sans elle, « autre » ne dit
+# rien de plus que la case à cocher qu'il est censé qualifier.
+EXPE_MOTIF_SANS_DOSSIER_NOTE_REQUISE = ("autre",)
+
 ROLES_PROD  = {ROLE_DIRECTION, ROLE_FABRICATION, ROLE_EXPEDITION, ROLE_COMMERCIAL, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
 ROLES_COMPTA = {ROLE_DIRECTION, ROLE_COMPTABILITE, ROLE_SUPERADMIN}
 ROLES_EXPE = {ROLE_DIRECTION, ROLE_EXPEDITION, ROLE_LOGISTIQUE, ROLE_COMMERCIAL, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
