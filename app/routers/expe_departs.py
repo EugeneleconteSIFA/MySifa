@@ -159,9 +159,11 @@ def _depart_dict(row) -> dict:
     if (d.get("type_colis") or "").strip().lower() == "vrac":
         d["type_palette_label"] = "Vrac"
     else:
-        ref = (d.get("type_palette_reference") or "").strip()
-        des = (d.get("type_palette_designation") or "").strip()
-        d["type_palette_label"] = (f"{ref} — {des}" if des else ref) if ref else None
+        # La seule chose qui compte à la lecture d'un départ, c'est la NATURE
+        # de la palette — Europe (consignée, à récupérer) ou Perdue. Les
+        # dimensions de la référence MyStock alourdissaient chaque cellule du
+        # tableau et chaque option du select sans jamais servir à décider.
+        d["type_palette_label"] = (d.get("type_palette_reference") or "").strip() or None
     return d
 
 

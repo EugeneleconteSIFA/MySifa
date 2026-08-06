@@ -3559,6 +3559,8 @@ EXPE_MAIN_CSS = r"""
 .expe-field-note{font-size:12px;color:var(--muted);line-height:1.4}
 .expe-rattach-ok{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;
   background:var(--accent-bg,rgba(58,123,213,.1));color:var(--accent);font-size:12.5px;font-weight:600}
+.expe-rattach-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:2px 0 4px}
+.expe-rattach-sep{font-size:12px;color:var(--muted)}
 /* Badge FSC — même langage visuel que `.fab-fsc-badge` de MyProd : un dossier
    certifié doit se reconnaître à l'identique d'un écran à l'autre. */
 .expe-fsc-badge{display:inline-flex;align-items:center;gap:4px;flex-shrink:0;
@@ -4206,9 +4208,7 @@ function expePaletteTypeLabel(row){
   const items=S.expePaletteTypes||[];
   const m=items.find(x=>String(x.id)===String(id));
   if(!m) return '—';
-  const ref=(m.reference||'').trim();
-  const des=(m.designation||'').trim();
-  return ref?(des?ref+' — '+des:ref):'—';
+  return (m.reference||'').trim() || '—';
 }
 async function loadExpeDepartJour(){
   if(S.app!=='expe')return;
@@ -4303,6 +4303,7 @@ function expeOpenDepartModal(prefill, mode){
   // En édition ou duplication : onglet manuel direct ; nouveau départ : onglet picker dossier
   const isEdit = !!(mode==='edit' && src && src.id);
   const initialTab = (mode==='new' && !prefill) ? 'dossier' : 'manuel';
+  S.expeDepartPickerRattachOnly = false;
   if(initialTab==='dossier'){
     void loadExpeDepartDossiers();
   }
@@ -4330,6 +4331,7 @@ function expeOpenDepartModal(prefill, mode){
       poids_total_kg: (src.poids_total_kg!=null && src.poids_total_kg!=='') ? String(src.poids_total_kg) : '',
       date_livraison: (src.date_livraison||'') ? String(src.date_livraison).slice(0,10) : '',
       planning_entry_id: (src.planning_entry_id!=null && src.planning_entry_id!=='') ? String(src.planning_entry_id) : '',
+      dossier_ref: src.planning_dossier_ref || src.planning_numero_of || '',
       fsc_requis: src.fsc_requis ? 1 : 0,
       fsc_type_requis: src.fsc_type_requis || '',
       sans_dossier: src.sans_dossier ? 1 : 0,
@@ -4340,7 +4342,8 @@ function expeOpenDepartModal(prefill, mode){
   });
 }
 function expeCloseDepartModal(){
-  set({expeDepartModalOpen:false, expeDepartEditId:null, expeDepartFormTab:'dossier'});
+  set({expeDepartModalOpen:false, expeDepartEditId:null, expeDepartFormTab:'dossier',
+       expeDepartPickerRattachOnly:false});
 }
 
 // Charge la liste des dossiers disponibles pour le picker MyExpé
@@ -4382,17 +4385,34 @@ function _expeFilterDossiers(q){
 function expeSelectDossier(d){
   if(!d) return;
   const f = S.expeDepartForm || {};
-  // ARC = pe.reference (numéro de dossier). On surcharge toujours.
-  f.arc = d.reference || f.arc || '';
-  f.client = d.client || f.client || '';
-  f.ref_sifa = d.ref_produit || f.ref_sifa || '';
-  f.date_livraison = (d.date_livraison||'').slice(0,10) || f.date_livraison || '';
+  // Deux usages du même picker, et ils ne doivent pas se confondre :
+  //
+  //   création    → le dossier PRÉREMPLIT le départ (ARC, client, réf produit,
+  //                 livraison). C'est le gain de saisie.
+  //   rattachement→ on relie un départ DÉJÀ saisi à son dossier, sans rien
+  //                 écraser. Écraser ici reviendrait à réécrire un ARC ou un
+  //                 client déjà validés pour la seule raison qu'on répare un
+  //                 lien de traçabilité — inacceptable sur de l'historique.
+  const rattachSeul = !!S.expeDepartPickerRattachOnly;
+  if(!rattachSeul){
+    // ARC = pe.reference (numéro de dossier). On surcharge toujours.
+    f.arc = d.reference || f.arc || '';
+    f.client = d.client || f.client || '';
+    f.ref_sifa = d.ref_produit || f.ref_sifa || '';
+    f.date_livraison = (d.date_livraison||'').slice(0,10) || f.date_livraison || '';
+  }
   f.planning_entry_id = d.id ? String(d.id) : '';
+  f.dossier_ref = d.reference || d.numero_of || '';
   // Le dossier prime : une déclaration « non lié à une production » devient
   // sans objet dès qu'un dossier est désigné.
   f.sans_dossier = 0; f.sans_dossier_motif = ''; f.sans_dossier_note = '';
   f.fsc_requis = d.fsc_requis ? 1 : 0;
   f.fsc_type_requis = d.fsc_type_requis || '';
+  if(rattachSeul){
+    set({expeDepartForm:f, expeDepartFormTab:'manuel', expeDepartPickerRattachOnly:false});
+    toast('Départ rattaché au dossier '+(d.reference||d.numero_of||''));
+    return;
+  }
   // Estimation nb palettes via fiche technique si dispo (cartons sol × hauteur ÷ ratio)
   // Si pas de donnée fiche : laisser vide pour saisie manuelle
   if(!f.nb_palette){
@@ -4516,20 +4536,30 @@ function renderExpeDepartModal(){
   const palSel=h('select',{name:'type_palette_matiere_id'});
   palSel.appendChild(h('option',{value:''},'— Sélectionner —'));
   paletteItems.forEach(m=>{
-    const ref=(m.reference||'').trim();
-    const des=(m.designation||'').trim();
-    const lbl=ref?(des?ref+' — '+des:ref):('Réf. #'+m.id);
+    const lbl=(m.reference||'').trim()||('Réf. #'+m.id);
     const opt=h('option',{value:String(m.id)},lbl);
     if(String(f.type_palette_matiere_id||'')===String(m.id)) opt.selected=true;
     palSel.appendChild(opt);
   });
-  const vracOpt=h('option',{value:'__vrac__'},'Vrac (sans palette — UPS…)');
+  const vracOpt=h('option',{value:'__vrac__'},'Vrac');
   if(f.type_palette_matiere_id==='__vrac__') vracOpt.selected=true;
   palSel.appendChild(vracOpt);
+  // Le suivi de retour n'a de sens que pour une palette consignée. Sur un
+  // type Europe on le coche d'office — c'est le cas normal, et l'oubli de la
+  // case était la première cause de palettes non réclamées ; sur tout autre
+  // type la question ne se pose pas, donc la case disparaît.
+  function _palEstEurope(idVal){
+    if(String(idVal||'')==='__vrac__') return false;
+    const m=(S.expePaletteTypes||[]).find(x=>String(x.id)===String(idVal||''));
+    return !!(m && Number(m.is_europe));
+  }
   palSel.addEventListener('change',e=>{
     S.expeDepartForm.type_palette_matiere_id=e.target.value;
+    S.expeDepartForm.palette_europe = _palEstEurope(e.target.value) ? 1 : 0;
     expeScheduleSaveLocal();
+    render();
   });
+  const estEurope = _palEstEurope(f.type_palette_matiere_id);
   const palField=h('div',{className:'expe-field'},
     h('label',null,'Type de palette'),
     palSel
@@ -4617,13 +4647,13 @@ function renderExpeDepartModal(){
     S.expeDepartForm.palette_europe = e.target.checked ? 1 : 0;
     expeScheduleSaveLocal();
   });
-  const europeField = h('div',{className:'expe-field'},
+  const europeField = estEurope ? h('div',{className:'expe-field'},
     h('label',null,'Palette Europe (consignée)'),
     h('div',{className:'expe-check'},
       europeCheck,
       h('label',{htmlFor:'expe-form-pal-europe'},'Suivre le retour dans l\'onglet Palettes Europe')
     )
-  );
+  ) : null;
 
   // ── Rattachement production ────────────────────────────────────
   // Un départ remonte à un dossier de fabrication, ou dit pourquoi il n'y
@@ -4670,24 +4700,47 @@ function renderExpeDepartModal(){
     expeScheduleSaveLocal();
   });
 
+  // Ouvre le picker en mode « rattachement seul » : on relie, on n'écrase pas.
+  function ouvrirPickerRattachement(){
+    set({expeDepartFormTab:'dossier', expeDepartPickerRattachOnly:true,
+         expeDepartDossierQuery:'', expeDepartDossierHi:-1});
+    void loadExpeDepartDossiers();
+  }
+  const btnRattacher = (txt)=>h('button',{type:'button',className:'btn-ghost',
+    style:{fontSize:'12px',padding:'6px 12px'},onClick:ouvrirPickerRattachement},
+    iconEl('folder',13),' ',txt);
+
   const rattachKids = [];
   if(aDossier){
-    rattachKids.push(h('div',{className:'expe-rattach-ok'},
-      iconEl('folder',13),
-      ' Rattaché au dossier '+((f.arc||'').trim()||'sélectionné'),
-      expeFscBadge(f)));
+    rattachKids.push(h('div',{className:'expe-rattach-row'},
+      h('span',{className:'expe-rattach-ok'},
+        iconEl('folder',13),
+        ' Rattaché au dossier '+((f.dossier_ref||f.arc||'').trim()||'sélectionné'),
+        expeFscBadge(f)),
+      btnRattacher('Changer'),
+      h('button',{type:'button',className:'btn-ghost',
+        style:{fontSize:'12px',padding:'6px 12px'},
+        onClick:()=>{
+          S.expeDepartForm.planning_entry_id='';
+          S.expeDepartForm.dossier_ref='';
+          S.expeDepartForm.fsc_requis=0;
+          S.expeDepartForm.fsc_type_requis='';
+          expeScheduleSaveLocal();
+          render();
+        }},'Détacher')
+    ));
   }else{
     const lbl = h('label',{htmlFor:'expe-form-sans-dossier'},
       'Envoi non lié à une production',
       h('small',null,'Stock ancien, sous-traitance, échantillon, palettes vides…'));
+    rattachKids.push(h('div',{className:'expe-rattach-row'},
+      btnRattacher('Rattacher à un dossier'),
+      h('span',{className:'expe-rattach-sep'},'ou')
+    ));
     rattachKids.push(h('div',{className:'expe-check'}, sansDossierCheck, lbl));
     if(f.sans_dossier){
       rattachKids.push(motifSel);
       if(String(f.sans_dossier_motif||'')==='autre') rattachKids.push(motifNote);
-    }else{
-      rattachKids.push(h('div',{className:'expe-field-note'},
-        'Sélectionnez un dossier dans l\'onglet « Depuis un dossier », ou cochez '
-        + 'ci-dessus si cet envoi ne sort pas d\'une production.'));
     }
   }
   const rattachField = h('div',{className:'expe-field expe-field--wide'},
@@ -4713,12 +4766,14 @@ function renderExpeDepartModal(){
     europeField
   );
 
+
   // Onglets internes : "Depuis un dossier" / "Saisie manuelle" — masqués en édition
   const tabsNav = !isEdit ? h('div',{className:'expe-form-tabs'},
     h('button',{type:'button',
       className:'expe-form-tab'+(formTab==='dossier'?' active':''),
       onClick:()=>{
-        set({expeDepartFormTab:'dossier', expeDepartDossierQuery:'', expeDepartDossierHi:-1});
+        set({expeDepartFormTab:'dossier', expeDepartPickerRattachOnly:false,
+             expeDepartDossierQuery:'', expeDepartDossierHi:-1});
         void loadExpeDepartDossiers();
       }},
       iconEl('folder',13),' Depuis un dossier'),
@@ -4728,9 +4783,10 @@ function renderExpeDepartModal(){
       iconEl('edit',13),' Saisie manuelle')
   ) : null;
 
-  // Picker dossier (onglet "Depuis un dossier")
+  // Picker dossier — accessible en création (onglet) ET en modification
+  // (bouton « Rattacher à un dossier » du bloc Rattachement production).
   let pickerBody = null;
-  if(!isEdit && formTab==='dossier'){
+  if(formTab==='dossier'){
     const searchInp = h('input',{
       type:'text',
       id:'expe-picker-search',
@@ -4750,14 +4806,16 @@ function renderExpeDepartModal(){
     });
     pickerBody = h('div',{className:'expe-picker-wrap'},
       h('div',{className:'expe-picker-hint'},
-        'Sélectionnez un dossier pour préremplir ARC, client, réf. SIFA, type et nb de palettes, livraison prévue. Vous pourrez ensuite ajuster manuellement.'),
+        S.expeDepartPickerRattachOnly
+          ? 'Sélectionnez le dossier de fabrication à l\'origine de cet envoi. Seul le rattachement est enregistré — aucun champ déjà saisi ne sera modifié.'
+          : 'Sélectionnez un dossier pour préremplir ARC, client, réf. SIFA, type et nb de palettes, livraison prévue. Vous pourrez ensuite ajuster manuellement.'),
       searchInp,
       listEl,
       h('div',{style:{display:'flex',justifyContent:'flex-end',marginTop:'10px'}},
         h('button',{type:'button',className:'btn-ghost',
           style:{fontSize:'12px',padding:'6px 12px'},
-          onClick:()=>set({expeDepartFormTab:'manuel'})},
-          'Continuer en saisie manuelle →')
+          onClick:()=>set({expeDepartFormTab:'manuel',expeDepartPickerRattachOnly:false})},
+          S.expeDepartPickerRattachOnly ? '← Revenir au formulaire' : 'Continuer en saisie manuelle →')
       )
     );
   }
@@ -4769,7 +4827,7 @@ function renderExpeDepartModal(){
 
   if(tabsNav) form.appendChild(tabsNav);
   if(pickerBody) form.appendChild(pickerBody);
-  if(formTab==='manuel' || isEdit){
+  if(formTab!=='dossier'){
     form.appendChild(fields);
     form.appendChild(actions);
   }
