@@ -3543,10 +3543,28 @@ EXPE_MAIN_CSS = r"""
 /* Rattachement production — occupe toute la largeur : c'est la première
    décision du formulaire, pas un champ parmi douze. */
 .expe-field--wide{grid-column:1/-1}
-.expe-field--wide select{margin-top:6px}
-.expe-field--wide input{margin-top:6px}
-.expe-rattach-ok{display:flex;align-items:center;gap:6px;padding:8px 10px;border-radius:8px;
-  background:var(--accent-bg,rgba(58,123,213,.1));color:var(--accent);font-size:12px;font-weight:600}
+.expe-field--wide select,.expe-field--wide .expe-field-note{max-width:440px;margin-top:6px}
+/* Cases à cocher — `.expe-field label` est un intitulé de champ (bloc, majuscules,
+   10px) et `.expe-field input` fait 100 % de large : appliqués tels quels à une
+   case, ils produisaient une case étirée et un libellé en capitales rejeté à
+   droite. Les deux règles ci-dessous rendent la case et son libellé à leur
+   nature — la case Palette Europe en souffrait déjà. */
+.expe-field input[type=checkbox]{width:16px;height:16px;flex:0 0 16px;padding:0;margin:0;
+  accent-color:var(--accent);cursor:pointer}
+.expe-check{display:flex;align-items:flex-start;gap:10px;padding:6px 0}
+.expe-check label{display:inline;margin:0;font-size:13px;font-weight:500;color:var(--text);
+  text-transform:none;letter-spacing:0;line-height:1.4;cursor:pointer}
+.expe-check label small{display:block;font-size:11.5px;font-weight:400;color:var(--muted);
+  text-transform:none;letter-spacing:0;margin-top:2px}
+.expe-field-note{font-size:12px;color:var(--muted);line-height:1.4}
+.expe-rattach-ok{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;
+  background:var(--accent-bg,rgba(58,123,213,.1));color:var(--accent);font-size:12.5px;font-weight:600}
+/* Badge FSC — même langage visuel que `.fab-fsc-badge` de MyProd : un dossier
+   certifié doit se reconnaître à l'identique d'un écran à l'autre. */
+.expe-fsc-badge{display:inline-flex;align-items:center;gap:4px;flex-shrink:0;
+  padding:2px 8px;border-radius:5px;font-size:10px;font-weight:800;letter-spacing:.5px;
+  background:rgba(52,211,153,.14);color:var(--success,#34d399);
+  border:1px solid rgba(52,211,153,.45)}
 .expe-help{font-size:10px;color:var(--muted);margin-top:4px}
 .expe-departs-table tbody tr:nth-child(even) td{background:rgba(148,163,184,.06)}
 .expe-departs-table tbody tr:hover td{background:rgba(34,211,238,.06)}
@@ -4312,6 +4330,8 @@ function expeOpenDepartModal(prefill, mode){
       poids_total_kg: (src.poids_total_kg!=null && src.poids_total_kg!=='') ? String(src.poids_total_kg) : '',
       date_livraison: (src.date_livraison||'') ? String(src.date_livraison).slice(0,10) : '',
       planning_entry_id: (src.planning_entry_id!=null && src.planning_entry_id!=='') ? String(src.planning_entry_id) : '',
+      fsc_requis: src.fsc_requis ? 1 : 0,
+      fsc_type_requis: src.fsc_type_requis || '',
       sans_dossier: src.sans_dossier ? 1 : 0,
       sans_dossier_motif: src.sans_dossier_motif || '',
       sans_dossier_note: src.sans_dossier_note || '',
@@ -4371,6 +4391,8 @@ function expeSelectDossier(d){
   // Le dossier prime : une déclaration « non lié à une production » devient
   // sans objet dès qu'un dossier est désigné.
   f.sans_dossier = 0; f.sans_dossier_motif = ''; f.sans_dossier_note = '';
+  f.fsc_requis = d.fsc_requis ? 1 : 0;
+  f.fsc_type_requis = d.fsc_type_requis || '';
   // Estimation nb palettes via fiche technique si dispo (cartons sol × hauteur ÷ ratio)
   // Si pas de donnée fiche : laisser vide pour saisie manuelle
   if(!f.nb_palette){
@@ -4452,7 +4474,8 @@ function _expeBuildDossierPickerItems(q){
       line1.className = 'expe-picker-line1';
       line1.innerHTML = '<span class="expe-picker-ref">'+escHtml(ref)+'</span>'
                      + '<span class="expe-picker-sep">·</span>'
-                     + '<span class="expe-picker-client">'+escHtml(client)+'</span>';
+                     + '<span class="expe-picker-client">'+escHtml(client)+'</span>'
+                     + expeFscBadgeHtml(d);
       wrap.appendChild(line1);
       const line2 = document.createElement('div');
       line2.className = 'expe-picker-line2';
@@ -4596,10 +4619,9 @@ function renderExpeDepartModal(){
   });
   const europeField = h('div',{className:'expe-field'},
     h('label',null,'Palette Europe (consignée)'),
-    h('div',{style:{display:'flex',alignItems:'center',gap:'8px',padding:'8px 0'}},
+    h('div',{className:'expe-check'},
       europeCheck,
-      h('label',{htmlFor:'expe-form-pal-europe',style:{fontSize:'12px',color:'var(--text2)',cursor:'pointer'}},
-        'Suivre le retour de cette palette dans l\'onglet Palettes Europe')
+      h('label',{htmlFor:'expe-form-pal-europe'},'Suivre le retour dans l\'onglet Palettes Europe')
     )
   );
 
@@ -4652,17 +4674,18 @@ function renderExpeDepartModal(){
   if(aDossier){
     rattachKids.push(h('div',{className:'expe-rattach-ok'},
       iconEl('folder',13),
-      ' Rattaché au dossier '+((f.arc||'').trim()||'sélectionné')));
+      ' Rattaché au dossier '+((f.arc||'').trim()||'sélectionné'),
+      expeFscBadge(f)));
   }else{
-    rattachKids.push(h('div',{style:{display:'flex',alignItems:'center',gap:'8px',padding:'8px 0'}},
-      sansDossierCheck,
-      h('label',{htmlFor:'expe-form-sans-dossier',style:{fontSize:'12px',color:'var(--text2)',cursor:'pointer'}},
-        'Envoi non lié à une production')));
+    const lbl = h('label',{htmlFor:'expe-form-sans-dossier'},
+      'Envoi non lié à une production',
+      h('small',null,'Stock ancien, sous-traitance, échantillon, palettes vides…'));
+    rattachKids.push(h('div',{className:'expe-check'}, sansDossierCheck, lbl));
     if(f.sans_dossier){
       rattachKids.push(motifSel);
       if(String(f.sans_dossier_motif||'')==='autre') rattachKids.push(motifNote);
     }else{
-      rattachKids.push(h('div',{style:{fontSize:'12px',color:'var(--muted)'}},
+      rattachKids.push(h('div',{className:'expe-field-note'},
         'Sélectionnez un dossier dans l\'onglet « Depuis un dossier », ou cochez '
         + 'ci-dessus si cet envoi ne sort pas d\'une production.'));
     }
@@ -5597,7 +5620,7 @@ function renderExpeSuiviDeparts(){
       h('td',{title:dateEnl},dateEnl),
       h('td',{title:r.affreteurs||''},r.affreteurs||'—'),
       h('td',{title:r.transporteur||''},(c=>c?trpTag(r.transporteur||'—',c):(r.transporteur||'—'))(trpColorFromRow(r))),
-      h('td',{title:r.client||''},h('span',{className:'expe-badge-devis-wrap'},r.client||'—',expeDevisBadge(r))),
+      h('td',{title:r.client||''},h('span',{className:'expe-badge-devis-wrap'},r.client||'—',expeFscBadge(r),expeDevisBadge(r))),
       h('td',{style:{fontSize:'12px'},title:r.code_postal_destination||''},r.code_postal_destination||'—'),
       h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.ref_sifa||''},r.ref_sifa||'—'),
       h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.arc||''},r.arc||'—'),
@@ -5649,6 +5672,29 @@ function renderExpeSuiviDeparts(){
   return h('div',null,topBar,listCard);
 }
 
+// Libellés des claims — copie locale du référentiel de config.py. MyExpé ne
+// sert pas à choisir un claim, seulement à le lire : un mot suffit.
+const EXPE_FSC_LABELS = {
+  fsc_100:'FSC 100%', fsc_mix:'FSC Mix', fsc_mix_credit:'FSC Mix Credit',
+  fsc_recycled:'FSC Recycled'
+};
+
+function expeFscBadge(r){
+  if(!r || !Number(r.fsc_requis)) return null;
+  const t = (r.fsc_type_requis||'').trim();
+  const lbl = EXPE_FSC_LABELS[t] || '';
+  return h('span',{className:'expe-fsc-badge',
+    title:'Dossier certifié'+(lbl?' — '+lbl:'')+'. La matière consommée doit être conforme.'},
+    'FSC', lbl?' · '+lbl:'');
+}
+
+function expeFscBadgeHtml(d){
+  if(!d || !Number(d.fsc_requis)) return '';
+  const t = (d.fsc_type_requis||'').trim();
+  const lbl = EXPE_FSC_LABELS[t] || '';
+  return '<span class="expe-fsc-badge">FSC'+(lbl?' · '+escHtml(lbl):'')+'</span>';
+}
+
 function expeDevisBadge(r){
   if(!r||!r.source_devis_reponse_id) return null;
   const demandeId=r.source_devis_demande_id;
@@ -5695,7 +5741,7 @@ function renderExpeHistoriqueDeparts(){
   const body=rows.length?rows.map(r=>h('tr',null,
     h('td',{style:{fontSize:'12px',whiteSpace:'nowrap'},title:(r.validated_at||'')},(r.validated_at||'').replace('T',' ').slice(0,16)||'—'),
     h('td',{title:(r.date_enlevement||'').slice(0,10)},(r.date_enlevement||'').slice(0,10)),
-    h('td',{title:r.client||''},h('span',{className:'expe-badge-devis-wrap'},r.client||'—',expeDevisBadge(r))),
+    h('td',{title:r.client||''},h('span',{className:'expe-badge-devis-wrap'},r.client||'—',expeFscBadge(r),expeDevisBadge(r))),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.ref_sifa||''},r.ref_sifa||'—'),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.arc||''},r.arc||'—'),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.no_cde_transport||''},r.no_cde_transport||'—'),

@@ -144,7 +144,9 @@ _DEPARTS_SELECT = """
            COALESCE(mp.is_europe, 0) AS palette_ref_is_europe,
            t.couleur AS transporteur_couleur,
            pe.reference AS planning_dossier_ref,
-           pe.numero_of AS planning_numero_of
+           pe.numero_of AS planning_numero_of,
+           COALESCE(pe.fsc_requis, 0) AS fsc_requis,
+           COALESCE(pe.fsc_type_requis, '') AS fsc_type_requis
     FROM expe_departs d
     LEFT JOIN matieres_premieres mp ON mp.id = d.type_palette_matiere_id
     LEFT JOIN expe_transporteurs t ON t.id = d.transporteur_id
@@ -666,6 +668,11 @@ def list_dossiers_disponibles_expe(request: Request):
                       pe.ref_produit, pe.numero_of, pe.date_livraison,
                       pe.format_l, pe.format_h, pe.statut, pe.position,
                       pe.duree_heures, pe.updated_at,
+                      -- L'exigence FSC se décide au planning mais se lit ici :
+                      -- l'expéditionnaire doit voir qu'il rattache un départ à
+                      -- un dossier certifié, sans avoir à ouvrir MyProd.
+                      COALESCE(pe.fsc_requis, 0) AS fsc_requis,
+                      COALESCE(pe.fsc_type_requis, '') AS fsc_type_requis,
                       m.nom AS machine_nom, m.code AS machine_code,
                       (SELECT COUNT(*) FROM expe_departs ed
                          WHERE ed.planning_entry_id = pe.id) AS departs_count,
