@@ -251,6 +251,25 @@ def _operateur_proprietaire_constat(conn, event_id: int, user_id: int) -> bool:
     return (row["source"] or "") == "non_planifie" and row["created_by"] == user_id
 
 
+def _refuser_constat_futur(date_prevue: str) -> None:
+    """400 si on date un constat dans le futur.
+
+    Symetrique de la regle du planning. Le planning REGARDE DEVANT : on ne
+    planifie pas dans le passe (v2.6.1). Le constat REGARDE DERRIERE : il
+    consigne une intervention deja realisee, donc il ne peut pas etre date
+    d'un jour qui n'est pas encore arrive. Sans cette borne, l'historique de
+    maintenance pouvait contenir des operations « faites » la semaine
+    prochaine.
+    """
+    if date_prevue and date_prevue > _today_paris():
+        raise HTTPException(
+            status_code=400,
+            detail="Une opération déjà réalisée ne peut pas être datée dans le "
+                   "futur. Pour prévoir une intervention à venir, utilise le "
+                   "planning.",
+        )
+
+
 def _event_est_constat(conn, event_id: int) -> bool:
     """Vrai si le creneau est un CONSTAT d'operation realisee, pas du planning.
 
@@ -650,6 +669,9 @@ def create_event(body: EventCreateBody, request: Request):
             raise HTTPException(status_code=400, detail="Une intervention non planifiée doit contenir exactement 1 code")
         if not body.machine:
             raise HTTPException(status_code=400, detail="machine requise pour une intervention non planifiée")
+        # v2.7.2 : pendant de la regle v2.6.1 ci-dessous. Le planning refuse le
+        # passe, le constat refuse le futur.
+        _refuser_constat_futur(body.date_prevue)
         ops_specs = [(ops_specs[0][0], _machines_list_to_csv([body.machine]))]
         event_machine = body.machine
     else:
@@ -774,19 +796,50 @@ def update_event(event_id: int, body: EventUpdateBody, request: Request):
         if not ev:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
         _check_event_not_deleted(ev)  # v2.5.29 : refuse toute modif si tombstoned
-        _check_event_not_closed(ev)   # v2.7.0 : créneau passé = clôturé
+        # v2.7.2 — deux règles de PLANNING s'appliquaient ici à tout créneau,
+        # constats compris. Conséquence : corriger la date d'une opération déjà
+        # enregistrée était impossible, alors que par construction cette date
+        # est passée. Le message parlait de « déplacer un créneau », donc de
+        # planification, pour ce qui était une correction d'historique.
+        #
+        # Un constat n'est pas un créneau du planning : il n'a pas d'horaires à
+        # tenir, personne ne s'y présente, et il ne se clôture pas — il est né
+        # après les faits. Les deux règles ne valent donc que pour `planifie`.
+        _est_constat = (ev.get("source") or "") != "planifie"
+        if not _est_constat:
+            _check_event_not_closed(ev)   # v2.7.0 : créneau passé = clôturé
         if maint_role == "operator":
             if not _can_operator_manage_event(ev, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres interventions non planifiées")
-        # Déplacer un créneau OUVERT vers une date passée reste refusé : il
-        # deviendrait clôturé dans la seconde, donc définitivement inéditable —
-        # par une simple maladresse de glisser-déposer.
-        if body.date_prevue is not None and body.date_prevue < _today_paris():
-            raise HTTPException(
-                status_code=403,
-                detail="Impossible de déplacer un créneau vers une date passée : "
-                       "il serait immédiatement clôturé.",
-            )
+            # v2.7.2 : la porte ouverte ci-dessus aux constats ne doit pas
+            # rendre l'historique modifiable par son auteur indefiniment. Meme
+            # regle qu'au niveau de l'operation : tant que rien n'est saisi,
+            # l'operateur corrige son propre constat ; des qu'une saisie
+            # existe, c'est de la correction d'historique, donc admin.
+            if _est_constat and any(
+                (o.get("statut") or "") in ("termine", "invalidee")
+                for o in (ev.get("ops") or [])
+            ):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Cette opération est déjà enregistrée : seul un "
+                           "administrateur peut encore la corriger.",
+                )
+        if body.date_prevue is not None:
+            if _est_constat:
+                # Le constat regarde derrière : seule la borne haute a un sens.
+                _refuser_constat_futur(body.date_prevue)
+            elif body.date_prevue < _today_paris():
+                # Déplacer un créneau OUVERT vers une date passée reste refusé :
+                # il deviendrait clôturé dans la seconde, donc définitivement
+                # inéditable — par une simple maladresse de glisser-déposer.
+                raise HTTPException(
+                    status_code=403,
+                    detail="Impossible de déplacer un créneau planifié vers une date "
+                           "passée : il serait immédiatement clôturé. Pour consigner "
+                           "une intervention déjà réalisée, utilise l'enregistrement "
+                           "d'opération.",
+                )
         # v2.7.1 : une OCCURRENCE DE RECURRENCE reste dans SA periode.
         #
         # Une occurrence hebdomadaire appartient a sa semaine, une mensuelle a

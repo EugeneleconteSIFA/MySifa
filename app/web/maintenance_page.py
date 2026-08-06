@@ -6241,6 +6241,7 @@ function openOpsModal(editId){
   // Pré-remplit la date (mode édition = date saisie ; mode création = maintenant)
   const dateEl = document.getElementById('ops-date');
   if(dateEl){
+    _maintBorneAujourdhui(dateEl);  // v2.7.2 : pas de saisie dans le futur
     const pad = n => (n < 10 ? '0' + n : '' + n);
     const sourceDate = editing && editing.date_saisie ? new Date(editing.date_saisie) : new Date();
     if(!isNaN(sourceDate.getTime())){
@@ -6545,6 +6546,10 @@ function addOperation(e){
   if(!machine || !type){ showToast('Machine et type sont requis.', 'danger'); return; }
   // Date d'opération : input datetime-local. Si vide ou invalide, fallback maintenant.
   const dateInput = (document.getElementById('ops-date')?.value || '').trim();
+  if(_maintDateFuture(dateInput)){
+    showToast('Une opération déjà réalisée ne peut pas être datée dans le futur.', 'danger');
+    return;
+  }
   let dateSaisie = new Date().toISOString();
   if(dateInput){
     const parsed = new Date(dateInput);
@@ -11148,6 +11153,37 @@ function _fmtDateISO(d){
   const p = n => String(n).padStart(2, '0');
   return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
 }
+
+// v2.7.2 — Borne haute des champs de date de SAISIE.
+//
+// Ces trois modales consignent une intervention DEJA REALISEE. Une date
+// future n'y a aucun sens : elle produisait une ligne d'historique datee de
+// la semaine prochaine. Le serveur refuse desormais le cas, mais le sélecteur
+// natif doit le dire avant le clic — un champ qui accepte puis se fait
+// rejeter est une mauvaise manière de poser une règle.
+//
+// La borne est posee a l'ouverture et non dans le HTML : une page laissee
+// ouverte toute la nuit garderait sinon la borne de la veille.
+function _maintBorneAujourdhui(el){
+  if(!el) return;
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  el.max = (el.type === 'datetime-local')
+    ? _fmtDateISO(d) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes())
+    : _fmtDateISO(d);
+}
+
+// Verification avant envoi : `max` n'empeche pas une saisie au clavier.
+function _maintDateFuture(valeur){
+  if(!valeur) return false;
+  const d = new Date(valeur);
+  if(isNaN(d.getTime())) return false;
+  // Comparaison au jour pres pour un input date, a la minute pres sinon.
+  const now = new Date();
+  return (valeur.length <= 10)
+    ? _fmtDateISO(d) > _fmtDateISO(now)
+    : d.getTime() > now.getTime();
+}
 function _catClass(cat){ return 'op-cat-' + (cat || 'autre'); }
 // Helpers unifiés pour la typologie 3 catégories (v178, renommage labels v179).
 // Valeurs DB : 'controles', 'entretien', 'remplacements'.
@@ -12088,6 +12124,7 @@ async function adminOpenRegisterOpModal(){
   // Date par défaut = aujourd'hui
   try{
     const dateEl = document.getElementById('op-new-date');
+    _maintBorneAujourdhui(dateEl);  // v2.7.2 : pas de saisie dans le futur
     if(dateEl && !dateEl.value){ dateEl.value = _fmtDateISO(new Date()); }
   }catch(e){}
   document.getElementById('op-modal-new').classList.add('active');
@@ -12313,6 +12350,10 @@ async function opSubmitNew(){
     if(typeof showToast === 'function') showToast('Date et machine sont obligatoires.', 'danger');
     return;
   }
+  if(_maintDateFuture(dateVal)){
+    if(typeof showToast === 'function') showToast('Une opération déjà réalisée ne peut pas être datée dans le futur.', 'danger');
+    return;
+  }
   if((isLibreEdit || isCreationInhabituelle) && !titreLibre){
     if(typeof showToast === 'function') showToast('Titre obligatoire.', 'danger');
     return;
@@ -12476,6 +12517,10 @@ async function adminSubmitRegisterOp(){
 
   // Validation
   if(!dateVal){ if(typeof showToast === 'function') showToast('Date obligatoire.', 'danger'); return; }
+  if(_maintDateFuture(dateVal)){
+    if(typeof showToast === 'function') showToast('Une opération déjà réalisée ne peut pas être datée dans le futur.', 'danger');
+    return;
+  }
   if(machines.length === 0){ if(typeof showToast === 'function') showToast('Sélectionne au moins une machine.', 'danger'); return; }
   if(isCreationInhabituelle && !titreLibre){ if(typeof showToast === 'function') showToast('Titre obligatoire.', 'danger'); return; }
   if(!isCreationInhabituelle && !code){ if(typeof showToast === 'function') showToast('Code opération obligatoire.', 'danger'); return; }
@@ -12562,6 +12607,7 @@ function libreOpenModal(){
   if(c) c.value = '';
   // v182 Lot 2 : date pre-remplie a aujourd'hui, modifiable par l'operateur
   if(dateEl && typeof _fmtDateISO === 'function') dateEl.value = _fmtDateISO(new Date());
+  if(typeof _maintBorneAujourdhui === 'function') _maintBorneAujourdhui(dateEl);  // v2.7.2
   const panel = document.getElementById('libre-autocomplete-panel');
   if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
   // Pre-remplit machine avec la selection courante si disponible
@@ -12657,6 +12703,12 @@ async function libreSubmit(){
   if(!titre || !machine || !dateVal){
     if(typeof showToast === 'function') showToast('Date, titre et machine sont obligatoires.', 'danger');
     else alert('Date, titre et machine sont obligatoires.');
+    _libreReset();
+    return;
+  }
+  if(_maintDateFuture(dateVal)){
+    const _m = 'Une opération déjà réalisée ne peut pas être datée dans le futur.';
+    if(typeof showToast === 'function') showToast(_m, 'danger'); else alert(_m);
     _libreReset();
     return;
   }
