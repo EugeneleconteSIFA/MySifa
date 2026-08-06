@@ -251,6 +251,22 @@ def _operateur_proprietaire_constat(conn, event_id: int, user_id: int) -> bool:
     return (row["source"] or "") == "non_planifie" and row["created_by"] == user_id
 
 
+def _check_cloture_planning(ev) -> None:
+    """Applique la clôture — mais au PLANNING seulement.
+
+    v2.7.2. La clôture v2.7.0 se déduit de la date : un créneau passé est gelé.
+    Appliquée telle quelle à tout événement, elle gelait aussi les constats,
+    qui sont passés par construction — rendant l'historique non corrigeable et
+    non supprimable, y compris pour un superadmin.
+
+    Un constat garde ses propres protections, adaptées à sa nature : rôle
+    (l'opérateur ne touche que les siens) et double confirmation quand une
+    saisie existe. Ce qu'il n'a pas, c'est un futur à protéger.
+    """
+    if (ev.get("source") or "") == "planifie":
+        _check_event_not_closed(ev)
+
+
 def _refuser_constat_futur(date_prevue: str) -> None:
     """400 si on date un constat dans le futur.
 
@@ -899,7 +915,26 @@ def delete_event(event_id: int, request: Request, confirm_token: Optional[str] =
         ev = _load_event_full(conn, event_id)
         if not ev:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
-        _check_event_not_closed(ev)   # v2.7.0 : un créneau passé ne se supprime plus
+        # v2.7.2 — la clôture protège le PLANNING, pas l'historique.
+        #
+        # Une opération enregistrée hors créneau est stockée comme un événement
+        # `non_planifie` à sa propre date. Supprimer cette ligne depuis
+        # l'historique supprime donc un événement passé — et la règle v2.7.0
+        # l'interdisait à tout le monde, en renvoyant un message qui conseillait
+        # l'enregistrement d'opération pour une action de suppression. Aucune
+        # saisie n'était effaçable, même par un superadmin.
+        #
+        # Un constat reste protégé par deux garde-fous qui, eux, sont faits
+        # pour ça : l'opérateur ne peut toucher que ses propres constats, et la
+        # présence d'une opération soldée impose la double confirmation par
+        # `confirm_token` (v2.4.19) — c'est-à-dire systématiquement, puisqu'une
+        # saisie enregistrée EST une opération soldée.
+        #
+        # Un créneau PLANIFIÉ passé reste, lui, non supprimable : il est la
+        # trace de ce qui avait été prévu. Retirer une saisie qu'il contient
+        # passe par DELETE /ops/{id}, réservé à l'admin.
+        if (ev.get("source") or "") == "planifie":
+            _check_event_not_closed(ev)   # v2.7.0
         if maint_role == "operator":
             if not _can_operator_manage_event(ev, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que vos propres interventions non planifiées")
@@ -972,7 +1007,7 @@ def add_op(event_id: int, body: OpAddBody, request: Request):
         if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
         _check_event_not_deleted(ev_check)  # v2.5.29
-        _check_event_not_closed(ev_check)   # v2.7.0
+        _check_cloture_planning(ev_check)   # v2.7.0, restreint au planning en v2.7.2
         if maint_role == "operator":
             if not _can_operator_manage_event(ev_check, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres interventions non planifiées")
@@ -1311,7 +1346,7 @@ def add_operator(event_id: int, body: OperatorAddBody, request: Request):
         if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
         _check_event_not_deleted(ev_check)  # v2.5.29
-        _check_event_not_closed(ev_check)   # v2.7.0
+        _check_cloture_planning(ev_check)   # v2.7.0, restreint au planning en v2.7.2
         if maint_role == "operator":
             if not _can_operator_manage_event(ev_check, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres événements")
@@ -1336,7 +1371,7 @@ def remove_operator(event_id: int, operator_id: int, request: Request):
         if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
         _check_event_not_deleted(ev_check)  # v2.5.29
-        _check_event_not_closed(ev_check)   # v2.7.0
+        _check_cloture_planning(ev_check)   # v2.7.0, restreint au planning en v2.7.2
         if maint_role == "operator":
             if not _can_operator_manage_event(ev_check, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres événements")
