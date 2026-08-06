@@ -6067,6 +6067,11 @@ async function saveMaintForm() {
   }
   closeMaintForm();
   await loadMaintCodes();
+  // v2.7.1 : un code cree ou renomme doit apparaitre immediatement dans la
+  // modal de saisie et les filtres — meme invalidation que la suppression.
+  if(typeof window.maintOnCatalogueChanged === 'function'){
+    try { await window.maintOnCatalogueChanged(); } catch(e) {}
+  }
   // Sync côté Alertes : une création/modif de code peut créer, renommer
   // ou supprimer l'alerte auto-liée (via le hook backend _sync_alert_for_code).
   if(typeof loadAlerts === 'function') await loadAlerts();
@@ -6077,9 +6082,21 @@ async function deleteMaintCode(code) {
   // de plus pour une information que la réponse porte déjà), mais le message
   // final doit dire ce qui s'est réellement passé : un utilisateur à qui on
   // annonce « supprimé » alors que le code est archivé le recréera.
-  if (!confirm('Supprimer le code ' + code + ' ?\n\n'
-             + 'S\'il porte déjà des saisies, il sera archivé au lieu d\'être '
-             + 'supprimé : l\'historique doit rester lisible.')) return;
+  const _lbl = (Array.isArray(window._maintItems)
+    ? (window._maintItems.find(x => String(x.code) === String(code)) || {}).label
+    : '') || '';
+  const _ask = (typeof window.maintConfirm === 'function')
+    ? window.maintConfirm({
+        title: 'Supprimer le code ' + code,
+        message: _lbl ? '« ' + _lbl + ' »' : 'Ce code',
+        detail: 'S\'il porte déjà des saisies ou des modèles de créneau, il sera '
+              + 'archivé plutôt que supprimé : l\'historique doit rester lisible. '
+              + 'Sinon, il est supprimé définitivement.',
+        confirmLabel: 'Supprimer',
+        danger: true,
+      })
+    : Promise.resolve(confirm('Supprimer le code ' + code + ' ?'));
+  if (!(await _ask)) return;
   try {
     const res = await api('/api/maintenance/codes/' + encodeURIComponent(code),
                           { method: 'DELETE' });
@@ -6098,6 +6115,13 @@ async function deleteMaintCode(code) {
     return;
   }
   await loadMaintCodes();
+  // v2.7.1 : le catalogue vient de changer. Sans cette invalidation, la modal
+  // « Enregistrer une opération » continuait de proposer le code supprimé
+  // jusqu'au prochain rechargement complet de la page — son cache
+  // (MAINT_STATE.codes) n'était jamais purgé.
+  if(typeof window.maintOnCatalogueChanged === 'function'){
+    try { await window.maintOnCatalogueChanged(); } catch(e) {}
+  }
   // La suppression d'un code déclenche la cascade DELETE de l'alerte liée
   // côté backend — on force le rechargement pour que la liste se mette à jour.
   if(typeof loadAlerts === 'function') await loadAlerts();
