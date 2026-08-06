@@ -12512,7 +12512,21 @@ async function adminSubmitRegisterOp(){
       const ev = data.event;
       const op = (ev.ops || [])[0];
       if(!ev || !op){ throw new Error('Créneau incomplet retourné par l\'API.'); }
-      await _patchOpTermine(ev.id, op.id, dureeMin, comment, _toDoneAtIso(dateVal));
+      // v2.7.2 : l'enregistrement est en deux temps — création du créneau, puis
+      // solde de l'opération. Si le second échoue, le premier laissait derrière
+      // lui un créneau « non planifié » jamais soldé, visible dans le planning
+      // et absent de l'historique. Chaque nouvelle tentative en ajoutait un.
+      // On annule donc la création avant de remonter l'erreur.
+      try{
+        await _patchOpTermine(ev.id, op.id, dureeMin, comment, _toDoneAtIso(dateVal));
+      }catch(errPatch){
+        try{
+          await fetch('/api/maintenance/events/' + ev.id, {
+            method:'DELETE', credentials:'include',
+          });
+        }catch(_){ /* nettoyage best-effort : l'erreur utile est celle du PATCH */ }
+        throw errPatch;
+      }
       created += 1;
     }
     const msg = created > 1
