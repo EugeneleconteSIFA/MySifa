@@ -10,13 +10,25 @@
   const S = {
     canWrite: !!INIT.canWrite,
     user: INIT.user || {},
-    route: { name: "dashboard", id: null },
+    route: { name: "materials", id: null },
     loading: true,
-    dashboard: null,
     categories: [],
     suppliers: [],
     supplierMap: {},
+    fournisseurs: [],
+    fournisseurMap: {},
     materials: [],
+    materialsAll: [],
+    mystock: [],
+    mystockAll: [],
+    mystockCats: [],
+    laizes: [],
+    grammages: [],
+    expanded: {},
+    // Fiche de paramétrage d'une déclinaison MyStock (route /pricing/mystock/:id).
+    declForm: null,
+    declPreview: null,
+    declDirty: false,
     products: [],
     settings: null,
     filters: {
@@ -24,8 +36,21 @@
       matCats: [],
       matSupplier: "",
       matActive: "1",
+      // MyStock est la source des prix : c'est la vue qu'on veut par défaut.
+      matTab: "mystock",
+      msQ: "",
+      msCat: "",
+      msActive: "1",
       prodQ: "",
+      // Onglet actif de la page Produits : base Coûts matières ou MyStock.
+      prodTab: "mystock",
+      msProdQ: "",
     },
+    msDecls: [],
+    msProducts: [],
+    expandedProd: {},
+    formMsProduct: null,
+    msProdPreview: null,
     formMaterial: null,
     formProduct: null,
     matPreview: null,
@@ -99,6 +124,22 @@
       "log-out":
         '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>',
       edit: '<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>',
+      trash:
+        '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+      copy:
+        '<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+      plus: '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
+      link:
+        '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
+      unlink:
+        '<path d="M18.84 12.25l1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M5.17 11.75l-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/><line x1="8" y1="2" x2="8" y2="5"/><line x1="2" y1="8" x2="5" y2="8"/><line x1="16" y1="19" x2="16" y2="22"/><line x1="19" y1="16" x2="22" y2="16"/>',
+      // Flèche coudée : « dérivé de la ligne du dessus ».
+      "corner-down-right":
+        '<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
+      "arrow-left":
+        '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
+      star:
+        '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
     };
     return "<svg " + a + ">" + (p[name] || p.grid) + "</svg>";
   }
@@ -131,6 +172,129 @@
     return s === "—" ? s : s + "\u00a0€/m²";
   }
 
+  function fmtPct(n) {
+    const s = fmtNum(n, 2, 2);
+    return s === "—" ? s : s + "\u00a0%";
+  }
+
+  const CUR_SYM = { EUR: "€", USD: "$" };
+
+  /** Montant dans une devise donnée : 4,0183 $ */
+  function fmtCur(n, cur) {
+    const s = fmtNum(n, 4, 4);
+    return s === "—" ? s : s + "\u00a0" + (CUR_SYM[(cur || "EUR").toUpperCase()] || "€");
+  }
+
+  /** Unité d'achat lisible : $/kg, €/m²… */
+  function unitLabel(cur, basis) {
+    const sym = CUR_SYM[(cur || "EUR").toUpperCase()] || "€";
+    return sym + "/" + (basis === "PER_M2" ? "m²" : "kg");
+  }
+
+  /**
+   * Méthodes de calcul du transport d'import.
+   *
+   * CONTENEUR et FORFAIT partagent la même arithmétique — un coût divisé par une
+   * quantité — mais pas le même vocabulaire : un champ « coût conteneur » ne
+   * doit pas servir à saisir un forfait de livraison.
+   */
+  const TRANSPORT_MODES = [
+    { v: "AMOUNT", label: "Montant à l'unité d'achat" },
+    { v: "PCT", label: "Pourcentage du prix d'achat" },
+    { v: "CONTENEUR", label: "Coût d'un conteneur ÷ ce qu'il transporte" },
+    { v: "FORFAIT", label: "Forfait de commande ÷ quantité commandée" },
+  ];
+  const TRANSPORT_CHAMPS = {
+    CONTENEUR: { cout: "Coût du conteneur", qte: "Quantité par conteneur" },
+    FORFAIT: { cout: "Forfait de commande", qte: "Quantité commandée" },
+  };
+
+  function transportModeOptions(actuel) {
+    return TRANSPORT_MODES.map(
+      (m) => `<option value="${m.v}" ${actuel === m.v ? "selected" : ""}>${escHtml(m.label)}</option>`
+    ).join("");
+  }
+
+  /** Les champs de saisie du transport dépendent de la méthode choisie. */
+  function transportChampsHtml(prefixe, f, unit, apercu) {
+    const mode = f.transport_mode || "AMOUNT";
+    if (mode === "PCT") {
+      return `<div class="field f-num"><label>Transport <span class="lbl-unit">% du prix d'achat</span></label>
+        <input type="number" step="0.0001" id="${prefixe}-transport" value="${escAttr(f.transport_pct)}"/>
+        <div class="field-hint" id="${prefixe}-transport-eq">${transportEqText(apercu)}</div>
+      </div>`;
+    }
+    if (mode === "CONTENEUR" || mode === "FORFAIT") {
+      const l = TRANSPORT_CHAMPS[mode];
+      return `<div class="field f-num"><label>${escHtml(l.cout)} <span class="lbl-unit">${escHtml(CUR_SYM[(f.price_currency || "EUR").toUpperCase()] || "€")}</span></label>
+          <input type="number" step="0.01" id="${prefixe}-tcout" value="${escAttr(f.transport_cout)}"/></div>
+        <div class="field f-num"><label>${escHtml(l.qte)} <span class="lbl-unit">${escHtml(f.price_basis === "PER_M2" ? "m²" : "kg")}</span></label>
+          <input type="number" step="0.01" id="${prefixe}-tqte" value="${escAttr(f.transport_quantite)}"/>
+          <div class="field-hint" id="${prefixe}-transport-eq">${transportEqText(apercu)}</div>
+        </div>`;
+    }
+    return `<div class="field f-num"><label>Transport <span class="lbl-unit">${escHtml(unit)}</span></label>
+      <input type="number" step="0.0001" id="${prefixe}-transport" value="${escAttr(f.transport_unit_price)}"/>
+      <div class="field-hint" id="${prefixe}-transport-eq">${transportEqText(apercu)}</div>
+    </div>`;
+  }
+
+  const BASIS_LABEL = {
+    PER_KG: "Au kilo — le prix est saisi par kg, converti au m² via le poids",
+    PER_M2: "Au mètre carré — le prix est déjà exprimé au m²",
+  };
+
+  /**
+   * Contrepartie du prix d'achat dans l'AUTRE devise.
+   * Le taux stocké est un USD → EUR (1 USD = taux €) : on multiplie pour aller
+   * du dollar vers l'euro, on divise dans l'autre sens.
+   */
+  function otherCurrencyPrice(value, currency, basis) {
+    const rate = parseFloat((S.settings && S.settings.eur_usd_rate) || 0);
+    const v = parseFloat(value);
+    if (!rate || rate <= 0 || Number.isNaN(v)) return null;
+    const cur = (currency || "EUR").toUpperCase();
+    const other = cur === "USD" ? "EUR" : "USD";
+    const converted = cur === "USD" ? v * rate : v / rate;
+    return { value: converted, currency: other, label: fmtCur(converted, other) + "/" + (basis === "PER_M2" ? "m²" : "kg") };
+  }
+
+  function otherPriceHtml(value, currency, basis) {
+    const o = otherCurrencyPrice(value, currency, basis);
+    if (!o) return '<div class="price-alt muted">taux non renseigné</div>';
+    return `<div class="price-alt">${escHtml(o.label)}</div>`;
+  }
+
+  /** Le poids au m² n'est utile que si le prix est au kilo ou pour la calculette import. */
+  // Perte matière par défaut, alignée sur mystock_prix.PERTE_DEFAUT.
+  const PERTE_DEFAUT = 9;
+
+  /**
+   * Poids au m² (kg) réellement consommé : le grammage majoré de la perte.
+   * On produit rarement au gramme près — chute et calage font qu'un frontal de
+   * 70 g/m² en consomme davantage. C'est ce poids qui entre dans le calcul.
+   */
+  function poidsRetenu(grammageGsm, pertePct) {
+    const g = parseFloat(grammageGsm) || 0;
+    const p = parseFloat(pertePct) || 0;
+    return Math.round(g * (1 + p / 100) * 1000) / 1e6;
+  }
+
+  function grammageRetenu(grammageGsm, pertePct) {
+    const g = parseFloat(grammageGsm) || 0;
+    const p = parseFloat(pertePct) || 0;
+    return Math.round(g * (1 + p / 100) * 100) / 100;
+  }
+
+  /**
+   * Le grammage ne sert qu'à une chose : passer d'un prix au KILO à un prix au
+   * m². Un prix déjà exprimé au m² n'en a aucun usage — la section n'a donc de
+   * sens que pour les matières tarifées au poids, c'est-à-dire les adhésifs.
+   */
+  function needsWeight(form) {
+    return form.price_basis === "PER_KG";
+  }
+
   function isFxStale(updatedAt) {
     if (!updatedAt) return true;
     const raw = String(updatedAt).replace(" ", "T");
@@ -152,7 +316,7 @@
             <h2>Confirmation</h2>
             <p style="font-size:13px;color:var(--text2);line-height:1.6;margin:0 0 16px">${escHtml(message)}</p>
             <div style="display:flex;gap:10px;justify-content:flex-end">
-              <button type="button" class="btn btn-ghost" id="cfm-no">Annuler</button>
+              <button type="button" class="btn btn-soft" id="cfm-no">Annuler</button>
               <button type="button" class="btn btn-danger" id="cfm-yes">Supprimer</button>
             </div>
           </div>
@@ -214,8 +378,9 @@
   function parseRoute() {
     const p = window.location.pathname.replace(/\/+$/, "") || "/pricing";
     const parts = p.split("/").filter(Boolean);
+    // Plus de tableau de bord : /pricing ouvre directement les matières.
     if (parts.length <= 1 || parts[0] !== "pricing") {
-      return { name: "dashboard", id: null };
+      return { name: "materials", id: null };
     }
     const seg = parts[1];
     if (seg === "materials") {
@@ -228,8 +393,16 @@
       if (parts[2] && /^\d+$/.test(parts[2])) return { name: "product-edit", id: parts[2] };
       return { name: "products", id: null };
     }
+    if (seg === "mystock") {
+      if (parts[2] === "produit") {
+        if (parts[3] === "new") return { name: "msproduct-new", id: null };
+        if (parts[3] && /^\d+$/.test(parts[3])) return { name: "msproduct-edit", id: parts[3] };
+        return { name: "products", id: null };
+      }
+      if (parts[2] && /^\d+$/.test(parts[2])) return { name: "mystock-edit", id: parts[2] };
+    }
     if (seg === "settings") return { name: "settings", id: null };
-    return { name: "dashboard", id: null };
+    return { name: "materials", id: null };
   }
 
   function navigate(path) {
@@ -315,7 +488,6 @@
   function renderSidebar() {
     const nav = document.getElementById("sidebar-nav");
     const items = [
-      { path: "/pricing", label: "Tableau de bord", route: "dashboard", icon: "grid" },
       { path: "/pricing/materials", label: "Matières", route: "materials", icon: "package" },
       { path: "/pricing/products", label: "Produits", route: "products", icon: "layers" },
     ];
@@ -343,7 +515,6 @@
     updateChromeControls();
 
     const titles = {
-      dashboard: ["Coûts matières", "Tableau de bord"],
       materials: ["Matières", "Liste"],
       "material-new": ["Matière", "Nouvelle"],
       "material-edit": ["Matière", "Édition"],
@@ -352,13 +523,29 @@
       "product-edit": ["Produit", "Édition"],
       settings: ["Paramètres", "Coûts matières"],
     };
-    const t = titles[active] || titles.dashboard;
+    const t = titles[active] || titles.materials;
     document.getElementById("mobile-title").textContent = t[0];
     document.getElementById("mobile-sub").textContent = t[1];
   }
 
+  /**
+   * En-tête de page commun. `sub` et `actions` acceptent du HTML.
+   * L'engrenage Paramètres est présent sur toutes les pages (droits en écriture).
+   */
+  function pageHead(title, sub, actions) {
+    const gear = S.canWrite
+      ? `<button type="button" class="icon-btn" id="btn-open-settings" title="Paramètres">${icon("settings", 16)}</button>`
+      : "";
+    return `<div class="page-head">
+        <div><h1>${escHtml(title)}</h1>${sub ? `<div class="sub">${sub}</div>` : ""}</div>
+        <div class="page-head-actions">${actions || ""}${gear}</div>
+      </div>`;
+  }
+
   function setContent(html) {
     document.getElementById("content").innerHTML = html;
+    const gear = document.getElementById("btn-open-settings");
+    if (gear) gear.onclick = () => openSettingsModal();
   }
 
   function showLoading() {
@@ -368,11 +555,17 @@
   }
 
   async function loadBaseData() {
-    const [cats, sups, settings] = await Promise.all([
+    const [cats, sups, fourn, settings] = await Promise.all([
       api("/api/pricing/categories"),
       api("/api/pricing/suppliers?active_only=false"),
+      api("/api/pricing/fournisseurs"),
       api("/api/pricing/settings"),
     ]);
+    S.fournisseurs = fourn.fournisseurs || [];
+    S.fournisseurMap = {};
+    S.fournisseurs.forEach((f) => {
+      S.fournisseurMap[f.id] = f.nom;
+    });
     S.categories = cats.categories || [];
     S.suppliers = sups.suppliers || [];
     S.supplierMap = {};
@@ -382,126 +575,30 @@
     S.settings = settings;
   }
 
-  function renderCategoryTiles(cats) {
-    if (!cats.length) return "";
-    const tiles = cats.map(c => {
-      const price = c.avg_price_eur_per_kg_or_m2;
-      const basis = c.price_basis_dominant === "PER_M2" ? "€/m²" : "€/kg";
-      const pv = c.variation_pct_30d != null ? parseFloat(c.variation_pct_30d) : null;
-      let vHtml = '<span class="cat-var muted">—</span>';
-      if (pv != null) {
-        const color = Math.abs(pv) < 0.5 ? "muted" : (pv > 0 ? "danger" : "success");
-        const arrow = pv > 0 ? "▲" : (pv < 0 ? "▼" : "•");
-        const abs = Math.abs(pv).toFixed(2);
-        vHtml = `<span class="cat-var ${color}">${arrow} ${abs}%</span>`;
-      }
-      return `<div class="cat-tile">
-        <div class="cat-tile-head">
-          <div class="cat-tile-label">${escHtml(c.label)}</div>
-          <div class="cat-tile-count">${c.count_materials} réf.</div>
-        </div>
-        <div class="cat-tile-value">${price != null ? fmtNum(price, 4, 4) : "—"} <span class="cat-tile-unit">${basis}</span></div>
-        <div class="cat-tile-var">Variation 30j : ${vHtml}</div>
-      </div>`;
-    }).join("");
-    return `<div class="section-title">Prix matières par catégorie <span style="font-size:11px;font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">— moyenne des références actives</span></div>
-      <div class="cat-grid">${tiles}</div>`;
-  }
-
-  function renderRecentMovers(movers, totalMaterials) {
-    if (!movers.length) {
-      return `<div class="chart-card" style="margin-top:16px">
-        <h2>Matières à surveiller <span style="font-size:12px;color:var(--muted);font-weight:400">— variations sur les 30 derniers jours</span></h2>
-        <div class="empty" style="padding:24px;text-align:center;color:var(--muted);font-size:13px">
-          Aucune variation détectée sur les ${totalMaterials || 0} matières actives.<br>
-          <span style="font-size:11px">Modifiez un prix côté MyStock ou Coûts matières pour voir les variations remonter ici.</span>
-        </div>
-      </div>`;
-    }
-    const rows = movers.map(m => {
-      const pct = parseFloat(m.variation_pct);
-      const color = pct > 0 ? "danger" : "success";
-      const arrow = pct > 0 ? "▲" : "▼";
-      const abs = Math.abs(pct).toFixed(2);
-      return `<div class="mover-row" style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--border)">
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:600;font-size:13px;color:var(--text)">${escHtml(m.name)}</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">${escHtml(m.category_code)} · il y a ${m.days_ago} j</div>
-        </div>
-        <div style="text-align:right;font-size:12px;color:var(--muted)">
-          ${fmtNum(m.old_price, 4, 4)} → <strong style="color:var(--text)">${fmtNum(m.new_price, 4, 4)}</strong>
-        </div>
-        <div class="cat-var ${color}" style="min-width:80px;text-align:right;font-weight:700;font-size:13px">
-          ${arrow} ${abs}%
-        </div>
-      </div>`;
-    }).join("");
-    return `<div class="chart-card" style="margin-top:16px">
-      <h2>Matières à surveiller <span style="font-size:12px;color:var(--muted);font-weight:400">— variations sur les 30 derniers jours</span></h2>
-      <div>${rows}</div>
-    </div>`;
-  }
-
-  async function renderDashboard() {
-    S.dashboard = await api("/api/pricing/dashboard");
-    const d = S.dashboard;
-    const fxDate = d.eur_usd_rate_updated_at
-      ? String(d.eur_usd_rate_updated_at).replace("T", " ").slice(0, 16)
-      : "—";
-    const fxSrc = d.eur_usd_rate_source || "—";
-    const fxStale = isFxStale(d.eur_usd_rate_updated_at);
-    setContent(`
-      <div class="page-head">
-        <div><h1>Tableau de bord</h1><div class="sub">Calcul des coûts matières</div></div>
-      </div>
-      <div class="kpi-grid">
-        <div class="kpi-card"><div class="kpi-label">Matières actives</div><div class="kpi-value">${d.materials_active}</div></div>
-        <div class="kpi-card"><div class="kpi-label">Produits actifs</div><div class="kpi-value">${d.products_active}</div></div>
-        <div class="kpi-card">
-          <div class="kpi-label">Taux EUR / USD ${fxStale ? fxStaleBadgeHtml() : ""}</div>
-          <div class="kpi-value">${fmtNum(d.eur_usd_rate, 4, 4)}</div>
-          <div class="kpi-meta">MAJ : ${escHtml(fxDate)} · ${escHtml(fxSrc)}</div>
-          ${S.canWrite ? '<button type="button" class="btn btn-ghost btn-sm" id="dash-fx-btn" style="margin-top:8px">Rafraîchir</button>' : ""}
-        </div>
-        <div class="kpi-card"><div class="kpi-label">Prix de vente moyen</div><div class="kpi-value">${d.avg_sell_price_eur_m2 != null ? fmtEurM2(d.avg_sell_price_eur_m2) : "—"}</div><div class="kpi-meta">produits actifs</div></div>
-      </div>
-      <div class="quick-links">
-        <button type="button" class="btn btn-accent" data-nav="/pricing/materials">Matières</button>
-        <button type="button" class="btn btn-accent" data-nav="/pricing/products">Produits</button>
-        ${S.canWrite ? '<button type="button" class="btn btn-ghost" data-nav="/pricing/settings">Paramètres</button>' : ""}
-      </div>
-      ${renderCategoryTiles(d.variations_by_category || [])}
-      ${renderRecentMovers(d.recent_movers || [], (d.materials_active || 0))}
-    `);
-    document.querySelectorAll("[data-nav]").forEach((b) => {
-      b.onclick = () => navigate(b.getAttribute("data-nav"));
-    });
-    const fxBtn = document.getElementById("dash-fx-btn");
-    if (fxBtn) {
-      fxBtn.onclick = async () => {
-        try {
-          await api("/api/pricing/settings/refresh-fx", { method: "POST" });
-          showToast("Taux EUR/USD mis à jour.", "success");
-          await renderDashboard();
-        } catch (e) {
-          showToast(e.message, "danger");
-        }
-      };
-    }
-  }
-
   async function loadMaterialsList() {
     const params = new URLSearchParams();
-    params.set("active_only", S.filters.matActive === "all" ? "false" : "true");
+    // L'API ne connaît que « actifs uniquement » ou « tout » : pour afficher les
+    // inactifs seuls, on charge tout et on tranche côté client.
+    params.set("active_only", S.filters.matActive === "1" ? "true" : "false");
     params.set("with_computed", "true");
     if (S.filters.matQ) params.set("q", S.filters.matQ);
     if (S.filters.matSupplier) params.set("supplier_id", S.filters.matSupplier);
     const data = await api("/api/pricing/materials?" + params.toString());
-    let list = data.materials || [];
+    // On conserve la liste brute : les filtres client sont rejouables sans
+    // rappeler l'API (décocher une catégorie doit restituer les lignes).
+    S.materialsAll = data.materials || [];
+    applyMaterialFilters();
+  }
+
+  /** Filtres appliqués côté client : catégories cochées et statut actif/inactif. */
+  function applyMaterialFilters() {
+    let list = S.materialsAll || [];
     if (S.filters.matCats.length) {
       const set = new Set(S.filters.matCats);
       list = list.filter((m) => set.has(m.category_code));
     }
+    if (S.filters.matActive === "1") list = list.filter((m) => m.is_active);
+    else if (S.filters.matActive === "0") list = list.filter((m) => !m.is_active);
     S.materials = list;
   }
 
@@ -509,37 +606,42 @@
     const catOpts = S.categories
       .map(
         (c) =>
-          `<label style="display:inline-flex;align-items:center;gap:4px;margin-right:10px;font-size:12px">
-            <input type="checkbox" class="mat-cat-cb" value="${escAttr(c.code)}" ${S.filters.matCats.includes(c.code) ? "checked" : ""}/>${escHtml(c.label)}
-          </label>`
+          `<label class="cat-cb${S.filters.matCats.includes(c.code) ? " on" : ""}"><input type="checkbox" class="mat-cat-cb" value="${escAttr(c.code)}" ${S.filters.matCats.includes(c.code) ? "checked" : ""}/>${escHtml(c.label)}</label>`
       )
       .join("");
     const supOpts =
       '<option value="">Tous fournisseurs</option>' +
-      S.suppliers
-        .filter((s) => s.is_active)
+      S.fournisseurs
         .map(
           (s) =>
-            `<option value="${s.id}" ${String(S.filters.matSupplier) === String(s.id) ? "selected" : ""}>${escHtml(s.name)}</option>`
+            `<option value="${s.id}" ${String(S.filters.matSupplier) === String(s.id) ? "selected" : ""}>${escHtml(s.nom)}</option>`
         )
         .join("");
 
     const rows = S.materials
       .map((m) => {
-        const sup = m.supplier_id ? S.supplierMap[m.supplier_id] || "—" : "—";
+        const sup =
+          m.fournisseur_nom ||
+          (m.fournisseur_fsc_id ? S.fournisseurMap[m.fournisseur_fsc_id] : null) ||
+          (m.supplier_id ? S.supplierMap[m.supplier_id] : null) ||
+          "—";
         const live = m.computed ? fmtEurM2(m.computed.price_eur_per_m2) : "—";
-        const unit = `${fmtNum(m.unit_price, 4, 4)}\u00a0${m.price_currency}/${m.price_basis === "PER_M2" ? "m²" : "kg"}`;
+        const ms = m.mystock || null;
+        const unit = ms
+          ? `${fmtNum(ms.unit_price, 4, 4)}\u00a0${ms.price_currency}/${ms.price_basis === "PER_M2" ? "m²" : "kg"}` +
+            ' <span class="badge badge-frontal" title="Prix piloté par MyStock">MyStock</span>'
+          : `${fmtNum(m.unit_price, 4, 4)}\u00a0${m.price_currency}/${m.price_basis === "PER_M2" ? "m²" : "kg"}`;
         return `<tr data-mid="${m.id}">
           <td>${categoryBadge(m.category_code)}</td>
-          <td>${escHtml(m.name)}</td>
+          <td><button type="button" class="cell-link" data-edit-m="${m.id}" title="Éditer cette matière">${escHtml(m.name)}</button></td>
           <td>${escHtml(m.appellation_code)}</td>
           <td>${escHtml(sup)}</td>
           <td>${unit}</td>
           <td><strong>${live}</strong></td>
           <td>${m.is_active ? '<span class="badge badge-glassine">Actif</span>' : '<span class="badge badge-inactive">Inactif</span>'}</td>
           <td class="row-actions" onclick="event.stopPropagation()">
-            <button type="button" class="btn btn-ghost btn-sm" data-hist="${m.id}">Historique</button>
-            ${S.canWrite ? `<button type="button" class="btn btn-ghost btn-sm" data-edit-m="${m.id}">Éditer</button>` : ""}
+            <button type="button" class="btn btn-soft btn-sm" data-hist="${m.id}">Historique</button>
+            ${S.canWrite ? `<button type="button" class="btn btn-soft btn-sm" data-edit-m="${m.id}">Éditer</button>` : ""}
           </td>
         </tr>`;
       })
@@ -554,24 +656,30 @@
         : "";
 
     setContent(`
-      <div class="page-head">
-        <div><h1>Matières</h1><div class="sub">${S.materials.length} ligne(s)</div></div>
-        ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-mat">+ Nouvelle matière</button>' : ""}
-      </div>
-      <div class="filters">
-        <input type="search" class="search-input" id="mat-q" placeholder="Rechercher (nom, appellation…)" value="${escAttr(S.filters.matQ)}"/>
-        <select id="mat-sup">${supOpts}</select>
-        <select id="mat-active"><option value="1" ${S.filters.matActive==="1"?"selected":""}>Actifs</option><option value="0" ${S.filters.matActive==="0"?"selected":""}>Inactifs</option><option value="all" ${S.filters.matActive==="all"?"selected":""}>Tous</option></select>
-      </div>
-      <div style="margin-bottom:12px">${catOpts}</div>
-      ${emptyBlock}
-      <div class="table-wrap" ${emptyBlock ? 'style="display:none"' : ""}>
-        <table class="pr-table">
-          <thead><tr><th>Cat.</th><th>Nom</th><th>Appellation</th><th>Fournisseur</th><th>Prix unit.</th><th>€/m²</th><th>Statut</th><th></th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="8" class="empty">Aucun résultat pour ce filtre</td></tr>'}</tbody>
-        </table>
+      <div class="pr-narrow">
+        ${pageHead(
+          "Matières",
+          `${S.materials.length} ligne(s)`,
+          materialsTabsHtml() +
+            (S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-mat">+ Nouvelle matière</button>' : "")
+        )}
+        <div class="filters">
+          <input type="search" class="search-input" id="mat-q" placeholder="Rechercher (nom, appellation…)" value="${escAttr(S.filters.matQ)}"/>
+          <select id="mat-sup">${supOpts}</select>
+          <select id="mat-active"><option value="1" ${S.filters.matActive==="1"?"selected":""}>Actifs</option><option value="0" ${S.filters.matActive==="0"?"selected":""}>Inactifs</option><option value="all" ${S.filters.matActive==="all"?"selected":""}>Tous</option></select>
+        </div>
+        <div class="cat-filters">${catOpts}</div>
+        ${emptyBlock}
+        <div class="table-wrap" ${emptyBlock ? 'style="display:none"' : ""}>
+          <table class="pr-table">
+            <thead><tr><th>Cat.</th><th>Nom</th><th>Appellation</th><th>Fournisseur</th><th>Prix unit.</th><th>€/m²</th><th>Statut</th><th></th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="8" class="empty">Aucun résultat pour ce filtre</td></tr>'}</tbody>
+          </table>
+        </div>
       </div>
     `);
+
+    bindMaterialsTabs();
 
     const qEl = document.getElementById("mat-q");
     let qTimer;
@@ -594,8 +702,11 @@
       renderMaterialsList();
     };
     document.querySelectorAll(".mat-cat-cb").forEach((cb) => {
-      cb.onchange = async () => {
-        S.filters.matCats = Array.from(document.querySelectorAll(".mat-cat-cb:checked")).map((x) => x.value);
+      cb.onchange = () => {
+        S.filters.matCats = Array.from(
+          document.querySelectorAll(".mat-cat-cb:checked")
+        ).map((x) => x.value);
+        applyMaterialFilters();
         renderMaterialsList();
       };
     });
@@ -606,12 +717,435 @@
       b.onclick = () => openPriceHistoryModal(b.getAttribute("data-hist"));
     });
     document.querySelectorAll("[data-edit-m]").forEach((b) => {
-      b.onclick = () => navigate("/pricing/materials/" + b.getAttribute("data-edit-m"));
+      b.onclick = (e) => {
+        e.stopPropagation();
+        navigate("/pricing/materials/" + b.getAttribute("data-edit-m"));
+      };
     });
     const btnNew = document.getElementById("btn-new-mat");
     if (btnNew) btnNew.onclick = () => navigate("/pricing/materials/new");
     const emptyNew = document.getElementById("empty-new-mat");
     if (emptyNew) emptyNew.onclick = () => navigate("/pricing/materials/new");
+  }
+
+  // ───────────────────────────────────────────────────────────────────────
+  // Onglet « Matières MyStock ».
+  //
+  // Une matière se décline par laize (frontal, glassine, complexe) ou par
+  // grammage (adhésif). C'est la déclinaison qui s'appaire à une matière de la
+  // base Coûts matières, et qui porte les prix par fournisseur.
+  // Les supports logistiques (mandrins, cartons, palettes) ne sont pas exposés.
+  // ───────────────────────────────────────────────────────────────────────
+
+  async function loadMystockList() {
+    const params = new URLSearchParams();
+    params.set("active_only", S.filters.msActive === "1" ? "true" : "false");
+    if (S.filters.msQ) params.set("q", S.filters.msQ);
+    if (S.filters.msCat) params.set("categorie", S.filters.msCat);
+    const data = await api("/api/pricing/mystock/materials?" + params.toString());
+    S.mystockAll = data.materials || [];
+    S.mystockCats = data.categories || [];
+    S.laizes = data.laizes || [];
+    S.grammages = data.grammages || [];
+    applyMystockFilters();
+  }
+
+  function applyMystockFilters() {
+    let list = S.mystockAll || [];
+    if (S.filters.msActive === "0") list = list.filter((m) => !m.actif);
+    S.mystock = list;
+  }
+
+  /** Prix en vigueur : 3 décimales à l'affichage, la saisie garde sa précision. */
+  function fmtPrixUnite(v, unite) {
+    if (v == null) return "—";
+    const s = fmtNum(v, 3, 3);
+    return s === "—" ? s : s + " " + (unite || "€");
+  }
+
+  function mystockPrixResume(m) {
+    if (m.prix_min == null) return '<span class="muted">à compléter</span>';
+    if (Math.abs((m.prix_max || 0) - (m.prix_min || 0)) < 1e-9) {
+      return fmtPrixUnite(m.prix_min, m.unite);
+    }
+    return `${fmtPrixUnite(m.prix_min, m.unite)} <span class="muted">à</span> ${fmtPrixUnite(m.prix_max, m.unite)}`;
+  }
+
+  function fournisseurOptions(selectedId) {
+    return (
+      '<option value="">— Sans fournisseur —</option>' +
+      S.fournisseurs
+        .map(
+          (f) =>
+            `<option value="${f.id}" ${String(selectedId) === String(f.id) ? "selected" : ""}>${escHtml(f.nom)}</option>`
+        )
+        .join("")
+    );
+  }
+
+  const DECL_LABEL = { LAIZE: "laize", GRAMMAGE: "grammage" };
+
+  /** Bouton d'action en icône seule, avec bulle d'aide au survol. */
+  function actionBtn(attr, valeur, nom, titre, danger) {
+    return `<button type="button" class="ico-btn${danger ? " danger" : ""}" ${attr}="${escAttr(valeur)}" title="${escAttr(titre)}" aria-label="${escAttr(titre)}">${icon(nom, 15)}</button>`;
+  }
+
+  /** Cellule de déclinaison : liste de laizes, ou grammage à saisir. */
+  function declinaisonCell(m, d) {
+    if (!S.canWrite) return escHtml(d.libelle);
+    if (m.type_declinaison === "LAIZE") {
+      const opts =
+        '<option value="">— à choisir —</option>' +
+        S.laizes
+          .map(
+            (l) =>
+              `<option value="${l.id}" ${String(d.laize_id) === String(l.id) ? "selected" : ""}>${escHtml(l.label)}</option>`
+          )
+          .join("");
+      return `<select class="ms-inline ms-decl-input" data-ms-decl-laize="${d.id}">${opts}</select>`;
+    }
+    if (m.type_declinaison === "GRAMMAGE") {
+      const v = d.grammage_id ? String(d.libelle).replace(/[^\d.,]/g, "").replace(",", ".") : "";
+      return `<input type="number" step="0.1" min="0" class="ms-inline ms-decl-input ms-gsm"
+                data-ms-decl-gsm="${d.id}" value="${escAttr(v)}" placeholder="g/m²"/>`;
+    }
+    return '<span class="muted">—</span>';
+  }
+
+  /**
+   * Zone dépliée : une seule table à plat. Chaque ligne porte sa déclinaison,
+   * son fournisseur, son prix, sa fiche appairée et ses actions.
+   */
+  function mystockDetailHtml(m) {
+    const decls = m.declinaisons || [];
+    const colonnes = m.type_declinaison
+      ? `<th style="width:34px"></th><th>${escHtml(DECL_LABEL[m.type_declinaison])}</th>`
+      : '<th style="width:34px"></th><th>Déclinaison</th>';
+    const lignes = [];
+    decls.forEach((d) => {
+      (d.lignes || []).forEach((l, i) => {
+        const fid = l.fournisseur_id == null ? "" : l.fournisseur_id;
+        const key = `${d.id}|${fid}`;
+        // Le coût au m² est le vrai résultat attendu : il ouvre la fiche de
+        // paramétrage de la déclinaison.
+        const cout = d.cout_eur_m2 != null && d.cout_eur_m2 > 0
+          ? `<button type="button" class="link-btn" data-ms-open="${d.id}" title="Ouvrir le paramétrage de cette déclinaison">${escHtml(fmtEurM2(d.cout_eur_m2))}</button>`
+          : `<button type="button" class="link-btn muted" data-ms-open="${d.id}" title="Renseigner poids, devise, taxes et transport">à paramétrer</button>`;
+        lignes.push(`<tr class="${l.principal ? "ms-principal" : ""}">
+          <td class="ms-statut">${l.principal
+              ? `<span class="badge badge-glassine" title="Ce prix fait foi">Principal</span>`
+              : (S.canWrite ? actionBtn("data-ms-principal", key, "star", "Faire de ce prix celui qui fait foi") : "")}</td>
+          <td class="ms-decl-cell">${i === 0 ? declinaisonCell(m, d) : '<span class="ms-decl-rappel">↳</span>'}</td>
+          <td>${S.canWrite
+              ? `<select class="ms-inline" data-ms-fourn="${escAttr(key)}">${fournisseurOptions(l.fournisseur_id)}</select>`
+              : escHtml(l.fournisseur_nom || "— Sans fournisseur —")}</td>
+          <td>${S.canWrite
+              ? `<input type="number" step="0.0001" class="ms-inline ms-prix" data-ms-prix="${escAttr(key)}" value="${escAttr(l.prix)}"/>`
+              : fmtPrixUnite(l.prix, m.unite)}</td>
+          <td class="ms-unite">${escHtml(m.unite)}</td>
+          <td class="ms-fiche">${i === 0 ? cout : ""}</td>
+          <td class="ms-meta">${escHtml(l.updated_at ? String(l.updated_at).replace("T", " ").slice(0, 16) : "—")}${l.updated_by_name ? " · " + escHtml(l.updated_by_name) : ""}</td>
+          <td class="ms-actions">${S.canWrite
+              ? actionBtn("data-ms-open", d.id, "edit", "Ouvrir le paramétrage de cette déclinaison") +
+                (m.type_declinaison
+                  ? actionBtn("data-ms-deriver", d.id, "corner-down-right",
+                      `Dériver : nouveau ${DECL_LABEL[m.type_declinaison]} avec les mêmes réglages`) +
+                    actionBtn("data-ms-new", m.id, "plus",
+                      `Créer un ${DECL_LABEL[m.type_declinaison]} vierge`)
+                  : "") +
+                actionBtn("data-ms-del", key, "trash", "Supprimer cette ligne", true)
+              : ""}</td>
+        </tr>`);
+      });
+    });
+    if (!lignes.length) {
+      return `<div class="ms-detail">
+        <table class="pr-table ms-table">
+          <thead><tr>${colonnes}<th>Fournisseur</th><th>Prix</th><th>Unité</th><th>Coût €/m²</th><th>Modifié</th><th class="ms-actions"></th></tr></thead>
+          <tbody><tr><td colspan="8" class="empty" style="padding:18px">Aucune déclinaison.
+            ${S.canWrite && m.type_declinaison
+              ? `<button type="button" class="btn btn-soft btn-sm" data-ms-new="${m.id}" style="margin-left:8px">Créer ${escHtml(DECL_LABEL[m.type_declinaison] === "laize" ? "une laize" : "un grammage")}</button>`
+              : ""}</td></tr></tbody>
+        </table></div>`;
+    }
+    return `<div class="ms-detail">
+      <table class="pr-table ms-table">
+        <thead><tr>${colonnes}<th>Fournisseur</th><th>Prix</th><th>Unité</th><th>Coût €/m²</th><th>Modifié</th><th class="ms-actions"></th></tr></thead>
+        <tbody>${lignes.join("")}</tbody>
+      </table>
+    </div>`;
+  }
+
+  function renderMystockList() {
+    const catOpts =
+      '<option value="">Toutes catégories</option>' +
+      S.mystockCats
+        .map(
+          (c) =>
+            `<option value="${escAttr(c)}" ${S.filters.msCat === c ? "selected" : ""}>${escHtml(c)}</option>`
+        )
+        .join("");
+
+    const rows = S.mystock
+      .map((m) => {
+        const open = !!S.expanded[m.id];
+        const nb = m.nb_declinaisons || 0;
+        const prets = m.nb_parametrees || 0;
+        // Le fournisseur dont le prix fait foi. Plusieurs déclinaisons peuvent
+        // en avoir des différents : on ne nomme que s'il n'y en a qu'un.
+        const principaux = [...new Set(
+          (m.declinaisons || [])
+            .map((d) => (d.lignes || []).find((l) => l.principal))
+            .filter((l) => l && l.fournisseur_nom)
+            .map((l) => l.fournisseur_nom)
+        )];
+        const fournPrincipal = principaux.length === 1
+          ? escHtml(principaux[0])
+          : (principaux.length
+              ? `<span class="muted">${principaux.length} fournisseurs</span>`
+              : '<span class="muted">—</span>');
+        const lien = nb
+          ? (prets === nb
+              ? `<span class="badge badge-frontal">${prets}/${nb} réglée${nb > 1 ? "s" : ""}</span>`
+              : `<span class="badge ${prets ? "badge-silicone" : "badge-autre"}">${prets}/${nb} réglée${nb > 1 ? "s" : ""}</span>`)
+          : '<span class="muted">—</span>';
+        return `<tr class="ms-row${open ? " open" : ""}" data-ms-row="${m.id}">
+            <td class="ms-caret">${open ? "▾" : "▸"}</td>
+            <td>${categorieBadge(m.categorie)}</td>
+            <td><strong>${escHtml(m.reference)}</strong></td>
+            <td>${escHtml(m.designation)}</td>
+            <td class="ms-mode">${m.type_declinaison
+                ? `<span class="badge badge-silicone">${escHtml(DECL_LABEL[m.type_declinaison])} · ${nb}</span>`
+                : '<span class="badge badge-autre">sans déclinaison</span>'}</td>
+            <td class="ms-prix-cell">${mystockPrixResume(m)}</td>
+            <td>${fournPrincipal}</td>
+            <td>${lien}</td>
+            <td class="row-actions" onclick="event.stopPropagation()">
+              <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${m.id}" target="_blank" rel="noopener" title="Ouvrir la fiche dans MyStock">MyStock ↗</a>
+            </td>
+          </tr>
+          ${open ? `<tr class="ms-detail-row"><td colspan="9">${mystockDetailHtml(m)}</td></tr>` : ""}`;
+      })
+      .join("");
+
+    setContent(`
+      <div class="pr-narrow">
+        ${pageHead("Matières", `${S.mystock.length} matière(s) MyStock`, materialsTabsHtml())}
+        <div class="filters">
+          <input type="search" class="search-input" id="ms-q" placeholder="Rechercher (référence, désignation…)" value="${escAttr(S.filters.msQ)}"/>
+          <select id="ms-cat">${catOpts}</select>
+          <select id="ms-active">
+            <option value="1" ${S.filters.msActive==="1"?"selected":""}>Actives</option>
+            <option value="0" ${S.filters.msActive==="0"?"selected":""}>Inactives</option>
+            <option value="all" ${S.filters.msActive==="all"?"selected":""}>Toutes</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table class="pr-table">
+            <thead><tr><th style="width:28px"></th><th>Cat.</th><th>Référence</th><th>Désignation</th><th>Déclinaisons</th><th>Prix en vigueur</th><th>Fournisseur principal</th><th>Réglées</th><th></th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="9" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+    `);
+
+    bindMaterialsTabs();
+
+    const qEl = document.getElementById("ms-q");
+    let t;
+    qEl.oninput = () => {
+      clearTimeout(t);
+      t = setTimeout(async () => {
+        S.filters.msQ = qEl.value;
+        await loadMystockList();
+        renderMystockList();
+      }, 300);
+    };
+    document.getElementById("ms-cat").onchange = async (e) => {
+      S.filters.msCat = e.target.value;
+      await loadMystockList();
+      renderMystockList();
+    };
+    document.getElementById("ms-active").onchange = async (e) => {
+      S.filters.msActive = e.target.value;
+      await loadMystockList();
+      renderMystockList();
+    };
+    document.querySelectorAll("[data-ms-row]").forEach((tr) => {
+      tr.onclick = (e) => {
+        if (e.target.closest("input,select,button,a")) return;
+        const id = tr.getAttribute("data-ms-row");
+        S.expanded[id] = !S.expanded[id];
+        renderMystockList();
+      };
+    });
+    bindMystockActions();
+  }
+
+  function parseMsKey(key) {
+    const [decl, fid] = String(key).split("|");
+    return {
+      declinaison_id: parseInt(decl, 10),
+      fournisseur_id: fid === "" || fid === undefined ? null : parseInt(fid, 10),
+    };
+  }
+
+  async function msCall(path, body, method) {
+    try {
+      await api(path, { method: method || "POST", body });
+      await loadMystockList();
+      renderMystockList();
+      return true;
+    } catch (e) {
+      showToast(e.message, "danger");
+      return false;
+    }
+  }
+
+  function bindMystockActions() {
+    document.querySelectorAll("[data-ms-prix]").forEach((inp) => {
+      inp.onchange = async () => {
+        const k = parseMsKey(inp.getAttribute("data-ms-prix"));
+        const prix = parseFloat(inp.value);
+        if (Number.isNaN(prix)) {
+          showToast("Prix invalide.", "danger");
+          return;
+        }
+        if (await msCall("/api/pricing/mystock/prix", { ...k, prix })) {
+          showToast("Prix enregistré dans MyStock.", "success");
+        }
+      };
+    });
+    document.querySelectorAll("[data-ms-fourn]").forEach((sel) => {
+      sel.onchange = async () => {
+        const k = parseMsKey(sel.getAttribute("data-ms-fourn"));
+        const nouveau = sel.value === "" ? null : parseInt(sel.value, 10);
+        // On renomme le fournisseur de la ligne existante : la recréer lui ferait
+        // perdre son statut de principal.
+        if (
+          await msCall("/api/pricing/mystock/fournisseur", {
+            ...k,
+            nouveau_fournisseur_id: nouveau,
+          })
+        ) {
+          showToast("Fournisseur enregistré dans MyStock.", "success");
+        }
+      };
+    });
+    document.querySelectorAll("[data-ms-principal]").forEach((btn) => {
+      btn.onclick = async () => {
+        const k = parseMsKey(btn.getAttribute("data-ms-principal"));
+        if (await msCall("/api/pricing/mystock/principal", k)) {
+          showToast("Fournisseur principal mis à jour — prix poussé dans MyStock.", "success");
+        }
+      };
+    });
+    document.querySelectorAll("[data-ms-del]").forEach((btn) => {
+      btn.onclick = async () => {
+        const k = parseMsKey(btn.getAttribute("data-ms-del"));
+        const ok = await confirmDelete(
+          "Supprimer cette ligne ? Si c'est la dernière de la déclinaison, la déclinaison part avec."
+        );
+        if (!ok) return;
+        if (await msCall("/api/pricing/mystock/prix", k, "DELETE")) {
+          showToast("Ligne supprimée.", "success");
+        }
+      };
+    });
+    // Dériver : tout est repris sauf la valeur, qui reste à saisir.
+    document.querySelectorAll("[data-ms-deriver]").forEach((btn) => {
+      btn.onclick = async () => {
+        const id = parseInt(btn.getAttribute("data-ms-deriver"), 10);
+        if (await msCall("/api/pricing/mystock/declinaisons/deriver", { declinaison_id: id })) {
+          showToast("Déclinaison dérivée — reste à saisir sa valeur.", "success");
+        }
+      };
+    });
+    document.querySelectorAll("[data-ms-new]").forEach((btn) => {
+      btn.onclick = async () => {
+        const id = parseInt(btn.getAttribute("data-ms-new"), 10);
+        if (await msCall("/api/pricing/mystock/declinaisons", { matiere_id: id })) {
+          showToast("Déclinaison créée — renseignez sa valeur dans la ligne.", "info");
+        }
+      };
+    });
+    document.querySelectorAll("[data-ms-decl-gsm]").forEach((inp) => {
+      inp.onchange = async () => {
+        const v = parseFloat(inp.value);
+        if (!v || v <= 0) {
+          showToast("Grammage invalide.", "danger");
+          return;
+        }
+        if (
+          await msCall("/api/pricing/mystock/declinaisons/valeur", {
+            declinaison_id: parseInt(inp.getAttribute("data-ms-decl-gsm"), 10),
+            valeur_gsm: v,
+          })
+        ) {
+          showToast("Grammage enregistré.", "success");
+        }
+      };
+    });
+    document.querySelectorAll("[data-ms-decl-laize]").forEach((sel) => {
+      sel.onchange = async () => {
+        if (!sel.value) return;
+        if (
+          await msCall("/api/pricing/mystock/declinaisons/valeur", {
+            declinaison_id: parseInt(sel.getAttribute("data-ms-decl-laize"), 10),
+            laize_id: parseInt(sel.value, 10),
+          })
+        ) {
+          showToast("Laize enregistrée.", "success");
+        }
+      };
+    });
+    // Ouverture de la fiche de paramétrage de la déclinaison.
+    document.querySelectorAll("[data-ms-open]").forEach((btn) => {
+      btn.onclick = () => navigate("/pricing/mystock/" + btn.getAttribute("data-ms-open"));
+    });
+  }
+
+
+  function categorieBadge(cat) {
+    const c = String(cat || "").toUpperCase();
+    const map = {
+      FRONTAL: "badge-frontal",
+      GLASSINE: "badge-glassine",
+      COMPLEXE: "badge-silicone",
+      ADHESIF: "badge-adhesif",
+    };
+    return `<span class="badge ${map[c] || "badge-autre"}">${escHtml(cat || "—")}</span>`;
+  }
+
+  /** Bascule entre la base Coûts matières et les matières MyStock. */
+  function materialsTabsHtml() {
+    const t = S.filters.matTab;
+    return `<div class="tabs">
+      <button type="button" class="tab${t === "couts" ? " on" : ""}" data-tab="couts">Base Coûts matières</button>
+      <button type="button" class="tab${t === "mystock" ? " on" : ""}" data-tab="mystock">Matières MyStock</button>
+    </div>`;
+  }
+
+  function bindMaterialsTabs() {
+    document.querySelectorAll("[data-tab]").forEach((b) => {
+      b.onclick = async () => {
+        const tab = b.getAttribute("data-tab");
+        if (tab === S.filters.matTab) return;
+        S.filters.matTab = tab;
+        showLoading();
+        try {
+          if (tab === "mystock") {
+            await loadMystockList();
+            renderMystockList();
+          } else {
+            await loadMaterialsList();
+            renderMaterialsList();
+          }
+        } catch (e) {
+          setContent(`<div class="empty" style="color:var(--danger);padding:24px">${escHtml(e.message)}</div>`);
+        }
+      };
+    });
   }
 
   function defaultMaterialForm() {
@@ -621,19 +1155,25 @@
       appellation_code: "",
       category_id: cat ? cat.id : 1,
       supplier_id: "",
-      weight_per_m2: "0",
-      weight_gsm: "",
+      fournisseur_fsc_id: "",
+      grammage_gsm: "0",
+      perte_pct: String(PERTE_DEFAUT),
       price_currency: "EUR",
       unit_price: "0",
       price_basis: "PER_KG",
-      tax_incidence: "1",
+      taxe_pct: "0",
       is_imported: false,
-      container_kg: "",
-      container_cost_usd: "",
+      applique_marge: true,
+      transport_mode: "AMOUNT",
+      transport_unit_price: "0",
+      transport_pct: "0",
+      transport_cout: "0",
+      transport_quantite: "0",
     };
   }
 
   async function loadMaterialForm(id) {
+    S.matDirty = false;
     if (!id) {
       S.formMaterial = defaultMaterialForm();
       S.matPreview = null;
@@ -645,15 +1185,22 @@
       appellation_code: m.appellation_code,
       category_id: m.category_id,
       supplier_id: m.supplier_id || "",
-      weight_per_m2: String(m.weight_per_m2),
-      weight_gsm: m.weight_gsm != null ? String(m.weight_gsm) : "",
+      fournisseur_fsc_id: m.fournisseur_fsc_id || "",
+      grammage_gsm: String(m.grammage_gsm != null ? m.grammage_gsm : 0),
+      perte_pct: String(m.perte_pct != null ? m.perte_pct : 0),
       price_currency: m.price_currency,
       unit_price: String(m.unit_price),
       price_basis: m.price_basis,
-      tax_incidence: String(m.tax_incidence),
+      taxe_pct: String(m.taxe_pct != null ? m.taxe_pct : 0),
+      applique_marge: m.applique_marge !== false,
       is_imported: !!m.is_imported,
-      container_kg: m.container_kg != null ? String(m.container_kg) : "",
-      container_cost_usd: m.container_cost_usd != null ? String(m.container_cost_usd) : "",
+      transport_mode: m.transport_mode || "AMOUNT",
+      transport_unit_price:
+        m.transport_unit_price != null ? String(m.transport_unit_price) : "0",
+      transport_pct: m.transport_pct != null ? String(m.transport_pct) : "0",
+      transport_cout: m.transport_cout != null ? String(m.transport_cout) : "0",
+      transport_quantite: m.transport_quantite != null ? String(m.transport_quantite) : "0",
+      _mystock: m.mystock || null,
       _history: [],
     };
     try {
@@ -669,13 +1216,17 @@
     const f = S.formMaterial;
     return {
       unit_price: parseFloat(f.unit_price) || 0,
-      weight_per_m2: parseFloat(f.weight_per_m2) || 0,
+      weight_per_m2: poidsRetenu(f.grammage_gsm, f.perte_pct),
       price_currency: f.price_currency,
       price_basis: f.price_basis,
-      tax_incidence: parseFloat(f.tax_incidence) || 1,
+      taxe_pct: parseFloat(f.taxe_pct) || 0,
       is_imported: !!f.is_imported,
-      container_kg: f.container_kg ? parseFloat(f.container_kg) : null,
-      container_cost_usd: f.container_cost_usd ? parseFloat(f.container_cost_usd) : null,
+      applique_marge: f.applique_marge !== false,
+      transport_mode: f.transport_mode || "AMOUNT",
+      transport_unit_price: parseFloat(f.transport_unit_price) || 0,
+      transport_pct: parseFloat(f.transport_pct) || 0,
+      transport_cout: parseFloat(f.transport_cout) || 0,
+      transport_quantite: parseFloat(f.transport_quantite) || 0,
     };
   }
 
@@ -686,27 +1237,251 @@
         method: "POST",
         body: materialPreviewPayload(),
       });
-      const el = document.getElementById("mat-live-price");
-      if (el) {
-        el.innerHTML = previewPanelHtml(S.matPreview);
-      }
+      const el = document.getElementById("mat-recap");
+      if (el) el.innerHTML = recapTableHtml(S.matPreview);
+      const sum = document.getElementById("mat-summary");
+      if (sum) sum.innerHTML = matSummaryHtml(S.matPreview);
+      updateTransportEquivalent();
     } catch (e) {
-      const el = document.getElementById("mat-live-price");
+      const el = document.getElementById("mat-recap");
       if (el) el.innerHTML = `<div class="empty" style="color:var(--danger)">${escHtml(e.message)}</div>`;
     }
   }
 
-  function previewPanelHtml(computed) {
+  /**
+   * Tableau récapitulatif horizontal du calcul :
+   * (prix d'achat + transport + taxes) x taux de change, puis marge.
+   */
+  function recapTableHtml(computed) {
     if (!computed) return '<div class="empty">—</div>';
-    const b = computed.breakdown;
+    const b = computed.breakdown || {};
+    const cur = (b.currency || "EUR").toUpperCase();
+    const basis = b.price_basis || "PER_KG";
+    const unit = unitLabel(cur, basis);
+    const perM2 = basis === "PER_M2";
+    const rate = parseFloat(b.fx_rate || 1);
+    const w = parseFloat(b.weight_per_m2 || 0);
+    const hasTransport = parseFloat(b.transport_src || 0) > 0;
+    const taxePct = parseFloat(b.taxe_pct || 0);
+    const taxesSrc = parseFloat(b.taxes_src || 0);
+
+    const cells = [
+      { label: "Prix d'achat", value: fmtCur(b.unit_price_src, cur), unit: unit },
+      {
+        label: "Transport",
+        value: hasTransport ? fmtCur(b.transport_src, cur) : "—",
+        unit: hasTransport
+          ? `${unit} · ${fmtPct(b.transport_pct_effective || 0)} du prix`
+          : "non imputé",
+        muted: !hasTransport,
+      },
+      {
+        label: "Taxes",
+        value: taxePct ? fmtCur(taxesSrc, cur) : "—",
+        unit: taxePct ? `${unit} · ${fmtPct(taxePct)} du sous-total` : "non imputées",
+        muted: !taxePct,
+      },
+      {
+        label: "Sous-total achat",
+        value: fmtCur(
+          parseFloat(b.unit_price_src || 0) + parseFloat(b.transport_src || 0) + taxesSrc,
+          cur
+        ),
+        unit: unit,
+      },
+    ];
+    if (!perM2) {
+      // Prix au kilo : on montre explicitement le passage au m² via le poids.
+      cells.push({
+        label: "Ramené au m²",
+        value: fmtCur(
+          parseFloat(b.raw || 0) + parseFloat(b.transport || 0) + taxesSrc * w,
+          cur
+        ),
+        unit: `${CUR_SYM[cur] || "€"}/m² · × ${fmtNum(w * 1000, 1, 1)} g/m²`,
+      });
+    }
+    cells.push(
+      {
+        label: "Change",
+        value: cur === "USD" ? "× " + fmtNum(rate, 4, 4) : "—",
+        unit: cur === "USD" ? "USD → EUR" : "achat en €",
+        muted: cur !== "USD",
+      },
+      {
+        label: "Prix de revient",
+        value: fmtNum(computed.price_eur_per_m2, 4, 4),
+        unit: "€/m²",
+        strong: true,
+      },
+      {
+        label: `Marge (${fmtNum(computed.margin_pct || 0, 2, 2)} %)`,
+        value: fmtNum(computed.margin_eur_m2 || 0, 4, 4),
+        unit: "€/m²",
+      },
+      {
+        label: "Prix de vente",
+        value: fmtNum(computed.sell_price_eur_m2 || 0, 4, 4),
+        unit: "€/m²",
+        strong: true,
+      }
+    );
+
+    const head = cells.map((c) => `<th>${escHtml(c.label)}</th>`).join("");
+    const body = cells
+      .map(
+        (c) =>
+          `<td class="${c.strong ? "recap-strong" : ""}${c.muted ? " recap-muted" : ""}">` +
+          `<div class="recap-value">${escHtml(c.value)}</div>` +
+          (c.unit ? `<div class="recap-unit">${escHtml(c.unit)}</div>` : "") +
+          "</td>"
+      )
+      .join("");
+
+    const notes = [];
+    if (!perM2) {
+      notes.push(
+        w > 0
+          ? `Prix au kilo ramené au m² via le poids : × ${fmtNum(w, 4, 4)} kg/m².`
+          : `Poids au m² non renseigné : le prix au kilo ne peut pas être ramené au m².`
+      );
+    }
+    if (hasTransport) {
+      notes.push(`Transport ramené en euros : ${fmtEurM2(b.transport_eur_m2 || 0)}.`);
+    }
+
     return `
-      <div class="big-label">Prix calculé</div>
-      <div class="big-price">${fmtEurM2(computed.price_eur_per_m2)}</div>
-      <div class="breakdown-legend" style="margin-top:12px">
-        <div><span>Brut</span><span>${fmtEur(b.raw)}</span></div>
-        <div><span>Transport</span><span>${fmtEur(b.transport)}</span></div>
-        <div><span>Change</span><span>${fmtEur(b.fx)}</span></div>
-        <div><span>Taxes</span><span>${fmtEur(b.tax_uplift)}</span></div>
+      <div class="recap-card">
+        <div class="recap-head">
+          <div>
+            <div class="recap-title">Détail du calcul</div>
+            <div class="recap-formula">(prix d'achat + transport + taxes) × change</div>
+          </div>
+        </div>
+        <div class="recap-scroll">
+          <table class="recap-table"><thead><tr>${head}</tr></thead><tbody><tr>${body}</tr></tbody></table>
+        </div>
+        ${notes.length ? `<div class="recap-notes">${notes.join(" · ")}</div>` : ""}
+      </div>`;
+  }
+
+  /**
+   * Paramètres globaux éditables en place, posés à droite de l'identification.
+   * Ils s'appliquent à toutes les matières — d'où l'avertissement et le bouton
+   * d'application explicite (pas d'enregistrement silencieux à la frappe).
+   */
+  function inlineSettingsHtml() {
+    const s = S.settings;
+    if (!s || !S.canWrite) return "";
+    const fxDate = s.eur_usd_rate_updated_at
+      ? String(s.eur_usd_rate_updated_at).replace("T", " ").slice(0, 16)
+      : "—";
+    const stale = isFxStale(s.eur_usd_rate_updated_at);
+    return `
+      <aside class="settings-side">
+        <div class="si-head">Paramètres globaux <span>appliqués à toutes les matières</span></div>
+        <div class="field"><label>Taux USD → EUR ${stale ? fxStaleBadgeHtml() : ""}</label>
+          <input type="number" step="0.0001" id="si-rate" value="${escAttr(s.eur_usd_rate)}"/>
+          <div class="si-meta">MAJ ${escHtml(fxDate)} · ${escHtml(s.eur_usd_rate_source || "—")}</div>
+        </div>
+        <div class="field"><label>Marge par défaut <span class="lbl-unit">%</span></label>
+          <input type="number" step="0.01" id="si-margin" value="${escAttr(s.default_margin_pct)}"/>
+        </div>
+        <div class="si-actions">
+          <button type="button" class="btn btn-accent btn-sm" id="si-save">Appliquer</button>
+          <button type="button" class="btn btn-soft btn-sm" id="si-fx">Rafraîchir le taux</button>
+        </div>
+      </aside>`;
+  }
+
+  function bindInlineSettings(isNew) {
+    const save = document.getElementById("si-save");
+    if (save) {
+      save.onclick = async () => {
+        try {
+          S.settings = await api("/api/pricing/settings", {
+            method: "PATCH",
+            body: {
+              eur_usd_rate: parseFloat(document.getElementById("si-rate").value),
+              default_margin_pct: parseFloat(document.getElementById("si-margin").value),
+            },
+          });
+          showToast("Paramètres globaux enregistrés.", "success");
+          renderMaterialForm(isNew);
+          refreshMaterialPreview();
+        } catch (e) {
+          showToast(e.message, "danger");
+        }
+      };
+    }
+    const fx = document.getElementById("si-fx");
+    if (fx) {
+      fx.onclick = async () => {
+        try {
+          const r = await api("/api/pricing/settings/refresh-fx", { method: "POST" });
+          showToast("Taux mis à jour : " + fmtNum(r.eur_usd_rate, 4, 4), "success");
+          S.settings = await api("/api/pricing/settings");
+          renderMaterialForm(isNew);
+          refreshMaterialPreview();
+        } catch (e) {
+          showToast(e.message, "danger");
+        }
+      };
+    }
+  }
+
+  /** Bandeau résumé en haut de la fiche matière : revient, marge, vente. */
+  function matSummaryHtml(computed) {
+    if (!computed) {
+      return `<div class="ms-item ms-main"><div class="ms-label">Prix de revient</div>
+        <div class="ms-value">—</div></div>`;
+    }
+    return `
+      <div class="ms-item ms-main">
+        <div class="ms-label">Prix de revient</div>
+        <div class="ms-value">${fmtEurM2(computed.price_eur_per_m2)}</div>
+      </div>
+      <div class="ms-item">
+        <div class="ms-label">Marge ${fmtPct(computed.margin_pct || 0)}</div>
+        <div class="ms-value">${fmtEurM2(computed.margin_eur_m2 || 0)}</div>
+      </div>
+      <div class="ms-item">
+        <div class="ms-label">Prix de vente</div>
+        <div class="ms-value">${fmtEurM2(computed.sell_price_eur_m2 || 0)}</div>
+      </div>`;
+  }
+
+  /** Texte d'équivalence sous le champ transport : montant €/m² et % du prix. */
+  function transportEqText(computed) {
+    if (!computed || !computed.breakdown) {
+      return "Le transport s'ajoute au prix d'achat avant conversion.";
+    }
+    const b = computed.breakdown;
+    const eur = parseFloat(b.transport_eur_m2 || 0);
+    const pct = parseFloat(b.transport_pct_effective || 0);
+    if (!eur && !pct) return "Aucun transport imputé pour l'instant.";
+    return `Soit ${fmtEurM2(eur)} · ${fmtPct(pct)} du prix d'achat`;
+  }
+
+  function updateTransportEquivalent() {
+    const el = document.getElementById("transport-eq");
+    if (el) el.textContent = transportEqText(S.matPreview);
+  }
+
+  /**
+   * Bandeau d'actions collé en haut de la fiche matière (même principe que la
+   * fiche produit MyAO) : sur un formulaire long, le bouton Enregistrer ne doit
+   * pas obliger à redescendre en bas de page.
+   */
+  function matSaveBarHtml(isNew) {
+    const dirty = S.matDirty ? "" : " hidden";
+    return `<div class="pr-savebar">
+        <button type="button" class="btn btn-soft btn-sm" id="btn-back-mat">${icon("arrow-left", 14)} Retour liste</button>
+        <div class="savebar-state" id="mat-dirty"${dirty}><span class="dot"></span>Modifications non enregistrées</div>
+        <div class="savebar-actions">
+          ${!isNew && S.canWrite ? '<button type="button" class="btn btn-danger btn-sm" id="btn-del-mat">Supprimer</button>' : ""}
+          ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-save-mat">Enregistrer</button>' : ""}
+        </div>
       </div>`;
   }
 
@@ -717,88 +1492,200 @@
       .join("");
     const supOpts =
       '<option value="">—</option>' +
-      S.suppliers
-        .map((s) => `<option value="${s.id}" ${String(f.supplier_id) === String(s.id) ? "selected" : ""}>${escHtml(s.name)}</option>`)
+      S.fournisseurs
+        .map(
+          (s) =>
+            `<option value="${s.id}" ${String(f.fournisseur_fsc_id) === String(s.id) ? "selected" : ""}>${escHtml(s.nom)}</option>`
+        )
         .join("");
+    // Ancien fournisseur non rapproché : on le signale plutôt que de le perdre.
+    const supLegacy =
+      !f.fournisseur_fsc_id && f.supplier_id
+        ? `<div class="field-hint">Ancien fournisseur : ${escHtml(S.supplierMap[f.supplier_id] || "?")} — non rapproché à l'annuaire de l'entreprise.</div>`
+        : "";
     const hist = (f._history || [])
       .map(
         (h) =>
           `<tr><td>${escHtml(h.effective_date)}</td><td>${fmt4(h.unit_price)} ${escHtml(h.price_currency)}</td><td>${escHtml(h.source || "—")}</td></tr>`
       )
       .join("");
+    const ms = f._mystock || null;
+    const unit = ms
+      ? unitLabel(ms.price_currency, ms.price_basis)
+      : unitLabel(f.price_currency, f.price_basis);
+    const lockAttr = ms ? "disabled" : "";
 
     setContent(`
-      <div class="page-head">
-        <div><h1>${isNew ? "Nouvelle matière" : "Éditer matière"}</h1></div>
-        <button type="button" class="btn btn-ghost" id="btn-back-mat">Retour liste</button>
-      </div>
-      <div class="form-grid">
-        <div class="form-card" id="mat-form-fields">
+      <div class="pr-narrow">
+        ${pageHead(
+          isNew ? "Nouvelle matière" : "Éditer matière",
+          isNew ? "" : escHtml(f.name)
+        )}
+        ${matSaveBarHtml(isNew)}
+        <div class="mat-summary" id="mat-summary">${matSummaryHtml(S.matPreview)}</div>
+        <div class="form-layout">
+        <div class="form-card">
           <div class="form-section"><h3>Identification</h3>
             <div class="field"><label>Nom</label><input id="f-name" value="${escAttr(f.name)}"/></div>
             <div class="field-row">
-              <div class="field"><label>Appellation</label><input id="f-app" value="${escAttr(f.appellation_code)}"/></div>
-              <div class="field"><label>Catégorie</label><select id="f-cat">${catOpts}</select></div>
+              <div class="field f-mid"><label>Appellation</label><input id="f-app" value="${escAttr(f.appellation_code)}"/></div>
+              <div class="field f-mid"><label>Catégorie</label><select id="f-cat">${catOpts}</select></div>
             </div>
-            <div class="field"><label>Fournisseur</label><select id="f-sup">${supOpts}</select></div>
+            <div class="field f-mid"><label>Fournisseur</label><select id="f-sup">${supOpts}</select>${supLegacy}</div>
           </div>
-          <div class="form-section"><h3>Prix</h3>
-            <div class="field-row">
-              <div class="field"><label>Devise</label><select id="f-cur"><option value="EUR" ${f.price_currency==="EUR"?"selected":""}>EUR</option><option value="USD" ${f.price_currency==="USD"?"selected":""}>USD</option></select></div>
-              <div class="field"><label>Base</label><select id="f-basis"><option value="PER_KG" ${f.price_basis==="PER_KG"?"selected":""}>€ ou $ / kg</option><option value="PER_M2" ${f.price_basis==="PER_M2"?"selected":""}>€ ou $ / m²</option></select></div>
-            </div>
-            <div class="field-row">
-              <div class="field"><label>Prix unitaire</label><input type="number" step="0.0001" id="f-unit" value="${escAttr(f.unit_price)}"/></div>
-              <div class="field"><label>Incidence taxes</label><input type="number" step="0.0001" id="f-tax" value="${escAttr(f.tax_incidence)}"/></div>
-            </div>
-          </div>
-          <div class="form-section"><h3>Import</h3>
-            <label style="display:flex;align-items:center;gap:8px;font-size:13px"><input type="checkbox" id="f-imp" ${f.is_imported?"checked":""}/> Matière importée (transport conteneur)</label>
-            <div id="import-fields" style="margin-top:10px;${f.is_imported?"":"display:none"}">
-              <div class="field-row">
-                <div class="field"><label>Coût conteneur USD</label><input type="number" step="0.01" id="f-cc" value="${escAttr(f.container_cost_usd)}"/></div>
-                <div class="field"><label>Masse conteneur kg</label><input type="number" step="0.01" id="f-ck" value="${escAttr(f.container_kg)}"/></div>
+
+          <div class="form-section" id="carac-section" style="${needsWeight(f)?"":"display:none"}"><h3>Caractéristiques</h3>
+            <div class="gram-row">
+              <div class="field f-num"><label>Grammage <span class="lbl-unit">g/m²</span></label>
+                <input type="number" step="0.01" id="f-gsm" value="${escAttr(f.grammage_gsm)}"/></div>
+              <div class="gram-arrow" aria-hidden="true">→</div>
+              <div class="field f-num"><label>Perte <span class="lbl-unit">%</span></label>
+                <input type="number" step="0.1" id="f-perte" value="${escAttr(f.perte_pct)}"/></div>
+              <div class="gram-arrow" aria-hidden="true">→</div>
+              <div class="field f-num"><label>Grammage dont perte <span class="lbl-unit">g/m²</span></label>
+                <div class="gram-out" id="f-gram-out">${escHtml(fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2))}</div>
+                <div class="field-hint">C'est lui qui entre dans le calcul.</div>
               </div>
             </div>
           </div>
-          <div class="form-section"><h3>Caractéristiques</h3>
+
+          <div class="form-section"><h3>Prix d'achat</h3>
+            ${ms ? `<div class="ms-locked">
+              <strong>Prix piloté par MyStock</strong> — cette matière est appairée à
+              <strong>${escHtml(ms.reference || "?")}</strong> (${escHtml(ms.categorie || "")}).
+              Le prix utilisé pour le calcul est celui de MyStock :
+              <strong>${escHtml(fmtNum(ms.unit_price, 4, 4))} ${escHtml(ms.price_currency === "USD" ? "$" : "€")}/${ms.price_basis === "PER_M2" ? "m²" : "kg"}</strong>${ms.detail ? ` (${escHtml(ms.detail)})` : ""}.
+              <button type="button" class="link-btn" id="btn-goto-mystock">modifier dans l'onglet MyStock</button>
+            </div>` : ""}
             <div class="field-row">
-              <div class="field"><label>Poids kg/m²</label><input type="number" step="0.0001" id="f-wm2" value="${escAttr(f.weight_per_m2)}"/></div>
-              <div class="field"><label>Grammage (g/m²)</label><input type="number" id="f-gsm" value="${escAttr(f.weight_gsm)}"/></div>
+              <div class="field f-mid"><label>Devise achat</label><select id="f-cur" ${lockAttr}>
+                <option value="EUR" ${f.price_currency==="EUR"?"selected":""}>EUR — euro (€)</option>
+                <option value="USD" ${f.price_currency==="USD"?"selected":""}>USD — dollar américain ($)</option>
+              </select></div>
+              <div class="field"><label>Base de prix</label><select id="f-basis" ${lockAttr}>
+                <option value="PER_KG" ${f.price_basis==="PER_KG"?"selected":""}>${escHtml(BASIS_LABEL.PER_KG)}</option>
+                <option value="PER_M2" ${f.price_basis==="PER_M2"?"selected":""}>${escHtml(BASIS_LABEL.PER_M2)}</option>
+              </select></div>
+            </div>
+            <div class="field-row">
+              <div class="field f-price"><label>Prix unitaire <span class="lbl-unit">${escHtml(unit)}</span></label>
+                <div class="price-pair">
+                  <input type="number" step="0.0001" id="f-unit" class="price-main" value="${escAttr(ms ? ms.unit_price : f.unit_price)}" ${lockAttr}/>
+                  <span class="price-arrow" aria-hidden="true">→</span>
+                  <span id="f-unit-alt">${otherPriceHtml(ms ? ms.unit_price : f.unit_price, ms ? ms.price_currency : f.price_currency, ms ? ms.price_basis : f.price_basis)}</span>
+                </div>
+                <div class="field-hint">Contrepartie au taux ${escHtml(fmtNum((S.settings && S.settings.eur_usd_rate) || 0, 4, 4))} USD → EUR — indicatif, non enregistré.</div>
+              </div>
+              <div class="field f-num">
+                <label class="check-row check-inline">
+                  <input type="checkbox" id="f-marge" ${f.applique_marge !== false ? "checked" : ""}/>
+                  <span>
+                    <span class="check-title">Appliquer la marge</span>
+                    <span class="check-sub">Décoché, la matière entre dans le prix de revient mais on ne marge pas dessus.</span>
+                  </span>
+                </label>
+              </div>
             </div>
           </div>
-          ${S.canWrite ? `<div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
-            <button type="button" class="btn btn-accent" id="btn-save-mat">Enregistrer</button>
-            ${!isNew ? '<button type="button" class="btn btn-danger" id="btn-del-mat">Supprimer</button>' : ""}
-          </div>` : ""}
-          ${!isNew && hist ? `<div class="form-section" style="margin-top:24px"><h3>Historique prix (10 derniers)</h3><table class="pr-table"><thead><tr><th>Date</th><th>Prix</th><th>Source</th></tr></thead><tbody>${hist}</tbody></table></div>` : ""}
+
+          <div class="form-section">
+            <div class="import-block${f.is_imported ? " on" : ""}" id="import-block">
+              <label class="check-row">
+                <input type="checkbox" id="f-imp" ${f.is_imported?"checked":""}/>
+                <span>
+                  <span class="check-title">Matière importée</span>
+                  <span class="check-sub">Un coût de transport s'ajoute au prix d'achat avant conversion.</span>
+                </span>
+              </label>
+              <div id="import-fields" class="import-fields" style="${f.is_imported?"":"display:none"}">
+                <div class="field-row">
+                  <div class="field f-mid"><label>Méthode de transport</label>
+                    <select id="f-tmode">${transportModeOptions(f.transport_mode || "AMOUNT")}</select></div>
+                  ${transportChampsHtml("f", f, unit, S.matPreview)}
+                  <div class="field f-num"><label>Taxes <span class="lbl-unit">% du sous-total</span></label>
+                    <input type="number" step="0.01" id="f-tax" value="${escAttr(f.taxe_pct)}"/>
+                    <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
-        <div class="side-panel" id="mat-live-price">${previewPanelHtml(S.matPreview)}</div>
+
+        ${inlineSettingsHtml()}
+        </div>
+
+        <div id="mat-recap">${recapTableHtml(S.matPreview)}</div>
+
+        ${!isNew && hist ? `<div class="form-card" style="margin-top:16px"><div class="form-section" style="margin:0"><h3>Historique prix (10 derniers)</h3><div class="table-wrap"><table class="pr-table"><thead><tr><th>Date</th><th>Prix</th><th>Source</th></tr></thead><tbody>${hist}</tbody></table></div></div></div>` : ""}
       </div>
     `);
 
     document.getElementById("btn-back-mat").onclick = () => navigate("/pricing/materials");
+    const goMs = document.getElementById("btn-goto-mystock");
+    if (goMs) {
+      goMs.onclick = () => {
+        S.filters.matTab = "mystock";
+        S.filters.msQ = ms && ms.reference ? ms.reference : "";
+        navigate("/pricing/materials");
+      };
+    }
+    bindInlineSettings(isNew);
 
     const bindPreview = () => {
       clearTimeout(S.debounceMat);
       S.debounceMat = setTimeout(refreshMaterialPreview, 300);
     };
-    ["f-unit", "f-wm2", "f-tax", "f-cc", "f-ck"].forEach((id) => {
+    const refreshAltPrice = () => {
+      const alt = document.getElementById("f-unit-alt");
+      if (!alt) return;
+      const cur = ms ? ms.price_currency : S.formMaterial.price_currency;
+      const bas = ms ? ms.price_basis : S.formMaterial.price_basis;
+      alt.innerHTML = otherPriceHtml(S.formMaterial.unit_price, cur, bas);
+    };
+    // Le grammage retenu n'est pas saisi : il se recalcule sous les yeux.
+    const majGrammage = () => {
+      const out = document.getElementById("f-gram-out");
+      if (out) out.textContent = fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2);
+    };
+    ["f-unit", "f-tax", "f-transport", "f-tcout", "f-tqte", "f-gsm", "f-perte"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.oninput = () => {
         syncMaterialFormFromDom();
+        refreshAltPrice();
+        majGrammage();
         bindPreview();
       };
     });
-    ["f-cur", "f-basis", "f-imp"].forEach((id) => {
+    const chkMarge = document.getElementById("f-marge");
+    if (chkMarge) chkMarge.onchange = () => {
+      syncMaterialFormFromDom();
+      bindPreview();
+    };
+    ["f-cur", "f-basis", "f-imp", "f-tmode"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.onchange = () => {
         syncMaterialFormFromDom();
-        const impFields = document.getElementById("import-fields");
-        if (impFields) impFields.style.display = document.getElementById("f-imp").checked ? "" : "none";
-        bindPreview();
+        renderMaterialForm(isNew);
+        refreshMaterialPreview();
       };
     });
+
+    // Le bandeau signale qu'une saisie attend d'être enregistrée. Le drapeau
+    // vit dans S : le formulaire se re-rend tout seul quand la devise ou la base
+    // de prix change, un état local serait perdu à chaque fois.
+    const carte = document.querySelector(".form-layout > .form-card");
+    if (carte) {
+      const marquer = () => {
+        if (S.matDirty) return;
+        S.matDirty = true;
+        const t = document.getElementById("mat-dirty");
+        if (t) t.hidden = false;
+      };
+      carte.addEventListener("input", marquer);
+      carte.addEventListener("change", marquer);
+    }
 
     if (S.canWrite) {
       document.getElementById("btn-save-mat").onclick = () => saveMaterialForm(isNew);
@@ -822,19 +1709,36 @@
 
   function syncMaterialFormFromDom() {
     const f = S.formMaterial;
-    f.name = document.getElementById("f-name").value;
-    f.appellation_code = document.getElementById("f-app").value;
-    f.category_id = parseInt(document.getElementById("f-cat").value, 10);
-    f.supplier_id = document.getElementById("f-sup").value;
-    f.price_currency = document.getElementById("f-cur").value;
-    f.price_basis = document.getElementById("f-basis").value;
-    f.unit_price = document.getElementById("f-unit").value;
-    f.tax_incidence = document.getElementById("f-tax").value;
-    f.is_imported = document.getElementById("f-imp").checked;
-    f.container_cost_usd = document.getElementById("f-cc").value;
-    f.container_kg = document.getElementById("f-ck").value;
-    f.weight_per_m2 = document.getElementById("f-wm2").value;
-    f.weight_gsm = document.getElementById("f-gsm").value;
+    const val = (id) => {
+      const el = document.getElementById(id);
+      return el ? el.value : null;
+    };
+    f.name = val("f-name") ?? f.name;
+    f.appellation_code = val("f-app") ?? f.appellation_code;
+    const cat = val("f-cat");
+    if (cat != null) f.category_id = parseInt(cat, 10);
+    f.fournisseur_fsc_id = val("f-sup") ?? f.fournisseur_fsc_id;
+    if (!f._mystock) {
+      f.price_currency = val("f-cur") ?? f.price_currency;
+      f.price_basis = val("f-basis") ?? f.price_basis;
+      f.unit_price = val("f-unit") ?? f.unit_price;
+    }
+    f.taxe_pct = val("f-tax") ?? f.taxe_pct;
+    f.grammage_gsm = val("f-gsm") ?? f.grammage_gsm;
+    f.perte_pct = val("f-perte") ?? f.perte_pct;
+    const imp = document.getElementById("f-imp");
+    if (imp) f.is_imported = imp.checked;
+    const marge = document.getElementById("f-marge");
+    if (marge) f.applique_marge = marge.checked;
+    const mode = val("f-tmode");
+    if (mode) f.transport_mode = mode;
+    const tv = val("f-transport");
+    if (tv != null) {
+      if (f.transport_mode === "PCT") f.transport_pct = tv;
+      else f.transport_unit_price = tv;
+    }
+    f.transport_cout = val("f-tcout") ?? f.transport_cout;
+    f.transport_quantite = val("f-tqte") ?? f.transport_quantite;
   }
 
   async function saveMaterialForm(isNew) {
@@ -844,18 +1748,30 @@
       name: f.name.trim(),
       appellation_code: f.appellation_code.trim(),
       category_id: f.category_id,
-      supplier_id: f.supplier_id ? parseInt(f.supplier_id, 10) : null,
-      weight_per_m2: parseFloat(f.weight_per_m2) || 0,
-      weight_gsm: f.weight_gsm ? parseInt(f.weight_gsm, 10) : null,
+      fournisseur_fsc_id: f.fournisseur_fsc_id ? parseInt(f.fournisseur_fsc_id, 10) : null,
+      grammage_gsm: parseFloat(f.grammage_gsm) || 0,
+      perte_pct: parseFloat(f.perte_pct) || 0,
       price_currency: f.price_currency,
       unit_price: parseFloat(f.unit_price) || 0,
       price_basis: f.price_basis,
-      tax_incidence: parseFloat(f.tax_incidence) || 1,
+      taxe_pct: parseFloat(f.taxe_pct) || 0,
       is_imported: !!f.is_imported,
-      container_kg: f.container_kg ? parseFloat(f.container_kg) : null,
-      container_cost_usd: f.container_cost_usd ? parseFloat(f.container_cost_usd) : null,
+      applique_marge: f.applique_marge !== false,
+      transport_mode: f.transport_mode || "AMOUNT",
+      transport_unit_price: parseFloat(f.transport_unit_price) || 0,
+      transport_pct: parseFloat(f.transport_pct) || 0,
+      transport_cout: parseFloat(f.transport_cout) || 0,
+      transport_quantite: parseFloat(f.transport_quantite) || 0,
       price_history_source: "Saisie interface",
     };
+    if (!body.name) {
+      showToast("Nom requis.", "danger");
+      return;
+    }
+    if (body.price_basis === "PER_KG" && !(body.grammage_gsm > 0)) {
+      showToast("Grammage requis : le prix est saisi au kilo.", "danger");
+      return;
+    }
     try {
       if (isNew) {
         const r = await api("/api/pricing/materials", { method: "POST", body });
@@ -864,6 +1780,7 @@
       } else {
         await api("/api/pricing/materials/" + S.route.id, { method: "PATCH", body });
         showToast("Matière enregistrée.", "success");
+        S.matDirty = false;
         await loadMaterialForm(S.route.id);
         renderMaterialForm(false);
       }
@@ -882,7 +1799,7 @@
         <p style="color:var(--muted);font-size:13px">${categoryBadge(m.category_code)} · ${escHtml(m.appellation_code)}</p>
         <p style="margin:16px 0"><strong>${m.computed ? fmtEurM2(m.computed.price_eur_per_m2) : "—"}</strong></p>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button type="button" class="btn btn-ghost btn-sm" id="dw-hist">Historique</button>
+          <button type="button" class="btn btn-soft btn-sm" id="dw-hist">Historique</button>
           ${S.canWrite ? `<button type="button" class="btn btn-accent btn-sm" id="dw-edit">Éditer</button>` : ""}
         </div>
       </div>`;
@@ -930,7 +1847,7 @@
     const rows = history
       .map(
         (x) =>
-          `<tr><td>${escHtml(x.effective_date)}</td><td>${fmt4(x.unit_price)} ${currencyBadge(x.price_currency)}</td><td>${fmt4(x.tax_incidence)}</td><td>${escHtml(x.source || "—")}</td></tr>`
+          `<tr><td>${escHtml(x.effective_date)}</td><td>${fmt4(x.unit_price)} ${currencyBadge(x.price_currency)}</td><td>${fmt4(x.taxe_pct)} %</td><td>${escHtml(x.source || "—")}</td></tr>`
       )
       .join("");
     const root = document.getElementById("modal-root");
@@ -941,7 +1858,7 @@
           <canvas class="history-chart" id="hist-canvas" width="560" height="200"></canvas>
           <table class="pr-table"><thead><tr><th>Date</th><th>Prix</th><th>Taxe</th><th>Source</th></tr></thead>
           <tbody>${rows || '<tr><td colspan="4" class="empty">Aucun historique</td></tr>'}</tbody></table>
-          <button type="button" class="btn btn-ghost" style="margin-top:12px" id="modal-close">Fermer</button>
+          <button type="button" class="btn btn-soft" style="margin-top:12px" id="modal-close">Fermer</button>
         </div>
       </div>`;
     document.getElementById("modal-back").onclick = (e) => {
@@ -998,10 +1915,10 @@
           <td>${sell}</td>
           <td>${margin}</td>
           <td class="row-actions" onclick="event.stopPropagation()">
-            <button type="button" class="btn btn-ghost btn-sm" data-dup="${p.id}">Dupliquer</button>
-            <button type="button" class="btn btn-ghost btn-sm" data-xls="${p.id}">Excel</button>
-            <button type="button" class="btn btn-ghost btn-sm" data-pdf="${p.id}">PDF</button>
-            ${S.canWrite ? `<button type="button" class="btn btn-ghost btn-sm" data-edit-p="${p.id}">Éditer</button>` : ""}
+            <button type="button" class="btn btn-soft btn-sm" data-dup="${p.id}">Dupliquer</button>
+            <button type="button" class="btn btn-soft btn-sm" data-xls="${p.id}">Excel</button>
+            <button type="button" class="btn btn-soft btn-sm" data-pdf="${p.id}">PDF</button>
+            ${S.canWrite ? `<button type="button" class="btn btn-soft btn-sm" data-edit-p="${p.id}">Éditer</button>` : ""}
           </td>
         </tr>`;
       })
@@ -1016,14 +1933,16 @@
         : "";
 
     setContent(`
-      <div class="page-head">
-        <div><h1>Produits</h1><div class="sub">${S.products.length} produit(s)</div></div>
-        ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-prod">+ Nouveau produit</button>' : ""}
-      </div>
+      ${pageHead(
+        "Produits",
+        `${S.products.length} produit(s)`,
+        productsTabsHtml() +
+          (S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-prod">+ Nouveau produit</button>' : "")
+      )}
       <div class="filters">
         <input type="search" class="search-input" id="prod-q" placeholder="Rechercher (code, nom…)" value="${escAttr(S.filters.prodQ)}"/>
         <button type="button" class="btn btn-accent" id="prod-export-sel">Exporter sélection (Excel)</button>
-        <button type="button" class="btn btn-ghost" id="prod-export-all">Exporter liste CSV</button>
+        <button type="button" class="btn btn-soft" id="prod-export-all">Exporter liste CSV</button>
       </div>
       ${prodEmpty}
       <div class="table-wrap" ${prodEmpty ? 'style="display:none"' : ""}>
@@ -1034,6 +1953,7 @@
       </div>
     `);
 
+    bindProductsTabs();
     document.getElementById("prod-q").oninput = (e) => {
       clearTimeout(S.debounceProd);
       S.debounceProd = setTimeout(async () => {
@@ -1061,7 +1981,7 @@
           silicone_id: p.silicone_id,
           glassine_id: p.glassine_id,
           extra_material_ids: [...(p.extra_material_ids || [])],
-          custom_margin_eur_m2: p.custom_margin_eur_m2 != null ? String(p.custom_margin_eur_m2) : "",
+          custom_margin_pct: p.custom_margin_pct != null ? String(p.custom_margin_pct) : "",
         };
         navigate("/pricing/products/new");
         await bootRoute();
@@ -1216,7 +2136,7 @@
         silicone_id: "",
         glassine_id: "",
         extra_material_ids: [],
-        custom_margin_eur_m2: "",
+        custom_margin_pct: "",
       }
     );
   }
@@ -1236,7 +2156,7 @@
       silicone_id: p.silicone_id || "",
       glassine_id: p.glassine_id || "",
       extra_material_ids: p.extra_material_ids || [],
-      custom_margin_eur_m2: p.custom_margin_eur_m2 != null ? String(p.custom_margin_eur_m2) : "",
+      custom_margin_pct: p.custom_margin_pct != null ? String(p.custom_margin_pct) : "",
     };
     S.prodPreview = p.cost || null;
   }
@@ -1316,7 +2236,9 @@
       silicone_id: f.silicone_id ? parseInt(f.silicone_id, 10) : null,
       glassine_id: f.glassine_id ? parseInt(f.glassine_id, 10) : null,
       extra_material_ids: f.extra_material_ids || [],
-      custom_margin_eur_m2: f.custom_margin_eur_m2 ? parseFloat(f.custom_margin_eur_m2) : null,
+      custom_margin_pct: f.custom_margin_pct !== "" && f.custom_margin_pct != null
+        ? parseFloat(f.custom_margin_pct)
+        : null,
     };
   }
 
@@ -1344,20 +2266,21 @@
       <div class="big-price">${fmtEurM2(cost.total_eur_per_m2)}</div>
       ${priceBreakdownHtml({ components: comps, total: cost.total_eur_per_m2 })}
       <div class="breakdown-legend" style="margin-top:14px">
-        <div><span>Marge</span><span>${fmtEurM2(cost.margin_eur_m2)}</span></div>
+        <div><span>Marge (${fmtNum(cost.margin_pct || 0, 2, 2)} %)</span><span>${fmtEurM2(cost.margin_eur_m2)}</span></div>
         <div><span>Prix de vente</span><span><strong>${fmtEurM2(cost.sell_price_eur_m2)}</strong></span></div>
       </div>`;
   }
 
   function renderProductForm(isNew) {
     const f = S.formProduct;
-    const defMargin = S.settings ? fmtEurM2(S.settings.default_margin_eur_m2) : "—";
+    const defMargin = S.settings ? fmtNum(S.settings.default_margin_pct, 2, 2) : "—";
 
     setContent(`
-      <div class="page-head">
-        <div><h1>${isNew ? "Nouveau produit" : "Éditer produit"}</h1></div>
-        <button type="button" class="btn btn-ghost" id="btn-back-prod">Retour liste</button>
-      </div>
+      ${pageHead(
+        isNew ? "Nouveau produit" : "Éditer produit",
+        "",
+        '<button type="button" class="btn btn-accent" id="btn-back-prod">Retour liste</button>'
+      )}
       <div class="form-grid">
         <div class="form-card">
           <div class="field-row">
@@ -1368,12 +2291,13 @@
           ${materialComboboxHtml("p-adhesif", "ADHESIF", f.adhesif_id)}
           ${materialComboboxHtml("p-silicone", "SILICONE", f.silicone_id)}
           ${materialComboboxHtml("p-glassine", "GLASSINE", f.glassine_id)}
-          <div class="field"><label>Marge custom €/m² (optionnel)</label>
-            <input type="number" step="0.0001" id="p-margin" value="${escAttr(f.custom_margin_eur_m2)}" placeholder="Défaut : ${escAttr(defMargin)}"/>
+          <div class="field"><label>Marge personnalisée <span class="lbl-unit">% du prix de revient</span></label>
+            <input type="number" step="0.01" id="p-margin" value="${escAttr(f.custom_margin_pct)}" placeholder="Défaut : ${escAttr(defMargin)} %"/>
+            <div class="field-hint">Laisser vide pour appliquer la marge par défaut des paramètres.</div>
           </div>
           ${S.canWrite ? `<div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
             <button type="button" class="btn btn-accent" id="btn-save-prod">Enregistrer</button>
-            <button type="button" class="btn btn-ghost" id="btn-print-prod">Exporter PDF</button>
+            <button type="button" class="btn btn-soft" id="btn-print-prod">Exporter PDF</button>
             ${!isNew ? '<button type="button" class="btn btn-danger" id="btn-del-prod">Supprimer</button>' : ""}
           </div>` : ""}
         </div>
@@ -1424,7 +2348,7 @@
     f.adhesif_id = document.getElementById("p-adhesif").value;
     f.silicone_id = document.getElementById("p-silicone").value;
     f.glassine_id = document.getElementById("p-glassine").value;
-    f.custom_margin_eur_m2 = document.getElementById("p-margin").value;
+    f.custom_margin_pct = document.getElementById("p-margin").value;
   }
 
   async function saveProductForm(isNew) {
@@ -1438,7 +2362,9 @@
       silicone_id: f.silicone_id ? parseInt(f.silicone_id, 10) : null,
       glassine_id: f.glassine_id ? parseInt(f.glassine_id, 10) : null,
       extra_material_ids: f.extra_material_ids || [],
-      custom_margin_eur_m2: f.custom_margin_eur_m2 ? parseFloat(f.custom_margin_eur_m2) : null,
+      custom_margin_pct: f.custom_margin_pct !== "" && f.custom_margin_pct != null
+        ? parseFloat(f.custom_margin_pct)
+        : null,
     };
     try {
       if (isNew) {
@@ -1456,41 +2382,57 @@
     }
   }
 
-  function renderSettings() {
-    const s = S.settings;
-    if (!s) return;
+  function openSettingsModal() {
+    if (!S.canWrite) return;
+    const s = S.settings || {};
     const fxDate = s.eur_usd_rate_updated_at
       ? String(s.eur_usd_rate_updated_at).replace("T", " ").slice(0, 16)
       : "—";
     const fxStale = isFxStale(s.eur_usd_rate_updated_at);
-    setContent(`
-      <div class="page-head"><div><h1>Paramètres</h1><div class="sub">Taux, conteneur et marge par défaut</div></div></div>
-      <div class="form-card" style="max-width:520px">
-        <div class="field"><label>Taux EUR / USD ${fxStale ? fxStaleBadgeHtml() : ""}</label><input type="number" step="0.0001" id="s-rate" value="${escAttr(s.eur_usd_rate)}"/>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">Source : ${escHtml(s.eur_usd_rate_source || "—")} · MAJ : ${escHtml(fxDate)}</div>
+    const root = document.getElementById("modal-root");
+    root.innerHTML = `
+      <div class="modal-backdrop" id="set-back">
+        <div class="modal" id="set-modal" style="max-width:520px">
+          <div class="modal-head">
+            <h2>Paramètres</h2>
+            <button type="button" class="icon-btn" id="set-close" aria-label="Fermer">×</button>
+          </div>
+          <div class="field"><label>Taux USD → EUR ${fxStale ? fxStaleBadgeHtml() : ""}</label>
+            <input type="number" step="0.0001" id="s-rate" value="${escAttr(s.eur_usd_rate)}"/>
+            <div class="field-hint">1 USD = ce montant en euros · Source : ${escHtml(s.eur_usd_rate_source || "—")} · MAJ : ${escHtml(fxDate)}</div>
+          </div>
+          <div class="field"><label>Marge par défaut <span class="lbl-unit">% du prix de revient</span></label>
+            <input type="number" step="0.01" id="s-margin" value="${escAttr(s.default_margin_pct)}"/>
+            <div class="field-hint">Appliquée à tous les produits sans marge personnalisée.</div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-accent" id="s-save">Enregistrer</button>
+            <button type="button" class="btn btn-soft" id="s-fx">Rafraîchir le taux</button>
+            <button type="button" class="btn btn-soft" id="s-cancel">Annuler</button>
+          </div>
         </div>
-        <div class="field"><label>Coût conteneur USD</label><input type="number" step="0.01" id="s-cc" value="${escAttr(s.default_container_cost_usd)}"/></div>
-        <div class="field"><label>Masse conteneur kg</label><input type="number" step="0.01" id="s-ck" value="${escAttr(s.default_container_kg)}"/></div>
-        <div class="field"><label>Marge par défaut €/m²</label><input type="number" step="0.0001" id="s-margin" value="${escAttr(s.default_margin_eur_m2)}"/></div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
-          <button type="button" class="btn btn-accent" id="s-save">Enregistrer</button>
-          <button type="button" class="btn btn-ghost" id="s-fx">Rafraîchir taux EUR/USD</button>
-        </div>
-      </div>
-    `);
+      </div>`;
+
+    const close = () => {
+      root.innerHTML = "";
+    };
+    document.getElementById("set-back").onclick = (e) => {
+      if (e.target.id === "set-back") close();
+    };
+    document.getElementById("set-close").onclick = close;
+    document.getElementById("s-cancel").onclick = close;
     document.getElementById("s-save").onclick = async () => {
       try {
         S.settings = await api("/api/pricing/settings", {
           method: "PATCH",
           body: {
             eur_usd_rate: parseFloat(document.getElementById("s-rate").value),
-            default_container_cost_usd: parseFloat(document.getElementById("s-cc").value),
-            default_container_kg: parseFloat(document.getElementById("s-ck").value),
-            default_margin_eur_m2: parseFloat(document.getElementById("s-margin").value),
+            default_margin_pct: parseFloat(document.getElementById("s-margin").value),
           },
         });
         showToast("Paramètres enregistrés.", "success");
-        renderSettings();
+        close();
+        await bootRoute();
       } catch (e) {
         showToast(e.message, "danger");
       }
@@ -1500,11 +2442,782 @@
         const r = await api("/api/pricing/settings/refresh-fx", { method: "POST" });
         showToast("Taux mis à jour : " + fmtNum(r.eur_usd_rate, 4, 4), "success");
         S.settings = await api("/api/pricing/settings");
-        renderSettings();
+        openSettingsModal();
       } catch (e) {
         showToast(e.message, "danger");
       }
     };
+  }
+
+  // ─── Fiche d'une déclinaison MyStock ────────────────────────────────────
+  // L'équivalent d'une fiche de la base Coûts matières, mais pour une matière
+  // MyStock : le prix vient du fournisseur principal, les réglages qui en font
+  // un coût au m² (poids, devise, base, taxes, import) vivent sur la
+  // déclinaison. Aucune fiche de la base historique n'est nécessaire.
+
+  async function loadDeclinaisonForm(id) {
+    S.declDirty = false;
+    S.declForm = await api("/api/pricing/mystock/declinaisons/" + id + "/parametrage");
+    S.declPreview = S.declForm.computed || null;
+  }
+
+  /** Recopie l'état des champs de la page dans S.declForm. */
+  function syncDeclFormFromDom() {
+    const f = S.declForm;
+    const g = (id) => document.getElementById(id);
+    if (g("d-cur")) f.price_currency = g("d-cur").value;
+    if (g("d-basis")) f.price_basis = g("d-basis").value;
+    if (g("d-tax")) f.taxe_pct = g("d-tax").value;
+    if (g("d-imp")) f.is_imported = g("d-imp").checked;
+    if (g("d-marge")) f.applique_marge = g("d-marge").checked;
+    if (g("d-tmode")) f.transport_mode = g("d-tmode").value;
+    if (g("d-transport")) {
+      const v = g("d-transport").value;
+      if (f.transport_mode === "PCT") f.transport_pct = v;
+      else f.transport_unit_price = v;
+    }
+    if (g("d-tcout")) f.transport_cout = g("d-tcout").value;
+    if (g("d-tqte")) f.transport_quantite = g("d-tqte").value;
+    if (g("d-gsm")) f.grammage_gsm = g("d-gsm").value;
+    if (g("d-perte")) f.perte_pct = g("d-perte").value;
+  }
+
+  /** Recalcule le coût sans rien enregistrer — même endpoint que la base CM. */
+  async function refreshDeclPreview() {
+    const f = S.declForm;
+    try {
+      S.declPreview = await api("/api/pricing/materials/preview", {
+        method: "POST",
+        body: {
+          unit_price: parseFloat(f.unit_price) || 0,
+          weight_per_m2: poidsRetenu(f.grammage_gsm, f.perte_pct),
+          price_currency: f.price_currency,
+          price_basis: f.price_basis,
+          taxe_pct: parseFloat(f.taxe_pct) || 0,
+          is_imported: !!f.is_imported,
+          applique_marge: f.applique_marge !== false,
+          transport_mode: f.transport_mode || "AMOUNT",
+          transport_unit_price: parseFloat(f.transport_unit_price) || 0,
+          transport_pct: parseFloat(f.transport_pct) || 0,
+          transport_cout: parseFloat(f.transport_cout) || 0,
+          transport_quantite: parseFloat(f.transport_quantite) || 0,
+        },
+      });
+    } catch (e) {
+      return;
+    }
+    const sum = document.getElementById("decl-summary");
+    if (sum) sum.innerHTML = matSummaryHtml(S.declPreview);
+    const rec = document.getElementById("decl-recap");
+    if (rec) rec.innerHTML = recapTableHtml(S.declPreview);
+    const eq = document.getElementById("d-transport-eq");
+    if (eq) eq.innerHTML = transportEqText(S.declPreview);
+  }
+
+  /**
+   * Historique des prix d'une déclinaison.
+   *
+   * Deux applications écrivent le même prix — la valorisation MyStock et cette
+   * fiche. Sans la colonne « Depuis », un écart se constate sans jamais
+   * s'expliquer.
+   */
+  function declHistoriqueHtml(lignes) {
+    if (!lignes || !lignes.length) {
+      return `<div class="form-card" style="margin-top:16px"><div class="form-section" style="margin:0">
+        <h3>Historique des prix</h3>
+        <div class="empty" style="padding:14px 0">Aucun mouvement enregistré pour l'instant.</div>
+      </div></div>`;
+    }
+    const corps = lignes
+      .map((h) => {
+        const dp = h.prix_apres != null && h.prix_avant != null
+          ? h.prix_apres - h.prix_avant : 0;
+        const sens = Math.abs(dp) < 1e-9 ? "" : (dp > 0 ? " hist-hausse" : " hist-baisse");
+        const fleche = Math.abs(dp) < 1e-9 ? "" : (dp > 0 ? "▲ " : "▼ ");
+        return `<tr>
+          <td class="hist-date">${escHtml(fmtDateHeure(h.date))}</td>
+          <td>${escHtml(h.origine || "—")}</td>
+          <td>${escHtml(h.auteur || "—")}${h.fournisseur_nom ? ` <span class="muted">· ${escHtml(h.fournisseur_nom)}</span>` : ""}</td>
+          <td class="msp-num">${h.prix_avant != null ? escHtml(fmt4(h.prix_avant)) : "—"}</td>
+          <td class="msp-num${sens}">${fleche}${h.prix_apres != null ? escHtml(fmt4(h.prix_apres)) : "—"}</td>
+          <td class="msp-num">${h.sous_total_apres != null ? escHtml(fmt4(h.sous_total_apres)) : "—"}</td>
+          <td class="hist-note">${escHtml(h.note || "")}</td>
+        </tr>`;
+      })
+      .join("");
+    return `<div class="form-card" style="margin-top:16px"><div class="form-section" style="margin:0">
+      <h3>Historique des prix</h3>
+      <div class="field-hint" style="margin:-6px 0 10px">Le sous-total d'achat est la valeur affichée par la valorisation MyStock.</div>
+      <div class="table-wrap"><table class="pr-table hist-table">
+        <thead><tr><th>Date</th><th>Depuis</th><th>Par</th>
+          <th class="msp-num">Prix avant</th><th class="msp-num">Prix après</th>
+          <th class="msp-num">Sous-total</th><th>Note</th></tr></thead>
+        <tbody>${corps}</tbody>
+      </table></div>
+    </div></div>`;
+  }
+
+  /** « 2026-08-05T07:42:11 » → « 05/08/2026 · 07:42 ». */
+  function fmtDateHeure(raw) {
+    const m = String(raw || "").match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+    return m ? `${m[3]}/${m[2]}/${m[1]} · ${m[4]}:${m[5]}` : String(raw || "");
+  }
+
+  function declSaveBarHtml() {
+    const dirty = S.declDirty ? "" : " hidden";
+    return `<div class="pr-savebar">
+        <button type="button" class="btn btn-soft btn-sm" id="btn-back-decl">${icon("arrow-left", 14)} Retour liste</button>
+        <div class="savebar-state" id="decl-dirty"${dirty}><span class="dot"></span>Modifications non enregistrées</div>
+        <div class="savebar-actions">
+          <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${S.declForm.matiere_id}" target="_blank" rel="noopener" title="Ouvrir la matière dans MyStock">MyStock ↗</a>
+          ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-save-decl">Enregistrer</button>' : ""}
+        </div>
+      </div>`;
+  }
+
+  function renderDeclinaisonForm() {
+    const f = S.declForm;
+    const unit = unitLabel(f.price_currency, f.price_basis);
+    const prixTxt = `${fmtNum(f.unit_price, 4, 4)} ${unit}`;
+
+    setContent(`
+      <div class="pr-narrow">
+        ${pageHead(
+          "Matière MyStock",
+          `${escHtml(f.reference)} — ${escHtml(f.libelle)}`
+        )}
+        ${declSaveBarHtml()}
+        <div class="mat-summary" id="decl-summary">${matSummaryHtml(S.declPreview)}</div>
+        <div class="form-layout">
+        <div class="form-card">
+
+          <div class="form-section"><h3>Identification</h3>
+            <div class="ms-locked">
+              <strong>${escHtml(f.reference)}</strong> — ${escHtml(f.designation || "")}
+              · ${escHtml(f.libelle)} · ${escHtml(f.categorie || "")}
+              <br>Prix en vigueur : <strong>${escHtml(prixTxt)}</strong>${
+                f.fournisseur_nom ? ` chez <strong>${escHtml(f.fournisseur_nom)}</strong>` : " (aucun fournisseur principal)"
+              }.
+              Sous-total d'achat : <strong>${escHtml(fmtNum(f.sous_total_achat, 4, 4))} ${escHtml(unit)}</strong>
+              — c'est cette valeur que la valorisation MyStock affiche.
+              <br>Le prix se modifie dans l'onglet Matières MyStock, où vivent les fournisseurs.
+            </div>
+          </div>
+
+          <div class="form-section" id="d-carac" style="${needsWeight(f)?"":"display:none"}"><h3>Caractéristiques</h3>
+            <div class="gram-row">
+              <div class="field f-num"><label>Grammage <span class="lbl-unit">g/m²</span></label>
+                <input type="number" step="0.01" id="d-gsm" value="${escAttr(f.grammage_gsm)}"/></div>
+              <div class="gram-arrow" aria-hidden="true">→</div>
+              <div class="field f-num"><label>Perte <span class="lbl-unit">%</span></label>
+                <input type="number" step="0.1" id="d-perte" value="${escAttr(f.perte_pct)}"/></div>
+              <div class="gram-arrow" aria-hidden="true">→</div>
+              <div class="field f-num"><label>Grammage dont perte <span class="lbl-unit">g/m²</span></label>
+                <div class="gram-out" id="d-gram-out">${escHtml(fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2))}</div>
+                <div class="field-hint">C'est lui qui entre dans le calcul.</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section"><h3>Prix d'achat</h3>
+            <div class="field-row">
+              <div class="field f-mid"><label>Devise achat</label><select id="d-cur">
+                <option value="EUR" ${f.price_currency==="EUR"?"selected":""}>EUR — euro (€)</option>
+                <option value="USD" ${f.price_currency==="USD"?"selected":""}>USD — dollar américain ($)</option>
+              </select></div>
+              <div class="field"><label>Base de prix</label><select id="d-basis">
+                <option value="PER_KG" ${f.price_basis==="PER_KG"?"selected":""}>${escHtml(BASIS_LABEL.PER_KG)}</option>
+                <option value="PER_M2" ${f.price_basis==="PER_M2"?"selected":""}>${escHtml(BASIS_LABEL.PER_M2)}</option>
+              </select></div>
+            </div>
+            <label class="check-row check-inline">
+              <input type="checkbox" id="d-marge" ${f.applique_marge !== false ? "checked" : ""}/>
+              <span>
+                <span class="check-title">Appliquer la marge</span>
+                <span class="check-sub">Décoché, la matière entre dans le prix de revient mais on ne marge pas dessus.</span>
+              </span>
+            </label>
+          </div>
+
+          <div class="form-section">
+            <div class="import-block${f.is_imported ? " on" : ""}" id="d-import-block">
+              <label class="check-row">
+                <input type="checkbox" id="d-imp" ${f.is_imported?"checked":""}/>
+                <span>
+                  <span class="check-title">Matière importée</span>
+                  <span class="check-sub">Un coût de transport s'ajoute au prix d'achat avant conversion.</span>
+                </span>
+              </label>
+              <div id="d-import-fields" class="import-fields" style="${f.is_imported?"":"display:none"}">
+                <div class="field-row">
+                  <div class="field f-mid"><label>Méthode de transport</label>
+                    <select id="d-tmode">${transportModeOptions(f.transport_mode || "AMOUNT")}</select></div>
+                  ${transportChampsHtml("d", f, unit, S.declPreview)}
+                  <div class="field f-num"><label>Taxes <span class="lbl-unit">% du sous-total</span></label>
+                    <input type="number" step="0.01" id="d-tax" value="${escAttr(f.taxe_pct)}"/>
+                    <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        ${inlineSettingsHtml()}
+        </div>
+
+        <div id="decl-recap">${recapTableHtml(S.declPreview)}</div>
+        ${declHistoriqueHtml(f.historique)}
+      </div>
+    `);
+
+    document.getElementById("btn-back-decl").onclick = () => navigate("/pricing/materials");
+    bindInlineSettings();
+
+    const marquer = () => {
+      if (S.declDirty) return;
+      S.declDirty = true;
+      const t = document.getElementById("decl-dirty");
+      if (t) t.hidden = false;
+    };
+
+    // Saisie libre : on recalcule à la volée, sans re-render (le curseur reste
+    // dans le champ).
+    const majGrammage = () => {
+      const out = document.getElementById("d-gram-out");
+      if (out) out.textContent = fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2);
+    };
+    ["d-tax", "d-transport", "d-tcout", "d-tqte", "d-gsm", "d-perte"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.oninput = () => {
+        marquer();
+        syncDeclFormFromDom();
+        majGrammage();
+        clearTimeout(S.debounceDecl);
+        S.debounceDecl = setTimeout(refreshDeclPreview, 300);
+      };
+    });
+    const chkMarge = document.getElementById("d-marge");
+    if (chkMarge) chkMarge.onchange = () => {
+      marquer();
+      syncDeclFormFromDom();
+      refreshDeclPreview();
+    };
+    // Ces champs changent les unités affichées partout : on re-rend.
+    ["d-cur", "d-basis", "d-imp", "d-tmode"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.onchange = () => {
+        marquer();
+        syncDeclFormFromDom();
+        renderDeclinaisonForm();
+        refreshDeclPreview();
+      };
+    });
+
+    const save = document.getElementById("btn-save-decl");
+    if (save) save.onclick = () => saveDeclinaisonForm();
+  }
+
+  async function saveDeclinaisonForm() {
+    syncDeclFormFromDom();
+    const f = S.declForm;
+    try {
+      const maj = await api(
+        "/api/pricing/mystock/declinaisons/" + f.declinaison_id + "/parametrage",
+        {
+          method: "PATCH",
+          body: {
+            price_currency: f.price_currency,
+            price_basis: f.price_basis,
+            taxe_pct: parseFloat(f.taxe_pct) || 0,
+            is_imported: !!f.is_imported,
+            applique_marge: f.applique_marge !== false,
+            transport_mode: f.transport_mode || "AMOUNT",
+            transport_unit_price: parseFloat(f.transport_unit_price) || 0,
+            transport_pct: parseFloat(f.transport_pct) || 0,
+            transport_cout: parseFloat(f.transport_cout) || 0,
+            transport_quantite: parseFloat(f.transport_quantite) || 0,
+            grammage_gsm: parseFloat(f.grammage_gsm) || 0,
+            perte_pct: parseFloat(f.perte_pct) || 0,
+          },
+        }
+      );
+      S.declForm = maj;
+      S.declPreview = maj.computed || null;
+      S.declDirty = false;
+      showToast("Réglages enregistrés.", "success");
+      renderDeclinaisonForm();
+    } catch (e) {
+      showToast(e.message, "danger");
+    }
+  }
+
+  // ─── Produits devisés à partir des matières MyStock ─────────────────────
+  // Même idée que les produits de la base Coûts matières, mais composés de
+  // DÉCLINAISONS : une laize précise d'un frontal, un grammage précis d'un
+  // adhésif. MyStock ne connaît pas de catégorie « silicone » : les trois
+  // emplacements nommés sont frontal, adhésif et glassine, le reste s'ajoute
+  // librement (complexe, autre…).
+
+  const MSP_ROLES = [
+    { role: "FRONTAL", label: "Frontal", categorie: "frontal" },
+    { role: "ADHESIF", label: "Adhésif", categorie: "adhesif" },
+    { role: "GLASSINE", label: "Glassine", categorie: "glassine" },
+  ];
+
+  /** Bascule entre les produits de la base CM et ceux composés depuis MyStock. */
+  function productsTabsHtml() {
+    const t = S.filters.prodTab;
+    return `<div class="tabs">
+      <button type="button" class="tab${t === "couts" ? " on" : ""}" data-ptab="couts">Base Coûts matières</button>
+      <button type="button" class="tab${t === "mystock" ? " on" : ""}" data-ptab="mystock">Produits MyStock</button>
+    </div>`;
+  }
+
+  function bindProductsTabs() {
+    document.querySelectorAll("[data-ptab]").forEach((b) => {
+      b.onclick = async () => {
+        const t = b.getAttribute("data-ptab");
+        if (t === S.filters.prodTab) return;
+        S.filters.prodTab = t;
+        await bootRoute();
+      };
+    });
+  }
+
+  function defaultMsProductForm() {
+    return { code: "", designation: "", roles: {}, autres: [], custom_margin_pct: "" };
+  }
+
+  async function loadMsDeclinaisons() {
+    const data = await api("/api/pricing/mystock/declinaisons");
+    S.msDecls = data.declinaisons || [];
+  }
+
+  async function loadMsProductsList() {
+    const params = new URLSearchParams();
+    params.set("with_cost", "true");
+    if (S.filters.msProdQ) params.set("q", S.filters.msProdQ);
+    const data = await api("/api/pricing/mystock/produits?" + params.toString());
+    S.msProducts = data.produits || [];
+  }
+
+  async function loadMsProductForm(id) {
+    await loadMsDeclinaisons();
+    if (!id) {
+      if (!S.formMsProduct) S.formMsProduct = defaultMsProductForm();
+      S.msProdPreview = null;
+      return;
+    }
+    const p = await api("/api/pricing/mystock/produits/" + id);
+    const roles = {};
+    const autres = [];
+    (p.composants || []).forEach((c) => {
+      if (MSP_ROLES.some((r) => r.role === c.role)) roles[c.role] = c.declinaison_id;
+      else autres.push(c.declinaison_id);
+    });
+    S.formMsProduct = {
+      code: p.code,
+      designation: p.designation,
+      roles,
+      autres,
+      custom_margin_pct: p.custom_margin_pct != null ? String(p.custom_margin_pct) : "",
+    };
+    S.msProdPreview = p.cost || null;
+  }
+
+  function msDeclLabel(d) {
+    const cout = d.cout_eur_m2 != null ? ` — ${fmtEurM2(d.cout_eur_m2)}` : " — à paramétrer";
+    return `${d.reference} · ${d.libelle}${cout}`;
+  }
+
+  function msDeclOptions(categorie, selectedId) {
+    const list = categorie
+      ? S.msDecls.filter((d) => (d.categorie || "").toLowerCase() === categorie)
+      : S.msDecls;
+    const opts = list
+      .map(
+        (d) =>
+          `<option value="${d.id}" ${String(d.id) === String(selectedId) ? "selected" : ""}>${escHtml(msDeclLabel(d))}</option>`
+      )
+      .join("");
+    return `<option value="">— Aucun —</option>${opts}`;
+  }
+
+  function msProductFormHtml(isNew) {
+    const f = S.formMsProduct;
+    const defMargin = S.settings ? fmtNum(S.settings.default_margin_pct, 2, 2) : "—";
+    const slots = MSP_ROLES.map(
+      (r) => `<div class="field"><label>${escHtml(r.label)}</label>
+        <select id="msp-${r.role.toLowerCase()}" data-msp-role="${r.role}">${msDeclOptions(r.categorie, f.roles[r.role])}</select>
+      </div>`
+    ).join("");
+    const autres = f.autres
+      .map(
+        (id, i) => `<div class="field-row msp-autre" data-msp-idx="${i}">
+          <div class="field" style="flex:1"><select data-msp-autre="${i}">${msDeclOptions(null, id)}</select></div>
+          <button type="button" class="icon-btn" data-msp-del="${i}" title="Retirer cette matière">${icon("trash", 15)}</button>
+        </div>`
+      )
+      .join("");
+    return `
+      ${pageHead(isNew ? "Nouveau produit MyStock" : "Éditer produit MyStock",
+                 isNew ? "" : escHtml(f.code))}
+      <div class="pr-savebar">
+        <button type="button" class="btn btn-soft btn-sm" id="btn-back-msprod">${icon("arrow-left", 14)} Retour liste</button>
+        <div class="savebar-actions">
+          ${!isNew && S.canWrite ? '<button type="button" class="btn btn-danger btn-sm" id="btn-del-msprod">Supprimer</button>' : ""}
+          ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-save-msprod">Enregistrer</button>' : ""}
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="form-card">
+          <div class="field-row">
+            <div class="field"><label>Code</label><input id="msp-code" value="${escAttr(f.code)}"/></div>
+            <div class="field"><label>Désignation</label><input id="msp-designation" value="${escAttr(f.designation)}"/></div>
+          </div>
+          ${slots}
+          <div class="form-section" style="margin-top:14px"><h3>Autres matières</h3>
+            <div id="msp-autres">${autres || '<div class="empty" style="padding:8px 0">Aucune autre matière.</div>'}</div>
+            ${S.canWrite ? `<button type="button" class="btn btn-soft btn-sm" id="msp-add-autre">${icon("plus", 14)} Ajouter une matière</button>` : ""}
+          </div>
+          <div class="field"><label>Marge personnalisée <span class="lbl-unit">% du prix de revient</span></label>
+            <input type="number" step="0.01" id="msp-margin" value="${escAttr(f.custom_margin_pct)}" placeholder="Défaut : ${escAttr(defMargin)} %"/>
+            <div class="field-hint">Laisser vide pour appliquer la marge par défaut des paramètres.</div>
+          </div>
+        </div>
+        <div class="side-panel" id="msp-recap">${productRecapHtml(S.msProdPreview)}</div>
+      </div>`;
+  }
+
+  function syncMsProductFromDom() {
+    const f = S.formMsProduct;
+    f.code = document.getElementById("msp-code").value;
+    f.designation = document.getElementById("msp-designation").value;
+    f.custom_margin_pct = document.getElementById("msp-margin").value;
+    f.roles = {};
+    MSP_ROLES.forEach((r) => {
+      const el = document.getElementById("msp-" + r.role.toLowerCase());
+      if (el && el.value) f.roles[r.role] = parseInt(el.value, 10);
+    });
+    f.autres = [];
+    document.querySelectorAll("[data-msp-autre]").forEach((sel) => {
+      if (sel.value) f.autres.push(parseInt(sel.value, 10));
+    });
+  }
+
+  /** Composition envoyée à l'API : un tableau {declinaison_id, role}. */
+  function msProductComposants() {
+    const f = S.formMsProduct;
+    const out = [];
+    MSP_ROLES.forEach((r) => {
+      if (f.roles[r.role]) out.push({ declinaison_id: f.roles[r.role], role: r.role });
+    });
+    f.autres.forEach((id) => {
+      if (id) out.push({ declinaison_id: id, role: "AUTRE" });
+    });
+    return out;
+  }
+
+  /**
+   * Aperçu du coût sans enregistrer : on additionne les coûts déjà calculés par
+   * l'API pour chaque déclinaison. Pas d'aller-retour serveur à chaque clic, et
+   * la formule reste celle du moteur (somme des composants + marge en %).
+   */
+  function refreshMsProductPreview() {
+    const f = S.formMsProduct;
+    const comps = msProductComposants();
+    if (!comps.length) {
+      S.msProdPreview = null;
+    } else {
+      let total = 0;
+      let complet = true;
+      const components = comps.map((c) => {
+        const d = S.msDecls.find((x) => x.id === c.declinaison_id);
+        const prix = d && d.cout_eur_m2 != null ? d.cout_eur_m2 : null;
+        if (prix == null) complet = false;
+        total += prix || 0;
+        return {
+          material_id: c.declinaison_id,
+          name: d ? `${d.reference} · ${d.libelle}` : "#" + c.declinaison_id,
+          role: c.role.toLowerCase(),
+          price_eur_per_m2: prix || 0,
+          share_pct: 0,
+        };
+      });
+      components.forEach((c) => {
+        c.share_pct = total ? Math.round((c.price_eur_per_m2 / total) * 10000) / 100 : 0;
+      });
+      const saisie = parseFloat(f.custom_margin_pct);
+      const marge = Number.isNaN(saisie)
+        ? parseFloat((S.settings && S.settings.default_margin_pct) || 0)
+        : saisie;
+      S.msProdPreview = {
+        total_eur_per_m2: total,
+        margin_pct: marge,
+        margin_eur_m2: (total * marge) / 100,
+        sell_price_eur_m2: total * (1 + marge / 100),
+        components,
+        incomplet: !complet,
+      };
+    }
+    const rec = document.getElementById("msp-recap");
+    if (rec) {
+      rec.innerHTML =
+        productRecapHtml(S.msProdPreview) +
+        (S.msProdPreview && S.msProdPreview.incomplet
+          ? '<div class="field-hint" style="color:var(--warn);margin-top:10px">Une matière n\'a pas encore de coût : ouvre sa fiche pour la paramétrer.</div>'
+          : "");
+    }
+  }
+
+  function renderMsProductForm(isNew) {
+    setContent(msProductFormHtml(isNew));
+
+    document.getElementById("btn-back-msprod").onclick = () => navigate("/pricing/products");
+
+    const majAperçu = () => {
+      syncMsProductFromDom();
+      refreshMsProductPreview();
+    };
+    ["msp-code", "msp-designation", "msp-margin"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.oninput = majAperçu;
+    });
+    document.querySelectorAll("[data-msp-role], [data-msp-autre]").forEach((sel) => {
+      sel.onchange = majAperçu;
+    });
+    const add = document.getElementById("msp-add-autre");
+    if (add) {
+      add.onclick = () => {
+        syncMsProductFromDom();
+        S.formMsProduct.autres.push("");
+        renderMsProductForm(isNew);
+      };
+    }
+    document.querySelectorAll("[data-msp-del]").forEach((btn) => {
+      btn.onclick = () => {
+        syncMsProductFromDom();
+        S.formMsProduct.autres.splice(parseInt(btn.getAttribute("data-msp-del"), 10), 1);
+        renderMsProductForm(isNew);
+      };
+    });
+
+    const save = document.getElementById("btn-save-msprod");
+    if (save) save.onclick = () => saveMsProductForm(isNew);
+    const del = document.getElementById("btn-del-msprod");
+    if (del) {
+      del.onclick = async () => {
+        if (!(await confirmDelete("Désactiver ce produit ?"))) return;
+        try {
+          await api("/api/pricing/mystock/produits/" + S.route.id, { method: "DELETE" });
+          showToast("Produit désactivé.", "success");
+          navigate("/pricing/products");
+        } catch (e) {
+          showToast(e.message, "danger");
+        }
+      };
+    }
+    refreshMsProductPreview();
+  }
+
+  async function saveMsProductForm(isNew) {
+    syncMsProductFromDom();
+    const f = S.formMsProduct;
+    const body = {
+      code: (f.code || "").trim(),
+      designation: (f.designation || "").trim(),
+      composants: msProductComposants(),
+      custom_margin_pct: f.custom_margin_pct === "" ? null : parseFloat(f.custom_margin_pct),
+    };
+    try {
+      if (isNew) {
+        const p = await api("/api/pricing/mystock/produits", { method: "POST", body });
+        S.formMsProduct = null;
+        showToast("Produit créé.", "success");
+        navigate("/pricing/mystock/produit/" + p.id);
+      } else {
+        await api("/api/pricing/mystock/produits/" + S.route.id, { method: "PATCH", body });
+        showToast("Produit enregistré.", "success");
+        await loadMsProductForm(S.route.id);
+        renderMsProductForm(false);
+      }
+    } catch (e) {
+      showToast(e.message, "danger");
+    }
+  }
+
+  const MSP_ROLE_LABEL = {
+    frontal: "Frontal",
+    adhesif: "Adhésif",
+    silicone: "Silicone",
+    glassine: "Glassine",
+  };
+
+  /**
+   * Étiquette courte d'un composant dans la liste.
+   *
+   * « Toutes déclinaisons » n'apprend rien : quand la déclinaison n'a pas de
+   * valeur, on n'affiche que la référence de la matière.
+   */
+  function msProductCompLabel(produit, role) {
+    const c = (produit.composants || []).find((x) => x.role === role);
+    if (!c) return '<span style="color:var(--muted)">—</span>';
+    const val = c.libelle && c.libelle !== "Toutes déclinaisons"
+      ? ` <span class="msp-decl">${escHtml(c.libelle)}</span>`
+      : "";
+    return escHtml(c.reference) + val;
+  }
+
+  /**
+   * Résumé déplié d'un produit : d'où vient chaque euro de son prix de revient.
+   * C'est la fiche produit ramenée à l'essentiel — on veut comprendre sans
+   * quitter la liste.
+   */
+  function msProductDetailHtml(p) {
+    const c = p.cost;
+    if (!c || !c.components || !c.components.length) {
+      return `<div class="ms-detail"><div class="empty" style="padding:16px 22px">
+        Aucun coût calculable : les matières de ce produit n'ont pas encore de prix.
+      </div></div>`;
+    }
+    const lignes = c.components
+      .map((x) => {
+        const prix = parseFloat(x.price_eur_per_m2 || 0);
+        const part = parseFloat(x.share_pct || 0);
+        return `<tr>
+          <td class="msp-role">${escHtml(MSP_ROLE_LABEL[x.role] || x.role)}</td>
+          <td><button type="button" class="msp-lien" data-msp-mat="${x.material_id}"
+                title="Ouvrir le paramétrage de cette matière">${escHtml(x.name)}</button></td>
+          <td class="msp-num">${prix > 0 ? escHtml(fmtEurM2(prix)) : '<span class="muted">sans prix</span>'}</td>
+          <td class="msp-part">
+            <span class="msp-jauge"><i style="width:${Math.max(0, Math.min(100, part))}%"></i></span>
+            <span class="msp-part-val">${escHtml(fmtPct(part))}</span>
+          </td>
+        </tr>`;
+      })
+      .join("");
+    const manquants = c.components.filter((x) => !(parseFloat(x.price_eur_per_m2) > 0)).length;
+    return `<div class="ms-detail">
+      <table class="pr-table ms-table msp-detail">
+        <thead><tr><th>Rôle</th><th>Matière MyStock</th><th class="msp-num">Coût €/m²</th><th class="msp-part">Part</th></tr></thead>
+        <tbody>${lignes}</tbody>
+      </table>
+      <div class="msp-totaux">
+        <span>Prix de revient <strong>${escHtml(fmtEurM2(c.total_eur_per_m2))}</strong></span>
+        <span>Marge ${escHtml(fmtPct(c.margin_pct))} <strong>${escHtml(fmtEurM2(c.margin_eur_m2))}</strong></span>
+        <span>Prix de vente <strong>${escHtml(fmtEurM2(c.sell_price_eur_m2))}</strong></span>
+        ${manquants ? `<span class="msp-alerte">${manquants} matière(s) sans prix — le coût est sous-évalué</span>` : ""}
+      </div>
+    </div>`;
+  }
+
+  function renderMsProductsList() {
+    const rows = S.msProducts
+      .map((p) => {
+        const c = p.cost;
+        const open = !!S.expandedProd[p.id];
+        const autres = (p.composants || []).filter((x) => x.role === "AUTRE").length;
+        return `<tr class="ms-row${open ? " open" : ""}" data-msp-row="${p.id}">
+            <td class="ms-caret">${open ? "▾" : "▸"}</td>
+            <td><strong>${escHtml(p.code)}</strong></td>
+            <td>${escHtml(p.designation)}</td>
+            <td>${msProductCompLabel(p, "FRONTAL")}</td>
+            <td>${msProductCompLabel(p, "ADHESIF")}</td>
+            <td>${msProductCompLabel(p, "GLASSINE")}</td>
+            <td>${autres || '<span style="color:var(--muted)">—</span>'}</td>
+            <td class="ms-prix-cell">${c ? fmtEurM2(c.total_eur_per_m2) : '<span style="color:var(--muted)">—</span>'}</td>
+            <td class="ms-prix-cell">${c ? fmtEurM2(c.sell_price_eur_m2) : "—"}</td>
+            <td class="ms-meta">${c ? fmtPct(c.margin_pct) : "—"}</td>
+            <td class="row-actions" onclick="event.stopPropagation()">
+              ${actionBtn("data-msp-edit", p.id, "edit", "Modifier ce produit")}
+              ${actionBtn("data-msp-dup", p.id, "copy", "Dupliquer — créer un produit similaire")}
+            </td>
+          </tr>
+          ${open ? `<tr class="ms-detail-row msp-detail-row"><td colspan="11">${msProductDetailHtml(p)}</td></tr>` : ""}`;
+      })
+      .join("");
+
+    setContent(`
+      <div class="pr-narrow">
+        ${pageHead("Produits", `${S.msProducts.length} produit(s) MyStock`, productsTabsHtml())}
+        <div class="filters">
+          <input type="search" class="search-input" id="msp-q" placeholder="Rechercher (code, désignation…)" value="${escAttr(S.filters.msProdQ)}"/>
+          ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-msprod">+ Nouveau produit</button>' : ""}
+        </div>
+        <div class="table-wrap">
+          <table class="pr-table msp-table">
+            <thead><tr><th style="width:28px"></th><th>Code</th><th>Désignation</th><th>Frontal</th><th>Adhésif</th><th>Glassine</th><th>Autres</th><th>Coût</th><th>Vente</th><th>Marge</th><th></th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="11" class="empty">Aucun produit MyStock. Crée le premier avec le bouton ci-dessus.</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+    `);
+
+    bindProductsTabs();
+    const q = document.getElementById("msp-q");
+    if (q) {
+      q.oninput = (e) => {
+        clearTimeout(S.debounceMsProd);
+        S.debounceMsProd = setTimeout(async () => {
+          S.filters.msProdQ = e.target.value;
+          await loadMsProductsList();
+          renderMsProductsList();
+        }, 300);
+      };
+    }
+    const nouveau = document.getElementById("btn-new-msprod");
+    if (nouveau) {
+      nouveau.onclick = () => {
+        S.formMsProduct = defaultMsProductForm();
+        navigate("/pricing/mystock/produit/new");
+      };
+    }
+    // La ligne déplie le détail ; l'édition passe par son bouton. Comme dans
+    // la liste des matières MyStock, pour ne pas avoir deux gestes différents
+    // d'un onglet à l'autre.
+    document.querySelectorAll("tr[data-msp-row]").forEach((tr) => {
+      tr.onclick = () => {
+        const id = tr.getAttribute("data-msp-row");
+        S.expandedProd[id] = !S.expandedProd[id];
+        renderMsProductsList();
+      };
+    });
+    document.querySelectorAll("[data-msp-edit]").forEach((b) => {
+      b.onclick = () => navigate("/pricing/mystock/produit/" + b.getAttribute("data-msp-edit"));
+    });
+    // Dupliquer : on ouvre le formulaire de création pré-rempli. Rien n'est écrit
+    // tant qu'on n'enregistre pas — le code et la désignation portent « copie »
+    // pour qu'on ne se retrouve pas avec deux produits au nom identique.
+    document.querySelectorAll("[data-msp-dup]").forEach((b) => {
+      b.onclick = () => {
+        const src = S.msProducts.find((x) => String(x.id) === b.getAttribute("data-msp-dup"));
+        if (!src) return;
+        const roles = {};
+        const autres = [];
+        (src.composants || []).forEach((c) => {
+          if (MSP_ROLES.some((r) => r.role === c.role)) roles[c.role] = c.declinaison_id;
+          else autres.push(c.declinaison_id);
+        });
+        S.formMsProduct = {
+          code: src.code + "-copie",
+          designation: src.designation + " (copie)",
+          roles,
+          autres,
+          custom_margin_pct:
+            src.custom_margin_pct != null ? String(src.custom_margin_pct) : "",
+        };
+        navigate("/pricing/mystock/produit/new");
+      };
+    });
+    // Depuis le détail, on saute directement au paramétrage de la matière.
+    document.querySelectorAll("[data-msp-mat]").forEach((b) => {
+      b.onclick = (ev) => {
+        ev.stopPropagation();
+        navigate("/pricing/mystock/" + b.getAttribute("data-msp-mat"));
+      };
+    });
   }
 
   async function bootRoute() {
@@ -1515,10 +3228,14 @@
       if (!S.categories.length) await loadBaseData();
 
       const r = S.route.name;
-      if (r === "dashboard") await renderDashboard();
-      else if (r === "materials") {
-        await loadMaterialsList();
-        renderMaterialsList();
+      if (r === "materials") {
+        if (S.filters.matTab === "mystock") {
+          await loadMystockList();
+          renderMystockList();
+        } else {
+          await loadMaterialsList();
+          renderMaterialsList();
+        }
       } else if (r === "material-new") {
         if (!S.canWrite) {
           navigate("/pricing/materials");
@@ -1529,9 +3246,29 @@
       } else if (r === "material-edit") {
         await loadMaterialForm(S.route.id);
         renderMaterialForm(false);
+      } else if (r === "mystock-edit") {
+        await loadDeclinaisonForm(S.route.id);
+        renderDeclinaisonForm();
       } else if (r === "products") {
-        await loadProductsList();
-        await renderProductsList();
+        if (S.filters.prodTab === "mystock") {
+          await loadMsProductsList();
+          renderMsProductsList();
+        } else {
+          await loadProductsList();
+          await renderProductsList();
+        }
+      } else if (r === "msproduct-new") {
+        if (!S.canWrite) {
+          navigate("/pricing/products");
+          return;
+        }
+        S.filters.prodTab = "mystock";
+        await loadMsProductForm(null);
+        renderMsProductForm(true);
+      } else if (r === "msproduct-edit") {
+        S.filters.prodTab = "mystock";
+        await loadMsProductForm(S.route.id);
+        renderMsProductForm(false);
       } else if (r === "product-new") {
         if (!S.canWrite) {
           navigate("/pricing/products");
@@ -1549,8 +3286,14 @@
           navigate("/pricing");
           return;
         }
-        renderSettings();
-      } else await renderDashboard();
+        // Les paramètres sont une modale : elle s'ouvre par-dessus la liste.
+        await loadMaterialsList();
+        renderMaterialsList();
+        openSettingsModal();
+      } else {
+        await loadMaterialsList();
+        renderMaterialsList();
+      }
     } catch (e) {
       setContent(`<div class="empty" style="color:var(--danger);padding:24px">${escHtml(e.message)}</div>`);
       if (e.status === 401) window.location.href = "/?next=" + encodeURIComponent(window.location.pathname);

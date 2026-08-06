@@ -37,6 +37,8 @@ from config import (
 )
 
 
+from app.services.maint_op_merge import merge_op_rows
+
 router = APIRouter(tags=["maintenance-events"])
 
 
@@ -187,6 +189,102 @@ def _assert_event_alive(conn, event_id: int) -> None:
         raise HTTPException(status_code=410, detail="Ce créneau a été supprimé. Il n'est plus modifiable.")
 
 
+def _today_paris() -> str:
+    return datetime.now(_PARIS).strftime("%Y-%m-%d")
+
+
+def _event_is_closed(ev) -> bool:
+    """Un créneau dont la date est passée est CLÔTURÉ.
+
+    v2.7.0 — règle unique. Elle remplace les quatre garde-fous qui se
+    superposaient jusqu'ici : la source (planifie / non_planifie), le rôle
+    (admin / opérateur), la nature du champ (temporel vs contenu) et l'état des
+    opérations. Personne ne pouvait les retenir, et chacun laissait passer un
+    cas que les autres bloquaient.
+
+    La clôture se DÉDUIT de la date : rien n'est stocké, rien n'est à
+    déclencher, aucun créneau ne peut être clôturé par erreur ni oublié
+    non clôturé. Le planning planifie ; pour consigner une intervention déjà
+    réalisée, l'enregistrement d'opération reste la voie normale.
+    """
+    if not ev:
+        return False
+    return (ev.get("date_prevue") or "") < _today_paris()
+
+
+def _check_event_not_closed(ev) -> None:
+    """403 si le créneau est passé. Aucune exception de rôle ni de source."""
+    if _event_is_closed(ev):
+        raise HTTPException(
+            status_code=403,
+            detail="Ce créneau est passé : il est clôturé et n'est plus modifiable. "
+                   "Pour consigner une intervention déjà réalisée, utilise "
+                   "l'enregistrement d'opération.",
+        )
+
+
+def _event_closed_by_id(conn, event_id: int) -> bool:
+    row = conn.execute(
+        "SELECT date_prevue FROM maintenance_events WHERE id=?", (event_id,)
+    ).fetchone()
+    return _event_is_closed({"date_prevue": row["date_prevue"]}) if row else False
+
+
+def _event_source_by_id(conn, event_id: int) -> str:
+    row = conn.execute(
+        "SELECT source FROM maintenance_events WHERE id=?", (event_id,)
+    ).fetchone()
+    return (row["source"] or "") if row else ""
+
+
+def _operateur_proprietaire_constat(conn, event_id: int, user_id: int) -> bool:
+    """Vrai si ce creneau est un constat cree par CET operateur.
+
+    Meme regle que _can_operator_manage_event, en une requete au lieu d'un
+    _load_event_full complet : on n'a besoin que de la source et du createur.
+    """
+    row = conn.execute(
+        "SELECT source, created_by FROM maintenance_events WHERE id=?", (event_id,)
+    ).fetchone()
+    if not row:
+        return False
+    return (row["source"] or "") == "non_planifie" and row["created_by"] == user_id
+
+
+def _event_est_constat(conn, event_id: int) -> bool:
+    """Vrai si le creneau est un CONSTAT d'operation realisee, pas du planning.
+
+    Distinction posee en v2.6.1 dans create_event : `planifie` = le planning,
+    qu'on n'ecrit pas dans le passe ; toute autre source = l'enregistrement
+    d'une intervention deja faite, qui doit rester saisissable a posteriori.
+    C'est le mode de saisie normal d'une intervention faite la veille et
+    enregistree le lendemain.
+    """
+    return _event_source_by_id(conn, event_id) != "planifie"
+
+
+def _assert_correction_allowed(conn, event_id: int, maint_role: str) -> None:
+    """Créneau clôturé : la CORRECTION d'une saisie reste possible, à l'admin.
+
+    v2.7.0 — la clôture gèle la planification (date, horaires, composition du
+    créneau, opérateurs) et la saisie (solder une opération après coup). Elle ne
+    gèle PAS la correction de ce qui a déjà été enregistré : invalider une saisie
+    douteuse, la revalider, la remettre à zéro, la reclasser vers le bon code,
+    retirer une ligne saisie par erreur.
+
+    Sans cette porte, l'édition de l'historique deviendrait impossible : elle
+    porte par construction sur des opérations passées. Un créneau reste le
+    reflet de ses opérations — quand l'une est invalidée ou supprimée,
+    l'affichage du créneau suit.
+    """
+    if _event_closed_by_id(conn, event_id) and maint_role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Ce créneau est passé : il est clôturé. Seul un administrateur "
+                   "peut encore corriger une saisie déjà enregistrée.",
+        )
+
+
 def _load_event_full(conn, event_id: int) -> Optional[dict]:
     """Retourne un dict enrichi {event, ops:[...], operators:[...]} ou None."""
     ev = conn.execute(
@@ -324,6 +422,10 @@ class OpUpdateBody(BaseModel):
     # historique d'une op déjà terminée). Format ISO Paris (YYYY-MM-DDTHH:MM:SS
     # ou avec .SSSZ). Si fourni, écrase la valeur actuelle.
     done_at: Optional[str] = None
+    # v2.5.13 : reclassement d'une saisie depuis l'historique (admin). Deplace
+    # l'op vers un autre code du catalogue -- ex. un operateur a saisi
+    # "Changement couteaux bande" alors qu'il s'agissait des couteaux rives.
+    code: Optional[str] = None
 
 
 class OperatorAddBody(BaseModel):
@@ -452,7 +554,11 @@ def list_deleted_events(request: Request, template_id: Optional[int] = None):
     where = ["deleted_at IS NOT NULL"]
     params: List[Any] = []
     if template_id is not None:
+        # v2.7.2 : filtre aligne sur deleted_count. Sans template_origin_date, le
+        # panel listait aussi les creneaux manuels ayant importe ce modele, alors
+        # que le badge ne les compte pas -- comptage et liste se contredisaient.
         where.append("template_id = ?")
+        where.append("template_origin_date IS NOT NULL")
         params.append(template_id)
     sql = "SELECT id FROM maintenance_events WHERE " + " AND ".join(where) + " ORDER BY date_prevue DESC, heure_debut DESC"
     with get_db() as conn:
@@ -494,20 +600,39 @@ def create_event(body: EventCreateBody, request: Request):
             tmpl = _load_template_full(tmpl_conn, template_id)
         if not tmpl:
             raise HTTPException(status_code=400, detail=f"Modèle inconnu: {template_id}")
-        # On remplace body.ops par les ops du template (ignoré si fourni côté client)
-        ops_from_tmpl = [{"code": o["code"], "machines": o.get("machines") or []} for o in tmpl["ops"]]
-        body_ops_effective = ops_from_tmpl
+        # v2.6.1 : les ops fournies par le client font desormais foi. Le client
+        # peut cumuler plusieurs modeles et retoucher la liste avant d'envoyer ;
+        # ecraser ce contenu par celui d'un seul modele annulerait la fusion.
+        # template_id ne sert plus qu'a etiqueter le creneau (pastille ↻, nom
+        # repris, rattachement pour la suppression du modele).
+        # Repli sur les ops du modele si le client n'en fournit aucune :
+        # conserve le contrat historique « instancier un modele » (v163).
+        if body.ops:
+            body_ops_effective = body.ops
+        else:
+            body_ops_effective = [{"code": o["code"], "machines": o.get("machines") or []}
+                                  for o in tmpl["ops"]]
     else:
         template_id = None  # opérateur n'utilise pas de template
         body_ops_effective = body.ops
 
     # Normalise chaque entrée en tuple (code, machines_csv_or_None), avec dedup
-    # sur le code tout en conservant les machines de la première occurrence.
+    # sur le code.
+    # v2.6.1 : les machines sont désormais UNIES au lieu de garder celles de la
+    # première occurrence. Avec la fusion de plusieurs modèles, deux entrées
+    # peuvent porter le même code sur des machines différentes ; l'ancien code
+    # perdait silencieusement les secondes.
     seen_codes = {}
     for item in body_ops_effective:
         code, mcsv = _normalize_op_spec(item)
         if code not in seen_codes:
             seen_codes[code] = mcsv
+        elif mcsv:
+            merged = _machines_csv_to_list(seen_codes[code] or "")
+            for m in _machines_csv_to_list(mcsv):
+                if m not in merged:
+                    merged.append(m)
+            seen_codes[code] = _machines_list_to_csv(merged)
     ops_specs = list(seen_codes.items())  # [(code, machines_csv_or_None), ...]
     operator_ids = list(dict.fromkeys(body.operators))
 
@@ -530,6 +655,25 @@ def create_event(body: EventCreateBody, request: Request):
     else:
         if src not in _VALID_SOURCES:
             raise HTTPException(status_code=400, detail=f"source invalide: {src}")
+        # v2.6.1 : on ne planifie pas dans le passe. Regle volontairement
+        # limitee a source='planifie' (le planning) : les interventions
+        # 'non_planifie' sont des CONSTATS d'operations realisees, et doivent
+        # rester saisissables a posteriori — c'est le mode de saisie normal
+        # d'une intervention faite la veille et enregistree le lendemain.
+        # Aucune exemption de role ici : le planning est deja reserve aux
+        # admins, une exemption admin n'aurait donc bloque personne.
+        # NB : la generation des recurrences n'est pas concernee, elle INSERT
+        # directement en SQL sans passer par ce endpoint (et ne produit de
+        # toute facon que des occurrences >= aujourd'hui).
+        if src == "planifie":
+            _today_iso = datetime.now(_PARIS).strftime("%Y-%m-%d")
+            if body.date_prevue < _today_iso:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Impossible de planifier un créneau à une date passée. "
+                           "Pour consigner une intervention déjà réalisée, utilise "
+                           "l'enregistrement d'opération.",
+                )
         heure_debut = body.heure_debut
         heure_fin = body.heure_fin
         if not ops_specs:
@@ -630,20 +774,50 @@ def update_event(event_id: int, body: EventUpdateBody, request: Request):
         if not ev:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
         _check_event_not_deleted(ev)  # v2.5.29 : refuse toute modif si tombstoned
+        _check_event_not_closed(ev)   # v2.7.0 : créneau passé = clôturé
         if maint_role == "operator":
             if not _can_operator_manage_event(ev, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres interventions non planifiées")
-        # v2.5.14 : garde-fou 'past event' -- interdit toute modif de la date ou
-        # des heures d'un créneau déjà passé (aujourd'hui inclus reste modifiable).
-        # Les autres champs (ops, notes, ...) restent éditables librement.
-        _today = datetime.now(_PARIS).strftime("%Y-%m-%d")
-        _ev_date = ev.get("date_prevue") or ""
-        _time_fields = {"date_prevue", "heure_debut", "heure_fin"}
-        if _ev_date < _today and any(k in updates for k in _time_fields):
+        # Déplacer un créneau OUVERT vers une date passée reste refusé : il
+        # deviendrait clôturé dans la seconde, donc définitivement inéditable —
+        # par une simple maladresse de glisser-déposer.
+        if body.date_prevue is not None and body.date_prevue < _today_paris():
             raise HTTPException(
                 status_code=403,
-                detail="Ce créneau est passé. La date et les horaires ne sont plus modifiables (seules les ops peuvent être corrigées).",
+                detail="Impossible de déplacer un créneau vers une date passée : "
+                       "il serait immédiatement clôturé.",
             )
+        # v2.7.1 : une OCCURRENCE DE RECURRENCE reste dans SA periode.
+        #
+        # Une occurrence hebdomadaire appartient a sa semaine, une mensuelle a
+        # son mois. La deplacer ailleurs cassait l'invariant « une occurrence
+        # par periode » : deux creneaux dans la periode d'arrivee, aucun dans
+        # celle de depart. _replace_recurrence_dates() devait ensuite demeler ce
+        # desordre a chaque changement de regle, en supprimant silencieusement
+        # les occurrences excedentaires. On bloque a la source plutot que de
+        # gerer les consequences.
+        #
+        # Ne concerne QUE les occurrences generees (template_origin_date non
+        # nul) : un creneau compose a la main reste librement deplacable.
+        if body.date_prevue is not None and ev.get("template_origin_date"):
+            _tmpl_row = conn.execute(
+                "SELECT recurrence_type FROM maintenance_templates WHERE id = ?",
+                (ev.get("template_id"),),
+            ).fetchone() if ev.get("template_id") else None
+            _rtype = (_tmpl_row["recurrence_type"] if _tmpl_row else None) or "weekly"
+            try:
+                _from = date.fromisoformat(str(ev.get("date_prevue") or "")[:10])
+                _to = date.fromisoformat(str(body.date_prevue)[:10])
+            except (ValueError, TypeError):
+                _from = _to = None
+            if _from and _to and _period_key(_from, _rtype) != _period_key(_to, _rtype):
+                _quoi = {"monthly": "son mois", "quarterly": "son trimestre",
+                         "yearly": "son année"}.get(_rtype, "sa semaine")
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Ce créneau vient d'une récurrence : il doit rester dans {_quoi}. "
+                           f"Pour le décaler au-delà, supprime-le et crée un créneau ponctuel.",
+                )
         updates["updated_at"] = _now_paris_iso()
         set_clause = ", ".join(f"{k}=?" for k in updates)
         conn.execute(f"UPDATE maintenance_events SET {set_clause} WHERE id=?",
@@ -672,6 +846,7 @@ def delete_event(event_id: int, request: Request, confirm_token: Optional[str] =
         ev = _load_event_full(conn, event_id)
         if not ev:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
+        _check_event_not_closed(ev)   # v2.7.0 : un créneau passé ne se supprime plus
         if maint_role == "operator":
             if not _can_operator_manage_event(ev, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez supprimer que vos propres interventions non planifiées")
@@ -744,6 +919,7 @@ def add_op(event_id: int, body: OpAddBody, request: Request):
         if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
         _check_event_not_deleted(ev_check)  # v2.5.29
+        _check_event_not_closed(ev_check)   # v2.7.0
         if maint_role == "operator":
             if not _can_operator_manage_event(ev_check, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres interventions non planifiées")
@@ -793,12 +969,52 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
 
     with get_db() as conn:
         row = conn.execute(
-            "SELECT event_id, statut, done_at FROM maintenance_event_ops WHERE id=?",
-            (op_id,),
+            "SELECT * FROM maintenance_event_ops WHERE id=?", (op_id,)
         ).fetchone()
+        code_target = None
         if not row or row["event_id"] != event_id:
             raise HTTPException(status_code=404, detail="Op introuvable dans ce créneau")
         _assert_event_alive(conn, event_id)  # v2.5.29
+        # v2.7.0 : créneau clôturé -> correction admin uniquement. Et on ne
+        # solde plus une opération jamais saisie : ce serait de la saisie
+        # rétroactive, pas une correction.
+        #
+        # v2.7.2 : une exception, et une seule — la SAISIE INITIALE par un
+        # opérateur de son propre constat. Consigner l'intervention qu'on a
+        # faite la veille n'est pas corriger l'historique de quelqu'un
+        # d'autre : c'est l'écrire pour la première fois. Sans cette porte,
+        # l'opérateur qui oublie de saisir sa journée doit passer par un admin
+        # le lendemain, alors que POST /events l'autorise à créer le constat.
+        # La condition « jamais soldée » est ce qui distingue les deux : dès
+        # qu'une saisie existe, on retombe sur la règle admin.
+        _saisie_initiale_operateur = (
+            maint_role == "operator"
+            and (row["statut"] or "") not in ("termine", "invalidee")
+            and _operateur_proprietaire_constat(conn, event_id, user["id"])
+        )
+        if not _saisie_initiale_operateur:
+            _assert_correction_allowed(conn, event_id, maint_role)
+        # v2.7.2 — la regle ne vaut que pour le PLANNING (source='planifie').
+        #
+        # « Enregistrer une operation » cree un creneau `non_planifie` a la date
+        # de l'intervention, puis solde son op par ce PATCH. Sur une date passee,
+        # le garde-fou ci-dessous se declenchait et renvoyait un message qui
+        # recommandait... l'enregistrement d'operation, c'est-a-dire exactement
+        # ce que l'utilisateur etait en train de faire. Enregistrer une
+        # intervention passee etait donc impossible depuis v2.7.0.
+        #
+        # create_event pose deja la meme distinction (v2.6.1) : il refuse une
+        # date passee pour `planifie` et l'autorise explicitement pour les
+        # constats. Ce garde-fou s'aligne dessus.
+        if (_event_closed_by_id(conn, event_id)
+                and not _event_est_constat(conn, event_id)
+                and (row["statut"] or "") not in ("termine", "invalidee")):
+            raise HTTPException(
+                status_code=403,
+                detail="Ce créneau passé était planifié : une opération qui n'a pas "
+                       "été saisie ne peut plus l'être. Utilise l'enregistrement "
+                       "d'opération pour consigner ce qui a réellement été fait.",
+            )
 
         if maint_role == "operator" and not _user_in_group(conn, event_id, user["id"]):
             raise HTTPException(status_code=403, detail="Vous n'êtes pas assigné à ce créneau")
@@ -816,8 +1032,22 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
                 updates["machines_csv"] = _machines_list_to_csv(v)
                 machines_touched = True
                 continue
+            if k == "code":
+                if maint_role != "admin":
+                    raise HTTPException(status_code=403, detail="Changement de type réservé aux admins")
+                new_code = (v or "").strip()
+                if not new_code:
+                    continue
+                if not conn.execute(
+                    "SELECT 1 FROM maintenance_codes WHERE code=? LIMIT 1", (new_code,)
+                ).fetchone():
+                    raise HTTPException(status_code=404, detail=f"Code {new_code} introuvable.")
+                if new_code != row["code"]:
+                    code_target = new_code
+                continue
             updates[k] = v
-        if not updates:
+        # v2.5.13 : un changement de type seul est une mise a jour valide.
+        if not updates and not code_target:
             raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour")
 
         now = _now_paris_iso()
@@ -835,6 +1065,27 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
         set_clause = ", ".join(f"{k}=?" for k in updates)
         conn.execute(f"UPDATE maintenance_event_ops SET {set_clause} WHERE id=?",
                      list(updates.values()) + [op_id])
+        # v2.5.13 : reclassement vers un autre code. La contrainte
+        # UNIQUE(event_id, code) interdit deux saisies du meme code dans un
+        # creneau : si la cible est deja presente, on fusionne les deux saisies
+        # (memes regles que le rattachement d'une intervention libre).
+        if code_target:
+            fresh = conn.execute(
+                "SELECT * FROM maintenance_event_ops WHERE id=?", (op_id,)
+            ).fetchone()
+            sibling = conn.execute(
+                "SELECT * FROM maintenance_event_ops "
+                "WHERE event_id=? AND code=? AND id<>? LIMIT 1",
+                (event_id, code_target, op_id),
+            ).fetchone()
+            if sibling:
+                merge_op_rows(conn, fresh, sibling, now)
+                op_id = sibling["id"]
+            else:
+                conn.execute(
+                    "UPDATE maintenance_event_ops SET code=?, updated_at=? WHERE id=?",
+                    (code_target, now, op_id),
+                )
         if machines_touched:
             _recompute_event_machine(conn, event_id)
         conn.commit()
@@ -852,6 +1103,7 @@ def delete_op(event_id: int, op_id: int, request: Request):
         ).fetchone()
         if not row or row["event_id"] != event_id:
             raise HTTPException(status_code=404, detail="Op introuvable dans ce créneau")
+        _assert_correction_allowed(conn, event_id, maint_role)  # v2.7.0
         if maint_role == "operator":
             ev_check = _load_event_full(conn, event_id)
             if not _can_operator_manage_event(ev_check, user["id"]):
@@ -881,6 +1133,7 @@ def reset_op(event_id: int, op_id: int, request: Request):
         if not row or row["event_id"] != event_id:
             raise HTTPException(status_code=404, detail="Op introuvable dans ce créneau")
         _assert_event_alive(conn, event_id)  # v2.5.29
+        _assert_correction_allowed(conn, event_id, maint_role)  # v2.7.0
         # Perms opérateur : dans le groupe OU créateur (cf. update_op / _can_operator_manage_event)
         if maint_role == "operator":
             ev_check = _load_event_full(conn, event_id)
@@ -1005,6 +1258,7 @@ def add_operator(event_id: int, body: OperatorAddBody, request: Request):
         if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
         _check_event_not_deleted(ev_check)  # v2.5.29
+        _check_event_not_closed(ev_check)   # v2.7.0
         if maint_role == "operator":
             if not _can_operator_manage_event(ev_check, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres événements")
@@ -1029,6 +1283,7 @@ def remove_operator(event_id: int, operator_id: int, request: Request):
         if not ev_check:
             raise HTTPException(status_code=404, detail="Créneau introuvable")
         _check_event_not_deleted(ev_check)  # v2.5.29
+        _check_event_not_closed(ev_check)   # v2.7.0
         if maint_role == "operator":
             if not _can_operator_manage_event(ev_check, user["id"]):
                 raise HTTPException(status_code=403, detail="Vous ne pouvez modifier que vos propres événements")
@@ -1104,6 +1359,9 @@ class TemplateUpdateBody(BaseModel):
     recurrence_time_end: Optional[str] = None
     recurrence_active: Optional[bool] = None
     default_operators: Optional[List[int]] = None
+    # v2.6.1 : ids de créneaux à NE PAS resynchroniser. L'admin les a coches
+    # dans la confirmation ; ils gardent leurs operations telles quelles.
+    resync_exclude_ids: Optional[List[int]] = None
 
 
 class SaveAsTemplateBody(BaseModel):
@@ -1430,7 +1688,179 @@ def _ensure_recurring_events_generated(conn, horizon_days: int = 90,
     return total
 
 
-def _resync_future_events_from_template(conn, template_id: int) -> int:
+def _period_key(d, rtype: str) -> str:
+    """v2.6.1 : periode de recurrence a laquelle appartient une date.
+
+    Une recurrence produit AU PLUS UNE occurrence par periode : une par semaine
+    en hebdomadaire, une par mois en mensuel, etc. C'est cette contrainte qui
+    remplace l'ancien appariement positionnel entre occurrences et dates cibles
+    — appariement qui decalait toute la serie des qu'une occurrence etait
+    preservee ou manquante, et pouvait produire deux creneaux la meme semaine.
+    """
+    if rtype == "monthly":
+        return f"{d.year}-M{d.month:02d}"
+    if rtype == "quarterly":
+        return f"{d.year}-Q{(d.month - 1) // 3 + 1}"
+    if rtype == "yearly":
+        return f"{d.year}"
+    y, w, _ = d.isocalendar()   # weekly (defaut) : semaine ISO
+    return f"{y}-W{w:02d}"
+
+
+def _replace_recurrence_dates(conn, template_id: int, exclude_ids=None, horizon_days: int = 90) -> dict:
+    """v2.6.1 : applique une NOUVELLE regle de recurrence aux occurrences futures
+    en les DEPLACANT dans leur propre periode, au lieu de les purger.
+
+    Les deux dimensions d'un modele sont independantes : le contenu (les
+    operations) et la planification (regle + horaires) ne se contaminent pas.
+    Une purge/regeneration detruirait les personnalisations d'operations et
+    l'avancement saisi par les operateurs, alors que seule la planification a
+    change.
+
+    Principe : UNE occurrence par periode (cf. _period_key). Chaque occurrence
+    existante est rattachee a sa periode et deplacee vers la date cible de
+    CETTE periode. Elle ne peut donc ni changer de semaine, ni se retrouver a
+    cote d'une autre.
+
+    template_origin_date est realigne sur la date cible : la generation
+    dedoublonne dessus, sans quoi elle recreerait un doublon a chaque cible.
+
+    exclude_ids : occurrences que l'admin a choisi de laisser en place. Elles ne
+    bougent pas, mais OCCUPENT leur periode — leur ancrage y est realigne, ce
+    qui empeche la generation d'ajouter un creneau a cote d'elles.
+    """
+    tmpl = _load_template_full(conn, template_id)
+    if not tmpl:
+        return {"moved": 0, "removed": 0, "created": 0}
+    today = date.today()
+    until = today + timedelta(days=horizon_days)
+    now = _now_paris_iso()
+    skip = set(int(x) for x in (exclude_ids or []))
+    rtype = tmpl.get("recurrence_type") or "weekly"
+
+    def _d(iso_str):
+        try:
+            return date.fromisoformat(str(iso_str)[:10])
+        except (ValueError, TypeError):
+            return None
+
+    rows = conn.execute(
+        "SELECT id, date_prevue FROM maintenance_events "
+        "WHERE template_id = ? AND template_origin_date IS NOT NULL "
+        "  AND date_prevue >= ? AND deleted_at IS NULL "
+        "ORDER BY date_prevue ASC, id ASC",
+        (template_id, today.isoformat()),
+    ).fetchall()
+
+    # Dates cibles de la nouvelle regle, indexees par periode.
+    targets_by_period = {}
+    cursor = today
+    for _ in range(500):
+        nxt = _compute_next_occurrence(tmpl, cursor)
+        if nxt is None or nxt > until:
+            break
+        targets_by_period.setdefault(_period_key(nxt, rtype), nxt)
+        cursor = nxt + timedelta(days=1)
+
+    # Occurrences existantes regroupees par periode.
+    by_period = {}
+    for r in rows:
+        d = _d(r["date_prevue"])
+        if d is None:
+            continue
+        by_period.setdefault(_period_key(d, rtype), []).append(r)
+
+    hd = tmpl.get("recurrence_time_start") or ""
+    hf = tmpl.get("recurrence_time_end") or ""
+
+    def _drop(eid: int):
+        conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
+        conn.execute("DELETE FROM maintenance_event_operators WHERE event_id = ?", (eid,))
+        conn.execute("DELETE FROM maintenance_events WHERE id = ?", (eid,))
+
+    moved = removed = 0
+    for period, occs in by_period.items():
+        tgt = targets_by_period.get(period)
+        # Dans une periode qui en contient plusieurs (changement de frequence,
+        # doublon historique), on garde UNE occurrence : une preservee en
+        # priorite, sinon la plus ancienne. Le reste part.
+        occs = sorted(occs, key=lambda r: (0 if int(r["id"]) in skip else 1, r["date_prevue"]))
+        keeper, extras = occs[0], occs[1:]
+        if tgt is None:
+            # Periode que la nouvelle regle ne couvre pas : rien a y faire.
+            for r in occs:
+                if int(r["id"]) in skip:
+                    continue
+                _drop(int(r["id"]))
+                removed += 1
+            continue
+        kid = int(keeper["id"])
+        iso = tgt.isoformat()
+        if kid in skip:
+            # Preservee : ni date ni horaires touches, mais elle occupe la
+            # periode — l'ancrage y est realigne pour bloquer la generation.
+            conn.execute(
+                "UPDATE maintenance_events SET template_origin_date=?, updated_at=? WHERE id=?",
+                (iso, now, kid),
+            )
+        else:
+            conn.execute(
+                "UPDATE maintenance_events SET date_prevue=?, heure_debut=?, heure_fin=?, "
+                "       template_origin_date=?, updated_at=? WHERE id=?",
+                (iso, hd, hf, iso, now, kid),
+            )
+            moved += 1
+        for r in extras:
+            if int(r["id"]) in skip:
+                continue
+            _drop(int(r["id"]))
+            removed += 1
+
+    # Periodes sans occurrence : la generation les cree (idempotente, dedup sur
+    # template_origin_date, desormais realigne).
+    created = _generate_events_for_template(conn, template_id, until)
+    return {"moved": moved, "removed": removed, "created": created}
+
+def _event_divergence(conn, event_id: int, tmpl: dict) -> dict:
+    """v2.6.1 : en quoi les operations d'un creneau s'ecartent-elles du modele ?
+
+    Sert a n'interroger l'admin QUE sur les creneaux reellement personnalises :
+    resynchroniser un creneau identique au modele ne change rien, inutile de
+    lui poser la question.
+
+    Signale aussi les operations deja effectuees ou invalidees. C'est le cas le
+    plus grave : la resync fait DELETE puis INSERT des lignes d'operations, donc
+    statut, auteur et horodatage de realisation seraient perdus. Le filtre
+    `date_prevue >= aujourd'hui` inclut AUJOURD'HUI : un creneau du matin dont
+    l'operateur a deja valide des operations est concerne.
+    """
+    rows = conn.execute(
+        "SELECT code, machines_csv, statut FROM maintenance_event_ops WHERE event_id = ?",
+        (event_id,),
+    ).fetchall()
+    ev_ops, done = {}, 0
+    for r in rows:
+        ev_ops[r["code"]] = r["machines_csv"] or ""
+        if (r["statut"] or "") in ("termine", "invalidee"):
+            done += 1
+    tm_ops = {o["code"]: (o.get("machines_csv") or "") for o in (tmpl.get("ops") or [])}
+    added = [c for c in ev_ops if c not in tm_ops]
+    removed = [c for c in tm_ops if c not in ev_ops]
+    mdiff = [c for c in ev_ops if c in tm_ops
+             and set(_machines_csv_to_list(ev_ops[c])) != set(_machines_csv_to_list(tm_ops[c]))]
+    reasons = []
+    if done:
+        reasons.append(f"{done} opération(s) déjà effectuée(s) — historique perdu si écrasé")
+    if added:
+        reasons.append(f"{len(added)} opération(s) ajoutée(s) à la main")
+    if removed:
+        reasons.append(f"{len(removed)} opération(s) du modèle retirée(s)")
+    if mdiff:
+        reasons.append(f"{len(mdiff)} opération(s) dont les machines ont été modifiées")
+    return {"diverged": bool(reasons), "reasons": reasons, "done_ops": done}
+
+
+def _resync_future_events_from_template(conn, template_id: int, exclude_ids=None, sync_ops: bool = True) -> int:
     """Écrase les ops des créneaux futurs (date_prevue >= aujourd'hui) liés au
     template. Retourne le nombre d'events resynchronisés.
     Préserve : date, horaires, source. Écrase : liste des ops, et les opérateurs
@@ -1448,22 +1878,44 @@ def _resync_future_events_from_template(conn, template_id: int) -> int:
         return 0
     sync_operators = bool(tmpl.get("recurrence_active"))
     today = datetime.now(_PARIS).strftime("%Y-%m-%d")
+    # v2.6.1 : restreint aux occurrences REELLEMENT generees par la recurrence.
+    # template_origin_date n'est pose que par _generate_events_for_template().
+    # Avant, le filtre portait sur le seul template_id : un creneau ou l'admin
+    # avait simplement IMPORTE le modele depuis la liste des operations, puis
+    # complete a la main, etait ecrase comme une occurrence — ses ajouts
+    # disparaissaient au premier enregistrement du modele. Pire, le sort du
+    # creneau dependait du NOMBRE de modeles importes : au-dela d'un seul,
+    # l'etiquette template_id tombe cote client et le creneau echappait a la
+    # resync. Comportement desormais uniforme : seules les occurrences de
+    # recurrence sont resynchronisees.
     events = conn.execute(
-        "SELECT id FROM maintenance_events WHERE template_id = ? AND date_prevue >= ? AND deleted_at IS NULL",
+        "SELECT id FROM maintenance_events "
+        "WHERE template_id = ? AND template_origin_date IS NOT NULL "
+        "  AND date_prevue >= ? AND deleted_at IS NULL",
         (template_id, today),
     ).fetchall()
     now = _now_paris_iso()
     default_uids = [u["id"] for u in (tmpl.get("default_operators") or [])]
+    # v2.6.1 : creneaux que l'admin a choisi de preserver dans la confirmation.
+    _skip = set(int(x) for x in (exclude_ids or []))
+    _synced = 0
     for ev in events:
         eid = ev["id"]
-        conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
-        for op in tmpl["ops"]:
-            conn.execute(
-                """INSERT INTO maintenance_event_ops (event_id, code, machines_csv, updated_at)
-                   VALUES (?, ?, ?, ?)""",
-                (eid, op["code"], op.get("machines_csv"), now),
-            )
-            _bump_libre_usage(conn, op["code"])
+        if eid in _skip:
+            continue
+        # v2.7.1 : sync_ops=False quand SEULS les operateurs par defaut ont
+        # change. Sans ce garde-fou, la branche « default_operators modifies »
+        # passait quand meme par ce DELETE/INSERT et ecrasait les operations
+        # personnalisees des occurrences, alors que les ops n'avaient pas bouge.
+        if sync_ops:
+            conn.execute("DELETE FROM maintenance_event_ops WHERE event_id = ?", (eid,))
+            for op in tmpl["ops"]:
+                conn.execute(
+                    """INSERT INTO maintenance_event_ops (event_id, code, machines_csv, updated_at)
+                       VALUES (?, ?, ?, ?)""",
+                    (eid, op["code"], op.get("machines_csv"), now),
+                )
+                _bump_libre_usage(conn, op["code"])
         # v2.5.25 / v2.6.0 : ecrase les operateurs par la liste default du
         # template -- uniquement si celui-ci est recurrent (cf. docstring).
         if sync_operators:
@@ -1474,7 +1926,8 @@ def _resync_future_events_from_template(conn, template_id: int) -> int:
                     (eid, uid),
                 )
         _recompute_event_machine(conn, eid)
-    return len(events)
+        _synced += 1
+    return _synced
 
 
 @router.get("/api/maintenance/templates")
@@ -1491,12 +1944,20 @@ def list_templates(request: Request):
                       t.recurrence_month, t.recurrence_time_start, t.recurrence_time_end,
                       t.recurrence_active, t.default_operators_csv,
                       (SELECT COUNT(*) FROM maintenance_template_ops o WHERE o.template_id=t.id) AS ops_count,
+                      -- v2.7.2 : ces compteurs alimentent le badge « N creneaux crees »
+                      -- et la modale de suppression, qui annonce combien de creneaux
+                      -- vont disparaitre. Depuis que la cascade ne touche que les
+                      -- occurrences generees, ils doivent compter la meme population,
+                      -- sinon la modale promet plus de suppressions qu'il n'y en a.
                       (SELECT COUNT(*) FROM maintenance_events e
-                        WHERE e.template_id=t.id AND e.deleted_at IS NULL) AS events_count,
+                        WHERE e.template_id=t.id AND e.template_origin_date IS NOT NULL
+                          AND e.deleted_at IS NULL) AS events_count,
                       (SELECT COUNT(*) FROM maintenance_events e
-                        WHERE e.template_id=t.id AND e.deleted_at IS NOT NULL) AS deleted_count,
+                        WHERE e.template_id=t.id AND e.template_origin_date IS NOT NULL
+                          AND e.deleted_at IS NOT NULL) AS deleted_count,
                       (SELECT MAX(date_prevue) FROM maintenance_events e
-                        WHERE e.template_id=t.id AND e.deleted_at IS NULL) AS last_event_date
+                        WHERE e.template_id=t.id AND e.template_origin_date IS NOT NULL
+                          AND e.deleted_at IS NULL) AS last_event_date
                FROM maintenance_templates t
                ORDER BY t.name""",
         ).fetchall()
@@ -1598,18 +2059,81 @@ def create_template(body: TemplateCreateBody, request: Request):
     return {"template": tmpl}
 
 
+@router.get("/api/maintenance/templates/{template_id}/resync-impact")
+def template_resync_impact(template_id: int, request: Request):
+    """v2.6.1 : combien de créneaux seraient réinitialisés par un enregistrement
+    de ce modèle ? Sert à avertir l'admin AVANT qu'il ne valide — la resync
+    écrase intégralement les ops (et les opérateurs si le modèle est récurrent).
+
+    Même filtre que _resync_future_events_from_template(), sinon l'annonce
+    mentirait : occurrences de récurrence uniquement, futures, non supprimées."""
+    _require_admin(request)
+    today = datetime.now(_PARIS).strftime("%Y-%m-%d")
+    with get_db() as conn:
+        if not conn.execute("SELECT 1 FROM maintenance_templates WHERE id = ?", (template_id,)).fetchone():
+            raise HTTPException(status_code=404, detail="Modèle introuvable")
+        rows = conn.execute(
+            "SELECT id, date_prevue FROM maintenance_events "
+            "WHERE template_id = ? AND template_origin_date IS NOT NULL "
+            "  AND date_prevue >= ? AND deleted_at IS NULL "
+            "ORDER BY date_prevue ASC",
+            (template_id, today),
+        ).fetchall()
+        # v2.6.1 : on ne detaille que les creneaux PERSONNALISES. Les autres
+        # sont des copies conformes : les resynchroniser ne change rien, il
+        # serait absurde de demander leur sort a l'admin.
+        tmpl = _load_template_full(conn, template_id) or {"ops": []}
+        diverged = []
+        for r in rows:
+            d = _event_divergence(conn, r["id"], tmpl)
+            if d["diverged"]:
+                diverged.append({"id": r["id"], "date": r["date_prevue"],
+                                 "reasons": d["reasons"], "done_ops": d["done_ops"]})
+        # v2.6.1 : creneaux DEPLACES a la main — date_prevue s'ecarte de la date
+        # theorique (template_origin_date, immuable). Ce sont eux, et eux seuls,
+        # dont la position serait ecrasee par un changement de regle : un
+        # creneau reste a sa place theorique est replace sans consequence.
+        moved_rows = conn.execute(
+            "SELECT id, date_prevue, template_origin_date FROM maintenance_events "
+            "WHERE template_id = ? AND template_origin_date IS NOT NULL "
+            "  AND date_prevue >= ? AND deleted_at IS NULL "
+            "  AND date_prevue <> template_origin_date "
+            "ORDER BY date_prevue ASC",
+            (template_id, today),
+        ).fetchall()
+        moved = [{"id": r["id"], "date": r["date_prevue"],
+                  "origin": r["template_origin_date"],
+                  "reasons": ["déplacé du " + str(r["template_origin_date"]) +
+                              " au " + str(r["date_prevue"])], "done_ops": 0}
+                 for r in moved_rows]
+    dates = [r["date_prevue"] for r in rows]
+    return {"count": len(dates), "dates": dates[:5], "first": dates[0] if dates else None,
+            "last": dates[-1] if dates else None, "diverged": diverged,
+            "identical_count": len(dates) - len(diverged),
+            "moved": moved, "unmoved_count": len(dates) - len(moved)}
+
+
 @router.patch("/api/maintenance/templates/{template_id}")
 def update_template(template_id: int, body: TemplateUpdateBody, request: Request):
     """Met à jour un template. Si les ops changent, resync les créneaux futurs."""
     _require_admin(request)
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id, name FROM maintenance_templates WHERE id = ?",
+            "SELECT id, name, recurrence_type, recurrence_dow, recurrence_dom, "
+            "       recurrence_month, recurrence_time_start, recurrence_time_end, "
+            "       recurrence_active "
+            "FROM maintenance_templates WHERE id = ?",
             (template_id,),
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="Modèle introuvable")
         now = _now_paris_iso()
+        # v2.6.1 : etat AVANT de la regle de recurrence. Le formulaire renvoie
+        # ces champs a CHAQUE enregistrement, meme inchanges : sans comparaison,
+        # corriger une faute dans le nom du modele replacerait tout le planning.
+        _RECUR_KEYS = ("recurrence_type", "recurrence_dow", "recurrence_dom",
+                       "recurrence_month", "recurrence_time_start", "recurrence_time_end")
+        _recur_before = {k: row[k] for k in _RECUR_KEYS}
         # Métadonnées (name, description)
         meta_updates = {}
         if body.name is not None:
@@ -1645,12 +2169,24 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
         if body.recurrence_active is not None:
             meta_updates["recurrence_active"] = 1 if body.recurrence_active else 0
         # v2.5.25 : default_operators (liste ids -> CSV, valides contre users)
+        # v2.7.1 : meme logique que pour les ops — le formulaire renvoie toujours
+        # default_operators, on ne declenche que sur un changement reel.
+        _default_ops_changed = False
         if body.default_operators is not None:
             _valid = []
             for uid in body.default_operators:
                 if isinstance(uid, int) and conn.execute("SELECT 1 FROM users WHERE id=?", (uid,)).fetchone():
                     _valid.append(str(uid))
-            meta_updates["default_operators_csv"] = ",".join(_valid) if _valid else None
+            _new_csv = ",".join(_valid) if _valid else None
+            _old_csv = conn.execute(
+                "SELECT default_operators_csv FROM maintenance_templates WHERE id = ?",
+                (template_id,),
+            ).fetchone()
+            _old_csv = _old_csv["default_operators_csv"] if _old_csv else None
+            _default_ops_changed = (
+                set((_old_csv or "").split(",")) - {""} != set((_new_csv or "").split(",")) - {""}
+            )
+            meta_updates["default_operators_csv"] = _new_csv
         # v2.5.31 : la purge etait imbriquee dans le bloc default_operators ci-dessus,
         # donc le toggle du panel Gestion des modeles (qui n'envoie que
         # recurrence_active) ne nettoyait jamais les creneaux futurs. On la
@@ -1658,9 +2194,14 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
         # Les creneaux deja tombstoned sont ignores (deja hors calendrier).
         if body.recurrence_active is False:
             today = datetime.now(_PARIS).strftime("%Y-%m-%d")
+            # v2.7.2 : le filtre portait sur template_id seul. Un creneau compose
+            # a la main qui avait simplement importe ce modele (raccourci de
+            # saisie) etait donc supprime avec les occurrences. On restreint aux
+            # occurrences reellement generees par la recurrence.
             future_ids = [r["id"] for r in conn.execute(
                 "SELECT id FROM maintenance_events "
-                "WHERE template_id = ? AND date_prevue >= ?",
+                "WHERE template_id = ? AND template_origin_date IS NOT NULL "
+                "  AND date_prevue >= ?",
                 (template_id, today),
             ).fetchall()]
             for eid in future_ids:
@@ -1675,6 +2216,37 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
                 f"UPDATE maintenance_templates SET {set_clause} WHERE id = ?",
                 list(meta_updates.values()) + [template_id],
             )
+
+        # v2.6.1 — REGLE DE RECURRENCE MODIFIEE : on replace tout.
+        #
+        # Distinction demandee cote produit :
+        #   - modifier les OPERATIONS du modele  -> n'impacte que les operations
+        #     des occurrences (cf. _resync_future_events_from_template). Les
+        #     dates ne bougent pas, un creneau deplace reste ou il est, un
+        #     creneau supprime ne ressuscite pas.
+        #   - modifier la REGLE de recurrence    -> redefinit le planning : les
+        #     occurrences futures sont purgees puis regenerees sur la nouvelle
+        #     regle.
+        #
+        # Sans cette purge, changer la recurrence du lundi au mardi laissait les
+        # anciens lundis en place ET ajoutait les mardis : la generation
+        # dedoublonne sur (template_id, template_origin_date), donc elle ne
+        # touchait jamais aux occurrences deja produites par l'ancienne regle.
+        #
+        # La purge est un DELETE reel, tombstones compris : un creneau supprime
+        # ou deplace a la main revient a sa place theorique. C'est l'arbitrage
+        # retenu — changer la regle, c'est redefinir le planning, pas l'ajuster.
+        # Elle ne touche que le FUTUR (date_prevue >= aujourd'hui) et que les
+        # occurrences GENEREES (template_origin_date IS NOT NULL) : les creneaux
+        # passes et ceux composes a la main ne sont jamais concernes.
+        recur_replaced = 0
+        _recur_changed = any(
+            k in meta_updates and meta_updates[k] != _recur_before[k] for k in _RECUR_KEYS
+        )
+        recur_stats = {"moved": 0, "removed": 0, "created": 0}
+        if _recur_changed and body.recurrence_active is not False:
+            recur_stats = _replace_recurrence_dates(conn, template_id, body.resync_exclude_ids)
+            recur_replaced = recur_stats["moved"]
         # Ops (si fournies, on remplace intégralement)
         resynced = 0
         if body.ops is not None:
@@ -1692,42 +2264,81 @@ def update_template(template_id: int, body: TemplateUpdateBody, request: Request
                     raise HTTPException(status_code=400, detail=f"code inconnu: {code}")
                 if not mcsv:
                     raise HTTPException(status_code=400, detail=f"L'opération {code} doit être attribuée à au moins une machine")
-            conn.execute("DELETE FROM maintenance_template_ops WHERE template_id = ?", (template_id,))
-            for code, mcsv in seen.items():
-                conn.execute(
-                    "INSERT INTO maintenance_template_ops (template_id, code, machines_csv) VALUES (?, ?, ?)",
-                    (template_id, code, mcsv),
-                )
-            conn.execute(
-                "UPDATE maintenance_templates SET updated_at=? WHERE id=?",
-                (now, template_id),
+            # v2.7.1 : la resync ne part QUE si les operations ont reellement
+            # change. Le formulaire renvoie `ops` a chaque enregistrement, meme
+            # intactes : `if body.ops is not None` etait donc toujours vrai, et
+            # ouvrir un modele puis cliquer « Enregistrer » suffisait a ecraser
+            # les operations personnalisees de toutes les occurrences futures —
+            # sans confirmation, puisque le client ne detectait aucun changement
+            # et n'affichait donc pas la modale.
+            _before = {r["code"]: (r["machines_csv"] or "") for r in conn.execute(
+                "SELECT code, machines_csv FROM maintenance_template_ops WHERE template_id = ?",
+                (template_id,),
+            ).fetchall()}
+            _after = {c: (m or "") for c, m in seen.items()}
+            _ops_changed = set(_before) != set(_after) or any(
+                set(_machines_csv_to_list(_before[c])) != set(_machines_csv_to_list(_after[c]))
+                for c in _after
             )
-            # Resync des créneaux futurs liés (ops + operateurs)
-            resynced = _resync_future_events_from_template(conn, template_id)
-        elif body.default_operators is not None:
-            # v2.5.25 : ops inchangees mais default_operators modifies -> resync operateurs
-            # sur les creneaux futurs uniquement (les ops restent car pas modifiees).
-            resynced = _resync_future_events_from_template(conn, template_id)
+            if _ops_changed:
+                conn.execute("DELETE FROM maintenance_template_ops WHERE template_id = ?", (template_id,))
+                for code, mcsv in seen.items():
+                    conn.execute(
+                        "INSERT INTO maintenance_template_ops (template_id, code, machines_csv) VALUES (?, ?, ?)",
+                        (template_id, code, mcsv),
+                    )
+                conn.execute(
+                    "UPDATE maintenance_templates SET updated_at=? WHERE id=?",
+                    (now, template_id),
+                )
+                # Resync des créneaux futurs liés (ops + operateurs)
+                resynced = _resync_future_events_from_template(conn, template_id, body.resync_exclude_ids)
+            elif _default_ops_changed:
+                # Ops intactes, operateurs par defaut modifies : on ne touche
+                # QU'AUX operateurs (sync_ops=False).
+                resynced = _resync_future_events_from_template(
+                    conn, template_id, body.resync_exclude_ids, sync_ops=False)
+        elif _default_ops_changed:
+            # v2.5.25 : ops non fournies mais default_operators modifies.
+            resynced = _resync_future_events_from_template(
+                conn, template_id, body.resync_exclude_ids, sync_ops=False)
+        # v2.6.1 : regeneration immediate apres une purge de regle, pour que la
+        # reponse reflete deja le nouveau planning (sinon le calendrier reste
+        # vide jusqu'au prochain GET /events).
+        regenerated = recur_stats["created"]
         conn.commit()
         tmpl = _load_template_full(conn, template_id)
     # v2.6.0 : la regle de recurrence a peut-etre change -> le prochain GET
     # /events doit regenerer sans attendre la fin du throttle.
     _invalidate_recur_gen_throttle()
-    return {"template": tmpl, "resynced_events": resynced, "deleted_future_events": deleted_future}
+    return {"template": tmpl, "resynced_events": resynced,
+            "deleted_future_events": deleted_future,
+            "recur_moved_events": recur_stats["moved"],
+            "recur_removed_events": recur_stats["removed"],
+            "recur_replaced_events": recur_replaced,
+            "recur_regenerated_events": regenerated}
 
 
 @router.delete("/api/maintenance/templates/{template_id}")
 def delete_template(template_id: int, request: Request):
-    """Supprime un template et, en cascade, les créneaux futurs qui en dépendent.
-    (Les créneaux passés restent, avec template_id → NULL.)"""
+    """Supprime un template et, en cascade, les occurrences futures de sa
+    récurrence (template_origin_date renseigné).
+    Les créneaux passés, ainsi que les créneaux composés à la main ayant
+    seulement importé ce modèle, survivent avec template_id → NULL."""
     _require_admin(request)
     with get_db() as conn:
         if not conn.execute("SELECT 1 FROM maintenance_templates WHERE id = ?", (template_id,)).fetchone():
             raise HTTPException(status_code=404, detail="Modèle introuvable")
         today = datetime.now(_PARIS).strftime("%Y-%m-%d")
         # Cascade sur les créneaux futurs (>= aujourd'hui)
+        # v2.7.2 : meme correctif que sur la desactivation de recurrence. La
+        # cascade emportait les creneaux composes a la main ayant importe ce
+        # modele. Ils sont desormais preserves : le UPDATE de detachement plus
+        # bas leur met simplement template_id a NULL.
         future_ids = [r["id"] for r in conn.execute(
-            "SELECT id FROM maintenance_events WHERE template_id = ? AND date_prevue >= ?",
+            "SELECT id FROM maintenance_events "
+            "WHERE template_id = ? AND template_origin_date IS NOT NULL "
+            "  AND date_prevue >= ?",
             (template_id, today),
         ).fetchall()]
         for eid in future_ids:
@@ -1738,8 +2349,13 @@ def delete_template(template_id: int, request: Request):
         # restaurées). Sans ça, le détachement ci-dessous leur met template_id
         # à NULL : plus aucun modèle pour les afficher, donc invisibles et
         # irrestaurables — des lignes fantômes en base.
+        # v2.7.2 : restreint aux occurrences generees. Le tombstone d'un creneau
+        # compose a la main est une suppression ordinaire, il doit survivre au
+        # detachement comme n'importe quel creneau manuel.
         ghost_ids = [r["id"] for r in conn.execute(
-            "SELECT id FROM maintenance_events WHERE template_id = ? AND deleted_at IS NOT NULL",
+            "SELECT id FROM maintenance_events "
+            "WHERE template_id = ? AND template_origin_date IS NOT NULL "
+            "  AND deleted_at IS NOT NULL",
             (template_id,),
         ).fetchall()]
         for eid in ghost_ids:

@@ -7167,19 +7167,6 @@ Ressources :
         conn.commit()
         _record_schema_migration(conn, 195, "backfill_libres_usage_count")
 
-    # v195 — Impression : support imprimantes Windows locales (USB / LPT).
-    # Jusqu'ici, les imprimantes etaient forcement atteignables en TCP:9100. Ajoute
-    # `type_connexion` = 'tcp_ip' | 'windows_local' + `nom_queue_windows` pour
-    # cibler une queue installee sur le PC hote (le driver Windows gere USB/LPT/etc).
-    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=195 LIMIT 1").fetchone():
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(imprimantes)").fetchall()}
-        if "type_connexion" not in cols:
-            conn.execute("ALTER TABLE imprimantes ADD COLUMN type_connexion TEXT NOT NULL DEFAULT 'tcp_ip'")
-        if "nom_queue_windows" not in cols:
-            conn.execute("ALTER TABLE imprimantes ADD COLUMN nom_queue_windows TEXT")
-        conn.commit()
-        _record_schema_migration(conn, 195, "imprimantes_type_connexion_windows_local")
-
     # v196 -- MyExpe (devis transporteurs) : type de palette sur les demandes,
     # commentaire + fichier joint lors de la retenue d'une offre. Colonnes
     # nullable, seedees a NULL pour ne rien casser en prod.
@@ -7949,6 +7936,153 @@ Ressources :
             f"[MySifa] migration taches_multi_assignes : {_asg.rowcount} assignation(s) reprise(s)."
         )
 
+    # v229 — Pièces d'usure : rattachement STRUCTUREL des codes maintenance.
+    #
+    # Avant : l'accueil Maintenance devinait à chaque render qu'un code était une
+    # pièce d'usure en lisant son LIBELLÉ (présence de "couteaux" / "contre" /
+    # "bande" / "rive" / "landberg" / "cutter" dans _findWearPartCode). Renommer
+    # un code détachait donc silencieusement sa carte, et deux codes matchant la
+    # même position se masquaient l'un l'autre (premier arrivé, premier servi).
+    #
+    # Après : le rattachement est une RELATION. Un code est une pièce d'usure si
+    # et seulement si usure_piece_id IS NOT NULL — pas de booléen séparé, donc
+    # pas d'état incohérent possible (flag posé sans rattachement). Le libellé
+    # redevient un simple libellé, librement modifiable.
+    #
+    # Le garde-fou porte sur le NOM et non sur le numéro de version : deux
+    # branches parallèles ont déjà collisionné sur un même numéro (cf. le bloc AO
+    # juste en dessous), et une migration silencieusement ignorée laisserait ici
+    # une table absente → 500 au chargement de Paramètres.
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE name='maintenance_usure_pieces' LIMIT 1"
+    ).fetchone():
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS maintenance_usure_pieces (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                cle         TEXT NOT NULL UNIQUE,
+                label       TEXT NOT NULL,
+                positions   TEXT NOT NULL DEFAULT '[]',
+                ordre       INTEGER NOT NULL DEFAULT 0,
+                actif       INTEGER NOT NULL DEFAULT 1,
+                created_at  TEXT NOT NULL,
+                updated_at  TEXT
+            )
+        """)
+        _mc_cols = {r["name"] for r in conn.execute("PRAGMA table_info(maintenance_codes)").fetchall()}
+        if "usure_piece_id" not in _mc_cols:
+            conn.execute("ALTER TABLE maintenance_codes ADD COLUMN usure_piece_id INTEGER")
+        if "usure_position" not in _mc_cols:
+            conn.execute("ALTER TABLE maintenance_codes ADD COLUMN usure_position TEXT")
+        # Index unique PARTIEL : deux codes ne peuvent pas revendiquer le même
+        # couple (pièce, position). Le WHERE exclut les codes non rattachés,
+        # sinon toutes les lignes NULL entreraient en collision entre elles.
+        # usure_position vaut '' (jamais NULL) pour une pièce sans position :
+        # SQLite considère deux NULL comme distincts, ce qui laisserait passer
+        # deux codes sur la même pièce sans position.
+        conn.execute("""
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_maint_usure_unique
+            ON maintenance_codes(usure_piece_id, usure_position)
+            WHERE usure_piece_id IS NOT NULL
+        """)
+
+        _now_usure = datetime.now().isoformat()
+
+        # Seed SIFA — conditionné. Les 4 pièces ci-dessous et le vocabulaire
+        # bande/rive sont du référentiel SIFA, pas du générique : un client
+        # Kernse démarre avec une table VIDE que l'onboarding remplit.
+        _seeded = 0
+        _already = conn.execute(
+            "SELECT COUNT(*) AS n FROM maintenance_usure_pieces"
+        ).fetchone()["n"]
+        if _already == 0 and ENV_NAME in ("v1", "v2"):
+            for _cle, _lab, _pos_json, _ordre in (
+                ("couteaux",          "Couteaux",          '["bande","rive"]', 1),
+                ("contre_couteaux",   "Contre-couteaux",   '["bande","rive"]', 2),
+                ("cutters",           "Cutters",           '[]',               3),
+                ("couteaux_landberg", "Couteaux Landberg", '[]',               4),
+            ):
+                conn.execute(
+                    """INSERT OR IGNORE INTO maintenance_usure_pieces
+                       (cle,label,positions,ordre,actif,created_at)
+                       VALUES (?,?,?,?,1,?)""",
+                    (_cle, _lab, _pos_json, _ordre, _now_usure),
+                )
+                _seeded += 1
+
+        # Backfill — on applique UNE DERNIÈRE FOIS la logique de matching par
+        # libellé du front, puis elle disparaît du code. Les clés de pièces sont
+        # volontairement identiques aux anciens `pieceId` du localStorage
+        # (mysifa_maint_wearparts_v1) : l'onglet Bande/Rive mémorisé par chaque
+        # utilisateur reste donc valide après la mise à jour.
+        _pieces_by_cle = {
+            r["cle"]: r["id"]
+            for r in conn.execute("SELECT id, cle FROM maintenance_usure_pieces").fetchall()
+        }
+        _linked, _dups = 0, []
+        if _pieces_by_cle:
+            _taken = set()
+            _rows = conn.execute(
+                """SELECT code, label FROM maintenance_codes
+                   WHERE categorie IN ('entretien','remplacements','interventions','suivi')
+                     AND usure_piece_id IS NULL
+                   ORDER BY code"""
+            ).fetchall()
+            for _r in _rows:
+                _lbl = str(_r["label"] or "").casefold()
+                _cle, _pos = None, ""
+                if "landberg" in _lbl:
+                    _cle = "couteaux_landberg"
+                elif "cutter" in _lbl:
+                    _cle = "cutters"
+                elif "couteau" in _lbl:
+                    # Sans position identifiable, on ne devine pas : le code
+                    # reste non rattaché et l'admin le rattache à la main.
+                    if "bande" in _lbl:
+                        _pos = "bande"
+                    elif "rive" in _lbl:
+                        _pos = "rive"
+                    else:
+                        continue
+                    _cle = "contre_couteaux" if "contre" in _lbl else "couteaux"
+                if not _cle:
+                    continue
+                _pid = _pieces_by_cle.get(_cle)
+                if not _pid:
+                    continue
+                if (_pid, _pos) in _taken:
+                    # Collision : deux codes revendiquent la même position. Avant
+                    # cette migration le premier gagnait EN SILENCE. On garde le
+                    # même arbitrage pour ne rien changer à l'affichage, mais on
+                    # le trace pour que l'admin puisse trancher.
+                    _dups.append(f"{_r['code']} ({_r['label']})")
+                    continue
+                _taken.add((_pid, _pos))
+                conn.execute(
+                    "UPDATE maintenance_codes SET usure_piece_id=?, usure_position=? WHERE code=?",
+                    (_pid, _pos, _r["code"]),
+                )
+                _linked += 1
+
+        # metrage_ref devient exclusif aux pièces d'usure. On COMPTE les codes
+        # non rattachés qui en portent encore un, sans les purger : la valeur
+        # était déjà ignorée en lecture (seule la carte pièce d'usure la lit),
+        # et une purge destructive n'a pas sa place dans une migration de
+        # structure. À traiter dans un lot de nettoyage une fois le compte connu.
+        _orphan_metrage = conn.execute(
+            """SELECT COUNT(*) AS n FROM maintenance_codes
+               WHERE usure_piece_id IS NULL AND COALESCE(metrage_ref,'') <> ''"""
+        ).fetchone()["n"]
+
+        conn.commit()
+        _record_schema_migration(conn, 229, "maintenance_usure_pieces")
+        print(
+            f"[MySifa] migration maintenance_usure_pieces : {_seeded} piece(s) seedee(s), "
+            f"{_linked} code(s) rattache(s), {len(_dups)} doublon(s) ignore(s), "
+            f"{_orphan_metrage} metrage_ref orphelin(s)."
+        )
+        if _dups:
+            print("[MySifa]   codes non rattaches (position deja prise) : " + ", ".join(_dups))
+
     # ── AO conditionnement (condi) + marge — schéma garde-fou sur COLONNE ────
     # ATTENTION, choix délibéré : ces colonnes NE sont PAS versionnées via
     # schema_migrations. Historique : le versionnage séquentiel entre branches
@@ -8171,6 +8305,268 @@ Ressources :
         "CREATE UNIQUE INDEX IF NOT EXISTS idx_ao_fournisseurs_token_pixel"
         " ON ao_fournisseurs(token_pixel) WHERE token_pixel IS NOT NULL"
     )
+
+    # ── MyExpé : journal d'engagement transporteur sur les demandes de tarif ─
+    # Transposition du bloc MyAO ci-dessus. Même garde-fou sur l'existence
+    # réelle plutôt qu'un numéro de migration, et mêmes colonnes `fiable` /
+    # `motif` : le problème des ouvertures d'email fantômes (Apple MPP,
+    # passerelles antispam) est identique quel que soit le module.
+    #
+    # L'unité de suivi est la LIGNE DE RÉPONSE et non le transporteur : le
+    # même transporteur peut avoir ouvert la demande de mardi et ignoré celle
+    # de jeudi. Le token portail, lui, reste par email et transverse — les
+    # deux granularités coexistent sans se contredire.
+    #
+    # `demande_id` est dénormalisé alors qu'il se déduit de `reponse_id` :
+    # l'agrégat de la liste (« qui a ouvert quoi sur cette demande ») est la
+    # requête chaude, elle ne doit pas payer une jointure.
+    #
+    # Pas d'adresse IP, volontairement : le user_agent suffit à identifier les
+    # robots. `expe_devis_reponses.opened_ip` existe pour des raisons
+    # historiques et n'est pas repris ici.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS expe_devis_evenements (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            reponse_id     INTEGER NOT NULL REFERENCES expe_devis_reponses(id) ON DELETE CASCADE,
+            demande_id     INTEGER REFERENCES expe_demandes_devis(id) ON DELETE CASCADE,
+            canal          TEXT NOT NULL,
+            type_evenement TEXT NOT NULL,
+            date           TEXT NOT NULL,
+            fiable         INTEGER NOT NULL DEFAULT 1,
+            motif          TEXT,
+            user_agent     TEXT,
+            meta           TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_expe_devis_ev_reponse"
+        " ON expe_devis_evenements(reponse_id, date DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_expe_devis_ev_demande"
+        " ON expe_devis_evenements(demande_id, type_evenement)"
+    )
+
+    # token_pixel : identifiant du pixel de suivi, DISTINCT du token portail
+    # (expe_portal_transporteurs.token). Le pixel passe par les proxys
+    # d'images qui le mettent en cache et le journalisent ; le token portail
+    # ouvre un accès, il n'a rien à faire dans une URL d'image.
+    # Pas de backfill ici, contrairement à MyAO : un token créé après coup ne
+    # sert à rien puisque les emails déjà partis ne le contiennent pas. Il est
+    # créé paresseusement au premier envoi (cf. expe_evenements.token_pixel).
+    _expe_rep_cols = {
+        r["name"]
+        for r in conn.execute("PRAGMA table_info(expe_devis_reponses)").fetchall()
+    }
+    if _expe_rep_cols and "token_pixel" not in _expe_rep_cols:
+        conn.execute("ALTER TABLE expe_devis_reponses ADD COLUMN token_pixel TEXT")
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_expe_devis_reponses_token_pixel"
+        " ON expe_devis_reponses(token_pixel) WHERE token_pixel IS NOT NULL"
+    )
+
+    # ── MyExpé : palettes Europe — compte courant par transporteur ───────────
+    # Le suivi métier réel (fichier « SUIVI DES PALETTES.xlsx », un onglet par
+    # transporteur et par année) est un COMPTE COURANT : colonnes Données /
+    # Rendues / Solde qui court, avec report du solde de l'année précédente.
+    # Le débiteur de la palette n'est pas le client — c'est le transporteur qui
+    # emporte les palettes et c'est à lui qu'on les réclame.
+    #
+    # Le statut par départ (expe_departs.palette_europe_statut) ne suffit pas :
+    # un transporteur rend 17 palettes d'un coup, sans dire lesquelles. Cette
+    # table porte donc les mouvements que le départ ne peut pas exprimer :
+    #
+    #   'report'  solde d'ouverture — la dette antérieure à MySifa. Sans lui le
+    #             solde repart de zéro et ne correspond à rien.
+    #   'rendue'  restitution en vrac, non rattachée à un départ précis.
+    #   'donnee'  palettes remises hors départ enregistré (dépannage, reprise).
+    #
+    # Le sens est stocké en clair plutôt qu'un nb_palette signé : une saisie
+    # « -17 » se relit mal six mois plus tard, et un signe inversé est
+    # invisible à l'œil alors qu'un sens faux saute aux yeux.
+    #
+    # transporteur_id ET transporteur_nom : les départs historiques ne portent
+    # qu'un nom en texte libre (expe_departs.transporteur), le référentiel est
+    # arrivé après. Garder les deux permet de rapprocher les deux populations
+    # sans réécrire l'historique.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS expe_palettes_mouvements (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            transporteur_id  INTEGER REFERENCES expe_transporteurs(id) ON DELETE SET NULL,
+            transporteur_nom TEXT,
+            date_mvt         TEXT NOT NULL,
+            sens             TEXT NOT NULL,
+            nb_palette       REAL NOT NULL,
+            reference        TEXT,
+            client           TEXT,
+            note             TEXT,
+            created_at       TEXT NOT NULL,
+            created_by_email TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_expe_pal_mvt_trp"
+        " ON expe_palettes_mouvements(transporteur_id, date_mvt DESC)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_expe_pal_mvt_nom"
+        " ON expe_palettes_mouvements(transporteur_nom, date_mvt DESC)"
+    )
+
+    # Contestations — le volet « Contestation de palette Europe » de l'Excel,
+    # et l'onglet mensuel « palettes non rendues ». C'est le registre qui sert
+    # à réclamer : une ligne = un litige identifié (récépissé, client, nombre,
+    # cause), pas une écriture comptable. Il est donc SÉPARÉ des mouvements et
+    # n'entre pas dans le solde : une palette contestée reste due tant que le
+    # litige n'est pas tranché, la sortir du solde reviendrait à l'abandonner.
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS expe_palettes_contestations (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            transporteur_id   INTEGER REFERENCES expe_transporteurs(id) ON DELETE SET NULL,
+            transporteur_nom  TEXT,
+            depart_id         INTEGER REFERENCES expe_departs(id) ON DELETE SET NULL,
+            date_contestation TEXT NOT NULL,
+            recepisse         TEXT,
+            client            TEXT,
+            nb_palette        REAL NOT NULL,
+            cause             TEXT,
+            statut            TEXT NOT NULL DEFAULT 'ouverte',
+            note              TEXT,
+            resolved_at       TEXT,
+            created_at        TEXT NOT NULL,
+            created_by_email  TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_expe_pal_contest_trp"
+        " ON expe_palettes_contestations(transporteur_id, statut)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_expe_pal_contest_date"
+        " ON expe_palettes_contestations(date_contestation DESC)"
+    )
+
+    # ── MyExpé devis : cycle de vie, langue, pièces jointes multiples ────────
+    # Même convention que les blocs ci-dessus : PRAGMA + CREATE IF NOT EXISTS.
+    #
+    # date_limite : échéance de réponse. Purement informative — MyAO ne bloque
+    #   pas non plus après la date, et un prix en retard vaut mieux que pas de
+    #   prix. Elle sert à trier, à colorer, et surtout à être rappelée au
+    #   transporteur sur son portail.
+    # deleted_at : corbeille. La suppression était physique et immédiate, avec
+    #   cascade sur les réponses et abandon des fichiers sur disque. Une
+    #   demande supprimée par erreur emportait sa référence (2026-15) et les
+    #   offres déjà reçues, sans recours.
+    _expe_dem_cols = {
+        r["name"]
+        for r in conn.execute("PRAGMA table_info(expe_demandes_devis)").fetchall()
+    }
+    if _expe_dem_cols and "date_limite" not in _expe_dem_cols:
+        conn.execute("ALTER TABLE expe_demandes_devis ADD COLUMN date_limite TEXT")
+    if _expe_dem_cols and "deleted_at" not in _expe_dem_cols:
+        conn.execute("ALTER TABLE expe_demandes_devis ADD COLUMN deleted_at TEXT")
+    if _expe_dem_cols:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_expe_demandes_devis_deleted"
+            " ON expe_demandes_devis(deleted_at)"
+        )
+
+    # langue : le pack de traduction FR/EN existait déjà (expe_email_i18n) mais
+    #   n'était jamais activé faute de savoir en quelle langue écrire à qui. Le
+    #   mail partait donc bilingue, les deux versions empilées — du bruit pour
+    #   tout le monde. Défaut 'fr' : la population est majoritairement
+    #   française, et un transporteur belge ou néerlandais se corrige à la main
+    #   une fois pour toutes.
+    _expe_trp_cols = {
+        r["name"]
+        for r in conn.execute("PRAGMA table_info(expe_transporteurs)").fetchall()
+    }
+    if _expe_trp_cols and "langue" not in _expe_trp_cols:
+        conn.execute(
+            "ALTER TABLE expe_transporteurs ADD COLUMN langue TEXT NOT NULL DEFAULT 'fr'"
+        )
+
+    # Sur la ligne de réponse : la langue est FIGÉE à l'envoi, pas relue depuis
+    # le référentiel. Si on change la langue d'un transporteur après coup, le
+    # mail déjà parti ne change pas de langue rétroactivement — la trace doit
+    # dire ce qui a réellement été envoyé.
+    # relances / last_relance_at : compteur affiché sur la ligne. Sans lui, on
+    # relance deux fois le même transporteur le même jour sans le savoir.
+    _expe_rep_cols2 = {
+        r["name"]
+        for r in conn.execute("PRAGMA table_info(expe_devis_reponses)").fetchall()
+    }
+    if _expe_rep_cols2 and "langue" not in _expe_rep_cols2:
+        conn.execute("ALTER TABLE expe_devis_reponses ADD COLUMN langue TEXT")
+    if _expe_rep_cols2 and "relances" not in _expe_rep_cols2:
+        conn.execute(
+            "ALTER TABLE expe_devis_reponses ADD COLUMN relances INTEGER NOT NULL DEFAULT 0"
+        )
+    if _expe_rep_cols2 and "last_relance_at" not in _expe_rep_cols2:
+        conn.execute("ALTER TABLE expe_devis_reponses ADD COLUMN last_relance_at TEXT")
+
+    # Pièces jointes : une seule table pour les deux sens, `origine` tranche.
+    #   'sifa'         document joint à la demande (plan de chargement, photo
+    #                  de contrainte d'accès) — visible du transporteur.
+    #   'transporteur' fichier déposé par le transporteur avec son offre
+    #                  (cotation PDF), rattaché à sa ligne de réponse.
+    # Deux tables auraient dupliqué le stockage, la limite de taille et la
+    # route de téléchargement pour une seule colonne de différence.
+    #
+    # Les colonnes historiques piece_jointe_path / piece_jointe_filename sur
+    # expe_demandes_devis restent en place et sont reprises ici au premier
+    # démarrage : elles sont encore lues par du code existant, les supprimer
+    # dans la même migration reviendrait à parier sur l'exhaustivité du grep.
+    # Le backfill ne doit tourner QU'À la création de la table. Un garde par
+    # comptage (`SELECT COUNT(*) == 0`) n'est pas un garde d'idempotence :
+    # supprimer la dernière pièce jointe héritée puis redémarrer les aurait
+    # toutes ressuscitées, pointant vers des fichiers effacés du disque.
+    _pj_table_neuve = (
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='expe_devis_pieces_jointes'"
+        ).fetchone()
+        is None
+    )
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS expe_devis_pieces_jointes (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            demande_id       INTEGER NOT NULL REFERENCES expe_demandes_devis(id) ON DELETE CASCADE,
+            reponse_id       INTEGER REFERENCES expe_devis_reponses(id) ON DELETE CASCADE,
+            origine          TEXT NOT NULL DEFAULT 'sifa',
+            filename         TEXT NOT NULL,
+            path             TEXT NOT NULL,
+            taille_octets    INTEGER,
+            created_at       TEXT NOT NULL,
+            created_by_email TEXT
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_expe_devis_pj_demande"
+        " ON expe_devis_pieces_jointes(demande_id, origine)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_expe_devis_pj_reponse"
+        " ON expe_devis_pieces_jointes(reponse_id)"
+    )
+    if _pj_table_neuve and _expe_dem_cols and "piece_jointe_path" in _expe_dem_cols:
+        try:
+            conn.execute("""
+                INSERT INTO expe_devis_pieces_jointes
+                  (demande_id, reponse_id, origine, filename, path, created_at, created_by_email)
+                SELECT id, NULL, 'sifa',
+                       COALESCE(NULLIF(TRIM(piece_jointe_filename),''), 'fichier'),
+                       piece_jointe_path, created_at, created_by_email
+                FROM expe_demandes_devis
+                WHERE COALESCE(TRIM(piece_jointe_path),'') <> ''
+            """)
+        except Exception as _exc_pj:
+            # Le backfill est un confort, pas une condition de démarrage : les
+            # colonnes historiques restent lues par ailleurs.
+            import logging as _logging
+
+            _logging.getLogger(__name__).warning(
+                "backfill expe_devis_pieces_jointes: %s", _exc_pj
+            )
 
     # ── Nommage des matières pour les références produit MyAO ────────────────
     # Deux colonnes, dans cet ordre de priorité (cf. ao_ref_produit.matiere_abbrev) :
@@ -8449,7 +8845,429 @@ Ressources :
     except Exception:
         pass
 
+    # ══════════════════════════════════════════════════════════════════════
+    # CHAÎNE FSC — produits certifiés / non certifiés (3 migrations)
+    # ══════════════════════════════════════════════════════════════════════
+    #
+    # GARDE-FOU PAR NOM (et non par numéro de version) : même raison que
+    # `taches_multi_assignes` plus haut. Le versionnage séquentiel a déjà
+    # produit une collision (216 = `ao_lignes_condi` sur une branche et
+    # `fab_matieres_commentaire` sur une autre), et la 2e migration portant
+    # le même numéro est SILENCIEUSEMENT ignorée. Ces trois-là arrivent
+    # depuis une branche parallèle : un garde-fou par nom les rend
+    # insensibles à l'ordre de merge.
+    #
+    # Rappel du modèle métier, parce qu'il n'est pas intuitif :
+    #   - `stock_receptions.fsc_type_claim` = certification de la MATIÈRE
+    #     reçue du fournisseur (5 claims : fsc_100, fsc_mix, fsc_mix_credit,
+    #     fsc_recycled, non_fsc).
+    #   - `lots_stock.fsc` = claim de SORTIE du PRODUIT FINI, hérité du
+    #     dossier de fabrication (planning_entries.fsc_requis). C'est un
+    #     booléen, pas un claim typé : décision produit, la finesse du claim
+    #     reste côté matière.
+    # Les deux ne sont pas la même chose et ne doivent jamais être fusionnés.
+
+    # ── FSC 1/3 : lots_stock porte le claim de sortie + son dossier ──────
+    #
+    # `no_dossier` sur le lot est le maillon qui manquait au traceur : sans
+    # lui, remonter d'une palette expédiée jusqu'aux bobines consommées
+    # imposait de deviner par (produit, emplacement, date), ce qui casse dès
+    # qu'un même produit entre deux fois le même jour.
+    #
+    # `fsc_ecart` : le lot est bien FSC (le dossier l'exige) MAIS la traça
+    # matière était vide ou non conforme au moment de l'entrée en stock. On
+    # ne bloque pas — décision produit — on rend l'écart visible et
+    # traçable jusqu'à l'audit.
+    #
+    # `fsc_link_reconstitue` : 1 = le lien dossier a été DÉDUIT par le
+    # backfill ci-dessous, pas saisi. Un auditeur FSC ne doit jamais prendre
+    # une déduction pour une donnée d'origine : l'interface affiche ces
+    # liens en dégradé et étiquetés « reconstitué ».
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE name='fsc_lots_stock' LIMIT 1"
+    ).fetchone():
+        _ls_cols = {r[1] for r in conn.execute("PRAGMA table_info(lots_stock)").fetchall()}
+        if "fsc" not in _ls_cols:
+            conn.execute("ALTER TABLE lots_stock ADD COLUMN fsc INTEGER NOT NULL DEFAULT 0")
+        if "no_dossier" not in _ls_cols:
+            conn.execute("ALTER TABLE lots_stock ADD COLUMN no_dossier TEXT")
+        if "fsc_ecart" not in _ls_cols:
+            conn.execute("ALTER TABLE lots_stock ADD COLUMN fsc_ecart INTEGER NOT NULL DEFAULT 0")
+        if "fsc_link_reconstitue" not in _ls_cols:
+            conn.execute(
+                "ALTER TABLE lots_stock ADD COLUMN fsc_link_reconstitue INTEGER NOT NULL DEFAULT 0"
+            )
+        # Index sur le triplet réellement interrogé par MyStock : les vues
+        # regroupent désormais par (produit, emplacement, fsc) et non plus
+        # par (produit, emplacement) — deux lignes distinctes au même
+        # emplacement quand du FSC et du non-FSC cohabitent.
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_lots_produit_empl_fsc "
+            "ON lots_stock(produit_id, emplacement, fsc)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_lots_no_dossier ON lots_stock(no_dossier)"
+        )
+
+        # Backfill 1 : rattacher chaque lot à son dossier via le mouvement
+        # d'entrée correspondant. `lots_stock.created_at` et
+        # `mouvements_stock.created_at` sont écrits avec la MÊME variable
+        # `now` dans _apply_stock_mouvement() — l'égalité stricte est donc
+        # fiable et évite les faux positifs d'un rapprochement à la journée.
+        _bf_dos = conn.execute(
+            """UPDATE lots_stock
+                  SET no_dossier = (
+                        SELECT m.no_dossier
+                          FROM mouvements_stock m
+                         WHERE m.produit_id   = lots_stock.produit_id
+                           AND m.emplacement  = lots_stock.emplacement
+                           AND m.created_at   = lots_stock.created_at
+                           AND m.type_mouvement = 'entree'
+                           AND TRIM(COALESCE(m.no_dossier,'')) <> ''
+                         LIMIT 1),
+                      fsc_link_reconstitue = 1
+                WHERE TRIM(COALESCE(no_dossier,'')) = ''
+                  AND EXISTS (
+                        SELECT 1 FROM mouvements_stock m2
+                         WHERE m2.produit_id   = lots_stock.produit_id
+                           AND m2.emplacement  = lots_stock.emplacement
+                           AND m2.created_at   = lots_stock.created_at
+                           AND m2.type_mouvement = 'entree'
+                           AND TRIM(COALESCE(m2.no_dossier,'')) <> '')"""
+        )
+
+        # Backfill 2 : un lot rattaché à un dossier FSC devient FSC. On
+        # accepte le rapprochement sur `reference` OU `numero_of` : selon le
+        # point de saisie, MySifa stocke tantôt l'un tantôt l'autre dans
+        # mouvements_stock.no_dossier.
+        _bf_fsc = conn.execute(
+            """UPDATE lots_stock
+                  SET fsc = 1
+                WHERE fsc = 0
+                  AND TRIM(COALESCE(no_dossier,'')) <> ''
+                  AND EXISTS (
+                        SELECT 1 FROM planning_entries pe
+                         WHERE COALESCE(pe.fsc_requis,0) = 1
+                           AND (TRIM(COALESCE(pe.reference,'')) = TRIM(lots_stock.no_dossier)
+                             OR TRIM(COALESCE(pe.numero_of,'')) = TRIM(lots_stock.no_dossier)))"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 220, "fsc_lots_stock")
+        print(
+            f"[MySifa] migration fsc_lots_stock : {_bf_dos.rowcount} lot(s) rattaché(s) "
+            f"à un dossier, {_bf_fsc.rowcount} marqué(s) FSC."
+        )
+
+    # ── FSC 2/3 : mouvements_stock référence son lot + porte l'écart ─────
+    #
+    # `lot_id` : aucun mouvement ne référençait son lot jusqu'ici. C'est LE
+    # maillon manquant du traceur bidirectionnel — sans lui, un déplacement
+    # de palette est un couple (sortie, entrée) que rien ne relie au lot
+    # déplacé, et la chaîne se rompt à chaque changement d'emplacement.
+    #
+    # `fsc_ecart` / `fsc_ecart_note` : trace la dérogation quand une sortie
+    # FSC a dû être complétée avec du stock non certifié. L'opérateur
+    # confirme explicitement, la note est obligatoire côté API, et l'écart
+    # remonte tel quel dans le rapport d'audit. Rien ne passe en silence.
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE name='fsc_mouvements_stock' LIMIT 1"
+    ).fetchone():
+        _ms_cols = {r[1] for r in conn.execute("PRAGMA table_info(mouvements_stock)").fetchall()}
+        if "fsc" not in _ms_cols:
+            conn.execute("ALTER TABLE mouvements_stock ADD COLUMN fsc INTEGER")
+        if "lot_id" not in _ms_cols:
+            conn.execute("ALTER TABLE mouvements_stock ADD COLUMN lot_id INTEGER")
+        if "fsc_ecart" not in _ms_cols:
+            conn.execute(
+                "ALTER TABLE mouvements_stock ADD COLUMN fsc_ecart INTEGER NOT NULL DEFAULT 0"
+            )
+        if "fsc_ecart_note" not in _ms_cols:
+            conn.execute("ALTER TABLE mouvements_stock ADD COLUMN fsc_ecart_note TEXT")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mvt_lot ON mouvements_stock(lot_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_mvt_no_dossier ON mouvements_stock(no_dossier)"
+        )
+
+        # Backfill : même clé de rapprochement que la migration précédente
+        # (created_at strictement égal). Ne concerne que les entrées : une
+        # sortie FIFO touche potentiellement plusieurs lots, on ne devine
+        # pas lequel rétroactivement.
+        _bf_lot = conn.execute(
+            """UPDATE mouvements_stock
+                  SET lot_id = (
+                        SELECT l.id FROM lots_stock l
+                         WHERE l.produit_id  = mouvements_stock.produit_id
+                           AND l.emplacement = mouvements_stock.emplacement
+                           AND l.created_at  = mouvements_stock.created_at
+                         LIMIT 1)
+                WHERE lot_id IS NULL
+                  AND type_mouvement = 'entree'"""
+        )
+        _bf_mfsc = conn.execute(
+            """UPDATE mouvements_stock
+                  SET fsc = (SELECT l.fsc FROM lots_stock l WHERE l.id = mouvements_stock.lot_id)
+                WHERE fsc IS NULL AND lot_id IS NOT NULL"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 221, "fsc_mouvements_stock")
+        print(
+            f"[MySifa] migration fsc_mouvements_stock : {_bf_lot.rowcount} mouvement(s) "
+            f"relié(s) à leur lot, {_bf_mfsc.rowcount} claim(s) propagé(s)."
+        )
+
+    # ── FSC 3/3 : expe_departs pointe vers son dossier ──────────────────
+    #
+    # Le lien expédition ↔ dossier passait par `ref_sifa`, champ TEXTE
+    # LIBRE : personne ne garantit qu'il contient une référence de dossier
+    # exploitable. Le traceur ne peut pas s'appuyer là-dessus pour clore la
+    # chaîne (« cette bobine est partie chez qui, quel jour, par quel
+    # transporteur ? »).
+    #
+    # `no_dossier_source` distingue explicitement une saisie ('saisi') d'un
+    # rapprochement automatique ('reconstitue'). Même principe que
+    # `fsc_link_reconstitue` : une déduction reste identifiée comme telle.
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE name='fsc_expe_departs_dossier' LIMIT 1"
+    ).fetchone():
+        _ed_cols = {r[1] for r in conn.execute("PRAGMA table_info(expe_departs)").fetchall()}
+        if "no_dossier" not in _ed_cols:
+            conn.execute("ALTER TABLE expe_departs ADD COLUMN no_dossier TEXT")
+        if "no_dossier_source" not in _ed_cols:
+            conn.execute("ALTER TABLE expe_departs ADD COLUMN no_dossier_source TEXT")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_expe_departs_dossier ON expe_departs(no_dossier)"
+        )
+
+        # Backfill : on ne retient QUE les correspondances exactes avec une
+        # référence de dossier connue. Un ref_sifa approchant est laissé
+        # vide plutôt que rapproché au jugé — un faux lien dans une chaîne
+        # de traçabilité coûte plus cher qu'un lien absent.
+        _bf_exp = conn.execute(
+            """UPDATE expe_departs
+                  SET no_dossier = (
+                        SELECT TRIM(COALESCE(pe.reference,''))
+                          FROM planning_entries pe
+                         WHERE TRIM(COALESCE(pe.reference,'')) = TRIM(COALESCE(expe_departs.ref_sifa,''))
+                            OR TRIM(COALESCE(pe.numero_of,'')) = TRIM(COALESCE(expe_departs.ref_sifa,''))
+                         LIMIT 1),
+                      no_dossier_source = 'reconstitue'
+                WHERE TRIM(COALESCE(no_dossier,'')) = ''
+                  AND TRIM(COALESCE(ref_sifa,'')) <> ''
+                  AND EXISTS (
+                        SELECT 1 FROM planning_entries pe2
+                         WHERE TRIM(COALESCE(pe2.reference,'')) = TRIM(COALESCE(expe_departs.ref_sifa,''))
+                            OR TRIM(COALESCE(pe2.numero_of,'')) = TRIM(COALESCE(expe_departs.ref_sifa,'')))"""
+        )
+        conn.commit()
+        _record_schema_migration(conn, 222, "fsc_expe_departs_dossier")
+        print(
+            f"[MySifa] migration fsc_expe_departs_dossier : {_bf_exp.rowcount} départ(s) "
+            f"rattaché(s) à un dossier."
+        )
+
+    # v223 — Coûts matières : transport saisi sur la matière (devise + base d'achat)
+    # et marge par défaut exprimée en % du prix de revient calculé.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=223 LIMIT 1").fetchone():
+        _mc_mat_cols = {r["name"] for r in conn.execute("PRAGMA table_info(mc_material)").fetchall()}
+        _mc_prod_cols = {r["name"] for r in conn.execute("PRAGMA table_info(mc_product)").fetchall()}
+        if _mc_mat_cols and "transport_unit_price" not in _mc_mat_cols:
+            conn.execute(
+                "ALTER TABLE mc_material ADD COLUMN transport_unit_price REAL NOT NULL DEFAULT 0"
+            )
+            _mc_mat_cols.add("transport_unit_price")
+        if _mc_prod_cols and "custom_margin_pct" not in _mc_prod_cols:
+            conn.execute("ALTER TABLE mc_product ADD COLUMN custom_margin_pct REAL")
+            _mc_prod_cols.add("custom_margin_pct")
+
+        _mc_settings = {}
+        if _mc_mat_cols:
+            conn.execute(
+                "INSERT OR IGNORE INTO mc_setting (key, value_decimal) VALUES ('default_margin_pct', 6)"
+            )
+            _mc_settings = {
+                r["key"]: float(r["value_decimal"])
+                for r in conn.execute("SELECT key, value_decimal FROM mc_setting").fetchall()
+            }
+        _mc_rate = _mc_settings.get("eur_usd_rate") or 1.0
+        _mc_def_cost = _mc_settings.get("default_container_cost_usd") or 0.0
+        _mc_def_kg = _mc_settings.get("default_container_kg") or 0.0
+
+        # Reprise du transport : la valeur que la calculette conteneur produisait
+        # devient la valeur saisie, exprimée dans la devise et la base d'achat.
+        _mc_n_transport = 0
+        if _mc_mat_cols:
+            for _m in conn.execute(
+                """SELECT id, weight_per_m2, price_currency, price_basis,
+                          container_kg, container_cost_usd
+                     FROM mc_material WHERE is_imported=1"""
+            ).fetchall():
+                _kg = _m["container_kg"] if _m["container_kg"] else _mc_def_kg
+                _cost = (
+                    _m["container_cost_usd"]
+                    if _m["container_cost_usd"] is not None
+                    else _mc_def_cost
+                )
+                try:
+                    _kg = float(_kg or 0)
+                    _cost = float(_cost or 0)
+                except (TypeError, ValueError):
+                    continue
+                if _kg <= 0 or _cost <= 0:
+                    continue
+                _usd_per_kg = _cost / _kg
+                _per_kg = (
+                    _usd_per_kg if _m["price_currency"] == "USD" else _usd_per_kg * _mc_rate
+                )
+                if _m["price_basis"] == "PER_KG":
+                    _val = _per_kg
+                else:
+                    _val = _per_kg * float(_m["weight_per_m2"] or 0)
+                if _val > 0:
+                    conn.execute(
+                        "UPDATE mc_material SET transport_unit_price=? WHERE id=?",
+                        (round(_val, 6), _m["id"]),
+                    )
+                    _mc_n_transport += 1
+
+        # Conversion des marges produit : montant €/m² -> % du prix de revient.
+        _mc_n_margin = 0
+        _mc_n_margin_skip = 0
+        if _mc_prod_cols and "custom_margin_eur_m2" in _mc_prod_cols:
+            _mc_mats = {
+                int(_r["id"]): _r
+                for _r in conn.execute(
+                    """SELECT id, unit_price, weight_per_m2, price_currency, price_basis,
+                              tax_incidence, is_imported, transport_unit_price
+                         FROM mc_material"""
+                ).fetchall()
+            }
+
+            def _mc_price_m2(_row):
+                _w = float(_row["weight_per_m2"] or 0)
+                _factor = _w if _row["price_basis"] == "PER_KG" else 1.0
+                _r8 = _mc_rate if _row["price_currency"] == "USD" else 1.0
+                _tr = float(_row["transport_unit_price"] or 0) if _row["is_imported"] else 0.0
+                return (
+                    (float(_row["unit_price"] or 0) + _tr)
+                    * _factor
+                    * _r8
+                    * float(_row["tax_incidence"] or 1)
+                )
+
+            for _p in conn.execute(
+                """SELECT id, frontal_id, adhesif_id, silicone_id, glassine_id,
+                          custom_margin_eur_m2
+                     FROM mc_product WHERE custom_margin_eur_m2 IS NOT NULL"""
+            ).fetchall():
+                _ids = [
+                    _p[_k]
+                    for _k in ("frontal_id", "adhesif_id", "silicone_id", "glassine_id")
+                    if _p[_k] is not None
+                ]
+                _ids += [
+                    int(_x["material_id"])
+                    for _x in conn.execute(
+                        "SELECT material_id FROM mc_product_extra_material WHERE product_id=?",
+                        (_p["id"],),
+                    ).fetchall()
+                ]
+                _total = sum(_mc_price_m2(_mc_mats[int(_i)]) for _i in _ids if int(_i) in _mc_mats)
+                if _total > 0:
+                    _pct = float(_p["custom_margin_eur_m2"]) / _total * 100.0
+                    conn.execute(
+                        "UPDATE mc_product SET custom_margin_pct=? WHERE id=?",
+                        (round(_pct, 4), _p["id"]),
+                    )
+                    _mc_n_margin += 1
+                else:
+                    # Prix de revient nul : pas de % calculable, le produit retombe
+                    # sur la marge globale par défaut.
+                    _mc_n_margin_skip += 1
+
+        conn.commit()
+        _record_schema_migration(conn, 223, "mc_transport_saisi_marge_pct")
+        print(
+            f"[MySifa] migration mc_transport_saisi_marge_pct : {_mc_n_transport} matière(s) "
+            f"avec transport repris, {_mc_n_margin} marge(s) produit converties en %, "
+            f"{_mc_n_margin_skip} non convertible(s)."
+        )
+
+    # v224 — MyCalendrier : partage des creneaux perso + calendriers externes
+    if not conn.execute(
+        "SELECT 1 FROM schema_migrations WHERE version=224 LIMIT 1"
+    ).fetchone():
+        _cal_cols = {
+            row[1] for row in conn.execute("PRAGMA table_info(cal_events_perso)").fetchall()
+        }
+        if _cal_cols and "prive" not in _cal_cols:
+            conn.execute(
+                "ALTER TABLE cal_events_perso ADD COLUMN prive INTEGER NOT NULL DEFAULT 0"
+            )
+        if _cal_cols and "updated_at" not in _cal_cols:
+            conn.execute("ALTER TABLE cal_events_perso ADD COLUMN updated_at TEXT")
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS cal_feed_tokens (
+                user_id        INTEGER PRIMARY KEY,
+                token          TEXT NOT NULL UNIQUE,
+                calendriers    TEXT,
+                actif          INTEGER NOT NULL DEFAULT 1,
+                created_at     TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                last_access_at TEXT,
+                hits           INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_cal_feed_tokens_token
+                ON cal_feed_tokens(token);
+
+            CREATE TABLE IF NOT EXISTS cal_subscriptions (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id      INTEGER NOT NULL,
+                nom          TEXT NOT NULL,
+                url          TEXT NOT NULL,
+                couleur      TEXT,
+                actif        INTEGER NOT NULL DEFAULT 1,
+                last_sync_at TEXT,
+                last_status  TEXT,
+                last_error   TEXT,
+                nb_events    INTEGER NOT NULL DEFAULT 0,
+                cache_ics    TEXT,
+                created_at   TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now','localtime')),
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_cal_subscriptions_user
+                ON cal_subscriptions(user_id);
+            """
+        )
+        conn.commit()
+        _record_schema_migration(conn, 224, "calendrier_partage_et_externes")
+
+    # v225 — Coûts matières : transport saisissable en % du prix d'achat.
+    if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=225 LIMIT 1").fetchone():
+        _mc225_cols = {r["name"] for r in conn.execute("PRAGMA table_info(mc_material)").fetchall()}
+        if _mc225_cols and "transport_mode" not in _mc225_cols:
+            conn.execute(
+                "ALTER TABLE mc_material ADD COLUMN transport_mode TEXT NOT NULL DEFAULT 'AMOUNT'"
+            )
+        if _mc225_cols and "transport_pct" not in _mc225_cols:
+            conn.execute(
+                "ALTER TABLE mc_material ADD COLUMN transport_pct REAL NOT NULL DEFAULT 0"
+            )
+        conn.commit()
+        _record_schema_migration(conn, 225, "mc_transport_mode_pct")
+
     conn.commit()
+
+    # Migrations en fichiers (app/core/migrations/), identifiées par leur nom.
+    # Les numéros ci-dessus sont figés : toute NOUVELLE migration va dans un
+    # fichier, pour que deux chantiers menés en parallèle ne se disputent ni un
+    # numéro ni ce fichier. Voir app/core/migrations/__init__.py.
+    from app.core.migrations import appliquer_migrations
+
+    for _nom in appliquer_migrations(conn):
+        print(f"[MySifa] migration {_nom} appliquée.")
 
 
 def create_default_admin():

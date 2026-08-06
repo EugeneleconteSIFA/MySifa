@@ -82,20 +82,95 @@ class OFPushIn(BaseModel):
     date_creation: Optional[str] = None     # t_of.date_creation
     format: Optional[str] = None            # t_of.format
     qte_etiquettes: Optional[float] = None  # t_of.theorique_quantite
-    qte_bobines: Optional[float] = None     # t_of.theorique_quantite_bobine
+    qte_bobines: Optional[float] = None     # t_of.theorique_quantite_bobines
     # Champs optionnels supplémentaires (extensible)
     reference: Optional[str] = None
     machine: Optional[str] = None
-    laize: Optional[float] = None
+    laize: Optional[float] = None           # fiches.matlaizestandard (PAS matlaize)
     matiere: Optional[str] = None
     delai_client: Optional[str] = None
+    # ── Métrage et adhésif ────────────────────────────────────────────
+    # Le métrage est STOCKÉ dans Access (t_of.theorique_metrage_necessaire),
+    # il n'a pas à être recalculé. Vérifié sur OF 9931861 : 7124,0398 en base
+    # pour 7124 imprimé, et 660000/1000 × 10,794 redonne la même valeur.
+    #
+    # La quantité d'adhésif est en revanche calculée, d'après la vue Access
+    # [adhesif_necessaire_sans_date_prev] :
+    #     Adhesif.grammage × theorique_metrage_necessaire × matlaizestandard / 1e6
+    # Jointures : t_of.format = fiches.reference, puis fiches.matadhesif
+    # = Adhesif.type. Vérifié : 19 × 7124,04 × 470 / 1e6 = 63,618 kg pour
+    # 63,6 imprimé.
+    #
+    # ATTENTION : la laize est matlaizestandard, PAS matlaize. Sur l'OF 9931861
+    # matlaize vaut 453 et donnerait 61,3 kg — faux. Le libellé « Laize
+    # optionnelle » de t_of.choix_laize_matiere est un intitulé de formulaire,
+    # pas le choix d'une laize alternative.
+    metrage: Optional[float] = None         # t_of.theorique_metrage_necessaire
+    qte_au_mille: Optional[float] = None    # fiches.matquantite (si type « au mille »)
+    glassine: Optional[str] = None          # fiches.matglassine
+    adhesif_label: Optional[str] = None     # fiches.matadhesif, ex. « Permanent 2028Y - 19 »
+    ref_adhesif: Optional[str] = None       # Adhesif.reference,  ex. « 2028Y »
+    qte_adhesif_g: Optional[float] = None   # Adhesif.grammage, en g/m²
+    qte_adhesif_kg: Optional[float] = None  # calculé côté script Access
+    nb_mandrins: Optional[int] = None       # t_of.theorique_mandrins
+    nb_cartons: Optional[int] = None        # t_of.theorique_cartons
+    nb_tubes: Optional[int] = None          # t_of.theorique_tubes
+    # Si l'OF existe déjà : compléter ses colonnes NULL au lieu de ne rien
+    # faire. Ne remplace JAMAIS une valeur existante — un OF importé par PDF
+    # garde les siennes. Sert à rattraper les OF poussés avant l'ajout du
+    # métrage, sans avoir à les supprimer pour les réimporter.
+    enrich_if_exists: bool = False
+    # Va plus loin que enrich_if_exists : met a jour les champs Access dont la
+    # valeur a CHANGE cote Access. Strictement limite aux OF qui n'ont ni PDF
+    # rattache ni passage humain (imported_by = 'access_bridge') : des qu'un
+    # PDF ou une correction manuelle existe, ils font autorite et rien n'est
+    # touche. Sans ce flag, une quantite corrigee dans Access n'arrivait jamais.
+    refresh_access_fields: bool = False
+
+
+# Colonnes que enrich_if_exists a le droit de compléter quand elles sont NULL.
+# of_numero, pdf_filename, date_import et statut en sont volontairement exclus.
+_ENRICHISSABLES = (
+    "date_creation", "delai_client", "reference", "machine", "laize", "format",
+    "matiere", "glassine", "ref_adhesif", "qte_adhesif_g", "qte_adhesif_kg",
+    "adhesif_label", "qte_au_mille", "qte_etiquettes", "qte_bobines", "metrage",
+    "nb_cartons", "nb_mandrins", "nb_tubes",
+)
+
+
+def _of_purement_access(row) -> bool:
+    """Vrai si l'OF n'a jamais été touché autrement que par le pont Access.
+
+    Un PDF rattaché ou un `imported_by` différent signale un passage humain :
+    dans ce cas Access n'est plus la source de vérité et on ne rafraîchit rien.
+    """
+    if (row["pdf_filename"] or "").strip():
+        return False
+    return (row["imported_by"] or "").strip() == "access_bridge"
+
+
+def _valeur_differente(ancien, nouveau) -> bool:
+    """Comparaison tolérante : évite de réécrire 7124.0 sur 7124.0398 arrondi."""
+    try:
+        return abs(float(ancien) - float(nouveau)) > 1e-6
+    except (TypeError, ValueError):
+        return str(ancien).strip() != str(nouveau).strip()
 
 
 # ── Endpoints ────────────────────────────────────────────────────────
 
 @router.get("/health")
 def bridge_health():
-    return {"status": "ok", "service": "mysifa-bridge"}
+    # `features` permet a un script d'import de verifier, AVANT d'ecrire, que
+    # l'instance visee connait bien les options qu'il envoie. Sans ce garde-fou
+    # un flag inconnu serait silencieusement ignore par Pydantic et le script
+    # croirait completer des champs vides alors qu'il ecrase tout.
+    return {
+        "status": "ok",
+        "service": "mysifa-bridge",
+        "features": ["of.enrich_if_exists", "of.refresh_access_fields",
+                     "fiche.enrich_if_exists"],
+    }
 
 
 @router.get("/of")
@@ -186,13 +261,63 @@ def push_of(
         existing = matches[0] if matches else None
 
         if existing:
+            enrichis: list = []
+            rafraichis: list = []
+            if body.enrich_if_exists or body.refresh_access_fields:
+                actuel = conn.execute(
+                    "SELECT * FROM of_imports WHERE id=?", (existing["id"],)
+                ).fetchone()
+                dispo = {
+                    col: getattr(body, col, None) for col in _ENRICHISSABLES
+                }
+                a_ecrire: dict = {}
+
+                # 1. Complète les colonnes NULL. Une valeur déjà en base — saisie
+                #    à la main ou extraite d'un vrai PDF — fait autorité.
+                if body.enrich_if_exists:
+                    a_ecrire.update({
+                        col: val for col, val in dispo.items()
+                        if val is not None and actuel[col] is None
+                    })
+                    enrichis = sorted(a_ecrire)
+
+                # 2. Rafraîchit les valeurs qui ont changé côté Access, mais
+                #    seulement sur un OF resté purement Access : ni PDF, ni
+                #    correction humaine. Sinon on écraserait du travail.
+                if body.refresh_access_fields and _of_purement_access(actuel):
+                    maj = {
+                        col: val for col, val in dispo.items()
+                        if val is not None
+                        and col not in a_ecrire
+                        and actuel[col] is not None
+                        and _valeur_differente(actuel[col], val)
+                    }
+                    a_ecrire.update(maj)
+                    rafraichis = sorted(maj)
+
+                if a_ecrire:
+                    set_sql = ", ".join(f"{col}=?" for col in a_ecrire)
+                    conn.execute(
+                        f"UPDATE of_imports SET {set_sql} WHERE id=?",
+                        (*a_ecrire.values(), existing["id"]),
+                    )
+                    conn.commit()
+
+            if rafraichis:
+                reason = "refreshed"
+            elif enrichis:
+                reason = "enriched"
+            else:
+                reason = "already_exists"
             return {
                 "inserted": False,
-                "reason": "already_exists",
+                "reason": reason,
                 "id": existing["id"],
                 "of_numero": numero,
                 "matched_of_numero": existing["of_numero"],
                 "has_pdf": bool(existing["pdf_filename"]),
+                "enriched_fields": enrichis,
+                "refreshed_fields": rafraichis,
             }
 
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -200,8 +325,11 @@ def push_of(
             """INSERT INTO of_imports
                (of_numero, date_creation, format, qte_etiquettes, qte_bobines,
                 reference, machine, laize, matiere, delai_client,
+                metrage, qte_au_mille, glassine, adhesif_label,
+                ref_adhesif, qte_adhesif_g, qte_adhesif_kg,
+                nb_mandrins, nb_cartons, nb_tubes,
                 date_import, imported_by, statut)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 numero,
                 body.date_creation,
@@ -213,6 +341,16 @@ def push_of(
                 body.laize,
                 body.matiere,
                 body.delai_client,
+                body.metrage,
+                body.qte_au_mille,
+                body.glassine,
+                body.adhesif_label,
+                body.ref_adhesif,
+                body.qte_adhesif_g,
+                body.qte_adhesif_kg,
+                body.nb_mandrins,
+                body.nb_cartons,
+                body.nb_tubes,
                 now,
                 "access_bridge",
                 "en_attente",
@@ -344,10 +482,23 @@ class FicheTechniqueIn(BaseModel):
     palette_hauteur_max:        Optional[float] = None
     particularite:              Optional[str]   = None
     notes:                      Optional[str]   = None
+    # Si la reference existe deja : ne completer que les colonnes vides au lieu
+    # d'ecraser. Meme contrat que OFPushIn.enrich_if_exists — une valeur deja
+    # renseignee dans MySifa (saisie manuelle, correction atelier) fait
+    # autorite sur Access. Defaut False : l'upsert historique est conserve.
+    enrich_if_exists:           bool            = False
 
 
 # Colonnes DB gérées manuellement (non mappées depuis le modèle)
 _FT_META_COLS = {"source", "date_import", "imported_by"}
+
+# Champs de pilotage du modele, jamais ecrits en base.
+_FT_FLAGS = {"enrich_if_exists"}
+
+
+def _ft_vide(val) -> bool:
+    """Vrai si la colonne est consideree comme non renseignee."""
+    return val is None or (isinstance(val, str) and not val.strip())
 
 
 @router.post("/fiche-technique")
@@ -367,25 +518,42 @@ def push_fiche_technique(
 
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
-    # Tous les champs non-null sauf référence et méta
+    # Tous les champs non-null sauf référence, méta et flags de pilotage
     data = {
         k: v for k, v in body.model_dump().items()
-        if k != "reference" and v is not None and k not in _FT_META_COLS
+        if k != "reference" and v is not None
+        and k not in _FT_META_COLS and k not in _FT_FLAGS
     }
 
     with get_db() as conn:
         existing = conn.execute(
-            "SELECT id FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
+            "SELECT * FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
             (ref,)
         ).fetchone()
         if existing:
+            champs = list(data)
+            if body.enrich_if_exists:
+                # Ne toucher qu'aux colonnes restees vides. Une fiche corrigee
+                # a la main dans MySifa n'est jamais ecrasee par Access.
+                colonnes = set(existing.keys())
+                data = {
+                    k: v for k, v in data.items()
+                    if k in colonnes and _ft_vide(existing[k])
+                }
+                champs = sorted(data)
             if data:
                 conn.execute(
                     f"UPDATE fiches_techniques SET {', '.join(f'{k}=?' for k in data)} WHERE id=?",
                     list(data.values()) + [existing["id"]],
                 )
                 conn.commit()
-            return {"action": "updated", "id": existing["id"], "reference": ref}
+            return {
+                "action": "enriched" if (body.enrich_if_exists and data)
+                          else ("unchanged" if body.enrich_if_exists else "updated"),
+                "id": existing["id"],
+                "reference": ref,
+                "fields": champs if data else [],
+            }
         else:
             cols = ["reference", "source", "date_import", "imported_by"] + list(data.keys())
             vals = [ref, "access_bridge", now, "access_bridge"] + list(data.values())

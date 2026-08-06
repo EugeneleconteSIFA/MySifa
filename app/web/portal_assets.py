@@ -1176,6 +1176,16 @@ function renderPortal(){
   const isComptaPlan = urole === 'comptabilite';
   const isPaie = isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','comptabilite'].includes(urole));
   const isPricing = aa ? !!(aa.pricing ?? aa.devis) : (isSuper || urole==='direction');
+  // Paramètres : accès sectionné (config.py ROLES_SETTINGS_* → union ROLES_SETTINGS).
+  // aa.settings reflète déjà cette union côté serveur (default_app_access_for_role),
+  // donc l'icône suit exactement ce que can_access_settings() autorise sur /settings.
+  // Gestionnaire de tâches : niveau lu dans la matrice (access_map), pas dans
+  // le rôle. Ouvrir l'app à un service se fait dans Paramètres → Accès, et
+  // l'icône doit suivre sans qu'on retouche cette ligne.
+  const amap = (S.user && S.user.access_map) || null;
+  const nivTaches = (amap && amap.taches && amap.taches._app) || (isSuper ? 'admin' : 'none');
+  const isTaches = nivTaches !== 'none';
+  const isSettings = aa ? !!aa.settings : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','comptabilite'].includes(urole)));
   const isAo = isSuper || urole === 'direction';
   const isBAT = isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','commercial'].includes(urole));
   const isQualite = isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','commercial'].includes(urole));
@@ -1456,7 +1466,12 @@ function renderPortal(){
     const inp = e.target && e.target.querySelector && e.target.querySelector('input');
     openGoogle(inp ? inp.value : '');
   }});
-  const gInp = h('input',{type:'search',placeholder:'Rechercher sur Google…',autocomplete:'off',spellcheck:'false'});
+  // Placeholder de la recherche : Kernse (palette de commandes) ou MySifa (Google)
+  const _isKernse = document.body.classList.contains('kernse-theme');
+  const _searchPlaceholder = _isKernse
+    ? 'Tapez une commande, un dossier, une réf produit…'
+    : 'Rechercher sur Google…';
+  const gInp = h('input',{type:'search',placeholder:_searchPlaceholder,autocomplete:'off',spellcheck:'false'});
   gInp.addEventListener('keydown',(e)=>{
     if(e.key==='Enter'){
       e.preventDefault();
@@ -1551,14 +1566,14 @@ function renderPortal(){
         title:profTitle,
         onClick:()=>{window.location.href='/profil';}
       },profRingBadge,profHumeurBadge,iconEl('user',24)),
-      (isSuper||urole==='direction')?h('button',{
+      isSettings?h('button',{
         type:'button',
         className:'portal-settings-corner',
         'aria-label':'Paramètres',
         title:'Paramètres',
         onClick:()=>{window.location.href='/settings';}
       },iconEl('sliders',24)):null,
-      isSuper?h('button',{
+      isTaches?h('button',{
         type:'button',
         className:'portal-settings-corner',
         'aria-label':'Gestionnaire de tâches',

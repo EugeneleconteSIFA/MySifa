@@ -160,7 +160,7 @@
     var actions = [
       { type: 'action', title: 'Retour au portail',                  sub: 'Page d’accueil',              keywords: 'portail accueil home',       url: '/',          icon: 'home',     roles: '*' },
       { type: 'action', title: 'Mon profil',                         sub: 'Préférences, mot de passe', keywords: 'profil compte preferences',  url: '/profil',    icon: 'user',     roles: '*' },
-      { type: 'action', title: 'Paramètres',                    sub: 'Comptes, rôles, annonces',    keywords: 'settings parametres reglages',url: '/settings',  icon: 'sliders',  roles: 'direction' },
+      { type: 'action', title: 'Paramètres',                    sub: 'Comptes, rôles, annonces',    keywords: 'settings parametres reglages',url: '/settings',  icon: 'sliders',  roles: 'direction,administration,administration_ventes,administration_technique,comptabilite' },
       { type: 'action', title: 'Messagerie',                         sub: 'Discussions et notifications',     keywords: 'messages chat',              url: '/messages',  icon: 'mail',     roles: 'superadmin' },
       { type: 'action', title: 'Calendrier',                         sub: 'Agenda partagé',              keywords: 'calendrier agenda',          url: '/calendrier',icon: 'calendar', roles: 'direction,administration' },
       { type: 'action', title: 'Base de données',               sub: 'Visualisation des tables',         keywords: 'db database sqlite tables',  url: '/db',        icon: 'database', roles: 'direction' },

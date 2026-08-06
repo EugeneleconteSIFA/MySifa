@@ -1,0 +1,80 @@
+﻿
+==============================================================================
+1. TABLE [Adhesif] - 12 premieres lignes
+==============================================================================
+  Colonnes : type, reference, grammage
+
+  type=Permanent 1007-17  |  reference=1007  |  grammage=17
+  type=Permanent 1007-19  |  reference=1007  |  grammage=19
+  type=Permanent 1007-22  |  reference=1007  |  grammage=22
+  type=Permanent 1007-24  |  reference=1007  |  grammage=24
+  type=Permanent 1007-25  |  reference=1007  |  grammage=25
+  type=Permanent 1007-27  |  reference=1007  |  grammage=27
+  type=Permanent 1007-30  |  reference=1007  |  grammage=30
+  type=Permanent 1007-35  |  reference=1007  |  grammage=35
+  type=Permanent 1007-40  |  reference=1007  |  grammage=40
+  type=Permanent 2021-17  |  reference=2021  |  grammage=17
+  type=Permanent 2021-19  |  reference=2021  |  grammage=19
+  type=Permanent 2021-21  |  reference=2021  |  grammage=21
+
+==============================================================================
+2. JOINTURE t_of -> t_fiches_techniques -> Adhesif
+==============================================================================
+
+  OF 9931861  (24/0023 - COHESIO1)
+  --------------------------------------------------------------------------
+    choix_laize_matiere              = Laize optionnelle
+    theorique_quantite               = 660000
+    theorique_metrage_necessaire     = 7124,03978347778
+    matsupport                       = THERMIQUE PRO
+    matglassine                      = ITASA KA
+    matlaize                         = 453
+    matlaizestandard                 = 470
+    nbfront                          = 1
+    matadhesif                       = Permanent 2028Y - 19
+    matquantite                      = 10,794
+    matquantite_type                 = au mille
+    matquantite_unite                = ml
+    reference                        = 2028Y
+    grammage                         = 19
+
+    -- Controles --
+    metrage stocke         calcule 7124,04        papier 7124       -> OK
+    qte au mille           calcule 10,794         papier 10,8       -> OK
+    grammage adhesif       calcule 19             papier 19         -> OK
+    laize standard         = 470            laize optionnelle = 453        papier 470
+    -> la laize imprimee vient de : matlaizestandard
+    kg via laize standard  calcule 63,618         papier 63,6       -> OK
+    kg via laize optionn.  calcule 61,317         papier 63,6       -> ECART
+    metrage recalcule      calcule 7124,04        papier 7124       -> OK
+
+  OF 9931953  (901/0005 - DSI)
+  --------------------------------------------------------------------------
+    choix_laize_matiere              = Laize optionnelle
+    theorique_quantite               = 201300
+    theorique_metrage_necessaire     = 10226,0398464203
+    matsupport                       = THERMIQUE ECO P100
+    matglassine                      = <vide>
+    matlaize                         = 322
+    matlaizestandard                 = 333
+    nbfront                          = 1
+    matadhesif                       = Permanent
+    matquantite                      = 50,8
+    matquantite_type                 = au mille
+    matquantite_unite                = ml
+    reference                        = <vide>
+    grammage                         = <vide>
+
+    -- Controles --
+    metrage stocke         calcule 10226,04       papier 10226      -> OK
+    qte au mille           calcule 50,8           papier 50,8       -> OK
+    grammage adhesif       calcule                (rien sur le papier)
+    laize standard         = 333            laize optionnelle = 322        papier 333
+    -> la laize imprimee vient de : matlaizestandard
+    metrage recalcule      calcule 10226,04       papier 10226      -> OK
+
+==============================================================================
+3. FIABILITE DE LA JOINTURE (500 derniers OF)
+==============================================================================
+  OF sans fiche technique correspondante : 5 / 500
+  OF sans grammage adhesif resolu       : 146 / 500

@@ -243,7 +243,11 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .filters-apply-btn:active{transform:translateY(1px)}
 .filters-date-presets{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:10px 0 0;margin-top:12px;border-top:1px dashed var(--border)}
 .filters-date-presets-label{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-right:4px;padding-top:8px}
-.date-preset-chip{padding:5px 12px;font-size:11px;font-weight:600;border-radius:14px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;white-space:nowrap;transition:all 120ms;margin-top:6px}
+/* v2.7.4 : background:transparent laissait remonter le fond de page (--bg),
+   donc des puces bleues sur un fond bleu. var(--card) les detache : blanches
+   en mode clair, gris fonce en mode sombre. L'etat .active garde sa teinte
+   d'accent, c'est lui qui doit trancher avec les autres. */
+.date-preset-chip{padding:5px 12px;font-size:11px;font-weight:600;border-radius:14px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;white-space:nowrap;transition:all 120ms;margin-top:6px}
 .date-preset-chip:hover{border-color:var(--accent);color:var(--accent)}
 .date-preset-chip.active{font-weight:700;border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
 @media(max-width:560px){.filter-group{flex:1 1 100%}.filter-input,select.filter-input{min-width:0;width:100%}.filters-apply-btn{width:100%}}
@@ -308,7 +312,7 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 }
 
 /* ── v2.6.0 : etats de chargement du calendrier ─────────────────────── */
-.cal-week-view.cal-hide-hint .cal-wv-hint{display:none}
+/* v2.6.1 : .cal-hide-hint masquait le bandeau d'aide pendant le chargement et en erreur ; le bandeau n'existe plus. La classe reste posee par _renderPlanningLoadState() (inoffensive) au cas ou un futur bandeau la reutiliserait. */
 .cal-load-bar{display:flex;align-items:center;gap:10px;padding:10px 14px;margin-bottom:12px;border-radius:10px;font-size:12.5px;font-weight:600;letter-spacing:.2px}
 .cal-load-bar.is-loading{background:var(--accent-bg);border:1px dashed var(--accent);color:var(--accent)}
 .cal-load-bar.is-error{background:rgba(248,113,113,.10);border:1px solid var(--danger);color:var(--danger)}
@@ -333,7 +337,21 @@ body.reduce-anim .cal-skel{animation:none}
 
 /* ── Vue Semaine (emploi du temps) ──────────────────────────────────── */
 .cal-week-view{overflow-x:auto}
-.cal-wv-hint{font-size:13px;color:var(--text2);background:var(--accent-bg);border:1px dashed var(--accent);border-radius:8px;padding:10px 14px;margin-bottom:14px;text-align:center;font-weight:600}
+/* v2.6.1 : .cal-wv-hint retire du HTML — regle de style supprimee. */
+/* v2.6.1 : bandes de bascule de semaine pendant un glisser-deposer. Le liseré
+   marque le bord vise ; la semaine change apres CAL_EDGE_DELAY_MS. box-shadow
+   inset est peint sur la padding-box : il ne defile pas avec le contenu. */
+.cal-wv-body{transition:box-shadow .12s}
+.cal-wv-body.cal-edge-prev{box-shadow:inset 5px 0 0 var(--accent)}
+.cal-wv-body.cal-edge-next{box-shadow:inset -5px 0 0 var(--accent)}
+/* v2.7.1 : bord ROUGE = la bascule de periode est verrouillee pour l'occurrence
+   en cours de deplacement (elle doit rester dans sa semaine / son mois). */
+.cal-wv-body.cal-edge-blocked-prev{box-shadow:inset 5px 0 0 var(--danger,#f87171)}
+.cal-wv-body.cal-edge-blocked-next{box-shadow:inset -5px 0 0 var(--danger,#f87171)}
+/* v2.6.1 : colonnes de dates passees — ni creation ni depot. Trame legere pour
+   que le refus soit lisible AVANT le geste, pas seulement apres. */
+.cal-wv-day-col.is-past-col{background-image:repeating-linear-gradient(45deg,transparent,transparent 7px,rgba(128,128,128,.055) 7px,rgba(128,128,128,.055) 14px);cursor:not-allowed}
+.cal-wv-day-col.cal-col-nodrop{box-shadow:inset 0 0 0 2px var(--danger,#f87171)}
 .cal-wv-header{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;margin-bottom:0;border-bottom:1px solid var(--border);box-sizing:border-box}  /* v2.5.17 : min-width retire (dim clippe). v2.6.0 : scrollbar-gutter retire -- inerte ici, la propriete ne s'applique qu'aux conteneurs de scroll, donc les 7 colonnes 1fr etaient calculees sur une largeur superieure a celles du corps (derive cumulative vers Sam/Dim). L'alignement est desormais fait par _syncCalHeaderGutter() qui reporte la largeur reelle de la gouttiere du corps sur le padding-right du header. */
 .cal-wv-corner{}
 .cal-wv-dayhead{padding:11px 10px;text-align:center;border-left:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:3px;background:var(--card)}
@@ -344,7 +362,7 @@ body.reduce-anim .cal-skel{animation:none}
 .cal-wv-dayhead.today .cal-wv-dayname{color:var(--accent)}
 .cal-wv-daydate{font-size:17px;font-weight:800;color:var(--text);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;letter-spacing:.3px}
 .cal-wv-dayhead.today .cal-wv-daydate{color:var(--accent)}
-.cal-wv-body{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;position:relative;overflow:auto;max-height:75vh;scrollbar-gutter:stable}  /* v2.5.17 */
+.cal-wv-body{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;position:relative;overflow:auto;max-height:calc(100vh - 330px);min-height:260px;scrollbar-gutter:stable}  /* v2.5.17. v2.6.1 : 75vh -> calc() comme valeur d'amorce avant que _fitCalWeekBody() ne pose la hauteur exacte en inline. 330px = ordre de grandeur de tout ce qui entoure la grille (en-tete de page, sous-onglets, bandeau, en-tete de grille, legende, paddings) : evite un flash de grille trop haute au premier rendu. */
 .cal-wv-times-col{display:flex;flex-direction:column}
 .cal-wv-time{height:62px;display:flex;align-items:flex-start;justify-content:flex-end;padding:3px 10px 0 0;font-size:12px;font-weight:700;color:var(--muted);font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;border-right:1px solid var(--border);border-top:1px solid var(--border)}
 .cal-wv-time:first-child{border-top:none}
@@ -353,38 +371,73 @@ body.reduce-anim .cal-skel{animation:none}
 .cal-wv-day-col.today{background:var(--accent-bg)}
 /* v2.2.53 : min-width:0 + overflow:hidden empêche les chips d'étirer la colonne */
 .cal-wv-day-col{min-width:0}
-/* Bandeau non-planifié repliable en haut de chaque jour (Week/Day view) */
-.cal-wv-nonpl-strip{position:absolute;top:0;left:0;right:0;z-index:3;background:var(--card);border-bottom:1px dashed var(--border);display:flex;flex-direction:column;gap:0;max-width:100%;min-width:0;overflow:hidden;box-sizing:border-box}
-.cal-wv-nonpl-strip:empty{display:none}
-.cal-wv-nonpl-header{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:5px 8px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;cursor:pointer;user-select:none;background:rgba(148,163,184,.05);transition:background .12s}
-.cal-wv-nonpl-header:hover{background:rgba(148,163,184,.12);color:var(--text2)}
-.cal-wv-nonpl-header-lbl{display:flex;align-items:center;gap:5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cal-wv-nonpl-header-chev{transition:transform .18s}
-.cal-wv-nonpl-strip.is-open .cal-wv-nonpl-header-chev{transform:rotate(90deg)}
-.cal-wv-nonpl-list{display:none;flex-direction:column;gap:3px;padding:4px 4px 6px;max-height:200px;min-width:0;overflow-y:auto;overflow-x:hidden}
-.cal-wv-nonpl-strip.is-open .cal-wv-nonpl-list{display:flex}
+/* v2.7.3 : puces des operations non planifiees. Le conteneur repliable qui les
+   portait (absolu au sommet de chaque colonne de jour) a ete remplace par la
+   bande .cal-wv-allday, hors zone de scroll. Seules les regles des puces
+   restent : la bande les reutilise telles quelles. */
 .cal-wv-nonpl-chip{display:block;padding:4px 8px;border-radius:5px;background:rgba(148,163,184,.15);color:var(--text2);border-left:3px solid var(--muted);font-size:11px;font-weight:600;cursor:pointer;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:100%;width:100%;box-sizing:border-box;transition:background .15s,color .15s}
 .cal-wv-nonpl-chip:hover{background:rgba(148,163,184,.28);color:var(--text)}
 .cal-wv-nonpl-chip[data-statut="termine"]{background:rgba(52,211,153,.15);color:var(--ok,#059669);border-left-color:var(--ok,#34d399)}
 .cal-wv-nonpl-chip[data-statut="termine"]:hover{background:rgba(52,211,153,.28)}
 .cal-wv-nonpl-chip .cal-wv-nonpl-icon{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:5px;vertical-align:middle;flex-shrink:0}
 .cal-wv-nonpl-chip[data-statut="termine"] .cal-wv-nonpl-icon{background:var(--ok,#34d399)}
-/* v2.2.54 : variante Day view — bandeau plus visible, déplié par défaut */
-.cal-wv-nonpl-strip.mode-day{border:1px solid var(--accent);border-radius:8px;margin:8px 8px 12px;background:var(--card);box-shadow:0 2px 8px rgba(0,0,0,.06)}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-header{background:var(--accent);color:var(--accent-fg,#fff);padding:8px 12px;font-size:12px;font-weight:800;letter-spacing:.5px;border-radius:7px 7px 0 0}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-header:hover{filter:brightness(1.08);color:var(--accent-fg,#fff)}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-header-chev{stroke-width:3.4}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-list{padding:8px 10px;max-height:none;gap:6px}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:13px;white-space:normal;line-height:1.4}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip-main{flex:1;min-width:0;font-weight:700;color:var(--text)}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip-sub{font-size:11px;color:var(--muted);font-weight:600;margin-top:2px;font-weight:500}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip-time{font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:var(--text2);white-space:nowrap;flex-shrink:0}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip-status{width:18px;height:18px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;background:var(--bg);border:1.5px solid var(--border)}
-.cal-wv-nonpl-strip.mode-day .cal-wv-nonpl-chip[data-statut="termine"] .cal-wv-nonpl-chip-status{background:var(--ok,#34d399);border-color:var(--ok,#34d399);color:#fff}
+/* v2.7.3 : bande « non planifie ». Le bandeau precedent vivait en
+   position:absolute au sommet de chaque colonne de jour, DANS la zone de
+   defilement. Tant que la grille allait de 6h a 21h, « en haut » restait a
+   portee ; depuis le passage en journee complete, le sommet de colonne est
+   00:00, soit ~1490px au-dessus de la zone que le calendrier recentre — les
+   operations non planifiees etaient invisibles sans remonter jusqu'a minuit.
+   La bande est desormais un troisieme frere de .cal-wv-header /
+   .cal-wv-body : meme grille de colonnes, mais HORS du conteneur de scroll,
+   donc toujours a l'ecran. Elle ne peut pas etre simplement sticky dans la
+   colonne : sticky implique d'etre dans le flux, ce qui decalerait les lignes
+   horaires et casserait leur alignement avec la colonne des heures. */
+.cal-wv-allday{display:grid;grid-template-columns:78px repeat(7,minmax(0,1fr));gap:0;box-sizing:border-box;border-bottom:1px solid var(--border);background:var(--card)}
+.cal-wv-allday[hidden]{display:none}
+.cal-wv-allday-corner{display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:3px;padding:6px 6px 6px 8px;border:0;background:rgba(148,163,184,.05);color:var(--muted);font-family:inherit;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;line-height:1.15;text-align:left;cursor:pointer;user-select:none;transition:background .12s,color .12s}
+.cal-wv-allday-corner:hover{background:rgba(148,163,184,.12);color:var(--text2)}
+.cal-wv-allday-corner-top{display:flex;align-items:center;gap:4px;min-width:0}
+.cal-wv-allday-chev{transition:transform .18s;flex-shrink:0}
+.cal-wv-allday.is-open .cal-wv-allday-chev{transform:rotate(90deg)}
+.cal-wv-allday-total{font-size:10px;font-weight:800;color:var(--accent);letter-spacing:0}
+.cal-wv-allday-cell{display:flex;flex-direction:column;gap:3px;padding:5px 4px;border-left:1px solid var(--border);min-width:0;max-height:132px;overflow-y:auto;overflow-x:hidden}
+/* Sans flex:0 0 auto, les puces se compriment quand le contenu depasse
+   max-height : au lieu de defiler, la colonne ecrase 13 puces en bandes de
+   10px illisibles (constate au harnais de rendu). */
+.cal-wv-allday-cell > *{flex:0 0 auto}
+.cal-wv-allday-cell.weekend{background:rgba(167,139,250,.04)}
+.cal-wv-allday-cell.today{background:var(--accent-bg)}
+/* Replie : les puces disparaissent, seule la pastille de comptage reste. */
+.cal-wv-allday:not(.is-open) .cal-wv-allday-cell{max-height:none;overflow:visible;padding:4px}
+.cal-wv-allday:not(.is-open) .cal-wv-nonpl-chip{display:none}
+.cal-wv-allday-pill{display:none;align-self:flex-start;padding:2px 7px;border-radius:9px;background:rgba(148,163,184,.2);color:var(--text2);font-size:10px;font-weight:800;line-height:1.5;cursor:pointer;border:0;font-family:inherit}
+.cal-wv-allday-pill:hover{background:rgba(148,163,184,.34);color:var(--text)}
+.cal-wv-allday:not(.is-open) .cal-wv-allday-pill{display:inline-block}
+/* Vue Jour : une seule colonne, on peut se permettre le rendu enrichi. */
+.cal-week-view.cal-wv-mode-day .cal-wv-allday-cell{max-height:200px;padding:8px 10px;gap:6px}
+.cal-week-view.cal-wv-mode-day .cal-wv-allday-cell .cal-wv-nonpl-chip{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:13px;white-space:normal;line-height:1.4}
+.cal-week-view.cal-wv-mode-day .cal-wv-allday-cell .cal-wv-nonpl-chip-main{flex:1;min-width:0;font-weight:700;color:var(--text)}
+.cal-week-view.cal-wv-mode-day .cal-wv-allday-cell .cal-wv-nonpl-chip-sub{font-size:11px;color:var(--muted);font-weight:500;margin-top:2px}
+.cal-week-view.cal-wv-mode-day .cal-wv-allday-cell .cal-wv-nonpl-chip-time{font-family:ui-monospace,monospace;font-size:11px;font-weight:700;color:var(--text2);white-space:nowrap;flex-shrink:0}
+.cal-week-view.cal-wv-mode-day .cal-wv-allday-cell .cal-wv-nonpl-chip-status{width:18px;height:18px;border-radius:50%;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;background:var(--bg);border:1.5px solid var(--border)}
+.cal-week-view.cal-wv-mode-day .cal-wv-allday-cell .cal-wv-nonpl-chip[data-statut="termine"] .cal-wv-nonpl-chip-status{background:var(--ok,#34d399);border-color:var(--ok,#34d399);color:#fff}
+/* v2.7.3 fix : les regles mode-jour ci-dessus pesent 4 classes, alors que la
+   regle de masquage `.cal-wv-allday:not(.is-open) .cal-wv-nonpl-chip` n'en pese
+   que 3 (:not() ne compte que son argument). En vue Jour, replier la bande ne
+   masquait donc rien : le chevron tournait, la pastille de comptage
+   apparaissait, mais les puces restaient affichees — etat visuellement
+   contradictoire. On repose le masquage et la geometrie repliee au meme niveau
+   de specificite que le mode jour, apres lui. */
+.cal-week-view.cal-wv-mode-day .cal-wv-allday:not(.is-open) .cal-wv-allday-cell .cal-wv-nonpl-chip{display:none}
+.cal-week-view.cal-wv-mode-day .cal-wv-allday:not(.is-open) .cal-wv-allday-cell{max-height:none;overflow:visible;padding:4px;gap:3px}
 .cal-wv-hour-row{height:62px;border-top:1px solid var(--border);transition:background .12s}
 .cal-wv-hour-row:first-child{border-top:none}
 .cal-wv-day-col.drag-over{background:var(--accent-bg);outline:2px dashed var(--accent);outline-offset:-2px;z-index:1}
 /* v2.5.14 : drag & drop planning maintenance */
+.cal-event.is-closed{opacity:.72}
+.cal-event-closed-badge{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;padding:1px 6px;border-radius:4px;background:rgba(148,163,184,.22);color:var(--text2,var(--muted));margin-left:6px;vertical-align:middle}
+.plan-det-closed{margin-top:14px;padding:12px 14px;border-radius:8px;background:rgba(148,163,184,.10);border:1px solid var(--border);color:var(--text2,var(--muted));font-size:13px;line-height:1.5}
+.plan-det-closed strong{color:var(--text)}
 .cal-event[data-draggable="1"]{cursor:grab}
 .cal-event[data-draggable="1"]:active{cursor:grabbing}
 .cal-event.is-past{cursor:not-allowed}
@@ -511,6 +564,7 @@ body:not(.light) .cal-event-item-niv-2 .cal-event-item-time{color:#fcd34d}
 body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 /* Mode vue Jour : 1 colonne large */
 .cal-week-view.cal-wv-mode-day .cal-wv-header,
+.cal-week-view.cal-wv-mode-day .cal-wv-allday,
 .cal-week-view.cal-wv-mode-day .cal-wv-body{grid-template-columns:70px 1fr}
 .cal-week-view.cal-wv-mode-day .cal-event{font-size:14.5px;padding:10px 14px}
 .cal-week-view.cal-wv-mode-day .cal-event-title{font-size:16px}
@@ -523,6 +577,7 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .cal-week-view.cal-wv-mode-day .cal-wv-time,
 .cal-week-view.cal-wv-mode-day .cal-wv-hour-row{height:72px}
 .cal-week-view.cal-wv-mode-day .cal-wv-header,
+.cal-week-view.cal-wv-mode-day .cal-wv-allday,
 .cal-week-view.cal-wv-mode-day .cal-wv-body{grid-template-columns:90px 1fr;min-width:0}
 /* Modale Créneau : section liste d'opérations */
 .case-modal-card{max-width:640px;width:92vw;max-height:92vh;display:flex;flex-direction:column}
@@ -661,16 +716,19 @@ body:not(.light) .cal-event-item-niv-3 .cal-event-item-time{color:#fca5a5}
 .tmpl-item-btn svg{width:15px;height:15px}
 .tmpl-empty{padding:24px 16px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:13px;text-align:center;font-style:italic;background:var(--bg)}
 /* Sélecteur de modèle dans le modal Nouveau créneau */
-.case-tmpl-picker{margin-bottom:16px;padding:12px 14px;border-radius:10px;background:linear-gradient(90deg,var(--accent-bg),transparent);border:1px solid var(--accent);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.case-tmpl-picker-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--accent);flex-shrink:0}
-.case-tmpl-picker select{flex:1;min-width:180px}
-.case-tmpl-picker-btn{padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text2);font-size:12px;font-weight:600;font-family:inherit;cursor:pointer;transition:all .12s}
-.case-tmpl-picker-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* v2.6.1 : styles .case-tmpl-picker* supprimes — le bloc « Modèle » du haut de
+   la modale et son bouton « Gérer » ont ete retires. L'import de modele se fait
+   desormais depuis l'en-tete « Opérations à effectuer », et la gestion des
+   modeles reste accessible par le menu « + » du calendrier ainsi que par
+   l'onglet Créneaux. */
+/* v2.6.1 : rappel des modeles deja importes dans le creneau en cours. */
+.case-tmpl-applied{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 0 10px 0;font-size:12px;color:var(--muted)}
+.case-tmpl-applied .case-tmpl-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;background:var(--accent-bg);color:var(--accent);border:1px solid rgba(34,211,238,.28);font-weight:700}
 /* Mode opérateur : masque tous les éléments d'édition dans le calendrier */
 body[data-maint-role="operator"] .cal-fab,
 body[data-maint-role="operator"] .cal-fab-menu,
 body[data-maint-role="operator"] .plan-det-case-actions{display:none !important}
-body[data-maint-role="operator"] .cal-wv-hint{display:none}
+/* v2.6.1 : le bandeau d'aide etait deja masque cote operateur ; il n'existe plus pour personne. */
 /* Les cases vides du calendrier ne réagissent plus visuellement au hover */
 body[data-maint-role="operator"] .cal-wv-day-col{cursor:default}
 body[data-maint-role="operator"] .cal-wv-day-col:hover{background:transparent !important}
@@ -699,7 +757,11 @@ body[data-maint-role="operator"] .cal-event{cursor:pointer}
 .plan-det-case-machine{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:8px;background:var(--accent);color:var(--accent-fg,#fff);font-size:13px;font-weight:800;letter-spacing:.2px}
 .plan-det-case-time{display:inline-flex;align-items:center;gap:5px;font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;font-weight:700;font-size:13px;color:var(--text)}
 .plan-det-case-ops-label{margin-top:14px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700}
-.plan-det-case-ops-list{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.plan-det-case-ops-list{margin-top:8px;display:flex;flex-direction:column;gap:6px;max-height:38vh;overflow-y:auto;padding-right:4px}
+/* v2.6.1 : la liste d'operations defile en interne. Avant, un creneau de 14
+   operations poussait les boutons Modifier / Supprimer (.plan-det-case-actions)
+   hors de la zone visible : il fallait faire defiler tout le corps du modal
+   pour les atteindre, sans indice qu'ils existaient. */
 .plan-det-case-op{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--card);transition:border-color .12s}
 .plan-det-case-op:hover{border-color:var(--accent)}
 .plan-det-case-op-bullet{flex-shrink:0;width:8px;height:8px;border-radius:50%;background:var(--accent)}
@@ -739,7 +801,7 @@ body[data-maint-role="operator"] .cal-event{cursor:pointer}
 @media(max-width:720px){
   .cal-wv-body{max-height:60vh}
   .cal-wv-time{font-size:9px;padding-right:5px}
-  .cal-wv-header,.cal-wv-body{grid-template-columns:54px repeat(7,1fr)}
+  .cal-wv-header,.cal-wv-allday,.cal-wv-body{grid-template-columns:54px repeat(7,1fr)}
   .cal-wv-daydate{font-size:12px}
 }
 
@@ -755,6 +817,14 @@ body[data-maint-role="operator"] .cal-event{cursor:pointer}
 .ops-select{appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 12px center;padding-right:32px}
 .ops-field-hint{font-size:11px;color:var(--muted);line-height:1.45}
 .ops-saisi-par{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px dashed var(--border);border-radius:10px;color:var(--muted);font-size:12px;margin-bottom:14px}
+/* v2.6.1 : bandeau date + horaires des modales creneau. Le discret « Date :
+   ... » en 12px gris pointille se confondait avec le fond ; date et horaires
+   sont l'information la plus structurante d'un creneau. */
+.ops-dt-banner{border-style:solid;border-color:var(--accent);background:var(--accent-bg);color:var(--text);font-size:14px;padding:12px 16px;gap:10px;flex-wrap:wrap}
+.ops-dt-banner strong{font-size:15px;font-weight:800;color:var(--text)}
+.ops-dt-banner .ops-dt-sep{color:var(--accent);font-weight:900;opacity:.55}
+.ops-dt-banner .ops-dt-time{font-family:"SFMono-Regular",ui-monospace,Consolas,monospace;font-size:15px;font-weight:800;color:var(--accent);letter-spacing:.02em}
+.ops-dt-banner svg{color:var(--accent);flex-shrink:0}
 .ops-saisi-par strong{color:var(--text);font-weight:600}
 .ops-btn-add{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;border:none;background:var(--accent);color:var(--accent-fg);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;transition:filter .15s,background .15s,color .15s;white-space:nowrap}
 .ops-btn-add:hover{filter:brightness(1.08)}
@@ -830,7 +900,20 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 .maint-subtoolbar{display:flex;align-items:center;gap:12px;margin:0 0 18px 0;flex-wrap:wrap}
 .maint-subtoolbar-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 /* v2.4.19 : toolbar unifiee Machine + Categorie + Statut sur une ligne */
-.maint-machine-toolbar{display:flex;align-items:center;gap:12px;row-gap:10px;margin:8px 0 20px 0;flex-wrap:wrap}
+.maint-machine-toolbar{display:flex;flex-direction:column;align-items:stretch;gap:0;margin:8px 0 20px 0}
+/* v2.5.10 : hierarchie des filtres. Niveau 1 = Machine (ligne du haut, isolee
+   par un filet). Niveau 2 = Categorie + Statut, indentes sous la machine
+   selectionnee pour montrer qu'ils s'appliquent DANS le perimetre machine. */
+.maint-toolbar-row{display:flex;align-items:center;gap:12px;row-gap:10px;flex-wrap:wrap}
+.maint-toolbar-row--primary{padding-bottom:12px;border-bottom:1px solid var(--border)}
+.maint-toolbar-row--secondary{margin-top:12px;margin-left:3px;padding-left:15px;border-left:2px solid var(--border)}
+.maint-toolbar-sep{width:1px;align-self:stretch;min-height:24px;background:var(--border);margin:0 2px}
+.maint-toolbar-row--primary .maint-toolbar-label{color:var(--text2);font-size:11px;letter-spacing:.6px}
+.maint-toolbar-row--primary .maint-machine-btn{font-size:14px;padding:9px 20px}
+@media(max-width:720px){
+  .maint-toolbar-row--secondary{margin-left:0;padding-left:10px}
+  .maint-toolbar-sep{display:none}
+}
 .maint-toolbar-label{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px}
 .maint-machine-tabs,.maint-cat-tabs{display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px}
 .maint-chip-group{display:inline-flex;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:4px}
@@ -872,11 +955,24 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 .maint-machine-btn.active:hover{background:var(--accent);color:var(--bg);filter:brightness(1.05)}
 .maint-cat-btn{border:none;background:transparent;color:var(--text2);padding:7px 16px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,box-shadow .15s}
 .maint-cat-btn:hover{background:var(--bg);color:var(--text)}
+.maint-cat-btn[data-maint-cat="all"].active{background:var(--accent);color:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .maint-cat-btn[data-maint-cat="entretien"].active{background:#a78bfa;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .maint-cat-btn[data-maint-cat="remplacements"].active{background:#fb923c;color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.15)}
 .maint-cat-btn.active:hover{filter:brightness(1.05)}
 .maint-wearparts-stack{display:grid;grid-template-columns:repeat(auto-fit,minmax(480px,1fr));gap:14px}
 .maint-wearpart{min-height:260px}
+/* v2.6.1 : la severite visuelle de la carte piece d'usure suit EXACTEMENT la
+   couleur de l'anneau (variable --wp-sev posee inline, calculee par
+   _ratioColor cote JS) — plus de bordure rouge en face d'un anneau jaune.
+   Fallback --danger si la variable n'est pas posee (carte non en retard). */
+.maint-frame.maint-wearpart.is-overdue{border-color:var(--wp-sev,var(--danger,#f87171));box-shadow:0 0 0 1px var(--wp-sev,var(--danger,#f87171)),0 4px 12px var(--wp-sev-glow,rgba(248,113,113,.20))}
+.maint-frame.maint-wearpart.is-overdue .maint-frame-head{border-bottom-color:var(--wp-sev-glow,rgba(248,113,113,.25))}
+.maint-frame.maint-wearpart.is-overdue .maint-frame-title{color:var(--wp-sev,var(--danger,#f87171))}
+.maint-frame.maint-wearpart.is-overdue-critical{border-color:var(--wp-sev,var(--danger,#dc2626));box-shadow:0 0 0 2px var(--wp-sev,var(--danger,#dc2626)),0 6px 16px var(--wp-sev-glow,rgba(220,38,38,.30))}
+/* Badge "Retard X j" (temps) aligne lui aussi. Le badge "Exces" du metrage
+   (.maint-wp-badge-info) garde son style neutre — le metrage est un supplement,
+   pas une alarme (regle produit v2.4.23). */
+.maint-frame.maint-wearpart.is-overdue .maint-wp-badge:not(.maint-wp-badge-info){background:var(--wp-sev-soft,rgba(248,113,113,.15));color:var(--wp-sev,var(--danger,#f87171))}
 .maint-wp-tabs{display:inline-flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:3px}
 .maint-wp-btn{border:none;background:transparent;color:var(--text2);padding:5px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s}
 .maint-wp-btn:hover{background:var(--card);color:var(--text)}
@@ -903,6 +999,10 @@ body.light .maint-frame-cat-pill.remplacements{color:#c2410c;background:rgba(234
 .maint-wp-row .val{font-size:13px;color:var(--text);font-weight:600;word-break:break-word;min-width:0}
 .maint-wp-row .val.muted{color:var(--muted);font-weight:400;font-style:italic;font-size:12px}
 .maint-wp-row .sub{font-size:11px;color:var(--muted);font-weight:500}
+.maint-wp-empty{flex:1;display:flex;flex-direction:column;justify-content:center;gap:6px;padding:18px 20px;border:1px dashed var(--border);border-radius:10px;background:rgba(148,163,184,.05)}
+.maint-wp-empty-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.maint-wp-empty-txt{font-size:13px;color:var(--text2,var(--muted));line-height:1.55}
+.maint-wp-empty-txt strong{color:var(--text);font-weight:600}
 .maint-wp-badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:rgba(248,113,113,.15);color:var(--danger,#f87171);text-transform:uppercase;letter-spacing:.3px;margin-left:4px}
 .maint-wp-rings{display:flex;justify-content:center;align-items:center}
 .maint-wp-rings svg{display:block;max-width:100%;height:auto}
@@ -1253,6 +1353,14 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
 .libre-inline-btn:hover{background:var(--bg);color:var(--accent);border-color:var(--border)}
 body[data-maint-role="operator"] .libre-inline-btn{display:none}
 body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
+/* v2.7.1 — Codes archivés (catalogue maintenance).
+   Un code archivé n'est ni actif ni supprimé : il est sorti du catalogue mais
+   son libellé continue de résoudre dans l'historique. La ligne est donc
+   estompée sans être barrée — barrer laisserait croire à une suppression. */
+.maint-arch-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;background:rgba(148,163,184,.18);color:var(--muted);margin-left:6px;vertical-align:middle}
+.maint-row-archived td{opacity:.55}
+.maint-row-archived:hover td{opacity:.85}
+.maint-arch-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 12px;margin-bottom:10px;border:1px dashed var(--border);border-radius:8px;background:var(--card);color:var(--muted);font-size:12px}
 /* v180 : mini-modal Intervention libre + autocomplete */
 .libre-titre-wrap{position:relative}
 .libre-autocomplete-panel{position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;margin-top:4px;box-shadow:0 6px 20px rgba(0,0,0,.18)}
@@ -1361,6 +1469,22 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .op-modal input, .op-modal select, .op-modal textarea{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-family:inherit;font-size:14px;transition:border-color .15s}
 .op-modal input:focus, .op-modal select:focus, .op-modal textarea:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px rgba(34,211,238,.12)}
 .op-modal textarea{resize:vertical;min-height:80px;font-family:inherit}
+/* v2.6.1 : lignes « préserver ce créneau » de la modale de confirmation.
+   .op-modal input{width:100%} s'appliquait a la case a cocher, qui occupait
+   toute la largeur et ejectait le texte hors du cadre ; .op-modal label impose
+   en plus uppercase + letter-spacing. On neutralise les deux ici — selecteurs
+   plus specifiques, donc prioritaires. */
+.mys-keep-row{display:flex;gap:9px;align-items:flex-start;padding:9px 11px;border:1px solid var(--border);border-radius:9px;margin-bottom:6px;cursor:pointer;background:var(--card);text-transform:none;letter-spacing:normal;font-size:13px;color:var(--text);font-weight:400}
+.mys-keep-row:hover{border-color:var(--accent)}
+.mys-keep-row.is-grave{border-color:var(--danger)}
+/* Geometrie seule : l'apparence (boite blanche + coche accent) vient de la
+   regle commune « cases a cocher natives » plus bas dans cette feuille. */
+.op-modal .mys-keep-row input[type=checkbox]{width:16px;min-width:16px;height:16px;flex:0 0 16px;margin:2px 0 0 0;padding:0;box-shadow:none}
+.mys-keep-txt{flex:1;min-width:0}
+.mys-keep-date{display:block;font-weight:700;color:var(--text);font-size:13px;text-transform:none;letter-spacing:normal}
+.mys-keep-why{display:block;font-size:12px;color:var(--muted);margin-top:3px;text-transform:none;letter-spacing:normal;font-weight:400;line-height:1.4}
+.mys-keep-row.is-grave .mys-keep-why{color:var(--danger)}
+.mys-keep-list{max-height:34vh;overflow-y:auto;padding-right:4px;margin-top:4px}
 .op-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
 .op-modal-context{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:8px 14px;font-size:12px;color:var(--text2)}
 .op-modal-context strong{color:var(--text);font-weight:700}
@@ -1447,6 +1571,10 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .ta-sim-exit{position:fixed;top:12px;left:12px;z-index:2100;background:rgba(0,0,0,.7);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;pointer-events:auto}
 .ta-sim-exit:hover{background:rgba(0,0,0,.9)}
 .af-cl-nc-lbl:has(input:checked){border-color:var(--danger);background:rgba(248,113,113,0.10);color:var(--danger)}
+/* v2.5.21 : puce COM — « cette réponse exige un commentaire ». Reprend le
+   gabarit de la puce NC, en accent au lieu de danger pour que les deux se
+   distinguent d'un coup d'oeil quand elles sont cochées ensemble. */
+.af-cl-com-lbl:has(input:checked){border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
 .ta-chip{display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-weight:500;cursor:pointer;user-select:none;transition:background .12s ease,color .12s ease,border-color .12s ease;font-family:inherit;line-height:1.2}
 .ta-chip input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
 .ta-chip:hover{border-color:var(--accent)}
@@ -1473,14 +1601,30 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .alerts-panel-embed .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:18px 20px;margin-bottom:16px}
 .alerts-panel-embed .btn{background:var(--accent);color:var(--accent-fg,#fff);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
 .alerts-panel-embed .btn:hover{filter:brightness(1.08)}
-.alerts-panel-embed .btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s}
-.alerts-panel-embed .btn-sec:hover{box-shadow:0 0 0 1px rgba(34,211,238,.32),0 0 20px rgba(34,211,238,.2);border-color:rgba(34,211,238,.45);color:var(--accent)}
-body.light .alerts-panel-embed .btn-sec:hover{box-shadow:0 0 0 1px rgba(8,145,178,.35),0 0 18px rgba(8,145,178,.15);border-color:rgba(8,145,178,.4);color:var(--accent)}
+/* v2.5.20 : contraste bouton / fond. Règle : un bouton ne porte jamais la
+   couleur de la surface qui le contient. Inversion systématique —
+     · surface blanche (.card, .alert-modal-body) -> bouton sur var(--bg)
+     · surface teintee (.alert-row, .af-cl-card)  -> bouton sur var(--card)
+   Les lueurs de survol passent des rgba() cyan en dur a var(--accent-bg),
+   pour suivre la palette choisie (ambre, pivoine, foret, cendre, braise). */
+.alerts-panel-embed .btn-sec{background:var(--bg);border:1px solid var(--border);color:var(--text2);transition:box-shadow .2s,border-color .15s,color .15s,background .15s}
+.alerts-panel-embed .btn-sec:hover{background:var(--accent-bg);border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 1px var(--accent-bg)}
 .alerts-panel-embed .btn-sm{padding:6px 12px;font-size:11px;font-weight:700;border-radius:8px}
-.alerts-panel-embed .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2);transition:border-color .15s,color .15s,box-shadow .15s,filter .15s}
-.alerts-panel-embed .btn-ghost:hover{border-color:var(--accent);color:var(--accent);filter:none;box-shadow:0 0 0 1px rgba(34,211,238,.28),0 0 14px rgba(34,211,238,.14)}
-body.light .alerts-panel-embed .btn-ghost:hover{box-shadow:0 0 0 1px rgba(8,145,178,.3),0 0 12px rgba(8,145,178,.1)}
-.alerts-panel-embed .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger);box-shadow:0 0 0 1px rgba(248,113,113,.35),0 0 14px rgba(248,113,113,.12)}
+.alerts-panel-embed .btn-ghost{background:var(--bg);border:1px solid var(--border);color:var(--text2);transition:border-color .15s,color .15s,box-shadow .15s,background .15s}
+.alerts-panel-embed .btn-ghost:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg);filter:none;box-shadow:0 0 0 1px var(--accent-bg)}
+.alerts-panel-embed .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger);background:var(--card);box-shadow:0 0 0 1px var(--border)}
+/* .alert-row est peinte en var(--bg) : ses boutons repassent en var(--card) */
+.alerts-panel-embed .alert-row .btn-sm,
+.alerts-panel-embed .alert-row .btn-ghost,
+.alerts-panel-embed .alert-row .btn-ghost:hover,
+.alerts-panel-embed .alert-row .btn-ghost.danger:hover{background:var(--card)}
+/* Historique des saisies (meme vue Alertes) : le bloc filtres est pose sur une
+   carte blanche, les puces de periode etaient donc blanches sur blanc. Scope
+   limite a #view-controles pour ne pas toucher les autres vues, ou ces memes
+   puces vivent deja sur var(--bg). */
+#view-controles .date-preset-chip{background:var(--bg)}
+#view-controles .date-preset-chip:hover{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+#view-controles .date-preset-chip.active{background:var(--accent-bg)}
 
 /* ═══════════════════════════════════════════════════════════ */
 /* v2.2.30 : panel Codes maintenance — CSS scopé (re-extraction propre) */
@@ -1500,6 +1644,36 @@ body.light .maint-codes-panel-embed th {background:#f1f5f9}
 .maint-codes-panel-embed .dot.no {background:var(--border)}
 .maint-codes-panel-embed .chk-edit {width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
 .maint-codes-panel-embed .cell-ov {font-size:9px;color:var(--accent);font-weight:700;letter-spacing:.02em;margin-left:6px;text-transform:uppercase}
+/* ── Cases a cocher natives du module ─────────────────────────────────────
+   v2.7.4 : elles utilisaient le rendu natif du navigateur, donc un carre bleu.
+   Sur le fond bleu clair du bloc « Piece d'usure », le contraste etait quasi
+   nul ; dans la modale de confirmation, accent-color donnait une boite pleine
+   d'une autre couleur encore. Rendu unique pour les deux : boite blanche,
+   bordure discrete, coche a la couleur d'accent du module.
+
+   Liste de selecteurs explicite, et NON un balayage de tous les
+   input[type=checkbox] : les interrupteurs a bascule (.toggle des alertes et
+   des modeles, .op-toggle-termine, .tmpl-recur-switch) et les chips .ta-chip
+   masquent leur input pour dessiner un rail ou une pastille a la place. Un
+   selecteur global reafficherait ces inputs par-dessus leur propre rendu.
+
+   Cette regle ne fait que l'apparence ; les dimensions restent posees la ou
+   elles l'etaient (inline pour le bloc piece d'usure, regle dediee pour la
+   modale). */
+#maint-usure-block input[type=checkbox],
+.op-modal .mys-keep-row input[type=checkbox]{-webkit-appearance:none;appearance:none;box-sizing:border-box;border:1.5px solid var(--border);border-radius:4px;background:#fff;display:inline-grid;place-content:center;cursor:pointer;transition:border-color .12s,box-shadow .12s}
+#maint-usure-block input[type=checkbox]::before,
+.op-modal .mys-keep-row input[type=checkbox]::before{content:"";width:10px;height:10px;transform:scale(0);transition:transform .12s ease-out;background:var(--accent);clip-path:polygon(14% 44%,0 60%,39% 100%,100% 18%,84% 0,39% 68%)}
+#maint-usure-block input[type=checkbox]:checked,
+.op-modal .mys-keep-row input[type=checkbox]:checked{border-color:var(--accent)}
+#maint-usure-block input[type=checkbox]:checked::before,
+.op-modal .mys-keep-row input[type=checkbox]:checked::before{transform:scale(1)}
+#maint-usure-block input[type=checkbox]:hover,
+.op-modal .mys-keep-row input[type=checkbox]:hover{border-color:var(--accent)}
+#maint-usure-block input[type=checkbox]:focus-visible,
+.op-modal .mys-keep-row input[type=checkbox]:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-bg)}
+#maint-usure-block input[type=checkbox]:disabled,
+.op-modal .mys-keep-row input[type=checkbox]:disabled{opacity:.5;cursor:not-allowed}
 .maint-codes-panel-embed .acc-matrix {width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
 .maint-codes-panel-embed .acc-matrix th {padding:8px 10px}
 .maint-codes-panel-embed .acc-matrix .acc-th-lbl {margin-right:6px}
@@ -1581,6 +1755,24 @@ body.light .maint-codes-panel-embed .op-filter:focus {box-shadow:0 0 0 3px rgba(
 .maint-codes-panel-embed .maint-doc-row-del:hover {border-color:var(--danger);background:rgba(248,113,113,.08)}
 .maint-codes-panel-embed .op-form-panel {margin-bottom:16px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--bg)}
 .maint-codes-panel-embed .op-form-panel h3 {margin:0 0 12px;font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+/* v2.7.4 : les champs du formulaire de code etaient en background:var(--bg),
+   exactement la couleur du panneau qui les contient (.op-form-panel, ligne
+   au-dessus). Champs et fond se confondaient : en clair, des cases bleues sur
+   un fond bleu, seule la bordure les distinguait. On les pose sur var(--card),
+   la surface "au-dessus du fond" du theme : blanc en mode clair, gris fonce en
+   mode sombre. Le champ de filtre du tableau, lui, est deja sur une carte
+   blanche : il garde var(--bg), qui l'y detache correctement.
+   Le selecteur est porte par .op-form-panel pour ne toucher QUE ce
+   formulaire, pas les autres champs du panneau des codes. */
+.maint-codes-panel-embed .op-form-panel input,
+.maint-codes-panel-embed .op-form-panel select{background:var(--card)}
+.maint-codes-panel-embed .op-form-panel input:focus,
+.maint-codes-panel-embed .op-form-panel select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+/* Meme raison pour le bouton Annuler : il etait en background:transparent,
+   donc de la couleur du panneau. Scope sur .op-form-panel pour ne pas
+   toucher les autres boutons secondaires du panneau des codes, qui eux
+   sont deja poses sur la carte blanche. */
+.maint-codes-panel-embed .op-form-panel .btn-sec{background:var(--card)}
 .maint-codes-panel-embed .op-table-wrap {margin-top:4px}
 .maint-codes-panel-embed .op-table {font-size:12px}
 .maint-codes-panel-embed .op-table th {font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:10px 12px;white-space:nowrap}
@@ -1719,12 +1911,27 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 .alert-modal-foot{display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border)}
 .alert-modal-overlay .btn{background:var(--accent);color:var(--accent-fg,#fff);border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;transition:filter .15s}
 .alert-modal-overlay .btn:hover{filter:brightness(1.08)}
-.alert-modal-overlay .btn-sec{background:transparent;border:1px solid var(--border);color:var(--muted);transition:box-shadow .2s,border-color .15s,color .15s,filter .15s;padding:10px 18px;font-weight:700;font-size:13px;border-radius:10px;cursor:pointer;font-family:inherit}
-.alert-modal-overlay .btn-sec:hover{border-color:rgba(34,211,238,.45);color:var(--accent)}
-.alert-modal-overlay .btn-sm{padding:6px 12px;font-size:11px;font-weight:700;border-radius:8px;background:transparent;border:1px solid var(--border);color:var(--text2);cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block;line-height:1.4;transition:border-color .12s,color .12s}
-.alert-modal-overlay .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
-.alert-modal-overlay .btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
-.alert-modal-overlay .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger)}
+/* v2.5.20 : meme regle de contraste dans la modale. Le corps de la modale est
+   en var(--card) -> les boutons secondaires prennent var(--bg). */
+.alert-modal-overlay .btn-sec{background:var(--bg);border:1px solid var(--border);color:var(--text2);transition:box-shadow .2s,border-color .15s,color .15s,background .15s;padding:10px 18px;font-weight:700;font-size:13px;border-radius:10px;cursor:pointer;font-family:inherit}
+.alert-modal-overlay .btn-sec:hover{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.alert-modal-overlay .btn-sm{padding:6px 12px;font-size:11px;font-weight:700;border-radius:8px;background:var(--bg);border:1px solid var(--border);color:var(--text2);cursor:pointer;font-family:inherit;text-decoration:none;display:inline-block;line-height:1.4;transition:border-color .12s,color .12s,background .12s}
+.alert-modal-overlay .btn-ghost{background:var(--bg);border:1px solid var(--border);color:var(--text2)}
+.alert-modal-overlay .btn-ghost:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.alert-modal-overlay .btn-ghost.danger:hover{border-color:var(--danger);color:var(--danger);background:var(--bg)}
+/* .af-cl-card (point de controle) est peinte en var(--bg) : tout ce qui vit
+   dedans — boutons, champs, puce NC — repasse en var(--card). */
+.alert-modal-overlay .af-cl-card .btn-sm,
+.alert-modal-overlay .af-cl-card .btn-ghost,
+.alert-modal-overlay .af-cl-card .btn-ghost.danger:hover,
+.alert-modal-overlay .af-cl-card .alert-field-input,
+.alert-modal-overlay .af-cl-card .alert-field-select{background:var(--card)}
+.alert-modal-overlay .af-cl-card .btn-ghost:hover{background:var(--accent-bg)}
+.af-cl-nc-lbl,.af-cl-com-lbl{background:var(--card)}
+/* Bandeau "Parametres" repliable : il porte deja var(--bg) sur fond blanc,
+   on renforce juste la lisibilite du libelle. */
+.alert-modal-overlay #af-settings-toggle{color:var(--text)}
+.alert-modal-overlay #af-settings-toggle:hover{border-color:var(--accent)}
 .alert-modal-overlay a.btn-sm{text-decoration:none}
 .alert-modal-overlay .maint-doc-add-btn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;background:var(--accent);color:var(--accent-fg,#fff);border:1px solid var(--accent);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;transition:filter .12s,transform .06s;font-family:inherit;user-select:none}
 .alert-modal-overlay .maint-doc-add-btn:hover{filter:brightness(1.06)}
@@ -1745,13 +1952,13 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
       Suivi machine
       <span class="nav-btn-badge hidden" id="nav-maint-badge" title="Retards toutes machines confondues">0</span>
     </button>
-    <button type="button" class="nav-btn adm-only" data-view="planning" onclick="switchView('planning')">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-      Planning
-    </button>
     <button type="button" class="nav-btn adm-only" data-view="operations" onclick="switchView('operations')">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h18M3 12h18M3 17h18"/></svg>
       Opérations de maintenance
+    </button>
+    <button type="button" class="nav-btn adm-only" data-view="planning" onclick="switchView('planning')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Planning
     </button>
     <!-- v2.2.45 : "Mes tâches" admin est réservée à Manuel Lesaffre. Cachée par défaut,
          révélée en JS après loadMe() si S.me.nom contient "lesaffre" (case-insensitive). -->
@@ -1827,16 +2034,27 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
              ligne (wrap responsive). Labels harmonises, toggles avec style
              coherent (chips), pastilles compteurs sur machine/categorie. -->
         <div class="maint-machine-toolbar">
+          <!-- Niveau 1 : perimetre machine -->
+          <div class="maint-toolbar-row maint-toolbar-row--primary">
           <label class="maint-toolbar-label">Machine</label>
           <div class="maint-machine-tabs" id="maint-machine-tabs" role="tablist">
             <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 1" onclick="setMaintMachine('Cohésio 1')">Cohésio 1<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 1" title="Opérations en retard sur cette machine">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-machine-badge-soon="Cohésio 1" title="Opérations dû bientôt sur cette machine">0</span></button>
             <button type="button" class="maint-machine-btn" data-maint-machine="Cohésio 2" onclick="setMaintMachine('Cohésio 2')">Cohésio 2<span class="maint-tab-badge hidden" data-maint-machine-badge="Cohésio 2" title="Opérations en retard sur cette machine">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-machine-badge-soon="Cohésio 2" title="Opérations dû bientôt sur cette machine">0</span></button>
           </div>
+          </div>
+          <!-- Niveau 2 : filtres appliques dans le perimetre machine -->
+          <div class="maint-toolbar-row maint-toolbar-row--secondary">
           <label class="maint-toolbar-label">Catégorie</label>
           <div class="maint-cat-tabs" id="maint-cat-tabs" role="tablist">
+            <!-- v2.7.4 : troisieme etat « Tous ». Les deux categories etaient
+                 mutuellement exclusives : impossible de voir l'entretien et les
+                 interventions sur le meme ecran. Meme logique que la ligne Statut
+                 juste a cote (selection unique parmi N, dont un « Tous »). -->
+            <button type="button" class="maint-cat-btn" data-maint-cat="all" onclick="setMaintCatFilter('all')">Tous<span class="maint-tab-badge hidden" data-maint-cat-badge="all" title="Opérations en retard, toutes catégories">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-cat-badge-soon="all" title="Opérations dû bientôt, toutes catégories">0</span></button>
             <button type="button" class="maint-cat-btn" data-maint-cat="entretien" onclick="setMaintCatFilter('entretien')">Entretien<span class="maint-tab-badge hidden" data-maint-cat-badge="entretien" title="Opérations en retard dans cette catégorie">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-cat-badge-soon="entretien" title="Opérations dû bientôt dans cette catégorie">0</span></button>
             <button type="button" class="maint-cat-btn" data-maint-cat="remplacements" onclick="setMaintCatFilter('remplacements')">Interventions<span class="maint-tab-badge hidden" data-maint-cat-badge="remplacements" title="Opérations en retard dans cette catégorie">0</span><span class="maint-tab-badge maint-tab-badge-soon hidden" data-maint-cat-badge-soon="remplacements" title="Opérations dû bientôt dans cette catégorie">0</span></button>
           </div>
+          <span class="maint-toolbar-sep" aria-hidden="true"></span>
           <label class="maint-toolbar-label">Statut</label>
           <div class="maint-chip-group" id="maint-status-chips" role="tablist">
             <button type="button" class="maint-chip active" data-status-filter="all" onclick="setMaintStatusFilter('all')">Tous<span class="maint-chip-count" data-status-count="all">0</span></button>
@@ -1844,6 +2062,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
             <button type="button" class="maint-chip" data-status-filter="soon" onclick="setMaintStatusFilter('soon')">Dû bientôt<span class="maint-chip-count" data-status-count="soon">0</span></button>
             <button type="button" class="maint-chip" data-status-filter="ok" onclick="setMaintStatusFilter('ok')">À jour<span class="maint-chip-count" data-status-count="ok">0</span></button>
             <button type="button" class="maint-chip" data-status-filter="never" onclick="setMaintStatusFilter('never')">Jamais saisi<span class="maint-chip-count" data-status-count="never">0</span></button>
+          </div>
           </div>
         </div>
 
@@ -1924,8 +2143,16 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </div>
           <!-- Vue Semaine (emploi du temps) -->
           <div class="cal-week-view cal-wv-mode-week" id="cal-week-view">
-            <div class="cal-wv-hint">Cliquez sur une plage horaire libre pour créer un créneau de maintenance.</div>
+            <!-- v2.6.1 : bandeau d'aide « Cliquez sur une plage horaire libre… »
+                 retire. Il occupait ~54px (hauteur + marge) en permanence pour une
+                 information apprise des la premiere utilisation ; la place va a la
+                 grille. _fitCalWeekBody() mesure le haut du corps de grille au
+                 runtime, la hauteur disponible s'ajuste donc toute seule. -->
             <div class="cal-wv-header" id="cal-wv-header"></div>
+            <!-- v2.7.3 : bande des operations non planifiees, entre les en-tetes
+                 de jours et la grille horaire. Hors du conteneur de scroll :
+                 elle reste visible quelle que soit l'heure affichee. -->
+            <div class="cal-wv-allday is-open" id="cal-wv-allday" hidden></div>
             <div class="cal-wv-body" id="cal-wv-body"></div>
           </div>
 
@@ -2117,9 +2344,9 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
               </select>
             </div>
             <div class="filter-group">
-              <label for="filt-operations-type">Type d'opération</label>
+              <label for="filt-operations-type">Nom de l'opération</label>
               <select id="filt-operations-type" class="filter-input">
-                <option value="">Tous les types</option>
+                <option value="">Toutes les opérations</option>
               </select>
             </div>
             <div class="filter-group">
@@ -2223,14 +2450,34 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                 <option value="2">N2</option>
                 <option value="3">N3</option>
               </select>
-              <select id="maint-categorie">
+              <select id="maint-categorie" onchange="_maintOnCategorieChange()">
                 <option value="controles">Contrôles</option>
                 <option value="entretien">Nettoyage</option>
                 <option value="remplacements">Interventions</option>
               </select>
               <input type="text" id="maint-intervalle" placeholder="Intervalle (ex. Hebdo, 30 jours, 6 mois)" maxlength="80">
-              <input type="text" id="maint-metrage-ref" placeholder="Réf. métrage (ex. 5000 m, 10 km)" maxlength="80">
             </div>
+            <div id="maint-usure-block" style="margin-top:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">
+              <label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text);white-space:nowrap">
+                <input type="checkbox" id="maint-usure-on" onchange="_maintOnUsureToggle()" style="width:16px;height:16px;flex:0 0 auto;margin:0;padding:0;cursor:pointer">
+                Pièce d'usure
+              </label>
+              <div id="maint-usure-fields" style="display:none;align-items:center;gap:12px;flex-wrap:wrap">
+                <select id="maint-usure-piece" onchange="_maintOnUsurePieceChange()" title="Pièce d'usure à laquelle ce code est rattaché" style="width:auto;min-width:150px;padding:6px 10px;font-size:12px">
+                  <option value="">— Choisir —</option>
+                </select>
+                <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;color:var(--text);white-space:nowrap">
+                  <input type="checkbox" id="maint-usure-haspos" onchange="_maintOnUsureHasPosChange()" style="width:16px;height:16px;flex:0 0 auto;margin:0;padding:0;cursor:pointer">
+                  Position particulière
+                </label>
+                <span id="maint-usure-pos-wrap" style="display:none">
+                  <input type="text" id="maint-usure-position" list="maint-usure-position-list" placeholder="ex. bande" maxlength="40" oninput="_maintOnUsurePositionInput()" style="width:120px;padding:6px 10px;font-size:12px">
+                  <datalist id="maint-usure-position-list"></datalist>
+                </span>
+                <input type="text" id="maint-metrage-ref" placeholder="Réf. métrage (ex. 5000 m)" maxlength="80" style="width:180px;padding:6px 10px;font-size:12px">
+              </div>
+            </div>
+            <div id="maint-usure-hint" style="display:none;font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5"></div>
             <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
               <button type="button" class="btn" onclick="saveMaintForm()">Enregistrer</button>
               <button type="button" class="btn btn-sec" onclick="closeMaintForm()">Annuler</button>
@@ -2572,9 +2819,11 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
       </button>
     </div>
     <div class="modal-body">
-      <div class="ops-saisi-par">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        <span>Date : <strong id="plan-det-date">—</strong></span>
+      <div class="ops-saisi-par ops-dt-banner">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <strong id="plan-det-date">—</strong>
+        <span class="ops-dt-sep">·</span>
+        <span class="ops-dt-time" id="plan-det-time">—</span>
       </div>
       <div class="plan-det-list" id="plan-det-list"></div>
     </div>
@@ -2595,16 +2844,11 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
     </div>
     <form id="case-mod-form" onsubmit="submitCaseModal(event)">
       <div class="modal-body">
-        <div class="case-tmpl-picker" id="case-tmpl-picker-wrap">
-          <span class="case-tmpl-picker-label">Modèle</span>
-          <select id="case-mod-template" class="ops-select" onchange="applyCaseTemplate(this.value)">
-            <option value="">Sans modèle (créneau vierge)</option>
-          </select>
-          <button type="button" class="case-tmpl-picker-btn" onclick="openTemplatesModal()">Gérer les modèles</button>
-        </div>
-        <div class="ops-saisi-par">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <span>Date : <strong id="case-mod-date">—</strong></span>
+        <div class="ops-saisi-par ops-dt-banner">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <strong id="case-mod-date">—</strong>
+          <span class="ops-dt-sep">·</span>
+          <span class="ops-dt-time" id="case-mod-time-recap">—</span>
         </div>
         <div class="ops-field">
           <label class="ops-field-label" for="case-mod-nom">Nom du créneau <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(optionnel)</span></label>
@@ -2621,13 +2865,25 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
           </div>
         </div>
         <div class="case-ops-section">
-          <div class="case-ops-head">
+          <div class="case-ops-head" style="flex-wrap:wrap;gap:8px">
             <label class="ops-field-label">Opérations à effectuer<span class="req">*</span></label>
-            <button type="button" class="case-ops-add-btn" onclick="addCaseOp()">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Ajouter une opération
-            </button>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+              <!-- v2.6.1 : l'import de modele a quitte le haut de la modale pour
+                   venir ici. Il AJOUTE et fusionne (plusieurs modeles possibles)
+                   au lieu de remplacer. Le select se reinitialise apres chaque
+                   import pour rester une action, pas un etat. -->
+              <select id="case-mod-template" class="ops-select" style="width:auto;min-width:190px"
+                      onchange="applyCaseTemplate(this.value); this.value='';"
+                      title="Ajoute les opérations d'un modèle au créneau">
+                <option value="">+ Importer un modèle…</option>
+              </select>
+              <button type="button" class="case-ops-add-btn" onclick="addCaseOp()">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Ajouter une opération
+              </button>
+            </div>
           </div>
+          <div id="case-tmpl-applied" class="case-tmpl-applied" style="display:none"></div>
           <div class="case-ops-list" id="case-mod-ops-list"></div>
         </div>
         <div class="case-ops-section">
@@ -2989,9 +3245,17 @@ function switchView(name){
 // =========================================================================
 // Planning — calendrier mensuel + vue Semaine (style MyProd)
 // =========================================================================
-const CAL_HOUR_START = 6;
-const CAL_HOUR_END   = 21;   // exclusif (affiche 6h → 20h)
+// v2.6.1 : journee complete. Avant 6h→21h, ce qui tronquait tout creneau
+// debordant de la plage (ex. un nettoyage 19:00–23:00 s'arretait visuellement
+// a 21:00) et rendait impossible la planification d'une intervention de nuit.
+// Toutes les positions verticales sont calculees relativement a
+// CAL_HOUR_START, donc changer ces deux constantes suffit : blocs d'evenement,
+// clic sur cellule, glisser-deposer et redimensionnement suivent.
+const CAL_HOUR_START = 0;
+const CAL_HOUR_END   = 24;   // exclusif (affiche 00h → 23h)
 const CAL_HOUR_PX    = 62;
+// Marge laissee au-dessus du premier creneau lors du recentrage automatique.
+const CAL_AUTOSCROLL_MARGIN = 28;
 function _calWeekMondayOf(d){
   const r = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const off = (r.getDay() + 6) % 7;
@@ -3092,6 +3356,12 @@ function _apiEventToClient(ev){
     operators: ev.operators || [],
     source: ev.source,
     template_id: ev.template_id || null,
+    // v2.6.1 : discriminant entre les deux facons d'etre lie a un modele.
+    // template_origin_date n'est pose QUE par _generate_events_for_template(),
+    // c.-a-d. par la generation d'une recurrence. Un creneau ou l'on a
+    // simplement importe un modele depuis la liste des operations porte un
+    // template_id mais PAS d'origin_date.
+    template_origin_date: ev.template_origin_date || null,
     created_at: ev.created_at,
     updated_at: ev.updated_at,
   };
@@ -3269,13 +3539,127 @@ function _syncCalHeaderGutter(){
   if(!body || !head) return;
   const gutter = Math.max(0, body.offsetWidth - body.clientWidth);
   head.style.paddingRight = gutter ? (gutter + 'px') : '';
+  // v2.7.3 : la bande « non planifie » est un troisieme frere sur la meme
+  // grille de colonnes et ne scrolle pas non plus -> meme correction.
+  const band = document.getElementById('cal-wv-allday');
+  if(band) band.style.paddingRight = gutter ? (gutter + 'px') : '';
 }
+// v2.6.1 : la grille horaire est bornee a la hauteur REELLEMENT disponible
+// sous elle, pour que le cadre .cal-sec tienne entierement dans la fenetre.
+//
+// Avant : `max-height:75vh` en dur dans le CSS. S'y ajoutaient l'en-tete de
+// page, les sous-onglets, le bandeau d'aide, l'en-tete de grille, la legende et
+// les 24px de padding de la section — soit bien au-dela de 100vh. Le bas du
+// cadre passait donc sous la ligne de flottaison et il fallait faire defiler la
+// PAGE pour l'atteindre, au lieu de faire defiler les heures DANS la grille.
+const CAL_WV_MIN_HEIGHT = 260;   // plancher : en dessous, la grille est inutilisable
+const CAL_WV_BOTTOM_GAP = 8;     // respiration sous le cadre
+function _fitCalWeekBody(){
+  const body = document.getElementById('cal-wv-body');
+  if(!body) return;
+  const sec = body.closest('.cal-sec');
+  if(!sec) return;
+  // Section masquee (autre vue, autre sous-onglet) : les rects valent 0, on ne
+  // calcule rien. Le prochain rendu rappellera cette fonction.
+  if(sec.offsetHeight === 0) return;
+  // Position du haut de la grille dans le DOCUMENT, pas dans le viewport : on
+  // reajoute le scroll courant. Sans ca, mesurer alors que la page est deja
+  // defilee donnerait une hauteur disponible surevaluee, la grille grandirait,
+  // la page defilerait davantage — emballement a chaque appel.
+  const scrolled = document.scrollingElement ? document.scrollingElement.scrollTop : 0;
+  const top = body.getBoundingClientRect().top + scrolled;
+  if(top <= 0) return;
+  // Ce qui doit rester visible SOUS la grille : legende + padding + marge bas.
+  const cs = getComputedStyle(sec);
+  let below = (parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.marginBottom) || 0);
+  const legend = sec.querySelector('.cal-legend');
+  if(legend && legend.offsetHeight){
+    below += legend.offsetHeight + (parseFloat(getComputedStyle(legend).marginTop) || 0);
+  }
+  const avail = window.innerHeight - top - below - CAL_WV_BOTTOM_GAP;
+  body.style.maxHeight = Math.max(CAL_WV_MIN_HEIGHT, Math.round(avail)) + 'px';
+}
+
+// v2.6.1 : avec 24 heures affichees, la grille fait ~1490px pour une zone
+// visible de ~360px. Sans recentrage, le planning s'ouvrirait sur 00:00 et il
+// faudrait faire defiler jusqu'aux creneaux. On se cale donc sur le creneau le
+// plus tot de la periode affichee ; a defaut (semaine vide) sur l'heure
+// courante.
+//
+// Le drapeau est indispensable : le recentrage ne doit avoir lieu qu'apres un
+// RENDU (changement de semaine, de vue, arrivee sur l'onglet), jamais sur un
+// simple redimensionnement — sinon on ecraserait la position de defilement que
+// l'utilisateur vient de choisir a la main.
+let _calAutoScrollPending = false;
+let _calSavedScrollTop = null;
+// Le recentrage n'est arme que par un changement de CONTEXTE : navigation
+// (semaine/jour precedent ou suivant, Aujourd'hui), changement de vue, arrivee
+// sur l'onglet Calendrier.
+//
+// Il ne DOIT PAS l'etre par un simple re-rendu consecutif a une modification de
+// donnees — creation, deplacement ou suppression d'un creneau repassent par
+// renderCalWeek(), et rearmer ici ramenait l'utilisateur au premier creneau de
+// la semaine juste apres qu'il ait cree le sien. C'est pour ca que l'appel a
+// ete retire de la fin des fonctions de rendu.
+function _requestCalAutoScroll(){
+  // v2.6.1 : pendant un glisser-deposer inter-semaines, la navigation est
+  // provoquee par le geste lui-meme. Recentrer ferait glisser les colonnes
+  // sous le curseur en plein drop — on garde la position telle quelle.
+  try{ if(_CAL_DRAG && _CAL_DRAG.active) return; }catch(_){}
+  _calAutoScrollPending = true;
+}
+// A appeler juste avant `body.innerHTML = ...` : le remplacement du contenu
+// remet scrollTop a 0, il faut donc memoriser la position avant, pour pouvoir
+// la rendre a l'utilisateur apres un re-rendu sans changement de contexte.
+function _saveCalScroll(){
+  if(_calAutoScrollPending){ _calSavedScrollTop = null; return; }
+  const body = document.getElementById('cal-wv-body');
+  if(body && body.clientHeight) _calSavedScrollTop = body.scrollTop;
+}
+function _autoScrollCalWeekBody(){
+  const body = document.getElementById('cal-wv-body');
+  if(!body) return;
+  // clientHeight nul = grille pas encore mesurable (section masquee) : on garde
+  // l'etat en attente pour retenter au prochain passage.
+  if(!body.clientHeight) return;
+  if(_calAutoScrollPending){
+    _calAutoScrollPending = false;
+    _calSavedScrollTop = null;
+    // On lit la position deja posee sur les blocs par _makeEventBlock plutot que
+    // de recalculer depuis le modele : une seule source de verite.
+    let target = null;
+    body.querySelectorAll('.cal-event').forEach(el => {
+      const t = parseFloat(el.style.top);
+      if(!isNaN(t) && (target === null || t < target)) target = t;
+    });
+    if(target === null){
+      const px = (CAL_STATE && CAL_STATE.view === 'day') ? 72 : CAL_HOUR_PX;
+      target = (new Date().getHours() - CAL_HOUR_START) * px;
+    }
+    body.scrollTop = Math.max(0, target - CAL_AUTOSCROLL_MARGIN);
+    return;
+  }
+  // Re-rendu sans changement de contexte : on restaure la position exacte que
+  // l'utilisateur avait avant. La restauration a lieu dans le meme
+  // requestAnimationFrame que le rendu, donc avant le paint : aucun saut visible.
+  if(_calSavedScrollTop != null){
+    body.scrollTop = _calSavedScrollTop;
+    _calSavedScrollTop = null;
+  }
+}
+
 let _calGutterRaf = 0;
 function _scheduleCalHeaderGutterSync(){
   if(_calGutterRaf) return;
   _calGutterRaf = requestAnimationFrame(() => {
     _calGutterRaf = 0;
+    // v2.6.1 : l'ajustement de hauteur passe AVANT la synchro de gouttiere —
+    // changer la hauteur peut faire apparaitre ou disparaitre la scrollbar
+    // verticale, donc modifier la largeur de gouttiere a reporter sur le header.
+    try{ _fitCalWeekBody(); }catch(_){}
     try{ _syncCalHeaderGutter(); }catch(_){}
+    // Apres la hauteur : scrollTop n'a de sens qu'une fois la zone visible connue.
+    try{ _autoScrollCalWeekBody(); }catch(_){}
   });
 }
 window.addEventListener('resize', _scheduleCalHeaderGutterSync);
@@ -3321,6 +3705,8 @@ function setCalView(v){
     wv.classList.toggle('cal-wv-mode-week', v === 'week');
     wv.classList.toggle('cal-wv-mode-day',  v === 'day');
   }
+  // v2.6.1 : changement de contexte -> recentrage legitime.
+  _requestCalAutoScroll();
   renderCalFromCacheThenRefresh();
 }
 function calPrev(){
@@ -3334,6 +3720,8 @@ function calPrev(){
     const d = CAL_STATE.dayDate;
     CAL_STATE.dayDate = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
   }
+  // v2.6.1 : changement de contexte -> recentrage legitime.
+  _requestCalAutoScroll();
   renderCalFromCacheThenRefresh();
 }
 function calNext(){
@@ -3347,6 +3735,8 @@ function calNext(){
     const d = CAL_STATE.dayDate;
     CAL_STATE.dayDate = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
   }
+  // v2.6.1 : changement de contexte -> recentrage legitime.
+  _requestCalAutoScroll();
   renderCalFromCacheThenRefresh();
 }
 function calToday(){
@@ -3359,6 +3749,8 @@ function calToday(){
   } else if(CAL_STATE.view === 'day'){
     CAL_STATE.dayDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   }
+  // v2.6.1 : changement de contexte -> recentrage legitime.
+  _requestCalAutoScroll();
   renderCalFromCacheThenRefresh();
 }
 function _calIsoYMD(d){
@@ -3507,25 +3899,32 @@ function renderCalWeek(){
     const isWeekend = (i >= 5);
     const isToday = (iso === todayIso);
     const colCls = 'cal-wv-day-col' + (isWeekend?' weekend':'') + (isToday?' today':'');
-    html += '<div class="' + colCls + '" data-date="' + iso + '" onclick="onCalCellClick(event)">';
+    html += '<div class="' + colCls + (_calIsPastIso(iso) ? ' is-past-col' : '') + '" data-date="' + iso + '" onclick="onCalCellClick(event)">';
     for(let h=CAL_HOUR_START; h<CAL_HOUR_END; h++){
       html += '<div class="cal-wv-hour-row" data-hour="' + h + '"></div>';
     }
     html += '</div>';
   }
+  try{ _saveCalScroll(); }catch(_){}
   body.innerHTML = html;
   // Lane-packing : un bloc par opération, placé côte à côte lorsqu'il y a chevauchement
   document.querySelectorAll('.cal-wv-day-col').forEach(col => {
     const iso = col.getAttribute('data-date');
-    const events = PLANNING_STATE.list.filter(ev => ev.date === iso);
+    const events = PLANNING_STATE.list.filter(ev => ev.date === iso  && !_isEventBeingDragged(ev));
     const packed = _packDayEvents(events);
     packed.forEach(item => {
       const block = _makeEventBlock(item);
       if(block) col.appendChild(block);
     });
-    // v2.2.58 : strip flottant absolu dans le day col — n'affecte plus les autres jours
-    _renderNonPlanifStrip(iso, col, 'week');
   });
+  // v2.7.3 : bande unique hors zone de scroll, alimentee par les 7 jours.
+  try{
+    const _isos = [];
+    for(let k=0;k<7;k++){
+      _isos.push(_calIsoYMD(new Date(ws.getFullYear(), ws.getMonth(), ws.getDate()+k)));
+    }
+    _renderNonPlanifBand(_isos, 'week');
+  }catch(_){}
   // v2.6.0 : le corps vient d'etre reconstruit -> re-aligner le header sur la
   // gouttiere de scrollbar, et repeindre l'etat de chargement (le skeleton a
   // ete efface par le innerHTML ci-dessus).
@@ -3564,98 +3963,149 @@ function renderCalDay(){
   }
   html += '</div>';
   const colCls = 'cal-wv-day-col' + (isWeekend?' weekend':'') + (isToday?' today':'');
-  html += '<div class="' + colCls + '" data-date="' + iso + '" onclick="onCalCellClick(event)">';
+  html += '<div class="' + colCls + (_calIsPastIso(iso) ? ' is-past-col' : '') + '" data-date="' + iso + '" onclick="onCalCellClick(event)">';
   for(let h=CAL_HOUR_START; h<CAL_HOUR_END; h++){
     html += '<div class="cal-wv-hour-row" data-hour="' + h + '"></div>';
   }
   html += '</div>';
+  try{ _saveCalScroll(); }catch(_){}
   body.innerHTML = html;
   // Lane-packing
   document.querySelectorAll('.cal-wv-day-col').forEach(col => {
     const cIso = col.getAttribute('data-date');
-    const events = PLANNING_STATE.list.filter(ev => ev.date === cIso);
+    const events = PLANNING_STATE.list.filter(ev => ev.date === cIso && !_isEventBeingDragged(ev));
     const packed = _packDayEvents(events);
     packed.forEach(item => {
       const block = _makeEventBlock(item);
       if(block) col.appendChild(block);
     });
-    // v2.2.58 : strip flottant absolu — pas d'impact sur l'alignement
-    _renderNonPlanifStrip(cIso, col, 'day');
   });
+  // v2.7.3 : meme bande qu'en vue Semaine, avec le rendu enrichi mono-colonne.
+  try{ _renderNonPlanifBand([iso], 'day'); }catch(_){}
   try{ _syncCalHeaderGutter(); _scheduleCalHeaderGutterSync(); }catch(_){}
   try{ _renderPlanningLoadState(); }catch(_){}
 }
 
-// v2.2.54 : bandeau non-planifié — mode 'week' (compact, replié) ou 'day' (large, déplié)
-function _renderNonPlanifStrip(iso, col, mode){
-  if(!col) return;
-  const events = (PLANNING_STATE.list || []).filter(ev =>
+// v2.7.3 : rendu des operations saisies hors creneau (source 'non_planifie').
+//
+// Avant : un bandeau absolu au sommet de CHAQUE colonne de jour, donc a
+// l'interieur du conteneur de scroll. Avec la plage 0h-24h, ce sommet est a
+// 00:00 : il fallait remonter d'environ 1490px pour voir ces operations.
+// Maintenant : une bande unique entre les en-tetes de jours et la grille
+// horaire, hors zone de defilement, donc toujours a l'ecran.
+//
+// L'etat de pliage est un module-level : il survit aux re-rendus (navigation,
+// creation d'un creneau, refresh), sinon chaque repaint le remettrait a zero.
+let _CAL_NONPL_OPEN = true;
+
+function _nonPlanifOpsOf(iso){
+  const evs = (PLANNING_STATE.list || []).filter(ev =>
     ev.date === iso && ev.source === 'non_planifie'
   );
-  if(!events.length) return;
-  let opsCount = 0;
-  events.forEach(ev => { opsCount += (ev.operations || []).length; });
-  if(!opsCount) return;
-  const isDay = (mode === 'day');
-  const strip = document.createElement('div');
-  strip.className = 'cal-wv-nonpl-strip' + (isDay ? ' mode-day is-open' : '');
-  // Header
-  const header = document.createElement('div');
-  header.className = 'cal-wv-nonpl-header';
-  header.title = 'Cliquer pour ' + (opsCount > 1 ? 'déplier/replier' : 'voir') + ' les ops non planifiées de ce jour';
-  header.innerHTML =
-    '<span class="cal-wv-nonpl-header-lbl">' +
-      '<svg class="cal-wv-nonpl-header-chev" width="' + (isDay ? 11 : 9) + '" height="' + (isDay ? 11 : 9) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>' +
-      '<span>' + opsCount + ' opération' + (opsCount > 1 ? 's' : '') + ' non planifiée' + (opsCount > 1 ? 's' : '') + '</span>' +
-    '</span>';
-  header.addEventListener('click', e => {
-    e.stopPropagation();
-    strip.classList.toggle('is-open');
-  });
-  strip.appendChild(header);
-  // Liste
-  const list = document.createElement('div');
-  list.className = 'cal-wv-nonpl-list';
-  // helper heure done_at
+  let n = 0;
+  evs.forEach(ev => { n += (ev.operations || []).length; });
+  return { iso: iso, evs: evs, n: n };
+}
+
+function _makeNonPlanifChip(ev, op, isDay){
+  const chip = document.createElement('div');
+  chip.className = 'cal-wv-nonpl-chip';
+  chip.setAttribute('data-statut', op.statut || 'a_faire');
+  chip.setAttribute('data-event-id', ev.id);
+  const machine = (op.machines && op.machines[0]) || ev.machine || '';
   const _fmtHM = (iso2) => {
     if(!iso2) return '';
     const m = String(iso2).match(/T(\d{2}):(\d{2})/);
     return m ? (m[1] + ':' + m[2]) : '';
   };
-  events.forEach(ev => {
-    (ev.operations || []).forEach(op => {
-      const chip = document.createElement('div');
-      chip.className = 'cal-wv-nonpl-chip';
-      chip.setAttribute('data-statut', op.statut || 'a_faire');
-      chip.setAttribute('data-event-id', ev.id);
-      const machine = (op.machines && op.machines[0]) || ev.machine || '';
-      const timeStr = (op.statut === 'termine') ? _fmtHM(op.done_at) : '';
-      chip.title = (op.opName || '') + (machine ? ' — ' + machine : '') + '\n(Non planifiée · cliquer pour voir le détail)';
-      if(isDay){
-        // Rendu enrichi mode Day
-        const statusIcon = (op.statut === 'termine')
-          ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
-          : '';
-        chip.innerHTML =
-          '<span class="cal-wv-nonpl-chip-status">' + statusIcon + '</span>' +
-          '<div class="cal-wv-nonpl-chip-main">' +
-            escHtml(op.opName || '—') +
-            (machine ? '<div class="cal-wv-nonpl-chip-sub">' + escHtml(machine) + '</div>' : '') +
-          '</div>' +
-          (timeStr ? '<span class="cal-wv-nonpl-chip-time">' + escHtml(timeStr) + '</span>' : '');
-      } else {
-        // Rendu compact mode Week
-        chip.innerHTML = '<span class="cal-wv-nonpl-icon"></span>' + escHtml(op.opName || '—') + (machine ? ' · ' + escHtml(machine) : '');
-      }
-      chip.addEventListener('click', e => {
-        e.stopPropagation();
-        openPlanningDetailsModal([ev]);
-      });
-      list.appendChild(chip);
-    });
+  const timeStr = (op.statut === 'termine') ? _fmtHM(op.done_at) : '';
+  chip.title = (op.opName || '') + (machine ? ' — ' + machine : '') +
+               '\n(Non planifiée · cliquer pour voir le détail)';
+  if(isDay){
+    const statusIcon = (op.statut === 'termine')
+      ? '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+      : '';
+    chip.innerHTML =
+      '<span class="cal-wv-nonpl-chip-status">' + statusIcon + '</span>' +
+      '<div class="cal-wv-nonpl-chip-main">' +
+        escHtml(op.opName || '—') +
+        (machine ? '<div class="cal-wv-nonpl-chip-sub">' + escHtml(machine) + '</div>' : '') +
+      '</div>' +
+      (timeStr ? '<span class="cal-wv-nonpl-chip-time">' + escHtml(timeStr) + '</span>' : '');
+  } else {
+    chip.innerHTML = '<span class="cal-wv-nonpl-icon"></span>' + escHtml(op.opName || '—') +
+                     (machine ? ' · ' + escHtml(machine) : '');
+  }
+  chip.addEventListener('click', e => {
+    e.stopPropagation();
+    openPlanningDetailsModal([ev]);
   });
-  strip.appendChild(list);
-  col.insertBefore(strip, col.firstChild);
+  return chip;
+}
+
+function _setNonPlanifOpen(band, open){
+  _CAL_NONPL_OPEN = !!open;
+  band.classList.toggle('is-open', _CAL_NONPL_OPEN);
+  // Plier/deplier change la hauteur de la bande, donc la hauteur restante pour
+  // la grille : _fitCalWeekBody() mesure le haut du corps, il faut la relancer.
+  try{ _scheduleCalHeaderGutterSync(); }catch(_){}
+}
+
+function _renderNonPlanifBand(isos, mode){
+  const band = document.getElementById('cal-wv-allday');
+  if(!band) return;
+  band.innerHTML = '';
+  const isDay = (mode === 'day');
+  const days = (isos || []).map(_nonPlanifOpsOf);
+  const total = days.reduce((a, d) => a + d.n, 0);
+  // Aucune operation hors creneau sur la periode : la bande disparait plutot
+  // que de laisser une ligne vide manger la hauteur de la grille.
+  if(!total){ band.hidden = true; return; }
+  band.hidden = false;
+  band.classList.toggle('is-open', !!_CAL_NONPL_OPEN);
+
+  const todayIso = _calIsoYMD(new Date());
+  const corner = document.createElement('button');
+  corner.type = 'button';
+  corner.className = 'cal-wv-allday-corner';
+  corner.title = 'Opérations saisies hors créneau — cliquer pour plier ou déplier';
+  corner.innerHTML =
+    '<span class="cal-wv-allday-corner-top">' +
+      '<svg class="cal-wv-allday-chev" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>' +
+      '<span>Non planifi\u00e9</span>' +
+    '</span>' +
+    '<span class="cal-wv-allday-total">' + total + ' op.</span>';
+  corner.addEventListener('click', e => {
+    e.stopPropagation();
+    _setNonPlanifOpen(band, !_CAL_NONPL_OPEN);
+  });
+  band.appendChild(corner);
+
+  days.forEach(d => {
+    const dt = new Date(d.iso + 'T00:00:00');
+    const wd = (dt.getDay() + 6) % 7;
+    const cell = document.createElement('div');
+    cell.className = 'cal-wv-allday-cell' + (wd >= 5 ? ' weekend' : '') +
+                     (d.iso === todayIso ? ' today' : '');
+    cell.setAttribute('data-date', d.iso);
+    if(d.n){
+      // Visible uniquement quand la bande est repliee (bascule CSS) : donne le
+      // volume par jour sans deplier, et deplie au clic.
+      const pill = document.createElement('button');
+      pill.type = 'button';
+      pill.className = 'cal-wv-allday-pill';
+      pill.textContent = String(d.n);
+      pill.title = d.n + ' op\u00e9ration' + (d.n > 1 ? 's' : '') +
+                   ' non planifi\u00e9e' + (d.n > 1 ? 's' : '') + ' — cliquer pour d\u00e9plier';
+      pill.addEventListener('click', e => { e.stopPropagation(); _setNonPlanifOpen(band, true); });
+      cell.appendChild(pill);
+      d.evs.forEach(ev => {
+        (ev.operations || []).forEach(op => cell.appendChild(_makeNonPlanifChip(ev, op, isDay)));
+      });
+    }
+    band.appendChild(cell);
+  });
+  try{ _syncCalHeaderGutter(); }catch(_){}
 }
 
 // ── Lane packing (Google-Calendar style) ──────────────────────────────
@@ -3751,7 +4201,12 @@ function _makeEventBlock(item){
   const lanesCount = item.lanesCount || 1;
   const lane = item.lane || 0;
   const div = document.createElement('div');
-  div.className = 'cal-event' + (ev.template_id ? ' is-from-template' : '');
+  // v2.7.2 : la pastille recurrence suivait template_id seul, donc elle
+  // s'affichait aussi sur les creneaux composes a la main ayant simplement
+  // importe un modele. Seul template_origin_date atteste d'une occurrence
+  // reellement generee par une recurrence.
+  div.className = 'cal-event' + (_calIsRecurOccurrence(ev) ? ' is-from-template' : '')
+                              + (_calIsPastEvent(ev) ? ' is-closed' : '');  // v2.7.0
   div.style.top = top + 'px';
   div.style.height = height + 'px';
   div.style.left = 'calc(' + (lane * (100 / lanesCount)) + '% + 3px)';
@@ -3767,7 +4222,13 @@ function _makeEventBlock(item){
     const mine = (ev.operators || []).some(o => o.id === S.me.id);
     if(mine) div.classList.add('is-mine');
   }
-  const ops = Array.isArray(ev.operations) ? ev.operations.filter(o => o && (o.opName || o.opTypeId)) : [];
+  // v2.7.0 : une operation invalidee est mise de cote — elle ne compte plus
+  // dans le creneau. Le compteur de la tuile suit donc l'historique : invalider
+  // une saisie depuis l'historique fait bien decroitre le nombre affiche ici
+  // (refreshPlanning + renderCal sont deja rappeles par l'action).
+  const ops = Array.isArray(ev.operations)
+    ? ev.operations.filter(o => o && (o.opName || o.opTypeId) && o.statut !== 'invalidee')
+    : [];
   const opsCount = ops.length;
   // v2.5.20 : rendu minimaliste -- juste le nom (ou le nom du modele lie, ou la
   // machine en fallback) + "Afficher les details". La liste des ops et l'horaire
@@ -3784,7 +4245,9 @@ function _makeEventBlock(item){
     if(tmpl && tmpl.name){ title = tmpl.name; hasCustomName = true; }
   }
   if(!title) title = ev.machine || '\u2014';
-  let inner = '<div class="cal-event-title">' + escHtml(title) + '</div>';
+  let inner = '<div class="cal-event-title">' + escHtml(title) +
+    (_calIsPastEvent(ev) ? '<span class="cal-event-closed-badge">Clôturé</span>' : '') +
+    '</div>';
   // Machine en sous-titre (seulement si le titre principal n\'est pas deja la machine)
   if(hasCustomName && ev.machine){
     inner += '<div class="cal-event-sub">' + escHtml(ev.machine) + '</div>';
@@ -3795,7 +4258,7 @@ function _makeEventBlock(item){
   }
   div.innerHTML = inner;
   // v2.5.26 / v2.6.0 : pictogramme « aucun operateur assigne ». APRES innerHTML.
-  _appendNoOperatorBadge(div, ev);
+  if(!_calIsPastEvent(ev)) _appendNoOperatorBadge(div, ev);  // v2.7.0
   div.title = (ev.machine || '') + '\n' + ev.start + ' – ' + ev.end +
     (ops.length ? '\n\n' + ops.map(o => '• ' + (o.opName||'—')).join('\n') : '') +
     '\n\nCliquer pour afficher les détails';
@@ -3821,6 +4284,56 @@ function _makeEventBlock(item){
 // - Persist via PATCH, rollback visuel + toast si échec
 const _CAL_SNAP_MIN = 15;
 let _CAL_DRAG = null;
+
+// v2.6.1 : une date ISO est-elle anterieure a aujourd'hui ? Aujourd'hui reste
+// une date valide (on peut planifier pour le jour meme).
+// v2.7.1 : miroir client de _period_key() (maintenance_events.py). Une
+// occurrence de recurrence appartient a une periode — semaine ISO, mois,
+// trimestre ou annee — et ne doit pas en sortir. Le serveur refuse en 403 ;
+// ici on rend le refus visible AVANT le lacher, plutot qu'apres coup.
+function _isoWeekKey(d){
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  // Jeudi de la semaine ISO : determine l'annee ISO (norme ISO-8601).
+  t.setUTCDate(t.getUTCDate() + 4 - (t.getUTCDay() || 7));
+  const y0 = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
+  const w = Math.ceil(((t - y0) / 86400000 + 1) / 7);
+  return t.getUTCFullYear() + '-W' + String(w).padStart(2, '0');
+}
+function _calPeriodKey(iso, rtype){
+  const d = (typeof iso === 'string') ? new Date(iso + 'T00:00:00') : iso;
+  if(!d || isNaN(d.getTime())) return null;
+  if(rtype === 'monthly')   return d.getFullYear() + '-M' + String(d.getMonth() + 1).padStart(2, '0');
+  if(rtype === 'quarterly') return d.getFullYear() + '-Q' + (Math.floor(d.getMonth() / 3) + 1);
+  if(rtype === 'yearly')    return String(d.getFullYear());
+  return _isoWeekKey(d);
+}
+// Type de recurrence du modele dont l'evenement est issu, ou null si ce n'est
+// pas une occurrence generee (creneau compose a la main : aucune contrainte).
+// v2.7.2 : un creneau n'est une occurrence de recurrence que s'il porte a la
+// fois template_id ET template_origin_date. template_id seul signifie
+// « un modele a ete importe dans la liste d'operations » : simple raccourci
+// de saisie, sans lien de vie avec le modele.
+function _calIsRecurOccurrence(ev){
+  return !!(ev && ev.template_id && ev.template_origin_date);
+}
+function _calRecurTypeOf(ev){
+  if(!ev || !ev.template_origin_date || !ev.template_id) return null;
+  try{
+    const t = (TEMPLATES_STATE.list || []).find(x => String(x.id) === String(ev.template_id));
+    return (t && t.recurrence_type) || 'weekly';
+  }catch(_){ return 'weekly'; }
+}
+
+function _calIsPastIso(iso){
+  try{
+    const s = String(iso || '');
+    // Valeur absente : on ne conclut PAS au passe. La comparaison de chaines
+    // ferait sinon '' < '2026-08-03' => true, et une colonne sans data-date
+    // serait grisee et refuserait tout depot.
+    if(!s) return false;
+    return s < _calIsoYMD(new Date());
+  }catch(_){ return false; }
+}
 
 function _calIsPastEvent(ev){
   try{
@@ -3912,8 +4425,27 @@ function _onCalDragMove(e){
   const col = el ? el.closest('.cal-wv-day-col') : null;
   const rect = col ? col.getBoundingClientRect() : null;
   const px = (CAL_STATE && CAL_STATE.view === 'day') ? 72 : CAL_HOUR_PX;
-  document.querySelectorAll('.cal-wv-day-col.drag-over').forEach(function(c){ c.classList.remove('drag-over'); });
+  document.querySelectorAll('.cal-wv-day-col.drag-over, .cal-wv-day-col.cal-col-nodrop').forEach(function(c){ c.classList.remove('drag-over', 'cal-col-nodrop'); });
   _handleCrossWeekHover(el, e);
+  // v2.6.1 : une colonne dont la date est passee n'accepte pas de depot. On ne
+  // la marque pas 'drag-over' et on ne met pas a jour targetDate : le refus est
+  // visible AVANT le lacher, plutot que par un message apres coup.
+  if(col && _calIsPastIso(col.getAttribute('data-date'))){
+    col.classList.add('cal-col-nodrop');
+    col = null;
+  }
+  // v2.7.1 : hors de la periode d'une occurrence de recurrence -> depot refuse.
+  if(col){
+    const _rt = _calRecurTypeOf(_CAL_DRAG.ev);
+    if(_rt){
+      const _pFrom = _calPeriodKey(_CAL_DRAG.origDate, _rt);
+      const _pTo   = _calPeriodKey(col.getAttribute('data-date'), _rt);
+      if(_pFrom && _pTo && _pFrom !== _pTo){
+        col.classList.add('cal-col-nodrop');
+        col = null;
+      }
+    }
+  }
   if(col && rect){
     col.classList.add('drag-over');
     const y = e.clientY - rect.top;
@@ -3969,34 +4501,129 @@ function _onCalDragMove(e){
   }
 }
 
+// v2.6.1 : bascule de semaine par les BORDS de la grille, en plus du survol
+// des fleches qui existait deja (et restait peu decouvrable — il fallait viser
+// un petit bouton en haut a droite alors que le creneau peut etre en bas).
+// Glisser au-dela du bord droit de dimanche = lundi suivant ; au-dela du bord
+// gauche de lundi = dimanche precedent.
+// v2.6.1 : pendant un glisser-deposer inter-semaines, le bloc en cours de
+// deplacement est gere a la main (detache du DOM par le re-rendu, puis
+// reinsere dans la colonne survolee). Il ne doit donc PAS etre redessine par
+// renderCalWeek()/renderCalDay() depuis PLANNING_STATE : en revenant sur la
+// semaine d'origine, le creneau apparaissait deux fois — celui qu'on deplace
+// et sa copie a l'emplacement d'origine.
+//
+// Le filtre ne s'applique qu'a un drag ACTIF (seuil de mouvement franchi) :
+// un simple clic ne doit pas faire disparaitre le creneau. Apres le drop,
+// _CAL_DRAG est remis a null avant le re-rendu, le bloc revient normalement.
+function _isEventBeingDragged(ev){
+  try{
+    return !!(_CAL_DRAG && _CAL_DRAG.active && _CAL_DRAG.ev && ev
+              && String(_CAL_DRAG.ev.id) === String(ev.id));
+  }catch(_){ return false; }
+}
+
+const CAL_EDGE_ZONE_PX  = 48;   // largeur des bandes sensibles
+const CAL_EDGE_DELAY_MS = 450;  // survol requis avant de changer de semaine
+
+function _calEdgeDirection(e){
+  // Vue Jour exclue : la navigation y va de jour en jour, les bords n'ont pas
+  // le sens « semaine precedente / suivante ».
+  if(typeof CAL_STATE === 'undefined' || !CAL_STATE || CAL_STATE.view !== 'week') return null;
+  const body = document.getElementById('cal-wv-body');
+  if(!body) return null;
+  const r = body.getBoundingClientRect();
+  // Hors de la bande verticale de la grille : le geste vise autre chose.
+  if(e.clientY < r.top || e.clientY > r.bottom) return null;
+  if(e.clientX <= r.left  + CAL_EDGE_ZONE_PX) return 'prev';
+  if(e.clientX >= r.right - CAL_EDGE_ZONE_PX) return 'next';
+  return null;
+}
+
+// v2.7.1 : la bascule de periode (bandes de bord + fleches) doit-elle rester
+// active pendant ce drag ? Non si la periode visee ne contient AUCUNE date
+// atteignable pour l'occurrence en cours.
+//
+// La nuance compte : une occurrence HEBDOMADAIRE ne peut jamais sortir de sa
+// semaine, donc toute navigation est inutile. Une occurrence MENSUELLE, elle,
+// peut parfaitement traverser des semaines a l'interieur de son mois — on ne
+// bloque alors que les semaines entierement hors du mois.
+function _calWeekNavAllowed(dir){
+  if(!_CAL_DRAG) return true;
+  const rt = _calRecurTypeOf(_CAL_DRAG.ev);
+  if(!rt) return true;                       // creneau libre : navigation libre
+  const p = _calPeriodKey(_CAL_DRAG.origDate, rt);
+  if(!p) return true;
+  const step = (dir === 'prev') ? -1 : 1;
+  let base;
+  try{
+    if(CAL_STATE.view === 'day'){
+      const d = CAL_STATE.dayDate;
+      base = new Date(d.getFullYear(), d.getMonth(), d.getDate() + step);
+      return _calPeriodKey(base, rt) === p;
+    }
+    const ws = CAL_STATE.weekStart;
+    base = new Date(ws.getFullYear(), ws.getMonth(), ws.getDate() + 7 * step);
+  }catch(_){ return true; }
+  // Au moins un jour de la semaine visee appartient-il a la meme periode ?
+  for(let i = 0; i < 7; i++){
+    const d = new Date(base.getFullYear(), base.getMonth(), base.getDate() + i);
+    if(_calPeriodKey(d, rt) === p) return true;
+  }
+  return false;
+}
+
+function _clearCalEdgeCue(){
+  const body = document.getElementById('cal-wv-body');
+  if(body) body.classList.remove('cal-edge-prev', 'cal-edge-next',
+                                 'cal-edge-blocked-prev', 'cal-edge-blocked-next');
+  document.querySelectorAll('.cal-nav button.cal-drop-target-nav').forEach(function(b){
+    b.classList.remove('cal-drop-target-nav');
+  });
+}
+
 function _handleCrossWeekHover(el, e){
   if(!_CAL_DRAG) return;
   const btnPrev = el ? el.closest('button[onclick="calPrev()"]') : null;
   const btnNext = el ? el.closest('button[onclick="calNext()"]') : null;
-  const dir = btnPrev ? 'prev' : (btnNext ? 'next' : null);
-  if(dir !== _CAL_DRAG._navHoverDir){
-    if(_CAL_DRAG._navHoverTimer){
-      clearTimeout(_CAL_DRAG._navHoverTimer);
-      _CAL_DRAG._navHoverTimer = null;
-    }
-    document.querySelectorAll('.cal-nav button.cal-drop-target-nav').forEach(function(b){
-      b.classList.remove('cal-drop-target-nav');
-    });
-    _CAL_DRAG._navHoverDir = dir;
-    if(dir){
-      const btn = (dir === 'prev') ? btnPrev : btnNext;
-      btn.classList.add('cal-drop-target-nav');
-      _CAL_DRAG._navHoverTimer = setTimeout(function(){
-        try{
-          if(dir === 'prev' && typeof calPrev === 'function') calPrev();
-          else if(dir === 'next' && typeof calNext === 'function') calNext();
-        }catch(_){}
-        btn.classList.remove('cal-drop-target-nav');
-        _CAL_DRAG._navHoverDir = null;
-        _CAL_DRAG._navHoverTimer = null;
-      }, 600);
-    }
+  const btn = btnPrev || btnNext;
+  let dir = btnPrev ? 'prev' : (btnNext ? 'next' : _calEdgeDirection(e));
+  // v2.7.1 : navigation refusee -> on signale le blocage au lieu de laisser
+  // croire que le depot sera possible de l'autre cote.
+  if(dir && !_calWeekNavAllowed(dir)){
+    const _b = document.getElementById('cal-wv-body');
+    if(_b) _b.classList.add(dir === 'prev' ? 'cal-edge-blocked-prev' : 'cal-edge-blocked-next');
+    dir = null;
+  } else {
+    const _b = document.getElementById('cal-wv-body');
+    if(_b) _b.classList.remove('cal-edge-blocked-prev', 'cal-edge-blocked-next');
   }
+  // Direction inchangee : le timer en cours court toujours, on ne le relance
+  // pas. C'est aussi ce qui empeche d'enchainer les semaines sans relacher —
+  // apres une bascule, _navHoverDir reste arme tant qu'on n'a pas quitte la
+  // bande, il faut en sortir puis y revenir pour avancer d'une semaine de plus.
+  if(dir === _CAL_DRAG._navHoverDir) return;
+  if(_CAL_DRAG._navHoverTimer){
+    clearTimeout(_CAL_DRAG._navHoverTimer);
+    _CAL_DRAG._navHoverTimer = null;
+  }
+  _clearCalEdgeCue();
+  _CAL_DRAG._navHoverDir = dir;
+  if(!dir) return;
+  if(btn) btn.classList.add('cal-drop-target-nav');
+  else {
+    const body = document.getElementById('cal-wv-body');
+    if(body) body.classList.add(dir === 'prev' ? 'cal-edge-prev' : 'cal-edge-next');
+  }
+  _CAL_DRAG._navHoverTimer = setTimeout(function(){
+    try{
+      if(dir === 'prev' && typeof calPrev === 'function') calPrev();
+      else if(dir === 'next' && typeof calNext === 'function') calNext();
+    }catch(_){}
+    _clearCalEdgeCue();
+    if(_CAL_DRAG) _CAL_DRAG._navHoverTimer = null;
+    // _navHoverDir volontairement CONSERVE : cf. commentaire ci-dessus.
+  }, CAL_EDGE_DELAY_MS);
 }
 
 function _onCalDragUp(e){
@@ -4006,10 +4633,8 @@ function _onCalDragUp(e){
   document.removeEventListener('mousemove', _onCalDragMove, true);
   document.removeEventListener('mouseup', _onCalDragUp, true);
   if(drag._navHoverTimer) clearTimeout(drag._navHoverTimer);
-  document.querySelectorAll('.cal-nav button.cal-drop-target-nav').forEach(function(b){
-    b.classList.remove('cal-drop-target-nav');
-  });
-  document.querySelectorAll('.cal-wv-day-col.drag-over').forEach(function(c){ c.classList.remove('drag-over'); });
+  _clearCalEdgeCue();
+  document.querySelectorAll('.cal-wv-day-col.drag-over, .cal-wv-day-col.cal-col-nodrop').forEach(function(c){ c.classList.remove('drag-over', 'cal-col-nodrop'); });
   if(drag.ghost){ drag.ghost.remove(); drag.ghost = null; }
   drag.div.classList.remove('is-dragging');
   if(!drag.active){
@@ -4037,11 +4662,35 @@ function _onCalDragUp(e){
     _CAL_DRAG = null;
     return;
   }
+  // v2.7.1 : hors periode -> message explicite. Le survol a deja refuse la
+  // colonne, donc targetDate ne devrait plus sortir de la periode ; ce garde-fou
+  // couvre les chemins ou le lacher se fait sans survol valide prealable.
+  const _rtDrop = _calRecurTypeOf(drag.ev);
+  if(_rtDrop){
+    const _a = _calPeriodKey(drag.origDate, _rtDrop);
+    const _b = _calPeriodKey(drag.targetDate, _rtDrop);
+    if(_a && _b && _a !== _b){
+      const _quoi = (_rtDrop === 'monthly') ? 'son mois'
+                  : (_rtDrop === 'quarterly') ? 'son trimestre'
+                  : (_rtDrop === 'yearly') ? 'son année' : 'sa semaine';
+      if(typeof showToast === 'function'){
+        showToast('Ce créneau vient d\'une récurrence : il doit rester dans ' + _quoi + '.', 'danger');
+      }
+      _CAL_DRAG = null;
+      try{ refreshPlanning().then(function(){ try{ renderCal(); }catch(_){} }); }catch(_){}
+      return;
+    }
+  }
   // Contrôle : si on déplace vers un jour passé, refuse.
-  const todayIso = _calIsoYMD(new Date());
-  if(String(drag.targetDate) < todayIso){
+  if(_calIsPastIso(drag.targetDate)){
     if(typeof showToast === 'function') showToast('Impossible de déplacer un créneau vers une date passée.', 'danger');
     _CAL_DRAG = null;
+    // v2.6.1 : ROLLBACK VISUEL. Sans lui, le bloc restait a la position ou on
+    // l'avait lache — le DOM ayant ete manipule pendant le drag — alors que la
+    // donnee n'avait pas bouge. L'ecran affichait donc un creneau a une date
+    // passee, avec un message d'erreur par dessus, jusqu'au prochain rendu.
+    // Meme traitement que la branche d'echec serveur de _persistCalDrag().
+    try{ refreshPlanning().then(function(){ try{ renderCal(); }catch(_){} }); }catch(_){}
     return;
   }
   // PATCH la nouvelle position.
@@ -4122,7 +4771,7 @@ function _makeClusterBlock(cluster){
   const single = (cluster.items.length === 1);
   // v2.5.27 : hoiste ev pour l'usage ci-dessous (corrige aussi le bug pre-existant qui accede a ev.template_id).
   const _ev0 = single ? cluster.items[0] : null;
-  div.className = 'cal-event' + (single ? '' : ' cal-event-merged') + (_ev0 && _ev0.template_id ? ' is-from-template' : '');
+  div.className = 'cal-event' + (single ? '' : ' cal-event-merged') + (_calIsRecurOccurrence(_ev0) ? ' is-from-template' : '');  // v2.7.2
   div.style.top = top + 'px';
   div.style.height = height + 'px';
   if(single && cluster.items[0].opNiveau){
@@ -4138,7 +4787,7 @@ function _makeClusterBlock(cluster){
     div.innerHTML = '<div class="cal-event-title">' + escHtml((ev.opName || '—') + machineSuffix) + '</div>' +
                     '<div class="cal-event-time">' + escHtml(ev.start) + ' – ' + escHtml(ev.end) + '</div>';
     // v2.6.0 : idem -- APRES innerHTML, sinon le badge est efface.
-    _appendNoOperatorBadge(div, ev);
+    if(!_calIsPastEvent(ev)) _appendNoOperatorBadge(div, ev);  // v2.7.0
     div.title = 'Cliquer pour afficher les détails';
     div.addEventListener('click', e => {
       e.stopPropagation();
@@ -4200,6 +4849,9 @@ function openPlanningDetailsModal(events){
   const listEl = document.getElementById('plan-det-list');
   if(titleEl) titleEl.textContent = 'Détails du créneau';
   if(dtEl) dtEl.textContent = _fmtIsoDateFr(ev.date);
+  // v2.6.1 : horaires dans le bandeau du haut, a cote de la date.
+  const tmEl = document.getElementById('plan-det-time');
+  if(tmEl) tmEl.textContent = (ev.start && ev.end) ? (ev.start + ' \u2013 ' + ev.end) : '—';
   if(listEl){
     const ops = Array.isArray(ev.operations) ? ev.operations : [];
     // Machines couvertes par le créneau (union des machines des ops).
@@ -4243,12 +4895,19 @@ function openPlanningDetailsModal(events){
           const rows = op.machineData.map(md => {
             // v2.5.11 : 3 etats visuels distincts : termine (ok), invalidee (gris),
             // a_faire (defaut).
+            // v2.6.1 : la machine est TOUJOURS nommee, meme quand l'operation
+            // n'en concerne qu'une seule. Avant, `machineData.length === 1` la
+            // masquait : sur un creneau couvrant Cohesio 1 ET Cohesio 2, une
+            // operation mono-machine s'affichait « En attente » sans dire
+            // laquelle des deux etait visee. Repli silencieux si la machine
+            // est absente de la donnee (creneaux anciens).
+            const mOn   = md.machine ? (' sur ' + escHtml(md.machine)) : '';
             const done = md.statut === 'termine';
             const invalidated = md.statut === 'invalidee';
             let icon, label, color;
             if(done){
               icon = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--ok);color:#fff;flex-shrink:0"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>';
-              label = 'Effectu\u00e9e' + (op.machineData.length === 1 ? '' : ' sur ' + escHtml(md.machine)) +
+              label = 'Effectu\u00e9e' + mOn +
                       (md.done_by ? ' \u00b7 par ' + escHtml(_resolveName(md.done_by) || 'op. inconnu') : '') +
                       (md.done_at ? ' \u00e0 ' + escHtml(_fmtDoneAt(md.done_at)) : '');
               color = 'var(--text2)';
@@ -4256,11 +4915,16 @@ function openPlanningDetailsModal(events){
               icon = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--muted);color:#fff;flex-shrink:0" title="Saisie invalid\u00e9e administrativement"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="5" x2="19" y2="19"/><line x1="5" y1="19" x2="19" y2="5"/></svg></span>';
               const invBy = md.invalidated_by_nom ? ' \u00b7 par ' + escHtml(md.invalidated_by_nom) : '';
               const invAt = md.invalidated_at ? ' le ' + escHtml(_fmtDoneAt(md.invalidated_at)) : '';
-              label = 'Invalid\u00e9e' + (op.machineData.length === 1 ? '' : ' sur ' + escHtml(md.machine)) + invBy + invAt;
+              label = 'Invalid\u00e9e' + mOn + invBy + invAt;
               color = 'var(--muted)';
+            } else if(_calIsPastEvent(ev)){
+              // v2.7.1 : créneau clôturé -> l'opération ne sera jamais saisie.
+              icon = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--danger,#f87171);color:var(--danger,#f87171);flex-shrink:0;font-size:11px;font-weight:800;line-height:1">!</span>';
+              label = md.machine ? (escHtml(md.machine) + ' \u2014 non r\u00e9alis\u00e9e') : 'Non r\u00e9alis\u00e9e';
+              color = 'var(--danger,#f87171)';
             } else {
               icon = '<span style="display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border);flex-shrink:0"></span>';
-              label = (op.machineData.length === 1 ? 'En attente' : escHtml(md.machine) + ' \u2014 en attente');
+              label = md.machine ? (escHtml(md.machine) + ' \u2014 en attente') : 'En attente';
               color = 'var(--muted)';
             }
             const extraStyle = invalidated ? ';text-decoration:line-through;text-decoration-color:var(--muted)' : '';
@@ -4277,9 +4941,15 @@ function openPlanningDetailsModal(events){
           '</div>';
         }).join('')
       : '<div class="plan-det-case-op-empty">Aucune opération définie.</div>';
-    // Badge template si le créneau vient d'un modèle
+    // Badge « Depuis modèle » — v2.6.1 : réservé aux créneaux GÉNÉRÉS par la
+    // récurrence d'un modèle. Un créneau où l'on a simplement importé un modèle
+    // depuis la liste des opérations n'en est pas une occurrence : ses ops ont
+    // pu être retouchées, complétées par d'autres modèles, et rien ne le
+    // resynchronisera avec le modèle. Afficher « Depuis modèle » y était
+    // trompeur, l'infobulle annonçant même que le modèle « écrasera ces
+    // opérations » — ce qui ne se produit que pour les occurrences générées.
     let tmplBadge = '';
-    if(ev.template_id){
+    if(ev.template_id && ev.template_origin_date){
       const tmpl = (typeof TEMPLATES_STATE !== 'undefined' && TEMPLATES_STATE ? (TEMPLATES_STATE.list || []) : []).find(t => t.id === ev.template_id);
       const label = tmpl ? tmpl.name : ('#' + ev.template_id);
       tmplBadge = '<span class="tmpl-badge" title="Créneau lié à un modèle. Les modifs futures du modèle écraseront ces opérations.">' +
@@ -4300,7 +4970,7 @@ function openPlanningDetailsModal(events){
         '</div>' +
       '</div>' +
       // v2.5.25 : bandeau warning si aucun operateur assigne (admin uniquement).
-      (MAINT_ROLE !== 'operator' && !(Array.isArray(ev.operators) && ev.operators.length)
+      (MAINT_ROLE !== 'operator' && !_calIsPastEvent(ev) && !(Array.isArray(ev.operators) && ev.operators.length)
         ? '<div style="margin-top:10px;padding:10px 14px;border-radius:8px;background:rgba(245,158,11,.12);border:1px solid var(--warn,#f59e0b);color:var(--warn,#f59e0b);font-size:13px;line-height:1.4;display:flex;align-items:center;gap:10px">' +
             '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>' +
             '<span style="flex:1"><strong>Aucun op\u00e9rateur assign\u00e9.</strong> Personne ne saura qu\'il y a une t\u00e2che.</span>' +
@@ -4318,16 +4988,25 @@ function openPlanningDetailsModal(events){
       '</div>' +
       '<div class="plan-det-case-ops-label">Opérations à effectuer (' + ops.length + ')</div>' +
       '<div class="plan-det-case-ops-list">' + opsHtml + '</div>' +
-      '<div class="plan-det-case-actions">' +
-        '<button type="button" class="case-action-btn edit" onclick="editCase(\'' + escAttr(ev.id) + '\')">' +
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
-          ' Modifier' +
-        '</button>' +
-        '<button type="button" class="case-action-btn del" onclick="confirmDeleteCase(\'' + escAttr(ev.id) + '\')">' +
-          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
-          ' Supprimer' +
-        '</button>' +
-      '</div>';
+      // v2.7.0 : créneau clôturé -> plus d'actions de planification, un
+      // bandeau qui dit pourquoi et où consigner une intervention faite.
+      (_calIsPastEvent(ev)
+        ? '<div class="plan-det-closed">' +
+            '<strong>Créneau clôturé.</strong> Sa date est passée : il ne peut plus être ' +
+            'déplacé, modifié ni supprimé. Pour consigner une intervention déjà ' +
+            'réalisée, utilise l\'enregistrement d\'opération. Une saisie déjà ' +
+            'enregistrée reste corrigeable depuis l\'historique des opérations.' +
+          '</div>'
+        : '<div class="plan-det-case-actions">' +
+            '<button type="button" class="case-action-btn edit" onclick="editCase(\'' + escAttr(ev.id) + '\')">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>' +
+              ' Modifier' +
+            '</button>' +
+            '<button type="button" class="case-action-btn del" onclick="confirmDeleteCase(\'' + escAttr(ev.id) + '\')">' +
+              '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>' +
+              ' Supprimer' +
+            '</button>' +
+          '</div>');
   }
   m.classList.add('open');
   m.setAttribute('aria-hidden','false');
@@ -4555,6 +5234,13 @@ function _closeDeleteCaseModal(){
 function editCase(id){
   const ev = PLANNING_STATE.list.find(e => String(e.id) === String(id));
   if(!ev){ showToast('Créneau introuvable.', 'danger'); return; }
+  // v2.7.0 : la modale de créneau EST le formulaire de planification. Sur un
+  // créneau clôturé elle n'a plus d'objet — le serveur refuserait de toute
+  // façon. La consultation reste ouverte via la modale de détails.
+  if(_calIsPastEvent(ev)){
+    showToast('Créneau passé : il est clôturé et n\'est plus modifiable.', 'info');
+    return;
+  }
   closePlanningDetailsModal();
   openCaseModal({
     editId: ev.id,
@@ -4575,6 +5261,15 @@ function onCalCellClick(e){
   if(!col) return;
   const iso = col.getAttribute('data-date');
   if(!iso) return;
+  // v2.6.1 : le planning sert a planifier — pas de creation dans le passe. Une
+  // intervention deja realisee se consigne via l'enregistrement d'operation,
+  // qui accepte les dates passees (source 'non_planifie').
+  if(_calIsPastIso(iso)){
+    if(typeof showToast === 'function'){
+      showToast('Le planning ne permet pas de créer un créneau à une date passée. Utilise l\'enregistrement d\'opération.', 'danger');
+    }
+    return;
+  }
   const rect = col.getBoundingClientRect();
   const y = e.clientY - rect.top;
   const hourFloat = CAL_HOUR_START + (y / CAL_HOUR_PX);
@@ -4690,8 +5385,24 @@ async function openCaseModal(opts){
   // Charge le catalogue en arrière-plan puis rerender le picker.
   _loadOperatorsCatalog().then(() => renderCaseOperators()).catch(() => {});
   // Charge les templates puis pré-sélectionne si le créneau en est issu
-  loadTemplates().then(() => refreshCaseTemplatePicker(preselectedTemplateId)).catch(() => {});
-  if(_PENDING_CASE) _PENDING_CASE.template_id = preselectedTemplateId;
+  loadTemplates().then(() => refreshCaseTemplatePicker()).catch(() => {});
+  // v2.6.1 : en EDITION on preserve le lien existant (une occurrence de
+  // recurrence doit rester rattachee a son modele) ; en CREATION il n'y a
+  // jamais de lien, meme via « Créer depuis un modèle » — cf. applyCaseTemplate.
+  if(_PENDING_CASE) _PENDING_CASE.template_id = opts.editId ? preselectedTemplateId : null;
+  // v2.6.1 : le rappel des modeles importes repart de zero a chaque ouverture.
+  // En EDITION d'un creneau deja issu d'un modele, on reaffiche son origine
+  // sans reimporter ses ops (elles sont deja chargees depuis l'event).
+  _CASE_TMPL_USED = [];
+  if(preselectedTemplateId){
+    loadTemplates().then(function(){
+      const t = (TEMPLATES_STATE.list || []).find(x => String(x.id) === String(preselectedTemplateId));
+      if(t){ _CASE_TMPL_USED = [{ id: t.id, name: t.name }]; }
+      renderCaseTemplatesApplied();
+    }).catch(function(){});
+  } else {
+    renderCaseTemplatesApplied();
+  }
   return result;
 }
 function _openCaseModalInner(opts){
@@ -4777,6 +5488,16 @@ function _openCaseModalInner(opts){
   const h = Math.max(0, Math.min(23, opts.defaultHour || 8));
   if(sEl) sEl.value = opts.start || (String(h).padStart(2,'0') + ':00');
   if(eEl) eEl.value = opts.end   || (String(Math.min(h+1, 23)).padStart(2,'0') + ':00');
+  // v2.6.1 : recap des horaires dans le bandeau du haut. Les champs de saisie
+  // restent la source de verite ; le bandeau se contente de les refleter, pour
+  // que date et horaires soient lisibles d'un coup d'oeil sans descendre.
+  _syncCaseTimeRecap();
+  [sEl, eEl].forEach(function(el){
+    if(!el || el._dtRecapBound) return;
+    el._dtRecapBound = true;
+    el.addEventListener('input',  _syncCaseTimeRecap);
+    el.addEventListener('change', _syncCaseTimeRecap);
+  });
   // v2.5.14 : créneau passé -> horaires en lecture seule (même règle que le drag & drop).
   try{
     const _todayIso = _calIsoYMD(new Date());
@@ -4804,7 +5525,14 @@ function _openCaseModalInner(opts){
   m.classList.add('open');
   m.setAttribute('aria-hidden','false');
   document.body.style.overflow = 'hidden';
-  setTimeout(() => { sEl?.focus(); }, 60);
+  // v2.6.1 : le focus allait sur le champ « Heure de début ». Or le timepicker
+  // maison s'ouvre sur l'evenement focus (mysifa_timepicker.js) : le panneau
+  // heures/minutes se depliait donc tout seul a chaque ouverture de modale, par
+  // dessus le formulaire, alors que les horaires par defaut conviennent le plus
+  // souvent. On donne le focus au premier champ de saisie reel — le nom du
+  // creneau — qui n'ouvre aucun panneau flottant. Le clavier entre bien dans la
+  // modale, sans rien deplier.
+  setTimeout(() => { (nomEl || sEl)?.focus(); }, 60);
 }
 function closeCaseModal(){
   const m = document.getElementById('planning-case-modal');
@@ -5085,13 +5813,33 @@ function renderCaseOpsList(){
           '<div class="libre-autocomplete-panel case-op-libre-autocomplete" data-idx="' + idx + '" style="display:none"></div>' +
         '</div>';
     } else {
+      // v2.6.1 : une operation deja presente dans le creneau est GRISEE, avec le
+      // motif. Avant, on pouvait la reselectionner et remplir toute la ligne
+      // pour rien : la dedup (par code) la fusionnait a l'enregistrement et la
+      // ligne « disparaissait », sans que l'utilisateur comprenne pourquoi.
+      //
+      // Deux precautions :
+      //  - on exclut la ligne COURANTE du calcul (i !== idx), sinon l'option
+      //    selectionnee serait elle-meme desactivee et le select perdrait sa
+      //    valeur a chaque rendu ;
+      //  - les operations deja effectuees ou invalidees, affichees en lecture
+      //    seule plus haut, comptent comme presentes — sinon on pourrait
+      //    rajouter une ligne pour une operation deja faite.
+      const _usedElsewhere = new Set(
+        _CASE_OPS.map((o, i) => (i !== idx && o.opTypeId) ? String(o.opTypeId) : null)
+                 .filter(Boolean)
+      );
       const options = '<option value="">Sélectionner une opération…</option>' +
-        OPS_TYPES_STATE.list.map(t =>
-          '<option value="' + escAttr(t.id) + '"' + (t.id === op.opTypeId ? ' selected' : '') + '>' +
+        OPS_TYPES_STATE.list.map(t => {
+          const taken = _usedElsewhere.has(String(t.id));
+          return '<option value="' + escAttr(t.id) + '"' +
+            (t.id === op.opTypeId ? ' selected' : '') +
+            (taken ? ' disabled' : '') + '>' +
             escHtml(t.nom) + (t.niveau ? ' (N' + t.niveau + ')' : '') +
             (t.frequence ? ' · ' + escHtml(t.frequence) : '') +
-          '</option>'
-        ).join('');
+            (taken ? ' — déjà dans le créneau' : '') +
+          '</option>';
+        }).join('');
       pickerHtml =
         '<select class="ops-select case-op-catalogue-select" data-idx="' + idx + '" onchange="updateCaseOp(' + idx + ', this.value)">' + options + '</select>';
     }
@@ -5960,15 +6708,23 @@ async function _dbEditPersist(original, changes){
         body: JSON.stringify({label: newTitle}),
       });
       if(!r.ok) await _throwFromResp(r, 'Renommage échoué');
-    }else if(isStandardCode && newTitle !== (original.type || '')){
-      if(typeof showToast === 'function') showToast('Le titre libre a été conservé (le type choisi correspondait à un code standard). Utilise Paramètres → Interventions libres pour renommer.', 'warn');
     }
+    // v2.5.13 : si le titre choisi correspond a un code du catalogue, ce n'est
+    // pas un renommage mais un reclassement — traite plus bas via codeChange.
   }
-  // Pour les catalogue standard : le "type" (code_label) n'est pas modifiable
-  // depuis l'historique (il vient de maintenance_codes). Si l'admin l'a changé
-  // dans le dropdown, on ignore le changement de type et on avertit.
-  else if(newTitle && newTitle !== (original.type || '')){
-    if(typeof showToast === 'function') showToast('Le type des opérations catalogue n\'est pas modifiable depuis l\'historique (change le code de l\'op via le créneau parent).', 'warn');
+  // v2.5.13 : le type EST modifiable depuis l'historique pour l'admin. La
+  // saisie est deplacee vers le code choisi (PATCH op {code}) — utile quand un
+  // operateur s'est trompe de ligne dans le catalogue. Avant, le changement
+  // etait silencieusement ignore avec un simple avertissement.
+  let codeChange = null;
+  if(newTitle && newTitle !== (original.type || '')){
+    const entry = (typeof OPS_TYPES_STATE === 'object' && Array.isArray(OPS_TYPES_STATE.list))
+      ? OPS_TYPES_STATE.list.find(t => (t.nom || '') === newTitle)
+      : null;
+    if(entry && String(entry.id) !== String(code)){
+      if(MAINT_ROLE === 'admin') codeChange = String(entry.id);
+      else if(typeof showToast === 'function') showToast('Seul un admin peut changer le type d\'une opération.', 'warn');
+    }
   }
   // 2. PATCH event : date + machine
   const evPatch = {};
@@ -5982,7 +6738,12 @@ async function _dbEditPersist(original, changes){
       if(!isNaN(d.getTime())){
         const pad = n => (n < 10 ? '0'+n : ''+n);
         const iso = d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate());
-        evPatch.date_prevue = iso;
+        // v2.5.13 fix : n'envoyer date_prevue QUE si la date a change. Avant,
+        // elle partait systematiquement — et le garde-fou 'creneau passe' du
+        // backend renvoyait 403 des que la saisie datait de la veille, ce qui
+        // bloquait aussi la modification du commentaire ou de la duree.
+        const evDate = (original._event_date_prevue || (original.date_saisie || '').slice(0, 10));
+        if(iso !== evDate) evPatch.date_prevue = iso;
       }
     }catch(e){}
   }
@@ -6032,6 +6793,7 @@ async function _dbEditPersist(original, changes){
       }
     }catch(e){}
   }
+  if(codeChange) opPatch.code = codeChange;
   if(Object.keys(opPatch).length){
     const r3 = await fetch('/api/maintenance/events/' + encodeURIComponent(eventId) + '/ops/' + encodeURIComponent(opId), {
       method:'PATCH', credentials:'include', headers: jsonHeaders,
@@ -6463,11 +7225,43 @@ function refreshOpsFiltersOptions(){
   const typeSel = document.getElementById('filt-operations-type');
   const opeSel  = document.getElementById('filt-operations-operateur');
   if(typeSel){
-    const cur = typeSel.value;
-    const types = OPS_TYPES_STATE.list.map(t => t.nom).filter(Boolean).sort((a,b) => a.localeCompare(b, 'fr'));
-    typeSel.innerHTML = '<option value="">Tous les types</option>' +
-      types.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
-    if(cur && types.includes(cur)) typeSel.value = cur;
+    const cur  = typeSel.value;
+    // v2.7.1 : le select "Nom de l'opération" liste les codes catalogue ET les
+    // interventions libres présentes dans l'historique. Le filtre "Type de
+    // saisie" restreint la liste au type sélectionné (codes / libres).
+    const kind = (document.getElementById('filt-operations-kind')?.value || 'all');
+    const sortFr = arr => arr.sort((a,b) => a.localeCompare(b, 'fr'));
+    // Union catalogue + historique, et non le seul catalogue : un code archivé
+    // (v2.7.1) sort de OPS_TYPES_STATE mais ses saisies restent dans le tableau.
+    // Sans cette union, elles seraient visibles sans être filtrables.
+    const codes  = sortFr(Array.from(new Set(
+      OPS_TYPES_STATE.list.map(t => t.nom).filter(Boolean).concat(
+        OPS_STATE.list.filter(o => !o._libre).map(o => o.type).filter(Boolean)
+      )
+    )));
+    const libres = sortFr(Array.from(new Set(
+      OPS_STATE.list.filter(o => o._libre).map(o => o.type).filter(Boolean)
+    )));
+    const opt = n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>';
+    const grp = (label, items) => items.length
+      ? '<optgroup label="' + escAttr(label) + '">' + items.map(opt).join('') + '</optgroup>'
+      : '';
+    let html = '<option value="">Toutes les opérations</option>';
+    let allowed = [];
+    if(kind === 'codes'){
+      html += codes.map(opt).join('');
+      allowed = codes;
+    } else if(kind === 'libres'){
+      html += libres.map(opt).join('');
+      allowed = libres;
+    } else {
+      html += grp('Codes catalogue', codes) + grp('Interventions libres', libres);
+      allowed = codes.concat(libres);
+    }
+    typeSel.innerHTML = html;
+    // Si la sélection courante n'existe plus dans le jeu restreint, on repasse
+    // sur "Toutes les opérations" plutôt que de laisser un filtre fantôme.
+    typeSel.value = (cur && allowed.includes(cur)) ? cur : '';
   }
   if(opeSel){
     const cur = opeSel.value;
@@ -6627,6 +7421,35 @@ function _lastInterventionFor(label, machine, sourceList){
   return latest;
 }
 
+// v229 — Variante par CODE, utilisée par les pièces d'usure. Le rattachement
+// par libellé fonctionnait (l'historique fait un JOIN sur maintenance_codes et
+// suit donc les renommages) mais restait indirect : deux codes homonymes se
+// mélangeaient, et la comparaison portait sur du texte alors que chaque saisie
+// porte déjà son code. Repli sur le libellé UNIQUEMENT si aucune entrée de la
+// source ne porte de code (saisies locales legacy).
+function _lastInterventionForCode(code, label, machine, sourceList){
+  if(!code || !machine || !Array.isArray(sourceList)) return null;
+  const codeStr = String(code);
+  const machLc = String(machine).toLowerCase().trim();
+  const machMatch = (m) => {
+    const s = String(m || '').toLowerCase().trim();
+    return s === machLc
+      || s.split('·').map(x => x.trim()).includes(machLc)
+      || s.split(',').map(x => x.trim()).includes(machLc);
+  };
+  let latest = null, sawAnyCode = false;
+  for(const it of sourceList){
+    if(!it || it._code == null || it._code === '') continue;
+    sawAnyCode = true;
+    if(String(it._code) !== codeStr) continue;
+    if(!machMatch(it.machine)) continue;
+    const d = it.date_saisie;
+    if(d && (!latest || d > latest)) latest = d;
+  }
+  if(latest == null && !sawAnyCode) return _lastInterventionFor(label, machine, sourceList);
+  return latest;
+}
+
 // Variante pour le catalogue "Liste de contrôles" : un contrôle peut être
 // rempli soit manuellement (CTRL_STATE.list, matché par label === type), soit
 // via une alerte opérateur (CTRL_STATE.acks, matché par code === _maint_code).
@@ -6681,6 +7504,10 @@ async function loadOpsTypes(){
     // Liste d'opérations : Entretien + Remplacements (toutes) + Contrôles avec periodique=OUI.
     OPS_TYPES_STATE.list = items
       .filter(it => {
+        // v229 : un code rattaché à une pièce d'usure est TOUJOURS retenu,
+        // quelle que soit sa catégorie — sinon _findWearPartCode ne le
+        // trouverait pas et la carte se viderait sans explication.
+        if(it.usure_piece_id != null) return true;
         const cn = normCat(it.categorie);
         return (cn === 'entretien') || (cn === 'remplacements') || (cn === 'controles' && !!it.periodique);
       })
@@ -6692,6 +7519,8 @@ async function loadOpsTypes(){
         periodique: !!it.periodique,
         intervalle: (it.intervalle || '').toString(),
         metrage_ref: (it.metrage_ref || '').toString(),
+        usure_piece_id: (it.usure_piece_id != null ? it.usure_piece_id : null),
+        usure_position: (it.usure_position || '').toString(),
         frequence: (it.intervalle || '').toString(),  // alias compat _parseFrequenceDays
         detail: '',
         docs_count: parseInt(it.docs_count, 10) || 0,
@@ -6711,7 +7540,7 @@ async function loadOpsTypes(){
 //   - > 200 %    : rouge plein (clamp)
 // Change par rapport à v1 : le vert restait "trop longtemps" un vert-jaune
 // dès 50 % avant, maintenant il reste pur jusqu'à 90 %.
-function _ratioColor(ratio){
+function _ratioColorRgb(ratio){
   // Stops en RATIO direct (pas de normalisation t=ratio/2 comme avant).
   const stops = [
     [0.00, [ 52, 211, 153]],   // vert franc
@@ -6730,11 +7559,21 @@ function _ratioColor(ratio){
       const red   = Math.round(ca[0] + (cb[0] - ca[0]) * lt);
       const green = Math.round(ca[1] + (cb[1] - ca[1]) * lt);
       const blue  = Math.round(ca[2] + (cb[2] - ca[2]) * lt);
-      return 'rgb(' + red + ',' + green + ',' + blue + ')';
+      return [red, green, blue];
     }
   }
   const last = stops[stops.length - 1][1];
-  return 'rgb(' + last[0] + ',' + last[1] + ',' + last[2] + ')';
+  return [last[0], last[1], last[2]];
+}
+// Wrappers CSS. _ratioColor garde exactement la signature d'avant (rgb(...)),
+// _ratioColorRgba sert a teinter bordure / titre / badge de la carte.
+function _ratioColor(ratio){
+  const c = _ratioColorRgb(ratio);
+  return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')';
+}
+function _ratioColorRgba(ratio, alpha){
+  const c = _ratioColorRgb(ratio);
+  return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + alpha + ')';
 }
 // Compteur module-level pour générer des IDs uniques de paths SVG et filtres
 // par carte (sinon les <textPath href="#..."> peuvent référencer un path d'une
@@ -6762,31 +7601,39 @@ function _renderWearPartRings(ratios){
         '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dashoffset .35s ease,stroke .15s"/>';
       return trackBg + fg;
     }
-    // >= 100% : tour de base + court segment de stroke à la position
-    // d'avancement (longueur ~ stroke-width) avec stroke-linecap="round"
-    // pour la tête arrondie style natif, et drop-shadow pour l'effet 3D.
-    // Le départ à 12h n'est pas tracé (gap dans le dasharray) → pas de
-    // cap visible au sommet.
-    // Overflow plafonné à 0.97 pour garder le tip distinct du sommet si > 200%.
-    const overflow = Math.min(0.97, ratio - 1);
+    // >= 100% : rendu Apple Watch. Le tour precedent reste PLEIN et un nouveau
+    // tour continu part de 12h jusqu'a la position d'avancement, pose par-dessus.
+    // Les deux tours ont la meme couleur : c'est uniquement l'ombre portee sous
+    // la tete arrondie qui revele la superposition (plus de "point volant").
+    // Au-dela de 200% les tours s'empilent : on affiche la fraction du tour en
+    // cours (ratio - floor(ratio)), la tete reste donc toujours a sa position
+    // reelle sur le cadran.
     const baseLap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
       '" style="transition:stroke .15s"/>';
-    // Triple drop-shadow pour l'effet 3D : ombre dure proche, moyenne diffuse,
-    // douce large.
-    const shadowFilter = 'filter:'
-      + 'drop-shadow(0 1px 1px rgba(0,0,0,.55)) '
-      + 'drop-shadow(2px 4px 5px rgba(0,0,0,.45)) '
-      + 'drop-shadow(0 0 8px rgba(0,0,0,.25))';
-    const tipPos      = overflow * circ;
-    const tipDashLen  = sw * 0.6;
-    const dashStart   = tipPos - tipDashLen;
-    const tip = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r +
+    const frac = ratio - Math.floor(ratio);
+    // Pile sur un tour complet (100%, 200%...) : cercle plein, pas de tete.
+    if(frac <= 0.002) return trackBg + baseLap;
+    const arcLen = circ * frac;
+    // Segment court a la tete du tour en cours. Il n'est pas visible en propre
+    // (meme couleur, meme geometrie que l'arc pose juste au-dessus) : son seul
+    // role est de PROJETER l'ombre sur le tour du dessous. En limitant sa
+    // longueur, on obtient un croissant d'ombre localise sous la tete au lieu
+    // d'un halo sur tout l'anneau.
+    const shadowLen = Math.min(arcLen, sw * 1.5);
+    const shadowStyle = 'filter:'
+      + 'drop-shadow(0 0 2px rgba(0,0,0,.40)) '
+      + 'drop-shadow(1.5px 2.5px 3px rgba(0,0,0,.38))';
+    const shadowSeg = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r +
       '" fill="none" stroke="' + color + '" stroke-width="' + sw +
-      '" stroke-linecap="round" stroke-dasharray="' + tipDashLen.toFixed(2) + ' ' + (circ - tipDashLen).toFixed(2) +
-      '" stroke-dashoffset="' + (-dashStart).toFixed(2) +
-      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="' + shadowFilter +
-      ';transition:stroke-dashoffset .35s ease,stroke .15s"/>';
-    return trackBg + baseLap + tip;
+      '" stroke-linecap="round" stroke-dasharray="' + shadowLen.toFixed(2) + ' ' + (circ - shadowLen).toFixed(2) +
+      '" stroke-dashoffset="' + (-(arcLen - shadowLen)).toFixed(2) +
+      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="' + shadowStyle + '"/>';
+    // Tour en cours : arc continu de 12h jusqu'a la position reelle, extremites
+    // arrondies (le cap de depart se fond dans le tour du dessous).
+    const lap = '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + sw +
+      '" stroke-linecap="round" stroke-dasharray="' + arcLen.toFixed(2) + ' ' + (circ - arcLen).toFixed(2) +
+      '" transform="rotate(-90 ' + cx + ' ' + cy + ')" style="transition:stroke-dasharray .35s ease,stroke .15s"/>';
+    return trackBg + baseLap + shadowSeg + lap;
   };
   // Étiquette titre à 12h (texte droit) sur chaque anneau.
   // Texte blanc, contour foncé paint-order:stroke pour rester lisible quel que
@@ -6830,41 +7677,31 @@ function _renderWearPartRings(ratios){
          '</svg>';
 }
 
-// Trouve le code Intervention correspondant à une pièce d'usure (par pattern
-// sur le libellé). pieceId = 'couteaux' | 'contre_couteaux' ; pos = 'bande' | 'rive'.
-// Cherche dans OPS_TYPES_STATE.list (qui contient Entretien + Remplacements).
-// Normalise vers { label, intervalle, metrage_ref } pour rester compatible
-// avec l'ancien retour de _findSuiviCodeForWearPart.
+// v229 — Retrouve le code maintenance rattaché à une pièce d'usure.
+//
+// Avant : on parcourait tous les codes en lisant leur LIBELLÉ à la recherche de
+// 'couteaux' / 'contre' / 'bande' / 'rive' / 'landberg' / 'cutter'. Renommer un
+// code détachait sa carte, et deux codes matchant la même position se masquaient
+// l'un l'autre (premier arrivé, premier servi, en silence).
+//
+// Après : lecture directe de la relation posée en base. pieceId = la CLE de la
+// pièce ('couteaux'…) ; pos = une position déclarée, ou 'single'.
 function _findWearPartCode(pieceId, pos){
-  const list = OPS_TYPES_STATE.list || [];
-  const single = _wearPartIsSingle(pieceId);
-  for(const t of list){
-    // Depuis v178, on cherche dans Entretien + Remplacements (les deux
-    // héritent des propriétés de l'ancienne catégorie Interventions).
-    if(t.categorie !== 'entretien' && t.categorie !== 'remplacements' && t.categorie !== 'interventions') continue;
-    const lbl = (t.nom || '').toLowerCase();
-    let isMatch = false;
-    if(single){
-      // Pièces sans position : matching par mot-clé principal
-      if(pieceId === 'cutters')            isMatch = lbl.indexOf('cutter')   !== -1;
-      else if(pieceId === 'couteaux_landberg') isMatch = lbl.indexOf('landberg') !== -1;
-    } else {
-      if(!lbl.includes(pos)) continue;
-      const hasContre = (lbl.indexOf('contre') !== -1);
-      isMatch = (pieceId === 'contre_couteaux')
-        ? (hasContre && lbl.indexOf('couteaux') !== -1)
-        : (!hasContre && lbl.indexOf('couteaux') !== -1 && lbl.indexOf('landberg') === -1);
-    }
-    if(isMatch){
-      return {
-        code: t.id,
-        label: t.nom,
-        intervalle: t.intervalle || '',
-        metrage_ref: t.metrage_ref || '',
-      };
-    }
-  }
-  return null;
+  const def = _wearPartDef(pieceId);
+  if(!def) return null;
+  const wantPos = def.no_position ? '' : String(pos || '');
+  const t = (OPS_TYPES_STATE.list || []).find(x =>
+    x.usure_piece_id != null
+    && String(x.usure_piece_id) === String(def.pieceId)
+    && String(x.usure_position || '') === wantPos
+  );
+  if(!t) return null;
+  return {
+    code: t.id,
+    label: t.nom,
+    intervalle: t.intervalle || '',
+    metrage_ref: t.metrage_ref || '',
+  };
 }
 // Conservé pour compat (no-op : géré dans Paramètres → Maintenance).
 function saveOpsTypes(){ /* géré côté serveur via /api/maintenance/codes */ }
@@ -6960,19 +7797,23 @@ function saveOpsTypeDetails(e){
 // Vue Maintenance (accueil) : cartes par opération périodique, par machine
 // =========================================================================
 const MAINT_MACHINE_KEY = 'mysifa_maint_home_machine_v1';
-// Toggle Entretien/Remplacements (v178) — filtre les cartes de la vue
-// Maintenance pour n'afficher qu'une seule des deux catégories à la fois.
+// Filtre de catégorie de la vue Maintenance (v178, élargi en v2.7.4).
+// Trois états : « Tous », « Entretien », « Interventions ».
 // Les contrôles ne sont JAMAIS visibles dans cette vue.
 const MAINT_CAT_FILTER_KEY = 'mysifa_maint_home_cat_filter_v1';
 
+// v2.7.4 : trois etats desormais — 'all' (les deux categories), 'entretien',
+// 'remplacements'. La valeur deja stockee chez les utilisateurs existants est
+// l'une des deux anciennes : elle reste valide, aucune migration necessaire.
 function getMaintCatFilter(){
   try{
     const v = localStorage.getItem(MAINT_CAT_FILTER_KEY);
-    return (v === 'remplacements') ? 'remplacements' : 'entretien';
+    if(v === 'remplacements' || v === 'all') return v;
+    return 'entretien';
   }catch(e){ return 'entretien'; }
 }
 function setMaintCatFilter(c){
-  if(c !== 'entretien' && c !== 'remplacements') return;
+  if(c !== 'all' && c !== 'entretien' && c !== 'remplacements') return;
   try{ localStorage.setItem(MAINT_CAT_FILTER_KEY, c); }catch(e){}
   renderMaintCards();
 }
@@ -7106,6 +7947,9 @@ function _refreshMaintCounters(){
       else if(st === 'soon') cats.remplacements.s++;
     });
   });
+  // v2.7.4 : le bouton « Tous » porte le cumul des deux categories.
+  cats.all = { o: cats.entretien.o + cats.remplacements.o,
+               s: cats.entretien.s + cats.remplacements.s };
   Object.keys(cats).forEach(cat => {
     setBadge(document.querySelector('[data-maint-cat-badge="' + cat + '"]'), cats[cat].o);
     setBadge(document.querySelector('[data-maint-cat-badge-soon="' + cat + '"]'), cats[cat].s);
@@ -7161,12 +8005,12 @@ async function loadWearPartLastDates(machine){
     if(p.no_position){
       const k = p.id + '_single';
       const c = _findWearPartCode(p.id, 'single');
-      dates[k] = c ? _lastInterventionFor(c.label, machine, OPS_STATE.list) : null;
+      dates[k] = c ? _lastInterventionForCode(c.code, c.label, machine, OPS_STATE.list) : null;
     } else {
-      ['bande','rive'].forEach(pos => {
+      _wearPartPositionsOf(p).forEach(pos => {
         const k = p.id + '_' + pos;
         const c = _findWearPartCode(p.id, pos);
-        dates[k] = c ? _lastInterventionFor(c.label, machine, OPS_STATE.list) : null;
+        dates[k] = c ? _lastInterventionForCode(c.code, c.label, machine, OPS_STATE.list) : null;
       });
     }
   });
@@ -7256,12 +8100,43 @@ function _fmtDateOnly(iso){
 // Une carte par pièce, position mémorisée par machine + par pièce.
 // État localStorage : { "<piece>": { "<machine>": "bande"|"rive" } }
 const WEARPART_KEY = 'mysifa_maint_wearparts_v1';
-const WEARPART_PIECES = [
-  { id: 'couteaux',         label: 'Couteaux' },
-  { id: 'contre_couteaux',  label: 'Contre-couteaux' },
-  { id: 'cutters',          label: 'Cutters',           no_position: true },
-  { id: 'couteaux_landberg',label: 'Couteaux Landberg', no_position: true },
-];
+// v229 : le référentiel vient de /api/maintenance/usure-pieces au lieu d'être
+// figé ici. `id` reste la CLE de la pièce (couteaux, contre_couteaux…), la même
+// qu'avant : le localStorage des utilisateurs (onglet Bande/Rive mémorisé par
+// machine) reste donc valide. `pieceId` porte l'id numérique en base, seul
+// utilisé pour retrouver le code rattaché.
+let WEARPART_PIECES = [];
+let _WP_PIECES_LOADED = false;
+let _WP_PIECES_LOADING = false;
+
+async function loadWearPartPieces(){
+  if(_WP_PIECES_LOADING) return;
+  _WP_PIECES_LOADING = true;
+  try{
+    const r = await fetch('/api/maintenance/usure-pieces', { credentials: 'include' });
+    if(r.ok){
+      const d = await r.json();
+      WEARPART_PIECES = (d && Array.isArray(d.items) ? d.items : []).map(p => {
+        const positions = Array.isArray(p.positions) ? p.positions : [];
+        return {
+          id: p.cle,
+          pieceId: p.id,
+          label: p.label,
+          positions: positions,
+          no_position: positions.length === 0,
+        };
+      });
+    }
+  }catch(e){
+    // Non bloquant : sans référentiel, la section Pièces d'usure ne s'affiche
+    // simplement pas — le reste de l'accueil Maintenance reste fonctionnel.
+    WEARPART_PIECES = [];
+  }finally{
+    _WP_PIECES_LOADED = true;
+    _WP_PIECES_LOADING = false;
+    if(typeof renderMaintCards === 'function') renderMaintCards();
+  }
+}
 
 // --- v2.4.21 : filtrage pieces d'usure par statut ("Tous" / "Jamais saisi") -
 // Une position est "renseignee" si _lastInterventionFor renvoie une date non
@@ -7272,12 +8147,12 @@ const WEARPART_PIECES = [
 //   - En 'never' : montrer seulement les pieces avec >=1 position vide,
 //                  et forcer la position affichee sur une vide.
 function _wearPartPositionsOf(piece){
-  return piece.no_position ? ['single'] : ['bande', 'rive'];
+  return piece.no_position ? ['single'] : (piece.positions || []).slice();
 }
 function _wearPartHasData(pieceId, pos, machine){
   const wpCode = _findWearPartCode(pieceId, pos);
   if(!wpCode) return false;
-  const last = _lastInterventionFor(wpCode.label, machine, OPS_STATE.list);
+  const last = _lastInterventionForCode(wpCode.code, wpCode.label, machine, OPS_STATE.list);
   return last != null;
 }
 // Retourne pour chaque piece : positions renseignees / non renseignees.
@@ -7300,7 +8175,7 @@ function _wearPartPositionStatus(pieceId, pos, machine){
   const wpCode = _findWearPartCode(pieceId, pos);
   if(!wpCode) return 'unknown';
   const refDays = _parseFrequenceDays(wpCode.intervalle || '');
-  const lastDate = _lastInterventionFor(wpCode.label, machine, OPS_STATE.list);
+  const lastDate = _lastInterventionForCode(wpCode.code, wpCode.label, machine, OPS_STATE.list);
   const daysSince = _daysSinceFromIso(lastDate);
   return _maintComputeStatus(refDays, daysSince);
 }
@@ -7337,11 +8212,19 @@ function _saveWearPartMap(m){
 }
 function getWearPartPos(pieceId, machine){
   if(_wearPartIsSingle(pieceId)) return 'single';
+  const def = _wearPartDef(pieceId);
+  const positions = def ? (def.positions || []) : [];
   const m = _loadWearPartMap();
-  return (m[pieceId] && m[pieceId][machine]) || 'bande';
+  const saved = (m[pieceId] && m[pieceId][machine]) || '';
+  // v229 : le défaut est la 1re position DÉCLARÉE, plus 'bande' en dur. Une
+  // valeur mémorisée qui n'existe plus (position retirée de la pièce) retombe
+  // sur ce défaut au lieu de sélectionner un onglet fantôme.
+  if(saved && positions.indexOf(saved) !== -1) return saved;
+  return positions[0] || '';
 }
 function setWearPartPos(pieceId, pos){
-  if(pos !== 'bande' && pos !== 'rive') return;
+  const _def = _wearPartDef(pieceId);
+  if(!_def || (_def.positions || []).indexOf(pos) === -1) return;
   const machine = getMaintMachine();
   const m = _loadWearPartMap();
   if(!m[pieceId]) m[pieceId] = {};
@@ -7418,6 +8301,10 @@ function setWearPartRef(pieceId, kind, value){
 }
 
 function _renderWearPartsGroup(machine, statusFilter){
+  // v229 : le référentiel des pièces est distant. Tant qu'il n'est pas arrivé,
+  // la section n'est pas rendue ; loadWearPartPieces rappelle renderMaintCards
+  // en sortie, et le drapeau _WP_PIECES_LOADED empêche toute boucle.
+  if(!_WP_PIECES_LOADED){ loadWearPartPieces(); return ''; }
   // Déclenche le fetch des dernières dates (asynchrone : le render initial
   // affiche "Chargement…", puis re-render au retour).
   //
@@ -7466,7 +8353,7 @@ function _renderWearPartsGroup(machine, statusFilter){
     // Le métrage parcouru depuis cette date est calculé côté serveur via le
     // cache WEARPART_LAST_DATES_STATE (clé piece_pos).
     const lastDate = wpCode
-      ? _lastInterventionFor(wpCode.label, machine, OPS_STATE.list)
+      ? _lastInterventionForCode(wpCode.code, wpCode.label, machine, OPS_STATE.list)
       : null;
     const wpItem = (WEARPART_LAST_DATES_STATE.machine === machine)
       ? _getWearPartItem(p.id, pos)
@@ -7492,11 +8379,22 @@ function _renderWearPartsGroup(machine, statusFilter){
       frameClsExtra = ' is-overdue';
       if(timeCritical) frameClsExtra += ' is-overdue-critical';
     }
+    // v2.6.1 : la bordure / le titre / le badge de retard prennent la couleur
+    // exacte de l'anneau Temps (fin du decalage "bordure rouge / anneau jaune").
+    // Plancher a 1.2 : entre 100 et 120% _ratioColor renvoie encore un
+    // vert-jaune trop clair pour lire comme une bordure d'alerte.
+    let sevStyle = '';
+    if(timeOver && refDays != null && refDays > 0 && daysSince != null){
+      const _sev = Math.max(1.2, daysSince / refDays);
+      sevStyle = ' style="--wp-sev:' + _ratioColor(_sev)
+        + ';--wp-sev-soft:' + _ratioColorRgba(_sev, .15)
+        + ';--wp-sev-glow:' + _ratioColorRgba(_sev, .22) + '"';
+    }
     let elapsedHtml = '';
     if(WEARPART_LAST_DATES_STATE.machine !== machine){
       elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Chargement…</span>';
     } else if(daysSince == null){
-      elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Aucun changement enregistré dans MyProd</span>';
+      elapsedHtml = '<span style="font-size:11px;color:var(--muted);font-style:italic">Aucune saisie de maintenance pour ce code</span>';
     } else {
       const lbl = daysSince === 0 ? 'Aujourd\'hui'
                 : daysSince === 1 ? 'Hier (1 jour)'
@@ -7516,20 +8414,24 @@ function _renderWearPartsGroup(machine, statusFilter){
     }
     const _b = (label, value) => {
       const active = (pos === value) ? ' active' : '';
-      return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + value + '">' + label + '</button>';
+      return '<button type="button" class="maint-wp-btn' + active + '" data-wp="' + escAttr(p.id) + '" data-pos="' + escAttr(value) + '">' + label + '</button>';
     };
     // v2.4.22 : ne montrer que les onglets des positions qui matchent le filtre.
     // Cas typique : Couteaux avec seulement Rive renseigné en filtre "Tous" →
     // le bouton Bande disparait (avant il était visible mais menait a une vue vide).
     // Si les 2 positions matchent, on montre les 2 (choix reel entre bande/rive).
     // Si une seule matche, seul son bouton apparait (agit comme un badge de position).
+    // v229 : les onglets sont générés depuis les positions DÉCLARÉES sur la
+    // pièce, plus depuis 'bande'/'rive' en dur. Une pièce à 3 positions rend
+    // 3 onglets sans toucher au code.
     const tabsHtml = p.no_position
       ? ''
       : ('<div class="maint-wp-tabs" role="tablist" aria-label="Position">' +
-           (matchingPositions.indexOf('bande') !== -1 ? _b('Bande', 'bande') : '') +
-           (matchingPositions.indexOf('rive')  !== -1 ? _b('Rive',  'rive')  : '') +
+           matchingPositions.map(mp =>
+             _b(escHtml(mp.charAt(0).toUpperCase() + mp.slice(1)), mp)
+           ).join('') +
          '</div>');
-    return '<section class="maint-frame maint-wearpart' + frameClsExtra + '" data-wearpart="' + escAttr(p.id) + '" data-wearpart-pos="' + escAttr(pos) + '" data-maint-machine="' + escAttr(machine) + '">' +
+    return '<section class="maint-frame maint-wearpart' + frameClsExtra + '" data-wearpart="' + escAttr(p.id) + '" data-wearpart-pos="' + escAttr(pos) + '" data-maint-machine="' + escAttr(machine) + '"' + sevStyle + '>' +
       '<div class="maint-frame-head">' +
         '<div class="maint-frame-title">' + escHtml(p.label) + '</div>' +
         tabsHtml +
@@ -7541,12 +8443,29 @@ function _renderWearPartsGroup(machine, statusFilter){
         //     l'anneau correspondant.
         //   - Droite : 2 anneaux concentriques. Extérieur cyan = temps,
         //     intérieur ambre = métrage. Couleurs assorties aux sections.
+        // v229 : la position est déclarée sur la pièce mais aucun code ne la
+        // porte (code supprimé, ou pièce configurée avant ses codes). On
+        // affichait deux sections vides et « aucun code intervention », sans
+        // dire quoi faire. On remplace le corps par un état vide qui NOMME la
+        // position concernée et donne le chemin de correction.
+        if(!wpCode){
+          const _posLbl = p.no_position
+            ? escHtml(p.label)
+            : escHtml(p.label) + ' · ' + escHtml(pos.charAt(0).toUpperCase() + pos.slice(1));
+          return '<div class="maint-wp-body">' +
+            '<div class="maint-wp-empty">' +
+              '<div class="maint-wp-empty-title">Aucun code rattaché</div>' +
+              '<div class="maint-wp-empty-txt">Aucune opération de maintenance n\'est rattachée à <strong>' +
+                _posLbl + '</strong>. Cette position ne peut donc ni afficher d\'échéance, ni recevoir de saisie.</div>' +
+              '<div class="maint-wp-empty-txt">Rattachez-en une depuis <strong>Paramètres → Maintenance</strong>, ' +
+                'champ « Pièce d\'usure » du code concerné — ou retirez la position de la pièce ' +
+                'si elle n\'a plus lieu d\'être.</div>' +
+            '</div>' +
+          '</div>';
+        }
         const _refVal = (v) => v
           ? '<span class="val">' + escHtml(v) + '</span>'
-          : (wpCode
-              ? '<span class="val muted">à compléter</span>'
-              : '<span class="val muted">aucun code intervention</span>'
-            );
+          : '<span class="val muted">à compléter</span>';
         // Section TEMPS
         let lastSub = '';
         let lastVal;
@@ -7665,9 +8584,9 @@ function renderMaintCards(){
   document.querySelectorAll('.maint-machine-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-maint-machine') === machine);
   });
-  // Toggle Entretien/Remplacements (v178) — filtre les cartes pour n'afficher
-  // qu'une seule des deux catégories à la fois. Les contrôles ne sont JAMAIS
-  // visibles ici. Les pièces d'usure ne sont visibles que sur "Remplacements".
+  // Filtre de catégorie (v178, élargi en v2.7.4) : « Tous », « Entretien » ou
+  // « Interventions ». Les contrôles ne sont JAMAIS visibles ici. Les pièces
+  // d'usure apparaissent sur « Interventions » et sur « Tous ».
   const catFilter = getMaintCatFilter();
   document.querySelectorAll('.maint-cat-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-maint-cat') === catFilter);
@@ -7677,7 +8596,9 @@ function renderMaintCards(){
   const grouping = 'status';  // v2.4.6 : toggle retire, groupement fixe par statut
   _refreshMaintChipState();
   _refreshMaintCounters();
-  const showWearParts = (catFilter === 'remplacements');
+  // v2.7.4 : les pieces d'usure appartiennent a la categorie Interventions ;
+  // elles doivent donc rester visibles quand on affiche les deux categories.
+  const showWearParts = (catFilter === 'remplacements' || catFilter === 'all');
   // v2.4.25 : les pieces d'usure sont maintenant comptees + affichees dans
   // TOUS les filtres statut (leur logique de retard temps est integree au
   // systeme unifie overdue/soon/ok/never). _renderWearPartsGroup renvoie ''
@@ -7692,7 +8613,7 @@ function renderMaintCards(){
   const wearPartCodeIds = new Set();
   if(showWearParts){
     WEARPART_PIECES.forEach(p => {
-      const positions = p.no_position ? ['single'] : ['bande','rive'];
+      const positions = _wearPartPositionsOf(p);
       positions.forEach(pos => {
         const c = _findWearPartCode(p.id, pos);
         if(c && c.code) wearPartCodeIds.add(String(c.code));
@@ -7705,10 +8626,14 @@ function renderMaintCards(){
     if(!it.periodique) return false;
     if(wearPartCodeIds.has(String(it.id))) return false;
     const cat = it.categorie;
-    if(catFilter === 'entretien'){
-      return cat === 'controles' || cat === 'entretien' || cat === 'interventions' || cat === 'suivi';
-    }
-    return cat === 'remplacements';
+    // Les codes legacy 'interventions' et 'suivi' sont ranges avec 'entretien',
+    // comme partout ailleurs dans le module.
+    const isEntretien = (cat === 'controles' || cat === 'entretien' ||
+                         cat === 'interventions' || cat === 'suivi');
+    const isRemplacement = (cat === 'remplacements');
+    if(catFilter === 'all') return isEntretien || isRemplacement;
+    if(catFilter === 'entretien') return isEntretien;
+    return isRemplacement;
   });
   if(!baseItems.length){
     grid.innerHTML = wearPartsHtml +
@@ -8698,10 +9623,21 @@ function openAckDetail(prefixedId){
             const otherHtml = (otherTxt != null && String(otherTxt).trim() !== '')
               ? '<div style="margin-top:6px;padding:6px 10px;border-left:3px solid var(--accent);background:var(--accent-bg);border-radius:0 6px 6px 0;font-size:12px;color:var(--text2);white-space:pre-wrap">' + escHtml(String(otherTxt)) + '</div>'
               : '';
+            // v2.5.21 : commentaire obligatoire déclenché par une réponse COM.
+            // Liseré rouge et libellé explicite pour le distinguer d'une simple
+            // précision « Autre » — c'est la justification d'un cas signalé.
+            const comTxt = responses[String(idx) + '_comment'];
+            const comHtml = (comTxt != null && String(comTxt).trim() !== '')
+              ? '<div style="margin-top:6px;padding:6px 10px;border-left:3px solid var(--danger);background:rgba(220,38,38,.07);border-radius:0 6px 6px 0">'
+                + '<div style="font-size:10px;font-weight:700;color:var(--danger);text-transform:uppercase;letter-spacing:.4px;margin-bottom:2px">Commentaire obligatoire</div>'
+                + '<div style="font-size:12px;color:var(--text2);white-space:pre-wrap">' + escHtml(String(comTxt)) + '</div>'
+                + '</div>'
+              : '';
             return '<div class="ta-cl-item" data-type="choice">'
               + '<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px">' + escHtml(it.label || '') + '</div>'
               + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + respHtml + '</div>'
               + otherHtml
+              + comHtml
               + '</div>';
           }).join('')
       + '</div>';
@@ -9406,7 +10342,11 @@ function setPlanSubtab(name){
   }
   else if(name === 'calendrier'){
     // v2.6.0 : rendu immediat depuis le cache, refetch seulement si besoin.
+    try{ _requestCalAutoScroll(); }catch(_){}
     try { renderCalFromCacheThenRefresh(); } catch(e){ try{ renderCal(); }catch(_){} }
+    // v2.6.1 : la section vient seulement d'etre affichee (display:none jusqu'a
+    // cette ligne), donc _fitCalWeekBody n'a pas pu mesurer pendant le rendu.
+    try{ _scheduleCalHeaderGutterSync(); }catch(_){}
   }
 }
 async function loadPlanningHistorique(){
@@ -9610,7 +10550,15 @@ if (typeof api !== 'function') {
     if (r.status === 401) { location.href = '/?next=/maintenance'; return null; }
     const ct = r.headers.get('content-type') || '';
     const j = ct.includes('json') ? await r.json().catch(() => ({})) : {};
-    if (!r.ok) throw new Error(j.detail || ('Erreur ' + r.status));
+    if (!r.ok) {
+      // v2.7.1 : cf. settings_page.py — un detail structuré ({message, ...})
+      // doit rester lisible dans le toast.
+      const d = j.detail;
+      const msg = (d && typeof d === 'object') ? (d.message || JSON.stringify(d)) : d;
+      const err = new Error(msg || ('Erreur ' + r.status));
+      err.detail = d; err.status = r.status;
+      throw err;
+    }
     return j;
   };
 }
@@ -10035,7 +10983,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 <script src="/static/chat_widget_v2.js?v=8"></script>
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
-<script src="/static/mysifa_maint_form.js?v=2.4.18"></script>
+<script src="/static/mysifa_maint_form.js?v=2.7.4-usure"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js"></script>
@@ -10216,8 +11164,62 @@ function _maintCatCssFront(cat){
   return 'controles';
 }
 function _statutLabel(s){
-  return { a_faire:'À faire', en_cours:'En cours', termine:'Terminé', reporte:'Reporté' }[s] || s;
+  // 'invalidee' manquait : le repli `|| s` affichait le libellé brut.
+  return { a_faire:'À faire', en_cours:'En cours', termine:'Terminé',
+           reporte:'Reporté', invalidee:'Invalidée' }[s] || s;
 }
+
+// v2.7.1 — Statut AFFICHÉ d'une opération, dérivé du créneau qui la porte.
+//
+// Une opération jamais saisie sur un créneau clôturé n'est pas « À faire » :
+// elle ne le sera jamais. Elle s'affichait pourtant avec le même libellé et la
+// même pastille grise qu'une opération d'un créneau de demain — impossible de
+// distinguer « pas encore fait » de « jamais fait » sans aller lire la date.
+//
+// On le DÉRIVE plutôt que de l'écrire en base : aucune migration, aucun
+// déclencheur à maintenir (ni job, ni écriture opportuniste au chargement), et
+// rien à rétro-corriger le jour où la règle change. Le statut réel reste
+// `a_faire` — une requête SQL ne verra donc pas « Non réalisé », c'est le prix
+// assumé de la solution dérivée.
+//
+// `evOrDate` accepte un event ({date} côté calendrier, {date_prevue} côté
+// serveur) ou directement une date ISO.
+function _opStatutView(statut, evOrDate){
+  const s = statut || 'a_faire';
+  const d = (typeof evOrDate === 'string')
+    ? evOrDate
+    : ((evOrDate && (evOrDate.date || evOrDate.date_prevue)) || '');
+  if((s === 'a_faire' || s === 'en_cours') && d && _calIsPastIso(d)){
+    return { cls: 'reporte', label: 'Non réalisé' };
+  }
+  return { cls: s, label: _statutLabel(s) };
+}
+
+// v2.7.1 — Point d'invalidation unique des listes derivees du catalogue.
+//
+// Trois caches vivent en parallele dans la page et sont alimentes par
+// /api/maintenance/codes : MAINT_STATE.codes (modal « Enregistrer une
+// operation »), OPS_TYPES_STATE (filtres + selection d'operation) et
+// CTRL_TYPES_STATE (controles ponctuels). Aucun n'etait purge apres une
+// suppression : le code disparaissait du catalogue mais restait proposé à la
+// saisie jusqu'au rechargement complet de la page.
+//
+// Tout ce qui modifie le catalogue (creation, modification, suppression,
+// archivage, reactivation) appelle ce point d'entree — y compris depuis
+// /settings et depuis le module partage, d'ou l'exposition sur window.
+window.maintOnCatalogueChanged = async function(){
+  MAINT_STATE.codes = [];  // cache de opFetchCodes(), purement local
+  if(typeof loadOpsTypes === 'function'){
+    try{ await loadOpsTypes(); }catch(e){}
+  }
+  if(typeof loadCtrlTypes === 'function'){
+    try{ await loadCtrlTypes(); }catch(e){}
+  }
+  // Re-rendus defensifs : chaque vue n'existe que si son onglet a ete ouvert.
+  try{ if(typeof renderOps === 'function') renderOps(); }catch(e){}
+  try{ if(typeof renderOpsTypes === 'function') renderOpsTypes(); }catch(e){}
+  try{ if(typeof renderCtrlTypes === 'function') renderCtrlTypes(); }catch(e){}
+};
 
 async function opFetchCodes(){
   if(MAINT_STATE.codes.length) return MAINT_STATE.codes;
@@ -10388,9 +11390,10 @@ function _renderOpCard(ev, opts){
     let opsInThisGroup = 0;
     for(const o of g.ops){
       if(previewLines.length >= MAX_LINES){ printedTruncated = true; break; }
+      const _sv = _opStatutView(o.statut, ev);
       const statusPill = singleOp
         ? ''
-        : `<span class="op-status op-status-${o.statut}" style="position:static;font-size:9px;padding:2px 5px">${_statutLabel(o.statut)}</span>`;
+        : `<span class="op-status op-status-${_sv.cls}" style="position:static;font-size:9px;padding:2px 5px">${_sv.label}</span>`;
       previewLines.push(`<div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-top:5px">
         <span class="op-code" style="font-size:11px;padding:2px 7px">${o.code}</span>
         <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.code_label || '—'}</span>
@@ -10406,11 +11409,14 @@ function _renderOpCard(ev, opts){
     ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">+ ${remainingOps} autre${remainingOps > 1 ? 's' : ''} opération${remainingOps > 1 ? 's' : ''}</div>`
     : '';
   const srcBadge = (ev.source === 'non_planifie') ? '<span class="op-badge-source">Non planifiée</span>' : '';
+  const _cardClos = _calIsPastIso(ev.date_prevue || ev.date || '');
   const summary = doneAll
     ? '<span class="op-status op-status-termine" style="position:static">Terminé</span>'
-    : (remaining < totalOps
-        ? `<span class="op-status op-status-en_cours" style="position:static">${remaining} restant${remaining > 1 ? 'es' : 'e'}</span>`
-        : `<span class="op-status op-status-a_faire" style="position:static">À faire</span>`);
+    : (_cardClos
+        ? '<span class="op-status op-status-reporte" style="position:static">Non réalisé</span>'
+        : (remaining < totalOps
+            ? `<span class="op-status op-status-en_cours" style="position:static">${remaining} restant${remaining > 1 ? 'es' : 'e'}</span>`
+            : `<span class="op-status op-status-a_faire" style="position:static">À faire</span>`));
   const dateLine = isToday ? '' : `<div style="font-size:12px;color:var(--muted);margin-top:2px">${_fmtDateFrShort(ev.date_prevue)}</div>`;
   const cta = isToday
     ? `<button type="button" class="btn op-btn-accent op-card-cta" onclick="event.stopPropagation();opOpenSaisie(${ev.id})">
@@ -10532,7 +11538,7 @@ function _renderOpCardIndividual(op, ev, opts){
   opts = opts || {};
   const showMachine = !!opts.showMachine;
   const isDone = op.statut === 'termine';
-  const statusLabel = _statutLabel(op.statut);
+  const statusLabel = _opStatutView(op.statut, ev).label;
   // Actions Modifier/Supprimer visibles uniquement sur les cartes d'ops
   // non_planifie créées par l'user courant (interventions déclarées via
   // "Enregistrer une opération").
@@ -11016,7 +12022,7 @@ async function opOpenNewModal(){
   MAINT_STATE.newLibreSelectedCode = null; // code catalogue si suggéré par autocomplete
   const sel = document.getElementById('op-new-code');
   sel.innerHTML = MAINT_STATE.codes.map(c =>
-    `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
+    `<option value="${c.code}">${c.code} — ${c.label}</option>`
   ).join('');
   document.getElementById('op-modal-new-title').textContent = 'Enregistrer une opération';
   document.getElementById('op-modal-new-sub').textContent = 'Choisis une opération dans le catalogue. Si elle ne s\'y trouve pas, décris une intervention inhabituelle.';
@@ -11055,7 +12061,7 @@ async function adminOpenRegisterOpModal(){
   MAINT_STATE.newModalAdminMode = true;
   const sel = document.getElementById('op-new-code');
   sel.innerHTML = MAINT_STATE.codes.map(c =>
-    `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
+    `<option value="${c.code}">${c.code} — ${c.label}</option>`
   ).join('');
   document.getElementById('op-modal-new-title').textContent = 'Enregistrer une opération';
   document.getElementById('op-modal-new-sub').textContent = 'Choisis une opération dans le catalogue ou décris une intervention inhabituelle. Coche une ou plusieurs machines — une opération sera créée pour chaque machine.';
@@ -11196,7 +12202,7 @@ async function opOpenEditModal(eventId){
     if(titreRow) titreRow.style.display = 'none';
     await opFetchCodes();
     sel.innerHTML = MAINT_STATE.codes.map(c =>
-      `<option value="${c.code}">${c.code} — ${c.label} (${c.categorie})</option>`
+      `<option value="${c.code}">${c.code} — ${c.label}</option>`
     ).join('');
     if(currentOp && currentOp.code) sel.value = currentOp.code;
   }
@@ -11506,7 +12512,21 @@ async function adminSubmitRegisterOp(){
       const ev = data.event;
       const op = (ev.ops || [])[0];
       if(!ev || !op){ throw new Error('Créneau incomplet retourné par l\'API.'); }
-      await _patchOpTermine(ev.id, op.id, dureeMin, comment, _toDoneAtIso(dateVal));
+      // v2.7.2 : l'enregistrement est en deux temps — création du créneau, puis
+      // solde de l'opération. Si le second échoue, le premier laissait derrière
+      // lui un créneau « non planifié » jamais soldé, visible dans le planning
+      // et absent de l'historique. Chaque nouvelle tentative en ajoutait un.
+      // On annule donc la création avant de remonter l'erreur.
+      try{
+        await _patchOpTermine(ev.id, op.id, dureeMin, comment, _toDoneAtIso(dateVal));
+      }catch(errPatch){
+        try{
+          await fetch('/api/maintenance/events/' + ev.id, {
+            method:'DELETE', credentials:'include',
+          });
+        }catch(_){ /* nettoyage best-effort : l'erreur utile est celle du PATCH */ }
+        throw errPatch;
+      }
       created += 1;
     }
     const msg = created > 1
@@ -12058,13 +13078,16 @@ function _opRenderPlanTable(events, meId){
     const allDone = rows.length > 0 && rows.every(r => r.op.statut === 'termine' || r.op.statut === 'invalidee');  // v2.5.10
     const anyDone = rows.some(r => r.op.statut === 'termine');
     const statusCls = allDone ? 'done' : (anyDone ? 'progress' : '');
-    const statusTxt = allDone ? '✓ Terminé' : (anyDone ? 'En cours' : 'À faire');
+    const statusTxt = allDone
+      ? '✓ Terminé'
+      : (_calIsPastIso(ev.date_prevue || ev.date || '') ? 'Non réalisé'
+                                                        : (anyDone ? 'En cours' : 'À faire'));
 
     const tbodyHtml = rows.map(r => `<tr>
       <td class="op-plan-cell-mac">${r.machines.map(m => escHtml(m)).join(' · ')}</td>
       <td><span class="op-code">${r.op.code}</span></td>
       <td class="op-plan-cell-lbl">${escHtml(r.op.code_label || '—')}</td>
-      <td><span class="op-status op-status-${r.op.statut}" style="position:static">${_statutLabel(r.op.statut)}</span></td>
+      <td><span class="op-status op-status-${_opStatutView(r.op.statut, ev).cls}" style="position:static">${_opStatutView(r.op.statut, ev).label}</span></td>
     </tr>`).join('');
 
     return `<div class="op-plan-creneau-card" onclick="opOpenPlanDetail(${ev.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();opOpenPlanDetail(${ev.id});}">
@@ -12334,25 +13357,97 @@ async function restoreEvent(eventId){
   }
 }
 
-function refreshCaseTemplatePicker(selectedId){
+function refreshCaseTemplatePicker(){
   const sel = document.getElementById('case-mod-template');
   if(!sel) return;
   const list = TEMPLATES_STATE.list || [];
-  const cur = selectedId != null ? String(selectedId) : (sel.value || '');
-  sel.innerHTML = '<option value="">Sans modèle (créneau vierge)</option>' +
+  // v2.6.1 : le select est une ACTION d'import, plus un etat « modele du
+  // creneau ». Il revient donc toujours sur son option neutre, et aucun
+  // modele n'y est pre-selectionne — on peut en importer plusieurs de suite.
+  sel.innerHTML = '<option value="">+ Importer un modèle…</option>' +
     list.map(t =>
-      '<option value="' + escAttr(t.id) + '"' + (String(t.id) === cur ? ' selected' : '') + '>' +
+      '<option value="' + escAttr(t.id) + '">' +
         escHtml(t.name) + ' (' + t.ops_count + ' op.)' +
       '</option>'
     ).join('');
+  sel.value = '';
+}
+
+// v2.6.1 : modeles CUMULABLES sur un meme creneau.
+// _CASE_TMPL_USED memorise les modeles importes dans la modale en cours :
+//   - pour afficher le rappel sous la liste d'operations ;
+//   - pour decider de l'etiquette template_id du creneau (cf. plus bas).
+let _CASE_TMPL_USED = [];   // [{id, name}]
+
+function _resetCaseTemplates(){ _CASE_TMPL_USED = []; renderCaseTemplatesApplied(); }
+
+function renderCaseTemplatesApplied(){
+  const box = document.getElementById('case-tmpl-applied');
+  if(!box) return;
+  if(!_CASE_TMPL_USED.length){ box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = '';
+  box.innerHTML = 'Modèle(s) importé(s) : ' + _CASE_TMPL_USED.map(t =>
+    '<span class="case-tmpl-chip">' + escHtml(t.name) + '</span>').join(' ');
+}
+
+// Fusionne les ops d'un modele dans _CASE_OPS.
+//   - meme code deja present  -> UNION des machines (aucune n'est perdue)
+//                              + consignes concatenees si elles different
+//   - code absent             -> ajout en fin de liste
+// Retourne {ajoutees, fusionnees} pour le message de confirmation.
+function _mergeTemplateOps(tmplOps){
+  let ajoutees = 0, fusionnees = 0;
+  for(const o of (tmplOps || [])){
+    const code = o.code;
+    if(!code) continue;
+    const machines = Array.isArray(o.machines) ? o.machines.slice() : [];
+    const consignes = (o.consignes || '').trim();
+    const existing = _CASE_OPS.find(c => c.opTypeId === code);
+    if(existing){
+      // Union des machines : c'est le point qui manquait. La dedup serveur
+      // gardait les machines de la PREMIERE occurrence, donc importer deux
+      // modeles portant la meme operation sur des machines differentes en
+      // perdait une silencieusement.
+      for(const m of machines){
+        if(existing.machines.indexOf(m) === -1) existing.machines.push(m);
+      }
+      const cur = (existing.consignes || '').trim();
+      if(consignes && cur.indexOf(consignes) === -1){
+        existing.consignes = cur ? (cur + '\n' + consignes) : consignes;
+      }
+      fusionnees++;
+    } else {
+      _CASE_OPS.push({
+        _op_id: null,
+        opTypeId: code,
+        opName: o.code_label || code,
+        opNiveau: null,
+        opFreq: '',
+        machines: machines,
+        consignes: consignes,
+      });
+      ajoutees++;
+    }
+  }
+  // Réinjecte les infos riches depuis OPS_TYPES_STATE (nom, niveau, frequence).
+  for(const co of _CASE_OPS){
+    const t = OPS_TYPES_STATE.list.find(x => x.id === co.opTypeId);
+    if(t){ co.opName = t.nom; co.opNiveau = t.niveau || null; co.opFreq = t.frequence || ''; }
+  }
+  return { ajoutees, fusionnees };
+}
+
+// v2.6.1 : reporte les horaires saisis dans le bandeau date du haut de modale.
+function _syncCaseTimeRecap(){
+  const el = document.getElementById('case-mod-time-recap');
+  if(!el) return;
+  const s = (document.getElementById('case-mod-start') || {}).value || '';
+  const e = (document.getElementById('case-mod-end')   || {}).value || '';
+  el.textContent = (s && e) ? (s + ' \u2013 ' + e) : (s || e || '—');
 }
 
 async function applyCaseTemplate(templateId){
-  if(!templateId){
-    // « Sans modèle » : on ne touche pas aux ops déjà présentes
-    if(_PENDING_CASE) _PENDING_CASE.template_id = null;
-    return;
-  }
+  if(!templateId) return;   // option « + Importer un modele… » : aucune action
   try{
     const r = await fetch('/api/maintenance/templates/' + encodeURIComponent(templateId) +
                           '?_=' + Date.now(), { credentials:'include', cache: 'no-store' });
@@ -12360,23 +13455,31 @@ async function applyCaseTemplate(templateId){
     const d = await r.json();
     const tmpl = d.template;
     if(!tmpl){ showToast('Modèle vide.', 'danger'); return; }
-    // Remplace les ops actuelles par celles du modèle
-    _CASE_OPS = (tmpl.ops || []).map(o => ({
-      _op_id: null,
-      opTypeId: o.code,
-      opName: o.code_label || o.code,
-      opNiveau: null,
-      opFreq: '',
-      machines: Array.isArray(o.machines) ? o.machines.slice() : [],
-    }));
-    // Réinjecte les infos richement depuis OPS_TYPES_STATE (niveau, freq)
-    for(const co of _CASE_OPS){
-      const t = OPS_TYPES_STATE.list.find(x => x.id === co.opTypeId);
-      if(t){ co.opName = t.nom; co.opNiveau = t.niveau || null; co.opFreq = t.frequence || ''; }
+    if(_CASE_TMPL_USED.some(t => String(t.id) === String(tmpl.id))){
+      showToast('Modèle « ' + tmpl.name + ' » déjà importé.', 'info');
+      return;
     }
-    if(_PENDING_CASE) _PENDING_CASE.template_id = tmpl.id;
+    const res = _mergeTemplateOps(tmpl.ops || []);
+    _CASE_TMPL_USED.push({ id: tmpl.id, name: tmpl.name });
+    // v2.6.1 : l'import NE CREE AUCUN LIEN avec le modele. C'est un simple
+    // raccourci de saisie : il recopie des operations dans le formulaire, rien
+    // de plus. Le creneau produit est autonome.
+    //
+    // Avant, un import unique laissait template_id sur le creneau, ce qui le
+    // rendait solidaire du modele : modifier le modele ecrasait ses operations,
+    // desactiver sa recurrence ou le supprimer effacait purement le creneau —
+    // alors qu'il avait ete compose a la main. Le comportement dependait en
+    // plus du NOMBRE de modeles importes, l'etiquette tombant des le second.
+    // On ne pose donc plus rien : seules les occurrences generees par la
+    // recurrence portent un lien (template_id + template_origin_date), et
+    // elles sont creees cote serveur, jamais par ce chemin.
     renderCaseOpsList();
-    showToast('Modèle « ' + tmpl.name + ' » appliqué.', 'info');
+    renderCaseTemplatesApplied();
+    let msg = 'Modèle « ' + tmpl.name + ' » importé';
+    if(res.ajoutees && res.fusionnees)      msg += ' : ' + res.ajoutees + ' op. ajoutée(s), ' + res.fusionnees + ' fusionnée(s)';
+    else if(res.ajoutees)                   msg += ' : ' + res.ajoutees + ' op. ajoutée(s)';
+    else if(res.fusionnees)                 msg += ' : ' + res.fusionnees + ' op. déjà présente(s), machines fusionnées';
+    showToast(msg + '.', 'info');
   }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
 }
 
@@ -12429,6 +13532,66 @@ async function confirmDeleteTemplate(templateId){
   const t = (TEMPLATES_STATE.list || []).find(x => x.id === templateId);
   if(!t) return;
   _openDeleteTemplateModal(t);
+}
+
+// v2.6.1 : confirmation au style MySifa, en remplacement de window.confirm().
+// Rend une Promise<boolean> pour rester utilisable en await dans un flux async.
+// Mise en forme alignee sur _openDeleteTemplateModal (overlay .op-modal-overlay
+// + carte .op-modal), fermeture par Echap, clic hors carte ou bouton Annuler.
+// v2.6.1 : ids coches dans la derniere confirmation (cases [data-keep]).
+let _MYS_CONFIRM_LAST_KEEP = [];
+function _mysConfirm(opts){
+  opts = opts || {};
+  return new Promise(function(resolve){
+    const prev = document.getElementById('mys-confirm-overlay');
+    if(prev) prev.remove();
+    const wrap = document.createElement('div');
+    wrap.id = 'mys-confirm-overlay';
+    wrap.className = 'op-modal-overlay';
+    wrap.style.cssText = 'display:flex;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:10000;align-items:center;justify-content:center';
+    let done = false;
+    function close(val){
+      if(done) return;
+      done = true;
+      // v2.6.1 : les cases [data-keep] du corps sont lues AVANT le retrait du
+      // DOM — apres, querySelectorAll ne trouverait plus rien. Le resultat est
+      // expose via _MYS_CONFIRM_LAST_KEEP pour l'appelant.
+      try{
+        _MYS_CONFIRM_LAST_KEEP = Array.prototype.slice
+          .call(wrap.querySelectorAll('[data-keep]'))
+          .filter(function(cb){ return cb.checked; })
+          .map(function(cb){ return parseInt(cb.getAttribute('data-keep'), 10); })
+          .filter(function(v){ return !isNaN(v); });
+      }catch(_){ _MYS_CONFIRM_LAST_KEEP = []; }
+      document.removeEventListener('keydown', esc, true);
+      try{ wrap.remove(); }catch(_){}
+      resolve(val);
+    }
+    function esc(e){ if(e.key === 'Escape'){ e.preventDefault(); close(false); } }
+    document.addEventListener('keydown', esc, true);
+    wrap.addEventListener('click', function(e){ if(e.target === wrap) close(false); });
+
+    const accent = opts.danger ? 'var(--danger)' : 'var(--warn,#f59e0b)';
+    wrap.innerHTML = ''
+      + '<div class="op-modal" role="dialog" aria-modal="true" style="max-width:520px;width:calc(100% - 40px);background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px;box-shadow:0 20px 50px rgba(0,0,0,0.4)">'
+      +   '<div style="color:' + accent + ';font-size:16px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px">'
+      +     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86l-8.18 14.16A2 2 0 0 0 3.83 21h16.34a2 2 0 0 0 1.72-2.98L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>'
+      +     escHtml(opts.title || 'Confirmer ?')
+      +   '</div>'
+      +   (opts.highlightHtml
+          ? '<div style="padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:14px">' + opts.highlightHtml + '</div>'
+          : '')
+      +   '<div style="font-size:13px;color:var(--text);line-height:1.55;margin-bottom:16px">' + (opts.bodyHtml || '') + '</div>'
+      +   '<div style="display:flex;justify-content:flex-end;gap:10px">'
+      +     '<button type="button" data-mys-cancel class="modal-btn-ghost">' + escHtml(opts.cancelLabel || 'Annuler') + '</button>'
+      +     '<button type="button" data-mys-ok style="background:' + accent + ';color:#fff;border:none;border-radius:10px;padding:10px 18px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px">' + escHtml(opts.okLabel || 'Continuer') + '</button>'
+      +   '</div>'
+      + '</div>';
+    wrap.querySelector('[data-mys-cancel]').addEventListener('click', function(){ close(false); });
+    wrap.querySelector('[data-mys-ok]').addEventListener('click', function(){ close(true); });
+    document.body.appendChild(wrap);
+    requestAnimationFrame(function(){ wrap.querySelector('[data-mys-cancel]').focus(); });
+  });
 }
 
 function _openDeleteTemplateModal(t){
@@ -12559,6 +13722,22 @@ function _setRecurInForm(t){
   const endEl = document.getElementById('tmpl-ed-recur-end');
   if(endEl) endEl.value = t.recurrence_time_end || '09:00';
   onTmplRecurTypeChange();
+}
+
+// v2.6.1 : empreinte des deux dimensions du modele. Le formulaire renvoie tout
+// a chaque enregistrement ; sans comparaison on ne saurait pas si l'admin a
+// touche au CONTENU (operations), a la PLANIFICATION (regle + horaires), ou
+// seulement au nom. Or ces deux dimensions n'ont pas les memes consequences et
+// ne concernent pas les memes creneaux.
+let _TMPL_INITIAL = null;
+function _snapshotTmplForm(){
+  let recur = '';
+  try{ recur = JSON.stringify(_readRecurFromForm()); }catch(_){}
+  const ops = (_TMPL_OPS || [])
+    .filter(function(o){ return o.opTypeId; })
+    .map(function(o){ return o.opTypeId + ':' + (o.machines || []).slice().sort().join('|'); })
+    .sort().join(';');
+  return { recur: recur, ops: ops };
 }
 
 function _readRecurFromForm(){
@@ -12852,10 +14031,12 @@ async function openTemplateEditor(templateId, focusDeleted){
       // v2.5.25 : charge les operateurs par defaut du template
       _TMPL_DEFAULT_OPS = (t.default_operators || []).map(u => ({ id: u.id, nom: u.nom }));
       if(ttlEl) ttlEl.textContent = 'Modifier le modèle';
+      // v2.6.1 : empreinte de reference, prise une fois le formulaire rempli.
+      _TMPL_INITIAL = _snapshotTmplForm();
       if(lblEl) lblEl.textContent = 'Enregistrer';
       // Avertissement resync
       if(warnEl){
-        warnEl.innerHTML = '<strong>Attention :</strong> modifier ce modèle écrasera automatiquement les opérations des créneaux futurs qui en dépendent (les horaires, opérateurs et statuts sont préservés).';
+        warnEl.innerHTML = '<strong>Attention :</strong> les modifications se répercutent sur les créneaux futurs issus de la récurrence de ce modèle. Changer la <strong>liste d\'opérations</strong> resynchronise leurs opérations, sans toucher aux dates ni aux horaires. Changer la <strong>règle de récurrence</strong> replace ces créneaux aux nouvelles dates. Les créneaux composés à la main, même après import de ce modèle, ne sont jamais touchés.';
         warnEl.style.display = 'block';
       }
     }catch(e){ showToast('Erreur : ' + e.message, 'danger'); return; }
@@ -13027,6 +14208,110 @@ async function submitTemplateEditor(e){
   if(!ops.length){ showToast('Ajoutez au moins une opération.', 'danger'); return; }
   const missing = ops.find(o => !o.machines.length);
   if(missing){ showToast('Attribuez au moins une machine à chaque opération.', 'danger'); return; }
+  // v2.6.1 : avertissement AVANT enregistrement. La resynchronisation ecrase
+  // integralement les operations des occurrences futures generees par la
+  // recurrence (et leurs operateurs si le modele est recurrent). Elle se
+  // declenche des que des ops sont envoyees, meme inchangees — il faut donc
+  // que l'admin sache combien de creneaux il s'apprete a reinitialiser.
+  let _TMPL_RESYNC_EXCLUDE = [];
+  if(_TMPL_EDIT_ID){
+    try{
+      const ri = await fetch('/api/maintenance/templates/' + encodeURIComponent(_TMPL_EDIT_ID) +
+                             '/resync-impact?_=' + Date.now(), { credentials:'include', cache:'no-store' });
+      if(ri.ok){
+        const imp = await ri.json();
+        const n = (imp && imp.count) || 0;
+        const snap = _snapshotTmplForm();
+        // Si l'empreinte de reference manque (ouverture inhabituelle), on
+        // considere les deux dimensions comme modifiees : mieux vaut demander
+        // pour rien que d'ecraser en silence.
+        const opsChanged   = !_TMPL_INITIAL || snap.ops   !== _TMPL_INITIAL.ops;
+        const recurChanged = !_TMPL_INITIAL || snap.recur !== _TMPL_INITIAL.recur;
+        // Chaque dimension a SA population de creneaux a risque :
+        //  - operations modifiees -> ceux dont la liste d'ops a diverge ;
+        //  - regle modifiee       -> ceux deplaces a la main, dont la position
+        //    serait ecrasee. Un creneau reste a sa place theorique est replace
+        //    sans consequence, inutile d'en parler.
+        const div = opsChanged   ? ((imp && imp.diverged) || []) : [];
+        const mov = recurChanged ? ((imp && imp.moved)    || []) : [];
+        // v2.6.1 : on n'interroge l'admin QUE sur les creneaux personnalises.
+        // Les copies conformes sont resynchronisees sans question — l'operation
+        // est un no-op pour elles. Case cochee = « préserver ce créneau » :
+        // le defaut protege ce qui a ete modifie a la main, il faut un geste
+        // explicite pour ecraser.
+        const _rows = function(items){
+          return items.map(function(d){
+            const grave = d.done_ops > 0;
+            return '<label class="mys-keep-row' + (grave ? ' is-grave' : '') + '">' +
+                   '<input type="checkbox" data-keep="' + escAttr(d.id) + '" checked>' +
+                   '<span class="mys-keep-txt">' +
+                     '<span class="mys-keep-date">' + escHtml(_fmtIsoDateFr(d.date)) + '</span>' +
+                     '<span class="mys-keep-why">' + escHtml((d.reasons || []).join(' · ')) + '</span>' +
+                   '</span></label>';
+          }).join('');
+        };
+        if(div.length || mov.length){
+          let body = '';
+          if(mov.length){
+            body += '<div style="margin-bottom:8px"><strong>Planification modifiée.</strong> ' +
+                    'Ces créneaux ont été déplacés à la main ; les replacer écraserait leur position. ' +
+                    'Les cases cochées restent où elles sont.</div>' +
+                    '<div class="mys-keep-list">' + _rows(mov) + '</div>';
+            if(imp.unmoved_count){
+              body += '<div style="margin:8px 0 14px;color:var(--muted);font-size:12px">' + imp.unmoved_count +
+                      ' autre(s) créneau(x) sont à leur place théorique : ils suivront la nouvelle règle, ' +
+                      'sans perdre leurs opérations.</div>';
+            }
+          }
+          if(div.length){
+            body += '<div style="margin-bottom:8px' + (mov.length ? ';margin-top:14px;padding-top:14px;border-top:1px solid var(--border)' : '') + '">' +
+                    '<strong>Opérations modifiées.</strong> ' +
+                    'Ces créneaux ont une liste d\'opérations personnalisée. ' +
+                    'Décoche ceux que tu veux réinitialiser ; les cases cochées seront préservées.</div>' +
+                    '<div class="mys-keep-list">' + _rows(div) + '</div>';
+            if(imp.identical_count){
+              body += '<div style="margin-top:8px;color:var(--muted);font-size:12px">' + imp.identical_count +
+                      ' autre(s) créneau(x) sont identiques au modèle : aucun changement visible pour eux.</div>';
+            }
+          }
+          const total = div.length + mov.length;
+          const ok = await _mysConfirm({
+            title: total + ' créneau' + (total > 1 ? 'x' : '') + ' à confirmer',
+            bodyHtml: body,
+            okLabel: 'Enregistrer',
+            cancelLabel: 'Annuler',
+          });
+          if(!ok) return;
+          _TMPL_RESYNC_EXCLUDE = _MYS_CONFIRM_LAST_KEEP.slice();
+        } else if(n > 0 && opsChanged){
+          const plur = n > 1;
+          let quand = '';
+          if(imp.first && imp.last && imp.first !== imp.last){
+            quand = ' (du ' + _fmtIsoDateFr(imp.first) + ' au ' + _fmtIsoDateFr(imp.last) + ')';
+          } else if(imp.first){
+            quand = ' (le ' + _fmtIsoDateFr(imp.first) + ')';
+          }
+          const ok = await _mysConfirm({
+            title: 'Réinitialiser ' + n + ' créneau' + (plur ? 'x' : '') + ' à venir ?',
+            highlightHtml:
+              '<div style="font-size:14px;font-weight:700;color:var(--text)">' +
+                n + ' créneau' + (plur ? 'x' : '') + ' généré' + (plur ? 's' : '') + ' par la récurrence' +
+              '</div>' +
+              (quand ? '<div style="font-size:12px;color:var(--muted);margin-top:4px">' + escHtml(quand.trim()) + '</div>' : ''),
+            bodyHtml:
+              'Leurs opérations seront <strong>remplacées par celles du modèle</strong>. ' +
+              'Toute retouche faite directement sur ces créneaux (opération ajoutée, machine décochée, consignes) sera perdue.' +
+              '<div style="margin-top:10px;color:var(--muted);font-size:12px">' +
+                'Les créneaux passés et ceux composés à la main ne sont pas concernés.' +
+              '</div>',
+            okLabel: 'Enregistrer quand même',
+            cancelLabel: 'Annuler',
+          });
+          if(!ok) return;
+        }
+      }
+    }catch(_){ /* impact indisponible : on n'empeche pas l'enregistrement */ }
+  }
   try{
     let r;
     // v2.4.29 : fusion avec les champs recurrence
@@ -13034,6 +14319,7 @@ async function submitTemplateEditor(e){
     // v2.5.25 : inclut la liste des ids d'operateurs par defaut
     const defaultOpIds = (_TMPL_DEFAULT_OPS || []).map(u => u.id);
     const payload = Object.assign({ name, description: desc, ops, default_operators: defaultOpIds }, recur);
+    if(_TMPL_RESYNC_EXCLUDE.length) payload.resync_exclude_ids = _TMPL_RESYNC_EXCLUDE;
     if(_TMPL_EDIT_ID){
       r = await fetch('/api/maintenance/templates/' + encodeURIComponent(_TMPL_EDIT_ID), {
         method:'PATCH', credentials:'include',
@@ -13053,6 +14339,9 @@ async function submitTemplateEditor(e){
     }
     const d = await r.json();
     const resynced = d.resynced_events || 0;
+    // v2.6.1 : replacement du planning suite a un changement de regle.
+    const replaced = d.recur_replaced_events || 0;
+    const regen    = d.recur_regenerated_events || 0;
     // v2.5.13 : mention les creneaux futurs supprimes si la recurrence a ete desactivee.
     const deletedFuture = d && d.deleted_future_events ? d.deleted_future_events : 0;
     let toastMsg;
@@ -13062,6 +14351,7 @@ async function submitTemplateEditor(e){
       const parts = ['Mod\u00e8le enregistr\u00e9'];
       if(resynced) parts.push(resynced + ' cr\u00e9neau' + (resynced > 1 ? 'x' : '') + ' futur' + (resynced > 1 ? 's' : '') + ' resynchronis' + (resynced > 1 ? '\u00e9s' : '\u00e9'));
       if(deletedFuture) parts.push(deletedFuture + ' cr\u00e9neau' + (deletedFuture > 1 ? 'x' : '') + ' futur' + (deletedFuture > 1 ? 's' : '') + ' nettoy' + (deletedFuture > 1 ? '\u00e9s' : '\u00e9') + ' (r\u00e9currence d\u00e9sactiv\u00e9e)');
+      if(replaced) parts.push('planning replac\u00e9 : ' + replaced + ' occurrence' + (replaced > 1 ? 's' : '') + ' remplac\u00e9' + (replaced > 1 ? 'es' : 'e') + ' par ' + regen + ' nouvelle' + (regen > 1 ? 's' : ''));
       toastMsg = parts.join(' \u2014 ') + '.';
     }
     showToast(toastMsg, 'info');
@@ -13070,7 +14360,17 @@ async function submitTemplateEditor(e){
     renderTemplatesList();
     refreshCaseTemplatePicker();
     // v2.5.13 : refresh calendrier si des events ont bouge (resync OU purge desactivation)
-    if(resynced > 0 || deletedFuture > 0){ await refreshPlanning(); renderCal(); }
+    // v2.7.1 : le rechargement du calendrier ne tenait compte que des
+    // operations resynchronisees et des creneaux supprimes. Un changement de
+    // REGLE de recurrence deplace les occurrences sans rien resynchroniser ni
+    // supprimer : la condition etait donc fausse, le planning restait affiche
+    // avec les dates d'avant, et l'utilisateur croyait le replacement rate
+    // alors qu'il avait bien eu lieu en base.
+    if(resynced > 0 || deletedFuture > 0 || replaced > 0 || regen > 0
+       || (d.recur_moved_events || 0) > 0 || (d.recur_removed_events || 0) > 0){
+      await refreshPlanning();
+      renderCal();
+    }
   }catch(e){ showToast('Erreur : ' + e.message, 'danger'); }
 }
 
@@ -13131,9 +14431,12 @@ async function startFromTemplate(templateId){
   closeCalFabMenu();
   const { iso, h } = _defaultIsoAndHour();
   await openCaseModal({ iso, defaultHour: h });
+  // v2.6.1 : pre-remplit les operations depuis le modele, sans creer de lien
+  // (applyCaseTemplate ne pose plus template_id). Le select revient sur son
+  // option neutre : c'est une action d'import, pas l'etat du creneau.
   await applyCaseTemplate(templateId);
   const sel = document.getElementById('case-mod-template');
-  if(sel) sel.value = String(templateId);
+  if(sel) sel.value = '';
 }
 
 
@@ -13339,7 +14642,20 @@ async function saveMaintForm() {
   if (!code) { toast('Code obligatoire', true); return; }
   if (!label) { toast('Libellé obligatoire', true); return; }
   if (niveau < 1 || niveau > 3) { toast('Niveau invalide (1-3)', true); return; }
-  const payload = { code, label, niveau, categorie, periodique, intervalle, metrage_ref };
+  // v230 : l'état des 2 cases à cocher est traduit en payload par le module
+  // partagé — une seule source de vérité pour les 2 pages hôtes.
+  const _usure = (typeof _maintUsurePayload === 'function')
+    ? _maintUsurePayload()
+    : { usure_piece_id: null, usure_position: '' };
+  if (document.getElementById('maint-usure-on')?.checked && !_usure.usure_piece_id) {
+    toast('Choisis une pièce d\'usure, ou décoche la case.', true); return;
+  }
+  if (_usure.usure_piece_id && document.getElementById('maint-usure-haspos')?.checked
+      && !_usure.usure_position) {
+    toast('Renseigne le nom de la position, ou décoche « Position particulière ».', true); return;
+  }
+  const payload = { code, label, niveau, categorie, periodique, intervalle, metrage_ref,
+                    usure_piece_id: _usure.usure_piece_id, usure_position: _usure.usure_position };
   try {
     if (_maintEditCode) {
       await api('/api/maintenance/codes/' + encodeURIComponent(_maintEditCode), {
@@ -13360,20 +14676,61 @@ async function saveMaintForm() {
   }
   closeMaintForm();
   await loadMaintCodes();
+  // v2.7.1 : un code cree ou renomme doit apparaitre immediatement dans la
+  // modal de saisie et les filtres — meme invalidation que la suppression.
+  if(typeof window.maintOnCatalogueChanged === 'function'){
+    try { await window.maintOnCatalogueChanged(); } catch(e) {}
+  }
   // Sync côté Alertes : une création/modif de code peut créer, renommer
   // ou supprimer l'alerte auto-liée (via le hook backend _sync_alert_for_code).
   if(typeof loadAlerts === 'function') await loadAlerts();
 }
 async function deleteMaintCode(code) {
-  if (!confirm('Supprimer le code ' + code + ' ?')) return;
+  // v2.7.1 : le serveur tranche entre suppression réelle et archivage selon
+  // les saisies rattachées. On ne l'anticipe pas ici (ça ferait un aller-retour
+  // de plus pour une information que la réponse porte déjà), mais le message
+  // final doit dire ce qui s'est réellement passé : un utilisateur à qui on
+  // annonce « supprimé » alors que le code est archivé le recréera.
+  const _lbl = (Array.isArray(window._maintItems)
+    ? (window._maintItems.find(x => String(x.code) === String(code)) || {}).label
+    : '') || '';
+  const _ask = (typeof window.maintConfirm === 'function')
+    ? window.maintConfirm({
+        title: 'Supprimer le code ' + code,
+        message: _lbl ? '« ' + _lbl + ' »' : 'Ce code',
+        detail: 'S\'il porte déjà des saisies ou des modèles de créneau, il sera '
+              + 'archivé plutôt que supprimé : l\'historique doit rester lisible. '
+              + 'Sinon, il est supprimé définitivement.',
+        confirmLabel: 'Supprimer',
+        danger: true,
+      })
+    : Promise.resolve(confirm('Supprimer le code ' + code + ' ?'));
+  if (!(await _ask)) return;
   try {
-    await api('/api/maintenance/codes/' + encodeURIComponent(code), { method: 'DELETE' });
-    toast('Code supprimé');
+    const res = await api('/api/maintenance/codes/' + encodeURIComponent(code),
+                          { method: 'DELETE' });
+    if (res && res.archived) {
+      const u = res.usages || {};
+      const bouts = [];
+      if (u.saisies) bouts.push(u.saisies + ' saisie(s)');
+      if (u.modeles) bouts.push(u.modeles + ' modèle(s) de créneau');
+      toast('Code ' + code + ' archivé — ' + (bouts.join(' et ') || 'usages existants')
+          + '. Il reste lisible dans l\'historique.');
+    } else {
+      toast('Code supprimé');
+    }
   } catch (e) {
     toast(e && e.message ? e.message : 'Erreur lors de la suppression', true);
     return;
   }
   await loadMaintCodes();
+  // v2.7.1 : le catalogue vient de changer. Sans cette invalidation, la modal
+  // « Enregistrer une opération » continuait de proposer le code supprimé
+  // jusqu'au prochain rechargement complet de la page — son cache
+  // (MAINT_STATE.codes) n'était jamais purgé.
+  if(typeof window.maintOnCatalogueChanged === 'function'){
+    try { await window.maintOnCatalogueChanged(); } catch(e) {}
+  }
   // La suppression d'un code déclenche la cascade DELETE de l'alerte liée
   // côté backend — on force le rechargement pour que la liste se mette à jour.
   if(typeof loadAlerts === 'function') await loadAlerts();

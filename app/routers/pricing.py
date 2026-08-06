@@ -22,6 +22,9 @@ from app.services.pricing import (
     compute_product_cost,
 )
 from app.services.pricing.repository import (
+    MYSTOCK_COLS,
+    MYSTOCK_JOIN,
+    mystock_price_for_row,
     assert_materials_active_for_product,
     ensure_settings_rows,
     fetch_material,
@@ -51,10 +54,6 @@ from app.services.pricing.schemas import (
     McSupplierCreate,
     McSupplierOut,
     McSupplierUpdate,
-    CategoryVariationOut,
-    MaterialMoverOut,
-    PricingDashboardOut,
-    PricingDashboardProductRow,
     PricingFxRefreshOut,
     PricingSettingsOut,
     PricingSettingsPatch,
@@ -66,6 +65,7 @@ from app.services.pricing.export_pdf import build_product_pdf
 from app.services.pricing.export_xlsx import build_products_workbook
 from app.services.pricing.types import PricingProduct
 from app.services import pricing_bridge
+from app.services import mystock_prix, mystock_produits
 
 router = APIRouter(tags=["pricing"])
 
@@ -94,27 +94,73 @@ def _pricing_error(exc: PricingError) -> HTTPException:
     return HTTPException(status_code=422, detail=str(exc))
 
 
-def _computed_out(mat_row, settings) -> MaterialComputedOut:
-    pm = row_to_pricing_material(mat_row)
+def _row_get(row, name: str, default=None):
+    """Lecture tolérante d'une colonne sqlite3.Row (compat pré-migration 223)."""
+    try:
+        return row[name]
+    except (IndexError, KeyError):
+        return default
+
+
+def _breakdown_out(b) -> MaterialBreakdownOut:
+    """Décomposition enrichie — alimente le tableau récap de la fiche matière."""
+    return MaterialBreakdownOut(
+        raw=b.raw,
+        transport=b.transport,
+        fx=b.fx,
+        tax_uplift=b.tax_uplift,
+        currency=getattr(b, "currency", "EUR"),
+        price_basis=getattr(b, "price_basis", "PER_KG"),
+        fx_rate=getattr(b, "fx_rate", Decimal("1")),
+        weight_per_m2=getattr(b, "weight_per_m2", Decimal("0")),
+        unit_price_src=getattr(b, "unit_price_src", Decimal("0")),
+        transport_src=getattr(b, "transport_src", Decimal("0")),
+        subtotal_src=getattr(b, "subtotal_src", Decimal("0")),
+        subtotal_eur=getattr(b, "subtotal_eur", Decimal("0")),
+        transport_eur_m2=getattr(b, "transport_eur_m2", Decimal("0")),
+        transport_pct_effective=getattr(b, "transport_pct_effective", Decimal("0")),
+        taxes_src=getattr(b, "taxes_src", Decimal("0")),
+        taxe_pct=getattr(b, "taxe_pct", Decimal("0")),
+    )
+
+
+def _poids_retenu(grammage_gsm, perte_pct) -> float:
+    """Poids au m² (kg) = grammage majoré de la perte. Voir mystock_prix.poids_retenu."""
+    g = float(grammage_gsm or 0)
+    p = float(perte_pct or 0)
+    return round(g * (1 + p / 100.0) / 1000.0, 6)
+
+
+def _material_computed(pm, settings) -> MaterialComputedOut:
+    """Prix calculé + marge par défaut + valeur de transport proposée."""
     try:
         res = compute_material_price_per_m2(pm, settings)
     except PricingError as e:
         raise _pricing_error(e) from e
-    b = res.breakdown
+    # Une matière exclue de l'assiette de marge n'affiche pas de marge : sinon la
+    # fiche annoncerait un prix de vente que le produit n'appliquera jamais.
+    margin_pct = getattr(settings, "default_margin_pct", Decimal("0")) or Decimal("0")
+    if not getattr(pm, "applique_marge", True):
+        margin_pct = Decimal("0")
+    margin = (res.price_eur_per_m2 * margin_pct / Decimal("100")).quantize(Decimal("0.0001"))
     return MaterialComputedOut(
         price_eur_per_m2=res.price_eur_per_m2,
-        breakdown=MaterialBreakdownOut(
-            raw=b.raw,
-            transport=b.transport,
-            fx=b.fx,
-            tax_uplift=b.tax_uplift,
-        ),
+        breakdown=_breakdown_out(res.breakdown),
+        margin_pct=margin_pct,
+        margin_eur_m2=margin,
+        sell_price_eur_m2=res.price_eur_per_m2 + margin,
     )
 
 
-def _material_out(row, *, settings=None, with_computed: bool = False) -> McMaterialOut:
-    d = material_row_to_dict(row, category_code=row["category_code"])
-    computed = _computed_out(row, settings) if with_computed and settings else None
+def _computed_out(mat_row, settings, mystock=None) -> MaterialComputedOut:
+    return _material_computed(row_to_pricing_material(mat_row, mystock=mystock), settings)
+
+
+def _material_out(row, *, conn=None, settings=None, with_computed: bool = False) -> McMaterialOut:
+    # Matière appairée : c'est le prix MyStock qui fait foi, pas la copie locale.
+    ms = mystock_price_for_row(conn, row) if conn is not None else None
+    d = material_row_to_dict(row, category_code=row["category_code"], mystock=ms)
+    computed = _computed_out(row, settings, ms) if with_computed and settings else None
     return McMaterialOut(**d, computed=computed)
 
 
@@ -154,10 +200,7 @@ def _build_product_cost(conn, row, extra_ids: list[int], settings) -> ProductCos
         pm = mats.get(c.material_id)
         if pm:
             comp = compute_material_price_per_m2(pm, settings)
-            b = comp.breakdown
-            breakdown = MaterialBreakdownOut(
-                raw=b.raw, transport=b.transport, fx=b.fx, tax_uplift=b.tax_uplift
-            )
+            breakdown = _breakdown_out(comp.breakdown)
         components.append(
             ProductComponentOut(
                 material_id=c.material_id,
@@ -170,6 +213,7 @@ def _build_product_cost(conn, row, extra_ids: list[int], settings) -> ProductCos
         )
     return ProductCostOut(
         total_eur_per_m2=result.total_eur_per_m2,
+        margin_pct=result.margin_pct,
         margin_eur_m2=result.margin_eur_m2,
         sell_price_eur_m2=result.sell_price_eur_m2,
         components=components,
@@ -189,8 +233,8 @@ def _product_out(conn, row, *, with_cost: bool = False) -> McProductOut:
         silicone_id=row["silicone_id"],
         glassine_id=row["glassine_id"],
         extra_material_ids=extra_ids,
-        custom_margin_eur_m2=float(row["custom_margin_eur_m2"])
-        if row["custom_margin_eur_m2"] is not None
+        custom_margin_pct=float(row["custom_margin_pct"])
+        if _row_get(row, "custom_margin_pct") is not None
         else None,
         is_active=bool(row["is_active"]),
         created_at=row["created_at"],
@@ -219,7 +263,7 @@ def _load_materials_export_map(conn, material_ids: set[int], settings) -> dict[i
         row = fetch_material(conn, mid)
         if not row:
             continue
-        m = _material_out(row, settings=settings, with_computed=True)
+        m = _material_out(row, conn=conn, settings=settings, with_computed=True)
         out[mid] = m.model_dump()
     return out
 
@@ -258,7 +302,7 @@ def _load_products_export_payload(
     return products, materials_map
 
 
-# ─── Dashboard & référentiels ────────────────────────────────────────────────
+# ─── Référentiels ────────────────────────────────────────────────────────────
 
 
 @router.get("/api/pricing/categories")
@@ -278,182 +322,6 @@ def list_material_categories(request: Request):
     }
 
 
-@router.get("/api/pricing/dashboard", response_model=PricingDashboardOut)
-def pricing_dashboard(request: Request):
-    _require_read(request)
-    with get_db() as conn:
-        n_mat = conn.execute(
-            "SELECT COUNT(*) AS c FROM mc_material WHERE is_active=1"
-        ).fetchone()["c"]
-        n_prod = conn.execute(
-            "SELECT COUNT(*) AS c FROM mc_product WHERE is_active=1"
-        ).fetchone()["c"]
-        settings_data = load_settings_response(conn)
-        settings = load_pricing_settings(conn)
-        rows = conn.execute("SELECT * FROM mc_product WHERE is_active=1").fetchall()
-        ranked: list[tuple[Decimal, PricingDashboardProductRow]] = []
-        sell_sum = Decimal("0")
-        sell_n = 0
-        for row in rows:
-            try:
-                extra = load_product_extra_ids(conn, int(row["id"]))
-                cost = _build_product_cost(conn, row, extra, settings)
-            except HTTPException:
-                continue
-            except PricingError:
-                # Matière inactive / introuvable : on ignore ce produit du dashboard
-                # plutôt que faire crasher toute la page.
-                continue
-            except Exception as _dash_exc:
-                import logging as _logging
-                _logging.getLogger(__name__).warning(
-                    "pricing_dashboard : produit id=%s ignoré (%s: %s)",
-                    row["id"], type(_dash_exc).__name__, _dash_exc,
-                )
-                continue
-            except PricingError:
-                # Matière inactive / introuvable : on ignore ce produit du dashboard
-                # plutôt que faire crasher toute la page.
-                continue
-            except Exception as _dash_exc:
-                # Filet ultime : données incohérentes (sync mp<->mc défectueuse etc.)
-                # ne doivent pas casser le dashboard direction.
-                import logging as _logging
-                _logging.getLogger(__name__).warning(
-                    "pricing_dashboard : produit id=%s ignoré (%s: %s)",
-                    row["id"], type(_dash_exc).__name__, _dash_exc,
-                )
-                continue
-            sell_sum += cost.sell_price_eur_m2
-            sell_n += 1
-            ranked.append(
-                (
-                    cost.total_eur_per_m2,
-                    PricingDashboardProductRow(
-                        id=row["id"],
-                        code=row["code"],
-                        name=row["name"],
-                        total_eur_per_m2=cost.total_eur_per_m2,
-                        sell_price_eur_per_m2=cost.sell_price_eur_m2,
-                    ),
-                )
-            )
-        ranked.sort(key=lambda x: x[0], reverse=True)
-        top = [r[1] for r in ranked[:10]]
-        avg_sell = (sell_sum / sell_n).quantize(Decimal("0.0001")) if sell_n else None
-        variations, movers = _compute_dashboard_kpis(conn)
-    return PricingDashboardOut(
-        materials_active=int(n_mat),
-        products_active=int(n_prod),
-        eur_usd_rate=Decimal(str(settings_data["eur_usd_rate"])),
-        eur_usd_rate_updated_at=settings_data.get("eur_usd_rate_updated_at"),
-        eur_usd_rate_source=settings_data.get("eur_usd_rate_source"),
-        avg_sell_price_eur_m2=avg_sell,
-        top_products=top,
-        variations_by_category=variations,
-        recent_movers=movers,
-    )
-
-
-def _compute_dashboard_kpis(conn) -> tuple[list, list]:
-    """KPI direction : prix moyen par catégorie + variation 30j + top movers."""
-    from collections import defaultdict
-
-    cat_rows = conn.execute(
-        "SELECT c.code, c.label, m.id, m.unit_price, m.price_basis "
-        "FROM mc_material m "
-        "JOIN mc_material_category c ON c.id = m.category_id "
-        "WHERE m.is_active = 1 AND m.unit_price > 0"
-    ).fetchall()
-
-    by_cat: dict = defaultdict(
-        lambda: {"label": "", "prices": [], "basis_counts": defaultdict(int)}
-    )
-    for r in cat_rows:
-        code = r["code"]
-        by_cat[code]["label"] = r["label"]
-        by_cat[code]["prices"].append(float(r["unit_price"]))
-        by_cat[code]["basis_counts"][r["price_basis"] or "PER_KG"] += 1
-
-    thirty_days_ago = (date.today() - _dt_timedelta(days=30)).isoformat()
-    hist_rows = conn.execute(
-        "SELECT h.material_id, h.unit_price, h.effective_date, "
-        "       m.name, c.code AS category_code "
-        "FROM mc_material_price_history h "
-        "JOIN mc_material m ON m.id = h.material_id "
-        "JOIN mc_material_category c ON c.id = m.category_id "
-        "WHERE h.effective_date <= ? AND m.is_active = 1 "
-        "ORDER BY h.material_id, h.effective_date DESC",
-        (thirty_days_ago,),
-    ).fetchall()
-
-    latest_old: dict = {}
-    for h in hist_rows:
-        mid = int(h["material_id"])
-        if mid not in latest_old:
-            latest_old[mid] = {
-                "old_price": float(h["unit_price"]),
-                "effective_date": h["effective_date"],
-                "name": h["name"],
-                "category_code": h["category_code"],
-            }
-
-    current_prices: dict = {int(r["id"]): float(r["unit_price"]) for r in cat_rows}
-
-    movers = []
-    variations_by_cat = defaultdict(list)
-    for mid, old in latest_old.items():
-        new = current_prices.get(mid)
-        if new is None or old["old_price"] <= 0:
-            continue
-        pct = (new - old["old_price"]) / old["old_price"] * 100.0
-        variations_by_cat[old["category_code"]].append(pct)
-        # N'ajoute pas aux movers si variation < 0.01% (bruit de calcul).
-        if abs(pct) < 0.01:
-            continue
-        try:
-            eff = datetime.strptime(old["effective_date"][:10], "%Y-%m-%d").date()
-            days = max(0, (date.today() - eff).days)
-        except (ValueError, TypeError):
-            days = 30
-        movers.append((
-            abs(pct),
-            MaterialMoverOut(
-                id=mid,
-                name=old["name"],
-                category_code=old["category_code"],
-                old_price=Decimal(str(round(old["old_price"], 4))),
-                new_price=Decimal(str(round(new, 4))),
-                variation_pct=Decimal(str(round(pct, 2))),
-                days_ago=days,
-            ),
-        ))
-
-    variations = []
-    for code, data in by_cat.items():
-        prices = data["prices"]
-        avg = sum(prices) / len(prices) if prices else None
-        dom_basis = None
-        if data["basis_counts"]:
-            dom_basis = max(data["basis_counts"].items(), key=lambda x: x[1])[0]
-        var_pcts = variations_by_cat.get(code, [])
-        avg_var = sum(var_pcts) / len(var_pcts) if var_pcts else None
-        variations.append(CategoryVariationOut(
-            code=code,
-            label=data["label"] or code,
-            count_materials=len(prices),
-            avg_price_eur_per_kg_or_m2=Decimal(str(round(avg, 4))) if avg is not None else None,
-            price_basis_dominant=dom_basis,
-            variation_pct_30d=Decimal(str(round(avg_var, 2))) if avg_var is not None else None,
-        ))
-    variations.sort(key=lambda v: v.code)
-
-    movers.sort(key=lambda t: -t[0])
-    top_movers = [m for _, m in movers[:10]]
-
-    return variations, top_movers
-
-
 @router.post("/api/pricing/materials/preview", response_model=MaterialComputedOut)
 def preview_material_price(request: Request, body: MaterialPreviewIn):
     _require_read(request)
@@ -468,22 +336,18 @@ def preview_material_price(request: Request, body: MaterialPreviewIn):
         weight_per_m2=body.weight_per_m2,
         price_currency=body.price_currency,
         price_basis=body.price_basis,
-        tax_incidence=body.tax_incidence,
+        taxe_pct=body.taxe_pct,
         is_imported=body.is_imported,
+        applique_marge=body.applique_marge,
+        transport_mode=body.transport_mode,
+        transport_unit_price=body.transport_unit_price,
+        transport_pct=body.transport_pct,
+        transport_cout=body.transport_cout,
+        transport_quantite=body.transport_quantite,
         container_kg=body.container_kg,
         container_cost_usd=body.container_cost_usd,
     )
-    try:
-        res = compute_material_price_per_m2(pm, settings)
-    except PricingError as e:
-        raise _pricing_error(e) from e
-    b = res.breakdown
-    return MaterialComputedOut(
-        price_eur_per_m2=res.price_eur_per_m2,
-        breakdown=MaterialBreakdownOut(
-            raw=b.raw, transport=b.transport, fx=b.fx, tax_uplift=b.tax_uplift
-        ),
-    )
+    return _material_computed(pm, settings)
 
 
 # ─── Settings ────────────────────────────────────────────────────────────────
@@ -690,10 +554,12 @@ def list_materials(
     with_computed: bool = Query(False),
 ):
     _require_read(request)
-    sql = """
-        SELECT m.*, c.code AS category_code
+    sql = f"""
+        SELECT m.*, c.code AS category_code, f.nom AS fournisseur_nom, {MYSTOCK_COLS}
         FROM mc_material m
         JOIN mc_material_category c ON c.id = m.category_id
+        LEFT JOIN fournisseurs_fsc f ON f.id = m.fournisseur_fsc_id
+        {MYSTOCK_JOIN}
         WHERE 1=1
     """
     args: list[Any] = []
@@ -703,8 +569,10 @@ def list_materials(
         sql += " AND c.code=?"
         args.append(category.strip().upper())
     if supplier_id is not None:
-        sql += " AND m.supplier_id=?"
-        args.append(supplier_id)
+        # Le sélecteur de la liste porte désormais sur l'annuaire entreprise ;
+        # on accepte encore l'ancien identifiant pour les matières non rattachées.
+        sql += " AND (m.fournisseur_fsc_id=? OR (m.fournisseur_fsc_id IS NULL AND m.supplier_id=?))"
+        args.extend([supplier_id, supplier_id])
     if q and q.strip():
         sql += " AND (m.name LIKE ? OR m.appellation_code LIKE ?)"
         pat = f"%{q.strip()}%"
@@ -713,7 +581,7 @@ def list_materials(
     with get_db() as conn:
         settings = load_pricing_settings(conn) if with_computed else None
         rows = conn.execute(sql, args).fetchall()
-        items = [_material_out(r, settings=settings, with_computed=with_computed) for r in rows]
+        items = [_material_out(r, conn=conn, settings=settings, with_computed=with_computed) for r in rows]
     return {"materials": items}
 
 
@@ -725,7 +593,7 @@ def get_material(request: Request, material_id: int):
         if not row:
             raise HTTPException(status_code=404, detail="Matière introuvable.")
         settings = load_pricing_settings(conn)
-        return _material_out(row, settings=settings, with_computed=True)
+        return _material_out(row, conn=conn, settings=settings, with_computed=True)
 
 
 @router.post("/api/pricing/materials", response_model=McMaterialOut, status_code=201)
@@ -739,22 +607,35 @@ def create_material(request: Request, body: McMaterialCreate):
             raise HTTPException(status_code=400, detail="Catégorie invalide.")
         cur = conn.execute(
             """INSERT INTO mc_material (
-                name, appellation_code, category_id, supplier_id, weight_per_m2, weight_gsm,
-                price_currency, unit_price, price_basis, tax_incidence, is_imported,
+                name, appellation_code, category_id, supplier_id, fournisseur_fsc_id,
+                weight_per_m2, weight_gsm, grammage_gsm, perte_pct,
+                price_currency, unit_price, price_basis, taxe_pct, is_imported,
+                applique_marge, transport_mode, transport_unit_price, transport_pct,
+                transport_cout, transport_quantite,
                 container_kg, container_cost_usd, is_active
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
             (
                 body.name.strip(),
                 body.appellation_code.strip(),
                 body.category_id,
                 body.supplier_id,
-                float(body.weight_per_m2),
-                body.weight_gsm,
+                body.fournisseur_fsc_id,
+                # Le poids découle du grammage et de la perte, il n'est jamais saisi.
+                _poids_retenu(body.grammage_gsm, body.perte_pct),
+                int(body.grammage_gsm) if body.grammage_gsm else None,
+                float(body.grammage_gsm or 0),
+                float(body.perte_pct or 0),
                 body.price_currency,
                 float(body.unit_price),
                 body.price_basis,
-                float(body.tax_incidence),
+                float(body.taxe_pct or 0),
                 1 if body.is_imported else 0,
+                1 if body.applique_marge else 0,
+                body.transport_mode or "AMOUNT",
+                float(body.transport_unit_price or 0),
+                float(body.transport_pct or 0),
+                float(body.transport_cout or 0),
+                float(body.transport_quantite or 0),
                 float(body.container_kg) if body.container_kg is not None else None,
                 float(body.container_cost_usd) if body.container_cost_usd is not None else None,
             ),
@@ -765,7 +646,7 @@ def create_material(request: Request, body: McMaterialCreate):
             material_id=mid,
             unit_price=body.unit_price,
             price_currency=body.price_currency,
-            tax_incidence=body.tax_incidence,
+            taxe_pct=body.taxe_pct,
             effective_date=date.today().isoformat(),
             source=body.price_history_source or "Création",
             created_by=user.get("id"),
@@ -773,7 +654,7 @@ def create_material(request: Request, body: McMaterialCreate):
         conn.commit()
         row = fetch_material(conn, mid)
         settings = load_pricing_settings(conn)
-        return _material_out(row, settings=settings, with_computed=True)
+        return _material_out(row, conn=conn, settings=settings, with_computed=True)
 
 
 @router.patch("/api/pricing/materials/{material_id}", response_model=McMaterialOut)
@@ -789,24 +670,42 @@ def patch_material(request: Request, material_id: int, body: McMaterialUpdate):
         if not row:
             raise HTTPException(status_code=404, detail="Matière introuvable.")
 
-        price_fields = {"unit_price", "price_currency", "tax_incidence"}
+        price_fields = {"unit_price", "price_currency", "taxe_pct"}
         price_changed = bool(price_fields & set(data.keys()))
 
         sets = []
         args: list[Any] = []
         for k, v in data.items():
-            if k == "is_imported":
+            if k in ("is_imported", "is_active", "applique_marge"):
                 sets.append(f"{k}=?")
                 args.append(1 if v else 0)
-            elif k == "is_active":
-                sets.append(f"{k}=?")
-                args.append(1 if v else 0)
-            elif k in ("weight_per_m2", "unit_price", "tax_incidence", "container_kg", "container_cost_usd"):
+            elif k in (
+                "weight_per_m2",
+                "unit_price",
+                "taxe_pct",
+                "grammage_gsm",
+                "perte_pct",
+                "transport_unit_price",
+                "transport_pct",
+                "transport_cout",
+                "transport_quantite",
+                "container_kg",
+                "container_cost_usd",
+            ):
                 sets.append(f"{k}=?")
                 args.append(float(v) if v is not None else None)
             else:
                 sets.append(f"{k}=?")
                 args.append(v.strip() if isinstance(v, str) else v)
+        # Poids et grammage suivent la saisie : on les recalcule à partir de ce
+        # que la fiche affiche, jamais depuis une valeur envoyée séparément.
+        if "grammage_gsm" in data or "perte_pct" in data:
+            g = data.get("grammage_gsm", row["grammage_gsm"])
+            pe = data.get("perte_pct", row["perte_pct"])
+            sets.append("weight_per_m2=?")
+            args.append(_poids_retenu(g, pe))
+            sets.append("weight_gsm=?")
+            args.append(int(float(g)) if float(g or 0) > 0 else None)
         sets.append("updated_at=strftime('%Y-%m-%dT%H:%M:%S','now','localtime')")
         args.append(material_id)
         conn.execute(f"UPDATE mc_material SET {', '.join(sets)} WHERE id=?", args)
@@ -818,34 +717,18 @@ def patch_material(request: Request, material_id: int, body: McMaterialUpdate):
                 material_id=material_id,
                 unit_price=Decimal(str(new["unit_price"])),
                 price_currency=new["price_currency"],
-                tax_incidence=Decimal(str(new["tax_incidence"])),
+                taxe_pct=Decimal(str(new["taxe_pct"])),
                 effective_date=date.today().isoformat(),
                 source=history_source or "MAJ prix",
                 created_by=user.get("id"),
             )
         conn.commit()
-        # Sync automatique vers MyStock (matieres_premieres) si un prix a
-        # bougé et qu'un mp est appairé sur ce mc_material. Non bloquant.
-        if price_changed:
-            try:
-                actor_name = (user.get("nom") or user.get("email") or "").strip() or None
-                pricing_bridge.sync_mc_to_mp(
-                    conn,
-                    material_id,
-                    actor_id=user.get("id"),
-                    actor_name=actor_name,
-                    source_note="Coûts matières",
-                )
-                conn.commit()
-            except Exception as _sync_err:
-                import logging as _logging
-                _logging.getLogger(__name__).warning(
-                    "pricing_bridge.sync_mc_to_mp a échoué pour mc_id=%s : %s",
-                    material_id, _sync_err,
-                )
+        # Plus de recopie vers MyStock : une matière appairée n'a plus de prix
+        # propre — celui de MyStock est lu au moment du calcul. Le prix
+        # local reste en base pour les matières non appairées uniquement.
         row = fetch_material(conn, material_id)
         settings = load_pricing_settings(conn)
-        return _material_out(row, settings=settings, with_computed=True)
+        return _material_out(row, conn=conn, settings=settings, with_computed=True)
 
 
 @router.delete("/api/pricing/materials/{material_id}")
@@ -882,7 +765,7 @@ def material_price_history(request: Request, material_id: int):
                 material_id=r["material_id"],
                 unit_price=Decimal(str(r["unit_price"])),
                 price_currency=r["price_currency"],
-                tax_incidence=Decimal(str(r["tax_incidence"])),
+                taxe_pct=Decimal(str(r["tax_incidence"])),
                 effective_date=r["effective_date"],
                 source=r["source"],
                 created_by=r["created_by"],
@@ -1013,7 +896,7 @@ def create_product(request: Request, body: McProductCreate):
             cur = conn.execute(
                 """INSERT INTO mc_product (
                     code, name, frontal_id, adhesif_id, silicone_id, glassine_id,
-                    custom_margin_eur_m2, is_active
+                    custom_margin_pct, is_active
                 ) VALUES (?,?,?,?,?,?,?,1)""",
                 (
                     body.code.strip(),
@@ -1022,7 +905,7 @@ def create_product(request: Request, body: McProductCreate):
                     body.adhesif_id,
                     body.silicone_id,
                     body.glassine_id,
-                    float(body.custom_margin_eur_m2) if body.custom_margin_eur_m2 is not None else None,
+                    float(body.custom_margin_pct) if body.custom_margin_pct is not None else None,
                 ),
             )
             pid = cur.lastrowid
@@ -1068,7 +951,7 @@ def patch_product(request: Request, product_id: int, body: McProductUpdate):
                 if k == "is_active":
                     sets.append(f"{k}=?")
                     args.append(1 if v else 0)
-                elif k == "custom_margin_eur_m2":
+                elif k == "custom_margin_pct":
                     sets.append(f"{k}=?")
                     args.append(float(v) if v is not None else None)
                 elif k in ("code", "name"):
@@ -1130,7 +1013,7 @@ def preview_product_cost(request: Request, body: ProductPreviewIn):
             silicone_id=body.silicone_id,
             glassine_id=body.glassine_id,
             extra_material_ids=tuple(body.extra_material_ids),
-            custom_margin_eur_m2=body.custom_margin_eur_m2,
+            custom_margin_pct=body.custom_margin_pct,
         )
         mat_ids = _collect_product_material_ids(
             body.frontal_id,
@@ -1157,20 +1040,612 @@ def preview_product_cost(request: Request, body: ProductPreviewIn):
                     role=c.role,
                     price_eur_per_m2=c.price_eur_per_m2,
                     share_pct=c.share_pct,
-                    breakdown=MaterialBreakdownOut(
-                        raw=b.raw,
-                        transport=b.transport,
-                        fx=b.fx,
-                        tax_uplift=b.tax_uplift,
-                    ),
+                    breakdown=_breakdown_out(b),
                 )
             )
         return ProductCostOut(
             total_eur_per_m2=result.total_eur_per_m2,
+            margin_pct=result.margin_pct,
             margin_eur_m2=result.margin_eur_m2,
             sell_price_eur_m2=result.sell_price_eur_m2,
             components=components,
         )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Annuaire fournisseurs de l'entreprise (fournisseurs_fsc)
+#
+# Coûts matières n'a plus d'annuaire à lui : il choisit dans celui de
+# l'entreprise, le même que la qualité et le FSC. La table mc_supplier reste en
+# base pour l'historique, avec la correspondance établie en migration 226.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/api/pricing/fournisseurs")
+def list_fournisseurs_entreprise(request: Request):
+    """Annuaire fournisseurs de l'entreprise, pour tous les sélecteurs de /pricing."""
+    _require_read(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, nom, COALESCE(has_fsc, 0) AS has_fsc, pays, actif
+                 FROM fournisseurs_fsc
+                ORDER BY nom COLLATE NOCASE ASC"""
+        ).fetchall()
+    return {
+        "fournisseurs": [
+            {
+                "id": int(r["id"]),
+                "nom": r["nom"],
+                "has_fsc": bool(r["has_fsc"]),
+                "pays": r["pays"],
+                "actif": bool(r["actif"]) if r["actif"] is not None else True,
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.get("/api/pricing/fournisseurs/rapprochement")
+def rapprochement_fournisseurs(request: Request):
+    """
+    État du rapprochement entre l'ancien annuaire de Coûts matières et celui de
+    l'entreprise : ce qui a trouvé son jumeau, et ce qui reste à trancher.
+    """
+    _require_read(request)
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT s.id, s.name, s.fournisseur_fsc_id, f.nom AS fsc_nom,
+                      (SELECT COUNT(*) FROM mc_material m WHERE m.supplier_id = s.id)
+                        AS nb_matieres
+                 FROM mc_supplier s
+                 LEFT JOIN fournisseurs_fsc f ON f.id = s.fournisseur_fsc_id
+                ORDER BY s.name COLLATE NOCASE ASC"""
+        ).fetchall()
+    apparies, orphelins = [], []
+    for r in rows:
+        item = {
+            "mc_supplier_id": int(r["id"]),
+            "nom": r["name"],
+            "nb_matieres": int(r["nb_matieres"] or 0),
+            "fournisseur_id": int(r["fournisseur_fsc_id"])
+            if r["fournisseur_fsc_id"] is not None
+            else None,
+            "fournisseur_nom": r["fsc_nom"],
+        }
+        (apparies if item["fournisseur_id"] else orphelins).append(item)
+    return {
+        "apparies": apparies,
+        "orphelins": orphelins,
+        "nb_apparies": len(apparies),
+        "nb_orphelins": len(orphelins),
+    }
+
+
+@router.post("/api/pricing/fournisseurs/rapprochement")
+def set_rapprochement_fournisseur(request: Request, body: dict = Body(...)):
+    """Rattache manuellement un ancien fournisseur à celui de l'annuaire entreprise."""
+    _require_write(request)
+    try:
+        mc_id = int(body.get("mc_supplier_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="mc_supplier_id requis") from None
+    raw = body.get("fournisseur_id")
+    fid = None
+    if raw not in (None, "", 0):
+        try:
+            fid = int(raw)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="fournisseur_id invalide") from None
+    with get_db() as conn:
+        if fid is not None and not conn.execute(
+            "SELECT 1 FROM fournisseurs_fsc WHERE id=?", (fid,)
+        ).fetchone():
+            raise HTTPException(status_code=404, detail="Fournisseur introuvable.")
+        conn.execute("UPDATE mc_supplier SET fournisseur_fsc_id=? WHERE id=?", (fid, mc_id))
+        # Les matières encore sans fournisseur d'entreprise héritent du rattachement.
+        conn.execute(
+            """UPDATE mc_material SET fournisseur_fsc_id=?
+                WHERE supplier_id=? AND fournisseur_fsc_id IS NULL""",
+            (fid, mc_id),
+        )
+        conn.commit()
+    return {"ok": True}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Matières MyStock — vue et écriture des prix par fournisseur
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+@router.get("/api/pricing/mystock/materials")
+def list_mystock_materials(
+    request: Request,
+    q: Optional[str] = None,
+    categorie: Optional[str] = None,
+    active_only: bool = Query(True),
+):
+    """Une ligne par matière MyStock devisable, avec ses déclinaisons et prix."""
+    _require_read(request)
+    with get_db() as conn:
+        materials = mystock_prix.list_materials(
+            conn, q=q, categorie=categorie, actives_only=active_only
+        )
+        # Coût au m² de chaque déclinaison : c'est la colonne qui rend la liste
+        # utile, sinon il faut ouvrir chaque fiche pour savoir ce que la matière
+        # coûte réellement.
+        from app.services.pricing.repository import declinaison_to_pricing_material
+
+        reglages = load_pricing_settings(conn)
+        for m in materials:
+            for d in m.get("declinaisons", []):
+                d["cout_eur_m2"] = None
+                if not d.get("unit_price"):
+                    continue
+                try:
+                    d["cout_eur_m2"] = float(
+                        compute_material_price_per_m2(
+                            declinaison_to_pricing_material(
+                                {**d, "declinaison_id": d["id"],
+                                 "reference": m["reference"], "libelle": d["libelle"]}
+                            ),
+                            reglages,
+                        ).price_eur_per_m2
+                    )
+                except PricingError:
+                    # Réglages incomplets : la fiche le dira, la liste ne doit
+                    # pas tomber pour autant.
+                    pass
+        cats = sorted(
+            r["categorie"]
+            for r in conn.execute(
+                "SELECT DISTINCT categorie FROM matieres_premieres"
+            ).fetchall()
+            if (r["categorie"] or "").strip().lower() in mystock_prix.CATEGORIES_VISIBLES
+        )
+        return {
+            "materials": materials,
+            "categories": cats,
+            "laizes": mystock_prix.list_laizes(conn),
+            "grammages": mystock_prix.list_grammages(conn),
+        }
+
+
+def _decl_id(body: dict) -> int:
+    try:
+        return int(body.get("declinaison_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="declinaison_id requis") from None
+
+
+def _opt_int(body: dict, key: str) -> Optional[int]:
+    raw = body.get(key)
+    if raw in (None, "", 0, "0"):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail=f"{key} invalide") from None
+
+
+@router.post("/api/pricing/mystock/declinaisons")
+def add_mystock_declinaison(request: Request, body: dict = Body(...)):
+    """Ajoute une laize (frontal, glassine, complexe) ou un grammage (adhésif)."""
+    _require_write(request)
+    try:
+        matiere_id = int(body.get("matiere_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="matiere_id requis") from None
+    gsm = body.get("valeur_gsm")
+    with get_db() as conn:
+        res = mystock_prix.add_declinaison(
+            conn,
+            matiere_id=matiere_id,
+            laize_id=_opt_int(body, "laize_id"),
+            valeur_gsm=float(gsm) if gsm not in (None, "") else None,
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Ajout refusé"))
+        conn.commit()
+    return res
+
+
+@router.post("/api/pricing/mystock/declinaisons/valeur")
+def set_mystock_declinaison_valeur(request: Request, body: dict = Body(...)):
+    """Change le grammage (ou la laize) d'une déclinaison, saisi dans sa ligne."""
+    _require_write(request)
+    gsm = body.get("valeur_gsm")
+    with get_db() as conn:
+        res = mystock_prix.set_declinaison_valeur(
+            conn,
+            declinaison_id=_decl_id(body),
+            laize_id=_opt_int(body, "laize_id"),
+            valeur_gsm=float(gsm) if gsm not in (None, "") else None,
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Modification refusée"))
+        conn.commit()
+    return res
+
+
+@router.post("/api/pricing/mystock/declinaisons/deriver")
+def deriver_mystock_declinaison(request: Request, body: dict = Body(...)):
+    """Nouvelle déclinaison reprenant tous les réglages d'une autre, sauf sa valeur."""
+    user = _require_write(request)
+    with get_db() as conn:
+        res = mystock_prix.deriver_declinaison(
+            conn, declinaison_id=_decl_id(body), user_name=user.get("nom")
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Création refusée"))
+        conn.commit()
+    return res
+
+
+@router.post("/api/pricing/mystock/prix/dupliquer")
+def dupliquer_mystock_ligne(request: Request, body: dict = Body(...)):
+    """Duplique une ligne de prix sur la même déclinaison, sans fournisseur."""
+    _require_write(request)
+    with get_db() as conn:
+        res = mystock_prix.dupliquer_ligne(
+            conn,
+            declinaison_id=_decl_id(body),
+            fournisseur_id=_opt_int(body, "fournisseur_id"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Duplication refusée"))
+        conn.commit()
+    return res
+
+
+@router.delete("/api/pricing/mystock/declinaisons/{declinaison_id}")
+def delete_mystock_declinaison(request: Request, declinaison_id: int):
+    """Retire une déclinaison et les prix qui lui sont rattachés."""
+    _require_write(request)
+    with get_db() as conn:
+        res = mystock_prix.delete_declinaison(conn, declinaison_id)
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Suppression refusée"))
+        conn.commit()
+    return res
+
+
+@router.post("/api/pricing/mystock/appairage")
+def set_mystock_appairage(request: Request, body: dict = Body(...)):
+    """Appaire une déclinaison à une matière Coûts matières, ou la détache."""
+    _require_write(request)
+    with get_db() as conn:
+        res = mystock_prix.set_appairage(
+            conn,
+            declinaison_id=_decl_id(body),
+            mc_material_id=_opt_int(body, "mc_material_id"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Appairage refusé"))
+        conn.commit()
+    return res
+
+
+@router.post("/api/pricing/mystock/prix")
+def set_mystock_prix(request: Request, body: dict = Body(...)):
+    """Fixe le prix d'un fournisseur sur une déclinaison (et son miroir si principal)."""
+    user = _require_write(request)
+    try:
+        prix = float(body.get("prix"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="prix invalide") from None
+    with get_db() as conn:
+        res = mystock_prix.set_prix(
+            conn,
+            declinaison_id=_decl_id(body),
+            fournisseur_id=_opt_int(body, "fournisseur_id"),
+            prix=prix,
+            user_id=user.get("id"),
+            user_name=user.get("nom"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Modification refusée"))
+        conn.commit()
+    return res
+
+
+@router.post("/api/pricing/mystock/fournisseur")
+def set_mystock_fournisseur(request: Request, body: dict = Body(...)):
+    """Change le fournisseur d'une ligne de prix, sans lui faire perdre son statut."""
+    _require_write(request)
+    with get_db() as conn:
+        res = mystock_prix.set_fournisseur(
+            conn,
+            declinaison_id=_decl_id(body),
+            fournisseur_id=_opt_int(body, "fournisseur_id"),
+            nouveau_fournisseur_id=_opt_int(body, "nouveau_fournisseur_id"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Modification refusée"))
+        conn.commit()
+    return res
+
+
+@router.post("/api/pricing/mystock/principal")
+def set_mystock_principal(request: Request, body: dict = Body(...)):
+    """Désigne le fournisseur dont le prix fait foi pour cette déclinaison."""
+    user = _require_write(request)
+    with get_db() as conn:
+        res = mystock_prix.set_principal(
+            conn,
+            declinaison_id=_decl_id(body),
+            fournisseur_id=_opt_int(body, "fournisseur_id"),
+            user_id=user.get("id"),
+            user_name=user.get("nom"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Modification refusée"))
+        conn.commit()
+    return res
+
+
+@router.delete("/api/pricing/mystock/prix")
+def delete_mystock_prix(request: Request, body: dict = Body(...)):
+    """Retire un fournisseur d'une déclinaison."""
+    _require_write(request)
+    with get_db() as conn:
+        res = mystock_prix.delete_ligne(
+            conn,
+            declinaison_id=_decl_id(body),
+            fournisseur_id=_opt_int(body, "fournisseur_id"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Suppression refusée"))
+        conn.commit()
+    return res
+
+
+def _cout_declinaison(conn, param: dict) -> MaterialComputedOut:
+    """Coût au m² d'une déclinaison, à partir de ses propres réglages."""
+    from app.services.pricing.repository import declinaison_to_pricing_material
+
+    return _material_computed(
+        declinaison_to_pricing_material(param), load_pricing_settings(conn)
+    )
+
+
+@router.get("/api/pricing/mystock/declinaisons/{declinaison_id}/parametrage")
+def get_mystock_parametrage(request: Request, declinaison_id: int):
+    """
+    Fiche d'une déclinaison MyStock : identité, prix d'achat par fournisseur,
+    réglages de calcul et coût de revient au m². C'est l'équivalent d'une fiche
+    de la base Coûts matières, mais pilotée par MyStock.
+    """
+    _require_read(request)
+    with get_db() as conn:
+        param = mystock_prix.parametrage(conn, declinaison_id)
+        if not param:
+            raise HTTPException(status_code=404, detail="Déclinaison introuvable.")
+        param["computed"] = _cout_declinaison(conn, param)
+        param["historique"] = mystock_prix.historique_prix(conn, declinaison_id)
+    return param
+
+
+@router.patch("/api/pricing/mystock/declinaisons/{declinaison_id}/parametrage")
+def patch_mystock_parametrage(request: Request, declinaison_id: int, body: dict = Body(...)):
+    """Enregistre les réglages de calcul d'une déclinaison."""
+    user = _require_write(request)
+    with get_db() as conn:
+        res = mystock_prix.set_parametrage(
+            conn,
+            declinaison_id=declinaison_id,
+            patch=body,
+            user_name=user.get("nom"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Modification refusée"))
+        conn.commit()
+        param = res["parametrage"]
+        param["computed"] = _cout_declinaison(conn, param)
+        param["historique"] = mystock_prix.historique_prix(conn, declinaison_id)
+    return param
+
+
+# ─── Produits devisés à partir des matières MyStock ──────────────────────────
+
+
+def _cout_produit_mystock(conn, produit: dict, reglages) -> Optional[ProductCostOut]:
+    """Prix de revient d'un produit MyStock, au même format que ceux de la base CM."""
+    if not produit.get("composants"):
+        return None
+    try:
+        res = mystock_produits.cout_produit(conn, produit, reglages)
+    except PricingError:
+        # Une déclinaison mal réglée ne doit pas faire tomber la liste entière :
+        # le produit s'affiche sans coût, la fiche dira pourquoi.
+        return None
+    return ProductCostOut(
+        total_eur_per_m2=res.total_eur_per_m2,
+        margin_pct=res.margin_pct,
+        margin_eur_m2=res.margin_eur_m2,
+        sell_price_eur_m2=res.sell_price_eur_m2,
+        components=[
+            ProductComponentOut(
+                material_id=c.material_id,
+                name=c.name,
+                role=c.role,
+                price_eur_per_m2=c.price_eur_per_m2,
+                share_pct=c.share_pct,
+            )
+            for c in res.components
+        ],
+    )
+
+
+@router.get("/api/pricing/mystock/declinaisons")
+def list_mystock_declinaisons(request: Request):
+    """
+    Toutes les déclinaisons devisables, à plat : de quoi remplir les sélecteurs
+    d'un produit sans redemander la liste des matières.
+    """
+    _require_read(request)
+    with get_db() as conn:
+        materials = mystock_prix.list_materials(conn, actives_only=True)
+        reglages = load_pricing_settings(conn)
+        from app.services.pricing.repository import declinaison_to_pricing_material
+
+        out = []
+        for m in materials:
+            for d in m.get("declinaisons", []):
+                cout = None
+                if d.get("unit_price"):
+                    try:
+                        cout = float(
+                            compute_material_price_per_m2(
+                                declinaison_to_pricing_material(
+                                    {**d, "declinaison_id": d["id"],
+                                     "reference": m["reference"], "libelle": d["libelle"]}
+                                ),
+                                reglages,
+                            ).price_eur_per_m2
+                        )
+                    except PricingError:
+                        pass
+                out.append({
+                    "id": d["id"],
+                    "matiere_id": m["id"],
+                    "categorie": m["categorie"],
+                    "reference": m["reference"],
+                    "designation": m["designation"],
+                    "libelle": d["libelle"],
+                    "parametre": d["parametre"],
+                    "unit_price": d["unit_price"],
+                    "cout_eur_m2": cout,
+                })
+    return {"declinaisons": out}
+
+
+@router.get("/api/pricing/mystock/produits")
+def list_mystock_produits(
+    request: Request,
+    q: Optional[str] = None,
+    active_only: bool = Query(True),
+    with_cost: bool = Query(True),
+):
+    _require_read(request)
+    with get_db() as conn:
+        produits = mystock_produits.list_produits(conn, q=q, actifs_only=active_only)
+        if with_cost:
+            reglages = load_pricing_settings(conn)
+            for p in produits:
+                p["cost"] = _cout_produit_mystock(conn, p, reglages)
+    return {"produits": produits}
+
+
+@router.get("/api/pricing/mystock/produits/{produit_id}")
+def get_mystock_produit(request: Request, produit_id: int):
+    _require_read(request)
+    with get_db() as conn:
+        p = mystock_produits.get_produit(conn, produit_id)
+        if not p:
+            raise HTTPException(status_code=404, detail="Produit introuvable.")
+        p["cost"] = _cout_produit_mystock(conn, p, load_pricing_settings(conn))
+    return p
+
+
+@router.post("/api/pricing/mystock/produits")
+def create_mystock_produit(request: Request, body: dict = Body(...)):
+    user = _require_write(request)
+    with get_db() as conn:
+        res = mystock_produits.creer_produit(
+            conn,
+            code=body.get("code", ""),
+            designation=body.get("designation", ""),
+            composants=body.get("composants"),
+            custom_margin_pct=body.get("custom_margin_pct"),
+            note=body.get("note"),
+            user_name=user.get("nom"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Création refusée"))
+        conn.commit()
+        p = res["produit"]
+        p["cost"] = _cout_produit_mystock(conn, p, load_pricing_settings(conn))
+    return p
+
+
+@router.patch("/api/pricing/mystock/produits/{produit_id}")
+def update_mystock_produit(request: Request, produit_id: int, body: dict = Body(...)):
+    user = _require_write(request)
+    with get_db() as conn:
+        res = mystock_produits.modifier_produit(
+            conn, produit_id, patch=body, user_name=user.get("nom")
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Modification refusée"))
+        conn.commit()
+        p = res["produit"]
+        p["cost"] = _cout_produit_mystock(conn, p, load_pricing_settings(conn))
+    return p
+
+
+@router.delete("/api/pricing/mystock/produits/{produit_id}")
+def delete_mystock_produit(request: Request, produit_id: int):
+    _require_write(request)
+    with get_db() as conn:
+        res = mystock_produits.supprimer_produit(conn, produit_id)
+        if not res.get("ok"):
+            raise HTTPException(status_code=404, detail=res.get("reason", "Produit introuvable"))
+        conn.commit()
+    return res
+
+
+@router.get("/api/pricing/mystock/candidats/{declinaison_id}")
+def mystock_candidats(request: Request, declinaison_id: int):
+    """
+    Matières Coûts matières proposées pour appairer une déclinaison, les plus
+    probables d'abord : appellation identique à la référence MyStock, puis nom
+    proche, puis le reste. Celles déjà pilotées par une autre déclinaison sont
+    signalées.
+    """
+    _require_read(request)
+    with get_db() as conn:
+        d = mystock_prix.fetch_declinaison(conn, declinaison_id)
+        if not d:
+            raise HTTPException(status_code=404, detail="Déclinaison introuvable.")
+        ref = (d["reference"] or "").strip().lower()
+        des = (d["designation"] or "").strip().lower()
+        rows = conn.execute(
+            """SELECT m.id, m.name, m.appellation_code, c.code AS category_code,
+                      m.unit_price, m.price_basis, m.price_currency,
+                      (SELECT dd.id FROM mp_matiere_declinaison dd
+                        WHERE dd.mc_material_id = m.id LIMIT 1) AS deja_pilotee
+                 FROM mc_material m
+                 JOIN mc_material_category c ON c.id = m.category_id
+                WHERE m.is_active = 1"""
+        ).fetchall()
+        out = []
+        for r in rows:
+            app = (r["appellation_code"] or "").strip().lower()
+            name = (r["name"] or "").strip().lower()
+            score = 0
+            if ref and app and ref == app:
+                score += 100
+            elif ref and app and (ref in app or app in ref):
+                score += 40
+            if des and name and des == name:
+                score += 30
+            elif des and name and (des in name or name in des):
+                score += 15
+            out.append(
+                {
+                    "id": int(r["id"]),
+                    "name": r["name"],
+                    "appellation_code": r["appellation_code"],
+                    "category_code": r["category_code"],
+                    "unit_price": float(r["unit_price"] or 0),
+                    "price_basis": r["price_basis"],
+                    "price_currency": r["price_currency"],
+                    "deja_pilotee": r["deja_pilotee"] is not None,
+                    "score": score,
+                }
+            )
+        out.sort(key=lambda x: (-x["score"], (x["name"] or "").lower()))
+    return {"candidats": out}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1231,12 +1706,8 @@ def bridge_link(request: Request, body: dict = Body(...)):
         # Sync immédiate : pousse le prix côté qui a la valeur la plus récente.
         # On tente les deux sens ; celui qui n'a rien à faire retournera
         # {synced: False, reason: 'prix identique'} — silencieux.
-        actor_name = (request.state.user.get("nom") if hasattr(request.state, "user") else None) or None
-        try:
-            pricing_bridge.sync_mp_to_mc(conn, mp_id, source_note="Appairage manuel")
-            conn.commit()
-        except Exception:
-            pass
+        # Rien à recopier : l'appairage suffit, le prix MyStock devient
+        # immédiatement celui utilisé par les calculs de Coûts matières.
     return result
 
 

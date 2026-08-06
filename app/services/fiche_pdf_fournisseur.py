@@ -764,7 +764,6 @@ def _build_blocks(c: canvas.Canvas, produit: dict, matieres_map: dict) -> list[d
 
     # ── Cartons + Palettes ─────────────────────────────────────────
     rows_7 = _keep([
-        _kv("Type de carton", "Box type", mp_of("matiere_id", cart)),
         _kv("Bobines au sol", "Rolls per layer", _num(cart.get("bobines_sol"))),
         _kv("Nombre d'étages", "Number of layers", _num(cart.get("nb_etages"))),
         _kv("Bobines / carton", "Rolls / box", _num(cart.get("bobines_carton"))),

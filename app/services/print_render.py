@@ -228,7 +228,79 @@ DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL = """^XA
 
 # Templates prédéfinis complémentaires (galerie de départ pour l'admin).
 # Format : liste de dicts {key, nom, description, langage, contenu}.
+# ── Avertissement FSC à agrafer au dossier physique de production ──────
+#
+# Format 100 × 50 mm, soit 800 × 400 points à 203 dpi (8 pts/mm — même
+# résolution que les gabarits bobine ci-dessus : 57 mm → ^PW456).
+#
+# Strictement monochrome. Sur une thermique, la couleur n'existe pas : la
+# hiérarchie visuelle passe par l'épaisseur du trait, le pavé plein inversé
+# (^GB rempli + ^FR) et la taille de police. Rien d'autre ne se voit.
+#
+# Le contenu est une CONSIGNE, pas une identification : l'opérateur qui prend
+# le dossier physique en main doit savoir ce qu'on attend de lui avant d'aller
+# chercher sa bobine. C'est le pendant papier du bandeau de la saisie de
+# production — et le seul support disponible quand l'écran est mobilisé par
+# une autre machine.
+#
+# Texte sans accents, comme les gabarits existants : les polices bitmap A0
+# des thermiques d'entrée de gamme les rendent mal même en ^CI28.
+# Hiérarchie assumée : ce que l'opérateur doit FAIRE est plus gros que ce qui
+# identifie le dossier. Le n° d'OF et le client servent à retrouver la bonne
+# pochette — une fois l'étiquette en main, ils n'apprennent plus rien. Les
+# trois consignes, elles, sont relues à chaque changement de bobine.
+#
+# ^FB (field block) fait le retour à la ligne automatique : les consignes sont
+# trop longues pour tenir sur une ligne à cette taille, et un ^FD nu serait
+# tronqué au bord droit sans le moindre avertissement. Les hauteurs réservées
+# (2 / 3 / 2 lignes) sont calculées pour le pire cas.
+#
+# Le code-barres a sauté : il servait à rescanner le dossier, ce que personne
+# ne fait depuis une étiquette collée sur une pochette. La place gagnée va aux
+# consignes, qui elles sont lues.
+#
+# N° de dossier et client partagent une ligne — le n° à gauche, le client
+# aligné à droite via ^FB…,R (justification à droite dans la moitié droite,
+# pour que des noms de longueurs très différentes restent alignés entre eux).
+# La ligne gagnée est redonnée aux consignes sous forme d'interligne.
+DEFAULT_TEMPLATE_FSC_AVERTISSEMENT_ZPL = """^XA
+^CI28
+^PW800
+^LL400
+^LH0,0
+^FO4,4^GB792,392,4^FS
+^FO14,8^GB772,48,48^FS
+^FO26,14^FR^A0N,36,36^FDDOSSIER FSC^FS
+^FO560,22^FR^A0N,18,18^FD{{fsc_type_requis}}^FS
+^FO26,64^A0N,24,24^FD{{no_dossier}}^FS
+^FO380,70^FB394,1,0,R,0^A0N,18,18^FD{{client}}^FS
+^FO14,96^GB772,2,2^FS
+^FO26,102^FB748,2,4,L,0^A0N,28,28^FD1. Utiliser de la matiere avec la mention "Matiere FSC" uniquement.^FS
+^FO26,172^FB748,3,4,L,0^A0N,28,28^FD2. Pour chaque bobine utilisee (glassines et frontaux) ajouter les numeros de bobine IMPERATIVEMENT dans l'outil de traca^FS
+^FO26,272^FB748,2,4,L,0^A0N,28,28^FD3. Effectuer les entrees de produits finis en Z1 avec l'outil stock.^FS
+^FO14,342^GB772,2,2^FS
+^FO26,352^A0N,20,20^FD{{ref_produit}}  {{machine}}^FS
+^FO420,352^A0N,20,20^FD{{now:%d/%m/%Y}}^FS
+^FO670,348^A0N,28,28^FDMerci^FS
+^XZ
+"""
+
 DEFAULT_TEMPLATE_GALLERY = [
+    {
+        "key": "fsc_avertissement_dossier",
+        "variante": "full",
+        "nom": "Avertissement FSC — dossier de production (100×50mm, N&B)",
+        "description": (
+            "Format 100×50mm, strictement noir et blanc. Consigne à coller sur le "
+            "dossier physique : matière certifiée obligatoire, scan de chaque bobine, "
+            "entrée en Z1. Bandeau inversé, code-barres du n° de dossier."
+        ),
+        "langage": "zpl",
+        "usage_key": "fsc_avertissement_dossier",
+        "largeur_mm": 100,
+        "hauteur_mm": 50,
+        "contenu": DEFAULT_TEMPLATE_FSC_AVERTISSEMENT_ZPL,
+    },
     {
         "key": "bobine_full",
         "variante": "full",
@@ -421,6 +493,17 @@ USAGES = [
         "label": "Fiche technique (PDF)",
         "module": "prod",
         "placeholders": [],
+    },
+    {
+        "key": "fsc_avertissement_dossier",
+        "label": "Avertissement FSC — dossier de production",
+        "module": "prod",
+        "placeholders": [
+            "no_dossier", "numero_of", "client", "ref_produit", "machine",
+            "fsc_type_requis", "operateur_nom",
+            "{{barcode:no_dossier}}", "{{qrcode:no_dossier}}",
+            "{{now:%d/%m/%Y %H:%M}}",
+        ],
     },
     # À venir : etiquette_colis (MyExpé), etiquette_emplacement (MyStock), etc.
 ]

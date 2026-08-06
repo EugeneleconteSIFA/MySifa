@@ -975,3 +975,136 @@ body.light .contact-modal input:focus,body.light .contact-modal select:focus{box
   overflow:visible;
   white-space:nowrap;
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   TRACEUR — chaîne de traçabilité FSC (Traçabilité → Traceur)
+   ══════════════════════════════════════════════════════════════════
+   Une timeline verticale plutôt qu'un graphe : la chaîne est une
+   séquence (matière → production → stock → expédition), et une
+   séquence se lit de haut en bas sans apprentissage. Le graphe
+   n'apporterait de la valeur qu'aux embranchements, qui sont rendus
+   ici par des branches successives clairement titrées. */
+
+.trc-wrap{padding:4px 0 24px}
+
+.trc-search{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 6px}
+.trc-input{
+  flex:1;min-width:240px;
+  background:var(--bg);border:1.5px solid var(--border);border-radius:10px;
+  padding:10px 14px;font-size:14px;color:var(--text);font-family:inherit;outline:none;
+  transition:border-color .15s;
+}
+.trc-input:focus{border-color:var(--accent)}
+.trc-hint{font-size:11.5px;color:var(--muted);margin:0 0 14px;line-height:1.5}
+
+/* Candidats quand la saisie est ambiguë */
+.trc-cand{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:11px 14px;border-bottom:1px solid var(--border);cursor:pointer;
+  transition:background .12s;
+}
+.trc-cand:last-child{border-bottom:none}
+.trc-cand:hover{background:var(--accent-bg)}
+.trc-cand-lbl{font-size:13px;font-weight:700;color:var(--text)}
+.trc-cand-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.trc-cand-type{
+  font-size:10px;font-weight:700;letter-spacing:.3px;flex-shrink:0;
+  padding:3px 9px;border-radius:20px;background:var(--accent-bg);color:var(--accent);
+}
+
+/* Point d'entrée de la chaîne */
+.trc-racine{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin:6px 0 12px}
+.trc-racine-type{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.trc-racine-id{font-size:19px;font-weight:900;color:var(--text);font-family:ui-monospace,monospace}
+
+.trc-stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.trc-stat{
+  flex:1;min-width:104px;padding:10px 12px;border-radius:10px;
+  background:var(--card);border:1px solid var(--border);
+}
+.trc-stat-k{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.trc-stat-v{font-size:19px;font-weight:800;color:var(--text);margin-top:2px}
+
+/* Ce que la chaîne ne démontre PAS — affiché avant la chaîne, jamais
+   en note de bas de page. Une chaîne incomplète présentée comme
+   complète est pire qu'une absence de chaîne. */
+.trc-ruptures{
+  border:1px solid rgba(251,146,60,.42);background:rgba(251,146,60,.09);
+  border-radius:10px;padding:10px 13px;margin:0 0 14px;
+}
+.trc-ruptures-t{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:#fb923c;margin-bottom:5px}
+.trc-rupture{font-size:12px;color:#fb923c;line-height:1.55}
+body.light .trc-ruptures{background:rgba(217,119,6,.07);border-color:rgba(217,119,6,.32)}
+body.light .trc-ruptures-t,body.light .trc-rupture{color:#b45309}
+
+/* Branche = un dossier et sa descendance */
+.trc-branche{margin-bottom:22px}
+.trc-branche-head{
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+  padding:9px 0 11px;border-bottom:1px solid var(--border);margin-bottom:12px;
+}
+.trc-branche-ref{font-size:14px;font-weight:800;color:var(--accent);font-family:ui-monospace,monospace}
+.trc-branche-client{font-size:12px;font-weight:600;color:var(--text)}
+.trc-branche-meta{font-size:11px;color:var(--muted)}
+
+/* Timeline : le trait vertical porte la continuité de la chaîne.
+   S'il est interrompu à l'œil, c'est que l'information l'est aussi. */
+.trc-timeline{position:relative;padding-left:22px}
+.trc-timeline::before{
+  content:'';position:absolute;left:7px;top:6px;bottom:6px;width:2px;
+  background:linear-gradient(180deg,var(--border),var(--border));border-radius:2px;
+}
+.trc-node{
+  position:relative;display:flex;gap:11px;align-items:flex-start;
+  padding:10px 13px;margin-bottom:9px;border-radius:10px;
+  background:var(--card);border:1px solid var(--border);
+}
+.trc-node::before{
+  content:'';position:absolute;left:-19px;top:16px;width:10px;height:10px;
+  border-radius:50%;background:var(--border);border:2px solid var(--bg);
+}
+.trc-node--matiere::before{background:var(--accent)}
+.trc-node--prod::before{background:var(--warn,#fbbf24)}
+.trc-node--stock::before{background:#a78bfa}
+.trc-node--expe::before{background:var(--ok,#34d399)}
+.trc-node.is-clickable{cursor:pointer;transition:border-color .12s,background .12s}
+.trc-node.is-clickable:hover{border-color:var(--accent);background:var(--accent-bg)}
+/* Lien déduit par backfill : volontairement délavé. On voit au premier
+   coup d'œil ce qui est saisi et ce qui est reconstitué. */
+.trc-node.is-reconstitue{opacity:.62;border-style:dashed}
+.trc-node-ico{flex-shrink:0;color:var(--muted);margin-top:1px}
+.trc-node-body{flex:1;min-width:0}
+.trc-node-head{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.trc-node-title{font-size:13px;font-weight:700;color:var(--text)}
+.trc-node-sub{font-size:11.5px;color:var(--text2);margin-top:2px}
+.trc-node-line{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5}
+.trc-more{font-size:11px;color:var(--muted);padding:5px 0 10px;font-style:italic}
+
+.trc-reconst{
+  font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  padding:1px 6px;border-radius:4px;cursor:help;
+  background:rgba(148,163,184,.16);color:var(--muted);border:1px dashed var(--border);
+}
+.trc-fsc{
+  font-size:10px;font-weight:800;letter-spacing:.4px;padding:1px 7px;border-radius:5px;
+  background:rgba(52,211,153,.14);color:var(--ok,#34d399);border:1px solid rgba(52,211,153,.45);
+}
+.trc-fsc.is-ecart{background:rgba(251,146,60,.14);color:#fb923c;border-color:rgba(251,146,60,.45)}
+
+/* Export PDF : la page imprimée est le livrable d'audit. On enlève les
+   commandes, on force les fonds clairs, on empêche les nœuds d'être
+   coupés en deux par un saut de page. */
+@media print{
+  .trc-no-print,.trc-search,.trc-hint{display:none!important}
+  .trc-node,.trc-stat,.trc-ruptures{break-inside:avoid;page-break-inside:avoid}
+  .trc-branche{break-inside:avoid-page}
+  .trc-node{background:#fff;border-color:#ccc}
+}
+
+@media (max-width:640px){
+  .trc-stats{gap:7px}
+  .trc-stat{min-width:88px;padding:8px 10px}
+  .trc-stat-v{font-size:16px}
+  .trc-timeline{padding-left:18px}
+  .trc-node::before{left:-16px}
+}

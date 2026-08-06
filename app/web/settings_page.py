@@ -202,6 +202,14 @@ body.light .op-table tr.op-cat-row td{background:rgba(8,145,178,.06)}
   border:1px solid var(--border);text-transform:uppercase;letter-spacing:.3px;line-height:1.3
 }
 .op-pill.info{color:var(--text2);border-color:rgba(148,163,184,.4);background:rgba(148,163,184,.1)}
+/* v2.7.1 — Codes archivés (catalogue maintenance).
+   Un code archivé n'est ni actif ni supprimé : il est sorti du catalogue mais
+   son libellé continue de résoudre dans l'historique. La ligne est donc
+   estompée sans être barrée — barrer laisserait croire à une suppression. */
+.maint-arch-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;background:rgba(148,163,184,.18);color:var(--muted);margin-left:6px;vertical-align:middle}
+.maint-row-archived td{opacity:.55}
+.maint-row-archived:hover td{opacity:.85}
+.maint-arch-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 12px;margin-bottom:10px;border:1px dashed var(--border);border-radius:8px;background:var(--card);color:var(--muted);font-size:12px}
 .op-pill.attention{color:var(--warn);border-color:rgba(251,191,36,.4);background:rgba(251,191,36,.12)}
 .op-pill.critique{color:var(--danger);border-color:rgba(248,113,113,.45);background:rgba(248,113,113,.12)}
 .op-pill.calage{color:var(--ok);border-color:rgba(52,211,153,.4);background:rgba(52,211,153,.1)}
@@ -418,6 +426,28 @@ body.light .users-search select:focus{box-shadow:0 0 0 3px rgba(8,145,178,.12)}
 .ta-sim-exit{position:fixed;top:12px;left:12px;z-index:2100;background:rgba(0,0,0,.7);color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-family:inherit;cursor:pointer;pointer-events:auto}
 .ta-sim-exit:hover{background:rgba(0,0,0,.9)}
 .af-cl-nc-lbl:has(input:checked){border-color:var(--danger);background:rgba(248,113,113,0.10);color:var(--danger)}
+/* v2.5.21 : puce COM — « cette réponse exige un commentaire obligatoire ». */
+.af-cl-com-lbl:has(input:checked){border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
+/* v2.5.20 : contraste bouton / fond dans la section Alertes. Un bouton ne
+   porte jamais la couleur de la surface qui le contient — inversion :
+   surface blanche -> bouton var(--bg) ; surface teintee -> bouton var(--card). */
+.alert-row .btn-sm,
+.alert-row .btn-ghost,
+.alert-row .btn-ghost:hover,
+.alert-row .btn-ghost.danger:hover{background:var(--card)}
+.alert-modal-overlay .btn-sm,
+.alert-modal-overlay .btn-ghost,
+.alert-modal-overlay .btn-sec{background:var(--bg)}
+.alert-modal-overlay .btn-ghost:hover,
+.alert-modal-overlay .btn-sec:hover{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+.alert-modal-overlay .btn-ghost.danger:hover{background:var(--bg);border-color:var(--danger);color:var(--danger)}
+.alert-modal-overlay .af-cl-card .btn-sm,
+.alert-modal-overlay .af-cl-card .btn-ghost,
+.alert-modal-overlay .af-cl-card .btn-ghost.danger:hover,
+.alert-modal-overlay .af-cl-card .alert-field-input,
+.alert-modal-overlay .af-cl-card .alert-field-select{background:var(--card)}
+.alert-modal-overlay .af-cl-card .btn-ghost:hover{background:var(--accent-bg)}
+.af-cl-nc-lbl,.af-cl-com-lbl{background:var(--card)}
 .ta-chip{display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;font-weight:500;cursor:pointer;user-select:none;transition:background .12s ease,color .12s ease,border-color .12s ease;font-family:inherit;line-height:1.2}
 .ta-chip input{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
 .ta-chip:hover{border-color:var(--accent)}
@@ -708,6 +738,10 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="2 12 22 12"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="10" y1="7" x2="10" y2="17"/><line x1="14" y1="9" x2="14" y2="15"/><line x1="18" y1="7" x2="18" y2="17"/></svg>
         Laizes matières
       </button>
+      <button type="button" class="nav-btn" data-req-section="logistique" data-tab="mandrins">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><ellipse cx="12" cy="6" rx="3" ry="1.2"/></svg>
+        Mandrins
+      </button>
       <button type="button" class="nav-btn" data-req-section="logistique" data-tab="importations">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
         Importations
@@ -876,6 +910,11 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <button type="button" class="menu-item" data-goto="laizes">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2 12 22 12"/><line x1="6" y1="9" x2="6" y2="15"/><line x1="10" y1="7" x2="10" y2="17"/><line x1="14" y1="9" x2="14" y2="15"/><line x1="18" y1="7" x2="18" y2="17"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Laizes matières</span><span class="mi-desc">Formats standards par matière.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button type="button" class="menu-item" data-goto="mandrins">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.66 3.58 3 8 3s8-1.34 8-3V6"/><ellipse cx="12" cy="6" rx="3" ry="1.2"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Mandrins</span><span class="mi-desc">Perte de coupe appliquée aux tubes.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
             <button type="button" class="menu-item" data-goto="importations">
@@ -1459,6 +1498,13 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           <p id="mac-je-hint" class="sub" style="margin-top:-8px;margin-bottom:14px;font-size:11px;color:var(--muted)">
             Quand activé, cette machine tourne en continu tous les jours travaillés. Les horaires ci-dessous ne sont utilisés que si un override journalier ou hebdomadaire les rétablit.
           </p>
+          <label id="mac-sbm-row" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;margin-bottom:6px;font-size:13px">
+            <input type="checkbox" id="mac-sbm">
+            <span style="font-weight:600;color:var(--text)">Poste sans matière première</span>
+          </label>
+          <p id="mac-sbm-hint" class="sub" style="margin-top:0;margin-bottom:14px;font-size:11px;color:var(--muted)">
+            Toutes les lignes du planning ne sont pas des machines de production : le repiquage est un atelier, on y surimprime des étiquettes déjà fabriquées. Le frontal, la glassine et l&rsquo;adhésif ont été consommés en amont &mdash; les recompter serait un doublon. Le conditionnement (mandrin, carton, palette) reste calculé normalement.
+          </p>
           <div id="mac-horaires-weekly"></div>
           <div id="mac-horaires-parity" class="hidden" style="margin-top:16px"></div>
           <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
@@ -1545,6 +1591,29 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         </form>
         <div id="laizes-list" style="display:flex;flex-direction:column;gap:8px"></div>
         <p id="laizes-empty" class="sub" style="display:none;margin:16px 0 4px;font-size:13px">Aucune laize définie.</p>
+      </div>
+    </section>
+
+    <section id="panel-mandrins" class="hidden">
+      <div class="card">
+        <div style="margin-bottom:16px">
+          <h2 style="margin:0 0 4px">Mandrins</h2>
+          <p class="sub" style="margin:0;font-size:12px">Les mandrins se découpent dans des tubes. La perte de coupe retirée de la longueur du tube couvre les chutes de début et de fin. Utilisée par MyStock → Besoins matières pour convertir un besoin en mandrins en tubes, puis en palettes à commander.</p>
+        </div>
+        <div id="mandrins-loading" class="sub" style="padding:12px 0;font-size:13px">Chargement…</div>
+        <form id="mandrins-form" style="display:none;flex-direction:column;gap:16px;max-width:520px">
+          <div>
+            <label for="mand-perte" style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Perte de coupe sur un tube (%)</label>
+            <input type="number" id="mand-perte" min="0" max="99" step="0.5" placeholder="Ex. 10"
+              style="width:100%;padding:10px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;outline:none;transition:border-color .15s;font-variant-numeric:tabular-nums">
+            <p class="sub" style="margin:6px 0 0;font-size:12px">Nombre de tubes = mandrins × laize module ÷ (longueur du tube − perte). La longueur du tube et le nombre de tubes par palette se saisissent sur chaque fiche matière mandrin, dans MyStock.</p>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <button type="submit" class="btn" id="mand-save-btn">Enregistrer</button>
+            <span id="mand-status" class="sub" style="font-size:12px"></span>
+          </div>
+        </form>
+        <div id="mandrins-error" class="sub" style="display:none;color:var(--danger);font-size:13px;padding:12px 0"></div>
       </div>
     </section>
 
@@ -1638,6 +1707,10 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
         Codes
       </button>
+      <button type="button" class="btn btn-sec sub-tab-btn" data-maintsub="maint-subtab-usure">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
+        Pièces d'usure
+      </button>
       <button type="button" class="btn btn-sec sub-tab-btn" data-maintsub="maint-subtab-libres">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
         Interventions libres
@@ -1666,14 +1739,34 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
               <option value="2">N2</option>
               <option value="3">N3</option>
             </select>
-            <select id="maint-categorie">
+            <select id="maint-categorie" onchange="_maintOnCategorieChange()">
               <option value="controles">Contrôles</option>
               <option value="entretien">Nettoyage</option>
               <option value="remplacements">Interventions</option>
             </select>
             <input type="text" id="maint-intervalle" placeholder="Intervalle (ex. Hebdo, 30 jours, 6 mois)" maxlength="80">
-            <input type="text" id="maint-metrage-ref" placeholder="Réf. métrage (ex. 5000 m, 10 km)" maxlength="80">
           </div>
+          <div id="maint-usure-block" style="margin-top:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)">
+            <label style="display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;cursor:pointer;color:var(--text);white-space:nowrap">
+              <input type="checkbox" id="maint-usure-on" onchange="_maintOnUsureToggle()" style="width:16px;height:16px;flex:0 0 auto;margin:0;padding:0;cursor:pointer">
+              Pièce d'usure
+            </label>
+            <div id="maint-usure-fields" style="display:none;align-items:center;gap:12px;flex-wrap:wrap">
+              <select id="maint-usure-piece" onchange="_maintOnUsurePieceChange()" title="Pièce d'usure à laquelle ce code est rattaché" style="width:auto;min-width:150px;padding:6px 10px;font-size:12px">
+                <option value="">— Choisir —</option>
+              </select>
+              <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;color:var(--text);white-space:nowrap">
+                <input type="checkbox" id="maint-usure-haspos" onchange="_maintOnUsureHasPosChange()" style="width:16px;height:16px;flex:0 0 auto;margin:0;padding:0;cursor:pointer">
+                Position
+              </label>
+              <span id="maint-usure-pos-wrap" style="display:none">
+                <input type="text" id="maint-usure-position" list="maint-usure-position-list" placeholder="ex. bande" maxlength="40" oninput="_maintOnUsurePositionInput()" style="width:120px;padding:6px 10px;font-size:12px">
+                <datalist id="maint-usure-position-list"></datalist>
+              </span>
+              <input type="text" id="maint-metrage-ref" placeholder="Réf. métrage (ex. 5000 m)" maxlength="80" style="width:180px;padding:6px 10px;font-size:12px">
+            </div>
+          </div>
+          <div id="maint-usure-hint" style="display:none;font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5"></div>
           <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
             <button type="button" class="btn" onclick="saveMaintForm()">Enregistrer</button>
             <button type="button" class="btn btn-sec" onclick="closeMaintForm()">Annuler</button>
@@ -1717,6 +1810,36 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <input type="search" id="alerts-filter-q" class="op-filter" placeholder="Filtrer par nom d'alerte…" oninput="renderAlertsList()">
           </div>
           <div id="alerts-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+        </div>
+      </div>
+      <!-- v229 : Sous-onglet Pièces d'usure — référentiel des pièces suivies
+           par anneaux (Couteaux, Contre-couteaux…). Une pièce regroupe un ou
+           plusieurs codes sous une seule carte de l'accueil Maintenance ; quand
+           elle déclare des positions, chaque position est portée par un code
+           distinct. Avant ce référentiel, les 4 pièces étaient figées dans le
+           code source et le rattachement était deviné depuis les libellés. -->
+      <div id="maint-subtab-usure" class="maint-subtab" style="display:none">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+            <h2 style="margin:0">Pièces d'usure</h2>
+            <button type="button" class="btn" onclick="openUsurePieceForm()">+ Ajouter une pièce</button>
+          </div>
+          <p class="sub" style="margin-top:-4px;margin-bottom:14px">Chaque pièce donne une carte sur l'accueil Maintenance, avec ses deux anneaux Temps et Métrage. La colonne Positions est un reflet : elle liste ce que les codes rattachés déclarent, chaque position devenant un onglet de la carte. Une pièce sans position ne porte qu'un seul code et n'a pas d'onglet.</p>
+          <div id="usure-form-wrap" class="hidden op-form-panel">
+            <h3 id="usure-form-title">Nouvelle pièce</h3>
+            <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(180px,1fr))">
+              <input type="text" id="usure-label" placeholder="Libellé (ex. Couteaux)" maxlength="80">
+              <input type="number" id="usure-ordre" placeholder="Ordre d'affichage" min="0" step="1">
+            </div>
+            <div id="usure-form-hint" style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px">
+              Les positions (Bande, Rive…) ne se déclarent pas ici : elles se saisissent sur chaque code, dans l'onglet Codes. Cette pièce les reflétera automatiquement.
+            </div>
+            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+              <button type="button" class="btn" onclick="saveUsurePieceForm()">Enregistrer</button>
+              <button type="button" class="btn btn-sec" onclick="closeUsurePieceForm()">Annuler</button>
+            </div>
+          </div>
+          <div id="usure-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
         </div>
       </div>
       <!-- v182 Lot 2 : Sous-onglet Interventions libres -->
@@ -1932,6 +2055,22 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
       <div class="card" id="pr-output-card" style="display:none">
         <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Sortie du script</div>
         <pre id="pr-output" style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;font-size:12px;line-height:1.5;color:var(--text2);font-family:'SFMono-Regular',Menlo,monospace;max-height:420px;overflow:auto;margin:0;white-space:pre-wrap;word-break:break-word"></pre>
+      </div>
+
+      <!-- ── Santé du dépôt : migrations, branches, propreté ──────────────── -->
+      <div class="card" id="ds-card" style="margin-top:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px">
+          <div>
+            <div style="font-size:17px;font-weight:700;color:var(--text)">Santé du dépôt</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:4px">Migrations, branches et propreté du dossier de travail. Consultation seule&nbsp;— rien n'est modifié ici.</div>
+          </div>
+          <button type="button" class="btn btn-sec" id="ds-refresh-btn" onclick="loadDeploiementSante()" style="font-size:12px">
+            Rafraîchir
+          </button>
+        </div>
+        <div id="ds-body">
+          <div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Chargement&hellip;</div>
+        </div>
       </div>
 
       <!-- v2 : bloc Synchroniser DB v2 → v1 (déplacé depuis Maintenance) -->
@@ -2662,7 +2801,16 @@ async function api(path, opt) {
   if (r.status === 401) { location.href = '/?next=/settings'; return null; }
   const ct = r.headers.get('content-type') || '';
   const j = ct.includes('json') ? await r.json().catch(() => ({})) : {};
-  if (!r.ok) throw new Error(j.detail || ('Erreur ' + r.status));
+  if (!r.ok) {
+    // v2.7.1 : certains 409 renvoient un detail structuré ({message, ...})
+    // pour que l'appelant puisse réagir. Sans ce déballage, new Error(objet)
+    // affichait « [object Object] » à l'utilisateur.
+    const d = j.detail;
+    const msg = (d && typeof d === 'object') ? (d.message || JSON.stringify(d)) : d;
+    const err = new Error(msg || ('Erreur ' + r.status));
+    err.detail = d; err.status = r.status;
+    throw err;
+  }
   return j;
 }
 function toast(msg, err) {
@@ -2736,6 +2884,7 @@ function syncSettingsPageHead(tabId) {
     machines:     { title: 'Machines',        sub: 'Horaires, capacité, rentabilité' },
     emplacements: { title: 'Emplacements',    sub: 'Plan du magasin' },
     laizes:       { title: 'Laizes matières', sub: 'Formats standards' },
+    mandrins:     { title: 'Mandrins',        sub: 'Perte de coupe sur les tubes' },
     importations: { title: 'Importations',    sub: 'Grilles tarifaires transporteurs' },
     updates:      { title: 'Mises à jour',    sub: 'Annonces de release' },
     audit:        { title: 'Audit',           sub: 'Log d\'activité' },
@@ -2758,7 +2907,7 @@ function syncSettingsPageHead(tabId) {
   }
 }
 
-const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','maintenance','machines','emplacements','laizes','importations','bridge','updates','audit','fsc','dashboards','api','promote','printers','formations'];
+const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','maintenance','machines','emplacements','laizes','mandrins','importations','bridge','updates','audit','fsc','dashboards','api','promote','printers','formations'];
 
 function setTab(id, opts) {
   if (!VALID_TABS.includes(id)) id = 'menu';
@@ -2776,7 +2925,7 @@ function setTab(id, opts) {
       }
     } catch(e){}
   }
-  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'maintenance', 'machines', 'emplacements', 'laizes', 'importations', 'bridge', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations'].forEach(p => {
+  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'maintenance', 'machines', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -2789,6 +2938,7 @@ loadFournisseursGroupes();
   if (id === 'machines') initMachinesPanel();
   if (id === 'emplacements') initEmplacementsPanel();
   if (id === 'laizes') initLaizesPanel();
+  if (id === 'mandrins') initMandrinsPanel();
   if (id === 'importations') initImportationsPanel();
   if (id === 'bridge') initBridgePanel();
   if (id === 'updates') loadUpdates();
@@ -3096,6 +3246,8 @@ function renderMacHorairesForm() {
   const parityBox = document.getElementById('mac-horaires-parity');
   const jeBox = document.getElementById('mac-je');
   if (jeBox) jeBox.checked = !!(m && +m.journee_entiere === 1);
+  const sbmBox = document.getElementById('mac-sbm');
+  if (sbmBox) sbmBox.checked = !!(m && +m.sans_matiere_premiere === 1);
   if (!weekly || !m) return;
   const mk = macMachineKey(m);
   const isC2 = mk === 'C2';
@@ -3261,6 +3413,13 @@ async function saveMacHoraires() {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ journee_entiere: je }),
+    });
+    // Consommation matière : propriété de la machine, lue par MyStock.
+    const sbmBox = document.getElementById('mac-sbm');
+    await api('/api/planning/machines/' + id + '/sans-matiere-premiere', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sans_matiere_premiere: sbmBox && sbmBox.checked ? 1 : 0 }),
     });
     toast('Horaires enregistrés.');
     await loadMacMachineDetail();
@@ -3951,9 +4110,9 @@ let fourFilterCat = '';
 // Getter courant du picker du panneau d'ajout (setté après le premier chargement des catégories)
 let _cfCatsGetSelected = () => [];
 
-// Fallback hardcodé — utilisé si l'API /api/fournisseurs/categories est down
-// ou pas encore déployée. Doit rester synchro avec FOURNISSEUR_CATEGORIES dans
-// app/routers/settings.py.
+// Fallback hardcodé — utilisé si l'API /api/fournisseurs/categories est down.
+// Doit rester synchro avec FOURNISSEUR_CATEGORIES dans config.py (source de
+// vérité, servie par GET /api/fournisseurs/categories).
 const _FOURNISSEUR_CATS_FALLBACK = [
   {code:'mandrin', label:'Mandrin'}, {code:'palette', label:'Palette'},
   {code:'adhesif', label:'Adhésif'}, {code:'carton', label:'Carton'},
@@ -3983,7 +4142,11 @@ async function _loadFournisseurCategories(){
 
 function _renderCategoryPicker(container, initialSelected){
   const cats = window.__FOURNISSEUR_CATS__ || [];
-  const sel = new Set(initialSelected || []);
+  // Sélection filtrée sur le référentiel : un code stocké en base mais absent
+  // du référentiel n'a aucune puce, donc aucun moyen d'être décoché — il
+  // survivait à chaque enregistrement et masquait le changement demandé.
+  const connus = new Set(cats.map(c => c.code));
+  const sel = new Set((initialSelected || []).filter(c => connus.has(c)));
   container.innerHTML = cats.map(c => {
     const cls = ['four-cat-chip'];
     if (c.code === 'negoce') cls.push('cat-neg');
@@ -5870,7 +6033,20 @@ async function saveMaintForm() {
   if (!code) { toast('Code obligatoire', true); return; }
   if (!label) { toast('Libellé obligatoire', true); return; }
   if (niveau < 1 || niveau > 3) { toast('Niveau invalide (1-3)', true); return; }
-  const payload = { code, label, niveau, categorie, periodique, intervalle, metrage_ref };
+  // v230 : l'état des 2 cases à cocher est traduit en payload par le module
+  // partagé — une seule source de vérité pour les 2 pages hôtes.
+  const _usure = (typeof _maintUsurePayload === 'function')
+    ? _maintUsurePayload()
+    : { usure_piece_id: null, usure_position: '' };
+  if (document.getElementById('maint-usure-on')?.checked && !_usure.usure_piece_id) {
+    toast('Choisis une pièce d\'usure, ou décoche la case.', true); return;
+  }
+  if (_usure.usure_piece_id && document.getElementById('maint-usure-haspos')?.checked
+      && !_usure.usure_position) {
+    toast('Renseigne le nom de la position, ou décoche « Position particulière ».', true); return;
+  }
+  const payload = { code, label, niveau, categorie, periodique, intervalle, metrage_ref,
+                    usure_piece_id: _usure.usure_piece_id, usure_position: _usure.usure_position };
   try {
     if (_maintEditCode) {
       await api('/api/maintenance/codes/' + encodeURIComponent(_maintEditCode), {
@@ -5891,20 +6067,61 @@ async function saveMaintForm() {
   }
   closeMaintForm();
   await loadMaintCodes();
+  // v2.7.1 : un code cree ou renomme doit apparaitre immediatement dans la
+  // modal de saisie et les filtres — meme invalidation que la suppression.
+  if(typeof window.maintOnCatalogueChanged === 'function'){
+    try { await window.maintOnCatalogueChanged(); } catch(e) {}
+  }
   // Sync côté Alertes : une création/modif de code peut créer, renommer
   // ou supprimer l'alerte auto-liée (via le hook backend _sync_alert_for_code).
   if(typeof loadAlerts === 'function') await loadAlerts();
 }
 async function deleteMaintCode(code) {
-  if (!confirm('Supprimer le code ' + code + ' ?')) return;
+  // v2.7.1 : le serveur tranche entre suppression réelle et archivage selon
+  // les saisies rattachées. On ne l'anticipe pas ici (ça ferait un aller-retour
+  // de plus pour une information que la réponse porte déjà), mais le message
+  // final doit dire ce qui s'est réellement passé : un utilisateur à qui on
+  // annonce « supprimé » alors que le code est archivé le recréera.
+  const _lbl = (Array.isArray(window._maintItems)
+    ? (window._maintItems.find(x => String(x.code) === String(code)) || {}).label
+    : '') || '';
+  const _ask = (typeof window.maintConfirm === 'function')
+    ? window.maintConfirm({
+        title: 'Supprimer le code ' + code,
+        message: _lbl ? '« ' + _lbl + ' »' : 'Ce code',
+        detail: 'S\'il porte déjà des saisies ou des modèles de créneau, il sera '
+              + 'archivé plutôt que supprimé : l\'historique doit rester lisible. '
+              + 'Sinon, il est supprimé définitivement.',
+        confirmLabel: 'Supprimer',
+        danger: true,
+      })
+    : Promise.resolve(confirm('Supprimer le code ' + code + ' ?'));
+  if (!(await _ask)) return;
   try {
-    await api('/api/maintenance/codes/' + encodeURIComponent(code), { method: 'DELETE' });
-    toast('Code supprimé');
+    const res = await api('/api/maintenance/codes/' + encodeURIComponent(code),
+                          { method: 'DELETE' });
+    if (res && res.archived) {
+      const u = res.usages || {};
+      const bouts = [];
+      if (u.saisies) bouts.push(u.saisies + ' saisie(s)');
+      if (u.modeles) bouts.push(u.modeles + ' modèle(s) de créneau');
+      toast('Code ' + code + ' archivé — ' + (bouts.join(' et ') || 'usages existants')
+          + '. Il reste lisible dans l\'historique.');
+    } else {
+      toast('Code supprimé');
+    }
   } catch (e) {
     toast(e && e.message ? e.message : 'Erreur lors de la suppression', true);
     return;
   }
   await loadMaintCodes();
+  // v2.7.1 : le catalogue vient de changer. Sans cette invalidation, la modal
+  // « Enregistrer une opération » continuait de proposer le code supprimé
+  // jusqu'au prochain rechargement complet de la page — son cache
+  // (MAINT_STATE.codes) n'était jamais purgé.
+  if(typeof window.maintOnCatalogueChanged === 'function'){
+    try { await window.maintOnCatalogueChanged(); } catch(e) {}
+  }
   // La suppression d'un code déclenche la cascade DELETE de l'alerte liée
   // côté backend — on force le rechargement pour que la liste se mette à jour.
   if(typeof loadAlerts === 'function') await loadAlerts();
@@ -5922,6 +6139,10 @@ document.addEventListener('click', (ev) => {
   // v182 Lot 2 : charge la liste des libres a la premiere ouverture du sous-onglet
   if (target === 'maint-subtab-libres' && typeof loadLibres === 'function') {
     loadLibres();
+  }
+  // v229 : le référentiel des pièces d'usure se charge à la première ouverture.
+  if (target === 'maint-subtab-usure' && typeof loadUsurePiecesAdmin === 'function') {
+    loadUsurePiecesAdmin();
   }
 });
 
@@ -6705,12 +6926,12 @@ async function unlinkBridge(mp_id) {
 <!-- v2.4.18 : mysifa_maint_form.js — CRUD codes maintenance + interventions libres (module partagé settings ↔ maintenance). -->
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
-<script src="/static/mysifa_maint_form.js?v=2.4.18"></script>
+<script src="/static/mysifa_maint_form.js?v=2.7.4-usure"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
 <script src="/static/mysifa_impersonate.js"></script>
 <!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe
      autonome pour éviter qu'un refacto du script inline ne les supprime à nouveau. -->
-<script src="/static/mysifa_promote.js?v=3"></script>
+<script src="/static/mysifa_promote.js?v=4"></script>
 <!-- Fonctions imprimantes/templates/agents restaurees : bloc inline autonome.
      NE PAS fusionner avec le <script src> ci-dessus (contenu ignore par le navigateur). -->
 <script>
@@ -7458,6 +7679,72 @@ function initFscPanel() {
   }
   loadFscStats();
   loadFscRegistre();
+}
+
+async function initMandrinsPanel() {
+  const loading = document.getElementById('mandrins-loading');
+  const form = document.getElementById('mandrins-form');
+  const errBox = document.getElementById('mandrins-error');
+  const inp = document.getElementById('mand-perte');
+  const saveBtn = document.getElementById('mand-save-btn');
+  const status = document.getElementById('mand-status');
+  if (!form || !inp) return;
+
+  const showError = (msg) => {
+    if (loading) loading.style.display = 'none';
+    form.style.display = 'none';
+    if (errBox) { errBox.style.display = 'block'; errBox.textContent = msg; }
+  };
+
+  try {
+    const r = await fetch('/api/stock/config', { credentials: 'include' });
+    if (r.status === 403) { showError('Accès réservé à la Direction et à l\'Administration.'); return; }
+    if (!r.ok) { showError('Erreur de chargement (' + r.status + ').'); return; }
+    const data = await r.json();
+    inp.value = String(Number(data.mandrin_perte_coupe_pct || 0));
+    if (loading) loading.style.display = 'none';
+    if (errBox) errBox.style.display = 'none';
+    form.style.display = 'flex';
+  } catch (e) {
+    showError('Erreur de chargement : ' + (e?.message || 'inconnue'));
+    return;
+  }
+
+  if (_mandReady) return;
+  _mandReady = true;
+
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const pct = parseFloat((inp.value || '').replace(',', '.'));
+    if (isNaN(pct) || pct < 0 || pct >= 100) {
+      status.textContent = 'Perte de coupe invalide — valeur entre 0 et 99 %.';
+      status.style.color = 'var(--danger)';
+      return;
+    }
+    saveBtn.disabled = true;
+    status.textContent = 'Enregistrement…';
+    status.style.color = 'var(--muted)';
+    try {
+      const r = await fetch('/api/stock/config', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mandrin_perte_coupe_pct: pct }),
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.detail || ('HTTP ' + r.status));
+      }
+      status.textContent = 'Enregistré.';
+      status.style.color = 'var(--ok, #34d399)';
+      setTimeout(() => { status.textContent = ''; }, 2500);
+    } catch (e) {
+      status.textContent = 'Erreur : ' + (e?.message || 'enregistrement impossible');
+      status.style.color = 'var(--danger)';
+    } finally {
+      saveBtn.disabled = false;
+    }
+  });
 }
 
 async function initImportationsPanel() {
@@ -9000,6 +9287,7 @@ function renderLaizesList() {
 
 // ── Importations (Logistique) ─────────────────────────────────
 let _impReady = false;
+let _mandReady = false;
 
 // ---- Etat + helpers restaures depuis bb89336 ----
 const PR = {

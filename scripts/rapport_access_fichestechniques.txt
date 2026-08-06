@@ -1,0 +1,268 @@
+﻿Base   : \\IDEFIX\sifa_pub\Fiches techniques Access\sifa_fiches_techniques.mdb
+Table  : fiches_techniques
+Cle    : reference = 24/0023
+PowerShell : 5.1.26100.8875  |  Process 64 bits : True
+Provider   : Microsoft.ACE.OLEDB.16.0
+
+==============================================================================
+1. COLONNES DE [fiches_techniques]
+==============================================================================
+120 colonne(s)
+
+  1   reference                           Texte           240
+  2   date_creation                       Texte           240
+  3   modif                               Date            8
+  4   format                              Texte           240
+  5   etilaize                            Texte           240
+  6   etilong                             Texte           240
+  7   etirayon                            Texte           240
+  8   eticoins                            Texte           240
+  9   etiperfo                            Memo            536870910
+  10  modlaize                            Texte           240
+  11  modlong                             Texte           240
+  12  nbfront                             Texte           240
+  13  nbavance                            Texte           240
+  14  lateral_ext                         Texte           240
+  15  horizontal                          Texte           240
+  16  lateral_int                         Texte           50
+  17  outil                               Texte           240
+  18  outil_epaisseur                     Entier long     4
+  19  machine                             Texte           240
+  20  nbdents                             Texte           240
+  21  outilnbfront                        Texte           240
+  22  outilnumerosifa                     Texte           50
+  23  outilnumerofournisseur              Texte           240
+  24  laizecoupant                        Texte           240
+  25  outilmagnetique                     Texte           240
+  26  outilnbavance                       Texte           240
+  27  outil2                              Texte           255
+  28  outilnumerosifa2                    Texte           255
+  29  outil_epaisseur2                    Texte           255
+  30  nbdents2                            Texte           255
+  31  outilnbfront2                       Texte           255
+  32  outilnbavance2                      Texte           255
+  33  outilmagnetique2                    Texte           240
+  34  outil3                              Texte           255
+  35  outilnumerosifa3                    Texte           255
+  36  outil_epaisseur3                    Texte           255
+  37  nbdents3                            Texte           255
+  38  outilnbfront3                       Texte           255
+  39  outilnbavance3                      Texte           255
+  40  outilmagnetique3                    Texte           240
+  41  matsupport                          Texte           240
+  42  matsupport_rempl                    Texte           240
+  43  matglassine                         Texte           240
+  44  matglassine_rempl                   Texte           240
+  45  matlaize                            Texte           240
+  46  matlaizestandard                    Texte           50
+  47  matprotect                          Texte           240
+  48  protect_epaisseur                   Entier long     4
+  49  matiere_divers                      Texte           240
+  50  matlong                             Texte           240
+  51  matadhesif                          Texte           240
+  52  matquantite                         Simple          4
+  53  matquantite_type                    Texte           50
+  54  matquantite_unite                   Texte           50
+  55  nbcouleurs                          Texte           240
+  56  recto                               Texte           240
+  57  verso                               Texte           240
+  58  pant1                               Texte           240
+  59  pant2                               Texte           240
+  60  pant3                               Texte           240
+  61  pant4                               Texte           240
+  62  pant5                               Texte           240
+  63  pant6                               Texte           240
+  64  anilox1                             Texte           15
+  65  anilox2                             Texte           15
+  66  anilox3                             Texte           15
+  67  anilox4                             Texte           15
+  68  anilox5                             Texte           15
+  69  anilox6                             Texte           15
+  70  composition1                        Texte           50
+  71  composition2                        Texte           50
+  72  composition3                        Texte           50
+  73  composition4                        Texte           50
+  74  composition5                        Texte           50
+  75  composition6                        Texte           50
+  76  impression_divers                   Texte           250
+  77  mandrin_diametre                    Texte           240
+  78  mandrin_longueur                    Texte           50
+  79  enroulement                         Texte           240
+  80  enroulement_commentaires            Texte           255
+  81  miseboite                           Texte           240
+  82  choix_tolerance                     Texte           10
+  83  choix_bobinettes_completes          Texte           10
+  84  dimensions_carton                   Texte           240
+  85  cales_sachets                       Texte           250
+  86  nb_etag                             Texte           240
+  87  nb_au_sol                           Texte           50
+  88  particularites                      Memo            536870910
+  89  diametreext                         Texte           240
+  90  nbetiquette                         Texte           240
+  91  nb_etiquette_numerique              Entier long     4
+  92  bob_carton                          Texte           240
+  93  remarques                           Memo            536870910
+  94  problemes                           Memo            536870910
+  95  fichier                             Objet OLE       1073741823
+  96  poids                               Texte           240
+  97  etiquette_client_matiere            Texte           250
+  98  etiquette_client_adhesif            Texte           250
+  99  etiquette_client_reference          Texte           250
+  100 etiquette_client_conditionnement    Texte           250
+  101 quantite_par_carton                 Texte           50
+  102 reglage_enrouleur                   Texte           50
+  103 reglage_derouleur                   Texte           50
+  104 plieuse_timing_cam                  Texte           50
+  105 plieuse_pos_cam                     Texte           50
+  106 plieuse_nb_pouces                   Simple          4
+  107 cohesio_passage_sortie              Texte           50
+  108 cohesio_passage_papier              Texte           50
+  109 reglage_presseur_arriere            Texte           50
+  110 cohesio_programme                   Texte           50
+  111 reglage_pression_outil              Texte           50
+  112 reglage_barre                       Texte           50
+  113 plieuse_nb_dents                    Texte           50
+  114 lien_fichier1                       Texte           255
+  115 lien_fichier2                       Texte           255
+  116 lien_fichier3                       Texte           255
+  117 palettisation_type                  Texte           255
+  118 palettisation_nb_sol                Entier long     4
+  119 palettisation_nb_hauteur            Entier long     4
+  120 palettisation_hauteur_max           Simple          4
+
+==============================================================================
+2. CONTENU COMPLET DE reference = 24/0023
+==============================================================================
+  Aucun enregistrement trouve.
+  Exemples de [reference] :  | 100X100AF | 100X100D/RONDE | 100X100E | 100x100G (GMT)
+
+==============================================================================
+4. SQL DES REQUETES ACCESS (metrage, adhesif, matiere)
+==============================================================================
+  C'est ici que se trouve la formule officielle, deja ecrite cote SIFA.
+
+==============================================================================
+5. TAUX DE REMPLISSAGE (500 dernieres lignes)
+==============================================================================
+  Une colonne vide a 100 % n'est jamais saisie -> inutile de la lire.
+
+  reference                             99 %  ###################
+  date_creation                         75 %  ###############
+  modif                                100 %  ####################
+  format                               100 %  ####################
+  etilaize                              99 %  ###################
+  etilong                               99 %  ###################
+  etirayon                              36 %  #######
+  eticoins                              15 %  ###
+  etiperfo                              48 %  #########
+  modlaize                              97 %  ###################
+  modlong                               93 %  ##################
+  nbfront                               99 %  ###################
+  nbavance                              17 %  ###
+  lateral_ext                           96 %  ###################
+  horizontal                            93 %  ##################
+  lateral_int                           58 %  ###########
+  outil                                 73 %  ##############
+  outil_epaisseur                       65 %  #############
+  machine                               72 %  ##############
+  nbdents                               76 %  ###############
+  outilnbfront                          79 %  ###############
+  outilnumerosifa                       69 %  #############
+  outilnumerofournisseur                67 %  #############
+  laizecoupant                          70 %  ##############
+  outilmagnetique                       54 %  ##########
+  outilnbavance                         76 %  ###############
+  outil2                                19 %  ###
+  outilnumerosifa2                      15 %  ###
+  outil_epaisseur2                       5 %  #
+  nbdents2                              16 %  ###
+  outilnbfront2                         16 %  ###
+  outilnbavance2                        16 %  ###
+  outilmagnetique2                      26 %  #####
+  outil3                                 5 %  #
+  outilnumerosifa3                       3 %  
+  outil_epaisseur3                       0 %  
+  nbdents3                               3 %  
+  outilnbfront3                          3 %  
+  outilnbavance3                         3 %  
+  outilmagnetique3                       5 %  #
+  matsupport                           100 %  ####################
+  matsupport_rempl                       1 %  
+  matglassine                           30 %  ######
+  matglassine_rempl                      0 %  
+  matlaize                              77 %  ###############
+  matlaizestandard                      71 %  ##############
+  matprotect                            10 %  ##
+  protect_epaisseur                     43 %  ########
+  matiere_divers                         8 %  #
+  matlong                               12 %  ##
+  matadhesif                            90 %  ##################
+  matquantite                           70 %  ##############
+  matquantite_type                      65 %  #############
+  matquantite_unite                     71 %  ##############
+  nbcouleurs                            89 %  #################
+  recto                                 42 %  ########
+  verso                                 15 %  ###
+  pant1                                 42 %  ########
+  pant2                                 10 %  ##
+  pant3                                  8 %  #
+  pant4                                  3 %  
+  pant5                                  0 %  
+  pant6                                  0 %  
+  anilox1                               19 %  ###
+  anilox2                                0 %  
+  anilox3                                5 %  #
+  anilox4                                1 %  
+  anilox5                                0 %  
+  anilox6                                0 %  
+  composition1                          20 %  ####
+  composition2                          11 %  ##
+  composition3                           8 %  #
+  composition4                           2 %  
+  composition5                           0 %  
+  composition6                           0 %  
+  impression_divers                     32 %  ######
+  mandrin_diametre                      85 %  #################
+  mandrin_longueur                      65 %  #############
+  enroulement                           84 %  ################
+  enroulement_commentaires               2 %  
+  miseboite                             82 %  ################
+  choix_tolerance                       67 %  #############
+  choix_bobinettes_completes            71 %  ##############
+  dimensions_carton                     68 %  #############
+  cales_sachets                          9 %  #
+  nb_etag                               68 %  #############
+  nb_au_sol                             66 %  #############
+  particularites                        34 %  ######
+  diametreext                           16 %  ###
+  nbetiquette                           95 %  ###################
+  nb_etiquette_numerique                87 %  #################
+  bob_carton                            67 %  #############
+  remarques                             23 %  ####
+  problemes                              2 %  
+  fichier                               12 %  ##
+  poids                                  2 %  
+  etiquette_client_matiere              87 %  #################
+  etiquette_client_adhesif              88 %  #################
+  etiquette_client_reference           100 %  ####################
+  etiquette_client_conditionnement      84 %  ################
+  quantite_par_carton                   67 %  #############
+  reglage_enrouleur                     12 %  ##
+  reglage_derouleur                     11 %  ##
+  plieuse_timing_cam                     9 %  #
+  plieuse_pos_cam                        9 %  #
+  plieuse_nb_pouces                      4 %  
+  cohesio_passage_sortie                25 %  #####
+  cohesio_passage_papier                25 %  #####
+  reglage_presseur_arriere              11 %  ##
+  cohesio_programme                      6 %  #
+  reglage_pression_outil                 6 %  #
+  reglage_barre                         11 %  ##
+  plieuse_nb_dents                      12 %  ##
+  lien_fichier1                          4 %  
+  lien_fichier2                          0 %  
+  lien_fichier3                          0 %  
+  palettisation_type                    40 %  ########
+  palettisation_nb_sol                  38 %  #######
+  palettisation_nb_hauteur              38 %  #######
+  palettisation_hauteur_max             37 %  #######

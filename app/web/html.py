@@ -13,6 +13,10 @@ from config import (
     APP_ORG_NAME,
     APP_TAGLINE,
     APP_LOGIN_HINT,
+    APP_WELCOME_TITLE,
+    APP_WELCOME_SUB,
+    APP_TAGLINE_RICH,
+    APP_STATUS_TEXT,
     KERNSE_THEME,
 )
 
@@ -47,6 +51,17 @@ from app.web.login_assets import (
     LOGIN_MAIN_CSS,
     LOGIN_MAIN_JS,
 )
+
+# Override conditionnel : si KERNSE_THEME=1 sur cette instance, on remplace
+# les assets du login MySifa historique par la variante DA Kernse
+# (logo icône K, gros "Bienvenue.", tagline riche, SSO Azure AD + Badge NFC,
+# footer statut opérationnel, bouton primary navy). La logique métier
+# (endpoints auth, state) reste identique — c'est seulement le rendu HTML.
+if KERNSE_THEME:
+    from app.web.kernse_theme.login_assets import (
+        LOGIN_MAIN_CSS,   # noqa: F811 (override MySifa)
+        LOGIN_MAIN_JS,    # noqa: F811
+    )
 
 _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="fr">
@@ -1747,7 +1762,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 
 </style>
 </head>
-<body class="__STAGING_BODY_CLASS__">
+<body class="__STAGING_BODY_CLASS__ __KERNSE_THEME_CLASS__">
 <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true"><filter id="cloudNoise" x="-10%" y="-10%" width="120%" height="120%"><feTurbulence type="fractalNoise" baseFrequency="0.014" numOctaves="2" seed="7" stitchTiles="stitch"/><feDisplacementMap in="SourceGraphic" scale="55"/></filter></svg>
 <div class="staging-bandeau __STAGING_INITIAL_CLASS__" id="msf-staging-bandeau" __STAGING_INITIAL_HIDDEN__>
   <span class="msf-imp-msg" id="msf-staging-msg">__STAGING_INITIAL_MSG__</span>
@@ -2187,6 +2202,13 @@ function icon(name,size=16){
     'pallet': '<rect x="2" y="7" width="20" height="3" rx="0.5"/><rect x="2" y="14" width="20" height="3" rx="0.5"/><line x1="5" y1="10" x2="5" y2="14"/><line x1="12" y1="10" x2="12" y2="14"/><line x1="19" y1="10" x2="19" y2="14"/><line x1="5" y1="17" x2="5" y2="20"/><line x1="12" y1="17" x2="12" y2="20"/><line x1="19" y1="17" x2="19" y2="20"/>',
     'chevron-down': '<polyline points="6 9 12 15 18 9"/>',
     'chevron-right': '<polyline points="9 6 15 12 9 18"/>',
+    // Lucide activity — tracé d'électrocardiogramme, utilisé pour les timelines
+    // de suivi d'engagement (MyAO et MyExpé devis).
+    'activity': '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+    // Lucide paperclip — pièces jointes. Un trombone dessiné au trait, dans le
+    // même jeu que le reste : l'emoji 📎 dépend de la police du poste et casse
+    // l'alignement des lignes où il apparaît.
+    'paperclip': '<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
     'external': '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>',
     'link': '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
     'globe': '<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>',
@@ -2327,8 +2349,17 @@ async function loadMessagesUnread(){
 // Pastille « mes tâches » : tâches ouvertes qui me sont assignées. L'endpoint
 // répond 0 plutôt qu'une erreur pour un rôle non autorisé — une pastille ne
 // doit jamais faire échouer le chargement du portail.
+//
+// Le compteur suit la matrice d'accès, pas le rôle : quiconque peut ouvrir
+// l'app doit voir ses tâches en attente. Le garde-fou `isSuperAdmin` d'origine
+// laissait la pastille muette pour tous les autres services.
+function _peutVoirTaches(u){
+  const m=(u&&u.access_map&&u.access_map.taches)||{};
+  const niv=m._app||(isSuperAdmin(u)?'admin':'none');
+  return niv!=='none';
+}
 async function loadTachesCount(){
-  if(!isSuperAdmin(S.user))return;
+  if(!_peutVoirTaches(S.user))return;
   const r=await api('/api/taches/badge');
   if(r && typeof r.count==='number') set({tachesCount:r.count});
 }
@@ -8528,11 +8559,52 @@ async function loadDossiersSansOf(){
     const data=await api('/api/admin/dossiers-sans-of');
     set({
       dossiersSansOf:Array.isArray(data&&data.items)?data.items:[],
+      dossiersSansOfRapprochables:Number(data&&data.rapprochables||0),
       dossiersSansOfLoading:false,
     });
   }catch(e){
     set({dossiersSansOfLoading:false});
     toast(e.message||'Erreur chargement dossiers sans OF','error');
+  }
+}
+
+// Relance le rapprochement automatique dossier <-> OF sur tout le planning.
+// Simulation d'abord (dry_run), application ensuite apres confirmation : la
+// cascade elargie peut creer beaucoup de liens d'un coup, on montre donc le
+// resultat avant d'ecrire quoi que ce soit.
+async function relancerMappingAuto(){
+  if(S.relinkRunning) return;
+  set({relinkRunning:true});
+  try{
+    const sim=await api('/api/admin/relink-of?dry_run=1',{method:'POST'});
+    const aLier  =Number(sim&&sim.relinked||0);
+    const aRepar =Number(sim&&sim.repaired_links||0);
+    const ambigus=Number(sim&&sim.pending_for_review||0);
+    const lignes=[];
+    if(aLier)  lignes.push('\u00b7 '+aLier+' dossier'+(aLier>1?'s':'')+' rattaché'+(aLier>1?'s':'')+' automatiquement');
+    if(aRepar) lignes.push('\u00b7 '+aRepar+' lien'+(aRepar>1?'s':'')+' Access réparé'+(aRepar>1?'s':''));
+    if(!lignes.length){
+      toast(ambigus
+        ? ambigus+' dossier'+(ambigus>1?'s':'')+' ambigu'+(ambigus>1?'s':'')+' — à arbitrer dans « Mappings à valider »'
+        : 'Rien de plus à rapprocher automatiquement.');
+      return;
+    }
+    let msg='Simulation du rapprochement automatique :\n\n'+lignes.join('\n');
+    if(ambigus) msg+='\n\n'+ambigus+' cas ambigu'+(ambigus>1?'s':'')+' resteront à arbitrer manuellement.';
+    msg+='\n\nAppliquer ces changements ?';
+    if(!confirm(msg)) return;
+    const res=await api('/api/admin/relink-of',{method:'POST'});
+    const n=Number(res&&res.relinked||0), r=Number(res&&res.repaired_links||0);
+    toast(n+' dossier'+(n>1?'s':'')+' rattaché'+(n>1?'s':'')
+          +(r?' \u00b7 '+r+' lien'+(r>1?'s':'')+' réparé'+(r>1?'s':''):'')+'.');
+    await loadDossiersSansOf();
+    await loadPendingOfMappings();
+    loadPendingOfCount();
+  }catch(e){
+    toast(e.message||'Erreur pendant le rapprochement','error');
+  }finally{
+    set({relinkRunning:false});
+    render();
   }
 }
 
@@ -8631,10 +8703,31 @@ function renderDossiersSansOfTab(){
       h('div',null,'Tous les dossiers actifs ont au moins un OF lié.')
     );
   }
-  const intro=h('div',{style:{marginBottom:'16px',padding:'12px 16px',background:'var(--accent-bg)',border:'1px solid var(--border)',borderRadius:'10px',fontSize:'13px',color:'var(--text2)',lineHeight:1.6}},
+  const nbRappro=Number(S.dossiersSansOfRapprochables||0);
+  const nbManuel=Math.max(0, items.length-nbRappro);
+  const introTxt=[
     h('div',{style:{fontWeight:600,color:'var(--text)',marginBottom:'4px'}},
       items.length+' dossier'+(items.length>1?'s':'')+' actif'+(items.length>1?'s':'')+' sans OF lié'),
-    'Recherche dans tous les OF existants pour en attacher un (ou plusieurs), ou importe un nouvel OF PDF.'
+    h('div',null,'Recherche dans tous les OF existants pour en attacher un (ou plusieurs), ou importe un nouvel OF PDF.'),
+  ];
+  if(nbRappro){
+    introTxt.push(h('div',{style:'margin-top:5px;font-size:12px'},
+      h('b',{style:'color:var(--text)'},nbRappro+' rapprochable'+(nbRappro>1?'s':'')+' automatiquement'),
+      nbManuel? ' \u00b7 '+nbManuel+' sans numéro d\u2019OF exploitable (à attacher à la main)' : ''
+    ));
+  }
+  const busy=!!S.relinkRunning;
+  const intro=h('div',{style:{marginBottom:'16px',padding:'12px 16px',background:'var(--accent-bg)',border:'1px solid var(--border)',borderRadius:'10px',fontSize:'13px',color:'var(--text2)',lineHeight:1.6}},
+    h('div',{style:'display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap'},
+      h('div',{style:'min-width:0;flex:1'}, ...introTxt),
+      h('button',{
+        style:'padding:9px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:12px;font-weight:700;white-space:nowrap;'
+             +'cursor:'+(busy?'wait':'pointer')+';opacity:'+(busy?'0.55':'1'),
+        disabled:busy,
+        onClick:relancerMappingAuto,
+        title:'Simule puis applique le rapprochement automatique sur tous les dossiers du planning'
+      }, busy?'Rapprochement…':'\u21bb Relancer le mapping automatique')
+    )
   );
 
   const cards=items.map(it=>{
@@ -9451,7 +9544,6 @@ function renderOfTab(){
   );
 
   const rows=(S.ofImports||[]).map(row=>{
-    const stCls=prodOfStatutClass(row.statut);
     const dateCrea=(row.date_creation||'').slice(0,10)||'—';
     const acts=[
       h('button',{
@@ -9494,13 +9586,12 @@ function renderOfTab(){
       h('td',null,escHtml(row.delai_client||'—')),
       h('td',null,row.qte_etiquettes!=null?escHtml(String(row.qte_etiquettes)):'—'),
       h('td',null,escHtml(dateCrea)),
-      h('td',null,h('span',{className:stCls},prodOfStatutLabel(row.statut))),
       h('td',null,h('div',{style:{display:'flex',gap:'4px'}},...acts)),
     );
   });
 
   const empty=h('tr',null,
-    h('td',{colSpan:'9',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
+    h('td',{colSpan:'8',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
       S.ofImportsLoading?'Chargement…':(S.ofSearch?`Aucun résultat pour « ${escHtml(S.ofSearch)} »`:'Aucun OF importé')
     )
   );
@@ -10761,10 +10852,17 @@ function renderMobileNavbar(){
 // ══════════════════════════════════════════════════════════════════
 function _sheetRoles(){
   const role=(S.user&&S.user.role)||'';
+  const aa=(S.user&&S.user.app_access)||null;
   return {
     isSuper: role==='superadmin',
     isDir: role==='direction',
     isAdmin: (role==='administration'||role==='administration_ventes'||role==='administration_technique'),
+    // Parametres : acces sectionne (config.py ROLES_SETTINGS_* -> union ROLES_SETTINGS),
+    // deja reflete par app_access.settings cote serveur.
+    canSettings: aa ? !!aa.settings : (role==='superadmin'||role==='direction'),
+    // Tâches : niveau issu de la matrice d'accès, pas du rôle.
+    canTaches: (((S.user&&S.user.access_map&&S.user.access_map.taches)||{})._app
+                || (role==='superadmin'?'admin':'none')) !== 'none',
     role,
   };
 }
@@ -10772,7 +10870,7 @@ function openProfileSheet(){
   const sheet=document.getElementById('msf-sheet-root');
   const bd=document.getElementById('msf-sheet-backdrop');
   if(!sheet||!bd) return;
-  const {isSuper,isDir,isAdmin,role}=_sheetRoles();
+  const {isSuper,isDir,isAdmin,canSettings,canTaches,role}=_sheetRoles();
   const nom=(S.user&&S.user.nom)||'';
   const initials=_mnbInitials(nom);
   const msgUnread=Number(S.msgUnread||0);
@@ -10794,10 +10892,10 @@ function openProfileSheet(){
   }
   const items=[];
   items.push(item('profil', ICO.user, 'Mon profil', ''));
-  if(isSuper||isDir){
+  if(canSettings){
     items.push(item('settings', ICO.sliders, 'Paramètres', ''));
   }
-  if(isSuper){
+  if(canTaches){
     const nbT=Number(S.tachesCount||0);
     items.push(item('taches', ICO.taches, 'Gestionnaire de tâches',
       nbT>0?(nbT>9?'9+':String(nbT)):''));
@@ -11176,7 +11274,7 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         staging_body_class = "has-staging-bandeau"
         staging_initial_class = ""  # rouge par défaut (staging)
         staging_initial_hidden = ""
-        staging_initial_msg = "v1 — Environnement de test — DB partagée avec la prod"
+        staging_initial_msg = "v1 — Bac à sable · ce qui est saisi ici sera effacé cette nuit"
     else:
         staging_body_class = ""
         staging_initial_class = "env-prod"
@@ -11245,8 +11343,13 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__APP_LOGIN_HINT__", _js_escape(APP_LOGIN_HINT))
         .replace("__APP_ORG_NAME__", _js_escape(APP_ORG_NAME))
         .replace("__APP_NAME__", _js_escape(APP_NAME))
+        .replace("__APP_WELCOME_TITLE__", _js_escape(APP_WELCOME_TITLE))
+        .replace("__APP_WELCOME_SUB__", _js_escape(APP_WELCOME_SUB))
+        .replace("__APP_TAGLINE_RICH__", _js_escape(APP_TAGLINE_RICH))
+        .replace("__APP_STATUS_TEXT__", _js_escape(APP_STATUS_TEXT))
         # Theme Kernse : link injecté seulement si KERNSE_THEME=1.
         .replace("__KERNSE_THEME_CSS__", _KERNSE_THEME_LINK)
+        .replace("__KERNSE_THEME_CLASS__", "kernse-theme" if KERNSE_THEME else "")
         # Re-substitution du __V_LABEL__ (peut apparaître dans les assets
         # injectés au-dessus après leur inclusion). Idempotent.
         .replace("__V_LABEL__", f"v{APP_VERSION}")

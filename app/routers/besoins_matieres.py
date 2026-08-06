@@ -31,7 +31,13 @@ Formules :
                   grammage = matieres_premieres.weight_gsm (saisi sur la fiche
                   matière), repli fiches_techniques.qte_au_mille
                   laize    = of_imports.laize, repli fiche technique
-- mandrins (u)  : qte_etiquettes / nb_etiq_bobin
+Postes sans matière première (repiquage) : frontal, glassine et adhésif ne
+sont pas comptés — la matière a été consommée en amont. Mandrins, cartons et
+palettes restent calculés : le conditionnement, lui, est bien consommé.
+
+- mandrins (u)  : of_imports.nb_mandrins, sinon of_imports.qte_bobines,
+                  sinon qte_etiquettes / nb_etiq_bobin (champ de la fiche, ou
+                  nombre relu dans la phrase de conditionnement)
 - cartons  (u)  : mandrins / nb_bobines_carton
 - palettes (u)  : cartons / (palette_nb_cartons_sol * palette_nb_cartons_hauteur)
 
@@ -45,13 +51,18 @@ sur la durée qui tombe dans la fenêtre.
 
 Accès : rôles _STOCK_MATIERES_ADMIN_ROLES (voir stock.py).
 """
+import re
 from datetime import date, datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
 
 from app.core.database import get_db
-from app.routers.stock import require_stock_matieres_admin
+from app.routers.stock import (
+    require_stock_matieres_admin,
+    require_stock_write,
+    stock_config_float,
+)
 
 router = APIRouter(tags=["besoins-matieres"])
 
@@ -153,12 +164,21 @@ _SQL_PE = """
     SELECT pe.id, pe.machine_id, pe.reference, pe.client, pe.description,
            pe.ref_produit, pe.ref_produit_norm, pe.numero_of, pe.statut,
            pe.planned_start, pe.planned_end, pe.date_livraison, pe.duree_heures,
-           pe.position,
+           pe.position, pe.of_import_id,
            m.nom AS machine_nom,
+           COALESCE(m.sans_matiere_premiere, 0) AS poste_sans_matiere,
            oi.qte_etiquettes AS qte_etiquettes,
            oi.qte_bobines    AS qte_bobines,
            oi.metrage        AS of_metrage,
-           oi.laize          AS of_laize
+           oi.laize          AS of_laize,
+           -- L'OF chiffre souvent lui-meme le conditionnement : ces valeurs
+           -- priment sur toute reconstitution a partir de la fiche technique.
+           oi.nb_mandrins    AS of_nb_mandrins,
+           oi.nb_cartons     AS of_nb_cartons,
+           oi.conditionnement AS of_conditionnement,
+           COALESCE(oi.valide, 0) AS of_valide,
+           oi.valide_par          AS of_valide_par,
+           oi.valide_at           AS of_valide_at
     FROM planning_entries pe
     LEFT JOIN machines m ON m.id = pe.machine_id
     LEFT JOIN of_imports oi ON oi.id = pe.of_import_id
@@ -168,17 +188,21 @@ _SQL_PE = """
 
 _SQL_FT = """
     SELECT id, reference, ref_produit_norm, machine,
+           COALESCE(valide, 0) AS valide, valide_par, valide_at,
            support, glassine, adhesif, qte_au_mille, eti_laize, eti_longueur,
-           mod_longueur, mod_nb_front, laize, laize_optimale,
+           mod_laize, mod_longueur, mod_nb_front, laize, laize_optimale,
            mandrin_dia, nb_etiq_bobin, nb_bobines_carton, cartons,
+           conditionnement,
            palette_type, palette_nb_cartons_sol, palette_nb_cartons_hauteur
     FROM fiches_techniques
 """
 
 _FT_FIELDS = (
     "support", "glassine", "adhesif", "qte_au_mille", "eti_laize", "eti_longueur",
-    "mod_longueur", "mod_nb_front", "laize", "laize_optimale",
+    "valide", "valide_par", "valide_at",
+    "mod_laize", "mod_longueur", "mod_nb_front", "laize", "laize_optimale",
     "mandrin_dia", "nb_etiq_bobin", "nb_bobines_carton", "cartons",
+    "conditionnement",
     "palette_type", "palette_nb_cartons_sol", "palette_nb_cartons_hauteur",
 )
 
@@ -193,14 +217,21 @@ def _ft_key(norm, ref) -> str:
     return (ref or "").strip().lower()
 
 
-def _load_dossiers(conn) -> list:
+# Même requête que _SQL_PE, mais sur un dossier précis quel que soit son statut :
+# on déstocke une production terminée, donc hors du périmètre de la vue Besoins.
+_SQL_PE_UN = _SQL_PE.replace(
+    "WHERE pe.statut IN ('attente', 'en_cours')", "WHERE pe.id = ?"
+).replace("ORDER BY COALESCE(pe.planned_start, pe.date_livraison, '9999'), pe.position", "")
+
+
+def _load_dossiers(conn, sql: Optional[str] = None, params: tuple = ()) -> list:
     """Dossiers du planning (attente/en_cours) + fiche technique associée.
 
     Tie-breaker machine identique à planning.py : fiche dont `machine`
     correspond à la machine du dossier > fiche sans machine > autre, puis
     id croissant. Chaque dossier reçoit les champs ft_* (None si aucune fiche).
     """
-    pes = [dict(r) for r in conn.execute(_SQL_PE).fetchall()]
+    pes = [dict(r) for r in conn.execute(sql or _SQL_PE, params).fetchall()]
     fts = [dict(r) for r in conn.execute(_SQL_FT).fetchall()]
 
     by_key: dict = {}
@@ -235,7 +266,8 @@ def _load_mapping(conn) -> dict:
     rows = conn.execute("""
         SELECT m.kind, m.source_value, m.matiere_id,
                mp.reference, mp.designation, mp.categorie,
-               mp.metres_lineaires_par_bobine, mp.weight_gsm, mp.weight_per_m2
+               mp.metres_lineaires_par_bobine, mp.weight_gsm, mp.weight_per_m2,
+               mp.longueur_tube_mm, mp.unites_par_palette
         FROM mp_fiche_mapping m
         JOIN matieres_premieres mp ON mp.id = m.matiere_id
     """).fetchall()
@@ -253,6 +285,11 @@ def _load_mapping(conn) -> dict:
             ),
             "weight_gsm": r["weight_gsm"] if "weight_gsm" in keys else None,
             "weight_per_m2": r["weight_per_m2"] if "weight_per_m2" in keys else None,
+            # Mandrins : longueur du tube acheté et nombre de tubes par palette.
+            # Ce sont les deux seules données qui traduisent un besoin en mandrins
+            # en une commande de tubes, puis de palettes.
+            "longueur_tube_mm": r["longueur_tube_mm"] if "longueur_tube_mm" in keys else None,
+            "unites_par_palette": r["unites_par_palette"] if "unites_par_palette" in keys else None,
         }
     return out
 
@@ -339,7 +376,150 @@ def _matiere_ml_par_bobine(mapping: dict, kind: str, source_value: str):
     return m.get("metres_lineaires_par_bobine") if m else None
 
 
-def _compute_besoins_dossier(pe: dict, mapping: dict) -> list:
+# « Bobine de 1.000 étiquettes », « Bobines de 1 000 etiq. » : la phrase de
+# conditionnement porte le nombre d'étiquettes par bobine bien plus souvent que
+# le champ dédié de la fiche technique, laissé vide dans la plupart des fiches.
+_RE_ETIQ_BOBINE = re.compile(
+    r"bobines?\s*(?:de|:)?\s*(\d[\d\s\u202f\u00a0.,]*)\s*(?:é|e)tiq",
+    re.IGNORECASE,
+)
+
+
+def _entier_fr(txt) -> Optional[int]:
+    """« 1.000 », « 1 000 », « 1 000 » → 1000.
+
+    Les séparateurs de milliers français (point, espace, espace fine) sont
+    retirés sans distinction : un nombre d'étiquettes par bobine est toujours
+    entier, aucun risque de confondre avec une décimale.
+    """
+    chiffres = re.sub(r"\D", "", str(txt or ""))
+    if not chiffres:
+        return None
+    try:
+        v = int(chiffres)
+    except ValueError:
+        return None
+    return v if v > 0 else None
+
+
+def _etiq_par_bobine(pe: dict) -> dict:
+    """Étiquettes par bobine, avec sa provenance.
+
+    Le champ dédié `nb_etiq_bobin` est vide sur beaucoup de fiches alors que la
+    phrase de conditionnement porte l'information. On lit dans l'ordre : le
+    champ, la phrase de la fiche, puis celle de l'OF.
+    """
+    v = _f(pe.get("ft_nb_etiq_bobin"))
+    if v:
+        return {"valeur": v, "champ": "fiches_techniques.nb_etiq_bobin",
+                "origine": "Fiche technique"}
+    for cle, champ, origine in (
+        ("ft_conditionnement", "fiches_techniques.conditionnement",
+         "Fiche technique (conditionnement)"),
+        ("of_conditionnement", "of_imports.conditionnement", "OF (conditionnement)"),
+    ):
+        m = _RE_ETIQ_BOBINE.search(str(pe.get(cle) or ""))
+        if m:
+            n = _entier_fr(m.group(1))
+            if n:
+                return {"valeur": float(n), "champ": champ, "origine": origine}
+    return {"valeur": None, "champ": None, "origine": None}
+
+
+def _nb_bobines_dossier(pe: dict, qte: Optional[float]) -> dict:
+    """Nombre de bobines produites — c'est aussi le nombre de mandrins consommés.
+
+    Trois sources, de la plus directe à la plus reconstituée :
+    l'OF quand il chiffre lui-même les mandrins, la quantité de bobines de l'OF,
+    puis la quantité d'étiquettes divisée par les étiquettes par bobine.
+    """
+    n = _f(pe.get("of_nb_mandrins"))
+    if n:
+        return {"nb": n, "formule": f"{_n(n)} mandrins (chiffrés sur l'OF)",
+                "variables": [
+                    {"label": "Mandrins", "champ": "of_imports.nb_mandrins",
+                     "origine": "OF", "valeur": n, "unite": "u"}],
+                "manque": []}
+
+    nb_bob = _f(pe.get("qte_bobines"))
+    if nb_bob:
+        return {"nb": nb_bob,
+                "formule": f"{_n(nb_bob)} bobines (OF) × 1 mandrin/bobine",
+                "variables": [
+                    {"label": "Quantité bobines", "champ": "of_imports.qte_bobines",
+                     "origine": "OF", "valeur": nb_bob, "unite": "bobines"}],
+                "manque": []}
+
+    eb = _etiq_par_bobine(pe)
+    if qte and eb["valeur"]:
+        return {"nb": qte / eb["valeur"],
+                "formule": f"{_n(qte)} étiq ÷ {_n(eb['valeur'])} étiq/bobine",
+                "variables": [
+                    {"label": "Quantité étiquettes", "champ": "of_imports.qte_etiquettes",
+                     "origine": "OF", "valeur": qte, "unite": "étiq"},
+                    {"label": "Étiquettes par bobine", "champ": eb["champ"],
+                     "origine": eb["origine"], "valeur": eb["valeur"], "unite": ""}],
+                "manque": []}
+
+    manque = []
+    if not qte and not nb_bob:
+        manque.append("Quantité d'étiquettes ou de bobines de l'OF")
+    if not eb["valeur"]:
+        manque.append("Étiquettes par bobine — champ « Nb étiq./bobine » vide sur la "
+                      "fiche et phrase de conditionnement non exploitable")
+    return {"nb": None, "formule": "Calcul impossible", "variables": [], "manque": manque}
+
+
+def _mandrin_tubes(pe: dict, mapping: dict, nb_mandrins: float,
+                   perte_pct: float) -> dict:
+    """Traduit un besoin en mandrins en nombre de tubes, puis de palettes.
+
+    Les mandrins s'achètent en tubes qu'on redécoupe à la laize du module : un
+    tube de L mm rend, une fois la perte de coupe retirée, L × (1 − perte) de
+    longueur utile, dont on tire des mandrins de `mod_laize` mm de haut.
+
+    Le besoin reste exprimé en mandrins — c'est l'unité de l'atelier. Les tubes
+    et les palettes sont la traduction à l'achat, affichée à côté.
+    """
+    vide = {"tubes": None, "palettes": None, "mandrins_par_tube": None,
+            "detail_tubes": None, "manque_tubes": []}
+    m = mapping.get(("mandrin", str(pe.get("ft_mandrin_dia") or "").strip().lower()))
+    laize_mod = _f(pe.get("ft_mod_laize"))
+    lg_tube = _f(m.get("longueur_tube_mm")) if m else None
+    upp = _f(m.get("unites_par_palette")) if m else None
+
+    manque = []
+    if not laize_mod:
+        manque.append("Laize module de la fiche technique (mod_laize)")
+    if not lg_tube:
+        manque.append("Longueur tube — à saisir sur la fiche matière mandrin")
+    if not laize_mod or not lg_tube or not nb_mandrins:
+        return {**vide, "manque_tubes": manque}
+
+    utile = lg_tube * (1.0 - perte_pct / 100.0)
+    if utile <= 0:
+        return {**vide, "manque_tubes": ["Perte de coupe ≥ 100 % — réglage à corriger"]}
+
+    tubes = nb_mandrins * laize_mod / utile
+    palettes = tubes / upp if upp else None
+    detail = (f"{_n(round(nb_mandrins, 1))} mandrins × {_n(laize_mod)} mm "
+              f"÷ ({_n(lg_tube)} mm − {_n(perte_pct)} %) = "
+              f"{_n(round(tubes, 1))} tubes")
+    if palettes is not None:
+        detail += f" ÷ {_n(upp)} tubes/palette = {_n(round(palettes, 2))} palettes"
+    else:
+        manque.append("Tubes par palette — à saisir sur la fiche matière mandrin")
+    return {
+        "tubes": round(tubes, 3),
+        "palettes": round(palettes, 3) if palettes is not None else None,
+        "mandrins_par_tube": round(utile / laize_mod, 2),
+        "detail_tubes": detail,
+        "manque_tubes": manque,
+    }
+
+
+def _compute_besoins_dossier(pe: dict, mapping: dict,
+                             perte_pct: float = 10.0) -> list:
     """Calcule la liste des besoins MP pour un dossier de prod.
 
     Retourne une liste de dicts :
@@ -357,7 +537,7 @@ def _compute_besoins_dossier(pe: dict, mapping: dict) -> list:
     lz = _laize_dossier(pe)
 
     def _add(kind: str, source_value, quantite, formule: str,
-             variables=None, manque=None):
+             variables=None, manque=None, extra=None):
         # L'unité n'est pas passée par l'appelant : elle est déduite du kind,
         # pour qu'elle ne puisse pas diverger de _KIND_UNITE.
         unite = _KIND_UNITE.get(kind, "u")
@@ -382,24 +562,38 @@ def _compute_besoins_dossier(pe: dict, mapping: dict) -> list:
             "variables": variables or [],
             "manque": manque or [],
             "source_metrage": met["source"] if kind in ("support", "glassine", "adhesif") else None,
+            **(extra or {}),
         })
+
+    # Postes sans matière première : le repiquage est un atelier, on y
+    # surimprime des étiquettes déjà fabriquées. Le frontal, la glassine et
+    # l'adhésif ont été consommés en amont — les recompter ici serait un
+    # doublon. Le conditionnement, lui, est bien consommé : les étiquettes
+    # repiquées sont rembobinées sur mandrin, mises en carton et palettisées.
+    sans_mp = bool(pe.get("poste_sans_matiere"))
 
     # ── Bobines (frontal / complexe / glassine) : besoin en mètres linéaires ──
     # Toutes les bobines d'un dossier voient passer le même métrage.
     for kind, col in (("support", "ft_support"), ("glassine", "ft_glassine")):
+        if sans_mp:
+            break
         if not pe.get(col):
             continue
+        # La laize voyage avec le besoin : une bobine ne se commande pas, ne se
+        # stocke pas et ne se déstocke pas hors de sa laize. L'agréger sans elle
+        # donnait un total juste en mètres, mais inutilisable pour commander.
+        extra_lz = {"laize_mm": lz.get("laize")}
         if metrage:
             src = "métrage OF" if met["source"] == "of" else "métrage calculé fiche"
             _add(kind, pe[col], metrage,
-                 f"{_n(metrage, 'm')} ({src})", met["variables"])
+                 f"{_n(metrage, 'm')} ({src})", met["variables"], extra=extra_lz)
         else:
             _add(kind, pe[col], None, "Métrage indisponible",
-                 met["variables"], met["manque"])
+                 met["variables"], met["manque"], extra=extra_lz)
 
     # ── Adhésif : kilos = grammage (g/m²) × surface enduite (m²) ──
     # surface = métrage (m) × laize (mm) / 1000
-    if pe.get("ft_adhesif"):
+    if pe.get("ft_adhesif") and not sans_mp:
         # Grammage : porté par la référence adhésif (weight_gsm, g/m²). Le champ
         # « Grammage » de la fiche technique sert de repli tant que la matière
         # n'est pas renseignée.
@@ -447,32 +641,54 @@ def _compute_besoins_dossier(pe: dict, mapping: dict) -> list:
                  "Calcul impossible", variables, manque)
 
     # ── Mandrins : 1 par bobine ──
-    nb_eb = _f(pe.get("ft_nb_etiq_bobin"))
-    nb_mandrins = 0.0
+    bob = _nb_bobines_dossier(pe, qte)
+    nb_mandrins = bob["nb"] or 0.0
     if pe.get("ft_mandrin_dia"):
-        if qte and nb_eb:
-            nb_mandrins = qte / nb_eb
-            _add("mandrin", pe["ft_mandrin_dia"], nb_mandrins,
-                 f"{_n(qte)} étiq ÷ {_n(nb_eb)} étiq/bobine", [
-                     {"label": "Quantité étiquettes", "champ": "of_imports.qte_etiquettes",
-                      "origine": "OF", "valeur": qte, "unite": "étiq"},
-                     {"label": "Étiquettes par bobine", "champ": "fiches_techniques.nb_etiq_bobin",
-                      "origine": "Fiche technique", "valeur": nb_eb, "unite": ""},
-                 ])
+        if bob["nb"]:
+            tub = _mandrin_tubes(pe, mapping, nb_mandrins, perte_pct)
+            variables = list(bob["variables"])
+            formule = bob["formule"]
+            if tub["tubes"] is not None:
+                # La conversion en tubes n'est pas le besoin : c'est ce qu'il faut
+                # commander pour le couvrir. On l'expose à côté, jamais à la place.
+                mp_man = mapping.get(
+                    ("mandrin", str(pe.get("ft_mandrin_dia") or "").strip().lower())) or {}
+                variables += [
+                    {"label": "Laize module", "champ": "fiches_techniques.mod_laize",
+                     "origine": "Fiche technique", "valeur": _f(pe.get("ft_mod_laize")),
+                     "unite": "mm"},
+                    {"label": "Longueur tube", "champ": "matieres_premieres.longueur_tube_mm",
+                     "origine": "Matière première",
+                     "valeur": _f(mp_man.get("longueur_tube_mm")), "unite": "mm"},
+                    {"label": "Perte de coupe", "champ": "stock_config.mandrin_perte_coupe_pct",
+                     "origine": "Paramètres", "valeur": perte_pct, "unite": "%"},
+                    {"label": "Mandrins par tube", "champ": "calculé",
+                     "origine": "Calcul", "valeur": tub["mandrins_par_tube"], "unite": ""},
+                ]
+                formule += " · " + tub["detail_tubes"]
+            _add("mandrin", pe["ft_mandrin_dia"], nb_mandrins, formule, variables,
+                 tub["manque_tubes"] or None, extra={
+                     "besoin_tubes": tub["tubes"],
+                     "besoin_palettes": tub["palettes"],
+                     "mandrins_par_tube": tub["mandrins_par_tube"],
+                 })
         else:
-            manque = []
-            if not qte:
-                manque.append("Quantité d'étiquettes de l'OF")
-            if not nb_eb:
-                manque.append("Étiquettes par bobine (nb_etiq_bobin)")
             _add("mandrin", pe["ft_mandrin_dia"], None,
-                 "Calcul impossible", [], manque)
+                 bob["formule"], bob["variables"], bob["manque"])
 
-    # ── Cartons : nb bobines / bobines par carton ──
+    # ── Cartons : chiffrés sur l'OF, sinon nb bobines / bobines par carton ──
     nb_bc = _f(pe.get("ft_nb_bobines_carton"))
+    of_cart = _f(pe.get("of_nb_cartons"))
     nb_cartons = 0.0
     if pe.get("ft_cartons"):
-        if nb_bc and nb_mandrins > 0:
+        if of_cart:
+            nb_cartons = of_cart
+            _add("carton", pe["ft_cartons"], nb_cartons,
+                 f"{_n(of_cart)} cartons (chiffrés sur l'OF)", [
+                     {"label": "Cartons", "champ": "of_imports.nb_cartons",
+                      "origine": "OF", "valeur": of_cart, "unite": "u"},
+                 ])
+        elif nb_bc and nb_mandrins > 0:
             nb_cartons = nb_mandrins / nb_bc
             _add("carton", pe["ft_cartons"], nb_cartons,
                  f"{nb_mandrins:.1f} bobines ÷ {_n(nb_bc)} bobines/carton", [
@@ -488,6 +704,7 @@ def _compute_besoins_dossier(pe: dict, mapping: dict) -> list:
             if not nb_bc:
                 manque.append("Bobines par carton (nb_bobines_carton)")
             _add("carton", pe["ft_cartons"], None, "Calcul impossible", [], manque)
+
 
     # ── Palettes : cartons / (cartons_sol × cartons_hauteur) ──
     ncs = _f(pe.get("ft_palette_nb_cartons_sol"))
@@ -525,9 +742,10 @@ def besoins_par_dossier(request: Request):
     with get_db() as conn:
         mapping = _load_mapping(conn)
         rows = _load_dossiers(conn)
+        perte_pct = stock_config_float(conn, "mandrin_perte_coupe_pct")
     dossiers = []
     for pe in rows:
-        besoins = _compute_besoins_dossier(pe, mapping)
+        besoins = _compute_besoins_dossier(pe, mapping, perte_pct)
         dossiers.append({
             "id": pe["id"],
             "reference": pe.get("reference"),
@@ -542,10 +760,105 @@ def besoins_par_dossier(request: Request):
             "date_livraison": pe.get("date_livraison"),
             "qte_etiquettes": pe.get("qte_etiquettes"),
             "ft_id": pe.get("ft_id"),
+            # La laize du dossier : c'est elle qui décide quelle bobine sortira
+            # du stock, donc elle a sa place à côté des besoins.
+            "laize": _laize_dossier(pe).get("laize"),
+            # Les deux documents consultables depuis la vue par dossier : l'OF
+            # importé et la fiche technique rapprochée.
+            "of_import_id": pe.get("of_import_id"),
+            # Validation humaine des deux documents : c'est elle qui autorise
+            # le défalquage automatique du stock en fin de production.
+            "of_valide": int(pe.get("of_valide") or 0),
+            "of_valide_par": pe.get("of_valide_par"),
+            "ft_valide": int(pe.get("ft_valide") or 0),
+            "ft_valide_par": pe.get("ft_valide_par"),
+            "destockage": pe.get("destockage") or "todo",
             "of_metrage": pe.get("of_metrage"),
             "of_laize": pe.get("of_laize"),
             "besoins": besoins,
             "besoins_mapped_count": sum(1 for b in besoins if b["mapped"]),
+            "besoins_total_count": len(besoins),
+            "besoins_incalculables_count": sum(1 for b in besoins if not b["calculable"]),
+        })
+    return {"dossiers": dossiers, "count": len(dossiers)}
+
+
+_SQL_PE_PASSES = _SQL_PE.replace(
+    "WHERE pe.statut IN ('attente', 'en_cours')",
+    "WHERE COALESCE(pe.statut, '') NOT IN ('attente', 'en_cours')"
+).replace(
+    "ORDER BY COALESCE(pe.planned_start, pe.date_livraison, '9999'), pe.position",
+    "ORDER BY COALESCE(pe.planned_end, pe.date_livraison, '0000') DESC, pe.id DESC"
+)
+
+
+@router.get("/api/stock/besoins-matieres/par-dossier-passes")
+def besoins_dossiers_passes(request: Request):
+    """Dossiers sortis de production : ce qui reste à déstocker, et ce qui l'est.
+
+    La vue par dossier ne montre que la production en cours — c'est ce qu'on
+    veut pour approvisionner. Mais le déstockage se fait *après*, donc sur des
+    dossiers qui ont justement quitté ce périmètre : sans cette vue, ils
+    devenaient introuvables.
+    """
+    require_stock_matieres_admin(request)
+    try:
+        limite = int(request.query_params.get("limit") or 300)
+    except (TypeError, ValueError):
+        limite = 300
+    limite = max(1, min(limite, 1000))
+
+    with get_db() as conn:
+        mapping = _load_mapping(conn)
+        rows = _load_dossiers(conn, _SQL_PE_PASSES)
+        perte_pct = stock_config_float(conn, "mandrin_perte_coupe_pct")
+        rows = rows[:limite]
+        # Un seul aller-retour pour savoir qui a déstocké quoi : la modale n'a
+        # pas à être ouverte pour que la liste sache ce qui est déjà sorti.
+        mvts = {}
+        for r in conn.execute(
+            """SELECT m.planning_entry_id AS pid, COUNT(*) AS n,
+                      MIN(m.created_by_name) AS qui, MIN(m.created_at) AS quand
+               FROM mp_mouvements m
+               WHERE m.planning_entry_id IS NOT NULL
+                 AND m.type_mouvement = 'sortie'
+                 -- Une sortie ne porte jamais annule_mouvement_id : c'est la
+                 -- contre-passation qui la désigne. On exclut donc les sorties
+                 -- *visées* par une annulation, pas celles qui en portent une —
+                 -- sinon un dossier annulé continuait d'apparaître déstocké.
+                 AND NOT EXISTS (SELECT 1 FROM mp_mouvements c
+                                 WHERE c.annule_mouvement_id = m.id)
+               GROUP BY m.planning_entry_id"""
+        ).fetchall():
+            mvts[int(r["pid"])] = dict(r)
+
+    dossiers = []
+    for pe in rows:
+        besoins = _compute_besoins_dossier(pe, mapping, perte_pct)
+        docs = _etat_documents(pe)
+        m = mvts.get(int(pe["id"])) or {}
+        dossiers.append({
+            "id": pe["id"],
+            "reference": pe.get("reference"),
+            "client": pe.get("client"),
+            "ref_produit": pe.get("ref_produit"),
+            "numero_of": pe.get("numero_of"),
+            "machine_nom": pe.get("machine_nom"),
+            "statut": pe.get("statut"),
+            "planned_end": pe.get("planned_end"),
+            "date_livraison": pe.get("date_livraison"),
+            "qte_etiquettes": pe.get("qte_etiquettes"),
+            "of_import_id": pe.get("of_import_id"),
+            "ft_id": pe.get("ft_id"),
+            "of_valide": int(pe.get("of_valide") or 0),
+            "ft_valide": int(pe.get("ft_valide") or 0),
+            "destockage": pe.get("destockage") or "todo",
+            "destockable": docs["complet"],
+            "blocage": docs["blocage"],
+            "nb_mouvements": int(m.get("n") or 0),
+            "destocke_par": m.get("qui"),
+            "destocke_at": m.get("quand"),
+            "besoins": besoins,
             "besoins_total_count": len(besoins),
             "besoins_incalculables_count": sum(1 for b in besoins if not b["calculable"]),
         })
@@ -571,19 +884,30 @@ def besoins_par_echeance(request: Request):
         #            (kg pour l'adhésif, palette/unité pour le reste).
         # mp_stock_laize : catégories bobine, en BOBINES — converti plus bas en
         #            mètres linéaires pour être comparable au besoin.
+        perte_pct = stock_config_float(conn, "mandrin_perte_coupe_pct")
         stock_map: dict = {}
         stock_bobines: dict = {}
         for r in conn.execute("SELECT matiere_id, SUM(quantite) AS q FROM mp_stock GROUP BY matiere_id").fetchall():
             stock_map[int(r["matiere_id"])] = float(r["q"] or 0)
         for r in conn.execute("SELECT matiere_id, SUM(quantite) AS q FROM mp_stock_laize GROUP BY matiere_id").fetchall():
             stock_bobines[int(r["matiere_id"])] = float(r["q"] or 0)
+        # Détail par laize : c'est le stock réellement mobilisable pour un
+        # dossier, celui qu'on compare au besoin d'une laize précise.
+        stock_par_laize: dict = {}
+        for r in conn.execute(
+            """SELECT s.matiere_id, l.valeur_mm, l.label, s.quantite
+               FROM mp_stock_laize s JOIN mp_laizes l ON l.id = s.laize_id"""
+        ).fetchall():
+            stock_par_laize[(int(r["matiere_id"]), float(r["valeur_mm"] or 0))] = {
+                "quantite": float(r["quantite"] or 0), "label": r["label"],
+            }
 
     # Agrégation par (kind, source_value)
     agg: dict = {}
     for pe in rows:
         r7 = _ratio_dans_fenetre(pe, today, borne_7)
         r15 = _ratio_dans_fenetre(pe, today, borne_15)
-        besoins = _compute_besoins_dossier(pe, mapping)
+        besoins = _compute_besoins_dossier(pe, mapping, perte_pct)
         for b in besoins:
             key = (b["kind"], (b["source_value"] or "").strip().lower())
             if key not in agg:
@@ -602,6 +926,17 @@ def besoins_par_echeance(request: Request):
                     "nb_dossiers": 0,
                     "nb_dossiers_incalculables": 0,
                     "formule_exemple": None,
+                    # Mandrins : traduction du besoin à l'achat. Chaque dossier a
+                    # sa propre laize de module, donc ses propres tubes — on somme
+                    # les tubes dossier par dossier, jamais après coup.
+                    "besoin_7j_tubes": 0.0,
+                    "besoin_15j_tubes": 0.0,
+                    "besoin_total_tubes": 0.0,
+                    "besoin_total_palettes": 0.0,
+                    "nb_dossiers_sans_tubes": 0,
+                    # Ventilation par laize (bobines uniquement) : le total en
+                    # mètres ne dit pas quelle bobine commander.
+                    "par_laize": {},
                 }
             a = agg[key]
             a["nb_dossiers"] += 1
@@ -611,13 +946,42 @@ def besoins_par_echeance(request: Request):
             a["besoin_7j"] += b["quantite"] * r7
             a["besoin_15j"] += b["quantite"] * r15
             a["besoin_total"] += b["quantite"]
+            if b["kind"] in _KINDS_BOBINE:
+                cle_lz = b.get("laize_mm")
+                cle_lz = float(cle_lz) if cle_lz else None
+                pl = a["par_laize"].setdefault(cle_lz, {
+                    "laize_mm": cle_lz, "besoin_7j": 0.0, "besoin_15j": 0.0,
+                    "besoin_total": 0.0, "nb_dossiers": 0,
+                })
+                pl["besoin_7j"] += b["quantite"] * r7
+                pl["besoin_15j"] += b["quantite"] * r15
+                pl["besoin_total"] += b["quantite"]
+                pl["nb_dossiers"] += 1
+            bt = b.get("besoin_tubes")
+            if bt is None:
+                if b["kind"] == "mandrin":
+                    a["nb_dossiers_sans_tubes"] += 1
+            else:
+                a["besoin_7j_tubes"] += bt * r7
+                a["besoin_15j_tubes"] += bt * r15
+                a["besoin_total_tubes"] += bt
+                a["besoin_total_palettes"] += b.get("besoin_palettes") or 0.0
             if not a["formule_exemple"]:
                 a["formule_exemple"] = b["formule"]
 
     lignes = []
     for a in agg.values():
-        for k in ("besoin_7j", "besoin_15j", "besoin_total"):
+        for k in ("besoin_7j", "besoin_15j", "besoin_total",
+                  "besoin_7j_tubes", "besoin_15j_tubes",
+                  "besoin_total_tubes", "besoin_total_palettes"):
             a[k] = round(a[k], 3)
+        if a["kind"] != "mandrin":
+            # Hors mandrins, la notion de tube n'existe pas : on ne laisse pas
+            # traîner des zéros que le front pourrait afficher.
+            for k in ("besoin_7j_tubes", "besoin_15j_tubes",
+                      "besoin_total_tubes", "besoin_total_palettes",
+                      "nb_dossiers_sans_tubes"):
+                a[k] = None
         # Stock ramené dans l'unité du besoin.
         stock = None
         stock_note = None
@@ -626,12 +990,54 @@ def besoins_par_echeance(request: Request):
             if a["kind"] in _KINDS_BOBINE:
                 bobines = stock_bobines.get(mid, 0.0) + stock_map.get(mid, 0.0)
                 ml_bobine = _f(_matiere_ml_par_bobine(mapping, a["kind"], a["source_value"]))
+                a["ml_par_bobine"] = ml_bobine
                 if ml_bobine:
                     stock = round(bobines * ml_bobine, 3)
                     stock_note = (f"{_n(bobines)} bobines × {_n(ml_bobine, 'm')}/bobine")
                 else:
                     stock_note = ("Métrage par bobine non renseigné sur la matière — "
                                   "stock non convertible en ml")
+            elif a["kind"] == "mandrin":
+                # Le stock d'un mandrin se tient en palettes de tubes, le besoin en
+                # mandrins. Sans la longueur de tube ni le nombre de tubes par
+                # palette, les deux ne sont pas comparables : on le dit plutôt que
+                # d'afficher des palettes en face de mandrins.
+                palettes_stock = stock_map.get(mid, 0.0) + stock_bobines.get(mid, 0.0)
+                mp_man = mapping.get((a["kind"], (a["source_value"] or "").strip().lower())) or {}
+                upp = _f(mp_man.get("unites_par_palette"))
+                tubes_besoin = a["besoin_total_tubes"] or 0
+                ratio = (a["besoin_total"] / tubes_besoin) if tubes_besoin > 0 else None
+                a["stock_palettes"] = round(palettes_stock, 3)
+                if upp and ratio:
+                    tubes_stock = palettes_stock * upp
+                    stock = round(tubes_stock * ratio, 3)
+                    a["stock_tubes"] = round(tubes_stock, 3)
+                    stock_note = (
+                        f"{_n(palettes_stock)} palettes × {_n(upp)} tubes/palette = "
+                        f"{_n(round(tubes_stock, 1))} tubes ≈ {_n(round(stock, 0))} mandrins "
+                        f"(à {_n(round(ratio, 2))} mandrins/tube sur les dossiers en cours)"
+                    )
+                elif not upp:
+                    stock_note = ("Tubes par palette non renseigné sur la matière — "
+                                  "stock non convertible en mandrins")
+                else:
+                    stock_note = ("Longueur tube ou laize module manquante — "
+                                  "stock non convertible en mandrins")
+            elif a["kind"] == "carton":
+                # Un carton se stocke à la palette mais se consomme à l'unité :
+                # sans la conversion, une palette de 672 cartons s'affichait
+                # « 1 u » en face d'un besoin de 672, et tout ressortait en manque.
+                palettes_stock = stock_map.get(mid, 0.0) + stock_bobines.get(mid, 0.0)
+                mp_cart = mapping.get((a["kind"], (a["source_value"] or "").strip().lower())) or {}
+                cpp = _f(mp_cart.get("unites_par_palette"))
+                a["stock_palettes"] = round(palettes_stock, 3)
+                if cpp:
+                    stock = round(palettes_stock * cpp, 3)
+                    stock_note = (f"{_n(palettes_stock)} palettes × {_n(cpp)} cartons/palette "
+                                  f"= {_n(stock)} cartons")
+                else:
+                    stock_note = ("Cartons par palette non renseigné sur la matière — "
+                                  "stock non convertible en cartons")
             else:
                 stock = round(stock_map.get(mid, 0.0) + stock_bobines.get(mid, 0.0), 3)
         a["stock_actuel"] = stock
@@ -646,13 +1052,809 @@ def besoins_par_echeance(request: Request):
         -(x.get("manque_7j") or 0),
         -x["besoin_7j"],
     ))
+    groupe = _regrouper_par_matiere(lignes, stock_par_laize)
     return {
         "lignes": lignes,
         "count": len(lignes),
+        # Vue « par matière » : même calcul, regroupé sur la référence MySifa.
+        # Servi par le même endpoint pour que les trois vues montrent toujours
+        # les mêmes chiffres, à la même seconde.
+        "matieres": groupe["matieres"],
+        "non_associees": groupe["non_associees"],
         "today": today.isoformat(),
         "borne_7j": borne_7.isoformat(),
         "borne_15j": borne_15.isoformat(),
     }
+
+
+def _ml_par_bobine_ligne(a: dict) -> Optional[float]:
+    """Mètres linéaires par bobine de la matière d'une ligne agrégée.
+
+    Posé par l'agrégation par échéance, qui l'a déjà lu sur la matière. On ne
+    le redemande pas à la base : la ligne le porte, c'est la même valeur.
+    """
+    return _f(a.get("ml_par_bobine"))
+
+
+def _regrouper_par_matiere(lignes: list, stock_par_laize: Optional[dict] = None) -> dict:
+    """Regroupe les lignes de besoin par référence matière MySifa.
+
+    Plusieurs valeurs de fiche technique peuvent pointer vers la même référence
+    (« Couché », « Couché 80 »). C'est au niveau de la référence qu'on commande,
+    donc c'est ce total-là qui compte pour l'appro — la vue par échéance, elle,
+    reste au niveau de la valeur de fiche pour pouvoir corriger un mapping.
+
+    Les bobines font exception : une référence frontal, glassine ou complexe
+    sort en **une ligne par laize**. Une bobine de 306 ne remplace pas une
+    bobine de 500, et le stock lui-même est tenu laize par laize — agréger les
+    deux donnait un total juste en mètres mais impossible à commander.
+
+    Retourne { matieres: [...], non_associees: [...] }. Les besoins sans matière
+    associée ne sont pas noyés dans le tableau : ils sortent à part, en fin de
+    vue, car ils appellent une action différente (associer, pas commander).
+    """
+    stock_par_laize = stock_par_laize or {}
+    par_mat: dict = {}
+    non_associees: list = []
+
+    def _entree(cle, a, laize_mm):
+        """Crée (ou retrouve) la ligne agrégée d'une référence, laize comprise."""
+        m = par_mat.get(cle)
+        if m is not None:
+            return m
+        # Le stock est porté par la référence, pas par la valeur de fiche : on le
+        # prend une fois et on ne l'additionne jamais, sinon deux valeurs mappées
+        # sur la même référence le compteraient deux fois.
+        stock = a.get("stock_actuel")
+        note = a.get("stock_note")
+        if laize_mm is not None:
+            # Stock de CETTE laize, converti en mètres pour rester comparable au
+            # besoin. Sans conversion on afficherait des bobines face à des ml.
+            info = stock_par_laize.get((a["matiere_id"], laize_mm))
+            ml = _ml_par_bobine_ligne(a)
+            if info is None:
+                stock, note = None, ("Laize absente de cette matière — "
+                                     "stock non comparable")
+            elif ml:
+                stock = round(info["quantite"] * ml, 3)
+                note = (f"{_n(info['quantite'])} bobines de {_n(laize_mm)} mm "
+                        f"× {_n(ml, 'm')}/bobine")
+            else:
+                stock, note = None, ("Métrage par bobine non renseigné — "
+                                     "stock non convertible en ml")
+        m = par_mat[cle] = {
+            "matiere_id": a["matiere_id"],
+            "matiere_ref": a["matiere_ref"],
+            "matiere_designation": a["matiere_designation"],
+            "matiere_categorie": a.get("matiere_categorie"),
+            "kind": a["kind"],
+            "unite": a["unite"],
+            "laize_mm": laize_mm,
+            "besoin_7j": 0.0,
+            "besoin_15j": 0.0,
+            "besoin_total": 0.0,
+            "stock_actuel": stock,
+            "stock_note": note,
+            "stock_palettes": a.get("stock_palettes"),
+            "besoin_total_tubes": None,
+            "besoin_total_palettes": None,
+            "nb_dossiers": 0,
+            "nb_dossiers_incalculables": 0,
+            "sources": [],
+        }
+        return m
+
+    for a in lignes:
+        if not a.get("mapped") or not a.get("matiere_id"):
+            non_associees.append({
+                "kind": a["kind"],
+                "source_value": a["source_value"],
+                "unite": a["unite"],
+                "besoin_7j": a["besoin_7j"],
+                "besoin_15j": a["besoin_15j"],
+                "besoin_total": a["besoin_total"],
+                "nb_dossiers": a["nb_dossiers"],
+                "nb_dossiers_incalculables": a["nb_dossiers_incalculables"],
+            })
+            continue
+
+        mid = a["matiere_id"]
+        bobine = a["kind"] in _KINDS_BOBINE
+        ventil = (a.get("par_laize") or {}) if bobine else {}
+
+        if bobine and ventil:
+            for laize_mm, part in ventil.items():
+                m = _entree((mid, laize_mm), a, laize_mm)
+                m["besoin_7j"] += part["besoin_7j"]
+                m["besoin_15j"] += part["besoin_15j"]
+                m["besoin_total"] += part["besoin_total"]
+                m["nb_dossiers"] += part["nb_dossiers"]
+                m["sources"].append({
+                    "source_value": a["source_value"],
+                    "besoin_total": round(part["besoin_total"], 3),
+                    "nb_dossiers": part["nb_dossiers"],
+                })
+            # Les dossiers non chiffrés n'ont pas de laize à eux : ils restent
+            # rattachés à la première ligne de la référence, signalés hors total.
+            if a["nb_dossiers_incalculables"]:
+                prem = next((par_mat[(mid, lz)] for lz in ventil), None)
+                if prem is not None:
+                    prem["nb_dossiers_incalculables"] += a["nb_dossiers_incalculables"]
+            continue
+
+        m = _entree(mid, a, None)
+        m["besoin_7j"] += a["besoin_7j"]
+        m["besoin_15j"] += a["besoin_15j"]
+        m["besoin_total"] += a["besoin_total"]
+        m["nb_dossiers"] += a["nb_dossiers"]
+        m["nb_dossiers_incalculables"] += a["nb_dossiers_incalculables"]
+        for cle in ("besoin_total_tubes", "besoin_total_palettes"):
+            v = a.get(cle)
+            if v:
+                m[cle] = (m[cle] or 0.0) + v
+        m["sources"].append({
+            "source_value": a["source_value"],
+            "besoin_total": a["besoin_total"],
+            "nb_dossiers": a["nb_dossiers"],
+        })
+
+    matieres = []
+    for m in par_mat.values():
+        for k in ("besoin_7j", "besoin_15j", "besoin_total",
+                  "besoin_total_tubes", "besoin_total_palettes"):
+            if m[k] is not None:
+                m[k] = round(m[k], 3)
+        m["manque_7j"] = (round(max(0.0, m["besoin_7j"] - m["stock_actuel"]), 3)
+                          if m["stock_actuel"] is not None else None)
+        m["sources"].sort(key=lambda s: -(s["besoin_total"] or 0))
+        matieres.append(m)
+
+    # Ce qui manque d'abord, puis le besoin le plus proche : l'ordre de l'appro.
+    matieres.sort(key=lambda x: (-(x.get("manque_7j") or 0), -x["besoin_7j"]))
+    non_associees.sort(key=lambda x: (-(x["besoin_total"] or 0), -x["nb_dossiers"]))
+    return {"matieres": matieres, "non_associees": non_associees}
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Rattachement des documents d'un dossier non chiffré
+#
+# Un dossier sort « n.c. » pour deux raisons seulement : aucun OF rattaché, ou
+# aucune fiche technique rapprochée. Les deux se corrigent depuis la ligne, sans
+# quitter Besoins matières — et surtout, la correction s'écrit dans les tables
+# de référence, donc elle vaut pour MyProd, le planning et l'expédition, pas
+# seulement pour cet écran.
+#
+# - OF : `_promote_of_link` (of_import.py) aligne `planning_of_links` ET
+#   `planning_entries.of_import_id`. Les deux sont nécessaires : le slot du
+#   planning lit la colonne, le panneau OF lit la table de liens.
+# - Fiche technique : le rapprochement se fait sur `ref_produit_norm`. On aligne
+#   cette clé sans toucher à `ref_produit`, qui reste ce que l'atelier lit.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def _dossier_ou_404(conn, planning_id: int):
+    row = conn.execute(
+        """SELECT pe.id, pe.reference, pe.numero_of, pe.ref_produit,
+                  pe.ref_produit_norm, pe.of_import_id, pe.statut,
+                  m.nom AS machine_nom
+           FROM planning_entries pe
+           LEFT JOIN machines m ON m.id = pe.machine_id
+           WHERE pe.id = ?""",
+        (planning_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, "Dossier introuvable.")
+    return row
+
+
+def _like(v) -> str:
+    return "%" + str(v or "").strip() + "%"
+
+
+@router.get("/api/stock/besoins-matieres/dossier/{planning_id}/documents")
+def dossier_documents(planning_id: int, request: Request):
+    """OF et fiches techniques rattachables à un dossier.
+
+    Sans `q`, on propose ce que le dossier laisse deviner : son numéro d'OF et
+    sa référence produit. Avec `q`, c'est une recherche libre — le cas où le
+    document existe sous un libellé qui ne ressemble à rien de ce qu'on attend.
+    """
+    require_stock_matieres_admin(request)
+    q = (request.query_params.get("q") or "").strip()
+
+    with get_db() as conn:
+        pe = _dossier_ou_404(conn, planning_id)
+
+        if q:
+            ofs = conn.execute(
+                """SELECT id, of_numero, reference, machine, qte_etiquettes,
+                          qte_bobines, date_creation, date_import
+                   FROM of_imports
+                   WHERE LOWER(COALESCE(of_numero,'')) LIKE LOWER(?)
+                      OR LOWER(COALESCE(reference,''))  LIKE LOWER(?)
+                      OR LOWER(COALESCE(machine,''))    LIKE LOWER(?)
+                   ORDER BY date_import DESC, id DESC LIMIT 25""",
+                (_like(q), _like(q), _like(q)),
+            ).fetchall()
+            fiches = conn.execute(
+                """SELECT id, reference, designation, client, machine, ref_produit_norm
+                   FROM fiches_techniques
+                   WHERE LOWER(COALESCE(reference,''))   LIKE LOWER(?)
+                      OR LOWER(COALESCE(designation,'')) LIKE LOWER(?)
+                      OR LOWER(COALESCE(client,''))      LIKE LOWER(?)
+                   ORDER BY reference COLLATE NOCASE LIMIT 25""",
+                (_like(q), _like(q), _like(q)),
+            ).fetchall()
+        else:
+            num = (pe["numero_of"] or "").strip()
+            ref = (pe["ref_produit"] or "").strip()
+            ofs = conn.execute(
+                """SELECT id, of_numero, reference, machine, qte_etiquettes,
+                          qte_bobines, date_creation, date_import
+                   FROM of_imports
+                   WHERE (? != '' AND LOWER(COALESCE(of_numero,'')) LIKE LOWER(?))
+                      OR (? != '' AND LOWER(COALESCE(reference,'')) LIKE LOWER(?))
+                   ORDER BY date_import DESC, id DESC LIMIT 25""",
+                (num, _like(num), ref, _like(ref)),
+            ).fetchall()
+            norm = (pe["ref_produit_norm"] or "").strip()
+            fiches = conn.execute(
+                """SELECT id, reference, designation, client, machine, ref_produit_norm
+                   FROM fiches_techniques
+                   WHERE (? != '' AND ref_produit_norm = ?)
+                      OR (? != '' AND LOWER(COALESCE(reference,'')) LIKE LOWER(?))
+                   ORDER BY reference COLLATE NOCASE LIMIT 25""",
+                (norm, norm, ref, _like(ref)),
+            ).fetchall()
+
+    return {
+        "dossier": {
+            "planning_id": pe["id"],
+            "reference": pe["reference"],
+            "numero_of": pe["numero_of"],
+            "ref_produit": pe["ref_produit"],
+            "machine": pe["machine_nom"],
+            "of_import_id": pe["of_import_id"],
+            "a_un_of": pe["of_import_id"] is not None,
+        },
+        "recherche": q,
+        "ofs": [dict(r) for r in ofs],
+        "fiches": [dict(r) for r in fiches],
+    }
+
+
+@router.post("/api/stock/besoins-matieres/dossier/{planning_id}/rattacher-of")
+async def rattacher_of(planning_id: int, request: Request):
+    """Fait d'un OF existant l'OF actif du dossier. Body : { of_id }."""
+    user = require_stock_matieres_admin(request)
+    body = await request.json()
+    of_id = body.get("of_id")
+    if not isinstance(of_id, int):
+        raise HTTPException(400, "of_id (entier) requis.")
+
+    # Import local : of_import.py n'a pas à connaître Besoins matières, et un
+    # import au niveau module créerait un cycle le jour où l'inverse arrivera.
+    from app.routers.of_import import _promote_of_link
+
+    qui = (user.get("nom") or user.get("email") or "besoins_matieres")
+    with get_db() as conn:
+        _dossier_ou_404(conn, planning_id)
+        oi = conn.execute(
+            "SELECT id, of_numero FROM of_imports WHERE id=?", (of_id,)
+        ).fetchone()
+        if not oi:
+            raise HTTPException(404, "OF introuvable.")
+        _promote_of_link(conn, planning_id, of_id, qui)
+        # Rattachement décidé par un humain : l'auto-link ne doit plus le défaire.
+        try:
+            conn.execute(
+                "UPDATE planning_entries SET of_link_user_managed=1 WHERE id=?",
+                (planning_id,),
+            )
+        except Exception:
+            pass  # colonne absente sur une base ancienne : le lien reste valide
+        conn.commit()
+    return {"ok": True, "planning_id": planning_id, "of_id": of_id,
+            "of_numero": oi["of_numero"]}
+
+
+_VALIDATION_ROLES = frozenset({
+    "superadmin", "direction",
+    # La famille administration : c'est l'administration technique qui relit les
+    # fiches et déstocke, elle doit pouvoir lever son propre blocage.
+    "administration", "administration_technique", "administration_ventes",
+})
+
+
+def _require_validation_docs(request: Request) -> dict:
+    user = require_stock_write(request)
+    if user.get("role") not in _VALIDATION_ROLES:
+        raise HTTPException(403, "Validation réservée à la Direction et à l'Administration.")
+    return user
+
+
+async def _basculer_validation(request: Request, table: str, doc_id: int, libelle: str):
+    """Valide ou dévalide un document. Body : { valide: true|false }.
+
+    La validation porte un nom et une date : une case cochée sans auteur ne
+    veut rien dire le jour où le stock est faux et qu'on cherche pourquoi.
+    """
+    user = _require_validation_docs(request)
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    valide = 1 if bool((body or {}).get("valide", True)) else 0
+    qui = (user.get("nom") or user.get("email") or "").strip() or None
+    with get_db() as conn:
+        row = conn.execute(f"SELECT id FROM {table} WHERE id=?", (doc_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, f"{libelle} introuvable.")
+        conn.execute(
+            f"UPDATE {table} SET valide=?, valide_par=?, "
+            f"valide_at=strftime('%Y-%m-%dT%H:%M:%S','now','localtime') WHERE id=?",
+            (valide, qui if valide else None, doc_id),
+        )
+        conn.commit()
+    return {"ok": True, "valide": valide, "valide_par": qui if valide else None}
+
+
+@router.post("/api/stock/besoins-matieres/of/{of_id}/validation")
+async def valider_of(of_id: int, request: Request):
+    """Valide (ou dévalide) un ordre de fabrication."""
+    return await _basculer_validation(request, "of_imports", of_id, "OF")
+
+
+@router.post("/api/stock/besoins-matieres/fiche/{fiche_id}/validation")
+async def valider_fiche(fiche_id: int, request: Request):
+    """Valide (ou dévalide) une fiche technique."""
+    return await _basculer_validation(request, "fiches_techniques", fiche_id, "Fiche technique")
+
+
+@router.post("/api/stock/besoins-matieres/dossier/{planning_id}/rattacher-fiche")
+async def rattacher_fiche(planning_id: int, request: Request):
+    """Rapproche une fiche technique d'un dossier. Body : { fiche_id }.
+
+    On aligne `ref_produit_norm` — la clé de jointure — sans toucher à
+    `ref_produit`, le libellé que l'atelier lit sur le planning. Attention : une
+    modification ultérieure de `ref_produit` recalcule la clé par trigger et
+    défait ce rapprochement ; c'est le prix à payer pour ne pas réécrire le
+    libellé du dossier dans le dos de l'utilisateur.
+    """
+    require_stock_matieres_admin(request)
+    body = await request.json()
+    fiche_id = body.get("fiche_id")
+    if not isinstance(fiche_id, int):
+        raise HTTPException(400, "fiche_id (entier) requis.")
+
+    with get_db() as conn:
+        _dossier_ou_404(conn, planning_id)
+        ft = conn.execute(
+            "SELECT id, reference, ref_produit_norm FROM fiches_techniques WHERE id=?",
+            (fiche_id,),
+        ).fetchone()
+        if not ft:
+            raise HTTPException(404, "Fiche technique introuvable.")
+        norm = (ft["ref_produit_norm"] or "").strip()
+        if not norm:
+            raise HTTPException(
+                400,
+                "Cette fiche n'a pas de clé produit normalisée — corrigez sa "
+                "référence dans MyProd avant de la rapprocher.",
+            )
+        conn.execute(
+            "UPDATE planning_entries SET ref_produit_norm=? WHERE id=?",
+            (norm, planning_id),
+        )
+        conn.commit()
+    return {"ok": True, "planning_id": planning_id, "fiche_id": fiche_id,
+            "reference": ft["reference"]}
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# Déstockage de production
+#
+# Quand une production est réellement terminée, la matière consommée doit
+# sortir du stock. Le bouton « À destocker » du planning ne changeait qu'un
+# statut : le stock ne bougeait pas, il aurait fallu ressaisir chaque sortie à
+# la main — donc personne ne le faisait.
+#
+# Le déstockage part du même calcul que Besoins matières, avec une différence
+# de fond : on ne cherche plus ce qu'il faudra, mais ce qui a été consommé. Le
+# métrage réellement produit (production_data) prime donc sur le théorique de
+# l'OF, et les quantités sont exprimées dans l'unité de gestion du stock — en
+# bobines, pas en mètres linéaires.
+#
+# Rien n'est bloquant : une matière non associée est listée et ignorée, un
+# stock qui passe en négatif est signalé mais enregistré. La matière a été
+# consommée ; refuser de l'écrire rendrait le stock plus faux, pas moins.
+# ═════════════════════════════════════════════════════════════════════════
+
+
+def _production_reelle(conn, pe: dict) -> dict:
+    """Quantités réellement produites, lues dans les saisies d'atelier.
+
+    Retourne { metrage, etiquettes, source } — source vaut 'reel' dès qu'une
+    saisie exploitable existe, 'theorique' sinon.
+    """
+    vide = {"metrage": None, "etiquettes": None, "source": "theorique"}
+    no_dossier = (pe.get("numero_of") or pe.get("reference") or "").strip()
+    if not no_dossier:
+        return vide
+    try:
+        from app.services.dossier_stats import build_dossier_production_stats
+        rows = conn.execute(
+            """SELECT id, operateur, date_operation, operation, operation_code,
+                      operation_category, machine, no_dossier, client, designation,
+                      quantite_a_traiter, quantite_traitee,
+                      COALESCE(metrage_total_debut, metrage_prevu) AS metrage_prevu,
+                      COALESCE(metrage_total_fin, metrage_reel)   AS metrage_reel
+               FROM production_data
+               WHERE TRIM(no_dossier) = TRIM(?)
+                 AND COALESCE(est_annule, 0) = 0""",
+            (no_dossier,),
+        ).fetchall()
+        stats = build_dossier_production_stats([dict(r) for r in rows], no_dossier)
+    except Exception:
+        return vide
+    q = (stats or {}).get("quantites") or {}
+    metrage = _f(q.get("metrage_m"))
+    etiquettes = _f(q.get("etiquettes"))
+    if not metrage and not etiquettes:
+        return vide
+    return {"metrage": metrage, "etiquettes": etiquettes, "source": "reel"}
+
+
+def _laizes_matiere(conn, matiere_id: int) -> list:
+    """Laizes associées à une matière, avec leur stock actuel en bobines."""
+    rows = conn.execute(
+        """SELECT l.id AS laize_id, l.valeur_mm, l.label,
+                  COALESCE(s.quantite, 0) AS stock
+           FROM mp_matiere_laizes ml
+           JOIN mp_laizes l ON l.id = ml.laize_id
+           LEFT JOIN mp_stock_laize s
+                  ON s.matiere_id = ml.matiere_id AND s.laize_id = ml.laize_id
+           WHERE ml.matiere_id = ?
+           ORDER BY l.valeur_mm""",
+        (matiere_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _quantite_a_destocker(b: dict, mp: dict) -> dict:
+    """Traduit un besoin dans l'unité de gestion du stock.
+
+    Le besoin s'exprime dans l'unité de l'atelier (mètres linéaires, kilos,
+    unités) ; le stock se tient dans celle du magasin (bobines, kilos,
+    palettes). C'est cette dernière qu'il faut mouvementer, sinon on retire
+    3 658 « bobines » à une référence qui en compte douze.
+
+    Les bobines restent fractionnaires : 0,73 bobine est ce qui a réellement
+    été consommé. Arrondir à la bobine entière ferait dériver le stock d'un
+    reliquat à chaque dossier.
+    """
+    kind = b["kind"]
+    q = b.get("quantite")
+    if q is None:
+        return {"quantite": None, "unite": None,
+                "manque": ["Besoin non chiffré — voir Besoins matières"]}
+
+    if kind in _KINDS_BOBINE:
+        ml = _f(mp.get("metres_lineaires_par_bobine"))
+        if not ml:
+            return {"quantite": None, "unite": "bobine",
+                    "manque": ["Mètres linéaires par bobine non renseignés sur la matière"]}
+        return {"quantite": round(q / ml, 4), "unite": "bobine",
+                "detail": f"{_n(q, 'm')} ÷ {_n(ml, 'm')}/bobine", "manque": []}
+
+    if kind == "adhesif":
+        return {"quantite": round(q, 4), "unite": "kg", "manque": []}
+
+    if kind == "mandrin":
+        pal = _f(b.get("besoin_palettes"))
+        if not pal:
+            return {"quantite": None, "unite": "palette",
+                    "manque": ["Longueur tube ou tubes par palette manquants sur la matière"]}
+        return {"quantite": round(pal, 4), "unite": "palette",
+                "detail": f"{_n(round(q))} mandrins", "manque": []}
+
+    if kind == "carton":
+        upp = _f(mp.get("unites_par_palette"))
+        if not upp:
+            return {"quantite": None, "unite": "palette",
+                    "manque": ["Cartons par palette non renseignés sur la matière"]}
+        return {"quantite": round(q / upp, 4), "unite": "palette",
+                "detail": f"{_n(round(q))} cartons ÷ {_n(upp)}/palette", "manque": []}
+
+    # Palettes : le besoin est déjà dans l'unité de gestion.
+    return {"quantite": round(q, 4), "unite": "palette", "manque": []}
+
+
+def _etat_documents(pe: dict) -> dict:
+    """Validation des deux documents dont dépend le calcul du déstockage.
+
+    Le défalquage lit l'OF et la fiche technique pour décider ce qui sort du
+    stock. Si l'un des deux est faux, c'est le stock qui devient faux — et on
+    ne s'en aperçoit qu'à l'inventaire suivant. On exige donc que les deux
+    aient été relus et validés par quelqu'un avant tout mouvement automatique.
+    """
+    of_id = pe.get("of_import_id")
+    ft_id = pe.get("ft_id")
+    of_ok = bool(of_id) and bool(int(pe.get("of_valide") or 0))
+    ft_ok = bool(ft_id) and bool(int(pe.get("ft_valide") or 0))
+
+    manquants = []
+    if not of_id:
+        manquants.append("aucun OF rattaché")
+    elif not of_ok:
+        manquants.append("OF non validé")
+    if not ft_id:
+        manquants.append("aucune fiche technique rapprochée")
+    elif not ft_ok:
+        manquants.append("fiche technique non validée")
+
+    return {
+        "of_id": of_id,
+        "of_valide": of_ok,
+        "of_valide_par": pe.get("of_valide_par"),
+        "ft_id": ft_id,
+        "ft_valide": ft_ok,
+        "ft_valide_par": pe.get("ft_valide_par"),
+        "complet": of_ok and ft_ok,
+        "blocage": None if (of_ok and ft_ok) else
+                   "Déstockage impossible tant que les deux documents ne sont pas "
+                   "validés — " + ", ".join(manquants) + ".",
+    }
+
+
+def _destockage_lignes(conn, planning_id: int) -> dict:
+    """Prépare le déstockage d'un dossier : une ligne par matière consommée."""
+    dossiers = _load_dossiers(conn, _SQL_PE_UN, (planning_id,))
+    if not dossiers:
+        raise HTTPException(404, "Dossier introuvable.")
+    pe = dossiers[0]
+    mapping = _load_mapping(conn)
+    perte_pct = stock_config_float(conn, "mandrin_perte_coupe_pct")
+
+    # Le réel prime sur le théorique : on substitue avant de calculer, pour que
+    # toute la cascade (métrage → adhésif, étiquettes → mandrins → cartons)
+    # reparte des quantités effectivement produites.
+    reel = _production_reelle(conn, pe)
+    pe_calc = dict(pe)
+    if reel["source"] == "reel":
+        if reel["metrage"]:
+            pe_calc["of_metrage"] = reel["metrage"]
+        if reel["etiquettes"]:
+            pe_calc["qte_etiquettes"] = reel["etiquettes"]
+            # Les bobines de l'OF décrivent le prévu : elles primeraient sur la
+            # quantité réelle dans le calcul des mandrins.
+            pe_calc["qte_bobines"] = None
+            pe_calc["of_nb_mandrins"] = None
+            pe_calc["of_nb_cartons"] = None
+
+    besoins = _compute_besoins_dossier(pe_calc, mapping, perte_pct)
+    lz = _laize_dossier(pe_calc)
+
+    lignes = []
+    for b in besoins:
+        mp = mapping.get((b["kind"], (b["source_value"] or "").strip().lower())) or {}
+        conv = _quantite_a_destocker(b, mp)
+        mid = b.get("matiere_id")
+        laizes, laize_suggeree = [], None
+        stock = None
+        if mid:
+            if b["kind"] in _KINDS_BOBINE:
+                laizes = _laizes_matiere(conn, mid)
+                cible = _f(lz.get("laize"))
+                if cible:
+                    for l in laizes:
+                        if abs(float(l["valeur_mm"] or 0) - cible) < 0.5:
+                            laize_suggeree = l["laize_id"]
+                            break
+                if laize_suggeree is None and len(laizes) == 1:
+                    laize_suggeree = laizes[0]["laize_id"]
+                if laize_suggeree is not None:
+                    stock = next((float(l["stock"]) for l in laizes
+                                  if l["laize_id"] == laize_suggeree), None)
+            else:
+                r = conn.execute(
+                    "SELECT quantite FROM mp_stock WHERE matiere_id=?", (mid,)
+                ).fetchone()
+                stock = float(r["quantite"]) if r else 0.0
+
+        manque = list(conv.get("manque") or [])
+        if not b.get("mapped"):
+            manque.append("Valeur de fiche non associée à une référence MySifa")
+        if b["kind"] in _KINDS_BOBINE and mid and laize_suggeree is None:
+            manque.append("Laize du dossier absente des laizes de cette matière — à choisir")
+
+        lignes.append({
+            "kind": b["kind"],
+            "source_value": b["source_value"],
+            "matiere_id": mid,
+            "matiere_ref": b.get("matiere_ref"),
+            "matiere_designation": b.get("matiere_designation"),
+            "mapped": bool(b.get("mapped")),
+            "besoin": b.get("quantite"),
+            "besoin_unite": b.get("unite"),
+            "quantite": conv.get("quantite"),
+            "unite": conv.get("unite"),
+            "detail": conv.get("detail"),
+            "laizee": b["kind"] in _KINDS_BOBINE,
+            "laizes": laizes,
+            "laize_id": laize_suggeree,
+            "stock_actuel": round(stock, 4) if stock is not None else None,
+            "manque": manque,
+            "destockable": bool(mid) and conv.get("quantite") is not None and (
+                b["kind"] not in _KINDS_BOBINE or laize_suggeree is not None),
+        })
+
+    deja = [dict(r) for r in conn.execute(
+        """SELECT m.id, m.matiere_id, m.type_mouvement, m.quantite, m.quantite_apres,
+                  m.laize_id, m.note, m.created_at, m.created_by_name,
+                  m.annule_mouvement_id, mp.reference AS matiere_ref
+           FROM mp_mouvements m
+           LEFT JOIN matieres_premieres mp ON mp.id = m.matiere_id
+           WHERE m.planning_entry_id = ?
+           ORDER BY m.id""",
+        (planning_id,),
+    ).fetchall()]
+
+    docs = _etat_documents(pe)
+    return {
+        "dossier": {
+            "planning_id": pe["id"],
+            "reference": pe.get("reference"),
+            "numero_of": pe.get("numero_of"),
+            "client": pe.get("client"),
+            "machine": pe.get("machine_nom"),
+            "statut": pe.get("statut"),
+            "destockage": pe.get("destockage") or "todo",
+        },
+        "documents": docs,
+        "blocage": docs["blocage"],
+        "source_calcul": reel["source"],
+        "reel": {"metrage": reel["metrage"], "etiquettes": reel["etiquettes"]},
+        "theorique": {"metrage": _f(pe.get("of_metrage")),
+                      "etiquettes": _f(pe.get("qte_etiquettes"))},
+        "laize_dossier": lz.get("laize"),
+        "lignes": lignes,
+        "mouvements": deja,
+    }
+
+
+@router.get("/api/stock/destockage/{planning_id}")
+def destockage_preview(planning_id: int, request: Request):
+    """Ce qui sera retiré du stock à la clôture de ce dossier."""
+    require_stock_write(request)
+    with get_db() as conn:
+        return _destockage_lignes(conn, planning_id)
+
+
+@router.post("/api/stock/destockage/{planning_id}/valider")
+async def destockage_valider(planning_id: int, request: Request):
+    """Enregistre les sorties de stock d'une production terminée.
+
+    Body : { lignes: [{ matiere_id, quantite, laize_id? }], note? }
+    Les quantités viennent de la modale : ce sont celles que l'opératrice a
+    validées, pas celles qu'on a calculées. Un ajustement de sa part est donc
+    la vérité — le calcul n'était qu'une proposition.
+    """
+    user = require_stock_write(request)
+    body = await request.json()
+    lignes = body.get("lignes")
+    if not isinstance(lignes, list) or not lignes:
+        raise HTTPException(400, "Aucune ligne à déstocker.")
+    note_libre = (body.get("note") or "").strip()
+
+    from app.routers.stock import appliquer_mouvement_mp
+
+    with get_db() as conn:
+        pe = conn.execute(
+            "SELECT id, reference, numero_of, destockage FROM planning_entries WHERE id=?",
+            (planning_id,),
+        ).fetchone()
+        if not pe:
+            raise HTTPException(404, "Dossier introuvable.")
+        if (pe["destockage"] or "todo") == "done":
+            raise HTTPException(400, "Ce dossier est déjà déstocké.")
+
+        # Verrou documentaire : on ne bouge pas le stock sur la foi d'un OF ou
+        # d'une fiche que personne n'a relus. Le contrôle est refait ici et pas
+        # seulement à l'affichage — un appel direct à l'API doit buter dessus.
+        etat = _load_dossiers(conn, _SQL_PE_UN, (planning_id,))
+        docs = _etat_documents(etat[0]) if etat else {"complet": False,
+            "blocage": "Dossier introuvable."}
+        if not docs["complet"]:
+            raise HTTPException(400, docs["blocage"])
+
+        no_dossier = (pe["numero_of"] or pe["reference"] or "").strip()
+        base_note = f"Déstockage production {no_dossier}".strip()
+        if note_libre:
+            base_note += f" — {note_libre}"
+
+        faits, negatifs = [], []
+        for li in lignes:
+            try:
+                mid = int(li.get("matiere_id"))
+                qte = float(str(li.get("quantite")).replace(",", "."))
+            except (TypeError, ValueError):
+                raise HTTPException(400, "Ligne invalide (matiere_id / quantité).") from None
+            if qte <= 0:
+                continue  # une ligne remise à zéro est un refus explicite de déstocker
+            laize_id = li.get("laize_id")
+            laize_id = int(laize_id) if laize_id not in (None, "") else None
+            res = appliquer_mouvement_mp(
+                conn, user, mid, "sortie", qte,
+                laize_id=laize_id, note=base_note,
+                planning_entry_id=planning_id, no_dossier=no_dossier,
+                autoriser_negatif=True,
+            )
+            faits.append({"matiere_id": mid, **res})
+            if res["negatif"]:
+                negatifs.append(mid)
+
+        if not faits:
+            raise HTTPException(400, "Toutes les lignes sont à zéro : rien à déstocker.")
+
+        conn.execute(
+            "UPDATE planning_entries SET destockage='done', updated_at=? WHERE id=?",
+            (datetime.now().isoformat(), planning_id),
+        )
+        conn.commit()
+
+    return {"success": True, "destockage": "done", "mouvements": faits,
+            "stocks_negatifs": negatifs}
+
+
+@router.post("/api/stock/destockage/{planning_id}/annuler")
+async def destockage_annuler(planning_id: int, request: Request):
+    """Contre-passe le déstockage d'un dossier.
+
+    On n'efface rien : chaque sortie est annulée par une entrée de même
+    quantité, rattachée à l'originale. Les deux écritures restent à
+    l'historique — c'est la seule façon honnête de raconter qu'on s'est trompé.
+    """
+    user = require_stock_write(request)
+    from app.routers.stock import appliquer_mouvement_mp
+
+    with get_db() as conn:
+        pe = conn.execute(
+            "SELECT id, reference, numero_of, destockage FROM planning_entries WHERE id=?",
+            (planning_id,),
+        ).fetchone()
+        if not pe:
+            raise HTTPException(404, "Dossier introuvable.")
+
+        no_dossier = (pe["numero_of"] or pe["reference"] or "").strip()
+        # Sorties de ce dossier qui n'ont pas déjà été contre-passées.
+        a_annuler = conn.execute(
+            """SELECT m.id, m.matiere_id, m.quantite, m.laize_id
+               FROM mp_mouvements m
+               WHERE m.planning_entry_id = ?
+                 AND m.type_mouvement = 'sortie'
+                 AND m.annule_mouvement_id IS NULL
+                 AND NOT EXISTS (SELECT 1 FROM mp_mouvements c
+                                 WHERE c.annule_mouvement_id = m.id)
+               ORDER BY m.id""",
+            (planning_id,),
+        ).fetchall()
+
+        rendus = []
+        for m in a_annuler:
+            res = appliquer_mouvement_mp(
+                conn, user, int(m["matiere_id"]), "entree", float(m["quantite"]),
+                laize_id=m["laize_id"],
+                note=f"Annulation déstockage production {no_dossier}",
+                planning_entry_id=planning_id, no_dossier=no_dossier,
+                annule_mouvement_id=int(m["id"]),
+            )
+            rendus.append({"matiere_id": m["matiere_id"], **res})
+
+        conn.execute(
+            "UPDATE planning_entries SET destockage='todo', updated_at=? WHERE id=?",
+            (datetime.now().isoformat(), planning_id),
+        )
+        conn.commit()
+
+    return {"success": True, "destockage": "todo", "mouvements": rendus}
 
 
 @router.get("/api/stock/besoins-matieres/mapping")
@@ -893,12 +2095,26 @@ _EXPLICATIONS = {
             "id": "mandrin",
             "titre": "Mandrins",
             "type": "calcul",
-            "resume": "Besoin en unités — un mandrin par bobine produite.",
-            "formule": "Besoin (u) = Quantité étiquettes ÷ Étiquettes par bobine",
+            "resume": "Besoin en mandrins — un par bobine produite, traduit en "
+                      "tubes puis en palettes à commander.",
+            "formule": "Besoin (u) = Quantité étiquettes ÷ Étiquettes par bobine · "
+                       "Tubes = Mandrins × Laize module ÷ (Longueur tube − perte de coupe)",
             "paragraphes": [
-                "Chaque bobine finie consomme un mandrin. Le nombre de bobines se "
-                "déduit de la quantité à produire divisée par le nombre d'étiquettes "
-                "par bobine défini sur la fiche technique.",
+                "Chaque bobine finie consomme un mandrin. Le nombre de bobines a "
+                "trois sources possibles, lues dans cet ordre : le nombre de mandrins "
+                "chiffré sur l'OF, la quantité de bobines de l'OF, puis la quantité "
+                "d'étiquettes divisée par le nombre d'étiquettes par bobine.",
+                "Ce dernier nombre vient du champ « Nb étiq./bobine » de la fiche "
+                "technique ; s'il est vide, il est relu dans la phrase de "
+                "conditionnement (« Bobine de 1.000 étiquettes »), sur la fiche puis "
+                "sur l'OF. C'est ce qui évite qu'une fiche complète par ailleurs "
+                "sorte « n.c. » sur les mandrins, les cartons et les palettes.",
+                "Les mandrins ne s'achètent pas à l'unité : ils sont découpés dans "
+                "des tubes. Un tube donne, une fois la perte de coupe retirée, autant "
+                "de mandrins que la laize du module tient de fois dans sa longueur. "
+                "La longueur du tube et le nombre de tubes par palette se saisissent "
+                "sur la fiche matière du mandrin, la perte de coupe dans "
+                "Paramètres → Mandrins.",
                 "Ce résultat sert aussi de base au calcul des cartons.",
             ],
             "variables": [
@@ -906,25 +2122,49 @@ _EXPLICATIONS = {
                  "detail": "diamètre mandrin, mappé vers une référence mandrin"},
                 {"label": "Quantité étiquettes", "champ": "of_imports.qte_etiquettes",
                  "unite": "étiq"},
-                {"label": "Étiquettes par bobine", "champ": "fiches_techniques.nb_etiq_bobin",
+                {"label": "Étiquettes par bobine",
+                 "champ": "fiches_techniques.nb_etiq_bobin ou conditionnement",
+                 "unite": "", "detail": "repli sur « Bobine de N étiquettes »"},
+                {"label": "Mandrins / bobines de l'OF",
+                 "champ": "of_imports.nb_mandrins ou qte_bobines",
+                 "detail": "prioritaires quand l'OF les renseigne"},
+                {"label": "Laize module", "champ": "fiches_techniques.mod_laize",
+                 "unite": "mm", "detail": "hauteur du mandrin découpé dans le tube"},
+                {"label": "Longueur tube", "champ": "matieres_premieres.longueur_tube_mm",
+                 "unite": "mm"},
+                {"label": "Tubes par palette", "champ": "matieres_premieres.unites_par_palette",
                  "unite": ""},
+                {"label": "Perte de coupe", "champ": "stock_config.mandrin_perte_coupe_pct",
+                 "unite": "%"},
             ],
         },
         {
             "id": "carton",
             "titre": "Cartons",
             "type": "calcul",
-            "resume": "Besoin en unités — dépend du calcul des mandrins.",
-            "formule": "Besoin (u) = Nb de bobines ÷ Bobines par carton",
+            "resume": "Besoin en unités — chiffré sur l'OF, sinon reconstruit "
+                      "depuis le calcul des mandrins.",
+            "formule": "Besoin (u) = Nb de cartons de l'OF, "
+                       "sinon Nb de bobines ÷ Bobines par carton",
             "paragraphes": [
-                "Le nombre de bobines est celui calculé pour les mandrins. S'il n'est "
-                "pas calculable, le besoin en cartons ne l'est pas non plus.",
+                "Quand l'OF chiffre lui-même les cartons, c'est cette valeur qui fait "
+                "foi : elle décrit la commande réelle, pas une reconstitution.",
+                "Sinon, le nombre de bobines est celui calculé pour les mandrins. S'il "
+                "n'est pas calculable, le besoin en cartons ne l'est pas non plus.",
+                "Le stock, lui, est tenu en palettes : il est converti en cartons via "
+                "« Cartons par palette » de la fiche matière. Sans ce champ, le stock "
+                "reste affiché comme non comparable plutôt que confondu avec un "
+                "nombre de palettes.",
             ],
             "variables": [
                 {"label": "Valeur source", "champ": "fiches_techniques.cartons"},
+                {"label": "Cartons de l'OF", "champ": "of_imports.nb_cartons",
+                 "detail": "prioritaire quand l'OF le renseigne"},
                 {"label": "Nb de bobines", "champ": "voir « Mandrins »", "unite": "bobines"},
                 {"label": "Bobines par carton", "champ": "fiches_techniques.nb_bobines_carton",
                  "unite": ""},
+                {"label": "Cartons par palette", "champ": "matieres_premieres.unites_par_palette",
+                 "unite": "", "detail": "conversion du stock, tenu en palettes"},
             ],
         },
         {

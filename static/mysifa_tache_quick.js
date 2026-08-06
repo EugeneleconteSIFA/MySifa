@@ -25,6 +25,7 @@
 
   var H2C_URL = '/static/html2canvas.min.js';
   var role = null;          // résolu paresseusement
+  var niveau = null;        // niveau d'accès sur l'app taches, résolu paresseusement
   var meta = null;          // référentiels /api/taches/meta
   var moi = null;           // utilisateur courant
   var cssPose = false;
@@ -103,6 +104,21 @@
   }
 
   // ── Chargements paresseux ───────────────────────────────────────────────
+  // Niveau d'acces sur l'app taches : none / read / write / admin. Lu dans la
+  // matrice (access_map) et non dans le role — un service ouvert dans
+  // Parametres doit obtenir le widget sans retouche de code. Pas de raccourci
+  // par window.__MYSIFA_ROLE__ : le role ne porte plus l'information.
+  function chargerNiveau() {
+    if (niveau !== null) return Promise.resolve(niveau);
+    return api('/api/auth/me').then(function (u) {
+      moi = u; role = (u && u.role) || '';
+      var m = (u && u.access_map && u.access_map.taches) || {};
+      niveau = m._app || (role === 'superadmin' ? 'admin' : 'none');
+      return niveau;
+    }, function () { niveau = 'none'; return niveau; });
+  }
+  function peutCreer(n) { return n === 'write' || n === 'admin'; }
+
   function chargerRole() {
     if (role !== null) return Promise.resolve(role);
     var r = window.__MYSIFA_ROLE__;
@@ -289,8 +305,8 @@
     opts = opts || {};
     if (ouverte) return Promise.resolve();
     ouverte = true;
-    return chargerRole().then(function (r) {
-      if (r !== 'superadmin') { ouverte = false; return; }
+    return chargerNiveau().then(function (n) {
+      if (!peutCreer(n)) { ouverte = false; return; }
       return Promise.all([chargerMeta(), chargerMoi()]).then(function () {
         poserCSS();
         rendre(opts);
@@ -518,8 +534,8 @@
     // On ne vole pas la frappe dans un champ de saisie : « † » y est légitime.
     if (dansUneSaisie(e)) return;
     e.preventDefault();
-    chargerRole().then(function (r) {
-      if (r !== 'superadmin') return;
+    chargerNiveau().then(function (n) {
+      if (!peutCreer(n)) return;
       toast('Capture de la page…');
       return capturer().then(function (res) {
         return ouvrir({

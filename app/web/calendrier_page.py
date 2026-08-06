@@ -364,6 +364,53 @@ body.light .cal-allday-row{background:#f8fafc}
     width:auto;max-width:none;border-radius:12px 12px 0 0;max-height:60vh;overflow-y:auto;
   }
 }
+/* --- Edition des creneaux personnels (drag & drop / etirement) --- */
+.cal-ev--own,.cal-pill--own,.cal-mbar--own,.cal-allday-pill--own{cursor:grab}
+.cal-ev--own:active,.cal-pill--own:active,.cal-mbar--own:active{cursor:grabbing}
+.cal-pill,.cal-mbar,.cal-allday-pill{position:relative}
+.cal-ev-rs{position:absolute;left:0;right:0;height:7px;cursor:ns-resize;z-index:3}
+.cal-ev-rs-top{top:-1px}
+.cal-ev-rs-bot{bottom:-1px}
+.cal-ev-rs::after{content:'';position:absolute;left:50%;transform:translateX(-50%);width:22px;height:2px;border-radius:2px;background:rgba(10,14,23,.4);opacity:0;transition:opacity .12s}
+.cal-ev-rs-top::after{top:2px}
+.cal-ev-rs-bot::after{bottom:2px}
+.cal-ev--own:hover .cal-ev-rs::after{opacity:1}
+.cal-rs-x{position:absolute;top:0;bottom:0;right:-1px;width:8px;cursor:ew-resize;z-index:3}
+.cal-ev--dragging,.cal-pill--dragging,.cal-mbar--dragging,.cal-allday-pill--dragging{opacity:.78;box-shadow:0 6px 18px rgba(0,0,0,.35);pointer-events:none}
+body.cal-dragging{user-select:none}
+.cal-drag-badge{position:fixed;z-index:9000;pointer-events:none;background:var(--card);border:1px solid var(--accent);color:var(--text);font-size:11px;font-weight:700;padding:5px 9px;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.35);white-space:nowrap}
+.cal-ev--busy,.cal-pill--busy,.cal-allday-pill--busy,.cal-mbar--busy{background-image:repeating-linear-gradient(45deg,rgba(10,14,23,.16) 0 5px,transparent 5px 10px)}
+/* --- Calendriers externes --- */
+.cal-extern-btn{display:flex;align-items:center;gap:8px;width:100%;margin-top:6px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,border-color .15s}
+.cal-extern-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.cal-cals-section.collapsed #btn-cal-extern{display:none}
+.cal-create-modal--lg{max-width:580px}
+.cal-extern-sec{margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+.cal-extern-sec.first{margin-top:0;padding-top:0;border-top:none}
+.cal-extern-h{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin:0 0 8px}
+.cal-extern-p{font-size:12px;color:var(--text2);line-height:1.6;margin:0 0 10px}
+.cal-extern-hint{font-size:11px;color:var(--muted);line-height:1.6;margin:8px 0 0}
+.cal-feed-cals{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.cal-feed-cal{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--border);border-radius:999px;background:var(--bg);font-size:11px;font-weight:600;color:var(--text2);cursor:pointer;user-select:none;transition:border-color .15s,color .15s}
+.cal-feed-cal:hover{border-color:var(--accent);color:var(--accent)}
+.cal-feed-cal input{width:14px;height:14px;accent-color:var(--accent);cursor:pointer;margin:0}
+.cal-feed-cal .cal-dot{width:8px;height:8px}
+.cal-url-row{display:flex;gap:8px;align-items:center}
+.cal-url-row input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 11px;color:var(--text2);font-size:11px;font-family:monospace}
+.cal-sub-row{display:flex;align-items:center;gap:9px;padding:9px 10px;border:1px solid var(--border);border-radius:10px;background:var(--bg);margin-bottom:8px}
+.cal-sub-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.cal-sub-main{flex:1;min-width:0}
+.cal-sub-nom{font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-sub-meta{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-sub-meta.err{color:var(--danger)}
+.cal-mini-btn{border:1px solid var(--border);background:var(--card);color:var(--text2);border-radius:8px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;flex-shrink:0;transition:border-color .15s,color .15s}
+.cal-mini-btn:hover{border-color:var(--accent);color:var(--accent)}
+.cal-mini-btn.danger:hover{border-color:var(--danger);color:var(--danger)}
+.cal-extern-form{display:grid;grid-template-columns:1fr 120px;gap:8px;margin-top:10px}
+.cal-extern-form input[type=text],.cal-extern-form input[type=url]{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 11px;color:var(--text);font-size:13px;font-family:inherit;min-width:0}
+.cal-extern-form input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12);outline:none}
+.cal-extern-form .full{grid-column:1 / -1}
+.cal-extern-form input[type=color]{width:100%;height:38px;border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:3px;cursor:pointer}
 </style>
 </head>
 <body class="has-topbar">
@@ -412,6 +459,10 @@ body.light .cal-allday-row{background:#f8fafc}
         <svg class="cal-cals-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div id="cal-toggles"></div>
+      <button type="button" class="cal-extern-btn" id="btn-cal-extern" title="Connecter un calendrier externe">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+        Calendriers externes
+      </button>
     </div>
     <div id="cal-mini-root"></div>
     <div class="sidebar-bottom">
@@ -482,6 +533,7 @@ body.light .cal-allday-row{background:#f8fafc}
 </div>
 <div id="cal-color-modal-root"></div>
 <div id="cal-create-modal-root"></div>
+<div id="cal-extern-modal-root"></div>
 <script>
 const USER_ROLE=__USER_ROLE__;
 const CAL_DEFS=window.MySifaCalendar?MySifaCalendar.CAL_DEFS:[];
@@ -495,7 +547,14 @@ function calIdsForRole(role){
 }
 function accessibleCalDefs(){
   const allowed=new Set(calIdsForRole(USER_ROLE));
-  return CAL_DEFS.filter(c=>allowed.has(c.id));
+  return CAL_DEFS.filter(c=>allowed.has(c.id)||c.externe);
+}
+function isSubCal(id){return /^sub_\d+$/.test(String(id||''));}
+function isOwnPerso(ev){
+  return !!(ev&&ev.calendrier==='perso'&&ev.meta&&ev.meta.own===true);
+}
+function isBusyPerso(ev){
+  return !!(ev&&ev.calendrier==='perso'&&ev.meta&&ev.meta.own===false&&ev.meta.prive===true);
 }
 const ICO_CAL_GEAR='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
 const PROD_CAL_IDS=['production_1','production_2','production_3','production_4'];
@@ -512,7 +571,7 @@ const LS_VIEW='mysifa_cal_view';
 const VALID_VIEWS=['month','week','day','agenda'];
 const MINI_DOW=['L','M','M','J','V','S','D'];
 const MOBILE_BREAKPOINT=900;
-let S={view:'month',anchor:new Date(),events:[],dayWindows:{},feriesMap:{},loading:false,visible:{},pop:null,colorModal:null,createModal:null,miniCalY:null,miniCalM:null,_touchStartX:null,_touchStartY:null};
+let S={view:'month',anchor:new Date(),events:[],dayWindows:{},feriesMap:{},loading:false,visible:{},pop:null,colorModal:null,createModal:null,externModal:null,miniCalY:null,miniCalM:null,_touchStartX:null,_touchStartY:null,subs:[],feed:null,drag:null,editingEv:null,_suppressClickUntil:0,_clickTimer:null};
 let ME=null;
 
 function isMobileViewport(){return window.innerWidth<MOBILE_BREAKPOINT;}
@@ -802,6 +861,7 @@ async function saveCalColorsModal(){
   closeCalColorModal();
 }
 function openCalSettingsModal(calId){
+  if(isSubCal(calId)){openExternModal();return;}
   closeCalColorModal();
   const root=document.getElementById('cal-color-modal-root');
   if(!root||!window.MySifaCalendar)return;
@@ -860,8 +920,7 @@ function renderToggles(){
 }
 
 function activeCalList(){
-  const allowed=new Set(calIdsForRole(USER_ROLE));
-  return CAL_DEFS.filter(c=>allowed.has(c.id)&&S.visible[c.id]).map(c=>c.id);
+  return accessibleCalDefs().filter(c=>S.visible[c.id]).map(c=>c.id);
 }
 function exportIcsUrl(dateStart,dateEnd,calIds){
   const q=new URLSearchParams({
@@ -896,10 +955,52 @@ function darkenHex(hex,f){
   const b=Math.min(255,Math.max(0,Math.round(parseInt(m[1].slice(4,6),16)*k)));
   return '#'+[r,g,b].map(x=>pad2(x.toString(16))).join('');
 }
-function calSlotStyle(calId){
-  const fill=calColor(calId);
+function slotStyleFromColor(fill){
   if(String(fill).indexOf('var(')===0)return 'background:'+fill+';border-color:var(--border)';
   return 'background:'+fill+';border-color:'+darkenHex(fill);
+}
+function calSlotStyle(calId){
+  return slotStyleFromColor(calColor(calId));
+}
+/* Une couleur stable par utilisateur : l'angle d'or sur l'id garantit des
+   teintes bien réparties, identiques sur tous les postes, sans réglage. */
+const PERSON_HUE_STEP=137.508;
+const PERSON_SAT=68;
+const PERSON_LUM=62;
+function hslToHex(h,s,l){
+  s=s/100;l=l/100;
+  const k=n=>(n+h/30)%12;
+  const a=s*Math.min(l,1-l);
+  const f=n=>l-a*Math.max(-1,Math.min(k(n)-3,Math.min(9-k(n),1)));
+  const to=x=>pad2(Math.round(255*x).toString(16));
+  return '#'+to(f(0))+to(f(8))+to(f(4));
+}
+function relLum(hex){
+  const v=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16)/255)
+    .map(x=>x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4));
+  return 0.2126*v[0]+0.7152*v[1]+0.0722*v[2];
+}
+const SLOT_TEXT_LUM=relLum('#0a0e17');
+const SLOT_MIN_CONTRAST=4.6;
+/* Le libellé d'un créneau est écrit en #0a0e17 : on éclaircit la teinte
+   jusqu'à repasser au-dessus du seuil de contraste AA. */
+function personColor(userId){
+  const id=parseInt(userId,10);
+  if(!id)return calColor('perso');
+  const hue=(id*PERSON_HUE_STEP)%360;
+  let l=PERSON_LUM;
+  let hex=hslToHex(hue,PERSON_SAT,l);
+  while(l<86&&(relLum(hex)+0.05)/(SLOT_TEXT_LUM+0.05)<SLOT_MIN_CONTRAST){
+    l+=3;
+    hex=hslToHex(hue,PERSON_SAT,l);
+  }
+  return hex;
+}
+function evSlotStyle(ev){
+  if(ev&&ev.calendrier==='perso'&&ev.meta&&ev.meta.user_id){
+    return slotStyleFromColor(personColor(ev.meta.user_id));
+  }
+  return calSlotStyle(ev&&ev.calendrier);
 }
 
 function getPeriod(){
@@ -1078,6 +1179,7 @@ function defaultPersoRange(opts){
 }
 function closeCreateModal(){
   if(S.createModal){S.createModal.remove();S.createModal=null;}
+  S.editingEv=null;
   document.removeEventListener('keydown',onCreateModalKey);
 }
 function onCreateModalKey(e){if(e.key==='Escape')closeCreateModal();}
@@ -1111,33 +1213,56 @@ function readCreateModalPayload(){
     if(date_fin.length===10)date_fin+='T10:00';
   }
   const note=(document.getElementById('cp-note')?.value||'').trim()||null;
-  return{titre,date_debut,date_fin,all_day,note};
+  const prive=!!document.getElementById('cp-prive')?.checked;
+  return{titre,date_debut,date_fin,all_day,note,prive};
 }
-function openCreateModal(opts){
+function persoRawId(ev){return String((ev&&ev.id)||'').replace(/^perso-/,'');}
+function openEditModal(ev){
+  if(!isOwnPerso(ev))return;
+  openPersoModal({ev});
+}
+function openPersoModal(opts){
   closeCreateModal();
   closePop();
   const root=document.getElementById('cal-create-modal-root');
   if(!root)return;
-  const defs=defaultPersoRange(opts||{});
+  const ev=(opts&&opts.ev)||null;
+  const edit=!!ev;
+  let allDay,debut,fin,titre,note,prive;
+  if(edit){
+    allDay=!!ev.all_day;
+    debut=String(ev.debut||'').slice(0,16);
+    fin=String(ev.fin||'').slice(0,16);
+    titre=(ev.meta&&ev.meta.titre_brut)||ev.titre||'';
+    note=(ev.meta&&ev.meta.note)||'';
+    prive=!!(ev.meta&&ev.meta.prive);
+  }else{
+    const defs=defaultPersoRange(opts||{});
+    allDay=defs.all_day;debut=defs.debut;fin=defs.fin;titre='';note='';prive=false;
+  }
+  S.editingEv=ev;
   const wrap=document.createElement('div');
   wrap.className='cal-create-modal-backdrop';
   wrap.innerHTML=`<div class="cal-create-modal" role="dialog" aria-labelledby="cp-title-h">
     <button type="button" class="cal-create-modal-close" aria-label="Fermer">×</button>
-    <h2 id="cp-title-h">Nouvel événement personnel</h2>
+    <h2 id="cp-title-h">${edit?'Modifier l\'événement':'Nouvel événement personnel'}</h2>
     <div class="cal-create-field"><label for="cp-titre">Titre</label>
-      <input type="text" id="cp-titre" required maxlength="500" placeholder="Titre de l'événement"></div>
-    <label class="cal-create-toggle"><input type="checkbox" id="cp-allday" ${defs.all_day?'checked':''}> Journée entière</label>
+      <input type="text" id="cp-titre" required maxlength="500" placeholder="Titre de l'événement" value="${esc(titre)}"></div>
+    <label class="cal-create-toggle"><input type="checkbox" id="cp-allday" ${allDay?'checked':''}> Journée entière</label>
     <div class="cal-create-row">
       <div class="cal-create-field"><label for="cp-debut">Début</label>
-        <input id="cp-debut" type="${defs.all_day?'date':'datetime-local'}" value="${defs.all_day?defs.debut.slice(0,10):defs.debut}"></div>
+        <input id="cp-debut" type="${allDay?'date':'datetime-local'}" value="${allDay?esc(debut.slice(0,10)):esc(debut)}"></div>
       <div class="cal-create-field"><label for="cp-fin">Fin</label>
-        <input id="cp-fin" type="${defs.all_day?'date':'datetime-local'}" value="${defs.all_day?defs.fin.slice(0,10):defs.fin}"></div>
+        <input id="cp-fin" type="${allDay?'date':'datetime-local'}" value="${allDay?esc(fin.slice(0,10)):esc(fin)}"></div>
     </div>
     <div class="cal-create-field"><label for="cp-note">Note (optionnel)</label>
-      <textarea id="cp-note" maxlength="4000" placeholder="Détails…"></textarea></div>
+      <textarea id="cp-note" maxlength="4000" placeholder="Détails…">${esc(note)}</textarea></div>
+    <label class="cal-create-toggle"><input type="checkbox" id="cp-prive" ${prive?'checked':''}> Ne pas faire apparaître</label>
+    <p class="cal-extern-hint" style="margin:-6px 0 14px">Par défaut, vos créneaux sont visibles par tous. Coché, les autres voient uniquement « Occupé » — sans titre ni note.</p>
     <div class="cal-create-modal-foot">
+      ${edit?'<button type="button" class="cal-btn" id="cp-delete" style="margin-right:auto;border-color:var(--danger);color:var(--danger)">Supprimer</button>':''}
       <button type="button" class="cal-btn" id="cp-cancel">Annuler</button>
-      <button type="button" class="cal-btn primary" id="cp-submit">Créer</button>
+      <button type="button" class="cal-btn primary" id="cp-submit">${edit?'Enregistrer':'Créer'}</button>
     </div>
   </div>`;
   root.appendChild(wrap);
@@ -1147,29 +1272,56 @@ function openCreateModal(opts){
   wrap.querySelector('.cal-create-modal-close').onclick=closeCreateModal;
   wrap.querySelector('#cp-cancel').onclick=closeCreateModal;
   document.getElementById('cp-allday').onchange=syncCreateModalAllDay;
-  wrap.querySelector('#cp-submit').onclick=submitCreatePerso;
+  wrap.querySelector('#cp-submit').onclick=submitPersoModal;
+  const delBtn=wrap.querySelector('#cp-delete');
+  if(delBtn)delBtn.onclick=()=>deletePersoEvent(ev,{fromModal:true});
   document.addEventListener('keydown',onCreateModalKey);
   setTimeout(()=>document.getElementById('cp-titre')?.focus(),0);
 }
-async function submitCreatePerso(){
+function openCreateModal(opts){openPersoModal(opts||{});}
+async function submitPersoModal(){
   const payload=readCreateModalPayload();
   if(!payload.titre){showToast('Titre requis.','danger');return;}
   if(!payload.date_debut||!payload.date_fin){showToast('Dates invalides.','danger');return;}
+  const ev=S.editingEv;
   try{
-    await api('/api/calendrier/events/perso',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(payload)
-    });
+    if(ev){
+      await api('/api/calendrier/events/perso/'+encodeURIComponent(persoRawId(ev)),{
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload)
+      });
+    }else{
+      await api('/api/calendrier/events/perso',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(payload)
+      });
+    }
     closeCreateModal();
-    showToast('Événement créé.','success');
+    showToast(ev?'Événement modifié.':'Événement créé.','success');
     if(!S.visible.perso)S.visible.perso=true;
     saveVisible();
     fetchEvents();
   }catch(e){
-    showToast(e.message||'Création impossible','danger');
+    showToast(e.message||(ev?'Modification impossible':'Création impossible'),'danger');
   }
 }
+async function deletePersoEvent(ev,opts){
+  if(!isOwnPerso(ev))return;
+  const raw=persoRawId(ev);
+  if(!raw)return;
+  try{
+    await api('/api/calendrier/events/perso/'+encodeURIComponent(raw),{method:'DELETE'});
+    if(opts&&opts.fromModal)closeCreateModal();
+    closePop();
+    showToast('Événement supprimé.','success');
+    fetchEvents();
+  }catch(err){
+    showToast(err.message||'Suppression impossible','danger');
+  }
+}
+
 function bindBodySwipe(){
   const body=document.getElementById('cal-body');
   if(!body||body.dataset.swipeBound)return;
@@ -1199,6 +1351,7 @@ function bindCalendarBodyClicks(){
   body.dataset.createBound='1';
   bindBodySwipe();
   body.addEventListener('click',e=>{
+    if(dragJustEnded())return;
     if(e.target.closest('[data-ev-id],.cal-more'))return;
     const dayEl=e.target.closest('.cal-day[data-day]');
     if(dayEl){
@@ -1231,37 +1384,37 @@ function openPop(ev,anchorEl){
       (e?' → '+e.toLocaleString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'');
   }
   const stat=ev.meta&&ev.meta.statut?('<div><strong>Statut :</strong> '+esc(ev.meta.statut)+'</div>'):'';
-  const noteBlk=ev.calendrier==='perso'&&ev.meta&&ev.meta.note
-    ?'<div style="margin-top:8px;font-size:12px;color:var(--text2);line-height:1.5">'+esc(ev.meta.note)+'</div>':'';
+  const meta=ev.meta||{};
+  const noteBlk=meta.note
+    ?'<div style="margin-top:8px;font-size:12px;color:var(--text2);line-height:1.5">'+esc(meta.note)+'</div>':'';
+  const srcBlk=meta.source
+    ?'<div style="margin-top:6px;font-size:11px;color:var(--muted)">Source : '+esc(meta.source)+'</div>':'';
+  const lieuBlk=meta.lieu
+    ?'<div style="margin-top:6px;font-size:11px;color:var(--muted)">Lieu : '+esc(meta.lieu)+'</div>':'';
+  const busyBlk=isBusyPerso(ev)
+    ?'<div style="margin-top:6px;font-size:11px;color:var(--muted)">Créneau masqué par son auteur.</div>':'';
   let link='';
   if(ev.calendrier.startsWith('production_'))link='<a href="/planning">Ouvrir le planning production</a>';
   else if(ev.calendrier==='conges')link='<a href="/planning-rh">Ouvrir le planning RH</a>';
   else if(ev.calendrier==='expeditions')link='<a href="/expe">Ouvrir MyExpé</a>';
-  const delBtn=ev.calendrier==='perso'
+  const own=isOwnPerso(ev);
+  const editBtn=own
+    ?'<button type="button" class="cal-btn cal-pop-edit" style="width:100%;margin-top:10px">Modifier</button>':'';
+  const delBtn=own
     ?'<button type="button" class="cal-pop-del">Supprimer</button>':'';
   const pop=document.createElement('div');
   pop.className='cal-pop';
   pop.innerHTML='<button type="button" class="cal-pop-close" aria-label="Fermer">×</button>'+
     '<div class="cal-pop-title">'+esc(ev.titre)+'</div>'+
-    '<div class="cal-pop-meta">'+esc(CAL_DEFS.find(c=>c.id===ev.calendrier)?.label||ev.calendrier)+'<br>'+per+stat+noteBlk+'</div>'+
-    (link?'<div>'+link+'</div>':'')+delBtn;
+    '<div class="cal-pop-meta">'+esc(CAL_DEFS.find(c=>c.id===ev.calendrier)?.label||ev.calendrier)+'<br>'+per+stat+noteBlk+srcBlk+lieuBlk+busyBlk+'</div>'+
+    (link?'<div>'+link+'</div>':'')+editBtn+delBtn;
   document.body.appendChild(pop);
   S.pop=pop;
   pop.querySelector('.cal-pop-close').onclick=closePop;
+  const editEl=pop.querySelector('.cal-pop-edit');
+  if(editEl)editEl.onclick=e=>{e.stopPropagation();openEditModal(ev);};
   const delEl=pop.querySelector('.cal-pop-del');
-  if(delEl)delEl.onclick=async e=>{
-    e.stopPropagation();
-    const raw=String(ev.id||'').replace(/^perso-/,'');
-    if(!raw)return;
-    try{
-      await api('/api/calendrier/events/perso/'+encodeURIComponent(raw),{method:'DELETE'});
-      closePop();
-      showToast('Événement supprimé.','success');
-      fetchEvents();
-    }catch(err){
-      showToast(err.message||'Suppression impossible','danger');
-    }
-  };
+  if(delEl)delEl.onclick=e=>{e.stopPropagation();deletePersoEvent(ev);};
   if(isMobileViewport()){
     pop.classList.add('cal-pop--sheet');
   }else{
@@ -1300,12 +1453,274 @@ function renderCalendar(){
   renderMiniCal();
 }
 
+/* ---------------------------------------------------------------------
+   Interactions sur les créneaux : clic, double-clic (édition),
+   déplacement et étirement des créneaux personnels dont on est l'auteur.
+   --------------------------------------------------------------------- */
+function dragJustEnded(){
+  return !!(S._suppressClickUntil&&Date.now()<S._suppressClickUntil);
+}
+const DRAG_SNAP_MIN=15;
+const DRAG_THRESHOLD_PX=4;
+const DRAG_MIN_MINUTES=15;
+
 function bindRenderedEvents(){
   document.querySelectorAll('[data-ev-id]').forEach(el=>{
     const id=el.dataset.evId;
     const ev=S.events.find(x=>x.id===id);
-    if(ev)el.onclick=e=>onEvClick(ev,e);
+    if(!ev)return;
+    const own=isOwnPerso(ev);
+    el.onclick=e=>{
+      if(e.target.closest&&e.target.closest('.cal-ev-rs,.cal-rs-x')){e.stopPropagation();return;}
+      if(dragJustEnded()){e.stopPropagation();return;}
+      if(!own){onEvClick(ev,e);return;}
+      e.stopPropagation();
+      const cur=e.currentTarget;
+      clearTimeout(S._clickTimer);
+      S._clickTimer=setTimeout(()=>{openPop(ev,cur);},240);
+    };
+    if(own){
+      el.ondblclick=e=>{
+        e.preventDefault();e.stopPropagation();
+        clearTimeout(S._clickTimer);
+        closePop();
+        openEditModal(ev);
+      };
+      el.addEventListener('pointerdown',e=>startEventDrag(ev,el,e));
+    }
   });
+}
+
+function colSlotsAt(x,y){
+  const el=document.elementFromPoint(x,y);
+  const col=el&&el.closest?el.closest('.cal-col-slots[data-day]'):null;
+  if(col)return col;
+  const cols=document.querySelectorAll('.cal-col-slots[data-day]');
+  for(const c of cols){
+    const r=c.getBoundingClientRect();
+    if(x>=r.left&&x<=r.right)return c;
+  }
+  return null;
+}
+function dayCellAt(x,y){
+  const el=document.elementFromPoint(x,y);
+  const cell=el&&el.closest?el.closest('.cal-day[data-day]'):null;
+  if(cell)return cell;
+  const row=el&&el.closest?el.closest('.cal-week-row'):null;
+  const cells=(row||document).querySelectorAll('.cal-day[data-day]');
+  for(const c of cells){
+    const r=c.getBoundingClientRect();
+    if(x>=r.left&&x<=r.right)return c;
+  }
+  return null;
+}
+function daysDiff(a,b){
+  return Math.round((startOfDay(a)-startOfDay(b))/86400000);
+}
+function shiftDt(d,days,mins){
+  const x=new Date(d);
+  if(days)x.setDate(x.getDate()+days);
+  if(mins)x.setMinutes(x.getMinutes()+mins);
+  return x;
+}
+function fmtLocalDt(d){
+  return ymd(d)+'T'+pad2(d.getHours())+':'+pad2(d.getMinutes());
+}
+function fmtHm(d){return pad2(d.getHours())+':'+pad2(d.getMinutes());}
+function fmtDayShort(d){
+  return d.toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'});
+}
+function snapMinutes(m){return Math.round(m/DRAG_SNAP_MIN)*DRAG_SNAP_MIN;}
+
+function ensureDragBadge(){
+  let b=document.getElementById('cal-drag-badge');
+  if(!b){
+    b=document.createElement('div');
+    b.id='cal-drag-badge';
+    b.className='cal-drag-badge';
+    document.body.appendChild(b);
+  }
+  return b;
+}
+function moveDragBadge(x,y,text){
+  const b=ensureDragBadge();
+  b.textContent=text;
+  b.style.left=Math.min(window.innerWidth-b.offsetWidth-8,x+14)+'px';
+  b.style.top=Math.max(8,y-34)+'px';
+}
+function removeDragBadge(){
+  const b=document.getElementById('cal-drag-badge');
+  if(b)b.remove();
+}
+
+function startEventDrag(ev,el,e){
+  if(S.drag)return;
+  if(e.pointerType==='touch')return;
+  if(e.button!==undefined&&e.button!==0)return;
+  const s0=evStart(ev);
+  const e0=evEnd(ev)||s0;
+  if(!s0)return;
+  const handle=e.target.closest?e.target.closest('.cal-ev-rs,.cal-rs-x'):null;
+  const timedCol=el.closest('.cal-col-slots[data-day]');
+  const monthCell=el.closest('.cal-day[data-day]');
+  const barsRow=el.closest('.cal-week-bars');
+  let kind=null;
+  if(timedCol)kind='timed';
+  else if(monthCell)kind='monthPill';
+  else if(barsRow)kind='monthBar';
+  if(!kind)return;
+  let mode='move';
+  if(handle){
+    if(handle.classList.contains('cal-ev-rs-top'))mode='top';
+    else if(handle.classList.contains('cal-ev-rs-bot'))mode='bot';
+    else if(handle.classList.contains('cal-rs-x'))mode='end-day';
+  }
+  e.preventDefault();
+  const originDay=kind==='timed'
+    ?parseDayStr(timedCol.dataset.day)
+    :(kind==='monthPill'?parseDayStr(monthCell.dataset.day):startOfDay(s0));
+  S.drag={
+    ev,el,kind,mode,
+    s0,e0,
+    startX:e.clientX,startY:e.clientY,
+    originDay,
+    originCol:timedCol||null,
+    origTop:parseFloat(el.style.top)||0,
+    origH:parseFloat(el.style.height)||0,
+    dayDelta:0,minDelta:0,targetDay:null,
+    started:false,
+    newStart:s0,newEnd:e0
+  };
+  window.addEventListener('pointermove',onDragMove,true);
+  window.addEventListener('pointerup',onDragEnd,true);
+  window.addEventListener('pointercancel',cancelDrag,true);
+}
+
+function computeDragDates(st){
+  let ns=st.s0,ne=st.e0;
+  if(st.kind==='timed'){
+    if(st.mode==='move'){
+      ns=shiftDt(st.s0,st.dayDelta,st.minDelta);
+      ne=shiftDt(st.e0,st.dayDelta,st.minDelta);
+    }else if(st.mode==='top'){
+      const maxUp=(st.e0-st.s0)/60000-DRAG_MIN_MINUTES;
+      const d=Math.min(st.minDelta,maxUp);
+      ns=shiftDt(st.s0,0,d);
+    }else{
+      const maxDown=-((st.e0-st.s0)/60000-DRAG_MIN_MINUTES);
+      const d=Math.max(st.minDelta,maxDown);
+      ne=shiftDt(st.e0,0,d);
+    }
+  }else{
+    if(st.mode==='end-day'){
+      const target=st.targetDay?new Date(st.targetDay):startOfDay(st.e0);
+      ne=new Date(target);
+      ne.setHours(st.e0.getHours(),st.e0.getMinutes(),0,0);
+      if(ne<st.s0)ne=new Date(st.e0);
+    }else{
+      ns=shiftDt(st.s0,st.dayDelta,0);
+      ne=shiftDt(st.e0,st.dayDelta,0);
+    }
+  }
+  return{ns,ne};
+}
+
+function onDragMove(e){
+  const st=S.drag;
+  if(!st)return;
+  const dx=e.clientX-st.startX;
+  const dy=e.clientY-st.startY;
+  if(!st.started){
+    if(Math.abs(dx)<DRAG_THRESHOLD_PX&&Math.abs(dy)<DRAG_THRESHOLD_PX)return;
+    st.started=true;
+    clearTimeout(S._clickTimer);
+    closePop();
+    document.body.classList.add('cal-dragging');
+    st.el.classList.add(
+      st.kind==='timed'?'cal-ev--dragging'
+        :(st.kind==='monthBar'?'cal-mbar--dragging':'cal-pill--dragging')
+    );
+  }
+  e.preventDefault();
+
+  if(st.kind==='timed'){
+    st.minDelta=(st.mode==='move'||st.mode==='top'||st.mode==='bot')
+      ?snapMinutes(dy/PX_PER_HOUR*60):0;
+    if(st.mode==='move'){
+      const col=colSlotsAt(e.clientX,e.clientY);
+      if(col){
+        st.dayDelta=daysDiff(parseDayStr(col.dataset.day),st.originDay);
+        if(col!==st.el.parentNode)col.appendChild(st.el);
+      }
+    }
+  }else{
+    const cell=dayCellAt(e.clientX,e.clientY);
+    if(cell){
+      const target=parseDayStr(cell.dataset.day);
+      st.targetDay=target;
+      st.dayDelta=daysDiff(target,st.originDay);
+    }
+  }
+
+  const {ns,ne}=computeDragDates(st);
+  st.newStart=ns;st.newEnd=ne;
+
+  if(st.kind==='timed'){
+    const dpx=(ns-st.s0-(st.dayDelta*86400000))/60000/60*PX_PER_HOUR;
+    const hpx=Math.max(18,(ne-ns)/60000/60*PX_PER_HOUR);
+    if(st.mode==='bot'){
+      st.el.style.height=hpx+'px';
+    }else{
+      st.el.style.top=(st.origTop+dpx)+'px';
+      st.el.style.height=hpx+'px';
+    }
+    const sameDay=ymd(ns)===ymd(st.s0);
+    moveDragBadge(e.clientX,e.clientY,
+      (sameDay?'':fmtDayShort(ns)+' · ')+fmtHm(ns)+' → '+fmtHm(ne));
+  }else{
+    const multi=ymd(ns)!==ymd(ne);
+    moveDragBadge(e.clientX,e.clientY,
+      multi?(fmtDayShort(ns)+' → '+fmtDayShort(ne)):fmtDayShort(ns));
+  }
+}
+
+function releaseDrag(){
+  window.removeEventListener('pointermove',onDragMove,true);
+  window.removeEventListener('pointerup',onDragEnd,true);
+  window.removeEventListener('pointercancel',cancelDrag,true);
+  document.body.classList.remove('cal-dragging');
+  removeDragBadge();
+  const st=S.drag;
+  S.drag=null;
+  return st;
+}
+function cancelDrag(){
+  const st=releaseDrag();
+  if(st&&st.started){S._suppressClickUntil=Date.now()+400;renderCalendar();}
+}
+async function onDragEnd(e){
+  const st=releaseDrag();
+  if(!st)return;
+  if(!st.started)return;
+  S._suppressClickUntil=Date.now()+400;
+  const ns=st.newStart,ne=st.newEnd;
+  const unchanged=fmtLocalDt(ns)===fmtLocalDt(st.s0)&&fmtLocalDt(ne)===fmtLocalDt(st.e0);
+  if(unchanged){renderCalendar();return;}
+  const ev=st.ev;
+  const payload=ev.all_day
+    ?{date_debut:ymd(ns)+'T00:00',date_fin:ymd(ne)+'T23:59'}
+    :{date_debut:fmtLocalDt(ns),date_fin:fmtLocalDt(ne)};
+  try{
+    await api('/api/calendrier/events/perso/'+encodeURIComponent(persoRawId(ev)),{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    showToast('Créneau déplacé.','success');
+  }catch(err){
+    showToast(err.message||'Déplacement impossible','danger');
+  }
+  fetchEvents();
 }
 
 function eventsOnDay(day){
@@ -1370,7 +1785,7 @@ function renderAgenda(p){
         const time=evTimeLabelOnDay(ev,cur);
         html+='<div class="cal-agenda-ev-row">';
         if(time)html+='<span class="cal-agenda-time">'+esc(time)+'</span>';
-        html+='<div class="cal-pill" data-ev-id="'+esc(ev.id)+'" style="'+calSlotStyle(ev.calendrier)+'">'+esc(ev.titre)+'</div>';
+        html+='<div class="cal-pill" data-ev-id="'+esc(ev.id)+'" style="'+evSlotStyle(ev)+'">'+esc(ev.titre)+'</div>';
         html+='</div>';
       });
     }else{
@@ -1417,7 +1832,12 @@ function renderMonth(p){
       html+='<div class="cal-day-num">'+day.getDate()+'</div>';
       html+='<div class="cal-day-events">';
       show.forEach(ev=>{
-        html+='<div class="cal-pill" data-ev-id="'+esc(ev.id)+'" style="'+calSlotStyle(ev.calendrier)+'">'+esc(ev.titre)+'</div>';
+        const own=isOwnPerso(ev);
+        const cls='cal-pill'+(own?' cal-pill--own':'')+(isBusyPerso(ev)?' cal-pill--busy':'');
+        html+='<div class="'+cls+'" data-ev-id="'+esc(ev.id)+'" '+
+          (own?'title="Glisser pour changer de jour · double-clic pour modifier" ':'')+
+          'style="'+evSlotStyle(ev)+'">'+esc(ev.titre)+
+          (own?'<span class="cal-rs-x"></span>':'')+'</div>';
       });
       if(more)html+='<div class="cal-more">+'+more+'</div>';
       html+='</div>';
@@ -1485,7 +1905,7 @@ function timedEvStyle(ev,top,h,col,total){
   const px=CAL_SLOT_PAD_X;
   const inset=px*2;
   return 'top:'+top+'px;height:'+h+'px;left:calc('+pctL+'% + '+px+'px);width:calc('+pctW+'% - '+inset+'px);'+
-    'z-index:'+(1+c)+';'+calSlotStyle(ev.calendrier);
+    'z-index:'+(1+c)+';'+evSlotStyle(ev);
 }
 
 function renderDayTimedHtml(dayTimed,day,range){
@@ -1495,8 +1915,13 @@ function renderDayTimedHtml(dayTimed,day,range){
     const slice=timedSliceOnDay(ev,day,range);
     if(!slice)continue;
     const lay=layout.get(layoutKey(ev))||{col:0,total:1};
-    html+='<div class="cal-ev" data-ev-id="'+esc(ev.id)+'" data-col="'+lay.col+'" data-tot="'+lay.total+'" '+
-      'style="'+timedEvStyle(ev,slice.top,slice.h,lay.col,lay.total)+'">'+esc(ev.titre)+'</div>';
+    const own=isOwnPerso(ev);
+    const cls='cal-ev'+(own?' cal-ev--own':'')+(isBusyPerso(ev)?' cal-ev--busy':'');
+    const handles=own
+      ?'<span class="cal-ev-rs cal-ev-rs-top"></span><span class="cal-ev-rs cal-ev-rs-bot"></span>':'';
+    html+='<div class="'+cls+'" data-ev-id="'+esc(ev.id)+'" data-col="'+lay.col+'" data-tot="'+lay.total+'" '+
+      (own?'title="Glisser pour déplacer · double-clic pour modifier" ':'')+
+      'style="'+timedEvStyle(ev,slice.top,slice.h,lay.col,lay.total)+'">'+esc(ev.titre)+handles+'</div>';
   }
   return html;
 }
@@ -1522,7 +1947,10 @@ function renderWeekBars(days){
     }
     if(!colStart)return;
     const span=colEnd-colStart+1;
-    html+='<div class="cal-mbar" data-ev-id="'+esc(ev.id)+'" style="grid-column:'+colStart+' / span '+span+';grid-row:'+(ri+1)+';'+calSlotStyle(ev.calendrier)+'">'+esc(ev.titre)+'</div>';
+    const own=isOwnPerso(ev);
+    const cls='cal-mbar'+(own?' cal-mbar--own':'')+(isBusyPerso(ev)?' cal-mbar--busy':'');
+    html+='<div class="'+cls+'" data-ev-id="'+esc(ev.id)+'" style="grid-column:'+colStart+' / span '+span+';grid-row:'+(ri+1)+';'+evSlotStyle(ev)+'">'+esc(ev.titre)+
+      (own?'<span class="cal-rs-x"></span>':'')+'</div>';
   });
   html+='</div>';
   return html;
@@ -1556,7 +1984,7 @@ function renderTimeGrid(p,colCount){
       const s=ymd(startOfDay(evStart(ev))),e=ymd(startOfDay(evEnd(ev)));
       return s<=dk&&e>=dk;
     }).forEach(ev=>{
-      html+='<div class="cal-allday-pill" data-ev-id="'+esc(ev.id)+'" style="'+calSlotStyle(ev.calendrier)+'">'+esc(ev.titre)+'</div>';
+      html+='<div class="cal-allday-pill'+(isBusyPerso(ev)?' cal-allday-pill--busy':'')+'" data-ev-id="'+esc(ev.id)+'" style="'+evSlotStyle(ev)+'">'+esc(ev.titre)+'</div>';
     });
   });
   html+='</div></div>';
@@ -1599,6 +2027,7 @@ document.getElementById('btn-next').onclick=()=>shiftAnchor(1);
 document.getElementById('btn-today').onclick=()=>goToToday();
 document.getElementById('btn-export-ics').onclick=()=>exportIcs();
 document.getElementById('btn-print').onclick=()=>window.print();
+document.getElementById('btn-cal-extern').onclick=()=>openExternModal();
 document.querySelectorAll('.nav-btn[data-view],.cal-view-tabs .cal-btn[data-view]').forEach(b=>{
   b.onclick=()=>setView(b.dataset.view);
 });
@@ -1624,6 +2053,8 @@ document.addEventListener('keydown',e=>{
   if(isTypingTarget(document.activeElement))return;
   const k=e.key;
   if(k==='Escape'){
+    if(S.drag){cancelDrag();e.preventDefault();return;}
+    if(S.externModal){closeExternModal();e.preventDefault();return;}
     if(S.pop){closePop();e.preventDefault();return;}
     if(S.createModal){closeCreateModal();e.preventDefault();return;}
     if(S.colorModal){closeCalColorModal();e.preventDefault();}
@@ -1637,6 +2068,289 @@ document.addEventListener('keydown',e=>{
   if(k==='d'||k==='D'){e.preventDefault();setView('day');return;}
   if(k==='a'||k==='A'){e.preventDefault();setView('agenda');return;}
 });
+
+/* ---------------------------------------------------------------------
+   Calendriers externes : flux ICS sortant (abonnement Outlook / Google /
+   Apple) et abonnements ICS entrants affichés dans MyCalendrier.
+   --------------------------------------------------------------------- */
+const SUB_COLOR_DEFAULT='#38bdf8';
+
+function applySubCalDefs(){
+  for(let i=CAL_DEFS.length-1;i>=0;i--){
+    if(!CAL_DEFS[i].externe)continue;
+    const still=S.subs.some(s=>('sub_'+s.id)===CAL_DEFS[i].id&&s.actif);
+    if(!still){
+      delete S.visible[CAL_DEFS[i].id];
+      CAL_DEFS.splice(i,1);
+    }
+  }
+  S.subs.forEach(s=>{
+    if(!s.actif)return;
+    const id='sub_'+s.id;
+    let def=CAL_DEFS.find(c=>c.id===id);
+    if(!def){
+      CAL_DEFS.push({id,label:s.nom,color:s.couleur||SUB_COLOR_DEFAULT,externe:true});
+    }else{
+      def.label=s.nom;
+      def.color=s.couleur||def.color;
+    }
+    if(S.visible[id]===undefined)S.visible[id]=true;
+  });
+  saveVisible();
+}
+async function loadSubs(){
+  try{
+    const res=await api('/api/calendrier/subscriptions');
+    S.subs=(res&&res.subscriptions)||[];
+  }catch(e){
+    S.subs=[];
+    return;
+  }
+  applySubCalDefs();
+}
+async function loadFeed(){
+  try{S.feed=await api('/api/calendrier/feed');}
+  catch(e){S.feed=null;}
+}
+
+function closeExternModal(){
+  if(S.externModal){S.externModal.remove();S.externModal=null;}
+}
+function fmtSyncMeta(s){
+  if(s.last_status==='erreur')return{cls:'err',txt:s.last_error||'Flux injoignable.'};
+  if(!s.last_sync_at)return{cls:'',txt:'Jamais synchronisé'};
+  const d=parseEvDt(s.last_sync_at);
+  const when=d?d.toLocaleString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):s.last_sync_at;
+  return{cls:'',txt:s.nb_events+' événement(s) · maj '+when};
+}
+function externModalBodyHtml(){
+  const feed=S.feed;
+  let html='<div class="cal-extern-sec first">';
+  html+='<h3 class="cal-extern-h">Abonner un agenda externe à MySifa</h3>';
+  html+='<p class="cal-extern-p">Collez cette adresse dans Outlook, Google Agenda ou Apple Calendrier '+
+    '(« S\'abonner à un calendrier depuis le web »). Vos calendriers MySifa apparaîtront chez eux, '+
+    'en lecture seule, et se mettront à jour automatiquement.</p>';
+  if(feed){
+    const sel=new Set(String(feed.calendriers||'').split(',').map(s=>s.trim()).filter(Boolean));
+    html+='<div class="cal-feed-cals" id="cal-feed-cals">';
+    accessibleCalDefs().filter(c=>!c.externe).forEach(c=>{
+      html+='<label class="cal-feed-cal" style="--cal-c:'+calColor(c.id)+'">'+
+        '<input type="checkbox" data-feed-cal="'+esc(c.id)+'"'+(sel.has(c.id)?' checked':'')+'>'+
+        '<span class="cal-dot" style="background:'+calColor(c.id)+'"></span>'+esc(c.label)+'</label>';
+    });
+    html+='</div>';
+    html+='<div class="cal-url-row"><input type="text" id="cal-feed-url" readonly value="'+esc(feed.url)+'">'+
+      '<button type="button" class="cal-mini-btn" id="cal-feed-copy">Copier</button></div>';
+    html+='<div class="cal-extern-actions">'+
+      '<button type="button" class="cal-mini-btn" id="cal-feed-open">Ouvrir dans mon agenda</button>'+
+      '<button type="button" class="cal-mini-btn danger" id="cal-feed-rotate">Régénérer l\'adresse</button>'+
+      '</div>';
+    html+='<p class="cal-extern-hint">Fenêtre publiée : '+feed.fenetre.passe_jours+
+      ' jours passés / '+feed.fenetre.futur_jours+' jours à venir. Le calendrier Personnel ne publie que vos propres créneaux.'+
+      '<br>Cette adresse vaut mot de passe — ne la partagez pas. Régénérer coupe immédiatement les abonnements existants.</p>';
+  }else{
+    html+='<p class="cal-extern-hint">Adresse indisponible pour le moment.</p>';
+  }
+  html+='</div>';
+
+  html+='<div class="cal-extern-sec">';
+  html+='<h3 class="cal-extern-h">Afficher un agenda externe dans MySifa</h3>';
+  html+='<p class="cal-extern-p">Ajoutez l\'adresse ICS d\'un agenda publié (Outlook, Google, Apple, '+
+    'agenda partagé d\'un fournisseur). Ses événements apparaissent dans MyCalendrier, en lecture seule, '+
+    'rafraîchis automatiquement.</p>';
+  if(S.subs.length){
+    S.subs.forEach(s=>{
+      const m=fmtSyncMeta(s);
+      html+='<div class="cal-sub-row">'+
+        '<span class="cal-sub-dot" style="background:'+esc(s.couleur||SUB_COLOR_DEFAULT)+'"></span>'+
+        '<div class="cal-sub-main"><div class="cal-sub-nom">'+esc(s.nom)+(s.actif?'':' · masqué')+'</div>'+
+        '<div class="cal-sub-meta '+m.cls+'">'+esc(m.txt)+'</div></div>'+
+        '<button type="button" class="cal-mini-btn" data-sub-refresh="'+s.id+'">Actualiser</button>'+
+        '<button type="button" class="cal-mini-btn" data-sub-toggle="'+s.id+'">'+(s.actif?'Masquer':'Afficher')+'</button>'+
+        '<button type="button" class="cal-mini-btn danger" data-sub-del="'+s.id+'">Retirer</button>'+
+        '</div>';
+    });
+  }else{
+    html+='<p class="cal-extern-hint">Aucun agenda externe pour l\'instant.</p>';
+  }
+  html+='<div class="cal-extern-form">'+
+    '<input type="text" id="cal-sub-nom" maxlength="200" placeholder="Nom affiché (ex. Outlook perso)">'+
+    '<input type="color" id="cal-sub-couleur" value="'+SUB_COLOR_DEFAULT+'" aria-label="Couleur">'+
+    '<input class="full" type="text" id="cal-sub-url" maxlength="2000" placeholder="https://… .ics ou webcal://…">'+
+    '</div>';
+  html+='<div class="cal-extern-actions"><button type="button" class="cal-btn primary" id="cal-sub-add">Ajouter l\'agenda</button></div>';
+  html+='<p class="cal-extern-hint">Dans Outlook : Paramètres → Calendrier → Calendriers partagés → Publier un calendrier → copier le lien ICS. '+
+    'Dans Google Agenda : Paramètres du calendrier → Adresse secrète au format iCal.</p>';
+  html+='</div>';
+  return html;
+}
+function renderExternModalBody(){
+  const box=S.externModal&&S.externModal.querySelector('#cal-extern-body');
+  if(!box)return;
+  box.innerHTML=externModalBodyHtml();
+  bindExternModalBody();
+}
+function bindExternModalBody(){
+  const wrap=S.externModal;
+  if(!wrap)return;
+  const copy=wrap.querySelector('#cal-feed-copy');
+  if(copy)copy.onclick=copyFeedUrl;
+  const open=wrap.querySelector('#cal-feed-open');
+  if(open)open.onclick=()=>{
+    if(S.feed&&S.feed.webcal_url)window.location.href=S.feed.webcal_url;
+  };
+  const rot=wrap.querySelector('#cal-feed-rotate');
+  if(rot)rot.onclick=rotateFeedUrl;
+  wrap.querySelectorAll('[data-feed-cal]').forEach(inp=>{
+    inp.onchange=()=>saveFeedCalendars(inp);
+  });
+  const add=wrap.querySelector('#cal-sub-add');
+  if(add)add.onclick=addSubscription;
+  wrap.querySelectorAll('[data-sub-refresh]').forEach(b=>{
+    b.onclick=()=>refreshSubscription(parseInt(b.dataset.subRefresh,10));
+  });
+  wrap.querySelectorAll('[data-sub-toggle]').forEach(b=>{
+    b.onclick=()=>toggleSubscription(parseInt(b.dataset.subToggle,10));
+  });
+  wrap.querySelectorAll('[data-sub-del]').forEach(b=>{
+    b.onclick=()=>removeSubscription(parseInt(b.dataset.subDel,10));
+  });
+}
+async function openExternModal(){
+  closeExternModal();
+  closePop();
+  const root=document.getElementById('cal-extern-modal-root');
+  if(!root)return;
+  const wrap=document.createElement('div');
+  wrap.className='cal-create-modal-backdrop';
+  wrap.innerHTML='<div class="cal-create-modal cal-create-modal--lg" role="dialog" aria-labelledby="cal-extern-title">'+
+    '<button type="button" class="cal-create-modal-close" aria-label="Fermer">×</button>'+
+    '<h2 id="cal-extern-title">Calendriers externes</h2>'+
+    '<div id="cal-extern-body"><p class="cal-extern-hint">Chargement…</p></div>'+
+    '<div class="cal-create-modal-foot"><button type="button" class="cal-btn" id="cal-extern-close">Fermer</button></div>'+
+    '</div>';
+  root.appendChild(wrap);
+  S.externModal=wrap;
+  wrap.onclick=e=>{if(e.target===wrap)closeExternModal();};
+  wrap.querySelector('.cal-create-modal').onclick=e=>e.stopPropagation();
+  wrap.querySelector('.cal-create-modal-close').onclick=closeExternModal;
+  wrap.querySelector('#cal-extern-close').onclick=closeExternModal;
+  await Promise.all([loadFeed(),loadSubs()]);
+  if(!S.externModal)return;
+  renderExternModalBody();
+  renderToggles();
+}
+function copyFeedUrl(){
+  const inp=document.getElementById('cal-feed-url');
+  if(!inp)return;
+  const txt=inp.value;
+  const fallback=()=>{
+    try{inp.select();document.execCommand('copy');showToast('Adresse copiée.','success');}
+    catch(e){showToast('Copie impossible — sélectionnez l\'adresse manuellement.','danger');}
+  };
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(()=>showToast('Adresse copiée.','success')).catch(fallback);
+  }else fallback();
+}
+async function saveFeedCalendars(changed){
+  const boxes=Array.from(document.querySelectorAll('[data-feed-cal]'));
+  const cals=boxes.filter(b=>b.checked).map(b=>b.dataset.feedCal);
+  if(!cals.length){
+    if(changed)changed.checked=true;
+    showToast('Au moins un calendrier doit être publié.','danger');
+    return;
+  }
+  boxes.forEach(b=>{b.disabled=true;});
+  try{
+    S.feed=await api('/api/calendrier/feed',{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({calendriers:cals.join(',')})
+    });
+    showToast('Flux mis à jour.','success');
+  }catch(e){
+    showToast(e.message||'Mise à jour impossible','danger');
+  }
+  renderExternModalBody();
+}
+async function rotateFeedUrl(){
+  if(!window.confirm('Régénérer l\'adresse ? Les agendas déjà abonnés cesseront de se mettre à jour.'))return;
+  try{
+    S.feed=await api('/api/calendrier/feed/rotate',{method:'POST'});
+    renderExternModalBody();
+    showToast('Nouvelle adresse générée.','success');
+  }catch(e){
+    showToast(e.message||'Régénération impossible','danger');
+  }
+}
+async function addSubscription(){
+  const nom=(document.getElementById('cal-sub-nom')?.value||'').trim();
+  const url=(document.getElementById('cal-sub-url')?.value||'').trim();
+  const couleur=document.getElementById('cal-sub-couleur')?.value||SUB_COLOR_DEFAULT;
+  if(!nom){showToast('Nom requis.','danger');return;}
+  if(!url){showToast('Adresse ICS requise.','danger');return;}
+  try{
+    const res=await api('/api/calendrier/subscriptions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({nom,url,couleur})
+    });
+    await loadSubs();
+    renderExternModalBody();
+    renderToggles();
+    fetchEvents();
+    if(res&&res.warning)showToast('Agenda ajouté — '+res.warning,'danger');
+    else showToast('Agenda ajouté.','success');
+  }catch(e){
+    showToast(e.message||'Ajout impossible','danger');
+  }
+}
+async function refreshSubscription(id){
+  if(!id)return;
+  try{
+    await api('/api/calendrier/subscriptions/'+id+'/refresh',{method:'POST'});
+    await loadSubs();
+    renderExternModalBody();
+    fetchEvents();
+    showToast('Agenda actualisé.','success');
+  }catch(e){
+    await loadSubs();
+    renderExternModalBody();
+    showToast(e.message||'Actualisation impossible','danger');
+  }
+}
+async function toggleSubscription(id){
+  const sub=S.subs.find(s=>s.id===id);
+  if(!sub)return;
+  try{
+    await api('/api/calendrier/subscriptions/'+id,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({actif:!sub.actif})
+    });
+    await loadSubs();
+    renderExternModalBody();
+    renderToggles();
+    fetchEvents();
+  }catch(e){
+    showToast(e.message||'Modification impossible','danger');
+  }
+}
+async function removeSubscription(id){
+  const sub=S.subs.find(s=>s.id===id);
+  if(!sub)return;
+  if(!window.confirm('Retirer « '+sub.nom+' » de MyCalendrier ?'))return;
+  try{
+    await api('/api/calendrier/subscriptions/'+id,{method:'DELETE'});
+    await loadSubs();
+    renderExternModalBody();
+    renderToggles();
+    fetchEvents();
+    showToast('Agenda retiré.','success');
+  }catch(e){
+    showToast(e.message||'Suppression impossible','danger');
+  }
+}
 
 function bootCalendrier(){
   S.view=loadSavedView();
@@ -1659,6 +2373,7 @@ window.addEventListener('resize',()=>{
     bootCalendrier();
     applyTheme();
     loadVisible();
+    await loadSubs();
     applyCalListOpen(loadCalListOpen());
     const calHead=document.getElementById('cal-cals-head');
     if(calHead)calHead.addEventListener('click',toggleCalList);

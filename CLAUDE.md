@@ -111,7 +111,7 @@ sur un plan Kernse Atelier générique, activables via un pack vertical.
 - **Frontend** : HTML/CSS/JS vanilla, généré côté serveur en chaînes Python (dans `app/web/*.py`)
 - **Base de données** : SQLite unique — fichier actif : `data/production.db` (chemin défini par `DB_PATH` dans `config.py`)
 - **Auth** : sessions cookie (`sifa_token`), durée 6h
-- **Migrations DB** : pattern `_migrate()` dans `app/core/database.py`, versionnées via la table `schema_migrations`
+- **Migrations DB** : un fichier par migration dans `app/core/migrations/`, identifiée par son `NOM` (table `schema_migrations_fichiers`). Les migrations historiques 1→225 restent dans `_migrate()` de `app/core/database.py` — voir la section « Migrations de base de données »
 
 **Rôles disponibles :**
 `superadmin`, `direction`, `administration`, `fabrication`, `logistique`, `comptabilite`, `expedition`, `commercial`
@@ -202,7 +202,8 @@ MySifa/
 │
 ├── app/
 │   ├── core/
-│   │   └── database.py       # Schéma DB, migrations, helpers get_db() — NE PAS DUPLIQUER
+│   │   ├── database.py       # Schéma DB, migrations historiques, get_db() — NE PAS DUPLIQUER
+│   │   └── migrations/       # UNE MIGRATION = UN FICHIER (toute nouvelle migration va ici)
 │   ├── routers/              # Tous les endpoints FastAPI (source réelle)
 │   │   ├── auth.py
 │   │   ├── fabrication.py    # API saisie de production
@@ -261,7 +262,7 @@ Ces règles ont été violées deux fois par des IA (Cursor puis Claude) et ont 
 - `date_operation` est stocké en `"%Y-%m-%dT%H:%M:%S"` heure Paris (pas de timezone dans la chaîne)
 
 **Python (backend)**
-- Migrations DB : `if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=N LIMIT 1").fetchone()`
+- Migrations DB : un fichier dans `app/core/migrations/` avec `NOM` + `appliquer(conn)` — jamais de nouveau numéro dans `_migrate()`
 - Seeds idempotents : toujours `INSERT OR IGNORE`
 - Ne jamais bloquer une saisie pour une erreur de mise à jour planning : `try/except: pass`
 - Imports de config toujours depuis `config` (racine), jamais depuis `app.config`
@@ -568,13 +569,220 @@ Le message (`message` field) doit être en **HTML** et respecter les codes visue
 
 ---
 
+## Migrations de base de données — une migration = un fichier
+
+**Règle depuis le 3 août 2026 : toute NOUVELLE migration va dans un fichier de
+`app/core/migrations/`, jamais dans `_migrate()`.** Les migrations historiques
+numérotées 1 à 225 restent dans `app/core/database.py` et n'ont pas à bouger.
+
+### Pourquoi ce changement
+
+Deux chantiers menés en parallèle (deux conversations Claude, ou Claude + Cursor)
+se marchaient systématiquement dessus :
+
+1. **Collision de numéros.** Chacun choisit le même numéro de son côté. Après
+   fusion, la seconde migration ne s'exécute **jamais** : son garde-fou voit le
+   numéro de l'autre déjà enregistré. Cas réel : le doublon v195 — le bloc
+   `imprimantes_type_connexion_windows_local` est resté muet pendant des mois sur
+   toutes les bases où `backfill_libres_usage_count` était passé avant lui.
+2. **Fichier partagé.** `database.py` fait ~9 000 lignes. Deux sessions qui y
+   écrivent s'écrasent mutuellement, et git n'a aucun moyen de trancher. Cas réel
+   (3 août 2026) : une migration entière effacée entre deux tours de
+   conversation, découverte par une erreur 500 en production.
+
+### Écrire une migration
+
+Créer `app/core/migrations/AAAA_MM_JJ_sujet.py` :
+
+```python
+"""
+Ce que fait la migration, et pourquoi.
+"""
+
+NOM = "sujet_explicite"              # clé unique et DÉFINITIVE
+DEPEND = ["autre_migration"]         # facultatif — à passer avant celle-ci
+
+def appliquer(conn):
+    conn.execute("ALTER TABLE ... ")
+    conn.commit()
+```
+
+- **`NOM` est la clé.** Il ne change JAMAIS une fois la migration partie en
+  production — c'est lui qui dit si elle est déjà passée. Deux chantiers ne
+  choisiront pas le même nom s'ils décrivent ce qu'ils font.
+- **Le préfixe de date ne sert qu'à ordonner par défaut.** Ce n'est pas une clé :
+  deux migrations datées du même jour ne se gênent pas.
+- **`DEPEND` dès qu'une migration en attend une autre** (elle touche une table que
+  l'autre crée). Ne jamais compter sur l'ordre alphabétique : le chantier voisin
+  ne contrôle pas ton nom de fichier, et toi pas le sien.
+- **Toujours rejouable.** `CREATE TABLE IF NOT EXISTS`, test de présence de
+  colonne avant `ALTER TABLE`, `INSERT OR IGNORE` pour les seeds. Une migration
+  doit pouvoir tourner deux fois sans rien casser.
+- **Un `print()` de bilan** en fin de migration quand elle transforme des données
+  (`f"[MySifa] migration X : {n} ligne(s) reprise(s)."`) — c'est ce qui permet de
+  vérifier au démarrage que la reprise a bien eu lieu.
+
+### Ce que fait le lanceur
+
+`app/core/migrations/__init__.py`, appelé en fin de `_migrate()` :
+
+- suit les migrations passées dans `schema_migrations_fichiers` (clé = `nom`) ;
+- lit **aussi** l'ancienne table `schema_migrations` : une migration déplacée
+  depuis `database.py` y est déjà enregistrée sous le même nom et n'est donc pas
+  rejouée sur les bases existantes ;
+- refuse de démarrer si deux fichiers portent le même `NOM`, si un `DEPEND` pointe
+  vers une migration inexistante, ou si les dépendances tournent en rond.
+
+Test associé : `python3 tests/test_migrations_fichiers.py` (application, absence
+de rejeu, reprise d'une base migrée par l'ancien mécanisme, respect de `DEPEND`).
+
+### Vérifier l'état sans ouvrir la base
+
+**Paramètres → Promouvoir → Déployer → « Santé du dépôt »** (`GET /api/deploiement/sante`,
+rendu par `static/mysifa_promote.js`) affiche, pour l'instance qui répond :
+
+- les migrations **appliquées** (numérotées et fichiers confondus) et celles
+  **présentes dans le code mais pas encore jouées** ;
+- les **numéros historiques en double** — deux migrations sur le même numéro : la
+  seconde ne s'exécute jamais, c'est un piège silencieux ;
+- les **branches distantes**, leur âge et leur état de fusion dans `staging`, avec
+  un marqueur « à supprimer » pour celles fusionnées et dormantes depuis 15 jours ;
+- la **propreté du dossier de travail** : fichiers modifiés, non suivis, verrou
+  `.git/index.lock`.
+
+La vue est en **consultation seule** : elle ne lance que des commandes git en
+lecture (`for-each-ref`, `status`, `branch --merged`). Le ménage se fait au
+terminal. Test associé : `python3 tests/test_deploiement_sante.py`.
+
+### Ce qu'il ne faut plus faire
+
+- ❌ Ajouter un `if not conn.execute("SELECT 1 FROM schema_migrations WHERE version=N")` dans `_migrate()`
+- ❌ Choisir un numéro de migration, même « libre » sur `origin/staging`
+- ❌ Renuméroter une migration déjà partie en production (le `NOM` la remplace)
+
+---
+
+## Coûts matières — où vit le prix d'une matière
+
+Deux bases cohabitent, et une seule fait foi.
+
+**MyStock est la source.** Une matière MyStock se décline (`mp_matiere_declinaison`) :
+par **laize** pour un frontal, une glassine ou un complexe, par **grammage** pour un
+adhésif. La déclinaison porte tout ce qui fait un coût :
+
+- son **prix d'achat** : une ligne par fournisseur dans `mp_matiere_prix`, celle
+  marquée `principal = 1` est le prix en vigueur ;
+- son **paramétrage** : poids, grammage, devise, base de prix, incidence des taxes,
+  import et transport — des colonnes de `mp_matiere_declinaison` depuis le
+  4 août 2026.
+
+De là, `compute_material_price_per_m2` sort un coût au m² sans qu'aucune fiche de
+la base historique n'intervienne. La page se trouve à `/pricing/mystock/<id>` —
+c'est le lien sur le coût, dans l'onglet **Matières MyStock**.
+
+**La base « Coûts matières » (`mc_material`) est l'ancêtre**, destinée à
+disparaître. L'appairage d'une déclinaison à une fiche n'est plus proposé dans
+l'interface ; la colonne `mc_material_id` et `mystock_price_for_row` restent le
+temps que les fiches historiques finissent de vivre.
+
+### Ce qui circule entre MyStock et Coûts matières : le sous-total d'achat
+
+Coûts matières saisit un **prix d'achat** fournisseur. La valorisation MyStock
+affiche ce que la matière coûte **rendue** : le **sous-total d'achat**, soit
+`prix + transport + taxes`, dans la devise et la base d'achat.
+
+C'est cette valeur-là qui circule entre les deux écrans, pas le prix nu — sinon
+les deux applications montrent deux chiffres pour la même matière.
+`sous_total_achat()` et `prix_depuis_sous_total()` sont l'inverse exacte l'une de
+l'autre (test d'aller-retour sur cinq configurations). La seconde renvoie `None`
+quand la décomposition n'a pas de solution positive — un sous-total inférieur au
+seul transport : on refuse plutôt que d'écrire un prix d'achat négatif.
+
+Changer transport ou taxes déplace le sous-total **sans toucher au prix d'achat** :
+`set_parametrage` pousse alors le nouveau sous-total vers la valorisation.
+
+**Historique** — `mp_prix_historique`, au niveau de la déclinaison, avec la date,
+**l'écran d'origine**, l'auteur, le fournisseur, prix avant/après ET sous-total
+avant/après. Les deux valeurs, parce qu'un changement de paramétrage fait bouger
+la seconde seule. Affiché en bas de la fiche `/pricing/mystock/<id>`.
+`mp_valorisation_historique` reste en place : elle trace au niveau de la matière,
+pour les écrans MyStock.
+
+**Les deux sens du prix sont branchés** :
+
+- Coûts matières → MyStock : `_mirror_principal` recopie le prix principal dans les
+  champs que la valorisation lit déjà ;
+- MyStock → Coûts matières : `resync_depuis_mystock` fait redescendre un prix
+  corrigé sur la valorisation, la fiche matière ou par le PMP.
+
+Un prix à 0 côté MyStock veut dire « pas renseigné » : il n'écrase jamais un tarif.
+
+### Comment un prix d'achat devient un coût au m²
+
+    prix de revient €/m² = (prix d'achat + transport + taxes) × taux de change
+
+Les mêmes réglages sur les deux fiches (base CM et MyStock) :
+
+- **Grammage (g/m²) + perte (%)** — le poids n'est jamais saisi. Il découle du
+  grammage majoré de la perte : on produit rarement au gramme près, la chute et
+  le calage font qu'un frontal de 70 g/m² en consomme davantage. Perte par
+  défaut : 9 % sur toute nouvelle matière.
+  Sur un **adhésif**, ce grammage EST la valeur de la déclinaison : « 1225 en
+  22 g/m² » ne peut pas peser autre chose. La ligne du tableau et la fiche
+  écrivent au même endroit, dans les deux sens. Sur une matière **laizée**, la
+  déclinaison vaut une laize et le grammage reste indépendant.
+- **Taxes en %** (6 = +6 %), plus un multiplicateur. Elles vivent dans l'encadré
+  « Matière importée » et **ne comptent que si la matière est importée** — une
+  taxe invisible qui gonfle le prix d'une matière locale serait un piège.
+- **Appliquer la marge** — décochée, la matière entre dans le prix de revient
+  mais sort de l'assiette de marge. Utile pour ce qu'on refacture à l'euro près.
+
+La colonne `tax_incidence` reste en base (multiplicateur historique) mais n'est
+plus lue : le calcul passe par `taxe_pct`. Reprise faite par
+`mc_taxe_pct_marge_grammage`, qui met la perte des matières existantes à **0** —
+appliquer 9 % d'un coup aurait renchéri tout le catalogue sans le dire.
+
+Tests : `python3 tests/test_pricing_engine.py`,
+`node tests/test_pricing_reglages_matiere.js`.
+
+### Produits devisés depuis MyStock
+
+`mp_produit` + `mp_produit_composant` : un produit composé de **déclinaisons**,
+l'équivalent MyStock de `mc_product`. Onglet **Produits → Produits MyStock**,
+fiche à `/pricing/mystock/produit/<id>`.
+
+MyStock ne connaît pas de catégorie « silicone » : les emplacements nommés sont
+**frontal, adhésif, glassine**, et toute autre matière (complexe, autre) s'ajoute
+en composant libre. Le calcul ne réécrit rien — les déclinaisons sont habillées en
+`PricingMaterial` et passées à `compute_product_cost`, le même moteur que la base
+CM. Une seule formule de prix de revient dans l'application.
+
+Deux refus volontaires à la création : deux matières sur un même rôle, et la même
+déclinaison deux fois. Dans les deux cas le coût serait faux sans que rien ne le
+signale à l'écran.
+
+Le module n'a **pas de tableau de bord** : `/pricing` ouvre directement les
+matières. La page et son endpoint ont été retirés le 4 août 2026, ils
+n'apportaient rien que les deux listes ne montrent déjà.
+
+**Import en masse** — `scripts/import_catalogue_produits.py` crée les produits
+depuis le catalogue commercial, en trois temps : `--inventaire` (propose les
+correspondances de noms), `--simulation` (rejoue sans écrire), `--appliquer`.
+Relançable sans doublon. Test : `python3 tests/test_import_catalogue.py`.
+
+Tests : `python3 tests/test_mystock_declinaisons.py`,
+`node tests/test_pricing_declinaison.js`,
+`node tests/test_pricing_produits_mystock.js`.
+
+---
+
 ## Points d'attention critiques
 
 **Base de données**
 - `duree_heures` est `REAL` — toujours `parseFloat()` côté JS
 - `date_operation` stocké en `"%Y-%m-%dT%H:%M:%S"` heure Paris (pas de timezone dans la chaîne)
 - `TERMINE_KEEP = 2` : les 2 derniers dossiers terminés restent visibles dans la liste
-- Toute nouvelle colonne doit être ajoutée via une migration numérotée dans `_migrate()`
+- Toute nouvelle colonne doit être ajoutée via une migration fichier dans `app/core/migrations/`
 
 **Frontend**
 - La scroll position doit être préservée après tout `renderEntries()` ou drag & drop
@@ -671,11 +879,12 @@ et re-taper `git checkout` retronque à nouveau.
    mount) : demander à l'utilisateur de le supprimer depuis PowerShell avec
    `Remove-Item .git\index.lock -Force`.
 
-**Conflits de numérotation de migration** :
-- Toujours vérifier `origin/staging` avant de choisir un numéro de migration
-  (`git fetch origin && git show origin/staging:app/core/database.py | grep -n "_record_schema_migration(conn, 1[6-9][0-9]"`).
-- Si conflit détecté (deux branches ont utilisé le même numéro), renuméroter
-  la nôtre côté staging local **avant** de merger `origin/staging`, pas après.
+**Conflits de migration** :
+- Le problème est réglé à la source : une nouvelle migration est un fichier de
+  `app/core/migrations/` identifié par son `NOM`, plus par un numéro. Deux
+  chantiers parallèles ne se disputent ni un numéro, ni ce fichier.
+- Si un fichier `database.py` en conflit contient encore une migration numérotée
+  non partie en production, la déplacer vers un fichier plutôt que la renuméroter.
 
 **PowerShell vs bash** :
 - Les blocs bash du CLAUDE.md (`if [[ ]]`, `&& \`, `if/then/fi`) ne fonctionnent
@@ -1279,9 +1488,9 @@ vont dans `kernse/docs/archives/`.
 
 **Base de données — hygiène**
 
-- Toute modification de schéma passe par une migration numérotée dans
-  `_migrate()` (racine `app/core/database.py`). Jamais de `ALTER TABLE`
-  à la main sur prod ni sur v1.
+- Toute modification de schéma passe par une migration fichier dans
+  `app/core/migrations/`. Jamais de `ALTER TABLE` à la main sur prod ni sur v1,
+  jamais de nouveau numéro dans `_migrate()`.
 - **VACUUM + ANALYZE mensuel automatisé** via cron VPS
   (`/etc/cron.d/mysifa-db-maintenance`). Récupère l'espace, met à jour
   les stats de l'optimiseur.

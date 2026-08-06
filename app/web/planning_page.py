@@ -7,13 +7,25 @@ Ajouter dans main.py :
 Accès : /planning  ou  /planning?machine=<id SQLite réel>
 """
 
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from services.auth_service import get_current_user, user_has_app_access
-from config import APP_META_DESCRIPTION, APP_PLANNING_PAGE_TITLE, APP_VERSION, THEME_COLOR_META
+from config import (
+    APP_META_DESCRIPTION,
+    APP_PLANNING_PAGE_TITLE,
+    APP_VERSION,
+    FSC_CLAIM_DEFAUT,
+    FSC_CLAIM_LABELS,
+    FSC_CLAIMS_REQUERABLES,
+    THEME_COLOR_META,
+)
 from app.web.access_denied import access_denied_response
+# Étiquette d'avertissement FSC : gabarit + impression partagés avec la
+# saisie de production (app/web/fabrication_page.py).
+from app.web.fsc_label_js import FSC_LABEL_SCRIPT_BLOCK
 
 router = APIRouter()
 
@@ -39,6 +51,15 @@ def planning_page(request: Request, machine: Optional[int] = None):
         if user.get("role") in {"superadmin", "direction", "administration", "administration_ventes", "administration_technique"}
         else "false"
     )
+    # Claims FSC injectés depuis config.py plutôt que réécrits en dur dans le
+    # JS : la liste vivait auparavant à trois endroits du fichier (le <select>,
+    # le validateur de dossierFields, le libellé du badge) et il en manquait
+    # un — fsc_mix_credit était absent partout, donc silencieusement écrasé en
+    # fsc_mix à chaque réouverture d'un dossier Mix Credit.
+    fsc_req_js = json.dumps(
+        [[c, FSC_CLAIM_LABELS.get(c, c)] for c in FSC_CLAIMS_REQUERABLES],
+        ensure_ascii=False,
+    )
     html = (
         PLANNING_HTML.replace("__MACHINE_ID__", ssr_mid)
         .replace("__IS_OF_ADMIN__", of_admin_js)
@@ -46,6 +67,9 @@ def planning_page(request: Request, machine: Optional[int] = None):
         .replace("__META_DESCRIPTION__", APP_META_DESCRIPTION)
         .replace("__THEME_COLOR__", THEME_COLOR_META)
         .replace("__V_LABEL__", f"v{APP_VERSION}")
+        .replace("__FSC_REQ_OPTIONS__", fsc_req_js)
+        .replace("__FSC_CLAIM_DEFAUT__", FSC_CLAIM_DEFAUT)
+        .replace("/*__FSC_LABEL__*/", FSC_LABEL_SCRIPT_BLOCK)
     )
     return HTMLResponse(content=html)
 
@@ -531,6 +555,30 @@ body.light .btn-p{color:#fff}
   0%,100%{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
   50%{border-color:var(--border2);box-shadow:none}
 }
+
+/* ── Dossier certifié FSC dans la timeline ────────────────────────
+   Anneau vert pulsant, posé en ::after pour ne jamais entrer en
+   conflit avec les `border` / `box-shadow` inline du slot (couleur du
+   dossier, pulsation du dossier actif). pointer-events:none pour ne pas
+   voler le drag & drop ni les tooltips au slot lui-même. */
+@keyframes fscRingPulse{
+  0%,100%{box-shadow:0 0 0 2px rgba(16,185,129,.95), 0 0 9px 2px rgba(16,185,129,.45)}
+  50%    {box-shadow:0 0 0 3px rgba(16,185,129,.55), 0 0 14px 4px rgba(16,185,129,.20)}
+}
+.slot.slot-fsc::after{
+  content:'';position:absolute;inset:0;border-radius:inherit;
+  pointer-events:none;z-index:6;
+  animation:fscRingPulse 1.9s ease-in-out infinite;
+}
+/* Le scintillement attire l'œil sur un écran d'atelier consulté de loin,
+   mais il ne doit pas être imposé à qui le supporte mal : anneau fixe. */
+@media (prefers-reduced-motion: reduce){
+  .slot.slot-fsc::after{animation:none;box-shadow:0 0 0 2px rgba(16,185,129,.95)}
+}
+/* À l'impression du planning, un halo ne sort pas : bordure franche. */
+@media print{
+  .slot.slot-fsc::after{animation:none;box-shadow:0 0 0 2px #0f7c3a}
+}
 /* Timeline search highlighting */
 .slot.tl-match{outline:3px solid rgba(255,255,255,.9);outline-offset:2px;z-index:12}
 .slot.tl-no-match{opacity:0.18;filter:grayscale(50%)}
@@ -672,6 +720,7 @@ window.addEventListener("unhandledrejection", (e)=>{
 });
 </script>
 <script>
+/*__FSC_LABEL__*/
 let MID=__MACHINE_ID__;
 const DN=["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
 const MIND=0.75,MAXD=720;
@@ -1412,6 +1461,7 @@ function icon(name,size=16){
     'corner-down-right': '<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
     'ban': '<circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>',
     'search': '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+    'printer': '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
     'chevron-left': '<polyline points="15 18 9 12 15 6"/>',
     'chevron-right': '<polyline points="9 18 15 12 9 6"/>',
     'download': '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
@@ -2217,17 +2267,170 @@ function setupTlDD(){
   });
 }
 
-async function toggleDestockage(entryId){
+// ── Déstockage matière d'une production terminée ──────────────────────────
+// Le bouton ne bascule plus un statut : il ouvre ce que la matière a coûté.
+// L'opératrice voit ce que le calcul propose, corrige ce qu'elle a réellement
+// consommé, et c'est sa saisie qui fait foi — le calcul n'est qu'un point de
+// départ. La validation écrit de vraies sorties de stock dans MyStock.
+const apiAbs=(p,o={})=>fetch(p,{credentials:"include",cache:"no-store",headers:{"Content-Type":"application/json",...(o.headers||{})},...o}).then(async r=>{
+  if(!r.ok){ const j=await r.json().catch(()=>({})); throw new Error(j.detail||("HTTP "+r.status)); }
+  return r.json();
+});
+
+let _destockData=null;
+
+async function toggleDestockage(entryId){ return openDestockageModal(entryId); }
+
+async function openDestockageModal(entryId){
   if(!CAN_EDIT) return;
+  const root=document.getElementById("mroot");
+  root.innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md" style="width:860px;max-width:96vw">
+    <h3 style="margin:0 0 18px;font-size:18px;font-family:var(--mono);color:var(--text)">Déstockage matière</h3><p style="color:var(--muted);font-size:13px">Chargement…</p></div></div>`;
   try{
-    const r=await api(`/machines/${MID}/entries/${entryId}/destockage`,{method:"PUT"});
-    (S.timeline||[]).forEach(s=>{if((s.entry_id||0)===entryId) s.destockage=r.destockage;});
-    const ent=(S.entries||[]).find(x=>x.id===entryId);
-    if(ent) ent.destockage=r.destockage;
-    renderTL();
-    updateDestockBtn(entryId, r.destockage);
-  }catch(e){ console.error("toggleDestockage",e); }
+    _destockData=await apiAbs(`/api/stock/destockage/${entryId}`);
+  }catch(e){
+    root.innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()"><div class="md" style="width:520px;max-width:95vw">
+      <h3 style="margin:0 0 18px;font-size:18px;font-family:var(--mono);color:var(--text)">Déstockage matière</h3>
+      <p style="color:var(--danger,#ef4444);font-size:13px">${escHtml(e.message||"Chargement impossible")}</p>
+      <div class="md-acts" style="display:flex;justify-content:flex-end;gap:10px"><button class="btn-s" onclick="closeM()">Fermer</button></div></div></div>`;
+    return;
+  }
+  renderDestockModal(entryId);
 }
+
+function _dqFmt(v,u){
+  if(v==null) return "—";
+  const n=Math.abs(v)>=100?Math.round(v):Math.round(v*1000)/1000;
+  return String(n).replace(".",",")+(u?" "+u:"");
+}
+
+function renderDestockModal(entryId){
+  const d=_destockData;
+  const dj=(d.dossier.destockage||"todo")==="done";
+  const src=d.source_calcul==="reel"
+    ? `<span style="color:var(--success,#22c55e);font-weight:600">saisies d'atelier</span> — ${_dqFmt(d.reel.metrage,"m")} produits`
+    : `<span style="color:var(--warn,#d97706);font-weight:600">quantités théoriques</span> (aucune saisie de production trouvée)`;
+
+  let corps="";
+  if(dj){
+    // Déjà déstocké : on montre ce qui est sorti, par qui, et rien d'autre.
+    const mvts=(d.mouvements||[]).filter(m=>!m.annule_mouvement_id);
+    const annules=new Set((d.mouvements||[]).filter(m=>m.annule_mouvement_id).map(m=>m.annule_mouvement_id));
+    const actifs=mvts.filter(m=>!annules.has(m.id));
+    corps=`<div style="background:rgba(56,189,248,.10);border:1px solid #38bdf8;border-radius:8px;padding:12px;margin-bottom:14px;font-size:13px">
+        <strong style="color:#38bdf8">Matière déjà déstockée</strong><br>
+        <span style="color:var(--muted)">Validé par ${escHtml((actifs[0]||{}).created_by_name||"—")} le ${escHtml(((actifs[0]||{}).created_at||"").slice(0,16).replace("T"," "))}</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase">
+          <th style="padding:6px 8px">Matière</th><th style="padding:6px 8px;text-align:right">Sortie</th>
+          <th style="padding:6px 8px;text-align:right">Stock après</th></tr></thead>
+        <tbody>${actifs.map(m=>`<tr style="border-top:1px solid var(--border)">
+          <td style="padding:7px 8px;font-weight:600">${escHtml(m.matiere_ref||"—")}</td>
+          <td style="padding:7px 8px;text-align:right">${_dqFmt(m.quantite)}</td>
+          <td style="padding:7px 8px;text-align:right;color:${m.quantite_apres<0?"var(--danger,#ef4444)":"var(--muted)"}">${_dqFmt(m.quantite_apres)}</td>
+        </tr>`).join("")||`<tr><td colspan="3" style="padding:10px;color:var(--muted)">Aucun mouvement enregistré.</td></tr>`}</tbody>
+      </table>`;
+  }else{
+    const dispo=d.lignes.filter(l=>l.destockable);
+    const bloques=d.lignes.filter(l=>!l.destockable);
+    corps=`<p style="color:var(--muted);font-size:12px;margin:0 0 12px">Calculé à partir des ${src}. Corrige les quantités réellement consommées avant de valider.</p>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="text-align:left;color:var(--muted);font-size:11px;text-transform:uppercase">
+          <th style="padding:6px 8px">Matière</th><th style="padding:6px 8px">Laize</th>
+          <th style="padding:6px 8px;text-align:right">Stock</th>
+          <th style="padding:6px 8px;text-align:right">À sortir</th></tr></thead>
+        <tbody>${dispo.map((l,i)=>`<tr style="border-top:1px solid var(--border)">
+          <td style="padding:7px 8px">
+            <div style="font-weight:600">${escHtml(l.matiere_ref||"—")}</div>
+            <div style="font-size:11px;color:var(--muted)">${escHtml(l.matiere_designation||l.source_value||"")}${l.detail?" · "+escHtml(l.detail):""}</div>
+          </td>
+          <td style="padding:7px 8px">${l.laizee&&l.laizes.length
+            ? `<select id="dq-lz-${i}" style="padding:5px 8px;background:var(--bg);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:12px">
+                 ${l.laizes.map(z=>`<option value="${z.laize_id}"${z.laize_id===l.laize_id?" selected":""}>${escHtml(z.label||z.valeur_mm+" mm")} (${_dqFmt(z.stock)})</option>`).join("")}
+               </select>`
+            : `<span style="color:var(--muted)">—</span>`}</td>
+          <td style="padding:7px 8px;text-align:right;color:var(--muted)">${_dqFmt(l.stock_actuel)}</td>
+          <td style="padding:7px 8px;text-align:right;white-space:nowrap">
+            <input id="dq-q-${i}" type="number" step="0.001" min="0" value="${l.quantite}"
+              data-mid="${l.matiere_id}"
+              style="width:96px;padding:5px 8px;background:var(--bg);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-size:13px;text-align:right">
+            <span style="color:var(--muted);font-size:11px;margin-left:4px">${escHtml(l.unite||"")}</span>
+          </td>
+        </tr>`).join("")}</tbody>
+      </table>
+      ${bloques.length?`<div style="margin-top:14px;padding:10px 12px;border:1px solid var(--warn,#d97706);border-radius:8px;background:rgba(251,146,60,.08);font-size:12px">
+        <strong style="color:var(--warn,#d97706)">${bloques.length} ligne${bloques.length>1?"s":""} non déstockée${bloques.length>1?"s":""}</strong>
+        <ul style="margin:6px 0 0;padding-left:18px;color:var(--muted)">
+          ${bloques.map(l=>`<li>${escHtml(l.source_value||l.kind)} — ${escHtml((l.manque||[]).join(" ; ")||"non chiffrable")}</li>`).join("")}
+        </ul></div>`:""}
+      <div class="fd" style="margin-top:14px"><label>Commentaire (optionnel)</label>
+        <input id="dq-note" type="text" placeholder="Ex. bobine entamée terminée sur ce dossier"
+          style="width:100%;padding:9px 12px;background:var(--bg);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px"></div>`;
+  }
+
+  const actions=dj
+    ? `<button class="btn-s" onclick="closeM()">Fermer</button>
+       <button class="btn-p" style="background:var(--warn,#d97706)" onclick="annulerDestockage(${entryId})">Annuler le déstockage</button>`
+    : `<button class="btn-s" onclick="closeM()">Annuler</button>
+       <button class="btn-p" onclick="validerDestockage(${entryId})">Valider le déstockage</button>`;
+
+  document.getElementById("mroot").innerHTML=`<div class="mo" onclick="if(event.target===this)closeM()">
+    <div class="md" style="width:860px;max-width:96vw;max-height:88vh;overflow-y:auto">
+      <h3 style="margin:0 0 18px;font-size:18px;font-family:var(--mono);color:var(--text)">Déstockage matière — ${escHtml(d.dossier.reference||"")}</h3>
+      ${corps}
+      <div id="dq-err" style="color:var(--danger,#ef4444);font-size:12px;margin-top:10px"></div>
+      <div class="md-acts" style="display:flex;align-items:center;justify-content:flex-end;gap:10px;margin-top:18px">${actions}</div>
+    </div></div>`;
+}
+
+async function validerDestockage(entryId){
+  const d=_destockData; if(!d) return;
+  const dispo=d.lignes.filter(l=>l.destockable);
+  const lignes=[];
+  dispo.forEach((l,i)=>{
+    const inp=document.getElementById("dq-q-"+i);
+    const q=parseFloat((inp&&inp.value||"0").replace(",","."));
+    if(!(q>0)) return;   // remise à zéro = refus explicite de déstocker cette ligne
+    const sel=document.getElementById("dq-lz-"+i);
+    lignes.push({matiere_id:l.matiere_id, quantite:q,
+                 laize_id: sel?parseInt(sel.value,10):l.laize_id});
+  });
+  if(!lignes.length){ document.getElementById("dq-err").textContent="Toutes les lignes sont à zéro : rien à déstocker."; return; }
+  const note=(document.getElementById("dq-note")||{}).value||"";
+  try{
+    const r=await apiAbs(`/api/stock/destockage/${entryId}/valider`,
+      {method:"POST",body:JSON.stringify({lignes,note})});
+    closeM();
+    appliquerDestockage(entryId,"done");
+    if((r.stocks_negatifs||[]).length){
+      alert("Déstockage enregistré. Attention : "+r.stocks_negatifs.length
+        +" matière(s) passent en stock négatif — un inventaire est à prévoir.");
+    }
+  }catch(e){ document.getElementById("dq-err").textContent=e.message||"Enregistrement impossible"; }
+}
+
+async function annulerDestockage(entryId){
+  const d=_destockData; if(!d) return;
+  const actifs=(d.mouvements||[]).filter(m=>!m.annule_mouvement_id);
+  const detail=actifs.map(m=>"• "+(m.matiere_ref||"?")+" : +"+_dqFmt(m.quantite)).join("\n");
+  if(!confirm("Remettre en stock la matière déstockée sur ce dossier ?\n\n"+detail
+    +"\n\nLes sorties ne sont pas effacées : elles sont contre-passées, et les deux écritures restent à l'historique.")) return;
+  try{
+    await apiAbs(`/api/stock/destockage/${entryId}/annuler`,{method:"POST",body:"{}"});
+    closeM();
+    appliquerDestockage(entryId,"todo");
+  }catch(e){ document.getElementById("dq-err").textContent=e.message||"Annulation impossible"; }
+}
+
+function appliquerDestockage(entryId,val){
+  (S.timeline||[]).forEach(s=>{if((s.entry_id||0)===entryId) s.destockage=val;});
+  const ent=(S.entries||[]).find(x=>x.id===entryId);
+  if(ent) ent.destockage=val;
+  renderTL();
+  updateDestockBtn(entryId, val);
+}
+
 function updateDestockBtn(entryId, val){
   const btn=document.getElementById("destock-btn-"+entryId);
   if(!btn) return;
@@ -2463,6 +2666,12 @@ function mkTL(mon,slots){
     const termineSlideCls=(CAN_EDIT&&s.statut==="termine")?"slot-termine-movable":"";
     const annuleSlot=isAnnuleEntry(s);
     const annuleCls=annuleSlot?"slot-annule":"";
+    // Anneau vert animé sur les dossiers certifiés. Rendu par un ::after et
+    // non par `border` / `box-shadow` : ces deux propriétés sont posées en
+    // style INLINE sur le slot (couleur du dossier, pulsation du dossier
+    // actif), et un style inline gagne toujours contre une classe — l'anneau
+    // aurait simplement disparu sur le dossier en cours.
+    const fscCls=(s.fsc_requis===1||s.fsc_requis===true)?"slot-fsc":"";
     const resizeHint="Bord droit : ajuster la durée. Reste du créneau : réordonner (si disponible).";
     const resizeHandle=canResizeSlot?`<div class="slot-resize-handle" data-eid="${s.entry_id||idx}" data-resize="1" title="${escAttr(resizeHint)}"></div>`:"";
     const termineTitle=termineSlideCls?"Dossier terminé — glisser pour décaler le créneau sur la ligne de temps":"";
@@ -2495,7 +2704,7 @@ function mkTL(mon,slots){
       line3SlotHtml=l3parts.length?l3parts.join(" | "):"";
     }
 
-    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls} ${annuleCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${expeBrightnessStyle}${isActive?"border:2px solid var(--accent);animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
+    h+=`<div class="slot ${matchCls} ${aplacerCls} ${reelTermineCls} ${termineSlideCls} ${annuleCls} ${fscCls}" data-eid="${s.entry_id||idx}" data-statut="${escAttr(s.statut||"attente")}" data-statut-reel="${escAttr(sr)}" ${canDragSlot?'draggable="true"':''} style="left:${l}%;width:${w}%;background:${co};box-shadow:0 2px 8px ${co}55;${expeBrightnessStyle}${isActive?"border:2px solid var(--accent);animation:activePulse 2.2s ease-in-out infinite;":"border:1.5px solid rgba(148,163,184,.35);"}"
       onmouseenter="showTip(event,this)" onmousemove="moveTip(event)" onmouseleave="hideTip()"
       ondblclick="hideTip();openEdit(${s.entry_id||idx});event.stopPropagation()"
       data-livraison="${escAttr(fmtLivraisonLong(s.date_livraison||""))}" data-ref="${escAttr(cli)}" data-lbl="${escAttr(meta)}" data-rfp="${escAttr(s.ref_produit||"")}" data-fmt="${escAttr(fmTip)}" data-dur="${escAttr(fmtDur(durAff))}" data-exigences="${escAttr(exig)}" data-qte-etiq="${escAttr(qteEtiq!=null?fmtQty(qteEtiq):"")}" data-nb-palettes="${escAttr(nbPalettes!=null?String(nbPalettes):"")}"`+
@@ -2636,6 +2845,19 @@ async function moveEntry(entryId,delta){
   }
 }
 
+// Diamètre du mandrin, extrait du libellé de la fiche technique.
+// « Tube 1500x76 » décrit un tube de 1 500 mm de long en diamètre 76 : sur un
+// slot, seul le diamètre parle à l'opérateur, la longueur du tube appartient à
+// la fiche matière. Libellé brut conservé si aucun nombre n'est lisible.
+function mandrinDiaTxt(raw){
+  const s=String(raw||"").trim();
+  if(!s) return "";
+  const sep=s.match(/[x×*]\s*(\d+(?:[.,]\d+)?)/i);
+  const n=sep?sep[1]:((s.match(/\d+(?:[.,]\d+)?/g)||[]).pop());
+  if(!n) return s;
+  return String(n).replace(",",".")+" mm";
+}
+
 // ── Tooltip ──
 let tipEl=null;
 let _hoveredSlotEid=null;
@@ -2666,7 +2888,7 @@ function showTip(ev,el){hideTip();const d=el.dataset;_hoveredSlotEid=d.eid?+d.ei
   const supTxt=(d.support||"").trim();
   const adhTxt=(d.adhesif||"").trim();
   const palTxt=(d.paletteType||"").trim();
-  const manTxt=(d.mandrin||"").trim();
+  const manTxt=mandrinDiaTxt(d.mandrin);
   const qteTxt=(d.qteEtiq||"").trim();
   const condTxt=(d.cond||"").trim();
   // Colonne technique (vue prod)
@@ -3199,25 +3421,29 @@ function annuleBadgeHtml(e){
   const lbl=nb>1?("Annulé ×"+nb):"Annulé";
   return `<span class="badge-annule" title="${escAttr(annuleTitle(e))}">${lbl}</span>`;
 }
+// Source unique des claims FSC exigibles sur un dossier, injectée depuis
+// config.py (FSC_CLAIMS_REQUERABLES). Ne jamais réintroduire de liste en dur
+// ici : c'est exactement ce qui avait fait disparaître fsc_mix_credit.
+const FSC_REQ_OPTIONS=__FSC_REQ_OPTIONS__;
+const FSC_CLAIM_DEFAUT="__FSC_CLAIM_DEFAUT__";
+const FSC_REQ_CODES=FSC_REQ_OPTIONS.map(o=>o[0]);
+const FSC_REQ_LABELS=Object.fromEntries(FSC_REQ_OPTIONS);
+
 function fscBadgeHtml(e){
   if(!e||!(e.fsc_requis===1||e.fsc_requis===true)) return "";
-  const typ=(e.fsc_type_requis||"").trim();
-  const typeLbl=typ==="fsc_100"?"FSC 100%":typ==="fsc_mix"?"FSC Mix":typ==="fsc_recycled"?"FSC Recycled":"";
+  const typeLbl=fscTypeRequisLabel(e.fsc_type_requis);
   const title="Certification FSC requise"+(typeLbl?" — "+typeLbl:"");
   return `<span title="${escAttr(title)}" style="background:var(--accent-bg);color:var(--accent);font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;margin-left:4px;vertical-align:middle">FSC</span>`;
 }
 
 function fscTypeRequisLabel(t){
   const typ=(t||"").trim();
-  if(typ==="fsc_100") return "FSC 100%";
-  if(typ==="fsc_mix") return "FSC Mix";
-  if(typ==="fsc_recycled") return "FSC Recycled";
-  return typ;
+  return FSC_REQ_LABELS[typ]||typ;
 }
 
 function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType="",deptLivraison="",priseRdv=0,dlImposee=0,valide=0,etiqParCarton=null){
   const fscOn=fscRequis===1||fscRequis===true;
-  const fscTyp=(fscType&&["fsc_100","fsc_mix","fsc_recycled"].includes(fscType))?fscType:"fsc_mix";
+  const fscTyp=(fscType&&FSC_REQ_CODES.includes(fscType))?fscType:FSC_CLAIM_DEFAUT;
   const rdvOn=priseRdv===1||priseRdv===true;
   const dlImpOn=dlImposee===1||dlImposee===true;
   const valideOn=valide===1||valide===true;
@@ -3271,9 +3497,7 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
             <div id="fsc-type-wrap" style="display:${fscOn?"block":"none"};margin-top:8px">
               <label class="dossier-sub-lbl" style="margin-bottom:4px">Type requis</label>
               <select id="fsc-type-requis" class="form-sel" style="width:100%">
-                <option value="fsc_100" ${fscTyp==="fsc_100"?"selected":""}>FSC 100%</option>
-                <option value="fsc_mix" ${fscTyp==="fsc_mix"?"selected":""}>FSC Mix</option>
-                <option value="fsc_recycled" ${fscTyp==="fsc_recycled"?"selected":""}>FSC Recycled</option>
+                ${FSC_REQ_OPTIONS.map(([v,lbl])=>`<option value="${escAttr(v)}" ${fscTyp===v?"selected":""}>${escHtml(lbl)}</option>`).join("")}
               </select>
             </div>
           </div>
@@ -3333,7 +3557,7 @@ function getFormData(withStatut){
   const fscChk=document.getElementById("fsc-requis-chk");
   const fscOn=!!(fscChk&&fscChk.checked);
   d.fsc_requis=fscOn?1:0;
-  d.fsc_type_requis=fscOn?(document.getElementById("fsc-type-requis")?.value||"fsc_mix"):"";
+  d.fsc_type_requis=fscOn?(document.getElementById("fsc-type-requis")?.value||FSC_CLAIM_DEFAUT):"";
   if(withStatut)d.statut=document.getElementById("f-stat").value;
   return d;
 }
@@ -3508,6 +3732,29 @@ async function submitAdd(){
   }
 }
 
+/* Étiquette d'avertissement FSC (100×50 mm, N&B) depuis la modale dossier.
+   Le gabarit et la logique d'impression vivent dans app/web/fsc_label_js.py,
+   partagés avec la saisie de production : une seule définition de
+   l'étiquette pour les deux points d'impression. */
+function printFscAvertissement(id){
+  const e=S.entries.find(x=>x.id===id);
+  if(!e){ showToast("Dossier introuvable.","danger"); return; }
+  if(!(e.fsc_requis===1||e.fsc_requis===true)){
+    showToast("Ce dossier n'est pas certifié FSC.","danger");
+    return;
+  }
+  const mach=(S.machines||[]).find(m=>m.id===e.machine_id);
+  fscImprimerAvertissement({
+    no_dossier: (e.reference||e.numero_of||"").trim(),
+    numero_of: e.numero_of||"",
+    client: e.client||"",
+    ref_produit: e.ref_produit||e.description||"",
+    machine: (mach&&mach.nom)||"",
+    fsc_type_requis: fscTypeRequisLabel(e.fsc_type_requis)||"FSC",
+    operateur_nom: (window.__MYSIFA_NOM__||""),
+  });
+}
+
 async function openFscRapport(noDossier){
   const ref=(noDossier||"").trim();
   if(!ref){ showToast("Référence dossier manquante.","danger"); return; }
@@ -3645,6 +3892,21 @@ function openEdit(id){
       Rapport FSC
     </button>`
     :"";
+  // Impression de l'étiquette d'avertissement FSC (100×50 mm, N&B) depuis le
+  // planning : c'est ici que le dossier est préparé et sa pochette montée,
+  // donc c'est ici que l'étiquette doit pouvoir sortir — sans attendre que
+  // l'opérateur ait démarré la production pour la trouver dans MyProd.
+  const fscPrintBtn=(e.fsc_requis===1||e.fsc_requis===true)
+    ?`<button type="button" onclick="printFscAvertissement(${id})"
+      title="Imprimer l'etiquette d'avertissement FSC a coller sur le dossier"
+      style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;
+             border:1.5px solid var(--success,#34d399);background:rgba(52,211,153,.10);
+             color:var(--success,#34d399);
+             font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap"
+      onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
+      ${icon('printer',14)} Étiquette FSC
+    </button>`
+    :"";
   const ofEyeBtn=`<button type="button"
     onclick="openOfPreview(${id})"
     title="Voir l'OF relié à ce dossier"
@@ -3667,7 +3929,7 @@ function openEdit(id){
     ${destockIcon}
     <span>${destockDone?"Destocké":"À destocker"}</span>
   </button>`;
-  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${fscBtn}${statsBtn}${ofEyeBtn}${destockActionBtn}</div>`;
+  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${fscBtn}${fscPrintBtn}${statsBtn}${ofEyeBtn}${destockActionBtn}</div>`;
 
   // Traçabilité création/modification
   const fmtDate=(iso)=>{

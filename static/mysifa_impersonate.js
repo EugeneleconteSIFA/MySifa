@@ -262,7 +262,7 @@
       if (isStaging()) {
         showBandeau(true);
         setBandeauMode('staging');
-        setMsg('v1 — Environnement de test — DB partagée avec la prod');
+        setMsg('v1 — Bac à sable · ce qui est saisi ici sera effacé cette nuit');
       } else {
         showBandeau(false);
       }
@@ -274,7 +274,7 @@
       if (isStaging()) {
         showBandeau(true);
         setBandeauMode('staging');
-        setMsg('v1 — Environnement de test — DB partagée avec la prod');
+        setMsg('v1 — Bac à sable · ce qui est saisi ici sera effacé cette nuit');
       } else {
         showBandeau(false);
       }
@@ -289,7 +289,7 @@
       } else {
         setBandeauMode(isStaging() ? 'staging' : 'prod');
         if (isStaging()) {
-          setMsg('v1 — Environnement de test — DB partagée avec la prod');
+          setMsg('v1 — Bac à sable · ce qui est saisi ici sera effacé cette nuit');
         } else {
           setMsg('Mode superadmin — prod');
         }

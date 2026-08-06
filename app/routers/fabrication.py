@@ -12,7 +12,7 @@ _PARIS = ZoneInfo("Europe/Paris")
 
 from app.services.audit_service import log_action
 from database import get_db, parse_datetime
-from config import classify_operation, STOCK_UNITE_VENTE_DEFAUT
+from config import classify_operation, FSC_CLAIM_LABELS, STOCK_UNITE_VENTE_DEFAUT
 from app.services.auth_service import get_current_user, is_fabrication, is_admin, effective_machine_id
 from app.routers.planning import _planned_end_iso_for_machine
 from app.routers.stock import (
@@ -155,6 +155,11 @@ def _normalize_stock_pf(row: dict) -> Optional[dict]:
         "produit_designation": row.get("produit_designation") or "",
         "produit_unite": row.get("produit_unite") or "",
         "note": row.get("note") or "",
+        # Expose le marquage FSC : c'est lui qui change la conduite a tenir cote
+        # ecran (annulation par sortie tracee, et non suppression) et qui permet
+        # d'annoncer a l'operateur ce qui va reellement se passer.
+        "fsc": 1 if int(row.get("fsc") or 0) == 1 else 0,
+        "lot_id": row.get("lot_id"),
     }
 
 
@@ -224,6 +229,7 @@ def _fetch_stock_saisies_du_jour(
           ms.id, ms.produit_id, ms.emplacement, ms.type_mouvement, ms.quantite,
           ms.quantite_avant, ms.quantite_apres, ms.note, ms.created_at,
           ms.created_by, ms.created_by_name, ms.no_dossier,
+          COALESCE(ms.fsc,0) AS fsc, ms.lot_id,
           p.reference AS produit_reference,
           p.designation AS produit_designation,
           p.unite AS produit_unite,
@@ -2037,17 +2043,26 @@ async def annuler_dossier(request: Request):
 
 # ─── Traçabilité matières ─────────────────────────────────────────────────────
 
+# Claim exigé sur le dossier → claims de bobine qui le satisfont.
+# Lecture : la clé est l'EXIGENCE, la valeur l'ensemble des matières
+# acceptables. Un claim plus strict satisfait toujours un claim plus large
+# (du FSC 100% passe partout), l'inverse jamais.
+#
+# `fsc_mix_credit` a été ajouté comme EXIGENCE : il était présent en valeur
+# (une bobine Mix Credit satisfaisait une exigence Mix) mais absent en clé,
+# donc un dossier exigeant du Mix Credit n'acceptait aucune bobine — le
+# rapport de traçabilité l'aurait déclaré non conforme à 100%. Le cas ne se
+# produisait pas tant que le type n'était pas sélectionnable ; il le devient.
 FSC_CLAIM_HIERARCHY = {
     "fsc_100": {"fsc_100"},
     "fsc_mix": {"fsc_100", "fsc_mix_credit", "fsc_mix"},
+    "fsc_mix_credit": {"fsc_100", "fsc_mix_credit"},
     "fsc_recycled": {"fsc_100", "fsc_recycled"},
 }
 
-_FSC_TYPE_LABELS = {
-    "fsc_100": "FSC 100%",
-    "fsc_mix": "FSC Mix",
-    "fsc_recycled": "FSC Recycled",
-}
+# Libellés : source unique dans config.py (FSC_CLAIM_LABELS), plus de copie
+# locale — celle-ci avait déjà divergé (fsc_mix_credit manquant).
+_FSC_TYPE_LABELS = dict(FSC_CLAIM_LABELS)
 
 
 def _fsc_type_label(fsc_type: str) -> str:
@@ -2262,13 +2277,79 @@ def get_tracabilite_dossier(no_dossier: str, request: Request):
     if not entry and _is_fictif_dossier(ref):
         dossier_out = _build_fictif_dossier_dict(ref, None)
 
+    # ── Parcours aval : ce que le rapport ne montrait pas ────────────────
+    #
+    # Le rapport s'arrêtait aux bobines scannées. Or « traçabilité FSC » veut
+    # dire chaîne de contrôle COMPLÈTE : d'où vient la matière ET où est
+    # parti le produit. Un rapport qui s'arrête à la consommation matière ne
+    # démontre que la moitié de ce qu'un auditeur demande.
+    #
+    # On réutilise les fonctions du traceur (app/routers/traca.py) plutôt que
+    # de réécrire les requêtes : une seule définition de la chaîne dans
+    # l'application, et le rapport ne peut pas diverger du traceur.
+    #
+    # Import local et non en tête de module : traca.py importe déjà
+    # fabrication.py (pour FSC_CLAIM_HIERARCHY), un import croisé au
+    # chargement casserait le démarrage.
+    #
+    # Échec silencieux assumé : si le parcours aval n'est pas calculable, le
+    # rapport de conformité matière — qui est la partie exigible en atelier —
+    # doit continuer à sortir.
+    parcours: dict = {"lots": [], "mouvements": [], "expeditions": [], "ruptures": []}
+    try:
+        from app.routers.traca import (
+            _lots_du_dossier,
+            _mouvements_des_lots,
+            _expeditions_du_dossier,
+        )
+
+        ref_canon = (dossier_out.get("reference") or ref or "").strip()
+        with get_db() as conn:
+            lots = _lots_du_dossier(conn, ref_canon)
+            parcours["lots"] = lots
+            parcours["mouvements"] = _mouvements_des_lots(
+                conn, [l["id"] for l in lots], ref_canon
+            )
+            parcours["expeditions"] = _expeditions_du_dossier(conn, ref_canon)
+    except Exception:
+        parcours["indisponible"] = True
+
+    # Ruptures : ce que la chaîne ne démontre PAS. Affiché en tête du rapport
+    # plutôt qu'en note de bas de page — une chaîne incomplète présentée comme
+    # complète vaut moins qu'une absence de chaîne.
+    if fsc_requis:
+        if nb_total == 0:
+            parcours["ruptures"].append(
+                "Aucune bobine tracée : l'origine de la matière n'est pas démontrable."
+            )
+        elif nb_conformes < nb_total:
+            parcours["ruptures"].append(
+                f"{nb_total - nb_conformes} bobine(s) ne satisfont pas le claim exigé."
+            )
+        if not parcours["lots"]:
+            parcours["ruptures"].append(
+                "Aucun lot de produit fini rattaché — entrée en stock Z1 non faite, "
+                "ou antérieure au suivi."
+            )
+        elif not parcours["expeditions"]:
+            parcours["ruptures"].append(
+                "Aucune expédition rattachée : la chaîne s'arrête au stock."
+            )
+
     return {
         "dossier": dossier_out,
         "bobines": bobines,
+        "parcours": parcours,
         "synthese": {
             "nb_bobines_total": nb_total,
             "nb_bobines_fsc_conformes": nb_conformes if fsc_requis else None,
             "nb_bobines_non_conformes": (nb_total - nb_conformes) if fsc_requis else None,
+            "nb_lots": len(parcours["lots"]),
+            "nb_lots_fsc": sum(1 for l in parcours["lots"] if int(l.get("fsc") or 0) == 1),
+            "nb_expeditions": len(parcours["expeditions"]),
+            "quantite_produite": sum(
+                float(l.get("quantite_initiale") or 0) for l in parcours["lots"]
+            ),
             "statut_global": statut_global,
             "genere_a": datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S"),
         },
@@ -4448,6 +4529,116 @@ def delete_saisie_stock(kind: str, mvt_id: int, request: Request):
                     400,
                     f"Suppression non supportee pour type_mouvement={type_mvt!r}"
                 )
+
+            # ── Entree FSC : on annule par un mouvement inverse ─────────────
+            # Effacer le lot et son mouvement supprimerait les deux maillons de
+            # la chaine de preuve, ce qu'interdit la retention 5 ans. Mais
+            # refuser tout court laisserait l'operateur bloque avec une saisie
+            # fausse en stock — pire encore.
+            #
+            # On fait donc ce que ferait un magasinier : une SORTIE de meme
+            # quantite, tracee, qui solde le lot. Le stock redescend a la bonne
+            # valeur, l'erreur reste visible dans l'historique, et rien n'est
+            # perdu. C'est la seule facon d'etre a la fois juste et utilisable.
+            if int(row_d.get("fsc") or 0) == 1:
+                produit_id = row_d["produit_id"]
+                emplacement = row_d["emplacement"]
+                quantite = float(row_d.get("quantite") or 0)
+
+                lot_id = row_d.get("lot_id")
+                lot = None
+                if lot_id:
+                    lot = conn.execute(
+                        "SELECT * FROM lots_stock WHERE id=?", (lot_id,)
+                    ).fetchone()
+                if lot is None:
+                    # Entree anterieure au rattachement lot_id : on retrouve le
+                    # lot par les memes criteres que la reversion classique.
+                    same_day = str(row_d.get("created_at") or "")[:10]
+                    lot = conn.execute(
+                        """SELECT * FROM lots_stock
+                            WHERE produit_id=? AND emplacement=? AND created_by=?
+                              AND quantite_initiale=? AND substr(created_at,1,10)=?
+                            ORDER BY id DESC LIMIT 1""",
+                        (produit_id, emplacement, row_d.get("created_by"),
+                         quantite, same_day),
+                    ).fetchone()
+
+                # Si le lot a deja ete entame, une sortie de la quantite totale
+                # creerait du stock negatif. On sort ce qui reste et on le dit.
+                restant = float(dict(lot).get("quantite_restante") or 0) if lot else 0.0
+                a_sortir = min(quantite, restant) if lot else quantite
+                if lot and a_sortir <= 0:
+                    raise HTTPException(
+                        409,
+                        "Annulation impossible : ce lot certifie est deja entierement "
+                        "consomme. La quantite est partie en production ou en expedition ; "
+                        "il n'y a plus rien a sortir."
+                    )
+
+                agg = conn.execute(
+                    "SELECT quantite FROM stock_emplacements WHERE produit_id=? AND emplacement=?",
+                    (produit_id, emplacement),
+                ).fetchone()
+                qte_avant = float(agg["quantite"] or 0) if agg else 0.0
+                qte_apres = max(0.0, qte_avant - a_sortir)
+
+                if lot:
+                    conn.execute(
+                        "UPDATE lots_stock SET quantite_restante=? WHERE id=?",
+                        (max(0.0, restant - a_sortir), lot["id"]),
+                    )
+                if agg:
+                    conn.execute(
+                        """UPDATE stock_emplacements SET quantite=?, updated_at=?, updated_by=?
+                            WHERE produit_id=? AND emplacement=?""",
+                        (qte_apres, now, user.get("email") or "system",
+                         produit_id, emplacement),
+                    )
+
+                note_annul = (
+                    f"Annulation de l'entree #{mvt_id} du "
+                    f"{str(row_d.get('created_at') or '')[:10]}"
+                )
+                if a_sortir < quantite:
+                    note_annul += f" (entree {quantite:g}, sortie limitee au restant {a_sortir:g})"
+                cur_annul = conn.execute(
+                    """INSERT INTO mouvements_stock
+                         (produit_id, emplacement, type_mouvement, quantite,
+                          quantite_avant, quantite_apres, note, created_at,
+                          created_by, created_by_name, no_dossier, fsc, lot_id)
+                       VALUES (?,?,'sortie',?,?,?,?,?,?,?,?,1,?)""",
+                    (produit_id, emplacement, a_sortir, qte_avant, qte_apres,
+                     note_annul, now, user.get("email") or "system",
+                     (user.get("nom") or "").strip() or None,
+                     row_d.get("no_dossier"), (lot["id"] if lot else None)),
+                )
+                conn.commit()
+
+                log_action(
+                    user=user, action="UPDATE", module="fabrication",
+                    objet=f"annulation FSC par sortie - entree #{mvt_id} - produit {produit_id} - {a_sortir}",
+                    detail={
+                        "kind": "stock_pf", "entree_id": mvt_id,
+                        "sortie_id": cur_annul.lastrowid,
+                        "produit_id": produit_id, "emplacement": emplacement,
+                        "quantite_entree": quantite, "quantite_sortie": a_sortir,
+                        "lot_id": (lot["id"] if lot else None),
+                        "no_dossier": row_d.get("no_dossier"),
+                    },
+                    ip=request.client.host if request.client else None,
+                )
+                return {
+                    "ok": True, "kind": "stock_pf", "id": mvt_id,
+                    "mode": "sortie_compensatoire",
+                    "sortie_id": cur_annul.lastrowid,
+                    "quantite_sortie": a_sortir,
+                    "quantite_apres_reversion": qte_apres,
+                    "message": (
+                        f"Entree FSC annulee par une sortie de {a_sortir:g}. "
+                        "L'entree reste visible dans l'historique (retention FSC 5 ans)."
+                    ),
+                }
 
             # PF entree : rembobiner
             produit_id = row_d["produit_id"]

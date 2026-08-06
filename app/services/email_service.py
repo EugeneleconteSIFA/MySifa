@@ -261,34 +261,93 @@ def email_expe_rfq_transport(
     demande: dict,
     user: dict,
     portail_lien: str,
+    pixel_url: str | None = None,
+    langue: str | None = None,
+    relance: bool = False,
+    message_perso: str | None = None,
+    date_limite: str | None = None,
 ) -> tuple[str, str]:
-    """Sujet et corps HTML — demande de tarif transport (MyExpé → transporteur, FR/EN)."""
+    """Sujet et corps HTML — demande de tarif transport (MyExpé → transporteur).
+
+    `langue` vaut 'fr' ou 'en' : le mail part alors dans cette seule langue.
+    Toute autre valeur (dont None) conserve l'ancien comportement bilingue avec
+    sélecteur de drapeaux — c'est le cas des transporteurs dont on ne connaît
+    pas encore la langue, où doubler vaut mieux que se tromper.
+
+    `relance` ne change pas le corps du message mais son enveloppe : sujet
+    préfixé et bandeau de rappel. Renvoyer un texte identique à l'original
+    laisserait le destinataire croire à un doublon technique.
+    """
     from app.services.expe_email_i18n import expe_rfq_email_strings
 
     cp = (demande.get("code_postal_destination") or "—").strip()
     lien = (portail_lien or "").strip()
+    lang = str(langue or "").strip().lower()[:2]
+    mono = lang if lang in ("fr", "en") else None
+
     s_fr = expe_rfq_email_strings("fr", cp=cp, user_nom="")
     s_en = expe_rfq_email_strings("en", cp=cp, user_nom="")
 
-    fr_body = _rfq_email_body_block(demande=demande, user=user, lang="fr", portail_lien=lien)
-    en_body = _rfq_email_body_block(demande=demande, user=user, lang="en", portail_lien=lien)
+    entete = ""
+    if relance:
+        txt = (
+            "Reminder — we have not received your quote yet."
+            if mono == "en"
+            else "Rappel — nous n'avons pas encore reçu votre tarif."
+        )
+        entete += (
+            '<div style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.35);'
+            'border-radius:10px;padding:12px 16px;margin:0 0 20px;font-size:13px;'
+            f'font-weight:700;color:#92400e;text-align:center">{_esc(txt)}</div>'
+        )
+    if message_perso:
+        entete += (
+            '<div style="background:rgba(34,211,238,.08);border:1px solid rgba(34,211,238,.28);'
+            'border-radius:10px;padding:14px 16px;margin:0 0 20px;font-size:14px;color:#0f172a;'
+            f'line-height:1.6;white-space:pre-wrap">{_esc(message_perso)}</div>'
+        )
+    if date_limite:
+        lbl = "Reply expected before" if mono == "en" else "Réponse attendue avant le"
+        entete += (
+            '<p style="margin:0 0 18px;font-size:13px;text-align:center;color:#475569">'
+            f'{_esc(lbl)} <strong style="color:#0f172a">{_esc(date_limite)}</strong></p>'
+        )
 
-    picker = _email_lang_picker_html()
-    inner = (
-        f"{picker}"
-        f'<div class="mysifa-em-fr">{fr_body}</div>'
-        f'<div class="mysifa-em-en">{en_body}</div>'
-    )
-
-    subject = f"Demande de tarif transport / Transport quote — SIFA — {cp}"
+    if mono:
+        inner = entete + _rfq_email_body_block(
+            demande=demande, user=user, lang=mono, portail_lien=lien
+        )
+        s = s_en if mono == "en" else s_fr
+        subtitle = s["subtitle"]
+        footer_note = s["footer"]
+        subject = s["subject"]
+        if relance:
+            subject = ("Reminder — " if mono == "en" else "Relance — ") + subject
+    else:
+        fr_body = _rfq_email_body_block(demande=demande, user=user, lang="fr", portail_lien=lien)
+        en_body = _rfq_email_body_block(demande=demande, user=user, lang="en", portail_lien=lien)
+        inner = (
+            f"{entete}{_email_lang_picker_html()}"
+            f'<div class="mysifa-em-fr">{fr_body}</div>'
+            f'<div class="mysifa-em-en">{en_body}</div>'
+        )
+        subtitle = "Demande de tarif / Transport quote"
+        footer_note = f"{s_fr['footer']} / {s_en['footer']}"
+        subject = f"Demande de tarif transport / Transport quote — SIFA — {cp}"
+        if relance:
+            subject = "Relance / Reminder — " + subject
 
     body = email_mysifa_layout(
-        subtitle="Demande de tarif / Transport quote",
+        subtitle=subtitle,
         body_html=inner,
         cta_href=None,
         cta_label=None,
-        footer_note=f"{s_fr['footer']} / {s_en['footer']}",
+        footer_note=footer_note,
         footer_contact=True,
+        pixel_url=pixel_url,
+        # La mention d'ouverture RGPD suit la langue du mail. En bilingue elle
+        # reste en français : il faut trancher, et c'est la langue par défaut.
+        lang=mono or "fr",
     )
     return subject, body
 
@@ -723,6 +782,7 @@ def email_expe_devis_confirmation(
     user: dict,
     retention_comment: str | None = None,
     retention_file_name: str | None = None,
+    pixel_url: str | None = None,
 ) -> tuple[str, str]:
     """Sujet et corps HTML — confirmation transporteur : sa proposition de
     devis a été retenue, voici le récap de la mission. Envoyé au transporteur
@@ -830,6 +890,7 @@ def email_expe_devis_confirmation(
         cta_href=None,
         cta_label=None,
         footer_contact=True,
+        pixel_url=pixel_url,
     )
     return subject, body
 

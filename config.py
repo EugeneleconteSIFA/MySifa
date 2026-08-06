@@ -36,7 +36,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "2.6.0"
+APP_VERSION = "2.7.1"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -131,14 +131,24 @@ PORT        = int(os.getenv("PORT", 8000))
 
 # ─── Environnement (v1 staging / v2 prod) ────────────────────────────
 # ENV_NAME : "v2" (prod, défaut) ou "v1" (staging). Les deux instances tournent
-# côte à côte sur le VPS (v2:8000, v1:8002) et partagent la même DB.
+# côte à côte sur le VPS (v2:8000, v1:8002).
+#
+# v1 a sa PROPRE base : un script (mysifa-v1-resync-db.sh, hors dépôt) la
+# remplace chaque nuit par une copie de celle de v2. Écrire sur v1 ne touche
+# donc jamais la production — en revanche tout ce qui y est saisi disparaît à
+# la resync suivante. C'est ce que doit dire le bandeau, et rien d'autre.
+#
 # Toute valeur autre que "v1" est traitée comme prod (sécurité par défaut).
 ENV_NAME = os.getenv("ENV_NAME", "v2").strip().lower()
 IS_STAGING = (ENV_NAME == "v1")
 
-# MIGRATIONS_DISABLED : désactive les migrations de schéma au boot. Obligatoire
-# sur v1 pour ne pas modifier la DB partagée avec la prod. Valeur par défaut :
-# désactivé sur v1, actif sur v2.
+# MIGRATIONS_DISABLED : désactive les migrations de schéma au boot.
+#
+# Actif par défaut sur v1. Conséquence à connaître : une migration livrée sur
+# v1 ne s'y applique PAS. Le schéma de v1 est celui que la resync nocturne lui
+# apporte, donc celui de la prod. Tester sur v1 une fonctionnalité qui ajoute
+# des colonnes suppose donc soit de lancer v1 avec MIGRATIONS_DISABLED=0, soit
+# d'attendre que la prod ait migré puis resynchronisé.
 _migrations_default = "1" if IS_STAGING else "0"
 MIGRATIONS_DISABLED = os.getenv("MIGRATIONS_DISABLED", _migrations_default) in {"1", "true", "True", "yes", "YES"}
 
@@ -232,6 +242,44 @@ STOCK_EMPLACEMENT_SORTIE_PROD_LABEL = "En attente - sortie de prod"
 # à l'entrée Z1 (aucune fiche produit préexistante). SIFA vend à l'étiquette ;
 # une instance Kernse surcharge via STOCK_UNITE_VENTE_DEFAUT dans son .env.
 STOCK_UNITE_VENTE_DEFAUT = os.getenv("STOCK_UNITE_VENTE_DEFAUT", "étiquette")
+
+# ─── Certification FSC ────────────────────────────────────────────
+# Volontairement mono-certification : FSC est le seul référentiel dont SIFA a
+# besoin aujourd'hui, et généraliser en « certifications » (PEFC, ISCC…) ferait
+# porter le coût d'une abstraction à un besoin qui n'existe pas encore. Ce qui
+# est fait ici, en revanche, c'est de sortir TOUS les libellés et le texte
+# atelier du code : une instance Kernse qui devrait basculer sur un autre
+# référentiel n'aura à toucher qu'à ce bloc et aux `.env`, pas aux templates.
+#
+# Les 5 claims sont ceux de la matière reçue (stock_receptions.fsc_type_claim).
+# Le produit fini, lui, ne porte qu'un booléen (lots_stock.fsc) : décision
+# produit assumée, la finesse du claim reste en amont, côté bobine.
+FSC_CLAIM_LABELS = {
+    "non_fsc":        "Non FSC",
+    "fsc_100":        "FSC 100%",
+    "fsc_mix":        "FSC Mix",
+    "fsc_mix_credit": "FSC Mix Credit",
+    "fsc_recycled":   "FSC Recycled",
+}
+# Claims sélectionnables comme EXIGENCE sur un dossier de fabrication : on ne
+# peut pas « exiger du non certifié », donc non_fsc est exclu de cette liste.
+FSC_CLAIMS_REQUERABLES = ("fsc_100", "fsc_mix", "fsc_mix_credit", "fsc_recycled")
+# Défaut quand on coche « Certification FSC requise » : FSC Mix est le claim
+# très majoritaire chez SIFA. Sans ce défaut explicite, le <select> retombait
+# sur sa première option (FSC 100%) et un dossier Mix partait mal étiqueté.
+FSC_CLAIM_DEFAUT = os.getenv("FSC_CLAIM_DEFAUT", "fsc_mix")
+
+# Consigne atelier affichée en permanence sur la saisie de production dès que
+# le dossier courant est FSC. Volontairement figée dans le code (pas de CRUD
+# Paramètres) : c'est une exigence de chaîne de contrôle, pas une préférence
+# d'affichage — on ne veut pas qu'elle puisse être vidée depuis l'interface.
+FSC_WARNING_PROD = os.getenv(
+    "FSC_WARNING_PROD",
+    "Dossier FSC — utiliser exclusivement de la matière certifiée FSC · "
+    "traçabilité matière impérative (scanner chaque bobine) · "
+    "entrée du produit fini en stock Z1 obligatoire",
+)
+
 ROLES_PROD  = {ROLE_DIRECTION, ROLE_FABRICATION, ROLE_EXPEDITION, ROLE_COMMERCIAL, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
 ROLES_COMPTA = {ROLE_DIRECTION, ROLE_COMPTABILITE, ROLE_SUPERADMIN}
 ROLES_EXPE = {ROLE_DIRECTION, ROLE_EXPEDITION, ROLE_LOGISTIQUE, ROLE_COMMERCIAL, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
@@ -275,6 +323,38 @@ ROLES_SETTINGS_CONTACTS = {ROLE_DIRECTION, ROLE_SUPERADMIN, ROLE_COMPTABILITE} |
 ROLES_SETTINGS_PRINTERS = {ROLE_DIRECTION, ROLE_SUPERADMIN, ROLE_COMPTABILITE} | ROLES_ADMINISTRATION_ALL
 ROLES_SETTINGS_FSC      = {ROLE_DIRECTION, ROLE_SUPERADMIN, ROLE_COMPTABILITE} | ROLES_ADMINISTRATION_ALL
 
+# Traceur de traçabilité (MyProd → Traçabilité → Traceur). Volontairement plus
+# fermé que ROLES_SETTINGS_FSC : l'outil reconstitue la chaîne complète d'un
+# produit, fournisseurs et prix de revient compris. La fabrication garde son
+# rapport de traçabilité par dossier (déjà accessible en atelier) mais n'a pas
+# besoin de la vue transversale.
+ROLES_TRACA_VIEWER = {
+    ROLE_SUPERADMIN,
+    ROLE_DIRECTION,
+    ROLE_ADMINISTRATION_VENTES,
+    ROLE_ADMINISTRATION_TECHNIQUE,
+}
+
+# Code de licence FSC de SIFA — celui qui doit figurer sur TOUT document de
+# vente portant un claim (facture et/ou BL). Il n'est volontairement pas codé
+# en dur : renseigné par variable d'environnement FSC_LICENCE_SIFA, il reste
+# vide tant qu'il n'a pas été saisi, et l'API le signale comme un écart plutôt
+# que d'imprimer un numéro faux — ce qui serait pire que pas de numéro du tout.
+FSC_LICENCE_SIFA = os.getenv("FSC_LICENCE_SIFA", "").strip()
+
+# Négoce FSC — réception de produit fini certifié (A1) et rattachement d'une
+# livraison directe partenaire → client (A2).
+# Volontairement plus étroit que ROLES_STOCK : ces saisies engagent un claim
+# FSC opposable à un auditeur, ce n'est pas de la manutention de stock.
+# `fabrication` en est exclu (l'atelier ne réceptionne pas d'achat négoce) et
+# `commercial` aussi (lecture seule sur le stock).
+ROLES_FSC_NEGOCE_WRITE = {
+    ROLE_SUPERADMIN,
+    ROLE_DIRECTION,
+    ROLE_LOGISTIQUE,
+    ROLE_EXPEDITION,
+} | ROLES_ADMINISTRATION_ALL
+
 # Union : rôles autorisés à ouvrir /settings (au moins une section accessible).
 ROLES_SETTINGS = (
     ROLES_SETTINGS_ACCESS
@@ -287,6 +367,14 @@ ROLES_SETTINGS = (
     | ROLES_SETTINGS_PRINTERS
     | ROLES_SETTINGS_FSC
 )
+
+# ─── Gestionnaire de tâches : accès par défaut ────────────────────
+# Valeur de repli uniquement. L'accès réel est piloté par la matrice
+# database-driven (role_access_defaults / user_access_overrides) : c'est elle
+# qu'on édite dans Paramètres pour ouvrir /taches à un service, sans toucher au
+# code ni redéployer. Cette constante ne sert que si la matrice est vide (base
+# neuve, instance Kernse avant seed).
+ROLES_TACHES = {ROLE_DIRECTION, ROLE_SUPERADMIN}
 
 # Applications dont l'accès peut être surchargé par utilisateur (hors Paramètres : accès géré par ROLES_SETTINGS_*).
 ACCESS_OVERRIDABLE_APPS = frozenset({"prod", "planning", "planning_rh", "stock", "compta", "expe", "pricing"})
@@ -361,6 +449,7 @@ APPS_CATALOG = [
         {"id": "ressources-list", "label": "Ressources"},
         {"id": "ref-list", "label": "Référentiel"},
     ]},
+    {"id": "taches", "label": "Gestionnaire de tâches", "modules": []},
     {"id": "settings", "label": "Paramètres", "modules": []},
 ]
 
@@ -396,6 +485,27 @@ ASSIGNABLE_ROLES = frozenset(
         ROLE_COMMERCIAL,
     }
 )
+
+
+# Libellés lisibles des rôles. Source de vérité : tout écran qui affiche un rôle
+# (Paramètres, matrice d'accès, gestionnaire de tâches) lit ce dictionnaire.
+ROLE_LABELS = {
+    ROLE_DIRECTION:                "Direction",
+    ROLE_ADMINISTRATION:           "Administration",
+    ROLE_ADMINISTRATION_VENTES:    "Administration des ventes",
+    ROLE_ADMINISTRATION_TECHNIQUE: "Administration technique",
+    ROLE_FABRICATION:              "Fabrication",
+    ROLE_LOGISTIQUE:               "Logistique",
+    ROLE_COMPTABILITE:             "Comptabilité",
+    ROLE_EXPEDITION:               "Expédition",
+    ROLE_COMMERCIAL:               "Commercial",
+    ROLE_SUPERADMIN:               "Super admin",
+}
+
+
+def role_label(role: str) -> str:
+    """Libellé lisible d'un rôle — repli sur le code brut si inconnu."""
+    return ROLE_LABELS.get(role or "", role or "")
 
 
 ROLES_FABRICATION_APP = {ROLE_FABRICATION, ROLE_DIRECTION, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
@@ -478,6 +588,7 @@ def default_app_access_for_role(role: str) -> dict:
             "fabrication": True,
             "settings": True,
             "planning_rh": True,
+            "taches": True,
         }
     return {
         "prod": role in ROLES_PROD or role in ROLES_PROD_COMPTA_PLANNING,
@@ -489,6 +600,7 @@ def default_app_access_for_role(role: str) -> dict:
         "fabrication": role in ROLES_FABRICATION_APP,
         "settings": role in ROLES_SETTINGS,
         "planning_rh": role in ROLES_PLANNING_RH_VIEW,
+        "taches": role in ROLES_TACHES,
     }
 
 # Admin par défaut
@@ -776,7 +888,79 @@ def taches_types() -> list[dict]:
     return [dict(t) for t in TACHES_TYPES]
 
 
+# Services auxquels une tâche peut être rattachée. Un service EST un rôle : la
+# question « qui doit voir cette tâche » a la même réponse que « qui travaille
+# dessus ». Pas de référentiel parallèle à tenir à jour, et un rôle ajouté demain
+# devient automatiquement un service.
+TACHES_SERVICES_CODES = ASSIGNABLE_ROLES | {ROLE_SUPERADMIN}
+
+
+def taches_services() -> list[dict]:
+    """Services rattachables à une tâche (code + libellé), triés par libellé."""
+    return [{"code": r, "label": role_label(r)}
+            for r in sorted(TACHES_SERVICES_CODES, key=lambda x: role_label(x).casefold())]
+
+
 TACHES_STATUTS_CODES = {s["code"] for s in TACHES_STATUTS}
 TACHES_STATUTS_FINAUX = {s["code"] for s in TACHES_STATUTS if s["final"]}
 TACHES_PRIORITES_CODES = {p["code"] for p in TACHES_PRIORITES}
 TACHES_TYPES_CODES = {t["code"] for t in TACHES_TYPES}
+
+
+# ─── Catégories fournisseurs ──────────────────────────────────────
+# Ce que le fournisseur nous fournit. Référentiel court et structurant :
+# une constante lue par une fonction, jamais interpolée en dur dans un
+# template (règle CLAUDE.md). Les valeurs ci-dessous sont celles de SIFA ;
+# une instance Kernse surcharge via FOURNISSEUR_CATEGORIES (JSON) dans .env.
+#
+# Cette liste est la SOURCE DE VÉRITÉ unique, côté serveur comme côté client
+# (servie par GET /api/fournisseurs/categories). Un code absent d'ici est un
+# code fantôme : il ne peut être ni affiché lisiblement, ni décoché.
+_FOURNISSEUR_CATEGORIES_DEFAUT = (
+    {"code": "mandrin",       "label": "Mandrin"},
+    {"code": "palette",       "label": "Palette"},
+    {"code": "adhesif",       "label": "Adhésif"},
+    {"code": "carton",        "label": "Carton"},
+    {"code": "frontal",       "label": "Frontal"},
+    {"code": "glassine",      "label": "Glassine"},
+    {"code": "complexe",      "label": "Complexe"},
+    {"code": "autre",         "label": "Autre"},
+    {"code": "negoce",        "label": "Négoce"},
+    {"code": "sous_traitant", "label": "Sous-traitant"},
+)
+
+
+def _charger_fournisseur_categories() -> tuple:
+    """Lit FOURNISSEUR_CATEGORIES depuis l'env (JSON), sinon défaut SIFA."""
+    brut = os.getenv("FOURNISSEUR_CATEGORIES", "").strip()
+    if not brut:
+        return _FOURNISSEUR_CATEGORIES_DEFAUT
+    try:
+        import json as _json
+        items = _json.loads(brut)
+        propres = []
+        for it in items:
+            code = str(it.get("code", "")).strip()
+            if not code:
+                continue
+            propres.append({"code": code, "label": str(it.get("label") or code).strip()})
+        return tuple(propres) or _FOURNISSEUR_CATEGORIES_DEFAUT
+    except Exception:
+        # Un .env mal formé ne doit pas priver l'app de son référentiel :
+        # on retombe sur le défaut plutôt que de démarrer sans catégories.
+        return _FOURNISSEUR_CATEGORIES_DEFAUT
+
+
+FOURNISSEUR_CATEGORIES = _charger_fournisseur_categories()
+FOURNISSEUR_CATEGORIES_CODES = {c["code"] for c in FOURNISSEUR_CATEGORIES}
+
+
+def fournisseur_categories() -> list[dict]:
+    return [dict(c) for c in FOURNISSEUR_CATEGORIES]
+
+
+def fournisseur_categorie_label(code: str) -> str:
+    for c in FOURNISSEUR_CATEGORIES:
+        if c["code"] == code:
+            return c["label"]
+    return code

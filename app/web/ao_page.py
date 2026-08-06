@@ -247,12 +247,16 @@ margin-left:6px;cursor:help;vertical-align:middle}
 .bubble.interne{align-self:flex-end;margin-left:auto;background:var(--accent-bg);border:1px solid var(--accent)}
 .bubble.fournisseur{align-self:flex-start;background:var(--card);border:1px solid var(--border)}
 .bubble .meta{font-size:11px;color:var(--muted);margin-bottom:4px}
-#toast{position:fixed;bottom:max(20px,env(safe-area-inset-bottom,0px));right:max(20px,env(safe-area-inset-right,0px));padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:12050;display:none;max-width:min(420px,calc(100vw - 32px));box-shadow:0 8px 32px rgba(0,0,0,.45);pointer-events:none}
+/* Le coin bas-droit est occupe par les FAB (guides, chat, IA) qui montent
+   jusqu'a z-index 19990 : la note doit passer au-dessus, et son fond doit
+   etre OPAQUE — les variantes teintees en rgba laissaient transparaitre les
+   boutons, ce qui donnait l'impression d'une note passee dessous. */
+#toast{position:fixed;bottom:max(20px,env(safe-area-inset-bottom,0px));right:max(20px,env(safe-area-inset-right,0px));padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;z-index:99990;display:none;max-width:min(420px,calc(100vw - 32px));box-shadow:0 8px 32px rgba(0,0,0,.45);pointer-events:none;background:var(--card)}
 #toast.show{display:block;pointer-events:auto}
 #toast.success{background:var(--success);color:var(--bg)}
 #toast.danger{background:var(--danger);color:#fff}
-#toast.info{background:var(--accent-bg);color:var(--accent);border:1px solid var(--accent)}
-#toast.warn{background:rgba(251,191,36,.2);color:var(--warn);border:1px solid var(--warn)}
+#toast.info{background:color-mix(in srgb,var(--accent) 14%,var(--card));color:var(--accent);border:1px solid var(--accent)}
+#toast.warn{background:color-mix(in srgb,var(--warn) 20%,var(--card));color:var(--warn);border:1px solid var(--warn)}
 .prod-list-table .prod-ref-cell{font-family:ui-monospace,monospace;font-size:14px;font-weight:700;color:var(--text)}
 .prod-list-table .prod-info-cell{font-size:12px;color:var(--text2);line-height:1.5}
 .prod-list-table .prod-info-cell strong{color:var(--text);font-weight:700}
@@ -351,7 +355,8 @@ function icon(name, size) {
     'corner-down-right': '<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
     'alert-triangle': '<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
     activity: '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
-    'message-square': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'
+    'message-square': '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+    tag: '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>'
   };
   return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0">'+(p[name]||'')+'</svg>';
 }

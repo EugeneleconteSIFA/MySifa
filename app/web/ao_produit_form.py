@@ -167,11 +167,57 @@ border-radius:8px;background:var(--card);color:var(--text);font-size:12px}
 .pf-bat-body{padding:8px}
 .pf-bat-refcli input{width:120px}
 }
+/* Champ signale comme manquant : bordure rouge + halo, le temps que l'oeil
+   le retrouve apres le defilement automatique. */
+.pf-field-alert{border-color:var(--danger,#dc2626)!important;
+box-shadow:0 0 0 3px rgba(220,38,38,.18)!important;
+animation:pfFieldAlert .5s ease-in-out 0s 3}
+@keyframes pfFieldAlert{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+@media(prefers-reduced-motion:reduce){.pf-field-alert{animation:none}}
+/* Modale apercu etiquette d'identification carton (100 x 50 mm).
+   Reprend la charpente de la modale BAT ; seule la scene change de ratio :
+   l'etiquette est un rectangle 2:1, on la borne en largeur pour qu'elle
+   reste lisible sans occuper toute la modale. */
+.pf-etq-ov{position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:600;
+display:flex;align-items:center;justify-content:center;padding:16px}
+.pf-etq-box{background:var(--card);border:1px solid var(--border);border-radius:14px;
+width:min(720px,100%);max-height:94vh;display:flex;flex-direction:column;overflow:hidden;
+box-shadow:0 18px 48px rgba(0,0,0,.30)}
+.pf-etq-hdr{display:flex;align-items:center;gap:12px;padding:10px 14px;
+border-bottom:1px solid var(--border);
+background:linear-gradient(135deg, var(--card) 0%, var(--accent-bg) 100%)}
+.pf-etq-hdr h3{margin:0;font-size:15px;font-weight:800;color:var(--text);line-height:1.2}
+.pf-etq-sub{font-size:11px;color:var(--muted);font-weight:600;margin-top:1px}
+.pf-etq-push{margin-left:auto}
+.pf-etq-x{border:1px solid var(--border);background:var(--card);color:var(--text2);
+width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:15px;line-height:1;
+display:inline-flex;align-items:center;justify-content:center}
+.pf-etq-x:hover{border-color:var(--accent);color:var(--accent)}
+.pf-etq-body{flex:1;overflow:auto;padding:22px 16px;background:var(--bg);
+display:flex;justify-content:center;align-items:flex-start}
+.pf-etq-stage{background:#fff;border:1px solid var(--border);border-radius:4px;
+box-shadow:0 2px 12px rgba(15,23,42,.14);overflow:hidden;flex:0 0 auto;
+width:100%;max-width:560px}
+.pf-etq-stage svg{display:block;width:100%;height:auto}
+.pf-etq-msg{text-align:center;color:var(--muted);font-size:13px;padding:52px 16px;font-weight:600}
+.pf-etq-msg.err{color:var(--danger,#dc2626)}
+.pf-etq-ftr{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;
+border-top:1px solid var(--border);background:var(--card)}
+.pf-etq-dim{font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.3px}
+@media(max-width:640px){
+.pf-etq-ov{padding:0}
+.pf-etq-box{border-radius:0;max-height:100vh;height:100vh;width:100%}
+.pf-etq-body{padding:12px 8px}
+}
 """
 
 AO_PRODUIT_FORM_JS = r"""
 function defaultProduitFiche() {
   return {
+    // Reference de la fiche technique SIFA (format XXX/NNNN). Elle identifie
+    // le produit sur l'etiquette carton et declenche l'enrichissement fiche
+    // technique cote serveur (BAT, PDF fournisseur).
+    ref_sifa: '',
     type_produit: 'rouleau',
     impressions: true,
     etiquette: { laize: '', longueur: '', rayon: '', perforation: '' },
@@ -309,7 +355,6 @@ function renderProduitForm() {
   const frontal = mats.frontal || [];
   const adhesif = mats.adhesif || [];
   const glassine = mats.glassine || [];
-  const carton = mats.carton || [];
   const palette = mats.palette || [];
 
   const navPager = d.id ? buildNavPagerHtml(filteredProduits(), d.id, 'produit') : '';
@@ -319,11 +364,14 @@ function renderProduitForm() {
     '<div class="pf-actions">'+
     navPager+
     '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-export"'+(d.id?'':' disabled')+
-    ' title="'+escAttr(d.id ? 'Exporter la fiche PDF' : 'Enregistrez le produit pour activer l\'export PDF')+'">'+
-    icon('file-text',14)+' PDF</button>'+
+    ' title="'+escAttr(d.id ? 'Exporter la fiche technique en PDF' : 'Enregistrez le produit pour activer l\'export PDF')+'">'+
+    icon('file-text',14)+' Fiche technique</button>'+
     '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-bat"'+(d.id?'':' disabled')+
     ' title="'+escAttr(d.id ? 'Générer le BAT étiquette' : 'Enregistrez le produit pour activer le BAT')+'">'+
     icon('file-text',14)+' BAT</button>'+
+    '<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-etq"'+(d.id?'':' disabled')+
+    ' title="'+escAttr(d.id ? 'Aperçu de l\'étiquette d\'identification carton' : 'Enregistrez le produit pour activer l\'étiquette')+'">'+
+    icon('tag',14)+' Étiq. identification</button>'+
     '<button type="button" class="btn btn-accent btn-sm" id="btn-pf-save">Enregistrer</button>'+
     '</div></div>'+
     '<div class="pf-page-hdr">'+
@@ -349,7 +397,7 @@ function renderProduitForm() {
     pfRow('Impressions', '<select id="pf-impressions"><option value="1"'+(f.impressions?' selected':'')+'>Oui</option>'+
       '<option value="0"'+(f.impressions?'':' selected')+'>Non</option></select>')+
     pfRow('Client', clientPicker, 'pf-inline-wide pf-client-row')+
-    pfRow('Ref SIFA', '<div class="pf-refsifa-wrap" style="position:relative;display:flex;gap:6px;align-items:center">'+'<input id="pf-refsifa" placeholder="Rechercher une fiche technique..." autocomplete="off" style="flex:1">'+'<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-refsifa-clear" title="Effacer" style="padding:4px 8px">\u00d7</button>'+'<div class="pf-refsifa-list" id="pf-refsifa-list" style="display:none;position:absolute;top:100%;left:0;right:36px;z-index:60;max-height:280px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:8px;margin-top:2px;box-shadow:0 6px 20px rgba(0,0,0,.12)"></div>'+'</div>', 'pf-inline-wide pf-wide-row')+
+    pfRow('Ref SIFA', '<div class="pf-refsifa-wrap" style="position:relative;display:flex;gap:6px;align-items:center">'+'<input id="pf-refsifa" value="'+escAttr(f.ref_sifa||'')+'" placeholder="Rechercher une fiche technique..." autocomplete="off" style="flex:1">'+'<button type="button" class="btn btn-ghost btn-sm" id="btn-pf-refsifa-clear" title="Effacer" style="padding:4px 8px">\u00d7</button>'+'<div class="pf-refsifa-list" id="pf-refsifa-list" style="display:none;position:absolute;top:100%;left:0;right:36px;z-index:60;max-height:280px;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:8px;margin-top:2px;box-shadow:0 6px 20px rgba(0,0,0,.12)"></div>'+'</div>', 'pf-inline-wide pf-wide-row')+
     '</div></div>'+
 
     '<div class="pf-section"><div class="pf-section-title">Fiche technique</div>'+
@@ -402,8 +450,7 @@ function renderProduitForm() {
     '<div class="pf-section"><div class="pf-section-title">Conditionnement</div>'+
     '<div class="pf-cols-2">'+
     '<div class="pf-block"><div class="pf-block-title">Cartons</div>'+
-  pfRow('Type', '<select id="pf-cart-type">'+mpOptionsHtml(carton, f.conditionnement.carton.matiere_id)+'</select>', 'pf-inline-wide')+
-  pfRow('Bobines / sol', '<input type="number" step="1" min="0" id="pf-cart-sol" value="'+escAttr(f.conditionnement.carton.bobines_sol)+'">')+
+  pfRow('Bobines / sol','<input type="number" step="1" min="0" id="pf-cart-sol" value="'+escAttr(f.conditionnement.carton.bobines_sol)+'">')+
   pfRow('Étages', '<input type="number" step="1" min="0" id="pf-cart-etages" value="'+escAttr(f.conditionnement.carton.nb_etages)+'">')+
   pfRow('Bobines / carton', '<input type="number" step="1" min="0" id="pf-cart-bob" value="'+escAttr(f.conditionnement.carton.bobines_carton)+'">')+
     '</div>'+
@@ -598,6 +645,120 @@ function openBatPreview(produitId, ref) {
   pfBatLoad();
 }
 
+/* ---------------------------------------------------------------------
+   Apercu etiquette d'identification carton (100 x 50 mm) - modale SVG.
+   Meme principe que le BAT : /api/ao/produits/{id}/etiquette-carton?fmt=svg
+   rend un SVG autonome (unites mm) injecte inline, et fmt=pdf sert le PDF
+   a la taille exacte de l'etiquette pour l'imprimante. Tout le contenu vient
+   de la fiche produit : aucun champ n'est saisissable ici.
+--------------------------------------------------------------------- */
+let pfEtq = null;
+
+/* L'etiquette carton est identifiee par la Ref SIFA : sans elle le document
+   sortirait sans numero. On refuse d'ouvrir l'apercu et on renvoie l'oeil sur
+   le champ a remplir plutot que de produire une etiquette muette. */
+function pfAlertRefSifaManquante() {
+  showToast('Champ Ref SIFA à renseigner avant de créer une étiquette d\'identification.', 'warn');
+  const inp = document.getElementById('pf-refsifa');
+  if (!inp) return;
+  inp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  inp.classList.remove('pf-field-alert');
+  void inp.offsetWidth;            // relance l'animation si deja signale
+  inp.classList.add('pf-field-alert');
+  inp.focus({ preventScroll: true });
+  setTimeout(() => inp.classList.remove('pf-field-alert'), 2600);
+}
+
+function pfRefSifaValue() {
+  const inp = document.getElementById('pf-refsifa');
+  if (inp) return (inp.value || '').trim();
+  return (S.produitForm?.fiche?.ref_sifa || '').trim();
+}
+
+/* La Ref SIFA saisie est transmise en parametre : l'apercu et le PDF la
+   prennent en compte sans attendre un enregistrement du produit. */
+function pfEtqUrl(fmt) {
+  if (!pfEtq) return '';
+  const p = new URLSearchParams({ fmt: fmt });
+  if (pfEtq.refSifa) p.set('ref_sifa', pfEtq.refSifa);
+  return '/api/ao/produits/' + pfEtq.id + '/etiquette-carton?' + p.toString();
+}
+
+function pfEtqKeydown(e) {
+  if (e.key === 'Escape') closeEtiquettePreview();
+}
+
+function closeEtiquettePreview() {
+  pfEtq = null;
+  document.removeEventListener('keydown', pfEtqKeydown);
+  document.getElementById('pf-etq-ov')?.remove();
+}
+
+async function pfEtqLoad() {
+  if (!pfEtq) return;
+  const stage = document.getElementById('pf-etq-stage');
+  if (!stage) return;
+  const seq = ++pfEtq.seq;
+  stage.innerHTML = '<div class="pf-etq-msg">Génération de l\'aperçu…</div>';
+  try {
+    const res = await fetch(pfEtqUrl('svg'), { credentials: 'same-origin' });
+    if (!res.ok) {
+      let detail = '';
+      try { detail = (await res.json())?.detail || ''; } catch (_) {}
+      throw new Error(detail || ('erreur ' + res.status));
+    }
+    const svg = await res.text();
+    if (!pfEtq || pfEtq.seq !== seq) return;
+    stage.innerHTML = svg;
+  } catch (e) {
+    if (!pfEtq || pfEtq.seq !== seq) return;
+    stage.innerHTML = '<div class="pf-etq-msg err">Aperçu indisponible — ' +
+      escHtml(e.message || 'erreur inconnue') + '</div>';
+  }
+}
+
+function openEtiquettePreview(produitId, ref, refSifa) {
+  closeEtiquettePreview();
+  pfEtq = { id: produitId, ref: ref || '', refSifa: refSifa || '', seq: 0 };
+
+  const ov = document.createElement('div');
+  ov.className = 'pf-etq-ov';
+  ov.id = 'pf-etq-ov';
+  ov.innerHTML =
+    '<div class="pf-etq-box" role="dialog" aria-modal="true" aria-label="Aperçu de l\'étiquette carton">' +
+      '<div class="pf-etq-hdr">' +
+        '<div><h3>Étiquette d\'identification carton</h3>' +
+        (ref ? '<div class="pf-etq-sub">' + escHtml(ref) + '</div>' : '') + '</div>' +
+        '<div class="pf-etq-push"></div>' +
+        '<button type="button" class="pf-etq-x" id="pf-etq-x" title="Fermer (Échap)" aria-label="Fermer">&#10005;</button>' +
+      '</div>' +
+      '<div class="pf-etq-body">' +
+        '<div class="pf-etq-stage" id="pf-etq-stage">' +
+          '<div class="pf-etq-msg">Génération de l\'aperçu…</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="pf-etq-ftr">' +
+        '<span class="pf-etq-dim">100 × 50 mm — taille réelle</span>' +
+        '<div class="pf-etq-push"></div>' +
+        '<button type="button" class="btn btn-ghost btn-sm" id="pf-etq-close">Fermer</button>' +
+        '<button type="button" class="btn btn-accent btn-sm" id="pf-etq-pdf">' +
+          icon('file-text', 14) + ' Télécharger le PDF</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(ov);
+
+  ov.addEventListener('click', (e) => { if (e.target === ov) closeEtiquettePreview(); });
+  document.getElementById('pf-etq-x').onclick = closeEtiquettePreview;
+  document.getElementById('pf-etq-close').onclick = closeEtiquettePreview;
+  document.getElementById('pf-etq-pdf').onclick = () => {
+    const u = pfEtqUrl('pdf');
+    if (u) window.open(u, '_blank');
+  };
+
+  document.addEventListener('keydown', pfEtqKeydown);
+  pfEtqLoad();
+}
+
 function pfNum(v) {
   if (v === '' || v == null) return null;
   const n = parseFloat(v);
@@ -624,6 +785,11 @@ function collectImpDetails(kind) {
 
 function collectProduitForm() {
   const f = S.produitForm.fiche;
+  // La Ref SIFA etait un simple autocomplete de prechargement : sa valeur
+  // n'etait ni enregistree ni rechargee, si bien que fiche.ref_sifa restait
+  // toujours vide cote serveur (enrichissement fiche technique du BAT et des
+  // PDF fournisseur inclus). On la persiste desormais.
+  f.ref_sifa = document.getElementById('pf-refsifa')?.value.trim() || '';
   f.type_produit = document.getElementById('pf-type')?.value || 'rouleau';
   f.impressions = document.getElementById('pf-impressions')?.value === '1';
   f.etiquette = {
@@ -661,7 +827,10 @@ function collectProduitForm() {
   imp.verso_details = collectImpDetails('verso');
   f.conditionnement = {
     carton: {
-      matiere_id: document.getElementById('pf-cart-type')?.value || null,
+      // Le type de carton n'est plus saisi dans la fiche (champ retire de
+      // l'UI). On preserve la valeur historique au lieu de l'ecraser a null :
+      // les fiches deja renseignees ne doivent pas perdre l'information.
+      matiere_id: f.conditionnement?.carton?.matiere_id ?? null,
       bobines_sol: pfInt(document.getElementById('pf-cart-sol')?.value),
       nb_etages: pfInt(document.getElementById('pf-cart-etages')?.value),
       bobines_carton: pfInt(document.getElementById('pf-cart-bob')?.value)
@@ -980,6 +1149,16 @@ function bindProduitFormEvents() {
     batBtn.addEventListener('click', () => {
       const id = S.produitForm?.id;
       if (id) openBatPreview(id, S.produitForm?.ref || '');
+    });
+  }
+  const etqBtn = document.getElementById('btn-pf-etq');
+  if (etqBtn && !etqBtn.disabled) {
+    etqBtn.addEventListener('click', () => {
+      const id = S.produitForm?.id;
+      if (!id) return;
+      const refSifa = pfRefSifaValue();
+      if (!refSifa) { pfAlertRefSifaManquante(); return; }
+      openEtiquettePreview(id, S.produitForm?.ref || '', refSifa);
     });
   }
   document.getElementById('btn-pf-client-pick')?.addEventListener('click', () => {

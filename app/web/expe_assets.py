@@ -476,7 +476,8 @@ function openTransporteurModal(id){
       actif:tr.actif==null?true:!!Number(tr.actif),
       tarif_filename:tr.tarif_filename||'',
       tarif_url:tr.tarif_url||'',
-      couleur:tr.couleur||''
+      couleur:tr.couleur||'',
+      langue:(tr.langue||'fr')
     };
   }else{
     T.editId=null;
@@ -484,7 +485,7 @@ function openTransporteurModal(id){
       nom:'',taxe_carburant_pct:'0',contact_nom:'',
       contact_portail_url:'',contact_emails:[''],contact_tels:[{numero:'',service:''}],contact_tel:'',
       zone_france:true,zone_france_hors_paris:false,zone_affretement:false,zone_messagerie:false,
-      actif:true,tarif_filename:'',tarif_url:'',couleur:''
+      actif:true,tarif_filename:'',tarif_url:'',couleur:'',langue:'fr'
     };
   }
   T.tarifFile=null;
@@ -755,6 +756,7 @@ function expeTrpBodyFromForm(){
     zone_affretement:T.form.zone_affretement?1:0,
     zone_messagerie:T.form.zone_messagerie?1:0,
     couleur:T.form.couleur||null,
+    langue:T.form.langue||'fr',
     actif:T.form.actif?1:0
   };
 }
@@ -1131,10 +1133,22 @@ function renderExpeTransporteurModal(){
   if(isEdit&&T.modalTab==='tarifs'){
     box.appendChild(renderTarifsOnglet());
   }else{
+    // Langue des emails. Le pack de traduction FR/EN existait déjà mais
+    // n'était jamais utilisé faute de savoir à qui écrire dans quelle langue :
+    // le mail partait bilingue, les deux versions empilées.
+    const langueSel=h('select',{style:{width:'100%',padding:'12px 16px',background:'var(--bg)',
+      border:'1px solid var(--border)',borderRadius:'10px',color:'var(--text)',fontSize:'14px'}});
+    [['fr','Français'],['en','English']].forEach(([v,l])=>{
+      const o=h('option',{value:v},l);
+      if((T.form.langue||'fr')===v)o.selected=true;
+      langueSel.appendChild(o);
+    });
+    langueSel.addEventListener('change',e=>{T.form.langue=e.target.value;});
     const ident=h('div',{className:'expe-trp-sec'},
       h('div',{className:'expe-trp-sec-title'},'Identité'),
       mkText('Nom du transporteur *','nom'),
-      mkText('Taxe carburant %','taxe_carburant_pct',{type:'number',step:'0.1',min:'0'})
+      mkText('Taxe carburant %','taxe_carburant_pct',{type:'number',step:'0.1',min:'0'}),
+      h('div',{className:'expe-trp-field'},h('label',null,'Langue des emails'),langueSel)
     );
     const curColor=T.form.couleur||'';
     const swatches=TRP_PALETTE.map(c=>{
@@ -1668,17 +1682,21 @@ async function validerNouvelleDemande(){
         code_postal_destination:cp,
         type_envoi:f.type_envoi||'messagerie',
         type_palette:(f.type_palette||'').trim()||null,
-        contraintes:(f.contraintes||'').trim()||null
+        contraintes:(f.contraintes||'').trim()||null,
+        date_limite:(f.date_limite||'').trim()||null
       })
     });
+    // Nouveau client saisi : le cache de suggestions est invalidé pour que la
+    // demande suivante le propose au lieu de laisser rouvrir une graphie.
+    _expeClientsCache=null;
     // Si un fichier a été sélectionné, on l'upload après la création.
     // Le second appel ne bloque pas la création si l'upload échoue (on prévient).
     const fileObj=f.piece_jointe_file;
     if(fileObj&&fileObj instanceof File){
       try{
         const fd=new FormData();
-        fd.append('file',fileObj);
-        const r=await fetch('/api/expe/devis/demandes/'+demande.id+'/piece-jointe',{
+        fd.append('files',fileObj);
+        const r=await fetch('/api/expe/devis/demandes/'+demande.id+'/pieces-jointes',{
           method:'POST',
           credentials:'include',
           body:fd
@@ -1703,7 +1721,8 @@ async function validerNouvelleDemande(){
 async function ouvrirDetailDemande(demandeId){
   try{
     const data=await api('/api/expe/devis/demandes/'+demandeId);
-    set({expeDevisModal:{type:'detail',demandeId,demande:data.demande,reponses:data.reponses||[]}});
+    set({expeDevisModal:{type:'detail',demandeId,demande:data.demande,
+      reponses:data.reponses||[],pieces_jointes:data.pieces_jointes||[]}});
   }catch(e){
     showToast(e.message||'Chargement impossible','danger');
   }
@@ -1951,12 +1970,430 @@ function expeDevisSuiviTag(d){
   return h('span',{className:'expe-devis-pill accent'},parts.join(' / '));
 }
 
+// Pastille d'échéance. Le retard est rouge, l'imminence ambre, le reste gris :
+// une date sans code couleur oblige à la comparer mentalement à aujourd'hui
+// sur chaque carte, ce que personne ne fait en balayant une liste.
+function expeDevisEcheanceTag(d){
+  const dl=(d.date_limite||'').slice(0,10);
+  if(!dl)return null;
+  if(d.statut!=='ouverte')return h('span',{className:'expe-devis-pill muted'},'Limite '+dl);
+  const auj=expeParisDayISO();
+  let cls='muted', txt='Limite '+dl;
+  if(dl<auj){ cls='danger'; txt='En retard — '+dl; }
+  else{
+    const j=Math.round((new Date(dl+'T00:00:00')-new Date(auj+'T00:00:00'))/86400000);
+    if(j===0){ cls='warn'; txt="Limite aujourd'hui"; }
+    else if(j<=2){ cls='warn'; txt='Limite J-'+j; }
+  }
+  return h('span',{className:'expe-devis-pill '+cls,title:'Date limite de réponse'},txt);
+}
+
+async function dupliquerDemande(id,ev){
+  if(ev)ev.stopPropagation();
+  try{
+    const d=await api('/api/expe/devis/demandes/'+id+'/dupliquer',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({copier_pieces_jointes:true})});
+    const n=(d.destinataires_precedents||[]).length;
+    showToast('Demande '+(d.reference||'')+' créée'+(n?' — '+n+' destinataire(s) à re-sélectionner':''));
+    S.devis_filtre='ouverte';
+    await chargerDemandes();
+    void ouvrirDetailDemande(d.id);
+  }catch(e){ showToast(e.message||'Duplication impossible','danger'); }
+}
+
+async function restaurerDemande(id,ev){
+  if(ev)ev.stopPropagation();
+  try{
+    await api('/api/expe/devis/demandes/'+id+'/restaurer',{method:'POST'});
+    showToast('Demande restaurée');
+    await chargerDemandes();
+  }catch(e){ showToast(e.message||'Restauration impossible','danger'); }
+}
+
+async function purgerDemande(id,ev){
+  if(ev)ev.stopPropagation();
+  if(!confirm('Supprimer DÉFINITIVEMENT cette demande, ses réponses et ses fichiers ?\nCette action est irréversible.'))return;
+  try{
+    await api('/api/expe/devis/demandes/'+id+'/purger',{method:'DELETE'});
+    showToast('Demande supprimée définitivement');
+    await chargerDemandes();
+  }catch(e){ showToast(e.message||'Suppression impossible','danger'); }
+}
+
+async function supprimerDemandeDevis(id,ev){
+  if(ev)ev.stopPropagation();
+  if(!confirm('Mettre cette demande à la corbeille ? Elle reste restaurable.'))return;
+  try{
+    await api('/api/expe/devis/demandes/'+id,{method:'DELETE'});
+    showToast('Demande mise à la corbeille');
+    fermerExpeDevisModal();
+    await chargerDemandes();
+  }catch(e){ showToast(e.message||'Suppression impossible','danger'); }
+}
+
+// Liste des clients déjà employés — chargée une fois par session et partagée
+// par tous les champs client. Le but n'est pas de contraindre la saisie mais
+// d'éviter qu'un même client existe en trois graphies.
+let _expeClientsCache=null;
+async function expeClientsSuggestions(){
+  if(_expeClientsCache)return _expeClientsCache;
+  try{
+    const d=await api('/api/expe/devis/clients-suggestions');
+    _expeClientsCache=d.clients||[];
+  }catch(_e){ _expeClientsCache=[]; }
+  return _expeClientsCache;
+}
+
+// Combobox client. Le <datalist> natif était le choix simple, mais son menu
+// est rendu par le navigateur : ni la police, ni les couleurs, ni le thème
+// sombre de MySifa ne s'y appliquent, et il tombait en blanc sur blanc. On
+// redessine donc la liste nous-mêmes.
+//
+// La liste est en `position:fixed` et non `absolute` : le modal a
+// `overflow:auto`, une liste en flux absolu s'y ferait couper au bord.
+function expeClientCombo(inp){
+  const wrap=h('div',{className:'expe-combo'});
+  inp.classList.add('expe-devis-inp');
+  inp.setAttribute('autocomplete','off');
+  const menu=h('div',{className:'expe-combo-menu'});
+  let items=[], idx=-1, ouvert=false;
+
+  const placer=()=>{
+    const r=inp.getBoundingClientRect();
+    menu.style.left=r.left+'px';
+    menu.style.width=r.width+'px';
+    // Sous le champ, sauf s'il n'y a pas la place : au-dessus alors.
+    const dispoBas=window.innerHeight-r.bottom;
+    if(dispoBas<180&&r.top>dispoBas){
+      menu.style.top='auto';
+      menu.style.bottom=(window.innerHeight-r.top+4)+'px';
+      menu.style.maxHeight=Math.min(240,r.top-12)+'px';
+    }else{
+      menu.style.bottom='auto';
+      menu.style.top=(r.bottom+4)+'px';
+      menu.style.maxHeight=Math.min(240,dispoBas-12)+'px';
+    }
+  };
+  const fermer=()=>{ ouvert=false; idx=-1; try{menu.remove();}catch(_e){} };
+  const choisir=v=>{
+    inp.value=v;
+    inp.dispatchEvent(new Event('input',{bubbles:true}));
+    fermer(); inp.focus();
+  };
+  const surligne=()=>{
+    Array.from(menu.children).forEach((el,i)=>el.classList.toggle('on',i===idx));
+    if(idx>=0&&menu.children[idx])menu.children[idx].scrollIntoView({block:'nearest'});
+  };
+  const ouvrir=async()=>{
+    const all=await expeClientsSuggestions();
+    const q=(inp.value||'').trim().toLowerCase();
+    items=q?all.filter(c=>c.toLowerCase().indexOf(q)>=0).slice(0,40):all.slice(0,40);
+    menu.innerHTML='';
+    if(!items.length){
+      // Pas de menu vide qui flotte : s'il n'y a rien à proposer, le champ
+      // reste un champ texte ordinaire.
+      fermer(); return;
+    }
+    items.forEach((c,i)=>{
+      const o=h('div',{className:'expe-combo-item'},c);
+      o.addEventListener('mousedown',e=>{e.preventDefault();choisir(c);});
+      o.addEventListener('mouseenter',()=>{idx=i;surligne();});
+      menu.appendChild(o);
+    });
+    if(!ouvert){ document.body.appendChild(menu); ouvert=true; }
+    placer(); idx=-1; surligne();
+  };
+
+  inp.addEventListener('input',()=>{ void ouvrir(); });
+  inp.addEventListener('focus',()=>{ void ouvrir(); });
+  inp.addEventListener('blur',()=>{ setTimeout(fermer,120); });
+  inp.addEventListener('keydown',e=>{
+    if(!ouvert){
+      if(e.key==='ArrowDown'){ e.preventDefault(); void ouvrir(); }
+      return;
+    }
+    if(e.key==='ArrowDown'){ e.preventDefault(); idx=Math.min(idx+1,items.length-1); surligne(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); idx=Math.max(idx-1,0); surligne(); }
+    else if(e.key==='Enter'&&idx>=0){ e.preventDefault(); choisir(items[idx]); }
+    else if(e.key==='Escape'){ fermer(); }
+  });
+  window.addEventListener('scroll',()=>{ if(ouvert)placer(); },true);
+  window.addEventListener('resize',()=>{ if(ouvert)placer(); });
+  wrap.appendChild(inp);
+  return wrap;
+}
+
+// ── Engagement transporteur (email ouvert / portail consulté) ──
+//
+// Deux signaux distincts, et non un statut unique : ils n'ont pas la même
+// valeur de preuve. Le portail est certain — personne n'ouvre cette page par
+// hasard. L'ouverture d'email est un INDICE : Outlook bloque les images par
+// défaut (faux négatif), Apple Mail et les passerelles antispam les
+// préchargent (faux positif, filtré côté serveur par expe_evenements). Les
+// fondre en « vu / pas vu » donnerait une certitude qu'on n'a pas.
+function expeDepuisDate(s){
+  if(!s)return '';
+  const d=new Date(String(s).replace(' ','T'));
+  if(isNaN(d))return '';
+  const min=Math.floor((Date.now()-d.getTime())/60000);
+  if(min<1)return "à l'instant";
+  if(min<60)return 'il y a '+min+' min';
+  const hh=Math.floor(min/60);
+  if(hh<24)return 'il y a '+hh+' h';
+  return 'il y a '+Math.floor(hh/24)+' j';
+}
+
+function expeEngagementCell(r){
+  const e=r.engagement||{};
+  if(!r.sent_at)return h('span',{style:{color:'var(--muted)'}},'—');
+  const parts=[];
+  const nbMail=Number(e.nb_ouvertures_email)||0;
+  if(nbMail>0){
+    parts.push(h('span',{className:'expe-eng-chip expe-eng-on',
+      title:'Dernière ouverture : '+(e.email_ouvert_dernier||'')},
+      'Email ouvert'+(nbMail>1?' ×'+nbMail:'')));
+  }else if((Number(e.ouvertures_ecartees)||0)>0){
+    // Le motif est affiché, pas seulement compté : « non confirmée » sans
+    // raison oblige à ouvrir la timeline pour comprendre.
+    parts.push(h('span',{className:'expe-eng-chip expe-eng-doubt',
+      title:e.ouvertures_ecartees+' chargement(s) du pixel écarté(s)'+(e.motif_ecarte?' — '+e.motif_ecarte:'')},
+      'Ouverture non confirmée'));
+  }else{
+    parts.push(h('span',{className:'expe-eng-chip expe-eng-off'},"Pas d'ouverture détectée"));
+  }
+  const nbP=Number(e.nb_visites_portail)||0;
+  if(nbP>0){
+    parts.push(h('span',{className:'expe-eng-chip expe-eng-strong'},'Portail'+(nbP>1?' ×'+nbP:'')));
+  }
+  const wrap=h('div',{className:'expe-eng-wrap'},...parts);
+  if(e.dernier_signal){
+    wrap.appendChild(h('div',{className:'expe-eng-when'},expeDepuisDate(e.dernier_signal)));
+  }
+  return wrap;
+}
+
+// Popover d'édition de la date limite. Détaché du modal « Modifier » parce
+// que décaler une échéance reste légitime après envoi, contrairement au reste
+// de l'entête.
+function ouvrirEditionDateLimite(d,ancre){
+  const pop=h('div',{className:'expe-pop'});
+  const inp=h('input',{type:'date',className:'expe-devis-inp',
+    value:(d.date_limite||'').slice(0,10),style:{padding:'8px 12px',fontSize:'13px'}});
+  const fermer=()=>{try{pop.remove();}catch(_e){} document.removeEventListener('mousedown',dehors,true);};
+  const dehors=e=>{ if(!pop.contains(e.target)&&e.target!==ancre)fermer(); };
+  const enregistrer=async(val)=>{
+    try{
+      await api('/api/expe/devis/demandes/'+d.id+'/date-limite',{method:'PATCH',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({date_limite:val||null})});
+      showToast(val?'Date limite mise à jour':'Date limite retirée');
+      fermer();
+      await ouvrirDetailDemande(d.id); await chargerDemandes();
+    }catch(e){ showToast(e.message||'Erreur','danger'); }
+  };
+  pop.appendChild(h('div',{className:'expe-pop-t'},'Date limite de réponse'));
+  pop.appendChild(inp);
+  pop.appendChild(h('div',{className:'expe-pop-foot'},
+    d.date_limite?h('button',{type:'button',className:'btn-ghost',
+      style:{fontSize:'12px',color:'var(--danger)'},onClick:()=>void enregistrer('')},'Retirer'):null,
+    h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px',marginLeft:'auto'},
+      onClick:fermer},'Annuler'),
+    h('button',{type:'button',className:'btn btn-accent',style:{fontSize:'12px',padding:'6px 14px'},
+      onClick:()=>void enregistrer(inp.value)},'Enregistrer')));
+  document.body.appendChild(pop);
+  const r=ancre.getBoundingClientRect();
+  pop.style.top=(Math.min(r.bottom+6,window.innerHeight-160))+'px';
+  pop.style.left=(Math.min(r.left,window.innerWidth-280))+'px';
+  inp.focus();
+  // La touche Entrée valide : sur un champ date, c'est le geste attendu.
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();void enregistrer(inp.value);}
+    else if(e.key==='Escape'){fermer();}
+  });
+  setTimeout(()=>document.addEventListener('mousedown',dehors,true),0);
+}
+
+function ouvrirEditionDemande(d){
+  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'12200'}});
+  const box=h('div',{className:'expe-devis-modal',style:{maxWidth:'560px'}});
+  const close=()=>{try{ov.remove();}catch(_e){}};
+  const inp=(v,opts)=>h('input',Object.assign({className:'expe-devis-inp',type:'text',
+    value:(v==null?'':String(v))},opts||{}));
+  const cli=inp(d.client,{placeholder:'Nom du client',autocomplete:'off'});
+  const cp=inp(d.code_postal_destination);
+  const poids=inp(d.poids_total_kg,{type:'number',step:'0.1'});
+  const pal=inp(d.nb_palette,{type:'number',step:'1'});
+  const contr=inp(d.contraintes,{placeholder:'Délai, RDV…'});
+  const dl=inp((d.date_limite||'').slice(0,10),{type:'date'});
+  const typeSel=h('select',{className:'expe-devis-inp'},
+    ...['messagerie','ramasse','affretement'].map(v=>{
+      const o=h('option',{value:v},v.charAt(0).toUpperCase()+v.slice(1));
+      if((d.type_envoi||'')===v)o.selected=true; return o;}));
+  const palSel=h('select',{className:'expe-devis-inp'},
+    ...[['','— Non précisé —'],['europe','Palette Europe (EUR/EPAL)'],['perdue','Palette perdue'],
+        ['autre','Autre palette'],['vrac','Sans palette (vrac)']].map(([v,l])=>{
+      const o=h('option',{value:v},l);
+      if((d.type_palette||'')===v)o.selected=true; return o;}));
+  box.appendChild(h('div',{className:'expe-devis-modal-head'},
+    h('span',{style:{fontWeight:'700',fontSize:'15px'}},'Modifier '+devisRefLabel(d)),
+    h('button',{type:'button',className:'btn-ghost expe-devis-close',onClick:close},iconEl('x',16))));
+  box.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'12px'}},
+    "Possible tant qu'aucune demande n'est partie."));
+  box.appendChild(h('div',{className:'expe-devis-grid'},
+    h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Client *',expeClientCombo(cli)),
+    h('label',{className:'expe-devis-label'},'CP destination *',cp),
+    h('label',{className:'expe-devis-label'},'Date limite',dl),
+    h('label',{className:'expe-devis-label'},'Poids (kg)',poids),
+    h('label',{className:'expe-devis-label'},'Palettes',pal),
+    h('label',{className:'expe-devis-label'},"Type d'envoi",typeSel),
+    h('label',{className:'expe-devis-label'},'Type de palette',palSel),
+    h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Contraintes',contr)
+  ));
+  box.appendChild(h('div',{className:'expe-devis-modal-foot'},
+    h('button',{type:'button',className:'btn btn-ghost',onClick:close},'Annuler'),
+    h('button',{type:'button',className:'btn btn-accent',onClick:async()=>{
+      const client=cli.value.trim(), cpv=cp.value.trim();
+      if(!client){showToast('Client obligatoire','danger');return;}
+      if(!cpv){showToast('Code postal obligatoire','danger');return;}
+      try{
+        await api('/api/expe/devis/demandes/'+d.id,{method:'PUT',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            client, code_postal_destination:cpv,
+            poids_total_kg:parseFloat(poids.value)||null,
+            nb_palette:parseFloat(pal.value)||null,
+            type_envoi:typeSel.value, type_palette:palSel.value||null,
+            contraintes:contr.value.trim()||null,
+            date_limite:dl.value||null
+          })});
+        _expeClientsCache=null;
+        showToast('Demande modifiée');
+        close(); await ouvrirDetailDemande(d.id); await chargerDemandes();
+      }catch(e){ showToast(e.message||'Modification impossible','danger'); }
+    }},'Enregistrer')));
+  ov.appendChild(box);
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  document.body.appendChild(ov);
+}
+
+async function copierLienPortail(reponseId){
+  try{
+    const d=await api('/api/expe/devis/reponses/'+reponseId+'/lien-portail');
+    let ok=false;
+    try{ await navigator.clipboard.writeText(d.lien); ok=true; }catch(_e){ ok=false; }
+    if(ok)showToast('Lien portail copié — '+d.email);
+    // Le presse-papier est refusé hors contexte sécurisé et sur certains
+    // navigateurs mobiles : plutôt qu'un échec muet, on affiche le lien pour
+    // qu'il reste sélectionnable à la main.
+    else prompt('Lien portail de '+d.email+' :', d.lien);
+  }catch(e){ showToast(e.message||'Lien indisponible','danger'); }
+}
+
+async function retirerDestinataire(r,demandeId){
+  if(!confirm('Retirer '+(r.nom_transporteur||r.destinataire_email||'ce destinataire')+' de la demande ?'))return;
+  try{
+    await api('/api/expe/devis/reponses/'+r.id,{method:'DELETE'});
+    showToast('Destinataire retiré');
+    await ouvrirDetailDemande(demandeId); await chargerDemandes();
+  }catch(e){ showToast(e.message||'Retrait impossible','danger'); }
+}
+
+function ouvrirRelanceDevis(r,demandeId){
+  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'12200'}});
+  const box=h('div',{className:'expe-devis-modal',style:{maxWidth:'480px'}});
+  const close=()=>{try{ov.remove();}catch(_e){}};
+  const msg=h('textarea',{className:'expe-devis-inp',rows:4,
+    placeholder:'Message à ajouter en tête de la relance (optionnel)',
+    style:{resize:'vertical',minHeight:'88px',fontFamily:'inherit'}});
+  box.appendChild(h('div',{className:'expe-devis-modal-head'},
+    h('span',{style:{fontWeight:'700',fontSize:'15px'}},'Relancer '+escHtml(r.nom_transporteur||'')),
+    h('button',{type:'button',className:'btn-ghost expe-devis-close',onClick:close},iconEl('x',16))));
+  box.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'12px'}},
+    escHtml(r.destinataire_email||'')+
+    (r.relances?' · '+r.relances+' relance'+(r.relances>1?'s':'')+' déjà envoyée'+(r.relances>1?'s':''):'')+
+    (r.last_relance_at?' · dernière le '+(r.last_relance_at||'').slice(0,10):'')));
+  box.appendChild(h('label',{className:'expe-devis-label'},'Message',msg));
+  box.appendChild(h('div',{className:'expe-devis-modal-foot'},
+    h('button',{type:'button',className:'btn btn-ghost',onClick:close},'Annuler'),
+    h('button',{type:'button',className:'btn btn-accent',onClick:async()=>{
+      try{
+        await api('/api/expe/devis/reponses/'+r.id+'/relancer',{method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({message:msg.value.trim()||null})});
+        showToast('Relance envoyée');
+        close(); await ouvrirDetailDemande(demandeId);
+      }catch(e){ showToast(e.message||'Relance impossible','danger'); }
+    }},'Envoyer la relance')));
+  ov.appendChild(box);
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  document.body.appendChild(ov);
+}
+
+async function ouvrirTimelineDevis(reponseId){
+  // Overlay autonome empilé au-dessus du modal de détail : passer par
+  // S.expeDevisModal fermerait le détail, et on perdrait le contexte au
+  // moment précis où on veut le croiser avec la timeline.
+  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'12200'}});
+  const box=h('div',{className:'expe-devis-modal',style:{maxWidth:'560px'}});
+  const body=h('div',{id:'expe-tl-body',style:{color:'var(--muted)',fontSize:'13px'}},'Chargement…');
+  const close=()=>{try{ov.remove();}catch(_e){}};
+  box.appendChild(h('div',{className:'expe-devis-modal-head'},
+    h('span',{style:{fontWeight:'700',fontSize:'15px'}},'Suivi transporteur'),
+    h('button',{type:'button',className:'btn-ghost expe-devis-close',onClick:close},iconEl('x',16))));
+  box.appendChild(body);
+  box.appendChild(h('div',{className:'expe-devis-modal-foot'},
+    h('button',{type:'button',className:'btn btn-ghost',onClick:close},'Fermer')));
+  ov.appendChild(box);
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  document.body.appendChild(ov);
+  try{
+    const d=await api('/api/expe/devis/reponses/'+reponseId+'/evenements');
+    const dest=d.destinataire||{};
+    const evts=d.evenements||[];
+    body.innerHTML='';
+    body.appendChild(h('div',{style:{fontSize:'13px',fontWeight:'700',color:'var(--text)'}},escHtml(dest.nom||'')));
+    body.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'14px'}},escHtml(dest.email||'')));
+    if(!evts.length){
+      body.appendChild(h('div',{style:{color:'var(--muted)',fontSize:'13px'}},'Aucun événement enregistré.'));
+      return;
+    }
+    const tl=h('div',{className:'expe-tl'});
+    evts.forEach(ev=>{
+      const row=h('div',{className:'expe-tl-row'+(ev.fiable?'':' expe-tl-doubt')});
+      row.appendChild(h('div',{className:'expe-tl-dot'}));
+      const main=h('div',{className:'expe-tl-main'});
+      main.appendChild(h('div',{className:'expe-tl-lib'},escHtml(ev.libelle||'')));
+      main.appendChild(h('div',{className:'expe-tl-meta'},escHtml(ev.date||'')+' · '+escHtml(ev.canal||'')));
+      // Un événement RETENU peut aussi porter un motif (proxy de webmail) :
+      // l'info est utile, elle ne doit pas disparaître de la timeline.
+      if(!ev.fiable){
+        main.appendChild(h('div',{className:'expe-tl-motif'},'Écarté — '+escHtml(ev.motif||'signal non fiable')));
+      }else if(ev.motif){
+        main.appendChild(h('div',{className:'expe-tl-motif expe-tl-motif-ok'},escHtml(ev.motif)));
+      }
+      row.appendChild(main);
+      tl.appendChild(row);
+    });
+    body.appendChild(tl);
+    body.appendChild(h('div',{className:'expe-tl-note'},
+      "Une ouverture d'email n'est pas une preuve de lecture : les images sont bloquées par défaut "+
+      "dans Outlook (ouverture invisible) et préchargées par Apple Mail et les filtres antispam "+
+      "(ouverture fictive, écartée ci-dessus). La consultation du portail, elle, est certaine."));
+  }catch(e){
+    body.innerHTML='';
+    body.appendChild(h('div',{style:{color:'var(--danger)',fontSize:'13px'}},escHtml(e.message||'Erreur')));
+  }
+}
+
 function renderExpeDevisModal(){
   const m=S.expeDevisModal;
   if(!m)return null;
   const overlay=h('div',{className:'expe-devis-modal-overlay'});
   overlay.addEventListener('click',e=>{if(e.target===overlay)fermerExpeDevisModal();});
-  const box=h('div',{className:'expe-devis-modal'});
+  // Le détail porte un comparatif à sept colonnes : à 720 px il faut faire
+  // défiler pour atteindre les actions. On l'élargit, sans toucher aux autres
+  // modales qui, elles, n'ont qu'un formulaire à afficher.
+  const box=h('div',{className:'expe-devis-modal'+(m.type==='detail'?' expe-devis-modal--large':'')});
   const closeBtn=h('button',{type:'button',className:'btn-ghost expe-devis-close',onClick:fermerExpeDevisModal},iconEl('x',16));
 
   if(m.type==='nouvelle'){
@@ -1986,13 +2423,20 @@ function renderExpeDevisModal(){
       h('span',{style:{fontWeight:'700',fontSize:'15px'}},'Nouvelle demande de devis'),closeBtn));
     box.appendChild(h('div',{className:'expe-devis-grid'},
       (()=>{
-        const c=h('input',{type:'text',className:'expe-devis-inp',value:f.client||'',placeholder:'Nom du client'});
+        const c=h('input',{type:'text',className:'expe-devis-inp',value:f.client||'',
+          placeholder:'Nom du client',autocomplete:'off'});
         c.addEventListener('input',e=>{m.form.client=e.target.value;});
-        return h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Client *',c);
+        return h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Client *',
+          expeClientCombo(c));
       })(),
       mk('Poids (kg)','poids_total_kg',{type:'number',step:'0.1'}),
       mk('Palettes','nb_palette',{type:'number',step:'1'}),
       mk('CP destination *','code_postal_destination'),
+      (()=>{
+        const c=h('input',{type:'date',className:'expe-devis-inp',value:f.date_limite||''});
+        c.addEventListener('change',e=>{m.form.date_limite=e.target.value;});
+        return h('label',{className:'expe-devis-label'},'Date limite de réponse',c);
+      })(),
       h('label',{className:'expe-devis-label'},'Type d\'envoi',typeSel),
       h('label',{className:'expe-devis-label'},'Type de palette',palSel),
       (()=>{
@@ -2030,7 +2474,7 @@ function renderExpeDevisModal(){
     box.appendChild(h('div',{className:'expe-devis-modal-head'},
       h('span',{style:{fontWeight:'700',fontSize:'15px'}},devisRefLabel(d)+' — '+escHtml(d.code_postal_destination||'')),
       closeBtn));
-    box.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'16px'}},
+    box.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'10px'}},
       (d.client?escHtml(d.client)+' · ':'')+
       (d.poids_total_kg?d.poids_total_kg+' kg · ':'')+
       (d.nb_palette?d.nb_palette+' pal. · ':'')+
@@ -2038,27 +2482,139 @@ function renderExpeDevisModal(){
       (d.type_palette?' · '+escHtml(expePaletteLabel(d.type_palette)):'')+
       (d.contraintes?' · '+escHtml(d.contraintes):'')
     ));
-    // Lien vers la pièce jointe si présente
-    if(d.piece_jointe_path){
-      const a=h('a',{
-        href:'/api/expe/devis/demandes/'+d.id+'/piece-jointe',
-        target:'_blank',
-        rel:'noopener',
-        style:{display:'inline-flex',alignItems:'center',gap:'6px',marginBottom:'14px',fontSize:'13px',color:'var(--accent)',textDecoration:'none'}
-      },'Pièce jointe : '+escHtml(d.piece_jointe_filename||'fichier'));
-      box.appendChild(a);
-    }
-    if(d.statut==='ouverte'&&expeCanWrite()){
-      box.appendChild(h('div',{style:{marginBottom:'16px',display:'flex',gap:'8px',flexWrap:'wrap'}},
-        h('button',{type:'button',className:'btn btn-accent',onClick:()=>void ouvrirModalEnvoi(d.id)},'Envoyer les demandes'),
-        h('button',{type:'button',className:'btn btn-ghost',style:{color:'var(--danger)',borderColor:'var(--danger)',background:'transparent'},
+    // Échéance + compteur de réponses : « il en manque combien » est la
+    // question qu'on se pose en ouvrant le détail, elle ne doit pas obliger à
+    // compter les lignes du tableau.
+    (function(){
+      const bar=h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center',marginBottom:'14px'}});
+      const modifiable=expeCanWrite()&&d.statut==='ouverte';
+      // Une seule représentation de l'échéance, pas deux. Il y avait la
+      // pastille ET un champ date juste en dessous : outre le doublon,
+      // l'`input type=date` déclenche son `change` sur une saisie clavier
+      // partielle, donc une date tapée à la main partait au serveur avant
+      // d'être finie. La pastille devient le point d'entrée, et l'édition
+      // passe par un popover qui ne valide qu'à la demande.
+      const ech=expeDevisEcheanceTag(d)
+        ||(modifiable?h('span',{className:'expe-devis-pill muted'},'Sans date limite'):null);
+      if(ech){
+        if(modifiable){
+          ech.classList.add('expe-pill-edit');
+          ech.title='Modifier la date limite';
+          ech.addEventListener('click',ev=>{ev.stopPropagation();ouvrirEditionDateLimite(d,ech);});
+        }
+        bar.appendChild(ech);
+      }
+      const env=reps.filter(r=>r.sent_at).length;
+      const rec=reps.filter(r=>r.prix!=null).length;
+      if(env){
+        bar.appendChild(h('span',{className:'expe-devis-pill '+(rec>=env?'ok':'accent')},
+          rec+' / '+env+' réponse'+(env>1?'s':'')+(rec>=env?' — toutes reçues':'')));
+      }
+      if(bar.childElementCount)box.appendChild(bar);
+    })();
+
+    // Pièces jointes — liste, ajout, suppression. Auparavant une seule
+    // colonne : le second fichier chassait le premier sans le dire.
+    (function(){
+      const pjs=m.pieces_jointes||[];
+      const sifa=pjs.filter(p=>p.origine==='sifa');
+      const trp=pjs.filter(p=>p.origine==='transporteur');
+      const wrap=h('div',{className:'expe-devis-pj'});
+      const lignePJ=(p,supprimable)=>h('div',{className:'expe-devis-pj-item'},
+        h('a',{href:'/api/expe/devis/pieces-jointes/'+p.id,target:'_blank',rel:'noopener',
+          className:'expe-devis-pj-lien'},iconEl('paperclip',12),escHtml(p.filename||'fichier')),
+        p.taille_octets?h('span',{className:'expe-devis-pj-taille'},
+          Math.max(1,Math.round(p.taille_octets/1024))+' Ko'):null,
+        (supprimable&&expeCanWrite())?h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--bad',
+          style:{width:'22px',height:'22px'},title:'Supprimer',
+          onClick:async()=>{
+            if(!confirm('Supprimer '+(p.filename||'ce fichier')+' ?'))return;
+            try{
+              await api('/api/expe/devis/pieces-jointes/'+p.id,{method:'DELETE'});
+              showToast('Pièce jointe supprimée'); await ouvrirDetailDemande(d.id);
+            }catch(e){ showToast(e.message||'Erreur','danger'); }
+          }},iconEl('x',11)):null
+      );
+      if(sifa.length||d.statut==='ouverte'){
+        wrap.appendChild(h('div',{className:'expe-devis-pj-titre'},'Documents joints à la demande'));
+        sifa.forEach(p=>wrap.appendChild(lignePJ(p,d.statut==='ouverte')));
+        if(!sifa.length)wrap.appendChild(h('div',{className:'expe-devis-pj-vide'},'Aucun document.'));
+        if(expeCanWrite()&&d.statut==='ouverte'){
+          const fi=h('input',{type:'file',multiple:true,style:{display:'none'}});
+          fi.addEventListener('change',async e=>{
+            const fs=Array.from(e.target.files||[]);
+            if(!fs.length)return;
+            const fd=new FormData();
+            fs.forEach(f2=>fd.append('files',f2));
+            try{
+              const r=await fetch('/api/expe/devis/demandes/'+d.id+'/pieces-jointes',
+                {method:'POST',credentials:'include',body:fd});
+              if(!r.ok)throw new Error(await r.text().catch(()=>String(r.status)));
+              showToast(fs.length+' fichier(s) ajouté(s)');
+              await ouvrirDetailDemande(d.id); await chargerDemandes();
+            }catch(err){ showToast(err.message||'Envoi impossible','danger'); }
+          });
+          wrap.appendChild(h('button',{type:'button',className:'btn-ghost',
+            style:{fontSize:'12px',padding:'4px 10px',marginTop:'6px'},
+            onClick:()=>fi.click()},iconEl('plus',12),' Ajouter des fichiers'));
+          wrap.appendChild(fi);
+        }
+      }
+      if(trp.length){
+        wrap.appendChild(h('div',{className:'expe-devis-pj-titre',style:{marginTop:'10px'}},
+          'Fichiers déposés par les transporteurs'));
+        trp.forEach(p=>{
+          const rep=reps.find(r=>String(r.id)===String(p.reponse_id));
+          const l=lignePJ(p,false);
+          if(rep)l.appendChild(h('span',{className:'expe-devis-pj-taille'},'— '+escHtml(rep.nom_transporteur||'')));
+          wrap.appendChild(l);
+        });
+      }
+      if(wrap.childElementCount)box.appendChild(wrap);
+    })();
+
+    (function(){
+      const barre=h('div',{style:{marginBottom:'16px',display:'flex',gap:'8px',flexWrap:'wrap'}});
+      if(d.statut==='ouverte'&&expeCanWrite()){
+        barre.appendChild(h('button',{type:'button',className:'btn btn-accent',
+          onClick:()=>void ouvrirModalEnvoi(d.id)},'Envoyer les demandes'));
+      }
+      if(reps.length){
+        barre.appendChild(h('button',{type:'button',className:'btn btn-ghost',
+          title:'Comparatif imprimable (nouvelle fenêtre)',
+          onClick:()=>window.open('/api/expe/devis/demandes/'+d.id+'/imprimer','_blank','noopener')
+        },iconEl('printer',12),' Imprimer le comparatif'));
+      }
+      if(expeCanWrite()){
+        barre.appendChild(h('button',{type:'button',className:'btn btn-ghost',
+          title:'Créer une nouvelle demande à partir de celle-ci',
+          onClick:()=>void dupliquerDemande(d.id)},iconEl('copy',12),' Dupliquer'));
+      }
+      // Correction de l'entête, tant qu'aucun email n'est parti. Après envoi
+      // les transporteurs ont chiffré sur ces données : le serveur refuse, et
+      // le bouton disparaît pour ne pas promettre ce qui sera refusé.
+      if(d.statut==='ouverte'&&expeCanWrite()&&!reps.some(r=>r.sent_at)){
+        barre.appendChild(h('button',{type:'button',className:'btn btn-ghost',
+          title:"Corriger l'entête de la demande",
+          onClick:()=>ouvrirEditionDemande(d)},iconEl('edit',12),' Modifier'));
+      }
+      if(d.statut==='ouverte'&&expeCanWrite()){
+        barre.appendChild(h('button',{type:'button',className:'btn btn-ghost',
+          style:{color:'var(--danger)',borderColor:'var(--danger)',background:'transparent'},
           title:'Clôturer cette demande (déplace dans l’historique)',
-          onClick:()=>void cloturerDemande(d.id)},iconEl('check-circle',12),' Clôturer')
-      ));
-    }
+          onClick:()=>void cloturerDemande(d.id)},iconEl('check-circle',12),' Clôturer'));
+      }
+      if(expeCanWrite()&&!d.deleted_at){
+        barre.appendChild(h('button',{type:'button',className:'btn-ghost',
+          style:{fontSize:'12px',color:'var(--muted)',marginLeft:'auto'},
+          title:'Mettre à la corbeille (restaurable)',
+          onClick:()=>void supprimerDemandeDevis(d.id)},iconEl('x',12),' Corbeille'));
+      }
+      if(barre.childElementCount)box.appendChild(barre);
+    })();
     const {bestPrix,bestDelai}=expeDevisMeilleursReponses(reps);
     const head=h('tr',null,
-      h('th',null,'Transporteur'),h('th',null,'Statut'),h('th',null,'Prix HT'),
+      h('th',null,'Transporteur'),h('th',null,'Statut'),h('th',null,'Engagement'),h('th',null,'Prix HT'),
       h('th',null,'Délai'),h('th',null,'Commentaire'),h('th',null,'')
     );
     const body=reps.length?reps.map(r=>{
@@ -2066,6 +2622,23 @@ function renderExpeDevisModal(){
       const acts=[];
       if(r.statut==='recue'&&expeCanWrite())acts.push(h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px',color:'var(--success)'},onClick:()=>void retenirReponse(r.id,d.id)},'Retenir'));
       if((r.statut==='envoyee'||r.statut==='echec')&&expeCanWrite())acts.push(h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px'},onClick:()=>ouvrirSaisieReponse(r.id,d.id)},'Saisir réponse'));
+      if(r.sent_at)acts.push(h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px',padding:'4px 6px'},
+        title:"Suivi d'engagement",onClick:()=>void ouvrirTimelineDevis(r.id)},iconEl('activity',13)));
+      const silencieux=(r.statut==='envoyee'||r.statut==='ouvert'||r.statut==='echec');
+      if(d.statut==='ouverte'&&silencieux&&r.sent_at&&expeCanWrite()){
+        acts.push(h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px',padding:'4px 6px'},
+          title:'Relancer'+(r.relances?' ('+r.relances+' déjà envoyée'+(r.relances>1?'s':'')+')':''),
+          onClick:()=>ouvrirRelanceDevis(r,d.id)},iconEl('mail',13)));
+      }
+      if(r.sent_at)acts.push(h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px',padding:'4px 6px'},
+        title:'Copier le lien portail de ce transporteur',
+        onClick:()=>void copierLienPortail(r.id)},iconEl('link',13)));
+      if(d.statut==='ouverte'&&r.statut!=='recue'&&r.statut!=='retenue'&&expeCanWrite()){
+        acts.push(h('button',{type:'button',className:'btn-ghost',
+          style:{fontSize:'12px',padding:'4px 6px',color:'var(--danger)'},
+          title:'Retirer ce destinataire de la demande',
+          onClick:()=>void retirerDestinataire(r,d.id)},iconEl('x',13)));
+      }
       const prixTxt=r.prix!=null?Number(r.prix).toFixed(2)+' €':'—';
       const delTxt=r.delai_jours!=null?'J+'+r.delai_jours:'—';
       const isBestPrix=r.prix!=null&&bestPrix!=null&&Number(r.prix)===bestPrix;
@@ -2088,14 +2661,15 @@ function renderExpeDevisModal(){
       return h('tr',null,
         h('td',{style:{fontWeight:'600'}},escHtml(r.nom_transporteur||'—')),
         h('td',null,h('span',{style:{color:sl.c,textDecoration:sl.strike?'line-through':'none'}},sl.t)),
+        h('td',null,expeEngagementCell(r)),
         h('td',null,expeDevisCellValeur(prixTxt,isBestPrix)),
         h('td',null,expeDevisCellValeur(delTxt,isBestDelai)),
         h('td',{style:{fontSize:'12px',color:'var(--text2)'}},...commentParts),
         h('td',null,...acts)
       );
-    }):[h('tr',null,h('td',{colSpan:6,style:{color:'var(--muted)',fontStyle:'italic'}},'Aucune réponse.'))];
-    box.appendChild(h('div',{className:'expe-devis-table-wrap'},
-      h('table',{className:'table-std'},h('thead',null,head),h('tbody',null,...body))
+    }):[h('tr',null,h('td',{colSpan:7,style:{color:'var(--muted)',fontStyle:'italic'}},'Aucune réponse.'))];
+    box.appendChild(h('div',{className:'expe-devis-table-wrap expe-devis-comp-wrap'},
+      h('table',{className:'table-std expe-devis-comp'},h('thead',null,head),h('tbody',null,...body))
     ));
   }else if(m.type==='envoi'){
     const trps=(T.list||[]).filter(t=>{
@@ -2314,13 +2888,15 @@ function renderExpeDevisSection(){
   const filtre=S.devis_filtre||'ouverte';
   const emptyMsg=filtre==='historique'
     ? 'Aucune demande clôturée.'
-    : (filtre==='toutes' ? 'Aucune demande enregistrée.' : 'Aucune demande en cours.');
+    : (filtre==='corbeille' ? 'La corbeille est vide.'
+      : (filtre==='toutes' ? 'Aucune demande enregistrée.' : 'Aucune demande en cours.'));
   const head=h('div',{className:'expe-devis-page-head'},
     expeCanWrite()?h('button',{type:'button',className:'btn btn-accent',onClick:()=>ouvrirModalNouvelleDemande(null)},iconEl('plus',14),' Nouvelle demande'):null,
     h('div',{className:'expe-devis-filtre'},
-      h('button',{type:'button',className:'btn-ghost'+(filtre==='ouverte'?' active-filtre':''),onClick:()=>{S.devis_filtre='ouverte';void chargerDemandes();}},'Ouvertes'),
-      h('button',{type:'button',className:'btn-ghost'+(filtre==='historique'?' active-filtre':''),onClick:()=>{S.devis_filtre='historique';void chargerDemandes();}},'Historique'),
-      h('button',{type:'button',className:'btn-ghost'+(filtre==='toutes'?' active-filtre':''),onClick:()=>{S.devis_filtre='toutes';void chargerDemandes();}},'Toutes')
+      ...[['ouverte','Ouvertes'],['historique','Historique'],['toutes','Toutes'],['corbeille','Corbeille']]
+        .map(([k,lbl])=>h('button',{type:'button',
+          className:'btn-ghost'+(filtre===k?' active-filtre':'')+(k==='corbeille'?' expe-devis-filtre--trash':''),
+          onClick:()=>{S.devis_filtre=k;void chargerDemandes();}},lbl))
     )
   );
   let list;
@@ -2330,24 +2906,51 @@ function renderExpeDevisSection(){
     list=h('div',{className:'expe-devis-cards'},
       ...demandes.map(d=>{
         const pills=[];
+        const ech=expeDevisEcheanceTag(d);
+        if(ech)pills.push(ech);
         const suivi=expeDevisSuiviTag(d);
         if(suivi)pills.push(suivi);
-        if(d.statut==='cloturee')pills.push(h('span',{className:'expe-devis-pill muted'},'Clôturée'));
+        if(d.nb_pieces_jointes)pills.push(h('span',{className:'expe-devis-pill muted expe-devis-pill-pj',
+          title:d.nb_pieces_jointes+' pièce(s) jointe(s)'},
+          iconEl('paperclip',11),String(d.nb_pieces_jointes)));
+        if(d.deleted_at)pills.push(h('span',{className:'expe-devis-pill danger'},'Corbeille'));
+        else if(d.statut==='cloturee')pills.push(h('span',{className:'expe-devis-pill muted'},'Clôturée'));
         const actions=[];
-        if(d.statut==='ouverte'&&expeCanWrite()){
-          actions.push(h('button',{
-            type:'button',
-            className:'btn-ghost',
+        if(d.deleted_at&&expeCanWrite()){
+          // Deux gestes pour détruire : restaurer est à portée de clic,
+          // purger demande d'être venu jusqu'à la corbeille.
+          actions.push(h('button',{type:'button',className:'btn-ghost',
+            style:{fontSize:'12px',padding:'4px 8px'},title:'Restaurer cette demande',
+            onClick:e=>void restaurerDemande(d.id,e)},iconEl('rotate-ccw',12),' Restaurer'));
+          actions.push(h('button',{type:'button',className:'btn-ghost',
             style:{fontSize:'12px',color:'var(--danger)',padding:'4px 8px'},
-            title:'Clôturer cette demande (déplace dans l’historique)',
-            onClick:e=>void cloturerDemande(d.id,e)
-          },iconEl('check-circle',12),' Clôturer'));
+            title:'Supprimer définitivement (fichiers compris)',
+            onClick:e=>void purgerDemande(d.id,e)},iconEl('x',12),' Purger'));
+        }else if(expeCanWrite()){
+          actions.push(h('button',{type:'button',className:'btn-ghost',
+            style:{fontSize:'12px',padding:'4px 8px'},title:'Dupliquer cette demande',
+            onClick:e=>void dupliquerDemande(d.id,e)},iconEl('copy',12)));
+          if(d.statut==='ouverte'){
+            actions.push(h('button',{
+              type:'button',
+              className:'btn-ghost',
+              style:{fontSize:'12px',color:'var(--danger)',padding:'4px 8px'},
+              title:'Clôturer cette demande (déplace dans l’historique)',
+              onClick:e=>void cloturerDemande(d.id,e)
+            },iconEl('check-circle',12),' Clôturer'));
+          }
         }
         const card=h('div',{className:'expe-devis-card',onClick:()=>void ouvrirDetailDemande(d.id)},
           h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'12px'}},
             h('div',null,
               h('div',{style:{fontSize:'13px',fontWeight:'700',color:'var(--text)',marginBottom:'4px'}},
                 devisRefLabel(d)+' — '+escHtml(d.code_postal_destination||'CP inconnu')+' — '+escHtml(d.type_envoi||'')),
+              // Le client d'abord : c'est par lui qu'on retrouve une demande de
+              // memoire, pas par son numero. Ligne dediee et non fondue dans la
+              // ligne meta grise, qui elle ne porte que du gabarit.
+              d.client?h('div',{style:{fontSize:'12px',fontWeight:'600',color:'var(--text2)',marginBottom:'3px',
+                display:'flex',alignItems:'center',gap:'5px'}},
+                iconEl('users',11),escHtml(d.client)):null,
               h('div',{style:{fontSize:'12px',color:'var(--muted)'}},
                 (d.poids_total_kg?d.poids_total_kg+' kg ':'')+
                 (d.nb_palette?d.nb_palette+' pal. ':'')+
@@ -2409,6 +3012,30 @@ EXPE_DEVIS_CSS = r"""
   display:flex;align-items:center;justify-content:center;padding:16px}
 .expe-devis-modal{width:100%;max-width:720px;max-height:min(92vh,900px);overflow:auto;background:var(--card);
   border:1px solid var(--border);border-radius:12px;padding:18px}
+.expe-devis-modal--large{max-width:min(1180px,96vw)}
+/* Comparatif : les deux colonnes qui portent le sens restent en place quand
+   le tableau défile horizontalement. Sans la première, on lit « pas
+   d'ouverture détectée » sans savoir de QUI il s'agit ; sans la dernière,
+   les actions sortent de l'écran — c'est exactement ce qui arrivait. */
+.expe-devis-comp th:first-child,.expe-devis-comp td:first-child{
+  position:sticky;left:0;z-index:2;background:var(--card)}
+.expe-devis-comp th:last-child,.expe-devis-comp td:last-child{
+  position:sticky;right:0;z-index:2;background:var(--card);white-space:nowrap;text-align:right}
+.expe-devis-comp th:first-child,.expe-devis-comp th:last-child{z-index:3}
+/* Filet d'ombre : signale que le contenu passe DESSOUS la colonne figée,
+   sinon la superposition se lit comme un défaut d'alignement. */
+.expe-devis-comp td:first-child::after,.expe-devis-comp th:first-child::after{
+  content:'';position:absolute;top:0;right:0;bottom:0;width:6px;pointer-events:none;
+  background:linear-gradient(to right,color-mix(in srgb,var(--bg) 45%,transparent),transparent)}
+.expe-devis-comp td:last-child::before,.expe-devis-comp th:last-child::before{
+  content:'';position:absolute;top:0;left:0;bottom:0;width:6px;pointer-events:none;
+  background:linear-gradient(to left,color-mix(in srgb,var(--bg) 45%,transparent),transparent)}
+/* Le hover de ligne repeint les cellules ordinaires : les cellules figées
+   doivent suivre, sinon la ligne survolée apparaît coupée en trois. */
+.expe-devis-comp tr:hover td:first-child,.expe-devis-comp tr:hover td:last-child{
+  background:color-mix(in srgb,var(--accent-bg) 100%,var(--card))}
+.expe-devis-comp td:last-child .btn-ghost{padding:4px 7px}
+.expe-devis-comp td:last-child>*{margin-left:3px}
 .expe-devis-modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;gap:12px}
 .expe-devis-close{padding:6px 8px}
 .expe-devis-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
@@ -2421,6 +3048,10 @@ EXPE_DEVIS_CSS = r"""
 .expe-devis-modal-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
 .expe-devis-page-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px}
 .expe-devis-filtre{display:flex;gap:6px}
+/* Fond opaque et non transparent : posés sur le fond pointillé de la page,
+   ces boutons se lisaient comme du texte flottant plutôt que comme un
+   groupe de bascules. */
+.expe-devis-filtre .btn-ghost{background:var(--card)}
 .expe-devis-filtre .active-filtre{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
 .expe-devis-cards{display:flex;flex-direction:column;gap:8px}
 .expe-devis-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 20px;cursor:pointer;
@@ -2430,8 +3061,66 @@ EXPE_DEVIS_CSS = r"""
 .expe-devis-pill.accent{background:var(--accent-bg);color:var(--accent)}
 .expe-devis-pill.muted{background:color-mix(in srgb,var(--muted) 12%,transparent);color:var(--muted)}
 .expe-devis-pill.ok{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
+.expe-devis-pill.warn{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.expe-devis-pill.danger{background:color-mix(in srgb,var(--danger) 16%,transparent);color:var(--danger)}
+.expe-devis-filtre--trash.active-filtre{background:color-mix(in srgb,var(--danger) 12%,transparent);
+  color:var(--danger);border-color:var(--danger)}
+/* Pièces jointes d'une demande */
+.expe-devis-pj{background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  padding:10px 14px;margin-bottom:14px}
+.expe-devis-pj-titre{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--muted);margin-bottom:6px}
+.expe-devis-pj-item{display:flex;align-items:center;gap:8px;padding:3px 0}
+.expe-devis-pj-lien{font-size:13px;color:var(--accent);text-decoration:none}
+.expe-devis-pj-lien:hover{text-decoration:underline}
+.expe-devis-pj-taille{font-size:11px;color:var(--muted)}
+.expe-devis-pj-vide{font-size:12px;color:var(--muted);font-style:italic}
+.expe-devis-pj-lien{display:inline-flex;align-items:center;gap:6px}
+.expe-devis-pill-pj{display:inline-flex;align-items:center;gap:4px}
+/* Combobox client — le menu du <datalist> natif ignore le thème MySifa.
+   Menu en position:fixed : le modal a overflow:auto, un menu en flux absolu
+   s'y ferait couper au bord. */
+.expe-combo{position:relative;width:100%}
+.expe-combo-menu{position:fixed;z-index:12400;overflow-y:auto;background:var(--card);
+  border:1px solid var(--border);border-radius:10px;padding:4px;
+  box-shadow:0 12px 32px color-mix(in srgb,var(--bg) 60%,transparent)}
+.expe-combo-item{padding:8px 12px;border-radius:7px;font-size:13px;color:var(--text);
+  cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.expe-combo-item.on{background:var(--accent-bg);color:var(--accent)}
+/* Popover d'édition rapide (date limite) */
+.expe-pop{position:fixed;z-index:12400;min-width:250px;background:var(--card);
+  border:1px solid var(--border);border-radius:12px;padding:14px;
+  box-shadow:0 16px 40px color-mix(in srgb,var(--bg) 65%,transparent)}
+.expe-pop-t{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--muted);margin-bottom:8px}
+.expe-pop-foot{display:flex;gap:6px;align-items:center;margin-top:12px}
+.expe-pill-edit{cursor:pointer}
+.expe-pill-edit:hover{outline:1px solid var(--accent);outline-offset:1px}
 .expe-devis-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px}
 .expe-devis-table-wrap table.table-std{margin:0;font-size:13px}
+/* Engagement transporteur — chips 11px, un signal par chip */
+.expe-eng-wrap{display:flex;flex-direction:column;gap:3px;align-items:flex-start}
+.expe-eng-chip{display:inline-block;font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px;
+  white-space:nowrap;line-height:1.5}
+.expe-eng-on{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
+.expe-eng-strong{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
+.expe-eng-doubt{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
+.expe-eng-off{background:color-mix(in srgb,var(--muted) 12%,transparent);color:var(--muted)}
+.expe-eng-when{font-size:10px;color:var(--muted)}
+/* Timeline d'engagement */
+.expe-tl{display:flex;flex-direction:column}
+.expe-tl-row{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
+.expe-tl-row:last-child{border-bottom:none}
+.expe-tl-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:5px;flex-shrink:0}
+.expe-tl-main{flex:1;min-width:0}
+.expe-tl-doubt .expe-tl-dot{background:var(--muted)}
+.expe-tl-doubt .expe-tl-lib{color:var(--muted)}
+.expe-tl-lib{font-size:13px;font-weight:600;color:var(--text)}
+.expe-tl-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.expe-tl-motif{font-size:11px;color:var(--warn);margin-top:3px}
+.expe-tl-motif-ok{color:var(--muted)}
+.expe-tl-note{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;
+  color:var(--muted);line-height:1.6}
 .expe-prospects-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--card)}
 .expe-prospects-table-wrap table.expe-prospects-table{margin:0;font-size:13px}
 .expe-prospects-table-wrap .expe-prospects-table th{
@@ -3017,6 +3706,34 @@ EXPE_MAIN_CSS = r"""
 .expe-pal-eur-act:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
 .expe-pal-eur-act--ok:hover{border-color:var(--success,#34d399);color:var(--success,#34d399);background:rgba(52,211,153,.12)}
 .expe-pal-eur-act--bad:hover{border-color:var(--danger);color:var(--danger);background:rgba(248,113,113,.12)}
+/* Comptes courants transporteurs + relevé de compte */
+.expe-pal-eur-trp-table td,.expe-pal-eur-journal td{padding:9px 12px;font-size:13px}
+.expe-pal-eur-trp-row--debt td{background:color-mix(in srgb,var(--warn) 5%,transparent)}
+.expe-pal-eur-row-report td{background:color-mix(in srgb,var(--muted) 8%,transparent);font-style:italic}
+.expe-pal-eur-solde-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;
+  margin-bottom:14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.5px}
+.expe-pal-eur-solde-val{font-size:22px;font-family:monospace;font-weight:800;color:var(--text);
+  text-transform:none;letter-spacing:0}
+.expe-pal-eur-solde-val--debt{color:var(--warn)}
+.expe-pal-eur-trp-row{cursor:pointer}
+.expe-pal-eur-trp-row:hover td{background:var(--accent-bg)}
+.expe-pal-eur-row-mois td{background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--accent);
+  font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.7px;padding:7px 12px}
+.expe-pal-eur-row-total td{background:color-mix(in srgb,var(--muted) 10%,transparent);font-weight:800;
+  border-top:1px solid var(--border);font-size:12px}
+.expe-pal-eur-detail{font-size:11px;color:var(--muted);margin-top:2px}
+.expe-pal-nat{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;white-space:nowrap}
+.expe-pal-nat--out{background:color-mix(in srgb,var(--warn) 15%,transparent);color:var(--warn)}
+.expe-pal-nat--ok{background:color-mix(in srgb,var(--success) 15%,transparent);color:var(--success)}
+.expe-pal-nat--bad{background:color-mix(in srgb,var(--danger) 15%,transparent);color:var(--danger)}
+.expe-pal-nat--neutral{background:color-mix(in srgb,var(--muted) 14%,transparent);color:var(--muted)}
+/* En-têtes de tableau triables */
+.expe-sort-th{cursor:pointer;user-select:none;white-space:nowrap}
+.expe-sort-th:hover{color:var(--accent)}
+.expe-sort-th--on{color:var(--accent)}
+.expe-sort-arrow{margin-left:5px;font-size:9px;opacity:.55}
+.expe-sort-th--on .expe-sort-arrow{opacity:1}
 .expe-hist-table td{padding:6px 10px;max-width:140px}
 .expe-hist-table td:nth-child(1){max-width:110px} /* Validé le */
 .expe-hist-table td:nth-child(2){max-width:120px} /* Par */
@@ -4005,28 +4722,368 @@ function _expePalEuropeStatutBadge(s){
   return h('span',{className:cls},lbl);
 }
 
+// ── Palettes Europe : compte courant transporteur ──────────────────
+//
+// Le suivi métier réel est un compte courant PAR TRANSPORTEUR, pas par
+// client : c'est le transporteur qui emporte les palettes et à qui on les
+// réclame. Le récap client reste accessible — il sert à identifier d'où part
+// la fuite — mais il ne peut pas porter un solde, faute de contrepartie
+// (un client ne « rend » rien, il n'a jamais eu de compte ouvert chez nous).
+//
+//   solde = report + données − rendues − perdues
+
+function _expePalNum(v){ const n=Number(v); return isFinite(n)?n:0; }
+
+function _expePalFmt(v){
+  const n=_expePalNum(v);
+  return (Math.round(n*100)/100).toLocaleString('fr-FR');
+}
+
+const EXPE_PAL_SENS_LABELS = {
+  report:"Solde d'ouverture",
+  donnee:'Palettes remises',
+  rendue:'Restitution'
+};
+
+const EXPE_PAL_MOIS = ['janvier','février','mars','avril','mai','juin',
+  'juillet','août','septembre','octobre','novembre','décembre'];
+
+function _expePalMoisLabel(ym){
+  if(!ym||ym.length<7) return 'Sans date';
+  const m=parseInt(ym.slice(5,7),10);
+  const lbl=EXPE_PAL_MOIS[m-1]||ym.slice(5,7);
+  return lbl.charAt(0).toUpperCase()+lbl.slice(1)+' '+ym.slice(0,4);
+}
+
+// Distinguo visuel : une restitution et un départ ne se lisent pas de la même
+// façon dans une colonne de dates. La pastille porte le sens du mouvement,
+// pas son statut — le statut est dans la ligne de détail.
+function _expePalNatureTag(l){
+  if(l.type==='depart'){
+    const perdue=_expePalNum(l.perdues)>0;
+    const rendue=_expePalNum(l.rendues)>0;
+    const cls=perdue?'expe-pal-nat--bad':(rendue?'expe-pal-nat--ok':'expe-pal-nat--out');
+    return h('span',{className:'expe-pal-nat '+cls},perdue?'Départ · perdue':(rendue?'Départ · rendue':'Départ'));
+  }
+  const map={report:'expe-pal-nat--neutral',donnee:'expe-pal-nat--out',rendue:'expe-pal-nat--ok'};
+  return h('span',{className:'expe-pal-nat '+(map[l.sens]||'expe-pal-nat--neutral')},
+    EXPE_PAL_SENS_LABELS[l.sens]||l.sens||'Mouvement');
+}
+
+async function loadExpePalContestations(){
+  if(S.app!=='expe')return;
+  try{
+    const st = S.expePalContestStatut||'ouverte';
+    const data = await api('/api/expe/palettes-europe/contestations'+(st?'?statut='+encodeURIComponent(st):''));
+    set({expePalContestations:data});
+  }catch(e){
+    toast(e.message||'Chargement des contestations impossible','error');
+  }
+}
+
+function _expePalTrpParams(t){
+  const p = new URLSearchParams();
+  if(t.transporteur_id!=null) p.set('transporteur_id', String(t.transporteur_id));
+  else p.set('transporteur', t.transporteur||'');
+  return p.toString();
+}
+
+async function ouvrirJournalPalettes(t){
+  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'12200'}});
+  const box=h('div',{className:'expe-devis-modal',style:{maxWidth:'900px'}});
+  const body=h('div',{style:{color:'var(--muted)',fontSize:'13px'}},'Chargement…');
+  const close=()=>{try{ov.remove();}catch(_e){}};
+  box.appendChild(h('div',{className:'expe-devis-modal-head'},
+    h('div',null,
+      h('div',{style:{fontWeight:'700',fontSize:'15px'}},'Relevé de compte — '+escHtml(t.transporteur||'—')),
+      h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'2px'}},'Palettes Europe · solde recalculé à chaque ligne')),
+    h('button',{type:'button',className:'btn-ghost expe-devis-close',onClick:close},iconEl('x',16))));
+  box.appendChild(body);
+  box.appendChild(h('div',{className:'expe-devis-modal-foot'},
+    expeCanWrite()?h('button',{type:'button',className:'btn btn-ghost',
+      onClick:()=>{close(); ouvrirSaisieMouvementPalettes(t);}},iconEl('plus',13),' Saisir un mouvement'):null,
+    h('button',{type:'button',className:'btn btn-ghost',onClick:close},'Fermer')));
+  ov.appendChild(box);
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  document.body.appendChild(ov);
+  try{
+    const d = await api('/api/expe/palettes-europe/journal?'+_expePalTrpParams(t));
+    const lignes = d.lignes||[];
+    body.innerHTML='';
+    body.appendChild(h('div',{className:'expe-pal-eur-solde-head'},
+      h('span',null,'Solde actuel'),
+      h('strong',{className:'expe-pal-eur-solde-val'+(_expePalNum(d.solde)>0?' expe-pal-eur-solde-val--debt':'')},
+        _expePalFmt(d.solde)+' pal.')
+    ));
+    if(!lignes.length){
+      body.appendChild(h('div',{style:{padding:'18px',color:'var(--muted)',textAlign:'center'}},'Aucun mouvement enregistré.'));
+    }else{
+      const supprimerMvt=async(id)=>{
+        if(!confirm('Supprimer ce mouvement ? Le solde sera recalculé.'))return;
+        try{
+          await api('/api/expe/palettes-europe/mouvements/'+id,{method:'DELETE'});
+          toast('Mouvement supprimé');
+          close(); await loadExpePalettesEurope(); ouvrirJournalPalettes(t);
+        }catch(e){ toast(e.message||'Suppression impossible','error'); }
+      };
+      const head=h('tr',null,
+        h('th',null,'Date'),h('th',null,'Nature'),h('th',null,'Client / libellé'),
+        h('th',null,'Réf.'),h('th',{style:{textAlign:'right'}},'Données'),
+        h('th',{style:{textAlign:'right'}},'Rendues'),h('th',{style:{textAlign:'right'}},'Solde'),h('th',null,''));
+      const corps=[];
+      // Le relevé est découpé par mois, comme les onglets de l'Excel : c'est
+      // l'unité à laquelle on rapproche les comptes avec un transporteur. Le
+      // report d'ouverture reste hors mois — il n'appartient à aucun d'eux.
+      let moisCourant=null, mDon=0, mRen=0, mSolde=0;
+      const cloreMois=()=>{
+        if(moisCourant===null)return;
+        corps.push(h('tr',{className:'expe-pal-eur-row-total'},
+          h('td',{colSpan:4},'Total '+_expePalMoisLabel(moisCourant)),
+          h('td',{style:{textAlign:'right',fontFamily:'monospace'}},mDon?_expePalFmt(mDon):'—'),
+          h('td',{style:{textAlign:'right',fontFamily:'monospace'}},mRen?_expePalFmt(mRen):'—'),
+          h('td',{style:{textAlign:'right',fontFamily:'monospace'}},_expePalFmt(mSolde)),
+          h('td',null,'')));
+        moisCourant=null; mDon=0; mRen=0;
+      };
+      lignes.forEach(l=>{
+        const rendu=_expePalNum(l.rendues)+_expePalNum(l.perdues);
+        if(l.sens==='report'){
+          cloreMois();
+          corps.push(h('tr',{className:'expe-pal-eur-row-report'},
+            h('td',{style:{whiteSpace:'nowrap'}},l.date||'—'),
+            h('td',null,_expePalNatureTag(l)),
+            h('td',{colSpan:2},'Antériorité reprise du suivi précédent'),
+            h('td',{style:{textAlign:'right',fontFamily:'monospace'}},_expePalFmt(l.donnees)),
+            h('td',null,''),
+            h('td',{style:{textAlign:'right',fontFamily:'monospace',fontWeight:'700'}},_expePalFmt(l.solde)),
+            h('td',{style:{textAlign:'right'}},expeCanWrite()?h('button',{type:'button',
+              className:'expe-pal-eur-act expe-pal-eur-act--bad',title:'Supprimer ce mouvement',
+              onClick:()=>void supprimerMvt(l.id)},iconEl('x',12)):null)));
+          mSolde=_expePalNum(l.solde);
+          return;
+        }
+        const mois=(l.date||'').slice(0,7);
+        if(mois!==moisCourant){
+          cloreMois();
+          moisCourant=mois;
+          corps.push(h('tr',{className:'expe-pal-eur-row-mois'},
+            h('td',{colSpan:8},_expePalMoisLabel(mois))));
+        }
+        mDon+=_expePalNum(l.donnees); mRen+=rendu; mSolde=_expePalNum(l.solde);
+        // Détail sous le libellé : statut de la palette, date de retour, note.
+        // Sans lui, deux lignes « SATO 4 pal. » à quinze jours d'écart sont
+        // indiscernables, et c'est justement ce qu'on cherche à trancher au
+        // moment de rapprocher les comptes.
+        const details=[];
+        if(l.type==='depart'){
+          details.push(_expePalEuropeStatutLabel(l.statut));
+          if(l.date_retour) details.push('retour '+l.date_retour);
+        }
+        if(l.note) details.push(l.note);
+        corps.push(h('tr',null,
+          h('td',{style:{whiteSpace:'nowrap'}},l.date||'—'),
+          h('td',null,_expePalNatureTag(l)),
+          h('td',null,
+            h('div',{style:{fontWeight:'600'}},escHtml(l.libelle||'—')),
+            details.length?h('div',{className:'expe-pal-eur-detail'},escHtml(details.join(' · '))):null),
+          h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},escHtml(l.reference||'—')),
+          h('td',{style:{textAlign:'right',fontFamily:'monospace'}},l.donnees?_expePalFmt(l.donnees):''),
+          h('td',{style:{textAlign:'right',fontFamily:'monospace',color:'var(--success)'}},rendu?_expePalFmt(rendu):''),
+          h('td',{style:{textAlign:'right',fontFamily:'monospace',fontWeight:'700'}},_expePalFmt(l.solde)),
+          h('td',{style:{textAlign:'right'}},
+            (l.type==='mouvement'&&expeCanWrite())?h('button',{type:'button',
+              className:'expe-pal-eur-act expe-pal-eur-act--bad',title:'Supprimer ce mouvement',
+              onClick:()=>void supprimerMvt(l.id)},iconEl('x',12)):null)
+        ));
+      });
+      cloreMois();
+      body.appendChild(h('div',{style:{overflowX:'auto'}},
+        h('table',{className:'table-std expe-pal-eur-journal'},h('thead',null,head),h('tbody',null,...corps))));
+    }
+    const contest=(d.contestations||[]).filter(c=>c.statut==='ouverte');
+    if(contest.length){
+      body.appendChild(h('div',{style:{marginTop:'18px',fontSize:'12px',fontWeight:'700',color:'var(--warn)'}},
+        contest.length+' contestation'+(contest.length>1?'s':'')+' ouverte'+(contest.length>1?'s':'')+
+        ' · '+_expePalFmt(contest.reduce((a,c)=>a+_expePalNum(c.nb_palette),0))+' pal.'));
+    }
+  }catch(e){
+    body.innerHTML='';
+    body.appendChild(h('div',{style:{color:'var(--danger)'}},escHtml(e.message||'Erreur')));
+  }
+}
+
+function _expePalTrpOptions(selectedId, selectedNom){
+  const sel=h('select',{className:'expe-devis-inp',id:'pal-mvt-trp'});
+  sel.appendChild(h('option',{value:''},'— Choisir un transporteur —'));
+  (T.list||[]).filter(t=>Number(t.actif)).forEach(t=>{
+    const o=h('option',{value:String(t.id)},t.nom);
+    if(String(selectedId)===String(t.id))o.selected=true;
+    sel.appendChild(o);
+  });
+  // Un transporteur historique absent du référentiel doit rester saisissable :
+  // son compte existe, le priver de saisie reviendrait à le figer.
+  if(selectedId==null&&selectedNom){
+    const o=h('option',{value:'__libre__'},selectedNom+' (hors référentiel)');
+    o.selected=true;
+    sel.appendChild(o);
+  }
+  return sel;
+}
+
+function ouvrirSaisieMouvementPalettes(t){
+  t = t || {};
+  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'12300'}});
+  const box=h('div',{className:'expe-devis-modal',style:{maxWidth:'520px'}});
+  const close=()=>{try{ov.remove();}catch(_e){}};
+  const sensSel=h('select',{className:'expe-devis-inp'});
+  [['rendue','Restitution — le transporteur nous rend des palettes'],
+   ['report',"Solde d'ouverture — dette antérieure à MySifa"],
+   ['donnee','Remise hors départ — palettes confiées sans départ saisi']]
+    .forEach(([v,l])=>sensSel.appendChild(h('option',{value:v},l)));
+  const trpSel=_expePalTrpOptions(t.transporteur_id, t.transporteur);
+  const nomLibre=h('input',{className:'expe-devis-inp',type:'text',placeholder:'Nom du transporteur',
+    value:(t.transporteur_id==null?(t.transporteur||''):'')});
+  const nomWrap=h('label',{className:'expe-devis-label',style:{display:t.transporteur_id==null&&t.transporteur?'flex':'none'}},
+    'Nom (hors référentiel)',nomLibre);
+  trpSel.addEventListener('change',()=>{
+    nomWrap.style.display = (trpSel.value==='__libre__'||trpSel.value==='') ? 'flex' : 'none';
+  });
+  const dateInp=h('input',{className:'expe-devis-inp',type:'date',value:expeParisDayISO()});
+  const nbInp=h('input',{className:'expe-devis-inp',type:'number',min:'0',step:'1',placeholder:'0'});
+  const refInp=h('input',{className:'expe-devis-inp',type:'text',placeholder:'Récépissé, bon de retour…'});
+  const noteInp=h('input',{className:'expe-devis-inp',type:'text',placeholder:'Note (optionnel)'});
+  box.appendChild(h('div',{className:'expe-devis-modal-head'},
+    h('span',{style:{fontWeight:'700',fontSize:'15px'}},'Mouvement de palettes Europe'),
+    h('button',{type:'button',className:'btn-ghost expe-devis-close',onClick:close},iconEl('x',16))));
+  box.appendChild(h('div',{className:'expe-devis-grid',style:{gridTemplateColumns:'1fr'}},
+    h('label',{className:'expe-devis-label'},'Nature *',sensSel),
+    h('label',{className:'expe-devis-label'},'Transporteur *',trpSel),
+    nomWrap,
+    h('label',{className:'expe-devis-label'},'Date *',dateInp),
+    h('label',{className:'expe-devis-label'},'Nombre de palettes *',nbInp),
+    h('label',{className:'expe-devis-label'},'Référence',refInp),
+    h('label',{className:'expe-devis-label'},'Note',noteInp)
+  ));
+  box.appendChild(h('div',{className:'expe-devis-modal-foot'},
+    h('button',{type:'button',className:'btn btn-ghost',onClick:close},'Annuler'),
+    h('button',{type:'button',className:'btn btn-accent',onClick:async()=>{
+      const nb=Number(nbInp.value);
+      if(!(nb>0)){ toast('Nombre de palettes obligatoire','error'); return; }
+      const body={sens:sensSel.value, date_mvt:dateInp.value, nb_palette:nb,
+        reference:refInp.value, note:noteInp.value};
+      if(trpSel.value&&trpSel.value!=='__libre__') body.transporteur_id=Number(trpSel.value);
+      else body.transporteur=nomLibre.value.trim();
+      if(!body.transporteur_id&&!body.transporteur){ toast('Transporteur obligatoire','error'); return; }
+      try{
+        await api('/api/expe/palettes-europe/mouvements',{method:'POST',
+          headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        toast('Mouvement enregistré');
+        close(); await loadExpePalettesEurope();
+      }catch(e){ toast(e.message||'Enregistrement impossible','error'); }
+    }},'Enregistrer')));
+  ov.appendChild(box);
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  document.body.appendChild(ov);
+}
+
+function ouvrirSaisieContestation(prefill){
+  prefill = prefill || {};
+  const ov=h('div',{className:'expe-devis-modal-overlay',style:{zIndex:'12300'}});
+  const box=h('div',{className:'expe-devis-modal',style:{maxWidth:'520px'}});
+  const close=()=>{try{ov.remove();}catch(_e){}};
+  const trpSel=_expePalTrpOptions(prefill.transporteur_id, prefill.transporteur);
+  const nomLibre=h('input',{className:'expe-devis-inp',type:'text',placeholder:'Nom du transporteur',
+    value:(prefill.transporteur_id==null?(prefill.transporteur||''):'')});
+  const nomWrap=h('label',{className:'expe-devis-label',style:{display:prefill.transporteur_id==null&&prefill.transporteur?'flex':'none'}},
+    'Nom (hors référentiel)',nomLibre);
+  trpSel.addEventListener('change',()=>{
+    nomWrap.style.display = (trpSel.value==='__libre__'||trpSel.value==='') ? 'flex' : 'none';
+  });
+  const dateInp=h('input',{className:'expe-devis-inp',type:'date',value:prefill.date||expeParisDayISO()});
+  const recepInp=h('input',{className:'expe-devis-inp',type:'text',placeholder:'N° récépissé',value:prefill.recepisse||''});
+  const clientInp=h('input',{className:'expe-devis-inp',type:'text',placeholder:'Client livré',value:prefill.client||''});
+  const nbInp=h('input',{className:'expe-devis-inp',type:'number',min:'0',step:'1',value:prefill.nb_palette||''});
+  const causeInp=h('input',{className:'expe-devis-inp',type:'text',value:'Palette non rendue'});
+  box.appendChild(h('div',{className:'expe-devis-modal-head'},
+    h('span',{style:{fontWeight:'700',fontSize:'15px'}},'Contestation de palette Europe'),
+    h('button',{type:'button',className:'btn-ghost expe-devis-close',onClick:close},iconEl('x',16))));
+  box.appendChild(h('div',{className:'expe-devis-grid',style:{gridTemplateColumns:'1fr'}},
+    h('label',{className:'expe-devis-label'},'Transporteur *',trpSel),
+    nomWrap,
+    h('label',{className:'expe-devis-label'},'Date *',dateInp),
+    h('label',{className:'expe-devis-label'},'Récépissé',recepInp),
+    h('label',{className:'expe-devis-label'},'Client',clientInp),
+    h('label',{className:'expe-devis-label'},'Nombre de palettes *',nbInp),
+    h('label',{className:'expe-devis-label'},'Cause',causeInp)
+  ));
+  box.appendChild(h('div',{className:'expe-devis-modal-foot'},
+    h('button',{type:'button',className:'btn btn-ghost',onClick:close},'Annuler'),
+    h('button',{type:'button',className:'btn btn-accent',onClick:async()=>{
+      const nb=Number(nbInp.value);
+      if(!(nb>0)){ toast('Nombre de palettes obligatoire','error'); return; }
+      const body={date_contestation:dateInp.value, nb_palette:nb,
+        recepisse:recepInp.value, client:clientInp.value, cause:causeInp.value};
+      if(prefill.depart_id) body.depart_id=prefill.depart_id;
+      if(trpSel.value&&trpSel.value!=='__libre__') body.transporteur_id=Number(trpSel.value);
+      else body.transporteur=nomLibre.value.trim();
+      if(!body.transporteur_id&&!body.transporteur){ toast('Transporteur obligatoire','error'); return; }
+      try{
+        await api('/api/expe/palettes-europe/contestations',{method:'POST',
+          headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        toast('Contestation enregistrée');
+        close(); await loadExpePalettesEurope(); await loadExpePalContestations();
+      }catch(e){ toast(e.message||'Enregistrement impossible','error'); }
+    }},'Enregistrer')));
+  ov.appendChild(box);
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+  document.body.appendChild(ov);
+}
+
+async function expePatchContestation(id, patch){
+  try{
+    await api('/api/expe/palettes-europe/contestations/'+id,{method:'PATCH',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(patch)});
+    toast('Contestation mise à jour');
+    await loadExpePalContestations();
+    await loadExpePalettesEurope();
+  }catch(e){ toast(e.message||'Mise à jour impossible','error'); }
+}
+
 function renderExpePalettesEurope(){
-  const data = S.expePalettesEuropeData || {departs:[], recap_clients:[], totaux:{}};
-  const departs = data.departs || [];
+  const data = S.expePalettesEuropeData || {departs:[], recap_clients:[], recap_transporteurs:[], totaux:{}};
+  let departs = data.departs || [];
   const recap = data.recap_clients || [];
+  const recapTrp = data.recap_transporteurs || [];
   const tot = data.totaux || {};
-  const subTab = S.expePalEurSubTab || 'suivi';
+  // Par défaut le compte transporteur : c'est la vue sur laquelle on décide
+  // (qui rappeler), les autres servent à instruire.
+  const subTab = S.expePalEurSubTab || 'transporteurs';
 
   // Sous-onglets
   const subTabs = [
-    {key:'suivi', label:'Suivi', icon:'clipboard'},
+    {key:'transporteurs', label:'Comptes transporteurs', icon:'truck'},
+    {key:'suivi', label:'Départs détaillés', icon:'clipboard'},
+    {key:'contest', label:'Contestations', icon:'alert-circle'},
     {key:'recap', label:'Récap clients', icon:'users'},
   ];
   const subNav = h('div',{className:'nav-tabs',style:{marginBottom:'16px'}},
     ...subTabs.map(t=>h('button',{
       type:'button',
       className:'nav-tab'+(subTab===t.key?' active':''),
-      onClick:()=>set({expePalEurSubTab:t.key})
+      onClick:()=>{
+        if(t.key==='contest'&&!S.expePalContestations) void loadExpePalContestations();
+        set({expePalEurSubTab:t.key});
+      }
     },iconEl(t.icon,14),' ',t.label))
   );
 
-  // Bandeau totaux (commun aux deux sous-onglets)
+  // Bandeau totaux — le solde en tête : c'est le chiffre qu'on vient chercher.
+  const soldeTot = _expePalNum(tot.solde_transporteurs);
   const totauxBlock = h('div',{className:'expe-pal-eur-totaux'},
+    h('div',{className:'expe-pal-eur-tot-card'+(soldeTot>0?' expe-pal-eur-tot-card--warn':' expe-pal-eur-tot-card--ok')},
+      h('div',{className:'expe-pal-eur-tot-lbl'},'Solde dû par les transporteurs'),
+      h('div',{className:'expe-pal-eur-tot-val'},_expePalFmt(soldeTot))
+    ),
     h('div',{className:'expe-pal-eur-tot-card'},
       h('div',{className:'expe-pal-eur-tot-lbl'},'Total envoyées'),
       h('div',{className:'expe-pal-eur-tot-val'},String(tot.nb_pal_envoyees||0))
@@ -4035,14 +5092,117 @@ function renderExpePalettesEurope(){
       h('div',{className:'expe-pal-eur-tot-lbl'},'Retournées'),
       h('div',{className:'expe-pal-eur-tot-val'},String(tot.nb_pal_retournees||0))
     ),
-    h('div',{className:'expe-pal-eur-tot-card expe-pal-eur-tot-card--warn'},
-      h('div',{className:'expe-pal-eur-tot-lbl'},'En attente'),
-      h('div',{className:'expe-pal-eur-tot-val'},String(tot.nb_pal_en_attente||0))
-    ),
     h('div',{className:'expe-pal-eur-tot-card expe-pal-eur-tot-card--bad'},
-      h('div',{className:'expe-pal-eur-tot-lbl'},'Perdues'),
-      h('div',{className:'expe-pal-eur-tot-val'},String(tot.nb_pal_perdues||0))
+      h('div',{className:'expe-pal-eur-tot-lbl'},'En litige'),
+      h('div',{className:'expe-pal-eur-tot-val'},_expePalFmt(tot.nb_pal_contestees))
     )
+  );
+
+  // Bloc principal : un poste de compte courant par transporteur
+  const trpHead = h('tr',null,
+    ...['Transporteur','Report','Données','Rendues','Perdues','Solde','Litiges','Dernier mvt',''].map(x=>h('th',null,x))
+  );
+  const trpRows = recapTrp.length ? recapTrp.map(t=>{
+    const solde=_expePalNum(t.solde);
+    return h('tr',{className:'expe-pal-eur-trp-row'+(solde>0?' expe-pal-eur-trp-row--debt':''),
+      title:'Ouvrir le relevé de compte',
+      onClick:e=>{
+        // Les boutons d'action de la dernière colonne ont leur propre effet :
+        // sans ce garde-fou, un clic sur « saisir un mouvement » ouvrirait
+        // aussi le relevé derrière la modale.
+        if(e.target.closest('button')) return;
+        void ouvrirJournalPalettes(t);
+      }},
+      h('td',{style:{fontWeight:'700'}},
+        (c=>c?trpTag(t.transporteur||'—',c):(t.transporteur||'—'))(
+          (function(){
+            const ref=(T.list||[]).find(x=>String(x.id)===String(t.transporteur_id));
+            return ref?ref.couleur:null;
+          })()
+        )),
+      h('td',{style:{textAlign:'right',fontFamily:'monospace',color:'var(--muted)'}},t.report?_expePalFmt(t.report):'—'),
+      h('td',{style:{textAlign:'right',fontFamily:'monospace'}},_expePalFmt(t.donnees)),
+      h('td',{style:{textAlign:'right',fontFamily:'monospace',color:'var(--success)'}},_expePalFmt(t.rendues)),
+      h('td',{style:{textAlign:'right',fontFamily:'monospace',color:'var(--danger)'}},t.perdues?_expePalFmt(t.perdues):'—'),
+      h('td',{style:{textAlign:'right',fontFamily:'monospace',fontWeight:'800',
+        color:solde>0?'var(--warn)':'var(--text)'}},_expePalFmt(solde)),
+      h('td',{style:{textAlign:'right'}},
+        t.nb_contestations?h('span',{className:'expe-pal-eur-badge expe-pal-eur-badge--perdue',
+          title:t.nb_contestations+' contestation(s) ouverte(s)'},_expePalFmt(t.nb_pal_contestees)+' pal.'):'—'),
+      h('td',{style:{fontSize:'12px',color:'var(--muted)',whiteSpace:'nowrap'}},t.dernier_mouvement||'—'),
+      h('td',{style:{textAlign:'right',whiteSpace:'nowrap'}},
+        h('button',{type:'button',className:'expe-pal-eur-act',title:'Relevé de compte',
+          onClick:()=>void ouvrirJournalPalettes(t)},iconEl('clipboard',13)),
+        expeCanWrite()?h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--ok',
+          title:'Saisir une restitution',
+          onClick:()=>ouvrirSaisieMouvementPalettes(t)},iconEl('plus',13)):null)
+    );
+  }) : [h('tr',null,h('td',{colSpan:9,style:{color:'var(--muted)',padding:'18px',textAlign:'center'}},
+    S.expePalettesEuropeLoading?'Chargement…':'Aucun compte palette Europe ouvert.'))];
+
+  const trpBlock = h('div',{className:'card'},
+    h('div',{className:'card-header',style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
+      h('h3',{className:'expe-mobile-hide-head'},'Comptes transporteurs'),
+      h('div',{style:{display:'flex',gap:'8px',alignItems:'center',marginLeft:'auto',flexWrap:'wrap'}},
+        expeCanWrite()?h('button',{type:'button',className:'btn btn-ghost',style:{fontSize:'12px',padding:'6px 12px'},
+          onClick:()=>ouvrirSaisieMouvementPalettes(null)},iconEl('plus',13),' Mouvement'):null,
+        expeCanWrite()?h('button',{type:'button',className:'btn btn-ghost',style:{fontSize:'12px',padding:'6px 12px'},
+          onClick:()=>ouvrirSaisieContestation(null)},iconEl('alert-circle',13),' Contestation'):null
+      )
+    ),
+    h('div',{style:{padding:'0 18px 10px',fontSize:'11px',color:'var(--muted)'}},
+      'Solde = report + données − rendues − perdues. Une palette contestée reste dans le solde tant que le litige n’est pas tranché.'),
+    h('div',{style:{overflowX:'auto'}},
+      h('table',{className:'table-std expe-pal-eur-trp-table'},h('thead',null,trpHead),h('tbody',null,...trpRows)))
+  );
+
+  // Bloc contestations — le registre qui sert à réclamer
+  const cData = S.expePalContestations || {contestations:[], totaux:{}};
+  const cRows = (cData.contestations||[]);
+  const contestFiltre = h('select',{
+    value:S.expePalContestStatut||'ouverte',
+    onChange:e=>{ S.expePalContestStatut=e.target.value; void loadExpePalContestations(); }
+  });
+  [['ouverte','Ouvertes'],['resolue','Résolues'],['abandonnee','Abandonnées'],['','Toutes']].forEach(([v,l])=>{
+    const o=h('option',{value:v},l);
+    if((S.expePalContestStatut||'ouverte')===v)o.selected=true;
+    contestFiltre.appendChild(o);
+  });
+  const contestBlock = h('div',{className:'card'},
+    h('div',{className:'card-header',style:{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}},
+      h('h3',{className:'expe-mobile-hide-head'},'Contestations de palettes'),
+      h('div',{style:{display:'flex',gap:'8px',alignItems:'center',marginLeft:'auto'}},
+        contestFiltre,
+        expeCanWrite()?h('button',{type:'button',className:'btn btn-ghost',style:{fontSize:'12px',padding:'6px 12px'},
+          onClick:()=>ouvrirSaisieContestation(null)},iconEl('plus',13),' Ajouter'):null)
+    ),
+    h('div',{style:{overflowX:'auto'}},
+      h('table',{className:'table-std'},
+        h('thead',null,h('tr',null,...['Date','Transporteur','Récépissé','Client','Pal.','Cause','Statut',''].map(x=>h('th',null,x)))),
+        h('tbody',null,...(cRows.length?cRows.map(c=>h('tr',null,
+          h('td',{style:{whiteSpace:'nowrap'}},(c.date_contestation||'').slice(0,10)),
+          h('td',{style:{fontWeight:'600'}},escHtml(c.transporteur_nom||'—')),
+          h('td',{style:{fontFamily:'monospace',fontSize:'12px'}},escHtml(c.recepisse||'—')),
+          h('td',null,escHtml(c.client||'—')),
+          h('td',{style:{textAlign:'right',fontWeight:'700'}},_expePalFmt(c.nb_palette)),
+          h('td',{style:{fontSize:'12px',color:'var(--text2)'}},escHtml(c.cause||'—')),
+          h('td',null,h('span',{className:'expe-pal-eur-badge expe-pal-eur-badge--'+
+            (c.statut==='ouverte'?'en_attente':(c.statut==='resolue'?'retournee':'perdue'))},
+            c.statut==='ouverte'?'Ouverte':(c.statut==='resolue'?'Résolue':'Abandonnée'))),
+          h('td',{className:'expe-pal-eur-acts-cell'},expeCanWrite()?h('div',{className:'expe-pal-eur-acts'},
+            c.statut!=='resolue'?h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--ok',
+              title:'Marquer résolue (palettes récupérées ou remboursées)',
+              onClick:()=>void expePatchContestation(c.id,{statut:'resolue'})},iconEl('check-circle',13)):null,
+            c.statut!=='abandonnee'?h('button',{type:'button',className:'expe-pal-eur-act expe-pal-eur-act--bad',
+              title:'Abandonner la réclamation',
+              onClick:()=>{ if(confirm('Abandonner cette réclamation ?')) void expePatchContestation(c.id,{statut:'abandonnee'}); }
+            },iconEl('x',13)):null,
+            c.statut!=='ouverte'?h('button',{type:'button',className:'expe-pal-eur-act',title:'Rouvrir',
+              onClick:()=>void expePatchContestation(c.id,{statut:'ouverte'})},iconEl('rotate-ccw',12)):null
+          ):null)
+        )):[h('tr',null,h('td',{colSpan:8,style:{color:'var(--muted)',padding:'18px',textAlign:'center'}},
+          'Aucune contestation pour ce filtre.'))]))
+      ))
   );
 
   // Filtres
@@ -4106,10 +5266,60 @@ function renderExpePalettesEurope(){
   ) : h('div',{style:{padding:'18px',color:'var(--muted)',fontSize:'13px',textAlign:'center'}},
     'Aucune palette Europe enregistrée.');
 
-  // Tableau des départs palette Europe
+  // Tableau des départs palette Europe — en-têtes triables.
+  // Le tri est CLIENT et non serveur : la liste est déjà entièrement chargée
+  // (elle est bornée par les filtres), un aller-retour réseau pour réordonner
+  // une centaine de lignes serait un temps d'attente sans contrepartie.
+  const PAL_COLS = [
+    {lbl:'Date enl.',   key:'date_enlevement', type:'txt'},
+    {lbl:'Client',      key:'client',          type:'txt'},
+    {lbl:'Transp.',     key:'transporteur',    type:'txt'},
+    {lbl:'ARC',         key:'arc',             type:'txt'},
+    {lbl:'N° BL',       key:'no_bl',           type:'txt'},
+    {lbl:'Pal.',        key:'nb_palette',      type:'num'},
+    {lbl:'Statut',      key:'palette_europe_statut', type:'txt'},
+    {lbl:'Date retour', key:'palette_europe_date_retour', type:'txt'},
+    {lbl:'Note',        key:null},
+    {lbl:'Actions',     key:null},
+  ];
+  const sortKey = S.expePalSortKey || 'date_enlevement';
+  const sortDir = S.expePalSortDir || 'desc';
   const head = h('tr',null,
-    ...['Date enl.','Client','Transp.','ARC','N° BL','Pal.','Statut','Date retour','Note','Actions'].map(t=>h('th',null,t))
+    ...PAL_COLS.map(c=>{
+      if(!c.key) return h('th',null,c.lbl);
+      const actif = sortKey===c.key;
+      const th = h('th',{className:'expe-sort-th'+(actif?' expe-sort-th--on':''),
+        title:'Trier par '+c.lbl,
+        onClick:()=>set({
+          expePalSortKey:c.key,
+          // Reclic sur la même colonne = on inverse. Colonne différente = on
+          // repart en croissant, sauf sur les dates où le récent d'abord est
+          // ce qu'on veut voir neuf fois sur dix.
+          expePalSortDir: actif ? (sortDir==='asc'?'desc':'asc')
+                                : (c.key.indexOf('date')===0||c.key.indexOf('_date')>0?'desc':'asc')
+        })});
+      th.appendChild(document.createTextNode(c.lbl));
+      th.appendChild(h('span',{className:'expe-sort-arrow'}, actif?(sortDir==='asc'?'▲':'▼'):'⇅'));
+      return th;
+    })
   );
+  const _palSortType = (PAL_COLS.find(c=>c.key===sortKey)||{}).type || 'txt';
+  departs = departs.slice().sort((a,b)=>{
+    let va=a[sortKey], vb=b[sortKey];
+    if(_palSortType==='num'){
+      va=_expePalNum(va); vb=_expePalNum(vb);
+    }else{
+      // Les cellules vides finissent toujours en bas, quel que soit le sens :
+      // une ligne sans date de retour n'est ni « avant » ni « après », elle
+      // n'a rien à dire et ne doit pas polluer le haut du tableau.
+      va=(va==null?'':String(va)).toLowerCase(); vb=(vb==null?'':String(vb)).toLowerCase();
+      if(!va&&vb) return 1;
+      if(va&&!vb) return -1;
+    }
+    if(va<vb) return sortDir==='asc'?-1:1;
+    if(va>vb) return sortDir==='asc'?1:-1;
+    return (a.id||0)-(b.id||0);
+  });
   const bodyRows = departs.length ? departs.map(r=>{
     const statut = r.palette_europe_statut || 'en_attente';
     const noteInp = h('input',{
@@ -4177,7 +5387,18 @@ function renderExpePalettesEurope(){
           statut!=='en_attente' ? h('button',{type:'button',className:'expe-pal-eur-act',
             title:'Réinitialiser le statut (en attente)',
             onClick:()=>expeChangePaletteEuropeStatut(r.id,'en_attente', '')
-          },iconEl('rotate-ccw',13)) : null
+          },iconEl('rotate-ccw',13)) : null,
+          // Ouvrir une contestation depuis le départ : c'est là qu'on a le
+          // récépissé et le client sous les yeux, les ressaisir serait une
+          // occasion d'erreur pour rien.
+          expeCanWrite() ? h('button',{type:'button',className:'expe-pal-eur-act',
+            title:'Ouvrir une contestation sur ce départ',
+            onClick:()=>ouvrirSaisieContestation({
+              transporteur_id:r.transporteur_id, transporteur:r.transporteur,
+              depart_id:r.id, client:r.client, recepisse:r.arc||r.no_bl,
+              nb_palette:r.nb_palette, date:(r.date_enlevement||'').slice(0,10)
+            })
+          },iconEl('alert-circle',13)) : null
         )
       )
     );
@@ -4215,10 +5436,11 @@ function renderExpePalettesEurope(){
     h('div',{style:{padding:'14px 18px'}}, recapCards)
   );
 
+  const blocs = {transporteurs:trpBlock, contest:contestBlock, recap:recapBlock, suivi:suiviBlock};
   return h('div',null,
     subNav,
     totauxBlock,
-    subTab==='recap' ? recapBlock : suiviBlock
+    blocs[subTab] || trpBlock
   );
 }
 
@@ -4478,7 +5700,10 @@ function renderExpe(){
       if(sub==='jour')void loadExpeDepartJour();
       else void loadExpeDepartHistorique();
     }else if(tab==='comparateur'){if(!T.list.length&&!T.loading)void loadTransporteurs();}
-    else if(tab==='devis'){void chargerDemandes();if(!T.list.length&&!T.loading)void loadTransporteurs();}
+    // Les prospects sont chargés ici aussi : le modal d'envoi les propose
+    // comme destinataires, mais sans ce chargement leur section restait vide
+    // tant qu'on n'était pas passé par l'onglet Prospects dans la session.
+    else if(tab==='devis'){void chargerDemandes();if(!T.list.length&&!T.loading)void loadTransporteurs();if(!S.prospects)void chargerProspects();}
     else if(tab==='prospects'){void chargerProspects();}
     else if(tab==='transporteurs'&&!T.pageLoaded){T.pageLoaded=true;void loadTransporteurs();}
     else if(tab==='palettes_europe'){void loadExpePalettesEurope();}
@@ -4496,10 +5721,13 @@ function renderExpe(){
           {tab:'suivi_departs',  ico:'clipboard', label:'Départs'},
           {tab:'palettes_europe',ico:'pallet',    label:'Palettes Europe'},
         ]},
+        // Ordre = ordre reel du travail : on pese, puis on chiffre sur grille,
+        // puis on va chercher un prix chez les transporteurs quand la grille
+        // ne suffit pas. Ne pas reordonner sans cette raison-la.
         { key:'prep', label:'Préparation envoi', items:[
+          {tab:'poids',      ico:'calculator',label:'Calcul poids'},
           {tab:'comparateur',ico:'sliders',   label:'Comparateur tarifs'},
           {tab:'devis',      ico:'mail',      label:'Devis transporteurs'},
-          {tab:'poids',      ico:'calculator',label:'Calcul poids'},
         ]},
         { key:'ref', label:'Référentiel', items:[
           {tab:'transporteurs',ico:'truck',label:'Transporteurs'},
@@ -4607,7 +5835,7 @@ function renderExpe(){
           h('div',{className:'subtitle'},
             tab==='suivi_departs'?(sub==='historique'?'Recherche multi-critères sur les départs validés'
               :'Enregistrement des enlèvements et validation vers l\'historique')
-            :tab==='palettes_europe'?'Suivi des palettes Europe consignées — quels clients, combien, et combien sont revenues'
+            :tab==='palettes_europe'?'Compte courant des palettes Europe — combien chaque transporteur nous doit'
             :tab==='comparateur'?'Comparaison des transporteurs selon les grilles tarifaires actives en base'
             :tab==='devis'?'Prospection parallèle — demandes de tarif aux transporteurs'
             :tab==='prospects'?'Transporteurs hors référentiel — suivi de démarchage'

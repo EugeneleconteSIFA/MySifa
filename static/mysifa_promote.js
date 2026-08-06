@@ -116,6 +116,9 @@
 
     if (goBtn) goBtn.disabled = !data.can_promote;
     if (blocked) blocked.textContent = data.can_promote ? '' : (data.reason || '');
+
+    // La santé du dépôt se rafraîchit avec le reste de l'onglet Déployer.
+    loadDeploiementSante();
   }
 
   async function runPromote() {
@@ -329,6 +332,227 @@
     }
   }
 
+  // ─── Santé du dépôt : migrations, branches, propreté du dossier ─────
+  // Vue de consultation seule : aucune action destructive n'est exposée ici.
+  // Elle répond à une question simple avant de promouvoir : est-ce que le
+  // schéma est à jour, est-ce qu'il reste des branches mortes, est-ce que le
+  // dossier de travail est propre.
+
+  const _DS_OUVERT = { migrations: false, branches: false, dossier: false };
+  let _dsData = null;
+
+  function _dsScore(label, valeur, sous, couleur) {
+    return '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;flex:1;min-width:160px">'
+      + '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">' + label + '</div>'
+      + '<div style="font-size:15px;font-weight:700;color:' + (couleur || 'var(--text)') + '">' + valeur + '</div>'
+      + '<div style="font-size:11px;color:var(--muted);margin-top:2px">' + sous + '</div>'
+      + '</div>';
+  }
+
+  function _dsSection(cle, titre, badge, badgeCouleur, contenu) {
+    const ouvert = !!_DS_OUVERT[cle];
+    return '<div style="border:1px solid var(--border);border-radius:10px;margin-top:10px;overflow:hidden">'
+      + '<button type="button" onclick="dsToggle(\'' + cle + '\')" style="width:100%;display:flex;align-items:center;gap:10px;background:transparent;border:none;padding:11px 14px;cursor:pointer;font-family:inherit;text-align:left">'
+        + '<span style="color:var(--muted);font-size:9px;display:inline-block;width:10px;transform:rotate(' + (ouvert ? '90deg' : '0deg') + ')">&#9654;</span>'
+        + '<span style="flex:1;font-size:13px;font-weight:700;color:var(--text)">' + titre + '</span>'
+        + (badge ? '<span style="font-size:11px;font-weight:700;color:' + (badgeCouleur || 'var(--muted)') + '">' + badge + '</span>' : '')
+      + '</button>'
+      + (ouvert ? '<div style="border-top:1px solid var(--border)">' + contenu + '</div>' : '')
+      + '</div>';
+  }
+
+  function _dsVide(texte) {
+    return '<div style="padding:16px;text-align:center;color:var(--muted);font-size:12px">' + texte + '</div>';
+  }
+
+  function _dsTh(txt, align) {
+    return '<th style="text-align:' + (align || 'left') + ';padding:7px 12px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap">' + txt + '</th>';
+  }
+
+  function _dsTd(html, style) {
+    return '<td style="padding:8px 12px;font-size:12px;color:var(--text2);vertical-align:top;' + (style || '') + '">' + html + '</td>';
+  }
+
+  // ─ Migrations ─
+  function _dsMigrationsHtml(mig) {
+    let out = '';
+    if (mig.en_attente && mig.en_attente.length) {
+      out += '<div style="padding:12px 14px;background:rgba(251,191,36,.10);border-bottom:1px solid var(--border)">'
+        + '<div style="font-size:11px;font-weight:700;color:var(--warn);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">En attente sur cette instance</div>'
+        + mig.en_attente.map(function (m) {
+            return '<div style="font-size:12px;color:var(--text);font-family:\'SFMono-Regular\',Menlo,monospace">'
+              + _prEsc(m.nom) + ' <span style="color:var(--muted)">&middot; ' + _prEsc(m.fichier) + '</span></div>';
+          }).join('')
+        + '<div style="font-size:11px;color:var(--muted);margin-top:6px">Elles s\'appliqueront au prochain démarrage de l\'application.</div>'
+        + '</div>';
+    }
+    if (mig.doublons && mig.doublons.length) {
+      out += '<div style="padding:12px 14px;background:rgba(239,68,68,.10);border-bottom:1px solid var(--border)">'
+        + '<div style="font-size:11px;font-weight:700;color:var(--danger);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Numéros en double</div>'
+        + mig.doublons.map(function (d) {
+            return '<div style="font-size:12px;color:var(--text)">v' + _prEsc(d.cle) + ' &rarr; ' + _prEsc((d.noms || []).join(', ')) + '</div>';
+          }).join('')
+        + '<div style="font-size:11px;color:var(--muted);margin-top:6px">Deux migrations partagent un numéro : la seconde ne s\'exécute jamais.</div>'
+        + '</div>';
+    }
+    if (!mig.appliquees || !mig.appliquees.length) return out + _dsVide('Aucune migration enregistrée.');
+    out += '<div style="max-height:340px;overflow:auto">'
+      + '<table style="width:100%;border-collapse:collapse">'
+      + '<thead><tr style="border-bottom:1px solid var(--border)">'
+        + _dsTh('Clé') + _dsTh('Migration') + _dsTh('Type') + _dsTh('Appliquée le', 'right')
+      + '</tr></thead><tbody>'
+      + mig.appliquees.map(function (m) {
+          const fichier = m.source === 'fichier';
+          return '<tr style="border-bottom:1px solid var(--border)">'
+            + _dsTd('<span style="font-family:\'SFMono-Regular\',Menlo,monospace;color:var(--accent)">' + _prEsc(fichier ? '—' : 'v' + m.cle) + '</span>', 'white-space:nowrap')
+            + _dsTd('<span style="color:var(--text)">' + _prEsc(m.nom || '(sans nom)') + '</span>')
+            + _dsTd('<span style="font-size:11px;color:var(--muted)">' + (fichier ? 'fichier' : 'numérotée') + '</span>', 'white-space:nowrap')
+            + _dsTd('<span style="font-size:11px;color:var(--muted)">' + _prEsc(m.date || '') + '</span>', 'text-align:right;white-space:nowrap')
+          + '</tr>';
+        }).join('')
+      + '</tbody></table></div>';
+    if (mig.nb_appliquees > mig.appliquees.length) {
+      out += '<div style="padding:8px 14px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)">'
+        + mig.appliquees.length + ' plus récentes affichées sur ' + mig.nb_appliquees + '.</div>';
+    }
+    return out;
+  }
+
+  // ─ Branches ─
+  function _dsBranchesHtml(branches) {
+    if (!branches || !branches.length) return _dsVide('Aucune branche distante lisible depuis cette instance.');
+    return '<div style="max-height:360px;overflow:auto">'
+      + '<table style="width:100%;border-collapse:collapse">'
+      + '<thead><tr style="border-bottom:1px solid var(--border)">'
+        + _dsTh('Branche') + _dsTh('Dernier commit') + _dsTh('Auteur') + _dsTh('Âge', 'right') + _dsTh('État', 'right')
+      + '</tr></thead><tbody>'
+      + branches.map(function (b) {
+          let etat, couleur;
+          if (b.protegee) { etat = 'protégée'; couleur = 'var(--muted)'; }
+          else if (b.a_nettoyer) { etat = 'à supprimer'; couleur = 'var(--warn)'; }
+          else if (b.fusionnee) { etat = 'fusionnée'; couleur = 'var(--muted)'; }
+          else { etat = 'en cours'; couleur = 'var(--accent)'; }
+          const age = (b.jours == null) ? '' : (b.jours === 0 ? "aujourd'hui" : b.jours + ' j');
+          return '<tr style="border-bottom:1px solid var(--border)' + (b.a_nettoyer ? ';background:rgba(251,191,36,.07)' : '') + '">'
+            + _dsTd('<span style="font-family:\'SFMono-Regular\',Menlo,monospace;color:var(--text);font-weight:600">' + _prEsc(b.nom) + '</span>')
+            + _dsTd('<span style="color:var(--text2)">' + _prEsc(b.dernier_commit || '') + '</span>')
+            + _dsTd('<span style="font-size:11px;color:var(--muted)">' + _prEsc(b.auteur || '') + '</span>', 'white-space:nowrap')
+            + _dsTd('<span style="font-size:11px;color:var(--muted)">' + _prEsc(age) + '</span>', 'text-align:right;white-space:nowrap')
+            + _dsTd('<span style="font-size:11px;font-weight:700;color:' + couleur + '">' + etat + '</span>', 'text-align:right;white-space:nowrap')
+          + '</tr>';
+        }).join('')
+      + '</tbody></table></div>'
+      + '<div style="padding:8px 14px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)">'
+      + 'Une branche est signalée « à supprimer » quand elle est déjà fusionnée dans staging et sans activité depuis plus de deux semaines. La suppression se fait depuis ton terminal.'
+      + '</div>';
+  }
+
+  // ─ Dossier de travail ─
+  function _dsFichiersHtml(titre, liste, total) {
+    if (!total) return '';
+    return '<div style="margin-top:10px">'
+      + '<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">' + titre + ' (' + total + ')</div>'
+      + '<div style="font-family:\'SFMono-Regular\',Menlo,monospace;font-size:11px;color:var(--text2);line-height:1.7">'
+      + liste.map(function (f) { return _prEsc(f); }).join('<br>')
+      + (total > liste.length ? '<br><span style="color:var(--muted)">… et ' + (total - liste.length) + ' autre(s)</span>' : '')
+      + '</div></div>';
+  }
+
+  function _dsDossierHtml(d) {
+    let out = '<div style="padding:12px 14px">'
+      + '<div style="font-size:12px;color:var(--text2)">Branche courante&nbsp;: '
+      + '<span style="font-family:\'SFMono-Regular\',Menlo,monospace;color:var(--text);font-weight:600">' + _prEsc(d.branche) + '</span></div>';
+    if (d.verrou_git) {
+      out += '<div style="margin-top:10px;background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.35);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--text)">'
+        + 'Un verrou <span style="font-family:\'SFMono-Regular\',Menlo,monospace">.git/index.lock</span> traîne dans le dépôt. '
+        + 'Il bloque toute commande git tant qu\'il n\'est pas supprimé.</div>';
+    }
+    if (d.propre) {
+      out += '<div style="margin-top:10px;font-size:12px;color:var(--success, #16a34a)">Dossier propre — rien en attente de commit.</div>';
+    }
+    out += _dsFichiersHtml('Modifiés non commités', d.modifies || [], d.nb_modifies || 0);
+    out += _dsFichiersHtml('Non suivis', d.non_suivis || [], d.nb_non_suivis || 0);
+    return out + '</div>';
+  }
+
+  function _dsRender() {
+    const body = document.getElementById('ds-body');
+    if (!body || !_dsData) return;
+    const d = _dsData;
+    const mig = d.migrations || {};
+    const branches = d.branches || [];
+    const dossier = d.dossier || {};
+
+    const nbAttente = (mig.en_attente || []).length;
+    const nbNettoyer = branches.filter(function (b) { return b.a_nettoyer; }).length;
+    const nbActives = branches.filter(function (b) { return !b.fusionnee && !b.protegee; }).length;
+
+    let html = '';
+
+    if (d.alertes && d.alertes.length) {
+      html += '<div style="background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.40);border-left:4px solid var(--warn);border-radius:10px;padding:11px 15px;margin-bottom:14px">'
+        + d.alertes.map(function (a) {
+            return '<div style="font-size:12.5px;color:var(--text);line-height:1.55">• ' + _prEsc(a) + '</div>';
+          }).join('')
+        + '</div>';
+    } else {
+      html += '<div style="background:rgba(22,163,74,.10);border:1px solid rgba(22,163,74,.35);border-left:4px solid var(--success, #16a34a);border-radius:10px;padding:11px 15px;margin-bottom:14px;font-size:12.5px;color:var(--text)">'
+        + 'Rien à signaler : schéma à jour, pas de branche morte, dossier propre.</div>';
+    }
+
+    html += '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:4px">'
+      + _dsScore('Migrations',
+          _prEsc(String(mig.nb_appliquees || 0)) + ' appliquées',
+          nbAttente ? (nbAttente + ' en attente') : 'schéma à jour',
+          nbAttente ? 'var(--warn)' : 'var(--text)')
+      + _dsScore('Branches distantes',
+          _prEsc(String(branches.length)) + ' au total',
+          nbActives + ' en cours · ' + nbNettoyer + ' à nettoyer',
+          nbNettoyer ? 'var(--warn)' : 'var(--text)')
+      + _dsScore('Dossier de travail',
+          dossier.propre ? 'Propre' : ((dossier.nb_modifies || 0) + (dossier.nb_non_suivis || 0)) + ' fichier(s)',
+          _prEsc(dossier.branche || '—'),
+          dossier.propre ? 'var(--success, #16a34a)' : 'var(--warn)')
+      + '</div>';
+
+    html += _dsSection('migrations', 'Migrations de base de données',
+      nbAttente ? nbAttente + ' en attente' : 'à jour',
+      nbAttente ? 'var(--warn)' : 'var(--muted)',
+      _dsMigrationsHtml(mig));
+
+    html += _dsSection('branches', 'Branches sur le dépôt distant',
+      nbNettoyer ? nbNettoyer + ' à nettoyer' : branches.length + ' branches',
+      nbNettoyer ? 'var(--warn)' : 'var(--muted)',
+      _dsBranchesHtml(branches));
+
+    html += _dsSection('dossier', 'Dossier de travail de cette instance',
+      dossier.propre ? 'propre' : (dossier.nb_modifies || 0) + ' modifié(s)',
+      dossier.propre ? 'var(--muted)' : 'var(--warn)',
+      _dsDossierHtml(dossier));
+
+    body.innerHTML = html;
+  }
+
+  function dsToggle(cle) {
+    _DS_OUVERT[cle] = !_DS_OUVERT[cle];
+    _dsRender();
+  }
+
+  async function loadDeploiementSante() {
+    const body = document.getElementById('ds-body');
+    if (!body) return; // panneau absent de cette page
+    body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">Chargement…</div>';
+    try {
+      _dsData = await _prGetJson('/api/deploiement/sante');
+    } catch (e) {
+      _dsData = null;
+      body.innerHTML = '<div style="padding:18px;color:var(--danger);font-size:13px">Erreur de chargement : '
+        + _prEsc(e && e.message ? e.message : String(e)) + '</div>';
+      return;
+    }
+    _dsRender();
+  }
+
   // Exposition globale pour les onclick inline du HTML.
   window.loadPromoteStatus = loadPromoteStatus;
   window.runPromote = runPromote;
@@ -336,4 +560,6 @@
   window.pmSetSub = pmSetSub;
   window.loadPromoteHistory = loadPromoteHistory;
   window.phToggle = phToggle;
+  window.loadDeploiementSante = loadDeploiementSante;
+  window.dsToggle = dsToggle;
 })();

@@ -438,6 +438,33 @@ body.light .btn.btn-accent{color:#fff}
   background:color-mix(in srgb,var(--danger) 12%,transparent);color:var(--danger);cursor:pointer;flex-shrink:0}
 .empl-lot-out-btn:hover{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 22%,transparent)}
 .empl-lot-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
+
+/* ── Badge FSC (produit fini certifié) ─────────────────────────────
+   Vert et discret : il marque une ligne parmi d'autres, il ne doit pas
+   dominer la référence produit. La variante orange signale un écart de
+   traçabilité matière sur le dossier d'origine — le lot reste certifié,
+   mais l'anomalie ne doit pas se perdre. */
+.sm-fsc-badge{display:inline-flex;align-items:center;gap:3px;flex-shrink:0;
+  padding:1px 7px;border-radius:5px;font-size:10px;font-weight:800;letter-spacing:.5px;
+  background:rgba(52,211,153,.14);color:var(--success,#34d399);
+  border:1px solid rgba(52,211,153,.45);vertical-align:middle}
+.sm-fsc-badge.is-ecart{background:rgba(251,146,60,.14);color:#fb923c;
+  border-color:rgba(251,146,60,.45)}
+body.light .sm-fsc-badge{background:rgba(16,122,87,.10);color:#0f7c3a;border-color:rgba(16,122,87,.35)}
+body.light .sm-fsc-badge.is-ecart{background:rgba(217,119,6,.10);color:#b45309;border-color:rgba(217,119,6,.35)}
+.sm-empl-code-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.sm-fsc-value{color:var(--success,#34d399)}
+body.light .sm-fsc-value{color:#0f7c3a}
+.sm-fsc-hint{color:var(--success,#34d399)}
+/* Dérogation FSC dans l'historique : orange, sur une ligne à part, jamais
+   fondue dans le commentaire libre du mouvement. */
+.mvt-note-fsc-ecart{color:#fb923c;font-weight:700}
+body.light .mvt-note-fsc-ecart{color:#b45309}
+/* Bandeau d'écart FSC en sortie : orange, pas rouge — ce n'est pas une
+   erreur bloquante, c'est une décision que l'opérateur doit assumer. */
+.sm-fsc-alert{border:1px solid rgba(251,146,60,.45);background:rgba(251,146,60,.10);
+  color:#fb923c;border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.5;margin-top:10px}
+body.light .sm-fsc-alert{background:rgba(217,119,6,.08);color:#b45309;border-color:rgba(217,119,6,.35)}
 .empl-lot-exp-btn{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;padding:0;
   border-radius:10px;border:1px solid rgba(251,191,36,.4);
   background:rgba(251,191,36,.08);color:var(--warn);cursor:pointer;flex-shrink:0;transition:border-color .15s,background .15s}
@@ -613,12 +640,34 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
   .dash-quick-btn-label{font-size:11px}
 }
 .dash-section{border-top:1px solid var(--border);padding-top:22px;margin-top:22px}
-.dash-section-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;
-  color:var(--muted);margin:0 0 14px;display:flex;align-items:center;justify-content:space-between}
-.dash-section-toggle{background:none;border:1px solid var(--border);border-radius:6px;
-  color:var(--muted);font-size:11px;font-weight:500;padding:3px 8px;cursor:pointer;
-  text-transform:none;letter-spacing:0;transition:border-color .15s,color .15s;line-height:1.4}
-.dash-section-toggle:hover{border-color:var(--accent);color:var(--accent)}
+.dash-section-title{font-size:16px;font-weight:700;text-transform:none;letter-spacing:0;
+  color:var(--text);margin:0 0 14px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.dash-section-title>span:first-child{display:inline-flex;align-items:center;gap:10px;min-width:0}
+.dash-section-title>span:first-child::before{content:"";flex-shrink:0;width:4px;height:20px;
+  border-radius:3px;background:var(--accent)}
+/* Fond plein au repos : un bouton transparent sur le fond de page est
+   invisible tant que le curseur n'est pas dessus. */
+.dash-section-toggle{background:var(--card);border:1px solid var(--border);border-radius:8px;
+  color:var(--text2);font-size:12px;font-weight:600;padding:5px 12px;cursor:pointer;
+  text-transform:none;letter-spacing:0;transition:background .15s,border-color .15s,color .15s;line-height:1.4;
+  font-family:inherit;flex-shrink:0}
+.dash-section-toggle:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
+
+/* ── Fiche matière première : barre haute (retour + navigation) ───────────── */
+.mp-detail-topbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.mp-nav{display:flex;align-items:center;gap:8px;margin-left:auto}
+.mp-nav-pos{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.mp-nav-btn{display:inline-flex;align-items:center;gap:6px;background:var(--card);color:var(--text);
+  border:1px solid var(--border);border-radius:10px;padding:9px 14px;font-size:13px;font-weight:600;
+  cursor:pointer;font-family:inherit;transition:background .15s,border-color .15s,color .15s;white-space:nowrap}
+.mp-nav-btn:hover:not(:disabled){background:var(--bg);border-color:var(--accent);color:var(--text)}
+.mp-nav-btn:disabled{opacity:.4;cursor:not-allowed}
+.mp-nav-arrow{font-size:15px;line-height:1;color:var(--muted)}
+@media (max-width:640px){
+  .mp-detail-topbar{flex-direction:column;align-items:stretch}
+  .mp-nav{margin-left:0;justify-content:space-between}
+  .mp-nav-btn{flex:1;justify-content:center}
+}
 .dash-alert-block{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;
   display:flex;flex-direction:column;min-height:100px}
 .dash-alert-block h4{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 12px;flex-shrink:0}
@@ -712,6 +761,55 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-btn-associate.mapped:hover{border-color:var(--accent);color:var(--accent)}
 .bes-total-row td{background:color-mix(in srgb,var(--accent) 5%,transparent);font-weight:700;color:var(--text);border-top:1px solid var(--border)}
 .bes-dossier-ref{font-weight:700;color:var(--text)}
+/* Vue par dossier : une colonne par categorie matiere. Le tableau depasse
+   la largeur d'ecran sur petit portable -> defilement horizontal plutot que
+   colonnes ecrasees. */
+.bes-scroll-x{overflow-x:auto}
+.bes-kind-cell{min-width:112px;vertical-align:top}
+.bes-kind-qte{font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.bes-kind-qte.nc{color:var(--warn,#d97706)}
+.bes-kind-src{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.35;word-break:break-word}
+.bes-kind-none{color:var(--border);font-size:12px}
+.bes-kind-cell.unmapped{background:color-mix(in srgb,var(--warn,#d97706) 9%,transparent);cursor:pointer}
+.bes-kind-cell.unmapped:hover{background:color-mix(in srgb,var(--warn,#d97706) 16%,transparent)}
+.bes-kind-cell .bes-kind-src.tolink{color:var(--warn,#d97706);font-weight:600}
+/* Boutons documents de la vue par dossier (OF, fiche technique). Desactives
+   quand le document n'est pas rattache : visible mais inerte, plutot que masque. */
+.bes-act-cell{white-space:nowrap;text-align:right}
+.bes-act-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 9px;margin-left:6px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:11px;font-weight:600;font-family:inherit;border-radius:6px;cursor:pointer;transition:all .12s}
+.bes-act-btn:hover{border-color:var(--accent);color:var(--accent)}
+.bes-act-btn.off{opacity:.35;cursor:not-allowed}
+.bes-act-btn.manque{border-color:var(--warn,#d97706);color:var(--warn,#d97706);background:color-mix(in srgb,var(--warn,#d97706) 8%,transparent)}
+.bes-act-btn.manque:hover{background:color-mix(in srgb,var(--warn,#d97706) 18%,transparent)}
+/* Modale de rattachement des documents d'un dossier non chiffre */
+.bes-doc-tabs{display:flex;gap:6px;margin:14px 0 10px}
+.bes-doc-tab{flex:1;padding:8px 12px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:13px;font-weight:600;font-family:inherit;border-radius:8px;cursor:pointer}
+.bes-doc-tab.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.bes-doc-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer;transition:border-color .12s,background .12s}
+.bes-doc-item:hover{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.bes-doc-item-main{flex:1;min-width:0}
+.bes-doc-item-ref{font-weight:700;color:var(--text);font-size:13px}
+.bes-doc-item-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.bes-doc-list{max-height:300px;overflow-y:auto;margin-top:8px}
+.bes-doc-import{margin-top:12px;padding:12px;border:1px dashed var(--border);border-radius:8px}
+.bes-doc-import-hd{font-size:12px;font-weight:700;color:var(--text);margin-bottom:6px}
+.bes-doc-status{font-size:12px;margin-top:8px;line-height:1.5}
+/* Pastille de validation d'un document (OF, fiche technique) */
+.bes-doc-pair{display:inline-flex;align-items:center;margin-left:6px}
+.bes-doc-pair .bes-act-btn{margin-left:0;border-top-right-radius:0;border-bottom-right-radius:0}
+.bes-valid-btn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:27px;border:1px solid var(--warn,#d97706);border-left:none;background:color-mix(in srgb,var(--warn,#d97706) 10%,transparent);color:var(--warn,#d97706);font-size:12px;font-weight:800;font-family:inherit;cursor:pointer;border-radius:0 6px 6px 0;transition:all .12s}
+.bes-valid-btn.ok{border-color:var(--success,#22c55e);color:var(--success,#22c55e);background:color-mix(in srgb,var(--success,#22c55e) 12%,transparent)}
+.bes-valid-btn:disabled{cursor:default;opacity:.75}
+.bes-valid-btn:not(:disabled):hover{filter:brightness(1.15)}
+.bes-destock-ok{color:var(--success,#22c55e);font-weight:700;font-size:12px}
+.bes-destock-todo{color:var(--warn,#d97706);font-weight:700;font-size:12px}
+/* Laize : une bobine ne se commande, ne se stocke et ne se destocke que dans sa laize */
+.bes-laize-chip{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--text2)}
+.bes-act-btn.off:hover{border-color:var(--border);color:var(--text2)}
+/* Vue par matiere : sources de fiche technique agregees sous la reference */
+.bes-mat-sources{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.45}
+.bes-mat-sources b{font-weight:600;color:var(--text2)}
+.bes-mat-cat{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;background:color-mix(in srgb,var(--accent) 10%,transparent);color:var(--text2)}
 .bes-dossier-meta{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.4}
 .bes-statut{display:inline-flex;align-items:center;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
 .bes-statut-en_cours{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent)}
@@ -732,6 +830,8 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-src-badge.of{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent)}
 .bes-src-badge.fiche{background:color-mix(in srgb,var(--warn,#d97706) 15%,transparent);color:var(--warn,#d97706)}
 .bes-warn-note{font-size:11px;color:var(--warn,#d97706);margin-top:3px;line-height:1.4}
+/* Conversion secondaire d'une ligne de besoin (mandrins -> tubes -> palettes) */
+.bes-sub-conv{font-size:11px;font-weight:600;color:var(--muted);margin-top:3px;line-height:1.4}
 /* Modal d'aide : sections repliables */
 .bes-doc-intro{font-size:13px;color:var(--text2);line-height:1.6;margin:2px 0 16px}
 .bes-doc-toolbar{display:flex;justify-content:flex-end;margin-bottom:8px}
@@ -2154,11 +2254,23 @@ function fournisseurSuggestions(query) {
 // ── API ─────────────────────────────────────────────────────────
 async function api(p, o) {
   try {
-    const r = await fetch(API + p, { credentials: 'include', ...o });
+    // cache: 'no-store' — MyStock lit des données vivantes. Le serveur envoie
+    // déjà les en-têtes anti-cache, ceci couvre le cas d'un proxy intercalé et
+    // les navigateurs qui gardent une réponse en mémoire pour un même onglet.
+    // `...o` reste après, pour qu'un appel puisse redemander le cache s'il veut.
+    const r = await fetch(API + p, { credentials: 'include', cache: 'no-store', ...o });
     if (r.status === 401) { window.location.href = '/'; return null; }
     if (!r.ok) {
       const e = await r.json().catch(() => ({}));
-      throw new Error(apiErrorDetail(e.detail, r.status));
+      const err = new Error(apiErrorDetail(e.detail, r.status));
+      // On conserve le statut et le détail STRUCTURÉ sur l'objet Error.
+      // Certaines erreurs ne sont pas des échecs mais des décisions à
+      // prendre — le 409 « stock FSC insuffisant » renvoie les quantités
+      // disponibles pour que l'interface propose la confirmation au lieu
+      // d'afficher un message et de s'arrêter là.
+      err.status = r.status;
+      err.detail = e.detail;
+      throw err;
     }
     return await r.json();
   } catch(e) {
@@ -2690,6 +2802,22 @@ async function loadBesoinsMatieres() {
   }
 }
 
+// Les dossiers passés se chargent à la demande : ils peuvent être nombreux et
+// n'intéressent que le déstockage, pas l'approvisionnement quotidien.
+async function loadBesoinsPasses() {
+  S.besoinsLoading = true;
+  renderContent();
+  try {
+    S.besoinsPasses = await api('/api/stock/besoins-matieres/par-dossier-passes');
+  } catch (e) {
+    S.besoinsPasses = { dossiers: [] };
+    showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
+  } finally {
+    S.besoinsLoading = false;
+    renderContent();
+  }
+}
+
 async function saveBesoinMapping(kind, sourceValue, matiereId) {
   try {
     await api('/api/stock/besoins-matieres/mapping', {
@@ -3145,7 +3273,10 @@ function buildLotTransporteurBtn(produitId, emplacement, row) {
     },
     on: { click: (ev) => {
       ev.stopPropagation();
-      sortirLot(produitId, emplacement, qLot, unite, refLabel, row.nb_lots, { expedition: true });
+      // row.fsc : depuis la séparation FSC, une ligne de stock porte son
+      // segment. Le transmettre garantit qu'on sort bien la palette qu'on
+      // voit à l'écran, et pas la plus ancienne toutes catégories confondues.
+      sortirLot(produitId, emplacement, qLot, unite, refLabel, row.nb_lots, { expedition: true, fsc: row.fsc });
     }},
   }, iconEl('truck', 18));
 }
@@ -3160,7 +3291,7 @@ function buildLotOutBtn(produitId, emplacement, row) {
     attrs: { title: 'Sortir le lot FIFO', 'aria-label': 'Sortir le lot FIFO' },
     on: { click: (ev) => {
       ev.stopPropagation();
-      sortirLot(produitId, emplacement, qLot, unite, refLabel, row.nb_lots);
+      sortirLot(produitId, emplacement, qLot, unite, refLabel, row.nb_lots, { fsc: row.fsc });
     }},
   }, iconEl('trash-2', 18));
 }
@@ -3175,9 +3306,31 @@ function buildLotMoveBtn(produitId, emplacement, row) {
     attrs: { title: 'Déplacer le lot', 'aria-label': 'Déplacer le lot' },
     on: { click: (ev) => {
       ev.stopPropagation();
-      openMoveLotModal(produitId, emplacement, qLot, unite, refLabel, row.nb_lots);
+      openMoveLotModal(produitId, emplacement, qLot, unite, refLabel, row.nb_lots, { fsc: row.fsc });
     }},
   }, iconEl('move', 18));
+}
+
+// ── Badge FSC d'une ligne de stock ────────────────────────────────
+// Depuis la séparation par segment, l'API renvoie DEUX lignes quand un même
+// produit est présent au même emplacement en certifié et en non certifié.
+// Ce badge est ce qui les rend distinguables à l'œil : sans lui, l'écran
+// afficherait deux lignes identiques avec des quantités différentes.
+//
+// `fsc_ecart` = le dossier d'origine exigeait bien la certification, mais sa
+// traçabilité matière était vide ou en écart au moment de l'entrée en stock.
+// Le lot reste FSC (le dossier fait foi), l'anomalie reste visible.
+function buildFscBadge(row) {
+  if (!row || !row.fsc) return null;
+  const ecart = !!row.fsc_ecart;
+  return el('span', {
+    cls: 'sm-fsc-badge' + (ecart ? ' is-ecart' : ''),
+    attrs: {
+      title: ecart
+        ? 'Produit FSC — traçabilité matière incomplète ou en écart sur le dossier d\'origine'
+        : 'Produit certifié FSC' + (row.no_dossier ? ' — dossier ' + row.no_dossier : ''),
+    },
+  }, 'FSC', ecart ? ' ⚠' : '');
 }
 
 function buildLotActionBtns(produitId, emplacement, row) {
@@ -4000,6 +4153,56 @@ function buildMvtModal() {
 
   const qteInp = el('input', { cls:'field-input', type:'number', placeholder:'0', min:'0', inputmode:'numeric', style:{direction:'ltr'} });
 
+  // ── Segments FSC connus pour ce couple (produit, emplacement) ────
+  // Lus depuis l'état déjà chargé (détail produit ou détail emplacement),
+  // qui renvoie désormais une ligne par segment. Pas d'appel réseau
+  // supplémentaire : la modale s'ouvre toujours depuis l'une de ces deux
+  // vues, et un aller-retour ici ralentirait une saisie d'atelier pour une
+  // information qu'on a déjà sous la main.
+  function fscSegmentsFor(pid, empl) {
+    const out = { fsc: 0, non_fsc: 0 };
+    const E = String(empl || '').trim().toUpperCase();
+    if (!E) return out;
+    if (S.selProduit && S.selProduit.produit && S.selProduit.produit.id === pid) {
+      (S.selProduit.emplacements || []).forEach(e => {
+        if (String(e.emplacement || '').toUpperCase() !== E) return;
+        out[e.fsc ? 'fsc' : 'non_fsc'] += Number(e.quantite || 0);
+      });
+    }
+    if (S.selEmpl && String(S.selEmpl.emplacement || '').toUpperCase() === E) {
+      (S.selEmpl.refs || []).forEach(r => {
+        if (r.id !== pid) return;
+        out[r.fsc ? 'fsc' : 'non_fsc'] += Number(r.quantite || 0);
+      });
+    }
+    return out;
+  }
+
+  // Inventaire d'un emplacement mixte : deux comptages distincts.
+  // Une seule quantité globale obligerait le serveur à répartir au prorata,
+  // c'est-à-dire à inventer une donnée — inacceptable sur un claim.
+  const qteFscInp = el('input', { cls:'field-input', type:'number', placeholder:'0', min:'0', inputmode:'numeric', style:{direction:'ltr'} });
+  const qteStdInp = el('input', { cls:'field-input', type:'number', placeholder:'0', min:'0', inputmode:'numeric', style:{direction:'ltr'} });
+  const splitWrap = el('div', { style:{display:'none'} },
+    el('div', { cls:'sm-fsc-alert' },
+      'Cet emplacement contient du stock certifié ET du stock non certifié. '
+      + 'Comptez les deux piles séparément : la ventilation ne peut pas être devinée.'),
+    el('div', { cls:'modal-field' },
+      el('label', { cls:'field-label' }, 'Quantité comptée — certifiée FSC'), qteFscInp),
+    el('div', { cls:'modal-field' },
+      el('label', { cls:'field-label' }, 'Quantité comptée — non certifiée'), qteStdInp)
+  );
+
+  function refreshSplitVisibility() {
+    if (type !== 'inventaire') { splitWrap.style.display = 'none'; return; }
+    const seg = fscSegmentsFor(produit_id, emplInp.value);
+    const mixte = seg.fsc > 0 && seg.non_fsc > 0;
+    splitWrap.style.display = mixte ? '' : 'none';
+    qteInp.parentElement.style.display = mixte ? 'none' : '';
+  }
+  emplInp.addEventListener('input', refreshSplitVisibility);
+  emplInp.addEventListener('change', refreshSplitVisibility);
+
   const today = new Date().toISOString().slice(0,10);
   const dateInp = el('input', { cls:'field-input', type:'date', value:today });
   const dateField = el('div', { cls:'modal-field', style:{display: type==='sortie' ? 'none' : ''} }, el('label', { cls:'field-label' }, 'Date du stock'), dateInp);
@@ -4051,10 +4254,46 @@ function buildMvtModal() {
 
   const confirmPfCls = type === 'inventaire' ? 'inventaire' : ('pf-' + type);
   const confirmBtn = el('button', { cls:'btn-confirm '+confirmPfCls, on:{ click: async () => {
-    const qte = parseFloat(qteInp.value);
     const empl = emplInp.value.trim().toUpperCase();
     if (!empl) { showToast('Emplacement requis','error'); return; }
-    if (!qte||qte<=0) { showToast('Quantité requise','error'); return; }
+
+    const splitActif = (type === 'inventaire' && splitWrap.style.display !== 'none');
+    let qte, qFsc = null, qStd = null;
+    if (splitActif) {
+      qFsc = parseFloat(qteFscInp.value);
+      qStd = parseFloat(qteStdInp.value);
+      if (Number.isNaN(qFsc) && Number.isNaN(qStd)) { showToast('Quantités requises','error'); return; }
+      qFsc = Number.isNaN(qFsc) ? 0 : qFsc;
+      qStd = Number.isNaN(qStd) ? 0 : qStd;
+      if (qFsc < 0 || qStd < 0) { showToast('Quantités négatives impossibles','error'); return; }
+      qte = qFsc + qStd;
+      if (qte <= 0) { showToast('Quantité totale doit être positive','error'); return; }
+    } else {
+      qte = parseFloat(qteInp.value);
+      if (!qte||qte<=0) { showToast('Quantité requise','error'); return; }
+    }
+
+    // Sortie sur emplacement mixte : on demande explicitement quel stock est
+    // servi. Sans cette question, le FIFO global viderait le certifié en
+    // premier (c'est souvent le plus ancien) — le stock le plus précieux et
+    // celui qu'un simple réapprovisionnement ne remplace pas.
+    let fscSortie = null;
+    if (type === 'sortie') {
+      const seg = fscSegmentsFor(produit_id, empl);
+      if (seg.fsc > 0 && seg.non_fsc > 0) {
+        const rep = confirm(
+          'Cet emplacement contient ' + fN(seg.fsc) + ' certifié(s) FSC et '
+          + fN(seg.non_fsc) + ' non certifié(s).\n\n'
+          + 'OK = sortie CERTIFIÉE FSC (puise dans le stock certifié)\n'
+          + 'Annuler = sortie ordinaire (puise dans le non certifié d\'abord)'
+        );
+        fscSortie = rep ? 1 : 0;
+      } else if (seg.fsc > 0) {
+        fscSortie = 1;
+      } else if (seg.non_fsc > 0) {
+        fscSortie = 0;
+      }
+    }
 
     // Préfixe selon case cochée
     let prefix = '';
@@ -4071,7 +4310,12 @@ function buildMvtModal() {
     const userNote = noteInp.value.trim();
     const finalNote = [prefix, userNote].filter(Boolean).join(' | ');
 
-    await submitMouvement({ produit_id, emplacement:empl, type_mouvement:S.modalType, quantite:qte, date_entree:dateInp.value||today, note:finalNote });
+    await submitMouvement({
+      produit_id, emplacement:empl, type_mouvement:S.modalType, quantite:qte,
+      date_entree:dateInp.value||today, note:finalNote,
+      ...(splitActif ? { quantite_fsc: qFsc, quantite_non_fsc: qStd } : {}),
+      ...(fscSortie != null ? { fsc: fscSortie } : {}),
+    });
   }}}, type==='entree'?'Valider entrée':type==='sortie'?'Valider sortie':'Valider inventaire');
 
   sheet.append(...[
@@ -4081,6 +4325,7 @@ function buildMvtModal() {
     typeBtns,
     el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Emplacement'), emplInp, suggWrap),
     el('div',{cls:'modal-field'}, el('label',{cls:'field-label'},'Quantité'), qteInp),
+    splitWrap,
     dateField,
     origineWrap,
     expWrap,
@@ -4091,6 +4336,10 @@ function buildMvtModal() {
     )
   ].filter(Boolean));
   overlay.appendChild(sheet);
+  // L'emplacement peut être pré-rempli à l'ouverture (modale lancée depuis un
+  // détail d'emplacement) : on évalue tout de suite s'il est mixte, sinon les
+  // deux champs de comptage n'apparaîtraient qu'après une frappe inutile.
+  refreshSplitVisibility();
   return overlay;
 }
 
@@ -4198,6 +4447,28 @@ function renderToast() {
   document.body.appendChild(t);
 }
 
+// Badge FSC d'un MOUVEMENT (et non d'un lot).
+//
+// `m.fsc` vaut null sur tous les mouvements antérieurs à la migration 221 et
+// sur les mouvements « neutres » (correction, ajustement) qui n'engagent
+// aucun claim. On ne montre donc rien dans ce cas plutôt qu'un badge « non
+// FSC » : absence d'information et information d'absence ne sont pas la même
+// chose, et un historique de traçabilité doit distinguer les deux.
+function buildMvtFscBadge(m) {
+  if (!m || m.fsc == null) return null;
+  if (!m.fsc && !m.fsc_ecart) return null;
+  const ecart = !!m.fsc_ecart;
+  return el('span', {
+    cls: 'sm-fsc-badge' + (ecart ? ' is-ecart' : ''),
+    style: { marginLeft: '6px' },
+    attrs: {
+      title: ecart
+        ? ('Écart FSC — ' + (m.fsc_ecart_note || 'complément non certifié sur une sortie certifiée'))
+        : ('Mouvement de stock certifié FSC' + (m.no_dossier ? ' — dossier ' + m.no_dossier : '')),
+    },
+  }, 'FSC', ecart ? ' ⚠' : '');
+}
+
 function buildMvtHistory(mouvements, unite='', opts=null) {
   return el('div',{cls:'card'},
     el('div',{cls:'card-header'},el('div',{cls:'card-title'},'🕐 Historique')),
@@ -4220,6 +4491,10 @@ function buildMvtHistory(mouvements, unite='', opts=null) {
             (m.produit_id && m.reference)
               ? el('button',{cls:'mvt-ref-link',type:'button',on:{click:()=>loadProduit(m.produit_id)}},m.reference)
               : el('span',null,refTxt || '—'),
+            // Le claim voyage sur le mouvement depuis la migration 221 : un
+            // historique qui ne le montre pas oblige à rouvrir le lot pour
+            // savoir si le stock qui vient de partir était certifié.
+            buildMvtFscBadge(m),
             el('span',{cls:pfQteCls},signe+fU(m.quantite, unit))
           ),
           el('div',{cls:'mvt-line2'},
@@ -4230,7 +4505,13 @@ function buildMvtHistory(mouvements, unite='', opts=null) {
             (m.quantite_apres != null)
               ? el('span',null,' · Solde '+fU(m.quantite_apres, unit))
               : null,
+            (m.no_dossier ? el('span',null,' · dossier '+m.no_dossier) : null),
           ),
+          // Une dérogation FSC (complément non certifié sur une sortie
+          // certifiée) est affichée en clair, avec sa justification. C'est
+          // exactement ce qu'un auditeur vient chercher.
+          m.fsc_ecart ? el('div',{cls:'mvt-note mvt-note-fsc-ecart'},
+            '⚠ Écart FSC — ' + (m.fsc_ecart_note || 'complément non certifié')) : null,
           m.note?el('div',{cls:'mvt-note'},m.note):null
         )
       );
@@ -4951,6 +5232,15 @@ const MP_CATEGORIES_AVEC_CONDITIONNEMENT = new Set(['carton', 'mandrin']);
 function mpHasConditionnement(cat) {
   return MP_CATEGORIES_AVEC_CONDITIONNEMENT.has((cat || '').toLowerCase());
 }
+function mpIsMandrinCategory(cat) {
+  return (cat || '').toLowerCase() === 'mandrin';
+}
+// « Cartons par palette », « Tubes par palette » : le libelle est au pluriel,
+// l'unite d'achat renvoyee par mpUniteAchat() est au singulier.
+function mpLabelUnitesParPalette(cat) {
+  const u = mpUniteAchat(cat);
+  return u.charAt(0).toUpperCase() + u.slice(1) + 's par palette';
+}
 function mpUniteAchat(cat) {
   const c = (cat || '').toLowerCase();
   if (c === 'carton') return 'carton';
@@ -5228,6 +5518,49 @@ function buildMpMvtHistory(mouvements, matiere) {
   );
 }
 
+// Ordre de navigation précédent/suivant sur une fiche matière : on suit la liste
+// telle qu'elle est affichée (filtres de catégorie + recherche en cours) quand
+// la matière courante y figure. Sinon (arrivée depuis le tableau de bord ou une
+// URL directe), on retombe sur le référentiel complet.
+function mpNavListe(id) {
+  const filtered = filterMatieresList() || [];
+  if (filtered.some(x => x && x.id === id)) return filtered;
+  return S.matieres || [];
+}
+
+function buildMatiereNav(m) {
+  if (!m) return null;
+  const list = mpNavListe(m.id);
+  const idx = list.findIndex(x => x && x.id === m.id);
+  if (idx < 0 || list.length < 2) return null;
+  const prev = idx > 0 ? list[idx - 1] : null;
+  const next = idx < list.length - 1 ? list[idx + 1] : null;
+  const mk = (target, label, dir) => {
+    const cible = target ? (target.reference || target.designation || '') : '';
+    const b = el('button', {
+      cls: 'mp-nav-btn',
+      type: 'button',
+      attrs: target
+        ? { title: label + ' \u2014 ' + cible, 'aria-label': label + ' : ' + cible }
+        : { disabled: 'disabled', title: dir === 'prev' ? 'Première référence de la liste' : 'Dernière référence de la liste' },
+      on: target ? { click: () => loadMatiere(target.id) } : {},
+    });
+    if (dir === 'prev') {
+      b.appendChild(el('span', { cls: 'mp-nav-arrow' }, '\u2039'));
+      b.appendChild(el('span', null, label));
+    } else {
+      b.appendChild(el('span', null, label));
+      b.appendChild(el('span', { cls: 'mp-nav-arrow' }, '\u203a'));
+    }
+    return b;
+  };
+  return el('div', { cls: 'mp-nav' },
+    mk(prev, 'Précédent', 'prev'),
+    el('span', { cls: 'mp-nav-pos' }, (idx + 1) + ' / ' + list.length),
+    mk(next, 'Suivant', 'next'),
+  );
+}
+
 function buildMatiereDetail() {
   const sel = S.selMatiere;
   if (!sel || !sel.matiere) {
@@ -5239,10 +5572,10 @@ function buildMatiereDetail() {
 
   const back = el('button', {
     cls: 'btn-ghost mp-back-btn',
-    style: { marginBottom: '14px' },
     type: 'button',
     on: { click: clearMatiereSel },
   }, '← Retour aux matières premières');
+  const topbar = el('div', { cls: 'mp-detail-topbar' }, back, buildMatiereNav(m));
 
   const actionBtns = [];
   if (!S.stockReadOnly) {
@@ -5279,7 +5612,7 @@ function buildMatiereDetail() {
   }
   if (isMatieresAdmin()) {
     actionBtns.push(el('button', {
-      cls: 'mp-act-icon',
+      cls: 'mp-act-icon mp-act-icon--neutral',
       type: 'button',
       style: { flex: '0 0 auto', minWidth: '44px' },
       attrs: { title: 'Modifier la référence', 'aria-label': 'Modifier la référence' },
@@ -5386,7 +5719,7 @@ function buildMatiereDetail() {
   const equiv = mpIsAdhesifCategory(m) ? mpAdhesifEquivalent(m.quantite, m) : '';
 
   return el('div', { cls: 'content' },
-    back,
+    topbar,
     el('div', { cls: 'scorecard' },
       el('div', { style: { display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' } },
         ...[dashMpCatBadge(m.categorie, m.sous_section), dashMpSousCatBadge(m)].filter(Boolean),
@@ -6153,9 +6486,14 @@ function closePfModals() {
 }
 
 function renderPfMvtModal() {
-  closePfModals();
+  // closePfModals() remet S.pfModal a null : il faut donc capturer la modale
+  // AVANT de fermer, puis la restaurer. Sans cela le test `if (!modal)` sortait
+  // systematiquement et les boutons Entree / Sortie ne faisaient rien du tout,
+  // sans la moindre erreur en console.
   const modal = S.pfModal;
   if (!modal) return;
+  closePfModals();
+  S.pfModal = modal;
   const mroot = document.getElementById('mroot');
   if (!mroot) return;
   const typeMvt = modal.type;
@@ -7531,6 +7869,7 @@ async function openMatiereCopyFromCard(m) {
     metres_lineaires_par_bobine: m.metres_lineaires_par_bobine || null,
     prix_eur_m2: m.prix_eur_m2 || null,
     unites_par_palette: m.unites_par_palette || null,
+    longueur_tube_mm: m.longueur_tube_mm || null,
     stock_par_laize: Array.isArray(m.stock_par_laize) ? m.stock_par_laize.slice() : [],
   };
   await Promise.all([loadMatieresAdminList(), loadMpSousSections()]);
@@ -7606,6 +7945,19 @@ function matiereRefEditPayload(item, fields) {
         return { error: 'Unités par palette : valeur > 0 obligatoire.' };
       }
       payload.unites_par_palette = upp;
+    }
+  }
+  if (fields.isMandrin && fields.ltInp) {
+    // Toujours envoyée, même vide, pour autoriser l'effacement de la longueur.
+    const raw = (fields.ltInp.value || '').replace(',', '.').trim();
+    if (raw === '') {
+      payload.longueur_tube_mm = null;
+    } else {
+      const lt = parseFloat(raw);
+      if (isNaN(lt) || lt <= 0) {
+        return { error: 'Longueur tube : valeur > 0 obligatoire.' };
+      }
+      payload.longueur_tube_mm = lt;
     }
   }
   if (fields.isAdhesif && fields.cppInp && fields.kgcInp) {
@@ -8021,7 +8373,35 @@ function appendMatiereRefEditFields(parent, item) {
   const uniteAchat = mpUniteAchat(item.categorie);
   const uppInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 260' } });
   uppInp.value = String(item.unites_par_palette != null && item.unites_par_palette > 0 ? item.unites_par_palette : '');
-  uppWrap.append(el('label', null, uniteAchat.charAt(0).toUpperCase() + uniteAchat.slice(1) + ' par palette'), uppInp);
+  uppWrap.append(el('label', null, mpLabelUnitesParPalette(item.categorie)), uppInp);
+
+  // ── Mandrins : longueur du tube acheté ────────────────────────────────────
+  // Un mandrin ne s'achète pas à l'unité : on achète des tubes qu'on redécoupe
+  // à la laize du module. Sans cette longueur, Besoins matières sait combien de
+  // mandrins il faut, mais pas combien de tubes commander.
+  const isMandrin = mpIsMandrinCategory(item.categorie);
+  const ltWrap = el('div', { cls: 'mp-field', style: { display: isMandrin ? '' : 'none' } });
+  const ltInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 1500' } });
+  ltInp.value = String(item.longueur_tube_mm > 0 ? item.longueur_tube_mm : '');
+  const ltHint = el('div', { cls: 'mp-hint' }, '');
+  function refreshLongueurTube() {
+    const lt = parseFloat((ltInp.value || '').replace(',', '.'));
+    const upp = parseFloat((uppInp.value || '').replace(',', '.'));
+    if (lt > 0 && upp > 0) {
+      ltHint.textContent = 'Une palette représente ' + fN(upp) + ' tubes, soit '
+        + fN(Math.round(lt * upp / 1000)) + ' m de mandrin à découper.';
+    } else if (lt > 0) {
+      ltHint.textContent = 'Renseigne aussi les tubes par palette pour connaître '
+        + 'le métrage de mandrin d\'une palette.';
+    } else {
+      ltHint.textContent = 'Longueur du tube acheté. Sans elle, le besoin en tubes '
+        + 'reste non chiffré dans Besoins matières.';
+    }
+  }
+  ltInp.addEventListener('input', refreshLongueurTube);
+  uppInp.addEventListener('input', refreshLongueurTube);
+  refreshLongueurTube();
+  ltWrap.append(el('label', null, 'Longueur tube (mm)'), ltInp, ltHint);
 
   // ── Conditionnement à l'achat des adhésifs ────────────────────────────────
   // Le stock est au kilo ; ces deux champs décrivent comment l'adhésif ARRIVE
@@ -8081,7 +8461,7 @@ function appendMatiereRefEditFields(parent, item) {
   // Formulaire organisé en sections : la fiche mélangeait identification,
   // conditionnement, seuils et laizes dans une seule colonne de champs.
   const sectionConditionnement = (isAdhesif || hasCond || mpIsPaletteCategory(item))
-    ? mpFormSection('Conditionnement à l\'achat', ...adhesifCondFields, pppWrap, uppWrap)
+    ? mpFormSection('Conditionnement à l\'achat', ...adhesifCondFields, pppWrap, uppWrap, ltWrap)
     : null;
 
   // Mise en page deux colonnes. Identification et Classement d'un cote,
@@ -8123,7 +8503,7 @@ function appendMatiereRefEditFields(parent, item) {
     ? mpFormSection('Laizes & tarification', laizeWrap)
     : null;
   parent.append(...[grille, sectionLaizes].filter(Boolean));
-  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, abbrevInp, hasAbbrev, sousCategorieSel };
+  return { refInp, desInp, seuilInp, pppInp, couleurInp, metresInp, prixM2Inp, laizeChecks, isLaizee, sousSectionSel, hasSousSection, uppInp, hasCond, ltInp, isMandrin, prixModeUniInp, prixModeLaiInp, laizePriceInputs, laizeFournisseursIds, intervalleInp, cppInp, kgcInp, gsmInp, isAdhesif, abbrevInp, hasAbbrev, sousCategorieSel };
 }
 
 async function submitMatiereRefEdit(item, fields, onSaved) {
@@ -9405,6 +9785,11 @@ function buildMatieresAdminAddForm() {
   const uppWrap = el('div', { cls: 'mp-field' });
   const uppInp = el('input', { attrs: { type: 'number', min: '1', step: '1', placeholder: 'Ex. 260' } });
   const uppLbl = el('label', null, 'Unités par palette');
+  // Mandrins : longueur du tube acheté (détail sur la fiche matière).
+  const ltWrap = el('div', { cls: 'mp-field', style: { display: 'none' } });
+  const ltInp = el('input', { attrs: { type: 'number', min: '0', step: '1', placeholder: 'Ex. 1500' } });
+  ltWrap.append(el('label', null, 'Longueur tube (mm)'), ltInp,
+    el('div', { cls: 'mp-hint' }, 'Longueur du tube acheté, redécoupé à la laize du module.'));
   // Conditionnement à l'achat des adhésifs (stock au kilo) : palette → cartons → kg.
   const adhCondWrap = el('div', { style: { display: 'none' } });
   const cppInp = el('input', { attrs: { type: 'number', min: '1', step: '1', placeholder: 'Ex. 24' } });
@@ -9481,13 +9866,13 @@ function buildMatieresAdminAddForm() {
     pppWrap.style.display = isPal ? '' : 'none';
     couleurWrap.style.display = isGlass ? '' : 'none';
     uppWrap.style.display = hasCond ? '' : 'none';
+    ltWrap.style.display = mpIsMandrinCategory(cat) ? '' : 'none';
     adhCondWrap.style.display = mpIsAdhesifCategory(cat) ? '' : 'none';
     laizeWrap.style.display = isLaizee ? '' : 'none';
     sousSectionWrap.style.display = hasSousSection ? '' : 'none';
     pppLbl.textContent = 'Palettes par pile';
     if (hasCond) {
-      const u = mpUniteAchat(cat);
-      uppLbl.textContent = u.charAt(0).toUpperCase() + u.slice(1) + ' par palette';
+      uppLbl.textContent = mpLabelUnitesParPalette(cat);
     }
     seuilLbl.textContent = mpSeuilFieldLabel(cat);
     seuilInp.step = isPal || isCarton || cat === 'mandrin' || mpIsBobineCategory(cat) ? '1' : '0.5';
@@ -9513,6 +9898,7 @@ function buildMatieresAdminAddForm() {
     if (seed.metres_lineaires_par_bobine) metresInp.value = String(seed.metres_lineaires_par_bobine);
     if (seed.prix_eur_m2) prixM2Inp.value = String(seed.prix_eur_m2);
     if (seed.unites_par_palette) uppInp.value = String(seed.unites_par_palette);
+    if (seed.longueur_tube_mm) ltInp.value = String(seed.longueur_tube_mm);
     if (Array.isArray(seed.stock_par_laize)) {
       const seedLaizeIds = new Set(seed.stock_par_laize.map(s => s.laize_id));
       laizeChecks.querySelectorAll('input[type=checkbox]').forEach(inp => {
@@ -9536,6 +9922,7 @@ function buildMatieresAdminAddForm() {
     couleurWrap,
     pppWrap,
     uppWrap,
+    ltWrap,
     adhCondWrap,
     sousSectionWrap,
     el('div', { cls: 'mp-field' }, seuilLbl, seuilInp),
@@ -9586,6 +9973,10 @@ function buildMatieresAdminAddForm() {
                 payload.unites_par_palette = upp;
               }
             }
+          }
+          if (mpIsMandrinCategory(cat)) {
+            const lt = parseFloat((ltInp.value || '').replace(',', '.'));
+            if (lt > 0) payload.longueur_tube_mm = lt;
           }
           if (mpIsAdhesifCategory(cat)) {
             const cpp = parseFloat((cppInp.value || '').replace(',', '.'));
@@ -10736,7 +11127,10 @@ function buildDashboardAlertes(d) {
   const mpRows = alertesMp.length
       ? el('div', { cls: 'dash-alert-rows' }, ...alertesMp.map(a => el('div', {
           cls: 'dash-alert-row',
-          on: { click: () => goToTab('matieres') },
+          attrs: { title: 'Ouvrir la fiche ' + (a.reference || '') },
+          // La ligne cite une référence précise : renvoyer vers la liste
+          // complète obligeait à la retrouver à la main.
+          on: { click: () => (a.id ? loadMatiere(a.id) : goToTab('matieres')) },
         },
           dashMpCatBadge(a.categorie),
           el('span', { cls: 'dash-alert-main' },
@@ -10809,6 +11203,10 @@ function buildDashboardActivite(d) {
         el('div', { cls: 'dash-act-badges' },
           dashStockTypeBadge(m.type_stock),
           dashMvtBadge(m.type_mouvement),
+          // Même badge que dans l'historique détaillé : le flux d'activité
+          // est souvent le premier endroit où on remarque qu'une sortie
+          // certifiée vient de partir avec un complément non certifié.
+          buildMvtFscBadge(m),
         ),
         mainEl,
         el('span', { cls: qteCls }, qteText),
@@ -11011,7 +11409,10 @@ function buildProduitDetail() {
           on:{click:()=>loadEmplacement(e.emplacement)}
         },
           el('div',null,
-            el('div',{cls:stockEmplCodeClass(e.emplacement)},stockEmplLabel(e.emplacement)),
+            el('div',{cls:'sm-empl-code-row'},
+              el('div',{cls:stockEmplCodeClass(e.emplacement)},stockEmplLabel(e.emplacement)),
+              buildFscBadge(e)
+            ),
             el('div',{cls:'empl-info'},'FIFO lot : '+fD(e.date_fifo_empl)+(e.alerte_inventaire?' · inventaire':'')+(e.jours_stock!=null?' · ~'+e.jours_stock+'j':''))
           ),
           el('div',{cls:'empl-row-right'},
@@ -11095,7 +11496,15 @@ function buildEmplacementDetail() {
     el('div',{cls:'sc-des'},(sel.nb_refs||0)+' réf. · '+fN(sel.total_unites)+' u. en stock'),
     el('div',{cls:'sc-stats'},
       el('div',{cls:'sc-stat'},el('div',{cls:'sc-stat-label'},'Références'),el('div',{cls:'sc-stat-value'},String(refs.length))),
-      el('div',{cls:'sc-stat'},el('div',{cls:'sc-stat-label'},'Unités'),el('div',{cls:'sc-stat-value'},fN(sel.total_unites)))
+      el('div',{cls:'sc-stat'},el('div',{cls:'sc-stat-label'},'Unités'),el('div',{cls:'sc-stat-value'},fN(sel.total_unites))),
+      // Ventilation affichée seulement si les deux segments coexistent :
+      // sur un emplacement homogène, la répartition n'apprend rien et
+      // n'ajouterait que du bruit.
+      (sel.total_fsc > 0 && sel.total_non_fsc > 0)
+        ? el('div',{cls:'sc-stat'},
+            el('div',{cls:'sc-stat-label'},'Dont FSC'),
+            el('div',{cls:'sc-stat-value sm-fsc-value'},fN(sel.total_fsc)))
+        : null
     ),
     invInfo
   );
@@ -11108,7 +11517,13 @@ function buildEmplacementDetail() {
           cls:'empl-row',
           on:{click:()=>loadProduit(r.id)}
         },
-          el('div',null,el('div',{cls:'empl-code'},r.reference),el('div',{cls:'empl-info'},r.designation||'')),
+          el('div',null,
+            el('div',{cls:'sm-empl-code-row'},
+              el('div',{cls:'empl-code'},r.reference),
+              buildFscBadge(r)
+            ),
+            el('div',{cls:'empl-info'},r.designation||'')
+          ),
           el('div',{cls:'empl-row-right'},
             el('div',null,
               el('div',{cls:'empl-qte'},fU(r.quantite, r.unite||'')),
@@ -11196,7 +11611,7 @@ function _inp(placeholder, opts={}) {
 
 // ── 1. Logistique — Identification palette (A4 paysage) ───────────
 function buildIdPaletteA4Form() {
-  let _ref='', _qty='', _unit=allUnitLabels()[0]||'étiquettes', _qctn='';
+  let _ref='', _qty='', _unit=allUnitLabels()[0]||'étiquettes', _qctn='', _fsc=false;
   function doPrint() {
     const ref = _ref.trim(), qty = _qty.trim(), qctn = _qctn.trim();
     if (!ref) { showToast('Référence requise', 'error'); return; }
@@ -11216,8 +11631,16 @@ function buildIdPaletteA4Form() {
               font-family:'Berlin Sans FB','Berlin Sans FB Demi',Arial,sans-serif;text-transform:uppercase}
        .ref{font-size:112pt;font-weight:900;letter-spacing:1pt;word-break:break-all;line-height:1.1;text-decoration:underline}
        .quv{font-size:100pt;font-weight:800;color:#111}
-       .qctn{font-size:72pt;font-weight:700;color:#333}`,
+       .qctn{font-size:72pt;font-weight:700;color:#333}
+       /* Bandeau FSC : même code visuel que l'étiquette bobine matière, pour
+          qu'un cariste lise la même chose sur une palette et sur une bobine.
+          Contour épais et non couleur seule : les imprimantes d'atelier sont
+          en noir et blanc. */
+       .fsc-banner{font-size:34pt;font-weight:900;letter-spacing:3pt;
+                   padding:4mm 14mm;border:3mm solid #0f7c3a;border-radius:6mm;
+                   background:#e6f4ea;color:#0f7c3a}`,
       `<div class="label">
+         ${_fsc?`<div class="fsc-banner">PRODUIT CERTIFIÉ FSC</div>`:''}
          <div class="ref">${ref} FS</div>
          ${quv?`<div class="quv">${quv}</div>`:''}
          ${showCtn?`<div class="qctn">(${ctnLabel})</div>`:''}
@@ -11248,10 +11671,21 @@ function buildIdPaletteA4Form() {
     el('div',{cls:'etiq-form-field',style:{flex:'1'}},el('label',{cls:'etiq-form-label'},'Quantité'),qtyInp),
     el('div',{cls:'etiq-form-field',style:{flex:'1.6'}},el('label',{cls:'etiq-form-label'},'Unité de vente'),unitSel)
   );
+  // Case FSC : l'étiquette palette est saisie à la main (elle ne descend pas
+  // d'un lot précis), donc le claim ne peut pas être hérité automatiquement.
+  // Non cochée par défaut — sur une certification, l'oubli d'un marquage est
+  // récupérable, un marquage abusif ne l'est pas.
+  const fscChk=el('input',{attrs:{type:'checkbox',id:'palette-fsc-chk'},style:{width:'16px',height:'16px',cursor:'pointer'}});
+  fscChk.addEventListener('change',e=>{_fsc=e.target.checked;});
+  const fscRow=el('label',{cls:'etiq-form-field',style:{display:'flex',flexDirection:'row',alignItems:'center',gap:'10px',cursor:'pointer'}},
+    fscChk,
+    el('span',{cls:'etiq-form-label',style:{margin:'0'}},'Palette certifiée FSC — ajouter le bandeau sur l\'étiquette')
+  );
   return el('div',null,
     el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Référence produit *'),rInp),
     qtyUnitRow,
     el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Quantité cartons'),cInp),
+    fscRow,
     btn);
 }
 
@@ -11696,8 +12130,9 @@ const BESOINS_KIND_UNITE_NOTE = {
   support: 'Besoin exprimé en mètres linéaires — le métrage de l’OF.',
   glassine: 'Besoin exprimé en mètres linéaires — le métrage de l’OF.',
   adhesif: 'Besoin exprimé en kilos — grammage × métrage × laize.',
-  mandrin: 'Besoin exprimé en unités.',
-  carton: 'Besoin exprimé en unités.',
+  mandrin: 'Besoin exprimé en mandrins — un par bobine produite. '
+    + 'La traduction en tubes puis en palettes à commander s’affiche sous le total.',
+  carton: 'Besoin exprimé en cartons. Le stock est tenu en palettes : il est converti via « Cartons par palette » de la fiche matière.',
   palette: 'Besoin exprimé en unités.',
 };
 
@@ -11783,10 +12218,40 @@ function buildBesoinsMatieres() {
         on: { click: () => { S.besoinsView = 'echeance'; renderContent(); } }
       }, 'Par échéance'),
       el('button', {
+        cls: 'bes-seg-btn' + (view === 'matiere' ? ' active' : ''),
+        on: { click: () => { S.besoinsView = 'matiere'; renderContent(); } }
+      }, 'Par matière'),
+      el('button', {
         cls: 'bes-seg-btn' + (view === 'dossier' ? ' active' : ''),
         on: { click: () => { S.besoinsView = 'dossier'; renderContent(); } }
       }, 'Par dossier'),
+      el('button', {
+        cls: 'bes-seg-btn' + (view === 'passes' ? ' active' : ''),
+        title: 'Productions terminées : ce qui reste à déstocker et ce qui l\'est déjà',
+        on: { click: () => { S.besoinsView = 'passes'; loadBesoinsPasses(); } }
+      }, 'Dossiers passés'),
     ),
+    (function () {
+      const inp = el('input', {
+        cls: 'bes-search-input',
+        style: { maxWidth: '260px', margin: '0' },
+        placeholder: 'Filtrer — n\'importe quel champ…',
+      });
+      inp.value = S.besoinsFiltre || '';
+      let t = null;
+      inp.addEventListener('input', () => {
+        clearTimeout(t);
+        t = setTimeout(() => {
+          S.besoinsFiltre = (inp.value || '').trim();
+          renderContent();
+          // Le re-rendu recrée l'input : on lui rend le focus et le curseur,
+          // sinon on ne peut pas taper deux caractères de suite.
+          const n = document.querySelector('.bes-toolbar .bes-search-input');
+          if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); }
+        }, 250);
+      });
+      return inp;
+    })(),
     el('div', { cls: 'bes-actions' },
       el('button', { cls: 'bes-btn-secondary', on: { click: () => openBesoinsMappingModal() } },
         iconEl('list-checks', 14), el('span', {}, 'Correspondances')),
@@ -11798,14 +12263,162 @@ function buildBesoinsMatieres() {
 
   if (view === 'echeance') {
     wrap.appendChild(_buildBesoinsEcheanceTable(ech));
+  } else if (view === 'matiere') {
+    wrap.appendChild(_buildBesoinsMatiereTable(ech));
+  } else if (view === 'passes') {
+    wrap.appendChild(_buildBesoinsPassesTable(S.besoinsPasses));
   } else {
     wrap.appendChild(_buildBesoinsDossierTable(dos));
   }
   return wrap;
 }
 
+// ── Vue « par matière » ───────────────────────────────────────────────────
+// La vue par échéance raisonne en valeurs de fiche technique, parce qu'on y
+// corrige les associations. Ici on raisonne en références MySifa : c'est
+// l'unité de la commande fournisseur, et deux valeurs de fiche mappées sur la
+// même référence doivent s'additionner avant qu'on décide d'acheter.
+function _buildBesoinsMatiereTable(ech) {
+  const q = S.besoinsFiltre;
+  const matieres = (ech.matieres || []).filter(m => _besMatchFiltre(m, q));
+  const orphelins = (ech.non_associees || []).filter(o => _besMatchFiltre(o, q));
+  if (!matieres.length && !orphelins.length) {
+    return el('div', { cls: 'bes-empty' },
+      'Aucun besoin matière détecté pour les dossiers en cours ou en attente.');
+  }
+
+  const container = el('div', {});
+
+  if (matieres.length) {
+    const section = el('div', { cls: 'bes-section' });
+    section.appendChild(el('div', { cls: 'bes-section-head' },
+      el('span', { cls: 'bes-section-title' }, 'Références MySifa'),
+      el('span', { cls: 'bes-section-count' },
+        `${matieres.length} référence${matieres.length > 1 ? 's' : ''} à approvisionner`),
+    ));
+
+    const table = el('table', { cls: 'bes-table' });
+    table.appendChild(el('thead', {}, el('tr', {},
+      el('th', {}, 'Référence'),
+      el('th', {}, 'Catégorie'),
+      el('th', {}, 'Laize'),
+      el('th', { cls: 'num' }, 'Besoin 7j'),
+      el('th', { cls: 'num' }, 'Besoin 15j'),
+      el('th', { cls: 'num' }, 'Total'),
+      el('th', { cls: 'num' }, 'Stock'),
+      el('th', { cls: 'num' }, 'Manque 7j'),
+      el('th', { cls: 'num' }, 'Dossiers'),
+    )));
+
+    const tbody = el('tbody', {});
+    matieres.forEach(m => {
+      const rowCls = (m.manque_7j != null && m.manque_7j > 0) ? 'bes-row-danger' : '';
+      // Les valeurs de fiche technique qui alimentent cette référence : c'est
+      // la seule façon de comprendre d'où sort un total agrégé.
+      const srcTxt = (m.sources || [])
+        .map(s => s.source_value + (s.besoin_total ? ' (' + _fmtQte(s.besoin_total, m.unite) + ')' : ''))
+        .join(' · ');
+
+      tbody.appendChild(el('tr', { cls: rowCls },
+        el('td', { cls: 'bes-mp-cell' },
+          el('div', { cls: 'bes-mp-ref' }, _besMpLink(m.matiere_id, m.matiere_ref || '—')),
+          m.matiere_designation ? el('div', { cls: 'bes-mp-des' }, m.matiere_designation) : null,
+          srcTxt ? el('div', { cls: 'bes-mat-sources' },
+            el('b', {}, (m.sources.length > 1 ? m.sources.length + ' valeurs de fiche : ' : 'Fiche : ')),
+            srcTxt) : null,
+          m.nb_dossiers_incalculables
+            ? el('div', { cls: 'bes-warn-note' },
+                `${m.nb_dossiers_incalculables} dossier${m.nb_dossiers_incalculables > 1 ? 's' : ''} non chiffré${m.nb_dossiers_incalculables > 1 ? 's' : ''}, hors total`)
+            : null,
+        ),
+        el('td', {}, el('span', { cls: 'bes-mat-cat' },
+          BESOINS_KIND_LABELS[m.kind] || m.matiere_categorie || m.kind)),
+        // Une bobine se commande par laize : deux laizes d'une même référence
+        // sont deux lignes distinctes, chacune avec son stock et son manque.
+        el('td', {}, m.laize_mm
+          ? el('span', { cls: 'bes-laize-chip' }, _fmtQte(m.laize_mm, 'mm'))
+          : el('span', { style: { color: 'var(--border)' } }, '—')),
+        _besQteCell(m.besoin_7j, m.unite),
+        _besQteCell(m.besoin_15j, m.unite),
+        el('td', { cls: 'num', style: { fontWeight: '700' } },
+          _fmtQte(m.besoin_total, m.unite),
+          (m.kind === 'mandrin' && m.besoin_total_tubes)
+            ? el('div', { cls: 'bes-sub-conv' },
+                Math.ceil(m.besoin_total_tubes) + ' tubes'
+                + (m.besoin_total_palettes ? ' · ' + _fmtQte(m.besoin_total_palettes, 'pal.') : ''))
+            : null),
+        el('td', { cls: 'num', style: { color: 'var(--muted)' }, title: m.stock_note || '' },
+          m.stock_actuel != null ? _fmtQte(m.stock_actuel, m.unite) : '—',
+          (m.stock_palettes != null)
+            ? el('div', { cls: 'bes-sub-conv' }, _fmtQte(m.stock_palettes, 'pal.'))
+            : null),
+        (m.manque_7j != null && m.manque_7j > 0)
+          ? el('td', { cls: 'num' }, el('span', { cls: 'bes-manque' }, _fmtQte(m.manque_7j, m.unite)))
+          : el('td', { cls: 'num' }, el('span', { cls: 'bes-manque-zero' },
+              m.manque_7j != null ? '0' : '—')),
+        el('td', { cls: 'num', style: { color: 'var(--muted)' } }, String(m.nb_dossiers || 0)),
+      ));
+    });
+    table.appendChild(tbody);
+    section.appendChild(el('div', { cls: 'bes-card' }, table));
+    container.appendChild(section);
+  }
+
+  // ── Besoins sans référence associée ─────────────────────────────────────
+  // En fin de vue, jamais mélangés aux références : ils n'appellent pas la même
+  // action. On ne commande pas ces lignes, on les associe.
+  if (orphelins.length) {
+    const section = el('div', { cls: 'bes-section' });
+    section.appendChild(el('div', { cls: 'bes-section-head' },
+      el('span', { cls: 'bes-section-title' }, 'Besoins non associés'),
+      el('span', { cls: 'bes-section-count' },
+        `${orphelins.length} valeur${orphelins.length > 1 ? 's' : ''} de fiche technique sans référence MySifa`),
+    ));
+
+    const table = el('table', { cls: 'bes-table' });
+    table.appendChild(el('thead', {}, el('tr', {},
+      el('th', {}, 'Valeur fiche technique'),
+      el('th', {}, 'Catégorie'),
+      el('th', { cls: 'num' }, 'Besoin 7j'),
+      el('th', { cls: 'num' }, 'Besoin 15j'),
+      el('th', { cls: 'num' }, 'Total'),
+      el('th', { cls: 'num' }, 'Dossiers'),
+      el('th', {}, ''),
+    )));
+
+    const tbody = el('tbody', {});
+    orphelins.forEach(o => {
+      tbody.appendChild(el('tr', { cls: 'bes-row-warn' },
+        el('td', {},
+          el('span', { cls: 'bes-src-value' }, o.source_value || '—'),
+          o.nb_dossiers_incalculables
+            ? el('div', { cls: 'bes-warn-note' },
+                `${o.nb_dossiers_incalculables} dossier${o.nb_dossiers_incalculables > 1 ? 's' : ''} non chiffré${o.nb_dossiers_incalculables > 1 ? 's' : ''}`)
+            : null,
+        ),
+        el('td', {}, el('span', { cls: 'bes-mat-cat' }, BESOINS_KIND_LABELS[o.kind] || o.kind)),
+        _besQteCell(o.besoin_7j, o.unite),
+        _besQteCell(o.besoin_15j, o.unite),
+        el('td', { cls: 'num', style: { fontWeight: '700' } }, _fmtQte(o.besoin_total, o.unite)),
+        el('td', { cls: 'num', style: { color: 'var(--muted)' } }, String(o.nb_dossiers || 0)),
+        el('td', { style: { textAlign: 'right' } },
+          el('button', {
+            cls: 'bes-btn-associate',
+            on: { click: () => openBesoinAssocierModal(o.kind, o.source_value) },
+          }, 'Associer'),
+        ),
+      ));
+    });
+    table.appendChild(tbody);
+    section.appendChild(el('div', { cls: 'bes-card' }, table));
+    container.appendChild(section);
+  }
+
+  return container;
+}
+
 function _buildBesoinsEcheanceTable(ech) {
-  const lignes = ech.lignes || [];
+  const lignes = (ech.lignes || []).filter(l => _besMatchFiltre(l, S.besoinsFiltre));
   if (!lignes.length) {
     return el('div', { cls: 'bes-empty' },
       'Aucun besoin matière détecté pour les dossiers en cours ou en attente.');
@@ -11878,7 +12491,13 @@ function _buildBesoinsKindSection(kind, lignes) {
       cls: 'num',
       style: { color: 'var(--muted)' },
       title: l.stock_note || '',
-    }, l.stock_actuel != null ? _fmtQte(l.stock_actuel, l.unite) : '—');
+    }, l.stock_actuel != null ? _fmtQte(l.stock_actuel, l.unite) : '—',
+      // Mandrins et cartons se stockent à la palette et se consomment à l'unité.
+      // On affiche sous la conversion la quantité réellement en magasin, sinon
+      // l'opérateur ne peut pas rapprocher l'écran de ce qu'il a devant lui.
+      (l.stock_palettes != null)
+        ? el('div', { cls: 'bes-sub-conv' }, _fmtQte(l.stock_palettes, 'pal.'))
+        : null);
 
     const srcCell = el('td', {},
       el('span', { cls: 'bes-src-value' }, l.source_value || '—'),
@@ -11894,7 +12513,20 @@ function _buildBesoinsKindSection(kind, lignes) {
       _besQteCell(l.besoin_7j, l.unite),
       _besQteCell(l.besoin_15j, l.unite),
       el('td', { cls: 'num', style: { fontWeight: '700' }, title: l.formule_exemple || '' },
-        _fmtQte(l.besoin_total, l.unite)),
+        _fmtQte(l.besoin_total, l.unite),
+        // Les mandrins se commandent en tubes, jamais à l'unité : la conversion
+        // est la seule information actionnable pour passer commande.
+        (l.kind === 'mandrin' && l.besoin_total_tubes)
+          ? el('div', { cls: 'bes-sub-conv' },
+              Math.ceil(l.besoin_total_tubes) + ' tubes'
+              + (l.besoin_total_palettes ? ' · ' + _fmtQte(l.besoin_total_palettes, 'pal.') : ''))
+          : null,
+        (l.kind === 'mandrin' && l.nb_dossiers_sans_tubes)
+          ? el('div', { cls: 'bes-warn-note' },
+              l.nb_dossiers_sans_tubes + ' dossier'
+              + (l.nb_dossiers_sans_tubes > 1 ? 's' : '')
+              + ' sans conversion — longueur tube ou laize module manquante')
+          : null),
       stockCell,
       manqueCell,
       el('td', { cls: 'num', style: { color: 'var(--muted)' } }, String(l.nb_dossiers || 0)),
@@ -11945,69 +12577,224 @@ function _besFmtVar(v) {
 
 // Métrage du dossier + provenance. Le badge dit d'où vient le chiffre :
 // « OF » (métrage lu sur l'OF) ou « fiche » (reconstitué géométriquement).
-function _besMetrageCell(d) {
-  const bobine = (d.besoins || []).find(b => b.kind === 'support' || b.kind === 'glassine');
-  const src = bobine ? bobine.source_metrage : (d.of_metrage ? 'of' : null);
-  const ml = bobine && bobine.quantite != null
-    ? bobine.quantite
-    : (d.of_metrage != null ? Number(d.of_metrage) : null);
-  if (ml == null) {
-    return el('td', { cls: 'num' }, el('span', { cls: 'bes-na' }, '—'));
+
+// En-tetes des colonnes matiere de la vue par dossier. Le kind « support »
+// s'affiche « Frontal » : c'est le mot de l'atelier, et la categorie MyStock
+// correspondante. Les autres reprennent BESOINS_KIND_LABELS.
+const BESOINS_KIND_COL_LABELS = {
+  support: 'Frontal', glassine: 'Glassine', adhesif: 'Adhésif',
+  mandrin: 'Mandrin', carton: 'Carton', palette: 'Palette',
+};
+
+// Filtre « n'importe quel champ contient ». Plutot qu'une liste de champs a
+// maintenir — et a oublier d'etendre au prochain ajout de colonne — on aplatit
+// l'objet et on cherche dedans. Chaque mot doit etre present : « roquette 993 »
+// trouve le dossier Roquette dont la reference commence par 993, quel que soit
+// l'ordre des mots.
+function _besAplati(o, prof) {
+  if (o == null) return '';
+  if (typeof o !== 'object') return String(o) + ' ';
+  if (prof > 2) return '';
+  let s = '';
+  if (Array.isArray(o)) { o.forEach(v => { s += _besAplati(v, prof + 1); }); return s; }
+  Object.keys(o).forEach(k => { s += _besAplati(o[k], prof + 1); });
+  return s;
+}
+function _besMatchFiltre(obj, q) {
+  if (!q) return true;
+  const hay = _besAplati(obj, 0).toLowerCase();
+  return q.toLowerCase().split(/\s+/).filter(Boolean).every(mot => hay.includes(mot));
+}
+
+// Trace de calcul d'un besoin, affichee en infobulle : formule, variables
+// utilisees avec leur origine, puis ce qui manque quand rien n'est chiffrable.
+function _besTraceTitle(b) {
+  const lignes = [];
+  if (b.formule) lignes.push(b.formule);
+  (b.variables || []).forEach(v => {
+    lignes.push('· ' + v.label + ' : ' + _besFmtVar(v) + ' (' + (v.origine || '?') + ')');
+  });
+  if ((b.manque || []).length) lignes.push('Manque : ' + b.manque.join(' ; '));
+  if (!b.mapped) lignes.push('Valeur non associée à une matière première — cliquer pour l\'associer.');
+  return lignes.join('\n');
+}
+
+// Cellule « une categorie matiere pour un dossier ». Trois etats : pas de besoin
+// de cette categorie sur ce dossier, besoin chiffre, besoin non chiffrable.
+function _besKindCell(b) {
+  if (!b) return el('td', { cls: 'bes-kind-cell' }, el('span', { cls: 'bes-kind-none' }, '—'));
+  const nc = b.quantite == null;
+  const cell = el('td', {
+    cls: 'bes-kind-cell' + (b.mapped ? '' : ' unmapped'),
+    title: _besTraceTitle(b),
+  },
+    el('div', { cls: 'bes-kind-qte' + (nc ? ' nc' : '') },
+      nc ? 'n.c.' : _fmtQte(b.quantite, b.unite)),
+    // Les mandrins se commandent en tubes : sans la conversion, le chiffre
+    // n'est pas actionnable pour passer commande.
+    (b.kind === 'mandrin' && b.besoin_tubes)
+      ? el('div', { cls: 'bes-sub-conv' },
+          Math.ceil(b.besoin_tubes) + ' tubes'
+          + (b.besoin_palettes ? ' · ' + _fmtQte(b.besoin_palettes, 'pal.') : ''))
+      : null,
+    el('div', { cls: 'bes-kind-src' + (b.mapped ? '' : ' tolink') },
+      (b.source_value || '?') + (b.mapped ? '' : ' · à associer')),
+  );
+  if (!b.mapped) {
+    cell.addEventListener('click', () => openBesoinAssocierModal(b.kind, b.source_value));
   }
-  return el('td', { cls: 'num' },
-    _fmtQte(ml, 'm'),
-    src ? el('span', { cls: 'bes-src-badge ' + src, title: src === 'of'
-      ? 'Métrage lu sur l’OF importé'
-      : 'Métrage reconstitué depuis la fiche technique (pas d’OF importé)' },
-      src === 'of' ? 'OF' : 'fiche') : null,
+  return cell;
+}
+
+// Bouton d'ouverture d'un document (OF ou fiche technique) dans un nouvel
+// onglet. Sans document rattache, le bouton reste visible mais desactive :
+// l'absence est une information, la masquer laisserait croire a un oubli d'UI.
+function _besDocBtn(label, ico, url, titre) {
+  const dispo = !!url;
+  const b = el('button', {
+    cls: 'bes-act-btn' + (dispo ? '' : ' off'),
+    type: 'button',
+    title: dispo ? titre : titre + ' — aucun document rattaché à ce dossier',
+    attrs: dispo ? {} : { disabled: 'disabled' },
+  }, iconEl(ico, 13), el('span', {}, label));
+  if (dispo) {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      window.open(url, '_blank', 'noopener');
+    });
+  }
+  return b;
+}
+
+// Bouton d'un document manquant. Il n'est pas grisé : c'est une action, pas
+// une absence subie — c'est depuis cette ligne qu'on répare le dossier.
+function _besDocManquantBtn(label, ico, dossier, onglet) {
+  if (!isMatieresAdmin() || S.stockReadOnly) {
+    return _besDocBtn(label, ico, null, 'Ouvrir ' + label);
+  }
+  const b = el('button', {
+    cls: 'bes-act-btn manque',
+    type: 'button',
+    title: 'Aucun ' + label + ' rattaché à ce dossier — cliquer pour en rattacher un',
+  }, iconEl('plus-circle', 13), el('span', {}, label));
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openBesoinDocModal(dossier, onglet);
+  });
+  return b;
+}
+
+function _besDocCell(d) {
+  // Chaque document porte son état de validation : c'est lui qui autorisera le
+  // déstockage en fin de production, autant le voir dès l'approvisionnement.
+  return el('td', { cls: 'bes-act-cell' },
+    d.of_import_id
+      ? el('span', { cls: 'bes-doc-pair' },
+          _besDocBtn('OF', 'file-text', '/api/of/' + d.of_import_id + '/pdf-preview', 'Ouvrir l\'OF'),
+          _besValidBtn('of', d.of_import_id, d.of_valide, d.of_valide_par, 'OF'))
+      : _besDocManquantBtn('OF', 'file-text', d, 'of'),
+    d.ft_id
+      ? el('span', { cls: 'bes-doc-pair' },
+          _besDocBtn('Fiche', 'clipboard', '/api/fiches-techniques/' + d.ft_id + '/pdf-preview',
+            'Ouvrir la fiche technique'),
+          _besValidBtn('fiche', d.ft_id, d.ft_valide, d.ft_valide_par, 'Fiche technique'))
+      : _besDocManquantBtn('Fiche', 'clipboard', d, 'fiche'),
   );
 }
 
-function _buildBesoinsDossierTable(dos) {
-  const dossiers = dos.dossiers || [];
-  if (!dossiers.length) {
-    return el('div', { cls: 'bes-empty' }, 'Aucun dossier de production en cours ou en attente.');
+// ── Validation des documents d'un dossier ─────────────────────────────────
+// Le déstockage lit l'OF et la fiche technique pour décider ce qui sort du
+// stock : tant que personne ne les a relus, on ne bouge rien. La validation se
+// fait donc ici, là où le blocage se constate.
+async function basculerValidationDoc(type, docId, valide) {
+  try {
+    await api('/api/stock/besoins-matieres/' + type + '/' + docId + '/validation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valide: !!valide }),
+    });
+    showToast(valide ? 'Document validé.' : 'Validation retirée.', 'success');
+    if (S.besoinsView === 'passes') await loadBesoinsPasses();
+    else await loadBesoinsMatieres();
+  } catch (e) {
+    showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
   }
+}
+
+// Pastille de validation : cliquable pour l'administration, simple témoin
+// sinon. Un document non validé se voit, même pour qui ne peut pas le valider.
+function _besValidBtn(type, docId, valide, quiValide, libelle) {
+  if (!docId) return null;
+  const peut = isMatieresAdmin() && !S.stockReadOnly;
+  const b = el('button', {
+    cls: 'bes-valid-btn' + (valide ? ' ok' : ''),
+    type: 'button',
+    attrs: peut ? {} : { disabled: 'disabled' },
+    title: valide
+      ? (libelle + ' validé' + (quiValide ? ' par ' + quiValide : '')
+         + (peut ? ' — cliquer pour retirer la validation' : ''))
+      : (libelle + ' non validé' + (peut ? ' — cliquer pour valider' : '')),
+  }, valide ? '✓' : '!');
+  if (peut) {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      basculerValidationDoc(type, docId, !valide);
+    });
+  }
+  return b;
+}
+
+// ── Dossiers passés ───────────────────────────────────────────────────────
+// La vue par dossier ne montre que la production en cours : c'est ce qu'il faut
+// pour approvisionner. Mais le déstockage se fait après, donc sur des dossiers
+// qui ont justement quitté ce périmètre — sans cette vue, ils devenaient
+// introuvables une fois terminés.
+function _buildBesoinsPassesTable(dos) {
+  if (!dos) {
+    return el('div', { cls: 'bes-empty' }, 'Chargement des dossiers terminés…');
+  }
+  const dossiers = (dos.dossiers || []).filter(d => _besMatchFiltre(d, S.besoinsFiltre));
+  if (!dossiers.length) {
+    return el('div', { cls: 'bes-empty' },
+      S.besoinsFiltre ? 'Aucun dossier terminé ne correspond à ce filtre.'
+                      : 'Aucun dossier terminé.');
+  }
+
+  const aFaire = dossiers.filter(d => d.destockage !== 'done').length;
+  const section = el('div', { cls: 'bes-section' });
+  section.appendChild(el('div', { cls: 'bes-section-head' },
+    el('span', { cls: 'bes-section-title' }, 'Productions terminées'),
+    el('span', { cls: 'bes-section-count' },
+      `${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`
+      + (aFaire ? ` · ${aFaire} à déstocker` : ' · tous déstockés')),
+  ));
 
   const table = el('table', { cls: 'bes-table' });
   table.appendChild(el('thead', {}, el('tr', {},
     el('th', {}, 'Dossier'),
     el('th', {}, 'Client'),
     el('th', {}, 'Machine'),
-    el('th', {}, 'Statut'),
-    el('th', { cls: 'num' }, 'Étiq.'),
-    el('th', { cls: 'num' }, 'Métrage'),
-    el('th', {}, 'Livraison'),
-    el('th', {}, 'Besoins'),
+    el('th', {}, 'Fin'),
+    el('th', {}, 'Documents'),
+    el('th', {}, 'Déstockage'),
   )));
 
   const tbody = el('tbody', {});
-  let totalEtiq = 0;
   dossiers.forEach(d => {
-    totalEtiq += (parseFloat(d.qte_etiquettes) || 0);
-    const besoinsEls = (d.besoins || []).map(b => {
-      // Le titre déplie la trace de calcul : formule, variables, ou ce qui manque.
-      const lignesTitre = [];
-      if (b.formule) lignesTitre.push(b.formule);
-      (b.variables || []).forEach(v => {
-        lignesTitre.push('· ' + v.label + ' : ' + _besFmtVar(v) + ' (' + (v.origine || '?') + ')');
-      });
-      if ((b.manque || []).length) {
-        lignesTitre.push('Manque : ' + b.manque.join(' ; '));
-      }
-      const qte = b.quantite == null ? 'n.c.' : _fmtQte(b.quantite, b.unite);
-      const tag = el('span', {
-        cls: 'bes-tag' + ((!b.mapped || b.quantite == null) ? ' warn' : ''),
-        title: lignesTitre.join('\n'),
-      }, `${BESOINS_KIND_LABELS[b.kind] || b.kind} · ${b.source_value || '?'} : ${qte}`);
-      return tag;
-    });
-    const besoinsCell = besoinsEls.length
-      ? el('td', {}, ...besoinsEls)
-      : el('td', { style: { color: 'var(--muted)', fontStyle: 'italic', fontSize: '12px' } },
-          'Aucun besoin calculé (fiche technique manquante ou incomplète)');
+    const fait = d.destockage === 'done';
+    const etat = fait
+      ? el('td', {},
+          el('span', { cls: 'bes-destock-ok' }, '✓ Déstocké'),
+          (d.destocke_par || d.destocke_at)
+            ? el('div', { cls: 'bes-dossier-meta' },
+                [d.destocke_par ? 'par ' + d.destocke_par : null,
+                 d.destocke_at ? 'le ' + _fmtDate(d.destocke_at) : null].filter(Boolean).join(' '))
+            : null)
+      : el('td', {},
+          el('span', { cls: 'bes-destock-todo' }, 'À déstocker'),
+          d.blocage ? el('div', { cls: 'bes-warn-note' }, d.blocage) : null);
 
-    tbody.appendChild(el('tr', {},
+    tbody.appendChild(el('tr', { cls: (fait || d.destockable) ? '' : 'bes-row-warn' },
       el('td', {},
         el('div', { cls: 'bes-dossier-ref' }, d.reference || '—'),
         (d.numero_of || d.ref_produit) ? el('div', { cls: 'bes-dossier-meta' },
@@ -12015,23 +12802,263 @@ function _buildBesoinsDossierTable(dos) {
       ),
       el('td', {}, d.client || '—'),
       el('td', {}, d.machine_nom || '—'),
-      el('td', {}, el('span', { cls: 'bes-statut bes-statut-' + (d.statut || 'attente') },
-        d.statut === 'en_cours' ? 'En cours' : 'En attente')),
-      el('td', { cls: 'num' }, d.qte_etiquettes ? Number(d.qte_etiquettes).toLocaleString('fr-FR') : '—'),
-      _besMetrageCell(d),
+      el('td', {}, _fmtDate(d.planned_end || d.date_livraison)),
+      el('td', { cls: 'bes-act-cell' },
+        d.of_import_id
+          ? el('span', { cls: 'bes-doc-pair' },
+              _besDocBtn('OF', 'file-text', '/api/of/' + d.of_import_id + '/pdf-preview',
+                'Ouvrir l\'OF'),
+              _besValidBtn('of', d.of_import_id, d.of_valide, d.of_valide_par, 'OF'))
+          : el('span', { cls: 'bes-mp-none' }, 'Pas d\'OF'),
+        d.ft_id
+          ? el('span', { cls: 'bes-doc-pair' },
+              _besDocBtn('Fiche', 'clipboard', '/api/fiches-techniques/' + d.ft_id + '/pdf-preview',
+                'Ouvrir la fiche technique'),
+              _besValidBtn('fiche', d.ft_id, d.ft_valide, d.ft_valide_par, 'Fiche technique'))
+          : el('span', { cls: 'bes-mp-none' }, 'Pas de fiche'),
+      ),
+      etat,
+    ));
+  });
+  table.appendChild(tbody);
+  section.appendChild(el('div', { cls: 'bes-card bes-scroll-x' }, table));
+  return section;
+}
+
+function _buildBesoinsDossierTable(dos) {
+  const dossiers = (dos.dossiers || []).filter(d => _besMatchFiltre(d, S.besoinsFiltre));
+  if (!dossiers.length) {
+    return el('div', { cls: 'bes-empty' }, 'Aucun dossier de production en cours ou en attente.');
+  }
+
+  const table = el('table', { cls: 'bes-table' });
+  table.appendChild(el('thead', {}, el('tr', {},
+    el('th', {}, 'Dossier'),
+    el('th', {}, 'Laize'),
+    el('th', {}, 'Livraison'),
+    ...BESOINS_KIND_ORDER.map(k => el('th', {
+      title: BESOINS_KIND_UNITE_NOTE[k] || '',
+    }, BESOINS_KIND_COL_LABELS[k] || k)),
+    el('th', { cls: 'bes-act-cell' }, 'Documents'),
+  )));
+
+  const tbody = el('tbody', {});
+  // Totaux par categorie : les unites sont homogenes a l'interieur d'un kind
+  // (ml, kg, u), donc la somme a un sens. Les dossiers non chiffres sont comptes
+  // a part pour ne pas laisser croire que le total couvre tout.
+  const totaux = {};
+  BESOINS_KIND_ORDER.forEach(k => { totaux[k] = { q: 0, unite: '', nc: 0 }; });
+
+  dossiers.forEach(d => {
+    const parKind = {};
+    (d.besoins || []).forEach(b => { parKind[b.kind] = b; });
+    BESOINS_KIND_ORDER.forEach(k => {
+      const b = parKind[k];
+      if (!b) return;
+      if (b.quantite == null) { totaux[k].nc++; return; }
+      totaux[k].q += b.quantite;
+      totaux[k].unite = b.unite;
+    });
+    const sansBesoin = !(d.besoins || []).length;
+
+    tbody.appendChild(el('tr', {},
+      el('td', {},
+        el('div', { cls: 'bes-dossier-ref' }, d.reference || '—'),
+        (d.numero_of || d.ref_produit) ? el('div', { cls: 'bes-dossier-meta' },
+          [d.numero_of ? 'OF ' + d.numero_of : null, d.ref_produit].filter(Boolean).join(' · ')) : null,
+        sansBesoin ? el('div', { cls: 'bes-warn-note' },
+          (!d.of_import_id && !d.ft_id) ? 'Ni OF ni fiche technique rattachés'
+            : (!d.ft_id ? 'Fiche technique non rapprochée'
+                        : 'Fiche technique incomplète')) : null,
+      ),
+      el('td', {}, d.laize
+        ? el('span', { cls: 'bes-laize-chip' }, _fmtQte(d.laize, 'mm'))
+        : el('span', { style: { color: 'var(--border)' } }, '—')),
       el('td', {}, _fmtDate(d.date_livraison || d.planned_end)),
-      besoinsCell,
+      ...BESOINS_KIND_ORDER.map(k => _besKindCell(parKind[k])),
+      _besDocCell(d),
     ));
   });
 
   tbody.appendChild(el('tr', { cls: 'bes-total-row' },
-    el('td', { colspan: '4' }, `Total — ${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`),
-    el('td', { cls: 'num' }, totalEtiq ? Math.round(totalEtiq).toLocaleString('fr-FR') : '—'),
-    el('td', { colspan: '3' }, ''),
+    el('td', { colspan: '3' }, `Total — ${dossiers.length} dossier${dossiers.length > 1 ? 's' : ''}`),
+    ...BESOINS_KIND_ORDER.map(k => el('td', {
+      cls: 'bes-kind-cell',
+      title: totaux[k].nc ? totaux[k].nc + ' dossier(s) non chiffré(s), hors total' : '',
+    },
+      el('div', { cls: 'bes-kind-qte' }, totaux[k].q ? _fmtQte(totaux[k].q, totaux[k].unite) : '—'),
+      totaux[k].nc ? el('div', { cls: 'bes-warn-note' }, totaux[k].nc + ' n.c.') : null,
+    )),
+    el('td', {}, ''),
   ));
 
   table.appendChild(tbody);
-  return el('div', { cls: 'bes-card' }, table);
+  return el('div', { cls: 'bes-card bes-scroll-x' }, table);
+}
+
+// ── Rattacher les documents d'un dossier non chiffré ──────────────────────
+// Deux causes possibles à un « n.c. » : pas d'OF, ou pas de fiche technique
+// rapprochée. Les deux se réparent ici, et l'écriture va dans les tables de
+// référence — le dossier redevient complet dans MyProd et sur le planning, pas
+// seulement dans cet écran.
+async function openBesoinDocModal(dossier, ongletInitial) {
+  closeMroot();
+  const planningId = dossier.id;
+  let onglet = ongletInitial === 'fiche' ? 'fiche' : 'of';
+  let data = null;
+
+  const overlay = el('div', { cls: 'modal-overlay', on: { click: e => { if (e.target === overlay) closeMroot(); } } });
+  const listWrap = el('div', { cls: 'bes-doc-list' });
+  const statut = el('div', { cls: 'bes-doc-status' });
+  const search = el('input', { cls: 'bes-search-input', placeholder: 'Rechercher…' });
+
+  const tabOf = el('button', { cls: 'bes-doc-tab', type: 'button' }, 'Ordre de fabrication');
+  const tabFt = el('button', { cls: 'bes-doc-tab', type: 'button' }, 'Fiche technique');
+
+  // ── Import d'un OF externe (PDF) ───────────────────────────────────────
+  // On réutilise le moteur d'import de MyProd : /api/of/parse lit le PDF,
+  // /api/of/validate crée l'OF. Le rattachement explicite qui suit couvre le
+  // cas où le numéro d'OF du PDF ne correspond pas au libellé du dossier.
+  const fileInp = el('input', { type: 'file', attrs: { accept: '.pdf' }, style: { display: 'none' } });
+  const importBtn = el('button', { cls: 'btn btn-sec btn-sm', type: 'button' },
+    iconEl('upload', 13), el('span', {}, ' Importer un PDF'));
+  const importWrap = el('div', { cls: 'bes-doc-import' },
+    el('div', { cls: 'bes-doc-import-hd' }, 'L\'OF n\'est pas encore dans MySifa ?'),
+    el('div', { style: { fontSize: '12px', color: 'var(--muted)', marginBottom: '8px' } },
+      'Dépose le PDF : il est lu, enregistré comme OF, puis rattaché à ce dossier.'),
+    importBtn, fileInp,
+  );
+
+  function setStatut(txt, couleur) {
+    statut.textContent = txt || '';
+    statut.style.color = couleur || 'var(--muted)';
+  }
+
+  async function charger(q) {
+    setStatut('Chargement…');
+    try {
+      data = await api('/api/stock/besoins-matieres/dossier/' + planningId
+        + '/documents' + (q ? '?q=' + encodeURIComponent(q) : ''));
+      setStatut('');
+    } catch (e) {
+      setStatut('Erreur : ' + (e.message || 'chargement impossible'), 'var(--danger)');
+      data = null;
+    }
+    rendre();
+  }
+
+  async function rattacher(url, corps, libelle) {
+    setStatut('Rattachement…');
+    try {
+      await api(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(corps),
+      });
+      closeMroot();
+      showToast(libelle + ' rattaché — le dossier est mis à jour partout dans MySifa.', 'success');
+      await loadBesoinsMatieres();
+    } catch (e) {
+      setStatut('Erreur : ' + (e.message || 'rattachement impossible'), 'var(--danger)');
+    }
+  }
+
+  function rendre() {
+    tabOf.classList.toggle('active', onglet === 'of');
+    tabFt.classList.toggle('active', onglet === 'fiche');
+    importWrap.style.display = onglet === 'of' ? '' : 'none';
+    search.placeholder = onglet === 'of'
+      ? 'Rechercher un OF (n°, référence, machine)…'
+      : 'Rechercher une fiche (référence, désignation, client)…';
+
+    listWrap.innerHTML = '';
+    const items = !data ? [] : (onglet === 'of' ? (data.ofs || []) : (data.fiches || []));
+    if (!items.length) {
+      listWrap.appendChild(el('div', {
+        style: { padding: '16px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' },
+      }, data ? 'Aucun document trouvé — essaie une recherche.' : '—'));
+      return;
+    }
+    items.forEach(it => {
+      const ref = onglet === 'of' ? (it.of_numero || '—') : (it.reference || '—');
+      const meta = onglet === 'of'
+        ? [it.reference, it.machine,
+           it.qte_etiquettes ? Number(it.qte_etiquettes).toLocaleString('fr-FR') + ' étiq.' : null,
+           it.date_creation].filter(Boolean).join(' · ')
+        : [it.designation, it.client, it.machine].filter(Boolean).join(' · ');
+      listWrap.appendChild(el('div', {
+        cls: 'bes-doc-item',
+        on: { click: () => onglet === 'of'
+          ? rattacher('/api/stock/besoins-matieres/dossier/' + planningId + '/rattacher-of',
+              { of_id: it.id }, 'OF ' + ref)
+          : rattacher('/api/stock/besoins-matieres/dossier/' + planningId + '/rattacher-fiche',
+              { fiche_id: it.id }, 'Fiche ' + ref) },
+      },
+        el('div', { cls: 'bes-doc-item-main' },
+          el('div', { cls: 'bes-doc-item-ref' }, ref),
+          meta ? el('div', { cls: 'bes-doc-item-meta' }, meta) : null,
+        ),
+        el('span', { cls: 'bes-btn-associate' }, 'Rattacher'),
+      ));
+    });
+  }
+
+  tabOf.addEventListener('click', () => { onglet = 'of'; search.value = ''; charger(''); });
+  tabFt.addEventListener('click', () => { onglet = 'fiche'; search.value = ''; charger(''); });
+
+  let tmr = null;
+  search.addEventListener('input', () => {
+    clearTimeout(tmr);
+    tmr = setTimeout(() => charger((search.value || '').trim()), 250);
+  });
+
+  importBtn.addEventListener('click', () => fileInp.click());
+  fileInp.addEventListener('change', async () => {
+    const f = fileInp.files && fileInp.files[0];
+    if (!f) return;
+    importBtn.disabled = true;
+    try {
+      setStatut('Lecture du PDF…');
+      const fd = new FormData();
+      fd.append('file', f);
+      const champs = await api('/api/of/parse', { method: 'POST', body: fd });
+      setStatut('OF n° ' + (champs.of_numero || '?') + ' lu — enregistrement…');
+      const fd2 = new FormData();
+      fd2.append('file', f);
+      fd2.append('data', JSON.stringify(champs));
+      const cree = await api('/api/of/validate', { method: 'POST', body: fd2 });
+      await rattacher('/api/stock/besoins-matieres/dossier/' + planningId + '/rattacher-of',
+        { of_id: cree.id }, 'OF ' + (champs.of_numero || cree.id));
+    } catch (e) {
+      setStatut('Import impossible : ' + (e.message || 'erreur inconnue'), 'var(--danger)');
+    } finally {
+      importBtn.disabled = false;
+      fileInp.value = '';
+    }
+  });
+
+  const sheet = el('div', { cls: 'modal-sheet', style: { maxWidth: '620px' } },
+    el('span', { cls: 'modal-handle' }),
+    el('div', { cls: 'modal-title' }, 'Rattacher les documents du dossier'),
+    el('div', { cls: 'modal-sub' },
+      el('strong', {}, dossier.reference || '—'),
+      [dossier.numero_of ? ' · OF ' + dossier.numero_of : '',
+       dossier.ref_produit ? ' · ' + dossier.ref_produit : ''].join(''),
+    ),
+    el('div', { cls: 'bes-doc-tabs' }, tabOf, tabFt),
+    search,
+    listWrap,
+    importWrap,
+    statut,
+    el('div', { cls: 'modal-actions', style: { marginTop: '14px' } },
+      el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Fermer'),
+    ),
+  );
+  sheet.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
+  rendre();
+  charger('');
 }
 
 function openBesoinAssocierModal(kind, sourceValue) {
@@ -17662,7 +18689,7 @@ async function openValorisationSettingsModal() {
   const contCostInp = mkInput('vsm-cont-cost', settings.default_container_cost_usd, '1');
   const contHalfInp = mkInput('vsm-cont-half', settings.default_half_container_cost_eur || 0, '1');
   const contKgInp = mkInput('vsm-cont-kg', settings.default_container_kg, '1');
-  const marginInp = mkInput('vsm-margin', settings.default_margin_eur_m2, '0.0001');
+  const marginInp = mkInput('vsm-margin', settings.default_margin_pct, '0.01');
 
   // Quantités m² par container (renseignées via /settings > Logistique > Importations).
   // Utilisées pour afficher "soit X EUR/m²" sous les 2 champs coût container.
@@ -17757,7 +18784,7 @@ async function openValorisationSettingsModal() {
   box.appendChild(el('div', { style: 'height:14px' }));
 
   // -- Default margin --
-  box.appendChild(mkLabel('Marge par défaut (€ / m²)'));
+  box.appendChild(mkLabel('Marge par défaut (% du prix de revient)'));
   box.appendChild(marginInp);
 
   // -- Actions --
@@ -17782,7 +18809,7 @@ async function openValorisationSettingsModal() {
         default_container_cost_usd: parseFloat(contCostInp.value),
         default_half_container_cost_eur: parseFloat(contHalfInp.value || '0'),
         default_container_kg: parseFloat(contKgInp.value),
-        default_margin_eur_m2: parseFloat(marginInp.value),
+        default_margin_pct: parseFloat(marginInp.value),
       };
       for (const k of Object.keys(payload)) {
         if (isNaN(payload[k])) {

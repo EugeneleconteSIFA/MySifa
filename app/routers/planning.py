@@ -20,7 +20,12 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import JSONResponse
 from database import get_db
-from config import ROLE_FABRICATION, ROLE_DIRECTION, ROLE_SUPERADMIN
+from config import (
+    FSC_CLAIMS_REQUERABLES,
+    ROLE_FABRICATION,
+    ROLE_DIRECTION,
+    ROLE_SUPERADMIN,
+)
 from app.services.audit_service import log_action
 from services.auth_service import require_admin, get_current_user, user_has_app_access
 from services.dossier_stats import build_dossier_production_stats
@@ -42,7 +47,11 @@ _PLANNING_ENTRY_COL_DDLS = [
     ("valide", "ALTER TABLE planning_entries ADD COLUMN valide INTEGER DEFAULT 0"),
 ]
 
-_FSC_TYPES = frozenset({"fsc_100", "fsc_mix", "fsc_recycled"})
+# Claims exigibles sur un dossier — pilotés par config.FSC_CLAIMS_REQUERABLES.
+# Cette liste était figée à 3 valeurs alors que la matière en connaît 5 :
+# fsc_mix_credit était rejeté en 400 par l'API et effacé côté formulaire, si
+# bien qu'un dossier Mix Credit ne pouvait tout simplement pas exister.
+_FSC_TYPES = frozenset(FSC_CLAIMS_REQUERABLES)
 
 router = APIRouter(prefix="/api/planning", tags=["planning"])
 
@@ -437,7 +446,7 @@ def _parse_fsc_type_requis(raw: Any, fsc_requis: int) -> str:
     if t not in _FSC_TYPES:
         raise HTTPException(
             status_code=400,
-            detail="Type FSC invalide — valeurs : fsc_100, fsc_mix, fsc_recycled.",
+            detail="Type FSC invalide — valeurs : " + ", ".join(sorted(_FSC_TYPES)) + ".",
         )
     return t
 
@@ -3010,6 +3019,47 @@ async def set_day_horaires(machine_id: int, request: Request):
 # ═══════════════════════════════════════════════════════════════
 # JOURNÉE ENTIÈRE — default machine
 # ═══════════════════════════════════════════════════════════════
+
+@router.put("/machines/{machine_id}/sans-matiere-premiere")
+async def set_machine_sans_matiere_premiere(machine_id: int, request: Request):
+    """Marque un poste comme ne consommant pas de matière première.
+
+    Body: {"sans_matiere_premiere": 0|1}
+    Toutes les lignes du planning ne sont pas des machines de production : le
+    repiquage est un atelier, où l'on surimprime des étiquettes déjà fabriquées.
+    Le frontal, la glassine et l'adhésif ont été consommés en amont — les
+    recompter dans MyStock → Besoins matières serait un doublon. Le
+    conditionnement (mandrin, carton, palette) reste calculé : les étiquettes
+    repiquées sont bien rembobinées, emballées et palettisées.
+    """
+    user = require_admin(request)
+    body = await request.json()
+    try:
+        smp = 1 if int(body.get("sans_matiere_premiere", 0) or 0) == 1 else 0
+    except (TypeError, ValueError):
+        smp = 0
+    with get_db() as conn:
+        ex = conn.execute("SELECT id, nom FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not ex:
+            raise HTTPException(404, "Machine non trouvée")
+        conn.execute(
+            "UPDATE machines SET sans_matiere_premiere=? WHERE id=?",
+            (smp, machine_id),
+        )
+        conn.commit()
+    try:
+        log_action(
+            user=user,
+            action="UPDATE",
+            module="planning",
+            objet=f"Matière première poste {ex['nom']}",
+            detail={"sans_matiere_premiere": smp},
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return {"success": True, "sans_matiere_premiere": smp}
+
 
 @router.put("/machines/{machine_id}/journee-entiere")
 async def set_machine_journee_entiere(machine_id: int, request: Request):

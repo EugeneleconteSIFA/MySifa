@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>MyExpé — ce qu'on peut reprendre de MyAO</title>
+<style>
+  @page { size: A4 portrait; margin: 0; }
+  :root{
+    --ink:#0f172a; --ink2:#334155; --mute:#64748b; --line:#e2e8f0;
+    --accent:#0891b2; --accent-bg:#ecfeff;
+    --p1:#dc2626; --p1bg:#fef2f2;
+    --p2:#d97706; --p2bg:#fffbeb;
+    --p3:#0891b2; --p3bg:#ecfeff;
+    --ok:#059669; --okbg:#ecfdf5;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#94a3b8;font-family:"Segoe UI",-apple-system,system-ui,Arial,sans-serif;
+    color:var(--ink);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{width:210mm;height:297mm;background:#fff;margin:0 auto;padding:10mm 12mm 7mm;
+    display:flex;flex-direction:column}
+
+  header{border-bottom:2px solid var(--ink);padding-bottom:4mm;margin-bottom:4mm}
+  .brand{font-size:8.5pt;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:var(--accent)}
+  h1{font-size:19pt;font-weight:800;letter-spacing:-.4px;margin-top:1.5mm;line-height:1.1}
+  .sub{font-size:9pt;color:var(--mute);margin-top:1.8mm;line-height:1.4;max-width:172mm}
+
+  .grid{display:flex;flex-direction:column;gap:3.4mm;flex:1}
+
+  .block{border:1px solid var(--line);border-radius:2.5mm;overflow:hidden}
+  .bhead{display:flex;align-items:center;gap:3mm;padding:2.2mm 4mm;border-bottom:1px solid var(--line)}
+  .tag{font-size:7.5pt;font-weight:800;letter-spacing:.7px;text-transform:uppercase;
+    padding:1mm 2.5mm;border-radius:1.5mm;color:#fff;white-space:nowrap}
+  .btitle{font-size:10.5pt;font-weight:800}
+  .bwhen{margin-left:auto;font-size:8pt;color:var(--mute);font-weight:600}
+
+  .p1 .bhead{background:var(--p1bg)} .p1 .tag{background:var(--p1)} .p1 .btitle{color:var(--p1)}
+  .p2 .bhead{background:var(--p2bg)} .p2 .tag{background:var(--p2)} .p2 .btitle{color:var(--p2)}
+  .p3 .bhead{background:var(--p3bg)} .p3 .tag{background:var(--p3)} .p3 .btitle{color:var(--p3)}
+
+  ul{list-style:none;padding:1.6mm 4mm 2.4mm}
+  li{display:flex;gap:3mm;padding:1.25mm 0;border-bottom:1px dotted var(--line);align-items:baseline}
+  li:last-child{border-bottom:none}
+  .verb{font-size:7.5pt;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
+    width:16mm;flex-shrink:0;color:var(--mute)}
+  .verb.add{color:var(--ok)} .verb.fix{color:var(--p1)} .verb.mod{color:var(--accent)}
+  .what{font-size:9.5pt;font-weight:700;width:57mm;flex-shrink:0;line-height:1.25}
+  .why{font-size:8.5pt;color:var(--ink2);line-height:1.35}
+
+  .keep{border:1px solid var(--ok);border-radius:2.5mm;background:var(--okbg);
+    padding:2.5mm 4mm;margin-top:1mm}
+  .keep-t{font-size:8pt;font-weight:800;text-transform:uppercase;letter-spacing:.7px;
+    color:var(--ok);margin-bottom:1.5mm}
+  .keep-l{font-size:8.5pt;color:var(--ink2);line-height:1.5}
+  .keep-l b{color:var(--ink)}
+
+  footer{margin-top:auto;padding-top:3mm;border-top:1px solid var(--line);
+    display:flex;justify-content:space-between;font-size:7.5pt;color:var(--mute)}
+
+  @media print{ body{background:#fff} .page{margin:0;box-shadow:none} }
+  @media screen{ .page{box-shadow:0 4px 24px rgba(0,0,0,.25);margin:14px auto} }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="brand">MySifa · Expéditions</div>
+    <h1>MyExpé — ce qu'on peut reprendre de MyAO</h1>
+    <p class="sub">Les deux modules font la même chose : on envoie une demande de prix à plusieurs
+    destinataires, ils répondent, on compare, on attribue. MyAO est plus abouti sur le cycle de vie
+    et sur la communication. Voici ce qui vaut la peine d'être transposé — et dans quel ordre.</p>
+  </header>
+
+  <div class="grid">
+
+    <section class="block p1">
+      <div class="bhead">
+        <span class="tag">Priorité 1</span>
+        <span class="btitle">Ce qui coûte aujourd'hui</span>
+        <span class="bwhen">≈ 3 jours</span>
+      </div>
+      <ul>
+        <li>
+          <span class="verb fix">Corriger</span>
+          <span class="what">Verrouiller une demande clôturée</span>
+          <span class="why">Le serveur accepte encore d'envoyer ou de retenir sur une affaire déjà
+          attribuée. Un onglet resté ouvert peut créer un second départ.</span>
+        </li>
+        <li>
+          <span class="verb add">Ajouter</span>
+          <span class="what">Une date limite de réponse</span>
+          <span class="why">Elle n'existe nulle part. On l'écrit dans les contraintes, en texte
+          libre, et rien ne la rappelle — ni au transporteur, ni à nous.</span>
+        </li>
+        <li>
+          <span class="verb add">Ajouter</span>
+          <span class="what">Un bouton « Relancer »</span>
+          <span class="why">On voit désormais qui n'a pas ouvert son mail, mais on ne peut rien en
+          faire depuis MySifa. Le suivi de la relance est déjà prévu.</span>
+        </li>
+        <li>
+          <span class="verb add">Ajouter</span>
+          <span class="what">Être prévenu d'une réponse</span>
+          <span class="why">Aucune notification interne à l'arrivée d'une offre. On retourne voir
+          la page à la main.</span>
+        </li>
+      </ul>
+    </section>
+
+    <section class="block p2">
+      <div class="bhead">
+        <span class="tag">Priorité 2</span>
+        <span class="btitle">Ce qui fait gagner du temps chaque jour</span>
+        <span class="bwhen">≈ 4 jours</span>
+      </div>
+      <ul>
+        <li>
+          <span class="verb add">Ajouter</span>
+          <span class="what">Dupliquer une demande passée</span>
+          <span class="why">Même client, même destination, un mois plus tard : aujourd'hui on
+          ressaisit tout.</span>
+        </li>
+        <li>
+          <span class="verb mod">Modifier</span>
+          <span class="what">Le client, en liste déroulante</span>
+          <span class="why">C'est du texte libre : « SATO », « Sato » et « SATO SA » comptent pour
+          trois. Aucun regroupement fiable n'est possible.</span>
+        </li>
+        <li>
+          <span class="verb add">Ajouter</span>
+          <span class="what">Corriger une demande après création</span>
+          <span class="why">Une coquille dans le poids oblige à supprimer et recréer — on perd la
+          référence et les réponses déjà reçues.</span>
+        </li>
+        <li>
+          <span class="verb mod">Modifier</span>
+          <span class="what">Plusieurs pièces jointes</span>
+          <span class="why">Le second fichier écrase le premier, sans prévenir. Et le transporteur
+          n'y a pas accès depuis son portail.</span>
+        </li>
+        <li>
+          <span class="verb add">Ajouter</span>
+          <span class="what">Le transporteur joint un fichier</span>
+          <span class="why">Sa cotation PDF part par mail à côté du portail — elle n'entre jamais
+          dans le comparatif.</span>
+        </li>
+      </ul>
+    </section>
+
+    <section class="block p3">
+      <div class="bhead">
+        <span class="tag">Priorité 3</span>
+        <span class="btitle">Confort et exploitation</span>
+        <span class="bwhen">≈ 4 jours</span>
+      </div>
+      <ul>
+        <li>
+          <span class="verb mod">Modifier</span>
+          <span class="what">Une langue par transporteur</span>
+          <span class="why">Les traductions FR/EN existent déjà mais ne sont jamais utilisées : le
+          mail part bilingue, les deux versions empilées. Demi-journée.</span>
+        </li>
+        <li>
+          <span class="verb add">Ajouter</span>
+          <span class="what">Un comparatif imprimable</span>
+          <span class="why">Aucun export aujourd'hui. Un tableau des offres à joindre au dossier ou
+          à faire viser.</span>
+        </li>
+        <li>
+          <span class="verb add">Ajouter</span>
+          <span class="what">L'écart % vs la meilleure offre</span>
+          <span class="why">Le meilleur prix est en gras, mais on ne voit pas si le deuxième est à
+          3 % ou à 40 %.</span>
+        </li>
+        <li>
+          <span class="verb add">Ajouter</span>
+          <span class="what">Retirer un destinataire, copier son lien</span>
+          <span class="why">Un email saisi de travers reste sur la demande. Et on ne peut pas
+          renvoyer le lien portail à qui dit ne rien avoir reçu.</span>
+        </li>
+        <li>
+          <span class="verb add">Ajouter</span>
+          <span class="what">Une corbeille et une trace</span>
+          <span class="why">La suppression est définitive et immédiate. Rien n'est journalisé sauf
+          l'attribution.</span>
+        </li>
+      </ul>
+    </section>
+
+    <div class="keep">
+      <div class="keep-t">À ne pas casser — MyExpé fait déjà mieux que MyAO sur quatre points</div>
+      <div class="keep-l">
+        <b>Le comparateur tarifaire automatique</b> sur les grilles importées ·
+        <b>la création du départ</b> dès qu'une offre est retenue ·
+        <b>le reply-to et la copie service</b> sur tous les emails ·
+        <b>la séparation lecture / écriture</b> des droits.
+        MyAO n'a aucun des quatre : la convergence doit se faire dans les deux sens.
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    <span>Déjà livré : suivi d'ouverture des emails, journal d'événements, timeline par transporteur, colonne Engagement.</span>
+    <span>MySifa · août 2026</span>
+  </footer>
+
+</div>
+</body>
+</html>
