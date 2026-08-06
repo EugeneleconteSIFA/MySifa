@@ -43,6 +43,10 @@
       msQ: "",
       msCat: "",
       msActive: "1",
+      // Affichage des matières MyStock : "reference" (une ligne par référence,
+      // déclinaisons dépliables) ou "liste" (une ligne par déclinaison).
+      // Relu du navigateur au démarrage — voir chargerVueMystock.
+      msVue: "reference",
       prodQ: "",
       // Onglet actif de la page Produits : base Coûts matières ou MyStock.
       prodTab: "mystock",
@@ -142,6 +146,9 @@
         '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
       star:
         '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+      // Bascule d'affichage : « layers » = référence + déclinaisons empilées,
+      // « list » = une ligne par déclinaison.
+      list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
     };
     return "<svg " + a + ">" + (p[name] || p.grid) + "</svg>";
   }
@@ -925,6 +932,117 @@
     </div>`;
   }
 
+  // ─── Deux façons de lire la même liste ─────────────────────────────────────
+  //
+  // La vue « référence » groupe : une ligne par référence MyStock, dépliable sur
+  // ses déclinaisons, avec la saisie en place (prix, fournisseur, laize…). C'est
+  // la vue d'entretien — celle où l'on corrige.
+  //
+  // La vue « liste » met tout à plat : une ligne par déclinaison, en lecture.
+  // C'est la vue de lecture — celle où l'on cherche un coût, où l'on compare
+  // deux grammages, où l'on repère ce qui n'est pas encore paramétré. Elle ne
+  // propose qu'une action, ouvrir la fiche, et c'est ce qui la rend rapide.
+  //
+  // Les deux partent des mêmes données (`S.mystock`) : aucun appel de plus.
+
+  const MS_VUE_CLE = "mysifa.pricing.msVue";
+
+  /** Le choix d'affichage survit au rechargement — c'est une habitude, pas un filtre. */
+  function chargerVueMystock() {
+    try {
+      const v = window.localStorage.getItem(MS_VUE_CLE);
+      if (v === "reference" || v === "liste") S.filters.msVue = v;
+    } catch (e) {
+      // Navigation privée, stockage refusé : on garde la vue par défaut.
+    }
+  }
+
+  function memoriserVueMystock(v) {
+    try {
+      window.localStorage.setItem(MS_VUE_CLE, v);
+    } catch (e) {
+      /* sans conséquence : la vue reste valable pour la session */
+    }
+  }
+
+  function msVueSwitchHtml() {
+    const v = S.filters.msVue;
+    const bouton = (val, nom, titre) =>
+      `<button type="button" class="vs-btn${v === val ? " on" : ""}" data-ms-vue="${val}"
+         title="${escAttr(titre)}" aria-label="${escAttr(titre)}"
+         aria-pressed="${v === val ? "true" : "false"}">${icon(nom, 15)}</button>`;
+    return `<div class="view-switch" role="group" aria-label="Affichage des matières">
+        ${bouton("reference", "layers", "Vue par référence — déclinaisons dépliables, saisie en place")}
+        ${bouton("liste", "list", "Vue liste — une ligne par déclinaison, lecture rapide")}
+      </div>`;
+  }
+
+  /**
+   * Aplatit les matières en une ligne par déclinaison.
+   *
+   * Une référence sans déclinaison produit quand même sa ligne : la faire
+   * disparaître de la liste à plat serait le meilleur moyen de l'oublier.
+   */
+  function mystockDeclinaisonsAPlat() {
+    const lignes = [];
+    (S.mystock || []).forEach((m) => {
+      const decls = m.declinaisons || [];
+      if (!decls.length) {
+        lignes.push({ m, d: null, principal: null, autres: 0 });
+        return;
+      }
+      decls.forEach((d) => {
+        const prix = d.lignes || [];
+        // Le prix qui fait foi ; à défaut, le premier connu — la ligne doit
+        // afficher quelque chose, pas un tiret trompeur.
+        const principal = prix.find((l) => l.principal) || prix[0] || null;
+        lignes.push({ m, d, principal, autres: Math.max(0, prix.length - 1) });
+      });
+    });
+    return lignes;
+  }
+
+  function mystockFlatRowHtml(entree) {
+    const { m, d, principal, autres } = entree;
+    const decl = d
+      ? (d.libelle
+          ? `<strong>${escHtml(d.libelle)}</strong>`
+          : `<span class="muted">${escHtml(DECL_LABEL[m.type_declinaison] || "valeur")} à définir</span>`)
+      : '<span class="muted">sans déclinaison</span>';
+
+    const fournisseur = principal && principal.fournisseur_nom
+      ? escHtml(principal.fournisseur_nom)
+      : '<span class="muted">—</span>';
+    const plus = autres
+      ? ` <span class="msl-plus" title="${escAttr(autres + " autre(s) fournisseur(s) sur cette déclinaison")}">+${autres}</span>`
+      : "";
+
+    const prix = principal && principal.prix != null
+      ? fmtPrixUnite(principal.prix, m.unite)
+      : '<span class="muted">—</span>';
+
+    const cout = d && d.cout_eur_m2 != null && d.cout_eur_m2 > 0
+      ? `<span class="msl-cout">${escHtml(fmtEurM2(d.cout_eur_m2))}</span>`
+      : '<span class="badge badge-silicone">à paramétrer</span>';
+
+    const action = d
+      ? actionBtn("data-ms-open", d.id, "edit", "Ouvrir le paramétrage de cette déclinaison")
+      : (S.canWrite && m.type_declinaison
+          ? actionBtn("data-ms-new", m.id, "plus", `Créer un ${DECL_LABEL[m.type_declinaison]}`)
+          : "");
+
+    return `<tr class="msl-row${d ? "" : " msl-vide"}"${d ? ` data-ms-line="${d.id}"` : ""}>
+        <td>${categorieBadge(m.categorie)}</td>
+        <td class="msl-ref"><strong>${escHtml(m.reference)}</strong></td>
+        <td class="msl-des" title="${escAttr(m.designation || "")}">${escHtml(m.designation || "")}</td>
+        <td class="msl-decl">${decl}</td>
+        <td>${fournisseur}${plus}</td>
+        <td class="msl-prix">${prix}</td>
+        <td class="msl-coutcell">${cout}</td>
+        <td class="ms-actions" onclick="event.stopPropagation()">${action}</td>
+      </tr>`;
+  }
+
   function renderMystockList() {
     const catOpts =
       '<option value="">Toutes catégories</option>' +
@@ -977,9 +1095,30 @@
       })
       .join("");
 
+    const plat = S.filters.msVue === "liste";
+    const aPlat = plat ? mystockDeclinaisonsAPlat() : [];
+    const sousTitre = plat
+      ? `${aPlat.length} déclinaison(s) · ${S.mystock.length} matière(s) MyStock`
+      : `${S.mystock.length} matière(s) MyStock`;
+
+    const tableau = plat
+      ? `<div class="table-wrap">
+          <table class="pr-table msl-table">
+            <thead><tr><th>Cat.</th><th>Référence</th><th>Désignation</th><th>Déclinaison</th><th>Fournisseur</th><th>Prix</th><th>Coût €/m²</th><th class="ms-actions"></th></tr></thead>
+            <tbody>${aPlat.map(mystockFlatRowHtml).join("")
+              || '<tr><td colspan="8" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
+          </table>
+        </div>`
+      : `<div class="table-wrap">
+          <table class="pr-table">
+            <thead><tr><th style="width:28px"></th><th>Cat.</th><th>Référence</th><th>Désignation</th><th>Déclinaisons</th><th>Prix en vigueur</th><th>Fournisseur principal</th><th>Réglées</th><th></th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="9" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
+          </table>
+        </div>`;
+
     setContent(`
       <div class="pr-narrow">
-        ${pageHead("Matières", `${S.mystock.length} matière(s) MyStock`, materialsTabsHtml())}
+        ${pageHead("Matières", sousTitre, materialsTabsHtml() + msVueSwitchHtml())}
         <div class="filters">
           <input type="search" class="search-input" id="ms-q" placeholder="Rechercher (référence, désignation…)" value="${escAttr(S.filters.msQ)}"/>
           <select id="ms-cat">${catOpts}</select>
@@ -989,16 +1128,12 @@
             <option value="all" ${S.filters.msActive==="all"?"selected":""}>Toutes</option>
           </select>
         </div>
-        <div class="table-wrap">
-          <table class="pr-table">
-            <thead><tr><th style="width:28px"></th><th>Cat.</th><th>Référence</th><th>Désignation</th><th>Déclinaisons</th><th>Prix en vigueur</th><th>Fournisseur principal</th><th>Réglées</th><th></th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="9" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
-          </table>
-        </div>
+        ${tableau}
       </div>
     `);
 
     bindMaterialsTabs();
+    bindMsVueSwitch();
 
     const qEl = document.getElementById("ms-q");
     let t;
@@ -1028,7 +1163,27 @@
         renderMystockList();
       };
     });
+    // Vue à plat : la ligne entière ouvre la fiche de paramétrage — c'est la
+    // seule action de cette vue, autant la rendre évidente.
+    document.querySelectorAll("[data-ms-line]").forEach((tr) => {
+      tr.onclick = (e) => {
+        if (e.target.closest("input,select,button,a")) return;
+        navigate("/pricing/mystock/" + tr.getAttribute("data-ms-line"));
+      };
+    });
     bindMystockActions();
+  }
+
+  function bindMsVueSwitch() {
+    document.querySelectorAll("[data-ms-vue]").forEach((b) => {
+      b.onclick = () => {
+        const v = b.getAttribute("data-ms-vue");
+        if (v === S.filters.msVue) return;
+        S.filters.msVue = v;
+        memoriserVueMystock(v);
+        renderMystockList();
+      };
+    });
   }
 
   function parseMsKey(key) {
@@ -3448,6 +3603,7 @@
       }
     }
     updateChromeControls();
+    chargerVueMystock();
     appliquerParamsUrl();
     S.route = parseRoute();
     await bootRoute();
