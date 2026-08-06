@@ -567,43 +567,6 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
 .btn-danger-solid:hover{filter:brightness(1.08)}
 .btn-danger-solid:disabled{opacity:.6;cursor:wait}
 
-/* ── Sous-onglets fournisseurs : visibilité forte ─────────────── */
-.four-sub-btn.btn.btn-sec{
-  background:var(--bg);
-  border:1.5px solid var(--border);
-  color:var(--text);
-  font-weight:600;
-  padding:10px 18px;
-  font-size:13px;
-  letter-spacing:.1px;
-  position:relative;
-  transition:background .15s,border-color .15s,color .15s,box-shadow .15s,transform .1s;
-}
-.four-sub-btn.btn.btn-sec:hover:not(.active){
-  background:rgba(34,211,238,.06);
-  border-color:rgba(34,211,238,.5);
-  color:var(--accent);
-  box-shadow:0 0 0 1px rgba(34,211,238,.25);
-}
-body.light .four-sub-btn.btn.btn-sec:hover:not(.active){
-  background:rgba(8,145,178,.05);
-  border-color:rgba(8,145,178,.45);
-}
-.four-sub-btn.btn.btn-sec.active{
-  background:var(--accent);
-  border-color:var(--accent);
-  color:#04202a;
-  box-shadow:0 4px 14px rgba(34,211,238,.35),0 0 0 1px rgba(34,211,238,.45);
-  font-weight:700;
-}
-body.light .four-sub-btn.btn.btn-sec.active{
-  color:#fff;
-  box-shadow:0 3px 12px rgba(8,145,178,.32),0 0 0 1px rgba(8,145,178,.4);
-}
-.four-sub-btn.btn.btn-sec.active svg{opacity:1}
-.four-sub-btn.btn.btn-sec:not(.active) svg{opacity:.6}
-.four-sub-btn.btn.btn-sec:active{transform:translateY(1px)}
-
 /* ── Catégories fournisseur : chips ──────────────────────────── */
 .four-cat-picker{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
 .four-cat-chip{
@@ -640,27 +603,7 @@ body.light .four-actif-toggle .fat-slider{background:#cbd5e1}
 tr.four-row-inactif td{opacity:.55}
 tr.four-row-inactif td.four-nom-cell strong{text-decoration:line-through;color:var(--muted)}
 
-/* Drawer fiche fournisseur unifiée */
-.four-drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:900;opacity:0;transition:opacity .2s;pointer-events:none}
-.four-drawer-backdrop.open{opacity:1;pointer-events:auto}
-.four-drawer{position:fixed;top:0;right:0;height:100vh;width:min(560px,95vw);background:var(--card);border-left:1px solid var(--border);box-shadow:-8px 0 32px rgba(0,0,0,.4);transform:translateX(100%);transition:transform .25s ease;z-index:901;display:flex;flex-direction:column}
-.four-drawer.open{transform:translateX(0)}
-.four-drawer-head{padding:18px 20px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px}
-.four-drawer-head h3{margin:0;font-size:16px;font-weight:700}
-.four-drawer-head .sub{margin:2px 0 0;font-size:12px;color:var(--muted)}
-.four-drawer-close{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:22px;padding:0 4px;line-height:1;transition:color .12s}
-.four-drawer-close:hover{color:var(--text)}
-.four-drawer-tabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;scrollbar-width:none}
-.four-drawer-tabs::-webkit-scrollbar{display:none}
-.four-drawer-tab{background:transparent;border:none;color:var(--muted);font-size:12px;font-weight:600;padding:12px 14px;cursor:pointer;font-family:inherit;position:relative;transition:color .12s;white-space:nowrap;border-bottom:2px solid transparent}
-.four-drawer-tab:hover{color:var(--text)}
-.four-drawer-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
-.four-drawer-body{flex:1;overflow-y:auto;padding:16px 20px}
-.four-drawer-body h4{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 10px;font-weight:700}
-.four-drawer-body .kv{display:grid;grid-template-columns:120px 1fr;gap:6px 12px;font-size:13px;margin-bottom:14px}
-.four-drawer-body .kv dt{color:var(--muted);font-weight:600}
-.four-drawer-body .kv dd{margin:0;color:var(--text);word-break:break-word}
-.four-drawer-empty{padding:24px 12px;text-align:center;color:var(--muted);font-size:12px;background:var(--bg);border-radius:8px;border:1px dashed var(--border)}
+/* Listes compactes réutilisées par la modale Doublons (ex-drawer) */
 .four-drawer-list{border:1px solid var(--border);border-radius:8px;overflow:hidden}
 .four-drawer-list-item{padding:10px 12px;border-bottom:1px solid var(--border);font-size:12px}
 .four-drawer-list-item:last-child{border-bottom:none}
