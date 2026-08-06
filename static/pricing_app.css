@@ -459,21 +459,21 @@ table.recap-table td:last-child{border-right:none}
 /* Vue de lecture : on y cherche un coût, on y compare deux grammages. D'où des
    lignes plus aérées, le coût €/m² mis en avant, et rien à saisir. */
 /* Largeurs fixées par le <colgroup> du tableau. Sans `table-layout:fixed`, le
-   navigateur répartit à sa guise : la désignation, de loin la plus longue,
-   s'étale et pousse le coût €/m² hors de l'écran — la colonne pour laquelle on
-   vient. Ici elle est la seule élastique, et se coupe proprement (le texte
-   complet reste dans l'infobulle). Sous 920px, le tableau défile. */
-table.msl-table{table-layout:fixed;min-width:920px}
+   navigateur répartit à sa guise et la colonne la plus bavarde pousse le coût
+   €/m² hors de l'écran — celle pour laquelle on ouvre cette vue.
+   Pas de colonne Désignation ici : sur une liste à plat, elle se répète à
+   chaque déclinaison de la même référence et mange la largeur pour ne rien
+   apprendre. Elle reste en infobulle sur la référence. */
+table.msl-table{table-layout:fixed;min-width:840px}
 table.msl-table th,table.msl-table td{padding:11px 12px}
 .msl-row{cursor:pointer}
 .msl-ref{font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.msl-des{color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .msl-decl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .msl-prix{font-variant-numeric:tabular-nums;white-space:nowrap}
 .msl-coutcell{white-space:nowrap}
-/* Le fournisseur peut être long (« Administration technique »…) : il se coupe
-   plutôt que d'élargir sa colonne. Le compteur « +2 », lui, reste visible. */
-.msl-table td:nth-child(5){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Le fournisseur peut être long : il se coupe plutôt que d'élargir sa colonne.
+   Le compteur « +2 », lui, reste visible. */
+.msl-table td:nth-child(4){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .msl-cout{font-weight:700;font-size:14px;color:var(--accent);font-variant-numeric:tabular-nums}
 /* « +2 » : d'autres fournisseurs existent sur cette déclinaison, ils se voient
    dans la vue par référence. Discret — ce n'est pas l'objet de cette vue. */

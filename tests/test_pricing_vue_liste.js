@@ -128,20 +128,32 @@ check('la vue par référence reste le défaut', /msVue: "reference"/.test(src),
 check('la bascule a son style', css.includes('.view-switch{') && css.includes('.vs-btn.on{'), true);
 
 console.log('\n--- tout tient dans la largeur ---');
-// Sans largeurs fixées, la désignation s'étale et pousse le coût €/m² hors de
-// l'écran — la colonne pour laquelle on ouvre cette vue.
+// Sans largeurs fixées, la colonne la plus bavarde s'étale et pousse le coût
+// €/m² hors de l'écran — celle pour laquelle on ouvre cette vue.
 check('les colonnes ont une largeur imposée', css.includes('table.msl-table{table-layout:fixed'), true);
-const zoneListe = src.slice(src.indexOf('const plat = S.filters.msVue'), src.indexOf('setContent(`', src.indexOf('const plat = S.filters.msVue')));
+// Le tableau à plat seul : la vue par référence, juste en dessous, garde
+// légitimement sa colonne Désignation — on ne veut pas la compter ici.
+const debutListe = src.indexOf('<table class="pr-table msl-table">');
+const zoneListe = src.slice(debutListe, src.indexOf('</table>', debutListe));
 check('un colgroup accompagne le tableau', zoneListe.includes('<colgroup>'), true);
-check('une largeur par colonne sauf la désignation',
-  (zoneListe.match(/<col style="width:/g) || []).length, 7);
-check('la désignation est la seule élastique',
-  /<col>\s/.test(zoneListe) || zoneListe.includes('<col>'), true);
-check('elle se coupe au lieu de pousser',
-  css.includes('.msl-des{color:var(--text2);overflow:hidden;text-overflow:ellipsis'), true);
-// Texte coupé = texte perdu, sauf si l'infobulle le rend.
-check('la désignation garde son infobulle', src.includes('class="msl-des" title="${escAttr(m.designation'), true);
-check('la déclinaison aussi', src.includes('title="${escAttr(d.libelle)}"'), true);
+check('une largeur par colonne sauf la référence',
+  (zoneListe.match(/<col style="width:/g) || []).length, 6);
+check('la référence est la seule élastique', zoneListe.includes('<col>'), true);
+
+// La désignation se répétait à chaque déclinaison d'une même référence : elle
+// mangeait la largeur sans rien apprendre. Retirée du tableau, gardée en
+// infobulle — l'information reste à un survol.
+check('plus de colonne Désignation', zoneListe.includes('<th>Désignation</th>'), false);
+check('plus de cellule Désignation', src.includes('class="msl-des"'), false);
+check('la désignation survit en infobulle',
+  l0.includes('class="msl-ref" title="Adhésif enlevable fort"'), true);
+// Autant d'en-têtes que de cellules, autant de <col> que d'en-têtes : une
+// colonne retirée d'un seul des trois endroits décale tout le tableau.
+const nbTh = (zoneListe.match(/<th[ >]/g) || []).length;
+check('en-tête et cellules comptent pareil', nbTh, (l0.match(/<td[ >]/g) || []).length);
+check('autant de <col> que d\'en-têtes', (zoneListe.match(/<col[ >]/g) || []).length, nbTh);
+check('la ligne vide occupe toute la largeur', zoneListe.includes('colspan="7"'), true);
+check('la déclinaison garde son infobulle', src.includes('title="${escAttr(d.libelle)}"'), true);
 
 console.log(ko === 0 ? '\nTOUT EST VERT' : '\n' + ko + ' ECHEC(S)');
 process.exit(ko === 0 ? 0 : 1);
