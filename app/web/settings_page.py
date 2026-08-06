@@ -4908,6 +4908,11 @@ const F2_TABS = [
   { k:'certifs',    l:'Certifications', cnt: () => (f2Cache[f2Id]?.certifs?.stats?.couvert ?? null) },
   { k:'contacts',   l:'Contacts',       cnt: () => (f2Cache[f2Id]?.contacts?.length ?? null) },
   { k:'receptions', l:'Réceptions',     cnt: () => (f2Cache[f2Id]?.receptions?.length ?? null) },
+  // Le tarif d'achat (devise, transport, taxes) se règle dans Coûts matières,
+  // là où on raisonne en coûts. Cet onglet en donne la lecture et le raccourci :
+  // quand on est sur la fiche d'un fournisseur, c'est là qu'on se pose la
+  // question, pas dans un autre module.
+  { k:'tarif',      l:'Tarif d\'achat', cnt: () => (f2Cache[f2Id]?.tarif?.matieres?.length ?? null) },
   { k:'traca',      l:'Traçabilité' },
 ];
 
@@ -4920,17 +4925,22 @@ async function openFournisseurFiche(id, keepTab){
   try { window.scrollTo(0,0); } catch(e){}
   _f2PaintFiche();
   if (!f2Cache[id]) {
-    // 3 appels en parallèle, une seule fois par fiche : contacts,
-    // réceptions MyStock et certifications MyQualité.
-    const [contacts, rec, certifs] = await Promise.all([
+    // 4 appels en parallèle, une seule fois par fiche : contacts, réceptions
+    // MyStock, certifications MyQualité et tarif d'achat (Coûts matières).
+    // Le tarif peut légitimement échouer — module absent des droits, base non
+    // migrée : son onglet le dira, la fiche ne doit pas s'en trouver amputée.
+    const [contacts, rec, certifs, tarif] = await Promise.all([
       api('/api/fournisseurs/' + id + '/contacts').catch(() => []),
       api('/api/fournisseurs/' + id + '/receptions').catch(() => ({receptions:[]})),
       api('/api/fournisseurs/' + id + '/certifications').catch(() => null),
+      api('/api/pricing/tarifs/fournisseur/' + id)
+        .catch(() => ({ erreur: 'Tarifs indisponibles : module Coûts matières inaccessible depuis ce compte, ou base non migrée.' })),
     ]);
     f2Cache[id] = {
       contacts: Array.isArray(contacts) ? contacts : [],
       receptions: (rec && rec.receptions) || [],
       certifs: certifs,
+      tarif: tarif,
     };
     // nb_contacts vient de la liste : on le réaligne sur la vérité
     const nb = f2Cache[id].contacts.filter(c => c.actif == null || c.actif).length;
@@ -5026,12 +5036,13 @@ function _f2PaintFiche(){
   const renderers = {
     synthese: _f2TabSynthese, identite: _f2TabIdentite, fsc: _f2TabFsc,
     certifs: _f2TabCertifs, contacts: _f2TabContacts,
-    receptions: _f2TabReceptions, traca: _f2TabTraca,
+    receptions: _f2TabReceptions, tarif: _f2TabTarif, traca: _f2TabTraca,
   };
   const body = document.getElementById('f2-body');
   body.innerHTML = (renderers[f2Tab] || _f2TabSynthese)(f, cache);
   const post = { identite: _f2BindIdentite, fsc: _f2BindFsc, certifs: _f2BindCertifs,
-                 contacts: _f2BindContacts, traca: _f2BindTraca, synthese: _f2BindSynthese };
+                 contacts: _f2BindContacts, traca: _f2BindTraca, synthese: _f2BindSynthese,
+                 tarif: _f2BindTarif };
   if (post[f2Tab]) post[f2Tab](f, cache);
 }
 
@@ -5513,6 +5524,67 @@ function _f2TabReceptions(f, cache){
         '</tr>').join('') + '</tbody></table></div>'
       : '<div class="f2-empty">Aucune réception enregistrée dans MyStock pour ce fournisseur.</div>') +
     '<p class="f2-hint">Source : réceptions MyStock, tous opérateurs confondus, rapprochées par nom de fournisseur. L\'ancien sous-onglet « Historique réceptions » (un menu déroulant seul dans une page) est remplacé par cet onglet.</p></div>';
+}
+
+// ─── Onglet Tarif d'achat ─────────────────────────────────────────
+// Lecture seule ici, à dessein : le tarif se règle dans Coûts matières, qui
+// porte le calcul et l'historique. Dupliquer le formulaire aurait fait deux
+// écrans à tenir d'accord — et c'est celui qu'on oublie qui écrit des bêtises.
+// Cet onglet répond à la question posée depuis la fiche fournisseur (« qu'est-ce
+// qu'on lui achète, et à quelles conditions ? ») et donne le chemin pour agir.
+function _f2TabTarif(f, cache){
+  const t = cache.tarif;
+  if (!t) return '<div class="f2-block full"><div class="f2-empty">Chargement…</div></div>';
+  if (t.erreur) {
+    return '<div class="f2-block full"><div class="f2-empty">' + esc(t.erreur) + '</div></div>';
+  }
+  const mats = t.matieres || [];
+  const lien = '/pricing/fournisseurs/' + f.id;
+  const devise = (t.fournisseur && t.fournisseur.price_currency) || 'EUR';
+  const sansTarif = mats.filter(m => !m.a_tarif).length;
+
+  const resume = (m) => {
+    const b = [m.price_basis === 'PER_M2' ? 'au m²' : 'au kilo'];
+    if (!m.is_imported) { b.push('pas d\'import'); return b.join(' · '); }
+    const mo = m.transport_mode || 'AMOUNT';
+    if (mo === 'PCT') b.push('transport ' + (m.transport_pct || 0) + ' %');
+    else if (mo === 'AMOUNT') b.push('transport ' + (m.transport_unit_price || 0));
+    else b.push((mo === 'CONTENEUR' ? 'conteneur ' : 'forfait ') + (m.transport_cout || 0) +
+                ' € ÷ ' + (m.transport_quantite || '?'));
+    if (m.taxe_pct) b.push('taxes ' + m.taxe_pct + ' %');
+    return b.join(' · ');
+  };
+
+  return '<div class="f2-block full">' +
+    '<div class="f2-bh"><h3>Tarif d\'achat</h3>' +
+      '<a class="btn btn-sec btn-sm" href="' + lien + '" target="_blank" rel="noopener">Régler dans Coûts matières ↗</a>' +
+    '</div>' +
+    '<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px">' +
+      _f2Kv('Devise d\'achat', devise) +
+      _f2Kv('Matières achetées', String(mats.length)) +
+      _f2Kv('Sans tarif propre', sansTarif ? String(sansTarif) : '—') +
+    '</div>' +
+    (mats.length
+      ? '<div class="table-wrap"><table class="four-table"><thead><tr>' +
+        '<th>Référence</th><th>Désignation</th><th>Décl.</th><th>Tarif appliqué</th><th>État</th>' +
+        '</tr></thead><tbody>' +
+        mats.map(m => '<tr>' +
+          '<td style="font-family:monospace;font-weight:700">' + esc(m.reference || '') + '</td>' +
+          '<td>' + esc(m.designation || '') + '</td>' +
+          '<td>' + esc(String(m.nb_declinaisons || 0)) + '</td>' +
+          '<td style="max-width:320px;white-space:normal">' + esc(resume(m)) + '</td>' +
+          '<td>' + (m.a_tarif
+            ? '<span style="color:var(--ok,#16a34a);font-weight:700;font-size:12px">réglé</span>'
+            : '<span style="color:#d97706;font-weight:700;font-size:12px">par défaut</span>') + '</td>' +
+        '</tr>').join('') + '</tbody></table></div>'
+      : '<div class="f2-empty">Aucune matière achetée à ce fournisseur dans MyStock.</div>') +
+    '<p class="f2-hint">La devise vaut pour tout ce qu\'on achète à ce fournisseur. Le reste — base de prix, transport, taxes — se règle par matière : Meltavis peut livrer un adhésif par conteneur et un frontal au forfait. « Par défaut » signifie qu\'aucun tarif propre n\'a été posé : le calcul retombe alors sur les réglages hérités de la déclinaison.</p>' +
+  '</div>';
+}
+
+function _f2BindTarif(){
+  // Rien à brancher : l'onglet est en lecture, le seul geste est le lien vers
+  // Coûts matières, qui est un <a> ordinaire.
 }
 
 // ─── Onglet Traçabilité ───────────────────────────────────────────

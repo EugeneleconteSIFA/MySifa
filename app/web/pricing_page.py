@@ -99,6 +99,7 @@ def _pricing_html_response(request: Request) -> HTMLResponse:
 @router.get("/pricing/products/new", response_class=HTMLResponse)
 @router.get("/pricing/mystock", response_class=HTMLResponse)
 @router.get("/pricing/mystock/produit/new", response_class=HTMLResponse)
+@router.get("/pricing/fournisseurs", response_class=HTMLResponse)
 @router.get("/pricing/settings", response_class=HTMLResponse)
 def pricing_shell(request: Request):
     return _pricing_html_response(request)
@@ -131,6 +132,13 @@ def pricing_mystock_produit_edit(request: Request, produit_id: str):
 def pricing_mystock_declinaison(request: Request, declinaison_id: str):
     if not re.fullmatch(r"\d+", declinaison_id):
         return RedirectResponse(url="/pricing/materials", status_code=302)
+    return _pricing_html_response(request)
+
+
+@router.get("/pricing/fournisseurs/{fournisseur_id}", response_class=HTMLResponse)
+def pricing_fournisseur_tarif(request: Request, fournisseur_id: str):
+    if not re.fullmatch(r"\d+", fournisseur_id):
+        return RedirectResponse(url="/pricing/fournisseurs", status_code=302)
     return _pricing_html_response(request)
 
 

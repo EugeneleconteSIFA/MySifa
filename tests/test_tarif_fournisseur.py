@@ -185,8 +185,115 @@ def main():
     print("\n--- le calcul lit le tarif de la ligne, pas celui de la déclinaison ---")
     calcul(mod)
 
+    print("\n--- écrire un tarif ---")
+    ecriture(mod)
+
     print("\n" + ("TOUT EST VERT" if not ECHECS else "ECHECS : " + ", ".join(ECHECS)))
     return 0 if not ECHECS else 1
+
+
+def ecriture(mod):
+    """
+    `set_tarif` : validation, création, et surtout propagation.
+
+    Changer un transport ne touche aucun prix d'achat, mais déplace le sous-total
+    de chaque déclinaison où ce fournisseur fait foi. Si ça ne redescend pas dans
+    la valorisation MyStock, l'écart se constate sans jamais s'expliquer — le
+    défaut qu'on passe cette refonte à corriger.
+    """
+    if str(RACINE) not in sys.path:
+        sys.path.insert(0, str(RACINE))
+    from app.services import mystock_prix as mpx
+
+    c = base_jouet()
+    # `journaliser_prix` et `_mirror_principal` écrivent dans des tables qui
+    # n'existent pas dans la base jouet : on les neutralise pour tester ce qui
+    # nous intéresse ici, la propagation elle-même.
+    touche = []
+    mpx.journaliser_prix = lambda conn, **kw: touche.append(kw)
+    mpx._mirror_principal = lambda conn, decl_id, **kw: {"ok": True}
+    appliquer(mod, c)
+
+    print("  · ce qui est refusé")
+    for patch, motif in (
+        ({"price_basis": "PER_TONNE"}, "base inconnue"),
+        ({"transport_mode": "AVION"}, "méthode inconnue"),
+        ({"taxe_pct": 5000}, "taxe hors limites"),
+        ({"transport_cout": -1}, "coût négatif"),
+        ({}, "patch vide"),
+    ):
+        r = mpx.set_tarif(c, fournisseur_id=1, matiere_id=10, patch=patch)
+        check("refus : " + motif, r.get("ok"), False)
+    check("fournisseur inconnu",
+          mpx.set_tarif(c, fournisseur_id=999, matiere_id=10,
+                        patch={"taxe_pct": 1}).get("ok"), False)
+    check("matière inconnue",
+          mpx.set_tarif(c, fournisseur_id=1, matiere_id=999,
+                        patch={"taxe_pct": 1}).get("ok"), False)
+
+    print("  · ce qui est écrit, et ce que ça déplace")
+    avant = mpx.sous_total_declinaison(c, 90)
+    r = mpx.set_tarif(
+        c, fournisseur_id=1, matiere_id=10,
+        patch={"transport_mode": "CONTENEUR", "transport_cout": 4800,
+               "transport_quantite": 18000, "taxe_pct": 6, "is_imported": True},
+        user_name="Eugene",
+    )
+    check("le tarif est accepté", r.get("ok"), True)
+    check("le mode est enregistré", r["tarif"]["transport_mode"], "CONTENEUR")
+    check("l'auteur est tracé", r["tarif"]["updated_by_name"], "Eugene")
+    # Meltavis est principal sur les trois grammages de 1408 : les trois bougent.
+    check("les déclinaisons pilotées suivent", r["declinaisons_touchees"], 3)
+    check("le sous-total a bien changé", mpx.sous_total_declinaison(c, 90) != avant, True)
+    check("l'historique dit d'où ça vient",
+          {k["origine"] for k in touche}, {"Coûts matières — tarif fournisseur"})
+
+    print("  · un tarif neuf prend les défauts de sa catégorie")
+    # PE80B est un frontal : laizé, donc tarifé au m² et non au kilo.
+    r2 = mpx.set_tarif(c, fournisseur_id=1, matiere_id=11, patch={"taxe_pct": 0})
+    check("création acceptée", r2.get("ok"), True)
+    check("base déduite de la catégorie", r2["tarif"]["price_basis"], "PER_M2")
+    check("et rien d'autre n'est facturé", r2["tarif"]["transport_mode"], "AMOUNT")
+
+    print("  · un fournisseur secondaire ne pousse rien")
+    touche.clear()
+    r3 = mpx.set_tarif(c, fournisseur_id=2, matiere_id=10, patch={"taxe_pct": 12})
+    check("le tarif est bien écrit", r3.get("ok"), True)
+    # Bostik n'est principal nulle part sur 1408 : son coût change à l'écran,
+    # mais rien ne part dans la valorisation.
+    check("aucune déclinaison touchée", r3["declinaisons_touchees"], 0)
+    check("et aucun historique", touche, [])
+
+    print("  · la devise")
+    check("devise inconnue refusée",
+          mpx.set_devise_fournisseur(c, fournisseur_id=2, devise="CHF").get("ok"), False)
+    check("devise acceptée",
+          mpx.set_devise_fournisseur(c, fournisseur_id=2, devise="usd").get("price_currency"),
+          "USD")
+    check("fournisseur inconnu refusé",
+          mpx.set_devise_fournisseur(c, fournisseur_id=999, devise="EUR").get("ok"), False)
+
+    print("  · les deux vues, fournisseur et matière")
+    par_f = mpx.tarifs_du_fournisseur(c, 1)
+    # 1408 (où il a des prix) et PE80B (où on vient de lui poser un tarif sans
+    # prix). Un tarif enregistré d'avance doit rester visible, sinon il n'est
+    # jamais corrigé.
+    check("Meltavis : deux matières listées", len(par_f), 2)
+    check("dont celle sans prix", sorted(x["reference"] for x in par_f), ["1408", "PE80B"])
+    check("le compteur de déclinaisons suit",
+          {x["reference"]: x["nb_declinaisons"] for x in par_f}, {"1408": 3, "PE80B": 0})
+    check("chacune dit si elle a un tarif", all("a_tarif" in x for x in par_f), True)
+    par_m = mpx.fournisseurs_de_la_matiere(c, 10)
+    check("1408 a deux fournisseurs", len(par_m), 2)
+    check("le principal est en tête", par_m[0]["nom"], "Meltavis")
+    check("avec sa devise", par_m[0]["price_currency"], "USD")
+
+    print("  · base non migrée : on refuse proprement")
+    vieille = base_jouet()
+    check("écriture refusée sans table",
+          mpx.set_tarif(vieille, fournisseur_id=1, matiere_id=10,
+                        patch={"taxe_pct": 1}).get("ok"), False)
+    check("et les vues restent vides", mpx.tarifs_du_fournisseur(vieille, 1), [])
 
 
 def calcul(mod):
