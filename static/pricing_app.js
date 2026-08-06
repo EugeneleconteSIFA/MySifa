@@ -869,6 +869,28 @@
   }
 
   /**
+   * Coût au m² d'une ligne de prix.
+   *
+   * Le serveur le calcule ligne par ligne : même déclinaison, mêmes réglages,
+   * prix de la ligne. La ligne principale l'affiche en clair et ouvre la fiche
+   * de paramétrage — c'est elle qui fait foi. Les autres le donnent en retrait :
+   * ce sont des hypothèses, « voilà ce que ça coûterait chez celui-là ».
+   *
+   * Le calcul ne se refait pas côté client : avec un forfait de transport, le
+   * coût ne suit pas le prix proportionnellement.
+   */
+  function coutLigneHtml(d, l) {
+    const cout = l.cout_eur_m2;
+    if (l.principal) {
+      return cout != null && cout > 0
+        ? `<button type="button" class="link-btn" data-ms-open="${d.id}" title="Ouvrir le paramétrage de cette déclinaison">${escHtml(fmtEurM2(cout))}</button>`
+        : `<button type="button" class="link-btn muted" data-ms-open="${d.id}" title="Renseigner poids, devise, taxes et transport">à paramétrer</button>`;
+    }
+    if (cout == null || !(cout > 0)) return '<span class="muted">—</span>';
+    return `<span class="ms-cout-alt" title="Coût si ce fournisseur devenait le principal">${escHtml(fmtEurM2(cout))}</span>`;
+  }
+
+  /**
    * Zone dépliée : une seule table à plat. Chaque ligne porte sa déclinaison,
    * son fournisseur, son prix, sa fiche appairée et ses actions.
    */
@@ -882,11 +904,13 @@
       (d.lignes || []).forEach((l, i) => {
         const fid = l.fournisseur_id == null ? "" : l.fournisseur_id;
         const key = `${d.id}|${fid}`;
-        // Le coût au m² est le vrai résultat attendu : il ouvre la fiche de
-        // paramétrage de la déclinaison.
-        const cout = d.cout_eur_m2 != null && d.cout_eur_m2 > 0
-          ? `<button type="button" class="link-btn" data-ms-open="${d.id}" title="Ouvrir le paramétrage de cette déclinaison">${escHtml(fmtEurM2(d.cout_eur_m2))}</button>`
-          : `<button type="button" class="link-btn muted" data-ms-open="${d.id}" title="Renseigner poids, devise, taxes et transport">à paramétrer</button>`;
+        // Chaque ligne montre SON coût au m², calculé avec son prix et les
+        // réglages de la déclinaison. C'est la seule façon de comparer deux
+        // fournisseurs : le prix au kilo ne dit rien tant que le grammage, la
+        // perte, le transport et les taxes ne sont pas passés dessus.
+        // Seule la ligne principale ouvre la fiche — c'est elle qui fait foi ;
+        // les autres sont des hypothèses, affichées en retrait.
+        const cout = coutLigneHtml(d, l);
         lignes.push(`<tr class="${l.principal ? "ms-principal" : ""}">
           <td class="ms-statut">${l.principal
               ? `<span class="badge badge-glassine" title="Ce prix fait foi">Principal</span>`
@@ -899,7 +923,7 @@
               ? `<input type="number" step="0.0001" class="ms-inline ms-prix" data-ms-prix="${escAttr(key)}" value="${escAttr(l.prix)}"/>`
               : fmtPrixUnite(l.prix, m.unite)}</td>
           <td class="ms-unite">${escHtml(m.unite)}</td>
-          <td class="ms-fiche">${i === 0 ? cout : ""}</td>
+          <td class="ms-fiche">${cout}</td>
           <td class="ms-meta">${escHtml(l.updated_at ? String(l.updated_at).replace("T", " ").slice(0, 16) : "—")}${l.updated_by_name ? " · " + escHtml(l.updated_by_name) : ""}</td>
           <td class="ms-actions">${S.canWrite
               ? actionBtn("data-ms-open", d.id, "edit", "Ouvrir le paramétrage de cette déclinaison") +
@@ -988,41 +1012,53 @@
     (S.mystock || []).forEach((m) => {
       const decls = m.declinaisons || [];
       if (!decls.length) {
-        lignes.push({ m, d: null, principal: null, autres: 0 });
+        lignes.push({ m, d: null, lignes: [], principal: null });
         return;
       }
       decls.forEach((d) => {
-        const prix = d.lignes || [];
-        // Le prix qui fait foi ; à défaut, le premier connu — la ligne doit
-        // afficher quelque chose, pas un tiret trompeur.
-        const principal = prix.find((l) => l.principal) || prix[0] || null;
-        lignes.push({ m, d, principal, autres: Math.max(0, prix.length - 1) });
+        // Le prix qui fait foi en tête, les autres à la suite : la ligne montre
+        // tous les fournisseurs de la déclinaison, pas seulement le retenu.
+        // Sans eux, un deuxième fournisseur n'existait nulle part dans cette vue.
+        const prix = (d.lignes || []).slice().sort(
+          (a, b) => (b.principal ? 1 : 0) - (a.principal ? 1 : 0)
+        );
+        lignes.push({ m, d, lignes: prix, principal: prix[0] || null });
       });
     });
     return lignes;
   }
 
   function mystockFlatRowHtml(entree) {
-    const { m, d, principal, autres } = entree;
+    const { m, d } = entree;
+    const prix = entree.lignes || [];
+
     const decl = d
       ? (d.libelle
           ? `<strong>${escHtml(d.libelle)}</strong>`
           : `<span class="muted">${escHtml(DECL_LABEL[m.type_declinaison] || "valeur")} à définir</span>`)
       : '<span class="muted">sans déclinaison</span>';
 
-    const fournisseur = principal && principal.fournisseur_nom
-      ? escHtml(principal.fournisseur_nom)
-      : '<span class="muted">—</span>';
-    const plus = autres
-      ? ` <span class="msl-plus" title="${escAttr(autres + " autre(s) fournisseur(s) sur cette déclinaison")}">+${autres}</span>`
-      : "";
+    // Trois colonnes empilées en parallèle : une sous-ligne par fournisseur, le
+    // principal en tête. Une déclinaison à fournisseur unique — le cas courant —
+    // garde une ligne d'une seule hauteur.
+    const vide = '<span class="muted">—</span>';
+    const empiler = (rendu) =>
+      prix.length
+        ? prix.map((l) => `<div class="msl-l${l.principal ? " msl-l-main" : ""}">${rendu(l)}</div>`).join("")
+        : vide;
 
-    const prix = principal && principal.prix != null
-      ? fmtPrixUnite(principal.prix, m.unite)
-      : '<span class="muted">—</span>';
-
-    const cout = d && d.cout_eur_m2 != null && d.cout_eur_m2 > 0
-      ? `<span class="msl-cout">${escHtml(fmtEurM2(d.cout_eur_m2))}</span>`
+    const fournisseurs = empiler((l) =>
+      l.fournisseur_nom ? escHtml(l.fournisseur_nom) : '<span class="muted">sans fournisseur</span>'
+    );
+    const prixCell = empiler((l) =>
+      l.prix != null ? escHtml(fmtPrixUnite(l.prix, m.unite)) : "—"
+    );
+    const coutCell = prix.length
+      ? empiler((l) =>
+          l.cout_eur_m2 != null && l.cout_eur_m2 > 0
+            ? `<span class="msl-cout">${escHtml(fmtEurM2(l.cout_eur_m2))}</span>`
+            : '<span class="badge badge-silicone">à paramétrer</span>'
+        )
       : '<span class="badge badge-silicone">à paramétrer</span>';
 
     const action = d
@@ -1035,9 +1071,9 @@
         <td>${categorieBadge(m.categorie)}</td>
         <td class="msl-ref" title="${escAttr(m.designation || m.reference)}"><strong>${escHtml(m.reference)}</strong></td>
         <td class="msl-decl"${d && d.libelle ? ` title="${escAttr(d.libelle)}"` : ""}>${decl}</td>
-        <td>${fournisseur}${plus}</td>
-        <td class="msl-prix">${prix}</td>
-        <td class="msl-coutcell">${cout}</td>
+        <td class="msl-fourn">${fournisseurs}</td>
+        <td class="msl-prix">${prixCell}</td>
+        <td class="msl-coutcell">${coutCell}</td>
         <td class="ms-actions" onclick="event.stopPropagation()">${action}</td>
       </tr>`;
   }
@@ -1056,7 +1092,11 @@
       .map((m) => {
         const open = !!S.expanded[m.id];
         const nb = m.nb_declinaisons || 0;
-        const prets = m.nb_parametrees || 0;
+        // « Réglée » = chiffrée, c'est-à-dire dont on sait sortir un coût au
+        // m². Le compteur d'avant (`nb_parametrees`) comptait les fiches
+        // ouvertes et enregistrées à la main : une déclinaison pouvait afficher
+        // son coût dans le tableau et être annoncée non réglée dans le badge.
+        const prets = m.nb_chiffrees != null ? m.nb_chiffrees : (m.nb_parametrees || 0);
         // Le fournisseur dont le prix fait foi. Plusieurs déclinaisons peuvent
         // en avoir des différents : on ne nomme que s'il n'y en a qu'un.
         const principaux = [...new Set(
