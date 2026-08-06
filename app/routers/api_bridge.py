@@ -161,7 +161,16 @@ def _valeur_differente(ancien, nouveau) -> bool:
 
 @router.get("/health")
 def bridge_health():
-    return {"status": "ok", "service": "mysifa-bridge"}
+    # `features` permet a un script d'import de verifier, AVANT d'ecrire, que
+    # l'instance visee connait bien les options qu'il envoie. Sans ce garde-fou
+    # un flag inconnu serait silencieusement ignore par Pydantic et le script
+    # croirait completer des champs vides alors qu'il ecrase tout.
+    return {
+        "status": "ok",
+        "service": "mysifa-bridge",
+        "features": ["of.enrich_if_exists", "of.refresh_access_fields",
+                     "fiche.enrich_if_exists"],
+    }
 
 
 @router.get("/of")
@@ -473,10 +482,23 @@ class FicheTechniqueIn(BaseModel):
     palette_hauteur_max:        Optional[float] = None
     particularite:              Optional[str]   = None
     notes:                      Optional[str]   = None
+    # Si la reference existe deja : ne completer que les colonnes vides au lieu
+    # d'ecraser. Meme contrat que OFPushIn.enrich_if_exists — une valeur deja
+    # renseignee dans MySifa (saisie manuelle, correction atelier) fait
+    # autorite sur Access. Defaut False : l'upsert historique est conserve.
+    enrich_if_exists:           bool            = False
 
 
 # Colonnes DB gérées manuellement (non mappées depuis le modèle)
 _FT_META_COLS = {"source", "date_import", "imported_by"}
+
+# Champs de pilotage du modele, jamais ecrits en base.
+_FT_FLAGS = {"enrich_if_exists"}
+
+
+def _ft_vide(val) -> bool:
+    """Vrai si la colonne est consideree comme non renseignee."""
+    return val is None or (isinstance(val, str) and not val.strip())
 
 
 @router.post("/fiche-technique")
@@ -496,25 +518,42 @@ def push_fiche_technique(
 
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
-    # Tous les champs non-null sauf référence et méta
+    # Tous les champs non-null sauf référence, méta et flags de pilotage
     data = {
         k: v for k, v in body.model_dump().items()
-        if k != "reference" and v is not None and k not in _FT_META_COLS
+        if k != "reference" and v is not None
+        and k not in _FT_META_COLS and k not in _FT_FLAGS
     }
 
     with get_db() as conn:
         existing = conn.execute(
-            "SELECT id FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
+            "SELECT * FROM fiches_techniques WHERE LOWER(TRIM(reference))=LOWER(TRIM(?)) LIMIT 1",
             (ref,)
         ).fetchone()
         if existing:
+            champs = list(data)
+            if body.enrich_if_exists:
+                # Ne toucher qu'aux colonnes restees vides. Une fiche corrigee
+                # a la main dans MySifa n'est jamais ecrasee par Access.
+                colonnes = set(existing.keys())
+                data = {
+                    k: v for k, v in data.items()
+                    if k in colonnes and _ft_vide(existing[k])
+                }
+                champs = sorted(data)
             if data:
                 conn.execute(
                     f"UPDATE fiches_techniques SET {', '.join(f'{k}=?' for k in data)} WHERE id=?",
                     list(data.values()) + [existing["id"]],
                 )
                 conn.commit()
-            return {"action": "updated", "id": existing["id"], "reference": ref}
+            return {
+                "action": "enriched" if (body.enrich_if_exists and data)
+                          else ("unchanged" if body.enrich_if_exists else "updated"),
+                "id": existing["id"],
+                "reference": ref,
+                "fields": champs if data else [],
+            }
         else:
             cols = ["reference", "source", "date_import", "imported_by"] + list(data.keys())
             vals = [ref, "access_bridge", now, "access_bridge"] + list(data.values())

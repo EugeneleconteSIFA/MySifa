@@ -1678,7 +1678,6 @@ function renderOfTab(){
   );
 
   const rows=(S.ofImports||[]).map(row=>{
-    const stCls=prodOfStatutClass(row.statut);
     const dateCrea=(row.date_creation||'').slice(0,10)||'—';
     const acts=[
       h('button',{
@@ -1737,14 +1736,13 @@ function renderOfTab(){
       h('td',null,escHtml(row.delai_client||'—')),
       h('td',null,row.qte_etiquettes!=null?escHtml(String(row.qte_etiquettes)):'—'),
       h('td',null,escHtml(dateCrea)),
-      h('td',null,h('span',{className:stCls},prodOfStatutLabel(row.statut))),
       // v1.7 — className 'td-actions' pour override du clip global (cf. CSS)
       h('td',{className:'td-actions'},h('div',{style:{display:'flex',gap:'4px'}},...acts)),
     );
   });
 
   const empty=h('tr',null,
-    h('td',{colSpan:'9',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
+    h('td',{colSpan:'8',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
       S.ofImportsLoading?'Chargement…':(S.ofSearch?`Aucun résultat pour « ${escHtml(S.ofSearch)} »`:'Aucun OF importé')
     )
   );
@@ -1771,7 +1769,7 @@ function renderOfTab(){
           ),
           h('th',null,'OF n°'),h('th',null,'Référence'),h('th',null,'Machine'),
           h('th',null,'Délai client'),h('th',null,'Qté étiquettes'),h('th',null,'Date création'),
-          h('th',null,'Statut'),h('th',{className:'th-actions'},'Actions')
+          h('th',{className:'th-actions'},'Actions')
         )),
         h('tbody',null,...(rows.length?rows:[empty]))
       )

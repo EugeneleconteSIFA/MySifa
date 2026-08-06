@@ -18,6 +18,7 @@ from fastapi.responses import StreamingResponse
 
 from app.services import mystock_prix as _mystock_prix
 from app.services.audit_service import log_action
+from app.services.fsc_certificat import evaluer_certificat
 from config import (
     STOCK_EMPLACEMENT_AU_SOL,
     STOCK_EMPLACEMENT_AU_SOL_LABEL,
@@ -1145,6 +1146,25 @@ def get_stock_produit_total(conn, produit_id: int) -> dict:
     return {"total": total, "date_fifo": date_fifo, "nb_lots": len(rows)}
 
 
+def _validate_expe_depart_id(conn, value) -> Optional[int]:
+    """Vérifie que le départ existe avant de lui rattacher une sortie.
+
+    Un identifiant de départ invalide passé en silence produirait une sortie
+    rattachée à rien — pire qu'une sortie non rattachée, parce que la chaîne
+    aurait l'air complète.
+    """
+    if value in (None, ""):
+        return None
+    try:
+        did = int(value)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "expe_depart_id invalide.") from None
+    row = conn.execute("SELECT id FROM expe_departs WHERE id=?", (did,)).fetchone()
+    if not row:
+        raise HTTPException(400, "Départ d'expédition introuvable.")
+    return did
+
+
 def apply_fifo_sortie(
     conn,
     produit_id: int,
@@ -1157,10 +1177,16 @@ def apply_fifo_sortie(
     fsc: Optional[int] = None,
     fsc_ecart_confirme: bool = False,
     fsc_ecart_note: Optional[str] = None,
+    expe_depart_id: Optional[int] = None,
 ) -> dict:
     """
     Consomme les lots FIFO pour un emplacement donné.
     Retourne quantite_avant, quantite_apres.
+
+    `expe_depart_id` rattache la sortie au départ qui l'a provoquée. Il reste
+    facultatif : toutes les sorties ne sont pas des expéditions (rebut,
+    correction, transfert). Mais sans lui sur une vente, la chaîne de contrôle
+    s'arrête au stock et reprend au bon de livraison sans rien pour les relier.
 
     FIFO PAR SEGMENT (paramètre `fsc`) — c'est ce qui protège le claim :
 
@@ -1255,6 +1281,10 @@ def apply_fifo_sortie(
 
     conso_fsc = 0.0
     conso_std = 0.0
+    # Détail de consommation : quels lots, dans quelle proportion. C'est ce
+    # que la ligne agrégée de `mouvements_stock` perdait — et c'est exactement
+    # ce qu'un auditeur demande quand un dossier a produit plusieurs lots.
+    lots_consommes: list[dict] = []
     for lot in ordre:
         if restant <= 0:
             break
@@ -1267,6 +1297,11 @@ def apply_fifo_sortie(
             conso_fsc += consomme
         else:
             conso_std += consomme
+        lots_consommes.append({
+            "lot_id": lot["id"],
+            "quantite": consomme,
+            "fsc": int(lot["fsc"] or 0),
+        })
         restant -= consomme
 
     quantite_apres = total_dispo - quantite
@@ -1282,18 +1317,37 @@ def apply_fifo_sortie(
     # Historique
     cur = conn.execute(
         """INSERT INTO mouvements_stock
-           (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name,no_dossier,fsc,fsc_ecart,fsc_ecart_note)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           (produit_id,emplacement,type_mouvement,quantite,quantite_avant,quantite_apres,note,created_at,created_by,created_by_name,no_dossier,fsc,fsc_ecart,fsc_ecart_note,expe_depart_id)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (produit_id, emplacement, "sortie", quantite, quantite_avant, quantite_apres,
          note, now, user_email, user_name, no_dossier,
-         (int(fsc) if fsc is not None else None), ecart, ecart_note),
+         (int(fsc) if fsc is not None else None), ecart, ecart_note,
+         (int(expe_depart_id) if expe_depart_id else None)),
     )
+    mouvement_id = cur.lastrowid
+
+    # `fsc` et `no_dossier` sont recopiés depuis le lot au moment de la
+    # consommation, pas lus plus tard par jointure : une correction ultérieure
+    # sur le lot ne doit pas réécrire ce qui est physiquement parti.
+    for c in lots_consommes:
+        dos = conn.execute(
+            "SELECT no_dossier FROM lots_stock WHERE id=?", (c["lot_id"],)
+        ).fetchone()
+        conn.execute(
+            """INSERT INTO mouvements_stock_lots
+               (mouvement_id, lot_id, quantite, fsc, no_dossier, created_at)
+               VALUES (?,?,?,?,?,?)""",
+            (mouvement_id, c["lot_id"], c["quantite"], c["fsc"],
+             (dos["no_dossier"] if dos else None), now),
+        )
+
     return {
         "quantite_avant": quantite_avant,
         "quantite_apres": quantite_apres,
-        "mouvement_id": cur.lastrowid,
+        "mouvement_id": mouvement_id,
         "consomme_fsc": conso_fsc,
         "consomme_non_fsc": conso_std,
+        "lots_consommes": lots_consommes,
         "fsc_ecart": ecart,
         "fsc_ecart_note": ecart_note,
     }
@@ -1307,6 +1361,7 @@ def sortir_lot_fifo(
     user_name: Optional[str] = None,
     note: str = "",
     fsc: Optional[int] = None,
+    expe_depart_id: Optional[int] = None,
 ) -> dict:
     """Sortie du lot FIFO le plus ancien à un emplacement (quantité = lot entier).
 
@@ -1338,6 +1393,7 @@ def sortir_lot_fifo(
         fsc=int(lot["fsc"] or 0),
         fsc_ecart_confirme=True,
         fsc_ecart_note="Sortie du lot entier",
+        expe_depart_id=expe_depart_id,
     )
     return {**result, "quantite_sortie": qte_lot, "fsc": int(lot["fsc"] or 0)}
 
@@ -2335,6 +2391,7 @@ def _apply_stock_mouvement(
     fsc: Optional[int] = None,
     fsc_ecart_confirme: bool = False,
     fsc_ecart_note: Optional[str] = None,
+    expe_depart_id: Optional[int] = None,
 ) -> tuple[dict, str, str]:
     """Applique un mouvement PF (entree / sortie / inventaire) sur la base existante.
 
@@ -2437,6 +2494,7 @@ def _apply_stock_mouvement(
             fsc=fsc,
             fsc_ecart_confirme=fsc_ecart_confirme,
             fsc_ecart_note=fsc_ecart_note,
+            expe_depart_id=expe_depart_id,
         )
 
     elif type_mvt == "inventaire":
@@ -2674,6 +2732,7 @@ async def mouvement_stock(request: Request):
             fsc=fsc_sortie,
             fsc_ecart_confirme=fsc_ecart_confirme,
             fsc_ecart_note=fsc_ecart_note,
+            expe_depart_id=_validate_expe_depart_id(conn, body.get("expe_depart_id")),
         )
 
         # Insertion des palettes (meme transaction)
@@ -2739,6 +2798,7 @@ async def api_sortir_lot(request: Request):
         result = sortir_lot_fifo(
             conn, int(produit_id), emplacement, user["email"], created_by_name, note,
             fsc=fsc_seg,
+            expe_depart_id=_validate_expe_depart_id(conn, body.get("expe_depart_id")),
         )
         conn.commit()
 
@@ -3584,6 +3644,91 @@ def list_receptions(request: Request, limit: int = 50):
     return {"receptions": result}
 
 
+def _check_codes_barres_uniques(conn, codes: list[str]) -> None:
+    """Refuse un code-barre déjà enregistré sur une autre réception.
+
+    Le code-barre est ce qui identifie physiquement une bobine, et c'est par
+    lui que la production remonte au fournisseur et à son certificat. Deux
+    réceptions portant le même code rendent cette remontée indécidable : le
+    rapport de traçabilité retiendrait la plus récente, donc peut-être le
+    mauvais fournisseur, sans qu'aucune alerte ne le dise.
+
+    409 et non 400 : la situation existe (un fournisseur peut recycler sa
+    numérotation d'une année sur l'autre). L'opérateur peut passer outre avec
+    `codes_doublons_confirmes` et une justification, qui sera enregistrée sur
+    chaque bobine concernée.
+    """
+    if not codes:
+        return
+    trouves = []
+    for code in codes:
+        c = (code or "").strip()
+        if not c:
+            continue
+        rows = conn.execute(
+            """SELECT i.reception_id, i.scanned_at, r.lot_numero, r.fournisseur,
+                      r.fsc_type_claim
+                 FROM stock_reception_items i
+                 JOIN stock_receptions r ON r.id = i.reception_id
+                WHERE TRIM(i.code_barre) = ?
+                LIMIT 3""",
+            (c,),
+        ).fetchall()
+        if rows:
+            trouves.append({"code": c, "receptions": [dict(r) for r in rows]})
+    if not trouves:
+        return
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "code_barre_doublon",
+            "bobines": trouves[:20],
+            "nb": len(trouves),
+            "message": (
+                f"{len(trouves)} code(s)-barre déjà enregistré(s) sur une autre "
+                f"réception. Une bobine portant un code déjà utilisé ne peut plus "
+                f"être rattachée à un fournisseur avec certitude : son certificat "
+                f"FSC deviendrait indémontrable."
+            ),
+        },
+    )
+
+
+def _resoudre_fournisseur_reception(conn, nom: Optional[str]) -> tuple[Optional[int], Optional[dict]]:
+    """Retrouve le fournisseur de l'annuaire FSC à partir du nom saisi.
+
+    Correspondance exacte, insensible à la casse. Pas de rapprochement
+    approchant : attribuer à une réception le certificat d'un fournisseur
+    voisin est la seule erreur qu'un audit ne pardonne pas.
+    """
+    n = (nom or "").strip()
+    if not n:
+        return None, None
+    row = conn.execute(
+        "SELECT * FROM fournisseurs_fsc WHERE UPPER(TRIM(nom))=UPPER(?) LIMIT 1",
+        (n,),
+    ).fetchone()
+    return (row["id"], dict(row)) if row else (None, None)
+
+
+def _verdict_certificat_reception(fournisseur: Optional[dict], date_reception) -> dict:
+    """Verdict de validité du certificat, figé à la date de la réception.
+
+    La date qui fait foi est celle du bon de livraison, pas celle du jour : un
+    fournisseur dont le certificat expire entre la commande et la livraison
+    casse le claim de cette livraison précise, et un renouvellement ultérieur
+    ne doit pas réécrire l'histoire d'une réception passée. Sans fournisseur
+    connu, on renvoie « inconnu » — jamais « valide » par défaut.
+    """
+    if not fournisseur:
+        return {
+            "statut": "inconnu",
+            "libelle": "Fournisseur absent de l'annuaire FSC — validité invérifiable",
+            "expiration": None,
+        }
+    return evaluer_certificat(fournisseur, date_reception)
+
+
 @router.post("/api/stock/receptions")
 async def create_reception(request: Request):
     """Enregistre une reception de bobines (lot de codes-barres).
@@ -3662,6 +3807,25 @@ async def create_reception(request: Request):
     nb_bobines_ajoutees = len(normalized_items)
 
     with get_db() as conn:
+        # ── Unicité des codes-barres ─────────────────────────────────────
+        doublons_confirmes = bool(body.get("codes_doublons_confirmes"))
+        doublon_note = (body.get("codes_doublons_note") or "").strip() or None
+        if not doublons_confirmes:
+            _check_codes_barres_uniques(conn, [it["code"] for it in normalized_items])
+        elif not doublon_note:
+            raise HTTPException(
+                400,
+                "Réutilisation d'un code-barre : une justification est obligatoire.",
+            )
+
+        # ── Fournisseur : clé étrangère + verdict de certificat figé ──────
+        # Le nom saisi reste enregistré tel quel (c'est ce qui figure sur le
+        # bon de livraison), mais la chaîne FSC s'appuie désormais sur la clé :
+        # renommer un fournisseur dans l'annuaire ne détache plus ses
+        # réceptions passées de leur licence.
+        fournisseur_id, fournisseur_row = _resoudre_fournisseur_reception(conn, fournisseur)
+        verdict = _verdict_certificat_reception(fournisseur_row, now_dt.date())
+
         # ── Precharge des matieres impliquees (verifier existence + laizee) ──
         matiere_ids = {int(it["matiere_id"]) for it in normalized_items if "matiere_id" in it}
         matieres_cache: dict[int, dict] = {}
@@ -3710,13 +3874,27 @@ async def create_reception(request: Request):
         if existing:
             reception_id = existing["id"]
             merged_note = _merge_note(note, conn, reception_id)
+            # Le lot fusionné est du même fournisseur et de la même heure
+            # (c'est ce que `lot_numero` encode) : compléter ce qui manque est
+            # exact, pas rétroactif. On ne touche jamais à un verdict déjà posé.
+            conn.execute(
+                """UPDATE stock_receptions
+                      SET fournisseur_id = COALESCE(fournisseur_id, ?),
+                          certificat_valide = COALESCE(certificat_valide, ?),
+                          certificat_expiration = COALESCE(certificat_expiration, ?),
+                          certificat_note = COALESCE(certificat_note, ?)
+                    WHERE id = ?""",
+                (fournisseur_id, verdict.get("statut"), verdict.get("expiration"),
+                 verdict.get("libelle"), reception_id),
+            )
             for it in normalized_items:
                 conn.execute(
                     """INSERT INTO stock_reception_items
-                       (reception_id, code_barre, scanned_at, matiere_id, laize_id)
-                       VALUES (?, ?, ?, ?, ?)""",
+                       (reception_id, code_barre, scanned_at, matiere_id, laize_id,
+                        doublon_note)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
                     (reception_id, it["code"], now,
-                     it.get("matiere_id"), it.get("laize_id")),
+                     it.get("matiere_id"), it.get("laize_id"), doublon_note),
                 )
             conn.execute(
                 """UPDATE stock_receptions
@@ -3731,8 +3909,10 @@ async def create_reception(request: Request):
             cur = conn.execute(
                 """INSERT INTO stock_receptions
                    (created_at, created_by, created_by_name, note, nb_bobines,
-                    fournisseur, certificat_fsc, fsc_type_claim, lot_numero)
-                   VALUES (?,?,?,?,?,?,?,?,?)""",
+                    fournisseur, fournisseur_id, certificat_fsc, fsc_type_claim,
+                    lot_numero, certificat_valide, certificat_expiration,
+                    certificat_note)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     now,
                     created_by,
@@ -3740,19 +3920,24 @@ async def create_reception(request: Request):
                     note,
                     nb_bobines_ajoutees,
                     fournisseur,
+                    fournisseur_id,
                     certificat_fsc,
                     fsc_type_claim,
                     lot_numero,
+                    verdict.get("statut"),
+                    verdict.get("expiration"),
+                    verdict.get("libelle"),
                 ),
             )
             reception_id = cur.lastrowid
             for it in normalized_items:
                 conn.execute(
                     """INSERT INTO stock_reception_items
-                       (reception_id, code_barre, scanned_at, matiere_id, laize_id)
-                       VALUES (?, ?, ?, ?, ?)""",
+                       (reception_id, code_barre, scanned_at, matiere_id, laize_id,
+                        doublon_note)
+                       VALUES (?, ?, ?, ?, ?, ?)""",
                     (reception_id, it["code"], now,
-                     it.get("matiere_id"), it.get("laize_id")),
+                     it.get("matiere_id"), it.get("laize_id"), doublon_note),
                 )
             merged = False
             new_total = nb_bobines_ajoutees
@@ -4288,6 +4473,115 @@ def stock_config_float(conn, cle: str) -> float:
         return float(str(row["valeur"]).replace(",", "."))
     except (TypeError, ValueError):
         return defaut
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Mouvement de matière première réutilisable
+#
+# `mouvement_matiere_premiere` (l'endpoint) fait beaucoup : conversion d'unité
+# de saisie, prix moyen pondéré, audit. Le déstockage de production n'a besoin
+# que du cœur — bouger le stock et écrire au journal — mais il en a besoin
+# depuis un autre module, dans une transaction qu'il contrôle (une production
+# déstocke cinq matières : soit les cinq passent, soit aucune).
+# ─────────────────────────────────────────────────────────────────────────
+
+
+def appliquer_mouvement_mp(
+    conn: sqlite3.Connection,
+    user: dict,
+    matiere_id: int,
+    type_mvt: str,
+    quantite: float,
+    *,
+    laize_id: Optional[int] = None,
+    note: Optional[str] = None,
+    planning_entry_id: Optional[int] = None,
+    no_dossier: Optional[str] = None,
+    annule_mouvement_id: Optional[int] = None,
+    autoriser_negatif: bool = False,
+) -> dict:
+    """Applique une entrée ou une sortie sur une matière et journalise.
+
+    Ne committe pas : l'appelant maîtrise sa transaction.
+
+    `autoriser_negatif` existe pour le déstockage de production : la matière a
+    réellement été consommée. Refuser de l'enregistrer parce que le stock
+    théorique est déjà à zéro rendrait le stock plus faux, pas moins — on
+    enregistre, et c'est l'écart négatif qui alerte.
+    """
+    if type_mvt not in ("entree", "sortie"):
+        raise HTTPException(400, "Type de mouvement non géré ici.")
+    if quantite <= 0:
+        raise HTTPException(400, "Quantité doit être positive.")
+
+    mp = conn.execute(
+        "SELECT id, categorie FROM matieres_premieres WHERE id=?", (matiere_id,)
+    ).fetchone()
+    if not mp:
+        raise HTTPException(404, "Matière non trouvée.")
+
+    unite = _mp_unite_gestion(mp["categorie"])
+    laizee = _mp_is_laizee(mp["categorie"])
+    nom = _resolve_created_by_name(conn, user)
+
+    if laizee:
+        if laize_id is None:
+            raise HTTPException(400, "Laize obligatoire pour cette catégorie.")
+        ligne = conn.execute(
+            "SELECT quantite FROM mp_stock_laize WHERE matiere_id=? AND laize_id=?",
+            (matiere_id, laize_id),
+        ).fetchone()
+    else:
+        ligne = conn.execute(
+            "SELECT quantite FROM mp_stock WHERE matiere_id=?", (matiere_id,)
+        ).fetchone()
+    avant = float(ligne["quantite"]) if ligne else 0.0
+    apres = avant + quantite if type_mvt == "entree" else avant - quantite
+    if apres < 0 and not autoriser_negatif:
+        raise HTTPException(400, f"Stock insuffisant — stock actuel : {avant:g} {unite}.")
+
+    if laizee:
+        conn.execute(
+            """INSERT INTO mp_stock_laize (matiere_id, laize_id, quantite, updated_at, updated_by_name)
+               VALUES (?,?,?,strftime('%Y-%m-%dT%H:%M:%S','now','localtime'),?)
+               ON CONFLICT(matiere_id, laize_id) DO UPDATE SET
+                 quantite=excluded.quantite, updated_at=excluded.updated_at,
+                 updated_by_name=excluded.updated_by_name""",
+            (matiere_id, laize_id, apres, nom),
+        )
+        total = conn.execute(
+            "SELECT COALESCE(SUM(quantite), 0) AS s FROM mp_stock_laize WHERE matiere_id=?",
+            (matiere_id,),
+        ).fetchone()
+        conn.execute(
+            """INSERT OR REPLACE INTO mp_stock(matiere_id, quantite, updated_at, updated_by_name)
+               VALUES (?,?,strftime('%Y-%m-%dT%H:%M:%S','now','localtime'),?)""",
+            (matiere_id, float(total["s"] or 0), nom),
+        )
+    else:
+        conn.execute(
+            """INSERT OR REPLACE INTO mp_stock(matiere_id, quantite, updated_at, updated_by_name)
+               VALUES (?,?,strftime('%Y-%m-%dT%H:%M:%S','now','localtime'),?)""",
+            (matiere_id, apres, nom),
+        )
+
+    cur = conn.execute(
+        """INSERT INTO mp_mouvements (
+               matiere_id, type_mouvement, quantite, quantite_avant, quantite_apres,
+               note, created_by, created_by_name, laize_id,
+               planning_entry_id, no_dossier, annule_mouvement_id
+           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (matiere_id, type_mvt, quantite, avant, apres, note,
+         user.get("id"), nom, laize_id,
+         planning_entry_id, (no_dossier or "").strip() or None, annule_mouvement_id),
+    )
+    return {
+        "mouvement_id": cur.lastrowid,
+        "quantite_avant": round(avant, 4),
+        "quantite_apres": round(apres, 4),
+        "unite": unite,
+        "negatif": apres < 0,
+    }
 
 
 @router.get("/api/stock/config")
@@ -5799,7 +6093,8 @@ async def produit_fini_sortie(request: Request):
                 f"Stock insuffisant — disponible : {stock:g} {unite}.",
             )
         result, ref_audit, audit_action = _apply_stock_mouvement(
-            conn, user, produit_id, emplacement, "sortie", quantite, note
+            conn, user, produit_id, emplacement, "sortie", quantite, note,
+            expe_depart_id=_validate_expe_depart_id(conn, body.get("expe_depart_id")),
         )
         conn.commit()
 
@@ -5974,7 +6269,8 @@ async def negoce_sortie(request: Request):
                 f"Stock insuffisant — disponible : {stock:g} {unite}.",
             )
         result, ref_audit, audit_action = _apply_stock_mouvement(
-            conn, user, produit_id, emplacement, "sortie", quantite, note
+            conn, user, produit_id, emplacement, "sortie", quantite, note,
+            expe_depart_id=_validate_expe_depart_id(conn, body.get("expe_depart_id")),
         )
         conn.commit()
 

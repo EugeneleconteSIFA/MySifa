@@ -1789,7 +1789,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/mysifa_humeur.js"></script>
-<script src="/static/chat_widget_v2.js?v=8"></script>
+<script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/mysifa_landscape.js?v=2"></script>
 <script src="/static/motion.js" defer></script>
@@ -2349,8 +2349,17 @@ async function loadMessagesUnread(){
 // Pastille « mes tâches » : tâches ouvertes qui me sont assignées. L'endpoint
 // répond 0 plutôt qu'une erreur pour un rôle non autorisé — une pastille ne
 // doit jamais faire échouer le chargement du portail.
+//
+// Le compteur suit la matrice d'accès, pas le rôle : quiconque peut ouvrir
+// l'app doit voir ses tâches en attente. Le garde-fou `isSuperAdmin` d'origine
+// laissait la pastille muette pour tous les autres services.
+function _peutVoirTaches(u){
+  const m=(u&&u.access_map&&u.access_map.taches)||{};
+  const niv=m._app||(isSuperAdmin(u)?'admin':'none');
+  return niv!=='none';
+}
 async function loadTachesCount(){
-  if(!isSuperAdmin(S.user))return;
+  if(!_peutVoirTaches(S.user))return;
   const r=await api('/api/taches/badge');
   if(r && typeof r.count==='number') set({tachesCount:r.count});
 }
@@ -9535,7 +9544,6 @@ function renderOfTab(){
   );
 
   const rows=(S.ofImports||[]).map(row=>{
-    const stCls=prodOfStatutClass(row.statut);
     const dateCrea=(row.date_creation||'').slice(0,10)||'—';
     const acts=[
       h('button',{
@@ -9578,13 +9586,12 @@ function renderOfTab(){
       h('td',null,escHtml(row.delai_client||'—')),
       h('td',null,row.qte_etiquettes!=null?escHtml(String(row.qte_etiquettes)):'—'),
       h('td',null,escHtml(dateCrea)),
-      h('td',null,h('span',{className:stCls},prodOfStatutLabel(row.statut))),
       h('td',null,h('div',{style:{display:'flex',gap:'4px'}},...acts)),
     );
   });
 
   const empty=h('tr',null,
-    h('td',{colSpan:'9',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
+    h('td',{colSpan:'8',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
       S.ofImportsLoading?'Chargement…':(S.ofSearch?`Aucun résultat pour « ${escHtml(S.ofSearch)} »`:'Aucun OF importé')
     )
   );
@@ -10845,10 +10852,17 @@ function renderMobileNavbar(){
 // ══════════════════════════════════════════════════════════════════
 function _sheetRoles(){
   const role=(S.user&&S.user.role)||'';
+  const aa=(S.user&&S.user.app_access)||null;
   return {
     isSuper: role==='superadmin',
     isDir: role==='direction',
     isAdmin: (role==='administration'||role==='administration_ventes'||role==='administration_technique'),
+    // Parametres : acces sectionne (config.py ROLES_SETTINGS_* -> union ROLES_SETTINGS),
+    // deja reflete par app_access.settings cote serveur.
+    canSettings: aa ? !!aa.settings : (role==='superadmin'||role==='direction'),
+    // Tâches : niveau issu de la matrice d'accès, pas du rôle.
+    canTaches: (((S.user&&S.user.access_map&&S.user.access_map.taches)||{})._app
+                || (role==='superadmin'?'admin':'none')) !== 'none',
     role,
   };
 }
@@ -10856,7 +10870,7 @@ function openProfileSheet(){
   const sheet=document.getElementById('msf-sheet-root');
   const bd=document.getElementById('msf-sheet-backdrop');
   if(!sheet||!bd) return;
-  const {isSuper,isDir,isAdmin,role}=_sheetRoles();
+  const {isSuper,isDir,isAdmin,canSettings,canTaches,role}=_sheetRoles();
   const nom=(S.user&&S.user.nom)||'';
   const initials=_mnbInitials(nom);
   const msgUnread=Number(S.msgUnread||0);
@@ -10878,10 +10892,10 @@ function openProfileSheet(){
   }
   const items=[];
   items.push(item('profil', ICO.user, 'Mon profil', ''));
-  if(isSuper||isDir){
+  if(canSettings){
     items.push(item('settings', ICO.sliders, 'Paramètres', ''));
   }
-  if(isSuper){
+  if(canTaches){
     const nbT=Number(S.tachesCount||0);
     items.push(item('taches', ICO.taches, 'Gestionnaire de tâches',
       nbT>0?(nbT>9?'9+':String(nbT)):''));

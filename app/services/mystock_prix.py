@@ -142,7 +142,8 @@ def list_materials(
                   d.weight_per_m2, d.grammage_gsm, d.perte_pct,
                   d.price_currency, d.price_basis,
                   d.taxe_pct, d.is_imported, d.applique_marge, d.transport_mode,
-                  d.transport_unit_price, d.transport_pct, d.parametre,
+                  d.transport_unit_price, d.transport_pct,
+                  d.transport_cout, d.transport_quantite, d.parametre,
                   l.valeur_mm, l.label AS laize_label, l.ordre AS laize_ordre,
                   g.valeur_gsm, g.label AS grammage_label,
                   mc.name AS mc_name, mc.appellation_code AS mc_appellation
@@ -221,6 +222,8 @@ def list_materials(
                 "transport_mode": _col(r, "transport_mode") or "AMOUNT",
                 "transport_unit_price": _f(_col(r, "transport_unit_price")),
                 "transport_pct": _f(_col(r, "transport_pct")),
+                "transport_cout": _f(_col(r, "transport_cout")),
+                "transport_quantite": _f(_col(r, "transport_quantite")),
             }
         )
 
@@ -406,6 +409,74 @@ def _poids_depuis_grammage(conn: sqlite3.Connection, declinaison_id: int, gramma
     )
 
 
+def deriver_declinaison(
+    conn: sqlite3.Connection,
+    *,
+    declinaison_id: int,
+    user_name: Optional[str] = None,
+) -> dict:
+    """
+    Crée une déclinaison sœur : tout est repris, sauf sa valeur.
+
+    Un adhésif décliné en 17, 19 et 22 g/m² a le même fournisseur, le même
+    tarif, la même perte, les mêmes taxes — seul le grammage change. Repartir
+    d'une déclinaison existante évite de ressaisir sept réglages pour changer
+    un chiffre.
+
+    La valeur (grammage ou laize) reste vide : c'est la seule chose à saisir,
+    et c'est justement ce qui distingue la nouvelle de son modèle.
+    """
+    source = fetch_declinaison_complete(conn, declinaison_id)
+    if not source:
+        return {"ok": False, "reason": "déclinaison introuvable"}
+    matiere_id = int(source["matiere_id"])
+
+    if conn.execute(
+        """SELECT 1 FROM mp_matiere_declinaison
+            WHERE matiere_id=? AND laize_id IS NULL AND grammage_id IS NULL""",
+        (matiere_id,),
+    ).fetchone():
+        return {
+            "ok": False,
+            "reason": "une déclinaison sans valeur existe déjà — renseignez-la d'abord",
+        }
+
+    colonnes = [c for c in CHAMPS_PARAM if c != "grammage_gsm"] + ["parametre"]
+    valeurs = [_col(source, c) for c in colonnes]
+    cur = conn.execute(
+        f"""INSERT INTO mp_matiere_declinaison (matiere_id, {", ".join(colonnes)})
+            VALUES (?{", ?" * len(colonnes)})""",
+        (matiere_id, *valeurs),
+    )
+    nouvelle = int(cur.lastrowid)
+
+    # Les lignes de prix suivent : même fournisseur, même tarif, même principal.
+    lignes = conn.execute(
+        """SELECT fournisseur_id, prix, principal, note FROM mp_matiere_prix
+            WHERE declinaison_id=? ORDER BY principal DESC, id""",
+        (declinaison_id,),
+    ).fetchall()
+    now = _now()
+    if not lignes:
+        conn.execute(
+            """INSERT INTO mp_matiere_prix
+               (matiere_id, laize_id, grammage_id, declinaison_id, fournisseur_id,
+                prix, principal, updated_at, updated_by_name)
+               VALUES (?,NULL,NULL,?,NULL,0,1,?,?)""",
+            (matiere_id, nouvelle, now, user_name),
+        )
+    for l in lignes:
+        conn.execute(
+            """INSERT INTO mp_matiere_prix
+               (matiere_id, laize_id, grammage_id, declinaison_id, fournisseur_id,
+                prix, principal, note, updated_at, updated_by_name)
+               VALUES (?,NULL,NULL,?,?,?,?,?,?,?)""",
+            (matiere_id, nouvelle, l["fournisseur_id"], l["prix"], l["principal"],
+             l["note"], now, user_name),
+        )
+    return {"ok": True, "declinaison_id": nouvelle, "source_id": declinaison_id}
+
+
 def set_declinaison_valeur(
     conn: sqlite3.Connection,
     *,
@@ -550,6 +621,8 @@ CHAMPS_PARAM = (
     "transport_mode",
     "transport_unit_price",
     "transport_pct",
+    "transport_cout",
+    "transport_quantite",
 )
 
 # Perte matière par défaut sur une nouvelle déclinaison, en %.
@@ -570,7 +643,7 @@ def poids_retenu(grammage_gsm: Any, perte_pct: Any) -> float:
 
 _DEVISES = ("EUR", "USD")
 _BASES = ("PER_KG", "PER_M2")
-_MODES_TRANSPORT = ("AMOUNT", "PCT")
+_MODES_TRANSPORT = ("AMOUNT", "PCT", "CONTENEUR", "FORFAIT")
 
 
 def libelle_declinaison(row: Any) -> str:
@@ -670,6 +743,8 @@ def parametrage(conn: sqlite3.Connection, declinaison_id: int) -> Optional[dict]
         "transport_mode": _col(d, "transport_mode") or "AMOUNT",
         "transport_unit_price": _f(_col(d, "transport_unit_price")),
         "transport_pct": _f(_col(d, "transport_pct")),
+        "transport_cout": _f(_col(d, "transport_cout")),
+        "transport_quantite": _f(_col(d, "transport_quantite")),
     }
 
 
@@ -735,6 +810,8 @@ def set_parametrage(
         ("taxe_pct", -100, 1000),
         ("transport_unit_price", 0, 1_000_000),
         ("transport_pct", 0, 1000),
+        ("transport_cout", 0, 100_000_000),
+        ("transport_quantite", 0, 100_000_000),
     ):
         if champ in patch:
             v = _f(patch[champ], None)
@@ -801,6 +878,20 @@ def set_parametrage(
 # passent par les deux fonctions ci-dessous, qui sont l'inverse l'une de l'autre.
 
 
+def _transport_unitaire(prix, mode, unit_price, pct, cout, quantite) -> float:
+    """
+    Transport ramené à l'unité d'achat. Doit rester aligné sur `_transport_unit`
+    du moteur de calcul : deux implémentations, une seule formule (test dédié).
+    """
+    m = (mode or "AMOUNT").upper()
+    if m == "PCT":
+        return _f(prix) * _f(pct) / 100.0
+    if m in ("CONTENEUR", "FORFAIT"):
+        q = _f(quantite)
+        return _f(cout) / q if q > 0 else 0.0
+    return _f(unit_price)
+
+
 def sous_total_achat(
     prix: Any,
     *,
@@ -808,16 +899,18 @@ def sous_total_achat(
     transport_mode: Optional[str] = "AMOUNT",
     transport_unit_price: Any = 0,
     transport_pct: Any = 0,
+    transport_cout: Any = 0,
+    transport_quantite: Any = 0,
     taxe_pct: Any = 0,
 ) -> float:
     """Prix d'achat + transport + taxes, dans la devise et la base d'achat."""
     p = _f(prix)
     if not is_imported:
         return round(p, 6)
-    if (transport_mode or "AMOUNT").upper() == "PCT":
-        transport = p * _f(transport_pct) / 100.0
-    else:
-        transport = _f(transport_unit_price)
+    transport = _transport_unitaire(
+        p, transport_mode, transport_unit_price, transport_pct,
+        transport_cout, transport_quantite,
+    )
     return round((p + transport) * (1 + _f(taxe_pct) / 100.0), 6)
 
 
@@ -828,6 +921,8 @@ def prix_depuis_sous_total(
     transport_mode: Optional[str] = "AMOUNT",
     transport_unit_price: Any = 0,
     transport_pct: Any = 0,
+    transport_cout: Any = 0,
+    transport_quantite: Any = 0,
     taxe_pct: Any = 0,
 ) -> Optional[float]:
     """
@@ -844,13 +939,20 @@ def prix_depuis_sous_total(
     if facteur_taxe <= 0:
         return None
     hors_taxe = st / facteur_taxe
-    if (transport_mode or "AMOUNT").upper() == "PCT":
+    mode = (transport_mode or "AMOUNT").upper()
+    if mode == "PCT":
+        # Le transport dépend du prix : on inverse la proportion.
         facteur_transport = 1 + _f(transport_pct) / 100.0
         if facteur_transport <= 0:
             return None
         p = hors_taxe / facteur_transport
     else:
-        p = hors_taxe - _f(transport_unit_price)
+        # Montant, conteneur ou forfait : le transport ne dépend pas du prix,
+        # on le retranche tel quel.
+        p = hors_taxe - _transport_unitaire(
+            0, transport_mode, transport_unit_price, transport_pct,
+            transport_cout, transport_quantite,
+        )
     return round(p, 6) if p >= 0 else None
 
 
@@ -861,6 +963,8 @@ def _reglages_declinaison(row: Any) -> dict:
         "transport_mode": _col(row, "transport_mode") or "AMOUNT",
         "transport_unit_price": _f(_col(row, "transport_unit_price")),
         "transport_pct": _f(_col(row, "transport_pct")),
+        "transport_cout": _f(_col(row, "transport_cout")),
+        "transport_quantite": _f(_col(row, "transport_quantite")),
         "taxe_pct": _f(_col(row, "taxe_pct")),
     }
 

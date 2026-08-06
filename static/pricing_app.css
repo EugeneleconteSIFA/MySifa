@@ -240,34 +240,51 @@ table.pr-table tr{cursor:pointer}
 .gram-out{background:var(--bg);border:1px solid var(--border);border-radius:10px;
   padding:12px 14px;font-size:14px;font-weight:700;color:var(--text);
   font-variant-numeric:tabular-nums}
-/* Case à cocher posée dans une grille de champs : alignée sur ses voisins. */
-.check-inline{margin-top:24px}
 @media(max-width:860px){
   .gram-row{grid-template-columns:1fr 1fr;gap:12px}
   .gram-arrow{display:none}
   .gram-row .field{margin-bottom:12px}
 }
 
-/* Bandeau d'actions collé en haut de la fiche matière (repris de la fiche
-   produit MyAO) : sur un formulaire long, Enregistrer reste sous la main. */
-.pr-savebar{position:sticky;top:0;z-index:30;display:flex;flex-wrap:wrap;gap:10px;align-items:center;
-  padding:10px 14px;margin-bottom:16px;
-  background:linear-gradient(135deg,var(--card) 0%,var(--accent-bg) 100%);
+/* Bandeau d'actions de la fiche matière (repris de la fiche produit MyAO).
+   En `fixed` plutôt qu'en `sticky` : Enregistrer reste visible en permanence,
+   qu'on soit en haut de la fiche ou dans le récapitulatif tout en bas. Le fond
+   doit être OPAQUE — `--accent-bg` est un rgba, un simple dégradé laisserait la
+   page défiler en transparence derrière le bandeau. */
+.pr-savebar{position:fixed;top:20px;left:244px;right:24px;max-width:1180px;margin:0 auto;
+  z-index:60;display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+  padding:10px 14px;
+  background-color:var(--card);
+  background-image:linear-gradient(135deg,var(--card) 0%,var(--accent-bg) 100%);
   border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:12px;
-  box-shadow:0 2px 8px rgba(15,23,42,.06)}
-/* .content a 20px de padding haut : sans ce cache, la page défilerait en clair
-   dans la bande au-dessus du bandeau une fois celui-ci collé. */
-.pr-savebar::before{content:"";position:absolute;left:-1px;right:-1px;bottom:100%;
-  height:24px;background:var(--bg)}
+  box-shadow:0 6px 18px rgba(15,23,42,.14)}
+/* Sorti du flux, le bandeau masquerait le haut de la page : cet espaceur lui
+   tient la place. Hauteur de repli ici, hauteur réelle posée par
+   `syncSavebarSpacer` (le bandeau passe sur deux lignes en écran étroit). */
+.savebar-spacer{height:82px}
+/* Le bandeau rouge de staging est lui aussi `fixed`, 24px de haut. Le
+   `padding-top` que `mysifa_impersonate.js` pose sur le body décale le flux
+   normal, pas un élément fixe : sans cette règle, le bandeau d'actions passe
+   par-dessus le rouge. Le décalage aligne le bandeau sur le haut du contenu. */
+body.has-staging-bandeau .pr-savebar{top:44px}
 .pr-savebar .savebar-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:auto}
 .pr-savebar .btn-soft{background:var(--card)}
 .pr-savebar .btn-soft:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}
 .savebar-state{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--warn)}
 .savebar-state .dot{width:7px;height:7px;border-radius:50%;background:var(--warn);flex-shrink:0}
 .savebar-state[hidden]{display:none}
+/* Sous 900px la barre latérale passe en tiroir : le bandeau reprend la largeur. */
+@media(max-width:900px){
+  .pr-savebar{left:16px;right:16px}
+}
 @media(max-width:640px){
-  .pr-savebar{gap:8px}
+  .pr-savebar{gap:8px;top:14px}
+  body.has-staging-bandeau .pr-savebar{top:38px}
   .pr-savebar .savebar-state{order:3;width:100%}
+  .savebar-spacer{height:118px}
+}
+@media print{
+  .pr-savebar,.savebar-spacer{display:none!important}
 }
 
 .page-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -308,6 +325,14 @@ table.pr-table tr{cursor:pointer}
 /* Formulaire */
 .lbl-unit{font-weight:600;color:var(--text2);text-transform:none;letter-spacing:0}
 .field-hint{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5}
+/* Explication de la méthode de transport choisie : ce qu'elle calcule, puis un
+   exemple chiffré. L'exemple est détaché pour se repérer d'un coup d'œil. */
+.transport-aide{margin-top:8px}
+.transport-aide .aide-ex{display:block;margin-top:6px;padding:6px 9px;border-radius:7px;
+  background:var(--bg);border-left:2px solid var(--accent);color:var(--text2);
+  font-variant-numeric:tabular-nums}
+.transport-aide .aide-ex strong{color:var(--text)}
+.transport-aide .aide-quand{display:block;margin-top:6px;font-style:italic}
 .form-actions{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;
   padding-top:16px;border-top:1px solid var(--border)}
 
@@ -378,11 +403,23 @@ table.recap-table td:last-child{border-right:none}
 .form-layout{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:18px;align-items:start}
 .form-layout .form-card{max-width:none}
 .settings-side{background:var(--card);border:1px solid var(--border);border-radius:12px;
-  padding:16px 18px;position:sticky;top:16px}
+  padding:16px 18px;position:sticky;top:110px}
 .si-head{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
   color:var(--muted);margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--border)}
 .si-head span{font-weight:400;text-transform:none;letter-spacing:0;display:block;margin-top:4px;
   line-height:1.5}
+/* Le panneau réunit deux portées : un réglage de la fiche ouverte, puis les
+   réglages valables partout. Les blocs titrés évitent la confusion — le bouton
+   « Appliquer » ne concerne que le second. */
+.si-block + .si-block{margin-top:18px;padding-top:16px;border-top:1px solid var(--border)}
+.si-sub{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--accent);margin-bottom:10px}
+.settings-side .check-side{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.settings-side .check-side input{margin-top:2px;flex-shrink:0;width:16px;height:16px;
+  accent-color:var(--accent);cursor:pointer}
+.settings-side .check-side .check-title{display:block;font-size:13px;font-weight:600;color:var(--text)}
+.settings-side .check-side .check-sub{display:block;font-size:11px;color:var(--muted);
+  margin-top:3px;line-height:1.5}
 .settings-side .field{margin-bottom:14px}
 .settings-side .field input{background:var(--filter-input-bg);padding:10px 12px;font-size:14px;
   max-width:none}
@@ -404,6 +441,49 @@ table.recap-table td:last-child{border-right:none}
   font-weight:600;padding:7px 14px;border-radius:8px;cursor:pointer;white-space:nowrap}
 .tab:hover{color:var(--text)}
 .tab.on{background:var(--accent);color:var(--bg)}
+
+/* Bascule d'affichage des matières MyStock : groupé par référence, ou une ligne
+   par déclinaison. Même boîtier que .tabs — c'est le même geste, en icônes :
+   deux choix seulement, et le pictogramme dit la forme du tableau mieux qu'un
+   mot. Le libellé complet vit dans l'infobulle. */
+.view-switch{display:inline-flex;gap:3px;background:var(--card);border:1px solid var(--border);
+  border-radius:10px;padding:3px}
+.vs-btn{border:none;background:transparent;color:var(--muted);font:inherit;cursor:pointer;
+  width:34px;height:34px;border-radius:8px;display:inline-flex;align-items:center;
+  justify-content:center;transition:background .15s,color .15s}
+.vs-btn:hover{color:var(--text);background:var(--bg)}
+.vs-btn.on{background:var(--accent);color:var(--bg)}
+.vs-btn.on:hover{background:var(--accent);color:var(--bg)}
+
+/* ─── Vue liste : une ligne par déclinaison ─── */
+/* Vue de lecture : on y cherche un coût, on y compare deux grammages. D'où des
+   lignes plus aérées, le coût €/m² mis en avant, et rien à saisir. */
+/* Largeurs fixées par le <colgroup> du tableau. Sans `table-layout:fixed`, le
+   navigateur répartit à sa guise et la colonne la plus bavarde pousse le coût
+   €/m² hors de l'écran — celle pour laquelle on ouvre cette vue.
+   Pas de colonne Désignation ici : sur une liste à plat, elle se répète à
+   chaque déclinaison de la même référence et mange la largeur pour ne rien
+   apprendre. Elle reste en infobulle sur la référence. */
+table.msl-table{table-layout:fixed;min-width:840px}
+table.msl-table th,table.msl-table td{padding:11px 12px}
+.msl-row{cursor:pointer}
+.msl-ref{font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msl-decl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msl-prix{font-variant-numeric:tabular-nums;white-space:nowrap}
+.msl-coutcell{white-space:nowrap}
+/* Le fournisseur peut être long : il se coupe plutôt que d'élargir sa colonne.
+   Le compteur « +2 », lui, reste visible. */
+.msl-table td:nth-child(4){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msl-cout{font-weight:700;font-size:14px;color:var(--accent);font-variant-numeric:tabular-nums}
+/* « +2 » : d'autres fournisseurs existent sur cette déclinaison, ils se voient
+   dans la vue par référence. Discret — ce n'est pas l'objet de cette vue. */
+.msl-plus{display:inline-block;margin-left:5px;padding:1px 6px;border-radius:5px;
+  background:var(--bg);border:1px solid var(--border);color:var(--muted);
+  font-size:10px;font-weight:700}
+/* Référence sans aucune déclinaison : elle reste dans la liste, sinon on
+   l'oublie — mais elle ne se donne pas des airs de ligne complète. */
+.msl-vide{cursor:default}
+.msl-vide td{opacity:.72}
 
 .ms-hint{font-size:12px;color:var(--text2);background:var(--card);border:1px solid var(--border);
   border-left:3px solid var(--accent);border-radius:8px;padding:11px 14px;margin-bottom:12px;line-height:1.6}

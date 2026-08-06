@@ -1,6 +1,9 @@
 """MySifa — Gestionnaire de tâches (page).
 
-Route : /taches — super administrateur uniquement.
+Route : /taches — accès piloté par la matrice (Paramètres → Accès, app
+`taches`). Chacun voit ses tâches, et celles de son service à partir du niveau
+`write`. Le cloisonnement est appliqué côté API (`app/routers/taches.py`) : la
+page ne fait que masquer ce qui n'a pas lieu d'être proposé.
 
 Trois vues : Kanban (glisser-déposer), Liste (filtrable / triable) et un
 panneau de détail (description, checklist, sous-tâches, fichiers de contexte,
@@ -13,8 +16,8 @@ MySifaUserChip + guides in-app partagés (mysifa_guides.js).
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from config import APP_VERSION, ROLE_SUPERADMIN
-from services.auth_service import get_current_user
+from config import APP_VERSION, role_label
+from services.auth_service import effective_role, get_current_user, user_access_level, user_can
 
 router = APIRouter()
 
@@ -27,13 +30,22 @@ def taches_page(request: Request):
         if e.status_code == 401:
             return RedirectResponse(url="/?next=/taches", status_code=302)
         raise
-    if (user.get("role") or "") != ROLE_SUPERADMIN:
+    if not user_can(user, "taches", "_app", "read"):
         from app.web.access_denied import access_denied_response
-        return access_denied_response("Gestionnaire de tâches")
+        return access_denied_response(
+            "Gestionnaire de tâches",
+            detail=(
+                "Cette application n'est pas ouverte à votre service. "
+                "Merci de contacter un administrateur en cas de besoin."
+            ),
+        )
+    service = effective_role(user) or ""
     html = (
         TACHES_HTML
         .replace("__V_LABEL__", f"v{APP_VERSION}")
         .replace("__USER_ROLE__", str(user.get("role") or ""))
+        .replace("__USER_NIVEAU__", user_access_level(user, "taches"))
+        .replace("__USER_SERVICE__", role_label(service))
     )
     return HTMLResponse(content=html)
 
@@ -212,6 +224,11 @@ td .pile .avatar,td .pile .plus{box-shadow:0 0 0 2px var(--card)}
 .asg-pop .asg-opt.actif{color:var(--accent)}
 .asg-pop .asg-opt input{width:14px;height:14px;accent-color:var(--accent);cursor:pointer;flex-shrink:0;margin:0}
 .asg-pop .asg-opt .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Service de la personne : la liste couvre tous les services, deux prénoms
+   identiques doivent rester distinguables d'un coup d'œil. */
+.asg-pop .asg-opt .asg-svc{flex-shrink:0;font-size:10.5px;color:var(--muted);
+  background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:1px 6px}
+.asg-pop .asg-opt.actif .asg-svc{color:var(--accent);border-color:var(--accent)}
 .asg-rien{font-size:12px;color:var(--muted);padding:10px 8px;text-align:center}
 
 /* Corbeille d'archivage : discrète au repos, elle ne s'ouvre que pendant un
@@ -453,7 +470,7 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
         </div>
         <div class="subtitle" id="page-sub">Ce que l'équipe doit faire, en cours et terminé.</div>
       </div>
-      <button type="button" class="btn" onclick="openTacheModal()">
+      <button type="button" class="btn" id="btn-nouvelle" onclick="openTacheModal()">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Nouvelle tâche
       </button>
@@ -475,6 +492,7 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
       <select class="filter" id="f-priorite"><option value="">Toutes priorités</option></select>
       <select class="filter" id="f-type"><option value="">Tous types</option></select>
       <select class="filter" id="f-module"><option value="">Tous modules</option></select>
+      <select class="filter" id="f-service" style="display:none"><option value="">Tous services</option></select>
       <button type="button" class="btn ghost small" id="btn-sous" title="Vue Liste : afficher ou masquer les lignes de sous-tâches. Sur le Kanban elles sont toujours regroupées sous leur tâche mère.">Sous-tâches affichées</button>
       <button type="button" class="btn ghost small" id="btn-reset" onclick="resetFiltres()">Réinitialiser</button>
     </div>
@@ -515,6 +533,12 @@ tbody tr.row-sous:hover td{background:var(--accent-bg)}
 // Convention api() : retourne le JSON parsé, throw sur HTTP != 2xx.
 // ══════════════════════════════════════════════════════════════════
 const USER_ROLE = "__USER_ROLE__";
+// Niveau d'accès sur l'app : read / write / admin. Sert uniquement à ne pas
+// proposer une action que l'API refuserait — la règle, elle, est côté serveur.
+const USER_NIVEAU = "__USER_NIVEAU__";
+const USER_SERVICE = "__USER_SERVICE__";
+const PEUT_ECRIRE = (USER_NIVEAU === 'write' || USER_NIVEAU === 'admin');
+const TOUS_SERVICES = (USER_NIVEAU === 'admin');
 
 const S = {
   meta: null,
@@ -525,7 +549,7 @@ const S = {
   detailTab: 'detail',
   // `moi` : bascule « Mes tâches ». C'est un filtre, pas une vue — il s'applique
   // au Kanban comme à la Liste et survit au changement d'onglet.
-  filtres: {q:'', assigne:'', priorite:'', type:'', module:'', rapide:'', moi:false},
+  filtres: {q:'', assigne:'', priorite:'', type:'', module:'', service:'', rapide:'', moi:false},
   sousTaches: true,     // vue Liste : afficher ou non les lignes de sous-tâches
   ouverts: new Set(),   // Kanban : cartes dont la pile de sous-tâches est dépliée
   actif: null,          // carte visée par les touches 1–5 (survol ou J/K)
@@ -619,9 +643,9 @@ function champAssignes(hostId, selection, onChange, connus){
   if(!host)return;
   let ids=(selection||[]).slice();
   let ouvert=false;
-  // `connus` = les assignés réels de la tâche. Seuls les super admins sont
-  // proposés à l'assignation, mais une tâche plus ancienne peut porter
-  // quelqu'un d'autre : on l'affiche quand même pour pouvoir le retirer.
+  // `connus` = les assignés réels de la tâche. La liste proposée couvre tous
+  // les services, mais une tâche plus ancienne peut porter quelqu'un qui n'y
+  // figure plus : on l'affiche quand même pour pouvoir le retirer.
   const horsListe=(connus||[]).filter(u=>!((S.meta&&S.meta.users)||[]).some(x=>x.id===u.id));
 
   function tousUsers(){
@@ -643,7 +667,7 @@ function champAssignes(hostId, selection, onChange, connus){
   }
   function popHtml(){
     return '<div class="asg-pop">'+
-      '<input type="text" class="asg-q" placeholder="Rechercher une personne…" autocomplete="off">'+
+      '<input type="text" class="asg-q" placeholder="Rechercher (nom, service…)" autocomplete="off">'+
       '<div class="asg-list"></div>'+
     '</div>';
   }
@@ -651,7 +675,9 @@ function champAssignes(hostId, selection, onChange, connus){
     const zone=host.querySelector('.asg-list');
     if(!zone)return;
     const q=(filtre||'').trim().toLowerCase();
-    const users=tousUsers().filter(u=>!q||String(u.nom||'').toLowerCase().includes(q));
+    const users=tousUsers().filter(u=>!q
+      ||String(u.nom||'').toLowerCase().includes(q)
+      ||String(u.service_label||'').toLowerCase().includes(q));
     if(!users.length){
       zone.innerHTML='<div class="asg-rien">Aucun résultat pour « '+esc(filtre)+' »</div>';
       return;
@@ -662,6 +688,7 @@ function champAssignes(hostId, selection, onChange, connus){
         '<input type="checkbox"'+(on?' checked':'')+'>'+
         avatarHtml(u.nom,u.avatar_url)+
         '<span class="n">'+esc(u.nom||'')+'</span>'+
+        (u.service_label?'<span class="asg-svc">'+esc(u.service_label)+'</span>':'')+
       '</label>';
     }).join('');
     zone.querySelectorAll('.asg-opt').forEach(el=>{
@@ -802,6 +829,17 @@ function remplirFiltres(){
     (S.meta.types||[]).map(t=>'<option value="'+esc(t.code)+'">'+esc(t.label)+'</option>').join('');
   document.getElementById('f-module').innerHTML='<option value="">Tous modules</option>'+
     (S.meta.modules||[]).map(m=>'<option value="'+esc(m.code)+'">'+esc(m.label)+'</option>').join('');
+  // Filtrer par service n'a de sens que si on en voit plusieurs : à un seul
+  // service visible, la liste n'offrirait qu'un choix déjà appliqué.
+  const fs=document.getElementById('f-service');
+  const services=S.meta.services||[];
+  if(fs){
+    fs.innerHTML='<option value="">Tous services</option>'+
+      services.map(x=>'<option value="'+esc(x.code)+'">'+esc(x.label)+'</option>').join('');
+    fs.style.display=services.length>1?'':'none';
+  }
+  const bn=document.getElementById('btn-nouvelle');
+  if(bn&&!PEUT_ECRIRE)bn.style.display='none';
 }
 
 function queryFiltres(){
@@ -818,6 +856,7 @@ function queryFiltres(){
   if(f.priorite)p.set('priorite',f.priorite);
   if(f.type)p.set('type',f.type);
   if(f.module)p.set('module',f.module);
+  if(f.service)p.set('service',f.service);
   if(S.view==='archives')p.set('archivees','1');
   return p.toString();
 }
@@ -1352,6 +1391,9 @@ function paneDetail(d){
     '<div class="field full asg-field"><label>Assigné à</label><div id="d-assignes"></div></div>'+
     '<div class="field"><label>Type</label><select id="d-type">'+opt(S.meta.types,t.type)+'</select></div>'+
     '<div class="field"><label>Module</label><select id="d-module">'+opt(S.meta.modules,t.module,'Aucun')+'</select></div>'+
+    (TOUS_SERVICES
+      ? '<div class="field"><label>Service</label><select id="d-service">'+opt(S.meta.services,t.service)+'</select></div>'
+      : '')+
     '<div class="field"><label>Estimation (h)</label><input type="number" step="0.25" min="0" id="d-estimation" value="'+esc(t.estimation_h!=null?t.estimation_h:'')+'"></div>'+
     '<div class="field"><label>Temps passé</label>'+
       '<div style="display:flex;gap:6px">'+
@@ -1487,6 +1529,7 @@ function brancherDetail(){
   bind('d-priorite','priorite');
   bind('d-type','type');
   bind('d-module','module',v=>v||null);
+  if(TOUS_SERVICES)bind('d-service','service',v=>v||null);
   // Assignés : on enregistre SANS re-rendre le tiroir. `patch()` rappelle
   // renderDrawer(), ce qui reconstruirait le champ et fermerait le popover à
   // chaque case cochée — impossible d'assigner deux personnes d'affilée. Le
@@ -1723,6 +1766,9 @@ function openTacheModal(_ignored,defauts){
         '<div class="field"><label>Priorité</label><select id="n-priorite">'+optList(S.meta.priorites,'normale')+'</select></div>'+
         '<div class="field"><label>Type</label><select id="n-type">'+optList(S.meta.types,'evolution')+'</select></div>'+
         '<div class="field"><label>Module</label><select id="n-module">'+optList(S.meta.modules,'','Aucun')+'</select></div>'+
+        (TOUS_SERVICES
+          ? '<div class="field"><label>Service</label><select id="n-service">'+optList(S.meta.services,(S.meta.moi&&S.meta.moi.service)||'')+'</select></div>'
+          : '')+
         '<div class="field"><label>Échéance</label><input type="date" id="n-echeance"></div>'+
         '<div class="field full asg-field"><label>Assigné à</label><div id="n-assignes"></div></div>'+
         '<div class="field"><label>Estimation (h)</label><input type="number" step="0.25" min="0" id="n-estimation" placeholder="ex. 3"></div>'+
@@ -1750,6 +1796,9 @@ function openTacheModal(_ignored,defauts){
       description:(g('n-description')||'').trim()||null,
       statut:g('n-statut'),priorite:g('n-priorite'),type:g('n-type'),
       module:g('n-module')||null,
+      // Absent du formulaire hors niveau admin : le serveur retombe alors sur
+      // le service de l'auteur.
+      service:(TOUS_SERVICES?(g('n-service')||null):null),
       assignes:nouvAssignes.slice(),
       echeance:g('n-echeance')||null,
       estimation_h:g('n-estimation')?Number(g('n-estimation')):null,
@@ -1778,8 +1827,10 @@ function brancherFiltres(){
   q.addEventListener('keydown',e=>{
     if(e.key==='Escape'){q.value='';S.filtres.q='';chargerTaches();}
   });
-  [['f-assigne','assigne'],['f-priorite','priorite'],['f-type','type'],['f-module','module']].forEach(([id,champ])=>{
+  [['f-assigne','assigne'],['f-priorite','priorite'],['f-type','type'],
+   ['f-module','module'],['f-service','service']].forEach(([id,champ])=>{
     const el=document.getElementById(id);
+    if(!el)return;
     el.addEventListener('change',()=>{
       S.filtres[champ]=el.value;
       el.classList.toggle('on',!!el.value);
@@ -1834,8 +1885,8 @@ function brancherSousTaches(){
 }
 
 function resetFiltres(){
-  S.filtres={q:'',assigne:'',priorite:'',type:'',module:'',rapide:'',moi:false};
-  ['f-q','f-assigne','f-priorite','f-type','f-module'].forEach(id=>{
+  S.filtres={q:'',assigne:'',priorite:'',type:'',module:'',service:'',rapide:'',moi:false};
+  ['f-q','f-assigne','f-priorite','f-type','f-module','f-service'].forEach(id=>{
     const el=document.getElementById(id);if(el){el.value='';el.classList.remove('on');}
   });
   try{localStorage.setItem('mysifa_taches_moi','0');}catch(e){}

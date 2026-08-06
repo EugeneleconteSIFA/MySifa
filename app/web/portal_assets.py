@@ -653,7 +653,7 @@ body.light .mytraduction-title-tag{background:rgba(15,43,70,.08)}
 }
 .mytraduction-usage-cached{color:var(--success);font-weight:600}
 .mytraduction-btn{
-  background:var(--accent);color:#000;border:0;border-radius:10px;
+  background:var(--accent);color:var(--bg);border:0;border-radius:10px;
   padding:10px 22px;font-weight:700;font-size:13px;cursor:pointer;
   display:inline-flex;align-items:center;gap:8px;transition:filter .15s
 }
@@ -1176,6 +1176,16 @@ function renderPortal(){
   const isComptaPlan = urole === 'comptabilite';
   const isPaie = isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','comptabilite'].includes(urole));
   const isPricing = aa ? !!(aa.pricing ?? aa.devis) : (isSuper || urole==='direction');
+  // Paramètres : accès sectionné (config.py ROLES_SETTINGS_* → union ROLES_SETTINGS).
+  // aa.settings reflète déjà cette union côté serveur (default_app_access_for_role),
+  // donc l'icône suit exactement ce que can_access_settings() autorise sur /settings.
+  // Gestionnaire de tâches : niveau lu dans la matrice (access_map), pas dans
+  // le rôle. Ouvrir l'app à un service se fait dans Paramètres → Accès, et
+  // l'icône doit suivre sans qu'on retouche cette ligne.
+  const amap = (S.user && S.user.access_map) || null;
+  const nivTaches = (amap && amap.taches && amap.taches._app) || (isSuper ? 'admin' : 'none');
+  const isTaches = nivTaches !== 'none';
+  const isSettings = aa ? !!aa.settings : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','comptabilite'].includes(urole)));
   const isAo = isSuper || urole === 'direction';
   const isBAT = isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','commercial'].includes(urole));
   const isQualite = isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','commercial'].includes(urole));
@@ -1556,14 +1566,14 @@ function renderPortal(){
         title:profTitle,
         onClick:()=>{window.location.href='/profil';}
       },profRingBadge,profHumeurBadge,iconEl('user',24)),
-      (isSuper||urole==='direction')?h('button',{
+      isSettings?h('button',{
         type:'button',
         className:'portal-settings-corner',
         'aria-label':'Paramètres',
         title:'Paramètres',
         onClick:()=>{window.location.href='/settings';}
       },iconEl('sliders',24)):null,
-      isSuper?h('button',{
+      isTaches?h('button',{
         type:'button',
         className:'portal-settings-corner',
         'aria-label':'Gestionnaire de tâches',

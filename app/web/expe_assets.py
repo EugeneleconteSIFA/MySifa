@@ -3540,6 +3540,33 @@ EXPE_MAIN_CSS = r"""
 .expe-field label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px}
 .expe-field input,.expe-field select{width:100%;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:14px;font-family:inherit;outline:none}
 .expe-field input:focus,.expe-field select:focus{border-color:var(--accent)}
+/* Rattachement production — occupe toute la largeur : c'est la première
+   décision du formulaire, pas un champ parmi douze. */
+.expe-field--wide{grid-column:1/-1}
+.expe-field--wide select,.expe-field--wide .expe-field-note{max-width:440px;margin-top:6px}
+/* Cases à cocher — `.expe-field label` est un intitulé de champ (bloc, majuscules,
+   10px) et `.expe-field input` fait 100 % de large : appliqués tels quels à une
+   case, ils produisaient une case étirée et un libellé en capitales rejeté à
+   droite. Les deux règles ci-dessous rendent la case et son libellé à leur
+   nature — la case Palette Europe en souffrait déjà. */
+.expe-field input[type=checkbox]{width:16px;height:16px;flex:0 0 16px;padding:0;margin:0;
+  accent-color:var(--accent);cursor:pointer}
+.expe-check{display:flex;align-items:flex-start;gap:10px;padding:6px 0}
+.expe-check label{display:inline;margin:0;font-size:13px;font-weight:500;color:var(--text);
+  text-transform:none;letter-spacing:0;line-height:1.4;cursor:pointer}
+.expe-check label small{display:block;font-size:11.5px;font-weight:400;color:var(--muted);
+  text-transform:none;letter-spacing:0;margin-top:2px}
+.expe-field-note{font-size:12px;color:var(--muted);line-height:1.4}
+.expe-rattach-ok{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;
+  background:var(--accent-bg,rgba(58,123,213,.1));color:var(--accent);font-size:12.5px;font-weight:600}
+.expe-rattach-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:2px 0 4px}
+.expe-rattach-sep{font-size:12px;color:var(--muted)}
+/* Badge FSC — même langage visuel que `.fab-fsc-badge` de MyProd : un dossier
+   certifié doit se reconnaître à l'identique d'un écran à l'autre. */
+.expe-fsc-badge{display:inline-flex;align-items:center;gap:4px;flex-shrink:0;
+  padding:2px 8px;border-radius:5px;font-size:10px;font-weight:800;letter-spacing:.5px;
+  background:rgba(52,211,153,.14);color:var(--success,#34d399);
+  border:1px solid rgba(52,211,153,.45)}
 .expe-help{font-size:10px;color:var(--muted);margin-top:4px}
 .expe-departs-table tbody tr:nth-child(even) td{background:rgba(148,163,184,.06)}
 .expe-departs-table tbody tr:hover td{background:rgba(34,211,238,.06)}
@@ -4181,9 +4208,7 @@ function expePaletteTypeLabel(row){
   const items=S.expePaletteTypes||[];
   const m=items.find(x=>String(x.id)===String(id));
   if(!m) return '—';
-  const ref=(m.reference||'').trim();
-  const des=(m.designation||'').trim();
-  return ref?(des?ref+' — '+des:ref):'—';
+  return (m.reference||'').trim() || '—';
 }
 async function loadExpeDepartJour(){
   if(S.app!=='expe')return;
@@ -4278,6 +4303,7 @@ function expeOpenDepartModal(prefill, mode){
   // En édition ou duplication : onglet manuel direct ; nouveau départ : onglet picker dossier
   const isEdit = !!(mode==='edit' && src && src.id);
   const initialTab = (mode==='new' && !prefill) ? 'dossier' : 'manuel';
+  S.expeDepartPickerRattachOnly = false;
   if(initialTab==='dossier'){
     void loadExpeDepartDossiers();
   }
@@ -4305,12 +4331,19 @@ function expeOpenDepartModal(prefill, mode){
       poids_total_kg: (src.poids_total_kg!=null && src.poids_total_kg!=='') ? String(src.poids_total_kg) : '',
       date_livraison: (src.date_livraison||'') ? String(src.date_livraison).slice(0,10) : '',
       planning_entry_id: (src.planning_entry_id!=null && src.planning_entry_id!=='') ? String(src.planning_entry_id) : '',
+      dossier_ref: src.planning_dossier_ref || src.planning_numero_of || '',
+      fsc_requis: src.fsc_requis ? 1 : 0,
+      fsc_type_requis: src.fsc_type_requis || '',
+      sans_dossier: src.sans_dossier ? 1 : 0,
+      sans_dossier_motif: src.sans_dossier_motif || '',
+      sans_dossier_note: src.sans_dossier_note || '',
       palette_europe: src.palette_europe ? 1 : 0,
     }
   });
 }
 function expeCloseDepartModal(){
-  set({expeDepartModalOpen:false, expeDepartEditId:null, expeDepartFormTab:'dossier'});
+  set({expeDepartModalOpen:false, expeDepartEditId:null, expeDepartFormTab:'dossier',
+       expeDepartPickerRattachOnly:false});
 }
 
 // Charge la liste des dossiers disponibles pour le picker MyExpé
@@ -4352,12 +4385,34 @@ function _expeFilterDossiers(q){
 function expeSelectDossier(d){
   if(!d) return;
   const f = S.expeDepartForm || {};
-  // ARC = pe.reference (numéro de dossier). On surcharge toujours.
-  f.arc = d.reference || f.arc || '';
-  f.client = d.client || f.client || '';
-  f.ref_sifa = d.ref_produit || f.ref_sifa || '';
-  f.date_livraison = (d.date_livraison||'').slice(0,10) || f.date_livraison || '';
+  // Deux usages du même picker, et ils ne doivent pas se confondre :
+  //
+  //   création    → le dossier PRÉREMPLIT le départ (ARC, client, réf produit,
+  //                 livraison). C'est le gain de saisie.
+  //   rattachement→ on relie un départ DÉJÀ saisi à son dossier, sans rien
+  //                 écraser. Écraser ici reviendrait à réécrire un ARC ou un
+  //                 client déjà validés pour la seule raison qu'on répare un
+  //                 lien de traçabilité — inacceptable sur de l'historique.
+  const rattachSeul = !!S.expeDepartPickerRattachOnly;
+  if(!rattachSeul){
+    // ARC = pe.reference (numéro de dossier). On surcharge toujours.
+    f.arc = d.reference || f.arc || '';
+    f.client = d.client || f.client || '';
+    f.ref_sifa = d.ref_produit || f.ref_sifa || '';
+    f.date_livraison = (d.date_livraison||'').slice(0,10) || f.date_livraison || '';
+  }
   f.planning_entry_id = d.id ? String(d.id) : '';
+  f.dossier_ref = d.reference || d.numero_of || '';
+  // Le dossier prime : une déclaration « non lié à une production » devient
+  // sans objet dès qu'un dossier est désigné.
+  f.sans_dossier = 0; f.sans_dossier_motif = ''; f.sans_dossier_note = '';
+  f.fsc_requis = d.fsc_requis ? 1 : 0;
+  f.fsc_type_requis = d.fsc_type_requis || '';
+  if(rattachSeul){
+    set({expeDepartForm:f, expeDepartFormTab:'manuel', expeDepartPickerRattachOnly:false});
+    toast('Départ rattaché au dossier '+(d.reference||d.numero_of||''));
+    return;
+  }
   // Estimation nb palettes via fiche technique si dispo (cartons sol × hauteur ÷ ratio)
   // Si pas de donnée fiche : laisser vide pour saisie manuelle
   if(!f.nb_palette){
@@ -4439,7 +4494,8 @@ function _expeBuildDossierPickerItems(q){
       line1.className = 'expe-picker-line1';
       line1.innerHTML = '<span class="expe-picker-ref">'+escHtml(ref)+'</span>'
                      + '<span class="expe-picker-sep">·</span>'
-                     + '<span class="expe-picker-client">'+escHtml(client)+'</span>';
+                     + '<span class="expe-picker-client">'+escHtml(client)+'</span>'
+                     + expeFscBadgeHtml(d);
       wrap.appendChild(line1);
       const line2 = document.createElement('div');
       line2.className = 'expe-picker-line2';
@@ -4480,20 +4536,30 @@ function renderExpeDepartModal(){
   const palSel=h('select',{name:'type_palette_matiere_id'});
   palSel.appendChild(h('option',{value:''},'— Sélectionner —'));
   paletteItems.forEach(m=>{
-    const ref=(m.reference||'').trim();
-    const des=(m.designation||'').trim();
-    const lbl=ref?(des?ref+' — '+des:ref):('Réf. #'+m.id);
+    const lbl=(m.reference||'').trim()||('Réf. #'+m.id);
     const opt=h('option',{value:String(m.id)},lbl);
     if(String(f.type_palette_matiere_id||'')===String(m.id)) opt.selected=true;
     palSel.appendChild(opt);
   });
-  const vracOpt=h('option',{value:'__vrac__'},'Vrac (sans palette — UPS…)');
+  const vracOpt=h('option',{value:'__vrac__'},'Vrac');
   if(f.type_palette_matiere_id==='__vrac__') vracOpt.selected=true;
   palSel.appendChild(vracOpt);
+  // Le suivi de retour n'a de sens que pour une palette consignée. Sur un
+  // type Europe on le coche d'office — c'est le cas normal, et l'oubli de la
+  // case était la première cause de palettes non réclamées ; sur tout autre
+  // type la question ne se pose pas, donc la case disparaît.
+  function _palEstEurope(idVal){
+    if(String(idVal||'')==='__vrac__') return false;
+    const m=(S.expePaletteTypes||[]).find(x=>String(x.id)===String(idVal||''));
+    return !!(m && Number(m.is_europe));
+  }
   palSel.addEventListener('change',e=>{
     S.expeDepartForm.type_palette_matiere_id=e.target.value;
+    S.expeDepartForm.palette_europe = _palEstEurope(e.target.value) ? 1 : 0;
     expeScheduleSaveLocal();
+    render();
   });
+  const estEurope = _palEstEurope(f.type_palette_matiere_id);
   const palField=h('div',{className:'expe-field'},
     h('label',null,'Type de palette'),
     palSel
@@ -4535,9 +4601,26 @@ function renderExpeDepartModal(){
       poids_total_kg:(S.expeDepartForm.poids_total_kg||'').trim()||null,
       date_livraison:(S.expeDepartForm.date_livraison||'').trim()||null,
       planning_entry_id:(S.expeDepartForm.planning_entry_id||'').trim()||null,
+      sans_dossier: S.expeDepartForm.sans_dossier ? 1 : 0,
+      sans_dossier_motif:(S.expeDepartForm.sans_dossier_motif||'').trim()||null,
+      sans_dossier_note:(S.expeDepartForm.sans_dossier_note||'').trim()||null,
       palette_europe: S.expeDepartForm.palette_europe ? 1 : 0
     };
     if(!body.date_enlevement){toast("Date d'enlèvement obligatoire",'error');return;}
+    // Contrôle côté écran : l'API refuse de toute façon, mais autant le dire
+    // avant d'avoir tout ressaisi.
+    if(!body.planning_entry_id && !body.sans_dossier){
+      toast('Sélectionnez le dossier, ou cochez « Envoi non lié à une production »','error');
+      return;
+    }
+    if(body.sans_dossier && !body.sans_dossier_motif){
+      toast('Précisez le motif de l\'envoi non lié à une production','error');
+      return;
+    }
+    if(body.sans_dossier_motif==='autre' && !body.sans_dossier_note){
+      toast('Motif « Autre » : précisez la raison','error');
+      return;
+    }
     set({expeDepartSubmitting:true});
     try{
       if(isEdit){
@@ -4564,16 +4647,109 @@ function renderExpeDepartModal(){
     S.expeDepartForm.palette_europe = e.target.checked ? 1 : 0;
     expeScheduleSaveLocal();
   });
-  const europeField = h('div',{className:'expe-field'},
+  const europeField = estEurope ? h('div',{className:'expe-field'},
     h('label',null,'Palette Europe (consignée)'),
-    h('div',{style:{display:'flex',alignItems:'center',gap:'8px',padding:'8px 0'}},
+    h('div',{className:'expe-check'},
       europeCheck,
-      h('label',{htmlFor:'expe-form-pal-europe',style:{fontSize:'12px',color:'var(--text2)',cursor:'pointer'}},
-        'Suivre le retour de cette palette dans l\'onglet Palettes Europe')
+      h('label',{htmlFor:'expe-form-pal-europe'},'Suivre le retour dans l\'onglet Palettes Europe')
     )
+  ) : null;
+
+  // ── Rattachement production ────────────────────────────────────
+  // Un départ remonte à un dossier de fabrication, ou dit pourquoi il n'y
+  // remonte pas. Sans l'un des deux, l'expédition est indémontrable en audit
+  // FSC — et c'était le cas de 2764 départs sur 2783 avant ce champ.
+  const MOTIFS_SANS_DOSSIER = [
+    ['stock_ancien',    'Stock ancien — production antérieure au suivi'],
+    ['sous_traitance',  'Sous-traitance / façonnage extérieur'],
+    ['negoce',          'Négoce — produit fini acheté'],
+    ['echantillon',     'Échantillon, présérie ou maquette'],
+    ['retour_client',   'Retour ou réexpédition client'],
+    ['non_marchandise', 'Envoi non marchand (palettes vides, matériel, documents)'],
+    ['autre',           'Autre (préciser)'],
+  ];
+  const aDossier = !!((f.planning_entry_id||'').toString().trim());
+  const sansDossierCheck = h('input',{type:'checkbox',id:'expe-form-sans-dossier'});
+  sansDossierCheck.checked = !aDossier && !!(f.sans_dossier);
+  sansDossierCheck.disabled = aDossier;   // un départ rattaché n'a rien à déclarer
+  sansDossierCheck.addEventListener('change',e=>{
+    S.expeDepartForm.sans_dossier = e.target.checked ? 1 : 0;
+    if(!e.target.checked){
+      S.expeDepartForm.sans_dossier_motif = '';
+      S.expeDepartForm.sans_dossier_note = '';
+    }
+    expeScheduleSaveLocal();
+    render();
+  });
+  const motifSel = h('select',{name:'sans_dossier_motif'});
+  motifSel.appendChild(h('option',{value:''},'— Motif —'));
+  MOTIFS_SANS_DOSSIER.forEach(([v,lbl])=>{
+    const o=h('option',{value:v},lbl);
+    if(String(f.sans_dossier_motif||'')===v) o.selected=true;
+    motifSel.appendChild(o);
+  });
+  motifSel.addEventListener('change',e=>{
+    S.expeDepartForm.sans_dossier_motif = e.target.value;
+    expeScheduleSaveLocal();
+    render();
+  });
+  const motifNote = h('input',{type:'text',placeholder:'Préciser la raison',
+    value:(f.sans_dossier_note!=null?String(f.sans_dossier_note):'')});
+  motifNote.addEventListener('input',e=>{
+    S.expeDepartForm.sans_dossier_note = e.target.value;
+    expeScheduleSaveLocal();
+  });
+
+  // Ouvre le picker en mode « rattachement seul » : on relie, on n'écrase pas.
+  function ouvrirPickerRattachement(){
+    set({expeDepartFormTab:'dossier', expeDepartPickerRattachOnly:true,
+         expeDepartDossierQuery:'', expeDepartDossierHi:-1});
+    void loadExpeDepartDossiers();
+  }
+  const btnRattacher = (txt)=>h('button',{type:'button',className:'btn-ghost',
+    style:{fontSize:'12px',padding:'6px 12px'},onClick:ouvrirPickerRattachement},
+    iconEl('folder',13),' ',txt);
+
+  const rattachKids = [];
+  if(aDossier){
+    rattachKids.push(h('div',{className:'expe-rattach-row'},
+      h('span',{className:'expe-rattach-ok'},
+        iconEl('folder',13),
+        ' Rattaché au dossier '+((f.dossier_ref||f.arc||'').trim()||'sélectionné'),
+        expeFscBadge(f)),
+      btnRattacher('Changer'),
+      h('button',{type:'button',className:'btn-ghost',
+        style:{fontSize:'12px',padding:'6px 12px'},
+        onClick:()=>{
+          S.expeDepartForm.planning_entry_id='';
+          S.expeDepartForm.dossier_ref='';
+          S.expeDepartForm.fsc_requis=0;
+          S.expeDepartForm.fsc_type_requis='';
+          expeScheduleSaveLocal();
+          render();
+        }},'Détacher')
+    ));
+  }else{
+    const lbl = h('label',{htmlFor:'expe-form-sans-dossier'},
+      'Envoi non lié à une production',
+      h('small',null,'Stock ancien, sous-traitance, échantillon, palettes vides…'));
+    rattachKids.push(h('div',{className:'expe-rattach-row'},
+      btnRattacher('Rattacher à un dossier'),
+      h('span',{className:'expe-rattach-sep'},'ou')
+    ));
+    rattachKids.push(h('div',{className:'expe-check'}, sansDossierCheck, lbl));
+    if(f.sans_dossier){
+      rattachKids.push(motifSel);
+      if(String(f.sans_dossier_motif||'')==='autre') rattachKids.push(motifNote);
+    }
+  }
+  const rattachField = h('div',{className:'expe-field expe-field--wide'},
+    h('label',null,'Rattachement production'),
+    h('div',null,...rattachKids)
   );
 
   const fields=h('div',{className:'expe-fields'},
+    rattachField,
     mk("Date d'enlèvement",'date_enlevement','date'),
     mk('Affréteurs','affreteurs'),
     mk('Transporteur','transporteur'),
@@ -4590,12 +4766,14 @@ function renderExpeDepartModal(){
     europeField
   );
 
+
   // Onglets internes : "Depuis un dossier" / "Saisie manuelle" — masqués en édition
   const tabsNav = !isEdit ? h('div',{className:'expe-form-tabs'},
     h('button',{type:'button',
       className:'expe-form-tab'+(formTab==='dossier'?' active':''),
       onClick:()=>{
-        set({expeDepartFormTab:'dossier', expeDepartDossierQuery:'', expeDepartDossierHi:-1});
+        set({expeDepartFormTab:'dossier', expeDepartPickerRattachOnly:false,
+             expeDepartDossierQuery:'', expeDepartDossierHi:-1});
         void loadExpeDepartDossiers();
       }},
       iconEl('folder',13),' Depuis un dossier'),
@@ -4605,9 +4783,10 @@ function renderExpeDepartModal(){
       iconEl('edit',13),' Saisie manuelle')
   ) : null;
 
-  // Picker dossier (onglet "Depuis un dossier")
+  // Picker dossier — accessible en création (onglet) ET en modification
+  // (bouton « Rattacher à un dossier » du bloc Rattachement production).
   let pickerBody = null;
-  if(!isEdit && formTab==='dossier'){
+  if(formTab==='dossier'){
     const searchInp = h('input',{
       type:'text',
       id:'expe-picker-search',
@@ -4627,14 +4806,16 @@ function renderExpeDepartModal(){
     });
     pickerBody = h('div',{className:'expe-picker-wrap'},
       h('div',{className:'expe-picker-hint'},
-        'Sélectionnez un dossier pour préremplir ARC, client, réf. SIFA, type et nb de palettes, livraison prévue. Vous pourrez ensuite ajuster manuellement.'),
+        S.expeDepartPickerRattachOnly
+          ? 'Sélectionnez le dossier de fabrication à l\'origine de cet envoi. Seul le rattachement est enregistré — aucun champ déjà saisi ne sera modifié.'
+          : 'Sélectionnez un dossier pour préremplir ARC, client, réf. SIFA, type et nb de palettes, livraison prévue. Vous pourrez ensuite ajuster manuellement.'),
       searchInp,
       listEl,
       h('div',{style:{display:'flex',justifyContent:'flex-end',marginTop:'10px'}},
         h('button',{type:'button',className:'btn-ghost',
           style:{fontSize:'12px',padding:'6px 12px'},
-          onClick:()=>set({expeDepartFormTab:'manuel'})},
-          'Continuer en saisie manuelle →')
+          onClick:()=>set({expeDepartFormTab:'manuel',expeDepartPickerRattachOnly:false})},
+          S.expeDepartPickerRattachOnly ? '← Revenir au formulaire' : 'Continuer en saisie manuelle →')
       )
     );
   }
@@ -4646,7 +4827,7 @@ function renderExpeDepartModal(){
 
   if(tabsNav) form.appendChild(tabsNav);
   if(pickerBody) form.appendChild(pickerBody);
-  if(formTab==='manuel' || isEdit){
+  if(formTab!=='dossier'){
     form.appendChild(fields);
     form.appendChild(actions);
   }
@@ -5497,7 +5678,7 @@ function renderExpeSuiviDeparts(){
       h('td',{title:dateEnl},dateEnl),
       h('td',{title:r.affreteurs||''},r.affreteurs||'—'),
       h('td',{title:r.transporteur||''},(c=>c?trpTag(r.transporteur||'—',c):(r.transporteur||'—'))(trpColorFromRow(r))),
-      h('td',{title:r.client||''},h('span',{className:'expe-badge-devis-wrap'},r.client||'—',expeDevisBadge(r))),
+      h('td',{title:r.client||''},h('span',{className:'expe-badge-devis-wrap'},r.client||'—',expeFscBadge(r),expeDevisBadge(r))),
       h('td',{style:{fontSize:'12px'},title:r.code_postal_destination||''},r.code_postal_destination||'—'),
       h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.ref_sifa||''},r.ref_sifa||'—'),
       h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.arc||''},r.arc||'—'),
@@ -5549,6 +5730,29 @@ function renderExpeSuiviDeparts(){
   return h('div',null,topBar,listCard);
 }
 
+// Libellés des claims — copie locale du référentiel de config.py. MyExpé ne
+// sert pas à choisir un claim, seulement à le lire : un mot suffit.
+const EXPE_FSC_LABELS = {
+  fsc_100:'FSC 100%', fsc_mix:'FSC Mix', fsc_mix_credit:'FSC Mix Credit',
+  fsc_recycled:'FSC Recycled'
+};
+
+function expeFscBadge(r){
+  if(!r || !Number(r.fsc_requis)) return null;
+  const t = (r.fsc_type_requis||'').trim();
+  const lbl = EXPE_FSC_LABELS[t] || '';
+  return h('span',{className:'expe-fsc-badge',
+    title:'Dossier certifié'+(lbl?' — '+lbl:'')+'. La matière consommée doit être conforme.'},
+    'FSC', lbl?' · '+lbl:'');
+}
+
+function expeFscBadgeHtml(d){
+  if(!d || !Number(d.fsc_requis)) return '';
+  const t = (d.fsc_type_requis||'').trim();
+  const lbl = EXPE_FSC_LABELS[t] || '';
+  return '<span class="expe-fsc-badge">FSC'+(lbl?' · '+escHtml(lbl):'')+'</span>';
+}
+
 function expeDevisBadge(r){
   if(!r||!r.source_devis_reponse_id) return null;
   const demandeId=r.source_devis_demande_id;
@@ -5595,7 +5799,7 @@ function renderExpeHistoriqueDeparts(){
   const body=rows.length?rows.map(r=>h('tr',null,
     h('td',{style:{fontSize:'12px',whiteSpace:'nowrap'},title:(r.validated_at||'')},(r.validated_at||'').replace('T',' ').slice(0,16)||'—'),
     h('td',{title:(r.date_enlevement||'').slice(0,10)},(r.date_enlevement||'').slice(0,10)),
-    h('td',{title:r.client||''},h('span',{className:'expe-badge-devis-wrap'},r.client||'—',expeDevisBadge(r))),
+    h('td',{title:r.client||''},h('span',{className:'expe-badge-devis-wrap'},r.client||'—',expeFscBadge(r),expeDevisBadge(r))),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.ref_sifa||''},r.ref_sifa||'—'),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.arc||''},r.arc||'—'),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.no_cde_transport||''},r.no_cde_transport||'—'),

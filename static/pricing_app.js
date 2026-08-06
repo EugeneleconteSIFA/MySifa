@@ -31,6 +31,8 @@
     declDirty: false,
     products: [],
     settings: null,
+    // Observateur de hauteur du bandeau d'actions fixe (voir syncSavebarSpacer).
+    savebarRO: null,
     filters: {
       matQ: "",
       matCats: [],
@@ -41,6 +43,10 @@
       msQ: "",
       msCat: "",
       msActive: "1",
+      // Affichage des matières MyStock : "reference" (une ligne par référence,
+      // déclinaisons dépliables) ou "liste" (une ligne par déclinaison).
+      // Relu du navigateur au démarrage — voir chargerVueMystock.
+      msVue: "reference",
       prodQ: "",
       // Onglet actif de la page Produits : base Coûts matières ou MyStock.
       prodTab: "mystock",
@@ -133,10 +139,16 @@
         '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
       unlink:
         '<path d="M18.84 12.25l1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M5.17 11.75l-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/><line x1="8" y1="2" x2="8" y2="5"/><line x1="2" y1="8" x2="5" y2="8"/><line x1="16" y1="19" x2="16" y2="22"/><line x1="19" y1="16" x2="22" y2="16"/>',
+      // Flèche coudée : « dérivé de la ligne du dessus ».
+      "corner-down-right":
+        '<polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/>',
       "arrow-left":
         '<line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>',
       star:
         '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+      // Bascule d'affichage : « layers » = référence + déclinaisons empilées,
+      // « list » = une ligne par déclinaison.
+      list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
     };
     return "<svg " + a + ">" + (p[name] || p.grid) + "</svg>";
   }
@@ -186,6 +198,98 @@
   function unitLabel(cur, basis) {
     const sym = CUR_SYM[(cur || "EUR").toUpperCase()] || "€";
     return sym + "/" + (basis === "PER_M2" ? "m²" : "kg");
+  }
+
+  /**
+   * Méthodes de calcul du transport d'import.
+   *
+   * CONTENEUR et FORFAIT partagent la même arithmétique — un coût divisé par une
+   * quantité — mais pas le même vocabulaire : un champ « coût conteneur » ne
+   * doit pas servir à saisir un forfait de livraison.
+   */
+  const TRANSPORT_MODES = [
+    { v: "AMOUNT", label: "Montant à l'unité d'achat" },
+    { v: "PCT", label: "Pourcentage du prix d'achat" },
+    { v: "CONTENEUR", label: "Coût d'un conteneur ÷ ce qu'il transporte" },
+    { v: "FORFAIT", label: "Forfait de commande ÷ quantité commandée" },
+  ];
+  const TRANSPORT_CHAMPS = {
+    CONTENEUR: { cout: "Coût du conteneur", qte: "Quantité par conteneur" },
+    FORFAIT: { cout: "Forfait de commande", qte: "Quantité commandée" },
+  };
+
+  /**
+   * Ce que fait chaque méthode, et un exemple chiffré.
+   *
+   * Les quatre méthodes arrivent au même endroit — un coût de transport ramené à
+   * l'unité d'achat, ajouté au prix avant conversion — mais partent de ce que le
+   * fournisseur facture réellement. On choisit celle dont on a la donnée.
+   *
+   * Les exemples sont figés et volontairement ronds : ils expliquent la
+   * mécanique. Le chiffre de la matière en cours, lui, s'affiche sous le champ
+   * de saisie (« Soit 0,0123 €/m² · 3,00 % du prix d'achat »).
+   */
+  const TRANSPORT_AIDE = {
+    AMOUNT: {
+      quoi: "Le transport est déjà connu à l'unité : on le saisit tel quel, il s'ajoute au prix d'achat.",
+      exemple: "achat 4,20 €/kg + transport 0,15 €/kg → 4,35 €/kg.",
+      quand: "Quand le fournisseur ou le transitaire annonce un coût au kilo (ou au m²).",
+    },
+    PCT: {
+      quoi: "Le transport est un pourcentage du prix d'achat : il suit le prix quand celui-ci bouge.",
+      exemple: "achat 4,20 €/kg + 8 % → 0,3360 €/kg de transport, soit 4,5360 €/kg.",
+      quand: "Quand on raisonne en taux moyen d'approche plutôt qu'en montant.",
+    },
+    CONTENEUR: {
+      quoi: "On saisit ce que coûte un conteneur entier et la quantité qu'il transporte : le transport est le coût divisé par cette quantité.",
+      exemple: "4 800 € de conteneur pour 18 000 kg → 4 800 ÷ 18 000 = 0,2667 €/kg de transport.",
+      quand: "Quand on achète par conteneur complet et qu'on connaît son remplissage.",
+    },
+    FORFAIT: {
+      quoi: "On saisit le forfait facturé pour une commande et la quantité commandée : le transport est le forfait divisé par cette quantité.",
+      exemple: "150 € de livraison pour 260 kg commandés → 150 ÷ 260 = 0,5769 €/kg de transport.",
+      quand: "Quand le transporteur facture un montant fixe par commande, quelle que soit la quantité.",
+    },
+  };
+
+  /** Sous-texte explicatif affiché sous le sélecteur de méthode de transport. */
+  function transportAideHtml(mode) {
+    const a = TRANSPORT_AIDE[mode] || TRANSPORT_AIDE.AMOUNT;
+    return `<div class="field-hint transport-aide">
+        ${escHtml(a.quoi)}
+        <span class="aide-ex"><strong>Exemple :</strong> ${escHtml(a.exemple)}</span>
+        <span class="aide-quand">${escHtml(a.quand)}</span>
+      </div>`;
+  }
+
+  function transportModeOptions(actuel) {
+    return TRANSPORT_MODES.map(
+      (m) => `<option value="${m.v}" ${actuel === m.v ? "selected" : ""}>${escHtml(m.label)}</option>`
+    ).join("");
+  }
+
+  /** Les champs de saisie du transport dépendent de la méthode choisie. */
+  function transportChampsHtml(prefixe, f, unit, apercu) {
+    const mode = f.transport_mode || "AMOUNT";
+    if (mode === "PCT") {
+      return `<div class="field f-num"><label>Transport <span class="lbl-unit">% du prix d'achat</span></label>
+        <input type="number" step="0.0001" id="${prefixe}-transport" value="${escAttr(f.transport_pct)}"/>
+        <div class="field-hint" id="${prefixe}-transport-eq">${transportEqText(apercu)}</div>
+      </div>`;
+    }
+    if (mode === "CONTENEUR" || mode === "FORFAIT") {
+      const l = TRANSPORT_CHAMPS[mode];
+      return `<div class="field f-num"><label>${escHtml(l.cout)} <span class="lbl-unit">${escHtml(CUR_SYM[(f.price_currency || "EUR").toUpperCase()] || "€")}</span></label>
+          <input type="number" step="0.01" id="${prefixe}-tcout" value="${escAttr(f.transport_cout)}"/></div>
+        <div class="field f-num"><label>${escHtml(l.qte)} <span class="lbl-unit">${escHtml(f.price_basis === "PER_M2" ? "m²" : "kg")}</span></label>
+          <input type="number" step="0.01" id="${prefixe}-tqte" value="${escAttr(f.transport_quantite)}"/>
+          <div class="field-hint" id="${prefixe}-transport-eq">${transportEqText(apercu)}</div>
+        </div>`;
+    }
+    return `<div class="field f-num"><label>Transport <span class="lbl-unit">${escHtml(unit)}</span></label>
+      <input type="number" step="0.0001" id="${prefixe}-transport" value="${escAttr(f.transport_unit_price)}"/>
+      <div class="field-hint" id="${prefixe}-transport-eq">${transportEqText(apercu)}</div>
+    </div>`;
   }
 
   const BASIS_LABEL = {
@@ -495,6 +599,9 @@
     document.getElementById("content").innerHTML = html;
     const gear = document.getElementById("btn-open-settings");
     if (gear) gear.onclick = () => openSettingsModal();
+    // Le bandeau d'actions est fixe : la page qui vient d'être posée doit lui
+    // réserver sa hauteur (ou libérer l'observateur si elle n'en a pas).
+    syncSavebarSpacer();
   }
 
   function showLoading() {
@@ -796,8 +903,12 @@
           <td class="ms-meta">${escHtml(l.updated_at ? String(l.updated_at).replace("T", " ").slice(0, 16) : "—")}${l.updated_by_name ? " · " + escHtml(l.updated_by_name) : ""}</td>
           <td class="ms-actions">${S.canWrite
               ? actionBtn("data-ms-open", d.id, "edit", "Ouvrir le paramétrage de cette déclinaison") +
-                actionBtn("data-ms-dup", key, "copy", "Dupliquer cette ligne pour un autre fournisseur") +
-                (m.type_declinaison ? actionBtn("data-ms-new", m.id, "plus", `Créer un nouveau ${DECL_LABEL[m.type_declinaison]}`) : "") +
+                (m.type_declinaison
+                  ? actionBtn("data-ms-deriver", d.id, "corner-down-right",
+                      `Dériver : nouveau ${DECL_LABEL[m.type_declinaison]} avec les mêmes réglages`) +
+                    actionBtn("data-ms-new", m.id, "plus",
+                      `Créer un ${DECL_LABEL[m.type_declinaison]} vierge`)
+                  : "") +
                 actionBtn("data-ms-del", key, "trash", "Supprimer cette ligne", true)
               : ""}</td>
         </tr>`);
@@ -821,6 +932,116 @@
     </div>`;
   }
 
+  // ─── Deux façons de lire la même liste ─────────────────────────────────────
+  //
+  // La vue « référence » groupe : une ligne par référence MyStock, dépliable sur
+  // ses déclinaisons, avec la saisie en place (prix, fournisseur, laize…). C'est
+  // la vue d'entretien — celle où l'on corrige.
+  //
+  // La vue « liste » met tout à plat : une ligne par déclinaison, en lecture.
+  // C'est la vue de lecture — celle où l'on cherche un coût, où l'on compare
+  // deux grammages, où l'on repère ce qui n'est pas encore paramétré. Elle ne
+  // propose qu'une action, ouvrir la fiche, et c'est ce qui la rend rapide.
+  //
+  // Les deux partent des mêmes données (`S.mystock`) : aucun appel de plus.
+
+  const MS_VUE_CLE = "mysifa.pricing.msVue";
+
+  /** Le choix d'affichage survit au rechargement — c'est une habitude, pas un filtre. */
+  function chargerVueMystock() {
+    try {
+      const v = window.localStorage.getItem(MS_VUE_CLE);
+      if (v === "reference" || v === "liste") S.filters.msVue = v;
+    } catch (e) {
+      // Navigation privée, stockage refusé : on garde la vue par défaut.
+    }
+  }
+
+  function memoriserVueMystock(v) {
+    try {
+      window.localStorage.setItem(MS_VUE_CLE, v);
+    } catch (e) {
+      /* sans conséquence : la vue reste valable pour la session */
+    }
+  }
+
+  function msVueSwitchHtml() {
+    const v = S.filters.msVue;
+    const bouton = (val, nom, titre) =>
+      `<button type="button" class="vs-btn${v === val ? " on" : ""}" data-ms-vue="${val}"
+         title="${escAttr(titre)}" aria-label="${escAttr(titre)}"
+         aria-pressed="${v === val ? "true" : "false"}">${icon(nom, 15)}</button>`;
+    return `<div class="view-switch" role="group" aria-label="Affichage des matières">
+        ${bouton("reference", "layers", "Vue par référence — déclinaisons dépliables, saisie en place")}
+        ${bouton("liste", "list", "Vue liste — une ligne par déclinaison, lecture rapide")}
+      </div>`;
+  }
+
+  /**
+   * Aplatit les matières en une ligne par déclinaison.
+   *
+   * Une référence sans déclinaison produit quand même sa ligne : la faire
+   * disparaître de la liste à plat serait le meilleur moyen de l'oublier.
+   */
+  function mystockDeclinaisonsAPlat() {
+    const lignes = [];
+    (S.mystock || []).forEach((m) => {
+      const decls = m.declinaisons || [];
+      if (!decls.length) {
+        lignes.push({ m, d: null, principal: null, autres: 0 });
+        return;
+      }
+      decls.forEach((d) => {
+        const prix = d.lignes || [];
+        // Le prix qui fait foi ; à défaut, le premier connu — la ligne doit
+        // afficher quelque chose, pas un tiret trompeur.
+        const principal = prix.find((l) => l.principal) || prix[0] || null;
+        lignes.push({ m, d, principal, autres: Math.max(0, prix.length - 1) });
+      });
+    });
+    return lignes;
+  }
+
+  function mystockFlatRowHtml(entree) {
+    const { m, d, principal, autres } = entree;
+    const decl = d
+      ? (d.libelle
+          ? `<strong>${escHtml(d.libelle)}</strong>`
+          : `<span class="muted">${escHtml(DECL_LABEL[m.type_declinaison] || "valeur")} à définir</span>`)
+      : '<span class="muted">sans déclinaison</span>';
+
+    const fournisseur = principal && principal.fournisseur_nom
+      ? escHtml(principal.fournisseur_nom)
+      : '<span class="muted">—</span>';
+    const plus = autres
+      ? ` <span class="msl-plus" title="${escAttr(autres + " autre(s) fournisseur(s) sur cette déclinaison")}">+${autres}</span>`
+      : "";
+
+    const prix = principal && principal.prix != null
+      ? fmtPrixUnite(principal.prix, m.unite)
+      : '<span class="muted">—</span>';
+
+    const cout = d && d.cout_eur_m2 != null && d.cout_eur_m2 > 0
+      ? `<span class="msl-cout">${escHtml(fmtEurM2(d.cout_eur_m2))}</span>`
+      : '<span class="badge badge-silicone">à paramétrer</span>';
+
+    const action = d
+      ? actionBtn("data-ms-open", d.id, "edit", "Ouvrir le paramétrage de cette déclinaison")
+      : (S.canWrite && m.type_declinaison
+          ? actionBtn("data-ms-new", m.id, "plus", `Créer un ${DECL_LABEL[m.type_declinaison]}`)
+          : "");
+
+    return `<tr class="msl-row${d ? "" : " msl-vide"}"${d ? ` data-ms-line="${d.id}"` : ""}>
+        <td>${categorieBadge(m.categorie)}</td>
+        <td class="msl-ref" title="${escAttr(m.designation || m.reference)}"><strong>${escHtml(m.reference)}</strong></td>
+        <td class="msl-decl"${d && d.libelle ? ` title="${escAttr(d.libelle)}"` : ""}>${decl}</td>
+        <td>${fournisseur}${plus}</td>
+        <td class="msl-prix">${prix}</td>
+        <td class="msl-coutcell">${cout}</td>
+        <td class="ms-actions" onclick="event.stopPropagation()">${action}</td>
+      </tr>`;
+  }
+
   function renderMystockList() {
     const catOpts =
       '<option value="">Toutes catégories</option>' +
@@ -836,6 +1057,19 @@
         const open = !!S.expanded[m.id];
         const nb = m.nb_declinaisons || 0;
         const prets = m.nb_parametrees || 0;
+        // Le fournisseur dont le prix fait foi. Plusieurs déclinaisons peuvent
+        // en avoir des différents : on ne nomme que s'il n'y en a qu'un.
+        const principaux = [...new Set(
+          (m.declinaisons || [])
+            .map((d) => (d.lignes || []).find((l) => l.principal))
+            .filter((l) => l && l.fournisseur_nom)
+            .map((l) => l.fournisseur_nom)
+        )];
+        const fournPrincipal = principaux.length === 1
+          ? escHtml(principaux[0])
+          : (principaux.length
+              ? `<span class="muted">${principaux.length} fournisseurs</span>`
+              : '<span class="muted">—</span>');
         const lien = nb
           ? (prets === nb
               ? `<span class="badge badge-frontal">${prets}/${nb} réglée${nb > 1 ? "s" : ""}</span>`
@@ -850,7 +1084,7 @@
                 ? `<span class="badge badge-silicone">${escHtml(DECL_LABEL[m.type_declinaison])} · ${nb}</span>`
                 : '<span class="badge badge-autre">sans déclinaison</span>'}</td>
             <td class="ms-prix-cell">${mystockPrixResume(m)}</td>
-            <td>${m.nb_fournisseurs || 0}</td>
+            <td>${fournPrincipal}</td>
             <td>${lien}</td>
             <td class="row-actions" onclick="event.stopPropagation()">
               <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${m.id}" target="_blank" rel="noopener" title="Ouvrir la fiche dans MyStock">MyStock ↗</a>
@@ -860,9 +1094,35 @@
       })
       .join("");
 
+    const plat = S.filters.msVue === "liste";
+    const aPlat = plat ? mystockDeclinaisonsAPlat() : [];
+    const sousTitre = plat
+      ? `${aPlat.length} déclinaison(s) · ${S.mystock.length} matière(s) MyStock`
+      : `${S.mystock.length} matière(s) MyStock`;
+
+    const tableau = plat
+      ? `<div class="table-wrap">
+          <table class="pr-table msl-table">
+            <colgroup>
+              <col style="width:100px"><col>
+              <col style="width:180px"><col style="width:220px">
+              <col style="width:130px"><col style="width:136px"><col style="width:56px">
+            </colgroup>
+            <thead><tr><th>Cat.</th><th>Référence</th><th>Déclinaison</th><th>Fournisseur</th><th>Prix</th><th>Coût €/m²</th><th class="ms-actions"></th></tr></thead>
+            <tbody>${aPlat.map(mystockFlatRowHtml).join("")
+              || '<tr><td colspan="7" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
+          </table>
+        </div>`
+      : `<div class="table-wrap">
+          <table class="pr-table">
+            <thead><tr><th style="width:28px"></th><th>Cat.</th><th>Référence</th><th>Désignation</th><th>Déclinaisons</th><th>Prix en vigueur</th><th>Fournisseur principal</th><th>Réglées</th><th></th></tr></thead>
+            <tbody>${rows || '<tr><td colspan="9" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
+          </table>
+        </div>`;
+
     setContent(`
       <div class="pr-narrow">
-        ${pageHead("Matières", `${S.mystock.length} matière(s) MyStock`, materialsTabsHtml())}
+        ${pageHead("Matières", sousTitre, materialsTabsHtml() + msVueSwitchHtml())}
         <div class="filters">
           <input type="search" class="search-input" id="ms-q" placeholder="Rechercher (référence, désignation…)" value="${escAttr(S.filters.msQ)}"/>
           <select id="ms-cat">${catOpts}</select>
@@ -872,19 +1132,12 @@
             <option value="all" ${S.filters.msActive==="all"?"selected":""}>Toutes</option>
           </select>
         </div>
-        <div class="ms-hint">Le prix saisi ici est <strong>celui de MyStock</strong> : il est écrit directement dans la valorisation et historisé.
-          C'est le prix du <strong>fournisseur principal</strong> qui fait foi. Chaque <strong>déclinaison</strong> — une laize, un grammage —
-          a sa propre fiche : clique sur son coût pour régler poids, devise, taxes et transport d'import.</div>
-        <div class="table-wrap">
-          <table class="pr-table">
-            <thead><tr><th style="width:28px"></th><th>Cat.</th><th>Référence</th><th>Désignation</th><th>Déclinaisons</th><th>Prix en vigueur</th><th>Fourn.</th><th>Réglées</th><th></th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="9" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
-          </table>
-        </div>
+        ${tableau}
       </div>
     `);
 
     bindMaterialsTabs();
+    bindMsVueSwitch();
 
     const qEl = document.getElementById("ms-q");
     let t;
@@ -914,7 +1167,27 @@
         renderMystockList();
       };
     });
+    // Vue à plat : la ligne entière ouvre la fiche de paramétrage — c'est la
+    // seule action de cette vue, autant la rendre évidente.
+    document.querySelectorAll("[data-ms-line]").forEach((tr) => {
+      tr.onclick = (e) => {
+        if (e.target.closest("input,select,button,a")) return;
+        navigate("/pricing/mystock/" + tr.getAttribute("data-ms-line"));
+      };
+    });
     bindMystockActions();
+  }
+
+  function bindMsVueSwitch() {
+    document.querySelectorAll("[data-ms-vue]").forEach((b) => {
+      b.onclick = () => {
+        const v = b.getAttribute("data-ms-vue");
+        if (v === S.filters.msVue) return;
+        S.filters.msVue = v;
+        memoriserVueMystock(v);
+        renderMystockList();
+      };
+    });
   }
 
   function parseMsKey(key) {
@@ -987,11 +1260,12 @@
         }
       };
     });
-    document.querySelectorAll("[data-ms-dup]").forEach((btn) => {
+    // Dériver : tout est repris sauf la valeur, qui reste à saisir.
+    document.querySelectorAll("[data-ms-deriver]").forEach((btn) => {
       btn.onclick = async () => {
-        const k = parseMsKey(btn.getAttribute("data-ms-dup"));
-        if (await msCall("/api/pricing/mystock/prix/dupliquer", k)) {
-          showToast("Ligne dupliquée — choisissez l'autre fournisseur.", "success");
+        const id = parseInt(btn.getAttribute("data-ms-deriver"), 10);
+        if (await msCall("/api/pricing/mystock/declinaisons/deriver", { declinaison_id: id })) {
+          showToast("Déclinaison dérivée — reste à saisir sa valeur.", "success");
         }
       };
     });
@@ -1101,6 +1375,8 @@
       transport_mode: "AMOUNT",
       transport_unit_price: "0",
       transport_pct: "0",
+      transport_cout: "0",
+      transport_quantite: "0",
     };
   }
 
@@ -1130,6 +1406,8 @@
       transport_unit_price:
         m.transport_unit_price != null ? String(m.transport_unit_price) : "0",
       transport_pct: m.transport_pct != null ? String(m.transport_pct) : "0",
+      transport_cout: m.transport_cout != null ? String(m.transport_cout) : "0",
+      transport_quantite: m.transport_quantite != null ? String(m.transport_quantite) : "0",
       _mystock: m.mystock || null,
       _history: [],
     };
@@ -1155,6 +1433,8 @@
       transport_mode: f.transport_mode || "AMOUNT",
       transport_unit_price: parseFloat(f.transport_unit_price) || 0,
       transport_pct: parseFloat(f.transport_pct) || 0,
+      transport_cout: parseFloat(f.transport_cout) || 0,
+      transport_quantite: parseFloat(f.transport_quantite) || 0,
     };
   }
 
@@ -1294,35 +1574,71 @@
   }
 
   /**
-   * Paramètres globaux éditables en place, posés à droite de l'identification.
-   * Ils s'appliquent à toutes les matières — d'où l'avertissement et le bouton
-   * d'application explicite (pas d'enregistrement silencieux à la frappe).
+   * Panneau « Paramètres » posé à droite du formulaire.
+   *
+   * Il réunit deux portées que rien ne doit laisser confondre, d'où les deux
+   * blocs titrés :
+   *   - « Cette matière » : un réglage propre à la fiche ouverte (appliquer la
+   *     marge ou non). Il s'enregistre avec la matière, par le bandeau du haut.
+   *   - « Toutes les matières » : le taux de change et la marge par défaut, qui
+   *     valent pour tout le module — d'où le bouton Appliquer distinct, pas
+   *     d'enregistrement silencieux à la frappe.
+   *
+   * `prefixe` vaut "f" (fiche matière) ou "d" (fiche déclinaison MyStock) : les
+   * deux formulaires partagent ce panneau mais gardent leurs identifiants.
    */
-  function inlineSettingsHtml() {
+  function inlineSettingsHtml(prefixe, f) {
     const s = S.settings;
-    if (!s || !S.canWrite) return "";
+    const ro = S.canWrite ? "" : " disabled";
+    const blocMatiere = `
+      <div class="si-block">
+        <div class="si-sub">Cette matière</div>
+        <label class="check-row check-side">
+          <input type="checkbox" id="${prefixe}-marge" ${f && f.applique_marge !== false ? "checked" : ""}${ro}/>
+          <span>
+            <span class="check-title">Appliquer la marge</span>
+            <span class="check-sub">Décoché, la matière entre dans le prix de revient mais on ne marge pas dessus.</span>
+          </span>
+        </label>
+        <div class="si-meta">Enregistré avec la matière, par le bouton Enregistrer du bandeau.</div>
+      </div>`;
+
+    if (!s || !S.canWrite) {
+      return `<aside class="settings-side"><div class="si-head">Paramètres</div>${blocMatiere}</aside>`;
+    }
+
     const fxDate = s.eur_usd_rate_updated_at
       ? String(s.eur_usd_rate_updated_at).replace("T", " ").slice(0, 16)
       : "—";
     const stale = isFxStale(s.eur_usd_rate_updated_at);
     return `
       <aside class="settings-side">
-        <div class="si-head">Paramètres globaux <span>appliqués à toutes les matières</span></div>
-        <div class="field"><label>Taux USD → EUR ${stale ? fxStaleBadgeHtml() : ""}</label>
-          <input type="number" step="0.0001" id="si-rate" value="${escAttr(s.eur_usd_rate)}"/>
-          <div class="si-meta">MAJ ${escHtml(fxDate)} · ${escHtml(s.eur_usd_rate_source || "—")}</div>
-        </div>
-        <div class="field"><label>Marge par défaut <span class="lbl-unit">%</span></label>
-          <input type="number" step="0.01" id="si-margin" value="${escAttr(s.default_margin_pct)}"/>
-        </div>
-        <div class="si-actions">
-          <button type="button" class="btn btn-accent btn-sm" id="si-save">Appliquer</button>
-          <button type="button" class="btn btn-soft btn-sm" id="si-fx">Rafraîchir le taux</button>
+        <div class="si-head">Paramètres</div>
+        ${blocMatiere}
+        <div class="si-block">
+          <div class="si-sub">Toutes les matières</div>
+          <div class="field"><label>Taux USD → EUR ${stale ? fxStaleBadgeHtml() : ""}</label>
+            <input type="number" step="0.0001" id="si-rate" value="${escAttr(s.eur_usd_rate)}"/>
+            <div class="si-meta">MAJ ${escHtml(fxDate)} · ${escHtml(s.eur_usd_rate_source || "—")}</div>
+          </div>
+          <div class="field"><label>Marge par défaut <span class="lbl-unit">%</span></label>
+            <input type="number" step="0.01" id="si-margin" value="${escAttr(s.default_margin_pct)}"/>
+          </div>
+          <div class="si-actions">
+            <button type="button" class="btn btn-accent btn-sm" id="si-save">Appliquer</button>
+            <button type="button" class="btn btn-soft btn-sm" id="si-fx">Rafraîchir le taux</button>
+          </div>
         </div>
       </aside>`;
   }
 
-  function bindInlineSettings(isNew) {
+  /**
+   * `rafraichir` re-rend le formulaire qui héberge le panneau — fiche matière ou
+   * fiche déclinaison. Sans lui, appliquer un taux depuis la fiche déclinaison
+   * redessinait la fiche matière.
+   */
+  function bindInlineSettings(rafraichir) {
+    const redessiner = typeof rafraichir === "function" ? rafraichir : () => {};
     const save = document.getElementById("si-save");
     if (save) {
       save.onclick = async () => {
@@ -1334,9 +1650,8 @@
               default_margin_pct: parseFloat(document.getElementById("si-margin").value),
             },
           });
-          showToast("Paramètres globaux enregistrés.", "success");
-          renderMaterialForm(isNew);
-          refreshMaterialPreview();
+          showToast("Paramètres enregistrés pour toutes les matières.", "success");
+          redessiner();
         } catch (e) {
           showToast(e.message, "danger");
         }
@@ -1349,8 +1664,7 @@
           const r = await api("/api/pricing/settings/refresh-fx", { method: "POST" });
           showToast("Taux mis à jour : " + fmtNum(r.eur_usd_rate, 4, 4), "success");
           S.settings = await api("/api/pricing/settings");
-          renderMaterialForm(isNew);
-          refreshMaterialPreview();
+          redessiner();
         } catch (e) {
           showToast(e.message, "danger");
         }
@@ -1397,13 +1711,41 @@
   }
 
   /**
-   * Bandeau d'actions collé en haut de la fiche matière (même principe que la
-   * fiche produit MyAO) : sur un formulaire long, le bouton Enregistrer ne doit
-   * pas obliger à redescendre en bas de page.
+   * Le bandeau d'actions est en `position:fixed` : sur un formulaire long, le
+   * bouton Enregistrer reste sous la main quelle que soit la position du
+   * défilement. Sorti du flux, il masquerait le haut de la page — d'où
+   * l'espaceur, dont `syncSavebarSpacer` recopie la hauteur réelle (le bandeau
+   * passe sur deux lignes en écran étroit).
    */
+  /**
+   * Recopie la hauteur du bandeau fixe dans l'espaceur qui lui tient la place.
+   * Le ResizeObserver précédent est débranché : les fiches se re-rendent souvent
+   * (changement de devise, de base de prix…), on n'en empile pas un par rendu.
+   */
+  function syncSavebarSpacer() {
+    if (S.savebarRO) {
+      S.savebarRO.disconnect();
+      S.savebarRO = null;
+    }
+    const bar = document.querySelector(".pr-savebar");
+    const spacer = document.querySelector(".savebar-spacer");
+    if (!bar || !spacer) return;
+    const maj = () => {
+      // Hauteur du bandeau + l'espace qui le séparait du contenu quand il était
+      // encore dans le flux.
+      spacer.style.height = bar.offsetHeight + 16 + "px";
+    };
+    maj();
+    if (typeof ResizeObserver === "function") {
+      S.savebarRO = new ResizeObserver(maj);
+      S.savebarRO.observe(bar);
+    }
+  }
+
   function matSaveBarHtml(isNew) {
     const dirty = S.matDirty ? "" : " hidden";
-    return `<div class="pr-savebar">
+    return `<div class="savebar-spacer" aria-hidden="true"></div>
+      <div class="pr-savebar">
         <button type="button" class="btn btn-soft btn-sm" id="btn-back-mat">${icon("arrow-left", 14)} Retour liste</button>
         <div class="savebar-state" id="mat-dirty"${dirty}><span class="dot"></span>Modifications non enregistrées</div>
         <div class="savebar-actions">
@@ -1442,15 +1784,14 @@
       ? unitLabel(ms.price_currency, ms.price_basis)
       : unitLabel(f.price_currency, f.price_basis);
     const lockAttr = ms ? "disabled" : "";
-    const isPct = f.transport_mode === "PCT";
 
     setContent(`
       <div class="pr-narrow">
+        ${matSaveBarHtml(isNew)}
         ${pageHead(
           isNew ? "Nouvelle matière" : "Éditer matière",
           isNew ? "" : escHtml(f.name)
         )}
-        ${matSaveBarHtml(isNew)}
         <div class="mat-summary" id="mat-summary">${matSummaryHtml(S.matPreview)}</div>
         <div class="form-layout">
         <div class="form-card">
@@ -1496,24 +1837,13 @@
                 <option value="PER_M2" ${f.price_basis==="PER_M2"?"selected":""}>${escHtml(BASIS_LABEL.PER_M2)}</option>
               </select></div>
             </div>
-            <div class="field-row">
-              <div class="field f-price"><label>Prix unitaire <span class="lbl-unit">${escHtml(unit)}</span></label>
-                <div class="price-pair">
-                  <input type="number" step="0.0001" id="f-unit" class="price-main" value="${escAttr(ms ? ms.unit_price : f.unit_price)}" ${lockAttr}/>
-                  <span class="price-arrow" aria-hidden="true">→</span>
-                  <span id="f-unit-alt">${otherPriceHtml(ms ? ms.unit_price : f.unit_price, ms ? ms.price_currency : f.price_currency, ms ? ms.price_basis : f.price_basis)}</span>
-                </div>
-                <div class="field-hint">Contrepartie au taux ${escHtml(fmtNum((S.settings && S.settings.eur_usd_rate) || 0, 4, 4))} USD → EUR — indicatif, non enregistré.</div>
+            <div class="field f-price"><label>Prix unitaire <span class="lbl-unit">${escHtml(unit)}</span></label>
+              <div class="price-pair">
+                <input type="number" step="0.0001" id="f-unit" class="price-main" value="${escAttr(ms ? ms.unit_price : f.unit_price)}" ${lockAttr}/>
+                <span class="price-arrow" aria-hidden="true">→</span>
+                <span id="f-unit-alt">${otherPriceHtml(ms ? ms.unit_price : f.unit_price, ms ? ms.price_currency : f.price_currency, ms ? ms.price_basis : f.price_basis)}</span>
               </div>
-              <div class="field f-num">
-                <label class="check-row check-inline">
-                  <input type="checkbox" id="f-marge" ${f.applique_marge !== false ? "checked" : ""}/>
-                  <span>
-                    <span class="check-title">Appliquer la marge</span>
-                    <span class="check-sub">Décoché, la matière entre dans le prix de revient mais on ne marge pas dessus.</span>
-                  </span>
-                </label>
-              </div>
+              <div class="field-hint">Contrepartie au taux ${escHtml(fmtNum((S.settings && S.settings.eur_usd_rate) || 0, 4, 4))} USD → EUR — indicatif, non enregistré.</div>
             </div>
           </div>
 
@@ -1528,14 +1858,10 @@
               </label>
               <div id="import-fields" class="import-fields" style="${f.is_imported?"":"display:none"}">
                 <div class="field-row">
-                  <div class="field f-mid"><label>Mode de transport</label><select id="f-tmode">
-                    <option value="AMOUNT" ${isPct?"":"selected"}>Montant — saisi en ${escHtml(unit)}</option>
-                    <option value="PCT" ${isPct?"selected":""}>Pourcentage du prix d'achat</option>
-                  </select></div>
-                  <div class="field f-num"><label>Transport <span class="lbl-unit">${isPct ? "% du prix d'achat" : escHtml(unit)}</span></label>
-                    <input type="number" step="0.0001" id="f-transport" value="${escAttr(isPct ? f.transport_pct : f.transport_unit_price)}"/>
-                    <div class="field-hint" id="transport-eq">${transportEqText(S.matPreview)}</div>
-                  </div>
+                  <div class="field f-mid"><label>Méthode de transport</label>
+                    <select id="f-tmode">${transportModeOptions(f.transport_mode || "AMOUNT")}</select>
+                    ${transportAideHtml(f.transport_mode || "AMOUNT")}</div>
+                  ${transportChampsHtml("f", f, unit, S.matPreview)}
                   <div class="field f-num"><label>Taxes <span class="lbl-unit">% du sous-total</span></label>
                     <input type="number" step="0.01" id="f-tax" value="${escAttr(f.taxe_pct)}"/>
                     <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
@@ -1547,7 +1873,7 @@
 
         </div>
 
-        ${inlineSettingsHtml()}
+        ${inlineSettingsHtml("f", f)}
         </div>
 
         <div id="mat-recap">${recapTableHtml(S.matPreview)}</div>
@@ -1565,7 +1891,21 @@
         navigate("/pricing/materials");
       };
     }
-    bindInlineSettings(isNew);
+    bindInlineSettings(() => {
+      renderMaterialForm(isNew);
+      refreshMaterialPreview();
+    });
+
+    // Le bandeau signale qu'une saisie attend d'être enregistrée. Déclaré ici
+    // parce que la case « Appliquer la marge » vit maintenant dans le panneau
+    // Paramètres, hors de la carte du formulaire : elle doit salir la fiche
+    // elle aussi.
+    const marquerMat = () => {
+      if (S.matDirty) return;
+      S.matDirty = true;
+      const t = document.getElementById("mat-dirty");
+      if (t) t.hidden = false;
+    };
 
     const bindPreview = () => {
       clearTimeout(S.debounceMat);
@@ -1583,7 +1923,7 @@
       const out = document.getElementById("f-gram-out");
       if (out) out.textContent = fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2);
     };
-    ["f-unit", "f-tax", "f-transport", "f-gsm", "f-perte"].forEach((id) => {
+    ["f-unit", "f-tax", "f-transport", "f-tcout", "f-tqte", "f-gsm", "f-perte"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.oninput = () => {
         syncMaterialFormFromDom();
@@ -1594,6 +1934,7 @@
     });
     const chkMarge = document.getElementById("f-marge");
     if (chkMarge) chkMarge.onchange = () => {
+      marquerMat();
       syncMaterialFormFromDom();
       bindPreview();
     };
@@ -1606,19 +1947,12 @@
       };
     });
 
-    // Le bandeau signale qu'une saisie attend d'être enregistrée. Le drapeau
-    // vit dans S : le formulaire se re-rend tout seul quand la devise ou la base
-    // de prix change, un état local serait perdu à chaque fois.
+    // Le drapeau vit dans S : le formulaire se re-rend tout seul quand la devise
+    // ou la base de prix change, un état local serait perdu à chaque fois.
     const carte = document.querySelector(".form-layout > .form-card");
     if (carte) {
-      const marquer = () => {
-        if (S.matDirty) return;
-        S.matDirty = true;
-        const t = document.getElementById("mat-dirty");
-        if (t) t.hidden = false;
-      };
-      carte.addEventListener("input", marquer);
-      carte.addEventListener("change", marquer);
+      carte.addEventListener("input", marquerMat);
+      carte.addEventListener("change", marquerMat);
     }
 
     if (S.canWrite) {
@@ -1671,6 +2005,8 @@
       if (f.transport_mode === "PCT") f.transport_pct = tv;
       else f.transport_unit_price = tv;
     }
+    f.transport_cout = val("f-tcout") ?? f.transport_cout;
+    f.transport_quantite = val("f-tqte") ?? f.transport_quantite;
   }
 
   async function saveMaterialForm(isNew) {
@@ -1692,6 +2028,8 @@
       transport_mode: f.transport_mode || "AMOUNT",
       transport_unit_price: parseFloat(f.transport_unit_price) || 0,
       transport_pct: parseFloat(f.transport_pct) || 0,
+      transport_cout: parseFloat(f.transport_cout) || 0,
+      transport_quantite: parseFloat(f.transport_quantite) || 0,
       price_history_source: "Saisie interface",
     };
     if (!body.name) {
@@ -2406,6 +2744,8 @@
       if (f.transport_mode === "PCT") f.transport_pct = v;
       else f.transport_unit_price = v;
     }
+    if (g("d-tcout")) f.transport_cout = g("d-tcout").value;
+    if (g("d-tqte")) f.transport_quantite = g("d-tqte").value;
     if (g("d-gsm")) f.grammage_gsm = g("d-gsm").value;
     if (g("d-perte")) f.perte_pct = g("d-perte").value;
   }
@@ -2427,6 +2767,8 @@
           transport_mode: f.transport_mode || "AMOUNT",
           transport_unit_price: parseFloat(f.transport_unit_price) || 0,
           transport_pct: parseFloat(f.transport_pct) || 0,
+          transport_cout: parseFloat(f.transport_cout) || 0,
+          transport_quantite: parseFloat(f.transport_quantite) || 0,
         },
       });
     } catch (e) {
@@ -2491,7 +2833,8 @@
 
   function declSaveBarHtml() {
     const dirty = S.declDirty ? "" : " hidden";
-    return `<div class="pr-savebar">
+    return `<div class="savebar-spacer" aria-hidden="true"></div>
+      <div class="pr-savebar">
         <button type="button" class="btn btn-soft btn-sm" id="btn-back-decl">${icon("arrow-left", 14)} Retour liste</button>
         <div class="savebar-state" id="decl-dirty"${dirty}><span class="dot"></span>Modifications non enregistrées</div>
         <div class="savebar-actions">
@@ -2504,16 +2847,15 @@
   function renderDeclinaisonForm() {
     const f = S.declForm;
     const unit = unitLabel(f.price_currency, f.price_basis);
-    const isPct = f.transport_mode === "PCT";
     const prixTxt = `${fmtNum(f.unit_price, 4, 4)} ${unit}`;
 
     setContent(`
       <div class="pr-narrow">
+        ${declSaveBarHtml()}
         ${pageHead(
           "Matière MyStock",
           `${escHtml(f.reference)} — ${escHtml(f.libelle)}`
         )}
-        ${declSaveBarHtml()}
         <div class="mat-summary" id="decl-summary">${matSummaryHtml(S.declPreview)}</div>
         <div class="form-layout">
         <div class="form-card">
@@ -2557,13 +2899,6 @@
                 <option value="PER_M2" ${f.price_basis==="PER_M2"?"selected":""}>${escHtml(BASIS_LABEL.PER_M2)}</option>
               </select></div>
             </div>
-            <label class="check-row check-inline">
-              <input type="checkbox" id="d-marge" ${f.applique_marge !== false ? "checked" : ""}/>
-              <span>
-                <span class="check-title">Appliquer la marge</span>
-                <span class="check-sub">Décoché, la matière entre dans le prix de revient mais on ne marge pas dessus.</span>
-              </span>
-            </label>
           </div>
 
           <div class="form-section">
@@ -2577,14 +2912,10 @@
               </label>
               <div id="d-import-fields" class="import-fields" style="${f.is_imported?"":"display:none"}">
                 <div class="field-row">
-                  <div class="field f-mid"><label>Mode de transport</label><select id="d-tmode">
-                    <option value="AMOUNT" ${isPct?"":"selected"}>Montant — saisi en ${escHtml(unit)}</option>
-                    <option value="PCT" ${isPct?"selected":""}>Pourcentage du prix d'achat</option>
-                  </select></div>
-                  <div class="field f-num"><label>Transport <span class="lbl-unit">${isPct ? "% du prix d'achat" : escHtml(unit)}</span></label>
-                    <input type="number" step="0.0001" id="d-transport" value="${escAttr(isPct ? f.transport_pct : f.transport_unit_price)}"/>
-                    <div class="field-hint" id="d-transport-eq">${transportEqText(S.declPreview)}</div>
-                  </div>
+                  <div class="field f-mid"><label>Méthode de transport</label>
+                    <select id="d-tmode">${transportModeOptions(f.transport_mode || "AMOUNT")}</select>
+                    ${transportAideHtml(f.transport_mode || "AMOUNT")}</div>
+                  ${transportChampsHtml("d", f, unit, S.declPreview)}
                   <div class="field f-num"><label>Taxes <span class="lbl-unit">% du sous-total</span></label>
                     <input type="number" step="0.01" id="d-tax" value="${escAttr(f.taxe_pct)}"/>
                     <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
@@ -2596,7 +2927,7 @@
 
         </div>
 
-        ${inlineSettingsHtml()}
+        ${inlineSettingsHtml("d", f)}
         </div>
 
         <div id="decl-recap">${recapTableHtml(S.declPreview)}</div>
@@ -2605,7 +2936,10 @@
     `);
 
     document.getElementById("btn-back-decl").onclick = () => navigate("/pricing/materials");
-    bindInlineSettings();
+    bindInlineSettings(() => {
+      renderDeclinaisonForm();
+      refreshDeclPreview();
+    });
 
     const marquer = () => {
       if (S.declDirty) return;
@@ -2620,7 +2954,7 @@
       const out = document.getElementById("d-gram-out");
       if (out) out.textContent = fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2);
     };
-    ["d-tax", "d-transport", "d-gsm", "d-perte"].forEach((id) => {
+    ["d-tax", "d-transport", "d-tcout", "d-tqte", "d-gsm", "d-perte"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.oninput = () => {
         marquer();
@@ -2668,6 +3002,8 @@
             transport_mode: f.transport_mode || "AMOUNT",
             transport_unit_price: parseFloat(f.transport_unit_price) || 0,
             transport_pct: parseFloat(f.transport_pct) || 0,
+            transport_cout: parseFloat(f.transport_cout) || 0,
+            transport_quantite: parseFloat(f.transport_quantite) || 0,
             grammage_gsm: parseFloat(f.grammage_gsm) || 0,
             perte_pct: parseFloat(f.perte_pct) || 0,
           },
@@ -2792,8 +3128,7 @@
       )
       .join("");
     return `
-      ${pageHead(isNew ? "Nouveau produit MyStock" : "Éditer produit MyStock",
-                 isNew ? "" : escHtml(f.code))}
+      <div class="savebar-spacer" aria-hidden="true"></div>
       <div class="pr-savebar">
         <button type="button" class="btn btn-soft btn-sm" id="btn-back-msprod">${icon("arrow-left", 14)} Retour liste</button>
         <div class="savebar-actions">
@@ -2801,6 +3136,8 @@
           ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-save-msprod">Enregistrer</button>' : ""}
         </div>
       </div>
+      ${pageHead(isNew ? "Nouveau produit MyStock" : "Éditer produit MyStock",
+                 isNew ? "" : escHtml(f.code))}
       <div class="form-grid">
         <div class="form-card">
           <div class="field-row">
@@ -3076,9 +3413,6 @@
           <input type="search" class="search-input" id="msp-q" placeholder="Rechercher (code, désignation…)" value="${escAttr(S.filters.msProdQ)}"/>
           ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-msprod">+ Nouveau produit</button>' : ""}
         </div>
-        <div class="ms-hint">Ces produits sont composés de <strong>déclinaisons MyStock</strong> : une laize précise d'un frontal,
-          un grammage précis d'un adhésif. Leur coût suit automatiquement le prix du fournisseur principal de chaque matière.
-          Clique sur une ligne pour voir d'où vient son prix de revient.</div>
         <div class="table-wrap">
           <table class="pr-table msp-table">
             <thead><tr><th style="width:28px"></th><th>Code</th><th>Désignation</th><th>Frontal</th><th>Adhésif</th><th>Glassine</th><th>Autres</th><th>Coût</th><th>Vente</th><th>Marge</th><th></th></tr></thead>
@@ -3273,8 +3607,32 @@
       }
     }
     updateChromeControls();
+    chargerVueMystock();
+    appliquerParamsUrl();
     S.route = parseRoute();
     await bootRoute();
+  }
+
+  /**
+   * `?ref=1408` ouvre la liste MyStock déjà filtrée sur cette référence.
+   *
+   * MyStock renvoie ici pour toute modification de prix : il ne connaît que sa
+   * référence, pas l'identifiant de déclinaison de la fiche. Filtrer la liste
+   * est le point d'entrée le plus sûr — une référence peut avoir plusieurs
+   * déclinaisons (grammages, laizes), c'est à l'utilisateur de choisir.
+   */
+  function appliquerParamsUrl() {
+    let params;
+    try {
+      params = new URLSearchParams(window.location.search);
+    } catch (e) {
+      return;
+    }
+    const ref = params.get("ref");
+    if (ref) {
+      S.filters.matTab = "mystock";
+      S.filters.msQ = ref;
+    }
   }
 
   window.addEventListener("popstate", bootRoute);

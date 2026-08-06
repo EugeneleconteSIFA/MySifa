@@ -36,7 +36,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "2.7.0"
+APP_VERSION = "2.7.1"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -280,6 +280,29 @@ FSC_WARNING_PROD = os.getenv(
     "entrée du produit fini en stock Z1 obligatoire",
 )
 
+# Motifs d'un départ NON rattaché à un dossier de fabrication.
+#
+# Toutes les expéditions ne sortent pas d'une production : on expédie du stock
+# ancien, de la sous-traitance, des échantillons, des palettes vides. Ces
+# départs-là n'ont pas de dossier, et c'est normal.
+#
+# Ce qui ne l'est pas, c'est de ne pas savoir lequel est lequel. Une case
+# « pas lié à une production » sans motif produit deux mille lignes muettes
+# dont un auditeur ne peut rien tirer. Avec un motif, chaque ligne se défend
+# seule — et si « autre » domine, c'est que cette liste est incomplète.
+EXPE_MOTIFS_SANS_DOSSIER = {
+    "stock_ancien":   "Stock ancien — production antérieure au suivi",
+    "sous_traitance": "Sous-traitance / façonnage extérieur",
+    "negoce":         "Négoce — produit fini acheté",
+    "echantillon":    "Échantillon, présérie ou maquette",
+    "retour_client":  "Retour ou réexpédition client",
+    "non_marchandise": "Envoi non marchand (palettes vides, matériel, documents)",
+    "autre":          "Autre (préciser)",
+}
+# Seul motif qui exige une justification écrite : sans elle, « autre » ne dit
+# rien de plus que la case à cocher qu'il est censé qualifier.
+EXPE_MOTIF_SANS_DOSSIER_NOTE_REQUISE = ("autre",)
+
 ROLES_PROD  = {ROLE_DIRECTION, ROLE_FABRICATION, ROLE_EXPEDITION, ROLE_COMMERCIAL, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
 ROLES_COMPTA = {ROLE_DIRECTION, ROLE_COMPTABILITE, ROLE_SUPERADMIN}
 ROLES_EXPE = {ROLE_DIRECTION, ROLE_EXPEDITION, ROLE_LOGISTIQUE, ROLE_COMMERCIAL, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
@@ -368,6 +391,14 @@ ROLES_SETTINGS = (
     | ROLES_SETTINGS_FSC
 )
 
+# ─── Gestionnaire de tâches : accès par défaut ────────────────────
+# Valeur de repli uniquement. L'accès réel est piloté par la matrice
+# database-driven (role_access_defaults / user_access_overrides) : c'est elle
+# qu'on édite dans Paramètres pour ouvrir /taches à un service, sans toucher au
+# code ni redéployer. Cette constante ne sert que si la matrice est vide (base
+# neuve, instance Kernse avant seed).
+ROLES_TACHES = {ROLE_DIRECTION, ROLE_SUPERADMIN}
+
 # Applications dont l'accès peut être surchargé par utilisateur (hors Paramètres : accès géré par ROLES_SETTINGS_*).
 ACCESS_OVERRIDABLE_APPS = frozenset({"prod", "planning", "planning_rh", "stock", "compta", "expe", "pricing"})
 
@@ -441,6 +472,7 @@ APPS_CATALOG = [
         {"id": "ressources-list", "label": "Ressources"},
         {"id": "ref-list", "label": "Référentiel"},
     ]},
+    {"id": "taches", "label": "Gestionnaire de tâches", "modules": []},
     {"id": "settings", "label": "Paramètres", "modules": []},
 ]
 
@@ -476,6 +508,27 @@ ASSIGNABLE_ROLES = frozenset(
         ROLE_COMMERCIAL,
     }
 )
+
+
+# Libellés lisibles des rôles. Source de vérité : tout écran qui affiche un rôle
+# (Paramètres, matrice d'accès, gestionnaire de tâches) lit ce dictionnaire.
+ROLE_LABELS = {
+    ROLE_DIRECTION:                "Direction",
+    ROLE_ADMINISTRATION:           "Administration",
+    ROLE_ADMINISTRATION_VENTES:    "Administration des ventes",
+    ROLE_ADMINISTRATION_TECHNIQUE: "Administration technique",
+    ROLE_FABRICATION:              "Fabrication",
+    ROLE_LOGISTIQUE:               "Logistique",
+    ROLE_COMPTABILITE:             "Comptabilité",
+    ROLE_EXPEDITION:               "Expédition",
+    ROLE_COMMERCIAL:               "Commercial",
+    ROLE_SUPERADMIN:               "Super admin",
+}
+
+
+def role_label(role: str) -> str:
+    """Libellé lisible d'un rôle — repli sur le code brut si inconnu."""
+    return ROLE_LABELS.get(role or "", role or "")
 
 
 ROLES_FABRICATION_APP = {ROLE_FABRICATION, ROLE_DIRECTION, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
@@ -558,6 +611,7 @@ def default_app_access_for_role(role: str) -> dict:
             "fabrication": True,
             "settings": True,
             "planning_rh": True,
+            "taches": True,
         }
     return {
         "prod": role in ROLES_PROD or role in ROLES_PROD_COMPTA_PLANNING,
@@ -569,6 +623,7 @@ def default_app_access_for_role(role: str) -> dict:
         "fabrication": role in ROLES_FABRICATION_APP,
         "settings": role in ROLES_SETTINGS,
         "planning_rh": role in ROLES_PLANNING_RH_VIEW,
+        "taches": role in ROLES_TACHES,
     }
 
 # Admin par défaut
@@ -854,6 +909,19 @@ def taches_priorites() -> list[dict]:
 
 def taches_types() -> list[dict]:
     return [dict(t) for t in TACHES_TYPES]
+
+
+# Services auxquels une tâche peut être rattachée. Un service EST un rôle : la
+# question « qui doit voir cette tâche » a la même réponse que « qui travaille
+# dessus ». Pas de référentiel parallèle à tenir à jour, et un rôle ajouté demain
+# devient automatiquement un service.
+TACHES_SERVICES_CODES = ASSIGNABLE_ROLES | {ROLE_SUPERADMIN}
+
+
+def taches_services() -> list[dict]:
+    """Services rattachables à une tâche (code + libellé), triés par libellé."""
+    return [{"code": r, "label": role_label(r)}
+            for r in sorted(TACHES_SERVICES_CODES, key=lambda x: role_label(x).casefold())]
 
 
 TACHES_STATUTS_CODES = {s["code"] for s in TACHES_STATUTS}

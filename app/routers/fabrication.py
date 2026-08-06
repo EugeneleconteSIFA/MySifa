@@ -2242,7 +2242,9 @@ def get_tracabilite_dossier(no_dossier: str, request: Request):
                    LIMIT 1
                )
                LEFT JOIN fournisseurs_fsc ff
-                 ON ff.nom = COALESCE(sr.fournisseur, fmu.fournisseur_manual)
+                 ON ff.id = sr.fournisseur_id
+                 OR (sr.fournisseur_id IS NULL
+                     AND ff.nom = COALESCE(sr.fournisseur, fmu.fournisseur_manual))
                WHERE fmu.no_dossier = ?
                ORDER BY fmu.scanned_at ASC""",
             (ref,),

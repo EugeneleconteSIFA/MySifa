@@ -243,7 +243,11 @@ select.filter-input option{background:#ffffff;color:#0f172a}
 .filters-apply-btn:active{transform:translateY(1px)}
 .filters-date-presets{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:10px 0 0;margin-top:12px;border-top:1px dashed var(--border)}
 .filters-date-presets-label{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-right:4px;padding-top:8px}
-.date-preset-chip{padding:5px 12px;font-size:11px;font-weight:600;border-radius:14px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:inherit;white-space:nowrap;transition:all 120ms;margin-top:6px}
+/* v2.7.4 : background:transparent laissait remonter le fond de page (--bg),
+   donc des puces bleues sur un fond bleu. var(--card) les detache : blanches
+   en mode clair, gris fonce en mode sombre. L'etat .active garde sa teinte
+   d'accent, c'est lui qui doit trancher avec les autres. */
+.date-preset-chip{padding:5px 12px;font-size:11px;font-weight:600;border-radius:14px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;font-family:inherit;white-space:nowrap;transition:all 120ms;margin-top:6px}
 .date-preset-chip:hover{border-color:var(--accent);color:var(--accent)}
 .date-preset-chip.active{font-weight:700;border-color:var(--accent);background:var(--accent-bg);color:var(--accent)}
 @media(max-width:560px){.filter-group{flex:1 1 100%}.filter-input,select.filter-input{min-width:0;width:100%}.filters-apply-btn{width:100%}}
@@ -1349,6 +1353,14 @@ body.light .op-card.is-done{background:linear-gradient(90deg,rgba(5,150,105,.06)
 .libre-inline-btn:hover{background:var(--bg);color:var(--accent);border-color:var(--border)}
 body[data-maint-role="operator"] .libre-inline-btn{display:none}
 body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
+/* v2.7.1 — Codes archivés (catalogue maintenance).
+   Un code archivé n'est ni actif ni supprimé : il est sorti du catalogue mais
+   son libellé continue de résoudre dans l'historique. La ligne est donc
+   estompée sans être barrée — barrer laisserait croire à une suppression. */
+.maint-arch-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;background:rgba(148,163,184,.18);color:var(--muted);margin-left:6px;vertical-align:middle}
+.maint-row-archived td{opacity:.55}
+.maint-row-archived:hover td{opacity:.85}
+.maint-arch-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:8px 12px;margin-bottom:10px;border:1px dashed var(--border);border-radius:8px;background:var(--card);color:var(--muted);font-size:12px}
 /* v180 : mini-modal Intervention libre + autocomplete */
 .libre-titre-wrap{position:relative}
 .libre-autocomplete-panel{position:absolute;top:100%;left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;max-height:220px;overflow-y:auto;z-index:100;margin-top:4px;box-shadow:0 6px 20px rgba(0,0,0,.18)}
@@ -1465,7 +1477,9 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .mys-keep-row{display:flex;gap:9px;align-items:flex-start;padding:9px 11px;border:1px solid var(--border);border-radius:9px;margin-bottom:6px;cursor:pointer;background:var(--card);text-transform:none;letter-spacing:normal;font-size:13px;color:var(--text);font-weight:400}
 .mys-keep-row:hover{border-color:var(--accent)}
 .mys-keep-row.is-grave{border-color:var(--danger)}
-.op-modal .mys-keep-row input[type=checkbox]{width:16px;min-width:16px;height:16px;flex:0 0 16px;margin:2px 0 0 0;padding:0;border-radius:4px;accent-color:var(--accent);box-shadow:none}
+/* Geometrie seule : l'apparence (boite blanche + coche accent) vient de la
+   regle commune « cases a cocher natives » plus bas dans cette feuille. */
+.op-modal .mys-keep-row input[type=checkbox]{width:16px;min-width:16px;height:16px;flex:0 0 16px;margin:2px 0 0 0;padding:0;box-shadow:none}
 .mys-keep-txt{flex:1;min-width:0}
 .mys-keep-date{display:block;font-weight:700;color:var(--text);font-size:13px;text-transform:none;letter-spacing:normal}
 .mys-keep-why{display:block;font-size:12px;color:var(--muted);margin-top:3px;text-transform:none;letter-spacing:normal;font-weight:400;line-height:1.4}
@@ -1630,6 +1644,36 @@ body.light .maint-codes-panel-embed th {background:#f1f5f9}
 .maint-codes-panel-embed .dot.no {background:var(--border)}
 .maint-codes-panel-embed .chk-edit {width:16px;height:16px;cursor:pointer;accent-color:var(--accent)}
 .maint-codes-panel-embed .cell-ov {font-size:9px;color:var(--accent);font-weight:700;letter-spacing:.02em;margin-left:6px;text-transform:uppercase}
+/* ── Cases a cocher natives du module ─────────────────────────────────────
+   v2.7.4 : elles utilisaient le rendu natif du navigateur, donc un carre bleu.
+   Sur le fond bleu clair du bloc « Piece d'usure », le contraste etait quasi
+   nul ; dans la modale de confirmation, accent-color donnait une boite pleine
+   d'une autre couleur encore. Rendu unique pour les deux : boite blanche,
+   bordure discrete, coche a la couleur d'accent du module.
+
+   Liste de selecteurs explicite, et NON un balayage de tous les
+   input[type=checkbox] : les interrupteurs a bascule (.toggle des alertes et
+   des modeles, .op-toggle-termine, .tmpl-recur-switch) et les chips .ta-chip
+   masquent leur input pour dessiner un rail ou une pastille a la place. Un
+   selecteur global reafficherait ces inputs par-dessus leur propre rendu.
+
+   Cette regle ne fait que l'apparence ; les dimensions restent posees la ou
+   elles l'etaient (inline pour le bloc piece d'usure, regle dediee pour la
+   modale). */
+#maint-usure-block input[type=checkbox],
+.op-modal .mys-keep-row input[type=checkbox]{-webkit-appearance:none;appearance:none;box-sizing:border-box;border:1.5px solid var(--border);border-radius:4px;background:#fff;display:inline-grid;place-content:center;cursor:pointer;transition:border-color .12s,box-shadow .12s}
+#maint-usure-block input[type=checkbox]::before,
+.op-modal .mys-keep-row input[type=checkbox]::before{content:"";width:10px;height:10px;transform:scale(0);transition:transform .12s ease-out;background:var(--accent);clip-path:polygon(14% 44%,0 60%,39% 100%,100% 18%,84% 0,39% 68%)}
+#maint-usure-block input[type=checkbox]:checked,
+.op-modal .mys-keep-row input[type=checkbox]:checked{border-color:var(--accent)}
+#maint-usure-block input[type=checkbox]:checked::before,
+.op-modal .mys-keep-row input[type=checkbox]:checked::before{transform:scale(1)}
+#maint-usure-block input[type=checkbox]:hover,
+.op-modal .mys-keep-row input[type=checkbox]:hover{border-color:var(--accent)}
+#maint-usure-block input[type=checkbox]:focus-visible,
+.op-modal .mys-keep-row input[type=checkbox]:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-bg)}
+#maint-usure-block input[type=checkbox]:disabled,
+.op-modal .mys-keep-row input[type=checkbox]:disabled{opacity:.5;cursor:not-allowed}
 .maint-codes-panel-embed .acc-matrix {width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
 .maint-codes-panel-embed .acc-matrix th {padding:8px 10px}
 .maint-codes-panel-embed .acc-matrix .acc-th-lbl {margin-right:6px}
@@ -1711,6 +1755,24 @@ body.light .maint-codes-panel-embed .op-filter:focus {box-shadow:0 0 0 3px rgba(
 .maint-codes-panel-embed .maint-doc-row-del:hover {border-color:var(--danger);background:rgba(248,113,113,.08)}
 .maint-codes-panel-embed .op-form-panel {margin-bottom:16px;padding:16px 18px;border:1px solid var(--border);border-radius:12px;background:var(--bg)}
 .maint-codes-panel-embed .op-form-panel h3 {margin:0 0 12px;font-size:13px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+/* v2.7.4 : les champs du formulaire de code etaient en background:var(--bg),
+   exactement la couleur du panneau qui les contient (.op-form-panel, ligne
+   au-dessus). Champs et fond se confondaient : en clair, des cases bleues sur
+   un fond bleu, seule la bordure les distinguait. On les pose sur var(--card),
+   la surface "au-dessus du fond" du theme : blanc en mode clair, gris fonce en
+   mode sombre. Le champ de filtre du tableau, lui, est deja sur une carte
+   blanche : il garde var(--bg), qui l'y detache correctement.
+   Le selecteur est porte par .op-form-panel pour ne toucher QUE ce
+   formulaire, pas les autres champs du panneau des codes. */
+.maint-codes-panel-embed .op-form-panel input,
+.maint-codes-panel-embed .op-form-panel select{background:var(--card)}
+.maint-codes-panel-embed .op-form-panel input:focus,
+.maint-codes-panel-embed .op-form-panel select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+/* Meme raison pour le bouton Annuler : il etait en background:transparent,
+   donc de la couleur du panneau. Scope sur .op-form-panel pour ne pas
+   toucher les autres boutons secondaires du panneau des codes, qui eux
+   sont deja poses sur la carte blanche. */
+.maint-codes-panel-embed .op-form-panel .btn-sec{background:var(--card)}
 .maint-codes-panel-embed .op-table-wrap {margin-top:4px}
 .maint-codes-panel-embed .op-table {font-size:12px}
 .maint-codes-panel-embed .op-table th {font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);padding:10px 12px;white-space:nowrap}
@@ -2282,9 +2344,9 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
               </select>
             </div>
             <div class="filter-group">
-              <label for="filt-operations-type">Type d'opération</label>
+              <label for="filt-operations-type">Nom de l'opération</label>
               <select id="filt-operations-type" class="filter-input">
-                <option value="">Tous les types</option>
+                <option value="">Toutes les opérations</option>
               </select>
             </div>
             <div class="filter-group">
@@ -2406,7 +2468,7 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
                 </select>
                 <label style="display:flex;align-items:center;gap:7px;font-size:12px;cursor:pointer;color:var(--text);white-space:nowrap">
                   <input type="checkbox" id="maint-usure-haspos" onchange="_maintOnUsureHasPosChange()" style="width:16px;height:16px;flex:0 0 auto;margin:0;padding:0;cursor:pointer">
-                  Position
+                  Position particulière
                 </label>
                 <span id="maint-usure-pos-wrap" style="display:none">
                   <input type="text" id="maint-usure-position" list="maint-usure-position-list" placeholder="ex. bande" maxlength="40" oninput="_maintOnUsurePositionInput()" style="width:120px;padding:6px 10px;font-size:12px">
@@ -6179,6 +6241,7 @@ function openOpsModal(editId){
   // Pré-remplit la date (mode édition = date saisie ; mode création = maintenant)
   const dateEl = document.getElementById('ops-date');
   if(dateEl){
+    _maintBorneAujourdhui(dateEl);  // v2.7.2 : pas de saisie dans le futur
     const pad = n => (n < 10 ? '0' + n : '' + n);
     const sourceDate = editing && editing.date_saisie ? new Date(editing.date_saisie) : new Date();
     if(!isNaN(sourceDate.getTime())){
@@ -6483,6 +6546,10 @@ function addOperation(e){
   if(!machine || !type){ showToast('Machine et type sont requis.', 'danger'); return; }
   // Date d'opération : input datetime-local. Si vide ou invalide, fallback maintenant.
   const dateInput = (document.getElementById('ops-date')?.value || '').trim();
+  if(_maintDateFuture(dateInput)){
+    showToast('Une opération déjà réalisée ne peut pas être datée dans le futur.', 'danger');
+    return;
+  }
   let dateSaisie = new Date().toISOString();
   if(dateInput){
     const parsed = new Date(dateInput);
@@ -7163,11 +7230,43 @@ function refreshOpsFiltersOptions(){
   const typeSel = document.getElementById('filt-operations-type');
   const opeSel  = document.getElementById('filt-operations-operateur');
   if(typeSel){
-    const cur = typeSel.value;
-    const types = OPS_TYPES_STATE.list.map(t => t.nom).filter(Boolean).sort((a,b) => a.localeCompare(b, 'fr'));
-    typeSel.innerHTML = '<option value="">Tous les types</option>' +
-      types.map(n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>').join('');
-    if(cur && types.includes(cur)) typeSel.value = cur;
+    const cur  = typeSel.value;
+    // v2.7.1 : le select "Nom de l'opération" liste les codes catalogue ET les
+    // interventions libres présentes dans l'historique. Le filtre "Type de
+    // saisie" restreint la liste au type sélectionné (codes / libres).
+    const kind = (document.getElementById('filt-operations-kind')?.value || 'all');
+    const sortFr = arr => arr.sort((a,b) => a.localeCompare(b, 'fr'));
+    // Union catalogue + historique, et non le seul catalogue : un code archivé
+    // (v2.7.1) sort de OPS_TYPES_STATE mais ses saisies restent dans le tableau.
+    // Sans cette union, elles seraient visibles sans être filtrables.
+    const codes  = sortFr(Array.from(new Set(
+      OPS_TYPES_STATE.list.map(t => t.nom).filter(Boolean).concat(
+        OPS_STATE.list.filter(o => !o._libre).map(o => o.type).filter(Boolean)
+      )
+    )));
+    const libres = sortFr(Array.from(new Set(
+      OPS_STATE.list.filter(o => o._libre).map(o => o.type).filter(Boolean)
+    )));
+    const opt = n => '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>';
+    const grp = (label, items) => items.length
+      ? '<optgroup label="' + escAttr(label) + '">' + items.map(opt).join('') + '</optgroup>'
+      : '';
+    let html = '<option value="">Toutes les opérations</option>';
+    let allowed = [];
+    if(kind === 'codes'){
+      html += codes.map(opt).join('');
+      allowed = codes;
+    } else if(kind === 'libres'){
+      html += libres.map(opt).join('');
+      allowed = libres;
+    } else {
+      html += grp('Codes catalogue', codes) + grp('Interventions libres', libres);
+      allowed = codes.concat(libres);
+    }
+    typeSel.innerHTML = html;
+    // Si la sélection courante n'existe plus dans le jeu restreint, on repasse
+    // sur "Toutes les opérations" plutôt que de laisser un filtre fantôme.
+    typeSel.value = (cur && allowed.includes(cur)) ? cur : '';
   }
   if(opeSel){
     const cur = opeSel.value;
@@ -10456,7 +10555,15 @@ if (typeof api !== 'function') {
     if (r.status === 401) { location.href = '/?next=/maintenance'; return null; }
     const ct = r.headers.get('content-type') || '';
     const j = ct.includes('json') ? await r.json().catch(() => ({})) : {};
-    if (!r.ok) throw new Error(j.detail || ('Erreur ' + r.status));
+    if (!r.ok) {
+      // v2.7.1 : cf. settings_page.py — un detail structuré ({message, ...})
+      // doit rester lisible dans le toast.
+      const d = j.detail;
+      const msg = (d && typeof d === 'object') ? (d.message || JSON.stringify(d)) : d;
+      const err = new Error(msg || ('Erreur ' + r.status));
+      err.detail = d; err.status = r.status;
+      throw err;
+    }
     return j;
   };
 }
@@ -10878,7 +10985,7 @@ if(typeof window.MySifaDock !== 'undefined' && typeof window.MySifaDock.bootPage
 </script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
-<script src="/static/chat_widget_v2.js?v=8"></script>
+<script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
 <script src="/static/mysifa_maint_form.js?v=2.7.4-usure"></script>
@@ -11046,6 +11153,37 @@ function _fmtDateISO(d){
   const p = n => String(n).padStart(2, '0');
   return d.getFullYear() + '-' + p(d.getMonth()+1) + '-' + p(d.getDate());
 }
+
+// v2.7.2 — Borne haute des champs de date de SAISIE.
+//
+// Ces trois modales consignent une intervention DEJA REALISEE. Une date
+// future n'y a aucun sens : elle produisait une ligne d'historique datee de
+// la semaine prochaine. Le serveur refuse desormais le cas, mais le sélecteur
+// natif doit le dire avant le clic — un champ qui accepte puis se fait
+// rejeter est une mauvaise manière de poser une règle.
+//
+// La borne est posee a l'ouverture et non dans le HTML : une page laissee
+// ouverte toute la nuit garderait sinon la borne de la veille.
+function _maintBorneAujourdhui(el){
+  if(!el) return;
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  el.max = (el.type === 'datetime-local')
+    ? _fmtDateISO(d) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes())
+    : _fmtDateISO(d);
+}
+
+// Verification avant envoi : `max` n'empeche pas une saisie au clavier.
+function _maintDateFuture(valeur){
+  if(!valeur) return false;
+  const d = new Date(valeur);
+  if(isNaN(d.getTime())) return false;
+  // Comparaison au jour pres pour un input date, a la minute pres sinon.
+  const now = new Date();
+  return (valeur.length <= 10)
+    ? _fmtDateISO(d) > _fmtDateISO(now)
+    : d.getTime() > now.getTime();
+}
 function _catClass(cat){ return 'op-cat-' + (cat || 'autre'); }
 // Helpers unifiés pour la typologie 3 catégories (v178, renommage labels v179).
 // Valeurs DB : 'controles', 'entretien', 'remplacements'.
@@ -11092,6 +11230,32 @@ function _opStatutView(statut, evOrDate){
   }
   return { cls: s, label: _statutLabel(s) };
 }
+
+// v2.7.1 — Point d'invalidation unique des listes derivees du catalogue.
+//
+// Trois caches vivent en parallele dans la page et sont alimentes par
+// /api/maintenance/codes : MAINT_STATE.codes (modal « Enregistrer une
+// operation »), OPS_TYPES_STATE (filtres + selection d'operation) et
+// CTRL_TYPES_STATE (controles ponctuels). Aucun n'etait purge apres une
+// suppression : le code disparaissait du catalogue mais restait proposé à la
+// saisie jusqu'au rechargement complet de la page.
+//
+// Tout ce qui modifie le catalogue (creation, modification, suppression,
+// archivage, reactivation) appelle ce point d'entree — y compris depuis
+// /settings et depuis le module partage, d'ou l'exposition sur window.
+window.maintOnCatalogueChanged = async function(){
+  MAINT_STATE.codes = [];  // cache de opFetchCodes(), purement local
+  if(typeof loadOpsTypes === 'function'){
+    try{ await loadOpsTypes(); }catch(e){}
+  }
+  if(typeof loadCtrlTypes === 'function'){
+    try{ await loadCtrlTypes(); }catch(e){}
+  }
+  // Re-rendus defensifs : chaque vue n'existe que si son onglet a ete ouvert.
+  try{ if(typeof renderOps === 'function') renderOps(); }catch(e){}
+  try{ if(typeof renderOpsTypes === 'function') renderOpsTypes(); }catch(e){}
+  try{ if(typeof renderCtrlTypes === 'function') renderCtrlTypes(); }catch(e){}
+};
 
 async function opFetchCodes(){
   if(MAINT_STATE.codes.length) return MAINT_STATE.codes;
@@ -11960,6 +12124,7 @@ async function adminOpenRegisterOpModal(){
   // Date par défaut = aujourd'hui
   try{
     const dateEl = document.getElementById('op-new-date');
+    _maintBorneAujourdhui(dateEl);  // v2.7.2 : pas de saisie dans le futur
     if(dateEl && !dateEl.value){ dateEl.value = _fmtDateISO(new Date()); }
   }catch(e){}
   document.getElementById('op-modal-new').classList.add('active');
@@ -12185,6 +12350,10 @@ async function opSubmitNew(){
     if(typeof showToast === 'function') showToast('Date et machine sont obligatoires.', 'danger');
     return;
   }
+  if(_maintDateFuture(dateVal)){
+    if(typeof showToast === 'function') showToast('Une opération déjà réalisée ne peut pas être datée dans le futur.', 'danger');
+    return;
+  }
   if((isLibreEdit || isCreationInhabituelle) && !titreLibre){
     if(typeof showToast === 'function') showToast('Titre obligatoire.', 'danger');
     return;
@@ -12348,6 +12517,10 @@ async function adminSubmitRegisterOp(){
 
   // Validation
   if(!dateVal){ if(typeof showToast === 'function') showToast('Date obligatoire.', 'danger'); return; }
+  if(_maintDateFuture(dateVal)){
+    if(typeof showToast === 'function') showToast('Une opération déjà réalisée ne peut pas être datée dans le futur.', 'danger');
+    return;
+  }
   if(machines.length === 0){ if(typeof showToast === 'function') showToast('Sélectionne au moins une machine.', 'danger'); return; }
   if(isCreationInhabituelle && !titreLibre){ if(typeof showToast === 'function') showToast('Titre obligatoire.', 'danger'); return; }
   if(!isCreationInhabituelle && !code){ if(typeof showToast === 'function') showToast('Code opération obligatoire.', 'danger'); return; }
@@ -12384,7 +12557,21 @@ async function adminSubmitRegisterOp(){
       const ev = data.event;
       const op = (ev.ops || [])[0];
       if(!ev || !op){ throw new Error('Créneau incomplet retourné par l\'API.'); }
-      await _patchOpTermine(ev.id, op.id, dureeMin, comment, _toDoneAtIso(dateVal));
+      // v2.7.2 : l'enregistrement est en deux temps — création du créneau, puis
+      // solde de l'opération. Si le second échoue, le premier laissait derrière
+      // lui un créneau « non planifié » jamais soldé, visible dans le planning
+      // et absent de l'historique. Chaque nouvelle tentative en ajoutait un.
+      // On annule donc la création avant de remonter l'erreur.
+      try{
+        await _patchOpTermine(ev.id, op.id, dureeMin, comment, _toDoneAtIso(dateVal));
+      }catch(errPatch){
+        try{
+          await fetch('/api/maintenance/events/' + ev.id, {
+            method:'DELETE', credentials:'include',
+          });
+        }catch(_){ /* nettoyage best-effort : l'erreur utile est celle du PATCH */ }
+        throw errPatch;
+      }
       created += 1;
     }
     const msg = created > 1
@@ -12420,6 +12607,7 @@ function libreOpenModal(){
   if(c) c.value = '';
   // v182 Lot 2 : date pre-remplie a aujourd'hui, modifiable par l'operateur
   if(dateEl && typeof _fmtDateISO === 'function') dateEl.value = _fmtDateISO(new Date());
+  if(typeof _maintBorneAujourdhui === 'function') _maintBorneAujourdhui(dateEl);  // v2.7.2
   const panel = document.getElementById('libre-autocomplete-panel');
   if(panel){ panel.innerHTML = ''; panel.style.display = 'none'; }
   // Pre-remplit machine avec la selection courante si disponible
@@ -12515,6 +12703,12 @@ async function libreSubmit(){
   if(!titre || !machine || !dateVal){
     if(typeof showToast === 'function') showToast('Date, titre et machine sont obligatoires.', 'danger');
     else alert('Date, titre et machine sont obligatoires.');
+    _libreReset();
+    return;
+  }
+  if(_maintDateFuture(dateVal)){
+    const _m = 'Une opération déjà réalisée ne peut pas être datée dans le futur.';
+    if(typeof showToast === 'function') showToast(_m, 'danger'); else alert(_m);
     _libreReset();
     return;
   }
@@ -14534,20 +14728,61 @@ async function saveMaintForm() {
   }
   closeMaintForm();
   await loadMaintCodes();
+  // v2.7.1 : un code cree ou renomme doit apparaitre immediatement dans la
+  // modal de saisie et les filtres — meme invalidation que la suppression.
+  if(typeof window.maintOnCatalogueChanged === 'function'){
+    try { await window.maintOnCatalogueChanged(); } catch(e) {}
+  }
   // Sync côté Alertes : une création/modif de code peut créer, renommer
   // ou supprimer l'alerte auto-liée (via le hook backend _sync_alert_for_code).
   if(typeof loadAlerts === 'function') await loadAlerts();
 }
 async function deleteMaintCode(code) {
-  if (!confirm('Supprimer le code ' + code + ' ?')) return;
+  // v2.7.1 : le serveur tranche entre suppression réelle et archivage selon
+  // les saisies rattachées. On ne l'anticipe pas ici (ça ferait un aller-retour
+  // de plus pour une information que la réponse porte déjà), mais le message
+  // final doit dire ce qui s'est réellement passé : un utilisateur à qui on
+  // annonce « supprimé » alors que le code est archivé le recréera.
+  const _lbl = (Array.isArray(window._maintItems)
+    ? (window._maintItems.find(x => String(x.code) === String(code)) || {}).label
+    : '') || '';
+  const _ask = (typeof window.maintConfirm === 'function')
+    ? window.maintConfirm({
+        title: 'Supprimer le code ' + code,
+        message: _lbl ? '« ' + _lbl + ' »' : 'Ce code',
+        detail: 'S\'il porte déjà des saisies ou des modèles de créneau, il sera '
+              + 'archivé plutôt que supprimé : l\'historique doit rester lisible. '
+              + 'Sinon, il est supprimé définitivement.',
+        confirmLabel: 'Supprimer',
+        danger: true,
+      })
+    : Promise.resolve(confirm('Supprimer le code ' + code + ' ?'));
+  if (!(await _ask)) return;
   try {
-    await api('/api/maintenance/codes/' + encodeURIComponent(code), { method: 'DELETE' });
-    toast('Code supprimé');
+    const res = await api('/api/maintenance/codes/' + encodeURIComponent(code),
+                          { method: 'DELETE' });
+    if (res && res.archived) {
+      const u = res.usages || {};
+      const bouts = [];
+      if (u.saisies) bouts.push(u.saisies + ' saisie(s)');
+      if (u.modeles) bouts.push(u.modeles + ' modèle(s) de créneau');
+      toast('Code ' + code + ' archivé — ' + (bouts.join(' et ') || 'usages existants')
+          + '. Il reste lisible dans l\'historique.');
+    } else {
+      toast('Code supprimé');
+    }
   } catch (e) {
     toast(e && e.message ? e.message : 'Erreur lors de la suppression', true);
     return;
   }
   await loadMaintCodes();
+  // v2.7.1 : le catalogue vient de changer. Sans cette invalidation, la modal
+  // « Enregistrer une opération » continuait de proposer le code supprimé
+  // jusqu'au prochain rechargement complet de la page — son cache
+  // (MAINT_STATE.codes) n'était jamais purgé.
+  if(typeof window.maintOnCatalogueChanged === 'function'){
+    try { await window.maintOnCatalogueChanged(); } catch(e) {}
+  }
   // La suppression d'un code déclenche la cascade DELETE de l'alerte liée
   // côté backend — on force le rechargement pour que la liste se mette à jour.
   if(typeof loadAlerts === 'function') await loadAlerts();

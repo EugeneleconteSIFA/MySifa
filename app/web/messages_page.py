@@ -685,7 +685,7 @@ body.sb-open .sidebar-overlay{display:block}
         <input type="file" id="chat-file-input" accept=".jpg,.jpeg,.png,.webp,.gif,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip">
         <button type="button" id="chat-action-expand" aria-label="Plus d'options" onclick="toggleChatActions()">+</button>
         <div id="chat-action-btns">
-          <button type="button" id="chat-attach" aria-label="Pièce jointe" title="Pièce jointe" onclick="document.getElementById('chat-file-input').click()">
+          <button type="button" id="chat-attach" aria-label="Pièce jointe" title="Pièce jointe — ou collez un fichier avec Cmd/Ctrl+V" onclick="document.getElementById('chat-file-input').click()">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
           </button>
           <button type="button" id="chat-gif-btn" aria-label="Envoyer un GIF" title="Envoyer un GIF" onclick="openGifPicker()">GIF</button>
@@ -719,7 +719,7 @@ body.sb-open .sidebar-overlay{display:block}
 <script src="/static/mysifa_chat_badge.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
-<script src="/static/chat_widget_v2.js?v=8"></script>
+<script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_humeur.js"></script>
 <script>
 window.__MYSIFA_UID__ = __USER_ID__;
@@ -2285,9 +2285,86 @@ document.getElementById('chat-input').addEventListener('input',function(){
   }
 });
 document.getElementById('chat-file-input').addEventListener('change',function(){
-  pendingChatFile=(this.files&&this.files[0])||null;
-  renderPendingChatFile();
+  const f=(this.files&&this.files[0])||null;
+  if(f){acceptChatFile(f);}else{pendingChatFile=null;renderPendingChatFile();}
   this.value='';
+});
+
+// ── Pièce jointe par collage (Cmd/Ctrl+V) ──────────────────────
+// Les contraintes doivent rester alignées sur app/routers/chat.py
+// (_ALLOWED_ATTACHMENT_EXT et _MAX_ATTACHMENT).
+const CHAT_ATTACH_EXT=['.jpg','.jpeg','.png','.webp','.gif','.pdf','.doc','.docx',
+                       '.xls','.xlsx','.ppt','.pptx','.txt','.csv','.zip'];
+const CHAT_ATTACH_MAX=10*1024*1024;
+
+function chatFileExt(name){
+  const s=String(name||'');
+  const i=s.lastIndexOf('.');
+  return i<0?'':s.slice(i).toLowerCase();
+}
+
+// Renomme une image collée sans nom exploitable (capture d'écran, image
+// copiée depuis une page web) en capture-AAAAMMJJ-HHMMSS.<ext>.
+function chatNameBlob(f){
+  const raw=f.name||'';
+  if(raw&&raw!=='image.png'&&raw!=='blob'&&chatFileExt(raw))return f;
+  const t=(f.type||'image/png').split(';')[0];
+  let ext='.'+(t.split('/')[1]||'png').split('+')[0];
+  if(ext==='.jpeg')ext='.jpg';
+  const d=new Date();
+  const p2=(n)=>String(n).padStart(2,'0');
+  const nom='capture-'+d.getFullYear()+p2(d.getMonth()+1)+p2(d.getDate())+'-'+
+            p2(d.getHours())+p2(d.getMinutes())+p2(d.getSeconds())+ext;
+  try{return new File([f],nom,{type:t});}catch(e){return f;}
+}
+
+// Valide et arme un fichier en pièce jointe. Renvoie true si accepté.
+function acceptChatFile(file){
+  if(!file)return false;
+  const f=chatNameBlob(file);
+  const ext=chatFileExt(f.name);
+  if(CHAT_ATTACH_EXT.indexOf(ext)<0){
+    showToast('Format refusé'+(ext?' ('+ext+')':'')+' — images, PDF, Office, txt, csv, zip.','danger');
+    return false;
+  }
+  if(f.size>CHAT_ATTACH_MAX){
+    showToast('Fichier trop volumineux — 10 Mo maximum.','danger');
+    return false;
+  }
+  pendingChatFile=f;
+  renderPendingChatFile();
+  return true;
+}
+
+document.addEventListener('paste',function(e){
+  if(!activeId)return;
+  const area=document.getElementById('chat-input-area');
+  if(!area||area.style.display==='none')return;
+  // Ne pas intercepter un collage dans un autre champ de la page.
+  const t=e.target;
+  if(t&&t.closest&&t.closest('input,textarea,[contenteditable="true"]')&&t.id!=='chat-input')return;
+  const dt=e.clipboardData;
+  if(!dt)return;
+  const types=dt.types?Array.prototype.slice.call(dt.types):[];
+  if(types.indexOf('Files')<0)return;  // collage de texte : comportement natif
+  const files=[];
+  if(dt.files&&dt.files.length){
+    for(let i=0;i<dt.files.length;i++)files.push(dt.files[i]);
+  }else if(dt.items&&dt.items.length){
+    for(let i=0;i<dt.items.length;i++){
+      if(dt.items[i].kind==='file'){
+        const f=dt.items[i].getAsFile();
+        if(f)files.push(f);
+      }
+    }
+  }
+  if(!files.length)return;
+  e.preventDefault();
+  if(files.length>1)showToast('Un seul fichier par message — le premier a été joint.','info');
+  if(acceptChatFile(files[0])){
+    const inp=document.getElementById('chat-input');
+    if(inp)inp.focus();
+  }
 });
 
 const ICO_MOON='<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';

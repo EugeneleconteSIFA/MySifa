@@ -64,5 +64,42 @@ check('drapeau remis à zéro au chargement', /loadMaterialForm\(id\)\s*\{\s*S\.
 check('drapeau remis à zéro après enregistrement',
   src.includes('showToast("Matière enregistrée.", "success");\n        S.matDirty = false;'), true);
 
+// ─── Le bandeau reste visible en permanence (position:fixed) ────────────────
+// En `sticky`, le bandeau ne colle qu'à l'intérieur de son conteneur ; en haut
+// de fiche il se laissait recouvrir. En `fixed`, il flotte — d'où l'espaceur
+// qui lui réserve sa hauteur, sinon il masque le haut de la page.
+const css = fs.readFileSync('static/pricing_app.css', 'utf8').replace(/\r\n/g, '\n');
+const regleBar = css.slice(css.indexOf('.pr-savebar{'), css.indexOf('}', css.indexOf('.pr-savebar{')));
+check('le bandeau est fixe', regleBar.includes('position:fixed'), true);
+check('il n\'est plus seulement collant', regleBar.includes('position:sticky'), false);
+check('son fond est opaque', regleBar.includes('background-color:var(--card)'), true);
+check('l\'espaceur a une hauteur de repli', /\.savebar-spacer\{height:\d+px\}/.test(css), true);
+// Le bandeau rouge de staging est fixe lui aussi : le `padding-top` posé sur le
+// body décale le flux, pas un élément fixe. Sans règle dédiée, le bandeau
+// d'actions passait par-dessus le rouge.
+check('le bandeau passe sous celui de staging',
+  css.includes('body.has-staging-bandeau .pr-savebar{top:44px}'), true);
+check('chaque bandeau a son espaceur',
+  (src.match(/class="savebar-spacer"/g) || []).length,
+  (src.match(/class="pr-savebar"/g) || []).length);
+
+// Sorti du flux, le bandeau recouvre ce qui est en tête de page : l'espaceur
+// doit donc précéder le titre, pas le suivre.
+for (const [nom, borneFin] of [
+  ['renderMaterialForm(', 'function syncMaterialFormFromDom('],
+  ['renderDeclinaisonForm(', 'async function saveDeclinaisonForm('],
+]) {
+  const zone = src.slice(src.indexOf('function ' + nom), src.indexOf(borneFin));
+  check(nom + ' : le bandeau précède le titre',
+    zone.indexOf('SaveBarHtml(') < zone.indexOf('${pageHead('), true);
+}
+
+// L'espaceur reprend la hauteur réelle du bandeau (il passe sur deux lignes en
+// écran étroit) : sans ça, la hauteur de repli suffirait rarement.
+check('la hauteur de l\'espaceur est resynchronisée',
+  src.includes('function syncSavebarSpacer()') && src.includes('syncSavebarSpacer();'), true);
+check('l\'observateur précédent est débranché',
+  /S\.savebarRO\.disconnect\(\)/.test(src), true);
+
 console.log(ko === 0 ? '\nTOUT EST VERT' : '\n' + ko + ' ECHEC(S)');
 process.exit(ko === 0 ? 0 : 1);

@@ -61,7 +61,13 @@ check('lecture seule : pas de bouton enregistrer',
 check('plus de bouton appairer', /data-ms-pair|data-ms-unpair/.test(src), false);
 check('plus de modale d\'appairage', src.includes('openAppairageModal'), false);
 check('le coût ouvre la fiche', src.includes('data-ms-open="${d.id}"'), true);
-check('colonne Coût €/m² dans le tableau', (src.match(/<th>Coût €\/m²<\/th>/g) || []).length, 2);
+// Deux en-têtes dans la vue par référence (tableau plein et tableau vide), un
+// troisième dans la vue liste. On compte par vue plutôt qu'en vrac : ajouter un
+// affichage ne doit pas faire échouer un test qui parle du dépliage.
+const vueRef = src.slice(src.indexOf('function mystockDetailHtml('), src.indexOf('const MS_VUE_CLE'));
+check('colonne Coût €/m² dans le tableau', (vueRef.match(/<th>Coût €\/m²<\/th>/g) || []).length, 2);
+check('la vue liste a aussi sa colonne coût',
+  src.slice(src.indexOf('function renderMystockList(')).includes('<th>Coût €/m²</th>'), true);
 
 // ─── Le formulaire envoie bien ce que l'API attend ──────────────────────────
 const save = extraire('saveDeclinaisonForm');

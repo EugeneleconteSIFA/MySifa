@@ -28,6 +28,7 @@ from config import (
     SUPERADMIN_EMAIL,
     default_app_access_for_role,
     APPS_CATALOG,
+    ROLE_LABELS,
     ACCESS_LEVELS,
     LEVEL_LABELS,
     LEVEL_ORDER,
@@ -84,18 +85,9 @@ def _traca_file_from_url(url: str) -> Optional[Path]:
 
 # ─── Labels rôles (partagés par les endpoints d'accès) ────────────
 
-_ROLE_LABELS = {
-    ROLE_DIRECTION: "Direction",
-    ROLE_ADMINISTRATION: "Administration",
-    ROLE_ADMINISTRATION_VENTES: "Administration des ventes",
-    ROLE_ADMINISTRATION_TECHNIQUE: "Administration technique",
-    ROLE_FABRICATION: "Fabrication",
-    ROLE_LOGISTIQUE: "Logistique",
-    ROLE_COMPTABILITE: "Comptabilité",
-    ROLE_EXPEDITION: "Expédition",
-    ROLE_COMMERCIAL: "Commercial",
-    ROLE_SUPERADMIN: "Super admin",
-}
+# Déplacé dans config.py (source de vérité) : le gestionnaire de tâches affiche
+# les mêmes libellés, deux dictionnaires auraient divergé au premier rôle ajouté.
+_ROLE_LABELS = ROLE_LABELS
 
 
 def _load_all_access(conn):
@@ -634,6 +626,443 @@ def list_fournisseurs_groupes(request: Request):
     return [{"groupe": r["groupe"], "n": r["n"]} for r in rows]
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Certifications fournisseurs — miroir de MyQualité › Ressources
+# fournisseurs. AUCUNE table nouvelle : on lit `qualite_ref_fiches`
+# (catalogue du référentiel RSE), `qualite_fournisseur_certificats`
+# (documents déposés) et `qualite_fournisseur_certificat_fiches` (le
+# tag document → certification). Le dépôt et l'édition restent dans
+# MyQualité : ici c'est lecture seule.
+#
+# Règle héritée de MyQualité et rendue visible dans la fiche : un
+# certificat portant `groupe_ref` couvre TOUTES les branches du groupe,
+# pas seulement celle qui l'a téléversé.
+# ═══════════════════════════════════════════════════════════════════════
+
+# Ordre de préséance quand deux documents couvrent la même certification :
+# le meilleur statut gagne. Identique à _COUV_RANG dans routers/qualite.py.
+_FOUR_CERT_RANG = {"valide": 0, "soon": 1, "nod": 2, "exp": 3}
+
+
+def _four_cert_statut(date_expiration):
+    """'valide' | 'soon' (<=60 j) | 'exp' | 'nod' (pas de date).
+
+    Mêmes seuils que _compute_cert_status (routers/qualite.py) — les deux
+    écrans doivent afficher le même statut pour le même document.
+    """
+    if not date_expiration:
+        return "nod"
+    try:
+        dexp = datetime.strptime(str(date_expiration)[:10], "%Y-%m-%d").date()
+    except Exception:
+        return "nod"
+    today = datetime.now().date()
+    if dexp < today:
+        return "exp"
+    return "soon" if (dexp - today).days <= 60 else "valide"
+
+
+def _four_load_referentiel(conn):
+    """Catalogue des certifications (qualite_ref_fiches).
+
+    Renvoie [] si la table n'existe pas encore — le module Qualité peut ne
+    pas être initialisé sur une base fraîche, et l'onglet Certifications
+    doit alors se dégrader proprement au lieu de casser la page entière.
+    """
+    try:
+        rows = conn.execute(
+            """SELECT id, slug, nom, acronyme, categorie, statut_sifa
+               FROM qualite_ref_fiches
+               ORDER BY categorie ASC, nom COLLATE NOCASE ASC"""
+        ).fetchall()
+    except Exception:
+        return []
+    return [dict(r) for r in rows]
+
+
+def _four_load_couverture(conn):
+    """Couverture par fournisseur : {fournisseur_id: {fiche_id: entry}}.
+
+    entry = {statut, niveau ('branche'|'groupe'), titre, date_expiration,
+             certificat_id, filename}
+    """
+    try:
+        certs = conn.execute(
+            """SELECT id, fournisseur_id, titre, original_name,
+                      date_emission, date_expiration, groupe_ref
+               FROM qualite_fournisseur_certificats"""
+        ).fetchall()
+        liens = conn.execute(
+            "SELECT certificat_id, fiche_id FROM qualite_fournisseur_certificat_fiches"
+        ).fetchall()
+    except Exception:
+        return {}, {}
+
+    meta = {c["id"]: dict(c) for c in certs}
+
+    # groupe (minuscule) -> [fournisseur_id...] : cible d'un certificat groupe
+    par_groupe = {}
+    for r in conn.execute(
+        """SELECT id, groupe FROM fournisseurs_fsc
+           WHERE groupe IS NOT NULL AND TRIM(groupe) <> ''"""
+    ).fetchall():
+        par_groupe.setdefault(r["groupe"].strip().lower(), []).append(r["id"])
+
+    couv = {}
+
+    def _pose(fid, fiche_id, entry):
+        if fid is None:
+            return
+        d = couv.setdefault(fid, {})
+        cur = d.get(fiche_id)
+        if cur is None or _FOUR_CERT_RANG.get(entry["statut"], 9) < _FOUR_CERT_RANG.get(cur["statut"], 9):
+            d[fiche_id] = entry
+
+    for lk in liens:
+        m = meta.get(lk["certificat_id"])
+        if not m:
+            continue
+        gref = (m.get("groupe_ref") or "").strip().lower()
+        cibles = par_groupe.get(gref) if gref else None
+        entry_base = {
+            "statut": _four_cert_statut(m.get("date_expiration")),
+            "niveau": "groupe" if cibles else "branche",
+            "titre": m.get("titre") or m.get("original_name") or "",
+            "date_emission": m.get("date_emission"),
+            "date_expiration": m.get("date_expiration"),
+            "certificat_id": m["id"],
+            "filename": m.get("original_name") or "",
+            "groupe_ref": m.get("groupe_ref") or None,
+        }
+        for fid in (cibles or [m["fournisseur_id"]]):
+            _pose(fid, lk["fiche_id"], dict(entry_base))
+
+    return couv, meta
+
+
+def _four_stats_couverture(entries, total_referentiel):
+    s = {"couvert": 0, "valide": 0, "soon": 0, "exp": 0, "nod": 0,
+         "total": total_referentiel}
+    for e in (entries or {}).values():
+        s["couvert"] += 1
+        s[e["statut"]] = s.get(e["statut"], 0) + 1
+    return s
+
+
+# ─── Date d'expiration FSC : le document déposé fait foi ─────────────
+#
+# La date vivait à deux endroits : `fournisseurs_fsc.fsc_date_expiration`
+# (saisie à la main dans les Paramètres) et le certificat PDF déposé dans
+# MyQualité, qui porte sa propre `date_expiration`. Deux saisies, deux
+# chances de diverger — et c'est arrivé (badge « échéance inconnue » alors
+# que le certificat déposé était valide jusqu'en 2027).
+#
+# Règle retenue : le document fait foi. La colonne reste écrite parce que
+# tout l'aval la lit (contrôle au BL, registre FSC), mais elle devient
+# DÉRIVÉE — resynchronisée depuis le document, plus saisie.
+
+def _four_fiche_fsc_id(ref):
+    """id de la fiche « FSC » dans le référentiel RSE, ou None."""
+    for r in ref:
+        if (r.get("slug") or "").strip().lower() == "fsc":
+            return r["id"]
+    for r in ref:
+        if (r.get("acronyme") or "").strip().upper() == "FSC":
+            return r["id"]
+    return None
+
+
+def _four_fsc_doc(entries, fiche_fsc_id):
+    """Entrée de couverture correspondant au certificat FSC, ou None."""
+    if not fiche_fsc_id:
+        return None
+    return (entries or {}).get(fiche_fsc_id)
+
+
+def _four_sync_fsc_dates(conn, ref, couv, only_id=None):
+    """Aligne fsc_date_expiration sur la date du certificat FSC déposé.
+
+    N'écrit que s'il y a une différence, et jamais dans l'autre sens : un
+    fournisseur sans certificat déposé garde sa date saisie à la main.
+    Renvoie la liste des changements pour le journal d'audit.
+    """
+    fiche_id = _four_fiche_fsc_id(ref)
+    if not fiche_id:
+        return []
+    q = "SELECT id, nom, fsc_date_expiration, has_fsc FROM fournisseurs_fsc"
+    params = ()
+    if only_id is not None:
+        q += " WHERE id=?"
+        params = (only_id,)
+    changes = []
+    for row in conn.execute(q, params).fetchall():
+        doc = _four_fsc_doc(couv.get(row["id"]), fiche_id)
+        if not doc or not doc.get("date_expiration"):
+            continue
+        avant = row["fsc_date_expiration"]
+        apres = str(doc["date_expiration"])[:10]
+        if avant == apres:
+            continue
+        conn.execute(
+            "UPDATE fournisseurs_fsc SET fsc_date_expiration=? WHERE id=?",
+            (apres, row["id"]),
+        )
+        changes.append({"id": row["id"], "nom": row["nom"],
+                        "avant": avant, "apres": apres,
+                        "certificat_id": doc.get("certificat_id"),
+                        "niveau": doc.get("niveau")})
+    if changes:
+        conn.commit()
+    return changes
+
+
+@router.post("/api/fournisseurs/sync-fsc-certificats")
+def sync_fsc_certificats(request: Request):
+    """Resynchronise les dates d'expiration FSC depuis les certificats déposés.
+
+    Appelé silencieusement à l'ouverture de l'onglet Fournisseurs, et
+    disponible en bouton pour voir le rapport. Idempotent.
+    """
+    user = require_settings(request)
+    from database import get_db
+    with get_db() as conn:
+        ref = _four_load_referentiel(conn)
+        couv, _meta = _four_load_couverture(conn)
+        changes = _four_sync_fsc_dates(conn, ref, couv)
+    if changes:
+        log_action(
+            user=user,
+            action="UPDATE",
+            module="settings",
+            objet=f"Sync FSC depuis certificats ({len(changes)})",
+            detail={"changes": changes},
+            ip=request.client.host if request.client else None,
+        )
+    return {"success": True, "updated": changes, "count": len(changes)}
+
+
+@router.get("/api/fournisseurs/referentiel-certifications")
+def list_referentiel_certifications(request: Request):
+    """Catalogue du référentiel RSE + couverture agrégée de chaque fournisseur.
+
+    Un seul appel pour peindre la colonne « Certifications » de la liste :
+    32 fournisseurs × N certifications en une requête plutôt qu'un aller-retour
+    par ligne.
+
+    Déclaré avant les routes paramétrées `/api/fournisseurs/{...}` pour ne pas
+    être capté par un segment variable.
+    """
+    require_settings(request)
+    from database import get_db
+    with get_db() as conn:
+        ref = _four_load_referentiel(conn)
+        couv, _meta = _four_load_couverture(conn)
+        ids = [r["id"] for r in conn.execute("SELECT id FROM fournisseurs_fsc").fetchall()]
+
+    fiche_fsc = _four_fiche_fsc_id(ref)
+    by_id = {r["id"]: r for r in ref}
+    out = {}
+    for fid in ids:
+        entries = couv.get(fid, {})
+        st = _four_stats_couverture(entries, len(ref))
+        doc_fsc = _four_fsc_doc(entries, fiche_fsc)
+        # Les 3 acronymes les plus « sains » d'abord : c'est ce que la
+        # cellule de liste affiche avant le « +N ».
+        top = sorted(
+            (
+                {
+                    "fiche_id": k,
+                    "acronyme": (by_id.get(k, {}).get("acronyme")
+                                 or by_id.get(k, {}).get("nom") or "?"),
+                    "statut": v["statut"],
+                    "niveau": v["niveau"],
+                }
+                for k, v in entries.items() if k in by_id
+            ),
+            key=lambda x: (_FOUR_CERT_RANG.get(x["statut"], 9), x["acronyme"]),
+        )
+        out[str(fid)] = {"stats": st, "top": top, "fsc_doc": doc_fsc}
+    return {"referentiel": ref, "couverture": out, "fiche_fsc_id": fiche_fsc}
+
+
+@router.get("/api/fournisseurs/{fournisseur_id}/certifications")
+def fournisseur_certifications(fournisseur_id: int, request: Request):
+    """Détail Certifications d'un fournisseur : catalogue + couverture + documents.
+
+    `documents` contient ses propres certificats ET ceux déposés au niveau de
+    son groupe : ces derniers portent niveau='groupe' et ne sont pas stockés
+    sur lui — ils s'affichent parce qu'ils le couvrent.
+    """
+    require_settings(request)
+    from database import get_db
+    with get_db() as conn:
+        four = conn.execute(
+            "SELECT id, nom, groupe, branche FROM fournisseurs_fsc WHERE id=?",
+            (fournisseur_id,),
+        ).fetchone()
+        if not four:
+            raise HTTPException(status_code=404, detail="Fournisseur non trouvé")
+        ref = _four_load_referentiel(conn)
+        couv, meta = _four_load_couverture(conn)
+        try:
+            liens = conn.execute(
+                """SELECT l.certificat_id, l.fiche_id, f.nom, f.acronyme
+                   FROM qualite_fournisseur_certificat_fiches l
+                   JOIN qualite_ref_fiches f ON f.id = l.fiche_id"""
+            ).fetchall()
+        except Exception:
+            liens = []
+
+    groupe = (four["groupe"] or "").strip().lower()
+    fiches_par_cert = {}
+    for lk in liens:
+        fiches_par_cert.setdefault(lk["certificat_id"], []).append(
+            {"fiche_id": lk["fiche_id"], "nom": lk["nom"], "acronyme": lk["acronyme"]}
+        )
+
+    documents = []
+    for cid, m in meta.items():
+        gref = (m.get("groupe_ref") or "").strip().lower()
+        est_groupe = bool(gref)
+        # Retenu si c'est un document de ce fournisseur, ou un document
+        # groupe portant le groupe auquel il est rattaché.
+        if not (m["fournisseur_id"] == fournisseur_id or (est_groupe and gref and gref == groupe)):
+            continue
+        documents.append({
+            "id": cid,
+            "titre": m.get("titre") or m.get("original_name") or "",
+            "filename": m.get("original_name") or "",
+            "date_emission": m.get("date_emission"),
+            "date_expiration": m.get("date_expiration"),
+            "statut": _four_cert_statut(m.get("date_expiration")),
+            "niveau": "groupe" if est_groupe else "branche",
+            "fiches": fiches_par_cert.get(cid, []),
+        })
+    documents.sort(key=lambda d: (d["niveau"] != "branche", d["titre"].lower()))
+
+    entries = couv.get(fournisseur_id, {})
+    fiche_fsc = _four_fiche_fsc_id(ref)
+    return {
+        "fournisseur": dict(four),
+        "referentiel": ref,
+        "couverture": {str(k): v for k, v in entries.items()},
+        "documents": documents,
+        "stats": _four_stats_couverture(entries, len(ref)),
+        # Le certificat qui porte la date d'expiration FSC. Quand il existe,
+        # le champ date des Paramètres passe en lecture seule : c'est lui la
+        # source, la colonne n'en est que le reflet.
+        "fiche_fsc_id": fiche_fsc,
+        "fsc_doc": _four_fsc_doc(entries, fiche_fsc),
+    }
+
+
+@router.get("/api/fournisseurs/groupe/{groupe}/fiche")
+def fournisseur_groupe_fiche(groupe: str, request: Request):
+    """Fiche consolidée d'un groupe : branches, agrégats et documents groupe.
+
+    Le groupe n'est pas une ligne en base — c'est la colonne `groupe` de
+    fournisseurs_fsc. Cette route l'expose comme une entité pour que la fiche
+    groupe existe côté UI sans migration.
+    """
+    require_settings(request)
+    from database import get_db
+    import json
+    g = (groupe or "").strip()
+    if not g:
+        raise HTTPException(status_code=400, detail="Groupe requis")
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, nom, groupe, branche, licence, certificat, has_fsc,
+                      fsc_date_expiration, categories, ville, pays, actif,
+                      traca_exemple_code, traca_photo_url, traca_explication,
+                      (SELECT COUNT(*) FROM fournisseur_contacts fc
+                       WHERE fc.fournisseur_id = fournisseurs_fsc.id AND fc.actif=1) AS nb_contacts
+               FROM fournisseurs_fsc
+               WHERE LOWER(TRIM(groupe)) = LOWER(?)
+               ORDER BY COALESCE(NULLIF(TRIM(branche),''), nom) COLLATE NOCASE ASC""",
+            (g,),
+        ).fetchall()
+        if not rows:
+            raise HTTPException(status_code=404, detail="Groupe non trouvé")
+        ref = _four_load_referentiel(conn)
+        couv, meta = _four_load_couverture(conn)
+        try:
+            liens = conn.execute(
+                """SELECT l.certificat_id, l.fiche_id, f.nom, f.acronyme
+                   FROM qualite_fournisseur_certificat_fiches l
+                   JOIN qualite_ref_fiches f ON f.id = l.fiche_id"""
+            ).fetchall()
+        except Exception:
+            liens = []
+        # Réceptions : même source que GET /{id}/receptions — stock_receptions,
+        # rapproché par NOM de fournisseur (pas par id : la table n'a pas de FK).
+        nb_rec = {}
+        for r in rows:
+            try:
+                nb_rec[r["id"]] = conn.execute(
+                    "SELECT COUNT(*) AS n FROM stock_receptions WHERE fournisseur = ?",
+                    (r["nom"],),
+                ).fetchone()["n"]
+            except Exception:
+                nb_rec[r["id"]] = 0
+
+    fiches_par_cert = {}
+    for lk in liens:
+        fiches_par_cert.setdefault(lk["certificat_id"], []).append(
+            {"fiche_id": lk["fiche_id"], "nom": lk["nom"], "acronyme": lk["acronyme"]}
+        )
+
+    branches = []
+    union = {}
+    for r in rows:
+        d = dict(r)
+        try:
+            d["categories"] = json.loads(d["categories"]) if d.get("categories") else []
+        except (json.JSONDecodeError, TypeError):
+            d["categories"] = []
+        entries = couv.get(r["id"], {})
+        d["couverture"] = {str(k): v for k, v in entries.items()}
+        d["stats"] = _four_stats_couverture(entries, len(ref))
+        d["nb_receptions"] = nb_rec.get(r["id"], 0)
+        branches.append(d)
+        for k, v in entries.items():
+            cur = union.get(k)
+            if cur is None or _FOUR_CERT_RANG.get(v["statut"], 9) < _FOUR_CERT_RANG.get(cur["statut"], 9):
+                union[k] = v
+
+    gl = g.lower()
+    documents_groupe = []
+    for cid, m in meta.items():
+        if (m.get("groupe_ref") or "").strip().lower() != gl:
+            continue
+        documents_groupe.append({
+            "id": cid,
+            "titre": m.get("titre") or m.get("original_name") or "",
+            "filename": m.get("original_name") or "",
+            "date_emission": m.get("date_emission"),
+            "date_expiration": m.get("date_expiration"),
+            "statut": _four_cert_statut(m.get("date_expiration")),
+            "fiches": fiches_par_cert.get(cid, []),
+        })
+    documents_groupe.sort(key=lambda d: d["titre"].lower())
+
+    return {
+        "groupe": rows[0]["groupe"],
+        "branches": branches,
+        "referentiel": ref,
+        "documents_groupe": documents_groupe,
+        "union": {str(k): v for k, v in union.items()},
+        "stats": {
+            "nb_branches": len(branches),
+            "nb_actives": sum(1 for b in branches if (b.get("actif") is None or b["actif"])),
+            "nb_receptions": sum(b["nb_receptions"] for b in branches),
+            "nb_contacts": sum(int(b.get("nb_contacts") or 0) for b in branches),
+            "couvert": len(union),
+            "total": len(ref),
+        },
+    }
+
+
 def _parse_fournisseur_tags(raw):
     """Parse tags depuis body : accepte list JSON ou string séparée par virgules."""
     import json as _json
@@ -823,8 +1252,14 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
         if not has_fsc:
             licence = None
             certificat = None
-        traca_explication = (body.get("traca_explication") or "").strip() or None
-        traca_exemple_code = (body.get("traca_exemple_code") or "").strip() or None
+        # Traçabilité : même garde-fou que les autres champs. Ces deux colonnes
+        # étaient écrasées à NULL dès qu'un enregistrement partiel ne les
+        # portait pas — la fiche v2 édite bloc par bloc, donc chaque save
+        # aurait effacé le guide opérateur du fournisseur.
+        traca_explication = _pick("traca_explication")
+        traca_exemple_code = _pick("traca_exemple_code")
+        if isinstance(traca_explication, str): traca_explication = traca_explication.strip() or None
+        if isinstance(traca_exemple_code, str): traca_exemple_code = traca_exemple_code.strip() or None
         groupe = _pick("groupe")
         branche = _pick("branche")
         if isinstance(groupe, str): groupe = groupe.strip() or None
@@ -869,6 +1304,21 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
             fsc_date_expiration = _parse_fsc_date_expiration(body.get("fsc_date_expiration"))
         else:
             fsc_date_expiration = ex["fsc_date_expiration"] if "fsc_date_expiration" in ex_cols else None
+
+        # Le certificat déposé dans MyQualité fait foi. Si ce fournisseur en a
+        # un, sa date écrase ce que le body propose : sans ce garde-fou, un
+        # onglet resté ouvert (ou un appel direct à l'API) pourrait réintroduire
+        # la divergence que la synchro vient de corriger.
+        try:
+            ref_rse = _four_load_referentiel(conn)
+            fiche_fsc = _four_fiche_fsc_id(ref_rse)
+            if fiche_fsc:
+                couv_all, _m = _four_load_couverture(conn)
+                doc_fsc = _four_fsc_doc(couv_all.get(fournisseur_id), fiche_fsc)
+                if doc_fsc and doc_fsc.get("date_expiration"):
+                    fsc_date_expiration = str(doc_fsc["date_expiration"])[:10]
+        except Exception:
+            pass  # MyQualité absent : on garde la saisie manuelle
         # Un fournisseur non certifié ne peut pas porter de date d'expiration
         # de certificat : la garder laisserait une donnée orpheline que le
         # contrôle de validité interpréterait de travers.
@@ -2636,6 +3086,12 @@ def _maint_row_to_dict(r) -> dict:
         usure_position = r["usure_position"] or ""
     except (IndexError, KeyError):
         usure_position = ""
+    # v2.7.1 : archived_at. Un code encore utilise n'est plus supprime mais
+    # archive — il sort du catalogue sans orpheliner l'historique.
+    try:
+        archived_v = r["archived_at"] or None
+    except (IndexError, KeyError):
+        archived_v = None
     return {
         "code": r["code"],
         "label": r["label"],
@@ -2648,8 +3104,38 @@ def _maint_row_to_dict(r) -> dict:
         "usage_count": usage_v,
         "usure_piece_id": usure_piece_id,
         "usure_position": usure_position if usure_piece_id is not None else "",
+        "archived_at": archived_v,
+        "archived": bool(archived_v),
         "created_at": r["created_at"],
         "updated_at": r["updated_at"],
+    }
+
+
+def _maint_code_usages(conn, code: str) -> dict:
+    """Compte ce qui serait orpheline par la suppression du code.
+
+    Le total conditionne le comportement de DELETE : zero usage = suppression
+    reelle, sinon archivage. On regarde les saisies ET les modeles de creneau :
+    supprimer un code encore reference par un modele casserait la planification
+    aussi surement qu'il casserait l'historique.
+    """
+    def _count(sql: str) -> int:
+        try:
+            row = conn.execute(sql, (code,)).fetchone()
+            return int(row["n"] or 0) if row else 0
+        except Exception:
+            return 0  # table absente sur une DB pas encore migree
+    saisies = _count(
+        "SELECT COUNT(*) AS n FROM maintenance_event_ops WHERE code = ?")
+    modeles = _count(
+        "SELECT COUNT(*) AS n FROM maintenance_template_ops WHERE code = ?")
+    docs = _count(
+        "SELECT COUNT(*) AS n FROM maintenance_docs WHERE code = ?")
+    return {
+        "saisies": saisies,
+        "modeles": modeles,
+        "docs": docs,
+        "total": saisies + modeles,
     }
 
 
@@ -3339,10 +3825,15 @@ def _sync_alert_for_code(conn, code: str, label: str, categorie: str, periodique
 
 
 @router.get("/api/maintenance/codes")
-def maintenance_codes_list(request: Request, include_libres: int = 0):
+def maintenance_codes_list(request: Request, include_libres: int = 0,
+                           include_archived: int = 0):
     """Liste des codes maintenance du catalogue standard.
     Depuis v180, les codes libres (libre=1) sont exclus par defaut. Pour les
     inclure (ex. panneau admin dedié), passer include_libres=1.
+    Depuis v2.7.1, les codes archives sont exclus par defaut : ils ne doivent
+    plus etre proposes a la saisie, mais leur ligne reste en base pour que
+    l'historique continue de resoudre leur libelle. include_archived=1 les
+    ramene (panneau catalogue, filtre « archives »).
     """
     get_current_user(request)
     from database import get_db
@@ -3359,9 +3850,14 @@ def maintenance_codes_list(request: Request, include_libres: int = 0):
         # v229 : rattachement pièce d'usure (absent des DB pas encore migrées).
         if "usure_piece_id" in cols: sel_extra += ",usure_piece_id"
         if "usure_position" in cols: sel_extra += ",usure_position"
-        where = ""
+        has_archived = "archived_at" in cols
+        if has_archived: sel_extra += ",archived_at"
+        conds = []
         if has_libre and not include_libres:
-            where = "WHERE libre = 0"
+            conds.append("libre = 0")
+        if has_archived and not include_archived:
+            conds.append("archived_at IS NULL")
+        where = ("WHERE " + " AND ".join(conds)) if conds else ""
         rows = conn.execute(
             f"""SELECT code,label,niveau,categorie,periodique,intervalle,metrage_ref,
                       created_at,updated_at{sel_extra}
@@ -3397,10 +3893,35 @@ async def maintenance_codes_create(request: Request):
     from database import get_db
     now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
     with get_db() as conn:
+        _ecols = {c["name"] for c in conn.execute(
+            "PRAGMA table_info(maintenance_codes)").fetchall()}
+        _arch_sel = ",archived_at" if "archived_at" in _ecols else ""
         existing = conn.execute(
-            "SELECT 1 FROM maintenance_codes WHERE code=? LIMIT 1", (data["code"],)
+            f"SELECT label{_arch_sel} FROM maintenance_codes WHERE code=? LIMIT 1",
+            (data["code"],),
         ).fetchone()
         if existing:
+            # v2.7.1 : un identifiant archive n'est pas « libre ». Le laisser
+            # se recreer, c'est exactement le bug qu'on corrige : les saisies
+            # de l'ancien code se rattachaient au nouveau libelle et
+            # l'historique affichait une intervention qui n'a jamais eu lieu.
+            _arch = None
+            if _arch_sel:
+                try:
+                    _arch = existing["archived_at"]
+                except (IndexError, KeyError):
+                    _arch = None
+            if _arch:
+                raise HTTPException(409, {
+                    "message": (
+                        f"Le code {data['code']} a ete archive (il porte encore "
+                        f"des saisies). Reactive-le au lieu de le recreer, ou "
+                        f"choisis un autre identifiant."
+                    ),
+                    "archived": True,
+                    "code": data["code"],
+                    "label": existing["label"],
+                })
             raise HTTPException(409, f"Le code {data['code']} existe deja.")
         _validate_usure_link(conn, data)
         _cols = {c["name"] for c in conn.execute(
@@ -3465,20 +3986,94 @@ async def maintenance_codes_update(code: str, request: Request):
 
 @router.delete("/api/maintenance/codes/{code}")
 def maintenance_codes_delete(code: str, request: Request):
+    """Supprime un code — ou l'archive s'il porte deja des saisies.
+
+    Avant v2.7.1, cette route faisait un DELETE sec sur maintenance_codes.
+    Les saisies de maintenance_event_ops y survivaient (la cle etrangere est
+    inerte : get_db() n'active pas PRAGMA foreign_keys=ON), et l'historique,
+    qui resout le libelle a la volee par LEFT JOIN sur le code, les affichait
+    avec le code brut. Recreer le meme identifiant les rattachait au nouveau
+    libelle : l'historique racontait alors une intervention qui n'avait jamais
+    eu lieu.
+
+    Regle desormais : zero usage = suppression reelle (identifiant
+    immediatement reutilisable) ; au moins une saisie ou un modele = archivage.
+    Le code sort du catalogue, son libelle continue de resoudre dans
+    l'historique, et l'identifiant reste pris tant qu'il n'est pas reactive.
+    C'est le meme garde-fou que celui deja en place sur les interventions
+    libres (maintenance_libres_delete).
+    """
     user = _require_maint_writer(request)
     from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
     with get_db() as conn:
-        cur = conn.execute("DELETE FROM maintenance_codes WHERE code=?", (code,))
-        if cur.rowcount == 0:
-            conn.rollback()
+        row = conn.execute(
+            "SELECT label FROM maintenance_codes WHERE code=? LIMIT 1", (code,)
+        ).fetchone()
+        if not row:
             raise HTTPException(404, f"Code {code} introuvable.")
+        usages = _maint_code_usages(conn, code)
+        has_archived = "archived_at" in {
+            c["name"] for c in conn.execute(
+                "PRAGMA table_info(maintenance_codes)").fetchall()}
+        if usages["total"] > 0 and has_archived:
+            conn.execute(
+                "UPDATE maintenance_codes SET archived_at=?, updated_at=? WHERE code=?",
+                (now, now, code),
+            )
+            conn.commit()
+            log_action(user=user, action="ARCHIVE", module="maintenance_codes",
+                       objet=code,
+                       detail=f"{row['label']} — {usages['saisies']} saisie(s), "
+                              f"{usages['modeles']} modele(s)")
+            return {"ok": True, "archived": True, "code": code,
+                    "label": row["label"], "usages": usages}
+        # Aucun usage : suppression reelle. On purge au passage les documents
+        # attaches, dont le ON DELETE CASCADE declare est tout aussi inerte
+        # que la cle etrangere des saisies.
+        try:
+            conn.execute("DELETE FROM maintenance_docs WHERE code=?", (code,))
+        except Exception:
+            pass  # table absente sur une DB pas encore migree
+        conn.execute("DELETE FROM maintenance_codes WHERE code=?", (code,))
         # v2.2.15 — Plus de cascade sur les alertes (le système auto a été
         # retiré). Les alertes classiques (manuelles) ne sont jamais liées
         # à un code, donc rien à supprimer côté maintenance_alerts.
         conn.commit()
     log_action(user=user, action="DELETE", module="maintenance_codes",
                objet=code, detail="")
-    return {"ok": True}
+    return {"ok": True, "archived": False, "code": code}
+
+
+@router.post("/api/maintenance/codes/{code}/restore")
+def maintenance_codes_restore(code: str, request: Request):
+    """Reactive un code archive : il repasse dans le catalogue avec son
+    historique. C'est la sortie de secours quand l'archivage a ete fait par
+    erreur, ou quand l'operation redevient d'actualite."""
+    user = _require_maint_writer(request)
+    from database import get_db
+    now = datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as conn:
+        cols = {c["name"] for c in conn.execute(
+            "PRAGMA table_info(maintenance_codes)").fetchall()}
+        if "archived_at" not in cols:
+            raise HTTPException(400, "Base pas encore migree (archived_at absent).")
+        row = conn.execute(
+            "SELECT label, archived_at FROM maintenance_codes WHERE code=? LIMIT 1",
+            (code,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, f"Code {code} introuvable.")
+        if not row["archived_at"]:
+            return {"ok": True, "code": code, "already_active": True}
+        conn.execute(
+            "UPDATE maintenance_codes SET archived_at=NULL, updated_at=? WHERE code=?",
+            (now, code),
+        )
+        conn.commit()
+    log_action(user=user, action="RESTORE", module="maintenance_codes",
+               objet=code, detail=row["label"])
+    return {"ok": True, "code": code, "label": row["label"]}
 
 
 class _MaintBulkImport(BaseModel):

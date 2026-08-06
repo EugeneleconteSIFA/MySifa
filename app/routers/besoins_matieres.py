@@ -58,7 +58,11 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 
 from app.core.database import get_db
-from app.routers.stock import require_stock_matieres_admin, stock_config_float
+from app.routers.stock import (
+    require_stock_matieres_admin,
+    require_stock_write,
+    stock_config_float,
+)
 
 router = APIRouter(tags=["besoins-matieres"])
 
@@ -171,7 +175,10 @@ _SQL_PE = """
            -- priment sur toute reconstitution a partir de la fiche technique.
            oi.nb_mandrins    AS of_nb_mandrins,
            oi.nb_cartons     AS of_nb_cartons,
-           oi.conditionnement AS of_conditionnement
+           oi.conditionnement AS of_conditionnement,
+           COALESCE(oi.valide, 0) AS of_valide,
+           oi.valide_par          AS of_valide_par,
+           oi.valide_at           AS of_valide_at
     FROM planning_entries pe
     LEFT JOIN machines m ON m.id = pe.machine_id
     LEFT JOIN of_imports oi ON oi.id = pe.of_import_id
@@ -181,6 +188,7 @@ _SQL_PE = """
 
 _SQL_FT = """
     SELECT id, reference, ref_produit_norm, machine,
+           COALESCE(valide, 0) AS valide, valide_par, valide_at,
            support, glassine, adhesif, qte_au_mille, eti_laize, eti_longueur,
            mod_laize, mod_longueur, mod_nb_front, laize, laize_optimale,
            mandrin_dia, nb_etiq_bobin, nb_bobines_carton, cartons,
@@ -191,6 +199,7 @@ _SQL_FT = """
 
 _FT_FIELDS = (
     "support", "glassine", "adhesif", "qte_au_mille", "eti_laize", "eti_longueur",
+    "valide", "valide_par", "valide_at",
     "mod_laize", "mod_longueur", "mod_nb_front", "laize", "laize_optimale",
     "mandrin_dia", "nb_etiq_bobin", "nb_bobines_carton", "cartons",
     "conditionnement",
@@ -208,14 +217,21 @@ def _ft_key(norm, ref) -> str:
     return (ref or "").strip().lower()
 
 
-def _load_dossiers(conn) -> list:
+# Même requête que _SQL_PE, mais sur un dossier précis quel que soit son statut :
+# on déstocke une production terminée, donc hors du périmètre de la vue Besoins.
+_SQL_PE_UN = _SQL_PE.replace(
+    "WHERE pe.statut IN ('attente', 'en_cours')", "WHERE pe.id = ?"
+).replace("ORDER BY COALESCE(pe.planned_start, pe.date_livraison, '9999'), pe.position", "")
+
+
+def _load_dossiers(conn, sql: Optional[str] = None, params: tuple = ()) -> list:
     """Dossiers du planning (attente/en_cours) + fiche technique associée.
 
     Tie-breaker machine identique à planning.py : fiche dont `machine`
     correspond à la machine du dossier > fiche sans machine > autre, puis
     id croissant. Chaque dossier reçoit les champs ft_* (None si aucune fiche).
     """
-    pes = [dict(r) for r in conn.execute(_SQL_PE).fetchall()]
+    pes = [dict(r) for r in conn.execute(sql or _SQL_PE, params).fetchall()]
     fts = [dict(r) for r in conn.execute(_SQL_FT).fetchall()]
 
     by_key: dict = {}
@@ -563,13 +579,17 @@ def _compute_besoins_dossier(pe: dict, mapping: dict,
             break
         if not pe.get(col):
             continue
+        # La laize voyage avec le besoin : une bobine ne se commande pas, ne se
+        # stocke pas et ne se déstocke pas hors de sa laize. L'agréger sans elle
+        # donnait un total juste en mètres, mais inutilisable pour commander.
+        extra_lz = {"laize_mm": lz.get("laize")}
         if metrage:
             src = "métrage OF" if met["source"] == "of" else "métrage calculé fiche"
             _add(kind, pe[col], metrage,
-                 f"{_n(metrage, 'm')} ({src})", met["variables"])
+                 f"{_n(metrage, 'm')} ({src})", met["variables"], extra=extra_lz)
         else:
             _add(kind, pe[col], None, "Métrage indisponible",
-                 met["variables"], met["manque"])
+                 met["variables"], met["manque"], extra=extra_lz)
 
     # ── Adhésif : kilos = grammage (g/m²) × surface enduite (m²) ──
     # surface = métrage (m) × laize (mm) / 1000
@@ -740,13 +760,105 @@ def besoins_par_dossier(request: Request):
             "date_livraison": pe.get("date_livraison"),
             "qte_etiquettes": pe.get("qte_etiquettes"),
             "ft_id": pe.get("ft_id"),
+            # La laize du dossier : c'est elle qui décide quelle bobine sortira
+            # du stock, donc elle a sa place à côté des besoins.
+            "laize": _laize_dossier(pe).get("laize"),
             # Les deux documents consultables depuis la vue par dossier : l'OF
             # importé et la fiche technique rapprochée.
             "of_import_id": pe.get("of_import_id"),
+            # Validation humaine des deux documents : c'est elle qui autorise
+            # le défalquage automatique du stock en fin de production.
+            "of_valide": int(pe.get("of_valide") or 0),
+            "of_valide_par": pe.get("of_valide_par"),
+            "ft_valide": int(pe.get("ft_valide") or 0),
+            "ft_valide_par": pe.get("ft_valide_par"),
+            "destockage": pe.get("destockage") or "todo",
             "of_metrage": pe.get("of_metrage"),
             "of_laize": pe.get("of_laize"),
             "besoins": besoins,
             "besoins_mapped_count": sum(1 for b in besoins if b["mapped"]),
+            "besoins_total_count": len(besoins),
+            "besoins_incalculables_count": sum(1 for b in besoins if not b["calculable"]),
+        })
+    return {"dossiers": dossiers, "count": len(dossiers)}
+
+
+_SQL_PE_PASSES = _SQL_PE.replace(
+    "WHERE pe.statut IN ('attente', 'en_cours')",
+    "WHERE COALESCE(pe.statut, '') NOT IN ('attente', 'en_cours')"
+).replace(
+    "ORDER BY COALESCE(pe.planned_start, pe.date_livraison, '9999'), pe.position",
+    "ORDER BY COALESCE(pe.planned_end, pe.date_livraison, '0000') DESC, pe.id DESC"
+)
+
+
+@router.get("/api/stock/besoins-matieres/par-dossier-passes")
+def besoins_dossiers_passes(request: Request):
+    """Dossiers sortis de production : ce qui reste à déstocker, et ce qui l'est.
+
+    La vue par dossier ne montre que la production en cours — c'est ce qu'on
+    veut pour approvisionner. Mais le déstockage se fait *après*, donc sur des
+    dossiers qui ont justement quitté ce périmètre : sans cette vue, ils
+    devenaient introuvables.
+    """
+    require_stock_matieres_admin(request)
+    try:
+        limite = int(request.query_params.get("limit") or 300)
+    except (TypeError, ValueError):
+        limite = 300
+    limite = max(1, min(limite, 1000))
+
+    with get_db() as conn:
+        mapping = _load_mapping(conn)
+        rows = _load_dossiers(conn, _SQL_PE_PASSES)
+        perte_pct = stock_config_float(conn, "mandrin_perte_coupe_pct")
+        rows = rows[:limite]
+        # Un seul aller-retour pour savoir qui a déstocké quoi : la modale n'a
+        # pas à être ouverte pour que la liste sache ce qui est déjà sorti.
+        mvts = {}
+        for r in conn.execute(
+            """SELECT m.planning_entry_id AS pid, COUNT(*) AS n,
+                      MIN(m.created_by_name) AS qui, MIN(m.created_at) AS quand
+               FROM mp_mouvements m
+               WHERE m.planning_entry_id IS NOT NULL
+                 AND m.type_mouvement = 'sortie'
+                 -- Une sortie ne porte jamais annule_mouvement_id : c'est la
+                 -- contre-passation qui la désigne. On exclut donc les sorties
+                 -- *visées* par une annulation, pas celles qui en portent une —
+                 -- sinon un dossier annulé continuait d'apparaître déstocké.
+                 AND NOT EXISTS (SELECT 1 FROM mp_mouvements c
+                                 WHERE c.annule_mouvement_id = m.id)
+               GROUP BY m.planning_entry_id"""
+        ).fetchall():
+            mvts[int(r["pid"])] = dict(r)
+
+    dossiers = []
+    for pe in rows:
+        besoins = _compute_besoins_dossier(pe, mapping, perte_pct)
+        docs = _etat_documents(pe)
+        m = mvts.get(int(pe["id"])) or {}
+        dossiers.append({
+            "id": pe["id"],
+            "reference": pe.get("reference"),
+            "client": pe.get("client"),
+            "ref_produit": pe.get("ref_produit"),
+            "numero_of": pe.get("numero_of"),
+            "machine_nom": pe.get("machine_nom"),
+            "statut": pe.get("statut"),
+            "planned_end": pe.get("planned_end"),
+            "date_livraison": pe.get("date_livraison"),
+            "qte_etiquettes": pe.get("qte_etiquettes"),
+            "of_import_id": pe.get("of_import_id"),
+            "ft_id": pe.get("ft_id"),
+            "of_valide": int(pe.get("of_valide") or 0),
+            "ft_valide": int(pe.get("ft_valide") or 0),
+            "destockage": pe.get("destockage") or "todo",
+            "destockable": docs["complet"],
+            "blocage": docs["blocage"],
+            "nb_mouvements": int(m.get("n") or 0),
+            "destocke_par": m.get("qui"),
+            "destocke_at": m.get("quand"),
+            "besoins": besoins,
             "besoins_total_count": len(besoins),
             "besoins_incalculables_count": sum(1 for b in besoins if not b["calculable"]),
         })
@@ -779,6 +891,16 @@ def besoins_par_echeance(request: Request):
             stock_map[int(r["matiere_id"])] = float(r["q"] or 0)
         for r in conn.execute("SELECT matiere_id, SUM(quantite) AS q FROM mp_stock_laize GROUP BY matiere_id").fetchall():
             stock_bobines[int(r["matiere_id"])] = float(r["q"] or 0)
+        # Détail par laize : c'est le stock réellement mobilisable pour un
+        # dossier, celui qu'on compare au besoin d'une laize précise.
+        stock_par_laize: dict = {}
+        for r in conn.execute(
+            """SELECT s.matiere_id, l.valeur_mm, l.label, s.quantite
+               FROM mp_stock_laize s JOIN mp_laizes l ON l.id = s.laize_id"""
+        ).fetchall():
+            stock_par_laize[(int(r["matiere_id"]), float(r["valeur_mm"] or 0))] = {
+                "quantite": float(r["quantite"] or 0), "label": r["label"],
+            }
 
     # Agrégation par (kind, source_value)
     agg: dict = {}
@@ -812,6 +934,9 @@ def besoins_par_echeance(request: Request):
                     "besoin_total_tubes": 0.0,
                     "besoin_total_palettes": 0.0,
                     "nb_dossiers_sans_tubes": 0,
+                    # Ventilation par laize (bobines uniquement) : le total en
+                    # mètres ne dit pas quelle bobine commander.
+                    "par_laize": {},
                 }
             a = agg[key]
             a["nb_dossiers"] += 1
@@ -821,6 +946,17 @@ def besoins_par_echeance(request: Request):
             a["besoin_7j"] += b["quantite"] * r7
             a["besoin_15j"] += b["quantite"] * r15
             a["besoin_total"] += b["quantite"]
+            if b["kind"] in _KINDS_BOBINE:
+                cle_lz = b.get("laize_mm")
+                cle_lz = float(cle_lz) if cle_lz else None
+                pl = a["par_laize"].setdefault(cle_lz, {
+                    "laize_mm": cle_lz, "besoin_7j": 0.0, "besoin_15j": 0.0,
+                    "besoin_total": 0.0, "nb_dossiers": 0,
+                })
+                pl["besoin_7j"] += b["quantite"] * r7
+                pl["besoin_15j"] += b["quantite"] * r15
+                pl["besoin_total"] += b["quantite"]
+                pl["nb_dossiers"] += 1
             bt = b.get("besoin_tubes")
             if bt is None:
                 if b["kind"] == "mandrin":
@@ -854,6 +990,7 @@ def besoins_par_echeance(request: Request):
             if a["kind"] in _KINDS_BOBINE:
                 bobines = stock_bobines.get(mid, 0.0) + stock_map.get(mid, 0.0)
                 ml_bobine = _f(_matiere_ml_par_bobine(mapping, a["kind"], a["source_value"]))
+                a["ml_par_bobine"] = ml_bobine
                 if ml_bobine:
                     stock = round(bobines * ml_bobine, 3)
                     stock_note = (f"{_n(bobines)} bobines × {_n(ml_bobine, 'm')}/bobine")
@@ -915,7 +1052,7 @@ def besoins_par_echeance(request: Request):
         -(x.get("manque_7j") or 0),
         -x["besoin_7j"],
     ))
-    groupe = _regrouper_par_matiere(lignes)
+    groupe = _regrouper_par_matiere(lignes, stock_par_laize)
     return {
         "lignes": lignes,
         "count": len(lignes),
@@ -930,7 +1067,16 @@ def besoins_par_echeance(request: Request):
     }
 
 
-def _regrouper_par_matiere(lignes: list) -> dict:
+def _ml_par_bobine_ligne(a: dict) -> Optional[float]:
+    """Mètres linéaires par bobine de la matière d'une ligne agrégée.
+
+    Posé par l'agrégation par échéance, qui l'a déjà lu sur la matière. On ne
+    le redemande pas à la base : la ligne le porte, c'est la même valeur.
+    """
+    return _f(a.get("ml_par_bobine"))
+
+
+def _regrouper_par_matiere(lignes: list, stock_par_laize: Optional[dict] = None) -> dict:
     """Regroupe les lignes de besoin par référence matière MySifa.
 
     Plusieurs valeurs de fiche technique peuvent pointer vers la même référence
@@ -938,12 +1084,65 @@ def _regrouper_par_matiere(lignes: list) -> dict:
     donc c'est ce total-là qui compte pour l'appro — la vue par échéance, elle,
     reste au niveau de la valeur de fiche pour pouvoir corriger un mapping.
 
+    Les bobines font exception : une référence frontal, glassine ou complexe
+    sort en **une ligne par laize**. Une bobine de 306 ne remplace pas une
+    bobine de 500, et le stock lui-même est tenu laize par laize — agréger les
+    deux donnait un total juste en mètres mais impossible à commander.
+
     Retourne { matieres: [...], non_associees: [...] }. Les besoins sans matière
     associée ne sont pas noyés dans le tableau : ils sortent à part, en fin de
     vue, car ils appellent une action différente (associer, pas commander).
     """
+    stock_par_laize = stock_par_laize or {}
     par_mat: dict = {}
     non_associees: list = []
+
+    def _entree(cle, a, laize_mm):
+        """Crée (ou retrouve) la ligne agrégée d'une référence, laize comprise."""
+        m = par_mat.get(cle)
+        if m is not None:
+            return m
+        # Le stock est porté par la référence, pas par la valeur de fiche : on le
+        # prend une fois et on ne l'additionne jamais, sinon deux valeurs mappées
+        # sur la même référence le compteraient deux fois.
+        stock = a.get("stock_actuel")
+        note = a.get("stock_note")
+        if laize_mm is not None:
+            # Stock de CETTE laize, converti en mètres pour rester comparable au
+            # besoin. Sans conversion on afficherait des bobines face à des ml.
+            info = stock_par_laize.get((a["matiere_id"], laize_mm))
+            ml = _ml_par_bobine_ligne(a)
+            if info is None:
+                stock, note = None, ("Laize absente de cette matière — "
+                                     "stock non comparable")
+            elif ml:
+                stock = round(info["quantite"] * ml, 3)
+                note = (f"{_n(info['quantite'])} bobines de {_n(laize_mm)} mm "
+                        f"× {_n(ml, 'm')}/bobine")
+            else:
+                stock, note = None, ("Métrage par bobine non renseigné — "
+                                     "stock non convertible en ml")
+        m = par_mat[cle] = {
+            "matiere_id": a["matiere_id"],
+            "matiere_ref": a["matiere_ref"],
+            "matiere_designation": a["matiere_designation"],
+            "matiere_categorie": a.get("matiere_categorie"),
+            "kind": a["kind"],
+            "unite": a["unite"],
+            "laize_mm": laize_mm,
+            "besoin_7j": 0.0,
+            "besoin_15j": 0.0,
+            "besoin_total": 0.0,
+            "stock_actuel": stock,
+            "stock_note": note,
+            "stock_palettes": a.get("stock_palettes"),
+            "besoin_total_tubes": None,
+            "besoin_total_palettes": None,
+            "nb_dossiers": 0,
+            "nb_dossiers_incalculables": 0,
+            "sources": [],
+        }
+        return m
 
     for a in lignes:
         if not a.get("mapped") or not a.get("matiere_id"):
@@ -960,30 +1159,30 @@ def _regrouper_par_matiere(lignes: list) -> dict:
             continue
 
         mid = a["matiere_id"]
-        m = par_mat.get(mid)
-        if m is None:
-            # Le stock est porté par la référence, pas par la valeur de fiche :
-            # on le prend une fois et on ne l'additionne jamais, sinon deux
-            # valeurs mappées sur la même référence le compteraient deux fois.
-            m = par_mat[mid] = {
-                "matiere_id": mid,
-                "matiere_ref": a["matiere_ref"],
-                "matiere_designation": a["matiere_designation"],
-                "matiere_categorie": a.get("matiere_categorie"),
-                "kind": a["kind"],
-                "unite": a["unite"],
-                "besoin_7j": 0.0,
-                "besoin_15j": 0.0,
-                "besoin_total": 0.0,
-                "stock_actuel": a.get("stock_actuel"),
-                "stock_note": a.get("stock_note"),
-                "stock_palettes": a.get("stock_palettes"),
-                "besoin_total_tubes": None,
-                "besoin_total_palettes": None,
-                "nb_dossiers": 0,
-                "nb_dossiers_incalculables": 0,
-                "sources": [],
-            }
+        bobine = a["kind"] in _KINDS_BOBINE
+        ventil = (a.get("par_laize") or {}) if bobine else {}
+
+        if bobine and ventil:
+            for laize_mm, part in ventil.items():
+                m = _entree((mid, laize_mm), a, laize_mm)
+                m["besoin_7j"] += part["besoin_7j"]
+                m["besoin_15j"] += part["besoin_15j"]
+                m["besoin_total"] += part["besoin_total"]
+                m["nb_dossiers"] += part["nb_dossiers"]
+                m["sources"].append({
+                    "source_value": a["source_value"],
+                    "besoin_total": round(part["besoin_total"], 3),
+                    "nb_dossiers": part["nb_dossiers"],
+                })
+            # Les dossiers non chiffrés n'ont pas de laize à eux : ils restent
+            # rattachés à la première ligne de la référence, signalés hors total.
+            if a["nb_dossiers_incalculables"]:
+                prem = next((par_mat[(mid, lz)] for lz in ventil), None)
+                if prem is not None:
+                    prem["nb_dossiers_incalculables"] += a["nb_dossiers_incalculables"]
+            continue
+
+        m = _entree(mid, a, None)
         m["besoin_7j"] += a["besoin_7j"]
         m["besoin_15j"] += a["besoin_15j"]
         m["besoin_total"] += a["besoin_total"]
@@ -1159,6 +1358,56 @@ async def rattacher_of(planning_id: int, request: Request):
             "of_numero": oi["of_numero"]}
 
 
+_VALIDATION_ROLES = frozenset({
+    "superadmin", "direction",
+    # La famille administration : c'est l'administration technique qui relit les
+    # fiches et déstocke, elle doit pouvoir lever son propre blocage.
+    "administration", "administration_technique", "administration_ventes",
+})
+
+
+def _require_validation_docs(request: Request) -> dict:
+    user = require_stock_write(request)
+    if user.get("role") not in _VALIDATION_ROLES:
+        raise HTTPException(403, "Validation réservée à la Direction et à l'Administration.")
+    return user
+
+
+async def _basculer_validation(request: Request, table: str, doc_id: int, libelle: str):
+    """Valide ou dévalide un document. Body : { valide: true|false }.
+
+    La validation porte un nom et une date : une case cochée sans auteur ne
+    veut rien dire le jour où le stock est faux et qu'on cherche pourquoi.
+    """
+    user = _require_validation_docs(request)
+    body = await request.json() if request.headers.get("content-type", "").startswith("application/json") else {}
+    valide = 1 if bool((body or {}).get("valide", True)) else 0
+    qui = (user.get("nom") or user.get("email") or "").strip() or None
+    with get_db() as conn:
+        row = conn.execute(f"SELECT id FROM {table} WHERE id=?", (doc_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, f"{libelle} introuvable.")
+        conn.execute(
+            f"UPDATE {table} SET valide=?, valide_par=?, "
+            f"valide_at=strftime('%Y-%m-%dT%H:%M:%S','now','localtime') WHERE id=?",
+            (valide, qui if valide else None, doc_id),
+        )
+        conn.commit()
+    return {"ok": True, "valide": valide, "valide_par": qui if valide else None}
+
+
+@router.post("/api/stock/besoins-matieres/of/{of_id}/validation")
+async def valider_of(of_id: int, request: Request):
+    """Valide (ou dévalide) un ordre de fabrication."""
+    return await _basculer_validation(request, "of_imports", of_id, "OF")
+
+
+@router.post("/api/stock/besoins-matieres/fiche/{fiche_id}/validation")
+async def valider_fiche(fiche_id: int, request: Request):
+    """Valide (ou dévalide) une fiche technique."""
+    return await _basculer_validation(request, "fiches_techniques", fiche_id, "Fiche technique")
+
+
 @router.post("/api/stock/besoins-matieres/dossier/{planning_id}/rattacher-fiche")
 async def rattacher_fiche(planning_id: int, request: Request):
     """Rapproche une fiche technique d'un dossier. Body : { fiche_id }.
@@ -1197,6 +1446,415 @@ async def rattacher_fiche(planning_id: int, request: Request):
         conn.commit()
     return {"ok": True, "planning_id": planning_id, "fiche_id": fiche_id,
             "reference": ft["reference"]}
+
+
+# ═════════════════════════════════════════════════════════════════════════
+# Déstockage de production
+#
+# Quand une production est réellement terminée, la matière consommée doit
+# sortir du stock. Le bouton « À destocker » du planning ne changeait qu'un
+# statut : le stock ne bougeait pas, il aurait fallu ressaisir chaque sortie à
+# la main — donc personne ne le faisait.
+#
+# Le déstockage part du même calcul que Besoins matières, avec une différence
+# de fond : on ne cherche plus ce qu'il faudra, mais ce qui a été consommé. Le
+# métrage réellement produit (production_data) prime donc sur le théorique de
+# l'OF, et les quantités sont exprimées dans l'unité de gestion du stock — en
+# bobines, pas en mètres linéaires.
+#
+# Rien n'est bloquant : une matière non associée est listée et ignorée, un
+# stock qui passe en négatif est signalé mais enregistré. La matière a été
+# consommée ; refuser de l'écrire rendrait le stock plus faux, pas moins.
+# ═════════════════════════════════════════════════════════════════════════
+
+
+def _production_reelle(conn, pe: dict) -> dict:
+    """Quantités réellement produites, lues dans les saisies d'atelier.
+
+    Retourne { metrage, etiquettes, source } — source vaut 'reel' dès qu'une
+    saisie exploitable existe, 'theorique' sinon.
+    """
+    vide = {"metrage": None, "etiquettes": None, "source": "theorique"}
+    no_dossier = (pe.get("numero_of") or pe.get("reference") or "").strip()
+    if not no_dossier:
+        return vide
+    try:
+        from app.services.dossier_stats import build_dossier_production_stats
+        rows = conn.execute(
+            """SELECT id, operateur, date_operation, operation, operation_code,
+                      operation_category, machine, no_dossier, client, designation,
+                      quantite_a_traiter, quantite_traitee,
+                      COALESCE(metrage_total_debut, metrage_prevu) AS metrage_prevu,
+                      COALESCE(metrage_total_fin, metrage_reel)   AS metrage_reel
+               FROM production_data
+               WHERE TRIM(no_dossier) = TRIM(?)
+                 AND COALESCE(est_annule, 0) = 0""",
+            (no_dossier,),
+        ).fetchall()
+        stats = build_dossier_production_stats([dict(r) for r in rows], no_dossier)
+    except Exception:
+        return vide
+    q = (stats or {}).get("quantites") or {}
+    metrage = _f(q.get("metrage_m"))
+    etiquettes = _f(q.get("etiquettes"))
+    if not metrage and not etiquettes:
+        return vide
+    return {"metrage": metrage, "etiquettes": etiquettes, "source": "reel"}
+
+
+def _laizes_matiere(conn, matiere_id: int) -> list:
+    """Laizes associées à une matière, avec leur stock actuel en bobines."""
+    rows = conn.execute(
+        """SELECT l.id AS laize_id, l.valeur_mm, l.label,
+                  COALESCE(s.quantite, 0) AS stock
+           FROM mp_matiere_laizes ml
+           JOIN mp_laizes l ON l.id = ml.laize_id
+           LEFT JOIN mp_stock_laize s
+                  ON s.matiere_id = ml.matiere_id AND s.laize_id = ml.laize_id
+           WHERE ml.matiere_id = ?
+           ORDER BY l.valeur_mm""",
+        (matiere_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _quantite_a_destocker(b: dict, mp: dict) -> dict:
+    """Traduit un besoin dans l'unité de gestion du stock.
+
+    Le besoin s'exprime dans l'unité de l'atelier (mètres linéaires, kilos,
+    unités) ; le stock se tient dans celle du magasin (bobines, kilos,
+    palettes). C'est cette dernière qu'il faut mouvementer, sinon on retire
+    3 658 « bobines » à une référence qui en compte douze.
+
+    Les bobines restent fractionnaires : 0,73 bobine est ce qui a réellement
+    été consommé. Arrondir à la bobine entière ferait dériver le stock d'un
+    reliquat à chaque dossier.
+    """
+    kind = b["kind"]
+    q = b.get("quantite")
+    if q is None:
+        return {"quantite": None, "unite": None,
+                "manque": ["Besoin non chiffré — voir Besoins matières"]}
+
+    if kind in _KINDS_BOBINE:
+        ml = _f(mp.get("metres_lineaires_par_bobine"))
+        if not ml:
+            return {"quantite": None, "unite": "bobine",
+                    "manque": ["Mètres linéaires par bobine non renseignés sur la matière"]}
+        return {"quantite": round(q / ml, 4), "unite": "bobine",
+                "detail": f"{_n(q, 'm')} ÷ {_n(ml, 'm')}/bobine", "manque": []}
+
+    if kind == "adhesif":
+        return {"quantite": round(q, 4), "unite": "kg", "manque": []}
+
+    if kind == "mandrin":
+        pal = _f(b.get("besoin_palettes"))
+        if not pal:
+            return {"quantite": None, "unite": "palette",
+                    "manque": ["Longueur tube ou tubes par palette manquants sur la matière"]}
+        return {"quantite": round(pal, 4), "unite": "palette",
+                "detail": f"{_n(round(q))} mandrins", "manque": []}
+
+    if kind == "carton":
+        upp = _f(mp.get("unites_par_palette"))
+        if not upp:
+            return {"quantite": None, "unite": "palette",
+                    "manque": ["Cartons par palette non renseignés sur la matière"]}
+        return {"quantite": round(q / upp, 4), "unite": "palette",
+                "detail": f"{_n(round(q))} cartons ÷ {_n(upp)}/palette", "manque": []}
+
+    # Palettes : le besoin est déjà dans l'unité de gestion.
+    return {"quantite": round(q, 4), "unite": "palette", "manque": []}
+
+
+def _etat_documents(pe: dict) -> dict:
+    """Validation des deux documents dont dépend le calcul du déstockage.
+
+    Le défalquage lit l'OF et la fiche technique pour décider ce qui sort du
+    stock. Si l'un des deux est faux, c'est le stock qui devient faux — et on
+    ne s'en aperçoit qu'à l'inventaire suivant. On exige donc que les deux
+    aient été relus et validés par quelqu'un avant tout mouvement automatique.
+    """
+    of_id = pe.get("of_import_id")
+    ft_id = pe.get("ft_id")
+    of_ok = bool(of_id) and bool(int(pe.get("of_valide") or 0))
+    ft_ok = bool(ft_id) and bool(int(pe.get("ft_valide") or 0))
+
+    manquants = []
+    if not of_id:
+        manquants.append("aucun OF rattaché")
+    elif not of_ok:
+        manquants.append("OF non validé")
+    if not ft_id:
+        manquants.append("aucune fiche technique rapprochée")
+    elif not ft_ok:
+        manquants.append("fiche technique non validée")
+
+    return {
+        "of_id": of_id,
+        "of_valide": of_ok,
+        "of_valide_par": pe.get("of_valide_par"),
+        "ft_id": ft_id,
+        "ft_valide": ft_ok,
+        "ft_valide_par": pe.get("ft_valide_par"),
+        "complet": of_ok and ft_ok,
+        "blocage": None if (of_ok and ft_ok) else
+                   "Déstockage impossible tant que les deux documents ne sont pas "
+                   "validés — " + ", ".join(manquants) + ".",
+    }
+
+
+def _destockage_lignes(conn, planning_id: int) -> dict:
+    """Prépare le déstockage d'un dossier : une ligne par matière consommée."""
+    dossiers = _load_dossiers(conn, _SQL_PE_UN, (planning_id,))
+    if not dossiers:
+        raise HTTPException(404, "Dossier introuvable.")
+    pe = dossiers[0]
+    mapping = _load_mapping(conn)
+    perte_pct = stock_config_float(conn, "mandrin_perte_coupe_pct")
+
+    # Le réel prime sur le théorique : on substitue avant de calculer, pour que
+    # toute la cascade (métrage → adhésif, étiquettes → mandrins → cartons)
+    # reparte des quantités effectivement produites.
+    reel = _production_reelle(conn, pe)
+    pe_calc = dict(pe)
+    if reel["source"] == "reel":
+        if reel["metrage"]:
+            pe_calc["of_metrage"] = reel["metrage"]
+        if reel["etiquettes"]:
+            pe_calc["qte_etiquettes"] = reel["etiquettes"]
+            # Les bobines de l'OF décrivent le prévu : elles primeraient sur la
+            # quantité réelle dans le calcul des mandrins.
+            pe_calc["qte_bobines"] = None
+            pe_calc["of_nb_mandrins"] = None
+            pe_calc["of_nb_cartons"] = None
+
+    besoins = _compute_besoins_dossier(pe_calc, mapping, perte_pct)
+    lz = _laize_dossier(pe_calc)
+
+    lignes = []
+    for b in besoins:
+        mp = mapping.get((b["kind"], (b["source_value"] or "").strip().lower())) or {}
+        conv = _quantite_a_destocker(b, mp)
+        mid = b.get("matiere_id")
+        laizes, laize_suggeree = [], None
+        stock = None
+        if mid:
+            if b["kind"] in _KINDS_BOBINE:
+                laizes = _laizes_matiere(conn, mid)
+                cible = _f(lz.get("laize"))
+                if cible:
+                    for l in laizes:
+                        if abs(float(l["valeur_mm"] or 0) - cible) < 0.5:
+                            laize_suggeree = l["laize_id"]
+                            break
+                if laize_suggeree is None and len(laizes) == 1:
+                    laize_suggeree = laizes[0]["laize_id"]
+                if laize_suggeree is not None:
+                    stock = next((float(l["stock"]) for l in laizes
+                                  if l["laize_id"] == laize_suggeree), None)
+            else:
+                r = conn.execute(
+                    "SELECT quantite FROM mp_stock WHERE matiere_id=?", (mid,)
+                ).fetchone()
+                stock = float(r["quantite"]) if r else 0.0
+
+        manque = list(conv.get("manque") or [])
+        if not b.get("mapped"):
+            manque.append("Valeur de fiche non associée à une référence MySifa")
+        if b["kind"] in _KINDS_BOBINE and mid and laize_suggeree is None:
+            manque.append("Laize du dossier absente des laizes de cette matière — à choisir")
+
+        lignes.append({
+            "kind": b["kind"],
+            "source_value": b["source_value"],
+            "matiere_id": mid,
+            "matiere_ref": b.get("matiere_ref"),
+            "matiere_designation": b.get("matiere_designation"),
+            "mapped": bool(b.get("mapped")),
+            "besoin": b.get("quantite"),
+            "besoin_unite": b.get("unite"),
+            "quantite": conv.get("quantite"),
+            "unite": conv.get("unite"),
+            "detail": conv.get("detail"),
+            "laizee": b["kind"] in _KINDS_BOBINE,
+            "laizes": laizes,
+            "laize_id": laize_suggeree,
+            "stock_actuel": round(stock, 4) if stock is not None else None,
+            "manque": manque,
+            "destockable": bool(mid) and conv.get("quantite") is not None and (
+                b["kind"] not in _KINDS_BOBINE or laize_suggeree is not None),
+        })
+
+    deja = [dict(r) for r in conn.execute(
+        """SELECT m.id, m.matiere_id, m.type_mouvement, m.quantite, m.quantite_apres,
+                  m.laize_id, m.note, m.created_at, m.created_by_name,
+                  m.annule_mouvement_id, mp.reference AS matiere_ref
+           FROM mp_mouvements m
+           LEFT JOIN matieres_premieres mp ON mp.id = m.matiere_id
+           WHERE m.planning_entry_id = ?
+           ORDER BY m.id""",
+        (planning_id,),
+    ).fetchall()]
+
+    docs = _etat_documents(pe)
+    return {
+        "dossier": {
+            "planning_id": pe["id"],
+            "reference": pe.get("reference"),
+            "numero_of": pe.get("numero_of"),
+            "client": pe.get("client"),
+            "machine": pe.get("machine_nom"),
+            "statut": pe.get("statut"),
+            "destockage": pe.get("destockage") or "todo",
+        },
+        "documents": docs,
+        "blocage": docs["blocage"],
+        "source_calcul": reel["source"],
+        "reel": {"metrage": reel["metrage"], "etiquettes": reel["etiquettes"]},
+        "theorique": {"metrage": _f(pe.get("of_metrage")),
+                      "etiquettes": _f(pe.get("qte_etiquettes"))},
+        "laize_dossier": lz.get("laize"),
+        "lignes": lignes,
+        "mouvements": deja,
+    }
+
+
+@router.get("/api/stock/destockage/{planning_id}")
+def destockage_preview(planning_id: int, request: Request):
+    """Ce qui sera retiré du stock à la clôture de ce dossier."""
+    require_stock_write(request)
+    with get_db() as conn:
+        return _destockage_lignes(conn, planning_id)
+
+
+@router.post("/api/stock/destockage/{planning_id}/valider")
+async def destockage_valider(planning_id: int, request: Request):
+    """Enregistre les sorties de stock d'une production terminée.
+
+    Body : { lignes: [{ matiere_id, quantite, laize_id? }], note? }
+    Les quantités viennent de la modale : ce sont celles que l'opératrice a
+    validées, pas celles qu'on a calculées. Un ajustement de sa part est donc
+    la vérité — le calcul n'était qu'une proposition.
+    """
+    user = require_stock_write(request)
+    body = await request.json()
+    lignes = body.get("lignes")
+    if not isinstance(lignes, list) or not lignes:
+        raise HTTPException(400, "Aucune ligne à déstocker.")
+    note_libre = (body.get("note") or "").strip()
+
+    from app.routers.stock import appliquer_mouvement_mp
+
+    with get_db() as conn:
+        pe = conn.execute(
+            "SELECT id, reference, numero_of, destockage FROM planning_entries WHERE id=?",
+            (planning_id,),
+        ).fetchone()
+        if not pe:
+            raise HTTPException(404, "Dossier introuvable.")
+        if (pe["destockage"] or "todo") == "done":
+            raise HTTPException(400, "Ce dossier est déjà déstocké.")
+
+        # Verrou documentaire : on ne bouge pas le stock sur la foi d'un OF ou
+        # d'une fiche que personne n'a relus. Le contrôle est refait ici et pas
+        # seulement à l'affichage — un appel direct à l'API doit buter dessus.
+        etat = _load_dossiers(conn, _SQL_PE_UN, (planning_id,))
+        docs = _etat_documents(etat[0]) if etat else {"complet": False,
+            "blocage": "Dossier introuvable."}
+        if not docs["complet"]:
+            raise HTTPException(400, docs["blocage"])
+
+        no_dossier = (pe["numero_of"] or pe["reference"] or "").strip()
+        base_note = f"Déstockage production {no_dossier}".strip()
+        if note_libre:
+            base_note += f" — {note_libre}"
+
+        faits, negatifs = [], []
+        for li in lignes:
+            try:
+                mid = int(li.get("matiere_id"))
+                qte = float(str(li.get("quantite")).replace(",", "."))
+            except (TypeError, ValueError):
+                raise HTTPException(400, "Ligne invalide (matiere_id / quantité).") from None
+            if qte <= 0:
+                continue  # une ligne remise à zéro est un refus explicite de déstocker
+            laize_id = li.get("laize_id")
+            laize_id = int(laize_id) if laize_id not in (None, "") else None
+            res = appliquer_mouvement_mp(
+                conn, user, mid, "sortie", qte,
+                laize_id=laize_id, note=base_note,
+                planning_entry_id=planning_id, no_dossier=no_dossier,
+                autoriser_negatif=True,
+            )
+            faits.append({"matiere_id": mid, **res})
+            if res["negatif"]:
+                negatifs.append(mid)
+
+        if not faits:
+            raise HTTPException(400, "Toutes les lignes sont à zéro : rien à déstocker.")
+
+        conn.execute(
+            "UPDATE planning_entries SET destockage='done', updated_at=? WHERE id=?",
+            (datetime.now().isoformat(), planning_id),
+        )
+        conn.commit()
+
+    return {"success": True, "destockage": "done", "mouvements": faits,
+            "stocks_negatifs": negatifs}
+
+
+@router.post("/api/stock/destockage/{planning_id}/annuler")
+async def destockage_annuler(planning_id: int, request: Request):
+    """Contre-passe le déstockage d'un dossier.
+
+    On n'efface rien : chaque sortie est annulée par une entrée de même
+    quantité, rattachée à l'originale. Les deux écritures restent à
+    l'historique — c'est la seule façon honnête de raconter qu'on s'est trompé.
+    """
+    user = require_stock_write(request)
+    from app.routers.stock import appliquer_mouvement_mp
+
+    with get_db() as conn:
+        pe = conn.execute(
+            "SELECT id, reference, numero_of, destockage FROM planning_entries WHERE id=?",
+            (planning_id,),
+        ).fetchone()
+        if not pe:
+            raise HTTPException(404, "Dossier introuvable.")
+
+        no_dossier = (pe["numero_of"] or pe["reference"] or "").strip()
+        # Sorties de ce dossier qui n'ont pas déjà été contre-passées.
+        a_annuler = conn.execute(
+            """SELECT m.id, m.matiere_id, m.quantite, m.laize_id
+               FROM mp_mouvements m
+               WHERE m.planning_entry_id = ?
+                 AND m.type_mouvement = 'sortie'
+                 AND m.annule_mouvement_id IS NULL
+                 AND NOT EXISTS (SELECT 1 FROM mp_mouvements c
+                                 WHERE c.annule_mouvement_id = m.id)
+               ORDER BY m.id""",
+            (planning_id,),
+        ).fetchall()
+
+        rendus = []
+        for m in a_annuler:
+            res = appliquer_mouvement_mp(
+                conn, user, int(m["matiere_id"]), "entree", float(m["quantite"]),
+                laize_id=m["laize_id"],
+                note=f"Annulation déstockage production {no_dossier}",
+                planning_entry_id=planning_id, no_dossier=no_dossier,
+                annule_mouvement_id=int(m["id"]),
+            )
+            rendus.append({"matiere_id": m["matiere_id"], **res})
+
+        conn.execute(
+            "UPDATE planning_entries SET destockage='todo', updated_at=? WHERE id=?",
+            (datetime.now().isoformat(), planning_id),
+        )
+        conn.commit()
+
+    return {"success": True, "destockage": "todo", "mouvements": rendus}
 
 
 @router.get("/api/stock/besoins-matieres/mapping")

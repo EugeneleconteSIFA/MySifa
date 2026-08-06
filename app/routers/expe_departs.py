@@ -26,7 +26,11 @@ from app.services.email_service import (
     email_expe_rfq_transport,
     send_email,
 )
-from config import public_base_url
+from config import (
+    EXPE_MOTIF_SANS_DOSSIER_NOTE_REQUISE,
+    EXPE_MOTIFS_SANS_DOSSIER,
+    public_base_url,
+)
 from app.services import expe_evenements as expe_ev
 from app.services.expe_transporteurs_seed import seed_expe_transporteurs_if_empty
 from database import get_db
@@ -140,7 +144,9 @@ _DEPARTS_SELECT = """
            COALESCE(mp.is_europe, 0) AS palette_ref_is_europe,
            t.couleur AS transporteur_couleur,
            pe.reference AS planning_dossier_ref,
-           pe.numero_of AS planning_numero_of
+           pe.numero_of AS planning_numero_of,
+           COALESCE(pe.fsc_requis, 0) AS fsc_requis,
+           COALESCE(pe.fsc_type_requis, '') AS fsc_type_requis
     FROM expe_departs d
     LEFT JOIN matieres_premieres mp ON mp.id = d.type_palette_matiere_id
     LEFT JOIN expe_transporteurs t ON t.id = d.transporteur_id
@@ -153,9 +159,11 @@ def _depart_dict(row) -> dict:
     if (d.get("type_colis") or "").strip().lower() == "vrac":
         d["type_palette_label"] = "Vrac"
     else:
-        ref = (d.get("type_palette_reference") or "").strip()
-        des = (d.get("type_palette_designation") or "").strip()
-        d["type_palette_label"] = (f"{ref} — {des}" if des else ref) if ref else None
+        # La seule chose qui compte à la lecture d'un départ, c'est la NATURE
+        # de la palette — Europe (consignée, à récupérer) ou Perdue. Les
+        # dimensions de la référence MyStock alourdissaient chaque cellule du
+        # tableau et chaque option du select sans jamais servir à décider.
+        d["type_palette_label"] = (d.get("type_palette_reference") or "").strip() or None
     return d
 
 
@@ -462,6 +470,185 @@ def _validate_planning_entry_id(conn, value) -> Optional[int]:
     return pid
 
 
+def _resoudre_rattachement(conn, body: dict, user: dict,
+                           depart_id: Optional[int] = None) -> dict:
+    """Un départ est rattaché à un dossier, ou il déclare pourquoi il ne l'est pas.
+
+    Il n'y a pas de troisième possibilité, et c'est tout l'objet de cette
+    fonction. La mesure sur la base de production a montré 19 départs rattachés
+    sur 2783 : le lien existait dans l'écran, personne ne le remplissait, et
+    aucune expédition n'était remontable jusqu'à la matière. Rendre le
+    rattachement obligatoire sans porte de sortie aurait bloqué les envois qui
+    n'ont légitimement pas de dossier — stock ancien, sous-traitance,
+    échantillons, palettes vides. D'où la déclaration.
+
+    La déclaration n'est pas un contournement : elle produit une chaîne courte
+    mais complète, adossée à un motif, exactement comme une livraison directe
+    du module négoce. Ce qu'elle remplace, c'est le silence — et le silence est
+    la seule chose qu'un auditeur ne peut pas interpréter.
+
+    Renvoie les champs à écrire. Lève un 400 explicite si ni l'un ni l'autre.
+    """
+    a_dossier = _validate_planning_entry_id(conn, body.get("planning_entry_id")) is not None
+
+    # En modification, on ne juge que ce qui est effectivement envoyé : un PUT
+    # qui ne touche qu'au poids ne doit pas exiger de re-motiver le départ.
+    if depart_id is not None:
+        touche = "planning_entry_id" in body or "sans_dossier" in body
+        if not touche:
+            return {}
+        if not a_dossier and "planning_entry_id" not in body:
+            ex = conn.execute(
+                "SELECT planning_entry_id FROM expe_departs WHERE id=?", (depart_id,)
+            ).fetchone()
+            a_dossier = bool(ex and ex["planning_entry_id"])
+
+    # Un départ rattaché n'a rien à déclarer : le dossier prime, et on efface
+    # une éventuelle déclaration devenue sans objet.
+    if a_dossier:
+        return {"sans_dossier": 0, "sans_dossier_motif": None, "sans_dossier_note": None,
+                "sans_dossier_par": None, "sans_dossier_le": None}
+
+    declare = body.get("sans_dossier") in (1, True, "1", "true", "True")
+    if not declare:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Rattachement manquant : sélectionnez le dossier de fabrication, "
+                "ou cochez « Envoi non lié à une production » en précisant le motif. "
+                "Sans l'un des deux, cette expédition ne pourra pas être remontée "
+                "jusqu'à la matière lors d'un audit FSC."
+            ),
+        )
+
+    motif = (body.get("sans_dossier_motif") or "").strip()
+    if motif not in EXPE_MOTIFS_SANS_DOSSIER:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Motif invalide. Valeurs attendues : "
+                + ", ".join(EXPE_MOTIFS_SANS_DOSSIER) + "."
+            ),
+        )
+    note = (body.get("sans_dossier_note") or "").strip() or None
+    if motif in EXPE_MOTIF_SANS_DOSSIER_NOTE_REQUISE and not note:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Motif « {EXPE_MOTIFS_SANS_DOSSIER[motif]} » : précisez la raison.",
+        )
+
+    return {
+        "sans_dossier": 1,
+        "sans_dossier_motif": motif,
+        "sans_dossier_note": note,
+        # Qui a déclaré, et quand. Une régularisation d'historique est une
+        # écriture sur le passé : non tracée, elle est indéfendable en audit.
+        "sans_dossier_par": (user.get("email") or user.get("identifiant") or "").strip() or None,
+        "sans_dossier_le": datetime.now(_PARIS).replace(tzinfo=None).isoformat(timespec="seconds"),
+    }
+
+
+def _cle_no_bl(valeur: Any) -> str:
+    """Forme normalisée d'un n° de BL, pour la comparaison seulement.
+
+    « BL-1001 », « bl 1001 » et « BL1001 » désignent le même document papier.
+    On ne stocke PAS cette forme : ce que l'opérateur a tapé reste ce qui est
+    enregistré, c'est ce qui figure sur le document. Elle ne sert qu'à
+    reconnaître un doublon.
+    """
+    return (
+        str(valeur or "").strip().upper().replace(" ", "").replace("-", "").replace(".", "")
+    )
+
+
+def _check_no_bl_unique(conn, no_bl: Any, exclure_id: Optional[int] = None) -> None:
+    """Refuse un n° de BL déjà porté par un autre départ.
+
+    Premier maillon d'un audit FSC : l'auditeur arrive avec un bon de livraison
+    et demande le départ correspondant. Si deux lignes répondent, la chaîne
+    qu'on lui présente est peut-être la mauvaise et personne ne peut trancher.
+
+    Le refus est un 409 structuré, pas un 400 : ce n'est pas une requête
+    malformée, c'est un conflit d'état que l'opérateur peut lever en
+    connaissance de cause (`no_bl_doublon_confirme: true`) — un même BL réparti
+    sur deux enlèvements existe. Ce qui ne doit pas exister, c'est le doublon
+    créé sans que personne ne l'ait vu.
+    """
+    cle = _cle_no_bl(no_bl)
+    if not cle:
+        return
+    rows = conn.execute(
+        """SELECT id, no_bl, client, date_enlevement
+             FROM expe_departs
+            WHERE UPPER(REPLACE(REPLACE(REPLACE(TRIM(COALESCE(no_bl,'')),' ',''),'-',''),'.','')) = ?
+            LIMIT 5""",
+        (cle,),
+    ).fetchall()
+    autres = [dict(r) for r in rows if exclure_id is None or int(r["id"]) != int(exclure_id)]
+    if not autres:
+        return
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "no_bl_doublon",
+            "no_bl": str(no_bl or "").strip(),
+            "departs": autres,
+            "message": (
+                f"Le n° de BL « {str(no_bl or '').strip()} » est déjà porté par "
+                f"{len(autres)} autre(s) départ(s). Deux départs sous le même numéro "
+                f"rendent la traçabilité ambiguë : un auditeur ne saurait pas lequel "
+                f"correspond au document qu'il présente."
+            ),
+        },
+    )
+
+
+def _sync_no_dossier(conn, depart_id: int) -> None:
+    """Recopie sur le départ la référence du dossier qu'il pointe.
+
+    `planning_entry_id` est la source de vérité : c'est le dossier que
+    l'utilisateur désigne dans le formulaire d'expédition. `no_dossier` en est
+    une copie textuelle, tenue à jour ici parce que toute la chaîne FSC —
+    traceur, mention à porter sur le document de vente, registre — interroge
+    des références de dossier et non des identifiants de ligne de planning.
+
+    Sans cette recopie, le champ reste vide sur tout départ créé après la
+    migration 222 (son backfill depuis `ref_sifa` ne s'est joué qu'une fois),
+    et un auditeur qui part d'un bon de livraison ne peut pas remonter à la
+    matière : la chaîne casse au premier maillon interne.
+
+    Deux règles :
+      - la saisie prime sur la déduction. Un `no_dossier_source` hérité du
+        backfill ('reconstitue', déduit de `ref_sifa`) est écrasé dès qu'un
+        vrai dossier est désigné ;
+      - on n'efface QUE ce que ce mécanisme a écrit. Si le dossier est retiré
+        du départ, un rattachement 'reconstitue' antérieur reste en place — il
+        ne vient pas d'ici, ce n'est pas à nous de le supprimer.
+    """
+    row = conn.execute(
+        """SELECT COALESCE(
+                    NULLIF(TRIM(COALESCE(pe.reference, '')), ''),
+                    NULLIF(TRIM(COALESCE(pe.numero_of, '')), '')) AS ref
+             FROM expe_departs d
+             LEFT JOIN planning_entries pe ON pe.id = d.planning_entry_id
+            WHERE d.id = ?""",
+        (depart_id,),
+    ).fetchone()
+    ref = ((row["ref"] if row else None) or "").strip()
+
+    if ref:
+        conn.execute(
+            "UPDATE expe_departs SET no_dossier=?, no_dossier_source='saisi' WHERE id=?",
+            (ref, depart_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE expe_departs SET no_dossier=NULL, no_dossier_source=NULL "
+            " WHERE id=? AND COALESCE(no_dossier_source,'')='saisi'",
+            (depart_id,),
+        )
+
+
 @router.get("/dossiers-disponibles")
 def list_dossiers_disponibles_expe(request: Request):
     """Picker dossier pour l'écran Ajouter départ (MyExpé).
@@ -483,6 +670,11 @@ def list_dossiers_disponibles_expe(request: Request):
                       pe.ref_produit, pe.numero_of, pe.date_livraison,
                       pe.format_l, pe.format_h, pe.statut, pe.position,
                       pe.duree_heures, pe.updated_at,
+                      -- L'exigence FSC se décide au planning mais se lit ici :
+                      -- l'expéditionnaire doit voir qu'il rattache un départ à
+                      -- un dossier certifié, sans avoir à ouvrir MyProd.
+                      COALESCE(pe.fsc_requis, 0) AS fsc_requis,
+                      COALESCE(pe.fsc_type_requis, '') AS fsc_type_requis,
                       m.nom AS machine_nom, m.code AS machine_code,
                       (SELECT COUNT(*) FROM expe_departs ed
                          WHERE ed.planning_entry_id = pe.id) AS departs_count,
@@ -633,6 +825,9 @@ def create_depart(request: Request, body: dict = Body(...)):
             if palette_europe else None
         ) or None
         palette_europe_note = _f("palette_europe_note") if palette_europe else None
+        if not body.get("no_bl_doublon_confirme"):
+            _check_no_bl_unique(conn, body.get("no_bl"))
+        rattachement = _resoudre_rattachement(conn, body, user)
         cur = conn.execute(
             """INSERT INTO expe_departs (
                 date_enlevement, affreteurs, transporteur, transporteur_id, client,
@@ -668,8 +863,20 @@ def create_depart(request: Request, body: dict = Body(...)):
                 email,
             ),
         )
-        conn.commit()
         rid = cur.lastrowid
+        # Avant le commit : le départ, sa référence de dossier et, à défaut, sa
+        # déclaration entrent en base dans la même transaction. Un départ
+        # enregistré sans l'un des deux, même une fraction de seconde, est un
+        # trou dans la chaîne de contrôle.
+        _sync_no_dossier(conn, rid)
+        if rattachement:
+            conn.execute(
+                "UPDATE expe_departs SET "
+                + ", ".join(f"{k}=?" for k in rattachement)
+                + " WHERE id=?",
+                (*rattachement.values(), rid),
+            )
+        conn.commit()
         row = conn.execute(
             f"{_DEPARTS_SELECT} WHERE d.id=?", (rid,)
         ).fetchone()
@@ -841,7 +1048,11 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
         sets.append("palette_europe_note=?")
         args.append(body.get("palette_europe_note") or None)
 
-    if not sets:
+    # `sans_dossier` seul est une modification légitime : c'est le geste de
+    # régularisation d'un départ historique, où rien d'autre ne change. Les
+    # colonnes correspondantes sont ajoutées à `sets` plus bas, une fois la
+    # connexion ouverte (la validation du motif a besoin de la base).
+    if not sets and "sans_dossier" not in body:
         raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour")
 
     with get_db() as conn:
@@ -863,8 +1074,18 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
             raise HTTPException(status_code=404, detail="Départ introuvable")
         if ex["statut"] not in ("en_attente", "valide"):
             raise HTTPException(status_code=409, detail="Modification impossible : départ annulé")
+        if "no_bl" in body and not body.get("no_bl_doublon_confirme"):
+            _check_no_bl_unique(conn, body.get("no_bl"), exclure_id=depart_id)
+        for champ, valeur in _resoudre_rattachement(conn, body, user, depart_id).items():
+            sets.append(f"{champ}=?")
+            args.append(valeur)
 
         conn.execute(f"UPDATE expe_departs SET {', '.join(sets)} WHERE id=?", (*args, depart_id))
+        if "planning_entry_id" in body:
+            # Le dossier rattaché a changé (ou a été retiré) : la copie
+            # textuelle doit suivre, sinon la chaîne FSC continue de pointer
+            # vers l'ancien dossier.
+            _sync_no_dossier(conn, depart_id)
         conn.commit()
         row = conn.execute(
             f"{_DEPARTS_SELECT} WHERE d.id=?", (depart_id,)
