@@ -203,14 +203,19 @@ def _matieres_du_dossier(conn, ref: str) -> list[dict]:
                   COALESCE(sr.fournisseur, fmu.fournisseur_manual) AS fournisseur,
                   COALESCE(sr.certificat_fsc, fmu.certificat_fsc_manual) AS certificat_fsc,
                   COALESCE(sr.fsc_type_claim,'non_fsc') AS fsc_type_claim,
-                  ff.licence AS fournisseur_licence
+                  ff.licence AS fournisseur_licence,
+                  (SELECT COUNT(DISTINCT i2.reception_id)
+                     FROM stock_reception_items i2
+                    WHERE TRIM(i2.code_barre) = TRIM(fmu.code_barre)) AS nb_receptions_candidates
              FROM fab_matieres_utilisees fmu
              LEFT JOIN stock_receptions sr ON sr.id = (
                    SELECT i.reception_id FROM stock_reception_items i
                     WHERE TRIM(i.code_barre) = TRIM(fmu.code_barre)
                     ORDER BY i.scanned_at DESC, i.id DESC LIMIT 1)
              LEFT JOIN fournisseurs_fsc ff
-                    ON ff.nom = COALESCE(sr.fournisseur, fmu.fournisseur_manual)
+                    ON ff.id = sr.fournisseur_id
+                    OR (sr.fournisseur_id IS NULL
+                        AND ff.nom = COALESCE(sr.fournisseur, fmu.fournisseur_manual))
             WHERE TRIM(COALESCE(fmu.no_dossier,''))=?
             ORDER BY fmu.scanned_at ASC
             LIMIT ?""",
@@ -223,6 +228,11 @@ def _matieres_du_dossier(conn, ref: str) -> list[dict]:
         # Le rattachement bobine → réception passe par le code-barre : c'est
         # une saisie réelle (l'opérateur a scanné), pas une déduction.
         d["reconstitue"] = False
+        # …sauf si le code existe dans plusieurs réceptions. La requête
+        # ci-dessus retient alors la plus récente : c'est un choix arbitraire,
+        # et il doit être annoncé. Un fournisseur affiché avec certitude alors
+        # qu'il y avait deux candidats est pire qu'une case vide.
+        d["reception_ambigue"] = int(d.pop("nb_receptions_candidates", 1) or 1) > 1
         out.append(d)
     return out
 
@@ -259,6 +269,9 @@ def _lots_du_dossier(conn, ref: str) -> list[dict]:
     for r in rows:
         d = dict(r)
         d["reconstitue"] = bool(d.pop("reconstitue", 0))
+        # Où ce lot est-il parti ? Le sens aval, celui qu'un auditeur suit
+        # quand il doute d'un certificat fournisseur.
+        d["departs"] = _departs_du_lot(conn, d["id"])
         out.append(d)
     return out
 
@@ -318,16 +331,36 @@ def _mouvements_des_lots(conn, lot_ids: list[int], ref: str) -> list[dict]:
 
 
 def _expeditions_du_dossier(conn, ref: str) -> list[dict]:
+    """Départs rattachés à un dossier.
+
+    Deux chemins, parce que le lien a deux âges. `expe_departs.no_dossier` est
+    la copie textuelle tenue à jour à l'écriture par `_sync_no_dossier()` ;
+    `planning_entry_id` est la clé étrangère que le formulaire d'expédition
+    remplit depuis toujours. On interroge les deux : sans le second, tout
+    départ créé entre la migration 222 et le rétablissement du lien resterait
+    invisible ici alors que son dossier est parfaitement connu en base.
+    """
     rows = conn.execute(
-        """SELECT id, no_bl, client, transporteur, affreteurs, date_enlevement,
-                  date_livraison, code_postal_destination, nb_palette, poids_total_kg,
-                  statut, ref_sifa, no_dossier,
-                  COALESCE(no_dossier_source,'') AS no_dossier_source
-             FROM expe_departs
-            WHERE TRIM(COALESCE(no_dossier,''))=?
-            ORDER BY date_enlevement ASC
+        """SELECT d.id, d.no_bl, d.client, d.transporteur, d.affreteurs,
+                  d.date_enlevement, d.date_livraison, d.code_postal_destination,
+                  d.nb_palette, d.poids_total_kg, d.statut, d.ref_sifa,
+                  COALESCE(NULLIF(TRIM(COALESCE(d.no_dossier,'')),''),
+                           NULLIF(TRIM(COALESCE(pe.reference,'')),''),
+                           TRIM(COALESCE(pe.numero_of,''))) AS no_dossier,
+                  CASE
+                    WHEN TRIM(COALESCE(d.no_dossier,'')) <> ''
+                      THEN COALESCE(d.no_dossier_source,'')
+                    WHEN d.planning_entry_id IS NOT NULL THEN 'saisi'
+                    ELSE ''
+                  END AS no_dossier_source
+             FROM expe_departs d
+             LEFT JOIN planning_entries pe ON pe.id = d.planning_entry_id
+            WHERE TRIM(COALESCE(d.no_dossier,''))=?
+               OR TRIM(COALESCE(pe.reference,''))=?
+               OR TRIM(COALESCE(pe.numero_of,''))=?
+            ORDER BY d.date_enlevement ASC
             LIMIT ?""",
-        (ref, _MAX_NOEUDS),
+        (ref, ref, ref, _MAX_NOEUDS),
     ).fetchall()
     out = []
     for r in rows:
@@ -335,6 +368,66 @@ def _expeditions_du_dossier(conn, ref: str) -> list[dict]:
         d["reconstitue"] = (d.pop("no_dossier_source", "") == "reconstitue")
         out.append(d)
     return out
+
+
+def _lots_expedies(conn, depart_id: int) -> list[dict]:
+    """Lots de produit fini physiquement sortis pour un départ donné.
+
+    C'est la preuve directe, celle qu'un auditeur préfère : non pas « ce
+    dossier a produit ces lots et cette expédition vient de ce dossier », mais
+    « ces lots-là sont sortis du stock sur ce BL ». La déduction par le dossier
+    reste juste tant qu'un dossier ne produit qu'un lot ; elle cesse de l'être
+    dès qu'il en produit plusieurs.
+
+    Renvoie une liste vide pour les sorties antérieures à la migration
+    `fsc_sortie_lots_et_depart` : elles n'ont jamais enregistré le détail des
+    lots consommés, et le reconstituer a posteriori serait une invention.
+    """
+    try:
+        rows = conn.execute(
+            """SELECT msl.lot_id, msl.quantite, msl.fsc, msl.no_dossier,
+                      m.id AS mouvement_id, m.created_at, m.created_by_name,
+                      m.emplacement, m.note,
+                      l.date_entree, l.quantite_initiale,
+                      COALESCE(l.fsc_link_reconstitue,0) AS lot_reconstitue,
+                      p.reference AS produit_ref, p.designation, p.unite
+                 FROM mouvements_stock m
+                 JOIN mouvements_stock_lots msl ON msl.mouvement_id = m.id
+                 JOIN lots_stock l ON l.id = msl.lot_id
+                 JOIN produits p ON p.id = m.produit_id
+                WHERE m.expe_depart_id = ?
+                ORDER BY m.created_at ASC, msl.id ASC
+                LIMIT ?""",
+            (depart_id, _MAX_NOEUDS),
+        ).fetchall()
+    except Exception:
+        # Base antérieure à la migration : absence de trace, pas erreur.
+        return []
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["lot_reconstitue"] = bool(d.pop("lot_reconstitue", 0))
+        out.append(d)
+    return out
+
+
+def _departs_du_lot(conn, lot_id: int) -> list[dict]:
+    """Sens inverse : sur quels bons de livraison ce lot est-il parti ?"""
+    try:
+        rows = conn.execute(
+            """SELECT DISTINCT d.id, d.no_bl, d.client, d.date_enlevement,
+                      d.transporteur, msl.quantite
+                 FROM mouvements_stock_lots msl
+                 JOIN mouvements_stock m ON m.id = msl.mouvement_id
+                 JOIN expe_departs d ON d.id = m.expe_depart_id
+                WHERE msl.lot_id = ?
+                ORDER BY d.date_enlevement ASC
+                LIMIT ?""",
+            (lot_id, _MAX_NOEUDS),
+        ).fetchall()
+    except Exception:
+        return []
+    return [dict(r) for r in rows]
 
 
 def _dossiers_de_la_bobine(conn, code_barre: str) -> list[str]:
@@ -358,7 +451,9 @@ def _reception_de_la_bobine(conn, code_barre: str) -> Optional[dict]:
                   ff.pays_origine
              FROM stock_reception_items i
              JOIN stock_receptions sr ON sr.id = i.reception_id
-             LEFT JOIN fournisseurs_fsc ff ON ff.nom = sr.fournisseur
+             LEFT JOIN fournisseurs_fsc ff
+                    ON ff.id = sr.fournisseur_id
+                    OR (sr.fournisseur_id IS NULL AND ff.nom = sr.fournisseur)
             WHERE TRIM(i.code_barre)=?
             ORDER BY i.scanned_at DESC, i.id DESC
             LIMIT 1""",
@@ -368,6 +463,12 @@ def _reception_de_la_bobine(conn, code_barre: str) -> Optional[dict]:
         return None
     d = dict(r)
     d["fsc_claim_label"] = _claim_label(d.get("fsc_type_claim"))
+    nb = conn.execute(
+        """SELECT COUNT(DISTINCT reception_id) AS n
+             FROM stock_reception_items WHERE TRIM(code_barre)=?""",
+        (code_barre,),
+    ).fetchone()
+    d["reception_ambigue"] = int((nb["n"] if nb else 1) or 1) > 1
     return d
 
 
@@ -450,6 +551,12 @@ def _chaine_dossier(conn, ref: str) -> dict:
         ruptures.append(
             f"{len(matieres) - nb_conformes} bobine(s) ne satisfont pas le claim exigé."
         )
+    nb_ambigues = sum(1 for m in matieres if m.get("reception_ambigue"))
+    if nb_ambigues:
+        ruptures.append(
+            f"{nb_ambigues} bobine(s) portent un code-barre présent dans plusieurs "
+            f"réceptions : leur origine fournisseur n'est pas démontrable."
+        )
     if not lots:
         ruptures.append("Aucun lot de produit fini rattaché — entrée en stock non faite ou antérieure au suivi.")
     if lots and not expeditions:
@@ -530,7 +637,9 @@ def traca_chaine(request: Request, type: str = "", id: str = ""):
                 """SELECT sr.*, ff.licence AS fournisseur_licence,
                           ff.certificat AS fournisseur_certificat, ff.pays_origine
                      FROM stock_receptions sr
-                     LEFT JOIN fournisseurs_fsc ff ON ff.nom = sr.fournisseur
+                     LEFT JOIN fournisseurs_fsc ff
+                            ON ff.id = sr.fournisseur_id
+                            OR (sr.fournisseur_id IS NULL AND ff.nom = sr.fournisseur)
                     WHERE sr.id=?""",
                 (rid,),
             ).fetchone()
@@ -564,11 +673,29 @@ def traca_chaine(request: Request, type: str = "", id: str = ""):
                 eid = int(key)
             except ValueError:
                 raise HTTPException(400, "Identifiant d'expédition invalide.")
-            exp = conn.execute("SELECT * FROM expe_departs WHERE id=?", (eid,)).fetchone()
+            # Même double lecture que `_expeditions_du_dossier` : la copie
+            # textuelle si elle existe, sinon le dossier pointé par la clé
+            # étrangère du formulaire d'expédition.
+            exp = conn.execute(
+                """SELECT d.*,
+                          COALESCE(NULLIF(TRIM(COALESCE(d.no_dossier,'')),''),
+                                   NULLIF(TRIM(COALESCE(pe.reference,'')),''),
+                                   TRIM(COALESCE(pe.numero_of,''))) AS dossier_ref,
+                          CASE
+                            WHEN TRIM(COALESCE(d.no_dossier,'')) <> ''
+                              THEN COALESCE(d.no_dossier_source,'')
+                            WHEN d.planning_entry_id IS NOT NULL THEN 'saisi'
+                            ELSE ''
+                          END AS dossier_source
+                     FROM expe_departs d
+                     LEFT JOIN planning_entries pe ON pe.id = d.planning_entry_id
+                    WHERE d.id=?""",
+                (eid,),
+            ).fetchone()
             if not exp:
                 raise HTTPException(404, "Expédition introuvable.")
             d_exp = dict(exp)
-            ref = (d_exp.get("no_dossier") or "").strip()
+            ref = (d_exp.get("dossier_ref") or "").strip()
             branche = _chaine_dossier(conn, ref) if ref else None
 
             # Livraison directe (régime A2) : rien n'a transité par SIFA, donc
@@ -591,6 +718,9 @@ def traca_chaine(request: Request, type: str = "", id: str = ""):
                     "claim_label": _claim_label(d_exp.get("fsc_claim_sortant")),
                 }
 
+            # Preuve directe : les lots physiquement sortis pour ce départ.
+            lots_expedies = _lots_expedies(conn, eid)
+
             if negoce_direct:
                 ruptures_e = (
                     []
@@ -607,14 +737,32 @@ def traca_chaine(request: Request, type: str = "", id: str = ""):
                     "Cette expédition n'est rattachée à aucun dossier : "
                     "la chaîne ne peut pas remonter jusqu'à la matière."
                 ]
+
+            # Une expédition de marchandise fabriquée sans lot rattaché n'est
+            # pas fausse — c'est le cas de toutes celles antérieures au suivi.
+            # Mais l'auditeur doit savoir qu'il lit une déduction par le
+            # dossier et non la sortie physique elle-même.
+            if not negoce_direct and not lots_expedies:
+                ruptures_e = ruptures_e + [
+                    "Aucun lot rattaché à cette sortie : le lien entre les palettes "
+                    "parties et le dossier repose sur une déduction, pas sur "
+                    "l'enregistrement de la sortie."
+                ]
+
             return {
                 "racine": {"type": "expedition", "id": key},
                 "expedition": d_exp,
-                "reconstitue": (d_exp.get("no_dossier_source") or "") == "reconstitue",
+                "reconstitue": (d_exp.get("dossier_source") or "") == "reconstitue",
                 "negoce_direct": negoce_direct,
+                "lots_expedies": lots_expedies,
                 "dossiers": [branche] if branche else [],
                 "synthese": {
                     "nb_dossiers": 1 if branche else 0,
+                    "nb_lots_expedies": len(lots_expedies),
+                    "quantite_expediee": sum(
+                        float(l.get("quantite") or 0) for l in lots_expedies
+                    ),
+                    "preuve_sortie": "directe" if lots_expedies else "deduite",
                     "origine": "negoce_direct" if negoce_direct else ("fabrication" if ref else "inconnue"),
                     "ruptures": ruptures_e,
                     "tronque": False,

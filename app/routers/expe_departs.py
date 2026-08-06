@@ -462,6 +462,107 @@ def _validate_planning_entry_id(conn, value) -> Optional[int]:
     return pid
 
 
+def _cle_no_bl(valeur: Any) -> str:
+    """Forme normalisée d'un n° de BL, pour la comparaison seulement.
+
+    « BL-1001 », « bl 1001 » et « BL1001 » désignent le même document papier.
+    On ne stocke PAS cette forme : ce que l'opérateur a tapé reste ce qui est
+    enregistré, c'est ce qui figure sur le document. Elle ne sert qu'à
+    reconnaître un doublon.
+    """
+    return (
+        str(valeur or "").strip().upper().replace(" ", "").replace("-", "").replace(".", "")
+    )
+
+
+def _check_no_bl_unique(conn, no_bl: Any, exclure_id: Optional[int] = None) -> None:
+    """Refuse un n° de BL déjà porté par un autre départ.
+
+    Premier maillon d'un audit FSC : l'auditeur arrive avec un bon de livraison
+    et demande le départ correspondant. Si deux lignes répondent, la chaîne
+    qu'on lui présente est peut-être la mauvaise et personne ne peut trancher.
+
+    Le refus est un 409 structuré, pas un 400 : ce n'est pas une requête
+    malformée, c'est un conflit d'état que l'opérateur peut lever en
+    connaissance de cause (`no_bl_doublon_confirme: true`) — un même BL réparti
+    sur deux enlèvements existe. Ce qui ne doit pas exister, c'est le doublon
+    créé sans que personne ne l'ait vu.
+    """
+    cle = _cle_no_bl(no_bl)
+    if not cle:
+        return
+    rows = conn.execute(
+        """SELECT id, no_bl, client, date_enlevement
+             FROM expe_departs
+            WHERE UPPER(REPLACE(REPLACE(REPLACE(TRIM(COALESCE(no_bl,'')),' ',''),'-',''),'.','')) = ?
+            LIMIT 5""",
+        (cle,),
+    ).fetchall()
+    autres = [dict(r) for r in rows if exclure_id is None or int(r["id"]) != int(exclure_id)]
+    if not autres:
+        return
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "no_bl_doublon",
+            "no_bl": str(no_bl or "").strip(),
+            "departs": autres,
+            "message": (
+                f"Le n° de BL « {str(no_bl or '').strip()} » est déjà porté par "
+                f"{len(autres)} autre(s) départ(s). Deux départs sous le même numéro "
+                f"rendent la traçabilité ambiguë : un auditeur ne saurait pas lequel "
+                f"correspond au document qu'il présente."
+            ),
+        },
+    )
+
+
+def _sync_no_dossier(conn, depart_id: int) -> None:
+    """Recopie sur le départ la référence du dossier qu'il pointe.
+
+    `planning_entry_id` est la source de vérité : c'est le dossier que
+    l'utilisateur désigne dans le formulaire d'expédition. `no_dossier` en est
+    une copie textuelle, tenue à jour ici parce que toute la chaîne FSC —
+    traceur, mention à porter sur le document de vente, registre — interroge
+    des références de dossier et non des identifiants de ligne de planning.
+
+    Sans cette recopie, le champ reste vide sur tout départ créé après la
+    migration 222 (son backfill depuis `ref_sifa` ne s'est joué qu'une fois),
+    et un auditeur qui part d'un bon de livraison ne peut pas remonter à la
+    matière : la chaîne casse au premier maillon interne.
+
+    Deux règles :
+      - la saisie prime sur la déduction. Un `no_dossier_source` hérité du
+        backfill ('reconstitue', déduit de `ref_sifa`) est écrasé dès qu'un
+        vrai dossier est désigné ;
+      - on n'efface QUE ce que ce mécanisme a écrit. Si le dossier est retiré
+        du départ, un rattachement 'reconstitue' antérieur reste en place — il
+        ne vient pas d'ici, ce n'est pas à nous de le supprimer.
+    """
+    row = conn.execute(
+        """SELECT COALESCE(
+                    NULLIF(TRIM(COALESCE(pe.reference, '')), ''),
+                    NULLIF(TRIM(COALESCE(pe.numero_of, '')), '')) AS ref
+             FROM expe_departs d
+             LEFT JOIN planning_entries pe ON pe.id = d.planning_entry_id
+            WHERE d.id = ?""",
+        (depart_id,),
+    ).fetchone()
+    ref = ((row["ref"] if row else None) or "").strip()
+
+    if ref:
+        conn.execute(
+            "UPDATE expe_departs SET no_dossier=?, no_dossier_source='saisi' WHERE id=?",
+            (ref, depart_id),
+        )
+    else:
+        conn.execute(
+            "UPDATE expe_departs SET no_dossier=NULL, no_dossier_source=NULL "
+            " WHERE id=? AND COALESCE(no_dossier_source,'')='saisi'",
+            (depart_id,),
+        )
+
+
 @router.get("/dossiers-disponibles")
 def list_dossiers_disponibles_expe(request: Request):
     """Picker dossier pour l'écran Ajouter départ (MyExpé).
@@ -633,6 +734,8 @@ def create_depart(request: Request, body: dict = Body(...)):
             if palette_europe else None
         ) or None
         palette_europe_note = _f("palette_europe_note") if palette_europe else None
+        if not body.get("no_bl_doublon_confirme"):
+            _check_no_bl_unique(conn, body.get("no_bl"))
         cur = conn.execute(
             """INSERT INTO expe_departs (
                 date_enlevement, affreteurs, transporteur, transporteur_id, client,
@@ -668,8 +771,12 @@ def create_depart(request: Request, body: dict = Body(...)):
                 email,
             ),
         )
-        conn.commit()
         rid = cur.lastrowid
+        # Avant le commit : le départ et sa référence de dossier entrent en base
+        # dans la même transaction. Un départ enregistré sans son `no_dossier`,
+        # même une fraction de seconde, est un trou dans la chaîne de contrôle.
+        _sync_no_dossier(conn, rid)
+        conn.commit()
         row = conn.execute(
             f"{_DEPARTS_SELECT} WHERE d.id=?", (rid,)
         ).fetchone()
@@ -863,8 +970,15 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
             raise HTTPException(status_code=404, detail="Départ introuvable")
         if ex["statut"] not in ("en_attente", "valide"):
             raise HTTPException(status_code=409, detail="Modification impossible : départ annulé")
+        if "no_bl" in body and not body.get("no_bl_doublon_confirme"):
+            _check_no_bl_unique(conn, body.get("no_bl"), exclure_id=depart_id)
 
         conn.execute(f"UPDATE expe_departs SET {', '.join(sets)} WHERE id=?", (*args, depart_id))
+        if "planning_entry_id" in body:
+            # Le dossier rattaché a changé (ou a été retiré) : la copie
+            # textuelle doit suivre, sinon la chaîne FSC continue de pointer
+            # vers l'ancien dossier.
+            _sync_no_dossier(conn, depart_id)
         conn.commit()
         row = conn.execute(
             f"{_DEPARTS_SELECT} WHERE d.id=?", (depart_id,)

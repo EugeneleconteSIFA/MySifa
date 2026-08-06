@@ -468,20 +468,36 @@ def mention_document_vente(depart_id: int, request: Request):
         source = "negoce_direct" if sans_transit else None
 
         # Régime A1 / fabrication : le claim vient du dossier rattaché.
+        #
+        # Deux façons d'atteindre ce dossier. `planning_entry_id` est une clé
+        # étrangère : elle désigne UNE ligne, sans ambiguïté. `no_dossier` est
+        # une référence textuelle : deux dossiers peuvent la partager, d'où le
+        # `ORDER BY id DESC LIMIT 1` qui suit — un pis-aller. On privilégie
+        # donc la clé, et on ne retombe sur le texte que faute de mieux.
         if not claim:
-            ref = (d.get("no_dossier") or "").strip()
-            if ref:
+            row = None
+            pe_id = d.get("planning_entry_id")
+            if pe_id:
                 row = conn.execute(
                     """SELECT COALESCE(fsc_requis,0) AS fsc_requis,
                               COALESCE(fsc_type_requis,'') AS fsc_type_requis
-                         FROM planning_entries
-                        WHERE TRIM(COALESCE(reference,''))=? OR TRIM(COALESCE(numero_of,''))=?
-                        ORDER BY id DESC LIMIT 1""",
-                    (ref, ref),
+                         FROM planning_entries WHERE id=?""",
+                    (pe_id,),
                 ).fetchone()
-                if row and int(row["fsc_requis"] or 0) == 1:
-                    claim = (row["fsc_type_requis"] or FSC_CLAIM_DEFAUT).strip()
-                    source = "dossier"
+            if row is None:
+                ref = (d.get("no_dossier") or "").strip()
+                if ref:
+                    row = conn.execute(
+                        """SELECT COALESCE(fsc_requis,0) AS fsc_requis,
+                                  COALESCE(fsc_type_requis,'') AS fsc_type_requis
+                             FROM planning_entries
+                            WHERE TRIM(COALESCE(reference,''))=? OR TRIM(COALESCE(numero_of,''))=?
+                            ORDER BY id DESC LIMIT 1""",
+                        (ref, ref),
+                    ).fetchone()
+            if row and int(row["fsc_requis"] or 0) == 1:
+                claim = (row["fsc_type_requis"] or FSC_CLAIM_DEFAUT).strip()
+                source = "dossier"
 
     claim = claim or "non_fsc"
     manques: list[str] = []
@@ -598,12 +614,73 @@ def controles_fsc(request: Request, jours: int = 60):
         except Exception:
             lots_orphelins = []
 
+        # Numéros de BL portés par plusieurs départs. Premier maillon d'un
+        # audit : l'auditeur présente un document, deux lignes répondent, et
+        # rien ne dit laquelle est la bonne.
+        try:
+            bl_doublons = [
+                dict(r)
+                for r in conn.execute(
+                    """SELECT UPPER(REPLACE(REPLACE(REPLACE(TRIM(no_bl),' ',''),'-',''),'.','')) AS cle,
+                              COUNT(*) AS nb,
+                              GROUP_CONCAT(id) AS depart_ids,
+                              GROUP_CONCAT(DISTINCT client) AS clients
+                         FROM expe_departs
+                        WHERE TRIM(COALESCE(no_bl,'')) <> ''
+                        GROUP BY cle
+                       HAVING COUNT(*) > 1
+                        ORDER BY nb DESC LIMIT 200"""
+                ).fetchall()
+            ]
+        except Exception:
+            bl_doublons = []
+
+        # Codes-barres présents dans plusieurs réceptions : l'origine
+        # fournisseur de ces bobines n'est pas décidable.
+        try:
+            codes_ambigus = [
+                dict(r)
+                for r in conn.execute(
+                    """SELECT TRIM(i.code_barre) AS code_barre,
+                              COUNT(DISTINCT i.reception_id) AS nb_receptions,
+                              GROUP_CONCAT(DISTINCT r.fournisseur) AS fournisseurs
+                         FROM stock_reception_items i
+                         JOIN stock_receptions r ON r.id = i.reception_id
+                        WHERE TRIM(COALESCE(i.code_barre,'')) <> ''
+                        GROUP BY TRIM(i.code_barre)
+                       HAVING COUNT(DISTINCT i.reception_id) > 1
+                        ORDER BY nb_receptions DESC LIMIT 200"""
+                ).fetchall()
+            ]
+        except Exception:
+            codes_ambigus = []
+
+        # Réceptions de matière dont le fournisseur n'est pas dans l'annuaire
+        # FSC : ni licence ni certificat opposables.
+        try:
+            recep_sans_fournisseur = [
+                dict(r)
+                for r in conn.execute(
+                    """SELECT id, lot_numero, created_at, fournisseur, fsc_type_claim,
+                              nb_bobines
+                         FROM stock_receptions
+                        WHERE fournisseur_id IS NULL
+                          AND TRIM(COALESCE(fournisseur,'')) <> ''
+                        ORDER BY created_at DESC LIMIT 200"""
+                ).fetchall()
+            ]
+        except Exception:
+            recep_sans_fournisseur = []
+
     return {
         "certificats_a_renouveler": certifs,
         "fournisseurs_sans_date_certificat": sans_date,
         "departs_directs_sans_bl": directs_orphelins,
         "receptions_certificat_invalide": recep_douteuses,
         "lots_fsc_sans_origine": lots_orphelins,
+        "bl_doublons": bl_doublons,
+        "codes_barres_ambigus": codes_ambigus,
+        "receptions_fournisseur_hors_annuaire": recep_sans_fournisseur,
         "synthese": {
             "nb_certificats_a_renouveler": len(certifs),
             "nb_expires": sum(1 for c in certifs if c["expire"]),
@@ -611,6 +688,9 @@ def controles_fsc(request: Request, jours: int = 60):
             "nb_departs_directs_sans_bl": len(directs_orphelins),
             "nb_receptions_douteuses": len(recep_douteuses),
             "nb_lots_sans_origine": len(lots_orphelins),
+            "nb_bl_doublons": len(bl_doublons),
+            "nb_codes_barres_ambigus": len(codes_ambigus),
+            "nb_receptions_fournisseur_hors_annuaire": len(recep_sans_fournisseur),
             "genere_a": _now(),
         },
     }
