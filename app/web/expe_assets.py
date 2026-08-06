@@ -3567,6 +3567,41 @@ EXPE_MAIN_CSS = r"""
   padding:2px 8px;border-radius:5px;font-size:10px;font-weight:800;letter-spacing:.5px;
   background:rgba(52,211,153,.14);color:var(--success,#34d399);
   border:1px solid rgba(52,211,153,.45)}
+.expe-fsc-badge--mixte{background:rgba(251,146,60,.14);color:#fb923c;border-color:rgba(251,146,60,.45)}
+
+/* Sections du formulaire — même langage que la fiche dossier du planning :
+   un titre à barre bleue, deux colonnes, pas de cadre. Douze champs à plat
+   ne se lisent pas ; les mêmes douze rangés par question le font. */
+.expe-form-sections{display:grid;grid-template-columns:1fr 1fr;gap:0 24px}
+@media(max-width:820px){.expe-form-sections{grid-template-columns:1fr}}
+.expe-sec{padding:16px 0 0;min-width:0}
+.expe-sec--wide{grid-column:1/-1;padding-top:0}
+.expe-sec-title{font-size:14.5px;font-weight:700;color:var(--text);margin-bottom:12px;
+  padding-left:11px;border-left:3px solid var(--accent);line-height:1.3}
+.expe-sec .expe-fields{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.expe-sec--wide .expe-fields{grid-template-columns:1fr}
+@media(max-width:520px){.expe-sec .expe-fields{grid-template-columns:1fr}}
+
+/* Dossiers rattachés : une puce par dossier, retirable. */
+.expe-dossier-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.expe-dossier-chip{display:inline-flex;align-items:center;gap:8px;padding:6px 8px 6px 12px;
+  border-radius:8px;background:var(--accent-bg,rgba(58,123,213,.1));color:var(--accent);
+  font-size:12.5px;font-weight:600}
+.expe-dossier-chip button{background:none;border:none;color:inherit;cursor:pointer;
+  font-size:15px;line-height:1;padding:0 2px;opacity:.65}
+.expe-dossier-chip button:hover{opacity:1}
+
+/* Ligne dépliable du tableau des départs. */
+.expe-departs-table tbody tr.expe-row-main{cursor:pointer}
+.expe-row-chevron{display:inline-block;width:12px;color:var(--muted);transition:transform .15s ease;
+  font-size:10px}
+.expe-row-chevron.is-open{transform:rotate(90deg)}
+.expe-row-detail-cell{background:var(--bg);padding:0!important}
+.expe-row-detail{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:12px 22px;padding:12px 16px 14px 30px}
+.expe-row-detail dt{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.5px;margin-bottom:3px}
+.expe-row-detail dd{margin:0;font-size:13px;color:var(--text)}
 .expe-help{font-size:10px;color:var(--muted);margin-top:4px}
 .expe-departs-table tbody tr:nth-child(even) td{background:rgba(148,163,184,.06)}
 .expe-departs-table tbody tr:hover td{background:rgba(34,211,238,.06)}
@@ -3583,14 +3618,21 @@ EXPE_MAIN_CSS = r"""
 .expe-hist-table th,.expe-hist-table td{padding:8px 6px;overflow:hidden;
   text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
 .expe-departs-table th,.expe-hist-table th{padding:10px 6px;font-size:10px;letter-spacing:.3px}
-/* Colonnes texte principales : autorise wrap sur 2 lignes plutôt que d'ellipser */
+/* Colonnes texte principales : autorise wrap sur 2 lignes plutôt que d'ellipser.
+   Depuis le passage à 9 colonnes + ligne dépliable, seuls le client et le n° de
+   BL peuvent encore déborder — le reste est dans le dépliant, où rien n'est
+   tronqué. */
 .expe-departs-table td:nth-child(4),   /* Client (suivi) */
-.expe-departs-table td:nth-child(8),   /* Cde transp. (suivi) */
-.expe-departs-table td:nth-child(10),  /* Type pal. (suivi) */
-.expe-hist-table td:nth-child(3),      /* Client (histo) */
-.expe-hist-table td:nth-child(6),      /* Cde transp. (histo) */
-.expe-hist-table td:nth-child(9)       /* Type pal. (histo) */
+.expe-departs-table td:nth-child(6),   /* N° BL (suivi) */
+.expe-departs-table td:nth-child(7),   /* Palettes + type (suivi) */
+.expe-hist-table td:nth-child(4),      /* Client (histo) */
+.expe-hist-table td:nth-child(5),      /* N° BL (histo) */
+.expe-hist-table td:nth-child(7)       /* Palettes + type (histo) */
 {white-space:normal;word-break:break-word;overflow-wrap:anywhere;overflow:hidden}
+/* La ligne de détail ne doit jamais hériter du tronquage du tableau. */
+.expe-departs-table td.expe-row-detail-cell,
+.expe-hist-table td.expe-row-detail-cell{white-space:normal;overflow:visible;
+  text-overflow:clip;max-width:none}
 /* Colonne actions : jamais tronquée (les boutons doivent rester cliquables) */
 .expe-departs-table td.expe-dep-actions-td,
 .expe-hist-table td.expe-dep-actions-td{overflow:visible;white-space:normal;padding:6px 6px}
@@ -4331,6 +4373,7 @@ function expeOpenDepartModal(prefill, mode){
       poids_total_kg: (src.poids_total_kg!=null && src.poids_total_kg!=='') ? String(src.poids_total_kg) : '',
       date_livraison: (src.date_livraison||'') ? String(src.date_livraison).slice(0,10) : '',
       planning_entry_id: (src.planning_entry_id!=null && src.planning_entry_id!=='') ? String(src.planning_entry_id) : '',
+      dossiers: Array.isArray(src.dossiers) ? src.dossiers.slice() : [],
       dossier_ref: src.planning_dossier_ref || src.planning_numero_of || '',
       fsc_requis: src.fsc_requis ? 1 : 0,
       fsc_type_requis: src.fsc_type_requis || '',
@@ -4401,8 +4444,18 @@ function expeSelectDossier(d){
     f.ref_sifa = d.ref_produit || f.ref_sifa || '';
     f.date_livraison = (d.date_livraison||'').slice(0,10) || f.date_livraison || '';
   }
-  f.planning_entry_id = d.id ? String(d.id) : '';
-  f.dossier_ref = d.reference || d.numero_of || '';
+  // On AJOUTE à la liste : un départ peut couvrir plusieurs OF, et le cas est
+  // courant (consolidation de commandes, OF scindé en lignes). Remplacer
+  // silencieusement le dossier précédent ferait disparaître une ligne de la
+  // chaîne de contrôle sans que personne ne le voie.
+  const liste = Array.isArray(f.dossiers) ? f.dossiers.slice() : [];
+  if(!liste.some(x=>String(x.planning_entry_id)===String(d.id))){
+    liste.push({planning_entry_id:d.id, reference:(d.reference||d.numero_of||''),
+                fsc_requis:d.fsc_requis?1:0, fsc_type_requis:d.fsc_type_requis||''});
+  }
+  f.dossiers = liste;
+  f.planning_entry_id = liste.length ? String(liste[0].planning_entry_id) : '';
+  f.dossier_ref = liste.length ? (liste[0].reference||'') : '';
   // Le dossier prime : une déclaration « non lié à une production » devient
   // sans objet dès qu'un dossier est désigné.
   f.sans_dossier = 0; f.sans_dossier_motif = ''; f.sans_dossier_note = '';
@@ -4410,7 +4463,7 @@ function expeSelectDossier(d){
   f.fsc_type_requis = d.fsc_type_requis || '';
   if(rattachSeul){
     set({expeDepartForm:f, expeDepartFormTab:'manuel', expeDepartPickerRattachOnly:false});
-    toast('Départ rattaché au dossier '+(d.reference||d.numero_of||''));
+    toast('Dossier '+(d.reference||d.numero_of||'')+' rattaché ('+liste.length+' au total)');
     return;
   }
   // Estimation nb palettes via fiche technique si dispo (cartons sol × hauteur ÷ ratio)
@@ -4574,7 +4627,7 @@ function renderExpeDepartModal(){
   const overlay=h('div',{className:'add-row-modal',style:{zIndex:12000}});
   overlay.addEventListener('click',e=>{if(e.target===overlay)expeCloseDepartModal();});
 
-  const box=h('div',{className:'add-row-form',style:{maxWidth:'760px'}});
+  const box=h('div',{className:'add-row-form',style:{maxWidth:'920px'}});
   const closeBtn=h('button',{type:'button',className:'add-row-close',onClick:expeCloseDepartModal},'×');
   const header=h('div',{className:'add-row-header'},
     h('h3',null,isEdit?'Modifier un départ':'Ajouter un départ'),
@@ -4600,7 +4653,8 @@ function renderExpeDepartModal(){
       nb_palette:(S.expeDepartForm.nb_palette||'').trim()||null,
       poids_total_kg:(S.expeDepartForm.poids_total_kg||'').trim()||null,
       date_livraison:(S.expeDepartForm.date_livraison||'').trim()||null,
-      planning_entry_id:(S.expeDepartForm.planning_entry_id||'').trim()||null,
+      dossiers:(Array.isArray(S.expeDepartForm.dossiers)?S.expeDepartForm.dossiers:[])
+                 .map(x=>x.planning_entry_id),
       sans_dossier: S.expeDepartForm.sans_dossier ? 1 : 0,
       sans_dossier_motif:(S.expeDepartForm.sans_dossier_motif||'').trim()||null,
       sans_dossier_note:(S.expeDepartForm.sans_dossier_note||'').trim()||null,
@@ -4609,7 +4663,7 @@ function renderExpeDepartModal(){
     if(!body.date_enlevement){toast("Date d'enlèvement obligatoire",'error');return;}
     // Contrôle côté écran : l'API refuse de toute façon, mais autant le dire
     // avant d'avoir tout ressaisi.
-    if(!body.planning_entry_id && !body.sans_dossier){
+    if(!(body.dossiers||[]).length && !body.sans_dossier){
       toast('Sélectionnez le dossier, ou cochez « Envoi non lié à une production »','error');
       return;
     }
@@ -4668,10 +4722,16 @@ function renderExpeDepartModal(){
     ['non_marchandise', 'Envoi non marchand (palettes vides, matériel, documents)'],
     ['autre',           'Autre (préciser)'],
   ];
-  const aDossier = !!((f.planning_entry_id||'').toString().trim());
+  const dossiersListe = Array.isArray(f.dossiers) ? f.dossiers : [];
+  const aDossier = dossiersListe.length > 0;
+  // Claims hétérogènes sur un même départ : la mention FSC ne peut plus être
+  // globale, elle devra être portée ligne par ligne sur la facture.
+  const claimsSet = new Set(dossiersListe.map(x=>Number(x.fsc_requis)?(x.fsc_type_requis||'fsc'):'non_fsc'));
+  const fscMixte = claimsSet.size > 1;
   const sansDossierCheck = h('input',{type:'checkbox',id:'expe-form-sans-dossier'});
   sansDossierCheck.checked = !aDossier && !!(f.sans_dossier);
   sansDossierCheck.disabled = aDossier;   // un départ rattaché n'a rien à déclarer
+  void sansDossierCheck;
   sansDossierCheck.addEventListener('change',e=>{
     S.expeDepartForm.sans_dossier = e.target.checked ? 1 : 0;
     if(!e.target.checked){
@@ -4712,22 +4772,32 @@ function renderExpeDepartModal(){
 
   const rattachKids = [];
   if(aDossier){
+    const chips = dossiersListe.map(d=>h('span',{className:'expe-dossier-chip'},
+      iconEl('folder',12),' ',(d.reference||('#'+d.planning_entry_id)),
+      Number(d.fsc_requis)?h('span',{className:'expe-fsc-badge'},
+        'FSC'+(EXPE_FSC_LABELS[d.fsc_type_requis]?' · '+EXPE_FSC_LABELS[d.fsc_type_requis]:'')):null,
+      h('button',{type:'button',title:'Retirer ce dossier',onClick:(e)=>{
+        e.stopPropagation();
+        S.expeDepartForm.dossiers = dossiersListe.filter(
+          x=>String(x.planning_entry_id)!==String(d.planning_entry_id));
+        expeScheduleSaveLocal(); render();
+      }},'×')
+    ));
+    rattachKids.push(h('div',{className:'expe-dossier-chips'},...chips));
+    if(fscMixte){
+      rattachKids.push(h('div',{className:'expe-field-note',
+        style:{color:'#c2410c',fontWeight:'600'}},
+        'Vente mixte : ce départ couvre du certifié et du non certifié. '
+        + 'Le claim FSC devra être porté ligne par ligne sur la facture, jamais globalement.'));
+    }
     rattachKids.push(h('div',{className:'expe-rattach-row'},
-      h('span',{className:'expe-rattach-ok'},
-        iconEl('folder',13),
-        ' Rattaché au dossier '+((f.dossier_ref||f.arc||'').trim()||'sélectionné'),
-        expeFscBadge(f)),
-      btnRattacher('Changer'),
+      btnRattacher('Ajouter un dossier'),
       h('button',{type:'button',className:'btn-ghost',
         style:{fontSize:'12px',padding:'6px 12px'},
         onClick:()=>{
-          S.expeDepartForm.planning_entry_id='';
-          S.expeDepartForm.dossier_ref='';
-          S.expeDepartForm.fsc_requis=0;
-          S.expeDepartForm.fsc_type_requis='';
-          expeScheduleSaveLocal();
-          render();
-        }},'Détacher')
+          S.expeDepartForm.dossiers=[];
+          expeScheduleSaveLocal(); render();
+        }},'Tout détacher')
     ));
   }else{
     const lbl = h('label',{htmlFor:'expe-form-sans-dossier'},
@@ -4744,26 +4814,44 @@ function renderExpeDepartModal(){
     }
   }
   const rattachField = h('div',{className:'expe-field expe-field--wide'},
-    h('label',null,'Rattachement production'),
     h('div',null,...rattachKids)
   );
 
-  const fields=h('div',{className:'expe-fields'},
-    rattachField,
-    mk("Date d'enlèvement",'date_enlevement','date'),
-    mk('Affréteurs','affreteurs'),
-    mk('Transporteur','transporteur'),
-    mk('Client','client'),
-    mk('Code postal / destination','code_postal_destination'),
-    mk('Réf. SIFA','ref_sifa'),
-    mk('ARC','arc'),
-    mk('N° Récépissé','no_cde_transport'),
-    mk('N° BL','no_bl'),
-    palField,
-    mk('Nombre de palettes','nb_palette','number','ex: 2'),
-    mk('Poids total (kg)','poids_total_kg','number','ex: 1325'),
-    mk('Date livraison (prévue)','date_livraison','date'),
-    europeField
+  // Quatre questions, dans l'ordre où on les pose vraiment : d'où ça vient,
+  // qui l'emporte et quand, chez qui ça va, et ce qu'il y a dessus. Les mêmes
+  // champs qu'avant — c'est le regroupement qui rend la saisie lisible.
+  const sec = (titre, ...champs) => h('div',{className:'expe-sec'},
+    h('div',{className:'expe-sec-title'},titre),
+    h('div',{className:'expe-fields'},...champs.filter(Boolean))
+  );
+
+  const fields=h('div',{className:'expe-form-sections'},
+    h('div',{className:'expe-sec expe-sec--wide'},
+      h('div',{className:'expe-sec-title'},'Rattachement production'),
+      h('div',{className:'expe-fields'},rattachField)
+    ),
+    sec('Enlèvement et transport',
+      mk("Date d'enlèvement",'date_enlevement','date'),
+      mk('Transporteur','transporteur'),
+      mk('Affréteurs','affreteurs'),
+      mk('N° Récépissé','no_cde_transport')
+    ),
+    sec('Client et livraison',
+      mk('Client','client'),
+      mk('Code postal / destination','code_postal_destination'),
+      mk('Date livraison (prévue)','date_livraison','date')
+    ),
+    sec('Colisage',
+      palField,
+      mk('Nombre de palettes','nb_palette','number','ex: 2'),
+      mk('Poids total (kg)','poids_total_kg','number','ex: 1325'),
+      europeField
+    ),
+    sec('Références documentaires',
+      mk('N° BL','no_bl'),
+      mk('ARC','arc'),
+      mk('Réf. SIFA','ref_sifa')
+    )
   );
 
 
@@ -5649,9 +5737,14 @@ function renderExpeSuiviDeparts(){
     )
   );
   const rows=S.expeDepartList||[];
+  // Sept colonnes au lieu de quatorze. Le reste n'a pas disparu : il est dans
+  // le dépliant. Quatorze colonnes dont la moitié est tronquée par une ellipse
+  // ne renseignent sur rien — un n° de BL coupé à « 993870… » ne permet ni de
+  // lire, ni de comparer, ni de retrouver.
   const head=h('tr',null,
-    ...['Date enl.','Affr.','Transp.','Client','Destination','Réf SIFA','ARC','Cde transp.','N° BL','Type pal.','Pal.','Poids kg','Liv. prév.',''].map(t=>h('th',null,t))
+    ...['','Date enl.','Transporteur','Client','Destination','N° BL','Pal.','Dossier',''].map(t=>h('th',null,t))
   );
+  const COLSPAN = 9;
   function formatDateFr(iso){
     if(!iso||iso.length<10)return iso||'—';
     const d=new Date(iso+'T00:00:00');
@@ -5666,7 +5759,7 @@ function renderExpeSuiviDeparts(){
     if(dateEnl!==prevDate){
       bodyRows.push(
         h('tr',{className:'expe-day-sep-row'},
-          h('td',{colSpan:14,className:'expe-day-sep-cell'},
+          h('td',{colSpan:COLSPAN,className:'expe-day-sep-cell'},
             h('span',{className:'expe-day-sep-label'},formatDateFr(dateEnl))
           )
         )
@@ -5674,20 +5767,20 @@ function renderExpeSuiviDeparts(){
       prevDate=dateEnl;
     }
     const isHl=S.expeDepartHighlightId&&Number(S.expeDepartHighlightId)===Number(r.id);
-    bodyRows.push(h('tr',{className:isHl?'expe-depart-hl':null},
+    const ouvert = expeRowIsOpen(r.id);
+    bodyRows.push(h('tr',{className:'expe-row-main'+(isHl?' expe-depart-hl':''),
+        onClick:(e)=>{ if(!e.target.closest('button')) expeToggleRow(r.id); }},
+      h('td',{style:{width:'22px',textAlign:'center'}},
+        h('span',{className:'expe-row-chevron'+(ouvert?' is-open':'')},'▶')),
       h('td',{title:dateEnl},dateEnl),
-      h('td',{title:r.affreteurs||''},r.affreteurs||'—'),
       h('td',{title:r.transporteur||''},(c=>c?trpTag(r.transporteur||'—',c):(r.transporteur||'—'))(trpColorFromRow(r))),
-      h('td',{title:r.client||''},h('span',{className:'expe-badge-devis-wrap'},r.client||'—',expeFscBadge(r),expeDevisBadge(r))),
+      h('td',{title:r.client||''},h('span',{className:'expe-badge-devis-wrap'},r.client||'—',expeDevisBadge(r))),
       h('td',{style:{fontSize:'12px'},title:r.code_postal_destination||''},r.code_postal_destination||'—'),
-      h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.ref_sifa||''},r.ref_sifa||'—'),
-      h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.arc||''},r.arc||'—'),
-      h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.no_cde_transport||''},r.no_cde_transport||'—'),
       h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.no_bl||''},r.no_bl||'—'),
-      h('td',{style:{fontSize:'12px'},title:expePaletteTypeLabel(r)||''},expePaletteTypeLabel(r)),
-      h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
-      h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
-      h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
+      h('td',{title:expePaletteTypeLabel(r)||''},
+        (r.nb_palette!=null?String(r.nb_palette):'—'),
+        h('span',{style:{color:'var(--muted)',fontSize:'11px'}},' '+(expePaletteTypeLabel(r)||''))),
+      h('td',null,expeDossierCell(r)),
       expeCanWrite()?h('td',{className:'expe-dep-actions-td'},
         expeDepartActsGrid([
           r.code_postal_destination?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
@@ -5713,14 +5806,14 @@ function renderExpeSuiviDeparts(){
           onClick:()=>expeValiderDepart(r.id)},'Valider'))
       ):h('td',null,'—')
     ));
+    if(ouvert) bodyRows.push(expeRowDetail(r, COLSPAN));
   });
-  const body=rows.length?bodyRows:[h('tr',null,h('td',{colSpan:14,style:{color:'var(--muted)'}},S.expeDepartLoading?'Chargement…':'Aucun départ en attente pour ce jour'))];
+  const body=rows.length?bodyRows:[h('tr',null,h('td',{colSpan:COLSPAN,style:{color:'var(--muted)'}},S.expeDepartLoading?'Chargement…':'Aucun départ en attente pour ce jour'))];
   // Colgroup : force la répartition des largeurs (table-layout:fixed). Toutes en % pour
   // s'adapter à la largeur du conteneur sans jamais dépasser.
   const departsCols=[
-    ['date','8%'],['affr','5%'],['transp','9%'],['client','12%'],['dest','6%'],
-    ['refsifa','7%'],['arc','7%'],['cde','9%'],['bl','7%'],['type','9%'],
-    ['pal','4%'],['poids','5%'],['liv','7%'],['acts','12%']
+    ['chev','3%'],['date','10%'],['transp','13%'],['client','18%'],['dest','9%'],
+    ['bl','13%'],['pal','10%'],['dossier','12%'],['acts','12%']
   ];
   const colgroup=h('colgroup',null,...departsCols.map(([c,w])=>h('col',{className:'expe-col-'+c,style:{width:w}})));
   const listCard=h('div',{className:'card'},
@@ -5752,6 +5845,71 @@ function expeFscBadgeHtml(d){
   const lbl = EXPE_FSC_LABELS[t] || '';
   return '<span class="expe-fsc-badge">FSC'+(lbl?' · '+escHtml(lbl):'')+'</span>';
 }
+
+// ── Ligne dépliable ──────────────────────────────────────────────
+// Le tableau garde ce qu'on compare d'une ligne à l'autre ; le dépliant porte
+// ce qu'on lit sur UNE ligne à la fois. Rien n'est supprimé, tout est lisible.
+function expeRowIsOpen(id){
+  return !!(S.expeDepartRowsOpen && S.expeDepartRowsOpen[String(id)]);
+}
+function expeToggleRow(id){
+  const cur = Object.assign({}, S.expeDepartRowsOpen||{});
+  const k = String(id);
+  if(cur[k]) delete cur[k]; else cur[k]=1;
+  set({expeDepartRowsOpen:cur});
+}
+
+function expeDossierCell(r){
+  const ds = Array.isArray(r.dossiers) ? r.dossiers : [];
+  if(!ds.length){
+    if(Number(r.sans_dossier)) return h('span',{className:'expe-field-note',
+      title:'Envoi déclaré non lié à une production'},'Hors prod.');
+    return h('span',{style:{color:'#c2410c',fontWeight:'600',fontSize:'11.5px'},
+      title:'Ni dossier rattaché, ni motif déclaré'},'À rattacher');
+  }
+  const premier = ds[0].reference || ('#'+ds[0].planning_entry_id);
+  const reste = ds.length>1 ? ' +'+(ds.length-1) : '';
+  return h('span',{className:'expe-badge-devis-wrap',
+    title:ds.map(x=>x.reference||('#'+x.planning_entry_id)).join(' · ')},
+    h('span',{style:{fontFamily:'monospace',fontSize:'12px'}},premier+reste),
+    Number(r.fsc_mixte)
+      ? h('span',{className:'expe-fsc-badge expe-fsc-badge--mixte',
+          title:'Vente mixte : claim à porter ligne par ligne'},'FSC mixte')
+      : expeFscBadge(r));
+}
+
+function expeRowDetail(r, colspan){
+  const dl = (lbl, val) => h('div',null,
+    h('dt',null,lbl), h('dd',null, (val==null||val==='')?'—':String(val)));
+  const ds = Array.isArray(r.dossiers) ? r.dossiers : [];
+  const dossiersTxt = ds.length
+    ? ds.map(x=>(x.reference||('#'+x.planning_entry_id))
+        + (Number(x.fsc_requis)?' (FSC'+(EXPE_FSC_LABELS[x.fsc_type_requis]?' '+EXPE_FSC_LABELS[x.fsc_type_requis]:'')+')':'')).join('  ·  ')
+    : (Number(r.sans_dossier)
+        ? 'Non lié à une production — '+(EXPE_MOTIF_LABELS[r.sans_dossier_motif]||r.sans_dossier_motif||'motif non précisé')
+        : 'Aucun dossier rattaché, aucun motif déclaré');
+  return h('tr',{className:'expe-row-detail-row'},
+    h('td',{colSpan:colspan,className:'expe-row-detail-cell'},
+      h('dl',{className:'expe-row-detail'},
+        dl('Dossiers de production', dossiersTxt),
+        dl('ARC', r.arc),
+        dl('Réf. SIFA', r.ref_sifa),
+        dl('N° récépissé', r.no_cde_transport),
+        dl('Affréteurs', r.affreteurs),
+        dl('Type de palette', expePaletteTypeLabel(r)),
+        dl('Poids total', r.poids_total_kg!=null?(r.poids_total_kg+' kg'):null),
+        dl('Livraison prévue', (r.date_livraison||'').slice(0,10)),
+        dl('Palette Europe', Number(r.palette_europe)?'Suivie au retour':'—')
+      )
+    )
+  );
+}
+
+const EXPE_MOTIF_LABELS = {
+  stock_ancien:'Stock ancien', sous_traitance:'Sous-traitance', negoce:'Négoce',
+  echantillon:'Échantillon / présérie', retour_client:'Retour client',
+  non_marchandise:'Envoi non marchand', autre:'Autre'
+};
 
 function expeDevisBadge(r){
   if(!r||!r.source_devis_reponse_id) return null;
@@ -5793,22 +5951,26 @@ function renderExpeHistoriqueDeparts(){
   const limit=50;
   const from=total===0?0:(page-1)*limit+1;
   const to=Math.min(page*limit,total);
+  const HCOLSPAN = 9;
   const head=h('tr',null,
-    ...['Validé le','Date enl.','Client','Réf SIFA','ARC','Cde transp.','N° BL','Transp.','Type pal.','Pal.','Poids','Liv. prév.',''].map(t=>h('th',null,t))
+    ...['','Validé le','Date enl.','Client','N° BL','Transporteur','Pal.','Dossier',''].map(t=>h('th',null,t))
   );
-  const body=rows.length?rows.map(r=>h('tr',null,
+  const bodyRows=[];
+  rows.forEach(r=>{
+    const ouvert = expeRowIsOpen('h'+r.id);
+    bodyRows.push(h('tr',{className:'expe-row-main',
+      onClick:(e)=>{ if(!e.target.closest('button')) expeToggleRow('h'+r.id); }},
+    h('td',{style:{width:'22px',textAlign:'center'}},
+      h('span',{className:'expe-row-chevron'+(ouvert?' is-open':'')},'▶')),
     h('td',{style:{fontSize:'12px',whiteSpace:'nowrap'},title:(r.validated_at||'')},(r.validated_at||'').replace('T',' ').slice(0,16)||'—'),
     h('td',{title:(r.date_enlevement||'').slice(0,10)},(r.date_enlevement||'').slice(0,10)),
-    h('td',{title:r.client||''},h('span',{className:'expe-badge-devis-wrap'},r.client||'—',expeFscBadge(r),expeDevisBadge(r))),
-    h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.ref_sifa||''},r.ref_sifa||'—'),
-    h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.arc||''},r.arc||'—'),
-    h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.no_cde_transport||''},r.no_cde_transport||'—'),
+    h('td',{title:r.client||''},h('span',{className:'expe-badge-devis-wrap'},r.client||'—',expeDevisBadge(r))),
     h('td',{style:{fontFamily:'monospace',fontSize:'12px'},title:r.no_bl||''},r.no_bl||'—'),
     h('td',{title:r.transporteur||''},(c=>c?trpTag(r.transporteur||'—',c):(r.transporteur||'—'))(trpColorFromRow(r))),
-    h('td',{style:{fontSize:'12px'},title:expePaletteTypeLabel(r)||''},expePaletteTypeLabel(r)),
-    h('td',null,r.nb_palette!=null?String(r.nb_palette):'—'),
-    h('td',null,r.poids_total_kg!=null?String(r.poids_total_kg):'—'),
-    h('td',null,(r.date_livraison||'').slice(0,10)||'—'),
+    h('td',{title:expePaletteTypeLabel(r)||''},
+      (r.nb_palette!=null?String(r.nb_palette):'—'),
+      h('span',{style:{color:'var(--muted)',fontSize:'11px'}},' '+(expePaletteTypeLabel(r)||''))),
+    h('td',null,expeDossierCell(r)),
     expeCanWrite()?h('td',{className:'expe-dep-actions-td'},
       expeDepartActsGrid([
         h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Dupliquer ce départ en nouvelle saisie',
@@ -5828,7 +5990,10 @@ function renderExpeHistoriqueDeparts(){
         title:'Annuler la validation et remettre ce départ dans le suivi du jour',
         onClick:()=>void expeInvaliderDepart(r.id)},'Invalider'))
     ):h('td',null,'—')
-  )):[h('tr',null,h('td',{colSpan:13,style:{color:'var(--muted)'}},S.expeDepartHistLoading?'Chargement…':'Aucune entrée (ou affiner la recherche)'))];
+    ));
+    if(ouvert) bodyRows.push(expeRowDetail(r, HCOLSPAN));
+  });
+  const body=rows.length?bodyRows:[h('tr',null,h('td',{colSpan:HCOLSPAN,style:{color:'var(--muted)'}},S.expeDepartHistLoading?'Chargement…':'Aucune entrée (ou affiner la recherche)'))];
   const pager=h('div',{className:'expe-hist-pager'},
     h('span',{className:'page-info'},
       total===0?'Aucun résultat':(from+'–'+to+' / '+total.toLocaleString('fr')+(pages>1?' · page '+page+'/'+pages:''))
@@ -5846,19 +6011,15 @@ function renderExpeHistoriqueDeparts(){
       h('div',{className:'card-header'},h('h3',{className:'expe-mobile-hide-head'},'Historique des départs validés')),
       h('div',{className:'expe-departs-tbl-wrap'},h('table',{className:'table-std expe-hist-table'},
         h('colgroup',null,
-          h('col',{style:{width:'9%'}}),  // Validé le
-          h('col',{style:{width:'8%'}}),  // Date enl.
-          h('col',{style:{width:'13%'}}), // Client
-          h('col',{style:{width:'7%'}}),  // Réf SIFA
-          h('col',{style:{width:'7%'}}),  // ARC
-          h('col',{style:{width:'9%'}}),  // Cde transp.
-          h('col',{style:{width:'7%'}}),  // N° BL
-          h('col',{style:{width:'9%'}}),  // Transp.
-          h('col',{style:{width:'8%'}}),  // Type pal.
-          h('col',{style:{width:'4%'}}),  // Pal.
-          h('col',{style:{width:'5%'}}),  // Poids
-          h('col',{style:{width:'7%'}}),  // Liv. prév.
-          h('col',{style:{width:'7%'}})   // Actions
+          h('col',{style:{width:'3%'}}),   // chevron
+          h('col',{style:{width:'13%'}}),  // Validé le
+          h('col',{style:{width:'10%'}}),  // Date enl.
+          h('col',{style:{width:'20%'}}),  // Client
+          h('col',{style:{width:'13%'}}),  // N° BL
+          h('col',{style:{width:'13%'}}),  // Transporteur
+          h('col',{style:{width:'10%'}}),  // Pal.
+          h('col',{style:{width:'11%'}}),  // Dossier
+          h('col',{style:{width:'7%'}})    // Actions
         ),
         h('thead',null,head),h('tbody',null,...body))),
       pager

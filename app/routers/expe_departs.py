@@ -145,8 +145,26 @@ _DEPARTS_SELECT = """
            t.couleur AS transporteur_couleur,
            pe.reference AS planning_dossier_ref,
            pe.numero_of AS planning_numero_of,
-           COALESCE(pe.fsc_requis, 0) AS fsc_requis,
-           COALESCE(pe.fsc_type_requis, '') AS fsc_type_requis
+           -- L'exigence FSC d'un départ est celle du PLUS EXIGEANT de ses
+           -- dossiers : dès qu'une ligne est certifiée, l'expédition l'est.
+           (SELECT MAX(COALESCE(pe2.fsc_requis, 0))
+              FROM expe_depart_dossiers dd
+              JOIN planning_entries pe2 ON pe2.id = dd.planning_entry_id
+             WHERE dd.depart_id = d.id) AS fsc_requis,
+           COALESCE(pe.fsc_type_requis, '') AS fsc_type_requis,
+           (SELECT COUNT(*) FROM expe_depart_dossiers dd WHERE dd.depart_id = d.id)
+             AS nb_dossiers,
+           -- Liste sérialisée : id|référence|fsc|type, séparateur RS (\x1e).
+           -- Une jointure ligne à ligne multiplierait chaque départ par son
+           -- nombre de dossiers dans toutes les vues qui utilisent ce SELECT.
+           (SELECT GROUP_CONCAT(x.bloc, CHAR(30)) FROM (
+              SELECT dd.planning_entry_id || '|' || COALESCE(dd.no_dossier, '')
+                     || '|' || COALESCE(pe2.fsc_requis, 0)
+                     || '|' || COALESCE(pe2.fsc_type_requis, '') AS bloc
+                FROM expe_depart_dossiers dd
+                LEFT JOIN planning_entries pe2 ON pe2.id = dd.planning_entry_id
+               WHERE dd.depart_id = d.id
+               ORDER BY dd.id ASC) x) AS dossiers_raw
     FROM expe_departs d
     LEFT JOIN matieres_premieres mp ON mp.id = d.type_palette_matiere_id
     LEFT JOIN expe_transporteurs t ON t.id = d.transporteur_id
@@ -164,6 +182,33 @@ def _depart_dict(row) -> dict:
         # dimensions de la référence MyStock alourdissaient chaque cellule du
         # tableau et chaque option du select sans jamais servir à décider.
         d["type_palette_label"] = (d.get("type_palette_reference") or "").strip() or None
+
+    dossiers = []
+    for bloc in (d.pop("dossiers_raw", None) or "").split("\x1e"):
+        if not bloc:
+            continue
+        parts = bloc.split("|")
+        if len(parts) < 4:
+            continue
+        try:
+            pid = int(parts[0])
+        except ValueError:
+            continue
+        dossiers.append({
+            "planning_entry_id": pid,
+            "reference": parts[1] or "",
+            "fsc_requis": int(parts[2] or 0),
+            "fsc_type_requis": parts[3] or "",
+        })
+    d["dossiers"] = dossiers
+    d["nb_dossiers"] = len(dossiers)
+    # Claims hétérogènes : le départ contient du certifié ET du non certifié.
+    # Le claim ne peut alors pas être porté globalement sur le document de
+    # vente — il doit l'être ligne par ligne. On le signale plutôt que de
+    # laisser croire à une vente homogène.
+    claims = {(x["fsc_type_requis"] if x["fsc_requis"] else "non_fsc") for x in dossiers}
+    d["fsc_mixte"] = 1 if len(claims) > 1 else 0
+    d["fsc_requis"] = 1 if any(x["fsc_requis"] for x in dossiers) else 0
     return d
 
 
@@ -489,19 +534,21 @@ def _resoudre_rattachement(conn, body: dict, user: dict,
 
     Renvoie les champs à écrire. Lève un 400 explicite si ni l'un ni l'autre.
     """
-    a_dossier = _validate_planning_entry_id(conn, body.get("planning_entry_id")) is not None
+    demandes = _dossiers_du_body(conn, body)
+    a_dossier = bool(demandes)
 
     # En modification, on ne juge que ce qui est effectivement envoyé : un PUT
     # qui ne touche qu'au poids ne doit pas exiger de re-motiver le départ.
     if depart_id is not None:
-        touche = "planning_entry_id" in body or "sans_dossier" in body
-        if not touche:
+        if demandes is None and "sans_dossier" not in body:
             return {}
-        if not a_dossier and "planning_entry_id" not in body:
-            ex = conn.execute(
-                "SELECT planning_entry_id FROM expe_departs WHERE id=?", (depart_id,)
-            ).fetchone()
-            a_dossier = bool(ex and ex["planning_entry_id"])
+        if demandes is None:
+            a_dossier = bool(
+                conn.execute(
+                    "SELECT 1 FROM expe_depart_dossiers WHERE depart_id=? LIMIT 1",
+                    (depart_id,),
+                ).fetchone()
+            )
 
     # Un départ rattaché n'a rien à déclarer : le dossier prime, et on efface
     # une éventuelle déclaration devenue sans objet.
@@ -603,6 +650,92 @@ def _check_no_bl_unique(conn, no_bl: Any, exclure_id: Optional[int] = None) -> N
     )
 
 
+def _dossiers_du_body(conn, body: dict) -> Optional[list[int]]:
+    """Liste des dossiers demandée par l'appelant, ou None si non concernée.
+
+    Deux formes acceptées. `dossiers: [id, ...]` est la forme courante depuis
+    le multi-rattachement ; `planning_entry_id` reste comprise et vaut liste à
+    un élément — l'API MyExpé est appelée depuis plusieurs écrans et un client
+    qui n'a pas été mis à jour ne doit pas se mettre à effacer des liens.
+
+    Renvoie None quand ni l'une ni l'autre n'est présente : « ne touche pas
+    aux dossiers », qui n'est pas la même chose que « liste vide ».
+    """
+    if "dossiers" in body:
+        brut = body.get("dossiers") or []
+        if not isinstance(brut, list):
+            raise HTTPException(400, "`dossiers` doit être une liste d'identifiants.")
+        out: list[int] = []
+        for v in brut:
+            pid = _validate_planning_entry_id(conn, v)
+            if pid is not None and pid not in out:
+                out.append(pid)
+        return out
+    if "planning_entry_id" in body:
+        pid = _validate_planning_entry_id(conn, body.get("planning_entry_id"))
+        return [pid] if pid is not None else []
+    return None
+
+
+def _set_dossiers(conn, depart_id: int, ids: list[int], user: dict) -> None:
+    """Fixe la liste des dossiers d'un départ, en différentiel.
+
+    On ne supprime puis réinsère pas tout : `created_at` et `created_by` de
+    chaque rattachement sont des enregistrements de chaîne de contrôle. Les
+    réécrire à chaque modification du poids d'un départ ferait mentir la date
+    à laquelle le lien a réellement été établi.
+    """
+    now = datetime.now(_PARIS).replace(tzinfo=None).isoformat(timespec="seconds")
+    email = (user.get("email") or user.get("identifiant") or "").strip() or None
+    actuels = {
+        int(r["planning_entry_id"])
+        for r in conn.execute(
+            "SELECT planning_entry_id FROM expe_depart_dossiers WHERE depart_id=?",
+            (depart_id,),
+        ).fetchall()
+    }
+    vises = set(ids)
+
+    for pid in actuels - vises:
+        conn.execute(
+            "DELETE FROM expe_depart_dossiers WHERE depart_id=? AND planning_entry_id=?",
+            (depart_id, pid),
+        )
+    for pid in ids:
+        if pid in actuels:
+            continue
+        r = conn.execute(
+            """SELECT COALESCE(NULLIF(TRIM(COALESCE(reference,'')), ''),
+                               TRIM(COALESCE(numero_of,''))) AS ref
+                 FROM planning_entries WHERE id=?""",
+            (pid,),
+        ).fetchone()
+        conn.execute(
+            """INSERT OR IGNORE INTO expe_depart_dossiers
+                 (depart_id, planning_entry_id, no_dossier, created_at, created_by)
+               VALUES (?,?,?,?,?)""",
+            (depart_id, pid, (r["ref"] if r else None), now, email),
+        )
+
+    # `expe_departs.planning_entry_id` désigne le premier dossier — c'est lui
+    # que lisent le picker, le traceur et le registre.
+    #
+    # On le relit depuis la liaison plutôt que de prendre `ids[0]` : l'ordre
+    # d'affichage suit l'ordre de RATTACHEMENT (dd.id), pas l'ordre du tableau
+    # envoyé par le client. Après un retrait puis un ré-ajout, les deux
+    # divergent — et le départ afficherait alors un premier dossier différent
+    # de celui que la chaîne de contrôle a retenu.
+    premier = conn.execute(
+        "SELECT planning_entry_id FROM expe_depart_dossiers "
+        " WHERE depart_id=? ORDER BY id ASC LIMIT 1",
+        (depart_id,),
+    ).fetchone()
+    conn.execute(
+        "UPDATE expe_departs SET planning_entry_id=? WHERE id=?",
+        ((premier["planning_entry_id"] if premier else None), depart_id),
+    )
+
+
 def _sync_no_dossier(conn, depart_id: int) -> None:
     """Recopie sur le départ la référence du dossier qu'il pointe.
 
@@ -627,11 +760,13 @@ def _sync_no_dossier(conn, depart_id: int) -> None:
     """
     row = conn.execute(
         """SELECT COALESCE(
+                    NULLIF(TRIM(COALESCE(dd.no_dossier, '')), ''),
                     NULLIF(TRIM(COALESCE(pe.reference, '')), ''),
                     NULLIF(TRIM(COALESCE(pe.numero_of, '')), '')) AS ref
-             FROM expe_departs d
-             LEFT JOIN planning_entries pe ON pe.id = d.planning_entry_id
-            WHERE d.id = ?""",
+             FROM expe_depart_dossiers dd
+             LEFT JOIN planning_entries pe ON pe.id = dd.planning_entry_id
+            WHERE dd.depart_id = ?
+            ORDER BY dd.id ASC LIMIT 1""",
         (depart_id,),
     ).fetchone()
     ref = ((row["ref"] if row else None) or "").strip()
@@ -828,6 +963,7 @@ def create_depart(request: Request, body: dict = Body(...)):
         if not body.get("no_bl_doublon_confirme"):
             _check_no_bl_unique(conn, body.get("no_bl"))
         rattachement = _resoudre_rattachement(conn, body, user)
+        dossiers_demandes = _dossiers_du_body(conn, body)
         cur = conn.execute(
             """INSERT INTO expe_departs (
                 date_enlevement, affreteurs, transporteur, transporteur_id, client,
@@ -864,6 +1000,8 @@ def create_depart(request: Request, body: dict = Body(...)):
             ),
         )
         rid = cur.lastrowid
+        if dossiers_demandes:
+            _set_dossiers(conn, rid, dossiers_demandes, user)
         # Avant le commit : le départ, sa référence de dossier et, à défaut, sa
         # déclaration entrent en base dans la même transaction. Un départ
         # enregistré sans l'un des deux, même une fraction de seconde, est un
@@ -1028,9 +1166,9 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
             sets.append(f"{k}=?")
             args.append(_float_opt(k))
 
-    if "planning_entry_id" in body:
-        sets.append("planning_entry_id=?")
-        args.append(None)
+    # `planning_entry_id` n'est plus posé ici : c'est `_set_dossiers()` qui
+    # l'aligne sur le premier dossier de la liaison, pour que les deux ne
+    # puissent jamais diverger.
 
     if "palette_europe" in body:
         raw = body.get("palette_europe")
@@ -1052,7 +1190,8 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
     # régularisation d'un départ historique, où rien d'autre ne change. Les
     # colonnes correspondantes sont ajoutées à `sets` plus bas, une fois la
     # connexion ouverte (la validation du motif a besoin de la base).
-    if not sets and "sans_dossier" not in body:
+    if not sets and "sans_dossier" not in body and "dossiers" not in body \
+            and "planning_entry_id" not in body:
         raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour")
 
     with get_db() as conn:
@@ -1066,9 +1205,6 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
                 args[idx] = _validate_type_palette_matiere_id(
                     conn, body.get("type_palette_matiere_id")
                 )
-        if "planning_entry_id" in body:
-            idx = next(i for i, s in enumerate(sets) if s.startswith("planning_entry_id"))
-            args[idx] = _validate_planning_entry_id(conn, body.get("planning_entry_id"))
         ex = conn.execute("SELECT id, statut FROM expe_departs WHERE id=?", (depart_id,)).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Départ introuvable")
@@ -1080,8 +1216,17 @@ async def update_depart(request: Request, depart_id: int, body: dict = Body(...)
             sets.append(f"{champ}=?")
             args.append(valeur)
 
-        conn.execute(f"UPDATE expe_departs SET {', '.join(sets)} WHERE id=?", (*args, depart_id))
-        if "planning_entry_id" in body:
+        # Garde-fou : un PUT ne portant que des dossiers laisse `sets` vide, et
+        # un `SET` sans colonne est une erreur SQL, pas une opération neutre.
+        if sets:
+            conn.execute(
+                f"UPDATE expe_departs SET {', '.join(sets)} WHERE id=?",
+                (*args, depart_id),
+            )
+        dossiers_demandes = _dossiers_du_body(conn, body)
+        if dossiers_demandes is not None:
+            _set_dossiers(conn, depart_id, dossiers_demandes, user)
+        if dossiers_demandes is not None or "planning_entry_id" in body:
             # Le dossier rattaché a changé (ou a été retiré) : la copie
             # textuelle doit suivre, sinon la chaîne FSC continue de pointer
             # vers l'ancien dossier.

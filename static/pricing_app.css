@@ -471,15 +471,18 @@ table.msl-table th,table.msl-table td{padding:11px 12px}
 .msl-decl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .msl-prix{font-variant-numeric:tabular-nums;white-space:nowrap}
 .msl-coutcell{white-space:nowrap}
-/* Le fournisseur peut être long : il se coupe plutôt que d'élargir sa colonne.
-   Le compteur « +2 », lui, reste visible. */
-.msl-table td:nth-child(4){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
 .msl-cout{font-weight:700;font-size:14px;color:var(--accent);font-variant-numeric:tabular-nums}
-/* « +2 » : d'autres fournisseurs existent sur cette déclinaison, ils se voient
-   dans la vue par référence. Discret — ce n'est pas l'objet de cette vue. */
-.msl-plus{display:inline-block;margin-left:5px;padding:1px 6px;border-radius:5px;
-  background:var(--bg);border:1px solid var(--border);color:var(--muted);
-  font-size:10px;font-weight:700}
+/* Plusieurs fournisseurs sur une même déclinaison : ils s'empilent dans les
+   trois colonnes concernées, alignés sous-ligne par sous-ligne. Le principal en
+   tête, en clair ; les autres en retrait — ce sont des hypothèses, pas le prix
+   retenu. Le cas courant (un seul fournisseur) reste une ligne simple. */
+.msl-fourn .msl-l,.msl-prix .msl-l,.msl-coutcell .msl-l{line-height:22px;min-height:22px}
+.msl-l + .msl-l{margin-top:2px;padding-top:2px;border-top:1px dashed var(--border)}
+.msl-l:not(.msl-l-main){color:var(--muted);font-size:12px}
+.msl-l:not(.msl-l-main) .msl-cout{color:var(--muted);font-weight:600;font-size:12px}
+.msl-fourn{overflow:hidden}
+.msl-fourn .msl-l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* Référence sans aucune déclinaison : elle reste dans la liste, sinon on
    l'oublie — mais elle ne se donne pas des airs de ligne complète. */
 .msl-vide{cursor:default}
@@ -647,3 +650,6 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
    saisit qu'une fois. */
 .ms-decl-rappel{color:var(--muted);padding-left:14px}
 .ms-fiche{white-space:nowrap}
+/* Coût au m² d'un fournisseur qui n'est pas le principal : c'est une hypothèse
+   — « voilà ce que ça coûterait si on prenait celui-là ». D'où le retrait. */
+.ms-cout-alt{color:var(--text2);font-variant-numeric:tabular-nums}

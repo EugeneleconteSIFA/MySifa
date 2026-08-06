@@ -474,29 +474,86 @@ def mention_document_vente(depart_id: int, request: Request):
         # une référence textuelle : deux dossiers peuvent la partager, d'où le
         # `ORDER BY id DESC LIMIT 1` qui suit — un pis-aller. On privilégie
         # donc la clé, et on ne retombe sur le texte que faute de mieux.
+        lignes: list[dict] = []
         if not claim:
-            row = None
-            pe_id = d.get("planning_entry_id")
-            if pe_id:
-                row = conn.execute(
-                    """SELECT COALESCE(fsc_requis,0) AS fsc_requis,
-                              COALESCE(fsc_type_requis,'') AS fsc_type_requis
-                         FROM planning_entries WHERE id=?""",
-                    (pe_id,),
-                ).fetchone()
-            if row is None:
+            lignes = [
+                dict(r)
+                for r in conn.execute(
+                    """SELECT dd.planning_entry_id,
+                              COALESCE(NULLIF(TRIM(COALESCE(dd.no_dossier,'')), ''),
+                                       TRIM(COALESCE(pe.reference,''))) AS dossier,
+                              COALESCE(pe.fsc_requis,0) AS fsc_requis,
+                              COALESCE(pe.fsc_type_requis,'') AS fsc_type_requis
+                         FROM expe_depart_dossiers dd
+                         LEFT JOIN planning_entries pe ON pe.id = dd.planning_entry_id
+                        WHERE dd.depart_id = ?
+                        ORDER BY dd.id ASC""",
+                    (depart_id,),
+                ).fetchall()
+            ]
+            # Repli sur la référence textuelle pour les départs antérieurs à
+            # la table de liaison.
+            if not lignes:
                 ref = (d.get("no_dossier") or "").strip()
                 if ref:
-                    row = conn.execute(
-                        """SELECT COALESCE(fsc_requis,0) AS fsc_requis,
+                    r = conn.execute(
+                        """SELECT id AS planning_entry_id, reference AS dossier,
+                                  COALESCE(fsc_requis,0) AS fsc_requis,
                                   COALESCE(fsc_type_requis,'') AS fsc_type_requis
                              FROM planning_entries
                             WHERE TRIM(COALESCE(reference,''))=? OR TRIM(COALESCE(numero_of,''))=?
                             ORDER BY id DESC LIMIT 1""",
                         (ref, ref),
                     ).fetchone()
-            if row and int(row["fsc_requis"] or 0) == 1:
-                claim = (row["fsc_type_requis"] or FSC_CLAIM_DEFAUT).strip()
+                    if r:
+                        lignes = [dict(r)]
+
+            claims_lignes = {
+                ((l["fsc_type_requis"] or FSC_CLAIM_DEFAUT).strip()
+                 if int(l["fsc_requis"] or 0) else "non_fsc")
+                for l in lignes
+            }
+            # Vente MIXTE. La norme demande le claim par LIGNE du document de
+            # vente ; produire ici une mention globale reviendrait soit à
+            # certifier de la marchandise qui ne l'est pas, soit à taire un
+            # claim dû. Les deux sont des non-conformités — on refuse et on
+            # rend les lignes pour que la facture soit annotée correctement.
+            if len(claims_lignes) > 1:
+                return {
+                    "depart_id": depart_id,
+                    "claim": None,
+                    "mention": None,
+                    "source": "dossiers_mixtes",
+                    "mixte": True,
+                    "lignes": [
+                        {
+                            "dossier": l["dossier"],
+                            "claim": ((l["fsc_type_requis"] or FSC_CLAIM_DEFAUT).strip()
+                                      if int(l["fsc_requis"] or 0) else "non_fsc"),
+                            "claim_label": FSC_CLAIM_LABELS.get(
+                                ((l["fsc_type_requis"] or FSC_CLAIM_DEFAUT).strip()
+                                 if int(l["fsc_requis"] or 0) else "non_fsc"), ""),
+                            "mention": (
+                                f"{FSC_LICENCE_SIFA or '«licence FSC SIFA à renseigner»'} — "
+                                + FSC_CLAIM_LABELS.get(
+                                    (l["fsc_type_requis"] or FSC_CLAIM_DEFAUT).strip(), "")
+                                if int(l["fsc_requis"] or 0) else None
+                            ),
+                        }
+                        for l in lignes
+                    ],
+                    "manques": ([] if FSC_LICENCE_SIFA else [
+                        "Code de licence FSC de SIFA non renseigné (FSC_LICENCE_SIFA)."
+                    ]),
+                    "commentaire": (
+                        "Vente mixte : ce départ couvre des dossiers certifiés et non "
+                        "certifiés. Aucune mention globale n'est recevable — porter le "
+                        "claim ligne par ligne sur la facture et le bon de livraison, "
+                        "et ne rien porter sur les lignes non certifiées."
+                    ),
+                }
+            if lignes and claims_lignes and "non_fsc" not in claims_lignes:
+                claim = next(iter(claims_lignes))
                 source = "dossier"
 
     claim = claim or "non_fsc"

@@ -1173,28 +1173,56 @@ def list_mystock_materials(
         # Coût au m² de chaque déclinaison : c'est la colonne qui rend la liste
         # utile, sinon il faut ouvrir chaque fiche pour savoir ce que la matière
         # coûte réellement.
+        #
+        # Et un coût par LIGNE fournisseur, calculé avec les mêmes réglages et le
+        # prix de cette ligne-là. Sans lui, un deuxième fournisseur ne servait à
+        # rien : on voyait deux prix d'achat, jamais les deux coûts au m² — et
+        # c'est le coût au m² qui tranche, pas le prix au kilo (grammage, perte,
+        # transport et taxes ne se comparent pas à l'œil).
+        #
+        # Le calcul est pur — Decimal, aucun accès base : le refaire par ligne ne
+        # coûte rien.
         from app.services.pricing.repository import declinaison_to_pricing_material
 
         reglages = load_pricing_settings(conn)
+
+        def _cout_m2(base: dict, prix: Any) -> Optional[float]:
+            if not prix:
+                return None
+            try:
+                return float(
+                    compute_material_price_per_m2(
+                        declinaison_to_pricing_material({**base, "unit_price": prix}),
+                        reglages,
+                    ).price_eur_per_m2
+                )
+            except PricingError:
+                # Réglages incomplets : la fiche le dira, la liste ne doit pas
+                # tomber pour autant.
+                return None
+
         for m in materials:
             for d in m.get("declinaisons", []):
-                d["cout_eur_m2"] = None
-                if not d.get("unit_price"):
-                    continue
-                try:
-                    d["cout_eur_m2"] = float(
-                        compute_material_price_per_m2(
-                            declinaison_to_pricing_material(
-                                {**d, "declinaison_id": d["id"],
-                                 "reference": m["reference"], "libelle": d["libelle"]}
-                            ),
-                            reglages,
-                        ).price_eur_per_m2
-                    )
-                except PricingError:
-                    # Réglages incomplets : la fiche le dira, la liste ne doit
-                    # pas tomber pour autant.
-                    pass
+                base = {
+                    **d,
+                    "declinaison_id": d["id"],
+                    "reference": m["reference"],
+                    "libelle": d["libelle"],
+                }
+                d["cout_eur_m2"] = _cout_m2(base, d.get("unit_price"))
+                for ligne in d.get("lignes", []):
+                    # La ligne apporte le tarif de SON fournisseur (devise, base
+                    # de prix, transport, taxes). Le calquer sur la déclinaison
+                    # reviendrait à comparer deux fournisseurs avec le transport
+                    # d'un seul — c'était le défaut qu'on corrige.
+                    ligne["cout_eur_m2"] = _cout_m2({**base, **ligne}, ligne.get("prix"))
+            # « Réglées » veut dire chiffrées : une déclinaison dont on sait
+            # sortir un coût au m². `nb_parametrees` comptait autre chose — les
+            # fiches ouvertes et enregistrées à la main — si bien qu'une
+            # déclinaison affichant son coût pouvait être annoncée non réglée.
+            m["nb_chiffrees"] = sum(
+                1 for d in m.get("declinaisons", []) if d.get("cout_eur_m2")
+            )
         cats = sorted(
             r["categorie"]
             for r in conn.execute(
