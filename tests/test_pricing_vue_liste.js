@@ -127,5 +127,21 @@ check('un stockage refusé ne casse pas la page',
 check('la vue par référence reste le défaut', /msVue: "reference"/.test(src), true);
 check('la bascule a son style', css.includes('.view-switch{') && css.includes('.vs-btn.on{'), true);
 
+console.log('\n--- tout tient dans la largeur ---');
+// Sans largeurs fixées, la désignation s'étale et pousse le coût €/m² hors de
+// l'écran — la colonne pour laquelle on ouvre cette vue.
+check('les colonnes ont une largeur imposée', css.includes('table.msl-table{table-layout:fixed'), true);
+const zoneListe = src.slice(src.indexOf('const plat = S.filters.msVue'), src.indexOf('setContent(`', src.indexOf('const plat = S.filters.msVue')));
+check('un colgroup accompagne le tableau', zoneListe.includes('<colgroup>'), true);
+check('une largeur par colonne sauf la désignation',
+  (zoneListe.match(/<col style="width:/g) || []).length, 7);
+check('la désignation est la seule élastique',
+  /<col>\s/.test(zoneListe) || zoneListe.includes('<col>'), true);
+check('elle se coupe au lieu de pousser',
+  css.includes('.msl-des{color:var(--text2);overflow:hidden;text-overflow:ellipsis'), true);
+// Texte coupé = texte perdu, sauf si l'infobulle le rend.
+check('la désignation garde son infobulle', src.includes('class="msl-des" title="${escAttr(m.designation'), true);
+check('la déclinaison aussi', src.includes('title="${escAttr(d.libelle)}"'), true);
+
 console.log(ko === 0 ? '\nTOUT EST VERT' : '\n' + ko + ' ECHEC(S)');
 process.exit(ko === 0 ? 0 : 1);

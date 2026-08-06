@@ -1035,7 +1035,7 @@
         <td>${categorieBadge(m.categorie)}</td>
         <td class="msl-ref"><strong>${escHtml(m.reference)}</strong></td>
         <td class="msl-des" title="${escAttr(m.designation || "")}">${escHtml(m.designation || "")}</td>
-        <td class="msl-decl">${decl}</td>
+        <td class="msl-decl"${d && d.libelle ? ` title="${escAttr(d.libelle)}"` : ""}>${decl}</td>
         <td>${fournisseur}${plus}</td>
         <td class="msl-prix">${prix}</td>
         <td class="msl-coutcell">${cout}</td>
@@ -1104,6 +1104,11 @@
     const tableau = plat
       ? `<div class="table-wrap">
           <table class="pr-table msl-table">
+            <colgroup>
+              <col style="width:92px"><col style="width:112px"><col>
+              <col style="width:174px"><col style="width:152px">
+              <col style="width:112px"><col style="width:122px"><col style="width:56px">
+            </colgroup>
             <thead><tr><th>Cat.</th><th>Référence</th><th>Désignation</th><th>Déclinaison</th><th>Fournisseur</th><th>Prix</th><th>Coût €/m²</th><th class="ms-actions"></th></tr></thead>
             <tbody>${aPlat.map(mystockFlatRowHtml).join("")
               || '<tr><td colspan="8" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
