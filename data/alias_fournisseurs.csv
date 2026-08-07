@@ -23,3 +23,6 @@ SATO FRANCE;18    # ~0.95 → « Sato » · licence FSC-C207483
 SUZHOU PIAOZHIHUA COMPOSITE MATERIALS TECHNOLOGY C;20    # ~0.95 → « Suzhou » · licence FSC-C140235
 XINZHU SELF-ADHESIVE MATERIALS;24    # ~0.95 → « Xinzhu » · licence FSC-C177953
 FRIMPEKS ITALIA SRL;7    # ~0.89 → « Frimpeks Italy » · licence FSC-C164660
+UPM;-    # decision : une seule fiche UPM, coordonnees francaises (Pompey).
+#          Cette ligne est le siege finlandais (Tampere, TVA FI10647334) :
+#          meme relation commerciale a l'achat, on ne l'importe pas.

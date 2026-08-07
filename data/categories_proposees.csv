@@ -1,0 +1,206 @@
+# Catégories proposées — relisez, corrigez, puis :
+#   python3 scripts/categoriser_fournisseurs.py --appliquer
+# (ce CSV est un rapport de relecture, le script relit la base)
+#
+# id;nom;categories;source
+30;AAC Computer;autre;nom
+37;ABSOFT;autre;nom
+38;ABZAC;mandrin;nom
+39;ACCENT Labels & Packaging;carton,sous_traitant;nom
+42;ACCESS PRINTING SOLUTION;sous_traitant;nom
+40;ACCESS-IT;autre;nom
+45;ACTEBIS;autre;nom
+47;ADECCO;autre;nom
+50;ADEZIF NORD;adhesif;nom
+51;ADLEY ADHESIVES;adhesif;nom
+53;AFFRETOO;autre;nom
+55;ALLPACK TUPACK;carton;nom
+58;Alternative packaging;carton;nom
+59;AMAZON;autre;nom
+60;Antalis;frontal;nom
+134;ARCONVERT S.A;frontal;nom
+63;ARJOBEX Synthetic Papers;frontal;nom
+67;Autour du bureau;autre;nom
+74;B.S SYNERGIE ETIQUETTES;sous_traitant;nom
+68;BARCODIS;autre;nom
+70;Beyond Adhesives Ltd;adhesif;nom
+71;Bluestar Europe Distribution;negoce;nom
+73;BRENNTAG SA;adhesif;nom
+75;BURBAN PALETTES;palette;nom
+77;Cartonnages Auguste PAULET;carton;nom
+76;Cartonnages du Nord;carton;nom
+78;CEVENNES ETIQUETTES;sous_traitant;nom
+79;CHECKPOINT;autre;nom
+80;COREX;mandrin;nom
+81;CROWN VAN GELBER;frontal;nom
+82;DAETWYLER-HELL;autre;nom
+84;DIATECX;autre;nom
+202;E&P CONSULT;autre;nom
+86;EMBALTEC;carton;nom
+88;ERP ASSOCIES;autre;nom
+91;Ester INdustries Ltd.;frontal;nom
+93;ETICZEN;sous_traitant;nom
+94;ETIFLEX;sous_traitant;nom
+95;ETIKSERVICES;sous_traitant;nom
+100;Etiquettes Pierre Foucher;sous_traitant;nom
+96;FLEXCON;frontal;nom
+98;FOCUS HOTMELT EUROPE Sp. z o.o.;adhesif;nom
+29;FRANCE EXPRESS;autre;nom
+102;GENERIQUE;autre;nom
+105;GIPAKO;mandrin;nom
+106;GREEN LASER - CARTOUCHE DIFFUSION;negoce;nom
+175;GUANGZHOU SHINE LABEL MATERIALS CO.LTD;sous_traitant;nom
+107;HANGZOU CODEWEL NEX MATERIAL Co.,Ltd;frontal;nom
+110;HONORE RECUPERATION;autre;nom
+112;IMPRIMERIE FEYS;sous_traitant;nom
+113;INAPA France;frontal;nom
+116;JARLTECH FRANCE;autre;nom
+119;JOYE KARTONNAGE NV;carton;nom
+121;JPG;autre;nom
+122;Jujo Thermal Ltd;frontal;nom
+12;Kanzan;frontal;nom
+120;KARTONNAGE JOYE POLSKA SP. Z O.O.;carton;nom
+124;KARTONNAGE LEFEVERE BEEL;carton;nom
+125;KOCHER + BECK GMBH & CO.;autre;nom
+126;KPM Analytics North America Corporation;autre;nom
+127;KPN ANALYTICS;autre;nom
+87;L'EPERON IMPRIMERIE;sous_traitant;nom
+128;LABELMATE BV;sous_traitant;nom
+131;LGP PACKAGING;carton;nom
+56;Mandriladora Alpesa S.L.;mandrin;nom
+135;Maxi Palette;palette;nom
+136;MELTAVIS GmbH;adhesif;nom
+138;MILLER GRAPHICS LIMOGES SAS;sous_traitant;nom
+15;Mitsubishi;frontal;nom
+139;MONDI HILM;frontal;nom
+140;MONDI JULICH;frontal;nom
+146;OndulExpress;carton;nom
+147;ONDULYS GHEYSENS;carton;nom
+148;Pack discount - Monceau diffusion;carton;nom
+151;PERFORMANCES DIFFUSION;negoce;nom
+152;PHENIX LABELS;sous_traitant;nom
+153;PHOENIX RELEASE BV;glassine;nom
+154;PPI Adhesive Products Limited;adhesif;nom
+155;QRT Graphique;sous_traitant;nom
+156;RAJA;autre;nom
+157;RECYL GRAPHICS;sous_traitant;nom
+17;Ricoh;frontal;nom
+160;RIFO PACKAGE MATERIAL Co., Ltd;carton;nom
+161;RKW Finland Ltd.;frontal;nom
+164;ROTOMETAL DBN SP. Z O.O.;autre;nom
+165;ROTOMETRICS France;autre;nom
+166;ROTOMETRICS INTERNATIO;autre;nom
+167;RSW GmbH Papierhülsen;mandrin,frontal;nom
+203;SAS XEROX;autre;nom
+169;SCOPUS-OMNIBADGES;autre;nom
+170;SD PACK;carton;nom
+171;SEDIS-LOGISTICS;autre;nom
+174;ShaoxingXiangyu Green Packing Co.,Ltd;carton;nom
+179;SKYFLEX;frontal;nom
+182;SOFTAGE Groupe Systeos;autre;nom
+185;SPANDEX GROUP;frontal;nom
+186;SPECIALITY FILMS DISTR;negoce;nom
+187;SPOOLEX;autre;nom
+198;THERMAL TRANSFER SOLUTIONS BV;frontal;nom
+190;TIXO SAS (NGA développement);adhesif;nom
+192;TODDCHRONO;autre;nom
+193;TORRASPAPEL ESPAGNE;frontal;nom
+194;TORRASPAPEL FRANCE;frontal;nom
+22;Torrespapel;frontal;nom
+195;TOUTEMBAL;carton;nom
+199;Vetaphone A/S;autre;nom
+200;VPK CONVERTING SAS;carton;nom
+201;WINK STANZWERKZEUGE GMBH & CO. KG;autre;nom
+204;XIAMEN SENGKEN INDUSTRY & TRADE Co.,Ltd.;adhesif;nom
+#
+# 90 fiche(s) sans proposition :
+# 26;2DM;;
+# 27;3 DIS;;
+# 28;3M;;
+# 31;A.A.E.P;;
+# 34;AB GRAPHIC INTERN france SARL;;
+# 32;ABCorganisation;;
+# 33;Abecassis;;
+# 35;ABILITY ACCESS;;
+# 36;ABIX;;
+# 41;ACCESSOIRES ASUS;;
+# 43;ACEEA;;
+# 44;ACT 400;;
+# 46;ACT'E-PRINT;;
+# 48;ADER PRINT;;
+# 49;ADESTOR;;
+# 52;ADS DHENNIN BESSE;;
+# 54;AIRMAT TECHNOLOGY;;
+# 57;AlterEos;;
+# 61;APEX EUROPE B.V.;;
+# 62;ARBOLI-ARDEVOL, S.L.;;
+# 64;ASTER;;
+# 65;ASTRA-INKS;;
+# 1;Avery;;
+# 4;Burgo / Mosaico;;
+# 173;DACD;;
+# 83;DEWILDE;;
+# 85;DOUBLE E INTERNATIONAL;;
+# 89;ERREPI Srl;;
+# 90;ERSTI;;
+# 69;Etablissement Bernard III;;
+# 92;ETI Equipement Transfo;;
+# 2;Fedrigoni;;
+# 3;Feys;;
+# 97;FLINT GROUP INTERNATIONAL;;
+# 99;FORM' O PLAST;;
+# 5;Foucherf;;
+# 7;Frimpeks Italy;;
+# 8;Frimpeks Turkey;;
+# 6;Frimpeks UK;;
+# 101;GATINE;;
+# 103;GERGONNE INDUSTRIE;;
+# 104;GETRA;;
+# 9;Grand Ouest;;
+# 10;Guyenne;;
+# 108;HANOVA SARL;;
+# 111;IIMAK;;
+# 25;INDU;;
+# 114;INTER PHOTO GRAPHIC;;
+# 11;Itasa;;
+# 117;JEMMCO;;
+# 118;JFE Virton SRL;;
+# 123;KAIPING;;
+# 129;LAFORET DELAYE INDUSTRIE;;
+# 130;LAOUREUX Etablissements;;
+# 13;Lefrancq;;
+# 14;Likexin;;
+# 137;M.G. Kurth GmbH;;
+# 133;MAJICAP;;
+# 141;MOSAICO;;
+# 142;MULLIEZ RICHEBE;;
+# 143;NCI;;
+# 145;NORD TECHNIQUES ETIQUETAGE;;
+# 144;NOYER SAFIA;;
+# 149;PANNIER;;
+# 158;REGMA TRANSFERT THERMIQUE;;
+# 159;REPPLUS;;
+# 16;Rheno;;
+# 162;RONT PRODUCTION;;
+# 163;ROSSELLA S.R.L.;;
+# 168;RUBANORD;;
+# 18;Sato;;
+# 172;SEPT;;
+# 132;SHENZHEN LIKEXIN INDUSTRIAL Co.;;
+# 19;Shine;;
+# 176;SICAD FRANCE;;
+# 177;SIEGWERK France SAS;;
+# 178;SIFA - Production;;
+# 180;SOCFAM;;
+# 181;SODINOR;;
+# 183;SOONTOMAX;;
+# 184;SOPRINTEX;;
+# 20;Suzhou;;
+# 188;SYCDA Company Ltd;;
+# 21;Techmay;;
+# 189;TECNOCUT S.L;;
+# 191;TODAYTEC UK;;
+# 196;TRINITY BRAND IND.;;
+# 197;Tristar Engineered Plastic Solutions;;
+# 23;UPM;;
+# 24;Xinzhu;;

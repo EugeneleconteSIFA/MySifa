@@ -58,6 +58,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 
 from app.core.database import get_db
+from app.services.date_livraison import parse_date_livraison
 from app.services.documents_verite import historique_document
 from app.routers.stock import (
     require_stock_matieres_admin,
@@ -98,15 +99,15 @@ def _f(v) -> Optional[float]:
 
 
 def _parse_iso(s) -> Optional[date]:
-    if not s:
-        return None
-    try:
-        return datetime.fromisoformat(str(s)[:19]).date()
-    except (TypeError, ValueError):
-        try:
-            return datetime.strptime(str(s)[:10], "%Y-%m-%d").date()
-        except (TypeError, ValueError):
-            return None
+    """Date d'un champ du planning, ISO ou saisie à la main.
+
+    `date_livraison` est un champ TEXTE et le reste : c'est l'atelier qui
+    l'écrit. « 07/04/2026 » et « A livrer le 03/04 » tombaient ici en None, et
+    `_ratio_dans_fenetre` les comptait alors à 100 % dans TOUTES les fenêtres,
+    « à 7 jours » comprise — soit 11 % des dossiers surévaluant le besoin
+    court terme, sans que rien ne le signale.
+    """
+    return parse_date_livraison(s)
 
 
 def _ratio_dans_fenetre(pe: dict, today: date, borne: date) -> float:
