@@ -1,3 +1,11 @@
+# ATTENTION — les cibles sont des NOMS de fiche, pas des ID.
+# Un id n'existe que dans la base qui l'a attribue : rejouer ce fichier
+# sur le serveur avec des ids viserait des fiches au hasard.
+#
+# Et meme avec des noms : l'annuaire du serveur n'est pas celui d'ici.
+# Regenerez ce fichier la-bas (--generer-alias) et relisez-le, plutot que
+# de reprendre celui-ci les yeux fermes.
+#
 # Alias d'import fournisseurs — À RELIRE AVANT USAGE
 #
 # Une ligne = « le nom dans l'export ERP » ; « la fiche à enrichir ».
@@ -11,18 +19,18 @@
 # puisse choisir, en réception, celle qui n'a pas la licence.
 #
 # nom dans l'export ; id ou nom de la fiche
-AVERY DENNISON MATERIALS SALES FRANCE SAS;1    # ~0.95 → « Avery » · licence FSC-C004451
-FRIMPEKS LTD;6    # ~0.95 → « Frimpeks UK » · licence FSC-C160714
-GRAND OUEST ETIQUETTES;9    # ~0.95 → « Grand Ouest » · licence FSC-C148933
-KANZAN SPEZIALPAPIERE;12    # ~0.95 → « Kanzan » · licence FSC-C007179
-LEFRANCQ IMPRIMEUR;13    # ~0.95 → « Lefrancq » · licence FSC-C135176
-Mitsubishi HiTec Paper Europe GmbH;15    # ~0.95 → « Mitsubishi » · licence FSC-C014541
-UPM RAFLATAC;23    # ~0.95 → « UPM » · licence FSC-C012530
-RICOH Industrie France SAS;17    # ~0.95 → « Ricoh » · licence FSC-C001858
-SATO FRANCE;18    # ~0.95 → « Sato » · licence FSC-C207483
-SUZHOU PIAOZHIHUA COMPOSITE MATERIALS TECHNOLOGY C;20    # ~0.95 → « Suzhou » · licence FSC-C140235
-XINZHU SELF-ADHESIVE MATERIALS;24    # ~0.95 → « Xinzhu » · licence FSC-C177953
-FRIMPEKS ITALIA SRL;7    # ~0.89 → « Frimpeks Italy » · licence FSC-C164660
+AVERY DENNISON MATERIALS SALES FRANCE SAS;Avery  # ~0.95 → « Avery » · licence FSC-C004451
+FRIMPEKS LTD;Frimpeks UK  # ~0.95 → « Frimpeks UK » · licence FSC-C160714
+GRAND OUEST ETIQUETTES;Grand Ouest  # ~0.95 → « Grand Ouest » · licence FSC-C148933
+KANZAN SPEZIALPAPIERE;Kanzan  # ~0.95 → « Kanzan » · licence FSC-C007179
+LEFRANCQ IMPRIMEUR;Lefrancq  # ~0.95 → « Lefrancq » · licence FSC-C135176
+Mitsubishi HiTec Paper Europe GmbH;Mitsubishi  # ~0.95 → « Mitsubishi » · licence FSC-C014541
+UPM RAFLATAC;UPM  # ~0.95 → « UPM » · licence FSC-C012530
+RICOH Industrie France SAS;Ricoh  # ~0.95 → « Ricoh » · licence FSC-C001858
+SATO FRANCE;Sato  # ~0.95 → « Sato » · licence FSC-C207483
+SUZHOU PIAOZHIHUA COMPOSITE MATERIALS TECHNOLOGY C;Suzhou  # ~0.95 → « Suzhou » · licence FSC-C140235
+XINZHU SELF-ADHESIVE MATERIALS;Xinzhu  # ~0.95 → « Xinzhu » · licence FSC-C177953
+FRIMPEKS ITALIA SRL;Frimpeks Italy  # ~0.89 → « Frimpeks Italy » · licence FSC-C164660
 UPM;-    # decision : une seule fiche UPM, coordonnees francaises (Pompey).
 #          Cette ligne est le siege finlandais (Tampere, TVA FI10647334) :
 #          meme relation commerciale a l'achat, on ne l'importe pas.

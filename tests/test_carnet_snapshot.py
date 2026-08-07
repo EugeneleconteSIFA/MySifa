@@ -12,7 +12,11 @@ d'où ces cas, qui verrouillent le contrat maintenant :
   - un besoin non chiffrable est COMPTÉ À PART, jamais confondu avec zéro :
     un carnet dont les OF n'ont pas de métrage ressemble sinon trait pour
     trait à un carnet vide ;
-  - un dossier sans aucune date exploitable ne pèse sur aucun mois.
+  - un dossier sans aucune date exploitable ne pèse sur aucun mois ;
+  - le TOTAL d'un mois est distingué de la part encore à produire. Sans cette
+    séparation, le volume final d'un mois n'est jamais enregistré : ses
+    dossiers passent en « terminé » à mesure qu'il approche et la série
+    retombe à zéro le mois venu — p(k) se calculerait alors sur du bruit.
 """
 import importlib.util
 import sqlite3
@@ -42,18 +46,34 @@ def _charger(chemin, nom):
 
 
 mig = _charger("app/core/migrations/2026_08_07_carnet_snapshots.py", "mig_carnet")
+mig2 = _charger("app/core/migrations/2026_08_07_carnet_snapshot_total.py", "mig_carnet_tot")
 
 conn = sqlite3.connect(":memory:")
 conn.row_factory = sqlite3.Row
 mig.appliquer(conn)
 
-print("\n1. Le schéma tient et la migration est rejouable")
+print("\n1. Le schéma tient et les migrations sont rejouables")
 cols = {r["name"] for r in conn.execute("PRAGMA table_info(carnet_snapshots)")}
-check("colonnes attendues",
+check("colonnes de base",
       {"snapshot_le", "mois_livraison", "matiere_id", "kind", "unite",
        "quantite", "nb_dossiers", "nb_incalculables"} <= cols, True)
-mig.appliquer(conn)
-check("rejouable", True, True)
+
+# Une photo prise AVANT le correctif : elle ne comptait que les dossiers actifs.
+conn.execute("INSERT INTO carnet_snapshots (snapshot_le, mois_livraison, matiere_id, "
+             "kind, unite, quantite, nb_dossiers) VALUES ('2026-08-07','2026-09',5,"
+             "'support','ml',9000,3)")
+conn.commit()
+mig2.appliquer(conn)
+cols = {r["name"] for r in conn.execute("PRAGMA table_info(carnet_snapshots)")}
+check("colonnes du total ajoutées",
+      {"quantite_active", "nb_dossiers_actifs"} <= cols, True)
+r = conn.execute("SELECT quantite, quantite_active, nb_dossiers_actifs "
+                 "FROM carnet_snapshots WHERE snapshot_le='2026-08-07'").fetchone()
+check("les photos antérieures sont recopiées en 'actif'",
+      (r["quantite"], r["quantite_active"], r["nb_dossiers_actifs"]), (9000, 9000, 3))
+mig.appliquer(conn); mig2.appliquer(conn)
+check("rejouables", True, True)
+conn.execute("DELETE FROM carnet_snapshots"); conn.commit()
 
 print("\n2. Une seule ligne par jour et par combinaison")
 ins = ("INSERT INTO carnet_snapshots (snapshot_le, mois_livraison, matiere_id, "
@@ -89,7 +109,27 @@ cas = [
 for pe, attendu, libelle in cas:
     check(f"{libelle:42} → {snap._mois_livraison(pe)}", snap._mois_livraison(pe), attendu)
 
-print("\n4. Un besoin non chiffrable n'est pas un zéro")
+print("\n4. Total du mois et part encore à produire sont distingués")
+cumul, vus, vus_actifs = {}, {}, {}
+# 4 dossiers pour octobre : 2 terminés (déjà produits), 2 encore à faire.
+for pe_id, q, actif in [(1, 5000.0, False), (2, 3000.0, False),
+                        (3, 4000.0, True), (4, 2000.0, True)]:
+    cle = ("2026-10", 5, "support")
+    agg = cumul.setdefault(cle, {"q": 0.0, "q_actif": 0.0, "unite": "ml", "inc": 0})
+    vus.setdefault(cle, set()).add(pe_id)
+    if actif:
+        vus_actifs.setdefault(cle, set()).add(pe_id)
+    agg["q"] += q
+    if actif:
+        agg["q_actif"] += q
+agg = cumul[("2026-10", 5, "support")]
+check("le total couvre les 4 dossiers (dénominateur de p(k))", agg["q"], 14000.0)
+check("la part active ne couvre que les 2 restants", agg["q_actif"], 6000.0)
+check("comptages de dossiers cohérents",
+      (len(vus[("2026-10", 5, "support")]), len(vus_actifs[("2026-10", 5, "support")])),
+      (4, 2))
+
+print("\n5. Un besoin non chiffrable n'est pas un zéro")
 # On rejoue l'agrégation du service sur un besoin sans quantité.
 conn.execute("DELETE FROM carnet_snapshots")
 cumul = {}
@@ -107,7 +147,7 @@ check("les quantités connues sont sommées", agg["q"], 12000.0)
 check("l'incalculable est compté à part", agg["inc"], 1)
 check("les 3 dossiers sont comptés", len(vus[("2026-11", 7, "support")]), 3)
 
-print("\n5. Couverture : tant qu'on n'a qu'un mois, rien n'est calibrable")
+print("\n6. Couverture : tant qu'on n'a qu'un mois, rien n'est calibrable")
 check("base vide", snap.couverture(conn)["horizons_calibrables"], [])
 for j, m in [("2026-08-07", "2026-10"), ("2026-08-20", "2026-10"), ("2026-09-05", "2026-11")]:
     conn.execute(ins, (j, m, 3, "support", "ml", 1000, 1))

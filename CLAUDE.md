@@ -917,7 +917,22 @@ Test : `python3 tests/test_carnet_snapshot.py`.
 - Ne jamais reconstruire le DOM d'une modal ouverte pendant un refresh automatique — vérifier `document.getElementById("mroot").firstElementChild` avant tout re-render global
 
 **Routing**
-- `frontend/` et `routers/` à la racine sont des **shims** — ne pas y ajouter de logique
+- `frontend/`, `routers/` et `database.py` à la racine sont des **shims** — ne pas y ajouter de logique
+- **Script lancé à la main : importer `database` AVANT tout `app.*`.** Le shim
+  `database.py` fait `from app.core.database import *`. Si un script importe
+  `app.core.database` en premier, ce module exécute les migrations au
+  chargement, ce qui réimporte le shim alors qu'il est à mi-parcours : le shim
+  se retrouve sans `get_db` et Python garde cette version cassée en cache.
+  Symptôme : `ImportError: cannot import name 'get_db' from 'database'` sur un
+  code qui tourne parfaitement dans l'application. `main.py` n'est jamais
+  touché parce qu'il charge le shim en premier.
+
+  ```python
+  import sys; sys.path.insert(0, '.')
+  import database                      # d'abord, toujours
+  from database import get_db
+  from app.services.mon_service import ma_fonction
+  ```
 - Tout nouveau router doit être créé dans `app/routers/` et enregistré dans `main.py`
 - Toute nouvelle page doit être créée dans `app/web/` et enregistrée dans `main.py`
 
