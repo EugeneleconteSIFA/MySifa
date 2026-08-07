@@ -58,6 +58,9 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 
 from app.core.database import get_db
+from app.services.carnet_snapshot import (
+    capturer as capturer_carnet, capturer_si_besoin, couverture as couverture_carnet,
+)
 from app.services.date_livraison import parse_date_livraison
 from app.services.documents_verite import historique_document
 from app.routers.stock import (
@@ -747,6 +750,12 @@ def besoins_par_dossier(request: Request):
     avec le détail des besoins MP calculés."""
     require_stock_matieres_admin(request)
     with get_db() as conn:
+        # Photo du carnet, une fois par jour. Cet écran est ouvert tous les
+        # jours ouvrés par l'administration : ça suffit à alimenter la série
+        # sans dépendre d'un cron à installer sur le VPS. Best-effort et muet
+        # — rien de ce qui sert à une prévision d'automne ne justifie de faire
+        # échouer l'affichage des besoins d'aujourd'hui.
+        capturer_si_besoin(conn)
         mapping = _load_mapping(conn)
         rows = _load_dossiers(conn)
         perte_pct = stock_config_float(conn, "mandrin_perte_coupe_pct")
@@ -1455,6 +1464,30 @@ def _historique(request: Request, table: str, doc_id: int, libelle: str) -> dict
         "historique": lignes,
         "a_relire": [li for li in lignes if li["depuis_validation"]],
     }
+
+
+@router.get("/api/stock/besoins-matieres/carnet/couverture")
+def carnet_couverture(request: Request):
+    """Où en est l'accumulation des photos du carnet.
+
+    Sert à répondre à une question simple et qu'on se posera forcément :
+    « à partir de quand la prévision sera-t-elle calibrée ? ». Tant que
+    `horizons_calibrables` est vide, aucun modèle fondé sur le remplissage du
+    carnet ne peut être honnête — et il vaut mieux que l'écran le dise.
+    """
+    require_stock_matieres_admin(request)
+    with get_db() as conn:
+        return couverture_carnet(conn)
+
+
+@router.post("/api/stock/besoins-matieres/carnet/capturer")
+def carnet_capturer(request: Request):
+    """Force la photo du jour (la recalcule si elle existe déjà)."""
+    require_stock_matieres_admin(request)
+    with get_db() as conn:
+        res = capturer_carnet(conn, force=True)
+        conn.commit()
+    return res
 
 
 @router.get("/api/stock/besoins-matieres/of/{of_id}/historique")
