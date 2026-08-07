@@ -3627,12 +3627,38 @@ function _autoScrollCalWeekBody(){
   // l'etat en attente pour retenter au prochain passage.
   if(!body.clientHeight) return;
   if(_calAutoScrollPending){
+    // v2.7.2 — ne pas consommer le recentrage sur une grille pas encore
+    // alimentee.
+    //
+    // Au rechargement de la page, le premier rendu du calendrier a lieu AVANT
+    // l'arrivee des donnees : au boot, _fmtDateISO n'est pas encore parse
+    // (il vit dans le <script> suivant), donc les deux premiers appels a
+    // refreshPlanning() sont des coquilles vides et seul le setTimeout(0)
+    // declenche le vrai fetch. La grille rendue a ce moment-la ne contient
+    // aucun bloc .cal-event.
+    //
+    // Le recentrage se declenchait quand meme : faute de bloc a viser, il
+    // retombait sur l'heure courante ET consommait le drapeau. Quand les
+    // creneaux arrivaient une fraction de seconde plus tard, le rendu suivant
+    // se contentait de restaurer cette position. Resultat : sur 24 h de grille
+    // affichees dans une fenetre d'environ 6 h, le planning s'ouvrait sur
+    // l'heure qu'il est — et les creneaux du matin restaient hors champ. Cela
+    // se lisait comme des creneaux « pas encore charges », alors qu'ils
+    // etaient bien la, plus haut.
+    //
+    // On distingue « pas encore charge » de « semaine reellement vide » par
+    // l'etat du chargement : tant qu'il est en cours ou n'a jamais abouti, on
+    // garde le drapeau arme pour le rendu qui portera les donnees.
+    const _blocs = body.querySelectorAll('.cal-event');
+    const _enCours = (typeof PLANNING_STATE !== 'undefined' && PLANNING_STATE)
+      && (PLANNING_STATE.status === 'loading' || !PLANNING_STATE._everLoaded);
+    if(!_blocs.length && _enCours) return;
     _calAutoScrollPending = false;
     _calSavedScrollTop = null;
     // On lit la position deja posee sur les blocs par _makeEventBlock plutot que
     // de recalculer depuis le modele : une seule source de verite.
     let target = null;
-    body.querySelectorAll('.cal-event').forEach(el => {
+    _blocs.forEach(el => {
       const t = parseFloat(el.style.top);
       if(!isNaN(t) && (target === null || t < target)) target = t;
     });
