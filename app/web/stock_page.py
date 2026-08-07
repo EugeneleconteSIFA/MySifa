@@ -818,6 +818,39 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .doc-etat-src{flex:0 0 27%;text-align:right;color:var(--muted);font-size:11px;line-height:1.4}
 .doc-etat-vide{padding:14px;text-align:center;color:var(--muted);font-size:12px}
 .bes-valid-btn:not(:disabled):hover{filter:brightness(1.15)}
+/* ── Vue Tendance : petits multiples ──────────────────────────────────────
+   Une serie par ligne, chacune a son echelle. Vingt matieres sur un graphe
+   commun imposeraient une palette categorielle a vingt teintes dont aucune
+   ne serait distinguable ; une teinte unique par ligne evite la question. */
+.bes-tend-note{font-size:12px;color:var(--muted);line-height:1.6;margin:0 0 14px;
+  padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--accent) 7%,transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 22%,transparent)}
+.bes-tend-grid{display:grid;grid-template-columns:minmax(160px,1.4fr) 1fr;gap:0 16px;align-items:center}
+.bes-tend-axis{display:grid;gap:2px;padding:0 0 6px}
+.bes-tend-axis-lbl{font-size:10px;font-weight:700;letter-spacing:.3px;color:var(--muted);
+  text-align:center;text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.bes-tend-axis-lbl.now{color:var(--accent)}
+.bes-tend-row{display:contents}
+.bes-tend-id{padding:9px 0;border-top:1px solid var(--border);min-width:0}
+.bes-tend-ref{font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.bes-tend-meta{font-size:11px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+.bes-tend-meta.orphelin{color:var(--warn,#d97706);font-weight:600}
+/* Les barres : extremite haute arrondie a 4px, ancree sur la ligne de base,
+   2px de respiration entre deux fills. */
+.bes-tend-plot{display:grid;gap:2px;align-items:end;height:46px;padding:9px 0;
+  border-top:1px solid var(--border)}
+.bes-tend-bar{position:relative;height:100%;display:flex;align-items:flex-end;
+  border-radius:3px;transition:background .12s}
+.bes-tend-bar:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.bes-tend-fill{width:100%;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px}
+.bes-tend-bar.vide .bes-tend-fill{background:var(--border);min-height:2px;border-radius:2px}
+.bes-tend-bar.au-dela .bes-tend-fill{background:color-mix(in srgb,var(--accent) 45%,var(--border))}
+.bes-tend-bar.inc::after{content:'';position:absolute;top:-1px;left:50%;transform:translateX(-50%);
+  width:4px;height:4px;border-radius:50%;background:var(--warn,#d97706)}
+.bes-tend-peak{position:absolute;top:-13px;left:50%;transform:translateX(-50%);
+  font-size:9px;font-weight:700;color:var(--text2);white-space:nowrap;
+  font-variant-numeric:tabular-nums;pointer-events:none}
 .bes-destock-ok{color:var(--success,#22c55e);font-weight:700;font-size:12px}
 .bes-destock-todo{color:var(--warn,#d97706);font-weight:700;font-size:12px}
 /* Laize : une bobine ne se commande, ne se stocke et ne se destocke que dans sa laize */
@@ -12375,6 +12408,11 @@ function buildBesoinsMatieres() {
         on: { click: () => { S.besoinsView = 'dossier'; renderContent(); } }
       }, 'Par dossier'),
       el('button', {
+        cls: 'bes-seg-btn' + (view === 'tendance' ? ' active' : ''),
+        title: 'Quand la matière sera nécessaire, mois par mois',
+        on: { click: () => { S.besoinsView = 'tendance'; loadBesoinsTendance(); } }
+      }, 'Tendance'),
+      el('button', {
         cls: 'bes-seg-btn' + (view === 'passes' ? ' active' : ''),
         title: 'Productions terminées : ce qui reste à déstocker et ce qui l\'est déjà',
         on: { click: () => { S.besoinsView = 'passes'; loadBesoinsPasses(); } }
@@ -12404,7 +12442,13 @@ function buildBesoinsMatieres() {
     el('div', { cls: 'bes-actions' },
       el('button', { cls: 'bes-btn-secondary', on: { click: () => openBesoinsMappingModal() } },
         iconEl('list-checks', 14), el('span', {}, 'Correspondances')),
-      el('button', { cls: 'bes-btn-secondary', on: { click: () => loadBesoinsMatieres() } },
+      el('button', { cls: 'bes-btn-secondary', on: { click: () => {
+        // Recharger la vue affichée : les vues Tendance et Dossiers passés ont
+        // leur propre source, un rechargement générique les laissait figées.
+        if (S.besoinsView === 'tendance') loadBesoinsTendance();
+        else if (S.besoinsView === 'passes') loadBesoinsPasses();
+        else loadBesoinsMatieres();
+      } } },
         iconEl('refresh-ccw', 14), el('span', {}, 'Actualiser')),
     ),
   );
@@ -12414,12 +12458,157 @@ function buildBesoinsMatieres() {
     wrap.appendChild(_buildBesoinsEcheanceTable(ech));
   } else if (view === 'matiere') {
     wrap.appendChild(_buildBesoinsMatiereTable(ech));
+  } else if (view === 'tendance') {
+    wrap.appendChild(_buildBesoinsTendance(S.besoinsTendance));
   } else if (view === 'passes') {
     wrap.appendChild(_buildBesoinsPassesTable(S.besoinsPasses));
   } else {
     wrap.appendChild(_buildBesoinsDossierTable(dos));
   }
   return wrap;
+}
+
+// ── Vue « Tendance » ──────────────────────────────────────────────────────
+// Les autres vues répondent à « de quoi ai-je besoin ». Celle-ci répond à
+// « quand », qui est la question de l'acheteur : un besoin de frontal étalé
+// sur quatre mois ne se commande pas comme le même volume concentré sur trois
+// semaines.
+//
+// Forme : petits multiples. Une ligne par matière, ses mois en colonnes,
+// chacune à SON échelle — le pic de chaque ligne est étiqueté pour que
+// l'échelle soit explicite. Vingt matières sur un graphe commun seraient
+// illisibles et exigeraient vingt teintes catégorielles dont aucune ne serait
+// distinguable ; une série par ligne rend la question sans objet.
+async function loadBesoinsTendance() {
+  S.besoinsTendance = null;
+  S.besoinsLoading = true;
+  renderContent();
+  try {
+    S.besoinsTendance = await api('/api/stock/besoins-matieres/tendance?mois=8');
+  } catch (e) {
+    S.besoinsTendance = { erreur: e.message || 'chargement impossible' };
+    showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
+  } finally {
+    S.besoinsLoading = false;
+    renderContent();
+  }
+}
+
+const _BES_MOIS_COURT = ['janv', 'févr', 'mars', 'avr', 'mai', 'juin',
+                         'juil', 'août', 'sept', 'oct', 'nov', 'déc'];
+
+function _besMoisLabel(cle) {
+  if (cle === 'au-dela') return 'au-delà';
+  const m = /^(\d{4})-(\d{2})$/.exec(cle || '');
+  if (!m) return cle || '—';
+  return _BES_MOIS_COURT[parseInt(m[2], 10) - 1] + ' ' + m[1].slice(2);
+}
+
+function _besFmtQte(v, unite) {
+  if (!v) return '0';
+  const n = Number(v);
+  const s = n >= 1000000 ? (n / 1000000).toFixed(1) + ' M'
+          : n >= 1000    ? Math.round(n / 1000) + ' k'
+          : String(Math.round(n * 10) / 10);
+  return s + (unite ? ' ' + unite : '');
+}
+
+function _buildBesoinsTendance(data) {
+  if (!data) return el('div', { cls: 'bes-empty' }, 'Chargement de la tendance…');
+  if (data.erreur) {
+    return el('div', { cls: 'bes-empty', style: { color: 'var(--danger)' } },
+      'Erreur : ' + data.erreur);
+  }
+  const lignes = (data.lignes || []).filter(l => _besMatchFiltre(
+    { reference: l.libelle, designation: l.designation, matiere: l.libelle }, S.besoinsFiltre));
+  const cont = el('div', {});
+
+  // Dire ce que l'écran montre vraiment. Tant que la série de photos du carnet
+  // est courte, ce n'est pas une tendance mesurée dans le temps : c'est l'état
+  // du carnet aujourd'hui, réparti par mois de livraison. Laisser croire
+  // l'inverse ferait prendre un carnet qui se remplit pour une baisse d'activité.
+  const jours = ((data.historique || {}).jours) || 0;
+  cont.appendChild(el('div', { cls: 'bes-tend-note' },
+    el('div', {},
+      el('strong', {}, 'Ce que montre cet écran : '),
+      'le carnet d\'aujourd\'hui, réparti par mois de livraison. ',
+      'Les mois éloignés paraissent creux parce qu\'ils ne sont pas encore ',
+      'commandés — pas parce que l\'activité baisse.'),
+    el('div', { style: { marginTop: '6px' } },
+      jours < 2
+        ? 'Le carnet est photographié chaque jour depuis aujourd\'hui. Après quelques semaines, cet écran pourra dire de combien un mois se remplit à l\'approche, et donc ce qu\'il manque encore.'
+        : jours + ' jour(s) de photos accumulés' +
+          ((data.historique.horizons_calibrables || []).length
+            ? ' — horizons calibrables : M+' + data.historique.horizons_calibrables.join(', M+') + '.'
+            : ' — encore trop court pour extrapoler.')),
+    data.reste_sur_mois_echus > 0
+      ? el('div', { style: { marginTop: '6px', color: 'var(--warn,#d97706)', fontWeight: '600' } },
+          'Attention : ' + _besFmtQte(data.reste_sur_mois_echus) +
+          ' de besoin porte sur des mois déjà échus — dossiers en retard.')
+      : null,
+  ));
+
+  if (!lignes.length) {
+    cont.appendChild(el('div', { cls: 'bes-empty' },
+      'Aucun besoin daté sur l\'horizon. Les dossiers sans date de livraison ' +
+      'lisible ne peuvent être rattachés à aucun mois.'));
+    return cont;
+  }
+
+  const cols = data.colonnes || [];
+  const moisCourant = (data.mois || [])[0];
+  const grid = el('div', { cls: 'bes-tend-grid' });
+
+  // Axe : les mois, une seule fois en tête. Le mois courant est marqué.
+  grid.appendChild(el('div', {}));
+  grid.appendChild(el('div', {
+    cls: 'bes-tend-axis',
+    style: { gridTemplateColumns: 'repeat(' + cols.length + ', 1fr)' },
+  }, ...cols.map(c => el('div', {
+    cls: 'bes-tend-axis-lbl' + (c === moisCourant ? ' now' : ''),
+  }, _besMoisLabel(c)))));
+
+  const KINDS = { support: 'Frontal', glassine: 'Glassine', adhesif: 'Adhésif',
+                  mandrin: 'Mandrins', carton: 'Cartons', palette: 'Palettes' };
+
+  lignes.forEach(l => {
+    const max = l.max || 0;
+    grid.appendChild(el('div', { cls: 'bes-tend-id' },
+      el('div', { cls: 'bes-tend-ref', title: l.designation || l.libelle }, l.libelle),
+      el('div', { cls: 'bes-tend-meta' + (l.non_associee ? ' orphelin' : '') },
+        (KINDS[l.kind] || l.kind) + ' · ' + _besFmtQte(l.total, l.unite) +
+        ' · ' + l.nb_dossiers + ' dossier' + (l.nb_dossiers > 1 ? 's' : '') +
+        (l.non_associee ? ' · non associée à une référence' : '') +
+        (l.incalculables ? ' · ' + l.incalculables + ' non chiffré(s)' : '')),
+    ));
+
+    const plot = el('div', {
+      cls: 'bes-tend-plot',
+      style: { gridTemplateColumns: 'repeat(' + cols.length + ', 1fr)' },
+    });
+    l.serie.forEach(p => {
+      const h = max > 0 ? Math.max(2, Math.round((p.q / max) * 46)) : 2;
+      // Étiquette directe sur le seul pic : un nombre sur chaque barre
+      // masquerait la forme qu'on cherche à lire.
+      const pic = max > 0 && p.q === max;
+      const bar = el('div', {
+        cls: 'bes-tend-bar' + (p.q > 0 ? '' : ' vide')
+             + (p.mois === 'au-dela' ? ' au-dela' : '')
+             + (p.inc ? ' inc' : ''),
+        title: _besMoisLabel(p.mois) + ' · ' + _besFmtQte(p.q, l.unite)
+               + ' · ' + p.dossiers + ' dossier' + (p.dossiers > 1 ? 's' : '')
+               + (p.inc ? ' · ' + p.inc + ' besoin(s) non chiffré(s)' : ''),
+      },
+        pic ? el('span', { cls: 'bes-tend-peak' }, _besFmtQte(p.q, l.unite)) : null,
+        el('div', { cls: 'bes-tend-fill', style: { height: h + 'px' } }),
+      );
+      plot.appendChild(bar);
+    });
+    grid.appendChild(plot);
+  });
+
+  cont.appendChild(grid);
+  return cont;
 }
 
 // ── Vue « par matière » ───────────────────────────────────────────────────
