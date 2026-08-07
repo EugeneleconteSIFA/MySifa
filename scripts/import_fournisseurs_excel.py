@@ -524,6 +524,10 @@ CHAMPS_SIMPLES = (
 #  Base de données
 # ═══════════════════════════════════════════════════════════════════
 
+# Sentinelle de la cible « - » dans le fichier d'alias : ligne à ne pas importer.
+IGNORER = object()
+
+
 def lire_alias(chemin: Path) -> dict:
     """Table de correspondance « nom de l'export » → fiche existante.
 
@@ -567,7 +571,12 @@ def lire_alias(chemin: Path) -> dict:
         if not cible:
             print(f"  ! alias ligne {num} ignorée (cible vide) : {ligne}")
             continue
-        table[norm_nom(bouts[0])] = cible
+        # Cible « - » : ne pas importer cette ligne du tout. Le cas d'usage est
+        # l'export qui liste deux fois la même relation commerciale sous deux
+        # entités juridiques (siège et filiale de vente) alors qu'on ne les
+        # distingue pas à l'achat. Même fichier, même syntaxe : une seule chose
+        # à comprendre pour décider du sort d'une ligne.
+        table[norm_nom(bouts[0])] = IGNORER if cible in ("-", "ignorer", "ignore") else cible
     return table
 
 
@@ -577,6 +586,9 @@ def resoudre_alias(table: dict, fiches: list) -> dict:
     par_nom = {norm_nom(dict(f)["nom"]): dict(f) for f in fiches}
     sortie, inconnus = {}, []
     for cle, cible in table.items():
+        if cible is IGNORER:
+            sortie[cle] = IGNORER
+            continue
         fiche = None
         if str(cible).isdigit():
             fiche = par_id.get(int(cible))
@@ -609,7 +621,10 @@ def ecrire_alias_propose(chemin: Path, quasi: list) -> None:
         "# l'export SANS créer de seconde fiche — donc sans qu'un opérateur",
         "# puisse choisir, en réception, celle qui n'a pas la licence.",
         "#",
-        "# nom dans l'export ; id ou nom de la fiche",
+        "# Cible « - » au lieu d'un id : la ligne n'est pas importée du tout",
+        "# (export qui liste deux fois la même relation sous deux entités).",
+        "#",
+        "# nom dans l'export ; id ou nom de la fiche  (ou « - » pour ignorer)",
     ]
     for c, f, r in sorted(quasi, key=lambda x: -x[2]):
         lignes.append(f"{c['nom']};{f['id']}    # ~{r} → « {f['nom']} »"
@@ -662,7 +677,7 @@ def rapprocher(cand: dict, idx: dict) -> tuple[dict | None, str]:
     # les fiches concernées n'ont justement pas de SIRET à comparer.
     alias = idx.get("alias") or {}
     n_alias = norm_nom(cand.get("nom"))
-    if n_alias in alias:
+    if n_alias in alias and alias[n_alias] is not IGNORER:
         return alias[n_alias], "alias"
     if cand.get("siret") and cand["siret"] in idx["siret"]:
         return idx["siret"][cand["siret"]], "siret"
@@ -926,6 +941,21 @@ def main() -> int:
     if args.alias:
         idx["alias"] = resoudre_alias(lire_alias(Path(args.alias).expanduser()), fiches)
         print(f"  Alias : {len(idx['alias'])} correspondance(s) chargée(s).")
+
+    ignorees = []
+    if idx.get("alias"):
+        gardees = []
+        for c in candidats:
+            if idx["alias"].get(norm_nom(c["nom"])) is IGNORER:
+                ignorees.append(c)
+            else:
+                gardees.append(c)
+        candidats = gardees
+        if ignorees:
+            titre(f"Lignes ignorées sur demande du fichier d'alias ({len(ignorees)})")
+            for c in ignorees:
+                lieu = " · ".join(x for x in (c.get("ville"), c.get("pays")) if x)
+                print(f"  - « {c['nom']} »" + (f"   {lieu}" if lieu else ""))
 
     apparies, nouveaux = [], []
     for c in candidats:

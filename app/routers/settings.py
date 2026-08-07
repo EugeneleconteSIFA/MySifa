@@ -1442,6 +1442,68 @@ def _four_squash(s):
     return s
 
 
+# Mots qui ne distinguent rien : les retenir ferait grouper « ETIQUETTES
+# CEVENNES » avec « ETIQUETTES PIERRE FOUCHER » au seul motif qu'ils vendent
+# tous deux des étiquettes.
+_four_jetons_generiques = frozenset("""
+de du des la le les et sas sa sarl sasu snc gie group groupe holding
+france europe european international industrie industries industrial
+etiquette etiquettes label labels packaging package pack paper papier papel
+materials material adhesive adhesif imprimerie imprimeur print printing
+company societe ste co ltd gmbh srl spa nv bv oy ab as inc corp
+""".split())
+
+
+def _four_jetons(nom):
+    """Jetons distinctifs d'un nom, dans l'ordre."""
+    return [j for j in _four_norm_nom(nom).split() if j]
+
+
+def _four_jeton_proche(a, b):
+    """Deux jetons désignent-ils le même mot ?
+
+    Tolérance volontairement étroite : « torrespapel » et « torraspapel »
+    (une voyelle), « foucher » et « foucherf » (une lettre en trop dans la
+    fiche historique). Au-delà, ce sont deux mots différents.
+    """
+    if a == b:
+        return True
+    if abs(len(a) - len(b)) > 1 or min(len(a), len(b)) < 5:
+        return False
+    from difflib import SequenceMatcher
+    return SequenceMatcher(None, a, b).ratio() >= 0.9
+
+
+def _four_inclus(petit, grand):
+    """Le nom `petit` apparaît-il comme suite de jetons dans `grand` ?
+
+    C'est le cas que la comparaison de chaînes ratait : les fiches historiques
+    portent un nom d'usage court (« Feys », « Likexin », « Shine ») et l'export
+    comptable la raison sociale complète (« IMPRIMERIE FEYS », « SHENZHEN
+    LIKEXIN INDUSTRIAL Co. », « GUANGZHOU SHINE LABEL MATERIALS »). Comparées
+    entières, ces paires tombent sous le seuil de similarité ; comparées jeton
+    par jeton, elles sautent aux yeux.
+
+    Pourquoi c'est important : la fiche courte porte la LICENCE FSC, la longue
+    l'adresse et le SIRET. Les deux coexistent dans la liste de réception, une
+    seule affiche le badge FSC, et rien n'empêche d'attraper l'autre.
+    """
+    jp, jg = _four_jetons(petit), _four_jetons(grand)
+    if not jp or not jg or len(jp) > len(jg):
+        return False
+    # Un seul jeton distinctif : il doit être assez long et non générique,
+    # sinon « ABI » se collerait à « ABIX ».
+    if len(jp) == 1:
+        if jp[0] in _four_jetons_generiques or len(jp[0]) < 4:
+            return False
+        return any(_four_jeton_proche(jp[0], j) for j in jg)
+    for depart in range(len(jg) - len(jp) + 1):
+        if all(_four_jeton_proche(jp[i], jg[depart + i]) for i in range(len(jp))):
+            if any(j not in _four_jetons_generiques for j in jp):
+                return True
+    return False
+
+
 @router.get("/api/fournisseurs/doublons")
 def fournisseurs_doublons(request: Request):
     """Groupes de fiches qui désignent probablement le même fournisseur.
@@ -1501,6 +1563,40 @@ def fournisseurs_doublons(request: Request):
              lambda k, membres: membres[0]["nom"])
     _ajouter(lambda f: _four_squash(f["nom"]) or None, "nom",
              lambda k, membres: membres[0]["nom"])
+
+    # Passe « inclusion » : plus coûteuse (comparaison de paires), donc en
+    # dernier, sur ce que les clés exactes n'ont pas déjà groupé. À l'échelle
+    # d'un annuaire fournisseurs — quelques centaines de fiches — le coût est
+    # sans conséquence, et cette passe est la seule qui rapproche un nom
+    # d'usage de sa raison sociale.
+    restants = [f for f in fiches if f["id"] not in deja]
+    # Le nom le plus court d'abord : c'est lui qu'on cherche DANS les autres.
+    restants.sort(key=lambda f: len(_four_norm_nom(f["nom"])))
+    for i, court in enumerate(restants):
+        if court["id"] in deja:
+            continue
+        groupe = [court]
+        for long in restants[i + 1:]:
+            if long["id"] in deja:
+                continue
+            if _four_inclus(court["nom"], long["nom"]):
+                groupe.append(long)
+        if len(groupe) < 2:
+            continue
+        for m in groupe:
+            deja.add(m["id"])
+        groups.append({
+            "reason": "nom",
+            "key": court["nom"],
+            "count": len(groupe),
+            "fournisseurs": [
+                {"id": m["id"], "nom": m["nom"], "siret": m["siret"],
+                 "ville": m["ville"], "has_fsc": 1 if m["has_fsc"] else 0,
+                 "actif": 1 if (m["actif"] is None or m["actif"]) else 0,
+                 "nb_contacts": m["nb_contacts"]}
+                for m in groupe
+            ],
+        })
 
     # SIRET d'abord : c'est la seule clé qu'on n'invente pas. Le nom passe en
     # dernier, il produit le plus de faux positifs.
