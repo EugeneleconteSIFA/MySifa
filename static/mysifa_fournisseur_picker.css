@@ -1,0 +1,249 @@
+/* ============================================================
+   MySifa — Picker fournisseur partagé  (v1.0)
+   ------------------------------------------------------------
+   Aucune couleur en dur : uniquement les variables du design
+   system, pour que le composant suive dark et light sans double
+   déclaration. Les deux thèmes sont à vérifier à chaque ajout.
+   ============================================================ */
+
+/* ── Champ ────────────────────────────────────────────────── */
+
+.mys-fp {
+  position: relative;
+  display: block;
+  width: 100%;
+}
+
+.mys-fp-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 38px 12px 38px;   /* place pour la loupe et la croix */
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.mys-fp-input::placeholder { color: var(--muted); }
+
+.mys-fp-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+
+.mys-fp-input:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+/* Loupe à gauche : elle dit « on tape pour chercher », là où le
+   chevron d'un <select> disait « on déroule ». */
+.mys-fp-caret {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mys-fp-caret svg { width: 16px; height: 16px; }
+.mys-fp-open .mys-fp-caret,
+.mys-fp-input:focus ~ .mys-fp-caret { color: var(--accent); }
+
+.mys-fp-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  /* Bouton posé DANS un champ déjà coloré : le fond transparent est ici le
+     cas toléré (croix de nettoyage), pas un CTA de page. */
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+  transition: color .15s, background .15s;
+}
+.mys-fp-clear svg { width: 14px; height: 14px; }
+.mys-fp-filled .mys-fp-clear { display: flex; }
+.mys-fp-clear:hover { color: var(--danger); background: var(--card); }
+.mys-fp-clear:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Variante compacte : cellule de tableau, ligne de prix, barre d'outils. */
+.mys-fp.mys-fp-sm .mys-fp-input {
+  padding: 7px 30px 7px 30px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+.mys-fp.mys-fp-sm .mys-fp-caret { left: 9px; width: 13px; height: 13px; }
+.mys-fp.mys-fp-sm .mys-fp-caret svg { width: 13px; height: 13px; }
+.mys-fp.mys-fp-sm .mys-fp-clear { right: 5px; width: 20px; height: 20px; }
+
+/* ── Popover ──────────────────────────────────────────────── */
+
+.mys-fp-pop {
+  position: fixed;
+  z-index: 12000;            /* au-dessus des modales de MySifa */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .28);
+  padding: 6px;
+  font-size: 13px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mys-fp-groupe {
+  padding: 8px 10px 5px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  color: var(--muted);
+}
+
+/* Le groupe « favoris » — les fournisseurs de la catégorie attendue par
+   l'écran. Barre d'accent à gauche : on voit d'un coup où s'arrête la
+   liste courte et où commence le reste de l'annuaire. */
+.mys-fp-groupe-fav {
+  color: var(--accent);
+  border-left: 2px solid var(--accent);
+  padding-left: 8px;
+  margin-left: 2px;
+}
+
+.mys-fp-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text);
+  transition: background .1s;
+}
+
+.mys-fp-item:hover,
+.mys-fp-item.hi {
+  background: var(--accent-bg);
+}
+/* Sur .hi, seul le fond change : passer le texte en var(--accent) ferait
+   disparaître les métadonnées, déjà en var(--muted). */
+.mys-fp-item.hi .mys-fp-nom { color: var(--accent); }
+
+.mys-fp-nom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* La portion qui correspond à la frappe. */
+.mys-fp-nom b {
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.mys-fp-meta {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+.mys-fp-item-vide .mys-fp-nom,
+.mys-fp-item-libre .mys-fp-nom {
+  font-weight: 500;
+  color: var(--text2);
+  font-style: italic;
+}
+
+.mys-fp-badge {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  text-transform: uppercase;
+  line-height: 1.5;
+}
+
+/* Fond coloré : le texte prend var(--bg), qui bascule avec le thème et
+   reste donc contrasté dans les deux. Jamais var(--text) ni var(--text2)
+   sur un fond d'accent — c'est le bug du badge cyan invisible en dark. */
+.mys-fp-fsc {
+  background: var(--success);
+  color: var(--bg);
+}
+
+.mys-fp-archive {
+  background: var(--warn);
+  color: var(--bg);
+}
+
+.mys-fp-plus,
+.mys-fp-empty {
+  padding: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+  line-height: 1.5;
+}
+
+.mys-fp-plus {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.mys-fp-err { color: var(--danger); }
+
+/* ── Mobile ───────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .mys-fp-pop {
+    padding: 8px;
+    border-radius: 14px;
+  }
+  .mys-fp-item { padding: 11px 12px; }   /* cible tactile confortable */
+  .mys-fp-input { font-size: 15px; }     /* < 15px déclenche le zoom iOS */
+}
+
+/* Valeur qui référence une fiche disparue (supprimée ou fusionnée). Le champ
+   PORTE toujours la donnée : on la signale au lieu de l'effacer en silence,
+   sinon le prochain « Enregistrer » écrirait un champ vide. */
+.mys-fp-orphelin .mys-fp-input {
+  border-color: var(--warn);
+  background: var(--card);
+}
+.mys-fp-orphelin .mys-fp-input::placeholder {
+  color: var(--warn);
+  font-style: italic;
+}
+.mys-fp-orphelin .mys-fp-caret { color: var(--warn); }
+
+/* Champ désactivé repris d'un <select disabled>. */
+.mys-fp-disabled { opacity: .6; }
+.mys-fp-disabled .mys-fp-clear { display: none; }

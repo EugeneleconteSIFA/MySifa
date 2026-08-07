@@ -2976,12 +2976,32 @@ async function openTracMatieresEditModal(dos, matieres){
   const fournLbl = document.createElement('label');
   fournLbl.style.cssText = 'font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.4px;text-transform:uppercase;display:block;margin-bottom:6px';
   fournLbl.textContent = 'Fournisseur (liaison manuelle)';
-  const fournSel = document.createElement('select');
-  fournSel.className = 'form-sel';
-  fournSel.style.width = '100%';
-  fournSel.innerHTML = '<option value="">— Choisir —</option>' +
-    fournisseurs.map(f=>'<option value="'+Number(f.id)+'">'+escapeHtml(f.nom||'')+'</option>').join('');
-  fournWrap.append(fournLbl, fournSel);
+  // Ce bloc n'apparaît que quand l'API répond « fournisseur requis » : la
+  // bobine n'est liée à aucune réception, il faut désigner son fournisseur à
+  // la main. Une liste déroulante de tout l'annuaire pour une saisie ponctuelle
+  // et sous pression (dossier en cours de fabrication) est le pire cas d'usage.
+  const fournPickerTrac = window.MysFournisseurPicker
+    ? window.MysFournisseurPicker.create({
+        valueMode: 'id',
+        placeholder: 'Rechercher le fournisseur de cette bobine\u2026',
+        allowEmpty: false,
+        // La bobine est une matière première : ces catégories d'abord, le
+        // reste de l'annuaire ensuite.
+        categories: ['frontal', 'adhesif', 'glassine', 'complexe'],
+      })
+    : null;
+  // `fournSel` garde son nom et son interface : plus bas, le code lit
+  // `fournSel.value` pour construire le payload. Le champ caché du picker le
+  // porte, donc cette lecture est inchangée.
+  const fournSel = fournPickerTrac ? fournPickerTrac.hidden : document.createElement('select');
+  const fournNode = fournPickerTrac ? fournPickerTrac.el : fournSel;
+  if (!fournPickerTrac) {
+    fournSel.className = 'form-sel';
+    fournSel.style.width = '100%';
+    fournSel.innerHTML = '<option value="">— Choisir —</option>' +
+      fournisseurs.map(f=>'<option value="'+Number(f.id)+'">'+escapeHtml(f.nom||'')+'</option>').join('');
+  }
+  fournWrap.append(fournLbl, fournNode);
 
   function mkCodeInput(val, placeholder){
     const inp = document.createElement('input');

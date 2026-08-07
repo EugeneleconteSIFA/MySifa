@@ -735,7 +735,7 @@
         )}
         <div class="filters">
           <input type="search" class="search-input" id="mat-q" placeholder="Rechercher (nom, appellation…)" value="${escAttr(S.filters.matQ)}"/>
-          <select id="mat-sup">${supOpts}</select>
+          <select id="mat-sup" class="pr-fourn-filtre">${supOpts}</select>
           <select id="mat-active"><option value="1" ${S.filters.matActive==="1"?"selected":""}>Actifs</option><option value="0" ${S.filters.matActive==="0"?"selected":""}>Inactifs</option><option value="all" ${S.filters.matActive==="all"?"selected":""}>Tous</option></select>
         </div>
         <div class="cat-filters">${catOpts}</div>
@@ -761,11 +761,26 @@
         renderMaterialsList();
       }, 300);
     };
-    document.getElementById("mat-sup").onchange = async (e) => {
-      S.filters.matSupplier = e.target.value;
-      await loadMaterialsList();
-      renderMaterialsList();
-    };
+    // Le filtre fournisseur devient une recherche. Favoris = les catégories
+    // de matière déjà cochées dans les filtres : quand on regarde les
+    // adhésifs, les fournisseurs d'adhésif remontent d'eux-mêmes.
+    {
+      const selSup = document.getElementById("mat-sup");
+      const instSup = pickerFournisseur(selSup, {
+        placeholder: "Tous fournisseurs — taper pour filtrer",
+        className: "mys-fp-sm",
+        emptyLabel: "— Tous fournisseurs —",
+        activeOnly: false,   // un filtre doit pouvoir viser une fiche archivée
+        resolveCategories: () =>
+          (S.filters.matCats || []).flatMap(fournCatsDepuisCategorieCode),
+      });
+      const champSup = instSup ? instSup.hidden : selSup;
+      champSup.onchange = async () => {
+        S.filters.matSupplier = champSup.value;
+        await loadMaterialsList();
+        renderMaterialsList();
+      };
+    }
     document.getElementById("mat-active").onchange = async (e) => {
       S.filters.matActive = e.target.value;
       await loadMaterialsList();
@@ -839,6 +854,47 @@
       return fmtPrixUnite(m.prix_min, m.unite);
     }
     return `${fmtPrixUnite(m.prix_min, m.unite)} <span class="muted">à</span> ${fmtPrixUnite(m.prix_max, m.unite)}`;
+  }
+
+  /* Catégorie de matière (FRONTAL, ADHESIF…) → catégorie de fournisseur
+     (frontal, adhesif…). C'est ce qui fait remonter « Fournisseurs adhésif »
+     en tête de la recherche quand on renseigne le prix d'un adhésif.
+
+     Les deux référentiels sont distincts et le resteront : une matière est
+     rangée par ce qu'elle EST, un fournisseur par ce qu'il VEND. Ils se
+     recouvrent aujourd'hui sur les codes usuels ; un code sans correspondance
+     ne renvoie rien, et la recherche s'affiche alors sans groupe de favoris —
+     dégradation silencieuse volontaire, pas un blocage. */
+  const FOURN_CATS_CONNUES = new Set([
+    "mandrin", "palette", "adhesif", "carton", "frontal", "glassine",
+    "complexe", "autre", "negoce", "sous_traitant",
+  ]);
+
+  function fournCatsDepuisCategorieCode(code) {
+    if (!code) return [];
+    const c = String(code).toLowerCase();
+    return FOURN_CATS_CONNUES.has(c) ? [c] : [];
+  }
+
+  function fournCatsDepuisMatiere(m) {
+    if (!m) return [];
+    // La matière porte parfois son code de catégorie, parfois seulement l'id.
+    const direct = m.category_code || m.categorie_code || m.category || null;
+    if (direct) return fournCatsDepuisCategorieCode(direct);
+    const id = m.category_id != null ? m.category_id : m.categorie_id;
+    if (id == null) return [];
+    const cat = (S.categories || []).find((c) => String(c.id) === String(id));
+    return cat ? fournCatsDepuisCategorieCode(cat.code) : [];
+  }
+
+  /* Convertit en place un <select> de fournisseur en recherche à la frappe.
+     Le champ caché reprend l'id du select, donc tout le code qui lisait
+     document.getElementById(<id>).value continue de fonctionner. */
+  function pickerFournisseur(selector, opts) {
+    if (!window.MysFournisseurPicker) return null;   // script absent : le <select> reste
+    const el = typeof selector === "string" ? document.querySelector(selector) : selector;
+    if (!el || el.tagName !== "SELECT") return null;
+    return window.MysFournisseurPicker.fromSelect(el, opts || {});
   }
 
   function fournisseurOptions(selectedId) {
@@ -931,7 +987,7 @@
               : (S.canWrite ? actionBtn("data-ms-principal", key, "star", "Faire de ce prix celui qui fait foi") : "")}</td>
           <td class="ms-decl-cell">${i === 0 ? declinaisonCell(m, d) : '<span class="ms-decl-rappel">↳</span>'}</td>
           <td>${S.canWrite
-              ? `<select class="ms-inline" data-ms-fourn="${escAttr(key)}">${fournisseurOptions(l.fournisseur_id)}</select>`
+              ? `<select class="ms-inline" data-ms-fourn="${escAttr(key)}" data-fourn-cats="${escAttr(fournCatsDepuisMatiere(m).join(","))}">${fournisseurOptions(l.fournisseur_id)}</select>`
               : escHtml(l.fournisseur_nom || "— Sans fournisseur —")}
             ${l.fournisseur_id
               ? `<button type="button" class="ms-tarif-btn" data-ms-tarif="${l.fournisseur_id}|${m.id}"
@@ -1282,10 +1338,22 @@
         }
       };
     });
-    document.querySelectorAll("[data-ms-fourn]").forEach((sel) => {
-      sel.onchange = async () => {
-        const k = parseMsKey(sel.getAttribute("data-ms-fourn"));
-        const nouveau = sel.value === "" ? null : parseInt(sel.value, 10);
+    document.querySelectorAll("select[data-ms-fourn]").forEach((sel) => {
+      // Converti AVANT la pose du handler : après conversion, `sel` n'est plus
+      // dans le DOM et son onchange ne partirait jamais. On garde une
+      // référence au champ qui porte désormais la valeur.
+      const cats = (sel.getAttribute("data-fourn-cats") || "").split(",").filter(Boolean);
+      const cle = sel.getAttribute("data-ms-fourn");
+      const inst = pickerFournisseur(sel, {
+        categories: cats,
+        placeholder: "Fournisseur…",
+        className: "mys-fp-sm",
+        emptyLabel: "— Sans fournisseur —",
+      });
+      const champ = inst ? inst.hidden : sel;
+      champ.onchange = async () => {
+        const k = parseMsKey(cle);
+        const nouveau = champ.value === "" ? null : parseInt(champ.value, 10);
         // On renomme le fournisseur de la ligne existante : la recréer lui ferait
         // perdre son statut de principal.
         if (
@@ -2221,7 +2289,7 @@
               <div class="field f-mid"><label>Appellation</label><input id="f-app" value="${escAttr(f.appellation_code)}"/></div>
               <div class="field f-mid"><label>Catégorie</label><select id="f-cat">${catOpts}</select></div>
             </div>
-            <div class="field f-mid"><label>Fournisseur</label><select id="f-sup">${supOpts}</select>${supLegacy}</div>
+            <div class="field f-mid"><label>Fournisseur</label><select id="f-sup" data-fourn-cats="${escAttr(fournCatsDepuisMatiere(f).join(","))}">${supOpts}</select>${supLegacy}</div>
           </div>
 
           <div class="form-section" id="carac-section" style="${needsWeight(f)?"":"display:none"}"><h3>Caractéristiques</h3>
@@ -2352,6 +2420,26 @@
         bindPreview();
       };
     });
+    // Fournisseur du formulaire matière. Favoris = la catégorie de la
+    // matière en cours d'édition, portée par data-fourn-cats à l'émission
+    // (la catégorie peut changer sans re-render, d'où la relecture au
+    // moment de l'ouverture plutôt qu'une valeur figée à la conversion).
+    {
+      const selFSup = document.getElementById("f-sup");
+      if (selFSup) {
+        pickerFournisseur(selFSup, {
+          placeholder: "Rechercher un fournisseur…",
+          emptyLabel: "— Aucun —",
+          resolveCategories: () => fournCatsDepuisMatiere(f),
+          onSelect: () => {
+            marquerMat();
+            syncMaterialFormFromDom();
+            refreshMaterialPreview();
+          },
+        });
+      }
+    }
+
     const chkMarge = document.getElementById("f-marge");
     if (chkMarge) chkMarge.onchange = () => {
       marquerMat();
