@@ -21,14 +21,23 @@ qu'en novembre si la capture était correcte :
    OF n'ont pas de métrage ressemble trait pour trait à un carnet vide. Sans
    `nb_incalculables`, on calibrerait un modèle sur une pénurie de données en
    croyant calibrer sur une pénurie de commandes.
+3. **On photographie TOUS les statuts, pas seulement le reste à produire.**
+   p(k) est un rapport dont le dénominateur est le volume FINAL du mois M. Si
+   la photo se limite aux dossiers actifs, ce volume final n'est jamais
+   enregistré : les dossiers passent en « terminé » à mesure que M approche et
+   la série retombe à zéro le mois venu. D'où `quantite` (tout ce qui vise ce
+   mois) à côté de `quantite_active` (ce qui reste à produire).
 
 La capture est best-effort et idempotente : la relancer dans la journée ne
 duplique rien, et son échec ne doit jamais empêcher l'affichage des besoins.
 """
+import logging
 from datetime import date, datetime
 from typing import Optional
 
 from app.services.date_livraison import parse_date_livraison
+
+logger = logging.getLogger(__name__)
 
 
 def _mois_livraison(pe: dict) -> Optional[str]:
@@ -65,43 +74,67 @@ def capturer(conn, jour: Optional[date] = None, force: bool = False) -> dict:
     # Au niveau module, l'import serait circulaire. Même parti pris que
     # besoins_matieres avec of_import._promote_of_link.
     from app.routers.besoins_matieres import (
-        _load_dossiers, _load_mapping, _compute_besoins_dossier,
+        _SQL_PE, _load_dossiers, _load_mapping, _compute_besoins_dossier,
     )
     from app.routers.stock import stock_config_float
 
-    dossiers = _load_dossiers(conn)
+    # `_SQL_PE` restreint aux dossiers en attente ou en cours — le périmètre de
+    # l'écran Besoins matières, qui répond à « que reste-t-il à approvisionner ».
+    # La calibration a besoin de l'autre question : « combien ce mois aura-t-il
+    # pesé au total ». On retire donc le filtre de statut, et on distingue les
+    # deux grandeurs à l'écriture.
+    sql_tous = _SQL_PE.replace("WHERE pe.statut IN ('attente', 'en_cours')", "")
+    dossiers = _load_dossiers(conn, sql_tous)
     mapping = _load_mapping(conn)
     perte = stock_config_float(conn, "mandrin_perte_coupe_pct")
 
     # (mois, matiere_id, kind) → agrégat
     cumul: dict = {}
-    vus: dict = {}   # mêmes clés → set d'ids de dossiers, pour ne pas les compter deux fois
+    vus: dict = {}         # mêmes clés → ids de dossiers, pour ne pas compter deux fois
+    vus_actifs: dict = {}  # idem, restreint aux dossiers encore à produire
     for pe in dossiers:
         mois = _mois_livraison(pe)
         if not mois:
             continue  # aucune date exploitable : le dossier n'a pas de mois à peser
+        actif = (pe.get("statut") or "") in ("attente", "en_cours")
         for b in _compute_besoins_dossier(pe, mapping, perte):
             cle_ligne = (mois, b.get("matiere_id"), b.get("kind"))
-            agg = cumul.setdefault(cle_ligne, {"q": 0.0, "unite": b.get("unite"), "inc": 0})
+            agg = cumul.setdefault(
+                cle_ligne, {"q": 0.0, "q_actif": 0.0, "unite": b.get("unite"), "inc": 0})
             vus.setdefault(cle_ligne, set()).add(pe["id"])
+            if actif:
+                vus_actifs.setdefault(cle_ligne, set()).add(pe["id"])
             q = b.get("quantite")
             if q is None:
                 agg["inc"] += 1
             else:
                 agg["q"] += float(q)
+                if actif:
+                    agg["q_actif"] += float(q)
             if not agg["unite"]:
                 agg["unite"] = b.get("unite")
 
     for (mois, mid, kind), agg in cumul.items():
+        k = (mois, mid, kind)
         conn.execute(
             """INSERT INTO carnet_snapshots
                (snapshot_le, mois_livraison, matiere_id, kind, unite,
-                quantite, nb_dossiers, nb_incalculables)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (cle, mois, mid, kind, agg["unite"], round(agg["q"], 3),
-             len(vus[(mois, mid, kind)]), agg["inc"]),
+                quantite, quantite_active, nb_dossiers, nb_dossiers_actifs,
+                nb_incalculables)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (cle, mois, mid, kind, agg["unite"],
+             round(agg["q"], 3), round(agg["q_actif"], 3),
+             len(vus[k]), len(vus_actifs.get(k, ())), agg["inc"]),
         )
 
+    if dossiers and not cumul:
+        # Des dossiers au planning, mais rien à photographier : aucun n'a de
+        # date exploitable, ou aucun besoin n'est calculable. Ce n'est pas une
+        # capture réussie, c'est une capture vide — et elle se lira plus tard
+        # comme un carnet vide si personne ne le dit maintenant.
+        logger.warning("[carnet] %s dossier(s) au planning mais aucune ligne "
+                       "photographiée — dates de livraison ou besoins "
+                       "incalculables ?", len(dossiers))
     return {"jour": cle, "lignes": len(cumul), "dossiers": len(dossiers),
             "deja_fait": False}
 
@@ -116,14 +149,20 @@ def capturer_si_besoin(conn) -> None:
     jours consécutifs.
 
     Toute erreur est avalée : rien de ce qui sert à une prévision d'automne ne
-    justifie de faire échouer l'affichage des besoins d'aujourd'hui.
+    justifie de faire échouer l'affichage des besoins d'aujourd'hui. Elle est
+    en revanche TRACÉE. Une capture qui échoue en silence ne se découvre qu'en
+    novembre, devant une table vide et trois mois irrécupérables — le coût
+    d'une ligne de log est sans commune mesure.
     """
     try:
         res = capturer(conn)
         if not res["deja_fait"]:
             conn.commit()
+            logger.info("[carnet] photo du %s : %s ligne(s), %s dossier(s).",
+                        res["jour"], res["lignes"], res["dossiers"])
     except Exception:
-        pass
+        logger.exception("[carnet] photo du jour impossible — la série de "
+                         "calibration aura un trou aujourd'hui.")
 
 
 def couverture(conn) -> dict:
