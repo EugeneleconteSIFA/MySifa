@@ -1,6 +1,7 @@
 """Paramètres & matrice d'accès — super administrateur uniquement."""
 
 import hashlib
+import re
 import secrets
 import uuid
 from datetime import datetime, timedelta
@@ -560,12 +561,24 @@ def list_fournisseurs(request: Request):
             #
             # La validité du certificat À LA DATE DU BL est une exigence de
             # chaîne de contrôle : sans cette colonne, aucun contrôle possible.
+            # ── siret / tva_intracom : créés par la migration 214, édités et
+            # affichés par la fiche v2 depuis le premier jour… mais absents de
+            # ce SELECT, de l'INSERT et de l'UPDATE. Les deux champs étaient
+            # donc toujours vides à l'écran et jamais persistés : on saisissait
+            # un SIRET, on sauvegardait, il disparaissait sans message.
+            #
+            # ── telephone / email / fax / conditions d'achat / regime_tva /
+            # rcs : ajoutés par la migration `fournisseur_contact_conditions`.
             """SELECT ff.id, ff.nom, ff.licence, ff.certificat, ff.has_fsc,
                       ff.fsc_date_expiration, ff.sous_traitant, ff.categories,
                       ff.traca_photo_url, ff.traca_explication, ff.traca_exemple_code,
                       ff.groupe, ff.branche,
                       ff.adresse, ff.code_postal, ff.ville, ff.pays,
                       ff.langue_default, ff.tags, ff.notes, ff.actif, ff.updated_at,
+                      ff.siret, ff.tva_intracom, ff.price_currency,
+                      ff.telephone, ff.email, ff.fax,
+                      ff.mode_reglement, ff.mode_livraison, ff.delai_expedition_jours,
+                      ff.regime_tva, ff.rcs,
                       (SELECT COUNT(*) FROM fournisseur_contacts fc
                        WHERE fc.fournisseur_id = ff.id AND fc.actif=1) AS nb_contacts
                FROM fournisseurs_fsc ff
@@ -609,6 +622,74 @@ def list_fournisseur_categories(request: Request):
     require_settings(request)
     from config import fournisseur_categories
     return fournisseur_categories()
+
+
+@router.get("/api/fournisseurs/picker")
+def fournisseurs_picker(request: Request):
+    """Annuaire allégé pour la recherche fournisseur (MysFournisseurPicker).
+
+    Source UNIQUE de tous les champs « fournisseur » de l'application. Avant,
+    chaque écran avait le sien : `/api/stock/fournisseurs`, `/api/fabrication/
+    fournisseurs-fsc`, `/api/pricing/fournisseurs`, `/api/ao/picker/
+    fournisseurs`, plus deux listes codées en dur côté client. Six vérités pour
+    un annuaire, avec des divergences réelles — `has_fsc` valait 1 par défaut
+    ici et 0 là.
+
+    Garde : `get_current_user`, pas `require_settings`. Un opérateur qui
+    réceptionne une bobine doit pouvoir désigner son fournisseur sans être
+    administrateur ; c'est bien le seul point commun de tous les appelants.
+
+    Charge utile réduite à ce que la recherche affiche ou interroge — ni
+    notes, ni traçabilité, ni dates de certificat : cette liste est
+    téléchargée à l'ouverture de chaque page qui contient un tel champ.
+    """
+    get_current_user(request)
+    from database import get_db
+    from config import fournisseur_categories
+    import json as _json
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT id, nom, categories, has_fsc, licence, certificat,
+                      code_postal, ville, pays, groupe, branche, tags, email, actif
+                 FROM fournisseurs_fsc
+                ORDER BY nom COLLATE NOCASE ASC"""
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        for champ in ("categories", "tags"):
+            brut = d.get(champ)
+            if brut:
+                try:
+                    p = _json.loads(brut)
+                    d[champ] = p if isinstance(p, list) else []
+                except (_json.JSONDecodeError, TypeError):
+                    d[champ] = []
+            else:
+                d[champ] = []
+        d["has_fsc"] = 1 if d.get("has_fsc") else 0
+        d["actif"] = 1 if (d.get("actif") is None or d.get("actif")) else 0
+        out.append(d)
+    # Le référentiel voyage avec la liste : le picker doit nommer le groupe
+    # « Fournisseurs adhésif » sans un second aller-retour réseau.
+    return {"fournisseurs": out, "categories": fournisseur_categories()}
+
+
+@router.get("/api/fournisseurs/referentiels-achat")
+def list_referentiels_achat(request: Request):
+    """Modes de règlement, modes de livraison, régimes de TVA.
+
+    Trois référentiels de `config.py`, servis ensemble : la fiche fournisseur
+    les affiche dans le même bloc, un appel par liste serait trois requêtes
+    pour trois constantes.
+    """
+    get_current_user(request)
+    from config import modes_reglement, modes_livraison, regimes_tva
+    return {
+        "modes_reglement": modes_reglement(),
+        "modes_livraison": modes_livraison(),
+        "regimes_tva": regimes_tva(),
+    }
 
 
 @router.get("/api/fournisseurs/groupes")
@@ -1157,6 +1238,497 @@ def _parse_fsc_date_expiration(raw):
     return s
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Coordonnées société, conditions d'achat et fiscalité
+#
+# Ces champs décrivent l'ENTREPRISE, pas une personne : le standard et
+# l'adresse générique de commande survivent au contact qui y répond.
+# `fournisseur_contacts` garde les personnes.
+#
+# Chaque valeur est refusée si elle est mal formée, plutôt que stockée telle
+# quelle. Un SIRET à 12 chiffres ou un régime de TVA inconnu ne provoque
+# aucune erreur visible tant qu'on ne s'en sert pas — et le jour où l'on
+# s'en sert, c'est une écriture comptable fausse ou un index qui ne
+# rapproche rien.
+# ═══════════════════════════════════════════════════════════════════════
+
+_FOUR_COLS_ACHAT = (
+    "siret", "tva_intracom", "rcs",
+    "telephone", "email", "fax",
+    "mode_reglement", "mode_livraison", "delai_expedition_jours",
+    "regime_tva",
+)
+
+
+def _txt_ou_none(v, maxlen=0):
+    if v is None:
+        return None
+    s = " ".join(str(v).split())
+    if not s:
+        return None
+    return s[:maxlen] if maxlen and len(s) > maxlen else s
+
+
+def _parse_siret(raw):
+    s = _txt_ou_none(raw)
+    if not s:
+        return None
+    chiffres = re.sub(r"\D", "", s)
+    if len(chiffres) not in (9, 14):
+        raise HTTPException(
+            status_code=400,
+            detail="SIRET invalide — 14 chiffres attendus (ou 9 pour un SIREN).",
+        )
+    return chiffres
+
+
+def _parse_tva_intracom(raw):
+    s = _txt_ou_none(raw)
+    if not s:
+        return None
+    s = re.sub(r"[^A-Za-z0-9]", "", s).upper()
+    if not re.match(r"^[A-Z]{2}[0-9A-Z]{6,13}$", s):
+        raise HTTPException(
+            status_code=400,
+            detail="Numéro de TVA invalide — deux lettres de pays puis 6 à 13 caractères (ex. FR81511760092).",
+        )
+    return s
+
+
+def _parse_email_fournisseur(raw):
+    s = _txt_ou_none(raw, 190)
+    if not s:
+        return None
+    s = s.strip().lower()
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", s):
+        raise HTTPException(status_code=400, detail="Adresse e-mail invalide.")
+    return s
+
+
+def _parse_delai_expedition(raw):
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    try:
+        n = int(float(str(raw).replace(",", ".")))
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail="Délai d'expédition invalide — nombre entier de jours entre 0 et 365.",
+        )
+    if not 0 <= n <= 365:
+        raise HTTPException(
+            status_code=400,
+            detail="Délai d'expédition invalide — nombre entier de jours entre 0 et 365.",
+        )
+    return n
+
+
+def _parse_code_referentiel(raw, codes, quoi):
+    """Code d'un petit référentiel de config.py, ou 400.
+
+    Refuser plutôt qu'écarter silencieusement : un code hors référentiel ne
+    peut être ni affiché lisiblement, ni décoché — c'est la leçon des
+    catégories fournisseurs.
+    """
+    s = _txt_ou_none(raw)
+    if not s:
+        return None
+    if s not in codes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{quoi} inconnu : « {s} ». Valeurs acceptées : {', '.join(sorted(codes))}.",
+        )
+    return s
+
+
+def _parse_devise_achat(raw, defaut="EUR"):
+    s = _txt_ou_none(raw)
+    if not s:
+        return defaut
+    s = s.strip().upper()
+    if not re.match(r"^[A-Z]{3}$", s):
+        raise HTTPException(
+            status_code=400,
+            detail="Devise invalide — code ISO à 3 lettres attendu (EUR, USD, GBP…).",
+        )
+    return s
+
+
+def _champs_achat(body, ex=None, ex_cols=()):
+    """Valeurs des champs coordonnées / conditions / fiscalité.
+
+    `ex` fourni → sémantique d'édition partielle : un champ absent du body
+    garde sa valeur en base. La fiche v2 enregistre bloc par bloc ; sans ce
+    garde-fou, sauvegarder l'onglet Contacts effacerait le régime de TVA.
+    """
+    from config import (
+        MODES_REGLEMENT_CODES, MODES_LIVRAISON_CODES, REGIMES_TVA_CODES,
+    )
+
+    def brut(champ, defaut=None):
+        if champ in body:
+            return body.get(champ)
+        if ex is not None and champ in ex_cols:
+            return ex[champ]
+        return defaut
+
+    return {
+        "siret": _parse_siret(brut("siret")),
+        "tva_intracom": _parse_tva_intracom(brut("tva_intracom")),
+        "rcs": _txt_ou_none(brut("rcs"), 60),
+        "telephone": _txt_ou_none(brut("telephone"), 40),
+        "email": _parse_email_fournisseur(brut("email")),
+        "fax": _txt_ou_none(brut("fax"), 40),
+        "mode_reglement": _parse_code_referentiel(
+            brut("mode_reglement"), MODES_REGLEMENT_CODES, "Mode de règlement"),
+        "mode_livraison": _parse_code_referentiel(
+            brut("mode_livraison"), MODES_LIVRAISON_CODES, "Mode de livraison"),
+        "delai_expedition_jours": _parse_delai_expedition(brut("delai_expedition_jours")),
+        "regime_tva": _parse_code_referentiel(
+            brut("regime_tva"), REGIMES_TVA_CODES, "Régime de TVA"),
+        "price_currency": _parse_devise_achat(
+            brut("price_currency", "EUR" if ex is None else None),
+            (ex["price_currency"] if (ex is not None and "price_currency" in ex_cols) else "EUR") or "EUR",
+        ),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Doublons et fusion
+#
+# Ces deux endpoints étaient appelés par la page Paramètres depuis le début
+# et n'existaient pas côté serveur : le bouton « Doublons » et la fusion
+# renvoyaient un 404 silencieux. Un import de 199 lignes d'export ERP en
+# fait le besoin immédiat — c'est exactement le moment où l'annuaire se
+# retrouve avec « 2DM » à côté de « 2 D M S.A.S. ».
+# ═══════════════════════════════════════════════════════════════════════
+
+_FOUR_FORMES_JURIDIQUES = (
+    "sa", "sas", "sarl", "sasu", "gmbh", "ltd", "bv", "nv", "spa", "srl",
+    "inc", "snc", "eurl", "scop", "scp", "gie", "ag", "plc",
+)
+
+
+def _four_norm_nom(s):
+    """Nom normalisé pour comparaison — même logique que la migration
+    `mc_fournisseurs_annuaire_entreprise` et que le script d'import.
+
+    Les trois doivent se tromper de la même façon : sinon l'import crée un
+    doublon que la détection ne voit pas, ou l'inverse.
+    """
+    import unicodedata
+    s = unicodedata.normalize("NFKD", str(s or ""))
+    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
+    s = "".join(ch if ch.isalnum() else " " for ch in s)
+    mots = [m for m in s.split()
+            if m not in _FOUR_FORMES_JURIDIQUES and len(m) > 1]
+    return " ".join(mots) or " ".join(s.split())
+
+
+def _four_squash(s):
+    """Nom réduit aux seuls alphanumériques, suffixe juridique retiré.
+
+    Rattrape ce que `_four_norm_nom` laisse passer : « 2 D M S.A.S. » perd
+    ses initiales isolées à la normalisation et ne ressemble plus à « 2DM ».
+    Utilisé pour SIGNALER une ressemblance, jamais pour fusionner d'office.
+    """
+    import unicodedata
+    s = unicodedata.normalize("NFKD", str(s or ""))
+    s = "".join(c for c in s if not unicodedata.combining(c)).lower()
+    s = re.sub(r"[^a-z0-9]+", "", s)
+    for forme in sorted(_FOUR_FORMES_JURIDIQUES, key=len, reverse=True):
+        if s.endswith(forme) and len(s) > len(forme) + 2:
+            return s[: -len(forme)]
+    return s
+
+
+@router.get("/api/fournisseurs/doublons")
+def fournisseurs_doublons(request: Request):
+    """Groupes de fiches qui désignent probablement le même fournisseur.
+
+    Quatre clés, de la plus sûre à la plus lâche : SIRET, numéro de TVA,
+    nom normalisé, nom tassé. Une fiche n'apparaît que dans le premier
+    groupe qui la retient — sinon « 2DM » et « 2 D M S.A.S. » se lisent
+    quatre fois et le rapport devient illisible.
+    """
+    require_settings(request)
+    from database import get_db
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT ff.id, ff.nom, ff.siret, ff.tva_intracom, ff.ville,
+                      ff.has_fsc, ff.actif, ff.groupe,
+                      (SELECT COUNT(*) FROM fournisseur_contacts fc
+                        WHERE fc.fournisseur_id = ff.id AND fc.actif = 1) AS nb_contacts
+                 FROM fournisseurs_fsc ff
+                ORDER BY ff.nom COLLATE NOCASE ASC"""
+        ).fetchall()
+
+    fiches = [dict(r) for r in rows]
+    groups = []
+    deja = set()
+
+    def _ajouter(cle_fn, reason, libelle_fn=None):
+        paniers = {}
+        for f in fiches:
+            if f["id"] in deja:
+                continue
+            k = cle_fn(f)
+            if not k:
+                continue
+            paniers.setdefault(k, []).append(f)
+        for k, membres in paniers.items():
+            if len(membres) < 2:
+                continue
+            for m in membres:
+                deja.add(m["id"])
+            groups.append({
+                "reason": reason,
+                "key": (libelle_fn(k, membres) if libelle_fn else k),
+                "count": len(membres),
+                "fournisseurs": [
+                    {"id": m["id"], "nom": m["nom"], "siret": m["siret"],
+                     "ville": m["ville"], "has_fsc": 1 if m["has_fsc"] else 0,
+                     "actif": 1 if (m["actif"] is None or m["actif"]) else 0,
+                     "nb_contacts": m["nb_contacts"]}
+                    for m in membres
+                ],
+            })
+
+    _ajouter(lambda f: re.sub(r"\D", "", str(f["siret"] or "")) or None, "siret")
+    _ajouter(lambda f: re.sub(r"[^A-Z0-9]", "", str(f["tva_intracom"] or "").upper()) or None,
+             "tva")
+    _ajouter(lambda f: _four_norm_nom(f["nom"]) or None, "nom",
+             lambda k, membres: membres[0]["nom"])
+    _ajouter(lambda f: _four_squash(f["nom"]) or None, "nom",
+             lambda k, membres: membres[0]["nom"])
+
+    # SIRET d'abord : c'est la seule clé qu'on n'invente pas. Le nom passe en
+    # dernier, il produit le plus de faux positifs.
+    ordre = {"siret": 0, "tva": 1, "nom": 2}
+    groups.sort(key=lambda g: (ordre.get(g["reason"], 9), -g["count"]))
+    return {"groups": groups, "total_fiches": len(fiches)}
+
+
+def _four_refs_fournisseur(conn):
+    """Introspecte le schéma : où l'id d'un fournisseur est-il référencé ?
+
+    Volontairement générique. Une quinzaine de tables portent aujourd'hui un
+    `fournisseur_id` et le nombre grandit à chaque chantier ; une liste écrite
+    à la main serait périmée au prochain merge, et une fusion qui oublie une
+    table laisse des lignes pointant vers un id supprimé — donc des écrans
+    vides sans message d'erreur.
+
+    Renvoie (refs_id, refs_nom, refs_json) :
+      refs_id   [(table, colonne, cles_unicite)]  colonnes d'id
+      refs_nom  [(table, colonne)]                colonnes portant le NOM
+      refs_json [(table, colonne)]                listes d'ids en JSON
+    """
+    refs_id, refs_nom, refs_json = [], [], []
+    tables = [
+        r["name"] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name NOT LIKE 'sqlite_%'"
+        ).fetchall()
+    ]
+    for t in tables:
+        if t == "fournisseurs_fsc":
+            continue
+        try:
+            cols = conn.execute(f"PRAGMA table_info({t})").fetchall()
+        except Exception:
+            continue
+        noms = [c["name"] for c in cols]
+        pk = [c["name"] for c in cols if c["pk"]]
+        uniques = set(pk)
+        try:
+            for idx in conn.execute(f"PRAGMA index_list({t})").fetchall():
+                if not idx["unique"]:
+                    continue
+                for ic in conn.execute(f"PRAGMA index_info({idx['name']})").fetchall():
+                    if ic["name"]:
+                        uniques.add(ic["name"])
+        except Exception:
+            pass
+        for c in noms:
+            if c in ("fournisseur_id", "fournisseur_fsc_id", "source_fournisseur_id"):
+                refs_id.append((t, c, uniques))
+            elif c == "fournisseur":
+                refs_nom.append((t, c))
+            elif "fournisseur" in c and (c.endswith("_json") or c.endswith("_ids")):
+                refs_json.append((t, c))
+    return refs_id, refs_nom, refs_json
+
+
+@router.post("/api/fournisseurs/{source_id}/merge/{target_id}")
+def merge_fournisseurs(source_id: int, target_id: int, request: Request):
+    """Réassigne tout ce qui pend à `source_id` vers `target_id`, puis
+    supprime la source.
+
+    Irréversible, d'où le double garde-fou côté interface (case à cocher +
+    confirmation). Côté serveur, tout tient dans UNE transaction : une fusion
+    à moitié faite laisserait des contacts orphelins et un fournisseur
+    fantôme, état dont on ne sort pas sans SQL à la main.
+    """
+    user = require_settings(request)
+    if source_id == target_id:
+        raise HTTPException(status_code=400,
+                            detail="Source et cible identiques — rien à fusionner.")
+    from database import get_db
+    import json as _json
+
+    with get_db() as conn:
+        src = conn.execute("SELECT * FROM fournisseurs_fsc WHERE id=?", (source_id,)).fetchone()
+        tgt = conn.execute("SELECT * FROM fournisseurs_fsc WHERE id=?", (target_id,)).fetchone()
+        if not src:
+            raise HTTPException(status_code=404, detail="Fournisseur source non trouvé")
+        if not tgt:
+            raise HTTPException(status_code=404, detail="Fournisseur cible non trouvé")
+
+        refs_id, refs_nom, refs_json = _four_refs_fournisseur(conn)
+        moved, renamed = {}, {}
+        json_rewrites = 0
+
+        try:
+            conn.execute("BEGIN")
+
+            for table, col, uniques in refs_id:
+                # UPDATE OR IGNORE : quand la table impose l'unicité du couple
+                # (fournisseur, autre chose) — mc_tarif_fournisseur,
+                # matiere_laize_fournisseurs — la cible peut déjà porter la
+                # ligne équivalente. On la garde, elle : c'est la fiche qui
+                # survit, ses réglages sont ceux que l'utilisateur voit.
+                if col in uniques or (uniques & {col}):
+                    cur = conn.execute(
+                        f"UPDATE OR IGNORE {table} SET {col}=? WHERE {col}=?",
+                        (target_id, source_id))
+                    deplacees = cur.rowcount
+                    reste = conn.execute(
+                        f"DELETE FROM {table} WHERE {col}=?", (source_id,)).rowcount
+                    if deplacees or reste:
+                        moved[table] = deplacees
+                        if reste:
+                            moved[f"{table} (doublons écartés)"] = reste
+                else:
+                    cur = conn.execute(
+                        f"UPDATE {table} SET {col}=? WHERE {col}=?",
+                        (target_id, source_id))
+                    if cur.rowcount:
+                        moved[table] = cur.rowcount
+
+            for table, col in refs_nom:
+                # Historique stocké par NOM (stock_receptions.fournisseur,
+                # matiere_params.fournisseur). On renomme : effacer couperait
+                # la traçabilité d'une réception déjà partie en production.
+                cur = conn.execute(
+                    f"UPDATE {table} SET {col}=? WHERE {col}=?", (tgt["nom"], src["nom"]))
+                if cur.rowcount:
+                    renamed[table] = cur.rowcount
+
+            for table, col in refs_json:
+                lignes = conn.execute(
+                    f"SELECT rowid AS rid, {col} AS v FROM {table} "
+                    f"WHERE {col} IS NOT NULL AND {col} LIKE ?",
+                    (f"%{source_id}%",)).fetchall()
+                for l in lignes:
+                    try:
+                        val = _json.loads(l["v"])
+                    except (ValueError, TypeError):
+                        continue
+                    if not isinstance(val, list):
+                        continue
+                    neuf, change = [], False
+                    for x in val:
+                        y = target_id if (isinstance(x, int) and x == source_id) else x
+                        if y != x:
+                            change = True
+                        if y not in neuf:
+                            neuf.append(y)
+                    if change:
+                        conn.execute(
+                            f"UPDATE {table} SET {col}=? WHERE rowid=?",
+                            (_json.dumps(neuf), l["rid"]))
+                        json_rewrites += 1
+
+            # Ce que la cible n'a pas et que la source portait : on le récupère
+            # plutôt que de le perdre avec la fiche. Les champs déjà remplis sur
+            # la cible ne bougent pas — c'est elle qui survit.
+            recuperables = [
+                "licence", "certificat", "groupe", "branche", "adresse",
+                "code_postal", "ville", "siret", "tva_intracom", "rcs",
+                "telephone", "email", "fax", "mode_reglement", "mode_livraison",
+                "delai_expedition_jours", "regime_tva", "notes",
+                "traca_photo_url", "traca_explication", "traca_exemple_code",
+                "fsc_date_expiration",
+            ]
+            tgt_cols = tgt.keys()
+            sets, vals, recup = [], [], []
+            for champ in recuperables:
+                if champ not in tgt_cols:
+                    continue
+                a, b = tgt[champ], src[champ]
+                if (a is None or str(a).strip() == "") and b not in (None, ""):
+                    sets.append(f"{champ}=?")
+                    vals.append(b)
+                    recup.append(champ)
+            # Catégories : union. Deux fiches du même fournisseur peuvent avoir
+            # été rangées différemment, les deux rangements sont justes.
+            if "categories" in tgt_cols:
+                def _liste(v):
+                    try:
+                        p = _json.loads(v) if v else []
+                        return p if isinstance(p, list) else []
+                    except (ValueError, TypeError):
+                        return []
+                union = _liste(tgt["categories"])
+                for c in _liste(src["categories"]):
+                    if c not in union:
+                        union.append(c)
+                if union != _liste(tgt["categories"]):
+                    sets.append("categories=?")
+                    vals.append(_json.dumps(union, ensure_ascii=False))
+                    recup.append("categories")
+                    if "sous_traitant" in tgt_cols and "sous_traitant" in union:
+                        sets.append("sous_traitant=?")
+                        vals.append(1)
+            if "has_fsc" in tgt_cols and not tgt["has_fsc"] and src["has_fsc"]:
+                sets.append("has_fsc=?")
+                vals.append(1)
+                recup.append("has_fsc")
+            if sets:
+                sets.append("updated_at=?")
+                vals.append(datetime.now().isoformat())
+                vals.append(target_id)
+                conn.execute(
+                    f"UPDATE fournisseurs_fsc SET {', '.join(sets)} WHERE id=?", vals)
+
+            conn.execute("DELETE FROM fournisseurs_fsc WHERE id=?", (source_id,))
+            conn.commit()
+        except HTTPException:
+            conn.rollback()
+            raise
+        except Exception as e:
+            conn.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail=f"Fusion interrompue et annulée — aucune donnée modifiée. ({e})",
+            )
+
+    log_action(
+        user=user,
+        action="DELETE",
+        module="settings",
+        objet=f"Fusion fournisseur {src['nom']} → {tgt['nom']}",
+        detail={"source_id": source_id, "target_id": target_id,
+                "moved": moved, "renamed": renamed,
+                "json_rewrites": json_rewrites,
+                "champs_recuperes": recup},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "moved": moved, "renamed": renamed,
+            "json_rewrites": json_rewrites, "champs_recuperes": recup,
+            "target": {"id": target_id, "nom": tgt["nom"]}}
+
+
 @router.post("/api/fournisseurs")
 async def create_fournisseur(request: Request):
     user = require_settings(request)
@@ -1185,6 +1757,7 @@ async def create_fournisseur(request: Request):
     fsc_date_expiration = _parse_fsc_date_expiration(body.get("fsc_date_expiration"))
     if not has_fsc:
         fsc_date_expiration = None
+    achat = _champs_achat(body)
     if not nom:
         raise HTTPException(status_code=400, detail="Nom du fournisseur requis")
     now = datetime.now().isoformat()
@@ -1195,12 +1768,21 @@ async def create_fournisseur(request: Request):
                    (nom, licence, certificat, has_fsc, groupe, branche,
                     adresse, code_postal, ville, pays, langue_default, tags,
                     notes, actif, updated_at,
-                    fsc_date_expiration, sous_traitant, categories)
-                   VALUES (?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?, ?,?,?)""",
+                    fsc_date_expiration, sous_traitant, categories,
+                    siret, tva_intracom, rcs, telephone, email, fax,
+                    mode_reglement, mode_livraison, delai_expedition_jours,
+                    regime_tva, price_currency)
+                   VALUES (?,?,?,?,?,?, ?,?,?,?,?,?, ?,?,?, ?,?,?,
+                           ?,?,?,?,?,?, ?,?,?, ?,?)""",
                 (nom, licence, certificat, has_fsc, groupe, branche,
                  adresse, code_postal, ville, pays, langue_default, tags_json,
                  notes, actif, now,
-                 fsc_date_expiration, sous_traitant, cat_json),
+                 fsc_date_expiration, sous_traitant, cat_json,
+                 achat["siret"], achat["tva_intracom"], achat["rcs"],
+                 achat["telephone"], achat["email"], achat["fax"],
+                 achat["mode_reglement"], achat["mode_livraison"],
+                 achat["delai_expedition_jours"],
+                 achat["regime_tva"], achat["price_currency"]),
             )
             conn.commit()
             log_action(
@@ -1304,6 +1886,9 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
             fsc_date_expiration = _parse_fsc_date_expiration(body.get("fsc_date_expiration"))
         else:
             fsc_date_expiration = ex["fsc_date_expiration"] if "fsc_date_expiration" in ex_cols else None
+        # Édition partielle : la fiche v2 enregistre bloc par bloc, donc un
+        # champ absent du body garde sa valeur en base.
+        achat = _champs_achat(body, ex, ex_cols)
 
         # Le certificat déposé dans MyQualité fait foi. Si ce fournisseur en a
         # un, sa date écrase ce que le body propose : sans ce garde-fou, un
@@ -1341,6 +1926,12 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
              (ex["fsc_date_expiration"] if "fsc_date_expiration" in ex_cols else None),
              fsc_date_expiration),
         ]
+        # Identité fiscale et conditions d'achat : ce sont les champs qui
+        # engagent (SIRET faux = facture non déductible, régime de TVA faux =
+        # écriture comptable fausse). Ils appartiennent au journal d'audit.
+        for _c in _FOUR_COLS_ACHAT + ("price_currency",):
+            if _c in ex_cols:
+                _pairs.append((_c, ex[_c], achat.get(_c)))
         for name, before, after in _pairs:
             if before != after:
                 changed[name] = {"before": before, "after": after}
@@ -1352,13 +1943,22 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
                        traca_explication=?, traca_exemple_code=?, groupe=?, branche=?,
                        adresse=?, code_postal=?, ville=?, pays=?,
                        langue_default=?, tags=?, notes=?, actif=?, updated_at=?,
-                       fsc_date_expiration=?, sous_traitant=?, categories=?
+                       fsc_date_expiration=?, sous_traitant=?, categories=?,
+                       siret=?, tva_intracom=?, rcs=?,
+                       telephone=?, email=?, fax=?,
+                       mode_reglement=?, mode_livraison=?, delai_expedition_jours=?,
+                       regime_tva=?, price_currency=?
                    WHERE id=?""",
                 (nom, licence, certificat, has_fsc,
                  traca_explication, traca_exemple_code, groupe, branche,
                  adresse, code_postal, ville, pays,
                  langue_default, tags_json, notes, actif, now,
                  fsc_date_expiration, sous_traitant, cat_json,
+                 achat["siret"], achat["tva_intracom"], achat["rcs"],
+                 achat["telephone"], achat["email"], achat["fax"],
+                 achat["mode_reglement"], achat["mode_livraison"],
+                 achat["delai_expedition_jours"],
+                 achat["regime_tva"], achat["price_currency"],
                  fournisseur_id),
             )
             conn.commit()
@@ -1505,15 +2105,29 @@ def fournisseur_receptions(fournisseur_id: int, request: Request):
         four = conn.execute("SELECT nom FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)).fetchone()
         if not four:
             raise HTTPException(status_code=404, detail="Fournisseur non trouvé")
+        # Jointure par id ET par nom. `stock_receptions.fournisseur_id` existe
+        # depuis la migration `fsc_reception_fournisseur_id`, mais les
+        # réceptions antérieures ne portent que le nom en texte : ne joindre
+        # que sur l'id viderait l'historique, ne joindre que sur le nom le
+        # perdrait au premier renommage. Les deux, le temps que les anciennes
+        # lignes finissent de vivre.
+        a_col_id = any(
+            r[1] == "fournisseur_id"
+            for r in conn.execute("PRAGMA table_info(stock_receptions)").fetchall()
+        )
+        clause = ("(r.fournisseur_id = ? OR (r.fournisseur_id IS NULL AND r.fournisseur = ?))"
+                  if a_col_id else "r.fournisseur = ?")
+        params = (fournisseur_id, four["nom"]) if a_col_id else (four["nom"],)
         rows = conn.execute(
-            """SELECT r.id, r.created_at, r.created_by_name, r.nb_bobines, r.certificat_fsc, r.note,
+            f"""SELECT r.id, r.created_at, r.created_by_name, r.nb_bobines,
+                      r.certificat_fsc, r.note,
                       GROUP_CONCAT(i.code_barre, '||') as codes
                FROM stock_receptions r
                LEFT JOIN stock_reception_items i ON i.reception_id = r.id
-               WHERE r.fournisseur = ?
+               WHERE {clause}
                GROUP BY r.id
                ORDER BY r.created_at DESC LIMIT 50""",
-            (four["nom"],),
+            params,
         ).fetchall()
     result = []
     for row in rows:

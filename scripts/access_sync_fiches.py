@@ -242,6 +242,8 @@ def main():
     created = 0
     updated = 0
     errors  = 0
+    conflits = 0
+    devalides = 0
 
     for row in rows:
         ref = s(row.reference) or "???"
@@ -256,9 +258,24 @@ def main():
             if action == "created":
                 print(f"  [CRÉÉ]    {ref} → id MySifa : {fid}")
                 created += 1
+            elif action == "unchanged":
+                print(f"  [IDENTIQUE] {ref} → rien à mettre à jour")
             else:
-                print(f"  [MIS À JOUR] {ref} → id MySifa : {fid}")
+                champs = ", ".join(result.get("fields") or [])
+                print(f"  [MIS À JOUR] {ref} → {champs or 'aucun champ'} (id : {fid})")
                 updated += 1
+            # Une valeur saisie à la main dans MySifa n'est plus écrasée. Le
+            # conflit est signalé ici et consultable dans MyStock : c'est un
+            # désaccord entre deux bases, pas un non-événement.
+            for c in result.get("conflits") or []:
+                print(f"  [CONFLIT] {ref} → {c.get('libelle', c.get('champ'))} : "
+                      f"MySifa {c.get('actuel')!r} ≠ Access {c.get('propose')!r} "
+                      f"(saisie manuelle conservée)")
+                conflits += 1
+            if result.get("validation_retiree"):
+                print(f"            ↳ {result.get('motif_validation')} "
+                      f"Fiche à revalider dans MyStock avant tout déstockage.")
+                devalides += 1
         except requests.HTTPError as e:
             print(f"  [ERREUR]  {ref} → HTTP {e.response.status_code} : {e.response.text[:120]}")
             errors += 1
@@ -266,7 +283,9 @@ def main():
             print(f"  [ERREUR]  {ref} → {e}")
             errors += 1
 
-    print(f"\nRésultat — Créées : {created}  |  Mises à jour : {updated}  |  Erreurs : {errors}")
+    print(f"\nRésultat — Créées : {created}  |  Mises à jour : {updated}  "
+          f"|  Conflits : {conflits}  |  Validations retirées : {devalides}  "
+          f"|  Erreurs : {errors}")
 
     if created + updated > 0:
         save_date_depuis()

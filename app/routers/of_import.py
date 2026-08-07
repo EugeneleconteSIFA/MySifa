@@ -20,6 +20,9 @@ from fastapi.responses import FileResponse, Response
 from config import UPLOAD_DIR
 from database import get_db
 from services.auth_service import get_current_user, require_superadmin
+from app.services.documents_verite import (
+    appliquer_maj, constater_remplacement, marquer_champs_manuels,
+)
 
 router = APIRouter()
 
@@ -415,10 +418,22 @@ async def validate_of(
                 replaced_pdf = matches[0]["pdf_filename"]
 
         if replaced_id is not None:
+            # Photo de la ligne AVANT réécriture. Le remplacement est un geste
+            # délibéré et le papier fait foi — on ne l'arbitre pas. Mais si un
+            # chiffre de calcul change sous une validation déjà acquise, cette
+            # validation ne vaut plus rien : `constater_remplacement` la retire
+            # et journalise ce qui a bougé.
+            avant = dict(conn.execute(
+                "SELECT * FROM of_imports WHERE id = ?", (replaced_id,)
+            ).fetchone())
             set_cols = list(OF_DATA_FIELDS) + tail_cols
             set_sql = ", ".join(f"{c} = ?" for c in set_cols)
             vals = [fields.get(c) for c in OF_DATA_FIELDS] + tail_vals + [replaced_id]
             conn.execute(f"UPDATE of_imports SET {set_sql} WHERE id = ?", vals)
+            constater_remplacement(
+                conn, "of_imports", replaced_id, avant,
+                origine="import_pdf", auteur=imported_by,
+            )
             conn.commit()
             new_id = replaced_id
         else:
@@ -429,8 +444,15 @@ async def validate_of(
                 f"INSERT INTO of_imports ({', '.join(cols)}) VALUES ({placeholders})",
                 values,
             )
-            conn.commit()
             new_id = cur.lastrowid
+            # Ce que le PDF a rempli vient d'un humain : Access ne l'écrase pas.
+            marquer_champs_manuels(
+                conn, "of_imports", new_id,
+                [c for c in OF_DATA_FIELDS
+                 if fields.get(c) is not None
+                 and str(fields.get(c)).strip() != ""],
+            )
+            conn.commit()
 
     if replaced_pdf and replaced_pdf != pdf_filename:
         _archive_of_pdf(replaced_pdf)
@@ -509,7 +531,7 @@ def list_of_imports(request: Request):
 @router.patch("/api/of/{of_id}")
 async def update_of_import(of_id: int, request: Request):
     """Modifier les champs éditables d'un OF importé."""
-    _require_of_access(request)
+    user = _require_of_access(request)
     body = await request.json()
 
     # Tous les champs metier de l'OF sont corrigeables. L'ancienne liste de 15
@@ -529,20 +551,30 @@ async def update_of_import(of_id: int, request: Request):
                    + (" Champs inconnus : " + ", ".join(ignores) if ignores else ""),
         )
 
+    qui = (user.get("nom") or user.get("email") or "").strip() or None
     with get_db() as conn:
         row = conn.execute("SELECT id FROM of_imports WHERE id=?", (of_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="OF introuvable.")
-        set_clause = ", ".join(f"{k}=?" for k in updates)
-        conn.execute(
-            f"UPDATE of_imports SET {set_clause} WHERE id=?",
-            list(updates.values()) + [of_id],
+        # Une correction humaine a le dernier mot (`proteger_manuels=False`) et
+        # devient protegee a son tour (`marquer_manuels=True`) : le prochain
+        # sync Access ne la reecrira pas. Elle perime aussi la validation si
+        # elle touche un chiffre de calcul — c'est le meme risque qu'une
+        # modification venue d'Access, et corriger n'est pas relire.
+        maj = appliquer_maj(
+            conn, "of_imports", of_id, updates,
+            origine="manuel", auteur=qui,
+            proteger_manuels=False,
+            marquer_manuels=True,
+            autoriser_effacement=True,
         )
         conn.commit()
     # `ignored` non vide = des champs postes n'ont pas ete ecrits. On le remonte
     # plutot que de laisser croire a une mise a jour complete.
     return {"updated": True, "id": of_id,
-            "updated_fields": sorted(updates), "ignored": ignores}
+            "updated_fields": maj["ecrits"], "ignored": ignores,
+            "validation_retiree": maj["invalide"],
+            "motif_validation": maj["motif"]}
 
 
 @router.get("/api/of/planning/{entry_id}")
@@ -916,7 +948,7 @@ def list_fiches(request: Request):
 
 @router.patch("/api/fiches-techniques/{fiche_id}")
 async def update_fiche(fiche_id: int, request: Request):
-    _require_of_access(request)
+    user = _require_of_access(request)
     body = await request.json()
     EDITABLE = {
         "reference","designation","client","format",
@@ -937,15 +969,25 @@ async def update_fiche(fiche_id: int, request: Request):
     updates = {k: v for k, v in body.items() if k in EDITABLE}
     if not updates:
         raise HTTPException(status_code=400, detail="Aucun champ modifiable.")
+    qui = (user.get("nom") or user.get("email") or "").strip() or None
     with get_db() as conn:
         if not conn.execute("SELECT id FROM fiches_techniques WHERE id=?", (fiche_id,)).fetchone():
             raise HTTPException(status_code=404, detail="Fiche introuvable.")
-        conn.execute(
-            f"UPDATE fiches_techniques SET {', '.join(f'{k}=?' for k in updates)} WHERE id=?",
-            list(updates.values()) + [fiche_id],
+        # Meme contrat que sur l'OF. C'est ici que se jouait la perte la plus
+        # brutale : une correction atelier saisie dans MySifa etait ecrasee au
+        # sync Access suivant, sans trace. Elle est desormais protegee.
+        maj = appliquer_maj(
+            conn, "fiches_techniques", fiche_id, updates,
+            origine="manuel", auteur=qui,
+            proteger_manuels=False,
+            marquer_manuels=True,
+            autoriser_effacement=True,
         )
         conn.commit()
-    return {"updated": True, "id": fiche_id}
+    return {"updated": True, "id": fiche_id,
+            "updated_fields": maj["ecrits"],
+            "validation_retiree": maj["invalide"],
+            "motif_validation": maj["motif"]}
 
 
 @router.get("/api/fiches-techniques/{fiche_id}/pdf-preview")

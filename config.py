@@ -987,3 +987,105 @@ def fournisseur_categorie_label(code: str) -> str:
         if c["code"] == code:
             return c["label"]
     return code
+
+
+# ─── Conditions d'achat fournisseur ───────────────────────────────
+# Trois petits référentiels structurants : ils qualifient la relation d'achat,
+# pas l'entreprise. Constantes lues par des fonctions (jamais interpolées en
+# dur dans un template), surchargeables par variable d'environnement JSON pour
+# une instance Kernse. Aucun nom propre ici : « par transporteur affrété » est
+# un mode de livraison, le nom du transporteur est une donnée qui vit en base.
+
+_MODES_REGLEMENT_DEFAUT = (
+    {"code": "virement",              "label": "Virement"},
+    {"code": "virement_proforma",     "label": "Virement sur proforma"},
+    {"code": "virement_pre_expedition", "label": "Virement avant expédition"},
+    {"code": "comptant",              "label": "Comptant"},
+    {"code": "carte",                 "label": "Carte bancaire"},
+    {"code": "cheque",                "label": "Chèque"},
+    {"code": "prelevement",           "label": "Prélèvement"},
+    {"code": "lcr_acceptee",          "label": "LCR acceptée"},
+    {"code": "lcr_non_acceptee",      "label": "LCR non acceptée"},
+    {"code": "bor",                   "label": "BOR"},
+    {"code": "autre",                 "label": "Autre"},
+)
+
+_MODES_LIVRAISON_DEFAUT = (
+    {"code": "par_nos_soins",  "label": "Par nos soins"},
+    {"code": "par_vos_soins",  "label": "Par ses soins"},
+    {"code": "transporteur",   "label": "Par transporteur affrété"},
+    {"code": "enlevement",     "label": "Enlèvement sur place"},
+)
+
+# Position fiscale : elle décide du traitement de la TVA sur la facture d'achat.
+# Une valeur fausse ici se traduit par une écriture comptable fausse, d'où le
+# refus d'un code hors référentiel côté API.
+_REGIMES_TVA_DEFAUT = (
+    {"code": "soumis_tva", "label": "Soumis à TVA"},
+    {"code": "exonere",    "label": "Exonéré"},
+    {"code": "cee",        "label": "CEE (autoliquidation)"},
+    {"code": "export",     "label": "Export (hors UE)"},
+)
+
+
+def _charger_referentiel_achat(env_var: str, defaut: tuple) -> tuple:
+    """Lit un référentiel {code,label} depuis l'env (JSON), sinon le défaut.
+
+    Même repli silencieux que les catégories : un .env mal formé ne doit pas
+    priver l'application d'un référentiel dont dépend l'affichage d'une fiche.
+    """
+    brut = os.getenv(env_var, "").strip()
+    if not brut:
+        return defaut
+    try:
+        import json as _json
+        items = _json.loads(brut)
+        propres = []
+        for it in items:
+            code = str(it.get("code", "")).strip()
+            if not code:
+                continue
+            propres.append({"code": code, "label": str(it.get("label") or code).strip()})
+        return tuple(propres) or defaut
+    except Exception:
+        return defaut
+
+
+MODES_REGLEMENT = _charger_referentiel_achat("MODES_REGLEMENT", _MODES_REGLEMENT_DEFAUT)
+MODES_LIVRAISON = _charger_referentiel_achat("MODES_LIVRAISON", _MODES_LIVRAISON_DEFAUT)
+REGIMES_TVA = _charger_referentiel_achat("REGIMES_TVA", _REGIMES_TVA_DEFAUT)
+
+MODES_REGLEMENT_CODES = {c["code"] for c in MODES_REGLEMENT}
+MODES_LIVRAISON_CODES = {c["code"] for c in MODES_LIVRAISON}
+REGIMES_TVA_CODES = {c["code"] for c in REGIMES_TVA}
+
+
+def modes_reglement() -> list[dict]:
+    return [dict(c) for c in MODES_REGLEMENT]
+
+
+def modes_livraison() -> list[dict]:
+    return [dict(c) for c in MODES_LIVRAISON]
+
+
+def regimes_tva() -> list[dict]:
+    return [dict(c) for c in REGIMES_TVA]
+
+
+def _label_referentiel(items: tuple, code: str) -> str:
+    for c in items:
+        if c["code"] == code:
+            return c["label"]
+    return code or ""
+
+
+def mode_reglement_label(code: str) -> str:
+    return _label_referentiel(MODES_REGLEMENT, code)
+
+
+def mode_livraison_label(code: str) -> str:
+    return _label_referentiel(MODES_LIVRAISON, code)
+
+
+def regime_tva_label(code: str) -> str:
+    return _label_referentiel(REGIMES_TVA, code)

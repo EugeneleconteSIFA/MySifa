@@ -1072,9 +1072,11 @@ body.has-topbar .fab-main{padding-top:74px}
 <link rel="stylesheet" href="/static/mysifa_dock.css">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
+<link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
+<script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/chat_mentions.js"></script>
@@ -3674,7 +3676,21 @@ function tracaShowFicheManuelle(codeBarre){
     const licEl = overlay.querySelector('#fiche-fournisseur-licence');
     const btn = overlay.querySelector('#fiche-manual-confirm');
 
+    // `attach` remplace l'input dans le DOM : `inp` en sort, la référence à
+    // garder est `fournPickerFiche.input`.
+    const fournPickerFiche = (window.MysFournisseurPicker && inp)
+      ? window.MysFournisseurPicker.attach(inp, {
+          valueMode: 'id',
+          allowEmpty: false,
+          placeholder: 'Nom, ville, licence\u2026',
+          categories: ['frontal', 'adhesif', 'glassine', 'complexe'],
+        })
+      : null;
+
     function findFournisseur(){
+      // Le picker renvoie l'objet complet de son propre annuaire (licence
+      // comprise) : plus besoin d'une correspondance exacte sur le nom.
+      if (fournPickerFiche) return fournPickerFiche.get();
       const val = (inp?.value || '').trim().toLowerCase();
       if(!val) return null;
       return list.find(x => String(x.nom||'').toLowerCase() === val) || null;
@@ -3691,7 +3707,13 @@ function tracaShowFicheManuelle(codeBarre){
         if(btn){ btn.disabled = true; btn.style.opacity = '.5'; }
       }
     }
-    if(inp){
+    if (fournPickerFiche) {
+      fournPickerFiche.opts.onSelect = updateLicence;
+      fournPickerFiche.opts.onClear = updateLicence;
+      // requestAnimationFrame plutôt qu'un setTimeout à l'aveugle : le champ
+      // vient d'être inséré, il est prêt au frame suivant.
+      requestAnimationFrame(() => fournPickerFiche.focus());
+    } else if(inp){
       inp.addEventListener('input', updateLicence);
       inp.addEventListener('change', updateLicence);
       setTimeout(()=>inp.focus(), 50);
@@ -3763,16 +3785,33 @@ function tracaAskFournisseur(){
     box.querySelector('#tf-cancel').onclick=()=>close(null);
     const inp = box.querySelector('#tf-inp');
     const ok = box.querySelector('#tf-ok');
+    const tfPicker = (window.MysFournisseurPicker && inp)
+      ? window.MysFournisseurPicker.attach(inp, {
+          valueMode: 'id',
+          allowEmpty: false,
+          placeholder: 'Nom, ville, licence\u2026',
+          categories: ['frontal', 'adhesif', 'glassine', 'complexe'],
+        })
+      : null;
     function pick(){
+      if (tfPicker) return tfPicker.get();
       const val = (inp.value||'').trim().toLowerCase();
       return list.find(x => String(x.nom||'').toLowerCase() === val) || null;
     }
     function refresh(){ ok.disabled = !pick(); }
-    inp.addEventListener('input', refresh);
-    inp.addEventListener('change', refresh);
+    if (tfPicker) {
+      tfPicker.opts.onSelect = refresh;
+      tfPicker.opts.onClear = refresh;
+    } else {
+      inp.addEventListener('input', refresh);
+      inp.addEventListener('change', refresh);
+    }
     ok.onclick=()=>{ const f = pick(); close(f ? Number(f.id) : null); };
     document.body.appendChild(backdrop);
-    setTimeout(()=>inp.focus(), 50);
+    // Le picker est inséré dans `box`, déjà rattaché : le focus part au frame
+    // suivant, une fois le backdrop dans le document.
+    if (tfPicker) requestAnimationFrame(()=>tfPicker.focus());
+    else setTimeout(()=>inp.focus(), 50);
   });
 }
 

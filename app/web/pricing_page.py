@@ -199,6 +199,7 @@ PRICING_SHELL = r"""<!DOCTYPE html>
 <script>window.__PRICING__={canWrite:__CAN_WRITE__,user:__USER__};</script>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <script src="/static/pricing_app.js?v=__ASSETS__" defer></script>
 <script src="/static/mysifa_impersonate.js"></script>
 </body>
