@@ -366,6 +366,16 @@ def push_of(
         )
         conn2.commit()
 
+    # Le push Access peut faire sortir des dossiers de la liste « sans OF ».
+    # Import local : of_import n'a pas à connaître le pont, et l'inverse
+    # créerait un cycle. Best-effort — un badge en retard ne justifie pas de
+    # faire échouer un import.
+    try:
+        from app.routers.of_import import _invalidate_pending_count_cache
+        _invalidate_pending_count_cache()
+    except Exception:
+        pass
+
     return {
         "inserted": True,
         "id": new_id,
