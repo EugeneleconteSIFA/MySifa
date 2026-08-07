@@ -77,7 +77,8 @@ conn.executescript("""
         id INTEGER PRIMARY KEY, reference TEXT, ref_produit_norm TEXT, machine TEXT,
         support TEXT, matiere TEXT, glassine TEXT, adhesif TEXT, qte_au_mille REAL,
         eti_laize REAL, eti_longueur REAL, mod_laize REAL, mod_longueur REAL,
-        mod_nb_front INTEGER, laize REAL, laize_optimale REAL, mandrin_dia TEXT,
+        mod_nb_front INTEGER, outil1_nb_front INTEGER,
+        laize REAL, laize_optimale REAL, mandrin_dia TEXT,
         nb_etiq_bobin INTEGER, nb_bobines_carton INTEGER, cartons TEXT,
         conditionnement TEXT, palette_type TEXT, palette_nb_cartons_sol INTEGER,
         palette_nb_cartons_hauteur INTEGER, source TEXT, date_import TEXT,
@@ -113,9 +114,13 @@ conn.executescript("""
     UPDATE of_imports SET invalide_motif =
       'Validation retirée : quantité d''étiquettes modifiée par Access.'
       WHERE id = 12;
-    INSERT INTO fiches_techniques(id, reference, ref_produit_norm, valide, valide_par)
-      VALUES (20, '1068/0001', '1068/0001', 1, 'Nathalie'),
-             (21, '1068/0002', '1068/0002', 0, NULL);
+    -- outil1_nb_front est le vrai nombre de fronts : mod_nb_front vaut 1 sur
+    -- 878 fiches sur 909 en production. Le métrage se calcule sur le premier.
+    INSERT INTO fiches_techniques(id, reference, ref_produit_norm, valide, valide_par,
+                                  mod_nb_front, outil1_nb_front, mod_laize,
+                                  mod_longueur, laize_optimale)
+      VALUES (20, '1068/0001', '1068/0001', 1, 'Nathalie', 1, 8, 57.5, 152.4, 470),
+             (21, '1068/0002', '1068/0002', 0, NULL,       1, 8, 57.5, 152.4, 470);
     INSERT INTO planning_entries(id, machine_id, reference, ref_produit,
         ref_produit_norm, numero_of, statut, of_import_id, position)
       VALUES (1, 1, 'D-1', '1068/0001', '1068/0001', '9932056', 'en_cours', 10, 0),
@@ -133,6 +138,8 @@ check("l'OF validé est vu comme validé", par_id[1]["of_valide"], 1)
 check("la fiche est rapprochée", par_id[1]["ft_id"], 20)
 check("le motif d'invalidation remonte jusqu'au dossier",
       "quantité d'étiquettes" in (par_id[3]["of_invalide_motif"] or ""), True)
+check("le nombre de fronts de l'outil est remonté, pas celui du module",
+      (par_id[1]["ft_outil1_nb_front"], par_id[1]["ft_mod_nb_front"]), (8, 1))
 un = load_dossiers(conn, SQL_PE_UN, (1,))
 check("la variante mono-dossier tourne aussi", (len(un), un[0]["id"]), (1, 1))
 
