@@ -59,7 +59,8 @@ from fastapi import APIRouter, HTTPException, Request
 
 from app.core.database import get_db
 from app.services.carnet_snapshot import (
-    capturer as capturer_carnet, capturer_si_besoin, couverture as couverture_carnet,
+    agreger as agreger_carnet, capturer as capturer_carnet, capturer_si_besoin,
+    couverture as couverture_carnet,
 )
 from app.services.coherence_fiche import (
     alerte_courte, controler as controler_fiche, nb_fronts,
@@ -1500,6 +1501,108 @@ def _historique(request: Request, table: str, doc_id: int, libelle: str) -> dict
         "document": dict(row),
         "historique": lignes,
         "a_relire": [li for li in lignes if li["depuis_validation"]],
+    }
+
+
+@router.get("/api/stock/besoins-matieres/tendance")
+def besoins_tendance(request: Request):
+    """Besoin par matière et par mois de livraison, sur les mois à venir.
+
+    Les trois autres vues répondent à « de quoi ai-je besoin » ; celle-ci
+    répond à « quand ». C'est la question de l'acheteur : un besoin de frontal
+    étalé sur quatre mois ne se commande pas comme le même volume concentré
+    sur trois semaines.
+
+    Une ligne par matière, ses mois en colonnes — des petits multiples. Vingt
+    matières sur un graphe commun seraient illisibles et imposeraient une
+    palette catégorielle à vingt teintes, dont aucune ne serait distinguable.
+    Une série par ligne, chacune à son échelle, se lit d'un coup d'œil.
+
+    Le mois d'une ligne est celui de la LIVRAISON, pas de la production : c'est
+    l'engagement client qui fixe la date à laquelle la matière doit être là.
+    """
+    require_stock_matieres_admin(request)
+    try:
+        horizon = max(2, min(18, int(request.query_params.get("mois") or 8)))
+    except (TypeError, ValueError):
+        horizon = 8
+    kind_filtre = (request.query_params.get("kind") or "").strip() or None
+
+    with get_db() as conn:
+        cumul, vus, vus_actifs, dossiers = agreger_carnet(conn)
+        couv = couverture_carnet(conn)
+
+    # Fenêtre : du mois courant à M+horizon. Les mois passés sont exclus — ils
+    # ne se commandent plus. Ceux au-delà de l'horizon sont regroupés dans un
+    # « au-delà » plutôt que tronqués en silence : un besoin oublié parce qu'il
+    # tombait hors fenêtre serait pire qu'un besoin affiché en vrac.
+    auj = date.today()
+    mois_fenetre = []
+    an, mo = auj.year, auj.month
+    for _ in range(horizon):
+        mois_fenetre.append(f"{an:04d}-{mo:02d}")
+        mo += 1
+        if mo > 12:
+            mo = 1
+            an += 1
+    borne = mois_fenetre[-1]
+    AU_DELA = "au-dela"
+
+    lignes: dict = {}
+    passe_total = 0.0
+    for (mois, mid, kind), agg in cumul.items():
+        if kind_filtre and kind != kind_filtre:
+            continue
+        if mois < mois_fenetre[0]:
+            passe_total += agg["q_actif"]  # reste à produire sur un mois échu
+            continue
+        col = mois if mois <= borne else AU_DELA
+        cle = (mid, kind)
+        li = lignes.setdefault(cle, {
+            "matiere_id": mid,
+            "libelle": (agg.get("ref") or agg.get("designation")
+                        or agg.get("source_value") or "Non associée"),
+            "designation": agg.get("designation"),
+            "kind": kind,
+            "unite": agg.get("unite"),
+            "par_mois": {},
+            "total": 0.0,
+            "dossiers": set(),
+            "incalculables": 0,
+        })
+        cell = li["par_mois"].setdefault(col, {"q": 0.0, "dossiers": 0, "inc": 0})
+        cell["q"] += agg["q"]
+        cell["dossiers"] += len(vus.get((mois, mid, kind), ()))
+        cell["inc"] += agg["inc"]
+        li["total"] += agg["q"]
+        li["dossiers"] |= vus.get((mois, mid, kind), set())
+        li["incalculables"] += agg["inc"]
+
+    colonnes = mois_fenetre + [AU_DELA]
+    out = []
+    for li in lignes.values():
+        serie = [{"mois": c, **li["par_mois"].get(c, {"q": 0.0, "dossiers": 0, "inc": 0})}
+                 for c in colonnes]
+        out.append({
+            **{k: v for k, v in li.items() if k not in ("par_mois", "dossiers")},
+            "serie": serie,
+            "max": max((p["q"] for p in serie), default=0.0),
+            "nb_dossiers": len(li["dossiers"]),
+            "non_associee": li["matiere_id"] is None,
+        })
+    # Le poids d'abord : on commande ce qui pèse, pas ce qui est alphabétique.
+    out.sort(key=lambda l: (l["kind"], -l["total"]))
+
+    return {
+        "colonnes": colonnes,
+        "mois": mois_fenetre,
+        "horizon": horizon,
+        "lignes": out,
+        "reste_sur_mois_echus": round(passe_total, 2),
+        # Tant que la série de photos est trop courte, l'écran ne doit pas
+        # laisser croire qu'il montre une tendance mesurée dans le temps : il
+        # montre l'état du carnet aujourd'hui, réparti par mois.
+        "historique": couv,
     }
 
 

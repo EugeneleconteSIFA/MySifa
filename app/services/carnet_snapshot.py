@@ -54,6 +54,64 @@ def _mois_livraison(pe: dict) -> Optional[str]:
     return None
 
 
+def agreger(conn) -> tuple:
+    """Besoin par (mois de livraison, matière, nature), sur tout le planning.
+
+    Cœur commun à la photo quotidienne et à la vue Tendance : les deux posent
+    exactement la même question, l'une pour l'écrire, l'autre pour l'afficher.
+    Les faire diverger garantirait qu'un jour l'écran et la série de
+    calibration ne racontent plus la même chose.
+
+    Retourne (cumul, vus, vus_actifs, dossiers) où `cumul` est indexé par
+    (mois, matiere_id, kind) et porte { q, q_actif, unite, inc }.
+    """
+    # Import local : ce service est appelé DEPUIS le router besoins_matieres.
+    # Au niveau module, l'import serait circulaire. Même parti pris que
+    # besoins_matieres avec of_import._promote_of_link.
+    from app.routers.besoins_matieres import (
+        _SQL_PE, _load_dossiers, _load_mapping, _compute_besoins_dossier,
+    )
+    from app.routers.stock import stock_config_float
+
+    # `_SQL_PE` restreint aux dossiers en attente ou en cours — le périmètre de
+    # l'écran Besoins matières, qui répond à « que reste-t-il à approvisionner ».
+    # On a besoin de l'autre question : « combien ce mois aura-t-il pesé au
+    # total ». On retire donc le filtre de statut, et on distingue les deux
+    # grandeurs à la sortie.
+    sql_tous = _SQL_PE.replace("WHERE pe.statut IN ('attente', 'en_cours')", "")
+    dossiers = _load_dossiers(conn, sql_tous)
+    mapping = _load_mapping(conn)
+    perte = stock_config_float(conn, "mandrin_perte_coupe_pct")
+
+    cumul: dict = {}
+    vus: dict = {}         # (mois, mat, kind) → ids, pour ne pas compter deux fois
+    vus_actifs: dict = {}  # idem, restreint aux dossiers encore à produire
+    for pe in dossiers:
+        mois = _mois_livraison(pe)
+        if not mois:
+            continue  # aucune date exploitable : le dossier n'a pas de mois à peser
+        actif = (pe.get("statut") or "") in ("attente", "en_cours")
+        for b in _compute_besoins_dossier(pe, mapping, perte):
+            cle = (mois, b.get("matiere_id"), b.get("kind"))
+            agg = cumul.setdefault(
+                cle, {"q": 0.0, "q_actif": 0.0, "unite": b.get("unite"), "inc": 0,
+                      "ref": b.get("matiere_ref"), "designation": b.get("matiere_designation"),
+                      "source_value": b.get("source_value")})
+            vus.setdefault(cle, set()).add(pe["id"])
+            if actif:
+                vus_actifs.setdefault(cle, set()).add(pe["id"])
+            q = b.get("quantite")
+            if q is None:
+                agg["inc"] += 1
+            else:
+                agg["q"] += float(q)
+                if actif:
+                    agg["q_actif"] += float(q)
+            if not agg["unite"]:
+                agg["unite"] = b.get("unite")
+    return cumul, vus, vus_actifs, dossiers
+
+
 def capturer(conn, jour: Optional[date] = None, force: bool = False) -> dict:
     """Écrit la photo du jour. Ne committe pas : l'appelant maîtrise sa transaction.
 
@@ -70,49 +128,7 @@ def capturer(conn, jour: Optional[date] = None, force: bool = False) -> dict:
     if deja:
         conn.execute("DELETE FROM carnet_snapshots WHERE snapshot_le=?", (cle,))
 
-    # Import local : ce service est appelé DEPUIS le router besoins_matieres.
-    # Au niveau module, l'import serait circulaire. Même parti pris que
-    # besoins_matieres avec of_import._promote_of_link.
-    from app.routers.besoins_matieres import (
-        _SQL_PE, _load_dossiers, _load_mapping, _compute_besoins_dossier,
-    )
-    from app.routers.stock import stock_config_float
-
-    # `_SQL_PE` restreint aux dossiers en attente ou en cours — le périmètre de
-    # l'écran Besoins matières, qui répond à « que reste-t-il à approvisionner ».
-    # La calibration a besoin de l'autre question : « combien ce mois aura-t-il
-    # pesé au total ». On retire donc le filtre de statut, et on distingue les
-    # deux grandeurs à l'écriture.
-    sql_tous = _SQL_PE.replace("WHERE pe.statut IN ('attente', 'en_cours')", "")
-    dossiers = _load_dossiers(conn, sql_tous)
-    mapping = _load_mapping(conn)
-    perte = stock_config_float(conn, "mandrin_perte_coupe_pct")
-
-    # (mois, matiere_id, kind) → agrégat
-    cumul: dict = {}
-    vus: dict = {}         # mêmes clés → ids de dossiers, pour ne pas compter deux fois
-    vus_actifs: dict = {}  # idem, restreint aux dossiers encore à produire
-    for pe in dossiers:
-        mois = _mois_livraison(pe)
-        if not mois:
-            continue  # aucune date exploitable : le dossier n'a pas de mois à peser
-        actif = (pe.get("statut") or "") in ("attente", "en_cours")
-        for b in _compute_besoins_dossier(pe, mapping, perte):
-            cle_ligne = (mois, b.get("matiere_id"), b.get("kind"))
-            agg = cumul.setdefault(
-                cle_ligne, {"q": 0.0, "q_actif": 0.0, "unite": b.get("unite"), "inc": 0})
-            vus.setdefault(cle_ligne, set()).add(pe["id"])
-            if actif:
-                vus_actifs.setdefault(cle_ligne, set()).add(pe["id"])
-            q = b.get("quantite")
-            if q is None:
-                agg["inc"] += 1
-            else:
-                agg["q"] += float(q)
-                if actif:
-                    agg["q_actif"] += float(q)
-            if not agg["unite"]:
-                agg["unite"] = b.get("unite")
+    cumul, vus, vus_actifs, dossiers = agreger(conn)
 
     for (mois, mid, kind), agg in cumul.items():
         k = (mois, mid, kind)
