@@ -846,6 +846,52 @@ Besoins matières + blocage du déstockage).
 
 ---
 
+## Nombre de fronts — `outil1_nb_front`, jamais `mod_nb_front`
+
+Le nombre de fronts est au **dénominateur** du métrage :
+
+    métrage = qte_étiquettes ÷ nb_fronts × mod_longueur ÷ 1000
+
+S'y tromper d'un facteur 18 multiplie le besoin en frontal par 18.
+
+**Constat du 7 août 2026, base de production :** `mod_nb_front` vaut 1 sur
+**878 fiches sur 909**. Ce n'est pas une valeur, c'est un champ que personne ne
+remplit. Le vrai nombre de fronts est `outil1_nb_front` — les poses de l'outil
+de découpe — confirmé par la géométrie sur **868 fiches sur 909**.
+
+Conséquence avant correction : les 585 OF sans métrage (sur 745) passaient par
+le repli géométrique et sortaient un besoin surestimé d'un facteur égal au vrai
+nombre de fronts. Un dossier est ressorti à **55 823 km de frontal**, dix fois
+le total d'un mois entier.
+
+`app/services/coherence_fiche.py` porte les deux fonctions :
+
+- `nb_fronts(ft, laize_of)` — la valeur à utiliser et sa provenance. Ordre :
+  `outil1_nb_front`, puis `mod_nb_front` s'il est > 1, puis la géométrie.
+- `controler(ft, laize_of)` — vérifie que la fiche boucle, et chiffre le
+  facteur d'erreur.
+
+**L'identité qui rend le contrôle possible**, et qui ne demande aucune source
+extérieure :
+
+    nb_fronts ≈ laize_bobine ÷ laize_module
+
+La laize de l'OF prime sur celle de la fiche : c'est la bobine réellement
+montée. `eti_laize` est la largeur de l'ÉTIQUETTE, jamais celle de la bobine —
+les confondre redonne un nombre de fronts de 1.
+
+`GET /api/stock/besoins-matieres/fiches-incoherentes` liste les fiches à
+corriger, classées par facteur d'erreur puis par nombre de dossiers concernés.
+
+**On ne corrige jamais d'office.** Une fiche fausse se répare dans Access, à la
+source. Compenser en silence à chaque lecture cacherait le problème pendant que
+les commandes continuent de partir de travers.
+
+Test : `python3 tests/test_coherence_fiche.py` (fiches réelles relevées en
+production).
+
+---
+
 ## Prévision des besoins matières — pourquoi on photographie le carnet
 
 **Ne pas supprimer `carnet_snapshots` sous prétexte qu'elle ne sert à rien.**

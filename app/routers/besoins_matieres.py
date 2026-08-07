@@ -61,6 +61,9 @@ from app.core.database import get_db
 from app.services.carnet_snapshot import (
     capturer as capturer_carnet, capturer_si_besoin, couverture as couverture_carnet,
 )
+from app.services.coherence_fiche import (
+    alerte_courte, controler as controler_fiche, nb_fronts,
+)
 from app.services.date_livraison import parse_date_livraison
 from app.services.documents_verite import historique_document
 from app.routers.stock import (
@@ -201,6 +204,11 @@ _SQL_FT = """
            invalide_at, invalide_motif,
            support, glassine, adhesif, qte_au_mille, eti_laize, eti_longueur,
            mod_laize, mod_longueur, mod_nb_front, laize, laize_optimale,
+           -- Le vrai nombre de fronts vit dans l'outil de découpe :
+           -- `mod_nb_front` vaut 1 sur 878 fiches sur 909 (constat du
+           -- 7 août 2026), `outil1_nb_front` est confirmé par la géométrie
+           -- sur 868. Cf. app/services/coherence_fiche.py.
+           outil1_nb_front,
            mandrin_dia, nb_etiq_bobin, nb_bobines_carton, cartons,
            conditionnement,
            palette_type, palette_nb_cartons_sol, palette_nb_cartons_hauteur
@@ -210,7 +218,8 @@ _SQL_FT = """
 _FT_FIELDS = (
     "support", "glassine", "adhesif", "qte_au_mille", "eti_laize", "eti_longueur",
     "valide", "valide_par", "valide_at", "invalide_at", "invalide_motif",
-    "mod_laize", "mod_longueur", "mod_nb_front", "laize", "laize_optimale",
+    "mod_laize", "mod_longueur", "mod_nb_front", "outil1_nb_front",
+    "laize", "laize_optimale",
     "mandrin_dia", "nb_etiq_bobin", "nb_bobines_carton", "cartons",
     "conditionnement",
     "palette_type", "palette_nb_cartons_sol", "palette_nb_cartons_hauteur",
@@ -336,8 +345,24 @@ def _metrage_dossier(pe: dict) -> dict:
         }
 
     qte = _f(pe.get("qte_etiquettes"))
-    nb_front = _f(pe.get("ft_mod_nb_front"))
     mod_long = _f(pe.get("ft_mod_longueur"))
+
+    # Le nombre de fronts est au DÉNOMINATEUR : s'y tromper d'un facteur 18
+    # multiplie le besoin en frontal par 18. `mod_nb_front` valait 1 sur 878
+    # fiches sur 909 — un champ que personne ne remplit, pas une valeur. Le
+    # nombre de poses de l'outil de découpe est le bon, et la géométrie le
+    # confirme sur 868 fiches. Cf. app/services/coherence_fiche.py.
+    ft = {
+        "mod_nb_front": pe.get("ft_mod_nb_front"),
+        "outil1_nb_front": pe.get("ft_outil1_nb_front"),
+        "mod_laize": pe.get("ft_mod_laize"),
+        "laize_optimale": pe.get("ft_laize_optimale"),
+        "laize": pe.get("ft_laize"),
+    }
+    res_front = nb_fronts(ft, pe.get("of_laize"))
+    nb_front = res_front["valeur"]
+    coherence = controler_fiche(ft, pe.get("of_laize"))
+
     if qte and nb_front and mod_long:
         return {
             "metrage": qte / nb_front * mod_long / 1000.0,
@@ -345,12 +370,18 @@ def _metrage_dossier(pe: dict) -> dict:
             "variables": [
                 {"label": "Quantité étiquettes", "champ": "of_imports.qte_etiquettes",
                  "origine": "OF", "valeur": qte, "unite": "étiq"},
-                {"label": "Nb de front", "champ": "fiches_techniques.mod_nb_front",
-                 "origine": "Fiche technique", "valeur": nb_front, "unite": ""},
+                {"label": "Nb de front", "champ": res_front["champ"],
+                 "origine": {"outil": "Fiche technique — outil de découpe",
+                             "module": "Fiche technique — module",
+                             "geometrie": "Déduit de la laize"}.get(
+                                 res_front["source"], "Fiche technique"),
+                 "valeur": nb_front, "unite": ""},
                 {"label": "Longueur module", "champ": "fiches_techniques.mod_longueur",
                  "origine": "Fiche technique", "valeur": mod_long, "unite": "mm"},
             ],
             "manque": [],
+            "coherence": coherence,
+            "alerte": alerte_courte(coherence),
         }
 
     manque = []
@@ -359,10 +390,12 @@ def _metrage_dossier(pe: dict) -> dict:
     if not qte:
         manque.append("Quantité d'étiquettes de l'OF")
     if not nb_front:
-        manque.append("Nb de front de la fiche technique (mod_nb_front)")
+        manque.append("Nb de front de la fiche technique "
+                      "(outil1_nb_front, ou mod_nb_front, ou laize + mod_laize)")
     if not mod_long:
         manque.append("Longueur module de la fiche technique (mod_longueur)")
-    return {"metrage": None, "source": None, "variables": [], "manque": manque}
+    return {"metrage": None, "source": None, "variables": [], "manque": manque,
+            "coherence": coherence, "alerte": alerte_courte(coherence)}
 
 
 def _laize_dossier(pe: dict) -> dict:
@@ -793,6 +826,10 @@ def besoins_par_dossier(request: Request):
             "destockage": pe.get("destockage") or "todo",
             "of_metrage": pe.get("of_metrage"),
             "of_laize": pe.get("of_laize"),
+            # Cohérence géométrique de la fiche. Un besoin calculé sur une
+            # fiche qui ne boucle pas est faux d'un facteur connu : autant le
+            # dire sur la ligne plutôt que de laisser partir la commande.
+            "fiche_alerte": _metrage_dossier(pe).get("alerte"),
             "besoins": besoins,
             "besoins_mapped_count": sum(1 for b in besoins if b["mapped"]),
             "besoins_total_count": len(besoins),
@@ -1463,6 +1500,64 @@ def _historique(request: Request, table: str, doc_id: int, libelle: str) -> dict
         "document": dict(row),
         "historique": lignes,
         "a_relire": [li for li in lignes if li["depuis_validation"]],
+    }
+
+
+@router.get("/api/stock/besoins-matieres/fiches-incoherentes")
+def fiches_incoherentes(request: Request):
+    """Fiches techniques dont la géométrie ne boucle pas.
+
+    Le nombre de fronts multiplié par la laize du module doit tenir dans la
+    laize de la bobine. Quand ce n'est pas le cas, le besoin en frontal calculé
+    depuis cette fiche est faux d'un facteur qu'on sait nommer — et c'est ce
+    facteur qui classe la liste : une fiche qui surestime d'un facteur 18 se
+    corrige avant une qui se trompe d'un front.
+
+    Aucune correction automatique. Une fiche fausse se répare dans Access, à la
+    source ; compenser en silence à chaque lecture cacherait le problème
+    pendant que les commandes continuent de partir de travers.
+    """
+    require_stock_matieres_admin(request)
+    with get_db() as conn:
+        fiches = [dict(r) for r in conn.execute(_SQL_FT).fetchall()]
+        # Combien de dossiers du planning s'appuient sur chaque fiche : une
+        # fiche fausse mais inutilisée n'est pas une urgence.
+        dossiers = _load_dossiers(conn, _SQL_PE.replace(
+            "WHERE pe.statut IN ('attente', 'en_cours')", ""))
+    usage: dict = {}
+    for pe in dossiers:
+        if pe.get("ft_id"):
+            usage[pe["ft_id"]] = usage.get(pe["ft_id"], 0) + 1
+
+    items, indeterminables = [], 0
+    for ft in fiches:
+        res = controler_fiche(ft)
+        if res["verdict"] == "indeterminable":
+            indeterminables += 1
+            continue
+        if res["verdict"] == "coherent":
+            continue
+        items.append({
+            "fiche_id": ft["id"],
+            "reference": ft.get("reference"),
+            "machine": ft.get("machine"),
+            "dossiers_concernes": usage.get(ft["id"], 0),
+            "nb_front_retenu": res["retenu"],
+            "nb_front_outil": res["nb_front_outil"],
+            "nb_front_module": res["nb_front_declare_module"],
+            "nb_front_geometrique": res["nb_front_geometrique"],
+            "laize": res["laize_utile"],
+            "mod_laize": res["mod_laize"],
+            "facteur_erreur": res["facteur_erreur"],
+            "message": res["message"],
+        })
+    # Impact d'abord : facteur d'erreur, puis nombre de dossiers qui en dépendent.
+    items.sort(key=lambda i: (-(i["facteur_erreur"] or 0), -i["dossiers_concernes"]))
+    return {
+        "total_fiches": len(fiches),
+        "incoherentes": len(items),
+        "indeterminables": indeterminables,
+        "items": items[:200],
     }
 
 
