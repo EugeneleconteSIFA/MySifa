@@ -460,6 +460,7 @@ async def validate_of(
     # Auto-link : relier les dossiers planning dont le numero_of correspond,
     # en plaçant cet OF en position 0 (slot ET aperçu pointent sur la même ligne).
     linked = _autolink_of_to_planning(new_id, of_num_clean, created_by="of_import")
+    _invalidate_pending_count_cache()
 
     return {
         "id": new_id,
@@ -900,6 +901,7 @@ async def bulk_delete_of(request: Request):
     with get_db() as conn:
         conn.execute(f"DELETE FROM of_imports WHERE id IN ({placeholders})", ids)
         conn.commit()
+    _invalidate_pending_count_cache()
     return {"deleted": len(ids), "ids": ids}
 
 
@@ -912,6 +914,7 @@ def delete_of_import(request: Request, of_id: int):
             raise HTTPException(status_code=404, detail="OF introuvable.")
         conn.execute("DELETE FROM of_imports WHERE id=?", (of_id,))
         conn.commit()
+    _invalidate_pending_count_cache()
     return {"ok": True}
 
 
@@ -1559,6 +1562,11 @@ def admin_relink_of(request: Request):
         if not dry_run:
             conn.commit()
 
+    if not dry_run:
+        # Sans ça, le badge « Dossiers sans OF » gardait sa valeur d'avant le
+        # rapprochement pendant toute la durée du cache : liste à 7, badge à 16.
+        _invalidate_pending_count_cache()
+
     return {
         "dry_run": dry_run,
         "total_with_numero_of": total,
@@ -1630,7 +1638,18 @@ _pending_count_cache: dict = {"at": 0.0, "data": None}
 
 
 def _invalidate_pending_count_cache() -> None:
+    """À appeler après TOUTE écriture qui change le nombre de dossiers sans OF.
+
+    Le cache est un cache de process, pas de requête : le vider avant l'écriture
+    ne sert à rien — un autre admin peut le repeupler avec l'ancienne valeur
+    pendant la transaction. Il se vide donc APRÈS le commit, systématiquement.
+
+    Endpoints concernés : import d'un PDF d'OF (auto-link), suppression d'un OF
+    (unitaire ou en masse), relance du mapping automatique, ajout et retrait de
+    liens planning↔OF, rattachement depuis Besoins matières, push Access.
+    """
     _pending_count_cache["at"] = 0.0
+    _pending_count_cache["data"] = None
 
 
 @router.get("/api/admin/of-link-pending/count")
@@ -1676,7 +1695,6 @@ def admin_of_link_pending(request: Request):
 
 @router.post("/api/admin/link-planning-of")
 async def admin_link_planning_of(request: Request):
-    _invalidate_pending_count_cache()
     _require_of_access(request)
     try:
         body = await request.json()
@@ -1727,6 +1745,7 @@ async def admin_link_planning_of(request: Request):
             pass
         conn.commit()
 
+    _invalidate_pending_count_cache()
     return {"linked": True, "planning_id": planning_id, "of_id": of_id}
 
 
@@ -1863,6 +1882,7 @@ async def admin_add_planning_of_links(request: Request):
         except Exception:
             pass
         conn.commit()
+    _invalidate_pending_count_cache()
     return {
         "planning_id": planning_id,
         "added": added,
@@ -1894,6 +1914,7 @@ async def admin_remove_planning_of_link(request: Request):
             pass
         conn.commit()
         deleted = cur.rowcount or 0
+    _invalidate_pending_count_cache()
     return {"deleted": int(deleted), "planning_id": planning_id, "of_id": of_id}
 
 

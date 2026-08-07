@@ -2896,7 +2896,9 @@ async function loadBesoinsMatieres() {
     ]);
     S.besoinsEcheance = parEch || { lignes: [] };
     S.besoinsDossiers = parDos || { dossiers: [] };
-    if (!S.besoinsView) S.besoinsView = 'echeance';
+    // Vue par défaut : « par dossier ». C'est celle qui porte les documents et
+    // leur validation — donc celle où l'on répare, pas seulement où l'on lit.
+    if (!S.besoinsView) S.besoinsView = 'dossier';
     if (!S.matList || !S.matList.length) {
       try {
         const m = await api('/api/stock/matieres');
@@ -12316,7 +12318,7 @@ function buildBesoinsMatieres() {
 
   const ech = S.besoinsEcheance || { lignes: [], today: '', borne_7j: '', borne_15j: '' };
   const dos = S.besoinsDossiers || { dossiers: [] };
-  const view = S.besoinsView || 'echeance';
+  const view = S.besoinsView || 'dossier';
   const lignes = ech.lignes || [];
   const dossiers = dos.dossiers || [];
   const nbDossiers = dossiers.length;
@@ -12982,12 +12984,18 @@ async function openDocEtatModal(type, docId, libelle) {
   }
 
   if (peut) {
-    actions.insertBefore(
-      el('button', {
-        cls: valide ? 'btn btn-sec' : 'btn btn-primary',
-        on: { click: async () => { closeMroot(); await basculerValidationDoc(type, docId, !valide); } },
-      }, valide ? 'Retirer la validation' : 'Valider ce document'),
-      actions.firstChild);
+    // `.modal-actions` est une grille 1fr / 2fr : l'annulation à gauche, l'action
+    // à droite. D'où l'ajout APRÈS « Fermer », et pas avant.
+    //
+    // Classes : `btn btn-ghost` et `btn` uniquement. Ne jamais combiner `.btn`
+    // avec `.btn-sec` — `body.light .btn:not(.btn-ghost):not(.btn-soft)` force
+    // la couleur du texte en blanc, ce qui donne du blanc sur fond transparent
+    // en mode clair. `.btn-ghost` est explicitement exclu de cette règle.
+    actions.appendChild(el('button', {
+      cls: valide ? 'btn btn-ghost' : 'btn',
+      type: 'button',
+      on: { click: async () => { closeMroot(); await basculerValidationDoc(type, docId, !valide); } },
+    }, valide ? 'Retirer la validation' : 'Valider ce document'));
   }
 }
 

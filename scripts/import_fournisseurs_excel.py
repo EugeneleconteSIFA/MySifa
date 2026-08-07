@@ -249,6 +249,32 @@ def email(v) -> str | None:
     return s if re.match(r"^[^@\s]+@[^@\s]+\.[a-z]{2,}$", s) else None
 
 
+def ville(v) -> str | None:
+    """Nettoie un nom de ville de deux artefacts de l'export ERP.
+
+    1. Le suffixe « -> 59200 ». 24 lignes sur 199 le portent, et le code qui
+       suit la flèche est CHAQUE FOIS identique à la colonne C.P. — vérifié sur
+       les 24. C'est de la redondance d'affichage, pas une donnée : la laisser
+       donnerait « CHAMP/DRAC -> 38560 » comme nom de ville dans la fiche, et
+       une recherche sur « Champ » suivie du code postal ne trouverait rien.
+
+    2. Le nom écrit deux fois de suite, sans séparateur : « DEVILLE LES
+       ROUENDEVILLE LES ROUEN ». On ne défait ce doublement que s'il est
+       EXACT — la première moitié égale la seconde. Un rapprochement plus
+       souple risquerait de tronquer une ville dont le nom répète un mot.
+    """
+    s = texte(v, 120)
+    if not s:
+        return None
+    s = re.split(r"\s*-+>\s*", s)[0].strip()
+    if not s:
+        return None
+    moitie = len(s) // 2
+    if len(s) % 2 == 0 and s[:moitie] == s[moitie:] and moitie >= 4:
+        s = s[:moitie]
+    return s.strip() or None
+
+
 def siret(v) -> str | None:
     s = texte(v)
     if not s:
@@ -465,7 +491,7 @@ def extraire(ligne: dict, inconnus: Counter) -> dict:
         "nom": nom,
         "adresse": adresse,
         "code_postal": texte(g(COL["cp"]), 20),
-        "ville": texte(g(COL["ville"]), 120),
+        "ville": ville(g(COL["ville"])),
         "pays": (texte(g(COL["cpays"])) or "FR").upper()[:2],
         "siret": siret(g(COL["siret"])),
         "tva_intracom": tva(g(COL["tva"])),
@@ -497,6 +523,101 @@ CHAMPS_SIMPLES = (
 # ═══════════════════════════════════════════════════════════════════
 #  Base de données
 # ═══════════════════════════════════════════════════════════════════
+
+def lire_alias(chemin: Path) -> dict:
+    """Table de correspondance « nom de l'export » → fiche existante.
+
+    Pourquoi ce fichier existe
+    --------------------------
+    Les fiches historiques de l'annuaire portent un nom d'usage court — « UPM »,
+    « Ricoh », « Avery » — et rien d'autre que leur licence FSC. L'export ERP,
+    lui, nomme les mêmes sociétés en raison sociale complète : « UPM RAFLATAC »,
+    « RICOH Industrie France SAS », « AVERY DENNISON MATERIALS SALES FRANCE SAS ».
+
+    Aucune règle automatique ne peut trancher : « UPM » est un préfixe de
+    « UPM RAFLATAC », mais « ABI » est aussi un préfixe de « ABIX » sans être la
+    même société. Rapprocher sur la ressemblance ferait fusionner des
+    fournisseurs distincts ; ne rien rapprocher créerait deux fiches par
+    société — l'une avec la licence FSC, l'autre avec l'adresse et le SIRET.
+
+    Cette seconde issue est la pire : dans l'écran de réception, les deux
+    apparaissent, une seule porte le badge FSC, et rien n'empêche d'attraper
+    l'autre. Un claim de chaîne de contrôle tombe là-dessus.
+
+    D'où ce fichier, écrit une fois, relu à chaque import : deux colonnes
+    séparées par `;`, `nom dans l'export` puis `id de fiche` (ou nom exact de
+    fiche). Les lignes vides et celles commençant par `#` sont ignorées.
+    Générez-en un pré-rempli avec --generer-alias, relisez-le, corrigez-le.
+    """
+    if not chemin.exists():
+        raise SystemExit(f"Fichier d'alias introuvable : {chemin}")
+    table = {}
+    for num, ligne in enumerate(chemin.read_text(encoding="utf-8-sig").splitlines(), 1):
+        ligne = ligne.strip()
+        if not ligne or ligne.startswith("#"):
+            continue
+        bouts = [b.strip() for b in ligne.split(";")]
+        if len(bouts) < 2 or not bouts[0]:
+            print(f"  ! alias ligne {num} ignorée (deux colonnes attendues) : {ligne}")
+            continue
+        # Commentaire en fin de ligne : le fichier généré en met un (le score et
+        # le nom de la fiche visée) pour que la relecture soit possible sans
+        # ouvrir la base à côté. Il ne doit pas se retrouver dans la valeur.
+        cible = bouts[1].split("#", 1)[0].strip()
+        if not cible:
+            print(f"  ! alias ligne {num} ignorée (cible vide) : {ligne}")
+            continue
+        table[norm_nom(bouts[0])] = cible
+    return table
+
+
+def resoudre_alias(table: dict, fiches: list) -> dict:
+    """Convertit la cible de chaque alias (id ou nom) en fiche réelle."""
+    par_id = {int(dict(f)["id"]): dict(f) for f in fiches}
+    par_nom = {norm_nom(dict(f)["nom"]): dict(f) for f in fiches}
+    sortie, inconnus = {}, []
+    for cle, cible in table.items():
+        fiche = None
+        if str(cible).isdigit():
+            fiche = par_id.get(int(cible))
+        if fiche is None:
+            fiche = par_nom.get(norm_nom(cible))
+        if fiche is None:
+            inconnus.append(cible)
+            continue
+        sortie[cle] = fiche
+    if inconnus:
+        # Un alias qui ne pointe sur rien est une faute de frappe, pas une
+        # absence : le signaler évite de croire le rapprochement fait.
+        print(f"  ! {len(inconnus)} alias sans fiche correspondante : "
+              + ", ".join(str(x) for x in inconnus[:8]))
+    return sortie
+
+
+def ecrire_alias_propose(chemin: Path, quasi: list) -> None:
+    """Écrit un fichier d'alias pré-rempli à partir des quasi-doublons."""
+    lignes = [
+        "# Alias d'import fournisseurs — À RELIRE AVANT USAGE",
+        "#",
+        "# Une ligne = « le nom dans l'export ERP » ; « la fiche à enrichir ».",
+        "# Chaque ligne ci-dessous est une PROPOSITION fondée sur une simple",
+        "# ressemblance de nom. Deux sociétés différentes peuvent se ressembler :",
+        "# vérifiez, puis commentez (#) ou supprimez les lignes fausses.",
+        "#",
+        "# Les fiches citées ici ne portent souvent que leur licence FSC. Les",
+        "# aliaser, c'est leur donner l'adresse, le SIRET et le téléphone de",
+        "# l'export SANS créer de seconde fiche — donc sans qu'un opérateur",
+        "# puisse choisir, en réception, celle qui n'a pas la licence.",
+        "#",
+        "# nom dans l'export ; id ou nom de la fiche",
+    ]
+    for c, f, r in sorted(quasi, key=lambda x: -x[2]):
+        lignes.append(f"{c['nom']};{f['id']}    # ~{r} → « {f['nom']} »"
+                      + (f" · licence {f['licence']}" if f.get("licence") else ""))
+    chemin.write_text("\n".join(lignes) + "\n", encoding="utf-8")
+    print(f"\nAlias proposé écrit dans {chemin} ({len(quasi)} ligne(s)).")
+    print("  Relisez-le, corrigez-le, puis relancez avec --alias " + str(chemin))
+
 
 def ouvrir_base(chemin: str | None) -> sqlite3.Connection:
     if not chemin:
@@ -537,6 +658,12 @@ def index_rapprochement(fiches: list[sqlite3.Row], cols: set[str]) -> dict:
 
 
 def rapprocher(cand: dict, idx: dict) -> tuple[dict | None, str]:
+    # L'alias passe avant le SIRET : c'est une décision humaine explicite, et
+    # les fiches concernées n'ont justement pas de SIRET à comparer.
+    alias = idx.get("alias") or {}
+    n_alias = norm_nom(cand.get("nom"))
+    if n_alias in alias:
+        return alias[n_alias], "alias"
     if cand.get("siret") and cand["siret"] in idx["siret"]:
         return idx["siret"][cand["siret"]], "siret"
     if cand.get("tva_intracom") and cand["tva_intracom"] in idx["tva"]:
@@ -753,6 +880,10 @@ def main() -> int:
     ap.add_argument("--simulation", action="store_true",
                     help="Rejoue l'écriture sans committer (comportement par défaut)")
     ap.add_argument("--appliquer", action="store_true", help="Écrit en base")
+    ap.add_argument("--alias", default=None,
+                    help="Fichier de correspondances « nom export ; fiche » (voir --generer-alias)")
+    ap.add_argument("--generer-alias", default=None, metavar="CHEMIN",
+                    help="Écrit un fichier d'alias pré-rempli depuis les quasi-doublons, puis s'arrête")
     ap.add_argument("--ecraser", action="store_true",
                     help="Remplace aussi les valeurs déjà renseignées dans MySifa")
     ap.add_argument("--auteur", default=os.getenv("USER") or "import",
@@ -792,6 +923,9 @@ def main() -> int:
         raise SystemExit("Table fournisseurs_fsc absente de cette base.")
     fiches = charger_annuaire(conn)
     idx = index_rapprochement(fiches, cols)
+    if args.alias:
+        idx["alias"] = resoudre_alias(lire_alias(Path(args.alias).expanduser()), fiches)
+        print(f"  Alias : {len(idx['alias'])} correspondance(s) chargée(s).")
 
     apparies, nouveaux = [], []
     for c in candidats:
@@ -801,6 +935,58 @@ def main() -> int:
         else:
             nouveaux.append(c)
 
+    # ── Collisions : deux lignes de l'export visant LA MÊME fiche ────────────
+    #
+    # Le cas réel qui a motivé cette garde : « UPM RAFLATAC » (Pompey, TVA
+    # FR77…) était aliasé vers la fiche « UPM », et la ligne « UPM » (Tampere,
+    # TVA FI10…) visait la même fiche par son nom. Les deux enrichissements
+    # s'appliquaient l'un après l'autre sur la même fiche, et le second écrasait
+    # les champs du premier : la fiche finissait avec l'adresse finlandaise et
+    # la note « Code ERP : RAFLATAC ». Deux sociétés en une, sans un mot dans le
+    # rapport — et l'entité française sans fiche du tout.
+    #
+    # Règle retenue : la clé la plus forte garde la fiche, les autres lignes
+    # partent en création. Deux numéros de TVA différents, ce sont deux
+    # personnes morales ; les empiler sur une fiche est toujours faux.
+    FORCE = {"alias": 0, "siret": 1, "tva": 2, "nom": 3}
+    par_cible = defaultdict(list)
+    for item in apparies:
+        par_cible[item[1]["id"]].append(item)
+
+    collisions = []
+    apparies = []
+    for fid, lot in par_cible.items():
+        if len(lot) == 1:
+            apparies.append(lot[0])
+            continue
+        lot.sort(key=lambda x: FORCE.get(x[2], 9))
+        gagnant = lot[0]
+        apparies.append(gagnant)
+        for perdant in lot[1:]:
+            collisions.append((perdant[0], gagnant[0], gagnant[1], perdant[2]))
+            nouveaux.append(perdant[0])
+
+    if collisions:
+        titre(f"COLLISIONS ÉCARTÉES ({len(collisions)})")
+        print("  Deux lignes de l'export visaient la même fiche. La ligne rapprochée")
+        print("  par la clé la plus forte l'enrichit ; l'autre part en création.")
+        for perdue, gardee, fiche, motif in collisions:
+            print(f"  fiche #{fiche['id']} « {fiche['nom']} » enrichie par « {gardee['nom']} »")
+            print(f"      « {perdue['nom']} » (rapprochée par {motif}) sera créée à part.")
+        # Le nom est UNIQUE en base : si la ligne écartée porte exactement le nom
+        # d'une fiche existante, sa création échouera. Le dire ici, pas au
+        # moment de l'INSERT, laisse le temps de trancher avant d'écrire.
+        noms_pris = {norm_nom(dict(f)["nom"]) for f in fiches}
+        bloquees = [c for c, _, _, _ in collisions if norm_nom(c["nom"]) in noms_pris]
+        if bloquees:
+            print()
+            print("  ATTENTION — ces lignes portent le nom d'une fiche existante et ne")
+            print("  pourront pas être créées telles quelles (le nom est unique) :")
+            for c in bloquees:
+                print(f"      « {c['nom']} »")
+            print("  Tranchez d'abord : renommez la fiche existante pour distinguer les")
+            print("  deux entités, ou ajoutez un alias pour dire laquelle est laquelle.")
+
     print(f"  Annuaire MySifa : {len(fiches)} fiche(s).")
     if doublons_fichier:
         titre(f"Doublons dans le fichier ({len(doublons_fichier)}) — 2e ligne ignorée")
@@ -808,6 +994,14 @@ def main() -> int:
             print(f"  « {a} » ≈ « {b} »")
 
     quasi = proches(nouveaux, fiches)
+
+    if args.generer_alias:
+        if not quasi:
+            print("\nAucun quasi-doublon : pas d'alias à proposer.")
+            return 0
+        ecrire_alias_propose(Path(args.generer_alias).expanduser(), quasi)
+        return 0
+
     inventaire(lignes, entetes, candidats, apparies, nouveaux, inconnus, cols, quasi)
 
     if args.inventaire:

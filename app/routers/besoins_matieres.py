@@ -1346,7 +1346,9 @@ async def rattacher_of(planning_id: int, request: Request):
 
     # Import local : of_import.py n'a pas à connaître Besoins matières, et un
     # import au niveau module créerait un cycle le jour où l'inverse arrivera.
-    from app.routers.of_import import _promote_of_link
+    from app.routers.of_import import (
+        _promote_of_link, _invalidate_pending_count_cache,
+    )
 
     qui = (user.get("nom") or user.get("email") or "besoins_matieres")
     with get_db() as conn:
@@ -1366,6 +1368,8 @@ async def rattacher_of(planning_id: int, request: Request):
         except Exception:
             pass  # colonne absente sur une base ancienne : le lien reste valide
         conn.commit()
+    # Le dossier sort de la liste « sans OF » : le badge de MyProd doit suivre.
+    _invalidate_pending_count_cache()
     return {"ok": True, "planning_id": planning_id, "of_id": of_id,
             "of_numero": oi["of_numero"]}
 
