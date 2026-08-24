@@ -912,12 +912,66 @@ _SQL_OF_ORPHELINS = """
            oi.valide_par          AS of_valide_par,
            oi.valide_at           AS of_valide_at,
            oi.invalide_at         AS of_invalide_at,
-           oi.invalide_motif      AS of_invalide_motif
+           oi.invalide_motif      AS of_invalide_motif,
+           -- Les matières PORTÉES PAR L'OF LUI-MÊME. `access_sync_of.py` les
+           -- recopie depuis la fiche Access au moment où l'OF est créé
+           -- (`f.matsupport`, `f.matglassine`, `f.matadhesif`). C'est ce qui
+           -- rend l'archive exploitable sans fiche technique — et c'est même
+           -- la meilleure source pour un mois révolu : la fiche d'aujourd'hui
+           -- a pu changer depuis, l'OF dit ce qui a réellement été engagé.
+           oi.matiere        AS of_matiere,
+           oi.glassine       AS of_glassine,
+           oi.adhesif_label  AS of_adhesif_label,
+           oi.mandrins_dia   AS of_mandrins_dia,
+           oi.cartons_type   AS of_cartons_type,
+           oi.qte_au_mille   AS of_qte_au_mille
     FROM of_imports oi
     LEFT JOIN machines m ON LOWER(TRIM(m.nom)) = LOWER(TRIM(oi.machine))
     LEFT JOIN planning_entries pe ON pe.of_import_id = oi.id
     WHERE pe.id IS NULL
 """
+
+
+# Ce que l'OF sait dire de lui-même, et le champ de fiche technique que ça
+# remplace. `_compute_besoins_dossier` ne lit QUE les champs ft_* : c'est par
+# eux qu'il faut passer, sans quoi il faudrait dupliquer les six formules.
+_OF_VERS_FT = (
+    ("ft_support",     "of_matiere"),
+    ("ft_glassine",    "of_glassine"),
+    ("ft_adhesif",     "of_adhesif_label"),
+    ("ft_mandrin_dia", "of_mandrins_dia"),
+    ("ft_cartons",     "of_cartons_type"),
+    ("ft_qte_au_mille", "of_qte_au_mille"),
+)
+
+
+def _matieres_depuis_of(pe: dict) -> None:
+    """Fait dire à l'OF quelles matières il engage, en place.
+
+    Mesuré le 24/08/2026 : sur 592 OF que le planning ne porte plus, 81
+    seulement (13,7 %) se rapprochent d'une fiche technique — `fiches_techniques`
+    ne garde que les produits actifs, pas ceux d'il y a un an. Faire dépendre
+    l'archive de ce rapprochement revenait à la jeter à 86 %, et à afficher
+    douze mois de courbes à plat qu'on lit comme une activité nulle.
+
+    Or l'OF n'a besoin de personne : `access_sync_of.py` y recopie
+    `f.matsupport`, `f.matglassine` et `f.matadhesif` au moment de sa création.
+    La quantité, elle, continue de passer par les formules communes
+    (métrage × laize × grammage) — une seconde formule pour le passé rendrait
+    les deux moitiés du graphe incomparables, ce qui est précisément ce que
+    l'écran sert à faire.
+
+    L'OF PRIME sur la fiche, il ne la complète pas : sur un mois révolu, la
+    fiche d'aujourd'hui a pu être corrigée depuis, alors que l'OF est le
+    document qui a été produit. La fiche ne sert que là où l'OF se tait.
+    """
+    for champ_ft, champ_of in _OF_VERS_FT:
+        v = pe.get(champ_of)
+        if v is None:
+            continue
+        if isinstance(v, str) and not v.strip():
+            continue
+        pe[champ_ft] = v
 
 
 def _mois_of(pe: dict) -> Optional[str]:
@@ -1646,6 +1700,7 @@ def _agreger_of_orphelins(conn, debut: Optional[str] = None) -> tuple:
         mois = _mois_of(pe)
         if not mois:
             continue  # un OF sans date exploitable ne pèse sur aucun mois
+        _matieres_depuis_of(pe)
         for b in _compute_besoins_dossier(pe, mapping, perte):
             cle = (mois, b.get("matiere_id"), b.get("kind"))
             agg = cumul.setdefault(cle, {
