@@ -132,6 +132,17 @@
       '.pmem-card-date{font-size:13px;font-weight:800;color:var(--text)}',
       '.pmem-card-meta{font-size:12px;color:var(--muted)}',
       '.pmem-kpis{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:4px}',
+      // Deux colonnes sans filet ni fond : ce qui les separe est le blanc, pas
+      // un trait. Une bordure ferait lire deux blocs distincts la ou il s'agit
+      // de deux faces de la meme production.
+      '.pmem-serie{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);',
+      'gap:14px 30px;margin-top:2px}',
+      '@media(max-width:760px){.pmem-serie{grid-template-columns:1fr;gap:16px}}',
+      '.pmem-col-lbl{font-size:10px;font-weight:800;text-transform:uppercase;',
+      'letter-spacing:.6px;color:var(--muted);margin-bottom:9px}',
+      '.pmem-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));',
+      'gap:11px 18px}',
+      '.pmem-rien{font-size:12px;color:var(--muted);font-style:italic}',
       '.pmem-kpi{display:flex;flex-direction:column;gap:1px}',
       '.pmem-kpi-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}',
       '.pmem-kpi-val{font-size:14px;font-weight:800;color:var(--text)}',
@@ -173,7 +184,9 @@
       '@media(max-width:820px){.pmem-split{grid-template-columns:1fr}}',
       '.pmem-frame{width:100%;height:460px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}',
       '.pmem-panel.pmem-inline{max-width:none;max-height:none;border:none;background:transparent}',
-      '.pmem-panel.pmem-inline .pmem-hd{padding:0 0 14px}',
+      // En page, MyProd affiche deja le titre et le sous-titre : les repeter
+      // donnait deux en-tetes identiques l'un sous l'autre.
+      '.pmem-panel.pmem-inline .pmem-hd{display:none}',
       '.pmem-panel.pmem-inline .pmem-body{padding:16px 0 0;overflow:visible}',
       '.pmem-panel.pmem-inline .pmem-tabs{padding:12px 0 0}',
       '.pmem-panel.pmem-inline .pmem-x{display:none}',
@@ -375,14 +388,35 @@
 
     series.forEach(function (s) {
       var arrets = s.arrets_par_code || {};
-      var codes = Object.keys(arrets);
+      var codes = Object.keys(arrets).sort(function (a, b) {
+        return ((arrets[b] || {}).minutes || 0) - ((arrets[a] || {}).minutes || 0);
+      });
       var docs = (d.documents || []).filter(function (x) { return x.no_dossier === s.no_dossier; });
-      out.push(el('div', { className: 'pmem-card' }, [
-        el('div', { className: 'pmem-card-hd' }, [
-          el('span', { className: 'pmem-card-date', text: fDate(s.date_fin || s.date_debut) }),
-          el('span', { className: 'pmem-card-meta', text: [s.machine, s.no_dossier, (s.operateurs || []).join(', ')].filter(Boolean).join(' · ') }),
-        ]),
-        el('div', { className: 'pmem-kpis' }, [
+
+      // Colonne gauche — ce qui a coince. Vide, elle le dit : « aucun arret »
+      // est une information, pas un blanc.
+      var gauche = [el('div', { className: 'pmem-col-lbl', text: 'Arrets et erreurs' })];
+      if (codes.length) {
+        gauche.push(el('div', { className: 'pmem-chips', style: 'margin-top:0' },
+          codes.map(function (c) {
+            var a = arrets[c] || {};
+            return el('span', { className: 'pmem-chip', text: labelArret(c, a.label) + ' · ' + fMin(a.minutes) });
+          })));
+      }
+      if (s.nb_nc) {
+        gauche.push(el('div', { className: 'pmem-chips' }, [
+          el('span', { className: 'pmem-chip is-warn',
+                       text: s.nb_nc + ' non-conformite' + (s.nb_nc > 1 ? 's' : '') }),
+        ]));
+      }
+      if (!codes.length && !s.nb_nc) {
+        gauche.push(el('div', { className: 'pmem-rien', text: 'Aucun arret ni non-conformite.' }));
+      }
+
+      // Colonne droite — ce que la production a donne.
+      var droite = [
+        el('div', { className: 'pmem-col-lbl', text: 'Production' }),
+        el('div', { className: 'pmem-stats' }, [
           kpi('Calage', fMin(s.temps_calage_min)),
           kpi('Production', fMin(s.temps_prod_min)),
           kpi('Arrets', fMin(s.temps_arret_min)),
@@ -390,20 +424,35 @@
           kpi('Vitesse', s.vitesse_m_min != null ? fNum(s.vitesse_m_min, 1) + ' m/mn' : '—'),
           kpi('Etiquettes', s.etiquettes != null ? fNum(s.etiquettes) : '—'),
         ]),
-        codes.length ? el('div', { className: 'pmem-chips' }, codes.map(function (c) {
-          var a = arrets[c] || {};
-          return el('span', { className: 'pmem-chip', text: labelArret(c, a.label) + ' · ' + fMin(a.minutes) });
-        })) : null,
-        (s.nb_nc ? el('div', { className: 'pmem-chips' }, [
-          el('span', { className: 'pmem-chip is-warn', text: s.nb_nc + ' non-conformite' + (s.nb_nc > 1 ? 's' : '') }),
-        ]) : null),
-        docs.length ? el('div', { className: 'pmem-chips' }, docs.map(function (doc) {
-          return el('button', {
-            type: 'button', className: 'pmem-btn pmem-btn-sm',
+      ];
+
+      // Le scan est une action, pas une donnee : il monte dans l'en-tete.
+      var entete = [
+        el('span', { className: 'pmem-card-date', text: fDate(s.date_fin || s.date_debut) }),
+        el('span', { className: 'pmem-card-meta',
+                     text: [s.machine, s.no_dossier, (s.operateurs || []).join(', ')]
+                             .filter(Boolean).join(' · ') }),
+      ];
+      if (docs.length) {
+        entete.push(el('span', { style: 'flex:1' }));
+        docs.forEach(function (doc) {
+          entete.push(el('button', {
+            type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-accent',
+            // L'en-tete aligne sur la ligne de base : un bouton s'y poserait
+            // de travers a cote du texte.
+            style: 'align-self:center',
             onclick: function () { window.open('/api/produits/documents/' + doc.id + '/pdf', '_blank'); },
-            text: 'OF scanne' + (doc.of_numero ? ' ' + doc.of_numero : ''),
-          });
-        })) : null,
+            text: 'Ouvrir le scan' + (doc.of_numero ? ' ' + doc.of_numero : ''),
+          }));
+        });
+      }
+
+      out.push(el('div', { className: 'pmem-card' }, [
+        el('div', { className: 'pmem-card-hd' }, entete),
+        el('div', { className: 'pmem-serie' }, [
+          el('div', {}, gauche),
+          el('div', {}, droite),
+        ]),
       ]));
     });
     return out;
@@ -571,7 +620,7 @@
       }
       enfants.push(el('div', { className: 'pmem-chips' }, [
         el('button', {
-          type: 'button', className: 'pmem-btn pmem-btn-sm',
+          type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-accent',
           onclick: function () { window.open('/api/produits/documents/' + doc.id + '/pdf', '_blank'); },
           text: 'Ouvrir le scan',
         }),
@@ -588,7 +637,7 @@
 
   // ── Rendu courant ──────────────────────────────────────────────────
   function renderCourant() {
-    if (state.mode === 'rattachement') { renderRattachement(); return; }
+    if (state.mode === 'rattachement') { renderScans(); return; }
     if (state.mode === 'liste') { renderListe(); return; }
 
     var d = state.data || {};
@@ -617,7 +666,7 @@
 
   async function recharger() {
     if (state.mode === 'liste') { await chargerListe(); return; }
-    if (state.mode === 'rattachement') { await chargerDocs(); return; }
+    if (state.mode === 'rattachement') { await chargerScans(); return; }
     if (state.mode === 'historique' && state.noDossier) {
       state.data = await api('/api/produits/dossier/' + encodeURIComponent(state.noDossier) + '/historique');
     } else if (state.data && state.data.ref_produit_norm) {
@@ -829,31 +878,146 @@
   // ── File de rattachement des scans ─────────────────────────────────
   async function openRattachement() {
     contenantInline = null;
-    state = { tab: 'rattachement', data: null, mode: 'rattachement', noDossier: null, docs: null, sel: null };
-    await chargerDocs();
+    state = { tab: 'scannes', data: null, mode: 'rattachement', noDossier: null,
+              docs: null, sel: null, q: '' };
+    await chargerScans();
+  }
+
+  async function chargerScans() {
+    try {
+      var r = await api('/api/produits/documents?q=' + encodeURIComponent(state.q || ''));
+      state.tous = r.documents || [];
+      state.total = r.total || 0;
+      state.nbARattacher = r.a_rattacher || 0;
+    } catch (e) { toast(e.message || 'Erreur.', 'danger'); return; }
+    if (state.tab === 'rattacher') { await chargerDocs(); return; }
+    renderScans();
   }
 
   async function chargerDocs() {
     try {
       var r = await api('/api/produits/documents/a-rattacher');
       state.docs = r.documents || [];
-      state.total = r.total || 0;
+      state.nbARattacher = r.total || 0;
       if (state.sel && !state.docs.some(function (d) { return d.id === state.sel; })) state.sel = null;
       if (!state.sel && state.docs.length) state.sel = state.docs[0].id;
     } catch (e) { toast(e.message || 'Erreur.', 'danger'); return; }
-    renderRattachement();
+    renderScans();
   }
 
-  function renderRattachement() {
+  function scansOnglets() {
+    var defs = [
+      { key: 'scannes', label: 'Scannes', count: state.total },
+      { key: 'rattacher', label: 'A rattacher', count: state.nbARattacher },
+    ];
+    return el('div', { className: 'pmem-tabs' }, defs.map(function (t) {
+      return el('button', {
+        type: 'button',
+        className: 'pmem-tab' + (state.tab === t.key ? ' is-on' : ''),
+        text: t.label + (t.count != null ? '  (' + t.count + ')' : ''),
+        onclick: function () {
+          state.tab = t.key;
+          if (t.key === 'rattacher' && !state.docs) { chargerDocs(); return; }
+          renderScans();
+        },
+      });
+    }));
+  }
+
+  // ── Onglet « Scannes » : ce qu'on a deja, pas seulement les echecs ──────
+  function vueScannes() {
+    var input = el('input', {
+      className: 'pmem-input', type: 'text', id: 'pmem-scans-q',
+      placeholder: 'Rechercher (n\u00b0 d\'OF, reference, dossier, client, nom de fichier)…',
+      value: state.q || '',
+    });
+    var t0 = null;
+    input.addEventListener('input', function (e) {
+      state.q = e.target.value;
+      clearTimeout(t0);
+      t0 = setTimeout(function () {
+        var pos = input.selectionStart;
+        chargerScans().then(function () {
+          var n = document.getElementById('pmem-scans-q');
+          if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (x) {} }
+        });
+      }, 220);
+    });
+
+    var docs = state.tous || [];
+    if (!docs.length) {
+      return [el('div', { style: 'margin-bottom:14px' }, [input]),
+              el('div', {
+                className: 'pmem-empty',
+                text: state.q ? ('Aucun scan pour « ' + state.q + ' »')
+                              : 'Aucun OF scanne pour l\'instant.',
+              })];
+    }
+
+    var lignes = docs.map(function (d) {
+      var infos = [];
+      if (d.machine) infos.push(d.machine);
+      if (d.client) infos.push(d.client);
+      if (d.etiquettes) infos.push(fNum(d.etiquettes) + ' etiq.');
+      if (d.of_laize) infos.push('laize ' + fNum(d.of_laize) + ' mm');
+
+      var cellRef = el('td', {});
+      if (d.ref_produit_norm) {
+        var b = boutonFiche(d.ref_produit_norm, { label: d.ref_produit_norm });
+        if (b) cellRef.appendChild(b);
+        else cellRef.textContent = d.ref_produit_norm;
+      } else {
+        cellRef.appendChild(el('span', { className: 'pmem-chip is-warn', text: 'a rattacher' }));
+      }
+
+      var tr = el('tr', {}, [
+        el('td', { text: fDate(d.date_document || d.importe_le) }),
+        el('td', {}, [el('strong', { text: d.of_numero || '—' })]),
+        cellRef,
+        el('td', { text: d.no_dossier || '—' }),
+        el('td', { text: infos.join(' · ') || '—' }),
+        el('td', { title: d.chemin_origine || '', text: d.fichier_origine || '—' }),
+      ]);
+      var tdAct = el('td', {});
+      tdAct.appendChild(el('button', {
+        type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-accent', text: 'Ouvrir',
+        onclick: function (e) {
+          e.stopPropagation();
+          window.open('/api/produits/documents/' + d.id + '/pdf', '_blank');
+        },
+      }));
+      tr.appendChild(tdAct);
+      tr.style.cursor = 'default';
+      return tr;
+    });
+
+    var table = el('div', { className: 'pmem-scroll' }, [
+      el('table', { className: 'pmem-tbl' }, [
+        el('thead', {}, [el('tr', {},
+          ['Date', 'OF', 'Produit', 'Dossier', 'Production', 'Fichier', '']
+            .map(function (h) { return el('th', { text: h }); }))]),
+        el('tbody', {}, lignes),
+      ]),
+    ]);
+
+    var pied = docs.length < (state.total || 0)
+      ? el('div', {
+          style: 'font-size:11px;color:var(--muted);margin-top:10px',
+          text: docs.length + ' scans affiches sur ' + state.total + '. Affinez la recherche.',
+        })
+      : null;
+
+    return [el('div', { style: 'margin-bottom:14px' }, [input]), table, pied];
+  }
+
+  // ── Onglet « A rattacher » : la file, avec apercu cote a cote ───────────
+  function vueARattacher() {
     var docs = state.docs || [];
     if (!docs.length) {
-      mount(panel(
-        header('Scans d\'OF', 'Deposer des scans, et traiter ceux qui n\'ont pas pu etre rattaches', []),
-        el('div', { className: 'pmem-tabs' }),
-        [zoneDepot(chargerDocs),
-         el('div', { className: 'pmem-empty', text: 'Aucun scan en attente de rattachement.' })]
-      ));
-      return;
+      return [el('div', {
+        className: 'pmem-empty',
+        text: 'Aucun scan en attente de rattachement.',
+      })];
     }
 
     var liste = el('div', {}, docs.map(function (doc) {
@@ -866,11 +1030,12 @@
         el('div', { style: 'font-weight:800', text: doc.fichier_origine || doc.fichier }),
         el('div', {
           style: 'font-size:11px;color:var(--muted);margin-top:3px',
-          text: [fDate(doc.importe_le), doc.of_numero ? 'OF lu ' + doc.of_numero : 'numero non lu',
+          text: [fDate(doc.date_document || doc.importe_le),
+                 doc.of_numero ? 'OF lu ' + doc.of_numero : 'numero non lu',
                  doc.texte_extrait ? null : 'sans OCR'].filter(Boolean).join(' · '),
         }),
       ]);
-      b.addEventListener('click', function () { state.sel = doc.id; renderRattachement(); });
+      b.addEventListener('click', function () { state.sel = doc.id; renderScans(); });
       return b;
     }));
 
@@ -891,7 +1056,7 @@
         });
         toast('Scan rattache a ' + r.ref_produit_norm + '.');
         state.sel = null;
-        await chargerDocs();
+        await chargerScans();
       } catch (e) { toast(e.message || 'Erreur.', 'danger'); }
       btnOk.disabled = false;
     });
@@ -904,7 +1069,7 @@
           method: 'POST', body: JSON.stringify({ ecarter: true }),
         });
         state.sel = null;
-        await chargerDocs();
+        await chargerScans();
       } catch (e) { toast(e.message || 'Erreur.', 'danger'); }
     });
 
@@ -912,15 +1077,28 @@
       el('label', { className: 'pmem-lbl', text: 'Rattacher a un dossier' }),
       champ,
       el('div', { className: 'pmem-form-row' }, [btnOk, btnKo]),
-      el('iframe', { className: 'pmem-frame', src: '/api/produits/documents/' + sel.id + '/pdf', style: 'margin-top:12px' }),
+      el('iframe', { className: 'pmem-frame', src: '/api/produits/documents/' + sel.id + '/pdf',
+                     style: 'margin-top:12px' }),
     ]);
 
+    return [el('div', { className: 'pmem-split' }, [liste, droite])];
+  }
+
+  function renderScans() {
+    var corps = state.tab === 'rattacher' ? vueARattacher() : vueScannes();
     mount(panel(
-      header('Scans d\'OF', 'Deposer des scans, et traiter ceux qui n\'ont pas pu etre rattaches',
-             [state.total + ' en attente de rattachement']),
-      el('div', { className: 'pmem-tabs' }),
-      [zoneDepot(chargerDocs), el('div', { className: 'pmem-split' }, [liste, droite])]
+      header('Scans d\'OF', 'Deposer des scans, et rattacher ceux qui n\'ont pas pu l\'etre',
+             [(state.total || 0) + ' scan(s)',
+              (state.nbARattacher || 0) + ' en attente de rattachement']),
+      scansOnglets(),
+      [zoneDepot(chargerScans)].concat(corps)
     ));
+    if (state.tab === 'scannes') {
+      requestAnimationFrame(function () {
+        var n = document.getElementById('pmem-scans-q');
+        if (n && state.q) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); }
+      });
+    }
   }
 
   // ── Bouton « Historique » pour Saisieprod ──────────────────────────
@@ -988,9 +1166,9 @@
     // Quand MyProd change de page, l'element est detache et mount() bascule
     // tout seul en surcouche.
     contenantInline = contenant;
-    state = { tab: 'rattachement', data: null, mode: 'rattachement',
-              noDossier: null, docs: null, sel: null };
-    await chargerDocs();
+    state = { tab: 'scannes', data: null, mode: 'rattachement',
+              noDossier: null, docs: null, sel: null, q: '' };
+    await chargerScans();
   }
 
   window.MySifaProduitMemoire = {
