@@ -47,6 +47,8 @@ with dbmod.get_db() as conn:
     check("table cal_event_participants creee", "cal_event_participants" in tables, True)
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(cal_events_perso)").fetchall()}
     check("colonne annule ajoutee", "annule" in cols, True)
+    check("colonnes de serie ajoutees",
+          {"serie_id", "recurrence"} <= cols, True)
 
     # Ids hauts : init_db seede deja des comptes sur les premiers ids.
     ORG, INVITE, TIERS = 901, 902, 903
@@ -144,6 +146,113 @@ with dbmod.get_db() as conn:
     conn.execute("UPDATE cal_events_perso SET annule=0 WHERE id=1")
     conn.commit()
     check("pastille compte l'invitation sans reponse", en_attente(INVITE), 1)
+
+
+    # ------------------------------------------------------------------
+    # Rappel propre a l'evenement, invites externes, delegation
+    # ------------------------------------------------------------------
+    conn.execute(
+        """INSERT INTO cal_events_perso
+               (id, user_id, titre, date_debut, date_fin, all_day, prive, rappel_minutes)
+           VALUES (2, 901, 'Comite', '2026-09-02T10:00', '2026-09-02T11:00', 0, 0, 60)"""
+    )
+    conn.execute(
+        """INSERT INTO cal_events_perso
+               (id, user_id, titre, date_debut, date_fin, all_day, prive, rappel_minutes)
+           VALUES (3, 901, 'Sans rappel', '2026-09-02T10:00', '2026-09-02T11:00', 0, 0, 0)"""
+    )
+    conn.commit()
+
+    # Meme regle que /api/calendrier/notifications : la fenetre depend de la
+    # ligne, pas d'une constante — c'est la partie que SQLite doit calculer.
+    def rappels_dus(maintenant):
+        return sorted(
+            int(r["id"])
+            for r in conn.execute(
+                """SELECT e.id FROM cal_events_perso e
+                    WHERE COALESCE(e.all_day, 0) = 0
+                      AND COALESCE(e.annule, 0) = 0
+                      AND COALESCE(e.rappel_minutes, 10) > 0
+                      AND e.date_debut >= ?
+                      AND datetime(e.date_debut) <=
+                          datetime(?, '+' || COALESCE(e.rappel_minutes, 10) || ' minutes')""",
+                (maintenant, maintenant),
+            ).fetchall()
+        )
+
+    check("rappel a 60 min : rien 90 min avant", rappels_dus("2026-09-02T08:30"), [])
+    check("rappel a 60 min : du 45 min avant", rappels_dus("2026-09-02T09:15"), [2])
+    check("rappel a 0 : jamais rappele", 3 in rappels_dus("2026-09-02T09:59"), False)
+
+    conn.execute(
+        """INSERT INTO cal_event_invites_ext (event_id, email, jeton)
+           VALUES (2, 'client@exemple.fr', 'jeton-abc')"""
+    )
+    conn.commit()
+    doublon = True
+    try:
+        conn.execute(
+            """INSERT INTO cal_event_invites_ext (event_id, email, jeton)
+               VALUES (2, 'client@exemple.fr', 'jeton-def')"""
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        doublon = False
+    check("un externe n'est invite qu'une fois", doublon, False)
+    check("le jeton identifie l'invitation",
+          conn.execute(
+              "SELECT statut FROM cal_event_invites_ext WHERE jeton = 'jeton-abc'"
+          ).fetchone()["statut"],
+          "en_attente")
+
+    conn.execute(
+        "INSERT INTO cal_delegations (proprietaire_id, delegue_id) VALUES (901, 902)"
+    )
+    conn.commit()
+    check("delegation lisible dans le sens du delegue",
+          [int(r["proprietaire_id"]) for r in conn.execute(
+              "SELECT proprietaire_id FROM cal_delegations WHERE delegue_id = 902"
+          ).fetchall()],
+          [901])
+    check("pas de delegation en double",
+          conn.execute(
+              "SELECT COUNT(*) FROM cal_delegations WHERE proprietaire_id=901 AND delegue_id=902"
+          ).fetchone()[0],
+          1)
+
+
+# ---------------------------------------------------------------------------
+# Recurrence : depliage d'une serie
+# ---------------------------------------------------------------------------
+from datetime import date as _date, datetime as _dt  # noqa: E402
+from app.services.cal_recurrence import occurrences_serie  # noqa: E402
+
+
+def _jours(regle, d0, d1, fin):
+    occ = occurrences_serie(d0, d1, regle, fin)
+    return [x[0].strftime("%d/%m") for x in occ]
+
+
+D0 = _dt(2026, 8, 28, 9, 0)   # un vendredi
+D1 = _dt(2026, 8, 28, 10, 0)
+check("hebdo : un creneau par semaine",
+      _jours("hebdo", D0, D1, _date(2026, 9, 18)), ["28/08", "04/09", "11/09", "18/09"])
+check("ouvres : le week-end est saute",
+      _jours("ouvres", D0, D1, _date(2026, 9, 2)), ["28/08", "31/08", "01/09", "02/09"])
+check("bihebdo : une semaine sur deux",
+      _jours("bihebdo", D0, D1, _date(2026, 9, 30)), ["28/08", "11/09", "25/09"])
+# Le piege du mensuel : sans ancrage sur le premier creneau, un 31 ramene au 28
+# de fevrier resterait au 28 tous les mois suivants.
+check("mensuel : le quantieme ne derive pas",
+      _jours("mensuel", _dt(2026, 1, 31, 9, 0), _dt(2026, 1, 31, 10, 0), _date(2026, 5, 15)),
+      ["31/01", "28/02", "31/03", "30/04"])
+check("la duree du creneau est conservee",
+      (occurrences_serie(D0, D1, "hebdo", _date(2026, 9, 4))[1][1]
+       - occurrences_serie(D0, D1, "hebdo", _date(2026, 9, 4))[1][0]).seconds // 60,
+      60)
+check("une fin anterieure ne cree rien de plus que le premier creneau",
+      len(occurrences_serie(D0, D1, "hebdo", _date(2026, 8, 28))), 1)
 
 os.unlink(db)
 print()

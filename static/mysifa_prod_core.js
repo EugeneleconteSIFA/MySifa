@@ -5694,12 +5694,14 @@ function renderSaisies(){
     h('button',{className:'btn-ghost',title:'Page précédente',disabled:off<=0,onClick:async()=>{
       const n = Math.max(0, off - lim);
       await loadSaisies({offset:n,limit:lim});
+      __skipScrollRestore = true;   // changement de page : on remonte en haut
       render();
     }},'‹'),
     h('span',{style:{fontSize:'11px',color:'var(--muted)',fontFamily:'monospace'}}, total?(`${from}-${to}/${total}`):'0'),
     h('button',{className:'btn-ghost',title:'Page suivante',disabled:(off+lim)>=total,onClick:async()=>{
       const n = Math.min(Math.max(0,total-lim), off + lim);
       await loadSaisies({offset:n,limit:lim});
+      __skipScrollRestore = true;   // changement de page : on remonte en haut
       render();
     }},'›'),
   );
@@ -7976,7 +7978,38 @@ function renderProdKpis(){
     );
   }
 
+  // Intitule de section de la barre laterale. Reprise fidele de MyStock :
+  // meme classe CSS, meme chevron, meme repli au clic. L'etat de repli vit
+  // dans S.navCollapsed et survit aux rendus, pas aux rechargements — c'est
+  // le comportement de MyStock, et deux applications qui se replient
+  // differemment se remarquent tout de suite.
+  function renderSidebarSection(label){
+    if(!S.navCollapsed) S.navCollapsed = new Set();
+    const replie = S.navCollapsed.has(label);
+    const el = document.createElement('div');
+    el.className = 'nav-section-label' + (replie ? ' ngl-collapsed' : '');
+    el.innerHTML = '<span>' + escHtml(label) + '</span>'
+      + '<span class="ngl-chevron"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"'
+      + ' stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"'
+      + ' aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></span>';
+    el.addEventListener('click', () => {
+      const etaitReplie = S.navCollapsed.has(label);
+      if(etaitReplie) S.navCollapsed.delete(label); else S.navCollapsed.add(label);
+      el.classList.toggle('ngl-collapsed', !etaitReplie);
+      let sib = el.nextElementSibling;
+      while(sib && !sib.classList.contains('nav-section-label')){
+        sib.style.display = etaitReplie ? '' : 'none';
+        sib = sib.nextElementSibling;
+      }
+    });
+    return el;
+  }
+
   function renderSidebar(){
+    // La feuille de style porte aussi l'intitule de section : sans cet appel
+    // il n'etait injecte que sur la page d'accueil, et « Fiches et OF »
+    // apparaissait nu partout ailleurs.
+    ensureProdMenuStyle();
     // Le style du logo (cliquable + hover + espacement 32px) vit dans
     // mysifa_myprod_shell.css depuis la PR 1 « unifier MyProd ».
     const admin = isAdmin(S.user);
@@ -7993,26 +8026,39 @@ function renderProdKpis(){
           // aucune raison d'etre.
           ...(canAccessOfTab() ? [
             {section: 'Fiches et OF'},
-            {key: 'of', label: 'Ordres de fabrication', icon: 'file', withPendingOfBadge: true},
-            {key: 'scans', label: 'Scans d\'OF', icon: 'file-text'},
+            // Trois entrees, deux pages : « OF » et « Fiches techniques » sont
+            // deux onglets du meme ecran, on y mene directement plutot que de
+            // faire chercher le sous-onglet une fois arrive.
+            {key: 'of', label: 'OF', icon: 'file', subTab: 'of', withPendingOfBadge: true},
+            {key: 'of', label: 'Fiches techniques', icon: 'file-text', subTab: 'fiche'},
+            {key: 'scans', label: 'Scans d\'OF', icon: 'copy'},
           ] : []),
         ];
     const isLight = document.body.classList.contains('light');
+    let sectionCourante = null;
     return h('nav', {className: 'sidebar'},
       h('div', {className: 'logo', title: 'Accueil MyProd', onClick: () => { S.sidebarOpen = false; set({page: 'menu'}); nav(); }},
         h('div', {className: 'logo-brand'}, 'My', h('span', null, 'Prod')),
         h('div', {className: 'logo-sub'}, 'by SIFA')
       ),
       ...items.map(i => {
-        // Intitule de section (.nav-group-label) : meme classe que les autres
-        // applications MySifa, non cliquable, separateur au-dessus.
-        if(i.section) return h('div', {className: 'nav-group-label'}, i.section);
+        // Intitule de section, repliable — meme classe et meme comportement
+        // que la sidebar de MyStock (.nav-section-label), pour que les deux
+        // applications ne divergent pas sur un detail qu'on voit tous les jours.
+        if(i.section){ sectionCourante = i.section; return renderSidebarSection(i.section); }
+        // Deux entrees mènent a la page 'of' : l'etat actif se decide sur le
+        // sous-onglet, sinon les deux s'allumeraient en meme temps.
+        const sub = S.ofSubTab || 'of';
+        const actif = i.key === 'of'
+          ? (S.page === 'of' && (i.subTab === 'fiche' ? sub === 'fiche' : sub !== 'fiche'))
+          : S.page === i.key;
         const btn = h('button', {
-          className: 'nav-btn' + (S.page === i.key ? ' active' : ''),
+          className: 'nav-btn' + (actif ? ' active' : ''),
           onClick: () => {
             if(i.key === '_planning'){ window.location.href = '/planning'; return; }
             S.sidebarOpen = false;
-            set({page: i.key});
+            if(i.subTab) set({page: i.key, ofSubTab: i.subTab});
+            else set({page: i.key});
             nav();
           }
         });
@@ -8026,6 +8072,10 @@ function renderProdKpis(){
               title: cnt + ' OF \u00e0 associer manuellement',
             }, String(cnt)));
           }
+        }
+        // Section repliee : l'item ne doit pas reapparaitre au rendu suivant.
+        if(sectionCourante && S.navCollapsed && S.navCollapsed.has(sectionCourante)){
+          btn.style.display = 'none';
         }
         return btn;
       }),
@@ -8066,11 +8116,16 @@ function renderProdKpis(){
     s.textContent =
       // Reprise a l'identique de app/web/html.py : la sidebar doit etre la
       // meme dans toutes les applications, y compris ses intitules de section.
-      '.sidebar .nav-group-label{font-size:11px;font-weight:700;color:var(--muted);'
-      + 'text-transform:uppercase;letter-spacing:.5px;padding:4px 12px 2px;'
-      + 'user-select:none;pointer-events:none;line-height:1.3}'
-      + '.sidebar .nav-group-label:not(:first-child){margin-top:10px;padding-top:12px;'
-      + 'border-top:1px solid var(--border)}'
+      // Copie conforme de app/web/stock_page.py : la sidebar doit se
+      // comporter et se lire pareil dans MyStock et dans MyProd.
+      '.sidebar .nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;'
+      + 'color:var(--muted);font-weight:600;padding:10px 14px 4px 14px;user-select:none;'
+      + 'cursor:pointer;display:flex;align-items:center;justify-content:space-between;'
+      + 'border-radius:6px;transition:background .15s,opacity .15s}'
+      + '.sidebar .nav-section-label:hover{background:rgba(148,163,184,.08);opacity:1}'
+      + '.sidebar .nav-section-label .ngl-chevron{display:inline-flex;flex-shrink:0;'
+      + 'transition:transform .2s;opacity:.55}'
+      + '.sidebar .nav-section-label.ngl-collapsed .ngl-chevron{transform:rotate(-90deg)}'
       + '.myprod-page-scans{max-width:1100px}'
       + '.myprod-menu{max-width:960px}'
       + '.myprod-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:8px}'
@@ -8104,7 +8159,7 @@ function renderProdKpis(){
       try{ if(window.MySifaGuides) MySifaGuides.autoOpen('myprod-produits'); }catch(e){}
       window.MySifaProduitMemoire.openListe();
     }});
-    if(canAccessOfTab()) tiles.push({icon:'file-text', label:'Scans d OF', desc:'Deposer les OF termines scannes et traiter ceux a rattacher', go:function(){ set({page:'scans'}); nav(); }});
+    if(canAccessOfTab()) tiles.push({icon:'copy', label:'Scans d OF', desc:'Deposer les OF termines scannes et traiter ceux a rattacher', go:function(){ set({page:'scans'}); nav(); }});
     if(canPlanningNav(u)) tiles.push({icon:'calendar', label:'Planning machine', desc:'Ordonnancement des dossiers par machine', go:function(){ window.location.href='/planning'; }});
 
     var grid = h('div', {className:'myprod-tiles'},
@@ -8122,9 +8177,51 @@ function renderProdKpis(){
     return h('div', {className:'myprod-menu'}, grid);
   }
 
+  // ── Preservation de la vue au re-render ───────────────────────
+  // render() reconstruit tout le DOM de #root : sans precaution, cocher une
+  // ligne (ou trier, annuler, editer…) renvoie la liste des saisies tout en
+  // haut. On memorise la position des conteneurs scrollables + de la fenetre
+  // avant la reconstruction, et on la restaure juste apres — uniquement si on
+  // est reste sur la meme page/sous-onglet (une vraie navigation doit bien
+  // repartir du haut).
+  const SCROLL_KEEP_SEL = [
+    '.saisies-table-wrap .saisies-bot',            // scroll vertical de la liste
+    '.saisies-table-wrap .saisies-bot > div',      // scroll horizontal (bas)
+    '.saisies-table-wrap > div:first-child'        // scrollbar miroir (haut)
+  ];
+  let __skipScrollRestore = false;   // mis a true par la pagination : nouvelle page = vue en haut
+  function __viewKey(){ return (S.page||'')+'/'+(S.subPage||'')+'/'+(S.ofSubTab||''); }
+  function __captureScroll(){
+    const pos = {key:__viewKey(), win:(window.scrollY||window.pageYOffset||0), els:[]};
+    SCROLL_KEEP_SEL.forEach(sel=>{
+      const el = document.querySelector(sel);
+      if(el && (el.scrollTop || el.scrollLeft))
+        pos.els.push({sel, top:el.scrollTop, left:el.scrollLeft});
+    });
+    return pos;
+  }
+  function __restoreScroll(pos){
+    if(!pos) return;
+    if(__skipScrollRestore){ __skipScrollRestore = false; return; }
+    if(pos.key !== __viewKey()) return;          // navigation : on repart en haut
+    if(!pos.els.length && !pos.win) return;
+    const apply = ()=>{
+      pos.els.forEach(p=>{
+        const el = document.querySelector(p.sel);
+        if(!el) return;
+        if(p.top)  el.scrollTop  = p.top;
+        if(p.left) el.scrollLeft = p.left;
+      });
+      if(pos.win) window.scrollTo(0, pos.win);
+    };
+    apply();                                     // avant peinture : pas de saut visible
+    requestAnimationFrame(apply);                // apres calcul des largeurs de table
+  }
+
   function render(){
     const root = document.getElementById('root');
     if(!root) return;
+    const __keepScroll = __captureScroll();
     root.innerHTML = '';
     document.body.classList.toggle('sb-open', !!S.sidebarOpen);
 
@@ -8261,6 +8358,7 @@ function renderProdKpis(){
     // Sur les re-renders intra-onglet (filtres, pagination), aucun
     // élément n'est animé : on évite les replays parasites.
     try { __moApplyPostRender(root); } catch(e){}
+    try { __restoreScroll(__keepScroll); } catch(e){}
   }
 
   // État de nav pour détecter les transitions d'onglet

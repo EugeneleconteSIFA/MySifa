@@ -8317,12 +8317,14 @@ function renderSaisies(){
     h('button',{className:'btn-ghost',title:'Page précédente',disabled:off<=0,onClick:async()=>{
       const n = Math.max(0, off - lim);
       await loadSaisies({offset:n,limit:lim});
+      __skipScrollRestore = true;   // changement de page : on remonte en haut
       render();
     }},'‹'),
     h('span',{style:{fontSize:'11px',color:'var(--muted)',fontFamily:'monospace'}}, total?(`${from}-${to}/${total}`):'0'),
     h('button',{className:'btn-ghost',title:'Page suivante',disabled:(off+lim)>=total,onClick:async()=>{
       const n = Math.min(Math.max(0,total-lim), off + lim);
       await loadSaisies({offset:n,limit:lim});
+      __skipScrollRestore = true;   // changement de page : on remonte en haut
       render();
     }},'›'),
   );
@@ -10998,12 +11000,54 @@ function closeProfileSheet(){
 }
 
 // ── Render ──────────────────────────────────────────────────────
+// ── Preservation de la vue au re-render ─────────────────────────
+// render() reconstruit tout le DOM de #root : sans precaution, cocher une
+// ligne de saisie (ou trier, annuler, editer…) renvoie la liste tout en haut.
+// On memorise la position des conteneurs scrollables + de la fenetre avant la
+// reconstruction, et on la restaure juste apres — seulement si on est reste
+// sur la meme page/sous-onglet (une vraie navigation repart bien du haut).
+const SCROLL_KEEP_SEL=[
+  '.prod-main-scroll',                        // colonne scrollable des pages prod
+  '.saisies-table-wrap .saisies-bot',         // scroll vertical de la liste
+  '.saisies-table-wrap .saisies-bot > div',   // scroll horizontal (bas)
+  '.saisies-table-wrap > div:first-child'     // scrollbar miroir (haut)
+];
+let __skipScrollRestore=false;   // mis a true par la pagination : nouvelle page = vue en haut
+function __viewKey(){ return (S.app||'')+'/'+(S.page||'')+'/'+(S.subPage||'')+'/'+(S.ofSubTab||''); }
+function __captureScroll(){
+  const pos={key:__viewKey(),win:(window.scrollY||window.pageYOffset||0),els:[]};
+  SCROLL_KEEP_SEL.forEach(sel=>{
+    const el=document.querySelector(sel);
+    if(el&&(el.scrollTop||el.scrollLeft)) pos.els.push({sel,top:el.scrollTop,left:el.scrollLeft});
+  });
+  return pos;
+}
+function __restoreScroll(pos){
+  if(!pos) return;
+  if(__skipScrollRestore){ __skipScrollRestore=false; return; }
+  if(pos.key!==__viewKey()) return;
+  if(!pos.els.length&&!pos.win) return;
+  const apply=()=>{
+    pos.els.forEach(p=>{
+      const el=document.querySelector(p.sel);
+      if(!el) return;
+      if(p.top)  el.scrollTop=p.top;
+      if(p.left) el.scrollLeft=p.left;
+    });
+    if(pos.win) window.scrollTo(0,pos.win);
+  };
+  apply();
+  requestAnimationFrame(apply);
+}
+
 function render(){
   const _dfAe = document.activeElement;
   const _dfFocus = _dfAe && _dfAe.id === 'prod-filter-dossier-search';
   const _dfCaret = _dfFocus ? [_dfAe.selectionStart, _dfAe.selectionEnd] : null;
 
-  const root=document.getElementById('root');root.innerHTML='';
+  const root=document.getElementById('root');
+  const __keepScroll=__captureScroll();
+  root.innerHTML='';
   document.body.classList.toggle('sb-open', !!S.sidebarOpen);
   document.body.classList.toggle('has-topbar', S.app==='prod' || S.app==='stock' || S.app==='compta' || S.app==='expe' || S.app==='devis');
   document.body.classList.toggle('mysifa-app-prod', S.app==='prod');
@@ -11199,6 +11243,7 @@ function render(){
   // arme les IntersectionObserver pour mo-reveal et data-count-to, et place
   // l'indicateur de navigation glissant. No-op si window.Motion absent.
   try{ if(window.Motion) window.Motion.scan(document); }catch(_){}
+  try{ __restoreScroll(__keepScroll); }catch(_){}
 }
 
 async function nav(){
