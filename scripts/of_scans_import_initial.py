@@ -34,6 +34,9 @@ def main() -> int:
                     help="S'arreter apres N fichiers (reprise par tranches)")
     ap.add_argument("--pause", type=float, default=0.0,
                     help="Secondes entre deux envois (menage le reseau)")
+    ap.add_argument("--annee-min", type=int, default=2026,
+                    help="Ignorer les sous-dossiers d'annee anterieurs "
+                         "(0 pour tout reprendre)")
     args = ap.parse_args()
 
     if not args.simulation:
@@ -45,7 +48,7 @@ def main() -> int:
 
     bilan = importer(
         args.dossier, args.url, args.cle, args.index,
-        age_min=0, modifie_depuis=0.0,
+        age_min=0, modifie_depuis=0.0, annee_min=args.annee_min,
         simulation=args.simulation, pause=args.pause, max_fichiers=args.max,
     )
     return 1 if bilan["echecs"] else 0

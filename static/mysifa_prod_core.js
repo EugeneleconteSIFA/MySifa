@@ -8078,7 +8078,7 @@ function renderProdKpis(){
       try{ if(window.MySifaGuides) MySifaGuides.autoOpen('myprod-produits'); }catch(e){}
       window.MySifaProduitMemoire.openListe();
     }});
-    if(canAccessOfTab()) tiles.push({icon:'file-text', label:'Scans a rattacher', desc:'OF termines scannes dont le numero n a pas ete lu', go:function(){
+    if(canAccessOfTab()) tiles.push({icon:'file-text', label:'Scans d OF', desc:'Deposer les OF termines scannes et traiter ceux a rattacher', go:function(){
       if(window.MySifaProduitMemoire) window.MySifaProduitMemoire.openRattachement();
       else toast('Module memoire produit indisponible.','error');
     }});
