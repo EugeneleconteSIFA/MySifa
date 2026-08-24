@@ -349,7 +349,8 @@ def materialiser_serie(conn, no_dossier: str, cloture_par: Optional[str] = None)
     return payload
 
 
-def rattraper_series(conn, limit: Optional[int] = None, refaire: bool = False) -> dict:
+def rattraper_series(conn, limit: Optional[int] = None, refaire: bool = False,
+                     offset: int = 0) -> dict:
     """Materialise les series manquantes sur l'historique.
 
     Idempotent : sans `refaire`, ne touche pas aux dossiers deja materialises.
@@ -366,7 +367,10 @@ def rattraper_series(conn, limit: Optional[int] = None, refaire: bool = False) -
         sql += " AND trim(no_dossier) NOT IN (SELECT no_dossier FROM produit_series)"
     sql += " ORDER BY ref"
     if limit:
-        sql += f" LIMIT {int(limit)}"
+        # `offset` sert a avancer par-dessus les dossiers non rattachables : ils
+        # restent candidats a chaque passe (rien ne les retire du lot), et sans
+        # ce decalage un rattrapage par lots boucle indefiniment sur eux.
+        sql += f" LIMIT {int(limit)} OFFSET {max(0, int(offset))}"
 
     refs = [r["ref"] for r in conn.execute(sql).fetchall()]
     faits, sans_produit = 0, []
@@ -554,6 +558,45 @@ def apercu_pour_dossier(conn, no_dossier: str, user_login: Optional[str] = None)
         "nb_savoirs": int(n_savoirs or 0),
         "nb_documents": int(n_docs or 0),
     }
+
+
+def dossiers_non_materialises(conn, ref_produit_norm: str) -> List[str]:
+    """Dossiers de cette reference qui ont tourne mais n'ont pas encore de serie.
+
+    Sert a distinguer deux situations que l'utilisateur ne doit surtout pas
+    confondre : « cette reference n'a jamais tourne » et « elle a tourne, mais
+    le rattrapage n'a pas encore ete lance ». Repondre « aucune donnee » dans
+    le second cas revient a mentir a quelqu'un qui sait qu'il a produit ce
+    produit — et a lui faire douter de l'outil plutot que d'agir.
+    """
+    ref = (ref_produit_norm or "").strip()
+    if not ref:
+        return []
+    pe_cols = _cols(conn, "planning_entries")
+    if "ref_produit_norm" not in pe_cols:
+        return []
+    pd_cols = _cols(conn, "production_data")
+    where_pd = "pd.no_dossier = pe.reference AND pd.operation_code = '89'"
+    if "est_annule" in pd_cols:
+        where_pd += " AND COALESCE(pd.est_annule,0) = 0"
+    base = f"""SELECT DISTINCT pe.reference AS no_dossier
+               FROM planning_entries pe
+               WHERE {{cle}}
+                 AND EXISTS (SELECT 1 FROM production_data pd WHERE {where_pd})
+                 AND pe.reference NOT IN (SELECT no_dossier FROM produit_series)
+               ORDER BY pe.reference"""
+    try:
+        # `norm_ref_produit` est enregistree sur chaque connexion (elle alimente
+        # les triggers). L'inclure rattrape les dossiers dont la colonne
+        # normalisee est restee vide — sinon un backfill jamais lance donne le
+        # meme resultat qu'une reference qui n'a jamais tourne.
+        rows = conn.execute(
+            base.format(cle="(pe.ref_produit_norm = ? OR norm_ref_produit(pe.ref_produit) = ?)"),
+            (ref, ref),
+        ).fetchall()
+    except Exception:
+        rows = conn.execute(base.format(cle="pe.ref_produit_norm = ?"), (ref,)).fetchall()
+    return [r["no_dossier"] for r in rows]
 
 
 def taux_rattachement(conn) -> dict:

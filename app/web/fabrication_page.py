@@ -1084,7 +1084,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.5"></script>
 <!-- Memoire produit : fiche par reference produit, partagee avec MyProd -->
-<script src="/static/mysifa_produit_memoire.js?v=1.0"></script>
+<script src="/static/mysifa_produit_memoire.js?v=1.1"></script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
