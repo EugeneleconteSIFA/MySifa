@@ -202,6 +202,6 @@ PRICING_SHELL = r"""<!DOCTYPE html>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <script src="/static/pricing_app.js?v=__ASSETS__" defer></script>
 <script src="/static/mysifa_impersonate.js"></script>
-<script src="/static/mysifa_cal_rappel.js?v=1"></script>
+<script src="/static/mysifa_cal_rappel.js?v=2"></script>
 </body>
 </html>"""

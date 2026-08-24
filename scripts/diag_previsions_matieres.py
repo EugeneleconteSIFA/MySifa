@@ -272,6 +272,152 @@ def diag_metrage(conn):
     print("  restreint la calibration en volume aux années bien renseignées.")
 
 
+# ── 5. Qui documente les mois passés ? ────────────────────────────────
+#
+# La vue Tendance affiche douze mois révolus. Deux sources peuvent les
+# documenter : les dossiers encore présents au planning, et les OF scannés
+# qu'aucun dossier ne porte plus. Quand les deux sont muettes, le mois est
+# hachuré — un trou, pas un zéro. Quand elles parlent mais que le besoin
+# n'est pas chiffrable, le mois s'affiche à plat, ce qui se lit à tort comme
+# une activité nulle. Cette section distingue les deux cas, mois par mois.
+
+def _mois_de(s):
+    """'2026-03-14…' ou '14/03/2026' → '2026-03'. None si illisible."""
+    s = str(s or "").strip()
+    if len(s) >= 7 and s[4] == "-" and s[:4].isdigit() and s[5:7].isdigit():
+        return s[:7]
+    # Formats français d'Access : JJ/MM/AAAA ou JJ-MM-AAAA.
+    for sep in ("/", "-"):
+        p = s.split(" ")[0].split(sep)
+        if len(p) == 3 and len(p[2]) == 4 and p[2].isdigit() and p[1].isdigit():
+            return f"{int(p[2]):04d}-{int(p[1]):02d}"
+    return None
+
+
+def _fenetre_mois(n_passes=12, n_futurs=5):
+    auj = date.today()
+    an, mo = auj.year, auj.month - n_passes
+    an += (mo - 1) // 12
+    mo = (mo - 1) % 12 + 1
+    out = []
+    for _ in range(n_passes + 1 + n_futurs):
+        out.append(f"{an:04d}-{mo:02d}")
+        mo += 1
+        if mo > 12:
+            mo, an = 1, an + 1
+    return out
+
+
+def diag_sources_passe(conn):
+    _titre("5. Vue Tendance — qui documente chaque mois de la fenêtre ?")
+
+    try:
+        from app.services.fiche_ref_parser import normalize_ref_produit
+    except Exception:
+        normalize_ref_produit = None
+        print("  (fiche_ref_parser indisponible : le rapprochement OF↔fiche")
+        print("   ne sera pas mesuré — lancer le script depuis la racine du projet.)\n")
+
+    # Les clés de fiche technique, telles que `_load_dossiers` les indexe.
+    cles_fiches = set()
+    for r in conn.execute(
+        "SELECT ref_produit_norm, reference FROM fiches_techniques"
+    ).fetchall():
+        n = (r["ref_produit_norm"] or "").strip()
+        cles_fiches.add(n if n else (r["reference"] or "").strip().lower())
+    cles_fiches.discard("")
+
+    fenetre = _fenetre_mois()
+    courant = f"{date.today().year:04d}-{date.today().month:02d}"
+
+    # ── Source A : le planning, tous statuts ──
+    pe_par_mois = defaultdict(lambda: {"n": 0, "chiffrable": 0})
+    for r in conn.execute(
+        """SELECT pe.date_livraison, pe.planned_end, pe.planned_start,
+                  COALESCE(oi.metrage, 0)        AS metrage,
+                  COALESCE(oi.qte_etiquettes, 0) AS qte
+           FROM planning_entries pe
+           LEFT JOIN of_imports oi ON oi.id = pe.of_import_id"""
+    ).fetchall():
+        m = (_mois_de(r["date_livraison"]) or _mois_de(r["planned_end"])
+             or _mois_de(r["planned_start"]))
+        if not m:
+            continue
+        c = pe_par_mois[m]
+        c["n"] += 1
+        if r["metrage"] > 0 or r["qte"] > 0:
+            c["chiffrable"] += 1
+
+    # ── Source B : les OF qu'aucun dossier du planning ne porte ──
+    of_par_mois = defaultdict(lambda: {"n": 0, "fiche": 0, "chiffrable": 0})
+    of_total = of_orph = of_sans_date = 0
+    for r in conn.execute(
+        """SELECT oi.id, oi.reference, oi.delai_client, oi.date_creation,
+                  COALESCE(oi.metrage, 0)        AS metrage,
+                  COALESCE(oi.qte_etiquettes, 0) AS qte,
+                  (SELECT COUNT(*) FROM planning_entries pe
+                    WHERE pe.of_import_id = oi.id) AS n_pe
+           FROM of_imports oi"""
+    ).fetchall():
+        of_total += 1
+        if r["n_pe"]:
+            continue  # porté par le planning : compté en source A, pas ici
+        of_orph += 1
+        m = _mois_de(r["delai_client"]) or _mois_de(r["date_creation"])
+        if not m:
+            of_sans_date += 1
+            continue
+        c = of_par_mois[m]
+        c["n"] += 1
+        if normalize_ref_produit:
+            k = normalize_ref_produit(r["reference"]) \
+                or (r["reference"] or "").strip().lower()
+            if k in cles_fiches:
+                c["fiche"] += 1
+        if r["metrage"] > 0 or r["qte"] > 0:
+            c["chiffrable"] += 1
+
+    print(f"  {of_total} OF scannés au total, dont {of_orph} qu'aucun dossier du")
+    print(f"  planning ne porte ({of_sans_date} sans date exploitable).\n")
+
+    print("   mois      PLANNING            OF ORPHELINS                  verdict")
+    print("             dossiers chiffr.    OF   fiche  chiffr.")
+    print("  ──────────────────────────────────────────────────────────────────────")
+    trous = plats = 0
+    for m in fenetre:
+        a = pe_par_mois.get(m, {"n": 0, "chiffrable": 0})
+        b = of_par_mois.get(m, {"n": 0, "fiche": 0, "chiffrable": 0})
+        chiffrable = a["chiffrable"] + min(b["fiche"], b["chiffrable"])
+        if a["n"] + b["n"] == 0:
+            verdict = "TROU — hachuré à l'écran"
+            trous += 1
+        elif chiffrable == 0:
+            verdict = "PLAT — des dossiers, aucun chiffre"
+            plats += 1
+        elif chiffrable < (a["n"] + b["n"]) * 0.5:
+            verdict = "partiel — moins de la moitié chiffrée"
+        else:
+            verdict = "ok"
+        marque = " <" if m == courant else "  "
+        print(f"  {m}{marque} {a['n']:7} {a['chiffrable']:7}   {b['n']:5} {b['fiche']:6} "
+              f"{b['chiffrable']:7}   {verdict}")
+
+    print()
+    if trous:
+        print(f"  {trous} mois sans aucune source. Si ce sont des mois anciens, c'est")
+        print("  attendu : ni le planning ni les OF ne remontent aussi loin.")
+    if plats:
+        print(f"  {plats} mois documentés mais non chiffrables — c'est CE cas qui")
+        print("  fabrique une courbe à plat qu'on lira comme une activité nulle.")
+    if normalize_ref_produit:
+        tot_of = sum(c["n"] for c in of_par_mois.values())
+        tot_fi = sum(c["fiche"] for c in of_par_mois.values())
+        print(f"\n  Rapprochement OF orphelin ↔ fiche technique : "
+              f"{tot_fi}/{tot_of} ({_pct(tot_fi, tot_of).strip()}).")
+        print("  Sans fiche, l'OF ne produit AUCUN besoin : c'est le point de")
+        print("  rupture le plus probable si les mois passés sortent à plat.")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -294,6 +440,10 @@ def main():
         calib = None
     diag_references(conn)
     diag_metrage(conn)
+    try:
+        diag_sources_passe(conn)
+    except Exception as exc:
+        print(f"\n5. Sources des mois passés — impossible sur cette base : {exc}")
 
     _titre("Verdict")
     if not calib:

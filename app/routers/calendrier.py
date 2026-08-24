@@ -549,6 +549,49 @@ def _quand_lisible(debut: str, fin: str, all_day: bool) -> str:
     return f"{jour} de {d.strftime('%H:%M')}" + (f" à {fin_txt}" if fin_txt else "")
 
 
+MOIS_COURT_FR = [
+    "janv.", "févr.", "mars", "avril", "mai", "juin",
+    "juil.", "août", "sept.", "oct.", "nov.", "déc.",
+]
+
+
+def _duree_lisible(debut: str, fin: str) -> str:
+    d = _parse_planned_dt(debut)
+    f = _parse_planned_dt(fin)
+    if not d or not f or f <= d:
+        return ""
+    minutes = int((f - d).total_seconds() // 60)
+    h, m = divmod(minutes, 60)
+    if h and m:
+        return f"{h} h {m:02d}"
+    if h:
+        return f"{h} h"
+    return f"{m} min"
+
+
+def _creneau_pour_email(debut: str, fin: str, all_day: bool) -> dict:
+    """Les morceaux de date affichés dans le pavé de l'e-mail."""
+    d = _parse_planned_dt(debut)
+    f = _parse_planned_dt(fin)
+    if not d:
+        return {
+            "jour_num": "?",
+            "mois_court": "",
+            "jour_semaine": str(debut or ""),
+            "heures": "",
+            "duree": "",
+        }
+    return {
+        "jour_num": f"{d.day:02d}",
+        "mois_court": MOIS_COURT_FR[d.month - 1],
+        "jour_semaine": f"{JOURS_FR[d.weekday()]} {d.day} {MOIS_FR[d.month - 1]} {d.year}",
+        "heures": "Journée entière"
+        if all_day
+        else (d.strftime("%H:%M") + (f" → {f.strftime('%H:%M')}" if f else "")),
+        "duree": "" if all_day else _duree_lisible(debut, fin),
+    }
+
+
 def _envoyer_invitation_email(
     *,
     destinataires: list[dict],
@@ -561,79 +604,50 @@ def _envoyer_invitation_email(
     lieu: str,
     visio: str,
     note: str,
+    participants: str = "",
     annulation: bool = False,
 ) -> None:
     """E-mail d'invitation avec le .ics en pièce jointe.
 
     Best-effort de bout en bout : une réunion se crée même si le serveur mail
-    est muet. Chaque destinataire reçoit son propre lien de réponse quand il
-    est externe (jeton), le lien du calendrier quand il a un compte.
+    est muet. Un invité externe reçoit ses trois boutons de réponse (son jeton),
+    un invité interne le lien du calendrier.
     """
     if not destinataires:
         return
     try:
-        from app.services.email_service import email_mysifa_layout, send_email
+        from app.services.email_service import email_invitation_reunion, send_email
     except Exception:
         return
-    from html import escape as _e
-
-    quand = _quand_lisible(debut, fin, all_day)
-    lignes = [f"<p style=\"margin:0 0 14px\"><strong>{_e(titre)}</strong></p>"]
-    detail = [("Quand", _e(quand)), ("Organisateur", _e(organisateur))]
-    if lieu:
-        detail.append(("Lieu", _e(lieu)))
-    if visio:
-        detail.append(
-            ("Visioconférence", f'<a href="{_e(visio)}">{_e(visio)}</a>')
-        )
-    lignes.append(
-        "<table style=\"width:100%;border-collapse:collapse;font-size:13px\">"
-        + "".join(
-            "<tr>"
-            f"<td style=\"padding:6px 0;color:#64748b;width:150px\">{k}</td>"
-            f"<td style=\"padding:6px 0;color:#0f172a\">{v}</td></tr>"
-            for k, v in detail
-        )
-        + "</table>"
-    )
-    if note:
-        lignes.append(
-            "<p style=\"margin:14px 0 0;color:#475569;white-space:pre-line\">"
-            f"{_e(note)}</p>"
-        )
-    if annulation:
-        lignes.insert(
-            0,
-            "<p style=\"margin:0 0 14px;color:#b91c1c;font-weight:700\">"
-            "Cette réunion est annulée.</p>",
-        )
-    corps = "".join(lignes)
-    sujet = ("Réunion annulée — " if annulation else "Invitation — ") + titre
+    creneau = _creneau_pour_email(debut, fin, all_day)
     ics = build_ics_calendar(
         [ev_ics],
         nom="MySifa",
         methode="CANCEL" if annulation else "REQUEST",
     ).encode("utf-8")
+    base = public_base_url()
     for dest in destinataires:
         mail = str(dest.get("email") or "").strip()
         if not mail:
             continue
         jeton = str(dest.get("jeton") or "").strip()
-        href = (
-            f"{public_base_url()}/calendrier/invitation/{jeton}"
-            if jeton
-            else f"{public_base_url()}/calendrier"
+        sujet, corps = email_invitation_reunion(
+            titre=titre,
+            lieu=lieu,
+            visio=visio,
+            organisateur=organisateur,
+            participants=participants,
+            note=note,
+            lien_app=f"{base}/calendrier",
+            lien_reponse=f"{base}/calendrier/invitation/{jeton}" if jeton else "",
+            annulation=annulation,
+            **creneau,
         )
         try:
             send_email(
                 mail,
                 sujet,
-                email_mysifa_layout(
-                    subtitle="MyCalendrier",
-                    body_html=corps,
-                    cta_href=None if annulation else href,
-                    cta_label=None if annulation else "Répondre à l'invitation",
-                ),
+                corps,
                 attachments=[
                     {
                         "filename": "invitation.ics",
@@ -702,28 +716,34 @@ def _prevenir_annulation(conn, event_ids: list[int]) -> None:
     titre = (premier["titre"] or "").strip() or "Sans titre"
     suffixe = f" ({len(evs)} créneaux)" if len(evs) > 1 else ""
     try:
-        from app.services.email_service import email_mysifa_layout, send_email
+        from app.services.email_service import email_invitation_reunion, send_email
     except Exception:
         return
-    quand = _quand_lisible(
+    creneau = _creneau_pour_email(
         str(premier["date_debut"] or ""),
         str(premier["date_fin"] or ""),
         bool(int(premier["all_day"] or 0)),
     )
-    from html import escape as _e
-
-    corps = (
-        f"<p style=\"margin:0 0 14px\"><strong>{_e(titre)}</strong>{suffixe}</p>"
-        f"<p style=\"margin:0;color:#b91c1c;font-weight:700\">Cette réunion est annulée.</p>"
-        f"<p style=\"margin:14px 0 0;color:#475569\">Créneau initial : {_e(quand)}</p>"
+    noms = ", ".join(
+        p["nom"] for p in internes.get(int(premier["id"]), []) if p.get("nom")
+    )
+    sujet, corps = email_invitation_reunion(
+        titre=titre + suffixe,
+        lieu=premier["lieu"] or "",
+        visio=premier["visio"] or "",
+        organisateur=org_nom,
+        participants=noms,
+        note="",
+        annulation=True,
+        **creneau,
     )
     ics = build_ics_calendar(evs, nom="MySifa", methode="CANCEL").encode("utf-8")
     for dest in destinataires.values():
         try:
             send_email(
                 dest["email"],
-                f"Réunion annulée — {titre}",
-                email_mysifa_layout(subtitle="MyCalendrier", body_html=corps),
+                sujet,
+                corps,
                 attachments=[
                     {
                         "filename": "annulation.ics",
@@ -1729,6 +1749,10 @@ def create_perso_event(request: Request, body: PersoEventCreate):
             lieu=lieu or "",
             visio=visio or "",
             note=note or "",
+            participants=", ".join(
+                p.get("nom") or p.get("email") or ""
+                for p in (invites + invites_ext)
+            ),
         )
     if serie_id:
         meta["serie_id"] = serie_id
@@ -2083,6 +2107,10 @@ def update_perso_event(request: Request, event_id: int, body: PersoEventUpdate):
             lieu=lieu or "",
             visio=visio or "",
             note=note or "",
+            participants=", ".join(
+                p.get("nom") or p.get("email") or ""
+                for p in (invites + invites_ext)
+            ),
         )
     return {
         "id": f"perso-{event_id}",
@@ -2465,12 +2493,31 @@ def _invitation_contexte(conn, jeton: str) -> dict:
 
 
 @router.get("/calendrier/invitation/{jeton}", response_class=HTMLResponse)
-def page_invitation_externe(jeton: str):
-    """Page publique — l'invité externe n'a pas de compte MySifa."""
+def page_invitation_externe(
+    jeton: str,
+    reponse: str = Query("", description="Réponse en un clic depuis l'e-mail"),
+):
+    """Page publique — l'invité externe n'a pas de compte MySifa.
+
+    `?reponse=accepte` enregistre la réponse à l'ouverture : c'est ce que font
+    les trois boutons de l'e-mail d'invitation, pour qu'un clic suffise.
+    """
     from app.web.calendrier_invitation_page import page_invitation
 
+    tok = str(jeton or "").strip()
+    statut = str(reponse or "").strip()
     with get_db() as conn:
-        ctx = _invitation_contexte(conn, str(jeton or "").strip())
+        ctx = _invitation_contexte(conn, tok)
+        if statut in STATUTS_PARTICIPANT and not ctx["annule"]:
+            conn.execute(
+                """UPDATE cal_event_invites_ext
+                      SET statut = ?,
+                          repondu_le = strftime('%Y-%m-%dT%H:%M:%S','now','localtime')
+                    WHERE jeton = ?""",
+                (statut, tok),
+            )
+            conn.commit()
+            ctx["statut"] = statut
     return HTMLResponse(page_invitation(ctx))
 
 

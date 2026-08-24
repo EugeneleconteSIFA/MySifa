@@ -120,17 +120,17 @@
       '.pmem-x:hover{color:var(--text);border-color:var(--accent)}',
       '.pmem-tabs{display:flex;gap:6px;padding:12px 22px 0;flex-shrink:0;flex-wrap:wrap}',
       '.pmem-tab{background:var(--bg);border:1px solid var(--border);color:var(--text2);',
-      'border-radius:10px 10px 0 0;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer;',
+      'border-radius:10px 10px 0 0;padding:10px 17px;font-size:14px;font-weight:700;cursor:pointer;',
       'font-family:inherit;border-bottom-color:transparent}',
       '.pmem-tab:hover{color:var(--text);border-color:var(--accent)}',
       '.pmem-tab.is-on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}',
       '.pmem-body{padding:18px 22px 22px;overflow-y:auto;flex:1}',
-      '.pmem-empty{text-align:center;color:var(--muted);font-size:13px;padding:36px 12px}',
+      '.pmem-empty{text-align:center;color:var(--muted);font-size:14px;padding:40px 12px}',
       '.pmem-card{background:var(--bg);border:1px solid var(--border);border-radius:12px;',
       'padding:14px 16px;margin-bottom:10px}',
       '.pmem-card-hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}',
-      '.pmem-card-date{font-size:13px;font-weight:800;color:var(--text)}',
-      '.pmem-card-meta{font-size:12px;color:var(--muted)}',
+      '.pmem-card-date{font-size:14px;font-weight:800;color:var(--text)}',
+      '.pmem-card-meta{font-size:13px;color:var(--muted)}',
       '.pmem-kpis{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:4px}',
       // Deux colonnes sans filet ni fond : ce qui les separe est le blanc, pas
       // un trait. Une bordure ferait lire deux blocs distincts la ou il s'agit
@@ -138,16 +138,16 @@
       '.pmem-serie{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);',
       'gap:14px 30px;margin-top:2px}',
       '@media(max-width:760px){.pmem-serie{grid-template-columns:1fr;gap:16px}}',
-      '.pmem-col-lbl{font-size:10px;font-weight:800;text-transform:uppercase;',
+      '.pmem-col-lbl{font-size:11px;font-weight:800;text-transform:uppercase;',
       'letter-spacing:.6px;color:var(--muted);margin-bottom:9px}',
       '.pmem-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));',
       'gap:11px 18px}',
-      '.pmem-rien{font-size:12px;color:var(--muted);font-style:italic}',
+      '.pmem-rien{font-size:13px;color:var(--muted);font-style:italic}',
       '.pmem-kpi{display:flex;flex-direction:column;gap:1px}',
-      '.pmem-kpi-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}',
-      '.pmem-kpi-val{font-size:14px;font-weight:800;color:var(--text)}',
+      '.pmem-kpi-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}',
+      '.pmem-kpi-val{font-size:16px;font-weight:800;color:var(--text)}',
       '.pmem-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}',
-      '.pmem-chip{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;',
+      '.pmem-chip{font-size:12px;font-weight:700;padding:4px 11px;border-radius:20px;',
       'background:var(--card);border:1px solid var(--border);color:var(--text2)}',
       '.pmem-chip.is-warn{border-color:var(--warn);color:var(--warn)}',
       '.pmem-chip.is-accent{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}',
@@ -155,30 +155,41 @@
       'border-radius:10px;padding:12px 14px;margin-bottom:10px}',
       '.pmem-note.is-epingle{border-left-color:var(--warn)}',
       '.pmem-note.is-obsolete{opacity:.55;border-left-color:var(--muted)}',
-      '.pmem-note-txt{font-size:13px;line-height:1.55;color:var(--text);white-space:pre-wrap;word-break:break-word}',
-      '.pmem-note-ft{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:9px;',
-      'font-size:11px;color:var(--muted)}',
+      '.pmem-note-txt{font-size:14px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-word}',
+      '.pmem-note-ft{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;',
+      'font-size:12px;color:var(--muted)}',
       '.pmem-btn{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:10px;',
-      'padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s}',
+      'padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s}',
       '.pmem-btn:hover{border-color:var(--accent);color:var(--accent)}',
-      '.pmem-btn-sm{padding:5px 10px;font-size:11px;border-radius:8px}',
+      '.pmem-btn-sm{padding:6px 12px;font-size:12px;border-radius:8px}',
       '.pmem-btn-accent{background:var(--accent);border-color:var(--accent);color:var(--bg)}',
       '.pmem-btn-accent:hover{filter:brightness(1.06);color:var(--bg)}',
+      // Ouvrir un document est une action frequente et sans risque : elle se
+      // signale par une teinte, pas par un aplat. Un aplat plein a chaque
+      // ligne d'un tableau de 461 entrees fait une colonne de pastilles
+      // bleues, et plus rien ne ressort.
+      '.pmem-btn-doc{background:var(--accent-bg);border-color:transparent;color:var(--accent);',
+      'font-weight:800}',
+      '.pmem-btn-doc:hover{border-color:var(--accent);color:var(--accent)}',
       '.pmem-btn.is-on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}',
       '.pmem-form{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px}',
       '.pmem-form textarea,.pmem-form select,.pmem-input{width:100%;box-sizing:border-box;background:var(--card);',
-      'border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;',
+      'border:1px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-size:14px;',
       'font-family:inherit;outline:none;transition:border-color .15s}',
       '.pmem-form textarea:focus,.pmem-form select:focus,.pmem-input:focus{border-color:var(--accent)}',
       '.pmem-form-row{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}',
       '.pmem-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;',
       'color:var(--muted);display:block;margin-bottom:5px}',
-      '.pmem-tbl{width:100%;border-collapse:collapse;font-size:13px}',
-      '.pmem-tbl th{text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;',
-      'letter-spacing:.5px;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--border)}',
-      '.pmem-tbl td{padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text2)}',
-      '.pmem-tbl tr{cursor:pointer}',
+      '.pmem-tablecard{background:var(--card);border:1px solid var(--border);border-radius:12px;',
+      'overflow:hidden}',
+      '.pmem-tbl{width:100%;border-collapse:collapse;font-size:14px;background:var(--card)}',
+      '.pmem-tbl th{text-align:left;font-size:11px;font-weight:800;text-transform:uppercase;',
+      'letter-spacing:.5px;color:var(--muted);padding:11px 14px;background:var(--card);',
+      'border-bottom:1px solid var(--border)}',
+      '.pmem-tbl td{padding:12px 14px;border-bottom:1px solid var(--border);color:var(--text2)}',
+      '.pmem-tbl tbody tr:last-child td{border-bottom:none}',
       '.pmem-tbl tbody tr:hover td{background:var(--accent-bg);color:var(--text)}',
+      '.pmem-tbl .pmem-chip{font-size:12px}',
       '.pmem-scroll{overflow-x:auto}',
       '.pmem-split{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:14px}',
       '@media(max-width:820px){.pmem-split{grid-template-columns:1fr}}',
@@ -437,7 +448,7 @@
         entete.push(el('span', { style: 'flex:1' }));
         docs.forEach(function (doc) {
           entete.push(el('button', {
-            type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-accent',
+            type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-doc',
             // L'en-tete aligne sur la ligne de base : un bouton s'y poserait
             // de travers a cote du texte.
             style: 'align-self:center',
@@ -620,7 +631,7 @@
       }
       enfants.push(el('div', { className: 'pmem-chips' }, [
         el('button', {
-          type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-accent',
+          type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-doc',
           onclick: function () { window.open('/api/produits/documents/' + doc.id + '/pdf', '_blank'); },
           text: 'Ouvrir le scan',
         }),
@@ -752,12 +763,13 @@
         el('td', { text: (p.nb_savoirs || 0) + ' note' + ((p.nb_savoirs || 0) > 1 ? 's' : '') }),
         el('td', { text: (p.nb_documents || 0) + ' scan' + ((p.nb_documents || 0) > 1 ? 's' : '') }),
       ]);
+      tr.style.cursor = 'pointer';
       tr.addEventListener('click', function () { openFiche(p.ref_produit_norm); });
       return tr;
     });
 
     var table = rows.length
-      ? el('div', { className: 'pmem-scroll' }, [
+      ? el('div', { className: 'pmem-tablecard pmem-scroll' }, [
           el('table', { className: 'pmem-tbl' }, [
             el('thead', {}, [el('tr', {}, ['Reference', 'Designation', 'Productions', 'Derniere', 'Machines', 'Notes', 'Scans']
               .map(function (h) { return el('th', { text: h }); }))]),
@@ -980,7 +992,7 @@
       ]);
       var tdAct = el('td', {});
       tdAct.appendChild(el('button', {
-        type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-accent', text: 'Ouvrir',
+        type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-doc', text: 'Ouvrir',
         onclick: function (e) {
           e.stopPropagation();
           window.open('/api/produits/documents/' + d.id + '/pdf', '_blank');
@@ -991,7 +1003,7 @@
       return tr;
     });
 
-    var table = el('div', { className: 'pmem-scroll' }, [
+    var table = el('div', { className: 'pmem-tablecard pmem-scroll' }, [
       el('table', { className: 'pmem-tbl' }, [
         el('thead', {}, [el('tr', {},
           ['Date', 'OF', 'Produit', 'Dossier', 'Production', 'Fichier', '']
