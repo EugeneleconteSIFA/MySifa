@@ -188,6 +188,23 @@ check("deux series", taux["series_materialisees"], 2)
 check("taux a 100 %", taux["taux"], 1.0)
 check("une reference multi-series", taux["references_multi_series"], 1)
 
+print("--- diagnostic : reference qui a tourne mais pas encore reprise ---")
+with dbmod.get_db() as conn:
+    conn.execute("DELETE FROM produit_series")
+    conn.commit()
+    manquants = pm.dossiers_non_materialises(conn, REF)
+check("les deux dossiers sont vus comme a reprendre", sorted(manquants), ["D-1001", "D-1002"])
+
+print("--- rattrapage par lots (limit + offset) ---")
+with dbmod.get_db() as conn:
+    lot1 = pm.rattraper_series(conn, limit=1, offset=0)
+    lot2 = pm.rattraper_series(conn, limit=1, offset=0)
+check("premier lot", lot1["materialisees"], 1)
+check("second lot", lot2["materialisees"], 1)
+with dbmod.get_db() as conn:
+    check("plus rien a reprendre", pm.dossiers_non_materialises(conn, REF), [])
+    check("les deux series sont la", pm.taux_rattachement(conn)["series_materialisees"], 2)
+
 print("--- normalisation de reference ---")
 check("variante machine ignoree", pm._norm("1013/0068 - COHESIO 2 - L570"), "1013/0068")
 check("tiret tolere", pm._norm("1315-0004"), "1315/0004")
