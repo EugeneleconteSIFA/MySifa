@@ -2101,7 +2101,7 @@ document.getElementById('btn-logout').onclick=async()=>{
 })();
 window.addEventListener('hashchange',function(){try{showView(readView(),{silent:true});}catch(e){}});
 </script>
-<script src="/static/mysifa_cal_rappel.js?v=1"></script>
+<script src="/static/mysifa_cal_rappel.js?v=2"></script>
 </body>
 </html>
 """

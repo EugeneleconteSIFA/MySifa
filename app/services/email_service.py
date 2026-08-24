@@ -1275,3 +1275,160 @@ def send_email(
     except Exception as exc:
         logger.error("Echec envoi email: %s", exc, exc_info=True)
         return False
+
+
+# ---------------------------------------------------------------------------
+# MyCalendrier — invitation à une réunion
+# ---------------------------------------------------------------------------
+
+
+def _bouton_reponse(href: str, libelle: str, fond: str, bord: str, texte: str) -> str:
+    """Un bouton de réponse, en table : Outlook ignore un <a> qui fait le malin."""
+    return (
+        '<td align="center" style="padding:0 4px">'
+        f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
+        f'<tr><td align="center" bgcolor="{fond}" '
+        f'style="background:{fond};border:1px solid {bord};border-radius:9px">'
+        f'<a href="{_esc(href)}" style="display:block;padding:12px 6px;color:{texte};'
+        "font-size:13px;font-weight:700;text-decoration:none;"
+        f'font-family:\'Segoe UI\',Arial,sans-serif">{_esc(libelle)}</a>'
+        "</td></tr></table></td>"
+    )
+
+
+def email_invitation_reunion(
+    *,
+    titre: str,
+    jour_num: str,
+    mois_court: str,
+    jour_semaine: str,
+    heures: str,
+    duree: str = "",
+    lieu: str = "",
+    visio: str = "",
+    organisateur: str = "",
+    participants: str = "",
+    note: str = "",
+    lien_app: str = "",
+    lien_reponse: str = "",
+    annulation: bool = False,
+) -> tuple[str, str]:
+    """Sujet + corps HTML d'une invitation (ou d'une annulation) de réunion.
+
+    Un invité externe reçoit trois boutons de réponse pointant sur son lien
+    signé : accepter depuis le mail, sans compte MySifa ni détour. Un invité
+    interne reçoit le bouton « Ouvrir dans MySifa » du gabarit.
+
+    Tout est en tables : le gabarit `email_mysifa_layout_light` est le seul qui
+    tienne dans Outlook — la version `email_mysifa_layout` s'étalait sur toute
+    la largeur de la fenêtre et transformait le bouton en texte surligné.
+    """
+    accent = "#dc2626" if annulation else "#0891b2"
+    fond_pave = "#fef2f2" if annulation else "#f0f9ff"
+    bord_pave = "#fecaca" if annulation else "#bae6fd"
+
+    bandeau = ""
+    if annulation:
+        bandeau = (
+            '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
+            'style="margin:0 0 20px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px">'
+            '<tr><td style="padding:13px 16px;font-size:13px;font-weight:700;color:#b91c1c">'
+            "Cette réunion est annulée — vous pouvez retirer le créneau de votre agenda."
+            "</td></tr></table>"
+        )
+
+    # Pavé date : le quantième en gros à gauche, l'horaire à droite.
+    pave = f"""
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+      style="margin:0 0 22px;background:{fond_pave};border:1px solid {bord_pave};border-radius:12px">
+      <tr>
+        <td width="88" align="center" valign="middle" style="padding:16px 10px 16px 16px">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="72"
+            bgcolor="{accent}" style="background:{accent};border-radius:10px">
+            <tr><td align="center" style="padding:9px 4px 3px;font-size:24px;line-height:1;
+              font-weight:800;color:#ffffff;font-family:'Segoe UI',Arial,sans-serif">{_esc(jour_num)}</td></tr>
+            <tr><td align="center" style="padding:0 4px 9px;font-size:11px;line-height:1.2;
+              font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:.6px;
+              font-family:'Segoe UI',Arial,sans-serif">{_esc(mois_court)}</td></tr>
+          </table>
+        </td>
+        <td valign="middle" style="padding:16px 16px 16px 6px">
+          <div style="font-size:14px;font-weight:800;color:#0f172a">{_esc(jour_semaine[:1].upper() + jour_semaine[1:])}</div>
+          <div style="margin-top:3px;font-size:15px;font-weight:700;color:{accent}">{_esc(heures)}</div>
+          {f'<div style="margin-top:3px;font-size:12px;color:#64748b">{_esc(duree)}</div>' if duree else ''}
+        </td>
+      </tr>
+    </table>"""
+
+    lignes = []
+    for label, valeur, brut in (
+        ("Lieu", _esc(lieu), False),
+        (
+            "Visioconférence",
+            f'<a href="{_esc(visio)}" style="color:#0891b2;text-decoration:none">{_esc(visio)}</a>',
+            True,
+        ),
+        ("Organisateur", _esc(organisateur), False),
+        ("Participants", _esc(participants), False),
+    ):
+        source = visio if brut else valeur
+        if not source:
+            continue
+        lignes.append(
+            '<tr><td style="padding:9px 0;font-size:12px;color:#64748b;width:140px;'
+            f'vertical-align:top">{label}</td>'
+            '<td style="padding:9px 0;font-size:13px;color:#0f172a;font-weight:600">'
+            f"{valeur}</td></tr>"
+        )
+    detail = (
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
+        f'style="margin:0 0 6px;border-collapse:collapse">{"".join(lignes)}</table>'
+        if lignes
+        else ""
+    )
+
+    note_bloc = ""
+    if note:
+        note_bloc = (
+            '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
+            'style="margin:18px 0 0;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px">'
+            '<tr><td style="padding:14px 16px;font-size:13px;color:#475569;line-height:1.6;'
+            f'white-space:pre-line">{_esc(note)}</td></tr></table>'
+        )
+
+    rsvp = ""
+    if lien_reponse and not annulation:
+        sep = "&" if "?" in lien_reponse else "?"
+        rsvp = f"""
+    <p style="margin:26px 0 10px;font-size:12px;font-weight:700;color:#64748b;
+      text-transform:uppercase;letter-spacing:.55px">Votre réponse</p>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+      <tr>
+        {_bouton_reponse(f"{lien_reponse}{sep}reponse=accepte", "Accepter", "#0e9f6e", "#0e9f6e", "#ffffff")}
+        {_bouton_reponse(f"{lien_reponse}{sep}reponse=peut_etre", "Peut-être", "#fffffe", "#cbd5e1", "#334155")}
+        {_bouton_reponse(f"{lien_reponse}{sep}reponse=refuse", "Refuser", "#fffffe", "#fca5a5", "#b91c1c")}
+      </tr>
+    </table>
+    <p style="margin:10px 0 0;font-size:11px;color:#94a3b8;text-align:center">
+      Un clic suffit — votre réponse arrive directement dans le calendrier de l'organisateur.
+    </p>"""
+
+    inner = f"""
+    {bandeau}
+    <p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#64748b;
+      text-transform:uppercase;letter-spacing:.55px">{'Réunion annulée' if annulation else 'Vous êtes invité'}</p>
+    <h1 style="margin:0 0 20px;font-size:21px;line-height:1.3;color:#0f172a;font-weight:800">{_esc(titre)}</h1>
+    {pave}
+    {detail}
+    {note_bloc}
+    {rsvp}"""
+
+    sujet = ("Réunion annulée — " if annulation else "Invitation — ") + (titre or "Réunion")
+    corps = email_mysifa_layout_light(
+        subtitle="Calendrier",
+        body_html=inner,
+        cta_href=None if (annulation or lien_reponse) else (lien_app or None),
+        cta_label=None if (annulation or lien_reponse) else "Ouvrir dans MySifa",
+        footer_note="Invitation envoyée depuis MyCalendrier — MySifa",
+    )
+    return sujet, corps
