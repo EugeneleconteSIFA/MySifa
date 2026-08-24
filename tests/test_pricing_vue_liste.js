@@ -10,6 +10,7 @@ process.chdir(path.join(__dirname, '..'));
 const fs = require('fs'), vm = require('vm');
 const src = fs.readFileSync('static/pricing_app.js', 'utf8').replace(/\r\n/g, '\n');
 const css = fs.readFileSync('static/pricing_app.css', 'utf8').replace(/\r\n/g, '\n');
+const api = fs.readFileSync('app/routers/pricing.py', 'utf8').replace(/\r\n/g, '\n');
 
 function extraire(nom) {
   const i = src.indexOf('function ' + nom + '(');
@@ -53,8 +54,8 @@ ctx.S.mystock = [
       {
         id: 90, libelle: '17 g/m²', cout_eur_m2: 0.0885,
         lignes: [
-          { fournisseur_id: 3, fournisseur_nom: 'Coquelle', prix: 4.5, principal: false },
-          { fournisseur_id: 7, fournisseur_nom: 'Meltavis', prix: 4.2, principal: true },
+          { fournisseur_id: 3, fournisseur_nom: 'Coquelle', prix: 4.5, principal: false, cout_eur_m2: 0.0948 },
+          { fournisseur_id: 7, fournisseur_nom: 'Meltavis', prix: 4.2, principal: true, cout_eur_m2: 0.0885 },
         ],
       },
       { id: 91, libelle: '', cout_eur_m2: 0, lignes: [] },
@@ -75,7 +76,8 @@ check('elle garde sa matière', plat[2].m.reference, 'GL80');
 
 console.log('\n--- le prix affiché est celui qui fait foi ---');
 check('principal retenu, pas le premier venu', plat[0].principal.fournisseur_nom, 'Meltavis');
-check('les autres fournisseurs sont comptés', plat[0].autres, 1);
+check('tous les fournisseurs sont là', plat[0].lignes.length, 2);
+check('le principal passe en tête', plat[0].lignes[0].fournisseur_nom, 'Meltavis');
 // Sans principal désigné, on montre quand même un prix plutôt qu'un tiret.
 ctx.S.mystock[0].declinaisons[0].lignes.forEach(l => { l.principal = false; });
 check('à défaut, le premier prix connu', ctx.mystockDeclinaisonsAPlat()[0].principal.fournisseur_nom, 'Coquelle');
@@ -88,7 +90,12 @@ check('le grammage', l0.includes('17 g/m²'), true);
 check('le fournisseur principal', l0.includes('Meltavis'), true);
 check('le prix en vigueur', l0.includes('4,200'), true);
 check('le coût au m², mis en avant', l0.includes('msl-cout') && l0.includes('0,0885'), true);
-check('le compteur des autres fournisseurs', l0.includes('>+1<'), true);
+// Le deuxième fournisseur doit être visible AVEC son coût : c'est tout l'objet
+// de la comparaison. Avant, la vue n'en montrait qu'un.
+check('le second fournisseur est visible', l0.includes('Coquelle'), true);
+check('avec son propre prix', l0.includes('4,500'), true);
+check('et son propre coût', l0.includes('0,0948'), true);
+check('le principal se distingue', (l0.match(/msl-l-main/g) || []).length, 3);
 check('la ligne ouvre la fiche', l0.includes('data-ms-line="90"'), true);
 
 const l1 = ctx.mystockFlatRowHtml(plat[1]);
@@ -144,7 +151,11 @@ check('la référence est la seule élastique', zoneListe.includes('<col>'), tru
 // mangeait la largeur sans rien apprendre. Retirée du tableau, gardée en
 // infobulle — l'information reste à un survol.
 check('plus de colonne Désignation', zoneListe.includes('<th>Désignation</th>'), false);
-check('plus de cellule Désignation', src.includes('class="msl-des"'), false);
+// Sur la ligne à plat elle-même : la classe `msl-des` sert encore ailleurs
+// (fiche tarif fournisseur), on ne la cherche donc pas dans tout le fichier.
+const ligneAPlat = src.slice(src.indexOf('function mystockFlatRowHtml('),
+                             src.indexOf('function renderMystockList('));
+check('plus de cellule Désignation', ligneAPlat.includes('class="msl-des"'), false);
 check('la désignation survit en infobulle',
   l0.includes('class="msl-ref" title="Adhésif enlevable fort"'), true);
 // Autant d'en-têtes que de cellules, autant de <col> que d'en-têtes : une
@@ -154,6 +165,36 @@ check('en-tête et cellules comptent pareil', nbTh, (l0.match(/<td[ >]/g) || [])
 check('autant de <col> que d\'en-têtes', (zoneListe.match(/<col[ >]/g) || []).length, nbTh);
 check('la ligne vide occupe toute la largeur', zoneListe.includes('colspan="7"'), true);
 check('la déclinaison garde son infobulle', src.includes('title="${escAttr(d.libelle)}"'), true);
+
+console.log('\n--- plusieurs fournisseurs sur une même déclinaison ---');
+// Le coût vient du serveur, ligne par ligne : même déclinaison, mêmes réglages,
+// prix de la ligne. Le client ne l'extrapole pas — avec un forfait de transport,
+// le coût ne suit pas le prix proportionnellement.
+check('le serveur chiffre chaque ligne',
+  api.includes('ligne["cout_eur_m2"] = _cout_m2({**base, **ligne}, ligne.get("prix"))'), true);
+check('avec le prix de la ligne', api.includes('{**base, "unit_price": prix}'), true);
+// Et surtout avec le TARIF de la ligne : `{**base, **ligne}` laisse la ligne
+// écraser devise, base de prix, transport et taxes de la déclinaison. Sans ça,
+// on comparerait deux fournisseurs avec le transport d'un seul.
+check('et avec le tarif de son fournisseur', api.includes('{**base, **ligne}'), true);
+check('le client n\'invente aucun coût', /cout_eur_m2\s*[*/]/.test(src), false);
+
+// Vue par référence : chaque ligne fournisseur porte son coût, plus seulement
+// la première.
+check('plus de coût réservé à la première ligne', src.includes('${i === 0 ? cout : ""}'), false);
+check('chaque ligne calcule le sien', src.includes('function coutLigneHtml('), true);
+check('seul le principal ouvre la fiche',
+  /function coutLigneHtml[^]{0,900}if \(l\.principal\)[^]{0,300}data-ms-open/.test(src), true);
+check('les autres s\'affichent en retrait', src.includes('class="ms-cout-alt"'), true);
+check('le retrait a son style', css.includes('.ms-cout-alt{'), true);
+
+console.log('\n--- le badge « réglées » dit ce qu\'il compte ---');
+// Il comptait les fiches ouvertes et enregistrées à la main : une déclinaison
+// pouvait afficher son coût dans le tableau et être annoncée non réglée.
+check('le serveur compte les chiffrées', api.includes('m["nb_chiffrees"] = sum('), true);
+check('sur le même critère que la colonne coût',
+  api.includes('for d in m.get("declinaisons", []) if d.get("cout_eur_m2")'), true);
+check('le badge utilise ce compteur', src.includes('m.nb_chiffrees != null'), true);
 
 console.log(ko === 0 ? '\nTOUT EST VERT' : '\n' + ko + ' ECHEC(S)');
 process.exit(ko === 0 ? 0 : 1);

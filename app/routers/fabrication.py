@@ -857,10 +857,25 @@ def get_session(request: Request, machine_id: int = None):
             dossier["machine_nom"] = machine.get("nom")
             dossier["machine_code"] = machine.get("code")
 
+        # Mémoire produit : l'aperçu commande l'existence du bouton « Historique »
+        # dans Saisieprod. `None` quand la référence n'a jamais été produite —
+        # le bouton n'est alors pas rendu du tout.
+        historique_produit = None
+        if dossier:
+            try:
+                from app.services.produit_memoire import apercu_pour_dossier
+                _ref_dos = (dossier.get("reference") or dossier.get("no_dossier") or "")
+                _ap = apercu_pour_dossier(conn, _ref_dos)
+                if _ap.get("disponible"):
+                    historique_produit = _ap
+            except Exception:
+                historique_produit = None
+
         return {
             "saisies": saisies,
             "etat": etat,
             "dossier": dossier,
+            "historique_produit": historique_produit,
             "last_saisie": saisies[-1] if saisies else None,
             "operateur": operateur,
             "machine": machine,
@@ -1062,11 +1077,27 @@ def get_dossier_en_cours(request: Request):
             ).fetchall()
             precedents = [_hydrate_dossier_row(r, conn) for r in prev_rows]
 
+        # Mémoire produit : le bouton « Historique » de Saisieprod n'existe que
+        # si la référence a déjà été produite. On renvoie donc l'aperçu, jamais
+        # un objet vide « à afficher quand même » — un bouton toujours présent
+        # qui ouvre « aucune donnée » perd sa crédibilité en trois ouvertures.
+        historique = None
+        if dossier:
+            try:
+                from app.services.produit_memoire import apercu_pour_dossier
+                ref_dos = dossier.get("reference") or dossier.get("no_dossier") or ""
+                apercu = apercu_pour_dossier(conn, ref_dos)
+                if apercu.get("disponible"):
+                    historique = apercu
+            except Exception:
+                historique = None
+
         return {
             "dossier": dossier,
             "precedents": precedents,
             "machine": machine,
             "can_search_all": can_search_all,
+            "historique_produit": historique,
         }
 
 
@@ -1609,6 +1640,18 @@ async def create_saisie(request: Request):
 
             except Exception:
                 pass  # Ne jamais bloquer la saisie opérateur
+
+        # ── Mémoire produit : figer la série à la clôture réelle ─────────────
+        # Une production terminée devient une ligne d'historique rattachée à la
+        # référence produit, consultable la prochaine fois qu'elle repasse.
+        # Best-effort : une erreur ici ne doit jamais faire échouer la saisie
+        # de l'opérateur — c'est un service, pas un contrôle.
+        if cl["code"] == "89" and fin_dossier_flag and no_dossier:
+            try:
+                from app.services.produit_memoire import materialiser_serie
+                materialiser_serie(conn, no_dossier, cloture_par=operateur)
+            except Exception:
+                pass
 
         # v2.2.83 — Fermeture auto des alertes périodiques : seuls 03 (Production)
         # et 88 (Reprise production) maintiennent le chrono actif. 01 (Début prod)

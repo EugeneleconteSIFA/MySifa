@@ -1711,6 +1711,12 @@ function renderOfTab(){
         title:'Télécharger PDF', onClick:()=>{window.open('/api/of/'+row.id+'/pdf','_blank');}
       },iconEl('download',13)));
     }
+    // Memoire produit : of_imports.reference EST deja la cle produit normalisee
+    // (option B de l'import OF), le bouton n'a donc rien a deviner.
+    if(window.MySifaProduitMemoire){
+      const bp=window.MySifaProduitMemoire.boutonFiche(row.reference,{label:'Produit'});
+      if(bp) acts.push(bp);
+    }
     if(S.user&&S.user.role==='superadmin'){
       acts.push(h('button',{
         style:'padding:4px 8px;border-radius:6px;border:1px solid rgba(248,113,113,.3);background:transparent;cursor:pointer;color:var(--danger)',
@@ -1857,6 +1863,12 @@ function renderFichesTab(){
         title:'Modifier',onClick:()=>openFicheEditModal(row)
       },iconEl('edit',13)),
     ];
+    // Le libelle d'une fiche porte la variante (machine, laize) : on normalise
+    // cote client avec exactement la regle de fiche_ref_parser.py.
+    if(window.MySifaProduitMemoire){
+      const bpf=window.MySifaProduitMemoire.boutonFiche(row.reference,{label:'Produit'});
+      if(bpf) acts.push(bpf);
+    }
     if(S.user&&S.user.role==='superadmin'){
       acts.push(h('button',{
         style:'padding:4px 8px;border-radius:6px;border:1px solid rgba(248,113,113,.3);background:transparent;cursor:pointer;color:var(--danger)',
@@ -2976,12 +2988,32 @@ async function openTracMatieresEditModal(dos, matieres){
   const fournLbl = document.createElement('label');
   fournLbl.style.cssText = 'font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.4px;text-transform:uppercase;display:block;margin-bottom:6px';
   fournLbl.textContent = 'Fournisseur (liaison manuelle)';
-  const fournSel = document.createElement('select');
-  fournSel.className = 'form-sel';
-  fournSel.style.width = '100%';
-  fournSel.innerHTML = '<option value="">— Choisir —</option>' +
-    fournisseurs.map(f=>'<option value="'+Number(f.id)+'">'+escapeHtml(f.nom||'')+'</option>').join('');
-  fournWrap.append(fournLbl, fournSel);
+  // Ce bloc n'apparaît que quand l'API répond « fournisseur requis » : la
+  // bobine n'est liée à aucune réception, il faut désigner son fournisseur à
+  // la main. Une liste déroulante de tout l'annuaire pour une saisie ponctuelle
+  // et sous pression (dossier en cours de fabrication) est le pire cas d'usage.
+  const fournPickerTrac = window.MysFournisseurPicker
+    ? window.MysFournisseurPicker.create({
+        valueMode: 'id',
+        placeholder: 'Rechercher le fournisseur de cette bobine\u2026',
+        allowEmpty: false,
+        // La bobine est une matière première : ces catégories d'abord, le
+        // reste de l'annuaire ensuite.
+        categories: ['frontal', 'adhesif', 'glassine', 'complexe'],
+      })
+    : null;
+  // `fournSel` garde son nom et son interface : plus bas, le code lit
+  // `fournSel.value` pour construire le payload. Le champ caché du picker le
+  // porte, donc cette lecture est inchangée.
+  const fournSel = fournPickerTrac ? fournPickerTrac.hidden : document.createElement('select');
+  const fournNode = fournPickerTrac ? fournPickerTrac.el : fournSel;
+  if (!fournPickerTrac) {
+    fournSel.className = 'form-sel';
+    fournSel.style.width = '100%';
+    fournSel.innerHTML = '<option value="">— Choisir —</option>' +
+      fournisseurs.map(f=>'<option value="'+Number(f.id)+'">'+escapeHtml(f.nom||'')+'</option>').join('');
+  }
+  fournWrap.append(fournLbl, fournNode);
 
   function mkCodeInput(val, placeholder){
     const inp = document.createElement('input');
@@ -8035,6 +8067,21 @@ function renderProdKpis(){
     tiles.push({icon:'layers', label:'Traçabilité', desc:'Matières utilisées par dossier', go:function(){ set({page:'traceabilite'}); nav(); }});
     if(isAdmin(u)) tiles.push({icon:'trending-up', label:'Rentabilité', desc:'Comparaison devis / réel par dossier', go:function(){ set({page:'rentabilite'}); nav(); }});
     if(canAccessOfTab()) tiles.push({icon:'file', label:'Fiches + OF', desc:'Import PDF et consultation des OF', go:function(){ set({page:'of'}); nav(); }});
+    // Memoire produit : la fiche d'une reference (productions passees, notes
+    // d'atelier, OF scannes). Vue de detail ouverte en surcouche — pas un
+    // onglet de plus dans la barre : l'objet est le meme que celui de Fiches + OF.
+    tiles.push({icon:'layers', label:'Produits', desc:'Historique de production par reference produit', go:function(){
+      if(!window.MySifaProduitMemoire){ toast('Module memoire produit indisponible.','error'); return; }
+      // La fiche produit est une surcouche, pas une page : PROD_VIEW_GUIDE ne
+      // peut pas la declencher sur S.page. On ouvre le guide ici, une seule
+      // fois par utilisateur — le moteur gere le « deja vu ».
+      try{ if(window.MySifaGuides) MySifaGuides.autoOpen('myprod-produits'); }catch(e){}
+      window.MySifaProduitMemoire.openListe();
+    }});
+    if(canAccessOfTab()) tiles.push({icon:'file-text', label:'Scans a rattacher', desc:'OF termines scannes dont le numero n a pas ete lu', go:function(){
+      if(window.MySifaProduitMemoire) window.MySifaProduitMemoire.openRattachement();
+      else toast('Module memoire produit indisponible.','error');
+    }});
     if(canPlanningNav(u)) tiles.push({icon:'calendar', label:'Planning machine', desc:'Ordonnancement des dossiers par machine', go:function(){ window.location.href='/planning'; }});
 
     var grid = h('div', {className:'myprod-tiles'},
@@ -8242,6 +8289,28 @@ function renderProdKpis(){
   };
 
   var PROD_GUIDES = {
+    'myprod-produits': { steps: [
+      {
+        icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>`,
+        title: 'La memoire d\'un produit',
+        body: `Jusqu'ici, tout ce que l'atelier remontait etait range par <strong>numero de dossier</strong>. Le dossier se cloturait, et la reference repassait huit mois plus tard sans que rien de ce qu'on avait appris ne soit disponible. La <strong>fiche produit</strong> range la meme information par <span class="mguide-hl">reference produit</span> — la ligne de vie d'un produit, pas d'une commande.`,
+        extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Ce qu'une fiche produit rassemble</div><ul class="mguide-svc-list"><li>Les <strong>productions passees</strong> : calage, vitesse, arrets, metrage — calcules, rien a saisir.</li><li>Les <strong>notes d'atelier</strong>, ecrites par ceux qui ont fait tourner le produit.</li><li>Les <strong>OF termines scannes</strong>, avec les annotations manuscrites du dossier papier.</li></ul></div></div>`
+      },
+      {
+        title: 'Trois portes, un seul objet',
+        body: `On ouvre la meme fiche depuis trois endroits. Depuis <strong>Saisieprod</strong>, un bouton <span class="mguide-tag">Historique</span> apparait sur le dossier en cours — <strong>et seulement si la reference a deja ete produite</strong>. Depuis <strong>Fiches + OF</strong>, le bouton <span class="mguide-tag">Produit</span> de chaque ligne. Depuis la tuile <span class="mguide-tag">Produits</span> du menu, la liste complete.`,
+        extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>A retenir</div><ul class="mguide-svc-list"><li>Pas de bouton en Saisieprod = ce produit n'a jamais tourne.</li><li>Une note est publiee immediatement, avec son auteur et sa date.</li><li>Une note qui ne vaut plus se marque <span class="mguide-tag">perimee</span> — elle ne s'efface pas, pour que personne ne la redecouvre.</li></ul></div></div>`
+      },
+      {
+        title: 'Les OF scannes et leur file',
+        body: `Les OF termines scannes sur le copieur remontent automatiquement et se rattachent a leur reference quand leur numero est lisible. Quand il ne l'est pas — un scan sans OCR ne porte aucun texte — le document part dans <span class="mguide-tag">Scans a rattacher</span> : on l'ouvre en apercu, on tape le numero de dossier, c'est regle. Rien n'est jamais supprime : un document hors sujet se marque <span class="mguide-hl">ecarte</span>.`
+      },
+      {
+        title: 'Le chiffre a surveiller',
+        body: `Une fiche produit ne vaut que ce que vaut son <strong>rattachement</strong>. Si des dossiers ne sont relies a aucune reference — faute d'OF rattache — la memoire produit est incomplete <em>sans le dire</em>. Le <span class="mguide-hl">taux de rattachement</span> mesure cette part. Quand il baisse, ce sont les onglets <span class="mguide-tag">Mappings a valider</span> et <span class="mguide-tag">Dossiers sans OF</span> qu'il faut traiter, pas la fiche produit.`
+      }
+    ]},
+
     'myprod-overview': { steps: [
       {
         icon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>`,

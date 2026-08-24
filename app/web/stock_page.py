@@ -78,6 +78,7 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_dock.css">
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
+<link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -800,7 +801,56 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-valid-btn{display:inline-flex;align-items:center;justify-content:center;width:26px;height:27px;border:1px solid var(--warn,#d97706);border-left:none;background:color-mix(in srgb,var(--warn,#d97706) 10%,transparent);color:var(--warn,#d97706);font-size:12px;font-weight:800;font-family:inherit;cursor:pointer;border-radius:0 6px 6px 0;transition:all .12s}
 .bes-valid-btn.ok{border-color:var(--success,#22c55e);color:var(--success,#22c55e);background:color-mix(in srgb,var(--success,#22c55e) 12%,transparent)}
 .bes-valid-btn:disabled{cursor:default;opacity:.75}
+/* Validation TOMBEE : un chiffre a bouge sous une relecture deja faite. Ce
+   n'est pas la meme chose qu'un document jamais relu, et ca ne doit pas se
+   voir pareil — c'est le seul cas ou quelqu'un s'est deja prononce. */
+.bes-valid-btn.perime{border-color:var(--danger,#ef4444);color:var(--danger,#ef4444);background:color-mix(in srgb,var(--danger,#ef4444) 12%,transparent)}
+.doc-etat-motif{padding:10px 12px;border-radius:6px;font-size:12px;line-height:1.55;background:color-mix(in srgb,var(--danger,#ef4444) 10%,transparent);border:1px solid color-mix(in srgb,var(--danger,#ef4444) 35%,transparent);color:var(--text);margin-bottom:12px}
+.doc-etat-hd{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text2);margin:14px 0 6px}
+.doc-etat-liste{max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:6px}
+.doc-etat-row{display:flex;gap:10px;align-items:baseline;padding:7px 10px;border-bottom:1px solid var(--border);font-size:12px}
+.doc-etat-row:last-child{border-bottom:none}
+.doc-etat-row.arelire{background:color-mix(in srgb,var(--warn,#d97706) 9%,transparent)}
+.doc-etat-row.refuse{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.doc-etat-champ{flex:0 0 34%;font-weight:600;color:var(--text)}
+.doc-etat-val{flex:1;color:var(--text2);font-variant-numeric:tabular-nums}
+.doc-etat-val s{color:var(--muted);text-decoration-thickness:1px}
+.doc-etat-src{flex:0 0 27%;text-align:right;color:var(--muted);font-size:11px;line-height:1.4}
+.doc-etat-vide{padding:14px;text-align:center;color:var(--muted);font-size:12px}
 .bes-valid-btn:not(:disabled):hover{filter:brightness(1.15)}
+/* ── Vue Tendance : petits multiples ──────────────────────────────────────
+   Une serie par ligne, chacune a son echelle. Vingt matieres sur un graphe
+   commun imposeraient une palette categorielle a vingt teintes dont aucune
+   ne serait distinguable ; une teinte unique par ligne evite la question. */
+.bes-tend-note{font-size:12px;color:var(--muted);line-height:1.6;margin:0 0 14px;
+  padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--accent) 7%,transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 22%,transparent)}
+.bes-tend-grid{display:grid;grid-template-columns:minmax(160px,1.4fr) 1fr;gap:0 16px;align-items:center}
+.bes-tend-axis{display:grid;gap:2px;padding:0 0 6px}
+.bes-tend-axis-lbl{font-size:10px;font-weight:700;letter-spacing:.3px;color:var(--muted);
+  text-align:center;text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.bes-tend-axis-lbl.now{color:var(--accent)}
+.bes-tend-row{display:contents}
+.bes-tend-id{padding:9px 0;border-top:1px solid var(--border);min-width:0}
+.bes-tend-ref{font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.bes-tend-meta{font-size:11px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+.bes-tend-meta.orphelin{color:var(--warn,#d97706);font-weight:600}
+/* Les barres : extremite haute arrondie a 4px, ancree sur la ligne de base,
+   2px de respiration entre deux fills. */
+.bes-tend-plot{display:grid;gap:2px;align-items:end;height:46px;padding:9px 0;
+  border-top:1px solid var(--border)}
+.bes-tend-bar{position:relative;height:100%;display:flex;align-items:flex-end;
+  border-radius:3px;transition:background .12s}
+.bes-tend-bar:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.bes-tend-fill{width:100%;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px}
+.bes-tend-bar.vide .bes-tend-fill{background:var(--border);min-height:2px;border-radius:2px}
+.bes-tend-bar.au-dela .bes-tend-fill{background:color-mix(in srgb,var(--accent) 45%,var(--border))}
+.bes-tend-bar.inc::after{content:'';position:absolute;top:-1px;left:50%;transform:translateX(-50%);
+  width:4px;height:4px;border-radius:50%;background:var(--warn,#d97706)}
+.bes-tend-peak{position:absolute;top:-13px;left:50%;transform:translateX(-50%);
+  font-size:9px;font-weight:700;color:var(--text2);white-space:nowrap;
+  font-variant-numeric:tabular-nums;pointer-events:none}
 .bes-destock-ok{color:var(--success,#22c55e);font-weight:700;font-size:12px}
 .bes-destock-todo{color:var(--warn,#d97706);font-weight:700;font-size:12px}
 /* Laize : une bobine ne se commande, ne se stocke et ne se destocke que dans sa laize */
@@ -1938,6 +1988,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
+<script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <script src="/static/mysifa_guides.js"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
@@ -2007,9 +2058,14 @@ let S = {
   recepHistLoading: false,
   recepExpandedId: null,   // lot ouvert dans l'historique
   recepManual: '',         // valeur du champ saisie manuelle
-  recepFournisseur: '',     // fournisseur sélectionné
-  recepFournisseurSearch: '', // texte de recherche fournisseur
-  recepFournisseurOpen: false, // dropdown ouvert
+  recepFournisseur: '',     // nom du fournisseur sélectionné (affichage + repli)
+  // L'ID, désormais envoyé au serveur en plus du nom. `stock_receptions`
+  // porte les deux colonnes : le nom garde l'historique lisible, l'id survit
+  // à un renommage de fiche. N'envoyer que le nom, c'était perdre le lien dès
+  // qu'un fournisseur était renommé ou fusionné.
+  recepFournisseurId: null,
+  recepFournisseurSearch: '', // conservé : encore lu par d'anciens resets
+  recepFournisseurOpen: false,
   recepFscTypeClaim: 'fsc_mix', // type certification lot (défaut FSC Mix)
   recepLastLot: null,      // dernier lot créé (pour modale impression étiquettes)
   // Réception structurée par matière (v2)
@@ -2236,6 +2292,53 @@ async function loadFournisseursFSC() {
     const data = await api('/api/stock/fournisseurs');
     FOURNISSEURS_FSC = Array.isArray(data) ? data : [];
   } catch(e) { /* garder la liste précédente si erreur */ }
+}
+
+/* Champ fournisseur de réception, en un seul endroit pour les deux modales.
+   Avant : un <select> à plusieurs centaines d'entrées dans la modale mini, et
+   un autocomplete maison SANS navigation clavier dans la plein écran — deux
+   comportements différents pour la même saisie, sur l'écran le plus utilisé
+   de la journée.
+
+   Favoris : la catégorie de la matière réceptionnée quand on la connaît (la
+   modale mini est ouverte sur une matière précise). En réception libre, aucun
+   groupe de favoris — mieux vaut pas de tri qu'un tri arbitraire. */
+function buildFournisseurReceptionField() {
+  if (!window.MysFournisseurPicker) return null;
+  const cats = [];
+  const m = S.recepModalMatiere;
+  if (m && m.categorie) {
+    const c = String(m.categorie).toLowerCase();
+    // Le référentiel des catégories fournisseurs est servi par l'API ; on ne
+    // pousse que les codes qu'il connaît, sinon le titre du groupe afficherait
+    // un code brut.
+    const connus = (window.MysFournisseurPicker.categories() || []).map(x => x.code);
+    if (connus.includes(c)) cats.push(c);
+  }
+  const inst = window.MysFournisseurPicker.create({
+    valueMode: 'id',
+    value: S.recepFournisseurId || '',
+    categories: cats,
+    placeholder: 'Rechercher un fournisseur (nom, ville, licence\u2026)',
+    allowEmpty: false,
+    required: true,
+    onSelect: (f) => {
+      S.recepFournisseurId = f ? f.id : null;
+      S.recepFournisseur = f ? f.nom : '';
+      renderContent();
+    },
+    onClear: () => {
+      S.recepFournisseurId = null;
+      S.recepFournisseur = '';
+      renderContent();
+    },
+  });
+  // Un id déjà retenu mais absent de l'annuaire du picker (fiche archivée) :
+  // le nom reste affiché plutôt qu'un champ vide.
+  if (!S.recepFournisseurId && S.recepFournisseur) {
+    inst.input.value = S.recepFournisseur;
+  }
+  return inst;
 }
 
 function fournisseurSuggestions(query) {
@@ -2826,7 +2929,9 @@ async function loadBesoinsMatieres() {
     ]);
     S.besoinsEcheance = parEch || { lignes: [] };
     S.besoinsDossiers = parDos || { dossiers: [] };
-    if (!S.besoinsView) S.besoinsView = 'echeance';
+    // Vue par défaut : « par dossier ». C'est celle qui porte les documents et
+    // leur validation — donc celle où l'on répare, pas seulement où l'on lit.
+    if (!S.besoinsView) S.besoinsView = 'dossier';
     if (!S.matList || !S.matList.length) {
       try {
         const m = await api('/api/stock/matieres');
@@ -8308,39 +8413,69 @@ function appendMatiereRefEditFields(parent, item) {
         }, f.nom + (f.has_fsc ? ' \u00b7 FSC' : ''), retirer));
       });
 
-      // Champ d'ajout en saisie assistee. datalist natif : pas de dependance,
-      // et le navigateur filtre a la frappe sur les 40 references.
+      // Champ d'ajout. Le <datalist> natif ne cherchait que sur le nom, exigeait
+      // une correspondance exacte pour valider, et n'affichait rien de la ville
+      // ni du groupe — trois fiches homonymes y étaient indiscernables.
       const restants = fournisseurs.filter(f => !chosen.has(f.id));
+      const pickerLaize = (window.MysFournisseurPicker && restants.length)
+        ? window.MysFournisseurPicker.create({
+            valueMode: 'id',
+            className: 'mys-fp-sm',
+            placeholder: 'Ajouter un fournisseur\u2026',
+            allowEmpty: false,
+            // La liste des restants est recalculée à chaque rendu : le filtre
+            // lit `chosen` au moment de l'ouverture, pas à la construction.
+            filter: (f) => !chosen.has(f.id),
+            onSelect: (f) => {
+              if (!f || f.id == null) return;
+              chosen.add(f.id);
+              renderLaizeFournisseurs();
+            },
+          })
+        : null;
       const dlId = 'mp-four-dl-' + lid;
       const dl = el('datalist', { id: dlId });
-      restants.forEach(f => {
-        dl.appendChild(el('option', { value: f.nom }, f.nom + (f.has_fsc ? ' \u00b7 FSC' : '')));
-      });
-      const ajout = el('input', {
+      if (!pickerLaize) {
+        restants.forEach(f => {
+          dl.appendChild(el('option', { value: f.nom }, f.nom + (f.has_fsc ? ' \u00b7 FSC' : '')));
+        });
+      }
+      const champLibre = el('input', {
         attrs: { type: 'text', list: dlId, placeholder: restants.length
           ? 'Ajouter un fournisseur\u2026' : 'Tous les fournisseurs sont associes',
           autocomplete: 'off' },
         style: 'width:210px;padding:5px 9px;font-size:12px;border-radius:6px;' +
           'border:1px solid var(--border);background:var(--card);color:var(--text);font-family:inherit',
       });
-      if (!restants.length) ajout.disabled = true;
+      // `ajout` est le nœud à INSÉRER, `champAjout` celui qui prend le focus.
+      // Avec le picker les deux diffèrent : le conteneur porte la loupe et la
+      // croix, l'input est dedans. Insérer l'input seul le priverait des deux.
+      const ajout = pickerLaize ? pickerLaize.el : champLibre;
+      const champAjout = pickerLaize ? pickerLaize.input : champLibre;
+      if (pickerLaize) ajout.style.width = '230px';
+      if (!restants.length && !pickerLaize) champAjout.disabled = true;
       const ajouter = () => {
-        const saisi = (ajout.value || '').trim().toLowerCase();
+        const saisi = (champAjout.value || '').trim().toLowerCase();
         if (!saisi) return;
         const trouve = restants.find(f => f.nom.trim().toLowerCase() === saisi);
         if (!trouve) return;   // saisie partielle : on attend une correspondance exacte
         chosen.add(trouve.id);
-        ajout.value = '';
+        champAjout.value = '';
         renderLaizeFournisseurs();
         // Rend la saisie enchainable : on redonne le focus au champ de CETTE laize.
         const suivant = laizeFournisseursGrid.querySelector('[data-ajout-laize="' + lid + '"]');
         if (suivant) suivant.focus();
       };
-      ajout.setAttribute('data-ajout-laize', String(lid));
-      ajout.addEventListener('change', ajouter);
-      ajout.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); ajouter(); }
-      });
+      champAjout.setAttribute('data-ajout-laize', String(lid));
+      // Avec le picker, c'est lui qui valide (onSelect) : rebrancher `ajouter`
+      // sur change/Enter ferait deux ajouts pour un seul choix, et Enter est
+      // déjà capté par la liste de résultats.
+      if (!pickerLaize) {
+        champAjout.addEventListener('change', ajouter);
+        champAjout.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') { e.preventDefault(); ajouter(); }
+        });
+      }
 
       // « Appliquer a toutes les laizes » : sur ces matieres, les laizes
       // partagent presque toujours la meme liste de fournisseurs. Sans ce
@@ -12216,7 +12351,7 @@ function buildBesoinsMatieres() {
 
   const ech = S.besoinsEcheance || { lignes: [], today: '', borne_7j: '', borne_15j: '' };
   const dos = S.besoinsDossiers || { dossiers: [] };
-  const view = S.besoinsView || 'echeance';
+  const view = S.besoinsView || 'dossier';
   const lignes = ech.lignes || [];
   const dossiers = dos.dossiers || [];
   const nbDossiers = dossiers.length;
@@ -12273,6 +12408,11 @@ function buildBesoinsMatieres() {
         on: { click: () => { S.besoinsView = 'dossier'; renderContent(); } }
       }, 'Par dossier'),
       el('button', {
+        cls: 'bes-seg-btn' + (view === 'tendance' ? ' active' : ''),
+        title: 'Quand la matière sera nécessaire, mois par mois',
+        on: { click: () => { S.besoinsView = 'tendance'; loadBesoinsTendance(); } }
+      }, 'Tendance'),
+      el('button', {
         cls: 'bes-seg-btn' + (view === 'passes' ? ' active' : ''),
         title: 'Productions terminées : ce qui reste à déstocker et ce qui l\'est déjà',
         on: { click: () => { S.besoinsView = 'passes'; loadBesoinsPasses(); } }
@@ -12302,7 +12442,13 @@ function buildBesoinsMatieres() {
     el('div', { cls: 'bes-actions' },
       el('button', { cls: 'bes-btn-secondary', on: { click: () => openBesoinsMappingModal() } },
         iconEl('list-checks', 14), el('span', {}, 'Correspondances')),
-      el('button', { cls: 'bes-btn-secondary', on: { click: () => loadBesoinsMatieres() } },
+      el('button', { cls: 'bes-btn-secondary', on: { click: () => {
+        // Recharger la vue affichée : les vues Tendance et Dossiers passés ont
+        // leur propre source, un rechargement générique les laissait figées.
+        if (S.besoinsView === 'tendance') loadBesoinsTendance();
+        else if (S.besoinsView === 'passes') loadBesoinsPasses();
+        else loadBesoinsMatieres();
+      } } },
         iconEl('refresh-ccw', 14), el('span', {}, 'Actualiser')),
     ),
   );
@@ -12312,12 +12458,157 @@ function buildBesoinsMatieres() {
     wrap.appendChild(_buildBesoinsEcheanceTable(ech));
   } else if (view === 'matiere') {
     wrap.appendChild(_buildBesoinsMatiereTable(ech));
+  } else if (view === 'tendance') {
+    wrap.appendChild(_buildBesoinsTendance(S.besoinsTendance));
   } else if (view === 'passes') {
     wrap.appendChild(_buildBesoinsPassesTable(S.besoinsPasses));
   } else {
     wrap.appendChild(_buildBesoinsDossierTable(dos));
   }
   return wrap;
+}
+
+// ── Vue « Tendance » ──────────────────────────────────────────────────────
+// Les autres vues répondent à « de quoi ai-je besoin ». Celle-ci répond à
+// « quand », qui est la question de l'acheteur : un besoin de frontal étalé
+// sur quatre mois ne se commande pas comme le même volume concentré sur trois
+// semaines.
+//
+// Forme : petits multiples. Une ligne par matière, ses mois en colonnes,
+// chacune à SON échelle — le pic de chaque ligne est étiqueté pour que
+// l'échelle soit explicite. Vingt matières sur un graphe commun seraient
+// illisibles et exigeraient vingt teintes catégorielles dont aucune ne serait
+// distinguable ; une série par ligne rend la question sans objet.
+async function loadBesoinsTendance() {
+  S.besoinsTendance = null;
+  S.besoinsLoading = true;
+  renderContent();
+  try {
+    S.besoinsTendance = await api('/api/stock/besoins-matieres/tendance?mois=8');
+  } catch (e) {
+    S.besoinsTendance = { erreur: e.message || 'chargement impossible' };
+    showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
+  } finally {
+    S.besoinsLoading = false;
+    renderContent();
+  }
+}
+
+const _BES_MOIS_COURT = ['janv', 'févr', 'mars', 'avr', 'mai', 'juin',
+                         'juil', 'août', 'sept', 'oct', 'nov', 'déc'];
+
+function _besMoisLabel(cle) {
+  if (cle === 'au-dela') return 'au-delà';
+  const m = /^(\d{4})-(\d{2})$/.exec(cle || '');
+  if (!m) return cle || '—';
+  return _BES_MOIS_COURT[parseInt(m[2], 10) - 1] + ' ' + m[1].slice(2);
+}
+
+function _besFmtQte(v, unite) {
+  if (!v) return '0';
+  const n = Number(v);
+  const s = n >= 1000000 ? (n / 1000000).toFixed(1) + ' M'
+          : n >= 1000    ? Math.round(n / 1000) + ' k'
+          : String(Math.round(n * 10) / 10);
+  return s + (unite ? ' ' + unite : '');
+}
+
+function _buildBesoinsTendance(data) {
+  if (!data) return el('div', { cls: 'bes-empty' }, 'Chargement de la tendance…');
+  if (data.erreur) {
+    return el('div', { cls: 'bes-empty', style: { color: 'var(--danger)' } },
+      'Erreur : ' + data.erreur);
+  }
+  const lignes = (data.lignes || []).filter(l => _besMatchFiltre(
+    { reference: l.libelle, designation: l.designation, matiere: l.libelle }, S.besoinsFiltre));
+  const cont = el('div', {});
+
+  // Dire ce que l'écran montre vraiment. Tant que la série de photos du carnet
+  // est courte, ce n'est pas une tendance mesurée dans le temps : c'est l'état
+  // du carnet aujourd'hui, réparti par mois de livraison. Laisser croire
+  // l'inverse ferait prendre un carnet qui se remplit pour une baisse d'activité.
+  const jours = ((data.historique || {}).jours) || 0;
+  cont.appendChild(el('div', { cls: 'bes-tend-note' },
+    el('div', {},
+      el('strong', {}, 'Ce que montre cet écran : '),
+      'le carnet d\'aujourd\'hui, réparti par mois de livraison. ',
+      'Les mois éloignés paraissent creux parce qu\'ils ne sont pas encore ',
+      'commandés — pas parce que l\'activité baisse.'),
+    el('div', { style: { marginTop: '6px' } },
+      jours < 2
+        ? 'Le carnet est photographié chaque jour depuis aujourd\'hui. Après quelques semaines, cet écran pourra dire de combien un mois se remplit à l\'approche, et donc ce qu\'il manque encore.'
+        : jours + ' jour(s) de photos accumulés' +
+          ((data.historique.horizons_calibrables || []).length
+            ? ' — horizons calibrables : M+' + data.historique.horizons_calibrables.join(', M+') + '.'
+            : ' — encore trop court pour extrapoler.')),
+    data.reste_sur_mois_echus > 0
+      ? el('div', { style: { marginTop: '6px', color: 'var(--warn,#d97706)', fontWeight: '600' } },
+          'Attention : ' + _besFmtQte(data.reste_sur_mois_echus) +
+          ' de besoin porte sur des mois déjà échus — dossiers en retard.')
+      : null,
+  ));
+
+  if (!lignes.length) {
+    cont.appendChild(el('div', { cls: 'bes-empty' },
+      'Aucun besoin daté sur l\'horizon. Les dossiers sans date de livraison ' +
+      'lisible ne peuvent être rattachés à aucun mois.'));
+    return cont;
+  }
+
+  const cols = data.colonnes || [];
+  const moisCourant = (data.mois || [])[0];
+  const grid = el('div', { cls: 'bes-tend-grid' });
+
+  // Axe : les mois, une seule fois en tête. Le mois courant est marqué.
+  grid.appendChild(el('div', {}));
+  grid.appendChild(el('div', {
+    cls: 'bes-tend-axis',
+    style: { gridTemplateColumns: 'repeat(' + cols.length + ', 1fr)' },
+  }, ...cols.map(c => el('div', {
+    cls: 'bes-tend-axis-lbl' + (c === moisCourant ? ' now' : ''),
+  }, _besMoisLabel(c)))));
+
+  const KINDS = { support: 'Frontal', glassine: 'Glassine', adhesif: 'Adhésif',
+                  mandrin: 'Mandrins', carton: 'Cartons', palette: 'Palettes' };
+
+  lignes.forEach(l => {
+    const max = l.max || 0;
+    grid.appendChild(el('div', { cls: 'bes-tend-id' },
+      el('div', { cls: 'bes-tend-ref', title: l.designation || l.libelle }, l.libelle),
+      el('div', { cls: 'bes-tend-meta' + (l.non_associee ? ' orphelin' : '') },
+        (KINDS[l.kind] || l.kind) + ' · ' + _besFmtQte(l.total, l.unite) +
+        ' · ' + l.nb_dossiers + ' dossier' + (l.nb_dossiers > 1 ? 's' : '') +
+        (l.non_associee ? ' · non associée à une référence' : '') +
+        (l.incalculables ? ' · ' + l.incalculables + ' non chiffré(s)' : '')),
+    ));
+
+    const plot = el('div', {
+      cls: 'bes-tend-plot',
+      style: { gridTemplateColumns: 'repeat(' + cols.length + ', 1fr)' },
+    });
+    l.serie.forEach(p => {
+      const h = max > 0 ? Math.max(2, Math.round((p.q / max) * 46)) : 2;
+      // Étiquette directe sur le seul pic : un nombre sur chaque barre
+      // masquerait la forme qu'on cherche à lire.
+      const pic = max > 0 && p.q === max;
+      const bar = el('div', {
+        cls: 'bes-tend-bar' + (p.q > 0 ? '' : ' vide')
+             + (p.mois === 'au-dela' ? ' au-dela' : '')
+             + (p.inc ? ' inc' : ''),
+        title: _besMoisLabel(p.mois) + ' · ' + _besFmtQte(p.q, l.unite)
+               + ' · ' + p.dossiers + ' dossier' + (p.dossiers > 1 ? 's' : '')
+               + (p.inc ? ' · ' + p.inc + ' besoin(s) non chiffré(s)' : ''),
+      },
+        pic ? el('span', { cls: 'bes-tend-peak' }, _besFmtQte(p.q, l.unite)) : null,
+        el('div', { cls: 'bes-tend-fill', style: { height: h + 'px' } }),
+      );
+      plot.appendChild(bar);
+    });
+    grid.appendChild(plot);
+  });
+
+  cont.appendChild(grid);
+  return cont;
 }
 
 // ── Vue « par matière » ───────────────────────────────────────────────────
@@ -12738,13 +13029,15 @@ function _besDocCell(d) {
     d.of_import_id
       ? el('span', { cls: 'bes-doc-pair' },
           _besDocBtn('OF', 'file-text', '/api/of/' + d.of_import_id + '/pdf-preview', 'Ouvrir l\'OF'),
-          _besValidBtn('of', d.of_import_id, d.of_valide, d.of_valide_par, 'OF'))
+          _besValidBtn('of', d.of_import_id, d.of_valide, d.of_valide_par,
+            'OF', d.of_invalide_motif))
       : _besDocManquantBtn('OF', 'file-text', d, 'of'),
     d.ft_id
       ? el('span', { cls: 'bes-doc-pair' },
           _besDocBtn('Fiche', 'clipboard', '/api/fiches-techniques/' + d.ft_id + '/pdf-preview',
             'Ouvrir la fiche technique'),
-          _besValidBtn('fiche', d.ft_id, d.ft_valide, d.ft_valide_par, 'Fiche technique'))
+          _besValidBtn('fiche', d.ft_id, d.ft_valide, d.ft_valide_par,
+            'Fiche technique', d.ft_invalide_motif))
       : _besDocManquantBtn('Fiche', 'clipboard', d, 'fiche'),
   );
 }
@@ -12770,25 +13063,129 @@ async function basculerValidationDoc(type, docId, valide) {
 
 // Pastille de validation : cliquable pour l'administration, simple témoin
 // sinon. Un document non validé se voit, même pour qui ne peut pas le valider.
-function _besValidBtn(type, docId, valide, quiValide, libelle) {
+//
+// Trois états, pas deux. « Validé » et « jamais relu » ne couvrent pas le cas
+// qui compte le plus : un document relu, puis modifié. Sa validation est
+// tombée toute seule, et c'est celui-là qu'il faut rouvrir en premier.
+function _besValidBtn(type, docId, valide, quiValide, libelle, motifInvalidation) {
   if (!docId) return null;
   const peut = isMatieresAdmin() && !S.stockReadOnly;
+  const perime = !valide && !!motifInvalidation;
   const b = el('button', {
-    cls: 'bes-valid-btn' + (valide ? ' ok' : ''),
+    cls: 'bes-valid-btn' + (valide ? ' ok' : (perime ? ' perime' : '')),
     type: 'button',
-    attrs: peut ? {} : { disabled: 'disabled' },
     title: valide
       ? (libelle + ' validé' + (quiValide ? ' par ' + quiValide : '')
-         + (peut ? ' — cliquer pour retirer la validation' : ''))
-      : (libelle + ' non validé' + (peut ? ' — cliquer pour valider' : '')),
-  }, valide ? '✓' : '!');
-  if (peut) {
-    b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      basculerValidationDoc(type, docId, !valide);
-    });
-  }
+         + ' — cliquer pour voir ce qui a changé')
+      : (perime
+          ? (libelle + ' — ' + motifInvalidation + ' Cliquer pour voir le détail.')
+          : (libelle + ' non validé' + (peut ? ' — cliquer pour valider' : ''))),
+  }, valide ? '✓' : (perime ? '⟳' : '!'));
+  // La pastille ouvre l'état du document au lieu de basculer directement.
+  // Valider en un clic, sans voir ce qu'on valide, refabriquait la case à
+  // cocher que ce verrou est censé remplacer. Le geste reste à un clic de
+  // plus, et il porte enfin quelque chose.
+  b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openDocEtatModal(type, docId, libelle);
+  });
   return b;
+}
+
+// ── État d'un document : ce qui a changé, et depuis quand ─────────────────
+// Le déstockage lit l'OF et la fiche technique. Demander une relecture n'a de
+// sens que si le relecteur voit CE QUI a bougé depuis la précédente — sinon il
+// revalide au jugé. Cette modale est la contrepartie du verrou.
+function _docEtatLigne(li) {
+  const cls = 'doc-etat-row' + (li.refuse ? ' refuse' : (li.depuis_validation ? ' arelire' : ''));
+  const av = (li.avant === null || li.avant === undefined || li.avant === '') ? '—' : String(li.avant);
+  const ap = (li.apres === null || li.apres === undefined || li.apres === '') ? '—' : String(li.apres);
+  const src = { access_bridge: 'Access', manuel: 'saisie manuelle', import_pdf: 'import PDF' }[li.origine]
+              || li.origine || '?';
+  const quand = (li.at || '').replace('T', ' ').slice(0, 16);
+  return el('div', { cls: cls },
+    el('div', { cls: 'doc-etat-champ' }, li.libelle || li.champ),
+    el('div', { cls: 'doc-etat-val' },
+      el('s', {}, av), ' → ', el('strong', {}, ap),
+      li.refuse ? el('div', { style: { color: 'var(--muted)', fontSize: '11px' } },
+        'Refusé : cette valeur a été saisie à la main dans MySifa.') : null,
+    ),
+    el('div', { cls: 'doc-etat-src' }, src, el('br', {}),
+      quand + (li.auteur ? ' · ' + li.auteur : '')),
+  );
+}
+
+async function openDocEtatModal(type, docId, libelle) {
+  closeMroot();
+  const peut = isMatieresAdmin() && !S.stockReadOnly;
+  const corps = el('div', {}, el('div', { cls: 'doc-etat-vide' }, 'Chargement…'));
+  const actions = el('div', { cls: 'modal-actions', style: { marginTop: '14px' } },
+    el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Fermer'));
+
+  const overlay = el('div', { cls: 'modal-overlay', on: { click: e => { if (e.target === overlay) closeMroot(); } } });
+  const sheet = el('div', { cls: 'modal-sheet', style: { maxWidth: '620px' } },
+    el('span', { cls: 'modal-handle' }),
+    el('div', { cls: 'modal-title' }, 'État du document — ' + libelle),
+    corps, actions,
+  );
+  sheet.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
+
+  let d;
+  try {
+    d = await api('/api/stock/besoins-matieres/' + type + '/' + docId + '/historique');
+  } catch (e) {
+    corps.innerHTML = '';
+    corps.appendChild(el('div', { cls: 'doc-etat-vide', style: { color: 'var(--danger)' } },
+      'Chargement impossible : ' + (e.message || 'erreur inconnue')));
+    return;
+  }
+
+  const doc = d.document || {};
+  const valide = !!doc.valide;
+  const aRelire = d.a_relire || [];
+  const hist = d.historique || [];
+
+  corps.innerHTML = '';
+  if (!valide && doc.invalide_motif) {
+    corps.appendChild(el('div', { cls: 'doc-etat-motif' }, doc.invalide_motif));
+  }
+  corps.appendChild(el('div', { style: { fontSize: '12px', color: 'var(--text2)', lineHeight: '1.6' } },
+    valide
+      ? ('Validé' + (doc.valide_par ? ' par ' + doc.valide_par : '')
+         + (doc.valide_at ? ' le ' + String(doc.valide_at).replace('T', ' à ').slice(0, 19) : '')
+         + (aRelire.length
+             ? ' — mais ' + aRelire.length + ' valeur' + (aRelire.length > 1 ? 's ont' : ' a')
+               + ' changé depuis.'
+             : ' — aucun changement depuis.'))
+      : 'Ce document n\'est pas validé : aucun déstockage automatique ne partira de ses chiffres.'));
+
+  corps.appendChild(el('div', { cls: 'doc-etat-hd' },
+    hist.length ? 'Changements de valeur (' + hist.length + ')' : 'Changements de valeur'));
+  if (!hist.length) {
+    corps.appendChild(el('div', { cls: 'doc-etat-vide' },
+      'Aucun changement enregistré depuis la mise en place du journal.'));
+  } else {
+    const liste = el('div', { cls: 'doc-etat-liste' });
+    hist.forEach(li => liste.appendChild(_docEtatLigne(li)));
+    corps.appendChild(liste);
+  }
+
+  if (peut) {
+    // `.modal-actions` est une grille 1fr / 2fr : l'annulation à gauche, l'action
+    // à droite. D'où l'ajout APRÈS « Fermer », et pas avant.
+    //
+    // Classes : `btn btn-ghost` et `btn` uniquement. Ne jamais combiner `.btn`
+    // avec `.btn-sec` — `body.light .btn:not(.btn-ghost):not(.btn-soft)` force
+    // la couleur du texte en blanc, ce qui donne du blanc sur fond transparent
+    // en mode clair. `.btn-ghost` est explicitement exclu de cette règle.
+    actions.appendChild(el('button', {
+      cls: valide ? 'btn btn-ghost' : 'btn',
+      type: 'button',
+      on: { click: async () => { closeMroot(); await basculerValidationDoc(type, docId, !valide); } },
+    }, valide ? 'Retirer la validation' : 'Valider ce document'));
+  }
 }
 
 // ── Dossiers passés ───────────────────────────────────────────────────────
@@ -12855,13 +13252,15 @@ function _buildBesoinsPassesTable(dos) {
           ? el('span', { cls: 'bes-doc-pair' },
               _besDocBtn('OF', 'file-text', '/api/of/' + d.of_import_id + '/pdf-preview',
                 'Ouvrir l\'OF'),
-              _besValidBtn('of', d.of_import_id, d.of_valide, d.of_valide_par, 'OF'))
+              _besValidBtn('of', d.of_import_id, d.of_valide, d.of_valide_par,
+            'OF', d.of_invalide_motif))
           : el('span', { cls: 'bes-mp-none' }, 'Pas d\'OF'),
         d.ft_id
           ? el('span', { cls: 'bes-doc-pair' },
               _besDocBtn('Fiche', 'clipboard', '/api/fiches-techniques/' + d.ft_id + '/pdf-preview',
                 'Ouvrir la fiche technique'),
-              _besValidBtn('fiche', d.ft_id, d.ft_valide, d.ft_valide_par, 'Fiche technique'))
+              _besValidBtn('fiche', d.ft_id, d.ft_valide, d.ft_valide_par,
+            'Fiche technique', d.ft_invalide_motif))
           : el('span', { cls: 'bes-mp-none' }, 'Pas de fiche'),
       ),
       etat,
@@ -14803,6 +15202,11 @@ async function recepValider() {
         items,
         note: S.recepNote,
         fournisseur: S.recepFournisseur,
+        // L'id en plus du nom : `stock_receptions.fournisseur_id` existe
+        // depuis la migration `fsc_reception_fournisseur_id` mais personne ne
+        // l'écrivait. Le nom reste envoyé — il fait l'historique lisible et
+        // couvre le cas d'une saisie hors annuaire.
+        fournisseur_id: S.recepFournisseurId || null,
         certificat_fsc: recepFscTypeRequiresCert(claim) ? cert : '',
         fsc_type_claim: claim,
       }),
@@ -14836,7 +15240,8 @@ async function recepValider() {
           laize_valeur_mm: i.laize_valeur_mm != null ? i.laize_valeur_mm : null,
         })),
       };
-      S.recepItems = []; S.recepNote = ''; S.recepFournisseur = ''; S.recepFournisseurSearch = ''; S.recepFournisseurOpen = false;
+      S.recepItems = []; S.recepNote = ''; S.recepFournisseur = ''; S.recepFournisseurId = null;
+      S.recepFournisseurSearch = ''; S.recepFournisseurOpen = false;
       S.recepFscTypeClaim = 'fsc_mix';
       // Reset selecteurs de reception structuree (categorie/matiere/laize)
       // En mode modal simplifie on ferme la modal apres validation
@@ -14945,28 +15350,48 @@ function renderReceptionMiniModal() {
   // ── Picker (matière verrouillée) ──
   modal.appendChild(buildReceptionPicker(true));
 
-  // ── Fournisseur + FSC (simplifié — sélecteur natif) ──
+  // ── Fournisseur + FSC ──
   const fournWrap = el('div', { cls: 'recep-fourn-wrap' });
   fournWrap.appendChild(el('div', { cls: 'recep-fourn-label' },
     iconEl('truck', 13), ' Fournisseur',
     el('span', { style: { color: 'var(--danger)', marginLeft: '4px' } }, '*'),
   ));
-  const fournSel = document.createElement('select');
-  fournSel.className = 'recep-picker-sel';
-  const optE = document.createElement('option');
-  optE.value = ''; optE.textContent = '— Choisir un fournisseur —';
-  fournSel.appendChild(optE);
-  (Array.isArray(FOURNISSEURS_FSC) ? FOURNISSEURS_FSC : []).forEach(f => {
-    const o = document.createElement('option');
-    o.value = f.nom; o.textContent = f.nom + (f.certificat ? ' — ' + f.certificat : '');
-    if (S.recepFournisseur === f.nom) o.selected = true;
-    fournSel.appendChild(o);
-  });
-  fournSel.addEventListener('change', (e) => {
-    S.recepFournisseur = e.target.value || '';
-    renderReceptionMiniModal();
-  });
-  fournWrap.appendChild(fournSel);
+  const fournPicker = buildFournisseurReceptionField();
+  if (fournPicker) {
+    // onSelect appelle renderContent() ; ici c'est la modale mini qu'il faut
+    // redessiner (l'indicateur de validité et le bloc certificat en dépendent).
+    fournPicker.opts.onSelect = (f) => {
+      S.recepFournisseurId = f ? f.id : null;
+      S.recepFournisseur = f ? f.nom : '';
+      renderReceptionMiniModal();
+    };
+    fournPicker.opts.onClear = () => {
+      S.recepFournisseurId = null;
+      S.recepFournisseur = '';
+      renderReceptionMiniModal();
+    };
+    fournWrap.appendChild(fournPicker.el);
+  } else {
+    // Script du picker absent : on garde un <select> plutôt qu'un champ mort.
+    const fournSel = document.createElement('select');
+    fournSel.className = 'recep-picker-sel';
+    const optE = document.createElement('option');
+    optE.value = ''; optE.textContent = '— Choisir un fournisseur —';
+    fournSel.appendChild(optE);
+    (Array.isArray(FOURNISSEURS_FSC) ? FOURNISSEURS_FSC : []).forEach(f => {
+      const o = document.createElement('option');
+      o.value = f.nom; o.textContent = f.nom + (f.certificat ? ' — ' + f.certificat : '');
+      if (S.recepFournisseur === f.nom) o.selected = true;
+      fournSel.appendChild(o);
+    });
+    fournSel.addEventListener('change', (e) => {
+      S.recepFournisseur = e.target.value || '';
+      const f = FOURNISSEURS_FSC.find(x => x.nom === e.target.value);
+      S.recepFournisseurId = f ? f.id : null;
+      renderReceptionMiniModal();
+    });
+    fournWrap.appendChild(fournSel);
+  }
   const fscTypeSel = document.createElement('select');
   fscTypeSel.className = 'recep-picker-sel';
   fscTypeSel.style.marginTop = '6px';
@@ -15947,69 +16372,27 @@ function buildReceptionNouvelle() {
   const fourWrap = el('div', { cls: 'recep-fourn-wrap' });
   const fourLabel = el('div', { cls: 'recep-fourn-label' }, iconEl('truck', 13), ' Fournisseur', el('span', { style: { color: 'var(--danger)', marginLeft: '4px' } }, '*'));
   fourWrap.appendChild(fourLabel);
+  // L'autocomplete maison (recherche par `includes` sur le seul nom, aucune
+  // navigation clavier, dropdown à refermer à la main) cède la place au
+  // composant partagé : mêmes touches et mêmes champs cherchés que partout
+  // ailleurs dans MySifa.
   const fourSearchWrap = el('div', { cls: 'recep-fourn-search-wrap' });
-  const fourInp = el('input', {
-    cls: 'recep-fourn-inp' + (S.recepFournisseur ? ' recep-fourn-selected' : ''),
-    attrs: {
-      type: 'text',
-      placeholder: 'Rechercher un fournisseur…',
-      autocomplete: 'off',
-      autocorrect: 'off',
-      spellcheck: 'false',
-    },
-  });
-  const dropdown = el('div', { cls: 'recep-fourn-dropdown' });
-
-  function updateFourDropdown(query) {
-    dropdown.innerHTML = '';
-    dropdown.classList.add('open');
-    const suggestions = query ? fournisseurSuggestions(query) : [];
-    if (suggestions.length > 0) {
-      suggestions.forEach(f => {
-        const item = el('div', { cls: 'recep-fourn-item', on: { mousedown: (e) => {
-          e.preventDefault();
-          S.recepFournisseur = f.nom;
-          S.recepFournisseurSearch = '';
-          S.recepFournisseurOpen = false;
-          renderContent();
-        }}},
-          el('span', { cls: 'recep-fourn-item-nom' }, f.nom),
-          el('span', { cls: 'recep-fourn-item-cert' }, f.certificat)
-        );
-        dropdown.appendChild(item);
-      });
-    } else if (query) {
-      dropdown.appendChild(el('div', { cls: 'recep-fourn-empty' }, 'Aucun fournisseur trouvé'));
-    } else {
-      dropdown.classList.remove('open');
-    }
-  }
-
-  if (S.recepFournisseur) {
-    fourInp.value = S.recepFournisseur;
-    fourInp.setAttribute('readonly', 'true');
-    const clearBtn = el('button', { cls: 'recep-fourn-clear', on: { click: (e) => {
-      e.stopPropagation();
-      S.recepFournisseur = ''; S.recepFournisseurSearch = ''; S.recepFournisseurOpen = false;
-      renderContent();
-      setTimeout(() => { const i = document.querySelector('.recep-fourn-inp:not([readonly])'); if (i) i.focus(); }, 50);
-    }}}, '✕');
-    fourSearchWrap.append(fourInp, clearBtn);
+  const fourPickerPlein = buildFournisseurReceptionField();
+  if (fourPickerPlein) {
+    fourSearchWrap.appendChild(fourPickerPlein.el);
   } else {
-    fourInp.value = S.recepFournisseurSearch || '';
-    fourSearchWrap.append(fourInp, dropdown);
-    fourInp.addEventListener('input', (e) => {
-      S.recepFournisseurSearch = e.target.value;
-      S.recepFournisseurOpen = true;
-      updateFourDropdown(e.target.value);
+    // Repli sans le script : saisie libre plutôt qu'un champ absent.
+    const fourInp = el('input', {
+      cls: 'recep-fourn-inp',
+      attrs: { type: 'text', placeholder: 'Fournisseur', autocomplete: 'off' },
     });
-    fourInp.addEventListener('focus', () => {
-      S.recepFournisseurOpen = true;
-      if (S.recepFournisseurSearch) updateFourDropdown(S.recepFournisseurSearch);
+    fourInp.value = S.recepFournisseur || '';
+    fourInp.addEventListener('change', (e) => {
+      S.recepFournisseur = e.target.value || '';
+      const f = FOURNISSEURS_FSC.find(x => x.nom === S.recepFournisseur);
+      S.recepFournisseurId = f ? f.id : null;
     });
-    fourInp.addEventListener('blur', () => {
-      setTimeout(() => { dropdown.classList.remove('open'); S.recepFournisseurOpen = false; }, 200);
-    });
+    fourSearchWrap.appendChild(fourInp);
   }
   fourWrap.appendChild(fourSearchWrap);
 
@@ -16215,8 +16598,29 @@ function buildReceptionHistorique() {
               el('option', { attrs: { value: v, selected: (lot.fsc_type_claim || 'non_fsc') === v } }, lbl)
             )
           );
-          const editFour = el('input', { cls: 'recep-note-inp', attrs: { type: 'text', placeholder: 'Fournisseur' }, style: { maxWidth: '280px' } });
-          editFour.value = lot.fournisseur || '';
+          // Correction d'une réception passée. Saisie libre jusqu'ici : rien
+          // n'empêchait « Aveery » ou « avery dennison » de rentrer, et la
+          // fiche fournisseur joignait ensuite l'historique sur ce nom.
+          //
+          // allowFree reste actif : les réceptions anciennes portent des noms
+          // qui n'existent plus dans l'annuaire, et corriger une note ne doit
+          // pas obliger à réécrire un fournisseur disparu.
+          const editFourInp = el('input', { cls: 'recep-note-inp', attrs: { type: 'text', placeholder: 'Fournisseur' }, style: { maxWidth: '280px' } });
+          editFourInp.value = lot.fournisseur || '';
+          const editFourPicker = window.MysFournisseurPicker
+            ? window.MysFournisseurPicker.create({
+                valueMode: 'nom',
+                value: lot.fournisseur || '',
+                className: 'mys-fp-sm',
+                placeholder: 'Fournisseur',
+                allowFree: true,
+              })
+            : null;
+          if (editFourPicker) editFourPicker.el.style.maxWidth = '280px';
+          // `editFour` garde l'interface d'un <input> pour le reste du code :
+          // seul `.value` est lu, et le champ caché du picker le porte.
+          const editFour = editFourPicker ? editFourPicker.hidden : editFourInp;
+          const editFourNode = editFourPicker ? editFourPicker.el : editFourInp;
           const editCert = el('input', { cls: 'recep-note-inp', attrs: { type: 'text', placeholder: 'Certificat FSC' }, style: { maxWidth: '280px' } });
           editCert.value = lot.certificat_fsc || '';
           const editNote = el('input', { cls: 'recep-note-inp', attrs: { type: 'text', placeholder: 'Note' }, style: { maxWidth: '400px' } });
@@ -16254,7 +16658,7 @@ function buildReceptionHistorique() {
           }, 'Enregistrer les modifications');
           detail.appendChild(el('div', { style: { fontSize: '11px', color: 'var(--muted)', fontWeight: '700', textTransform: 'uppercase' } }, 'Corriger la réception'));
           detail.appendChild(editClaim);
-          detail.appendChild(editFour);
+          detail.appendChild(editFourNode);
           detail.appendChild(editCert);
           detail.appendChild(editNote);
           detail.appendChild(saveBtn);

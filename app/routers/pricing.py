@@ -1066,6 +1066,11 @@ def list_fournisseurs_entreprise(request: Request):
     """Annuaire fournisseurs de l'entreprise, pour tous les sélecteurs de /pricing."""
     _require_read(request)
     with get_db() as conn:
+        # La devise d'achat vit sur le fournisseur depuis la migration
+        # `mc_tarif_fournisseur`. `COALESCE` plutôt qu'une colonne nue : sur une
+        # base non migrée elle n'existe pas, et l'annuaire doit répondre quand
+        # même.
+        devises = mystock_prix.devises_fournisseurs(conn)
         rows = conn.execute(
             """SELECT id, nom, COALESCE(has_fsc, 0) AS has_fsc, pays, actif
                  FROM fournisseurs_fsc
@@ -1079,10 +1084,154 @@ def list_fournisseurs_entreprise(request: Request):
                 "has_fsc": bool(r["has_fsc"]),
                 "pays": r["pays"],
                 "actif": bool(r["actif"]) if r["actif"] is not None else True,
+                "price_currency": devises.get(int(r["id"]), "EUR"),
             }
             for r in rows
         ]
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tarifs fournisseurs
+# ─────────────────────────────────────────────────────────────────────────────
+# Un tarif ne dépend ni de la laize ni du grammage : il dépend de chez qui on
+# achète et de ce qu'on lui achète. La devise se règle au fournisseur, le reste
+# — base de prix, transport, taxes — au couple (fournisseur, matière).
+
+
+@router.get("/api/pricing/tarifs/fournisseurs")
+def list_tarifs_fournisseurs(request: Request):
+    """
+    L'annuaire vu sous l'angle des coûts : qui vend quoi, à quelle devise, et
+    combien de ses matières attendent encore un tarif.
+    """
+    _require_read(request)
+    with get_db() as conn:
+        devises = mystock_prix.devises_fournisseurs(conn)
+        dispo = mystock_prix.tarifs_disponibles(conn)
+        rows = conn.execute(
+            """SELECT f.id, f.nom, COALESCE(f.has_fsc,0) AS has_fsc, f.pays, f.actif,
+                      COUNT(DISTINCT d.matiere_id)  AS nb_matieres,
+                      COUNT(DISTINCT p.declinaison_id) AS nb_declinaisons,
+                      SUM(CASE WHEN p.principal=1 THEN 1 ELSE 0 END) AS nb_principal
+                 FROM fournisseurs_fsc f
+                 LEFT JOIN mp_matiere_prix p ON p.fournisseur_id = f.id
+                 LEFT JOIN mp_matiere_declinaison d ON d.id = p.declinaison_id
+                GROUP BY f.id
+                ORDER BY f.nom COLLATE NOCASE ASC"""
+        ).fetchall()
+        poses = {}
+        if dispo:
+            poses = {
+                int(r["fournisseur_id"]): int(r["n"])
+                for r in conn.execute(
+                    """SELECT fournisseur_id, COUNT(*) AS n
+                         FROM mc_tarif_fournisseur GROUP BY fournisseur_id"""
+                ).fetchall()
+            }
+    return {
+        "tarifs_disponibles": dispo,
+        "fournisseurs": [
+            {
+                "id": int(r["id"]),
+                "nom": r["nom"],
+                "has_fsc": bool(r["has_fsc"]),
+                "pays": r["pays"],
+                "actif": bool(r["actif"]) if r["actif"] is not None else True,
+                "price_currency": devises.get(int(r["id"]), "EUR"),
+                "nb_matieres": int(r["nb_matieres"] or 0),
+                "nb_declinaisons": int(r["nb_declinaisons"] or 0),
+                "nb_principal": int(r["nb_principal"] or 0),
+                "nb_tarifs": poses.get(int(r["id"]), 0),
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/api/pricing/tarifs/fournisseur/{fournisseur_id}")
+def tarifs_fournisseur(request: Request, fournisseur_id: int):
+    """La fiche tarif d'un fournisseur : sa devise, et une ligne par matière."""
+    _require_read(request)
+    with get_db() as conn:
+        f = conn.execute(
+            "SELECT id, nom, pays FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)
+        ).fetchone()
+        if not f:
+            raise HTTPException(404, "Fournisseur introuvable.")
+        devises = mystock_prix.devises_fournisseurs(conn)
+        return {
+            "fournisseur": {
+                "id": int(f["id"]),
+                "nom": f["nom"],
+                "pays": f["pays"],
+                "price_currency": devises.get(int(f["id"]), "EUR"),
+            },
+            "tarifs_disponibles": mystock_prix.tarifs_disponibles(conn),
+            "matieres": mystock_prix.tarifs_du_fournisseur(conn, fournisseur_id),
+        }
+
+
+@router.get("/api/pricing/tarifs/matiere/{matiere_id}")
+def tarifs_matiere(request: Request, matiere_id: int):
+    """La vue symétrique : les fournisseurs d'une matière et leurs tarifs."""
+    _require_read(request)
+    with get_db() as conn:
+        mat = conn.execute(
+            "SELECT id, reference, designation, categorie FROM matieres_premieres WHERE id=?",
+            (matiere_id,),
+        ).fetchone()
+        if not mat:
+            raise HTTPException(404, "Matière introuvable.")
+        return {
+            "matiere_id": int(mat["id"]),
+            "reference": mat["reference"],
+            "designation": mat["designation"],
+            "categorie": mat["categorie"],
+            "tarifs_disponibles": mystock_prix.tarifs_disponibles(conn),
+            "fournisseurs": mystock_prix.fournisseurs_de_la_matiere(conn, matiere_id),
+        }
+
+
+@router.patch("/api/pricing/tarifs/fournisseur/{fournisseur_id}/devise")
+async def maj_devise_fournisseur(request: Request, fournisseur_id: int):
+    """La devise d'achat d'un fournisseur — elle vaut pour tout ce qu'il vend."""
+    _require_write(request)
+    body = await request.json()
+    with get_db() as conn:
+        r = mystock_prix.set_devise_fournisseur(
+            conn, fournisseur_id=fournisseur_id, devise=body.get("price_currency")
+        )
+        if not r.get("ok"):
+            raise HTTPException(400, r.get("reason") or "Devise refusée.")
+        conn.commit()
+    return r
+
+
+@router.patch("/api/pricing/tarifs/{fournisseur_id}/{matiere_id}")
+async def maj_tarif(request: Request, fournisseur_id: int, matiere_id: int):
+    """
+    Le tarif d'un fournisseur pour une matière.
+
+    La réponse dit combien de déclinaisons en ont vu leur sous-total bouger :
+    changer un transport ne touche aucun prix d'achat, mais déplace tout ce que
+    la valorisation MyStock affiche là où ce fournisseur fait foi.
+    """
+    user = _require_write(request)
+    body = await request.json()
+    with get_db() as conn:
+        r = mystock_prix.set_tarif(
+            conn,
+            fournisseur_id=fournisseur_id,
+            matiere_id=matiere_id,
+            patch=body,
+            user_id=user.get("id"),
+            user_name=(user.get("nom") or user.get("email") or "").strip() or None,
+        )
+        if not r.get("ok"):
+            raise HTTPException(400, r.get("reason") or "Tarif refusé.")
+        conn.commit()
+    return r
 
 
 @router.get("/api/pricing/fournisseurs/rapprochement")
@@ -1173,28 +1322,56 @@ def list_mystock_materials(
         # Coût au m² de chaque déclinaison : c'est la colonne qui rend la liste
         # utile, sinon il faut ouvrir chaque fiche pour savoir ce que la matière
         # coûte réellement.
+        #
+        # Et un coût par LIGNE fournisseur, calculé avec les mêmes réglages et le
+        # prix de cette ligne-là. Sans lui, un deuxième fournisseur ne servait à
+        # rien : on voyait deux prix d'achat, jamais les deux coûts au m² — et
+        # c'est le coût au m² qui tranche, pas le prix au kilo (grammage, perte,
+        # transport et taxes ne se comparent pas à l'œil).
+        #
+        # Le calcul est pur — Decimal, aucun accès base : le refaire par ligne ne
+        # coûte rien.
         from app.services.pricing.repository import declinaison_to_pricing_material
 
         reglages = load_pricing_settings(conn)
+
+        def _cout_m2(base: dict, prix: Any) -> Optional[float]:
+            if not prix:
+                return None
+            try:
+                return float(
+                    compute_material_price_per_m2(
+                        declinaison_to_pricing_material({**base, "unit_price": prix}),
+                        reglages,
+                    ).price_eur_per_m2
+                )
+            except PricingError:
+                # Réglages incomplets : la fiche le dira, la liste ne doit pas
+                # tomber pour autant.
+                return None
+
         for m in materials:
             for d in m.get("declinaisons", []):
-                d["cout_eur_m2"] = None
-                if not d.get("unit_price"):
-                    continue
-                try:
-                    d["cout_eur_m2"] = float(
-                        compute_material_price_per_m2(
-                            declinaison_to_pricing_material(
-                                {**d, "declinaison_id": d["id"],
-                                 "reference": m["reference"], "libelle": d["libelle"]}
-                            ),
-                            reglages,
-                        ).price_eur_per_m2
-                    )
-                except PricingError:
-                    # Réglages incomplets : la fiche le dira, la liste ne doit
-                    # pas tomber pour autant.
-                    pass
+                base = {
+                    **d,
+                    "declinaison_id": d["id"],
+                    "reference": m["reference"],
+                    "libelle": d["libelle"],
+                }
+                d["cout_eur_m2"] = _cout_m2(base, d.get("unit_price"))
+                for ligne in d.get("lignes", []):
+                    # La ligne apporte le tarif de SON fournisseur (devise, base
+                    # de prix, transport, taxes). Le calquer sur la déclinaison
+                    # reviendrait à comparer deux fournisseurs avec le transport
+                    # d'un seul — c'était le défaut qu'on corrige.
+                    ligne["cout_eur_m2"] = _cout_m2({**base, **ligne}, ligne.get("prix"))
+            # « Réglées » veut dire chiffrées : une déclinaison dont on sait
+            # sortir un coût au m². `nb_parametrees` comptait autre chose — les
+            # fiches ouvertes et enregistrées à la main — si bien qu'une
+            # déclinaison affichant son coût pouvait être annoncée non réglée.
+            m["nb_chiffrees"] = sum(
+                1 for d in m.get("declinaisons", []) if d.get("cout_eur_m2")
+            )
         cats = sorted(
             r["categorie"]
             for r in conn.execute(

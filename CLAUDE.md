@@ -776,6 +776,178 @@ Tests : `python3 tests/test_mystock_declinaisons.py`,
 
 ---
 
+## OF et fiches techniques — qui a le dernier mot
+
+Deux sources écrivent dans `of_imports` et `fiches_techniques` : le pont Access
+(`scripts/access_sync_of.py`, `scripts/access_sync_fiches.py` → `/api/bridge/*`)
+et les humains (import d'un PDF d'OF, correction dans une modale MySifa). Le
+déstockage de production lit ces deux tables. Un arbitrage faux ne se voit pas :
+il sort à l'inventaire, des semaines plus tard.
+
+**Deux règles, arbitrées au niveau du CHAMP.**
+
+1. Le document le plus récent fait foi.
+2. Sauf sur une valeur saisie par un humain.
+
+Au niveau du document ces deux règles se contredisent, et c'est ce qui donnait
+deux comportements opposés selon la table (avant le 7 août 2026) : un OF portant
+un PDF était gelé en entier — une quantité corrigée dans Access n'arrivait
+jamais — tandis qu'une fiche technique était intégralement écrasée à chaque
+sync, correction atelier comprise, sans trace. Au niveau du champ, les deux
+règles tiennent ensemble.
+
+Tout passe désormais par **`app/services/documents_verite.py`**. Aucun autre
+chemin ne doit écrire dans ces deux tables.
+
+- `appliquer_maj(...)` — écriture arbitrée. `proteger_manuels` refuse
+  d'écraser une colonne listée dans `champs_manuels` (JSON) et journalise le
+  refus ; `marquer_manuels` ajoute les colonnes écrites à cette liste ;
+  `seulement_vides` reproduit `enrich_if_exists` ; `autoriser_effacement` n'est
+  vrai que pour une saisie humaine — un `None` venu d'Access est presque
+  toujours une jointure vide, pas une décision.
+- `constater_remplacement(...)` — pour l'import d'un PDF d'OF, qui réécrit la
+  ligne d'un bloc. On n'arbitre pas ce geste, on en tire les conséquences.
+
+**La validation se périme.** Toute écriture sur un champ de
+`CHAMPS_CALCUL_OF` / `CHAMPS_CALCUL_FT` remet `valide` à 0, efface `valide_par`
+et renseigne `invalide_motif`. Sans cela le verrou de déstockage atteste d'une
+relecture qui a bien eu lieu — mais pas sur les valeurs qui serviront au calcul.
+Corriger n'est pas relire : une correction humaine dévalide au même titre
+qu'une modification Access.
+
+`reference` et `machine` sont dans les champs de calcul bien qu'ils ne soient
+pas des quantités : ce sont eux qui décident QUELLE fiche technique est
+rapprochée du dossier.
+
+**Tout est journalisé** dans `documents_valeurs_historique` (avant, après,
+origine, auteur, `etait_valide`, `refuse`). Un mouvement de déstockage porte en
+plus `mp_mouvements.of_import_id` et `.fiche_id` : le dossier seul ne suffit
+pas, il change d'OF et une fiche se modifie.
+
+**Ce qu'il ne faut pas faire**
+
+- ❌ `UPDATE of_imports SET ...` ou `UPDATE fiches_techniques SET ...` en direct
+- ❌ Rendre `valide` modifiable par un endpoint de mise à jour de données
+- ❌ Ignorer un conflit en silence : un désaccord Access / MySifa se remonte
+
+**Vérifier l'état d'une base**
+
+```bash
+python scripts/audit_documents_validation.py --db data/production.db
+```
+
+Sections 3 et 4 du rapport doivent rester vides. Une ligne en section 3 (document
+validé malgré un changement postérieur) signale un chemin d'écriture qui
+court-circuite le service.
+
+Tests : `python3 tests/test_documents_verite.py` (arbitrage, péremption,
+journal) et `python3 tests/test_besoins_verrou_documents.py` (SQL réelle de
+Besoins matières + blocage du déstockage).
+
+---
+
+## Nombre de fronts — `outil1_nb_front`, jamais `mod_nb_front`
+
+Le nombre de fronts est au **dénominateur** du métrage :
+
+    métrage = qte_étiquettes ÷ nb_fronts × mod_longueur ÷ 1000
+
+S'y tromper d'un facteur 18 multiplie le besoin en frontal par 18.
+
+**Constat du 7 août 2026, base de production :** `mod_nb_front` vaut 1 sur
+**878 fiches sur 909**. Ce n'est pas une valeur, c'est un champ que personne ne
+remplit. Le vrai nombre de fronts est `outil1_nb_front` — les poses de l'outil
+de découpe — confirmé par la géométrie sur **868 fiches sur 909**.
+
+Conséquence avant correction : les 585 OF sans métrage (sur 745) passaient par
+le repli géométrique et sortaient un besoin surestimé d'un facteur égal au vrai
+nombre de fronts. Un dossier est ressorti à **55 823 km de frontal**, dix fois
+le total d'un mois entier.
+
+`app/services/coherence_fiche.py` porte les deux fonctions :
+
+- `nb_fronts(ft, laize_of)` — la valeur à utiliser et sa provenance. Ordre :
+  `outil1_nb_front`, puis `mod_nb_front` s'il est > 1, puis la géométrie.
+- `controler(ft, laize_of)` — vérifie que la fiche boucle, et chiffre le
+  facteur d'erreur.
+
+**L'identité qui rend le contrôle possible**, et qui ne demande aucune source
+extérieure :
+
+    nb_fronts ≈ laize_bobine ÷ laize_module
+
+La laize de l'OF prime sur celle de la fiche : c'est la bobine réellement
+montée. `eti_laize` est la largeur de l'ÉTIQUETTE, jamais celle de la bobine —
+les confondre redonne un nombre de fronts de 1.
+
+`GET /api/stock/besoins-matieres/fiches-incoherentes` liste les fiches à
+corriger, classées par facteur d'erreur puis par nombre de dossiers concernés.
+
+**On ne corrige jamais d'office.** Une fiche fausse se répare dans Access, à la
+source. Compenser en silence à chaque lecture cacherait le problème pendant que
+les commandes continuent de partir de travers.
+
+Test : `python3 tests/test_coherence_fiche.py` (fiches réelles relevées en
+production).
+
+---
+
+## Prévision des besoins matières — pourquoi on photographie le carnet
+
+**Ne pas supprimer `carnet_snapshots` sous prétexte qu'elle ne sert à rien.**
+Elle ne servira à rien jusqu'à novembre 2026, et c'est exactement pourquoi elle
+existe depuis août.
+
+Prévoir la consommation matière à 3-4 mois ne consiste pas à extrapoler une
+courbe. Sur cet horizon, une partie du besoin est déjà connue — les dossiers au
+planning livrés dans la fenêtre, que Besoins matières chiffre exactement. Ce
+qui reste à estimer, c'est le **remplissage** :
+
+    prévision(M+k) = besoin_connu(M+k) ÷ p(k)
+
+où p(k) est la part du volume final déjà visible k mois à l'avance.
+
+p(k) se mesure — mais seulement si l'on sait ce que le carnet contenait à une
+date passée. Or `planning_entries` ne garde que le présent : au 7 août 2026,
+ses 295 dossiers avaient TOUS été créés dans les quatre mois précédents. Un
+dossier terminé quitte la fenêtre et emporte la trace de ce qu'il pesait.
+
+Diagnostic reproductible :
+
+```bash
+python scripts/diag_previsions_matieres.py --db data/production.db
+```
+
+D'où `app/services/carnet_snapshot.py` : une photo par jour du besoin calculé,
+par mois de livraison et par matière. Déclenchée par la consultation de Besoins
+matières (l'écran est ouvert chaque jour ouvré), idempotente, best-effort — son
+échec ne doit jamais empêcher l'affichage.
+
+Deux points de conception à ne pas défaire :
+
+- **On stocke le besoin CALCULÉ, pas les dossiers.** C'est la grandeur à
+  prédire, et elle survit à la suppression du dossier qui l'a produite.
+- **`nb_incalculables` compte à part les besoins non chiffrables.** Un carnet
+  dont les OF n'ont pas de métrage ressemble trait pour trait à un carnet vide ;
+  sans ce compteur on calibrerait sur une pénurie de données en croyant
+  calibrer sur une pénurie de commandes.
+
+`GET /api/stock/besoins-matieres/carnet/couverture` dit où en est
+l'accumulation et quels horizons sont calibrables. Tant que
+`horizons_calibrables` est vide, aucun modèle fondé sur le remplissage n'est
+honnête — l'écran doit le dire plutôt qu'afficher un chiffre.
+
+L'historique antérieur (2022 → 2026) n'est pas dans la base : il vit dans le
+classeur « Point Besoin des commandes ». Deux feuilles complémentaires dans le
+temps — « analyse Eugene » (2022 et 2026) et « Controle dossier » (2023-09 à
+2025-12) — à dédoublonner par numéro d'OF, avec deux définitions différentes du
+métrage (théorique d'un côté, utilisé de l'autre, plus une colonne
+`Surconsommation`).
+
+Test : `python3 tests/test_carnet_snapshot.py`.
+
+---
+
 ## Points d'attention critiques
 
 **Base de données**
@@ -791,7 +963,22 @@ Tests : `python3 tests/test_mystock_declinaisons.py`,
 - Ne jamais reconstruire le DOM d'une modal ouverte pendant un refresh automatique — vérifier `document.getElementById("mroot").firstElementChild` avant tout re-render global
 
 **Routing**
-- `frontend/` et `routers/` à la racine sont des **shims** — ne pas y ajouter de logique
+- `frontend/`, `routers/` et `database.py` à la racine sont des **shims** — ne pas y ajouter de logique
+- **Script lancé à la main : importer `database` AVANT tout `app.*`.** Le shim
+  `database.py` fait `from app.core.database import *`. Si un script importe
+  `app.core.database` en premier, ce module exécute les migrations au
+  chargement, ce qui réimporte le shim alors qu'il est à mi-parcours : le shim
+  se retrouve sans `get_db` et Python garde cette version cassée en cache.
+  Symptôme : `ImportError: cannot import name 'get_db' from 'database'` sur un
+  code qui tourne parfaitement dans l'application. `main.py` n'est jamais
+  touché parce qu'il charge le shim en premier.
+
+  ```python
+  import sys; sys.path.insert(0, '.')
+  import database                      # d'abord, toujours
+  from database import get_db
+  from app.services.mon_service import ma_fonction
+  ```
 - Tout nouveau router doit être créé dans `app/routers/` et enregistré dans `main.py`
 - Toute nouvelle page doit être créée dans `app/web/` et enregistrée dans `main.py`
 

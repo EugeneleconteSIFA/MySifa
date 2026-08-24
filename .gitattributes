@@ -1,2 +1,10 @@
 # Les scripts shell doivent garder des fins de ligne LF même sur Windows.
 *.sh text eol=lf
+
+*.py text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+
+*.csv -text
+*.xlsx binary
+*.docx binary

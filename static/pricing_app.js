@@ -33,6 +33,9 @@
     settings: null,
     // Observateur de hauteur du bandeau d'actions fixe (voir syncSavebarSpacer).
     savebarRO: null,
+    // Tarifs fournisseurs : liste de l'annuaire, et fiche ouverte.
+    tarifFournisseurs: [],
+    tarifFiche: null,
     filters: {
       matQ: "",
       matCats: [],
@@ -51,6 +54,7 @@
       // Onglet actif de la page Produits : base Coûts matières ou MyStock.
       prodTab: "mystock",
       msProdQ: "",
+      tarifQ: "",
     },
     msDecls: [],
     msProducts: [],
@@ -148,6 +152,7 @@
         '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
       // Bascule d'affichage : « layers » = référence + déclinaisons empilées,
       // « list » = une ligne par déclinaison.
+      truck: '<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
       list: '<line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
     };
     return "<svg " + a + ">" + (p[name] || p.grid) + "</svg>";
@@ -454,6 +459,10 @@
       }
       if (parts[2] && /^\d+$/.test(parts[2])) return { name: "mystock-edit", id: parts[2] };
     }
+    if (seg === "fournisseurs") {
+      if (parts[2] && /^\d+$/.test(parts[2])) return { name: "fournisseur-edit", id: parts[2] };
+      return { name: "fournisseurs", id: null };
+    }
     if (seg === "settings") return { name: "settings", id: null };
     return { name: "materials", id: null };
   }
@@ -543,6 +552,9 @@
     const items = [
       { path: "/pricing/materials", label: "Matières", route: "materials", icon: "package" },
       { path: "/pricing/products", label: "Produits", route: "products", icon: "layers" },
+      // Les tarifs vivent ici parce que c'est ici qu'on raisonne en coûts. La
+      // fiche fournisseur de Réglages en porte un raccourci.
+      { path: "/pricing/fournisseurs", label: "Fournisseurs", route: "fournisseurs", icon: "truck" },
     ];
     if (S.canWrite) {
       items.push({ path: "/pricing/settings", label: "Paramètres", route: "settings", icon: "settings" });
@@ -569,6 +581,8 @@
 
     const titles = {
       materials: ["Matières", "Liste"],
+      fournisseurs: ["Fournisseurs", ""],
+      "fournisseur-edit": ["Fournisseur", "Tarifs"],
       "material-new": ["Matière", "Nouvelle"],
       "material-edit": ["Matière", "Édition"],
       products: ["Produits", "Liste"],
@@ -721,7 +735,7 @@
         )}
         <div class="filters">
           <input type="search" class="search-input" id="mat-q" placeholder="Rechercher (nom, appellation…)" value="${escAttr(S.filters.matQ)}"/>
-          <select id="mat-sup">${supOpts}</select>
+          <select id="mat-sup" class="pr-fourn-filtre">${supOpts}</select>
           <select id="mat-active"><option value="1" ${S.filters.matActive==="1"?"selected":""}>Actifs</option><option value="0" ${S.filters.matActive==="0"?"selected":""}>Inactifs</option><option value="all" ${S.filters.matActive==="all"?"selected":""}>Tous</option></select>
         </div>
         <div class="cat-filters">${catOpts}</div>
@@ -747,11 +761,26 @@
         renderMaterialsList();
       }, 300);
     };
-    document.getElementById("mat-sup").onchange = async (e) => {
-      S.filters.matSupplier = e.target.value;
-      await loadMaterialsList();
-      renderMaterialsList();
-    };
+    // Le filtre fournisseur devient une recherche. Favoris = les catégories
+    // de matière déjà cochées dans les filtres : quand on regarde les
+    // adhésifs, les fournisseurs d'adhésif remontent d'eux-mêmes.
+    {
+      const selSup = document.getElementById("mat-sup");
+      const instSup = pickerFournisseur(selSup, {
+        placeholder: "Tous fournisseurs — taper pour filtrer",
+        className: "mys-fp-sm",
+        emptyLabel: "— Tous fournisseurs —",
+        activeOnly: false,   // un filtre doit pouvoir viser une fiche archivée
+        resolveCategories: () =>
+          (S.filters.matCats || []).flatMap(fournCatsDepuisCategorieCode),
+      });
+      const champSup = instSup ? instSup.hidden : selSup;
+      champSup.onchange = async () => {
+        S.filters.matSupplier = champSup.value;
+        await loadMaterialsList();
+        renderMaterialsList();
+      };
+    }
     document.getElementById("mat-active").onchange = async (e) => {
       S.filters.matActive = e.target.value;
       await loadMaterialsList();
@@ -827,6 +856,47 @@
     return `${fmtPrixUnite(m.prix_min, m.unite)} <span class="muted">à</span> ${fmtPrixUnite(m.prix_max, m.unite)}`;
   }
 
+  /* Catégorie de matière (FRONTAL, ADHESIF…) → catégorie de fournisseur
+     (frontal, adhesif…). C'est ce qui fait remonter « Fournisseurs adhésif »
+     en tête de la recherche quand on renseigne le prix d'un adhésif.
+
+     Les deux référentiels sont distincts et le resteront : une matière est
+     rangée par ce qu'elle EST, un fournisseur par ce qu'il VEND. Ils se
+     recouvrent aujourd'hui sur les codes usuels ; un code sans correspondance
+     ne renvoie rien, et la recherche s'affiche alors sans groupe de favoris —
+     dégradation silencieuse volontaire, pas un blocage. */
+  const FOURN_CATS_CONNUES = new Set([
+    "mandrin", "palette", "adhesif", "carton", "frontal", "glassine",
+    "complexe", "autre", "negoce", "sous_traitant",
+  ]);
+
+  function fournCatsDepuisCategorieCode(code) {
+    if (!code) return [];
+    const c = String(code).toLowerCase();
+    return FOURN_CATS_CONNUES.has(c) ? [c] : [];
+  }
+
+  function fournCatsDepuisMatiere(m) {
+    if (!m) return [];
+    // La matière porte parfois son code de catégorie, parfois seulement l'id.
+    const direct = m.category_code || m.categorie_code || m.category || null;
+    if (direct) return fournCatsDepuisCategorieCode(direct);
+    const id = m.category_id != null ? m.category_id : m.categorie_id;
+    if (id == null) return [];
+    const cat = (S.categories || []).find((c) => String(c.id) === String(id));
+    return cat ? fournCatsDepuisCategorieCode(cat.code) : [];
+  }
+
+  /* Convertit en place un <select> de fournisseur en recherche à la frappe.
+     Le champ caché reprend l'id du select, donc tout le code qui lisait
+     document.getElementById(<id>).value continue de fonctionner. */
+  function pickerFournisseur(selector, opts) {
+    if (!window.MysFournisseurPicker) return null;   // script absent : le <select> reste
+    const el = typeof selector === "string" ? document.querySelector(selector) : selector;
+    if (!el || el.tagName !== "SELECT") return null;
+    return window.MysFournisseurPicker.fromSelect(el, opts || {});
+  }
+
   function fournisseurOptions(selectedId) {
     return (
       '<option value="">— Sans fournisseur —</option>' +
@@ -869,6 +939,28 @@
   }
 
   /**
+   * Coût au m² d'une ligne de prix.
+   *
+   * Le serveur le calcule ligne par ligne : même déclinaison, mêmes réglages,
+   * prix de la ligne. La ligne principale l'affiche en clair et ouvre la fiche
+   * de paramétrage — c'est elle qui fait foi. Les autres le donnent en retrait :
+   * ce sont des hypothèses, « voilà ce que ça coûterait chez celui-là ».
+   *
+   * Le calcul ne se refait pas côté client : avec un forfait de transport, le
+   * coût ne suit pas le prix proportionnellement.
+   */
+  function coutLigneHtml(d, l) {
+    const cout = l.cout_eur_m2;
+    if (l.principal) {
+      return cout != null && cout > 0
+        ? `<button type="button" class="link-btn" data-ms-open="${d.id}" title="Ouvrir le paramétrage de cette déclinaison">${escHtml(fmtEurM2(cout))}</button>`
+        : `<button type="button" class="link-btn muted" data-ms-open="${d.id}" title="Renseigner poids, devise, taxes et transport">à paramétrer</button>`;
+    }
+    if (cout == null || !(cout > 0)) return '<span class="muted">—</span>';
+    return `<span class="ms-cout-alt" title="Coût si ce fournisseur devenait le principal">${escHtml(fmtEurM2(cout))}</span>`;
+  }
+
+  /**
    * Zone dépliée : une seule table à plat. Chaque ligne porte sa déclinaison,
    * son fournisseur, son prix, sa fiche appairée et ses actions.
    */
@@ -882,24 +974,30 @@
       (d.lignes || []).forEach((l, i) => {
         const fid = l.fournisseur_id == null ? "" : l.fournisseur_id;
         const key = `${d.id}|${fid}`;
-        // Le coût au m² est le vrai résultat attendu : il ouvre la fiche de
-        // paramétrage de la déclinaison.
-        const cout = d.cout_eur_m2 != null && d.cout_eur_m2 > 0
-          ? `<button type="button" class="link-btn" data-ms-open="${d.id}" title="Ouvrir le paramétrage de cette déclinaison">${escHtml(fmtEurM2(d.cout_eur_m2))}</button>`
-          : `<button type="button" class="link-btn muted" data-ms-open="${d.id}" title="Renseigner poids, devise, taxes et transport">à paramétrer</button>`;
+        // Chaque ligne montre SON coût au m², calculé avec son prix et les
+        // réglages de la déclinaison. C'est la seule façon de comparer deux
+        // fournisseurs : le prix au kilo ne dit rien tant que le grammage, la
+        // perte, le transport et les taxes ne sont pas passés dessus.
+        // Seule la ligne principale ouvre la fiche — c'est elle qui fait foi ;
+        // les autres sont des hypothèses, affichées en retrait.
+        const cout = coutLigneHtml(d, l);
         lignes.push(`<tr class="${l.principal ? "ms-principal" : ""}">
           <td class="ms-statut">${l.principal
               ? `<span class="badge badge-glassine" title="Ce prix fait foi">Principal</span>`
               : (S.canWrite ? actionBtn("data-ms-principal", key, "star", "Faire de ce prix celui qui fait foi") : "")}</td>
           <td class="ms-decl-cell">${i === 0 ? declinaisonCell(m, d) : '<span class="ms-decl-rappel">↳</span>'}</td>
           <td>${S.canWrite
-              ? `<select class="ms-inline" data-ms-fourn="${escAttr(key)}">${fournisseurOptions(l.fournisseur_id)}</select>`
-              : escHtml(l.fournisseur_nom || "— Sans fournisseur —")}</td>
+              ? `<select class="ms-inline" data-ms-fourn="${escAttr(key)}" data-fourn-cats="${escAttr(fournCatsDepuisMatiere(m).join(","))}">${fournisseurOptions(l.fournisseur_id)}</select>`
+              : escHtml(l.fournisseur_nom || "— Sans fournisseur —")}
+            ${l.fournisseur_id
+              ? `<button type="button" class="ms-tarif-btn" data-ms-tarif="${l.fournisseur_id}|${m.id}"
+                   title="Tarif de ${escAttr(l.fournisseur_nom || "ce fournisseur")} pour ${escAttr(m.reference)} : transport, taxes, base de prix${l.a_tarif === false ? " — aucun tarif propre, réglages hérités" : ""}">${icon("truck", 13)}${l.a_tarif === false ? '<span class="ms-tarif-manquant" aria-hidden="true"></span>' : ""}</button>`
+              : ""}</td>
           <td>${S.canWrite
               ? `<input type="number" step="0.0001" class="ms-inline ms-prix" data-ms-prix="${escAttr(key)}" value="${escAttr(l.prix)}"/>`
               : fmtPrixUnite(l.prix, m.unite)}</td>
           <td class="ms-unite">${escHtml(m.unite)}</td>
-          <td class="ms-fiche">${i === 0 ? cout : ""}</td>
+          <td class="ms-fiche">${cout}</td>
           <td class="ms-meta">${escHtml(l.updated_at ? String(l.updated_at).replace("T", " ").slice(0, 16) : "—")}${l.updated_by_name ? " · " + escHtml(l.updated_by_name) : ""}</td>
           <td class="ms-actions">${S.canWrite
               ? actionBtn("data-ms-open", d.id, "edit", "Ouvrir le paramétrage de cette déclinaison") +
@@ -988,41 +1086,53 @@
     (S.mystock || []).forEach((m) => {
       const decls = m.declinaisons || [];
       if (!decls.length) {
-        lignes.push({ m, d: null, principal: null, autres: 0 });
+        lignes.push({ m, d: null, lignes: [], principal: null });
         return;
       }
       decls.forEach((d) => {
-        const prix = d.lignes || [];
-        // Le prix qui fait foi ; à défaut, le premier connu — la ligne doit
-        // afficher quelque chose, pas un tiret trompeur.
-        const principal = prix.find((l) => l.principal) || prix[0] || null;
-        lignes.push({ m, d, principal, autres: Math.max(0, prix.length - 1) });
+        // Le prix qui fait foi en tête, les autres à la suite : la ligne montre
+        // tous les fournisseurs de la déclinaison, pas seulement le retenu.
+        // Sans eux, un deuxième fournisseur n'existait nulle part dans cette vue.
+        const prix = (d.lignes || []).slice().sort(
+          (a, b) => (b.principal ? 1 : 0) - (a.principal ? 1 : 0)
+        );
+        lignes.push({ m, d, lignes: prix, principal: prix[0] || null });
       });
     });
     return lignes;
   }
 
   function mystockFlatRowHtml(entree) {
-    const { m, d, principal, autres } = entree;
+    const { m, d } = entree;
+    const prix = entree.lignes || [];
+
     const decl = d
       ? (d.libelle
           ? `<strong>${escHtml(d.libelle)}</strong>`
           : `<span class="muted">${escHtml(DECL_LABEL[m.type_declinaison] || "valeur")} à définir</span>`)
       : '<span class="muted">sans déclinaison</span>';
 
-    const fournisseur = principal && principal.fournisseur_nom
-      ? escHtml(principal.fournisseur_nom)
-      : '<span class="muted">—</span>';
-    const plus = autres
-      ? ` <span class="msl-plus" title="${escAttr(autres + " autre(s) fournisseur(s) sur cette déclinaison")}">+${autres}</span>`
-      : "";
+    // Trois colonnes empilées en parallèle : une sous-ligne par fournisseur, le
+    // principal en tête. Une déclinaison à fournisseur unique — le cas courant —
+    // garde une ligne d'une seule hauteur.
+    const vide = '<span class="muted">—</span>';
+    const empiler = (rendu) =>
+      prix.length
+        ? prix.map((l) => `<div class="msl-l${l.principal ? " msl-l-main" : ""}">${rendu(l)}</div>`).join("")
+        : vide;
 
-    const prix = principal && principal.prix != null
-      ? fmtPrixUnite(principal.prix, m.unite)
-      : '<span class="muted">—</span>';
-
-    const cout = d && d.cout_eur_m2 != null && d.cout_eur_m2 > 0
-      ? `<span class="msl-cout">${escHtml(fmtEurM2(d.cout_eur_m2))}</span>`
+    const fournisseurs = empiler((l) =>
+      l.fournisseur_nom ? escHtml(l.fournisseur_nom) : '<span class="muted">sans fournisseur</span>'
+    );
+    const prixCell = empiler((l) =>
+      l.prix != null ? escHtml(fmtPrixUnite(l.prix, m.unite)) : "—"
+    );
+    const coutCell = prix.length
+      ? empiler((l) =>
+          l.cout_eur_m2 != null && l.cout_eur_m2 > 0
+            ? `<span class="msl-cout">${escHtml(fmtEurM2(l.cout_eur_m2))}</span>`
+            : '<span class="badge badge-silicone">à paramétrer</span>'
+        )
       : '<span class="badge badge-silicone">à paramétrer</span>';
 
     const action = d
@@ -1035,9 +1145,9 @@
         <td>${categorieBadge(m.categorie)}</td>
         <td class="msl-ref" title="${escAttr(m.designation || m.reference)}"><strong>${escHtml(m.reference)}</strong></td>
         <td class="msl-decl"${d && d.libelle ? ` title="${escAttr(d.libelle)}"` : ""}>${decl}</td>
-        <td>${fournisseur}${plus}</td>
-        <td class="msl-prix">${prix}</td>
-        <td class="msl-coutcell">${cout}</td>
+        <td class="msl-fourn">${fournisseurs}</td>
+        <td class="msl-prix">${prixCell}</td>
+        <td class="msl-coutcell">${coutCell}</td>
         <td class="ms-actions" onclick="event.stopPropagation()">${action}</td>
       </tr>`;
   }
@@ -1056,7 +1166,11 @@
       .map((m) => {
         const open = !!S.expanded[m.id];
         const nb = m.nb_declinaisons || 0;
-        const prets = m.nb_parametrees || 0;
+        // « Réglée » = chiffrée, c'est-à-dire dont on sait sortir un coût au
+        // m². Le compteur d'avant (`nb_parametrees`) comptait les fiches
+        // ouvertes et enregistrées à la main : une déclinaison pouvait afficher
+        // son coût dans le tableau et être annoncée non réglée dans le badge.
+        const prets = m.nb_chiffrees != null ? m.nb_chiffrees : (m.nb_parametrees || 0);
         // Le fournisseur dont le prix fait foi. Plusieurs déclinaisons peuvent
         // en avoir des différents : on ne nomme que s'il n'y en a qu'un.
         const principaux = [...new Set(
@@ -1224,10 +1338,22 @@
         }
       };
     });
-    document.querySelectorAll("[data-ms-fourn]").forEach((sel) => {
-      sel.onchange = async () => {
-        const k = parseMsKey(sel.getAttribute("data-ms-fourn"));
-        const nouveau = sel.value === "" ? null : parseInt(sel.value, 10);
+    document.querySelectorAll("select[data-ms-fourn]").forEach((sel) => {
+      // Converti AVANT la pose du handler : après conversion, `sel` n'est plus
+      // dans le DOM et son onchange ne partirait jamais. On garde une
+      // référence au champ qui porte désormais la valeur.
+      const cats = (sel.getAttribute("data-fourn-cats") || "").split(",").filter(Boolean);
+      const cle = sel.getAttribute("data-ms-fourn");
+      const inst = pickerFournisseur(sel, {
+        categories: cats,
+        placeholder: "Fournisseur…",
+        className: "mys-fp-sm",
+        emptyLabel: "— Sans fournisseur —",
+      });
+      const champ = inst ? inst.hidden : sel;
+      champ.onchange = async () => {
+        const k = parseMsKey(cle);
+        const nouveau = champ.value === "" ? null : parseInt(champ.value, 10);
         // On renomme le fournisseur de la ligne existante : la recréer lui ferait
         // perdre son statut de principal.
         if (
@@ -1307,12 +1433,374 @@
         }
       };
     });
+    // Le camion d'une ligne ouvre le tarif de SON fournisseur pour CETTE
+    // matière. C'est la porte la plus directe : on est déjà devant l'écart de
+    // coût qu'on cherche à expliquer.
+    document.querySelectorAll("[data-ms-tarif]").forEach((btn) => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const [fid, mid] = btn.getAttribute("data-ms-tarif").split("|");
+        await openTarifModal(parseInt(fid, 10), parseInt(mid, 10), async () => {
+          await loadMystockList();
+          renderMystockList();
+        });
+      };
+    });
     // Ouverture de la fiche de paramétrage de la déclinaison.
     document.querySelectorAll("[data-ms-open]").forEach((btn) => {
       btn.onclick = () => navigate("/pricing/mystock/" + btn.getAttribute("data-ms-open"));
     });
   }
 
+
+  // ─── Tarifs fournisseurs ───────────────────────────────────────────────────
+  //
+  // Un tarif ne dépend ni de la laize ni du grammage : il dépend de chez qui on
+  // achète — la devise — et de ce qu'on lui achète — base de prix, transport,
+  // taxes. Deux fournisseurs sur la même déclinaison n'ont aucune raison de
+  // partager un mode de transport : Meltavis livre par conteneur depuis l'Asie,
+  // Bostik par forfait local. C'est ce que cet écran permet enfin de dire.
+
+  async function loadTarifFournisseurs() {
+    const d = await api("/api/pricing/tarifs/fournisseurs");
+    S.tarifFournisseurs = d.fournisseurs || [];
+    S.tarifsDisponibles = d.tarifs_disponibles !== false;
+  }
+
+  async function loadTarifFiche(id) {
+    S.tarifFiche = await api("/api/pricing/tarifs/fournisseur/" + id);
+  }
+
+  /** Résumé d'un tarif en une ligne : ce qui s'ajoute au prix, et comment. */
+  function tarifResume(t) {
+    const bouts = [];
+    bouts.push(t.price_basis === "PER_M2" ? "au m²" : "au kilo");
+    if (t.is_imported) {
+      const m = t.transport_mode || "AMOUNT";
+      if (m === "PCT" && t.transport_pct) {
+        bouts.push(`transport ${fmtPct(t.transport_pct)}`);
+      } else if (m === "AMOUNT" && t.transport_unit_price) {
+        bouts.push(`transport ${fmtNum(t.transport_unit_price, 2, 4)}`);
+      } else if ((m === "CONTENEUR" || m === "FORFAIT") && t.transport_cout) {
+        bouts.push(
+          `${m === "CONTENEUR" ? "conteneur" : "forfait"} ${fmtNum(t.transport_cout, 0, 2)} €` +
+          (t.transport_quantite ? ` ÷ ${fmtNum(t.transport_quantite, 0, 0)}` : " ÷ ?")
+        );
+      } else {
+        bouts.push("transport à renseigner");
+      }
+      if (t.taxe_pct) bouts.push(`taxes ${fmtPct(t.taxe_pct)}`);
+    } else {
+      bouts.push("pas d'import");
+    }
+    return bouts.join(" · ");
+  }
+
+  function renderTarifFournisseurs() {
+    const q = (S.filters.tarifQ || "").trim().toLowerCase();
+    const liste = S.tarifFournisseurs.filter(
+      (f) => !q || String(f.nom || "").toLowerCase().includes(q)
+    );
+    const lignes = liste
+      .map((f) => {
+        // Un fournisseur dont on achète des matières sans lui avoir posé de
+        // tarif calcule ses coûts sur un repli : autant le dire.
+        const manque = Math.max(0, (f.nb_matieres || 0) - (f.nb_tarifs || 0));
+        const etat = !f.nb_matieres
+          ? '<span class="muted">aucun achat</span>'
+          : (manque
+              ? `<span class="badge badge-silicone">${manque} sans tarif</span>`
+              : `<span class="badge badge-frontal">${f.nb_tarifs} tarif${f.nb_tarifs > 1 ? "s" : ""}</span>`);
+        return `<tr data-tarif-open="${f.id}">
+            <td><strong>${escHtml(f.nom)}</strong>${f.actif ? "" : ' <span class="badge badge-autre">inactif</span>'}</td>
+            <td>${currencyBadge(f.price_currency)}</td>
+            <td class="msl-prix">${f.nb_matieres || 0}</td>
+            <td class="msl-prix">${f.nb_declinaisons || 0}</td>
+            <td>${etat}</td>
+            <td class="ms-actions" onclick="event.stopPropagation()">
+              ${actionBtn("data-tarif-open", f.id, "edit", "Ouvrir la fiche tarif")}
+            </td>
+          </tr>`;
+      })
+      .join("");
+
+    setContent(`
+      <div class="pr-narrow">
+        ${pageHead("Fournisseurs", `${liste.length} fournisseur(s) · tarifs d'achat`)}
+        ${S.tarifsDisponibles === false ? `<div class="ms-hint">
+          <strong>Tarifs indisponibles</strong> — la base n'a pas encore reçu la migration
+          des tarifs fournisseurs. Les coûts sont calculés sur les anciens réglages
+          de déclinaison.</div>` : ""}
+        <div class="filters">
+          <input type="search" class="search-input" id="tarif-q" placeholder="Rechercher un fournisseur…" value="${escAttr(S.filters.tarifQ)}"/>
+        </div>
+        <div class="table-wrap">
+          <table class="pr-table">
+            <thead><tr><th>Fournisseur</th><th>Devise</th><th>Matières</th><th>Déclinaisons</th><th>Tarifs</th><th class="ms-actions"></th></tr></thead>
+            <tbody>${lignes || '<tr><td colspan="6" class="empty">Aucun fournisseur</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+    `);
+
+    const qEl = document.getElementById("tarif-q");
+    let t;
+    qEl.oninput = () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        S.filters.tarifQ = qEl.value;
+        renderTarifFournisseurs();
+      }, 200);
+    };
+    document.querySelectorAll("[data-tarif-open]").forEach((el) => {
+      el.onclick = () => navigate("/pricing/fournisseurs/" + el.getAttribute("data-tarif-open"));
+    });
+  }
+
+  function renderTarifFiche() {
+    const d = S.tarifFiche;
+    if (!d) return;
+    const f = d.fournisseur;
+    const lignes = (d.matieres || [])
+      .map(
+        (m) => `<tr>
+          <td>${categorieBadge(m.categorie)}</td>
+          <td class="msl-ref"><strong>${escHtml(m.reference)}</strong></td>
+          <td class="msl-des" title="${escAttr(m.designation || "")}">${escHtml(m.designation || "")}</td>
+          <td class="msl-prix">${m.nb_declinaisons}${m.nb_principal ? ` <span class="msl-plus" title="Fait foi sur ${m.nb_principal} déclinaison(s)">★${m.nb_principal}</span>` : ""}</td>
+          <td class="tarif-resume">${escHtml(tarifResume(m))}</td>
+          <td>${m.a_tarif
+              ? '<span class="badge badge-frontal">réglé</span>'
+              : '<span class="badge badge-silicone">par défaut</span>'}</td>
+          <td class="ms-actions">${S.canWrite
+              ? actionBtn("data-tarif-mat", m.matiere_id, "edit", `Régler le tarif de ${m.reference}`)
+              : ""}</td>
+        </tr>`
+      )
+      .join("");
+
+    setContent(`
+      <div class="pr-narrow">
+        <div class="savebar-spacer" aria-hidden="true"></div>
+        <div class="pr-savebar">
+          <button type="button" class="btn btn-soft btn-sm" id="btn-back-tarif">${icon("arrow-left", 14)} Retour liste</button>
+          <div class="savebar-actions">
+            <a class="btn btn-soft btn-sm" href="/settings#fournisseurs" target="_blank" rel="noopener" title="Ouvrir la fiche complète du fournisseur">Fiche fournisseur ↗</a>
+          </div>
+        </div>
+        ${pageHead("Fournisseur", escHtml(f.nom))}
+
+        <div class="form-card" style="margin-bottom:16px">
+          <div class="form-section" style="margin:0">
+            <h3>Devise d'achat</h3>
+            <div class="field-hint" style="margin:-6px 0 10px">
+              Elle vaut pour tout ce qu'on achète à ce fournisseur. Les tarifs par
+              matière, eux, se règlent ligne par ligne ci-dessous.
+            </div>
+            <div class="field f-mid">
+              <select id="tarif-devise" ${S.canWrite ? "" : "disabled"}>
+                <option value="EUR" ${f.price_currency === "EUR" ? "selected" : ""}>EUR — euro (€)</option>
+                <option value="USD" ${f.price_currency === "USD" ? "selected" : ""}>USD — dollar américain ($)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="pr-table">
+            <thead><tr><th>Cat.</th><th>Référence</th><th>Désignation</th><th>Décl.</th><th>Tarif appliqué</th><th>État</th><th class="ms-actions"></th></tr></thead>
+            <tbody>${lignes || '<tr><td colspan="7" class="empty">Aucune matière achetée à ce fournisseur</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+    `);
+
+    document.getElementById("btn-back-tarif").onclick = () => navigate("/pricing/fournisseurs");
+    const dev = document.getElementById("tarif-devise");
+    if (dev && S.canWrite) {
+      dev.onchange = async () => {
+        try {
+          await api("/api/pricing/tarifs/fournisseur/" + f.id + "/devise", {
+            method: "PATCH",
+            body: { price_currency: dev.value },
+          });
+          showToast("Devise enregistrée — tous les coûts de ce fournisseur suivent.", "success");
+          await loadTarifFiche(f.id);
+          renderTarifFiche();
+        } catch (e) {
+          showToast(e.message, "danger");
+        }
+      };
+    }
+    document.querySelectorAll("[data-tarif-mat]").forEach((b) => {
+      b.onclick = () =>
+        openTarifModal(f.id, parseInt(b.getAttribute("data-tarif-mat"), 10), async () => {
+          await loadTarifFiche(f.id);
+          renderTarifFiche();
+        });
+    });
+  }
+
+  /**
+   * Modale de réglage d'un tarif (fournisseur × matière).
+   *
+   * Une seule modale sert les trois chemins d'accès : la fiche fournisseur de
+   * Coûts matières, la ligne de prix d'une déclinaison, et le raccourci depuis
+   * Réglages. Trois portes, une seule pièce — sinon trois formulaires à tenir
+   * d'accord, et c'est celui qu'on oublie qui écrit des bêtises.
+   */
+  async function openTarifModal(fournisseurId, matiereId, apres) {
+    let data;
+    try {
+      data = await api("/api/pricing/tarifs/matiere/" + matiereId);
+    } catch (e) {
+      showToast(e.message, "danger");
+      return;
+    }
+    const t = (data.fournisseurs || []).find(
+      (x) => String(x.fournisseur_id) === String(fournisseurId)
+    );
+    if (!t) {
+      showToast("Ce fournisseur ne vend pas cette matière.", "danger");
+      return;
+    }
+
+    const root = document.getElementById("modal-root");
+    const champs = (mode) => {
+      // Chaque méthode a ses champs : les afficher tous serait un formulaire
+      // illisible où trois quarts des cases ne servent à rien.
+      if (mode === "PCT") {
+        return `<div class="field f-num"><label>Transport <span class="lbl-unit">% du prix d'achat</span></label>
+          <input type="number" step="0.01" min="0" id="tf-pct" value="${escAttr(t.transport_pct)}"/></div>`;
+      }
+      if (mode === "CONTENEUR" || mode === "FORFAIT") {
+        const lib = TRANSPORT_CHAMPS[mode];
+        return `<div class="field f-num"><label>${escHtml(lib.cout)} <span class="lbl-unit">€</span></label>
+            <input type="number" step="0.01" min="0" id="tf-cout" value="${escAttr(t.transport_cout)}"/></div>
+          <div class="field f-num"><label>${escHtml(lib.qte)}</label>
+            <input type="number" step="0.01" min="0" id="tf-qte" value="${escAttr(t.transport_quantite)}"/></div>`;
+      }
+      return `<div class="field f-num"><label>Transport <span class="lbl-unit">à l'unité d'achat</span></label>
+        <input type="number" step="0.0001" min="0" id="tf-unit" value="${escAttr(t.transport_unit_price)}"/></div>`;
+    };
+
+    const dessiner = () => {
+      const mode = t.transport_mode || "AMOUNT";
+      root.innerHTML = `
+        <div class="modal-backdrop" id="tf-back">
+          <div class="modal" style="max-width:620px" id="tf-modal">
+            <h2 style="margin:0 0 4px">Tarif fournisseur</h2>
+            <p style="color:var(--muted);font-size:13px;margin:0 0 18px">
+              ${escHtml(t.nom)} · ${escHtml(data.reference || "")} — ce réglage vaut pour
+              toutes les déclinaisons de cette matière chez ce fournisseur.
+            </p>
+
+            <div class="field-row">
+              <div class="field f-mid"><label>Base de prix</label>
+                <select id="tf-basis">
+                  <option value="PER_KG" ${t.price_basis === "PER_KG" ? "selected" : ""}>${escHtml(BASIS_LABEL.PER_KG)}</option>
+                  <option value="PER_M2" ${t.price_basis === "PER_M2" ? "selected" : ""}>${escHtml(BASIS_LABEL.PER_M2)}</option>
+                </select>
+              </div>
+              <div class="field f-mid"><label>Devise du fournisseur</label>
+                <div class="gram-out">${escHtml(t.price_currency || "EUR")}</div>
+                <div class="field-hint">Se règle sur sa fiche : elle vaut pour toutes ses matières.</div>
+              </div>
+            </div>
+
+            <div class="import-block${t.is_imported ? " on" : ""}">
+              <label class="check-row">
+                <input type="checkbox" id="tf-imp" ${t.is_imported ? "checked" : ""}/>
+                <span>
+                  <span class="check-title">Matière importée</span>
+                  <span class="check-sub">Un coût de transport s'ajoute au prix d'achat avant conversion.</span>
+                </span>
+              </label>
+              <div class="import-fields" style="${t.is_imported ? "" : "display:none"}">
+                <div class="field-row">
+                  <div class="field f-mid"><label>Méthode de transport</label>
+                    <select id="tf-mode">${transportModeOptions(mode)}</select>
+                    ${transportAideHtml(mode)}
+                  </div>
+                  ${champs(mode)}
+                  <div class="field f-num"><label>Taxes <span class="lbl-unit">% du sous-total</span></label>
+                    <input type="number" step="0.01" id="tf-taxe" value="${escAttr(t.taxe_pct)}"/>
+                    <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            ${t.nb_principal ? `<div class="ms-hint" style="margin:14px 0 0">
+              Ce fournisseur fait foi sur <strong>${t.nb_principal} déclinaison(s)</strong> :
+              enregistrer déplacera leur sous-total dans la valorisation MyStock.</div>` : ""}
+
+            <div class="si-actions" style="flex-direction:row;justify-content:flex-end">
+              <button type="button" class="btn btn-soft btn-sm" id="tf-cancel" style="width:auto">Annuler</button>
+              <button type="button" class="btn btn-accent" id="tf-save" style="width:auto">Enregistrer</button>
+            </div>
+          </div>
+        </div>`;
+
+      const fermer = () => (root.innerHTML = "");
+      document.getElementById("tf-back").onclick = (e) => {
+        if (e.target.id === "tf-back") fermer();
+      };
+      document.getElementById("tf-cancel").onclick = fermer;
+
+      // Ces deux-là changent les champs affichés : on redessine en gardant la
+      // saisie en cours dans `t`.
+      const relire = () => {
+        const g = (id) => document.getElementById(id);
+        t.is_imported = g("tf-imp").checked;
+        t.price_basis = g("tf-basis").value;
+        if (g("tf-mode")) t.transport_mode = g("tf-mode").value;
+        if (g("tf-unit")) t.transport_unit_price = g("tf-unit").value;
+        if (g("tf-pct")) t.transport_pct = g("tf-pct").value;
+        if (g("tf-cout")) t.transport_cout = g("tf-cout").value;
+        if (g("tf-qte")) t.transport_quantite = g("tf-qte").value;
+        if (g("tf-taxe")) t.taxe_pct = g("tf-taxe").value;
+      };
+      ["tf-imp", "tf-mode"].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.onchange = () => { relire(); dessiner(); };
+      });
+
+      document.getElementById("tf-save").onclick = async () => {
+        relire();
+        try {
+          const r = await api(
+            "/api/pricing/tarifs/" + fournisseurId + "/" + matiereId,
+            {
+              method: "PATCH",
+              body: {
+                price_basis: t.price_basis,
+                is_imported: !!t.is_imported,
+                transport_mode: t.transport_mode || "AMOUNT",
+                transport_unit_price: parseFloat(t.transport_unit_price) || 0,
+                transport_pct: parseFloat(t.transport_pct) || 0,
+                transport_cout: parseFloat(t.transport_cout) || 0,
+                transport_quantite: parseFloat(t.transport_quantite) || 0,
+                taxe_pct: parseFloat(t.taxe_pct) || 0,
+              },
+            }
+          );
+          const n = r.declinaisons_touchees || 0;
+          showToast(
+            n
+              ? `Tarif enregistré — ${n} déclinaison(s) mise(s) à jour dans MyStock.`
+              : "Tarif enregistré.",
+            "success"
+          );
+          fermer();
+          if (typeof apres === "function") await apres();
+        } catch (e) {
+          showToast(e.message, "danger");
+        }
+      };
+    };
+    dessiner();
+  }
 
   function categorieBadge(cat) {
     const c = String(cat || "").toUpperCase();
@@ -1801,7 +2289,7 @@
               <div class="field f-mid"><label>Appellation</label><input id="f-app" value="${escAttr(f.appellation_code)}"/></div>
               <div class="field f-mid"><label>Catégorie</label><select id="f-cat">${catOpts}</select></div>
             </div>
-            <div class="field f-mid"><label>Fournisseur</label><select id="f-sup">${supOpts}</select>${supLegacy}</div>
+            <div class="field f-mid"><label>Fournisseur</label><select id="f-sup" data-fourn-cats="${escAttr(fournCatsDepuisMatiere(f).join(","))}">${supOpts}</select>${supLegacy}</div>
           </div>
 
           <div class="form-section" id="carac-section" style="${needsWeight(f)?"":"display:none"}"><h3>Caractéristiques</h3>
@@ -1932,6 +2420,26 @@
         bindPreview();
       };
     });
+    // Fournisseur du formulaire matière. Favoris = la catégorie de la
+    // matière en cours d'édition, portée par data-fourn-cats à l'émission
+    // (la catégorie peut changer sans re-render, d'où la relecture au
+    // moment de l'ouverture plutôt qu'une valeur figée à la conversion).
+    {
+      const selFSup = document.getElementById("f-sup");
+      if (selFSup) {
+        pickerFournisseur(selFSup, {
+          placeholder: "Rechercher un fournisseur…",
+          emptyLabel: "— Aucun —",
+          resolveCategories: () => fournCatsDepuisMatiere(f),
+          onSelect: () => {
+            marquerMat();
+            syncMaterialFormFromDom();
+            refreshMaterialPreview();
+          },
+        });
+      }
+    }
+
     const chkMarge = document.getElementById("f-marge");
     if (chkMarge) chkMarge.onchange = () => {
       marquerMat();
@@ -3548,6 +4056,12 @@
         await loadMaterialsForCombos();
         await loadProductForm(S.route.id);
         renderProductForm(false);
+      } else if (r === "fournisseurs") {
+        await loadTarifFournisseurs();
+        renderTarifFournisseurs();
+      } else if (r === "fournisseur-edit") {
+        await loadTarifFiche(S.route.id);
+        renderTarifFiche();
       } else if (r === "settings") {
         if (!S.canWrite) {
           navigate("/pricing");

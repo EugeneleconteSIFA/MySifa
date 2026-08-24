@@ -20,6 +20,9 @@ from fastapi.responses import FileResponse, Response
 from config import UPLOAD_DIR
 from database import get_db
 from services.auth_service import get_current_user, require_superadmin
+from app.services.documents_verite import (
+    appliquer_maj, constater_remplacement, marquer_champs_manuels,
+)
 
 router = APIRouter()
 
@@ -415,10 +418,22 @@ async def validate_of(
                 replaced_pdf = matches[0]["pdf_filename"]
 
         if replaced_id is not None:
+            # Photo de la ligne AVANT réécriture. Le remplacement est un geste
+            # délibéré et le papier fait foi — on ne l'arbitre pas. Mais si un
+            # chiffre de calcul change sous une validation déjà acquise, cette
+            # validation ne vaut plus rien : `constater_remplacement` la retire
+            # et journalise ce qui a bougé.
+            avant = dict(conn.execute(
+                "SELECT * FROM of_imports WHERE id = ?", (replaced_id,)
+            ).fetchone())
             set_cols = list(OF_DATA_FIELDS) + tail_cols
             set_sql = ", ".join(f"{c} = ?" for c in set_cols)
             vals = [fields.get(c) for c in OF_DATA_FIELDS] + tail_vals + [replaced_id]
             conn.execute(f"UPDATE of_imports SET {set_sql} WHERE id = ?", vals)
+            constater_remplacement(
+                conn, "of_imports", replaced_id, avant,
+                origine="import_pdf", auteur=imported_by,
+            )
             conn.commit()
             new_id = replaced_id
         else:
@@ -429,8 +444,15 @@ async def validate_of(
                 f"INSERT INTO of_imports ({', '.join(cols)}) VALUES ({placeholders})",
                 values,
             )
-            conn.commit()
             new_id = cur.lastrowid
+            # Ce que le PDF a rempli vient d'un humain : Access ne l'écrase pas.
+            marquer_champs_manuels(
+                conn, "of_imports", new_id,
+                [c for c in OF_DATA_FIELDS
+                 if fields.get(c) is not None
+                 and str(fields.get(c)).strip() != ""],
+            )
+            conn.commit()
 
     if replaced_pdf and replaced_pdf != pdf_filename:
         _archive_of_pdf(replaced_pdf)
@@ -438,6 +460,7 @@ async def validate_of(
     # Auto-link : relier les dossiers planning dont le numero_of correspond,
     # en plaçant cet OF en position 0 (slot ET aperçu pointent sur la même ligne).
     linked = _autolink_of_to_planning(new_id, of_num_clean, created_by="of_import")
+    _invalidate_pending_count_cache()
 
     return {
         "id": new_id,
@@ -509,7 +532,7 @@ def list_of_imports(request: Request):
 @router.patch("/api/of/{of_id}")
 async def update_of_import(of_id: int, request: Request):
     """Modifier les champs éditables d'un OF importé."""
-    _require_of_access(request)
+    user = _require_of_access(request)
     body = await request.json()
 
     # Tous les champs metier de l'OF sont corrigeables. L'ancienne liste de 15
@@ -529,20 +552,30 @@ async def update_of_import(of_id: int, request: Request):
                    + (" Champs inconnus : " + ", ".join(ignores) if ignores else ""),
         )
 
+    qui = (user.get("nom") or user.get("email") or "").strip() or None
     with get_db() as conn:
         row = conn.execute("SELECT id FROM of_imports WHERE id=?", (of_id,)).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="OF introuvable.")
-        set_clause = ", ".join(f"{k}=?" for k in updates)
-        conn.execute(
-            f"UPDATE of_imports SET {set_clause} WHERE id=?",
-            list(updates.values()) + [of_id],
+        # Une correction humaine a le dernier mot (`proteger_manuels=False`) et
+        # devient protegee a son tour (`marquer_manuels=True`) : le prochain
+        # sync Access ne la reecrira pas. Elle perime aussi la validation si
+        # elle touche un chiffre de calcul — c'est le meme risque qu'une
+        # modification venue d'Access, et corriger n'est pas relire.
+        maj = appliquer_maj(
+            conn, "of_imports", of_id, updates,
+            origine="manuel", auteur=qui,
+            proteger_manuels=False,
+            marquer_manuels=True,
+            autoriser_effacement=True,
         )
         conn.commit()
     # `ignored` non vide = des champs postes n'ont pas ete ecrits. On le remonte
     # plutot que de laisser croire a une mise a jour complete.
     return {"updated": True, "id": of_id,
-            "updated_fields": sorted(updates), "ignored": ignores}
+            "updated_fields": maj["ecrits"], "ignored": ignores,
+            "validation_retiree": maj["invalide"],
+            "motif_validation": maj["motif"]}
 
 
 @router.get("/api/of/planning/{entry_id}")
@@ -868,6 +901,7 @@ async def bulk_delete_of(request: Request):
     with get_db() as conn:
         conn.execute(f"DELETE FROM of_imports WHERE id IN ({placeholders})", ids)
         conn.commit()
+    _invalidate_pending_count_cache()
     return {"deleted": len(ids), "ids": ids}
 
 
@@ -880,6 +914,7 @@ def delete_of_import(request: Request, of_id: int):
             raise HTTPException(status_code=404, detail="OF introuvable.")
         conn.execute("DELETE FROM of_imports WHERE id=?", (of_id,))
         conn.commit()
+    _invalidate_pending_count_cache()
     return {"ok": True}
 
 
@@ -916,7 +951,7 @@ def list_fiches(request: Request):
 
 @router.patch("/api/fiches-techniques/{fiche_id}")
 async def update_fiche(fiche_id: int, request: Request):
-    _require_of_access(request)
+    user = _require_of_access(request)
     body = await request.json()
     EDITABLE = {
         "reference","designation","client","format",
@@ -937,15 +972,25 @@ async def update_fiche(fiche_id: int, request: Request):
     updates = {k: v for k, v in body.items() if k in EDITABLE}
     if not updates:
         raise HTTPException(status_code=400, detail="Aucun champ modifiable.")
+    qui = (user.get("nom") or user.get("email") or "").strip() or None
     with get_db() as conn:
         if not conn.execute("SELECT id FROM fiches_techniques WHERE id=?", (fiche_id,)).fetchone():
             raise HTTPException(status_code=404, detail="Fiche introuvable.")
-        conn.execute(
-            f"UPDATE fiches_techniques SET {', '.join(f'{k}=?' for k in updates)} WHERE id=?",
-            list(updates.values()) + [fiche_id],
+        # Meme contrat que sur l'OF. C'est ici que se jouait la perte la plus
+        # brutale : une correction atelier saisie dans MySifa etait ecrasee au
+        # sync Access suivant, sans trace. Elle est desormais protegee.
+        maj = appliquer_maj(
+            conn, "fiches_techniques", fiche_id, updates,
+            origine="manuel", auteur=qui,
+            proteger_manuels=False,
+            marquer_manuels=True,
+            autoriser_effacement=True,
         )
         conn.commit()
-    return {"updated": True, "id": fiche_id}
+    return {"updated": True, "id": fiche_id,
+            "updated_fields": maj["ecrits"],
+            "validation_retiree": maj["invalide"],
+            "motif_validation": maj["motif"]}
 
 
 @router.get("/api/fiches-techniques/{fiche_id}/pdf-preview")
@@ -1517,6 +1562,11 @@ def admin_relink_of(request: Request):
         if not dry_run:
             conn.commit()
 
+    if not dry_run:
+        # Sans ça, le badge « Dossiers sans OF » gardait sa valeur d'avant le
+        # rapprochement pendant toute la durée du cache : liste à 7, badge à 16.
+        _invalidate_pending_count_cache()
+
     return {
         "dry_run": dry_run,
         "total_with_numero_of": total,
@@ -1588,7 +1638,18 @@ _pending_count_cache: dict = {"at": 0.0, "data": None}
 
 
 def _invalidate_pending_count_cache() -> None:
+    """À appeler après TOUTE écriture qui change le nombre de dossiers sans OF.
+
+    Le cache est un cache de process, pas de requête : le vider avant l'écriture
+    ne sert à rien — un autre admin peut le repeupler avec l'ancienne valeur
+    pendant la transaction. Il se vide donc APRÈS le commit, systématiquement.
+
+    Endpoints concernés : import d'un PDF d'OF (auto-link), suppression d'un OF
+    (unitaire ou en masse), relance du mapping automatique, ajout et retrait de
+    liens planning↔OF, rattachement depuis Besoins matières, push Access.
+    """
     _pending_count_cache["at"] = 0.0
+    _pending_count_cache["data"] = None
 
 
 @router.get("/api/admin/of-link-pending/count")
@@ -1634,7 +1695,6 @@ def admin_of_link_pending(request: Request):
 
 @router.post("/api/admin/link-planning-of")
 async def admin_link_planning_of(request: Request):
-    _invalidate_pending_count_cache()
     _require_of_access(request)
     try:
         body = await request.json()
@@ -1685,6 +1745,7 @@ async def admin_link_planning_of(request: Request):
             pass
         conn.commit()
 
+    _invalidate_pending_count_cache()
     return {"linked": True, "planning_id": planning_id, "of_id": of_id}
 
 
@@ -1821,6 +1882,7 @@ async def admin_add_planning_of_links(request: Request):
         except Exception:
             pass
         conn.commit()
+    _invalidate_pending_count_cache()
     return {
         "planning_id": planning_id,
         "added": added,
@@ -1852,6 +1914,7 @@ async def admin_remove_planning_of_link(request: Request):
             pass
         conn.commit()
         deleted = cur.rowcount or 0
+    _invalidate_pending_count_cache()
     return {"deleted": int(deleted), "planning_id": planning_id, "of_id": of_id}
 
 

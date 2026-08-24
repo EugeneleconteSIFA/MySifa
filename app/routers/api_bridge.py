@@ -19,6 +19,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.core.database import get_db
+from app.services.documents_verite import appliquer_maj
 from app.services.fiche_pdf import generate_fiche_pdf
 
 router = APIRouter(prefix="/api/bridge", tags=["bridge"])
@@ -138,23 +139,12 @@ _ENRICHISSABLES = (
 )
 
 
-def _of_purement_access(row) -> bool:
-    """Vrai si l'OF n'a jamais été touché autrement que par le pont Access.
-
-    Un PDF rattaché ou un `imported_by` différent signale un passage humain :
-    dans ce cas Access n'est plus la source de vérité et on ne rafraîchit rien.
-    """
-    if (row["pdf_filename"] or "").strip():
-        return False
-    return (row["imported_by"] or "").strip() == "access_bridge"
-
-
-def _valeur_differente(ancien, nouveau) -> bool:
-    """Comparaison tolérante : évite de réécrire 7124.0 sur 7124.0398 arrondi."""
-    try:
-        return abs(float(ancien) - float(nouveau)) > 1e-6
-    except (TypeError, ValueError):
-        return str(ancien).strip() != str(nouveau).strip()
+# `_of_purement_access` et `_valeur_differente` vivaient ici. La protection
+# est désormais portée par of_imports.champs_manuels, champ par champ, dans
+# app/services/documents_verite.py : un PDF ne gèle plus l'OF entier, il gèle
+# les colonnes qu'il a effectivement remplies. Une quantité corrigée dans
+# Access peut donc enfin compléter un OF qui porte un PDF, sans toucher à ce
+# que le PDF disait.
 
 
 # ── Endpoints ────────────────────────────────────────────────────────
@@ -169,7 +159,11 @@ def bridge_health():
         "status": "ok",
         "service": "mysifa-bridge",
         "features": ["of.enrich_if_exists", "of.refresh_access_fields",
-                     "fiche.enrich_if_exists"],
+                     "fiche.enrich_if_exists",
+                     # Depuis le 7 août 2026 : les colonnes saisies par un
+                     # humain sont protégées champ par champ, et toute écriture
+                     # sur un champ de calcul périme la validation du document.
+                     "documents.champs_manuels", "documents.validation_perimable"],
     }
 
 
@@ -261,52 +255,35 @@ def push_of(
         existing = matches[0] if matches else None
 
         if existing:
-            enrichis: list = []
-            rafraichis: list = []
+            maj = {"remplis": [], "corriges": [], "conflits": [],
+                   "invalide": False, "motif": None}
             if body.enrich_if_exists or body.refresh_access_fields:
-                actuel = conn.execute(
-                    "SELECT * FROM of_imports WHERE id=?", (existing["id"],)
-                ).fetchone()
-                dispo = {
-                    col: getattr(body, col, None) for col in _ENRICHISSABLES
-                }
-                a_ecrire: dict = {}
+                dispo = {col: getattr(body, col, None) for col in _ENRICHISSABLES}
+                # `enrich_if_exists` seul ne comble que les trous.
+                # `refresh_access_fields` autorise en plus la réécriture d'une
+                # valeur qui a changé côté Access — jamais sur un champ qu'un
+                # humain a saisi, le service s'en charge et journalise le refus.
+                maj = appliquer_maj(
+                    conn, "of_imports", existing["id"], dispo,
+                    origine="access_bridge",
+                    proteger_manuels=True,
+                    seulement_vides=(body.enrich_if_exists
+                                     and not body.refresh_access_fields),
+                )
+                conn.commit()
 
-                # 1. Complète les colonnes NULL. Une valeur déjà en base — saisie
-                #    à la main ou extraite d'un vrai PDF — fait autorité.
-                if body.enrich_if_exists:
-                    a_ecrire.update({
-                        col: val for col, val in dispo.items()
-                        if val is not None and actuel[col] is None
-                    })
-                    enrichis = sorted(a_ecrire)
-
-                # 2. Rafraîchit les valeurs qui ont changé côté Access, mais
-                #    seulement sur un OF resté purement Access : ni PDF, ni
-                #    correction humaine. Sinon on écraserait du travail.
-                if body.refresh_access_fields and _of_purement_access(actuel):
-                    maj = {
-                        col: val for col, val in dispo.items()
-                        if val is not None
-                        and col not in a_ecrire
-                        and actuel[col] is not None
-                        and _valeur_differente(actuel[col], val)
-                    }
-                    a_ecrire.update(maj)
-                    rafraichis = sorted(maj)
-
-                if a_ecrire:
-                    set_sql = ", ".join(f"{col}=?" for col in a_ecrire)
-                    conn.execute(
-                        f"UPDATE of_imports SET {set_sql} WHERE id=?",
-                        (*a_ecrire.values(), existing["id"]),
-                    )
-                    conn.commit()
-
+            enrichis = maj["remplis"]
+            rafraichis = maj["corriges"]
+            # `reason`, `enriched_fields` et `refreshed_fields` sont lus tels
+            # quels par scripts/access_sync_of.py : on ne touche ni aux noms ni
+            # au sens. `conflit_saisie_manuelle` est un cas nouveau — Access
+            # apporte une valeur différente sur un champ que MySifa protège.
             if rafraichis:
                 reason = "refreshed"
             elif enrichis:
                 reason = "enriched"
+            elif maj["conflits"]:
+                reason = "conflit_saisie_manuelle"
             else:
                 reason = "already_exists"
             return {
@@ -318,6 +295,9 @@ def push_of(
                 "has_pdf": bool(existing["pdf_filename"]),
                 "enriched_fields": enrichis,
                 "refreshed_fields": rafraichis,
+                "conflits": maj["conflits"],
+                "validation_retiree": maj["invalide"],
+                "motif_validation": maj["motif"],
             }
 
         now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
@@ -385,6 +365,16 @@ def push_of(
             (new_id, numero, new_id),
         )
         conn2.commit()
+
+    # Le push Access peut faire sortir des dossiers de la liste « sans OF ».
+    # Import local : of_import n'a pas à connaître le pont, et l'inverse
+    # créerait un cycle. Best-effort — un badge en retard ne justifie pas de
+    # faire échouer un import.
+    try:
+        from app.routers.of_import import _invalidate_pending_count_cache
+        _invalidate_pending_count_cache()
+    except Exception:
+        pass
 
     return {
         "inserted": True,
@@ -496,11 +486,6 @@ _FT_META_COLS = {"source", "date_import", "imported_by"}
 _FT_FLAGS = {"enrich_if_exists"}
 
 
-def _ft_vide(val) -> bool:
-    """Vrai si la colonne est consideree comme non renseignee."""
-    return val is None or (isinstance(val, str) and not val.strip())
-
-
 @router.post("/fiche-technique")
 def push_fiche_technique(
     body: FicheTechniqueIn,
@@ -531,28 +516,32 @@ def push_fiche_technique(
             (ref,)
         ).fetchone()
         if existing:
-            champs = list(data)
-            if body.enrich_if_exists:
-                # Ne toucher qu'aux colonnes restees vides. Une fiche corrigee
-                # a la main dans MySifa n'est jamais ecrasee par Access.
-                colonnes = set(existing.keys())
-                data = {
-                    k: v for k, v in data.items()
-                    if k in colonnes and _ft_vide(existing[k])
-                }
-                champs = sorted(data)
-            if data:
-                conn.execute(
-                    f"UPDATE fiches_techniques SET {', '.join(f'{k}=?' for k in data)} WHERE id=?",
-                    list(data.values()) + [existing["id"]],
-                )
-                conn.commit()
+            # L'upsert d'origine réécrivait TOUS les champs fournis : une
+            # correction faite à la main dans MySifa disparaissait au sync
+            # suivant, sans trace et sans que la validation ne bouge. Le
+            # service arbitre désormais champ par champ et journalise, y
+            # compris les refus.
+            maj = appliquer_maj(
+                conn, "fiches_techniques", existing["id"], data,
+                origine="access_bridge",
+                proteger_manuels=True,
+                seulement_vides=body.enrich_if_exists,
+            )
+            conn.commit()
+            if maj["ecrits"]:
+                action = "enriched" if body.enrich_if_exists else "updated"
+            elif maj["conflits"]:
+                action = "conflit_saisie_manuelle"
+            else:
+                action = "unchanged"
             return {
-                "action": "enriched" if (body.enrich_if_exists and data)
-                          else ("unchanged" if body.enrich_if_exists else "updated"),
+                "action": action,
                 "id": existing["id"],
                 "reference": ref,
-                "fields": champs if data else [],
+                "fields": maj["ecrits"],
+                "conflits": maj["conflits"],
+                "validation_retiree": maj["invalide"],
+                "motif_validation": maj["motif"],
             }
         else:
             cols = ["reference", "source", "date_import", "imported_by"] + list(data.keys())

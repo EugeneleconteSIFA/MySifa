@@ -568,6 +568,18 @@ body.light .four-table tbody tr:hover td{background:rgba(8,145,178,.04)}
 .btn-danger-solid:disabled{opacity:.6;cursor:wait}
 
 /* ── Catégories fournisseur : chips ──────────────────────────── */
+/* Chips « probables » de la modale de fusion. Fond explicite au repos :
+   posées dans une modale (fond var(--card)), elles prennent var(--bg) pour
+   contraster — jamais transparent, sinon l'affordance est invisible. */
+.mf-sugg{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px}
+.mf-sugg-lbl{font-size:11px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.5px;color:var(--muted)}
+.mf-sugg-chip{background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:5px 10px;font-size:12px;font-weight:600;color:var(--text);cursor:pointer;
+  font-family:inherit;transition:background .15s,border-color .15s,color .15s}
+.mf-sugg-chip:hover{background:var(--card);border-color:var(--accent);color:var(--accent)}
+.mf-sugg-chip.on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
+
 .four-cat-picker{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}
 .four-cat-chip{
   display:inline-flex;align-items:center;gap:5px;
@@ -2128,6 +2140,18 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
                 style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;outline:none;font-family:inherit"
                 onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
             </div>
+            <!-- Portee : sans ce choix, toute cle recevait of:read,of:write et
+                 l'agent de scans d'OF ne pouvait jamais etre autorise. -->
+            <div style="min-width:230px">
+              <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px">Portée</label>
+              <select id="ak-scopes"
+                style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;outline:none;font-family:inherit">
+                <option value="of:read,of:write">Pont Access — lecture et écriture des OF</option>
+                <option value="scan:write">Agent de scans — dépôt des OF terminés</option>
+                <option value="of:read">Lecture seule des OF</option>
+                <option value="of:read,of:write,scan:write">Tout (pont Access + scans)</option>
+              </select>
+            </div>
             <button class="btn btn-accent" onclick="createApiKey()" style="white-space:nowrap">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:6px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Générer la clé
@@ -2948,6 +2972,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
 <link rel="stylesheet" href="/static/mysifa_postit.css">
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_timepicker.css?v=1.0">
+<link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
@@ -4328,6 +4353,68 @@ async function _loadFournisseurCategories(){
   return window.__FOURNISSEUR_CATS__;
 }
 
+// Modes de règlement / livraison et régimes de TVA. Ces trois listes sont
+// courtes et fermées : un <select> y reste la bonne réponse. La recherche à la
+// frappe sert aux listes LONGUES et ouvertes — l'annuaire fournisseurs.
+// Fallback aligné sur config.py, comme pour les catégories : une page qui
+// perd son référentiel affiche des codes bruts impossibles à corriger.
+const _FOUR_REFS_ACHAT_FALLBACK = {
+  modes_reglement: [
+    {code:'virement', label:'Virement'},
+    {code:'virement_proforma', label:'Virement sur proforma'},
+    {code:'virement_pre_expedition', label:'Virement avant expédition'},
+    {code:'comptant', label:'Comptant'}, {code:'carte', label:'Carte bancaire'},
+    {code:'cheque', label:'Chèque'}, {code:'prelevement', label:'Prélèvement'},
+    {code:'lcr_acceptee', label:'LCR acceptée'},
+    {code:'lcr_non_acceptee', label:'LCR non acceptée'},
+    {code:'bor', label:'BOR'}, {code:'autre', label:'Autre'},
+  ],
+  modes_livraison: [
+    {code:'par_nos_soins', label:'Par nos soins'},
+    {code:'par_vos_soins', label:'Par ses soins'},
+    {code:'transporteur', label:'Par transporteur affrété'},
+    {code:'enlevement', label:'Enlèvement sur place'},
+  ],
+  regimes_tva: [
+    {code:'soumis_tva', label:'Soumis à TVA'}, {code:'exonere', label:'Exonéré'},
+    {code:'cee', label:'CEE (autoliquidation)'}, {code:'export', label:'Export (hors UE)'},
+  ],
+};
+
+async function _loadReferentielsAchat(){
+  if (window.__FOUR_REFS_ACHAT__) return window.__FOUR_REFS_ACHAT__;
+  try {
+    const r = await api('/api/fournisseurs/referentiels-achat');
+    if (r && Array.isArray(r.modes_reglement) && r.modes_reglement.length) {
+      window.__FOUR_REFS_ACHAT__ = r;
+      return r;
+    }
+  } catch(e) {
+    console.error('[fournisseurs] /referentiels-achat a échoué :', e && e.message ? e.message : e);
+  }
+  window.__FOUR_REFS_ACHAT__ = _FOUR_REFS_ACHAT_FALLBACK;
+  return window.__FOUR_REFS_ACHAT__;
+}
+
+function _refsAchat(){ return window.__FOUR_REFS_ACHAT__ || _FOUR_REFS_ACHAT_FALLBACK; }
+
+function _refLabel(quoi, code){
+  if (!code) return '';
+  const l = (_refsAchat()[quoi] || []).find(x => x.code === code);
+  return l ? l.label : code;
+}
+
+// <select> d'un référentiel court, avec entrée vide en tête : « non renseigné »
+// est un état légitime, il ne doit pas être confondu avec la 1ère valeur.
+function _refSelect(id, quoi, courant, vide){
+  return '<select id="' + escAttr(id) + '">' +
+    '<option value="">' + esc(vide || '— Non renseigné —') + '</option>' +
+    (_refsAchat()[quoi] || []).map(o =>
+      '<option value="' + escAttr(o.code) + '"' + (o.code === courant ? ' selected' : '') + '>' +
+      esc(o.label) + '</option>').join('') +
+    '</select>';
+}
+
 function _renderCategoryPicker(container, initialSelected){
   const cats = window.__FOURNISSEUR_CATS__ || [];
   // Sélection filtrée sur le référentiel : un code stocké en base mais absent
@@ -4424,6 +4511,10 @@ async function loadFournisseurs() {
   f2Cache = {};
   try {
     await _loadFournisseurCategories();
+    // Les référentiels d'achat voyagent avec les catégories : la fiche les
+    // affiche dans le même écran, les charger séparément ferait clignoter les
+    // libellés le temps du second aller-retour.
+    await _loadReferentielsAchat();
     const data = await api('/api/fournisseurs');
     fournisseursAll = Array.isArray(data) ? data : [];
   } catch (e) { fournisseursAll = []; toast(e.message, true); }
@@ -4908,6 +4999,11 @@ const F2_TABS = [
   { k:'certifs',    l:'Certifications', cnt: () => (f2Cache[f2Id]?.certifs?.stats?.couvert ?? null) },
   { k:'contacts',   l:'Contacts',       cnt: () => (f2Cache[f2Id]?.contacts?.length ?? null) },
   { k:'receptions', l:'Réceptions',     cnt: () => (f2Cache[f2Id]?.receptions?.length ?? null) },
+  // Le tarif d'achat (devise, transport, taxes) se règle dans Coûts matières,
+  // là où on raisonne en coûts. Cet onglet en donne la lecture et le raccourci :
+  // quand on est sur la fiche d'un fournisseur, c'est là qu'on se pose la
+  // question, pas dans un autre module.
+  { k:'tarif',      l:'Tarif d\'achat', cnt: () => (f2Cache[f2Id]?.tarif?.matieres?.length ?? null) },
   { k:'traca',      l:'Traçabilité' },
 ];
 
@@ -4920,17 +5016,22 @@ async function openFournisseurFiche(id, keepTab){
   try { window.scrollTo(0,0); } catch(e){}
   _f2PaintFiche();
   if (!f2Cache[id]) {
-    // 3 appels en parallèle, une seule fois par fiche : contacts,
-    // réceptions MyStock et certifications MyQualité.
-    const [contacts, rec, certifs] = await Promise.all([
+    // 4 appels en parallèle, une seule fois par fiche : contacts, réceptions
+    // MyStock, certifications MyQualité et tarif d'achat (Coûts matières).
+    // Le tarif peut légitimement échouer — module absent des droits, base non
+    // migrée : son onglet le dira, la fiche ne doit pas s'en trouver amputée.
+    const [contacts, rec, certifs, tarif] = await Promise.all([
       api('/api/fournisseurs/' + id + '/contacts').catch(() => []),
       api('/api/fournisseurs/' + id + '/receptions').catch(() => ({receptions:[]})),
       api('/api/fournisseurs/' + id + '/certifications').catch(() => null),
+      api('/api/pricing/tarifs/fournisseur/' + id)
+        .catch(() => ({ erreur: 'Tarifs indisponibles : module Coûts matières inaccessible depuis ce compte, ou base non migrée.' })),
     ]);
     f2Cache[id] = {
       contacts: Array.isArray(contacts) ? contacts : [],
       receptions: (rec && rec.receptions) || [],
       certifs: certifs,
+      tarif: tarif,
     };
     // nb_contacts vient de la liste : on le réaligne sur la vérité
     const nb = f2Cache[id].contacts.filter(c => c.actif == null || c.actif).length;
@@ -5026,12 +5127,13 @@ function _f2PaintFiche(){
   const renderers = {
     synthese: _f2TabSynthese, identite: _f2TabIdentite, fsc: _f2TabFsc,
     certifs: _f2TabCertifs, contacts: _f2TabContacts,
-    receptions: _f2TabReceptions, traca: _f2TabTraca,
+    receptions: _f2TabReceptions, tarif: _f2TabTarif, traca: _f2TabTraca,
   };
   const body = document.getElementById('f2-body');
   body.innerHTML = (renderers[f2Tab] || _f2TabSynthese)(f, cache);
   const post = { identite: _f2BindIdentite, fsc: _f2BindFsc, certifs: _f2BindCertifs,
-                 contacts: _f2BindContacts, traca: _f2BindTraca, synthese: _f2BindSynthese };
+                 contacts: _f2BindContacts, traca: _f2BindTraca, synthese: _f2BindSynthese,
+                 tarif: _f2BindTarif };
   if (post[f2Tab]) post[f2Tab](f, cache);
 }
 
@@ -5206,15 +5308,63 @@ function _f2TabIdentite(f){
         (addr ? '<dl class="f2-kv">' + _f2Kv('Adresse', esc(addr)) + '</dl>'
               : '<div class="f2-empty">Aucune adresse renseignée.</div>') + '</div>';
 
+  // Coordonnées de la SOCIÉTÉ : le standard, le fax et l'adresse générique de
+  // commande. Distinctes de l'onglet Contacts, qui porte les personnes — un
+  // interlocuteur part, le standard reste.
+  const telHref = v => '<a href="tel:' + escAttr(String(v).replace(/[^+0-9]/g,'')) + '">' + esc(v) + '</a>';
+  const blocCoord = (ed === 'coord')
+    ? '<div class="f2-block"><div class="f2-bh"><h3>Coordonnées société</h3></div><div class="f2-form">' +
+        '<div><label class="sub">Téléphone</label><input id="f2-e-tel" value="' + escAttr(f.telephone || '') + '" placeholder="03 20 00 00 00" autocomplete="off"></div>' +
+        '<div><label class="sub">Télécopie</label><input id="f2-e-fax" value="' + escAttr(f.fax || '') + '" autocomplete="off"></div>' +
+        '<div class="span2"><label class="sub">E-mail générique (commandes)</label><input id="f2-e-email" type="email" value="' + escAttr(f.email || '') + '" placeholder="commandes@fournisseur.fr" autocomplete="off"></div>' +
+        '</div><p class="f2-hint">Ces coordonnées sont celles de l\'entreprise. Les interlocuteurs nommés se saisissent dans l\'onglet Contacts.</p>' +
+        '<div class="f2-formacts"><button type="button" class="btn btn-sec btn-sm" data-f2cancel="1">Annuler</button>' +
+        '<button type="button" class="btn btn-sm" id="f2-save-coord">Enregistrer</button></div></div>'
+    : '<div class="f2-block"><div class="f2-bh"><h3>Coordonnées société</h3>' + _f2EditBtn('coord') + '</div>' +
+        ((f.telephone || f.email || f.fax)
+          ? '<dl class="f2-kv">' +
+              _f2Kv('Téléphone', f.telephone ? telHref(f.telephone) : '') +
+              _f2Kv('Télécopie', f.fax ? esc(f.fax) : '') +
+              _f2Kv('E-mail', f.email ? '<a href="mailto:' + escAttr(f.email) + '">' + esc(f.email) + '</a>' : '') +
+            '</dl>'
+          : '<div class="f2-empty">Aucune coordonnée renseignée.</div>') + '</div>';
+
+  // Conditions d'achat : elles conditionnent chaque commande passée chez ce
+  // fournisseur, et vivaient jusqu'ici uniquement dans l'ERP comptable.
+  const blocCond = (ed === 'conditions')
+    ? '<div class="f2-block"><div class="f2-bh"><h3>Conditions d\'achat</h3></div><div class="f2-form">' +
+        '<div><label class="sub">Mode de règlement</label>' + _refSelect('f2-e-regl', 'modes_reglement', f.mode_reglement) + '</div>' +
+        '<div><label class="sub">Mode de livraison</label>' + _refSelect('f2-e-livr', 'modes_livraison', f.mode_livraison) + '</div>' +
+        '<div><label class="sub">Délai d\'expédition (jours)</label><input id="f2-e-delai" type="number" min="0" max="365" step="1" value="' + escAttr(f.delai_expedition_jours == null ? '' : f.delai_expedition_jours) + '" placeholder="—"></div>' +
+        '<div><label class="sub">Devise d\'achat</label><input id="f2-e-devise" value="' + escAttr(f.price_currency || 'EUR') + '" maxlength="3" placeholder="EUR" style="text-transform:uppercase"></div>' +
+        '</div><div class="f2-formacts"><button type="button" class="btn btn-sec btn-sm" data-f2cancel="1">Annuler</button>' +
+        '<button type="button" class="btn btn-sm" id="f2-save-conditions">Enregistrer</button></div></div>'
+    : '<div class="f2-block"><div class="f2-bh"><h3>Conditions d\'achat</h3>' + _f2EditBtn('conditions') + '</div>' +
+        ((f.mode_reglement || f.mode_livraison || f.delai_expedition_jours != null ||
+          (f.price_currency && f.price_currency !== 'EUR'))
+          ? '<dl class="f2-kv">' +
+              _f2Kv('Règlement', f.mode_reglement ? esc(_refLabel('modes_reglement', f.mode_reglement)) : '') +
+              _f2Kv('Livraison', f.mode_livraison ? esc(_refLabel('modes_livraison', f.mode_livraison)) : '') +
+              _f2Kv('Délai d\'expédition', f.delai_expedition_jours != null ? esc(f.delai_expedition_jours + ' jour' + (f.delai_expedition_jours > 1 ? 's' : '')) : '') +
+              _f2Kv('Devise d\'achat', esc(f.price_currency || 'EUR')) +
+            '</dl>'
+          : '<div class="f2-empty">Aucune condition renseignée.</div>') +
+        '<p class="f2-hint">La devise d\'achat s\'applique à tous les tarifs de ce fournisseur (onglet Tarif d\'achat).</p></div>';
+
   const blocFiscal = (ed === 'fiscal')
     ? '<div class="f2-block"><div class="f2-bh"><h3>Identité fiscale</h3></div><div class="f2-form">' +
         '<div><label class="sub">SIRET (14 chiffres)</label><input id="f2-e-siret" value="' + escAttr(f.siret || '') + '" inputmode="numeric" maxlength="17"></div>' +
         '<div><label class="sub">TVA intracommunautaire</label><input id="f2-e-tva" value="' + escAttr(f.tva_intracom || '') + '"></div>' +
-        '</div><div class="f2-formacts"><button type="button" class="btn btn-sec btn-sm" data-f2cancel="1">Annuler</button>' +
+        '<div><label class="sub">Position fiscale</label>' + _refSelect('f2-e-regime', 'regimes_tva', f.regime_tva) + '</div>' +
+        '<div><label class="sub">RCS</label><input id="f2-e-rcs" value="' + escAttr(f.rcs || '') + '" placeholder="ex: Lille Métropole 412 319 196"></div>' +
+        '</div><p class="f2-hint">La position fiscale décide du traitement de la TVA sur la facture d\'achat : « CEE » déclenche l\'autoliquidation, « Export » l\'exonération hors UE.</p>' +
+        '<div class="f2-formacts"><button type="button" class="btn btn-sec btn-sm" data-f2cancel="1">Annuler</button>' +
         '<button type="button" class="btn btn-sm" id="f2-save-fiscal">Enregistrer</button></div></div>'
     : '<div class="f2-block"><div class="f2-bh"><h3>Identité fiscale</h3>' + _f2EditBtn('fiscal') + '</div><dl class="f2-kv">' +
         _f2Kv('SIRET', f.siret ? '<code>' + esc(f.siret) + '</code>' : '') +
         _f2Kv('TVA intracom.', f.tva_intracom ? '<code>' + esc(f.tva_intracom) + '</code>' : '') +
+        _f2Kv('Position fiscale', f.regime_tva ? esc(_refLabel('regimes_tva', f.regime_tva)) : '') +
+        _f2Kv('RCS', f.rcs ? esc(f.rcs) : '') +
       '</dl></div>';
 
   const blocCats = (ed === 'categories')
@@ -5226,7 +5376,8 @@ function _f2TabIdentite(f){
         ((f.categories || []).length ? _fourCatsCellHTML(f.categories) : '<div class="f2-empty">Aucune catégorie.</div>') +
         '<p class="f2-hint">« Sous-traitant » active automatiquement ce fournisseur pour les réceptions de produits finis sous-traités.</p></div>';
 
-  return '<div class="f2-blocks">' + blocIdentite + blocAdresse + blocFiscal + blocCats + '</div>';
+  return '<div class="f2-blocks">' + blocIdentite + blocAdresse + blocCoord +
+         blocCond + blocFiscal + blocCats + '</div>';
 }
 
 function _f2BindIdentite(f){
@@ -5245,8 +5396,25 @@ function _f2BindIdentite(f){
     adresse: g('#f2-e-adresse').value.trim(), code_postal: g('#f2-e-cp').value.trim(),
     ville: g('#f2-e-ville').value.trim(), pays: g('#f2-e-pays').value.trim() || 'FR',
   });
+  if (g('#f2-save-coord')) g('#f2-save-coord').onclick = () => _f2SavePartial(f.id, {
+    telephone: g('#f2-e-tel').value.trim(),
+    fax: g('#f2-e-fax').value.trim(),
+    email: g('#f2-e-email').value.trim(),
+  });
+  if (g('#f2-save-conditions')) g('#f2-save-conditions').onclick = () => {
+    const d = g('#f2-e-delai').value.trim();
+    _f2SavePartial(f.id, {
+      mode_reglement: g('#f2-e-regl').value,
+      mode_livraison: g('#f2-e-livr').value,
+      // Champ vidé → null explicite : '' serait relu comme « 0 jour », donc
+      // comme un engagement d'expédition le jour même.
+      delai_expedition_jours: d === '' ? null : d,
+      price_currency: g('#f2-e-devise').value.trim().toUpperCase() || 'EUR',
+    });
+  };
   if (g('#f2-save-fiscal')) g('#f2-save-fiscal').onclick = () => _f2SavePartial(f.id, {
     siret: g('#f2-e-siret').value.trim(), tva_intracom: g('#f2-e-tva').value.trim(),
+    regime_tva: g('#f2-e-regime').value, rcs: g('#f2-e-rcs').value.trim(),
   });
   const catBox = g('#f2-e-cats');
   if (catBox) {
@@ -5515,6 +5683,67 @@ function _f2TabReceptions(f, cache){
     '<p class="f2-hint">Source : réceptions MyStock, tous opérateurs confondus, rapprochées par nom de fournisseur. L\'ancien sous-onglet « Historique réceptions » (un menu déroulant seul dans une page) est remplacé par cet onglet.</p></div>';
 }
 
+// ─── Onglet Tarif d'achat ─────────────────────────────────────────
+// Lecture seule ici, à dessein : le tarif se règle dans Coûts matières, qui
+// porte le calcul et l'historique. Dupliquer le formulaire aurait fait deux
+// écrans à tenir d'accord — et c'est celui qu'on oublie qui écrit des bêtises.
+// Cet onglet répond à la question posée depuis la fiche fournisseur (« qu'est-ce
+// qu'on lui achète, et à quelles conditions ? ») et donne le chemin pour agir.
+function _f2TabTarif(f, cache){
+  const t = cache.tarif;
+  if (!t) return '<div class="f2-block full"><div class="f2-empty">Chargement…</div></div>';
+  if (t.erreur) {
+    return '<div class="f2-block full"><div class="f2-empty">' + esc(t.erreur) + '</div></div>';
+  }
+  const mats = t.matieres || [];
+  const lien = '/pricing/fournisseurs/' + f.id;
+  const devise = (t.fournisseur && t.fournisseur.price_currency) || 'EUR';
+  const sansTarif = mats.filter(m => !m.a_tarif).length;
+
+  const resume = (m) => {
+    const b = [m.price_basis === 'PER_M2' ? 'au m²' : 'au kilo'];
+    if (!m.is_imported) { b.push('pas d\'import'); return b.join(' · '); }
+    const mo = m.transport_mode || 'AMOUNT';
+    if (mo === 'PCT') b.push('transport ' + (m.transport_pct || 0) + ' %');
+    else if (mo === 'AMOUNT') b.push('transport ' + (m.transport_unit_price || 0));
+    else b.push((mo === 'CONTENEUR' ? 'conteneur ' : 'forfait ') + (m.transport_cout || 0) +
+                ' € ÷ ' + (m.transport_quantite || '?'));
+    if (m.taxe_pct) b.push('taxes ' + m.taxe_pct + ' %');
+    return b.join(' · ');
+  };
+
+  return '<div class="f2-block full">' +
+    '<div class="f2-bh"><h3>Tarif d\'achat</h3>' +
+      '<a class="btn btn-sec btn-sm" href="' + lien + '" target="_blank" rel="noopener">Régler dans Coûts matières ↗</a>' +
+    '</div>' +
+    '<div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:14px">' +
+      _f2Kv('Devise d\'achat', devise) +
+      _f2Kv('Matières achetées', String(mats.length)) +
+      _f2Kv('Sans tarif propre', sansTarif ? String(sansTarif) : '—') +
+    '</div>' +
+    (mats.length
+      ? '<div class="table-wrap"><table class="four-table"><thead><tr>' +
+        '<th>Référence</th><th>Désignation</th><th>Décl.</th><th>Tarif appliqué</th><th>État</th>' +
+        '</tr></thead><tbody>' +
+        mats.map(m => '<tr>' +
+          '<td style="font-family:monospace;font-weight:700">' + esc(m.reference || '') + '</td>' +
+          '<td>' + esc(m.designation || '') + '</td>' +
+          '<td>' + esc(String(m.nb_declinaisons || 0)) + '</td>' +
+          '<td style="max-width:320px;white-space:normal">' + esc(resume(m)) + '</td>' +
+          '<td>' + (m.a_tarif
+            ? '<span style="color:var(--ok,#16a34a);font-weight:700;font-size:12px">réglé</span>'
+            : '<span style="color:#d97706;font-weight:700;font-size:12px">par défaut</span>') + '</td>' +
+        '</tr>').join('') + '</tbody></table></div>'
+      : '<div class="f2-empty">Aucune matière achetée à ce fournisseur dans MyStock.</div>') +
+    '<p class="f2-hint">La devise vaut pour tout ce qu\'on achète à ce fournisseur. Le reste — base de prix, transport, taxes — se règle par matière : Meltavis peut livrer un adhésif par conteneur et un frontal au forfait. « Par défaut » signifie qu\'aucun tarif propre n\'a été posé : le calcul retombe alors sur les réglages hérités de la déclinaison.</p>' +
+  '</div>';
+}
+
+function _f2BindTarif(){
+  // Rien à brancher : l'onglet est en lecture, le seul geste est le lien vers
+  // Coûts matières, qui est un <a> ordinaire.
+}
+
 // ─── Onglet Traçabilité ───────────────────────────────────────────
 function _f2TabTraca(f){
   if (_f2EditingBlock === 'traca') {
@@ -5733,6 +5962,7 @@ function openMergeFournisseurModal(sourceId){
     .filter(x => x.id !== sourceId)
     .map(x => ({ ...x, _score: (norm(x.nom) === srcN ? 100 : (x.groupe && x.groupe === src.groupe ? 20 : 0)) }))
     .sort((a,b) => (b._score - a._score) || a.nom.localeCompare(b.nom, 'fr', {sensitivity:'base'}));
+  const suggestions = candidates.filter(x => x._score > 0).slice(0, 4);
   const opts = candidates.map(x => {
     const hint = x._score >= 100 ? ' — nom identique après normalisation' : (x._score >= 20 ? ' — même groupe' : '');
     return '<option value="' + x.id + '">' + esc(x.nom) + (x.groupe ? ' · ' + esc(x.groupe) : '') + hint + '</option>';
@@ -5744,6 +5974,18 @@ function openMergeFournisseurModal(sourceId){
     '<select id="mf-target" style="width:100%">' +
       '<option value="">— Choisir un fournisseur cible —</option>' + opts +
     '</select>' +
+    // Les candidats que le score juge proches restent proposés en un clic :
+    // c'est l'information que la recherche libre ne donne pas (« nom identique
+    // après normalisation » n'est pas quelque chose qu'on pense à taper).
+    (suggestions.length
+      ? '<div class="mf-sugg">' +
+          '<span class="mf-sugg-lbl">Probables :</span>' +
+          suggestions.map(x =>
+            '<button type="button" class="mf-sugg-chip" data-mfpick="' + x.id + '" title="' +
+            escAttr(x._score >= 100 ? 'Nom identique après normalisation' : 'Même groupe') + '">' +
+            esc(x.nom) + '</button>').join('') +
+        '</div>'
+      : '') +
     '<label style="display:flex;gap:8px;align-items:center;margin-top:14px;font-size:13px;cursor:pointer">' +
       '<input type="checkbox" id="mf-confirm" style="width:16px;height:16px">' +
       'Je confirme : cette opération est <strong style="color:var(--danger);margin-left:4px">irréversible</strong>' +
@@ -5755,12 +5997,33 @@ function openMergeFournisseurModal(sourceId){
     '</div>';
   backdrop.appendChild(dlg);
   document.body.appendChild(backdrop);
+  // Le <select> devient une recherche à la frappe. Le champ caché reprend
+  // l'id « mf-target », donc tout le code en aval (lecture de .value, pose
+  // du onchange) fonctionne sans changer de cible.
+  let mfPicker = null;
+  if (window.MysFournisseurPicker) {
+    mfPicker = window.MysFournisseurPicker.fromSelect(dlg.querySelector('#mf-target'), {
+      placeholder: 'Rechercher la fiche à conserver (nom, ville, SIRET…)',
+      // Les catégories de la source remontent en tête : le bon candidat est
+      // presque toujours un fournisseur du même métier.
+      categories: Array.isArray(src.categories) ? src.categories : [],
+      allowEmpty: false,
+      filter: x => x.id !== sourceId,
+    });
+  }
   const close = () => backdrop.remove();
   backdrop.onclick = (e) => { if (e.target === backdrop) close(); };
   dlg.querySelector('#mf-cancel').onclick = close;
+  dlg.querySelectorAll('[data-mfpick]').forEach(b => b.onclick = () => {
+    const id = Number(b.dataset.mfpick);
+    if (mfPicker) mfPicker.set(id);
+    else { dlg.querySelector('#mf-target').value = String(id); }
+    dlg.querySelectorAll('[data-mfpick]').forEach(o => o.classList.toggle('on', o === b));
+    upd();
+  });
   const cbo = dlg.querySelector('#mf-confirm');
   const btn = dlg.querySelector('#mf-go');
-  const upd = () => { btn.disabled = !(cbo.checked && dlg.querySelector('#mf-target').value); };
+  function upd(){ btn.disabled = !(cbo.checked && dlg.querySelector('#mf-target').value); }
   cbo.onchange = upd;
   dlg.querySelector('#mf-target').onchange = upd;
   btn.onclick = async () => {
@@ -7386,6 +7649,7 @@ async function unlinkBridge(mp_id) {
 <!-- v2.4.16 : scripts alert_form + alert_runtime perdus lors du retrait du bloc orphelin en v2.4.15, remis ici. -->
 <!-- v2.4.18 : mysifa_maint_form.js — CRUD codes maintenance + interventions libres (module partagé settings ↔ maintenance). -->
 <script src="/static/mysifa_timepicker.js?v=1.0"></script>
+<script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <script src="/static/mysifa_alert_form.js?v=2.4.18"></script>
 <script src="/static/mysifa_maint_form.js?v=2.7.4-usure"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.18"></script>
@@ -7939,10 +8203,12 @@ function copyApiKey() {
 async function createApiKey() {
   const name = document.getElementById('ak-name').value.trim();
   if (!name) { toast('Donnez un nom à cette clé.', true); return; }
+  const scopesEl = document.getElementById('ak-scopes');
+  const scopes = (scopesEl && scopesEl.value) || 'of:read,of:write';
   const res = await fetch('/api/settings/api-keys', {
     method:'POST', credentials:'include',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name})
+    body: JSON.stringify({name, scopes})
   });
   if (!res.ok) { toast('Erreur lors de la création.', true); return; }
   const data = await res.json();

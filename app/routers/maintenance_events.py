@@ -267,6 +267,17 @@ def _check_cloture_planning(ev) -> None:
         _check_event_not_closed(ev)
 
 
+def _event_a_venir(conn, event_id: int) -> str:
+    """Retourne la date du créneau s'il est encore à venir, sinon ""."""
+    row = conn.execute(
+        "SELECT date_prevue FROM maintenance_events WHERE id=?", (event_id,)
+    ).fetchone()
+    if not row:
+        return ""
+    d = row["date_prevue"] or ""
+    return d if d > _today_paris() else ""
+
+
 def _refuser_constat_futur(date_prevue: str) -> None:
     """400 si on date un constat dans le futur.
 
@@ -1103,6 +1114,31 @@ def update_op(event_id: int, op_id: int, body: OpUpdateBody, request: Request):
                        "été saisie ne peut plus l'être. Utilise l'enregistrement "
                        "d'opération pour consigner ce qui a réellement été fait.",
             )
+
+        # v2.7.2 — pendant de la clôture, dans l'autre sens du temps.
+        #
+        # La clôture interdit de solder après coup ce qui n'a pas été saisi.
+        # Rien n'interdisait de solder AVANT : une opération programmée dans
+        # trois semaines était validable aujourd'hui, avec le même bouton et
+        # sans avertissement. `done_at` prenait alors la date du jour, donc
+        # l'historique datait l'intervention d'aujourd'hui pendant que le
+        # planning la montrait faite le jour prévu — et le compteur de
+        # périodicité repartait de la mauvaise date. Rien n'empêchait non plus
+        # de solder d'un coup deux mois d'occurrences d'une récurrence : tout
+        # passait au vert sans qu'une seule intervention ait eu lieu.
+        #
+        # On ne borne que le SOLDE. Un admin doit rester libre de préparer un
+        # créneau à venir : consignes, machines, composition.
+        if (body.model_dump(exclude_unset=True).get("statut") == "termine"
+                and (row["statut"] or "") != "termine"):
+            _date_a_venir = _event_a_venir(conn, event_id)
+            if _date_a_venir:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Ce créneau est prévu le {_date_a_venir[8:10]}/"
+                           f"{_date_a_venir[5:7]} : une opération ne peut être "
+                           f"marquée terminée qu'à partir de ce jour-là.",
+                )
 
         if maint_role == "operator" and not _user_in_group(conn, event_id, user["id"]):
             raise HTTPException(status_code=403, detail="Vous n'êtes pas assigné à ce créneau")

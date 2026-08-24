@@ -1388,6 +1388,10 @@ body.light .libre-chip{color:#2563eb;background:rgba(37,99,235,.10)}
 .op-status-en_cours{background:rgba(251,191,36,.16);color:#f59e0b}
 .op-status-termine{background:rgba(52,211,153,.16);color:#10b981}
 .op-status-reporte{background:rgba(248,113,113,.16);color:var(--danger)}
+/* v2.7.2 : créneau à venir — le CTA laisse place à une mention inerte.
+   Pas un bouton désactivé : un bouton grisé invite à cliquer et laisse
+   croire à une panne. Ici c'est un état, et il porte sa date. */
+.op-op-card-cta.is-locked{display:flex;align-items:center;justify-content:center;gap:6px;cursor:default;background:var(--bg);color:var(--muted);border:1px dashed var(--border);font-weight:600}
 .op-badge-source{display:inline-block;font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:rgba(251,191,36,.14);color:#f59e0b;text-transform:uppercase;letter-spacing:.4px}
 
 /* ── État vide (aucune tâche) ───────────────────────────────────── */
@@ -3623,12 +3627,38 @@ function _autoScrollCalWeekBody(){
   // l'etat en attente pour retenter au prochain passage.
   if(!body.clientHeight) return;
   if(_calAutoScrollPending){
+    // v2.7.2 — ne pas consommer le recentrage sur une grille pas encore
+    // alimentee.
+    //
+    // Au rechargement de la page, le premier rendu du calendrier a lieu AVANT
+    // l'arrivee des donnees : au boot, _fmtDateISO n'est pas encore parse
+    // (il vit dans le <script> suivant), donc les deux premiers appels a
+    // refreshPlanning() sont des coquilles vides et seul le setTimeout(0)
+    // declenche le vrai fetch. La grille rendue a ce moment-la ne contient
+    // aucun bloc .cal-event.
+    //
+    // Le recentrage se declenchait quand meme : faute de bloc a viser, il
+    // retombait sur l'heure courante ET consommait le drapeau. Quand les
+    // creneaux arrivaient une fraction de seconde plus tard, le rendu suivant
+    // se contentait de restaurer cette position. Resultat : sur 24 h de grille
+    // affichees dans une fenetre d'environ 6 h, le planning s'ouvrait sur
+    // l'heure qu'il est — et les creneaux du matin restaient hors champ. Cela
+    // se lisait comme des creneaux « pas encore charges », alors qu'ils
+    // etaient bien la, plus haut.
+    //
+    // On distingue « pas encore charge » de « semaine reellement vide » par
+    // l'etat du chargement : tant qu'il est en cours ou n'a jamais abouti, on
+    // garde le drapeau arme pour le rendu qui portera les donnees.
+    const _blocs = body.querySelectorAll('.cal-event');
+    const _enCours = (typeof PLANNING_STATE !== 'undefined' && PLANNING_STATE)
+      && (PLANNING_STATE.status === 'loading' || !PLANNING_STATE._everLoaded);
+    if(!_blocs.length && _enCours) return;
     _calAutoScrollPending = false;
     _calSavedScrollTop = null;
     // On lit la position deja posee sur les blocs par _makeEventBlock plutot que
     // de recalculer depuis le modele : une seule source de verite.
     let target = null;
-    body.querySelectorAll('.cal-event').forEach(el => {
+    _blocs.forEach(el => {
       const t = parseFloat(el.style.top);
       if(!isNaN(t) && (target === null || t < target)) target = t;
     });
@@ -11602,6 +11632,19 @@ function _renderOpCardIndividual(op, ev, opts){
   const machineChip = (showMachine && machinesList.length)
     ? `<div class="op-op-card-machine"><span class="op-op-card-machine-dot"></span><span class="op-op-card-machine-lbl">${machinesList.map(m => escHtml(m)).join(' · ')}</span></div>`
     : '';
+  // v2.7.2 : un créneau qui n'est pas encore arrivé ne se solde pas. On
+  // remplace le bouton par la date d'ouverture plutôt que de le désactiver
+  // sans explication — l'opérateur doit comprendre pourquoi, pas buter.
+  const dateEv = ev.date_prevue || ev.date || '';
+  const aVenir = !isDone && dateEv && dateEv > _fmtDateISO(new Date());
+  const ctaHtml = aVenir
+    ? `<div class="op-op-card-cta is-locked" title="Cette opération pourra être validée le jour du créneau">
+         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+         À valider le ${escHtml(_fmtDateFrShort(dateEv))}
+       </div>`
+    : `<button type="button" class="op-op-card-cta ${isDone ? 'is-done' : ''}" onclick="opOpenSingleOpModal(${ev.id}, ${op.id})">
+      ${isDone ? 'Voir / modifier' : 'Marquer comme terminée'}
+    </button>`;
   return `<div class="op-op-card ${isDone ? 'is-done' : ''}">
     <div class="op-op-card-head">
       <span class="op-code">${op.code}</span>
@@ -11610,9 +11653,7 @@ function _renderOpCardIndividual(op, ev, opts){
     <div class="op-op-card-title">${escHtml(op.code_label || '—')}</div>
     ${machineChip}
     ${consignesChip}
-    <button type="button" class="op-op-card-cta ${isDone ? 'is-done' : ''}" onclick="opOpenSingleOpModal(${ev.id}, ${op.id})">
-      ${isDone ? 'Voir / modifier' : 'Marquer comme terminée'}
-    </button>
+    ${ctaHtml}
     ${actionsHtml}
   </div>`;
 }
@@ -11774,7 +11815,21 @@ function opRenderTasks(){
       if(ev.source === 'non_planifie') persos.push(ev);
       else creneaux.push(ev);
     }
+    // v2.7.2 — tri par DATE puis heure.
+    //
+    // Le tri ne portait que sur heure_debut. Sans conséquence dans « Aujourd'hui »
+    // (une seule date), mais « À venir » couvre 30 jours : un créneau de 08:00
+    // dans trois semaines passait devant un créneau de 14:00 demain. Les
+    // récurrences de modèle rendent le désordre systématique — elles produisent
+    // justement des créneaux qui partagent le même horaire sur des dates
+    // différentes, donc tous départagés par le seul tie-break de l'id.
+    //
+    // 'zz' place les créneaux sans horaire en fin de journée plutôt qu'au
+    // début : un créneau sans heure n'est pas un créneau de minuit.
     creneaux.sort((a, b) => {
+      const da = a.date_prevue || '';
+      const db = b.date_prevue || '';
+      if(da !== db) return da.localeCompare(db);
       const ha = a.heure_debut || 'zz';
       const hb = b.heure_debut || 'zz';
       if(ha !== hb) return ha.localeCompare(hb);
@@ -11788,10 +11843,13 @@ function opRenderTasks(){
     const creneauBoxes = creneaux
       .map(ev => _renderCreneauBox(ev, showTermine, isToday))
       .filter(Boolean);
+    // v2.7.2 : « Aujourd'hui » se lit du plus récent au plus ancien (ce qui
+    // vient d'être saisi remonte). « À venir » se lit dans l'autre sens : le
+    // plus proche d'abord. Le même tri DESC servait aux deux.
     // v2.2.71 : la section perso est toujours affichée si des ops perso 'à faire'
     // existent. Le toggle contrôle uniquement l'inclusion des ops terminées (filtre
     // interne dans _renderPersoSection).
-    const persoHtml = _renderPersoSection(persos, showTermine);
+    const persoHtml = _renderPersoSection(persos, showTermine, !isToday);
     return { creneauBoxes, persoHtml };
   };
 
@@ -11865,7 +11923,7 @@ function _renderCreneauBox(ev, showTermine, isToday){
 }
 
 // v2.2.62 : section « Opérations personnelles » (source=non_planifie) — en bas, seulement si toggle ON.
-function _renderPersoSection(evs, showTermine){
+function _renderPersoSection(evs, showTermine, chronoAsc){
   if(!evs.length) return '';
   const items = [];
   for(const ev of evs){
@@ -11876,12 +11934,15 @@ function _renderPersoSection(evs, showTermine){
     }
   }
   if(!items.length) return '';
-  // Trie : date_prevue DESC (plus récent en premier), tie-break id DESC
+  // Trie : date_prevue DESC par défaut (plus récent en premier), tie-break
+  // id DESC. chronoAsc inverse le sens pour l'onglet « À venir », où c'est
+  // l'échéance la plus proche qui doit arriver en tête.
   items.sort((a, b) => {
     const da = a.ev.date_prevue || '';
     const db = b.ev.date_prevue || '';
-    if(da !== db) return db.localeCompare(da);
-    return (b.ev.id || 0) - (a.ev.id || 0);
+    if(da !== db) return chronoAsc ? da.localeCompare(db) : db.localeCompare(da);
+    const ia = a.ev.id || 0, ib = b.ev.id || 0;
+    return chronoAsc ? (ia - ib) : (ib - ia);
   });
   const cards = items.map(({op, ev}) => _renderOpCardIndividual(op, ev, {showMachine:true})).join('');
   return `<section class="op-perso-section">
@@ -12908,6 +12969,17 @@ function opOpenSingleOpModal(eventId, opId){
   if(!ev){ return; }
   const op = (ev.ops || []).find(o => o.id === opId);
   if(!op){ return; }
+  // v2.7.2 : second verrou. La carte n'affiche déjà plus de bouton sur un
+  // créneau à venir, mais la modale reste atteignable par un autre chemin
+  // (rendu obsolète, appel direct). Le serveur refuse de toute façon.
+  const _dEv = ev.date_prevue || ev.date || '';
+  if(op.statut !== 'termine' && _dEv && _dEv > _fmtDateISO(new Date())){
+    if(typeof showToast === 'function'){
+      showToast('Créneau prévu le ' + _fmtDateFrShort(_dEv)
+              + ' : la validation sera possible ce jour-là.', 'info');
+    }
+    return;
+  }
   MAINT_STATE.singleOpTarget = { eventId, opId, _wasDone: (op.statut === 'termine') };
   const timeLabel = (ev.heure_debut && ev.heure_fin)
     ? (ev.heure_debut + ' – ' + ev.heure_fin)

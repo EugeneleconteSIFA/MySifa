@@ -358,9 +358,17 @@ def _expeditions_du_dossier(conn, ref: str) -> list[dict]:
             WHERE TRIM(COALESCE(d.no_dossier,''))=?
                OR TRIM(COALESCE(pe.reference,''))=?
                OR TRIM(COALESCE(pe.numero_of,''))=?
+               -- Un départ peut couvrir plusieurs dossiers : le lien direct
+               -- ne désigne que le premier, la liaison les porte tous.
+               OR EXISTS (SELECT 1 FROM expe_depart_dossiers dd
+                            LEFT JOIN planning_entries pe3 ON pe3.id = dd.planning_entry_id
+                           WHERE dd.depart_id = d.id
+                             AND (TRIM(COALESCE(dd.no_dossier,''))=?
+                               OR TRIM(COALESCE(pe3.reference,''))=?
+                               OR TRIM(COALESCE(pe3.numero_of,''))=?))
             ORDER BY d.date_enlevement ASC
             LIMIT ?""",
-        (ref, ref, ref, _MAX_NOEUDS),
+        (ref, ref, ref, ref, ref, ref, _MAX_NOEUDS),
     ).fetchall()
     out = []
     for r in rows:
@@ -695,8 +703,28 @@ def traca_chaine(request: Request, type: str = "", id: str = ""):
             if not exp:
                 raise HTTPException(404, "Expédition introuvable.")
             d_exp = dict(exp)
-            ref = (d_exp.get("dossier_ref") or "").strip()
-            branche = _chaine_dossier(conn, ref) if ref else None
+            refs_dossiers = [
+                r["ref"]
+                for r in conn.execute(
+                    """SELECT COALESCE(
+                                NULLIF(TRIM(COALESCE(dd.no_dossier,'')), ''),
+                                NULLIF(TRIM(COALESCE(pe.reference,'')), ''),
+                                TRIM(COALESCE(pe.numero_of,''))) AS ref
+                         FROM expe_depart_dossiers dd
+                         LEFT JOIN planning_entries pe ON pe.id = dd.planning_entry_id
+                        WHERE dd.depart_id = ?
+                        ORDER BY dd.id ASC LIMIT ?""",
+                    (eid, _MAX_NOEUDS),
+                ).fetchall()
+                if (r["ref"] or "").strip()
+            ]
+            # Repli sur la copie textuelle pour les départs antérieurs à la
+            # table de liaison, ou saisis par un client non mis à jour.
+            if not refs_dossiers:
+                r0 = (d_exp.get("dossier_ref") or "").strip()
+                refs_dossiers = [r0] if r0 else []
+            ref = refs_dossiers[0] if refs_dossiers else ""
+            branches = [_chaine_dossier(conn, r) for r in refs_dossiers]
 
             # Livraison directe (régime A2) : rien n'a transité par SIFA, donc
             # l'absence de dossier et de lot est la situation NORMALE. La
@@ -778,9 +806,16 @@ def traca_chaine(request: Request, type: str = "", id: str = ""):
                 "negoce_direct": negoce_direct,
                 "hors_production": hors_production,
                 "lots_expedies": lots_expedies,
-                "dossiers": [branche] if branche else [],
+                "dossiers": branches,
                 "synthese": {
-                    "nb_dossiers": 1 if branche else 0,
+                    "nb_dossiers": len(branches),
+                    # Vente mixte : le claim ne peut pas être porté globalement
+                    # sur le document, il doit l'être ligne par ligne.
+                    "fsc_mixte": len({
+                        (b.get("dossier") or {}).get("fsc_type_requis") or ""
+                        if int((b.get("dossier") or {}).get("fsc_requis") or 0) else "non_fsc"
+                        for b in branches
+                    }) > 1,
                     "nb_lots_expedies": len(lots_expedies),
                     "quantite_expediee": sum(
                         float(l.get("quantite") or 0) for l in lots_expedies

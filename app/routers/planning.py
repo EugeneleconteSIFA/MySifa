@@ -27,6 +27,7 @@ from config import (
     ROLE_SUPERADMIN,
 )
 from app.services.audit_service import log_action
+from app.services.date_livraison import parse_date_livraison
 from services.auth_service import require_admin, get_current_user, user_has_app_access
 from services.dossier_stats import build_dossier_production_stats
 
@@ -1183,15 +1184,18 @@ def _compute_timeline_slots(
 # ═══════════════════════════════════════════════════════════════
 
 def _parse_liv_date(raw: Any) -> Optional[datetime]:
-    """Date de livraison 'YYYY-MM-DD' → datetime fin de journée (échéance). None si invalide/vide."""
-    s = str(raw or "").strip()
-    if not s:
+    """Date de livraison → datetime fin de journée (échéance). None si illisible.
+
+    Accepte l'ISO applicatif ET la saisie manuelle (« 07/04/2026 », « A livrer
+    le 03/04 ») : `date_livraison` est un champ texte, c'est l'atelier qui
+    l'écrit. Avant, ces dossiers n'avaient aucune échéance aux yeux du calcul
+    de retard — ils ne pouvaient donc jamais être en retard, quelle que soit
+    leur date de fin réelle.
+    """
+    d = parse_date_livraison(raw)
+    if d is None:
         return None
-    try:
-        d = datetime.strptime(s[:10], "%Y-%m-%d")
-        return d.replace(hour=23, minute=59, second=59, microsecond=0)
-    except (ValueError, TypeError):
-        return None
+    return datetime(d.year, d.month, d.day, 23, 59, 59)
 
 
 def _entry_tardiness_h(entry: dict, end_dt: Optional[datetime]) -> float:

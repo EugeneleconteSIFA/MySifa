@@ -58,6 +58,15 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Request
 
 from app.core.database import get_db
+from app.services.carnet_snapshot import (
+    agreger as agreger_carnet, capturer as capturer_carnet, capturer_si_besoin,
+    couverture as couverture_carnet,
+)
+from app.services.coherence_fiche import (
+    alerte_courte, controler as controler_fiche, nb_fronts,
+)
+from app.services.date_livraison import parse_date_livraison
+from app.services.documents_verite import historique_document
 from app.routers.stock import (
     require_stock_matieres_admin,
     require_stock_write,
@@ -97,15 +106,15 @@ def _f(v) -> Optional[float]:
 
 
 def _parse_iso(s) -> Optional[date]:
-    if not s:
-        return None
-    try:
-        return datetime.fromisoformat(str(s)[:19]).date()
-    except (TypeError, ValueError):
-        try:
-            return datetime.strptime(str(s)[:10], "%Y-%m-%d").date()
-        except (TypeError, ValueError):
-            return None
+    """Date d'un champ du planning, ISO ou saisie à la main.
+
+    `date_livraison` est un champ TEXTE et le reste : c'est l'atelier qui
+    l'écrit. « 07/04/2026 » et « A livrer le 03/04 » tombaient ici en None, et
+    `_ratio_dans_fenetre` les comptait alors à 100 % dans TOUTES les fenêtres,
+    « à 7 jours » comprise — soit 11 % des dossiers surévaluant le besoin
+    court terme, sans que rien ne le signale.
+    """
+    return parse_date_livraison(s)
 
 
 def _ratio_dans_fenetre(pe: dict, today: date, borne: date) -> float:
@@ -178,7 +187,11 @@ _SQL_PE = """
            oi.conditionnement AS of_conditionnement,
            COALESCE(oi.valide, 0) AS of_valide,
            oi.valide_par          AS of_valide_par,
-           oi.valide_at           AS of_valide_at
+           oi.valide_at           AS of_valide_at,
+           -- Pourquoi la validation est tombée. Une pastille qui repasse au
+           -- rouge sans dire pourquoi sera recochée sans être relue.
+           oi.invalide_at         AS of_invalide_at,
+           oi.invalide_motif      AS of_invalide_motif
     FROM planning_entries pe
     LEFT JOIN machines m ON m.id = pe.machine_id
     LEFT JOIN of_imports oi ON oi.id = pe.of_import_id
@@ -189,8 +202,14 @@ _SQL_PE = """
 _SQL_FT = """
     SELECT id, reference, ref_produit_norm, machine,
            COALESCE(valide, 0) AS valide, valide_par, valide_at,
+           invalide_at, invalide_motif,
            support, glassine, adhesif, qte_au_mille, eti_laize, eti_longueur,
            mod_laize, mod_longueur, mod_nb_front, laize, laize_optimale,
+           -- Le vrai nombre de fronts vit dans l'outil de découpe :
+           -- `mod_nb_front` vaut 1 sur 878 fiches sur 909 (constat du
+           -- 7 août 2026), `outil1_nb_front` est confirmé par la géométrie
+           -- sur 868. Cf. app/services/coherence_fiche.py.
+           outil1_nb_front,
            mandrin_dia, nb_etiq_bobin, nb_bobines_carton, cartons,
            conditionnement,
            palette_type, palette_nb_cartons_sol, palette_nb_cartons_hauteur
@@ -199,8 +218,9 @@ _SQL_FT = """
 
 _FT_FIELDS = (
     "support", "glassine", "adhesif", "qte_au_mille", "eti_laize", "eti_longueur",
-    "valide", "valide_par", "valide_at",
-    "mod_laize", "mod_longueur", "mod_nb_front", "laize", "laize_optimale",
+    "valide", "valide_par", "valide_at", "invalide_at", "invalide_motif",
+    "mod_laize", "mod_longueur", "mod_nb_front", "outil1_nb_front",
+    "laize", "laize_optimale",
     "mandrin_dia", "nb_etiq_bobin", "nb_bobines_carton", "cartons",
     "conditionnement",
     "palette_type", "palette_nb_cartons_sol", "palette_nb_cartons_hauteur",
@@ -326,8 +346,24 @@ def _metrage_dossier(pe: dict) -> dict:
         }
 
     qte = _f(pe.get("qte_etiquettes"))
-    nb_front = _f(pe.get("ft_mod_nb_front"))
     mod_long = _f(pe.get("ft_mod_longueur"))
+
+    # Le nombre de fronts est au DÉNOMINATEUR : s'y tromper d'un facteur 18
+    # multiplie le besoin en frontal par 18. `mod_nb_front` valait 1 sur 878
+    # fiches sur 909 — un champ que personne ne remplit, pas une valeur. Le
+    # nombre de poses de l'outil de découpe est le bon, et la géométrie le
+    # confirme sur 868 fiches. Cf. app/services/coherence_fiche.py.
+    ft = {
+        "mod_nb_front": pe.get("ft_mod_nb_front"),
+        "outil1_nb_front": pe.get("ft_outil1_nb_front"),
+        "mod_laize": pe.get("ft_mod_laize"),
+        "laize_optimale": pe.get("ft_laize_optimale"),
+        "laize": pe.get("ft_laize"),
+    }
+    res_front = nb_fronts(ft, pe.get("of_laize"))
+    nb_front = res_front["valeur"]
+    coherence = controler_fiche(ft, pe.get("of_laize"))
+
     if qte and nb_front and mod_long:
         return {
             "metrage": qte / nb_front * mod_long / 1000.0,
@@ -335,12 +371,18 @@ def _metrage_dossier(pe: dict) -> dict:
             "variables": [
                 {"label": "Quantité étiquettes", "champ": "of_imports.qte_etiquettes",
                  "origine": "OF", "valeur": qte, "unite": "étiq"},
-                {"label": "Nb de front", "champ": "fiches_techniques.mod_nb_front",
-                 "origine": "Fiche technique", "valeur": nb_front, "unite": ""},
+                {"label": "Nb de front", "champ": res_front["champ"],
+                 "origine": {"outil": "Fiche technique — outil de découpe",
+                             "module": "Fiche technique — module",
+                             "geometrie": "Déduit de la laize"}.get(
+                                 res_front["source"], "Fiche technique"),
+                 "valeur": nb_front, "unite": ""},
                 {"label": "Longueur module", "champ": "fiches_techniques.mod_longueur",
                  "origine": "Fiche technique", "valeur": mod_long, "unite": "mm"},
             ],
             "manque": [],
+            "coherence": coherence,
+            "alerte": alerte_courte(coherence),
         }
 
     manque = []
@@ -349,10 +391,12 @@ def _metrage_dossier(pe: dict) -> dict:
     if not qte:
         manque.append("Quantité d'étiquettes de l'OF")
     if not nb_front:
-        manque.append("Nb de front de la fiche technique (mod_nb_front)")
+        manque.append("Nb de front de la fiche technique "
+                      "(outil1_nb_front, ou mod_nb_front, ou laize + mod_laize)")
     if not mod_long:
         manque.append("Longueur module de la fiche technique (mod_longueur)")
-    return {"metrage": None, "source": None, "variables": [], "manque": manque}
+    return {"metrage": None, "source": None, "variables": [], "manque": manque,
+            "coherence": coherence, "alerte": alerte_courte(coherence)}
 
 
 def _laize_dossier(pe: dict) -> dict:
@@ -740,6 +784,12 @@ def besoins_par_dossier(request: Request):
     avec le détail des besoins MP calculés."""
     require_stock_matieres_admin(request)
     with get_db() as conn:
+        # Photo du carnet, une fois par jour. Cet écran est ouvert tous les
+        # jours ouvrés par l'administration : ça suffit à alimenter la série
+        # sans dépendre d'un cron à installer sur le VPS. Best-effort et muet
+        # — rien de ce qui sert à une prévision d'automne ne justifie de faire
+        # échouer l'affichage des besoins d'aujourd'hui.
+        capturer_si_besoin(conn)
         mapping = _load_mapping(conn)
         rows = _load_dossiers(conn)
         perte_pct = stock_config_float(conn, "mandrin_perte_coupe_pct")
@@ -770,11 +820,17 @@ def besoins_par_dossier(request: Request):
             # le défalquage automatique du stock en fin de production.
             "of_valide": int(pe.get("of_valide") or 0),
             "of_valide_par": pe.get("of_valide_par"),
+            "of_invalide_motif": pe.get("of_invalide_motif"),
             "ft_valide": int(pe.get("ft_valide") or 0),
             "ft_valide_par": pe.get("ft_valide_par"),
+            "ft_invalide_motif": pe.get("ft_invalide_motif"),
             "destockage": pe.get("destockage") or "todo",
             "of_metrage": pe.get("of_metrage"),
             "of_laize": pe.get("of_laize"),
+            # Cohérence géométrique de la fiche. Un besoin calculé sur une
+            # fiche qui ne boucle pas est faux d'un facteur connu : autant le
+            # dire sur la ligne plutôt que de laisser partir la commande.
+            "fiche_alerte": _metrage_dossier(pe).get("alerte"),
             "besoins": besoins,
             "besoins_mapped_count": sum(1 for b in besoins if b["mapped"]),
             "besoins_total_count": len(besoins),
@@ -851,7 +907,11 @@ def besoins_dossiers_passes(request: Request):
             "of_import_id": pe.get("of_import_id"),
             "ft_id": pe.get("ft_id"),
             "of_valide": int(pe.get("of_valide") or 0),
+            "of_valide_par": pe.get("of_valide_par"),
+            "of_invalide_motif": pe.get("of_invalide_motif"),
             "ft_valide": int(pe.get("ft_valide") or 0),
+            "ft_valide_par": pe.get("ft_valide_par"),
+            "ft_invalide_motif": pe.get("ft_invalide_motif"),
             "destockage": pe.get("destockage") or "todo",
             "destockable": docs["complet"],
             "blocage": docs["blocage"],
@@ -1334,7 +1394,9 @@ async def rattacher_of(planning_id: int, request: Request):
 
     # Import local : of_import.py n'a pas à connaître Besoins matières, et un
     # import au niveau module créerait un cycle le jour où l'inverse arrivera.
-    from app.routers.of_import import _promote_of_link
+    from app.routers.of_import import (
+        _promote_of_link, _invalidate_pending_count_cache,
+    )
 
     qui = (user.get("nom") or user.get("email") or "besoins_matieres")
     with get_db() as conn:
@@ -1354,6 +1416,8 @@ async def rattacher_of(planning_id: int, request: Request):
         except Exception:
             pass  # colonne absente sur une base ancienne : le lien reste valide
         conn.commit()
+    # Le dossier sort de la liste « sans OF » : le badge de MyProd doit suivre.
+    _invalidate_pending_count_cache()
     return {"ok": True, "planning_id": planning_id, "of_id": of_id,
             "of_numero": oi["of_numero"]}
 
@@ -1406,6 +1470,234 @@ async def valider_of(of_id: int, request: Request):
 async def valider_fiche(fiche_id: int, request: Request):
     """Valide (ou dévalide) une fiche technique."""
     return await _basculer_validation(request, "fiches_techniques", fiche_id, "Fiche technique")
+
+
+def _historique(request: Request, table: str, doc_id: int, libelle: str) -> dict:
+    """Ce qui a changé sur un document, et depuis quelle source.
+
+    C'est la contrepartie du verrou : demander une relecture n'a de sens que si
+    le relecteur peut voir CE QUI a bougé depuis la dernière. Sinon il revalide
+    au jugé, et la case redevient une formalité.
+
+    Lecture seule, et ouverte à tous ceux qui voient déjà le tableau Besoins
+    matières : comprendre pourquoi un déstockage est bloqué ne demande pas le
+    droit de le débloquer.
+    """
+    require_stock_matieres_admin(request)
+    with get_db() as conn:
+        row = conn.execute(
+            f"SELECT id, COALESCE(valide,0) AS valide, valide_par, valide_at, "
+            f"invalide_at, invalide_motif FROM {table} WHERE id=?", (doc_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, f"{libelle} introuvable.")
+        lignes = historique_document(conn, table, doc_id)
+    # Les changements postérieurs à la dernière validation sont ceux qui
+    # restent à relire. Les autres sont déjà couverts par la case cochée.
+    depuis = (row["valide_at"] or "") if row["valide"] else ""
+    for li in lignes:
+        li["depuis_validation"] = bool(depuis) and str(li["at"] or "") > depuis
+    return {
+        "document": dict(row),
+        "historique": lignes,
+        "a_relire": [li for li in lignes if li["depuis_validation"]],
+    }
+
+
+@router.get("/api/stock/besoins-matieres/tendance")
+def besoins_tendance(request: Request):
+    """Besoin par matière et par mois de livraison, sur les mois à venir.
+
+    Les trois autres vues répondent à « de quoi ai-je besoin » ; celle-ci
+    répond à « quand ». C'est la question de l'acheteur : un besoin de frontal
+    étalé sur quatre mois ne se commande pas comme le même volume concentré
+    sur trois semaines.
+
+    Une ligne par matière, ses mois en colonnes — des petits multiples. Vingt
+    matières sur un graphe commun seraient illisibles et imposeraient une
+    palette catégorielle à vingt teintes, dont aucune ne serait distinguable.
+    Une série par ligne, chacune à son échelle, se lit d'un coup d'œil.
+
+    Le mois d'une ligne est celui de la LIVRAISON, pas de la production : c'est
+    l'engagement client qui fixe la date à laquelle la matière doit être là.
+    """
+    require_stock_matieres_admin(request)
+    try:
+        horizon = max(2, min(18, int(request.query_params.get("mois") or 8)))
+    except (TypeError, ValueError):
+        horizon = 8
+    kind_filtre = (request.query_params.get("kind") or "").strip() or None
+
+    with get_db() as conn:
+        cumul, vus, vus_actifs, dossiers = agreger_carnet(conn)
+        couv = couverture_carnet(conn)
+
+    # Fenêtre : du mois courant à M+horizon. Les mois passés sont exclus — ils
+    # ne se commandent plus. Ceux au-delà de l'horizon sont regroupés dans un
+    # « au-delà » plutôt que tronqués en silence : un besoin oublié parce qu'il
+    # tombait hors fenêtre serait pire qu'un besoin affiché en vrac.
+    auj = date.today()
+    mois_fenetre = []
+    an, mo = auj.year, auj.month
+    for _ in range(horizon):
+        mois_fenetre.append(f"{an:04d}-{mo:02d}")
+        mo += 1
+        if mo > 12:
+            mo = 1
+            an += 1
+    borne = mois_fenetre[-1]
+    AU_DELA = "au-dela"
+
+    lignes: dict = {}
+    passe_total = 0.0
+    for (mois, mid, kind), agg in cumul.items():
+        if kind_filtre and kind != kind_filtre:
+            continue
+        if mois < mois_fenetre[0]:
+            passe_total += agg["q_actif"]  # reste à produire sur un mois échu
+            continue
+        col = mois if mois <= borne else AU_DELA
+        cle = (mid, kind)
+        li = lignes.setdefault(cle, {
+            "matiere_id": mid,
+            "libelle": (agg.get("ref") or agg.get("designation")
+                        or agg.get("source_value") or "Non associée"),
+            "designation": agg.get("designation"),
+            "kind": kind,
+            "unite": agg.get("unite"),
+            "par_mois": {},
+            "total": 0.0,
+            "dossiers": set(),
+            "incalculables": 0,
+        })
+        cell = li["par_mois"].setdefault(col, {"q": 0.0, "dossiers": 0, "inc": 0})
+        cell["q"] += agg["q"]
+        cell["dossiers"] += len(vus.get((mois, mid, kind), ()))
+        cell["inc"] += agg["inc"]
+        li["total"] += agg["q"]
+        li["dossiers"] |= vus.get((mois, mid, kind), set())
+        li["incalculables"] += agg["inc"]
+
+    colonnes = mois_fenetre + [AU_DELA]
+    out = []
+    for li in lignes.values():
+        serie = [{"mois": c, **li["par_mois"].get(c, {"q": 0.0, "dossiers": 0, "inc": 0})}
+                 for c in colonnes]
+        out.append({
+            **{k: v for k, v in li.items() if k not in ("par_mois", "dossiers")},
+            "serie": serie,
+            "max": max((p["q"] for p in serie), default=0.0),
+            "nb_dossiers": len(li["dossiers"]),
+            "non_associee": li["matiere_id"] is None,
+        })
+    # Le poids d'abord : on commande ce qui pèse, pas ce qui est alphabétique.
+    out.sort(key=lambda l: (l["kind"], -l["total"]))
+
+    return {
+        "colonnes": colonnes,
+        "mois": mois_fenetre,
+        "horizon": horizon,
+        "lignes": out,
+        "reste_sur_mois_echus": round(passe_total, 2),
+        # Tant que la série de photos est trop courte, l'écran ne doit pas
+        # laisser croire qu'il montre une tendance mesurée dans le temps : il
+        # montre l'état du carnet aujourd'hui, réparti par mois.
+        "historique": couv,
+    }
+
+
+@router.get("/api/stock/besoins-matieres/fiches-incoherentes")
+def fiches_incoherentes(request: Request):
+    """Fiches techniques dont la géométrie ne boucle pas.
+
+    Le nombre de fronts multiplié par la laize du module doit tenir dans la
+    laize de la bobine. Quand ce n'est pas le cas, le besoin en frontal calculé
+    depuis cette fiche est faux d'un facteur qu'on sait nommer — et c'est ce
+    facteur qui classe la liste : une fiche qui surestime d'un facteur 18 se
+    corrige avant une qui se trompe d'un front.
+
+    Aucune correction automatique. Une fiche fausse se répare dans Access, à la
+    source ; compenser en silence à chaque lecture cacherait le problème
+    pendant que les commandes continuent de partir de travers.
+    """
+    require_stock_matieres_admin(request)
+    with get_db() as conn:
+        fiches = [dict(r) for r in conn.execute(_SQL_FT).fetchall()]
+        # Combien de dossiers du planning s'appuient sur chaque fiche : une
+        # fiche fausse mais inutilisée n'est pas une urgence.
+        dossiers = _load_dossiers(conn, _SQL_PE.replace(
+            "WHERE pe.statut IN ('attente', 'en_cours')", ""))
+    usage: dict = {}
+    for pe in dossiers:
+        if pe.get("ft_id"):
+            usage[pe["ft_id"]] = usage.get(pe["ft_id"], 0) + 1
+
+    items, indeterminables = [], 0
+    for ft in fiches:
+        res = controler_fiche(ft)
+        if res["verdict"] == "indeterminable":
+            indeterminables += 1
+            continue
+        if res["verdict"] == "coherent":
+            continue
+        items.append({
+            "fiche_id": ft["id"],
+            "reference": ft.get("reference"),
+            "machine": ft.get("machine"),
+            "dossiers_concernes": usage.get(ft["id"], 0),
+            "nb_front_retenu": res["retenu"],
+            "nb_front_outil": res["nb_front_outil"],
+            "nb_front_module": res["nb_front_declare_module"],
+            "nb_front_geometrique": res["nb_front_geometrique"],
+            "laize": res["laize_utile"],
+            "mod_laize": res["mod_laize"],
+            "facteur_erreur": res["facteur_erreur"],
+            "message": res["message"],
+        })
+    # Impact d'abord : facteur d'erreur, puis nombre de dossiers qui en dépendent.
+    items.sort(key=lambda i: (-(i["facteur_erreur"] or 0), -i["dossiers_concernes"]))
+    return {
+        "total_fiches": len(fiches),
+        "incoherentes": len(items),
+        "indeterminables": indeterminables,
+        "items": items[:200],
+    }
+
+
+@router.get("/api/stock/besoins-matieres/carnet/couverture")
+def carnet_couverture(request: Request):
+    """Où en est l'accumulation des photos du carnet.
+
+    Sert à répondre à une question simple et qu'on se posera forcément :
+    « à partir de quand la prévision sera-t-elle calibrée ? ». Tant que
+    `horizons_calibrables` est vide, aucun modèle fondé sur le remplissage du
+    carnet ne peut être honnête — et il vaut mieux que l'écran le dise.
+    """
+    require_stock_matieres_admin(request)
+    with get_db() as conn:
+        return couverture_carnet(conn)
+
+
+@router.post("/api/stock/besoins-matieres/carnet/capturer")
+def carnet_capturer(request: Request):
+    """Force la photo du jour (la recalcule si elle existe déjà)."""
+    require_stock_matieres_admin(request)
+    with get_db() as conn:
+        res = capturer_carnet(conn, force=True)
+        conn.commit()
+    return res
+
+
+@router.get("/api/stock/besoins-matieres/of/{of_id}/historique")
+def historique_of(of_id: int, request: Request):
+    """Changements de valeur d'un ordre de fabrication."""
+    return _historique(request, "of_imports", of_id, "OF")
+
+
+@router.get("/api/stock/besoins-matieres/fiche/{fiche_id}/historique")
+def historique_fiche(fiche_id: int, request: Request):
+    """Changements de valeur d'une fiche technique."""
+    return _historique(request, "fiches_techniques", fiche_id, "Fiche technique")
 
 
 @router.post("/api/stock/besoins-matieres/dossier/{planning_id}/rattacher-fiche")
@@ -1590,17 +1882,34 @@ def _etat_documents(pe: dict) -> dict:
     elif not ft_ok:
         manquants.append("fiche technique non validée")
 
+    # Une validation qui est TOMBÉE ne se raconte pas comme une validation
+    # jamais faite : dans le premier cas un chiffre a bougé sous une relecture
+    # déjà acquise, et c'est précisément ce qu'il faut aller regarder.
+    motifs = [m for m in (pe.get("of_invalide_motif") if of_id and not of_ok else None,
+                          pe.get("ft_invalide_motif") if ft_id and not ft_ok else None)
+              if m]
+
+    blocage = None
+    if not (of_ok and ft_ok):
+        blocage = ("Déstockage impossible tant que les deux documents ne sont "
+                   "pas validés — " + ", ".join(manquants) + ".")
+        if motifs:
+            blocage += " " + " ".join(motifs)
+
     return {
         "of_id": of_id,
         "of_valide": of_ok,
         "of_valide_par": pe.get("of_valide_par"),
+        "of_invalide_at": pe.get("of_invalide_at"),
+        "of_invalide_motif": pe.get("of_invalide_motif"),
         "ft_id": ft_id,
         "ft_valide": ft_ok,
         "ft_valide_par": pe.get("ft_valide_par"),
+        "ft_invalide_at": pe.get("ft_invalide_at"),
+        "ft_invalide_motif": pe.get("ft_invalide_motif"),
         "complet": of_ok and ft_ok,
-        "blocage": None if (of_ok and ft_ok) else
-                   "Déstockage impossible tant que les deux documents ne sont pas "
-                   "validés — " + ", ".join(manquants) + ".",
+        "motifs_invalidation": motifs,
+        "blocage": blocage,
     }
 
 
@@ -1785,6 +2094,9 @@ async def destockage_valider(planning_id: int, request: Request):
                 conn, user, mid, "sortie", qte,
                 laize_id=laize_id, note=base_note,
                 planning_entry_id=planning_id, no_dossier=no_dossier,
+                # Les deux documents qui ont servi au calcul. Le dossier seul
+                # ne suffit pas : il change d'OF, et une fiche se modifie.
+                of_import_id=docs.get("of_id"), fiche_id=docs.get("ft_id"),
                 autoriser_negatif=True,
             )
             faits.append({"matiere_id": mid, **res})

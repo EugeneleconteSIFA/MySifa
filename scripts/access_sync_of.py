@@ -226,6 +226,7 @@ def main():
     print(f"{len(rows)} OF(s) trouvé(s) après le {DATE_DEPUIS}.\n")
 
     inserted = enriched = skipped = errors = 0
+    conflits = devalides = 0
     sans_metrage = sans_adhesif = 0
 
     for row in rows:
@@ -248,9 +249,23 @@ def main():
                 champs = ", ".join(result.get("enriched_fields") or [])
                 print(f"  [COMPLÉTÉ] OF {numero} → {champs}")
                 enriched += 1
+            elif result.get("reason") == "conflit_saisie_manuelle":
+                # Access propose une valeur différente sur un champ qu'un humain
+                # a saisi dans MySifa. On ne l'écrase pas, mais le silence
+                # d'avant était pire : personne ne savait que les deux bases
+                # divergeaient. Le détail est aussi consultable dans MyStock.
+                for c in result.get("conflits") or []:
+                    print(f"  [CONFLIT]  OF {numero} → {c.get('libelle', c.get('champ'))} : "
+                          f"MySifa {c.get('actuel')!r} ≠ Access {c.get('propose')!r} "
+                          f"(saisie manuelle conservée)")
+                conflits += 1
             else:
                 print(f"  [IGNORÉ]   OF {numero} → déjà complet (id : {result['id']})")
                 skipped += 1
+            if result.get("validation_retiree"):
+                print(f"             ↳ {result.get('motif_validation')} "
+                      f"L'OF est à revalider dans MyStock avant tout déstockage.")
+                devalides += 1
         except requests.HTTPError as e:
             print(f"  [ERREUR]   OF {numero} → HTTP {e.response.status_code} : {e.response.text[:120]}")
             errors += 1
@@ -259,7 +274,8 @@ def main():
             errors += 1
 
     print(f"\nRésultat — Importés : {inserted}  |  Complétés : {enriched}"
-          f"  |  Inchangés : {skipped}  |  Erreurs : {errors}")
+          f"  |  Inchangés : {skipped}  |  Conflits : {conflits}"
+          f"  |  Validations retirées : {devalides}  |  Erreurs : {errors}")
     print(f"Sans métrage en base : {sans_metrage}  |  "
           f"Sans grammage adhésif : {sans_adhesif} "
           f"(normal quand matadhesif = « Permanent » sans référence)")

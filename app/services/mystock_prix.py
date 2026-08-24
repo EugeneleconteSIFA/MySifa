@@ -180,9 +180,23 @@ def list_materials(
             }
         )
 
+    # Tarifs et devises chargés d'un coup : chaque ligne de prix en consulte un,
+    # et une requête par ligne ferait des centaines d'allers-retours.
+    tarifs = charger_tarifs(conn)
+    devises = devises_fournisseurs(conn)
+
     decl_by_mat: dict[int, list[dict]] = {}
     for r in decl_rows:
         lignes = prix_by_decl.get(int(r["id"]), [])
+        # Chaque ligne porte les réglages de SON fournisseur pour cette matière :
+        # c'est ce qui permet de calculer un coût au m² par fournisseur, et donc
+        # de comparer deux offres autrement qu'au prix au kilo.
+        for ligne in lignes:
+            tarif = tarifs.get((ligne["fournisseur_id"], int(r["matiere_id"]))) if ligne["fournisseur_id"] else None
+            ligne["a_tarif"] = tarif is not None
+            ligne["price_currency"] = devise_ligne(conn, r, ligne["fournisseur_id"], devises)
+            ligne["price_basis"] = base_prix_ligne(r, tarif)
+            ligne.update(reglages_ligne(r, tarif))
         principal = next((x for x in lignes if x["principal"]), None)
         if r["laize_id"] is not None:
             libelle = r["laize_label"] or (
@@ -207,8 +221,9 @@ def list_materials(
                 "mc_appellation": r["mc_appellation"],
                 "prix_principal": principal["prix"] if principal else None,
                 "lignes": lignes,
-                # Réglages de calcul portés par la déclinaison : ils suffisent à
-                # en tirer un coût au m², sans fiche Coûts matières.
+                # Réglages de repli, portés par la déclinaison. Ils servent tant
+                # qu'aucun fournisseur n'est désigné — et sur une base non
+                # migrée, où la table des tarifs n'existe pas.
                 "unit_price": principal["prix"] if principal else 0.0,
                 "parametre": bool(_col(r, "parametre")),
                 "weight_per_m2": _f(_col(r, "weight_per_m2")),
@@ -224,6 +239,18 @@ def list_materials(
                 "transport_pct": _f(_col(r, "transport_pct")),
                 "transport_cout": _f(_col(r, "transport_cout")),
                 "transport_quantite": _f(_col(r, "transport_quantite")),
+                # ... puis les réglages EFFECTIFS, ceux du fournisseur principal.
+                # Posés en dernier : dans un dictionnaire littéral, la dernière
+                # occurrence d'une clé gagne, et c'est bien celle-ci qu'on veut.
+                **(
+                    {
+                        "price_currency": principal["price_currency"],
+                        "price_basis": principal["price_basis"],
+                        **{c: principal[c] for c in _CLES_CALCUL},
+                    }
+                    if principal
+                    else {}
+                ),
             }
         )
 
@@ -691,30 +718,45 @@ def parametrage(conn: sqlite3.Connection, declinaison_id: int) -> Optional[dict]
     d = fetch_declinaison_complete(conn, declinaison_id)
     if not d:
         return None
-    lignes = [
-        {
-            "fournisseur_id": int(r["fournisseur_id"]) if r["fournisseur_id"] is not None else None,
+    matiere_id = int(d["matiere_id"])
+    devises = devises_fournisseurs(conn)
+    lignes = []
+    for r in conn.execute(
+        """SELECT p.fournisseur_id, p.prix, p.principal, p.updated_at, p.updated_by_name,
+                  f.nom AS fournisseur_nom
+             FROM mp_matiere_prix p
+             LEFT JOIN fournisseurs_fsc f ON f.id = p.fournisseur_id
+            WHERE p.declinaison_id = ?
+            ORDER BY p.principal DESC, f.nom COLLATE NOCASE ASC""",
+        (declinaison_id,),
+    ).fetchall():
+        fid = int(r["fournisseur_id"]) if r["fournisseur_id"] is not None else None
+        tarif = fetch_tarif(conn, fid, matiere_id)
+        ligne = {
+            "fournisseur_id": fid,
             "fournisseur_nom": r["fournisseur_nom"],
             "prix": _f(r["prix"]),
             "principal": bool(r["principal"]),
             "updated_at": r["updated_at"],
             "updated_by_name": r["updated_by_name"],
+            # Le tarif appliqué à cette ligne, et d'où il vient. La fiche doit
+            # pouvoir dire « ce fournisseur n'a pas encore de tarif pour cette
+            # matière, on lui applique le repli » plutôt que d'afficher des
+            # chiffres sans origine.
+            "a_tarif": tarif is not None,
+            "price_currency": devise_ligne(conn, d, fid, devises),
+            "price_basis": base_prix_ligne(d, tarif),
         }
-        for r in conn.execute(
-            """SELECT p.fournisseur_id, p.prix, p.principal, p.updated_at, p.updated_by_name,
-                      f.nom AS fournisseur_nom
-                 FROM mp_matiere_prix p
-                 LEFT JOIN fournisseurs_fsc f ON f.id = p.fournisseur_id
-                WHERE p.declinaison_id = ?
-                ORDER BY p.principal DESC, f.nom COLLATE NOCASE ASC""",
-            (declinaison_id,),
-        ).fetchall()
-    ]
+        ligne.update(reglages_ligne(d, tarif))
+        ligne["sous_total_achat"] = sous_total_achat(
+            ligne["prix"], **{c: ligne[c] for c in _CLES_CALCUL}
+        )
+        lignes.append(ligne)
     principal = next((x for x in lignes if x["principal"]), None)
     cat = _cat(d["categorie"])
     return {
         "declinaison_id": int(d["id"]),
-        "matiere_id": int(d["matiere_id"]),
+        "matiere_id": matiere_id,
         "reference": d["reference"],
         "designation": d["designation"],
         "categorie": d["categorie"],
@@ -723,8 +765,10 @@ def parametrage(conn: sqlite3.Connection, declinaison_id: int) -> Optional[dict]
         "libelle": libelle_declinaison(d),
         "unit_price": principal["prix"] if principal else 0.0,
         # Ce que la valorisation MyStock affiche pour cette matière.
+        # Le sous-total est celui du fournisseur principal : c'est sa ligne qui
+        # part dans la valorisation MyStock, donc son tarif qui s'applique.
         "sous_total_achat": sous_total_achat(
-            principal["prix"] if principal else 0, **_reglages_declinaison(d)
+            principal["prix"] if principal else 0, **reglages_principal(conn, d)
         ),
         "fournisseur_nom": principal["fournisseur_nom"] if principal else None,
         "prix_updated_at": principal["updated_at"] if principal else None,
@@ -745,6 +789,17 @@ def parametrage(conn: sqlite3.Connection, declinaison_id: int) -> Optional[dict]
         "transport_pct": _f(_col(d, "transport_pct")),
         "transport_cout": _f(_col(d, "transport_cout")),
         "transport_quantite": _f(_col(d, "transport_quantite")),
+        # ... puis les réglages EFFECTIFS, ceux du fournisseur principal. En
+        # dernier : la dernière occurrence d'une clé gagne dans un littéral.
+        **(
+            {
+                "price_currency": principal["price_currency"],
+                "price_basis": principal["price_basis"],
+                **{c: principal[c] for c in _CLES_CALCUL},
+            }
+            if principal
+            else {}
+        ),
     }
 
 
@@ -957,7 +1012,17 @@ def prix_depuis_sous_total(
 
 
 def _reglages_declinaison(row: Any) -> dict:
-    """Les réglages qui font passer du prix d'achat au sous-total."""
+    """
+    Les réglages qui font passer du prix d'achat au sous-total, lus sur la
+    déclinaison.
+
+    C'est le REPLI, plus le cas nominal : depuis la migration
+    `mc_tarif_fournisseur`, transport et taxes vivent sur le couple
+    (fournisseur, matière). Ces colonnes servent encore quand une ligne de prix
+    n'a pas de fournisseur — une déclinaison créée vierge en porte une — et
+    quand la table des tarifs n'existe pas encore (bases non migrées, dont v1
+    tant que `MIGRATIONS_DISABLED` vaut 1).
+    """
     return {
         "is_imported": bool(_col(row, "is_imported")),
         "transport_mode": _col(row, "transport_mode") or "AMOUNT",
@@ -969,9 +1034,450 @@ def _reglages_declinaison(row: Any) -> dict:
     }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Tarifs fournisseurs
+# ─────────────────────────────────────────────────────────────────────────────
+# Un tarif ne dépend ni de la laize ni du grammage : il dépend de chez qui on
+# achète (devise) et de ce qu'on lui achète (base de prix, transport, taxes).
+# Deux fournisseurs sur la même déclinaison n'ont aucune raison de partager un
+# mode de transport — Meltavis livre par conteneur, Bostik par forfait.
+
+CHAMPS_TARIF = (
+    "price_basis",
+    "taxe_pct",
+    "is_imported",
+    "transport_mode",
+    "transport_unit_price",
+    "transport_pct",
+    "transport_cout",
+    "transport_quantite",
+)
+
+# Les clés que `sous_total_achat` consomme, dans l'ordre où elles comptent.
+_CLES_CALCUL = (
+    "is_imported", "transport_mode", "transport_unit_price", "transport_pct",
+    "transport_cout", "transport_quantite", "taxe_pct",
+)
+
+
+def _table_existe(conn: sqlite3.Connection, nom: str) -> bool:
+    return bool(
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", (nom,)
+        ).fetchone()
+    )
+
+
+def tarifs_disponibles(conn: sqlite3.Connection) -> bool:
+    """
+    La table des tarifs est-elle en place ?
+
+    Une base non migrée doit continuer à fonctionner sur les anciennes colonnes
+    plutôt que de tomber : c'est le cas de v1, où les migrations sont désactivées
+    par défaut.
+    """
+    return _table_existe(conn, "mc_tarif_fournisseur")
+
+
+def charger_tarifs(conn: sqlite3.Connection) -> dict:
+    """
+    Tous les tarifs, indexés par (fournisseur_id, matiere_id).
+
+    Chargés d'un coup : la liste des matières en consulte un par ligne de prix,
+    et une requête par ligne ferait des centaines d'allers-retours pour un
+    volume qui tient en mémoire sans effort.
+    """
+    if not tarifs_disponibles(conn):
+        return {}
+    champs = ", ".join(CHAMPS_TARIF)
+    return {
+        (int(r["fournisseur_id"]), int(r["matiere_id"])): {c: r[c] for c in CHAMPS_TARIF}
+        for r in conn.execute(
+            f"SELECT fournisseur_id, matiere_id, {champs} FROM mc_tarif_fournisseur"
+        ).fetchall()
+    }
+
+
+def devises_fournisseurs(conn: sqlite3.Connection) -> dict:
+    """Devise d'achat par fournisseur. EUR pour ceux qui n'en portent pas."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+    if "price_currency" not in cols:
+        return {}
+    return {
+        int(r["id"]): (r["price_currency"] or "EUR")
+        for r in conn.execute("SELECT id, price_currency FROM fournisseurs_fsc").fetchall()
+    }
+
+
+def fetch_tarif(conn: sqlite3.Connection, fournisseur_id: Optional[int],
+                matiere_id: int) -> Optional[dict]:
+    """Le tarif d'un couple, ou None s'il n'y en a pas."""
+    if fournisseur_id is None or not tarifs_disponibles(conn):
+        return None
+    champs = ", ".join(CHAMPS_TARIF)
+    r = conn.execute(
+        f"""SELECT {champs}, updated_at, updated_by_name
+              FROM mc_tarif_fournisseur WHERE fournisseur_id=? AND matiere_id=?""",
+        (fournisseur_id, matiere_id),
+    ).fetchone()
+    return dict(r) if r else None
+
+
+def reglages_ligne(decl_row: Any, tarif: Optional[dict]) -> dict:
+    """
+    Les réglages de calcul d'UNE ligne de prix : ceux de son fournisseur pour
+    cette matière, à défaut ceux de la déclinaison.
+
+    Le repli n'est pas un détail : une ligne sans fournisseur n'a pas de tarif
+    possible, et il faut bien la chiffrer avec quelque chose.
+    """
+    if not tarif:
+        return _reglages_declinaison(decl_row)
+    return {
+        "is_imported": bool(tarif.get("is_imported")),
+        "transport_mode": tarif.get("transport_mode") or "AMOUNT",
+        "transport_unit_price": _f(tarif.get("transport_unit_price")),
+        "transport_pct": _f(tarif.get("transport_pct")),
+        "transport_cout": _f(tarif.get("transport_cout")),
+        "transport_quantite": _f(tarif.get("transport_quantite")),
+        "taxe_pct": _f(tarif.get("taxe_pct")),
+    }
+
+
+def base_prix_ligne(decl_row: Any, tarif: Optional[dict]) -> str:
+    """Base de prix (au kilo / au m²) : celle du tarif, sinon celle héritée."""
+    if tarif and tarif.get("price_basis"):
+        return tarif["price_basis"]
+    return _col(decl_row, "price_basis") or "PER_KG"
+
+
+def devise_ligne(conn: sqlite3.Connection, decl_row: Any,
+                 fournisseur_id: Optional[int],
+                 devises: Optional[dict] = None) -> str:
+    """
+    Devise d'achat d'une ligne : celle de son fournisseur.
+
+    Sans fournisseur — ou sur une base non migrée — on retombe sur celle de la
+    déclinaison, qui était l'ancien porteur.
+    """
+    if fournisseur_id is not None:
+        table = devises if devises is not None else devises_fournisseurs(conn)
+        devise = table.get(int(fournisseur_id))
+        if devise:
+            return devise
+    return _col(decl_row, "price_currency") or "EUR"
+
+
+def tarif_defaut(matiere_categorie: Any = None) -> dict:
+    """Un tarif neuf : rien de facturé en plus du prix, base selon la catégorie."""
+    return {
+        "price_basis": "PER_M2" if is_laizee(matiere_categorie) else "PER_KG",
+        "taxe_pct": 0.0,
+        "is_imported": 0,
+        "transport_mode": "AMOUNT",
+        "transport_unit_price": 0.0,
+        "transport_pct": 0.0,
+        "transport_cout": 0.0,
+        "transport_quantite": 0.0,
+    }
+
+
+def tarifs_du_fournisseur(conn: sqlite3.Connection, fournisseur_id: int) -> list[dict]:
+    """
+    Les tarifs d'un fournisseur, une entrée par matière qu'on lui achète.
+
+    On part des matières où il a un prix, pas des tarifs enregistrés : une
+    matière qu'on lui achète sans tarif posé doit apparaître, sinon elle reste
+    invisible et personne ne la règle jamais.
+    """
+    if not tarifs_disponibles(conn):
+        return []
+    # L'union des deux sources : les matières où il a un prix, ET celles où un
+    # tarif a été posé sans prix. Partir des seuls prix ferait disparaître un
+    # tarif enregistré d'avance — invisible, donc jamais corrigé.
+    champs = ", ".join(f"t.{c}" for c in CHAMPS_TARIF)
+    rows = conn.execute(
+        f"""WITH concernees(matiere_id) AS (
+                SELECT DISTINCT d.matiere_id
+                  FROM mp_matiere_prix p
+                  JOIN mp_matiere_declinaison d ON d.id = p.declinaison_id
+                 WHERE p.fournisseur_id = ?
+                UNION
+                SELECT matiere_id FROM mc_tarif_fournisseur WHERE fournisseur_id = ?
+            )
+            SELECT mp.id AS matiere_id, mp.reference, mp.designation, mp.categorie,
+                   COUNT(DISTINCT p.declinaison_id) AS nb_declinaisons,
+                   COALESCE(SUM(CASE WHEN p.principal=1 THEN 1 ELSE 0 END), 0) AS nb_principal,
+                   t.id AS tarif_id, {champs}
+              FROM concernees c
+              JOIN matieres_premieres mp ON mp.id = c.matiere_id
+              LEFT JOIN mp_matiere_declinaison d ON d.matiere_id = mp.id
+              LEFT JOIN mp_matiere_prix p
+                     ON p.declinaison_id = d.id AND p.fournisseur_id = ?
+              LEFT JOIN mc_tarif_fournisseur t
+                     ON t.fournisseur_id = ? AND t.matiere_id = mp.id
+             GROUP BY mp.id
+             ORDER BY mp.categorie, mp.reference COLLATE NOCASE""",
+        (fournisseur_id, fournisseur_id, fournisseur_id, fournisseur_id),
+    ).fetchall()
+    sortie = []
+    for r in rows:
+        pose = r["tarif_id"] is not None
+        tarif = {c: r[c] for c in CHAMPS_TARIF} if pose else tarif_defaut(r["categorie"])
+        sortie.append(
+            {
+                "matiere_id": int(r["matiere_id"]),
+                "reference": r["reference"],
+                "designation": r["designation"],
+                "categorie": r["categorie"],
+                "nb_declinaisons": int(r["nb_declinaisons"] or 0),
+                "nb_principal": int(r["nb_principal"] or 0),
+                "a_tarif": pose,
+                **tarif,
+            }
+        )
+    return sortie
+
+
+def fournisseurs_de_la_matiere(conn: sqlite3.Connection, matiere_id: int) -> list[dict]:
+    """Les fournisseurs d'une matière, avec leur tarif — vue symétrique."""
+    if not tarifs_disponibles(conn):
+        return []
+    champs = ", ".join(f"t.{c}" for c in CHAMPS_TARIF)
+    devises = devises_fournisseurs(conn)
+    rows = conn.execute(
+        f"""SELECT f.id AS fournisseur_id, f.nom,
+                   COUNT(DISTINCT p.declinaison_id) AS nb_declinaisons,
+                   SUM(CASE WHEN p.principal=1 THEN 1 ELSE 0 END) AS nb_principal,
+                   t.id AS tarif_id, {champs}
+              FROM mp_matiere_prix p
+              JOIN mp_matiere_declinaison d ON d.id = p.declinaison_id
+              JOIN fournisseurs_fsc f ON f.id = p.fournisseur_id
+              LEFT JOIN mc_tarif_fournisseur t
+                     ON t.fournisseur_id = f.id AND t.matiere_id = d.matiere_id
+             WHERE d.matiere_id = ?
+             GROUP BY f.id
+             ORDER BY nb_principal DESC, f.nom COLLATE NOCASE""",
+        (matiere_id,),
+    ).fetchall()
+    cat = conn.execute(
+        "SELECT categorie FROM matieres_premieres WHERE id=?", (matiere_id,)
+    ).fetchone()
+    return [
+        {
+            "fournisseur_id": int(r["fournisseur_id"]),
+            "nom": r["nom"],
+            "price_currency": devises.get(int(r["fournisseur_id"]), "EUR"),
+            "nb_declinaisons": int(r["nb_declinaisons"] or 0),
+            "nb_principal": int(r["nb_principal"] or 0),
+            "a_tarif": r["tarif_id"] is not None,
+            **(
+                {c: r[c] for c in CHAMPS_TARIF}
+                if r["tarif_id"] is not None
+                else tarif_defaut(cat["categorie"] if cat else None)
+            ),
+        }
+        for r in rows
+    ]
+
+
+def _declinaisons_pilotees(conn: sqlite3.Connection, fournisseur_id: int,
+                           matiere_id: int) -> list[int]:
+    """
+    Les déclinaisons dont ce fournisseur est le principal pour cette matière.
+
+    Ce sont les seules dont le sous-total change quand son tarif change : les
+    autres lignes voient bien leur coût bouger à l'écran, mais rien ne part dans
+    la valorisation MyStock tant qu'elles ne font pas foi.
+    """
+    return [
+        int(r["id"])
+        for r in conn.execute(
+            """SELECT d.id FROM mp_matiere_prix p
+                 JOIN mp_matiere_declinaison d ON d.id = p.declinaison_id
+                WHERE p.fournisseur_id = ? AND d.matiere_id = ? AND p.principal = 1""",
+            (fournisseur_id, matiere_id),
+        ).fetchall()
+    ]
+
+
+def set_tarif(
+    conn: sqlite3.Connection,
+    *,
+    fournisseur_id: int,
+    matiere_id: int,
+    patch: dict,
+    user_id: Optional[int] = None,
+    user_name: Optional[str] = None,
+) -> dict:
+    """
+    Enregistre le tarif d'un fournisseur pour une matière.
+
+    Changer un tarif ne touche à aucun prix d'achat, mais déplace le sous-total
+    de toutes les déclinaisons où ce fournisseur fait foi : la valorisation
+    MyStock doit suivre, et l'historique doit pouvoir l'expliquer. C'est la même
+    mécanique que `set_parametrage`, à ceci près qu'elle porte maintenant sur
+    plusieurs déclinaisons d'un coup.
+    """
+    if not tarifs_disponibles(conn):
+        return {"ok": False, "reason": "table des tarifs absente (base non migrée)"}
+    if not conn.execute(
+        "SELECT 1 FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)
+    ).fetchone():
+        return {"ok": False, "reason": "fournisseur introuvable"}
+    mat = conn.execute(
+        "SELECT id, categorie FROM matieres_premieres WHERE id=?", (matiere_id,)
+    ).fetchone()
+    if not mat:
+        return {"ok": False, "reason": "matière introuvable"}
+
+    sets: list[str] = []
+    args: list[Any] = []
+
+    def poser(champ: str, valeur: Any) -> None:
+        sets.append(f"{champ}=?")
+        args.append(valeur)
+
+    if "price_basis" in patch:
+        v = str(patch["price_basis"] or "").upper()
+        if v not in _BASES:
+            return {"ok": False, "reason": f"base de prix inconnue : {v}"}
+        poser("price_basis", v)
+    if "transport_mode" in patch:
+        v = str(patch["transport_mode"] or "").upper()
+        if v not in _MODES_TRANSPORT:
+            return {"ok": False, "reason": f"méthode de transport inconnue : {v}"}
+        poser("transport_mode", v)
+    for champ, mini, maxi in (
+        ("taxe_pct", -100.0, 1000.0),
+        ("transport_unit_price", 0.0, 1_000_000.0),
+        ("transport_pct", 0.0, 1000.0),
+        ("transport_cout", 0.0, 100_000_000.0),
+        ("transport_quantite", 0.0, 100_000_000.0),
+    ):
+        if champ in patch:
+            v = _f(patch[champ])
+            if v < mini or v > maxi:
+                return {"ok": False, "reason": f"{champ} hors limites"}
+            poser(champ, v)
+    if "is_imported" in patch:
+        poser("is_imported", 1 if patch["is_imported"] else 0)
+
+    if not sets:
+        return {"ok": False, "reason": "aucun réglage à modifier"}
+
+    # Sous-totaux d'avant, déclinaison par déclinaison : c'est la seule façon
+    # d'écrire un historique qui dise ce qui a bougé et de combien.
+    pilotees = _declinaisons_pilotees(conn, fournisseur_id, matiere_id)
+    avant = {d: sous_total_declinaison(conn, d) for d in pilotees}
+
+    existe = conn.execute(
+        "SELECT id FROM mc_tarif_fournisseur WHERE fournisseur_id=? AND matiere_id=?",
+        (fournisseur_id, matiere_id),
+    ).fetchone()
+    poser("updated_at", _now())
+    poser("updated_by_name", user_name)
+    if existe:
+        args.append(int(existe["id"]))
+        conn.execute(
+            f"UPDATE mc_tarif_fournisseur SET {', '.join(sets)} WHERE id=?", args
+        )
+    else:
+        # Création : ce qui n'est pas dans le patch prend le défaut de la
+        # catégorie, pas celui de la colonne — une matière laizée se tarife au m².
+        base = tarif_defaut(mat["categorie"])
+        for champ in CHAMPS_TARIF:
+            if f"{champ}=?" not in sets:
+                sets.append(f"{champ}=?")
+                args.append(base[champ])
+        champs = ", ".join(s.replace("=?", "") for s in sets)
+        conn.execute(
+            f"""INSERT INTO mc_tarif_fournisseur (fournisseur_id, matiere_id, {champs})
+                VALUES (?, ?{", ?" * len(sets)})""",
+            (fournisseur_id, matiere_id, *args),
+        )
+
+    # Le sous-total a bougé là où ce fournisseur fait foi : on pousse et on trace.
+    touchees = 0
+    for decl_id in pilotees:
+        apres = sous_total_declinaison(conn, decl_id)
+        if abs(avant[decl_id] - apres) <= 1e-9:
+            continue
+        prix_row = conn.execute(
+            "SELECT prix FROM mp_matiere_prix WHERE declinaison_id=? AND principal=1 LIMIT 1",
+            (decl_id,),
+        ).fetchone()
+        prix = _f(prix_row["prix"]) if prix_row else None
+        journaliser_prix(
+            conn, declinaison_id=decl_id, fournisseur_id=fournisseur_id,
+            prix_avant=prix, prix_apres=prix,
+            sous_total_avant=avant[decl_id], sous_total_apres=apres,
+            origine="Coûts matières — tarif fournisseur",
+            user_id=user_id, user_name=user_name,
+        )
+        _mirror_principal(
+            conn, decl_id, user_id=user_id, user_name=user_name,
+            note="Tarif fournisseur modifié",
+        )
+        touchees += 1
+
+    return {
+        "ok": True,
+        "tarif": fetch_tarif(conn, fournisseur_id, matiere_id),
+        "declinaisons_touchees": touchees,
+    }
+
+
+def set_devise_fournisseur(
+    conn: sqlite3.Connection, *, fournisseur_id: int, devise: str
+) -> dict:
+    """
+    La devise d'achat d'un fournisseur.
+
+    Elle ne change aucun sous-total en base — la conversion se fait au calcul,
+    au taux du jour — mais elle change tous les coûts au m² affichés pour ce
+    fournisseur. D'où sa place ici plutôt que noyée dans un tarif par matière.
+    """
+    v = str(devise or "").upper()
+    if v not in _DEVISES:
+        return {"ok": False, "reason": f"devise inconnue : {v}"}
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(fournisseurs_fsc)").fetchall()}
+    if "price_currency" not in cols:
+        return {"ok": False, "reason": "colonne devise absente (base non migrée)"}
+    n = conn.execute(
+        "UPDATE fournisseurs_fsc SET price_currency=? WHERE id=?", (v, fournisseur_id)
+    ).rowcount
+    if not n:
+        return {"ok": False, "reason": "fournisseur introuvable"}
+    return {"ok": True, "price_currency": v}
+
+
+def reglages_principal(conn: sqlite3.Connection, decl_row: Any) -> dict:
+    """
+    Réglages du fournisseur PRINCIPAL d'une déclinaison.
+
+    C'est lui qui fait foi : le sous-total poussé dans la valorisation MyStock,
+    le prix de revient d'un produit, l'historique — tout part de sa ligne. Un
+    changement de principal change donc aussi le transport et les taxes, ce qui
+    est le comportement voulu et non un effet de bord.
+    """
+    row = conn.execute(
+        """SELECT fournisseur_id FROM mp_matiere_prix
+            WHERE declinaison_id=? AND principal=1 LIMIT 1""",
+        (_col(decl_row, "id"),),
+    ).fetchone()
+    fid = row["fournisseur_id"] if row else None
+    return reglages_ligne(decl_row, fetch_tarif(conn, fid, _col(decl_row, "matiere_id")))
+
+
 def sous_total_declinaison(conn: sqlite3.Connection, declinaison_id: int,
                            prix: Optional[Any] = None) -> float:
-    """Sous-total d'une déclinaison, à partir de son prix principal par défaut."""
+    """
+    Sous-total d'une déclinaison, à partir de son prix principal par défaut.
+
+    Les réglages appliqués sont ceux du fournisseur principal — pas ceux de la
+    déclinaison, qui n'en porte plus que le repli.
+    """
     d = fetch_declinaison_complete(conn, declinaison_id)
     if not d:
         return 0.0
@@ -981,7 +1487,7 @@ def sous_total_declinaison(conn: sqlite3.Connection, declinaison_id: int,
             (declinaison_id,),
         ).fetchone()
         prix = row["prix"] if row else 0
-    return sous_total_achat(prix, **_reglages_declinaison(d))
+    return sous_total_achat(prix, **reglages_principal(conn, d))
 
 
 def journaliser_prix(
@@ -1081,7 +1587,7 @@ def _mirror_principal(
     ).fetchone()
     if not row:
         return {"ok": False, "reason": "aucun prix principal"}
-    prix = sous_total_achat(row["prix"], **_reglages_declinaison(d))
+    prix = sous_total_achat(row["prix"], **reglages_principal(conn, d))
 
     laizee = is_laizee(mat["categorie"])
     par_laize = bool(int(mat["prix_par_laize"] or 0)) and laizee
@@ -1210,7 +1716,7 @@ def resync_depuis_mystock(
             continue
         decl_id = int(d["id"])
         complete = fetch_declinaison_complete(conn, decl_id)
-        prix = prix_depuis_sous_total(sous_total, **_reglages_declinaison(complete))
+        prix = prix_depuis_sous_total(sous_total, **reglages_principal(conn, complete))
         if prix is None:
             # Le sous-total ne couvre même pas le transport : on ne devine pas.
             continue
@@ -1254,7 +1760,7 @@ def resync_depuis_mystock(
         journaliser_prix(
             conn, declinaison_id=decl_id,
             prix_avant=avant, prix_apres=prix,
-            sous_total_avant=sous_total_achat(avant, **_reglages_declinaison(complete)),
+            sous_total_avant=sous_total_achat(avant, **reglages_principal(conn, complete)),
             sous_total_apres=sous_total,
             origine=origine, user_id=user_id, user_name=user_name,
         )
@@ -1287,7 +1793,12 @@ def set_prix(
 
     now = _now()
     complete = fetch_declinaison_complete(conn, declinaison_id)
-    reglages = _reglages_declinaison(complete)
+    # Le tarif de CE fournisseur pour CETTE matière : c'est son transport et ses
+    # taxes qui transforment le prix qu'on saisit en sous-total, pas ceux du
+    # voisin ni ceux de la déclinaison.
+    reglages = reglages_ligne(
+        complete, fetch_tarif(conn, fournisseur_id, int(complete["matiere_id"]))
+    )
     existing = conn.execute(
         """SELECT id, principal, prix FROM mp_matiere_prix
             WHERE declinaison_id=? AND COALESCE(fournisseur_id,0)=COALESCE(?,0)""",

@@ -3694,13 +3694,38 @@ def _check_codes_barres_uniques(conn, codes: list[str]) -> None:
     )
 
 
-def _resoudre_fournisseur_reception(conn, nom: Optional[str]) -> tuple[Optional[int], Optional[dict]]:
-    """Retrouve le fournisseur de l'annuaire FSC à partir du nom saisi.
+def _resoudre_fournisseur_reception(conn, nom: Optional[str],
+                                    fournisseur_id_saisi: Optional[int] = None
+                                    ) -> tuple[Optional[int], Optional[dict]]:
+    """Retrouve le fournisseur de l'annuaire FSC pour cette réception.
 
-    Correspondance exacte, insensible à la casse. Pas de rapprochement
-    approchant : attribuer à une réception le certificat d'un fournisseur
-    voisin est la seule erreur qu'un audit ne pardonne pas.
+    L'ID prime sur le nom. Depuis que la saisie passe par la recherche
+    fournisseur, l'interface envoie l'id de la fiche RÉELLEMENT choisie ;
+    le redéduire du nom rouvrirait deux trous :
+
+      - deux fiches homonymes (« Frimpeks UK » et « Frimpeks Italy » abrégées
+        pareil dans un export) : le nom en désigne une au hasard, l'id la
+        bonne ;
+      - un fournisseur renommé entre la saisie et l'enregistrement : le nom
+        ne retrouve plus rien, l'id oui.
+
+    Le nom reste enregistré tel quel — c'est ce qui figure sur le bon de
+    livraison — et sert de repli quand aucun id n'est fourni (appels d'API
+    directs, et les scripts d'import de l'historique).
+
+    Correspondance exacte sur le nom, insensible à la casse. Pas de
+    rapprochement approchant : attribuer à une réception le certificat d'un
+    fournisseur voisin est la seule erreur qu'un audit ne pardonne pas.
     """
+    if fournisseur_id_saisi:
+        row = conn.execute(
+            "SELECT * FROM fournisseurs_fsc WHERE id=?", (int(fournisseur_id_saisi),)
+        ).fetchone()
+        if row:
+            return row["id"], dict(row)
+        # Id inconnu : on ne l'écrit pas, et on retombe sur le nom. Poser une
+        # clé étrangère vers une fiche absente donnerait une réception dont la
+        # licence FSC est invérifiable en se croyant rattachée.
     n = (nom or "").strip()
     if not n:
         return None, None
@@ -3791,6 +3816,12 @@ async def create_reception(request: Request):
 
     note = (body.get("note") or "").strip() or None
     fournisseur = (body.get("fournisseur") or "").strip() or None
+    # Envoyé par la recherche fournisseur. Absent des appels plus anciens :
+    # le repli sur le nom reste donc en place, pas de rupture de contrat.
+    try:
+        fournisseur_id_saisi = int(body.get("fournisseur_id") or 0) or None
+    except (TypeError, ValueError):
+        fournisseur_id_saisi = None
     certificat_fsc = (body.get("certificat_fsc") or "").strip() or None
     fsc_type_claim = _parse_fsc_type_claim(body.get("fsc_type_claim"), "non_fsc")
     if fsc_type_claim != "non_fsc" and not certificat_fsc:
@@ -3823,7 +3854,8 @@ async def create_reception(request: Request):
         # bon de livraison), mais la chaîne FSC s'appuie désormais sur la clé :
         # renommer un fournisseur dans l'annuaire ne détache plus ses
         # réceptions passées de leur licence.
-        fournisseur_id, fournisseur_row = _resoudre_fournisseur_reception(conn, fournisseur)
+        fournisseur_id, fournisseur_row = _resoudre_fournisseur_reception(
+            conn, fournisseur, fournisseur_id_saisi)
         verdict = _verdict_certificat_reception(fournisseur_row, now_dt.date())
 
         # ── Precharge des matieres impliquees (verifier existence + laizee) ──
@@ -4498,6 +4530,8 @@ def appliquer_mouvement_mp(
     planning_entry_id: Optional[int] = None,
     no_dossier: Optional[str] = None,
     annule_mouvement_id: Optional[int] = None,
+    of_import_id: Optional[int] = None,
+    fiche_id: Optional[int] = None,
     autoriser_negatif: bool = False,
 ) -> dict:
     """Applique une entrée ou une sortie sur une matière et journalise.
@@ -4508,6 +4542,12 @@ def appliquer_mouvement_mp(
     réellement été consommée. Refuser de l'enregistrer parce que le stock
     théorique est déjà à zéro rendrait le stock plus faux, pas moins — on
     enregistre, et c'est l'écart négatif qui alerte.
+
+    `of_import_id` et `fiche_id` disent sur QUELS documents la quantité a été
+    calculée. Le mouvement portait déjà son dossier, mais un dossier change
+    d'OF et une fiche est modifiable : sans ces deux clés, un stock faux ne
+    remonte à rien. Avec elles, le journal des valeurs
+    (`documents_valeurs_historique`) raconte le reste.
     """
     if type_mvt not in ("entree", "sortie"):
         raise HTTPException(400, "Type de mouvement non géré ici.")
@@ -4569,11 +4609,13 @@ def appliquer_mouvement_mp(
         """INSERT INTO mp_mouvements (
                matiere_id, type_mouvement, quantite, quantite_avant, quantite_apres,
                note, created_by, created_by_name, laize_id,
-               planning_entry_id, no_dossier, annule_mouvement_id
-           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+               planning_entry_id, no_dossier, annule_mouvement_id,
+               of_import_id, fiche_id
+           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (matiere_id, type_mvt, quantite, avant, apres, note,
          user.get("id"), nom, laize_id,
-         planning_entry_id, (no_dossier or "").strip() or None, annule_mouvement_id),
+         planning_entry_id, (no_dossier or "").strip() or None, annule_mouvement_id,
+         of_import_id, fiche_id),
     )
     return {
         "mouvement_id": cur.lastrowid,
