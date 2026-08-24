@@ -28,14 +28,14 @@ from app.services.ics_service import (
     normalize_feed_url,
 )
 from config import (
-    ROLE_ADMINISTRATION,
     ROLE_DIRECTION,
     ROLE_SUPERADMIN,
+    ROLES_ADMINISTRATION_ALL,
     national_holidays_between,
     public_base_url,
 )
 from database import get_db
-from services.auth_service import require_calendrier
+from services.auth_service import CALENDRIER_PAGE_ROLES, require_calendrier
 
 router = APIRouter(tags=["calendrier"])
 
@@ -44,6 +44,15 @@ CALENDRIER_ADMIN_CALENDARS = frozenset(
 )
 CALENDRIER_BASIC_CALENDARS = frozenset({"conges", "feries"})
 CALENDRIER_PERSO_CAL = "perso"
+# Les creneaux des collegues, jadis melanges au calendrier personnel, ont leur
+# propre calendrier : « Mon calendrier » ne porte plus que mes creneaux et les
+# reunions ou je suis invite.
+CALENDRIER_COLLEGUES_CAL = "collegues"
+
+# Reponse d'un invite a une reunion.
+STATUTS_PARTICIPANT = frozenset({"en_attente", "accepte", "refuse", "peut_etre"})
+# Fenetre de la pop-up de rappel avant une reunion.
+RAPPEL_AVANT_MINUTES = 10
 
 # Calendriers externes (abonnements ICS) : identifiants dynamiques sub_<id>.
 SUB_CAL_RE = re.compile(r"^sub_(\d+)$")
@@ -72,7 +81,15 @@ PRODUCTION_MACHINE_CODES: dict[str, str] = {
 
 VALID_CALENDARS = frozenset(
     set(PRODUCTION_MACHINE_CODES.keys())
-    | {"conges", "anniversaires", "feries", "paie", "expeditions", "perso"}
+    | {
+        "conges",
+        "anniversaires",
+        "feries",
+        "paie",
+        "expeditions",
+        "perso",
+        "collegues",
+    }
 )
 
 DEFAULT_CALENDARS = ",".join(
@@ -87,6 +104,7 @@ DEFAULT_CALENDARS = ",".join(
         "paie",
         "expeditions",
         "perso",
+        "collegues",
     ]
 )
 
@@ -94,11 +112,11 @@ DEFAULT_CALENDARS = ",".join(
 def _allowed_calendars_for_role(role: str) -> frozenset[str]:
     if role in {ROLE_SUPERADMIN, ROLE_DIRECTION}:
         base: frozenset[str] = VALID_CALENDARS
-    elif role == ROLE_ADMINISTRATION:
+    elif role in ROLES_ADMINISTRATION_ALL:
         base = CALENDRIER_ADMIN_CALENDARS
     else:
         base = CALENDRIER_BASIC_CALENDARS
-    return base | frozenset({CALENDRIER_PERSO_CAL})
+    return base | frozenset({CALENDRIER_PERSO_CAL, CALENDRIER_COLLEGUES_CAL})
 
 
 def _filter_calendars_for_role(role: str, requested: set[str]) -> set[str]:
@@ -125,6 +143,7 @@ class PersoEventCreate(BaseModel):
     all_day: bool = False
     note: Optional[str] = Field(None, max_length=4000)
     prive: bool = False
+    participants: Optional[list[int]] = None
 
 
 class PersoEventUpdate(BaseModel):
@@ -136,6 +155,13 @@ class PersoEventUpdate(BaseModel):
     all_day: Optional[bool] = None
     note: Optional[str] = Field(None, max_length=4000)
     prive: Optional[bool] = None
+    participants: Optional[list[int]] = None
+
+
+class ParticipantReponse(BaseModel):
+    """Reponse d'un invite : accepte / refuse / peut_etre."""
+
+    statut: str = Field(..., max_length=20)
 
 
 class SubscriptionCreate(BaseModel):
@@ -177,6 +203,119 @@ def _user_id_from_session(user: dict) -> int:
         return int(uid)
     except (TypeError, ValueError):
         raise HTTPException(401, detail="Session invalide.")
+
+
+def _users_invitables(conn) -> list[dict]:
+    """Utilisateurs que l'on peut inviter : ceux qui peuvent ouvrir MyCalendrier.
+
+    Inviter quelqu'un qui n'a pas acces a la page lui enverrait une reunion
+    qu'il ne pourrait ni voir ni refuser — on ne les propose donc pas.
+    """
+    roles = sorted(CALENDRIER_PAGE_ROLES)
+    marks = ",".join("?" for _ in roles)
+    rows = conn.execute(
+        f"""
+        SELECT id, nom, role
+        FROM users
+        WHERE COALESCE(actif, 1) = 1
+          AND role IN ({marks})
+        ORDER BY nom COLLATE NOCASE ASC
+        """,
+        tuple(roles),
+    ).fetchall()
+    return [
+        {"id": int(r["id"]), "nom": (r["nom"] or "").strip(), "role": r["role"] or ""}
+        for r in rows
+    ]
+
+
+def _participants_par_event(conn, event_ids: list[int]) -> dict[int, list[dict]]:
+    """{event_id: [{user_id, nom, statut, repondu_le}, ...]} pour les ids donnes."""
+    if not event_ids:
+        return {}
+    out: dict[int, list[dict]] = {}
+    marks = ",".join("?" for _ in event_ids)
+    rows = conn.execute(
+        f"""
+        SELECT p.event_id, p.user_id, p.statut, p.repondu_le, u.nom, u.email
+        FROM cal_event_participants p
+        LEFT JOIN users u ON u.id = p.user_id
+        WHERE p.event_id IN ({marks})
+        ORDER BY u.nom COLLATE NOCASE ASC, p.user_id ASC
+        """,
+        tuple(event_ids),
+    ).fetchall()
+    for r in rows:
+        out.setdefault(int(r["event_id"]), []).append(
+            {
+                "user_id": int(r["user_id"]),
+                "nom": (r["nom"] or "").strip() or "Utilisateur",
+                "email": (r["email"] or "").strip(),
+                "statut": (r["statut"] or "en_attente").strip(),
+                "repondu_le": r["repondu_le"],
+            }
+        )
+    return out
+
+
+def _ecrire_participants(conn, event_id: int, organisateur_id: int, ids: list[int]) -> None:
+    """Aligne la liste des invites sur `ids`, en gardant les reponses deja donnees."""
+    voulus = {int(i) for i in ids if int(i) != organisateur_id}
+    if voulus:
+        connus = {
+            int(r["id"])
+            for r in conn.execute(
+                f"""SELECT id FROM users
+                     WHERE COALESCE(actif, 1) = 1
+                       AND id IN ({",".join("?" for _ in voulus)})""",
+                tuple(sorted(voulus)),
+            ).fetchall()
+        }
+        voulus &= connus
+    actuels = {
+        int(r["user_id"])
+        for r in conn.execute(
+            "SELECT user_id FROM cal_event_participants WHERE event_id = ?",
+            (event_id,),
+        ).fetchall()
+    }
+    for uid in sorted(voulus - actuels):
+        conn.execute(
+            """INSERT OR IGNORE INTO cal_event_participants (event_id, user_id, statut)
+               VALUES (?, ?, 'en_attente')""",
+            (event_id, uid),
+        )
+    retires = actuels - voulus
+    if retires:
+        conn.execute(
+            f"""DELETE FROM cal_event_participants
+                 WHERE event_id = ?
+                   AND user_id IN ({",".join("?" for _ in retires)})""",
+            (event_id, *sorted(retires)),
+        )
+
+
+def _notifier_invitation(user_ids: list[int], titre: str, debut: str) -> None:
+    """Push best-effort : une invitation ne doit jamais faire echouer la creation."""
+    if not user_ids:
+        return
+    try:
+        from app.routers.push import send_push_to_user
+
+        quand = str(debut or "").replace("T", " ")[:16]
+        for uid in user_ids:
+            try:
+                send_push_to_user(
+                    uid,
+                    "Invitation à une réunion",
+                    f"{titre} — {quand}",
+                    url="/calendrier",
+                    tag="cal-invitation",
+                )
+            except Exception:
+                continue
+    except Exception:
+        return
 
 
 def _parse_ymd(s: str) -> date:
@@ -638,44 +777,75 @@ def _fetch_calendar_events(
         if prod_machine_ids:
             day_windows = _compute_day_windows(conn, prod_machine_ids, d0, d1)
 
-        if CALENDRIER_PERSO_CAL in cals:
+        besoin_perso = CALENDRIER_PERSO_CAL in cals
+        besoin_collegues = CALENDRIER_COLLEGUES_CAL in cals
+        if besoin_perso or besoin_collegues:
             uid = _user_id_from_session(user)
-            scope_sql = (
-                "AND e.user_id = ?"
-                if perso_own_only
-                else "AND (e.user_id = ? OR COALESCE(u.actif, 1) = 1)"
-            )
             rows = conn.execute(
-                f"""
+                """
                 SELECT e.id, e.user_id, e.titre, e.date_debut, e.date_fin,
-                       e.all_day, e.note, e.prive, u.nom AS user_nom
+                       e.all_day, e.note, e.prive,
+                       COALESCE(e.annule, 0) AS annule,
+                       u.nom AS user_nom, u.email AS user_email,
+                       p.statut AS mon_statut,
+                       (SELECT COUNT(*) FROM cal_event_participants x
+                         WHERE x.event_id = e.id) AS nb_invites
                 FROM cal_events_perso e
                 LEFT JOIN users u ON u.id = e.user_id
+                LEFT JOIN cal_event_participants p
+                       ON p.event_id = e.id AND p.user_id = ?
                 WHERE date(substr(e.date_debut, 1, 10)) <= ?
                   AND date(substr(e.date_fin, 1, 10)) >= ?
-                  {scope_sql}
+                  AND (e.user_id = ? OR p.user_id IS NOT NULL
+                       OR COALESCE(u.actif, 1) = 1)
                 ORDER BY e.date_debut ASC, e.id ASC
                 """,
-                (d1.isoformat(), d0.isoformat(), uid),
+                (uid, d1.isoformat(), d0.isoformat(), uid),
             ).fetchall()
+
+            # Les invites d'une reunion ne sont detailles que pour les concernes.
+            ids_a_moi = [
+                int(r["id"])
+                for r in rows
+                if int(r["user_id"] or 0) == uid or r["mon_statut"] is not None
+            ]
+            invites_par_event = _participants_par_event(conn, ids_a_moi)
+
             for r in rows:
                 debut = str(r["date_debut"] or "").strip()
                 fin = str(r["date_fin"] or "").strip() or debut
                 all_day = bool(int(r["all_day"] or 0))
                 note = (r["note"] or "").strip() or None
                 prive = bool(int(r["prive"] or 0))
+                annule = bool(int(r["annule"] or 0))
                 owner_id = int(r["user_id"] or 0)
                 owner_nom = (r["user_nom"] or "").strip() or "Utilisateur"
                 own = owner_id == uid
+                mon_statut_brut = r["mon_statut"]
+                invite = mon_statut_brut is not None
+                a_moi = own or invite
+                reunion = bool(int(r["nb_invites"] or 0))
                 titre_brut = (r["titre"] or "").strip() or "Sans titre"
-                if own:
+
+                cal = CALENDRIER_PERSO_CAL if a_moi else CALENDRIER_COLLEGUES_CAL
+                if cal not in cals:
+                    continue
+                if perso_own_only and not a_moi:
+                    continue
+                # Une reunion annulee reste chez l'organisateur et ses invites,
+                # barree — mais elle libere le creneau aux yeux des autres.
+                if annule and not a_moi:
+                    continue
+
+                if a_moi:
                     titre = titre_brut
                 elif prive:
                     titre = f"{owner_nom} · {PERSO_BUSY_LABEL}"
                     note = None
                 else:
                     titre = f"{owner_nom} · {titre_brut}"
-                meta = {
+
+                meta: dict[str, Any] = {
                     "own": own,
                     "prive": prive,
                     "user_id": owner_id,
@@ -685,10 +855,23 @@ def _fetch_calendar_events(
                     meta["note"] = note
                 if own:
                     meta["titre_brut"] = titre_brut
+                if annule:
+                    meta["annule"] = True
+                if a_moi and (reunion or invite):
+                    meta["reunion"] = True
+                    meta["organisateur_id"] = owner_id
+                    meta["organisateur_nom"] = owner_nom
+                    meta["organisateur_email"] = (r["user_email"] or "").strip()
+                    meta["mon_statut"] = (
+                        "organisateur"
+                        if own
+                        else str(mon_statut_brut or "en_attente").strip()
+                    )
+                    meta["participants"] = invites_par_event.get(int(r["id"]), [])
                 out.append(
                     _event(
                         eid=f"perso-{r['id']}",
-                        cal=CALENDRIER_PERSO_CAL,
+                        cal=cal,
                         titre=titre,
                         debut=debut,
                         fin=fin,
@@ -762,6 +945,39 @@ def _ics_description(ev: dict) -> str:
     return "\n".join(lines)
 
 
+ICS_PARTSTAT = {
+    "en_attente": "NEEDS-ACTION",
+    "accepte": "ACCEPTED",
+    "refuse": "DECLINED",
+    "peut_etre": "TENTATIVE",
+}
+
+
+def _ics_personnes(ev: dict) -> list[str]:
+    """ORGANIZER / ATTENDEE — la reunion arrive complete dans Outlook."""
+    meta = ev.get("meta") or {}
+    if not meta.get("reunion"):
+        return []
+    out: list[str] = []
+    org_nom = _ics_escape(str(meta.get("organisateur_nom") or "").strip())
+    org_mail = str(meta.get("organisateur_email") or "").strip()
+    if org_mail:
+        cn = f';CN="{org_nom}"' if org_nom else ""
+        out.append(f"ORGANIZER{cn}:mailto:{org_mail}")
+    for part in meta.get("participants") or []:
+        mail = str(part.get("email") or "").strip()
+        if not mail:
+            continue
+        nom = _ics_escape(str(part.get("nom") or "").strip())
+        cn = f';CN="{nom}"' if nom else ""
+        partstat = ICS_PARTSTAT.get(str(part.get("statut") or ""), "NEEDS-ACTION")
+        out.append(
+            f"ATTENDEE{cn};ROLE=REQ-PARTICIPANT;PARTSTAT={partstat}"
+            f";RSVP=TRUE:mailto:{mail}"
+        )
+    return out
+
+
 def _event_to_vevent_lines(ev: dict) -> list[str]:
     eid = str(ev.get("id") or "event")
     titre = _ics_escape(str(ev.get("titre") or "Sans titre"))
@@ -776,6 +992,9 @@ def _event_to_vevent_lines(ev: dict) -> list[str]:
     ]
     if desc:
         lines.append(f"DESCRIPTION:{desc}")
+    lines.extend(_ics_personnes(ev))
+    if (ev.get("meta") or {}).get("annule"):
+        lines.append("STATUS:CANCELLED")
     debut = _parse_ev_dt_for_ics(ev.get("debut") or "")
     fin = _parse_ev_dt_for_ics(ev.get("fin") or "") or debut
     if not debut:
@@ -890,11 +1109,20 @@ def create_perso_event(request: Request, body: PersoEventCreate):
             """,
             (uid, titre, debut_s, fin_s, all_day, note, prive),
         )
-        conn.commit()
         new_id = int(cur.lastrowid)
+        if body.participants:
+            _ecrire_participants(conn, new_id, uid, body.participants)
+        conn.commit()
+        invites = _participants_par_event(conn, [new_id]).get(new_id, [])
     meta: dict[str, Any] = {"own": True, "prive": bool(prive), "user_id": uid}
     if note:
         meta["note"] = note
+    if invites:
+        meta["reunion"] = True
+        meta["organisateur_id"] = uid
+        meta["mon_statut"] = "organisateur"
+        meta["participants"] = invites
+        _notifier_invitation([p["user_id"] for p in invites], titre, debut_s)
     return {
         "id": f"perso-{new_id}",
         "calendrier": CALENDRIER_PERSO_CAL,
@@ -912,14 +1140,37 @@ def delete_perso_event(request: Request, event_id: int):
     uid = _user_id_from_session(user)
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id FROM cal_events_perso WHERE id = ? AND user_id = ?",
+            """SELECT id, COALESCE(annule, 0) AS annule
+                 FROM cal_events_perso WHERE id = ? AND user_id = ?""",
             (event_id, uid),
         ).fetchone()
         if not row:
             raise HTTPException(404, detail="Événement introuvable.")
+        nb_invites = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM cal_event_participants WHERE event_id = ?",
+                (event_id,),
+            ).fetchone()[0]
+        )
+        # Une reunion suivie par d'autres ne disparait pas sans un mot : on
+        # l'annule d'abord, les invites la voient barree. Une seconde
+        # suppression la retire pour de bon.
+        if nb_invites and not int(row["annule"] or 0):
+            conn.execute(
+                """UPDATE cal_events_perso
+                      SET annule = 1,
+                          updated_at = strftime('%Y-%m-%dT%H:%M:%S','now','localtime')
+                    WHERE id = ?""",
+                (event_id,),
+            )
+            conn.commit()
+            return {"ok": True, "annule": True}
+        conn.execute(
+            "DELETE FROM cal_event_participants WHERE event_id = ?", (event_id,)
+        )
         conn.execute("DELETE FROM cal_events_perso WHERE id = ?", (event_id,))
         conn.commit()
-    return {"ok": True}
+    return {"ok": True, "annule": False}
 
 
 # ---------------------------------------------------------------------------
@@ -975,6 +1226,13 @@ def update_perso_event(request: Request, event_id: int, body: PersoEventUpdate):
 
         debut_s = _fmt_dt(dt_debut)
         fin_s = _fmt_dt(dt_fin)
+        avant = {
+            int(r["user_id"])
+            for r in conn.execute(
+                "SELECT user_id FROM cal_event_participants WHERE event_id = ?",
+                (event_id,),
+            ).fetchall()
+        }
         conn.execute(
             """
             UPDATE cal_events_perso
@@ -994,11 +1252,33 @@ def update_perso_event(request: Request, event_id: int, body: PersoEventUpdate):
                 uid,
             ),
         )
+        if body.participants is not None:
+            _ecrire_participants(conn, event_id, uid, body.participants)
+        # Deplacer une reunion remet tout le monde en attente : une reponse
+        # donnee sur l'ancien creneau ne vaut pas pour le nouveau.
+        creneau_change = (
+            body.date_debut is not None or body.date_fin is not None
+        ) and (debut_s != str(row["date_debut"] or "") or fin_s != str(row["date_fin"] or ""))
+        if creneau_change:
+            conn.execute(
+                """UPDATE cal_event_participants
+                      SET statut = 'en_attente', repondu_le = NULL
+                    WHERE event_id = ?""",
+                (event_id,),
+            )
         conn.commit()
+        invites = _participants_par_event(conn, [event_id]).get(event_id, [])
 
     meta: dict[str, Any] = {"own": True, "prive": prive, "user_id": uid}
     if note:
         meta["note"] = note
+    if invites:
+        meta["reunion"] = True
+        meta["organisateur_id"] = uid
+        meta["mon_statut"] = "organisateur"
+        meta["participants"] = invites
+        nouveaux = [p["user_id"] for p in invites if p["user_id"] not in avant]
+        _notifier_invitation(nouveaux, titre, debut_s)
     return {
         "id": f"perso-{event_id}",
         "calendrier": CALENDRIER_PERSO_CAL,
@@ -1008,6 +1288,175 @@ def update_perso_event(request: Request, event_id: int, body: PersoEventUpdate):
         "all_day": all_day,
         "meta": meta,
     }
+
+
+# ---------------------------------------------------------------------------
+# Reunions : invites et reponses
+# ---------------------------------------------------------------------------
+
+
+@router.get("/api/calendrier/invitables")
+def list_invitables(request: Request):
+    """Personnes que l'on peut convier a une reunion."""
+    user = require_calendrier(request)
+    uid = _user_id_from_session(user)
+    with get_db() as conn:
+        gens = _users_invitables(conn)
+    return {"utilisateurs": [g for g in gens if g["id"] != uid]}
+
+
+@router.get("/api/calendrier/disponibilites")
+def list_disponibilites(
+    request: Request,
+    date_debut: str = Query(..., description="YYYY-MM-DDTHH:MM"),
+    date_fin: str = Query(..., description="YYYY-MM-DDTHH:MM"),
+    utilisateurs: str = Query("", description="Ids separes par des virgules"),
+):
+    """Qui est deja pris sur ce creneau — affiche au moment d'inviter."""
+    require_calendrier(request)
+    dt_debut = _parse_event_dt(date_debut, "date_debut")
+    dt_fin = _parse_event_dt(date_fin, "date_fin")
+    if dt_fin < dt_debut:
+        raise HTTPException(400, detail="date_fin doit être >= date_debut.")
+    ids: list[int] = []
+    for part in str(utilisateurs or "").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            ids.append(int(part))
+        except ValueError:
+            continue
+    ids = sorted(set(ids))[:100]
+    if not ids:
+        return {"occupes": []}
+    debut_s = _fmt_dt(dt_debut)
+    fin_s = _fmt_dt(dt_fin)
+    marks = ",".join("?" for _ in ids)
+    with get_db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT DISTINCT q.user_id
+            FROM (
+                SELECT e.user_id AS user_id, e.date_debut, e.date_fin, e.annule
+                  FROM cal_events_perso e
+                UNION ALL
+                SELECT p.user_id AS user_id, e.date_debut, e.date_fin, e.annule
+                  FROM cal_event_participants p
+                  JOIN cal_events_perso e ON e.id = p.event_id
+                 WHERE p.statut <> 'refuse'
+            ) q
+            WHERE q.user_id IN ({marks})
+              AND COALESCE(q.annule, 0) = 0
+              AND q.date_debut < ?
+              AND q.date_fin > ?
+            """,
+            (*ids, fin_s, debut_s),
+        ).fetchall()
+    return {"occupes": [int(r["user_id"]) for r in rows]}
+
+
+@router.post("/api/calendrier/events/perso/{event_id}/reponse")
+def repondre_invitation(request: Request, event_id: int, body: ParticipantReponse):
+    """Un invite accepte, refuse ou repond « peut-etre »."""
+    user = require_calendrier(request)
+    uid = _user_id_from_session(user)
+    statut = (body.statut or "").strip()
+    if statut not in STATUTS_PARTICIPANT:
+        raise HTTPException(
+            400,
+            detail="statut attendu : en_attente, accepte, refuse ou peut_etre.",
+        )
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM cal_event_participants WHERE event_id = ? AND user_id = ?",
+            (event_id, uid),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, detail="Vous n'êtes pas invité à cette réunion.")
+        conn.execute(
+            """UPDATE cal_event_participants
+                  SET statut = ?,
+                      repondu_le = strftime('%Y-%m-%dT%H:%M:%S','now','localtime')
+                WHERE event_id = ? AND user_id = ?""",
+            (statut, event_id, uid),
+        )
+        conn.commit()
+        invites = _participants_par_event(conn, [event_id]).get(event_id, [])
+    return {"ok": True, "statut": statut, "participants": invites}
+
+
+# ---------------------------------------------------------------------------
+# Pop-up de rappel et pastille d'invitations (interrogees depuis tout MySifa)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/api/calendrier/notifications")
+def calendrier_notifications(request: Request):
+    """Reunions qui commencent dans moins de 10 min + invitations sans reponse.
+
+    Interroge par toutes les pages du portail : un role sans acces a
+    MyCalendrier recoit un contenu vide plutot qu'un 403, une pastille ne
+    devant jamais faire echouer le chargement d'une page.
+    """
+    from services.auth_service import can_access_calendrier, get_current_user
+
+    try:
+        user = get_current_user(request)
+    except HTTPException:
+        return {"rappels": [], "invitations": 0}
+    if not can_access_calendrier(user):
+        return {"rappels": [], "invitations": 0}
+    uid = _user_id_from_session(user)
+    maintenant = datetime.now()
+    limite = maintenant + timedelta(minutes=RAPPEL_AVANT_MINUTES)
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT e.id, e.titre, e.date_debut, e.date_fin, e.user_id,
+                   u.nom AS organisateur_nom,
+                   p.statut AS mon_statut,
+                   (SELECT COUNT(*) FROM cal_event_participants x
+                     WHERE x.event_id = e.id) AS nb_invites
+              FROM cal_events_perso e
+              LEFT JOIN users u ON u.id = e.user_id
+              LEFT JOIN cal_event_participants p
+                     ON p.event_id = e.id AND p.user_id = ?
+             WHERE COALESCE(e.all_day, 0) = 0
+               AND COALESCE(e.annule, 0) = 0
+               AND e.date_debut >= ?
+               AND e.date_debut <= ?
+               AND (e.user_id = ? OR (p.user_id IS NOT NULL AND p.statut <> 'refuse'))
+             ORDER BY e.date_debut ASC
+             LIMIT 20
+            """,
+            (uid, _fmt_dt(maintenant), _fmt_dt(limite), uid),
+        ).fetchall()
+        rappels = [
+            {
+                "id": f"perso-{r['id']}",
+                "titre": (r["titre"] or "").strip() or "Sans titre",
+                "debut": str(r["date_debut"] or "")[:16],
+                "fin": str(r["date_fin"] or "")[:16],
+                "reunion": bool(int(r["nb_invites"] or 0)),
+                "organisateur_nom": (r["organisateur_nom"] or "").strip(),
+                "organisateur": int(r["user_id"] or 0) == uid,
+            }
+            for r in rows
+        ]
+        nb = int(
+            conn.execute(
+                """SELECT COUNT(*)
+                     FROM cal_event_participants p
+                     JOIN cal_events_perso e ON e.id = p.event_id
+                    WHERE p.user_id = ?
+                      AND p.statut = 'en_attente'
+                      AND COALESCE(e.annule, 0) = 0
+                      AND date(substr(e.date_fin, 1, 10)) >= date('now','localtime')""",
+                (uid,),
+            ).fetchone()[0]
+        )
+    return {"rappels": rappels, "invitations": nb}
 
 
 # ---------------------------------------------------------------------------

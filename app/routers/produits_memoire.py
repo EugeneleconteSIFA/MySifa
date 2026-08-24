@@ -217,14 +217,14 @@ async def rattacher_document(doc_id: int, request: Request):
 @router.post("/api/produits/documents")
 async def deposer_document(request: Request, file: UploadFile = File(...),
                            no_dossier: str = Form(""), of_numero: str = Form(""),
-                           chemin_origine: str = Form("")):
+                           chemin_origine: str = Form(""), date_fichier: str = Form("")):
     """Depot manuel d'un scan depuis l'interface (secours de l'agent local)."""
     user = get_current_user(request)
     content = await file.read()
     return _enregistrer_scan(content, file.filename or "scan.pdf",
                              importe_par=_auteur(user),
                              no_dossier=no_dossier, of_numero=of_numero,
-                             chemin_origine=chemin_origine)
+                             chemin_origine=chemin_origine, date_fichier=date_fichier)
 
 
 # ─── Depot par l'agent local (dossier reseau surveille) ──────────────────────
@@ -234,6 +234,7 @@ async def bridge_of_scan(file: UploadFile = File(...),
                          fichier_origine: str = Form(""),
                          of_numero: str = Form(""),
                          chemin_origine: str = Form(""),
+                         date_fichier: str = Form(""),
                          x_api_key: Optional[str] = Header(None, alias="X-Api-Key")):
     """Depot d'un OF termine scanne par l'agent qui surveille le dossier reseau.
 
@@ -245,7 +246,7 @@ async def bridge_of_scan(file: UploadFile = File(...),
     content = await file.read()
     return _enregistrer_scan(content, fichier_origine or file.filename or "scan.pdf",
                              importe_par="agent:scan", of_numero=of_numero,
-                             chemin_origine=chemin_origine)
+                             chemin_origine=chemin_origine, date_fichier=date_fichier)
 
 
 def _lire_of_numero(content: bytes) -> tuple[Optional[str], bool]:
@@ -282,7 +283,7 @@ def _nom_fichier_sur(nom: str, of_numero: Optional[str]) -> str:
 
 def _enregistrer_scan(content: bytes, nom_origine: str, importe_par: str,
                       no_dossier: str = "", of_numero: str = "",
-                      chemin_origine: str = "") -> dict:
+                      chemin_origine: str = "", date_fichier: str = "") -> dict:
     """Enregistre un scan d'OF termine et le rattache au mieux.
 
     Ordre de resolution, du plus fiable au moins fiable :
@@ -383,16 +384,23 @@ def _enregistrer_scan(content: bytes, nom_origine: str, importe_par: str,
             origine_ref = "nom_fichier"
 
         statut = "rattache" if ref_norm else "a_rattacher"
+        maintenant = pm.now_iso()
+        d_fichier = (date_fichier or "").strip() or None
+        # La date qui sert au tri est celle de la PRODUCTION, pas celle du
+        # depot : sept scans deposes le meme apres-midi couvrent plusieurs
+        # mois d'atelier, et une liste triee sur la date d'import n'ordonne
+        # rien du tout.
+        d_document = pm.date_document(conn, dossier, of_import_id, d_fichier, maintenant)
         cur = conn.execute(
             """INSERT INTO produit_documents
                (ref_produit_norm, no_dossier, of_numero, of_import_id, type, fichier,
                 fichier_origine, chemin_origine, nb_pages, taille_octets, texte_extrait,
-                empreinte, statut, importe_le, importe_par)
-               VALUES (?,?,?,?,'of_termine',?,?,?,?,?,?,?,?,?,?)""",
+                empreinte, statut, date_fichier, date_document, importe_le, importe_par)
+               VALUES (?,?,?,?,'of_termine',?,?,?,?,?,?,?,?,?,?,?,?)""",
             (ref_norm, dossier, numero, of_import_id, fichier,
              os.path.basename(nom_origine or ""), (chemin_origine or "").strip() or None,
              nb_pages, len(content), 1 if avait_texte else 0, empreinte,
-             statut, pm.now_iso(), importe_par),
+             statut, d_fichier, d_document, maintenant, importe_par),
         )
         conn.commit()
         doc_id = cur.lastrowid
@@ -408,6 +416,7 @@ def _enregistrer_scan(content: bytes, nom_origine: str, importe_par: str,
         "success": True, "doublon": False, "id": doc_id, "statut": statut,
         "of_numero": numero, "no_dossier": dossier, "ref_produit_norm": ref_norm,
         "origine_ref": origine_ref, "texte_extrait": avait_texte,
+        "date_document": d_document,
         "message": message,
     }
 

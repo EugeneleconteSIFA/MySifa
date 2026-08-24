@@ -498,12 +498,78 @@ def savoirs_produit(conn, ref_produit_norm: str, inclure_obsoletes: bool = False
 
 
 def documents_produit(conn, ref_produit_norm: str) -> List[dict]:
+    """Scans d'une reference, du plus recent au plus ancien.
+
+    Le tri se fait sur `date_document` (la date de PRODUCTION, cf. migration
+    produit_documents_dates) et non sur la date d'import : sept scans deposes
+    le meme apres-midi couvrent plusieurs mois d'atelier.
+
+    Les informations affichees viennent de l'OF et de la serie deja en base —
+    machine, client, quantite, operateurs. Rien n'est relu dans le PDF : ce
+    qu'on sait deja n'a pas a etre redecouvert dans une image.
+    """
     rows = conn.execute(
-        "SELECT * FROM produit_documents WHERE ref_produit_norm = ? AND statut != 'ecarte' "
-        "ORDER BY datetime(importe_le) DESC, id DESC",
+        """SELECT d.*,
+                  o.machine        AS of_machine,
+                  o.qte_etiquettes AS of_qte_etiquettes,
+                  o.metrage        AS of_metrage,
+                  o.laize          AS of_laize,
+                  o.format         AS of_format,
+                  o.date_creation  AS of_date_creation,
+                  o.delai_client   AS of_delai_client,
+                  s.machine        AS serie_machine,
+                  s.client         AS serie_client,
+                  s.date_fin       AS serie_date_fin,
+                  s.operateurs     AS serie_operateurs,
+                  s.etiquettes     AS serie_etiquettes,
+                  s.metrage_m      AS serie_metrage_m
+             FROM produit_documents d
+             LEFT JOIN of_imports    o ON o.id = d.of_import_id
+             LEFT JOIN produit_series s ON s.no_dossier = d.no_dossier
+            WHERE d.ref_produit_norm = ? AND d.statut != 'ecarte'
+            ORDER BY COALESCE(d.date_document, d.importe_le) DESC, d.id DESC""",
         (ref_produit_norm,),
     ).fetchall()
-    return [dict(r) for r in rows]
+    out = []
+    for r in rows:
+        d = dict(r)
+        ops = d.get("serie_operateurs")
+        if ops:
+            try:
+                d["serie_operateurs"] = json.loads(ops)
+            except (ValueError, TypeError):
+                d["serie_operateurs"] = None
+        d["machine"] = d.get("serie_machine") or d.get("of_machine")
+        d["client"] = d.get("serie_client")
+        d["etiquettes"] = d.get("serie_etiquettes") or d.get("of_qte_etiquettes")
+        out.append(d)
+    return out
+
+
+def date_document(conn, no_dossier: Optional[str], of_import_id: Optional[int],
+                  date_fichier: Optional[str], defaut: str) -> str:
+    """Meilleure date connue pour un scan, de la plus sure a la moins sure.
+
+    Une production rattachee sait exactement quand elle s'est terminee ;
+    a defaut l'OF sait quand il a ete cree ; a defaut le fichier sait quand il
+    a ete scanne ; a defaut il ne reste que la date d'import, qui ne dit rien
+    de l'atelier mais evite une colonne vide.
+    """
+    if no_dossier:
+        row = conn.execute(
+            "SELECT date_fin FROM produit_series WHERE no_dossier = ?", (no_dossier,)
+        ).fetchone()
+        if row and row["date_fin"]:
+            return str(row["date_fin"])
+    if of_import_id:
+        row = conn.execute(
+            "SELECT date_creation FROM of_imports WHERE id = ?", (of_import_id,)
+        ).fetchone()
+        if row and row["date_creation"]:
+            return str(row["date_creation"])
+    if date_fichier:
+        return str(date_fichier)
+    return defaut
 
 
 def identite_produit(conn, ref_produit_norm: str) -> dict:

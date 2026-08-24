@@ -1608,7 +1608,10 @@ function renderPortal(){
         'aria-label':'Calendrier',
         title:'Calendrier',
         onClick:()=>{window.location.href='/calendrier';}
-      },iconEl('calendar',24)):null,
+      },
+        (S.calInvitCount>0)?h('span',{className:'portal-corner-badge'},S.calInvitCount>9?'9+':String(S.calInvitCount)):null,
+        iconEl('calendar',24)
+      ):null,
       (isSuper||urole==='direction')?h('button',{
         type:'button',
         className:'portal-settings-corner',

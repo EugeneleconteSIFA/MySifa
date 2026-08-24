@@ -1791,6 +1791,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/mysifa_humeur.js"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
+<script src="/static/mysifa_cal_rappel.js?v=1"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/mysifa_landscape.js?v=2"></script>
 <script src="/static/motion.js" defer></script>
@@ -2016,6 +2017,7 @@ ficheSelected:new Set(),ficheEditModal:null,
   // Messagerie interne (support)
   msgUnread:0,
   tachesCount:0,      // mes tâches ouvertes — pastille du portail sur l'icône Tâches
+  calInvitCount:0,    // invitations à une réunion sans réponse — pastille Calendrier
   msgList:null,
   msgSelId:null,
   msgSelIds:[],
@@ -2364,9 +2366,22 @@ async function loadTachesCount(){
   const r=await api('/api/taches/badge');
   if(r && typeof r.count==='number') set({tachesCount:r.count});
 }
+// Pastille « invitations » : alimentée par mysifa_cal_rappel.js, qui interroge
+// déjà /api/calendrier/notifications une fois par minute pour la pop-up de
+// rappel — inutile d'ajouter un second aller-retour pour le même chiffre.
+function ecouterInvitationsCalendrier(){
+  window.addEventListener('mysifa:cal-invitations',function(e){
+    const n=Number((e&&e.detail&&e.detail.nombre)||0);
+    if(n!==Number(S.calInvitCount||0))set({calInvitCount:n});
+  });
+  if(window.MySifaCalRappel&&window.MySifaCalRappel.rafraichir){
+    window.MySifaCalRappel.rafraichir();
+  }
+}
 function startMessagesPolling(){
   if(_msgPollStarted)return;
   _msgPollStarted=true;
+  ecouterInvitationsCalendrier();
   loadMessagesUnread().catch(()=>{});
   loadTachesCount().catch(()=>{});
   setInterval(()=>{
@@ -10923,7 +10938,9 @@ function openProfileSheet(){
   }
   items.push(item('messagerie', ICO.mail, 'Messagerie', msgUnread>0?(msgUnread>9?'9+':String(msgUnread)):''));
   if(isSuper||isDir||isAdmin){
-    items.push(item('calendrier', ICO.calendar, 'Calendrier', ''));
+    const nbC=Number(S.calInvitCount||0);
+    items.push(item('calendrier', ICO.calendar, 'Calendrier',
+      nbC>0?(nbC>9?'9+':String(nbC)):''));
   }
   if(isSuper||isDir){
     items.push(item('db', ICO.database, 'Base de données', ''));

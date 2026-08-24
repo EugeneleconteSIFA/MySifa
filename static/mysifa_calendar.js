@@ -7,18 +7,29 @@
   var LS_CAL_COLORS = 'mysifa_cal_colors';
   var HEX_RE = /^#[0-9A-Fa-f]{6}$/;
 
+  /* L'ordre de ce tableau est celui de la liste des calendriers : « Mon
+   * calendrier » d'abord, le reste sous le chevron « Autres calendriers ».
+   * `defaut: false` = calendrier décoché à la première ouverture — les
+   * plannings machines, la paie et les expéditions encombrent la vue de
+   * quelqu'un qui vient y chercher ses réunions. */
   var CAL_DEFS = [
-    { id: 'production_1', label: 'Cohésio 1', color: '#22d3ee' },
-    { id: 'production_2', label: 'Cohésio 2', color: '#3A7BD5' },
-    { id: 'production_3', label: 'DSI', color: '#a78bfa' },
-    { id: 'production_4', label: 'Repiquage', color: '#34d399' },
+    { id: 'perso', label: 'Mon calendrier', color: '#f97316', mien: true },
+    { id: 'collegues', label: 'Collègues', color: '#38bdf8' },
     { id: 'conges', label: 'Congés', color: '#fbbf24' },
     { id: 'anniversaires', label: 'Anniversaires', color: '#34d399' },
     { id: 'feries', label: 'Jours fériés', color: '#f87171' },
-    { id: 'paie', label: 'Paie', color: '#a78bfa' },
-    { id: 'expeditions', label: 'Expéditions', color: '#f97316' },
-    { id: 'perso', label: 'Personnel', color: '#f97316' },
+    { id: 'paie', label: 'Paie', color: '#a78bfa', defaut: false },
+    { id: 'expeditions', label: 'Expéditions', color: '#f97316', defaut: false },
+    { id: 'production_1', label: 'Cohésio 1', color: '#22d3ee', defaut: false },
+    { id: 'production_2', label: 'Cohésio 2', color: '#3A7BD5', defaut: false },
+    { id: 'production_3', label: 'DSI', color: '#a78bfa', defaut: false },
+    { id: 'production_4', label: 'Repiquage', color: '#34d399', defaut: false },
   ];
+
+  function visibleParDefaut(calId) {
+    var c = CAL_DEFS.find(function (x) { return x.id === calId; });
+    return !c || c.defaut !== false;
+  }
 
   function defaultColorsMap() {
     var o = {};
@@ -135,6 +146,7 @@
 
   global.MySifaCalendar = {
     CAL_DEFS: CAL_DEFS,
+    visibleParDefaut: visibleParDefaut,
     defaultColorsMap: defaultColorsMap,
     loadColorsMap: loadColorsMap,
     mergeFromUser: mergeFromUser,

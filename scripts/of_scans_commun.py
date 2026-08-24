@@ -149,11 +149,19 @@ def envoyer(chemin: str, racine: str, url: str, cle: str, timeout: int = 180) ->
     if not contenu:
         raise ValueError("fichier vide")
     relatif = cle_index(racine, chemin)
+    # Date du fichier sur le partage : c'est la date du scan, pas celle de
+    # l'envoi. Sans elle, une reprise complete daterait tous les documents du
+    # jour de la reprise et la liste ne s'ordonnerait sur rien.
+    try:
+        date_fichier = datetime.fromtimestamp(os.path.getmtime(chemin)).strftime("%Y-%m-%dT%H:%M:%S")
+    except OSError:
+        date_fichier = ""
     reponse = requests.post(
         url.rstrip("/") + "/api/bridge/of-scan",
         headers={"X-Api-Key": cle},
         files={"file": (os.path.basename(chemin), contenu, "application/pdf")},
-        data={"fichier_origine": os.path.basename(chemin), "chemin_origine": relatif},
+        data={"fichier_origine": os.path.basename(chemin), "chemin_origine": relatif,
+              "date_fichier": date_fichier},
         timeout=timeout,
     )
     if reponse.status_code >= 400:

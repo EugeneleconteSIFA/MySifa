@@ -69,8 +69,8 @@ REF = "965/0001"
 with dbmod.get_db() as conn:
     conn.execute("INSERT OR REPLACE INTO machines (id, nom, code) VALUES (992,'Cohesio 1','CO1')")
     conn.execute(
-        "INSERT INTO of_imports (id, of_numero, reference, machine, date_import) "
-        "VALUES (1, '9931987', ?, 'Cohesio 1', '2026-08-01')", (REF,))
+        "INSERT INTO of_imports (id, of_numero, reference, machine, date_creation, date_import) "
+        "VALUES (1, '9931987', ?, 'Cohesio 1', '2026-01-28', '2026-08-01')", (REF,))
     conn.execute(
         "INSERT INTO planning_entries (machine_id, position, reference, client, description, "
         "duree_heures, statut, ref_produit, numero_of, of_import_id) "
@@ -119,6 +119,39 @@ print("--- ni OF ni reference : file de rattachement ---")
 res3 = pmr._enregistrer_scan(pdf_octets("rien"), "scan illisible.pdf", "test")
 check("mis en file", res3["statut"], "a_rattacher")
 check("aucune reference devinee", res3["ref_produit_norm"], None)
+
+print("--- datation : production, OF, fichier, import ---")
+with dbmod.get_db() as conn:
+    # 1. Une production rattachee : sa date de fin fait foi.
+    conn.execute(
+        "INSERT INTO produit_series (ref_produit_norm, no_dossier, date_debut, date_fin, cloture_le) "
+        "VALUES (?, 'D-9931987', '2026-01-29T17:00:00', '2026-02-02T16:15:00', ?)",
+        (REF, pm.now_iso()))
+    conn.commit()
+    check("date = fin de production",
+          pm.date_document(conn, "D-9931987", 1, "2026-08-24T10:00:00", "2026-08-24T12:00:00"),
+          "2026-02-02T16:15:00")
+    # 2. Sans production : la date de creation de l'OF.
+    check("date = creation de l'OF",
+          pm.date_document(conn, None, 1, "2026-08-24T10:00:00", "2026-08-24T12:00:00"),
+          "2026-01-28")
+    # 3. Sans OF : la date du fichier sur le partage.
+    check("date = date du fichier",
+          pm.date_document(conn, None, None, "2026-07-15T09:00:00", "2026-08-24T12:00:00"),
+          "2026-07-15T09:00:00")
+    # 4. Rien de mieux : la date d'import, faute d'autre chose.
+    check("date = import en dernier recours",
+          pm.date_document(conn, None, None, None, "2026-08-24T12:00:00"),
+          "2026-08-24T12:00:00")
+
+res4 = pmr._enregistrer_scan(pdf_octets("date"), "9931987 965-0001 bis.pdf", "test",
+                             date_fichier="2026-08-24T10:00:00")
+check("scan date sur la production", res4["date_document"], "2026-02-02T16:15:00")
+
+with dbmod.get_db() as conn:
+    docs = pm.documents_produit(conn, REF)
+check("documents ordonnes et enrichis", len(docs) >= 2, True)
+check("machine remontee depuis l'OF", docs[0].get("machine"), "Cohesio 1")
 
 print("--- parcours du dossier reseau (sous-dossiers par annee) ---")
 import of_scans_commun as osc

@@ -1659,6 +1659,14 @@ function renderOfTab(){
       title:'Exporter tous les OF (filtre appliqué) en CSV',
       onClick:exportOfCsv
     },iconEl('download',13),' Exporter CSV'),
+    // Les scans d'OF vivent au meme endroit que les OF : chercher ailleurs
+    // n'aurait aucune raison d'etre. La tuile du menu MyProd reste, mais
+    // c'est ici qu'on tombe dessus naturellement.
+    h('button',{
+      style:'padding:9px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap',
+      title:'Deposer des OF termines scannes et traiter ceux a rattacher',
+      onClick:()=>{ set({page:'scans'}); nav(); }
+    },iconEl('file',13),' Scans d\'OF'),
     S.user&&S.user.role==='superadmin'&&S.ofSelected.size>0
       ? h('button',{
           style:'padding:9px 14px;border-radius:8px;border:none;background:var(--danger);color:#fff;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap',
@@ -7726,7 +7734,7 @@ function renderProdKpis(){
         if(p === 'users'){ window.location.href = '/settings'; return; }
         if(p === 'matiere_prix'){ window.location.href = '/pricing'; return; }
         if(p === 'profil'){ window.location.href = '/profil'; return; }
-        const allowed = new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
+        const allowed = new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of','scans']);
         if(allowed.has(p)) S.page = p;
       }catch(e){}
       try{var _hv=_readProdHash();if(_hv){if(_hv.subPage)S.subPage=_hv.subPage;if(_hv.ofSubTab)S.ofSubTab=_hv.ofSubTab;}}catch(e){}
@@ -7815,7 +7823,7 @@ function renderProdKpis(){
         if(p === 'users'){ window.location.href = '/settings'; return; }
         if(p === 'matiere_prix'){ window.location.href = '/pricing'; return; }
         if(p === 'profil'){ window.location.href = '/profil'; return; }
-        const allowed = new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
+        const allowed = new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of','scans']);
         if(allowed.has(p)) S.page = p;
       }catch(e){}
       S.loginError = null;
@@ -7980,7 +7988,14 @@ function renderProdKpis(){
           {key: 'production', label: 'Production', icon: 'wrench'},
           {key: 'traceabilite', label: 'Tra\u00e7abilit\u00e9', icon: 'layers'},
           ...(admin ? [{key: 'rentabilite', label: 'Rentabilit\u00e9', icon: 'trending-up'}] : []),
-          ...(canAccessOfTab() ? [{key: 'of', label: 'Fiches + OF', icon: 'file', withPendingOfBadge: true}] : []),
+          // Section : les OF, leurs fiches et leurs scans vivent ensemble.
+          // Chercher les scans ailleurs que la ou vivent les OF n'aurait
+          // aucune raison d'etre.
+          ...(canAccessOfTab() ? [
+            {section: 'Fiches et OF'},
+            {key: 'of', label: 'Ordres de fabrication', icon: 'file', withPendingOfBadge: true},
+            {key: 'scans', label: 'Scans d\'OF', icon: 'file-text'},
+          ] : []),
         ];
     const isLight = document.body.classList.contains('light');
     return h('nav', {className: 'sidebar'},
@@ -7989,6 +8004,9 @@ function renderProdKpis(){
         h('div', {className: 'logo-sub'}, 'by SIFA')
       ),
       ...items.map(i => {
+        // Intitule de section (.nav-group-label) : meme classe que les autres
+        // applications MySifa, non cliquable, separateur au-dessus.
+        if(i.section) return h('div', {className: 'nav-group-label'}, i.section);
         const btn = h('button', {
           className: 'nav-btn' + (S.page === i.key ? ' active' : ''),
           onClick: () => {
@@ -8046,7 +8064,15 @@ function renderProdKpis(){
     var s = document.createElement('style');
     s.id = 'myprod-menu-css';
     s.textContent =
-      '.myprod-menu{max-width:960px}'
+      // Reprise a l'identique de app/web/html.py : la sidebar doit etre la
+      // meme dans toutes les applications, y compris ses intitules de section.
+      '.sidebar .nav-group-label{font-size:11px;font-weight:700;color:var(--muted);'
+      + 'text-transform:uppercase;letter-spacing:.5px;padding:4px 12px 2px;'
+      + 'user-select:none;pointer-events:none;line-height:1.3}'
+      + '.sidebar .nav-group-label:not(:first-child){margin-top:10px;padding-top:12px;'
+      + 'border-top:1px solid var(--border)}'
+      + '.myprod-page-scans{max-width:1100px}'
+      + '.myprod-menu{max-width:960px}'
       + '.myprod-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:8px}'
       + '.myprod-tile{display:flex;align-items:center;gap:14px;text-align:left;width:100%;padding:18px 18px;background:var(--card);border:1px solid var(--border);border-radius:14px;cursor:pointer;color:var(--text);font-family:inherit;transition:border-color .15s,transform .15s,box-shadow .15s}'
       + '.myprod-tile:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 22px rgba(34,211,238,.12)}'
@@ -8078,10 +8104,7 @@ function renderProdKpis(){
       try{ if(window.MySifaGuides) MySifaGuides.autoOpen('myprod-produits'); }catch(e){}
       window.MySifaProduitMemoire.openListe();
     }});
-    if(canAccessOfTab()) tiles.push({icon:'file-text', label:'Scans d OF', desc:'Deposer les OF termines scannes et traiter ceux a rattacher', go:function(){
-      if(window.MySifaProduitMemoire) window.MySifaProduitMemoire.openRattachement();
-      else toast('Module memoire produit indisponible.','error');
-    }});
+    if(canAccessOfTab()) tiles.push({icon:'file-text', label:'Scans d OF', desc:'Deposer les OF termines scannes et traiter ceux a rattacher', go:function(){ set({page:'scans'}); nav(); }});
     if(canPlanningNav(u)) tiles.push({icon:'calendar', label:'Planning machine', desc:'Ordonnancement des dossiers par machine', go:function(){ window.location.href='/planning'; }});
 
     var grid = h('div', {className:'myprod-tiles'},
@@ -8141,6 +8164,23 @@ function renderProdKpis(){
                       S.subPage === 'erreurs' ? 'Sanity Score, incidents et erreurs de saisie' :
                       'KPIs, temps, quantit\u00e9s et qualit\u00e9 de saisie');
       pageContent = renderProdPage();
+    }else if(S.page === 'scans'){
+      pageTitle = 'Scans d\'OF';
+      pageSubtitle = 'Deposer les OF termines scannes, et rattacher ceux qui n\'ont pas pu l\'etre';
+      // Le contenu est construit par mysifa_produit_memoire.js — le meme ecran
+      // que la surcouche, rendu ici dans la page. On passe le contenant a
+      // chaque rendu : MyProd reconstruit son DOM, une reference gardee d'un
+      // rendu a l'autre pointerait sur un element detache.
+      pageContent = h('div', {className: 'myprod-page-scans'});
+      const _cible = pageContent;
+      if(window.MySifaProduitMemoire){
+        requestAnimationFrame(function(){
+          window.MySifaProduitMemoire.monterScansDans(_cible);
+        });
+      }else{
+        pageContent.appendChild(h('div', {style: 'color:var(--muted);font-size:13px;padding:24px'},
+          'Module memoire produit indisponible.'));
+      }
     }else if(S.page === 'of'){
       pageTitle = 'Ordres de fabrication';
       pageSubtitle = 'Import PDF et consultation des OF';
@@ -8285,7 +8325,8 @@ function renderProdKpis(){
     production: 'myprod-production',
     traceabilite: 'myprod-tracabilite',
     rentabilite: 'myprod-rentabilite',
-    of: 'myprod-of'
+    of: 'myprod-of',
+    scans: 'myprod-produits'
   };
 
   var PROD_GUIDES = {

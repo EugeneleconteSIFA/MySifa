@@ -172,6 +172,11 @@
       '.pmem-split{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:14px}',
       '@media(max-width:820px){.pmem-split{grid-template-columns:1fr}}',
       '.pmem-frame{width:100%;height:460px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}',
+      '.pmem-panel.pmem-inline{max-width:none;max-height:none;border:none;background:transparent}',
+      '.pmem-panel.pmem-inline .pmem-hd{padding:0 0 14px}',
+      '.pmem-panel.pmem-inline .pmem-body{padding:16px 0 0;overflow:visible}',
+      '.pmem-panel.pmem-inline .pmem-tabs{padding:12px 0 0}',
+      '.pmem-panel.pmem-inline .pmem-x{display:none}',
       '.pmem-drop{border:2px dashed var(--border);border-radius:12px;padding:22px 18px;',
       'text-align:center;background:var(--bg);cursor:pointer;transition:border-color .15s,background .15s;',
       'margin-bottom:14px}',
@@ -195,6 +200,11 @@
   // ── Overlay ────────────────────────────────────────────────────────
   var state = { tab: 'series', data: null, mode: 'fiche', noDossier: null, docs: null, sel: null };
 
+  // Contenant de rendu. `null` = surcouche modale (ouverture depuis un bouton) ;
+  // un element = page de MyProd (entree de barre laterale). La vue est
+  // construite une seule fois : c'est le contenant qui change, pas l'ecran.
+  var contenantInline = null;
+
   function close() {
     var ov = document.getElementById(OVERLAY_ID);
     if (ov) ov.remove();
@@ -205,6 +215,15 @@
 
   function mount(node) {
     ensureStyle();
+    if (contenantInline) {
+      if (!contenantInline.isConnected) { contenantInline = null; }
+      else {
+        contenantInline.innerHTML = '';
+        node.classList.add('pmem-inline');
+        contenantInline.appendChild(node);
+        return;
+      }
+    }
     close();
     var ov = el('div', { className: 'pmem-ov', id: OVERLAY_ID });
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
@@ -522,24 +541,48 @@
       return [el('div', { className: 'pmem-empty', text: 'Aucun OF scanne rattache a cette reference.' })];
     }
     return docs.map(function (doc) {
-      return el('div', { className: 'pmem-card' }, [
+      var ops = Array.isArray(doc.serie_operateurs) ? doc.serie_operateurs : [];
+      // Ligne du haut : quand, et sur quelle machine. C'est ce qu'on cherche
+      // en premier dans une pile de scans.
+      var haut = [doc.machine, doc.client].filter(Boolean).join(' · ');
+      // Ligne du bas : ce que la production a donne, et de quoi retrouver le
+      // dossier papier. Tout vient de la base — rien n'est relu dans le PDF.
+      var bas = [];
+      if (doc.no_dossier) bas.push('dossier ' + doc.no_dossier);
+      if (doc.etiquettes) bas.push(fNum(doc.etiquettes) + ' etiquettes');
+      if (doc.serie_metrage_m) bas.push(fNum(doc.serie_metrage_m) + ' m');
+      if (doc.of_laize) bas.push('laize ' + fNum(doc.of_laize) + ' mm');
+      if (doc.of_format) bas.push(doc.of_format);
+      if (ops.length) bas.push(ops.join(', '));
+      if (doc.nb_pages) bas.push(doc.nb_pages + ' page' + (doc.nb_pages > 1 ? 's' : ''));
+
+      var enfants = [
         el('div', { className: 'pmem-card-hd' }, [
-          el('span', { className: 'pmem-card-date', text: 'OF ' + (doc.of_numero || '—') }),
-          el('span', {
-            className: 'pmem-card-meta',
-            text: [doc.no_dossier ? 'dossier ' + doc.no_dossier : null, fDate(doc.importe_le),
-                   doc.nb_pages ? doc.nb_pages + ' page' + (doc.nb_pages > 1 ? 's' : '') : null]
-              .filter(Boolean).join(' · '),
-          }),
+          el('span', { className: 'pmem-card-date', text: fDate(doc.date_document || doc.importe_le) }),
+          el('span', { className: 'pmem-card-meta', text: 'OF ' + (doc.of_numero || '—') }),
+          haut ? el('span', { className: 'pmem-card-meta', text: haut }) : null,
         ]),
-        el('div', { className: 'pmem-chips' }, [
-          el('button', {
-            type: 'button', className: 'pmem-btn pmem-btn-sm',
-            onclick: function () { window.open('/api/produits/documents/' + doc.id + '/pdf', '_blank'); },
-            text: 'Ouvrir le scan',
-          }),
-        ]),
-      ]);
+      ];
+      if (bas.length) {
+        enfants.push(el('div', {
+          style: 'font-size:12px;color:var(--muted);line-height:1.5',
+          text: bas.join(' · '),
+        }));
+      }
+      enfants.push(el('div', { className: 'pmem-chips' }, [
+        el('button', {
+          type: 'button', className: 'pmem-btn pmem-btn-sm',
+          onclick: function () { window.open('/api/produits/documents/' + doc.id + '/pdf', '_blank'); },
+          text: 'Ouvrir le scan',
+        }),
+        // Le fichier d'origine porte souvent une precision que la base n'a
+        // pas (« marche 748 », « L1 », « Reliquat ») : on la garde visible.
+        doc.fichier_origine
+          ? el('span', { className: 'pmem-chip', title: doc.chemin_origine || '',
+                         text: doc.fichier_origine })
+          : null,
+      ]));
+      return el('div', { className: 'pmem-card' }, enfants);
     });
   }
 
@@ -593,6 +636,7 @@
 
   // ── Portes d'entree ────────────────────────────────────────────────
   async function openHistorique(noDossier) {
+    contenantInline = null;
     await chargerTypes();
     state = { tab: 'series', data: null, mode: 'historique', noDossier: noDossier, docs: null, sel: null };
     try {
@@ -603,6 +647,7 @@
   }
 
   async function openFiche(ref) {
+    contenantInline = null;
     await chargerTypes();
     state = { tab: 'series', data: null, mode: 'fiche', noDossier: null, docs: null, sel: null };
     try {
@@ -613,6 +658,7 @@
 
   // ── Liste des produits ─────────────────────────────────────────────
   async function openListe(q) {
+    contenantInline = null;
     state = { tab: 'liste', data: null, mode: 'liste', noDossier: null, docs: null, sel: null };
     state.q = q || '';
     await chargerListe();
@@ -731,6 +777,14 @@
         barre.style.width = Math.round((i / liste.length) * 100) + '%';
         var fd = new FormData();
         fd.append('file', f, f.name);
+        // `lastModified` est la date du fichier sur le partage, pas celle de
+        // l'envoi. C'est ce qui permet d'ordonner des scans deposes en bloc.
+        try {
+          if (f.lastModified) {
+            fd.append('date_fichier',
+              new Date(f.lastModified).toISOString().slice(0, 19));
+          }
+        } catch (e) { /* date illisible : le serveur retombera sur l'OF */ }
         try {
           var r = await api('/api/produits/documents', { method: 'POST', body: fd });
           if (r && r.doublon) doublons += 1;
@@ -774,6 +828,7 @@
 
   // ── File de rattachement des scans ─────────────────────────────────
   async function openRattachement() {
+    contenantInline = null;
     state = { tab: 'rattachement', data: null, mode: 'rattachement', noDossier: null, docs: null, sel: null };
     await chargerDocs();
   }
@@ -918,6 +973,26 @@
     return b;
   }
 
+  // Rend la vue « Scans d'OF » DANS une page de MyProd plutot qu'en surcouche.
+  // Le contenant est fourni par l'appelant a chaque rendu : MyProd reconstruit
+  // son DOM entierement, garder une reference d'un rendu a l'autre pointerait
+  // sur un element detache.
+  async function monterScansDans(contenant) {
+    // Contenant detache : MyProd a deja re-rendu depuis. Sans ce garde-fou,
+    // mount() basculerait en surcouche et ferait surgir une modale que
+    // personne n'a demandee.
+    if (!contenant || !contenant.isConnected) return;
+    // Le contenant reste actif tant qu'il est dans le document : les actions de
+    // la vue (depot, rattachement, mise a l'ecart) rappellent chargerDocs(), et
+    // ce second rendu doit rester dans la page, pas repartir en surcouche.
+    // Quand MyProd change de page, l'element est detache et mount() bascule
+    // tout seul en surcouche.
+    contenantInline = contenant;
+    state = { tab: 'rattachement', data: null, mode: 'rattachement',
+              noDossier: null, docs: null, sel: null };
+    await chargerDocs();
+  }
+
   window.MySifaProduitMemoire = {
     openHistorique: openHistorique,
     openFiche: openFiche,
@@ -925,6 +1000,7 @@
     openRattachement: openRattachement,
     boutonHistorique: boutonHistorique,
     boutonFiche: boutonFiche,
+    monterScansDans: monterScansDans,
     normRef: normRef,
     fermer: close,
   };

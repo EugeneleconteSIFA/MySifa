@@ -62,6 +62,33 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .cal-cals-head-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted)}
 .cal-cals-chevron{flex-shrink:0;color:var(--muted);transition:transform .15s,color .15s}
 .cal-cals-section.collapsed .cal-cals-chevron{transform:rotate(-90deg)}
+/* Reunions : invites, reponses, evenement annule ou refuse. */
+.cal-pop-reunion{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.cal-pop-reunion-head{font-size:11px;font-weight:700;color:var(--text2)}
+.cal-pop-reunion-compte{font-size:11px;color:var(--muted);margin-top:2px}
+.cal-pop-parts{list-style:none;margin:6px 0 0;padding:0;max-height:132px;overflow-y:auto}
+.cal-pop-parts li{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);padding:2px 0}
+.cal-part-pastille{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--muted)}
+.cal-part-pastille.st-accepte{background:var(--success)}
+.cal-part-pastille.st-refuse{background:var(--danger)}
+.cal-part-pastille.st-peut_etre{background:var(--warn)}
+.cal-pop-reponse{display:flex;gap:6px;margin-top:10px}
+.cal-rep-btn{flex:1;padding:7px 4px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;transition:border-color .15s,color .15s}
+.cal-rep-btn:hover{border-color:var(--accent);color:var(--accent)}
+.cal-rep-btn.actif{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.cal-pop-annule{margin-top:10px;padding:7px 9px;border-radius:8px;background:rgba(248,113,113,.12);color:var(--danger);font-size:11px;font-weight:600}
+/* Selection des invites dans la modale de creation. */
+.cal-part-list{max-height:168px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg);margin-top:6px}
+.cal-part-row{display:flex;align-items:center;gap:8px;padding:7px 10px;font-size:12px;color:var(--text2);cursor:pointer;user-select:none}
+.cal-part-row:hover{background:var(--accent-bg)}
+.cal-part-row input{appearance:none;width:15px;height:15px;border:2px solid var(--border);border-radius:4px;background:var(--card);cursor:pointer;position:relative;flex-shrink:0}
+.cal-part-row input:checked{background:var(--accent);border-color:var(--accent)}
+.cal-part-row input:checked::after{content:'';position:absolute;left:4px;top:1px;width:3px;height:7px;border:solid #0a0e17;border-width:0 2px 2px 0;transform:rotate(45deg)}
+.cal-part-row .cal-part-nom{flex:1}
+.cal-part-occupe{font-size:10px;font-weight:700;color:var(--warn);text-transform:uppercase;letter-spacing:.6px}
+.cal-part-dispo{font-size:11px;color:var(--muted);margin-top:6px;min-height:15px}
+.cal-part-dispo.alerte{color:var(--warn)}
+.cal-part-vide{padding:10px;font-size:11px;color:var(--muted)}
 .cal-cals-section.collapsed #cal-toggles{display:none}
 .cal-toggle{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--text2);user-select:none}
 .cal-toggle:hover{background:var(--accent-bg)}
@@ -429,6 +456,7 @@ body.cal-dragging{user-select:none}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
+<script src="/static/mysifa_cal_rappel.js?v=1"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
   <aside class="sidebar">
@@ -454,8 +482,9 @@ body.cal-dragging{user-select:none}
     </button>
     <hr>
     <div class="cal-cals-section" id="cal-cals-section">
-      <button type="button" class="cal-cals-head" id="cal-cals-head" aria-expanded="true" aria-controls="cal-toggles">
-        <span class="cal-cals-head-label">Calendriers</span>
+      <div id="cal-toggles-mien"></div>
+      <button type="button" class="cal-cals-head" id="cal-cals-head" aria-expanded="false" aria-controls="cal-toggles">
+        <span class="cal-cals-head-label">Autres calendriers</span>
         <svg class="cal-cals-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div id="cal-toggles"></div>
@@ -538,8 +567,8 @@ body.cal-dragging{user-select:none}
 const USER_ROLE=__USER_ROLE__;
 const CAL_DEFS=window.MySifaCalendar?MySifaCalendar.CAL_DEFS:[];
 const CAL_IDS_FULL=CAL_DEFS.map(c=>c.id);
-const CAL_IDS_ADMIN=['conges','anniversaires','feries','paie','expeditions','perso'];
-const CAL_IDS_BASIC=['conges','feries','perso'];
+const CAL_IDS_ADMIN=['conges','anniversaires','feries','paie','expeditions','perso','collegues'];
+const CAL_IDS_BASIC=['conges','feries','perso','collegues'];
 function calIdsForRole(role){
   if(role==='superadmin'||role==='direction')return CAL_IDS_FULL;
   if(role==='administration'||role==='administration_ventes'||role==='administration_technique')return CAL_IDS_ADMIN;
@@ -550,16 +579,28 @@ function accessibleCalDefs(){
   return CAL_DEFS.filter(c=>allowed.has(c.id)||c.externe);
 }
 function isSubCal(id){return /^sub_\d+$/.test(String(id||''));}
+function calDefsMien(){return accessibleCalDefs().filter(c=>c.mien===true);}
+function calDefsAutres(){return accessibleCalDefs().filter(c=>c.mien!==true);}
 function isOwnPerso(ev){
   return !!(ev&&ev.calendrier==='perso'&&ev.meta&&ev.meta.own===true);
 }
 function isBusyPerso(ev){
-  return !!(ev&&ev.calendrier==='perso'&&ev.meta&&ev.meta.own===false&&ev.meta.prive===true);
+  return !!(ev&&ev.calendrier==='collegues'&&ev.meta&&ev.meta.prive===true);
 }
+function isCreneauHumain(ev){
+  return !!(ev&&(ev.calendrier==='perso'||ev.calendrier==='collegues'));
+}
+/* Une reunion refusee ou annulee reste au calendrier, mais grisee et barree :
+   elle ne doit plus se lire comme un engagement. */
+function evEstBarre(ev){
+  const m=(ev&&ev.meta)||{};
+  return !!(m.annule||m.mon_statut==='refuse');
+}
+const STATUT_LABEL={accepte:'Accepter',peut_etre:'Peut-être',refuse:'Refuser'};
+const STATUT_MOT={accepte:'accepté',peut_etre:'peut-être',refuse:'refusé',en_attente:'en attente'};
 const ICO_CAL_GEAR='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
-const PROD_CAL_IDS=['production_1','production_2','production_3','production_4'];
-const LS_VISIBLE='mysifa_cal_visible';
-const LS_CAL_LIST='mysifa_cal_list_open';
+const LS_VISIBLE='mysifa_cal_visible_v2';
+const LS_CAL_LIST='mysifa_cal_autres_open';
 const MOIS=['','janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 const JOURS=['lun','mar','mer','jeu','ven','sam','dim'];
 const ROLE_LABELS={direction:'Direction',administration:'Administration',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',commercial:'Commercial',superadmin:'Super admin'};
@@ -571,7 +612,7 @@ const LS_VIEW='mysifa_cal_view';
 const VALID_VIEWS=['month','week','day','agenda'];
 const MINI_DOW=['L','M','M','J','V','S','D'];
 const MOBILE_BREAKPOINT=900;
-let S={view:'month',anchor:new Date(),events:[],dayWindows:{},feriesMap:{},loading:false,visible:{},pop:null,colorModal:null,createModal:null,externModal:null,miniCalY:null,miniCalM:null,_touchStartX:null,_touchStartY:null,subs:[],feed:null,drag:null,editingEv:null,_suppressClickUntil:0,_clickTimer:null};
+let S={view:'month',anchor:new Date(),events:[],dayWindows:{},feriesMap:{},loading:false,visible:{},pop:null,colorModal:null,createModal:null,externModal:null,miniCalY:null,miniCalM:null,_touchStartX:null,_touchStartY:null,subs:[],feed:null,drag:null,editingEv:null,_suppressClickUntil:0,_clickTimer:null,invitables:null,partSel:null,partOccupes:null,_partTimer:null};
 let ME=null;
 
 function isMobileViewport(){return window.innerWidth<MOBILE_BREAKPOINT;}
@@ -767,29 +808,36 @@ function syncThemeBtn(){
   if(lbl)lbl.textContent=isLight?'Mode sombre':'Mode clair';
 }
 
+function calDefautVisible(c){
+  if(window.MySifaCalendar&&MySifaCalendar.visibleParDefaut)return MySifaCalendar.visibleParDefaut(c.id);
+  return c.defaut!==false;
+}
+/* Les plannings machines, la paie et les expeditions sont decoches a la
+   premiere ouverture. La cle localStorage est versionnee : sans cela, un poste
+   qui avait deja une preference enregistree n'aurait jamais vu le nouveau
+   defaut s'appliquer. */
 function loadVisible(){
+  accessibleCalDefs().forEach(c=>{S.visible[c.id]=calDefautVisible(c);});
   try{
     const raw=localStorage.getItem(LS_VISIBLE);
     if(raw){
       const o=JSON.parse(raw);
       if(o&&typeof o==='object'){
-        if(o.production!==undefined&&o.production_1===undefined){
-          const v=o.production!==false;
-          PROD_CAL_IDS.forEach(k=>{o[k]=v;});
-        }
-        accessibleCalDefs().forEach(c=>{S.visible[c.id]=o[c.id]!==false;});
-        return;
+        // On reprend toutes les cles memorisees, y compris les calendriers
+        // externes (sub_N) qui ne sont charges qu'apres cet appel.
+        Object.keys(o).forEach(k=>{
+          if(typeof o[k]==='boolean')S.visible[k]=o[k];
+        });
       }
     }
   }catch(e){}
-  accessibleCalDefs().forEach(c=>{S.visible[c.id]=true;});
 }
 function saveVisible(){
   try{localStorage.setItem(LS_VISIBLE,JSON.stringify(S.visible));}catch(e){}
 }
 
 function loadCalListOpen(){
-  try{return localStorage.getItem(LS_CAL_LIST)!=='0';}catch(e){return true;}
+  try{return localStorage.getItem(LS_CAL_LIST)==='1';}catch(e){return false;}
 }
 function saveCalListOpen(open){
   try{localStorage.setItem(LS_CAL_LIST,open?'1':'0');}catch(e){}
@@ -900,22 +948,31 @@ function openCalSettingsModal(calId){
   S.colorModal=wrap;
   document.addEventListener('keydown',onCalColorModalKey);
 }
-function renderToggles(){
-  const box=document.getElementById('cal-toggles');
-  if(!box)return;
-  box.innerHTML=accessibleCalDefs().map(c=>`<label class="cal-toggle" style="--cal-c:${calColor(c.id)}">
+function calToggleHtml(c){
+  return `<label class="cal-toggle" style="--cal-c:${calColor(c.id)}">
       <span class="cal-dot"></span>
       <span class="flex1">${esc(c.label)}</span>
       <button type="button" class="cal-gear-btn" title="Réglages du calendrier" aria-label="Réglages ${esc(c.label)}"
         onclick="event.preventDefault();event.stopPropagation();openCalSettingsModal('${esc(c.id)}')">${ICO_CAL_GEAR}</button>
       <input type="checkbox" data-cal="${c.id}" ${S.visible[c.id]?'checked':''}>
-    </label>`).join('');
-  box.querySelectorAll('input[data-cal]').forEach(inp=>{
-    inp.onchange=()=>{
-      S.visible[inp.dataset.cal]=inp.checked;
-      saveVisible();
-      fetchEvents();
-    };
+    </label>`;
+}
+/* « Mon calendrier » reste toujours visible en tete ; tout le reste vit sous le
+   chevron « Autres calendriers ». */
+function renderToggles(){
+  const mien=document.getElementById('cal-toggles-mien');
+  const box=document.getElementById('cal-toggles');
+  if(mien)mien.innerHTML=calDefsMien().map(calToggleHtml).join('');
+  if(box)box.innerHTML=calDefsAutres().map(calToggleHtml).join('');
+  [mien,box].forEach(el=>{
+    if(!el)return;
+    el.querySelectorAll('input[data-cal]').forEach(inp=>{
+      inp.onchange=()=>{
+        S.visible[inp.dataset.cal]=inp.checked;
+        saveVisible();
+        fetchEvents();
+      };
+    });
   });
 }
 
@@ -997,7 +1054,11 @@ function personColor(userId){
   return hex;
 }
 function evSlotStyle(ev){
-  if(ev&&ev.calendrier==='perso'&&ev.meta&&ev.meta.user_id){
+  if(evEstBarre(ev)){
+    return 'background:var(--border);border-color:var(--muted);color:var(--muted);'+
+           'text-decoration:line-through;opacity:.8';
+  }
+  if(isCreneauHumain(ev)&&ev.meta&&ev.meta.user_id){
     return slotStyleFromColor(personColor(ev.meta.user_id));
   }
   return calSlotStyle(ev&&ev.calendrier);
@@ -1214,7 +1275,8 @@ function readCreateModalPayload(){
   }
   const note=(document.getElementById('cp-note')?.value||'').trim()||null;
   const prive=!!document.getElementById('cp-prive')?.checked;
-  return{titre,date_debut,date_fin,all_day,note,prive};
+  const participants=S.partSel?Array.from(S.partSel):[];
+  return{titre,date_debut,date_fin,all_day,note,prive,participants};
 }
 function persoRawId(ev){return String((ev&&ev.id)||'').replace(/^perso-/,'');}
 function openEditModal(ev){
@@ -1241,6 +1303,9 @@ function openPersoModal(opts){
     allDay=defs.all_day;debut=defs.debut;fin=defs.fin;titre='';note='';prive=false;
   }
   S.editingEv=ev;
+  S.partSel=new Set(((edit&&ev.meta&&ev.meta.participants)||[]).map(p=>Number(p.user_id)));
+  S.partOccupes=new Set();
+  const dejaReunion=!!(edit&&ev.meta&&ev.meta.reunion);
   const wrap=document.createElement('div');
   wrap.className='cal-create-modal-backdrop';
   wrap.innerHTML=`<div class="cal-create-modal" role="dialog" aria-labelledby="cp-title-h">
@@ -1257,10 +1322,14 @@ function openPersoModal(opts){
     </div>
     <div class="cal-create-field"><label for="cp-note">Note (optionnel)</label>
       <textarea id="cp-note" maxlength="4000" placeholder="Détails…">${esc(note)}</textarea></div>
+    <div class="cal-create-field"><label for="cp-part-filtre">Participants (optionnel)</label>
+      <input type="text" id="cp-part-filtre" placeholder="Rechercher une personne…" autocomplete="off">
+      <div class="cal-part-list" id="cp-part-list"><div class="cal-part-vide">Chargement…</div></div>
+      <div class="cal-part-dispo" id="cp-part-dispo"></div></div>
     <label class="cal-create-toggle"><input type="checkbox" id="cp-prive" ${prive?'checked':''}> Ne pas faire apparaître</label>
     <p class="cal-extern-hint" style="margin:-6px 0 14px">Par défaut, vos créneaux sont visibles par tous. Coché, les autres voient uniquement « Occupé » — sans titre ni note.</p>
     <div class="cal-create-modal-foot">
-      ${edit?'<button type="button" class="cal-btn" id="cp-delete" style="margin-right:auto;border-color:var(--danger);color:var(--danger)">Supprimer</button>':''}
+      ${edit?'<button type="button" class="cal-btn" id="cp-delete" style="margin-right:auto;border-color:var(--danger);color:var(--danger)">'+(dejaReunion?'Annuler la réunion':'Supprimer')+'</button>':''}
       <button type="button" class="cal-btn" id="cp-cancel">Annuler</button>
       <button type="button" class="cal-btn primary" id="cp-submit">${edit?'Enregistrer':'Créer'}</button>
     </div>
@@ -1271,13 +1340,115 @@ function openPersoModal(opts){
   wrap.querySelector('.cal-create-modal').onclick=e=>e.stopPropagation();
   wrap.querySelector('.cal-create-modal-close').onclick=closeCreateModal;
   wrap.querySelector('#cp-cancel').onclick=closeCreateModal;
-  document.getElementById('cp-allday').onchange=syncCreateModalAllDay;
+  document.getElementById('cp-allday').onchange=()=>{syncCreateModalAllDay();planifierDispos();};
   wrap.querySelector('#cp-submit').onclick=submitPersoModal;
+  ['cp-debut','cp-fin'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.addEventListener('change',planifierDispos);
+  });
+  const filtre=wrap.querySelector('#cp-part-filtre');
+  if(filtre)filtre.addEventListener('input',()=>renderParticipantsList(filtre.value));
+  chargerInvitables().then(()=>{renderParticipantsList('');planifierDispos();});
   const delBtn=wrap.querySelector('#cp-delete');
   if(delBtn)delBtn.onclick=()=>deletePersoEvent(ev,{fromModal:true});
   document.addEventListener('keydown',onCreateModalKey);
   setTimeout(()=>document.getElementById('cp-titre')?.focus(),0);
 }
+/* ---------------------------------------------------------------------
+   Invites d'une reunion : liste, disponibilites et reponses.
+   --------------------------------------------------------------------- */
+async function chargerInvitables(){
+  if(S.invitables)return S.invitables;
+  try{
+    const r=await api('/api/calendrier/invitables');
+    S.invitables=(r&&r.utilisateurs)||[];
+  }catch(e){
+    S.invitables=[];
+  }
+  return S.invitables;
+}
+function renderParticipantsList(filtre){
+  const box=document.getElementById('cp-part-list');
+  if(!box)return;
+  const q=String(filtre||'').trim().toLowerCase();
+  const gens=(S.invitables||[]).filter(u=>!q||String(u.nom||'').toLowerCase().includes(q));
+  if(!gens.length){
+    box.innerHTML='<div class="cal-part-vide">'+
+      (S.invitables&&S.invitables.length?'Aucun résultat.':'Personne à inviter.')+'</div>';
+    return;
+  }
+  box.innerHTML=gens.map(u=>{
+    const coche=S.partSel&&S.partSel.has(u.id);
+    const occupe=S.partOccupes&&S.partOccupes.has(u.id);
+    return '<label class="cal-part-row">'+
+      '<input type="checkbox" data-part="'+u.id+'"'+(coche?' checked':'')+'>'+
+      '<span class="cal-part-nom">'+esc(u.nom)+'</span>'+
+      (occupe?'<span class="cal-part-occupe">occupé</span>':'')+
+    '</label>';
+  }).join('');
+  box.querySelectorAll('input[data-part]').forEach(inp=>{
+    inp.onchange=()=>{
+      const id=Number(inp.dataset.part);
+      if(inp.checked)S.partSel.add(id);else S.partSel.delete(id);
+      planifierDispos();
+    };
+  });
+}
+function planifierDispos(){
+  if(S._partTimer)clearTimeout(S._partTimer);
+  S._partTimer=setTimeout(()=>{chargerDispos().catch(()=>{});},250);
+}
+/* Qui est deja pris sur le creneau choisi — la question qui evite trois
+   allers-retours par reunion. */
+async function chargerDispos(){
+  const info=document.getElementById('cp-part-dispo');
+  if(!info)return;
+  const ids=S.partSel?Array.from(S.partSel):[];
+  if(!ids.length){
+    S.partOccupes=new Set();
+    info.textContent='';
+    info.classList.remove('alerte');
+    renderParticipantsList(document.getElementById('cp-part-filtre')?.value||'');
+    return;
+  }
+  const p=readCreateModalPayload();
+  if(!p.date_debut||!p.date_fin)return;
+  try{
+    const q=new URLSearchParams({
+      date_debut:p.date_debut,
+      date_fin:p.date_fin,
+      utilisateurs:ids.join(',')
+    });
+    const r=await api('/api/calendrier/disponibilites?'+q);
+    S.partOccupes=new Set(((r&&r.occupes)||[]).map(Number));
+  }catch(e){
+    S.partOccupes=new Set();
+  }
+  const n=S.partOccupes.size;
+  info.textContent=n
+    ?(n+' participant'+(n>1?'s':'')+' déjà pris sur ce créneau.')
+    :(ids.length+' participant'+(ids.length>1?'s':'')+' — tout le monde est libre.');
+  info.classList.toggle('alerte',n>0);
+  renderParticipantsList(document.getElementById('cp-part-filtre')?.value||'');
+}
+async function repondreInvitation(ev,statut){
+  const raw=persoRawId(ev);
+  if(!raw)return;
+  try{
+    await api('/api/calendrier/events/perso/'+encodeURIComponent(raw)+'/reponse',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({statut})
+    });
+    closePop();
+    showToast('Réponse enregistrée : '+(STATUT_MOT[statut]||statut)+'.','success');
+    fetchEvents();
+    if(window.MySifaCalRappel&&MySifaCalRappel.rafraichir)MySifaCalRappel.rafraichir();
+  }catch(e){
+    showToast(e.message||'Réponse impossible','danger');
+  }
+}
+
 function openCreateModal(opts){openPersoModal(opts||{});}
 async function submitPersoModal(){
   const payload=readCreateModalPayload();
@@ -1312,10 +1483,12 @@ async function deletePersoEvent(ev,opts){
   const raw=persoRawId(ev);
   if(!raw)return;
   try{
-    await api('/api/calendrier/events/perso/'+encodeURIComponent(raw),{method:'DELETE'});
+    const r=await api('/api/calendrier/events/perso/'+encodeURIComponent(raw),{method:'DELETE'});
     if(opts&&opts.fromModal)closeCreateModal();
     closePop();
-    showToast('Événement supprimé.','success');
+    showToast(r&&r.annule
+      ?'Réunion annulée — les participants la voient barrée.'
+      :'Événement supprimé.','success');
     fetchEvents();
   }catch(err){
     showToast(err.message||'Suppression impossible','danger');
@@ -1372,6 +1545,31 @@ function bindCalendarBodyClicks(){
   });
 }
 
+/* Qui vient, qui a repondu quoi — lisible d'un coup d'oeil par tous les
+   invites, pas seulement par l'organisateur. */
+function blocReunionHtml(meta){
+  if(!meta||!meta.reunion)return '';
+  const parts=meta.participants||[];
+  const n={accepte:0,refuse:0,peut_etre:0,en_attente:0};
+  parts.forEach(p=>{if(n[p.statut]!=null)n[p.statut]++;});
+  const compte=[
+    n.accepte+' accepté'+(n.accepte>1?'s':''),
+    n.peut_etre+' peut-être',
+    n.refuse+' refusé'+(n.refuse>1?'s':''),
+    n.en_attente+' en attente'
+  ].join(' · ');
+  const liste=parts.length
+    ?'<ul class="cal-pop-parts">'+parts.map(p=>
+        '<li><span class="cal-part-pastille st-'+esc(p.statut||'en_attente')+'"></span>'+
+        esc(p.nom)+'</li>').join('')+'</ul>'
+    :'';
+  const org=meta.organisateur_nom
+    ?('Réunion · organisée par '+esc(meta.organisateur_nom))
+    :'Réunion';
+  return '<div class="cal-pop-reunion">'+
+    '<div class="cal-pop-reunion-head">'+org+'</div>'+
+    '<div class="cal-pop-reunion-compte">'+compte+'</div>'+liste+'</div>';
+}
 function closePop(){if(S.pop){S.pop.remove();S.pop=null;}}
 
 function openPop(ev,anchorEl){
@@ -1397,6 +1595,14 @@ function openPop(ev,anchorEl){
   if(ev.calendrier.startsWith('production_'))link='<a href="/planning">Ouvrir le planning production</a>';
   else if(ev.calendrier==='conges')link='<a href="/planning-rh">Ouvrir le planning RH</a>';
   else if(ev.calendrier==='expeditions')link='<a href="/expe">Ouvrir MyExpé</a>';
+  const reunionBlk=blocReunionHtml(meta);
+  const annuleBlk=meta.annule
+    ?'<div class="cal-pop-annule">Réunion annulée par l\'organisateur.</div>':'';
+  const repBlk=(meta.reunion&&meta.mon_statut&&meta.mon_statut!=='organisateur'&&!meta.annule)
+    ?'<div class="cal-pop-reponse">'+['accepte','peut_etre','refuse'].map(st=>
+        '<button type="button" class="cal-rep-btn'+(meta.mon_statut===st?' actif':'')+
+        '" data-rep="'+st+'">'+STATUT_LABEL[st]+'</button>').join('')+'</div>'
+    :'';
   const own=isOwnPerso(ev);
   const editBtn=own
     ?'<button type="button" class="cal-btn cal-pop-edit" style="width:100%;margin-top:10px">Modifier</button>':'';
@@ -1407,7 +1613,7 @@ function openPop(ev,anchorEl){
   pop.innerHTML='<button type="button" class="cal-pop-close" aria-label="Fermer">×</button>'+
     '<div class="cal-pop-title">'+esc(ev.titre)+'</div>'+
     '<div class="cal-pop-meta">'+esc(CAL_DEFS.find(c=>c.id===ev.calendrier)?.label||ev.calendrier)+'<br>'+per+stat+noteBlk+srcBlk+lieuBlk+busyBlk+'</div>'+
-    (link?'<div>'+link+'</div>':'')+editBtn+delBtn;
+    (link?'<div>'+link+'</div>':'')+annuleBlk+reunionBlk+repBlk+editBtn+delBtn;
   document.body.appendChild(pop);
   S.pop=pop;
   pop.querySelector('.cal-pop-close').onclick=closePop;
@@ -1415,6 +1621,9 @@ function openPop(ev,anchorEl){
   if(editEl)editEl.onclick=e=>{e.stopPropagation();openEditModal(ev);};
   const delEl=pop.querySelector('.cal-pop-del');
   if(delEl)delEl.onclick=e=>{e.stopPropagation();deletePersoEvent(ev);};
+  pop.querySelectorAll('.cal-rep-btn').forEach(b=>{
+    b.onclick=e=>{e.stopPropagation();repondreInvitation(ev,b.dataset.rep);};
+  });
   if(isMobileViewport()){
     pop.classList.add('cal-pop--sheet');
   }else{
@@ -2146,7 +2355,7 @@ function externModalBodyHtml(){
       '<button type="button" class="cal-mini-btn danger" id="cal-feed-rotate">Régénérer l\'adresse</button>'+
       '</div>';
     html+='<p class="cal-extern-hint">Fenêtre publiée : '+feed.fenetre.passe_jours+
-      ' jours passés / '+feed.fenetre.futur_jours+' jours à venir. Le calendrier Personnel ne publie que vos propres créneaux.'+
+      ' jours passés / '+feed.fenetre.futur_jours+' jours à venir. « Mon calendrier » ne publie que vos créneaux et vos réunions.'+
       '<br>Cette adresse vaut mot de passe — ne la partagez pas. Régénérer coupe immédiatement les abonnements existants.</p>';
   }else{
     html+='<p class="cal-extern-hint">Adresse indisponible pour le moment.</p>';
