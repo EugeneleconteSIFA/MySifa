@@ -22,6 +22,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime
@@ -77,18 +78,44 @@ def cle_index(racine: str, chemin: str) -> str:
 
 # ─── Parcours ─────────────────────────────────────────────────────────────────
 
-def parcourir(racine: str, age_min: int = 0, modifie_depuis: float = 0.0) -> list:
+_ANNEE_DOSSIER_RE = re.compile(r"^(\d{4})")
+
+
+def _annee_du_dossier(nom: str):
+    """Annee lue en tete d'un nom de sous-dossier (« 2022 retrouves… » -> 2022)."""
+    m = _ANNEE_DOSSIER_RE.match(str(nom or "").strip())
+    if not m:
+        return None
+    annee = int(m.group(1))
+    return annee if 1990 <= annee <= 2099 else None
+
+
+def parcourir(racine: str, age_min: int = 0, modifie_depuis: float = 0.0,
+              annee_min: int = 0) -> list:
     """PDF du dossier et de ses sous-dossiers (un par annee), tries.
 
     `age_min` ecarte les fichiers encore en cours d'ecriture par le copieur.
     `modifie_depuis` (timestamp) limite la passe quotidienne aux fichiers
     recents — le controle de doublon reste, lui, cote serveur.
+    `annee_min` ecarte les sous-dossiers d'annee anterieurs : on se fie au NOM
+    du dossier, pas a la date des fichiers, parce qu'une archive recopiee porte
+    la date de la copie et non celle de la production. Les PDF poses a la
+    racine sont toujours pris — ils sont, eux, de l'annee en cours.
     """
     trouves = []
     maintenant = time.time()
+    racine_abs = os.path.abspath(racine)
     for dossier, sous_dossiers, fichiers in os.walk(racine):
         # Les dossiers de service de l'ancien agent ne sont pas des sources.
         sous_dossiers[:] = [d for d in sous_dossiers if d not in ("_envoyes", "_echecs")]
+        if annee_min and os.path.abspath(dossier) == racine_abs:
+            gardes = []
+            for d in sous_dossiers:
+                annee = _annee_du_dossier(d)
+                if annee is not None and annee < annee_min:
+                    continue
+                gardes.append(d)
+            sous_dossiers[:] = gardes
         for nom in fichiers:
             if not nom.lower().endswith(".pdf"):
                 continue
@@ -139,7 +166,7 @@ def envoyer(chemin: str, racine: str, url: str, cle: str, timeout: int = 180) ->
 
 
 def importer(racine: str, url: str, cle: str, index_path: str, *,
-             age_min: int = 0, modifie_depuis: float = 0.0,
+             age_min: int = 0, modifie_depuis: float = 0.0, annee_min: int = 0,
              simulation: bool = False, pause: float = 0.0,
              max_fichiers: int = 0) -> dict:
     """Balaie `racine` et envoie ce qui n'est pas deja parti."""
@@ -147,7 +174,8 @@ def importer(racine: str, url: str, cle: str, index_path: str, *,
         raise SystemExit("Dossier introuvable : %s" % racine)
 
     index = charger_index(index_path)
-    fichiers = parcourir(racine, age_min=age_min, modifie_depuis=modifie_depuis)
+    fichiers = parcourir(racine, age_min=age_min, modifie_depuis=modifie_depuis,
+                         annee_min=annee_min)
     log("%d PDF vus dans %s" % (len(fichiers), racine))
 
     bilan = {"vus": len(fichiers), "envoyes": 0, "doublons": 0,

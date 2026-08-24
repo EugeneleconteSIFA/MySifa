@@ -42,6 +42,9 @@ def main() -> int:
     ap.add_argument("--age-min", type=int, default=120,
                     help="Ignorer les fichiers modifies il y a moins de N secondes "
                          "(un PDF encore en cours d'ecriture partirait tronque)")
+    ap.add_argument("--annee-min", type=int, default=2026,
+                    help="Ignorer les sous-dossiers d'annee anterieurs "
+                         "(0 pour tout reprendre)")
     args = ap.parse_args()
 
     if not args.simulation:
@@ -52,7 +55,7 @@ def main() -> int:
 
     bilan = importer(
         args.dossier, args.url, args.cle, args.index,
-        age_min=args.age_min, modifie_depuis=depuis,
+        age_min=args.age_min, modifie_depuis=depuis, annee_min=args.annee_min,
         simulation=args.simulation,
     )
     # Code de sortie non nul en cas d'echec : le planificateur Windows le

@@ -172,6 +172,14 @@
       '.pmem-split{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:14px}',
       '@media(max-width:820px){.pmem-split{grid-template-columns:1fr}}',
       '.pmem-frame{width:100%;height:460px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}',
+      '.pmem-drop{border:2px dashed var(--border);border-radius:12px;padding:22px 18px;',
+      'text-align:center;background:var(--bg);cursor:pointer;transition:border-color .15s,background .15s;',
+      'margin-bottom:14px}',
+      '.pmem-drop:hover,.pmem-drop.is-over{border-color:var(--accent);background:var(--accent-bg)}',
+      '.pmem-drop-t{font-size:13px;font-weight:800;color:var(--text)}',
+      '.pmem-drop-s{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5}',
+      '.pmem-prog{height:6px;border-radius:99px;background:var(--border);overflow:hidden;margin-top:12px}',
+      '.pmem-prog-b{height:100%;background:var(--accent);width:0;transition:width .2s}',
       '.pmem-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:2400;',
       'background:var(--card);border:1px solid var(--accent);color:var(--text);border-radius:10px;',
       'padding:11px 18px;font-size:13px;font-weight:600;box-shadow:0 8px 26px rgba(0,0,0,.28)}',
@@ -681,6 +689,89 @@
     });
   }
 
+  // ── Depot manuel de scans depuis le navigateur ─────────────────────
+  // L'import par script suppose une machine qui voit le partage reseau, un
+  // Python installe et une tache planifiee. Pour une reprise ponctuelle —
+  // « les OF de cette annee » — c'est trois obstacles pour rien : on ouvre le
+  // dossier, on selectionne, on depose. Le serveur fait exactement le meme
+  // travail que pour un depot par script, deduplication comprise : reposer
+  // deux fois les memes fichiers ne cree pas de doublon.
+  function zoneDepot(onFini) {
+    ensureStyle();
+    var input = el('input', {
+      type: 'file', multiple: 'multiple', accept: 'application/pdf,.pdf',
+      style: 'display:none',
+    });
+    var titre = el('div', { className: 'pmem-drop-t', text: 'Deposer des OF scannes' });
+    var sous = el('div', {
+      className: 'pmem-drop-s',
+      text: 'Glissez vos PDF ici, ou cliquez pour les choisir. '
+          + 'Le numero d\'OF et la reference produit sont lus dans le nom du fichier.',
+    });
+    var barre = el('div', { className: 'pmem-prog-b' });
+    var prog = el('div', { className: 'pmem-prog', style: 'display:none' }, [barre]);
+    var zone = el('div', { className: 'pmem-drop' }, [titre, sous, prog, input]);
+
+    var enCours = false;
+
+    async function envoyer(fichiers) {
+      var liste = Array.prototype.slice.call(fichiers || []).filter(function (f) {
+        return /\.pdf$/i.test(f.name);
+      });
+      if (!liste.length) { toast('Aucun PDF dans la selection.', 'danger'); return; }
+      if (enCours) return;
+      enCours = true;
+      prog.style.display = 'block';
+
+      var ok = 0, doublons = 0, rattaches = 0, echecs = 0;
+      for (var i = 0; i < liste.length; i++) {
+        var f = liste[i];
+        titre.textContent = 'Envoi ' + (i + 1) + ' / ' + liste.length + '…';
+        sous.textContent = f.name;
+        barre.style.width = Math.round((i / liste.length) * 100) + '%';
+        var fd = new FormData();
+        fd.append('file', f, f.name);
+        try {
+          var r = await api('/api/produits/documents', { method: 'POST', body: fd });
+          if (r && r.doublon) doublons += 1;
+          else { ok += 1; if (r && r.statut === 'rattache') rattaches += 1; }
+        } catch (e) {
+          echecs += 1;
+        }
+      }
+      barre.style.width = '100%';
+
+      var msg = ok + ' scan(s) enregistre(s), dont ' + rattaches + ' rattache(s) a un produit';
+      if (doublons) msg += ' · ' + doublons + ' deja connu(s)';
+      if (echecs) msg += ' · ' + echecs + ' en echec';
+      toast(msg + '.', echecs ? 'danger' : 'info');
+
+      enCours = false;
+      prog.style.display = 'none';
+      titre.textContent = 'Deposer des OF scannes';
+      sous.textContent = 'Glissez vos PDF ici, ou cliquez pour les choisir.';
+      input.value = '';
+      if (onFini) await onFini();
+    }
+
+    zone.addEventListener('click', function () { if (!enCours) input.click(); });
+    input.addEventListener('change', function (e) { envoyer(e.target.files); });
+    ['dragenter', 'dragover'].forEach(function (ev) {
+      zone.addEventListener(ev, function (e) {
+        e.preventDefault(); e.stopPropagation(); zone.classList.add('is-over');
+      });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+      zone.addEventListener(ev, function (e) {
+        e.preventDefault(); e.stopPropagation(); zone.classList.remove('is-over');
+      });
+    });
+    zone.addEventListener('drop', function (e) {
+      if (e.dataTransfer && e.dataTransfer.files) envoyer(e.dataTransfer.files);
+    });
+    return zone;
+  }
+
   // ── File de rattachement des scans ─────────────────────────────────
   async function openRattachement() {
     state = { tab: 'rattachement', data: null, mode: 'rattachement', noDossier: null, docs: null, sel: null };
@@ -702,9 +793,10 @@
     var docs = state.docs || [];
     if (!docs.length) {
       mount(panel(
-        header('Scans a rattacher', 'OF termines dont le numero n\'a pas pu etre lu', []),
+        header('Scans d\'OF', 'Deposer des scans, et traiter ceux qui n\'ont pas pu etre rattaches', []),
         el('div', { className: 'pmem-tabs' }),
-        [el('div', { className: 'pmem-empty', text: 'Aucun scan en attente. Tout est rattache.' })]
+        [zoneDepot(chargerDocs),
+         el('div', { className: 'pmem-empty', text: 'Aucun scan en attente de rattachement.' })]
       ));
       return;
     }
@@ -769,10 +861,10 @@
     ]);
 
     mount(panel(
-      header('Scans a rattacher', 'OF termines dont le numero n\'a pas pu etre lu automatiquement',
-             [state.total + ' en attente']),
+      header('Scans d\'OF', 'Deposer des scans, et traiter ceux qui n\'ont pas pu etre rattaches',
+             [state.total + ' en attente de rattachement']),
       el('div', { className: 'pmem-tabs' }),
-      [el('div', { className: 'pmem-split' }, [liste, droite])]
+      [zoneDepot(chargerDocs), el('div', { className: 'pmem-split' }, [liste, droite])]
     ));
   }
 
