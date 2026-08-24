@@ -17,7 +17,7 @@
   var LS_VUS = 'mysifa_cal_rappels_vus';
   var SNOOZE_MIN = 5;
 
-  var etat = { invitations: 0, timer: null, enCours: false, montres: {} };
+  var etat = { invitations: 0, timer: null, enCours: false, montres: {}, dernier: null };
 
   function maintenant() { return Date.now(); }
 
@@ -250,7 +250,15 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) {
         if (!j) return;
-        (j.rappels || []).forEach(afficher);
+        etat.dernier = j;
+        // C'est ici, avec l'horloge du poste, qu'on decide ce qui est du :
+        // le serveur ne fait que lister les creneaux des prochaines 48 h.
+        (j.evenements || j.rappels || []).forEach(function (e) {
+          var mins = minutesAvant(e.debut);
+          if (mins === null) return;
+          var seuil = Number(e.rappel || 10);
+          if (seuil > 0 && mins <= seuil && mins >= -2) afficher(e);
+        });
         diffuserInvitations(Number(j.invitations || 0));
       })
       .catch(function () { /* une pastille ne casse jamais une page */ })
@@ -294,6 +302,24 @@
   global.MySifaCalRappel = {
     rafraichir: verifier,
     invitations: function () { return etat.invitations; },
+    /* Diagnostic : ce que le serveur a renvoye et ce que le module en a fait.
+       MySifaCalRappel.diagnostic() dans la console. */
+    diagnostic: function () {
+      var evs = (etat.dernier && (etat.dernier.evenements || etat.dernier.rappels)) || [];
+      return {
+        maintenant: new Date().toString(),
+        invitations: etat.invitations,
+        recus: evs.length,
+        details: evs.map(function (e) {
+          return {
+            titre: e.titre, debut: e.debut, rappel: e.rappel,
+            minutes: minutesAvant(e.debut),
+            masque: estMasque(e.id)
+          };
+        }),
+        affiches: Object.keys(etat.montres)
+      };
+    },
     /* Pour voir la fenetre sans attendre le prochain rendez-vous :
        MySifaCalRappel.demo() dans la console. */
     demo: function () {

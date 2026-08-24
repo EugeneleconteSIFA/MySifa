@@ -378,8 +378,8 @@ def email_mysifa_layout_light(
         cta_block = f"""
     <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:28px auto 8px">
       <tr>
-        <td align="center" bgcolor="#0891b2" style="background:#0891b2;border-radius:10px">
-          <a href="{_esc(cta_href)}" style="display:inline-block;padding:14px 32px;color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:.2px;font-family:'Segoe UI',Arial,sans-serif">{_esc(cta_label)}</a>
+        <td align="center" bgcolor="#0891b2" style="background:#0891b2;border-radius:10px;padding:15px 34px;mso-padding-alt:15px 34px">
+          <a href="{_esc(cta_href)}" style="color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;letter-spacing:.2px;font-family:'Segoe UI',Arial,sans-serif;line-height:1">{_esc(cta_label)}</a>
         </td>
       </tr>
     </table>
@@ -1288,9 +1288,10 @@ def _bouton_reponse(href: str, libelle: str, fond: str, bord: str, texte: str) -
         '<td align="center" style="padding:0 4px">'
         f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">'
         f'<tr><td align="center" bgcolor="{fond}" '
-        f'style="background:{fond};border:1px solid {bord};border-radius:9px">'
-        f'<a href="{_esc(href)}" style="display:block;padding:12px 6px;color:{texte};'
-        "font-size:13px;font-weight:700;text-decoration:none;"
+        f'style="background:{fond};border:1px solid {bord};border-radius:9px;'
+        f'padding:13px 6px;mso-padding-alt:13px 6px">'
+        f'<a href="{_esc(href)}" style="color:{texte};'
+        "font-size:13px;font-weight:700;text-decoration:none;line-height:1;"
         f'font-family:\'Segoe UI\',Arial,sans-serif">{_esc(libelle)}</a>'
         "</td></tr></table></td>"
     )
