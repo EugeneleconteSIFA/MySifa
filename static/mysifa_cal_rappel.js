@@ -63,6 +63,11 @@
       'color:var(--accent,#22d3ee)}',
       '.mcr-titre{font-size:13px;font-weight:700;color:var(--text,#f1f5f9);margin-top:3px;line-height:1.35}',
       '.mcr-sous{font-size:11px;color:var(--muted,#94a3b8);margin-top:3px}',
+      '.mcr-lieu{font-size:11px;color:var(--text2,#cbd5e1);margin-top:6px}',
+      '.mcr-lieu a{color:var(--accent,#22d3ee)}',
+      '.mcr-rep{display:flex;gap:6px;margin-top:10px}',
+      '.mcr-rep .mcr-btn{font-size:10px;padding:6px 4px}',
+      '.mcr-rep .mcr-btn.actif{border-color:var(--accent,#22d3ee);color:var(--accent,#22d3ee)}',
       '.mcr-actions{display:flex;gap:7px;margin-top:11px}',
       '.mcr-btn{flex:1;padding:7px 6px;border:1px solid var(--border,#1e293b);border-radius:8px;',
       'background:var(--bg,#0a0e17);color:var(--text2,#cbd5e1);font-family:inherit;font-size:11px;',
@@ -98,6 +103,22 @@
     return Math.round((d.getTime() - maintenant()) / 60000);
   }
 
+  var REPONSES = [
+    { cle: 'accepte', libelle: 'Oui' },
+    { cle: 'peut_etre', libelle: 'Peut-être' },
+    { cle: 'refuse', libelle: 'Non' }
+  ];
+
+  function repondre(id, statut) {
+    var brut = String(id || '').replace(/^perso-/, '');
+    return fetch('/api/calendrier/events/perso/' + encodeURIComponent(brut) + '/reponse', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ statut: statut })
+    });
+  }
+
   function afficher(r) {
     if (etat.montres[r.id] || estMasque(r.id)) return;
     var mins = minutesAvant(r.debut);
@@ -108,12 +129,28 @@
       ? (r.organisateur ? 'Réunion que vous organisez · ' + heure
                         : 'Réunion de ' + esc(r.organisateur_nom || '') + ' · ' + heure)
       : ('Créneau ' + heure);
+    var lieu = '';
+    if (r.lieu) lieu += '<div class="mcr-lieu">' + esc(r.lieu) + '</div>';
+    if (r.visio) {
+      lieu += '<div class="mcr-lieu"><a href="' + esc(r.visio) +
+        '" target="_blank" rel="noopener">Rejoindre la visioconférence</a></div>';
+    }
+    // Un invité qui n'a pas encore tranché peut le faire ici : c'est le moment
+    // où il y pense, pas quand il rouvrira le calendrier.
+    var rep = '';
+    if (r.mon_statut) {
+      rep = '<div class="mcr-rep">' + REPONSES.map(function (x) {
+        return '<button type="button" class="mcr-btn' +
+          (r.mon_statut === x.cle ? ' actif' : '') +
+          '" data-rep="' + x.cle + '">' + x.libelle + '</button>';
+      }).join('') + '<button type="button" class="mcr-btn" data-mcr="autre">Autre horaire</button></div>';
+    }
     var card = document.createElement('div');
     card.className = 'mcr-card';
     card.innerHTML =
       '<div class="mcr-quand">' + esc(quand) + '</div>' +
       '<div class="mcr-titre">' + esc(r.titre) + '</div>' +
-      '<div class="mcr-sous">' + sous + '</div>' +
+      '<div class="mcr-sous">' + sous + '</div>' + lieu + rep +
       '<div class="mcr-actions">' +
         '<button type="button" class="mcr-btn" data-mcr="snooze">Dans 5 min</button>' +
         '<button type="button" class="mcr-btn" data-mcr="ok">J\'ai vu</button>' +
@@ -124,6 +161,17 @@
       delete etat.montres[r.id];
       if (card.parentNode) card.parentNode.removeChild(card);
     }
+    card.querySelectorAll('[data-rep]').forEach(function (b) {
+      b.onclick = function () {
+        var statut = b.getAttribute('data-rep');
+        repondre(r.id, statut).then(function () {
+          if (statut === 'refuse') { masquer(r.id, 720); fermer(); return; }
+          card.querySelectorAll('[data-rep]').forEach(function (x) {
+            x.classList.toggle('actif', x.getAttribute('data-rep') === statut);
+          });
+        }).catch(function () { /* silencieux : le calendrier reste la source */ });
+      };
+    });
     card.querySelectorAll('[data-mcr]').forEach(function (b) {
       b.onclick = function () {
         var quoi = b.getAttribute('data-mcr');
@@ -133,6 +181,11 @@
         masquer(r.id, 720);
         fermer();
         if (quoi === 'ouvrir') global.location.href = '/calendrier';
+        if (quoi === 'autre') {
+          global.location.href = '/calendrier?ev=' + encodeURIComponent(r.id) +
+            '&jour=' + encodeURIComponent(String(r.debut || '').slice(0, 10)) +
+            '&action=proposer';
+        }
       };
     });
     racine().appendChild(card);

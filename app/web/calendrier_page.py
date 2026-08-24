@@ -42,8 +42,8 @@ CALENDRIER_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
-:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,0.12);--ok:#34d399;--warn:#fbbf24;--danger:#f87171;}
-body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,0.10);--ok:#059669;--warn:#d97706;--danger:#dc2626;}
+:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,0.12);--ok:#34d399;--warn:#fbbf24;--danger:#f87171;--sur-accent:#0a0e17;}
+body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,0.10);--ok:#059669;--warn:#d97706;--danger:#dc2626;--sur-accent:#ffffff;}
 *{box-sizing:border-box}
 body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
 .layout{display:flex;min-height:100vh}
@@ -76,19 +76,44 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .cal-rep-btn{flex:1;padding:7px 4px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;transition:border-color .15s,color .15s}
 .cal-rep-btn:hover{border-color:var(--accent);color:var(--accent)}
 .cal-rep-btn.actif{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.cal-prop{display:flex;gap:8px;align-items:flex-start;justify-content:space-between;
+  margin-top:8px;padding:8px 9px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
+.cal-prop-txt{font-size:11px;color:var(--text2);line-height:1.45}
+.cal-prop-msg{color:var(--muted);margin-top:3px}
+.cal-prop-actions{display:flex;gap:6px;flex-shrink:0}
+.cal-prop-actions .cal-rep-btn{padding:5px 8px;font-size:10px;flex:none}
 .cal-pop-annule{margin-top:10px;padding:7px 9px;border-radius:8px;background:rgba(248,113,113,.12);color:var(--danger);font-size:11px;font-weight:600}
-/* Selection des invites dans la modale de creation. */
-.cal-part-list{max-height:168px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg);margin-top:6px}
-.cal-part-row{display:flex;align-items:center;gap:8px;padding:7px 10px;font-size:12px;color:var(--text2);cursor:pointer;user-select:none}
-.cal-part-row:hover{background:var(--accent-bg)}
-.cal-part-row input{appearance:none;width:15px;height:15px;border:2px solid var(--border);border-radius:4px;background:var(--card);cursor:pointer;position:relative;flex-shrink:0}
-.cal-part-row input:checked{background:var(--accent);border-color:var(--accent)}
-.cal-part-row input:checked::after{content:'';position:absolute;left:4px;top:1px;width:3px;height:7px;border:solid #0a0e17;border-width:0 2px 2px 0;transform:rotate(45deg)}
+/* Invites : la recherche seule, les personnes retenues en pastilles. */
+.cal-part-box{position:relative}
+.cal-part-res{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:20;max-height:184px;overflow-y:auto;
+  border:1px solid var(--border);border-radius:8px;background:var(--card);box-shadow:0 12px 28px rgba(0,0,0,.28)}
+.cal-part-res[hidden]{display:none}
+.cal-part-row{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;font-size:12px;color:var(--text2);
+  background:transparent;border:none;font-family:inherit;text-align:left;cursor:pointer}
+.cal-part-row:hover,.cal-part-row.actif{background:var(--accent-bg);color:var(--accent)}
 .cal-part-row .cal-part-nom{flex:1}
 .cal-part-occupe{font-size:10px;font-weight:700;color:var(--warn);text-transform:uppercase;letter-spacing:.6px}
+.cal-part-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.cal-part-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 6px 4px 10px;border-radius:999px;
+  border:1px solid var(--border);background:var(--bg);font-size:11px;color:var(--text2)}
+.cal-part-chip.occupe{border-color:var(--warn);color:var(--warn)}
+.cal-part-chip button{width:16px;height:16px;display:flex;align-items:center;justify-content:center;padding:0;
+  border:none;border-radius:50%;background:transparent;color:inherit;font-size:13px;line-height:1;cursor:pointer}
+.cal-part-chip button:hover{background:var(--border)}
 .cal-part-dispo{font-size:11px;color:var(--muted);margin-top:6px;min-height:15px}
 .cal-part-dispo.alerte{color:var(--warn)}
 .cal-part-vide{padding:10px;font-size:11px;color:var(--muted)}
+/* Repetition. */
+.cal-recur-box{margin:-4px 0 14px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
+.cal-recur-box[hidden]{display:none}
+.cal-recur-row{display:flex;gap:10px;flex-wrap:wrap}
+.cal-recur-row .cal-create-field{flex:1;min-width:150px;margin:0}
+.cal-recur-hint{font-size:11px;color:var(--muted);margin:8px 0 0}
+.cal-serie-choix{display:flex;gap:8px;margin:-4px 0 14px}
+.cal-serie-choix label{flex:1;display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid var(--border);
+  border-radius:8px;background:var(--bg);font-size:12px;color:var(--text2);cursor:pointer}
+.cal-serie-choix label:hover{border-color:var(--accent)}
+.cal-serie-choix input{accent-color:var(--accent);flex-shrink:0}
 .cal-cals-section.collapsed #cal-toggles{display:none}
 .cal-toggle{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--text2);user-select:none}
 .cal-toggle:hover{background:var(--accent-bg)}
@@ -132,7 +157,23 @@ body.sb-open .sidebar-overlay{display:block}
 .cal-nav{display:flex;align-items:center;gap:8px}
 .cal-btn{padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s,background .15s}
 .cal-btn:hover{border-color:var(--accent);color:var(--accent)}
-.cal-btn.primary{background:var(--accent);color:#0a0e17;border-color:var(--accent)}
+.cal-search-wrap{position:relative;min-width:190px}
+.cal-search-wrap input{width:100%;padding:8px 12px;border-radius:10px;border:1px solid var(--border);
+  background:var(--bg);color:var(--text);font-size:12px;font-family:inherit}
+.cal-search-wrap input:focus{border-color:var(--accent);outline:none}
+.cal-search-res{position:absolute;top:calc(100% + 5px);left:0;right:0;z-index:60;max-height:300px;
+  overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;
+  box-shadow:0 14px 34px rgba(0,0,0,.3)}
+.cal-search-res[hidden]{display:none}
+.cal-search-row{display:block;width:100%;text-align:left;padding:9px 11px;border:none;background:transparent;
+  color:var(--text2);font-family:inherit;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border)}
+.cal-search-row:last-child{border-bottom:none}
+.cal-search-row:hover{background:var(--accent-bg);color:var(--accent)}
+.cal-search-row .cal-search-quand{display:block;font-size:10px;color:var(--muted);margin-top:2px}
+.cal-search-row.barre .cal-search-titre{text-decoration:line-through;opacity:.7}
+.cal-search-vide{padding:11px;font-size:11px;color:var(--muted)}
+@media print{.cal-search-wrap{display:none}}
+.cal-btn.primary{background:var(--accent);color:var(--sur-accent);border-color:var(--accent)}
 .cal-title{font-size:16px;font-weight:800;min-width:180px;text-align:center;color:var(--text)}
 .cal-view-tabs{display:flex;gap:6px;margin-left:auto}
 .cal-body{flex:1;overflow:auto;padding:16px 20px 24px;position:relative}
@@ -272,11 +313,11 @@ body.light .cal-allday-row{background:#f8fafc}
 .cal-create-modal h2{font-size:15px;font-weight:800;margin:0 0 14px;color:var(--text)}
 .cal-create-field{margin-bottom:12px}
 .cal-create-field label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
-.cal-create-field input[type=text],.cal-create-field input[type=date],.cal-create-field input[type=datetime-local],.cal-create-field textarea{
+.cal-create-field input[type=text],.cal-create-field input[type=date],.cal-create-field input[type=datetime-local],.cal-create-field select,.cal-create-field textarea{
   width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;
   padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;transition:border-color .15s;
 }
-.cal-create-field input:focus,.cal-create-field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12);outline:none}
+.cal-create-field input:focus,.cal-create-field select:focus,.cal-create-field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12);outline:none}
 .cal-create-field textarea{min-height:72px;resize:vertical}
 .cal-create-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .cal-create-toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer;user-select:none;margin-bottom:12px}
@@ -290,6 +331,10 @@ body.light .cal-allday-row{background:#f8fafc}
 .cal-create-modal-close:hover{color:var(--text)}
 .cal-day[data-day]{cursor:pointer}
 .cal-col-slots[data-day]{cursor:pointer}
+/* Trace de selection pendant qu'on tire un nouveau creneau sur la grille. */
+.cal-ghost{position:absolute;left:2px;right:2px;border-radius:6px;pointer-events:none;
+  background:var(--accent-bg);border:1px dashed var(--accent);color:var(--accent);
+  font-size:10px;font-weight:700;padding:3px 6px;overflow:hidden;z-index:3}
 .cal-pop-del{
   display:block;width:100%;margin-top:10px;padding:8px 12px;border-radius:8px;
   border:1px solid var(--danger);background:color-mix(in srgb, var(--danger) 12%, transparent);
@@ -492,6 +537,10 @@ body.cal-dragging{user-select:none}
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
         Calendriers externes
       </button>
+      <button type="button" class="cal-extern-btn" id="btn-cal-deleg" title="Qui peut écrire dans mon calendrier">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Délégations
+      </button>
     </div>
     <div id="cal-mini-root"></div>
     <div class="sidebar-bottom">
@@ -544,6 +593,11 @@ body.cal-dragging{user-select:none}
         <button type="button" class="cal-btn" data-view="day">Jour</button>
         <button type="button" class="cal-btn" data-view="agenda">Agenda</button>
       </div>
+      <div class="cal-search-wrap">
+        <input type="search" id="cal-search" placeholder="Rechercher un événement…"
+          autocomplete="off" aria-label="Rechercher un événement">
+        <div class="cal-search-res" id="cal-search-res" hidden></div>
+      </div>
       <div class="cal-shortcuts-wrap">
         <button type="button" class="cal-shortcuts-btn" aria-label="Raccourcis clavier" title="Raccourcis clavier">?</button>
         <div class="cal-shortcuts-tip" role="tooltip">
@@ -563,6 +617,7 @@ body.cal-dragging{user-select:none}
 <div id="cal-color-modal-root"></div>
 <div id="cal-create-modal-root"></div>
 <div id="cal-extern-modal-root"></div>
+<div id="cal-deleg-modal-root"></div>
 <script>
 const USER_ROLE=__USER_ROLE__;
 const CAL_DEFS=window.MySifaCalendar?MySifaCalendar.CAL_DEFS:[];
@@ -597,6 +652,18 @@ function evEstBarre(ev){
   return !!(m.annule||m.mon_statut==='refuse');
 }
 const STATUT_LABEL={accepte:'Accepter',peut_etre:'Peut-être',refuse:'Refuser'};
+const RAPPELS=[
+  {v:'',l:'Par défaut (10 min avant)'},
+  {v:'0',l:'Aucun rappel'},
+  {v:'5',l:'5 minutes avant'},
+  {v:'10',l:'10 minutes avant'},
+  {v:'15',l:'15 minutes avant'},
+  {v:'30',l:'30 minutes avant'},
+  {v:'60',l:'1 heure avant'},
+  {v:'120',l:'2 heures avant'},
+  {v:'1440',l:'La veille'},
+];
+const EMAIL_RE=/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/;
 const STATUT_MOT={accepte:'accepté',peut_etre:'peut-être',refuse:'refusé',en_attente:'en attente'};
 const ICO_CAL_GEAR='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
 const LS_VISIBLE='mysifa_cal_visible_v2';
@@ -612,7 +679,7 @@ const LS_VIEW='mysifa_cal_view';
 const VALID_VIEWS=['month','week','day','agenda'];
 const MINI_DOW=['L','M','M','J','V','S','D'];
 const MOBILE_BREAKPOINT=900;
-let S={view:'month',anchor:new Date(),events:[],dayWindows:{},feriesMap:{},loading:false,visible:{},pop:null,colorModal:null,createModal:null,externModal:null,miniCalY:null,miniCalM:null,_touchStartX:null,_touchStartY:null,subs:[],feed:null,drag:null,editingEv:null,_suppressClickUntil:0,_clickTimer:null,invitables:null,partSel:null,partOccupes:null,_partTimer:null};
+let S={view:'month',anchor:new Date(),events:[],dayWindows:{},feriesMap:{},loading:false,visible:{},pop:null,colorModal:null,createModal:null,externModal:null,miniCalY:null,miniCalM:null,_touchStartX:null,_touchStartY:null,subs:[],feed:null,drag:null,editingEv:null,lienDirect:null,_suppressClickUntil:0,_clickTimer:null,invitables:null,partSel:null,partNoms:null,partExt:null,partOccupes:null,_partTimer:null,delegations:null};
 let ME=null;
 
 function isMobileViewport(){return window.innerWidth<MOBILE_BREAKPOINT;}
@@ -1209,6 +1276,7 @@ async function fetchEvents(){
     }
     if(loading)loading.style.display='none';
     renderCalendar();
+    consommerLienDirect();
   }catch(e){
     if(e.message!=='auth')showToast(e.message||'Chargement impossible','danger');
     if(loading)loading.textContent='Erreur de chargement.';
@@ -1235,7 +1303,12 @@ function defaultPersoRange(opts){
   const start=new Date(day);
   start.setHours(h0,m,0,0);
   const end=new Date(start);
-  end.setHours(start.getHours()+1);
+  if(typeof opts.hourFin==='number'&&opts.hourFin>h){
+    // Creneau trace a la souris sur la grille : on respecte la hauteur tiree.
+    end.setHours(Math.floor(opts.hourFin),Math.round((opts.hourFin%1)*60),0,0);
+  }else{
+    end.setHours(start.getHours()+1);
+  }
   return{debut:toDatetimeLocalValue(start),fin:toDatetimeLocalValue(end),all_day:false};
 }
 function closeCreateModal(){
@@ -1276,7 +1349,20 @@ function readCreateModalPayload(){
   const note=(document.getElementById('cp-note')?.value||'').trim()||null;
   const prive=!!document.getElementById('cp-prive')?.checked;
   const participants=S.partSel?Array.from(S.partSel):[];
-  return{titre,date_debut,date_fin,all_day,note,prive,participants};
+  const invites_externes=S.partExt?Array.from(S.partExt):[];
+  const lieu=(document.getElementById('cp-lieu')?.value||'').trim()||null;
+  const visio=(document.getElementById('cp-visio')?.value||'').trim()||null;
+  const rappelBrut=document.getElementById('cp-rappel')?.value;
+  const rappel_minutes=(rappelBrut===''||rappelBrut==null)?null:parseInt(rappelBrut,10);
+  const auNomDe=document.getElementById('cp-au-nom-de')?.value;
+  const au_nom_de=auNomDe?parseInt(auNomDe,10):null;
+  const recurOn=!!document.getElementById('cp-recur')?.checked;
+  const recurrence=recurOn?(document.getElementById('cp-recur-regle')?.value||'hebdo'):null;
+  const recurrence_fin=recurOn?(document.getElementById('cp-recur-fin')?.value||null):null;
+  const radioSerie=document.querySelector('input[name="cp-serie"]:checked');
+  const serie=!!(radioSerie&&radioSerie.value==='1');
+  return{titre,date_debut,date_fin,all_day,note,prive,participants,invites_externes,
+         lieu,visio,rappel_minutes,au_nom_de,recurrence,recurrence_fin,serie};
 }
 function persoRawId(ev){return String((ev&&ev.id)||'').replace(/^perso-/,'');}
 function openEditModal(ev){
@@ -1290,7 +1376,7 @@ function openPersoModal(opts){
   if(!root)return;
   const ev=(opts&&opts.ev)||null;
   const edit=!!ev;
-  let allDay,debut,fin,titre,note,prive;
+  let allDay,debut,fin,titre,note,prive,lieu,visio,rappel;
   if(edit){
     allDay=!!ev.all_day;
     debut=String(ev.debut||'').slice(0,16);
@@ -1298,19 +1384,36 @@ function openPersoModal(opts){
     titre=(ev.meta&&ev.meta.titre_brut)||ev.titre||'';
     note=(ev.meta&&ev.meta.note)||'';
     prive=!!(ev.meta&&ev.meta.prive);
+    lieu=(ev.meta&&ev.meta.lieu)||'';
+    visio=(ev.meta&&ev.meta.visio)||'';
+    rappel=(ev.meta&&ev.meta.rappel_minutes!=null)?String(ev.meta.rappel_minutes):'';
   }else{
     const defs=defaultPersoRange(opts||{});
     allDay=defs.all_day;debut=defs.debut;fin=defs.fin;titre='';note='';prive=false;
+    lieu='';visio='';rappel='';
   }
   S.editingEv=ev;
   S.partSel=new Set(((edit&&ev.meta&&ev.meta.participants)||[]).map(p=>Number(p.user_id)));
+  S.partNoms=new Map(((edit&&ev.meta&&ev.meta.participants)||[])
+    .map(p=>[Number(p.user_id),String(p.nom||'')]));
+  S.partExt=new Set(((edit&&ev.meta&&ev.meta.invites_externes)||[]).map(p=>String(p.email||'')));
   S.partOccupes=new Set();
   const dejaReunion=!!(edit&&ev.meta&&ev.meta.reunion);
+  const serieId=(edit&&ev.meta&&ev.meta.serie_id)||'';
+  // Trois mois de répétition par défaut : assez pour une réunion hebdo, assez
+  // court pour ne pas remplir le calendrier de quelqu'un jusqu'en 2028.
+  const finRecurDefaut=(function(){
+    const d=new Date((debut||'').slice(0,10)||Date.now());
+    d.setMonth(d.getMonth()+3);
+    return ymd(d);
+  })();
   const wrap=document.createElement('div');
   wrap.className='cal-create-modal-backdrop';
   wrap.innerHTML=`<div class="cal-create-modal" role="dialog" aria-labelledby="cp-title-h">
     <button type="button" class="cal-create-modal-close" aria-label="Fermer">×</button>
     <h2 id="cp-title-h">${edit?'Modifier l\'événement':'Nouvel événement personnel'}</h2>
+    ${edit?'':'<div class="cal-create-field" id="cp-nom-de-box" hidden><label for="cp-au-nom-de">Calendrier</label>'+
+      '<select id="cp-au-nom-de"><option value="">Mon calendrier</option></select></div>'}
     <div class="cal-create-field"><label for="cp-titre">Titre</label>
       <input type="text" id="cp-titre" required maxlength="500" placeholder="Titre de l'événement" value="${esc(titre)}"></div>
     <label class="cal-create-toggle"><input type="checkbox" id="cp-allday" ${allDay?'checked':''}> Journée entière</label>
@@ -1320,12 +1423,45 @@ function openPersoModal(opts){
       <div class="cal-create-field"><label for="cp-fin">Fin</label>
         <input id="cp-fin" type="${allDay?'date':'datetime-local'}" value="${allDay?esc(fin.slice(0,10)):esc(fin)}"></div>
     </div>
+    <div class="cal-create-row">
+      <div class="cal-create-field"><label for="cp-lieu">Lieu (optionnel)</label>
+        <input type="text" id="cp-lieu" maxlength="300" placeholder="Salle, adresse…" value="${esc(lieu)}"></div>
+      <div class="cal-create-field"><label for="cp-rappel">Rappel</label>
+        <select id="cp-rappel">
+          ${RAPPELS.map(r=>`<option value="${r.v}"${String(r.v)===String(rappel)?' selected':''}>${esc(r.l)}</option>`).join('')}
+        </select></div>
+    </div>
+    <div class="cal-create-field"><label for="cp-visio">Lien de visioconférence (optionnel)</label>
+      <input type="text" id="cp-visio" maxlength="500" placeholder="https://…" value="${esc(visio)}"></div>
     <div class="cal-create-field"><label for="cp-note">Note (optionnel)</label>
       <textarea id="cp-note" maxlength="4000" placeholder="Détails…">${esc(note)}</textarea></div>
-    <div class="cal-create-field"><label for="cp-part-filtre">Participants (optionnel)</label>
-      <input type="text" id="cp-part-filtre" placeholder="Rechercher une personne…" autocomplete="off">
-      <div class="cal-part-list" id="cp-part-list"><div class="cal-part-vide">Chargement…</div></div>
+    <div class="cal-create-field cal-part-box"><label for="cp-part-filtre">Participants (optionnel)</label>
+      <input type="text" id="cp-part-filtre" placeholder="Nom d'un collègue ou adresse e-mail…" autocomplete="off"
+        role="combobox" aria-expanded="false" aria-controls="cp-part-res">
+      <div class="cal-part-res" id="cp-part-res" role="listbox" hidden></div>
+      <div class="cal-part-chips" id="cp-part-chips"></div>
       <div class="cal-part-dispo" id="cp-part-dispo"></div></div>
+    ${edit
+      ? (serieId?`<div class="cal-serie-choix">
+          <label><input type="radio" name="cp-serie" value="0" checked> Cette occurrence</label>
+          <label><input type="radio" name="cp-serie" value="1"> Toute la série à venir</label>
+        </div>`:'')
+      : `<label class="cal-create-toggle"><input type="checkbox" id="cp-recur"> Rendre récurrent</label>
+    <div class="cal-recur-box" id="cp-recur-box" hidden>
+      <div class="cal-recur-row">
+        <div class="cal-create-field"><label for="cp-recur-regle">Répéter</label>
+          <select id="cp-recur-regle">
+            <option value="hebdo">Toutes les semaines</option>
+            <option value="bihebdo">Toutes les deux semaines</option>
+            <option value="mensuel">Tous les mois</option>
+            <option value="ouvres">Tous les jours ouvrés</option>
+            <option value="quotidien">Tous les jours</option>
+          </select></div>
+        <div class="cal-create-field"><label for="cp-recur-fin">Jusqu'au</label>
+          <input type="date" id="cp-recur-fin" value="${esc(finRecurDefaut)}"></div>
+      </div>
+      <p class="cal-recur-hint" id="cp-recur-hint"></p>
+    </div>`}
     <label class="cal-create-toggle"><input type="checkbox" id="cp-prive" ${prive?'checked':''}> Ne pas faire apparaître</label>
     <p class="cal-extern-hint" style="margin:-6px 0 14px">Par défaut, vos créneaux sont visibles par tous. Coché, les autres voient uniquement « Occupé » — sans titre ni note.</p>
     <div class="cal-create-modal-foot">
@@ -1337,18 +1473,39 @@ function openPersoModal(opts){
   root.appendChild(wrap);
   S.createModal=wrap;
   wrap.onclick=e=>{if(e.target===wrap)closeCreateModal();};
-  wrap.querySelector('.cal-create-modal').onclick=e=>e.stopPropagation();
+  wrap.querySelector('.cal-create-modal').onclick=e=>{
+    e.stopPropagation();
+    if(!e.target.closest('.cal-part-box'))masquerResultats();
+  };
   wrap.querySelector('.cal-create-modal-close').onclick=closeCreateModal;
   wrap.querySelector('#cp-cancel').onclick=closeCreateModal;
   document.getElementById('cp-allday').onchange=()=>{syncCreateModalAllDay();planifierDispos();};
   wrap.querySelector('#cp-submit').onclick=submitPersoModal;
   ['cp-debut','cp-fin'].forEach(id=>{
     const el=document.getElementById(id);
-    if(el)el.addEventListener('change',planifierDispos);
+    if(el)el.addEventListener('change',()=>{planifierDispos();majRecurrence();});
   });
   const filtre=wrap.querySelector('#cp-part-filtre');
-  if(filtre)filtre.addEventListener('input',()=>renderParticipantsList(filtre.value));
-  chargerInvitables().then(()=>{renderParticipantsList('');planifierDispos();});
+  if(filtre){
+    filtre.addEventListener('input',()=>renderResultats(filtre.value));
+    filtre.addEventListener('focus',()=>renderResultats(filtre.value));
+    filtre.addEventListener('keydown',e=>{
+      if(e.key==='Escape'){masquerResultats();e.stopPropagation();}
+      if(e.key==='Enter'){
+        const prem=wrap.querySelector('.cal-part-row');
+        if(prem){e.preventDefault();prem.click();}
+      }
+    });
+  }
+  const recur=wrap.querySelector('#cp-recur');
+  if(recur)recur.onchange=majRecurrence;
+  const regle=wrap.querySelector('#cp-recur-regle');
+  if(regle)regle.onchange=majRecurrence;
+  const recurFin=wrap.querySelector('#cp-recur-fin');
+  if(recurFin)recurFin.onchange=majRecurrence;
+  renderChips();
+  chargerInvitables().then(()=>{planifierDispos();});
+  if(!edit)chargerDelegations().then(majSelecteurCalendrier);
   const delBtn=wrap.querySelector('#cp-delete');
   if(delBtn)delBtn.onclick=()=>deletePersoEvent(ev,{fromModal:true});
   document.addEventListener('keydown',onCreateModalKey);
@@ -1357,6 +1514,28 @@ function openPersoModal(opts){
 /* ---------------------------------------------------------------------
    Invites d'une reunion : liste, disponibilites et reponses.
    --------------------------------------------------------------------- */
+/* « Au nom de » : n'apparait que si quelqu'un a delegue son calendrier — un
+   selecteur vide serait du bruit pour les 95 % de cas normaux. */
+async function chargerDelegations(){
+  if(S.delegations)return S.delegations;
+  try{
+    S.delegations=await api('/api/calendrier/delegations');
+  }catch(e){
+    S.delegations={mes_delegues:[],calendriers_delegues:[]};
+  }
+  return S.delegations;
+}
+function majSelecteurCalendrier(){
+  const box=document.getElementById('cp-nom-de-box');
+  const sel=document.getElementById('cp-au-nom-de');
+  if(!box||!sel)return;
+  const dels=(S.delegations&&S.delegations.calendriers_delegues)||[];
+  if(!dels.length){box.hidden=true;return;}
+  sel.innerHTML='<option value="">Mon calendrier</option>'+
+    dels.map(d=>'<option value="'+d.id+'">Calendrier de '+esc(d.nom)+'</option>').join('');
+  box.hidden=false;
+}
+
 async function chargerInvitables(){
   if(S.invitables)return S.invitables;
   try{
@@ -1367,33 +1546,136 @@ async function chargerInvitables(){
   }
   return S.invitables;
 }
-function renderParticipantsList(filtre){
-  const box=document.getElementById('cp-part-list');
+/* La liste complete des collegues n'a pas sa place dans le formulaire : on ne
+   propose que ce qui est cherche, et ce qui est retenu passe en pastilles. */
+function masquerResultats(){
+  const box=document.getElementById('cp-part-res');
+  const inp=document.getElementById('cp-part-filtre');
+  if(box){box.hidden=true;box.innerHTML='';}
+  if(inp)inp.setAttribute('aria-expanded','false');
+}
+function renderResultats(filtre){
+  const box=document.getElementById('cp-part-res');
+  const inp=document.getElementById('cp-part-filtre');
   if(!box)return;
-  const q=String(filtre||'').trim().toLowerCase();
-  const gens=(S.invitables||[]).filter(u=>!q||String(u.nom||'').toLowerCase().includes(q));
-  if(!gens.length){
-    box.innerHTML='<div class="cal-part-vide">'+
-      (S.invitables&&S.invitables.length?'Aucun résultat.':'Personne à inviter.')+'</div>';
-    return;
+  const q=String(filtre||'').trim();
+  const ql=q.toLowerCase();
+  if(!ql){masquerResultats();return;}
+  const gens=(S.invitables||[])
+    .filter(u=>!S.partSel.has(u.id)&&String(u.nom||'').toLowerCase().includes(ql))
+    .slice(0,8);
+  // Une adresse e-mail complete ouvre la porte aux invites sans compte MySifa
+  // (client, fournisseur) : ils repondront depuis le lien recu par mail.
+  const mailPropose=EMAIL_RE.test(ql)&&!S.partExt.has(ql)
+    &&!(S.invitables||[]).some(u=>String(u.email||'').toLowerCase()===ql);
+  let html='';
+  if(mailPropose){
+    html+='<button type="button" class="cal-part-row" role="option" data-mail="'+esc(ql)+'">'+
+      '<span class="cal-part-nom">Inviter '+esc(ql)+'</span>'+
+      '<span class="cal-part-occupe" style="color:var(--muted)">externe</span></button>';
   }
-  box.innerHTML=gens.map(u=>{
-    const coche=S.partSel&&S.partSel.has(u.id);
-    const occupe=S.partOccupes&&S.partOccupes.has(u.id);
-    return '<label class="cal-part-row">'+
-      '<input type="checkbox" data-part="'+u.id+'"'+(coche?' checked':'')+'>'+
-      '<span class="cal-part-nom">'+esc(u.nom)+'</span>'+
-      (occupe?'<span class="cal-part-occupe">occupé</span>':'')+
-    '</label>';
-  }).join('');
-  box.querySelectorAll('input[data-part]').forEach(inp=>{
-    inp.onchange=()=>{
-      const id=Number(inp.dataset.part);
-      if(inp.checked)S.partSel.add(id);else S.partSel.delete(id);
+  if(gens.length){
+    html+=gens.map(u=>{
+      const occupe=S.partOccupes&&S.partOccupes.has(u.id);
+      return '<button type="button" class="cal-part-row" role="option" data-part="'+u.id+'">'+
+        '<span class="cal-part-nom">'+esc(u.nom)+'</span>'+
+        (occupe?'<span class="cal-part-occupe">occupé</span>':'')+
+      '</button>';
+    }).join('');
+  }
+  if(!html){
+    html='<div class="cal-part-vide">Aucun résultat. Tapez une adresse e-mail '+
+      'complète pour inviter quelqu\'un hors MySifa.</div>';
+  }
+  box.innerHTML=html;
+  const apres=()=>{
+    if(inp){inp.value='';inp.focus();}
+    masquerResultats();
+    renderChips();
+    planifierDispos();
+  };
+  box.querySelectorAll('[data-part]').forEach(btn=>{
+    btn.onclick=()=>{
+      const id=Number(btn.dataset.part);
+      const u=(S.invitables||[]).find(x=>x.id===id);
+      S.partSel.add(id);
+      if(u)S.partNoms.set(id,u.nom||'');
+      apres();
+    };
+  });
+  box.querySelectorAll('[data-mail]').forEach(btn=>{
+    btn.onclick=()=>{S.partExt.add(btn.dataset.mail);apres();};
+  });
+  box.hidden=false;
+  if(inp)inp.setAttribute('aria-expanded','true');
+}
+function renderChips(){
+  const box=document.getElementById('cp-part-chips');
+  if(!box)return;
+  const ids=S.partSel?Array.from(S.partSel):[];
+  const mails=S.partExt?Array.from(S.partExt):[];
+  const chip=(cle,nom,occupe,externe)=>
+    '<span class="cal-part-chip'+(occupe?' occupe':'')+'">'+esc(nom)+
+    (externe?'<span style="opacity:.7;font-size:10px">externe</span>':'')+
+    '<button type="button" data-retirer="'+esc(cle)+'" aria-label="Retirer '+esc(nom)+'">×</button></span>';
+  box.innerHTML=
+    ids.map(id=>chip(String(id),(S.partNoms&&S.partNoms.get(id))||'Utilisateur',
+                     S.partOccupes&&S.partOccupes.has(id),false)).join('')+
+    mails.map(m=>chip(m,m,false,true)).join('');
+  box.querySelectorAll('[data-retirer]').forEach(b=>{
+    b.onclick=()=>{
+      const cle=b.dataset.retirer;
+      if(S.partExt.has(cle))S.partExt.delete(cle);
+      else S.partSel.delete(Number(cle));
+      renderChips();
       planifierDispos();
     };
   });
 }
+/* Combien de créneaux la répétition va réellement créer — annoncé avant de
+   valider, pas découvert après coup dans le calendrier. */
+function majRecurrence(){
+  const box=document.getElementById('cp-recur-box');
+  const coche=document.getElementById('cp-recur');
+  if(!box||!coche)return;
+  box.hidden=!coche.checked;
+  const hint=document.getElementById('cp-recur-hint');
+  if(!hint)return;
+  if(!coche.checked){hint.textContent='';return;}
+  const p=readCreateModalPayload();
+  const n=compterOccurrences(p.date_debut,p.recurrence,p.recurrence_fin);
+  hint.textContent=n>0
+    ?(n+' créneau'+(n>1?'x':'')+' seront créés. Chacun peut ensuite être déplacé ou annulé seul.')
+    :'Choisissez une date de fin postérieure au créneau.';
+}
+/* Meme regle que le serveur (app/services/cal_recurrence.py) : le mensuel se
+   calcule depuis le premier creneau, sinon un 31 janvier ramene au 28 fevrier
+   resterait bloque au 28 les mois suivants. */
+function ajouterMoisDepuis(base,n){
+  const d=new Date(base.getFullYear(),base.getMonth()+n,1);
+  const dernier=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+  d.setDate(Math.min(base.getDate(),dernier));
+  return d;
+}
+function compterOccurrences(debut,regle,fin){
+  if(!debut||!regle||!fin)return 0;
+  const d0=new Date(String(debut).slice(0,10));
+  const dF=new Date(String(fin).slice(0,10));
+  if(isNaN(d0)||isNaN(dF)||dF<d0)return 0;
+  let n=0,rang=0;
+  let cur=new Date(d0);
+  while(cur<=dF&&n<260){
+    n++;rang++;
+    if(regle==='quotidien')cur.setDate(cur.getDate()+1);
+    else if(regle==='ouvres'){do{cur.setDate(cur.getDate()+1);}while(cur.getDay()===0||cur.getDay()===6);}
+    else if(regle==='hebdo')cur.setDate(cur.getDate()+7);
+    else if(regle==='bihebdo')cur.setDate(cur.getDate()+14);
+    else if(regle==='mensuel')cur=ajouterMoisDepuis(d0,rang);
+    else break;
+  }
+  return n;
+}
+
 function planifierDispos(){
   if(S._partTimer)clearTimeout(S._partTimer);
   S._partTimer=setTimeout(()=>{chargerDispos().catch(()=>{});},250);
@@ -1408,7 +1690,7 @@ async function chargerDispos(){
     S.partOccupes=new Set();
     info.textContent='';
     info.classList.remove('alerte');
-    renderParticipantsList(document.getElementById('cp-part-filtre')?.value||'');
+    renderChips();
     return;
   }
   const p=readCreateModalPayload();
@@ -1429,8 +1711,249 @@ async function chargerDispos(){
     ?(n+' participant'+(n>1?'s':'')+' déjà pris sur ce créneau.')
     :(ids.length+' participant'+(ids.length>1?'s':'')+' — tout le monde est libre.');
   info.classList.toggle('alerte',n>0);
-  renderParticipantsList(document.getElementById('cp-part-filtre')?.value||'');
+  renderChips();
 }
+/* Recherche : la barre du calendrier interroge le serveur, le clic amene la
+   periode sur la date trouvee. On cherche aussi dans le passe, avec les
+   creneaux a venir en tete. */
+let _rechTimer=null;
+function bindRecherche(){
+  const inp=document.getElementById('cal-search');
+  const box=document.getElementById('cal-search-res');
+  if(!inp||!box||inp.dataset.bound)return;
+  inp.dataset.bound='1';
+  inp.addEventListener('input',()=>{
+    clearTimeout(_rechTimer);
+    const q=inp.value.trim();
+    if(q.length<2){box.hidden=true;box.innerHTML='';return;}
+    _rechTimer=setTimeout(()=>lancerRecherche(q),260);
+  });
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){box.hidden=true;inp.blur();}
+  });
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('.cal-search-wrap')){box.hidden=true;}
+  });
+}
+async function lancerRecherche(q){
+  const box=document.getElementById('cal-search-res');
+  if(!box)return;
+  let res=[];
+  try{
+    const r=await api('/api/calendrier/recherche?q='+encodeURIComponent(q));
+    res=(r&&r.resultats)||[];
+  }catch(e){
+    res=[];
+  }
+  if(!res.length){
+    box.innerHTML='<div class="cal-search-vide">Aucun événement trouvé.</div>';
+  }else{
+    box.innerHTML=res.map(r=>{
+      const quand=r.all_day
+        ?new Date(String(r.debut).slice(0,10)).toLocaleDateString('fr-FR',
+            {weekday:'short',day:'2-digit',month:'short',year:'numeric'})+' · journée'
+        :fmtCreneauCourt(r.debut,r.fin);
+      return '<button type="button" class="cal-search-row'+(r.annule?' barre':'')+
+        '" data-jour="'+esc(String(r.debut).slice(0,10))+'">'+
+        '<span class="cal-search-titre">'+esc(r.titre)+'</span>'+
+        '<span class="cal-search-quand">'+esc(quand)+(r.lieu?' · '+esc(r.lieu):'')+'</span>'+
+      '</button>';
+    }).join('');
+    box.querySelectorAll('[data-jour]').forEach(b=>{
+      b.onclick=()=>{
+        box.hidden=true;
+        const d=parseDayStr(b.dataset.jour);
+        if(!d)return;
+        S.anchor=d;
+        fetchEvents();
+      };
+    });
+  }
+  box.hidden=false;
+}
+
+/* Delegation : je choisis qui peut poser un creneau dans mon calendrier. Le
+   delegue voit alors « Mon calendrier / Calendrier de X » a la creation. */
+function closeDelegModal(){
+  const root=document.getElementById('cal-deleg-modal-root');
+  if(root)root.innerHTML='';
+}
+async function openDelegationsModal(){
+  const root=document.getElementById('cal-deleg-modal-root');
+  if(!root)return;
+  S.delegations=null;
+  await Promise.all([chargerDelegations(),chargerInvitables()]);
+  const wrap=document.createElement('div');
+  wrap.className='cal-create-modal-backdrop';
+  root.innerHTML='';
+  root.appendChild(wrap);
+  function rendre(){
+    const mes=(S.delegations&&S.delegations.mes_delegues)||[];
+    const pour=(S.delegations&&S.delegations.calendriers_delegues)||[];
+    const dejaIds=new Set(mes.map(d=>d.id));
+    const options=(S.invitables||[]).filter(u=>!dejaIds.has(u.id));
+    wrap.innerHTML=`<div class="cal-create-modal" role="dialog" aria-labelledby="cdel-h">
+      <button type="button" class="cal-create-modal-close" aria-label="Fermer">×</button>
+      <h2 id="cdel-h">Délégations</h2>
+      <p class="cal-extern-hint" style="margin:-6px 0 16px">Une personne déléguée peut créer des créneaux dans votre calendrier. Elle ne voit pas vos créneaux privés.</p>
+      <div class="cal-create-field"><label>Qui peut écrire chez moi</label>
+        <div class="cal-part-chips">${mes.length
+          ?mes.map(d=>`<span class="cal-part-chip">${esc(d.nom)}<button type="button" data-retirer-deleg="${d.id}" aria-label="Retirer ${esc(d.nom)}">×</button></span>`).join('')
+          :'<span style="font-size:11px;color:var(--muted)">Personne pour l\'instant.</span>'}</div>
+      </div>
+      <div class="cal-create-row" style="align-items:flex-end">
+        <div class="cal-create-field" style="flex:1"><label for="cdel-sel">Ajouter</label>
+          <select id="cdel-sel">${options.map(u=>`<option value="${u.id}">${esc(u.nom)}</option>`).join('')}</select></div>
+        <div class="cal-create-field" style="margin-bottom:12px">
+          <button type="button" class="cal-btn primary" id="cdel-add"${options.length?'':' disabled'}>Ajouter</button></div>
+      </div>
+      ${pour.length?`<div class="cal-create-field"><label>Calendriers où je peux écrire</label>
+        <div class="cal-part-chips">${pour.map(d=>`<span class="cal-part-chip">${esc(d.nom)}</span>`).join('')}</div></div>`:''}
+      <div class="cal-create-modal-foot">
+        <button type="button" class="cal-btn" id="cdel-fermer">Fermer</button>
+      </div>
+    </div>`;
+    wrap.querySelector('.cal-create-modal').onclick=e=>e.stopPropagation();
+    wrap.querySelector('.cal-create-modal-close').onclick=closeDelegModal;
+    wrap.querySelector('#cdel-fermer').onclick=closeDelegModal;
+    const add=wrap.querySelector('#cdel-add');
+    if(add)add.onclick=async()=>{
+      const sel=wrap.querySelector('#cdel-sel');
+      if(!sel||!sel.value)return;
+      try{
+        await api('/api/calendrier/delegations',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({delegue_id:parseInt(sel.value,10)})
+        });
+        S.delegations=null;
+        await chargerDelegations();
+        rendre();
+        showToast('Délégation ajoutée.','success');
+      }catch(e){showToast(e.message||'Ajout impossible','danger');}
+    };
+    wrap.querySelectorAll('[data-retirer-deleg]').forEach(b=>{
+      b.onclick=async()=>{
+        try{
+          await api('/api/calendrier/delegations/'+encodeURIComponent(b.dataset.retirerDeleg),
+            {method:'DELETE'});
+          S.delegations=null;
+          await chargerDelegations();
+          rendre();
+        }catch(e){showToast(e.message||'Suppression impossible','danger');}
+      };
+    });
+  }
+  wrap.onclick=e=>{if(e.target===wrap)closeDelegModal();};
+  rendre();
+}
+
+/* Lien direct depuis la pop-up de rappel : /calendrier?ev=perso-12&jour=…
+   ouvre la periode sur le bon jour puis la fiche (ou la contre-proposition). */
+function lireLienDirect(){
+  try{
+    const q=new URLSearchParams(location.search);
+    const id=q.get('ev');
+    if(!id)return;
+    S.lienDirect={id:id,action:q.get('action')||''};
+    const jour=parseDayStr(q.get('jour')||'');
+    if(jour)S.anchor=jour;
+    history.replaceState(null,'',location.pathname);
+  }catch(e){}
+}
+function consommerLienDirect(){
+  const lien=S.lienDirect;
+  if(!lien)return;
+  S.lienDirect=null;
+  const ev=(S.events||[]).find(x=>x.id===lien.id);
+  if(!ev){showToast('Événement introuvable — il a peut-être été déplacé.','danger');return;}
+  if(lien.action==='proposer'&&ev.meta&&ev.meta.mon_statut&&ev.meta.mon_statut!=='organisateur'){
+    openPropositionModal(ev);
+    return;
+  }
+  const el=document.querySelector('[data-ev-id="'+cssEscape(ev.id)+'"]');
+  if(el)openPop(ev,el);
+}
+function cssEscape(v){
+  return String(v||'').replace(/["\\]/g,'\\$&');
+}
+
+function libelleRappel(m){
+  const n=Number(m);
+  if(n===0)return 'aucun';
+  if(n===1440)return 'la veille';
+  if(n>=60)return (n/60)+' h avant';
+  return n+' min avant';
+}
+/* Proposer un autre horaire plutot que refuser sec : l'organisateur recoit la
+   proposition sur la fiche de la reunion et deplace d'un clic. */
+function openPropositionModal(ev){
+  closePop();
+  const root=document.getElementById('cal-create-modal-root');
+  if(!root)return;
+  closeCreateModal();
+  const debut=String(ev.debut||'').slice(0,16);
+  const fin=String(ev.fin||'').slice(0,16);
+  const wrap=document.createElement('div');
+  wrap.className='cal-create-modal-backdrop';
+  wrap.innerHTML=`<div class="cal-create-modal" role="dialog" aria-labelledby="cprop-h">
+    <button type="button" class="cal-create-modal-close" aria-label="Fermer">×</button>
+    <h2 id="cprop-h">Proposer un autre horaire</h2>
+    <p class="cal-extern-hint" style="margin:-6px 0 14px">${esc(ev.titre||'')} — l'organisateur décide.</p>
+    <div class="cal-create-row">
+      <div class="cal-create-field"><label for="cprop-debut">Début</label>
+        <input id="cprop-debut" type="datetime-local" value="${esc(debut)}"></div>
+      <div class="cal-create-field"><label for="cprop-fin">Fin</label>
+        <input id="cprop-fin" type="datetime-local" value="${esc(fin)}"></div>
+    </div>
+    <div class="cal-create-field"><label for="cprop-msg">Message (optionnel)</label>
+      <textarea id="cprop-msg" maxlength="500" placeholder="Je suis en clientèle ce matin-là…"></textarea></div>
+    <div class="cal-create-modal-foot">
+      <button type="button" class="cal-btn" id="cprop-annuler">Annuler</button>
+      <button type="button" class="cal-btn primary" id="cprop-ok">Proposer</button>
+    </div>
+  </div>`;
+  root.appendChild(wrap);
+  S.createModal=wrap;
+  wrap.onclick=e=>{if(e.target===wrap)closeCreateModal();};
+  wrap.querySelector('.cal-create-modal').onclick=e=>e.stopPropagation();
+  wrap.querySelector('.cal-create-modal-close').onclick=closeCreateModal;
+  wrap.querySelector('#cprop-annuler').onclick=closeCreateModal;
+  wrap.querySelector('#cprop-ok').onclick=async()=>{
+    const d=document.getElementById('cprop-debut')?.value||'';
+    const f=document.getElementById('cprop-fin')?.value||'';
+    if(!d||!f||f<=d){showToast('Créneau invalide.','danger');return;}
+    try{
+      await api('/api/calendrier/events/perso/'+encodeURIComponent(persoRawId(ev))+'/proposition',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({date_debut:d,date_fin:f,
+          message:(document.getElementById('cprop-msg')?.value||'').trim()||null})
+      });
+      closeCreateModal();
+      showToast('Proposition envoyée à l\'organisateur.','success');
+      fetchEvents();
+    }catch(e){
+      showToast(e.message||'Proposition impossible','danger');
+    }
+  };
+  document.addEventListener('keydown',onCreateModalKey);
+}
+async function arbitrerProposition(ev,propId,accepter){
+  try{
+    const r=await api('/api/calendrier/events/perso/'+encodeURIComponent(persoRawId(ev))+
+      '/proposition/'+encodeURIComponent(propId)+'?accepter='+(accepter?'true':'false'),
+      {method:'POST'});
+    closePop();
+    showToast(r&&r.deplacee
+      ?'Réunion déplacée — chacun doit reconfirmer.'
+      :'Proposition écartée.','success');
+    fetchEvents();
+  }catch(e){
+    showToast(e.message||'Action impossible','danger');
+  }
+}
+
 async function repondreInvitation(ev,statut){
   const raw=persoRawId(ev);
   if(!raw)return;
@@ -1455,22 +1978,33 @@ async function submitPersoModal(){
   if(!payload.titre){showToast('Titre requis.','danger');return;}
   if(!payload.date_debut||!payload.date_fin){showToast('Dates invalides.','danger');return;}
   const ev=S.editingEv;
+  // Chaque endpoint ne reçoit que ses champs : la répétition ne se définit qu'à
+  // la création, le choix « toute la série » ne vaut qu'à la modification.
+  if(ev){delete payload.recurrence;delete payload.recurrence_fin;delete payload.au_nom_de;}
+  else{delete payload.serie;}
   try{
+    let r;
     if(ev){
-      await api('/api/calendrier/events/perso/'+encodeURIComponent(persoRawId(ev)),{
+      r=await api('/api/calendrier/events/perso/'+encodeURIComponent(persoRawId(ev)),{
         method:'PUT',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify(payload)
       });
     }else{
-      await api('/api/calendrier/events/perso',{
+      r=await api('/api/calendrier/events/perso',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify(payload)
       });
     }
     closeCreateModal();
-    showToast(ev?'Événement modifié.':'Événement créé.','success');
+    const nbOcc=Number((r&&r.meta&&r.meta.occurrences)||0);
+    showToast(
+      nbOcc>1
+        ?(ev?('Série mise à jour — '+nbOcc+' créneaux.')
+             :('Série créée — '+nbOcc+' créneaux.'))
+        :(ev?'Événement modifié.':'Événement créé.'),
+      'success');
     if(!S.visible.perso)S.visible.perso=true;
     saveVisible();
     fetchEvents();
@@ -1482,13 +2016,24 @@ async function deletePersoEvent(ev,opts){
   if(!isOwnPerso(ev))return;
   const raw=persoRawId(ev);
   if(!raw)return;
+  opts=opts||{};
+  // Depuis la modale, le choix « cette occurrence / toute la série » vaut aussi
+  // pour la suppression : c'est le même geste dans la tête de l'utilisateur.
+  let serie=!!opts.serie;
+  if(opts.fromModal){
+    const radio=document.querySelector('input[name=\"cp-serie\"]:checked');
+    serie=!!(radio&&radio.value==='1');
+  }
   try{
-    const r=await api('/api/calendrier/events/perso/'+encodeURIComponent(raw),{method:'DELETE'});
-    if(opts&&opts.fromModal)closeCreateModal();
+    const r=await api('/api/calendrier/events/perso/'+encodeURIComponent(raw)+(serie?'?serie=1':''),
+      {method:'DELETE'});
+    if(opts.fromModal)closeCreateModal();
     closePop();
+    const nb=Number((r&&r.occurrences)||1);
+    const suffixe=nb>1?(' — '+nb+' créneaux'):'';
     showToast(r&&r.annule
-      ?'Réunion annulée — les participants la voient barrée.'
-      :'Événement supprimé.','success');
+      ?('Réunion annulée — les participants la voient barrée'+suffixe+'.')
+      :('Événement supprimé'+suffixe+'.'),'success');
     fetchEvents();
   }catch(err){
     showToast(err.message||'Suppression impossible','danger');
@@ -1518,11 +2063,65 @@ function bindBodySwipe(){
     else if(dx>50)shiftAnchor(-1);
   },{passive:true});
 }
+/* Tirer sur une plage vide de la grille cree un creneau a la bonne heure et a
+   la bonne duree — le clic simple reste, il ouvre une heure par defaut. */
+function bindGridDragCreate(){
+  const body=document.getElementById('cal-body');
+  if(!body||body.dataset.dragCreateBound)return;
+  body.dataset.dragCreateBound='1';
+  body.addEventListener('pointerdown',e=>{
+    if(e.button!==0||e.pointerType==='touch')return;
+    if(e.target.closest('[data-ev-id],.cal-more,.cal-col-ferie-label'))return;
+    const slots=e.target.closest('.cal-col-slots[data-day]');
+    if(!slots)return;
+    const h0=parseFloat(slots.dataset.hStart);
+    const h1=parseFloat(slots.dataset.hEnd);
+    if(!(h1>h0))return;
+    const rect=slots.getBoundingClientRect();
+    const heureA=cy=>{
+      const ratio=Math.min(1,Math.max(0,(cy-rect.top)/rect.height));
+      return Math.round((h0+ratio*(h1-h0))*4)/4;
+    };
+    const depart=heureA(e.clientY);
+    const y0=e.clientY;
+    let ghost=null,bouge=false,plage=[depart,depart];
+    const libelle=h=>pad2(Math.floor(h))+':'+pad2(Math.round((h%1)*60));
+    function onMove(ev2){
+      if(!bouge&&Math.abs(ev2.clientY-y0)<6)return;
+      bouge=true;
+      const cur=heureA(ev2.clientY);
+      const a=Math.min(depart,cur),b=Math.max(depart,cur);
+      plage=[a,b];
+      if(!ghost){
+        ghost=document.createElement('div');
+        ghost.className='cal-ghost';
+        slots.appendChild(ghost);
+      }
+      ghost.style.top=(((a-h0)/(h1-h0))*rect.height)+'px';
+      ghost.style.height=Math.max(8,((b-a)/(h1-h0))*rect.height)+'px';
+      ghost.textContent=libelle(a)+' – '+libelle(b);
+    }
+    function onUp(){
+      document.removeEventListener('pointermove',onMove);
+      document.removeEventListener('pointerup',onUp);
+      if(ghost)ghost.remove();
+      if(!bouge)return;
+      S._suppressClickUntil=Date.now()+400;
+      let [a,b]=plage;
+      if(b-a<0.25)b=a+0.5;
+      openCreateModal({day:slots.dataset.day,hour:a,hourFin:b,allDay:false});
+    }
+    document.addEventListener('pointermove',onMove);
+    document.addEventListener('pointerup',onUp);
+  });
+}
+
 function bindCalendarBodyClicks(){
   const body=document.getElementById('cal-body');
   if(!body||body.dataset.createBound)return;
   body.dataset.createBound='1';
   bindBodySwipe();
+  bindGridDragCreate();
   body.addEventListener('click',e=>{
     if(dragJustEnded())return;
     if(e.target.closest('[data-ev-id],.cal-more'))return;
@@ -1549,7 +2148,7 @@ function bindCalendarBodyClicks(){
    invites, pas seulement par l'organisateur. */
 function blocReunionHtml(meta){
   if(!meta||!meta.reunion)return '';
-  const parts=meta.participants||[];
+  const parts=(meta.participants||[]).concat(meta.invites_externes||[]);
   const n={accepte:0,refuse:0,peut_etre:0,en_attente:0};
   parts.forEach(p=>{if(n[p.statut]!=null)n[p.statut]++;});
   const compte=[
@@ -1561,7 +2160,9 @@ function blocReunionHtml(meta){
   const liste=parts.length
     ?'<ul class="cal-pop-parts">'+parts.map(p=>
         '<li><span class="cal-part-pastille st-'+esc(p.statut||'en_attente')+'"></span>'+
-        esc(p.nom)+'</li>').join('')+'</ul>'
+        esc(p.nom||p.email||'')+
+        (p.externe?'<span style="font-size:10px;color:var(--muted)">externe</span>':'')+
+        '</li>').join('')+'</ul>'
     :'';
   const org=meta.organisateur_nom
     ?('Réunion · organisée par '+esc(meta.organisateur_nom))
@@ -1569,6 +2170,35 @@ function blocReunionHtml(meta){
   return '<div class="cal-pop-reunion">'+
     '<div class="cal-pop-reunion-head">'+org+'</div>'+
     '<div class="cal-pop-reunion-compte">'+compte+'</div>'+liste+'</div>';
+}
+/* Contre-propositions : l'organisateur arbitre depuis la fiche, les autres
+   voient simplement qu'un autre horaire est sur la table. */
+function blocPropositionsHtml(meta,own){
+  const props=meta.propositions||[];
+  if(!props.length)return '';
+  return '<div class="cal-pop-reunion">'+
+    '<div class="cal-pop-reunion-head">Autre horaire proposé</div>'+
+    props.map(p=>{
+      const quand=fmtCreneauCourt(p.debut,p.fin);
+      return '<div class="cal-prop">'+
+        '<div class="cal-prop-txt"><strong>'+esc(p.nom)+'</strong> — '+esc(quand)+
+        (p.message?'<div class="cal-prop-msg">'+esc(p.message)+'</div>':'')+'</div>'+
+        (own
+          ?'<div class="cal-prop-actions">'+
+             '<button type="button" class="cal-rep-btn" data-prop-ok="'+p.id+'">Déplacer</button>'+
+             '<button type="button" class="cal-rep-btn" data-prop-non="'+p.id+'">Écarter</button>'+
+           '</div>'
+          :'')+
+      '</div>';
+    }).join('')+'</div>';
+}
+function fmtCreneauCourt(debut,fin){
+  const d=new Date(String(debut||'').replace(' ','T'));
+  const f=new Date(String(fin||'').replace(' ','T'));
+  if(isNaN(d))return String(debut||'');
+  const jour=d.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'short'});
+  const h=x=>pad2(x.getHours())+':'+pad2(x.getMinutes());
+  return jour+' '+h(d)+(isNaN(f)?'':' – '+h(f));
 }
 function closePop(){if(S.pop){S.pop.remove();S.pop=null;}}
 
@@ -1589,41 +2219,73 @@ function openPop(ev,anchorEl){
     ?'<div style="margin-top:6px;font-size:11px;color:var(--muted)">Source : '+esc(meta.source)+'</div>':'';
   const lieuBlk=meta.lieu
     ?'<div style="margin-top:6px;font-size:11px;color:var(--muted)">Lieu : '+esc(meta.lieu)+'</div>':'';
+  const visioBlk=meta.visio
+    ?'<div style="margin-top:6px;font-size:11px"><a href="'+esc(meta.visio)+
+      '" target="_blank" rel="noopener">Rejoindre la visioconférence</a></div>':'';
+  const rappelBlk=(meta.rappel_minutes!=null&&meta.rappel_minutes!==10)
+    ?'<div style="margin-top:6px;font-size:11px;color:var(--muted)">Rappel : '+
+      (Number(meta.rappel_minutes)===0?'aucun':libelleRappel(meta.rappel_minutes))+'</div>':'';
+  const auteurBlk=meta.cree_par_nom
+    ?'<div style="margin-top:6px;font-size:11px;color:var(--muted)">Créé par '+
+      esc(meta.cree_par_nom)+'</div>':'';
   const busyBlk=isBusyPerso(ev)
     ?'<div style="margin-top:6px;font-size:11px;color:var(--muted)">Créneau masqué par son auteur.</div>':'';
   let link='';
   if(ev.calendrier.startsWith('production_'))link='<a href="/planning">Ouvrir le planning production</a>';
   else if(ev.calendrier==='conges')link='<a href="/planning-rh">Ouvrir le planning RH</a>';
   else if(ev.calendrier==='expeditions')link='<a href="/expe">Ouvrir MyExpé</a>';
+  const recurBlk=meta.recurrence_libelle
+    ?'<div style="margin-top:6px;font-size:11px;color:var(--muted)">Se répète '+
+      esc(meta.recurrence_libelle)+'</div>':'';
   const reunionBlk=blocReunionHtml(meta);
+  const propsBlk=blocPropositionsHtml(meta,isOwnPerso(ev));
   const annuleBlk=meta.annule
     ?'<div class="cal-pop-annule">Réunion annulée par l\'organisateur.</div>':'';
   const repBlk=(meta.reunion&&meta.mon_statut&&meta.mon_statut!=='organisateur'&&!meta.annule)
     ?'<div class="cal-pop-reponse">'+['accepte','peut_etre','refuse'].map(st=>
         '<button type="button" class="cal-rep-btn'+(meta.mon_statut===st?' actif':'')+
-        '" data-rep="'+st+'">'+STATUT_LABEL[st]+'</button>').join('')+'</div>'
+        '" data-rep="'+st+'">'+STATUT_LABEL[st]+'</button>').join('')+'</div>'+
+      '<button type="button" class="cal-btn cal-pop-proposer" style="width:100%;margin-top:8px">'+
+      'Proposer un autre horaire</button>'
     :'';
   const own=isOwnPerso(ev);
   const editBtn=own
     ?'<button type="button" class="cal-btn cal-pop-edit" style="width:100%;margin-top:10px">Modifier</button>':'';
   const delBtn=own
-    ?'<button type="button" class="cal-pop-del">Supprimer</button>':'';
+    ?(meta.serie_id
+        ?'<button type="button" class="cal-pop-del" data-serie="0">Supprimer cette occurrence</button>'+
+         '<button type="button" class="cal-pop-del" data-serie="1">Supprimer la série à venir</button>'
+        :'<button type="button" class="cal-pop-del">Supprimer</button>')
+    :'';
   const pop=document.createElement('div');
   pop.className='cal-pop';
   pop.innerHTML='<button type="button" class="cal-pop-close" aria-label="Fermer">×</button>'+
     '<div class="cal-pop-title">'+esc(ev.titre)+'</div>'+
-    '<div class="cal-pop-meta">'+esc(CAL_DEFS.find(c=>c.id===ev.calendrier)?.label||ev.calendrier)+'<br>'+per+stat+noteBlk+srcBlk+lieuBlk+busyBlk+'</div>'+
-    (link?'<div>'+link+'</div>':'')+annuleBlk+reunionBlk+repBlk+editBtn+delBtn;
+    '<div class="cal-pop-meta">'+esc(CAL_DEFS.find(c=>c.id===ev.calendrier)?.label||ev.calendrier)+'<br>'+per+stat+noteBlk+srcBlk+lieuBlk+visioBlk+rappelBlk+auteurBlk+recurBlk+busyBlk+'</div>'+
+    (link?'<div>'+link+'</div>':'')+annuleBlk+reunionBlk+propsBlk+repBlk+editBtn+delBtn;
   document.body.appendChild(pop);
   S.pop=pop;
   pop.querySelector('.cal-pop-close').onclick=closePop;
   const editEl=pop.querySelector('.cal-pop-edit');
   if(editEl)editEl.onclick=e=>{e.stopPropagation();openEditModal(ev);};
-  const delEl=pop.querySelector('.cal-pop-del');
-  if(delEl)delEl.onclick=e=>{e.stopPropagation();deletePersoEvent(ev);};
-  pop.querySelectorAll('.cal-rep-btn').forEach(b=>{
+  pop.querySelectorAll('.cal-pop-del').forEach(b=>{
+    b.onclick=e=>{
+      e.stopPropagation();
+      deletePersoEvent(ev,{serie:b.dataset.serie==='1'});
+    };
+  });
+  pop.querySelectorAll('.cal-rep-btn[data-rep]').forEach(b=>{
     b.onclick=e=>{e.stopPropagation();repondreInvitation(ev,b.dataset.rep);};
   });
+  pop.querySelectorAll('[data-prop-ok],[data-prop-non]').forEach(b=>{
+    b.onclick=e=>{
+      e.stopPropagation();
+      const id=b.dataset.propOk||b.dataset.propNon;
+      arbitrerProposition(ev,id,!!b.dataset.propOk);
+    };
+  });
+  const propBtn=pop.querySelector('.cal-pop-proposer');
+  if(propBtn)propBtn.onclick=e=>{e.stopPropagation();openPropositionModal(ev);};
   if(isMobileViewport()){
     pop.classList.add('cal-pop--sheet');
   }else{
@@ -2441,7 +3103,10 @@ async function openExternModal(){
   root.appendChild(wrap);
   S.externModal=wrap;
   wrap.onclick=e=>{if(e.target===wrap)closeExternModal();};
-  wrap.querySelector('.cal-create-modal').onclick=e=>e.stopPropagation();
+  wrap.querySelector('.cal-create-modal').onclick=e=>{
+    e.stopPropagation();
+    if(!e.target.closest('.cal-part-box'))masquerResultats();
+  };
   wrap.querySelector('.cal-create-modal-close').onclick=closeExternModal;
   wrap.querySelector('#cal-extern-close').onclick=closeExternModal;
   await Promise.all([loadFeed(),loadSubs()]);
@@ -2586,7 +3251,11 @@ window.addEventListener('resize',()=>{
     applyCalListOpen(loadCalListOpen());
     const calHead=document.getElementById('cal-cals-head');
     if(calHead)calHead.addEventListener('click',toggleCalList);
+    const delegBtn=document.getElementById('btn-cal-deleg');
+    if(delegBtn)delegBtn.addEventListener('click',()=>{openDelegationsModal().catch(()=>{});});
     renderToggles();
+    bindRecherche();
+    lireLienDirect();
     applyViewChrome(S.view);
     ME=await api('/api/auth/me');
     if(!ME){
