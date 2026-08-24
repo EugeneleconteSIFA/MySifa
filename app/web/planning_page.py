@@ -3252,6 +3252,7 @@ function duplicateEntry(id){
   if(!CAN_EDIT) return;
   const e=S.entries.find(x=>x.id===id);
   if(!e) return;
+  _dossierEditId=null;  // duplication : nouveau dossier, pas d'enregistrement à la volée
   document.getElementById("mroot").innerHTML=modalHTML(
     "Dupliquer le dossier",
     dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,"attente",false,1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,0,e.etiquettes_par_carton??null),
@@ -3389,11 +3390,75 @@ function modalHTML(title,fields,submitLabel,onSubmitFn,headerAction="",footerLef
     </div></div></div>`
 }
 
+/* Certification FSC dans la modale dossier : la case (et le type requis) est
+   enregistrée immédiatement, sans attendre « Enregistrer ». C'est ce qui permet
+   aux boutons FSC de l'en-tête (Rapport FSC / Étiquette FSC) d'apparaître dès
+   la coche : ils dépendent de fsc_requis côté dossier, pas de l'état du
+   formulaire. En création (_dossierEditId null) il n'y a rien à enregistrer,
+   la valeur part avec le POST. */
+let _dossierEditId=null;
+let _planningNeedsReload=false;
+
 function onFscRequisChange(){
   const chk=document.getElementById("fsc-requis-chk");
   const wrap=document.getElementById("fsc-type-wrap");
   if(!chk||!wrap) return;
   wrap.style.display=chk.checked?"block":"none";
+  persistFscDepuisModale();
+}
+
+function onFscTypeRequisChange(){
+  persistFscDepuisModale();
+}
+
+function refreshFscHeaderButtons(id){
+  const host=document.getElementById("dossier-fsc-hdr");
+  if(!host) return;
+  const e=S.entries.find(x=>x.id===id);
+  if(!e) return;
+  host.innerHTML=fscRapportBtnHtml(e)+fscPrintBtnHtml(id,e);
+}
+
+async function persistFscDepuisModale(){
+  const id=_dossierEditId;
+  if(!id||!CAN_EDIT) return;
+  const chk=document.getElementById("fsc-requis-chk");
+  if(!chk) return;
+  const e=S.entries.find(x=>x.id===id);
+  if(!e) return;
+  const on=!!chk.checked;
+  const typ=on?(document.getElementById("fsc-type-requis")?.value||FSC_CLAIM_DEFAUT):"";
+  const prevRequis=Number(e.fsc_requis===true?1:(e.fsc_requis||0));
+  const prevType=e.fsc_type_requis||"";
+  const nextRequis=on?1:0;
+  if(prevRequis===nextRequis && prevType===typ) return;
+
+  // Mise à jour optimiste : les boutons d'en-tête suivent la case sans latence.
+  e.fsc_requis=nextRequis;
+  e.fsc_type_requis=typ;
+  refreshFscHeaderButtons(id);
+  try{
+    const payload={fsc_requis:nextRequis,fsc_type_requis:typ};
+    // Le PUT réécrit dos_rvgi à partir du body : on le renvoie tel quel pour
+    // ne pas l'effacer au passage.
+    if(e.dos_rvgi) payload.dos_rvgi=e.dos_rvgi;
+    await api(`/machines/${MID}/entries/${id}`,{method:"PUT",body:JSON.stringify(payload)});
+    (S.timeline||[]).forEach(s=>{
+      if((s.entry_id||0)===id){ s.fsc_requis=nextRequis; s.fsc_type_requis=typ; }
+    });
+    // Le planning derrière la modale (pastille FSC, anneau du créneau) est
+    // rafraîchi à la fermeture : re-render immédiat = modale détruite.
+    _planningNeedsReload=true;
+    showToast(on?"Certification FSC enregistrée.":"Certification FSC retirée.","success");
+  }catch(err){
+    e.fsc_requis=prevRequis;
+    e.fsc_type_requis=prevType;
+    chk.checked=prevRequis===1;
+    const wrap=document.getElementById("fsc-type-wrap");
+    if(wrap) wrap.style.display=prevRequis===1?"block":"none";
+    refreshFscHeaderButtons(id);
+    showToast(apiErrorMessage(err,"Enregistrement de la certification FSC impossible."),"danger");
+  }
 }
 
 /* Dossier annule par un operateur depuis MyProd : le badge n'apparait que
@@ -3496,7 +3561,7 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
             </div>
             <div id="fsc-type-wrap" style="display:${fscOn?"block":"none"};margin-top:8px">
               <label class="dossier-sub-lbl" style="margin-bottom:4px">Type requis</label>
-              <select id="fsc-type-requis" class="form-sel" style="width:100%">
+              <select id="fsc-type-requis" class="form-sel" style="width:100%" onchange="onFscTypeRequisChange()">
                 ${FSC_REQ_OPTIONS.map(([v,lbl])=>`<option value="${escAttr(v)}" ${fscTyp===v?"selected":""}>${escHtml(lbl)}</option>`).join("")}
               </select>
             </div>
@@ -3611,6 +3676,7 @@ function renderAddModalBody(){
 }
 
 function renderAddModal(){
+  _dossierEditId=null;  // création : la case FSC part avec le POST, rien à enregistrer à la volée
   const tabs=`<div class="view-tabs" style="margin-bottom:18px">
     <button type="button" class="view-tab ${_addTab==='manual'?'active':''}" onclick="openAddSwitchTab('manual')">Manuel</button>
     <button type="button" class="view-tab ${_addTab==='of'?'active':''}" onclick="openAddSwitchTab('of')">Depuis un OF PDF</button>
@@ -3730,6 +3796,38 @@ async function submitAdd(){
   }catch(e){
     showToast(apiErrorMessage(e,"Ajout impossible."),"danger");
   }
+}
+
+/* Boutons FSC de l'en-tête de la modale dossier. Deux fabriques dédiées :
+   la modale les pose à l'ouverture, et refreshFscHeaderButtons() les rejoue
+   à la volée quand la case FSC est cochée/décochée. */
+function fscRapportBtnHtml(e){
+  if(!e||!(e.fsc_requis===1||e.fsc_requis===true)) return "";
+  const refFscEnc=encodeURIComponent((e.reference||e.numero_of||"").trim());
+  return `<button type="button" onclick="closeM();openFscRapport(decodeURIComponent('${escAttr(refFscEnc)}'))"
+      style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;
+             border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
+             font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap"
+      onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
+      Rapport FSC
+    </button>`;
+}
+
+// Impression de l'étiquette d'avertissement FSC (100×50 mm, N&B) depuis le
+// planning : c'est ici que le dossier est préparé et sa pochette montée,
+// donc c'est ici que l'étiquette doit pouvoir sortir — sans attendre que
+// l'opérateur ait démarré la production pour la trouver dans MyProd.
+function fscPrintBtnHtml(id,e){
+  if(!e||!(e.fsc_requis===1||e.fsc_requis===true)) return "";
+  return `<button type="button" onclick="printFscAvertissement(${id})"
+      title="Imprimer l'etiquette d'avertissement FSC a coller sur le dossier"
+      style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;
+             border:1.5px solid var(--success,#34d399);background:rgba(52,211,153,.10);
+             color:var(--success,#34d399);
+             font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap"
+      onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
+      ${icon('printer',14)} Étiquette FSC
+    </button>`;
 }
 
 /* Étiquette d'avertissement FSC (100×50 mm, N&B) depuis la modale dossier.
@@ -3854,6 +3952,9 @@ function openEdit(id){
   if(!CAN_EDIT && !IS_PLANNING_RO_ROLE) return;
   const e=S.entries.find(x=>x.id===id);if(!e)return;
   const RO=(!CAN_EDIT && IS_PLANNING_RO_ROLE);
+  // Dossier existant : la case FSC s'enregistre à la volée (voir
+  // persistFscDepuisModale). Remis à null par closeM().
+  _dossierEditId=RO?null:id;
 
   const isLocked=(e.statut==="en_cours"||e.statut==="termine");
   const isTermine=e.statut==="termine";
@@ -3881,32 +3982,12 @@ function openEdit(id){
   const statsBtn=isTermine?`<button type="button" onclick="openDossierStatsModal(${id})" title="Statistiques de production"
     style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:6px;border:1.5px solid var(--border2);background:var(--accent-bg);color:var(--accent);cursor:pointer;transition:opacity .15s;font-family:inherit;flex-shrink:0"
     onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">${icon('bar-chart-2',16)}</button>`:"";
-  const refFsc=(e.reference||e.numero_of||"").trim();
-  const refFscEnc=encodeURIComponent(refFsc);
-  const fscBtn=(e.fsc_requis===1||e.fsc_requis===true)
-    ?`<button type="button" onclick="closeM();openFscRapport(decodeURIComponent('${escAttr(refFscEnc)}'))"
-      style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;
-             border:1.5px solid var(--accent);background:var(--accent-bg);color:var(--accent);
-             font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap"
-      onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
-      Rapport FSC
-    </button>`
-    :"";
-  // Impression de l'étiquette d'avertissement FSC (100×50 mm, N&B) depuis le
-  // planning : c'est ici que le dossier est préparé et sa pochette montée,
-  // donc c'est ici que l'étiquette doit pouvoir sortir — sans attendre que
-  // l'opérateur ait démarré la production pour la trouver dans MyProd.
-  const fscPrintBtn=(e.fsc_requis===1||e.fsc_requis===true)
-    ?`<button type="button" onclick="printFscAvertissement(${id})"
-      title="Imprimer l'etiquette d'avertissement FSC a coller sur le dossier"
-      style="display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:6px;
-             border:1.5px solid var(--success,#34d399);background:rgba(52,211,153,.10);
-             color:var(--success,#34d399);
-             font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap"
-      onmouseenter="this.style.opacity='.75'" onmouseleave="this.style.opacity='1'">
-      ${icon('printer',14)} Étiquette FSC
-    </button>`
-    :"";
+  // Boutons FSC de l'en-tête : isolés dans un conteneur dédié pour pouvoir
+  // être re-rendus seuls quand la case « Certification FSC requise » change,
+  // sans reconstruire la modale (et donc sans perdre la saisie en cours).
+  // display:contents — le conteneur ne crée pas de boîte : quand il est vide
+  // (dossier non FSC) il n'ajoute pas d'espace dans la barre d'en-tête.
+  const fscHdr=`<span id="dossier-fsc-hdr" style="display:contents">${fscRapportBtnHtml(e)}${fscPrintBtnHtml(id,e)}</span>`;
   const ofEyeBtn=`<button type="button"
     onclick="openOfPreview(${id})"
     title="Voir l'OF relié à ce dossier"
@@ -3929,7 +4010,7 @@ function openEdit(id){
     ${destockIcon}
     <span>${destockDone?"Destocké":"À destocker"}</span>
   </button>`;
-  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${fscBtn}${fscPrintBtn}${statsBtn}${ofEyeBtn}${destockActionBtn}</div>`;
+  const headerAction=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${fscHdr}${statsBtn}${ofEyeBtn}${destockActionBtn}</div>`;
 
   // Traçabilité création/modification
   const fmtDate=(iso)=>{
@@ -4770,7 +4851,13 @@ async function openDossierStatsModal(entryId){
   }
 }
 
-function closeM(){document.getElementById("mroot").innerHTML=""}
+function closeM(){
+  document.getElementById("mroot").innerHTML="";
+  _dossierEditId=null;
+  // Un enregistrement à la volée (case FSC) a modifié le dossier : le planning
+  // est rechargé maintenant que la modale est fermée, badge FSC compris.
+  if(_planningNeedsReload){ _planningNeedsReload=false; load(); }
+}
 
 function exportDossiers(){
   if(!S.entries||!S.entries.length) return alert("Aucun dossier à exporter");

@@ -1083,6 +1083,8 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.5"></script>
+<!-- Memoire produit : fiche par reference produit, partagee avec MyProd -->
+<script src="/static/mysifa_produit_memoire.js?v=1.0"></script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
@@ -1168,6 +1170,7 @@ let S = {
   saisieViewMode: (localStorage.getItem('mysifa.fab.viewmode')||'operator'), // operator | admin
   etat: 'loading',   // loading | sans_session | arrive | en_cours_production | en_arret | fin_dossier
   dossier: null,     // planning_entry actif
+  historiqueProduit: null,  // apercu memoire produit (null = pas de bouton)
   dossiers: [],      // liste pour picker
   machine: null,     // machine liée
   machines: [],      // liste machines (pour sélecteur admin)
@@ -1725,6 +1728,7 @@ async function loadSession(opts){
     saisies: d.saisies||[],
     etat: d.etat||'sans_session',
     dossier: d.dossier||null,
+    historiqueProduit: d.historique_produit||null,
     lastSaisie: d.last_saisie||null,
     operateur: d.operateur||'',
     machine: d.machine||null,
@@ -4897,6 +4901,24 @@ function _renderFabTabNav(extraClass){
   return h('div',{className:'fab-tab-nav'+(extraClass?' '+extraClass:'')}, ...tabs);
 }
 
+/* ── Memoire produit ─────────────────────────────────────────────
+ * Le bouton n'existe que si la reference a deja ete produite : c'est sa
+ * presence seule qui porte l'information « ce produit est deja passe ».
+ * Un bouton toujours affiche qui ouvrirait « aucune donnee » perdrait sa
+ * credibilite en trois ouvertures — et personne ne le rouvrirait ensuite.
+ */
+function renderHistoriqueProduitBtn(){
+  const ap = S.historiqueProduit;
+  if(!ap || !ap.disponible) return null;
+  if(!window.MySifaProduitMemoire) return null;
+  const ref = (S.dossier && (S.dossier.reference || S.dossier.no_dossier)) || ap.no_dossier;
+  const btn = window.MySifaProduitMemoire.boutonHistorique(ap, ref);
+  if(!btn) return null;
+  const wrap = h('div',{style:{marginTop:'8px',alignSelf:'flex-start'}});
+  wrap.appendChild(btn);
+  return wrap;
+}
+
 /* ── Footer ──────────────────────────────────────────────────── */
 function renderFooter(){
   // Vue admin : lecture seule → ne pas afficher le footer d'actions (évite toute confusion).
@@ -4957,6 +4979,7 @@ function renderFooter(){
       d.commentaire ? h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'4px',
         overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'280px'}},
         '💬 '+d.commentaire) : null,
+      renderHistoriqueProduitBtn(),
       (d.fsc_requis === 1 || d.fsc_requis === true) ? h('div',{
         style:{display:'flex',gap:'6px',flexWrap:'wrap',marginTop:'8px',alignSelf:'flex-start'},
       },
