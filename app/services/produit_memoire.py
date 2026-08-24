@@ -18,6 +18,8 @@ qu'aucune production n'ait eu lieu.
 from __future__ import annotations
 
 import json
+import os
+import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from zoneinfo import ZoneInfo
@@ -75,6 +77,61 @@ def mediane(valeurs: List[float]) -> Optional[float]:
     if n % 2:
         return round(vals[mid], 2)
     return round((vals[mid - 1] + vals[mid]) / 2.0, 2)
+
+
+# ─── Lecture du nom d'un scan d'OF ────────────────────────────────────────────
+#
+# Les scans de l'atelier sont nommes a la main, et ce nom porte deja tout ce
+# dont on a besoin :
+#
+#     9932140 (marche 748) 420-0018      -> OF 9932140, produit 420/0018
+#     9932215 - L1 245-0241              -> OF 9932215, produit 245/0241
+#     M759 + 9932338 - L3 1382-0005      -> OF 9932338, produit 1382/0005
+#     Reliquat 9932056 890-0079          -> OF « Reliquat 9932056 », produit 890/0079
+#     March 746 1068-0002                -> pas d'OF, produit 1068/0002
+#     Stock 16-07-2026 961-0007          -> pas d'OF, produit 961/0007
+#
+# C'est plus fiable que de lire le PDF : le nom est du texte, la page est une
+# image. L'OCR du copieur devient un confort, plus un prerequis.
+
+_OF_RACINE_SCAN_RE = re.compile(r"\b(99\d{5})\b")
+_OF_RELIQUAT_RE = re.compile(r"\b(reliquat)\s+(99\d{5})\b", re.IGNORECASE)
+# La reference produit est en FIN de nom. On ancre a la fin plutot que de
+# prendre la premiere occurrence : « Stock 16-07-2026 961-0007 » contient
+# « 07-2026 », qui ressemble a une reference et n'en est pas une.
+_REF_FIN_RE = re.compile(r"(\d{2,5})\s*[-/]\s*(\d{4})\s*$")
+
+
+def _ressemble_a_une_date(gauche: str, droite: str) -> bool:
+    """« 16-07-2026 » n'est pas une reference produit, c'est une date."""
+    try:
+        g, d = int(gauche), int(droite)
+    except (TypeError, ValueError):
+        return False
+    return 1 <= g <= 31 and 1990 <= d <= 2099
+
+
+def analyser_nom_scan(nom: str) -> Dict[str, Any]:
+    """Numero d'OF et reference produit lus dans le nom d'un fichier scanne."""
+    out: Dict[str, Any] = {"of_numero": None, "ref_produit_norm": None}
+    base = os.path.splitext(os.path.basename(str(nom or "")))[0]
+    base = base.replace("_", " ").strip()
+    if not base:
+        return out
+
+    # « Reliquat 9932056 » et « 9932056 » sont deux OF distincts (cf. of_import).
+    m_rel = _OF_RELIQUAT_RE.search(base)
+    if m_rel:
+        out["of_numero"] = f"Reliquat {m_rel.group(2)}"
+    else:
+        m_of = _OF_RACINE_SCAN_RE.search(base)
+        if m_of:
+            out["of_numero"] = m_of.group(1)
+
+    m_ref = _REF_FIN_RE.search(base)
+    if m_ref and not _ressemble_a_une_date(m_ref.group(1), m_ref.group(2)):
+        out["ref_produit_norm"] = _norm(f"{m_ref.group(1)}/{m_ref.group(2)}")
+    return out
 
 
 # ─── Resolution dossier -> reference produit ──────────────────────────────────
