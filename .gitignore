@@ -45,3 +45,13 @@ _tmp_fresh*/
 
 # Artefacts FUSE (montage bridge desktop)
 .fuse_hidden*
+
+# Relevés et exports de l'ERP RVGI — données réelles (clients, adresses, prix).
+# Le rapport et le schéma se régénèrent avec scripts/inventaire_rvgi.ps1,
+# les CSV avec scripts/export_rvgi_csv.ps1. Rien de tout ça n'a sa place
+# dans le dépôt ; seul docs/rvgi/data_rvgi.md (sans donnée réelle) est versionné.
+docs/rvgi/rapport_rvgi.md
+docs/rvgi/schema_rvgi.json
+data/rvgi_export/
+erp_mirror.db
+data/erp_mirror.db

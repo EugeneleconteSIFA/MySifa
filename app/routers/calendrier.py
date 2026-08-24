@@ -2552,7 +2552,7 @@ async def repondre_invitation_externe(jeton: str, request: Request):
 
 @router.get("/api/calendrier/notifications")
 def calendrier_notifications(request: Request):
-    """Reunions dont le rappel est du, + invitations sans reponse.
+    """Creneaux des prochaines 48 h + invitations sans reponse.
 
     Interroge par toutes les pages du portail : un role sans acces a
     MyCalendrier recoit un contenu vide plutot qu'un 403, une pastille ne
@@ -2563,14 +2563,15 @@ def calendrier_notifications(request: Request):
     try:
         user = get_current_user(request)
     except HTTPException:
-        return {"rappels": [], "invitations": 0}
+        return {"evenements": [], "invitations": 0}
     if not can_access_calendrier(user):
-        return {"rappels": [], "invitations": 0}
+        return {"evenements": [], "invitations": 0}
     uid = _user_id_from_session(user)
-    maintenant = _fmt_dt(datetime.now())
     with get_db() as conn:
-        # Le delai de rappel appartient a l'evenement (NULL = defaut du
-        # calendrier, 0 = aucun rappel) : la fenetre se calcule ligne par ligne.
+        # Aucun filtrage horaire ici : on renvoie les creneaux des prochaines
+        # 48 h et c'est le navigateur qui decide lesquels sont dus. L'horloge du
+        # serveur et celle du poste n'ont pas toujours le meme fuseau — le
+        # rappel ne doit pas dependre de ce detail.
         rows = conn.execute(
             """
             SELECT e.id, e.titre, e.date_debut, e.date_fin, e.user_id, e.lieu,
@@ -2586,29 +2587,22 @@ def calendrier_notifications(request: Request):
              WHERE COALESCE(e.all_day, 0) = 0
                AND COALESCE(e.annule, 0) = 0
                AND COALESCE(e.rappel_minutes, ?) > 0
-               AND e.date_debut >= ?
-               AND datetime(e.date_debut) <=
-                   datetime(?, '+' || COALESCE(e.rappel_minutes, ?) || ' minutes')
+               AND date(substr(e.date_debut, 1, 10))
+                   BETWEEN date('now','localtime','-1 day')
+                       AND date('now','localtime','+2 day')
                AND (e.user_id = ? OR (p.user_id IS NOT NULL AND p.statut <> 'refuse'))
              ORDER BY e.date_debut ASC
-             LIMIT 20
+             LIMIT 40
             """,
-            (
-                RAPPEL_AVANT_MINUTES,
-                uid,
-                RAPPEL_AVANT_MINUTES,
-                maintenant,
-                maintenant,
-                RAPPEL_AVANT_MINUTES,
-                uid,
-            ),
+            (RAPPEL_AVANT_MINUTES, uid, RAPPEL_AVANT_MINUTES, uid),
         ).fetchall()
-        rappels = [
+        evenements = [
             {
                 "id": f"perso-{r['id']}",
                 "titre": (r["titre"] or "").strip() or "Sans titre",
                 "debut": str(r["date_debut"] or "")[:16],
                 "fin": str(r["date_fin"] or "")[:16],
+                "rappel": int(r["rappel"] or RAPPEL_AVANT_MINUTES),
                 "lieu": (r["lieu"] or "").strip(),
                 "visio": (r["visio"] or "").strip(),
                 "reunion": bool(int(r["nb_invites"] or 0)),
@@ -2630,7 +2624,7 @@ def calendrier_notifications(request: Request):
                 (uid,),
             ).fetchone()[0]
         )
-    return {"rappels": rappels, "invitations": nb}
+    return {"evenements": evenements, "invitations": nb}
 
 
 # ---------------------------------------------------------------------------

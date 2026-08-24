@@ -871,6 +871,12 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-tc-lg.off .bes-tc-lg-lbl{text-decoration:line-through}
 .bes-tc-lg.mode{margin-left:auto;font-weight:600;color:var(--accent);
   border-style:dashed}
+/* Le repere N-1 : une comparaison, pas une prevision. Le bouton n'apparait
+   que si la serie de l'an dernier a de quoi se tracer. */
+.bes-tc-lg.n1{font-weight:600;border-style:dashed}
+.bes-tc-lg.n1.on{border-color:var(--accent);color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.bes-tc-lg.n1+.bes-tc-lg.mode{margin-left:8px}
 .bes-tc-lg-lbl{font-weight:600;color:var(--text);white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
 .bes-tc-lg-val{color:var(--muted);font-variant-numeric:tabular-nums}
@@ -903,6 +909,15 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
   font-variant-numeric:tabular-nums}
 .bes-tc-tip-lbl{font-size:11px;color:var(--muted);overflow:hidden;
   text-overflow:ellipsis;max-width:150px}
+/* L'ecart a l'an dernier, toujours present dans l'infobulle meme quand les
+   courbes fantomes sont masquees : c'est du texte, il ne charge pas le graphe. */
+.bes-tc-tip-n1{margin-left:auto;padding-left:8px;font-size:11px;font-weight:700;
+  font-variant-numeric:tabular-nums;color:var(--text2)}
+.bes-tc-tip-n1.haut{color:var(--success,#059669)}
+.bes-tc-tip-n1.bas{color:var(--warn,#d97706)}
+.bes-tc-tip-n1.neutre{color:var(--muted);font-weight:400}
+.bes-tc-tip-note{margin-top:6px;padding-top:5px;border-top:1px solid var(--border);
+  font-size:10px;color:var(--muted)}
 .bes-tc-xrow{display:grid;grid-template-columns:56px 1fr;gap:0 8px;margin-top:5px}
 .bes-tc-xaxis{display:grid;min-width:0}
 .bes-tc-xlbl{font-size:9.5px;font-weight:700;letter-spacing:.2px;color:var(--muted);
@@ -2076,7 +2091,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=2"></script>
+<script src="/static/mysifa_cal_rappel.js?v=3"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script>
 /*__TRACA_GUIDE__*/
@@ -12639,6 +12654,12 @@ function _besTendCle(l) {
   return l.kind + '|' + (l.matiere_id != null ? 'm' + l.matiere_id : 's' + l.libelle);
 }
 
+// '2026-09' → '2025-09'. null pour « au-delà », qui n'est pas un mois.
+function _besMoisMoins12(cle) {
+  const m = /^(\d{4})-(\d{2})$/.exec(cle || '');
+  return m ? (parseInt(m[1], 10) - 1) + '-' + m[2] : null;
+}
+
 // Sections repliées et séries masquées : mémorisés dans S, parce que
 // renderContent() reconstruit tout le DOM à chaque frappe dans le filtre —
 // un état porté par le DOM serait perdu à chaque caractère tapé.
@@ -12646,6 +12667,7 @@ function _besTendEtat() {
   if (!S.besoinsTendFerme) S.besoinsTendFerme = {};
   if (!S.besoinsTendMasque) S.besoinsTendMasque = {};
   if (!S.besoinsTendTable) S.besoinsTendTable = {};
+  if (!S.besoinsTendRefAn) S.besoinsTendRefAn = {};
   return S;
 }
 
@@ -12684,15 +12706,20 @@ function _besTendEchelle(max) {
 // Toutes les matières d'une catégorie partagent la même unité (le kind la
 // fixe), donc un axe unique et une échelle commune sont légitimes : deux
 // courbes du même graphe se comparent vraiment. Jamais deux axes Y.
-function _besTendGraphe(series, cols, moisCourant, documentes, unite) {
+function _besTendGraphe(series, cols, moisCourant, documentes, unite, refAn) {
   const svgNS = 'http://www.w3.org/2000/svg';
   const N = cols.length;
   const W = 1000, H = 190, padT = 12, padB = 8;
   const usable = H - padT - padB;
   const x = i => ((i + 0.5) / N) * W;
   const visibles = series.filter(s => !s.masquee);
-  const maxData = visibles.reduce(
-    (m, s) => Math.max(m, s.valeurs.reduce((a, v) => Math.max(a, v || 0), 0)), 0);
+  // L'échelle englobe le repère N-1 quand il est affiché : sinon un an plus
+  // fort que celui-ci sortirait par le haut, et l'écart — qui est tout
+  // l'intérêt du repère — deviendrait invisible.
+  const maxData = visibles.reduce((m, s) => Math.max(
+    m,
+    s.valeurs.reduce((a, v) => Math.max(a, v || 0), 0),
+    refAn ? s.refAn.reduce((a, v) => Math.max(a, v || 0), 0) : 0), 0);
   const echelle = _besTendEchelle(maxData);
   const y = v => padT + usable - (Math.max(0, v || 0) / echelle) * usable;
 
@@ -12759,37 +12786,61 @@ function _besTendGraphe(series, cols, moisCourant, documentes, unite) {
     }));
   }
 
-  // Les courbes. Un mois non documenté coupe le tracé : deux segments séparés
-  // plutôt qu'une ligne droite qui inventerait une continuité.
-  visibles.forEach(s => {
+  // Découpe une série en segments, en coupant sur les mois qu'aucune source ne
+  // documente. Une ligne droite au-dessus d'un trou inventerait une continuité.
+  function segmenter(valeurs, dispo) {
     let seg = [];
     const segments = [];
     cols.forEach((c, i) => {
-      if (!documentes.has(c)) {
+      const v = valeurs[i];
+      if (!dispo(c, i) || v == null) {
         if (seg.length) segments.push(seg);
         seg = [];
         return;
       }
-      seg.push([x(i), y(s.valeurs[i])]);
+      seg.push([x(i), y(v)]);
     });
     if (seg.length) segments.push(seg);
+    return segments;
+  }
+
+  function tracer(segments, couleur, opts) {
+    const o = opts || {};
     segments.forEach(pts => {
       if (pts.length === 1) {
         // Un mois isolé entre deux trous : un trait court, sinon il
         // disparaîtrait du graphe alors qu'il porte une valeur.
-        svg.appendChild(mk('line', {
+        svg.appendChild(mk('line', Object.assign({
           x1: pts[0][0] - 6, x2: pts[0][0] + 6, y1: pts[0][1], y2: pts[0][1],
-          stroke: s.couleur, 'stroke-width': 2, 'stroke-linecap': 'round',
+          stroke: couleur, 'stroke-width': o.width || 2, 'stroke-linecap': 'round',
           'vector-effect': 'non-scaling-stroke',
-        }));
+        }, o.dash ? { 'stroke-dasharray': o.dash, opacity: o.opacity } : {})));
         return;
       }
-      svg.appendChild(mk('path', {
-        d: _besTendPath(pts), fill: 'none', stroke: s.couleur,
-        'stroke-width': 2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round',
-        'vector-effect': 'non-scaling-stroke',
-      }));
+      const attrs = {
+        d: _besTendPath(pts), fill: 'none', stroke: couleur,
+        'stroke-width': o.width || 2, 'stroke-linecap': 'round',
+        'stroke-linejoin': 'round', 'vector-effect': 'non-scaling-stroke',
+      };
+      if (o.dash) { attrs['stroke-dasharray'] = o.dash; attrs.opacity = o.opacity; }
+      svg.appendChild(mk('path', attrs));
     });
+  }
+
+  // ── Repère N-1, tracé EN PREMIER pour rester derrière les courbes ────────
+  // Le même mois douze mois plus tôt. Ce n'est pas une prévision : c'est le
+  // seul point de comparaison disponible pour dire si un mois à venir est en
+  // avance ou en retard de remplissage. Fin, pointillé, à 40 % — il doit se
+  // lire comme un fond, jamais comme une deuxième donnée.
+  if (refAn) {
+    visibles.forEach(s => {
+      tracer(segmenter(s.refAn, (c, i) => s.refAn[i] != null), s.couleur,
+             { width: 1.5, dash: '3 3', opacity: 0.4 });
+    });
+  }
+
+  visibles.forEach(s => {
+    tracer(segmenter(s.valeurs, c => documentes.has(c)), s.couleur);
   });
 
   // Crosshair : le lecteur vise un mois, jamais une courbe de 2 px.
@@ -12833,6 +12884,7 @@ function _besTendGraphe(series, cols, moisCourant, documentes, unite) {
       dots[k].style.top = ((y(val) / H) * 100) + '%';
     });
 
+    const m12 = _besMoisMoins12(c);
     tip.textContent = '';
     tip.appendChild(el('div', { cls: 'bes-tc-tip-mois' }, _besMoisLabel(c)));
     if (!documentes.has(c)) {
@@ -12848,12 +12900,29 @@ function _besTendGraphe(series, cols, moisCourant, documentes, unite) {
         tip.appendChild(el('div', { cls: 'bes-tc-tip-vide' }, 'Rien de daté sur ce mois.'));
       }
       rows.forEach(r => {
+        // L'écart à l'an dernier est dans l'infobulle QUOI QU'IL ARRIVE, même
+        // quand les courbes fantômes sont masquées : c'est un texte, il ne
+        // charge pas le graphe, et c'est la question que l'acheteur pose.
+        const ra = r.s.refAn[i];
+        const pct = (ra != null && ra > 0) ? Math.round((r.v / ra) * 100) : null;
         tip.appendChild(el('div', { cls: 'bes-tc-tip-row' },
           el('span', { cls: 'bes-tc-key', style: { background: r.s.couleur } }),
           el('span', { cls: 'bes-tc-tip-val' }, _besFmtQte(r.v, unite)),
           el('span', { cls: 'bes-tc-tip-lbl' }, r.s.libelle),
+          pct != null
+            ? el('span', {
+                cls: 'bes-tc-tip-n1' + (pct >= 100 ? ' haut' : (pct < 70 ? ' bas' : '')),
+                title: 'Contre ' + _besFmtQte(ra, unite) + ' en ' + _besMoisLabel(m12),
+              }, pct + ' %')
+            : (ra === 0
+                ? el('span', { cls: 'bes-tc-tip-n1 neutre', title: 'Rien sur ce mois l\'an dernier' }, '—')
+                : null),
         ));
       });
+      if (rows.length && rows.some(r => r.s.refAn[i] != null)) {
+        tip.appendChild(el('div', { cls: 'bes-tc-tip-note' },
+          '% = par rapport à ' + _besMoisLabel(m12)));
+      }
     }
     tip.style.left = Math.min(88, Math.max(12, gauche)) + '%';
     tip.style.opacity = '1';
@@ -13043,6 +13112,14 @@ function _buildBesoinsTendance(data) {
         const p = (l.serie || []).find(s => s.mois === c);
         return p ? p.q : 0;
       }),
+      // Le même mois douze mois plus tôt, calculé par le serveur sur douze
+      // mois d'amont qui ne sont pas affichés. `null` quand ce mois-là n'est
+      // documenté par personne : un repère à zéro se lirait comme un
+      // effondrement, alors qu'on n'a simplement rien.
+      refAn: cols.map(c => {
+        const p = (l.serie || []).find(s => s.mois === c);
+        return p && p.ref_an != null ? p.ref_an : null;
+      }),
     }));
     if (queue.length) {
       series.push({
@@ -13059,9 +13136,26 @@ function _buildBesoinsTendance(data) {
           const p = (l.serie || []).find(s => s.mois === c);
           return a + (p ? p.q : 0);
         }, 0)),
+        // `null` tant qu'AUCUNE des matières agrégées n'a de repère sur ce
+        // mois : sommer en comptant les absentes pour zéro donnerait un total
+        // trop bas, et donc un écart à N-1 flatteur.
+        refAn: cols.map(c => {
+          let somme = null;
+          queue.forEach(l => {
+            const p = (l.serie || []).find(s => s.mois === c);
+            if (p && p.ref_an != null) somme = (somme || 0) + p.ref_an;
+          });
+          return somme;
+        }),
       });
     }
-    series.forEach(s => { s.masquee = !!st.besoinsTendMasque[s.cle]; });
+    // Garde-fou : toute série qui arrive ici sans repère N-1 en reçoit un vide.
+    // Le graphe, l'infobulle et le compteur de points lisent tous `refAn` sans
+    // le tester — une série sans ce tableau les fait tomber d'un coup.
+    series.forEach(s => {
+      if (!Array.isArray(s.refAn)) s.refAn = cols.map(() => null);
+      s.masquee = !!st.besoinsTendMasque[s.cle];
+    });
 
     // Les totaux de l'en-tête sont recalculés sur les lignes AFFICHÉES. Ceux
     // du serveur portent sur toute la catégorie : les garder tels quels ferait
@@ -13125,6 +13219,23 @@ function _buildBesoinsTendance(data) {
           el('span', { cls: 'bes-tc-lg-val' }, _besFmtQte(s.total_futur, unite)),
         ));
       });
+      // Le repère N-1 ne se propose QUE s'il a de quoi se tracer. Un bouton
+      // qui n'affiche rien quand on le presse est pire que pas de bouton : il
+      // fait douter de la donnée au lieu de faire douter du bouton. Trois
+      // points minimum — deux ne dessinent pas une comparaison.
+      const pointsN1 = series.reduce(
+        (m, s) => Math.max(m, s.refAn.filter(v => v != null).length), 0);
+      const refAnOn = pointsN1 >= 3 && !!st.besoinsTendRefAn[cat.kind];
+      if (pointsN1 >= 3) {
+        leg.appendChild(el('button', {
+          cls: 'bes-tc-lg n1' + (refAnOn ? ' on' : ''),
+          title: 'Superposer le même mois de l\'année précédente, en pointillé',
+          on: { click: () => {
+            st.besoinsTendRefAn[cat.kind] = !refAnOn;
+            renderContent();
+          } },
+        }, refAnOn ? 'Masquer N-1' : 'Comparer à N-1'));
+      }
       leg.appendChild(el('button', {
         cls: 'bes-tc-lg mode',
         title: 'Basculer entre la courbe et les valeurs chiffrées',
@@ -13137,7 +13248,7 @@ function _buildBesoinsTendance(data) {
 
       body.appendChild(st.besoinsTendTable[cat.kind]
         ? _besTendTableau(series.filter(s => !s.masquee), cols, moisCourant, documentes, unite)
-        : _besTendGraphe(series, cols, moisCourant, documentes, unite));
+        : _besTendGraphe(series, cols, moisCourant, documentes, unite, refAnOn));
 
       if (series.every(s => s.masquee)) {
         body.appendChild(el('div', { cls: 'bes-tc-vide' },
