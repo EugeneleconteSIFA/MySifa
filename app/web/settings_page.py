@@ -2140,6 +2140,18 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
                 style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;outline:none;font-family:inherit"
                 onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
             </div>
+            <!-- Portee : sans ce choix, toute cle recevait of:read,of:write et
+                 l'agent de scans d'OF ne pouvait jamais etre autorise. -->
+            <div style="min-width:230px">
+              <label style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px">Portée</label>
+              <select id="ak-scopes"
+                style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);font-size:13px;outline:none;font-family:inherit">
+                <option value="of:read,of:write">Pont Access — lecture et écriture des OF</option>
+                <option value="scan:write">Agent de scans — dépôt des OF terminés</option>
+                <option value="of:read">Lecture seule des OF</option>
+                <option value="of:read,of:write,scan:write">Tout (pont Access + scans)</option>
+              </select>
+            </div>
             <button class="btn btn-accent" onclick="createApiKey()" style="white-space:nowrap">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:6px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
               Générer la clé
@@ -8191,10 +8203,12 @@ function copyApiKey() {
 async function createApiKey() {
   const name = document.getElementById('ak-name').value.trim();
   if (!name) { toast('Donnez un nom à cette clé.', true); return; }
+  const scopesEl = document.getElementById('ak-scopes');
+  const scopes = (scopesEl && scopesEl.value) || 'of:read,of:write';
   const res = await fetch('/api/settings/api-keys', {
     method:'POST', credentials:'include',
     headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({name})
+    body: JSON.stringify({name, scopes})
   });
   if (!res.ok) { toast('Erreur lors de la création.', true); return; }
   const data = await res.json();
