@@ -340,7 +340,7 @@
           var n = a.series, tot = series.length;
           return el('span', {
             className: 'pmem-chip' + (n >= Math.max(2, Math.ceil(tot / 2)) ? ' is-warn' : ''),
-            text: (a.label || ('Code ' + a.code)) + ' — ' + n + '/' + tot + ' series · ' + fMin(a.minutes),
+            text: labelArret(a.code, a.label) + ' — ' + n + '/' + tot + ' series · ' + fMin(a.minutes),
           });
         })),
       ]));
@@ -365,7 +365,7 @@
         ]),
         codes.length ? el('div', { className: 'pmem-chips' }, codes.map(function (c) {
           var a = arrets[c] || {};
-          return el('span', { className: 'pmem-chip', text: (a.label || ('Code ' + c)) + ' · ' + fMin(a.minutes) });
+          return el('span', { className: 'pmem-chip', text: labelArret(c, a.label) + ' · ' + fMin(a.minutes) });
         })) : null,
         (s.nb_nc ? el('div', { className: 'pmem-chips' }, [
           el('span', { className: 'pmem-chip is-warn', text: s.nb_nc + ' non-conformite' + (s.nb_nc > 1 ? 's' : '') }),
@@ -380,6 +380,16 @@
       ]));
     });
     return out;
+  }
+
+  // Le libelle stocke porte le code en prefixe (« 53 - Casse bande ») parce que
+  // c'est ce que l'operateur saisit. Dans la fiche produit, le code n'apprend
+  // rien : la puce est deja identifiee par son libelle, et le numero encombre
+  // une ligne qui doit se lire d'un coup d'oeil.
+  function labelArret(code, label) {
+    var s = String(label == null ? '' : label).trim();
+    s = s.replace(/^\d{1,3}\s*[-\u2013\u2014.:]\s*/, '').trim();
+    return s || ('Code ' + code);
   }
 
   function kpi(lbl, val) {
