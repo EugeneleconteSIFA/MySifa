@@ -417,6 +417,7 @@ loadPreview();
 try{switchTab(_readReportsTab(),{silent:true});}catch(e){}
 window.addEventListener('hashchange',function(){try{switchTab(_readReportsTab(),{silent:true});}catch(e){}});
 </script>
+<script src="/static/mysifa_cal_rappel.js?v=1"></script>
 </body>
 </html>
 """
