@@ -28,7 +28,9 @@ from fastapi.responses import FileResponse
 from config import UPLOAD_DIR
 from database import get_db
 from app.services.audit_service import log_action
-from app.services.auth_service import get_current_user, is_admin, require_superadmin
+from app.services.auth_service import (
+    get_current_user, is_admin, is_superadmin, require_superadmin,
+)
 from app.services import produit_memoire as pm
 
 router = APIRouter()
@@ -103,8 +105,11 @@ def liste_produits(request: Request, q: str = "", machine: str = "",
                 "SELECT COUNT(*) AS n FROM produit_documents "
                 "WHERE ref_produit_norm=? AND statut!='ecarte'", (r["ref_produit_norm"],)
             ).fetchone()["n"]
+    with get_db() as conn:
+        couverture = pm.taux_rattachement(conn)
     return {"produits": rows, "total": len(rows), "peut_ecrire": True,
-            "est_admin": is_admin(user)}
+            "est_admin": is_admin(user), "est_superadmin": is_superadmin(user),
+            "couverture": couverture}
 
 
 @router.get("/api/produits/rattachement")
@@ -116,11 +121,18 @@ def couverture_rattachement(request: Request):
 
 
 @router.post("/api/produits/rattrapage")
-def lancer_rattrapage(request: Request, limit: int = 0, refaire: bool = False):
-    """Materialise les series manquantes. Reserve au superadmin (long)."""
+def lancer_rattrapage(request: Request, limit: int = 0, refaire: bool = False,
+                      offset: int = 0):
+    """Materialise les series manquantes. Reserve au superadmin (long).
+
+    Appelable par lots (`limit` + `offset`) : sur plusieurs annees d'historique
+    une passe unique depasserait le timeout de la passerelle, et chaque lot
+    etant commite, une interruption ne perd rien de ce qui est deja fait.
+    """
     require_superadmin(request)
     with get_db() as conn:
-        return pm.rattraper_series(conn, limit=limit or None, refaire=refaire)
+        return pm.rattraper_series(conn, limit=limit or None, refaire=refaire,
+                                   offset=offset)
 
 
 @router.get("/api/produits/documents/a-rattacher")
@@ -535,6 +547,7 @@ def historique_dossier(no_dossier: str, request: Request):
     data["no_dossier"] = (no_dossier or "").strip()
     data["contexte"] = ctx
     data["est_admin"] = is_admin(user)
+    data["est_superadmin"] = is_superadmin(user)
     data["moi"] = _auteur(user)
     return data
 
@@ -605,8 +618,19 @@ def fiche_produit(ref: str, request: Request):
     r = _ref_ou_404(ref)
     with get_db() as conn:
         data = pm.resume_produit(conn, r, user_login=_user_login(user))
-    if not data["nb_series"] and not data["savoirs"] and not data["documents"]:
-        raise HTTPException(status_code=404, detail=f"Aucune donnee pour la reference {r}.")
+        # Une fiche vide a deux causes tres differentes : la reference n'a
+        # jamais tourne, ou elle a tourne mais le rattrapage n'a pas encore ete
+        # lance. Repondre « aucune donnee » dans le second cas fait douter de
+        # l'outil quelqu'un qui sait qu'il a produit ce produit.
+        data["a_materialiser"] = pm.dossiers_non_materialises(conn, r)
+    vide = (not data["nb_series"] and not data["savoirs"]
+            and not data["documents"] and not data["a_materialiser"])
+    if vide:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Aucun dossier de production rattache a la reference {r}.",
+        )
     data["est_admin"] = is_admin(user)
+    data["est_superadmin"] = is_superadmin(user)
     data["moi"] = _auteur(user)
     return data

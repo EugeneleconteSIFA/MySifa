@@ -233,10 +233,85 @@
     }));
   }
 
+  // ── Rattrapage de l'historique ─────────────────────────────────────
+  // Une serie n'existe qu'a partir du moment ou elle a ete figee : au code 89
+  // pour les productions a venir, par le rattrapage pour celles d'avant. Tant
+  // que le rattrapage n'a pas tourne, une reference qui a pourtant produit
+  // parait vide. On le dit, et on donne le bouton a qui peut le lancer.
+  var LOT_RATTRAPAGE = 200;
+
+  async function lancerRattrapage(btn) {
+    if (btn) btn.disabled = true;
+    var reprises = 0, orphelins = 0, tours = 0, offset = 0;
+    try {
+      // Par lots : sur plusieurs annees d'historique, un rattrapage en une
+      // seule requete tiendrait plusieurs minutes et finirait en timeout de
+      // passerelle — avec la moitie du travail fait et aucun moyen de le
+      // savoir. Chaque lot est commite, donc une interruption ne perd rien.
+      while (tours < 100) {
+        tours += 1;
+        if (btn) btn.textContent = 'Rattrapage… ' + reprises + ' reprise(s)';
+        var r = await api('/api/produits/rattrapage?limit=' + LOT_RATTRAPAGE
+                          + '&offset=' + offset, { method: 'POST' });
+        reprises += r.materialisees || 0;
+        orphelins += r.non_rattachables || 0;
+        // Les dossiers non rattachables restent candidats a chaque passe : on
+        // avance l'offset de leur nombre, sinon le lot suivant retomberait sur
+        // eux indefiniment. Un lot incomplet signifie qu'on a tout vu.
+        offset += Math.max(0, (r.candidats || 0) - (r.materialisees || 0));
+        if (!r.candidats || r.candidats < LOT_RATTRAPAGE) break;
+      }
+      var msg = reprises + ' production(s) reprise(s)';
+      if (orphelins) msg += ' — ' + orphelins + ' dossier(s) rattachables a aucune reference produit';
+      toast(msg + '.');
+      await recharger();
+    } catch (e) {
+      toast(e.message || 'Rattrapage impossible.', 'danger');
+      if (btn) { btn.disabled = false; btn.textContent = 'Lancer le rattrapage'; }
+    }
+  }
+
+  function blocRattrapage(d, contexteListe) {
+    var n = contexteListe
+      ? ((d.couverture && (d.couverture.dossiers_termines - d.couverture.series_materialisees)) || 0)
+      : ((d.a_materialiser || []).length);
+    if (n <= 0) return null;
+
+    var texte = contexteListe
+      ? n + ' dossier(s) termine(s) n\'ont pas encore de fiche produit.'
+      : n + ' production(s) de cette reference ont eu lieu, mais ne sont pas encore reprises dans l\'historique.';
+
+    var enfants = [
+      el('div', { className: 'pmem-card-hd' }, [
+        el('span', { className: 'pmem-card-date', text: 'Historique pas encore repris' }),
+      ]),
+      el('div', { style: 'font-size:13px;color:var(--text2);line-height:1.6', text: texte }),
+      el('div', {
+        style: 'font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5',
+        text: 'Les productions a venir se rangent toutes seules a la cloture du dossier. '
+            + 'Celles d\'avant demandent un rattrapage, a lancer une fois.',
+      }),
+    ];
+
+    if (d.est_superadmin) {
+      var btn = el('button', { type: 'button', className: 'pmem-btn pmem-btn-accent', text: 'Lancer le rattrapage' });
+      btn.addEventListener('click', function () { lancerRattrapage(btn); });
+      enfants.push(el('div', { className: 'pmem-form-row' }, [btn]));
+    } else {
+      enfants.push(el('div', {
+        style: 'font-size:11px;color:var(--muted);margin-top:10px',
+        text: 'Le rattrapage se lance depuis un compte superadmin.',
+      }));
+    }
+    return el('div', { className: 'pmem-card' }, enfants);
+  }
+
   // ── Rendu : series ─────────────────────────────────────────────────
   function renderSeries(d) {
     var series = d.series || [];
     if (!series.length) {
+      var diag = blocRattrapage(d, false);
+      if (diag) return [diag];
       return [el('div', { className: 'pmem-empty', text: 'Aucune production anterieure enregistree pour cette reference.' })];
     }
     var out = [];
@@ -480,6 +555,8 @@
   }
 
   async function recharger() {
+    if (state.mode === 'liste') { await chargerListe(); return; }
+    if (state.mode === 'rattachement') { await chargerDocs(); return; }
     if (state.mode === 'historique' && state.noDossier) {
       state.data = await api('/api/produits/dossier/' + encodeURIComponent(state.noDossier) + '/historique');
     } else if (state.data && state.data.ref_produit_norm) {
@@ -580,10 +657,13 @@
                         : 'Aucune reference avec un historique de production.',
         });
 
+    var diagListe = blocRattrapage(d, true);
     mount(panel(
       header('Produits', 'Historique de production par reference', [(d.produits || []).length + ' reference(s)']),
       el('div', { className: 'pmem-tabs' }),
-      [el('div', { style: 'margin-bottom:14px' }, [input]), table]
+      [el('div', { style: 'margin-bottom:14px' }, [input])]
+        .concat(diagListe ? [diagListe] : [])
+        .concat([table])
     ));
     requestAnimationFrame(function () {
       var n = document.getElementById('pmem-search');
