@@ -136,6 +136,108 @@ def lancer_rattrapage(request: Request, limit: int = 0, refaire: bool = False,
                                    offset=offset)
 
 
+@router.get("/api/produits/documents")
+def liste_documents_scannes(request: Request, q: str = "", limit: int = 300):
+    """Tous les OF scannes, rattaches ou non — la vue « ce qu'on a deja ».
+
+    La file de rattachement ne montre que les echecs. Elle ne dit rien de ce
+    qui est arrive, et c'est pourtant la question la plus frequente : « ce
+    dossier a-t-il ete scanne ? ».
+    """
+    get_current_user(request)
+    params: list = []
+    where = ["d.statut != 'ecarte'"]
+    if q.strip():
+        like = f"%{q.strip()}%"
+        where.append(
+            "(d.of_numero LIKE ? OR d.ref_produit_norm LIKE ? OR d.no_dossier LIKE ?"
+            " OR LOWER(COALESCE(d.fichier_origine,'')) LIKE LOWER(?)"
+            " OR LOWER(COALESCE(s.client,'')) LIKE LOWER(?))"
+        )
+        params += [like, like, like, like, like]
+    params.append(max(1, min(int(limit), 2000)))
+
+    with get_db() as conn:
+        rows = conn.execute(
+            f"""SELECT d.id, d.of_numero, d.no_dossier, d.ref_produit_norm, d.statut,
+                       d.nb_pages, d.fichier_origine, d.chemin_origine,
+                       d.date_document, d.importe_le, d.importe_par,
+                       o.machine AS of_machine, o.laize AS of_laize, o.format AS of_format,
+                       o.qte_etiquettes AS of_qte_etiquettes,
+                       s.machine AS serie_machine, s.client AS serie_client,
+                       s.etiquettes AS serie_etiquettes, s.metrage_m AS serie_metrage_m
+                  FROM produit_documents d
+                  LEFT JOIN of_imports    o ON o.id = d.of_import_id
+                  LEFT JOIN produit_series s ON s.no_dossier = d.no_dossier
+                 WHERE {' AND '.join(where)}
+                 ORDER BY COALESCE(d.date_document, d.importe_le) DESC, d.id DESC
+                 LIMIT ?""",
+            params,
+        ).fetchall()
+        total = conn.execute(
+            "SELECT COUNT(*) AS n FROM produit_documents WHERE statut != 'ecarte'"
+        ).fetchone()["n"]
+        a_rattacher = conn.execute(
+            "SELECT COUNT(*) AS n FROM produit_documents WHERE statut = 'a_rattacher'"
+        ).fetchone()["n"]
+
+    docs = []
+    for r in rows:
+        d = dict(r)
+        d["machine"] = d.get("serie_machine") or d.get("of_machine")
+        d["client"] = d.get("serie_client")
+        d["etiquettes"] = d.get("serie_etiquettes") or d.get("of_qte_etiquettes")
+        docs.append(d)
+    return {"documents": docs, "total": int(total or 0),
+            "a_rattacher": int(a_rattacher or 0), "affiches": len(docs)}
+
+
+@router.get("/api/produits/fiches-non-reliees")
+def fiches_non_reliees(request: Request, q: str = "", limit: int = 500):
+    """Fiches techniques qu'aucun OF et aucune production ne rejoint.
+
+    Deux causes, qui n'appellent pas la meme action et sont donc distinguees :
+    une reference illisible dans le libelle de la fiche (le rapprochement ne
+    peut pas fonctionner), ou une fiche parfaitement lisible mais jamais
+    produite (rien a corriger — c'est peut-etre juste un produit dormant).
+    """
+    get_current_user(request)
+    with get_db() as conn:
+        ft_cols = {r["name"] for r in conn.execute(
+            "PRAGMA table_info(fiches_techniques)").fetchall()}
+        if "ref_produit_norm" not in ft_cols:
+            return {"fiches": [], "total": 0}
+        champs = [c for c in ("id", "reference", "ref_produit_norm", "designation",
+                              "client", "format", "laize", "support", "matiere",
+                              "machine", "nb_couleurs", "source", "date_import")
+                  if c in ft_cols]
+        params: list = []
+        where = ["""(ft.ref_produit_norm IS NULL OR TRIM(ft.ref_produit_norm) = ''
+                     OR (NOT EXISTS (SELECT 1 FROM of_imports o
+                                      WHERE TRIM(COALESCE(o.reference,'')) = ft.ref_produit_norm)
+                         AND NOT EXISTS (SELECT 1 FROM produit_series s
+                                          WHERE s.ref_produit_norm = ft.ref_produit_norm)))"""]
+        if q.strip():
+            like = f"%{q.strip()}%"
+            where.append("(LOWER(COALESCE(ft.reference,'')) LIKE LOWER(?)"
+                         " OR LOWER(COALESCE(ft.designation,'')) LIKE LOWER(?))")
+            params += [like, like]
+        params.append(max(1, min(int(limit), 2000)))
+        rows = conn.execute(
+            "SELECT " + ", ".join("ft." + c for c in champs) +
+            " FROM fiches_techniques ft WHERE " + " AND ".join(where) +
+            " ORDER BY ft.reference LIMIT ?",
+            params,
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["motif"] = ("ref_illisible" if not (d.get("ref_produit_norm") or "").strip()
+                      else "jamais_produite")
+        out.append(d)
+    return {"fiches": out, "total": len(out)}
+
+
 @router.get("/api/produits/documents/a-rattacher")
 def documents_a_rattacher(request: Request, limit: int = 200):
     """File des scans dont le numero d'OF n'a pas pu etre lu automatiquement."""

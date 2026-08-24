@@ -104,12 +104,12 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .cal-part-dispo.alerte{color:var(--warn)}
 .cal-part-vide{padding:10px;font-size:11px;color:var(--muted)}
 /* Repetition. */
-.cal-recur-box{margin:-4px 0 14px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
+.cal-recur-box{margin:-2px 0 10px;padding:9px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
 .cal-recur-box[hidden]{display:none}
 .cal-recur-row{display:flex;gap:10px;flex-wrap:wrap}
-.cal-recur-row .cal-create-field{flex:1;min-width:150px;margin:0}
+.cal-recur-row .cal-create-field{flex:1 1 140px;min-width:0;margin:0}
 .cal-recur-hint{font-size:11px;color:var(--muted);margin:8px 0 0}
-.cal-serie-choix{display:flex;gap:8px;margin:-4px 0 14px}
+.cal-serie-choix{display:flex;gap:8px;margin:-2px 0 10px}
 .cal-serie-choix label{flex:1;display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid var(--border);
   border-radius:8px;background:var(--bg);font-size:12px;color:var(--text2);cursor:pointer}
 .cal-serie-choix label:hover{border-color:var(--accent)}
@@ -157,6 +157,12 @@ body.sb-open .sidebar-overlay{display:block}
 .cal-nav{display:flex;align-items:center;gap:8px}
 .cal-btn{padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s,background .15s}
 .cal-btn:hover{border-color:var(--accent);color:var(--accent)}
+.cal-collegue-sel{padding:8px 10px;border-radius:10px;border:1px solid var(--border);
+  background:var(--bg);color:var(--text2);font-size:12px;font-family:inherit;font-weight:600;
+  max-width:190px;cursor:pointer}
+.cal-collegue-sel:focus{border-color:var(--accent);outline:none}
+.cal-collegue-sel.actif{border-color:var(--accent);color:var(--accent)}
+@media print{.cal-collegue-sel{display:none}}
 .cal-search-wrap{position:relative;min-width:190px}
 .cal-search-wrap input{width:100%;padding:8px 12px;border-radius:10px;border:1px solid var(--border);
   background:var(--bg);color:var(--text);font-size:12px;font-family:inherit}
@@ -230,8 +236,13 @@ body.light{--cal-ferie-bg:color-mix(in srgb, var(--danger) 9%, transparent)}
 .cal-agenda-time{flex-shrink:0;font-size:10px;font-weight:700;color:var(--text2);font-variant-numeric:tabular-nums;min-width:42px}
 .cal-agenda-ev-row .cal-pill{flex:1;min-width:0}
 /* Week / Day time grid */
-.cal-time-wrap{display:flex;min-width:640px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--card)}
+.cal-time-wrap{display:flex;flex-direction:column;min-width:640px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--card)}
+/* La gouttiere des heures vit sous le bandeau « Journee », dans la meme ligne
+   que les colonnes : son entete fantome (.tg-head) a exactement la hauteur de
+   l'entete de colonne, ce qui garantit que 06:00 tombe sur le trait de 06:00. */
+.cal-time-body{display:flex;min-width:0}
 .cal-time-gutter{width:48px;flex-shrink:0;border-right:1px solid var(--border);background:var(--bg)}
+.cal-time-gutter .tg-head{color:transparent;user-select:none;pointer-events:none}
 .cal-time-gutter .tg-hour{height:48px;font-size:10px;color:var(--muted);text-align:right;padding:4px 6px;border-top:1px solid var(--border)}
 .cal-time-gutter .tg-hour:first-child{border-top:none}
 .cal-time-grid{flex:1;display:flex;flex-direction:column;min-width:0}
@@ -239,6 +250,9 @@ body.light{--cal-ferie-bg:color-mix(in srgb, var(--danger) 9%, transparent)}
 body.light .cal-allday-row{background:#f8fafc}
 .cal-allday-label{width:48px;flex-shrink:0;font-size:9px;font-weight:700;color:var(--muted);display:flex;align-items:center;justify-content:flex-end;padding:4px;border-right:1px solid var(--border)}
 .cal-allday-cols{flex:1;display:grid;position:relative;min-height:28px}
+.cal-allday-cell{min-width:0;display:flex;flex-direction:column;justify-content:center;
+  border-left:1px solid var(--border);padding:1px 0}
+.cal-allday-cell:first-child{border-left:none}
 .cal-allday-pill{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;border-width:1px;border-style:solid;margin:2px 3px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#0a0e17;box-shadow:0 1px 2px rgba(0,0,0,.15)}
 .cal-cols-row{flex:1;display:grid;position:relative}
 .cal-col{border-left:1px solid var(--border);position:relative}
@@ -254,6 +268,17 @@ body.light .cal-allday-row{background:#f8fafc}
 }
 .cal-col{min-width:0;overflow:visible}
 .cal-slot-line{position:absolute;left:0;right:0;height:1px;background:var(--border)}
+/* Contenu d'un creneau : titre, puis lignes secondaires que renderDayTimedHtml
+   n'ajoute que si la hauteur le permet. */
+.cal-ev-t{display:block;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-ev-l{display:block;font-weight:600;font-size:9px;line-height:1.35;opacity:.72;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.cal-ev-flag{display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;
+  margin-right:4px;border-radius:50%;background:rgba(10,14,23,.2);color:inherit;
+  font-size:9px;font-weight:800;line-height:1;vertical-align:1px;flex-shrink:0}
+.cal-ev-flag--peut{background:rgba(10,14,23,.34)}
+.cal-pill--agenda{display:flex;flex-direction:column;align-items:flex-start;white-space:normal}
+.cal-pill-sec{display:block;font-size:9px;font-weight:600;opacity:.72;margin-top:1px}
 .cal-ev{
   position:absolute;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;color:#0a0e17;
   border-width:1px;border-style:solid;overflow:hidden;cursor:pointer;line-height:1.3;box-sizing:border-box;
@@ -306,23 +331,36 @@ body.light .cal-allday-row{background:#f8fafc}
 .cal-settings-hint{font-size:11px;color:var(--muted);margin:8px 0 0;line-height:1.5}
 .cal-create-modal-backdrop{position:fixed;inset:0;z-index:8600;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:16px}
 .cal-create-modal{
-  position:relative;width:100%;max-width:440px;max-height:min(90vh,560px);overflow:auto;
+  position:relative;width:100%;max-width:440px;max-height:92vh;
+  overflow-y:auto;overflow-x:hidden;
   background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 18px 16px;
   box-shadow:0 16px 48px rgba(0,0,0,.45);
 }
-.cal-create-modal h2{font-size:15px;font-weight:800;margin:0 0 14px;color:var(--text)}
-.cal-create-field{margin-bottom:12px}
+/* Formulaire d'evenement : deux colonnes des qu'il y a la place, pour que le
+   creneau, les invites et la repetition tiennent dans un ecran sans defilement. */
+.cal-create-modal--large{max-width:780px;padding:16px 18px 14px}
+.cal-create-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 20px;align-items:start}
+@media(max-width:780px){
+  .cal-create-grid{grid-template-columns:1fr}
+  .cal-create-modal--large{max-width:440px}
+}
+@media(max-height:640px){
+  .cal-create-modal--large .cal-create-field textarea{min-height:52px}
+}
+.cal-create-modal h2{font-size:15px;font-weight:800;margin:0 0 12px;color:var(--text)}
+.cal-create-field{margin-bottom:10px}
 .cal-create-field label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
 .cal-create-field input[type=text],.cal-create-field input[type=date],.cal-create-field input[type=datetime-local],.cal-create-field select,.cal-create-field textarea{
-  width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;
+  width:100%;min-width:0;background:var(--bg);border:1px solid var(--border);border-radius:10px;
   padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;transition:border-color .15s;
 }
 .cal-create-field input:focus,.cal-create-field select:focus,.cal-create-field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12);outline:none}
-.cal-create-field textarea{min-height:72px;resize:vertical}
-.cal-create-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cal-create-field textarea{min-height:60px;resize:vertical}
+.cal-create-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+@media(max-width:520px){.cal-create-row{grid-template-columns:1fr}}
 .cal-create-toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer;user-select:none;margin-bottom:12px}
 .cal-create-toggle input{width:16px;height:16px;accent-color:var(--accent)}
-.cal-create-modal-foot{display:flex;gap:10px;justify-content:flex-end;margin-top:4px}
+.cal-create-modal-foot{display:flex;gap:10px;justify-content:flex-end;margin-top:6px}
 .cal-create-modal-foot .cal-btn{min-width:96px}
 .cal-create-modal-close{
   position:absolute;top:10px;right:12px;border:none;background:transparent;color:var(--muted);
@@ -593,6 +631,9 @@ body.cal-dragging{user-select:none}
         <button type="button" class="cal-btn" data-view="day">Jour</button>
         <button type="button" class="cal-btn" data-view="agenda">Agenda</button>
       </div>
+      <select id="cal-collegue" class="cal-collegue-sel" aria-label="Voir l'agenda d'un collègue">
+        <option value="">Tous les collègues</option>
+      </select>
       <div class="cal-search-wrap">
         <input type="search" id="cal-search" placeholder="Rechercher un événement…"
           autocomplete="off" aria-label="Rechercher un événement">
@@ -668,6 +709,7 @@ const STATUT_MOT={accepte:'accepté',peut_etre:'peut-être',refuse:'refusé',en_
 const ICO_CAL_GEAR='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
 const LS_VISIBLE='mysifa_cal_visible_v2';
 const LS_CAL_LIST='mysifa_cal_autres_open';
+const LS_COLLEGUE='mysifa_cal_collegue';
 const MOIS=['','janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 const JOURS=['lun','mar','mer','jeu','ven','sam','dim'];
 const ROLE_LABELS={direction:'Direction',administration:'Administration',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',commercial:'Commercial',superadmin:'Super admin'};
@@ -679,7 +721,7 @@ const LS_VIEW='mysifa_cal_view';
 const VALID_VIEWS=['month','week','day','agenda'];
 const MINI_DOW=['L','M','M','J','V','S','D'];
 const MOBILE_BREAKPOINT=900;
-let S={view:'month',anchor:new Date(),events:[],dayWindows:{},feriesMap:{},loading:false,visible:{},pop:null,colorModal:null,createModal:null,externModal:null,miniCalY:null,miniCalM:null,_touchStartX:null,_touchStartY:null,subs:[],feed:null,drag:null,editingEv:null,lienDirect:null,_suppressClickUntil:0,_clickTimer:null,invitables:null,partSel:null,partNoms:null,partExt:null,partOccupes:null,_partTimer:null,delegations:null};
+let S={view:'month',anchor:new Date(),events:[],dayWindows:{},feriesMap:{},loading:false,visible:{},pop:null,colorModal:null,createModal:null,externModal:null,miniCalY:null,miniCalM:null,_touchStartX:null,_touchStartY:null,subs:[],feed:null,drag:null,editingEv:null,lienDirect:null,collegue:'',_suppressClickUntil:0,_clickTimer:null,invitables:null,partSel:null,partNoms:null,partExt:null,partOccupes:null,_partTimer:null,delegations:null};
 let ME=null;
 
 function isMobileViewport(){return window.innerWidth<MOBILE_BREAKPOINT;}
@@ -1089,8 +1131,8 @@ function calSlotStyle(calId){
 /* Une couleur stable par utilisateur : l'angle d'or sur l'id garantit des
    teintes bien réparties, identiques sur tous les postes, sans réglage. */
 const PERSON_HUE_STEP=137.508;
-const PERSON_SAT=68;
-const PERSON_LUM=62;
+const PERSON_SAT=62;
+const PERSON_LUM=82;
 function hslToHex(h,s,l){
   s=s/100;l=l/100;
   const k=n=>(n+h/30)%12;
@@ -1114,21 +1156,78 @@ function personColor(userId){
   const hue=(id*PERSON_HUE_STEP)%360;
   let l=PERSON_LUM;
   let hex=hslToHex(hue,PERSON_SAT,l);
-  while(l<86&&(relLum(hex)+0.05)/(SLOT_TEXT_LUM+0.05)<SLOT_MIN_CONTRAST){
+  while(l<92&&(relLum(hex)+0.05)/(SLOT_TEXT_LUM+0.05)<SLOT_MIN_CONTRAST){
     l+=3;
     hex=hslToHex(hue,PERSON_SAT,l);
   }
   return hex;
 }
+/* Un « ? » sur les invitations sans reponse ou repondues « peut-etre » :
+   le coup d'oeil au planning doit suffire a voir ce qui reste a trancher. */
+function evFlagHtml(ev){
+  const st=(ev&&ev.meta&&ev.meta.mon_statut)||'';
+  if(st==='en_attente')
+    return '<span class="cal-ev-flag" title="Invitation sans réponse">?</span>';
+  if(st==='peut_etre')
+    return '<span class="cal-ev-flag cal-ev-flag--peut" title="Vous avez répondu « peut-être »">?</span>';
+  return '';
+}
+function evDureeTxt(ev){
+  const s=evStart(ev),e=evEnd(ev);
+  if(!s||!e)return '';
+  const min=Math.round((e-s)/60000);
+  if(min<=0)return '';
+  const h=Math.floor(min/60),m=min%60;
+  return (h?h+' h':'')+(m?(h?' ':'')+m+' min':'');
+}
+function evAuteurTxt(ev){
+  const meta=(ev&&ev.meta)||{};
+  if(meta.cree_par_nom)return meta.cree_par_nom;
+  if(meta.organisateur_nom&&meta.own===false)return meta.organisateur_nom;
+  return '';
+}
+function evParticipantsTxt(ev){
+  const meta=(ev&&ev.meta)||{};
+  const parts=(meta.participants||[]).concat(meta.invites_externes||[]);
+  if(!parts.length)return '';
+  const noms=parts.slice(0,3)
+    .map(p=>String(p.nom||p.email||'').split(/[\s@]/)[0])
+    .filter(Boolean);
+  return noms.join(', ')+(parts.length>3?' +'+(parts.length-3):'');
+}
+/* Les lignes secondaires n'apparaissent que si le creneau est assez haut :
+   ecrire par-dessus un creneau de 20 minutes le rendrait illisible. */
+function evLignesHtml(ev,hPx){
+  let out='';
+  if(hPx>=34){
+    const duree=evDureeTxt(ev);
+    const s=evStart(ev);
+    const heure=s?(pad2(s.getHours())+':'+pad2(s.getMinutes())):'';
+    const txt=[heure,duree].filter(Boolean).join(' · ');
+    if(txt)out+='<span class="cal-ev-l">'+esc(txt)+'</span>';
+  }
+  if(hPx>=48){
+    const auteur=evAuteurTxt(ev);
+    if(auteur)out+='<span class="cal-ev-l">Par '+esc(auteur)+'</span>';
+    else if(ev.meta&&ev.meta.lieu)out+='<span class="cal-ev-l">'+esc(ev.meta.lieu)+'</span>';
+  }
+  if(hPx>=64){
+    const parts=evParticipantsTxt(ev);
+    if(parts)out+='<span class="cal-ev-l">'+esc(parts)+'</span>';
+  }
+  return out;
+}
+
 function evSlotStyle(ev){
+  const base=(isCreneauHumain(ev)&&ev.meta&&ev.meta.user_id)
+    ?personColor(ev.meta.user_id)
+    :calColor(ev&&ev.calendrier);
+  // Refusee ou annulee : la teinte reste (on reconnait le calendrier) mais
+  // s'efface, et le libelle est barre. Un aplat gris disparaissait en sombre.
   if(evEstBarre(ev)){
-    return 'background:var(--border);border-color:var(--muted);color:var(--muted);'+
-           'text-decoration:line-through;opacity:.8';
+    return slotStyleFromColor(base)+';opacity:.42;text-decoration:line-through';
   }
-  if(isCreneauHumain(ev)&&ev.meta&&ev.meta.user_id){
-    return slotStyleFromColor(personColor(ev.meta.user_id));
-  }
-  return calSlotStyle(ev&&ev.calendrier);
+  return slotStyleFromColor(base);
 }
 
 function getPeriod(){
@@ -1154,7 +1253,15 @@ function getPeriod(){
   return{start:d,end:d,title:d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})};
 }
 
-function evVisible(ev){return !!S.visible[ev.calendrier];}
+/* « Agenda de X » : on garde son calendrier et ceux qu'on a coches, mais parmi
+   les collegues on ne montre plus que la personne demandee. */
+function evVisible(ev){
+  if(!S.visible[ev.calendrier])return false;
+  if(S.collegue&&ev.calendrier==='collegues'){
+    return String((ev.meta&&ev.meta.user_id)||'')===String(S.collegue);
+  }
+  return true;
+}
 function evStart(ev){return parseEvDt(ev.debut);}
 function evEnd(ev){return parseEvDt(ev.fin)||evStart(ev);}
 function layoutKey(ev){return String(ev.calendrier)+'|'+String(ev.id);}
@@ -1409,9 +1516,11 @@ function openPersoModal(opts){
   })();
   const wrap=document.createElement('div');
   wrap.className='cal-create-modal-backdrop';
-  wrap.innerHTML=`<div class="cal-create-modal" role="dialog" aria-labelledby="cp-title-h">
+  wrap.innerHTML=`<div class="cal-create-modal cal-create-modal--large" role="dialog" aria-labelledby="cp-title-h">
     <button type="button" class="cal-create-modal-close" aria-label="Fermer">×</button>
     <h2 id="cp-title-h">${edit?'Modifier l\'événement':'Nouvel événement personnel'}</h2>
+    <div class="cal-create-grid">
+    <div>
     ${edit?'':'<div class="cal-create-field" id="cp-nom-de-box" hidden><label for="cp-au-nom-de">Calendrier</label>'+
       '<select id="cp-au-nom-de"><option value="">Mon calendrier</option></select></div>'}
     <div class="cal-create-field"><label for="cp-titre">Titre</label>
@@ -1435,6 +1544,8 @@ function openPersoModal(opts){
       <input type="text" id="cp-visio" maxlength="500" placeholder="https://…" value="${esc(visio)}"></div>
     <div class="cal-create-field"><label for="cp-note">Note (optionnel)</label>
       <textarea id="cp-note" maxlength="4000" placeholder="Détails…">${esc(note)}</textarea></div>
+    </div>
+    <div>
     <div class="cal-create-field cal-part-box"><label for="cp-part-filtre">Participants (optionnel)</label>
       <input type="text" id="cp-part-filtre" placeholder="Nom d'un collègue ou adresse e-mail…" autocomplete="off"
         role="combobox" aria-expanded="false" aria-controls="cp-part-res">
@@ -1462,8 +1573,10 @@ function openPersoModal(opts){
       </div>
       <p class="cal-recur-hint" id="cp-recur-hint"></p>
     </div>`}
-    <label class="cal-create-toggle"><input type="checkbox" id="cp-prive" ${prive?'checked':''}> Ne pas faire apparaître</label>
-    <p class="cal-extern-hint" style="margin:-6px 0 14px">Par défaut, vos créneaux sont visibles par tous. Coché, les autres voient uniquement « Occupé » — sans titre ni note.</p>
+    <label class="cal-create-toggle" style="margin-bottom:6px"><input type="checkbox" id="cp-prive" ${prive?'checked':''}> Ne pas faire apparaître</label>
+    <p class="cal-extern-hint" style="margin:0 0 4px">Coché, les autres voient « Occupé » — sans titre ni note.</p>
+    </div>
+    </div>
     <div class="cal-create-modal-foot">
       ${edit?'<button type="button" class="cal-btn" id="cp-delete" style="margin-right:auto;border-color:var(--danger);color:var(--danger)">'+(dejaReunion?'Annuler la réunion':'Supprimer')+'</button>':''}
       <button type="button" class="cal-btn" id="cp-cancel">Annuler</button>
@@ -1717,6 +1830,37 @@ async function chargerDispos(){
    periode sur la date trouvee. On cherche aussi dans le passe, avec les
    creneaux a venir en tete. */
 let _rechTimer=null;
+async function initSelecteurCollegue(){
+  const sel=document.getElementById('cal-collegue');
+  if(!sel)return;
+  const gens=await chargerInvitables();
+  sel.innerHTML='<option value="">Tous les collègues</option>'+
+    (gens||[]).map(u=>'<option value="'+u.id+'">Agenda de '+esc(u.nom)+'</option>').join('');
+  try{
+    const memo=localStorage.getItem(LS_COLLEGUE)||'';
+    if(memo&&(gens||[]).some(u=>String(u.id)===memo)){sel.value=memo;S.collegue=memo;}
+  }catch(e){}
+  sel.classList.toggle('actif',!!S.collegue);
+  sel.onchange=()=>{
+    S.collegue=sel.value||'';
+    sel.classList.toggle('actif',!!S.collegue);
+    try{localStorage.setItem(LS_COLLEGUE,S.collegue);}catch(e){}
+    // Demander l'agenda de quelqu'un implique d'afficher le calendrier qui le
+    // porte : sinon le choix reste sans effet visible.
+    if(S.collegue&&!S.visible.collegues){
+      S.visible.collegues=true;
+      saveVisible();
+      renderToggles();
+    }
+    fetchEvents();
+  };
+  if(S.collegue&&!S.visible.collegues){
+    S.visible.collegues=true;
+    saveVisible();
+    renderToggles();
+  }
+}
+
 function bindRecherche(){
   const inp=document.getElementById('cal-search');
   const box=document.getElementById('cal-search-res');
@@ -2656,7 +2800,11 @@ function renderAgenda(p){
         const time=evTimeLabelOnDay(ev,cur);
         html+='<div class="cal-agenda-ev-row">';
         if(time)html+='<span class="cal-agenda-time">'+esc(time)+'</span>';
-        html+='<div class="cal-pill" data-ev-id="'+esc(ev.id)+'" style="'+evSlotStyle(ev)+'">'+esc(ev.titre)+'</div>';
+        const sec=[evDureeTxt(ev),evAuteurTxt(ev)?('par '+evAuteurTxt(ev)):'',evParticipantsTxt(ev)]
+          .filter(Boolean).join(' · ');
+        html+='<div class="cal-pill cal-pill--agenda" data-ev-id="'+esc(ev.id)+'" style="'+evSlotStyle(ev)+'">'+
+          evFlagHtml(ev)+esc(ev.titre)+
+          (sec?'<span class="cal-pill-sec">'+esc(sec)+'</span>':'')+'</div>';
         html+='</div>';
       });
     }else{
@@ -2707,7 +2855,7 @@ function renderMonth(p){
         const cls='cal-pill'+(own?' cal-pill--own':'')+(isBusyPerso(ev)?' cal-pill--busy':'');
         html+='<div class="'+cls+'" data-ev-id="'+esc(ev.id)+'" '+
           (own?'title="Glisser pour changer de jour · double-clic pour modifier" ':'')+
-          'style="'+evSlotStyle(ev)+'">'+esc(ev.titre)+
+          'style="'+evSlotStyle(ev)+'">'+evFlagHtml(ev)+esc(ev.titre)+
           (own?'<span class="cal-rs-x"></span>':'')+'</div>';
       });
       if(more)html+='<div class="cal-more">+'+more+'</div>';
@@ -2792,7 +2940,9 @@ function renderDayTimedHtml(dayTimed,day,range){
       ?'<span class="cal-ev-rs cal-ev-rs-top"></span><span class="cal-ev-rs cal-ev-rs-bot"></span>':'';
     html+='<div class="'+cls+'" data-ev-id="'+esc(ev.id)+'" data-col="'+lay.col+'" data-tot="'+lay.total+'" '+
       (own?'title="Glisser pour déplacer · double-clic pour modifier" ':'')+
-      'style="'+timedEvStyle(ev,slice.top,slice.h,lay.col,lay.total)+'">'+esc(ev.titre)+handles+'</div>';
+      'style="'+timedEvStyle(ev,slice.top,slice.h,lay.col,lay.total)+'">'+
+      '<span class="cal-ev-t">'+evFlagHtml(ev)+esc(ev.titre)+'</span>'+
+      evLignesHtml(ev,slice.h)+handles+'</div>';
   }
   return html;
 }
@@ -2820,7 +2970,7 @@ function renderWeekBars(days){
     const span=colEnd-colStart+1;
     const own=isOwnPerso(ev);
     const cls='cal-mbar'+(own?' cal-mbar--own':'')+(isBusyPerso(ev)?' cal-mbar--busy':'');
-    html+='<div class="'+cls+'" data-ev-id="'+esc(ev.id)+'" style="grid-column:'+colStart+' / span '+span+';grid-row:'+(ri+1)+';'+evSlotStyle(ev)+'">'+esc(ev.titre)+
+    html+='<div class="'+cls+'" data-ev-id="'+esc(ev.id)+'" style="grid-column:'+colStart+' / span '+span+';grid-row:'+(ri+1)+';'+evSlotStyle(ev)+'">'+evFlagHtml(ev)+esc(ev.titre)+
       (own?'<span class="cal-rs-x"></span>':'')+'</div>';
   });
   html+='</div>';
@@ -2844,21 +2994,27 @@ function renderTimeGrid(p,colCount){
   const span=Math.max(1,h1-h0);
   const gridH=span*PX_PER_HOUR;
   let html='<div class="cal-time-wrap'+(colCount===1?' cal-day-single':'')+'">';
-  html+='<div class="cal-time-gutter"><div style="height:32px;border-bottom:1px solid var(--border)"></div>';
-  for(let h=h0;h<h1;h++)html+='<div class="tg-hour">'+pad2(h)+':00</div>';
-  html+='</div><div class="cal-time-grid">';
+  // Bandeau « Journée » sur toute la largeur : son libellé de gauche sert de
+  // repère à la gouttière, et chaque jour a sa propre cellule (deux événements
+  // le même jour ne débordaient pas sur le voisin).
   html+='<div class="cal-allday-row"><div class="cal-allday-label">Journée</div>';
   html+='<div class="cal-allday-cols" style="grid-template-columns:repeat('+colCount+',1fr)">';
-  days.forEach((day,ci)=>{
+  days.forEach(day=>{
     const dk=ymd(day);
+    html+='<div class="cal-allday-cell">';
     allDay.filter(ev=>{
       const s=ymd(startOfDay(evStart(ev))),e=ymd(startOfDay(evEnd(ev)));
       return s<=dk&&e>=dk;
     }).forEach(ev=>{
-      html+='<div class="cal-allday-pill'+(isBusyPerso(ev)?' cal-allday-pill--busy':'')+'" data-ev-id="'+esc(ev.id)+'" style="'+evSlotStyle(ev)+'">'+esc(ev.titre)+'</div>';
+      html+='<div class="cal-allday-pill'+(isBusyPerso(ev)?' cal-allday-pill--busy':'')+'" data-ev-id="'+esc(ev.id)+'" style="'+evSlotStyle(ev)+'">'+evFlagHtml(ev)+esc(ev.titre)+'</div>';
     });
+    html+='</div>';
   });
   html+='</div></div>';
+  html+='<div class="cal-time-body">';
+  html+='<div class="cal-time-gutter"><div class="cal-col-head tg-head">&nbsp;</div>';
+  for(let h=h0;h<h1;h++)html+='<div class="tg-hour">'+pad2(h)+':00</div>';
+  html+='</div><div class="cal-time-grid">';
   html+='<div class="cal-cols-row" style="grid-template-columns:repeat('+colCount+',1fr)">';
   days.forEach(day=>{
     const fl=ferieLabelForDay(day);
@@ -2870,7 +3026,7 @@ function renderTimeGrid(p,colCount){
     if(fl)html+='<div class="cal-col-ferie-label">'+esc(fl)+'</div>';
     html+='</div></div>';
   });
-  html+='</div></div></div>';
+  html+='</div></div></div></div>';
   return html;
 }
 
@@ -3277,6 +3433,7 @@ window.addEventListener('resize',()=>{
     if(window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
     else if(window.MySifaCalendar)MySifaCalendar.mergeFromUser(ME);
     renderToggles();
+    initSelecteurCollegue().catch(()=>{});
     const chip=document.getElementById('sb-user-chip');
     if(chip&&window.MySifaUserChip){
       const editIco='<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';

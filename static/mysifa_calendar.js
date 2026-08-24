@@ -12,18 +12,21 @@
    * `defaut: false` = calendrier décoché à la première ouverture — les
    * plannings machines, la paie et les expéditions encombrent la vue de
    * quelqu'un qui vient y chercher ses réunions. */
+  /* Teintes pastel, alignées sur la palette des créneaux du planning de
+   * production (planning_page.py, const CC) : un libellé écrit en #0a0e17
+   * reste lisible dessus, et les deux plannings se ressemblent enfin. */
   var CAL_DEFS = [
-    { id: 'perso', label: 'Mon calendrier', color: '#f97316', mien: true },
-    { id: 'collegues', label: 'Collègues', color: '#38bdf8' },
-    { id: 'conges', label: 'Congés', color: '#fbbf24' },
-    { id: 'anniversaires', label: 'Anniversaires', color: '#34d399' },
-    { id: 'feries', label: 'Jours fériés', color: '#f87171' },
-    { id: 'paie', label: 'Paie', color: '#a78bfa', defaut: false },
-    { id: 'expeditions', label: 'Expéditions', color: '#f97316', defaut: false },
-    { id: 'production_1', label: 'Cohésio 1', color: '#22d3ee', defaut: false },
-    { id: 'production_2', label: 'Cohésio 2', color: '#3A7BD5', defaut: false },
-    { id: 'production_3', label: 'DSI', color: '#a78bfa', defaut: false },
-    { id: 'production_4', label: 'Repiquage', color: '#34d399', defaut: false },
+    { id: 'perso', label: 'Mon calendrier', color: '#a5b4fc', mien: true },
+    { id: 'collegues', label: 'Collègues', color: '#bae6fd' },
+    { id: 'conges', label: 'Congés', color: '#fde68a' },
+    { id: 'anniversaires', label: 'Anniversaires', color: '#bbf7d0' },
+    { id: 'feries', label: 'Jours fériés', color: '#fca5a5' },
+    { id: 'paie', label: 'Paie', color: '#c4b5fd', defaut: false },
+    { id: 'expeditions', label: 'Expéditions', color: '#fdba74', defaut: false },
+    { id: 'production_1', label: 'Cohésio 1', color: '#67e8f9', defaut: false },
+    { id: 'production_2', label: 'Cohésio 2', color: '#93c5fd', defaut: false },
+    { id: 'production_3', label: 'DSI', color: '#ddd6fe', defaut: false },
+    { id: 'production_4', label: 'Repiquage', color: '#6ee7b7', defaut: false },
   ];
 
   function visibleParDefaut(calId) {

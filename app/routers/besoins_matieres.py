@@ -51,6 +51,7 @@ sur la durée qui tombe dans la fenêtre.
 
 Accès : rôles _STOCK_MATIERES_ADMIN_ROLES (voir stock.py).
 """
+import logging
 import re
 from datetime import date, datetime, timedelta
 from typing import Optional
@@ -72,6 +73,8 @@ from app.routers.stock import (
     require_stock_write,
     stock_config_float,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["besoins-matieres"])
 
@@ -244,14 +247,25 @@ _SQL_PE_UN = _SQL_PE.replace(
 ).replace("ORDER BY COALESCE(pe.planned_start, pe.date_livraison, '9999'), pe.position", "")
 
 
-def _load_dossiers(conn, sql: Optional[str] = None, params: tuple = ()) -> list:
+def _load_dossiers(conn, sql: Optional[str] = None, params: tuple = (),
+                   filtre=None) -> list:
     """Dossiers du planning (attente/en_cours) + fiche technique associée.
 
     Tie-breaker machine identique à planning.py : fiche dont `machine`
     correspond à la machine du dossier > fiche sans machine > autre, puis
     id croissant. Chaque dossier reçoit les champs ft_* (None si aucune fiche).
+
+    `filtre` est appliqué aux lignes brutes, AVANT le rapprochement de fiche.
+    Il ne sert que là où l'appelant sait déjà écarter la majorité des lignes
+    sur un critère que SQL ne sait pas exprimer — le format des dates d'Access,
+    typiquement. Le rapprochement est le poste coûteux : le faire pour des
+    lignes qu'on jette ensuite double le coût de l'écran pour rien.
     """
     pes = [dict(r) for r in conn.execute(sql or _SQL_PE, params).fetchall()]
+    if filtre is not None:
+        pes = [pe for pe in pes if filtre(pe)]
+    if not pes:
+        return []
     fts = [dict(r) for r in conn.execute(_SQL_FT).fetchall()]
 
     by_key: dict = {}
@@ -846,6 +860,97 @@ _SQL_PE_PASSES = _SQL_PE.replace(
     "ORDER BY COALESCE(pe.planned_start, pe.date_livraison, '9999'), pe.position",
     "ORDER BY COALESCE(pe.planned_end, pe.date_livraison, '0000') DESC, pe.id DESC"
 )
+
+
+# ── Les mois passés : les OF scannés que le planning ne porte plus ────────
+#
+# `planning_entries` est un miroir du planning vivant : un dossier livré il y a
+# huit mois n'y est plus. Une fenêtre de douze mois passés lue sur cette seule
+# table afficherait donc des mois vides, et un mois vide se lit « on n'a rien
+# produit » — exactement le contresens qu'on veut éviter.
+#
+# Les OF, eux, restent : `of_imports` garde chaque OF scanné, avec son délai
+# client et sa référence produit — donc de quoi retrouver la fiche technique et
+# recalculer le besoin exactement comme pour un dossier du planning.
+#
+# On ne prend QUE les OF qu'aucun dossier du planning ne porte
+# (`pe.of_import_id IS NULL`) : sinon le même OF compterait deux fois, une fois
+# par le planning et une fois par lui-même. La complémentarité est stricte, pas
+# une préférence de source.
+_SQL_OF_ORPHELINS = """
+    SELECT ('of-' || oi.id)  AS id,
+           NULL              AS machine_id,
+           oi.reference      AS reference,
+           NULL              AS client,
+           NULL              AS description,
+           oi.reference      AS ref_produit,
+           -- Indispensable, pas cosmétique : `of_imports.reference` arrive
+           -- d'Access sous sa forme longue (« 1013/0068 - COHESIO 1 »), alors
+           -- que les fiches sont indexées sur la clé normalisée par le trigger
+           -- `trg_ft_ref_produit_norm_*`. Sans cette normalisation les deux
+           -- clés ne se rencontrent jamais, aucune fiche n'est rapprochée, et
+           -- l'OF ne produit aucun besoin — en silence, puisque rien n'échoue.
+           norm_ref_produit(oi.reference) AS ref_produit_norm,
+           oi.of_numero      AS numero_of,
+           'termine'         AS statut,
+           oi.date_creation  AS planned_start,
+           oi.delai_client   AS planned_end,
+           oi.delai_client   AS date_livraison,
+           NULL              AS duree_heures,
+           0                 AS position,
+           oi.id             AS of_import_id,
+           oi.machine        AS machine_nom,
+           COALESCE(m.sans_matiere_premiere, 0) AS poste_sans_matiere,
+           oi.qte_etiquettes AS qte_etiquettes,
+           oi.qte_bobines    AS qte_bobines,
+           oi.metrage        AS of_metrage,
+           oi.laize          AS of_laize,
+           oi.nb_mandrins    AS of_nb_mandrins,
+           oi.nb_cartons     AS of_nb_cartons,
+           oi.conditionnement AS of_conditionnement,
+           COALESCE(oi.valide, 0) AS of_valide,
+           oi.valide_par          AS of_valide_par,
+           oi.valide_at           AS of_valide_at,
+           oi.invalide_at         AS of_invalide_at,
+           oi.invalide_motif      AS of_invalide_motif
+    FROM of_imports oi
+    LEFT JOIN machines m ON LOWER(TRIM(m.nom)) = LOWER(TRIM(oi.machine))
+    LEFT JOIN planning_entries pe ON pe.of_import_id = oi.id
+    WHERE pe.id IS NULL
+"""
+
+
+def _mois_of(pe: dict) -> Optional[str]:
+    """Mois 'AAAA-MM' visé par un OF : son délai client, sinon sa création."""
+    d = parse_date_livraison(pe.get("date_livraison")) \
+        or parse_date_livraison(pe.get("planned_start"))
+    return f"{d.year:04d}-{d.month:02d}" if d else None
+
+
+def _load_of_orphelins(conn, depuis: Optional[str] = None) -> list:
+    """OF scannés qu'aucun dossier du planning ne porte, prêts pour le calcul.
+
+    `depuis` ('AAAA-MM') borne la fenêtre. Le tri se fait en Python plutôt que
+    dans le WHERE parce que `delai_client` arrive d'Access dans plusieurs
+    formats de date — une comparaison lexicale SQL y serait fausse une fois
+    sur deux. Il reste appliqué avant le rapprochement de fiche technique,
+    qui est le vrai poste de coût sur une table d'archive.
+
+    Best-effort : la colonne `valide` de `of_imports` est arrivée par migration,
+    et un déploiement en retard ne doit pas faire tomber la vue Tendance à 500 —
+    elle rendrait alors les seuls mois que le planning couvre, ce qui est une
+    dégradation lisible, pas une panne.
+    """
+    def _dans_fenetre(pe):
+        m = _mois_of(pe)
+        return bool(m) and (not depuis or m >= depuis)
+
+    try:
+        return _load_dossiers(conn, _SQL_OF_ORPHELINS, filtre=_dans_fenetre)
+    except Exception:
+        logger.exception("[besoins] OF orphelins illisibles — la fenêtre passée "
+                         "de la vue Tendance se limitera au planning.")
+        return []
 
 
 @router.get("/api/stock/besoins-matieres/par-dossier-passes")
@@ -1504,84 +1609,182 @@ def _historique(request: Request, table: str, doc_id: int, libelle: str) -> dict
     }
 
 
+def _mois_glissants(depuis: date, avant: int, apres: int) -> list:
+    """Liste 'AAAA-MM' de M-avant à M+apres, mois courant compris."""
+    an, mo = depuis.year, depuis.month - avant
+    an += (mo - 1) // 12
+    mo = (mo - 1) % 12 + 1
+    out = []
+    for _ in range(avant + 1 + apres):
+        out.append(f"{an:04d}-{mo:02d}")
+        mo += 1
+        if mo > 12:
+            mo, an = 1, an + 1
+    return out
+
+
+def _agreger_of_orphelins(conn, debut: Optional[str] = None) -> tuple:
+    """Même agrégat que `agreger_carnet`, mais sur les OF sans dossier planning.
+
+    Retourne (cumul, vus) au format de `agreger_carnet` : (mois, matiere_id,
+    kind) → { q, unite, inc, ref, designation, source_value } et l'ensemble des
+    identifiants d'OF vus par clé, pour ne pas compter deux fois un même OF qui
+    porterait deux besoins de la même matière.
+    """
+    # Le tri par date est fait par `_load_of_orphelins`, avant le
+    # rapprochement de fiche technique : c'est lui le poste de coût sur le
+    # fond d'archive, pas le calcul du besoin.
+    dossiers = _load_of_orphelins(conn, debut)
+    if not dossiers:
+        return {}, {}
+    mapping = _load_mapping(conn)
+    perte = stock_config_float(conn, "mandrin_perte_coupe_pct")
+
+    cumul: dict = {}
+    vus: dict = {}
+    for pe in dossiers:
+        mois = _mois_of(pe)
+        if not mois:
+            continue  # un OF sans date exploitable ne pèse sur aucun mois
+        for b in _compute_besoins_dossier(pe, mapping, perte):
+            cle = (mois, b.get("matiere_id"), b.get("kind"))
+            agg = cumul.setdefault(cle, {
+                "q": 0.0, "q_actif": 0.0, "unite": b.get("unite"), "inc": 0,
+                "ref": b.get("matiere_ref"), "designation": b.get("matiere_designation"),
+                "source_value": b.get("source_value"),
+            })
+            vus.setdefault(cle, set()).add(pe["id"])
+            q = b.get("quantite")
+            if q is None:
+                agg["inc"] += 1
+            else:
+                agg["q"] += float(q)
+            if not agg["unite"]:
+                agg["unite"] = b.get("unite")
+    return cumul, vus
+
+
 @router.get("/api/stock/besoins-matieres/tendance")
 def besoins_tendance(request: Request):
-    """Besoin par matière et par mois de livraison, sur les mois à venir.
+    """Besoin par matière et par mois de livraison, sur une fenêtre glissante.
 
     Les trois autres vues répondent à « de quoi ai-je besoin » ; celle-ci
     répond à « quand ». C'est la question de l'acheteur : un besoin de frontal
     étalé sur quatre mois ne se commande pas comme le même volume concentré
     sur trois semaines.
 
-    Une ligne par matière, ses mois en colonnes — des petits multiples. Vingt
-    matières sur un graphe commun seraient illisibles et imposeraient une
-    palette catégorielle à vingt teintes, dont aucune ne serait distinguable.
-    Une série par ligne, chacune à son échelle, se lit d'un coup d'œil.
+    La fenêtre par défaut est 12 mois passés + le mois courant + 6 mois à
+    venir. Le passé n'est pas décoratif : c'est la seule référence disponible
+    pour juger si un mois à venir est plein ou creux. Sans lui, un carnet qui
+    ne s'est pas encore rempli et une baisse d'activité ont exactement la même
+    allure.
+
+    Deux sources, strictement complémentaires :
+
+    - le planning (`planning_entries`, tous statuts) pour ce qu'il porte
+      encore — l'essentiel du futur et les derniers mois écoulés ;
+    - les OF scannés qu'aucun dossier du planning ne porte plus
+      (`of_imports`), datés par leur délai client, pour les mois plus anciens.
 
     Le mois d'une ligne est celui de la LIVRAISON, pas de la production : c'est
     l'engagement client qui fixe la date à laquelle la matière doit être là.
     """
     require_stock_matieres_admin(request)
-    try:
-        horizon = max(2, min(18, int(request.query_params.get("mois") or 8)))
-    except (TypeError, ValueError):
-        horizon = 8
+
+    def _q(nom, defaut, mini, maxi):
+        try:
+            return max(mini, min(maxi, int(request.query_params.get(nom) or defaut)))
+        except (TypeError, ValueError):
+            return defaut
+
+    # `mois` reste accepté pour ne pas casser un lien ou un signet existant :
+    # il ne pilotait que l'horizon futur, il continue de ne piloter que lui.
+    # 12 mois révolus + le mois courant + 5 à venir = 18 colonnes.
+    futur = _q("futur", _q("mois", 6, 2, 18) - 1, 1, 24)
+    passe = _q("passe", 12, 0, 36)
+    horizon = futur + 1
     kind_filtre = (request.query_params.get("kind") or "").strip() or None
+
+    # Fenêtre glissante. Ce qui tombe avant est ignoré (trop vieux pour
+    # éclairer une décision d'achat) ; ce qui tombe après est regroupé dans un
+    # « au-delà » plutôt que tronqué en silence — un besoin oublié parce qu'il
+    # sortait de la fenêtre serait pire qu'un besoin affiché en vrac.
+    auj = date.today()
+    mois_courant = f"{auj.year:04d}-{auj.month:02d}"
+    tous_mois = _mois_glissants(auj, passe, futur)
+    mois_passes = [m for m in tous_mois if m < mois_courant]
+    mois_futurs = [m for m in tous_mois if m >= mois_courant]
+    debut, borne = tous_mois[0], tous_mois[-1]
+    AU_DELA = "au-dela"
 
     with get_db() as conn:
         cumul, vus, vus_actifs, dossiers = agreger_carnet(conn)
+        cumul_of, vus_of = _agreger_of_orphelins(conn, debut)
         couv = couverture_carnet(conn)
 
-    # Fenêtre : du mois courant à M+horizon. Les mois passés sont exclus — ils
-    # ne se commandent plus. Ceux au-delà de l'horizon sont regroupés dans un
-    # « au-delà » plutôt que tronqués en silence : un besoin oublié parce qu'il
-    # tombait hors fenêtre serait pire qu'un besoin affiché en vrac.
-    auj = date.today()
-    mois_fenetre = []
-    an, mo = auj.year, auj.month
-    for _ in range(horizon):
-        mois_fenetre.append(f"{an:04d}-{mo:02d}")
-        mo += 1
-        if mo > 12:
-            mo = 1
-            an += 1
-    borne = mois_fenetre[-1]
-    AU_DELA = "au-dela"
+    # Une seule fusion des deux sources : le reste du calcul ne sait plus d'où
+    # vient une ligne, et ne peut donc pas les traiter différemment par erreur.
+    # `origines` garde la trace par mois, pour que l'écran puisse dire « ce
+    # mois-là vient des OF scannés » sans que ça change un seul chiffre.
+    origines: dict = {}
+    for src, (c, v) in (("planning", (cumul, vus)), ("of", (cumul_of, vus_of))):
+        for (mois, _mid, _kind) in c:
+            origines.setdefault(mois, set()).add(src)
 
     lignes: dict = {}
     passe_total = 0.0
-    for (mois, mid, kind), agg in cumul.items():
-        if kind_filtre and kind != kind_filtre:
-            continue
-        if mois < mois_fenetre[0]:
-            passe_total += agg["q_actif"]  # reste à produire sur un mois échu
-            continue
-        col = mois if mois <= borne else AU_DELA
-        cle = (mid, kind)
-        li = lignes.setdefault(cle, {
-            "matiere_id": mid,
-            "libelle": (agg.get("ref") or agg.get("designation")
-                        or agg.get("source_value") or "Non associée"),
-            "designation": agg.get("designation"),
-            "kind": kind,
-            "unite": agg.get("unite"),
-            "par_mois": {},
-            "total": 0.0,
-            "dossiers": set(),
-            "incalculables": 0,
-        })
-        cell = li["par_mois"].setdefault(col, {"q": 0.0, "dossiers": 0, "inc": 0})
-        cell["q"] += agg["q"]
-        cell["dossiers"] += len(vus.get((mois, mid, kind), ()))
-        cell["inc"] += agg["inc"]
-        li["total"] += agg["q"]
-        li["dossiers"] |= vus.get((mois, mid, kind), set())
-        li["incalculables"] += agg["inc"]
+    hors_fenetre = 0.0
+    for src_cumul, src_vus in ((cumul, vus), (cumul_of, vus_of)):
+        for (mois, mid, kind), agg in src_cumul.items():
+            if kind_filtre and kind != kind_filtre:
+                continue
+            if mois < debut:
+                # Trop vieux pour éclairer un achat, mais un dossier encore
+                # actif sur un mois échu est un retard : il reste compté.
+                hors_fenetre += agg["q"]
+                passe_total += agg.get("q_actif", 0.0)
+                continue
+            # Le retard : ce qui reste à produire sur un mois déjà échu. Compté
+            # sur le planning seul — un OF sorti du planning n'a plus de reste.
+            if mois < mois_courant:
+                passe_total += agg.get("q_actif", 0.0)
+            col = mois if mois <= borne else AU_DELA
+            cle = (mid, kind)
+            li = lignes.setdefault(cle, {
+                "matiere_id": mid,
+                "libelle": (agg.get("ref") or agg.get("designation")
+                            or agg.get("source_value") or "Non associée"),
+                "designation": agg.get("designation"),
+                "kind": kind,
+                "unite": agg.get("unite"),
+                "par_mois": {},
+                "total": 0.0,
+                "total_futur": 0.0,
+                "total_au_dela": 0.0,
+                "dossiers": set(),
+                "incalculables": 0,
+            })
+            cell = li["par_mois"].setdefault(col, {"q": 0.0, "dossiers": 0, "inc": 0})
+            cell["q"] += agg["q"]
+            cell["dossiers"] += len(src_vus.get((mois, mid, kind), ()))
+            cell["inc"] += agg["inc"]
+            li["total"] += agg["q"]
+            # `total_futur` s'arrête à la borne de la fenêtre, et le reste est
+            # compté à part. L'écran affiche les deux côte à côte : si le
+            # premier contenait le second, le lecteur additionnerait deux fois
+            # la même matière.
+            if col == AU_DELA:
+                li["total_au_dela"] += agg["q"]
+            elif mois >= mois_courant:
+                li["total_futur"] += agg["q"]
+            li["dossiers"] |= src_vus.get((mois, mid, kind), set())
+            li["incalculables"] += agg["inc"]
 
-    colonnes = mois_fenetre + [AU_DELA]
+    colonnes = tous_mois + [AU_DELA]
     out = []
     for li in lignes.values():
-        serie = [{"mois": c, **li["par_mois"].get(c, {"q": 0.0, "dossiers": 0, "inc": 0})}
+        serie = [{"mois": c, "passe": c < mois_courant and c != AU_DELA,
+                  **li["par_mois"].get(c, {"q": 0.0, "dossiers": 0, "inc": 0})}
                  for c in colonnes]
         out.append({
             **{k: v for k, v in li.items() if k not in ("par_mois", "dossiers")},
@@ -1590,14 +1793,63 @@ def besoins_tendance(request: Request):
             "nb_dossiers": len(li["dossiers"]),
             "non_associee": li["matiere_id"] is None,
         })
-    # Le poids d'abord : on commande ce qui pèse, pas ce qui est alphabétique.
-    out.sort(key=lambda l: (l["kind"], -l["total"]))
+    # Le poids à venir d'abord : c'est ce qui reste à commander qui classe la
+    # liste, pas le volume déjà livré. À égalité, le total sur la fenêtre.
+    out.sort(key=lambda l: (l["kind"], -l["total_futur"], -l["total"]))
+
+    # Regroupement par catégorie de matière, fait ici plutôt que dans l'écran :
+    # l'ordre des catégories et le libellé de chacune sont les mêmes partout
+    # dans MyStock, et les dupliquer côté navigateur garantirait qu'ils
+    # finissent par diverger.
+    cat_libelles = {"support": "Frontal", "glassine": "Glassine",
+                    "adhesif": "Adhésif", "mandrin": "Mandrins",
+                    "carton": "Cartons", "palette": "Palettes"}
+    cats: dict = {}
+    for l in out:
+        c = cats.setdefault(l["kind"], {
+            "kind": l["kind"],
+            "libelle": cat_libelles.get(l["kind"], l["kind"]),
+            "unite": l.get("unite"),
+            "total": 0.0, "total_futur": 0.0, "total_au_dela": 0.0,
+            "nb_matieres": 0, "incalculables": 0,
+            "lignes": [],
+        })
+        c["total"] += l["total"]
+        c["total_futur"] += l["total_futur"]
+        c["total_au_dela"] += l["total_au_dela"]
+        c["incalculables"] += l["incalculables"]
+        # Le rang dans la catégorie, figé ici. C'est lui qui choisira la teinte
+        # de la courbe : une couleur assignée sur la position dans une liste
+        # filtrée changerait à chaque caractère tapé dans la recherche, et une
+        # matière ne serait plus reconnaissable d'un écran à l'autre.
+        l["rang"] = c["nb_matieres"]
+        c["nb_matieres"] += 1
+        c["lignes"].append(l)
+        if not c["unite"]:
+            c["unite"] = l.get("unite")
+    ordre = list(_KINDS)
+    categories = sorted(cats.values(),
+                        key=lambda c: (ordre.index(c["kind"])
+                                       if c["kind"] in ordre else 99))
+    for c in categories:
+        c["total"] = round(c["total"], 2)
+        c["total_futur"] = round(c["total_futur"], 2)
+        c["total_au_dela"] = round(c["total_au_dela"], 2)
 
     return {
         "colonnes": colonnes,
-        "mois": mois_fenetre,
+        "mois": mois_futurs,
+        "mois_passes": mois_passes,
+        "mois_courant": mois_courant,
         "horizon": horizon,
+        "passe": passe,
+        "futur": futur,
         "lignes": out,
+        "categories": categories,
+        # D'où vient chaque mois. Sert uniquement à l'affichage : un mois que
+        # seuls les OF documentent se lit autrement qu'un mois planifié.
+        "origines": {m: sorted(s) for m, s in origines.items() if m in tous_mois},
+        "hors_fenetre": round(hors_fenetre, 2),
         "reste_sur_mois_echus": round(passe_total, 2),
         # Tant que la série de photos est trop courte, l'écran ne doit pas
         # laisser croire qu'il montre une tendance mesurée dans le temps : il
