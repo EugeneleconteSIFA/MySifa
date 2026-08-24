@@ -321,6 +321,35 @@ body.light table.fab-table tr.fab-row-last td{
 }
 .fab-meta-label{font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text2)}
 .fab-no-dossier{font-size:12px;color:var(--muted);font-style:italic}
+/* Reference produit : c'est l'identite du PRODUIT, pas celle de la commande.
+   Toujours affichee, et toujours cliquable — c'est la porte d'entree
+   permanente vers la memoire produit, independante du bouton Historique
+   qui, lui, ne parait que s'il y a quelque chose a voir. */
+.fab-produit-btn{
+  display:inline-flex;align-items:center;gap:5px;align-self:flex-start;
+  background:var(--accent-bg);border:1px solid var(--accent);color:var(--accent);
+  border-radius:8px;padding:3px 9px;margin-top:2px;
+  font-size:11px;font-weight:800;letter-spacing:.3px;
+  cursor:pointer;font-family:inherit;
+}
+.fab-produit-btn:hover{filter:brightness(1.12)}
+.fab-produit-btn .fab-produit-lbl{
+  font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:.5px;opacity:.75;
+}
+/* La consigne dossier etait tronquee sur une ligne : « ATTENTION : SI PALETTE
+   TROP HAUTE - Cartons du... » ne dit rien de ce qu'il faut faire. Elle
+   s'affiche desormais sur trois lignes, et se deplie entierement au clic. */
+.fab-dossier-consigne{
+  font-size:11px;line-height:1.45;color:var(--text2);margin-top:5px;max-width:340px;
+  background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--warn,#fbbf24);
+  border-radius:8px;padding:6px 9px;cursor:pointer;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+}
+.fab-dossier-consigne.is-open{display:block;-webkit-line-clamp:none;max-height:180px;overflow-y:auto}
+.fab-dossier-consigne-lbl{
+  display:block;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--warn,#fbbf24);margin-bottom:2px;
+}
 
 /* Center: action buttons */
 .fab-footer-actions{
@@ -4901,6 +4930,32 @@ function _renderFabTabNav(extraClass){
   return h('div',{className:'fab-tab-nav'+(extraClass?' '+extraClass:'')}, ...tabs);
 }
 
+/* Reference produit du dossier en cours. `ref_produit_norm` est maintenue par
+ * les triggers ; on retombe sur le libelle brut normalise cote client quand la
+ * colonne n'a pas encore ete alimentee (backfill non lance). */
+function fabRefProduit(d){
+  if(!d) return null;
+  const direct = (d.ref_produit_norm||'').trim();
+  if(direct) return direct;
+  if(window.MySifaProduitMemoire && d.ref_produit)
+    return window.MySifaProduitMemoire.normRef(d.ref_produit);
+  return null;
+}
+
+/* Bouton reference produit — toujours present des qu'une reference existe.
+ * Il ouvre la fiche produit meme vide : elle sait dire pourquoi elle l'est
+ * (historique pas encore repris) plutot que de laisser croire que le produit
+ * n'a jamais tourne. */
+function renderRefProduitBtn(){
+  const ref = fabRefProduit(S.dossier);
+  if(!ref || !window.MySifaProduitMemoire) return null;
+  return h('button',{
+    type:'button', className:'fab-produit-btn',
+    title:'Fiche produit '+ref+' — productions passees, notes d\'atelier, OF scannes',
+    onClick:()=>window.MySifaProduitMemoire.openFiche(ref)
+  }, h('span',{className:'fab-produit-lbl'},'Produit'), ref);
+}
+
 /* ── Memoire produit ─────────────────────────────────────────────
  * Le bouton n'existe que si la reference a deja ete produite : c'est sa
  * presence seule qui porte l'information « ce produit est deja passe ».
@@ -4946,6 +5001,8 @@ function renderFooter(){
     if(d.numero_of && !fictifDos) metas.push({label:'N° OF',val:d.numero_of});
     if(fictifDos) metas.push({label:'N° OF fictif',val:fictifOfDisplay(d.reference||d.numero_of||'')});
     if(d.machine_nom) metas.push({label:'Machine',val:d.machine_nom});
+    const refProduit = fabRefProduit(d);
+    if(refProduit) metas.push({label:'Réf. produit',val:refProduit});
 
     // Badge FSC accolé à la référence du dossier. Le bandeau porte déjà la
     // consigne complète ; ce badge sert au coup d'œil : « ce dossier est
@@ -4976,9 +5033,15 @@ function renderFooter(){
           ' ',m.val
         ))
       ),
-      d.commentaire ? h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'4px',
-        overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:'280px'}},
-        '💬 '+d.commentaire) : null,
+      d.commentaire ? h('div',{
+        className:'fab-dossier-consigne',
+        title:'Cliquer pour tout afficher',
+        onClick:function(e){ e.currentTarget.classList.toggle('is-open'); }
+      },
+        h('span',{className:'fab-dossier-consigne-lbl'},'Consigne dossier'),
+        d.commentaire
+      ) : null,
+      renderRefProduitBtn(),
       renderHistoriqueProduitBtn(),
       (d.fsc_requis === 1 || d.fsc_requis === true) ? h('div',{
         style:{display:'flex',gap:'6px',flexWrap:'wrap',marginTop:'8px',alignSelf:'flex-start'},
