@@ -1017,6 +1017,105 @@ Côté entrée, `lif_ligne.lot` et `stm_hist.lot` restent vivants.
 
 ---
 
+## ERP RVGI — l'app `/erp` et son miroir
+
+RVGI est l'ERP de SIFA (base HFSQL `sifa_cs`, serveur `192.168.100.199:4949`).
+MySifa en expose une lecture dans l'app `/erp`, réservée au **super
+administrateur**. La documentation de la base elle-même est dans
+`docs/rvgi/data_rvgi.md` — la lire avant de toucher à quoi que ce soit ici.
+
+### Les trois règles absolues
+
+1. **Le sens d'écriture est unique.** RVGI est la source, MySifa lit. Aucun code
+   MySifa n'écrit dans l'ERP. Côté miroir, ce n'est pas une consigne mais un
+   fait : `app/services/erp_mirror.py` ouvre la base en `mode=ro`, une écriture
+   lève `attempt to write a readonly database`.
+2. **`corbeille = 0`, partout.** RVGI ne supprime pas, il marque. Plus d'une
+   ligne sur deux est morte (`fic_art` : 7 678 vivantes sur 41 389). Le filtre
+   est appliqué à l'export, donc le miroir ne contient que du vivant — mais
+   toute requête écrite directement contre l'ERP doit le porter, des deux côtés
+   d'une jointure.
+3. **Trois colonnes ne sont JAMAIS lues** : `gen_sala.mdp` et `pasmail`,
+   `fic_clt.inftpmdp`, `fic_fou.inftpmdp` — mots de passe en clair côté ERP.
+   `scripts/export_rvgi_csv.ps1` les retire de la liste des colonnes **avant**
+   la requête (`$COLS_INTERDITES`) : leur valeur n'entre jamais en mémoire.
+   Ne pas « simplifier » en `SELECT *`.
+
+### Où vit quoi
+
+| Fichier | Rôle |
+|---|---|
+| `scripts/export_rvgi_csv.ps1` | ERP → CSV, lecture seule, 61 tables. Lit le `.env`. |
+| `scripts/import_rvgi_csv.py` | CSV → `data/erp_mirror.db`. stdlib seule, aucun import de `app.*`. |
+| `scripts/sync_rvgi.ps1` | Export + zip + envoi HTTPS. Tâche planifiée, 5 h et 12 h 30. |
+| `app/services/erp_mirror.py` | Connexion `mode=ro`, moteur de liste générique, sentinelles. |
+| `app/services/erp_catalogue.py` | Les 27 écrans, en déclaratif. |
+| `app/routers/erp.py` | API lecture seule, superadmin. Aucun verbe d'écriture. |
+| `app/web/erp_page.py` | La page `/erp`. |
+| `app/routers/api_bridge.py` | `POST /api/bridge/erp/miroir` — réception des exports. |
+
+Le miroir vit dans **son propre fichier** (`ERP_MIRROR_DB`, défaut
+`data/erp_mirror.db`), pas dans `production.db`. C'est délibéré : il est
+entièrement reconstructible depuis l'ERP, donc il n'a rien à faire dans les
+backups de production ni dans les migrations, et il se purge d'un `rm`. Il n'est
+pas dans git. Chaque instance a le sien — v1 et la prod ne le partagent pas.
+
+### Ajouter un écran
+
+On n'écrit pas de page : on ajoute une entrée à `ECRANS` dans
+`app/services/erp_catalogue.py` — table, alias, jointures, colonnes, filtres,
+groupes du panneau de détail. Le moteur fait le reste.
+
+`adapter_ecran()` élague ensuite l'écran de ce que le miroir n'a pas : une
+colonne absente disparaît au lieu de faire tomber la requête, un écran dont la
+table manque n'est pas proposé. C'est ce qui permet d'écrire un catalogue à
+partir du relevé sans avoir vu les données.
+
+Deux pièges de typage, tous deux traités, à ne pas défaire :
+
+- `code1` / `code2` / `code3` sont **toujours** stockés en TEXT. Sinon `code1`
+  vaut `890` (INTEGER) dans `cde_ligne` et `« FR »` (TEXT) dans `fic_art`, et la
+  jointure ne remonte rien — sans erreur.
+- Les valeurs sentinelles de RVGI (`30/11/1999` = date vide, `99999999999.99` =
+  pas de maximum, `0` sur un prix = non renseigné, `255` sur un octet = non
+  renseigné) sont **conservées en base** et neutralisées à la lecture, dans
+  `nettoyer()`. Corriger en base ferait mentir le miroir sur sa source.
+
+### La synchro
+
+Le VPS ne voit pas `192.168.100.x` : la synchro tourne sur une machine du
+**réseau SIFA**, jamais sur le serveur. Elle exporte, zippe (~20 Mo pour 110 Mo
+de CSV), et pousse vers chaque instance ; c'est le serveur qui reconstruit le
+miroir en tâche de fond. La machine du LAN n'a donc besoin ni de Python ni de
+SQLite — mais elle doit avoir le provider OLE DB `PCSoft.HFSQL` (celui du client
+RVGI ou d'Excel).
+
+Trois prérequis côté serveur, faciles à oublier :
+
+- `client_max_body_size 64M;` dans les vhosts nginx — le défaut d'1 Mo rejette
+  l'archive ;
+- une clé API de portée `erp:write` **par instance** : v1 et la prod ont chacune
+  leur base, et le resync nocturne de v1 écrase ses clés avec celles de prod. La
+  clé à conserver est donc celle créée en prod. `MYSIFA_SYNC_URLS` accepte
+  `url|clé` pour en donner une par cible ;
+- `MYSIFA_SYNC_URLS` et `MYSIFA_API_KEY` dans le `.env` de la machine du LAN —
+  le Planificateur de tâches Windows n'hérite d'aucune variable de terminal.
+
+### Deux détails d'implémentation
+
+**Jamais de WAL sur le miroir.** Une base ouverte en `mode=ro` ne peut pas créer
+les fichiers `-wal` / `-shm` dont WAL a besoin, et certains montages réseau la
+refusent carrément (`disk I/O error`). L'import construit un `.tmp` puis fait un
+`os.replace` : l'app ne voit jamais un miroir à moitié construit, et un import
+raté laisse le précédent en place.
+
+**La disposition des colonnes** (ordre, colonnes verrouillées) est mémorisée
+dans le `localStorage` du navigateur, par écran. C'est un confort d'affichage,
+pas une donnée : elle ne suit pas l'utilisateur d'un poste à l'autre. Si ça doit
+changer, c'est une table de préférences côté serveur.
+
+---
+
 ## Points d'attention critiques
 
 **Base de données**
