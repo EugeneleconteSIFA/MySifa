@@ -895,7 +895,7 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
    un ovale, un div reste rond. */
 .bes-tc-dot{position:absolute;width:9px;height:9px;border-radius:50%;
   border:2px solid var(--card);transform:translate(-50%,-50%);pointer-events:none}
-.bes-tc-tip{position:absolute;top:2px;transform:translateX(-50%);pointer-events:none;
+.bes-tc-tip{position:absolute;top:2px;pointer-events:none;max-width:46%;
   background:var(--card);border:1px solid var(--border);border-radius:8px;
   padding:7px 10px;min-width:140px;box-shadow:0 6px 18px rgba(0,0,0,.16);
   opacity:0;transition:opacity .1s;z-index:12}
@@ -12924,7 +12924,19 @@ function _besTendGraphe(series, cols, moisCourant, documentes, unite, refAn) {
           '% = par rapport à ' + _besMoisLabel(m12)));
       }
     }
-    tip.style.left = Math.min(88, Math.max(12, gauche)) + '%';
+    // L'infobulle se range du côté OPPOSÉ au curseur, jamais au-dessus de lui.
+    // Centrée sur le mois survolé, elle recouvrait les courbes qu'elle décrit :
+    // on lisait « 686 k ml » avec, dessous, une courbe qui semblait au plancher
+    // — alors qu'elle était simplement cachée derrière la boîte.
+    const aGauche = gauche > 50;
+    tip.style.left = aGauche ? 'auto' : '';
+    tip.style.right = aGauche ? '' : 'auto';
+    if (aGauche) {
+      tip.style.right = (100 - gauche + 2) + '%';
+    } else {
+      tip.style.left = (gauche + 2) + '%';
+    }
+    tip.style.transform = 'none';
     tip.style.opacity = '1';
   }
   function cacher() {
