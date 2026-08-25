@@ -818,39 +818,136 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .doc-etat-src{flex:0 0 27%;text-align:right;color:var(--muted);font-size:11px;line-height:1.4}
 .doc-etat-vide{padding:14px;text-align:center;color:var(--muted);font-size:12px}
 .bes-valid-btn:not(:disabled):hover{filter:brightness(1.15)}
-/* ── Vue Tendance : petits multiples ──────────────────────────────────────
-   Une serie par ligne, chacune a son echelle. Vingt matieres sur un graphe
-   commun imposeraient une palette categorielle a vingt teintes dont aucune
-   ne serait distinguable ; une teinte unique par ligne evite la question. */
-.bes-tend-note{font-size:12px;color:var(--muted);line-height:1.6;margin:0 0 14px;
+/* ── Vue Tendance : une courbe par matiere, une carte par categorie ───────
+   Toutes les matieres d'une categorie partagent la meme unite : un axe unique
+   et une echelle commune sont donc legitimes, et deux courbes du meme graphe
+   se comparent vraiment. Au-dela de huit series, le reste est agrege plutot
+   que de recycler les teintes. */
+.bes-tend-note{font-size:12px;color:var(--muted);line-height:1.6;margin:0 0 12px;
   padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--accent) 7%,transparent);
   border:1px solid color-mix(in srgb,var(--accent) 22%,transparent)}
-.bes-tend-grid{display:grid;grid-template-columns:minmax(160px,1.4fr) 1fr;gap:0 16px;align-items:center}
-.bes-tend-axis{display:grid;gap:2px;padding:0 0 6px}
-.bes-tend-axis-lbl{font-size:10px;font-weight:700;letter-spacing:.3px;color:var(--muted);
-  text-align:center;text-transform:uppercase;white-space:nowrap;overflow:hidden}
-.bes-tend-axis-lbl.now{color:var(--accent)}
-.bes-tend-row{display:contents}
-.bes-tend-id{padding:9px 0;border-top:1px solid var(--border);min-width:0}
-.bes-tend-ref{font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;
+/* Un seul controle de fenetre, au-dessus de tous les graphes : il les cadre
+   tous. Une fenetre par graphe donnerait des courbes qu'on croirait
+   comparables alors qu'elles ne couvriraient pas la meme periode. */
+.bes-tend-ctl{display:flex;align-items:center;gap:10px;margin:0 0 14px}
+.bes-tend-ctl-lbl{font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.5px;color:var(--muted)}
+/* La carte : fond plein, bordure fine. C'est la surface sur laquelle la
+   palette a ete validee — un graphe pose sur le fond de page n'aurait pas le
+   meme contraste que celui qu'on a mesure. */
+.bes-tsec{background:var(--card);border:1px solid var(--border);border-radius:12px;
+  margin-bottom:12px;overflow:hidden}
+.bes-tsec-head{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;
+  background:transparent;border:none;font-family:inherit;text-align:left;
+  cursor:pointer;color:var(--text)}
+.bes-tsec-head:hover{background:color-mix(in srgb,var(--accent) 5%,transparent)}
+.bes-tsec-head:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.bes-tsec-chev{flex:0 0 12px;color:var(--muted);font-size:10px;transition:transform .15s}
+.bes-tsec.open .bes-tsec-chev{transform:rotate(90deg)}
+.bes-tsec-titre{font-size:13px;font-weight:700}
+.bes-tsec-count{font-size:11px;color:var(--muted)}
+.bes-tsec-tot{margin-left:auto;font-size:13px;font-weight:700;color:var(--text);
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.bes-tsec-tot-lbl{font-size:10px;font-weight:600;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.4px}
+.bes-tsec-chip{padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;
+  white-space:nowrap;background:color-mix(in srgb,var(--accent) 10%,transparent);
+  color:var(--text2)}
+.bes-tsec-chip.warn{background:color-mix(in srgb,var(--warn,#d97706) 15%,transparent);
+  color:var(--warn,#d97706)}
+.bes-tsec-body{padding:4px 14px 14px;border-top:1px solid var(--border)}
+/* Legende : presente des deux courbes, et cliquable. Elle porte le nom a cote
+   de la teinte — l'identite d'une serie ne repose jamais sur la seule
+   couleur, ce qui est aussi ce qui rachete les trois teintes claires qui
+   passent sous 3:1 de contraste sur fond blanc. */
+.bes-tc-legend{display:flex;flex-wrap:wrap;gap:6px;padding:10px 0 12px}
+.bes-tc-lg{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;
+  border:1px solid var(--border);border-radius:999px;background:transparent;
+  font-family:inherit;font-size:11px;color:var(--text2);cursor:pointer;
+  transition:border-color .12s,opacity .12s;max-width:280px}
+.bes-tc-lg:hover{border-color:var(--accent)}
+.bes-tc-lg:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.bes-tc-lg.off{opacity:.42}
+.bes-tc-lg.off .bes-tc-lg-lbl{text-decoration:line-through}
+.bes-tc-lg.mode{margin-left:auto;font-weight:600;color:var(--accent);
+  border-style:dashed}
+/* Le repere N-1 : une comparaison, pas une prevision. Le bouton n'apparait
+   que si la serie de l'an dernier a de quoi se tracer. */
+.bes-tc-lg.n1{font-weight:600;border-style:dashed}
+.bes-tc-lg.n1.on{border-color:var(--accent);color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.bes-tc-lg.n1+.bes-tc-lg.mode{margin-left:8px}
+.bes-tc-lg-lbl{font-weight:600;color:var(--text);white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
-.bes-tend-meta{font-size:11px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
-.bes-tend-meta.orphelin{color:var(--warn,#d97706);font-weight:600}
-/* Les barres : extremite haute arrondie a 4px, ancree sur la ligne de base,
-   2px de respiration entre deux fills. */
-.bes-tend-plot{display:grid;gap:2px;align-items:end;height:46px;padding:9px 0;
-  border-top:1px solid var(--border)}
-.bes-tend-bar{position:relative;height:100%;display:flex;align-items:flex-end;
-  border-radius:3px;transition:background .12s}
-.bes-tend-bar:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}
-.bes-tend-fill{width:100%;background:var(--accent);border-radius:4px 4px 0 0;min-height:2px}
-.bes-tend-bar.vide .bes-tend-fill{background:var(--border);min-height:2px;border-radius:2px}
-.bes-tend-bar.au-dela .bes-tend-fill{background:color-mix(in srgb,var(--accent) 45%,var(--border))}
-.bes-tend-bar.inc::after{content:'';position:absolute;top:-1px;left:50%;transform:translateX(-50%);
-  width:4px;height:4px;border-radius:50%;background:var(--warn,#d97706)}
-.bes-tend-peak{position:absolute;top:-13px;left:50%;transform:translateX(-50%);
-  font-size:9px;font-weight:700;color:var(--text2);white-space:nowrap;
-  font-variant-numeric:tabular-nums;pointer-events:none}
+.bes-tc-lg-val{color:var(--muted);font-variant-numeric:tabular-nums}
+/* La cle : un trait, pas un pave. A cette densite un carre plein serait de
+   l'encre de donnee occupee a faire le travail d'une etiquette. */
+.bes-tc-key{flex:0 0 14px;width:14px;height:3px;border-radius:2px}
+.bes-tc{position:relative}
+.bes-tc-plot{display:grid;grid-template-columns:56px 1fr;gap:0 8px}
+.bes-tc-yaxis{display:flex;flex-direction:column;justify-content:space-between;
+  align-items:flex-end;height:190px;font-size:10px;color:var(--muted);
+  font-variant-numeric:tabular-nums;padding:8px 0 4px;line-height:1;
+  white-space:nowrap}
+.bes-tc-svgwrap{position:relative;min-width:0}
+/* Repere de survol : un div, pas un <circle>. Le viewBox est etire
+   horizontalement (preserveAspectRatio="none") — un cercle SVG y deviendrait
+   un ovale, un div reste rond. */
+.bes-tc-dot{position:absolute;width:9px;height:9px;border-radius:50%;
+  border:2px solid var(--card);transform:translate(-50%,-50%);pointer-events:none}
+.bes-tc-tip{position:absolute;top:2px;transform:translateX(-50%);pointer-events:none;
+  background:var(--card);border:1px solid var(--border);border-radius:8px;
+  padding:7px 10px;min-width:140px;box-shadow:0 6px 18px rgba(0,0,0,.16);
+  opacity:0;transition:opacity .1s;z-index:12}
+.bes-tc-tip-mois{font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.4px;color:var(--muted);margin-bottom:5px}
+.bes-tc-tip-vide{font-size:11px;color:var(--muted);line-height:1.45;max-width:200px}
+.bes-tc-tip-row{display:flex;align-items:center;gap:7px;margin-top:3px;white-space:nowrap}
+/* La valeur d'abord : ici le lecteur tient deja la serie et cherche le nombre
+   — hierarchie inverse de celle de la legende. */
+.bes-tc-tip-val{font-size:12px;font-weight:700;color:var(--text);
+  font-variant-numeric:tabular-nums}
+.bes-tc-tip-lbl{font-size:11px;color:var(--muted);overflow:hidden;
+  text-overflow:ellipsis;max-width:150px}
+/* L'ecart a l'an dernier, toujours present dans l'infobulle meme quand les
+   courbes fantomes sont masquees : c'est du texte, il ne charge pas le graphe. */
+.bes-tc-tip-n1{margin-left:auto;padding-left:8px;font-size:11px;font-weight:700;
+  font-variant-numeric:tabular-nums;color:var(--text2)}
+.bes-tc-tip-n1.haut{color:var(--success,#059669)}
+.bes-tc-tip-n1.bas{color:var(--warn,#d97706)}
+.bes-tc-tip-n1.neutre{color:var(--muted);font-weight:400}
+.bes-tc-tip-note{margin-top:6px;padding-top:5px;border-top:1px solid var(--border);
+  font-size:10px;color:var(--muted)}
+.bes-tc-xrow{display:grid;grid-template-columns:56px 1fr;gap:0 8px;margin-top:5px}
+.bes-tc-xaxis{display:grid;min-width:0}
+.bes-tc-xlbl{font-size:9.5px;font-weight:700;letter-spacing:.2px;color:var(--muted);
+  text-align:center;text-transform:uppercase;white-space:nowrap;overflow:hidden}
+.bes-tc-xlbl.passe{font-weight:600;opacity:.72}
+.bes-tc-xlbl.now{color:var(--accent);opacity:1}
+.bes-tc-vide{padding:14px 0 2px;text-align:center;color:var(--muted);font-size:12px}
+/* Vue tableau : le meme contenu sans dependre de la couleur, et copiable. */
+.bes-tc-tablewrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px}
+.bes-tc-table{width:100%;border-collapse:collapse;font-size:11.5px;
+  font-variant-numeric:tabular-nums}
+.bes-tc-table th,.bes-tc-table td{padding:6px 8px;border-bottom:1px solid var(--border);
+  white-space:nowrap}
+.bes-tc-table thead th{font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;
+  color:var(--muted);font-weight:700;text-align:left;position:sticky;top:0;
+  background:var(--card)}
+.bes-tc-table .num{text-align:right;color:var(--text2)}
+.bes-tc-table .now{color:var(--accent)}
+.bes-tc-table .nd{color:var(--muted);opacity:.6;font-style:italic}
+.bes-tc-table .tot{font-weight:700;color:var(--text)}
+.bes-tc-table tbody th.lbl{display:flex;align-items:center;gap:7px;font-weight:600;
+  color:var(--text);text-align:left;max-width:220px;overflow:hidden}
+.bes-tc-table tbody tr:last-child th,.bes-tc-table tbody tr:last-child td{border-bottom:none}
+.bes-tc-table tbody tr:hover td,.bes-tc-table tbody tr:hover th{
+  background:color-mix(in srgb,var(--accent) 5%,transparent)}
+@media (max-width:900px){
+  .bes-tc-plot,.bes-tc-xrow{grid-template-columns:46px 1fr;gap:0 6px}
+  .bes-tc-yaxis{font-size:9px}
+  .bes-tc-xlbl{font-size:8px;letter-spacing:0}
+}
 .bes-destock-ok{color:var(--success,#22c55e);font-weight:700;font-size:12px}
 .bes-destock-todo{color:var(--warn,#d97706);font-weight:700;font-size:12px}
 /* Laize : une bobine ne se commande, ne se stocke et ne se destocke que dans sa laize */
@@ -1994,6 +2091,7 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
+<script src="/static/mysifa_cal_rappel.js?v=4"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script>
 /*__TRACA_GUIDE__*/
@@ -12479,12 +12577,29 @@ function buildBesoinsMatieres() {
 // l'échelle soit explicite. Vingt matières sur un graphe commun seraient
 // illisibles et exigeraient vingt teintes catégorielles dont aucune ne serait
 // distinguable ; une série par ligne rend la question sans objet.
+// Fenêtre par défaut : 12 mois révolus + le mois courant + 5 à venir. Le passé
+// n'est pas décoratif — c'est la seule référence disponible pour juger si un
+// mois à venir est plein ou creux. Sans lui, un carnet qui ne s'est pas encore
+// rempli et une baisse d'activité ont exactement la même allure.
+const BES_TEND_FENETRES = [
+  { cle: '18', passe: 12, futur: 5, lbl: '18 mois', title: '12 mois révolus + le mois courant + 5 à venir' },
+  { cle: '12', passe: 6, futur: 5, lbl: '12 mois', title: '6 mois révolus + le mois courant + 5 à venir' },
+  { cle: 'futur', passe: 0, futur: 7, lbl: 'À venir', title: 'Le mois courant et les 7 suivants' },
+];
+
+function _besTendFenetre() {
+  return BES_TEND_FENETRES.find(f => f.cle === (S.besoinsTendFenetre || '18'))
+      || BES_TEND_FENETRES[0];
+}
+
 async function loadBesoinsTendance() {
   S.besoinsTendance = null;
   S.besoinsLoading = true;
   renderContent();
+  const f = _besTendFenetre();
   try {
-    S.besoinsTendance = await api('/api/stock/besoins-matieres/tendance?mois=8');
+    S.besoinsTendance = await api(
+      '/api/stock/besoins-matieres/tendance?passe=' + f.passe + '&futur=' + f.futur);
   } catch (e) {
     S.besoinsTendance = { erreur: e.message || 'chargement impossible' };
     showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
@@ -12513,34 +12628,427 @@ function _besFmtQte(v, unite) {
   return s + (unite ? ' ' + unite : '');
 }
 
+// ── Palette catégorielle ────────────────────────────────────────────────
+// Huit teintes, assignées dans un ordre FIXE et jamais recyclées : la couleur
+// suit la matière, pas son rang. Masquer une série ne doit donc jamais
+// repeindre les autres. Au-delà de huit matières dans une catégorie, le reste
+// est agrégé en « Autres » plutôt que de fabriquer une neuvième teinte que
+// personne ne distinguerait de la première.
+//
+// Les deux jeux sont validés séparément contre leur fond (blanc en thème
+// clair, #111827 en thème sombre) : séparation daltonisme, plancher de
+// chroma, contraste. Le jeu sombre n'est pas un inversement automatique du
+// clair, ce sont les mêmes teintes re-pas­sées sur le fond sombre.
+const BES_TEND_PAL_CLAIR = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100',
+                            '#e87ba4', '#008300', '#4a3aa7', '#e34948'];
+const BES_TEND_PAL_SOMBRE = ['#3987e5', '#d95926', '#199e70', '#c98500',
+                             '#d55181', '#008300', '#9085e9', '#e66767'];
+const BES_TEND_MAX_SERIES = 8;
+
+function _besTendPalette() {
+  return document.body.classList.contains('light')
+    ? BES_TEND_PAL_CLAIR : BES_TEND_PAL_SOMBRE;
+}
+
+function _besTendCle(l) {
+  return l.kind + '|' + (l.matiere_id != null ? 'm' + l.matiere_id : 's' + l.libelle);
+}
+
+// '2026-09' → '2025-09'. null pour « au-delà », qui n'est pas un mois.
+function _besMoisMoins12(cle) {
+  const m = /^(\d{4})-(\d{2})$/.exec(cle || '');
+  return m ? (parseInt(m[1], 10) - 1) + '-' + m[2] : null;
+}
+
+// Sections repliées et séries masquées : mémorisés dans S, parce que
+// renderContent() reconstruit tout le DOM à chaque frappe dans le filtre —
+// un état porté par le DOM serait perdu à chaque caractère tapé.
+function _besTendEtat() {
+  if (!S.besoinsTendFerme) S.besoinsTendFerme = {};
+  if (!S.besoinsTendMasque) S.besoinsTendMasque = {};
+  if (!S.besoinsTendTable) S.besoinsTendTable = {};
+  if (!S.besoinsTendRefAn) S.besoinsTendRefAn = {};
+  return S;
+}
+
+// Chemin lissé (Catmull-Rom → Bézier cubique), même tension que le sparkline
+// de la valorisation : lisse sans arrondir les pics au point de les effacer.
+function _besTendPath(pts) {
+  if (pts.length < 2) return '';
+  let d = 'M ' + pts[0][0].toFixed(2) + ' ' + pts[0][1].toFixed(2);
+  const T = 0.16;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2] || p2;
+    d += ' C ' + (p1[0] + (p2[0] - p0[0]) * T).toFixed(2) + ' '
+              + (p1[1] + (p2[1] - p0[1]) * T).toFixed(2) + ', '
+              + (p2[0] - (p3[0] - p1[0]) * T).toFixed(2) + ' '
+              + (p2[1] - (p3[1] - p1[1]) * T).toFixed(2) + ', '
+              + p2[0].toFixed(2) + ' ' + p2[1].toFixed(2);
+  }
+  return d;
+}
+
+// Échelle « ronde » : 1, 2, 2.5 ou 5 × 10^n au-dessus du max. Un axe qui se
+// termine sur 7 431 ne se lit pas ; sur 8 000, si.
+function _besTendEchelle(max) {
+  if (!(max > 0)) return 1;
+  const e = Math.pow(10, Math.floor(Math.log10(max)));
+  for (const m of [1, 2, 2.5, 5, 10]) {
+    if (max <= m * e) return m * e;
+  }
+  return 10 * e;
+}
+
+// ── Un graphe : une catégorie, une courbe par matière ────────────────────
+// Toutes les matières d'une catégorie partagent la même unité (le kind la
+// fixe), donc un axe unique et une échelle commune sont légitimes : deux
+// courbes du même graphe se comparent vraiment. Jamais deux axes Y.
+function _besTendGraphe(series, cols, moisCourant, documentes, unite, refAn) {
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const N = cols.length;
+  const W = 1000, H = 190, padT = 12, padB = 8;
+  const usable = H - padT - padB;
+  const x = i => ((i + 0.5) / N) * W;
+  const visibles = series.filter(s => !s.masquee);
+  // L'échelle englobe le repère N-1 quand il est affiché : sinon un an plus
+  // fort que celui-ci sortirait par le haut, et l'écart — qui est tout
+  // l'intérêt du repère — deviendrait invisible.
+  const maxData = visibles.reduce((m, s) => Math.max(
+    m,
+    s.valeurs.reduce((a, v) => Math.max(a, v || 0), 0),
+    refAn ? s.refAn.reduce((a, v) => Math.max(a, v || 0), 0) : 0), 0);
+  const echelle = _besTendEchelle(maxData);
+  const y = v => padT + usable - (Math.max(0, v || 0) / echelle) * usable;
+
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+  svg.setAttribute('preserveAspectRatio', 'none');
+  svg.setAttribute('role', 'img');
+  svg.style.width = '100%';
+  svg.style.height = H + 'px';
+  svg.style.display = 'block';
+  const mk = (tag, attrs) => {
+    const n = document.createElementNS(svgNS, tag);
+    Object.entries(attrs).forEach(([k, v]) => n.setAttribute(k, String(v)));
+    return n;
+  };
+
+  // Hachures : un mois dont AUCUNE source ne parle n'est pas un mois à zéro.
+  // On le raye et on y coupe les courbes, plutôt que de tracer un plancher
+  // qui se lirait « on n'a rien produit ».
+  const hachId = 'bes-tend-hach-' + Math.random().toString(36).slice(2, 9);
+  const defs = document.createElementNS(svgNS, 'defs');
+  const pat = mk('pattern', { id: hachId, width: 7, height: 7,
+                              patternUnits: 'userSpaceOnUse',
+                              patternTransform: 'rotate(45)' });
+  pat.appendChild(mk('line', { x1: 0, y1: 0, x2: 0, y2: 7,
+                               stroke: 'var(--border)', 'stroke-width': 2 }));
+  defs.appendChild(pat);
+  svg.appendChild(defs);
+
+  // Bandes : le passé en retrait, les mois non documentés hachurés.
+  const iCourant = Math.max(0, cols.indexOf(moisCourant));
+  if (iCourant > 0) {
+    svg.appendChild(mk('rect', {
+      x: 0, y: 0, width: (iCourant / N) * W, height: H,
+      fill: 'var(--bg)', opacity: 0.7,
+    }));
+  }
+  cols.forEach((c, i) => {
+    if (documentes.has(c)) return;
+    svg.appendChild(mk('rect', {
+      x: (i / N) * W, y: 0, width: W / N, height: H,
+      fill: 'url(#' + hachId + ')', opacity: 0.5,
+    }));
+  });
+
+  // Grille : quatre horizontales, discrètes. La ligne de base est plus dense
+  // que les autres — c'est le zéro, pas une graduation comme les autres.
+  for (let g = 0; g <= 4; g++) {
+    const yy = padT + (usable * g) / 4;
+    svg.appendChild(mk('line', {
+      x1: 0, x2: W, y1: yy, y2: yy,
+      stroke: g === 4 ? 'var(--muted)' : 'var(--border)',
+      'stroke-width': 1, opacity: g === 4 ? 0.55 : 0.6,
+      'vector-effect': 'non-scaling-stroke',
+    }));
+  }
+
+  // Frontière passé / à venir : le repère le plus important du graphe.
+  if (iCourant > 0) {
+    svg.appendChild(mk('line', {
+      x1: (iCourant / N) * W, x2: (iCourant / N) * W, y1: 0, y2: H,
+      stroke: 'var(--accent)', 'stroke-width': 1.5, 'stroke-dasharray': '4 3',
+      opacity: 0.65, 'vector-effect': 'non-scaling-stroke',
+    }));
+  }
+
+  // Découpe une série en segments, en coupant sur les mois qu'aucune source ne
+  // documente. Une ligne droite au-dessus d'un trou inventerait une continuité.
+  function segmenter(valeurs, dispo) {
+    let seg = [];
+    const segments = [];
+    cols.forEach((c, i) => {
+      const v = valeurs[i];
+      if (!dispo(c, i) || v == null) {
+        if (seg.length) segments.push(seg);
+        seg = [];
+        return;
+      }
+      seg.push([x(i), y(v)]);
+    });
+    if (seg.length) segments.push(seg);
+    return segments;
+  }
+
+  function tracer(segments, couleur, opts) {
+    const o = opts || {};
+    segments.forEach(pts => {
+      if (pts.length === 1) {
+        // Un mois isolé entre deux trous : un trait court, sinon il
+        // disparaîtrait du graphe alors qu'il porte une valeur.
+        svg.appendChild(mk('line', Object.assign({
+          x1: pts[0][0] - 6, x2: pts[0][0] + 6, y1: pts[0][1], y2: pts[0][1],
+          stroke: couleur, 'stroke-width': o.width || 2, 'stroke-linecap': 'round',
+          'vector-effect': 'non-scaling-stroke',
+        }, o.dash ? { 'stroke-dasharray': o.dash, opacity: o.opacity } : {})));
+        return;
+      }
+      const attrs = {
+        d: _besTendPath(pts), fill: 'none', stroke: couleur,
+        'stroke-width': o.width || 2, 'stroke-linecap': 'round',
+        'stroke-linejoin': 'round', 'vector-effect': 'non-scaling-stroke',
+      };
+      if (o.dash) { attrs['stroke-dasharray'] = o.dash; attrs.opacity = o.opacity; }
+      svg.appendChild(mk('path', attrs));
+    });
+  }
+
+  // ── Repère N-1, tracé EN PREMIER pour rester derrière les courbes ────────
+  // Le même mois douze mois plus tôt. Ce n'est pas une prévision : c'est le
+  // seul point de comparaison disponible pour dire si un mois à venir est en
+  // avance ou en retard de remplissage. Fin, pointillé, à 40 % — il doit se
+  // lire comme un fond, jamais comme une deuxième donnée.
+  if (refAn) {
+    visibles.forEach(s => {
+      tracer(segmenter(s.refAn, (c, i) => s.refAn[i] != null), s.couleur,
+             { width: 1.5, dash: '3 3', opacity: 0.4 });
+    });
+  }
+
+  visibles.forEach(s => {
+    tracer(segmenter(s.valeurs, c => documentes.has(c)), s.couleur);
+  });
+
+  // Crosshair : le lecteur vise un mois, jamais une courbe de 2 px.
+  const cross = mk('line', {
+    y1: 0, y2: H, stroke: 'var(--text2)', 'stroke-width': 1,
+    'stroke-dasharray': '3 3', opacity: 0.55,
+    'vector-effect': 'non-scaling-stroke',
+  });
+  cross.style.display = 'none';
+  svg.appendChild(cross);
+
+  const capture = mk('rect', { x: 0, y: 0, width: W, height: H, fill: 'transparent' });
+  capture.style.cursor = 'crosshair';
+  svg.appendChild(capture);
+
+  const wrap = el('div', { cls: 'bes-tc-svgwrap' }, svg);
+
+  // Repères de survol : des div HTML, pas des <circle>. Le viewBox est étiré
+  // horizontalement (preserveAspectRatio="none") — un cercle SVG y devient un
+  // ovale, un div reste rond.
+  const dots = visibles.map(s => {
+    const d = el('div', { cls: 'bes-tc-dot', style: { background: s.couleur } });
+    d.style.display = 'none';
+    wrap.appendChild(d);
+    return d;
+  });
+  const tip = el('div', { cls: 'bes-tc-tip' });
+  wrap.appendChild(tip);
+
+  function montrer(i) {
+    const c = cols[i];
+    cross.setAttribute('x1', String(x(i)));
+    cross.setAttribute('x2', String(x(i)));
+    cross.style.display = '';
+    const gauche = ((i + 0.5) / N) * 100;
+    visibles.forEach((s, k) => {
+      const val = s.valeurs[i];
+      if (!documentes.has(c) || !(val > 0)) { dots[k].style.display = 'none'; return; }
+      dots[k].style.display = '';
+      dots[k].style.left = gauche + '%';
+      dots[k].style.top = ((y(val) / H) * 100) + '%';
+    });
+
+    const m12 = _besMoisMoins12(c);
+    tip.textContent = '';
+    tip.appendChild(el('div', { cls: 'bes-tc-tip-mois' }, _besMoisLabel(c)));
+    if (!documentes.has(c)) {
+      tip.appendChild(el('div', { cls: 'bes-tc-tip-vide' },
+        'Aucune donnée pour ce mois — ni dossier au planning, ni OF scanné.'));
+    } else {
+      const rows = visibles
+        .map(s => ({ s, v: s.valeurs[i] }))
+        .filter(r => r.v > 0)
+        .sort((a, b) => b.v - a.v)
+        .slice(0, 8);
+      if (!rows.length) {
+        tip.appendChild(el('div', { cls: 'bes-tc-tip-vide' }, 'Rien de daté sur ce mois.'));
+      }
+      rows.forEach(r => {
+        // L'écart à l'an dernier est dans l'infobulle QUOI QU'IL ARRIVE, même
+        // quand les courbes fantômes sont masquées : c'est un texte, il ne
+        // charge pas le graphe, et c'est la question que l'acheteur pose.
+        const ra = r.s.refAn[i];
+        const pct = (ra != null && ra > 0) ? Math.round((r.v / ra) * 100) : null;
+        tip.appendChild(el('div', { cls: 'bes-tc-tip-row' },
+          el('span', { cls: 'bes-tc-key', style: { background: r.s.couleur } }),
+          el('span', { cls: 'bes-tc-tip-val' }, _besFmtQte(r.v, unite)),
+          el('span', { cls: 'bes-tc-tip-lbl' }, r.s.libelle),
+          pct != null
+            ? el('span', {
+                cls: 'bes-tc-tip-n1' + (pct >= 100 ? ' haut' : (pct < 70 ? ' bas' : '')),
+                title: 'Contre ' + _besFmtQte(ra, unite) + ' en ' + _besMoisLabel(m12),
+              }, pct + ' %')
+            : (ra === 0
+                ? el('span', { cls: 'bes-tc-tip-n1 neutre', title: 'Rien sur ce mois l\'an dernier' }, '—')
+                : null),
+        ));
+      });
+      if (rows.length && rows.some(r => r.s.refAn[i] != null)) {
+        tip.appendChild(el('div', { cls: 'bes-tc-tip-note' },
+          '% = par rapport à ' + _besMoisLabel(m12)));
+      }
+    }
+    tip.style.left = Math.min(88, Math.max(12, gauche)) + '%';
+    tip.style.opacity = '1';
+  }
+  function cacher() {
+    cross.style.display = 'none';
+    dots.forEach(d => { d.style.display = 'none'; });
+    tip.style.opacity = '0';
+  }
+  wrap.addEventListener('pointermove', ev => {
+    const r = wrap.getBoundingClientRect();
+    if (!r.width) return;
+    const i = Math.max(0, Math.min(N - 1,
+      Math.floor(((ev.clientX - r.left) / r.width) * N)));
+    montrer(i);
+  });
+  wrap.addEventListener('pointerleave', cacher);
+
+  // Axe Y : trois repères suffisent quand une grille les matérialise déjà.
+  const yaxis = el('div', { cls: 'bes-tc-yaxis' },
+    el('span', {}, _besFmtQte(echelle, unite)),
+    el('span', {}, _besFmtQte(echelle / 2, '')),
+    el('span', {}, '0'),
+  );
+
+  // Axe X : du HTML, pas du <text> SVG. Le viewBox étiré déformerait la typo.
+  const xaxis = el('div', {
+    cls: 'bes-tc-xaxis',
+    style: { gridTemplateColumns: 'repeat(' + N + ', 1fr)' },
+  }, ...cols.map((c, i) => el('span', {
+    cls: 'bes-tc-xlbl' + (c === moisCourant ? ' now' : '')
+         + (c < moisCourant ? ' passe' : ''),
+    title: _besMoisLabel(c) + (documentes.has(c) ? '' : ' — aucune donnée'),
+  },
+    // L'année n'est répétée qu'aux endroits où elle apprend quelque chose : le
+    // premier mois, chaque janvier, le mois courant. Dix-huit fois « 25 » et
+    // « 26 » doublent la largeur des étiquettes pour rien — et c'est cette
+    // largeur qui les fait se toucher sur un écran étroit.
+    (i === 0 || c === moisCourant || c.slice(5) === '01')
+      ? _besMoisLabel(c) : _besMoisLabel(c).replace(/ \d{2}$/, ''))));
+
+  return el('div', { cls: 'bes-tc' },
+    el('div', { cls: 'bes-tc-plot' }, yaxis, wrap),
+    el('div', { cls: 'bes-tc-xrow' }, el('div', {}), xaxis),
+  );
+}
+
+// Vue tableau d'une catégorie. Elle n'est pas décorative : trois teintes de la
+// palette claire passent sous 3:1 sur fond blanc, et la règle est alors de
+// fournir un accès aux valeurs qui ne dépende pas de la couleur. Elle sert
+// aussi à copier des chiffres, ce qu'aucune courbe ne permet.
+function _besTendTableau(series, cols, moisCourant, documentes, unite) {
+  const t = el('table', { cls: 'bes-tc-table' });
+  t.appendChild(el('thead', {}, el('tr', {},
+    el('th', {}, 'Matière'),
+    ...cols.map(c => el('th', {
+      cls: 'num' + (c === moisCourant ? ' now' : '')
+           + (documentes.has(c) ? '' : ' nd'),
+      title: documentes.has(c) ? '' : 'Aucune donnée pour ce mois',
+    }, _besMoisLabel(c))),
+    el('th', { cls: 'num' }, 'Total'),
+  )));
+  const tb = el('tbody', {});
+  series.forEach(s => {
+    // Le total ne compte que les mois documentés : additionner un trou
+    // reviendrait à lui donner la valeur zéro — exactement ce que la vue
+    // courbe refuse de faire en coupant le tracé.
+    const tot = s.valeurs.reduce(
+      (a, v, i) => a + (documentes.has(cols[i]) ? (v || 0) : 0), 0);
+    tb.appendChild(el('tr', {},
+      el('th', { cls: 'lbl' },
+        el('span', { cls: 'bes-tc-key', style: { background: s.couleur } }),
+        s.libelle),
+      ...s.valeurs.map((v, i) => {
+        const nd = !documentes.has(cols[i]);
+        return el('td', {
+          cls: 'num' + (cols[i] === moisCourant ? ' now' : '') + (nd ? ' nd' : ''),
+          title: nd ? 'Aucune donnée pour ce mois' : '',
+        }, nd ? 'n.d.' : (v > 0 ? _besFmtQte(v, '') : '—'));
+      }),
+      el('td', { cls: 'num tot' }, _besFmtQte(tot, unite)),
+    ));
+  });
+  t.appendChild(tb);
+  return el('div', { cls: 'bes-tc-tablewrap' }, t);
+}
+
 function _buildBesoinsTendance(data) {
   if (!data) return el('div', { cls: 'bes-empty' }, 'Chargement de la tendance…');
   if (data.erreur) {
     return el('div', { cls: 'bes-empty', style: { color: 'var(--danger)' } },
       'Erreur : ' + data.erreur);
   }
-  const lignes = (data.lignes || []).filter(l => _besMatchFiltre(
-    { reference: l.libelle, designation: l.designation, matiere: l.libelle }, S.besoinsFiltre));
+  const st = _besTendEtat();
   const cont = el('div', {});
+  const cols = (data.colonnes || []).filter(c => c !== 'au-dela');
+  const moisCourant = data.mois_courant || (data.mois || [])[0] || '';
+  const documentes = new Set(Object.keys(data.origines || {}));
+  const palette = _besTendPalette();
 
-  // Dire ce que l'écran montre vraiment. Tant que la série de photos du carnet
-  // est courte, ce n'est pas une tendance mesurée dans le temps : c'est l'état
-  // du carnet aujourd'hui, réparti par mois de livraison. Laisser croire
-  // l'inverse ferait prendre un carnet qui se remplit pour une baisse d'activité.
+  // ── Ce que montre l'écran ──
+  // Un mois à venir paraît creux parce qu'il n'est pas encore commandé, pas
+  // parce que l'activité baisse. C'est précisément ce que le passé sert à
+  // trancher : sans lui, les deux lectures sont indiscernables.
   const jours = ((data.historique || {}).jours) || 0;
+  const nbPasses = (data.mois_passes || []).length;
   cont.appendChild(el('div', { cls: 'bes-tend-note' },
     el('div', {},
       el('strong', {}, 'Ce que montre cet écran : '),
-      'le carnet d\'aujourd\'hui, réparti par mois de livraison. ',
-      'Les mois éloignés paraissent creux parce qu\'ils ne sont pas encore ',
-      'commandés — pas parce que l\'activité baisse.'),
+      'le besoin matière par mois de LIVRAISON, sur ' + cols.length + ' mois — ',
+      nbPasses + ' mois révolus à gauche du repère, le reste devant. ',
+      'À droite du repère, un mois bas signifie « pas encore commandé », pas ',
+      '« activité en baisse » : la comparaison au même mois de l\'an dernier, à ',
+      'gauche, est là pour trancher.'),
     el('div', { style: { marginTop: '6px' } },
-      jours < 2
-        ? 'Le carnet est photographié chaque jour depuis aujourd\'hui. Après quelques semaines, cet écran pourra dire de combien un mois se remplit à l\'approche, et donc ce qu\'il manque encore.'
-        : jours + ' jour(s) de photos accumulés' +
+      'Sources : les dossiers du planning, complétés — pour les mois que le ',
+      'planning ne porte plus — par les OF scannés et leurs fiches techniques. ',
+      'Un mois hachuré n\'est documenté par aucune des deux : c\'est un trou, ',
+      'pas un zéro.'),
+    jours >= 2
+      ? el('div', { style: { marginTop: '6px' } },
+          jours + ' jour(s) de photos du carnet accumulés' +
           ((data.historique.horizons_calibrables || []).length
             ? ' — horizons calibrables : M+' + data.historique.horizons_calibrables.join(', M+') + '.'
-            : ' — encore trop court pour extrapoler.')),
+            : ' — encore trop court pour extrapoler.'))
+      : null,
     data.reste_sur_mois_echus > 0
       ? el('div', { style: { marginTop: '6px', color: 'var(--warn,#d97706)', fontWeight: '600' } },
           'Attention : ' + _besFmtQte(data.reste_sur_mois_echus) +
@@ -12548,66 +13056,210 @@ function _buildBesoinsTendance(data) {
       : null,
   ));
 
-  if (!lignes.length) {
+  // ── Fenêtre ──
+  // Un seul contrôle, au-dessus de tous les graphes : il les cadre tous. Une
+  // fenêtre par graphe donnerait des courbes qu'on croirait comparables.
+  cont.appendChild(el('div', { cls: 'bes-tend-ctl' },
+    el('span', { cls: 'bes-tend-ctl-lbl' }, 'Fenêtre'),
+    el('div', { cls: 'bes-seg' }, ...BES_TEND_FENETRES.map(f =>
+      el('button', {
+        cls: 'bes-seg-btn' + ((S.besoinsTendFenetre || '18') === f.cle ? ' active' : ''),
+        title: f.title,
+        on: { click: () => { S.besoinsTendFenetre = f.cle; loadBesoinsTendance(); } },
+      }, f.lbl))),
+  ));
+
+  const categories = (data.categories || []).map(c => Object.assign({}, c, {
+    lignes: (c.lignes || []).filter(l => _besMatchFiltre(
+      { reference: l.libelle, designation: l.designation, matiere: l.libelle },
+      S.besoinsFiltre)),
+  })).filter(c => c.lignes.length);
+
+  if (!categories.length) {
     cont.appendChild(el('div', { cls: 'bes-empty' },
-      'Aucun besoin daté sur l\'horizon. Les dossiers sans date de livraison ' +
-      'lisible ne peuvent être rattachés à aucun mois.'));
+      S.besoinsFiltre
+        ? 'Aucune matière ne correspond au filtre.'
+        : 'Aucun besoin daté sur la fenêtre. Les dossiers sans date de '
+          + 'livraison lisible ne peuvent être rattachés à aucun mois.'));
     return cont;
   }
 
-  const cols = data.colonnes || [];
-  const moisCourant = (data.mois || [])[0];
-  const grid = el('div', { cls: 'bes-tend-grid' });
+  categories.forEach(cat => {
+    const ferme = !!st.besoinsTendFerme[cat.kind];
+    const unite = cat.unite || '';
 
-  // Axe : les mois, une seule fois en tête. Le mois courant est marqué.
-  grid.appendChild(el('div', {}));
-  grid.appendChild(el('div', {
-    cls: 'bes-tend-axis',
-    style: { gridTemplateColumns: 'repeat(' + cols.length + ', 1fr)' },
-  }, ...cols.map(c => el('div', {
-    cls: 'bes-tend-axis-lbl' + (c === moisCourant ? ' now' : ''),
-  }, _besMoisLabel(c)))));
+    // Huit courbes au maximum. Au-delà, le reste est agrégé plutôt que de
+    // recycler les teintes — deux matières de la même couleur sur le même
+    // graphe seraient pires qu'une ligne « Autres » assumée.
+    //
+    // Le rang vient du serveur (`l.rang`, figé sur la liste NON filtrée), pas
+    // de la position dans le tableau filtré : la couleur suit la matière, pas
+    // son rang à l'écran. Sans ça, chaque caractère tapé dans la recherche
+    // redistribuerait les huit teintes.
+    const tetes = cat.lignes.filter(l => (l.rang || 0) < BES_TEND_MAX_SERIES);
+    const queue = cat.lignes.filter(l => (l.rang || 0) >= BES_TEND_MAX_SERIES);
+    const series = tetes.map(l => ({
+      cle: _besTendCle(l),
+      libelle: l.libelle,
+      designation: l.designation,
+      couleur: palette[l.rang || 0],
+      nb_dossiers: l.nb_dossiers,
+      incalculables: l.incalculables,
+      non_associee: l.non_associee,
+      total: l.total,
+      total_futur: l.total_futur,
+      valeurs: cols.map(c => {
+        const p = (l.serie || []).find(s => s.mois === c);
+        return p ? p.q : 0;
+      }),
+      // Le même mois douze mois plus tôt, calculé par le serveur sur douze
+      // mois d'amont qui ne sont pas affichés. `null` quand ce mois-là n'est
+      // documenté par personne : un repère à zéro se lirait comme un
+      // effondrement, alors qu'on n'a simplement rien.
+      refAn: cols.map(c => {
+        const p = (l.serie || []).find(s => s.mois === c);
+        return p && p.ref_an != null ? p.ref_an : null;
+      }),
+    }));
+    if (queue.length) {
+      series.push({
+        cle: cat.kind + '|autres',
+        libelle: 'Autres (' + queue.length + ')',
+        designation: queue.map(l => l.libelle).join(', '),
+        couleur: 'var(--muted)',
+        agrege: true,
+        nb_dossiers: 0,
+        incalculables: queue.reduce((a, l) => a + (l.incalculables || 0), 0),
+        total: queue.reduce((a, l) => a + (l.total || 0), 0),
+        total_futur: queue.reduce((a, l) => a + (l.total_futur || 0), 0),
+        valeurs: cols.map(c => queue.reduce((a, l) => {
+          const p = (l.serie || []).find(s => s.mois === c);
+          return a + (p ? p.q : 0);
+        }, 0)),
+        // `null` tant qu'AUCUNE des matières agrégées n'a de repère sur ce
+        // mois : sommer en comptant les absentes pour zéro donnerait un total
+        // trop bas, et donc un écart à N-1 flatteur.
+        refAn: cols.map(c => {
+          let somme = null;
+          queue.forEach(l => {
+            const p = (l.serie || []).find(s => s.mois === c);
+            if (p && p.ref_an != null) somme = (somme || 0) + p.ref_an;
+          });
+          return somme;
+        }),
+      });
+    }
+    // Garde-fou : toute série qui arrive ici sans repère N-1 en reçoit un vide.
+    // Le graphe, l'infobulle et le compteur de points lisent tous `refAn` sans
+    // le tester — une série sans ce tableau les fait tomber d'un coup.
+    series.forEach(s => {
+      if (!Array.isArray(s.refAn)) s.refAn = cols.map(() => null);
+      s.masquee = !!st.besoinsTendMasque[s.cle];
+    });
 
-  const KINDS = { support: 'Frontal', glassine: 'Glassine', adhesif: 'Adhésif',
-                  mandrin: 'Mandrins', carton: 'Cartons', palette: 'Palettes' };
+    // Les totaux de l'en-tête sont recalculés sur les lignes AFFICHÉES. Ceux
+    // du serveur portent sur toute la catégorie : les garder tels quels ferait
+    // annoncer un total dont les courbes en dessous ne rendent pas compte dès
+    // qu'un filtre est actif.
+    //
+    // « Au-delà » n'est pas un mois : le poser sur un axe temporel écraserait
+    // l'échelle et mentirait sur la date. Il reste un chiffre à part dans
+    // l'en-tête — et il n'est PAS compris dans le total « à venir », sans quoi
+    // le lecteur additionnerait deux fois la même matière.
+    const totFutur = cat.lignes.reduce((a, l) => a + (l.total_futur || 0), 0);
+    const auDela = cat.lignes.reduce((a, l) => a + (l.total_au_dela || 0), 0);
+    const nonChiffres = cat.lignes.reduce((a, l) => a + (l.incalculables || 0), 0);
 
-  lignes.forEach(l => {
-    const max = l.max || 0;
-    grid.appendChild(el('div', { cls: 'bes-tend-id' },
-      el('div', { cls: 'bes-tend-ref', title: l.designation || l.libelle }, l.libelle),
-      el('div', { cls: 'bes-tend-meta' + (l.non_associee ? ' orphelin' : '') },
-        (KINDS[l.kind] || l.kind) + ' · ' + _besFmtQte(l.total, l.unite) +
-        ' · ' + l.nb_dossiers + ' dossier' + (l.nb_dossiers > 1 ? 's' : '') +
-        (l.non_associee ? ' · non associée à une référence' : '') +
-        (l.incalculables ? ' · ' + l.incalculables + ' non chiffré(s)' : '')),
+    const sec = el('div', { cls: 'bes-tsec' + (ferme ? '' : ' open') });
+    sec.appendChild(el('button', {
+      cls: 'bes-tsec-head',
+      title: ferme ? 'Afficher cette catégorie' : 'Masquer cette catégorie',
+      on: { click: () => {
+        st.besoinsTendFerme[cat.kind] = !ferme;
+        renderContent();
+      } },
+    },
+      el('span', { cls: 'bes-tsec-chev' }, '▸'),
+      el('span', { cls: 'bes-tsec-titre' }, cat.libelle),
+      el('span', { cls: 'bes-tsec-count' },
+        cat.lignes.length + ' matière' + (cat.lignes.length > 1 ? 's' : '')
+        + (S.besoinsFiltre && cat.nb_matieres > cat.lignes.length
+            ? ' sur ' + cat.nb_matieres : '')),
+      el('span', { cls: 'bes-tsec-tot' },
+        _besFmtQte(totFutur, unite),
+        el('span', { cls: 'bes-tsec-tot-lbl' }, ' à venir')),
+      auDela > 0
+        ? el('span', { cls: 'bes-tsec-chip' }, '+ ' + _besFmtQte(auDela, unite) + ' au-delà')
+        : null,
+      nonChiffres
+        ? el('span', { cls: 'bes-tsec-chip warn' }, nonChiffres + ' non chiffré(s)')
+        : null,
     ));
 
-    const plot = el('div', {
-      cls: 'bes-tend-plot',
-      style: { gridTemplateColumns: 'repeat(' + cols.length + ', 1fr)' },
-    });
-    l.serie.forEach(p => {
-      const h = max > 0 ? Math.max(2, Math.round((p.q / max) * 46)) : 2;
-      // Étiquette directe sur le seul pic : un nombre sur chaque barre
-      // masquerait la forme qu'on cherche à lire.
-      const pic = max > 0 && p.q === max;
-      const bar = el('div', {
-        cls: 'bes-tend-bar' + (p.q > 0 ? '' : ' vide')
-             + (p.mois === 'au-dela' ? ' au-dela' : '')
-             + (p.inc ? ' inc' : ''),
-        title: _besMoisLabel(p.mois) + ' · ' + _besFmtQte(p.q, l.unite)
-               + ' · ' + p.dossiers + ' dossier' + (p.dossiers > 1 ? 's' : '')
-               + (p.inc ? ' · ' + p.inc + ' besoin(s) non chiffré(s)' : ''),
-      },
-        pic ? el('span', { cls: 'bes-tend-peak' }, _besFmtQte(p.q, l.unite)) : null,
-        el('div', { cls: 'bes-tend-fill', style: { height: h + 'px' } }),
-      );
-      plot.appendChild(bar);
-    });
-    grid.appendChild(plot);
+    if (!ferme) {
+      const body = el('div', { cls: 'bes-tsec-body' });
+
+      // Légende : toujours présente dès deux courbes, et cliquable. Elle porte
+      // le nom à côté de la teinte — l'identité d'une série ne repose jamais
+      // sur la seule couleur.
+      const leg = el('div', { cls: 'bes-tc-legend' });
+      series.forEach(s => {
+        leg.appendChild(el('button', {
+          cls: 'bes-tc-lg' + (s.masquee ? ' off' : ''),
+          title: (s.designation || s.libelle)
+                 + (s.agrege ? '' : ' · ' + _besFmtQte(s.total, unite) + ' sur la fenêtre')
+                 + (s.masquee ? ' — masquée' : ''),
+          on: { click: () => {
+            st.besoinsTendMasque[s.cle] = !s.masquee;
+            renderContent();
+          } },
+        },
+          el('span', { cls: 'bes-tc-key', style: { background: s.couleur } }),
+          el('span', { cls: 'bes-tc-lg-lbl' }, s.libelle),
+          el('span', { cls: 'bes-tc-lg-val' }, _besFmtQte(s.total_futur, unite)),
+        ));
+      });
+      // Le repère N-1 ne se propose QUE s'il a de quoi se tracer. Un bouton
+      // qui n'affiche rien quand on le presse est pire que pas de bouton : il
+      // fait douter de la donnée au lieu de faire douter du bouton. Trois
+      // points minimum — deux ne dessinent pas une comparaison.
+      const pointsN1 = series.reduce(
+        (m, s) => Math.max(m, s.refAn.filter(v => v != null).length), 0);
+      const refAnOn = pointsN1 >= 3 && !!st.besoinsTendRefAn[cat.kind];
+      if (pointsN1 >= 3) {
+        leg.appendChild(el('button', {
+          cls: 'bes-tc-lg n1' + (refAnOn ? ' on' : ''),
+          title: 'Superposer le même mois de l\'année précédente, en pointillé',
+          on: { click: () => {
+            st.besoinsTendRefAn[cat.kind] = !refAnOn;
+            renderContent();
+          } },
+        }, refAnOn ? 'Masquer N-1' : 'Comparer à N-1'));
+      }
+      leg.appendChild(el('button', {
+        cls: 'bes-tc-lg mode',
+        title: 'Basculer entre la courbe et les valeurs chiffrées',
+        on: { click: () => {
+          st.besoinsTendTable[cat.kind] = !st.besoinsTendTable[cat.kind];
+          renderContent();
+        } },
+      }, st.besoinsTendTable[cat.kind] ? 'Voir les courbes' : 'Voir le tableau'));
+      body.appendChild(leg);
+
+      body.appendChild(st.besoinsTendTable[cat.kind]
+        ? _besTendTableau(series.filter(s => !s.masquee), cols, moisCourant, documentes, unite)
+        : _besTendGraphe(series, cols, moisCourant, documentes, unite, refAnOn));
+
+      if (series.every(s => s.masquee)) {
+        body.appendChild(el('div', { cls: 'bes-tc-vide' },
+          'Toutes les courbes de cette catégorie sont masquées.'));
+      }
+      sec.appendChild(body);
+    }
+
+    cont.appendChild(sec);
   });
 
-  cont.appendChild(grid);
   return cont;
 }
 

@@ -120,23 +120,34 @@
       '.pmem-x:hover{color:var(--text);border-color:var(--accent)}',
       '.pmem-tabs{display:flex;gap:6px;padding:12px 22px 0;flex-shrink:0;flex-wrap:wrap}',
       '.pmem-tab{background:var(--bg);border:1px solid var(--border);color:var(--text2);',
-      'border-radius:10px 10px 0 0;padding:9px 15px;font-size:13px;font-weight:700;cursor:pointer;',
+      'border-radius:10px 10px 0 0;padding:10px 17px;font-size:14px;font-weight:700;cursor:pointer;',
       'font-family:inherit;border-bottom-color:transparent}',
       '.pmem-tab:hover{color:var(--text);border-color:var(--accent)}',
       '.pmem-tab.is-on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}',
       '.pmem-body{padding:18px 22px 22px;overflow-y:auto;flex:1}',
-      '.pmem-empty{text-align:center;color:var(--muted);font-size:13px;padding:36px 12px}',
+      '.pmem-empty{text-align:center;color:var(--muted);font-size:14px;padding:40px 12px}',
       '.pmem-card{background:var(--bg);border:1px solid var(--border);border-radius:12px;',
       'padding:14px 16px;margin-bottom:10px}',
       '.pmem-card-hd{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}',
-      '.pmem-card-date{font-size:13px;font-weight:800;color:var(--text)}',
-      '.pmem-card-meta{font-size:12px;color:var(--muted)}',
+      '.pmem-card-date{font-size:14px;font-weight:800;color:var(--text)}',
+      '.pmem-card-meta{font-size:13px;color:var(--muted)}',
       '.pmem-kpis{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:4px}',
+      // Deux colonnes sans filet ni fond : ce qui les separe est le blanc, pas
+      // un trait. Une bordure ferait lire deux blocs distincts la ou il s'agit
+      // de deux faces de la meme production.
+      '.pmem-serie{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);',
+      'gap:14px 30px;margin-top:2px}',
+      '@media(max-width:760px){.pmem-serie{grid-template-columns:1fr;gap:16px}}',
+      '.pmem-col-lbl{font-size:11px;font-weight:800;text-transform:uppercase;',
+      'letter-spacing:.6px;color:var(--muted);margin-bottom:9px}',
+      '.pmem-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(92px,1fr));',
+      'gap:11px 18px}',
+      '.pmem-rien{font-size:13px;color:var(--muted);font-style:italic}',
       '.pmem-kpi{display:flex;flex-direction:column;gap:1px}',
-      '.pmem-kpi-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}',
-      '.pmem-kpi-val{font-size:14px;font-weight:800;color:var(--text)}',
+      '.pmem-kpi-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}',
+      '.pmem-kpi-val{font-size:16px;font-weight:800;color:var(--text)}',
       '.pmem-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}',
-      '.pmem-chip{font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px;',
+      '.pmem-chip{font-size:12px;font-weight:700;padding:4px 11px;border-radius:20px;',
       'background:var(--card);border:1px solid var(--border);color:var(--text2)}',
       '.pmem-chip.is-warn{border-color:var(--warn);color:var(--warn)}',
       '.pmem-chip.is-accent{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}',
@@ -144,34 +155,60 @@
       'border-radius:10px;padding:12px 14px;margin-bottom:10px}',
       '.pmem-note.is-epingle{border-left-color:var(--warn)}',
       '.pmem-note.is-obsolete{opacity:.55;border-left-color:var(--muted)}',
-      '.pmem-note-txt{font-size:13px;line-height:1.55;color:var(--text);white-space:pre-wrap;word-break:break-word}',
-      '.pmem-note-ft{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:9px;',
-      'font-size:11px;color:var(--muted)}',
+      '.pmem-note-txt{font-size:14px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-word}',
+      '.pmem-note-ft{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;',
+      'font-size:12px;color:var(--muted)}',
       '.pmem-btn{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:10px;',
-      'padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s}',
+      'padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s}',
       '.pmem-btn:hover{border-color:var(--accent);color:var(--accent)}',
-      '.pmem-btn-sm{padding:5px 10px;font-size:11px;border-radius:8px}',
+      '.pmem-btn-sm{padding:6px 12px;font-size:12px;border-radius:8px}',
       '.pmem-btn-accent{background:var(--accent);border-color:var(--accent);color:var(--bg)}',
       '.pmem-btn-accent:hover{filter:brightness(1.06);color:var(--bg)}',
+      // Ouvrir un document est une action frequente et sans risque : elle se
+      // signale par une teinte, pas par un aplat. Un aplat plein a chaque
+      // ligne d'un tableau de 461 entrees fait une colonne de pastilles
+      // bleues, et plus rien ne ressort.
+      '.pmem-btn-doc{background:var(--accent-bg);border-color:transparent;color:var(--accent);',
+      'font-weight:800}',
+      '.pmem-btn-doc:hover{border-color:var(--accent);color:var(--accent)}',
       '.pmem-btn.is-on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}',
       '.pmem-form{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px}',
       '.pmem-form textarea,.pmem-form select,.pmem-input{width:100%;box-sizing:border-box;background:var(--card);',
-      'border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;',
+      'border:1px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-size:14px;',
       'font-family:inherit;outline:none;transition:border-color .15s}',
       '.pmem-form textarea:focus,.pmem-form select:focus,.pmem-input:focus{border-color:var(--accent)}',
       '.pmem-form-row{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}',
       '.pmem-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;',
       'color:var(--muted);display:block;margin-bottom:5px}',
-      '.pmem-tbl{width:100%;border-collapse:collapse;font-size:13px}',
-      '.pmem-tbl th{text-align:left;font-size:10px;font-weight:800;text-transform:uppercase;',
-      'letter-spacing:.5px;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--border)}',
-      '.pmem-tbl td{padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text2)}',
-      '.pmem-tbl tr{cursor:pointer}',
+      '.pmem-tablecard{background:var(--card);border:1px solid var(--border);border-radius:12px;',
+      'overflow:hidden}',
+      '.pmem-tbl{width:100%;border-collapse:collapse;font-size:14px;background:var(--card)}',
+      '.pmem-tbl th{text-align:left;font-size:11px;font-weight:800;text-transform:uppercase;',
+      'letter-spacing:.5px;color:var(--muted);padding:11px 14px;background:var(--card);',
+      'border-bottom:1px solid var(--border)}',
+      '.pmem-tbl td{padding:12px 14px;border-bottom:1px solid var(--border);color:var(--text2)}',
+      '.pmem-tbl tbody tr:last-child td{border-bottom:none}',
       '.pmem-tbl tbody tr:hover td{background:var(--accent-bg);color:var(--text)}',
+      '.pmem-tbl .pmem-chip{font-size:12px}',
       '.pmem-scroll{overflow-x:auto}',
       '.pmem-split{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:14px}',
       '@media(max-width:820px){.pmem-split{grid-template-columns:1fr}}',
       '.pmem-frame{width:100%;height:460px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}',
+      '.pmem-panel.pmem-inline{max-width:none;max-height:none;border:none;background:transparent}',
+      // En page, MyProd affiche deja le titre et le sous-titre : les repeter
+      // donnait deux en-tetes identiques l'un sous l'autre.
+      '.pmem-panel.pmem-inline .pmem-hd{display:none}',
+      '.pmem-panel.pmem-inline .pmem-body{padding:16px 0 0;overflow:visible}',
+      '.pmem-panel.pmem-inline .pmem-tabs{padding:12px 0 0}',
+      '.pmem-panel.pmem-inline .pmem-x{display:none}',
+      '.pmem-drop{border:2px dashed var(--border);border-radius:12px;padding:22px 18px;',
+      'text-align:center;background:var(--bg);cursor:pointer;transition:border-color .15s,background .15s;',
+      'margin-bottom:14px}',
+      '.pmem-drop:hover,.pmem-drop.is-over{border-color:var(--accent);background:var(--accent-bg)}',
+      '.pmem-drop-t{font-size:13px;font-weight:800;color:var(--text)}',
+      '.pmem-drop-s{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5}',
+      '.pmem-prog{height:6px;border-radius:99px;background:var(--border);overflow:hidden;margin-top:12px}',
+      '.pmem-prog-b{height:100%;background:var(--accent);width:0;transition:width .2s}',
       '.pmem-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:2400;',
       'background:var(--card);border:1px solid var(--accent);color:var(--text);border-radius:10px;',
       'padding:11px 18px;font-size:13px;font-weight:600;box-shadow:0 8px 26px rgba(0,0,0,.28)}',
@@ -187,6 +224,11 @@
   // ── Overlay ────────────────────────────────────────────────────────
   var state = { tab: 'series', data: null, mode: 'fiche', noDossier: null, docs: null, sel: null };
 
+  // Contenant de rendu. `null` = surcouche modale (ouverture depuis un bouton) ;
+  // un element = page de MyProd (entree de barre laterale). La vue est
+  // construite une seule fois : c'est le contenant qui change, pas l'ecran.
+  var contenantInline = null;
+
   function close() {
     var ov = document.getElementById(OVERLAY_ID);
     if (ov) ov.remove();
@@ -197,6 +239,15 @@
 
   function mount(node) {
     ensureStyle();
+    if (contenantInline) {
+      if (!contenantInline.isConnected) { contenantInline = null; }
+      else {
+        contenantInline.innerHTML = '';
+        node.classList.add('pmem-inline');
+        contenantInline.appendChild(node);
+        return;
+      }
+    }
     close();
     var ov = el('div', { className: 'pmem-ov', id: OVERLAY_ID });
     ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
@@ -340,7 +391,7 @@
           var n = a.series, tot = series.length;
           return el('span', {
             className: 'pmem-chip' + (n >= Math.max(2, Math.ceil(tot / 2)) ? ' is-warn' : ''),
-            text: (a.label || ('Code ' + a.code)) + ' — ' + n + '/' + tot + ' series · ' + fMin(a.minutes),
+            text: labelArret(a.code, a.label) + ' — ' + n + '/' + tot + ' series · ' + fMin(a.minutes),
           });
         })),
       ]));
@@ -348,14 +399,35 @@
 
     series.forEach(function (s) {
       var arrets = s.arrets_par_code || {};
-      var codes = Object.keys(arrets);
+      var codes = Object.keys(arrets).sort(function (a, b) {
+        return ((arrets[b] || {}).minutes || 0) - ((arrets[a] || {}).minutes || 0);
+      });
       var docs = (d.documents || []).filter(function (x) { return x.no_dossier === s.no_dossier; });
-      out.push(el('div', { className: 'pmem-card' }, [
-        el('div', { className: 'pmem-card-hd' }, [
-          el('span', { className: 'pmem-card-date', text: fDate(s.date_fin || s.date_debut) }),
-          el('span', { className: 'pmem-card-meta', text: [s.machine, s.no_dossier, (s.operateurs || []).join(', ')].filter(Boolean).join(' · ') }),
-        ]),
-        el('div', { className: 'pmem-kpis' }, [
+
+      // Colonne gauche — ce qui a coince. Vide, elle le dit : « aucun arret »
+      // est une information, pas un blanc.
+      var gauche = [el('div', { className: 'pmem-col-lbl', text: 'Arrets et erreurs' })];
+      if (codes.length) {
+        gauche.push(el('div', { className: 'pmem-chips', style: 'margin-top:0' },
+          codes.map(function (c) {
+            var a = arrets[c] || {};
+            return el('span', { className: 'pmem-chip', text: labelArret(c, a.label) + ' · ' + fMin(a.minutes) });
+          })));
+      }
+      if (s.nb_nc) {
+        gauche.push(el('div', { className: 'pmem-chips' }, [
+          el('span', { className: 'pmem-chip is-warn',
+                       text: s.nb_nc + ' non-conformite' + (s.nb_nc > 1 ? 's' : '') }),
+        ]));
+      }
+      if (!codes.length && !s.nb_nc) {
+        gauche.push(el('div', { className: 'pmem-rien', text: 'Aucun arret ni non-conformite.' }));
+      }
+
+      // Colonne droite — ce que la production a donne.
+      var droite = [
+        el('div', { className: 'pmem-col-lbl', text: 'Production' }),
+        el('div', { className: 'pmem-stats' }, [
           kpi('Calage', fMin(s.temps_calage_min)),
           kpi('Production', fMin(s.temps_prod_min)),
           kpi('Arrets', fMin(s.temps_arret_min)),
@@ -363,23 +435,48 @@
           kpi('Vitesse', s.vitesse_m_min != null ? fNum(s.vitesse_m_min, 1) + ' m/mn' : '—'),
           kpi('Etiquettes', s.etiquettes != null ? fNum(s.etiquettes) : '—'),
         ]),
-        codes.length ? el('div', { className: 'pmem-chips' }, codes.map(function (c) {
-          var a = arrets[c] || {};
-          return el('span', { className: 'pmem-chip', text: (a.label || ('Code ' + c)) + ' · ' + fMin(a.minutes) });
-        })) : null,
-        (s.nb_nc ? el('div', { className: 'pmem-chips' }, [
-          el('span', { className: 'pmem-chip is-warn', text: s.nb_nc + ' non-conformite' + (s.nb_nc > 1 ? 's' : '') }),
-        ]) : null),
-        docs.length ? el('div', { className: 'pmem-chips' }, docs.map(function (doc) {
-          return el('button', {
-            type: 'button', className: 'pmem-btn pmem-btn-sm',
+      ];
+
+      // Le scan est une action, pas une donnee : il monte dans l'en-tete.
+      var entete = [
+        el('span', { className: 'pmem-card-date', text: fDate(s.date_fin || s.date_debut) }),
+        el('span', { className: 'pmem-card-meta',
+                     text: [s.machine, s.no_dossier, (s.operateurs || []).join(', ')]
+                             .filter(Boolean).join(' · ') }),
+      ];
+      if (docs.length) {
+        entete.push(el('span', { style: 'flex:1' }));
+        docs.forEach(function (doc) {
+          entete.push(el('button', {
+            type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-doc',
+            // L'en-tete aligne sur la ligne de base : un bouton s'y poserait
+            // de travers a cote du texte.
+            style: 'align-self:center',
             onclick: function () { window.open('/api/produits/documents/' + doc.id + '/pdf', '_blank'); },
-            text: 'OF scanne' + (doc.of_numero ? ' ' + doc.of_numero : ''),
-          });
-        })) : null,
+            text: 'Ouvrir le scan' + (doc.of_numero ? ' ' + doc.of_numero : ''),
+          }));
+        });
+      }
+
+      out.push(el('div', { className: 'pmem-card' }, [
+        el('div', { className: 'pmem-card-hd' }, entete),
+        el('div', { className: 'pmem-serie' }, [
+          el('div', {}, gauche),
+          el('div', {}, droite),
+        ]),
       ]));
     });
     return out;
+  }
+
+  // Le libelle stocke porte le code en prefixe (« 53 - Casse bande ») parce que
+  // c'est ce que l'operateur saisit. Dans la fiche produit, le code n'apprend
+  // rien : la puce est deja identifiee par son libelle, et le numero encombre
+  // une ligne qui doit se lire d'un coup d'oeil.
+  function labelArret(code, label) {
+    var s = String(label == null ? '' : label).trim();
+    s = s.replace(/^\d{1,3}\s*[-\u2013\u2014.:]\s*/, '').trim();
+    return s || ('Code ' + code);
   }
 
   function kpi(lbl, val) {
@@ -504,30 +601,54 @@
       return [el('div', { className: 'pmem-empty', text: 'Aucun OF scanne rattache a cette reference.' })];
     }
     return docs.map(function (doc) {
-      return el('div', { className: 'pmem-card' }, [
+      var ops = Array.isArray(doc.serie_operateurs) ? doc.serie_operateurs : [];
+      // Ligne du haut : quand, et sur quelle machine. C'est ce qu'on cherche
+      // en premier dans une pile de scans.
+      var haut = [doc.machine, doc.client].filter(Boolean).join(' · ');
+      // Ligne du bas : ce que la production a donne, et de quoi retrouver le
+      // dossier papier. Tout vient de la base — rien n'est relu dans le PDF.
+      var bas = [];
+      if (doc.no_dossier) bas.push('dossier ' + doc.no_dossier);
+      if (doc.etiquettes) bas.push(fNum(doc.etiquettes) + ' etiquettes');
+      if (doc.serie_metrage_m) bas.push(fNum(doc.serie_metrage_m) + ' m');
+      if (doc.of_laize) bas.push('laize ' + fNum(doc.of_laize) + ' mm');
+      if (doc.of_format) bas.push(doc.of_format);
+      if (ops.length) bas.push(ops.join(', '));
+      if (doc.nb_pages) bas.push(doc.nb_pages + ' page' + (doc.nb_pages > 1 ? 's' : ''));
+
+      var enfants = [
         el('div', { className: 'pmem-card-hd' }, [
-          el('span', { className: 'pmem-card-date', text: 'OF ' + (doc.of_numero || '—') }),
-          el('span', {
-            className: 'pmem-card-meta',
-            text: [doc.no_dossier ? 'dossier ' + doc.no_dossier : null, fDate(doc.importe_le),
-                   doc.nb_pages ? doc.nb_pages + ' page' + (doc.nb_pages > 1 ? 's' : '') : null]
-              .filter(Boolean).join(' · '),
-          }),
+          el('span', { className: 'pmem-card-date', text: fDate(doc.date_document || doc.importe_le) }),
+          el('span', { className: 'pmem-card-meta', text: 'OF ' + (doc.of_numero || '—') }),
+          haut ? el('span', { className: 'pmem-card-meta', text: haut }) : null,
         ]),
-        el('div', { className: 'pmem-chips' }, [
-          el('button', {
-            type: 'button', className: 'pmem-btn pmem-btn-sm',
-            onclick: function () { window.open('/api/produits/documents/' + doc.id + '/pdf', '_blank'); },
-            text: 'Ouvrir le scan',
-          }),
-        ]),
-      ]);
+      ];
+      if (bas.length) {
+        enfants.push(el('div', {
+          style: 'font-size:12px;color:var(--muted);line-height:1.5',
+          text: bas.join(' · '),
+        }));
+      }
+      enfants.push(el('div', { className: 'pmem-chips' }, [
+        el('button', {
+          type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-doc',
+          onclick: function () { window.open('/api/produits/documents/' + doc.id + '/pdf', '_blank'); },
+          text: 'Ouvrir le scan',
+        }),
+        // Le fichier d'origine porte souvent une precision que la base n'a
+        // pas (« marche 748 », « L1 », « Reliquat ») : on la garde visible.
+        doc.fichier_origine
+          ? el('span', { className: 'pmem-chip', title: doc.chemin_origine || '',
+                         text: doc.fichier_origine })
+          : null,
+      ]));
+      return el('div', { className: 'pmem-card' }, enfants);
     });
   }
 
   // ── Rendu courant ──────────────────────────────────────────────────
   function renderCourant() {
-    if (state.mode === 'rattachement') { renderRattachement(); return; }
+    if (state.mode === 'rattachement') { renderScans(); return; }
     if (state.mode === 'liste') { renderListe(); return; }
 
     var d = state.data || {};
@@ -556,7 +677,7 @@
 
   async function recharger() {
     if (state.mode === 'liste') { await chargerListe(); return; }
-    if (state.mode === 'rattachement') { await chargerDocs(); return; }
+    if (state.mode === 'rattachement') { await chargerScans(); return; }
     if (state.mode === 'historique' && state.noDossier) {
       state.data = await api('/api/produits/dossier/' + encodeURIComponent(state.noDossier) + '/historique');
     } else if (state.data && state.data.ref_produit_norm) {
@@ -575,6 +696,7 @@
 
   // ── Portes d'entree ────────────────────────────────────────────────
   async function openHistorique(noDossier) {
+    contenantInline = null;
     await chargerTypes();
     state = { tab: 'series', data: null, mode: 'historique', noDossier: noDossier, docs: null, sel: null };
     try {
@@ -585,6 +707,7 @@
   }
 
   async function openFiche(ref) {
+    contenantInline = null;
     await chargerTypes();
     state = { tab: 'series', data: null, mode: 'fiche', noDossier: null, docs: null, sel: null };
     try {
@@ -595,6 +718,7 @@
 
   // ── Liste des produits ─────────────────────────────────────────────
   async function openListe(q) {
+    contenantInline = null;
     state = { tab: 'liste', data: null, mode: 'liste', noDossier: null, docs: null, sel: null };
     state.q = q || '';
     await chargerListe();
@@ -639,12 +763,13 @@
         el('td', { text: (p.nb_savoirs || 0) + ' note' + ((p.nb_savoirs || 0) > 1 ? 's' : '') }),
         el('td', { text: (p.nb_documents || 0) + ' scan' + ((p.nb_documents || 0) > 1 ? 's' : '') }),
       ]);
+      tr.style.cursor = 'pointer';
       tr.addEventListener('click', function () { openFiche(p.ref_produit_norm); });
       return tr;
     });
 
     var table = rows.length
-      ? el('div', { className: 'pmem-scroll' }, [
+      ? el('div', { className: 'pmem-tablecard pmem-scroll' }, [
           el('table', { className: 'pmem-tbl' }, [
             el('thead', {}, [el('tr', {}, ['Reference', 'Designation', 'Productions', 'Derniere', 'Machines', 'Notes', 'Scans']
               .map(function (h) { return el('th', { text: h }); }))]),
@@ -671,32 +796,240 @@
     });
   }
 
+  // ── Depot manuel de scans depuis le navigateur ─────────────────────
+  // L'import par script suppose une machine qui voit le partage reseau, un
+  // Python installe et une tache planifiee. Pour une reprise ponctuelle —
+  // « les OF de cette annee » — c'est trois obstacles pour rien : on ouvre le
+  // dossier, on selectionne, on depose. Le serveur fait exactement le meme
+  // travail que pour un depot par script, deduplication comprise : reposer
+  // deux fois les memes fichiers ne cree pas de doublon.
+  function zoneDepot(onFini) {
+    ensureStyle();
+    var input = el('input', {
+      type: 'file', multiple: 'multiple', accept: 'application/pdf,.pdf',
+      style: 'display:none',
+    });
+    var titre = el('div', { className: 'pmem-drop-t', text: 'Deposer des OF scannes' });
+    var sous = el('div', {
+      className: 'pmem-drop-s',
+      text: 'Glissez vos PDF ici, ou cliquez pour les choisir. '
+          + 'Le numero d\'OF et la reference produit sont lus dans le nom du fichier.',
+    });
+    var barre = el('div', { className: 'pmem-prog-b' });
+    var prog = el('div', { className: 'pmem-prog', style: 'display:none' }, [barre]);
+    var zone = el('div', { className: 'pmem-drop' }, [titre, sous, prog, input]);
+
+    var enCours = false;
+
+    async function envoyer(fichiers) {
+      var liste = Array.prototype.slice.call(fichiers || []).filter(function (f) {
+        return /\.pdf$/i.test(f.name);
+      });
+      if (!liste.length) { toast('Aucun PDF dans la selection.', 'danger'); return; }
+      if (enCours) return;
+      enCours = true;
+      prog.style.display = 'block';
+
+      var ok = 0, doublons = 0, rattaches = 0, echecs = 0;
+      for (var i = 0; i < liste.length; i++) {
+        var f = liste[i];
+        titre.textContent = 'Envoi ' + (i + 1) + ' / ' + liste.length + '…';
+        sous.textContent = f.name;
+        barre.style.width = Math.round((i / liste.length) * 100) + '%';
+        var fd = new FormData();
+        fd.append('file', f, f.name);
+        // `lastModified` est la date du fichier sur le partage, pas celle de
+        // l'envoi. C'est ce qui permet d'ordonner des scans deposes en bloc.
+        try {
+          if (f.lastModified) {
+            fd.append('date_fichier',
+              new Date(f.lastModified).toISOString().slice(0, 19));
+          }
+        } catch (e) { /* date illisible : le serveur retombera sur l'OF */ }
+        try {
+          var r = await api('/api/produits/documents', { method: 'POST', body: fd });
+          if (r && r.doublon) doublons += 1;
+          else { ok += 1; if (r && r.statut === 'rattache') rattaches += 1; }
+        } catch (e) {
+          echecs += 1;
+        }
+      }
+      barre.style.width = '100%';
+
+      var msg = ok + ' scan(s) enregistre(s), dont ' + rattaches + ' rattache(s) a un produit';
+      if (doublons) msg += ' · ' + doublons + ' deja connu(s)';
+      if (echecs) msg += ' · ' + echecs + ' en echec';
+      toast(msg + '.', echecs ? 'danger' : 'info');
+
+      enCours = false;
+      prog.style.display = 'none';
+      titre.textContent = 'Deposer des OF scannes';
+      sous.textContent = 'Glissez vos PDF ici, ou cliquez pour les choisir.';
+      input.value = '';
+      if (onFini) await onFini();
+    }
+
+    zone.addEventListener('click', function () { if (!enCours) input.click(); });
+    input.addEventListener('change', function (e) { envoyer(e.target.files); });
+    ['dragenter', 'dragover'].forEach(function (ev) {
+      zone.addEventListener(ev, function (e) {
+        e.preventDefault(); e.stopPropagation(); zone.classList.add('is-over');
+      });
+    });
+    ['dragleave', 'drop'].forEach(function (ev) {
+      zone.addEventListener(ev, function (e) {
+        e.preventDefault(); e.stopPropagation(); zone.classList.remove('is-over');
+      });
+    });
+    zone.addEventListener('drop', function (e) {
+      if (e.dataTransfer && e.dataTransfer.files) envoyer(e.dataTransfer.files);
+    });
+    return zone;
+  }
+
   // ── File de rattachement des scans ─────────────────────────────────
   async function openRattachement() {
-    state = { tab: 'rattachement', data: null, mode: 'rattachement', noDossier: null, docs: null, sel: null };
-    await chargerDocs();
+    contenantInline = null;
+    state = { tab: 'scannes', data: null, mode: 'rattachement', noDossier: null,
+              docs: null, sel: null, q: '' };
+    await chargerScans();
+  }
+
+  async function chargerScans() {
+    try {
+      var r = await api('/api/produits/documents?q=' + encodeURIComponent(state.q || ''));
+      state.tous = r.documents || [];
+      state.total = r.total || 0;
+      state.nbARattacher = r.a_rattacher || 0;
+    } catch (e) { toast(e.message || 'Erreur.', 'danger'); return; }
+    if (state.tab === 'rattacher') { await chargerDocs(); return; }
+    renderScans();
   }
 
   async function chargerDocs() {
     try {
       var r = await api('/api/produits/documents/a-rattacher');
       state.docs = r.documents || [];
-      state.total = r.total || 0;
+      state.nbARattacher = r.total || 0;
       if (state.sel && !state.docs.some(function (d) { return d.id === state.sel; })) state.sel = null;
       if (!state.sel && state.docs.length) state.sel = state.docs[0].id;
     } catch (e) { toast(e.message || 'Erreur.', 'danger'); return; }
-    renderRattachement();
+    renderScans();
   }
 
-  function renderRattachement() {
+  function scansOnglets() {
+    var defs = [
+      { key: 'scannes', label: 'Scannes', count: state.total },
+      { key: 'rattacher', label: 'A rattacher', count: state.nbARattacher },
+    ];
+    return el('div', { className: 'pmem-tabs' }, defs.map(function (t) {
+      return el('button', {
+        type: 'button',
+        className: 'pmem-tab' + (state.tab === t.key ? ' is-on' : ''),
+        text: t.label + (t.count != null ? '  (' + t.count + ')' : ''),
+        onclick: function () {
+          state.tab = t.key;
+          if (t.key === 'rattacher' && !state.docs) { chargerDocs(); return; }
+          renderScans();
+        },
+      });
+    }));
+  }
+
+  // ── Onglet « Scannes » : ce qu'on a deja, pas seulement les echecs ──────
+  function vueScannes() {
+    var input = el('input', {
+      className: 'pmem-input', type: 'text', id: 'pmem-scans-q',
+      placeholder: 'Rechercher (n\u00b0 d\'OF, reference, dossier, client, nom de fichier)…',
+      value: state.q || '',
+    });
+    var t0 = null;
+    input.addEventListener('input', function (e) {
+      state.q = e.target.value;
+      clearTimeout(t0);
+      t0 = setTimeout(function () {
+        var pos = input.selectionStart;
+        chargerScans().then(function () {
+          var n = document.getElementById('pmem-scans-q');
+          if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (x) {} }
+        });
+      }, 220);
+    });
+
+    var docs = state.tous || [];
+    if (!docs.length) {
+      return [el('div', { style: 'margin-bottom:14px' }, [input]),
+              el('div', {
+                className: 'pmem-empty',
+                text: state.q ? ('Aucun scan pour « ' + state.q + ' »')
+                              : 'Aucun OF scanne pour l\'instant.',
+              })];
+    }
+
+    var lignes = docs.map(function (d) {
+      var infos = [];
+      if (d.machine) infos.push(d.machine);
+      if (d.client) infos.push(d.client);
+      if (d.etiquettes) infos.push(fNum(d.etiquettes) + ' etiq.');
+      if (d.of_laize) infos.push('laize ' + fNum(d.of_laize) + ' mm');
+
+      var cellRef = el('td', {});
+      if (d.ref_produit_norm) {
+        var b = boutonFiche(d.ref_produit_norm, { label: d.ref_produit_norm });
+        if (b) cellRef.appendChild(b);
+        else cellRef.textContent = d.ref_produit_norm;
+      } else {
+        cellRef.appendChild(el('span', { className: 'pmem-chip is-warn', text: 'a rattacher' }));
+      }
+
+      var tr = el('tr', {}, [
+        el('td', { text: fDate(d.date_document || d.importe_le) }),
+        el('td', {}, [el('strong', { text: d.of_numero || '—' })]),
+        cellRef,
+        el('td', { text: d.no_dossier || '—' }),
+        el('td', { text: infos.join(' · ') || '—' }),
+        el('td', { title: d.chemin_origine || '', text: d.fichier_origine || '—' }),
+      ]);
+      var tdAct = el('td', {});
+      tdAct.appendChild(el('button', {
+        type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-doc', text: 'Ouvrir',
+        onclick: function (e) {
+          e.stopPropagation();
+          window.open('/api/produits/documents/' + d.id + '/pdf', '_blank');
+        },
+      }));
+      tr.appendChild(tdAct);
+      tr.style.cursor = 'default';
+      return tr;
+    });
+
+    var table = el('div', { className: 'pmem-tablecard pmem-scroll' }, [
+      el('table', { className: 'pmem-tbl' }, [
+        el('thead', {}, [el('tr', {},
+          ['Date', 'OF', 'Produit', 'Dossier', 'Production', 'Fichier', '']
+            .map(function (h) { return el('th', { text: h }); }))]),
+        el('tbody', {}, lignes),
+      ]),
+    ]);
+
+    var pied = docs.length < (state.total || 0)
+      ? el('div', {
+          style: 'font-size:11px;color:var(--muted);margin-top:10px',
+          text: docs.length + ' scans affiches sur ' + state.total + '. Affinez la recherche.',
+        })
+      : null;
+
+    return [el('div', { style: 'margin-bottom:14px' }, [input]), table, pied];
+  }
+
+  // ── Onglet « A rattacher » : la file, avec apercu cote a cote ───────────
+  function vueARattacher() {
     var docs = state.docs || [];
     if (!docs.length) {
-      mount(panel(
-        header('Scans a rattacher', 'OF termines dont le numero n\'a pas pu etre lu', []),
-        el('div', { className: 'pmem-tabs' }),
-        [el('div', { className: 'pmem-empty', text: 'Aucun scan en attente. Tout est rattache.' })]
-      ));
-      return;
+      return [el('div', {
+        className: 'pmem-empty',
+        text: 'Aucun scan en attente de rattachement.',
+      })];
     }
 
     var liste = el('div', {}, docs.map(function (doc) {
@@ -709,11 +1042,12 @@
         el('div', { style: 'font-weight:800', text: doc.fichier_origine || doc.fichier }),
         el('div', {
           style: 'font-size:11px;color:var(--muted);margin-top:3px',
-          text: [fDate(doc.importe_le), doc.of_numero ? 'OF lu ' + doc.of_numero : 'numero non lu',
+          text: [fDate(doc.date_document || doc.importe_le),
+                 doc.of_numero ? 'OF lu ' + doc.of_numero : 'numero non lu',
                  doc.texte_extrait ? null : 'sans OCR'].filter(Boolean).join(' · '),
         }),
       ]);
-      b.addEventListener('click', function () { state.sel = doc.id; renderRattachement(); });
+      b.addEventListener('click', function () { state.sel = doc.id; renderScans(); });
       return b;
     }));
 
@@ -734,7 +1068,7 @@
         });
         toast('Scan rattache a ' + r.ref_produit_norm + '.');
         state.sel = null;
-        await chargerDocs();
+        await chargerScans();
       } catch (e) { toast(e.message || 'Erreur.', 'danger'); }
       btnOk.disabled = false;
     });
@@ -747,7 +1081,7 @@
           method: 'POST', body: JSON.stringify({ ecarter: true }),
         });
         state.sel = null;
-        await chargerDocs();
+        await chargerScans();
       } catch (e) { toast(e.message || 'Erreur.', 'danger'); }
     });
 
@@ -755,15 +1089,28 @@
       el('label', { className: 'pmem-lbl', text: 'Rattacher a un dossier' }),
       champ,
       el('div', { className: 'pmem-form-row' }, [btnOk, btnKo]),
-      el('iframe', { className: 'pmem-frame', src: '/api/produits/documents/' + sel.id + '/pdf', style: 'margin-top:12px' }),
+      el('iframe', { className: 'pmem-frame', src: '/api/produits/documents/' + sel.id + '/pdf',
+                     style: 'margin-top:12px' }),
     ]);
 
+    return [el('div', { className: 'pmem-split' }, [liste, droite])];
+  }
+
+  function renderScans() {
+    var corps = state.tab === 'rattacher' ? vueARattacher() : vueScannes();
     mount(panel(
-      header('Scans a rattacher', 'OF termines dont le numero n\'a pas pu etre lu automatiquement',
-             [state.total + ' en attente']),
-      el('div', { className: 'pmem-tabs' }),
-      [el('div', { className: 'pmem-split' }, [liste, droite])]
+      header('Scans d\'OF', 'Deposer des scans, et rattacher ceux qui n\'ont pas pu l\'etre',
+             [(state.total || 0) + ' scan(s)',
+              (state.nbARattacher || 0) + ' en attente de rattachement']),
+      scansOnglets(),
+      [zoneDepot(chargerScans)].concat(corps)
     ));
+    if (state.tab === 'scannes') {
+      requestAnimationFrame(function () {
+        var n = document.getElementById('pmem-scans-q');
+        if (n && state.q) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); }
+      });
+    }
   }
 
   // ── Bouton « Historique » pour Saisieprod ──────────────────────────
@@ -816,6 +1163,26 @@
     return b;
   }
 
+  // Rend la vue « Scans d'OF » DANS une page de MyProd plutot qu'en surcouche.
+  // Le contenant est fourni par l'appelant a chaque rendu : MyProd reconstruit
+  // son DOM entierement, garder une reference d'un rendu a l'autre pointerait
+  // sur un element detache.
+  async function monterScansDans(contenant) {
+    // Contenant detache : MyProd a deja re-rendu depuis. Sans ce garde-fou,
+    // mount() basculerait en surcouche et ferait surgir une modale que
+    // personne n'a demandee.
+    if (!contenant || !contenant.isConnected) return;
+    // Le contenant reste actif tant qu'il est dans le document : les actions de
+    // la vue (depot, rattachement, mise a l'ecart) rappellent chargerDocs(), et
+    // ce second rendu doit rester dans la page, pas repartir en surcouche.
+    // Quand MyProd change de page, l'element est detache et mount() bascule
+    // tout seul en surcouche.
+    contenantInline = contenant;
+    state = { tab: 'scannes', data: null, mode: 'rattachement',
+              noDossier: null, docs: null, sel: null, q: '' };
+    await chargerScans();
+  }
+
   window.MySifaProduitMemoire = {
     openHistorique: openHistorique,
     openFiche: openFiche,
@@ -823,6 +1190,7 @@
     openRattachement: openRattachement,
     boutonHistorique: boutonHistorique,
     boutonFiche: boutonFiche,
+    monterScansDans: monterScansDans,
     normRef: normRef,
     fermer: close,
   };

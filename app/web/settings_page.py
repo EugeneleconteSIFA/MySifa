@@ -2149,6 +2149,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
                 <option value="of:read,of:write">Pont Access — lecture et écriture des OF</option>
                 <option value="scan:write">Agent de scans — dépôt des OF terminés</option>
                 <option value="of:read">Lecture seule des OF</option>
+                <option value="erp:read,erp:write">Synchro ERP RVGI — dépôt du miroir</option>
                 <option value="of:read,of:write,scan:write">Tout (pont Access + scans)</option>
               </select>
             </div>
@@ -2979,6 +2980,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
+<script src="/static/mysifa_cal_rappel.js?v=4"></script>
 <script>
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;

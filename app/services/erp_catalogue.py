@@ -1,0 +1,1074 @@
+"""Catalogue des écrans ERP — définition déclarative.
+
+Un écran = une table du miroir RVGI, éventuellement jointe à son entête, avec
+la liste des colonnes à montrer, ce sur quoi on cherche, ce sur quoi on filtre,
+et comment le détail se regroupe. Le moteur générique
+(`app/services/erp_mirror.py`) ne connaît que cette structure : ajouter un
+écran, c'est ajouter une entrée ici, pas écrire une page.
+
+Les colonnes sont validées contre le miroir réel avant usage
+(`adapter_ecran`) : une colonne que RVGI n'expose pas est retirée au lieu de
+faire tomber la requête. Le relevé d'inventaire donne le modèle, le miroir
+donne la vérité.
+
+Codes RVGI
+----------
+RVGI affiche ses énumérations sous la forme « 1 - Fabrication ». Les libellés
+ne sont dans aucune table : ils sont codés dans l'application WinDev. Ceux
+d'ici ont été relevés sur les écrans de l'ERP. Un code inconnu s'affiche brut —
+on ne masque jamais une valeur qu'on ne sait pas traduire, ce serait pire que
+de montrer le code.
+"""
+
+# ── Énumérations relevées sur les écrans RVGI ───────────────────────────────
+ENUMS = {
+    "origine": {
+        "1": "Fabrication",
+        "2": "Stock",
+        "3": "Sous-traitance",
+    },
+    "position": {
+        "0": "En cours",
+        "1": "Partielle",
+        "2": "Soldée",
+    },
+    "colisage": {
+        "0": "En cours",
+        "1": "Partiel",
+        "2": "Terminé",
+    },
+    "position_facture": {
+        "0": "Non facturé",
+        "1": "Partiel",
+        "2": "Facturé",
+    },
+    "laboratoire": {
+        "1": "Renouvellement",
+    },
+    "type_produit": {
+        "1": "Produits",
+        "11": "Clichés",
+        "19": "Cartons",
+    },
+}
+
+DOMAINES = [
+    {"cle": "ventes", "label": "Ventes"},
+    {"cle": "achats", "label": "Achats"},
+    {"cle": "stocks", "label": "Stocks"},
+    {"cle": "referentiels", "label": "Référentiels"},
+    {"cle": "production", "label": "Production"},
+]
+
+# Libellés des colonnes RVGI qui reviennent partout. Servent au panneau de
+# détail, y compris pour les champs qu'aucun écran ne montre en liste.
+LABELS = {
+    "id": "Identifiant", "numero": "Numéro", "ligne": "Ligne",
+    "amjc": "Date de création", "amjd": "Date du devis", "amje": "Date d'expédition",
+    "amjl": "Date de livraison", "amjf": "Date de facture", "amjh": "Horodatage",
+    "amjv": "Fin de validité", "amj": "Date", "amjb": "Date du BAT",
+    "amjo": "Date d'ouverture", "amjp": "Date prévue", "amjr": "Date réelle",
+    "dtem": "Dernière modification",
+    "numclt": "N° client", "numfou": "N° fournisseur", "numfouclt": "N° tiers",
+    "rs": "Raison sociale", "groupeclt": "Groupe client", "groupefou": "Groupe fournisseur",
+    "code": "Code", "code1": "Code 1", "code2": "Code 2", "code3": "Code 3",
+    "des1": "Désignation", "des2": "Désignation 2", "des3": "Désignation 3",
+    "des4": "Désignation 4",
+    "libc1": "Libellé 1", "libc2": "Libellé 2", "libc3": "Libellé 3", "libc4": "Libellé 4",
+    "cltd1": "Libellé client 1", "cltd2": "Libellé client 2",
+    "cltc1": "Réf. client 1", "cltc2": "Réf. client 2", "cltc3": "Réf. client 3",
+    "qte": "Quantité", "qtep": "Quantité à traiter", "qtex": "Qtex (sens non établi)",
+    "qtef": "Quantité fabriquée", "qtes": "Quantité sortie", "qtefac": "Quantité facturée",
+    "qte1": "Quantité mouvementée", "qte2": "Stock après mouvement",
+    "qtemin": "Quantité mini", "qtemax": "Quantité maxi",
+    "pa": "Prix d'achat", "pv": "Prix de vente", "pub": "Prix unitaire brut",
+    "pun": "Prix unitaire net", "net": "Net", "htn": "Total HT net", "htb": "Total HT brut",
+    "ttcn": "Total TTC", "tva": "TVA", "rem": "Remise", "mt": "Montant",
+    "franco": "Franco", "escompte": "Escompte", "devise": "Devise",
+    "fam": "Famille", "sfam": "Sous-famille", "gamme": "Gamme", "nomen": "Nomenclature",
+    "depot": "Dépôt", "rang": "Rang", "lot": "N° de lot", "refbl": "Réf. BL",
+    "ref": "Référence fournisseur", "vref": "Référence client", "nref": "Notre référence",
+    "operateur": "Opérateur", "com": "Commentaire", "mvt": "Type de mouvement",
+    "stk": "Stock", "mini": "Stock minimum", "maxi": "Stock maximum",
+    "ftl": "Format L", "fth": "Format H", "fta": "Format A",
+    "orig": "Origine", "lpos": "Position", "pos": "Position", "lab": "Laboratoire",
+    "pcol": "Colisage", "bat": "BAT", "modliv": "Mode de livraison",
+    "nbjliv": "Délai (jours)", "numcde": "N° de commande", "lignecde": "Ligne de commande",
+    "livbl": "N° de BL", "livno": "N° de commande", "livlg": "Ligne de commande",
+    "nofac": "N° de facture", "fac_no": "N° de facture", "fac_lg": "Ligne de facture",
+    "sol": "Soldé", "reg": "Mode de règlement", "adv": "Chargé d'affaires",
+    "cp": "Code postal", "ville": "Ville", "vil": "Ville", "pays": "Pays",
+    "adr1": "Adresse", "adr2": "Adresse (suite)", "mail": "E-mail", "tel": "Téléphone",
+    "siret": "SIRET", "ntva": "N° TVA", "lrs": "Livré à", "lville": "Ville de livraison",
+    "machine": "Machine", "mach": "Machine", "dos": "Dossier", "pt": "Code opération",
+    "nbt": "Nombre de poses", "nbl": "Poses en laize", "nba": "Poses en avance",
+    "colis": "Colis", "pds": "Poids", "pal": "Palettes", "col": "Colis",
+    "nom": "Nom", "pre": "Prénom", "service": "Service",
+}
+
+
+def _c(ref, nom, label, type="texte", largeur=None, enum=None, aligne=None):
+    d = {"c": ref, "nom": nom, "label": label, "type": type}
+    if largeur:
+        d["largeur"] = largeur
+    if enum:
+        d["enum"] = enum
+    if aligne:
+        d["aligne"] = aligne
+    return d
+
+
+def _article(a, nom="article", label="Réf. article"):
+    """Clé article RVGI : `code1`/`code2` affichés « 890/0112 »."""
+    return {
+        "parts": ["%s.code1" % a, "%s.code2" % a],
+        "joint": "/",
+        "nom": nom,
+        "label": label,
+        "type": "ref",
+        "largeur": 100,
+    }
+
+
+ECRANS = [
+    # ── Ventes ───────────────────────────────────────────────────────────────
+    {
+        "cle": "devis",
+        "label": "Devis",
+        "domaine": "ventes",
+        "resume": "Lignes de devis et leur entête client.",
+        "table": "dev_ligne", "alias": "l",
+        "jointures": [{"table": "dev_entete", "alias": "e",
+                       "gauche": "e.numero", "droite": "l.numero"}],
+        "cle_ligne": "l.id",
+        "tri_defaut": ("e.amjd", "desc"),
+        "colonnes": [
+            _c("l.numero", "numero", "N° devis", "nombre", 90),
+            _c("l.ligne", "ligne", "Lg", "nombre", 45),
+            _c("e.rs", "client", "Client", "client", 190),
+            _c("e.amjd", "date", "Date", "date", 95),
+            _article("l"),
+            _c("l.des1", "des1", "Désignation", "texte", 240),
+            _c("l.qte", "qte", "Quantité", "qte", 100),
+            _c("l.pun", "pun", "PU net", "prix", 90),
+            _c("l.net", "net", "Net", "montant", 100),
+            _c("l.amjv", "amjv", "Validité", "date", 95),
+        ],
+        "recherche": ["e.rs", "l.des1", "l.numero", "l.code1", "l.code2", "l.vref"],
+        "filtres": [
+            {"nom": "client", "label": "Client", "col": "e.rs", "type": "contient"},
+            {"nom": "depuis", "label": "Depuis le", "col": "e.amjd", "type": "date_min"},
+            {"nom": "jusqua", "label": "Jusqu'au", "col": "e.amjd", "type": "date_max"},
+        ],
+        "detail": [
+            {"titre": "Devis", "champs": ["numero", "ligne", "amjd", "rs", "numclt", "vref"]},
+            {"titre": "Article", "champs": ["code1", "code2", "code3", "des1", "des2", "des3", "des4", "fam", "sfam"]},
+            {"titre": "Chiffrage", "champs": ["qte", "pub", "pun", "net", "pa", "tva", "rem"]},
+        ],
+    },
+    {
+        "cle": "commandes",
+        "label": "Commandes",
+        "domaine": "ventes",
+        "resume": "Le carnet : une ligne par ligne de commande, avec sa date d'expédition et son avancement.",
+        "table": "cde_ligne", "alias": "l",
+        "jointures": [{"table": "cde_entete", "alias": "e",
+                       "gauche": "e.numero", "droite": "l.numero"}],
+        "cle_ligne": "l.id",
+        "tri_defaut": ("l.amje", "desc"),
+        "colonnes": [
+            _c("l.numero", "numero", "N° / OF", "of", 90),
+            _c("l.ligne", "ligne", "Lg", "nombre", 45),
+            _c("e.rs", "client", "Client", "client", 190),
+            _c("e.amjc", "date", "Créée le", "date", 95),
+            _c("l.amje", "amje", "Expédition", "date", 95),
+            _c("l.amjl", "amjl", "Livraison", "date", 95),
+            _c("l.lpos", "lpos", "Position", "enum", 110, enum="position"),
+            _c("l.orig", "orig", "Origine", "enum", 110, enum="origine"),
+            _article("l"),
+            _c("l.des1", "des1", "Désignation", "texte", 240),
+            _c("l.qte", "qte", "Quantité", "qte", 110),
+            _c("l.qtep", "qtep", "À traiter", "qte", 105),
+            _c("l.pun", "pun", "PU net", "prix", 85),
+            _c("l.bat", "bat", "BAT", "bool", 55),
+        ],
+        "recherche": ["e.rs", "l.des1", "l.numero", "l.code1", "l.code2", "l.vref", "l.nref"],
+        "filtres": [
+            {"nom": "client", "label": "Client", "col": "e.rs", "type": "contient"},
+            # Un carnet s'ouvre sur ce qui est en cours, pas sur dix ans
+            # d'archives : le filtre est posé d'entrée, et reste effaçable.
+            {"nom": "position", "label": "Position", "col": "l.lpos", "type": "enum",
+             "enum": "position", "defaut": "0"},
+            {"nom": "origine", "label": "Origine", "col": "l.orig", "type": "enum", "enum": "origine"},
+            {"nom": "depuis", "label": "Expédition depuis", "col": "l.amje", "type": "date_min"},
+            {"nom": "jusqua", "label": "Expédition jusqu'au", "col": "l.amje", "type": "date_max"},
+        ],
+        "detail": [
+            {"titre": "Commande", "champs": ["numero", "ligne", "amjc", "rs", "numclt", "groupeclt", "vref", "nref"]},
+            {"titre": "Échéances", "champs": ["amje", "amjl", "nbjliv", "modliv", "lpos", "bat", "amjb"]},
+            {"titre": "Article", "champs": ["code1", "code2", "code3", "des1", "des2", "des3", "des4", "fam", "sfam", "gamme"]},
+            {"titre": "Quantités et prix", "champs": ["qte", "qtep", "qtex", "pub", "pun", "net", "pa", "orig", "lab", "pcol"]},
+            {"titre": "Livraison", "champs": ["lrs", "ladr1", "ladr2", "lcp", "lville", "lpays"]},
+        ],
+    },
+    {
+        "cle": "livraisons",
+        "label": "Bons de livraison",
+        "domaine": "ventes",
+        "resume": "Lignes de BL, rattachées à leur commande d'origine.",
+        "table": "liv_ligne", "alias": "l",
+        "jointures": [{"table": "liv_entete", "alias": "e",
+                       "gauche": "e.numero", "droite": "l.numero"}],
+        "cle_ligne": "l.id",
+        "tri_defaut": ("l.amje", "desc"),
+        "colonnes": [
+            _c("l.numero", "numero", "N° BL", "nombre", 90),
+            _c("e.lrs", "client", "Livré à", "client", 190),
+            _c("e.numclt", "numclt", "N° client", "nombre", 80),
+            _c("l.amje", "amje", "Expédié le", "date", 95),
+            _c("l.numcde", "numcde", "Commande", "of", 90),
+            _c("l.lignecde", "lignecde", "Lg cde", "nombre", 60),
+            _c("l.qte", "qte", "Quantité", "qte", 110),
+            _c("l.qtefac", "qtefac", "Facturée", "qte", 100),
+            _c("l.pds", "pds", "Poids", "nombre", 80),
+            _c("l.fac_no", "fac_no", "Facture", "nombre", 90),
+        ],
+        "recherche": ["e.lrs", "l.numero", "l.numcde", "l.note"],
+        "filtres": [
+            {"nom": "client", "label": "Destinataire", "col": "e.lrs", "type": "contient"},
+            {"nom": "commande", "label": "N° de commande", "col": "l.numcde", "type": "egal"},
+            {"nom": "depuis", "label": "Depuis le", "col": "l.amje", "type": "date_min"},
+            {"nom": "jusqua", "label": "Jusqu'au", "col": "l.amje", "type": "date_max"},
+        ],
+        "detail": [
+            {"titre": "Bon de livraison", "champs": ["numero", "amje", "lrs", "numclt", "col", "pal", "pds", "modliv"]},
+            {"titre": "Origine", "champs": ["numcde", "lignecde", "lpos"]},
+            {"titre": "Quantités", "champs": ["qte", "qtefac", "depot"]},
+            {"titre": "Facturation", "champs": ["fac_no", "fac_lg"]},
+        ],
+    },
+    {
+        "cle": "factures",
+        "label": "Factures de vente",
+        "domaine": "ventes",
+        "resume": "Ce qui a réellement été vendu, par référence, depuis 2015.",
+        "table": "vte_ligne", "alias": "l",
+        "jointures": [{"table": "vte_entete", "alias": "e",
+                       "gauche": "e.numero", "droite": "l.numero"}],
+        "cle_ligne": "l.id",
+        "tri_defaut": ("e.amjf", "desc"),
+        "colonnes": [
+            _c("l.numero", "numero", "N° facture", "nombre", 100),
+            _c("e.rs", "client", "Client", "client", 190),
+            _c("e.amjf", "amjf", "Date", "date", 95),
+            _article("l"),
+            _c("l.des1", "des1", "Désignation", "texte", 240),
+            _c("l.qte", "qte", "Quantité", "qte", 110),
+            _c("l.pun", "pun", "PU net", "prix", 90),
+            _c("l.net", "net", "Net", "montant", 100),
+            _c("l.livbl", "livbl", "BL", "nombre", 85),
+            _c("l.livno", "livno", "Commande", "of", 90),
+            _c("l.mach", "mach", "Machine", "texte", 90),
+        ],
+        "recherche": ["e.rs", "l.des1", "l.numero", "l.code1", "l.code2", "l.livno"],
+        "filtres": [
+            {"nom": "client", "label": "Client", "col": "e.rs", "type": "contient"},
+            {"nom": "commande", "label": "N° de commande", "col": "l.livno", "type": "egal"},
+            {"nom": "depuis", "label": "Depuis le", "col": "e.amjf", "type": "date_min"},
+            {"nom": "jusqua", "label": "Jusqu'au", "col": "e.amjf", "type": "date_max"},
+        ],
+        "detail": [
+            {"titre": "Facture", "champs": ["numero", "amjf", "rs", "numclt", "ligne"]},
+            {"titre": "Article", "champs": ["code1", "code2", "code3", "des1", "des2", "des3", "des4", "fam", "sfam"]},
+            {"titre": "Montants", "champs": ["qte", "pub", "pun", "net", "htn", "tva", "ttcn", "pa"]},
+            {"titre": "Rattachement", "champs": ["livbl", "livno", "livlg", "mach"]},
+        ],
+    },
+    {
+        "cle": "echeances",
+        "label": "Échéances clients",
+        "domaine": "ventes",
+        "resume": "Échéancier des factures de vente, soldé ou non.",
+        "table": "ecc_ech", "alias": "l",
+        "cle_ligne": "l.id",
+        "tri_defaut": ("l.amje", "desc"),
+        "colonnes": [
+            _c("l.nofac", "nofac", "Facture", "nombre", 100),
+            _c("l.rs", "client", "Client", "client", 200),
+            _c("l.amje", "amje", "Échéance", "date", 100),
+            _c("l.mt", "mt", "Montant", "montant", 110),
+            _c("l.sol", "sol", "Soldé", "bool", 70),
+            _c("l.ligneech", "ligneech", "Éch.", "nombre", 55),
+            _c("l.nbech", "nbech", "Nb éch.", "nombre", 65),
+            _c("l.reg", "reg", "Règlement", "nombre", 90),
+            _c("l.ville", "ville", "Ville", "texte", 140),
+        ],
+        "recherche": ["l.rs", "l.nofac", "l.com"],
+        "filtres": [
+            {"nom": "client", "label": "Client", "col": "l.rs", "type": "contient"},
+            {"nom": "solde", "label": "Soldé", "col": "l.sol", "type": "enum", "enum": "oui_non"},
+            {"nom": "depuis", "label": "Échéance depuis", "col": "l.amje", "type": "date_min"},
+            {"nom": "jusqua", "label": "Échéance jusqu'au", "col": "l.amje", "type": "date_max"},
+        ],
+        "detail": [
+            {"titre": "Échéance", "champs": ["nofac", "amje", "mt", "sol", "ligneech", "nbech"]},
+            {"titre": "Client", "champs": ["rs", "numclt", "ville", "cp", "reg"]},
+        ],
+    },
+    {
+        "cle": "marches",
+        "label": "Marchés",
+        "domaine": "ventes",
+        "resume": "Marchés et appels de livraison.",
+        "table": "cdm_ligne", "alias": "l",
+        "jointures": [{"table": "cdm_entete", "alias": "e",
+                       "gauche": "e.numero", "droite": "l.numero"}],
+        "cle_ligne": "l.id",
+        "tri_defaut": ("e.amjc", "desc"),
+        "colonnes": [
+            _c("l.numero", "numero", "N° marché", "nombre", 95),
+            _c("l.ligne", "ligne", "Lg", "nombre", 45),
+            _c("e.rs", "client", "Client", "client", 190),
+            _c("e.amjc", "amjc", "Créé le", "date", 95),
+            _article("l"),
+            _c("l.des1", "des1", "Désignation", "texte", 240),
+            _c("l.qte", "qte", "Quantité", "qte", 110),
+            _c("l.qtep", "qtep", "Livrée", "qte", 100),
+            _c("l.amjf", "amjf", "Fin", "date", 95),
+            _c("l.pun", "pun", "PU net", "prix", 90),
+        ],
+        "recherche": ["e.rs", "l.des1", "l.numero", "l.code1", "l.code2"],
+        "filtres": [
+            {"nom": "client", "label": "Client", "col": "e.rs", "type": "contient"},
+            {"nom": "depuis", "label": "Depuis le", "col": "e.amjc", "type": "date_min"},
+        ],
+        "detail": [
+            {"titre": "Marché", "champs": ["numero", "ligne", "amjc", "amjo", "amjf", "rs", "numclt"]},
+            {"titre": "Article", "champs": ["code1", "code2", "des1", "des2", "fam", "sfam"]},
+            {"titre": "Quantités", "champs": ["qte", "qtep", "pub", "pun", "net"]},
+        ],
+    },
+
+    # ── Achats ───────────────────────────────────────────────────────────────
+    {
+        "cle": "commandes_fournisseur",
+        "label": "Commandes fournisseurs",
+        "domaine": "achats",
+        "resume": "Achats matière, sous-traitance, clichés et fournitures.",
+        "table": "cdf_ligne", "alias": "l",
+        "jointures": [{"table": "cdf_entete", "alias": "e",
+                       "gauche": "e.numero", "droite": "l.numero"}],
+        "cle_ligne": "l.id",
+        "tri_defaut": ("e.amjc", "desc"),
+        "colonnes": [
+            _c("l.numero", "numero", "N° cde", "nombre", 85),
+            _c("l.ligne", "ligne", "Lg", "nombre", 45),
+            _c("e.rs", "fournisseur", "Fournisseur", "client", 190),
+            _c("e.amjc", "amjc", "Créée le", "date", 95),
+            _c("l.amjl", "amjl", "Livraison", "date", 95),
+            _c("l.lpos", "lpos", "Position", "enum", 110, enum="position"),
+            _article("l"),
+            _c("l.des1", "des1", "Désignation", "texte", 240),
+            _c("l.qte", "qte", "Quantité", "qte", 110),
+            _c("l.pa", "pa", "Prix d'achat", "prix", 100),
+            _c("e.vref", "vref", "Référence", "texte", 180),
+        ],
+        "recherche": ["e.rs", "l.des1", "l.numero", "l.code1", "l.code2", "e.vref"],
+        "filtres": [
+            {"nom": "fournisseur", "label": "Fournisseur", "col": "e.rs", "type": "contient"},
+            {"nom": "position", "label": "Position", "col": "l.lpos", "type": "enum",
+             "enum": "position", "defaut": "0"},
+            {"nom": "depuis", "label": "Depuis le", "col": "e.amjc", "type": "date_min"},
+        ],
+        "detail": [
+            {"titre": "Commande", "champs": ["numero", "ligne", "amjc", "amjl", "rs", "numfou", "vref", "lpos"]},
+            {"titre": "Article", "champs": ["code1", "code2", "code3", "des1", "des2", "des3", "fam", "sfam"]},
+            {"titre": "Quantités et prix", "champs": ["qte", "qtb", "metb", "pa", "pun", "net", "cua"]},
+        ],
+    },
+    {
+        "cle": "receptions",
+        "label": "Réceptions",
+        "domaine": "achats",
+        "resume": "Lignes de réception fournisseur, avec le n° de BL et le lot.",
+        "table": "lif_ligne", "alias": "l",
+        "jointures": [{"table": "cdf_entete", "alias": "e",
+                       "gauche": "e.numero", "droite": "l.numero"}],
+        "cle_ligne": "l.id",
+        "tri_defaut": ("l.amjl", "desc"),
+        "colonnes": [
+            _c("l.ref", "ref", "Référence BR", "code", 130),
+            _c("l.numero", "numero", "Commande", "nombre", 90),
+            _c("l.ligne", "ligne", "Lg", "nombre", 45),
+            _c("l.amjl", "amjl", "Réception", "date", 100),
+            _c("e.rs", "fournisseur", "Fournisseur", "client", 190),
+            _c("l.qte", "qte", "Quantité", "qte", 110),
+            _c("l.lot", "lot", "N° de lot", "code", 120),
+            _c("l.depot", "depot", "Dépôt", "nombre", 70),
+            _c("l.fac_no", "fac_no", "Facture", "nombre", 90),
+            _c("l.operateur", "operateur", "Opérateur", "nombre", 80),
+        ],
+        "recherche": ["l.ref", "l.numero", "l.lot", "e.rs", "l.note"],
+        "filtres": [
+            {"nom": "fournisseur", "label": "Fournisseur", "col": "e.rs", "type": "contient"},
+            {"nom": "lot", "label": "N° de lot", "col": "l.lot", "type": "contient"},
+            {"nom": "depuis", "label": "Réception depuis", "col": "l.amjl", "type": "date_min"},
+            {"nom": "jusqua", "label": "Réception jusqu'au", "col": "l.amjl", "type": "date_max"},
+        ],
+        "detail": [
+            {"titre": "Réception", "champs": ["ref", "amjl", "amje", "qte", "lot", "depot", "operateur"]},
+            {"titre": "Commande", "champs": ["numero", "ligne", "rs", "numfou", "lpos"]},
+            {"titre": "Facturation", "champs": ["fac_no", "fac_lg", "daa"]},
+            {"titre": "Notes", "champs": ["note", "note2", "com"]},
+        ],
+    },
+    {
+        "cle": "factures_fournisseur",
+        "label": "Factures fournisseurs",
+        "domaine": "achats",
+        "resume": "Lignes de facture d'achat.",
+        "table": "vtf_ligne", "alias": "l",
+        "jointures": [{"table": "vtf_entete", "alias": "e",
+                       "gauche": "e.numero", "droite": "l.numero"}],
+        "cle_ligne": "l.id",
+        "tri_defaut": ("e.amjf", "desc"),
+        "colonnes": [
+            _c("l.numero", "numero", "N° facture", "nombre", 100),
+            _c("e.rs", "fournisseur", "Fournisseur", "client", 190),
+            _c("e.amjf", "amjf", "Date", "date", 95),
+            _article("l"),
+            _c("l.des1", "des1", "Désignation", "texte", 240),
+            _c("l.qte", "qte", "Quantité", "qte", 110),
+            _c("l.pa", "pa", "Prix d'achat", "prix", 100),
+            _c("l.net", "net", "Net", "montant", 100),
+            _c("l.livno", "livno", "Commande", "nombre", 90),
+        ],
+        "recherche": ["e.rs", "l.des1", "l.numero", "l.code1", "l.code2"],
+        "filtres": [
+            {"nom": "fournisseur", "label": "Fournisseur", "col": "e.rs", "type": "contient"},
+            {"nom": "depuis", "label": "Depuis le", "col": "e.amjf", "type": "date_min"},
+        ],
+        "detail": [
+            {"titre": "Facture", "champs": ["numero", "amjf", "rs", "numfou", "ligne"]},
+            {"titre": "Article", "champs": ["code1", "code2", "des1", "des2", "fam", "sfam"]},
+            {"titre": "Montants", "champs": ["qte", "pa", "pun", "net", "htn", "tva", "ttcn"]},
+        ],
+    },
+    {
+        "cle": "appels_offres",
+        "label": "Appels d'offres",
+        "domaine": "achats",
+        "resume": "Consultations fournisseurs. Module arrêté depuis mars 2025.",
+        "table": "aof_ligne", "alias": "l",
+        "jointures": [{"table": "aof_entete", "alias": "e",
+                       "gauche": "e.numero", "droite": "l.numero"}],
+        "cle_ligne": "l.id",
+        "tri_defaut": ("e.amjc", "desc"),
+        "colonnes": [
+            _c("l.numero", "numero", "N°", "nombre", 85),
+            _c("e.rs", "fournisseur", "Fournisseur", "client", 190),
+            _c("e.amjc", "amjc", "Date", "date", 95),
+            _article("l"),
+            _c("l.des1", "des1", "Désignation", "texte", 260),
+            _c("l.qte", "qte", "Quantité", "qte", 110),
+            _c("l.pa", "pa", "Prix d'achat", "prix", 100),
+        ],
+        "recherche": ["e.rs", "l.des1", "l.numero"],
+        "filtres": [
+            {"nom": "fournisseur", "label": "Fournisseur", "col": "e.rs", "type": "contient"},
+        ],
+        "detail": [
+            {"titre": "Appel d'offres", "champs": ["numero", "ligne", "amjc", "rs", "numfou"]},
+            {"titre": "Article", "champs": ["code1", "code2", "des1", "des2", "qte", "pa"]},
+        ],
+    },
+
+    # ── Stocks ───────────────────────────────────────────────────────────────
+    {
+        "cle": "stock_pf",
+        "label": "Stock produits finis",
+        "domaine": "stocks",
+        "resume": "Stock réel par article, avec ses seuils.",
+        "table": "fic_art", "alias": "a",
+        "cle_ligne": "a.id",
+        "tri_defaut": ("a.code1", "asc"),
+        "colonnes": [
+            _article("a"),
+            _c("a.code3", "code3", "Code 3", "code", 80),
+            _c("a.numclt", "numclt", "Client", "nombre", 75),
+            _c("a.libc1", "libc1", "Désignation", "texte", 260),
+            _c("a.stk", "stk", "Stock réel", "qte", 110),
+            _c("a.mini", "mini", "Minimum", "qte", 95),
+            _c("a.maxi", "maxi", "Maximum", "qte", 95),
+            _c("a.ftl", "ftl", "Format L", "nombre", 85),
+            _c("a.fth", "fth", "Format H", "nombre", 85),
+            _c("a.cltc1", "cltc1", "Réf. client", "code", 120),
+        ],
+        "recherche": ["a.libc1", "a.libc2", "a.code1", "a.code2", "a.cltc1", "a.cltc2"],
+        "filtres": [
+            {"nom": "client", "label": "N° client", "col": "a.numclt", "type": "egal"},
+            {"nom": "famille", "label": "Famille", "col": "a.fam", "type": "egal"},
+            {"nom": "designation", "label": "Désignation", "col": "a.libc1", "type": "contient"},
+        ],
+        "detail": [
+            {"titre": "Article", "champs": ["code1", "code2", "code3", "numclt", "numart", "libc1", "libc2", "libc3", "libc4"]},
+            {"titre": "Stock", "champs": ["stk", "mini", "maxi", "depot", "rang", "pstk"]},
+            {"titre": "Format et poids", "champs": ["ftl", "fth", "pdsn", "pdsb", "coul", "cliche"]},
+            {"titre": "Classement", "champs": ["fam", "sfam", "gamme", "nomen", "douane"]},
+            {"titre": "Références client", "champs": ["cltc1", "cltc2", "cltc3", "cltd1", "cltd2", "cltd3", "cltd4"]},
+        ],
+    },
+    {
+        "cle": "mouvements_pf",
+        "label": "Mouvements produits finis",
+        "domaine": "stocks",
+        "resume": "Entrées et sorties de stock PF, à la minute.",
+        "table": "stk_hist", "alias": "m",
+        "cle_ligne": "m.id",
+        "tri_defaut": ("m.amjh", "desc"),
+        "colonnes": [
+            _c("m.amjh", "amjh", "Horodatage", "datetime", 140),
+            _article("m"),
+            _c("m.code3", "code3", "Code 3", "code", 80),
+            _c("m.des1", "des1", "Libellé", "texte", 240),
+            _c("m.mvt", "mvt", "Mouvement", "nombre", 90),
+            _c("m.qte1", "qte1", "Quantité", "qte", 110),
+            _c("m.qte2", "qte2", "Stock après", "qte", 110),
+            _c("m.numcde", "numcde", "Commande", "of", 95),
+            _c("m.refbl", "refbl", "BL", "code", 95),
+            _c("m.lot", "lot", "Lot", "code", 110),
+            _c("m.numfouclt", "numfouclt", "Tiers", "nombre", 75),
+        ],
+        "recherche": ["m.des1", "m.des2", "m.code1", "m.code2", "m.numcde", "m.lot", "m.refbl"],
+        "filtres": [
+            {"nom": "article", "label": "Code 1", "col": "m.code1", "type": "egal"},
+            {"nom": "commande", "label": "N° de commande", "col": "m.numcde", "type": "egal"},
+            {"nom": "depuis", "label": "Depuis le", "col": "m.amjh", "type": "date_min"},
+            {"nom": "jusqua", "label": "Jusqu'au", "col": "m.amjh", "type": "date_max"},
+        ],
+        "detail": [
+            {"titre": "Mouvement", "champs": ["amjh", "mvt", "qte1", "qte2", "depot", "rang", "operateur"]},
+            {"titre": "Article", "champs": ["code1", "code2", "code3", "des1", "des2"]},
+            {"titre": "Rattachement", "champs": ["numcde", "ligne", "refbl", "lot", "numfouclt"]},
+        ],
+    },
+    {
+        "cle": "stock_matiere",
+        "label": "Stock matières",
+        "domaine": "stocks",
+        "resume": "Stock matière par référence et par laize.",
+        "table": "mat_mat", "alias": "m",
+        "cle_ligne": "m.id",
+        "tri_defaut": ("m.code1", "asc"),
+        "colonnes": [
+            _article("m"),
+            _c("m.libc1", "libc1", "Désignation", "texte", 280),
+            _c("m.libc2", "libc2", "Complément", "texte", 200),
+            _c("m.stk", "stk", "Stock", "qte", 110),
+            _c("m.mini", "mini", "Minimum", "qte", 95),
+            _c("m.maxi", "maxi", "Maximum", "qte", 95),
+            _c("m.pds", "pds", "Grammage", "nombre", 90),
+            _c("m.pa", "pa", "Prix d'achat", "prix", 100),
+            _c("m.numfou", "numfou", "Fournisseur", "nombre", 90),
+        ],
+        "recherche": ["m.libc1", "m.libc2", "m.code1", "m.code2", "m.ref"],
+        "filtres": [
+            {"nom": "designation", "label": "Désignation", "col": "m.libc1", "type": "contient"},
+            {"nom": "famille", "label": "Sous-famille", "col": "m.sfam", "type": "egal"},
+        ],
+        "detail": [
+            {"titre": "Matière", "champs": ["code1", "code2", "code3", "libc1", "libc2", "sfam", "nomen"]},
+            {"titre": "Caractéristiques", "champs": ["m1_lai", "m1_epais", "m1_adh", "m1_pro", "m1_syn", "m1_film", "m1_abs", "coul", "pds"]},
+            {"titre": "Stock", "champs": ["stk", "mini", "maxi", "depot", "rang"]},
+            {"titre": "Achat", "champs": ["numfou", "ref", "pa", "cua", "cuc", "amjv"]},
+        ],
+    },
+    {
+        "cle": "mouvements_matiere",
+        "label": "Mouvements matières",
+        "domaine": "stocks",
+        "resume": "Entrées et sorties matière, la laize portée par le code 3.",
+        "table": "stm_hist", "alias": "m",
+        "cle_ligne": "m.id",
+        "tri_defaut": ("m.amjh", "desc"),
+        "colonnes": [
+            _c("m.amjh", "amjh", "Horodatage", "datetime", 140),
+            _article("m"),
+            _c("m.code3", "code3", "Laize", "code", 80),
+            _c("m.des1", "des1", "Libellé", "texte", 260),
+            _c("m.mvt", "mvt", "Mouvement", "nombre", 90),
+            _c("m.qte1", "qte1", "Quantité", "qte", 110),
+            _c("m.qte2", "qte2", "Stock après", "qte", 110),
+            _c("m.numcde", "numcde", "Commande", "nombre", 95),
+            _c("m.lot", "lot", "Lot", "code", 110),
+        ],
+        "recherche": ["m.des1", "m.des2", "m.code1", "m.code2", "m.lot", "m.refbl"],
+        "filtres": [
+            {"nom": "article", "label": "Code 1", "col": "m.code1", "type": "egal"},
+            {"nom": "lot", "label": "N° de lot", "col": "m.lot", "type": "contient"},
+            {"nom": "depuis", "label": "Depuis le", "col": "m.amjh", "type": "date_min"},
+        ],
+        "detail": [
+            {"titre": "Mouvement", "champs": ["amjh", "mvt", "qte1", "qte2", "depot", "rang", "operateur"]},
+            {"titre": "Matière", "champs": ["code1", "code2", "code3", "des1", "des2"]},
+            {"titre": "Rattachement", "champs": ["numcde", "ligne", "refbl", "lot", "numfouclt"]},
+        ],
+    },
+
+    # ── Référentiels ─────────────────────────────────────────────────────────
+    {
+        "cle": "articles",
+        "label": "Articles",
+        "domaine": "referentiels",
+        "resume": "Le référentiel produits finis : libellés, formats, classement.",
+        "table": "fic_art", "alias": "a",
+        "cle_ligne": "a.id",
+        "tri_defaut": ("a.code1", "asc"),
+        "colonnes": [
+            _article("a"),
+            _c("a.code3", "code3", "Code 3", "code", 80),
+            _c("a.libc1", "libc1", "Libellé 1", "texte", 240),
+            _c("a.libc2", "libc2", "Libellé 2", "texte", 220),
+            _c("a.libc3", "libc3", "Libellé 3", "texte", 180),
+            _c("a.fam", "fam", "Famille", "nombre", 80),
+            _c("a.sfam", "sfam", "Sous-famille", "nombre", 90),
+            _c("a.ftl", "ftl", "Format L", "nombre", 85),
+            _c("a.fth", "fth", "Format H", "nombre", 85),
+            _c("a.amj", "amj", "Créé le", "date", 95),
+        ],
+        "recherche": ["a.libc1", "a.libc2", "a.libc3", "a.code1", "a.code2", "a.cltc1", "a.numart"],
+        "filtres": [
+            {"nom": "client", "label": "N° client", "col": "a.numclt", "type": "egal"},
+            {"nom": "famille", "label": "Famille", "col": "a.fam", "type": "egal"},
+            {"nom": "libelle", "label": "Libellé", "col": "a.libc1", "type": "contient"},
+        ],
+        "detail": [
+            {"titre": "Article", "champs": ["code1", "code2", "code3", "numart", "numclt", "amj"]},
+            {"titre": "Libellés", "champs": ["libc1", "libc2", "libc3", "libc4"]},
+            {"titre": "Côté client", "champs": ["cltc1", "cltc2", "cltc3", "cltd1", "cltd2", "cltd3", "cltd4"]},
+            {"titre": "Format et poids", "champs": ["ftl", "fth", "pdsn", "pdsb", "coul", "cliche"]},
+            {"titre": "Classement", "champs": ["fam", "sfam", "gamme", "nomen", "douane", "cua", "cuv", "cuc"]},
+        ],
+    },
+    {
+        "cle": "clients",
+        "label": "Clients",
+        "domaine": "referentiels",
+        "resume": "Fiches clients : identité, groupe, conditions.",
+        "table": "fic_clt", "alias": "c",
+        "cle_ligne": "c.id",
+        "tri_defaut": ("c.rs", "asc"),
+        "colonnes": [
+            _c("c.numero", "numero", "N°", "nombre", 70),
+            _c("c.code", "code", "Code", "code", 110),
+            _c("c.rs", "rs", "Raison sociale", "client", 240),
+            _c("c.vil", "vil", "Ville", "texte", 160),
+            _c("c.cp", "cp", "CP", "code", 80),
+            _c("c.groupe", "groupe", "Groupe", "nombre", 80),
+            _c("c.tel", "tel", "Téléphone", "texte", 120),
+            _c("c.nbjliv", "nbjliv", "Délai", "nombre", 70),
+            _c("c.reg", "reg", "Règlement", "nombre", 90),
+            _c("c.bloq", "bloq", "Bloqué", "bool", 70),
+        ],
+        "recherche": ["c.rs", "c.code", "c.vil", "c.siret", "c.numero"],
+        "filtres": [
+            {"nom": "ville", "label": "Ville", "col": "c.vil", "type": "contient"},
+            {"nom": "groupe", "label": "Groupe", "col": "c.groupe", "type": "egal"},
+        ],
+        "detail": [
+            {"titre": "Identité", "champs": ["numero", "code", "rs", "groupe", "siret", "ntva", "rcs", "ean"]},
+            {"titre": "Adresse", "champs": ["adr1", "adr2", "bp", "cp", "vil", "pays", "cpays"]},
+            {"titre": "Contact", "champs": ["tel", "fax", "mail", "http"]},
+            {"titre": "Conditions", "champs": ["modeliv", "nbjliv", "franco", "remise", "escompte", "reg", "del", "dev", "lang", "adv"]},
+        ],
+    },
+    {
+        "cle": "fournisseurs",
+        "label": "Fournisseurs",
+        "domaine": "referentiels",
+        "resume": "Fiches fournisseurs : identité, groupe, conditions.",
+        "table": "fic_fou", "alias": "f",
+        "cle_ligne": "f.id",
+        "tri_defaut": ("f.rs", "asc"),
+        "colonnes": [
+            _c("f.numero", "numero", "N°", "nombre", 70),
+            _c("f.code", "code", "Code", "code", 110),
+            _c("f.rs", "rs", "Raison sociale", "client", 240),
+            _c("f.vil", "vil", "Ville", "texte", 160),
+            _c("f.cp", "cp", "CP", "code", 80),
+            _c("f.groupe", "groupe", "Groupe", "nombre", 80),
+            _c("f.tel", "tel", "Téléphone", "texte", 120),
+            _c("f.nbjliv", "nbjliv", "Délai", "nombre", 70),
+            _c("f.bloq", "bloq", "Bloqué", "bool", 70),
+        ],
+        "recherche": ["f.rs", "f.code", "f.vil", "f.siret", "f.numero"],
+        "filtres": [
+            {"nom": "ville", "label": "Ville", "col": "f.vil", "type": "contient"},
+            {"nom": "groupe", "label": "Groupe", "col": "f.groupe", "type": "egal"},
+        ],
+        "detail": [
+            {"titre": "Identité", "champs": ["numero", "code", "rs", "groupe", "siret", "ntva", "rcs"]},
+            {"titre": "Adresse", "champs": ["adr1", "adr2", "bp", "cp", "vil", "pays", "cpays"]},
+            {"titre": "Contact", "champs": ["tel", "fax", "mail", "http"]},
+            {"titre": "Conditions", "champs": ["modeliv", "nbjliv", "franco", "remise", "escompte", "reg", "dev", "lang"]},
+        ],
+    },
+    {
+        "cle": "outils",
+        "label": "Outils de découpe",
+        "domaine": "referentiels",
+        "resume": "Outils physiques. `nbt` est le nombre de poses qui fait foi.",
+        "table": "out_dec", "alias": "o",
+        "cle_ligne": "o.id",
+        "tri_defaut": ("o.numero", "desc"),
+        "colonnes": [
+            _c("o.numero", "numero", "N° outil", "nombre", 90),
+            _c("o.code", "code", "Code", "code", 110),
+            _c("o.machine", "machine", "Machine", "texte", 110),
+            _c("o.ftl", "ftl", "Format L", "nombre", 85),
+            _c("o.fta", "fta", "Format A", "nombre", 85),
+            _c("o.nbl", "nbl", "Poses laize", "nombre", 90),
+            _c("o.nba", "nba", "Poses avance", "nombre", 95),
+            _c("o.nbt", "nbt", "Poses (total)", "nombre", 100),
+            _c("o.numclt", "numclt", "Client", "nombre", 75),
+            _c("o.etat", "etat", "État", "nombre", 70),
+        ],
+        "recherche": ["o.code", "o.numero", "o.com", "o.machine"],
+        "filtres": [
+            {"nom": "machine", "label": "Machine", "col": "o.machine", "type": "contient"},
+            {"nom": "client", "label": "N° client", "col": "o.numclt", "type": "egal"},
+        ],
+        "detail": [
+            {"titre": "Outil", "champs": ["numero", "code", "machine", "etat", "forme", "amj"]},
+            {"titre": "Poses", "champs": ["nbl", "nba", "nbt", "nbeti", "espl", "espa", "eche"]},
+            {"titre": "Format", "champs": ["ftl", "fta", "lt", "at", "ft", "nbd", "ray", "qm"]},
+            {"titre": "Rattachement", "champs": ["numclt", "rclt", "depot", "rang", "com"]},
+        ],
+    },
+    {
+        "cle": "machines",
+        "label": "Machines",
+        "domaine": "referentiels",
+        "resume": "Parc machines et capacités déclarées dans l'ERP.",
+        "table": "mac_pro", "alias": "m",
+        "cle_ligne": "m.id",
+        "tri_defaut": ("m.code", "asc"),
+        "colonnes": [
+            _c("m.code", "code", "Code", "code", 90),
+            _c("m.nom", "nom", "Machine", "texte", 200),
+            _c("m.lai", "lai", "Laize max", "nombre", 100),
+            _c("m.nbcoul", "nbcoul", "Couleurs", "nombre", 90),
+            _c("m.vit", "vit", "Vitesse", "nombre", 90),
+            _c("m.tht", "tht", "Taux horaire", "prix", 110),
+            _c("m.thd", "thd", "Taux dorure", "prix", 110),
+            _c("m.nbout", "nbout", "Outils", "nombre", 80),
+        ],
+        "recherche": ["m.nom", "m.code", "m.com"],
+        "filtres": [],
+        "detail": [
+            {"titre": "Machine", "champs": ["code", "nom", "type", "lai", "nbcoul", "nbpap", "nbout", "vit", "tvit"]},
+            {"titre": "Taux horaires", "champs": ["tht", "thd", "ths", "cci", "ccd", "ccg", "ce", "pe", "cs", "ps"]},
+        ],
+    },
+    {
+        "cle": "prix_vente",
+        "label": "Prix de vente",
+        "domaine": "referentiels",
+        "resume": "Paliers de prix de vente par article.",
+        "table": "fic_artv", "alias": "p",
+        "cle_ligne": "p.id",
+        "tri_defaut": ("p.code1", "asc"),
+        "colonnes": [
+            _article("p"),
+            _c("p.code3", "code3", "Code 3", "code", 80),
+            _c("p.qtemin", "qtemin", "Quantité mini", "qte", 110),
+            _c("p.qtemax", "qtemax", "Quantité maxi", "qte", 110),
+            _c("p.pv", "pv", "Prix de vente", "prix", 110),
+            _c("p.amj", "amj", "Depuis le", "date", 95),
+            _c("p.amjv", "amjv", "Validité", "date", 95),
+        ],
+        "recherche": ["p.code1", "p.code2"],
+        "filtres": [
+            {"nom": "article", "label": "Code 1", "col": "p.code1", "type": "egal"},
+        ],
+        "detail": [
+            {"titre": "Palier", "champs": ["code1", "code2", "code3", "qtemin", "qtemax", "pv", "amj", "amjv", "grille", "cuv"]},
+        ],
+    },
+    {
+        "cle": "prix_achat",
+        "label": "Prix d'achat",
+        "domaine": "referentiels",
+        "resume": "Prix d'achat par article et par fournisseur.",
+        "table": "fic_arta", "alias": "p",
+        "cle_ligne": "p.id",
+        "tri_defaut": ("p.code1", "asc"),
+        "colonnes": [
+            _article("p"),
+            _c("p.numfou", "numfou", "Fournisseur", "nombre", 100),
+            _c("p.ref", "ref", "Réf. fournisseur", "code", 140),
+            _c("p.qtemin", "qtemin", "Quantité mini", "qte", 110),
+            _c("p.qtemax", "qtemax", "Quantité maxi", "qte", 110),
+            _c("p.pa", "pa", "Prix d'achat", "prix", 110),
+            _c("p.def", "def", "Par défaut", "bool", 90),
+            _c("p.amjv", "amjv", "Validité", "date", 95),
+        ],
+        "recherche": ["p.code1", "p.code2", "p.ref", "p.libt1"],
+        "filtres": [
+            {"nom": "fournisseur", "label": "N° fournisseur", "col": "p.numfou", "type": "egal"},
+            {"nom": "article", "label": "Code 1", "col": "p.code1", "type": "egal"},
+        ],
+        "detail": [
+            {"titre": "Prix d'achat", "champs": ["code1", "code2", "code3", "numfou", "ref", "qtemin", "qtemax", "pa", "def", "amj", "amjv", "cua", "cuc"]},
+        ],
+    },
+    {
+        "cle": "prix_client",
+        "label": "Prix négociés client",
+        "domaine": "referentiels",
+        "resume": "Prix négociés par client, avec la référence de son côté.",
+        "table": "fic_artc", "alias": "p",
+        "cle_ligne": "p.id",
+        "tri_defaut": ("p.code1", "asc"),
+        "colonnes": [
+            _article("p"),
+            _c("p.numclt", "numclt", "Client", "nombre", 85),
+            _c("p.cltc2", "cltc2", "Réf. client", "code", 140),
+            _c("p.qtemin", "qtemin", "Quantité mini", "qte", 110),
+            _c("p.qtemax", "qtemax", "Quantité maxi", "qte", 110),
+            _c("p.pv", "pv", "Prix négocié", "prix", 110),
+            _c("p.amjd", "amjd", "Depuis le", "date", 95),
+            _c("p.amjv", "amjv", "Validité", "date", 95),
+        ],
+        "recherche": ["p.code1", "p.code2", "p.cltc2", "p.libc1"],
+        "filtres": [
+            {"nom": "client", "label": "N° client", "col": "p.numclt", "type": "egal"},
+        ],
+        "detail": [
+            {"titre": "Prix négocié", "champs": ["code1", "code2", "code3", "numclt", "cltc1", "cltc2", "cltc3", "libc1", "libc2", "qtemin", "qtemax", "pv", "amjd", "amjv"]},
+        ],
+    },
+
+    # ── Production (historique) ──────────────────────────────────────────────
+    {
+        "cle": "fiches_fabrication",
+        "label": "Fiches de fabrication",
+        "domaine": "production",
+        "resume": "L'équivalent RVGI des fiches techniques : machines, matières, outils, carton.",
+        "table": "gpr_ff", "alias": "f",
+        "cle_ligne": "f.id",
+        "tri_defaut": ("f.dtem", "desc"),
+        "colonnes": [
+            _article("f"),
+            _c("f.nmac1", "nmac1", "Machine 1", "texte", 110),
+            _c("f.laimat", "laimat", "Laize matière", "nombre", 110),
+            _c("f.ndec1", "ndec1", "Outil", "nombre", 90),
+            _c("f.nbcoul", "nbcoul", "Couleurs", "nombre", 90),
+            _c("f.cartnbetiq", "cartnbetiq", "Étiq./carton", "nombre", 110),
+            _c("f.palnbcart", "palnbcart", "Cartons/palette", "nombre", 120),
+            _c("f.dtem", "dtem", "Modifiée le", "datetime", 140),
+        ],
+        "recherche": ["f.code1", "f.code2"],
+        "filtres": [
+            {"nom": "article", "label": "Code 1", "col": "f.code1", "type": "egal"},
+        ],
+        "detail": [
+            {"titre": "Fiche", "champs": ["code1", "code2", "dtem"]},
+            {"titre": "Machines", "champs": ["nmac1", "nmac2", "nmac3", "nmac4", "nmac5", "vitmac1", "vitmac2"]},
+            {"titre": "Matières", "champs": ["m1cod1", "m1cod2", "laimat", "m2cod1", "m2cod2", "laimat2"]},
+            {"titre": "Outils", "champs": ["ndec1", "ndec2", "ndec3", "laiout"]},
+            {"titre": "Impression", "champs": ["nbcoul", "repiquage", "impdorsal", "nbelame", "perfotls", "perfointer"]},
+            {"titre": "Conditionnement", "champs": ["c1_ner", "c1_dmax", "cartlarg", "cartlong", "carthaut", "cartnbetiq", "cartpds", "cartcode1", "cartcode2"]},
+            {"titre": "Palettisation", "champs": ["pallargeur", "pallongueur", "palnbcart", "palnbetage", "palcode1", "palcode2"]},
+        ],
+    },
+    {
+        "cle": "dossiers",
+        "label": "Dossiers d'ordonnancement",
+        "domaine": "production",
+        "resume": "Module arrêté en avril 2026, MyProd a pris le relais. Conservé comme historique.",
+        "table": "cdi_entete", "alias": "d",
+        "cle_ligne": "d.id",
+        "tri_defaut": ("d.amjc", "desc"),
+        "colonnes": [
+            _c("d.numero", "numero", "N° dossier", "nombre", 95),
+            _c("d.amjc", "amjc", "Créé le", "date", 95),
+            _c("d.numclt", "numclt", "Client", "nombre", 80),
+            _c("d.machine", "machine", "Machine", "nombre", 90),
+            _c("d.qte", "qte", "Quantité", "qte", 110),
+            _c("d.laizem", "laizem", "Laize", "nombre", 85),
+            _c("d.nbcoul", "nbcoul", "Couleurs", "nombre", 85),
+            _c("d.amjp", "amjp", "Prévu le", "date", 95),
+            _c("d.amjr", "amjr", "Réalisé le", "date", 95),
+            _c("d.pos", "pos", "Position", "nombre", 85),
+        ],
+        "recherche": ["d.numero", "d.com"],
+        "filtres": [
+            {"nom": "client", "label": "N° client", "col": "d.numclt", "type": "egal"},
+        ],
+        "detail": [
+            {"titre": "Dossier", "champs": ["numero", "amjc", "amjp", "amjr", "pos", "prio", "numclt"]},
+            {"titre": "Fabrication", "champs": ["machine", "travail", "qte", "laizem", "nbcoul", "vit", "ndec"]},
+            {"titre": "Temps", "champs": ["tpcm", "tpsm", "tpst", "tpcco", "tpsco"]},
+        ],
+    },
+    {
+        "cle": "declarations",
+        "label": "Déclarations de production",
+        "domaine": "production",
+        "resume": "Saisies d'atelier RVGI, mêmes codes opération que MyProd. Arrêtées en avril 2026.",
+        "table": "gpr_gpr", "alias": "g",
+        "cle_ligne": "g.id",
+        "tri_defaut": ("g.amj", "desc"),
+        "colonnes": [
+            _c("g.amj", "amj", "Date", "date", 100),
+            _c("g.dos", "dos", "Dossier", "nombre", 90),
+            _c("g.ligne", "ligne", "Lg", "nombre", 50),
+            _c("g.pt", "pt", "Opération", "code", 90),
+            _c("g.mach", "mach", "Machine", "nombre", 85),
+            _c("g.operateur", "operateur", "Opérateur", "nombre", 90),
+            _c("g.qtef", "qtef", "Quantité", "qte", 110),
+            _c("g.numclt", "numclt", "Client", "nombre", 80),
+            _c("g.service", "service", "Service", "nombre", 80),
+        ],
+        "recherche": ["g.dos", "g.pt"],
+        "filtres": [
+            {"nom": "dossier", "label": "Dossier", "col": "g.dos", "type": "egal"},
+            {"nom": "operation", "label": "Code opération", "col": "g.pt", "type": "egal"},
+            {"nom": "depuis", "label": "Depuis le", "col": "g.amj", "type": "date_min"},
+        ],
+        "detail": [
+            {"titre": "Déclaration", "champs": ["amj", "dos", "ligne", "pt", "mach", "operateur", "qtef", "service", "orig"]},
+        ],
+    },
+    {
+        "cle": "sorties_matiere",
+        "label": "Sorties matière",
+        "domaine": "production",
+        "resume": "Sorties matière par dossier, avec les numéros de lot. Arrêtées en avril 2026.",
+        "table": "gpr_mat", "alias": "s",
+        "cle_ligne": "s.id",
+        "tri_defaut": ("s.amj", "desc"),
+        "colonnes": [
+            _c("s.amj", "amj", "Date", "date", 100),
+            _c("s.dos", "dos", "Dossier", "nombre", 90),
+            _article("s", "matiere", "Matière"),
+            _c("s.lai", "lai", "Laize", "nombre", 85),
+            _c("s.qtes", "qtes", "Sortie", "qte", 110),
+            _c("s.qtev", "qtev", "Retour", "qte", 110),
+            _c("s.reflot", "reflot", "Lot", "code", 130),
+            _c("s.mach", "mach", "Machine", "nombre", 85),
+            _c("s.operateur", "operateur", "Opérateur", "nombre", 90),
+        ],
+        "recherche": ["s.dos", "s.reflot", "s.code1", "s.code2"],
+        "filtres": [
+            {"nom": "dossier", "label": "Dossier", "col": "s.dos", "type": "egal"},
+            {"nom": "lot", "label": "N° de lot", "col": "s.reflot", "type": "contient"},
+        ],
+        "detail": [
+            {"titre": "Sortie", "champs": ["amj", "dos", "ligne", "qtes", "qtev", "reflot", "mach", "operateur", "service"]},
+            {"titre": "Matière", "champs": ["code1", "code2", "code3", "lai", "type"]},
+        ],
+    },
+    {
+        "cle": "colisage",
+        "label": "Colisage",
+        "domaine": "production",
+        "resume": "Colis et palettes déclarés à l'expédition.",
+        "table": "col_ligne", "alias": "c",
+        "cle_ligne": "c.id",
+        "tri_defaut": ("c.amjc", "desc"),
+        "colonnes": [
+            _c("c.numero", "numero", "N°", "nombre", 85),
+            _c("c.amjc", "amjc", "Date", "date", 95),
+            _c("c.numcde", "numcde", "Commande", "of", 95),
+            _c("c.lignecde", "lignecde", "Lg cde", "nombre", 60),
+            _c("c.numbl", "numbl", "BL", "nombre", 90),
+            _c("c.colis", "colis", "Colis", "nombre", 80),
+            _c("c.numpal", "numpal", "Palette", "nombre", 85),
+            _c("c.des1", "des1", "Désignation", "texte", 240),
+            _c("c.numclt", "numclt", "Client", "nombre", 80),
+        ],
+        "recherche": ["c.des1", "c.numcde", "c.numbl", "c.numero"],
+        "filtres": [
+            {"nom": "commande", "label": "N° de commande", "col": "c.numcde", "type": "egal"},
+        ],
+        "detail": [
+            {"titre": "Colisage", "champs": ["numero", "amjc", "ligne", "colis", "numpal", "typp", "des1"]},
+            {"titre": "Rattachement", "champs": ["numcde", "lignecde", "numbl", "numclt", "operateur"]},
+        ],
+    },
+]
+
+PAR_CLE = {e["cle"]: e for e in ECRANS}
+
+
+def ecran(cle):
+    return PAR_CLE.get(cle)
+
+
+def adapter_ecran(ec, colonnes_par_table):
+    """Élague l'écran de ce que le miroir n'a pas.
+
+    Le catalogue décrit RVGI tel que le relevé le montre ; le miroir, lui, ne
+    contient que ce que l'export a ramené. Une colonne manquante ferait tomber
+    la requête entière : on la retire, et l'écran affiche le reste.
+
+    Renvoie `None` si la table principale ou la clé de ligne manquent — l'écran
+    n'a alors pas lieu d'exister et n'est pas proposé.
+    """
+    principales = colonnes_par_table.get(ec["table"])
+    if not principales:
+        return None
+
+    dispo = {ec["alias"]: principales}
+    jointures = []
+    for j in ec.get("jointures", []):
+        cols = colonnes_par_table.get(j["table"])
+        if not cols:
+            continue
+        dispo[j["alias"]] = cols
+        jointures.append(j)
+
+    def existe(ref):
+        alias, _, col = str(ref).partition(".")
+        if not col:
+            return False
+        return col in dispo.get(alias, set())
+
+    if not existe(ec["cle_ligne"]):
+        return None
+
+    # Une jointure dont la colonne de rapprochement manque est abandonnée.
+    jointures = [j for j in jointures if existe(j["gauche"]) and existe(j["droite"])]
+    alias_gardes = {ec["alias"]} | {j["alias"] for j in jointures}
+
+    def ref_ok(ref):
+        alias = str(ref).partition(".")[0]
+        return alias in alias_gardes and existe(ref)
+
+    colonnes = []
+    for c in ec["colonnes"]:
+        refs = c["parts"] if c.get("parts") else [c["c"]]
+        gardees = [r for r in refs if ref_ok(r)]
+        if not gardees:
+            continue
+        if c.get("parts"):
+            c = dict(c, parts=gardees)
+        colonnes.append(c)
+    if not colonnes:
+        return None
+
+    tri_col, tri_sens = ec["tri_defaut"]
+    if not ref_ok(tri_col):
+        tri_col = colonnes[0]["c"] if colonnes[0].get("c") else colonnes[0]["parts"][0]
+        tri_sens = "asc"
+
+    adapte = dict(ec)
+    adapte["jointures"] = jointures
+    adapte["colonnes"] = colonnes
+    adapte["tri_defaut"] = (tri_col, tri_sens)
+    adapte["recherche"] = [r for r in ec.get("recherche", []) if ref_ok(r)]
+    adapte["filtres"] = [f for f in ec.get("filtres", []) if ref_ok(f["col"])]
+    adapte["labels_detail"] = dict(LABELS, **(ec.get("labels_detail") or {}))
+    return adapte

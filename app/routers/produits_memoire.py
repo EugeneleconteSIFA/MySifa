@@ -18,6 +18,7 @@ Trois principes tenus par ce module :
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from typing import Optional
@@ -135,6 +136,108 @@ def lancer_rattrapage(request: Request, limit: int = 0, refaire: bool = False,
                                    offset=offset)
 
 
+@router.get("/api/produits/documents")
+def liste_documents_scannes(request: Request, q: str = "", limit: int = 300):
+    """Tous les OF scannes, rattaches ou non — la vue « ce qu'on a deja ».
+
+    La file de rattachement ne montre que les echecs. Elle ne dit rien de ce
+    qui est arrive, et c'est pourtant la question la plus frequente : « ce
+    dossier a-t-il ete scanne ? ».
+    """
+    get_current_user(request)
+    params: list = []
+    where = ["d.statut != 'ecarte'"]
+    if q.strip():
+        like = f"%{q.strip()}%"
+        where.append(
+            "(d.of_numero LIKE ? OR d.ref_produit_norm LIKE ? OR d.no_dossier LIKE ?"
+            " OR LOWER(COALESCE(d.fichier_origine,'')) LIKE LOWER(?)"
+            " OR LOWER(COALESCE(s.client,'')) LIKE LOWER(?))"
+        )
+        params += [like, like, like, like, like]
+    params.append(max(1, min(int(limit), 2000)))
+
+    with get_db() as conn:
+        rows = conn.execute(
+            f"""SELECT d.id, d.of_numero, d.no_dossier, d.ref_produit_norm, d.statut,
+                       d.nb_pages, d.fichier_origine, d.chemin_origine,
+                       d.date_document, d.importe_le, d.importe_par,
+                       o.machine AS of_machine, o.laize AS of_laize, o.format AS of_format,
+                       o.qte_etiquettes AS of_qte_etiquettes,
+                       s.machine AS serie_machine, s.client AS serie_client,
+                       s.etiquettes AS serie_etiquettes, s.metrage_m AS serie_metrage_m
+                  FROM produit_documents d
+                  LEFT JOIN of_imports    o ON o.id = d.of_import_id
+                  LEFT JOIN produit_series s ON s.no_dossier = d.no_dossier
+                 WHERE {' AND '.join(where)}
+                 ORDER BY COALESCE(d.date_document, d.importe_le) DESC, d.id DESC
+                 LIMIT ?""",
+            params,
+        ).fetchall()
+        total = conn.execute(
+            "SELECT COUNT(*) AS n FROM produit_documents WHERE statut != 'ecarte'"
+        ).fetchone()["n"]
+        a_rattacher = conn.execute(
+            "SELECT COUNT(*) AS n FROM produit_documents WHERE statut = 'a_rattacher'"
+        ).fetchone()["n"]
+
+    docs = []
+    for r in rows:
+        d = dict(r)
+        d["machine"] = d.get("serie_machine") or d.get("of_machine")
+        d["client"] = d.get("serie_client")
+        d["etiquettes"] = d.get("serie_etiquettes") or d.get("of_qte_etiquettes")
+        docs.append(d)
+    return {"documents": docs, "total": int(total or 0),
+            "a_rattacher": int(a_rattacher or 0), "affiches": len(docs)}
+
+
+@router.get("/api/produits/fiches-non-reliees")
+def fiches_non_reliees(request: Request, q: str = "", limit: int = 500):
+    """Fiches techniques qu'aucun OF et aucune production ne rejoint.
+
+    Deux causes, qui n'appellent pas la meme action et sont donc distinguees :
+    une reference illisible dans le libelle de la fiche (le rapprochement ne
+    peut pas fonctionner), ou une fiche parfaitement lisible mais jamais
+    produite (rien a corriger — c'est peut-etre juste un produit dormant).
+    """
+    get_current_user(request)
+    with get_db() as conn:
+        ft_cols = {r["name"] for r in conn.execute(
+            "PRAGMA table_info(fiches_techniques)").fetchall()}
+        if "ref_produit_norm" not in ft_cols:
+            return {"fiches": [], "total": 0}
+        champs = [c for c in ("id", "reference", "ref_produit_norm", "designation",
+                              "client", "format", "laize", "support", "matiere",
+                              "machine", "nb_couleurs", "source", "date_import")
+                  if c in ft_cols]
+        params: list = []
+        where = ["""(ft.ref_produit_norm IS NULL OR TRIM(ft.ref_produit_norm) = ''
+                     OR (NOT EXISTS (SELECT 1 FROM of_imports o
+                                      WHERE TRIM(COALESCE(o.reference,'')) = ft.ref_produit_norm)
+                         AND NOT EXISTS (SELECT 1 FROM produit_series s
+                                          WHERE s.ref_produit_norm = ft.ref_produit_norm)))"""]
+        if q.strip():
+            like = f"%{q.strip()}%"
+            where.append("(LOWER(COALESCE(ft.reference,'')) LIKE LOWER(?)"
+                         " OR LOWER(COALESCE(ft.designation,'')) LIKE LOWER(?))")
+            params += [like, like]
+        params.append(max(1, min(int(limit), 2000)))
+        rows = conn.execute(
+            "SELECT " + ", ".join("ft." + c for c in champs) +
+            " FROM fiches_techniques ft WHERE " + " AND ".join(where) +
+            " ORDER BY ft.reference LIMIT ?",
+            params,
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["motif"] = ("ref_illisible" if not (d.get("ref_produit_norm") or "").strip()
+                      else "jamais_produite")
+        out.append(d)
+    return {"fiches": out, "total": len(out)}
+
+
 @router.get("/api/produits/documents/a-rattacher")
 def documents_a_rattacher(request: Request, limit: int = 200):
     """File des scans dont le numero d'OF n'a pas pu etre lu automatiquement."""
@@ -215,14 +318,15 @@ async def rattacher_document(doc_id: int, request: Request):
 
 @router.post("/api/produits/documents")
 async def deposer_document(request: Request, file: UploadFile = File(...),
-                           no_dossier: str = Form(""), of_numero: str = Form("")):
+                           no_dossier: str = Form(""), of_numero: str = Form(""),
+                           chemin_origine: str = Form(""), date_fichier: str = Form("")):
     """Depot manuel d'un scan depuis l'interface (secours de l'agent local)."""
     user = get_current_user(request)
     content = await file.read()
-    res = _enregistrer_scan(content, file.filename or "scan.pdf",
-                            importe_par=_auteur(user),
-                            no_dossier=no_dossier, of_numero=of_numero)
-    return res
+    return _enregistrer_scan(content, file.filename or "scan.pdf",
+                             importe_par=_auteur(user),
+                             no_dossier=no_dossier, of_numero=of_numero,
+                             chemin_origine=chemin_origine, date_fichier=date_fichier)
 
 
 # ─── Depot par l'agent local (dossier reseau surveille) ──────────────────────
@@ -231,6 +335,8 @@ async def deposer_document(request: Request, file: UploadFile = File(...),
 async def bridge_of_scan(file: UploadFile = File(...),
                          fichier_origine: str = Form(""),
                          of_numero: str = Form(""),
+                         chemin_origine: str = Form(""),
+                         date_fichier: str = Form(""),
                          x_api_key: Optional[str] = Header(None, alias="X-Api-Key")):
     """Depot d'un OF termine scanne par l'agent qui surveille le dossier reseau.
 
@@ -241,7 +347,8 @@ async def bridge_of_scan(file: UploadFile = File(...),
     _require_scope(x_api_key, "scan:write")
     content = await file.read()
     return _enregistrer_scan(content, fichier_origine or file.filename or "scan.pdf",
-                             importe_par="agent:scan", of_numero=of_numero)
+                             importe_par="agent:scan", of_numero=of_numero,
+                             chemin_origine=chemin_origine, date_fichier=date_fichier)
 
 
 def _lire_of_numero(content: bytes) -> tuple[Optional[str], bool]:
@@ -277,14 +384,58 @@ def _nom_fichier_sur(nom: str, of_numero: Optional[str]) -> str:
 
 
 def _enregistrer_scan(content: bytes, nom_origine: str, importe_par: str,
-                      no_dossier: str = "", of_numero: str = "") -> dict:
+                      no_dossier: str = "", of_numero: str = "",
+                      chemin_origine: str = "", date_fichier: str = "") -> dict:
+    """Enregistre un scan d'OF termine et le rattache au mieux.
+
+    Ordre de resolution, du plus fiable au moins fiable :
+
+    1. **Le nom du fichier.** Les scans de l'atelier sont nommes a la main et
+       ce nom porte le numero d'OF et la reference produit
+       (« 9932140 (marche 748) 420-0018 »). C'est du texte, pas une image :
+       aucune OCR ne peut faire mieux.
+    2. **Le numero d'OF** ainsi lu, qui donne le dossier via `of_imports` puis
+       `planning_entries`, donc la serie exacte.
+    3. **La reference produit** du nom, quand aucun OF ne correspond : le
+       document se rattache au produit sans se rattacher a une production
+       precise. C'est deja utile.
+    4. **Le texte du PDF**, en dernier recours, si le copieur a fait de l'OCR.
+
+    La deduplication se fait sur le CONTENU (sha-256) : un fichier renomme ou
+    deplace d'un dossier d'annee a l'autre reste le meme document.
+    """
     if not content:
         raise HTTPException(status_code=400, detail="Fichier vide.")
     if not (nom_origine or "").lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Fichier PDF requis.")
 
-    lu, avait_texte = _lire_of_numero(content)
-    numero = (of_numero or "").strip() or lu or None
+    empreinte = hashlib.sha256(content).hexdigest()
+    with get_db() as conn:
+        deja = conn.execute(
+            "SELECT id, statut, ref_produit_norm, no_dossier, of_numero "
+            "FROM produit_documents WHERE empreinte = ?", (empreinte,)
+        ).fetchone()
+    if deja:
+        d = dict(deja)
+        d.update({"success": True, "doublon": True,
+                  "message": "Deja enregistre (contenu identique)."})
+        return d
+
+    infos = pm.analyser_nom_scan(nom_origine)
+    numero = (of_numero or "").strip() or infos.get("of_numero") or None
+    ref_nom = infos.get("ref_produit_norm")
+
+    # Le texte du PDF ne sert que si le nom n'a rien donne : sur un scan sans
+    # OCR il est vide, ce qui est le cas nominal et non une erreur.
+    avait_texte = False
+    if not numero:
+        lu, avait_texte = _lire_of_numero(content)
+        numero = numero or lu
+    else:
+        try:
+            _, avait_texte = _lire_of_numero(content)
+        except Exception:
+            avait_texte = False
 
     os.makedirs(SCAN_UPLOAD_DIR, exist_ok=True)
     fichier = _nom_fichier_sur(nom_origine, numero)
@@ -326,28 +477,49 @@ def _enregistrer_scan(content: bytes, nom_origine: str, importe_par: str,
             ref_norm = ctx.get("ref_produit_norm")
             of_import_id = of_import_id or ctx.get("of_import_id")
 
+        # Aucun dossier retrouve, mais le nom porte la reference : on rattache
+        # au produit. Le document n'appartient a aucune serie, il appartient
+        # quand meme au produit — et c'est ce que quelqu'un vient y chercher.
+        origine_ref = "dossier" if ref_norm else None
+        if not ref_norm and ref_nom:
+            ref_norm = ref_nom
+            origine_ref = "nom_fichier"
+
         statut = "rattache" if ref_norm else "a_rattacher"
+        maintenant = pm.now_iso()
+        d_fichier = (date_fichier or "").strip() or None
+        # La date qui sert au tri est celle de la PRODUCTION, pas celle du
+        # depot : sept scans deposes le meme apres-midi couvrent plusieurs
+        # mois d'atelier, et une liste triee sur la date d'import n'ordonne
+        # rien du tout.
+        d_document = pm.date_document(conn, dossier, of_import_id, d_fichier, maintenant)
         cur = conn.execute(
             """INSERT INTO produit_documents
                (ref_produit_norm, no_dossier, of_numero, of_import_id, type, fichier,
-                fichier_origine, nb_pages, taille_octets, texte_extrait, statut,
-                importe_le, importe_par)
-               VALUES (?,?,?,?,'of_termine',?,?,?,?,?,?,?,?)""",
+                fichier_origine, chemin_origine, nb_pages, taille_octets, texte_extrait,
+                empreinte, statut, date_fichier, date_document, importe_le, importe_par)
+               VALUES (?,?,?,?,'of_termine',?,?,?,?,?,?,?,?,?,?,?,?)""",
             (ref_norm, dossier, numero, of_import_id, fichier,
-             os.path.basename(nom_origine or ""), nb_pages, len(content),
-             1 if avait_texte else 0, statut, pm.now_iso(), importe_par),
+             os.path.basename(nom_origine or ""), (chemin_origine or "").strip() or None,
+             nb_pages, len(content), 1 if avait_texte else 0, empreinte,
+             statut, d_fichier, d_document, maintenant, importe_par),
         )
         conn.commit()
         doc_id = cur.lastrowid
 
+    if ref_norm:
+        message = "Rattache a " + str(ref_norm)
+        if origine_ref == "nom_fichier":
+            message += " (reference lue dans le nom du fichier, sans dossier)"
+    else:
+        message = "Ni numero d'OF ni reference dans le nom — file de rattachement."
+
     return {
-        "success": True, "id": doc_id, "statut": statut,
+        "success": True, "doublon": False, "id": doc_id, "statut": statut,
         "of_numero": numero, "no_dossier": dossier, "ref_produit_norm": ref_norm,
-        "texte_extrait": avait_texte,
-        "message": ("Rattache a " + str(ref_norm)) if ref_norm else
-                   ("Numero d'OF non lu — mis en file de rattachement."
-                    if not avait_texte else
-                    "OF non retrouve — mis en file de rattachement."),
+        "origine_ref": origine_ref, "texte_extrait": avait_texte,
+        "date_document": d_document,
+        "message": message,
     }
 
 

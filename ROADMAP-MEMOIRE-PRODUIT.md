@@ -497,3 +497,91 @@ Un sélecteur de portée a donc été ajouté au formulaire.
 - C6 — alimentation du chiffrage par les médianes réelles.
 - Rien n'est commité : tout est en working tree, aucune commande git n'a été
   exécutée depuis le mount.
+
+---
+
+## 12. Ingestion des scans — conception revue sur le terrain
+
+Le dossier réel (`U:\Réquia\Scan\OF SCANNES`) a changé deux hypothèses.
+
+### Le nom du fichier porte tout
+
+Les scans sont nommés à la main, et ce nom contient le n° d'OF **et** la
+référence produit :
+
+| Nom du fichier | OF lu | Produit lu |
+|---|---|---|
+| `9932140 (marché 748) 420-0018` | 9932140 | 420/0018 |
+| `9932215 - L1 245-0241` | 9932215 | 245/0241 |
+| `M759 + 9932338 - L3 1382-0005` | 9932338 | 1382/0005 |
+| `Reliquat 9932056 890-0079` | Reliquat 9932056 | 890/0079 |
+| `March 746 1068-0002` | — | 1068/0002 |
+| `Stock 16-07-2026 961-0007` | — | 961/0007 |
+
+C'est du **texte**, là où la page est une image : plus fiable que n'importe
+quelle OCR. **L'OCR du copieur devient un confort, plus un prérequis.**
+
+Deux précautions dans le parseur : la référence est ancrée en **fin** de nom
+(sinon `Stock 16-07-2026 961-0007` donnerait `16/0720`), et une paire
+jour–année plausible est rejetée comme date. `Reliquat 9932056` reste un OF
+distinct de `9932056`, comme partout ailleurs dans le code.
+
+Ordre de résolution, du plus fiable au moins fiable : n° d'OF du nom → dossier
+→ référence · puis référence du nom seule (le document se rattache au produit
+sans série) · puis texte du PDF si OCR · sinon file de rattachement manuel.
+
+### Le dossier source ne nous appartient pas
+
+Il est à Réquia, avec des sous-dossiers par année. **Rien n'y est déplacé,
+renommé ni supprimé.** L'idempotence vient d'ailleurs :
+
+- **côté serveur**, une empreinte sha-256 du contenu en index unique
+  (migration `produit_documents_empreinte`) — un fichier renommé ou passé du
+  dossier 2025 au 2026 reste le même document ;
+- **côté poste**, un index local JSON qui évite de relire des milliers de
+  fichiers chaque nuit. Le perdre ne crée aucun doublon, il fait juste perdre
+  du temps.
+
+### Les deux scripts
+
+`scripts/of_scans_commun.py` porte la logique ; les deux points d'entrée sont
+minces et ne peuvent pas diverger.
+
+**Reprise complète, une fois :**
+
+```
+python of_scans_import_initial.py --cle msk_xxxx --simulation
+python of_scans_import_initial.py --cle msk_xxxx
+```
+
+Commencer par `--simulation` : elle liste ce qui partirait sans rien envoyer.
+Interruptible et relançable — l'index est sauvegardé tous les 25 fichiers.
+`--max 500` pour reprendre par tranches, `--pause 0.2` pour ménager le réseau.
+
+**Passe quotidienne :**
+
+```
+python of_scans_import_quotidien.py --cle msk_xxxx
+```
+
+Ne regarde que les 30 derniers jours de modification (`--jours`), et ignore
+les fichiers touchés il y a moins de 2 minutes (`--age-min`) — un PDF encore
+en cours d'écriture par le copieur partirait tronqué. Sort en code 1 sur
+échec, pour que le planificateur Windows le remonte : une tâche qui
+« réussit » tous les soirs sans rien envoyer parce que le partage n'est plus
+monté est le pire des scénarios.
+
+**Tâche planifiée Windows** — cocher « Exécuter même si l'utilisateur n'est pas
+connecté », avec un compte qui voit `U:`. Un lecteur mappé à une session
+n'existe pas pour une tâche planifiée : en cas de doute, passer le chemin UNC
+complet `\\IDEFIX\users\Réquia\Scan\OF SCANNES` via `--dossier`.
+
+L'ancien `agent_scan_of.py` (surveillance + déplacement des fichiers) est
+remplacé par ces deux scripts et déplacé dans `_to_delete/`.
+
+### Contrôles
+
+`tests/test_of_scans.py` — 11 noms réels du dossier parsés, rattachement par
+n° d'OF, rattachement par référence seule, mise en file quand le nom ne dit
+rien, déduplication par contenu (même PDF renommé = un seul document),
+parcours récursif des sous-dossiers d'année.

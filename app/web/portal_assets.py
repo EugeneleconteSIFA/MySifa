@@ -60,6 +60,15 @@ PORTAL_MAIN_CSS = r"""
 .portal-corner-stack{position:fixed;top:20px;right:20px;z-index:120;display:flex;flex-direction:column;gap:10px}
 /* Important: must be relative so the badge positions on the right button. */
 .portal-corner-stack .portal-settings-corner{position:relative;top:auto;right:auto}
+/* Marque RVGI du bouton ERP. Le fichier source est bleu sur fond transparent :
+   lisible sur le thème clair, trop sombre sur le thème sombre. Deux fichiers,
+   un seul affiché — plutôt qu'un filtre CSS qui abîmerait la découpe de
+   l'oiseau (elle est faite dans l'alpha, pas en blanc). */
+.rvgi-mark{display:inline-flex;align-items:center;flex-shrink:0}
+.rvgi-mark img{width:34px;height:auto;display:block}
+.rvgi-mark .rvgi-clair{display:none}
+body.light .rvgi-mark .rvgi-sombre{display:none}
+body.light .rvgi-mark .rvgi-clair{display:block}
 .portal-corner-badge{position:absolute;top:8px;left:8px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
   background:rgba(248,113,113,.95);color:#fff;font-size:10px;font-weight:800;font-family:monospace;
   display:inline-flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.25)}
@@ -1608,7 +1617,10 @@ function renderPortal(){
         'aria-label':'Calendrier',
         title:'Calendrier',
         onClick:()=>{window.location.href='/calendrier';}
-      },iconEl('calendar',24)):null,
+      },
+        (S.calInvitCount>0)?h('span',{className:'portal-corner-badge'},S.calInvitCount>9?'9+':String(S.calInvitCount)):null,
+        iconEl('calendar',24)
+      ):null,
       (isSuper||urole==='direction')?h('button',{
         type:'button',
         className:'portal-settings-corner',
@@ -1616,6 +1628,24 @@ function renderPortal(){
         title:'Base de données',
         onClick:()=>{window.location.href='/db';}
       },iconEl('database',24)):null,
+      // ERP : lecture seule du miroir de RVGI. Superadmin uniquement, et
+      // volontairement absent du sheet mobile — l'écran est une grille dense,
+      // il n'a pas de sens sur un téléphone.
+      isSuper?h('button',{
+        type:'button',
+        className:'portal-settings-corner',
+        'aria-label':'ERP',
+        title:'ERP — lecture RVGI',
+        onClick:()=>{window.location.href='/erp';}
+      },
+        (function(){
+          const w=document.createElement('span');
+          w.className='rvgi-mark';
+          w.innerHTML='<img class="rvgi-sombre" src="/static/rvgi_mark_clair.png" alt="RVGI">'+
+                      '<img class="rvgi-clair" src="/static/rvgi_mark.png" alt="RVGI">';
+          return w;
+        })()
+      ):null,
       (function(){
         const btn=document.createElement('button');
         btn.type='button';

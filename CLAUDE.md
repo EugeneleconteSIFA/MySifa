@@ -948,6 +948,75 @@ Test : `python3 tests/test_carnet_snapshot.py`.
 
 ---
 
+## RVGI — la base de l'ERP, en lecture seule
+
+RVGI est l'ERP de SIFA. Sa base `sifa_cs` tourne sur un serveur HFSQL
+Client/Serveur (PC SOFT / WinDev) : `192.168.100.199:4949`, encodage
+ISO-8859-1, 183 tables utiles. On l'atteint par le provider OLE DB
+`PCSoft.HFSQL` — celui qu'Excel utilise déjà, donc déjà installé sur les postes,
+appelable en COM depuis PowerShell ou Python sans rien installer.
+
+**Le détail vit dans `docs/rvgi/data_rvgi.md`** : carte des domaines, tables
+qui comptent avec le sens de leurs colonnes, clés de jointure, gisements
+identifiés. Le relevé brut est dans `docs/rvgi/rapport_rvgi.md` et
+`docs/rvgi/schema_rvgi.json`, régénérés par
+`scripts/inventaire_rvgi.ps1` (lecture seule, aucune écriture sur l'ERP).
+
+**Règles absolues**
+
+- **RVGI est une source, jamais une destination.** Aucun code MySifa n'écrit
+  dans `sifa_cs`. La connexion se fait avec un compte de lecture seule dédié,
+  pour que ce soit structurellement impossible et pas seulement conventionnel.
+- **`corbeille = 0`, partout.** RVGI ne supprime pas, il marque. Toute autre
+  valeur — `1`, `9`, mais aussi `2.1` ou `18.2` — est une ligne supprimée dont
+  les valeurs ne veulent plus rien dire. Plus d'une ligne sur deux est dans ce
+  cas (`mat_mat` : 1 536 vivantes sur 7 521). Le filtre porte sur les
+  comptages, les agrégats, les extraits, et **des deux côtés d'une jointure**.
+- **Le VPS ne voit pas le LAN.** `192.168.100.x` n'est pas joignable depuis
+  `mysifa.com`. Toute synchro est un **push** depuis un poste du réseau vers
+  `/api/bridge/*` avec une clé `X-Api-Key`, planifié côté Windows — le motif de
+  `scripts/access_sync_of.py`. Jamais un pull depuis MySifa.
+- **Trois colonnes à ne jamais lire** : `gen_sala.mdp`, `fic_clt.inftpmdp`,
+  `fic_fou.inftpmdp` contiennent des mots de passe en clair. Pas de `SELECT *`
+  paresseux sur ces tables, pas de journalisation de ligne entière, pas de
+  recopie dans MySifa.
+
+**Les deux clés**
+
+- **`code1` / `code2` — l'article.** `code1` = numéro du client, `code2` = rang
+  de l'article chez lui. `_erp_reference()` dans `app/routers/reconciliation.py`
+  construit déjà `890/0112` à partir de ce couple : l'appeler, ne pas la
+  réécrire. `code3` porte la laize sur les matières et les mouvements.
+- **`cde_entete.numero` en `99xxxxx` — la commande**, soit le numéro d'OF que
+  `_OF_RACINE_RE` reconnaît déjà. Il se reporte dans `liv_ligne.numcde`,
+  `vte_ligne.livno`, `stk_hist.numcde`, `cdi_ligne.nocde`. Les autres domaines
+  ont leur propre numérotation : **ne jamais joindre deux domaines sur `numero`
+  seul**, toujours par la colonne de report explicite.
+
+**Deux pièges de lecture qui ont déjà faussé un relevé**
+
+- **Les tableaux WinDev sont dépilés en colonnes.** `mat_mat` déclare 76
+  colonnes logiques et en expose 483 : `pafou1`, `pafou1_2`… Là où MySifa
+  aurait une table fille, RVGI a des colonnes numérotées. Les replier vers un
+  modèle relationnel est le gros du travail de mapping.
+- **Des sentinelles à la place des nuls** : `30/11/1999` pour une date vide,
+  `4710000000` pour un compte absent, `99999999999.99` pour « pas de maximum »,
+  `0` sur un prix pour « non renseigné » — jamais « gratuit ».
+
+**Le module production de RVGI est abandonné**
+
+`cdi_*` et `gpr_gpr` / `gpr_mat` n'ont plus une écriture depuis avril 2026 :
+SIFA a cessé de les alimenter parce que le module ne convenait pas, et c'est ce
+qui a motivé la création de MySifa. Ces tables n'ont plus qu'une valeur
+d'historique — ne rien construire dessus, ne pas les présenter comme un état
+courant. `gpr_ff` (fiches de fabrication) fait exception et reste maintenue.
+
+Conséquence pour la traçabilité : le lien dossier ↔ lot matière que portait
+`gpr_mat.reflot` n'est plus alimenté côté ERP et doit exister dans MySifa.
+Côté entrée, `lif_ligne.lot` et `stm_hist.lot` restent vivants.
+
+---
+
 ## Points d'attention critiques
 
 **Base de données**

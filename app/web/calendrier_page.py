@@ -42,8 +42,8 @@ CALENDRIER_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
-:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,0.12);--ok:#34d399;--warn:#fbbf24;--danger:#f87171;}
-body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,0.10);--ok:#059669;--warn:#d97706;--danger:#dc2626;}
+:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,0.12);--ok:#34d399;--warn:#fbbf24;--danger:#f87171;--sur-accent:#0a0e17;}
+body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,0.10);--ok:#059669;--warn:#d97706;--danger:#dc2626;--sur-accent:#ffffff;}
 *{box-sizing:border-box}
 body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
 .layout{display:flex;min-height:100vh}
@@ -62,6 +62,58 @@ body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);c
 .cal-cals-head-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted)}
 .cal-cals-chevron{flex-shrink:0;color:var(--muted);transition:transform .15s,color .15s}
 .cal-cals-section.collapsed .cal-cals-chevron{transform:rotate(-90deg)}
+/* Reunions : invites, reponses, evenement annule ou refuse. */
+.cal-pop-reunion{margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.cal-pop-reunion-head{font-size:11px;font-weight:700;color:var(--text2)}
+.cal-pop-reunion-compte{font-size:11px;color:var(--muted);margin-top:2px}
+.cal-pop-parts{list-style:none;margin:6px 0 0;padding:0;max-height:132px;overflow-y:auto}
+.cal-pop-parts li{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);padding:2px 0}
+.cal-part-pastille{width:8px;height:8px;border-radius:50%;flex-shrink:0;background:var(--muted)}
+.cal-part-pastille.st-accepte{background:var(--success)}
+.cal-part-pastille.st-refuse{background:var(--danger)}
+.cal-part-pastille.st-peut_etre{background:var(--warn)}
+.cal-pop-reponse{display:flex;gap:6px;margin-top:10px}
+.cal-rep-btn{flex:1;padding:7px 4px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--text2);font-family:inherit;font-size:11px;font-weight:600;cursor:pointer;transition:border-color .15s,color .15s}
+.cal-rep-btn:hover{border-color:var(--accent);color:var(--accent)}
+.cal-rep-btn.actif{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.cal-prop{display:flex;gap:8px;align-items:flex-start;justify-content:space-between;
+  margin-top:8px;padding:8px 9px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
+.cal-prop-txt{font-size:11px;color:var(--text2);line-height:1.45}
+.cal-prop-msg{color:var(--muted);margin-top:3px}
+.cal-prop-actions{display:flex;gap:6px;flex-shrink:0}
+.cal-prop-actions .cal-rep-btn{padding:5px 8px;font-size:10px;flex:none}
+.cal-pop-annule{margin-top:10px;padding:7px 9px;border-radius:8px;background:rgba(248,113,113,.12);color:var(--danger);font-size:11px;font-weight:600}
+/* Invites : la recherche seule, les personnes retenues en pastilles. */
+.cal-part-box{position:relative}
+.cal-part-res{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:20;max-height:184px;overflow-y:auto;
+  border:1px solid var(--border);border-radius:8px;background:var(--card);box-shadow:0 12px 28px rgba(0,0,0,.28)}
+.cal-part-res[hidden]{display:none}
+.cal-part-row{display:flex;align-items:center;gap:8px;width:100%;padding:8px 10px;font-size:12px;color:var(--text2);
+  background:transparent;border:none;font-family:inherit;text-align:left;cursor:pointer}
+.cal-part-row:hover,.cal-part-row.actif{background:var(--accent-bg);color:var(--accent)}
+.cal-part-row .cal-part-nom{flex:1}
+.cal-part-occupe{font-size:10px;font-weight:700;color:var(--warn);text-transform:uppercase;letter-spacing:.6px}
+.cal-part-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.cal-part-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 6px 4px 10px;border-radius:999px;
+  border:1px solid var(--border);background:var(--bg);font-size:11px;color:var(--text2)}
+.cal-part-chip.occupe{border-color:var(--warn);color:var(--warn)}
+.cal-part-chip button{width:16px;height:16px;display:flex;align-items:center;justify-content:center;padding:0;
+  border:none;border-radius:50%;background:transparent;color:inherit;font-size:13px;line-height:1;cursor:pointer}
+.cal-part-chip button:hover{background:var(--border)}
+.cal-part-dispo{font-size:11px;color:var(--muted);margin-top:6px;min-height:15px}
+.cal-part-dispo.alerte{color:var(--warn)}
+.cal-part-vide{padding:10px;font-size:11px;color:var(--muted)}
+/* Repetition. */
+.cal-recur-box{margin:-2px 0 10px;padding:9px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
+.cal-recur-box[hidden]{display:none}
+.cal-recur-row{display:flex;gap:10px;flex-wrap:wrap}
+.cal-recur-row .cal-create-field{flex:1 1 140px;min-width:0;margin:0}
+.cal-recur-hint{font-size:11px;color:var(--muted);margin:8px 0 0}
+.cal-serie-choix{display:flex;gap:8px;margin:-2px 0 10px}
+.cal-serie-choix label{flex:1;display:flex;align-items:center;gap:7px;padding:8px 10px;border:1px solid var(--border);
+  border-radius:8px;background:var(--bg);font-size:12px;color:var(--text2);cursor:pointer}
+.cal-serie-choix label:hover{border-color:var(--accent)}
+.cal-serie-choix input{accent-color:var(--accent);flex-shrink:0}
 .cal-cals-section.collapsed #cal-toggles{display:none}
 .cal-toggle{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12px;color:var(--text2);user-select:none}
 .cal-toggle:hover{background:var(--accent-bg)}
@@ -105,7 +157,29 @@ body.sb-open .sidebar-overlay{display:block}
 .cal-nav{display:flex;align-items:center;gap:8px}
 .cal-btn{padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:border-color .15s,color .15s,background .15s}
 .cal-btn:hover{border-color:var(--accent);color:var(--accent)}
-.cal-btn.primary{background:var(--accent);color:#0a0e17;border-color:var(--accent)}
+.cal-collegue-sel{padding:8px 10px;border-radius:10px;border:1px solid var(--border);
+  background:var(--bg);color:var(--text2);font-size:12px;font-family:inherit;font-weight:600;
+  max-width:190px;cursor:pointer}
+.cal-collegue-sel:focus{border-color:var(--accent);outline:none}
+.cal-collegue-sel.actif{border-color:var(--accent);color:var(--accent)}
+@media print{.cal-collegue-sel{display:none}}
+.cal-search-wrap{position:relative;min-width:190px}
+.cal-search-wrap input{width:100%;padding:8px 12px;border-radius:10px;border:1px solid var(--border);
+  background:var(--bg);color:var(--text);font-size:12px;font-family:inherit}
+.cal-search-wrap input:focus{border-color:var(--accent);outline:none}
+.cal-search-res{position:absolute;top:calc(100% + 5px);left:0;right:0;z-index:60;max-height:300px;
+  overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:10px;
+  box-shadow:0 14px 34px rgba(0,0,0,.3)}
+.cal-search-res[hidden]{display:none}
+.cal-search-row{display:block;width:100%;text-align:left;padding:9px 11px;border:none;background:transparent;
+  color:var(--text2);font-family:inherit;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border)}
+.cal-search-row:last-child{border-bottom:none}
+.cal-search-row:hover{background:var(--accent-bg);color:var(--accent)}
+.cal-search-row .cal-search-quand{display:block;font-size:10px;color:var(--muted);margin-top:2px}
+.cal-search-row.barre .cal-search-titre{text-decoration:line-through;opacity:.7}
+.cal-search-vide{padding:11px;font-size:11px;color:var(--muted)}
+@media print{.cal-search-wrap{display:none}}
+.cal-btn.primary{background:var(--accent);color:var(--sur-accent);border-color:var(--accent)}
 .cal-title{font-size:16px;font-weight:800;min-width:180px;text-align:center;color:var(--text)}
 .cal-view-tabs{display:flex;gap:6px;margin-left:auto}
 .cal-body{flex:1;overflow:auto;padding:16px 20px 24px;position:relative}
@@ -162,8 +236,13 @@ body.light{--cal-ferie-bg:color-mix(in srgb, var(--danger) 9%, transparent)}
 .cal-agenda-time{flex-shrink:0;font-size:10px;font-weight:700;color:var(--text2);font-variant-numeric:tabular-nums;min-width:42px}
 .cal-agenda-ev-row .cal-pill{flex:1;min-width:0}
 /* Week / Day time grid */
-.cal-time-wrap{display:flex;min-width:640px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--card)}
+.cal-time-wrap{display:flex;flex-direction:column;min-width:640px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--card)}
+/* La gouttiere des heures vit sous le bandeau « Journee », dans la meme ligne
+   que les colonnes : son entete fantome (.tg-head) a exactement la hauteur de
+   l'entete de colonne, ce qui garantit que 06:00 tombe sur le trait de 06:00. */
+.cal-time-body{display:flex;min-width:0}
 .cal-time-gutter{width:48px;flex-shrink:0;border-right:1px solid var(--border);background:var(--bg)}
+.cal-time-gutter .tg-head{color:transparent;user-select:none;pointer-events:none}
 .cal-time-gutter .tg-hour{height:48px;font-size:10px;color:var(--muted);text-align:right;padding:4px 6px;border-top:1px solid var(--border)}
 .cal-time-gutter .tg-hour:first-child{border-top:none}
 .cal-time-grid{flex:1;display:flex;flex-direction:column;min-width:0}
@@ -171,6 +250,9 @@ body.light{--cal-ferie-bg:color-mix(in srgb, var(--danger) 9%, transparent)}
 body.light .cal-allday-row{background:#f8fafc}
 .cal-allday-label{width:48px;flex-shrink:0;font-size:9px;font-weight:700;color:var(--muted);display:flex;align-items:center;justify-content:flex-end;padding:4px;border-right:1px solid var(--border)}
 .cal-allday-cols{flex:1;display:grid;position:relative;min-height:28px}
+.cal-allday-cell{min-width:0;display:flex;flex-direction:column;justify-content:center;
+  border-left:1px solid var(--border);padding:1px 0}
+.cal-allday-cell:first-child{border-left:none}
 .cal-allday-pill{font-size:10px;font-weight:600;padding:2px 8px;border-radius:4px;border-width:1px;border-style:solid;margin:2px 3px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#0a0e17;box-shadow:0 1px 2px rgba(0,0,0,.15)}
 .cal-cols-row{flex:1;display:grid;position:relative}
 .cal-col{border-left:1px solid var(--border);position:relative}
@@ -186,6 +268,17 @@ body.light .cal-allday-row{background:#f8fafc}
 }
 .cal-col{min-width:0;overflow:visible}
 .cal-slot-line{position:absolute;left:0;right:0;height:1px;background:var(--border)}
+/* Contenu d'un creneau : titre, puis lignes secondaires que renderDayTimedHtml
+   n'ajoute que si la hauteur le permet. */
+.cal-ev-t{display:block;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-ev-l{display:block;font-weight:600;font-size:9px;line-height:1.35;opacity:.72;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.cal-ev-flag{display:inline-flex;align-items:center;justify-content:center;width:13px;height:13px;
+  margin-right:4px;border-radius:50%;background:rgba(10,14,23,.2);color:inherit;
+  font-size:9px;font-weight:800;line-height:1;vertical-align:1px;flex-shrink:0}
+.cal-ev-flag--peut{background:rgba(10,14,23,.34)}
+.cal-pill--agenda{display:flex;flex-direction:column;align-items:flex-start;white-space:normal}
+.cal-pill-sec{display:block;font-size:9px;font-weight:600;opacity:.72;margin-top:1px}
 .cal-ev{
   position:absolute;border-radius:6px;padding:4px 8px;font-size:10px;font-weight:700;color:#0a0e17;
   border-width:1px;border-style:solid;overflow:hidden;cursor:pointer;line-height:1.3;box-sizing:border-box;
@@ -238,23 +331,36 @@ body.light .cal-allday-row{background:#f8fafc}
 .cal-settings-hint{font-size:11px;color:var(--muted);margin:8px 0 0;line-height:1.5}
 .cal-create-modal-backdrop{position:fixed;inset:0;z-index:8600;background:rgba(0,0,0,.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:16px}
 .cal-create-modal{
-  position:relative;width:100%;max-width:440px;max-height:min(90vh,560px);overflow:auto;
+  position:relative;width:100%;max-width:440px;max-height:92vh;
+  overflow-y:auto;overflow-x:hidden;
   background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px 18px 16px;
   box-shadow:0 16px 48px rgba(0,0,0,.45);
 }
-.cal-create-modal h2{font-size:15px;font-weight:800;margin:0 0 14px;color:var(--text)}
-.cal-create-field{margin-bottom:12px}
+/* Formulaire d'evenement : deux colonnes des qu'il y a la place, pour que le
+   creneau, les invites et la repetition tiennent dans un ecran sans defilement. */
+.cal-create-modal--large{max-width:780px;padding:16px 18px 14px}
+.cal-create-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 20px;align-items:start}
+@media(max-width:780px){
+  .cal-create-grid{grid-template-columns:1fr}
+  .cal-create-modal--large{max-width:440px}
+}
+@media(max-height:640px){
+  .cal-create-modal--large .cal-create-field textarea{min-height:52px}
+}
+.cal-create-modal h2{font-size:15px;font-weight:800;margin:0 0 12px;color:var(--text)}
+.cal-create-field{margin-bottom:10px}
 .cal-create-field label{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:6px}
-.cal-create-field input[type=text],.cal-create-field input[type=date],.cal-create-field input[type=datetime-local],.cal-create-field textarea{
-  width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;
+.cal-create-field input[type=text],.cal-create-field input[type=date],.cal-create-field input[type=datetime-local],.cal-create-field select,.cal-create-field textarea{
+  width:100%;min-width:0;background:var(--bg);border:1px solid var(--border);border-radius:10px;
   padding:10px 12px;color:var(--text);font-size:14px;font-family:inherit;transition:border-color .15s;
 }
-.cal-create-field input:focus,.cal-create-field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12);outline:none}
-.cal-create-field textarea{min-height:72px;resize:vertical}
-.cal-create-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.cal-create-field input:focus,.cal-create-field select:focus,.cal-create-field textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(34,211,238,.12);outline:none}
+.cal-create-field textarea{min-height:60px;resize:vertical}
+.cal-create-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+@media(max-width:520px){.cal-create-row{grid-template-columns:1fr}}
 .cal-create-toggle{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer;user-select:none;margin-bottom:12px}
 .cal-create-toggle input{width:16px;height:16px;accent-color:var(--accent)}
-.cal-create-modal-foot{display:flex;gap:10px;justify-content:flex-end;margin-top:4px}
+.cal-create-modal-foot{display:flex;gap:10px;justify-content:flex-end;margin-top:6px}
 .cal-create-modal-foot .cal-btn{min-width:96px}
 .cal-create-modal-close{
   position:absolute;top:10px;right:12px;border:none;background:transparent;color:var(--muted);
@@ -263,6 +369,10 @@ body.light .cal-allday-row{background:#f8fafc}
 .cal-create-modal-close:hover{color:var(--text)}
 .cal-day[data-day]{cursor:pointer}
 .cal-col-slots[data-day]{cursor:pointer}
+/* Trace de selection pendant qu'on tire un nouveau creneau sur la grille. */
+.cal-ghost{position:absolute;left:2px;right:2px;border-radius:6px;pointer-events:none;
+  background:var(--accent-bg);border:1px dashed var(--accent);color:var(--accent);
+  font-size:10px;font-weight:700;padding:3px 6px;overflow:hidden;z-index:3}
 .cal-pop-del{
   display:block;width:100%;margin-top:10px;padding:8px 12px;border-radius:8px;
   border:1px solid var(--danger);background:color-mix(in srgb, var(--danger) 12%, transparent);
@@ -429,6 +539,7 @@ body.cal-dragging{user-select:none}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
+<script src="/static/mysifa_cal_rappel.js?v=4"></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div class="layout">
   <aside class="sidebar">
@@ -454,14 +565,19 @@ body.cal-dragging{user-select:none}
     </button>
     <hr>
     <div class="cal-cals-section" id="cal-cals-section">
-      <button type="button" class="cal-cals-head" id="cal-cals-head" aria-expanded="true" aria-controls="cal-toggles">
-        <span class="cal-cals-head-label">Calendriers</span>
+      <div id="cal-toggles-mien"></div>
+      <button type="button" class="cal-cals-head" id="cal-cals-head" aria-expanded="false" aria-controls="cal-toggles">
+        <span class="cal-cals-head-label">Autres calendriers</span>
         <svg class="cal-cals-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
       <div id="cal-toggles"></div>
       <button type="button" class="cal-extern-btn" id="btn-cal-extern" title="Connecter un calendrier externe">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
         Calendriers externes
+      </button>
+      <button type="button" class="cal-extern-btn" id="btn-cal-deleg" title="Qui peut écrire dans mon calendrier">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Délégations
       </button>
     </div>
     <div id="cal-mini-root"></div>
@@ -515,6 +631,14 @@ body.cal-dragging{user-select:none}
         <button type="button" class="cal-btn" data-view="day">Jour</button>
         <button type="button" class="cal-btn" data-view="agenda">Agenda</button>
       </div>
+      <select id="cal-collegue" class="cal-collegue-sel" aria-label="Voir l'agenda d'un collègue">
+        <option value="">Tous les collègues</option>
+      </select>
+      <div class="cal-search-wrap">
+        <input type="search" id="cal-search" placeholder="Rechercher un événement…"
+          autocomplete="off" aria-label="Rechercher un événement">
+        <div class="cal-search-res" id="cal-search-res" hidden></div>
+      </div>
       <div class="cal-shortcuts-wrap">
         <button type="button" class="cal-shortcuts-btn" aria-label="Raccourcis clavier" title="Raccourcis clavier">?</button>
         <div class="cal-shortcuts-tip" role="tooltip">
@@ -534,12 +658,13 @@ body.cal-dragging{user-select:none}
 <div id="cal-color-modal-root"></div>
 <div id="cal-create-modal-root"></div>
 <div id="cal-extern-modal-root"></div>
+<div id="cal-deleg-modal-root"></div>
 <script>
 const USER_ROLE=__USER_ROLE__;
 const CAL_DEFS=window.MySifaCalendar?MySifaCalendar.CAL_DEFS:[];
 const CAL_IDS_FULL=CAL_DEFS.map(c=>c.id);
-const CAL_IDS_ADMIN=['conges','anniversaires','feries','paie','expeditions','perso'];
-const CAL_IDS_BASIC=['conges','feries','perso'];
+const CAL_IDS_ADMIN=['conges','anniversaires','feries','paie','expeditions','perso','collegues'];
+const CAL_IDS_BASIC=['conges','feries','perso','collegues'];
 function calIdsForRole(role){
   if(role==='superadmin'||role==='direction')return CAL_IDS_FULL;
   if(role==='administration'||role==='administration_ventes'||role==='administration_technique')return CAL_IDS_ADMIN;
@@ -550,16 +675,41 @@ function accessibleCalDefs(){
   return CAL_DEFS.filter(c=>allowed.has(c.id)||c.externe);
 }
 function isSubCal(id){return /^sub_\d+$/.test(String(id||''));}
+function calDefsMien(){return accessibleCalDefs().filter(c=>c.mien===true);}
+function calDefsAutres(){return accessibleCalDefs().filter(c=>c.mien!==true);}
 function isOwnPerso(ev){
   return !!(ev&&ev.calendrier==='perso'&&ev.meta&&ev.meta.own===true);
 }
 function isBusyPerso(ev){
-  return !!(ev&&ev.calendrier==='perso'&&ev.meta&&ev.meta.own===false&&ev.meta.prive===true);
+  return !!(ev&&ev.calendrier==='collegues'&&ev.meta&&ev.meta.prive===true);
 }
+function isCreneauHumain(ev){
+  return !!(ev&&(ev.calendrier==='perso'||ev.calendrier==='collegues'));
+}
+/* Une reunion refusee ou annulee reste au calendrier, mais grisee et barree :
+   elle ne doit plus se lire comme un engagement. */
+function evEstBarre(ev){
+  const m=(ev&&ev.meta)||{};
+  return !!(m.annule||m.mon_statut==='refuse');
+}
+const STATUT_LABEL={accepte:'Accepter',peut_etre:'Peut-être',refuse:'Refuser'};
+const RAPPELS=[
+  {v:'',l:'Par défaut (10 min avant)'},
+  {v:'0',l:'Aucun rappel'},
+  {v:'5',l:'5 minutes avant'},
+  {v:'10',l:'10 minutes avant'},
+  {v:'15',l:'15 minutes avant'},
+  {v:'30',l:'30 minutes avant'},
+  {v:'60',l:'1 heure avant'},
+  {v:'120',l:'2 heures avant'},
+  {v:'1440',l:'La veille'},
+];
+const EMAIL_RE=/^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$/;
+const STATUT_MOT={accepte:'accepté',peut_etre:'peut-être',refuse:'refusé',en_attente:'en attente'};
 const ICO_CAL_GEAR='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
-const PROD_CAL_IDS=['production_1','production_2','production_3','production_4'];
-const LS_VISIBLE='mysifa_cal_visible';
-const LS_CAL_LIST='mysifa_cal_list_open';
+const LS_VISIBLE='mysifa_cal_visible_v2';
+const LS_CAL_LIST='mysifa_cal_autres_open';
+const LS_COLLEGUE='mysifa_cal_collegue';
 const MOIS=['','janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
 const JOURS=['lun','mar','mer','jeu','ven','sam','dim'];
 const ROLE_LABELS={direction:'Direction',administration:'Administration',fabrication:'Fabrication',logistique:'Logistique',comptabilite:'Comptabilité',expedition:'Expédition',commercial:'Commercial',superadmin:'Super admin'};
@@ -571,7 +721,7 @@ const LS_VIEW='mysifa_cal_view';
 const VALID_VIEWS=['month','week','day','agenda'];
 const MINI_DOW=['L','M','M','J','V','S','D'];
 const MOBILE_BREAKPOINT=900;
-let S={view:'month',anchor:new Date(),events:[],dayWindows:{},feriesMap:{},loading:false,visible:{},pop:null,colorModal:null,createModal:null,externModal:null,miniCalY:null,miniCalM:null,_touchStartX:null,_touchStartY:null,subs:[],feed:null,drag:null,editingEv:null,_suppressClickUntil:0,_clickTimer:null};
+let S={view:'month',anchor:new Date(),events:[],dayWindows:{},feriesMap:{},loading:false,visible:{},pop:null,colorModal:null,createModal:null,externModal:null,miniCalY:null,miniCalM:null,_touchStartX:null,_touchStartY:null,subs:[],feed:null,drag:null,editingEv:null,lienDirect:null,collegue:'',_suppressClickUntil:0,_clickTimer:null,invitables:null,partSel:null,partNoms:null,partExt:null,partOccupes:null,_partTimer:null,delegations:null};
 let ME=null;
 
 function isMobileViewport(){return window.innerWidth<MOBILE_BREAKPOINT;}
@@ -767,29 +917,36 @@ function syncThemeBtn(){
   if(lbl)lbl.textContent=isLight?'Mode sombre':'Mode clair';
 }
 
+function calDefautVisible(c){
+  if(window.MySifaCalendar&&MySifaCalendar.visibleParDefaut)return MySifaCalendar.visibleParDefaut(c.id);
+  return c.defaut!==false;
+}
+/* Les plannings machines, la paie et les expeditions sont decoches a la
+   premiere ouverture. La cle localStorage est versionnee : sans cela, un poste
+   qui avait deja une preference enregistree n'aurait jamais vu le nouveau
+   defaut s'appliquer. */
 function loadVisible(){
+  accessibleCalDefs().forEach(c=>{S.visible[c.id]=calDefautVisible(c);});
   try{
     const raw=localStorage.getItem(LS_VISIBLE);
     if(raw){
       const o=JSON.parse(raw);
       if(o&&typeof o==='object'){
-        if(o.production!==undefined&&o.production_1===undefined){
-          const v=o.production!==false;
-          PROD_CAL_IDS.forEach(k=>{o[k]=v;});
-        }
-        accessibleCalDefs().forEach(c=>{S.visible[c.id]=o[c.id]!==false;});
-        return;
+        // On reprend toutes les cles memorisees, y compris les calendriers
+        // externes (sub_N) qui ne sont charges qu'apres cet appel.
+        Object.keys(o).forEach(k=>{
+          if(typeof o[k]==='boolean')S.visible[k]=o[k];
+        });
       }
     }
   }catch(e){}
-  accessibleCalDefs().forEach(c=>{S.visible[c.id]=true;});
 }
 function saveVisible(){
   try{localStorage.setItem(LS_VISIBLE,JSON.stringify(S.visible));}catch(e){}
 }
 
 function loadCalListOpen(){
-  try{return localStorage.getItem(LS_CAL_LIST)!=='0';}catch(e){return true;}
+  try{return localStorage.getItem(LS_CAL_LIST)==='1';}catch(e){return false;}
 }
 function saveCalListOpen(open){
   try{localStorage.setItem(LS_CAL_LIST,open?'1':'0');}catch(e){}
@@ -900,22 +1057,31 @@ function openCalSettingsModal(calId){
   S.colorModal=wrap;
   document.addEventListener('keydown',onCalColorModalKey);
 }
-function renderToggles(){
-  const box=document.getElementById('cal-toggles');
-  if(!box)return;
-  box.innerHTML=accessibleCalDefs().map(c=>`<label class="cal-toggle" style="--cal-c:${calColor(c.id)}">
+function calToggleHtml(c){
+  return `<label class="cal-toggle" style="--cal-c:${calColor(c.id)}">
       <span class="cal-dot"></span>
       <span class="flex1">${esc(c.label)}</span>
       <button type="button" class="cal-gear-btn" title="Réglages du calendrier" aria-label="Réglages ${esc(c.label)}"
         onclick="event.preventDefault();event.stopPropagation();openCalSettingsModal('${esc(c.id)}')">${ICO_CAL_GEAR}</button>
       <input type="checkbox" data-cal="${c.id}" ${S.visible[c.id]?'checked':''}>
-    </label>`).join('');
-  box.querySelectorAll('input[data-cal]').forEach(inp=>{
-    inp.onchange=()=>{
-      S.visible[inp.dataset.cal]=inp.checked;
-      saveVisible();
-      fetchEvents();
-    };
+    </label>`;
+}
+/* « Mon calendrier » reste toujours visible en tete ; tout le reste vit sous le
+   chevron « Autres calendriers ». */
+function renderToggles(){
+  const mien=document.getElementById('cal-toggles-mien');
+  const box=document.getElementById('cal-toggles');
+  if(mien)mien.innerHTML=calDefsMien().map(calToggleHtml).join('');
+  if(box)box.innerHTML=calDefsAutres().map(calToggleHtml).join('');
+  [mien,box].forEach(el=>{
+    if(!el)return;
+    el.querySelectorAll('input[data-cal]').forEach(inp=>{
+      inp.onchange=()=>{
+        S.visible[inp.dataset.cal]=inp.checked;
+        saveVisible();
+        fetchEvents();
+      };
+    });
   });
 }
 
@@ -965,8 +1131,8 @@ function calSlotStyle(calId){
 /* Une couleur stable par utilisateur : l'angle d'or sur l'id garantit des
    teintes bien réparties, identiques sur tous les postes, sans réglage. */
 const PERSON_HUE_STEP=137.508;
-const PERSON_SAT=68;
-const PERSON_LUM=62;
+const PERSON_SAT=62;
+const PERSON_LUM=82;
 function hslToHex(h,s,l){
   s=s/100;l=l/100;
   const k=n=>(n+h/30)%12;
@@ -990,17 +1156,78 @@ function personColor(userId){
   const hue=(id*PERSON_HUE_STEP)%360;
   let l=PERSON_LUM;
   let hex=hslToHex(hue,PERSON_SAT,l);
-  while(l<86&&(relLum(hex)+0.05)/(SLOT_TEXT_LUM+0.05)<SLOT_MIN_CONTRAST){
+  while(l<92&&(relLum(hex)+0.05)/(SLOT_TEXT_LUM+0.05)<SLOT_MIN_CONTRAST){
     l+=3;
     hex=hslToHex(hue,PERSON_SAT,l);
   }
   return hex;
 }
-function evSlotStyle(ev){
-  if(ev&&ev.calendrier==='perso'&&ev.meta&&ev.meta.user_id){
-    return slotStyleFromColor(personColor(ev.meta.user_id));
+/* Un « ? » sur les invitations sans reponse ou repondues « peut-etre » :
+   le coup d'oeil au planning doit suffire a voir ce qui reste a trancher. */
+function evFlagHtml(ev){
+  const st=(ev&&ev.meta&&ev.meta.mon_statut)||'';
+  if(st==='en_attente')
+    return '<span class="cal-ev-flag" title="Invitation sans réponse">?</span>';
+  if(st==='peut_etre')
+    return '<span class="cal-ev-flag cal-ev-flag--peut" title="Vous avez répondu « peut-être »">?</span>';
+  return '';
+}
+function evDureeTxt(ev){
+  const s=evStart(ev),e=evEnd(ev);
+  if(!s||!e)return '';
+  const min=Math.round((e-s)/60000);
+  if(min<=0)return '';
+  const h=Math.floor(min/60),m=min%60;
+  return (h?h+' h':'')+(m?(h?' ':'')+m+' min':'');
+}
+function evAuteurTxt(ev){
+  const meta=(ev&&ev.meta)||{};
+  if(meta.cree_par_nom)return meta.cree_par_nom;
+  if(meta.organisateur_nom&&meta.own===false)return meta.organisateur_nom;
+  return '';
+}
+function evParticipantsTxt(ev){
+  const meta=(ev&&ev.meta)||{};
+  const parts=(meta.participants||[]).concat(meta.invites_externes||[]);
+  if(!parts.length)return '';
+  const noms=parts.slice(0,3)
+    .map(p=>String(p.nom||p.email||'').split(/[\s@]/)[0])
+    .filter(Boolean);
+  return noms.join(', ')+(parts.length>3?' +'+(parts.length-3):'');
+}
+/* Les lignes secondaires n'apparaissent que si le creneau est assez haut :
+   ecrire par-dessus un creneau de 20 minutes le rendrait illisible. */
+function evLignesHtml(ev,hPx){
+  let out='';
+  if(hPx>=34){
+    const duree=evDureeTxt(ev);
+    const s=evStart(ev);
+    const heure=s?(pad2(s.getHours())+':'+pad2(s.getMinutes())):'';
+    const txt=[heure,duree].filter(Boolean).join(' · ');
+    if(txt)out+='<span class="cal-ev-l">'+esc(txt)+'</span>';
   }
-  return calSlotStyle(ev&&ev.calendrier);
+  if(hPx>=48){
+    const auteur=evAuteurTxt(ev);
+    if(auteur)out+='<span class="cal-ev-l">Par '+esc(auteur)+'</span>';
+    else if(ev.meta&&ev.meta.lieu)out+='<span class="cal-ev-l">'+esc(ev.meta.lieu)+'</span>';
+  }
+  if(hPx>=64){
+    const parts=evParticipantsTxt(ev);
+    if(parts)out+='<span class="cal-ev-l">'+esc(parts)+'</span>';
+  }
+  return out;
+}
+
+function evSlotStyle(ev){
+  const base=(isCreneauHumain(ev)&&ev.meta&&ev.meta.user_id)
+    ?personColor(ev.meta.user_id)
+    :calColor(ev&&ev.calendrier);
+  // Refusee ou annulee : la teinte reste (on reconnait le calendrier) mais
+  // s'efface, et le libelle est barre. Un aplat gris disparaissait en sombre.
+  if(evEstBarre(ev)){
+    return slotStyleFromColor(base)+';opacity:.42;text-decoration:line-through';
+  }
+  return slotStyleFromColor(base);
 }
 
 function getPeriod(){
@@ -1026,7 +1253,15 @@ function getPeriod(){
   return{start:d,end:d,title:d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long',year:'numeric'})};
 }
 
-function evVisible(ev){return !!S.visible[ev.calendrier];}
+/* « Agenda de X » : on garde son calendrier et ceux qu'on a coches, mais parmi
+   les collegues on ne montre plus que la personne demandee. */
+function evVisible(ev){
+  if(!S.visible[ev.calendrier])return false;
+  if(S.collegue&&ev.calendrier==='collegues'){
+    return String((ev.meta&&ev.meta.user_id)||'')===String(S.collegue);
+  }
+  return true;
+}
 function evStart(ev){return parseEvDt(ev.debut);}
 function evEnd(ev){return parseEvDt(ev.fin)||evStart(ev);}
 function layoutKey(ev){return String(ev.calendrier)+'|'+String(ev.id);}
@@ -1148,6 +1383,7 @@ async function fetchEvents(){
     }
     if(loading)loading.style.display='none';
     renderCalendar();
+    consommerLienDirect();
   }catch(e){
     if(e.message!=='auth')showToast(e.message||'Chargement impossible','danger');
     if(loading)loading.textContent='Erreur de chargement.';
@@ -1174,7 +1410,12 @@ function defaultPersoRange(opts){
   const start=new Date(day);
   start.setHours(h0,m,0,0);
   const end=new Date(start);
-  end.setHours(start.getHours()+1);
+  if(typeof opts.hourFin==='number'&&opts.hourFin>h){
+    // Creneau trace a la souris sur la grille : on respecte la hauteur tiree.
+    end.setHours(Math.floor(opts.hourFin),Math.round((opts.hourFin%1)*60),0,0);
+  }else{
+    end.setHours(start.getHours()+1);
+  }
   return{debut:toDatetimeLocalValue(start),fin:toDatetimeLocalValue(end),all_day:false};
 }
 function closeCreateModal(){
@@ -1214,7 +1455,21 @@ function readCreateModalPayload(){
   }
   const note=(document.getElementById('cp-note')?.value||'').trim()||null;
   const prive=!!document.getElementById('cp-prive')?.checked;
-  return{titre,date_debut,date_fin,all_day,note,prive};
+  const participants=S.partSel?Array.from(S.partSel):[];
+  const invites_externes=S.partExt?Array.from(S.partExt):[];
+  const lieu=(document.getElementById('cp-lieu')?.value||'').trim()||null;
+  const visio=(document.getElementById('cp-visio')?.value||'').trim()||null;
+  const rappelBrut=document.getElementById('cp-rappel')?.value;
+  const rappel_minutes=(rappelBrut===''||rappelBrut==null)?null:parseInt(rappelBrut,10);
+  const auNomDe=document.getElementById('cp-au-nom-de')?.value;
+  const au_nom_de=auNomDe?parseInt(auNomDe,10):null;
+  const recurOn=!!document.getElementById('cp-recur')?.checked;
+  const recurrence=recurOn?(document.getElementById('cp-recur-regle')?.value||'hebdo'):null;
+  const recurrence_fin=recurOn?(document.getElementById('cp-recur-fin')?.value||null):null;
+  const radioSerie=document.querySelector('input[name="cp-serie"]:checked');
+  const serie=!!(radioSerie&&radioSerie.value==='1');
+  return{titre,date_debut,date_fin,all_day,note,prive,participants,invites_externes,
+         lieu,visio,rappel_minutes,au_nom_de,recurrence,recurrence_fin,serie};
 }
 function persoRawId(ev){return String((ev&&ev.id)||'').replace(/^perso-/,'');}
 function openEditModal(ev){
@@ -1228,7 +1483,7 @@ function openPersoModal(opts){
   if(!root)return;
   const ev=(opts&&opts.ev)||null;
   const edit=!!ev;
-  let allDay,debut,fin,titre,note,prive;
+  let allDay,debut,fin,titre,note,prive,lieu,visio,rappel;
   if(edit){
     allDay=!!ev.all_day;
     debut=String(ev.debut||'').slice(0,16);
@@ -1236,16 +1491,38 @@ function openPersoModal(opts){
     titre=(ev.meta&&ev.meta.titre_brut)||ev.titre||'';
     note=(ev.meta&&ev.meta.note)||'';
     prive=!!(ev.meta&&ev.meta.prive);
+    lieu=(ev.meta&&ev.meta.lieu)||'';
+    visio=(ev.meta&&ev.meta.visio)||'';
+    rappel=(ev.meta&&ev.meta.rappel_minutes!=null)?String(ev.meta.rappel_minutes):'';
   }else{
     const defs=defaultPersoRange(opts||{});
     allDay=defs.all_day;debut=defs.debut;fin=defs.fin;titre='';note='';prive=false;
+    lieu='';visio='';rappel='';
   }
   S.editingEv=ev;
+  S.partSel=new Set(((edit&&ev.meta&&ev.meta.participants)||[]).map(p=>Number(p.user_id)));
+  S.partNoms=new Map(((edit&&ev.meta&&ev.meta.participants)||[])
+    .map(p=>[Number(p.user_id),String(p.nom||'')]));
+  S.partExt=new Set(((edit&&ev.meta&&ev.meta.invites_externes)||[]).map(p=>String(p.email||'')));
+  S.partOccupes=new Set();
+  const dejaReunion=!!(edit&&ev.meta&&ev.meta.reunion);
+  const serieId=(edit&&ev.meta&&ev.meta.serie_id)||'';
+  // Trois mois de répétition par défaut : assez pour une réunion hebdo, assez
+  // court pour ne pas remplir le calendrier de quelqu'un jusqu'en 2028.
+  const finRecurDefaut=(function(){
+    const d=new Date((debut||'').slice(0,10)||Date.now());
+    d.setMonth(d.getMonth()+3);
+    return ymd(d);
+  })();
   const wrap=document.createElement('div');
   wrap.className='cal-create-modal-backdrop';
-  wrap.innerHTML=`<div class="cal-create-modal" role="dialog" aria-labelledby="cp-title-h">
+  wrap.innerHTML=`<div class="cal-create-modal cal-create-modal--large" role="dialog" aria-labelledby="cp-title-h">
     <button type="button" class="cal-create-modal-close" aria-label="Fermer">×</button>
     <h2 id="cp-title-h">${edit?'Modifier l\'événement':'Nouvel événement personnel'}</h2>
+    <div class="cal-create-grid">
+    <div>
+    ${edit?'':'<div class="cal-create-field" id="cp-nom-de-box" hidden><label for="cp-au-nom-de">Calendrier</label>'+
+      '<select id="cp-au-nom-de"><option value="">Mon calendrier</option></select></div>'}
     <div class="cal-create-field"><label for="cp-titre">Titre</label>
       <input type="text" id="cp-titre" required maxlength="500" placeholder="Titre de l'événement" value="${esc(titre)}"></div>
     <label class="cal-create-toggle"><input type="checkbox" id="cp-allday" ${allDay?'checked':''}> Journée entière</label>
@@ -1255,12 +1532,53 @@ function openPersoModal(opts){
       <div class="cal-create-field"><label for="cp-fin">Fin</label>
         <input id="cp-fin" type="${allDay?'date':'datetime-local'}" value="${allDay?esc(fin.slice(0,10)):esc(fin)}"></div>
     </div>
+    <div class="cal-create-row">
+      <div class="cal-create-field"><label for="cp-lieu">Lieu (optionnel)</label>
+        <input type="text" id="cp-lieu" maxlength="300" placeholder="Salle, adresse…" value="${esc(lieu)}"></div>
+      <div class="cal-create-field"><label for="cp-rappel">Rappel</label>
+        <select id="cp-rappel">
+          ${RAPPELS.map(r=>`<option value="${r.v}"${String(r.v)===String(rappel)?' selected':''}>${esc(r.l)}</option>`).join('')}
+        </select></div>
+    </div>
+    <div class="cal-create-field"><label for="cp-visio">Lien de visioconférence (optionnel)</label>
+      <input type="text" id="cp-visio" maxlength="500" placeholder="https://…" value="${esc(visio)}"></div>
     <div class="cal-create-field"><label for="cp-note">Note (optionnel)</label>
       <textarea id="cp-note" maxlength="4000" placeholder="Détails…">${esc(note)}</textarea></div>
-    <label class="cal-create-toggle"><input type="checkbox" id="cp-prive" ${prive?'checked':''}> Ne pas faire apparaître</label>
-    <p class="cal-extern-hint" style="margin:-6px 0 14px">Par défaut, vos créneaux sont visibles par tous. Coché, les autres voient uniquement « Occupé » — sans titre ni note.</p>
+    </div>
+    <div>
+    <div class="cal-create-field cal-part-box"><label for="cp-part-filtre">Participants (optionnel)</label>
+      <input type="text" id="cp-part-filtre" placeholder="Nom d'un collègue ou adresse e-mail…" autocomplete="off"
+        role="combobox" aria-expanded="false" aria-controls="cp-part-res">
+      <div class="cal-part-res" id="cp-part-res" role="listbox" hidden></div>
+      <div class="cal-part-chips" id="cp-part-chips"></div>
+      <div class="cal-part-dispo" id="cp-part-dispo"></div></div>
+    ${edit
+      ? (serieId?`<div class="cal-serie-choix">
+          <label><input type="radio" name="cp-serie" value="0" checked> Cette occurrence</label>
+          <label><input type="radio" name="cp-serie" value="1"> Toute la série à venir</label>
+        </div>`:'')
+      : `<label class="cal-create-toggle"><input type="checkbox" id="cp-recur"> Rendre récurrent</label>
+    <div class="cal-recur-box" id="cp-recur-box" hidden>
+      <div class="cal-recur-row">
+        <div class="cal-create-field"><label for="cp-recur-regle">Répéter</label>
+          <select id="cp-recur-regle">
+            <option value="hebdo">Toutes les semaines</option>
+            <option value="bihebdo">Toutes les deux semaines</option>
+            <option value="mensuel">Tous les mois</option>
+            <option value="ouvres">Tous les jours ouvrés</option>
+            <option value="quotidien">Tous les jours</option>
+          </select></div>
+        <div class="cal-create-field"><label for="cp-recur-fin">Jusqu'au</label>
+          <input type="date" id="cp-recur-fin" value="${esc(finRecurDefaut)}"></div>
+      </div>
+      <p class="cal-recur-hint" id="cp-recur-hint"></p>
+    </div>`}
+    <label class="cal-create-toggle" style="margin-bottom:6px"><input type="checkbox" id="cp-prive" ${prive?'checked':''}> Ne pas faire apparaître</label>
+    <p class="cal-extern-hint" style="margin:0 0 4px">Coché, les autres voient « Occupé » — sans titre ni note.</p>
+    </div>
+    </div>
     <div class="cal-create-modal-foot">
-      ${edit?'<button type="button" class="cal-btn" id="cp-delete" style="margin-right:auto;border-color:var(--danger);color:var(--danger)">Supprimer</button>':''}
+      ${edit?'<button type="button" class="cal-btn" id="cp-delete" style="margin-right:auto;border-color:var(--danger);color:var(--danger)">'+(dejaReunion?'Annuler la réunion':'Supprimer')+'</button>':''}
       <button type="button" class="cal-btn" id="cp-cancel">Annuler</button>
       <button type="button" class="cal-btn primary" id="cp-submit">${edit?'Enregistrer':'Créer'}</button>
     </div>
@@ -1268,38 +1586,569 @@ function openPersoModal(opts){
   root.appendChild(wrap);
   S.createModal=wrap;
   wrap.onclick=e=>{if(e.target===wrap)closeCreateModal();};
-  wrap.querySelector('.cal-create-modal').onclick=e=>e.stopPropagation();
+  wrap.querySelector('.cal-create-modal').onclick=e=>{
+    e.stopPropagation();
+    if(!e.target.closest('.cal-part-box'))masquerResultats();
+  };
   wrap.querySelector('.cal-create-modal-close').onclick=closeCreateModal;
   wrap.querySelector('#cp-cancel').onclick=closeCreateModal;
-  document.getElementById('cp-allday').onchange=syncCreateModalAllDay;
+  document.getElementById('cp-allday').onchange=()=>{syncCreateModalAllDay();planifierDispos();};
   wrap.querySelector('#cp-submit').onclick=submitPersoModal;
+  ['cp-debut','cp-fin'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.addEventListener('change',()=>{planifierDispos();majRecurrence();});
+  });
+  const filtre=wrap.querySelector('#cp-part-filtre');
+  if(filtre){
+    filtre.addEventListener('input',()=>renderResultats(filtre.value));
+    filtre.addEventListener('focus',()=>renderResultats(filtre.value));
+    filtre.addEventListener('keydown',e=>{
+      if(e.key==='Escape'){masquerResultats();e.stopPropagation();}
+      if(e.key==='Enter'){
+        const prem=wrap.querySelector('.cal-part-row');
+        if(prem){e.preventDefault();prem.click();}
+      }
+    });
+  }
+  const recur=wrap.querySelector('#cp-recur');
+  if(recur)recur.onchange=majRecurrence;
+  const regle=wrap.querySelector('#cp-recur-regle');
+  if(regle)regle.onchange=majRecurrence;
+  const recurFin=wrap.querySelector('#cp-recur-fin');
+  if(recurFin)recurFin.onchange=majRecurrence;
+  renderChips();
+  chargerInvitables().then(()=>{planifierDispos();});
+  if(!edit)chargerDelegations().then(majSelecteurCalendrier);
   const delBtn=wrap.querySelector('#cp-delete');
   if(delBtn)delBtn.onclick=()=>deletePersoEvent(ev,{fromModal:true});
   document.addEventListener('keydown',onCreateModalKey);
   setTimeout(()=>document.getElementById('cp-titre')?.focus(),0);
 }
+/* ---------------------------------------------------------------------
+   Invites d'une reunion : liste, disponibilites et reponses.
+   --------------------------------------------------------------------- */
+/* « Au nom de » : n'apparait que si quelqu'un a delegue son calendrier — un
+   selecteur vide serait du bruit pour les 95 % de cas normaux. */
+async function chargerDelegations(){
+  if(S.delegations)return S.delegations;
+  try{
+    S.delegations=await api('/api/calendrier/delegations');
+  }catch(e){
+    S.delegations={mes_delegues:[],calendriers_delegues:[]};
+  }
+  return S.delegations;
+}
+function majSelecteurCalendrier(){
+  const box=document.getElementById('cp-nom-de-box');
+  const sel=document.getElementById('cp-au-nom-de');
+  if(!box||!sel)return;
+  const dels=(S.delegations&&S.delegations.calendriers_delegues)||[];
+  if(!dels.length){box.hidden=true;return;}
+  sel.innerHTML='<option value="">Mon calendrier</option>'+
+    dels.map(d=>'<option value="'+d.id+'">Calendrier de '+esc(d.nom)+'</option>').join('');
+  box.hidden=false;
+}
+
+async function chargerInvitables(){
+  if(S.invitables)return S.invitables;
+  try{
+    const r=await api('/api/calendrier/invitables');
+    S.invitables=(r&&r.utilisateurs)||[];
+  }catch(e){
+    S.invitables=[];
+  }
+  return S.invitables;
+}
+/* La liste complete des collegues n'a pas sa place dans le formulaire : on ne
+   propose que ce qui est cherche, et ce qui est retenu passe en pastilles. */
+function masquerResultats(){
+  const box=document.getElementById('cp-part-res');
+  const inp=document.getElementById('cp-part-filtre');
+  if(box){box.hidden=true;box.innerHTML='';}
+  if(inp)inp.setAttribute('aria-expanded','false');
+}
+function renderResultats(filtre){
+  const box=document.getElementById('cp-part-res');
+  const inp=document.getElementById('cp-part-filtre');
+  if(!box)return;
+  const q=String(filtre||'').trim();
+  const ql=q.toLowerCase();
+  if(!ql){masquerResultats();return;}
+  const gens=(S.invitables||[])
+    .filter(u=>!S.partSel.has(u.id)&&String(u.nom||'').toLowerCase().includes(ql))
+    .slice(0,8);
+  // Une adresse e-mail complete ouvre la porte aux invites sans compte MySifa
+  // (client, fournisseur) : ils repondront depuis le lien recu par mail.
+  const mailPropose=EMAIL_RE.test(ql)&&!S.partExt.has(ql)
+    &&!(S.invitables||[]).some(u=>String(u.email||'').toLowerCase()===ql);
+  let html='';
+  if(mailPropose){
+    html+='<button type="button" class="cal-part-row" role="option" data-mail="'+esc(ql)+'">'+
+      '<span class="cal-part-nom">Inviter '+esc(ql)+'</span>'+
+      '<span class="cal-part-occupe" style="color:var(--muted)">externe</span></button>';
+  }
+  if(gens.length){
+    html+=gens.map(u=>{
+      const occupe=S.partOccupes&&S.partOccupes.has(u.id);
+      return '<button type="button" class="cal-part-row" role="option" data-part="'+u.id+'">'+
+        '<span class="cal-part-nom">'+esc(u.nom)+'</span>'+
+        (occupe?'<span class="cal-part-occupe">occupé</span>':'')+
+      '</button>';
+    }).join('');
+  }
+  if(!html){
+    html='<div class="cal-part-vide">Aucun résultat. Tapez une adresse e-mail '+
+      'complète pour inviter quelqu\'un hors MySifa.</div>';
+  }
+  box.innerHTML=html;
+  const apres=()=>{
+    if(inp){inp.value='';inp.focus();}
+    masquerResultats();
+    renderChips();
+    planifierDispos();
+  };
+  box.querySelectorAll('[data-part]').forEach(btn=>{
+    btn.onclick=()=>{
+      const id=Number(btn.dataset.part);
+      const u=(S.invitables||[]).find(x=>x.id===id);
+      S.partSel.add(id);
+      if(u)S.partNoms.set(id,u.nom||'');
+      apres();
+    };
+  });
+  box.querySelectorAll('[data-mail]').forEach(btn=>{
+    btn.onclick=()=>{S.partExt.add(btn.dataset.mail);apres();};
+  });
+  box.hidden=false;
+  if(inp)inp.setAttribute('aria-expanded','true');
+}
+function renderChips(){
+  const box=document.getElementById('cp-part-chips');
+  if(!box)return;
+  const ids=S.partSel?Array.from(S.partSel):[];
+  const mails=S.partExt?Array.from(S.partExt):[];
+  const chip=(cle,nom,occupe,externe)=>
+    '<span class="cal-part-chip'+(occupe?' occupe':'')+'">'+esc(nom)+
+    (externe?'<span style="opacity:.7;font-size:10px">externe</span>':'')+
+    '<button type="button" data-retirer="'+esc(cle)+'" aria-label="Retirer '+esc(nom)+'">×</button></span>';
+  box.innerHTML=
+    ids.map(id=>chip(String(id),(S.partNoms&&S.partNoms.get(id))||'Utilisateur',
+                     S.partOccupes&&S.partOccupes.has(id),false)).join('')+
+    mails.map(m=>chip(m,m,false,true)).join('');
+  box.querySelectorAll('[data-retirer]').forEach(b=>{
+    b.onclick=()=>{
+      const cle=b.dataset.retirer;
+      if(S.partExt.has(cle))S.partExt.delete(cle);
+      else S.partSel.delete(Number(cle));
+      renderChips();
+      planifierDispos();
+    };
+  });
+}
+/* Combien de créneaux la répétition va réellement créer — annoncé avant de
+   valider, pas découvert après coup dans le calendrier. */
+function majRecurrence(){
+  const box=document.getElementById('cp-recur-box');
+  const coche=document.getElementById('cp-recur');
+  if(!box||!coche)return;
+  box.hidden=!coche.checked;
+  const hint=document.getElementById('cp-recur-hint');
+  if(!hint)return;
+  if(!coche.checked){hint.textContent='';return;}
+  const p=readCreateModalPayload();
+  const n=compterOccurrences(p.date_debut,p.recurrence,p.recurrence_fin);
+  hint.textContent=n>0
+    ?(n+' créneau'+(n>1?'x':'')+' seront créés. Chacun peut ensuite être déplacé ou annulé seul.')
+    :'Choisissez une date de fin postérieure au créneau.';
+}
+/* Meme regle que le serveur (app/services/cal_recurrence.py) : le mensuel se
+   calcule depuis le premier creneau, sinon un 31 janvier ramene au 28 fevrier
+   resterait bloque au 28 les mois suivants. */
+function ajouterMoisDepuis(base,n){
+  const d=new Date(base.getFullYear(),base.getMonth()+n,1);
+  const dernier=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();
+  d.setDate(Math.min(base.getDate(),dernier));
+  return d;
+}
+function compterOccurrences(debut,regle,fin){
+  if(!debut||!regle||!fin)return 0;
+  const d0=new Date(String(debut).slice(0,10));
+  const dF=new Date(String(fin).slice(0,10));
+  if(isNaN(d0)||isNaN(dF)||dF<d0)return 0;
+  let n=0,rang=0;
+  let cur=new Date(d0);
+  while(cur<=dF&&n<260){
+    n++;rang++;
+    if(regle==='quotidien')cur.setDate(cur.getDate()+1);
+    else if(regle==='ouvres'){do{cur.setDate(cur.getDate()+1);}while(cur.getDay()===0||cur.getDay()===6);}
+    else if(regle==='hebdo')cur.setDate(cur.getDate()+7);
+    else if(regle==='bihebdo')cur.setDate(cur.getDate()+14);
+    else if(regle==='mensuel')cur=ajouterMoisDepuis(d0,rang);
+    else break;
+  }
+  return n;
+}
+
+function planifierDispos(){
+  if(S._partTimer)clearTimeout(S._partTimer);
+  S._partTimer=setTimeout(()=>{chargerDispos().catch(()=>{});},250);
+}
+/* Qui est deja pris sur le creneau choisi — la question qui evite trois
+   allers-retours par reunion. */
+async function chargerDispos(){
+  const info=document.getElementById('cp-part-dispo');
+  if(!info)return;
+  const ids=S.partSel?Array.from(S.partSel):[];
+  if(!ids.length){
+    S.partOccupes=new Set();
+    info.textContent='';
+    info.classList.remove('alerte');
+    renderChips();
+    return;
+  }
+  const p=readCreateModalPayload();
+  if(!p.date_debut||!p.date_fin)return;
+  try{
+    const q=new URLSearchParams({
+      date_debut:p.date_debut,
+      date_fin:p.date_fin,
+      utilisateurs:ids.join(',')
+    });
+    const r=await api('/api/calendrier/disponibilites?'+q);
+    S.partOccupes=new Set(((r&&r.occupes)||[]).map(Number));
+  }catch(e){
+    S.partOccupes=new Set();
+  }
+  const n=S.partOccupes.size;
+  info.textContent=n
+    ?(n+' participant'+(n>1?'s':'')+' déjà pris sur ce créneau.')
+    :(ids.length+' participant'+(ids.length>1?'s':'')+' — tout le monde est libre.');
+  info.classList.toggle('alerte',n>0);
+  renderChips();
+}
+/* Recherche : la barre du calendrier interroge le serveur, le clic amene la
+   periode sur la date trouvee. On cherche aussi dans le passe, avec les
+   creneaux a venir en tete. */
+let _rechTimer=null;
+async function initSelecteurCollegue(){
+  const sel=document.getElementById('cal-collegue');
+  if(!sel)return;
+  const gens=await chargerInvitables();
+  sel.innerHTML='<option value="">Tous les collègues</option>'+
+    (gens||[]).map(u=>'<option value="'+u.id+'">Agenda de '+esc(u.nom)+'</option>').join('');
+  try{
+    const memo=localStorage.getItem(LS_COLLEGUE)||'';
+    if(memo&&(gens||[]).some(u=>String(u.id)===memo)){sel.value=memo;S.collegue=memo;}
+  }catch(e){}
+  sel.classList.toggle('actif',!!S.collegue);
+  sel.onchange=()=>{
+    S.collegue=sel.value||'';
+    sel.classList.toggle('actif',!!S.collegue);
+    try{localStorage.setItem(LS_COLLEGUE,S.collegue);}catch(e){}
+    // Demander l'agenda de quelqu'un implique d'afficher le calendrier qui le
+    // porte : sinon le choix reste sans effet visible.
+    if(S.collegue&&!S.visible.collegues){
+      S.visible.collegues=true;
+      saveVisible();
+      renderToggles();
+    }
+    fetchEvents();
+  };
+  if(S.collegue&&!S.visible.collegues){
+    S.visible.collegues=true;
+    saveVisible();
+    renderToggles();
+  }
+}
+
+function bindRecherche(){
+  const inp=document.getElementById('cal-search');
+  const box=document.getElementById('cal-search-res');
+  if(!inp||!box||inp.dataset.bound)return;
+  inp.dataset.bound='1';
+  inp.addEventListener('input',()=>{
+    clearTimeout(_rechTimer);
+    const q=inp.value.trim();
+    if(q.length<2){box.hidden=true;box.innerHTML='';return;}
+    _rechTimer=setTimeout(()=>lancerRecherche(q),260);
+  });
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){box.hidden=true;inp.blur();}
+  });
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('.cal-search-wrap')){box.hidden=true;}
+  });
+}
+async function lancerRecherche(q){
+  const box=document.getElementById('cal-search-res');
+  if(!box)return;
+  let res=[];
+  try{
+    const r=await api('/api/calendrier/recherche?q='+encodeURIComponent(q));
+    res=(r&&r.resultats)||[];
+  }catch(e){
+    res=[];
+  }
+  if(!res.length){
+    box.innerHTML='<div class="cal-search-vide">Aucun événement trouvé.</div>';
+  }else{
+    box.innerHTML=res.map(r=>{
+      const quand=r.all_day
+        ?new Date(String(r.debut).slice(0,10)).toLocaleDateString('fr-FR',
+            {weekday:'short',day:'2-digit',month:'short',year:'numeric'})+' · journée'
+        :fmtCreneauCourt(r.debut,r.fin);
+      return '<button type="button" class="cal-search-row'+(r.annule?' barre':'')+
+        '" data-jour="'+esc(String(r.debut).slice(0,10))+'">'+
+        '<span class="cal-search-titre">'+esc(r.titre)+'</span>'+
+        '<span class="cal-search-quand">'+esc(quand)+(r.lieu?' · '+esc(r.lieu):'')+'</span>'+
+      '</button>';
+    }).join('');
+    box.querySelectorAll('[data-jour]').forEach(b=>{
+      b.onclick=()=>{
+        box.hidden=true;
+        const d=parseDayStr(b.dataset.jour);
+        if(!d)return;
+        S.anchor=d;
+        fetchEvents();
+      };
+    });
+  }
+  box.hidden=false;
+}
+
+/* Delegation : je choisis qui peut poser un creneau dans mon calendrier. Le
+   delegue voit alors « Mon calendrier / Calendrier de X » a la creation. */
+function closeDelegModal(){
+  const root=document.getElementById('cal-deleg-modal-root');
+  if(root)root.innerHTML='';
+}
+async function openDelegationsModal(){
+  const root=document.getElementById('cal-deleg-modal-root');
+  if(!root)return;
+  S.delegations=null;
+  await Promise.all([chargerDelegations(),chargerInvitables()]);
+  const wrap=document.createElement('div');
+  wrap.className='cal-create-modal-backdrop';
+  root.innerHTML='';
+  root.appendChild(wrap);
+  function rendre(){
+    const mes=(S.delegations&&S.delegations.mes_delegues)||[];
+    const pour=(S.delegations&&S.delegations.calendriers_delegues)||[];
+    const dejaIds=new Set(mes.map(d=>d.id));
+    const options=(S.invitables||[]).filter(u=>!dejaIds.has(u.id));
+    wrap.innerHTML=`<div class="cal-create-modal" role="dialog" aria-labelledby="cdel-h">
+      <button type="button" class="cal-create-modal-close" aria-label="Fermer">×</button>
+      <h2 id="cdel-h">Délégations</h2>
+      <p class="cal-extern-hint" style="margin:-6px 0 16px">Une personne déléguée peut créer des créneaux dans votre calendrier. Elle ne voit pas vos créneaux privés.</p>
+      <div class="cal-create-field"><label>Qui peut écrire chez moi</label>
+        <div class="cal-part-chips">${mes.length
+          ?mes.map(d=>`<span class="cal-part-chip">${esc(d.nom)}<button type="button" data-retirer-deleg="${d.id}" aria-label="Retirer ${esc(d.nom)}">×</button></span>`).join('')
+          :'<span style="font-size:11px;color:var(--muted)">Personne pour l\'instant.</span>'}</div>
+      </div>
+      <div class="cal-create-row" style="align-items:flex-end">
+        <div class="cal-create-field" style="flex:1"><label for="cdel-sel">Ajouter</label>
+          <select id="cdel-sel">${options.map(u=>`<option value="${u.id}">${esc(u.nom)}</option>`).join('')}</select></div>
+        <div class="cal-create-field" style="margin-bottom:12px">
+          <button type="button" class="cal-btn primary" id="cdel-add"${options.length?'':' disabled'}>Ajouter</button></div>
+      </div>
+      ${pour.length?`<div class="cal-create-field"><label>Calendriers où je peux écrire</label>
+        <div class="cal-part-chips">${pour.map(d=>`<span class="cal-part-chip">${esc(d.nom)}</span>`).join('')}</div></div>`:''}
+      <div class="cal-create-modal-foot">
+        <button type="button" class="cal-btn" id="cdel-fermer">Fermer</button>
+      </div>
+    </div>`;
+    wrap.querySelector('.cal-create-modal').onclick=e=>e.stopPropagation();
+    wrap.querySelector('.cal-create-modal-close').onclick=closeDelegModal;
+    wrap.querySelector('#cdel-fermer').onclick=closeDelegModal;
+    const add=wrap.querySelector('#cdel-add');
+    if(add)add.onclick=async()=>{
+      const sel=wrap.querySelector('#cdel-sel');
+      if(!sel||!sel.value)return;
+      try{
+        await api('/api/calendrier/delegations',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({delegue_id:parseInt(sel.value,10)})
+        });
+        S.delegations=null;
+        await chargerDelegations();
+        rendre();
+        showToast('Délégation ajoutée.','success');
+      }catch(e){showToast(e.message||'Ajout impossible','danger');}
+    };
+    wrap.querySelectorAll('[data-retirer-deleg]').forEach(b=>{
+      b.onclick=async()=>{
+        try{
+          await api('/api/calendrier/delegations/'+encodeURIComponent(b.dataset.retirerDeleg),
+            {method:'DELETE'});
+          S.delegations=null;
+          await chargerDelegations();
+          rendre();
+        }catch(e){showToast(e.message||'Suppression impossible','danger');}
+      };
+    });
+  }
+  wrap.onclick=e=>{if(e.target===wrap)closeDelegModal();};
+  rendre();
+}
+
+/* Lien direct depuis la pop-up de rappel : /calendrier?ev=perso-12&jour=…
+   ouvre la periode sur le bon jour puis la fiche (ou la contre-proposition). */
+function lireLienDirect(){
+  try{
+    const q=new URLSearchParams(location.search);
+    const id=q.get('ev');
+    if(!id)return;
+    S.lienDirect={id:id,action:q.get('action')||''};
+    const jour=parseDayStr(q.get('jour')||'');
+    if(jour)S.anchor=jour;
+    history.replaceState(null,'',location.pathname);
+  }catch(e){}
+}
+function consommerLienDirect(){
+  const lien=S.lienDirect;
+  if(!lien)return;
+  S.lienDirect=null;
+  const ev=(S.events||[]).find(x=>x.id===lien.id);
+  if(!ev){showToast('Événement introuvable — il a peut-être été déplacé.','danger');return;}
+  if(lien.action==='proposer'&&ev.meta&&ev.meta.mon_statut&&ev.meta.mon_statut!=='organisateur'){
+    openPropositionModal(ev);
+    return;
+  }
+  const el=document.querySelector('[data-ev-id="'+cssEscape(ev.id)+'"]');
+  if(el)openPop(ev,el);
+}
+function cssEscape(v){
+  return String(v||'').replace(/["\\]/g,'\\$&');
+}
+
+function libelleRappel(m){
+  const n=Number(m);
+  if(n===0)return 'aucun';
+  if(n===1440)return 'la veille';
+  if(n>=60)return (n/60)+' h avant';
+  return n+' min avant';
+}
+/* Proposer un autre horaire plutot que refuser sec : l'organisateur recoit la
+   proposition sur la fiche de la reunion et deplace d'un clic. */
+function openPropositionModal(ev){
+  closePop();
+  const root=document.getElementById('cal-create-modal-root');
+  if(!root)return;
+  closeCreateModal();
+  const debut=String(ev.debut||'').slice(0,16);
+  const fin=String(ev.fin||'').slice(0,16);
+  const wrap=document.createElement('div');
+  wrap.className='cal-create-modal-backdrop';
+  wrap.innerHTML=`<div class="cal-create-modal" role="dialog" aria-labelledby="cprop-h">
+    <button type="button" class="cal-create-modal-close" aria-label="Fermer">×</button>
+    <h2 id="cprop-h">Proposer un autre horaire</h2>
+    <p class="cal-extern-hint" style="margin:-6px 0 14px">${esc(ev.titre||'')} — l'organisateur décide.</p>
+    <div class="cal-create-row">
+      <div class="cal-create-field"><label for="cprop-debut">Début</label>
+        <input id="cprop-debut" type="datetime-local" value="${esc(debut)}"></div>
+      <div class="cal-create-field"><label for="cprop-fin">Fin</label>
+        <input id="cprop-fin" type="datetime-local" value="${esc(fin)}"></div>
+    </div>
+    <div class="cal-create-field"><label for="cprop-msg">Message (optionnel)</label>
+      <textarea id="cprop-msg" maxlength="500" placeholder="Je suis en clientèle ce matin-là…"></textarea></div>
+    <div class="cal-create-modal-foot">
+      <button type="button" class="cal-btn" id="cprop-annuler">Annuler</button>
+      <button type="button" class="cal-btn primary" id="cprop-ok">Proposer</button>
+    </div>
+  </div>`;
+  root.appendChild(wrap);
+  S.createModal=wrap;
+  wrap.onclick=e=>{if(e.target===wrap)closeCreateModal();};
+  wrap.querySelector('.cal-create-modal').onclick=e=>e.stopPropagation();
+  wrap.querySelector('.cal-create-modal-close').onclick=closeCreateModal;
+  wrap.querySelector('#cprop-annuler').onclick=closeCreateModal;
+  wrap.querySelector('#cprop-ok').onclick=async()=>{
+    const d=document.getElementById('cprop-debut')?.value||'';
+    const f=document.getElementById('cprop-fin')?.value||'';
+    if(!d||!f||f<=d){showToast('Créneau invalide.','danger');return;}
+    try{
+      await api('/api/calendrier/events/perso/'+encodeURIComponent(persoRawId(ev))+'/proposition',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({date_debut:d,date_fin:f,
+          message:(document.getElementById('cprop-msg')?.value||'').trim()||null})
+      });
+      closeCreateModal();
+      showToast('Proposition envoyée à l\'organisateur.','success');
+      fetchEvents();
+    }catch(e){
+      showToast(e.message||'Proposition impossible','danger');
+    }
+  };
+  document.addEventListener('keydown',onCreateModalKey);
+}
+async function arbitrerProposition(ev,propId,accepter){
+  try{
+    const r=await api('/api/calendrier/events/perso/'+encodeURIComponent(persoRawId(ev))+
+      '/proposition/'+encodeURIComponent(propId)+'?accepter='+(accepter?'true':'false'),
+      {method:'POST'});
+    closePop();
+    showToast(r&&r.deplacee
+      ?'Réunion déplacée — chacun doit reconfirmer.'
+      :'Proposition écartée.','success');
+    fetchEvents();
+  }catch(e){
+    showToast(e.message||'Action impossible','danger');
+  }
+}
+
+async function repondreInvitation(ev,statut){
+  const raw=persoRawId(ev);
+  if(!raw)return;
+  try{
+    await api('/api/calendrier/events/perso/'+encodeURIComponent(raw)+'/reponse',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({statut})
+    });
+    closePop();
+    showToast('Réponse enregistrée : '+(STATUT_MOT[statut]||statut)+'.','success');
+    fetchEvents();
+    if(window.MySifaCalRappel&&MySifaCalRappel.rafraichir)MySifaCalRappel.rafraichir();
+  }catch(e){
+    showToast(e.message||'Réponse impossible','danger');
+  }
+}
+
 function openCreateModal(opts){openPersoModal(opts||{});}
 async function submitPersoModal(){
   const payload=readCreateModalPayload();
   if(!payload.titre){showToast('Titre requis.','danger');return;}
   if(!payload.date_debut||!payload.date_fin){showToast('Dates invalides.','danger');return;}
   const ev=S.editingEv;
+  // Chaque endpoint ne reçoit que ses champs : la répétition ne se définit qu'à
+  // la création, le choix « toute la série » ne vaut qu'à la modification.
+  if(ev){delete payload.recurrence;delete payload.recurrence_fin;delete payload.au_nom_de;}
+  else{delete payload.serie;}
   try{
+    let r;
     if(ev){
-      await api('/api/calendrier/events/perso/'+encodeURIComponent(persoRawId(ev)),{
+      r=await api('/api/calendrier/events/perso/'+encodeURIComponent(persoRawId(ev)),{
         method:'PUT',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify(payload)
       });
     }else{
-      await api('/api/calendrier/events/perso',{
+      r=await api('/api/calendrier/events/perso',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify(payload)
       });
     }
     closeCreateModal();
-    showToast(ev?'Événement modifié.':'Événement créé.','success');
+    const nbOcc=Number((r&&r.meta&&r.meta.occurrences)||0);
+    showToast(
+      nbOcc>1
+        ?(ev?('Série mise à jour — '+nbOcc+' créneaux.')
+             :('Série créée — '+nbOcc+' créneaux.'))
+        :(ev?'Événement modifié.':'Événement créé.'),
+      'success');
     if(!S.visible.perso)S.visible.perso=true;
     saveVisible();
     fetchEvents();
@@ -1311,11 +2160,24 @@ async function deletePersoEvent(ev,opts){
   if(!isOwnPerso(ev))return;
   const raw=persoRawId(ev);
   if(!raw)return;
+  opts=opts||{};
+  // Depuis la modale, le choix « cette occurrence / toute la série » vaut aussi
+  // pour la suppression : c'est le même geste dans la tête de l'utilisateur.
+  let serie=!!opts.serie;
+  if(opts.fromModal){
+    const radio=document.querySelector('input[name=\"cp-serie\"]:checked');
+    serie=!!(radio&&radio.value==='1');
+  }
   try{
-    await api('/api/calendrier/events/perso/'+encodeURIComponent(raw),{method:'DELETE'});
-    if(opts&&opts.fromModal)closeCreateModal();
+    const r=await api('/api/calendrier/events/perso/'+encodeURIComponent(raw)+(serie?'?serie=1':''),
+      {method:'DELETE'});
+    if(opts.fromModal)closeCreateModal();
     closePop();
-    showToast('Événement supprimé.','success');
+    const nb=Number((r&&r.occurrences)||1);
+    const suffixe=nb>1?(' — '+nb+' créneaux'):'';
+    showToast(r&&r.annule
+      ?('Réunion annulée — les participants la voient barrée'+suffixe+'.')
+      :('Événement supprimé'+suffixe+'.'),'success');
     fetchEvents();
   }catch(err){
     showToast(err.message||'Suppression impossible','danger');
@@ -1345,11 +2207,65 @@ function bindBodySwipe(){
     else if(dx>50)shiftAnchor(-1);
   },{passive:true});
 }
+/* Tirer sur une plage vide de la grille cree un creneau a la bonne heure et a
+   la bonne duree — le clic simple reste, il ouvre une heure par defaut. */
+function bindGridDragCreate(){
+  const body=document.getElementById('cal-body');
+  if(!body||body.dataset.dragCreateBound)return;
+  body.dataset.dragCreateBound='1';
+  body.addEventListener('pointerdown',e=>{
+    if(e.button!==0||e.pointerType==='touch')return;
+    if(e.target.closest('[data-ev-id],.cal-more,.cal-col-ferie-label'))return;
+    const slots=e.target.closest('.cal-col-slots[data-day]');
+    if(!slots)return;
+    const h0=parseFloat(slots.dataset.hStart);
+    const h1=parseFloat(slots.dataset.hEnd);
+    if(!(h1>h0))return;
+    const rect=slots.getBoundingClientRect();
+    const heureA=cy=>{
+      const ratio=Math.min(1,Math.max(0,(cy-rect.top)/rect.height));
+      return Math.round((h0+ratio*(h1-h0))*4)/4;
+    };
+    const depart=heureA(e.clientY);
+    const y0=e.clientY;
+    let ghost=null,bouge=false,plage=[depart,depart];
+    const libelle=h=>pad2(Math.floor(h))+':'+pad2(Math.round((h%1)*60));
+    function onMove(ev2){
+      if(!bouge&&Math.abs(ev2.clientY-y0)<6)return;
+      bouge=true;
+      const cur=heureA(ev2.clientY);
+      const a=Math.min(depart,cur),b=Math.max(depart,cur);
+      plage=[a,b];
+      if(!ghost){
+        ghost=document.createElement('div');
+        ghost.className='cal-ghost';
+        slots.appendChild(ghost);
+      }
+      ghost.style.top=(((a-h0)/(h1-h0))*rect.height)+'px';
+      ghost.style.height=Math.max(8,((b-a)/(h1-h0))*rect.height)+'px';
+      ghost.textContent=libelle(a)+' – '+libelle(b);
+    }
+    function onUp(){
+      document.removeEventListener('pointermove',onMove);
+      document.removeEventListener('pointerup',onUp);
+      if(ghost)ghost.remove();
+      if(!bouge)return;
+      S._suppressClickUntil=Date.now()+400;
+      let [a,b]=plage;
+      if(b-a<0.25)b=a+0.5;
+      openCreateModal({day:slots.dataset.day,hour:a,hourFin:b,allDay:false});
+    }
+    document.addEventListener('pointermove',onMove);
+    document.addEventListener('pointerup',onUp);
+  });
+}
+
 function bindCalendarBodyClicks(){
   const body=document.getElementById('cal-body');
   if(!body||body.dataset.createBound)return;
   body.dataset.createBound='1';
   bindBodySwipe();
+  bindGridDragCreate();
   body.addEventListener('click',e=>{
     if(dragJustEnded())return;
     if(e.target.closest('[data-ev-id],.cal-more'))return;
@@ -1372,6 +2288,62 @@ function bindCalendarBodyClicks(){
   });
 }
 
+/* Qui vient, qui a repondu quoi — lisible d'un coup d'oeil par tous les
+   invites, pas seulement par l'organisateur. */
+function blocReunionHtml(meta){
+  if(!meta||!meta.reunion)return '';
+  const parts=(meta.participants||[]).concat(meta.invites_externes||[]);
+  const n={accepte:0,refuse:0,peut_etre:0,en_attente:0};
+  parts.forEach(p=>{if(n[p.statut]!=null)n[p.statut]++;});
+  const compte=[
+    n.accepte+' accepté'+(n.accepte>1?'s':''),
+    n.peut_etre+' peut-être',
+    n.refuse+' refusé'+(n.refuse>1?'s':''),
+    n.en_attente+' en attente'
+  ].join(' · ');
+  const liste=parts.length
+    ?'<ul class="cal-pop-parts">'+parts.map(p=>
+        '<li><span class="cal-part-pastille st-'+esc(p.statut||'en_attente')+'"></span>'+
+        esc(p.nom||p.email||'')+
+        (p.externe?'<span style="font-size:10px;color:var(--muted)">externe</span>':'')+
+        '</li>').join('')+'</ul>'
+    :'';
+  const org=meta.organisateur_nom
+    ?('Réunion · organisée par '+esc(meta.organisateur_nom))
+    :'Réunion';
+  return '<div class="cal-pop-reunion">'+
+    '<div class="cal-pop-reunion-head">'+org+'</div>'+
+    '<div class="cal-pop-reunion-compte">'+compte+'</div>'+liste+'</div>';
+}
+/* Contre-propositions : l'organisateur arbitre depuis la fiche, les autres
+   voient simplement qu'un autre horaire est sur la table. */
+function blocPropositionsHtml(meta,own){
+  const props=meta.propositions||[];
+  if(!props.length)return '';
+  return '<div class="cal-pop-reunion">'+
+    '<div class="cal-pop-reunion-head">Autre horaire proposé</div>'+
+    props.map(p=>{
+      const quand=fmtCreneauCourt(p.debut,p.fin);
+      return '<div class="cal-prop">'+
+        '<div class="cal-prop-txt"><strong>'+esc(p.nom)+'</strong> — '+esc(quand)+
+        (p.message?'<div class="cal-prop-msg">'+esc(p.message)+'</div>':'')+'</div>'+
+        (own
+          ?'<div class="cal-prop-actions">'+
+             '<button type="button" class="cal-rep-btn" data-prop-ok="'+p.id+'">Déplacer</button>'+
+             '<button type="button" class="cal-rep-btn" data-prop-non="'+p.id+'">Écarter</button>'+
+           '</div>'
+          :'')+
+      '</div>';
+    }).join('')+'</div>';
+}
+function fmtCreneauCourt(debut,fin){
+  const d=new Date(String(debut||'').replace(' ','T'));
+  const f=new Date(String(fin||'').replace(' ','T'));
+  if(isNaN(d))return String(debut||'');
+  const jour=d.toLocaleDateString('fr-FR',{weekday:'short',day:'2-digit',month:'short'});
+  const h=x=>pad2(x.getHours())+':'+pad2(x.getMinutes());
+  return jour+' '+h(d)+(isNaN(f)?'':' – '+h(f));
+}
 function closePop(){if(S.pop){S.pop.remove();S.pop=null;}}
 
 function openPop(ev,anchorEl){
@@ -1391,30 +2363,73 @@ function openPop(ev,anchorEl){
     ?'<div style="margin-top:6px;font-size:11px;color:var(--muted)">Source : '+esc(meta.source)+'</div>':'';
   const lieuBlk=meta.lieu
     ?'<div style="margin-top:6px;font-size:11px;color:var(--muted)">Lieu : '+esc(meta.lieu)+'</div>':'';
+  const visioBlk=meta.visio
+    ?'<div style="margin-top:6px;font-size:11px"><a href="'+esc(meta.visio)+
+      '" target="_blank" rel="noopener">Rejoindre la visioconférence</a></div>':'';
+  const rappelBlk=(meta.rappel_minutes!=null&&meta.rappel_minutes!==10)
+    ?'<div style="margin-top:6px;font-size:11px;color:var(--muted)">Rappel : '+
+      (Number(meta.rappel_minutes)===0?'aucun':libelleRappel(meta.rappel_minutes))+'</div>':'';
+  const auteurBlk=meta.cree_par_nom
+    ?'<div style="margin-top:6px;font-size:11px;color:var(--muted)">Créé par '+
+      esc(meta.cree_par_nom)+'</div>':'';
   const busyBlk=isBusyPerso(ev)
     ?'<div style="margin-top:6px;font-size:11px;color:var(--muted)">Créneau masqué par son auteur.</div>':'';
   let link='';
   if(ev.calendrier.startsWith('production_'))link='<a href="/planning">Ouvrir le planning production</a>';
   else if(ev.calendrier==='conges')link='<a href="/planning-rh">Ouvrir le planning RH</a>';
   else if(ev.calendrier==='expeditions')link='<a href="/expe">Ouvrir MyExpé</a>';
+  const recurBlk=meta.recurrence_libelle
+    ?'<div style="margin-top:6px;font-size:11px;color:var(--muted)">Se répète '+
+      esc(meta.recurrence_libelle)+'</div>':'';
+  const reunionBlk=blocReunionHtml(meta);
+  const propsBlk=blocPropositionsHtml(meta,isOwnPerso(ev));
+  const annuleBlk=meta.annule
+    ?'<div class="cal-pop-annule">Réunion annulée par l\'organisateur.</div>':'';
+  const repBlk=(meta.reunion&&meta.mon_statut&&meta.mon_statut!=='organisateur'&&!meta.annule)
+    ?'<div class="cal-pop-reponse">'+['accepte','peut_etre','refuse'].map(st=>
+        '<button type="button" class="cal-rep-btn'+(meta.mon_statut===st?' actif':'')+
+        '" data-rep="'+st+'">'+STATUT_LABEL[st]+'</button>').join('')+'</div>'+
+      '<button type="button" class="cal-btn cal-pop-proposer" style="width:100%;margin-top:8px">'+
+      'Proposer un autre horaire</button>'
+    :'';
   const own=isOwnPerso(ev);
   const editBtn=own
     ?'<button type="button" class="cal-btn cal-pop-edit" style="width:100%;margin-top:10px">Modifier</button>':'';
   const delBtn=own
-    ?'<button type="button" class="cal-pop-del">Supprimer</button>':'';
+    ?(meta.serie_id
+        ?'<button type="button" class="cal-pop-del" data-serie="0">Supprimer cette occurrence</button>'+
+         '<button type="button" class="cal-pop-del" data-serie="1">Supprimer la série à venir</button>'
+        :'<button type="button" class="cal-pop-del">Supprimer</button>')
+    :'';
   const pop=document.createElement('div');
   pop.className='cal-pop';
   pop.innerHTML='<button type="button" class="cal-pop-close" aria-label="Fermer">×</button>'+
     '<div class="cal-pop-title">'+esc(ev.titre)+'</div>'+
-    '<div class="cal-pop-meta">'+esc(CAL_DEFS.find(c=>c.id===ev.calendrier)?.label||ev.calendrier)+'<br>'+per+stat+noteBlk+srcBlk+lieuBlk+busyBlk+'</div>'+
-    (link?'<div>'+link+'</div>':'')+editBtn+delBtn;
+    '<div class="cal-pop-meta">'+esc(CAL_DEFS.find(c=>c.id===ev.calendrier)?.label||ev.calendrier)+'<br>'+per+stat+noteBlk+srcBlk+lieuBlk+visioBlk+rappelBlk+auteurBlk+recurBlk+busyBlk+'</div>'+
+    (link?'<div>'+link+'</div>':'')+annuleBlk+reunionBlk+propsBlk+repBlk+editBtn+delBtn;
   document.body.appendChild(pop);
   S.pop=pop;
   pop.querySelector('.cal-pop-close').onclick=closePop;
   const editEl=pop.querySelector('.cal-pop-edit');
   if(editEl)editEl.onclick=e=>{e.stopPropagation();openEditModal(ev);};
-  const delEl=pop.querySelector('.cal-pop-del');
-  if(delEl)delEl.onclick=e=>{e.stopPropagation();deletePersoEvent(ev);};
+  pop.querySelectorAll('.cal-pop-del').forEach(b=>{
+    b.onclick=e=>{
+      e.stopPropagation();
+      deletePersoEvent(ev,{serie:b.dataset.serie==='1'});
+    };
+  });
+  pop.querySelectorAll('.cal-rep-btn[data-rep]').forEach(b=>{
+    b.onclick=e=>{e.stopPropagation();repondreInvitation(ev,b.dataset.rep);};
+  });
+  pop.querySelectorAll('[data-prop-ok],[data-prop-non]').forEach(b=>{
+    b.onclick=e=>{
+      e.stopPropagation();
+      const id=b.dataset.propOk||b.dataset.propNon;
+      arbitrerProposition(ev,id,!!b.dataset.propOk);
+    };
+  });
+  const propBtn=pop.querySelector('.cal-pop-proposer');
+  if(propBtn)propBtn.onclick=e=>{e.stopPropagation();openPropositionModal(ev);};
   if(isMobileViewport()){
     pop.classList.add('cal-pop--sheet');
   }else{
@@ -1785,7 +2800,11 @@ function renderAgenda(p){
         const time=evTimeLabelOnDay(ev,cur);
         html+='<div class="cal-agenda-ev-row">';
         if(time)html+='<span class="cal-agenda-time">'+esc(time)+'</span>';
-        html+='<div class="cal-pill" data-ev-id="'+esc(ev.id)+'" style="'+evSlotStyle(ev)+'">'+esc(ev.titre)+'</div>';
+        const sec=[evDureeTxt(ev),evAuteurTxt(ev)?('par '+evAuteurTxt(ev)):'',evParticipantsTxt(ev)]
+          .filter(Boolean).join(' · ');
+        html+='<div class="cal-pill cal-pill--agenda" data-ev-id="'+esc(ev.id)+'" style="'+evSlotStyle(ev)+'">'+
+          evFlagHtml(ev)+esc(ev.titre)+
+          (sec?'<span class="cal-pill-sec">'+esc(sec)+'</span>':'')+'</div>';
         html+='</div>';
       });
     }else{
@@ -1836,7 +2855,7 @@ function renderMonth(p){
         const cls='cal-pill'+(own?' cal-pill--own':'')+(isBusyPerso(ev)?' cal-pill--busy':'');
         html+='<div class="'+cls+'" data-ev-id="'+esc(ev.id)+'" '+
           (own?'title="Glisser pour changer de jour · double-clic pour modifier" ':'')+
-          'style="'+evSlotStyle(ev)+'">'+esc(ev.titre)+
+          'style="'+evSlotStyle(ev)+'">'+evFlagHtml(ev)+esc(ev.titre)+
           (own?'<span class="cal-rs-x"></span>':'')+'</div>';
       });
       if(more)html+='<div class="cal-more">+'+more+'</div>';
@@ -1921,7 +2940,9 @@ function renderDayTimedHtml(dayTimed,day,range){
       ?'<span class="cal-ev-rs cal-ev-rs-top"></span><span class="cal-ev-rs cal-ev-rs-bot"></span>':'';
     html+='<div class="'+cls+'" data-ev-id="'+esc(ev.id)+'" data-col="'+lay.col+'" data-tot="'+lay.total+'" '+
       (own?'title="Glisser pour déplacer · double-clic pour modifier" ':'')+
-      'style="'+timedEvStyle(ev,slice.top,slice.h,lay.col,lay.total)+'">'+esc(ev.titre)+handles+'</div>';
+      'style="'+timedEvStyle(ev,slice.top,slice.h,lay.col,lay.total)+'">'+
+      '<span class="cal-ev-t">'+evFlagHtml(ev)+esc(ev.titre)+'</span>'+
+      evLignesHtml(ev,slice.h)+handles+'</div>';
   }
   return html;
 }
@@ -1949,7 +2970,7 @@ function renderWeekBars(days){
     const span=colEnd-colStart+1;
     const own=isOwnPerso(ev);
     const cls='cal-mbar'+(own?' cal-mbar--own':'')+(isBusyPerso(ev)?' cal-mbar--busy':'');
-    html+='<div class="'+cls+'" data-ev-id="'+esc(ev.id)+'" style="grid-column:'+colStart+' / span '+span+';grid-row:'+(ri+1)+';'+evSlotStyle(ev)+'">'+esc(ev.titre)+
+    html+='<div class="'+cls+'" data-ev-id="'+esc(ev.id)+'" style="grid-column:'+colStart+' / span '+span+';grid-row:'+(ri+1)+';'+evSlotStyle(ev)+'">'+evFlagHtml(ev)+esc(ev.titre)+
       (own?'<span class="cal-rs-x"></span>':'')+'</div>';
   });
   html+='</div>';
@@ -1973,21 +2994,27 @@ function renderTimeGrid(p,colCount){
   const span=Math.max(1,h1-h0);
   const gridH=span*PX_PER_HOUR;
   let html='<div class="cal-time-wrap'+(colCount===1?' cal-day-single':'')+'">';
-  html+='<div class="cal-time-gutter"><div style="height:32px;border-bottom:1px solid var(--border)"></div>';
-  for(let h=h0;h<h1;h++)html+='<div class="tg-hour">'+pad2(h)+':00</div>';
-  html+='</div><div class="cal-time-grid">';
+  // Bandeau « Journée » sur toute la largeur : son libellé de gauche sert de
+  // repère à la gouttière, et chaque jour a sa propre cellule (deux événements
+  // le même jour ne débordaient pas sur le voisin).
   html+='<div class="cal-allday-row"><div class="cal-allday-label">Journée</div>';
   html+='<div class="cal-allday-cols" style="grid-template-columns:repeat('+colCount+',1fr)">';
-  days.forEach((day,ci)=>{
+  days.forEach(day=>{
     const dk=ymd(day);
+    html+='<div class="cal-allday-cell">';
     allDay.filter(ev=>{
       const s=ymd(startOfDay(evStart(ev))),e=ymd(startOfDay(evEnd(ev)));
       return s<=dk&&e>=dk;
     }).forEach(ev=>{
-      html+='<div class="cal-allday-pill'+(isBusyPerso(ev)?' cal-allday-pill--busy':'')+'" data-ev-id="'+esc(ev.id)+'" style="'+evSlotStyle(ev)+'">'+esc(ev.titre)+'</div>';
+      html+='<div class="cal-allday-pill'+(isBusyPerso(ev)?' cal-allday-pill--busy':'')+'" data-ev-id="'+esc(ev.id)+'" style="'+evSlotStyle(ev)+'">'+evFlagHtml(ev)+esc(ev.titre)+'</div>';
     });
+    html+='</div>';
   });
   html+='</div></div>';
+  html+='<div class="cal-time-body">';
+  html+='<div class="cal-time-gutter"><div class="cal-col-head tg-head">&nbsp;</div>';
+  for(let h=h0;h<h1;h++)html+='<div class="tg-hour">'+pad2(h)+':00</div>';
+  html+='</div><div class="cal-time-grid">';
   html+='<div class="cal-cols-row" style="grid-template-columns:repeat('+colCount+',1fr)">';
   days.forEach(day=>{
     const fl=ferieLabelForDay(day);
@@ -1999,7 +3026,7 @@ function renderTimeGrid(p,colCount){
     if(fl)html+='<div class="cal-col-ferie-label">'+esc(fl)+'</div>';
     html+='</div></div>';
   });
-  html+='</div></div></div>';
+  html+='</div></div></div></div>';
   return html;
 }
 
@@ -2146,7 +3173,7 @@ function externModalBodyHtml(){
       '<button type="button" class="cal-mini-btn danger" id="cal-feed-rotate">Régénérer l\'adresse</button>'+
       '</div>';
     html+='<p class="cal-extern-hint">Fenêtre publiée : '+feed.fenetre.passe_jours+
-      ' jours passés / '+feed.fenetre.futur_jours+' jours à venir. Le calendrier Personnel ne publie que vos propres créneaux.'+
+      ' jours passés / '+feed.fenetre.futur_jours+' jours à venir. « Mon calendrier » ne publie que vos créneaux et vos réunions.'+
       '<br>Cette adresse vaut mot de passe — ne la partagez pas. Régénérer coupe immédiatement les abonnements existants.</p>';
   }else{
     html+='<p class="cal-extern-hint">Adresse indisponible pour le moment.</p>';
@@ -2232,7 +3259,10 @@ async function openExternModal(){
   root.appendChild(wrap);
   S.externModal=wrap;
   wrap.onclick=e=>{if(e.target===wrap)closeExternModal();};
-  wrap.querySelector('.cal-create-modal').onclick=e=>e.stopPropagation();
+  wrap.querySelector('.cal-create-modal').onclick=e=>{
+    e.stopPropagation();
+    if(!e.target.closest('.cal-part-box'))masquerResultats();
+  };
   wrap.querySelector('.cal-create-modal-close').onclick=closeExternModal;
   wrap.querySelector('#cal-extern-close').onclick=closeExternModal;
   await Promise.all([loadFeed(),loadSubs()]);
@@ -2377,7 +3407,11 @@ window.addEventListener('resize',()=>{
     applyCalListOpen(loadCalListOpen());
     const calHead=document.getElementById('cal-cals-head');
     if(calHead)calHead.addEventListener('click',toggleCalList);
+    const delegBtn=document.getElementById('btn-cal-deleg');
+    if(delegBtn)delegBtn.addEventListener('click',()=>{openDelegationsModal().catch(()=>{});});
     renderToggles();
+    bindRecherche();
+    lireLienDirect();
     applyViewChrome(S.view);
     ME=await api('/api/auth/me');
     if(!ME){
@@ -2399,6 +3433,7 @@ window.addEventListener('resize',()=>{
     if(window.MySifaTheme)MySifaTheme.mergeFromUser(ME);
     else if(window.MySifaCalendar)MySifaCalendar.mergeFromUser(ME);
     renderToggles();
+    initSelecteurCollegue().catch(()=>{});
     const chip=document.getElementById('sb-user-chip');
     if(chip&&window.MySifaUserChip){
       const editIco='<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';

@@ -7518,6 +7518,7 @@ __GED_ASSETS__
 init();
 </script>
 <script src="/static/mysifa_impersonate.js"></script>
+<script src="/static/mysifa_cal_rappel.js?v=4"></script>
 </body>
 </html>
 """

@@ -181,6 +181,9 @@
     fichesLoading: false,
     ficheSearch: '',
     fichePage: 0,
+    fichesSubTab: 'liste',   // liste | orphelines
+    fichesOrphelines: [],
+    fichesOrphQ: '',
     ficheTotal: 0,
     ficheSelected: new Set(),
     ficheEditModal: null,
@@ -432,6 +435,9 @@
       'activity': '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
       'tool': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
       'credit-card': '<rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>',
+      // Scanner : plateau + capot + ligne de lecture. Distinct de 'printer',
+      // qui sort du papier la ou celui-ci en avale.
+      'scanner': '<rect x="3" y="13" width="18" height="7" rx="2"/><line x1="7" y1="16.5" x2="17" y2="16.5"/><path d="M6 10V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5"/>',
       'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
       'grid': '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
       'tag': '<path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
@@ -1659,6 +1665,14 @@ function renderOfTab(){
       title:'Exporter tous les OF (filtre appliqué) en CSV',
       onClick:exportOfCsv
     },iconEl('download',13),' Exporter CSV'),
+    // Les scans d'OF vivent au meme endroit que les OF : chercher ailleurs
+    // n'aurait aucune raison d'etre. La tuile du menu MyProd reste, mais
+    // c'est ici qu'on tombe dessus naturellement.
+    h('button',{
+      style:'padding:9px 14px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:13px;font-weight:600;white-space:nowrap',
+      title:'Deposer des OF termines scannes et traiter ceux a rattacher',
+      onClick:()=>{ set({page:'scans'}); nav(); }
+    },iconEl('file',13),' Scans d\'OF'),
     S.user&&S.user.role==='superadmin'&&S.ofSelected.size>0
       ? h('button',{
           style:'padding:9px 14px;border-radius:8px;border:none;background:var(--danger);color:#fff;cursor:pointer;font-size:13px;font-weight:700;white-space:nowrap',
@@ -1938,16 +1952,128 @@ function renderFichesTab(){
   );
 }
 
+// ── Fiches techniques : page dediee ─────────────────────────────────────────
+// Les quatre onglets de la page OF parlaient tous d'ordres de fabrication sauf
+// un. Sorti ici, il retrouve un contexte coherent, et gagne une vue qui
+// n'existait pas : les fiches que rien ne rejoint.
+async function loadFichesOrphelines(){
+  const q = S.fichesOrphQ || '';
+  const d = await api('/api/produits/fiches-non-reliees?q=' + encodeURIComponent(q));
+  if(d) S.fichesOrphelines = d.fiches || [];
+}
+
+function renderFichesOrphelinesTab(){
+  const rows = (S.fichesOrphelines || []).map(f => {
+    const acts = [];
+    if(f.ref_produit_norm && window.MySifaProduitMemoire){
+      const b = window.MySifaProduitMemoire.boutonFiche(f.ref_produit_norm, {label:'Produit'});
+      if(b) acts.push(b);
+    }
+    acts.push(h('button',{
+      style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
+      title:'Prévisualiser PDF', onClick:()=>window.open('/api/fiches-techniques/'+f.id+'/pdf-preview','_blank')
+    },iconEl('file',13)));
+    acts.push(h('button',{
+      style:'padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;cursor:pointer',
+      title:'Modifier', onClick:()=>openFicheEditModal(f)
+    },iconEl('edit',13)));
+
+    const illisible = f.motif === 'ref_illisible';
+    return h('tr',null,
+      h('td',null,escHtml(f.reference||'—')),
+      h('td',null,escHtml(f.designation||'—')),
+      h('td',null,
+        h('span',{
+          style:'display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;'
+            + (illisible
+                ? 'background:rgba(251,191,36,.14);color:var(--warn,#fbbf24);border:1px solid var(--warn,#fbbf24)'
+                : 'background:var(--bg);color:var(--muted);border:1px solid var(--border)'),
+          title: illisible
+            ? 'Le libellé ne contient pas de référence XXX/NNNN : aucun rapprochement possible tant qu\'il n\'est pas corrigé.'
+            : 'Référence lisible, mais aucun OF ni aucune production ne la rejoint. Produit dormant, ou fiche à archiver.',
+        }, illisible ? 'Référence illisible' : 'Jamais produite')
+      ),
+      h('td',null,escHtml(f.machine||'—')),
+      h('td',null,escHtml(f.format||'—')),
+      h('td',null,escHtml(f.source||'—')),
+      h('td',{className:'td-actions'},h('div',{style:{display:'flex',gap:'4px'}},...acts)),
+    );
+  });
+
+  const empty = h('tr',null,
+    h('td',{colSpan:'7',style:{textAlign:'center',color:'var(--muted)',padding:'24px'}},
+      S.fichesOrphQ ? 'Aucun résultat.' : 'Toutes les fiches techniques sont reliées à un OF ou à une production.')
+  );
+
+  const search = h('input',{
+    id:'fiche-orph-search', type:'text', value:S.fichesOrphQ||'',
+    placeholder:'Rechercher (référence, désignation)…',
+    style:'flex:1;min-width:200px;max-width:320px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none',
+    oninput:async function(e){
+      const v=e.target.value; const ss=e.target.selectionStart, se=e.target.selectionEnd;
+      set({fichesOrphQ:v});
+      await loadFichesOrphelines(); render();
+      requestAnimationFrame(()=>{
+        const el=document.getElementById('fiche-orph-search');
+        if(el){el.focus();try{el.setSelectionRange(ss,se);}catch(x){}}
+      });
+    },
+  });
+
+  return h('div',{className:'card',style:{padding:'18px 20px'}},
+    h('div',{style:{display:'flex',alignItems:'center',gap:'10px',marginBottom:'14px',flexWrap:'wrap'}},
+      search,
+      h('span',{style:'font-size:12px;color:var(--muted)'},
+        (S.fichesOrphelines||[]).length + ' fiche(s) non reliée(s)')
+    ),
+    h('div',{style:{fontSize:'12px',color:'var(--muted)',lineHeight:'1.55',marginBottom:'14px'}},
+      'Une fiche « référence illisible » ne pourra jamais être rapprochée : son libellé ne porte pas de référence XXX/NNNN. '
+      + 'Une fiche « jamais produite » est lisible mais n\'a rencontré ni OF ni production — ce n\'est pas forcément une anomalie.'),
+    h('div',{style:{overflowX:'auto'}},
+      h('table',{className:'table-std table-actions-wide'},
+        h('thead',null,h('tr',null,
+          h('th',null,'Référence'),h('th',null,'Désignation'),h('th',null,'Motif'),
+          h('th',null,'Machine'),h('th',null,'Format'),h('th',null,'Source'),
+          h('th',{className:'th-actions'},'Actions')
+        )),
+        h('tbody',null,...(rows.length?rows:[empty]))
+      )
+    )
+  );
+}
+
+function renderFichesPage(){
+  const cur = S.fichesSubTab || 'liste';
+  const tabs = [
+    {key:'liste',      label:'Fiches techniques', icon:'file-text', load:async()=>{await loadFiches();}},
+    {key:'orphelines', label:'Non reliées',       icon:'alert-triangle', load:async()=>{await loadFichesOrphelines();}},
+  ];
+  const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Fiches techniques'},
+    ...tabs.map(t=>h('button',{
+      type:'button', role:'tab',
+      'aria-selected': cur===t.key ? 'true' : 'false',
+      className:'nav-tab'+(cur===t.key?' active':''),
+      onClick:async()=>{ set({fichesSubTab:t.key}); if(t.load) await t.load(); render(); }
+    }, iconEl(t.icon,14), ' '+t.label))
+  );
+  return h('div',{style:{paddingLeft:'12px',paddingRight:'4px'}},
+    subNav,
+    cur==='orphelines' ? renderFichesOrphelinesTab() : renderFichesTab()
+  );
+}
+
 function renderOfPage(){
   // Sous-navigation OF harmonisée avec la barre d'onglets de /prod
   // (classe .nav-tabs partagée, badges centrés, icônes cohérentes).
-  const cur = S.ofSubTab || 'of';
+  const cur = (S.ofSubTab === 'fiche' ? 'of' : (S.ofSubTab || 'of'));
   const ambigusN = Number(S.pendingOfAmbigus || 0);
   const sansOfN  = Number(S.pendingOfSansOf  || 0);
   const mkBadge = (n)=> n>0 ? h('span',{className:'nav-tab-badge'}, String(n)) : null;
+  // Les fiches techniques ont leur propre entree de barre laterale : les
+  // laisser aussi ici donnerait deux chemins vers le meme ecran, et l'un des
+  // deux finirait par diverger.
   const tabs = [
     {key:'of',      label:'Ordres de fabrication', icon:'clipboard',      load:null},
-    {key:'fiche',   label:'Fiches techniques',     icon:'file-text',      load:async()=>{await loadFiches();}},
     {key:'pending', label:'Mappings à valider',    icon:'alert-triangle', badge:mkBadge(ambigusN), load:async()=>{await loadPendingOfMappings();}},
     {key:'sansof',  label:'Dossiers sans OF',      icon:'folder',         badge:mkBadge(sansOfN),  load:async()=>{await loadDossiersSansOf();}},
   ];
@@ -1966,8 +2092,7 @@ function renderOfPage(){
   );
   return h('div',{style:{paddingLeft:'12px',paddingRight:'4px'}},
     subNav,
-    cur==='fiche'   ? renderFichesTab()
-      : cur==='pending' ? renderPendingOfMappingsTab()
+    cur==='pending' ? renderPendingOfMappingsTab()
       : cur==='sansof'  ? renderDossiersSansOfTab()
       : renderOfTab()
   );
@@ -5686,12 +5811,14 @@ function renderSaisies(){
     h('button',{className:'btn-ghost',title:'Page précédente',disabled:off<=0,onClick:async()=>{
       const n = Math.max(0, off - lim);
       await loadSaisies({offset:n,limit:lim});
+      __skipScrollRestore = true;   // changement de page : on remonte en haut
       render();
     }},'‹'),
     h('span',{style:{fontSize:'11px',color:'var(--muted)',fontFamily:'monospace'}}, total?(`${from}-${to}/${total}`):'0'),
     h('button',{className:'btn-ghost',title:'Page suivante',disabled:(off+lim)>=total,onClick:async()=>{
       const n = Math.min(Math.max(0,total-lim), off + lim);
       await loadSaisies({offset:n,limit:lim});
+      __skipScrollRestore = true;   // changement de page : on remonte en haut
       render();
     }},'›'),
   );
@@ -7726,7 +7853,7 @@ function renderProdKpis(){
         if(p === 'users'){ window.location.href = '/settings'; return; }
         if(p === 'matiere_prix'){ window.location.href = '/pricing'; return; }
         if(p === 'profil'){ window.location.href = '/profil'; return; }
-        const allowed = new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
+        const allowed = new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of','scans','fiches']);
         if(allowed.has(p)) S.page = p;
       }catch(e){}
       try{var _hv=_readProdHash();if(_hv){if(_hv.subPage)S.subPage=_hv.subPage;if(_hv.ofSubTab)S.ofSubTab=_hv.ofSubTab;}}catch(e){}
@@ -7815,7 +7942,7 @@ function renderProdKpis(){
         if(p === 'users'){ window.location.href = '/settings'; return; }
         if(p === 'matiere_prix'){ window.location.href = '/pricing'; return; }
         if(p === 'profil'){ window.location.href = '/profil'; return; }
-        const allowed = new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of']);
+        const allowed = new Set(['production','suivi','historique','saisies','import','rentabilite','dossiers','traceabilite','of','scans','fiches']);
         if(allowed.has(p)) S.page = p;
       }catch(e){}
       S.loginError = null;
@@ -7911,6 +8038,9 @@ function renderProdKpis(){
         S.traceabiliteDossier = undefined;
         S.tracShowAttente = false;
         await loadTracabilite();
+      }else if(S.page === 'fiches' && canAccessOfTab()){
+        if(S.fichesSubTab === 'orphelines') await loadFichesOrphelines();
+        else await loadFiches();
       }else if(S.page === 'of' && canAccessOfTab()){
         await loadOfImports();
         if(S.ofSubTab === 'fiche') await loadFiches();
@@ -7968,7 +8098,44 @@ function renderProdKpis(){
     );
   }
 
+  // Intitule de section de la barre laterale. Reprise fidele de MyStock :
+  // meme classe CSS, meme chevron, meme repli au clic. L'etat de repli vit
+  // dans S.navCollapsed et survit aux rendus, pas aux rechargements — c'est
+  // le comportement de MyStock, et deux applications qui se replient
+  // differemment se remarquent tout de suite.
+  function renderSidebarSection(label){
+    if(!S.navCollapsed) S.navCollapsed = new Set();
+    const replie = S.navCollapsed.has(label);
+    const el = document.createElement('div');
+    el.className = 'nav-section-label' + (replie ? ' ngl-collapsed' : '');
+    el.innerHTML = '<span>' + escHtml(label) + '</span>'
+      + '<span class="ngl-chevron"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"'
+      + ' stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"'
+      + ' aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></span>';
+    el.addEventListener('click', () => {
+      const etaitReplie = S.navCollapsed.has(label);
+      if(etaitReplie) S.navCollapsed.delete(label); else S.navCollapsed.add(label);
+      el.classList.toggle('ngl-collapsed', !etaitReplie);
+      // On ne replie QUE des entrees de navigation. La boucle de MyStock
+      // s'arrete au prochain intitule de section ; ici il n'y en a pas apres
+      // la derniere, et elle emportait le pied de page (Retour MySifa, profil,
+      // theme, deconnexion) avec elle.
+      let sib = el.nextElementSibling;
+      while(sib
+            && !sib.classList.contains('nav-section-label')
+            && !sib.classList.contains('sidebar-bottom')){
+        if(sib.classList.contains('nav-btn')) sib.style.display = etaitReplie ? '' : 'none';
+        sib = sib.nextElementSibling;
+      }
+    });
+    return el;
+  }
+
   function renderSidebar(){
+    // La feuille de style porte aussi l'intitule de section : sans cet appel
+    // il n'etait injecte que sur la page d'accueil, et « Fiches et OF »
+    // apparaissait nu partout ailleurs.
+    ensureProdMenuStyle();
     // Le style du logo (cliquable + hover + espacement 32px) vit dans
     // mysifa_myprod_shell.css depuis la PR 1 « unifier MyProd ».
     const admin = isAdmin(S.user);
@@ -7980,15 +8147,31 @@ function renderProdKpis(){
           {key: 'production', label: 'Production', icon: 'wrench'},
           {key: 'traceabilite', label: 'Tra\u00e7abilit\u00e9', icon: 'layers'},
           ...(admin ? [{key: 'rentabilite', label: 'Rentabilit\u00e9', icon: 'trending-up'}] : []),
-          ...(canAccessOfTab() ? [{key: 'of', label: 'Fiches + OF', icon: 'file', withPendingOfBadge: true}] : []),
+          // Section : les OF, leurs fiches et leurs scans vivent ensemble.
+          // Chercher les scans ailleurs que la ou vivent les OF n'aurait
+          // aucune raison d'etre.
+          ...(canAccessOfTab() ? [
+            {section: 'Fiches et OF'},
+            // Trois entrees, deux pages : « OF » et « Fiches techniques » sont
+            // deux onglets du meme ecran, on y mene directement plutot que de
+            // faire chercher le sous-onglet une fois arrive.
+            {key: 'of', label: 'OF', icon: 'file', withPendingOfBadge: true},
+            {key: 'fiches', label: 'Fiches techniques', icon: 'file-text'},
+            {key: 'scans', label: 'Scans d\'OF', icon: 'scanner'},
+          ] : []),
         ];
     const isLight = document.body.classList.contains('light');
+    let sectionCourante = null;
     return h('nav', {className: 'sidebar'},
       h('div', {className: 'logo', title: 'Accueil MyProd', onClick: () => { S.sidebarOpen = false; set({page: 'menu'}); nav(); }},
         h('div', {className: 'logo-brand'}, 'My', h('span', null, 'Prod')),
         h('div', {className: 'logo-sub'}, 'by SIFA')
       ),
       ...items.map(i => {
+        // Intitule de section, repliable — meme classe et meme comportement
+        // que la sidebar de MyStock (.nav-section-label), pour que les deux
+        // applications ne divergent pas sur un detail qu'on voit tous les jours.
+        if(i.section){ sectionCourante = i.section; return renderSidebarSection(i.section); }
         const btn = h('button', {
           className: 'nav-btn' + (S.page === i.key ? ' active' : ''),
           onClick: () => {
@@ -8008,6 +8191,10 @@ function renderProdKpis(){
               title: cnt + ' OF \u00e0 associer manuellement',
             }, String(cnt)));
           }
+        }
+        // Section repliee : l'item ne doit pas reapparaitre au rendu suivant.
+        if(sectionCourante && S.navCollapsed && S.navCollapsed.has(sectionCourante)){
+          btn.style.display = 'none';
         }
         return btn;
       }),
@@ -8046,7 +8233,20 @@ function renderProdKpis(){
     var s = document.createElement('style');
     s.id = 'myprod-menu-css';
     s.textContent =
-      '.myprod-menu{max-width:960px}'
+      // Reprise a l'identique de app/web/html.py : la sidebar doit etre la
+      // meme dans toutes les applications, y compris ses intitules de section.
+      // Copie conforme de app/web/stock_page.py : la sidebar doit se
+      // comporter et se lire pareil dans MyStock et dans MyProd.
+      '.sidebar .nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;'
+      + 'color:var(--muted);font-weight:600;padding:10px 14px 4px 14px;user-select:none;'
+      + 'cursor:pointer;display:flex;align-items:center;justify-content:space-between;'
+      + 'border-radius:6px;transition:background .15s,opacity .15s}'
+      + '.sidebar .nav-section-label:hover{background:rgba(148,163,184,.08);opacity:1}'
+      + '.sidebar .nav-section-label .ngl-chevron{display:inline-flex;flex-shrink:0;'
+      + 'transition:transform .2s;opacity:.55}'
+      + '.sidebar .nav-section-label.ngl-collapsed .ngl-chevron{transform:rotate(-90deg)}'
+      + '.myprod-page-scans{max-width:1100px}'
+      + '.myprod-menu{max-width:960px}'
       + '.myprod-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:8px}'
       + '.myprod-tile{display:flex;align-items:center;gap:14px;text-align:left;width:100%;padding:18px 18px;background:var(--card);border:1px solid var(--border);border-radius:14px;cursor:pointer;color:var(--text);font-family:inherit;transition:border-color .15s,transform .15s,box-shadow .15s}'
       + '.myprod-tile:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 8px 22px rgba(34,211,238,.12)}'
@@ -8066,7 +8266,8 @@ function renderProdKpis(){
     tiles.push({icon:'wrench', label:'Production', desc:'KPIs, saisies et qualité de saisie', go:function(){ set({page:'production', subPage:'kpis'}); nav(); }});
     tiles.push({icon:'layers', label:'Traçabilité', desc:'Matières utilisées par dossier', go:function(){ set({page:'traceabilite'}); nav(); }});
     if(isAdmin(u)) tiles.push({icon:'trending-up', label:'Rentabilité', desc:'Comparaison devis / réel par dossier', go:function(){ set({page:'rentabilite'}); nav(); }});
-    if(canAccessOfTab()) tiles.push({icon:'file', label:'Fiches + OF', desc:'Import PDF et consultation des OF', go:function(){ set({page:'of'}); nav(); }});
+    if(canAccessOfTab()) tiles.push({icon:'file', label:'OF', desc:'Import PDF, consultation et rapprochement des ordres de fabrication', go:function(){ set({page:'of'}); nav(); }});
+    if(canAccessOfTab()) tiles.push({icon:'file-text', label:'Fiches techniques', desc:'Consultation des fiches, et celles que rien ne rejoint', go:function(){ set({page:'fiches'}); nav(); }});
     // Memoire produit : la fiche d'une reference (productions passees, notes
     // d'atelier, OF scannes). Vue de detail ouverte en surcouche — pas un
     // onglet de plus dans la barre : l'objet est le meme que celui de Fiches + OF.
@@ -8078,10 +8279,7 @@ function renderProdKpis(){
       try{ if(window.MySifaGuides) MySifaGuides.autoOpen('myprod-produits'); }catch(e){}
       window.MySifaProduitMemoire.openListe();
     }});
-    if(canAccessOfTab()) tiles.push({icon:'file-text', label:'Scans a rattacher', desc:'OF termines scannes dont le numero n a pas ete lu', go:function(){
-      if(window.MySifaProduitMemoire) window.MySifaProduitMemoire.openRattachement();
-      else toast('Module memoire produit indisponible.','error');
-    }});
+    if(canAccessOfTab()) tiles.push({icon:'scanner', label:'Scans d OF', desc:'Deposer les OF termines scannes et traiter ceux a rattacher', go:function(){ set({page:'scans'}); nav(); }});
     if(canPlanningNav(u)) tiles.push({icon:'calendar', label:'Planning machine', desc:'Ordonnancement des dossiers par machine', go:function(){ window.location.href='/planning'; }});
 
     var grid = h('div', {className:'myprod-tiles'},
@@ -8099,9 +8297,51 @@ function renderProdKpis(){
     return h('div', {className:'myprod-menu'}, grid);
   }
 
+  // ── Preservation de la vue au re-render ───────────────────────
+  // render() reconstruit tout le DOM de #root : sans precaution, cocher une
+  // ligne (ou trier, annuler, editer…) renvoie la liste des saisies tout en
+  // haut. On memorise la position des conteneurs scrollables + de la fenetre
+  // avant la reconstruction, et on la restaure juste apres — uniquement si on
+  // est reste sur la meme page/sous-onglet (une vraie navigation doit bien
+  // repartir du haut).
+  const SCROLL_KEEP_SEL = [
+    '.saisies-table-wrap .saisies-bot',            // scroll vertical de la liste
+    '.saisies-table-wrap .saisies-bot > div',      // scroll horizontal (bas)
+    '.saisies-table-wrap > div:first-child'        // scrollbar miroir (haut)
+  ];
+  let __skipScrollRestore = false;   // mis a true par la pagination : nouvelle page = vue en haut
+  function __viewKey(){ return (S.page||'')+'/'+(S.subPage||'')+'/'+(S.ofSubTab||''); }
+  function __captureScroll(){
+    const pos = {key:__viewKey(), win:(window.scrollY||window.pageYOffset||0), els:[]};
+    SCROLL_KEEP_SEL.forEach(sel=>{
+      const el = document.querySelector(sel);
+      if(el && (el.scrollTop || el.scrollLeft))
+        pos.els.push({sel, top:el.scrollTop, left:el.scrollLeft});
+    });
+    return pos;
+  }
+  function __restoreScroll(pos){
+    if(!pos) return;
+    if(__skipScrollRestore){ __skipScrollRestore = false; return; }
+    if(pos.key !== __viewKey()) return;          // navigation : on repart en haut
+    if(!pos.els.length && !pos.win) return;
+    const apply = ()=>{
+      pos.els.forEach(p=>{
+        const el = document.querySelector(p.sel);
+        if(!el) return;
+        if(p.top)  el.scrollTop  = p.top;
+        if(p.left) el.scrollLeft = p.left;
+      });
+      if(pos.win) window.scrollTo(0, pos.win);
+    };
+    apply();                                     // avant peinture : pas de saut visible
+    requestAnimationFrame(apply);                // apres calcul des largeurs de table
+  }
+
   function render(){
     const root = document.getElementById('root');
     if(!root) return;
+    const __keepScroll = __captureScroll();
     root.innerHTML = '';
     document.body.classList.toggle('sb-open', !!S.sidebarOpen);
 
@@ -8141,6 +8381,29 @@ function renderProdKpis(){
                       S.subPage === 'erreurs' ? 'Sanity Score, incidents et erreurs de saisie' :
                       'KPIs, temps, quantit\u00e9s et qualit\u00e9 de saisie');
       pageContent = renderProdPage();
+    }else if(S.page === 'scans'){
+      pageTitle = 'Scans d\'OF';
+      pageSubtitle = 'Deposer les OF termines scannes, et rattacher ceux qui n\'ont pas pu l\'etre';
+      // Le contenu est construit par mysifa_produit_memoire.js — le meme ecran
+      // que la surcouche, rendu ici dans la page. On passe le contenant a
+      // chaque rendu : MyProd reconstruit son DOM, une reference gardee d'un
+      // rendu a l'autre pointerait sur un element detache.
+      pageContent = h('div', {className: 'myprod-page-scans'});
+      const _cible = pageContent;
+      if(window.MySifaProduitMemoire){
+        requestAnimationFrame(function(){
+          window.MySifaProduitMemoire.monterScansDans(_cible);
+        });
+      }else{
+        pageContent.appendChild(h('div', {style: 'color:var(--muted);font-size:13px;padding:24px'},
+          'Module memoire produit indisponible.'));
+      }
+    }else if(S.page === 'fiches'){
+      pageTitle = 'Fiches techniques';
+      pageSubtitle = (S.fichesSubTab === 'orphelines')
+        ? 'Fiches qu\'aucun OF ni aucune production ne rejoint'
+        : 'Consultation, correction et export des fiches techniques';
+      pageContent = renderFichesPage();
     }else if(S.page === 'of'){
       pageTitle = 'Ordres de fabrication';
       pageSubtitle = 'Import PDF et consultation des OF';
@@ -8221,6 +8484,7 @@ function renderProdKpis(){
     // Sur les re-renders intra-onglet (filtres, pagination), aucun
     // élément n'est animé : on évite les replays parasites.
     try { __moApplyPostRender(root); } catch(e){}
+    try { __restoreScroll(__keepScroll); } catch(e){}
   }
 
   // État de nav pour détecter les transitions d'onglet
@@ -8285,7 +8549,8 @@ function renderProdKpis(){
     production: 'myprod-production',
     traceabilite: 'myprod-tracabilite',
     rentabilite: 'myprod-rentabilite',
-    of: 'myprod-of'
+    of: 'myprod-of',
+    scans: 'myprod-produits'
   };
 
   var PROD_GUIDES = {
@@ -8518,6 +8783,7 @@ function renderProdKpis(){
     openOfImportModal, closeOfImportModal, ofHandlePdfFile,
     ofValidateImport, ofDeleteImport, renderOfImportModal,
     renderPaginationBar, renderOfTab, renderFichesTab, renderOfPage,
+    loadFichesOrphelines, renderFichesOrphelinesTab, renderFichesPage,
   };
 
   console.info('[mysifa_prod_core] fiches + OF charges - etape 2l (final)', {

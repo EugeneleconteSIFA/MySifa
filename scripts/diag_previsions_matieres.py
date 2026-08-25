@@ -272,6 +272,324 @@ def diag_metrage(conn):
     print("  restreint la calibration en volume aux années bien renseignées.")
 
 
+# ── 5. Qui documente les mois passés ? ────────────────────────────────
+#
+# La vue Tendance affiche douze mois révolus. Deux sources peuvent les
+# documenter : les dossiers encore présents au planning, et les OF scannés
+# qu'aucun dossier ne porte plus. Quand les deux sont muettes, le mois est
+# hachuré — un trou, pas un zéro. Quand elles parlent mais que le besoin
+# n'est pas chiffrable, le mois s'affiche à plat, ce qui se lit à tort comme
+# une activité nulle. Cette section distingue les deux cas, mois par mois.
+
+def _mois_de(s):
+    """'2026-03-14…' ou '14/03/2026' → '2026-03'. None si illisible."""
+    s = str(s or "").strip()
+    if len(s) >= 7 and s[4] == "-" and s[:4].isdigit() and s[5:7].isdigit():
+        return s[:7]
+    # Formats français d'Access : JJ/MM/AAAA ou JJ-MM-AAAA.
+    for sep in ("/", "-"):
+        p = s.split(" ")[0].split(sep)
+        if len(p) == 3 and len(p[2]) == 4 and p[2].isdigit() and p[1].isdigit():
+            return f"{int(p[2]):04d}-{int(p[1]):02d}"
+    return None
+
+
+def _fenetre_mois(n_passes=12, n_futurs=5):
+    auj = date.today()
+    an, mo = auj.year, auj.month - n_passes
+    an += (mo - 1) // 12
+    mo = (mo - 1) % 12 + 1
+    out = []
+    for _ in range(n_passes + 1 + n_futurs):
+        out.append(f"{an:04d}-{mo:02d}")
+        mo += 1
+        if mo > 12:
+            mo, an = 1, an + 1
+    return out
+
+
+def diag_sources_passe(conn):
+    _titre("5. Vue Tendance — qui documente chaque mois de la fenêtre ?")
+
+    try:
+        from app.services.fiche_ref_parser import normalize_ref_produit
+    except Exception:
+        normalize_ref_produit = None
+        print("  (fiche_ref_parser indisponible : le rapprochement OF↔fiche")
+        print("   ne sera pas mesuré — lancer le script depuis la racine du projet.)\n")
+
+    # Les clés de fiche technique, telles que `_load_dossiers` les indexe.
+    cles_fiches = set()
+    for r in conn.execute(
+        "SELECT ref_produit_norm, reference FROM fiches_techniques"
+    ).fetchall():
+        n = (r["ref_produit_norm"] or "").strip()
+        cles_fiches.add(n if n else (r["reference"] or "").strip().lower())
+    cles_fiches.discard("")
+
+    fenetre = _fenetre_mois()
+    courant = f"{date.today().year:04d}-{date.today().month:02d}"
+
+    # « Chiffrable » veut dire : on sait en tirer un métrage, donc un besoin.
+    #
+    # Une première version comptait « métrage OU quantité d'étiquettes ». C'est
+    # faux, et ça m'a fait dire que 97 OF de décembre 25 étaient exploitables
+    # alors qu'aucun ne l'était : la quantité d'étiquettes ne devient un métrage
+    # que divisée par le nombre de fronts et multipliée par la longueur du
+    # module — deux valeurs qui vivent dans la fiche technique. Sans métrage ET
+    # sans fiche, la quantité ne se convertit en rien.
+    def _chiffrable(metrage, qte, a_fiche):
+        return metrage > 0 or (qte > 0 and a_fiche)
+
+    # ── Source A : le planning, tous statuts ──
+    # `ref_produit` et `ref_produit_norm` sont arrivées par migration : on ne
+    # les nomme dans le SELECT que si elles existent. Un diagnostic qui tombe
+    # sur une base un peu ancienne ne diagnostique plus rien.
+    cols_pe = {r["name"] for r in conn.execute("PRAGMA table_info(planning_entries)")}
+    sel_ref = ", ".join(
+        (f"pe.{c}" if c in cols_pe else f"'' AS {c}")
+        for c in ("ref_produit_norm", "ref_produit"))
+
+    pe_par_mois = defaultdict(lambda: {"n": 0, "chiffrable": 0})
+    for r in conn.execute(
+        f"""SELECT pe.date_livraison, pe.planned_end, pe.planned_start,
+                   {sel_ref},
+                   COALESCE(oi.metrage, 0)        AS metrage,
+                   COALESCE(oi.qte_etiquettes, 0) AS qte
+            FROM planning_entries pe
+            LEFT JOIN of_imports oi ON oi.id = pe.of_import_id"""
+    ).fetchall():
+        m = (_mois_de(r["date_livraison"]) or _mois_de(r["planned_end"])
+             or _mois_de(r["planned_start"]))
+        if not m:
+            continue
+        cle = ((r["ref_produit_norm"] or "").strip()
+               or (r["ref_produit"] or "").strip().lower())
+        c = pe_par_mois[m]
+        c["n"] += 1
+        if _chiffrable(r["metrage"], r["qte"], cle in cles_fiches):
+            c["chiffrable"] += 1
+
+    # ── Source B : les OF qu'aucun dossier du planning ne porte ──
+    # `propres` : l'OF nomme lui-même sa matière (of_imports.matiere /
+    # .glassine / .adhesif_label, recopiées de la fiche Access à sa création).
+    # C'est ce que la vue Tendance exploite pour l'archive — comparer cette
+    # colonne à `fiche` dit ce que le rapprochement de fiche fait perdre.
+    cols_of = {r["name"] for r in conn.execute("PRAGMA table_info(of_imports)")}
+    a_mat = "matiere" in cols_of
+    sel_mat = ("COALESCE(oi.matiere,'') AS matiere, "
+               "COALESCE(oi.glassine,'') AS glassine, "
+               "COALESCE(oi.adhesif_label,'') AS adhesif_label, "
+               if a_mat else
+               "'' AS matiere, '' AS glassine, '' AS adhesif_label, ")
+
+    of_par_mois = defaultdict(
+        lambda: {"n": 0, "fiche": 0, "propres": 0, "chiffrable": 0})
+    of_total = of_orph = of_sans_date = 0
+    for r in conn.execute(
+        f"""SELECT oi.id, oi.reference, oi.delai_client, oi.date_creation,
+                   {sel_mat}
+                   COALESCE(oi.metrage, 0)        AS metrage,
+                   COALESCE(oi.qte_etiquettes, 0) AS qte,
+                   (SELECT COUNT(*) FROM planning_entries pe
+                     WHERE pe.of_import_id = oi.id) AS n_pe
+            FROM of_imports oi"""
+    ).fetchall():
+        of_total += 1
+        if r["n_pe"]:
+            continue  # porté par le planning : compté en source A, pas ici
+        of_orph += 1
+        m = _mois_de(r["delai_client"]) or _mois_de(r["date_creation"])
+        if not m:
+            of_sans_date += 1
+            continue
+        c = of_par_mois[m]
+        c["n"] += 1
+        a_fiche = False
+        if normalize_ref_produit:
+            k = normalize_ref_produit(r["reference"]) \
+                or (r["reference"] or "").strip().lower()
+            a_fiche = k in cles_fiches
+            if a_fiche:
+                c["fiche"] += 1
+        if (r["matiere"].strip() or r["glassine"].strip()
+                or r["adhesif_label"].strip()):
+            c["propres"] += 1
+        if _chiffrable(r["metrage"], r["qte"], a_fiche):
+            c["chiffrable"] += 1
+
+    print(f"  {of_total} OF scannés au total, dont {of_orph} qu'aucun dossier du")
+    print(f"  planning ne porte ({of_sans_date} sans date exploitable).\n")
+    if not a_mat:
+        print("  ⚠ of_imports n'a pas de colonne `matiere` : la colonne « propres »")
+        print("    restera vide et l'archive dépendra du rapprochement de fiche.\n")
+
+    print("  « chiffr. » = un métrage est calculable : soit l'OF le porte, soit il")
+    print("  porte une quantité ET une fiche technique donne fronts et longueur.\n")
+    print("   mois      PLANNING             OF ORPHELINS                     verdict")
+    print("             dossiers chiffr.    OF  fiche  propres  chiffr.")
+    print("  ─────────────────────────────────────────────────────────────────────────")
+    trous = plats = 0
+    for m in fenetre:
+        a = pe_par_mois.get(m, {"n": 0, "chiffrable": 0})
+        b = of_par_mois.get(m, {"n": 0, "fiche": 0, "propres": 0, "chiffrable": 0})
+        # Un OF pèse s'il nomme sa matière (par lui-même OU via une fiche) ET
+        # qu'il porte de quoi la chiffrer.
+        nomme = max(b["fiche"], b["propres"])
+        chiffrable = a["chiffrable"] + min(nomme, b["chiffrable"])
+        if a["n"] + b["n"] == 0:
+            verdict = "TROU — hachuré à l'écran"
+            trous += 1
+        elif chiffrable == 0:
+            verdict = "PLAT — des dossiers, aucun chiffre"
+            plats += 1
+        elif chiffrable < (a["n"] + b["n"]) * 0.5:
+            verdict = "partiel — moins de la moitié chiffrée"
+        else:
+            verdict = "ok"
+        marque = " <" if m == courant else "  "
+        print(f"  {m}{marque} {a['n']:7} {a['chiffrable']:7}   {b['n']:5} {b['fiche']:6} "
+              f"{b['propres']:7}  {b['chiffrable']:7}   {verdict}")
+
+    print()
+    if trous:
+        print(f"  {trous} mois sans aucune source. Si ce sont des mois anciens, c'est")
+        print("  attendu : ni le planning ni les OF ne remontent aussi loin.")
+    if plats:
+        print(f"  {plats} mois documentés mais non chiffrables — c'est CE cas qui")
+        print("  fabrique une courbe à plat qu'on lira comme une activité nulle.")
+
+    tot_of = sum(c["n"] for c in of_par_mois.values())
+    tot_fi = sum(c["fiche"] for c in of_par_mois.values())
+    tot_pr = sum(c["propres"] for c in of_par_mois.values())
+    if normalize_ref_produit:
+        print(f"\n  OF orphelins nommant leur matière :")
+        print(f"    via une fiche technique   {tot_fi:5}/{tot_of} "
+              f"({_pct(tot_fi, tot_of).strip()})")
+        print(f"    par leurs propres champs  {tot_pr:5}/{tot_of} "
+              f"({_pct(tot_pr, tot_of).strip()})")
+        if tot_pr > tot_fi:
+            print("\n  L'écart est l'enjeu : `fiches_techniques` ne garde que les produits")
+            print("  actifs, alors que l'OF a recopié sa matière à sa création. Lire l'OF")
+            print("  plutôt que de lui chercher une fiche récupère la différence.")
+        elif tot_pr == 0:
+            print("\n  Les OF ne portent pas leurs matières : l'archive dépend entièrement")
+            print("  du rapprochement de fiche, et il faudra le réparer là.")
+
+
+# ── 6. Que contiennent RÉELLEMENT les OF archivés ? ───────────────────
+#
+# La section 5 dit que les OF anciens ne nomment leur matière ni par une fiche
+# technique, ni par leurs propres champs. Reste à savoir ce qu'ils portent : un
+# OF qui a son métrage et sa quantité mais aucune matière n'est pas la même
+# situation qu'un OF vide, et n'appelle pas la même réparation.
+#
+# Deux cohortes, séparées par un mois pivot, parce que les OF n'ont pas tous
+# été chargés par le même chemin : la synchro Access remplit `matiere` /
+# `glassine` / `adhesif_label`, les reprises plus anciennes non.
+
+def diag_contenu_of(conn, pivot="2026-06"):
+    _titre(f"6. Contenu réel des OF que le planning ne porte plus (pivot {pivot})")
+
+    cols = [r["name"] for r in conn.execute("PRAGMA table_info(of_imports)")]
+    if not cols:
+        print("  Table of_imports absente.")
+        return
+
+    lignes = conn.execute(
+        "SELECT oi.* , (SELECT COUNT(*) FROM planning_entries pe "
+        "               WHERE pe.of_import_id = oi.id) AS n_pe "
+        "FROM of_imports oi"
+    ).fetchall()
+
+    anciens, recents = [], []
+    for r in lignes:
+        if r["n_pe"]:
+            continue
+        m = _mois_de(r["delai_client"]) or _mois_de(r["date_creation"])
+        if not m:
+            continue
+        (anciens if m < pivot else recents).append(r)
+
+    print(f"  {len(anciens)} OF orphelins avant {pivot}, {len(recents)} après.\n")
+    if not anciens and not recents:
+        return
+
+    def _rempli(v):
+        if v is None:
+            return False
+        if isinstance(v, str):
+            return bool(v.strip())
+        return v != 0
+
+    print("   colonne                    avant pivot   après pivot")
+    print("  ──────────────────────────────────────────────────────")
+    for c in cols:
+        if c in ("id", "n_pe"):
+            continue
+        a = sum(1 for r in anciens if _rempli(r[c]))
+        b = sum(1 for r in recents if _rempli(r[c]))
+        if not a and not b:
+            continue  # colonne vide partout : ne dit rien, n'encombre pas
+        print(f"   {c:26} {_pct(a, len(anciens))}      {_pct(b, len(recents))}")
+
+    # Pourquoi la fiche ne se trouve pas : référence illisible, ou fiche absente ?
+    # Les deux se réparent très différemment, et rien d'autre ne les distingue.
+    try:
+        from app.services.fiche_ref_parser import normalize_ref_produit
+    except Exception:
+        normalize_ref_produit = None
+
+    if normalize_ref_produit and anciens:
+        cles = set()
+        for r in conn.execute("SELECT ref_produit_norm FROM fiches_techniques"):
+            if (r["ref_produit_norm"] or "").strip():
+                cles.add(r["ref_produit_norm"].strip())
+        sans_ref = illisible = absente = trouvee = 0
+        exemples = []
+        for r in anciens:
+            ref = (r["reference"] or "").strip()
+            if not ref:
+                sans_ref += 1
+                continue
+            k = normalize_ref_produit(ref)
+            if not k:
+                illisible += 1
+                if len(exemples) < 6:
+                    exemples.append((ref, "référence non normalisable"))
+            elif k in cles:
+                trouvee += 1
+            else:
+                absente += 1
+                if len(exemples) < 6:
+                    exemples.append((ref, f"normalisée en {k}, aucune fiche"))
+
+        print(f"\n  Pourquoi la fiche manque, sur les {len(anciens)} OF anciens :")
+        print(f"    référence absente            {sans_ref:5}")
+        print(f"    référence non normalisable   {illisible:5}")
+        print(f"    normalisée mais fiche absente{absente:6}")
+        print(f"    fiche trouvée                {trouvee:5}")
+        if exemples:
+            print("\n  Exemples :")
+            for ref, pourquoi in exemples:
+                print(f"    {ref[:40]:42} {pourquoi}")
+        print("\n  « fiche absente » se répare en important les fiches anciennes ;")
+        print("  « non normalisable » se répare dans le parser. Ce ne sont pas")
+        print("  les mêmes travaux, et l'un des deux peut être inutile.")
+
+    # À quoi ressemble un OF ancien, concrètement.
+    if anciens:
+        print("\n  Trois OF anciens, champs non vides :")
+        for r in anciens[:3]:
+            dispo = set(r.keys())
+            plein = {c: r[c] for c in cols
+                     if c != "id" and c in dispo and _rempli(r[c])}
+            nom = r["of_numero"] if "of_numero" in dispo else "?"
+            print(f"\n    OF {nom} — {len(plein)} champ(s) renseigné(s)")
+            for c, v in list(plein.items())[:14]:
+                print(f"      {c:22} {str(v)[:44]}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -294,6 +612,14 @@ def main():
         calib = None
     diag_references(conn)
     diag_metrage(conn)
+    try:
+        diag_sources_passe(conn)
+    except Exception as exc:
+        print(f"\n5. Sources des mois passés — impossible sur cette base : {exc}")
+    try:
+        diag_contenu_of(conn)
+    except Exception as exc:
+        print(f"\n6. Contenu des OF — impossible sur cette base : {exc}")
 
     _titre("Verdict")
     if not calib:

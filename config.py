@@ -31,6 +31,13 @@ UPLOAD_DIR = os.path.join(DATA_DIR, "uploads")
 # jointes du chat quand un message est envoyé depuis l'autre instance.
 UPLOADS_ROOT = os.getenv("UPLOADS_ROOT", os.path.join(BASE_DIR, "uploads"))
 
+# Miroir en lecture seule de l'ERP RVGI (base HFSQL `sifa_cs`), alimenté par
+# scripts/import_rvgi_csv.py. Fichier séparé de DB_PATH à dessein : il est
+# entièrement reconstructible depuis l'ERP, n'a donc rien à faire dans les
+# backups de production ni dans les migrations. Absent = l'app ERP se signale
+# vide au lieu de planter.
+ERP_MIRROR_DB = os.getenv("ERP_MIRROR_DB", os.path.join(DATA_DIR, "erp_mirror.db"))
+
 os.makedirs(DATA_DIR,   exist_ok=True)
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
