@@ -18,8 +18,10 @@ from fastapi.responses import StreamingResponse
 
 from app.services import mystock_prix as _mystock_prix
 from app.services.audit_service import log_action
+from app.services.conditionnement_pf import conditionnement_produit
 from app.services.fsc_certificat import evaluer_certificat
 from config import (
+    STOCK_UNITE_VENTE_DEFAUT,
     STOCK_EMPLACEMENT_AU_SOL,
     STOCK_EMPLACEMENT_AU_SOL_LABEL,
     STOCK_EMPLACEMENT_SORTIE_PROD,
@@ -2620,6 +2622,59 @@ def _apply_stock_mouvement(
 
 
 # ── Mouvement de stock ────────────────────────────────────────────
+def _parse_palettes_body(palettes_in) -> list[tuple[int, int]]:
+    """Normalise la liste `palettes` d'un corps de requête : [{matiere_id, nombre}]."""
+    out: list[tuple[int, int]] = []
+    if not palettes_in:
+        return out
+    if not isinstance(palettes_in, list):
+        raise HTTPException(400, "palettes doit etre une liste")
+    for it in palettes_in:
+        if not isinstance(it, dict):
+            continue
+        try:
+            mid = int(it.get("matiere_id"))
+            nb = int(it.get("nombre"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "palette : matiere_id et nombre numeriques requis") from None
+        if nb <= 0:
+            continue
+        out.append((mid, nb))
+    return out
+
+
+def _check_palettes(conn, palettes_clean: list[tuple[int, int]]) -> None:
+    """Refuse une référence inexistante ou qui n'est pas de catégorie palette."""
+    if not palettes_clean:
+        return
+    ids = list({mid for mid, _ in palettes_clean})
+    placeholders = ",".join("?" * len(ids))
+    rows = conn.execute(
+        f"SELECT id, categorie FROM matieres_premieres WHERE id IN ({placeholders})",
+        ids,
+    ).fetchall()
+    found = {r["id"]: (r["categorie"] or "") for r in rows}
+    for mid, _ in palettes_clean:
+        if mid not in found:
+            raise HTTPException(400, f"Reference palette inconnue (matiere_id={mid})")
+        if (found[mid] or "").strip().lower() != "palette":
+            raise HTTPException(
+                400,
+                f"Reference {mid} n'est pas une palette (categorie={found[mid]!r})",
+            )
+
+
+def _insert_palettes(conn, mouvement_id, palettes_clean: list[tuple[int, int]]) -> None:
+    if not palettes_clean or not mouvement_id:
+        return
+    now = _now_paris().isoformat()
+    conn.executemany(
+        """INSERT INTO mouvement_palettes (mouvement_id, matiere_id, nombre, created_at)
+           VALUES (?,?,?,?)""",
+        [(mouvement_id, mid, nb, now) for mid, nb in palettes_clean],
+    )
+
+
 @router.post("/api/stock/mouvement")
 async def mouvement_stock(request: Request):
     user = require_stock_write(request)
@@ -2681,41 +2736,10 @@ async def mouvement_stock(request: Request):
         raise HTTPException(400, "Quantité doit être positive")
 
     # Validation palettes : liste d'objets {matiere_id:int, nombre:int>0}.
-    # Refusee si type != entree ET no_dossier vide (cas peu utile, on bloque pour clarte).
-    palettes_clean: list[tuple[int, int]] = []
-    if palettes_in:
-        if not isinstance(palettes_in, list):
-            raise HTTPException(400, "palettes doit etre une liste")
-        for it in palettes_in:
-            if not isinstance(it, dict):
-                continue
-            try:
-                mid = int(it.get("matiere_id"))
-                nb = int(it.get("nombre"))
-            except (TypeError, ValueError):
-                raise HTTPException(400, "palette : matiere_id et nombre numeriques requis")
-            if nb <= 0:
-                continue
-            palettes_clean.append((mid, nb))
+    palettes_clean = _parse_palettes_body(palettes_in)
 
     with get_db() as conn:
-        # Verifier que les matieres palettes existent et sont bien de categorie palette
-        if palettes_clean:
-            ids = list({mid for mid, _ in palettes_clean})
-            placeholders = ",".join("?" * len(ids))
-            rows = conn.execute(
-                f"SELECT id, categorie FROM matieres_premieres WHERE id IN ({placeholders})",
-                ids,
-            ).fetchall()
-            found = {r["id"]: (r["categorie"] or "") for r in rows}
-            for mid, _ in palettes_clean:
-                if mid not in found:
-                    raise HTTPException(400, f"Reference palette inconnue (matiere_id={mid})")
-                if (found[mid] or "").strip().lower() != "palette":
-                    raise HTTPException(
-                        400,
-                        f"Reference {mid} n'est pas une palette (categorie={found[mid]!r})",
-                    )
+        _check_palettes(conn, palettes_clean)
 
         result, ref_audit, audit_action = _apply_stock_mouvement(
             conn,
@@ -2736,14 +2760,7 @@ async def mouvement_stock(request: Request):
         )
 
         # Insertion des palettes (meme transaction)
-        mvt_id = result.get("mouvement_id")
-        if palettes_clean and mvt_id:
-            now = _now_paris().isoformat()
-            conn.executemany(
-                """INSERT INTO mouvement_palettes (mouvement_id, matiere_id, nombre, created_at)
-                   VALUES (?,?,?,?)""",
-                [(mvt_id, mid, nb, now) for mid, nb in palettes_clean],
-            )
+        _insert_palettes(conn, result.get("mouvement_id"), palettes_clean)
         conn.commit()
 
     log_action(
@@ -6088,27 +6105,102 @@ def _pf_validate_mouvement_body(body: dict) -> tuple[str, str, str, float, str]:
     return reference, designation, _normalize_emplacement(emplacement), quantite, unite
 
 
+@router.get("/api/stock/pf/conditionnement")
+def pf_conditionnement(request: Request,
+                       ref_produit: Optional[str] = None,
+                       no_dossier: Optional[str] = None,
+                       unite: Optional[str] = None,
+                       machine: Optional[str] = None):
+    """Conditionnement d'une référence : palette par défaut + unités par palette.
+
+    Sert la modale « Entrée Z1 » : le type de palette et le nombre de palettes
+    sont deux informations que la fiche technique porte déjà, et que l'opérateur
+    ne devrait pas ressaisir sous chaque bobine qui sort de machine.
+
+    `no_dossier` suffit : la référence produit et la machine en sont déduites
+    (le tie-breaker machine change la fiche retenue quand une référence est
+    déclinée par machine). `unite` n'est à passer que pour forcer une unité de
+    vente différente de celle du produit MyStock.
+    """
+    require_stock(request)
+    ref = (ref_produit or "").strip()
+    dossier = (no_dossier or "").strip()
+    machine_nom = (machine or "").strip()
+
+    with get_db() as conn:
+        if dossier and (not ref or not machine_nom):
+            row = conn.execute(
+                """SELECT pe.ref_produit, m.nom AS machine_nom
+                   FROM planning_entries pe
+                   LEFT JOIN machines m ON m.id = pe.machine_id
+                   WHERE pe.reference = ? OR pe.numero_of = ?
+                   ORDER BY pe.id DESC LIMIT 1""",
+                (dossier, dossier),
+            ).fetchone()
+            if row:
+                ref = ref or (row["ref_produit"] or "").strip()
+                machine_nom = machine_nom or (row["machine_nom"] or "").strip()
+
+        if not ref:
+            raise HTTPException(400, "ref_produit ou no_dossier requis")
+
+        unite_vente = (unite or "").strip()
+        if not unite_vente:
+            prow = conn.execute(
+                "SELECT unite FROM produits WHERE UPPER(TRIM(reference)) = ? LIMIT 1",
+                (ref.upper(),),
+            ).fetchone()
+            if prow:
+                unite_vente = (prow["unite"] or "").strip()
+        # Reference pas encore creee dans MyStock : l'entree Z1 la creera avec
+        # l'unite par defaut, autant calculer le conditionnement avec celle-la.
+        if not unite_vente:
+            unite_vente = STOCK_UNITE_VENTE_DEFAUT
+
+        data = conditionnement_produit(conn, ref, machine_nom, unite_vente)
+
+    data["no_dossier"] = dossier or None
+    data["machine"] = machine_nom or None
+    return data
+
+
 @router.post("/api/stock/produits-finis/entree")
 async def produit_fini_entree(request: Request):
+    """Entrée PF avec auto-création de la référence si elle n'existe pas encore.
+
+    `no_dossier` et `palettes` sont acceptés comme sur /api/stock/mouvement :
+    une entrée Z1 sur une référence toute neuve doit être rattachée à son
+    dossier de production comme les autres, sinon la production du dossier
+    disparaît des statistiques au seul motif que le produit était nouveau.
+    """
     user = require_stock_write(request)
     body = await request.json()
     reference, designation, emplacement, quantite, unite = _pf_validate_mouvement_body(body)
     note = _pf_compose_note(body)
+    no_dossier = (body.get("no_dossier") or "").strip() or None
+    palettes_clean = _parse_palettes_body(body.get("palettes"))
     now = _now_paris().isoformat()
 
     with get_db() as conn:
+        _check_palettes(conn, palettes_clean)
         produit_id = _pf_ensure_produit_id(conn, reference, designation, unite, now)
         result, ref_audit, audit_action = _apply_stock_mouvement(
-            conn, user, produit_id, emplacement, "entree", quantite, note
+            conn, user, produit_id, emplacement, "entree", quantite, note,
+            no_dossier=no_dossier,
         )
+        _insert_palettes(conn, result.get("mouvement_id"), palettes_clean)
         conn.commit()
 
     log_action(
         user=user,
         action=audit_action,
         module="stock",
-        objet=f"PF entrée {ref_audit} +{quantite:g} @ {emplacement}",
-        detail={"type_mouvement": "entree", "quantite": quantite},
+        objet=f"PF entrée {ref_audit} +{quantite:g} @ {emplacement}"
+              + (f" · dossier {no_dossier}" if no_dossier else "")
+              + (f" · {sum(n for _, n in palettes_clean)} palette(s)" if palettes_clean else ""),
+        detail={"type_mouvement": "entree", "quantite": quantite,
+                "no_dossier": no_dossier,
+                "palettes": [{"matiere_id": m, "nombre": n} for m, n in palettes_clean]},
         ip=request.client.host if request.client else None,
     )
     return {"ok": True, **result}

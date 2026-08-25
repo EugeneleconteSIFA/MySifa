@@ -2089,8 +2089,8 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='stock';</script>
-<link rel="stylesheet" href="/static/mysifa_stock_modals.css">
-<script src="/static/mysifa_stock_modals.js"></script>
+<link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=z1cond1">
+<script src="/static/mysifa_stock_modals.js?v=z1cond1"></script>
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
