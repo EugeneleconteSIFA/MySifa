@@ -50,6 +50,11 @@ def _ident(nom):
     return nom
 
 
+def valider_ref(expr):
+    """Alias public de `_ref`, pour les appelants hors module."""
+    return _ref(expr)
+
+
 def _ref(expr):
     """Valide une référence `alias.colonne` (ou `colonne` seule)."""
     parties = str(expr or "").split(".")
@@ -177,8 +182,14 @@ def ecran_disponible(ec, presentes):
     return ec["table"] in presentes
 
 
-def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1, taille=TAILLE_PAGE_DEFAUT):
-    """Liste paginée d'un écran. Renvoie colonnes, lignes, total."""
+def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
+           taille=TAILLE_PAGE_DEFAUT, extra=None):
+    """Liste paginée d'un écran. Renvoie colonnes, lignes, total.
+
+    `extra` : conditions supplémentaires, sous forme de couples
+    (fragment SQL déjà validé, valeur). Sert aux pièces liées, qui joignent
+    sur des colonnes que l'utilisateur ne filtre pas lui-même.
+    """
     filtres = filtres or {}
     taille = max(1, min(int(taille or TAILLE_PAGE_DEFAUT), TAILLE_PAGE_MAX))
     page = max(1, int(page or 1))
@@ -205,6 +216,10 @@ def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1, taille=TAILLE_P
 
     for cond in ec.get("conditions", []):
         conditions.append(cond)
+
+    for fragment, valeur in (extra or []):
+        conditions.append(fragment)
+        params.append(valeur)
 
     # Recherche plein-texte sur les colonnes déclarées par l'écran.
     q = (q or "").strip()
@@ -367,3 +382,75 @@ def compter(ec):
             ).fetchone()[0]
     except Exception:
         return None
+
+
+# ── Pièces liées ─────────────────────────────────────────────────────────────
+
+def ligne_brute(ec, ident):
+    """La ligne source, toutes colonnes, pour alimenter les jointures."""
+    _ref(ec["cle_ligne"])
+    sql = "SELECT * FROM %s WHERE %s = ?" % (_from(ec), ec["cle_ligne"])
+    with get_erp_db() as conn:
+        row = conn.execute(sql, [ident]).fetchone()
+    return dict(row) if row is not None else None
+
+
+def liens(ec, ident, resoudre, par_lien=5):
+    """Les pièces rattachées à une ligne, écran par écran.
+
+    `resoudre(cle)` rend l'écran cible adapté au miroir, ou None. Chaque lien
+    déclare `sur` : {colonne de l'écran cible : champ de la ligne source}. Un
+    lien dont la valeur source est vide est ignoré — mieux vaut ne rien
+    proposer qu'un onglet qui ramène toute la table.
+    """
+    source = ligne_brute(ec, ident)
+    if source is None:
+        return []
+
+    resultats = []
+    for lien in ec.get("liens", []):
+        cible = resoudre(lien["ecran"])
+        if not cible:
+            continue
+
+        extra = []
+        valeurs = {}
+        complet = True
+        for ref_cible, champ_source in lien["sur"].items():
+            _ref(ref_cible)
+            v = source.get(champ_source)
+            if v is None or str(v).strip() == "":
+                complet = False
+                break
+            # Comparaison en texte : le miroir type colonne par colonne, et
+            # `numcde` peut être INTEGER d'un côté, TEXT de l'autre.
+            extra.append(("CAST(%s AS TEXT) = ?" % ref_cible, str(v).strip()))
+            valeurs[ref_cible.split(".")[-1]] = v
+        if not complet or not extra:
+            continue
+
+        try:
+            res = lister(cible, taille=par_lien, extra=extra)
+        except Exception as e:
+            # Un lien qui casse se signale au lieu de disparaitre : sinon une
+            # jointure fausse passe pour « aucune piece rattachee ».
+            resultats.append({
+                "label": lien["label"], "ecran": lien["ecran"],
+                "erreur": str(e)[:200], "total": 0, "colonnes": [], "lignes": [],
+                "valeurs": valeurs,
+            })
+            continue
+
+        resultats.append({
+            "label": lien["label"],
+            "ecran": lien["ecran"],
+            "total": res["total"],
+            "colonnes": res["colonnes"][: lien.get("colonnes", 5)],
+            "lignes": [
+                {k: v for k, v in l.items()
+                 if k == "_id" or k in {c["nom"] for c in res["colonnes"][: lien.get("colonnes", 5)]}}
+                for l in res["lignes"]
+            ],
+            "valeurs": valeurs,
+        })
+    return resultats
