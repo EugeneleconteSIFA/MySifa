@@ -950,7 +950,8 @@ ul.liste li.al:before{background:var(--alerte);height:2px}
         </ul>
         <div class="carte ov pousse">
           <h3>Une dernière chose</h3>
-          <p class="mini">Le lien « Commande → Colisage » de MyERP était branché sur <span class="mono">col_ligne.numcde</span> — une colonne qui vaut <b>0 sur les 257 lignes</b> du miroir. Il ne remontait donc jamais rien, sans jamais le dire. Corrigé le 25/08. C'est très exactement le genre de silence que les contrôles de véracité sont là pour rompre.</p>
+          <p class="mini">Les 59 liens de MyERP ont été passés au crible contre le miroir. <b>Trois étaient morts</b> : « Commande → Colisage » branché sur <span class="mono">col_ligne.numcde</span>, une colonne qui vaut 0 sur les 257 lignes ; et les deux liens réception ↔ mouvement matière branchés sur <span class="mono">lot</span>, qui est NULL partout. Ils ne remontaient rien, sans jamais le dire. Corrigés le 25/08, et <span class="mono">scripts/audit_liens_erp.py</span> les cherche désormais en quelques secondes.</p>
+          <p class="mini"><b>C'est très exactement le genre de silence que les contrôles de véracité sont là pour rompre</b> — et la démonstration qu'un contrôle automatique trouve en une minute ce qu'un œil humain ne verra jamais.</p>
         </div>
       </div>
     </div>

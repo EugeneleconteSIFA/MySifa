@@ -87,24 +87,25 @@ def proposer_reference(lignes: List[Dict[str, Any]],
     `lignes` : [{numero, ligne, qte, qte_ligne}, …] — `qte` absente = ligne
     entière. `lignes_par_commande` : {numero: nb de lignes dans RVGI}, pour
     écrire « 9932128 » tout court quand la commande est couverte en entier.
+
+    Une couverture partielle ne se voit PAS dans la référence : l'opérateur la
+    tape au terminal, et « (part.) » lui coûterait sept caractères pour une
+    information qu'il ne peut de toute façon pas chiffrer de mémoire. Le
+    « 450 000 sur 900 000 » vit dans la fiche du dossier et dans la colonne de
+    MyERP, là où il est exact. En revanche « Reliquat » reste dans le numéro :
+    c'est déjà la convention des scans d'OF, et c'est ce qui distingue deux
+    dossiers posés sur la même ligne de commande.
     """
     if not lignes:
         return ""
     lignes_par_commande = lignes_par_commande or {}
 
     par_cde: Dict[str, List[Dict[str, Any]]] = {}
-    partiel = False
     for r in lignes:
         num = str(r.get("numero") or "").strip()
         if not num:
             continue
         par_cde.setdefault(num, []).append(r)
-        q, ql = r.get("qte"), r.get("qte_ligne")
-        try:
-            if q is not None and ql is not None and float(q) < float(ql):
-                partiel = True
-        except (TypeError, ValueError):
-            pass
     if not par_cde:
         return ""
 
@@ -122,11 +123,25 @@ def proposer_reference(lignes: List[Dict[str, Any]],
         # impossible à taper. On ne garde que les numéros.
         base = _compacter_numeros(list(par_cde.keys()))
 
-    if reliquat:
-        return "Reliquat " + base
-    if partiel:
-        return base + " (part.)"
-    return base
+    return ("Reliquat " + base) if reliquat else base
+
+
+def deja_couvertes(conn: sqlite3.Connection, lignes: List[Dict[str, Any]],
+                   piece: str = "commande",
+                   sauf: Optional[Tuple[str, int]] = None) -> bool:
+    """Une des lignes choisies est-elle déjà portée par un autre dossier ?
+
+    C'est ce qui fait basculer la référence proposée en « Reliquat … » : un
+    deuxième passage sur la même ligne de commande ne peut pas porter le même
+    numéro de dossier que le premier.
+    """
+    etats = etat_des_lignes(conn, piece, lignes)
+    for e in etats.values():
+        for o in e.get("objets", []):
+            if sauf and (o["objet"], int(o["objet_id"])) == (sauf[0], int(sauf[1])):
+                continue
+            return True
+    return False
 
 
 # ─── Lecture des rattachements ───────────────────────────────────────────────
