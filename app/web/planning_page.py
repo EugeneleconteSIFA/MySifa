@@ -1440,6 +1440,8 @@ function icon(name,size=16){
   const p={
     'menu': '<line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>',
     'bar-chart-2': '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+    'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
+    'scanner': '<rect x="3" y="13" width="18" height="7" rx="2"/><line x1="7" y1="16.5" x2="17" y2="16.5"/><path d="M6 10V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5"/>',
     'package': '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
     'wrench': '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
     'calendar': '<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
@@ -1738,12 +1740,24 @@ function renderSidebar(){
       {key:"production",label:"Production",icon:"wrench",href:"/prod?page=production"},
       {key:"traceabilite",label:"Traçabilité",icon:"layers",href:"/prod?page=traceabilite"},
       ...(admin?[{key:"rentabilite",label:"Rentabilité",icon:"trending-up",href:"/prod?page=rentabilite"}]:[]),
-      ...(canAccessOfTab()?[{key:"of",label:"Fiches + OF",icon:"file",href:"/prod?page=of",withPendingBadge:true}]:[]),
+      // Meme section que la barre laterale de MyProd : le Planning garde sa
+      // propre implementation de sidebar, elle doit donc etre tenue a jour en
+      // meme temps, sinon on repart de deux navigations differentes.
+      ...(canAccessOfTab()?[
+        {section:"Fiches et OF"},
+        {key:"of",label:"OF",icon:"file",href:"/prod?page=of",withPendingBadge:true},
+        {key:"fiches",label:"Fiches techniques",icon:"file-text",href:"/prod?page=fiches"},
+        {key:"scans",label:"Scans d'OF",icon:"scanner",href:"/prod?page=scans"},
+      ]:[]),
     ]),
   ];
   const isLight=document.body.classList.contains("light");
   return`<nav class="sidebar"><div class="logo" title="Accueil MyProd" onclick="location.href='/prod?page=menu'"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>${
     items.map(i=>{
+      // Pas de repli ici : la barre du Planning est reconstruite a chaque
+      // rendu, un etat de repli y serait perdu aussitot. L'intitule reste
+      // donc statique — meme allure, sans chevron qui ne servirait a rien.
+      if(i.section) return `<div class="nav-section-label nav-section-label--statique"><span>${i.section}</span></div>`;
       const badge=(i.withPendingBadge && PENDING_OF_COUNT>0)
         ? `<span style="margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;line-height:1.5;flex-shrink:0" title="${PENDING_OF_COUNT} OF à associer manuellement">${PENDING_OF_COUNT}</span>`
         : "";

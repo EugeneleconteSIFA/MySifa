@@ -143,14 +143,14 @@ if ($brut) {
 $dossierExport = Join-Path $racine 'data\rvgi_export'
 $archive = Join-Path $racine 'data\rvgi_export.zip'
 $codeSortie = 0
+$garderArchive = $false
 
 try {
     if (-not $SansEnvoi) {
-        if (-not $cibles) { Ecrire 'MYSIFA_SYNC_URLS absente du .env.' 'ERREUR'; exit 1 }
+        if (-not $cibles) { throw 'MYSIFA_SYNC_URLS absente du .env.' }
         $sansCle = @($cibles | Where-Object { -not $_.Cle })
         if ($sansCle) {
-            Ecrire ("Aucune cle API pour : {0}" -f (($sansCle | ForEach-Object { $_.Url }) -join ', ')) 'ERREUR'
-            exit 1
+            throw ("Aucune cle API pour : {0}" -f (($sansCle | ForEach-Object { $_.Url }) -join ', '))
         }
     }
 
@@ -159,13 +159,21 @@ try {
     # -- 1. Export ----------------------------------------------------------
     $chrono = [Diagnostics.Stopwatch]::StartNew()
     $scriptExport = Join-Path $PSScriptRoot 'export_rvgi_csv.ps1'
-    $sortie = & $scriptExport 2>&1
-    if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
-        Ecrire ("Export en echec (code {0}) : {1}" -f $LASTEXITCODE, ($sortie | Select-Object -Last 3)) 'ERREUR'
-        exit 1
-    }
+    $global:LASTEXITCODE = 0
+    $avant = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & $scriptExport
+    $codeExport = $LASTEXITCODE
+    $ErrorActionPreference = $avant
+    Ecrire ("Export termine, code {0}" -f $codeExport)
+    if ($codeExport -ne 0) { throw ("Export en echec, code {0}" -f $codeExport) }
+
     $lignes = @(Get-ChildItem -Path $dossierExport -Filter *.csv -ErrorAction SilentlyContinue)
-    if (-not $lignes) { Ecrire 'Aucun CSV produit par l export.' 'ERREUR'; exit 1 }
+    if (-not $lignes) { throw 'Aucun CSV produit par l export.' }
+    # Un export interrompu laisse des CSV, mais pas les 61 attendus.
+    if ($lignes.Count -lt 20) {
+        throw ("Export incomplet : {0} fichiers seulement." -f $lignes.Count)
+    }
     $poids = ($lignes | Measure-Object -Property Length -Sum).Sum
     Ecrire ("Export : {0} fichiers, {1:N1} Mo, en {2:N0} s" -f $lignes.Count, ($poids / 1MB), $chrono.Elapsed.TotalSeconds)
 
@@ -179,7 +187,8 @@ try {
     if ($SansEnvoi) {
         Ecrire 'Mode -SansEnvoi : archive conservee, rien n a ete envoye.' 'ALERTE'
         Ecrire ("Archive : {0}" -f $archive)
-        exit 0
+        $garderArchive = $true
+        $cibles = @()
     }
 
     foreach ($c in $cibles) {
@@ -205,7 +214,7 @@ catch {
 }
 finally {
     # -- 4. Menage : les CSV portent des donnees clients, ils ne restent pas --
-    Remove-Item $archive -Force -ErrorAction SilentlyContinue
+    if (-not $garderArchive) { Remove-Item $archive -Force -ErrorAction SilentlyContinue }
     if (Test-Path $dossierExport) {
         Remove-Item (Join-Path $dossierExport '*') -Force -Recurse -ErrorAction SilentlyContinue
     }

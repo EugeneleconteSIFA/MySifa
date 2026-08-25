@@ -543,7 +543,7 @@
 
 
   // ────────────────────────────────────────────────────────────────────
-  // ÉTAPE 2l — Onglet Fiches + OF (le dernier !)
+  // ÉTAPE 2l — Section Fiches et OF (le dernier !)
   //
   // Code extrait littéralement de app/web/html.py (lignes 10425-11790) :
   //   - Helpers OF : prodOfFmtDate, prodOfStatutLabel, prodOfStatutClass
@@ -7883,7 +7883,11 @@ function renderProdKpis(){
           await loadTracabilite();
         }else if(S.page === 'of' && canAccessOfTab()){
           await loadOfImports();
-          if(S.ofSubTab === 'fiche') await loadFiches();
+        }else if(S.page === 'fiches' && canAccessOfTab()){
+          // Arrivee directe par /prod?page=fiches (lien de la barre laterale
+          // du Planning) : sans ce chargement la page s'ouvre vide.
+          if(S.fichesSubTab === 'orphelines') await loadFichesOrphelines();
+          else await loadFiches();
         }
         // Badge "Mappings OF à valider" dans la sidebar
         try{ if(canAccessOfTab()) loadPendingOfCount(); }catch(e){}
@@ -7973,7 +7977,11 @@ function renderProdKpis(){
           await loadTracabilite();
         }else if(S.page === 'of' && canAccessOfTab()){
           await loadOfImports();
-          if(S.ofSubTab === 'fiche') await loadFiches();
+        }else if(S.page === 'fiches' && canAccessOfTab()){
+          // Arrivee directe par /prod?page=fiches (lien de la barre laterale
+          // du Planning) : sans ce chargement la page s'ouvre vide.
+          if(S.fichesSubTab === 'orphelines') await loadFichesOrphelines();
+          else await loadFiches();
         }
         // Badge "Mappings OF à valider" dans la sidebar
         try{ if(canAccessOfTab()) loadPendingOfCount(); }catch(e){}
@@ -8235,17 +8243,9 @@ function renderProdKpis(){
     s.textContent =
       // Reprise a l'identique de app/web/html.py : la sidebar doit etre la
       // meme dans toutes les applications, y compris ses intitules de section.
-      // Copie conforme de app/web/stock_page.py : la sidebar doit se
-      // comporter et se lire pareil dans MyStock et dans MyProd.
-      '.sidebar .nav-section-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;'
-      + 'color:var(--muted);font-weight:600;padding:10px 14px 4px 14px;user-select:none;'
-      + 'cursor:pointer;display:flex;align-items:center;justify-content:space-between;'
-      + 'border-radius:6px;transition:background .15s,opacity .15s}'
-      + '.sidebar .nav-section-label:hover{background:rgba(148,163,184,.08);opacity:1}'
-      + '.sidebar .nav-section-label .ngl-chevron{display:inline-flex;flex-shrink:0;'
-      + 'transition:transform .2s;opacity:.55}'
-      + '.sidebar .nav-section-label.ngl-collapsed .ngl-chevron{transform:rotate(-90deg)}'
-      + '.myprod-page-scans{max-width:1100px}'
+      // .nav-section-label vit dans mysifa_myprod_shell.css, charge par /prod
+      // ET par /planning : les deux barres laterales doivent se lire pareil.
+      '.myprod-page-scans{max-width:1100px}'
       + '.myprod-menu{max-width:960px}'
       + '.myprod-tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-top:8px}'
       + '.myprod-tile{display:flex;align-items:center;gap:14px;text-align:left;width:100%;padding:18px 18px;background:var(--card);border:1px solid var(--border);border-radius:14px;cursor:pointer;color:var(--text);font-family:inherit;transition:border-color .15s,transform .15s,box-shadow .15s}'
@@ -8270,7 +8270,7 @@ function renderProdKpis(){
     if(canAccessOfTab()) tiles.push({icon:'file-text', label:'Fiches techniques', desc:'Consultation des fiches, et celles que rien ne rejoint', go:function(){ set({page:'fiches'}); nav(); }});
     // Memoire produit : la fiche d'une reference (productions passees, notes
     // d'atelier, OF scannes). Vue de detail ouverte en surcouche — pas un
-    // onglet de plus dans la barre : l'objet est le meme que celui de Fiches + OF.
+    // onglet de plus dans la barre : l'objet est le meme que celui des OF.
     tiles.push({icon:'layers', label:'Produits', desc:'Historique de production par reference produit', go:function(){
       if(!window.MySifaProduitMemoire){ toast('Module memoire produit indisponible.','error'); return; }
       // La fiche produit est une surcouche, pas une page : PROD_VIEW_GUIDE ne
@@ -8563,7 +8563,7 @@ function renderProdKpis(){
       },
       {
         title: 'Trois portes, un seul objet',
-        body: `On ouvre la meme fiche depuis trois endroits. Depuis <strong>Saisieprod</strong>, un bouton <span class="mguide-tag">Historique</span> apparait sur le dossier en cours — <strong>et seulement si la reference a deja ete produite</strong>. Depuis <strong>Fiches + OF</strong>, le bouton <span class="mguide-tag">Produit</span> de chaque ligne. Depuis la tuile <span class="mguide-tag">Produits</span> du menu, la liste complete.`,
+        body: `On ouvre la meme fiche depuis trois endroits. Depuis <strong>Saisieprod</strong>, un bouton <span class="mguide-tag">Historique</span> apparait sur le dossier en cours — <strong>et seulement si la reference a deja ete produite</strong>. Depuis <strong>OF</strong> ou <strong>Fiches techniques</strong>, le bouton <span class="mguide-tag">Produit</span> de chaque ligne. Depuis la tuile <span class="mguide-tag">Produits</span> du menu, la liste complete.`,
         extra: `<div class="mguide-tasks"><div class="mguide-svc"><div class="mguide-svc-hd"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>A retenir</div><ul class="mguide-svc-list"><li>Pas de bouton en Saisieprod = ce produit n'a jamais tourne.</li><li>Une note est publiee immediatement, avec son auteur et sa date.</li><li>Une note qui ne vaut plus se marque <span class="mguide-tag">perimee</span> — elle ne s'efface pas, pour que personne ne la redecouvre.</li></ul></div></div>`
       },
       {
@@ -8629,9 +8629,9 @@ function renderProdKpis(){
         </svg>`
       },
       {
-        title: 'Rentabilité et Fiches + OF',
-        body: `<strong>Rentabilité</strong> compare le <span class="mguide-hl">réel</span> (temps et quantités saisis) au <span class="mguide-hl">devis</span>, dossier par dossier. <strong>Fiches + OF</strong> importe les ordres de fabrication (PDF) et les rattache aux dossiers.`,
-        illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><text x="8" y="20" font-size="10" fill="var(--text)" font-weight="800">Rentabilité — DOS-4821</text><text x="18" y="44" font-size="9" fill="var(--muted)">Devis</text><rect x="60" y="34" width="140" height="14" rx="4" fill="var(--bg)" stroke="var(--border)"/><rect x="60" y="34" width="120" height="14" rx="4" fill="var(--accent)"/><text x="210" y="45" font-size="9" fill="var(--text2)">1 250 €</text><text x="18" y="66" font-size="9" fill="var(--muted)">Réel</text><rect x="60" y="56" width="140" height="14" rx="4" fill="var(--bg)" stroke="var(--border)"/><rect x="60" y="56" width="134" height="14" rx="4" fill="var(--ok,#34d399)"/><text x="210" y="67" font-size="9" fill="var(--text2)">1 390 €</text><line x1="8" y1="86" x2="332" y2="86" stroke="var(--border)"/><text x="8" y="106" font-size="10" fill="var(--text)" font-weight="800">Fiches + OF</text><rect x="8" y="116" width="150" height="44" rx="8" fill="var(--card)" stroke="var(--border)"/><rect x="18" y="126" width="24" height="30" rx="4" fill="var(--accent-bg)"/><text x="34" y="145" font-size="11" fill="var(--accent)" text-anchor="middle" font-weight="800">PDF</text><text x="52" y="136" font-size="9" fill="var(--text)" font-weight="700">OF-2231.pdf</text><text x="52" y="150" font-size="8" fill="var(--muted)">rattaché à DOS-4821</text><rect x="170" y="116" width="162" height="44" rx="8" fill="var(--bg)" stroke="var(--border)" stroke-dasharray="4 3"/><text x="251" y="142" font-size="9" fill="var(--muted)" text-anchor="middle">Glissez un PDF pour l'importer</text></svg>`
+        title: 'Rentabilité, OF et fiches techniques',
+        body: `<strong>Rentabilité</strong> compare le <span class="mguide-hl">réel</span> (temps et quantités saisis) au <span class="mguide-hl">devis</span>, dossier par dossier. La section <span class="mguide-tag">Fiches et OF</span> de la barre latérale regroupe trois écrans : <strong>OF</strong> (import des PDF et rapprochement aux dossiers), <strong>Fiches techniques</strong>, et <strong>Scans d'OF</strong> (les OF terminés annotés par l'atelier).`,
+        illu: `<svg viewBox="0 0 340 172" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><text x="8" y="20" font-size="10" fill="var(--text)" font-weight="800">Rentabilité — DOS-4821</text><text x="18" y="44" font-size="9" fill="var(--muted)">Devis</text><rect x="60" y="34" width="140" height="14" rx="4" fill="var(--bg)" stroke="var(--border)"/><rect x="60" y="34" width="120" height="14" rx="4" fill="var(--accent)"/><text x="210" y="45" font-size="9" fill="var(--text2)">1 250 €</text><text x="18" y="66" font-size="9" fill="var(--muted)">Réel</text><rect x="60" y="56" width="140" height="14" rx="4" fill="var(--bg)" stroke="var(--border)"/><rect x="60" y="56" width="134" height="14" rx="4" fill="var(--ok,#34d399)"/><text x="210" y="67" font-size="9" fill="var(--text2)">1 390 €</text><line x1="8" y1="86" x2="332" y2="86" stroke="var(--border)"/><text x="8" y="106" font-size="10" fill="var(--text)" font-weight="800">OF</text><rect x="8" y="116" width="150" height="44" rx="8" fill="var(--card)" stroke="var(--border)"/><rect x="18" y="126" width="24" height="30" rx="4" fill="var(--accent-bg)"/><text x="34" y="145" font-size="11" fill="var(--accent)" text-anchor="middle" font-weight="800">PDF</text><text x="52" y="136" font-size="9" fill="var(--text)" font-weight="700">OF-2231.pdf</text><text x="52" y="150" font-size="8" fill="var(--muted)">rattaché à DOS-4821</text><rect x="170" y="116" width="162" height="44" rx="8" fill="var(--bg)" stroke="var(--border)" stroke-dasharray="4 3"/><text x="251" y="142" font-size="9" fill="var(--muted)" text-anchor="middle">Glissez un PDF pour l'importer</text></svg>`
       }
     ]},
 
@@ -8731,7 +8731,7 @@ function renderProdKpis(){
 
   window.__MYSIFA_PROD_STANDALONE__ = {
     stage: '2l',
-    description: 'Onglet Fiches + OF (final)',
+    description: 'Section Fiches et OF (OF, fiches techniques, scans)',
     loadedAt: new Date().toISOString(),
   };
   window.__prodCore = {
