@@ -65,7 +65,7 @@ PORTAL_MAIN_CSS = r"""
    un seul affiché — plutôt qu'un filtre CSS qui abîmerait la découpe de
    l'oiseau (elle est faite dans l'alpha, pas en blanc). */
 .rvgi-mark{display:inline-flex;align-items:center;flex-shrink:0}
-.rvgi-mark img{width:22px;height:22px;display:block}
+.rvgi-mark img{width:34px;height:auto;display:block}
 .rvgi-mark .rvgi-clair{display:none}
 body.light .rvgi-mark .rvgi-sombre{display:none}
 body.light .rvgi-mark .rvgi-clair{display:block}
@@ -1641,8 +1641,8 @@ function renderPortal(){
         (function(){
           const w=document.createElement('span');
           w.className='rvgi-mark';
-          w.innerHTML='<img class="rvgi-sombre" src="/static/rvgi_mark_clair.png" alt="RVGI" width="22" height="22">'+
-                      '<img class="rvgi-clair" src="/static/rvgi_mark.png" alt="RVGI" width="22" height="22">';
+          w.innerHTML='<img class="rvgi-sombre" src="/static/rvgi_mark_clair.png" alt="RVGI">'+
+                      '<img class="rvgi-clair" src="/static/rvgi_mark.png" alt="RVGI">';
           return w;
         })()
       ):null,
