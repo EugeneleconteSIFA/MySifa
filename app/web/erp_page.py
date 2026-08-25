@@ -77,9 +77,19 @@ body.sb-open .sidebar{transform:translateX(0)}
 body.light .rvgi-mark .rvgi-sombre{display:none}
 body.light .rvgi-mark .rvgi-clair{display:block}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
-.nav-groupe{font-size:12px;font-weight:800;letter-spacing:.2px;color:var(--text);padding:16px 12px 6px}
-.nav-btn{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:8px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s,color .15s;margin-bottom:1px}
-.nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
+/* Le tiroir reprend la lecture verticale du menu : chaque domaine est une
+   colonne, tenue par un filet, et l'écran courant marque ce filet d'un trait
+   plein. On suit la colonne des yeux au lieu de lire une liste plate. */
+.nav-groupe{font-size:12px;font-weight:800;letter-spacing:.2px;color:var(--text);padding:18px 12px 8px;display:flex;align-items:center;gap:8px}
+.nav-groupe::before{content:'';width:3px;height:14px;border-radius:2px;background:var(--accent);flex-shrink:0}
+.nav-domaine{display:flex;flex-direction:column;margin:0 0 4px 17px;padding-left:12px;border-left:1px solid var(--border)}
+.nav-btn{position:relative;display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:7px 11px;border-radius:0 8px 8px 0;border:none;background:transparent;color:var(--text2);font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,padding-left .12s;margin-bottom:1px}
+.nav-btn:hover{background:var(--accent-bg);color:var(--accent);padding-left:14px}
+.nav-btn.active{background:var(--accent-bg);color:var(--accent);font-weight:600}
+/* Le trait vient se poser exactement sur le filet de la colonne. */
+.nav-btn.active::before{content:'';position:absolute;left:-13px;top:5px;bottom:5px;width:2px;border-radius:2px;background:var(--accent)}
+/* « Menu » n'appartient à aucun domaine : il garde la forme pleine. */
+#nav-menu{border-radius:8px;padding:9px 12px;font-weight:600}
 .back-mysifa{border:none!important;background:transparent!important;font-weight:400!important;color:var(--text2)!important;padding:8px 10px!important}
 .back-mysifa:hover{color:var(--text)!important;background:transparent!important}
 .back-mysifa .wm{font-weight:800;color:var(--text)}.back-mysifa .wm span{color:var(--accent)}
@@ -565,10 +575,11 @@ function renderNav(){
   (S.meta.domaines||[]).forEach(d=>{
     const ecrans=(S.meta.ecrans||[]).filter(e=>e.domaine===d.cle);
     if(!ecrans.length)return;
-    h+='<div class="nav-groupe">'+esc(d.label)+'</div>';
+    h+='<div class="nav-groupe">'+esc(d.label)+'</div><div class="nav-domaine">';
     ecrans.forEach(e=>{
       h+='<button type="button" class="nav-btn'+(S.ecran===e.cle?' active':'')+'" data-ecran="'+esc(e.cle)+'">'+esc(e.label)+'</button>';
     });
+    h+='</div>';
   });
   hote.innerHTML=h;
   hote.querySelectorAll('[data-ecran]').forEach(b=>{
