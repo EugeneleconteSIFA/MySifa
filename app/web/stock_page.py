@@ -3029,7 +3029,13 @@ async function loadBesoinsMatieres() {
     S.besoinsDossiers = parDos || { dossiers: [] };
     // Vue par défaut : « par dossier ». C'est celle qui porte les documents et
     // leur validation — donc celle où l'on répare, pas seulement où l'on lit.
+    // Une vue déjà choisie (au clic, ou restaurée depuis l'URL) prime.
     if (!S.besoinsView) S.besoinsView = 'dossier';
+    // Les vues Tendance et Dossiers passés ont leur propre source : après un
+    // rechargement qui restaure l'une d'elles depuis l'URL, les deux appels
+    // ci-dessus ne leur ont rien rapporté et l'écran resterait vide.
+    if (S.besoinsView === 'tendance' && !S.besoinsTendance) loadBesoinsTendance();
+    else if (S.besoinsView === 'passes' && !S.besoinsPasses) loadBesoinsPasses();
     if (!S.matList || !S.matList.length) {
       try {
         const m = await api('/api/stock/matieres');
@@ -3918,6 +3924,13 @@ function stockSyncUrl() {
   try {
     const sp = new URLSearchParams();
     if (S.tab && S.tab !== 'dashboard') sp.set('tab', S.tab);
+    // La sous-vue des besoins matières voyage avec l'onglet. Sans elle, un
+    // rechargement ramenait toujours « par dossier » — la vue par défaut —
+    // quelle que soit celle qu'on regardait. Elle rend aussi l'écran
+    // partageable : un lien vers Tendance ouvre Tendance.
+    if (S.tab === 'besoins-matieres' && S.besoinsView && S.besoinsView !== 'dossier') {
+      sp.set('vue', S.besoinsView);
+    }
     if (S.selMatiere && S.selMatiere.matiere && S.selMatiere.matiere.id) {
       sp.set('matiere', String(S.selMatiere.matiere.id));
     } else if (S.selProduit && S.selProduit.id) {
@@ -12390,6 +12403,24 @@ function invV2BuildListItems(container, items) {
 // ══════════════════════════════════════════════════════════════════
 // ── Besoins matières (onglet MyStock) — v2 visuel refactorisé ────
 // ══════════════════════════════════════════════════════════════════
+
+// Les cinq sous-vues, et le chargement propre à chacune. Les trois premières
+// se servent dans les données déjà en mémoire ; Tendance et Dossiers passés
+// ont leur propre source et doivent aller la chercher.
+const BESOINS_VUES = ['echeance', 'matiere', 'dossier', 'tendance', 'passes'];
+
+// Un seul point de passage pour changer de vue : c'est lui qui écrit la vue
+// dans l'URL. Câbler les boutons directement sur `S.besoinsView` laissait
+// l'URL en arrière, et un rechargement ramenait la vue par défaut.
+function _besSetVue(vue) {
+  if (!BESOINS_VUES.includes(vue)) return;
+  S.besoinsView = vue;
+  try { stockSyncUrl(); } catch (e) { /* l'URL est un confort, pas un prérequis */ }
+  if (vue === 'tendance') loadBesoinsTendance();
+  else if (vue === 'passes') loadBesoinsPasses();
+  else renderContent();
+}
+
 const BESOINS_KIND_LABELS = {
   support: 'Support', glassine: 'Glassine', adhesif: 'Adhésif',
   mandrin: 'Mandrin', carton: 'Carton', palette: 'Palette',
@@ -12495,25 +12526,25 @@ function buildBesoinsMatieres() {
     el('div', { cls: 'bes-seg' },
       el('button', {
         cls: 'bes-seg-btn' + (view === 'echeance' ? ' active' : ''),
-        on: { click: () => { S.besoinsView = 'echeance'; renderContent(); } }
+        on: { click: () => { _besSetVue('echeance'); } }
       }, 'Par échéance'),
       el('button', {
         cls: 'bes-seg-btn' + (view === 'matiere' ? ' active' : ''),
-        on: { click: () => { S.besoinsView = 'matiere'; renderContent(); } }
+        on: { click: () => { _besSetVue('matiere'); } }
       }, 'Par matière'),
       el('button', {
         cls: 'bes-seg-btn' + (view === 'dossier' ? ' active' : ''),
-        on: { click: () => { S.besoinsView = 'dossier'; renderContent(); } }
+        on: { click: () => { _besSetVue('dossier'); } }
       }, 'Par dossier'),
       el('button', {
         cls: 'bes-seg-btn' + (view === 'tendance' ? ' active' : ''),
         title: 'Quand la matière sera nécessaire, mois par mois',
-        on: { click: () => { S.besoinsView = 'tendance'; loadBesoinsTendance(); } }
+        on: { click: () => { _besSetVue('tendance'); } }
       }, 'Tendance'),
       el('button', {
         cls: 'bes-seg-btn' + (view === 'passes' ? ' active' : ''),
         title: 'Productions terminées : ce qui reste à déstocker et ce qui l\'est déjà',
-        on: { click: () => { S.besoinsView = 'passes'; loadBesoinsPasses(); } }
+        on: { click: () => { _besSetVue('passes'); } }
       }, 'Dossiers passés'),
     ),
     (function () {
@@ -20611,6 +20642,11 @@ async function init() {
   if (urlTab && ['dashboard','matieres','produits-finis','negoce','referentiel','stock','inventaire','matieres-inventaire','besoins-matieres','reception','historique','traca','monitoring','valorisation','production','plan-entrepot'].includes(urlTab)) {
     S.tab = urlTab;
   }
+  // Sous-vue des besoins matières. Restaurée AVANT le chargement de l'onglet :
+  // `loadBesoinsMatieres` s'en sert pour décider s'il doit aussi aller chercher
+  // la tendance ou les dossiers passés, qui ont leur propre source.
+  const urlVue = (urlParams.get('vue') || '').trim();
+  if (urlVue && BESOINS_VUES.includes(urlVue)) S.besoinsView = urlVue;
   // Deep-link sur une matière ou un produit (ouvre directement le détail)
   const urlMatiereId = parseInt(urlParams.get('matiere') || '', 10);
   const urlProduitId = parseInt(urlParams.get('produit') || '', 10);
