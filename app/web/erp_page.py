@@ -56,7 +56,11 @@ body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;backgrou
 
 /* ── Shell ── */
 .layout{display:flex;min-height:100vh}
-.sidebar{width:230px;background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:sticky;top:0;overflow-y:auto;scrollbar-width:none}
+/* Tiroir : la sidebar ne mange plus 230 px en permanence. Elle s'ouvre par le
+   bouton Menu, se referme dès qu'on choisit un écran. La grille récupère la
+   largeur, c'est elle qui en a besoin. */
+.sidebar{width:250px;background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:fixed;top:0;left:0;z-index:70;overflow-y:auto;scrollbar-width:none;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 0 32px rgba(0,0,0,.35)}
+body.sb-open .sidebar{transform:translateX(0)}
 .sidebar::-webkit-scrollbar{width:0}
 .logo{padding:6px 8px;margin-bottom:18px;border-radius:8px;cursor:pointer;transition:background .15s,color .15s}
 .logo:hover{background:var(--accent-bg)}
@@ -81,7 +85,10 @@ body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;backgrou
 .version{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;color:var(--muted);text-align:center;padding-top:4px}
 
 .main{flex:1;min-width:0;display:flex;flex-direction:column}
-.page-head{padding:22px 26px 14px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.page-head{padding:18px 22px 12px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.btn-menu{flex-shrink:0;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--card);color:var(--text2);border-radius:10px;padding:9px 13px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.btn-menu:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+@media (max-width:900px){.btn-menu{display:none}}
 .page-head h1{margin:0;font-size:19px;font-weight:700}
 .page-head .sous{font-size:12px;color:var(--muted);margin-top:4px;max-width:640px}
 .head-droite{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -115,11 +122,27 @@ body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;backgrou
 .rail-info{font-size:11px;color:var(--muted);line-height:1.6;border-top:1px solid var(--border);margin-top:14px;padding-top:12px}
 
 .grille-zone{flex:1;min-width:0;display:flex;flex-direction:column}
-.grille-scroll{flex:1;overflow:auto}
+.grille-scroll{flex:1;overflow:auto;cursor:grab}
+.grille-scroll.attrape{cursor:grabbing;user-select:none}
 table.grille{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
 table.grille th{position:sticky;top:0;z-index:2;background:var(--card);border-bottom:1px solid var(--border);padding:9px 10px;text-align:left;font-size:10.5px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--muted);white-space:nowrap;cursor:pointer;user-select:none}
 table.grille th:hover{color:var(--accent)}
 table.grille th .fleche{color:var(--accent);margin-left:4px}
+table.grille th.attrapee{opacity:.4}
+table.grille th.cible{box-shadow:inset 3px 0 0 var(--accent)}
+.th-boite{display:flex;align-items:center;gap:6px}
+.th-poignee{cursor:grab;color:var(--muted);opacity:.45;flex-shrink:0}
+.th-poignee:hover{opacity:1;color:var(--accent)}
+.th-cadenas{border:none;background:transparent;padding:0;margin-left:auto;color:var(--muted);opacity:.35;cursor:pointer;display:inline-flex;flex-shrink:0}
+.th-cadenas:hover{opacity:1;color:var(--accent)}
+.th-cadenas.on{opacity:1;color:var(--accent)}
+/* Colonnes épinglées : elles restent à gauche au défilement horizontal.
+   Le décalage `left` est calculé après rendu, à la largeur réelle. */
+table.grille th.epingle{z-index:4}
+table.grille th.epingle,table.grille td.epingle{position:sticky;background:var(--card)}
+table.grille td.epingle{z-index:1;background:var(--bg)}
+table.grille tbody tr:hover td.epingle,table.grille tbody tr.sel td.epingle{background:var(--accent-bg)}
+table.grille th.bord-epingle,table.grille td.bord-epingle{border-right:1px solid var(--accent)}
 table.grille td{padding:7px 10px;border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
 table.grille tbody tr{cursor:pointer}
 table.grille tbody tr:hover td{background:var(--accent-bg)}
@@ -164,8 +187,6 @@ td.vide{color:var(--muted)}
 .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:40}
 body.sb-open .sidebar-overlay{display:block}
 @media (max-width:900px){
-  .sidebar{position:fixed;z-index:50;transform:translateX(-105%);transition:transform .2s}
-  body.sb-open .sidebar{transform:translateX(0)}
   .ecran{flex-direction:column}
   .rail{width:auto;border-right:none;border-bottom:1px solid var(--border)}
   .detail{position:fixed;inset:0;width:auto;z-index:60}
@@ -226,6 +247,10 @@ body.sb-open .sidebar-overlay{display:block}
     </div>
 
     <div class="page-head">
+      <button type="button" class="btn-menu" onclick="basculerSidebar()" aria-label="Ouvrir le menu ERP">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        Menu
+      </button>
       <div>
         <h1 id="titre">ERP</h1>
         <div class="sous" id="sous">Lecture du miroir de RVGI.</div>
@@ -259,6 +284,9 @@ const S = {
   q: '',
   filtres: {},
   selection: null,
+  epingles: [],       // colonnes figées à gauche, dans l'ordre d'épinglage
+  colDrag: null,      // colonne en cours de déplacement
+  glisse: false,      // un défilement à la souris vient d'avoir lieu
   jeton: 0,           // anti-course : seule la dernière requête lancée s'affiche
 };
 
@@ -320,6 +348,118 @@ function cellule(col,v){
   if(t==='prix')     return {cls:'num',  html:fmtNb(v,4)};
   if(t==='montant')  return {cls:'num',  html:fmtNb(v,2)};
   return {cls:'',html:esc(v)};
+}
+
+// ── Disposition des colonnes ─────────────────────────────────────
+// Ordre et épinglages sont mémorisés par écran, dans le navigateur. C'est un
+// confort d'affichage, pas une donnée : il n'a pas à voyager jusqu'au serveur,
+// et il ne suit pas l'utilisateur d'un poste à l'autre — dit une fois ici pour
+// que ce ne soit pas une surprise.
+function cleLayout(){return 'mysifa_erp_cols_'+(S.ecran||'');}
+function layoutCharger(){
+  try{const b=localStorage.getItem(cleLayout());if(b)return JSON.parse(b)||{};}catch(e){}
+  return {ordre:[],epingles:[]};
+}
+function layoutSauver(){
+  try{
+    localStorage.setItem(cleLayout(),JSON.stringify({
+      ordre:S.colonnes.map(c=>c.nom), epingles:S.epingles
+    }));
+  }catch(e){}
+}
+function layoutOublier(){
+  try{localStorage.removeItem(cleLayout());}catch(e){}
+  S.epingles=[];
+  charger();
+  toast('Disposition des colonnes réinitialisée.');
+}
+// Les épinglées passent devant, dans l'ordre où elles ont été épinglées.
+function reordonner(){
+  const ep=[],reste=[];
+  S.colonnes.forEach(c=>{(S.epingles.indexOf(c.nom)>=0?ep:reste).push(c);});
+  ep.sort((a,b)=>S.epingles.indexOf(a.nom)-S.epingles.indexOf(b.nom));
+  S.colonnes=ep.concat(reste);
+}
+function appliquerLayout(colonnes){
+  const l=layoutCharger();
+  const parNom={};colonnes.forEach(c=>{parNom[c.nom]=c;});
+  const ordonnees=[];
+  (l.ordre||[]).forEach(n=>{if(parNom[n]){ordonnees.push(parNom[n]);delete parNom[n];}});
+  colonnes.forEach(c=>{if(parNom[c.nom])ordonnees.push(c);});   // colonnes nouvelles : à la fin
+  S.colonnes=ordonnees;
+  S.epingles=(l.epingles||[]).filter(n=>ordonnees.some(c=>c.nom===n));
+  reordonner();
+}
+function basculerEpingle(nom){
+  const i=S.epingles.indexOf(nom);
+  if(i>=0)S.epingles.splice(i,1);else S.epingles.push(nom);
+  reordonner();layoutSauver();renderTete();renderGrille();
+}
+function deplacerColonne(depuis,vers){
+  if(depuis===vers)return;
+  const i=S.colonnes.findIndex(c=>c.nom===depuis);
+  const j=S.colonnes.findIndex(c=>c.nom===vers);
+  if(i<0||j<0)return;
+  const [c]=S.colonnes.splice(i,1);
+  S.colonnes.splice(j,0,c);
+  reordonner();layoutSauver();renderTete();renderGrille();
+}
+// Décalage `left` des colonnes épinglées : mesuré après rendu, parce que la
+// largeur réelle dépend du contenu, pas de la largeur déclarée au catalogue.
+function appliquerEpingles(){
+  const table=document.querySelector('table.grille');
+  if(!table)return;
+  const ths=table.querySelectorAll('thead th');
+  let x=0;
+  S.colonnes.forEach((c,i)=>{
+    const th=ths[i];
+    if(!th)return;
+    const cellules=table.querySelectorAll('tbody tr > td:nth-child('+(i+1)+')');
+    const epingle=S.epingles.indexOf(c.nom)>=0;
+    const suivante=S.colonnes[i+1];
+    const dernier=epingle&&(!suivante||S.epingles.indexOf(suivante.nom)<0);
+    if(epingle){
+      th.style.left=x+'px';th.classList.add('epingle');
+      th.classList.toggle('bord-epingle',dernier);
+      cellules.forEach(td=>{
+        td.style.left=x+'px';td.classList.add('epingle');
+        td.classList.toggle('bord-epingle',dernier);
+      });
+      x+=th.offsetWidth;
+    }else{
+      th.style.left='';th.classList.remove('epingle','bord-epingle');
+      cellules.forEach(td=>{td.style.left='';td.classList.remove('epingle','bord-epingle');});
+    }
+  });
+}
+// Défilement à la souris : la barre horizontale est en bas d'une grille haute,
+// donc presque toujours hors de vue. On attrape la grille et on la tire.
+function activerGlisserDefiler(){
+  const z=document.querySelector('.grille-scroll');
+  if(!z||z.dataset.glisse)return;
+  z.dataset.glisse='1';
+  let actif=false,bouge=false,x0=0,y0=0,g0=0,h0=0;
+  z.addEventListener('mousedown',e=>{
+    if(e.button!==0)return;
+    if(e.target.closest('button, a, input, select, .th-poignee'))return;
+    actif=true;bouge=false;x0=e.pageX;y0=e.pageY;g0=z.scrollLeft;h0=z.scrollTop;
+  });
+  z.addEventListener('mousemove',e=>{
+    if(!actif)return;
+    const dx=e.pageX-x0,dy=e.pageY-y0;
+    if(!bouge){
+      if(Math.abs(dx)<5&&Math.abs(dy)<5)return;
+      bouge=true;z.classList.add('attrape');
+    }
+    e.preventDefault();
+    z.scrollLeft=g0-dx;z.scrollTop=h0-dy;
+  });
+  function fin(){
+    if(bouge)S.glisse=true;   // avale le clic qui suit, sinon on ouvre une ligne
+    actif=false;bouge=false;z.classList.remove('attrape');
+  }
+  z.addEventListener('mouseleave',fin);
+  window.addEventListener('mouseup',fin);
 }
 
 // ── Navigation ───────────────────────────────────────────────────
@@ -394,7 +534,12 @@ function ouvrirMenu(){
 function ouvrirEcran(cle){
   const def=((S.meta&&S.meta.ecrans)||[]).find(e=>e.cle===cle);
   if(!def){toast('Écran inconnu.','err');ouvrirMenu();return;}
-  S.ecran=cle;S.def=def;S.page=1;S.tri=null;S.sens='asc';S.q='';S.filtres={};S.selection=null;S.colonnes=[];
+  S.ecran=cle;S.def=def;S.page=1;S.tri=null;S.sens='asc';S.q='';S.filtres={};S.selection=null;S.colonnes=[];S.epingles=[];
+  // Un écran s'ouvre sur ce qui est vivant : le filtre qui porte un défaut
+  // (Position = En cours) est appliqué d'entrée, et reste effaçable.
+  (def.filtres||[]).forEach(f=>{
+    if(f.defaut!=null&&f.defaut!=='')S.filtres[f.nom]=String(f.defaut);
+  });
   document.getElementById('titre').textContent=def.label;
   document.getElementById('sous').textContent=def.resume||'';
   const ms=document.getElementById('mobile-sub');if(ms)ms.textContent=def.label;
@@ -409,21 +554,25 @@ function ouvrirEcran(cle){
     (def.filtres||[]).forEach(f=>{
       const id='f-'+f.nom;
       const lab='<label for="'+id+'">'+esc(f.label)+'</label>';
+      const val=S.filtres[f.nom]!=null?String(S.filtres[f.nom]):'';
       if(f.type==='enum'&&S.meta.enums&&S.meta.enums[f.enum]){
-        let o='<option value="">Tous</option>';
+        let o='<option value=""'+(val===''?' selected':'')+'>Tous</option>';
         Object.keys(S.meta.enums[f.enum]).forEach(k=>{
-          o+='<option value="'+esc(k)+'">'+esc(S.meta.enums[f.enum][k])+'</option>';
+          o+='<option value="'+esc(k)+'"'+(val===String(k)?' selected':'')+'>'+esc(S.meta.enums[f.enum][k])+'</option>';
         });
         rail+='<div class="champ">'+lab+'<select id="'+id+'" data-filtre="'+esc(f.nom)+'">'+o+'</select></div>';
       }else if(f.type==='date_min'||f.type==='date_max'){
-        rail+='<div class="champ">'+lab+'<input type="date" id="'+id+'" data-filtre="'+esc(f.nom)+'"></div>';
+        rail+='<div class="champ">'+lab+'<input type="date" id="'+id+'" data-filtre="'+esc(f.nom)+'" value="'+esc(val)+'"></div>';
       }else{
-        rail+='<div class="champ">'+lab+'<input type="text" id="'+id+'" data-filtre="'+esc(f.nom)+'" autocomplete="off"></div>';
+        rail+='<div class="champ">'+lab+'<input type="text" id="'+id+'" data-filtre="'+esc(f.nom)+'" value="'+esc(val)+'" autocomplete="off"></div>';
       }
     });
   }
-  rail+='<button type="button" class="btn" id="btn-reset" style="width:100%">Réinitialiser</button>'+
-    '<div class="rail-info">Table <strong>'+esc(def.table)+'</strong><br>'+
+  rail+='<button type="button" class="btn" id="btn-reset" style="width:100%">Réinitialiser les filtres</button>'+
+    '<button type="button" class="btn" id="btn-reset-cols" style="width:100%;margin-top:6px">Réinitialiser les colonnes</button>'+
+    '<div class="rail-info">Glisser une en-tête pour déplacer sa colonne, le cadenas pour la figer à gauche. '+
+    'Tirer la grille à la souris pour la faire défiler.<br><br>'+
+    'Table <strong>'+esc(def.table)+'</strong><br>'+
     (def.lignes==null?'':(fmtNb(def.lignes,0)+' lignes dans le miroir<br>'))+
     'Corbeille RVGI exclue à l\'export.</div></div>';
 
@@ -453,12 +602,24 @@ function ouvrirEcran(cle){
   });
   document.getElementById('btn-reset').addEventListener('click',()=>{
     S.q='';S.filtres={};S.page=1;
+    (def.filtres||[]).forEach(f=>{
+      if(f.defaut!=null&&f.defaut!=='')S.filtres[f.nom]=String(f.defaut);
+    });
     const c=document.getElementById('q');if(c)c.value='';
-    document.querySelectorAll('[data-filtre]').forEach(el=>{el.value='';});
+    document.querySelectorAll('[data-filtre]').forEach(el=>{
+      const nom=el.getAttribute('data-filtre');
+      el.value=S.filtres[nom]!=null?String(S.filtres[nom]):'';
+    });
     charger();if(c)c.focus();
   });
+  const bc=document.getElementById('btn-reset-cols');
+  if(bc)bc.addEventListener('click',layoutOublier);
   charger();
 }
+
+const ICO_POIGNEE='<svg class="th-poignee" width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true"><circle cx="2" cy="3" r="1.2"/><circle cx="8" cy="3" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="8" cy="7" r="1.2"/><circle cx="2" cy="11" r="1.2"/><circle cx="8" cy="11" r="1.2"/></svg>';
+const ICO_CADENAS_OUVERT='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>';
+const ICO_CADENAS_FERME='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
 
 function renderTete(){
   const t=document.getElementById('thead');
@@ -467,16 +628,51 @@ function renderTete(){
   S.colonnes.forEach(c=>{
     const actif=S.tri===c.nom;
     const fl=actif?('<span class="fleche">'+(S.sens==='desc'?'▾':'▴')+'</span>'):'';
-    h+='<th data-col="'+esc(c.nom)+'" style="'+(c.largeur?('min-width:'+c.largeur+'px'):'')+'">'+esc(c.label)+fl+'</th>';
+    const ep=S.epingles.indexOf(c.nom)>=0;
+    h+='<th data-col="'+esc(c.nom)+'" draggable="true" style="'+(c.largeur?('min-width:'+c.largeur+'px'):'')+'">'+
+         '<span class="th-boite">'+ICO_POIGNEE+
+           '<span class="th-libelle">'+esc(c.label)+fl+'</span>'+
+           '<button type="button" class="th-cadenas'+(ep?' on':'')+'" data-epingle="'+esc(c.nom)+'" '+
+             'title="'+(ep?'Libérer la colonne':'Figer la colonne à gauche')+'" '+
+             'aria-label="'+(ep?'Libérer la colonne':'Figer la colonne à gauche')+'">'+
+             (ep?ICO_CADENAS_FERME:ICO_CADENAS_OUVERT)+
+           '</button>'+
+         '</span>'+
+       '</th>';
   });
   t.innerHTML=h+'</tr>';
+
+  t.querySelectorAll('[data-epingle]').forEach(b=>{
+    b.addEventListener('click',ev=>{ev.stopPropagation();basculerEpingle(b.getAttribute('data-epingle'));});
+  });
+
   t.querySelectorAll('[data-col]').forEach(th=>{
-    th.addEventListener('click',()=>{
-      const n=th.getAttribute('data-col');
-      if(S.tri===n){S.sens=(S.sens==='asc')?'desc':'asc';}else{S.tri=n;S.sens='asc';}
+    const nom=th.getAttribute('data-col');
+    th.addEventListener('click',ev=>{
+      if(ev.target.closest('.th-cadenas'))return;
+      if(S.tri===nom){S.sens=(S.sens==='asc')?'desc':'asc';}else{S.tri=nom;S.sens='asc';}
       S.page=1;charger();
     });
+    th.addEventListener('dragstart',ev=>{
+      S.colDrag=nom;th.classList.add('attrapee');
+      try{ev.dataTransfer.effectAllowed='move';ev.dataTransfer.setData('text/plain',nom);}catch(e){}
+    });
+    th.addEventListener('dragend',()=>{
+      S.colDrag=null;
+      t.querySelectorAll('th').forEach(x=>x.classList.remove('attrapee','cible'));
+    });
+    th.addEventListener('dragover',ev=>{
+      if(!S.colDrag||S.colDrag===nom)return;
+      ev.preventDefault();th.classList.add('cible');
+    });
+    th.addEventListener('dragleave',()=>th.classList.remove('cible'));
+    th.addEventListener('drop',ev=>{
+      ev.preventDefault();th.classList.remove('cible');
+      if(S.colDrag&&S.colDrag!==nom)deplacerColonne(S.colDrag,nom);
+      S.colDrag=null;
+    });
   });
+  appliquerEpingles();
 }
 
 function urlListe(){
@@ -503,8 +699,10 @@ async function charger(){
     return;
   }
   if(jeton!==S.jeton)return;   // une frappe plus récente a déjà relancé
-  S.colonnes=r.colonnes;S.lignes=r.lignes;S.total=r.total;
+  S.lignes=r.lignes;S.total=r.total;
+  appliquerLayout(r.colonnes);
   renderTete();renderGrille();renderPied();
+  activerGlisserDefiler();
 }
 
 function renderGrille(){
@@ -526,8 +724,12 @@ function renderGrille(){
   });
   tb.innerHTML=h;
   tb.querySelectorAll('[data-id]').forEach(tr=>{
-    tr.addEventListener('click',()=>ouvrirDetail(tr.getAttribute('data-id')));
+    tr.addEventListener('click',()=>{
+      if(S.glisse){S.glisse=false;return;}   // c'était un défilement, pas un clic
+      ouvrirDetail(tr.getAttribute('data-id'));
+    });
   });
+  appliquerEpingles();
 }
 
 function renderPied(){
@@ -598,6 +800,7 @@ function appliquerHash(){
 }
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
+    if(document.body.classList.contains('sb-open')){fermerSidebar();return;}
     const d=document.getElementById('detail');
     if(d&&d.classList.contains('ouvert'))fermerDetail();
   }
