@@ -67,7 +67,7 @@ body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;backgrou
 /* Tiroir : la sidebar ne mange plus 230 px en permanence. Elle s'ouvre par le
    bouton Menu, se referme dès qu'on choisit un écran. La grille récupère la
    largeur, c'est elle qui en a besoin. */
-.sidebar{width:min(1080px,94vw);background:var(--card);border-right:1px solid var(--border);padding:20px 20px 0;display:flex;flex-direction:column;flex-shrink:0;position:fixed;top:0;bottom:0;left:0;z-index:70;overflow-y:auto;scrollbar-width:none;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 0 48px rgba(0,0,0,.4)}
+.sidebar{width:min(1080px,94vw);background:var(--card);border-right:1px solid var(--border);padding:17px 21px 0;display:flex;flex-direction:column;flex-shrink:0;position:fixed;top:0;bottom:0;left:0;z-index:70;overflow-y:auto;scrollbar-width:none;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 0 48px rgba(0,0,0,.4)}
 /* Le tiroir montre le menu general en entier : on va de n'importe quel ecran
    a n'importe quel autre sans repasser par l'accueil. */
 .nav-colonnes{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 24px;align-items:start;margin-top:6px}
@@ -79,16 +79,18 @@ body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;backgrou
 .nav-bloc.parametres .nav-btn.active::before{display:none}
 body.sb-open .sidebar{transform:translateX(0)}
 .sidebar::-webkit-scrollbar{width:0}
-.logo{padding:6px 8px;margin-bottom:18px;border-radius:8px;cursor:pointer;transition:background .15s,color .15s}
+/* L'en-tete du tiroir se cale sur celui de la page : la croix occupe la place
+   exacte du bouton « Menu », donc ouvrir puis refermer se fait sans deplacer
+   la souris. Meme hauteur de bouton, meme retrait a gauche. */
+.sb-entete{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.logo{display:flex;align-items:center;gap:11px;padding:5px 9px;border-radius:9px;cursor:pointer;transition:background .15s,color .15s}
 .logo:hover{background:var(--accent-bg)}
 .logo:hover .logo-brand{color:var(--accent)}
 .logo-brand{font-size:15px;font-weight:800;transition:color .15s}.logo-brand span{color:var(--accent)}
-.logo-ligne{display:flex;align-items:center;gap:10px}
-.logo-entete{gap:12px;margin-bottom:6px}
-.logo-entete .logo{flex:1;margin-bottom:0}
+
 /* Ouvrir le tiroir par erreur ne doit pas couter un detour : la croix est la
    ou l'oeil arrive, a gauche de la marque. */
-.sb-fermer{flex-shrink:0;width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--bg);color:var(--text2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
+.sb-fermer{flex-shrink:0;width:36px;height:36px;border-radius:10px;border:1px solid var(--border);background:var(--bg);color:var(--text2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
 .sb-fermer:hover{background:var(--danger);border-color:var(--danger);color:#fff}
 .rvgi-mark{display:inline-flex;align-items:center;flex-shrink:0}
 .rvgi-mark img{width:46px;height:auto;display:block}
@@ -267,7 +269,7 @@ body.sb-open .sidebar-overlay{display:block}
 
 <div class="layout">
   <aside class="sidebar">
-    <div class="logo-ligne logo-entete">
+    <div class="sb-entete">
       <button type="button" class="sb-fermer" onclick="fermerSidebar()" title="Fermer le menu" aria-label="Fermer le menu">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
