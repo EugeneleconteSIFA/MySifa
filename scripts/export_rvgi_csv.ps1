@@ -314,7 +314,7 @@ function Exporter-Table {
         return $false
     }
 
-    $totalLignes += $nb
+    $script:totalLignes += $nb
     $taille = 0
     try { $taille = (Get-Item $chemin).Length } catch { $taille = 0 }
     $suffixe = ''

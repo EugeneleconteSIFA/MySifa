@@ -72,6 +72,11 @@ body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;backgrou
    a n'importe quel autre sans repasser par l'accueil. */
 .nav-colonnes{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 24px;align-items:start;margin-top:6px}
 .nav-bloc{min-width:0;break-inside:avoid}
+.nav-bloc.parametres{grid-column:1/-1;margin-top:6px;padding-top:10px;border-top:1px solid var(--border)}
+.nav-bloc.parametres .nav-domaine{border-left:none;margin:0 0 6px;padding-left:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:2px 10px}
+.nav-bloc.parametres .nav-btn{border-radius:8px;padding-left:11px}
+.nav-bloc.parametres .nav-btn:hover{padding-left:13px}
+.nav-bloc.parametres .nav-btn.active::before{display:none}
 body.sb-open .sidebar{transform:translateX(0)}
 .sidebar::-webkit-scrollbar{width:0}
 .logo{padding:6px 8px;margin-bottom:18px;border-radius:8px;cursor:pointer;transition:background .15s,color .15s}
@@ -147,6 +152,10 @@ body.light .rvgi-mark .rvgi-clair{display:block}
    on compare des natures d'objet côte à côte au lieu de dérouler cinq bandes. */
 .colonnes{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;align-items:start}
 .colonne{min-width:0}
+/* Les paramètres ne sont pas une étape du process : ils passent sous les
+   colonnes, sur toute la largeur, en lignes qui se replient. */
+.colonne.parametres{grid-column:1/-1;margin-top:10px;padding-top:16px;border-top:1px solid var(--border)}
+.colonne.parametres .cartes{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
 .domaine-titre{font-size:14px;font-weight:800;letter-spacing:.3px;color:var(--text);margin:0 0 12px;padding-bottom:9px;border-bottom:2px solid var(--accent)}
 .cartes{display:flex;flex-direction:column;gap:10px}
 .carte{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:border-color .15s,transform .12s;display:flex;align-items:center;gap:12px}
@@ -592,14 +601,22 @@ function iconeEcran(cle){
 }
 
 // ── Navigation ───────────────────────────────────────────────────
+// Les domaines de paramétrage passent après ceux du process, quelle que soit
+// leur place dans le catalogue.
+function domainesOrdonnes(){
+  const d=(S.meta&&S.meta.domaines)||[];
+  return d.filter(x=>x.type!=='parametres').concat(d.filter(x=>x.type==='parametres'));
+}
+
 function renderNav(){
   const hote=document.getElementById('nav-ecrans');
   if(!S.meta||!S.meta.present){hote.innerHTML='';return;}
   let h='<div class="nav-colonnes">';
-  (S.meta.domaines||[]).forEach(d=>{
+  domainesOrdonnes().forEach(d=>{
     const ecrans=(S.meta.ecrans||[]).filter(e=>e.domaine===d.cle);
     if(!ecrans.length)return;
-    h+='<div class="nav-bloc"><div class="nav-groupe">'+esc(d.label)+'</div><div class="nav-domaine">';
+    const kl=(d.type==='parametres')?' parametres':'';
+    h+='<div class="nav-bloc'+kl+'"><div class="nav-groupe">'+esc(d.label)+'</div><div class="nav-domaine">';
     ecrans.forEach(e=>{
       h+='<button type="button" class="nav-btn'+(S.ecran===e.cle?' active':'')+'" data-ecran="'+esc(e.cle)+'">'+esc(e.label)+'</button>';
     });
@@ -640,10 +657,11 @@ function ouvrirMenu(){
     return;
   }
   let h='<div class="menu-wrap"><div class="colonnes">';
-  (S.meta.domaines||[]).forEach(d=>{
+  domainesOrdonnes().forEach(d=>{
     const ecrans=(S.meta.ecrans||[]).filter(e=>e.domaine===d.cle);
     if(!ecrans.length)return;
-    h+='<div class="colonne"><div class="domaine-titre">'+esc(d.label)+'</div><div class="cartes">';
+    const kl=(d.type==='parametres')?' parametres':'';
+    h+='<div class="colonne'+kl+'"><div class="domaine-titre">'+esc(d.label)+'</div><div class="cartes">';
     ecrans.forEach(e=>{
       h+='<div class="carte" data-ecran="'+esc(e.cle)+'" title="'+esc(e.resume||'')+'">'+
            '<span class="carte-ico">'+iconeEcran(e.cle)+'</span>'+
