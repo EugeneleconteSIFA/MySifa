@@ -937,6 +937,41 @@ _SQL_OF_ORPHELINS = """
     LEFT JOIN machines m ON LOWER(TRIM(m.nom)) = LOWER(TRIM(oi.machine))
     LEFT JOIN planning_entries pe ON pe.of_import_id = oi.id
     WHERE pe.id IS NULL
+      -- Le rattachement se lit sur `of_import_id`, mais `of_imports` contient
+      -- des doublons : le même OF y figure parfois deux fois, une ligne
+      -- rattachée à un dossier et une autre non. La seconde passait alors pour
+      -- orpheline et venait S'AJOUTER au dossier du planning — le besoin
+      -- compté deux fois, sur les mois récents surtout, là où les deux sources
+      -- se recouvrent.
+      --
+      -- On écarte donc tout OF dont le NUMÉRO est déjà porté par un dossier du
+      -- planning, pas seulement la ligne qui l'est. La complémentarité des
+      -- deux sources se joue sur l'OF réel, pas sur la ligne de table.
+      AND NOT EXISTS (
+          SELECT 1 FROM of_imports o2
+          JOIN planning_entries p2 ON p2.of_import_id = o2.id
+          WHERE TRIM(COALESCE(oi.of_numero, '')) <> ''
+            AND LOWER(TRIM(COALESCE(o2.of_numero, '')))
+                = LOWER(TRIM(COALESCE(oi.of_numero, '')))
+      )
+      -- Et entre orphelins eux-mêmes : deux lignes sans dossier pour un même
+      -- OF comptaient aussi double. On garde la plus ancienne.
+      --
+      -- Le garde-fou sur le numéro vide n'est pas théorique : neuf OF n'en
+      -- portent aucun. Sans lui, ils se dédupliqueraient les uns les autres —
+      -- ils partagent tous la même clé « rien » — et huit disparaîtraient de
+      -- l'écran alors que ce sont des OF distincts.
+      AND (
+          TRIM(COALESCE(oi.of_numero, '')) = ''
+          OR oi.id = (
+              SELECT MIN(o3.id)
+              FROM of_imports o3
+              LEFT JOIN planning_entries p3 ON p3.of_import_id = o3.id
+              WHERE p3.id IS NULL
+                AND LOWER(TRIM(COALESCE(o3.of_numero, '')))
+                    = LOWER(TRIM(COALESCE(oi.of_numero, '')))
+          )
+      )
 """
 
 
@@ -1909,11 +1944,58 @@ def besoins_tendance(request: Request):
     cat_libelles = {"support": "Frontal", "glassine": "Glassine",
                     "adhesif": "Adhésif", "mandrin": "Mandrins",
                     "carton": "Cartons", "palette": "Palettes"}
+
+    # « Frontal » recouvre des matières qui ne se comparent pas et ne
+    # s'achètent pas ensemble : un thermique et un synthétique n'ont ni le même
+    # fournisseur, ni le même délai, ni le même prix. Douze courbes dans une
+    # seule carte demandaient au lecteur de faire ce tri de tête.
+    #
+    # La sous-section vient de `matieres_premieres.sous_section`, le champ que
+    # MyStock utilise déjà pour classer les frontaux — pas d'une liste inventée
+    # ici, qui divergerait du jour où quelqu'un ajoute une famille.
+    #
+    # Repli assumé : si AUCUNE matière n'est classée, on ne scinde rien. Une
+    # carte unique « Frontal — non classé » serait un écran cassé là où l'ancien
+    # marchait ; le découpage n'apparaît que s'il a de quoi être utile.
+    KINDS_A_SCINDER = ("support",)
+    sous_sections: dict = {}
+    try:
+        with get_db() as conn:
+            sous_sections = {
+                r["id"]: (r["sous_section"] or "").strip()
+                for r in conn.execute(
+                    "SELECT id, sous_section FROM matieres_premieres"
+                ).fetchall()
+            }
+    except Exception:
+        logger.exception("[besoins] sous-sections illisibles — la vue Tendance "
+                         "gardera une carte Frontal unique.")
+
+    def _classe(l):
+        """(clé de carte, libellé) pour une ligne de besoin."""
+        base = cat_libelles.get(l["kind"], l["kind"])
+        if l["kind"] not in KINDS_A_SCINDER:
+            return l["kind"], base
+        ss = (sous_sections.get(l.get("matiere_id")) or "").strip()
+        if not ss:
+            return f"{l['kind']}:", f"{base} — non classé"
+        return f"{l['kind']}:{ss.lower()}", ss
+
+    scindables = {l["kind"] for l in out} & set(KINDS_A_SCINDER)
+    for k in list(scindables):
+        classes = {(sous_sections.get(l.get("matiere_id")) or "").strip()
+                   for l in out if l["kind"] == k}
+        if not any(classes):
+            KINDS_A_SCINDER = tuple(x for x in KINDS_A_SCINDER if x != k)
+
     cats: dict = {}
     for l in out:
-        c = cats.setdefault(l["kind"], {
-            "kind": l["kind"],
-            "libelle": cat_libelles.get(l["kind"], l["kind"]),
+        cle_cat, libelle_cat = _classe(l)
+        l["sous_section"] = (sous_sections.get(l.get("matiere_id")) or "").strip() or None
+        c = cats.setdefault(cle_cat, {
+            "kind": cle_cat,
+            "kind_base": l["kind"],
+            "libelle": libelle_cat,
             "unite": l.get("unite"),
             "total": 0.0, "total_futur": 0.0, "total_au_dela": 0.0,
             "nb_matieres": 0, "incalculables": 0,
@@ -1932,10 +2014,15 @@ def besoins_tendance(request: Request):
         c["lignes"].append(l)
         if not c["unite"]:
             c["unite"] = l.get("unite")
+    # L'ordre des natures d'abord (frontal, glassine, adhésif…), puis le poids
+    # à venir entre sous-sections d'une même nature : dans « Frontal », le
+    # thermique passe devant le synthétique s'il pèse plus, sans quoi l'ordre
+    # serait alphabétique et n'apprendrait rien.
     ordre = list(_KINDS)
-    categories = sorted(cats.values(),
-                        key=lambda c: (ordre.index(c["kind"])
-                                       if c["kind"] in ordre else 99))
+    categories = sorted(
+        cats.values(),
+        key=lambda c: (ordre.index(c["kind_base"]) if c["kind_base"] in ordre else 99,
+                       -c["total_futur"], c["libelle"].lower()))
     for c in categories:
         c["total"] = round(c["total"], 2)
         c["total_futur"] = round(c["total_futur"], 2)
