@@ -2149,6 +2149,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
                 <option value="of:read,of:write">Pont Access — lecture et écriture des OF</option>
                 <option value="scan:write">Agent de scans — dépôt des OF terminés</option>
                 <option value="of:read">Lecture seule des OF</option>
+                <option value="erp:read,erp:write">Synchro ERP RVGI — dépôt du miroir</option>
                 <option value="of:read,of:write,scan:write">Tout (pont Access + scans)</option>
               </select>
             </div>

@@ -10,14 +10,19 @@ Endpoints :
   GET  /api/bridge/fiches      → liste les fiches techniques importées (of:read)
 """
 import hashlib
+import os
 import re
+import shutil
+import tempfile
+import zipfile
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel
 
+from config import BASE_DIR, ERP_MIRROR_DB
 from app.core.database import get_db
 from app.services.documents_verite import appliquer_maj
 from app.services.fiche_pdf import generate_fiche_pdf
@@ -581,3 +586,140 @@ def preview_fiche_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="fiche_{safe_ref}.pdf"'},
     )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# Miroir ERP RVGI — réception des exports depuis le réseau SIFA
+# ══════════════════════════════════════════════════════════════════════
+#
+# Le VPS ne voit pas 192.168.100.199 : c'est une machine du LAN SIFA qui
+# exporte l'ERP et pousse le résultat ici. Elle envoie les CSV zippés, pas la
+# base construite — ainsi la machine qui héberge la tâche planifiée n'a besoin
+# que de PowerShell, et c'est le serveur qui assemble le miroir.
+#
+# Sens d'écriture inchangé : RVGI est la source, MySifa reçoit. Rien ici ne
+# repart vers l'ERP.
+
+_ERP_TAILLE_MAX = 300 * 1024 * 1024      # un export complet zippé pèse ~20 Mo
+_ERP_ETAT = {"statut": "jamais lancé"}   # indicatif : la vérité est dans erp_meta
+
+
+def _charger_importeur():
+    """Charge scripts/import_rvgi_csv.py sans le dupliquer ici."""
+    import importlib.util
+    chemin = os.path.join(BASE_DIR, "scripts", "import_rvgi_csv.py")
+    spec = importlib.util.spec_from_file_location("import_rvgi_csv", chemin)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _erp_importer_en_fond(dossier_csv: str, dossier_temp: str) -> None:
+    global _ERP_ETAT
+    debut = datetime.now()
+    _ERP_ETAT = {"statut": "en cours", "debut": debut.strftime("%Y-%m-%d %H:%M:%S")}
+    lignes_journal = []
+    try:
+        module = _charger_importeur()
+        bilan = module.construire(
+            source=dossier_csv,
+            db=ERP_MIRROR_DB,
+            journal=lambda m: lignes_journal.append(str(m)),
+        )
+        _ERP_ETAT = {
+            "statut": "ok" if bilan.get("ok") else "partiel",
+            "debut": debut.strftime("%Y-%m-%d %H:%M:%S"),
+            "fin": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "lignes": bilan.get("lignes"),
+            "tables": bilan.get("tables"),
+            "echecs": bilan.get("echecs") or [],
+        }
+    except Exception as e:
+        _ERP_ETAT = {
+            "statut": "échec",
+            "debut": debut.strftime("%Y-%m-%d %H:%M:%S"),
+            "erreur": str(e)[:400],
+        }
+    finally:
+        # Les CSV portent des noms de clients, des adresses et des prix :
+        # ils ne survivent pas à l'import, quoi qu'il arrive.
+        shutil.rmtree(dossier_temp, ignore_errors=True)
+
+
+@router.post("/erp/miroir")
+async def erp_pousser_miroir(
+    request: Request,
+    taches: BackgroundTasks,
+    x_api_key: Optional[str] = Header(None),
+):
+    """Reçoit un ZIP des CSV d'export RVGI et reconstruit le miroir."""
+    _require_scope(x_api_key, "erp:write")
+
+    dossier_temp = tempfile.mkdtemp(prefix="erp_push_")
+    chemin_zip = os.path.join(dossier_temp, "export.zip")
+    taille = 0
+    try:
+        with open(chemin_zip, "wb") as f:
+            async for morceau in request.stream():
+                taille += len(morceau)
+                if taille > _ERP_TAILLE_MAX:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="Archive trop volumineuse (%d Mo max)." % (_ERP_TAILLE_MAX // (1024 * 1024)),
+                    )
+                f.write(morceau)
+
+        if taille == 0:
+            raise HTTPException(status_code=400, detail="Corps de requête vide.")
+
+        dossier_csv = os.path.join(dossier_temp, "csv")
+        os.makedirs(dossier_csv, exist_ok=True)
+        gardes = 0
+        try:
+            with zipfile.ZipFile(chemin_zip) as z:
+                for nom in z.namelist():
+                    # On ne garde que le nom de fichier : une entrée nommée
+                    # « ../../etc/passwd » ne peut pas sortir du dossier.
+                    base = os.path.basename(nom)
+                    if not base:
+                        continue
+                    if not (base.endswith(".csv") or base == "_manifeste.json"):
+                        continue
+                    with z.open(nom) as src, open(os.path.join(dossier_csv, base), "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+                    gardes += 1
+        except zipfile.BadZipFile:
+            raise HTTPException(status_code=400, detail="Archive ZIP illisible.")
+
+        if not any(f.endswith(".csv") for f in os.listdir(dossier_csv)):
+            raise HTTPException(status_code=400, detail="Aucun CSV dans l'archive.")
+
+        taches.add_task(_erp_importer_en_fond, dossier_csv, dossier_temp)
+        return {
+            "recu_octets": taille,
+            "fichiers": gardes,
+            "statut": "import lancé",
+            "miroir": ERP_MIRROR_DB,
+        }
+    except HTTPException:
+        shutil.rmtree(dossier_temp, ignore_errors=True)
+        raise
+    except Exception as e:
+        shutil.rmtree(dossier_temp, ignore_errors=True)
+        raise HTTPException(status_code=500, detail="Réception impossible : %s" % e)
+
+
+@router.get("/erp/miroir")
+def erp_etat_miroir(x_api_key: Optional[str] = Header(None)):
+    """Où en est le miroir : dernier import, fraîcheur, volumes."""
+    _require_scope(x_api_key, "erp:read")
+    from app.services.erp_mirror import meta as erp_meta
+    infos = erp_meta()
+    return {
+        "import": _ERP_ETAT,
+        "present": infos.get("present"),
+        "importe_le": infos.get("importe_le"),
+        "releve_le": infos.get("releve_le"),
+        "lignes": infos.get("lignes"),
+        "tables": len(infos.get("tables") or []),
+    }

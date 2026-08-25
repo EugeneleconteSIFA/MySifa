@@ -200,17 +200,33 @@ def importer_table(conn, table, chemin, verbeux=True):
     return nb
 
 
+def construire(source=SOURCE_DEFAUT, db=DB_DEFAUT, tables=None, journal=print):
+    """Construit le miroir depuis un dossier de CSV. Renvoie un dict de bilan.
+
+    Appelée par `main()` en ligne de commande, et par le pont HTTP
+    (`/api/bridge/erp/miroir`) quand la synchro pousse les CSV depuis le
+    réseau SIFA — c'est le VPS qui construit alors le miroir, ce qui évite
+    d'exiger un Python sur le serveur qui héberge la tâche planifiée.
+    """
+    args = argparse.Namespace(source=source, db=db, tables=",".join(tables or []))
+    return _construire(args, journal)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Construit le miroir SQLite de l'ERP RVGI.")
     ap.add_argument("--source", default=SOURCE_DEFAUT, help="dossier des CSV exportés")
     ap.add_argument("--db", default=DB_DEFAUT, help="fichier SQLite du miroir")
     ap.add_argument("--tables", default="", help="liste de tables, séparées par des virgules")
     args = ap.parse_args()
+    bilan = _construire(args, print)
+    return 0 if bilan.get("ok") else 1
 
+
+def _construire(args, journal):
     if not os.path.isdir(args.source):
-        print("Dossier introuvable : %s" % args.source)
-        print("Lancer d'abord scripts\\export_rvgi_csv.ps1 depuis un poste du réseau SIFA.")
-        return 1
+        journal("Dossier introuvable : %s" % args.source)
+        journal("Lancer d'abord scripts\\export_rvgi_csv.ps1 depuis un poste du réseau SIFA.")
+        return {"ok": False, "erreur": "source introuvable", "lignes": 0, "tables": 0}
 
     manifeste = {}
     chemin_manifeste = os.path.join(args.source, "_manifeste.json")
@@ -218,7 +234,7 @@ def main():
         with open(chemin_manifeste, "r", encoding="utf-8-sig") as f:
             manifeste = json.load(f)
     else:
-        print("Pas de _manifeste.json — import à l'aveugle sur les CSV présents.")
+        journal("Pas de _manifeste.json — import à l'aveugle sur les CSV présents.")
 
     voulues = [t.strip() for t in args.tables.split(",") if t.strip()]
     fichiers = sorted(
@@ -228,8 +244,8 @@ def main():
     if voulues:
         fichiers = [f for f in fichiers if f[:-4] in voulues]
     if not fichiers:
-        print("Aucun CSV à importer dans %s" % args.source)
-        return 1
+        journal("Aucun CSV à importer dans %s" % args.source)
+        return {"ok": False, "erreur": "aucun CSV", "lignes": 0, "tables": 0}
 
     os.makedirs(os.path.dirname(args.db) or ".", exist_ok=True)
 
@@ -263,19 +279,22 @@ def main():
     releve_le = str(manifeste.get("genere_le") or "")
     maintenant = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    print("Miroir  : %s" % args.db)
-    print("Source  : %s%s" % (args.source, (" (relevé du %s)" % releve_le) if releve_le else ""))
-    print("Tables  : %d" % len(fichiers))
-    print("")
+    journal("Miroir  : %s" % args.db)
+    journal("Source  : %s%s" % (args.source, (" (relevé du %s)" % releve_le) if releve_le else ""))
+    journal("Tables  : %d" % len(fichiers))
+    journal("")
 
     total = 0
+    echecs = []
     for f in fichiers:
         table = f[:-4]
         chemin = os.path.join(args.source, f)
         try:
-            nb = importer_table(conn, table, chemin)
+            nb = importer_table(conn, table, chemin, verbeux=False)
+            journal("  %-16s %9d lignes" % (table, nb))
         except Exception as e:
-            print("  %-16s ÉCHEC : %s" % (table, e))
+            echecs.append(table)
+            journal("  %-16s ÉCHEC : %s" % (table, e))
             continue
         total += nb
         cols = conn.execute("SELECT COUNT(*) FROM pragma_table_info(?)", (table,)).fetchone()[0]
@@ -298,9 +317,17 @@ def main():
     os.replace(db_tmp, args.db)
     taille = os.path.getsize(args.db)
 
-    print("")
-    print("Terminé : %d lignes, miroir de %.1f Mo." % (total, taille / (1024.0 * 1024.0)))
-    return 0
+    journal("")
+    journal("Terminé : %d lignes, miroir de %.1f Mo." % (total, taille / (1024.0 * 1024.0)))
+    return {
+        "ok": not echecs,
+        "lignes": total,
+        "tables": len(fichiers) - len(echecs),
+        "echecs": echecs,
+        "octets": taille,
+        "releve_le": releve_le,
+        "db": args.db,
+    }
 
 
 if __name__ == "__main__":

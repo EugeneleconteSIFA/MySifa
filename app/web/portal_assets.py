@@ -60,6 +60,15 @@ PORTAL_MAIN_CSS = r"""
 .portal-corner-stack{position:fixed;top:20px;right:20px;z-index:120;display:flex;flex-direction:column;gap:10px}
 /* Important: must be relative so the badge positions on the right button. */
 .portal-corner-stack .portal-settings-corner{position:relative;top:auto;right:auto}
+/* Marque RVGI du bouton ERP. Le fichier source est bleu sur fond transparent :
+   lisible sur le thème clair, trop sombre sur le thème sombre. Deux fichiers,
+   un seul affiché — plutôt qu'un filtre CSS qui abîmerait la découpe de
+   l'oiseau (elle est faite dans l'alpha, pas en blanc). */
+.rvgi-mark{display:inline-flex;align-items:center;flex-shrink:0}
+.rvgi-mark img{width:22px;height:22px;display:block}
+.rvgi-mark .rvgi-clair{display:none}
+body.light .rvgi-mark .rvgi-sombre{display:none}
+body.light .rvgi-mark .rvgi-clair{display:block}
 .portal-corner-badge{position:absolute;top:8px;left:8px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
   background:rgba(248,113,113,.95);color:#fff;font-size:10px;font-weight:800;font-family:monospace;
   display:inline-flex;align-items:center;justify-content:center;box-shadow:0 6px 18px rgba(0,0,0,.25)}
@@ -1631,8 +1640,9 @@ function renderPortal(){
       },
         (function(){
           const w=document.createElement('span');
-          w.style.display='inline-flex';w.style.alignItems='center';w.style.flexShrink='0';
-          w.innerHTML='<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 22 8.5 12 15 2 8.5 12 2"/><polyline points="2 15.5 12 22 22 15.5"/><polyline points="2 12 12 18.5 22 12"/></svg>';
+          w.className='rvgi-mark';
+          w.innerHTML='<img class="rvgi-sombre" src="/static/rvgi_mark_clair.png" alt="RVGI" width="22" height="22">'+
+                      '<img class="rvgi-clair" src="/static/rvgi_mark.png" alt="RVGI" width="22" height="22">';
           return w;
         })()
       ):null,
