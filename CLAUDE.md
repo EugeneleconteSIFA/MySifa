@@ -1020,8 +1020,8 @@ Côté entrée, `lif_ligne.lot` et `stm_hist.lot` restent vivants.
 ## ERP RVGI — l'app `/erp` et son miroir
 
 RVGI est l'ERP de SIFA (base HFSQL `sifa_cs`, serveur `192.168.100.199:4949`).
-MySifa en expose une lecture dans l'app `/erp`, réservée au **super
-administrateur**. La documentation de la base elle-même est dans
+MySifa en expose une lecture dans l'app `/erp`, ouverte à **`ROLES_ADMIN`** —
+direction, services administration et super administrateur. La documentation de la base elle-même est dans
 `docs/rvgi/data_rvgi.md` — la lire avant de toucher à quoi que ce soit ici.
 
 ### Les trois règles absolues
@@ -1050,7 +1050,7 @@ administrateur**. La documentation de la base elle-même est dans
 | `scripts/sync_rvgi.ps1` | Export + zip + envoi HTTPS. Tâche planifiée, 5 h et 12 h 30. |
 | `app/services/erp_mirror.py` | Connexion `mode=ro`, moteur de liste générique, sentinelles. |
 | `app/services/erp_catalogue.py` | Les 27 écrans, en déclaratif. |
-| `app/routers/erp.py` | API lecture seule, superadmin. Aucun verbe d'écriture. |
+| `app/routers/erp.py` | API lecture seule, `ROLES_ADMIN`. Aucun verbe d'écriture. |
 | `app/web/erp_page.py` | La page `/erp`. |
 | `app/routers/api_bridge.py` | `POST /api/bridge/erp/miroir` — réception des exports. |
 

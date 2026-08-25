@@ -1,6 +1,7 @@
 """MySifa — ERP (page).
 
-Route : /erp — super administrateur uniquement.
+Route : /erp — direction, services administration et super administrateur
+(`ROLES_ADMIN`).
 
 Lecture du miroir RVGI (`data/erp_mirror.db`) dans les codes de MySifa :
 sidebar invariable, filtres persistants à gauche, grille dense, panneau de
@@ -13,7 +14,7 @@ Le catalogue d'écrans vit dans `app/services/erp_catalogue.py` : ajouter un
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from config import APP_VERSION, ROLE_SUPERADMIN
+from config import APP_VERSION, ROLES_ADMIN
 from app.services.auth_service import get_current_user
 
 router = APIRouter()
@@ -27,11 +28,14 @@ def erp_page(request: Request):
         if e.status_code == 401:
             return RedirectResponse(url="/?next=/erp", status_code=302)
         raise
-    if user.get("role") != ROLE_SUPERADMIN:
+    if user.get("role") not in ROLES_ADMIN:
         from app.web.access_denied import access_denied_response
         return access_denied_response(
             "ERP",
-            detail="Cette application est réservée au super administrateur.",
+            detail=(
+                "Cette application est réservée à la direction, aux services "
+                "administration et au super administrateur."
+            ),
         )
     html = ERP_HTML.replace("__V_LABEL__", f"v{APP_VERSION}")
     return HTMLResponse(content=html)
@@ -76,8 +80,6 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 .nav-groupe{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);padding:14px 12px 6px}
 .nav-btn{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:8px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s,color .15s;margin-bottom:1px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
-.nav-badge{margin-left:auto;padding:1px 6px;border-radius:9px;background:var(--bg);color:var(--muted);font-size:10px;font-weight:700;font-variant-numeric:tabular-nums}
-.nav-btn.active .nav-badge{background:var(--accent-bg);color:var(--accent)}
 .back-mysifa{border:none!important;background:transparent!important;font-weight:400!important;color:var(--text2)!important;padding:8px 10px!important}
 .back-mysifa:hover{color:var(--text)!important;background:transparent!important}
 .back-mysifa .wm{font-weight:800;color:var(--text)}.back-mysifa .wm span{color:var(--accent)}
@@ -113,13 +115,17 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 
 /* ── Menu (accueil du module) ── */
 .menu-wrap{padding:22px 26px 40px;overflow:auto}
-.domaine-titre{font-size:11px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin:22px 0 10px}
-.cartes{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+/* Un domaine = une colonne. L'écran est large, la lecture est verticale :
+   on compare des natures d'objet côte à côte au lieu de dérouler cinq bandes. */
+.colonnes{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;align-items:start}
+.colonne{min-width:0}
+.domaine-titre{font-size:11px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.cartes{display:flex;flex-direction:column;gap:10px}
 .carte{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:border-color .15s,transform .12s;display:flex;align-items:center;gap:12px}
 .carte:hover{border-color:var(--accent);transform:translateY(-1px)}
 .carte-ico{width:36px;height:36px;border-radius:10px;background:var(--accent-bg);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
 .carte-titre{font-size:13.5px;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.carte-nb{margin-left:auto;font-size:11.5px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;flex-shrink:0}
+
 
 /* ── Écran : rail + grille ── */
 .ecran{display:flex;flex:1;min-height:0}
@@ -561,8 +567,7 @@ function renderNav(){
     if(!ecrans.length)return;
     h+='<div class="nav-groupe">'+esc(d.label)+'</div>';
     ecrans.forEach(e=>{
-      const nb=(e.lignes==null)?'':('<span class="nav-badge">'+fmtNb(e.lignes,0)+'</span>');
-      h+='<button type="button" class="nav-btn'+(S.ecran===e.cle?' active':'')+'" data-ecran="'+esc(e.cle)+'">'+esc(e.label)+nb+'</button>';
+      h+='<button type="button" class="nav-btn'+(S.ecran===e.cle?' active':'')+'" data-ecran="'+esc(e.cle)+'">'+esc(e.label)+'</button>';
     });
   });
   hote.innerHTML=h;
@@ -590,7 +595,7 @@ function ouvrirMenu(){
   document.getElementById('titre').textContent='ERP';
   document.getElementById('sous').textContent=
     (S.meta&&S.meta.present)
-      ? 'Miroir de RVGI : '+fmtNb(S.meta.lignes,0)+' lignes sur '+S.meta.tables+' tables.'
+      ? 'Lecture de l\'ERP RVGI.'
       : 'Le miroir de l\'ERP n\'a pas encore été construit.';
   const ms=document.getElementById('mobile-sub');if(ms)ms.textContent='Menu';
   renderNav();
@@ -599,21 +604,20 @@ function ouvrirMenu(){
     corps.innerHTML='<div class="vide-msg">'+esc((S.meta&&S.meta.message)||'Miroir indisponible.')+'</div>';
     return;
   }
-  let h='<div class="menu-wrap">';
+  let h='<div class="menu-wrap"><div class="colonnes">';
   (S.meta.domaines||[]).forEach(d=>{
     const ecrans=(S.meta.ecrans||[]).filter(e=>e.domaine===d.cle);
     if(!ecrans.length)return;
-    h+='<div class="domaine-titre">'+esc(d.label)+'</div><div class="cartes">';
+    h+='<div class="colonne"><div class="domaine-titre">'+esc(d.label)+'</div><div class="cartes">';
     ecrans.forEach(e=>{
       h+='<div class="carte" data-ecran="'+esc(e.cle)+'" title="'+esc(e.resume||'')+'">'+
            '<span class="carte-ico">'+iconeEcran(e.cle)+'</span>'+
            '<span class="carte-titre">'+esc(e.label)+'</span>'+
-           (e.lignes==null?'':'<span class="carte-nb">'+fmtNb(e.lignes,0)+'</span>')+
          '</div>';
     });
-    h+='</div>';
+    h+='</div></div>';
   });
-  corps.innerHTML=h+'</div>';
+  corps.innerHTML=h+'</div></div>';
   corps.querySelectorAll('[data-ecran]').forEach(c=>{
     c.addEventListener('click',()=>{location.hash='#/'+c.getAttribute('data-ecran');});
   });
@@ -660,10 +664,7 @@ function ouvrirEcran(cle){
   rail+='<button type="button" class="btn" id="btn-reset" style="width:100%">Réinitialiser les filtres</button>'+
     '<button type="button" class="btn" id="btn-reset-cols" style="width:100%;margin-top:6px">Réinitialiser les colonnes</button>'+
     '<div class="rail-info">Glisser une en-tête pour déplacer sa colonne, le cadenas pour la figer à gauche. '+
-    'Tirer la grille à la souris pour la faire défiler.<br><br>'+
-    'Table <strong>'+esc(def.table)+'</strong><br>'+
-    (def.lignes==null?'':(fmtNb(def.lignes,0)+' lignes dans le miroir<br>'))+
-    'Corbeille RVGI exclue à l\'export.</div></div>';
+    'Tirer la grille à la souris pour la faire défiler.</div></div>';
 
   document.getElementById('corps').innerHTML='<div class="ecran">'+rail+
     '<div class="grille-zone">'+
