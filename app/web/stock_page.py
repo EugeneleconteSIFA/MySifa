@@ -855,6 +855,11 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
   color:var(--text2)}
 .bes-tsec-chip.warn{background:color-mix(in srgb,var(--warn,#d97706) 15%,transparent);
   color:var(--warn,#d97706)}
+/* Pente : la couleur suit le SENS, jamais le jugement. Une baisse de besoin
+   n'est ni bonne ni mauvaise en soi -- c'est l'acheteur qui tranche. D'ou des
+   teintes neutres et une fleche, plutot que du rouge et du vert. */
+.bes-tsec-chip.baisse,.bes-tsec-chip.hausse{
+  background:color-mix(in srgb,var(--text2) 10%,transparent);color:var(--text2)}
 .bes-tsec-body{padding:4px 14px 14px;border-top:1px solid var(--border)}
 /* Legende : presente des deux courbes, et cliquable. Elle porte le nom a cote
    de la teinte — l'identite d'une serie ne repose jamais sur la seule
@@ -868,6 +873,10 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-tc-lg:hover{border-color:var(--accent)}
 .bes-tc-lg:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .bes-tc-lg.off{opacity:.42}
+/* La matiere isolee : c'est la seule tracee, elle doit se voir comme telle. */
+.bes-tc-lg.solo{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 18%,transparent)}
+.bes-tc-lg.tend{font-weight:600;border-style:dashed}
+.bes-tc-lg.tend.on{border-color:var(--accent);color:var(--accent);border-style:solid}
 .bes-tc-lg.off .bes-tc-lg-lbl{text-decoration:line-through}
 .bes-tc-lg.mode{margin-left:auto;font-weight:600;color:var(--accent);
   border-style:dashed}
@@ -12699,6 +12708,11 @@ function _besTendEtat() {
   if (!S.besoinsTendMasque) S.besoinsTendMasque = {};
   if (!S.besoinsTendTable) S.besoinsTendTable = {};
   if (!S.besoinsTendRefAn) S.besoinsTendRefAn = {};
+  if (!S.besoinsTendDroite) S.besoinsTendDroite = {};
+  // Isolement : au plus UNE matière mise en avant par catégorie. Un ensemble
+  // de matières masquées demandait de se souvenir de ce qu'on avait éteint ;
+  // une seule matière isolée se défait d'un clic sur la même pastille.
+  if (!S.besoinsTendIsole) S.besoinsTendIsole = {};
   return S;
 }
 
@@ -12737,7 +12751,7 @@ function _besTendEchelle(max) {
 // Toutes les matières d'une catégorie partagent la même unité (le kind la
 // fixe), donc un axe unique et une échelle commune sont légitimes : deux
 // courbes du même graphe se comparent vraiment. Jamais deux axes Y.
-function _besTendGraphe(series, cols, moisCourant, documentes, unite, refAn) {
+function _besTendGraphe(series, cols, moisCourant, documentes, unite, refAn, tendOn) {
   const svgNS = 'http://www.w3.org/2000/svg';
   const N = cols.length;
   const W = 1000, H = 190, padT = 12, padB = 8;
@@ -12747,10 +12761,14 @@ function _besTendGraphe(series, cols, moisCourant, documentes, unite, refAn) {
   // L'échelle englobe le repère N-1 quand il est affiché : sinon un an plus
   // fort que celui-ci sortirait par le haut, et l'écart — qui est tout
   // l'intérêt du repère — deviendrait invisible.
+  // L'échelle englobe aussi la droite de tendance quand elle est affichée :
+  // une tendance qui monte au-dessus du carnet sortirait du cadre, et l'écart
+  // — qui est justement ce qu'il reste à commander — deviendrait invisible.
   const maxData = visibles.reduce((m, s) => Math.max(
     m,
     s.valeurs.reduce((a, v) => Math.max(a, v || 0), 0),
-    refAn ? s.refAn.reduce((a, v) => Math.max(a, v || 0), 0) : 0), 0);
+    refAn ? s.refAn.reduce((a, v) => Math.max(a, v || 0), 0) : 0,
+    tendOn && s.tend ? s.tend.reduce((a, v) => Math.max(a, v || 0), 0) : 0), 0);
   const echelle = _besTendEchelle(maxData);
   const y = v => padT + usable - (Math.max(0, v || 0) / echelle) * usable;
 
@@ -12867,6 +12885,22 @@ function _besTendGraphe(series, cols, moisCourant, documentes, unite, refAn) {
     visibles.forEach(s => {
       tracer(segmenter(s.refAn, (c, i) => s.refAn[i] != null), s.couleur,
              { width: 1.5, dash: '3 3', opacity: 0.4 });
+    });
+  }
+
+  // ── Droite de tendance ───────────────────────────────────────────────────
+  // Ajustée par le serveur sur les seuls mois RÉVOLUS, puis prolongée. Sur les
+  // mois à venir, l'écart entre elle et la courbe pleine se lit directement :
+  // c'est ce qui reste à commander si la tendance se confirme.
+  //
+  // Tiret long, pour ne pas se confondre avec le pointillé fin du repère N-1 :
+  // deux lignes discontinues de la même teinte dans un même graphe doivent se
+  // distinguer autrement que par leur épaisseur.
+  if (tendOn) {
+    visibles.forEach(s => {
+      if (!Array.isArray(s.tend) || !s.tend.some(v => v != null)) return;
+      tracer(segmenter(s.tend, (c, i) => s.tend[i] != null), s.couleur,
+             { width: 1.8, dash: '7 4', opacity: 0.75 });
     });
   }
 
@@ -13163,6 +13197,12 @@ function _buildBesoinsTendance(data) {
         const p = (l.serie || []).find(s => s.mois === c);
         return p && p.ref_an != null ? p.ref_an : null;
       }),
+      // La droite de tendance, calculée serveur sur les mois révolus.
+      tend: cols.map(c => {
+        const p = (l.serie || []).find(s => s.mois === c);
+        return p && p.tend != null ? p.tend : null;
+      }),
+      tend_pente: l.tend_pente, tend_r2: l.tend_r2, tend_n: l.tend_n,
     }));
     if (queue.length) {
       series.push({
@@ -13190,14 +13230,32 @@ function _buildBesoinsTendance(data) {
           });
           return somme;
         }),
+        // Sommer les droites est exact, pas une approximation : l'ajustement
+        // par moindres carrés est linéaire, donc la somme des droites de
+        // chaque matière EST la droite de leur somme, tant qu'elles sont
+        // ajustées sur les mêmes mois — ce que garantit le serveur.
+        tend: cols.map(c => {
+          let somme = null;
+          queue.forEach(l => {
+            const p = (l.serie || []).find(s => s.mois === c);
+            if (p && p.tend != null) somme = (somme || 0) + p.tend;
+          });
+          return somme;
+        }),
       });
     }
     // Garde-fou : toute série qui arrive ici sans repère N-1 en reçoit un vide.
     // Le graphe, l'infobulle et le compteur de points lisent tous `refAn` sans
     // le tester — une série sans ce tableau les fait tomber d'un coup.
+    // La matière isolée, s'il y en a une. Vérifiée contre les séries réellement
+    // présentes : un filtre de recherche peut avoir fait disparaître celle qui
+    // était isolée, et l'écran resterait vide sans qu'on comprenne pourquoi.
+    let isole = st.besoinsTendIsole[cat.kind] || null;
+    if (isole && !series.some(s => s.cle === isole)) isole = null;
     series.forEach(s => {
       if (!Array.isArray(s.refAn)) s.refAn = cols.map(() => null);
-      s.masquee = !!st.besoinsTendMasque[s.cle];
+      if (!Array.isArray(s.tend)) s.tend = cols.map(() => null);
+      s.masquee = !!(isole && s.cle !== isole);
     });
 
     // Les totaux de l'en-tête sont recalculés sur les lignes AFFICHÉES. Ceux
@@ -13243,6 +13301,20 @@ function _buildBesoinsTendance(data) {
                    + 'la fenêtre. Sert à juger si un mois à venir est plein ou creux.',
           }, 'habituel ' + _besFmtQte(cat.niveau, unite) + '/mois')
         : null,
+      // La pente en pourcentage du niveau habituel : « −6 %/mois » se lit,
+      // « −94 000 ml/mois » oblige à connaître l'ordre de grandeur.
+      // Sous 3 % on n'affiche rien : une pente de cet ordre sur douze points
+      // est indiscernable du bruit, et lui donner une flèche serait la faire
+      // passer pour un mouvement.
+      (cat.tend_pct != null && Math.abs(cat.tend_pct) >= 3 && !S.besoinsFiltre)
+        ? el('span', {
+            cls: 'bes-tsec-chip' + (cat.tend_pct < 0 ? ' baisse' : ' hausse'),
+            title: 'Pente de la droite ajustée sur les ' + cat.tend_n
+                   + ' mois révolus documentés'
+                   + (cat.tend_r2 != null ? ' (r² ' + cat.tend_r2.toFixed(2) + ')' : '')
+                   + '. Une pente n\'est pas une prévision : elle prolonge le passé.',
+          }, (cat.tend_pct > 0 ? '▲ +' : '▼ ') + cat.tend_pct + ' %/mois')
+        : null,
       el('span', { cls: 'bes-tsec-tot' },
         _besFmtQte(totFutur, unite),
         el('span', { cls: 'bes-tsec-tot-lbl' }, ' à venir')),
@@ -13263,12 +13335,16 @@ function _buildBesoinsTendance(data) {
       const leg = el('div', { cls: 'bes-tc-legend' });
       series.forEach(s => {
         leg.appendChild(el('button', {
-          cls: 'bes-tc-lg' + (s.masquee ? ' off' : ''),
+          cls: 'bes-tc-lg' + (s.masquee ? ' off' : (isole === s.cle ? ' solo' : '')),
           title: (s.designation || s.libelle)
                  + (s.agrege ? '' : ' · ' + _besFmtQte(s.total, unite) + ' sur la fenêtre')
-                 + (s.masquee ? ' — masquée' : ''),
+                 + (isole === s.cle ? ' — cliquer pour revoir toutes les matières'
+                                    : ' — cliquer pour n\'afficher que celle-ci'),
           on: { click: () => {
-            st.besoinsTendMasque[s.cle] = !s.masquee;
+            // Clic = isoler. Re-clic sur la même = tout revoir. Sur un graphe
+            // où une matière écrase les autres — l'adhésif 2028Y contre les
+            // cinq du dessous — c'est le geste qu'on fait vraiment.
+            st.besoinsTendIsole[cat.kind] = (isole === s.cle) ? null : s.cle;
             renderContent();
           } },
         },
@@ -13294,6 +13370,28 @@ function _buildBesoinsTendance(data) {
           } },
         }, refAnOn ? 'Masquer N-1' : 'Comparer à N-1'));
       }
+      // La droite de tendance ne se propose que si le serveur a pu l'ajuster
+      // — il exige cinq mois révolus documentés. Même règle que pour N-1 : pas
+      // de bouton qui n'affiche rien.
+      const aUneTendance = series.some(
+        s => Array.isArray(s.tend) && s.tend.some(v => v != null));
+      const tendOn = aUneTendance && !!st.besoinsTendDroite[cat.kind];
+      if (aUneTendance) {
+        const r2 = (series.find(s => s.tend_r2 != null) || {}).tend_r2;
+        leg.appendChild(el('button', {
+          cls: 'bes-tc-lg tend' + (tendOn ? ' on' : ''),
+          title: 'Prolonger la tendance des mois révolus, en tirets. '
+                 + 'L\'écart avec la courbe pleine, sur les mois à venir, '
+                 + 'est ce qui reste à commander si elle se confirme.'
+                 + (r2 != null && r2 < 0.3
+                     ? ' Attention : très dispersée (r² ' + r2.toFixed(2)
+                       + ') — la pente ne veut pas dire grand-chose.' : ''),
+          on: { click: () => {
+            st.besoinsTendDroite[cat.kind] = !tendOn;
+            renderContent();
+          } },
+        }, tendOn ? 'Masquer la tendance' : 'Tendance'));
+      }
       leg.appendChild(el('button', {
         cls: 'bes-tc-lg mode',
         title: 'Basculer entre la courbe et les valeurs chiffrées',
@@ -13306,7 +13404,7 @@ function _buildBesoinsTendance(data) {
 
       body.appendChild(st.besoinsTendTable[cat.kind]
         ? _besTendTableau(series.filter(s => !s.masquee), cols, moisCourant, documentes, unite)
-        : _besTendGraphe(series, cols, moisCourant, documentes, unite, refAnOn));
+        : _besTendGraphe(series, cols, moisCourant, documentes, unite, refAnOn, tendOn));
 
       if (series.every(s => s.masquee)) {
         body.appendChild(el('div', { cls: 'bes-tc-vide' },
