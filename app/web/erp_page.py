@@ -77,7 +77,7 @@ body.sb-open .sidebar{transform:translateX(0)}
 body.light .rvgi-mark .rvgi-sombre{display:none}
 body.light .rvgi-mark .rvgi-clair{display:block}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
-.nav-groupe{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);padding:14px 12px 6px}
+.nav-groupe{font-size:12px;font-weight:800;letter-spacing:.2px;color:var(--text);padding:16px 12px 6px}
 .nav-btn{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:8px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s,color .15s;margin-bottom:1px}
 .nav-btn:hover,.nav-btn.active{background:var(--accent-bg);color:var(--accent)}
 .back-mysifa{border:none!important;background:transparent!important;font-weight:400!important;color:var(--text2)!important;padding:8px 10px!important}
@@ -119,7 +119,7 @@ body.light .rvgi-mark .rvgi-clair{display:block}
    on compare des natures d'objet côte à côte au lieu de dérouler cinq bandes. */
 .colonnes{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;align-items:start}
 .colonne{min-width:0}
-.domaine-titre{font-size:11px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin:0 0 10px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.domaine-titre{font-size:14px;font-weight:800;letter-spacing:.3px;color:var(--text);margin:0 0 12px;padding-bottom:9px;border-bottom:2px solid var(--accent)}
 .cartes{display:flex;flex-direction:column;gap:10px}
 .carte{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:border-color .15s,transform .12s;display:flex;align-items:center;gap:12px}
 .carte:hover{border-color:var(--accent);transform:translateY(-1px)}
