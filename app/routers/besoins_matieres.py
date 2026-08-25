@@ -1706,6 +1706,74 @@ def _historique(request: Request, table: str, doc_id: int, libelle: str) -> dict
     }
 
 
+# Nombre minimal de mois mesurés pour qu'une droite de tendance soit tracée.
+# En dessous, deux ou trois points suffisent à dessiner n'importe quelle pente,
+# et l'écran afficherait une prévision qui ne décrit que le bruit.
+_TEND_MIN_POINTS = 5
+
+
+def _regression(points: list) -> Optional[tuple]:
+    """Moindres carrés ordinaires sur une liste de (x, y).
+
+    Retourne (pente, ordonnée, r2) ou None si l'ajustement n'a pas de sens.
+
+    Le r² est renvoyé sans être filtré ici : un r² bas ne disqualifie pas la
+    droite, il dit que la PENTE n'est pas significative. La régression dégénère
+    alors en horizontale à la moyenne — « pas de tendance, attends-toi au
+    niveau habituel » — ce qui reste une information juste. C'est à l'écran de
+    dire l'incertitude, pas au calcul de la cacher en refusant de répondre.
+    """
+    n = len(points)
+    if n < 2:
+        return None
+    mx = sum(p[0] for p in points) / n
+    my = sum(p[1] for p in points) / n
+    sxx = sum((p[0] - mx) ** 2 for p in points)
+    if sxx <= 0:
+        return None  # tous les x confondus : aucune pente définissable
+    pente = sum((p[0] - mx) * (p[1] - my) for p in points) / sxx
+    ordonnee = my - pente * mx
+    sst = sum((p[1] - my) ** 2 for p in points)
+    ssr = sum((p[1] - (pente * p[0] + ordonnee)) ** 2 for p in points)
+    r2 = (1 - ssr / sst) if sst > 0 else 1.0
+    return pente, ordonnee, r2
+
+
+def _tendance(par_mois: dict, tous_mois: list, mois_courant: str,
+              documentes: set) -> Optional[dict]:
+    """Droite de tendance ajustée sur les mois RÉVOLUS et documentés.
+
+    Le choix des points d'ajustement est tout le sujet. Les mois à venir sont
+    incomplets par construction — le carnet ne s'est pas encore rempli — donc
+    les inclure ferait descendre la droite pour une raison purement comptable,
+    et l'écran annoncerait un effondrement d'activité qui n'est que le délai de
+    commande. On n'ajuste donc que sur du révolu, et on prolonge.
+
+    L'écart entre la courbe pleine (ce qui est engagé) et la droite (ce que la
+    tendance laisse attendre) est alors lisible pour ce qu'il est : ce qui
+    reste à commander sur ce mois.
+
+    Une limite à garder en tête : douze points ne permettent pas d'ajuster une
+    saisonnalité en plus d'une pente. C'est le repère N-1 qui porte le signal
+    saisonnier ; les deux se lisent ensemble.
+    """
+    pts = [(i, par_mois[m]["q"])
+           for i, m in enumerate(tous_mois)
+           if m < mois_courant and m in documentes and m in par_mois]
+    if len(pts) < _TEND_MIN_POINTS:
+        return None
+    res = _regression(pts)
+    if not res:
+        return None
+    pente, ordonnee, r2 = res
+    # Un besoin négatif n'existe pas : la droite est bornée à zéro à
+    # l'affichage, sans quoi une pente descendante finirait sous l'axe.
+    valeurs = [max(0.0, round(pente * i + ordonnee, 2))
+               for i, _m in enumerate(tous_mois)]
+    return {"pente": round(pente, 3), "r2": round(r2, 3),
+            "n": len(pts), "valeurs": valeurs}
+
+
 def _mois_glissants(depuis: date, avant: int, apres: int) -> list:
     """Liste 'AAAA-MM' de M-avant à M+apres, mois courant compris."""
     an, mo = depuis.year, depuis.month - avant
@@ -1924,10 +1992,24 @@ def besoins_tendance(request: Request):
             if m < mois_courant and m in documentes and m in li["par_mois"]
         )
         niveau = (statistics.median(revolus) if revolus else None)
+        # La tendance, ajustée sur les mois révolus et prolongée sur toute la
+        # fenêtre. Attachée point par point à la série pour que l'écran n'ait
+        # aucun calcul à refaire — et donc aucune occasion de diverger.
+        tend = _tendance(li["par_mois"], tous_mois, mois_courant, documentes)
+        if tend:
+            for i, c in enumerate(colonnes):
+                serie[i]["tend"] = (tend["valeurs"][i]
+                                    if i < len(tend["valeurs"]) else None)
+        else:
+            for p in serie:
+                p["tend"] = None
         out.append({
             **{k: v for k, v in li.items() if k not in ("par_mois", "dossiers")},
             "niveau": round(niveau, 2) if niveau is not None else None,
             "niveau_n": len(revolus),
+            "tend_pente": tend["pente"] if tend else None,
+            "tend_r2": tend["r2"] if tend else None,
+            "tend_n": tend["n"] if tend else None,
             "serie": serie,
             "max": max((p["q"] for p in serie), default=0.0),
             "nb_dossiers": len(li["dossiers"]),
@@ -2040,6 +2122,19 @@ def besoins_tendance(request: Request):
         vals = sorted(v for m, v in par_mois_cat.items() if m in tous_mois)
         c["niveau"] = round(statistics.median(vals), 2) if vals else None
         c["niveau_n"] = len(vals)
+
+        # La tendance de la catégorie, ajustée sur SES totaux mensuels. Elle
+        # sert l'en-tête, qui raisonne au niveau où l'on décide d'acheter.
+        # `_tendance` attend la même forme que `par_mois` d'une ligne.
+        tend_cat = _tendance({m: {"q": v} for m, v in par_mois_cat.items()},
+                             tous_mois, mois_courant, documentes)
+        c["tend_pente"] = tend_cat["pente"] if tend_cat else None
+        c["tend_r2"] = tend_cat["r2"] if tend_cat else None
+        c["tend_n"] = tend_cat["n"] if tend_cat else None
+        # La pente en % du niveau habituel : « −6 %/mois » se lit, « −94 000
+        # ml/mois » demande de connaître l'ordre de grandeur de la catégorie.
+        c["tend_pct"] = (round(100.0 * tend_cat["pente"] / c["niveau"], 1)
+                         if tend_cat and c.get("niveau") else None)
 
     return {
         "colonnes": colonnes,
