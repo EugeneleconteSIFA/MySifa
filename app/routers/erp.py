@@ -119,6 +119,31 @@ def erp_meta(request: Request):
     }
 
 
+@router.get("/recherche")
+def erp_recherche(
+    request: Request,
+    q: str = Query("", max_length=120),
+    par_ecran: int = Query(miroir.RESULTATS_PAR_ECRAN, ge=1, le=20),
+):
+    """Cherche la même chaîne dans les vingt-sept écrans à la fois.
+
+    Déclarée AVANT `/{cle}/...` : sinon FastAPI lirait « recherche » comme une
+    clé d'écran et rendrait un 404.
+    """
+    _exiger_acces(request)
+    cols = _colonnes_par_table()
+    ecrans = []
+    for ec in catalogue.ECRANS:
+        adapte = catalogue.adapter_ecran(ec, cols)
+        if adapte:
+            ecrans.append(adapte)
+    ecrans.sort(key=lambda e: catalogue.rang(e["cle"]))
+    try:
+        return miroir.recherche_globale(ecrans, q, par_ecran=par_ecran)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
 @router.get("/{cle}/lignes")
 def erp_lignes(
     cle: str,

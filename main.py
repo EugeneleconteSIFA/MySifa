@@ -101,6 +101,8 @@ from app.routers.taches import router as taches_api_router
 from app.web.taches_page import router as taches_page_router
 # ERP : lecture seule du miroir RVGI (data/erp_mirror.db), superadmin.
 from app.routers.erp import router as erp_api_router
+# Rattachement : relier un dossier de fabrication ou un départ aux pièces de RVGI.
+from app.routers.rvgi import router as rvgi_api_router
 from app.web.erp_page import router as erp_page_router
 
 
@@ -497,6 +499,7 @@ app.include_router(taches_page_router)
 # Les deux : sans include_router, /api/erp/* renverrait un 404 silencieux.
 app.include_router(erp_api_router)
 app.include_router(erp_page_router)
+app.include_router(rvgi_api_router)
 
 
 @app.get("/healthz", include_in_schema=False)
