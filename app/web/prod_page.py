@@ -78,7 +78,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
      s'en charge sur staging), or cette feuille porte desormais le style des
      intitules de section de la barre laterale. Sans suffixe, le navigateur
      ressert l'ancienne et la section s'affiche nue. -->
-<link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem12">
+<link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13">
 <link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_print_modal.css?v=__V_LABEL__">
 <script src="/static/motion.js?v=__V_LABEL__" defer></script>
@@ -93,13 +93,13 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <script src="/static/mysifa_theme.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_user_chip.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
-<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-pmem12"></script>
+<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-pmem13"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
 <!-- v2.3.42 : viewer partagé du détail d'un ack d'alerte (identique à Maintenance) -->
 <script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__"></script>
 <!-- Memoire produit : fiche par reference (partagee avec Saisieprod) -->
-<script src="/static/mysifa_produit_memoire.js?v=__V_LABEL__-pmem12"></script>
+<script src="/static/mysifa_produit_memoire.js?v=__V_LABEL__-pmem13"></script>
 <script src="/static/mysifa_cal_rappel.js?v=4"></script>
 </body>
 </html>"""

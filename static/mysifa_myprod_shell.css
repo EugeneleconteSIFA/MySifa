@@ -214,9 +214,9 @@ body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rg
    la coquille partagée, et non dans le JS d'une seule page : MyProd et le
    Planning chargent tous les deux ce fichier, et une sidebar qui change de
    tête d'une page à l'autre se remarque immédiatement.
-   Le modificateur --statique sert au Planning, dont la barre n'est qu'une
-   liste de liens : un repli dont l'état serait perdu à chaque rendu vaut
-   moins qu'un intitulé simple. */
+   MyProd et le Planning gardent chacun leur implémentation de sidebar, mais
+   se replient de la même façon : état hors du rendu, bascule directe du DOM,
+   arrêt de la boucle sur .sidebar-bottom. */
 .sidebar .nav-section-label{
   font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
   font-weight:600;padding:10px 14px 4px 14px;user-select:none;cursor:pointer;
@@ -228,5 +228,3 @@ body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rg
   display:inline-flex;flex-shrink:0;transition:transform .2s;opacity:.55;
 }
 .sidebar .nav-section-label.ngl-collapsed .ngl-chevron{transform:rotate(-90deg)}
-.sidebar .nav-section-label--statique{cursor:default}
-.sidebar .nav-section-label--statique:hover{background:transparent}

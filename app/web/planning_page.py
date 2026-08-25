@@ -92,7 +92,7 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/motion.css">
 <!-- Cette feuille n'avait aucun cache-buster : une modification n'arrivait
      jamais sur un poste qui l'avait deja chargee. -->
-<link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem12">
+<link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -1755,18 +1755,47 @@ function renderSidebar(){
   ];
   const isLight=document.body.classList.contains("light");
   return`<nav class="sidebar"><div class="logo" title="Accueil MyProd" onclick="location.href='/prod?page=menu'"><div class="logo-brand">My<span>Prod</span></div><div class="logo-sub">by SIFA</div></div>${
-    items.map(i=>{
-      // Pas de repli ici : la barre du Planning est reconstruite a chaque
-      // rendu, un etat de repli y serait perdu aussitot. L'intitule reste
-      // donc statique — meme allure, sans chevron qui ne servirait a rien.
-      if(i.section) return `<div class="nav-section-label nav-section-label--statique"><span>${i.section}</span></div>`;
+    (()=>{ let section=null; return items.map(i=>{
+      // Meme intitule repliable que dans MyProd : chevron, bascule au clic,
+      // etat conserve dans NAV_REPLIEES.
+      if(i.section){
+        section = i.section;
+        const replie = !!NAV_REPLIEES[i.section];
+        const chevron = '<span class="ngl-chevron"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></span>';
+        return `<div class="nav-section-label${replie?" ngl-collapsed":""}" data-section="${i.section}" onclick="toggleNavSection(this.dataset.section)"><span>${i.section}</span>${chevron}</div>`;
+      }
       const badge=(i.withPendingBadge && PENDING_OF_COUNT>0)
         ? `<span style="margin-left:auto;padding:1px 7px;border-radius:9px;background:var(--danger);color:#fff;font-size:10px;font-weight:700;line-height:1.5;flex-shrink:0" title="${PENDING_OF_COUNT} OF à associer manuellement">${PENDING_OF_COUNT}</span>`
         : "";
-      return `<button type="button" class="nav-btn${i.key==="_planning"?" active":""}" onclick="location.href='${i.href}'"><span style="display:inline-flex;align-items:center;gap:10px;width:100%">${icon(i.icon,16)}<span>${i.label}</span>${badge}</span></button>`;
-    }).join("")
+      const cache = (section && NAV_REPLIEES[section]) ? ' style="display:none"' : '';
+      return `<button type="button" class="nav-btn${i.key==="_planning"?" active":""}"${cache} onclick="location.href='${i.href}'"><span style="display:inline-flex;align-items:center;gap:10px;width:100%">${icon(i.icon,16)}<span>${i.label}</span>${badge}</span></button>`;
+    }).join(""); })()
   }<div class="sidebar-bottom">${(S.planningVue==='expe'||S.planningVue==='prod_expe')?`<button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/expe'" title="Retour MyExpé"><span class="mysifa-back-preamble">← Retour </span><span class="mysifa-back-brand" style="display:inline-flex;align-items:center;gap:6px">${icon('truck',14)}My<span class="mysifa-back-accent">Expé</span></span></button>`:''}<button type="button" class="nav-btn nav-btn--mysifa-portal" onclick="location.href='/'"><span class="mysifa-back-preamble">← Retour </span><span class="mysifa-back-brand">My<span class="mysifa-back-accent">Sifa</span></span></button>${planningUserChipHtml()}<button type="button" class="support-btn" onclick="openSupport()"><span class="support-ico">${(window.MySifaSupport&&window.MySifaSupport.iconSvg)?window.MySifaSupport.iconSvg():""}</span><span>Contacter le support</span></button><button type="button" class="theme-btn" onclick="toggleTheme()"><span class="theme-ico">${isLight?icon('sun',16):icon('moon',16)}</span><span class="theme-label">${isLight?"Mode clair":"Mode sombre"}</span></button><button type="button" class="logout-btn" onclick="doLogout()">${icon('log-out',14)} Déconnexion</button><div class="version">__V_LABEL__</div></div></nav>`;
 }
+/* Sections repliees de la barre laterale. L'etat vit ici, hors du rendu :
+ * la barre du Planning est reconstruite a chaque render(), mais elle relit
+ * cet objet, donc le repli survit. On bascule aussi le DOM directement, pour
+ * ne pas re-rendre la page entiere sur un clic de sidebar. */
+var NAV_REPLIEES = {};
+function toggleNavSection(nom){
+  NAV_REPLIEES[nom] = !NAV_REPLIEES[nom];
+  const replie = !!NAV_REPLIEES[nom];
+  document.querySelectorAll('.sidebar .nav-section-label').forEach(function(el){
+    if((el.dataset.section||'') !== nom) return;
+    el.classList.toggle('ngl-collapsed', replie);
+    let sib = el.nextElementSibling;
+    // On s'arrete au prochain intitule ET au pied de page : sans cette
+    // seconde borne, le repli emporterait Retour MySifa, le profil, le
+    // theme et la deconnexion avec lui.
+    while(sib
+          && !sib.classList.contains('nav-section-label')
+          && !sib.classList.contains('sidebar-bottom')){
+      if(sib.classList.contains('nav-btn')) sib.style.display = replie ? 'none' : '';
+      sib = sib.nextElementSibling;
+    }
+  });
+}
+
 async function loadPendingOfCount(){
   if(!canAccessOfTab())return;
   try{
