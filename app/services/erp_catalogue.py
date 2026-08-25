@@ -55,8 +55,12 @@ ENUMS = {
 # L'ordre et les noms sont ceux de la barre de menus de RVGI — Fichiers,
 # Ventes, Stocks, Production, Achats, Comptabilités. Quelqu'un qui passe d'un
 # écran à l'autre toute la journée n'a pas à réapprendre où sont les choses.
+# `type: parametres` sort un domaine du fil du process : Fichiers regroupe des
+# référentiels, pas des étapes de la vie d'une commande. L'affichage le range
+# donc en bas, sur toute la largeur, au lieu de lui donner une colonne dans le
+# flux.
 DOMAINES = [
-    {"cle": "fichiers", "label": "Fichiers"},
+    {"cle": "fichiers", "label": "Fichiers", "type": "parametres"},
     {"cle": "ventes", "label": "Ventes"},
     {"cle": "stocks", "label": "Stocks"},
     {"cle": "production", "label": "Production"},
