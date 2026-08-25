@@ -3554,32 +3554,34 @@ function fscTypeRequisLabel(t){
 }
 
 // ── Rattachement RVGI du dossier ────────────────────────────────────────────
-// Le « Numéro d'OF » d'un dossier EST un numéro de commande RVGI. On le
-// choisit donc dans RVGI plutôt que de le retaper — mais la saisie libre
-// reste possible : le miroir a jusqu'à douze heures de retard, et une
-// commande passée ce matin n'y est pas encore.
+// Le « Numéro d'OF » d'un dossier EST un numéro de commande RVGI. Le champ
+// cherche donc dans RVGI pendant qu'on le tape — pas un bouton à côté : le
+// geste attendu est de taper le numéro, il devait rattacher tout seul.
+//
+// La saisie libre reste possible, et « Commande introuvable » n'apparaît que
+// lorsqu'il n'y a rien à proposer. Le miroir a jusqu'à douze heures de retard :
+// une commande passée ce matin n'y est pas, et ce n'est pas une faute.
 let _rvgiEnAttente=null;   // sélection faite avant que le dossier existe
 
-function rvgiChoisirCommande(btn){
-  if(!window.MysRvgiPicker){ showToast("Sélecteur RVGI indisponible.","danger"); return; }
+function rvgiBrancherChamp(){
   const champ=document.getElementById('f-of');
-  const brut=(btn.getAttribute('data-entry')||'').trim();
-  const entryId=brut?Number(brut):null;
-  MysRvgiPicker.ouvrir({
-    mode:'commande', objet:'dossier', objetId:entryId,
-    recherche:(champ&&champ.value||'').trim(),
-    onValider:(res)=>{
-      // La référence proposée ne s'impose jamais : si le dossier porte déjà
-      // un numéro, on ne le réécrit pas dans son dos — c'est la clé que le
-      // reste de MySifa joint en texte.
-      if(res.reference&&champ&&!champ.value.trim())champ.value=res.reference;
-      if(!entryId){
-        _rvgiEnAttente={lignes:res.lignes||[],etat:res.etat||null};
-        rvgiPeindreEnAttente(res);
+  if(!champ||!window.MysRvgiPicker||champ.dataset.rvgiPret)return;
+  champ.dataset.rvgiPret='1';
+  const lireId=()=>{const v=(champ.getAttribute('data-entry')||'').trim();return v?Number(v):null;};
+  MysRvgiPicker.attacher(champ,{
+    mode:'commande', objet:'dossier', objetId:lireId,
+    // On ne réécrit jamais un numéro déjà saisi : c'est la clé que le reste
+    // de MySifa joint en texte.
+    remplir:!champ.value.trim(),
+    onChange:(res)=>{
+      if(res.enregistre){
+        MysRvgiPicker.resume(document.getElementById('f-of-res'),'dossier',lireId());
       }else{
-        MysRvgiPicker.resume(document.getElementById('f-of-res'),'dossier',entryId);
+        _rvgiEnAttente={lignes:res.lignes||[],etat:res.etat||null};
+        rvgiPeindreEnAttente(_rvgiEnAttente);
       }
-    }
+    },
+    onErreur:(e)=>showToast(e.message||"Rattachement impossible.","danger")
   });
 }
 
@@ -3589,9 +3591,9 @@ function rvgiPeindreEnAttente(res){
   const n=(res.lignes||[]).length;
   z.className='mrp-res';
   z.innerHTML=n
-    ? '<span class="e partiel">à enregistrer</span><span>'+n+' ligne'+(n>1?'s':'')+
-      ' de commande — rattachée'+(n>1?'s':'')+' à la création du dossier</span>'
-    : '<span class="e a_rattacher">à rattacher</span><span>aucune commande trouvée — le dossier ira dans la liste à traiter</span>';
+    ? '<span class="e partiel">à enregistrer</span><span>'+n+' pièce'+(n>1?'s':'')+
+      ' RVGI — rattachée'+(n>1?'s':'')+' à la création du dossier</span>'
+    : '<span class="e a_rattacher">à rattacher</span><span>commande introuvable — le dossier ira dans la liste à traiter</span>';
 }
 
 // Après la création d'un dossier : on pose ce qui avait été choisi avant
@@ -3611,6 +3613,7 @@ async function rvgiPoserEnAttente(nouvelId){
 }
 
 function rvgiRafraichirResume(entryId){
+  rvgiBrancherChamp();
   if(!window.MysRvgiPicker)return;
   const z=document.getElementById('f-of-res');
   if(!z)return;
@@ -3626,17 +3629,17 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
   const dlImpOn=dlImposee===1||dlImposee===true;
   const valideOn=valide===1||valide===true;
   const dlVal=/^\d{4}-\d{2}-\d{2}$/.test(date_livraison)?date_livraison:"";
+  // Le HTML rendu ici est injecté par l'appelant juste après, de façon
+  // synchrone : un timeout à 0 suffit pour brancher le champ, et évite de
+  // toucher aux cinq endroits qui construisent cette modale.
+  setTimeout(()=>{rvgiBrancherChamp();if(entryId)rvgiRafraichirResume(entryId);},0);
   return`
     <div class="dossier-sections">
       <div class="dossier-section">
         <span class="dossier-section-label">Informations générales</span>
         <div class="fd"><label>Numéro d'OF</label>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input id="f-of" value="${escAttr(numero_of)}" placeholder="9936280" style="flex:1;min-width:0">
-            <button type="button" id="f-of-rvgi" class="btn" data-entry="${entryId==null?'':escAttr(String(entryId))}"
-                    onclick="rvgiChoisirCommande(this)" title="Choisir la ou les commandes dans RVGI"
-                    style="white-space:nowrap;padding:8px 12px">Commandes RVGI…</button>
-          </div>
+          <input id="f-of" value="${escAttr(numero_of)}" placeholder="Tape un n° de commande, un client, un article…"
+                 data-entry="${entryId==null?'':escAttr(String(entryId))}">
           <div id="f-of-res" class="mrp-res"></div>
         </div>
         <div class="fd"><label>Client</label><input id="f-cli" value="${escAttr(client)}" placeholder="Nom du client"></div>

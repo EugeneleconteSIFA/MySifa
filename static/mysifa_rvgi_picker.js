@@ -115,6 +115,26 @@
     '.mrp-res .e.a_verifier{background:rgba(234,88,12,.14);color:#c2410c}',
     '.mrp-res .e.a_rattacher{background:rgba(148,163,184,.2);color:#475569}',
     '.mrp-res .e.hors_commande{background:rgba(148,163,184,.2);color:#475569}',
+    /* Suggestions sous le champ de saisie d'origine */
+    '.mrp-sug{position:fixed;z-index:9200;background:var(--card,#fff);border:1px solid var(--border,#dcdfe4);',
+    '  border-radius:11px;box-shadow:0 14px 40px rgba(0,0,0,.22);overflow:hidden;max-height:340px;overflow-y:auto;',
+    '  font:13px/1.4 inherit;color:var(--text,#111)}',
+    '.mrp-s-l{display:grid;grid-template-columns:110px minmax(0,1fr) auto;gap:2px 14px;align-items:baseline;',
+    '  padding:8px 13px;cursor:pointer;border-top:1px solid var(--border,#dcdfe4)}',
+    '.mrp-s-l:first-child{border-top:none}',
+    '.mrp-s-l:hover,.mrp-s-l.vise{background:rgba(37,99,235,.09)}',
+    '.mrp-s-l .n{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;color:var(--accent,#2563eb)}',
+    '.mrp-s-l .c{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.mrp-s-l .m{grid-column:2;font-size:11.5px;color:var(--muted,#6b7280);overflow:hidden;',
+    '  text-overflow:ellipsis;white-space:nowrap}',
+    '.mrp-s-l .k{grid-column:3;grid-row:1;font-size:11.5px;color:var(--muted,#6b7280);white-space:nowrap}',
+    '.mrp-s-pied{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 13px;',
+    '  background:var(--bg,#f6f7f9);border-top:1px solid var(--border,#dcdfe4);font-size:12px}',
+    '.mrp-s-pied .lien{color:var(--accent,#2563eb);cursor:pointer;font-weight:600;text-decoration:underline}',
+    '.mrp-s-vide{padding:14px 13px;color:var(--muted,#6b7280);font-size:12.5px}',
+    '.mrp-introuvable{border:1px solid #f59e0b;background:rgba(245,158,11,.12);color:#b45309;',
+    '  border-radius:8px;padding:6px 11px;cursor:pointer;font:inherit;font-size:12px;font-weight:700}',
+    '.mrp-introuvable:hover{background:rgba(245,158,11,.2)}',
     '@media (max-width:760px){',
     '  .mrp-l .des,.mrp-l .art{display:none}',
     '  .mrp{max-height:100vh;height:100vh;border-radius:0}',
@@ -464,5 +484,186 @@
     } catch (err) { el.innerHTML = ''; }
   }
 
-  global.MysRvgiPicker = { ouvrir: ouvrir, resume: resume, ETATS: ETATS };
+  // ── Le champ de saisie EST le lien vers RVGI ─────────────────────────────
+  //
+  // On ne met pas un bouton à côté d'un champ libre : on cherche dans RVGI
+  // pendant que l'utilisateur tape le numéro qu'il aurait tapé de toute façon.
+  // Le bouton « introuvable » n'apparaît que lorsqu'il sert — quand la
+  // recherche n'a rien rendu — parce qu'il n'y a rien à proposer d'autre.
+
+  function attacher(input, opts) {
+    styles();
+    var o = opts || {};
+    var mode = o.mode === 'livraison' ? 'livraison' : 'commande';
+    var objet = o.objet || (mode === 'commande' ? 'dossier' : 'depart');
+    var boite = null, minuteur = null, jeton = 0, pieces = [], vise = -1;
+
+    function objetId() { return o.objetId ? (typeof o.objetId === 'function' ? o.objetId() : o.objetId) : null; }
+    function dossierId() { return typeof o.dossierId === 'function' ? o.dossierId() : o.dossierId; }
+
+    function fermer() {
+      if (boite) { boite.remove(); boite = null; }
+      vise = -1;
+      document.removeEventListener('scroll', placer, true);
+      window.removeEventListener('resize', placer);
+    }
+    function placer() {
+      if (!boite) return;
+      var r = input.getBoundingClientRect();
+      boite.style.left = r.left + 'px';
+      boite.style.top = (r.bottom + 4) + 'px';
+      boite.style.width = Math.max(340, r.width) + 'px';
+    }
+    function ouvrirBoite(html) {
+      if (!boite) {
+        boite = document.createElement('div');
+        boite.className = 'mrp-sug';
+        document.body.appendChild(boite);
+        document.addEventListener('scroll', placer, true);
+        window.addEventListener('resize', placer);
+      }
+      boite.innerHTML = html;
+      placer();
+    }
+
+    async function chercher() {
+      var q = input.value.trim();
+      var j = ++jeton;
+      if (q.length < 2) { fermer(); return; }
+      ouvrirBoite('<div class="mrp-s-vide">Recherche dans RVGI…</div>');
+      var url = mode === 'commande'
+        ? '/api/rvgi/commandes?ouvertes=1&limite=8&q=' + encodeURIComponent(q)
+        : '/api/rvgi/livraisons?limite=8&q=' + encodeURIComponent(q) +
+          (dossierId() ? '&dossier_id=' + encodeURIComponent(dossierId()) : '');
+      var r;
+      try { r = await api(url); }
+      catch (e) {
+        if (j !== jeton) return;
+        ouvrirBoite('<div class="mrp-s-vide">' + esc(e.message) + '</div>');
+        return;
+      }
+      if (j !== jeton) return;
+      pieces = r.pieces || [];
+      peindre(r);
+    }
+
+    function peindre(r) {
+      var h = '';
+      pieces.forEach(function (p, i) {
+        var pris = p.etat === 'rattache' ? 'déjà rattachée'
+                 : (p.etat === 'partiel' ? 'partiellement prise' : '');
+        h += '<div class="mrp-s-l" data-i="' + i + '">' +
+             '<span class="n">' + esc(p.numero) + '</span>' +
+             '<span class="c">' + esc(p.client || '—') + '</span>' +
+             '<span class="k">' + esc(p.nb_lignes) + ' ligne' + (p.nb_lignes > 1 ? 's' : '') + '</span>' +
+             (pris ? '<span class="m">' + pris + '</span>' : '') +
+             '</div>';
+      });
+      if (!pieces.length) {
+        h += '<div class="mrp-s-vide">Aucune ' + (mode === 'commande' ? 'commande' : 'BL') +
+             ' ne correspond dans le miroir de RVGI.<br>' +
+             (r && r.miroir && r.miroir.releve_le
+               ? 'Relevé le ' + String(r.miroir.releve_le).slice(0, 16).replace('T', ' ') +
+                 ' — une pièce saisie depuis n\'y est pas.'
+               : '') + '</div>';
+      }
+      h += '<div class="mrp-s-pied">' +
+           (pieces.length
+             ? '<span class="lien" data-lignes="1">Choisir des lignes précises…</span>'
+             : '') +
+           '<button type="button" class="mrp-introuvable" data-introuvable="1">' +
+           (mode === 'commande' ? 'Commande introuvable' : 'BL introuvable') + '</button>' +
+           '</div>';
+      ouvrirBoite(h);
+
+      boite.querySelectorAll('[data-i]').forEach(function (el) {
+        el.addEventListener('mousedown', function (ev) {
+          ev.preventDefault();
+          prendre(pieces[Number(el.getAttribute('data-i'))]);
+        });
+      });
+      var lien = boite.querySelector('[data-lignes]');
+      if (lien) lien.addEventListener('mousedown', function (ev) {
+        ev.preventDefault(); fermer(); ouvrirComplet();
+      });
+      var intr = boite.querySelector('[data-introuvable]');
+      if (intr) intr.addEventListener('mousedown', function (ev) {
+        ev.preventDefault(); marquerIntrouvable();
+      });
+    }
+
+    // Choisir une pièce dans la liste la rattache EN ENTIER — c'est le cas
+    // courant. Le détail ligne par ligne reste à un clic, sous la liste.
+    async function prendre(p) {
+      if (!p) return;
+      fermer();
+      var lignes = [{ numero: String(p.numero), ligne: null, qte: null, confirme: true,
+                      vu_client: p.client || null }];
+      await poser(lignes, null, String(p.numero));
+    }
+
+    async function marquerIntrouvable() {
+      fermer();
+      await poser([], 'a_rattacher', null);
+    }
+
+    async function poser(lignes, force, texte) {
+      var id = objetId();
+      if (id) {
+        try {
+          var r = await api('/api/rvgi/rattachements', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ objet: objet, objet_id: Number(id), lignes: lignes, etat: force })
+          });
+          if (o.onChange) o.onChange({ etat: r.etat, texte: r.texte, lignes: lignes, enregistre: true });
+        } catch (e) {
+          if (o.onErreur) o.onErreur(e); else alert(e.message);
+          return;
+        }
+      } else if (o.onChange) {
+        o.onChange({ etat: force || (lignes.length ? 'lie' : 'a_rattacher'),
+                     texte: texte, lignes: lignes, enregistre: false });
+      }
+      if (texte && o.remplir !== false) input.value = texte;
+    }
+
+    function ouvrirComplet() {
+      ouvrir({
+        mode: mode, objet: objet, objetId: objetId(), dossierId: dossierId(),
+        recherche: input.value.trim(),
+        onValider: function (res) {
+          if (res.reference && o.remplir !== false && !input.value.trim()) input.value = res.reference;
+          if (o.onChange) o.onChange({ etat: res.etat, texte: res.texte, lignes: res.lignes,
+                                       enregistre: !!objetId(), reference: res.reference });
+        }
+      });
+    }
+
+    input.setAttribute('autocomplete', 'off');
+    input.addEventListener('input', function () {
+      clearTimeout(minuteur);
+      minuteur = setTimeout(chercher, 300);
+    });
+    input.addEventListener('focus', function () { if (input.value.trim().length >= 2) chercher(); });
+    input.addEventListener('blur', function () { setTimeout(fermer, 160); });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { fermer(); return; }
+      if (!boite) return;
+      var els = boite.querySelectorAll('[data-i]');
+      if (!els.length) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        vise = e.key === 'ArrowDown' ? Math.min(els.length - 1, vise + 1) : Math.max(0, vise - 1);
+        els.forEach(function (x) { x.classList.remove('vise'); });
+        els[vise].classList.add('vise');
+        els[vise].scrollIntoView({ block: 'nearest' });
+      } else if (e.key === 'Enter' && vise >= 0) {
+        e.preventDefault();
+        prendre(pieces[vise]);
+      }
+    });
+    return { ouvrirComplet: ouvrirComplet, fermer: fermer };
+  }
+
+  global.MysRvgiPicker = { ouvrir: ouvrir, attacher: attacher, resume: resume, ETATS: ETATS };
 })(window);

@@ -1247,6 +1247,15 @@ def adapter_ecran(ec, colonnes_par_table):
     adapte["labels_detail"] = dict(LABELS, **(ec.get("labels_detail") or {}))
     adapte["liens"] = LIENS.get(ec["cle"], [])
     adapte["piece"] = piece_de(adapte)
+    r = RATTACHABLE.get(ec["cle"])
+    # Le rattachement ne se propose que si les colonnes qu'il joint existent
+    # vraiment dans le miroir.
+    if r and ref_ok("%s.numero" % ec["alias"]):
+        if r["col_ligne"] and not ref_ok("%s.%s" % (ec["alias"], r["col_ligne"])):
+            r = dict(r, col_ligne=None)
+        if r["col_qte"] and not ref_ok("%s.%s" % (ec["alias"], r["col_qte"])):
+            r = dict(r, col_qte=None)
+        adapte["rattachable"] = r
     return adapte
 
 
@@ -1288,6 +1297,18 @@ def piece_de(ec):
                 "tri": _colonne_de_ligne(ec),
             }
     return None
+
+
+# ── Écrans qui portent un rattachement MySifa ────────────────────────────────
+#
+# Deux, et deux seulement : ce que MySifa fabrique se rattache à une ligne de
+# commande, ce qu'il expédie à un bon de livraison. Le reste — articles,
+# clients, factures — n'a rien à rattacher, et une colonne vide sur vingt-cinq
+# écrans coûterait une jointure pour rien.
+RATTACHABLE = {
+    "commandes":  {"piece": "commande",  "col_ligne": "ligne", "col_qte": "qte"},
+    "livraisons": {"piece": "livraison", "col_ligne": None,    "col_qte": "qte"},
+}
 
 
 def _colonne_de_ligne(ec):

@@ -4585,37 +4585,36 @@ function renderExpeDepartModal(){
     return h('div',{className:'expe-field'},h('label',null,label),i);
   }
 
-  // ── N° BL : saisie libre, ou choix dans RVGI ──────────────────────────────
+  // ── N° BL : le champ cherche dans RVGI pendant qu'on le tape ─────────────
   // Un départ peut porter plusieurs BL — c'est déjà le cas dans les données,
-  // écrit « 9938763 + 9938764 » à la main. Le sélecteur les rattache pour de
-  // vrai, et propose d'abord ceux que RVGI relie déjà aux commandes du
-  // dossier expédié : on ne cherche pas dans 23 000 bons de livraison.
-  const blInput=h('input',{type:'text',placeholder:'9938763',name:'no_bl',
+  // écrit « 9938763 + 9938764 » à la main. Ici, taper le numéro le rattache
+  // pour de vrai. Et comme le départ connaît son dossier, RVGI sait déjà
+  // quels BL livrent ses commandes : ce sont eux qui remontent en premier.
+  const blInput=h('input',{type:'text',name:'no_bl',
+                           placeholder:'Tape un n° de BL, de commande, un client…',
                            value:(f.no_bl!=null?String(f.no_bl):'')});
   blInput.addEventListener('input',e=>{S.expeDepartForm.no_bl=e.target.value; expeScheduleSaveLocal();});
   const blResume=h('div',{className:'mrp-res'});
-  const blBtn=h('button',{type:'button',className:'btn',
-    style:{whiteSpace:'nowrap',padding:'8px 12px'},
-    title:'Choisir le ou les bons de livraison dans RVGI'},'BL RVGI…');
-  blBtn.addEventListener('click',()=>{
-    if(!window.MysRvgiPicker){ alert("Sélecteur RVGI indisponible."); return; }
-    const dossierId=S.expeDepartForm&&S.expeDepartForm.planning_entry_id
-      ? Number(S.expeDepartForm.planning_entry_id) : null;
-    MysRvgiPicker.ouvrir({
+  const blField=h('div',{className:'expe-field'},h('label',null,'N° BL'),blInput,blResume);
+
+  if(window.MysRvgiPicker){
+    MysRvgiPicker.attacher(blInput,{
       mode:'livraison', objet:'depart',
-      objetId: S.expeDepartEditId ? Number(S.expeDepartEditId) : null,
-      dossierId: dossierId,
-      recherche:(blInput.value||'').trim(),
-      onValider:(res)=>{
+      objetId:()=>S.expeDepartEditId?Number(S.expeDepartEditId):null,
+      dossierId:()=>S.expeDepartForm&&S.expeDepartForm.planning_entry_id
+        ?Number(S.expeDepartForm.planning_entry_id):null,
+      remplir:false,   // c'est nous qui composons « 9938763 + 9938764 »
+      onChange:(res)=>{
         const nums=(res.lignes||[]).map(l=>l.numero);
-        // Le champ texte reste la vitrine : il affiche ce qui a été rattaché,
-        // dans la forme que l'équipe écrit déjà à la main.
         if(nums.length){
-          blInput.value=nums.join(' + ');
+          // Le champ reste la vitrine, dans la forme que l'équipe écrit déjà.
+          const deja=(S.expeDepartForm.no_bl||'').split('+').map(x=>x.trim()).filter(Boolean);
+          const tous=deja.concat(nums.filter(n=>deja.indexOf(String(n))<0));
+          blInput.value=tous.join(' + ');
           S.expeDepartForm.no_bl=blInput.value;
           expeScheduleSaveLocal();
         }
-        if(S.expeDepartEditId){
+        if(res.enregistre){
           MysRvgiPicker.resume(blResume,'depart',Number(S.expeDepartEditId));
         }else{
           S.expeDepartRattachEnAttente={lignes:res.lignes||[],etat:res.etat||null};
@@ -4623,17 +4622,14 @@ function renderExpeDepartModal(){
           blResume.innerHTML=nums.length
             ? '<span class="e partiel">à enregistrer</span><span>'+nums.length+
               ' BL — rattaché'+(nums.length>1?'s':'')+' à l\'enregistrement du départ</span>'
-            : '<span class="e a_rattacher">à rattacher</span><span>aucun BL trouvé dans le miroir</span>';
+            : '<span class="e a_rattacher">à rattacher</span><span>BL introuvable dans le miroir</span>';
         }
-      }
+      },
+      onErreur:(e)=>toast(e.message||'Rattachement impossible','error')
     });
-  });
-  const blField=h('div',{className:'expe-field'},
-    h('label',null,'N° BL'),
-    h('div',{style:{display:'flex',gap:'8px',alignItems:'center'}},blInput,blBtn),
-    blResume);
-  if(S.expeDepartEditId&&window.MysRvgiPicker){
-    setTimeout(()=>MysRvgiPicker.resume(blResume,'depart',Number(S.expeDepartEditId)),0);
+    if(S.expeDepartEditId){
+      setTimeout(()=>MysRvgiPicker.resume(blResume,'depart',Number(S.expeDepartEditId)),0);
+    }
   }
 
   const paletteItems=S.expePaletteTypes||[];

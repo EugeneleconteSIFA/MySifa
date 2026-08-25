@@ -102,6 +102,7 @@ def erp_meta(request: Request):
             "filtres": [
                 {k: v for k, v in f.items() if k != "col"} for f in adapte["filtres"]
             ],
+            "rattachable": bool(adapte.get("rattachable")),
         })
 
     # Les écrans sortent dans l'ordre d'affichage, pas dans celui du catalogue.
@@ -156,9 +157,12 @@ def erp_lignes(
     depuis: str = Query("", max_length=40),
     depuis_id: str = Query("", max_length=40),
     lien: int = Query(-1, ge=-1, le=99),
+    ratt: str = Query("", max_length=10),
 ):
     _exiger_acces(request)
     ec = _ecran(cle)
+    if ratt and ratt not in ("oui", "non", "partiel", "douteux"):
+        raise HTTPException(status_code=400, detail="Filtre de rattachement inconnu.")
 
     # Ouverture depuis une pièce liée : le client donne l'écran d'origine, la
     # ligne et le rang du lien — jamais un nom de colonne. La condition est
@@ -179,6 +183,7 @@ def erp_lignes(
         res = miroir.lister(
             ec, q=q, filtres=filtres, tri=tri or None, sens=sens,
             page=page, taille=taille, extra=extra,
+            rattachement=bool(ec.get("rattachable")), filtre_ratt=ratt,
         )
         if contexte:
             res["contexte"] = contexte

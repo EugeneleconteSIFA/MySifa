@@ -29,7 +29,7 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
-from config import ERP_MIRROR_DB
+from config import DB_PATH, ERP_MIRROR_DB
 
 # ── Sentinelles RVGI ─────────────────────────────────────────────────────────
 DATE_VIDE = "1999-11-30"        # date non renseignée
@@ -70,8 +70,17 @@ def miroir_present():
 
 
 @contextmanager
-def get_erp_db():
-    """Connexion SQLite en lecture seule sur le miroir."""
+def get_erp_db(avec_mysifa=False):
+    """Connexion SQLite en lecture seule sur le miroir.
+
+    `avec_mysifa=True` attache EN PLUS la base de production de MySifa, elle
+    aussi en `mode=ro`, sous le schéma `mysifa`. Une seule chose l'exige : la
+    colonne de rattachement des écrans, qui doit pouvoir être filtrée et triée
+    — donc jointe dans la même requête.
+
+    Les deux bases restent en lecture seule au niveau du pilote : attacher
+    n'ouvre aucun droit d'écriture, ni vers RVGI, ni vers MySifa.
+    """
     if not miroir_present():
         raise FileNotFoundError(
             "Miroir ERP absent (%s). Lancer scripts/export_rvgi_csv.ps1 depuis un "
@@ -81,9 +90,27 @@ def get_erp_db():
     conn = sqlite3.connect(uri, uri=True, timeout=5)
     conn.row_factory = sqlite3.Row
     try:
+        if avec_mysifa:
+            try:
+                conn.execute(
+                    "ATTACH DATABASE ? AS mysifa",
+                    [Path(DB_PATH).absolute().as_uri() + "?mode=ro"],
+                )
+            except sqlite3.Error:
+                # Base de production illisible : l'écran perd sa colonne de
+                # rattachement, il ne tombe pas. `mysifa_attachee()` le dit.
+                pass
         yield conn
     finally:
         conn.close()
+
+
+def mysifa_attachee(conn):
+    """La base de production est-elle jointe à cette connexion ?"""
+    try:
+        return any(r[1] == "mysifa" for r in conn.execute("PRAGMA database_list"))
+    except sqlite3.Error:
+        return False
 
 
 def tables_presentes(conn):
@@ -182,8 +209,75 @@ def ecran_disponible(ec, presentes):
     return ec["table"] in presentes
 
 
+# Ce que MySifa a rattaché à une ligne de RVGI, exprimé en SQL. Deux
+# sous-requêtes corrélées : combien de rattachements portent cette ligne, et
+# quelle quantité ils couvrent. Un rattachement posé sur la pièce entière
+# (`ligne IS NULL`) répond pour toutes ses lignes — c'est ce qui permet de
+# rattacher une commande de 84 lignes en un seul enregistrement.
+_SQL_RATT_OU = (
+    " FROM mysifa.rvgi_rattachements r"
+    " WHERE r.piece = '%s'"
+    "   AND TRIM(CAST(r.numero AS TEXT)) = TRIM(CAST(%s AS TEXT))"
+    "   AND (r.ligne IS NULL OR r.ligne = %s)"
+)
+
+
+def _sql_rattachement(piece, col_numero, col_ligne):
+    """(compte, quantité couverte, quantité non chiffrée) pour une ligne."""
+    ou = _SQL_RATT_OU % (piece, col_numero, col_ligne)
+    return (
+        "(SELECT COUNT(*)%s)" % ou,
+        "(SELECT COALESCE(SUM(r.qte), 0)%s)" % ou,
+        "(SELECT COUNT(*)%s AND r.qte IS NULL)" % ou,
+        "(SELECT COUNT(*)%s AND r.etat = 'a_verifier')" % ou,
+    )
+
+
+def _colonnes_rattachement(ec):
+    """L'écran porte-t-il un rattachement, et sur quelle nature de pièce ?"""
+    p = ec.get("rattachable")
+    if not p:
+        return None
+    alias = ec["alias"]
+    col_ligne = p.get("col_ligne")
+    return {
+        "piece": p["piece"],
+        "numero": "%s.numero" % alias,
+        "ligne": ("%s.%s" % (alias, col_ligne)) if col_ligne else "NULL",
+        "col_qte": ("%s.%s" % (alias, p["col_qte"])) if p.get("col_qte") else None,
+    }
+
+
+def _etat_rattachement(r, ratt, ligne):
+    """Traduit les compteurs SQL en un état lisible.
+
+    « Rattaché » ne veut pas dire « couvert » : un dossier peut n'avoir pris
+    qu'une partie de la ligne. C'est cette nuance qui rend la colonne utile —
+    sinon elle ne dirait que « quelqu'un s'en est occupé ».
+    """
+    n = int(r["_ratt_n"] or 0)
+    if not n:
+        return {"etat": "non", "n": 0}
+    if int(r["_ratt_douteux"] or 0):
+        return {"etat": "douteux", "n": n}
+    if int(r["_ratt_tout"] or 0):
+        return {"etat": "oui", "n": n}          # au moins un rattachement couvre tout
+    pris = float(r["_ratt_qte"] or 0)
+    total = None
+    if ratt["col_qte"]:
+        brut = ligne.get(ratt["col_qte"].split(".")[-1])
+        try:
+            total = float(brut) if brut is not None else None
+        except (TypeError, ValueError):
+            total = None
+    if total and pris + 1e-6 < total:
+        return {"etat": "partiel", "n": n, "pris": pris, "total": total}
+    return {"etat": "oui", "n": n, "pris": pris, "total": total}
+
+
 def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
-           taille=TAILLE_PAGE_DEFAUT, extra=None, compter=True):
+           taille=TAILLE_PAGE_DEFAUT, extra=None, compter=True, rattachement=False,
+           filtre_ratt=""):
     """Liste paginée d'un écran. Renvoie colonnes, lignes, total.
 
     `extra` : conditions supplémentaires, sous forme de couples
@@ -216,6 +310,20 @@ def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
     _ref(ec["cle_ligne"])
     select.append('%s AS "_id"' % ec["cle_ligne"])
 
+    ratt = _colonnes_rattachement(ec) if rattachement else None
+    if ratt:
+        _ref(ratt["numero"])
+        if ratt["ligne"] != "NULL":
+            _ref(ratt["ligne"])
+        if ratt["col_qte"]:
+            _ref(ratt["col_qte"])
+        n, somme, sans_qte, douteux = _sql_rattachement(
+            ratt["piece"], ratt["numero"], ratt["ligne"])
+        select.append('%s AS "_ratt_n"' % n)
+        select.append('%s AS "_ratt_qte"' % somme)
+        select.append('%s AS "_ratt_tout"' % sans_qte)
+        select.append('%s AS "_ratt_douteux"' % douteux)
+
     conditions = []
     params = []
 
@@ -225,6 +333,27 @@ def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
     for fragment, valeur in (extra or []):
         conditions.append(fragment)
         params.append(valeur)
+
+    # Filtrer sur l'état de rattachement suppose de joindre les deux bases : on
+    # le fait dans la requête, pas après coup, sinon « ne montrer que les
+    # commandes non rattachées » ne pourrait pas se paginer.
+    if ratt and filtre_ratt:
+        n, somme, sans_qte, douteux = _sql_rattachement(
+            ratt["piece"], ratt["numero"], ratt["ligne"])
+        qte = ratt["col_qte"]
+        if filtre_ratt == "non":
+            conditions.append("%s = 0" % n)
+        elif filtre_ratt == "oui":
+            conditions.append("%s > 0" % n)
+        elif filtre_ratt == "douteux":
+            conditions.append("%s > 0" % douteux)
+        elif filtre_ratt == "partiel" and qte:
+            # Partiel = rattaché, mais toutes les quantités sont chiffrées et
+            # leur somme reste sous la quantité de la ligne.
+            conditions.append(
+                "(%s > 0 AND %s = 0 AND %s < COALESCE(%s, 0))" % (n, sans_qte, somme, qte))
+        elif filtre_ratt == "partiel":
+            conditions.append("(%s > 0 AND %s = 0)" % (n, sans_qte))
 
     # Recherche plein-texte sur les colonnes déclarées par l'écran.
     q = (q or "").strip()
@@ -282,7 +411,12 @@ def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
         ", ".join(select), depart, ou, col_tri, sens_sql
     )
 
-    with get_erp_db() as conn:
+    with get_erp_db(avec_mysifa=bool(ratt)) as conn:
+        if ratt and not mysifa_attachee(conn):
+            # Sans la base de production, la colonne n'a pas de sens : on rend
+            # l'écran sans elle plutôt qu'une erreur.
+            return lister(ec, q=q, filtres=filtres, tri=tri, sens=sens, page=page,
+                          taille=taille, extra=extra, compter=compter)
         total = None
         if compter:
             total = conn.execute(
@@ -304,6 +438,8 @@ def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
                 d[c["nom"]] = c.get("joint", "/").join(bouts) or None
             else:
                 d[c["nom"]] = nettoyer(r[c["nom"]], c.get("type"))
+        if ratt:
+            d["_ratt"] = _etat_rattachement(r, ratt, d)
         lignes.append(d)
 
     return {
