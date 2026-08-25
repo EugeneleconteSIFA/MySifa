@@ -414,15 +414,18 @@ MySifa tourne sur un VPS public ; RVGI est sur `192.168.100.x`. **Aucune page
 MySifa hébergée sur le VPS ne peut interroger RVGI en direct.** C'est la
 contrainte structurante de tout ce qui suit.
 
-Trois montages possibles :
+Trois montages étaient possibles. **Le A est en place depuis le 25 août 2026** ;
+les deux autres restent documentés pour qu'on ne les reproposent pas sans savoir
+pourquoi ils ont été écartés.
 
-**A — Miroir poussé (recommandé par défaut).** Un script sur un poste du réseau
-lit RVGI et pousse vers `/api/bridge/*` avec une clé `X-Api-Key`, planifié par
-le Planificateur de tâches Windows. C'est exactement le motif de
-`scripts/access_sync_of.py`. MySifa lit ensuite son propre miroir SQLite : la
-page est rapide, fonctionne hors réseau SIFA, et survit à une coupure de l'ERP.
-Prix à payer : la fraîcheur est celle de la synchro, et il faut choisir quoi
-copier.
+**A — Miroir poussé. RETENU.** Une machine du réseau SIFA exporte l'ERP en CSV
+(`scripts/export_rvgi_csv.ps1`), zippe, et pousse l'archive en HTTPS vers
+`POST /api/bridge/erp/miroir` avec une clé `X-Api-Key` de portée `erp:write`.
+C'est le **serveur** qui reconstruit le miroir, en tâche de fond : la machine du
+LAN n'a donc besoin ni de Python ni de SQLite, PowerShell suffit. MySifa lit
+ensuite son propre miroir SQLite : la page est rapide, fonctionne hors réseau
+SIFA, et survit à une coupure de l'ERP. Prix à payer : la fraîcheur est celle de
+la synchro — deux passages par jour, 5 h et 12 h 30.
 
 **B — Agent local interrogé par le navigateur.** Le navigateur de
 l'utilisateur, lui, *est* sur le LAN. Un petit agent local exposant du JSON en
@@ -451,6 +454,23 @@ connexion doit rendre ça structurellement impossible.
   numéro de commande RVGI.
 - La réconciliation stocks PF de MyStock consomme un **export xlsx** de RVGI
   déposé à la main. Même donnée que `stk_hist`, par un chemin manuel.
+
+Depuis le 25 août 2026, l'essentiel :
+
+- **Le miroir** `data/erp_mirror.db`, 61 tables et ~343 000 lignes, reconstruit
+  par `scripts/import_rvgi_csv.py`. Jetable par construction : il vit dans son
+  propre fichier, hors backups de production et hors migrations, et se
+  reconstitue d'un export. Il n'est pas dans git.
+- **L'app `/erp`** (super administrateur uniquement) : 27 écrans déclarés dans
+  `app/services/erp_catalogue.py`, servis par un moteur générique
+  (`app/services/erp_mirror.py`) et une API en lecture seule
+  (`app/routers/erp.py`). Ajouter un écran, c'est ajouter une entrée au
+  catalogue — pas écrire une page.
+- **La synchro** `scripts/sync_rvgi.ps1`, planifiée à 5 h et 12 h 30 sur une
+  machine du réseau SIFA. Elle exporte, zippe, pousse vers chaque instance, puis
+  **efface les CSV** — ils portent des noms de clients, des adresses et des prix.
+- **La lecture seule est garantie par le pilote**, pas par la discipline : la
+  connexion au miroir est ouverte en `mode=ro`, une écriture échoue.
 
 ### Gisements identifiés, par ordre de valeur
 
@@ -494,6 +514,14 @@ connexion doit rendre ça structurellement impossible.
   n'est pas documentée ; à relever sur les valeurs distinctes.
 - **`type` et `pos`** — présents sur presque toutes les entêtes, sens non
   établi. Probablement type de pièce et statut.
+- **`lab` sur `cde_ligne`** — prend 1, 2, 4, 32 et 255 dans les données
+  réelles. Seul « 1 = Renouvellement » est relevé sur les écrans RVGI ; les
+  autres s'affichent en clair faute de mieux.
+- **`qtex`** — vaut 1 sur toutes les lignes de l'échantillon : c'est un
+  drapeau, pas une quantité expédiée. La quantité à traiter est `qtep`. Le
+  catalogue a été corrigé en conséquence.
+- **Les codes 255** — sentinelle WinDev pour « octet non renseigné ».
+  Neutralisée à l'affichage, jamais en base.
 
 ---
 
@@ -510,6 +538,14 @@ $env:HFSQL_PWD  = '<mot de passe>'
 ```
 
 Sorties : `docs/rvgi/rapport_rvgi.md` et `docs/rvgi/schema_rvgi.json`.
+
+Pour reconstruire le **miroir** — et non le relevé — c'est l'autre chaîne :
+
+```powershell
+.\scripts\export_rvgi_csv.ps1        # ERP -> data\rvgi_export\*.csv
+python scripts\import_rvgi_csv.py    # CSV -> data\erp_mirror.db
+.\scripts\sync_rvgi.ps1              # les deux + envoi aux instances MySifa
+```
 
 Les deux contiennent des extraits de données réelles (clients, prix, adresses) :
 usage interne SIFA, jamais dans un ticket, un prompt public ou une pièce jointe
