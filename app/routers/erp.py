@@ -1,6 +1,9 @@
 """API ERP — lecture seule du miroir RVGI.
 
-Réservé au super administrateur. La page `/erp` en est le seul consommateur.
+Ouvert à la direction et aux services administration, en plus du super
+administrateur — c'est `ROLES_ADMIN`, le même périmètre que les autres
+fonctions d'administration de MySifa. La page `/erp` en est le seul
+consommateur.
 
 Endpoints
 ---------
@@ -19,15 +22,18 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from app.services import erp_catalogue as catalogue
 from app.services import erp_mirror as miroir
 from app.services.auth_service import get_current_user
-from config import ROLE_SUPERADMIN
+from config import ROLES_ADMIN
 
 router = APIRouter(prefix="/api/erp", tags=["erp"])
 
 
 def _exiger_acces(request: Request) -> dict:
     user = get_current_user(request)
-    if user.get("role") != ROLE_SUPERADMIN:
-        raise HTTPException(status_code=403, detail="Accès réservé au super administrateur.")
+    if user.get("role") not in ROLES_ADMIN:
+        raise HTTPException(
+            status_code=403,
+            detail="Accès réservé à la direction, aux services administration et au super administrateur.",
+        )
     return user
 
 

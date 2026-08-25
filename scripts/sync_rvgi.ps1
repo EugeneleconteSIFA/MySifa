@@ -77,17 +77,36 @@ function Ecrire {
     }
 }
 
-# -- Verrou : deux executions qui se chevauchent liraient l'ERP en double ----
+# -- Verrou -----------------------------------------------------------------
+# Deux executions qui se chevauchent liraient l'ERP en double. Le verrou porte
+# le PID de la synchro qui le detient : une fenetre fermee ou un Ctrl+C laisse
+# le fichier derriere lui, mais plus le processus. On verifie donc que le
+# proprietaire vit encore, au lieu d'attendre une heure et demie pour rien.
 if (Test-Path $verrou) {
     $age = (Get-Date) - (Get-Item $verrou).LastWriteTime
-    if ($age.TotalMinutes -lt 90) {
-        Ecrire ("Une synchro tourne deja (verrou de {0:N0} min). Abandon." -f $age.TotalMinutes) 'ALERTE'
+    $pidVerrou = 0
+    try { $pidVerrou = [int]((Get-Content -LiteralPath $verrou -TotalCount 1 -ErrorAction Stop) -replace '\D', '') } catch { $pidVerrou = 0 }
+
+    $vivant = $false
+    if ($pidVerrou -gt 0) {
+        $proc = Get-Process -Id $pidVerrou -ErrorAction SilentlyContinue
+        # Le PID est reattribue par Windows : on verifie aussi que c'est bien
+        # un PowerShell, sinon on parlerait du processus de quelqu'un d'autre.
+        if ($proc -and $proc.ProcessName -match 'powershell|pwsh') { $vivant = $true }
+    }
+
+    if ($vivant) {
+        Ecrire ("Synchro deja en cours (PID {0}, depuis {1:N0} min). Abandon." -f $pidVerrou, $age.TotalMinutes) 'ALERTE'
         exit 0
     }
-    Ecrire ("Verrou perime de {0:N0} min : on passe outre." -f $age.TotalMinutes) 'ALERTE'
+    if ($pidVerrou -gt 0) {
+        Ecrire ("Verrou orphelin (PID {0} disparu, {1:N0} min) : la synchro precedente s'est interrompue." -f $pidVerrou, $age.TotalMinutes) 'ALERTE'
+    } else {
+        Ecrire ("Verrou sans proprietaire identifiable ({0:N0} min) : on passe outre." -f $age.TotalMinutes) 'ALERTE'
+    }
     Remove-Item $verrou -Force -ErrorAction SilentlyContinue
 }
-New-Item -ItemType File -Path $verrou -Force | Out-Null
+Set-Content -LiteralPath $verrou -Value $PID -Encoding ASCII
 
 # -- Lecture du .env ---------------------------------------------------------
 # Duplique volontairement le parseur de export_rvgi_csv.ps1 : la tache
