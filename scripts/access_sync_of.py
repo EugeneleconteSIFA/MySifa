@@ -39,8 +39,21 @@ Dépendances :
 Configuration :
     ACCESS_DB_PATH ci-dessous, et la clé API dans la variable
     d'environnement MYSIFA_API_KEY (jamais en clair dans le fichier).
+
+Usage :
+    python scripts/access_sync_of.py
+    python scripts/access_sync_of.py --depuis 2025-09-01 --dry-run
+    python scripts/access_sync_of.py --depuis 2025-09-01
+
+`--depuis` sert aux rattrapages. La borne porte sur la date de CRÉATION de
+l'OF : viser les livraisons de novembre en partant du 1er novembre ne ramène
+rien, puisque ces OF ont été créés en septembre ou en octobre.
+
+`--dry-run` n'écrit rien et dit seulement ce qu'Access contient — à faire
+avant tout rattrapage de masse, qui écrit en production.
 """
 
+import argparse
 import os
 import re
 import pyodbc
@@ -53,6 +66,11 @@ MYSIFA_BASE_URL = "https://mysifa.com"
 # Clé API : setx MYSIFA_API_KEY "msk_..." puis rouvrir le terminal.
 MYSIFA_API_KEY  = os.environ.get("MYSIFA_API_KEY", "")
 
+# Date de départ PAR DÉFAUT du passage quotidien. `--depuis` la surcharge pour
+# un rattrapage ponctuel : la borne porte sur la date de CRÉATION de l'OF, pas
+# sur sa livraison. Un OF livré en novembre a été créé en septembre ou octobre,
+# donc un rattrapage qui vise les livraisons de novembre doit remonter plus
+# haut que novembre, sans quoi il ne verra rien.
 DATE_DEPUIS        = "2025-11-01"   # OFs créés strictement après cette date
 ENRICHIR_EXISTANTS = True           # compléter les colonnes vides des OF déjà importés
 RAFRAICHIR_ACCESS  = True           # propager aussi les valeurs CHANGÉES dans Access
@@ -101,11 +119,11 @@ SQL_OF = """
 """
 
 
-def get_access_of():
-    """Lit les OFs de t_of créés après DATE_DEPUIS, fiche technique jointe."""
+def get_access_of(depuis=None):
+    """Lit les OFs de t_of créés après `depuis`, fiche technique jointe."""
     conn = pyodbc.connect(CONN_STR)
     cur  = conn.cursor()
-    cur.execute(SQL_OF, (DATE_DEPUIS,))
+    cur.execute(SQL_OF, (depuis or DATE_DEPUIS,))
     rows = cur.fetchall()
     conn.close()
     return rows
@@ -215,15 +233,74 @@ def push_of(row) -> dict:
     return resp.json()
 
 
+def essai_a_blanc(rows, depuis):
+    """Ce qu'Access a vraiment à donner, sans rien pousser.
+
+    Un rattrapage sur plusieurs centaines d'OF écrit en production. Avant de
+    le lancer, la seule question qui compte est : les colonnes qu'on vient
+    chercher sont-elles renseignées côté Access ? Si `format` et `metrage` y
+    sont vides, la synchro ne réparera rien et le problème est en amont.
+    """
+    n = len(rows)
+    compte = {
+        "format (→ référence produit, et donc fiche technique)":
+            sum(1 for r in rows if str(r.format or "").strip()),
+        "matiere (matsupport)":
+            sum(1 for r in rows if str(r.matiere or "").strip()),
+        "glassine (matglassine)":
+            sum(1 for r in rows if str(r.glassine or "").strip()),
+        "adhesif (matadhesif)":
+            sum(1 for r in rows if str(r.adhesif_label or "").strip()),
+        "metrage (theorique_metrage_necessaire)":
+            sum(1 for r in rows if to_float(r.metrage)),
+        "laize (matlaizestandard)":
+            sum(1 for r in rows if to_float(r.laize)),
+    }
+    print(f"ESSAI À BLANC — rien n'est poussé vers {MYSIFA_BASE_URL}.\n")
+    print(f"{n} OF(s) créés après le {depuis} dans Access.\n")
+    print("  colonne Access                                          renseignée")
+    print("  ─────────────────────────────────────────────────────────────────")
+    for libelle, c in compte.items():
+        pct = f"{(100.0 * c / n):5.1f}%" if n else "    —"
+        print(f"  {libelle:52} {c:5} {pct}")
+
+    exemples = [r for r in rows if not str(r.format or "").strip()][:5]
+    if exemples:
+        print(f"\n  {sum(1 for r in rows if not str(r.format or '').strip())} OF sans "
+              "`format` : ceux-là ne trouveront jamais de fiche technique.")
+        for r in exemples:
+            print(f"    {str(r.numero_of).strip():28} "
+                  f"créé le {format_date(r.date_creation)}")
+
+    print("\n  Si `format` et `metrage` sont bien remplis ci-dessus, relancer sans")
+    print("  --dry-run rapatriera tout. S'ils sont vides, la synchro n'y peut rien :")
+    print("  la donnée manque dans Access, et c'est là qu'il faut la chercher.")
+
+
 def main():
-    if not MYSIFA_API_KEY:
+    ap = argparse.ArgumentParser(
+        description="Synchronisation Access → MySifa (table t_of).")
+    ap.add_argument("--depuis", default=DATE_DEPUIS, metavar="AAAA-MM-JJ",
+                    help="OF créés strictement après cette date "
+                         f"(défaut : {DATE_DEPUIS}). Pour un rattrapage, viser "
+                         "plusieurs mois avant les livraisons manquantes.")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="N'écrit rien : dit seulement ce qu'Access contient.")
+    args = ap.parse_args()
+
+    if not MYSIFA_API_KEY and not args.dry_run:
         print("Clé API absente. Définir la variable d'environnement MYSIFA_API_KEY :")
         print('  setx MYSIFA_API_KEY "msk_..."   puis rouvrir le terminal.')
         return
 
     print(f"Connexion à Access : {ACCESS_DB_PATH}")
-    rows = get_access_of()
-    print(f"{len(rows)} OF(s) trouvé(s) après le {DATE_DEPUIS}.\n")
+    rows = get_access_of(args.depuis)
+
+    if args.dry_run:
+        essai_a_blanc(rows, args.depuis)
+        return
+
+    print(f"{len(rows)} OF(s) trouvé(s) après le {args.depuis}.\n")
 
     inserted = enriched = skipped = errors = 0
     conflits = devalides = 0

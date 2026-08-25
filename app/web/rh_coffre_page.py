@@ -614,7 +614,7 @@ document.getElementById('btn-logout').onclick=async()=>{
 })();
 window.addEventListener('hashchange',function(){try{showTab(_readRhCoffreTab(),{silent:true});}catch(e){}});
 </script>
-<script src="/static/mysifa_cal_rappel.js?v=3"></script>
+<script src="/static/mysifa_cal_rappel.js?v=4"></script>
 </body>
 </html>
 """

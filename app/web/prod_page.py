@@ -96,6 +96,6 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__"></script>
 <!-- Memoire produit : fiche par reference (partagee avec Saisieprod) -->
 <script src="/static/mysifa_produit_memoire.js?v=__V_LABEL__-pmem9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=3"></script>
+<script src="/static/mysifa_cal_rappel.js?v=4"></script>
 </body>
 </html>"""

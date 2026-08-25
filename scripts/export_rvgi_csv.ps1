@@ -210,8 +210,12 @@ foreach ($table in $voulues) {
 
     $chemin = Join-Path $Dossier ("{0}.csv" -f $table)
     $nb = 0
+    $blocTable = if ($Max -gt 0) { [Math]::Min($Bloc, $Max) } else { $Bloc }
     try {
         $rs = New-Object -ComObject ADODB.Recordset
+        # MaxRecords n'est pas honore par le provider HFSQL : la coupe se fait
+        # a l'ecriture, ligne a ligne, et le bloc de lecture est reduit pour ne
+        # pas ramener 2 000 lignes quand on en demande 500.
         if ($Max -gt 0) { $rs.MaxRecords = $Max }
         $rs.Open($sql, $conn, 0, 1, 1)   # adOpenForwardOnly, adLockReadOnly, adCmdText
 
@@ -221,10 +225,11 @@ foreach ($table in $voulues) {
             $sw.WriteLine((($gardees | ForEach-Object { Protege-Csv $_ }) -join ';'))
 
             while (-not $rs.EOF) {
-                $paquet = $rs.GetRows($Bloc)
+                $paquet = $rs.GetRows($blocTable)
                 $nbCol = $paquet.GetLength(0)
                 $nbLig = $paquet.GetLength(1)
                 for ($r = 0; $r -lt $nbLig; $r++) {
+                    if ($Max -gt 0 -and $nb -ge $Max) { break }
                     $cells = New-Object string[] $nbCol
                     for ($c = 0; $c -lt $nbCol; $c++) {
                         $cells[$c] = Protege-Csv (Format-Valeur $paquet[$c, $r])

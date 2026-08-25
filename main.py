@@ -99,6 +99,9 @@ from app.routers.print import router as print_router
 from app.routers.besoins_matieres import router as besoins_matieres_router
 from app.routers.taches import router as taches_api_router
 from app.web.taches_page import router as taches_page_router
+# ERP : lecture seule du miroir RVGI (data/erp_mirror.db), superadmin.
+from app.routers.erp import router as erp_api_router
+from app.web.erp_page import router as erp_page_router
 
 
 @asynccontextmanager
@@ -491,6 +494,9 @@ app.include_router(learning_page_router)
 app.include_router(print_router)
 app.include_router(taches_api_router)
 app.include_router(taches_page_router)
+# Les deux : sans include_router, /api/erp/* renverrait un 404 silencieux.
+app.include_router(erp_api_router)
+app.include_router(erp_page_router)
 
 
 @app.get("/healthz", include_in_schema=False)

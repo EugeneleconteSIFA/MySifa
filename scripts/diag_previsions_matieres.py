@@ -330,22 +330,44 @@ def diag_sources_passe(conn):
     fenetre = _fenetre_mois()
     courant = f"{date.today().year:04d}-{date.today().month:02d}"
 
+    # « Chiffrable » veut dire : on sait en tirer un métrage, donc un besoin.
+    #
+    # Une première version comptait « métrage OU quantité d'étiquettes ». C'est
+    # faux, et ça m'a fait dire que 97 OF de décembre 25 étaient exploitables
+    # alors qu'aucun ne l'était : la quantité d'étiquettes ne devient un métrage
+    # que divisée par le nombre de fronts et multipliée par la longueur du
+    # module — deux valeurs qui vivent dans la fiche technique. Sans métrage ET
+    # sans fiche, la quantité ne se convertit en rien.
+    def _chiffrable(metrage, qte, a_fiche):
+        return metrage > 0 or (qte > 0 and a_fiche)
+
     # ── Source A : le planning, tous statuts ──
+    # `ref_produit` et `ref_produit_norm` sont arrivées par migration : on ne
+    # les nomme dans le SELECT que si elles existent. Un diagnostic qui tombe
+    # sur une base un peu ancienne ne diagnostique plus rien.
+    cols_pe = {r["name"] for r in conn.execute("PRAGMA table_info(planning_entries)")}
+    sel_ref = ", ".join(
+        (f"pe.{c}" if c in cols_pe else f"'' AS {c}")
+        for c in ("ref_produit_norm", "ref_produit"))
+
     pe_par_mois = defaultdict(lambda: {"n": 0, "chiffrable": 0})
     for r in conn.execute(
-        """SELECT pe.date_livraison, pe.planned_end, pe.planned_start,
-                  COALESCE(oi.metrage, 0)        AS metrage,
-                  COALESCE(oi.qte_etiquettes, 0) AS qte
-           FROM planning_entries pe
-           LEFT JOIN of_imports oi ON oi.id = pe.of_import_id"""
+        f"""SELECT pe.date_livraison, pe.planned_end, pe.planned_start,
+                   {sel_ref},
+                   COALESCE(oi.metrage, 0)        AS metrage,
+                   COALESCE(oi.qte_etiquettes, 0) AS qte
+            FROM planning_entries pe
+            LEFT JOIN of_imports oi ON oi.id = pe.of_import_id"""
     ).fetchall():
         m = (_mois_de(r["date_livraison"]) or _mois_de(r["planned_end"])
              or _mois_de(r["planned_start"]))
         if not m:
             continue
+        cle = ((r["ref_produit_norm"] or "").strip()
+               or (r["ref_produit"] or "").strip().lower())
         c = pe_par_mois[m]
         c["n"] += 1
-        if r["metrage"] > 0 or r["qte"] > 0:
+        if _chiffrable(r["metrage"], r["qte"], cle in cles_fiches):
             c["chiffrable"] += 1
 
     # ── Source B : les OF qu'aucun dossier du planning ne porte ──
@@ -383,15 +405,17 @@ def diag_sources_passe(conn):
             continue
         c = of_par_mois[m]
         c["n"] += 1
+        a_fiche = False
         if normalize_ref_produit:
             k = normalize_ref_produit(r["reference"]) \
                 or (r["reference"] or "").strip().lower()
-            if k in cles_fiches:
+            a_fiche = k in cles_fiches
+            if a_fiche:
                 c["fiche"] += 1
         if (r["matiere"].strip() or r["glassine"].strip()
                 or r["adhesif_label"].strip()):
             c["propres"] += 1
-        if r["metrage"] > 0 or r["qte"] > 0:
+        if _chiffrable(r["metrage"], r["qte"], a_fiche):
             c["chiffrable"] += 1
 
     print(f"  {of_total} OF scannés au total, dont {of_orph} qu'aucun dossier du")
@@ -400,6 +424,8 @@ def diag_sources_passe(conn):
         print("  ⚠ of_imports n'a pas de colonne `matiere` : la colonne « propres »")
         print("    restera vide et l'archive dépendra du rapprochement de fiche.\n")
 
+    print("  « chiffr. » = un métrage est calculable : soit l'OF le porte, soit il")
+    print("  porte une quantité ET une fiche technique donne fronts et longueur.\n")
     print("   mois      PLANNING             OF ORPHELINS                     verdict")
     print("             dossiers chiffr.    OF  fiche  propres  chiffr.")
     print("  ─────────────────────────────────────────────────────────────────────────")
