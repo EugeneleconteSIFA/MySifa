@@ -1619,6 +1619,23 @@ function renderPortal(){
         title:'Base de données',
         onClick:()=>{window.location.href='/db';}
       },iconEl('database',24)):null,
+      // ERP : lecture seule du miroir de RVGI. Superadmin uniquement, et
+      // volontairement absent du sheet mobile — l'écran est une grille dense,
+      // il n'a pas de sens sur un téléphone.
+      isSuper?h('button',{
+        type:'button',
+        className:'portal-settings-corner',
+        'aria-label':'ERP',
+        title:'ERP — lecture RVGI',
+        onClick:()=>{window.location.href='/erp';}
+      },
+        (function(){
+          const w=document.createElement('span');
+          w.style.display='inline-flex';w.style.alignItems='center';w.style.flexShrink='0';
+          w.innerHTML='<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 22 8.5 12 15 2 8.5 12 2"/><polyline points="2 15.5 12 22 22 15.5"/><polyline points="2 12 12 18.5 22 12"/></svg>';
+          return w;
+        })()
+      ):null,
       (function(){
         const btn=document.createElement('button');
         btn.type='button';

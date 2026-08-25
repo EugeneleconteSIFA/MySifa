@@ -39,6 +39,7 @@ import csv
 import json
 import os
 import re
+import shutil
 import sqlite3
 import sys
 from datetime import datetime
@@ -230,10 +231,27 @@ def main():
         print("Aucun CSV à importer dans %s" % args.source)
         return 1
 
-    os.makedirs(os.path.dirname(args.db), exist_ok=True)
-    conn = sqlite3.connect(args.db)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("PRAGMA synchronous=NORMAL")
+    os.makedirs(os.path.dirname(args.db) or ".", exist_ok=True)
+
+    # Construction dans un fichier temporaire, remplacement atomique à la fin.
+    # Deux raisons : l'application ne voit jamais un miroir à moitié construit,
+    # et un import qui échoue laisse en place le miroir précédent.
+    #
+    # Pas de WAL : un miroir ouvert en lecture seule (`mode=ro`) ne peut pas
+    # créer les fichiers -wal/-shm dont WAL a besoin, et certains montages
+    # réseau le refusent carrément (« disk I/O error »).
+    db_tmp = args.db + ".tmp"
+    for reste in (db_tmp, db_tmp + "-wal", db_tmp + "-shm"):
+        if os.path.exists(reste):
+            os.remove(reste)
+    if voulues and os.path.exists(args.db):
+        # Import partiel : on repart du miroir existant pour ne pas perdre
+        # les tables qu'on ne réimporte pas.
+        shutil.copy2(args.db, db_tmp)
+
+    conn = sqlite3.connect(db_tmp)
+    conn.execute("PRAGMA journal_mode=DELETE")
+    conn.execute("PRAGMA synchronous=OFF")
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS erp_meta ("
@@ -272,8 +290,13 @@ def main():
 
     conn.execute("ANALYZE")
     conn.commit()
-    taille = os.path.getsize(args.db)
     conn.close()
+
+    for reste in (args.db + "-wal", args.db + "-shm"):
+        if os.path.exists(reste):
+            os.remove(reste)
+    os.replace(db_tmp, args.db)
+    taille = os.path.getsize(args.db)
 
     print("")
     print("Terminé : %d lignes, miroir de %.1f Mo." % (total, taille / (1024.0 * 1024.0)))

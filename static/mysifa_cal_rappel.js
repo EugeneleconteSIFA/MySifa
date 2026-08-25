@@ -55,7 +55,10 @@
     st.textContent = [
       /* Vraie fenetre : au centre, sur un voile. Une carte discrete en bas a
          droite passait inapercue — un rappel a dix minutes doit arreter l'oeil. */
-      '#mysifa-cal-rappels{position:fixed;inset:0;z-index:9600;display:none;',
+      /* Au-dessus de tout : le portail empile des elements fixes jusqu'a
+         z-index 99998 (dock IA, bandeau staging, toasts). A 9600, la fenetre
+         de rappel se retrouvait cachee derriere eux sur l'ecran d'accueil. */
+      '#mysifa-cal-rappels{position:fixed;inset:0;z-index:2147483000;display:none;',
       'align-items:center;justify-content:center;padding:18px;',
       'background:rgba(2,6,23,.55);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}',
       '#mysifa-cal-rappels.ouvert{display:flex}',

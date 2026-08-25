@@ -283,7 +283,7 @@ margin-left:6px;cursor:help;vertical-align:middle}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=3"></script>
+<script src="/static/mysifa_cal_rappel.js?v=4"></script>
 <script>
 const BASE_URL = __BASE_URL__;
 const S = {
