@@ -4585,6 +4585,57 @@ function renderExpeDepartModal(){
     return h('div',{className:'expe-field'},h('label',null,label),i);
   }
 
+  // ── N° BL : saisie libre, ou choix dans RVGI ──────────────────────────────
+  // Un départ peut porter plusieurs BL — c'est déjà le cas dans les données,
+  // écrit « 9938763 + 9938764 » à la main. Le sélecteur les rattache pour de
+  // vrai, et propose d'abord ceux que RVGI relie déjà aux commandes du
+  // dossier expédié : on ne cherche pas dans 23 000 bons de livraison.
+  const blInput=h('input',{type:'text',placeholder:'9938763',name:'no_bl',
+                           value:(f.no_bl!=null?String(f.no_bl):'')});
+  blInput.addEventListener('input',e=>{S.expeDepartForm.no_bl=e.target.value; expeScheduleSaveLocal();});
+  const blResume=h('div',{className:'mrp-res'});
+  const blBtn=h('button',{type:'button',className:'btn',
+    style:{whiteSpace:'nowrap',padding:'8px 12px'},
+    title:'Choisir le ou les bons de livraison dans RVGI'},'BL RVGI…');
+  blBtn.addEventListener('click',()=>{
+    if(!window.MysRvgiPicker){ alert("Sélecteur RVGI indisponible."); return; }
+    const dossierId=S.expeDepartForm&&S.expeDepartForm.planning_entry_id
+      ? Number(S.expeDepartForm.planning_entry_id) : null;
+    MysRvgiPicker.ouvrir({
+      mode:'livraison', objet:'depart',
+      objetId: S.expeDepartEditId ? Number(S.expeDepartEditId) : null,
+      dossierId: dossierId,
+      recherche:(blInput.value||'').trim(),
+      onValider:(res)=>{
+        const nums=(res.lignes||[]).map(l=>l.numero);
+        // Le champ texte reste la vitrine : il affiche ce qui a été rattaché,
+        // dans la forme que l'équipe écrit déjà à la main.
+        if(nums.length){
+          blInput.value=nums.join(' + ');
+          S.expeDepartForm.no_bl=blInput.value;
+          expeScheduleSaveLocal();
+        }
+        if(S.expeDepartEditId){
+          MysRvgiPicker.resume(blResume,'depart',Number(S.expeDepartEditId));
+        }else{
+          S.expeDepartRattachEnAttente={lignes:res.lignes||[],etat:res.etat||null};
+          blResume.className='mrp-res';
+          blResume.innerHTML=nums.length
+            ? '<span class="e partiel">à enregistrer</span><span>'+nums.length+
+              ' BL — rattaché'+(nums.length>1?'s':'')+' à l\'enregistrement du départ</span>'
+            : '<span class="e a_rattacher">à rattacher</span><span>aucun BL trouvé dans le miroir</span>';
+        }
+      }
+    });
+  });
+  const blField=h('div',{className:'expe-field'},
+    h('label',null,'N° BL'),
+    h('div',{style:{display:'flex',gap:'8px',alignItems:'center'}},blInput,blBtn),
+    blResume);
+  if(S.expeDepartEditId&&window.MysRvgiPicker){
+    setTimeout(()=>MysRvgiPicker.resume(blResume,'depart',Number(S.expeDepartEditId)),0);
+  }
+
   const paletteItems=S.expePaletteTypes||[];
   const palSel=h('select',{name:'type_palette_matiere_id'});
   palSel.appendChild(h('option',{value:''},'— Sélectionner —'));
@@ -4681,7 +4732,21 @@ function renderExpeDepartModal(){
         await api('/api/expe/departs/'+S.expeDepartEditId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
         toast('Départ modifié');
       }else{
-        await api('/api/expe/departs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        const cree=await api('/api/expe/departs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        // Le rattachement RVGI attendait que le départ ait un id : on le pose
+        // maintenant. Un échec ici ne remet pas le départ en cause — il existe.
+        const att=S.expeDepartRattachEnAttente;
+        S.expeDepartRattachEnAttente=null;
+        if(att&&cree&&cree.id){
+          try{
+            await api('/api/rvgi/rattachements',{method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({objet:'depart',objet_id:Number(cree.id),
+                                   lignes:att.lignes||[],etat:att.etat||null})});
+          }catch(e){
+            toast("Départ enregistré, mais le rattachement RVGI a échoué — rouvre-le pour le refaire.",'error');
+          }
+        }
         toast('Départ enregistré');
       }
       set({expeDepartSubmitting:false});
@@ -4848,7 +4913,7 @@ function renderExpeDepartModal(){
       europeField
     ),
     sec('Références documentaires',
-      mk('N° BL','no_bl'),
+      blField,
       mk('ARC','arc'),
       mk('Réf. SIFA','ref_sifa')
     )

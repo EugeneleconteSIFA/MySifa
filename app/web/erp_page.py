@@ -351,6 +351,51 @@ table.pl td.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11p
   border-radius:8px;padding:3px 10px;font-size:11.5px;cursor:pointer;font-weight:600}
 .bandeau .x:hover{border-color:var(--danger);color:var(--danger)}
 
+/* ── Recherche globale ── */
+.rg{position:relative;display:flex;align-items:center;gap:8px;margin-left:22px;
+  background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:0 10px;
+  height:36px;min-width:260px;max-width:420px;flex:1 1 300px}
+.rg:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.rg-ico{color:var(--muted);flex-shrink:0}
+.rg input{flex:1;min-width:0;background:none;border:none;outline:none;color:var(--text);
+  font:inherit;font-size:13px;padding:0}
+.rg input::placeholder{color:var(--muted)}
+.rg input::-webkit-search-cancel-button{filter:grayscale(1) opacity(.6)}
+.rg-kbd{flex-shrink:0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;
+  color:var(--muted);border:1px solid var(--border);border-radius:5px;padding:2px 5px;background:var(--card)}
+.rg:focus-within .rg-kbd{display:none}
+
+.rg-fond{position:fixed;inset:0;z-index:75;display:none;background:rgba(2,6,23,.5);
+  padding:76px 22px 22px;justify-content:center;align-items:flex-start}
+body.light .rg-fond{background:rgba(15,23,42,.4)}
+.rg-fond.ouvert{display:flex}
+.rg-panneau{width:min(1000px,96vw);max-height:calc(100vh - 110px);overflow-y:auto;
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  box-shadow:0 24px 70px rgba(0,0,0,.5);padding:8px 0 10px}
+.rg-tete{display:flex;align-items:baseline;gap:10px;padding:8px 16px 10px;
+  border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card);z-index:1}
+.rg-tete b{font-family:inherit;font-size:13px}
+.rg-tete .cpt{margin-left:auto;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.rg-groupe{padding:4px 0 2px}
+.rg-groupe-tete{display:flex;align-items:center;gap:8px;padding:9px 16px 6px;
+  font-family:Archivo,inherit;font-size:10.5px;font-weight:800;letter-spacing:.7px;
+  text-transform:uppercase;color:var(--muted)}
+.rg-groupe-tete .n{margin-left:auto;background:var(--accent-bg);color:var(--accent);
+  border-radius:999px;padding:1px 8px;font-size:10.5px;text-transform:none;letter-spacing:0}
+.rg-ligne{display:flex;gap:12px;align-items:center;padding:7px 16px;font-size:12.5px;
+  color:var(--text2);cursor:pointer;border-left:2px solid transparent}
+.rg-ligne:hover,.rg-ligne.vise{background:var(--accent-bg);color:var(--text);border-left-color:var(--accent)}
+.rg-ligne .c{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 0;min-width:0}
+.rg-ligne .c.num{text-align:right;flex:0 0 auto;font-variant-numeric:tabular-nums}
+.rg-ligne .c.of{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--accent);font-weight:600}
+.rg-ligne .c.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px}
+.rg-ligne mark{background:var(--accent-bg);color:var(--accent);border-radius:3px;padding:0 2px}
+.rg-plus{padding:5px 16px 8px;font-size:11.5px;color:var(--accent);cursor:pointer;font-weight:600}
+.rg-plus:hover{text-decoration:underline}
+.rg-msg{padding:26px 18px;text-align:center;color:var(--muted);font-size:13px}
+.rg-note{padding:8px 16px 2px;font-size:11.5px;color:var(--warn)}
+@media (max-width:900px){.rg{display:none}}
+
 /* ── Divers ── */
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:11px 18px;font-size:13px;z-index:80;box-shadow:0 8px 24px rgba(0,0,0,.3)}
 .toast.err{border-left-color:var(--danger)}
@@ -378,6 +423,8 @@ body.sb-open .sidebar-overlay{display:block}
 <div class="sidebar-overlay" id="sb-ov" onclick="fermerSidebar()"></div>
 
 <!-- Détail d'une ligne : modale par-dessus la grille, jamais une page à part. -->
+<div class="rg-fond" id="rg-fond"><div class="rg-panneau" id="rg-panneau" role="dialog" aria-label="Résultats de la recherche"></div></div>
+
 <div class="detail-fond" id="detail-fond">
   <section class="detail" id="detail" role="dialog" aria-modal="true" aria-labelledby="detail-titre"></section>
 </div>
@@ -456,6 +503,13 @@ body.sb-open .sidebar-overlay{display:block}
         <div class="head-titre-ligne"><h1 id="titre">ERP</h1><span id="guide-btn-slot"></span></div>
         <div class="sous" id="sous">Lecture du miroir de RVGI.</div>
       </div>
+      <div class="rg">
+        <svg class="rg-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+        <input type="search" id="rg-q" autocomplete="off" spellcheck="false"
+               placeholder="Chercher partout : n° de pièce, client, article…"
+               aria-label="Chercher dans tous les écrans">
+        <kbd class="rg-kbd">Ctrl K</kbd>
+      </div>
       <div class="head-droite" id="head-droite"></div>
       <div class="head-actions">
         <button type="button" class="head-btn" id="hd-profil" title="Mon profil" aria-label="Mon profil">
@@ -507,6 +561,7 @@ const S = {
   jetonD: 0,          // anti-course pour la modale
   contexte: null,     // grille ouverte depuis une pièce liée
   ctxAttente: null,   // contexte à consommer au prochain ouvrirEcran()
+  apresEcran: null,   // à jouer une fois l'écran monté (recherche globale)
 };
 
 const ICO_SUN='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
@@ -994,7 +1049,11 @@ function ouvrirEcran(cle){
   });
   const bc=document.getElementById('btn-reset-cols');
   if(bc)bc.addEventListener('click',layoutOublier);
-  charger();
+  // La recherche globale ouvre un écran PUIS une fiche : la grille doit être
+  // montée avant, sinon la modale s'ouvrirait sur un écran vide.
+  const suite=S.apresEcran;S.apresEcran=null;
+  if(suite){try{suite();}catch(e){charger();}}
+  else charger();
 }
 
 const ICO_POIGNEE='<svg class="th-poignee" width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true"><circle cx="2" cy="3" r="1.2"/><circle cx="8" cy="3" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="8" cy="7" r="1.2"/><circle cx="2" cy="11" r="1.2"/><circle cx="8" cy="11" r="1.2"/></svg>';
@@ -1477,6 +1536,155 @@ function fermerDetail(){
   S.selection=null;renderGrille();
 }
 
+// ── Recherche globale ────────────────────────────────────────────────────────
+// Une seule chaîne, les vingt-sept écrans. Chaque écran déclare déjà sur quoi
+// il se cherche ; on ne réinvente pas une seconde règle côté serveur, et le
+// résultat trouve donc exactement ce que la recherche de l'écran trouverait.
+const RG={ouvert:false,jeton:0,q:'',lignes:[],vise:-1};
+
+function rgOuvrir(){
+  const f=document.getElementById('rg-fond');
+  if(f){f.classList.add('ouvert');RG.ouvert=true;}
+}
+function rgFermer(){
+  const f=document.getElementById('rg-fond');
+  if(f){f.classList.remove('ouvert');}
+  RG.ouvert=false;RG.vise=-1;
+}
+function rgPanneau(html){
+  const p=document.getElementById('rg-panneau');
+  if(p)p.innerHTML=html;
+}
+
+function rgSurligner(txt,q){
+  const s=String(txt==null?'':txt);
+  const i=s.toLowerCase().indexOf(String(q||'').toLowerCase());
+  if(i<0||!q)return esc(s);
+  return esc(s.slice(0,i))+'<mark>'+esc(s.slice(i,i+q.length))+'</mark>'+esc(s.slice(i+q.length));
+}
+
+async function rgChercher(q){
+  RG.q=q;
+  const jeton=++RG.jeton;
+  if(String(q||'').trim().length<2){
+    if(String(q||'').trim().length===0){rgFermer();return;}
+    rgOuvrir();rgPanneau('<div class="rg-msg">Au moins deux caractères.</div>');return;
+  }
+  rgOuvrir();
+  rgPanneau('<div class="rg-msg">Recherche dans les écrans…</div>');
+  let r;
+  try{ r=await api('/api/erp/recherche?q='+encodeURIComponent(q)); }
+  catch(e){
+    if(jeton!==RG.jeton)return;
+    rgPanneau('<div class="rg-msg">'+esc(e.message)+'</div>');return;
+  }
+  if(jeton!==RG.jeton)return;   // une frappe plus récente a déjà relancé
+  rgRendre(r);
+}
+
+function rgRendre(r){
+  const groupes=r.resultats||[];
+  const nb=groupes.reduce((n,g)=>n+(g.lignes||[]).length,0);
+  RG.lignes=[];
+  let h='<div class="rg-tete"><b>'+esc(r.q)+'</b>'+
+        '<span class="cpt">'+(nb?fmtNb(nb,0)+' résultat'+(nb>1?'s':'')+' dans '+
+        fmtNb(groupes.length,0)+' écran'+(groupes.length>1?'s':''):'aucun résultat')+'</span></div>';
+  if(r.tronque){
+    h+='<div class="rg-note">Recherche interrompue avant d\'avoir vu tous les écrans — '+
+       'affine la chaîne pour aller au bout.</div>';
+  }
+  if(!groupes.length){
+    h+='<div class="rg-msg">Rien qui contienne « '+esc(r.q)+' » dans le miroir.<br>'+
+       '<span class="mini">Le miroir a jusqu\'à douze heures de retard : une pièce saisie ce matin peut ne pas y être.</span></div>';
+    rgPanneau(h);return;
+  }
+  groupes.forEach(g=>{
+    h+='<div class="rg-groupe"><div class="rg-groupe-tete">'+iconeEcran(g.cle)+
+       '<span>'+esc(g.label)+'</span>'+
+       '<span class="n">'+fmtNb((g.lignes||[]).length,0)+(g.encore?'+':'')+'</span></div>';
+    (g.lignes||[]).forEach(l=>{
+      const i=RG.lignes.length;
+      RG.lignes.push({ecran:g.cle,id:l._id});
+      h+='<div class="rg-ligne" data-i="'+i+'">';
+      (g.colonnes||[]).forEach(c=>{
+        const v=cellule(c,l[c.nom]);
+        // On surligne ce qui a été tapé, mais seulement sur du texte simple :
+        // une date formatée ou un badge d'énumération ne se découpent pas.
+        const html=(c.type==='texte'||c.type==='client'||c.type==='ref'||c.type==='of')
+          ? rgSurligner(l[c.nom],RG.q) : v.html;
+        h+='<span class="c '+esc(v.cls)+'">'+html+'</span>';
+      });
+      h+='</div>';
+    });
+    if(g.encore){
+      h+='<div class="rg-plus" data-ecran="'+esc(g.cle)+'">Ouvrir '+esc(g.label)+
+         ' avec cette recherche →</div>';
+    }
+    h+='</div>';
+  });
+  rgPanneau(h);
+  const p=document.getElementById('rg-panneau');
+  p.querySelectorAll('.rg-ligne').forEach(el=>{
+    el.addEventListener('click',()=>rgAller(Number(el.getAttribute('data-i'))));
+  });
+  p.querySelectorAll('[data-ecran]').forEach(el=>{
+    el.addEventListener('click',()=>rgOuvrirEcran(el.getAttribute('data-ecran')));
+  });
+}
+
+// Ouvrir un résultat, c'est ouvrir sa fiche — pas seulement son écran. On passe
+// donc par l'écran (la grille doit exister derrière la modale), puis on
+// déplie la ligne trouvée.
+function rgAller(i){
+  const cible=RG.lignes[i];
+  if(!cible)return;
+  rgFermer();
+  const suite=()=>{
+    charger();      // la grille doit exister derrière la fiche
+    S.pile=[{ecran:cible.ecran,id:cible.id}];S.selection=cible.id;rendreDetail();
+  };
+  if(S.ecran===cible.ecran){suite();return;}
+  S.apresEcran=suite;
+  location.hash='#/'+cible.ecran;
+}
+
+function rgOuvrirEcran(cle){
+  const q=RG.q;
+  rgFermer();
+  S.apresEcran=()=>{
+    S.q=q;const c=document.getElementById('q');
+    if(c)c.value=q;
+    S.page=1;charger();
+  };
+  if(location.hash==='#/'+cle)appliquerHash();else location.hash='#/'+cle;
+}
+
+function initRecherche(){
+  const i=document.getElementById('rg-q'),f=document.getElementById('rg-fond');
+  if(!i)return;
+  let m=null;
+  i.addEventListener('input',()=>{clearTimeout(m);m=setTimeout(()=>rgChercher(i.value),260);});
+  i.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){i.value='';rgFermer();i.blur();return;}
+    if(e.key==='Enter'&&RG.vise>=0){e.preventDefault();rgAller(RG.vise);return;}
+    if(e.key!=='ArrowDown'&&e.key!=='ArrowUp')return;
+    e.preventDefault();
+    if(!RG.lignes.length)return;
+    RG.vise=(e.key==='ArrowDown')
+      ? Math.min(RG.lignes.length-1,RG.vise+1)
+      : Math.max(0,RG.vise-1);
+    const p=document.getElementById('rg-panneau');
+    p.querySelectorAll('.rg-ligne').forEach(el=>el.classList.remove('vise'));
+    const el=p.querySelector('.rg-ligne[data-i="'+RG.vise+'"]');
+    if(el){el.classList.add('vise');el.scrollIntoView({block:'nearest'});}
+  });
+  i.addEventListener('focus',()=>{if(RG.lignes.length&&i.value.trim().length>=2)rgOuvrir();});
+  if(f)f.addEventListener('click',ev=>{if(ev.target===f)rgFermer();});
+  document.addEventListener('keydown',e=>{
+    if((e.ctrlKey||e.metaKey)&&(e.key==='k'||e.key==='K')){e.preventDefault();i.focus();i.select();}
+  });
+}
+
 // ── Shell ────────────────────────────────────────────────────────
 function basculerSidebar(){document.body.classList.toggle('sb-open');}
 function fermerSidebar(){document.body.classList.remove('sb-open');}
@@ -1512,6 +1720,7 @@ function appliquerHash(){
 }
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
+    if(RG.ouvert){rgFermer();return;}
     if(document.body.classList.contains('sb-open')){fermerSidebar();return;}
     const f=document.getElementById('detail-fond');
     if(f&&f.classList.contains('ouvert')){
@@ -1562,7 +1771,7 @@ async function boot(){
     document.getElementById('corps').innerHTML='<div class="vide-msg">'+esc(e.message)+'</div>';
     return;
   }
-  renderFraicheur();renderNav();appliquerHash();
+  renderFraicheur();renderNav();initRecherche();appliquerHash();
   window.addEventListener('hashchange',appliquerHash);
   initGuides();
 }

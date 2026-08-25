@@ -183,12 +183,17 @@ def ecran_disponible(ec, presentes):
 
 
 def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
-           taille=TAILLE_PAGE_DEFAUT, extra=None):
+           taille=TAILLE_PAGE_DEFAUT, extra=None, compter=True):
     """Liste paginée d'un écran. Renvoie colonnes, lignes, total.
 
     `extra` : conditions supplémentaires, sous forme de couples
     (fragment SQL déjà validé, valeur). Sert aux pièces liées, qui joignent
     sur des colonnes que l'utilisateur ne filtre pas lui-même.
+
+    `compter=False` : on renvoie `total = None` au lieu de compter. Le COUNT
+    est un balayage complet de la table ; sur une recherche qui interroge les
+    vingt-sept écrans d'un coup, il double le travail pour un chiffre que
+    personne ne lit.
     """
     filtres = filtres or {}
     taille = max(1, min(int(taille or TAILLE_PAGE_DEFAUT), TAILLE_PAGE_MAX))
@@ -278,9 +283,11 @@ def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
     )
 
     with get_erp_db() as conn:
-        total = conn.execute(
-            "SELECT COUNT(*) FROM %s%s" % (depart, ou), params
-        ).fetchone()[0]
+        total = None
+        if compter:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM %s%s" % (depart, ou), params
+            ).fetchone()[0]
         brut = conn.execute(sql, params + [taille, (page - 1) * taille]).fetchall()
 
     lignes = []
@@ -463,6 +470,75 @@ def detail(ec, ident, exclure=None, entete=None):
         groupes.append({"titre": "Autres champs", "champs": autres, "replie": True})
 
     return {"id": ident, "groupes": groupes}
+
+
+# ── Recherche globale ────────────────────────────────────────────────────────
+
+# Une recherche qui interroge vingt-sept écrans doit rendre la main. On borne
+# donc le temps passé : au-delà, on renvoie ce qu'on a et on le DIT, plutôt que
+# de faire attendre devant un champ qui ne répond pas.
+BUDGET_RECHERCHE_S = 6.0
+RESULTATS_PAR_ECRAN = 5
+
+
+def recherche_globale(ecrans, q, par_ecran=RESULTATS_PAR_ECRAN,
+                      budget_s=BUDGET_RECHERCHE_S):
+    """Cherche la même chaîne dans tous les écrans, et rend ce qui répond.
+
+    Chaque écran déclare déjà les colonnes sur lesquelles il se cherche
+    (`recherche`) : un numéro, un nom de client, une désignation, une
+    référence. On réutilise cette déclaration au lieu d'en inventer une
+    seconde — la recherche globale trouve exactement ce que la recherche de
+    l'écran trouverait.
+    """
+    import time
+
+    q = str(q or "").strip()
+    if len(q) < 2:
+        return {"q": q, "resultats": [], "tronque": False, "ecrans_vus": 0}
+
+    # « 571/0122 » est une référence article telle qu'on la LIT. En base, ce
+    # sont deux colonnes : la chercher en texte ne trouve rien. On la reconnaît
+    # ici et on interroge les deux morceaux — sur les écrans qui déclarent la
+    # colonne composée, c'est-à-dire ceux qui affichent cette référence.
+    m_ref = re.match(r"^\s*([A-Za-z0-9]{1,8})\s*/\s*([A-Za-z0-9]{1,8})\s*$", q)
+
+    debut = time.monotonic()
+    resultats, vus, tronque = [], 0, False
+    for ec in ecrans:
+        if not ec.get("recherche"):
+            continue          # un écran sans colonne cherchable ne répond pas
+        if time.monotonic() - debut > budget_s:
+            tronque = True
+            break
+        vus += 1
+        try:
+            extra, texte = None, q
+            if m_ref:
+                parts = next((c["parts"] for c in ec["colonnes"]
+                              if c.get("parts") and len(c["parts"]) == 2), None)
+                if parts:
+                    extra = [("CAST(%s AS TEXT) = ?" % _ref(parts[0]), m_ref.group(1)),
+                             ("CAST(%s AS TEXT) = ?" % _ref(parts[1]), m_ref.group(2))]
+                    texte = ""
+            # `par_ecran + 1` : une ligne de rab pour savoir s'il y en a plus,
+            # sans payer le COUNT.
+            res = lister(ec, q=texte, taille=par_ecran + 1, compter=False, extra=extra)
+        except Exception:
+            continue          # un écran qui casse n'emporte pas la recherche
+        lignes = res["lignes"]
+        if not lignes:
+            continue
+        encore = len(lignes) > par_ecran
+        resultats.append({
+            "cle": ec["cle"],
+            "label": ec["label"],
+            "domaine": ec["domaine"],
+            "colonnes": res["colonnes"][:4],
+            "lignes": lignes[:par_ecran],
+            "encore": encore,
+        })
+    return {"q": q, "resultats": resultats, "tronque": tronque, "ecrans_vus": vus}
 
 
 # ── La pièce derrière la ligne ───────────────────────────────────────────────

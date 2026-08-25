@@ -678,6 +678,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_rvgi_picker.js"></script>
 <script src="/static/motion.js" defer></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div id="app"></div>
@@ -3552,7 +3553,73 @@ function fscTypeRequisLabel(t){
   return FSC_REQ_LABELS[typ]||typ;
 }
 
-function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType="",deptLivraison="",priseRdv=0,dlImposee=0,valide=0,etiqParCarton=null){
+// ── Rattachement RVGI du dossier ────────────────────────────────────────────
+// Le « Numéro d'OF » d'un dossier EST un numéro de commande RVGI. On le
+// choisit donc dans RVGI plutôt que de le retaper — mais la saisie libre
+// reste possible : le miroir a jusqu'à douze heures de retard, et une
+// commande passée ce matin n'y est pas encore.
+let _rvgiEnAttente=null;   // sélection faite avant que le dossier existe
+
+function rvgiChoisirCommande(btn){
+  if(!window.MysRvgiPicker){ showToast("Sélecteur RVGI indisponible.","danger"); return; }
+  const champ=document.getElementById('f-of');
+  const brut=(btn.getAttribute('data-entry')||'').trim();
+  const entryId=brut?Number(brut):null;
+  MysRvgiPicker.ouvrir({
+    mode:'commande', objet:'dossier', objetId:entryId,
+    recherche:(champ&&champ.value||'').trim(),
+    onValider:(res)=>{
+      // La référence proposée ne s'impose jamais : si le dossier porte déjà
+      // un numéro, on ne le réécrit pas dans son dos — c'est la clé que le
+      // reste de MySifa joint en texte.
+      if(res.reference&&champ&&!champ.value.trim())champ.value=res.reference;
+      if(!entryId){
+        _rvgiEnAttente={lignes:res.lignes||[],etat:res.etat||null};
+        rvgiPeindreEnAttente(res);
+      }else{
+        MysRvgiPicker.resume(document.getElementById('f-of-res'),'dossier',entryId);
+      }
+    }
+  });
+}
+
+function rvgiPeindreEnAttente(res){
+  const z=document.getElementById('f-of-res');
+  if(!z)return;
+  const n=(res.lignes||[]).length;
+  z.className='mrp-res';
+  z.innerHTML=n
+    ? '<span class="e partiel">à enregistrer</span><span>'+n+' ligne'+(n>1?'s':'')+
+      ' de commande — rattachée'+(n>1?'s':'')+' à la création du dossier</span>'
+    : '<span class="e a_rattacher">à rattacher</span><span>aucune commande trouvée — le dossier ira dans la liste à traiter</span>';
+}
+
+// Après la création d'un dossier : on pose ce qui avait été choisi avant
+// qu'il ait un id. Un échec ici ne doit pas faire croire que le dossier n'a
+// pas été créé — il l'a été.
+async function rvgiPoserEnAttente(nouvelId){
+  if(!_rvgiEnAttente||!nouvelId)return;
+  const paquet=_rvgiEnAttente;_rvgiEnAttente=null;
+  try{
+    await api('/api/rvgi/rattachements',{method:'POST',body:JSON.stringify({
+      objet:'dossier',objet_id:Number(nouvelId),
+      lignes:paquet.lignes||[],etat:paquet.etat||null})});
+  }catch(e){
+    showToast("Dossier créé, mais le rattachement RVGI n'a pas été enregistré. "+
+              "Rouvre le dossier pour le refaire.","danger");
+  }
+}
+
+function rvgiRafraichirResume(entryId){
+  if(!window.MysRvgiPicker)return;
+  const z=document.getElementById('f-of-res');
+  if(!z)return;
+  if(entryId)MysRvgiPicker.resume(z,'dossier',entryId);
+  else if(_rvgiEnAttente)rvgiPeindreEnAttente(_rvgiEnAttente);
+  else z.innerHTML='';
+}
+
+function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType="",deptLivraison="",priseRdv=0,dlImposee=0,valide=0,etiqParCarton=null,entryId=null){
   const fscOn=fscRequis===1||fscRequis===true;
   const fscTyp=(fscType&&FSC_REQ_CODES.includes(fscType))?fscType:FSC_CLAIM_DEFAUT;
   const rdvOn=priseRdv===1||priseRdv===true;
@@ -3563,7 +3630,15 @@ function dossierFields(numero_of,client,ref_produit,laize,date_livraison,comment
     <div class="dossier-sections">
       <div class="dossier-section">
         <span class="dossier-section-label">Informations générales</span>
-        <div class="fd"><label>Numéro d'OF</label><input id="f-of" value="${escAttr(numero_of)}" placeholder="9936280"></div>
+        <div class="fd"><label>Numéro d'OF</label>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="f-of" value="${escAttr(numero_of)}" placeholder="9936280" style="flex:1;min-width:0">
+            <button type="button" id="f-of-rvgi" class="btn" data-entry="${entryId==null?'':escAttr(String(entryId))}"
+                    onclick="rvgiChoisirCommande(this)" title="Choisir la ou les commandes dans RVGI"
+                    style="white-space:nowrap;padding:8px 12px">Commandes RVGI…</button>
+          </div>
+          <div id="f-of-res" class="mrp-res"></div>
+        </div>
         <div class="fd"><label>Client</label><input id="f-cli" value="${escAttr(client)}" placeholder="Nom du client"></div>
         <div class="fd"><label>Durée (${MIND}–${MAXD}h)</label>
           <input type="number" id="f-dur" min="${MIND}" max="${MAXD}" step="0.25" value="${dur}" oninput="document.getElementById('f-dur-fill').style.width=((Math.max(${MIND},Math.min(${MAXD},+this.value||${MIND}))-${MIND})/(${MAXD}-${MIND})*100)+'%'">
@@ -3816,6 +3891,7 @@ async function submitAddFromOf(){
     showToast(apiErrorMessage(e,"Ajout impossible."),"danger");
     return;
   }
+  await rvgiPoserEnAttente(addRes&&addRes.id);
   const fd=new FormData();
   fd.append('file',_addOfFile);
   fd.append('data',JSON.stringify(buildAddOfValidatePayload()));
@@ -3836,6 +3912,7 @@ async function submitAdd(){
   if(!d.numero_of){ showToast("Numéro d'OF requis.","danger"); return; }
   try{
     const res=await api(`/machines/${MID}/entries`,{method:"POST",body:JSON.stringify({reference:d.numero_of,...d})});
+    await rvgiPoserEnAttente(res&&res.id);
     closeM();load();
     if(res&&res.warning&&res.warning.message){ showToast(res.warning.message,"danger"); }
     else { showToast("Dossier ajouté.","success"); }
@@ -4007,7 +4084,8 @@ function openEdit(id){
   const statLabel=isTermine?"Terminé":e.statut==="en_cours"?"En cours":"";
   const statColor=isTermine?"var(--danger)":"var(--accent)";
 
-  const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,e.valide??0,e.etiquettes_par_carton??null);
+  setTimeout(()=>rvgiRafraichirResume(e.id??null),0);
+  const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,e.valide??0,e.etiquettes_par_carton??null,e.id??null);
 
   // Bouton déstockage compact en en-tête
   const destockDone=e.destockage==="done";
