@@ -408,7 +408,7 @@ def liens(ec, ident, resoudre, par_lien=5):
         return []
 
     resultats = []
-    for lien in ec.get("liens", []):
+    for rang, lien in enumerate(ec.get("liens", [])):
         cible = resoudre(lien["ecran"])
         if not cible:
             continue
@@ -435,7 +435,7 @@ def liens(ec, ident, resoudre, par_lien=5):
             # Un lien qui casse se signale au lieu de disparaitre : sinon une
             # jointure fausse passe pour « aucune piece rattachee ».
             resultats.append({
-                "label": lien["label"], "ecran": lien["ecran"],
+                "label": lien["label"], "ecran": lien["ecran"], "rang": rang,
                 "erreur": str(e)[:200], "total": 0, "colonnes": [], "lignes": [],
                 "valeurs": valeurs,
             })
@@ -444,6 +444,7 @@ def liens(ec, ident, resoudre, par_lien=5):
         resultats.append({
             "label": lien["label"],
             "ecran": lien["ecran"],
+            "rang": rang,
             "total": res["total"],
             "colonnes": res["colonnes"][: lien.get("colonnes", 5)],
             "lignes": [
