@@ -7323,6 +7323,7 @@ const _FMT_GUIDES = {
   'planningrh-operator': 'Planning RH — Ma semaine',
   'taches-kanban': 'Gestionnaire de tâches — Kanban',
   'taches-liste': 'Gestionnaire de tâches — Liste',
+  'erp-overview': 'ERP — Lecture de RVGI',
 };
 
 function _fmtGuideLabel(key){ return _FMT_GUIDES[key] || key; }

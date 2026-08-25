@@ -1739,39 +1739,208 @@ def _regression(points: list) -> Optional[tuple]:
     return pente, ordonnee, r2
 
 
-def _tendance(par_mois: dict, tous_mois: list, mois_courant: str,
-              documentes: set) -> Optional[dict]:
-    """Droite de tendance ajustée sur les mois RÉVOLUS et documentés.
+# Fenêtre du lissage, en mois. Impaire pour être centrable : une moyenne
+# mobile paire tombe entre deux mois et doit être recentrée, ce qui coûte un
+# demi-mois de décalage pour aucun gain de lisibilité.
+_TEND_FENETRE = 3
 
-    Le choix des points d'ajustement est tout le sujet. Les mois à venir sont
-    incomplets par construction — le carnet ne s'est pas encore rempli — donc
-    les inclure ferait descendre la droite pour une raison purement comptable,
-    et l'écran annoncerait un effondrement d'activité qui n'est que le délai de
-    commande. On n'ajuste donc que sur du révolu, et on prolonge.
+# Fourchette plausible de jours ouvrés dans un mois complet. Sert de garde-fou :
+# en dessous, on considère que le mois a bien été amputé (fermeture d'usine) ;
+# au-dessus de 26 la donnée est douteuse et on préfère ne pas normaliser.
+_JOURS_MOIS_MAX = 26
 
-    L'écart entre la courbe pleine (ce qui est engagé) et la droite (ce que la
-    tendance laisse attendre) est alors lisible pour ce qu'il est : ce qui
-    reste à commander sur ce mois.
 
-    Une limite à garder en tête : douze points ne permettent pas d'ajuster une
-    saisonnalité en plus d'une pente. C'est le repère N-1 qui porte le signal
-    saisonnier ; les deux se lisent ensemble.
+def _jours_ouvres(conn, mois_liste: list) -> dict:
+    """Nombre de jours réellement travaillés par mois, d'après le planning.
+
+    Pourquoi c'est indispensable ici : l'usine ferme en août. Sans correction,
+    un août à 9 jours ouvrés se compare à un juillet à 22 comme si les deux
+    mesuraient la même chose. La moyenne mobile étale alors le creux sur juillet
+    et septembre, et la tendance annonce un ralentissement là où il n'y a qu'un
+    calendrier.
+
+    Un jour compte comme ouvré dès qu'AU MOINS UNE machine tourne — c'est la
+    définition d'une usine ouverte. Les règles suivent celles du planning
+    (`list_day_work`) : dimanche fermé ; samedi ouvert seulement sur exception
+    explicite ou `planning_config.samedi_travaille` ; lundi à vendredi ouverts
+    sauf jour off (`planning_holidays`) ou exception à 0.
+
+    Best-effort : sur une base où ces tables sont vides, tous les jours de
+    semaine ressortent ouvrés et la normalisation devient neutre. C'est une
+    dégradation silencieuse mais sans dommage — le comportement d'avant.
     """
-    pts = [(i, par_mois[m]["q"])
-           for i, m in enumerate(tous_mois)
-           if m < mois_courant and m in documentes and m in par_mois]
-    if len(pts) < _TEND_MIN_POINTS:
+    if not mois_liste:
+        return {}
+    debut, fin = f"{min(mois_liste)}-01", f"{max(mois_liste)}-31"
+    try:
+        machines = [int(r["id"]) for r in
+                    conn.execute("SELECT id FROM machines").fetchall()]
+        if not machines:
+            return {}
+        off: dict = {}
+        for r in conn.execute(
+            "SELECT machine_id, date FROM planning_holidays "
+            "WHERE COALESCE(is_off,1)=1 AND date>=? AND date<=?", (debut, fin)
+        ).fetchall():
+            off.setdefault(str(r["date"]), set()).add(int(r["machine_id"]))
+        explicite: dict = {}
+        for r in conn.execute(
+            "SELECT machine_id, date, is_worked FROM planning_day_worked "
+            "WHERE date>=? AND date<=?", (debut, fin)
+        ).fetchall():
+            explicite.setdefault(str(r["date"]), {})[int(r["machine_id"])] = \
+                int(r["is_worked"] or 0)
+        sam_cfg: dict = {}
+        for r in conn.execute(
+            "SELECT machine_id, semaine, samedi_travaille FROM planning_config"
+        ).fetchall():
+            if int(r["samedi_travaille"] or 0) == 1:
+                sam_cfg.setdefault(str(r["semaine"]), set()).add(int(r["machine_id"]))
+    except Exception:
+        logger.exception("[besoins] jours ouvrés illisibles — la tendance ne "
+                         "sera pas corrigée des fermetures d'usine.")
+        return {}
+
+    out: dict = {}
+    for mois in mois_liste:
+        an, mo = int(mois[:4]), int(mois[5:7])
+        d = date(an, mo, 1)
+        n = 0
+        while d.month == mo:
+            cle = d.isoformat()
+            ex = explicite.get(cle, {})
+            if d.weekday() == 6:
+                ouvertes = 0
+            elif d.weekday() == 5:
+                sem = f"{d.isocalendar()[0]}-W{d.isocalendar()[1]:02d}"
+                par_cfg = sam_cfg.get(sem, set())
+                ouvertes = sum(
+                    1 for m in machines
+                    if ex.get(m, 1 if m in par_cfg else 0) == 1
+                    and m not in off.get(cle, ())
+                )
+            else:
+                ouvertes = sum(
+                    1 for m in machines
+                    if ex.get(m, 1) == 1 and m not in off.get(cle, ())
+                )
+            if ouvertes > 0:
+                n += 1
+            d += timedelta(days=1)
+        out[mois] = n
+    return out
+
+
+def _tendance(par_mois: dict, tous_mois: list, mois_courant: str,
+              documentes: set, jours: Optional[dict] = None) -> Optional[dict]:
+    """Courbe de tendance : lissage sur le passé, projection saisonnière ensuite.
+
+    Une DROITE de régression a été essayée d'abord, et écartée. Sur douze
+    points, sa pente était surtout portée par le pic de juillet : elle imposait
+    une progression constante à une activité qui va par à-coups de marchés, et
+    elle jetait au passage le seul signal exploitable — la saisonnalité.
+
+    Ce qui la remplace tient en deux moitiés, chacune honnête sur ce qu'elle
+    est :
+
+    - **Sur les mois révolus**, une moyenne mobile centrée sur trois mois.
+      C'est une courbe, pas une droite : elle suit la forme réelle en filtrant
+      le bruit mensuel, et n'invente rien puisqu'elle ne fait que résumer des
+      mois mesurés.
+
+    - **Sur les mois à venir**, le niveau récent multiplié par le coefficient
+      saisonnier du mois. Le coefficient vient de N-1 : ce que ce mois-là
+      pesait, rapporté à la moyenne de son année. Un mois qui valait 1,3 fois
+      la moyenne l'an dernier est projeté à 1,3 fois le niveau d'aujourd'hui.
+      La courbe ondule donc avec les saisons au lieu de monter en ligne droite.
+
+    Les mois à venir ne servent JAMAIS à construire la tendance : ils sont
+    incomplets par construction — le carnet ne s'est pas encore rempli — et les
+    inclure ferait plonger la courbe pour une raison purement comptable.
+    L'écart entre la courbe pleine (engagé) et la tendance (attendu) reste donc
+    lisible pour ce qu'il est : ce qui reste à commander.
+
+    Limite à connaître : un seul cycle annuel ne permet pas de distinguer un
+    coefficient saisonnier d'un accident de l'an dernier. Un mois exceptionnel
+    en N-1 se rejoue en N. `saison_n` dit sur combien de mois le coefficient
+    s'appuie, pour que l'écran puisse en tenir compte.
+    """
+    idx = {m: i for i, m in enumerate(tous_mois)}
+    mesures = {m: par_mois[m]["q"] for m in tous_mois
+               if m < mois_courant and m in documentes and m in par_mois}
+    if len(mesures) < _TEND_MIN_POINTS:
         return None
-    res = _regression(pts)
-    if not res:
-        return None
-    pente, ordonnee, r2 = res
-    # Un besoin négatif n'existe pas : la droite est bornée à zéro à
-    # l'affichage, sans quoi une pente descendante finirait sous l'axe.
-    valeurs = [max(0.0, round(pente * i + ordonnee, 2))
-               for i, _m in enumerate(tous_mois)]
-    return {"pente": round(pente, 3), "r2": round(r2, 3),
-            "n": len(pts), "valeurs": valeurs}
+
+    # ── Correction du calendrier ──
+    # Tout le calcul se fait PAR JOUR OUVRÉ, puis se reconvertit en mois. Un
+    # août à 9 jours et un juillet à 22 deviennent alors comparables, la
+    # moyenne mobile cesse d'étaler la fermeture sur les mois voisins, et la
+    # projection d'un août à venir tient compte de SES jours à lui — pas de
+    # ceux d'août dernier, si la fermeture a changé de durée.
+    jours = jours or {}
+    def _jn(m):
+        n = jours.get(m)
+        return n if isinstance(n, int) and 0 < n <= _JOURS_MOIS_MAX else None
+    corrige = any(_jn(m) for m in mesures)
+    def _vers_jour(m, v):
+        n = _jn(m)
+        return (v / n) if (corrige and n) else v
+    def _vers_mois(m, v):
+        n = _jn(m)
+        return (v * n) if (corrige and n) else v
+
+    # ── Passé : moyenne mobile centrée ──
+    # Une fenêtre incomplète en bord de série est moyennée sur ce qu'elle a,
+    # plutôt que tronquée : mieux vaut un premier point un peu plus bruité que
+    # deux mois manquants au début de la courbe.
+    demi = _TEND_FENETRE // 2
+    lisse: dict = {}
+    for m, i in idx.items():
+        if m not in mesures:
+            continue
+        voisins = [_vers_jour(tous_mois[j], mesures[tous_mois[j]])
+                   for j in range(i - demi, i + demi + 1)
+                   if 0 <= j < len(tous_mois) and tous_mois[j] in mesures]
+        if voisins:
+            # Lissé par jour, puis reconverti avec les jours de CE mois-ci.
+            lisse[m] = _vers_mois(m, sum(voisins) / len(voisins))
+
+    # ── Futur : niveau récent × coefficient saisonnier ──
+    # Le niveau récent est une MÉDIANE des derniers mois mesurés, pas leur
+    # moyenne : un mois exceptionnel ne doit pas relever à lui seul toute la
+    # projection.
+    recents = [_vers_jour(m, mesures[m]) for m in sorted(mesures)[-_TEND_FENETRE * 2:]]
+    niveau_jour = statistics.median(recents) if recents else 0.0
+
+    # Base du coefficient saisonnier, elle aussi par jour ouvré : sinon le
+    # coefficient d'août mélangerait la saison et la fermeture, et la
+    # multiplication par les jours d'août la compterait une seconde fois.
+    par_jour = [_vers_jour(m, v) for m, v in mesures.items()]
+    base_n1 = (sum(par_jour) / len(par_jour)) if par_jour else 0.0
+
+    valeurs, saison_n = [], 0
+    for m in tous_mois:
+        if m in lisse:
+            valeurs.append(round(lisse[m], 2))
+            continue
+        if m < mois_courant:
+            valeurs.append(None)  # mois révolu mais non documenté : pas de trait
+            continue
+        an, mo = int(m[:4]), int(m[5:7])
+        m12 = f"{an - 1:04d}-{mo:02d}"
+        if base_n1 > 0 and m12 in mesures:
+            coef = _vers_jour(m12, mesures[m12]) / base_n1
+            saison_n += 1
+            valeurs.append(round(max(0.0, _vers_mois(m, niveau_jour * coef)), 2))
+        else:
+            # Aucun repère saisonnier pour ce mois : le niveau récent, à plat.
+            # Dire « comme d'habitude » est plus honnête qu'inventer une saison.
+            valeurs.append(round(max(0.0, _vers_mois(m, niveau_jour)), 2))
+
+    return {"niveau": round(_vers_mois(mois_courant, niveau_jour), 2),
+            "n": len(mesures), "saison_n": saison_n,
+            "fenetre": _TEND_FENETRE, "calendrier": bool(corrige),
+            "valeurs": valeurs}
 
 
 def _mois_glissants(depuis: date, avant: int, apres: int) -> list:
@@ -1899,6 +2068,9 @@ def besoins_tendance(request: Request):
         cumul, vus, vus_actifs, dossiers = agreger_carnet(conn)
         cumul_of, vus_of = _agreger_of_orphelins(conn, debut_calcul)
         couv = couverture_carnet(conn)
+        # Une seule lecture du calendrier pour toutes les matières : c'est la
+        # même usine qui ferme, quelle que soit la ligne du tableau.
+        jours_ouvres = _jours_ouvres(conn, tous_mois)
 
     # Une seule fusion des deux sources : le reste du calcul ne sait plus d'où
     # vient une ligne, et ne peut donc pas les traiter différemment par erreur.
@@ -1995,7 +2167,8 @@ def besoins_tendance(request: Request):
         # La tendance, ajustée sur les mois révolus et prolongée sur toute la
         # fenêtre. Attachée point par point à la série pour que l'écran n'ait
         # aucun calcul à refaire — et donc aucune occasion de diverger.
-        tend = _tendance(li["par_mois"], tous_mois, mois_courant, documentes)
+        tend = _tendance(li["par_mois"], tous_mois, mois_courant, documentes,
+                         jours_ouvres)
         if tend:
             for i, c in enumerate(colonnes):
                 serie[i]["tend"] = (tend["valeurs"][i]
@@ -2007,9 +2180,9 @@ def besoins_tendance(request: Request):
             **{k: v for k, v in li.items() if k not in ("par_mois", "dossiers")},
             "niveau": round(niveau, 2) if niveau is not None else None,
             "niveau_n": len(revolus),
-            "tend_pente": tend["pente"] if tend else None,
-            "tend_r2": tend["r2"] if tend else None,
             "tend_n": tend["n"] if tend else None,
+            "tend_saison_n": tend["saison_n"] if tend else None,
+            "tend_calendrier": tend["calendrier"] if tend else None,
             "serie": serie,
             "max": max((p["q"] for p in serie), default=0.0),
             "nb_dossiers": len(li["dossiers"]),
@@ -2127,13 +2300,16 @@ def besoins_tendance(request: Request):
         # sert l'en-tête, qui raisonne au niveau où l'on décide d'acheter.
         # `_tendance` attend la même forme que `par_mois` d'une ligne.
         tend_cat = _tendance({m: {"q": v} for m, v in par_mois_cat.items()},
-                             tous_mois, mois_courant, documentes)
-        c["tend_pente"] = tend_cat["pente"] if tend_cat else None
-        c["tend_r2"] = tend_cat["r2"] if tend_cat else None
+                             tous_mois, mois_courant, documentes, jours_ouvres)
         c["tend_n"] = tend_cat["n"] if tend_cat else None
-        # La pente en % du niveau habituel : « −6 %/mois » se lit, « −94 000
-        # ml/mois » demande de connaître l'ordre de grandeur de la catégorie.
-        c["tend_pct"] = (round(100.0 * tend_cat["pente"] / c["niveau"], 1)
+        c["tend_saison_n"] = tend_cat["saison_n"] if tend_cat else None
+        c["tend_calendrier"] = tend_cat["calendrier"] if tend_cat else None
+        # L'écart entre le niveau récent et le niveau habituel de la fenêtre,
+        # en pourcentage. Remplace la pente de l'ancienne droite : il n'y a
+        # plus de pente unique à afficher, la courbe ondule. Ce que l'acheteur
+        # veut savoir tient dans « on tourne 12 % au-dessus de l'habitude ».
+        c["tend_pct"] = (round(100.0 * (tend_cat["niveau"] - c["niveau"])
+                               / c["niveau"], 1)
                          if tend_cat and c.get("niveau") else None)
 
     return {
@@ -2149,6 +2325,10 @@ def besoins_tendance(request: Request):
         # D'où vient chaque mois. Sert uniquement à l'affichage : un mois que
         # seuls les OF documentent se lit autrement qu'un mois planifié.
         "origines": {m: sorted(s) for m, s in origines.items() if m in tous_mois},
+        # Les jours réellement ouvrés par mois. Exposés pour que l'écran
+        # puisse expliquer un creux d'août par le calendrier plutôt que de
+        # laisser croire à un effondrement d'activité.
+        "jours_ouvres": jours_ouvres,
         "hors_fenetre": round(hors_fenetre, 2),
         "reste_sur_mois_echus": round(passe_total, 2),
         # Tant que la série de photos est trop courte, l'écran ne doit pas

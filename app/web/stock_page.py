@@ -13202,7 +13202,7 @@ function _buildBesoinsTendance(data) {
         const p = (l.serie || []).find(s => s.mois === c);
         return p && p.tend != null ? p.tend : null;
       }),
-      tend_pente: l.tend_pente, tend_r2: l.tend_r2, tend_n: l.tend_n,
+      tend_n: l.tend_n, tend_saison_n: l.tend_saison_n,
     }));
     if (queue.length) {
       series.push({
@@ -13306,14 +13306,14 @@ function _buildBesoinsTendance(data) {
       // Sous 3 % on n'affiche rien : une pente de cet ordre sur douze points
       // est indiscernable du bruit, et lui donner une flèche serait la faire
       // passer pour un mouvement.
-      (cat.tend_pct != null && Math.abs(cat.tend_pct) >= 3 && !S.besoinsFiltre)
+      (cat.tend_pct != null && Math.abs(cat.tend_pct) >= 5 && !S.besoinsFiltre)
         ? el('span', {
             cls: 'bes-tsec-chip' + (cat.tend_pct < 0 ? ' baisse' : ' hausse'),
-            title: 'Pente de la droite ajustée sur les ' + cat.tend_n
-                   + ' mois révolus documentés'
-                   + (cat.tend_r2 != null ? ' (r² ' + cat.tend_r2.toFixed(2) + ')' : '')
-                   + '. Une pente n\'est pas une prévision : elle prolonge le passé.',
-          }, (cat.tend_pct > 0 ? '▲ +' : '▼ ') + cat.tend_pct + ' %/mois')
+            title: 'Niveau des derniers mois comparé à la médiane des '
+                   + cat.tend_n + ' mois révolus documentés'
+                   + (cat.tend_calendrier ? ', à jours ouvrés égaux' : '')
+                   + '. Un écart constaté, pas une prévision.',
+          }, (cat.tend_pct > 0 ? '▲ +' : '▼ ') + cat.tend_pct + ' % vs habituel')
         : null,
       el('span', { cls: 'bes-tsec-tot' },
         _besFmtQte(totFutur, unite),
@@ -13377,15 +13377,20 @@ function _buildBesoinsTendance(data) {
         s => Array.isArray(s.tend) && s.tend.some(v => v != null));
       const tendOn = aUneTendance && !!st.besoinsTendDroite[cat.kind];
       if (aUneTendance) {
-        const r2 = (series.find(s => s.tend_r2 != null) || {}).tend_r2;
+        const saisonN = (series.find(s => s.tend_saison_n != null) || {}).tend_saison_n;
         leg.appendChild(el('button', {
           cls: 'bes-tc-lg tend' + (tendOn ? ' on' : ''),
-          title: 'Prolonger la tendance des mois révolus, en tirets. '
-                 + 'L\'écart avec la courbe pleine, sur les mois à venir, '
-                 + 'est ce qui reste à commander si elle se confirme.'
-                 + (r2 != null && r2 < 0.3
-                     ? ' Attention : très dispersée (r² ' + r2.toFixed(2)
-                       + ') — la pente ne veut pas dire grand-chose.' : ''),
+          title: 'Sur les mois révolus, la courbe lissée sur 3 mois. '
+                 + 'Sur les mois à venir, le niveau récent corrigé de la '
+                 + 'saison — ce que pesait ce mois-là l\'an dernier. '
+                 + 'L\'écart avec la courbe pleine est ce qui reste à commander.'
+                 + (cat.tend_calendrier
+                     ? ' Corrigée des jours ouvrés : la fermeture d\'août ne '
+                       + 'compte pas comme une baisse d\'activité.'
+                     : '')
+                 + (!saisonN
+                     ? ' Aucun mois de référence l\'an dernier : la projection '
+                       + 'est plate, au niveau récent.' : ''),
           on: { click: () => {
             st.besoinsTendDroite[cat.kind] = !tendOn;
             renderContent();
