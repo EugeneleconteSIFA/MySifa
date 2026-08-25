@@ -311,3 +311,25 @@ body.light .mp-modal-actions .btn.btn-pf-entree{color:#fff}
 .mp-modal-actions .btn.btn-mvt-sortie{background:var(--danger);color:#fff}
 .mp-modal-actions .btn.btn-mvt-ajustement{background:var(--warn);color:#1a1200}
 .mp-modal-actions .btn.btn-mvt-transfert{background:var(--accent);color:var(--bg)}
+
+/* ── Entree Z1 : deux colonnes, aucune barre de defilement ───────────────────
+   La modale d'entree Z1 porte plus de champs que les autres (dossier, produit,
+   palettes, emplacement, quantite, date, note). Sur une colonne de 480 px le
+   bouton Valider tombait sous la ligne de flottaison : l'operateur validait
+   sans avoir vu les palettes. Deux colonnes la font tenir dans 90vh, et on
+   repasse en une colonne sous 760 px (telephone), ou le defilement redevient
+   le comportement normal.                                                   */
+.mp-modal.mp-modal-z1{max-width:780px}
+.mp-modal-z1 .z1-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  gap:0 18px;align-items:start}
+.mp-modal-z1 .z1-col{min-width:0}
+.mp-modal-z1 .mp-modal-mvt-body{padding:14px 18px 16px}
+.mp-modal-z1 .mp-field{margin-bottom:10px}
+.mp-modal-z1 .mp-field label{margin-bottom:3px}
+.mp-modal-z1 textarea{min-height:56px}
+.mp-modal-z1 .mp-readonly{padding:8px 10px}
+.mp-modal-z1 .mp-modal-actions{margin-top:6px}
+@media (max-width:760px){
+  .mp-modal.mp-modal-z1{max-width:520px}
+  .mp-modal-z1 .z1-grid{grid-template-columns:minmax(0,1fr)}
+}

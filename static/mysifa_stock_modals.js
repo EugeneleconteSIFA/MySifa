@@ -1352,6 +1352,156 @@
     } catch (e) { return []; }
   }
 
+
+  // ── Conditionnement produit (fiche technique) ─────────────────────
+  // Le type de palette et le nombre de palettes vivent deja dans la fiche
+  // technique : palette_type d'un cote, la cascade etiquettes/bobine ->
+  // bobines/carton -> cartons/palette de l'autre. Les redemander sous chaque
+  // bobine qui sort de machine, c'est demander a l'operateur de recopier une
+  // donnee que le systeme connait -- et accepter qu'il se trompe.
+  async function _fetchConditionnement(refProduit, noDossier, unite, machine) {
+    const qs = [];
+    if (refProduit) qs.push('ref_produit=' + encodeURIComponent(refProduit));
+    if (noDossier)  qs.push('no_dossier=' + encodeURIComponent(noDossier));
+    if (unite)      qs.push('unite=' + encodeURIComponent(unite));
+    if (machine)    qs.push('machine=' + encodeURIComponent(machine));
+    if (!qs.length) return null;
+    try {
+      return await api('/api/stock/pf/conditionnement?' + qs.join('&'));
+    } catch (e) { return null; }
+  }
+
+  function _z1RefProduitCourant() {
+    const m = S.pfModal || {};
+    if (m.produit && m.produit.reference) return String(m.produit.reference).trim();
+    if (m.refInp && (m.refInp.value || '').trim()) return String(m.refInp.value).trim();
+    if (m.dossier && m.dossier.ref_produit) return String(m.dossier.ref_produit).trim();
+    return '';
+  }
+
+  function _z1UniteCourante() {
+    const m = S.pfModal || {};
+    if (m.produit && m.produit.unite) return String(m.produit.unite).trim();
+    const uv = m.dossier ? _z1UniteVente(m.dossier) : null;
+    return uv ? uv.unite : '';
+  }
+
+  // Arrondi au superieur : une palette entamee occupe une place au sol.
+  function _z1NbPalettes(qte, parPalette) {
+    const q = parseFloat(qte);
+    const u = parseFloat(parPalette);
+    if (!isFinite(q) || q <= 0 || !isFinite(u) || u <= 0) return null;
+    return Math.max(1, Math.ceil(q / u));
+  }
+
+  function _z1RenderPalettes() {
+    const m = S.pfModal;
+    if (m && m._palettesBlock) _renderZ1PalettesBlock(m._palettesBlock);
+  }
+
+  function _z1MajIndiceQuantite() {
+    const m = S.pfModal;
+    if (!m || !m.qHintEl) return;
+    const h = m.qHintEl;
+    const cond = m._cond;
+    const parts = [];
+    if (cond && cond.unites_par_palette) {
+      let u = String(cond.unite_vente || 'unites').trim();
+      if (cond.unites_par_palette > 1 && u && !/s$/i.test(u)) u += 's';
+      parts.push(fN(cond.unites_par_palette) + ' ' + u + ' par palette');
+      const nb = _z1NbPalettes(m.qInp ? m.qInp.value : null, cond.unites_par_palette);
+      if (nb) parts.push('\u2192 ' + nb + ' palette' + (nb > 1 ? 's' : ''));
+    } else if (cond && cond.phrase) {
+      parts.push(cond.phrase);
+    }
+    if (!parts.length) { h.style.display = 'none'; h.textContent = ''; return; }
+    h.style.display = '';
+    h.textContent = parts.join(' ');
+  }
+
+  // Proposition, pas verdict : des que l'operateur touche aux palettes, sa
+  // saisie fait foi et le calcul ne la reecrit plus.
+  function _z1AppliquerConditionnement() {
+    const m = S.pfModal;
+    if (!m) return;
+    _z1MajIndiceQuantite();
+    const cond = m._cond;
+    if (!cond || m._palettesTouched || !cond.palette) { _z1RenderPalettes(); return; }
+    const nb = _z1NbPalettes(m.qInp ? m.qInp.value : null, cond.unites_par_palette);
+    m.palettesLines = [{ matiere_id: cond.palette.matiere_id, nombre: nb || 1 }];
+    _z1RenderPalettes();
+  }
+
+  async function _z1ChargerConditionnement() {
+    const m = S.pfModal;
+    if (!m) return;
+    const ref = _z1RefProduitCourant();
+    const noDos = (m.dossier && m.dossier.no_dossier) || m._noDossierManual || '';
+    if (!ref && !noDos) return;
+    const cle = ref.toUpperCase() + '|' + String(noDos).toUpperCase();
+    if (m._condCle === cle) { _z1AppliquerConditionnement(); return; }
+    m._condCle = cle;
+    const cond = await _fetchConditionnement(
+      ref, noDos, _z1UniteCourante(), (m.dossier && m.dossier.machine_nom) || '');
+    if (S.pfModal !== m) return;   // modale reconstruite entre-temps
+    m._cond = cond;
+    _z1AppliquerConditionnement();
+  }
+
+  // Ce que l'operateur avait deja renseigne, a re-injecter dans la modale
+  // reconstruite. Le conditionnement, lui, n'est pas emporte : il depend du
+  // produit, qui est justement ce qui vient de changer.
+  function _z1CarryFromModal(extra) {
+    const m = S.pfModal;
+    if (!m) return null;
+    const out = {
+      dossier: m.dossier || null,
+      noDossierManual: m._noDossierManual || '',
+      palettesLines: (m.palettesLines || []).slice(),
+      palettesTouched: !!m._palettesTouched,
+      paletteTypes: m._paletteTypes || [],
+      quantite: m.qInp ? (m.qInp.value || '') : '',
+      note: m._noteTa ? (m._noteTa.value || '') : '',
+      noteAuto: m._noteAutoLast || '',
+      refProduit: '',
+    };
+    if (extra) Object.keys(extra).forEach((k) => { out[k] = extra[k]; });
+    return out;
+  }
+
+  // Le produit suit le dossier choisi. Sans cela, choisir un dossier termine
+  // laissait la reference du dossier en cours dans la modale : la quantite
+  // partait sur le mauvais produit, et le dossier termine restait vide.
+  async function _z1SuivreProduitDuDossier(dossier) {
+    const m = S.pfModal;
+    if (!m) return;
+    const refDos = String((dossier && dossier.ref_produit) || '').trim();
+    if (!refDos) { _z1ChargerConditionnement(); return; }
+    const refCour = _z1RefProduitCourant();
+    if (refCour && refCour.toUpperCase() === refDos.toUpperCase()) {
+      _z1ChargerConditionnement();
+      return;
+    }
+    const p = await resolvePfProduitByRef(refDos);
+    if (S.pfModal !== m) return;
+    const carry = _z1CarryFromModal({ refProduit: refDos });
+    if (p) {
+      renderPfMouvementModal(m.type, p, m.defaultEmpl, carry);
+      return;
+    }
+    if (m.refInp) {
+      // Reference inconnue de MyStock : l'entree la creera. On la laisse
+      // affichee telle quelle plutot que de reconstruire pour rien.
+      m.refInp.value = refDos;
+      m.produit = null;
+      m.produitId = null;
+      m._condCle = null;
+      _z1ChargerConditionnement();
+    } else {
+      renderPfMouvementModal(m.type, null, m.defaultEmpl, carry);
+    }
+  }
+
   function _renderZ1PalettesBlock(container) {
     if (!container) return;
     container.innerHTML = '';
@@ -1365,12 +1515,27 @@
         type: 'button',
         style: { padding: '4px 10px', fontSize: '12px' },
         on: { click: () => {
+          S.pfModal._palettesTouched = true;
           S.pfModal.palettesLines.push({ matiere_id: null, nombre: 1 });
           _renderZ1PalettesBlock(container);
         } },
       }, '+ Ajouter'),
     );
     container.appendChild(head);
+
+    // D'ou vient ce qui est pre-rempli : sans cette ligne, l'operateur ne sait
+    // pas s'il regarde une proposition de la fiche technique ou sa propre
+    // saisie -- et ne sait donc pas s'il doit la verifier.
+    const cond = (S.pfModal && S.pfModal._cond) || null;
+    if (cond && !S.pfModal._palettesTouched && cond.palette) {
+      container.appendChild(el('div', { cls: 'mp-hint' },
+        'Fiche technique : ' + (cond.palette_label || cond.palette_type || 'palette')
+        + (cond.phrase ? ' \u00b7 ' + cond.phrase : '')
+        + '. Modifiable.'));
+    } else if (cond && !cond.palette && (cond.manque || []).length) {
+      container.appendChild(el('div', { cls: 'mp-hint' },
+        'Pas de palette pre-remplie : ' + cond.manque[0] + '.'));
+    }
 
     if (!types.length) {
       container.appendChild(el('div', { cls: 'mp-hint' },
@@ -1395,6 +1560,7 @@
       });
       sel.addEventListener('change', () => {
         const v = sel.value;
+        S.pfModal._palettesTouched = true;
         S.pfModal.palettesLines[idx].matiere_id = v ? Number(v) : null;
       });
 
@@ -1404,6 +1570,7 @@
       });
       nbInp.addEventListener('input', () => {
         const v = parseInt(nbInp.value, 10);
+        S.pfModal._palettesTouched = true;
         S.pfModal.palettesLines[idx].nombre = Number.isFinite(v) && v > 0 ? v : 1;
       });
 
@@ -1413,6 +1580,7 @@
         style: { padding: '4px 10px', fontSize: '12px', color: 'var(--danger)' },
         attrs: { title: 'Supprimer cette palette', 'aria-label': 'Supprimer' },
         on: { click: () => {
+          S.pfModal._palettesTouched = true;
           S.pfModal.palettesLines.splice(idx, 1);
           _renderZ1PalettesBlock(container);
         } },
@@ -1649,6 +1817,7 @@
     const prevAuto = S.pfModal._noteAutoLast || '';
     S.pfModal.dossier = dossier || null;
     S.pfModal._noDossierManual = (manualRef || '').trim();
+    S.pfModal._condCle = null;
     _renderZ1DossierBanner(container, ctx);
 
     // Note auto : ne l'ecrase que si vide OU si elle correspond a la note auto precedente.
@@ -1660,6 +1829,10 @@
         S.pfModal._noteAutoLast = newAuto;
       }
     }
+
+    // Le produit suit le dossier, puis le conditionnement suit le produit.
+    if (dossier) _z1SuivreProduitDuDossier(dossier);
+    else _z1ChargerConditionnement();
   }
 
   function _z1DossierRow(dossier, opts) {
@@ -1916,56 +2089,76 @@
   }
 
   async function _initZ1Enrichment(dossierBanner, palettesBlock, noteTa) {
-    const [ctx, types] = await Promise.all([_fetchZ1DossierContext(), _fetchPaletteTypes()]);
-    if (!S.pfModal) return;
-    S.pfModal._z1Ctx = ctx;
-    S.pfModal._paletteTypes = types || [];
-    S.pfModal._noteTa = noteTa || null;
-    // Selection par defaut : dossier actif s'il existe.
-    S.pfModal.dossier = ctx.dossier || null;
+    const m = S.pfModal;
+    if (!m) return;
+    m._palettesBlock = palettesBlock;
+    m._noteTa = noteTa || null;
+    const typesConnus = (m._paletteTypes && m._paletteTypes.length) ? m._paletteTypes : null;
+    const [ctx, types] = await Promise.all([
+      _fetchZ1DossierContext(),
+      typesConnus ? Promise.resolve(typesConnus) : _fetchPaletteTypes(),
+    ]);
+    if (S.pfModal !== m) return;
+    m._z1Ctx = ctx;
+    m._paletteTypes = types || [];
+    // Selection par defaut : le dossier deja choisi quand la modale vient
+    // d'etre reconstruite, sinon le dossier actif de l'operateur. Reprendre
+    // systematiquement ctx.dossier ecrasait le dossier termine choisi juste
+    // avant, et l'entree partait sur le dossier en cours.
+    if (!m.dossier && !m._noDossierManual) m.dossier = ctx.dossier || null;
 
     _renderZ1DossierBanner(dossierBanner, ctx);
     _renderZ1PalettesBlock(palettesBlock);
 
-    if (ctx.dossier && ctx.dossier.no_dossier && noteTa && !((noteTa.value || '').trim())) {
-      const auto = _z1MakeNoteFromDossier(ctx.dossier);
+    const dos = m.dossier;
+    if (dos && dos.no_dossier && noteTa && !((noteTa.value || '').trim())) {
+      const auto = _z1MakeNoteFromDossier(dos);
       noteTa.value = auto;
-      S.pfModal._noteAutoLast = auto;
+      m._noteAutoLast = auto;
     }
 
-    // Pre-remplit la reference produit depuis le dossier actif.
-    if (ctx.dossier && ctx.dossier.ref_produit && S.pfModal.refInp
-        && !((S.pfModal.refInp.value || '').trim())) {
-      const refDossier = String(ctx.dossier.ref_produit).trim();
-      S.pfModal.refInp.value = refDossier;
+    // Pre-remplit la reference produit depuis le dossier selectionne.
+    if (dos && dos.ref_produit && m.refInp && !((m.refInp.value || '').trim())) {
+      const refDossier = String(dos.ref_produit).trim();
+      m.refInp.value = refDossier;
       try {
         const p = await resolvePfProduitByRef(refDossier);
-        if (p && S.pfModal && S.pfModal.refInp
-            && String(S.pfModal.refInp.value || '').trim().toUpperCase()
+        if (p && S.pfModal === m && m.refInp
+            && String(m.refInp.value || '').trim().toUpperCase()
                 === refDossier.toUpperCase()) {
-          renderPfMouvementModal('entree', p, 'Z1');
+          renderPfMouvementModal('entree', p, m.defaultEmpl || 'Z1', _z1CarryFromModal());
+          return;
         }
       } catch (e) {}
     }
+    _z1ChargerConditionnement();
   }
 
-  function renderPfMouvementModal(type, produit, defaultEmpl) {
+  function renderPfMouvementModal(type, produit, defaultEmpl, carry) {
     const typeMvt = (type || 'entree').toLowerCase();
     if (!['entree', 'sortie'].includes(typeMvt)) return;
     closeMroot();
     const mroot = document.getElementById('mroot');
     if (!mroot) return;
     let prod = produit || null;
+    // `carry` : ce que l'operateur avait deja renseigne avant que la modale ne
+    // soit reconstruite (changement de produit, pre-remplissage depuis le
+    // dossier). Sans lui, le dossier choisi retombait silencieusement sur le
+    // dossier en cours -- et l'entree Z1 etait comptee sur le mauvais dossier.
+    const c = carry || null;
     S.pfModal = {
       type: typeMvt,
       produit: prod,
       produitId: prod ? prod.id : null,
       refInp: null,
       defaultEmpl: defaultEmpl || null,
-      dossier: null,
-      palettesLines: [],
-      _paletteTypes: [],
-      _noDossierManual: '',
+      dossier: (c && c.dossier) || null,
+      palettesLines: (c && Array.isArray(c.palettesLines)) ? c.palettesLines.slice() : [],
+      _paletteTypes: (c && c.paletteTypes) || [],
+      _noDossierManual: (c && c.noDossierManual) || '',
+      _palettesTouched: !!(c && c.palettesTouched),
+      _cond: (c && c.cond) || null,
+      _repris: !!c,
     };
     const _isZ1Entree = typeMvt === 'entree'
       && String(defaultEmpl || '').toUpperCase() === 'Z1';
@@ -1973,7 +2166,7 @@
     const overlay = el('div', { cls: 'mp-modal-overlay' });
     _bindOverlayDismiss(overlay, closeMroot);
     const headTypeCls = typeMvt === 'entree' ? 'pf-entree' : 'pf-sortie';
-    const box = el('div', { cls: 'mp-modal mp-modal-mvt' });
+    const box = el('div', { cls: 'mp-modal mp-modal-mvt' + (_isZ1Entree ? ' mp-modal-z1' : '') });
     box.appendChild(el('div', { cls: 'mp-modal-mvt-head mp-modal-mvt-head-' + headTypeCls },
       el('h3', null, PF_MVT_TITLES[typeMvt] || typeMvt),
       el('button', {
@@ -1986,12 +2179,23 @@
     const body = el('div', { cls: 'mp-modal-mvt-body' });
     const hintEl = el('div', { cls: 'mp-hint' }, '');
     const errEl = el('div', { cls: 'mp-hint err', style: { display: 'none' } }, '');
+    // Entree Z1 : deux colonnes. La modale empilait dossier, produit,
+    // emplacement, quantite, date, palettes et note sur une seule colonne de
+    // 480 px -- il fallait defiler pour atteindre Valider, et les palettes
+    // passaient sous la ligne de flottaison. A gauche ce qui vient du dossier,
+    // a droite ce que l'operateur saisit.
+    const colL = _isZ1Entree ? el('div', { cls: 'z1-col' }) : null;
+    const colR = _isZ1Entree ? el('div', { cls: 'z1-col' }) : null;
+    if (_isZ1Entree) body.appendChild(el('div', { cls: 'z1-grid' }, colL, colR));
+    const putL = (node) => { (colL || body).appendChild(node); return node; };
+    const putR = (node) => { (colR || body).appendChild(node); return node; };
+
     const dossierBanner = el('div', { cls: 'z1-dossier-banner', style: { display: 'none' } });
-    if (_isZ1Entree) body.appendChild(dossierBanner);
+    if (_isZ1Entree) putL(dossierBanner);
 
     if (prod) {
       const unit = (prod.unite || '').trim();
-      body.appendChild(el('div', { cls: 'mp-field' },
+      putL(el('div', { cls: 'mp-field' },
         el('label', null, 'Produit fini'),
         el('div', { cls: 'mp-readonly' },
           (prod.reference || '') + (prod.designation ? ' — ' + prod.designation : '')
@@ -2009,12 +2213,14 @@
         style: { direction: 'ltr' },
       });
       const suggWrap = el('div', { cls: 'empl-suggestions', style: { display: 'none' } });
+      if (c && c.refProduit) refInp.value = c.refProduit;
       S.pfModal.refInp = refInp;
       wireStockProduitSearch(refInp, suggWrap, (p) => {
-        renderPfMouvementModal(typeMvt, p, S.pfModal && S.pfModal.defaultEmpl);
+        renderPfMouvementModal(typeMvt, p, S.pfModal && S.pfModal.defaultEmpl,
+                               _z1CarryFromModal());
       });
       const refCombo = el('div', { cls: 'empl-combo-wrap' }, refInp, suggWrap);
-      body.appendChild(el('div', { cls: 'mp-field ref-field-wrap' },
+      putL(el('div', { cls: 'mp-field ref-field-wrap' },
         el('label', null, 'Produit fini'),
         refCombo,
       ));
@@ -2029,6 +2235,15 @@
     const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' });
     const dateInp = el('input', { attrs: { type: 'date', value: today } });
     const qInp = el('input', { attrs: { type: 'number', min: '0', step: 'any', inputmode: 'decimal' } });
+    // Indice sous la quantite : combien d'unites de vente tiennent sur une
+    // palette d'apres la fiche, et le nombre de palettes qui en decoule.
+    const qHintEl = el('div', { cls: 'mp-hint', style: { display: 'none' } }, '');
+    S.pfModal.qInp = qInp;
+    S.pfModal.qHintEl = qHintEl;
+    if (c && c.quantite) qInp.value = c.quantite;
+    if (_isZ1Entree) {
+      qInp.addEventListener('input', () => { _z1AppliquerConditionnement(); });
+    }
 
     let stockEmpl = 0;
     const refreshStockHint = async () => {
@@ -2063,12 +2278,13 @@
     emplInp.addEventListener('change', refreshStockHint);
 
     if (typeMvt === 'entree') {
-      body.appendChild(emplWrap);
-      body.appendChild(el('div', { cls: 'mp-field' },
+      putR(emplWrap);
+      putR(el('div', { cls: 'mp-field' },
         el('label', null, 'Quantité'),
         qInp,
+        qHintEl,
       ));
-      body.appendChild(el('div', { cls: 'mp-field' },
+      putR(el('div', { cls: 'mp-field' },
         el('label', null, 'Date du stock'),
         dateInp,
       ));
@@ -2119,10 +2335,12 @@
 
     const palettesBlock = el('div', { cls: 'z1-palettes-block' });
     if (_isZ1Entree) {
-      body.appendChild(el('div', { cls: 'mp-field' }, palettesBlock));
+      putL(el('div', { cls: 'mp-field' }, palettesBlock));
     }
     const noteTa = el('textarea', { attrs: { placeholder: 'Commentaire (optionnel)' } });
-    body.appendChild(el('div', { cls: 'mp-field' }, el('label', null, 'Note'), noteTa));
+    if (c && c.note) noteTa.value = c.note;
+    if (c && c.noteAuto) S.pfModal._noteAutoLast = c.noteAuto;
+    putR(el('div', { cls: 'mp-field' }, el('label', null, 'Note'), noteTa));
     const prevGetBody = S.pfModal.getBody;
     S.pfModal.getBody = () => {
       const b = prevGetBody();
@@ -2197,6 +2415,8 @@
     // Si entrée sans produit_id : passer par l'endpoint produits-finis/entree qui auto-crée.
     if (typeMvt === 'entree' && !S.pfModal.produitId) {
       const refVal = (S.pfModal.refInp ? S.pfModal.refInp.value : '') || '';
+      // body porte deja no_dossier et palettes pour une entree Z1 : les laisser
+      // de cote ici detachait du dossier toute entree sur une reference neuve.
       const payload = {
         reference: String(refVal).trim().toUpperCase(),
         designation: String(refVal).trim().toUpperCase(),
@@ -2204,6 +2424,8 @@
         emplacement: body.emplacement,
         quantite: body.quantite,
         note: body.note,
+        no_dossier: body.no_dossier || null,
+        palettes: body.palettes || undefined,
       };
       try {
         await api('/api/stock/produits-finis/entree', {

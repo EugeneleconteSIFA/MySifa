@@ -74,7 +74,7 @@ FABRICATION_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/support_widget.css">
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
-<link rel="stylesheet" href="/static/mysifa_stock_modals.css">
+<link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=z1cond1">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -1092,7 +1092,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <script>window.__STOCK_UNITE_VENTE_DEFAUT__="__STOCK_UNITE_VENTE_DEFAUT__";</script>
-<script src="/static/mysifa_stock_modals.js"></script>
+<script src="/static/mysifa_stock_modals.js?v=z1cond1"></script>
 <div id="root"></div>
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
@@ -1114,7 +1114,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_cal_rappel.js?v=4"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.5"></script>
 <!-- Memoire produit : fiche par reference produit, partagee avec MyProd -->
-<script src="/static/mysifa_produit_memoire.js?v=1.9"></script>
+<script src="/static/mysifa_produit_memoire.js?v=2.0"></script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,

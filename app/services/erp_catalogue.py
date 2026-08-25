@@ -1055,7 +1055,10 @@ LIENS = {
         {"label": "Bons de livraison", "ecran": "livraisons", "sur": {"l.numcde": "numero"}},
         {"label": "Factures", "ecran": "factures", "sur": {"l.livno": "numero"}},
         {"label": "Mouvements de stock", "ecran": "mouvements_pf", "sur": {"m.numcde": "numero"}},
-        {"label": "Colisage", "ecran": "colisage", "sur": {"c.numcde": "numero"}},
+        # `col_ligne.numcde` existe mais vaut 0 sur TOUTES les lignes du miroir :
+        # le colisage porte le numéro de commande dans `numero`. Vérifié le
+        # 25/08/2026 sur les 257 lignes de colisage présentes.
+        {"label": "Colisage", "ecran": "colisage", "sur": {"c.numero": "numero"}},
         {"label": "L'article", "ecran": "articles", "sur": {"a.code1": "code1", "a.code2": "code2"}},
         {"label": "Prix négociés du client", "ecran": "prix_client",
          "sur": {"p.code1": "code1", "p.code2": "code2"}},
