@@ -66,6 +66,12 @@ body.sb-open .sidebar{transform:translateX(0)}
 .logo:hover{background:var(--accent-bg)}
 .logo:hover .logo-brand{color:var(--accent)}
 .logo-brand{font-size:15px;font-weight:800;transition:color .15s}.logo-brand span{color:var(--accent)}
+.logo-ligne{display:flex;align-items:center;gap:10px}
+.rvgi-mark{display:inline-flex;align-items:center;flex-shrink:0}
+.rvgi-mark img{width:26px;height:26px;display:block}
+.rvgi-mark .rvgi-clair{display:none}
+body.light .rvgi-mark .rvgi-sombre{display:none}
+body.light .rvgi-mark .rvgi-clair{display:block}
 .logo-sub{font-size:10px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
 .nav-groupe{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);padding:14px 12px 6px}
 .nav-btn{display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:8px 12px;border-radius:8px;border:none;background:transparent;color:var(--text2);font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s,color .15s;margin-bottom:1px}
@@ -203,8 +209,16 @@ body.sb-open .sidebar-overlay{display:block}
 <div class="layout">
   <aside class="sidebar">
     <div class="logo" onclick="ouvrirMenu()" title="Menu ERP">
-      <div class="logo-brand">My<span>ERP</span></div>
-      <div class="logo-sub">RVGI · lecture seule</div>
+      <div class="logo-ligne">
+        <span class="rvgi-mark">
+          <img class="rvgi-sombre" src="/static/rvgi_mark_clair.png" alt="" width="26" height="26">
+          <img class="rvgi-clair" src="/static/rvgi_mark.png" alt="" width="26" height="26">
+        </span>
+        <div>
+          <div class="logo-brand">My<span>ERP</span></div>
+          <div class="logo-sub">RVGI · lecture seule</div>
+        </div>
+      </div>
     </div>
     <button type="button" class="nav-btn" id="nav-menu" onclick="ouvrirMenu()">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
