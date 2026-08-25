@@ -4,8 +4,10 @@ Route : /erp — direction, services administration et super administrateur
 (`ROLES_ADMIN`).
 
 Lecture du miroir RVGI (`data/erp_mirror.db`) dans les codes de MySifa :
-sidebar invariable, filtres persistants à gauche, grille dense, panneau de
-détail. Aucune action d'écriture — l'ERP reste la source, cet écran regarde.
+sidebar invariable, filtres persistants à gauche, grille dense, et une modale
+de détail qui porte les « pièces liées » — de la commande vers ses BL, ses
+factures, ses mouvements — pour explorer comme dans l'ERP. Aucune action
+d'écriture : l'ERP reste la source, cet écran regarde.
 
 Le catalogue d'écrans vit dans `app/services/erp_catalogue.py` : ajouter un
 écran ne demande pas de toucher à cette page.
@@ -233,22 +235,121 @@ td.vide{color:var(--muted)}
 .pied .pager{margin-left:auto;display:flex;align-items:center;gap:6px}
 .vide-msg{padding:40px 26px;color:var(--muted);font-size:13px}
 
-/* ── Détail ── */
-.detail{width:430px;flex-shrink:0;border-left:1px solid var(--border);background:var(--card);overflow-y:auto;display:none}
-.detail.ouvert{display:block}
-.detail-head{position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--border);padding:14px 18px;display:flex;align-items:center;gap:10px;z-index:2}
-.detail-head h2{margin:0;font-size:14px;font-weight:700}
-.detail-fermer{margin-left:auto;border:none;background:var(--bg);color:var(--text2);border-radius:8px;width:28px;height:28px;cursor:pointer;font-size:16px;line-height:1}
-.detail-fermer:hover{background:var(--danger);color:#fff}
-.groupe{border-bottom:1px solid var(--border)}
-.groupe-titre{padding:11px 18px;font-size:10.5px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:8px}
+/* ── Détail : une modale par-dessus la grille ── */
+.detail-fond{position:fixed;inset:0;z-index:70;display:none;align-items:center;justify-content:center;padding:22px;
+  background:rgba(2,6,23,.66)}
+body.light .detail-fond{background:rgba(15,23,42,.5)}
+.detail-fond.ouvert{display:flex}
+.detail{width:min(1100px,94vw);max-height:88vh;display:flex;flex-direction:column;
+  background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;
+  box-shadow:0 28px 80px rgba(0,0,0,.5);animation:mo .16s ease-out}
+@keyframes mo{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+.detail-head{flex-shrink:0;background:var(--card);border-bottom:1px solid var(--border);padding:13px 16px;display:flex;align-items:center;gap:12px}
+.detail-head .tt{min-width:0}
+.detail-head h2{margin:0;font-size:16px;font-weight:800;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.detail-head .st{margin:2px 0 0;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.detail-retour{border:1px solid var(--border);background:var(--bg);color:var(--text2);border-radius:9px;
+  padding:6px 11px;cursor:pointer;font-size:12px;font-weight:600;display:none;align-items:center;gap:6px;flex-shrink:0}
+.detail-retour.on{display:inline-flex}
+.detail-retour:hover{border-color:var(--accent);color:var(--accent)}
+.detail-fermer{margin-left:auto;border:1px solid var(--border);background:var(--bg);color:var(--text2);border-radius:9px;
+  width:30px;height:30px;cursor:pointer;font-size:17px;line-height:1;flex-shrink:0}
+.detail-fermer:hover{background:var(--danger);border-color:var(--danger);color:#fff}
+.detail-corps{overflow-y:auto;padding:15px 16px 20px;background:var(--bg);flex:1}
+.sections{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;align-items:start}
+.groupe{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.groupe.pleine{grid-column:1/-1}
+.groupe-titre{padding:10px 14px;font-size:10.5px;font-weight:800;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);
+  cursor:pointer;display:flex;align-items:center;gap:8px;background:var(--bg)}
 .groupe-titre:hover{color:var(--accent)}
-.groupe-corps{padding:0 18px 12px}
+.groupe-titre .chev{margin-left:auto;transition:transform .15s}
+.groupe.replie .groupe-titre .chev{transform:rotate(-90deg)}
+.groupe-corps{padding:6px 14px 10px}
+/* Un entête de pièce porte trop de champs pour une colonne : on les étale. */
+.groupe.champs-cols .groupe-corps{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:0 22px}
 .groupe.replie .groupe-corps{display:none}
-.ligne-champ{display:flex;gap:12px;padding:5px 0;font-size:12.5px;border-bottom:1px dashed transparent}
-.ligne-champ .lab{color:var(--muted);flex:0 0 46%}
-.ligne-champ .val{color:var(--text);word-break:break-word}
+.ligne-champ{display:flex;gap:12px;padding:6px 0;font-size:12.5px;border-bottom:1px solid var(--border)}
+.ligne-champ:last-child{border-bottom:none}
+.ligne-champ .lab{color:var(--muted);flex:0 0 44%}
+.ligne-champ .val{color:var(--text);word-break:break-word;font-weight:600;text-align:right;margin-left:auto}
 .ligne-champ .val.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px}
+.ligne-champ .val.num{font-variant-numeric:tabular-nums}
+.ligne-champ .val.vide{color:var(--muted);font-weight:400}
+.ligne-champ .val.of{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px;color:var(--accent)}
+.lien-row .c.of{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--accent);font-weight:600}
+.lien-row .c.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px}
+
+/* Pièces liées */
+.liens{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px;align-items:start}
+.lien{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.lien-tete{display:flex;align-items:center;gap:8px;padding:9px 13px;background:var(--bg);border-bottom:1px solid var(--border)}
+.lien-tete .nom{font-size:12px;font-weight:800;color:var(--text)}
+.lien-tete .cle{font-size:10.5px;color:var(--muted);font-family:ui-monospace,Menlo,Consolas,monospace}
+.lien-tete .cpt{margin-left:auto;display:inline-block;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:800;background:var(--accent-bg);color:var(--accent)}
+.lien-rows{display:flex;flex-direction:column}
+.lien-row{display:flex;gap:10px;align-items:center;padding:7px 13px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--border);color:var(--text2)}
+.lien-row:last-child{border-bottom:none}
+.lien-row:hover{background:var(--accent-bg);color:var(--text)}
+.lien-row .c{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1 1 0;min-width:0}
+.lien-row .c.num{text-align:right;font-variant-numeric:tabular-nums;flex:0 0 auto}
+.lien-row .fl{flex:0 0 auto;color:var(--muted)}
+.lien-plus{padding:8px 13px;font-size:11.5px;font-weight:700;color:var(--accent);cursor:pointer;background:var(--bg);text-align:center}
+.lien-plus:hover{background:var(--accent-bg)}
+.lien-err{padding:10px 13px;font-size:11.5px;color:var(--danger)}
+.liens-vide{grid-column:1/-1;padding:14px;border:1px dashed var(--border);border-radius:12px;color:var(--muted);font-size:12px;text-align:center}
+.titre-bloc{display:flex;align-items:center;gap:10px;margin:14px 0 8px;font-size:11px;font-weight:800;
+  letter-spacing:.8px;text-transform:uppercase;color:var(--text2)}
+.titre-bloc:first-child{margin-top:0}
+.titre-bloc:after{content:"";flex:1;height:1px;background:var(--border);order:1}
+.titre-bloc .tb-num{order:2;font-variant-numeric:tabular-nums;letter-spacing:0;
+  background:var(--accent-bg);color:var(--accent);border-radius:999px;padding:2px 9px;font-size:11px}
+
+/* Les lignes de la pièce : la même grille, en petit, dans la fiche. */
+.pl-boite{border:1px solid var(--border);border-radius:12px;overflow:auto;background:var(--card);max-height:290px}
+table.pl{width:100%;border-collapse:collapse;font-size:12px}
+table.pl th{position:sticky;top:0;z-index:1;background:var(--bg);color:var(--muted);text-align:left;
+  font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;
+  padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+table.pl th.num,table.pl td.num{text-align:right;font-variant-numeric:tabular-nums}
+table.pl td{padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text2);
+  white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis}
+table.pl tr:last-child td{border-bottom:none}
+table.pl tbody tr{cursor:pointer}
+table.pl tbody tr:hover td{background:var(--accent-bg);color:var(--text)}
+table.pl tbody tr.ici td{background:var(--accent-bg);color:var(--text);font-weight:600;cursor:default}
+table.pl tbody tr.ici td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+table.pl td.vide{color:var(--muted)}
+table.pl td.of{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--accent);font-weight:600}
+table.pl td.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px}
+.pl-note{margin:6px 2px 0;font-size:11.5px;color:var(--muted)}
+
+/* Résumé de la ligne : l'article et les chiffres, lisibles de loin. */
+.resume{display:flex;flex-wrap:wrap;align-items:center;gap:16px 26px;margin-bottom:12px;
+  padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--card);
+  border-left:3px solid var(--accent)}
+.resume-quoi{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1 1 240px}
+.resume-ref{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:19px;font-weight:700;
+  color:var(--accent);letter-spacing:-.2px}
+.resume-des{font-size:13px;color:var(--text2);line-height:1.35}
+.resume-chiffres{display:flex;flex-wrap:wrap;gap:10px 28px;margin-left:auto}
+.tuile{display:flex;flex-direction:column;gap:2px;text-align:right;min-width:88px}
+.tuile .tl{font-size:10px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--muted)}
+.tuile .tv{font-size:19px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;line-height:1.1}
+.tuile .tv.neg{color:var(--danger)}
+.tuile .tv.vide{color:var(--muted);font-weight:400}
+@media (max-width:700px){
+  .resume-chiffres{margin-left:0}
+  .tuile{text-align:left}
+}
+
+/* Bandeau de provenance au-dessus de la grille */
+.bandeau{display:none;align-items:center;gap:10px;padding:9px 14px;background:var(--accent-bg);
+  border-bottom:1px solid var(--border);font-size:12px;color:var(--text2)}
+.bandeau.on{display:flex}
+.bandeau b{color:var(--accent)}
+.bandeau .x{margin-left:auto;border:1px solid var(--border);background:var(--card);color:var(--text2);
+  border-radius:8px;padding:3px 10px;font-size:11.5px;cursor:pointer;font-weight:600}
+.bandeau .x:hover{border-color:var(--danger);color:var(--danger)}
 
 /* ── Divers ── */
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:11px 18px;font-size:13px;z-index:80;box-shadow:0 8px 24px rgba(0,0,0,.3)}
@@ -260,7 +361,10 @@ body.sb-open .sidebar-overlay{display:block}
 @media (max-width:900px){
   .ecran{flex-direction:column}
   .rail{width:auto;border-right:none;border-bottom:1px solid var(--border)}
-  .detail{position:fixed;inset:0;width:auto;z-index:60}
+  .detail-fond{padding:0}
+  .detail{width:100%;max-height:100vh;height:100vh;border-radius:0;border:none}
+  .sections{grid-template-columns:1fr}
+  .liens{grid-template-columns:1fr}
 }
 @media (min-width:901px){.mobile-topbar{display:none}}
 </style>
@@ -272,6 +376,11 @@ body.sb-open .sidebar-overlay{display:block}
 <script src="/static/mysifa_guides.js"></script>
 
 <div class="sidebar-overlay" id="sb-ov" onclick="fermerSidebar()"></div>
+
+<!-- Détail d'une ligne : modale par-dessus la grille, jamais une page à part. -->
+<div class="detail-fond" id="detail-fond">
+  <section class="detail" id="detail" role="dialog" aria-modal="true" aria-labelledby="detail-titre"></section>
+</div>
 
 <div class="layout">
   <aside class="sidebar">
@@ -394,6 +503,10 @@ const S = {
   colDrag: null,      // colonne en cours de déplacement
   glisse: false,      // un défilement à la souris vient d'avoir lieu
   jeton: 0,           // anti-course : seule la dernière requête lancée s'affiche
+  pile: [],           // fil d'Ariane de la modale : {ecran, id}
+  jetonD: 0,          // anti-course pour la modale
+  contexte: null,     // grille ouverte depuis une pièce liée
+  ctxAttente: null,   // contexte à consommer au prochain ouvrirEcran()
 };
 
 const ICO_SUN='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
@@ -681,9 +794,9 @@ const ERP_GUIDES = {
 
     {
       icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="14" y1="3" x2="14" y2="21"/><line x1="17" y1="9" x2="21" y2="9"/><line x1="17" y1="14" x2="21" y2="14"/></svg>',
-      title: 'Ouvrir une ligne',
-      body: '<p>Un clic sur une ligne ouvre son <strong>panneau de détail</strong>, à droite : la ligne y est dépliée en groupes — la pièce, l\'article, les quantités et prix, la livraison. Les champs que l\'écran ne montre pas sont regroupés sous <span class="mguide-tag">Autres champs</span>, replié.</p><p>Rien n\'est masqué : si RVGI porte l\'information, elle est là. <span class="mguide-tag">Échap</span> referme le panneau.</p>',
-      illu: '<svg viewBox="0 0 340 160" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><rect x="8" y="8" width="176" height="144" rx="8" fill="var(--bg)" stroke="var(--border)"/><rect x="14" y="40" width="164" height="20" rx="4" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="22" y="54" font-size="8" fill="var(--accent)" font-weight="700">9932399 · LIDL</text><rect x="14" y="66" width="164" height="16" rx="4" fill="var(--card)"/><rect x="14" y="86" width="164" height="16" rx="4" fill="var(--card)"/><rect x="190" y="8" width="142" height="144" rx="8" fill="var(--card)" stroke="var(--accent)"/><text x="202" y="26" font-size="9" fill="var(--text)" font-weight="800">Commandes</text><line x1="190" y1="34" x2="332" y2="34" stroke="var(--border)"/><text x="202" y="48" font-size="7.5" fill="var(--muted)" font-weight="700">COMMANDE</text><text x="202" y="62" font-size="8" fill="var(--text2)">N°</text><text x="324" y="62" font-size="8" fill="var(--text)" text-anchor="end">9932399</text><text x="202" y="76" font-size="8" fill="var(--text2)">Client</text><text x="324" y="76" font-size="8" fill="var(--text)" text-anchor="end">LIDL</text><line x1="196" y1="84" x2="326" y2="84" stroke="var(--border)"/><text x="202" y="98" font-size="7.5" fill="var(--muted)" font-weight="700">QUANTITÉS ET PRIX</text><text x="202" y="112" font-size="8" fill="var(--text2)">Quantité</text><text x="324" y="112" font-size="8" fill="var(--text)" text-anchor="end">500 000</text><line x1="196" y1="120" x2="326" y2="120" stroke="var(--border)"/><text x="202" y="136" font-size="7.5" fill="var(--muted)" font-weight="700">AUTRES CHAMPS</text><path d="M316 132 l5 5 5-5" fill="none" stroke="var(--muted)" stroke-width="1.4"/></svg>'
+      title: 'Ouvrir une ligne, suivre la pièce',
+      body: '<p>Un clic sur une ligne ouvre une <strong>fiche en grand</strong> par-dessus la grille : la ligne y est dépliée en blocs — la pièce, l\'article, les quantités et prix, la livraison. Ce que l\'écran ne montre pas est regroupé sous <span class="mguide-tag">Autres champs</span>, replié. Rien n\'est masqué : si RVGI porte l\'information, elle est là.</p><p>En bas, <span class="mguide-hl">Pièces liées</span> suit les clés de RVGI : d\'une commande vers ses bons de livraison, ses factures, ses mouvements de stock. Un clic sur une pièce l\'ouvre dans la même fiche — <span class="mguide-tag">Retour</span> revient d\'un cran, <span class="mguide-tag">Voir les N</span> bascule sur l\'écran complet. <span class="mguide-tag">Échap</span> referme.</p>',
+      illu: '<svg viewBox="0 0 340 160" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><g opacity=".28"><rect x="4" y="6" width="332" height="148" rx="8" fill="var(--bg)" stroke="var(--border)"/><line x1="4" y1="26" x2="336" y2="26" stroke="var(--border)"/><line x1="4" y1="46" x2="336" y2="46" stroke="var(--border)"/><line x1="4" y1="66" x2="336" y2="66" stroke="var(--border)"/><line x1="4" y1="86" x2="336" y2="86" stroke="var(--border)"/><line x1="4" y1="106" x2="336" y2="106" stroke="var(--border)"/><line x1="4" y1="126" x2="336" y2="126" stroke="var(--border)"/></g><rect x="26" y="12" width="288" height="136" rx="10" fill="var(--card)" stroke="var(--accent)"/><rect x="26" y="12" width="288" height="26" rx="10" fill="var(--bg)"/><text x="38" y="24" font-size="9" fill="var(--text)" font-weight="800">Commande 9932399</text><text x="38" y="34" font-size="7" fill="var(--muted)">LIDL · 890/0112 · 500 000</text><text x="302" y="29" font-size="10" fill="var(--muted)" text-anchor="end">×</text><line x1="26" y1="38" x2="314" y2="38" stroke="var(--border)"/><rect x="34" y="46" width="132" height="52" rx="7" fill="var(--bg)" stroke="var(--border)"/><text x="42" y="58" font-size="6.5" fill="var(--muted)" font-weight="800">LA PIÈCE</text><text x="42" y="72" font-size="7.5" fill="var(--text2)">N°</text><text x="158" y="72" font-size="7.5" fill="var(--text)" text-anchor="end" font-weight="700">9932399</text><line x1="42" y1="77" x2="158" y2="77" stroke="var(--border)"/><text x="42" y="90" font-size="7.5" fill="var(--text2)">Client</text><text x="158" y="90" font-size="7.5" fill="var(--text)" text-anchor="end" font-weight="700">LIDL</text><rect x="174" y="46" width="132" height="52" rx="7" fill="var(--bg)" stroke="var(--border)"/><text x="182" y="58" font-size="6.5" fill="var(--muted)" font-weight="800">QUANTITÉS ET PRIX</text><text x="182" y="72" font-size="7.5" fill="var(--text2)">Quantité</text><text x="298" y="72" font-size="7.5" fill="var(--text)" text-anchor="end" font-weight="700">500 000</text><line x1="182" y1="77" x2="298" y2="77" stroke="var(--border)"/><text x="182" y="90" font-size="7.5" fill="var(--text2)">Prix</text><text x="298" y="90" font-size="7.5" fill="var(--text)" text-anchor="end" font-weight="700">0,0142</text><text x="34" y="112" font-size="6.5" fill="var(--text2)" font-weight="800">PIÈCES LIÉES</text><line x1="92" y1="110" x2="306" y2="110" stroke="var(--border)"/><rect x="34" y="118" width="88" height="24" rx="7" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="42" y="128" font-size="7" fill="var(--accent)" font-weight="800">Bons de livraison</text><text x="42" y="138" font-size="6.5" fill="var(--accent)" opacity=".85">numcde 9932399</text><text x="114" y="133" font-size="7.5" fill="var(--accent)" text-anchor="end" font-weight="800">3</text><rect x="128" y="118" width="88" height="24" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="136" y="128" font-size="7" fill="var(--text)" font-weight="800">Factures</text><text x="136" y="138" font-size="6.5" fill="var(--muted)">livno 9932399</text><text x="208" y="133" font-size="7.5" fill="var(--text2)" text-anchor="end" font-weight="800">1</text><rect x="222" y="118" width="88" height="24" rx="7" fill="var(--card)" stroke="var(--border)"/><text x="230" y="128" font-size="7" fill="var(--text)" font-weight="800">Mouvements</text><text x="230" y="138" font-size="6.5" fill="var(--muted)">Voir les 12 →</text><text x="302" y="133" font-size="7.5" fill="var(--text2)" text-anchor="end" font-weight="800">12</text></svg>'
     },
 
     {
@@ -795,11 +908,18 @@ function ouvrirEcran(cle){
   const def=((S.meta&&S.meta.ecrans)||[]).find(e=>e.cle===cle);
   if(!def){toast('Écran inconnu.','err');ouvrirMenu();return;}
   S.ecran=cle;S.def=def;S.page=1;S.tri=null;S.sens='asc';S.q='';S.filtres={};S.selection=null;S.colonnes=[];S.epingles=[];
+  // Un contexte de pièce liée n'est valable que pour l'écran qu'il vise, et
+  // pour une seule ouverture : on le consomme ici.
+  S.contexte=(S.ctxAttente&&S.ctxAttente.cible===cle)?S.ctxAttente:null;
+  S.ctxAttente=null;
   // Un écran s'ouvre sur ce qui est vivant : le filtre qui porte un défaut
-  // (Position = En cours) est appliqué d'entrée, et reste effaçable.
-  (def.filtres||[]).forEach(f=>{
-    if(f.defaut!=null&&f.defaut!=='')S.filtres[f.nom]=String(f.defaut);
-  });
+  // (Position = En cours) est appliqué d'entrée, et reste effaçable. Venant
+  // d'une pièce liée, non : on veut la pièce, même soldée.
+  if(!S.contexte){
+    (def.filtres||[]).forEach(f=>{
+      if(f.defaut!=null&&f.defaut!=='')S.filtres[f.nom]=String(f.defaut);
+    });
+  }
   document.getElementById('titre').textContent=def.label;
   document.getElementById('sous').textContent=def.resume||'';
   const ms=document.getElementById('mobile-sub');if(ms)ms.textContent=def.label;
@@ -837,9 +957,10 @@ function ouvrirEcran(cle){
 
   document.getElementById('corps').innerHTML='<div class="ecran">'+rail+
     '<div class="grille-zone">'+
+      '<div class="bandeau" id="bandeau"></div>'+
       '<div class="grille-scroll"><table class="grille"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>'+
-      '<div class="pied" id="pied"></div></div>'+
-    '<aside class="detail" id="detail"></aside></div>';
+      '<div class="pied" id="pied"></div></div></div>';
+  renderBandeau();
 
   const q=document.getElementById('q');
   let minuteur=null;
@@ -941,7 +1062,29 @@ function urlListe(){
   p.set('page',String(S.page));
   p.set('taille',String(S.taille));
   Object.keys(S.filtres).forEach(k=>{if(S.filtres[k])p.set('f_'+k,S.filtres[k]);});
+  // Ouverture depuis une pièce liée : on transmet l'origine, jamais un nom de
+  // colonne — c'est le serveur qui reconstruit la jointure depuis le catalogue.
+  if(S.contexte){
+    p.set('depuis',S.contexte.depuis);
+    p.set('depuis_id',S.contexte.depuis_id);
+    p.set('lien',String(S.contexte.lien));
+  }
   return '/api/erp/'+encodeURIComponent(S.ecran)+'/lignes?'+p.toString();
+}
+
+// Bandeau de provenance : dire d'où vient une grille restreinte, et permettre
+// d'en sortir. Sans lui, une liste filtrée passe pour la liste complète.
+function renderBandeau(){
+  const b=document.getElementById('bandeau');
+  if(!b)return;
+  if(!S.contexte){b.classList.remove('on');b.innerHTML='';return;}
+  const c=S.contexte;
+  b.classList.add('on');
+  b.innerHTML='<span>'+ICO_LIEN+'</span><span>Depuis <b>'+esc(c.depuis_label||c.depuis)+'</b>'+
+    (c.cle_lue?(' · '+esc(c.cle_lue)):'')+'</span>'+
+    '<button type="button" class="x" id="ctx-x">Voir tout l\'écran</button>';
+  const x=document.getElementById('ctx-x');
+  if(x)x.addEventListener('click',()=>{S.contexte=null;S.page=1;renderBandeau();charger();});
 }
 
 async function charger(){
@@ -958,6 +1101,13 @@ async function charger(){
     return;
   }
   if(jeton!==S.jeton)return;   // une frappe plus récente a déjà relancé
+  if(S.contexte&&r.contexte){
+    S.contexte.depuis_label=r.contexte.depuis_label;
+    S.contexte.lien_label=r.contexte.lien;
+    S.contexte.cle_lue=Object.keys(r.contexte.valeurs||{})
+      .map(k=>k+' '+r.contexte.valeurs[k]).join(' · ');
+    renderBandeau();
+  }
   S.lignes=r.lignes;S.total=r.total;
   appliquerLayout(r.colonnes);
   renderTete();renderGrille();renderPied();
@@ -1007,39 +1157,323 @@ function renderPied(){
   if(b)b.addEventListener('click',()=>{if(S.page<pages){S.page++;charger();}});
 }
 
-// ── Détail ───────────────────────────────────────────────────────
-function enteteDetail(titre){
-  return '<div class="detail-head"><h2>'+esc(titre)+'</h2>'+
-    '<button type="button" class="detail-fermer" onclick="fermerDetail()" title="Fermer">×</button></div>';
+// ── Détail : modale sectionnée + pièces liées ────────────────────
+// La modale garde une pile : ouvrir une pièce liée empile, « Retour » dépile.
+// On explore ainsi commande → BL → facture sans jamais perdre son point de
+// départ, et sans quitter l'écran de travail derrière.
+const ICO_LIEN='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>';
+const ICO_CHEV='<svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+const ICO_FLECHE='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
+const ICO_RETOUR='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="11 18 5 12 11 6"/></svg>';
+const ICO_PIECE='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><polyline points="14 3 14 8 19 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>';
+const ICO_FICHE='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="10" x2="9" y2="20"/></svg>';
+
+function defEcran(cle){return ((S.meta&&S.meta.ecrans)||[]).find(e=>e.cle===cle)||null;}
+
+function enteteDetail(titre,sous){
+  const retour=S.pile.length>1;
+  const p=S.pile.length>1?S.pile[S.pile.length-2]:null;
+  const dp=p?defEcran(p.ecran):null;
+  return '<div class="detail-head">'+
+    '<button type="button" class="detail-retour'+(retour?' on':'')+'" id="d-retour" title="Revenir">'+
+      ICO_RETOUR+'<span>'+esc(dp?dp.label:'Retour')+'</span></button>'+
+    '<div class="tt"><h2 id="detail-titre">'+esc(titre)+'</h2>'+
+      (sous?('<p class="st">'+esc(sous)+'</p>'):'')+'</div>'+
+    '<button type="button" class="detail-fermer" id="d-fermer" title="Fermer (Échap)">×</button></div>';
 }
-async function ouvrirDetail(id){
-  S.selection=id;renderGrille();
-  const d=document.getElementById('detail');
-  if(!d)return;
-  d.classList.add('ouvert');
-  d.innerHTML=enteteDetail('Détail')+'<div style="padding:18px"><div class="skel"></div></div>';
-  let r;
-  try{ r=await api('/api/erp/'+encodeURIComponent(S.ecran)+'/detail/'+encodeURIComponent(id)); }
-  catch(e){ d.innerHTML=enteteDetail('Détail')+'<div class="vide-msg">'+esc(e.message)+'</div>'; return; }
-  let h=enteteDetail(S.def?S.def.label:'Détail');
-  (r.groupes||[]).forEach((g,i)=>{
-    h+='<div class="groupe'+(g.replie?' replie':'')+'" data-g="'+i+'">'+
-       '<div class="groupe-titre">'+esc(g.titre)+'</div><div class="groupe-corps">';
-    (g.champs||[]).forEach(c=>{
-      const v=cellule(c,c.valeur);
-      h+='<div class="ligne-champ"><span class="lab">'+esc(c.label)+'</span>'+
-         '<span class="val '+(v.cls.indexOf('mono')>=0?'mono':'')+'">'+v.html+'</span></div>';
-    });
-    h+='</div></div>';
+
+// Le sous-titre : ce qui identifie la pièce ouverte. Quand il y a un entête,
+// c'est lui qui parle — numéro, client, date — plutôt que le premier groupe
+// du détail, qui peut commencer par un identifiant technique.
+function sousTitreDetail(groupes,piece){
+  const source=piece?(piece.entete||[]).filter(c=>c.principal):((groupes||[])[0]||{}).champs;
+  const bouts=[];
+  (source||[]).forEach(c=>{
+    if(bouts.length>=3)return;
+    if(c.valeur==null||c.valeur==='')return;
+    const v=cellule(c,c.valeur);
+    const txt=String(v.html).replace(/<[^>]*>/g,'').trim();
+    if(txt&&txt!=='—')bouts.push(txt);
   });
+  return bouts.join(' · ');
+}
+
+function ouvrirDetail(id){
+  S.pile=[{ecran:S.ecran,id:id}];
+  S.selection=id;renderGrille();
+  rendreDetail();
+}
+function empilerDetail(cle,id){S.pile.push({ecran:cle,id:id});rendreDetail();}
+function depilerDetail(){if(S.pile.length>1){S.pile.pop();rendreDetail();}}
+
+async function rendreDetail(){
+  const f=document.getElementById('detail-fond'),d=document.getElementById('detail');
+  if(!f||!d||!S.pile.length)return;
+  const cur=S.pile[S.pile.length-1];
+  const def=defEcran(cur.ecran);
+  const jeton=++S.jetonD;
+  f.classList.add('ouvert');
+  d.innerHTML=enteteDetail(def?def.label:'Détail','')+
+    '<div class="detail-corps"><div class="sections"><div class="groupe pleine" style="padding:18px"><div class="skel"></div></div></div></div>';
+  brancherEnteteDetail();
+
+  let r;
+  try{ r=await api('/api/erp/'+encodeURIComponent(cur.ecran)+'/detail/'+encodeURIComponent(cur.id)); }
+  catch(e){
+    if(jeton!==S.jetonD)return;
+    d.innerHTML=enteteDetail(def?def.label:'Détail','')+'<div class="detail-corps"><div class="vide-msg">'+esc(e.message)+'</div></div>';
+    brancherEnteteDetail();return;
+  }
+  if(jeton!==S.jetonD)return;
+
+  // Une commande, un marché, un BL sont des DOCUMENTS : l'entête d'abord,
+  // puis toutes leurs lignes, puis la ligne ouverte, puis ce qui s'y rattache.
+  const p=r.piece||null;
+  h=enteteDetail(def?def.label:'Détail',sousTitreDetail(r.groupes,p));
+  h+='<div class="detail-corps">';
+  if(p)h+=blocPiece(p,cur.id);
+  h+='<div class="titre-bloc">'+ICO_FICHE+'<span>'+(p?'Détail de la ligne':'Détail')+'</span></div>';
+  const res=resumeLigne(r.groupes);
+  h+=res.html;
+  h+='<div class="sections" id="sec-detail">'+blocGroupes(r.groupes,res.pris)+'</div>';
+  h+='<div class="titre-bloc" id="t-liens">'+ICO_LIEN+'<span>Pièces liées</span></div>'+
+     '<div class="liens" id="liens"><div class="liens-vide">Recherche des pièces rattachées…</div></div>';
+  h+='</div>';
   d.innerHTML=h;
+  brancherEnteteDetail();
   d.querySelectorAll('.groupe-titre').forEach(t=>{
     t.addEventListener('click',()=>t.parentNode.classList.toggle('replie'));
   });
+  // Changer de ligne sans quitter la pièce : on remplace la ligne courante
+  // dans la pile plutôt que d'empiler — sinon « Retour » remonterait ligne
+  // par ligne au lieu de revenir d'où l'on vient.
+  d.querySelectorAll('.pl-ligne[data-id]').forEach(tr=>{
+    tr.addEventListener('click',()=>{
+      const id=tr.getAttribute('data-id');
+      if(String(id)===String(cur.id))return;
+      S.pile[S.pile.length-1]={ecran:cur.ecran,id:id};
+      rendreDetail();
+    });
+  });
+  d.querySelector('.detail-corps').scrollTop=0;
+  chargerLiens(cur,jeton);
 }
+
+function blocGroupes(groupes,pris){
+  pris=pris||{};
+  // Ce qui reste vraiment à afficher, une fois le résumé servi. Un bloc seul
+  // dans une grille à trois colonnes laisse deux tiers de vide : dans ce cas
+  // il prend la largeur et étale ses champs.
+  const restants=(groupes||[]).map((g,i)=>({g:g,i:i,champs:(g.champs||[]).filter(c=>!pris[c.nom])}))
+                              .filter(x=>x.champs.length);
+  const seul=restants.filter(x=>!x.g.replie).length<=1;
+  let h='';
+  restants.forEach(({g,i,champs})=>{
+    h+='<div class="groupe'+(g.replie?' replie':'')+
+       ((champs.length>14||(seul&&!g.replie))?' pleine champs-cols':'')+'" data-g="'+i+'">'+
+       '<div class="groupe-titre"><span>'+esc(g.titre)+'</span>'+ICO_CHEV+'</div><div class="groupe-corps">';
+    champs.forEach(c=>{
+      const v=cellule(c,c.valeur);
+      h+='<div class="ligne-champ"><span class="lab">'+esc(c.label)+'</span>'+
+         '<span class="val '+esc(v.cls)+'">'+v.html+'</span></div>';
+    });
+    h+='</div></div>';
+  });
+  return h;
+}
+
+// Ce qu'on veut savoir d'une ligne en une seconde : de quel article il s'agit,
+// et les chiffres qui comptent. Le reste des champs suit, mais ces quatre-là
+// méritent d'être lus de loin plutôt que d'être une ligne parmi trente.
+const TUILES_MAX=4;
+function resumeLigne(groupes){
+  const tous=[];
+  (groupes||[]).forEach(g=>{ if(!g.replie)(g.champs||[]).forEach(c=>tous.push(c)); });
+  const pris={};
+  const rempli=c=>c&&c.valeur!=null&&c.valeur!=='';
+
+  const article=tous.find(c=>c.type==='ref'&&rempli(c));
+  const titres=tous.filter(c=>c.type==='texte'&&rempli(c)&&/désignation|designation|libell/i.test(c.label)).slice(0,2);
+  const chiffres=tous.filter(c=>rempli(c)&&['qte','prix','montant','pct'].indexOf(c.type)>=0).slice(0,TUILES_MAX);
+  if(!article&&!chiffres.length)return {html:'',pris:pris};
+
+  let h='<div class="resume">';
+  if(article||titres.length){
+    h+='<div class="resume-quoi">';
+    if(article){pris[article.nom]=1;h+='<span class="resume-ref">'+esc(article.valeur)+'</span>';}
+    if(titres.length){
+      h+='<span class="resume-des">'+titres.map(t=>{pris[t.nom]=1;return esc(t.valeur);}).join(' · ')+'</span>';
+    }
+    h+='</div>';
+  }
+  if(chiffres.length){
+    h+='<div class="resume-chiffres">';
+    chiffres.forEach(c=>{
+      pris[c.nom]=1;
+      const v=cellule(c,c.valeur);
+      h+='<div class="tuile"><span class="tl">'+esc(c.label)+'</span>'+
+         '<span class="tv '+esc(v.cls)+'">'+v.html+'</span></div>';
+    });
+    h+='</div>';
+  }
+  h+='</div>';
+  return {html:h,pris:pris};
+}
+
+// L'entête de la pièce, puis ses lignes. Les champs que RVGI ne nomme pas
+// partent dans un bloc replié : on ne masque rien, on hiérarchise.
+function blocPiece(p,idCourant){
+  const princ=(p.entete||[]).filter(c=>c.principal);
+  const reste=(p.entete||[]).filter(c=>!c.principal);
+  let h='<div class="titre-bloc">'+ICO_PIECE+'<span>'+esc(p.label)+'</span>'+
+        '<span class="tb-num">'+esc(p.numero)+'</span></div>';
+
+  h+='<div class="sections" id="sec-piece">';
+  // Une ligne peut exister sans son entête : RVGI a mis la pièce à la
+  // corbeille, ou l'export ne l'a pas ramenée. On le dit, au lieu d'afficher
+  // une carte vide qui passerait pour un document sans informations.
+  if(!(p.entete||[]).length){
+    h+='<div class="liens-vide">L\'entête de cette pièce n\'est pas dans le miroir — '+
+       'seules ses lignes le sont.</div></div>';
+  }else{
+  h+='<div class="groupe pleine champs-cols">'+
+     '<div class="groupe-titre"><span>Informations communes</span>'+ICO_CHEV+'</div>'+
+     '<div class="groupe-corps">';
+  (princ.length?princ:(p.entete||[])).forEach(c=>{
+    const v=cellule(c,c.valeur);
+    h+='<div class="ligne-champ"><span class="lab">'+esc(c.label)+'</span>'+
+       '<span class="val '+esc(v.cls)+'">'+v.html+'</span></div>';
+  });
+  h+='</div></div>';
+  if(princ.length&&reste.length){
+    h+='<div class="groupe replie pleine champs-cols">'+
+       '<div class="groupe-titre"><span>Autres champs de l\'entête ('+reste.length+')</span>'+ICO_CHEV+'</div>'+
+       '<div class="groupe-corps">';
+    reste.forEach(c=>{
+      const v=cellule(c,c.valeur);
+      h+='<div class="ligne-champ"><span class="lab">'+esc(c.label)+'</span>'+
+         '<span class="val '+esc(v.cls)+'">'+v.html+'</span></div>';
+    });
+    h+='</div></div>';
+    }
+    h+='</div>';
+  }
+
+  // Les lignes de la pièce, avec les colonnes de la grille — mais remises
+  // dans l'ordre où on lit une pièce : de quoi il s'agit d'abord (numéro,
+  // ligne, article), le reste ensuite. Sur la grille, l'ordre est celui que
+  // l'utilisateur s'est fabriqué ; ici, c'est le document qui commande.
+  const cols=ordonnerColonnesPiece(p.colonnes||[]).slice(0,9);
+  h+='<div class="titre-bloc"><span>Lignes de la pièce</span>'+
+     '<span class="tb-num">'+fmtNb(p.total,0)+'</span></div>';
+  h+='<div class="pl-boite"><table class="pl"><thead><tr>';
+  cols.forEach(c=>{h+='<th class="'+(estNum(c)?'num':'')+'">'+esc(c.label)+'</th>';});
+  h+='</tr></thead><tbody>';
+  (p.lignes||[]).forEach(l=>{
+    const ici=String(l._id)===String(idCourant);
+    h+='<tr class="pl-ligne'+(ici?' ici':'')+'" data-id="'+esc(l._id)+'"'+
+       (ici?' title="La ligne ouverte"':' title="Ouvrir cette ligne"')+'>';
+    cols.forEach(c=>{
+      const v=cellule(c,l[c.nom]);
+      h+='<td class="'+esc(v.cls)+'">'+v.html+'</td>';
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  if(p.tronque){
+    h+='<p class="pl-note">'+fmtNb((p.lignes||[]).length,0)+' premières lignes sur '+
+       fmtNb(p.total,0)+' — la pièce est plus longue que ce que la fiche affiche.</p>';
+  }
+  return h;
+}
+
+// L'identité d'une ligne passe devant tout le reste : son numéro, son rang
+// dans la pièce, et l'article dont il est question.
+const TETE_PIECE=['numero','ligne','rang','lignecde','article','code','ref','reference'];
+function ordonnerColonnesPiece(cols){
+  const rang=c=>{
+    const i=TETE_PIECE.indexOf(c.nom);
+    if(i>=0)return i;
+    // Une colonne composite d'article ne s'appelle pas toujours « article ».
+    if(c.type==='ref')return TETE_PIECE.indexOf('article');
+    return TETE_PIECE.length+1;
+  };
+  return cols.map((c,i)=>({c:c,i:i})).sort((a,b)=>(rang(a.c)-rang(b.c))||(a.i-b.i)).map(x=>x.c);
+}
+
+function estNum(col){
+  const t=col.type||'';
+  return t==='qte'||t==='nombre'||t==='prix'||t==='montant'||t==='pct';
+}
+
+function brancherEnteteDetail(){
+  const r=document.getElementById('d-retour'),x=document.getElementById('d-fermer');
+  if(r)r.addEventListener('click',depilerDetail);
+  if(x)x.addEventListener('click',fermerDetail);
+}
+
+async function chargerLiens(cur,jeton){
+  const z=document.getElementById('liens');
+  if(!z)return;
+  let r;
+  try{ r=await api('/api/erp/'+encodeURIComponent(cur.ecran)+'/liens/'+encodeURIComponent(cur.id)); }
+  catch(e){
+    if(jeton!==S.jetonD)return;
+    z.innerHTML='<div class="liens-vide">'+esc(e.message)+'</div>';return;
+  }
+  if(jeton!==S.jetonD)return;
+  const liens=(r.liens||[]).filter(l=>l.erreur||l.total>0);
+  if(!liens.length){
+    const t=document.getElementById('t-liens');if(t)t.remove();
+    z.innerHTML='<div class="liens-vide">Aucune pièce rattachée à cette ligne dans le miroir.</div>';
+    return;
+  }
+  let h='';
+  liens.forEach((l,i)=>{
+    const cle=Object.keys(l.valeurs||{}).map(k=>k+' '+l.valeurs[k]).join(' · ');
+    h+='<div class="lien">'+
+       '<div class="lien-tete"><span class="nom">'+esc(l.label)+'</span>'+
+         (cle?('<span class="cle">'+esc(cle)+'</span>'):'')+
+         '<span class="cpt">'+fmtNb(l.total,0)+'</span></div>';
+    if(l.erreur){
+      h+='<div class="lien-err">Lien indisponible : '+esc(l.erreur)+'</div></div>';
+      return;
+    }
+    h+='<div class="lien-rows">';
+    (l.lignes||[]).forEach(ln=>{
+      h+='<div class="lien-row" data-ecran="'+esc(l.ecran)+'" data-id="'+esc(ln._id)+'">';
+      (l.colonnes||[]).slice(0,4).forEach(c=>{
+        const v=cellule(c,ln[c.nom]);
+        h+='<span class="c '+esc(v.cls)+'">'+v.html+'</span>';
+      });
+      h+='<span class="fl">'+ICO_FLECHE+'</span></div>';
+    });
+    h+='</div>';
+    if(l.total>(l.lignes||[]).length){
+      h+='<div class="lien-plus" data-plus="'+i+'" data-ecran="'+esc(l.ecran)+'" data-rang="'+
+         esc(String(l.rang))+'">Voir les '+fmtNb(l.total,0)+' →</div>';
+    }
+    h+='</div>';
+  });
+  z.innerHTML=h;
+  z.querySelectorAll('.lien-row').forEach(el=>{
+    el.addEventListener('click',()=>empilerDetail(el.getAttribute('data-ecran'),el.getAttribute('data-id')));
+  });
+  z.querySelectorAll('[data-plus]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const cible=el.getAttribute('data-ecran');
+      S.ctxAttente={cible:cible,depuis:cur.ecran,depuis_id:cur.id,lien:Number(el.getAttribute('data-rang'))};
+      fermerDetail();
+      if(location.hash==='#/'+cible)appliquerHash();else location.hash='#/'+cible;
+    });
+  });
+}
+
 function fermerDetail(){
-  const d=document.getElementById('detail');
-  if(d){d.classList.remove('ouvert');d.innerHTML='';}
+  const f=document.getElementById('detail-fond'),d=document.getElementById('detail');
+  if(f)f.classList.remove('ouvert');
+  if(d)d.innerHTML='';
+  S.pile=[];S.jetonD++;
   S.selection=null;renderGrille();
 }
 
@@ -1071,6 +1505,7 @@ function allerAuMenu(){
 }
 
 function appliquerHash(){
+  fermerDetail();   // on ne garde jamais une modale ouverte sur un autre écran
   const m=String(location.hash||'').match(/^#\/([a-z_]+)$/);
   if(m&&S.meta&&S.meta.present){ouvrirEcran(m[1]);}else{ouvrirMenu();}
   fermerSidebar();
@@ -1078,8 +1513,11 @@ function appliquerHash(){
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
     if(document.body.classList.contains('sb-open')){fermerSidebar();return;}
-    const d=document.getElementById('detail');
-    if(d&&d.classList.contains('ouvert'))fermerDetail();
+    const f=document.getElementById('detail-fond');
+    if(f&&f.classList.contains('ouvert')){
+      // Échap remonte d'un cran dans le fil, puis referme.
+      if(S.pile.length>1)depilerDetail();else fermerDetail();
+    }
   }
 });
 
@@ -1092,6 +1530,9 @@ async function boot(){
   brancher('btn-logout',deconnexion);
   brancher('hd-logout',deconnexion);
   brancher('hd-profil',()=>{location.href='/profil';});
+  // Cliquer le fond referme : le geste attendu d'une modale.
+  const fond=document.getElementById('detail-fond');
+  if(fond)fond.addEventListener('click',ev=>{if(ev.target===fond)fermerDetail();});
   brancher('hd-retour',()=>{location.href='/';});
   try{
     const me=await api('/api/auth/me');

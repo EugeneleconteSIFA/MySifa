@@ -1053,6 +1053,7 @@ direction, services administration et super administrateur. La documentation de 
 | `app/routers/erp.py` | API lecture seule, `ROLES_ADMIN`. Aucun verbe d'écriture. |
 | `app/web/erp_page.py` | La page `/erp`. |
 | `app/routers/api_bridge.py` | `POST /api/bridge/erp/miroir` — réception des exports. |
+| `scripts/audit_liens_erp.py` | Vérifie les 59 liens du catalogue contre le miroir. |
 
 Le miroir vit dans **son propre fichier** (`ERP_MIRROR_DB`, défaut
 `data/erp_mirror.db`), pas dans `production.db`. C'est délibéré : il est
@@ -1070,6 +1071,21 @@ groupes du panneau de détail. Le moteur fait le reste.
 colonne absente disparaît au lieu de faire tomber la requête, un écran dont la
 table manque n'est pas proposé. C'est ce qui permet d'écrire un catalogue à
 partir du relevé sans avoir vu les données.
+
+### Ajouter un lien entre écrans
+
+`LIENS` (même fichier) déclare, écran par écran, les pièces rattachées :
+`{"label", "ecran", "sur": {"<colonne cible>": "<champ source>"}}`. Le front
+n'envoie jamais un nom de colonne — il envoie l'écran d'origine, l'identifiant
+de la ligne et le **rang** du lien, et le serveur reconstruit la condition
+depuis le catalogue. Ne pas réordonner `LIENS` sans y penser : le rang, c'est
+l'index dans la liste.
+
+**Après tout ajout ou modification, lancer `python scripts/audit_liens_erp.py`.**
+Un lien branché sur une colonne que RVGI ne remplit jamais ne remonte rien et
+ne le dit pas — le 25/08/2026, trois liens étaient dans ce cas : `col_ligne.numcde`
+vaut 0 sur les 257 lignes de colisage, et `lot` est NULL partout dans
+`lif_ligne` comme dans `stm_hist`. Le script les trouve en quelques secondes.
 
 Deux pièges de typage, tous deux traités, à ne pas défaire :
 

@@ -213,10 +213,29 @@
       'background:var(--card);border:1px solid var(--accent);color:var(--text);border-radius:10px;',
       'padding:11px 18px;font-size:13px;font-weight:600;box-shadow:0 8px 26px rgba(0,0,0,.28)}',
       '.pmem-toast.is-danger{border-color:var(--danger)}',
-      '.pmem-hist-btn{display:inline-flex;align-items:center;gap:6px;background:var(--card);',
+      '.pmem-hist-btn{display:inline-flex;align-items:center;gap:8px;background:var(--card);',
       'border:1px solid var(--border);color:var(--text);border-radius:10px;padding:7px 13px;',
-      'font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}',
+      'font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;text-align:left}',
       '.pmem-hist-btn:hover{background:var(--bg);border-color:var(--accent);color:var(--accent)}',
+      /* Signalement conducteur : ce produit a deja tourne, il y a quelque chose
+         a lire avant de demarrer. Un bouton gris parmi d'autres boutons gris ne
+         se voit pas depuis un poste machine. */
+      '.pmem-hist-btn.is-signal{border-color:rgba(251,191,36,.55);background:rgba(251,191,36,.12)}',
+      '.pmem-hist-btn.is-signal:hover{border-color:#fbbf24;color:var(--text);background:rgba(251,191,36,.18)}',
+      '.pmem-hist-pastille{display:inline-flex;align-items:center;justify-content:center;',
+      'min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#fbbf24;',
+      'color:#1f2937;font-size:11px;font-weight:800;line-height:1;flex:none}',
+      '.pmem-hist-corps{display:flex;flex-direction:column;gap:1px;min-width:0}',
+      '.pmem-hist-titre{font-size:12px;font-weight:800}',
+      '.pmem-hist-detail{font-size:11px;font-weight:600;color:var(--text2)}',
+      '.pmem-hist-tag{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;',
+      'color:#fbbf24;flex:none}',
+      /* La pulsation s'arrete des que le conducteur a ouvert l'historique de ce
+         dossier : un signal qui clignote pour toujours devient du decor. */
+      '.pmem-hist-btn.is-neuf{animation:pmem-pulse 2.2s ease-in-out infinite}',
+      '@keyframes pmem-pulse{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,.45)}',
+      '50%{box-shadow:0 0 0 7px rgba(251,191,36,0)}}',
+      '@media (prefers-reduced-motion:reduce){.pmem-hist-btn.is-neuf{animation:none}}',
     ].join('');
     document.head.appendChild(s);
   }
@@ -1117,6 +1136,22 @@
   // Retourne null quand la reference n'a jamais ete produite : l'appelant
   // n'insere alors rien. Un bouton toujours present qui ouvre « aucune
   // donnee » perd sa credibilite en trois ouvertures.
+  var HIST_VU_PREFIX = 'pmem_hist_vu_';
+
+  function histCle(apercu, noDossier) {
+    return String(noDossier || (apercu && apercu.no_dossier) || '').trim().toUpperCase();
+  }
+
+  function histDejaConsulte(cle) {
+    if (!cle) return false;
+    try { return localStorage.getItem(HIST_VU_PREFIX + cle) === '1'; } catch (e) { return false; }
+  }
+
+  function histMarquerConsulte(cle) {
+    if (!cle) return;
+    try { localStorage.setItem(HIST_VU_PREFIX + cle, '1'); } catch (e) { /* mode prive */ }
+  }
+
   function boutonHistorique(apercu, noDossier) {
     if (!apercu || !apercu.disponible) return null;
     ensureStyle();
@@ -1124,12 +1159,34 @@
     if (apercu.nb_series) parts.push(apercu.nb_series + ' production' + (apercu.nb_series > 1 ? 's' : ''));
     if (apercu.nb_savoirs) parts.push(apercu.nb_savoirs + ' note' + (apercu.nb_savoirs > 1 ? 's' : ''));
     if (apercu.nb_documents) parts.push(apercu.nb_documents + ' scan' + (apercu.nb_documents > 1 ? 's' : ''));
+    var total = (apercu.nb_series || 0) + (apercu.nb_savoirs || 0) + (apercu.nb_documents || 0);
+    var cle = histCle(apercu, noDossier);
+    var consulte = histDejaConsulte(cle);
+    // Une note d'atelier est une consigne tiree d'une production passee : c'est
+    // ce qui doit arreter le conducteur avant qu'il lance la machine.
+    var titre = apercu.nb_savoirs
+      ? 'Deja produit \u2014 notes d\'atelier a lire'
+      : 'Deja produit \u2014 verifier les dossiers passes';
     var b = el('button', {
-      type: 'button', className: 'pmem-hist-btn',
-      title: 'Historique de la reference ' + (apercu.ref_produit_norm || ''),
-      text: 'Historique — ' + parts.join(' · '),
+      type: 'button',
+      className: 'pmem-hist-btn is-signal' + (consulte ? '' : ' is-neuf'),
+      title: 'Historique de la reference ' + (apercu.ref_produit_norm || '')
+             + ' \u2014 ' + parts.join(' \u00b7 '),
+    }, [
+      el('span', { className: 'pmem-hist-pastille', text: String(total) }),
+      el('span', { className: 'pmem-hist-corps' }, [
+        el('span', { className: 'pmem-hist-titre', text: titre }),
+        el('span', { className: 'pmem-hist-detail', text: parts.join(' \u00b7 ') }),
+      ]),
+      consulte ? null : el('span', { className: 'pmem-hist-tag', text: 'A consulter' }),
+    ]);
+    b.addEventListener('click', function () {
+      histMarquerConsulte(cle);
+      b.classList.remove('is-neuf');
+      var tag = b.querySelector('.pmem-hist-tag');
+      if (tag) tag.remove();
+      openHistorique(noDossier || apercu.no_dossier);
     });
-    b.addEventListener('click', function () { openHistorique(noDossier || apercu.no_dossier); });
     return b;
   }
 

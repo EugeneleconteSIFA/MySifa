@@ -99,7 +99,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- v2.3.42 : viewer partagé du détail d'un ack d'alerte (identique à Maintenance) -->
 <script src="/static/mysifa_ack_viewer.js?v=__V_LABEL__"></script>
 <!-- Memoire produit : fiche par reference (partagee avec Saisieprod) -->
-<script src="/static/mysifa_produit_memoire.js?v=__V_LABEL__-pmem13"></script>
+<script src="/static/mysifa_produit_memoire.js?v=__V_LABEL__-pmem14"></script>
 <script src="/static/mysifa_cal_rappel.js?v=4"></script>
 </body>
 </html>"""

@@ -1034,6 +1034,146 @@ ECRANS = [
     },
 ]
 
+
+# ── Pièces liées ─────────────────────────────────────────────────────────────
+# RVGI ne déclare aucune clé étrangère : les liens ci-dessous sont
+# conventionnels, déduits des noms et vérifiés sur les données (cf.
+# docs/rvgi/data_rvgi.md §3). Chacun dit : « depuis cette ligne, va chercher
+# dans tel écran les lignes dont telle colonne vaut telle valeur de la ligne
+# courante ».
+#
+#   {"label": ..., "ecran": <clé d'écran>, "sur": {<colonne cible>: <champ source>}}
+#
+# Deux règles de prudence appliquées partout :
+#   - jamais de jointure sur `numero` seul entre deux domaines : chaque famille
+#     a sa propre numérotation. On passe par la colonne de report explicite
+#     (`numcde`, `livbl`, `livno`, `nofac`, `refbl`) ;
+#   - un lien dont la valeur source est vide n'est pas proposé.
+
+LIENS = {
+    "commandes": [
+        {"label": "Bons de livraison", "ecran": "livraisons", "sur": {"l.numcde": "numero"}},
+        {"label": "Factures", "ecran": "factures", "sur": {"l.livno": "numero"}},
+        {"label": "Mouvements de stock", "ecran": "mouvements_pf", "sur": {"m.numcde": "numero"}},
+        # `col_ligne.numcde` existe mais vaut 0 sur TOUTES les lignes du miroir :
+        # le colisage porte le numéro de commande dans `numero`. Vérifié le
+        # 25/08/2026 sur les 257 lignes de colisage présentes.
+        {"label": "Colisage", "ecran": "colisage", "sur": {"c.numero": "numero"}},
+        {"label": "L'article", "ecran": "articles", "sur": {"a.code1": "code1", "a.code2": "code2"}},
+        {"label": "Prix négociés du client", "ecran": "prix_client",
+         "sur": {"p.code1": "code1", "p.code2": "code2"}},
+    ],
+    "livraisons": [
+        {"label": "La commande", "ecran": "commandes", "sur": {"l.numero": "numcde"}},
+        {"label": "Factures", "ecran": "factures", "sur": {"l.livbl": "numero"}},
+        {"label": "Mouvements de stock", "ecran": "mouvements_pf", "sur": {"m.refbl": "numero"}},
+        {"label": "Colisage", "ecran": "colisage", "sur": {"c.numbl": "numero"}},
+    ],
+    "factures": [
+        {"label": "La commande", "ecran": "commandes", "sur": {"l.numero": "livno"}},
+        {"label": "Le bon de livraison", "ecran": "livraisons", "sur": {"l.numero": "livbl"}},
+        {"label": "Échéances", "ecran": "echeances", "sur": {"l.nofac": "numero"}},
+        {"label": "L'article", "ecran": "articles", "sur": {"a.code1": "code1", "a.code2": "code2"}},
+    ],
+    "echeances": [
+        {"label": "La facture", "ecran": "factures", "sur": {"l.numero": "nofac"}},
+    ],
+    "devis": [
+        {"label": "L'article", "ecran": "articles", "sur": {"a.code1": "code1", "a.code2": "code2"}},
+    ],
+    "marches": [
+        {"label": "L'article", "ecran": "articles", "sur": {"a.code1": "code1", "a.code2": "code2"}},
+        {"label": "Commandes de l'article", "ecran": "commandes",
+         "sur": {"l.code1": "code1", "l.code2": "code2"}},
+    ],
+    "commandes_fournisseur": [
+        {"label": "Réceptions", "ecran": "receptions", "sur": {"l.numero": "numero"}},
+        {"label": "Factures fournisseurs", "ecran": "factures_fournisseur", "sur": {"l.livno": "numero"}},
+    ],
+    "receptions": [
+        {"label": "La commande fournisseur", "ecran": "commandes_fournisseur", "sur": {"l.numero": "numero"}},
+        # `lot` est NULL partout dans le miroir, des deux côtés : RVGI ne s'en
+        # sert pas. Le rapprochement se fait par le n° de commande fournisseur,
+        # que la réception porte dans `numero` et le mouvement dans `numcde`.
+        {"label": "Mouvements matière", "ecran": "mouvements_matiere", "sur": {"m.numcde": "numero"}},
+    ],
+    "factures_fournisseur": [
+        {"label": "La commande fournisseur", "ecran": "commandes_fournisseur", "sur": {"l.numero": "livno"}},
+    ],
+    "stock_pf": [
+        {"label": "Mouvements de stock", "ecran": "mouvements_pf",
+         "sur": {"m.code1": "code1", "m.code2": "code2"}},
+        {"label": "Commandes", "ecran": "commandes", "sur": {"l.code1": "code1", "l.code2": "code2"}},
+        {"label": "Prix de vente", "ecran": "prix_vente", "sur": {"p.code1": "code1", "p.code2": "code2"}},
+        {"label": "Fiche de fabrication", "ecran": "fiches_fabrication",
+         "sur": {"f.code1": "code1", "f.code2": "code2"}},
+    ],
+    "articles": [
+        {"label": "Stock", "ecran": "stock_pf", "sur": {"a.code1": "code1", "a.code2": "code2"}},
+        {"label": "Mouvements de stock", "ecran": "mouvements_pf",
+         "sur": {"m.code1": "code1", "m.code2": "code2"}},
+        {"label": "Commandes", "ecran": "commandes", "sur": {"l.code1": "code1", "l.code2": "code2"}},
+        {"label": "Factures", "ecran": "factures", "sur": {"l.code1": "code1", "l.code2": "code2"}},
+        {"label": "Prix de vente", "ecran": "prix_vente", "sur": {"p.code1": "code1", "p.code2": "code2"}},
+        {"label": "Prix d'achat", "ecran": "prix_achat", "sur": {"p.code1": "code1", "p.code2": "code2"}},
+        {"label": "Prix négociés", "ecran": "prix_client", "sur": {"p.code1": "code1", "p.code2": "code2"}},
+        {"label": "Fiche de fabrication", "ecran": "fiches_fabrication",
+         "sur": {"f.code1": "code1", "f.code2": "code2"}},
+    ],
+    "clients": [
+        {"label": "Commandes", "ecran": "commandes", "sur": {"e.numclt": "numero"}},
+        {"label": "Factures", "ecran": "factures", "sur": {"e.numclt": "numero"}},
+        {"label": "Échéances", "ecran": "echeances", "sur": {"l.numclt": "numero"}},
+        {"label": "Articles du client", "ecran": "articles", "sur": {"a.numclt": "numero"}},
+    ],
+    "fournisseurs": [
+        {"label": "Commandes fournisseurs", "ecran": "commandes_fournisseur",
+         "sur": {"e.numfou": "numero"}},
+        {"label": "Prix d'achat", "ecran": "prix_achat", "sur": {"p.numfou": "numero"}},
+    ],
+    "outils": [
+        {"label": "Fiches de fabrication", "ecran": "fiches_fabrication", "sur": {"f.ndec1": "numero"}},
+    ],
+    "fiches_fabrication": [
+        {"label": "L'article", "ecran": "articles", "sur": {"a.code1": "code1", "a.code2": "code2"}},
+        {"label": "L'outil de découpe", "ecran": "outils", "sur": {"o.numero": "ndec1"}},
+        {"label": "Commandes de l'article", "ecran": "commandes",
+         "sur": {"l.code1": "code1", "l.code2": "code2"}},
+    ],
+    "mouvements_pf": [
+        {"label": "L'article", "ecran": "articles", "sur": {"a.code1": "code1", "a.code2": "code2"}},
+        {"label": "La commande", "ecran": "commandes", "sur": {"l.numero": "numcde"}},
+        {"label": "Le bon de livraison", "ecran": "livraisons", "sur": {"l.numero": "refbl"}},
+    ],
+    "mouvements_matiere": [
+        {"label": "La matière", "ecran": "stock_matiere", "sur": {"m.code1": "code1", "m.code2": "code2"}},
+        # Voir la note sur « receptions » : `lot` n'est jamais renseigné.
+        {"label": "Réceptions", "ecran": "receptions", "sur": {"l.numero": "numcde"}},
+    ],
+    "stock_matiere": [
+        {"label": "Mouvements matière", "ecran": "mouvements_matiere",
+         "sur": {"m.code1": "code1", "m.code2": "code2"}},
+    ],
+    "dossiers": [
+        {"label": "Déclarations de production", "ecran": "declarations", "sur": {"g.dos": "numero"}},
+        {"label": "Sorties matière", "ecran": "sorties_matiere", "sur": {"s.dos": "numero"}},
+    ],
+    "declarations": [
+        {"label": "Le dossier", "ecran": "dossiers", "sur": {"d.numero": "dos"}},
+        {"label": "Sorties matière du dossier", "ecran": "sorties_matiere", "sur": {"s.dos": "dos"}},
+    ],
+    "sorties_matiere": [
+        {"label": "Le dossier", "ecran": "dossiers", "sur": {"d.numero": "dos"}},
+        {"label": "La matière", "ecran": "stock_matiere", "sur": {"m.code1": "code1", "m.code2": "code2"}},
+    ],
+    "colisage": [
+        # `col_ligne.numcde` vaut 0 partout : c'est `numero` qui porte le
+        # numéro de commande (voir la note du lien inverse, écran commandes).
+        {"label": "La commande", "ecran": "commandes", "sur": {"l.numero": "numero"}},
+        {"label": "Le bon de livraison", "ecran": "livraisons", "sur": {"l.numero": "numbl"}},
+    ],
+}
+
 PAR_CLE = {e["cle"]: e for e in ECRANS}
 
 
@@ -1105,4 +1245,59 @@ def adapter_ecran(ec, colonnes_par_table):
     adapte["recherche"] = [r for r in ec.get("recherche", []) if ref_ok(r)]
     adapte["filtres"] = [f for f in ec.get("filtres", []) if ref_ok(f["col"])]
     adapte["labels_detail"] = dict(LABELS, **(ec.get("labels_detail") or {}))
+    adapte["liens"] = LIENS.get(ec["cle"], [])
+    adapte["piece"] = piece_de(adapte)
     return adapte
+
+
+# ── Écrans de lignes de document ─────────────────────────────────────────────
+
+# Une pièce est déduite, pas déclarée. RVGI applique partout la même forme :
+# `<dom>_ligne` porte les lignes, `<dom>_entete` porte la pièce, et la jointure
+# se fait sur `numero`. Un nouvel écran de lignes hérite donc de la vue « pièce »
+# sans qu'on ait à y penser — et un écran qui n'est pas un document (un article,
+# un client, un mouvement) n'en hérite jamais.
+#
+# `PIECE_LABELS` ne sert qu'à nommer la section. Une clé absente donne
+# « La pièce », ce qui reste juste.
+PIECE_LABELS = {
+    "devis": "Le devis",
+    "commandes": "La commande",
+    "livraisons": "Le bon de livraison",
+    "factures": "La facture",
+    "marches": "Le marché",
+    "commandes_fournisseur": "La commande fournisseur",
+    "receptions": "La commande fournisseur",
+    "factures_fournisseur": "La facture fournisseur",
+    "appels_offres": "L'appel d'offres",
+    "colisage": "Le colisage",
+}
+
+
+def piece_de(ec):
+    """L'entête de pièce d'un écran de lignes, si l'écran en est un."""
+    alias = ec["alias"]
+    for j in ec.get("jointures", []):
+        if j["droite"] == "%s.numero" % alias and j["gauche"].endswith(".numero"):
+            return {
+                "table": j["table"],
+                "alias": j["alias"],
+                "cle": "numero",
+                "col_ligne": "%s.numero" % alias,
+                "label": PIECE_LABELS.get(ec["cle"], "La pièce"),
+                "tri": _colonne_de_ligne(ec),
+            }
+    return None
+
+
+def _colonne_de_ligne(ec):
+    """Sur quoi trier les lignes À L'INTÉRIEUR d'une pièce.
+
+    Le numéro de ligne quand l'écran en montre un, son rang sinon. À défaut,
+    `_id` : l'ordre dans lequel RVGI a écrit les lignes, qui est le bon.
+    """
+    noms = {c["nom"] for c in ec["colonnes"]}
+    for candidat in ("ligne", "rang", "lignecde"):
+        if candidat in noms:
+            return candidat
+    return "_id"

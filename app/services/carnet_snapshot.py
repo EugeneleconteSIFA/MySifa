@@ -40,21 +40,39 @@ from app.services.date_livraison import parse_date_livraison
 logger = logging.getLogger(__name__)
 
 
-def _mois_livraison(pe: dict) -> Optional[str]:
-    """Mois visé par un dossier, 'AAAA-MM'.
+# Deux axes de temps possibles, et ils ne répondent pas à la même question.
+#
+#   livraison  — quand le client attend sa commande. C'est l'engagement, et
+#                l'axe sur lequel on veut PRÉVOIR l'activité.
+#   production — quand le dossier passe en machine, donc quand la matière doit
+#                être EN STOCK. C'est l'axe sur lequel on ACHÈTE.
+#
+# L'écart entre les deux vaut un à deux mois : la matière sort du stock avant
+# la production, qui précède la livraison. Confronté au relevé de
+# consommations d'Access (avril-août 2026), l'axe livraison décalait les
+# courbes d'autant — les volumes étaient bons à 15 % près sur cinq mois, mais
+# répartis sur les mauvais mois pour qui doit passer commande.
+_AXES = {
+    "livraison":  ("date_livraison", "planned_end", "planned_start"),
+    "production": ("planned_start", "planned_end", "date_livraison"),
+}
 
-    `date_livraison` d'abord — c'est l'engagement client, donc l'axe sur lequel
-    on veut prévoir. `planned_end` en repli : un dossier planifié sans date de
-    livraison lisible pèse quand même sur le mois où il sera produit.
+
+def _mois_livraison(pe: dict, axe: str = "livraison") -> Optional[str]:
+    """Mois visé par un dossier, 'AAAA-MM', selon l'axe demandé.
+
+    L'ordre des champs est un ordre de REPLI, pas une préférence : un dossier
+    sans date sur l'axe choisi pèse quand même sur le mois qu'on peut lui
+    connaître, plutôt que de disparaître de l'écran.
     """
-    for champ in ("date_livraison", "planned_end", "planned_start"):
+    for champ in _AXES.get(axe) or _AXES["livraison"]:
         d = parse_date_livraison(pe.get(champ))
         if d:
             return f"{d.year:04d}-{d.month:02d}"
     return None
 
 
-def agreger(conn) -> tuple:
+def agreger(conn, axe: str = "livraison") -> tuple:
     """Besoin par (mois de livraison, matière, nature), sur tout le planning.
 
     Cœur commun à la photo quotidienne et à la vue Tendance : les deux posent
@@ -87,7 +105,7 @@ def agreger(conn) -> tuple:
     vus: dict = {}         # (mois, mat, kind) → ids, pour ne pas compter deux fois
     vus_actifs: dict = {}  # idem, restreint aux dossiers encore à produire
     for pe in dossiers:
-        mois = _mois_livraison(pe)
+        mois = _mois_livraison(pe, axe)
         if not mois:
             continue  # aucune date exploitable : le dossier n'a pas de mois à peser
         actif = (pe.get("statut") or "") in ("attente", "en_cours")
