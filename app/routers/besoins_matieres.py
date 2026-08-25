@@ -53,6 +53,7 @@ Accès : rôles _STOCK_MATIERES_ADMIN_ROLES (voir stock.py).
 """
 import logging
 import re
+import statistics
 from datetime import date, datetime, timedelta
 from typing import Optional
 
@@ -883,14 +884,21 @@ _SQL_OF_ORPHELINS = """
            oi.reference      AS reference,
            NULL              AS client,
            NULL              AS description,
-           oi.reference      AS ref_produit,
-           -- Indispensable, pas cosmétique : `of_imports.reference` arrive
-           -- d'Access sous sa forme longue (« 1013/0068 - COHESIO 1 »), alors
-           -- que les fiches sont indexées sur la clé normalisée par le trigger
-           -- `trg_ft_ref_produit_norm_*`. Sans cette normalisation les deux
-           -- clés ne se rencontrent jamais, aucune fiche n'est rapprochée, et
-           -- l'OF ne produit aucun besoin — en silence, puisque rien n'échoue.
-           norm_ref_produit(oi.reference) AS ref_produit_norm,
+           -- `format` AVANT `reference`, et l'ordre n'est pas indifférent.
+           -- Sur les OF rapatriés d'Access, `reference` porte le numéro d'OF
+           -- (« 9930667 - L1 ») tandis que `format` porte la vraie référence
+           -- produit (« 601/0192 - COHESIO 1 »). Mesuré le 25/08/2026 : lire
+           -- `reference` laissait 434 OF sur 592 avec une clé non
+           -- normalisable, donc aucune fiche technique rapprochée.
+           --
+           -- La normalisation est indispensable des deux côtés : les fiches
+           -- sont indexées sur la clé « XXX/NNNN » par le trigger
+           -- `trg_ft_ref_produit_norm_*`. Sans elle, les deux clés ne se
+           -- rencontrent jamais et rien n'échoue pour le signaler.
+           COALESCE(NULLIF(TRIM(oi.format), ''), oi.reference) AS ref_produit,
+           norm_ref_produit(
+               COALESCE(NULLIF(TRIM(oi.format), ''), oi.reference)
+           ) AS ref_produit_norm,
            oi.of_numero      AS numero_of,
            'termine'         AS statut,
            oi.date_creation  AS planned_start,
@@ -1772,9 +1780,21 @@ def besoins_tendance(request: Request):
     debut, borne = tous_mois[0], tous_mois[-1]
     AU_DELA = "au-dela"
 
+    # Douze mois de plus EN AMONT de la fenêtre affichée. Ils ne sont pas
+    # dessinés : ils servent uniquement à ce que chaque colonne dispose de son
+    # même-mois-un-an-plus-tôt. Sans eux, les premières colonnes n'auraient
+    # aucune comparaison — et le repère disparaîtrait précisément là où l'on
+    # regarde le plus, quand la fenêtre est courte.
+    debut_calcul = _mois_glissants(auj, passe + 12, futur)[0]
+    def _un_an_avant(m):
+        if m == AU_DELA:
+            return None
+        an, mo = int(m[:4]), int(m[5:7])
+        return f"{an - 1:04d}-{mo:02d}"
+
     with get_db() as conn:
         cumul, vus, vus_actifs, dossiers = agreger_carnet(conn)
-        cumul_of, vus_of = _agreger_of_orphelins(conn, debut)
+        cumul_of, vus_of = _agreger_of_orphelins(conn, debut_calcul)
         couv = couverture_carnet(conn)
 
     # Une seule fusion des deux sources : le reste du calcul ne sait plus d'où
@@ -1793,9 +1813,9 @@ def besoins_tendance(request: Request):
         for (mois, mid, kind), agg in src_cumul.items():
             if kind_filtre and kind != kind_filtre:
                 continue
-            if mois < debut:
-                # Trop vieux pour éclairer un achat, mais un dossier encore
-                # actif sur un mois échu est un retard : il reste compté.
+            if mois < debut_calcul:
+                # Trop vieux même pour servir de comparaison, mais un dossier
+                # encore actif sur un mois échu est un retard : il reste compté.
                 hors_fenetre += agg["q"]
                 passe_total += agg.get("q_actif", 0.0)
                 continue
@@ -1803,6 +1823,9 @@ def besoins_tendance(request: Request):
             # sur le planning seul — un OF sorti du planning n'a plus de reste.
             if mois < mois_courant:
                 passe_total += agg.get("q_actif", 0.0)
+            # Les douze mois d'amorce ne sont ni une colonne ni un total : ils
+            # n'existent que pour être lus comme « l'an dernier ».
+            amorce = mois < debut
             col = mois if mois <= borne else AU_DELA
             cle = (mid, kind)
             li = lignes.setdefault(cle, {
@@ -1823,6 +1846,10 @@ def besoins_tendance(request: Request):
             cell["q"] += agg["q"]
             cell["dossiers"] += len(src_vus.get((mois, mid, kind), ()))
             cell["inc"] += agg["inc"]
+            if amorce:
+                # Lisible comme comparaison, invisible dans les totaux : ces
+                # mois sont hors de la période que l'écran prétend couvrir.
+                continue
             li["total"] += agg["q"]
             # `total_futur` s'arrête à la borne de la fenêtre, et le reste est
             # compté à part. L'écran affiche les deux côte à côte : si le
@@ -1836,13 +1863,36 @@ def besoins_tendance(request: Request):
             li["incalculables"] += agg["inc"]
 
     colonnes = tous_mois + [AU_DELA]
+    # Un mois est « documenté » dès qu'une source en parle. Un mois muet n'est
+    # pas un mois à zéro, et sa valeur ne doit servir de comparaison à rien.
+    documentes = set(origines)
     out = []
     for li in lignes.values():
-        serie = [{"mois": c, "passe": c < mois_courant and c != AU_DELA,
-                  **li["par_mois"].get(c, {"q": 0.0, "dossiers": 0, "inc": 0})}
-                 for c in colonnes]
+        serie = []
+        for c in colonnes:
+            p = {"mois": c, "passe": c < mois_courant and c != AU_DELA,
+                 **li["par_mois"].get(c, {"q": 0.0, "dossiers": 0, "inc": 0})}
+            # Le même mois un an plus tôt. `None` — et non zéro — quand ce
+            # mois-là n'est documenté par aucune source : l'écran doit pouvoir
+            # taire la comparaison plutôt que d'afficher une chute de 100 %
+            # qui ne dirait rien d'autre que « on ne sait pas ».
+            m12 = _un_an_avant(c)
+            p["ref_an"] = (li["par_mois"].get(m12, {}).get("q", 0.0)
+                           if m12 and m12 in documentes else None)
+            serie.append(p)
+        # Le niveau habituel : la MÉDIANE des mois révolus et documentés de la
+        # fenêtre. Médiane et non moyenne — un seul gros marché suffirait à
+        # tirer une moyenne vers le haut et à faire passer tous les autres mois
+        # pour creux.
+        revolus = sorted(
+            li["par_mois"][m]["q"] for m in tous_mois
+            if m < mois_courant and m in documentes and m in li["par_mois"]
+        )
+        niveau = (statistics.median(revolus) if revolus else None)
         out.append({
             **{k: v for k, v in li.items() if k not in ("par_mois", "dossiers")},
+            "niveau": round(niveau, 2) if niveau is not None else None,
+            "niveau_n": len(revolus),
             "serie": serie,
             "max": max((p["q"] for p in serie), default=0.0),
             "nb_dossiers": len(li["dossiers"]),
@@ -1890,6 +1940,19 @@ def besoins_tendance(request: Request):
         c["total"] = round(c["total"], 2)
         c["total_futur"] = round(c["total_futur"], 2)
         c["total_au_dela"] = round(c["total_au_dela"], 2)
+        # Le niveau habituel de la catégorie se calcule sur SES totaux
+        # mensuels, pas en additionnant les médianes de ses matières : la
+        # somme des médianes n'est pas la médiane de la somme, et l'écart
+        # grandit avec le nombre de matières.
+        par_mois_cat: dict = {}
+        for l in c["lignes"]:
+            for p in l["serie"]:
+                if p["mois"] in documentes and p["mois"] < mois_courant \
+                        and p["mois"] != AU_DELA:
+                    par_mois_cat[p["mois"]] = par_mois_cat.get(p["mois"], 0.0) + p["q"]
+        vals = sorted(v for m, v in par_mois_cat.items() if m in tous_mois)
+        c["niveau"] = round(statistics.median(vals), 2) if vals else None
+        c["niveau_n"] = len(vals)
 
     return {
         "colonnes": colonnes,

@@ -13185,6 +13185,21 @@ function _buildBesoinsTendance(data) {
         cat.lignes.length + ' matière' + (cat.lignes.length > 1 ? 's' : '')
         + (S.besoinsFiltre && cat.nb_matieres > cat.lignes.length
             ? ' sur ' + cat.nb_matieres : '')),
+      // Le niveau habituel : la MÉDIANE des mois révolus documentés, pas leur
+      // moyenne — un seul gros marché suffirait à tirer une moyenne vers le
+      // haut et à faire passer tous les autres mois pour creux. Il ne
+      // s'affiche qu'à partir de trois mois mesurés : en dessous, une
+      // « médiane » n'est qu'une valeur prise au hasard.
+      //
+      // Masqué quand un filtre est actif : le serveur le calcule sur toute la
+      // catégorie, il ne décrirait pas les courbes affichées.
+      (cat.niveau != null && (cat.niveau_n || 0) >= 3 && !S.besoinsFiltre)
+        ? el('span', {
+            cls: 'bes-tsec-chip',
+            title: 'Médiane des ' + cat.niveau_n + ' mois révolus documentés de '
+                   + 'la fenêtre. Sert à juger si un mois à venir est plein ou creux.',
+          }, 'habituel ' + _besFmtQte(cat.niveau, unite) + '/mois')
+        : null,
       el('span', { cls: 'bes-tsec-tot' },
         _besFmtQte(totFutur, unite),
         el('span', { cls: 'bes-tsec-tot-lbl' }, ' à venir')),
