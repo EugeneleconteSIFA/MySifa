@@ -77,17 +77,36 @@ function Ecrire {
     }
 }
 
-# -- Verrou : deux executions qui se chevauchent liraient l'ERP en double ----
+# -- Verrou -----------------------------------------------------------------
+# Deux executions qui se chevauchent liraient l'ERP en double. Le verrou porte
+# le PID de la synchro qui le detient : une fenetre fermee ou un Ctrl+C laisse
+# le fichier derriere lui, mais plus le processus. On verifie donc que le
+# proprietaire vit encore, au lieu d'attendre une heure et demie pour rien.
 if (Test-Path $verrou) {
     $age = (Get-Date) - (Get-Item $verrou).LastWriteTime
-    if ($age.TotalMinutes -lt 90) {
-        Ecrire ("Une synchro tourne deja (verrou de {0:N0} min). Abandon." -f $age.TotalMinutes) 'ALERTE'
+    $pidVerrou = 0
+    try { $pidVerrou = [int]((Get-Content -LiteralPath $verrou -TotalCount 1 -ErrorAction Stop) -replace '\D', '') } catch { $pidVerrou = 0 }
+
+    $vivant = $false
+    if ($pidVerrou -gt 0) {
+        $proc = Get-Process -Id $pidVerrou -ErrorAction SilentlyContinue
+        # Le PID est reattribue par Windows : on verifie aussi que c'est bien
+        # un PowerShell, sinon on parlerait du processus de quelqu'un d'autre.
+        if ($proc -and $proc.ProcessName -match 'powershell|pwsh') { $vivant = $true }
+    }
+
+    if ($vivant) {
+        Ecrire ("Synchro deja en cours (PID {0}, depuis {1:N0} min). Abandon." -f $pidVerrou, $age.TotalMinutes) 'ALERTE'
         exit 0
     }
-    Ecrire ("Verrou perime de {0:N0} min : on passe outre." -f $age.TotalMinutes) 'ALERTE'
+    if ($pidVerrou -gt 0) {
+        Ecrire ("Verrou orphelin (PID {0} disparu, {1:N0} min) : la synchro precedente s'est interrompue." -f $pidVerrou, $age.TotalMinutes) 'ALERTE'
+    } else {
+        Ecrire ("Verrou sans proprietaire identifiable ({0:N0} min) : on passe outre." -f $age.TotalMinutes) 'ALERTE'
+    }
     Remove-Item $verrou -Force -ErrorAction SilentlyContinue
 }
-New-Item -ItemType File -Path $verrou -Force | Out-Null
+Set-Content -LiteralPath $verrou -Value $PID -Encoding ASCII
 
 # -- Lecture du .env ---------------------------------------------------------
 # Duplique volontairement le parseur de export_rvgi_csv.ps1 : la tache
@@ -143,14 +162,14 @@ if ($brut) {
 $dossierExport = Join-Path $racine 'data\rvgi_export'
 $archive = Join-Path $racine 'data\rvgi_export.zip'
 $codeSortie = 0
+$garderArchive = $false
 
 try {
     if (-not $SansEnvoi) {
-        if (-not $cibles) { Ecrire 'MYSIFA_SYNC_URLS absente du .env.' 'ERREUR'; exit 1 }
+        if (-not $cibles) { throw 'MYSIFA_SYNC_URLS absente du .env.' }
         $sansCle = @($cibles | Where-Object { -not $_.Cle })
         if ($sansCle) {
-            Ecrire ("Aucune cle API pour : {0}" -f (($sansCle | ForEach-Object { $_.Url }) -join ', ')) 'ERREUR'
-            exit 1
+            throw ("Aucune cle API pour : {0}" -f (($sansCle | ForEach-Object { $_.Url }) -join ', '))
         }
     }
 
@@ -159,13 +178,24 @@ try {
     # -- 1. Export ----------------------------------------------------------
     $chrono = [Diagnostics.Stopwatch]::StartNew()
     $scriptExport = Join-Path $PSScriptRoot 'export_rvgi_csv.ps1'
-    $sortie = & $scriptExport 2>&1
-    if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
-        Ecrire ("Export en echec (code {0}) : {1}" -f $LASTEXITCODE, ($sortie | Select-Object -Last 3)) 'ERREUR'
-        exit 1
-    }
+    $global:LASTEXITCODE = 0
+    $avant = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    & $scriptExport
+    $codeExport = $LASTEXITCODE
+    $ErrorActionPreference = $avant
+    Ecrire ("Export termine, code {0}" -f $codeExport)
+    # 2 = l'export a rendu la main mais des tables manquent. On refuse d'envoyer :
+    # un miroir ampute remplacerait des tables completes par du vide, sans bruit.
+    if ($codeExport -eq 2) { throw 'Export partiel : des tables sont en echec, rien ne sera envoye.' }
+    if ($codeExport -ne 0) { throw ("Export en echec, code {0}" -f $codeExport) }
+
     $lignes = @(Get-ChildItem -Path $dossierExport -Filter *.csv -ErrorAction SilentlyContinue)
-    if (-not $lignes) { Ecrire 'Aucun CSV produit par l export.' 'ERREUR'; exit 1 }
+    if (-not $lignes) { throw 'Aucun CSV produit par l export.' }
+    # Un export interrompu laisse des CSV, mais pas les 61 attendus.
+    if ($lignes.Count -lt 20) {
+        throw ("Export incomplet : {0} fichiers seulement." -f $lignes.Count)
+    }
     $poids = ($lignes | Measure-Object -Property Length -Sum).Sum
     Ecrire ("Export : {0} fichiers, {1:N1} Mo, en {2:N0} s" -f $lignes.Count, ($poids / 1MB), $chrono.Elapsed.TotalSeconds)
 
@@ -179,7 +209,8 @@ try {
     if ($SansEnvoi) {
         Ecrire 'Mode -SansEnvoi : archive conservee, rien n a ete envoye.' 'ALERTE'
         Ecrire ("Archive : {0}" -f $archive)
-        exit 0
+        $garderArchive = $true
+        $cibles = @()
     }
 
     foreach ($c in $cibles) {
@@ -205,7 +236,7 @@ catch {
 }
 finally {
     # -- 4. Menage : les CSV portent des donnees clients, ils ne restent pas --
-    Remove-Item $archive -Force -ErrorAction SilentlyContinue
+    if (-not $garderArchive) { Remove-Item $archive -Force -ErrorAction SilentlyContinue }
     if (Test-Path $dossierExport) {
         Remove-Item (Join-Path $dossierExport '*') -Force -Recurse -ErrorAction SilentlyContinue
     }

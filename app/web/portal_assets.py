@@ -1628,10 +1628,11 @@ function renderPortal(){
         title:'Base de données',
         onClick:()=>{window.location.href='/db';}
       },iconEl('database',24)):null,
-      // ERP : lecture seule du miroir de RVGI. Superadmin uniquement, et
-      // volontairement absent du sheet mobile — l'écran est une grille dense,
-      // il n'a pas de sens sur un téléphone.
-      isSuper?h('button',{
+      // ERP : lecture seule du miroir de RVGI. Direction, administration et
+      // superadmin — le meme perimetre que les autres fonctions d'administration.
+      // Volontairement absent du sheet mobile : l'ecran est une grille dense,
+      // il n'a pas de sens sur un telephone.
+      (isSuper||urole==='direction'||urole==='administration'||urole==='administration_ventes'||urole==='administration_technique')?h('button',{
         type:'button',
         className:'portal-settings-corner',
         'aria-label':'ERP',

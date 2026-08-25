@@ -52,13 +52,43 @@ ENUMS = {
     },
 }
 
+# L'ordre et les noms sont ceux de la barre de menus de RVGI — Fichiers,
+# Ventes, Stocks, Production, Achats, Comptabilités. Quelqu'un qui passe d'un
+# écran à l'autre toute la journée n'a pas à réapprendre où sont les choses.
 DOMAINES = [
+    {"cle": "fichiers", "label": "Fichiers"},
     {"cle": "ventes", "label": "Ventes"},
-    {"cle": "achats", "label": "Achats"},
     {"cle": "stocks", "label": "Stocks"},
-    {"cle": "referentiels", "label": "Référentiels"},
     {"cle": "production", "label": "Production"},
+    {"cle": "achats", "label": "Achats"},
+    {"cle": "comptabilites", "label": "Comptabilités"},
 ]
+
+# Ordre d'affichage à l'intérieur d'un domaine : celui du flux de RVGI, pas
+# celui du catalogue. Un écran absent d'ici passe à la fin de son domaine.
+ORDRE_ECRANS = [
+    # Fichiers
+    "articles", "clients", "fournisseurs", "outils", "machines",
+    "prix_vente", "prix_achat", "prix_client",
+    # Ventes — le flux : devis, marchés, commandes, livraisons, factures
+    "devis", "marches", "commandes", "livraisons", "factures",
+    # Stocks
+    "stock_pf", "mouvements_pf", "stock_matiere", "mouvements_matiere",
+    # Production — ordonnancement, fabrication, déclarations, matière, colisage
+    "dossiers", "fiches_fabrication", "declarations", "sorties_matiere", "colisage",
+    # Achats — appel d'offres, commande, réception, facture
+    "appels_offres", "commandes_fournisseur", "receptions", "factures_fournisseur",
+    # Comptabilités
+    "echeances",
+]
+
+
+def rang(cle):
+    """Position d'un écran dans l'ordre d'affichage."""
+    try:
+        return ORDRE_ECRANS.index(cle)
+    except ValueError:
+        return len(ORDRE_ECRANS)
 
 # Libellés des colonnes RVGI qui reviennent partout. Servent au panneau de
 # détail, y compris pour les champs qu'aucun écran ne montre en liste.
@@ -156,7 +186,7 @@ ECRANS = [
         ],
         "recherche": ["e.rs", "l.des1", "l.numero", "l.code1", "l.code2", "l.vref"],
         "filtres": [
-            {"nom": "client", "label": "Client", "col": "e.rs", "type": "contient"},
+            {"nom": "client", "label": "Client", "col": "e.rs", "type": "contient", "exemple": "LIDL"},
             {"nom": "depuis", "label": "Depuis le", "col": "e.amjd", "type": "date_min"},
             {"nom": "jusqua", "label": "Jusqu'au", "col": "e.amjd", "type": "date_max"},
         ],
@@ -194,7 +224,7 @@ ECRANS = [
         ],
         "recherche": ["e.rs", "l.des1", "l.numero", "l.code1", "l.code2", "l.vref", "l.nref"],
         "filtres": [
-            {"nom": "client", "label": "Client", "col": "e.rs", "type": "contient"},
+            {"nom": "client", "label": "Client", "col": "e.rs", "type": "contient", "exemple": "LIDL"},
             # Un carnet s'ouvre sur ce qui est en cours, pas sur dix ans
             # d'archives : le filtre est posé d'entrée, et reste effaçable.
             {"nom": "position", "label": "Position", "col": "l.lpos", "type": "enum",
@@ -235,8 +265,8 @@ ECRANS = [
         ],
         "recherche": ["e.lrs", "l.numero", "l.numcde", "l.note"],
         "filtres": [
-            {"nom": "client", "label": "Destinataire", "col": "e.lrs", "type": "contient"},
-            {"nom": "commande", "label": "N° de commande", "col": "l.numcde", "type": "egal"},
+            {"nom": "client", "label": "Destinataire", "col": "e.lrs", "type": "contient", "exemple": "LIDL"},
+            {"nom": "commande", "label": "N° de commande", "col": "l.numcde", "type": "egal", "exemple": "9932399"},
             {"nom": "depuis", "label": "Depuis le", "col": "l.amje", "type": "date_min"},
             {"nom": "jusqua", "label": "Jusqu'au", "col": "l.amje", "type": "date_max"},
         ],
@@ -272,8 +302,8 @@ ECRANS = [
         ],
         "recherche": ["e.rs", "l.des1", "l.numero", "l.code1", "l.code2", "l.livno"],
         "filtres": [
-            {"nom": "client", "label": "Client", "col": "e.rs", "type": "contient"},
-            {"nom": "commande", "label": "N° de commande", "col": "l.livno", "type": "egal"},
+            {"nom": "client", "label": "Client", "col": "e.rs", "type": "contient", "exemple": "LIDL"},
+            {"nom": "commande", "label": "N° de commande", "col": "l.livno", "type": "egal", "exemple": "9932399"},
             {"nom": "depuis", "label": "Depuis le", "col": "e.amjf", "type": "date_min"},
             {"nom": "jusqua", "label": "Jusqu'au", "col": "e.amjf", "type": "date_max"},
         ],
@@ -287,7 +317,7 @@ ECRANS = [
     {
         "cle": "echeances",
         "label": "Échéances clients",
-        "domaine": "ventes",
+        "domaine": "comptabilites",
         "resume": "Échéancier des factures de vente, soldé ou non.",
         "table": "ecc_ech", "alias": "l",
         "cle_ligne": "l.id",
@@ -305,7 +335,7 @@ ECRANS = [
         ],
         "recherche": ["l.rs", "l.nofac", "l.com"],
         "filtres": [
-            {"nom": "client", "label": "Client", "col": "l.rs", "type": "contient"},
+            {"nom": "client", "label": "Client", "col": "l.rs", "type": "contient", "exemple": "LIDL"},
             {"nom": "solde", "label": "Soldé", "col": "l.sol", "type": "enum", "enum": "oui_non"},
             {"nom": "depuis", "label": "Échéance depuis", "col": "l.amje", "type": "date_min"},
             {"nom": "jusqua", "label": "Échéance jusqu'au", "col": "l.amje", "type": "date_max"},
@@ -339,7 +369,7 @@ ECRANS = [
         ],
         "recherche": ["e.rs", "l.des1", "l.numero", "l.code1", "l.code2"],
         "filtres": [
-            {"nom": "client", "label": "Client", "col": "e.rs", "type": "contient"},
+            {"nom": "client", "label": "Client", "col": "e.rs", "type": "contient", "exemple": "LIDL"},
             {"nom": "depuis", "label": "Depuis le", "col": "e.amjc", "type": "date_min"},
         ],
         "detail": [
@@ -375,7 +405,7 @@ ECRANS = [
         ],
         "recherche": ["e.rs", "l.des1", "l.numero", "l.code1", "l.code2", "e.vref"],
         "filtres": [
-            {"nom": "fournisseur", "label": "Fournisseur", "col": "e.rs", "type": "contient"},
+            {"nom": "fournisseur", "label": "Fournisseur", "col": "e.rs", "type": "contient", "exemple": "QRT"},
             {"nom": "position", "label": "Position", "col": "l.lpos", "type": "enum",
              "enum": "position", "defaut": "0"},
             {"nom": "depuis", "label": "Depuis le", "col": "e.amjc", "type": "date_min"},
@@ -410,8 +440,8 @@ ECRANS = [
         ],
         "recherche": ["l.ref", "l.numero", "l.lot", "e.rs", "l.note"],
         "filtres": [
-            {"nom": "fournisseur", "label": "Fournisseur", "col": "e.rs", "type": "contient"},
-            {"nom": "lot", "label": "N° de lot", "col": "l.lot", "type": "contient"},
+            {"nom": "fournisseur", "label": "Fournisseur", "col": "e.rs", "type": "contient", "exemple": "QRT"},
+            {"nom": "lot", "label": "N° de lot", "col": "l.lot", "type": "contient", "exemple": "BL137434"},
             {"nom": "depuis", "label": "Réception depuis", "col": "l.amjl", "type": "date_min"},
             {"nom": "jusqua", "label": "Réception jusqu'au", "col": "l.amjl", "type": "date_max"},
         ],
@@ -445,7 +475,7 @@ ECRANS = [
         ],
         "recherche": ["e.rs", "l.des1", "l.numero", "l.code1", "l.code2"],
         "filtres": [
-            {"nom": "fournisseur", "label": "Fournisseur", "col": "e.rs", "type": "contient"},
+            {"nom": "fournisseur", "label": "Fournisseur", "col": "e.rs", "type": "contient", "exemple": "QRT"},
             {"nom": "depuis", "label": "Depuis le", "col": "e.amjf", "type": "date_min"},
         ],
         "detail": [
@@ -475,7 +505,7 @@ ECRANS = [
         ],
         "recherche": ["e.rs", "l.des1", "l.numero"],
         "filtres": [
-            {"nom": "fournisseur", "label": "Fournisseur", "col": "e.rs", "type": "contient"},
+            {"nom": "fournisseur", "label": "Fournisseur", "col": "e.rs", "type": "contient", "exemple": "QRT"},
         ],
         "detail": [
             {"titre": "Appel d'offres", "champs": ["numero", "ligne", "amjc", "rs", "numfou"]},
@@ -506,9 +536,9 @@ ECRANS = [
         ],
         "recherche": ["a.libc1", "a.libc2", "a.code1", "a.code2", "a.cltc1", "a.cltc2"],
         "filtres": [
-            {"nom": "client", "label": "N° client", "col": "a.numclt", "type": "egal"},
-            {"nom": "famille", "label": "Famille", "col": "a.fam", "type": "egal"},
-            {"nom": "designation", "label": "Désignation", "col": "a.libc1", "type": "contient"},
+            {"nom": "client", "label": "N° client", "col": "a.numclt", "type": "egal", "exemple": "890"},
+            {"nom": "famille", "label": "Famille", "col": "a.fam", "type": "egal", "exemple": "2"},
+            {"nom": "designation", "label": "Désignation", "col": "a.libc1", "type": "contient", "exemple": "étiquette 45 x 25"},
         ],
         "detail": [
             {"titre": "Article", "champs": ["code1", "code2", "code3", "numclt", "numart", "libc1", "libc2", "libc3", "libc4"]},
@@ -541,8 +571,8 @@ ECRANS = [
         ],
         "recherche": ["m.des1", "m.des2", "m.code1", "m.code2", "m.numcde", "m.lot", "m.refbl"],
         "filtres": [
-            {"nom": "article", "label": "Code 1", "col": "m.code1", "type": "egal"},
-            {"nom": "commande", "label": "N° de commande", "col": "m.numcde", "type": "egal"},
+            {"nom": "article", "label": "Code 1", "col": "m.code1", "type": "egal", "exemple": "890"},
+            {"nom": "commande", "label": "N° de commande", "col": "m.numcde", "type": "egal", "exemple": "9932399"},
             {"nom": "depuis", "label": "Depuis le", "col": "m.amjh", "type": "date_min"},
             {"nom": "jusqua", "label": "Jusqu'au", "col": "m.amjh", "type": "date_max"},
         ],
@@ -573,8 +603,8 @@ ECRANS = [
         ],
         "recherche": ["m.libc1", "m.libc2", "m.code1", "m.code2", "m.ref"],
         "filtres": [
-            {"nom": "designation", "label": "Désignation", "col": "m.libc1", "type": "contient"},
-            {"nom": "famille", "label": "Sous-famille", "col": "m.sfam", "type": "egal"},
+            {"nom": "designation", "label": "Désignation", "col": "m.libc1", "type": "contient", "exemple": "velin"},
+            {"nom": "famille", "label": "Sous-famille", "col": "m.sfam", "type": "egal", "exemple": "1"},
         ],
         "detail": [
             {"titre": "Matière", "champs": ["code1", "code2", "code3", "libc1", "libc2", "sfam", "nomen"]},
@@ -604,8 +634,8 @@ ECRANS = [
         ],
         "recherche": ["m.des1", "m.des2", "m.code1", "m.code2", "m.lot", "m.refbl"],
         "filtres": [
-            {"nom": "article", "label": "Code 1", "col": "m.code1", "type": "egal"},
-            {"nom": "lot", "label": "N° de lot", "col": "m.lot", "type": "contient"},
+            {"nom": "article", "label": "Code 1", "col": "m.code1", "type": "egal", "exemple": "890"},
+            {"nom": "lot", "label": "N° de lot", "col": "m.lot", "type": "contient", "exemple": "BL137434"},
             {"nom": "depuis", "label": "Depuis le", "col": "m.amjh", "type": "date_min"},
         ],
         "detail": [
@@ -619,7 +649,7 @@ ECRANS = [
     {
         "cle": "articles",
         "label": "Articles",
-        "domaine": "referentiels",
+        "domaine": "fichiers",
         "resume": "Le référentiel produits finis : libellés, formats, classement.",
         "table": "fic_art", "alias": "a",
         "cle_ligne": "a.id",
@@ -638,9 +668,9 @@ ECRANS = [
         ],
         "recherche": ["a.libc1", "a.libc2", "a.libc3", "a.code1", "a.code2", "a.cltc1", "a.numart"],
         "filtres": [
-            {"nom": "client", "label": "N° client", "col": "a.numclt", "type": "egal"},
-            {"nom": "famille", "label": "Famille", "col": "a.fam", "type": "egal"},
-            {"nom": "libelle", "label": "Libellé", "col": "a.libc1", "type": "contient"},
+            {"nom": "client", "label": "N° client", "col": "a.numclt", "type": "egal", "exemple": "890"},
+            {"nom": "famille", "label": "Famille", "col": "a.fam", "type": "egal", "exemple": "2"},
+            {"nom": "libelle", "label": "Libellé", "col": "a.libc1", "type": "contient", "exemple": "étiquette 45 x 25"},
         ],
         "detail": [
             {"titre": "Article", "champs": ["code1", "code2", "code3", "numart", "numclt", "amj"]},
@@ -653,7 +683,7 @@ ECRANS = [
     {
         "cle": "clients",
         "label": "Clients",
-        "domaine": "referentiels",
+        "domaine": "fichiers",
         "resume": "Fiches clients : identité, groupe, conditions.",
         "table": "fic_clt", "alias": "c",
         "cle_ligne": "c.id",
@@ -672,8 +702,8 @@ ECRANS = [
         ],
         "recherche": ["c.rs", "c.code", "c.vil", "c.siret", "c.numero"],
         "filtres": [
-            {"nom": "ville", "label": "Ville", "col": "c.vil", "type": "contient"},
-            {"nom": "groupe", "label": "Groupe", "col": "c.groupe", "type": "egal"},
+            {"nom": "ville", "label": "Ville", "col": "c.vil", "type": "contient", "exemple": "ROUBAIX"},
+            {"nom": "groupe", "label": "Groupe", "col": "c.groupe", "type": "egal", "exemple": "890"},
         ],
         "detail": [
             {"titre": "Identité", "champs": ["numero", "code", "rs", "groupe", "siret", "ntva", "rcs", "ean"]},
@@ -685,7 +715,7 @@ ECRANS = [
     {
         "cle": "fournisseurs",
         "label": "Fournisseurs",
-        "domaine": "referentiels",
+        "domaine": "fichiers",
         "resume": "Fiches fournisseurs : identité, groupe, conditions.",
         "table": "fic_fou", "alias": "f",
         "cle_ligne": "f.id",
@@ -703,8 +733,8 @@ ECRANS = [
         ],
         "recherche": ["f.rs", "f.code", "f.vil", "f.siret", "f.numero"],
         "filtres": [
-            {"nom": "ville", "label": "Ville", "col": "f.vil", "type": "contient"},
-            {"nom": "groupe", "label": "Groupe", "col": "f.groupe", "type": "egal"},
+            {"nom": "ville", "label": "Ville", "col": "f.vil", "type": "contient", "exemple": "ROUBAIX"},
+            {"nom": "groupe", "label": "Groupe", "col": "f.groupe", "type": "egal", "exemple": "1092"},
         ],
         "detail": [
             {"titre": "Identité", "champs": ["numero", "code", "rs", "groupe", "siret", "ntva", "rcs"]},
@@ -716,7 +746,7 @@ ECRANS = [
     {
         "cle": "outils",
         "label": "Outils de découpe",
-        "domaine": "referentiels",
+        "domaine": "fichiers",
         "resume": "Outils physiques. `nbt` est le nombre de poses qui fait foi.",
         "table": "out_dec", "alias": "o",
         "cle_ligne": "o.id",
@@ -735,8 +765,8 @@ ECRANS = [
         ],
         "recherche": ["o.code", "o.numero", "o.com", "o.machine"],
         "filtres": [
-            {"nom": "machine", "label": "Machine", "col": "o.machine", "type": "contient"},
-            {"nom": "client", "label": "N° client", "col": "o.numclt", "type": "egal"},
+            {"nom": "machine", "label": "Machine", "col": "o.machine", "type": "contient", "exemple": "COHESIO"},
+            {"nom": "client", "label": "N° client", "col": "o.numclt", "type": "egal", "exemple": "890"},
         ],
         "detail": [
             {"titre": "Outil", "champs": ["numero", "code", "machine", "etat", "forme", "amj"]},
@@ -748,7 +778,7 @@ ECRANS = [
     {
         "cle": "machines",
         "label": "Machines",
-        "domaine": "referentiels",
+        "domaine": "fichiers",
         "resume": "Parc machines et capacités déclarées dans l'ERP.",
         "table": "mac_pro", "alias": "m",
         "cle_ligne": "m.id",
@@ -773,7 +803,7 @@ ECRANS = [
     {
         "cle": "prix_vente",
         "label": "Prix de vente",
-        "domaine": "referentiels",
+        "domaine": "fichiers",
         "resume": "Paliers de prix de vente par article.",
         "table": "fic_artv", "alias": "p",
         "cle_ligne": "p.id",
@@ -789,7 +819,7 @@ ECRANS = [
         ],
         "recherche": ["p.code1", "p.code2"],
         "filtres": [
-            {"nom": "article", "label": "Code 1", "col": "p.code1", "type": "egal"},
+            {"nom": "article", "label": "Code 1", "col": "p.code1", "type": "egal", "exemple": "890"},
         ],
         "detail": [
             {"titre": "Palier", "champs": ["code1", "code2", "code3", "qtemin", "qtemax", "pv", "amj", "amjv", "grille", "cuv"]},
@@ -798,7 +828,7 @@ ECRANS = [
     {
         "cle": "prix_achat",
         "label": "Prix d'achat",
-        "domaine": "referentiels",
+        "domaine": "fichiers",
         "resume": "Prix d'achat par article et par fournisseur.",
         "table": "fic_arta", "alias": "p",
         "cle_ligne": "p.id",
@@ -815,8 +845,8 @@ ECRANS = [
         ],
         "recherche": ["p.code1", "p.code2", "p.ref", "p.libt1"],
         "filtres": [
-            {"nom": "fournisseur", "label": "N° fournisseur", "col": "p.numfou", "type": "egal"},
-            {"nom": "article", "label": "Code 1", "col": "p.code1", "type": "egal"},
+            {"nom": "fournisseur", "label": "N° fournisseur", "col": "p.numfou", "type": "egal", "exemple": "1092"},
+            {"nom": "article", "label": "Code 1", "col": "p.code1", "type": "egal", "exemple": "890"},
         ],
         "detail": [
             {"titre": "Prix d'achat", "champs": ["code1", "code2", "code3", "numfou", "ref", "qtemin", "qtemax", "pa", "def", "amj", "amjv", "cua", "cuc"]},
@@ -825,7 +855,7 @@ ECRANS = [
     {
         "cle": "prix_client",
         "label": "Prix négociés client",
-        "domaine": "referentiels",
+        "domaine": "fichiers",
         "resume": "Prix négociés par client, avec la référence de son côté.",
         "table": "fic_artc", "alias": "p",
         "cle_ligne": "p.id",
@@ -842,7 +872,7 @@ ECRANS = [
         ],
         "recherche": ["p.code1", "p.code2", "p.cltc2", "p.libc1"],
         "filtres": [
-            {"nom": "client", "label": "N° client", "col": "p.numclt", "type": "egal"},
+            {"nom": "client", "label": "N° client", "col": "p.numclt", "type": "egal", "exemple": "890"},
         ],
         "detail": [
             {"titre": "Prix négocié", "champs": ["code1", "code2", "code3", "numclt", "cltc1", "cltc2", "cltc3", "libc1", "libc2", "qtemin", "qtemax", "pv", "amjd", "amjv"]},
@@ -870,7 +900,7 @@ ECRANS = [
         ],
         "recherche": ["f.code1", "f.code2"],
         "filtres": [
-            {"nom": "article", "label": "Code 1", "col": "f.code1", "type": "egal"},
+            {"nom": "article", "label": "Code 1", "col": "f.code1", "type": "egal", "exemple": "890"},
         ],
         "detail": [
             {"titre": "Fiche", "champs": ["code1", "code2", "dtem"]},
@@ -904,7 +934,7 @@ ECRANS = [
         ],
         "recherche": ["d.numero", "d.com"],
         "filtres": [
-            {"nom": "client", "label": "N° client", "col": "d.numclt", "type": "egal"},
+            {"nom": "client", "label": "N° client", "col": "d.numclt", "type": "egal", "exemple": "890"},
         ],
         "detail": [
             {"titre": "Dossier", "champs": ["numero", "amjc", "amjp", "amjr", "pos", "prio", "numclt"]},
@@ -933,8 +963,8 @@ ECRANS = [
         ],
         "recherche": ["g.dos", "g.pt"],
         "filtres": [
-            {"nom": "dossier", "label": "Dossier", "col": "g.dos", "type": "egal"},
-            {"nom": "operation", "label": "Code opération", "col": "g.pt", "type": "egal"},
+            {"nom": "dossier", "label": "Dossier", "col": "g.dos", "type": "egal", "exemple": "1018"},
+            {"nom": "operation", "label": "Code opération", "col": "g.pt", "type": "egal", "exemple": "01"},
             {"nom": "depuis", "label": "Depuis le", "col": "g.amj", "type": "date_min"},
         ],
         "detail": [
@@ -962,8 +992,8 @@ ECRANS = [
         ],
         "recherche": ["s.dos", "s.reflot", "s.code1", "s.code2"],
         "filtres": [
-            {"nom": "dossier", "label": "Dossier", "col": "s.dos", "type": "egal"},
-            {"nom": "lot", "label": "N° de lot", "col": "s.reflot", "type": "contient"},
+            {"nom": "dossier", "label": "Dossier", "col": "s.dos", "type": "egal", "exemple": "1018"},
+            {"nom": "lot", "label": "N° de lot", "col": "s.reflot", "type": "contient", "exemple": "BL137434"},
         ],
         "detail": [
             {"titre": "Sortie", "champs": ["amj", "dos", "ligne", "qtes", "qtev", "reflot", "mach", "operateur", "service"]},
@@ -991,7 +1021,7 @@ ECRANS = [
         ],
         "recherche": ["c.des1", "c.numcde", "c.numbl", "c.numero"],
         "filtres": [
-            {"nom": "commande", "label": "N° de commande", "col": "c.numcde", "type": "egal"},
+            {"nom": "commande", "label": "N° de commande", "col": "c.numcde", "type": "egal", "exemple": "9932399"},
         ],
         "detail": [
             {"titre": "Colisage", "champs": ["numero", "amjc", "ligne", "colis", "numpal", "typp", "des1"]},
