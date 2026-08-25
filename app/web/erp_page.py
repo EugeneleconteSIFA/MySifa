@@ -68,7 +68,7 @@ body.sb-open .sidebar{transform:translateX(0)}
 .logo-brand{font-size:15px;font-weight:800;transition:color .15s}.logo-brand span{color:var(--accent)}
 .logo-ligne{display:flex;align-items:center;gap:10px}
 .rvgi-mark{display:inline-flex;align-items:center;flex-shrink:0}
-.rvgi-mark img{width:38px;height:auto;display:block}
+.rvgi-mark img{width:46px;height:auto;display:block}
 .rvgi-mark .rvgi-clair{display:none}
 body.light .rvgi-mark .rvgi-sombre{display:none}
 body.light .rvgi-mark .rvgi-clair{display:block}
@@ -211,8 +211,8 @@ body.sb-open .sidebar-overlay{display:block}
     <div class="logo" onclick="ouvrirMenu()" title="Menu ERP">
       <div class="logo-ligne">
         <span class="rvgi-mark">
-          <img class="rvgi-sombre" src="/static/rvgi_mark_clair.png" alt="">
-          <img class="rvgi-clair" src="/static/rvgi_mark.png" alt="">
+          <img class="rvgi-sombre" src="/static/rvgi_mark_clair.png?v=3" alt="">
+          <img class="rvgi-clair" src="/static/rvgi_mark.png?v=3" alt="">
         </span>
         <div>
           <div class="logo-brand">My<span>ERP</span></div>
