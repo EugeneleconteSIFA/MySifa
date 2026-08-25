@@ -37,7 +37,11 @@ def erp_page(request: Request):
                 "administration et au super administrateur."
             ),
         )
-    html = ERP_HTML.replace("__V_LABEL__", f"v{APP_VERSION}")
+    html = (
+        ERP_HTML
+        .replace("__V_LABEL__", f"v{APP_VERSION}")
+        .replace("__USER_ROLE__", str(user.get("role") or ""))
+    )
     return HTMLResponse(content=html)
 
 
@@ -139,6 +143,7 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 .btn-menu:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
 @media (max-width:900px){.btn-menu{display:none}}
 .page-head h1{margin:0;font-size:19px;font-weight:700}
+.head-titre-ligne{display:flex;align-items:center;gap:10px}
 .page-head .sous{font-size:12px;color:var(--muted);margin-top:4px;max-width:640px}
 .head-droite{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .head-mark{display:inline-flex;align-items:center;flex-shrink:0}
@@ -264,6 +269,7 @@ body.sb-open .sidebar-overlay{display:block}
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
 <script src="/static/support_widget.js"></script>
+<script src="/static/mysifa_guides.js"></script>
 
 <div class="sidebar-overlay" id="sb-ov" onclick="fermerSidebar()"></div>
 
@@ -338,7 +344,7 @@ body.sb-open .sidebar-overlay{display:block}
         <img class="rvgi-clair" src="/static/rvgi_mark.png?v=3" alt="RVGI">
       </span>
       <div>
-        <h1 id="titre">ERP</h1>
+        <div class="head-titre-ligne"><h1 id="titre">ERP</h1><span id="guide-btn-slot"></span></div>
         <div class="sous" id="sous">Lecture du miroir de RVGI.</div>
       </div>
       <div class="head-droite" id="head-droite"></div>
@@ -368,6 +374,8 @@ body.sb-open .sidebar-overlay{display:block}
 // liste : seuls le corps de la grille et le pied changent. C'est ce qui
 // garantit que la recherche ne perd pas le focus en cours de frappe.
 // ══════════════════════════════════════════════════════════════════
+const USER_ROLE = "__USER_ROLE__";
+
 const S = {
   meta: null,
   ecran: null,        // clé de l'écran courant
@@ -609,6 +617,100 @@ const ICO_PAR_ECRAN = {
 };
 function iconeEcran(cle){
   return ICO_ECRAN[ICO_PAR_ECRAN[cle]] || ICO_ECRAN.defaut;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// Guide in-app (moteur partagé mysifa_guides.js)
+// ══════════════════════════════════════════════════════════════════
+const ERP_TACHES_PAR_SERVICE = {
+  direction: [
+    'Retrouver un carnet, un chiffre d\'affaires ou un encours sans ouvrir RVGI.',
+    'Croiser une commande avec sa livraison, sa facture et son échéance.',
+    'Consulter les prix de vente, d\'achat et les prix négociés par client.'
+  ],
+  administration: [
+    'Retrouver une commande, un BL ou une facture à partir d\'un numéro ou d\'un nom.',
+    'Vérifier une réception : référence du BR, quantité, numéro de lot.',
+    'Contrôler un stock produit fini ou matière avant de répondre à un client.'
+  ]
+};
+
+function _erpBullets(role){
+  const bloc=(titre,items)=>'<div class="mguide-svc"><div class="mguide-svc-hd">'+
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'+
+    titre+'</div><ul class="mguide-svc-list">'+items.map(x=>'<li>'+x+'</li>').join('')+'</ul></div>';
+  let h='<div class="mguide-tasks">';
+  if(role==='superadmin'||role==='direction'){
+    h+=bloc('Direction',ERP_TACHES_PAR_SERVICE.direction);
+    h+=bloc('Administration',ERP_TACHES_PAR_SERVICE.administration);
+  }else{
+    h+=bloc('Ce que vous avez à faire ici',ERP_TACHES_PAR_SERVICE.administration);
+  }
+  return h+'</div>';
+}
+
+const ERP_GUIDES = {
+  'erp-overview': { steps: [
+
+    {
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l9-5 9 5v9l-9 5-9-5z"/><path d="M3 8l9 5 9-5"/><line x1="12" y1="13" x2="12" y2="22"/></svg>',
+      title: 'ERP',
+      body: '<p>Cet écran donne à lire les données de <strong>RVGI</strong>, l\'ERP de Sifa, dans l\'habillage de MySifa : commandes, livraisons, factures, stocks, référentiels. Vingt-sept écrans, une seule façon de chercher.</p><p>Tout y est en <span class="mguide-tag">lecture seule</span>. Rien de ce qui est fait ici ne remonte vers RVGI — l\'ERP reste la source, MySifa se contente de regarder.</p>',
+      extra: '__BULLETS__'
+    },
+
+    {
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+      title: 'Trouver le bon écran',
+      body: '<p>Les écrans suivent les menus de RVGI : <span class="mguide-tag">Ventes</span>, <span class="mguide-tag">Stocks</span>, <span class="mguide-tag">Production</span>, <span class="mguide-tag">Achats</span>, <span class="mguide-tag">Comptabilités</span>. Les <strong>Fichiers</strong> — articles, clients, fournisseurs, outils, prix — sont rangés à part, en bas : ce sont des référentiels, pas des étapes du process.</p><p>Le bouton <span class="mguide-hl">Menu</span>, en haut à gauche, ouvre le même sommaire par-dessus n\'importe quel écran. On passe donc d\'une liste à l\'autre sans revenir en arrière.</p>',
+      illu: '<svg viewBox="0 0 340 160" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><rect x="10" y="10" width="70" height="22" rx="7" fill="var(--card)" stroke="var(--accent)"/><text x="45" y="25" font-size="9" fill="var(--accent)" text-anchor="middle" font-weight="700">Menu</text><rect x="10" y="44" width="150" height="1" fill="var(--accent)"/><text x="10" y="58" font-size="9" fill="var(--text)" font-weight="800">Ventes</text><text x="20" y="74" font-size="8.5" fill="var(--text2)">Devis</text><text x="20" y="88" font-size="8.5" fill="var(--accent)" font-weight="700">Commandes</text><text x="20" y="102" font-size="8.5" fill="var(--text2)">Bons de livraison</text><line x1="14" y1="64" x2="14" y2="106" stroke="var(--border)"/><rect x="180" y="44" width="150" height="1" fill="var(--accent)"/><text x="180" y="58" font-size="9" fill="var(--text)" font-weight="800">Achats</text><text x="190" y="74" font-size="8.5" fill="var(--text2)">Commandes fourn.</text><text x="190" y="88" font-size="8.5" fill="var(--text2)">Réceptions</text><line x1="184" y1="64" x2="184" y2="92" stroke="var(--border)"/><line x1="10" y1="118" x2="330" y2="118" stroke="var(--border)"/><text x="10" y="134" font-size="9" fill="var(--muted)" font-weight="800">Fichiers</text><text x="80" y="134" font-size="8.5" fill="var(--text2)">Articles</text><text x="140" y="134" font-size="8.5" fill="var(--text2)">Clients</text><text x="200" y="134" font-size="8.5" fill="var(--text2)">Fournisseurs</text><text x="278" y="134" font-size="8.5" fill="var(--text2)">Prix</text></svg>'
+    },
+
+    {
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>',
+      title: 'Chercher et filtrer',
+      body: '<p>La colonne de gauche ne bouge jamais. La <strong>recherche</strong> porte sur les colonnes qui comptent pour l\'écran — un nom de client, une désignation, un numéro — et se vide avec <span class="mguide-tag">Échap</span>. Les filtres en dessous se cumulent avec elle.</p><p>Sur les commandes, <span class="mguide-hl">Position</span> est réglé d\'entrée sur <strong>En cours</strong> : on ouvre sur le carnet vivant, pas sur dix ans d\'archives. Le bouton <span class="mguide-tag">Réinitialiser les filtres</span> remet ce réglage, il ne vide pas tout.</p>',
+      illu: '<svg viewBox="0 0 340 160" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><rect x="8" y="8" width="112" height="144" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="20" y="26" font-size="8" fill="var(--text)" font-weight="800">RECHERCHE</text><rect x="20" y="34" width="88" height="20" rx="7" fill="var(--bg)" stroke="var(--accent)"/><text x="28" y="48" font-size="8" fill="var(--muted)">LIDL</text><text x="20" y="72" font-size="8" fill="var(--text)" font-weight="800">FILTRES</text><text x="20" y="88" font-size="7.5" fill="var(--text2)">POSITION</text><rect x="20" y="93" width="88" height="18" rx="6" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="28" y="106" font-size="8" fill="var(--accent)" font-weight="700">En cours</text><text x="20" y="126" font-size="7.5" fill="var(--text2)">ORIGINE</text><rect x="20" y="131" width="88" height="18" rx="6" fill="var(--bg)" stroke="var(--border)"/><text x="28" y="144" font-size="8" fill="var(--muted)">Tous</text><rect x="132" y="8" width="200" height="144" rx="9" fill="var(--bg)" stroke="var(--border)"/><rect x="132" y="8" width="200" height="22" rx="9" fill="var(--card)"/><text x="144" y="23" font-size="7.5" fill="var(--muted)" font-weight="700">N° / OF</text><text x="200" y="23" font-size="7.5" fill="var(--muted)" font-weight="700">CLIENT</text><text x="278" y="23" font-size="7.5" fill="var(--muted)" font-weight="700">QUANTITÉ</text><line x1="132" y1="30" x2="332" y2="30" stroke="var(--border)"/><text x="144" y="46" font-size="8" fill="var(--accent)" font-weight="700">9932399</text><text x="200" y="46" font-size="8" fill="var(--text)">LIDL</text><text x="324" y="46" font-size="8" fill="var(--text)" text-anchor="end">500 000</text><line x1="132" y1="54" x2="332" y2="54" stroke="var(--border)"/><text x="144" y="70" font-size="8" fill="var(--accent)" font-weight="700">9932401</text><text x="200" y="70" font-size="8" fill="var(--text)">LIDL</text><text x="324" y="70" font-size="8" fill="var(--text)" text-anchor="end">120 000</text><line x1="132" y1="78" x2="332" y2="78" stroke="var(--border)"/><text x="144" y="140" font-size="8" fill="var(--muted)">1–100 sur 880</text></svg>'
+    }
+    ,{
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="20"/></svg>',
+      title: 'Ranger la grille à sa main',
+      body: '<p>Un écran ERP est large. Trois gestes le rendent praticable : <strong>glisser une en-tête</strong> par sa poignée pour déplacer la colonne, cliquer le <strong>cadenas</strong> pour la figer à gauche, et <strong>tirer la grille à la souris</strong> pour la faire défiler sans chercher la barre du bas.</p><p>L\'ordre et les colonnes figées sont mémorisés <strong>écran par écran, sur ce poste</strong>. Ils ne vous suivent pas d\'un ordinateur à l\'autre. Un clic sur une en-tête trie ; un second inverse le sens.</p>',
+      illu: '<svg viewBox="0 0 340 160" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><rect x="8" y="20" width="324" height="24" rx="6" fill="var(--card)" stroke="var(--border)"/><circle cx="20" cy="29" r="1.3" fill="var(--muted)"/><circle cx="25" cy="29" r="1.3" fill="var(--muted)"/><circle cx="20" cy="35" r="1.3" fill="var(--muted)"/><circle cx="25" cy="35" r="1.3" fill="var(--muted)"/><text x="34" y="36" font-size="8" fill="var(--accent)" font-weight="700">N° / OF</text><rect x="76" y="26" width="12" height="12" rx="3" fill="var(--accent-bg)"/><path d="M79 33h6v4h-6z" fill="none" stroke="var(--accent)" stroke-width="1.2"/><path d="M80.5 33v-2a1.5 1.5 0 0 1 3 0v2" fill="none" stroke="var(--accent)" stroke-width="1.2"/><text x="106" y="36" font-size="8" fill="var(--muted)" font-weight="700">CLIENT</text><text x="176" y="36" font-size="8" fill="var(--muted)" font-weight="700">DÉSIGNATION</text><text x="276" y="36" font-size="8" fill="var(--muted)" font-weight="700">QUANTITÉ</text><line x1="96" y1="20" x2="96" y2="150" stroke="var(--accent)"/><rect x="8" y="48" width="88" height="22" rx="4" fill="var(--bg)"/><text x="34" y="63" font-size="8" fill="var(--accent)">9932399</text><rect x="100" y="48" width="232" height="22" rx="4" fill="var(--bg)" opacity=".45"/><text x="106" y="63" font-size="8" fill="var(--text2)">LIDL</text><rect x="8" y="76" width="88" height="22" rx="4" fill="var(--bg)"/><text x="34" y="91" font-size="8" fill="var(--accent)">9932401</text><rect x="100" y="76" width="232" height="22" rx="4" fill="var(--bg)" opacity=".45"/><text x="106" y="91" font-size="8" fill="var(--text2)">SCAPARTOIS</text><text x="150" y="126" font-size="8" fill="var(--muted)">colonnes figées</text><path d="M96 130 L60 130" stroke="var(--accent)" stroke-width="1.4" marker-end="url(#gf)"/><defs><marker id="gf" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6z" fill="var(--accent)"/></marker></defs><path d="M240 130 L300 130" stroke="var(--muted)" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#gf)"/><text x="250" y="146" font-size="8" fill="var(--muted)">tirer pour défiler</text></svg>'
+    },
+
+    {
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="14" y1="3" x2="14" y2="21"/><line x1="17" y1="9" x2="21" y2="9"/><line x1="17" y1="14" x2="21" y2="14"/></svg>',
+      title: 'Ouvrir une ligne',
+      body: '<p>Un clic sur une ligne ouvre son <strong>panneau de détail</strong>, à droite : la ligne y est dépliée en groupes — la pièce, l\'article, les quantités et prix, la livraison. Les champs que l\'écran ne montre pas sont regroupés sous <span class="mguide-tag">Autres champs</span>, replié.</p><p>Rien n\'est masqué : si RVGI porte l\'information, elle est là. <span class="mguide-tag">Échap</span> referme le panneau.</p>',
+      illu: '<svg viewBox="0 0 340 160" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><rect x="8" y="8" width="176" height="144" rx="8" fill="var(--bg)" stroke="var(--border)"/><rect x="14" y="40" width="164" height="20" rx="4" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="22" y="54" font-size="8" fill="var(--accent)" font-weight="700">9932399 · LIDL</text><rect x="14" y="66" width="164" height="16" rx="4" fill="var(--card)"/><rect x="14" y="86" width="164" height="16" rx="4" fill="var(--card)"/><rect x="190" y="8" width="142" height="144" rx="8" fill="var(--card)" stroke="var(--accent)"/><text x="202" y="26" font-size="9" fill="var(--text)" font-weight="800">Commandes</text><line x1="190" y1="34" x2="332" y2="34" stroke="var(--border)"/><text x="202" y="48" font-size="7.5" fill="var(--muted)" font-weight="700">COMMANDE</text><text x="202" y="62" font-size="8" fill="var(--text2)">N°</text><text x="324" y="62" font-size="8" fill="var(--text)" text-anchor="end">9932399</text><text x="202" y="76" font-size="8" fill="var(--text2)">Client</text><text x="324" y="76" font-size="8" fill="var(--text)" text-anchor="end">LIDL</text><line x1="196" y1="84" x2="326" y2="84" stroke="var(--border)"/><text x="202" y="98" font-size="7.5" fill="var(--muted)" font-weight="700">QUANTITÉS ET PRIX</text><text x="202" y="112" font-size="8" fill="var(--text2)">Quantité</text><text x="324" y="112" font-size="8" fill="var(--text)" text-anchor="end">500 000</text><line x1="196" y1="120" x2="326" y2="120" stroke="var(--border)"/><text x="202" y="136" font-size="7.5" fill="var(--muted)" font-weight="700">AUTRES CHAMPS</text><path d="M316 132 l5 5 5-5" fill="none" stroke="var(--muted)" stroke-width="1.4"/></svg>'
+    },
+
+    {
+      icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+      title: 'Lecture seule, et données d\'il y a quelques heures',
+      body: '<p>Les données ne sont pas lues dans RVGI en direct : le serveur de MySifa ne voit pas le réseau de l\'atelier. Une synchronisation en rapporte une copie <strong>deux fois par jour</strong>, à 5 h et 12 h 30.</p><p>La pastille <span class="mguide-tag">Miroir du …</span>, en haut à droite, dit l\'heure de cette copie — et passe à l\'<span class="mguide-hl">orange</span> au-delà de deux jours. Pour une commande saisie il y a dix minutes, c\'est encore RVGI qu\'il faut ouvrir.</p>',
+      illu: '<svg viewBox="0 0 340 160" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI"><rect x="12" y="46" width="92" height="46" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="58" y="66" font-size="9" fill="var(--text)" text-anchor="middle" font-weight="800">RVGI</text><text x="58" y="80" font-size="7.5" fill="var(--muted)" text-anchor="middle">réseau Sifa</text><path d="M108 69 L152 69" stroke="var(--accent)" stroke-width="1.8" marker-end="url(#fl)"/><defs><marker id="fl" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6z" fill="var(--accent)"/></marker></defs><text x="130" y="60" font-size="7.5" fill="var(--accent)" text-anchor="middle">5 h · 12 h 30</text><rect x="156" y="46" width="92" height="46" rx="9" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="202" y="66" font-size="9" fill="var(--accent)" text-anchor="middle" font-weight="800">Miroir</text><text x="202" y="80" font-size="7.5" fill="var(--accent)" text-anchor="middle" opacity=".8">copie du jour</text><path d="M252 69 L292 69" stroke="var(--muted)" stroke-width="1.8" marker-end="url(#fl)"/><rect x="296" y="46" width="32" height="46" rx="9" fill="var(--card)" stroke="var(--border)"/><text x="312" y="73" font-size="8" fill="var(--text2)" text-anchor="middle">vous</text><rect x="96" y="112" width="148" height="22" rx="11" fill="var(--card)" stroke="var(--border)"/><text x="170" y="127" font-size="8.5" fill="var(--text2)" text-anchor="middle">Miroir du 25/08/2026 05:00</text><rect x="12" y="112" width="76" height="22" rx="11" fill="var(--accent-bg)" stroke="var(--accent)"/><text x="50" y="127" font-size="8.5" fill="var(--accent)" text-anchor="middle" font-weight="700">Lecture seule</text></svg>'
+    }
+  ]}
+};
+
+
+function initGuides(){
+  try{
+    if(!window.MySifaGuides)return;
+    MySifaGuides.configure({role:USER_ROLE});
+    // Les bullets de la 1re etape dependent du role : on les injecte ici,
+    // une fois le role connu, plutot que de figer le texte au chargement.
+    const g=JSON.parse(JSON.stringify(ERP_GUIDES));
+    g['erp-overview'].steps[0].extra=_erpBullets(USER_ROLE);
+    MySifaGuides.registerMany(g);
+    MySifaGuides.boot().then(function(){
+      const slot=document.getElementById('guide-btn-slot');
+      if(slot&&typeof MySifaGuides.bookBtn==='function')slot.innerHTML=MySifaGuides.bookBtn('erp-overview');
+      MySifaGuides.autoOpen('erp-overview');
+    });
+  }catch(e){}
 }
 
 // ── Navigation ───────────────────────────────────────────────────
@@ -1021,6 +1123,7 @@ async function boot(){
   }
   renderFraicheur();renderNav();appliquerHash();
   window.addEventListener('hashchange',appliquerHash);
+  initGuides();
 }
 boot();
 </script>
