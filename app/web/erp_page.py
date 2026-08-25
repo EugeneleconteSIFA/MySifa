@@ -56,14 +56,22 @@ ERP_HTML = r"""<!DOCTYPE html>
 :root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);--ok:#34d399;--success:#34d399;--danger:#f87171;--warn:#fbbf24}
 body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);--ok:#059669;--success:#059669;--danger:#dc2626;--warn:#d97706}
 *{box-sizing:border-box}
-body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+/* La page ne défile pas : elle occupe l'écran, et c'est la grille qui roule
+   sous son en-tête. Le bandeau de v1 ajoute 24 px de padding en haut du body —
+   `height:100vh` avec `border-box` en tient compte tout seul. */
+html{height:100%}
+body{margin:0;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;display:flex;flex-direction:column}
 
 /* ── Shell ── */
-.layout{display:flex;min-height:100vh}
+.layout{display:flex;flex:1;min-height:0}
 /* Tiroir : la sidebar ne mange plus 230 px en permanence. Elle s'ouvre par le
    bouton Menu, se referme dès qu'on choisit un écran. La grille récupère la
    largeur, c'est elle qui en a besoin. */
-.sidebar{width:250px;background:var(--card);border-right:1px solid var(--border);padding:20px 12px;display:flex;flex-direction:column;flex-shrink:0;height:100vh;position:fixed;top:0;left:0;z-index:70;overflow-y:auto;scrollbar-width:none;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 0 32px rgba(0,0,0,.35)}
+.sidebar{width:min(1080px,94vw);background:var(--card);border-right:1px solid var(--border);padding:20px 20px 0;display:flex;flex-direction:column;flex-shrink:0;position:fixed;top:0;bottom:0;left:0;z-index:70;overflow-y:auto;scrollbar-width:none;transform:translateX(-105%);transition:transform .18s ease;box-shadow:0 0 48px rgba(0,0,0,.4)}
+/* Le tiroir montre le menu general en entier : on va de n'importe quel ecran
+   a n'importe quel autre sans repasser par l'accueil. */
+.nav-colonnes{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 24px;align-items:start;margin-top:6px}
+.nav-bloc{min-width:0;break-inside:avoid}
 body.sb-open .sidebar{transform:translateX(0)}
 .sidebar::-webkit-scrollbar{width:0}
 .logo{padding:6px 8px;margin-bottom:18px;border-radius:8px;cursor:pointer;transition:background .15s,color .15s}
@@ -80,9 +88,9 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 /* Le tiroir reprend la lecture verticale du menu : chaque domaine est une
    colonne, tenue par un filet, et l'écran courant marque ce filet d'un trait
    plein. On suit la colonne des yeux au lieu de lire une liste plate. */
-.nav-groupe{font-size:12px;font-weight:800;letter-spacing:.2px;color:var(--text);padding:18px 12px 8px;display:flex;align-items:center;gap:8px}
+.nav-groupe{font-size:13px;font-weight:800;letter-spacing:.2px;color:var(--text);padding:14px 4px 8px;display:flex;align-items:center;gap:8px}
 .nav-groupe::before{content:'';width:3px;height:14px;border-radius:2px;background:var(--accent);flex-shrink:0}
-.nav-domaine{display:flex;flex-direction:column;margin:0 0 4px 17px;padding-left:12px;border-left:1px solid var(--border)}
+.nav-domaine{display:flex;flex-direction:column;margin:0 0 10px 9px;padding-left:12px;border-left:1px solid var(--border)}
 .nav-btn{position:relative;display:flex;align-items:center;gap:9px;width:100%;text-align:left;padding:7px 11px;border-radius:0 8px 8px 0;border:none;background:transparent;color:var(--text2);font-size:12.5px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .15s,color .15s,padding-left .12s;margin-bottom:1px}
 .nav-btn:hover{background:var(--accent-bg);color:var(--accent);padding-left:14px}
 .nav-btn.active{background:var(--accent-bg);color:var(--accent);font-weight:600}
@@ -93,17 +101,27 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 .back-mysifa{border:none!important;background:transparent!important;font-weight:400!important;color:var(--text2)!important;padding:8px 10px!important}
 .back-mysifa:hover{color:var(--text)!important;background:transparent!important}
 .back-mysifa .wm{font-weight:800;color:var(--text)}.back-mysifa .wm span{color:var(--accent)}
-.sidebar-bottom{margin-top:auto;display:flex;flex-direction:column;gap:6px;padding-top:14px;padding-bottom:8px}
+/* Pied identique a celui de MyStock et MyProd : meme ordre, memes classes,
+   meme chip utilisateur partage (mysifa_user_chip.js). Un pied qui differe
+   d'une app a l'autre oblige a rechercher la deconnexion a chaque fois. */
+.sidebar-bottom{margin-top:auto;margin-left:-20px;margin-right:-20px;padding:12px 16px;border-top:1px solid var(--border);background:var(--card);display:flex;flex-direction:column;gap:6px;flex-shrink:0;position:sticky;bottom:0}
 .user-chip{padding:10px 12px;border-radius:8px;background:var(--accent-bg);cursor:pointer}
-.user-chip .uc-name{font-size:12px;font-weight:600;color:var(--text)}
-.user-chip .uc-role{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
-.theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg);color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:background .15s,color .15s}
-.theme-btn:hover{background:var(--card);color:var(--text)}
-.logout-btn:hover{background:var(--danger);border-color:var(--danger);color:#fff}
-.version{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;color:var(--muted);text-align:center;padding-top:4px}
+.user-chip:hover{background:rgba(34,211,238,.18)}
+.user-chip .uc-top{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.user-chip .uc-avatar{width:36px;height:36px;min-width:36px;border-radius:50%;object-fit:cover;border:1px solid var(--border);flex-shrink:0;display:block}
+.user-chip .uc-info{flex:1;min-width:0}
+.user-chip .uc-name,.uc-name{font-size:12px;font-weight:600;color:var(--text)}
+.user-chip .uc-role,.uc-role{font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px}
+.user-chip .uc-profil{font-size:10px;color:var(--accent);margin-top:3px;display:flex;align-items:center;gap:4px}
+.support-btn,.theme-btn,.logout-btn{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;width:100%;transition:background .15s,color .15s,border-color .15s}
+.support-btn:hover,.theme-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.support-ico{display:inline-flex;align-items:center}
+.logout-btn{border:none}
+.logout-btn:hover{color:var(--danger);background:rgba(248,113,113,.1)}
+.version{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;color:var(--muted);padding:4px 12px}
 
-.main{flex:1;min-width:0;display:flex;flex-direction:column}
-.page-head{padding:18px 22px 12px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column}
+.page-head{flex-shrink:0;padding:18px 22px 12px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;background:var(--bg)}
 .btn-menu{flex-shrink:0;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--card);color:var(--text2);border-radius:10px;padding:9px 13px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
 .btn-menu:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
 @media (max-width:900px){.btn-menu{display:none}}
@@ -138,12 +156,13 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 
 
 /* ── Écran : rail + grille ── */
-.ecran{display:flex;flex:1;min-height:0}
-.rail{width:236px;flex-shrink:0;border-right:1px solid var(--border);padding:16px 14px;overflow-y:auto;background:var(--card)}
-.rail-titre{font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
+.ecran{display:flex;flex:1;min-height:0;overflow:hidden}
+.rail{width:236px;flex-shrink:0;border-right:1px solid var(--border);padding:16px 14px;overflow-y:auto;background:var(--card);height:100%}
+.rail-titre{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--text);margin:0 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
 .champ{margin-bottom:12px}
-.champ label{display:block;font-size:10.5px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:5px}
+.champ label{display:block;font-size:11px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;color:var(--text2);margin-bottom:5px}
 .champ input,.champ select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;transition:border-color .15s}
+.champ input::placeholder{color:var(--muted);opacity:.75}
 .champ input:focus,.champ select:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
 .btn{border-radius:10px;padding:9px 14px;font-weight:700;font-size:12px;font-family:inherit;cursor:pointer;border:1px solid var(--border);background:var(--bg);color:var(--text2);transition:filter .15s,background .15s,color .15s}
 .btn:hover{background:var(--card);color:var(--text)}
@@ -151,7 +170,7 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 .btn-accent:hover{filter:brightness(1.05)}
 .rail-info{font-size:11px;color:var(--muted);line-height:1.6;border-top:1px solid var(--border);margin-top:14px;padding-top:12px}
 
-.grille-zone{flex:1;min-width:0;display:flex;flex-direction:column}
+.grille-zone{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column}
 .grille-scroll{flex:1;overflow:auto;cursor:grab}
 .grille-scroll.attrape{cursor:grabbing;user-select:none}
 table.grille{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
@@ -227,6 +246,7 @@ body.sb-open .sidebar-overlay{display:block}
 <body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/support_widget.js"></script>
 
 <div class="sidebar-overlay" id="sb-ov" onclick="fermerSidebar()"></div>
 
@@ -254,10 +274,14 @@ body.sb-open .sidebar-overlay{display:block}
       <button type="button" class="nav-btn back-mysifa" onclick="location.href='/'">
         ← Retour <span class="wm">My<span>Sifa</span></span>
       </button>
-      <div class="user-chip" onclick="location.href='/profil'" title="Mon profil">
+      <div class="user-chip" id="uc" onclick="location.href='/profil'" title="Modifier mon profil">
         <div class="uc-name" id="uc-name">—</div>
         <div class="uc-role" id="uc-role">—</div>
       </div>
+      <button type="button" class="support-btn" id="btn-support">
+        <span class="support-ico" id="support-ico"></span>
+        Contacter le support
+      </button>
       <button type="button" class="theme-btn" id="btn-theme">
         <span class="theme-ico" id="theme-ico"></span>
         <span class="theme-label" id="theme-label">Mode clair</span>
@@ -266,7 +290,7 @@ body.sb-open .sidebar-overlay{display:block}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         Déconnexion
       </button>
-      <div class="version">ERP · __V_LABEL__</div>
+      <div class="version">MyERP · __V_LABEL__</div>
     </div>
   </aside>
 
@@ -571,17 +595,17 @@ function iconeEcran(cle){
 function renderNav(){
   const hote=document.getElementById('nav-ecrans');
   if(!S.meta||!S.meta.present){hote.innerHTML='';return;}
-  let h='';
+  let h='<div class="nav-colonnes">';
   (S.meta.domaines||[]).forEach(d=>{
     const ecrans=(S.meta.ecrans||[]).filter(e=>e.domaine===d.cle);
     if(!ecrans.length)return;
-    h+='<div class="nav-groupe">'+esc(d.label)+'</div><div class="nav-domaine">';
+    h+='<div class="nav-bloc"><div class="nav-groupe">'+esc(d.label)+'</div><div class="nav-domaine">';
     ecrans.forEach(e=>{
       h+='<button type="button" class="nav-btn'+(S.ecran===e.cle?' active':'')+'" data-ecran="'+esc(e.cle)+'">'+esc(e.label)+'</button>';
     });
-    h+='</div>';
+    h+='</div></div>';
   });
-  hote.innerHTML=h;
+  hote.innerHTML=h+'</div>';
   hote.querySelectorAll('[data-ecran]').forEach(b=>{
     b.addEventListener('click',()=>{location.hash='#/'+b.getAttribute('data-ecran');});
   });
@@ -668,7 +692,9 @@ function ouvrirEcran(cle){
       }else if(f.type==='date_min'||f.type==='date_max'){
         rail+='<div class="champ">'+lab+'<input type="date" id="'+id+'" data-filtre="'+esc(f.nom)+'" value="'+esc(val)+'"></div>';
       }else{
-        rail+='<div class="champ">'+lab+'<input type="text" id="'+id+'" data-filtre="'+esc(f.nom)+'" value="'+esc(val)+'" autocomplete="off"></div>';
+        const ph=f.exemple?('ex. '+f.exemple):(f.type==='contient'?'Contient…':'Valeur exacte');
+        rail+='<div class="champ">'+lab+'<input type="text" id="'+id+'" data-filtre="'+esc(f.nom)+'" '+
+              'value="'+esc(val)+'" placeholder="'+esc(ph)+'" autocomplete="off"></div>';
       }
     });
   }
@@ -931,10 +957,27 @@ async function boot(){
   brancher('hd-retour',()=>{location.href='/';});
   try{
     const me=await api('/api/me');
-    const n=document.getElementById('uc-name'),ro=document.getElementById('uc-role');
-    if(n)n.textContent=me.nom||me.email||'—';
-    if(ro)ro.textContent=me.role||'—';
+    const chip=document.getElementById('uc');
+    // Le meme composant que MyStock et MyProd : avatar, nom, role, « Mon profil ».
+    if(chip&&window.MySifaUserChip&&MySifaUserChip.fill){
+      MySifaUserChip.fill(chip,me,{});
+    }else{
+      const n=document.getElementById('uc-name'),ro=document.getElementById('uc-role');
+      if(n)n.textContent=me.nom||me.email||'—';
+      if(ro)ro.textContent=me.role||'—';
+    }
   }catch(e){}
+
+  const bs=document.getElementById('btn-support');
+  if(bs){
+    const ico=document.getElementById('support-ico');
+    if(ico&&window.MySifaSupport&&MySifaSupport.iconSvg)ico.innerHTML=MySifaSupport.iconSvg();
+    if(window.MySifaSupport&&MySifaSupport.open){
+      bs.addEventListener('click',()=>MySifaSupport.open());
+    }else{
+      bs.style.display='none';   // pas de widget chargé : pas de bouton mort
+    }
+  }
   try{ S.meta=await api('/api/erp/meta'); }
   catch(e){
     document.getElementById('corps').innerHTML='<div class="vide-msg">'+esc(e.message)+'</div>';
