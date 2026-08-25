@@ -52,13 +52,43 @@ ENUMS = {
     },
 }
 
+# L'ordre et les noms sont ceux de la barre de menus de RVGI — Fichiers,
+# Ventes, Stocks, Production, Achats, Comptabilités. Quelqu'un qui passe d'un
+# écran à l'autre toute la journée n'a pas à réapprendre où sont les choses.
 DOMAINES = [
+    {"cle": "fichiers", "label": "Fichiers"},
     {"cle": "ventes", "label": "Ventes"},
-    {"cle": "achats", "label": "Achats"},
     {"cle": "stocks", "label": "Stocks"},
-    {"cle": "referentiels", "label": "Référentiels"},
     {"cle": "production", "label": "Production"},
+    {"cle": "achats", "label": "Achats"},
+    {"cle": "comptabilites", "label": "Comptabilités"},
 ]
+
+# Ordre d'affichage à l'intérieur d'un domaine : celui du flux de RVGI, pas
+# celui du catalogue. Un écran absent d'ici passe à la fin de son domaine.
+ORDRE_ECRANS = [
+    # Fichiers
+    "articles", "clients", "fournisseurs", "outils", "machines",
+    "prix_vente", "prix_achat", "prix_client",
+    # Ventes — le flux : devis, marchés, commandes, livraisons, factures
+    "devis", "marches", "commandes", "livraisons", "factures",
+    # Stocks
+    "stock_pf", "mouvements_pf", "stock_matiere", "mouvements_matiere",
+    # Production — ordonnancement, fabrication, déclarations, matière, colisage
+    "dossiers", "fiches_fabrication", "declarations", "sorties_matiere", "colisage",
+    # Achats — appel d'offres, commande, réception, facture
+    "appels_offres", "commandes_fournisseur", "receptions", "factures_fournisseur",
+    # Comptabilités
+    "echeances",
+]
+
+
+def rang(cle):
+    """Position d'un écran dans l'ordre d'affichage."""
+    try:
+        return ORDRE_ECRANS.index(cle)
+    except ValueError:
+        return len(ORDRE_ECRANS)
 
 # Libellés des colonnes RVGI qui reviennent partout. Servent au panneau de
 # détail, y compris pour les champs qu'aucun écran ne montre en liste.
@@ -287,7 +317,7 @@ ECRANS = [
     {
         "cle": "echeances",
         "label": "Échéances clients",
-        "domaine": "ventes",
+        "domaine": "comptabilites",
         "resume": "Échéancier des factures de vente, soldé ou non.",
         "table": "ecc_ech", "alias": "l",
         "cle_ligne": "l.id",
@@ -619,7 +649,7 @@ ECRANS = [
     {
         "cle": "articles",
         "label": "Articles",
-        "domaine": "referentiels",
+        "domaine": "fichiers",
         "resume": "Le référentiel produits finis : libellés, formats, classement.",
         "table": "fic_art", "alias": "a",
         "cle_ligne": "a.id",
@@ -653,7 +683,7 @@ ECRANS = [
     {
         "cle": "clients",
         "label": "Clients",
-        "domaine": "referentiels",
+        "domaine": "fichiers",
         "resume": "Fiches clients : identité, groupe, conditions.",
         "table": "fic_clt", "alias": "c",
         "cle_ligne": "c.id",
@@ -685,7 +715,7 @@ ECRANS = [
     {
         "cle": "fournisseurs",
         "label": "Fournisseurs",
-        "domaine": "referentiels",
+        "domaine": "fichiers",
         "resume": "Fiches fournisseurs : identité, groupe, conditions.",
         "table": "fic_fou", "alias": "f",
         "cle_ligne": "f.id",
@@ -716,7 +746,7 @@ ECRANS = [
     {
         "cle": "outils",
         "label": "Outils de découpe",
-        "domaine": "referentiels",
+        "domaine": "fichiers",
         "resume": "Outils physiques. `nbt` est le nombre de poses qui fait foi.",
         "table": "out_dec", "alias": "o",
         "cle_ligne": "o.id",
@@ -748,7 +778,7 @@ ECRANS = [
     {
         "cle": "machines",
         "label": "Machines",
-        "domaine": "referentiels",
+        "domaine": "fichiers",
         "resume": "Parc machines et capacités déclarées dans l'ERP.",
         "table": "mac_pro", "alias": "m",
         "cle_ligne": "m.id",
@@ -773,7 +803,7 @@ ECRANS = [
     {
         "cle": "prix_vente",
         "label": "Prix de vente",
-        "domaine": "referentiels",
+        "domaine": "fichiers",
         "resume": "Paliers de prix de vente par article.",
         "table": "fic_artv", "alias": "p",
         "cle_ligne": "p.id",
@@ -798,7 +828,7 @@ ECRANS = [
     {
         "cle": "prix_achat",
         "label": "Prix d'achat",
-        "domaine": "referentiels",
+        "domaine": "fichiers",
         "resume": "Prix d'achat par article et par fournisseur.",
         "table": "fic_arta", "alias": "p",
         "cle_ligne": "p.id",
@@ -825,7 +855,7 @@ ECRANS = [
     {
         "cle": "prix_client",
         "label": "Prix négociés client",
-        "domaine": "referentiels",
+        "domaine": "fichiers",
         "resume": "Prix négociés par client, avec la référence de son côté.",
         "table": "fic_artc", "alias": "p",
         "cle_ligne": "p.id",

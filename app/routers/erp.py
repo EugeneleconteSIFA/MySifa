@@ -104,6 +104,9 @@ def erp_meta(request: Request):
             ],
         })
 
+    # Les écrans sortent dans l'ordre d'affichage, pas dans celui du catalogue.
+    ecrans.sort(key=lambda e: catalogue.rang(e["cle"]))
+
     return {
         "present": True,
         "importe_le": infos["importe_le"],

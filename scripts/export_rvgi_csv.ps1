@@ -207,11 +207,16 @@ if (-not $Uid) {
     exit 1
 }
 
-$conn = New-Object -ComObject ADODB.Connection
-$conn.ConnectionTimeout = $Timeout
-$conn.CommandTimeout    = $Timeout
+function Ouvrir-Connexion {
+    $c = New-Object -ComObject ADODB.Connection
+    $c.ConnectionTimeout = $Timeout
+    $c.CommandTimeout    = $Timeout
+    $c.Open($chaine)
+    return $c
+}
+
 try {
-    $conn.Open($chaine)
+    $conn = Ouvrir-Connexion
 } catch {
     Write-Host ''
     Write-Host "Connexion impossible : $($_.Exception.Message)" -ForegroundColor Red
@@ -227,7 +232,8 @@ Write-Host ''
 $manifeste = New-Object System.Collections.ArrayList
 $totalLignes = 0
 
-foreach ($table in $voulues) {
+function Exporter-Table {
+    param([string]$table)
 
     Write-Host ("{0,-16}" -f $table) -NoNewline
 
@@ -236,7 +242,7 @@ foreach ($table in $voulues) {
     try {
         $rsm = New-Object -ComObject ADODB.Recordset
         $rsm.MaxRecords = 1
-        $rsm.Open(("SELECT * FROM {0}" -f (Get-NomCite $table)), $conn, 0, 1, 1)
+        $rsm.Open(("SELECT * FROM {0}" -f (Get-NomCite $table)), $script:conn, 0, 1, 1)
         for ($i = 0; $i -lt $rsm.Fields.Count; $i++) {
             [void]$cols.Add([string]$rsm.Fields.Item($i).Name)
         }
@@ -244,13 +250,13 @@ foreach ($table in $voulues) {
     } catch {
         Write-Host (" ECHEC lecture du schema : {0}" -f $_.Exception.Message) -ForegroundColor Red
         [void]$manifeste.Add([pscustomobject]@{ table = $table; erreur = $_.Exception.Message })
-        continue
+        return $false
     }
 
     if ($cols.Count -eq 0) {
         Write-Host ' vide (aucune colonne physique).' -ForegroundColor DarkGray
         [void]$manifeste.Add([pscustomobject]@{ table = $table; lignes = 0; colonnes = @(); note = 'aucune colonne physique' })
-        continue
+        return $false
     }
 
     $aCorbeille = $false
@@ -276,7 +282,7 @@ foreach ($table in $voulues) {
         # a l'ecriture, ligne a ligne, et le bloc de lecture est reduit pour ne
         # pas ramener 2 000 lignes quand on en demande 500.
         if ($Max -gt 0) { $rs.MaxRecords = $Max }
-        $rs.Open($sql, $conn, 0, 1, 1)   # adOpenForwardOnly, adLockReadOnly, adCmdText
+        $rs.Open($sql, $script:conn, 0, 1, 1)   # adOpenForwardOnly, adLockReadOnly, adCmdText
 
         $enc = New-Object System.Text.UTF8Encoding($true)
         $sw  = New-Object System.IO.StreamWriter($chemin, $false, $enc)
@@ -305,7 +311,7 @@ foreach ($table in $voulues) {
     } catch {
         Write-Host (" ECHEC : {0}" -f $_.Exception.Message) -ForegroundColor Red
         [void]$manifeste.Add([pscustomobject]@{ table = $table; erreur = $_.Exception.Message })
-        continue
+        return $false
     }
 
     $totalLignes += $nb
@@ -326,9 +332,57 @@ foreach ($table in $voulues) {
         colonnes_exclues = @($retirees)
         tronque          = ($Max -gt 0 -and $nb -ge $Max)
     })
+
+    return $true
 }
 
-$conn.Close()
+# Le pilote HFSQL peut rendre une erreur interne (72326) qui tue la connexion :
+# toutes les tables suivantes echouent alors sur "La connexion <sifa_cs> est
+# inconnue" (72901), et un export de 3 tables sur 61 passe pour un succes.
+# On verifie donc l'etat avant chaque table, on rouvre si besoin, et on repasse
+# une fois sur celles qui sont tombees.
+function Assurer-Connexion {
+    try { if ($script:conn -and $script:conn.State -eq 1) { return $true } } catch { }
+    Write-Host '  connexion perdue, reouverture...' -ForegroundColor Yellow
+    try { if ($script:conn) { $script:conn.Close() } } catch { }
+    try {
+        $script:conn = Ouvrir-Connexion
+        return $true
+    } catch {
+        Write-Host ("  reouverture impossible : {0}" -f (Get-MessageCourt $_.Exception.Message)) -ForegroundColor Red
+        return $false
+    }
+}
+
+$echecs = New-Object System.Collections.ArrayList
+foreach ($table in $voulues) {
+    if (-not (Assurer-Connexion)) { break }
+    if (-not (Exporter-Table $table)) { [void]$echecs.Add($table) }
+}
+
+if ($echecs.Count -gt 0) {
+    Write-Host ''
+    Write-Host ("Seconde passe sur {0} table(s) en echec." -f $echecs.Count) -ForegroundColor Yellow
+    $restants = @($echecs)
+    $echecs.Clear()
+    foreach ($table in $restants) {
+        # Connexion neuve : c'est elle qui a lache au premier passage.
+        try { if ($conn) { $conn.Close() } } catch { }
+        $conn = $null
+        if (-not (Assurer-Connexion)) { break }
+        # On retire la trace de l'echec precedent avant de reessayer.
+        foreach ($vieux in @($manifeste | Where-Object { $_.table -eq $table })) {
+            [void]$manifeste.Remove($vieux)
+        }
+        if (-not (Exporter-Table $table)) { [void]$echecs.Add($table) }
+    }
+}
+
+if ($echecs.Count -gt 0) {
+    Write-Host ''
+    Write-Host ("{0} table(s) restent en echec : {1}" -f $echecs.Count, ($echecs -join ', ')) -ForegroundColor Red
+}
+try { if ($conn) { $conn.Close() } } catch { }
 
 # -- Manifeste --------------------------------------------------------
 $meta = [pscustomobject]@{
@@ -351,3 +405,7 @@ Write-Host ("Manifeste : {0}" -f $cheminManifeste) -ForegroundColor DarkGray
 Write-Host ''
 Write-Host 'Ces CSV contiennent des donnees reelles (clients, adresses, prix).' -ForegroundColor Yellow
 Write-Host 'Le dossier data\rvgi_export\ est ignore par git - le laisser la.' -ForegroundColor Yellow
+
+# Un export partiel ne doit pas passer pour un succes aupres de l'appelant.
+if ($echecs.Count -gt 0) { exit 2 }
+exit 0

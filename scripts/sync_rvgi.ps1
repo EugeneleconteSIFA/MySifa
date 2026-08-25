@@ -185,6 +185,9 @@ try {
     $codeExport = $LASTEXITCODE
     $ErrorActionPreference = $avant
     Ecrire ("Export termine, code {0}" -f $codeExport)
+    # 2 = l'export a rendu la main mais des tables manquent. On refuse d'envoyer :
+    # un miroir ampute remplacerait des tables completes par du vide, sans bruit.
+    if ($codeExport -eq 2) { throw 'Export partiel : des tables sont en echec, rien ne sera envoye.' }
     if ($codeExport -ne 0) { throw ("Export en echec, code {0}" -f $codeExport) }
 
     $lignes = @(Get-ChildItem -Path $dossierExport -Filter *.csv -ErrorAction SilentlyContinue)
