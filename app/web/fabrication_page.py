@@ -303,9 +303,29 @@ body.light table.fab-table tr.fab-row-last td{
 }
 /* Left: dossier info */
 .fab-footer-info{
-  display:flex;flex-direction:column;gap:4px;overflow:hidden;
+  display:flex;flex-direction:column;gap:4px;
+  overflow-x:hidden;overflow-y:auto;
   min-width:0;
 }
+/* Le footer est une bande de hauteur fixe (--footer-h) en overflow:hidden :
+   tout ce qui depasse disparait sans bruit. La reference produit et l'alerte
+   « deja produit » etaient empilees a la suite de la consigne dossier et
+   passaient sous le bord -- justement le signal qui doit arreter le conducteur
+   avant qu'il lance la machine. Entete fixe, consigne compressible, actions
+   sur une seule ligne : tout tient dans la bande. */
+.fab-dossier-head{flex:0 0 auto;min-width:0}
+.fab-dossier-actions{
+  flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;
+  gap:6px;padding-top:4px;
+}
+/* Version compacte du signalement memoire produit : dans 190 px de footer,
+   le bouton pleine taille de la fiche produit coute trop de hauteur. */
+.fab-dossier-actions .pmem-hist-btn{padding:5px 10px;gap:6px}
+.fab-dossier-actions .pmem-hist-titre{font-size:11px}
+.fab-dossier-actions .pmem-hist-detail{font-size:10px}
+.fab-dossier-actions .pmem-hist-pastille{min-width:18px;height:18px;font-size:10px}
+.fab-dossier-actions .pmem-hist-tag{font-size:9px}
+.fab-dossier-actions .fab-produit-btn{margin-top:0}
 .fab-dossier-ref{
   font-size:13px;font-weight:800;color:var(--accent);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
@@ -320,7 +340,9 @@ body.light table.fab-table tr.fab-row-last td{
   display:flex;align-items:center;gap:4px;white-space:nowrap;
 }
 .fab-meta-label{font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text2)}
-.fab-no-dossier{font-size:12px;color:var(--muted);font-style:italic}
+/* Seul dans la colonne : marge auto = reste centre verticalement, alors que
+   la colonne, elle, aligne son contenu en haut. */
+.fab-no-dossier{font-size:12px;color:var(--muted);font-style:italic;margin:auto 0}
 /* Reference produit : c'est l'identite du PRODUIT, pas celle de la commande.
    Toujours affichee, et toujours cliquable — c'est la porte d'entree
    permanente vers la memoire produit, independante du bouton Historique
@@ -340,10 +362,11 @@ body.light table.fab-table tr.fab-row-last td{
    TROP HAUTE - Cartons du... » ne dit rien de ce qu'il faut faire. Elle
    s'affiche desormais sur trois lignes, et se deplie entierement au clic. */
 .fab-dossier-consigne{
+  flex:0 1 auto;min-height:0;
   font-size:11px;line-height:1.45;color:var(--text2);margin-top:5px;max-width:340px;
   background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--warn,#fbbf24);
   border-radius:8px;padding:6px 9px;cursor:pointer;
-  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
 }
 .fab-dossier-consigne.is-open{display:block;-webkit-line-clamp:none;max-height:180px;overflow-y:auto}
 .fab-dossier-consigne-lbl{
@@ -691,7 +714,7 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 
 /* ── Centrage sections footer ──────────────────────────────── */
 .fab-footer{align-items:center}
-.fab-footer-info{justify-content:center}
+.fab-footer-info{justify-content:flex-start}
 .fab-footer-actions{align-items:center;justify-content:center;gap:6px}
 .fab-footer-tools{align-items:stretch;justify-content:center}
 /* ── Onglet OF (import PDF) ─────────────────────────────────── */
@@ -4971,11 +4994,10 @@ function renderHistoriqueProduitBtn(){
   if(!ap || !ap.disponible) return null;
   if(!window.MySifaProduitMemoire) return null;
   const ref = (S.dossier && (S.dossier.reference || S.dossier.no_dossier)) || ap.no_dossier;
-  const btn = window.MySifaProduitMemoire.boutonHistorique(ap, ref);
-  if(!btn) return null;
-  const wrap = h('div',{style:{marginTop:'8px',alignSelf:'flex-start'}});
-  wrap.appendChild(btn);
-  return wrap;
+  // Rendu nu : il prend place dans .fab-dossier-actions, aux cotes de la
+  // reference produit et des boutons FSC. Un wrapper a lui seul le poussait
+  // sur sa propre ligne, hors de la bande visible du footer.
+  return window.MySifaProduitMemoire.boutonHistorique(ap, ref) || null;
 }
 
 /* ── Footer ──────────────────────────────────────────────────── */
@@ -5018,24 +5040,27 @@ function renderFooter(){
                                || (fscSg === '' && !fscSyn));
     const fscTypeLbl = fscOn ? fscTypeRequisLabel(d.fsc_type_requis) : '';
 
+    const fscDossier = (d.fsc_requis === 1 || d.fsc_requis === true);
     infoSection = h('div',{className:'fab-footer-info'},
-      h('div',{className:'fab-dossier-ref-row'},
-        h('div',{className:'fab-dossier-ref'+(fictifDos?' fab-dossier-fictif':'')},
-          fictifDos ? ('OF fictif '+fictifOfDisplay(d.reference||d.numero_of||'')) : (d.reference||'—')),
-        fscOn ? h('span',{
-          className:'fab-fsc-badge'+(fscEcart?' is-ecart':''),
-          title: fscEcart
-            ? 'Certification FSC requise — traçabilité matière incomplète ou en écart'
-            : ('Certification FSC requise'+(fscTypeLbl?' — '+fscTypeLbl:'')),
-        }, 'FSC', fscEcart ? ' ⚠' : '') : null
-      ),
-      h('div',{className:'fab-dossier-client'},
-        fictifDos ? 'Dossier hors planning' : (d.client||'Client non renseigné')),
-      h('div',{className:'fab-dossier-meta'},
-        ...metas.map(m=>h('span',{className:'fab-meta-item'},
-          h('span',{className:'fab-meta-label'},m.label),
-          ' ',m.val
-        ))
+      h('div',{className:'fab-dossier-head'},
+        h('div',{className:'fab-dossier-ref-row'},
+          h('div',{className:'fab-dossier-ref'+(fictifDos?' fab-dossier-fictif':'')},
+            fictifDos ? ('OF fictif '+fictifOfDisplay(d.reference||d.numero_of||'')) : (d.reference||'—')),
+          fscOn ? h('span',{
+            className:'fab-fsc-badge'+(fscEcart?' is-ecart':''),
+            title: fscEcart
+              ? 'Certification FSC requise — traçabilité matière incomplète ou en écart'
+              : ('Certification FSC requise'+(fscTypeLbl?' — '+fscTypeLbl:'')),
+          }, 'FSC', fscEcart ? ' ⚠' : '') : null
+        ),
+        h('div',{className:'fab-dossier-client'},
+          fictifDos ? 'Dossier hors planning' : (d.client||'Client non renseigné')),
+        h('div',{className:'fab-dossier-meta'},
+          ...metas.map(m=>h('span',{className:'fab-meta-item'},
+            h('span',{className:'fab-meta-label'},m.label),
+            ' ',m.val
+          ))
+        )
       ),
       d.commentaire ? h('div',{
         className:'fab-dossier-consigne',
@@ -5045,23 +5070,23 @@ function renderFooter(){
         h('span',{className:'fab-dossier-consigne-lbl'},'Consigne dossier'),
         d.commentaire
       ) : null,
-      renderRefProduitBtn(),
-      renderHistoriqueProduitBtn(),
-      (d.fsc_requis === 1 || d.fsc_requis === true) ? h('div',{
-        style:{display:'flex',gap:'6px',flexWrap:'wrap',marginTop:'8px',alignSelf:'flex-start'},
-      },
-        h('button',{
+      // Une seule ligne d'actions : reference produit, signalement « deja
+      // produit », et les deux boutons FSC quand le dossier est certifie.
+      h('div',{className:'fab-dossier-actions'},
+        renderRefProduitBtn(),
+        renderHistoriqueProduitBtn(),
+        fscDossier ? h('button',{
           className:'fab-btn fab-btn-ghost fab-btn-sm',
-          style:{fontSize:'12px'},
+          style:{fontSize:'11px'},
           onClick:()=>openTracabiliteModal(d.reference || d.numero_of || ''),
-        },'Rapport traçabilité FSC'),
-        h('button',{
+        },'Rapport traçabilité FSC') : null,
+        fscDossier ? h('button',{
           className:'fab-btn fab-btn-ghost fab-btn-sm',
-          style:{fontSize:'12px'},
+          style:{fontSize:'11px'},
           title:'Imprimer la consigne FSC à agrafer au dossier papier',
           onClick:imprimerAvertissementFsc,
-        }, svgIcon('printer',12),' Avertissement FSC')
-      ) : null
+        }, svgIcon('printer',12),' Avertissement FSC') : null
+      )
     );
   } else {
     infoSection = h('div',{className:'fab-footer-info'},

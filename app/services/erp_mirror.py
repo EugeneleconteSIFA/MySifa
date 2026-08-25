@@ -308,12 +308,62 @@ def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
     }
 
 
-def detail(ec, ident):
+def _libelles_et_types(ec):
+    """Libellé et type d'affichage de chaque colonne courte de l'écran."""
+    libelles, types = {}, {}
+    for c in ec["colonnes"]:
+        refs = c["parts"] if c.get("parts") else [c["c"]]
+        for ref in refs:
+            court = ref.split(".")[-1]
+            libelles.setdefault(court, c.get("label") or court)
+            types.setdefault(court, c.get("type") if not c.get("parts") else "texte")
+    for court, lib in (ec.get("labels_detail") or {}).items():
+        libelles[court] = lib
+    return libelles, types
+
+
+def _composites(ec):
+    """Les colonnes que l'écran assemble : `code1` + `code2` → « 986/0005 ».
+
+    Rendre « Code 1 : 986 » puis « Code 2 : 0005 » sur deux lignes oblige le
+    lecteur à recomposer de tête une référence que la grille, elle, affiche
+    déjà assemblée. On applique donc au détail la composition déjà déclarée
+    pour la grille — une seule source de vérité.
+
+    Renvoie {première part → définition} et l'ensemble des parts absorbées.
+    """
+    par_tete, absorbees = {}, set()
+    for c in ec["colonnes"]:
+        if not c.get("parts"):
+            continue
+        parts = [p.split(".")[-1] for p in c["parts"]]
+        if not parts:
+            continue
+        par_tete[parts[0]] = {
+            "nom": c["nom"], "label": c.get("label") or c["nom"],
+            "type": c.get("type") or "ref", "parts": parts,
+            "joint": c.get("joint") or "/",
+        }
+        absorbees.update(parts)
+    return par_tete, absorbees
+
+
+def _valeur_composite(defn, brut):
+    bouts = [str(brut.get(p) or "").strip() for p in defn["parts"]]
+    bouts = [b for b in bouts if b]
+    return defn["joint"].join(bouts) if bouts else None
+
+
+def detail(ec, ident, exclure=None):
     """Toutes les colonnes de la ligne, groupées comme l'écran le déclare.
 
     Le reste — ce que le catalogue ne nomme pas — est renvoyé dans un groupe
     « Autres champs ». On ne masque rien : un écran ERP qui cache une colonne
     oblige à rouvrir RVGI, et le bouton n'a plus d'intérêt.
+
+    `exclure` : colonnes déjà montrées ailleurs — typiquement celles de l'entête
+    d'une pièce, affichées dans leur propre section. Les répéter dans le détail
+    de la ligne ferait croire à deux informations là où il n'y en a qu'une.
     """
     _ref(ec["cle_ligne"])
     depart = _from(ec)
@@ -324,48 +374,141 @@ def detail(ec, ident):
             return None
         brut = dict(row)
 
-    libelles = {}
-    types = {}
-    for c in ec["colonnes"]:
-        refs = c["parts"] if c.get("parts") else [c["c"]]
-        for ref in refs:
-            court = ref.split(".")[-1]
-            libelles.setdefault(court, c.get("label") or court)
-            types.setdefault(court, c.get("type") if not c.get("parts") else "texte")
-    for court, lib in (ec.get("labels_detail") or {}).items():
-        libelles[court] = lib
+    exclure = set(exclure or ())
+    libelles, types = _libelles_et_types(ec)
+    composites, absorbees = _composites(ec)
+
+    def champ(court):
+        """Un champ prêt à afficher — ou le composite qu'il ouvre."""
+        if court in composites:
+            defn = composites[court]
+            return {"nom": defn["nom"], "label": defn["label"], "type": defn["type"],
+                    "valeur": _valeur_composite(defn, brut)}
+        if court in absorbees:
+            return None          # part déjà rendue par son composite
+        return {"nom": court, "label": libelles.get(court, court),
+                "type": types.get(court, "texte"),
+                "valeur": nettoyer(brut[court], types.get(court))}
 
     groupes = []
     vus = set()
     for g in ec.get("detail", []):
         champs = []
         for court in g["champs"]:
-            if court not in brut:
+            if court not in brut or court in exclure or court in vus:
                 continue
             vus.add(court)
-            champs.append({
-                "nom": court,
-                "label": libelles.get(court, court),
-                "type": types.get(court, "texte"),
-                "valeur": nettoyer(brut[court], types.get(court)),
-            })
+            c = champ(court)
+            if c is None:
+                continue
+            if court in composites:
+                vus.update(composites[court]["parts"])
+            champs.append(c)
         if champs:
             groupes.append({"titre": g["titre"], "champs": champs})
 
     autres = []
-    for court, valeur in brut.items():
-        if court in vus or court in ("corbeille", "salm", "bloq"):
+    for court in brut:
+        if court in vus or court in exclure or court in ("corbeille", "salm", "bloq"):
             continue
-        autres.append({
-            "nom": court,
-            "label": libelles.get(court, court),
-            "type": types.get(court, "texte"),
-            "valeur": nettoyer(valeur, types.get(court)),
-        })
+        vus.add(court)
+        c = champ(court)
+        if c is None:
+            continue
+        if court in composites:
+            vus.update(composites[court]["parts"])
+        autres.append(c)
     if autres:
         groupes.append({"titre": "Autres champs", "champs": autres, "replie": True})
 
     return {"id": ident, "groupes": groupes}
+
+
+# ── La pièce derrière la ligne ───────────────────────────────────────────────
+#
+# Une commande, un marché, un BL, une facture ne sont pas des lignes : ce sont
+# des documents qui en portent plusieurs. Ouvrir une ligne sans montrer la
+# pièce oblige à retourner à la grille pour savoir ce qu'il y avait d'autre
+# dessus — exactement le geste que cet écran est censé supprimer.
+
+MAX_LIGNES_PIECE = 300
+
+
+def piece(ec, ident):
+    """L'entête de la pièce et TOUTES ses lignes, autour de la ligne ouverte.
+
+    Renvoie None pour un écran qui n'est pas un écran de lignes de document
+    (un article, un client, un mouvement de stock n'ont pas d'entête).
+    """
+    p = ec.get("piece")
+    if not p:
+        return None
+    _ref(ec["cle_ligne"])
+    _ref(p["col_ligne"])
+    _ident(p["table"])
+    _ident(p["cle"])
+
+    with get_erp_db() as conn:
+        row = conn.execute(
+            "SELECT %s AS num FROM %s WHERE %s = ?" % (p["col_ligne"], _from(ec), ec["cle_ligne"]),
+            [ident],
+        ).fetchone()
+        if row is None or row["num"] is None:
+            return None
+        numero = row["num"]
+
+        entete = conn.execute(
+            'SELECT * FROM "%s" WHERE CAST(%s AS TEXT) = ?' % (p["table"], p["cle"]),
+            [str(numero).strip()],
+        ).fetchone()
+        entete = dict(entete) if entete is not None else {}
+
+    libelles, types = _libelles_et_types(ec)
+    composites, absorbees = _composites(ec)
+
+    # Un entête RVGI porte 80 champs, dont la moitié sont des reliquats
+    # techniques. On ne masque rien — mais on met en avant ceux qu'on sait
+    # nommer, et on replie les autres. « Nommé » veut dire : le catalogue ou
+    # le dictionnaire de libellés lui donne un nom français.
+    nommes = set(libelles)
+
+    champs, vus = [], set()
+    for court, valeur in entete.items():
+        if court in vus or court in ("id", "corbeille", "salm", "bloq", "dtem"):
+            continue
+        vus.add(court)
+        if court in composites:
+            defn = composites[court]
+            vus.update(defn["parts"])
+            champs.append({"nom": defn["nom"], "label": defn["label"],
+                           "type": defn["type"], "principal": True,
+                           "valeur": _valeur_composite(defn, entete)})
+            continue
+        if court in absorbees:
+            continue
+        champs.append({"nom": court, "label": libelles.get(court, court),
+                       "type": types.get(court, "texte"),
+                       "principal": court in nommes,
+                       "valeur": nettoyer(valeur, types.get(court))})
+
+    # Les lignes de la pièce sont rendues avec les colonnes de la grille : ce
+    # que l'écran a déjà retenu comme utile, on ne le redéclare pas ailleurs.
+    lignes = lister(
+        ec, taille=MAX_LIGNES_PIECE,
+        extra=[("CAST(%s AS TEXT) = ?" % p["col_ligne"], str(numero).strip())],
+        tri=p.get("tri"),
+    )
+
+    return {
+        "numero": numero,
+        "label": p.get("label") or "La pièce",
+        "entete": champs,
+        "colonnes_entete": sorted(entete.keys()),
+        "colonnes": lignes["colonnes"],
+        "lignes": lignes["lignes"],
+        "total": lignes["total"],
+        "tronque": lignes["total"] > len(lignes["lignes"]),
+    }
 
 
 def compter(ec):

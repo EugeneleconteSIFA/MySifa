@@ -222,12 +222,31 @@ def erp_liens(cle: str, ident: str, request: Request):
 
 @router.get("/{cle}/detail/{ident}")
 def erp_detail(cle: str, ident: str, request: Request):
+    """La ligne ouverte, et la pièce qui la porte.
+
+    Sur un écran de lignes de document — commande, marché, BL, facture — on
+    renvoie d'un seul coup l'entête de la pièce et TOUTES ses lignes. Ouvrir la
+    ligne 2 d'un marché sans montrer qu'il en compte quatre oblige à retourner
+    à la grille : c'est justement le geste que cet écran doit supprimer.
+    """
     _exiger_acces(request)
     ec = _ecran(cle)
     try:
-        res = miroir.detail(ec, ident)
+        piece = miroir.piece(ec, ident)
+        # Ce que l'entête porte déjà n'est pas répété dans le détail de la
+        # ligne. Uniquement ce qui lui est PROPRE : `amje` existe des deux
+        # côtés — date d'échéance de la pièce et de la ligne — et l'écarter du
+        # détail ferait disparaître une information qui n'est pas la même.
+        exclure = set()
+        if piece:
+            cols_ligne = _colonnes_par_table().get(ec["table"], set())
+            exclure = set(piece["colonnes_entete"]) - set(cols_ligne) - {"numero"}
+        res = miroir.detail(ec, ident, exclure=exclure)
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e))
     if res is None:
         raise HTTPException(status_code=404, detail="Ligne introuvable dans le miroir.")
+    if piece:
+        piece.pop("colonnes_entete", None)
+        res["piece"] = piece
     return res
