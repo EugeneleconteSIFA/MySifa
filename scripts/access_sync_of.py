@@ -186,8 +186,16 @@ def qte_adhesif_kg(grammage, metrage, laize_mm):
 
 # ── Envoi ────────────────────────────────────────────────────────────
 
-def push_of(row) -> dict:
-    """Envoie un OF vers MySifa. Retourne la réponse JSON."""
+def push_of(row, rafraichir: bool = RAFRAICHIR_ACCESS) -> dict:
+    """Envoie un OF vers MySifa. Retourne la réponse JSON.
+
+    `rafraichir` porte `refresh_access_fields`, et la nuance n'est pas
+    cosmétique. Sans lui, le pont ne remplit QUE les colonnes vides : aucune
+    valeur existante ne bouge, donc aucune validation d'OF ne peut tomber.
+    Avec lui, une valeur qui a changé côté Access est réécrite — ce qui est
+    souhaitable en régime courant, mais fait d'un rattrapage de masse une
+    opération qui peut dévalider des OF prêts à déstocker.
+    """
     metrage  = to_float(row.metrage)
     laize    = to_float(row.laize)
     grammage = to_float(row.adhesif_grammage)
@@ -221,7 +229,7 @@ def push_of(row) -> dict:
         "nb_cartons":       to_int(row.cartons),
         "nb_tubes":         to_int(row.tubes),
         "enrich_if_exists":     ENRICHIR_EXISTANTS,
-        "refresh_access_fields": RAFRAICHIR_ACCESS,
+        "refresh_access_fields": rafraichir,
     }
     resp = requests.post(
         f"{MYSIFA_BASE_URL}/api/bridge/of",
@@ -286,6 +294,13 @@ def main():
                          "plusieurs mois avant les livraisons manquantes.")
     ap.add_argument("--dry-run", action="store_true",
                     help="N'écrit rien : dit seulement ce qu'Access contient.")
+    ap.add_argument("--combler-seulement", action="store_true",
+                    help="Ne remplit que les colonnes VIDES : aucune valeur "
+                         "existante n'est réécrite, donc aucune validation d'OF "
+                         "ne peut tomber. À préférer pour un rattrapage de masse.")
+    ap.add_argument("--limite", type=int, default=0, metavar="N",
+                    help="S'arrêter après N OF. Pour essayer sur quelques "
+                         "lignes avant de lancer le lot entier.")
     args = ap.parse_args()
 
     if not MYSIFA_API_KEY and not args.dry_run:
@@ -300,7 +315,22 @@ def main():
         essai_a_blanc(rows, args.depuis)
         return
 
-    print(f"{len(rows)} OF(s) trouvé(s) après le {args.depuis}.\n")
+    rafraichir = RAFRAICHIR_ACCESS and not args.combler_seulement
+    total_dispo = len(rows)
+    if args.limite and args.limite < total_dispo:
+        rows = rows[:args.limite]
+
+    print(f"{total_dispo} OF(s) trouvé(s) après le {args.depuis}.")
+    if len(rows) < total_dispo:
+        # Une troncature passée sous silence se lirait comme un lot complet.
+        print(f"  → limité aux {len(rows)} premiers (--limite {args.limite}) ; "
+              f"{total_dispo - len(rows)} non traité(s).")
+    print("  Mode : " + ("comblement des colonnes vides seulement — aucune "
+                         "valeur existante réécrite."
+                         if not rafraichir else
+                         "comblement ET réécriture des valeurs changées dans "
+                         "Access (des validations d'OF peuvent tomber)."))
+    print()
 
     inserted = enriched = skipped = errors = 0
     conflits = devalides = 0
@@ -313,7 +343,7 @@ def main():
         if to_float(row.adhesif_grammage) is None:
             sans_adhesif += 1
         try:
-            result = push_of(row)
+            result = push_of(row, rafraichir)
             if result.get("inserted"):
                 print(f"  [OK]       OF {numero} → importé (id MySifa : {result['id']})")
                 inserted += 1

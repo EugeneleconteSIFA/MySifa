@@ -195,7 +195,10 @@ ECRANS = [
         "recherche": ["e.rs", "l.des1", "l.numero", "l.code1", "l.code2", "l.vref", "l.nref"],
         "filtres": [
             {"nom": "client", "label": "Client", "col": "e.rs", "type": "contient"},
-            {"nom": "position", "label": "Position", "col": "l.lpos", "type": "enum", "enum": "position"},
+            # Un carnet s'ouvre sur ce qui est en cours, pas sur dix ans
+            # d'archives : le filtre est posé d'entrée, et reste effaçable.
+            {"nom": "position", "label": "Position", "col": "l.lpos", "type": "enum",
+             "enum": "position", "defaut": "0"},
             {"nom": "origine", "label": "Origine", "col": "l.orig", "type": "enum", "enum": "origine"},
             {"nom": "depuis", "label": "Expédition depuis", "col": "l.amje", "type": "date_min"},
             {"nom": "jusqua", "label": "Expédition jusqu'au", "col": "l.amje", "type": "date_max"},
@@ -373,7 +376,8 @@ ECRANS = [
         "recherche": ["e.rs", "l.des1", "l.numero", "l.code1", "l.code2", "e.vref"],
         "filtres": [
             {"nom": "fournisseur", "label": "Fournisseur", "col": "e.rs", "type": "contient"},
-            {"nom": "position", "label": "Position", "col": "l.lpos", "type": "enum", "enum": "position"},
+            {"nom": "position", "label": "Position", "col": "l.lpos", "type": "enum",
+             "enum": "position", "defaut": "0"},
             {"nom": "depuis", "label": "Depuis le", "col": "e.amjc", "type": "date_min"},
         ],
         "detail": [

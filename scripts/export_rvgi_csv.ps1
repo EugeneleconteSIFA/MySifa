@@ -26,11 +26,22 @@
     Le dossier par defaut est `data\rvgi_export\`, ignore par git : ces fichiers
     contiennent des noms de clients, des adresses et des prix reels.
 
-    Identifiants - jamais en clair dans le fichier
-    ----------------------------------------------
-        $env:HFSQL_CONN = 'provider=PCSoft.HFSQL;initial catalog=sifa_cs;data source=192.168.100.199:4949;extended properties="Language=ISO-8859-1"'
-        $env:HFSQL_UID  = 'readonly'
-        $env:HFSQL_PWD  = '...'
+    Identifiants
+    ------------
+    Trois sources, par ordre de priorite :
+
+      1. les variables d'environnement du processus ($env:HFSQL_UID...) ;
+      2. le fichier .env a la racine du projet - c'est la voie normale ;
+      3. rien : le script s'arrete en le disant.
+
+    Dans .env (fichier deja ignore par git) :
+
+        HFSQL_CONN=provider=PCSoft.HFSQL;initial catalog=sifa_cs;data source=192.168.100.199:4949;extended properties="Language=ISO-8859-1"
+        HFSQL_UID=compte_lecture
+        HFSQL_PWD=le_mot_de_passe
+
+    Le Planificateur de taches Windows n'herite pas des variables d'un
+    terminal : pour la synchro planifiee, le .env est la seule voie qui marche.
 
     Usage
     -----
@@ -52,10 +63,48 @@ $ErrorActionPreference = 'Stop'
 
 # -- Configuration ----------------------------------------------------
 $CONN_DEFAUT = 'provider=PCSoft.HFSQL;initial catalog=sifa_cs;data source=192.168.100.199:4949;extended properties="Language=ISO-8859-1"'
-$ConnStr    = if ($env:HFSQL_CONN) { $env:HFSQL_CONN } else { $CONN_DEFAUT }
-$Uid        = $env:HFSQL_UID
-$MotDePasse = $env:HFSQL_PWD
 $Timeout    = 120
+
+# Lecture du .env : une cle par ligne, `CLE=valeur`. La valeur peut contenir
+# des `=` (la chaine de connexion en est pleine) : on coupe au PREMIER seulement.
+# Les guillemets qui entourent toute la valeur sont retires ; ceux qui sont
+# dedans - `extended properties="..."` - sont gardes tels quels.
+function Read-DotEnv {
+    param([string]$Chemin)
+    $valeurs = @{}
+    if (-not (Test-Path $Chemin)) { return $valeurs }
+    foreach ($ligne in (Get-Content -LiteralPath $Chemin -Encoding UTF8)) {
+        $l = $ligne.Trim()
+        if (-not $l -or $l.StartsWith('#')) { continue }
+        $i = $l.IndexOf('=')
+        if ($i -lt 1) { continue }
+        $cle = $l.Substring(0, $i).Trim()
+        $val = $l.Substring($i + 1).Trim()
+        if ($val.Length -ge 2) {
+            if (($val.StartsWith('"') -and $val.EndsWith('"')) -or
+                ($val.StartsWith("'") -and $val.EndsWith("'"))) {
+                $val = $val.Substring(1, $val.Length - 2)
+            }
+        }
+        $valeurs[$cle] = $val
+    }
+    return $valeurs
+}
+
+$racineProjet = Split-Path -Parent $PSScriptRoot
+$dotenv = Read-DotEnv (Join-Path $racineProjet '.env')
+
+function Get-Param {
+    param([string]$Nom, [string]$Defaut = $null)
+    $duProcessus = [Environment]::GetEnvironmentVariable($Nom)
+    if ($duProcessus) { return $duProcessus }
+    if ($dotenv.ContainsKey($Nom) -and $dotenv[$Nom]) { return $dotenv[$Nom] }
+    return $Defaut
+}
+
+$ConnStr    = Get-Param 'HFSQL_CONN' $CONN_DEFAUT
+$Uid        = Get-Param 'HFSQL_UID'
+$MotDePasse = Get-Param 'HFSQL_PWD'
 
 # Jamais lues. Mots de passe salaries en clair, acces FTP clients/fournisseurs.
 $COLS_INTERDITES = @('mdp','mdpbloq','pasmail','inftpmdp','ftpmdp','inftp','ftp')
@@ -142,10 +191,20 @@ function Protege-Csv {
 
 # -- Connexion --------------------------------------------------------
 Write-Host ("Process PowerShell : {0} bits" -f $(if ([Environment]::Is64BitProcess) { 64 } else { 32 })) -ForegroundColor DarkGray
+$source = if ([Environment]::GetEnvironmentVariable('HFSQL_UID')) { 'terminal' } elseif ($dotenv.ContainsKey('HFSQL_UID')) { '.env' } else { 'aucune' }
+Write-Host ("Identifiants       : {0} (compte {1})" -f $source, $(if ($Uid) { $Uid } else { '-' })) -ForegroundColor DarkGray
 
 $chaine = $ConnStr
 if ($Uid -and ($ConnStr -notmatch '(?i)user\s*id')) {
     $chaine = "$ConnStr;User ID=$Uid;Password=$MotDePasse"
+}
+
+if (-not $Uid) {
+    Write-Host ''
+    Write-Host 'Identifiants HFSQL absents.' -ForegroundColor Red
+    Write-Host ("Ajouter HFSQL_UID et HFSQL_PWD dans {0}" -f (Join-Path $racineProjet '.env')) -ForegroundColor Yellow
+    Write-Host 'ou les definir dans le terminal ($env:HFSQL_UID = ...).' -ForegroundColor Yellow
+    exit 1
 }
 
 $conn = New-Object -ComObject ADODB.Connection

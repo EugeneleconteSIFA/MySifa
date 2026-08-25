@@ -8116,9 +8116,15 @@ function renderProdKpis(){
       const etaitReplie = S.navCollapsed.has(label);
       if(etaitReplie) S.navCollapsed.delete(label); else S.navCollapsed.add(label);
       el.classList.toggle('ngl-collapsed', !etaitReplie);
+      // On ne replie QUE des entrees de navigation. La boucle de MyStock
+      // s'arrete au prochain intitule de section ; ici il n'y en a pas apres
+      // la derniere, et elle emportait le pied de page (Retour MySifa, profil,
+      // theme, deconnexion) avec elle.
       let sib = el.nextElementSibling;
-      while(sib && !sib.classList.contains('nav-section-label')){
-        sib.style.display = etaitReplie ? '' : 'none';
+      while(sib
+            && !sib.classList.contains('nav-section-label')
+            && !sib.classList.contains('sidebar-bottom')){
+        if(sib.classList.contains('nav-btn')) sib.style.display = etaitReplie ? '' : 'none';
         sib = sib.nextElementSibling;
       }
     });
