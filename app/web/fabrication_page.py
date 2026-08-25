@@ -1114,7 +1114,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/mysifa_cal_rappel.js?v=4"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.5"></script>
 <!-- Memoire produit : fiche par reference produit, partagee avec MyProd -->
-<script src="/static/mysifa_produit_memoire.js?v=1.8"></script>
+<script src="/static/mysifa_produit_memoire.js?v=1.9"></script>
 <script>
   // Démarre le polleur d'alertes maintenance dès que la page est prête.
   // Le runtime interroge /api/maintenance/alerts/active toutes les 15 s,
@@ -4903,13 +4903,16 @@ function _fabTabDefs(){
     {key:'print',  icon:'printer', label:'Imprimer', adminOnly:true},
     {key:'traca',  icon:'scan',    label:'Traça'},
     {key:'stats',  icon:'box',     label:'Stock'},
-    {key:'of',     icon:'file',    label:'Fiches + OF', ofOnly:true},
+    // « Fiches et OF » : meme intitule que la section de la barre laterale
+    // de MyProd. Ici l'onglet couvre bien les deux (sous-onglets OF et
+    // Fiches techniques), il n'y a donc rien a scinder.
+    {key:'of',     icon:'file',    label:'Fiches et OF', ofOnly:true},
   ];
 }
 function _isFabricationOperator(){
   const r = S.user && S.user.role;
   // Un pur opérateur fabrication OU un admin qui a explicitement
-  // basculé en vue opérateur : on masque Imprimer et Fiches+OF.
+  // basculé en vue opérateur : on masque Imprimer et Fiches et OF.
   return r === 'fabrication' || S.saisieViewMode === 'operator';
 }
 function _visibleFabTabs(){

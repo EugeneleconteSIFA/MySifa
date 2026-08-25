@@ -98,6 +98,15 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 .page-head h1{margin:0;font-size:19px;font-weight:700}
 .page-head .sous{font-size:12px;color:var(--muted);margin-top:4px;max-width:640px}
 .head-droite{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.head-mark{display:inline-flex;align-items:center;flex-shrink:0}
+.head-mark img{width:46px;height:auto;display:block}
+/* Les mêmes actions que dans le tiroir, mais toujours sous la main : le tiroir
+   sert à naviguer entre les écrans, pas à se déconnecter. */
+.head-actions{display:flex;align-items:center;gap:6px;padding-left:10px;margin-left:4px;border-left:1px solid var(--border)}
+.head-btn{width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--card);color:var(--text2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,color .15s,border-color .15s;flex-shrink:0}
+.head-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.head-btn.danger:hover{background:var(--danger);border-color:var(--danger);color:#fff}
+@media (max-width:900px){.head-actions{display:none}}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:999px;font-size:11px;font-weight:600;background:var(--bg);border:1px solid var(--border);color:var(--text2)}
 .pill.lecture{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}
 .pill.vieux{background:rgba(251,191,36,.14);border-color:var(--warn);color:var(--warn)}
@@ -106,12 +115,11 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 .menu-wrap{padding:22px 26px 40px;overflow:auto}
 .domaine-titre{font-size:11px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--muted);margin:22px 0 10px}
 .cartes{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
-.carte{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:border-color .15s,transform .12s}
+.carte{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;cursor:pointer;transition:border-color .15s,transform .12s;display:flex;align-items:center;gap:12px}
 .carte:hover{border-color:var(--accent);transform:translateY(-1px)}
-.carte-titre{font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:8px}
-.carte-nb{margin-left:auto;font-size:11px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums}
-.carte-sous{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.5}
-.carte-table{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;color:var(--muted);margin-top:8px}
+.carte-ico{width:36px;height:36px;border-radius:10px;background:var(--accent-bg);color:var(--accent);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.carte-titre{font-size:13.5px;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.carte-nb{margin-left:auto;font-size:11.5px;font-weight:700;color:var(--accent);font-variant-numeric:tabular-nums;flex-shrink:0}
 
 /* ── Écran : rail + grille ── */
 .ecran{display:flex;flex:1;min-height:0}
@@ -265,11 +273,27 @@ body.sb-open .sidebar-overlay{display:block}
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         Menu
       </button>
+      <span class="head-mark rvgi-mark">
+        <img class="rvgi-sombre" src="/static/rvgi_mark_clair.png?v=3" alt="RVGI">
+        <img class="rvgi-clair" src="/static/rvgi_mark.png?v=3" alt="RVGI">
+      </span>
       <div>
         <h1 id="titre">ERP</h1>
         <div class="sous" id="sous">Lecture du miroir de RVGI.</div>
       </div>
       <div class="head-droite" id="head-droite"></div>
+      <div class="head-actions">
+        <button type="button" class="head-btn" id="hd-profil" title="Mon profil" aria-label="Mon profil">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </button>
+        <button type="button" class="head-btn" id="hd-retour" title="Retour à MySifa" aria-label="Retour à MySifa">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 10v11h14V10"/></svg>
+        </button>
+        <button type="button" class="head-btn" id="hd-theme" title="Changer de thème" aria-label="Changer de thème"></button>
+        <button type="button" class="head-btn danger" id="hd-logout" title="Déconnexion" aria-label="Déconnexion">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
     </div>
 
     <div id="corps" style="flex:1;min-height:0;display:flex;flex-direction:column"></div>
@@ -476,6 +500,57 @@ function activerGlisserDefiler(){
   window.addEventListener('mouseup',fin);
 }
 
+// ── Icônes des écrans ────────────────────────────────────────────
+// Un pictogramme par nature d'objet, réutilisé quand deux écrans montrent la
+// même chose vue d'un autre bout (un prix reste un prix, un mouvement reste un
+// mouvement). Un écran sans icône déclarée tombe sur celle par défaut.
+function _svg(d){
+  return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" '+
+         'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'+d+'</svg>';
+}
+const ICO_ECRAN = {
+  devis:_svg('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/>'),
+  commandes:_svg('<rect x="4" y="4" width="16" height="17" rx="2"/><path d="M9 2h6v4H9z"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/>'),
+  livraisons:_svg('<rect x="1" y="6" width="13" height="10" rx="1"/><path d="M14 9h4l3 3v4h-7z"/><circle cx="6" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>'),
+  factures:_svg('<path d="M6 2h12v20l-3-2-3 2-3-2-3 2z"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="9" y1="12" x2="15" y2="12"/>'),
+  echeances:_svg('<rect x="3" y="4" width="18" height="17" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M12 14v3h3"/>'),
+  marches:_svg('<rect x="2" y="7" width="20" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><line x1="2" y1="12" x2="22" y2="12"/>'),
+  achats:_svg('<circle cx="9" cy="20" r="1.6"/><circle cx="18" cy="20" r="1.6"/><path d="M2 3h3l2.5 12h11L21 7H6"/>'),
+  receptions:_svg('<path d="M3 8l9-5 9 5v9l-9 5-9-5z"/><path d="M3 8l9 5 9-5"/><line x1="12" y1="13" x2="12" y2="22"/>'),
+  appels:_svg('<path d="M3 10v4h4l6 5V5L7 10z"/><path d="M17 8a5 5 0 0 1 0 8"/>'),
+  stock:_svg('<path d="M12 2l9 5-9 5-9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/>'),
+  mouvements:_svg('<polyline points="17 2 21 6 17 10"/><path d="M3 6h18"/><polyline points="7 14 3 18 7 22"/><path d="M21 18H3"/>'),
+  matiere:_svg('<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/>'),
+  articles:_svg('<path d="M20.6 13.4L12 22l-9-9V4a1 1 0 0 1 1-1h9z"/><circle cx="7.5" cy="7.5" r="1.4"/>'),
+  clients:_svg('<path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/>'),
+  fournisseurs:_svg('<path d="M3 21V8l7-5 7 5v13"/><path d="M17 12h4v9"/><line x1="7" y1="12" x2="10" y2="12"/><line x1="7" y1="16" x2="10" y2="16"/>'),
+  outils:_svg('<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.1" y2="15.9"/><line x1="14.5" y1="14.5" x2="20" y2="20"/><line x1="8.1" y1="8.1" x2="12" y2="12"/>'),
+  machines:_svg('<rect x="4" y="8" width="16" height="12" rx="2"/><path d="M8 8V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v3"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="12" y2="17"/>'),
+  prix:_svg('<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5A4.5 4.5 0 0 0 9 12a4.5 4.5 0 0 0 6.5 3.5"/><line x1="7.5" y1="11" x2="13" y2="11"/><line x1="7.5" y1="13.5" x2="13" y2="13.5"/>'),
+  fiches:_svg('<rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><circle cx="16" cy="17" r="2"/>'),
+  dossiers:_svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
+  declarations:_svg('<path d="M9 11l3 3 8-8"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>'),
+  sorties:_svg('<path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/><polyline points="8 17 3 12 8 7"/><line x1="3" y1="12" x2="15" y2="12"/>'),
+  colisage:_svg('<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M3 11h18"/><path d="M8 7V4h8v3"/>'),
+  defaut:_svg('<rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="9" x2="9" y2="20"/>'),
+};
+const ICO_PAR_ECRAN = {
+  devis:'devis', commandes:'commandes', livraisons:'livraisons', factures:'factures',
+  echeances:'echeances', marches:'marches',
+  commandes_fournisseur:'achats', receptions:'receptions',
+  factures_fournisseur:'factures', appels_offres:'appels',
+  stock_pf:'stock', mouvements_pf:'mouvements',
+  stock_matiere:'matiere', mouvements_matiere:'mouvements',
+  articles:'articles', clients:'clients', fournisseurs:'fournisseurs',
+  outils:'outils', machines:'machines',
+  prix_vente:'prix', prix_achat:'prix', prix_client:'prix',
+  fiches_fabrication:'fiches', dossiers:'dossiers', declarations:'declarations',
+  sorties_matiere:'sorties', colisage:'colisage',
+};
+function iconeEcran(cle){
+  return ICO_ECRAN[ICO_PAR_ECRAN[cle]] || ICO_ECRAN.defaut;
+}
+
 // ── Navigation ───────────────────────────────────────────────────
 function renderNav(){
   const hote=document.getElementById('nav-ecrans');
@@ -530,11 +605,11 @@ function ouvrirMenu(){
     if(!ecrans.length)return;
     h+='<div class="domaine-titre">'+esc(d.label)+'</div><div class="cartes">';
     ecrans.forEach(e=>{
-      h+='<div class="carte" data-ecran="'+esc(e.cle)+'">'+
-           '<div class="carte-titre">'+esc(e.label)+
-             (e.lignes==null?'':'<span class="carte-nb">'+fmtNb(e.lignes,0)+'</span>')+'</div>'+
-           '<div class="carte-sous">'+esc(e.resume||'')+'</div>'+
-           '<div class="carte-table">'+esc(e.table)+'</div></div>';
+      h+='<div class="carte" data-ecran="'+esc(e.cle)+'" title="'+esc(e.resume||'')+'">'+
+           '<span class="carte-ico">'+iconeEcran(e.cle)+'</span>'+
+           '<span class="carte-titre">'+esc(e.label)+'</span>'+
+           (e.lignes==null?'':'<span class="carte-nb">'+fmtNb(e.lignes,0)+'</span>')+
+         '</div>';
     });
     h+='</div>';
   });
@@ -806,6 +881,18 @@ function majTheme(){
   const i=document.getElementById('theme-ico'),l=document.getElementById('theme-label');
   if(i)i.innerHTML=clair?ICO_MOON:ICO_SUN;
   if(l)l.textContent=clair?'Mode sombre':'Mode clair';
+  // Le bouton de l'en-tête montre la même chose que celui du tiroir.
+  const h=document.getElementById('hd-theme');
+  if(h)h.innerHTML=clair?ICO_MOON:ICO_SUN;
+}
+function basculerTheme(){
+  document.body.classList.toggle('light');
+  try{localStorage.setItem('mysifa_theme',document.body.classList.contains('light')?'light':'dark');}catch(e){}
+  majTheme();
+}
+async function deconnexion(){
+  try{await fetch('/api/logout',{method:'POST',credentials:'include'});}catch(e){}
+  location.href='/';
 }
 function appliquerHash(){
   const m=String(location.hash||'').match(/^#\/([a-z_]+)$/);
@@ -823,17 +910,13 @@ document.addEventListener('keydown',e=>{
 async function boot(){
   try{if(localStorage.getItem('mysifa_theme')==='light')document.body.classList.add('light');}catch(e){}
   majTheme();
-  const bt=document.getElementById('btn-theme');
-  if(bt)bt.addEventListener('click',()=>{
-    document.body.classList.toggle('light');
-    try{localStorage.setItem('mysifa_theme',document.body.classList.contains('light')?'light':'dark');}catch(e){}
-    majTheme();
-  });
-  const bl=document.getElementById('btn-logout');
-  if(bl)bl.addEventListener('click',async()=>{
-    try{await fetch('/api/logout',{method:'POST',credentials:'include'});}catch(e){}
-    location.href='/';
-  });
+  const brancher=(id,fn)=>{const el=document.getElementById(id);if(el)el.addEventListener('click',fn);};
+  brancher('btn-theme',basculerTheme);
+  brancher('hd-theme',basculerTheme);
+  brancher('btn-logout',deconnexion);
+  brancher('hd-logout',deconnexion);
+  brancher('hd-profil',()=>{location.href='/profil';});
+  brancher('hd-retour',()=>{location.href='/';});
   try{
     const me=await api('/api/me');
     const n=document.getElementById('uc-name'),ro=document.getElementById('uc-role');

@@ -208,3 +208,25 @@ body.light .theme-btn:hover{box-shadow:0 0 0 1px rgba(8,145,178,.28),0 0 18px rg
 .toast{position:fixed;bottom:24px;right:24px;background:var(--card);border:1px solid var(--border);
   border-radius:12px;padding:14px 20px;box-shadow:0 10px 30px rgba(0,0,0,.45);
   z-index:9500;font-size:13px;color:var(--text);max-width:380px}
+
+/* ── Intitulé de section dans la barre latérale ────────────────────────────
+   Repris à l'identique de MyStock (app/web/stock_page.py). Il vit ici, dans
+   la coquille partagée, et non dans le JS d'une seule page : MyProd et le
+   Planning chargent tous les deux ce fichier, et une sidebar qui change de
+   tête d'une page à l'autre se remarque immédiatement.
+   Le modificateur --statique sert au Planning, dont la barre n'est qu'une
+   liste de liens : un repli dont l'état serait perdu à chaque rendu vaut
+   moins qu'un intitulé simple. */
+.sidebar .nav-section-label{
+  font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);
+  font-weight:600;padding:10px 14px 4px 14px;user-select:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:space-between;border-radius:6px;
+  transition:background .15s,opacity .15s;
+}
+.sidebar .nav-section-label:hover{background:rgba(148,163,184,.08);opacity:1}
+.sidebar .nav-section-label .ngl-chevron{
+  display:inline-flex;flex-shrink:0;transition:transform .2s;opacity:.55;
+}
+.sidebar .nav-section-label.ngl-collapsed .ngl-chevron{transform:rotate(-90deg)}
+.sidebar .nav-section-label--statique{cursor:default}
+.sidebar .nav-section-label--statique:hover{background:transparent}

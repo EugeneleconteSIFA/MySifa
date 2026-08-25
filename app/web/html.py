@@ -4825,7 +4825,11 @@ function renderSidebar(){
     {key:'production',label:'Production',icon:'wrench'},
     {key:'traceabilite',label:'Traçabilité',icon:'layers'},
     ...(admin?[{key:'rentabilite',label:'Rentabilité',icon:'trending-up'}]:[]),
-    ...(canAccessOfTab()?[{key:'of',label:'Fiches + OF',icon:'file',withPendingOfBadge:true}]:[]),
+    // Rendu de repli (PROD_STANDALONE=0). On aligne l'intitule sur la
+    // section « Fiches et OF » de la page standalone, mais SANS y ajouter
+    // les entrees Fiches techniques et Scans d'OF : elles n'existent pas
+    // dans ce monolithe, et les lier ferait deux culs-de-sac.
+    ...(canAccessOfTab()?[{key:'of',label:'Fiches et OF',icon:'file',withPendingOfBadge:true}]:[]),
   ];
   const isLight=document.body.classList.contains('light');
   return h('nav',{className:'sidebar'},
