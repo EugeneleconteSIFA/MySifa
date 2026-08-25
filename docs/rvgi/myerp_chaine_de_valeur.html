@@ -1,0 +1,1017 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Relier la commande à l'encaissement</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,75..125,400..800;1,75..125,400..700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400..700;1,8..60,400..600&display=swap">
+
+<style>
+/* ═══ Deux encres ═══════════════════════════════════════════════════════════
+   Le sujet, c'est deux systèmes qui impriment sur le même papier : RVGI en
+   rouge brique, MySifa en bleu-vert. Là où les deux encres se superposent —
+   une donnée que les deux détiennent — on obtient la troisième couleur : le
+   contrôle de véracité. Toute la mise en page tient dans ce repérage.
+   ════════════════════════════════════════════════════════════════════════ */
+
+:root{
+  --paper:#EFF0EA; --paper-2:#E3E5DC; --card:#F8F9F5;
+  --ink:#13171A; --ink-2:#464D50; --ink-3:#727A7C;
+  --rule:rgba(19,23,26,.16); --rule-fort:rgba(19,23,26,.34);
+  --rvgi:#A6382A; --rvgi-bg:rgba(166,56,42,.10); --rvgi-ligne:rgba(166,56,42,.38);
+  --sifa:#0B6C75; --sifa-bg:rgba(11,108,117,.10); --sifa-ligne:rgba(11,108,117,.38);
+  --over:#5A3663; --over-bg:rgba(90,54,99,.12);
+  --alerte:#9A6206; --alerte-bg:rgba(154,98,6,.12);
+  --ombre:0 1px 0 rgba(19,23,26,.06),0 12px 34px rgba(19,23,26,.09);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E1113; --paper-2:#151A1D; --card:#181D20;
+    --ink:#ECEEE7; --ink-2:#B2B9BA; --ink-3:#7C8587;
+    --rule:rgba(236,238,231,.15); --rule-fort:rgba(236,238,231,.32);
+    --rvgi:#E27A69; --rvgi-bg:rgba(226,122,105,.13); --rvgi-ligne:rgba(226,122,105,.42);
+    --sifa:#45BFC8; --sifa-bg:rgba(69,191,200,.13); --sifa-ligne:rgba(69,191,200,.42);
+    --over:#BE93CC; --over-bg:rgba(190,147,204,.15);
+    --alerte:#E0A83C; --alerte-bg:rgba(224,168,60,.14);
+    --ombre:0 1px 0 rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E1113; --paper-2:#151A1D; --card:#181D20;
+  --ink:#ECEEE7; --ink-2:#B2B9BA; --ink-3:#7C8587;
+  --rule:rgba(236,238,231,.15); --rule-fort:rgba(236,238,231,.32);
+  --rvgi:#E27A69; --rvgi-bg:rgba(226,122,105,.13); --rvgi-ligne:rgba(226,122,105,.42);
+  --sifa:#45BFC8; --sifa-bg:rgba(69,191,200,.13); --sifa-ligne:rgba(69,191,200,.42);
+  --over:#BE93CC; --over-bg:rgba(190,147,204,.15);
+  --alerte:#E0A83C; --alerte-bg:rgba(224,168,60,.14);
+  --ombre:0 1px 0 rgba(0,0,0,.4),0 16px 40px rgba(0,0,0,.5);
+}
+
+*{box-sizing:border-box}
+html{scroll-snap-type:y mandatory;scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:"Source Serif 4",Georgia,"Times New Roman",serif;
+  font-size:17px;line-height:1.5;-webkit-font-smoothing:antialiased;
+}
+
+/* ── Le feuillet ── */
+.pont{max-width:1360px;margin:0 auto;padding:0 26px}
+.slide{
+  scroll-snap-align:center;min-height:100vh;display:flex;align-items:center;justify-content:center;
+  padding:34px 26px 70px;
+}
+.feuille{
+  width:min(1300px,100%);aspect-ratio:16/9;min-height:0;
+  background:var(--card);border:1px solid var(--rule);border-radius:3px;
+  box-shadow:var(--ombre);position:relative;display:flex;flex-direction:column;
+  padding:30px 42px 34px;overflow:hidden;
+}
+/* croix de repérage, comme sur une forme découpée */
+.feuille:before,.feuille:after{
+  content:"";position:absolute;width:13px;height:13px;pointer-events:none;
+  background:
+    linear-gradient(var(--rule-fort),var(--rule-fort)) center/1px 100% no-repeat,
+    linear-gradient(var(--rule-fort),var(--rule-fort)) center/100% 1px no-repeat;
+}
+.feuille:before{top:11px;left:11px}
+.feuille:after{bottom:11px;right:11px}
+
+/* ── Bandeau de tête ── */
+.rail{
+  display:flex;align-items:baseline;gap:14px;padding-bottom:9px;margin-bottom:20px;
+  border-bottom:1.5px solid var(--ink);flex-shrink:0;
+}
+.rail .n{
+  font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11px;font-weight:600;
+  letter-spacing:.06em;color:var(--ink);background:var(--paper-2);
+  padding:3px 7px;border-radius:2px;
+}
+.rail .t{
+  font-family:Archivo,"Helvetica Neue",Arial,sans-serif;font-variation-settings:"wdth" 112;
+  font-weight:700;font-size:12.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);
+}
+.rail .p{
+  margin-left:auto;font-family:"IBM Plex Mono",ui-monospace,monospace;
+  font-size:10.5px;letter-spacing:.05em;color:var(--ink-3);
+}
+.rail.encre-r{border-bottom-color:var(--rvgi)}
+.rail.encre-s{border-bottom-color:var(--sifa)}
+.rail.encre-o{border-bottom-color:var(--over)}
+
+.corps{flex:1;min-height:0;display:flex;flex-direction:column;gap:16px;overflow:hidden}
+
+/* ── Typographie ── */
+h1,h2,h3,h4{
+  font-family:Archivo,"Helvetica Neue",Arial,sans-serif;margin:0;
+  text-wrap:balance;line-height:1.05;letter-spacing:-.015em;
+}
+h1{font-size:clamp(38px,4.4vw,60px);font-weight:800;font-variation-settings:"wdth" 96}
+h2{font-size:clamp(27px,2.9vw,39px);font-weight:750;font-variation-settings:"wdth" 100}
+h3{font-size:20px;font-weight:700;line-height:1.15}
+h4{font-size:13px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3)}
+p{margin:0}
+.chapo{font-size:19px;line-height:1.45;color:var(--ink-2);max-width:64ch;text-wrap:pretty}
+.petit{font-size:14.5px;line-height:1.45;color:var(--ink-2)}
+.mini{font-size:12.5px;line-height:1.4;color:var(--ink-3)}
+.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.88em;letter-spacing:-.01em}
+b,strong{font-weight:700;color:var(--ink)}
+em{font-style:italic}
+.r{color:var(--rvgi)}.s{color:var(--sifa)}.o{color:var(--over)}.a{color:var(--alerte)}
+.nb{font-variant-numeric:tabular-nums}
+
+/* ── Étiquettes d'encre ── */
+.tag{
+  display:inline-flex;align-items:center;gap:5px;padding:2.5px 8px;border-radius:2px;
+  font-family:Archivo,sans-serif;font-size:10.5px;font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;white-space:nowrap;
+}
+.tag.rv{background:var(--rvgi-bg);color:var(--rvgi);box-shadow:inset 0 0 0 1px var(--rvgi-ligne)}
+.tag.ms{background:var(--sifa-bg);color:var(--sifa);box-shadow:inset 0 0 0 1px var(--sifa-ligne)}
+.tag.ov{background:var(--over-bg);color:var(--over);box-shadow:inset 0 0 0 1px var(--over)}
+.tag.al{background:var(--alerte-bg);color:var(--alerte);box-shadow:inset 0 0 0 1px var(--alerte)}
+.tag.gr{background:var(--paper-2);color:var(--ink-3);box-shadow:inset 0 0 0 1px var(--rule)}
+
+/* ── Grilles ── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;align-items:start}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;align-items:start}
+.g-12{display:grid;grid-template-columns:1fr 2fr;gap:22px;align-items:start}
+.g-21{display:grid;grid-template-columns:2fr 1fr;gap:22px;align-items:start}
+.pile{display:flex;flex-direction:column;gap:10px}
+.rangee{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.pousse{margin-top:auto}
+
+/* ── Cartes ── */
+.carte{
+  background:var(--paper);border:1px solid var(--rule);border-radius:2px;padding:13px 15px;
+  display:flex;flex-direction:column;gap:7px;
+}
+.carte.rv{border-left:3px solid var(--rvgi)}
+.carte.ms{border-left:3px solid var(--sifa)}
+.carte.ov{border-left:3px solid var(--over)}
+.carte.al{border-left:3px solid var(--alerte)}
+.carte h3{font-size:16px}
+.carte>.tag,.controle>.tag,.decision>.tag{align-self:flex-start}
+.carte .mini{color:var(--ink-2)}
+
+/* ── Chiffres ── */
+.chiffre{display:flex;flex-direction:column;gap:1px}
+.chiffre .v{
+  font-family:Archivo,sans-serif;font-weight:800;font-variation-settings:"wdth" 88;
+  font-size:clamp(28px,3.2vw,44px);line-height:1;font-variant-numeric:tabular-nums;
+}
+.chiffre .l{font-size:12.5px;color:var(--ink-2);line-height:1.3}
+.chiffre .u{font-size:.5em;font-weight:700;color:var(--ink-3);margin-left:3px}
+
+/* ── Tableaux ── */
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th{
+  font-family:Archivo,sans-serif;font-size:10.5px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-3);text-align:left;
+  padding:0 10px 6px 0;border-bottom:1px solid var(--rule-fort);white-space:nowrap;
+}
+td{padding:7px 10px 7px 0;border-bottom:1px solid var(--rule);vertical-align:top;color:var(--ink-2)}
+tr:last-child td{border-bottom:none}
+td b{color:var(--ink)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;padding-right:0}
+.tableau-boite{overflow:auto;flex:1;min-height:0}
+
+/* ── La frise de la chaîne ── */
+.chaine{display:grid;grid-template-columns:repeat(7,1fr);gap:0;align-items:stretch;flex:1;min-height:0}
+.maillon{
+  position:relative;padding:12px 13px 12px 17px;background:var(--paper);
+  border-top:3px solid var(--rule-fort);display:flex;flex-direction:column;gap:6px;
+}
+.maillon+.maillon{border-left:1px solid var(--rule)}
+.maillon.rv{border-top-color:var(--rvgi)}
+.maillon.ms{border-top-color:var(--sifa)}
+.maillon.ov{border-top-color:var(--over)}
+.maillon .tag{align-self:flex-start}
+.maillon .etape{
+  font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--ink-3);letter-spacing:.05em;
+}
+.maillon .nom{font-family:Archivo,sans-serif;font-weight:700;font-size:15px;line-height:1.1}
+.maillon .cle{
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-2);
+  word-break:break-word;line-height:1.35;
+}
+.fleche{color:var(--ink-3);font-size:14px}
+
+/* ── Fiche de contrôle ── */
+.controle{
+  background:var(--paper);border:1px solid var(--rule);border-left:3px solid var(--over);
+  border-radius:2px;padding:11px 13px;display:flex;flex-direction:column;gap:6px;
+}
+.controle .code{
+  font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:600;color:var(--over);
+  letter-spacing:.06em;
+}
+.controle .q{font-family:Archivo,sans-serif;font-weight:700;font-size:14.5px;line-height:1.2;color:var(--ink)}
+.controle .k{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--ink-2);line-height:1.4}
+.controle .d{font-size:12.5px;color:var(--ink-2);line-height:1.4}
+
+/* ── Matrice effort × valeur ── */
+.matrice{
+  position:relative;flex:1;min-height:0;border-left:1.5px solid var(--rule-fort);
+  border-bottom:1.5px solid var(--rule-fort);margin:10px 0 0 62px;
+  background:
+    linear-gradient(var(--rule),var(--rule)) 0 50%/100% 1px no-repeat,
+    linear-gradient(var(--rule),var(--rule)) 50% 0/1px 100% no-repeat;
+}
+.matrice .zone{
+  position:absolute;left:0;top:0;width:50%;height:50%;
+  background:var(--over-bg);opacity:.5;
+}
+.matrice .zone span{
+  position:absolute;left:10px;top:8px;font-family:Archivo,sans-serif;font-size:10px;
+  font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--over);opacity:.9;
+}
+.matrice .pt{
+  position:absolute;transform:translate(-50%,50%);
+  background:var(--over-bg);color:var(--over);box-shadow:inset 0 0 0 1px var(--over);
+  font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;
+  padding:4px 8px;border-radius:2px;white-space:nowrap;
+}
+.matrice .pt.now{background:var(--sifa-bg);color:var(--sifa);box-shadow:inset 0 0 0 1px var(--sifa)}
+.matrice .ax-y{
+  position:absolute;left:-62px;top:0;bottom:0;width:54px;display:flex;flex-direction:column;
+  justify-content:space-between;align-items:flex-end;text-align:right;
+}
+.matrice .ax-x{position:absolute;left:0;right:0;bottom:-26px;display:flex;justify-content:space-between}
+.ax-lab{font-family:Archivo,sans-serif;font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3)}
+
+/* ── Lots ── */
+.lot{
+  display:grid;grid-template-columns:auto 1fr;gap:0 16px;align-items:start;
+  padding:12px 0;border-bottom:1px solid var(--rule);
+}
+.lot:last-child{border-bottom:none}
+.lot .num{
+  font-family:Archivo,sans-serif;font-weight:800;font-variation-settings:"wdth" 88;
+  font-size:34px;line-height:.9;color:var(--over);font-variant-numeric:tabular-nums;
+}
+.lot .titre{font-family:Archivo,sans-serif;font-weight:700;font-size:17px;line-height:1.15;margin-bottom:3px}
+
+/* ── Décisions ── */
+.decision{
+  background:var(--paper);border:1px solid var(--rule);border-radius:2px;padding:12px 14px;
+  display:flex;flex-direction:column;gap:7px;
+}
+.decision .q{font-family:Archivo,sans-serif;font-weight:700;font-size:15px;line-height:1.2}
+.decision .opts{display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--ink-2)}
+.decision .opts span{padding-left:14px;position:relative}
+.decision .opts span:before{content:"—";position:absolute;left:0;color:var(--ink-3)}
+.decision .reco{font-size:12.5px;color:var(--over);font-weight:600}
+
+/* ── Listes ── */
+ul.liste{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px}
+ul.liste li{position:relative;padding-left:17px;font-size:14px;line-height:1.4;color:var(--ink-2)}
+ul.liste li:before{
+  content:"";position:absolute;left:0;top:.55em;width:7px;height:1.5px;background:var(--ink-3);
+}
+ul.liste li.rv:before{background:var(--rvgi);height:2px}
+ul.liste li.ms:before{background:var(--sifa);height:2px}
+ul.liste li.al:before{background:var(--alerte);height:2px}
+
+/* ── Couverture ── */
+.couv{justify-content:space-between}
+.couv .marque{
+  font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.22em;
+  text-transform:uppercase;color:var(--ink-3);
+}
+.couv h1{max-width:19ch}
+.bande-encres{display:flex;gap:0;height:9px;width:210px;margin-top:2px}
+.bande-encres i{flex:1}
+
+/* ── Barre de progression : la bande de contrôle d'imprimeur ── */
+.bande{
+  position:fixed;left:0;right:0;bottom:0;height:7px;display:flex;gap:1px;z-index:20;
+  background:var(--paper);padding:0 0 0 0;
+}
+.bande i{flex:1;background:var(--rule);transition:background .18s}
+.bande i.vue{background:var(--ink-3)}
+.bande i.ici{background:var(--over)}
+@media (prefers-reduced-motion:reduce){.bande i{transition:none}}
+
+/* ── Navigation ── */
+.nav{
+  position:fixed;right:16px;bottom:18px;z-index:30;display:flex;align-items:center;gap:7px;
+  background:var(--card);border:1px solid var(--rule);border-radius:3px;padding:5px 7px;
+  box-shadow:var(--ombre);
+}
+.nav button{
+  font:inherit;font-family:Archivo,sans-serif;font-size:14px;font-weight:700;line-height:1;
+  border:1px solid var(--rule);background:var(--paper);color:var(--ink-2);
+  width:28px;height:26px;border-radius:2px;cursor:pointer;
+}
+.nav button:hover{border-color:var(--over);color:var(--over)}
+.nav button:focus-visible,a:focus-visible{outline:2px solid var(--over);outline-offset:2px}
+.nav .cpt{
+  font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--ink-2);
+  font-variant-numeric:tabular-nums;padding:0 4px;
+}
+
+@media (max-width:980px){
+  .feuille{aspect-ratio:auto;min-height:calc(100vh - 104px);padding:22px 20px 26px}
+  .g2,.g3,.g4,.g-12,.g-21{grid-template-columns:1fr}
+  .chaine{grid-template-columns:repeat(2,1fr)}
+  .maillon+.maillon{border-left:none}
+  body{font-size:16px}
+}
+
+@media print{
+  @page{size:A4 landscape;margin:8mm}
+  html{scroll-snap-type:none}
+  /* Impression : on force le rendu clair, quel que soit le thème de l'écran. */
+  html,body{
+    background:#fff !important;
+    --paper:#fff; --paper-2:#F1F2ED; --card:#fff;
+    --ink:#111517; --ink-2:#3C4245; --ink-3:#6B7274;
+    --rule:rgba(17,21,23,.20); --rule-fort:rgba(17,21,23,.42);
+    --rvgi:#9C3125; --rvgi-bg:rgba(156,49,37,.10); --rvgi-ligne:rgba(156,49,37,.45);
+    --sifa:#0A626B; --sifa-bg:rgba(10,98,107,.10); --sifa-ligne:rgba(10,98,107,.45);
+    --over:#523059; --over-bg:rgba(82,48,89,.12);
+    --alerte:#8A5705; --alerte-bg:rgba(138,87,5,.13);
+    --ombre:none;
+  }
+  .slide{
+    min-height:0;padding:0;display:block;
+    break-after:page;page-break-after:always;break-inside:avoid;page-break-inside:avoid;
+  }
+  .slide:last-child{break-after:auto;page-break-after:auto}
+  .feuille{
+    aspect-ratio:auto;height:193mm;width:100%;box-shadow:none;border:none;border-radius:0;
+    padding:6mm 8mm 6mm;break-inside:avoid;page-break-inside:avoid;
+  }
+  .feuille:before,.feuille:after{display:none}
+  .bande,.nav{display:none}
+  .carte,.controle,.decision,.lot,.maillon,tr{break-inside:avoid;page-break-inside:avoid}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+
+</head>
+<body>
+<main>
+
+<!-- 01 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille couv">
+  <div class="rail encre-o"><span class="n">01</span><span class="t">Couverture</span><span class="p">25 août 2026 · interne · Eugène Leconte</span></div>
+  <div class="corps" style="justify-content:center;gap:22px">
+    <div class="marque">MySifa &nbsp;×&nbsp; RVGI</div>
+    <h1>Relier la commande à l'encaissement</h1>
+    <p class="chapo">Ce que le miroir de RVGI permet enfin de faire : suivre une pièce d'un bout à l'autre de la chaîne, et vérifier que ce que MySifa raconte est vrai.</p>
+    <div class="bande-encres" aria-hidden="true">
+      <i style="background:var(--rvgi)"></i><i style="background:var(--over)"></i><i style="background:var(--sifa)"></i><i style="background:var(--ink-3)"></i>
+    </div>
+    <div class="rangee" style="gap:18px;margin-top:4px">
+      <span class="tag rv">Encre 1 — RVGI</span>
+      <span class="tag ov">Superposition — le contrôle</span>
+      <span class="tag ms">Encre 2 — MySifa</span>
+    </div>
+  </div>
+  <p class="mini pousse">19 diapos · 2 parties · 12 contrôles chiffrés · 5 décisions à trancher</p>
+</article></section>
+
+<!-- 02 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail"><span class="n">02</span><span class="t">Point de départ</span><span class="p">état au 25/08/2026</span></div>
+  <div class="corps">
+    <h2>Depuis trois jours, MySifa lit RVGI.</h2>
+    <p class="chapo">Un poste du réseau SIFA exporte, pousse en HTTPS, le serveur reconstruit une base miroir. Deux fois par jour, 5 h et 12 h 30. Le pilote SQLite ouvre cette base en <span class="mono">mode=ro</span> : une écriture n'est pas interdite par convention, elle échoue.</p>
+    <div class="g4" style="margin-top:6px">
+      <div class="chiffre"><span class="v">63</span><span class="l">tables de RVGI répliquées</span></div>
+      <div class="chiffre"><span class="v">27</span><span class="l">écrans lisibles dans MyERP</span></div>
+      <div class="chiffre"><span class="v">59</span><span class="l">liens entre pièces</span></div>
+      <div class="chiffre"><span class="v">19,2<span class="u">Mo</span></span><span class="l">transférés par synchro, en 10 s</span></div>
+    </div>
+    <div class="g3 pousse" style="align-items:stretch">
+      <div class="carte ms"><h3>Ce que ça change</h3><p class="mini">La direction et l'administration voient les données de RVGI dans l'habillage de MySifa, sans ouvrir l'ERP et sans licence.</p></div>
+      <div class="carte ov"><h3>Ce que ça ouvre</h3><p class="mini">Pour la première fois, les deux bases sont interrogeables ensemble. C'est le sujet de cette diapo.</p></div>
+      <div class="carte al"><h3>Ce que ça ne fait pas</h3><p class="mini">Rien ne repart vers RVGI, et les données ont jusqu'à douze heures de retard. Pour une commande saisie il y a dix minutes, c'est RVGI qu'il faut ouvrir.</p></div>
+    </div>
+  </div>
+</article></section>
+
+<!-- 03 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail"><span class="n">03</span><span class="t">Sommaire</span><span class="p">ce que tu as à arbitrer</span></div>
+  <div class="corps">
+    <h2>Deux questions, dans cet ordre.</h2>
+    <div class="g2" style="flex:1;align-items:stretch;margin-top:4px">
+      <div class="carte rv" style="justify-content:flex-start;gap:12px">
+        <span class="tag rv">Partie 1 · diapos 04 à 09</span>
+        <h3 style="font-size:23px">Où vit chaque maillon de la chaîne ?</h3>
+        <p class="petit">De la commande à l'échéance, sept maillons. Certains vivent dans RVGI, d'autres dans MySifa, quelques-uns dans les deux — et deux ne vivent nulle part correctement. On regarde d'abord la carte, avec les volumes réels.</p>
+        <ul class="liste" style="margin-top:4px">
+          <li>La frise des sept maillons et leur détenteur</li>
+          <li>Les identifiants qui relient — ou pas</li>
+          <li>Les six ruptures de la chaîne</li>
+        </ul>
+      </div>
+      <div class="carte ov" style="justify-content:flex-start;gap:12px">
+        <span class="tag ov">Partie 2 · diapos 10 à 19</span>
+        <h3 style="font-size:23px">Que peut-on vérifier automatiquement ?</h3>
+        <p class="petit">Un contrôle de véracité, c'est comparer deux systèmes sur une clé commune — pas fusionner les bases. Douze contrôles, chiffrés sur les données réelles, classés par effort et par valeur.</p>
+        <ul class="liste" style="margin-top:4px">
+          <li>Qui fait foi sur quoi</li>
+          <li>Les onze contrôles, maillon par maillon</li>
+          <li>Quatre lots, cinq décisions</li>
+        </ul>
+      </div>
+    </div>
+    <p class="mini">Tous les chiffres de cette diapo sortent du miroir du 25/08/2026 et du code de MySifa, vérifiés un par un. Ce qui n'est pas vérifié est signalé comme tel, diapo 19.</p>
+  </div>
+</article></section>
+
+<!-- 04 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail encre-o"><span class="n">04</span><span class="t">Partie 1 · la chaîne</span><span class="p">sept maillons, deux systèmes</span></div>
+  <div class="corps">
+    <h2>RVGI tient les deux bouts. MySifa tient le milieu.</h2>
+    <p class="chapo">Le raccord entre les deux se fait à la main, par un numéro retapé dans un champ texte.</p>
+    <div class="chaine" style="margin-top:4px">
+      <div class="maillon rv"><span class="etape">01</span><span class="nom">Commande</span><span class="tag rv">RVGI</span><span class="cle">cde_entete · cde_ligne<br>clé : numero</span></div>
+      <div class="maillon ms"><span class="etape">02</span><span class="nom">Ordre de fabrication</span><span class="tag ms">MySifa</span><span class="cle">of_imports · planning_entries<br>clé : of_numero</span></div>
+      <div class="maillon ms"><span class="etape">03</span><span class="nom">Production</span><span class="tag ms">MySifa</span><span class="cle">production_data<br>fab_matieres_utilisees</span></div>
+      <div class="maillon ov"><span class="etape">04</span><span class="nom">Colisage</span><span class="tag al">à peu près nulle part</span><span class="cle">col_ligne : 257 lignes<br>MySifa : pas de n° de colis</span></div>
+      <div class="maillon ms"><span class="etape">05</span><span class="nom">Expédition</span><span class="tag ms">MySifa</span><span class="cle">expe_departs<br>clé : no_bl (texte)</span></div>
+      <div class="maillon rv"><span class="etape">06</span><span class="nom">Livraison · BL</span><span class="tag rv">RVGI</span><span class="cle">liv_entete · liv_ligne<br>clé : numero, numcde</span></div>
+      <div class="maillon rv"><span class="etape">07</span><span class="nom">Facture · échéance</span><span class="tag rv">RVGI</span><span class="cle">vte_ligne · ecc_ech<br>clés : livno, livbl, nofac</span></div>
+    </div>
+    <div class="g3 pousse">
+      <div class="carte rv"><h3>Les deux bouts</h3><p class="mini">Ce qui engage l'entreprise vis-à-vis du client — la commande, le BL, la facture, l'échéance — est saisi et vit dans RVGI. C'est cohérent : c'est ce qui part chez le client et chez le factor.</p></div>
+      <div class="carte ms"><h3>Le milieu</h3><p class="mini">Ce qui se passe dans l'atelier — l'OF, la production, les bobines scannées, le départ — vit dans MySifa. RVGI ne le reçoit plus : <b>43 dossiers déclarés</b> dans <span class="mono">gpr_gpr</span> en 2026, contre des milliers de saisies dans MySifa.</p></div>
+      <div class="carte al"><h3>Le raccord</h3><p class="mini">Un champ texte, <span class="mono">planning_entries.dos_rvgi</span>, où le planificateur retape le numéro de commande. Aucun contrôle d'existence. C'est le maillon le plus fin de toute la chaîne.</p></div>
+    </div>
+  </div>
+</article></section>
+
+<!-- 05 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail encre-r"><span class="n">05</span><span class="t">Côté RVGI</span><span class="p">miroir du 25/08/2026</span></div>
+  <div class="corps">
+    <h2>Ce que le miroir contient réellement.</h2>
+    <div class="g-21" style="flex:1;min-height:0;align-items:stretch">
+      <div class="tableau-boite">
+        <table>
+          <thead><tr><th>Maillon</th><th>Table</th><th class="num">Lignes</th><th class="num">Pièces distinctes</th><th>Profondeur</th></tr></thead>
+          <tbody>
+            <tr><td><b>Commandes</b></td><td class="mono">cde_ligne</td><td class="num nb">34 943</td><td class="num nb"><b>19 959</b></td><td>depuis 2015</td></tr>
+            <tr><td><b>Bons de livraison</b></td><td class="mono">liv_ligne</td><td class="num nb">35 791</td><td class="num nb"><b>23 019</b></td><td>depuis 2020</td></tr>
+            <tr><td><b>Factures</b></td><td class="mono">vte_ligne</td><td class="num nb">36 998</td><td class="num nb"><b>21 785</b></td><td>depuis 2015</td></tr>
+            <tr><td><b>Échéances</b></td><td class="mono">ecc_ech</td><td class="num nb">43 644</td><td class="num">—</td><td>—</td></tr>
+            <tr><td><b>Mouvements produits finis</b></td><td class="mono">stk_hist</td><td class="num nb">25 592</td><td class="num">—</td><td>—</td></tr>
+            <tr><td><b>Colisage</b></td><td class="mono">col_ligne</td><td class="num nb a">257</td><td class="num nb a">2 clients</td><td class="a">05/2021 → 02/2026</td></tr>
+            <tr><td><b>Déclarations de production</b></td><td class="mono">gpr_gpr</td><td class="num nb a">2 804</td><td class="num nb a">43 dossiers</td><td class="a">01 → 04/2026</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pile">
+        <div class="carte rv"><h3>Solide</h3><p class="mini">La chaîne commerciale est complète et bien tenue : commande, BL, facture, échéance, sur dix ans, avec des clés remplies.</p></div>
+        <div class="carte al"><h3>Vide</h3><p class="mini">Le colisage — 257 lignes en cinq ans, deux clients — et la production. Ces deux maillons ne sont plus alimentés dans l'ERP.</p></div>
+        <div class="carte ov"><h3>À comprendre</h3><p class="mini">Le stock : seules <b>4 commandes sur 10</b> portent un mouvement de stock RVGI. Reste à savoir si c'est le flux ou la saisie.</p></div>
+      </div>
+    </div>
+  </div>
+</article></section>
+
+<!-- 06 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail encre-s"><span class="n">06</span><span class="t">Côté MySifa</span><span class="p">d'où vient chaque donnée</span></div>
+  <div class="corps">
+    <h2>Une donnée sur deux est tapée à la main.</h2>
+    <div class="tableau-boite">
+      <table>
+        <thead><tr><th>Maillon</th><th>Table</th><th>Comment la donnée entre</th><th>Contrôle à la saisie</th></tr></thead>
+        <tbody>
+          <tr><td><b>Dossier / carnet</b></td><td class="mono">planning_entries</td><td>Saisie manuelle du planificateur — recopie de la commande RVGI</td><td class="a">aucun</td></tr>
+          <tr><td><b>Référentiel client</b></td><td class="mono">clients</td><td>Import XLSX manuel, à la demande <span class="mini">(fusion par <span class="mono">code</span>)</span></td><td>unicité du code</td></tr>
+          <tr><td><b>Ordre de fabrication</b></td><td class="mono">of_imports</td><td>PDF de l'OF lu par <span class="mono">pdfplumber</span> <span class="mini">+</span> pont Access <span class="mono">t_of</span> en HTTPS</td><td class="s">arbitrage champ par champ, validation humaine</td></tr>
+          <tr><td><b>Fiche technique</b></td><td class="mono">fiches_techniques</td><td>Saisie + import, même arbitrage</td><td class="s">contrôle géométrique du nb de fronts</td></tr>
+          <tr><td><b>Production</b></td><td class="mono">production_data</td><td>Saisie opérateur <span class="mini">+</span> import du fichier de production</td><td class="s">dédoublonnage, score de cohérence</td></tr>
+          <tr><td><b>Bobines consommées</b></td><td class="mono">fab_matieres_utilisees</td><td class="s">Scan code-barres en atelier</td><td class="s">alerte FSC</td></tr>
+          <tr><td><b>Expédition</b></td><td class="mono">expe_departs</td><td>Saisie manuelle : n° de BL, ARC, transporteur, palettes, poids</td><td class="a">unicité du n° de BL, rien d'autre</td></tr>
+          <tr><td><b>Stock produits finis</b></td><td class="mono">lots_stock</td><td>Saisie manuelle, avec choix du dossier <span class="mini">(le lot hérite alors du statut FSC)</span></td><td>FIFO, héritage FSC</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="petit"><b>Ce qui marche déjà très bien :</b> l'OF et la fiche technique. Deux sources concurrentes — un PDF lu et un pont Access — arbitrées <em>champ par champ</em>, où une saisie humaine prime sur un import, où chaque écrasement est journalisé, et où toucher un champ de calcul périme la validation. C'est le modèle à reprendre pour les contrôles de véracité.</p>
+  </div>
+</article></section>
+
+<!-- 07 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail encre-o"><span class="n">07</span><span class="t">Les clés</span><span class="p">ce qui relie — ou pas</span></div>
+  <div class="corps">
+    <h2>Sept identifiants circulent. Deux seulement font le pont.</h2>
+    <div class="tableau-boite">
+      <table>
+        <thead><tr><th>Ce qui circule</th><th class="r">Côté RVGI</th><th class="s">Côté MySifa</th><th>État du pont</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><b>N° de commande</b><br><span class="mini">format <span class="mono">99xxxxx</span></span></td>
+            <td class="mono">cde_ligne.numero<br>liv_ligne.numcde<br>vte_ligne.livno</td>
+            <td class="mono">planning_entries.dos_rvgi<br>of_imports.of_numero</td>
+            <td><span class="tag al">fragile</span><br><span class="mini">retapé à la main, jamais vérifié</span></td>
+          </tr>
+          <tr>
+            <td><b>N° de BL</b></td>
+            <td class="mono">liv_ligne.numero<br>vte_ligne.livbl<br>stk_hist.refbl</td>
+            <td class="mono">expe_departs.no_bl</td>
+            <td><span class="tag al">fragile</span><br><span class="mini">recopié, unicité seule contrôlée</span></td>
+          </tr>
+          <tr>
+            <td><b>Article</b></td>
+            <td class="mono">fic_art.code1 / code2<br><span class="mini">→ « 890/0112 »</span></td>
+            <td class="mono">planning_entries.ref_produit_norm<br>fiches_techniques</td>
+            <td><span class="tag gr">absent</span><br><span class="mini">deux référentiels, aucune passerelle</span></td>
+          </tr>
+          <tr>
+            <td><b>Client</b></td>
+            <td class="mono">fic_clt.numclt · rs</td>
+            <td class="mono">clients.code <span class="mini">(import XLSX)</span><br>planning_entries.client <span class="mini">(texte libre)</span></td>
+            <td><span class="tag gr">absent</span><br><span class="mini">aucune clé étrangère dans le dossier</span></td>
+          </tr>
+          <tr>
+            <td><b>N° de facture</b></td>
+            <td class="mono">vte_ligne.numero · ecc_ech.nofac</td>
+            <td>—</td>
+            <td><span class="tag rv">RVGI seul</span></td>
+          </tr>
+          <tr>
+            <td><b>Bobine · lot</b></td>
+            <td>—</td>
+            <td class="mono">fab_matieres_utilisees.code_barre<br>lots_stock</td>
+            <td><span class="tag ms">MySifa seul</span></td>
+          </tr>
+          <tr>
+            <td><b>Colis · palette</b></td>
+            <td class="mono">col_ligne.colis · numpal</td>
+            <td class="mono">expe_departs.nb_palette <span class="mini">(un compte)</span></td>
+            <td><span class="tag al">inexistant</span><br><span class="mini">aucun des deux ne numérote un colis</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="mini">Un contrôle de véracité n'est possible que sur une ligne où les deux colonnes sont remplies. C'est pourquoi les premiers contrôles portent tous sur le n° de commande et le n° de BL.</p>
+  </div>
+</article></section>
+
+<!-- 08 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail"><span class="n">08</span><span class="t">Les ruptures</span><span class="p">six endroits où la chaîne se coupe</span></div>
+  <div class="corps">
+    <h2>Six ruptures, dont une qui commande toutes les autres.</h2>
+    <div class="g3" style="flex:1;align-items:stretch">
+      <div class="carte al">
+        <span class="tag al">Rupture 1 · la mère</span>
+        <h3>Le numéro de commande est retapé</h3>
+        <p class="mini"><span class="mono">planning_entries.dos_rvgi</span> est une saisie libre. Une faute de frappe, une commande annulée, un dossier créé avant la commande : rien ne le signale. Tout le reste — la production, l'expédition, la marge — s'accroche à ce numéro.</p>
+      </div>
+      <div class="carte">
+        <span class="tag gr">Rupture 2</span>
+        <h3>Le client du dossier est un texte</h3>
+        <p class="mini"><span class="mono">planning_entries.client</span> n'a de clé étrangère ni vers la table <span class="mono">clients</span> de MySifa, ni vers <span class="mono">fic_clt</span>. Deux orthographes font deux clients, et aucun regroupement fiable.</p>
+      </div>
+      <div class="carte">
+        <span class="tag gr">Rupture 3</span>
+        <h3>La date de livraison est une phrase</h3>
+        <p class="mini"><span class="mono">date_livraison</span> accepte « A livrer le 03/04 » ; un module entier existe pour la déchiffrer. RVGI porte, lui, une date propre dans <span class="mono">cde_ligne.amje</span>. Personne ne les compare.</p>
+      </div>
+      <div class="carte">
+        <span class="tag gr">Rupture 4</span>
+        <h3>Le BL est recopié</h3>
+        <p class="mini">MySifa ne génère aucun bon de livraison — le BL est un document RVGI. <span class="mono">expe_departs.no_bl</span> est une recopie manuelle dont on vérifie seulement qu'elle n'existe pas déjà.</p>
+      </div>
+      <div class="carte">
+        <span class="tag gr">Rupture 5</span>
+        <h3>La production ne remonte plus</h3>
+        <p class="mini">43 dossiers déclarés dans RVGI en 2026. L'ERP ne sait plus ce qui a été réellement produit, ni en combien de temps. C'est un choix implicite, jamais arbitré.</p>
+      </div>
+      <div class="carte">
+        <span class="tag gr">Rupture 6</span>
+        <h3>Le stock se réconcilie à la main</h3>
+        <p class="mini">L'écran de réconciliation compare le stock MySifa à un <b>export Excel de RVGI qu'un humain téléverse</b>. Depuis trois jours, ce fichier est dans le miroir. L'étape manuelle n'a plus de raison d'être.</p>
+      </div>
+    </div>
+  </div>
+</article></section>
+
+<!-- 09 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail encre-r"><span class="n">09</span><span class="t">Ce que la chaîne dit d'elle-même</span><span class="p">calculé sur le miroir, 25/08/2026</span></div>
+  <div class="corps">
+    <h2>Dans RVGI, la chaîne se tient. Le trou est au raccord.</h2>
+    <div class="g4">
+      <div class="chiffre"><span class="v">96,9<span class="u">%</span></span><span class="l">des <span class="nb">19 959</span> commandes ont au moins un bon de livraison</span></div>
+      <div class="chiffre"><span class="v">95,4<span class="u">%</span></span><span class="l">ont au moins une facture</span></div>
+      <div class="chiffre"><span class="v">100<span class="u">%</span></span><span class="l">des lignes de BL portent le n° de commande d'origine</span></div>
+      <div class="chiffre"><span class="v">100<span class="u">%</span></span><span class="l">des <span class="nb">21 785</span> factures portent au moins une échéance</span></div>
+    </div>
+    <hr style="border:none;border-top:1px solid var(--rule);margin:2px 0">
+    <div class="g4">
+      <div class="chiffre"><span class="v a">40,9<span class="u">%</span></span><span class="l">seulement des commandes ont un mouvement de stock RVGI</span></div>
+      <div class="chiffre"><span class="v a nb">888</span><span class="l">bons de livraison sans n° de facture <span class="mini">(dont les récents, normaux)</span></span></div>
+      <div class="chiffre"><span class="v a nb">3 178</span><span class="l">échéances non soldées</span></div>
+      <div class="chiffre"><span class="v a nb">657</span><span class="l">lignes de facture sans n° de commande <span class="mini">(748 sans n° de BL)</span></span></div>
+    </div>
+    <div class="g2 pousse">
+      <div class="carte rv"><h3>Lecture</h3><p class="mini">Les clés internes de RVGI sont remplies et fiables — on peut donc s'y appuyer sans réserve pour remonter une pièce. Ce n'est pas là que ça casse.</p></div>
+      <div class="carte ov"><h3>Conséquence</h3><p class="mini">Le seul endroit où l'information se perd, c'est la frontière entre les deux systèmes. Un contrôle qui porte sur cette frontière a donc un rendement immédiat — c'est tout l'objet de la partie 2.</p></div>
+    </div>
+  </div>
+</article></section>
+
+<!-- 10 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail encre-o"><span class="n">10</span><span class="t">Partie 2 · le principe</span><span class="p">qui fait foi sur quoi</span></div>
+  <div class="corps">
+    <h2>On ne fusionne pas. On compare, et l'écart devient une alerte.</h2>
+    <div class="g-21" style="flex:1;min-height:0;align-items:stretch">
+      <div class="tableau-boite">
+        <table>
+          <thead><tr><th>Objet</th><th>Fait foi</th><th>Pourquoi</th></tr></thead>
+          <tbody>
+            <tr><td><b>La commande client</b></td><td><span class="tag rv">RVGI</span></td><td>Saisie par l'administration des ventes, c'est l'engagement contractuel.</td></tr>
+            <tr><td><b>L'ordre de fabrication</b></td><td><span class="tag ms">MySifa</span></td><td>Deux sources arbitrées champ par champ, avec validation humaine et journal.</td></tr>
+            <tr><td><b>La production réelle</b></td><td><span class="tag ms">MySifa</span></td><td>RVGI ne la reçoit plus — 43 dossiers en 2026.</td></tr>
+            <tr><td><b>L'expédition physique</b></td><td><span class="tag ms">MySifa</span></td><td>Départs, transporteurs, palettes : RVGI ne les porte pas.</td></tr>
+            <tr><td><b>Le bon de livraison</b></td><td><span class="tag rv">RVGI</span></td><td>C'est le document qui part chez le client. MySifa n'en génère aucun.</td></tr>
+            <tr><td><b>La facture et l'échéance</b></td><td><span class="tag rv">RVGI</span></td><td>C'est ce qui part au factor et en comptabilité.</td></tr>
+            <tr><td><b>Le stock produits finis</b></td><td><span class="tag al">à trancher</span></td><td>Décision D5, diapo 18.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pile">
+        <div class="carte ov"><h3>La règle</h3><p class="mini">Un contrôle ne corrige jamais. Il compare deux systèmes sur une clé commune et <b>adresse l'écart à celui qui peut le corriger</b>. C'est déjà le principe de l'arbitrage OF / fiche technique.</p></div>
+        <div class="carte"><h3>Le précédent qui prouve</h3><p class="mini">Le contrôle géométrique des fiches a montré que <b>878 fiches sur 909</b> annonçaient 1 front là où la géométrie en impose 4, 9 ou 17 — et a évité un besoin matière calculé <b>18 fois trop grand</b>.</p></div>
+      </div>
+    </div>
+  </div>
+</article></section>
+
+<!-- 11 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail encre-o"><span class="n">11</span><span class="t">Contrôles · le pont commande</span><span class="p">V1 à V4</span></div>
+  <div class="corps">
+    <h2>Quatre contrôles pour sécuriser le maillon le plus fin.</h2>
+    <div class="g2" style="flex:1;align-items:stretch">
+      <div class="controle">
+        <span class="code">V1 — existence</span>
+        <span class="q">Ce numéro de commande existe-t-il vraiment ?</span>
+        <span class="k">planning_entries.dos_rvgi ∈ cde_ligne.numero</span>
+        <span class="d">Attrape la faute de frappe, la commande annulée, le dossier ouvert sur un numéro qui n'a jamais existé. <b>Une requête.</b> Tout le reste en dépend.</span>
+      </div>
+      <div class="controle">
+        <span class="code">V2 — client</span>
+        <span class="q">Le dossier est-il rattaché au bon client ?</span>
+        <span class="k">planning_entries.client ≈ cde_entete.rs · numclt</span>
+        <span class="d">Attrape le dossier accroché à la mauvaise commande. Effet de bord utile : donne enfin une clé client fiable au dossier, ce qui règle la rupture 2.</span>
+      </div>
+      <div class="controle">
+        <span class="code">V3 — article</span>
+        <span class="q">On fabrique bien la référence commandée ?</span>
+        <span class="k">planning_entries.ref_produit_norm ↔ cde_ligne.code1 / code2</span>
+        <span class="d">Le contrôle le plus coûteux des quatre : il faut d'abord une table de correspondance entre les deux référentiels. Mais c'est celui qui évite de produire la mauvaise étiquette.</span>
+      </div>
+      <div class="controle">
+        <span class="code">V4 — date promise</span>
+        <span class="q">L'atelier et le commerce promettent-ils la même date ?</span>
+        <span class="k">date_livraison <span class="mini">(texte, déjà parsé)</span> vs cde_ligne.amje</span>
+        <span class="d">Attrape la divergence entre la promesse client de RVGI et la date que l'atelier s'est écrite. Sur les commandes en cours seulement — 971 lignes aujourd'hui.</span>
+      </div>
+    </div>
+    <p class="mini">Les quatre se calculent sur les dossiers actifs uniquement : <span class="mono">planning_entries</span> ne garde que quatre mois glissants, et RVGI compte <span class="nb">971</span> lignes de commande hors position « soldée ».</p>
+  </div>
+</article></section>
+
+<!-- 12 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail encre-o"><span class="n">12</span><span class="t">Contrôles · produire et expédier</span><span class="p">V5 à V7</span></div>
+  <div class="corps">
+    <h2>Trois contrôles sur ce que l'atelier a réellement fait.</h2>
+    <div class="g3" style="flex:1;align-items:stretch">
+      <div class="controle">
+        <span class="code">V5 — quantité</span>
+        <span class="q">La quantité produite colle-t-elle à la commande ?</span>
+        <span class="k">production_data · opération 89 <span class="mini">(fin de dossier)</span><br>SUM(quantite_traitee) vs cde_ligne.qte</span>
+        <span class="d">Attrape la sur-production, la sous-production et le reliquat oublié. La donnée existe déjà des deux côtés : c'est une jointure, pas un développement.</span>
+      </div>
+      <div class="controle">
+        <span class="code">V6 — le BL existe</span>
+        <span class="q">Le BL saisi dans MyExpé existe-t-il dans RVGI ?</span>
+        <span class="k">expe_departs.no_bl ∈ liv_ligne.numero<br><span class="mini">+ le client et la date concordent</span></span>
+        <span class="d">Attrape la coquille de saisie et le départ enregistré sur un BL qui n'a jamais été édité. Sécurise du même coup la traçabilité FSC, qui s'appuie sur ce numéro.</span>
+      </div>
+      <div class="controle">
+        <span class="code">V7 — les deux sens</span>
+        <span class="q">Toute livraison a-t-elle un départ, et tout départ une livraison ?</span>
+        <span class="k">liv_entete <span class="mini">(30 j)</span> ↔ expe_departs</span>
+        <span class="d">Le seul contrôle qui mesure le trou dans les deux sens : marchandise partie sans BL édité d'un côté, BL édité sans départ enregistré de l'autre. C'est la vraie mesure de la fiabilité de MyExpé.</span>
+      </div>
+    </div>
+    <div class="carte ov pousse"><p class="mini"><b>Un point de méthode.</b> Ces trois contrôles comparent une donnée MySifa fraîche à une donnée RVGI vieille de quelques heures. Un écart peut donc n'être qu'un décalage de synchro. Il faut une <b>zone morte</b> — ne rien signaler sur les pièces plus récentes que la dernière synchro — sinon le tableau se remplit de faux positifs et plus personne ne le regarde.</p></div>
+  </div>
+</article></section>
+
+<!-- 13 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail encre-o"><span class="n">13</span><span class="t">Contrôles · le stock</span><span class="p">V8</span></div>
+  <div class="corps">
+    <h2>Un écran qui existe déjà, à qui il manque une prise.</h2>
+    <div class="g-12" style="flex:1;min-height:0;align-items:stretch">
+      <div class="pile">
+        <div class="controle">
+          <span class="code">V8 — stock automatique</span>
+          <span class="q">Le stock MySifa et le stock RVGI disent-ils la même chose ?</span>
+          <span class="k">lots_stock · produits.reference<br>↔ fic_art.code1 / code2</span>
+          <span class="d">Aucun développement neuf : l'écran, les écarts, l'historique des instantanés existent. Seule la source change.</span>
+        </div>
+        <div class="carte al"><h3>Aujourd'hui</h3><p class="mini">Quelqu'un exporte la table des stocks de RVGI en Excel, la téléverse, l'écran calcule. À chaque fois.</p></div>
+      </div>
+      <div class="pile">
+        <div class="carte ms">
+          <h3>Ce que l'écran sait déjà faire</h3>
+          <ul class="liste" style="margin-top:4px">
+            <li>Reconstruire la référence RVGI <span class="mono">code1/code2</span>, en complétant les zéros manquants</li>
+            <li>Classer chaque ligne : écart, présent seulement dans MySifa, présent seulement dans RVGI, stock négatif</li>
+            <li>Garder un instantané horodaté de chaque comparaison — donc suivre si un écart se résorbe</li>
+            <li>Expliquer un écart avec les mouvements des sept derniers jours</li>
+          </ul>
+        </div>
+        <div class="carte ov">
+          <h3>Ce que le miroir apporte</h3>
+          <p class="mini">La même comparaison, <b>deux fois par jour, sans personne</b>. Et pour la première fois une série : l'écart de stock devient une courbe, pas une photo. Un écart qui grandit se voit ; un écart qui se résorbe aussi.</p>
+          <p class="mini"><b>C'est le meilleur rapport valeur / effort de toute la liste</b> — une demi-journée, et une corvée hebdomadaire qui disparaît.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</article></section>
+
+<!-- 14 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail encre-o"><span class="n">14</span><span class="t">Contrôles · l'argent</span><span class="p">V9 à V12</span></div>
+  <div class="corps">
+    <h2>Quatre contrôles que RVGI porte seul — et que personne ne regarde.</h2>
+    <div class="g2" style="flex:1;align-items:stretch">
+      <div class="controle">
+        <span class="code">V9 — prix</span>
+        <span class="q">Le prix facturé est-il le prix négocié ?</span>
+        <span class="k">vte_ligne.pun vs fic_artc <span class="mini">(prix client)</span> et fic_artv <span class="mini">(tarif)</span></span>
+        <span class="d">Attrape la remise oubliée, le tarif périmé, la ligne saisie hors barème. Tout est dans le miroir : aucune donnée MySifa n'est nécessaire.</span>
+      </div>
+      <div class="controle">
+        <span class="code">V10 — marge réelle</span>
+        <span class="q">Ce dossier a-t-il rapporté ce qu'on avait prévu ?</span>
+        <span class="k">devis <span class="mini">(MySifa)</span> · production réelle <span class="mini">(op. 89, calage)</span> · vte_ligne.net <span class="mini">(facturé)</span></span>
+        <span class="d">L'écran de rentabilité compare aujourd'hui le devis à la production. Il lui manque la troisième jambe : ce qui a été <em>réellement facturé</em>. Le miroir la fournit.</span>
+      </div>
+      <div class="controle">
+        <span class="code">V11 — encours client</span>
+        <span class="q">Ce client dépasse-t-il son encours autorisé ?</span>
+        <span class="k">ecc_ech non soldées par client ↔ clients.encours_autorise</span>
+        <span class="d"><span class="nb">3 178</span> échéances non soldées dans le miroir, et l'encours autorisé est déjà une colonne de MySifa. Le rapprochement n'a jamais été fait.</span>
+      </div>
+      <div class="controle">
+        <span class="code">V12 — BL non facturés</span>
+        <span class="q">Qu'est-ce qui est parti sans être facturé ?</span>
+        <span class="k">liv_ligne sans fac_no, au-delà de N jours</span>
+        <span class="d"><span class="nb">888</span> BL sans n° de facture. La plupart sont récents et normaux ; c'est le reste qui compte, et personne ne le liste aujourd'hui.</span>
+      </div>
+    </div>
+    <p class="mini">Ces quatre-là ne demandent presque aucune donnée MySifa. Ils sont indépendants du reste : on peut les faire avant, après, ou jamais, sans rien casser.</p>
+  </div>
+</article></section>
+
+<!-- 15 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail encre-s"><span class="n">15</span><span class="t">Ne pas refaire</span><span class="p">ce qui existe déjà dans MySifa</span></div>
+  <div class="corps">
+    <h2>Quatre briques sont déjà posées.</h2>
+    <div class="g2" style="flex:1;align-items:stretch">
+      <div class="carte ms">
+        <h3>L'arbitrage de source — le modèle</h3>
+        <p class="mini">OF et fiche technique ont deux sources concurrentes. La règle est appliquée <b>au champ</b>, pas au document : une saisie humaine prime sur un import, tout écrasement est journalisé — même refusé —, et toucher un champ de calcul périme la validation. <b>C'est exactement la mécanique qu'il faut pour les écarts MySifa / RVGI.</b></p>
+      </div>
+      <div class="carte ms">
+        <h3>Les contrôles FSC — la forme</h3>
+        <p class="mini">Sept familles d'écarts déjà détectées : certificats à renouveler, directs orphelins, lots sans origine, doublons de BL, codes-barres en double. Chacune isolée : un contrôle qui casse n'emporte pas les autres. La liste des contrôles de véracité prendra la même forme.</p>
+      </div>
+      <div class="carte ms">
+        <h3>La réconciliation de stock — le squelette</h3>
+        <p class="mini">Instantanés horodatés, classement des écarts, explication par les mouvements récents. Il ne manque que la source automatique.</p>
+      </div>
+      <div class="carte al">
+        <h3>Le point à décider — le déclencheur</h3>
+        <p class="mini">MySifa n'a <b>aucune tâche périodique applicative</b> : tout est calculé à l'ouverture d'un écran, et l'instantané du carnet se prend au passage de l'utilisateur. Élégant, mais un contrôle que personne n'ouvre ne se déclenche jamais. La synchro RVGI, elle, est un vrai rendez-vous deux fois par jour : c'est le crochet naturel.</p>
+      </div>
+    </div>
+  </div>
+</article></section>
+
+<!-- 16 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail encre-o"><span class="n">16</span><span class="t">Arbitrage</span><span class="p">effort × valeur</span></div>
+  <div class="corps">
+    <h2>Où mettre les deux premiers jours.</h2>
+    <div class="matrice">
+      <div class="ax-y">
+        <span class="ax-lab">Valeur<br>forte</span>
+        <span class="ax-lab">faible</span>
+      </div>
+      <div class="ax-x"><span class="ax-lab">Effort faible</span><span class="ax-lab">Effort fort</span></div>
+      <div class="zone" aria-hidden="true"><span>Faire d'abord</span></div>
+      <span class="pt now" style="left:12%;bottom:86%">V8 stock auto</span>
+      <span class="pt" style="left:9%;bottom:70%">V1 existence commande</span>
+      <span class="pt" style="left:27%;bottom:79%">V6 le BL existe</span>
+      <span class="pt" style="left:21%;bottom:56%">V12 BL non facturés</span>
+      <span class="pt" style="left:42%;bottom:89%">V7 livraison ↔ départ</span>
+      <span class="pt" style="left:31%;bottom:38%">V2 client du dossier</span>
+      <span class="pt" style="left:48%;bottom:66%">V5 quantité produite</span>
+      <span class="pt" style="left:45%;bottom:22%">V4 date promise</span>
+      <span class="pt" style="left:64%;bottom:46%">V11 encours client</span>
+      <span class="pt" style="left:69%;bottom:81%">V10 marge réelle</span>
+      <span class="pt" style="left:77%;bottom:31%">V9 prix vs barème</span>
+      <span class="pt" style="left:89%;bottom:60%">V3 article</span>
+    </div>
+    <p class="mini" style="margin-top:32px">L'effort est estimé en jours de développement, la valeur en argent ou en risque évité. <b>V8</b> est en bleu : c'est le seul dont le code existe déjà à 80 %.</p>
+  </div>
+</article></section>
+
+<!-- 17 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail encre-o"><span class="n">17</span><span class="t">Séquence</span><span class="p">quatre lots</span></div>
+  <div class="corps">
+    <h2>Quatre lots, dans cet ordre.</h2>
+    <div style="flex:1;min-height:0;overflow:auto">
+      <div class="lot">
+        <span class="num">01</span>
+        <div>
+          <div class="titre">Le stock sans Excel <span class="tag ms">V8</span> <span class="tag gr">½ jour</span></div>
+          <p class="petit">Brancher l'écran de réconciliation sur le miroir au lieu du fichier téléversé. Rien à concevoir, une source à changer. Résultat visible le lendemain matin, et une corvée en moins — de quoi valider l'idée avant d'investir plus.</p>
+        </div>
+      </div>
+      <div class="lot">
+        <span class="num">02</span>
+        <div>
+          <div class="titre">Le pont commande <span class="tag ov">V1 · V2 · V6</span> <span class="tag gr">1 jour</span></div>
+          <p class="petit">Les trois contrôles d'existence, plus un écran « Contrôles » dans MyERP qui les liste. C'est le lot qui rend tous les suivants possibles : sans numéro de commande fiable, aucun croisement ne tient. À décider ici : est-ce qu'on ajoute aussi un sélecteur de commande à la saisie du dossier (décision D1).</p>
+        </div>
+      </div>
+      <div class="lot">
+        <span class="num">03</span>
+        <div>
+          <div class="titre">La promesse client <span class="tag ov">V4 · V5 · V7</span> <span class="tag gr">2 jours</span></div>
+          <p class="petit">Date promise, quantité produite, livraison contre départ. C'est le lot qui donne un vrai pilotage du délai — et le premier dont les écarts s'adressent à un service, pas à la direction.</p>
+        </div>
+      </div>
+      <div class="lot">
+        <span class="num">04</span>
+        <div>
+          <div class="titre">L'argent <span class="tag rv">V9 · V10 · V11 · V12</span> <span class="tag gr">2 jours</span></div>
+          <p class="petit">Prix contre barème, marge réelle, encours client, BL non facturés. Presque tout est dans le miroir seul : ce lot est indépendant des trois autres et peut passer devant si la priorité est financière plutôt qu'opérationnelle.</p>
+        </div>
+      </div>
+      <div class="lot">
+        <span class="num" style="color:var(--ink-3)">—</span>
+        <div>
+          <div class="titre" style="color:var(--ink-3)">Hors lot : V3, l'article</div>
+          <p class="petit">Rapprocher les deux référentiels articles est un chantier en soi, pas un contrôle. À traiter séparément, quand les autres tourneront.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</article></section>
+
+<!-- 18 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail encre-o"><span class="n">18</span><span class="t">Décisions</span><span class="p">cinq points à trancher</span></div>
+  <div class="corps">
+    <h2>Ce que je ne peux pas décider à ta place.</h2>
+    <div class="g3" style="flex:1;align-items:stretch">
+      <div class="decision">
+        <span class="q">D1 · Le pont commande</span>
+        <div class="opts"><span>Contrôle a posteriori seulement</span><span>Sélecteur qui lit le miroir à la saisie</span></div>
+        <span class="reco">Les deux : sélecteur proposé, saisie libre conservée, contrôle en filet — le miroir a douze heures de retard, il ne doit pas bloquer une saisie.</span>
+      </div>
+      <div class="decision">
+        <span class="q">D2 · Fréquence de synchro</span>
+        <div class="opts"><span>Deux fois par jour, comme aujourd'hui</span><span>Quatre fois par jour</span></div>
+        <span class="reco">Deux suffisent pour tout sauf V6 et V7. Passer à quatre seulement si tu veux contrôler l'expédition du jour même.</span>
+      </div>
+      <div class="decision">
+        <span class="q">D3 · Où vivent les écarts</span>
+        <div class="opts"><span>Calculés à l'ouverture de l'écran</span><span>Stockés à chaque synchro</span></div>
+        <span class="reco">Stockés. Un écart qui disparaît sans qu'on sache s'il a été corrigé ou simplement masqué ne sert à rien.</span>
+      </div>
+      <div class="decision">
+        <span class="q">D4 · Qui les voit</span>
+        <div class="opts"><span>Direction seule</span><span>Chaque service voit les siens</span></div>
+        <span class="reco">Chaque service voit ses écarts, la direction voit le total. Un écart n'a de valeur que devant quelqu'un qui peut le corriger.</span>
+      </div>
+      <div class="decision">
+        <span class="q">D5 · Le stock, qui fait foi</span>
+        <div class="opts"><span>RVGI</span><span>MySifa</span><span>Ni l'un ni l'autre : l'écart est l'indicateur</span></div>
+        <span class="reco">Le troisième. RVGI reste la référence comptable, MySifa la référence physique ; on ne recopie dans aucun sens.</span>
+      </div>
+      <div class="carte ov">
+        <h3>Et une question de fond</h3>
+        <p class="mini">La production ne remonte plus dans RVGI depuis avril. Est-ce assumé — MySifa devient la GPAO — ou subi ? La réponse change la valeur de la moitié des contrôles.</p>
+      </div>
+    </div>
+  </div>
+</article></section>
+
+<!-- 19 ─────────────────────────────────────────────────────────────────── -->
+<section class="slide"><article class="feuille">
+  <div class="rail"><span class="n">19</span><span class="t">Honnêteté</span><span class="p">ce qui reste à vérifier</span></div>
+  <div class="corps">
+    <h2>Ce que je ne sais pas encore.</h2>
+    <div class="g2" style="flex:1;align-items:stretch">
+      <div class="pile">
+        <ul class="liste">
+          <li class="al"><b>Aucun de ces contrôles n'a encore tourné sur les deux bases en même temps.</b> Les chiffres de RVGI sont mesurés sur le miroir ; ceux de MySifa viennent du code, pas d'une requête. Le premier croisement réel est la première tâche du lot 2.</li>
+          <li class="al"><b>Pourquoi 6 commandes sur 10 n'ont aucun mouvement de stock RVGI.</b> Flux qui ne passe pas par le stock, ou saisie abandonnée ? À demander à l'administration avant d'en tirer quoi que ce soit.</li>
+          <li><b>Le colisage RVGI</b> : 257 lignes, deux clients, cinq ans. Reliquat d'un client qui l'exigeait, ou fonction abandonnée ?</li>
+          <li><b>Deux colonnes de commande</b> — <span class="mono">lab</span> et <span class="mono">qtex</span> — dont le sens n'est pas tranché ; déjà noté dans la doc RVGI.</li>
+        </ul>
+      </div>
+      <div class="pile">
+        <ul class="liste">
+          <li><b>La table <span class="mono">pf_mouvements</span></b> reçoit-elle encore des écritures, ou n'est-elle plus qu'un vestige que les rapports continuent de lire ?</li>
+          <li><b>Le rapport hebdomadaire</b> n'a aucun déclencheur automatique dans le dépôt. À confirmer côté serveur.</li>
+          <li><b>Les seuils de tolérance</b> — à partir de quel écart de quantité, de combien de jours de retard, faut-il alerter ? Ça se règle avec les services, pas dans le code.</li>
+        </ul>
+        <div class="carte ov pousse">
+          <h3>Une dernière chose</h3>
+          <p class="mini">Le lien « Commande → Colisage » de MyERP était branché sur <span class="mono">col_ligne.numcde</span> — une colonne qui vaut <b>0 sur les 257 lignes</b> du miroir. Il ne remontait donc jamais rien, sans jamais le dire. Corrigé le 25/08. C'est très exactement le genre de silence que les contrôles de véracité sont là pour rompre.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</article></section>
+
+
+</main>
+
+<div class="bande" id="bande" aria-hidden="true"></div>
+<nav class="nav" aria-label="Navigation entre les diapos">
+  <button type="button" id="prec" aria-label="Diapo précédente">‹</button>
+  <span class="cpt" id="cpt">01 / 19</span>
+  <button type="button" id="suiv" aria-label="Diapo suivante">›</button>
+</nav>
+
+<script>
+(function(){
+  var slides=[].slice.call(document.querySelectorAll('.slide'));
+  var bande=document.getElementById('bande'),cpt=document.getElementById('cpt');
+  var ici=0;
+  slides.forEach(function(_,i){
+    var c=document.createElement('i');c.dataset.i=i;bande.appendChild(c);
+  });
+  var cellules=[].slice.call(bande.children);
+  cellules.forEach(function(c,i){
+    c.style.cursor='pointer';
+    c.addEventListener('click',function(){aller(i);});
+  });
+  function pad(n){return (n<9?'0':'')+(n+1);}
+  function peindre(){
+    cellules.forEach(function(c,i){
+      c.className=i<ici?'vue':(i===ici?'ici':'');
+    });
+    cpt.textContent=pad(ici)+' / '+slides.length;
+  }
+  function aller(i){
+    ici=Math.max(0,Math.min(slides.length-1,i));
+    slides[ici].scrollIntoView({block:'center'});
+    peindre();
+  }
+  document.getElementById('prec').addEventListener('click',function(){aller(ici-1);});
+  document.getElementById('suiv').addEventListener('click',function(){aller(ici+1);});
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){e.preventDefault();aller(ici+1);}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){e.preventDefault();aller(ici-1);}
+    else if(e.key==='Home'){e.preventDefault();aller(0);}
+    else if(e.key==='End'){e.preventDefault();aller(slides.length-1);}
+  });
+  // Le défilement libre reste possible : on suit ce qui est à l'écran.
+  if('IntersectionObserver' in window){
+    var obs=new IntersectionObserver(function(entrees){
+      entrees.forEach(function(e){
+        if(e.isIntersecting){ici=slides.indexOf(e.target);peindre();}
+      });
+    },{threshold:.55});
+    slides.forEach(function(s){obs.observe(s);});
+  }
+  peindre();
+})();
+</script>
+
+</body>
+</html>

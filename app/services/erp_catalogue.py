@@ -1092,7 +1092,10 @@ LIENS = {
     ],
     "receptions": [
         {"label": "La commande fournisseur", "ecran": "commandes_fournisseur", "sur": {"l.numero": "numero"}},
-        {"label": "Mouvements matière du lot", "ecran": "mouvements_matiere", "sur": {"m.lot": "lot"}},
+        # `lot` est NULL partout dans le miroir, des deux côtés : RVGI ne s'en
+        # sert pas. Le rapprochement se fait par le n° de commande fournisseur,
+        # que la réception porte dans `numero` et le mouvement dans `numcde`.
+        {"label": "Mouvements matière", "ecran": "mouvements_matiere", "sur": {"m.numcde": "numero"}},
     ],
     "factures_fournisseur": [
         {"label": "La commande fournisseur", "ecran": "commandes_fournisseur", "sur": {"l.numero": "livno"}},
@@ -1144,7 +1147,8 @@ LIENS = {
     ],
     "mouvements_matiere": [
         {"label": "La matière", "ecran": "stock_matiere", "sur": {"m.code1": "code1", "m.code2": "code2"}},
-        {"label": "Réceptions du lot", "ecran": "receptions", "sur": {"l.lot": "lot"}},
+        # Voir la note sur « receptions » : `lot` n'est jamais renseigné.
+        {"label": "Réceptions", "ecran": "receptions", "sur": {"l.numero": "numcde"}},
     ],
     "stock_matiere": [
         {"label": "Mouvements matière", "ecran": "mouvements_matiere",
@@ -1163,7 +1167,9 @@ LIENS = {
         {"label": "La matière", "ecran": "stock_matiere", "sur": {"m.code1": "code1", "m.code2": "code2"}},
     ],
     "colisage": [
-        {"label": "La commande", "ecran": "commandes", "sur": {"l.numero": "numcde"}},
+        # `col_ligne.numcde` vaut 0 partout : c'est `numero` qui porte le
+        # numéro de commande (voir la note du lien inverse, écran commandes).
+        {"label": "La commande", "ecran": "commandes", "sur": {"l.numero": "numero"}},
         {"label": "Le bon de livraison", "ecran": "livraisons", "sur": {"l.numero": "numbl"}},
     ],
 }
