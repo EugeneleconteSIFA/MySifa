@@ -1017,14 +1017,26 @@ def _matieres_depuis_of(pe: dict) -> None:
         pe[champ_ft] = v
 
 
-def _mois_of(pe: dict) -> Optional[str]:
-    """Mois 'AAAA-MM' visé par un OF : son délai client, sinon sa création."""
-    d = parse_date_livraison(pe.get("date_livraison")) \
-        or parse_date_livraison(pe.get("planned_start"))
-    return f"{d.year:04d}-{d.month:02d}" if d else None
+def _mois_of(pe: dict, axe: str = "livraison") -> Optional[str]:
+    """Mois 'AAAA-MM' visé par un OF, selon l'axe demandé.
+
+    Sur l'axe production, on retient `date_creation` — la date à laquelle l'OF
+    a été créé dans Access. Ce n'est pas le lancement en machine, mais c'est le
+    seul repère amont dont dispose un OF archivé, et il tombe du bon côté :
+    avant la livraison, comme la sortie de matière. L'approximation est
+    assumée, elle vaut mieux qu'un OF daté trois mois trop tard.
+    """
+    champs = (("planned_start", "date_livraison") if axe == "production"
+              else ("date_livraison", "planned_start"))
+    for c in champs:
+        d = parse_date_livraison(pe.get(c))
+        if d:
+            return f"{d.year:04d}-{d.month:02d}"
+    return None
 
 
-def _load_of_orphelins(conn, depuis: Optional[str] = None) -> list:
+def _load_of_orphelins(conn, depuis: Optional[str] = None,
+                       axe: str = "livraison") -> list:
     """OF scannés qu'aucun dossier du planning ne porte, prêts pour le calcul.
 
     `depuis` ('AAAA-MM') borne la fenêtre. Le tri se fait en Python plutôt que
@@ -1039,7 +1051,7 @@ def _load_of_orphelins(conn, depuis: Optional[str] = None) -> list:
     dégradation lisible, pas une panne.
     """
     def _dans_fenetre(pe):
-        m = _mois_of(pe)
+        m = _mois_of(pe, axe)
         return bool(m) and (not depuis or m >= depuis)
 
     try:
@@ -1957,7 +1969,8 @@ def _mois_glissants(depuis: date, avant: int, apres: int) -> list:
     return out
 
 
-def _agreger_of_orphelins(conn, debut: Optional[str] = None) -> tuple:
+def _agreger_of_orphelins(conn, debut: Optional[str] = None,
+                          axe: str = "livraison") -> tuple:
     """Même agrégat que `agreger_carnet`, mais sur les OF sans dossier planning.
 
     Retourne (cumul, vus) au format de `agreger_carnet` : (mois, matiere_id,
@@ -1968,7 +1981,7 @@ def _agreger_of_orphelins(conn, debut: Optional[str] = None) -> tuple:
     # Le tri par date est fait par `_load_of_orphelins`, avant le
     # rapprochement de fiche technique : c'est lui le poste de coût sur le
     # fond d'archive, pas le calcul du besoin.
-    dossiers = _load_of_orphelins(conn, debut)
+    dossiers = _load_of_orphelins(conn, debut, axe)
     if not dossiers:
         return {}, {}
     mapping = _load_mapping(conn)
@@ -1977,7 +1990,7 @@ def _agreger_of_orphelins(conn, debut: Optional[str] = None) -> tuple:
     cumul: dict = {}
     vus: dict = {}
     for pe in dossiers:
-        mois = _mois_of(pe)
+        mois = _mois_of(pe, axe)
         if not mois:
             continue  # un OF sans date exploitable ne pèse sur aucun mois
         _matieres_depuis_of(pe)
@@ -2037,6 +2050,14 @@ def besoins_tendance(request: Request):
     # 12 mois révolus + le mois courant + 5 à venir = 18 colonnes.
     futur = _q("futur", _q("mois", 6, 2, 18) - 1, 1, 24)
     passe = _q("passe", 12, 0, 36)
+    # L'axe de temps. Défaut PRODUCTION : cet écran sert à acheter, et la
+    # matière doit être en stock avant que le dossier passe en machine — pas
+    # le jour où le client est livré. L'axe livraison reste accessible : c'est
+    # lui qui répond à « quand ai-je promis », et c'est aussi ce qui permet de
+    # confronter l'écran à un relevé de consommations, qui date les sorties.
+    axe = (request.query_params.get("axe") or "production").strip().lower()
+    if axe not in ("production", "livraison"):
+        axe = "production"
     horizon = futur + 1
     kind_filtre = (request.query_params.get("kind") or "").strip() or None
 
@@ -2065,8 +2086,8 @@ def besoins_tendance(request: Request):
         return f"{an - 1:04d}-{mo:02d}"
 
     with get_db() as conn:
-        cumul, vus, vus_actifs, dossiers = agreger_carnet(conn)
-        cumul_of, vus_of = _agreger_of_orphelins(conn, debut_calcul)
+        cumul, vus, vus_actifs, dossiers = agreger_carnet(conn, axe)
+        cumul_of, vus_of = _agreger_of_orphelins(conn, debut_calcul, axe)
         couv = couverture_carnet(conn)
         # Une seule lecture du calendrier pour toutes les matières : c'est la
         # même usine qui ferme, quelle que soit la ligne du tableau.
@@ -2328,6 +2349,7 @@ def besoins_tendance(request: Request):
         # Les jours réellement ouvrés par mois. Exposés pour que l'écran
         # puisse expliquer un creux d'août par le calendrier plutôt que de
         # laisser croire à un effondrement d'activité.
+        "axe": axe,
         "jours_ouvres": jours_ouvres,
         "hors_fenetre": round(hors_fenetre, 2),
         "reste_sur_mois_echus": round(passe_total, 2),

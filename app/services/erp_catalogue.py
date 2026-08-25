@@ -1034,6 +1034,137 @@ ECRANS = [
     },
 ]
 
+
+# ── Pièces liées ─────────────────────────────────────────────────────────────
+# RVGI ne déclare aucune clé étrangère : les liens ci-dessous sont
+# conventionnels, déduits des noms et vérifiés sur les données (cf.
+# docs/rvgi/data_rvgi.md §3). Chacun dit : « depuis cette ligne, va chercher
+# dans tel écran les lignes dont telle colonne vaut telle valeur de la ligne
+# courante ».
+#
+#   {"label": ..., "ecran": <clé d'écran>, "sur": {<colonne cible>: <champ source>}}
+#
+# Deux règles de prudence appliquées partout :
+#   - jamais de jointure sur `numero` seul entre deux domaines : chaque famille
+#     a sa propre numérotation. On passe par la colonne de report explicite
+#     (`numcde`, `livbl`, `livno`, `nofac`, `refbl`) ;
+#   - un lien dont la valeur source est vide n'est pas proposé.
+
+LIENS = {
+    "commandes": [
+        {"label": "Bons de livraison", "ecran": "livraisons", "sur": {"l.numcde": "numero"}},
+        {"label": "Factures", "ecran": "factures", "sur": {"l.livno": "numero"}},
+        {"label": "Mouvements de stock", "ecran": "mouvements_pf", "sur": {"m.numcde": "numero"}},
+        {"label": "Colisage", "ecran": "colisage", "sur": {"c.numcde": "numero"}},
+        {"label": "L'article", "ecran": "articles", "sur": {"a.code1": "code1", "a.code2": "code2"}},
+        {"label": "Prix négociés du client", "ecran": "prix_client",
+         "sur": {"p.code1": "code1", "p.code2": "code2"}},
+    ],
+    "livraisons": [
+        {"label": "La commande", "ecran": "commandes", "sur": {"l.numero": "numcde"}},
+        {"label": "Factures", "ecran": "factures", "sur": {"l.livbl": "numero"}},
+        {"label": "Mouvements de stock", "ecran": "mouvements_pf", "sur": {"m.refbl": "numero"}},
+        {"label": "Colisage", "ecran": "colisage", "sur": {"c.numbl": "numero"}},
+    ],
+    "factures": [
+        {"label": "La commande", "ecran": "commandes", "sur": {"l.numero": "livno"}},
+        {"label": "Le bon de livraison", "ecran": "livraisons", "sur": {"l.numero": "livbl"}},
+        {"label": "Échéances", "ecran": "echeances", "sur": {"l.nofac": "numero"}},
+        {"label": "L'article", "ecran": "articles", "sur": {"a.code1": "code1", "a.code2": "code2"}},
+    ],
+    "echeances": [
+        {"label": "La facture", "ecran": "factures", "sur": {"l.numero": "nofac"}},
+    ],
+    "devis": [
+        {"label": "L'article", "ecran": "articles", "sur": {"a.code1": "code1", "a.code2": "code2"}},
+    ],
+    "marches": [
+        {"label": "L'article", "ecran": "articles", "sur": {"a.code1": "code1", "a.code2": "code2"}},
+        {"label": "Commandes de l'article", "ecran": "commandes",
+         "sur": {"l.code1": "code1", "l.code2": "code2"}},
+    ],
+    "commandes_fournisseur": [
+        {"label": "Réceptions", "ecran": "receptions", "sur": {"l.numero": "numero"}},
+        {"label": "Factures fournisseurs", "ecran": "factures_fournisseur", "sur": {"l.livno": "numero"}},
+    ],
+    "receptions": [
+        {"label": "La commande fournisseur", "ecran": "commandes_fournisseur", "sur": {"l.numero": "numero"}},
+        {"label": "Mouvements matière du lot", "ecran": "mouvements_matiere", "sur": {"m.lot": "lot"}},
+    ],
+    "factures_fournisseur": [
+        {"label": "La commande fournisseur", "ecran": "commandes_fournisseur", "sur": {"l.numero": "livno"}},
+    ],
+    "stock_pf": [
+        {"label": "Mouvements de stock", "ecran": "mouvements_pf",
+         "sur": {"m.code1": "code1", "m.code2": "code2"}},
+        {"label": "Commandes", "ecran": "commandes", "sur": {"l.code1": "code1", "l.code2": "code2"}},
+        {"label": "Prix de vente", "ecran": "prix_vente", "sur": {"p.code1": "code1", "p.code2": "code2"}},
+        {"label": "Fiche de fabrication", "ecran": "fiches_fabrication",
+         "sur": {"f.code1": "code1", "f.code2": "code2"}},
+    ],
+    "articles": [
+        {"label": "Stock", "ecran": "stock_pf", "sur": {"a.code1": "code1", "a.code2": "code2"}},
+        {"label": "Mouvements de stock", "ecran": "mouvements_pf",
+         "sur": {"m.code1": "code1", "m.code2": "code2"}},
+        {"label": "Commandes", "ecran": "commandes", "sur": {"l.code1": "code1", "l.code2": "code2"}},
+        {"label": "Factures", "ecran": "factures", "sur": {"l.code1": "code1", "l.code2": "code2"}},
+        {"label": "Prix de vente", "ecran": "prix_vente", "sur": {"p.code1": "code1", "p.code2": "code2"}},
+        {"label": "Prix d'achat", "ecran": "prix_achat", "sur": {"p.code1": "code1", "p.code2": "code2"}},
+        {"label": "Prix négociés", "ecran": "prix_client", "sur": {"p.code1": "code1", "p.code2": "code2"}},
+        {"label": "Fiche de fabrication", "ecran": "fiches_fabrication",
+         "sur": {"f.code1": "code1", "f.code2": "code2"}},
+    ],
+    "clients": [
+        {"label": "Commandes", "ecran": "commandes", "sur": {"e.numclt": "numero"}},
+        {"label": "Factures", "ecran": "factures", "sur": {"e.numclt": "numero"}},
+        {"label": "Échéances", "ecran": "echeances", "sur": {"l.numclt": "numero"}},
+        {"label": "Articles du client", "ecran": "articles", "sur": {"a.numclt": "numero"}},
+    ],
+    "fournisseurs": [
+        {"label": "Commandes fournisseurs", "ecran": "commandes_fournisseur",
+         "sur": {"e.numfou": "numero"}},
+        {"label": "Prix d'achat", "ecran": "prix_achat", "sur": {"p.numfou": "numero"}},
+    ],
+    "outils": [
+        {"label": "Fiches de fabrication", "ecran": "fiches_fabrication", "sur": {"f.ndec1": "numero"}},
+    ],
+    "fiches_fabrication": [
+        {"label": "L'article", "ecran": "articles", "sur": {"a.code1": "code1", "a.code2": "code2"}},
+        {"label": "L'outil de découpe", "ecran": "outils", "sur": {"o.numero": "ndec1"}},
+        {"label": "Commandes de l'article", "ecran": "commandes",
+         "sur": {"l.code1": "code1", "l.code2": "code2"}},
+    ],
+    "mouvements_pf": [
+        {"label": "L'article", "ecran": "articles", "sur": {"a.code1": "code1", "a.code2": "code2"}},
+        {"label": "La commande", "ecran": "commandes", "sur": {"l.numero": "numcde"}},
+        {"label": "Le bon de livraison", "ecran": "livraisons", "sur": {"l.numero": "refbl"}},
+    ],
+    "mouvements_matiere": [
+        {"label": "La matière", "ecran": "stock_matiere", "sur": {"m.code1": "code1", "m.code2": "code2"}},
+        {"label": "Réceptions du lot", "ecran": "receptions", "sur": {"l.lot": "lot"}},
+    ],
+    "stock_matiere": [
+        {"label": "Mouvements matière", "ecran": "mouvements_matiere",
+         "sur": {"m.code1": "code1", "m.code2": "code2"}},
+    ],
+    "dossiers": [
+        {"label": "Déclarations de production", "ecran": "declarations", "sur": {"g.dos": "numero"}},
+        {"label": "Sorties matière", "ecran": "sorties_matiere", "sur": {"s.dos": "numero"}},
+    ],
+    "declarations": [
+        {"label": "Le dossier", "ecran": "dossiers", "sur": {"d.numero": "dos"}},
+        {"label": "Sorties matière du dossier", "ecran": "sorties_matiere", "sur": {"s.dos": "dos"}},
+    ],
+    "sorties_matiere": [
+        {"label": "Le dossier", "ecran": "dossiers", "sur": {"d.numero": "dos"}},
+        {"label": "La matière", "ecran": "stock_matiere", "sur": {"m.code1": "code1", "m.code2": "code2"}},
+    ],
+    "colisage": [
+        {"label": "La commande", "ecran": "commandes", "sur": {"l.numero": "numcde"}},
+        {"label": "Le bon de livraison", "ecran": "livraisons", "sur": {"l.numero": "numbl"}},
+    ],
+}
+
 PAR_CLE = {e["cle"]: e for e in ECRANS}
 
 
@@ -1105,4 +1236,5 @@ def adapter_ecran(ec, colonnes_par_table):
     adapte["recherche"] = [r for r in ec.get("recherche", []) if ref_ok(r)]
     adapte["filtres"] = [f for f in ec.get("filtres", []) if ref_ok(f["col"])]
     adapte["labels_detail"] = dict(LABELS, **(ec.get("labels_detail") or {}))
+    adapte["liens"] = LIENS.get(ec["cle"], [])
     return adapte

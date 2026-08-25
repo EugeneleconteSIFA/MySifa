@@ -12627,6 +12627,22 @@ const BES_TEND_FENETRES = [
   { cle: 'futur', passe: 0, futur: 7, lbl: 'À venir', title: 'Le mois courant et les 7 suivants' },
 ];
 
+// Les deux axes de temps. Ils ne répondent pas à la même question, et l'écran
+// doit dire laquelle il traite — sans quoi on lit des courbes décalées d'un à
+// deux mois sans savoir pourquoi.
+const BES_TEND_AXES = [
+  { cle: 'production', lbl: 'Production',
+    title: 'Le mois où le dossier passe en machine — donc où la matière doit '
+           + 'être en stock. C\'est l\'axe sur lequel on commande.' },
+  { cle: 'livraison', lbl: 'Livraison',
+    title: 'Le mois promis au client. C\'est l\'engagement, pas la date à '
+           + 'laquelle la matière est nécessaire : elle sort du stock avant.' },
+];
+
+function _besTendAxe() {
+  return (S.besoinsTendAxe === 'livraison') ? 'livraison' : 'production';
+}
+
 function _besTendFenetre() {
   return BES_TEND_FENETRES.find(f => f.cle === (S.besoinsTendFenetre || '18'))
       || BES_TEND_FENETRES[0];
@@ -12639,7 +12655,8 @@ async function loadBesoinsTendance() {
   const f = _besTendFenetre();
   try {
     S.besoinsTendance = await api(
-      '/api/stock/besoins-matieres/tendance?passe=' + f.passe + '&futur=' + f.futur);
+      '/api/stock/besoins-matieres/tendance?passe=' + f.passe + '&futur=' + f.futur
+      + '&axe=' + _besTendAxe());
   } catch (e) {
     S.besoinsTendance = { erreur: e.message || 'chargement impossible' };
     showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
@@ -13109,7 +13126,13 @@ function _buildBesoinsTendance(data) {
   cont.appendChild(el('div', { cls: 'bes-tend-note' },
     el('div', {},
       el('strong', {}, 'Ce que montre cet écran : '),
-      'le besoin matière par mois de LIVRAISON, sur ' + cols.length + ' mois — ',
+      'le besoin matière par mois de ',
+      // L'axe affiché en toutes lettres. Deux lectures décalées d'un à deux
+      // mois se ressemblent trop pour qu'on devine laquelle on regarde.
+      el('strong', {}, (data.axe === 'livraison'
+                          ? 'LIVRAISON au client'
+                          : 'PRODUCTION — quand la matière doit être en stock')),
+      ', sur ' + cols.length + ' mois — ',
       nbPasses + ' mois révolus à gauche du repère, le reste devant. ',
       'À droite du repère, un mois bas signifie « pas encore commandé », pas ',
       '« activité en baisse » : la comparaison au même mois de l\'an dernier, à ',
@@ -13136,6 +13159,7 @@ function _buildBesoinsTendance(data) {
   // ── Fenêtre ──
   // Un seul contrôle, au-dessus de tous les graphes : il les cadre tous. Une
   // fenêtre par graphe donnerait des courbes qu'on croirait comparables.
+  const axe = _besTendAxe();
   cont.appendChild(el('div', { cls: 'bes-tend-ctl' },
     el('span', { cls: 'bes-tend-ctl-lbl' }, 'Fenêtre'),
     el('div', { cls: 'bes-seg' }, ...BES_TEND_FENETRES.map(f =>
@@ -13144,6 +13168,13 @@ function _buildBesoinsTendance(data) {
         title: f.title,
         on: { click: () => { S.besoinsTendFenetre = f.cle; loadBesoinsTendance(); } },
       }, f.lbl))),
+    el('span', { cls: 'bes-tend-ctl-lbl', style: { marginLeft: '18px' } }, 'Daté sur'),
+    el('div', { cls: 'bes-seg' }, ...BES_TEND_AXES.map(a =>
+      el('button', {
+        cls: 'bes-seg-btn' + (axe === a.cle ? ' active' : ''),
+        title: a.title,
+        on: { click: () => { S.besoinsTendAxe = a.cle; loadBesoinsTendance(); } },
+      }, a.lbl))),
   ));
 
   const categories = (data.categories || []).map(c => Object.assign({}, c, {

@@ -128,9 +128,20 @@ def erp_lignes(
     sens: str = Query("asc", max_length=4),
     page: int = Query(1, ge=1, le=100000),
     taille: int = Query(miroir.TAILLE_PAGE_DEFAUT, ge=1, le=miroir.TAILLE_PAGE_MAX),
+    depuis: str = Query("", max_length=40),
+    depuis_id: str = Query("", max_length=40),
+    lien: int = Query(-1, ge=-1, le=99),
 ):
     _exiger_acces(request)
     ec = _ecran(cle)
+
+    # Ouverture depuis une pièce liée : le client donne l'écran d'origine, la
+    # ligne et le rang du lien — jamais un nom de colonne. La condition est
+    # reconstruite ici, à partir du catalogue.
+    extra = None
+    contexte = None
+    if depuis and depuis_id and lien >= 0:
+        extra, contexte = _condition_de_lien(depuis, depuis_id, lien, cle)
 
     # Les filtres arrivent en `f_<nom>` : seuls ceux que l'écran déclare sont
     # retenus, les autres sont ignorés sans bruit.
@@ -140,14 +151,73 @@ def erp_lignes(
             filtres[nom_param[2:]] = valeur
 
     try:
-        return miroir.lister(
+        res = miroir.lister(
             ec, q=q, filtres=filtres, tri=tri or None, sens=sens,
-            page=page, taille=taille,
+            page=page, taille=taille, extra=extra,
         )
+        if contexte:
+            res["contexte"] = contexte
+        return res
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+def _condition_de_lien(cle_source, ident, rang, cle_cible):
+    """Reconstruit la condition d'un lien déclaré au catalogue."""
+    ec_source = catalogue.ecran(cle_source)
+    if not ec_source:
+        raise HTTPException(status_code=400, detail="Écran d'origine inconnu.")
+    liens = catalogue.LIENS.get(cle_source, [])
+    if rang >= len(liens):
+        raise HTTPException(status_code=400, detail="Lien inconnu.")
+    lien = liens[rang]
+    if lien["ecran"] != cle_cible:
+        raise HTTPException(status_code=400, detail="Ce lien ne mène pas à cet écran.")
+
+    adapte = catalogue.adapter_ecran(ec_source, _colonnes_par_table())
+    if not adapte:
+        raise HTTPException(status_code=404, detail="Écran d'origine indisponible.")
+
+    source = miroir.ligne_brute(adapte, ident)
+    if source is None:
+        raise HTTPException(status_code=404, detail="Ligne d'origine introuvable.")
+
+    extra = []
+    valeurs = {}
+    for ref, champ in lien["sur"].items():
+        v = source.get(champ)
+        if v is None or str(v).strip() == "":
+            raise HTTPException(status_code=400, detail="La ligne d'origine ne porte pas cette clé.")
+        extra.append(("CAST(%s AS TEXT) = ?" % miroir.valider_ref(ref), str(v).strip()))
+        valeurs[ref.split(".")[-1]] = v
+
+    return extra, {
+        "depuis": cle_source,
+        "depuis_label": ec_source["label"],
+        "lien": lien["label"],
+        "valeurs": valeurs,
+    }
+
+
+@router.get("/{cle}/liens/{ident}")
+def erp_liens(cle: str, ident: str, request: Request):
+    """Les pièces rattachées à une ligne : BL d'une commande, facture d'un BL…"""
+    _exiger_acces(request)
+    ec = _ecran(cle)
+    cols = _colonnes_par_table()
+
+    def resoudre(cle_cible):
+        cible = catalogue.ecran(cle_cible)
+        if not cible:
+            return None
+        return catalogue.adapter_ecran(cible, cols)
+
+    try:
+        return {"liens": miroir.liens(ec, ident, resoudre)}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e))
 
 
 @router.get("/{cle}/detail/{ident}")
