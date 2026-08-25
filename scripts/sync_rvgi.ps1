@@ -143,6 +143,17 @@ function Get-Param {
 }
 
 $cle = Get-Param 'MYSIFA_API_KEY'
+# D'ou vient la cle, et laquelle part : le prefixe suffit a la reconnaitre dans
+# la liste des cles API, sans jamais l'ecrire en clair dans le journal.
+$sourceCle = if ([Environment]::GetEnvironmentVariable('MYSIFA_API_KEY')) { 'terminal (surcharge le .env)' }
+             elseif ($dotenv.ContainsKey('MYSIFA_API_KEY')) { '.env' } else { 'aucune' }
+
+function Empreinte-Cle {
+    param([string]$K)
+    if (-not $K) { return '(vide)' }
+    $debut = if ($K.Length -ge 10) { $K.Substring(0, 10) } else { $K }
+    return ("{0}... ({1} caracteres)" -f $debut, $K.Length)
+}
 
 # Chaque entree vaut "url" ou "url|cle". Sans cle explicite, MYSIFA_API_KEY.
 $cibles = @()
@@ -212,6 +223,8 @@ try {
         $garderArchive = $true
         $cibles = @()
     }
+
+    Ecrire ("Cle API : source {0}, {1}" -f $sourceCle, (Empreinte-Cle $cle))
 
     foreach ($c in $cibles) {
         $adresse = "$($c.Url)/api/bridge/erp/miroir"
