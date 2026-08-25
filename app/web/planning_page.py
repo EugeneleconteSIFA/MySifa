@@ -90,7 +90,9 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/motion.css">
-<link rel="stylesheet" href="/static/mysifa_myprod_shell.css">
+<!-- Cette feuille n'avait aucun cache-buster : une modification n'arrivait
+     jamais sur un poste qui l'avait deja chargee. -->
+<link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem12">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{

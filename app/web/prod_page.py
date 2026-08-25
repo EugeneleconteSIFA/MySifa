@@ -74,7 +74,11 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/motion.css?v=__V_LABEL__">
-<link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__">
+<!-- Suffixe de cache : APP_VERSION n'est jamais bumpee ici (le collaborateur
+     s'en charge sur staging), or cette feuille porte desormais le style des
+     intitules de section de la barre laterale. Sans suffixe, le navigateur
+     ressert l'ancienne et la section s'affiche nue. -->
+<link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem12">
 <link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_print_modal.css?v=__V_LABEL__">
 <script src="/static/motion.js?v=__V_LABEL__" defer></script>
