@@ -1246,4 +1246,45 @@ def adapter_ecran(ec, colonnes_par_table):
     adapte["filtres"] = [f for f in ec.get("filtres", []) if ref_ok(f["col"])]
     adapte["labels_detail"] = dict(LABELS, **(ec.get("labels_detail") or {}))
     adapte["liens"] = LIENS.get(ec["cle"], [])
+    adapte["piece"] = piece_de(adapte)
     return adapte
+
+
+# ── Écrans de lignes de document ─────────────────────────────────────────────
+
+# Une pièce est déduite, pas déclarée. RVGI applique partout la même forme :
+# `<dom>_ligne` porte les lignes, `<dom>_entete` porte la pièce, et la jointure
+# se fait sur `numero`. Un nouvel écran de lignes hérite donc de la vue « pièce »
+# sans qu'on ait à y penser — et un écran qui n'est pas un document (un article,
+# un client, un mouvement) n'en hérite jamais.
+#
+# `PIECE_LABELS` ne sert qu'à nommer la section. Une clé absente donne
+# « La pièce », ce qui reste juste.
+PIECE_LABELS = {
+    "devis": "Le devis",
+    "commandes": "La commande",
+    "livraisons": "Le bon de livraison",
+    "factures": "La facture",
+    "marches": "Le marché",
+    "commandes_fournisseur": "La commande fournisseur",
+    "receptions": "La commande fournisseur",
+    "factures_fournisseur": "La facture fournisseur",
+    "appels_offres": "L'appel d'offres",
+    "colisage": "Le colisage",
+}
+
+
+def piece_de(ec):
+    """L'entête de pièce d'un écran de lignes, si l'écran en est un."""
+    alias = ec["alias"]
+    for j in ec.get("jointures", []):
+        if j["droite"] == "%s.numero" % alias and j["gauche"].endswith(".numero"):
+            return {
+                "table": j["table"],
+                "alias": j["alias"],
+                "cle": "numero",
+                "col_ligne": "%s.numero" % alias,
+                "label": PIECE_LABELS.get(ec["cle"], "La pièce"),
+                "tri": None,
+            }
+    return None

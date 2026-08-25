@@ -265,6 +265,8 @@ body.light .detail-fond{background:rgba(15,23,42,.5)}
 .groupe-titre .chev{margin-left:auto;transition:transform .15s}
 .groupe.replie .groupe-titre .chev{transform:rotate(-90deg)}
 .groupe-corps{padding:6px 14px 10px}
+/* Un entête de pièce porte trop de champs pour une colonne : on les étale. */
+.groupe.champs-cols .groupe-corps{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:0 22px}
 .groupe.replie .groupe-corps{display:none}
 .ligne-champ{display:flex;gap:12px;padding:6px 0;font-size:12.5px;border-bottom:1px solid var(--border)}
 .ligne-champ:last-child{border-bottom:none}
@@ -295,9 +297,31 @@ body.light .detail-fond{background:rgba(15,23,42,.5)}
 .lien-plus:hover{background:var(--accent-bg)}
 .lien-err{padding:10px 13px;font-size:11.5px;color:var(--danger)}
 .liens-vide{grid-column:1/-1;padding:14px;border:1px dashed var(--border);border-radius:12px;color:var(--muted);font-size:12px;text-align:center}
-.titre-bloc{grid-column:1/-1;display:flex;align-items:center;gap:10px;margin:8px 0 -2px;font-size:11px;font-weight:800;
+.titre-bloc{display:flex;align-items:center;gap:10px;margin:14px 0 8px;font-size:11px;font-weight:800;
   letter-spacing:.8px;text-transform:uppercase;color:var(--text2)}
-.titre-bloc:after{content:"";flex:1;height:1px;background:var(--border)}
+.titre-bloc:first-child{margin-top:0}
+.titre-bloc:after{content:"";flex:1;height:1px;background:var(--border);order:1}
+.titre-bloc .tb-num{order:2;font-variant-numeric:tabular-nums;letter-spacing:0;
+  background:var(--accent-bg);color:var(--accent);border-radius:999px;padding:2px 9px;font-size:11px}
+
+/* Les lignes de la pièce : la même grille, en petit, dans la fiche. */
+.pl-boite{border:1px solid var(--border);border-radius:12px;overflow:auto;background:var(--card);max-height:290px}
+table.pl{width:100%;border-collapse:collapse;font-size:12px}
+table.pl th{position:sticky;top:0;z-index:1;background:var(--bg);color:var(--muted);text-align:left;
+  font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;
+  padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+table.pl th.num,table.pl td.num{text-align:right;font-variant-numeric:tabular-nums}
+table.pl td{padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text2);
+  white-space:nowrap;max-width:280px;overflow:hidden;text-overflow:ellipsis}
+table.pl tr:last-child td{border-bottom:none}
+table.pl tbody tr{cursor:pointer}
+table.pl tbody tr:hover td{background:var(--accent-bg);color:var(--text)}
+table.pl tbody tr.ici td{background:var(--accent-bg);color:var(--text);font-weight:600;cursor:default}
+table.pl tbody tr.ici td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+table.pl td.vide{color:var(--muted)}
+table.pl td.of{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--accent);font-weight:600}
+table.pl td.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px}
+.pl-note{margin:6px 2px 0;font-size:11.5px;color:var(--muted)}
 
 /* Bandeau de provenance au-dessus de la grille */
 .bandeau{display:none;align-items:center;gap:10px;padding:9px 14px;background:var(--accent-bg);
@@ -1122,6 +1146,8 @@ const ICO_LIEN='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stro
 const ICO_CHEV='<svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
 const ICO_FLECHE='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>';
 const ICO_RETOUR='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="11 18 5 12 11 6"/></svg>';
+const ICO_PIECE='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><polyline points="14 3 14 8 19 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="13" y2="17"/></svg>';
+const ICO_FICHE='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="10" x2="9" y2="20"/></svg>';
 
 function defEcran(cle){return ((S.meta&&S.meta.ecrans)||[]).find(e=>e.cle===cle)||null;}
 
@@ -1137,13 +1163,13 @@ function enteteDetail(titre,sous){
     '<button type="button" class="detail-fermer" id="d-fermer" title="Fermer (Échap)">×</button></div>';
 }
 
-// Le sous-titre : les deux ou trois premiers champs renseignés du premier
-// groupe. C'est ce qui identifie la pièce — numéro, client, date.
-function sousTitreDetail(groupes){
-  const g=(groupes||[])[0];
-  if(!g)return '';
+// Le sous-titre : ce qui identifie la pièce ouverte. Quand il y a un entête,
+// c'est lui qui parle — numéro, client, date — plutôt que le premier groupe
+// du détail, qui peut commencer par un identifiant technique.
+function sousTitreDetail(groupes,piece){
+  const source=piece?(piece.entete||[]).filter(c=>c.principal):((groupes||[])[0]||{}).champs;
   const bouts=[];
-  (g.champs||[]).forEach(c=>{
+  (source||[]).forEach(c=>{
     if(bouts.length>=3)return;
     if(c.valeur==null||c.valeur==='')return;
     const v=cellule(c,c.valeur);
@@ -1181,11 +1207,42 @@ async function rendreDetail(){
   }
   if(jeton!==S.jetonD)return;
 
-  let h=enteteDetail(def?def.label:'Détail',sousTitreDetail(r.groupes));
-  h+='<div class="detail-corps"><div class="sections">';
-  (r.groupes||[]).forEach((g,i)=>{
+  // Une commande, un marché, un BL sont des DOCUMENTS : l'entête d'abord,
+  // puis toutes leurs lignes, puis la ligne ouverte, puis ce qui s'y rattache.
+  const p=r.piece||null;
+  h=enteteDetail(def?def.label:'Détail',sousTitreDetail(r.groupes,p));
+  h+='<div class="detail-corps">';
+  if(p)h+=blocPiece(p,cur.id);
+  h+='<div class="titre-bloc">'+ICO_FICHE+'<span>'+(p?'Détail de la ligne':'Détail')+'</span></div>';
+  h+='<div class="sections" id="sec-detail">'+blocGroupes(r.groupes)+'</div>';
+  h+='<div class="titre-bloc" id="t-liens">'+ICO_LIEN+'<span>Pièces liées</span></div>'+
+     '<div class="liens" id="liens"><div class="liens-vide">Recherche des pièces rattachées…</div></div>';
+  h+='</div>';
+  d.innerHTML=h;
+  brancherEnteteDetail();
+  d.querySelectorAll('.groupe-titre').forEach(t=>{
+    t.addEventListener('click',()=>t.parentNode.classList.toggle('replie'));
+  });
+  // Changer de ligne sans quitter la pièce : on remplace la ligne courante
+  // dans la pile plutôt que d'empiler — sinon « Retour » remonterait ligne
+  // par ligne au lieu de revenir d'où l'on vient.
+  d.querySelectorAll('.pl-ligne[data-id]').forEach(tr=>{
+    tr.addEventListener('click',()=>{
+      const id=tr.getAttribute('data-id');
+      if(String(id)===String(cur.id))return;
+      S.pile[S.pile.length-1]={ecran:cur.ecran,id:id};
+      rendreDetail();
+    });
+  });
+  d.querySelector('.detail-corps').scrollTop=0;
+  chargerLiens(cur,jeton);
+}
+
+function blocGroupes(groupes){
+  let h='';
+  (groupes||[]).forEach((g,i)=>{
     const nb=(g.champs||[]).length;
-    h+='<div class="groupe'+(g.replie?' replie':'')+(nb>14?' pleine':'')+'" data-g="'+i+'">'+
+    h+='<div class="groupe'+(g.replie?' replie':'')+(nb>14?' pleine champs-cols':'')+'" data-g="'+i+'">'+
        '<div class="groupe-titre"><span>'+esc(g.titre)+'</span>'+ICO_CHEV+'</div><div class="groupe-corps">';
     (g.champs||[]).forEach(c=>{
       const v=cellule(c,c.valeur);
@@ -1194,16 +1251,76 @@ async function rendreDetail(){
     });
     h+='</div></div>';
   });
-  h+='<div class="titre-bloc" id="t-liens">'+ICO_LIEN+'<span>Pièces liées</span></div>'+
-     '<div class="liens" id="liens"><div class="liens-vide">Recherche des pièces rattachées…</div></div>';
-  h+='</div></div>';
-  d.innerHTML=h;
-  brancherEnteteDetail();
-  d.querySelectorAll('.groupe-titre').forEach(t=>{
-    t.addEventListener('click',()=>t.parentNode.classList.toggle('replie'));
+  return h;
+}
+
+// L'entête de la pièce, puis ses lignes. Les champs que RVGI ne nomme pas
+// partent dans un bloc replié : on ne masque rien, on hiérarchise.
+function blocPiece(p,idCourant){
+  const princ=(p.entete||[]).filter(c=>c.principal);
+  const reste=(p.entete||[]).filter(c=>!c.principal);
+  let h='<div class="titre-bloc">'+ICO_PIECE+'<span>'+esc(p.label)+'</span>'+
+        '<span class="tb-num">'+esc(p.numero)+'</span></div>';
+
+  h+='<div class="sections" id="sec-piece">';
+  // Une ligne peut exister sans son entête : RVGI a mis la pièce à la
+  // corbeille, ou l'export ne l'a pas ramenée. On le dit, au lieu d'afficher
+  // une carte vide qui passerait pour un document sans informations.
+  if(!(p.entete||[]).length){
+    h+='<div class="liens-vide">L\'entête de cette pièce n\'est pas dans le miroir — '+
+       'seules ses lignes le sont.</div></div>';
+  }else{
+  h+='<div class="groupe pleine champs-cols">'+
+     '<div class="groupe-titre"><span>Informations communes</span>'+ICO_CHEV+'</div>'+
+     '<div class="groupe-corps">';
+  (princ.length?princ:(p.entete||[])).forEach(c=>{
+    const v=cellule(c,c.valeur);
+    h+='<div class="ligne-champ"><span class="lab">'+esc(c.label)+'</span>'+
+       '<span class="val '+esc(v.cls)+'">'+v.html+'</span></div>';
   });
-  d.querySelector('.detail-corps').scrollTop=0;
-  chargerLiens(cur,jeton);
+  h+='</div></div>';
+  if(princ.length&&reste.length){
+    h+='<div class="groupe replie pleine champs-cols">'+
+       '<div class="groupe-titre"><span>Autres champs de l\'entête ('+reste.length+')</span>'+ICO_CHEV+'</div>'+
+       '<div class="groupe-corps">';
+    reste.forEach(c=>{
+      const v=cellule(c,c.valeur);
+      h+='<div class="ligne-champ"><span class="lab">'+esc(c.label)+'</span>'+
+         '<span class="val '+esc(v.cls)+'">'+v.html+'</span></div>';
+    });
+    h+='</div></div>';
+    }
+    h+='</div>';
+  }
+
+  // Les lignes de la pièce, avec les colonnes de la grille.
+  const cols=(p.colonnes||[]).slice(0,9);
+  h+='<div class="titre-bloc"><span>Lignes de la pièce</span>'+
+     '<span class="tb-num">'+fmtNb(p.total,0)+'</span></div>';
+  h+='<div class="pl-boite"><table class="pl"><thead><tr>';
+  cols.forEach(c=>{h+='<th class="'+(estNum(c)?'num':'')+'">'+esc(c.label)+'</th>';});
+  h+='</tr></thead><tbody>';
+  (p.lignes||[]).forEach(l=>{
+    const ici=String(l._id)===String(idCourant);
+    h+='<tr class="pl-ligne'+(ici?' ici':'')+'" data-id="'+esc(l._id)+'"'+
+       (ici?' title="La ligne ouverte"':' title="Ouvrir cette ligne"')+'>';
+    cols.forEach(c=>{
+      const v=cellule(c,l[c.nom]);
+      h+='<td class="'+esc(v.cls)+'">'+v.html+'</td>';
+    });
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  if(p.tronque){
+    h+='<p class="pl-note">'+fmtNb((p.lignes||[]).length,0)+' premières lignes sur '+
+       fmtNb(p.total,0)+' — la pièce est plus longue que ce que la fiche affiche.</p>';
+  }
+  return h;
+}
+
+function estNum(col){
+  const t=col.type||'';
+  return t==='qte'||t==='nombre'||t==='prix'||t==='montant'||t==='pct';
 }
 
 function brancherEnteteDetail(){
