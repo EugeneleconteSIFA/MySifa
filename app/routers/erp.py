@@ -238,15 +238,18 @@ def erp_detail(cle: str, ident: str, request: Request):
         # côtés — date d'échéance de la pièce et de la ligne — et l'écarter du
         # détail ferait disparaître une information qui n'est pas la même.
         exclure = set()
+        entete = None
         if piece:
             cols_ligne = _colonnes_par_table().get(ec["table"], set())
             exclure = set(piece["colonnes_entete"]) - set(cols_ligne) - {"numero"}
-        res = miroir.detail(ec, ident, exclure=exclure)
+            entete = piece.get("brut_entete")
+        res = miroir.detail(ec, ident, exclure=exclure, entete=entete)
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e))
     if res is None:
         raise HTTPException(status_code=404, detail="Ligne introuvable dans le miroir.")
     if piece:
         piece.pop("colonnes_entete", None)
+        piece.pop("brut_entete", None)
         res["piece"] = piece
     return res

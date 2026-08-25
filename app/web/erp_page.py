@@ -323,6 +323,25 @@ table.pl td.of{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--acc
 table.pl td.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px}
 .pl-note{margin:6px 2px 0;font-size:11.5px;color:var(--muted)}
 
+/* Résumé de la ligne : l'article et les chiffres, lisibles de loin. */
+.resume{display:flex;flex-wrap:wrap;align-items:center;gap:16px 26px;margin-bottom:12px;
+  padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--card);
+  border-left:3px solid var(--accent)}
+.resume-quoi{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1 1 240px}
+.resume-ref{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:19px;font-weight:700;
+  color:var(--accent);letter-spacing:-.2px}
+.resume-des{font-size:13px;color:var(--text2);line-height:1.35}
+.resume-chiffres{display:flex;flex-wrap:wrap;gap:10px 28px;margin-left:auto}
+.tuile{display:flex;flex-direction:column;gap:2px;text-align:right;min-width:88px}
+.tuile .tl{font-size:10px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--muted)}
+.tuile .tv{font-size:19px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;line-height:1.1}
+.tuile .tv.neg{color:var(--danger)}
+.tuile .tv.vide{color:var(--muted);font-weight:400}
+@media (max-width:700px){
+  .resume-chiffres{margin-left:0}
+  .tuile{text-align:left}
+}
+
 /* Bandeau de provenance au-dessus de la grille */
 .bandeau{display:none;align-items:center;gap:10px;padding:9px 14px;background:var(--accent-bg);
   border-bottom:1px solid var(--border);font-size:12px;color:var(--text2)}
@@ -1214,7 +1233,9 @@ async function rendreDetail(){
   h+='<div class="detail-corps">';
   if(p)h+=blocPiece(p,cur.id);
   h+='<div class="titre-bloc">'+ICO_FICHE+'<span>'+(p?'Détail de la ligne':'Détail')+'</span></div>';
-  h+='<div class="sections" id="sec-detail">'+blocGroupes(r.groupes)+'</div>';
+  const res=resumeLigne(r.groupes);
+  h+=res.html;
+  h+='<div class="sections" id="sec-detail">'+blocGroupes(r.groupes,res.pris)+'</div>';
   h+='<div class="titre-bloc" id="t-liens">'+ICO_LIEN+'<span>Pièces liées</span></div>'+
      '<div class="liens" id="liens"><div class="liens-vide">Recherche des pièces rattachées…</div></div>';
   h+='</div>';
@@ -1238,13 +1259,20 @@ async function rendreDetail(){
   chargerLiens(cur,jeton);
 }
 
-function blocGroupes(groupes){
+function blocGroupes(groupes,pris){
+  pris=pris||{};
+  // Ce qui reste vraiment à afficher, une fois le résumé servi. Un bloc seul
+  // dans une grille à trois colonnes laisse deux tiers de vide : dans ce cas
+  // il prend la largeur et étale ses champs.
+  const restants=(groupes||[]).map((g,i)=>({g:g,i:i,champs:(g.champs||[]).filter(c=>!pris[c.nom])}))
+                              .filter(x=>x.champs.length);
+  const seul=restants.filter(x=>!x.g.replie).length<=1;
   let h='';
-  (groupes||[]).forEach((g,i)=>{
-    const nb=(g.champs||[]).length;
-    h+='<div class="groupe'+(g.replie?' replie':'')+(nb>14?' pleine champs-cols':'')+'" data-g="'+i+'">'+
+  restants.forEach(({g,i,champs})=>{
+    h+='<div class="groupe'+(g.replie?' replie':'')+
+       ((champs.length>14||(seul&&!g.replie))?' pleine champs-cols':'')+'" data-g="'+i+'">'+
        '<div class="groupe-titre"><span>'+esc(g.titre)+'</span>'+ICO_CHEV+'</div><div class="groupe-corps">';
-    (g.champs||[]).forEach(c=>{
+    champs.forEach(c=>{
       const v=cellule(c,c.valeur);
       h+='<div class="ligne-champ"><span class="lab">'+esc(c.label)+'</span>'+
          '<span class="val '+esc(v.cls)+'">'+v.html+'</span></div>';
@@ -1252,6 +1280,44 @@ function blocGroupes(groupes){
     h+='</div></div>';
   });
   return h;
+}
+
+// Ce qu'on veut savoir d'une ligne en une seconde : de quel article il s'agit,
+// et les chiffres qui comptent. Le reste des champs suit, mais ces quatre-là
+// méritent d'être lus de loin plutôt que d'être une ligne parmi trente.
+const TUILES_MAX=4;
+function resumeLigne(groupes){
+  const tous=[];
+  (groupes||[]).forEach(g=>{ if(!g.replie)(g.champs||[]).forEach(c=>tous.push(c)); });
+  const pris={};
+  const rempli=c=>c&&c.valeur!=null&&c.valeur!=='';
+
+  const article=tous.find(c=>c.type==='ref'&&rempli(c));
+  const titres=tous.filter(c=>c.type==='texte'&&rempli(c)&&/désignation|designation|libell/i.test(c.label)).slice(0,2);
+  const chiffres=tous.filter(c=>rempli(c)&&['qte','prix','montant','pct'].indexOf(c.type)>=0).slice(0,TUILES_MAX);
+  if(!article&&!chiffres.length)return {html:'',pris:pris};
+
+  let h='<div class="resume">';
+  if(article||titres.length){
+    h+='<div class="resume-quoi">';
+    if(article){pris[article.nom]=1;h+='<span class="resume-ref">'+esc(article.valeur)+'</span>';}
+    if(titres.length){
+      h+='<span class="resume-des">'+titres.map(t=>{pris[t.nom]=1;return esc(t.valeur);}).join(' · ')+'</span>';
+    }
+    h+='</div>';
+  }
+  if(chiffres.length){
+    h+='<div class="resume-chiffres">';
+    chiffres.forEach(c=>{
+      pris[c.nom]=1;
+      const v=cellule(c,c.valeur);
+      h+='<div class="tuile"><span class="tl">'+esc(c.label)+'</span>'+
+         '<span class="tv '+esc(v.cls)+'">'+v.html+'</span></div>';
+    });
+    h+='</div>';
+  }
+  h+='</div>';
+  return {html:h,pris:pris};
 }
 
 // L'entête de la pièce, puis ses lignes. Les champs que RVGI ne nomme pas
@@ -1293,8 +1359,11 @@ function blocPiece(p,idCourant){
     h+='</div>';
   }
 
-  // Les lignes de la pièce, avec les colonnes de la grille.
-  const cols=(p.colonnes||[]).slice(0,9);
+  // Les lignes de la pièce, avec les colonnes de la grille — mais remises
+  // dans l'ordre où on lit une pièce : de quoi il s'agit d'abord (numéro,
+  // ligne, article), le reste ensuite. Sur la grille, l'ordre est celui que
+  // l'utilisateur s'est fabriqué ; ici, c'est le document qui commande.
+  const cols=ordonnerColonnesPiece(p.colonnes||[]).slice(0,9);
   h+='<div class="titre-bloc"><span>Lignes de la pièce</span>'+
      '<span class="tb-num">'+fmtNb(p.total,0)+'</span></div>';
   h+='<div class="pl-boite"><table class="pl"><thead><tr>';
@@ -1316,6 +1385,20 @@ function blocPiece(p,idCourant){
        fmtNb(p.total,0)+' — la pièce est plus longue que ce que la fiche affiche.</p>';
   }
   return h;
+}
+
+// L'identité d'une ligne passe devant tout le reste : son numéro, son rang
+// dans la pièce, et l'article dont il est question.
+const TETE_PIECE=['numero','ligne','rang','lignecde','article','code','ref','reference'];
+function ordonnerColonnesPiece(cols){
+  const rang=c=>{
+    const i=TETE_PIECE.indexOf(c.nom);
+    if(i>=0)return i;
+    // Une colonne composite d'article ne s'appelle pas toujours « article ».
+    if(c.type==='ref')return TETE_PIECE.indexOf('article');
+    return TETE_PIECE.length+1;
+  };
+  return cols.map((c,i)=>({c:c,i:i})).sort((a,b)=>(rang(a.c)-rang(b.c))||(a.i-b.i)).map(x=>x.c);
 }
 
 function estNum(col){

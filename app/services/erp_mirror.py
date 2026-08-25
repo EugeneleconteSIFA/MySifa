@@ -260,7 +260,11 @@ def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
     # Tri : la colonne doit appartenir à l'écran, sinon on retombe sur le tri
     # par défaut. Aucun nom de colonne ne vient du client sans passer par là.
     par_col = {c["nom"]: c for c in colonnes}
-    if tri and tri in par_col:
+    if tri == "_id":
+        # Ordre naturel de la pièce : celui dans lequel RVGI a écrit les lignes.
+        # Sert quand l'écran ne montre aucun numéro de ligne.
+        col_tri = ec["cle_ligne"]
+    elif tri and tri in par_col:
         c_tri = par_col[tri]
         col_tri = c_tri["c"] if c_tri.get("c") else c_tri["parts"][0]
     else:
@@ -306,6 +310,24 @@ def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
         "tri": tri if (tri and tri in par_col) else None,
         "sens": sens_sql.lower(),
     }
+
+
+def _identiques(a, b):
+    """Deux valeurs RVGI disent-elles la même chose ?
+
+    Comparaison en texte : le miroir type colonne par colonne, et le même
+    numéro peut être INTEGER d'un côté, TEXT de l'autre.
+    """
+    if a is None and b is None:
+        return True
+    if a is None or b is None:
+        return False
+    if isinstance(a, (int, float)) and isinstance(b, (int, float)):
+        try:
+            return abs(float(a) - float(b)) < 1e-9
+        except (TypeError, ValueError):
+            pass
+    return str(a).strip() == str(b).strip()
 
 
 def _libelles_et_types(ec):
@@ -354,7 +376,7 @@ def _valeur_composite(defn, brut):
     return defn["joint"].join(bouts) if bouts else None
 
 
-def detail(ec, ident, exclure=None):
+def detail(ec, ident, exclure=None, entete=None):
     """Toutes les colonnes de la ligne, groupées comme l'écran le déclare.
 
     Le reste — ce que le catalogue ne nomme pas — est renvoyé dans un groupe
@@ -364,17 +386,36 @@ def detail(ec, ident, exclure=None):
     `exclure` : colonnes déjà montrées ailleurs — typiquement celles de l'entête
     d'une pièce, affichées dans leur propre section. Les répéter dans le détail
     de la ligne ferait croire à deux informations là où il n'y en a qu'une.
+
+    `entete` : la pièce, quand il y en a une. Un champ que la ligne porte à
+    l'identique de son entête — la date de livraison, le mode de règlement —
+    n'est pas répété. Mais s'il DIFFÈRE, il reste : une échéance propre à une
+    ligne est une information, et la masquer serait mentir.
     """
     _ref(ec["cle_ligne"])
     depart = _from(ec)
-    sql = "SELECT * FROM %s WHERE %s = ?" % (depart, ec["cle_ligne"])
     with get_erp_db() as conn:
-        row = conn.execute(sql, [ident]).fetchone()
+        row = conn.execute(
+            "SELECT * FROM %s WHERE %s = ?" % (depart, ec["cle_ligne"]), [ident]
+        ).fetchone()
         if row is None:
             return None
         brut = dict(row)
+        # `SELECT *` sur une jointure rend deux colonnes du même nom, et la
+        # dernière gagne : l'entête écrasait silencieusement la valeur de la
+        # ligne. On relit donc la ligne seule, et c'est ELLE qui fait foi.
+        _ident(ec["table"])
+        col_cle = _ident(ec["cle_ligne"].split(".")[-1])
+        propre = conn.execute(
+            'SELECT * FROM "%s" WHERE "%s" = ?' % (ec["table"], col_cle), [ident]
+        ).fetchone()
+        if propre is not None:
+            brut.update(dict(propre))
 
     exclure = set(exclure or ())
+    for court, valeur in (entete or {}).items():
+        if court in brut and _identiques(brut[court], valeur):
+            exclure.add(court)
     libelles, types = _libelles_et_types(ec)
     composites, absorbees = _composites(ec)
 
@@ -493,10 +534,13 @@ def piece(ec, ident):
 
     # Les lignes de la pièce sont rendues avec les colonnes de la grille : ce
     # que l'écran a déjà retenu comme utile, on ne le redéclare pas ailleurs.
+    # Une pièce se lit de la ligne 1 à la dernière. Le tri par défaut de
+    # l'écran — le plus récent d'abord — n'a aucun sens à l'intérieur d'un
+    # document : il les rendrait à l'envers.
     lignes = lister(
         ec, taille=MAX_LIGNES_PIECE,
         extra=[("CAST(%s AS TEXT) = ?" % p["col_ligne"], str(numero).strip())],
-        tri=p.get("tri"),
+        tri=p.get("tri") or "_id", sens="asc",
     )
 
     return {
@@ -504,6 +548,7 @@ def piece(ec, ident):
         "label": p.get("label") or "La pièce",
         "entete": champs,
         "colonnes_entete": sorted(entete.keys()),
+        "brut_entete": entete,
         "colonnes": lignes["colonnes"],
         "lignes": lignes["lignes"],
         "total": lignes["total"],

@@ -1285,6 +1285,19 @@ def piece_de(ec):
                 "cle": "numero",
                 "col_ligne": "%s.numero" % alias,
                 "label": PIECE_LABELS.get(ec["cle"], "La pièce"),
-                "tri": None,
+                "tri": _colonne_de_ligne(ec),
             }
     return None
+
+
+def _colonne_de_ligne(ec):
+    """Sur quoi trier les lignes À L'INTÉRIEUR d'une pièce.
+
+    Le numéro de ligne quand l'écran en montre un, son rang sinon. À défaut,
+    `_id` : l'ordre dans lequel RVGI a écrit les lignes, qui est le bon.
+    """
+    noms = {c["nom"] for c in ec["colonnes"]}
+    for candidat in ("ligne", "rang", "lignecde"):
+        if candidat in noms:
+            return candidat
+    return "_id"
