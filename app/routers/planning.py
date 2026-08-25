@@ -1914,7 +1914,10 @@ async def add_entry(machine_id: int, request: Request):
         detail={"reference": reference, "duree_heures": duree},
         ip=request.client.host if request.client else None,
     )
-    return {"success": True, "position": position, "warning": placement_warning}
+    # L'id est rendu : le sélecteur de commandes RVGI doit pouvoir rattacher
+    # le dossier qui vient d'être créé, et un rattachement pointe un id, jamais
+    # une référence texte.
+    return {"success": True, "id": new_id, "position": position, "warning": placement_warning}
 
 
 @router.put("/machines/{machine_id}/entries/{entry_id}")
