@@ -89,6 +89,13 @@
     '  background:var(--bg,#f6f7f9);color:inherit;font:inherit;font-size:12px;text-align:right}',
     '.mrp-l .qsai input:disabled{opacity:.4}',
     '.mrp-l .note{flex:0 0 auto;font-size:11px;color:#a16207}',
+    /* La machine sur laquelle l'article est censé tourner : ce que le
+       planificateur regarde en premier, juste après le produit. */
+    '.mrp-mac{display:inline-block;padding:1px 7px;border-radius:6px;font-size:10.5px;font-weight:700;',
+    '  white-space:nowrap;background:rgba(124,58,237,.14);color:#6d28d9;',
+    '  font-family:ui-monospace,Menlo,Consolas,monospace}',
+    '.mrp-mac.vide{background:rgba(148,163,184,.18);color:#64748b;font-weight:600}',
+    '.mrp-l .mac{flex:0 0 auto}',
     '.mrp-pied{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;',
     '  border-top:1px solid var(--border,#dcdfe4);background:var(--card,#fff)}',
     '.mrp-choix{font-size:12.5px;color:var(--muted,#6b7280)}',
@@ -128,6 +135,9 @@
     '.mrp-s-l .m{grid-column:2;font-size:11.5px;color:var(--muted,#6b7280);overflow:hidden;',
     '  text-overflow:ellipsis;white-space:nowrap}',
     '.mrp-s-l .k{grid-column:3;grid-row:1;font-size:11.5px;color:var(--muted,#6b7280);white-space:nowrap}',
+    '.mrp-s-l .pr{grid-column:2/4;display:flex;align-items:center;gap:7px;min-width:0;font-size:11.5px}',
+    '.mrp-s-l .pr .a{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;color:var(--text,#111)}',
+    '.mrp-s-l .pr .d{color:var(--muted,#6b7280);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
     '.mrp-s-pied{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 13px;',
     '  background:var(--bg,#f6f7f9);border-top:1px solid var(--border,#dcdfe4);font-size:12px}',
     '.mrp-s-pied .lien{color:var(--accent,#2563eb);cursor:pointer;font-weight:600;text-decoration:underline}',
@@ -173,6 +183,58 @@
     lie: 'Rattaché', partiel: 'Partiel', a_verifier: 'À vérifier',
     a_rattacher: 'À rattacher', hors_commande: 'Hors commande'
   };
+
+  // ── La fiche produit ──────────────────────────────────────────────────────
+  //
+  // RVGI ne connaît la machine et la laize que pour les articles qui ont une
+  // fiche de fabrication — environ une ligne de commande ouverte sur trois. On
+  // affiche donc « machine inconnue » plutôt que rien : l'absence de fiche est
+  // une information, et la deviner serait pire que l'avouer.
+
+  function etiqMachine(m) {
+    return m
+      ? '<span class="mrp-mac" title="Machine de la fiche de fabrication RVGI">' + esc(m) + '</span>'
+      : '<span class="mrp-mac vide" title="Aucune fiche de fabrication dans RVGI pour cet article">machine ?</span>';
+  }
+
+  // Un produit n'est injecté dans le formulaire que si TOUTES les lignes
+  // retenues portent le même article. Deux articles différents dans la même
+  // sélection ne se moyennent pas : on préfère ne rien pré-remplir.
+  function produitCommun(lignes) {
+    var art = null, p = null;
+    for (var i = 0; i < (lignes || []).length; i++) {
+      var l = lignes[i] || {};
+      var a = l.article || (l.produit && l.produit.article) || null;
+      if (!a) return null;
+      if (art === null) { art = a; p = l.produit || null; }
+      else if (a !== art) return null;
+    }
+    if (!art) return null;
+    var out = {};
+    if (p) for (var k in p) if (Object.prototype.hasOwnProperty.call(p, k)) out[k] = p[k];
+    out.article = art;
+    return out;
+  }
+
+  // Ce que la fiche produit ajoute, en une ligne survolable : format, laize et
+  // référence du client. Trop long pour la liste, trop utile pour le perdre.
+  function detailProduit(p) {
+    var b = [];
+    if (p.largeur && p.hauteur) b.push(nb(p.largeur, 2) + ' × ' + nb(p.hauteur, 2) + ' mm');
+    if (p.laize) b.push('laize ' + nb(p.laize) + ' mm');
+    if (p.machine) b.push('machine ' + p.machine);
+    if (p.ref_client) b.push('réf. client ' + p.ref_client);
+    return b.join(' · ');
+  }
+
+  // Toutes les lignes de toutes les pièces sélectionnées, à plat.
+  function lignesDesPieces(pieces) {
+    var out = [];
+    (pieces || []).forEach(function (p) {
+      (p.lignes || []).forEach(function (l) { out.push(l); });
+    });
+    return out;
+  }
 
   // ── Le sélecteur ──────────────────────────────────────────────────────────
 
@@ -288,10 +350,14 @@
       var h = '';
       etat.pieces.forEach(function (p, ip) {
         var sug = (p.lignes || []).some(function (l) { return l.suggere; });
+        var pc = mode === 'commande' ? produitCommun(p.lignes) : null;
         h += '<div class="mrp-piece' + (sug ? ' suggere' : '') + '" data-p="' + ip + '">' +
              '<div class="mrp-p-tete" data-tout="' + ip + '" title="Cocher ou décocher toute la pièce">' +
                '<span class="num">' + esc(p.numero) + '</span>' +
                '<span class="cli">' + esc(p.client || '—') + '</span>' +
+               (pc ? '<span class="mrp-etiq" style="background:rgba(148,163,184,.16);' +
+                     'font-family:ui-monospace,Menlo,Consolas,monospace">' + esc(pc.article) + '</span>' +
+                     etiqMachine(pc.machine) : '') +
                (sug ? '<span class="mrp-etiq sug">déjà lié dans RVGI</span>' : '') +
                etiqEtat(p.etat) +
                '<span class="meta">' + nb(p.nb_lignes) + ' ligne' + (p.nb_lignes > 1 ? 's' : '') +
@@ -306,6 +372,7 @@
                '<input type="checkbox" data-coche="' + esc(k) + '"' + (c ? ' checked' : '') + '>' +
                '<span class="lg">' + (l.ligne != null ? 'L' + l.ligne : '') + '</span>' +
                '<span class="art">' + esc(l.article || (l.numcde ? 'cde ' + l.numcde : '')) + '</span>' +
+               (mode === 'commande' ? '<span class="mac">' + etiqMachine(l.machine) + '</span>' : '') +
                '<span class="des">' + esc(l.des1 || '') + '</span>' +
                '<span class="qte">' + (l.qte != null ? nb(l.qte) : '—') + '</span>' +
                '<span class="qsai"><input type="number" min="0" step="1" data-qte="' + esc(k) + '"' +
@@ -355,6 +422,29 @@
         }
       }
       return null;
+    }
+
+    // Les lignes RVGI derrière ce qui est coché. Une pièce cochée en entier
+    // n'a qu'une seule clé mais couvre toutes ses lignes : c'est bien
+    // l'ensemble de ses articles qu'il faut regarder pour dire s'il n'y en a
+    // qu'un.
+    function lignesChoisies() {
+      var out = [];
+      Object.keys(etat.choix).forEach(function (k) {
+        var c = etat.choix[k];
+        if (c.ligne == null) {
+          for (var i = 0; i < etat.pieces.length; i++) {
+            if (String(etat.pieces[i].numero) === String(c.numero)) {
+              out = out.concat(etat.pieces[i].lignes || []);
+              return;
+            }
+          }
+          return;
+        }
+        var t = trouver(k);
+        if (t) out.push(t.l);
+      });
+      return out;
     }
 
     function basculer(k, coche) {
@@ -433,7 +523,8 @@
 
     async function valider(force) {
       var lignes = force ? [] : Object.keys(etat.choix).map(function (k) { return etat.choix[k]; });
-      var res = { lignes: lignes, reference: force ? '' : etat.ref, etat: force || null };
+      var res = { lignes: lignes, reference: force ? '' : etat.ref, etat: force || null,
+                  produit: force || mode !== 'commande' ? null : produitCommun(lignesChoisies()) };
       if (o.objetId) {
         var b = $('mrp-ok'); b.disabled = true;
         try {
@@ -552,10 +643,25 @@
       pieces.forEach(function (p, i) {
         var pris = p.etat === 'rattache' ? 'déjà rattachée'
                  : (p.etat === 'partiel' ? 'partiellement prise' : '');
+        // Le produit et sa machine, systématiquement : c'est ce qui permet de
+        // reconnaître la bonne commande sans l'ouvrir. Plusieurs articles dans
+        // la même commande → on le dit, on n'en choisit pas un au hasard.
+        var pc = mode === 'commande' ? produitCommun(p.lignes) : null;
+        var ligne1 = (p.lignes || [])[0] || {};
+        var prod = '';
+        if (mode === 'commande') {
+          prod = '<span class="pr">' +
+                 (pc ? '<span class="a">' + esc(pc.article) + '</span>' + etiqMachine(pc.machine) +
+                       '<span class="d" title="' + esc(detailProduit(pc)) + '">' +
+                       esc(pc.libelle || ligne1.des1 || '') + '</span>'
+                     : '<span class="d">' + esc(p.nb_lignes) + ' articles différents</span>') +
+                 '</span>';
+        }
         h += '<div class="mrp-s-l" data-i="' + i + '">' +
              '<span class="n">' + esc(p.numero) + '</span>' +
              '<span class="c">' + esc(p.client || '—') + '</span>' +
              '<span class="k">' + esc(p.nb_lignes) + ' ligne' + (p.nb_lignes > 1 ? 's' : '') + '</span>' +
+             prod +
              (pris ? '<span class="m">' + pris + '</span>' : '') +
              '</div>';
       });
@@ -599,15 +705,17 @@
       fermer();
       var lignes = [{ numero: String(p.numero), ligne: null, qte: null, confirme: true,
                       vu_client: p.client || null }];
-      await poser(lignes, null, String(p.numero));
+      await poser(lignes, null, String(p.numero),
+                  mode === 'commande' ? produitCommun(p.lignes) : null,
+                  p.client || null);
     }
 
     async function marquerIntrouvable() {
       fermer();
-      await poser([], 'a_rattacher', null);
+      await poser([], 'a_rattacher', null, null, null);
     }
 
-    async function poser(lignes, force, texte) {
+    async function poser(lignes, force, texte, produit, client) {
       var id = objetId();
       if (id) {
         try {
@@ -615,14 +723,17 @@
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ objet: objet, objet_id: Number(id), lignes: lignes, etat: force })
           });
-          if (o.onChange) o.onChange({ etat: r.etat, texte: r.texte, lignes: lignes, enregistre: true });
+          if (o.onChange) o.onChange({ etat: r.etat, texte: r.texte, lignes: lignes,
+                                       enregistre: true, produit: produit || null,
+                                       client: client || null });
         } catch (e) {
           if (o.onErreur) o.onErreur(e); else alert(e.message);
           return;
         }
       } else if (o.onChange) {
         o.onChange({ etat: force || (lignes.length ? 'lie' : 'a_rattacher'),
-                     texte: texte, lignes: lignes, enregistre: false });
+                     texte: texte, lignes: lignes, enregistre: false,
+                     produit: produit || null, client: client || null });
       }
       if (texte && o.remplir !== false) input.value = texte;
     }
@@ -634,7 +745,10 @@
         onValider: function (res) {
           if (res.reference && o.remplir !== false && !input.value.trim()) input.value = res.reference;
           if (o.onChange) o.onChange({ etat: res.etat, texte: res.texte, lignes: res.lignes,
-                                       enregistre: !!objetId(), reference: res.reference });
+                                       enregistre: !!objetId(), reference: res.reference,
+                                       produit: res.produit || null,
+                                       client: (res.lignes && res.lignes.length
+                                                ? res.lignes[0].vu_client : null) || null });
         }
       });
     }

@@ -243,7 +243,7 @@ td.vide{color:var(--muted)}
   background:rgba(2,6,23,.66)}
 body.light .detail-fond{background:rgba(15,23,42,.5)}
 .detail-fond.ouvert{display:flex}
-.detail{width:min(1100px,94vw);max-height:88vh;display:flex;flex-direction:column;
+.detail{width:min(1520px,96vw);max-height:90vh;display:flex;flex-direction:column;
   background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;
   box-shadow:0 28px 80px rgba(0,0,0,.5);animation:mo .16s ease-out}
 @keyframes mo{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
@@ -259,6 +259,24 @@ body.light .detail-fond{background:rgba(15,23,42,.5)}
   width:30px;height:30px;cursor:pointer;font-size:17px;line-height:1;flex-shrink:0}
 .detail-fermer:hover{background:var(--danger);border-color:var(--danger);color:#fff}
 .detail-corps{overflow-y:auto;padding:15px 16px 20px;background:var(--bg);flex:1}
+/* Deux colonnes : la pièce à gauche, ce qui s'y rattache à droite.
+   Les pièces liées étaient au bas d'une modale qu'il fallait dérouler pour
+   les voir — donc, en pratique, jamais vues. Elles tiennent maintenant leur
+   propre colonne, visible dès l'ouverture, et le rail reste collé en haut
+   pendant qu'on descend dans les champs de la ligne. */
+.detail-corps.deux-col{display:grid;grid-template-columns:minmax(0,1fr) 380px;
+  gap:0 18px;align-items:start}
+.detail-principal{min-width:0}
+.detail-rail{min-width:0;position:sticky;top:0;max-height:calc(90vh - 96px);
+  overflow-y:auto;padding-bottom:6px}
+.detail-rail::-webkit-scrollbar{width:6px}
+.detail-rail::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+/* Dans le rail, les cartes de liens s'empilent : 380 px n'en tiennent qu'une. */
+.detail-rail .liens{grid-template-columns:1fr}
+@media (max-width:1180px){
+  .detail-corps.deux-col{display:block}
+  .detail-rail{position:static;max-height:none;overflow:visible}
+}
 .sections{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;align-items:start}
 .groupe{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .groupe.pleine{grid-column:1/-1}
@@ -427,6 +445,27 @@ body.light .rg-ligne mark{background:rgba(217,119,6,.22)}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ar-date{color:var(--muted);font-size:12px;white-space:nowrap}
 .ar-btn{padding:5px 11px;font-size:12px}
+
+/* ── Stocks comparés ── */
+.sc-wrap{padding:18px 22px;max-width:1280px}
+.sc-hist{margin-left:auto;background:var(--card);color:var(--text);border:1px solid var(--border);
+  border-radius:9px;padding:7px 10px;font:inherit;font-size:12.5px;max-width:320px}
+.sc-cartes{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin-bottom:16px}
+.sc-tuile{background:var(--card);border:1px solid var(--border);border-left:3px solid var(--border);
+  border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:3px}
+.sc-tuile.al{border-left-color:var(--warn)}
+.sc-tuile.ok{border-left-color:var(--ok)}
+.sc-tuile .v{font-size:23px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1.05}
+.sc-tuile .l{font-size:11.5px;color:var(--muted)}
+.sc-avert{margin:0 0 14px;padding:10px 13px;border-radius:10px;font-size:12.5px;
+  background:var(--alerte-bg,rgba(251,191,36,.14));color:var(--warn);border:1px solid var(--warn)}
+.sc-barre{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+.sc-st.actif{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.sc-barre input{margin-left:auto;background:var(--card);color:var(--text);border:1px solid var(--border);
+  border-radius:9px;padding:7px 11px;font:inherit;font-size:12.5px;min-width:220px}
+.sc-barre input:focus{outline:none;border-color:var(--accent)}
+table.sc-t td{white-space:normal}
+table.sc-t td.mini{font-size:11.5px;color:var(--muted)}
 
 /* ── Divers ── */
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:11px 18px;font-size:13px;z-index:80;box-shadow:0 8px 24px rgba(0,0,0,.3)}
@@ -614,6 +653,13 @@ function fmtNb(v,dec){
   if(!isFinite(n))return esc(v);
   return n.toLocaleString('fr-FR',{minimumFractionDigits:dec||0,maximumFractionDigits:dec==null?2:dec});
 }
+// Un numéro de pièce, écrit comme RVGI l'écrit : sans séparateur de milliers,
+// et sans décimale parasite quand la colonne SQL est un réel (9938471.0).
+function fmtId(v){
+  const n=Number(v);
+  if(!isFinite(n))return String(v==null?'':v);
+  return String(Number.isInteger(n)?n:v);
+}
 function fmtDate(s){
   const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
   if(!m)return esc(s);
@@ -641,6 +687,10 @@ function cellule(col,v){
   if(t==='date')     return {cls:'',     html:fmtDate(v)};
   if(t==='datetime') return {cls:'mono', html:fmtDateHeure(v)};
   if(t==='of')       return {cls:'of',   html:esc(v)};
+  // Un numéro de pièce s'écrit tel qu'il est tapé et recopié : « 26060187 »,
+  // jamais « 26 060 187 ». Il s'aligne à droite comme un nombre — deux numéros
+  // l'un sous l'autre se comparent alors chiffre à chiffre.
+  if(t==='id')       return {cls:'mono num', html:esc(fmtId(v))};
   if(t==='ref'||t==='code') return {cls:'mono',html:esc(v)};
   if(t==='bool')     return {cls:'',     html:(String(v)==='1'||v===true)?'Oui':'—'};
   if(t==='enum'){
@@ -940,6 +990,9 @@ function initGuides(){
 // se vide jamais.
 const ECRAN_CONTROLE={cle:'a_rattacher',label:'À rattacher',domaine:'controles',
   resume:'Dossiers et départs sans pièce RVGI confirmée.'};
+const ECRAN_STOCKS={cle:'stocks_compares',label:'Stocks RVGI ↔ MySifa',domaine:'controles',
+  resume:'Ce que les deux bases disent du même article.'};
+const ECRANS_CONTROLE=[ECRAN_CONTROLE,ECRAN_STOCKS];
 
 function domainesOrdonnes(){
   const d=((S.meta&&S.meta.domaines)||[]).slice();
@@ -948,7 +1001,7 @@ function domainesOrdonnes(){
 }
 
 function ecransDuDomaine(cle){
-  if(cle==='controles')return [ECRAN_CONTROLE];
+  if(cle==='controles')return ECRANS_CONTROLE;
   return (S.meta.ecrans||[]).filter(e=>e.domaine===cle);
 }
 
@@ -1119,9 +1172,234 @@ async function reprendreSynchro(){
   if(b)b.disabled=false;
 }
 
+// ── Écran « Stocks RVGI ↔ MySifa » ───────────────────────────────
+// On ne recopie rien. RVGI reste la référence comptable, MySifa la référence
+// physique, et c'est l'ÉCART entre les deux qui est l'indicateur. Un écart ne
+// se juge pas sur une photo : chaque comparaison est enregistrée, et on peut
+// suivre une référence dans le temps — c'est ce qui distingue un écart corrigé
+// d'un écart masqué.
+let SC={perimetre:'pf',instantane:null,statut:'ecart',q:'',etat:null};
+
+const SC_STATUTS=[
+  {cle:'ecart',       label:'Écarts'},
+  {cle:'ok',          label:'Concordants'},
+  {cle:'rvgi_seul',   label:'RVGI seul'},
+  {cle:'mysifa_seul', label:'MySifa seul'},
+  {cle:'',            label:'Tout'},
+];
+
+async function ouvrirStocks(){
+  fermerSidebar();
+  S.ecran=ECRAN_STOCKS.cle;S.def=null;S.selection=null;S.colonnes=[];
+  document.getElementById('titre').textContent=ECRAN_STOCKS.label;
+  document.getElementById('sous').textContent=ECRAN_STOCKS.resume;
+  const ms=document.getElementById('mobile-sub');if(ms)ms.textContent=ECRAN_STOCKS.label;
+  renderNav();
+  document.getElementById('corps').innerHTML=
+    '<div class="sc-wrap">'+
+      '<div class="ar-tete">'+
+        '<span class="ar-onglets">'+
+          '<button type="button" class="btn ar-ong" data-per="pf">Produits finis</button>'+
+          '<button type="button" class="btn ar-ong" data-per="matiere">Matières</button>'+
+        '</span>'+
+        '<select class="sc-hist" id="sc-hist" title="Comparaisons enregistrées"></select>'+
+        '<button type="button" class="btn" id="sc-go">Comparer maintenant</button>'+
+      '</div>'+
+      '<div id="sc-corps"><div class="skel"></div></div>'+
+    '</div>';
+  document.querySelectorAll('.ar-ong[data-per]').forEach(b=>{
+    b.addEventListener('click',()=>{SC.perimetre=b.getAttribute('data-per');SC.instantane=null;chargerStocks();});
+  });
+  document.getElementById('sc-go').addEventListener('click',lancerComparaison);
+  document.getElementById('sc-hist').addEventListener('change',e=>{
+    SC.instantane=Number(e.target.value)||null;peindreStocks();
+  });
+  chargerStocks();
+}
+
+async function chargerStocks(){
+  document.querySelectorAll('.ar-ong[data-per]').forEach(b=>{
+    b.classList.toggle('actif',b.getAttribute('data-per')===SC.perimetre);
+  });
+  const z=document.getElementById('sc-corps');
+  z.innerHTML='<div class="skel"></div>';
+  try{
+    const [etat,hist]=await Promise.all([
+      api('/api/stock-compare/etat?perimetre='+SC.perimetre),
+      api('/api/stock-compare/instantanes?perimetre='+SC.perimetre)
+    ]);
+    SC.etat=etat;SC.hist=hist.instantanes||[];
+    if(!SC.instantane&&SC.hist.length)SC.instantane=SC.hist[0].id;
+  }catch(e){ z.innerHTML='<div class="vide-msg">'+esc(e.message)+'</div>'; return; }
+  peindreHistorique();
+  peindreStocks();
+}
+
+function peindreHistorique(){
+  const sel=document.getElementById('sc-hist');
+  if(!sel)return;
+  if(!SC.hist.length){sel.innerHTML='<option>aucune comparaison</option>';sel.disabled=true;return;}
+  sel.disabled=false;
+  sel.innerHTML=SC.hist.map(i=>
+    '<option value="'+i.id+'"'+(i.id===SC.instantane?' selected':'')+'>'+
+    esc(fmtDateHeure(i.cree_le))+' · '+fmtNb(i.nb_ecarts,0)+' écart'+(i.nb_ecarts>1?'s':'')+
+    (i.origine==='synchro'?' · auto':'')+'</option>').join('');
+}
+
+async function peindreStocks(){
+  const z=document.getElementById('sc-corps');
+  const e=SC.etat&&SC.etat.rvgi;
+  let h='';
+  // Ce que RVGI porte, avant toute comparaison : si personne n'a jamais
+  // comparé, cet écran doit quand même apprendre quelque chose.
+  if(e){
+    h+='<div class="sc-cartes">'+
+       tuileSc(fmtNb(e.references,0),'références suivies dans RVGI')+
+       tuileSc(fmtNb(e.avec_stock,0),'avec un stock non nul')+
+       tuileSc(fmtNb(e.negatifs,0),'en stock négatif',e.negatifs?'al':'')+
+       tuileSc(e.dernier_mouvement?fmtDateHeure(e.dernier_mouvement):'—','dernier mouvement RVGI')+
+       '</div>';
+  }
+  if(!SC.instantane){
+    z.innerHTML=h+'<div class="vide-msg">Aucune comparaison enregistrée pour ce périmètre.<br>'+
+      '<span class="mini">« Comparer maintenant » en prend une. Ensuite, une est prise '+
+      'automatiquement après chaque synchro RVGI — c\'est ce qui transforme un écart en courbe.</span></div>';
+    return;
+  }
+  z.innerHTML=h+'<div class="skel"></div>';
+  let r;
+  try{
+    r=await api('/api/stock-compare/instantanes/'+SC.instantane+
+      '?statut='+encodeURIComponent(SC.statut)+'&q='+encodeURIComponent(SC.q));
+  }catch(err){ z.innerHTML=h+'<div class="vide-msg">'+esc(err.message)+'</div>'; return; }
+  const i=r.instantane;
+
+  h+='<div class="sc-cartes">'+
+     tuileSc(fmtNb(i.nb_ecarts,0),'écarts',i.nb_ecarts?'al':'ok')+
+     tuileSc(fmtNb(i.ecart_absolu,0),'unités d\'écart cumulées')+
+     tuileSc(fmtNb(i.nb_communs,0),'références communes')+
+     tuileSc(fmtNb(i.nb_rvgi_seul,0)+' / '+fmtNb(i.nb_mysifa_seul,0),'RVGI seul / MySifa seul')+
+     '</div>';
+
+  const corresp=i.nb_rvgi?Math.round(1000*i.nb_communs/i.nb_rvgi)/10:0;
+  if(corresp<50){
+    h+='<p class="sc-avert">Seules <b>'+corresp+' %</b> des références de RVGI existent aussi dans MySifa. '+
+       'Tant que ce taux est bas, la colonne « écart » ne dit pas grand-chose : c\'est la clé de '+
+       'rapprochement qu\'il faut traiter d\'abord, pas les quantités.</p>';
+  }
+
+  h+='<div class="sc-barre">';
+  SC_STATUTS.forEach(st=>{
+    h+='<button type="button" class="btn sc-st'+(SC.statut===st.cle?' actif':'')+
+       '" data-st="'+esc(st.cle)+'">'+esc(st.label)+'</button>';
+  });
+  h+='<input type="search" id="sc-q" placeholder="Filtrer sur une référence…" value="'+esc(SC.q)+'">';
+  h+='</div>';
+
+  if(!r.lignes.length){
+    h+='<div class="vide-msg">Rien dans cette catégorie.</div>';
+  }else{
+    h+='<div class="pl-boite" style="max-height:none"><table class="pl sc-t"><thead><tr>'+
+       '<th>Référence</th><th>Désignation</th><th class="num">Stock RVGI</th>'+
+       '<th class="num">Stock MySifa</th><th class="num">Écart</th>'+
+       '<th>Dernier mouvement RVGI</th></tr></thead><tbody>';
+    r.lignes.forEach(l=>{
+      const ec=l.ecart;
+      h+='<tr data-ref="'+esc(l.reference)+'" title="Voir l\'histoire de cette référence">'+
+         '<td class="of">'+esc(l.reference)+'</td>'+
+         '<td>'+esc(l.designation||'—')+'</td>'+
+         '<td class="num'+((l.stock_rvgi||0)<0?' neg':'')+'">'+(l.stock_rvgi==null?'—':fmtNb(l.stock_rvgi,0))+'</td>'+
+         '<td class="num'+((l.stock_mysifa||0)<0?' neg':'')+'">'+(l.stock_mysifa==null?'—':fmtNb(l.stock_mysifa,0))+'</td>'+
+         '<td class="num">'+(ec==null?'<span class="badge n0">'+esc(SC_LIB[l.statut]||l.statut)+'</span>'
+              :'<b class="'+(ec<0?'neg':'')+'">'+(ec>0?'+':'')+fmtNb(ec,0)+'</b>')+'</td>'+
+         '<td class="mini">'+esc(l.rvgi_mvt_libelle||'—')+
+           (l.rvgi_mvt_date?(' · '+fmtDate(String(l.rvgi_mvt_date).slice(0,10))):'')+'</td>'+
+         '</tr>';
+    });
+    h+='</tbody></table></div>';
+    if(r.tronque){
+      h+='<p class="pl-note">'+fmtNb(r.lignes.length,0)+' lignes affichées sur '+fmtNb(r.total,0)+
+         ' — filtre pour voir le reste.</p>';
+    }
+  }
+  z.innerHTML=h;
+  z.querySelectorAll('[data-st]').forEach(b=>{
+    b.addEventListener('click',()=>{SC.statut=b.getAttribute('data-st');peindreStocks();});
+  });
+  const q=document.getElementById('sc-q');
+  if(q){
+    let m=null;
+    q.addEventListener('input',()=>{clearTimeout(m);m=setTimeout(()=>{SC.q=q.value;peindreStocks();},260);});
+  }
+  z.querySelectorAll('[data-ref]').forEach(tr=>{
+    tr.addEventListener('click',()=>histoireReference(tr.getAttribute('data-ref')));
+  });
+}
+
+const SC_LIB={rvgi_seul:'RVGI seul',mysifa_seul:'MySifa seul',ok:'concordant',ecart:'écart'};
+
+function tuileSc(v,l,cls){
+  return '<div class="sc-tuile '+(cls||'')+'"><span class="v">'+v+'</span><span class="l">'+esc(l)+'</span></div>';
+}
+
+async function lancerComparaison(){
+  const b=document.getElementById('sc-go');
+  b.disabled=true;b.textContent='Comparaison…';
+  try{
+    const r=await api('/api/stock-compare/comparer?perimetre='+SC.perimetre,{method:'POST'});
+    toast(fmtNb(r.nb_ecarts,0)+' écart'+(r.nb_ecarts>1?'s':'')+' sur '+
+          fmtNb(r.nb_communs,0)+' référence'+(r.nb_communs>1?'s':'')+' commune'+(r.nb_communs>1?'s':'')+'.');
+    SC.instantane=r.instantane_id;
+    await chargerStocks();
+  }catch(e){ toast(e.message,'err'); }
+  b.disabled=false;b.textContent='Comparer maintenant';
+}
+
+// L'histoire d'une référence : un écart qui dure n'est pas un écart qui vient
+// d'apparaître, et le tableau ne peut pas le dire.
+async function histoireReference(ref){
+  const f=document.getElementById('detail-fond'),d=document.getElementById('detail');
+  if(!f||!d)return;
+  S.pile=[{ecran:'stocks_compares',id:ref}];
+  f.classList.add('ouvert');
+  d.innerHTML=enteteDetail(ref,'Historique de l\'écart')+
+    '<div class="detail-corps"><div class="skel"></div></div>';
+  brancherEnteteDetail();
+  let r;
+  try{ r=await api('/api/stock-compare/suivi?perimetre='+SC.perimetre+'&reference='+encodeURIComponent(ref)); }
+  catch(e){ d.querySelector('.detail-corps').innerHTML='<div class="vide-msg">'+esc(e.message)+'</div>'; return; }
+  const s=r.suivi||[];
+  let h='<div class="detail-corps">';
+  if(!s.length){
+    h+='<div class="vide-msg">Cette référence n\'apparaît que dans la comparaison en cours.</div>';
+  }else{
+    h+='<div class="pl-boite"><table class="pl"><thead><tr><th>Comparé le</th>'+
+       '<th class="num">RVGI</th><th class="num">MySifa</th><th class="num">Écart</th><th>Origine</th>'+
+       '</tr></thead><tbody>';
+    s.forEach(x=>{
+      h+='<tr><td>'+esc(fmtDateHeure(x.cree_le))+'</td>'+
+         '<td class="num">'+(x.stock_rvgi==null?'—':fmtNb(x.stock_rvgi,0))+'</td>'+
+         '<td class="num">'+(x.stock_mysifa==null?'—':fmtNb(x.stock_mysifa,0))+'</td>'+
+         '<td class="num"><b class="'+((x.ecart||0)<0?'neg':'')+'">'+
+           (x.ecart==null?'—':((x.ecart>0?'+':'')+fmtNb(x.ecart,0)))+'</b></td>'+
+         '<td class="mini">'+(x.origine==='synchro'?'après synchro':'à la demande')+'</td></tr>';
+    });
+    h+='</tbody></table></div>';
+    const prem=s[s.length-1],dern=s[0];
+    if(s.length>1&&prem.ecart!=null&&dern.ecart!=null){
+      const sens=Math.abs(dern.ecart)>Math.abs(prem.ecart)?'se creuse'
+                :(Math.abs(dern.ecart)<Math.abs(prem.ecart)?'se résorbe':'ne bouge pas');
+      h+='<p class="pl-note">Sur '+s.length+' comparaisons, l\'écart <b>'+sens+'</b>.</p>';
+    }
+  }
+  d.innerHTML=enteteDetail(ref,'Historique de l\'écart')+h+'</div>';
+  brancherEnteteDetail();
+}
+
 // ── Vue écran : rail + grille ────────────────────────────────────
 function ouvrirEcran(cle){
   if(cle===ECRAN_CONTROLE.cle){ouvrirARattacher();return;}
+  if(cle===ECRAN_STOCKS.cle){ouvrirStocks();return;}
   const def=((S.meta&&S.meta.ecrans)||[]).find(e=>e.cle===cle);
   if(!def){toast('Écran inconnu.','err');ouvrirMenu();return;}
   S.ecran=cle;S.def=def;S.page=1;S.tri=null;S.sens='asc';S.q='';S.filtres={};S.selection=null;S.colonnes=[];S.epingles=[];
@@ -1478,15 +1756,16 @@ async function rendreDetail(){
   // puis toutes leurs lignes, puis la ligne ouverte, puis ce qui s'y rattache.
   const p=r.piece||null;
   h=enteteDetail(def?def.label:'Détail',sousTitreDetail(r.groupes,p));
-  h+='<div class="detail-corps">';
+  h+='<div class="detail-corps deux-col"><div class="detail-principal">';
   if(p)h+=blocPiece(p,cur.id);
   h+='<div class="titre-bloc">'+ICO_FICHE+'<span>'+(p?'Détail de la ligne':'Détail')+'</span></div>';
   const res=resumeLigne(r.groupes);
   h+=res.html;
   h+='<div class="sections" id="sec-detail">'+blocGroupes(r.groupes,res.pris)+'</div>';
+  h+='</div><div class="detail-rail">';
   h+='<div class="titre-bloc" id="t-liens">'+ICO_LIEN+'<span>Pièces liées</span></div>'+
      '<div class="liens" id="liens"><div class="liens-vide">Recherche des pièces rattachées…</div></div>';
-  h+='</div>';
+  h+='</div></div>';
   d.innerHTML=h;
   brancherEnteteDetail();
   d.querySelectorAll('.groupe-titre').forEach(t=>{
@@ -1651,7 +1930,7 @@ function ordonnerColonnesPiece(cols){
 
 function estNum(col){
   const t=col.type||'';
-  return t==='qte'||t==='nombre'||t==='prix'||t==='montant'||t==='pct';
+  return t==='qte'||t==='nombre'||t==='prix'||t==='montant'||t==='pct'||t==='id';
 }
 
 function brancherEnteteDetail(){
@@ -1671,8 +1950,16 @@ async function chargerLiens(cur,jeton){
   }
   if(jeton!==S.jetonD)return;
   const liens=(r.liens||[]).filter(l=>l.erreur||l.total>0);
+  // Le titre du rail reste en place même à vide : une colonne qui disparaît
+  // déplace tout le reste, et « aucune pièce rattachée » est une réponse, pas
+  // une absence de réponse.
+  const t=document.getElementById('t-liens');
+  if(t){
+    const total=liens.reduce((s,l)=>s+(l.total||0),0);
+    const n=t.querySelector('.tb-num');if(n)n.remove();
+    if(total)t.insertAdjacentHTML('beforeend','<span class="tb-num">'+fmtNb(total,0)+'</span>');
+  }
   if(!liens.length){
-    const t=document.getElementById('t-liens');if(t)t.remove();
     z.innerHTML='<div class="liens-vide">Aucune pièce rattachée à cette ligne dans le miroir.</div>';
     return;
   }
@@ -1779,7 +2066,10 @@ function rgCasesLigne(colonnes,l){
   const cases={c1:null,c2:null,c3:null,cn:null,cd:null};
   colonnes.forEach(c=>{
     const t=c.type||'texte';
-    if(!cases.c1&&(t==='of'||t==='ref'||t==='code'))cases.c1=c;
+    // Un numéro de pièce identifie : il tient la première case, comme un n° d'OF
+    // ou une référence article — pas la case du chiffre, où on le lirait comme
+    // une quantité.
+    if(!cases.c1&&(t==='of'||t==='ref'||t==='code'||t==='id'))cases.c1=c;
     else if(!cases.cd&&(t==='date'||t==='datetime'))cases.cd=c;
     else if(!cases.cn&&(t==='qte'||t==='nombre'||t==='prix'||t==='montant'))cases.cn=c;
     else if(!cases.c2)cases.c2=c;
@@ -1798,7 +2088,8 @@ function rgCasesLigne(colonnes,l){
     const brut=l[c.nom];
     const t=c.type||'texte';
     const html=(t==='texte'||t==='client'||t==='ref'||t==='of'||t==='code')
-      ? rgSurligner(brut,RG.q) : v.html;
+      ? rgSurligner(brut,RG.q)
+      : (t==='id' ? rgSurligner(fmtId(brut),RG.q) : v.html);
     h+='<span class="c '+k+'" title="'+esc(c.label)+' : '+esc(brut==null?'—':brut)+'">'+html+'</span>';
   });
   return h;

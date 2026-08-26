@@ -191,6 +191,39 @@
       '.pmem-tbl tbody tr:hover td{background:var(--accent-bg);color:var(--text)}',
       '.pmem-tbl .pmem-chip{font-size:12px}',
       '.pmem-scroll{overflow-x:auto}',
+      // Onglets sobres (« Scans d'OF ») : le blanc porte la page, l'onglet
+      // actif se signale par un trait et du texte fonce. Un aplat colore par
+      // onglet ajoutait une deuxieme emphase la ou le tableau en dessous
+      // demande deja de l'attention.
+      '.pmem-tabs.is-sobre{gap:0;border-bottom:1px solid var(--border);padding-bottom:0}',
+      '.pmem-tabs.is-sobre .pmem-tab{background:transparent;border:none;border-radius:0;',
+      'border-bottom:2px solid transparent;color:var(--muted);padding:9px 2px;margin-right:22px}',
+      '.pmem-tabs.is-sobre .pmem-tab:hover{color:var(--text);border-bottom-color:var(--border)}',
+      '.pmem-tabs.is-sobre .pmem-tab.is-on{background:transparent;color:var(--text);',
+      'border-bottom-color:var(--accent)}',
+      // Tableau sobre : le survol et la ligne selectionnee restent des gris,
+      // la couleur reste disponible pour ce qui alerte (« non lu »).
+      '.pmem-tbl-sobre tbody tr:hover td{background:var(--bg);color:var(--text)}',
+      '.pmem-tbl-sobre tbody tr.is-sel td{background:var(--bg);color:var(--text);',
+      'box-shadow:inset 2px 0 0 var(--accent)}',
+      '.pmem-file-n{font-weight:800;color:var(--text);font-size:13px;word-break:break-word}',
+      '.pmem-file-m{font-size:11px;color:var(--muted);margin-top:3px}',
+      // Suggestions de dossier : la liste se pose SOUS le champ sans pousser
+      // le formulaire, sinon les boutons sautent a chaque frappe.
+      '.pmem-sugg-wrap{position:relative}',
+      '.pmem-sugg{display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:30;',
+      'background:var(--card);border:1px solid var(--border);border-radius:10px;',
+      'box-shadow:0 10px 24px rgba(0,0,0,.18);max-height:280px;overflow-y:auto}',
+      '.pmem-sugg.is-open{display:block}',
+      '.pmem-sugg-i{display:block;width:100%;text-align:left;background:transparent;border:none;',
+      'border-bottom:1px solid var(--border);padding:9px 12px;cursor:pointer;font-family:inherit}',
+      '.pmem-sugg-i:last-child{border-bottom:none}',
+      '.pmem-sugg-i:hover{background:var(--bg)}',
+      '.pmem-sugg-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--text)}',
+      '.pmem-sugg-m{font-size:11px;color:var(--muted);margin-top:3px}',
+      '.pmem-sugg-vide{padding:11px 12px;font-size:12px;color:var(--muted)}',
+      '.pmem-sugg-note{font-size:12px;color:var(--text2);margin-top:7px;min-height:16px}',
+      '.pmem-sugg-note.is-warn{color:var(--warn);font-weight:700}',
       '.pmem-split{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:14px}',
       '@media(max-width:820px){.pmem-split{grid-template-columns:1fr}}',
       '.pmem-frame{width:100%;height:460px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}',
@@ -941,7 +974,7 @@
       { key: 'scannes', label: 'Scannes', count: state.total },
       { key: 'rattacher', label: 'A rattacher', count: state.nbARattacher },
     ];
-    return el('div', { className: 'pmem-tabs' }, defs.map(function (t) {
+    return el('div', { className: 'pmem-tabs is-sobre' }, defs.map(function (t) {
       return el('button', {
         type: 'button',
         className: 'pmem-tab' + (state.tab === t.key ? ' is-on' : ''),
@@ -1023,7 +1056,7 @@
     });
 
     var table = el('div', { className: 'pmem-tablecard pmem-scroll' }, [
-      el('table', { className: 'pmem-tbl' }, [
+      el('table', { className: 'pmem-tbl pmem-tbl-sobre' }, [
         el('thead', {}, [el('tr', {},
           ['Date', 'OF', 'Produit', 'Dossier', 'Production', 'Fichier', '']
             .map(function (h) { return el('th', { text: h }); }))]),
@@ -1042,6 +1075,9 @@
   }
 
   // ── Onglet « A rattacher » : la file, avec apercu cote a cote ───────────
+  // La file est un tableau a fond blanc, pas une pile de boutons accentues :
+  // vingt aplats de couleur empilaient vingt fois la meme emphase et la ligne
+  // reellement selectionnee ne se distinguait plus des autres.
   function vueARattacher() {
     var docs = state.docs || [];
     if (!docs.length) {
@@ -1051,30 +1087,128 @@
       })];
     }
 
-    var liste = el('div', {}, docs.map(function (doc) {
-      var on = doc.id === state.sel;
-      var b = el('button', {
-        type: 'button',
-        className: 'pmem-btn' + (on ? ' is-on' : ''),
-        style: 'display:block;width:100%;text-align:left;margin-bottom:6px',
-      }, [
-        el('div', { style: 'font-weight:800', text: doc.fichier_origine || doc.fichier }),
-        el('div', {
-          style: 'font-size:11px;color:var(--muted);margin-top:3px',
-          text: [fDate(doc.date_document || doc.importe_le),
-                 doc.of_numero ? 'OF lu ' + doc.of_numero : 'numero non lu',
-                 doc.texte_extrait ? null : 'sans OCR'].filter(Boolean).join(' · '),
-        }),
-      ]);
-      b.addEventListener('click', function () { state.sel = doc.id; renderScans(); });
-      return b;
-    }));
-
     var sel = docs.filter(function (d) { return d.id === state.sel; })[0] || docs[0];
-    var champ = el('input', {
-      className: 'pmem-input', type: 'text', id: 'pmem-dos',
-      placeholder: 'Numero de dossier (ex. 9932056)', value: sel.of_numero || '',
+
+    var lignes = docs.map(function (doc) {
+      var meta = [fDate(doc.date_document || doc.importe_le),
+                  doc.texte_extrait ? null : 'sans OCR'].filter(Boolean).join(' · ');
+      var tr = el('tr', { className: doc.id === sel.id ? 'is-sel' : '' }, [
+        el('td', {}, [
+          el('div', { className: 'pmem-file-n', text: doc.fichier_origine || doc.fichier }),
+          el('div', { className: 'pmem-file-m', text: meta }),
+        ]),
+        el('td', {}, [
+          doc.of_numero
+            ? el('strong', { text: doc.of_numero })
+            : el('span', { className: 'pmem-chip is-warn', text: 'non lu' }),
+        ]),
+      ]);
+      tr.style.cursor = 'pointer';
+      tr.addEventListener('click', function () {
+        if (state.sel === doc.id) return;
+        state.sel = doc.id;
+        renderScans();
+      });
+      return tr;
     });
+
+    var liste = el('div', { className: 'pmem-tablecard pmem-scroll' }, [
+      el('table', { className: 'pmem-tbl pmem-tbl-sobre' }, [
+        el('thead', {}, [el('tr', {}, ['Fichier', 'OF']
+          .map(function (h) { return el('th', { text: h }); }))]),
+        el('tbody', {}, lignes),
+      ]),
+    ]);
+
+    // ── Recherche vivante du dossier ──────────────────────────────────
+    // Le champ demandait un numero de dossier connu par coeur. Sur un scan
+    // dont l'OF n'a justement pas ete lu, personne ne l'a : on cherche donc
+    // sur tout ce que le document peut porter (dossier, OF, reference,
+    // client) et on montre, AVANT de valider, la reference produit que le
+    // rattachement va reellement ecrire.
+    var choix = null;
+
+    var champ = el('input', {
+      className: 'pmem-input', type: 'text', id: 'pmem-dos', autocomplete: 'off',
+      placeholder: 'N° de dossier, n° d\'OF, référence produit ou client…',
+      value: sel.of_numero || '',
+    });
+    var boite = el('div', { className: 'pmem-sugg' });
+    var apercu = el('div', { className: 'pmem-sugg-note' });
+
+    function poserApercu() {
+      apercu.className = 'pmem-sugg-note';
+      if (!choix) { apercu.textContent = ''; return; }
+      if (choix.ref_produit_norm) {
+        apercu.textContent = 'Dossier ' + choix.no_dossier + ' → référence '
+          + choix.ref_produit_norm
+          + (choix.client ? ' · ' + choix.client : '');
+      } else {
+        apercu.className = 'pmem-sugg-note is-warn';
+        apercu.textContent = 'Dossier ' + choix.no_dossier
+          + ' : aucune référence produit rattachable — le rattachement sera refusé.';
+      }
+    }
+
+    function viderSugg() { boite.textContent = ''; boite.classList.remove('is-open'); }
+
+    function poserSugg(cands, q) {
+      boite.textContent = '';
+      if (!cands.length) {
+        boite.appendChild(el('div', { className: 'pmem-sugg-vide',
+          text: 'Aucun dossier pour « ' + q + ' »' }));
+        boite.classList.add('is-open');
+        return;
+      }
+      cands.forEach(function (c) {
+        var infos = [c.client, c.machine, c.numero_of ? 'OF ' + c.numero_of : null,
+                     fDate(c.date) !== '—' ? fDate(c.date) : null].filter(Boolean);
+        var ligne = el('button', { type: 'button', className: 'pmem-sugg-i' }, [
+          el('div', { className: 'pmem-sugg-h' }, [
+            el('strong', { text: c.no_dossier }),
+            c.ref_produit_norm
+              ? el('span', { className: 'pmem-chip is-accent', text: c.ref_produit_norm })
+              : el('span', { className: 'pmem-chip is-warn', text: 'sans référence' }),
+          ]),
+          el('div', { className: 'pmem-sugg-m', text: infos.join(' · ') || '—' }),
+        ]);
+        ligne.addEventListener('click', function () {
+          choix = c;
+          champ.value = c.no_dossier;
+          viderSugg();
+          poserApercu();
+        });
+        boite.appendChild(ligne);
+      });
+      boite.classList.add('is-open');
+    }
+
+    var tSugg = null, seqSugg = 0;
+    champ.addEventListener('input', function () {
+      choix = null;
+      poserApercu();
+      var q = (champ.value || '').trim();
+      clearTimeout(tSugg);
+      if (q.length < 2) { viderSugg(); return; }
+      var seq = ++seqSugg;
+      tSugg = setTimeout(async function () {
+        try {
+          var r = await api('/api/produits/dossiers/recherche?q=' + encodeURIComponent(q));
+          if (seq !== seqSugg) return;   // reponse d'une frappe deja depassee
+          poserSugg(r.dossiers || [], q);
+        } catch (e) { viderSugg(); }
+      }, 220);
+    });
+    champ.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') viderSugg();
+    });
+
+    // Un scan dont l'OF a ete lu arrive avec ce numero pre-rempli : autant
+    // proposer tout de suite les dossiers correspondants plutot que
+    // d'attendre une frappe qui n'a pas lieu d'etre.
+    if ((champ.value || '').trim().length >= 2) {
+      champ.dispatchEvent(new Event('input'));
+    }
 
     var btnOk = el('button', { type: 'button', className: 'pmem-btn pmem-btn-accent', text: 'Rattacher' });
     btnOk.addEventListener('click', async function () {
@@ -1106,7 +1240,8 @@
 
     var droite = el('div', {}, [
       el('label', { className: 'pmem-lbl', text: 'Rattacher a un dossier' }),
-      champ,
+      el('div', { className: 'pmem-sugg-wrap' }, [champ, boite]),
+      apercu,
       el('div', { className: 'pmem-form-row' }, [btnOk, btnKo]),
       el('iframe', { className: 'pmem-frame', src: '/api/produits/documents/' + sel.id + '/pdf',
                      style: 'margin-top:12px' }),

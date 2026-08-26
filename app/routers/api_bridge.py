@@ -614,6 +614,35 @@ def _charger_importeur():
     return module
 
 
+def _comparer_les_stocks(journal) -> dict:
+    """Instantané RVGI ↔ MySifa, juste après la reconstruction du miroir.
+
+    Ne fait jamais échouer l'import : une comparaison ratée est un indicateur
+    manquant, pas une synchro perdue.
+    """
+    out = {}
+    try:
+        from database import get_db
+        from app.services import stock_compare
+    except Exception as e:
+        journal.append("Comparaison des stocks impossible : %s" % str(e)[:160])
+        return out
+    for perimetre in stock_compare.PERIMETRES:
+        try:
+            with get_db() as conn:
+                res = stock_compare.enregistrer(
+                    conn, perimetre, "synchro RVGI", origine="synchro")
+                conn.commit()
+            out[perimetre] = {"ecarts": res["nb_ecarts"],
+                              "correspondance": res["taux_correspondance"]}
+            journal.append(
+                "Stocks %s : %d écart(s) sur %d référence(s) communes."
+                % (perimetre, res["nb_ecarts"], res["nb_communs"]))
+        except Exception as e:
+            journal.append("Comparaison %s en échec : %s" % (perimetre, str(e)[:160]))
+    return out
+
+
 def _erp_importer_en_fond(dossier_csv: str, dossier_temp: str) -> None:
     global _ERP_ETAT
     debut = datetime.now()
@@ -634,6 +663,11 @@ def _erp_importer_en_fond(dossier_csv: str, dossier_temp: str) -> None:
             "tables": bilan.get("tables"),
             "echecs": bilan.get("echecs") or [],
         }
+        # Le miroir vient d'être reconstruit : c'est le seul moment où l'on
+        # sait que les deux bases sont comparables. On prend l'instantané ici,
+        # sinon l'écart de stock resterait une photo prise quand quelqu'un y
+        # pense — et on ne saurait jamais depuis quand il existe.
+        _ERP_ETAT["comparaisons"] = _comparer_les_stocks(lignes_journal)
     except Exception as e:
         _ERP_ETAT = {
             "statut": "échec",

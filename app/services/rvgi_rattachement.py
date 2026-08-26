@@ -553,13 +553,137 @@ def _lire_lignes_commandes(c, numeros: List[str]) -> List[Dict[str, Any]]:
                % ",".join("?" * len(lot)) + " ORDER BY l.numero DESC, l.ligne")
         for r in c.execute(sql, lot):
             d = dict(r)
-            d["article"] = _article(d.pop("code1", None), d.pop("code2", None))
+            # On garde les deux codes bruts : ils formeront la clé de jointure
+            # vers la fiche produit, que `article` ne permet plus une fois les
+            # deux colonnes fondues en « 986/0005 ».
+            c1, c2 = d.pop("code1", None), d.pop("code2", None)
+            d["code1_brut"], d["code2_brut"] = c1, c2
+            d["article"] = _article(c1, c2)
             d["qte"] = miroir.nettoyer(d.get("qte"), "qte")
             d["qtep"] = miroir.nettoyer(d.get("qtep"), "qte")
             d["amje"] = miroir.nettoyer(d.get("amje"), "date")
             d["date_cde"] = miroir.nettoyer(d.get("date_cde"), "date")
             lignes.append(d)
+        _ajouter_fiche_produit(c, lignes)
     return lignes
+
+
+# ─── La fiche produit ────────────────────────────────────────────────────────
+#
+# Ce que le planificateur regarde d'abord, avant même le client : QUEL produit,
+# et sur QUELLE machine il est censé tourner. RVGI le sait, dans deux tables
+# différentes — la fiche article pour le format, la fiche de fabrication pour
+# la machine et la laize. On les rassemble ici plutôt que de les faire chercher.
+#
+#   fic_art   ftl / fth   largeur et hauteur de l'étiquette (2 734 / 7 679)
+#             cltc2       la référence du client pour cet article (5 379)
+#             libc1       la désignation
+#   gpr_ff    nmac1       la machine de production (584 fiches, une par article)
+#             laimat      la laize matière (548 / 584)
+#   mac_pro   nom         le nom de la machine — type 1 = machines de production
+#
+# Toutes les commandes n'ont pas de fiche de fabrication : 579 articles sur les
+# 4 007 commandés. C'est normal — un article jamais produit chez SIFA n'en a
+# pas. Le sélecteur affiche alors l'article seul, sans machine, et n'invente rien.
+
+_SEP = "\x1f"
+
+
+def _cle_art(code1, code2) -> str:
+    return "%s%s%s" % (str(code1 or "").strip(), _SEP, str(code2 or "").strip())
+
+
+def _nombre(v) -> Optional[float]:
+    """Un format à zéro n'est pas un format : RVGI y écrit l'absence de saisie."""
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if f else None
+
+
+def fiche_produit(c, codes: Iterable[Tuple[Any, Any]]) -> Dict[str, Dict[str, Any]]:
+    """{clé article: {libelle, ref_client, largeur, hauteur, laize, machine}}.
+
+    Les trois tables sont interrogées par lots de 400 couples de codes : sous
+    SQLite, un `IN` de plusieurs milliers de paramètres coûte plus cher que
+    quelques allers-retours.
+    """
+    cles: List[Tuple[str, str]] = []
+    vus = set()
+    for c1, c2 in codes:
+        a, b = str(c1 or "").strip(), str(c2 or "").strip()
+        if not a or (a, b) in vus:
+            continue
+        vus.add((a, b))
+        cles.append((a, b))
+    if not cles:
+        return {}
+
+    presentes = miroir.tables_presentes(c)
+    out: Dict[str, Dict[str, Any]] = {}
+
+    def _par_lots(table: str, colonnes: str, sur):
+        if table not in presentes:
+            return
+        for debut in range(0, len(cles), 400):
+            lot = cles[debut:debut + 400]
+            sql = ('SELECT %s FROM "%s" WHERE corbeille = 0 AND (%s)'
+                   % (colonnes, table,
+                      " OR ".join(["(code1 = ? AND code2 = ?)"] * len(lot))))
+            params = [v for paire in lot for v in paire]
+            for r in c.execute(sql, params):
+                sur(out.setdefault(_cle_art(r["code1"], r["code2"]), {}), r)
+
+    _par_lots("fic_art", "code1, code2, libc1, ftl, fth, cltc2", lambda d, r: d.update({
+        "libelle": (r["libc1"] or None),
+        "ref_client": (str(r["cltc2"]).strip() or None) if r["cltc2"] else None,
+        "largeur": _nombre(r["ftl"]),
+        "hauteur": _nombre(r["fth"]),
+    }))
+
+    machines: Dict[Any, str] = {}
+    if "mac_pro" in presentes:
+        for r in c.execute("SELECT code, nom FROM mac_pro WHERE corbeille = 0 AND type = 1"):
+            if r["nom"]:
+                machines[r["code"]] = str(r["nom"]).strip()
+
+    def _ff(d: Dict[str, Any], r) -> None:
+        d["laize"] = _nombre(r["laimat"])
+        d["machine_code"] = r["nmac1"]
+        # Une machine que `mac_pro` ne connaît pas ne devient pas « machine 4 » :
+        # on préfère ne rien afficher plutôt qu'un numéro qui ne parle à personne.
+        d["machine"] = machines.get(r["nmac1"])
+
+    _par_lots("gpr_ff", "code1, code2, nmac1, laimat", _ff)
+    return out
+
+
+def _ajouter_fiche_produit(c, lignes: List[Dict[str, Any]]) -> None:
+    """Colle la fiche produit sur chaque ligne de commande proposée."""
+    if not lignes:
+        return
+    try:
+        fiches = fiche_produit(c, [(l.get("code1_brut"), l.get("code2_brut"))
+                                   for l in lignes])
+    except sqlite3.Error:
+        return  # une fiche manquante ne doit pas empêcher de rattacher
+    for l in lignes:
+        f = fiches.get(_cle_art(l.get("code1_brut"), l.get("code2_brut"))) or {}
+        l["produit"] = {
+            "article": l.get("article"),
+            "libelle": f.get("libelle") or l.get("des1"),
+            "ref_client": f.get("ref_client"),
+            "largeur": f.get("largeur"),
+            "hauteur": f.get("hauteur"),
+            "laize": f.get("laize"),
+            "machine": f.get("machine"),
+            "machine_code": f.get("machine_code"),
+        }
+        # Remontés à plat aussi : le sélecteur les affiche sur chaque ligne, et
+        # une indirection de plus dans le gabarit ne servirait à rien.
+        l["machine"] = f.get("machine")
+        l["laize"] = f.get("laize")
 
 
 def chercher_livraisons(q: str = "", numeros_commande: Optional[List[str]] = None,

@@ -103,6 +103,8 @@ from app.web.taches_page import router as taches_page_router
 from app.routers.erp import router as erp_api_router
 # Rattachement : relier un dossier de fabrication ou un départ aux pièces de RVGI.
 from app.routers.rvgi import router as rvgi_api_router
+# Comparaison des stocks : RVGI face a MySifa, avec historique des ecarts.
+from app.routers.stock_compare import router as stock_compare_router
 from app.web.erp_page import router as erp_page_router
 
 
@@ -500,6 +502,7 @@ app.include_router(taches_page_router)
 app.include_router(erp_api_router)
 app.include_router(erp_page_router)
 app.include_router(rvgi_api_router)
+app.include_router(stock_compare_router)
 
 
 @app.get("/healthz", include_in_schema=False)
