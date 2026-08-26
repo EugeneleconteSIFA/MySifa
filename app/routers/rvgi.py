@@ -124,6 +124,31 @@ def rvgi_livraisons(
     return {"pieces": groupes, "commandes_du_dossier": numeros, "miroir": _fraicheur()}
 
 
+@router.get("/receptions")
+def rvgi_receptions(
+    request: Request,
+    q: str = Query("", max_length=120),
+    depuis: str = Query("", max_length=10),
+    limite: int = Query(20, ge=1, le=60),
+):
+    """Les réceptions de RVGI, pour préremplir celles de MyStock.
+
+    Une réception se cherche comme le magasinier la lit sur le camion : le n°
+    de BL du fournisseur, le n° de commande, le nom du fournisseur, ou la
+    désignation d'un article. Chaque groupe rend ses lignes avec, quand MySifa
+    les connaît, la matière ou le produit fini correspondant — et le dit
+    quand il ne les connaît pas.
+    """
+    require_admin(request)
+    from app.services import rvgi_receptions as rec
+    try:
+        with get_db() as conn:
+            groupes = rec.chercher(conn, q, limite=limite, depuis=depuis)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    return {"receptions": groupes, "miroir": _fraicheur()}
+
+
 def _fraicheur() -> Dict[str, Any]:
     """L'heure du miroir, pour que l'écran puisse dire ce qu'il ne sait pas."""
     from app.services import erp_mirror as miroir
