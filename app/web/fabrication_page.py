@@ -295,7 +295,7 @@ body.light table.fab-table tr.fab-row-last td{
   /* Colonne de gauche un peu plus large : c'est elle qui porte l'identite du
      dossier sur une seule ligne, autant lui donner de quoi l'afficher sans
      defilement dans le cas courant. */
-  grid-template-columns:1.25fr auto 1fr;
+  grid-template-columns:1.2fr auto 1fr;
   gap:16px;
   padding:12px 16px;
   overflow:hidden;
@@ -312,26 +312,23 @@ body.light table.fab-table tr.fab-row-last td{
    passaient a la ligne, et poussait hors de la bande la ligne d'actions — donc
    le bouton Produit et le signalement « deja produit », c'est-a-dire tout ce
    qui doit arreter le conducteur avant qu'il lance la machine. */
+/* Colonne d'identite du dossier. `align-items:flex-start` fait que chaque
+   bloc prend la largeur de son contenu et pas celle de la colonne : la
+   consigne « Bobine » occupe la place de « Bobine », pas un pave vide de
+   700 px de large. Seule l'entete est etiree, c'est elle qui defile. */
 .fab-footer-info{
-  display:grid;
-  /* Entete et actions a leur hauteur naturelle, la consigne prend tout le
-     reste : c'est la seule ligne du footer qu'un conducteur doit lire en
-     entier, autant lui donner la place laissee vide. Les actions restent en
-     derniere ligne de la grille, donc toujours visibles quoi qu'il arrive. */
-  grid-template-rows:auto minmax(0,1fr) auto;
+  display:flex;flex-direction:column;align-items:flex-start;
   gap:5px;
-  align-self:stretch;
   overflow:hidden;
   min-width:0;
 }
 /* Le footer est une bande de hauteur fixe (--footer-h) en overflow:hidden :
-   tout ce qui depasse disparait sans bruit. La reference produit et l'alerte
-   « deja produit » etaient empilees a la suite de la consigne dossier et
-   passaient sous le bord -- justement le signal qui doit arreter le conducteur
-   avant qu'il lance la machine. Entete fixe, consigne compressible, actions
-   sur une seule ligne : tout tient dans la bande. */
+   tout ce qui depasse disparait sans bruit. D'ou l'entete sur une seule ligne
+   qui defile horizontalement plutot qu'un pave de metas qui repasse a la
+   ligne : la colonne garde une hauteur previsible, et rien ne se fait rogner
+   par le bas. */
 .fab-dossier-head{
-  flex:0 0 auto;min-width:0;
+  flex:0 0 auto;min-width:0;align-self:stretch;
   display:flex;align-items:center;flex-wrap:nowrap;gap:10px;
   white-space:nowrap;
   overflow-x:auto;overflow-y:hidden;
@@ -340,19 +337,14 @@ body.light table.fab-table tr.fab-row-last td{
 .fab-dossier-head > *{flex:0 0 auto}
 .fab-dossier-head::-webkit-scrollbar{height:4px}
 .fab-dossier-head::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+/* Boutons du dossier EN COURS (aujourd'hui : les deux boutons FSC). Ce qui
+   concerne les dossiers passes est parti dans .fab-memoire-row, colonne de
+   droite. */
 .fab-dossier-actions{
-  min-width:0;align-self:end;
+  min-width:0;
   display:flex;flex-wrap:wrap;align-items:center;
   gap:6px;padding-top:0;
 }
-/* Version compacte du signalement memoire produit : dans 190 px de footer,
-   le bouton pleine taille de la fiche produit coute trop de hauteur. */
-.fab-dossier-actions .pmem-hist-btn{padding:5px 10px;gap:6px}
-.fab-dossier-actions .pmem-hist-titre{font-size:11px}
-.fab-dossier-actions .pmem-hist-detail{font-size:10px}
-.fab-dossier-actions .pmem-hist-pastille{min-width:18px;height:18px;font-size:10px}
-.fab-dossier-actions .pmem-hist-tag{font-size:9px}
-.fab-dossier-actions .fab-produit-btn{margin-top:0}
 .fab-dossier-ref{
   font-size:13px;font-weight:800;color:var(--accent);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
@@ -389,12 +381,13 @@ body.light table.fab-table tr.fab-row-last td{
 /* La consigne dossier etait tronquee sur une ligne : « ATTENTION : SI PALETTE
    TROP HAUTE - Cartons du... » ne dit rien de ce qu'il faut faire. Elle
    s'affiche desormais sur trois lignes, et se deplie entierement au clic. */
-/* Elle prend toute la place disponible, en largeur comme en hauteur. Quand le
-   texte deborde, il se termine par des points de suspension et le survol en
-   donne l'integralite (attribut title). Le clic la rend defilante sur place,
-   pour les ecrans tactiles ou le survol n'existe pas. */
+/* Taillee sur son texte, avec un plafond. Au-dela, le texte se termine par des
+   points de suspension et le survol en donne l'integralite (attribut title).
+   Le clic la rend defilante sur place, pour les ecrans tactiles ou le survol
+   n'existe pas. */
 .fab-dossier-consigne{
   min-width:0;min-height:0;margin-top:0;
+  max-width:min(100%, 520px);
   font-size:11px;line-height:1.45;color:var(--text2);
   background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--warn,#fbbf24);
   border-radius:8px;padding:6px 9px;cursor:pointer;
@@ -404,9 +397,9 @@ body.light table.fab-table tr.fab-row-last td{
      nombre de lignes, le texte serait coupe net au bord de la boite. */
   -webkit-line-clamp:5;
 }
-/* Depliee au clic, elle defile a l'interieur de sa case de grille : elle ne
-   peut donc pas chasser la ligne d'actions hors de la bande. */
-.fab-dossier-consigne.is-open{-webkit-line-clamp:unset;overflow-y:auto}
+/* Depliee au clic, elle defile a l'interieur de sa propre boite, bornee en
+   hauteur : elle ne peut donc pas pousser le reste hors de la bande. */
+.fab-dossier-consigne.is-open{-webkit-line-clamp:unset;max-height:110px;overflow-y:auto}
 /* Pas de consigne : la case reste, elle le dit, mais elle cesse de crier —
    le liseré orange est reserve a une consigne qui existe vraiment. */
 .fab-dossier-consigne.is-vide{
@@ -453,7 +446,7 @@ body.light table.fab-table tr.fab-row-last td{
   display:flex;flex-direction:column;gap:8px;justify-content:center;
   min-width:0;
 }
-.fab-search-wrap{display:flex;gap:6px;align-items:center}
+.fab-search-wrap{display:flex;gap:6px;align-items:center;max-width:440px;width:100%}
 .fab-search-input{
   flex:1;background:var(--bg);border:1.5px solid var(--border);
   border-radius:8px;padding:8px 12px;font-size:12px;color:var(--text);
@@ -468,6 +461,16 @@ body.light table.fab-table tr.fab-row-last td{
 }
 .fab-search-btn:hover{filter:brightness(1.1)}
 .fab-comment-row{display:flex;gap:6px;align-items:center}
+/* Tout ce qui parle des dossiers PASSES vit ici, sous la saisie de code et le
+   bouton Commenter : la colonne de gauche ne dit plus que le dossier en cours. */
+.fab-memoire-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.fab-memoire-row:empty{display:none}
+.fab-memoire-row .fab-produit-btn{margin-top:0}
+.fab-memoire-row .pmem-hist-btn{padding:5px 10px;gap:6px}
+.fab-memoire-row .pmem-hist-titre{font-size:11px}
+.fab-memoire-row .pmem-hist-detail{font-size:10px}
+.fab-memoire-row .pmem-hist-pastille{min-width:18px;height:18px;font-size:10px}
+.fab-memoire-row .pmem-hist-tag{font-size:9px}
 .fab-comment-hint{font-size:10px;color:var(--muted);flex:1}
 .fab-footer-row2{
   display:flex;align-items:center;justify-content:center;gap:8px;
@@ -5042,9 +5045,9 @@ function renderHistoriqueProduitBtn(){
   if(!ap || !ap.disponible) return null;
   if(!window.MySifaProduitMemoire) return null;
   const ref = (S.dossier && (S.dossier.reference || S.dossier.no_dossier)) || ap.no_dossier;
-  // Rendu nu : il prend place dans .fab-dossier-actions, aux cotes de la
-  // reference produit et des boutons FSC. Un wrapper a lui seul le poussait
-  // sur sa propre ligne, hors de la bande visible du footer.
+  // Rendu nu : il prend place dans .fab-memoire-row, colonne de droite, aux
+  // cotes de la reference produit. Un wrapper a lui seul le poussait sur sa
+  // propre ligne, hors de la bande visible du footer.
   return window.MySifaProduitMemoire.boutonHistorique(ap, ref) || null;
 }
 
@@ -5110,9 +5113,9 @@ function renderFooter(){
           ))
         )
       ),
-      // La consigne occupe la place laissee libre entre l'entete et les
-      // actions. Le `title` porte le texte integral : au survol on a tout,
-      // sans clic et sans deplier quoi que ce soit.
+      // La consigne se taille sur son texte, dans la limite de 520 px. Le
+      // `title` porte le texte integral : au survol on a tout, sans clic et
+      // sans deplier quoi que ce soit.
       h('div',{
         className:'fab-dossier-consigne'+(d.commentaire?'':' is-vide'),
         title: d.commentaire || '',
@@ -5121,11 +5124,10 @@ function renderFooter(){
         h('span',{className:'fab-dossier-consigne-lbl'},'Consigne dossier'),
         d.commentaire || 'Aucune consigne sur ce dossier.'
       ),
-      // Reference produit, signalement « deja produit », et les deux boutons
-      // FSC quand le dossier est certifie.
-      h('div',{className:'fab-dossier-actions'},
-        renderRefProduitBtn(),
-        renderHistoriqueProduitBtn(),
+      // Ne restent ici que les boutons du dossier EN COURS. La reference
+      // produit et le signalement « deja produit » regardent les dossiers
+      // passes : ils sont partis dans la colonne de droite.
+      fscDossier ? h('div',{className:'fab-dossier-actions'},
         fscDossier ? h('button',{
           className:'fab-btn fab-btn-ghost fab-btn-sm',
           style:{fontSize:'11px'},
@@ -5137,7 +5139,7 @@ function renderFooter(){
           title:'Imprimer la consigne FSC à agrafer au dossier papier',
           onClick:imprimerAvertissementFsc,
         }, svgIcon('printer',12),' Avertissement FSC') : null
-      )
+      ) : null
     );
   } else {
     infoSection = h('div',{className:'fab-footer-info'},
@@ -5280,6 +5282,13 @@ function renderFooter(){
     ),
     h('div',{className:'fab-comment-row'},
       commentBtn
+    ),
+    // Memoire produit : fiche produit et signalement « deja produit ». Ce sont
+    // les seuls elements du footer qui parlent d'autre chose que du dossier en
+    // cours — ils sont donc regroupes ici, a l'ecart de la colonne d'identite.
+    h('div',{className:'fab-memoire-row'},
+      renderRefProduitBtn(),
+      renderHistoriqueProduitBtn()
     )
   );
 
