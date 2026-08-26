@@ -227,13 +227,15 @@
 
   async function ouvrirMapping(perimetre, onFini) {
     var L = LABELS[perimetre] || LABELS.client;
-    var f = fond('<h3>Relier les fiches à RVGI</h3>' +
+    var f = fond('<h3>Relier et dédoublonner</h3>' +
       '<p class="rt-note">L\'alignement tourne tout seul après chaque synchro et ' +
-      'pose les liens certains — SIRET, code ERP, nom identique. Ce qui reste est ' +
-      'ici : soit un candidat proposé qui attend un accord, soit une fiche MySifa ' +
-      'qui <b>ressemble</b> à une fiche RVGI sans y être identique. ' +
-      'Un lien confirmé rend la fiche pilotée par l\'ERP ; un lien faux ferait ' +
-      'écraser cette fiche par les données d\'un autre ' + esc(L.un) + '.</p>' +
+      'pose les liens certains — SIRET, code ERP, nom identique. Reste ce qui ' +
+      'demande un œil, et deux gestes différents :<br>' +
+      '<b>Relier</b> — un candidat RVGI a été trouvé à un cheveu près. La fiche ' +
+      'devient pilotée par l\'ERP, rien n\'est supprimé.<br>' +
+      '<b>Fusionner</b> — une fiche ancienne de MySifa fait double emploi avec ' +
+      'une fiche que l\'ERP pilote déjà. L\'ancienne y verse ses contacts, ses ' +
+      'certificats et ses tarifs, puis disparaît. <b>Irréversible.</b></p>' +
       '<div id="rt-map-corps">Lecture de RVGI…</div>' +
       '<div style="display:flex;justify-content:flex-end;margin-top:14px">' +
       '<button type="button" class="btn btn-sec btn-sm" data-rt="fermer">Fermer</button></div>');
@@ -255,17 +257,19 @@
       '<th style="width:1px"></th></tr></thead><tbody>' +
       r.lignes.map(function (x, i) {
         var m = x.mysifa;
+        var fusion = x.origine === 'doublon';
         return '<tr data-i="' + i + '">' +
           '<td><div style="font-weight:700">' + esc(m.nom || '—') +
-            (x.origine === 'suggere'
-              ? ' <span class="rt-chip att">ressemblance</span>'
-              : ' <span class="rt-chip erp">proposé</span>') + '</div>' +
+            (fusion
+              ? ' <span class="rt-chip att">doublon</span>'
+              : ' <span class="rt-chip erp">à relier</span>') + '</div>' +
             '<div class="dim mono">' + esc(m.siret || 'sans SIRET') +
             (m.ville ? ' · ' + esc(m.ville) : '') + '</div></td>' +
           '<td>' + (x.candidats.length
             ? x.candidats.map(function (c, j) {
                 return '<label class="rt-cand"><input type="radio" name="c' + i + '" ' +
-                  'value="' + esc(c.numero) + '"' + (j === 0 ? ' checked' : '') + '>' +
+                  'value="' + esc(fusion ? c.id : c.numero) + '"' +
+                  (j === 0 ? ' checked' : '') + '>' +
                   '<span><b>' + esc(c.rs || '—') + '</b>' +
                   (c.actif ? '' : ' <span class="rt-chip blo">bloqué</span>') +
                   '<span class="dim mono"> n° ' + esc(c.numero) +
@@ -273,15 +277,19 @@
                   (c.siret ? ' · ' + esc(c.siret) : '') +
                   (c.ville ? ' · ' + esc(c.ville) : '') +
                   (c.motif === 'siret' ? ' · même SIRET'
+                    : c.motif === 'mots' ? ' · mêmes mots'
+                    : c.motif === 'orthographe' ? ' · orthographe proche'
                     : (c.score ? ' · ' + Math.round(c.score * 100) + ' %' : '')) +
                   '</span></span></label>';
               }).join('')
             : '<span class="dim">candidat introuvable dans le miroir</span>') +
           '</td>' +
           '<td style="white-space:nowrap">' +
-            (x.candidats.length
-              ? '<button type="button" class="btn btn-sm" data-rt="oui">Relier</button> ' : '') +
-            '<button type="button" class="btn btn-sec btn-sm" data-rt="non">Aucune</button>' +
+            (x.candidats.length && (!fusion || r.fusion_possible)
+              ? '<button type="button" class="btn btn-sm" data-rt="oui">' +
+                (fusion ? 'Fusionner' : 'Relier') + '</button> ' : '') +
+            '<button type="button" class="btn btn-sec btn-sm" data-rt="non">' +
+            (fusion ? 'Ce n\'est pas un doublon' : 'Aucune') + '</button>' +
           '</td></tr>';
       }).join('') + '</tbody></table>';
 
@@ -290,15 +298,51 @@
       var oui = tr.querySelector('[data-rt="oui"]');
       if (oui) oui.addEventListener('click', function () {
         var choisi = tr.querySelector('input[type=radio]:checked');
-        decider(tr, perimetre, x.id, choisi ? Number(choisi.value) : null);
+        if (!choisi) return;
+        if (x.origine === 'doublon') {
+          var cible = x.candidats.filter(function (c) {
+            return String(c.id) === String(choisi.value);
+          })[0];
+          if (!cible) return;
+          if (!confirm('Fusionner « ' + x.mysifa.nom +' » dans « ' + cible.rs + ' » ?\n\n' +
+                       'Contacts, certificats, tarifs et catégories sont repris par la ' +
+                       'fiche pilotée par l\'ERP. L\'ancienne fiche disparaît.\n' +
+                       'Cette opération est irréversible.')) return;
+          fusionner(tr, x.id, cible.id);
+          return;
+        }
+        decider(tr, perimetre, x.id, Number(choisi.value));
       });
       // « Aucune » n'est pas un rejet définitif : la fiche reste propre à
       // MySifa, et la synchro suivante ne la reproposera pas puisqu'aucun
       // lien certain n'existe. Elle réapparaîtra ici si l'ERP change.
       tr.querySelector('[data-rt="non"]').addEventListener('click', function () {
+        if (x.origine === 'doublon') {
+          tr.style.opacity = '.45';
+          tr.querySelector('td:last-child').innerHTML =
+            '<span class="rt-chip loc">laissée à part</span>';
+          return;
+        }
         decider(tr, perimetre, x.id, null);
       });
     });
+  }
+
+  // La fusion passe par la route existante des fournisseurs : une seule
+  // transaction qui déplace toutes les dépendances, réunit les catégories,
+  // récupère le FSC, puis supprime la source.
+  async function fusionner(tr, source_id, cible_id) {
+    tr.querySelectorAll('button, input').forEach(function (b) { b.disabled = true; });
+    try {
+      var r = await post('/api/fournisseurs/' + source_id + '/merge/' + cible_id);
+      tr.style.opacity = '.45';
+      tr.querySelector('td:last-child').innerHTML = '<span class="rt-chip erp">fusionnée</span>';
+      var recup = (r && r.champs_recuperes) || [];
+      dire('Fiches fusionnées' + (recup.length ? ' — repris : ' + recup.join(', ') : '') + '.');
+    } catch (e) {
+      dire(e.message, true);
+      tr.querySelectorAll('button, input').forEach(function (b) { b.disabled = false; });
+    }
   }
 
   async function decider(tr, perimetre, fiche_id, rvgi_numero) {
