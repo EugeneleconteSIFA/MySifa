@@ -254,6 +254,85 @@ def documents_a_rattacher(request: Request, limit: int = 200):
     return {"documents": [dict(r) for r in rows], "total": int(total or 0)}
 
 
+@router.get("/api/produits/dossiers/recherche")
+def rechercher_dossiers(request: Request, q: str = "", limit: int = 12):
+    """Candidats de rattachement pour un scan, cherches au fil de la frappe.
+
+    Le champ de rattachement demandait jusqu'ici un numero de dossier connu
+    par coeur : sur un scan dont l'OF n'a pas ete lu, personne ne l'a. On
+    cherche donc sur tout ce que le document peut porter — numero de dossier,
+    numero d'OF, reference produit, client — et on renvoie pour chaque
+    candidat la reference produit que le rattachement produira REELLEMENT
+    (via `contexte_dossier`, la meme fonction que le POST). Afficher autre
+    chose que ce qui sera ecrit serait une promesse que l'ecran ne tient pas.
+    """
+    get_current_user(request)
+    terme = (q or "").strip()
+    if len(terme) < 2:
+        return {"dossiers": [], "total": 0}
+
+    n = max(1, min(int(limit), 50))
+    like = f"%{terme}%"
+    prefixe = f"{terme}%"
+
+    with get_db() as conn:
+        pe_cols = pm._cols(conn, "planning_entries")
+        if not pe_cols:
+            return {"dossiers": [], "total": 0}
+
+        champs = ["pe.id AS pe_id", "pe.reference", "pe.client", "pe.description"]
+        for c in ("numero_of", "ref_produit", "ref_produit_norm", "planned_start",
+                  "date_livraison", "statut"):
+            if c in pe_cols:
+                champs.append("pe." + c)
+
+        cherchables = ["pe.reference", "pe.client", "pe.description"]
+        for c in ("numero_of", "ref_produit", "ref_produit_norm"):
+            if c in pe_cols:
+                cherchables.append("pe." + c)
+        ou = " OR ".join(
+            f"LOWER(COALESCE({c},'')) LIKE LOWER(?)" for c in cherchables
+        )
+        params = [like] * len(cherchables)
+
+        # Un dossier tape en entier doit sortir en tete, avant les dossiers
+        # dont le libelle contient la meme suite de chiffres par hasard.
+        rang = ("CASE WHEN LOWER(pe.reference) LIKE LOWER(?) THEN 0 "
+                "WHEN LOWER(COALESCE(pe.numero_of,'')) LIKE LOWER(?) THEN 1 "
+                "ELSE 2 END" if "numero_of" in pe_cols
+                else "CASE WHEN LOWER(pe.reference) LIKE LOWER(?) THEN 0 ELSE 2 END")
+        params += [prefixe, prefixe] if "numero_of" in pe_cols else [prefixe]
+
+        sql = (
+            "SELECT " + ", ".join(champs) + ", m.nom AS machine_nom, " + rang + " AS rang "
+            "FROM planning_entries pe LEFT JOIN machines m ON m.id = pe.machine_id "
+            f"WHERE {ou} ORDER BY rang, pe.id DESC LIMIT ?"
+        )
+        rows = conn.execute(sql, params + [n]).fetchall()
+
+        vus = set()
+        out = []
+        for r in rows:
+            d = dict(r)
+            dossier = (d.get("reference") or "").strip()
+            if not dossier or dossier in vus:
+                continue
+            vus.add(dossier)
+            ctx = pm.contexte_dossier(conn, dossier)
+            out.append({
+                "no_dossier": dossier,
+                "numero_of": d.get("numero_of"),
+                "client": ctx.get("client") or d.get("client"),
+                "designation": ctx.get("designation") or d.get("description"),
+                "machine": ctx.get("machine") or d.get("machine_nom"),
+                "statut": d.get("statut"),
+                "date": d.get("planned_start") or d.get("date_livraison"),
+                "ref_produit_norm": ctx.get("ref_produit_norm"),
+            })
+
+    return {"dossiers": out, "total": len(out)}
+
+
 @router.get("/api/produits/documents/{doc_id}/pdf")
 def document_pdf(doc_id: int, request: Request):
     get_current_user(request)
