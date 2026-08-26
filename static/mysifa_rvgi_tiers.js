@@ -66,6 +66,12 @@
     '.rt-vs{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}',
     '.rt-vs .c{min-width:0}',
     '.rt-vs .h{font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--muted);margin-bottom:2px}',
+    /* Un candidat de mapping : le radio et sa fiche, cliquables ensemble. */
+    '.rt-cand{display:flex;align-items:flex-start;gap:8px;padding:4px 0;cursor:pointer;line-height:1.45}',
+    '.rt-cand + .rt-cand{border-top:1px dashed var(--border)}',
+    '.rt-cand input{margin-top:3px;flex:0 0 auto;accent-color:var(--accent)}',
+    '.rt-cand:hover{color:var(--text)}',
+    '.rt-cand .dim{display:block}',
     '@media (max-width:640px){.rt-vs{grid-template-columns:1fr}}',
     /* Fond de dialogue du module */
     '.rt-fond{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:900;display:flex;',
@@ -164,49 +170,32 @@
 
     var att = e.a_confirmer || 0;
     var seuls = e.rvgi_seuls || 0;
+    // Pas de bouton de synchro, et c'est voulu : l'alignement tourne après
+    // chaque reconstruction du miroir, sans que personne y pense. Le bandeau
+    // dit quand ça a eu lieu, pas comment le déclencher.
+    var derniere = e.derniere_synchro && e.derniere_synchro.lance_le;
     el.innerHTML =
       '<span class="rt-t">' + esc(L.des.charAt(0).toUpperCase() + L.des.slice(1)) + ' RVGI</span>' +
       '<span class="rt-s">' + nb(e.lies) + ' fiche' + (e.lies > 1 ? 's' : '') + ' pilotée' +
         (e.lies > 1 ? 's' : '') + ' par l\'ERP sur ' + nb(e.mysifa_total) +
         (e.manuels ? ' · ' + nb(e.manuels) + ' propre' + (e.manuels > 1 ? 's' : '') + ' à MySifa' : '') +
-        (e.miroir ? ' · miroir relevé le ' + esc(quand(e.miroir)) : '') + '</span>' +
+        (derniere ? ' · aligné le ' + esc(quand(derniere))
+                  : (e.miroir ? ' · miroir relevé le ' + esc(quand(e.miroir)) : '')) +
+        '</span>' +
       '<span class="rt-a">' +
-        (att ? '<button type="button" class="btn btn-sec btn-sm" data-rt="conf">' +
-               nb(att) + ' à confirmer</button>' : '') +
         (seuls ? '<button type="button" class="btn btn-sec btn-sm" data-rt="seuls">' +
                  nb(seuls) + ' dans RVGI seulement</button>' : '') +
-        '<button type="button" class="btn btn-sm" data-rt="sync">Synchroniser avec RVGI</button>' +
+        '<button type="button" class="btn' + (att ? '' : ' btn-sec') + ' btn-sm" data-rt="map">' +
+        (att ? nb(att) + ' à relier' : 'Relier à RVGI') + '</button>' +
       '</span>';
 
-    el.querySelector('[data-rt="sync"]').addEventListener('click', function (ev) {
-      lancerSynchro(ev.target, perimetre, function () { barre(el, perimetre, onFini); if (onFini) onFini(); });
-    });
-    var b1 = el.querySelector('[data-rt="conf"]');
-    if (b1) b1.addEventListener('click', function () {
-      ouvrirAConfirmer(perimetre, function () { barre(el, perimetre, onFini); if (onFini) onFini(); });
+    el.querySelector('[data-rt="map"]').addEventListener('click', function () {
+      ouvrirMapping(perimetre, function () { barre(el, perimetre, onFini); if (onFini) onFini(); });
     });
     var b2 = el.querySelector('[data-rt="seuls"]');
     if (b2) b2.addEventListener('click', function () {
       ouvrirRvgiSeuls(perimetre, function () { barre(el, perimetre, onFini); if (onFini) onFini(); });
     });
-  }
-
-  async function lancerSynchro(bouton, perimetre, onFini) {
-    var texte = bouton.textContent;
-    bouton.disabled = true;
-    bouton.textContent = 'Synchronisation…';
-    try {
-      var r = await post('/api/rvgi-tiers/synchroniser?perimetre=' + perimetre);
-      dire('RVGI · ' + nb(r.lies) + ' fiche(s) pilotée(s)' +
-           (r.nouveaux ? ', ' + nb(r.nouveaux) + ' créée(s)' : '') +
-           (r.mis_a_jour ? ', ' + nb(r.mis_a_jour) + ' mise(s) à jour' : '') +
-           (r.a_confirmer ? ', ' + nb(r.a_confirmer) + ' à confirmer' : '') + '.');
-      if (onFini) onFini(r);
-    } catch (e) {
-      dire(e.message, true);
-      bouton.disabled = false;
-      bouton.textContent = texte;
-    }
   }
 
   // Le toast de la page si elle en a un, sinon rien de bloquant : une alerte
@@ -236,71 +225,93 @@
     return f;
   }
 
-  async function ouvrirAConfirmer(perimetre, onFini) {
+  async function ouvrirMapping(perimetre, onFini) {
     var L = LABELS[perimetre] || LABELS.client;
-    var f = fond('<h3>Rapprochements à confirmer</h3>' +
-      '<p class="rt-note">Un lien confirmé rend la fiche pilotée par RVGI : ' +
-      'l\'ERP réécrira son identité et ses coordonnées à chaque synchro. ' +
-      'Un lien faux ferait donc écraser cette fiche par les données d\'un autre ' +
-      esc(L.un) + ' — c\'est pour ça qu\'on ne les pose pas tout seuls.</p>' +
-      '<div id="rt-conf-corps">Chargement…</div>' +
+    var f = fond('<h3>Relier les fiches à RVGI</h3>' +
+      '<p class="rt-note">L\'alignement tourne tout seul après chaque synchro et ' +
+      'pose les liens certains — SIRET, code ERP, nom identique. Ce qui reste est ' +
+      'ici : soit un candidat proposé qui attend un accord, soit une fiche MySifa ' +
+      'qui <b>ressemble</b> à une fiche RVGI sans y être identique. ' +
+      'Un lien confirmé rend la fiche pilotée par l\'ERP ; un lien faux ferait ' +
+      'écraser cette fiche par les données d\'un autre ' + esc(L.un) + '.</p>' +
+      '<div id="rt-map-corps">Lecture de RVGI…</div>' +
       '<div style="display:flex;justify-content:flex-end;margin-top:14px">' +
       '<button type="button" class="btn btn-sec btn-sm" data-rt="fermer">Fermer</button></div>');
     f.querySelector('[data-rt="fermer"]').addEventListener('click', function () {
       f.remove(); if (onFini) onFini();
     });
-    var corps = f.querySelector('#rt-conf-corps');
+    var corps = f.querySelector('#rt-map-corps');
     var r;
-    try { r = await api('/api/rvgi-tiers/a-confirmer?perimetre=' + perimetre); }
+    try { r = await api('/api/rvgi-tiers/a-mapper?perimetre=' + perimetre); }
     catch (e) { corps.innerHTML = '<div class="rt-cad">' + esc(e.message) + '</div>'; return; }
     if (!r.lignes.length) {
-      corps.innerHTML = '<div class="rt-cad">Plus rien à confirmer.</div>';
+      corps.innerHTML = '<div class="rt-cad">Tout est relié. Les fiches restantes ' +
+        'sont propres à MySifa — aucune fiche RVGI ne leur ressemble.</div>';
       return;
     }
+
     corps.innerHTML = '<table class="rt-tab"><thead><tr>' +
-      '<th>Fiche MySifa</th><th>Fiche RVGI proposée</th><th>Rapproché sur</th><th></th>' +
-      '</tr></thead><tbody>' + r.lignes.map(function (x) {
-        return '<tr data-id="' + x.id + '" data-num="' + esc(x.rvgi.numero) + '">' +
-          '<td><div style="font-weight:700">' + esc(x.mysifa.nom || '—') + '</div>' +
-            '<div class="dim mono">' + esc(x.mysifa.siret || 'sans SIRET') +
-            (x.mysifa.ville ? ' · ' + esc(x.mysifa.ville) : '') + '</div></td>' +
-          '<td><div style="font-weight:700">' + esc(x.rvgi.rs || '—') +
-            (x.rvgi.actif ? '' : ' <span class="rt-chip blo">bloqué</span>') + '</div>' +
-            '<div class="dim mono">n° ' + esc(x.rvgi.numero) +
-            (x.rvgi.code ? ' · ' + esc(x.rvgi.code) : '') +
-            (x.rvgi.siret ? ' · ' + esc(x.rvgi.siret) : '') +
-            (x.rvgi.ville ? ' · ' + esc(x.rvgi.ville) : '') + '</div></td>' +
-          '<td class="dim">' + esc({ siret: 'le SIRET', nom: 'le nom', code: 'le code ERP',
-                                     numero_erp: 'le n° ERP déjà saisi' }[x.motif] || x.motif || '—') + '</td>' +
+      '<th style="width:34%">Fiche MySifa</th><th>Fiche RVGI</th>' +
+      '<th style="width:1px"></th></tr></thead><tbody>' +
+      r.lignes.map(function (x, i) {
+        var m = x.mysifa;
+        return '<tr data-i="' + i + '">' +
+          '<td><div style="font-weight:700">' + esc(m.nom || '—') +
+            (x.origine === 'suggere'
+              ? ' <span class="rt-chip att">ressemblance</span>'
+              : ' <span class="rt-chip erp">proposé</span>') + '</div>' +
+            '<div class="dim mono">' + esc(m.siret || 'sans SIRET') +
+            (m.ville ? ' · ' + esc(m.ville) : '') + '</div></td>' +
+          '<td>' + (x.candidats.length
+            ? x.candidats.map(function (c, j) {
+                return '<label class="rt-cand"><input type="radio" name="c' + i + '" ' +
+                  'value="' + esc(c.numero) + '"' + (j === 0 ? ' checked' : '') + '>' +
+                  '<span><b>' + esc(c.rs || '—') + '</b>' +
+                  (c.actif ? '' : ' <span class="rt-chip blo">bloqué</span>') +
+                  '<span class="dim mono"> n° ' + esc(c.numero) +
+                  (c.code ? ' · ' + esc(c.code) : '') +
+                  (c.siret ? ' · ' + esc(c.siret) : '') +
+                  (c.ville ? ' · ' + esc(c.ville) : '') +
+                  (c.motif === 'siret' ? ' · même SIRET'
+                    : (c.score ? ' · ' + Math.round(c.score * 100) + ' %' : '')) +
+                  '</span></span></label>';
+              }).join('')
+            : '<span class="dim">candidat introuvable dans le miroir</span>') +
+          '</td>' +
           '<td style="white-space:nowrap">' +
-            '<button type="button" class="btn btn-sm" data-rt="oui">Confirmer</button> ' +
-            '<button type="button" class="btn btn-sec btn-sm" data-rt="non">Ce n\'est pas ça</button>' +
+            (x.candidats.length
+              ? '<button type="button" class="btn btn-sm" data-rt="oui">Relier</button> ' : '') +
+            '<button type="button" class="btn btn-sec btn-sm" data-rt="non">Aucune</button>' +
           '</td></tr>';
       }).join('') + '</tbody></table>';
 
-    corps.querySelectorAll('tr[data-id]').forEach(function (tr) {
-      var id = Number(tr.getAttribute('data-id'));
-      var num = Number(tr.getAttribute('data-num'));
-      tr.querySelector('[data-rt="oui"]').addEventListener('click', function () {
-        decider(tr, perimetre, id, num);
+    corps.querySelectorAll('tr[data-i]').forEach(function (tr) {
+      var x = r.lignes[Number(tr.getAttribute('data-i'))];
+      var oui = tr.querySelector('[data-rt="oui"]');
+      if (oui) oui.addEventListener('click', function () {
+        var choisi = tr.querySelector('input[type=radio]:checked');
+        decider(tr, perimetre, x.id, choisi ? Number(choisi.value) : null);
       });
+      // « Aucune » n'est pas un rejet définitif : la fiche reste propre à
+      // MySifa, et la synchro suivante ne la reproposera pas puisqu'aucun
+      // lien certain n'existe. Elle réapparaîtra ici si l'ERP change.
       tr.querySelector('[data-rt="non"]').addEventListener('click', function () {
-        decider(tr, perimetre, id, null);
+        decider(tr, perimetre, x.id, null);
       });
     });
   }
 
   async function decider(tr, perimetre, fiche_id, rvgi_numero) {
-    tr.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+    tr.querySelectorAll('button, input').forEach(function (b) { b.disabled = true; });
     try {
       await post('/api/rvgi-tiers/lier',
                  { perimetre: perimetre, fiche_id: fiche_id, rvgi_numero: rvgi_numero });
       tr.style.opacity = '.45';
       tr.querySelector('td:last-child').innerHTML =
-        '<span class="rt-chip ' + (rvgi_numero ? 'erp">liée' : 'loc">détachée') + '</span>';
+        '<span class="rt-chip ' + (rvgi_numero ? 'erp">reliée' : 'loc">laissée à MySifa') + '</span>';
     } catch (e) {
       dire(e.message, true);
-      tr.querySelectorAll('button').forEach(function (b) { b.disabled = false; });
+      tr.querySelectorAll('button, input').forEach(function (b) { b.disabled = false; });
     }
   }
 
@@ -564,7 +575,7 @@
 
   global.MysRvgiTiers = {
     barre: barre, badge: badge, bloc: bloc,
-    aConfirmer: ouvrirAConfirmer, rvgiSeuls: ouvrirRvgiSeuls,
+    mapping: ouvrirMapping, rvgiSeuls: ouvrirRvgiSeuls,
     estPilote: function (f) { return !!(f && f.rvgi_etat === 'lie' && f.rvgi_numero); },
   };
 })(window);

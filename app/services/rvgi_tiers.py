@@ -30,6 +30,7 @@ et son contenu : c'est à un humain de décider ce qu'on en fait.
 
 from __future__ import annotations
 
+import difflib
 import sqlite3
 import unicodedata
 from datetime import datetime
@@ -639,6 +640,157 @@ def candidats(perimetre: str, q: str, limite: int = 20) -> List[Dict[str, Any]]:
                     "actif": _actif(r)})
     out.sort(key=lambda x: (not x["actif"], str(x["rs"] or "")))
     return out[:limite]
+
+
+# ── Le mapping : relier ce qui reste ─────────────────────────────────────────
+#
+# Le rapprochement automatique ne pose un lien que sur le SIRET, le code ou un
+# nom normalisé identique. Ce qui reste — 24 fournisseurs propres à MySifa sur
+# 224 au 26/08/2026 — sont soit des fiches qui n'existent pas dans l'ERP, soit
+# des doublons écrits autrement. On ne peut pas les distinguer tout seul ; on
+# peut en revanche proposer les meilleurs candidats et laisser trancher.
+#
+# Deux mesures, et elles ne servent pas à la même chose :
+#
+#   - le RECOUVREMENT DE MOTS voit « SA BRENNTAG » = « BRENNTAG SA », et
+#     « ADLEY ADHESIVES » ⊂ « ADLEY ADHESIVES FRANCE ». Partager un mot entier
+#     est un signal fort : on l'accepte dès la moitié des mots en commun.
+#   - le RATIO DE SÉQUENCE rattrape les fautes de frappe et les abréviations,
+#     mais il produit du bruit : « GENERIQUE » et « SERVITIQUE » sont à 63 %
+#     l'un de l'autre et n'ont rien à voir. On ne l'accepte donc qu'au-delà
+#     de 80 %, où il ne reste plus grand-chose de faux.
+#
+# Les deux seuils ont été calés sur les vraies données du miroir : à 62 %
+# indifférencié, une suggestion sur deux était absurde et l'écran devenait
+# une corvée qu'on abandonne.
+
+SEUIL_MOTS = 0.50
+SEUIL_SEQUENCE = 0.80
+
+
+def _similarite(a: str, b: str):
+    """Rend (score, mesure) — ou (0, None) si rien ne se ressemble assez."""
+    if not a or not b:
+        return 0.0, None
+    ma, mb = set(a.split()), set(b.split())
+    recouvrement = len(ma & mb) / len(ma | mb) if (ma | mb) else 0.0
+    if recouvrement >= SEUIL_MOTS:
+        return recouvrement, "mots"
+    sequence = difflib.SequenceMatcher(None, a, b).ratio()
+    if sequence >= SEUIL_SEQUENCE:
+        return sequence, "orthographe"
+    return 0.0, None
+
+
+def doublons(conn: sqlite3.Connection, perimetre: str, limite: int = 80,
+             par_fiche: int = 3) -> List[Dict[str, Any]]:
+    """Les fiches restées propres à MySifa, et la fiche ERP qu'elles doublonnent.
+
+    Le raisonnement compte, parce qu'il n'est pas celui qu'on croit. L'import
+    crée une fiche MySifa pour CHAQUE fiche RVGI active. Une fiche MySifa
+    ancienne, écrite autrement que dans l'ERP, ne se relie donc pas à une fiche
+    RVGI libre : sa fiche RVGI a déjà son propre jumeau MySifa. Ce sont deux
+    fiches MySifa qui font double emploi — « ADLEY ADHESIVES » et « ADLEY
+    ADHESIVES (ADLEYADHESIVES FRANCE) ».
+
+    On ne les relie donc pas : on les FUSIONNE. La fiche pilotée par l'ERP
+    survit, l'ancienne y verse ses contacts, ses certificats FSC, ses tarifs
+    et ses catégories — c'est ce que fait `/api/fournisseurs/{src}/merge/{tgt}`.
+    """
+    p = PLAN[perimetre]
+    fiches = [dict(r) for r in conn.execute('SELECT * FROM "%s"' % p["table"])]
+    pilotees = [(f, normaliser(f.get(p["cle_nom"])), _siret(f.get(p["cle_siret"])))
+                for f in fiches if f.get("rvgi_etat") == "lie"]
+    orphelines = [f for f in fiches
+                  if f.get("rvgi_etat") != "lie" and not f.get("rvgi_numero")]
+
+    out = []
+    for f in orphelines:
+        nom = normaliser(f.get(p["cle_nom"]))
+        siret = _siret(f.get(p["cle_siret"]))
+        if not nom:
+            continue
+        notes = []
+        for g, nom_g, siret_g in pilotees:
+            if g["id"] == f["id"]:
+                continue
+            if siret and siret_g and siret == siret_g:
+                notes.append((1.0, "siret", g))
+                continue
+            score, mesure = _similarite(nom, nom_g)
+            if mesure:
+                notes.append((score, mesure, g))
+        if not notes:
+            continue
+        notes.sort(key=lambda x: (-x[0], str(x[2].get(p["cle_nom"]) or "")))
+        out.append({
+            "id": f["id"],
+            "origine": "doublon",
+            "mysifa": {"nom": f.get(p["cle_nom"]), "siret": siret,
+                       "ville": f.get("ville"), "email": f.get("email")},
+            "candidats": [{
+                "id": g["id"], "numero": g.get("rvgi_numero"),
+                "code": g.get("rvgi_code"), "rs": g.get(p["cle_nom"]),
+                "siret": g.get(p["cle_siret"]), "ville": g.get("ville"),
+                "actif": g.get("rvgi_bloq") != BLOQ_INACTIF,
+                "score": round(score, 2), "motif": mesure,
+            } for score, mesure, g in notes[:par_fiche]],
+        })
+    out.sort(key=lambda x: -x["candidats"][0]["score"])
+    return out[:limite]
+
+
+def a_mapper(conn: sqlite3.Connection, perimetre: str,
+             limite: int = 120) -> Dict[str, Any]:
+    """Tout ce qui attend une décision humaine, dans un seul écran.
+
+    Deux origines, deux gestes différents — et il ne faut pas les confondre :
+
+      `propose`  un rapprochement automatique a trouvé un candidat presque sûr
+                 et attend un accord. Le geste est de RELIER : la fiche devient
+                 pilotée par l'ERP, rien n'est supprimé.
+
+      `doublon`  une fiche ancienne de MySifa fait double emploi avec une fiche
+                 que l'ERP pilote déjà. Le geste est de FUSIONNER : l'ancienne
+                 verse son contenu dans l'autre puis disparaît. Irréversible,
+                 donc jamais automatique.
+    """
+    p = PLAN[perimetre]
+    rvgi = lire_rvgi(perimetre)
+    lignes = []
+
+    for f in conn.execute(
+            'SELECT * FROM "%s" WHERE rvgi_etat = \'a_confirmer\' '
+            "ORDER BY rvgi_score DESC, id LIMIT ?" % p["table"], (int(limite),)):
+        f = dict(f)
+        r = rvgi.get(int(f.get("rvgi_numero") or 0)) or {}
+        if not r:
+            continue
+        lignes.append({
+            "id": f["id"], "origine": "propose", "motif": f.get("rvgi_motif"),
+            "mysifa": {"nom": f.get(p["cle_nom"]), "siret": f.get(p["cle_siret"]),
+                       "ville": f.get("ville"), "email": f.get("email")},
+            "candidats": [{
+                "numero": f.get("rvgi_numero"), "code": _txt(r.get("code")),
+                "rs": _txt(r.get("rs")), "siret": _txt(r.get("siret")),
+                "ville": _txt(r.get("vil")), "actif": _actif(r),
+                "score": f.get("rvgi_score"), "motif": f.get("rvgi_motif"),
+            }],
+        })
+
+    vus = {l["id"] for l in lignes}
+    for d in doublons(conn, perimetre, limite=limite):
+        if d["id"] not in vus:
+            lignes.append(d)
+
+    return {
+        "perimetre": perimetre,
+        "total": len(lignes),
+        # La fusion n'existe que pour les fournisseurs : c'est la seule table
+        # dont toutes les dépendances sont connues et réassignables.
+        "fusion_possible": perimetre == "fournisseur",
+        "lignes": lignes,
+    }
 
 
 # ── Les contacts RVGI d'un fournisseur ───────────────────────────────────────

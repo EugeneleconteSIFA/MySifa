@@ -5803,8 +5803,8 @@ function renderFinModal(){
       'Que devient ce dossier ?'
     ),
     h('div',{style:{display:'flex',gap:'10px'}},
-      mkFdBtn(true,  'Terminé',     'Il sort du planning',   '--success', '52,211,153'),
-      mkFdBtn(false, 'À reprendre', 'Il reste au planning',  '--warn',    '251,191,36')
+      mkFdBtn(true,  'Dossier terminé',      'Il sort du planning',  '--success', '52,211,153'),
+      mkFdBtn(false, 'À reprendre plus tard', 'Il reste au planning', '--warn',    '251,191,36')
     )
   );
 

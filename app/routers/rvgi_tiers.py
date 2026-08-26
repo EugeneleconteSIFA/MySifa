@@ -119,6 +119,25 @@ def a_confirmer(request: Request, perimetre: str = Query("client", max_length=16
     return {"perimetre": p, "total": len(out), "lignes": out}
 
 
+@router.get("/a-mapper")
+def a_mapper(request: Request, perimetre: str = Query("client", max_length=16),
+             limite: int = Query(120, ge=1, le=400)):
+    """Tout ce qui attend une décision : proposé, et ressemblant.
+
+    Le rapprochement automatique tourne à chaque synchro et ne pose un lien
+    que sur du certain — SIRET, code ERP, nom normalisé identique. Ce qui
+    reste demande un œil : cette route le rassemble, avec les meilleurs
+    candidats de l'ERP en face.
+    """
+    require_superadmin(request)
+    p = _perimetre(perimetre)
+    try:
+        with get_db() as conn:
+            return tiers.a_mapper(conn, p, limite)
+    except FileNotFoundError as e:
+        raise HTTPException(503, str(e))
+
+
 @router.post("/lier")
 def lier(corps: LienIn, request: Request):
     """Confirmer, corriger ou défaire un lien. Détacher rouvre la saisie."""
