@@ -2080,6 +2080,8 @@ body.stock-embed .main-area { width:100% !important; }
 body.stock-embed { background: var(--bg, transparent) !important; }
 
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
@@ -2095,6 +2097,9 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
+<!-- Reprendre une réception de RVGI : fournisseur, BL, matière, laize.
+     Les bobines restent scannées une par une — voir le fichier. -->
+<script src="/static/mysifa_rvgi_reception.js"></script>
 <script src="/static/mysifa_guides.js"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
@@ -2189,6 +2194,10 @@ let S = {
   recepLaizeCustomMm: '',  // valeur saisie manuellement
   recepModalMode: false,   // true = modal simplifié depuis fiche matière
   recepModalMatiere: null, // matière verrouillée en mode modal
+  // La réception RVGI reprise, s'il y en a une. Elle ne remplace rien : elle
+  // préremplit l'entête et sert de point de comparaison au comptage.
+  recepRvgi: null,         // {cde, bl, fournisseur_id, qte_totale, lignes[]}
+  recepRvgiChamp: null,    // la poignée rendue par MysRvgiReception.champ()
   // Inventaire matière (par référence)
   matInvList: null,        // [{ id, reference, designation, categorie, statut, jours_depuis, ... }]
   matInvLoading: false,
@@ -15052,6 +15061,9 @@ function monEnsureState() {
       monPage: 'quantites',
       sortColumn: null,
       sortDirection: 'asc',
+      // Le miroir de RVGI comme source, à la place de l'export Excel manuel.
+      miroir: null,
+      miroirEnCours: false,
     };
   }
   return S.monitoring;
@@ -15494,13 +15506,6 @@ function buildMonitoring() {
     await monitoringImportFile(f);
   });
 
-  const importBtn = el('button', {
-    cls: 'btn btn-accent',
-    type: 'button',
-    disabled: m.importing ? true : null,
-    on: { click: () => fileInp.click() },
-  }, m.importing ? 'Import en cours…' : 'Importer l\'export ERP (.xlsx)');
-
   const snapSel = el('select', {
     cls: 'mon-snapshot-select',
     id: 'mon-snapshot-select',
@@ -15521,11 +15526,54 @@ function buildMonitoring() {
     if (id) loadMonitoringSnapshot(id);
   });
 
+  // Le miroir de RVGI est la source par défaut : il est relevé tout seul,
+  // plusieurs fois par jour, et porte la même information que l'export
+  // Table Stocks qu'il fallait sortir à la main. L'import .xlsx reste — c'est
+  // le recours quand la synchro est en panne.
+  const mir = m.miroir;
+  const mirPret = !!(mir && mir.disponible);
+  const miroirBtn = el('button', {
+    cls: 'btn btn-accent',
+    type: 'button',
+    disabled: (!mirPret || m.miroirEnCours || m.importing) ? true : null,
+    title: mirPret
+      ? ('Compare le stock MySifa au dernier relevé du miroir RVGI'
+         + (mir.releve_le ? ' (' + fDateTime(mir.releve_le) + ')' : '')
+         + '. Aucun fichier à sortir de RVGI.')
+      : ((mir && mir.raison) || 'Miroir RVGI indisponible.'),
+    on: { click: () => monitoringDepuisMiroir() },
+  }, m.miroirEnCours ? 'Comparaison en cours…' : 'Comparer avec RVGI');
+
+  const importBtnSec = el('button', {
+    cls: 'btn',
+    type: 'button',
+    disabled: (m.importing || m.miroirEnCours) ? true : null,
+    title: 'Recours si la synchro RVGI est en panne : l\'export Table Stocks (.xlsx).',
+    on: { click: () => fileInp.click() },
+  }, m.importing ? 'Import en cours…' : 'Importer un .xlsx');
+
   const actions = el('div', { cls: 'mon-actions', id: 'mon-actions-bar' },
-    importBtn,
+    miroirBtn,
+    importBtnSec,
     fileInp,
     snapSel,
   );
+
+  // Ce que le miroir porte, dit avant de cliquer plutôt qu'après : un relevé
+  // d'hier soir compare le stock d'hier soir, et ça change la lecture des
+  // écarts.
+  if (mir) {
+    actions.appendChild(el('span', {
+      cls: 'hist-subtitle',
+      style: { flexBasis: '100%', margin: '2px 0 0', fontSize: '12px' },
+    }, mirPret
+      ? ('Miroir RVGI relevé le ' + fDateTime(mir.releve_le)
+         + ' — ' + fN(mir.avec_stock || 0) + ' référence(s) avec du stock sur '
+         + fN(mir.references || 0)
+         + (mir.negatifs ? ', dont ' + fN(mir.negatifs) + ' en négatif' : '')
+         + '.')
+      : ('Miroir RVGI indisponible — ' + ((mir.raison) || 'synchro à lancer') + '.')));
+  }
 
   const kpisWrap = el('div', { id: 'mon-kpis-wrap' });
   if (m.current) kpisWrap.appendChild(buildMonitoringKpis(m.current, m.allLines));
@@ -15627,10 +15675,48 @@ async function loadMonitoringSnapshot(snapshotId) {
   renderMonitoringView(true);
 }
 
+// Une comparaison prise sur le miroir, sans fichier à sortir de RVGI.
+// Le snapshot produit est identique à celui d'un import Excel — même
+// comparaison, même historique — seule sa source diffère.
+async function monitoringDepuisMiroir() {
+  const m = monEnsureState();
+  if (m.miroirEnCours) return;
+  m.miroirEnCours = true;
+  renderMonitoringView(true);
+  try {
+    const r = await api('/api/reconciliation/miroir', { method: 'POST' });
+    showToast('Comparaison enregistrée — '
+      + (r.nb_ecarts != null
+          ? r.nb_ecarts + ' écart(s) sur ' + fN(r.nb_matched || 0) + ' référence(s) communes'
+          : 'snapshot pris')
+      + '.');
+    m.miroirEnCours = false;
+    await loadMonitoring(r.snapshot_id);
+    return;
+  } catch (e) {
+    const msg = (e && e.message) ? String(e.message) : 'Comparaison impossible.';
+    showToast(msg.length > 220 ? msg.slice(0, 217) + '…' : msg, 'error');
+  }
+  m.miroirEnCours = false;
+  renderMonitoringView(true);
+}
+
+async function loadMonitoringMiroir() {
+  const m = monEnsureState();
+  try {
+    m.miroir = await api('/api/reconciliation/miroir');
+  } catch (e) {
+    // Une route absente (serveur pas encore à jour) ne doit pas casser l'onglet :
+    // on retombe simplement sur l'import Excel.
+    m.miroir = { disponible: false, raison: (e && e.message) || 'indisponible' };
+  }
+}
+
 async function loadMonitoring(selectSnapshotId) {
   const m = monEnsureState();
   m.loading = true;
   renderMonitoringView(true);
+  loadMonitoringMiroir().then(() => renderMonitoringView(true));
   try {
     const snaps = await api('/api/reconciliation/snapshots');
     m.snapshots = snaps || [];
@@ -15824,6 +15910,10 @@ function recepAddCode(code) {
     laize_valeur_mm: laizeValeurMm,
   };
   S.recepItems = [...S.recepItems, item];
+  // Le contrôle « scannés / annoncés par RVGI » suit le comptage en direct.
+  // Il ne bloque rien : les deux chiffres ne sont pas dans la même unité, et
+  // c'est celui qui reçoit qui juge.
+  if (S.recepRvgiChamp) S.recepRvgiChamp.controle(S.recepItems.length);
   // Effacer le flag "nouveau" après 600ms (animation CSS)
   setTimeout(() => {
     S.recepItems = S.recepItems.map(i => i.code === c ? { ...i, isNew: false } : i);
@@ -16053,6 +16143,12 @@ async function recepValider() {
         fournisseur_id: S.recepFournisseurId || null,
         certificat_fsc: recepFscTypeRequiresCert(claim) ? cert : '',
         fsc_type_claim: claim,
+        // La réception RVGI reprise, si elle l'a été. Le n° de BL avait sa
+        // place dans le placeholder de la note ; il a maintenant sa colonne,
+        // et la quantité annoncée par l'ERP reste à côté du comptage réel.
+        rvgi_cde: S.recepRvgi ? String(S.recepRvgi.cde || '') : null,
+        rvgi_bl: S.recepRvgi ? (S.recepRvgi.bl || null) : null,
+        rvgi_qte_attendue: S.recepRvgi ? (S.recepRvgi.qte_totale || null) : null,
       }),
     });
     if (d && d.success) {
@@ -16190,6 +16286,7 @@ function renderReceptionMiniModal() {
     }, '✕'),
   );
   modal.appendChild(head);
+  modal.appendChild(buildRecepRvgi());
 
   // ── Picker (matière verrouillée) ──
   modal.appendChild(buildReceptionPicker(true));
@@ -17004,6 +17101,68 @@ function buildReception() {
 // ── Sous-onglet : Faire une réception ─────────────────────────────
 // ── Picker Catégorie/Matière/Laize partagé entre onglet et modal simplifié ──
 // lockedMatiere = true → matière verrouillée (mode modal fiche matière)
+// ── Reprendre une réception de RVGI ─────────────────────────────────────────
+//
+// Le formulaire ne change pas de nature : on scanne toujours les bobines une
+// par une, et c'est ce comptage qui fait la traçabilité FSC. Ce bloc remplit
+// seulement ce que l'ERP sait déjà — le fournisseur, le n° de BL, la matière
+// et sa laize — et rappelle la quantité que RVGI annonce, comme point de
+// comparaison. Les deux chiffres sont dans des unités différentes : on les
+// montre côte à côte, on ne les soustrait pas.
+function buildRecepRvgi() {
+  const zone = el('div');
+  if (!window.MysRvgiReception) return zone;
+  setTimeout(() => {
+    S.recepRvgiChamp = MysRvgiReception.champ(zone, {
+      ecran: 'matiere',
+      // MyStock re-rend tout l'onglet à chaque scan : la réception reprise
+      // doit vivre dans `S`, pas dans le module, sinon elle disparaîtrait à
+      // la première bobine.
+      reception: () => S.recepRvgi,
+      onReception: (r) => {
+        S.recepRvgi = r;
+        if (!r) return;
+        // Le fournisseur : seulement s'il est relié dans MySifa. Écrire un nom
+        // que l'annuaire ne connaît pas rendrait la réception non certifiable.
+        if (r.fournisseur_id && !S.recepFournisseurId) {
+          S.recepFournisseurId = r.fournisseur_id;
+          S.recepFournisseur = r.fournisseur_mysifa || r.fournisseur || '';
+        }
+        // Le BL dans la note, seulement si elle est vide : ce que quelqu'un a
+        // écrit à la main vaut mieux que ce qu'on devine.
+        if (r.bl && !String(S.recepNote || '').trim()) {
+          S.recepNote = 'BL ' + r.bl;
+        }
+        renderContent();
+      },
+      appliquer: (r, ligne) => {
+        // La matière et la laize de la ligne choisie, pour la PROCHAINE bobine
+        // scannée. On ne touche pas aux bobines déjà saisies.
+        if (ligne.matiere_id) {
+          S.recepMatiereId = ligne.matiere_id;
+          S.recepMatiereRef = ligne.article || '';
+          S.recepMatiereDes = ligne.matiere_nom || ligne.designation || '';
+          S.recepCategorie = ligne.categorie || S.recepCategorie;
+          if (ligne.laize_mm) {
+            S.recepLaizeCustomOn = true;
+            S.recepLaizeCustomMm = String(ligne.laize_mm);
+            S.recepLaizeValeurMm = ligne.laize_mm;
+            S.recepLaizeLabel = ligne.laize_mm + ' mm';
+          }
+          showToast('Matière reprise de RVGI : ' + (ligne.article || ''));
+        } else {
+          showToast('RVGI connaît « ' + (ligne.article || '?') +
+                    ' » mais MySifa n\'a pas cette matière — à créer ou à saisir à la main.',
+                    'error');
+        }
+        renderContent();
+      },
+    });
+    if (S.recepRvgiChamp) S.recepRvgiChamp.controle((S.recepItems || []).length);
+  }, 0);
+  return zone;
+}
+
 function buildReceptionPicker(lockedMatiere) {
   const wrap = el('div', { cls: 'recep-picker-card' });
   wrap.appendChild(el('div', { cls: 'recep-picker-title' },
@@ -17151,6 +17310,7 @@ function buildReceptionNouvelle() {
     },
   }, iconEl('scan', 12), ' Quel code scanner ?');
   block.appendChild(tracaGuideBtn);
+  block.appendChild(buildRecepRvgi());
 
   // ── Picker Catégorie / Matière / Laize (mode structuré) ──
   if (!S.recepModalMode) {

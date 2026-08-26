@@ -346,9 +346,24 @@ def update_client(client_id: int, payload: ClientIn, request: Request):
     now = datetime.now().isoformat(timespec="seconds")
 
     with get_db() as conn:
-        ex = conn.execute("SELECT id, raison_sociale FROM clients WHERE id=?", (client_id,)).fetchone()
+        ex = conn.execute("SELECT * FROM clients WHERE id=?", (client_id,)).fetchone()
         if not ex:
             raise HTTPException(404, "Client introuvable")
+        # RVGI prime. Sur une fiche liée, les champs que l'ERP pilote sont
+        # verrouillés à l'écran — mais l'écran n'est pas une sécurité. Un
+        # onglet resté ouvert avant le rattachement renverrait l'ancienne
+        # valeur : on reprend celle de la base, sans faire échouer la
+        # sauvegarde des champs que l'utilisateur avait bien le droit de
+        # modifier (notes, contact, conditions commerciales).
+        _cols = ex.keys()
+        if "rvgi_etat" in _cols and ex["rvgi_etat"] == "lie":
+            try:
+                from app.services.rvgi_tiers import champs_pilotes
+                for _c in champs_pilotes("client"):
+                    if _c in _cols:
+                        data[_c] = ex[_c]
+            except Exception:
+                pass
         if data.get("code"):
             dup = conn.execute(
                 "SELECT id FROM clients WHERE code=? COLLATE NOCASE AND id<>?",
@@ -400,9 +415,19 @@ def delete_client(client_id: int, request: Request):
     user = require_superadmin(request)
     from database import get_db
     with get_db() as conn:
-        row = conn.execute("SELECT raison_sociale FROM clients WHERE id=?", (client_id,)).fetchone()
+        row = conn.execute("SELECT * FROM clients WHERE id=?", (client_id,)).fetchone()
         if not row:
             raise HTTPException(404, "Client introuvable")
+        # Supprimer une fiche liée à RVGI ne la fait pas disparaître : la
+        # prochaine synchro la recréerait, vidée de ses notes et de ses
+        # contacts. Mieux vaut le dire que de laisser croire à une suppression.
+        if "rvgi_etat" in row.keys() and row["rvgi_etat"] == "lie":
+            raise HTTPException(
+                409,
+                "Ce client vient de RVGI : la synchro le recréerait. "
+                "Détachez-le de sa fiche RVGI si vous voulez le gérer dans "
+                "MySifa seul, ou bloquez-le dans l'ERP.",
+            )
         raison = row["raison_sociale"]
         conn.execute("DELETE FROM clients WHERE id=?", (client_id,))
         conn.commit()

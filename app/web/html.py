@@ -39,6 +39,7 @@ from app.web.expe_assets import (
     EXPE_TRANSPORTEURS_CSS,
     EXPE_TRANSPORTEURS_JS,
 )
+from app.web.expe_guide import EXPE_DEVIS_GUIDE_JS
 from app.web.compta_assets import (
     COMPTA_MAIN_CSS,
     COMPTA_MAIN_JS,
@@ -92,6 +93,11 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_landscape.css">
 <link rel="stylesheet" href="/static/motion.css">
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<!-- Chargé sans defer et avant tout le reste : sur un poste déjà connu comme lent,
+     le mode éco doit être posé avant le premier rendu, sinon la frame la plus
+     coûteuse de la visite est justement celle qu'on voulait éviter. -->
+<script src="/static/mysifa_perf.js"></script>
 __KERNSE_THEME_CSS__
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -1787,6 +1793,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
 <script src="/static/mysifa_expe_carte.js"></script>
+<script src="/static/mysifa_rvgi_picker.js"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/mysifa_humeur.js"></script>
@@ -1794,6 +1801,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/mysifa_cal_rappel.js?v=4"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/mysifa_landscape.js?v=2"></script>
+<script src="/static/mysifa_guides.js"></script>
 <script src="/static/motion.js" defer></script>
 <script>
 const API=window.location.origin;
@@ -11417,6 +11425,7 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__EXPE_CARTE_FRANCE_CSS__", EXPE_CARTE_FRANCE_CSS)
         .replace("__EXPE_COMPARATEUR_JS__", EXPE_COMPARATEUR_JS)
         .replace("__EXPE_DEVIS_JS__", EXPE_DEVIS_JS)
+        .replace("__EXPE_DEVIS_GUIDE_JS__", EXPE_DEVIS_GUIDE_JS)
         .replace("__EXPE_TRANSPORTEURS_JS__", EXPE_TRANSPORTEURS_JS)
         .replace("__EXPE_CARTE_FRANCE_JS__", EXPE_CARTE_FRANCE_JS)
         # ─── Branding paramétrable (LAST : appliqué aux contenus injectés

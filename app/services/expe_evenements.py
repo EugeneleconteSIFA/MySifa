@@ -89,6 +89,52 @@ CONTEXTES = {
 
 EMAILS_SORTANTS = (EV_EMAIL_ENVOYE, EV_EMAIL_RELANCE, EV_EMAIL_ATTRIBUTION)
 
+# Motif réservé aux hits qui viennent de CHEZ NOUS. Le créateur d'une demande
+# est en copie du mail : il reçoit le même corps, donc le même pixel, et sa
+# relecture gonflait le compteur du transporteur. Ces hits sont conservés
+# (jamais supprimés) mais sortent des compteurs, sous un motif distinct des
+# préchargements — « c'était nous » et « Apple a préchargé » ne se corrigent
+# pas de la même façon.
+MOTIF_INTERNE = "ouverture interne SIFA"
+
+
+def _prefixes_internes() -> tuple[str, ...]:
+    """Liste d'IP/préfixes internes, lue depuis `config` à chaque appel.
+
+    L'import est fait dans la fonction, pas en tête de module : ce service est
+    testé sur une base en mémoire, sans config chargée, et un import au
+    sommet le rendrait intestable. Changer la valeur reste une modification
+    du `.env` suivie d'un redémarrage — `config.py` fait son `os.getenv` à
+    l'import du processus.
+    """
+    try:
+        from config import EXPE_IPS_INTERNES
+    except Exception:
+        return ()
+    return tuple(
+        p.strip() for p in str(EXPE_IPS_INTERNES or "").split(",") if p.strip()
+    )
+
+
+def est_ip_interne(ip: object) -> bool:
+    """Vrai si l'adresse appartient à nos propres réseaux.
+
+    Ne couvre QUE les ouvertures dont la requête part d'ici : Outlook Web et
+    les applications mobiles chargent les images depuis les serveurs
+    Microsoft, indistinguables d'un transporteur sur Outlook.com. C'est
+    pourquoi le reclassement manuel (`marquer_interne`) existe à côté.
+    """
+    adr = str(ip or "").strip()
+    if not adr:
+        return False
+    for pref in _prefixes_internes():
+        if pref.endswith("."):
+            if adr.startswith(pref):
+                return True
+        elif adr == pref:
+            return True
+    return False
+
 _CONTEXTE_EVENEMENT = {
     "rfq": EV_EMAIL_ENVOYE,
     "rel": EV_EMAIL_RELANCE,
@@ -202,6 +248,7 @@ def log_evenement(
     fiable: bool = True,
     motif: str | None = None,
     user_agent: str | None = None,
+    ip: str | None = None,
     meta: dict | None = None,
     dedup_secondes: int = 0,
 ) -> bool:
@@ -235,8 +282,8 @@ def log_evenement(
         conn.execute(
             """INSERT INTO expe_devis_evenements
                (reponse_id, demande_id, canal, type_evenement, date,
-                fiable, motif, user_agent, meta)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+                fiable, motif, user_agent, ip, meta)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
             (
                 int(reponse_id),
                 int(demande_id) if demande_id is not None else None,
@@ -246,6 +293,7 @@ def log_evenement(
                 1 if fiable else 0,
                 motif,
                 (user_agent or "")[:300] or None,
+                (ip or "")[:64] or None,
                 json.dumps(meta, ensure_ascii=False) if meta else None,
             ),
         )
@@ -266,6 +314,7 @@ def log_par_email(
     date: str | None = None,
     demande_id: int | None = None,
     user_agent: str | None = None,
+    ip: str | None = None,
     dedup_secondes: int = 0,
 ) -> int:
     """Journalise un événement sur toutes les lignes ouvertes d'un email.
@@ -304,6 +353,7 @@ def log_par_email(
             type_evenement=type_evenement,
             date=date,
             user_agent=user_agent,
+            ip=ip,
             dedup_secondes=dedup_secondes,
         ):
             n += 1
@@ -317,6 +367,7 @@ _VIDE = {
     "email_ouvert_le": None,
     "email_ouvert_dernier": None,
     "ouvertures_ecartees": 0,
+    "ouvertures_internes": 0,
     "motif_ecarte": None,
     "nb_visites_portail": 0,
     "portail_ouvert_le": None,
@@ -335,11 +386,12 @@ def resume_par_reponse(conn, demande_id: int) -> dict[int, dict]:
     try:
         rows = conn.execute(
             """SELECT reponse_id AS rid, type_evenement AS t, fiable,
+                      CASE WHEN motif=? THEN 1 ELSE 0 END AS interne,
                       COUNT(*) AS n, MIN(date) AS premier, MAX(date) AS dernier
                FROM expe_devis_evenements
                WHERE demande_id=?
-               GROUP BY reponse_id, type_evenement, fiable""",
-            (int(demande_id),),
+               GROUP BY reponse_id, type_evenement, fiable, interne""",
+            (MOTIF_INTERNE, int(demande_id)),
         ).fetchall()
     except Exception as exc:
         logger.warning("expe_evenements.resume_par_reponse: %s", exc)
@@ -350,16 +402,29 @@ def resume_par_reponse(conn, demande_id: int) -> dict[int, dict]:
         entry = out.setdefault(rid, dict(_VIDE))
         t = str(r["t"])
         fiable = int(r["fiable"] or 0) == 1
+        interne = int(r["interne"] or 0) == 1
         if t == EV_EMAIL_OUVERT:
             if fiable:
-                entry["nb_ouvertures_email"] = int(r["n"])
-                entry["email_ouvert_le"] = r["premier"]
-                entry["email_ouvert_dernier"] = r["dernier"]
+                # Le GROUP BY peut rendre deux lignes fiables (motif interne
+                # ou non) : on cumule au lieu d'écraser.
+                entry["nb_ouvertures_email"] += int(r["n"])
+                prem = entry.get("email_ouvert_le")
+                if not prem or str(r["premier"]) < str(prem):
+                    entry["email_ouvert_le"] = r["premier"]
+                der = entry.get("email_ouvert_dernier")
+                if not der or str(r["dernier"]) > str(der):
+                    entry["email_ouvert_dernier"] = r["dernier"]
+            elif interne:
+                # Comptées à part et affichées à part : « ×2 (+3 internes) »
+                # dit la vérité là où un total muet la cachait.
+                entry["ouvertures_internes"] += int(r["n"])
             else:
-                entry["ouvertures_ecartees"] = int(r["n"])
+                entry["ouvertures_ecartees"] += int(r["n"])
         elif t == EV_PORTAIL_OUVERT and fiable:
-            entry["nb_visites_portail"] = int(r["n"])
-            entry["portail_ouvert_le"] = r["premier"]
+            entry["nb_visites_portail"] += int(r["n"])
+            prem = entry.get("portail_ouvert_le")
+            if not prem or str(r["premier"]) < str(prem):
+                entry["portail_ouvert_le"] = r["premier"]
         # Les emails SORTANTS ne sont pas des signaux du transporteur : compter
         # notre propre relance comme « dernier signal » ferait passer un
         # silencieux pour un actif au moment précis où on le relance.
@@ -376,8 +441,9 @@ def resume_par_reponse(conn, demande_id: int) -> dict[int, dict]:
             """SELECT reponse_id AS rid, motif, MAX(date) AS d
                FROM expe_devis_evenements
                WHERE demande_id=? AND type_evenement=? AND fiable=0
+                 AND COALESCE(motif,'') <> ?
                GROUP BY reponse_id""",
-            (int(demande_id), EV_EMAIL_OUVERT),
+            (int(demande_id), EV_EMAIL_OUVERT, MOTIF_INTERNE),
         ).fetchall():
             entry = out.get(int(r["rid"]))
             if entry is not None:
@@ -391,7 +457,8 @@ def timeline(conn, reponse_id: int, limite: int = 200) -> list[dict]:
     """Événements d'un destinataire, du plus récent au plus ancien."""
     try:
         rows = conn.execute(
-            """SELECT id, canal, type_evenement, date, fiable, motif, user_agent, meta
+            """SELECT id, canal, type_evenement, date, fiable, motif, user_agent,
+                      ip, meta
                FROM expe_devis_evenements
                WHERE reponse_id=?
                ORDER BY date DESC, id DESC
@@ -424,8 +491,61 @@ def timeline(conn, reponse_id: int, limite: int = 200) -> list[dict]:
                 "date": r["date"],
                 "fiable": int(r["fiable"] or 0) == 1,
                 "motif": r["motif"],
+                "interne": str(r["motif"] or "") == MOTIF_INTERNE,
                 "user_agent": r["user_agent"],
+                "ip": r["ip"] if "ip" in r.keys() else None,
                 "meta": meta,
             }
         )
     return out
+
+
+def marquer_interne(conn, evenement_id: int, *, interne: bool = True) -> bool:
+    """Reclasse à la main une ouverture d'email en « c'était nous » (ou l'inverse).
+
+    Le filtre par IP ne voit que les ouvertures faites depuis nos locaux :
+    lues sur Outlook Web ou sur mobile, elles passent par les serveurs
+    Microsoft et ressemblent trait pour trait à celles d'un transporteur.
+    Plutôt que de deviner, on laisse celui qui SAIT trancher — c'est lui qui
+    a le mail sous les yeux.
+
+    On ne supprime jamais la ligne : elle reste dans la timeline avec son
+    motif, seul son poids dans les compteurs change. Réversible, parce qu'un
+    clic de trop ne doit pas effacer une vraie ouverture transporteur.
+    """
+    try:
+        row = conn.execute(
+            "SELECT type_evenement, motif, fiable FROM expe_devis_evenements WHERE id=?",
+            (int(evenement_id),),
+        ).fetchone()
+        if not row:
+            return False
+        if str(row["type_evenement"]) != EV_EMAIL_OUVERT:
+            # Le portail, lui, se reconnaît tout seul (session MySifa) et le
+            # reste des événements est émis par nous : rien à reclasser.
+            return False
+        motif_actuel = str(row["motif"] or "")
+        deja_ecarte = int(row["fiable"] or 0) == 0
+        if interne:
+            if deja_ecarte and motif_actuel != MOTIF_INTERNE:
+                # Hit déjà écarté pour une autre raison (préchargement Apple,
+                # robot antispam) : il ne compte déjà pas. Écraser son motif
+                # ferait perdre le vrai diagnostic, et le « Finalement non »
+                # qui suivrait le rendrait fiable — un aller-retour de clic
+                # promouvrait un faux signal en ouverture certaine.
+                return False
+            conn.execute(
+                "UPDATE expe_devis_evenements SET fiable=0, motif=? WHERE id=?",
+                (MOTIF_INTERNE, int(evenement_id)),
+            )
+        else:
+            if motif_actuel != MOTIF_INTERNE:
+                return False
+            conn.execute(
+                "UPDATE expe_devis_evenements SET fiable=1, motif=NULL WHERE id=?",
+                (int(evenement_id),),
+            )
+        return True
+    except Exception as exc:
+        logger.warning("expe_evenements.marquer_interne: %s", exc)
+        return False

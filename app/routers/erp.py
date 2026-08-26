@@ -102,6 +102,7 @@ def erp_meta(request: Request):
             "filtres": [
                 {k: v for k, v in f.items() if k != "col"} for f in adapte["filtres"]
             ],
+            "rattachable": bool(adapte.get("rattachable")),
         })
 
     # Les écrans sortent dans l'ordre d'affichage, pas dans celui du catalogue.
@@ -119,6 +120,31 @@ def erp_meta(request: Request):
     }
 
 
+@router.get("/recherche")
+def erp_recherche(
+    request: Request,
+    q: str = Query("", max_length=120),
+    par_ecran: int = Query(miroir.RESULTATS_PAR_ECRAN, ge=1, le=20),
+):
+    """Cherche la même chaîne dans les vingt-sept écrans à la fois.
+
+    Déclarée AVANT `/{cle}/...` : sinon FastAPI lirait « recherche » comme une
+    clé d'écran et rendrait un 404.
+    """
+    _exiger_acces(request)
+    cols = _colonnes_par_table()
+    ecrans = []
+    for ec in catalogue.ECRANS:
+        adapte = catalogue.adapter_ecran(ec, cols)
+        if adapte:
+            ecrans.append(adapte)
+    ecrans.sort(key=lambda e: catalogue.rang(e["cle"]))
+    try:
+        return miroir.recherche_globale(ecrans, q, par_ecran=par_ecran)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
 @router.get("/{cle}/lignes")
 def erp_lignes(
     cle: str,
@@ -131,9 +157,12 @@ def erp_lignes(
     depuis: str = Query("", max_length=40),
     depuis_id: str = Query("", max_length=40),
     lien: int = Query(-1, ge=-1, le=99),
+    ratt: str = Query("", max_length=10),
 ):
     _exiger_acces(request)
     ec = _ecran(cle)
+    if ratt and ratt not in ("oui", "non", "partiel", "douteux"):
+        raise HTTPException(status_code=400, detail="Filtre de rattachement inconnu.")
 
     # Ouverture depuis une pièce liée : le client donne l'écran d'origine, la
     # ligne et le rang du lien — jamais un nom de colonne. La condition est
@@ -154,6 +183,7 @@ def erp_lignes(
         res = miroir.lister(
             ec, q=q, filtres=filtres, tri=tri or None, sens=sens,
             page=page, taille=taille, extra=extra,
+            rattachement=bool(ec.get("rattachable")), filtre_ratt=ratt,
         )
         if contexte:
             res["contexte"] = contexte

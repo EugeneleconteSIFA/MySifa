@@ -498,6 +498,7 @@ body.light .btn-p{color:#fff}
 .ds-cat-calage{color:var(--warn)}
 .ds-cat-production{color:var(--success)}
 .ds-cat-arret{color:var(--danger)}
+.ds-cat-nettoyage{color:var(--accent)}
 .md h3{color:var(--text);font-size:18px;font-family:var(--mono);margin-bottom:24px}
 .fd{margin-bottom:14px}
 .fd label{display:block;margin-bottom:6px;color:var(--dim);font-size:12px;text-transform:uppercase;letter-spacing:1px}
@@ -673,11 +674,14 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 .of-mismatch-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;
   max-width:440px;width:100%;padding:28px 24px;display:flex;flex-direction:column;gap:16px}
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
 <script src="/static/mysifa_favicon_badge.js"></script>
 <script src="/static/mysifa_user_chip.js"></script>
+<script src="/static/mysifa_rvgi_picker.js"></script>
 <script src="/static/motion.js" defer></script>
 <div class="sidebar-overlay" id="sb-ov"></div>
 <div id="app"></div>
@@ -1442,6 +1446,8 @@ function icon(name,size=16){
   const p={
     'menu': '<line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>',
     'bar-chart-2': '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+    'activity': '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+    'droplet': '<path d="M12 2.7l5.7 5.7a8 8 0 1 1-11.4 0z"/>',
     'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
     'scanner': '<rect x="3" y="13" width="18" height="7" rx="2"/><line x1="7" y1="16.5" x2="17" y2="16.5"/><path d="M6 10V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5"/>',
     'package': '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
@@ -3552,18 +3558,132 @@ function fscTypeRequisLabel(t){
   return FSC_REQ_LABELS[typ]||typ;
 }
 
-function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType="",deptLivraison="",priseRdv=0,dlImposee=0,valide=0,etiqParCarton=null){
+// ── Rattachement RVGI du dossier ────────────────────────────────────────────
+// Le « Numéro d'OF » d'un dossier EST un numéro de commande RVGI. Le champ
+// cherche donc dans RVGI pendant qu'on le tape — pas un bouton à côté : le
+// geste attendu est de taper le numéro, il devait rattacher tout seul.
+//
+// La saisie libre reste possible, et « Commande introuvable » n'apparaît que
+// lorsqu'il n'y a rien à proposer. Le miroir a jusqu'à douze heures de retard :
+// une commande passée ce matin n'y est pas, et ce n'est pas une faute.
+let _rvgiEnAttente=null;   // sélection faite avant que le dossier existe
+
+function rvgiBrancherChamp(){
+  const champ=document.getElementById('f-of');
+  if(!champ||!window.MysRvgiPicker||champ.dataset.rvgiPret)return;
+  champ.dataset.rvgiPret='1';
+  const lireId=()=>{const v=(champ.getAttribute('data-entry')||'').trim();return v?Number(v):null;};
+  MysRvgiPicker.attacher(champ,{
+    mode:'commande', objet:'dossier', objetId:lireId,
+    // On ne réécrit jamais un numéro déjà saisi : c'est la clé que le reste
+    // de MySifa joint en texte.
+    remplir:!champ.value.trim(),
+    onChange:(res)=>{
+      rvgiInjecterProduit(res);
+      if(res.enregistre){
+        MysRvgiPicker.resume(document.getElementById('f-of-res'),'dossier',lireId());
+      }else{
+        _rvgiEnAttente={lignes:res.lignes||[],etat:res.etat||null};
+        rvgiPeindreEnAttente(_rvgiEnAttente);
+      }
+    },
+    onErreur:(e)=>showToast(e.message||"Rattachement impossible.","danger")
+  });
+}
+
+// Ce que RVGI sait déjà du produit, versé dans la fiche.
+//
+// Deux règles, et elles ne se négocient pas :
+//
+// 1. **On ne remplit que le vide.** Ce qui a été tapé gagne toujours contre ce
+//    que l'ERP propose — un OF corrigé à la main l'a été pour une raison, et
+//    l'écraser en silence ferait produire le mauvais format.
+// 2. **On ne remplit que si le produit est unique.** Deux articles différents
+//    dans la sélection n'ont ni la même laize ni le même format : le sélecteur
+//    ne renvoie alors aucun produit, et on ne devine pas.
+//
+// Laize et machine viennent de la fiche de fabrication, qui n'existe que pour
+// un article commandé sur trois. Le champ reste vide dans ce cas : c'est
+// l'état réel de RVGI, pas un oubli de notre part.
+function rvgiInjecterProduit(res){
+  const p=res&&res.produit;
+  const remplis=[];
+  const poser=(id,val,label)=>{
+    const el=document.getElementById(id);
+    if(!el||val==null||val==='')return;
+    if(String(el.value||'').trim()!=='')return;   // jamais par-dessus une saisie
+    el.value=String(val);
+    remplis.push(label);
+  };
+  if(res&&res.client)poser('f-cli',res.client,'client');
+  if(p){
+    poser('f-rp',p.article,'réf produit');
+    poser('f-laize',p.laize,'laize');
+    poser('f-fl',p.largeur,'largeur');
+    poser('f-fh',p.hauteur,'hauteur');
+  }
+  if(remplis.length&&typeof showToast==='function'){
+    showToast('Repris de RVGI : '+remplis.join(', ')+'.','success');
+  }
+}
+
+function rvgiPeindreEnAttente(res){
+  const z=document.getElementById('f-of-res');
+  if(!z)return;
+  const n=(res.lignes||[]).length;
+  z.className='mrp-res';
+  z.innerHTML=n
+    ? '<span class="e partiel">à enregistrer</span><span>'+n+' pièce'+(n>1?'s':'')+
+      ' RVGI — rattachée'+(n>1?'s':'')+' à la création du dossier</span>'
+    : '<span class="e a_rattacher">à rattacher</span><span>commande introuvable — le dossier ira dans la liste à traiter</span>';
+}
+
+// Après la création d'un dossier : on pose ce qui avait été choisi avant
+// qu'il ait un id. Un échec ici ne doit pas faire croire que le dossier n'a
+// pas été créé — il l'a été.
+async function rvgiPoserEnAttente(nouvelId){
+  if(!_rvgiEnAttente||!nouvelId)return;
+  const paquet=_rvgiEnAttente;_rvgiEnAttente=null;
+  try{
+    await api('/api/rvgi/rattachements',{method:'POST',body:JSON.stringify({
+      objet:'dossier',objet_id:Number(nouvelId),
+      lignes:paquet.lignes||[],etat:paquet.etat||null})});
+  }catch(e){
+    showToast("Dossier créé, mais le rattachement RVGI n'a pas été enregistré. "+
+              "Rouvre le dossier pour le refaire.","danger");
+  }
+}
+
+function rvgiRafraichirResume(entryId){
+  rvgiBrancherChamp();
+  if(!window.MysRvgiPicker)return;
+  const z=document.getElementById('f-of-res');
+  if(!z)return;
+  if(entryId)MysRvgiPicker.resume(z,'dossier',entryId);
+  else if(_rvgiEnAttente)rvgiPeindreEnAttente(_rvgiEnAttente);
+  else z.innerHTML='';
+}
+
+function dossierFields(numero_of,client,ref_produit,laize,date_livraison,commentaire,exigences_production,fl,fh,dur,statut,showStatut,aPlacer=1,fscRequis=0,fscType="",deptLivraison="",priseRdv=0,dlImposee=0,valide=0,etiqParCarton=null,entryId=null){
   const fscOn=fscRequis===1||fscRequis===true;
   const fscTyp=(fscType&&FSC_REQ_CODES.includes(fscType))?fscType:FSC_CLAIM_DEFAUT;
   const rdvOn=priseRdv===1||priseRdv===true;
   const dlImpOn=dlImposee===1||dlImposee===true;
   const valideOn=valide===1||valide===true;
   const dlVal=/^\d{4}-\d{2}-\d{2}$/.test(date_livraison)?date_livraison:"";
+  // Le HTML rendu ici est injecté par l'appelant juste après, de façon
+  // synchrone : un timeout à 0 suffit pour brancher le champ, et évite de
+  // toucher aux cinq endroits qui construisent cette modale.
+  setTimeout(()=>{rvgiBrancherChamp();if(entryId)rvgiRafraichirResume(entryId);},0);
   return`
     <div class="dossier-sections">
       <div class="dossier-section">
         <span class="dossier-section-label">Informations générales</span>
-        <div class="fd"><label>Numéro d'OF</label><input id="f-of" value="${escAttr(numero_of)}" placeholder="9936280"></div>
+        <div class="fd"><label>Numéro d'OF</label>
+          <input id="f-of" value="${escAttr(numero_of)}" placeholder="Tape un n° de commande, un client, un article…"
+                 data-entry="${entryId==null?'':escAttr(String(entryId))}">
+          <div id="f-of-res" class="mrp-res"></div>
+        </div>
         <div class="fd"><label>Client</label><input id="f-cli" value="${escAttr(client)}" placeholder="Nom du client"></div>
         <div class="fd"><label>Durée (${MIND}–${MAXD}h)</label>
           <input type="number" id="f-dur" min="${MIND}" max="${MAXD}" step="0.25" value="${dur}" oninput="document.getElementById('f-dur-fill').style.width=((Math.max(${MIND},Math.min(${MAXD},+this.value||${MIND}))-${MIND})/(${MAXD}-${MIND})*100)+'%'">
@@ -3816,6 +3936,7 @@ async function submitAddFromOf(){
     showToast(apiErrorMessage(e,"Ajout impossible."),"danger");
     return;
   }
+  await rvgiPoserEnAttente(addRes&&addRes.id);
   const fd=new FormData();
   fd.append('file',_addOfFile);
   fd.append('data',JSON.stringify(buildAddOfValidatePayload()));
@@ -3836,6 +3957,7 @@ async function submitAdd(){
   if(!d.numero_of){ showToast("Numéro d'OF requis.","danger"); return; }
   try{
     const res=await api(`/machines/${MID}/entries`,{method:"POST",body:JSON.stringify({reference:d.numero_of,...d})});
+    await rvgiPoserEnAttente(res&&res.id);
     closeM();load();
     if(res&&res.warning&&res.warning.message){ showToast(res.warning.message,"danger"); }
     else { showToast("Dossier ajouté.","success"); }
@@ -4007,7 +4129,8 @@ function openEdit(id){
   const statLabel=isTermine?"Terminé":e.statut==="en_cours"?"En cours":"";
   const statColor=isTermine?"var(--danger)":"var(--accent)";
 
-  const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,e.valide??0,e.etiquettes_par_carton??null);
+  setTimeout(()=>rvgiRafraichirResume(e.id??null),0);
+  const fieldsHtml=dossierFields(e.numero_of||e.reference||"",e.client||"",e.ref_produit||"",e.laize||"",e.date_livraison||"",e.commentaire||"",e.exigences_production||"",e.format_l||"",e.format_h||"",e.duree_heures,e.statut,true,e.a_placer??1,e.fsc_requis||0,e.fsc_type_requis||"",e.departement_livraison||"",e.prise_rdv||0,e.date_livraison_imposee||0,e.valide??0,e.etiquettes_par_carton??null,e.id??null);
 
   // Bouton déstockage compact en en-tête
   const destockDone=e.destockage==="done";
@@ -4810,12 +4933,17 @@ function dsCatCls(cat){
   if(c==="calage") return "ds-cat-calage";
   if(c==="production") return "ds-cat-production";
   if(c==="arret") return "ds-cat-arret";
+  if(c==="nettoyage") return "ds-cat-nettoyage";
   return "";
 }
 function renderDossierStatsBody(d){
   if(!d) return '<div class="ds-empty">Chargement…</div>';
   const tt=d.temps_totaux||{};
   const q=d.quantites||{};
+  // Temps machine engagee = production + arrets. C'est une grandeur utile,
+  // mais elle etait affichee sous le mot « Production », juste au-dessus d'un
+  // tableau ou le meme mot designait la production nette : deux chiffres, un
+  // seul nom, sur le meme ecran. Elle a desormais son propre libelle.
   const prodInclArrets=Number(tt.production_min||0)+Number(tt.arret_min||0);
   if(!d.nb_saisies){
     return '<div class="ds-empty">Aucune saisie de production trouvée pour ce dossier sur cette machine.</div>';
@@ -4830,8 +4958,10 @@ function renderDossierStatsBody(d){
   html+=`<div class="ds-section">${icon("clock",13)} Temps</div>
   <div class="ds-time-kpi">
     <div class="ds-time-card"><div class="ds-tc-lbl">${icon("wrench",12)} Calage</div><div class="ds-tc-val">${fMin(tt.calage_min)}</div></div>
-    <div class="ds-time-card"><div class="ds-tc-lbl">${icon("play",12)} Production</div><div class="ds-tc-val">${fMin(prodInclArrets)}</div></div>
+    <div class="ds-time-card"><div class="ds-tc-lbl">${icon("play",12)} Production</div><div class="ds-tc-val">${fMin(tt.production_min)}</div></div>
     <div class="ds-time-card"><div class="ds-tc-lbl">${icon("alert-triangle",12)} Arrêts</div><div class="ds-tc-val">${fMin(tt.arret_min)}</div></div>
+    ${Number(tt.nettoyage_min||0)>0?`<div class="ds-time-card"><div class="ds-tc-lbl">${icon("droplet",12)} Nettoyage</div><div class="ds-tc-val">${fMin(tt.nettoyage_min)}</div></div>`:""}
+    <div class="ds-time-card" title="Production + arrêts — le temps pendant lequel la machine était engagée sur le dossier"><div class="ds-tc-lbl">${icon("activity",12)} Machine engagée</div><div class="ds-tc-val">${fMin(prodInclArrets)}</div></div>
   </div>`;
   const cats=d.by_category||[];
   if(cats.length){
@@ -4861,7 +4991,7 @@ function renderDossierStatsBody(d){
   const ops2=d.operateurs||[];
   if(ops2.length){
     html+=`<div class="ds-section">${icon("users",13)} Opérateurs</div>
-    <div class="ds-tbl-wrap"><table class="ds-tbl"><thead><tr><th>Opérateur</th><th>Saisies</th><th>Calage</th><th>Prod</th><th>Arrêts</th><th>Total</th></tr></thead><tbody>`;
+    <div class="ds-tbl-wrap"><table class="ds-tbl"><thead><tr><th>Opérateur</th><th>Saisies</th><th>Calage</th><th>Prod</th><th>Arrêts</th><th>Nettoyage</th><th>Total</th></tr></thead><tbody>`;
     ops2.forEach(r=>{
       html+=`<tr>
         <td style="font-weight:600;color:var(--text)">${escHtml(r.operateur||"?")}</td>
@@ -4869,6 +4999,7 @@ function renderDossierStatsBody(d){
         <td>${fMin(r.calage_min)}</td>
         <td>${fMin(r.prod_min)}</td>
         <td>${fMin(r.arret_min)}</td>
+        <td>${fMin(r.nettoyage_min)}</td>
         <td>${fMin(r.minutes)}</td>
       </tr>`;
     });

@@ -199,6 +199,23 @@ SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "MySifa")
 SMTP_TLS       = os.getenv("SMTP_TLS", "1") not in {"0", "false", "False", "no", "NO"}
 SUPPORT_EMAIL_DEBUG = os.getenv("SUPPORT_EMAIL_DEBUG", "0") in {"1", "true", "True", "yes", "YES"}
 
+# ─── MyExpé — devis transporteurs (envoi et suivi d'engagement) ────
+# Boîte partagée qui EXPÉDIE les demandes de tarif. Le transporteur doit
+# reconnaître le service expéditions, pas la personne qui a cliqué : le
+# créateur de la demande passe en copie, jamais en expéditeur. Laisser vide
+# retombe sur MS_SENDER_UPN (comportement historique).
+EXPE_DEVIS_FROM = os.getenv("EXPE_DEVIS_FROM", "expeditions@sifa.pro")
+# Copie systématique EN PLUS du créateur. Vide par défaut : depuis que la
+# boîte expéditions est l'expéditrice, elle garde déjà sa copie dans
+# « Éléments envoyés » — l'y remettre en copie ferait un doublon.
+EXPE_DEVIS_CC = os.getenv("EXPE_DEVIS_CC", "")
+# Adresses publiques depuis lesquelles une ouverture d'email ne peut être que
+# la nôtre (nos bureaux, le VPS). Liste séparée par des virgules : IP exacte
+# (« 92.154.13.4 ») ou préfixe terminé par un point (« 92.154.13. »).
+# Ce filtre ne couvre PAS les ouvertures via Outlook Web ou mobile, qui
+# partent des serveurs Microsoft : le reclassement manuel est là pour ça.
+EXPE_IPS_INTERNES = os.getenv("EXPE_IPS_INTERNES", "")
+
 # ─── Sécurité ─────────────────────────────────────────────────────
 SECRET_KEY    = os.getenv("SECRET_KEY", secrets.token_hex(32))
 SESSION_HOURS = 6
@@ -652,9 +669,15 @@ CODE_REPRISE    = "88"
 CODE_ANNUL_DOS  = "90"
 
 # Ensemble complet des codes traités comme du temps de calage
-# (02 calage, 10-12 réglages, 58-60 préparations, 67 vidange, 74-75 essais)
+# (02 calage, 10-12 réglages, 58-60 préparations, 74-75 essais)
+#
+# Le 67 (vidange four colle) en a été retiré le 26/08/2026 : c'est un
+# nettoyage, sa catégorie dans `operations.json` le dit, et MyProd le range
+# déjà là (`_CODES_NETTOYAGE` dans app/routers/production.py). Le compter en
+# calage gonflait le calage de la modale planning et de la mémoire produit —
+# 2h36 sur un dossier relevé — pendant que MyProd affichait le bon chiffre.
 CODES_CALAGE: frozenset[str] = frozenset({
-    "02", "10", "11", "12", "58", "59", "60", "67", "74", "75"
+    "02", "10", "11", "12", "58", "59", "60", "74", "75"
 })
 
 # ─── Classification opérations ────────────────────────────────────

@@ -836,6 +836,8 @@ body.light .f2-src{color:#7c3aed;background:rgba(124,58,237,.08);border-color:rg
 
 @media(max-width:900px){.f2-kv{grid-template-columns:1fr}.f2-form{grid-template-columns:1fr}.f2-form .span2{grid-column:span 1}}
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
 <script>
@@ -951,6 +953,12 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           <path d="M2 21c0-3 2.5-5 5-5"/>
         </svg>
         Registre FSC
+      </button>
+      <!-- Page à part (/perf-postes) et non un onglet : la vue ne lit pas les
+           réglages mais des relevés navigateur, et sert aussi de lien direct. -->
+      <button type="button" class="nav-btn" data-req-section="audit_full" onclick="location.href='/perf-postes'">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Fluidité des postes
       </button>
       <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="api">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
@@ -1166,6 +1174,11 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
               <span class="mi-body"><span class="mi-lbl">Formations & guides</span><span class="mi-desc">Suivi des tutos in-app lus par utilisateur (reset possible).</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
+            <button type="button" class="menu-item" onclick="location.href='/perf-postes'">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Fluidité des postes</span><span class="mi-desc">Images par seconde mesurées sur chaque ordinateur, pages les plus lourdes.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
             <button type="button" class="menu-item" data-goto="api">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Clés API</span><span class="mi-desc">Tokens d'intégration externe.</span></span>
@@ -1379,6 +1392,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             </div>
           </div>
 
+          <div id="four-rvgi-barre"></div>
           <div class="table-wrap" id="four-table-wrap"></div>
           <div class="f2-legend" style="margin-top:10px">
             <span><span class="f2-dot on"></span> Identité · FSC · Contacts · Adresse · Traçabilité</span>
@@ -1448,6 +1462,27 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
 
     </section>
 
+    <style>
+    /* Liste des clients : quatre colonnes denses plutôt que neuf étroites. */
+    .cli-th{text-align:left;padding:10px 12px;font-size:10px;font-weight:700;
+      text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap}
+    .cli-table td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top;font-size:13px}
+    .cli-row{cursor:pointer;transition:background .12s}
+    .cli-row:hover td{background:rgba(34,211,238,.05)}
+    .cli-nom{font-weight:700;font-size:13.5px;color:var(--text)}
+    .cli-sub{font-size:11.5px;color:var(--muted);margin-top:2px;display:flex;
+      align-items:center;gap:6px;flex-wrap:wrap}
+    .cli-mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px}
+    .cli-mail{font-size:12px;word-break:break-all}
+    .cli-etat{display:inline-block;padding:3px 9px;border-radius:6px;font-size:11px;
+      font-weight:700;border:1px solid}
+    .cli-etat.ok{background:rgba(52,211,153,.15);color:var(--success);border-color:rgba(52,211,153,.35)}
+    .cli-etat.blo{background:rgba(248,113,113,.15);color:#f87171;border-color:rgba(248,113,113,.35)}
+    .cli-etat.ina{background:rgba(148,163,184,.18);color:var(--muted);border-color:rgba(148,163,184,.35)}
+    /* Un champ piloté par RVGI : verrouillé, et on voit pourquoi. */
+    .cli-lock, .f2-lock{opacity:.7;cursor:not-allowed}
+    </style>
+
     <section id="panel-clients" class="hidden">
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
@@ -1462,6 +1497,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <button type="button" class="btn btn-sm" id="cli-new-btn">+ Nouveau client</button>
           </div>
         </div>
+        <div id="cli-rvgi-barre"></div>
         <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
           <input type="text" id="cli-search" placeholder="Rechercher (raison sociale, code, ville, SIRET, TVA, email…)" autocomplete="off"
             style="flex:1;min-width:260px;padding:9px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s">
@@ -1470,22 +1506,23 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           </select>
         </div>
         <div class="table-wrap">
-          <table id="cli-table" style="min-width:780px">
+          <table id="cli-table" class="cli-table" style="min-width:720px">
+            <!-- Quatre colonnes, pas neuf. Un client se reconnaît à sa raison
+                 sociale et à sa ville ; le code, le n° ERP et l'origine sont des
+                 précisions qui vivent sous le nom plutôt que dans leur propre
+                 colonne. Les coordonnées tiennent ensemble : on les lit ou on
+                 les ignore, jamais l'une sans l'autre. -->
             <thead>
               <tr style="background:rgba(34,211,238,.06)">
-                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">N°</th>
-                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">Code</th>
-                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Raison sociale</th>
-                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">Ville</th>
-                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">Pays</th>
-                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">Téléphone</th>
-                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Email</th>
-                <th style="text-align:left;padding:10px 12px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);white-space:nowrap">État</th>
+                <th class="cli-th">Client</th>
+                <th class="cli-th">Localisation</th>
+                <th class="cli-th">Coordonnées</th>
+                <th class="cli-th">Suivi</th>
                 <th style="padding:10px 12px;width:1px"></th>
               </tr>
             </thead>
             <tbody id="cli-tbody">
-              <tr><td colspan="9" style="padding:24px 12px;color:var(--muted);font-size:13px;text-align:center">Chargement…</td></tr>
+              <tr><td colspan="5" style="padding:24px 12px;color:var(--muted);font-size:13px;text-align:center">Chargement…</td></tr>
             </tbody>
           </table>
         </div>
@@ -1506,6 +1543,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           <button type="button" class="btn btn-sec sub-tab-btn" data-clisub="cli-tab-contact">Contact</button>
           <button type="button" class="btn btn-sec sub-tab-btn" data-clisub="cli-tab-commerce">Commerce</button>
           <button type="button" class="btn btn-sec sub-tab-btn" data-clisub="cli-tab-notes">Notes</button>
+          <button type="button" class="btn btn-sec sub-tab-btn" data-clisub="cli-tab-rvgi">RVGI</button>
         </div>
 
         <div id="cli-tab-info" class="cli-tab">
@@ -1604,6 +1642,10 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <div id="cli-tab-notes" class="cli-tab" style="display:none">
           <label style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:4px">Notes internes</label>
           <textarea id="cli-notes" rows="8" placeholder="Remarques, conditions particulières…" style="width:100%;padding:10px 12px;border-radius:10px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;resize:vertical"></textarea>
+        </div>
+
+        <div id="cli-tab-rvgi" class="cli-tab" style="display:none">
+          <div id="cli-rvgi-bloc"></div>
         </div>
 
         <div style="display:flex;gap:10px;justify-content:space-between;align-items:center;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
@@ -2977,6 +3019,10 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
+<!-- Clients et fournisseurs alignés sur RVGI : bandeau de synchro,
+     pastille d'origine, bloc « fiche RVGI ». Tout est dans ce fichier,
+     la page n'y accroche que trois appels. -->
+<script src="/static/mysifa_rvgi_tiers.js?v=__V_LABEL__"></script>
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
@@ -4542,6 +4588,7 @@ async function loadFournisseurs() {
   if (f2Groupe) { await openGroupeFiche(f2Groupe, true); }
   else if (f2Id && fournisseursAll.some(x => x.id === f2Id)) { await openFournisseurFiche(f2Id, true); }
   else { f2Id = null; f2Groupe = null; _f2Show('list'); renderFournisseursTable(); }
+  _fourRvgiBarre();
 }
 
 async function loadFournisseursGroupes(){
@@ -4686,7 +4733,8 @@ function _fourRowHTML(f, indent){
     : (f.ville ? esc(f.ville) + (f.pays && f.pays !== 'FR' ? ', ' + esc(f.pays) : '') : '');
   return '<tr class="f2-row" data-fopen="' + f.id + '"' + (actif ? '' : ' style="opacity:.55"') + '>' +
     '<td' + (indent ? ' class="f2-branch"' : '') + '>' +
-      '<div class="f2-nom">' + esc(f.nom) + (actif ? '' : ' <span class="four-pill nofsc">Inactif</span>') + '</div>' +
+      '<div class="f2-nom">' + esc(f.nom) + (actif ? '' : ' <span class="four-pill nofsc">Inactif</span>') +
+        (window.MysRvgiTiers ? ' ' + MysRvgiTiers.badge(f) : '') + '</div>' +
       (sub ? '<div class="f2-sub">' + sub + '</div>' : '') +
     '</td>' +
     '<td>' + _fscBadgeHTML(f) +
@@ -5007,6 +5055,9 @@ const F2_TABS = [
   // question, pas dans un autre module.
   { k:'tarif',      l:'Tarif d\'achat', cnt: () => (f2Cache[f2Id]?.tarif?.matieres?.length ?? null) },
   { k:'traca',      l:'Traçabilité' },
+  // La fiche RVGI en regard de la fiche MySifa. En dernier, parce qu'on la
+  // consulte quand on se demande d'où vient une valeur — pas tous les jours.
+  { k:'rvgi',       l:'RVGI' },
 ];
 
 async function openFournisseurFiche(id, keepTab){
@@ -5130,13 +5181,48 @@ function _f2PaintFiche(){
     synthese: _f2TabSynthese, identite: _f2TabIdentite, fsc: _f2TabFsc,
     certifs: _f2TabCertifs, contacts: _f2TabContacts,
     receptions: _f2TabReceptions, tarif: _f2TabTarif, traca: _f2TabTraca,
+    rvgi: _f2TabRvgi,
   };
   const body = document.getElementById('f2-body');
   body.innerHTML = (renderers[f2Tab] || _f2TabSynthese)(f, cache);
   const post = { identite: _f2BindIdentite, fsc: _f2BindFsc, certifs: _f2BindCertifs,
                  contacts: _f2BindContacts, traca: _f2BindTraca, synthese: _f2BindSynthese,
-                 tarif: _f2BindTarif };
+                 tarif: _f2BindTarif, rvgi: _f2BindRvgi };
   if (post[f2Tab]) post[f2Tab](f, cache);
+}
+
+// ── L'onglet RVGI d'un fournisseur ──────────────────────────────────────────
+//
+// Tout le contenu vient du module `mysifa_rvgi_tiers.js` : la fiche ERP en
+// regard de la fiche MySifa, le lien, les interlocuteurs. Ici on ne fait que
+// poser le conteneur et recharger la liste quand le lien change — le reste de
+// l'onglet Fournisseurs continue de fonctionner exactement comme avant.
+function _f2TabRvgi(f, cache){
+  if (!window.MysRvgiTiers) {
+    return '<div class="f2-block"><div class="f2-empty">Le module RVGI n\'est pas chargé.</div></div>';
+  }
+  return '<div id="f2-rvgi-bloc"></div>';
+}
+
+function _f2BindRvgi(f, cache){
+  if (!window.MysRvgiTiers) return;
+  MysRvgiTiers.bloc(document.getElementById('f2-rvgi-bloc'), 'fournisseur', f, async () => {
+    await loadFournisseurs();
+    const maj = fournisseursAll.find(x => x.id === f.id);
+    if (maj) { _f2PaintFiche(); }
+    renderFournisseursTable();
+    _fourRvgiBarre();
+  });
+}
+
+// Le bandeau au-dessus de la liste des fournisseurs.
+function _fourRvgiBarre(){
+  if (!window.MysRvgiTiers) return;
+  const el = document.getElementById('four-rvgi-barre');
+  if (el) MysRvgiTiers.barre(el, 'fournisseur', async () => {
+    await loadFournisseurs();
+    renderFournisseursTable();
+  });
 }
 
 function _f2Kpi(label, value, note, isHtmlSmall){
@@ -7324,6 +7410,7 @@ const _FMT_GUIDES = {
   'taches-kanban': 'Gestionnaire de tâches — Kanban',
   'taches-liste': 'Gestionnaire de tâches — Liste',
   'erp-overview': 'ERP — Lecture de RVGI',
+  'expe-devis': 'MyExpé — Devis transporteurs',
 };
 
 function _fmtGuideLabel(key){ return _FMT_GUIDES[key] || key; }
@@ -9614,6 +9701,19 @@ async function loadClients() {
     toast('Erreur lors du chargement des clients.', true);
   }
   renderCliTable();
+  _cliRvgiBarre();
+}
+
+// Le bandeau RVGI au-dessus de la liste des clients. Peint une seule fois par
+// chargement : la recherche relance `loadClients`, et repeindre le bandeau à
+// chaque frappe ferait un aller-retour serveur pour rien.
+let _cliBarrePeinte = false;
+function _cliRvgiBarre(){
+  if (!window.MysRvgiTiers || _cliBarrePeinte) return;
+  const el = document.getElementById('cli-rvgi-barre');
+  if (!el) return;
+  _cliBarrePeinte = true;
+  MysRvgiTiers.barre(el, 'client', () => { _cliBarrePeinte = false; loadClients(); });
 }
 
 async function loadEmplacements() {
@@ -9717,6 +9817,12 @@ function openCliModal(id) {
   if (id == null) {
     if (title) title.textContent = 'Nouveau client';
     if (delBtn) delBtn.style.display = 'none';
+    // Rouvrir en création après avoir consulté une fiche pilotée laisserait
+    // les champs verrouillés : on rend la main explicitement.
+    _cliAppliquerRvgi(null);
+    const bloc = document.getElementById('cli-rvgi-bloc');
+    if (bloc) bloc.innerHTML = '<div style="padding:14px;color:var(--muted);font-size:12.5px">' +
+      'Enregistrez d\'abord ce client : le lien vers RVGI se pose ensuite.</div>';
     requestAnimationFrame(() => document.getElementById('cli-raison')?.focus());
     return;
   }
@@ -9739,9 +9845,51 @@ function openCliModal(id) {
       setV('cli-devise', c.devise); setV('cli-encours', c.encours_autorise); setV('cli-codecpta', c.code_comptable);
       setV('cli-cat1', c.categorie1); setV('cli-cat2', c.categorie2); setV('cli-cat3', c.categorie3);
       setV('cli-notes', c.notes);
+      _cliAppliquerRvgi(c);
       requestAnimationFrame(() => document.getElementById('cli-raison')?.focus());
     })
     .catch(() => toast('Impossible de charger ce client.', true));
+}
+
+// Ce que RVGI pilote se lit, ne se saisit pas.
+//
+// Les champs restent VISIBLES et lisibles — les masquer donnerait l'impression
+// que MySifa ne connaît pas l'adresse du client. Ils sont simplement en lecture
+// seule, avec le motif au survol. Le serveur refuse de toute façon la
+// modification : l'interface explique, elle ne protège pas.
+const _CLI_PILOTES = {
+  'cli-numero': 'numero', 'cli-code': 'code', 'cli-raison': 'raison_sociale',
+  'cli-adresse1': 'adresse1', 'cli-adresse2': 'adresse2', 'cli-bp': 'bp',
+  'cli-cp': 'cp', 'cli-ville': 'ville', 'cli-code-pays': 'code_pays', 'cli-pays': 'pays',
+  'cli-siret': 'siret', 'cli-tva': 'tva', 'cli-rcs': 'rcs', 'cli-ean': 'ean',
+  'cli-nif': 'nif', 'cli-tel': 'telephone', 'cli-fax': 'telecopie', 'cli-email': 'email',
+  'cli-groupe': 'groupe', 'cli-rep': 'representant', 'cli-devise': 'devise',
+  'cli-etat': 'etat',
+};
+
+function _cliAppliquerRvgi(c) {
+  const lie = !!(c && c.rvgi_etat === 'lie' && c.rvgi_numero);
+  Object.keys(_CLI_PILOTES).forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (lie) {
+      if (el.tagName === 'SELECT') el.disabled = true; else el.readOnly = true;
+      el.classList.add('cli-lock');
+      el.title = 'Renseigné par RVGI (fiche n° ' + (c.rvgi_numero || '') +
+                 ') — modifiable dans l\'ERP.';
+    } else {
+      el.disabled = false; el.readOnly = false;
+      el.classList.remove('cli-lock');
+      el.title = '';
+    }
+  });
+  // Supprimer une fiche pilotée n'a pas de sens : la synchro la recréerait.
+  const del = document.getElementById('cli-delete-btn');
+  if (del) del.style.display = lie ? 'none' : '';
+  const bloc = document.getElementById('cli-rvgi-bloc');
+  if (bloc && window.MysRvgiTiers) {
+    MysRvgiTiers.bloc(bloc, 'client', c, () => { closeCliModal(); _cliBarrePeinte = false; loadClients(); });
+  }
 }
 
 function prInsertPh(placeholder) {
@@ -9930,29 +10078,45 @@ function renderCliTable() {
       const q = (document.getElementById('cli-search')?.value || '').trim();
       empty.textContent = q
         ? 'Aucun résultat pour « ' + q + ' ».'
-        : 'Aucun client. Cliquez sur « + Nouveau client » ou importez un fichier xlsx.';
+        : 'Aucun client. Synchronisez avec RVGI, ou créez-en un à la main.';
     }
     return;
   }
   if (empty) empty.style.display = 'none';
-  const html = _cliData.map(c => {
-    const etat = c.etat || '';
-    const etatBg = etat === 'Bloqué' ? 'rgba(248,113,113,.15);color:#f87171;border-color:rgba(248,113,113,.35)'
-                : etat === 'Inactif' ? 'rgba(148,163,184,.18);color:var(--muted);border-color:rgba(148,163,184,.35)'
-                : 'rgba(52,211,153,.15);color:var(--success);border-color:rgba(52,211,153,.35)';
-    return `<tr style="border-bottom:1px solid var(--border);cursor:pointer" onclick="openCliModal(${c.id})">
-      <td style="padding:9px 12px;font-family:ui-monospace,monospace;font-size:12px;color:var(--muted);white-space:nowrap">${c.numero == null ? '' : escHtml(String(c.numero))}</td>
-      <td style="padding:9px 12px;font-family:ui-monospace,monospace;font-size:12px;white-space:nowrap">${escHtml(c.code || '')}</td>
-      <td style="padding:9px 12px;font-weight:600">${escHtml(c.raison_sociale || '')}</td>
-      <td style="padding:9px 12px;white-space:nowrap">${escHtml(c.ville || '')}</td>
-      <td style="padding:9px 12px;white-space:nowrap">${escHtml(c.pays || '')}</td>
-      <td style="padding:9px 12px;font-family:ui-monospace,monospace;font-size:12px;white-space:nowrap">${escHtml(c.telephone || '')}</td>
-      <td style="padding:9px 12px;font-size:12px">${escHtml(c.email || '')}</td>
-      <td style="padding:9px 12px;white-space:nowrap"><span style="display:inline-block;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:700;background:${etatBg};border:1px solid">${escHtml(etat)}</span></td>
-      <td style="padding:9px 12px;white-space:nowrap"><button type="button" class="btn btn-sec btn-sm" onclick="event.stopPropagation();openCliModal(${c.id})">Modifier</button></td>
-    </tr>`;
+  const badge = (c) => (window.MysRvgiTiers ? MysRvgiTiers.badge(c) : '');
+  const dim = (t) => '<span style="color:var(--muted)">' + t + '</span>';
+  tbody.innerHTML = _cliData.map(c => {
+    // L'identité : le nom d'abord, ce qui le désigne juste en dessous.
+    const ids = [];
+    if (c.code) ids.push('<span class="cli-mono">' + escHtml(c.code) + '</span>');
+    if (c.numero != null && c.numero !== '') ids.push('n° ' + escHtml(String(c.numero)));
+    if (c.groupe && c.groupe !== c.raison_sociale) ids.push('groupe ' + escHtml(c.groupe));
+
+    const lieu = [c.cp, c.ville].filter(Boolean).join(' ');
+    const pays = (c.pays && c.pays !== 'FRANCE') ? c.pays : '';
+
+    // Téléphone et e-mail vont ensemble : c'est « comment je le joins ».
+    const coord = [];
+    if (c.telephone) coord.push('<span class="cli-mono">' + escHtml(c.telephone) + '</span>');
+    if (c.email) coord.push('<span class="cli-mail">' + escHtml(c.email) + '</span>');
+    if (c.contact_nom) coord.push(dim(escHtml(c.contact_nom)));
+
+    const etat = c.etat || 'Normal';
+    const cls = etat === 'Bloqué' ? 'blo' : (etat === 'Inactif' ? 'ina' : 'ok');
+
+    return '<tr class="cli-row" onclick="openCliModal(' + c.id + ')">' +
+      '<td><div class="cli-nom">' + escHtml(c.raison_sociale || '—') + '</div>' +
+        '<div class="cli-sub">' + (ids.join(' · ') || dim('sans code')) + ' ' + badge(c) + '</div></td>' +
+      '<td>' + (lieu ? escHtml(lieu) : dim('—')) +
+        (pays ? '<div class="cli-sub">' + escHtml(pays) + '</div>' : '') + '</td>' +
+      '<td>' + (coord.length ? coord.join('<br>') : dim('—')) + '</td>' +
+      '<td><span class="cli-etat ' + cls + '">' + escHtml(etat) + '</span>' +
+        (c.encours_autorise ? '<div class="cli-sub">encours ' +
+          escHtml(Number(c.encours_autorise).toLocaleString('fr-FR')) + ' €</div>' : '') + '</td>' +
+      '<td style="white-space:nowrap"><button type="button" class="btn btn-sec btn-sm" ' +
+        'onclick="event.stopPropagation();openCliModal(' + c.id + ')">Ouvrir</button></td>' +
+      '</tr>';
   }).join('');
-  tbody.innerHTML = html;
 }
 
 function renderLaizesList() {

@@ -503,11 +503,13 @@ function closeTransporteurModal(){
   T.modalTab='fiche';
   T.tarifs_lignes=[];
   T.tarifs_frais=[];
-  // Reprise du modal envoi devis si on est venu de la (bouton Nouveau transporteur).
+  // Reprise de l'ecran devis si on est venu de la (bouton Nouveau
+  // transporteur) : le modal d'envoi comme le wizard de creation sont remis
+  // en place tels quels, saisie comprise.
   if(S._resumeDevisEnvoi){
     const r=S._resumeDevisEnvoi;
     S._resumeDevisEnvoi=null;
-    S.expeDevisModal={type:'envoi',demandeId:r.demandeId,checks:r.checks||{}};
+    S.expeDevisModal=r.modal||{type:'envoi',demandeId:r.demandeId,checks:r.checks||{}};
   }
   render();
 }
@@ -789,9 +791,10 @@ async function saveTransporteur(){
     const newTrpId=saved&&saved.id?Number(saved.id):null;
     closeTransporteurModal();
     await loadTransporteurs();
-    if(wasFromDevis&&newTrpId&&S.expeDevisModal&&S.expeDevisModal.type==='envoi'){
-      if(!S.expeDevisModal.checks)S.expeDevisModal.checks={};
-      S.expeDevisModal.checks['t'+newTrpId]={checked:true,kind:'actif',id:newTrpId};
+    const md=S.expeDevisModal;
+    if(wasFromDevis&&newTrpId&&md&&(md.type==='envoi'||md.type==='nouvelle')){
+      if(!md.checks)md.checks={};
+      md.checks['t'+newTrpId]={checked:true,kind:'actif',id:newTrpId};
       render();
     }
   }catch(e){
@@ -1614,7 +1617,7 @@ function expeDevisIcon(size){
 function ouvrirDevisDepuisDepart(departId,poids,nb_palette,cp){
   set({expeTab:'devis'});
   requestAnimationFrame(()=>{
-    ouvrirModalNouvelleDemande({
+    void ouvrirModalNouvelleDemande({
       id:departId,
       poids_total_kg:poids,
       nb_palette:nb_palette,
@@ -1648,9 +1651,13 @@ async function chargerProspects(){
   render();
 }
 
-function ouvrirModalNouvelleDemande(departPreRempli){
+// Wizard en trois écrans : les infos générales, les détails et la pièce
+// jointe, puis les transporteurs — d'où l'envoi peut partir directement.
+// L'ancien formulaire d'un bloc obligeait à créer d'abord, puis à rouvrir la
+// demande pour l'envoyer : deux gestes pour une seule intention.
+async function ouvrirModalNouvelleDemande(departPreRempli){
   const d=departPreRempli||{};
-  set({expeDevisModal:{type:'nouvelle',departId:d.id||null,form:{
+  set({expeDevisModal:{type:'nouvelle',step:1,departId:d.id||null,checks:{},form:{
     client:d.client||'',
     poids_total_kg:d.poids_total_kg!=null?String(d.poids_total_kg):'',
     nb_palette:d.nb_palette!=null?String(d.nb_palette):'',
@@ -1660,16 +1667,140 @@ function ouvrirModalNouvelleDemande(departPreRempli){
     contraintes:'',
     piece_jointe_file:null
   }}});
+  // Chargés dès l'ouverture, pas à l'arrivée sur l'étape 3 : une liste vide
+  // qui se remplit sous les yeux fait douter de ce qui est coché.
+  try{ if(!T.list.length&&!T.loading)await loadTransporteurs(); }catch(_e){}
+  try{ if(!S.prospects||!S.prospects.length)await chargerProspects(); }catch(_e){}
+  render();
 }
 
-async function validerNouvelleDemande(){
+function expeWizEtape1Valide(m){
+  const f=m.form||{};
+  if(!(f.client||'').trim()){showToast('Client obligatoire','danger');return false;}
+  if(!(f.code_postal_destination||'').trim()){showToast('Code postal destination obligatoire','danger');return false;}
+  return true;
+}
+
+// Traduction des cases cochées en charge utile d'envoi. Partagée par le
+// wizard et le modal d'envoi : dupliquer ce tri, c'est se retrouver un jour
+// avec un prospect envoyé d'un côté et ignoré de l'autre.
+function expeDevisSelection(checks){
+  const trpIds=[],extras=[];
+  Object.keys(checks||{}).forEach(k=>{
+    const c=checks[k];
+    if(!c||!c.checked)return;
+    if(c.kind==='actif')trpIds.push(Number(c.id));
+    else extras.push({nom:c.nom,email:c.email});
+  });
+  return {trpIds,extras};
+}
+
+// Liste de destinataires (transporteurs actifs + prospects), avec sa
+// maître-case. Même raison : une seule liste, pour que les deux écrans
+// montrent exactement le même monde.
+function expeDevisListeDestinataires(m,opts){
+  const o=opts||{};
+  if(!m.checks)m.checks={};
+  const checks=m.checks;
+  const trps=(T.list||[]).filter(t=>{
+    if(!Number(t.actif))return false;
+    return expeTrpReadEmails(t).length>0;
+  });
+  const prospects=(S.prospects||[]).filter(p=>p.statut_demarchage!=='ecarte'&&p.contact_email&&String(p.contact_email).includes('@'));
+  const allKeys=[];
+  trps.forEach(t=>allKeys.push('t'+t.id));
+  prospects.forEach(pp=>allKeys.push('p'+pp.id));
+  const allChecked=allKeys.length>0&&allKeys.every(k=>checks[k]&&checks[k].checked);
+  const noneChecked=allKeys.every(k=>!checks[k]||!checks[k].checked);
+  const masterCb=h('input',{type:'checkbox'});
+  masterCb.checked=allChecked;
+  masterCb.indeterminate=!allChecked&&!noneChecked;
+  masterCb.addEventListener('change',e=>{
+    const val=!!e.target.checked;
+    trps.forEach(t=>{
+      const k='t'+t.id;
+      if(checks[k]==null)checks[k]={checked:val,kind:'actif',id:t.id};
+      else checks[k].checked=val;
+    });
+    prospects.forEach(pp=>{
+      const k='p'+pp.id;
+      if(checks[k]==null)checks[k]={checked:val,kind:'prospect',nom:pp.nom,email:pp.contact_email};
+      else checks[k].checked=val;
+    });
+    render();
+  });
+  const wrap=h('div',null);
+  wrap.appendChild(h('label',{className:'expe-devis-envoi-row',style:{background:'var(--accent-bg)',borderRadius:'8px',fontWeight:'700'}},
+    masterCb,
+    h('span',{style:{fontSize:'13px',color:'var(--text)'}},allChecked?'Tout désélectionner':'Tout sélectionner'),
+    h('span',{style:{fontSize:'11px',color:'var(--muted)',marginLeft:'auto'}},allKeys.length+' destinataire'+(allKeys.length>1?'s':''))
+  ));
+  if(o.onNouveau){
+    wrap.appendChild(h('div',{style:{display:'flex',justifyContent:'flex-end',margin:'8px 0'}},
+      h('button',{type:'button',className:'btn-ghost',
+        style:{fontSize:'12px',color:'var(--accent)',padding:'6px 10px',border:'1px dashed var(--accent)',borderRadius:'8px',cursor:'pointer',background:'var(--bg)'},
+        onClick:o.onNouveau,
+        title:'Créer un nouveau transporteur — cet écran se rouvrira après création'
+      },iconEl('plus',12),' Nouveau transporteur')));
+  }
+  const list=h('div',{className:'expe-devis-envoi-list'});
+  trps.forEach(t=>{
+    const key='t'+t.id;
+    if(checks[key]==null)checks[key]={checked:true,kind:'actif',id:t.id};
+    const cb=h('input',{type:'checkbox'});
+    cb.checked=!!checks[key].checked;
+    cb.addEventListener('change',e=>{checks[key].checked=e.target.checked;render();});
+    const ems=expeTrpReadEmails(t);
+    const emailsLabel=ems.length<=1?ems[0]:ems[0]+' (+'+(ems.length-1)+')';
+    list.appendChild(h('label',{className:'expe-devis-envoi-row',title:ems.join(', ')},
+      cb,
+      h('span',{style:{fontWeight:'600',fontSize:'13px'}},escHtml(t.nom)),
+      h('span',{style:{fontSize:'12px',color:'var(--muted)'}},escHtml(emailsLabel))
+    ));
+  });
+  if(!trps.length&&!prospects.length){
+    list.appendChild(h('div',{style:{color:'var(--muted)',fontSize:'13px',fontStyle:'italic',padding:'12px 4px'}},
+      'Aucun transporteur actif avec une adresse email.'));
+  }
+  if(prospects.length){
+    list.appendChild(h('div',{className:'expe-devis-envoi-sep'},'Prospects'));
+    prospects.forEach(p=>{
+      const key='p'+p.id;
+      if(checks[key]==null)checks[key]={checked:false,kind:'prospect',nom:p.nom,email:p.contact_email};
+      const cb=h('input',{type:'checkbox'});
+      cb.checked=!!checks[key].checked;
+      cb.addEventListener('change',e=>{checks[key].checked=e.target.checked;render();});
+      list.appendChild(h('label',{className:'expe-devis-envoi-row'},
+        cb,
+        h('span',{style:{fontWeight:'600',fontSize:'13px'}},escHtml(p.nom)),
+        h('span',{style:{fontSize:'12px',color:'var(--muted)'}},escHtml(p.contact_email)),
+        h('span',{style:{fontSize:'11px',color:'var(--warn)'}},'prospect')
+      ));
+    });
+  }
+  wrap.appendChild(list);
+  return wrap;
+}
+
+async function validerNouvelleDemande(envoyer){
   const m=S.expeDevisModal;
-  if(!m||m.type!=='nouvelle')return;
+  if(!m||m.type!=='nouvelle'||m._busy)return;
   const f=m.form||{};
   const cp=(f.code_postal_destination||'').trim();
   const client=(f.client||'').trim();
-  if(!client){showToast('Client obligatoire','danger');return;}
-  if(!cp){showToast('Code postal destination obligatoire','danger');return;}
+  // Le wizard peut être quitté par « Créer » depuis la 3e étape : on
+  // revérifie ici et on ramène à l'étape fautive plutôt que d'échouer avec un
+  // toast qui ne dit pas où corriger.
+  if(!client){showToast('Client obligatoire','danger');m.step=1;render();return;}
+  if(!cp){showToast('Code postal destination obligatoire','danger');m.step=1;render();return;}
+  let sel={trpIds:[],extras:[]};
+  if(envoyer){
+    sel=expeDevisSelection(m.checks);
+    if(!sel.trpIds.length&&!sel.extras.length){
+      showToast('Sélectionner au moins un transporteur','danger');m.step=3;render();return;
+    }
+  }
+  m._busy=true;render();
   try{
     const demande=await api('/api/expe/devis/demandes',{
       method:'POST',
@@ -1709,12 +1840,35 @@ async function validerNouvelleDemande(){
         showToast('Demande créée mais pièce jointe non sauvée : '+(e.message||e),'danger');
       }
     }
+    // L'envoi est un appel distinct de la création. Si les emails échouent,
+    // la demande existe déjà et se renvoie depuis le détail — l'inverse,
+    // perdre une saisie parce qu'un serveur de messagerie tousse, serait
+    // impardonnable.
+    let res=null;
+    if(envoyer){
+      try{
+        res=await api('/api/expe/devis/demandes/'+demande.id+'/envoyer',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({transporteur_ids:sel.trpIds,transporteur_extras:sel.extras})
+        });
+      }catch(e){
+        showToast('Demande créée, envoi impossible : '+(e.message||e),'danger');
+      }
+    }
     fermerExpeDevisModal();
-    showToast('Demande créée.','success');
+    if(res){
+      showToast('Demande créée · '+res.envoyes+' email'+(res.envoyes>1?'s':'')+' envoyé'+(res.envoyes>1?'s':'')+'.','success');
+      if(res.echecs>0)showToast(res.echecs+' échec(s) : '+((res.destinataires_ko||[]).join(', ')),'danger');
+    }else if(!envoyer){
+      showToast('Demande créée.','success');
+    }
     await chargerDemandes();
     await ouvrirDetailDemande(demande.id);
   }catch(e){
+    if(m)m._busy=false;
     showToast(e.message||'Erreur','danger');
+    render();
   }
 }
 
@@ -1736,14 +1890,7 @@ async function ouvrirModalEnvoi(demandeId){
 async function confirmerEnvoi(demandeId){
   const m=S.expeDevisModal;
   if(!m||m.type!=='envoi'||m._sending)return;  // anti-double-clic
-  const checks=m.checks||{};
-  const trpIds=[],extras=[];
-  Object.keys(checks).forEach(k=>{
-    const c=checks[k];
-    if(!c.checked)return;
-    if(c.kind==='actif')trpIds.push(Number(c.id));
-    else extras.push({nom:c.nom,email:c.email});
-  });
+  const {trpIds,extras}=expeDevisSelection(m.checks);
   if(!trpIds.length&&!extras.length){
     showToast('Sélectionner au moins un transporteur','danger');
     return;
@@ -1767,29 +1914,107 @@ async function confirmerEnvoi(demandeId){
   }
 }
 
-function ouvrirSaisieReponse(reponseId,demandeId){
-  set({expeDevisModal:{type:'saisie',reponseId,demandeId,form:{prix:'',delai:'',comment:''}}});
+// La saisie s'ouvre sur les valeurs déjà connues : elle sert autant à
+// enregistrer une première réponse qu'à corriger un prix mal recopié ou à
+// compléter un commentaire trois jours plus tard.
+function ouvrirSaisieReponse(r,demandeId){
+  const rep=(r&&typeof r==='object')?r:{id:r};
+  set({expeDevisModal:{type:'saisie',reponseId:rep.id,demandeId,
+    nom:rep.nom_transporteur||'',
+    form:{
+      prix:rep.prix!=null?String(rep.prix):'',
+      delai:rep.delai_jours!=null?String(rep.delai_jours):'',
+      comment:rep.commentaire||'',
+      sans_suite:rep.statut==='sans_suite'
+    }}});
 }
 
 async function validerSaisieReponse(reponseId,demandeId){
   const m=S.expeDevisModal;
-  const prix=parseFloat(m&&m.form&&m.form.prix);
-  if(isNaN(prix)){showToast('Prix obligatoire','danger');return;}
+  const f=(m&&m.form)||{};
+  const sansSuite=!!f.sans_suite;
+  const brutPrix=(f.prix==null?'':String(f.prix)).trim();
+  const prix=brutPrix===''?null:parseFloat(brutPrix);
+  if(prix!=null&&isNaN(prix)){showToast('Prix invalide','danger');return;}
+  const comment=(f.comment||'').trim();
+  // Trois vides valent refus : sans prix, sans « sans suite » et sans
+  // commentaire, il n'y a rien à enregistrer — autant le dire tout de suite
+  // plutôt que de laisser croire qu'une saisie vide a été prise en compte.
+  if(prix==null&&!sansSuite&&!comment){
+    showToast('Renseigner un prix, un commentaire, ou cocher « sans suite ».','danger');
+    return;
+  }
+  const brutDelai=(f.delai==null?'':String(f.delai)).trim();
   try{
     await api('/api/expe/devis/reponses/'+reponseId,{
       method:'PUT',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        prix,
-        delai_jours:parseInt(m.form.delai,10)||null,
-        commentaire:(m.form.comment||'').trim()||null
+        prix:sansSuite?null:prix,
+        delai_jours:(sansSuite||brutDelai==='')?null:(parseInt(brutDelai,10)||null),
+        commentaire:comment||null,
+        sans_suite:sansSuite
       })
     });
-    showToast('Réponse enregistrée.','success');
+    showToast(sansSuite?'Sans suite enregistré.':(prix!=null?'Réponse enregistrée.':'Commentaire enregistré.'),'success');
     await ouvrirDetailDemande(demandeId);
   }catch(e){
     showToast(e.message||'Erreur','danger');
   }
+}
+
+// Édition du commentaire directement dans le comparatif. L'input remplace la
+// cellule sur place et le résultat est réinjecté sans passer par render() :
+// un re-render global reconstruirait le tableau et ferait perdre le focus au
+// premier caractère saisi — le piège documenté dans CLAUDE.md.
+function editerCommentaireInline(cellule,r,demandeId){
+  if(cellule.querySelector('input'))return;
+  const avant=r.commentaire||'';
+  const inp=document.createElement('input');
+  inp.type='text';
+  inp.className='expe-devis-inp';
+  inp.value=avant;
+  inp.placeholder='Commentaire';
+  inp.style.fontSize='12px';
+  inp.style.padding='6px 8px';
+  inp.maxLength=2000;
+  const ancien=Array.prototype.slice.call(cellule.childNodes);
+  const restaurer=()=>{
+    cellule.innerHTML='';
+    ancien.forEach(n=>cellule.appendChild(n));
+  };
+  let fini=false;
+  const enregistrer=async()=>{
+    if(fini)return;
+    const val=inp.value.trim();
+    if(val===avant.trim()){fini=true;restaurer();return;}
+    fini=true;
+    inp.disabled=true;
+    try{
+      await api('/api/expe/devis/reponses/'+r.id,{
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({commentaire:val||null})
+      });
+      r.commentaire=val;
+      showToast('Commentaire enregistré.','success');
+      await ouvrirDetailDemande(demandeId);
+    }catch(e){
+      showToast(e.message||'Erreur','danger');
+      fini=false;
+      inp.disabled=false;
+      restaurer();
+    }
+  };
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();void enregistrer();}
+    else if(e.key==='Escape'){e.preventDefault();fini=true;restaurer();}
+  });
+  inp.addEventListener('blur',()=>{void enregistrer();});
+  cellule.innerHTML='';
+  cellule.appendChild(inp);
+  inp.focus();
+  try{inp.setSelectionRange(inp.value.length,inp.value.length);}catch(_e){}
 }
 
 function retenirReponse(reponseId,demandeId){
@@ -1955,6 +2180,7 @@ function expeDevisStatutLabel(st){
     recue:{t:'Reçue',c:'var(--accent)'},
     retenue:{t:'Retenue',c:'var(--success)'},
     refusee:{t:'Refusée',c:'var(--muted)',strike:true},
+    sans_suite:{t:'Sans suite',c:'var(--muted)'},
     echec:{t:'Échec envoi',c:'var(--danger)'}
   };
   return m[st]||{t:st||'—',c:'var(--muted)'};
@@ -1963,10 +2189,16 @@ function expeDevisStatutLabel(st){
 function expeDevisSuiviTag(d){
   const env=Number(d.nb_envoyes)||0;
   const rep=Number(d.nb_recus)||0;
-  if(!env&&!rep)return null;
+  // Compté à part : une demande dont tous les destinataires ont répondu
+  // « je ne prends pas » afficherait sinon « 3 envoyés » et rien d'autre,
+  // indiscernable d'un silence — alors que c'est le moment d'en solliciter
+  // d'autres, pas d'attendre.
+  const ss=Number(d.nb_sans_suite)||0;
+  if(!env&&!rep&&!ss)return null;
   const parts=[];
   if(env)parts.push(env+' envoyé'+(env>1?'s':''));
   if(rep)parts.push(rep+' réponse'+(rep>1?'s':''));
+  if(ss)parts.push(ss+' sans suite');
   return h('span',{className:'expe-devis-pill accent'},parts.join(' / '));
 }
 
@@ -2148,10 +2380,20 @@ function expeEngagementCell(r){
   if(!r.sent_at)return h('span',{style:{color:'var(--muted)'}},'—');
   const parts=[];
   const nbMail=Number(e.nb_ouvertures_email)||0;
+  // Les ouvertures reconnues comme les nôtres (créateur en copie du mail) ne
+  // sont pas cachées, elles sont dites à part : masquer le doute le rendrait
+  // invisible au moment où il faut décider de relancer ou non.
+  const nbInt=Number(e.ouvertures_internes)||0;
+  const suffixeInt=nbInt>0?' +'+nbInt+' interne'+(nbInt>1?'s':''):'';
   if(nbMail>0){
     parts.push(h('span',{className:'expe-eng-chip expe-eng-on',
-      title:'Dernière ouverture : '+(e.email_ouvert_dernier||'')},
-      'Email ouvert'+(nbMail>1?' ×'+nbMail:'')));
+      title:'Dernière ouverture : '+(e.email_ouvert_dernier||'')+
+        (nbInt>0?' · '+nbInt+' ouverture(s) interne(s) écartée(s)':'')},
+      'Email ouvert'+(nbMail>1?' ×'+nbMail:'')+suffixeInt));
+  }else if(nbInt>0){
+    parts.push(h('span',{className:'expe-eng-chip expe-eng-doubt',
+      title:nbInt+' ouverture(s) venue(s) de chez nous — le transporteur, lui, n’a rien ouvert'},
+      'Ouvert par nous seulement'+(nbInt>1?' ×'+nbInt:'')));
   }else if((Number(e.ouvertures_ecartees)||0)>0){
     // Le motif est affiché, pas seulement compté : « non confirmée » sans
     // raison oblige à ouvrir la timeline pour comprendre.
@@ -2346,43 +2588,78 @@ async function ouvrirTimelineDevis(reponseId){
   ov.appendChild(box);
   ov.addEventListener('click',e=>{if(e.target===ov)close();});
   document.body.appendChild(ov);
-  try{
-    const d=await api('/api/expe/devis/reponses/'+reponseId+'/evenements');
-    const dest=d.destinataire||{};
-    const evts=d.evenements||[];
-    body.innerHTML='';
-    body.appendChild(h('div',{style:{fontSize:'13px',fontWeight:'700',color:'var(--text)'}},escHtml(dest.nom||'')));
-    body.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'14px'}},escHtml(dest.email||'')));
-    if(!evts.length){
-      body.appendChild(h('div',{style:{color:'var(--muted)',fontSize:'13px'}},'Aucun événement enregistré.'));
-      return;
-    }
-    const tl=h('div',{className:'expe-tl'});
-    evts.forEach(ev=>{
-      const row=h('div',{className:'expe-tl-row'+(ev.fiable?'':' expe-tl-doubt')});
-      row.appendChild(h('div',{className:'expe-tl-dot'}));
-      const main=h('div',{className:'expe-tl-main'});
-      main.appendChild(h('div',{className:'expe-tl-lib'},escHtml(ev.libelle||'')));
-      main.appendChild(h('div',{className:'expe-tl-meta'},escHtml(ev.date||'')+' · '+escHtml(ev.canal||'')));
-      // Un événement RETENU peut aussi porter un motif (proxy de webmail) :
-      // l'info est utile, elle ne doit pas disparaître de la timeline.
-      if(!ev.fiable){
-        main.appendChild(h('div',{className:'expe-tl-motif'},'Écarté — '+escHtml(ev.motif||'signal non fiable')));
-      }else if(ev.motif){
-        main.appendChild(h('div',{className:'expe-tl-motif expe-tl-motif-ok'},escHtml(ev.motif)));
+  // Le contenu est redessiné après chaque reclassement : rouvrir la modale
+  // empilerait un second overlay et ferait perdre le fil de la lecture.
+  const charger=async()=>{
+    try{
+      const d=await api('/api/expe/devis/reponses/'+reponseId+'/evenements');
+      const dest=d.destinataire||{};
+      const evts=d.evenements||[];
+      body.innerHTML='';
+      body.appendChild(h('div',{style:{fontSize:'13px',fontWeight:'700',color:'var(--text)'}},escHtml(dest.nom||'')));
+      body.appendChild(h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'14px'}},escHtml(dest.email||'')));
+      if(!evts.length){
+        body.appendChild(h('div',{style:{color:'var(--muted)',fontSize:'13px'}},'Aucun événement enregistré.'));
+        return;
       }
-      row.appendChild(main);
-      tl.appendChild(row);
-    });
-    body.appendChild(tl);
-    body.appendChild(h('div',{className:'expe-tl-note'},
-      "Une ouverture d'email n'est pas une preuve de lecture : les images sont bloquées par défaut "+
-      "dans Outlook (ouverture invisible) et préchargées par Apple Mail et les filtres antispam "+
-      "(ouverture fictive, écartée ci-dessus). La consultation du portail, elle, est certaine."));
-  }catch(e){
-    body.innerHTML='';
-    body.appendChild(h('div',{style:{color:'var(--danger)',fontSize:'13px'}},escHtml(e.message||'Erreur')));
-  }
+      const tl=h('div',{className:'expe-tl'});
+      evts.forEach(ev=>{
+        const row=h('div',{className:'expe-tl-row'+(ev.fiable?'':' expe-tl-doubt')});
+        row.appendChild(h('div',{className:'expe-tl-dot'}));
+        const main=h('div',{className:'expe-tl-main'});
+        main.appendChild(h('div',{className:'expe-tl-lib'},escHtml(ev.libelle||'')));
+        main.appendChild(h('div',{className:'expe-tl-meta'},escHtml(ev.date||'')+' · '+escHtml(ev.canal||'')+
+          (ev.ip?' · '+escHtml(ev.ip):'')));
+        // Un événement RETENU peut aussi porter un motif (proxy de webmail) :
+        // l'info est utile, elle ne doit pas disparaître de la timeline.
+        if(!ev.fiable){
+          main.appendChild(h('div',{className:'expe-tl-motif'},'Écarté — '+escHtml(ev.motif||'signal non fiable')));
+        }else if(ev.motif){
+          main.appendChild(h('div',{className:'expe-tl-motif expe-tl-motif-ok'},escHtml(ev.motif)));
+        }
+        // Reclassement manuel : le filtre par IP ne voit que ce qui part de
+        // nos locaux, une lecture sur Outlook Web ou sur mobile arrive par
+        // les serveurs Microsoft. Celui qui a le mail sous les yeux tranche.
+        if(ev.type==='email_ouvert'&&expeCanWrite()&&(ev.fiable||ev.interne)){
+          const versInterne=!ev.interne;
+          const btn=h('button',{type:'button',className:'btn-ghost expe-tl-btn',
+            title:versInterne
+              ?'Cette ouverture vient de nous (créateur en copie) — la sortir du compteur'
+              :'Rendre cette ouverture au transporteur',
+            onClick:async()=>{
+              btn.disabled=true;
+              try{
+                await api('/api/expe/devis/evenements/'+ev.id+'/interne',{
+                  method:'POST',
+                  headers:{'Content-Type':'application/json'},
+                  body:JSON.stringify({interne:versInterne})
+                });
+                showToast(versInterne?'Ouverture marquée interne.':'Ouverture rendue au transporteur.','success');
+                await charger();
+                if(S.expeDevisModal&&S.expeDevisModal.type==='detail')await ouvrirDetailDemande(S.expeDevisModal.demandeId);
+              }catch(e){
+                btn.disabled=false;
+                showToast(e.message||'Erreur','danger');
+              }
+            }},versInterne?"C'était nous":'Finalement non');
+          main.appendChild(btn);
+        }
+        row.appendChild(main);
+        tl.appendChild(row);
+      });
+      body.appendChild(tl);
+      body.appendChild(h('div',{className:'expe-tl-note'},
+        "Une ouverture d'email n'est pas une preuve de lecture : les images sont bloquées par défaut "+
+        "dans Outlook (ouverture invisible) et préchargées par Apple Mail et les filtres antispam "+
+        "(ouverture fictive, écartée ci-dessus). Le créateur de la demande étant en copie, sa propre "+
+        "relecture charge le même pixel : marquez-la « C'était nous » pour la sortir du compteur. "+
+        "La consultation du portail, elle, est certaine — les visites internes n'y sont jamais comptées."));
+    }catch(e){
+      body.innerHTML='';
+      body.appendChild(h('div',{style:{color:'var(--danger)',fontSize:'13px'}},escHtml(e.message||'Erreur')));
+    }
+  };
+  await charger();
 }
 
 function renderExpeDevisModal(){
@@ -2398,76 +2675,143 @@ function renderExpeDevisModal(){
 
   if(m.type==='nouvelle'){
     const f=m.form||{};
+    if(!m.step)m.step=1;
+    if(!m.checks)m.checks={};
+    box.classList.add('expe-wiz');
     const mk=(label,key,opts)=>{
       const o=opts||{};
       const inp=h('input',{type:o.type||'text',className:'expe-devis-inp',value:f[key]!=null?String(f[key]):''});
       if(o.step)inp.step=o.step;
+      if(o.min!=null)inp.min=o.min;
+      if(o.placeholder)inp.placeholder=o.placeholder;
       inp.addEventListener('input',e=>{m.form[key]=e.target.value;});
       return h('label',{className:'expe-devis-label'},label,inp);
     };
-    const typeSel=h('select',{className:'expe-devis-inp'},
-      h('option',{value:'messagerie',selected:(f.type_envoi||'messagerie')==='messagerie'},'Messagerie'),
-      h('option',{value:'ramasse',selected:f.type_envoi==='ramasse'},'Ramasse'),
-      h('option',{value:'affretement',selected:f.type_envoi==='affretement'},'Affrètement')
-    );
-    typeSel.addEventListener('change',e=>{m.form.type_envoi=e.target.value;});
-    const palSel=h('select',{className:'expe-devis-inp'},
-      h('option',{value:'',selected:!f.type_palette},'— Non précisé —'),
-      h('option',{value:'europe',selected:f.type_palette==='europe'},'Palette Europe (EUR/EPAL)'),
-      h('option',{value:'perdue',selected:f.type_palette==='perdue'},'Palette perdue'),
-      h('option',{value:'autre',selected:f.type_palette==='autre'},'Autre palette'),
-      h('option',{value:'vrac',selected:f.type_palette==='vrac'},'Sans palette (vrac)')
-    );
-    palSel.addEventListener('change',e=>{m.form.type_palette=e.target.value;});
     box.appendChild(h('div',{className:'expe-devis-modal-head'},
       h('span',{style:{fontWeight:'700',fontSize:'15px'}},'Nouvelle demande de devis'),closeBtn));
-    box.appendChild(h('div',{className:'expe-devis-grid'},
-      (()=>{
-        const c=h('input',{type:'text',className:'expe-devis-inp',value:f.client||'',
-          placeholder:'Nom du client',autocomplete:'off'});
-        c.addEventListener('input',e=>{m.form.client=e.target.value;});
-        return h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Client *',
-          expeClientCombo(c));
-      })(),
-      mk('Poids (kg)','poids_total_kg',{type:'number',step:'0.1'}),
-      mk('Palettes','nb_palette',{type:'number',step:'1'}),
-      mk('CP destination *','code_postal_destination'),
-      (()=>{
-        const c=h('input',{type:'date',className:'expe-devis-inp',value:f.date_limite||''});
-        c.addEventListener('change',e=>{m.form.date_limite=e.target.value;});
-        return h('label',{className:'expe-devis-label'},'Date limite de réponse',c);
-      })(),
-      h('label',{className:'expe-devis-label'},'Type d\'envoi',typeSel),
-      h('label',{className:'expe-devis-label'},'Type de palette',palSel),
-      (()=>{
-        const c=h('input',{type:'text',className:'expe-devis-inp',value:f.contraintes||'',placeholder:'Délai, RDV…'});
-        c.addEventListener('input',e=>{m.form.contraintes=e.target.value;});
-        return h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Contraintes',c);
-      })(),
-      (()=>{
-        // Pièce jointe : input file natif caché, déclenché par un bouton stylé
-        // cohérent avec le design system (btn btn-ghost). Max 20 Mo côté serveur.
-        const fileInp=h('input',{type:'file',style:{display:'none'}});
-        const btnLbl=h('span',null,m.form.piece_jointe_file?'Changer de fichier':'Sélectionner un fichier');
-        const btn=h('button',{type:'button',className:'btn btn-ghost',onClick:()=>fileInp.click()},btnLbl);
-        const info=h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'6px'}},
-          m.form.piece_jointe_file?('Sélectionné : '+(m.form.piece_jointe_file.name||'')):'Optionnel — max 20 Mo'
-        );
-        fileInp.addEventListener('change',e=>{
-          const ff=(e.target.files&&e.target.files[0])||null;
-          m.form.piece_jointe_file=ff;
-          btnLbl.textContent=ff?'Changer de fichier':'Sélectionner un fichier';
-          info.textContent=ff?('Sélectionné : '+(ff.name||'')):'Optionnel — max 20 Mo';
-        });
-        return h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Pièce jointe',
-          h('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:'2px'}},btn,info,fileInp)
-        );
-      })()
-    ));
-    box.appendChild(h('div',{className:'expe-devis-modal-foot'},
-      h('button',{type:'button',className:'btn btn-ghost',onClick:fermerExpeDevisModal},'Annuler'),
-      h('button',{type:'button',className:'btn btn-accent',onClick:()=>void validerNouvelleDemande()},'Créer la demande')
-    ));
+
+    // Fil des étapes. Cliquable uniquement vers l'arrière : sauter en avant
+    // court-circuiterait la vérification du client et du code postal, et on
+    // arriverait à l'envoi avec une demande incomplète.
+    const stepper=h('div',{className:'expe-wiz-steps'});
+    ['Général','Détails','Transporteurs'].forEach((lbl,i)=>{
+      const n=i+1;
+      const cls='expe-wiz-step'+(m.step===n?' actif':'')+(m.step>n?' fait':'');
+      const el=h('div',{className:cls},h('span',{className:'expe-wiz-num'},String(n)),h('span',null,lbl));
+      if(m.step>n){
+        el.style.cursor='pointer';
+        el.addEventListener('click',()=>{m.step=n;render();});
+      }
+      stepper.appendChild(el);
+      if(i<2)stepper.appendChild(h('div',{className:'expe-wiz-sep'}));
+    });
+    box.appendChild(stepper);
+
+    if(m.step===1){
+      box.appendChild(h('div',{className:'expe-devis-grid'},
+        (()=>{
+          const c=h('input',{type:'text',className:'expe-devis-inp',value:f.client||'',
+            placeholder:'Nom du client',autocomplete:'off'});
+          c.addEventListener('input',e=>{m.form.client=e.target.value;});
+          return h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Client *',
+            expeClientCombo(c));
+        })(),
+        mk('CP destination *','code_postal_destination',{placeholder:'Ex. 31200'}),
+        mk('Poids (kg)','poids_total_kg',{type:'number',step:'0.1',min:'0'}),
+        mk('Palettes','nb_palette',{type:'number',step:'1',min:'0'})
+      ));
+    }else if(m.step===2){
+      const typeSel=h('select',{className:'expe-devis-inp'},
+        h('option',{value:'messagerie',selected:(f.type_envoi||'messagerie')==='messagerie'},'Messagerie'),
+        h('option',{value:'ramasse',selected:f.type_envoi==='ramasse'},'Ramasse'),
+        h('option',{value:'affretement',selected:f.type_envoi==='affretement'},'Affrètement')
+      );
+      typeSel.addEventListener('change',e=>{m.form.type_envoi=e.target.value;});
+      const palSel=h('select',{className:'expe-devis-inp'},
+        h('option',{value:'',selected:!f.type_palette},'— Non précisé —'),
+        h('option',{value:'europe',selected:f.type_palette==='europe'},'Palette Europe (EUR/EPAL)'),
+        h('option',{value:'perdue',selected:f.type_palette==='perdue'},'Palette perdue'),
+        h('option',{value:'autre',selected:f.type_palette==='autre'},'Autre palette'),
+        h('option',{value:'vrac',selected:f.type_palette==='vrac'},'Sans palette (vrac)')
+      );
+      palSel.addEventListener('change',e=>{m.form.type_palette=e.target.value;});
+      box.appendChild(h('div',{className:'expe-devis-grid'},
+        h('label',{className:'expe-devis-label'},'Type d\'envoi',typeSel),
+        h('label',{className:'expe-devis-label'},'Type de palette',palSel),
+        (()=>{
+          const c=h('input',{type:'date',className:'expe-devis-inp',value:f.date_limite||''});
+          c.addEventListener('change',e=>{m.form.date_limite=e.target.value;});
+          return h('label',{className:'expe-devis-label'},'Date limite de réponse',c);
+        })(),
+        (()=>{
+          const c=h('input',{type:'text',className:'expe-devis-inp',value:f.contraintes||'',placeholder:'Délai, RDV…'});
+          c.addEventListener('input',e=>{m.form.contraintes=e.target.value;});
+          return h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Contraintes',c);
+        })(),
+        (()=>{
+          // Pièce jointe : input file natif caché, déclenché par un bouton stylé
+          // cohérent avec le design system (btn btn-ghost). Max 20 Mo côté serveur.
+          const fileInp=h('input',{type:'file',style:{display:'none'}});
+          const btnLbl=h('span',null,m.form.piece_jointe_file?'Changer de fichier':'Sélectionner un fichier');
+          const btn=h('button',{type:'button',className:'btn btn-ghost',onClick:()=>fileInp.click()},btnLbl);
+          const info=h('div',{style:{fontSize:'12px',color:'var(--muted)',marginTop:'6px'}},
+            m.form.piece_jointe_file?('Sélectionné : '+(m.form.piece_jointe_file.name||'')):'Optionnel — max 20 Mo'
+          );
+          fileInp.addEventListener('change',e=>{
+            const ff=(e.target.files&&e.target.files[0])||null;
+            m.form.piece_jointe_file=ff;
+            btnLbl.textContent=ff?'Changer de fichier':'Sélectionner un fichier';
+            info.textContent=ff?('Sélectionné : '+(ff.name||'')):'Optionnel — max 20 Mo';
+          });
+          return h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Pièce jointe',
+            h('div',{style:{display:'flex',flexDirection:'column',alignItems:'flex-start',gap:'2px'}},btn,info,fileInp)
+          );
+        })()
+      ));
+    }else{
+      box.appendChild(h('p',{style:{fontSize:'12px',color:'var(--muted)',margin:'0 0 12px'}},
+        'Expéditeur : ',
+        h('strong',null,'le service expéditions'),
+        ' · vous êtes en copie. Les réponses reviennent sur la boîte partagée.'
+      ));
+      box.appendChild(expeDevisListeDestinataires(m,{
+        onNouveau:()=>{
+          // Le modal transporteur passe au-dessus : on met le wizard de côté
+          // au lieu de le perdre, et on le rouvre à l'étape 3 après création.
+          S._resumeDevisEnvoi={modal:m};
+          set({expeDevisModal:null});
+          openTransporteurModal(null);
+        }
+      }));
+    }
+
+    const wizFoot=h('div',{className:'expe-devis-modal-foot'});
+    if(m.step>1){
+      wizFoot.appendChild(h('button',{type:'button',className:'btn btn-ghost',
+        onClick:()=>{m.step-=1;render();}},'← Précédent'));
+    }else{
+      wizFoot.appendChild(h('button',{type:'button',className:'btn btn-ghost',onClick:fermerExpeDevisModal},'Annuler'));
+    }
+    if(m.step<3){
+      wizFoot.appendChild(h('button',{type:'button',className:'btn btn-accent',
+        onClick:()=>{
+          if(m.step===1&&!expeWizEtape1Valide(m))return;
+          m.step+=1;render();
+        }},'Suivant →'));
+    }else{
+      const btnSeul=h('button',{type:'button',className:'btn btn-ghost',
+        title:'Enregistrer la demande sans prévenir les transporteurs — les emails partiront depuis le détail',
+        onClick:()=>void validerNouvelleDemande(false)},'Créer sans envoyer');
+      const btnEnvoi=h('button',{type:'button',className:'btn btn-accent',
+        onClick:()=>void validerNouvelleDemande(true)},m._busy?'Envoi en cours…':'Créer et envoyer');
+      if(m._busy){
+        btnEnvoi.disabled=true;btnEnvoi.style.opacity='.65';btnEnvoi.style.cursor='wait';
+        btnSeul.disabled=true;
+      }
+      wizFoot.appendChild(btnSeul);
+      wizFoot.appendChild(btnEnvoi);
+    }
+    box.appendChild(wizFoot);
   }else if(m.type==='detail'){
     const d=m.demande||{};
     const reps=m.reponses||[];
@@ -2621,7 +2965,16 @@ function renderExpeDevisModal(){
       const sl=expeDevisStatutLabel(r.statut);
       const acts=[];
       if(r.statut==='recue'&&expeCanWrite())acts.push(h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px',color:'var(--success)'},onClick:()=>void retenirReponse(r.id,d.id)},'Retenir'));
-      if((r.statut==='envoyee'||r.statut==='echec')&&expeCanWrite())acts.push(h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px'},onClick:()=>ouvrirSaisieReponse(r.id,d.id)},'Saisir réponse'));
+      // Plus de restriction au statut : un transporteur qui a consulté le
+      // portail sans y répondre envoie souvent son prix par mail, et une
+      // offre reçue se corrige. La restriction aux lignes « envoyée » privait
+      // précisément ces cas-là de saisie.
+      if(expeCanWrite()&&d.statut==='ouverte'){
+        const dejaChiffre=(r.prix!=null);
+        acts.push(h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px'},
+          title:dejaChiffre?'Corriger la réponse saisie':'Saisir une réponse reçue par email',
+          onClick:()=>ouvrirSaisieReponse(r,d.id)},dejaChiffre?'Corriger':'Saisir réponse'));
+      }
       if(r.sent_at)acts.push(h('button',{type:'button',className:'btn-ghost',style:{fontSize:'12px',padding:'4px 6px'},
         title:"Suivi d'engagement",onClick:()=>void ouvrirTimelineDevis(r.id)},iconEl('activity',13)));
       const silencieux=(r.statut==='envoyee'||r.statut==='ouvert'||r.statut==='echec');
@@ -2645,6 +2998,9 @@ function renderExpeDevisModal(){
       const isBestDelai=r.delai_jours!=null&&bestDelai!=null&&Number(r.delai_jours)===bestDelai;
       const commentParts=[];
       if(r.commentaire)commentParts.push(h('div',null,escHtml(r.commentaire)));
+      else if(expeCanWrite()&&d.statut==='ouverte'){
+        commentParts.push(h('div',{style:{color:'var(--muted)',fontStyle:'italic'}},'+ Commentaire'));
+      }
       if(r.statut==='retenue'&&r.retention_comment){
         commentParts.push(h('div',{style:{marginTop:'4px',padding:'6px 8px',background:'var(--accent-bg)',borderRadius:'6px',color:'var(--text2)'}},
           h('strong',{style:{color:'var(--accent)'}},'Message envoyé : '),
@@ -2664,7 +3020,21 @@ function renderExpeDevisModal(){
         h('td',null,expeEngagementCell(r)),
         h('td',null,expeDevisCellValeur(prixTxt,isBestPrix)),
         h('td',null,expeDevisCellValeur(delTxt,isBestDelai)),
-        h('td',{style:{fontSize:'12px',color:'var(--text2)'}},...commentParts),
+        (()=>{
+          const cell=h('td',{style:{fontSize:'12px',color:'var(--text2)'}},...commentParts);
+          if(expeCanWrite()&&d.statut==='ouverte'){
+            cell.style.cursor='pointer';
+            cell.title='Cliquer pour éditer le commentaire';
+            // Un lien de pièce jointe posé dans la même cellule doit rester
+            // cliquable : sans ce garde-fou, ouvrir le fichier basculait la
+            // cellule en édition au lieu de le télécharger.
+            cell.addEventListener('click',ev=>{
+              if(ev.target&&ev.target.closest&&ev.target.closest('a'))return;
+              editerCommentaireInline(cell,r,d.id);
+            });
+          }
+          return cell;
+        })(),
         h('td',null,...acts)
       );
     }):[h('tr',null,h('td',{colSpan:7,style:{color:'var(--muted)',fontStyle:'italic'}},'Aucune réponse.'))];
@@ -2672,97 +3042,23 @@ function renderExpeDevisModal(){
       h('table',{className:'table-std expe-devis-comp'},h('thead',null,head),h('tbody',null,...body))
     ));
   }else if(m.type==='envoi'){
-    const trps=(T.list||[]).filter(t=>{
-      if(!Number(t.actif))return false;
-      const ems=expeTrpReadEmails(t);
-      return ems.length>0;
-    });
-    const prospects=(S.prospects||[]).filter(p=>p.statut_demarchage!=='ecarte'&&p.contact_email&&String(p.contact_email).includes('@'));
     if(!m.checks)m.checks={};
     box.appendChild(h('div',{className:'expe-devis-modal-head'},
       h('span',{style:{fontWeight:'700',fontSize:'15px'}},'Envoyer les demandes de tarif'),closeBtn));
     box.appendChild(h('p',{style:{fontSize:'12px',color:'var(--muted)',margin:'0 0 12px'}},
-      'Reply-To : votre email · copie ',
-      h('strong',null,'expeditions@sifa.pro')
+      'Expéditeur : ',
+      h('strong',null,'le service expéditions'),
+      ' · vous êtes en copie. Les réponses reviennent sur la boîte partagée.'
     ));
-    // Barre d'actions : maitre-checkbox (tout selectionner / tout deselectionner)
-    // + bouton "Nouveau transporteur" qui ouvre le modal d'ajout (le modal envoi
-    // reste ouvert derriere, l'utilisateur y revient apres avoir sauvegarde).
-    const allKeys=[];
-    trps.forEach(t=>allKeys.push('t'+t.id));
-    prospects.forEach(pp=>allKeys.push('p'+pp.id));
-    const allChecked=allKeys.length>0&&allKeys.every(k=>m.checks[k]&&m.checks[k].checked);
-    const noneChecked=allKeys.every(k=>!m.checks[k]||!m.checks[k].checked);
-    const masterCb=h('input',{type:'checkbox'});
-    masterCb.checked=allChecked;
-    masterCb.indeterminate=!allChecked&&!noneChecked;
-    masterCb.addEventListener('change',e=>{
-      const val=!!e.target.checked;
-      // Initialise les entrees manquantes puis force le nouvel etat.
-      trps.forEach(t=>{
-        const k='t'+t.id;
-        if(m.checks[k]==null)m.checks[k]={checked:val,kind:'actif',id:t.id};
-        else m.checks[k].checked=val;
-      });
-      prospects.forEach(pp=>{
-        const k='p'+pp.id;
-        if(m.checks[k]==null)m.checks[k]={checked:val,kind:'prospect',nom:pp.nom,email:pp.contact_email};
-        else m.checks[k].checked=val;
-      });
-      render();
-    });
-    const masterLbl=allChecked?'Tout desselectionner':'Tout selectionner';
-    const masterRow=h('label',{className:'expe-devis-envoi-row',style:{background:'var(--accent-bg)',borderRadius:'8px',fontWeight:'700'}},
-      masterCb,
-      h('span',{style:{fontSize:'13px',color:'var(--text)'}},masterLbl),
-      h('span',{style:{fontSize:'11px',color:'var(--muted)',marginLeft:'auto'}},allKeys.length+' destinataire'+(allKeys.length>1?'s':''))
-    );
-    const newTrpBtn=h('button',{type:'button',className:'btn-ghost',
-      style:{fontSize:'12px',color:'var(--accent)',padding:'6px 10px',border:'1px dashed var(--accent)',borderRadius:'8px',cursor:'pointer',background:'transparent'},
-      onClick:()=>{
+    box.appendChild(expeDevisListeDestinataires(m,{
+      onNouveau:()=>{
         // Le modal envoi (z=12100) masque le modal transporteur (z=12000) :
         // on ferme l'envoi mais on sauve l'etat pour reprise apres creation.
-        S._resumeDevisEnvoi={demandeId:m.demandeId,checks:m.checks};
+        S._resumeDevisEnvoi={modal:m};
         set({expeDevisModal:null});
         openTransporteurModal(null);
-      },
-      title:'Creer un nouveau transporteur — le modal d\'envoi se rouvrira apres creation'
-    },iconEl('plus',12),' Nouveau transporteur');
-    const actionsBar=h('div',{style:{display:'flex',justifyContent:'flex-end',margin:'8px 0'}},newTrpBtn);
-    box.appendChild(masterRow);
-    box.appendChild(actionsBar);
-    const list=h('div',{className:'expe-devis-envoi-list'});
-    trps.forEach(t=>{
-      const key='t'+t.id;
-      if(m.checks[key]==null)m.checks[key]={checked:true,kind:'actif',id:t.id};
-      const cb=h('input',{type:'checkbox'});
-      cb.checked=!!m.checks[key].checked;
-      cb.addEventListener('change',e=>{m.checks[key].checked=e.target.checked;render();});
-      const ems=expeTrpReadEmails(t);
-      const emailsLabel=ems.length<=1?ems[0]:ems[0]+' (+'+(ems.length-1)+')';
-      list.appendChild(h('label',{className:'expe-devis-envoi-row',title:ems.join(', ')},
-        cb,
-        h('span',{style:{fontWeight:'600',fontSize:'13px'}},escHtml(t.nom)),
-        h('span',{style:{fontSize:'12px',color:'var(--muted)'}},escHtml(emailsLabel))
-      ));
-    });
-    if(prospects.length){
-      list.appendChild(h('div',{className:'expe-devis-envoi-sep'},'Prospects'));
-      prospects.forEach(p=>{
-        const key='p'+p.id;
-        if(m.checks[key]==null)m.checks[key]={checked:false,kind:'prospect',nom:p.nom,email:p.contact_email};
-        const cb=h('input',{type:'checkbox'});
-        cb.checked=!!m.checks[key].checked;
-        cb.addEventListener('change',e=>{m.checks[key].checked=e.target.checked;render();});
-        list.appendChild(h('label',{className:'expe-devis-envoi-row'},
-          cb,
-          h('span',{style:{fontWeight:'600',fontSize:'13px'}},escHtml(p.nom)),
-          h('span',{style:{fontSize:'12px',color:'var(--muted)'}},escHtml(p.contact_email)),
-          h('span',{style:{fontSize:'11px',color:'var(--warn)'}},'prospect')
-        ));
-      });
-    }
-    box.appendChild(list);
+      }
+    }));
     const envAnnuler=h('button',{type:'button',className:'btn btn-ghost',onClick:fermerExpeDevisModal},'Annuler');
     const envBtn=h('button',{type:'button',className:'btn btn-accent',onClick:()=>void confirmerEnvoi(m.demandeId)},m._sending?'Envoi en cours…':'Envoyer');
     if(m._sending){
@@ -2775,18 +3071,43 @@ function renderExpeDevisModal(){
   }else if(m.type==='saisie'){
     const f=m.form||{};
     box.appendChild(h('div',{className:'expe-devis-modal-head'},
-      h('span',{style:{fontWeight:'700',fontSize:'15px'}},'Saisir la réponse reçue'),closeBtn));
-    const prix=h('input',{type:'number',step:'0.01',className:'expe-devis-inp',value:f.prix});
+      h('span',{style:{fontWeight:'700',fontSize:'15px'}},
+        'Réponse reçue'+(m.nom?' — '+m.nom:'')),closeBtn));
+    box.appendChild(h('p',{style:{fontSize:'12px',color:'var(--muted)',margin:'0 0 14px',lineHeight:'1.6'}},
+      "Prix et délai sont facultatifs : un commentaire seul suffit à noter ce que le transporteur a répondu."));
+    const prix=h('input',{type:'number',step:'0.01',min:'0',className:'expe-devis-inp',value:f.prix,
+      placeholder:'Laisser vide si pas de prix'});
     prix.addEventListener('input',e=>{f.prix=e.target.value;});
-    const del=h('input',{type:'number',className:'expe-devis-inp',value:f.delai});
+    const del=h('input',{type:'number',min:'0',className:'expe-devis-inp',value:f.delai});
     del.addEventListener('input',e=>{f.delai=e.target.value;});
-    const com=h('input',{type:'text',className:'expe-devis-inp',value:f.comment});
+    const com=h('textarea',{className:'expe-devis-inp',rows:3,
+      placeholder:'Ex. « ne dessert pas cette zone », « attend le poids exact »',
+      style:{resize:'vertical',minHeight:'72px',fontFamily:'inherit'}});
+    com.value=f.comment||'';
     com.addEventListener('input',e=>{f.comment=e.target.value;});
+    // Case « sans suite » : elle grise le prix plutôt que de le refuser au
+    // moment d'enregistrer. Un champ visiblement neutralisé se comprend seul,
+    // un message d'erreur au clic oblige à deviner la règle.
+    const ss=h('input',{type:'checkbox'});
+    ss.checked=!!f.sans_suite;
+    const majSansSuite=()=>{
+      prix.disabled=ss.checked; del.disabled=ss.checked;
+      prix.style.opacity=ss.checked?'.5':'1';
+      del.style.opacity=ss.checked?'.5':'1';
+    };
+    ss.addEventListener('change',e=>{f.sans_suite=e.target.checked;majSansSuite();});
     box.appendChild(h('div',{className:'expe-devis-grid'},
       h('label',{className:'expe-devis-label'},'Prix HT (€)',prix),
       h('label',{className:'expe-devis-label'},'Délai (j. ouvrés)',del),
       h('label',{className:'expe-devis-label',style:{gridColumn:'1 / -1'}},'Commentaire',com)
     ));
+    box.appendChild(h('label',{style:{display:'flex',alignItems:'center',gap:'8px',
+      fontSize:'13px',color:'var(--text2)',margin:'4px 0 12px',cursor:'pointer'}},
+      ss,
+      h('span',null,'Ne chiffre pas cette demande — classer ',
+        h('strong',{style:{color:'var(--text)'}},'Sans suite'))
+    ));
+    majSansSuite();
     box.appendChild(h('div',{className:'expe-devis-modal-foot'},
       h('button',{type:'button',className:'btn btn-ghost',onClick:()=>void ouvrirDetailDemande(m.demandeId)},'Retour'),
       h('button',{type:'button',className:'btn btn-accent',onClick:()=>void validerSaisieReponse(m.reponseId,m.demandeId)},'Enregistrer')
@@ -2890,8 +3211,15 @@ function renderExpeDevisSection(){
     ? 'Aucune demande clôturée.'
     : (filtre==='corbeille' ? 'La corbeille est vide.'
       : (filtre==='toutes' ? 'Aucune demande enregistrée.' : 'Aucune demande en cours.'));
+  // Le moteur de guide remplit ce créneau lui-même (`bookBtn`) : il décide
+  // seul de qui voit le bouton, on ne duplique pas cette règle ici.
+  const guideSlot=h('span',{id:'expe-devis-guide-slot'});
+  requestAnimationFrame(()=>{try{expeDevisInitGuide();}catch(_e){}});
   const head=h('div',{className:'expe-devis-page-head'},
-    expeCanWrite()?h('button',{type:'button',className:'btn btn-accent',onClick:()=>ouvrirModalNouvelleDemande(null)},iconEl('plus',14),' Nouvelle demande'):null,
+    h('div',{style:{display:'flex',alignItems:'center',gap:'10px'}},
+      expeCanWrite()?h('button',{type:'button',className:'btn btn-accent',onClick:()=>void ouvrirModalNouvelleDemande(null)},iconEl('plus',14),' Nouvelle demande'):null,
+      guideSlot
+    ),
     h('div',{className:'expe-devis-filtre'},
       ...[['ouverte','Ouvertes'],['historique','Historique'],['toutes','Toutes'],['corbeille','Corbeille']]
         .map(([k,lbl])=>h('button',{type:'button',
@@ -3119,6 +3447,36 @@ EXPE_DEVIS_CSS = r"""
 .expe-tl-meta{font-size:11px;color:var(--muted);margin-top:2px}
 .expe-tl-motif{font-size:11px;color:var(--warn);margin-top:3px}
 .expe-tl-motif-ok{color:var(--muted)}
+/* Bouton posé DANS la modale (fond --card) : son repos prend --bg pour
+   contraster, et le hover repasse sur --card. Un fond transparent le rendrait
+   invisible tant que le curseur n'est pas dessus. */
+.expe-tl-btn{margin-top:6px;font-size:11px;font-weight:600;padding:4px 10px;border-radius:8px;
+  background:var(--bg);border:1px solid var(--border);color:var(--text2);cursor:pointer;
+  transition:background .15s,border-color .15s,color .15s}
+.expe-tl-btn:hover{background:var(--card);border-color:var(--accent);color:var(--accent)}
+.expe-tl-btn:disabled{opacity:.5;cursor:wait}
+/* Fil des etapes du wizard de creation. Etat courant en accent, etapes
+   franchies en succes et cliquables pour revenir corriger. */
+.expe-wiz-steps{display:flex;align-items:center;gap:6px;margin:0 0 18px}
+.expe-wiz-step{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;
+  color:var(--muted);padding:6px 12px;border-radius:9px;border:1px solid var(--border);
+  background:var(--bg);white-space:nowrap}
+.expe-wiz-step .expe-wiz-num{display:inline-flex;align-items:center;justify-content:center;
+  width:19px;height:19px;border-radius:50%;background:var(--border);color:var(--text2);
+  font-size:11px;font-weight:700}
+.expe-wiz-step.actif{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
+.expe-wiz-step.actif .expe-wiz-num{background:var(--accent);color:var(--bg)}
+.expe-wiz-step.fait{color:var(--text2)}
+.expe-wiz-step.fait .expe-wiz-num{background:var(--success);color:var(--bg)}
+.expe-wiz-step.fait:hover{border-color:var(--accent);color:var(--accent)}
+.expe-wiz-sep{flex:1;height:1px;background:var(--border);min-width:10px}
+.expe-wiz .expe-devis-envoi-list{max-height:46vh}
+@media(max-width:640px){
+  .expe-wiz-steps{gap:4px}
+  .expe-wiz-step{padding:5px 8px;font-size:11px}
+  .expe-wiz-step span:not(.expe-wiz-num){display:none}
+  .expe-wiz-step.actif span:not(.expe-wiz-num){display:inline}
+}
 .expe-tl-note{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;
   color:var(--muted);line-height:1.6}
 .expe-prospects-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--card)}
@@ -4057,6 +4415,7 @@ function renderExpeComparateur(){
 }
 __EXPE_COMPARATEUR_JS__
 __EXPE_DEVIS_JS__
+__EXPE_DEVIS_GUIDE_JS__
 __EXPE_TRANSPORTEURS_JS__
 __EXPE_CARTE_FRANCE_JS__
 function renderExpePoids(){
@@ -4585,6 +4944,53 @@ function renderExpeDepartModal(){
     return h('div',{className:'expe-field'},h('label',null,label),i);
   }
 
+  // ── N° BL : le champ cherche dans RVGI pendant qu'on le tape ─────────────
+  // Un départ peut porter plusieurs BL — c'est déjà le cas dans les données,
+  // écrit « 9938763 + 9938764 » à la main. Ici, taper le numéro le rattache
+  // pour de vrai. Et comme le départ connaît son dossier, RVGI sait déjà
+  // quels BL livrent ses commandes : ce sont eux qui remontent en premier.
+  const blInput=h('input',{type:'text',name:'no_bl',
+                           placeholder:'Tape un n° de BL, de commande, un client…',
+                           value:(f.no_bl!=null?String(f.no_bl):'')});
+  blInput.addEventListener('input',e=>{S.expeDepartForm.no_bl=e.target.value; expeScheduleSaveLocal();});
+  const blResume=h('div',{className:'mrp-res'});
+  const blField=h('div',{className:'expe-field'},h('label',null,'N° BL'),blInput,blResume);
+
+  if(window.MysRvgiPicker){
+    MysRvgiPicker.attacher(blInput,{
+      mode:'livraison', objet:'depart',
+      objetId:()=>S.expeDepartEditId?Number(S.expeDepartEditId):null,
+      dossierId:()=>S.expeDepartForm&&S.expeDepartForm.planning_entry_id
+        ?Number(S.expeDepartForm.planning_entry_id):null,
+      remplir:false,   // c'est nous qui composons « 9938763 + 9938764 »
+      onChange:(res)=>{
+        const nums=(res.lignes||[]).map(l=>l.numero);
+        if(nums.length){
+          // Le champ reste la vitrine, dans la forme que l'équipe écrit déjà.
+          const deja=(S.expeDepartForm.no_bl||'').split('+').map(x=>x.trim()).filter(Boolean);
+          const tous=deja.concat(nums.filter(n=>deja.indexOf(String(n))<0));
+          blInput.value=tous.join(' + ');
+          S.expeDepartForm.no_bl=blInput.value;
+          expeScheduleSaveLocal();
+        }
+        if(res.enregistre){
+          MysRvgiPicker.resume(blResume,'depart',Number(S.expeDepartEditId));
+        }else{
+          S.expeDepartRattachEnAttente={lignes:res.lignes||[],etat:res.etat||null};
+          blResume.className='mrp-res';
+          blResume.innerHTML=nums.length
+            ? '<span class="e partiel">à enregistrer</span><span>'+nums.length+
+              ' BL — rattaché'+(nums.length>1?'s':'')+' à l\'enregistrement du départ</span>'
+            : '<span class="e a_rattacher">à rattacher</span><span>BL introuvable dans le miroir</span>';
+        }
+      },
+      onErreur:(e)=>toast(e.message||'Rattachement impossible','error')
+    });
+    if(S.expeDepartEditId){
+      setTimeout(()=>MysRvgiPicker.resume(blResume,'depart',Number(S.expeDepartEditId)),0);
+    }
+  }
+
   const paletteItems=S.expePaletteTypes||[];
   const palSel=h('select',{name:'type_palette_matiere_id'});
   palSel.appendChild(h('option',{value:''},'— Sélectionner —'));
@@ -4681,7 +5087,21 @@ function renderExpeDepartModal(){
         await api('/api/expe/departs/'+S.expeDepartEditId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
         toast('Départ modifié');
       }else{
-        await api('/api/expe/departs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        const cree=await api('/api/expe/departs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+        // Le rattachement RVGI attendait que le départ ait un id : on le pose
+        // maintenant. Un échec ici ne remet pas le départ en cause — il existe.
+        const att=S.expeDepartRattachEnAttente;
+        S.expeDepartRattachEnAttente=null;
+        if(att&&cree&&cree.id){
+          try{
+            await api('/api/rvgi/rattachements',{method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({objet:'depart',objet_id:Number(cree.id),
+                                   lignes:att.lignes||[],etat:att.etat||null})});
+          }catch(e){
+            toast("Départ enregistré, mais le rattachement RVGI a échoué — rouvre-le pour le refaire.",'error');
+          }
+        }
         toast('Départ enregistré');
       }
       set({expeDepartSubmitting:false});
@@ -4848,7 +5268,7 @@ function renderExpeDepartModal(){
       europeField
     ),
     sec('Références documentaires',
-      mk('N° BL','no_bl'),
+      blField,
       mk('ARC','arc'),
       mk('Réf. SIFA','ref_sifa')
     )

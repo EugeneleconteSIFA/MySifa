@@ -205,6 +205,79 @@ with dbmod.get_db() as conn:
     check("plus rien a reprendre", pm.dossiers_non_materialises(conn, REF), [])
     check("les deux series sont la", pm.taux_rattachement(conn)["series_materialisees"], 2)
 
+print("--- materialisation a la volee (plus de rattrapage a lancer) ---")
+# Le geste que ce bloc supprime : ouvrir un dossier, ne rien voir, aller
+# chercher un bouton « Lancer le rattrapage » reserve au superadmin, revenir.
+with dbmod.get_db() as conn:
+    conn.execute("DELETE FROM produit_series")
+    conn.commit()
+with dbmod.get_db() as conn:
+    ap = pm.apercu_pour_dossier(conn, "D-1002")
+check("l'apercu materialise la serie manquante et la voit", ap["nb_series"], 1)
+check("le signalement « deja produit » apparait sans geste", ap["disponible"], True)
+with dbmod.get_db() as conn:
+    check("plus rien a reprendre sur cette reference",
+          pm.dossiers_non_materialises(conn, REF), [])
+    # Idempotence : une seconde ouverture ne doit rien reecrire ni dupliquer.
+    check("seconde ouverture sans effet", pm.assurer_series_reference(conn, REF), 0)
+
+print("--- dossier dont les saisies portent le numero d'OF ---")
+# Saisieprod et le planning ecrivent `numero_of or reference` dans
+# production_data. Un dossier dont les deux valeurs different ne remontait
+# nulle part : il avait produit, et la memoire produit le disait vierge.
+with dbmod.get_db() as conn:
+    conn.execute(
+        "INSERT INTO planning_entries (machine_id, position, reference, client, description, "
+        "duree_heures, statut, ref_produit, numero_of) "
+        "VALUES (991, 9, 'D-9001', 'CLIENT TEST', 'Etiquette logistique', 8, 'termine', ?, '9932777')",
+        (REF + " - COHESIO 2",),
+    )
+    conn.commit()
+    saisie(conn, "9932777", "01", "Debut de production", "2026-03-02T06:00:00")
+    saisie(conn, "9932777", "03", "Production", "2026-03-02T07:00:00")
+    saisie(conn, "9932777", "89", "Fin de production", "2026-03-02T15:00:00")
+    conn.commit()
+with dbmod.get_db() as conn:
+    vus = pm.dossiers_non_materialises(conn, REF)
+check("le dossier est vu par sa cle de saisie", vus, ["9932777"])
+with dbmod.get_db() as conn:
+    check("il se materialise sans rattrapage global",
+          pm.assurer_series_reference(conn, REF), 1)
+    check("plus rien a reprendre", pm.dossiers_non_materialises(conn, REF), [])
+
+print("--- ou en sont les autres dossiers de la reference ---")
+# Le doute a l'origine de ce bloc : quatre dossiers de la reference au
+# planning, deux lignes dans la fiche. Les deux autres n'ont simplement pas
+# encore cloture — encore faut-il que la fiche le dise.
+with dbmod.get_db() as conn:
+    conn.execute(
+        "INSERT INTO planning_entries (machine_id, position, reference, client, description, "
+        "duree_heures, statut, ref_produit, numero_of) "
+        "VALUES (991, 20, 'D-9100', 'CLIENT TEST', 'Etiquette logistique', 8, 'en_cours', ?, '')",
+        (REF + " - COHESIO 2",),
+    )
+    conn.execute(
+        "INSERT INTO planning_entries (machine_id, position, reference, client, description, "
+        "duree_heures, statut, ref_produit, numero_of) "
+        "VALUES (991, 21, 'D-9200', 'CLIENT TEST', 'Etiquette logistique', 8, 'attente', ?, '')",
+        (REF + " - COHESIO 2",),
+    )
+    conn.commit()
+    # D-9100 a demarre mais n'a pas cloture : ni 89, ni serie.
+    saisie(conn, "D-9100", "01", "Debut de production", "2026-04-01T06:00:00")
+    saisie(conn, "D-9100", "03", "Production", "2026-04-01T07:00:00")
+    conn.commit()
+with dbmod.get_db() as conn:
+    dr = pm.dossiers_reference(conn, REF)
+check("cinq dossiers portent la reference", dr["total"], 5)
+check("trois ont produit", dr["produits"], 3)
+check("un est en cours", dr["en_cours"], 1)
+check("un n'a pas encore tourne", dr["a_venir"], 1)
+check("le total se repartit sans reste",
+      dr["produits"] + dr["en_cours"] + dr["a_venir"], dr["total"])
+check("un dossier en cours ne cree pas de serie",
+      "D-9100" in [x["no_dossier"] for x in dr["dossiers"] if x["etat"] == "en_cours"], True)
+
 print("--- normalisation de reference ---")
 check("variante machine ignoree", pm._norm("1013/0068 - COHESIO 2 - L570"), "1013/0068")
 check("tiret tolere", pm._norm("1315-0004"), "1315/0004")

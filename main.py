@@ -66,6 +66,7 @@ from app.routers.ai import router as ai_router
 from app.routers.translate import router as translate_router
 from app.routers.chat import router as chat_router
 from app.routers.alerts import router as alerts_router
+from app.routers.perf import router as perf_router
 from app.routers.postit import router as postit_router
 from app.routers.ao import router as ao_router
 from app.routers.ao_portail import router_api as ao_portail_api_router
@@ -101,6 +102,11 @@ from app.routers.taches import router as taches_api_router
 from app.web.taches_page import router as taches_page_router
 # ERP : lecture seule du miroir RVGI (data/erp_mirror.db), superadmin.
 from app.routers.erp import router as erp_api_router
+# Rattachement : relier un dossier de fabrication ou un départ aux pièces de RVGI.
+from app.routers.rvgi import router as rvgi_api_router
+# Comparaison des stocks : RVGI face a MySifa, avec historique des ecarts.
+from app.routers.stock_compare import router as stock_compare_router
+from app.routers.rvgi_tiers import router as rvgi_tiers_router
 from app.web.erp_page import router as erp_page_router
 
 
@@ -462,6 +468,7 @@ app.include_router(ai_router)
 app.include_router(translate_router)
 app.include_router(chat_router)
 app.include_router(alerts_router)
+app.include_router(perf_router)
 app.include_router(postit_router)
 app.include_router(ao_router)
 app.include_router(ao_portail_html_router)
@@ -497,6 +504,9 @@ app.include_router(taches_page_router)
 # Les deux : sans include_router, /api/erp/* renverrait un 404 silencieux.
 app.include_router(erp_api_router)
 app.include_router(erp_page_router)
+app.include_router(rvgi_api_router)
+app.include_router(stock_compare_router)
+app.include_router(rvgi_tiers_router)
 
 
 @app.get("/healthz", include_in_schema=False)

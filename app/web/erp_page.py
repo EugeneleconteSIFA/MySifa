@@ -59,8 +59,8 @@ ERP_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_mobile_topbar.css">
 <style>
-:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);--ok:#34d399;--success:#34d399;--danger:#f87171;--warn:#fbbf24}
-body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);--ok:#059669;--success:#059669;--danger:#dc2626;--warn:#d97706}
+:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);--accent-bord:rgba(34,211,238,.45);--ok:#34d399;--success:#34d399;--danger:#f87171;--warn:#fbbf24}
+body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);--accent-bord:rgba(8,145,178,.42);--ok:#059669;--success:#059669;--danger:#dc2626;--warn:#d97706}
 *{box-sizing:border-box}
 /* La page ne défile pas : elle occupe l'écran, et c'est la grille qui roule
    sous son en-tête. Le bandeau de v1 ajoute 24 px de padding en haut du body —
@@ -230,6 +230,9 @@ td.vide{color:var(--muted)}
 .badge.n2{background:rgba(52,211,153,.16);color:var(--ok)}
 .badge.n3{background:rgba(34,211,238,.14);color:var(--accent)}
 .neg{color:var(--danger);font-weight:600}
+.badge.r-oui{background:rgba(52,211,153,.16);color:var(--ok)}
+.badge.r-partiel{background:rgba(251,191,36,.16);color:var(--warn)}
+.badge.r-douteux{background:rgba(248,113,113,.16);color:var(--danger)}
 .pied{display:flex;align-items:center;gap:12px;padding:10px 16px;border-top:1px solid var(--border);background:var(--card);font-size:12px;color:var(--muted)}
 .pied .compte{font-variant-numeric:tabular-nums}
 .pied .pager{margin-left:auto;display:flex;align-items:center;gap:6px}
@@ -240,7 +243,7 @@ td.vide{color:var(--muted)}
   background:rgba(2,6,23,.66)}
 body.light .detail-fond{background:rgba(15,23,42,.5)}
 .detail-fond.ouvert{display:flex}
-.detail{width:min(1100px,94vw);max-height:88vh;display:flex;flex-direction:column;
+.detail{width:min(1520px,96vw);max-height:90vh;display:flex;flex-direction:column;
   background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;
   box-shadow:0 28px 80px rgba(0,0,0,.5);animation:mo .16s ease-out}
 @keyframes mo{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
@@ -256,6 +259,24 @@ body.light .detail-fond{background:rgba(15,23,42,.5)}
   width:30px;height:30px;cursor:pointer;font-size:17px;line-height:1;flex-shrink:0}
 .detail-fermer:hover{background:var(--danger);border-color:var(--danger);color:#fff}
 .detail-corps{overflow-y:auto;padding:15px 16px 20px;background:var(--bg);flex:1}
+/* Deux colonnes : la pièce à gauche, ce qui s'y rattache à droite.
+   Les pièces liées étaient au bas d'une modale qu'il fallait dérouler pour
+   les voir — donc, en pratique, jamais vues. Elles tiennent maintenant leur
+   propre colonne, visible dès l'ouverture, et le rail reste collé en haut
+   pendant qu'on descend dans les champs de la ligne. */
+.detail-corps.deux-col{display:grid;grid-template-columns:minmax(0,1fr) 380px;
+  gap:0 18px;align-items:start}
+.detail-principal{min-width:0}
+.detail-rail{min-width:0;position:sticky;top:0;max-height:calc(90vh - 96px);
+  overflow-y:auto;padding-bottom:6px}
+.detail-rail::-webkit-scrollbar{width:6px}
+.detail-rail::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+/* Dans le rail, les cartes de liens s'empilent : 380 px n'en tiennent qu'une. */
+.detail-rail .liens{grid-template-columns:1fr}
+@media (max-width:1180px){
+  .detail-corps.deux-col{display:block}
+  .detail-rail{position:static;max-height:none;overflow:visible}
+}
 .sections{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;align-items:start}
 .groupe{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .groupe.pleine{grid-column:1/-1}
@@ -322,6 +343,22 @@ table.pl td.vide{color:var(--muted)}
 table.pl td.of{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--accent);font-weight:600}
 table.pl td.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px}
 .pl-note{margin:6px 2px 0;font-size:11.5px;color:var(--muted)}
+/* Le tableau porte tout le détail de la ligne : il défile horizontalement, et
+   les deux colonnes d'identité restent visibles pendant qu'on défile. Sans
+   elles, à la dixième colonne on ne sait plus quelle ligne on lit. */
+.pl-boite.pl-large{max-height:340px}
+table.pl th.fx,table.pl td.fx{position:sticky;z-index:2;background:var(--card)}
+table.pl th.fx{z-index:3;background:var(--bg)}
+table.pl th.fx0,table.pl td.fx0{left:0}
+/* Le décalage de la 2e colonne figée est mesuré après le rendu : la largeur de
+   la 1re dépend du contenu, et une valeur en dur la faisait chevaucher. */
+table.pl th.fx1,table.pl td.fx1{left:var(--fx1,96px)}
+table.pl td.fx1{box-shadow:1px 0 0 var(--border)}
+table.pl th.fx1{box-shadow:1px 0 0 var(--border)}
+table.pl tbody tr:hover td.fx,table.pl tbody tr.ici td.fx{background:var(--accent-bg)}
+table.pl td{max-width:210px}
+.pl-astuce{order:3;font-size:10.5px;font-weight:600;letter-spacing:0;text-transform:none;
+  color:var(--muted);white-space:nowrap}
 
 /* Résumé de la ligne : l'article et les chiffres, lisibles de loin. */
 .resume{display:flex;flex-wrap:wrap;align-items:center;gap:16px 26px;margin-bottom:12px;
@@ -351,6 +388,64 @@ table.pl td.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11p
   border-radius:8px;padding:3px 10px;font-size:11.5px;cursor:pointer;font-weight:600}
 .bandeau .x:hover{border-color:var(--danger);color:var(--danger)}
 
+/* ── Recherche globale ── */
+.rg{position:relative;display:flex;align-items:center;gap:8px;margin-left:22px;
+  background:var(--card);border:1.5px solid var(--accent-bord);border-radius:10px;padding:0 11px;
+  height:38px;min-width:260px;max-width:440px;flex:1 1 320px;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.14)}
+body.light .rg{background:#fff;box-shadow:inset 0 1px 2px rgba(15,23,42,.06)}
+.rg:hover{border-color:var(--accent)}
+.rg:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.rg-ico{color:var(--accent);flex-shrink:0;opacity:.85}
+.rg input{flex:1;min-width:0;background:none;border:none;outline:none;color:var(--text);
+  font:inherit;font-size:13.5px;padding:0}
+.rg input::placeholder{color:var(--muted)}
+.rg input::-webkit-search-cancel-button{filter:grayscale(1) opacity(.6)}
+.rg-kbd{flex-shrink:0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;
+  color:var(--muted);border:1px solid var(--border);border-radius:5px;padding:2px 5px;background:var(--card)}
+.rg:focus-within .rg-kbd{display:none}
+
+.rg-fond{position:fixed;inset:0;z-index:75;display:none;background:rgba(2,6,23,.5);
+  padding:76px 22px 22px;justify-content:center;align-items:flex-start}
+body.light .rg-fond{background:rgba(15,23,42,.4)}
+.rg-fond.ouvert{display:flex}
+.rg-panneau{width:min(940px,96vw);max-height:calc(100vh - 110px);overflow-y:auto;
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  box-shadow:0 24px 70px rgba(0,0,0,.5);padding:8px 0 10px}
+.rg-tete{display:flex;align-items:baseline;gap:10px;padding:8px 16px 10px;
+  border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--card);z-index:1}
+.rg-tete b{font-family:inherit;font-size:13px}
+.rg-tete .cpt{margin-left:auto;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.rg-groupe{padding:0}
+.rg-groupe-tete{display:flex;align-items:center;gap:8px;padding:11px 16px 7px;background:var(--bg);
+  border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+  font-family:Archivo,inherit;font-size:10.5px;font-weight:800;letter-spacing:.7px;
+  text-transform:uppercase;color:var(--muted)}
+.rg-groupe-tete .n{margin-left:auto;background:var(--accent-bg);color:var(--accent);
+  border-radius:999px;padding:1px 8px;font-size:10.5px;text-transform:none;letter-spacing:0}
+.rg-ligne{display:grid;grid-template-columns:140px minmax(0,1fr) auto;gap:4px 16px;align-items:baseline;
+  padding:9px 16px 9px 14px;font-size:12.5px;color:var(--text2);cursor:pointer;
+  border-left:3px solid transparent;border-top:1px solid var(--border)}
+.rg-groupe .rg-ligne:first-of-type{border-top:none}
+.rg-ligne:hover,.rg-ligne.vise{background:var(--accent-bg);color:var(--text);border-left-color:var(--accent)}
+/* La 1re colonne identifie (numéro, référence), la 2e décrit, la 3e chiffre.
+   Sans cette grille, cinq colonnes de largeurs libres s'alignaient au hasard
+   d'un écran à l'autre et la liste devenait illisible. */
+.rg-ligne .c{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rg-ligne .c1{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;font-size:13px;color:var(--accent)}
+.rg-ligne .c2{color:var(--text);font-weight:600}
+.rg-ligne .c3{grid-column:2;font-size:11.5px;color:var(--muted);font-weight:400}
+.rg-ligne .cn{grid-column:3;grid-row:1;text-align:right;font-variant-numeric:tabular-nums;
+  color:var(--text2);white-space:nowrap}
+.rg-ligne .cd{grid-column:3;grid-row:2;text-align:right;font-size:11.5px;color:var(--muted);white-space:nowrap}
+.rg-ligne mark{background:rgba(251,191,36,.28);color:inherit;border-radius:3px;padding:0 2px;font-weight:700}
+body.light .rg-ligne mark{background:rgba(217,119,6,.22)}
+.rg-plus{padding:5px 16px 8px;font-size:11.5px;color:var(--accent);cursor:pointer;font-weight:600}
+.rg-plus:hover{text-decoration:underline}
+.rg-msg{padding:26px 18px;text-align:center;color:var(--muted);font-size:13px}
+.rg-note{padding:8px 16px 2px;font-size:11.5px;color:var(--warn)}
+@media (max-width:900px){.rg{display:none}}
+
 /* ── Divers ── */
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:11px 18px;font-size:13px;z-index:80;box-shadow:0 8px 24px rgba(0,0,0,.3)}
 .toast.err{border-left-color:var(--danger)}
@@ -378,6 +473,8 @@ body.sb-open .sidebar-overlay{display:block}
 <div class="sidebar-overlay" id="sb-ov" onclick="fermerSidebar()"></div>
 
 <!-- Détail d'une ligne : modale par-dessus la grille, jamais une page à part. -->
+<div class="rg-fond" id="rg-fond"><div class="rg-panneau" id="rg-panneau" role="dialog" aria-label="Résultats de la recherche"></div></div>
+
 <div class="detail-fond" id="detail-fond">
   <section class="detail" id="detail" role="dialog" aria-modal="true" aria-labelledby="detail-titre"></section>
 </div>
@@ -456,6 +553,13 @@ body.sb-open .sidebar-overlay{display:block}
         <div class="head-titre-ligne"><h1 id="titre">ERP</h1><span id="guide-btn-slot"></span></div>
         <div class="sous" id="sous">Lecture du miroir de RVGI.</div>
       </div>
+      <div class="rg">
+        <svg class="rg-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+        <input type="search" id="rg-q" autocomplete="off" spellcheck="false"
+               placeholder="Chercher partout : n° de pièce, client, article…"
+               aria-label="Chercher dans tous les écrans">
+        <kbd class="rg-kbd">Ctrl K</kbd>
+      </div>
       <div class="head-droite" id="head-droite"></div>
       <div class="head-actions">
         <button type="button" class="head-btn" id="hd-profil" title="Mon profil" aria-label="Mon profil">
@@ -507,6 +611,8 @@ const S = {
   jetonD: 0,          // anti-course pour la modale
   contexte: null,     // grille ouverte depuis une pièce liée
   ctxAttente: null,   // contexte à consommer au prochain ouvrirEcran()
+  apresEcran: null,   // à jouer une fois l'écran monté (recherche globale)
+  ratt: '',           // filtre sur l'état de rattachement MySifa
 };
 
 const ICO_SUN='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
@@ -514,8 +620,8 @@ const ICO_MOON='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stro
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function toast(msg,type){const t=document.createElement('div');t.className='toast'+(type==='err'?' err':'');t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3400);}
-async function api(url){
-  const r=await fetch(url,{credentials:'include'});
+async function api(url,opts){
+  const r=await fetch(url,Object.assign({credentials:'include'},opts||{}));
   if(!r.ok){let m='Erreur';try{const j=await r.json();m=j.detail||j.message||m;}catch(e){}throw new Error(m);}
   return r.json();
 }
@@ -525,6 +631,13 @@ function fmtNb(v,dec){
   const n=Number(v);
   if(!isFinite(n))return esc(v);
   return n.toLocaleString('fr-FR',{minimumFractionDigits:dec||0,maximumFractionDigits:dec==null?2:dec});
+}
+// Un numéro de pièce, écrit comme RVGI l'écrit : sans séparateur de milliers,
+// et sans décimale parasite quand la colonne SQL est un réel (9938471.0).
+function fmtId(v){
+  const n=Number(v);
+  if(!isFinite(n))return String(v==null?'':v);
+  return String(Number.isInteger(n)?n:v);
 }
 function fmtDate(s){
   const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -547,11 +660,16 @@ function libelleEnum(nom,code){
 // Rendu d'une cellule : classe CSS + HTML. Une valeur absente est un tiret
 // discret, jamais un vide — sinon on ne distingue pas « rien » de « pas chargé ».
 function cellule(col,v){
+  if((col.type||'')==='ratt')return celluleRatt(v);
   if(v==null||v==='')return{cls:'vide',html:'—'};
   const t=col.type||'texte';
   if(t==='date')     return {cls:'',     html:fmtDate(v)};
   if(t==='datetime') return {cls:'mono', html:fmtDateHeure(v)};
   if(t==='of')       return {cls:'of',   html:esc(v)};
+  // Un numéro de pièce s'écrit tel qu'il est tapé et recopié : « 26060187 »,
+  // jamais « 26 060 187 ». Il s'aligne à droite comme un nombre — deux numéros
+  // l'un sous l'autre se comparent alors chiffre à chiffre.
+  if(t==='id')       return {cls:'mono num', html:esc(fmtId(v))};
   if(t==='ref'||t==='code') return {cls:'mono',html:esc(v)};
   if(t==='bool')     return {cls:'',     html:(String(v)==='1'||v===true)?'Oui':'—'};
   if(t==='enum'){
@@ -567,6 +685,22 @@ function cellule(col,v){
   if(t==='prix')     return {cls:'num',  html:fmtNb(v,4)};
   if(t==='montant')  return {cls:'num',  html:fmtNb(v,2)};
   return {cls:'',html:esc(v)};
+}
+
+// L'état de rattachement : « rattaché » ne veut pas dire « couvert ». Une
+// ligne prise à moitié doit se lire comme telle, avec le chiffre — sinon la
+// colonne ne dit que « quelqu'un s'en est occupé », ce qui n'aide personne.
+const RATT_LIB={oui:'Rattaché',partiel:'Partiel',douteux:'À vérifier',non:'—'};
+function celluleRatt(v){
+  const e=(v&&v.etat)||'non';
+  if(e==='non')return {cls:'vide',html:'—'};
+  let txt=RATT_LIB[e]||e;
+  if(e==='partiel'&&v.total){
+    txt+=' '+fmtNb(v.pris,0)+' / '+fmtNb(v.total,0);
+  }else if(v.n>1){
+    txt+=' ×'+v.n;
+  }
+  return {cls:'',html:'<span class="badge r-'+esc(e)+'">'+esc(txt)+'</span>'};
 }
 
 // ── Disposition des colonnes ─────────────────────────────────────
@@ -829,9 +963,17 @@ function initGuides(){
 // ── Navigation ───────────────────────────────────────────────────
 // Les domaines de paramétrage passent après ceux du process, quelle que soit
 // leur place dans le catalogue.
+
 function domainesOrdonnes(){
-  const d=(S.meta&&S.meta.domaines)||[];
+  const d=((S.meta&&S.meta.domaines)||[]).slice();
   return d.filter(x=>x.type!=='parametres').concat(d.filter(x=>x.type==='parametres'));
+}
+
+// MyERP ne montre QUE ce que le miroir contient. Les domaines viennent du
+// catalogue, qui vient de RVGI — aucun écran n'est ajouté ici. Voir CLAUDE.md,
+// « MyERP est un miroir ».
+function ecransDuDomaine(cle){
+  return (S.meta.ecrans||[]).filter(e=>e.domaine===cle);
 }
 
 function renderNav(){
@@ -839,7 +981,7 @@ function renderNav(){
   if(!S.meta||!S.meta.present){hote.innerHTML='';return;}
   let h='<div class="nav-colonnes">';
   domainesOrdonnes().forEach(d=>{
-    const ecrans=(S.meta.ecrans||[]).filter(e=>e.domaine===d.cle);
+    const ecrans=ecransDuDomaine(d.cle);
     if(!ecrans.length)return;
     const kl=(d.type==='parametres')?' parametres':'';
     h+='<div class="nav-bloc'+kl+'"><div class="nav-groupe">'+esc(d.label)+'</div><div class="nav-domaine">';
@@ -885,7 +1027,7 @@ function ouvrirMenu(){
   }
   let h='<div class="menu-wrap"><div class="colonnes">';
   domainesOrdonnes().forEach(d=>{
-    const ecrans=(S.meta.ecrans||[]).filter(e=>e.domaine===d.cle);
+    const ecrans=ecransDuDomaine(d.cle);
     if(!ecrans.length)return;
     const kl=(d.type==='parametres')?' parametres':'';
     h+='<div class="colonne'+kl+'"><div class="domaine-titre">'+esc(d.label)+'</div><div class="cartes">';
@@ -912,6 +1054,7 @@ function ouvrirEcran(cle){
   // pour une seule ouverture : on le consomme ici.
   S.contexte=(S.ctxAttente&&S.ctxAttente.cible===cle)?S.ctxAttente:null;
   S.ctxAttente=null;
+  S.ratt='';
   // Un écran s'ouvre sur ce qui est vivant : le filtre qui porte un défaut
   // (Position = En cours) est appliqué d'entrée, et reste effaçable. Venant
   // d'une pièce liée, non : on veut la pièce, même soldée.
@@ -929,6 +1072,18 @@ function ouvrirEcran(cle){
   // touchent pas : le champ de recherche garde son focus et son curseur.
   let rail='<div class="rail"><div class="rail-titre">Recherche</div>'+
     '<div class="champ"><input type="text" id="q" placeholder="Rechercher..." autocomplete="off"></div>';
+  if(def.rattachable){
+    rail+='<div class="rail-titre">Rattachement MySifa</div>'+
+      '<div class="champ"><label for="f-ratt">'+
+      (cle==='livraisons'?'Départ MyExpé':'Dossier de fabrication')+'</label>'+
+      '<select id="f-ratt">'+
+        '<option value="">Tous</option>'+
+        '<option value="non">Non rattaché</option>'+
+        '<option value="partiel">Partiellement</option>'+
+        '<option value="oui">Rattaché</option>'+
+        '<option value="douteux">À vérifier</option>'+
+      '</select></div>';
+  }
   if((def.filtres||[]).length){
     rail+='<div class="rail-titre">Filtres</div>';
     (def.filtres||[]).forEach(f=>{
@@ -971,6 +1126,8 @@ function ouvrirEcran(cle){
   q.addEventListener('keydown',ev=>{
     if(ev.key==='Escape'){q.value='';S.q='';S.page=1;charger();}
   });
+  const fr=document.getElementById('f-ratt');
+  if(fr)fr.addEventListener('change',()=>{S.ratt=fr.value;S.page=1;charger();});
   document.querySelectorAll('[data-filtre]').forEach(el=>{
     const ev=(el.tagName==='SELECT'||el.type==='date')?'change':'input';
     let m=null;
@@ -981,12 +1138,15 @@ function ouvrirEcran(cle){
     });
   });
   document.getElementById('btn-reset').addEventListener('click',()=>{
-    S.q='';S.filtres={};S.page=1;
+    S.q='';S.filtres={};S.page=1;S.ratt='';
+    const r=document.getElementById('f-ratt');if(r)r.value='';
     (def.filtres||[]).forEach(f=>{
       if(f.defaut!=null&&f.defaut!=='')S.filtres[f.nom]=String(f.defaut);
     });
     const c=document.getElementById('q');if(c)c.value='';
-    document.querySelectorAll('[data-filtre]').forEach(el=>{
+    const fr=document.getElementById('f-ratt');
+  if(fr)fr.addEventListener('change',()=>{S.ratt=fr.value;S.page=1;charger();});
+  document.querySelectorAll('[data-filtre]').forEach(el=>{
       const nom=el.getAttribute('data-filtre');
       el.value=S.filtres[nom]!=null?String(S.filtres[nom]):'';
     });
@@ -994,7 +1154,11 @@ function ouvrirEcran(cle){
   });
   const bc=document.getElementById('btn-reset-cols');
   if(bc)bc.addEventListener('click',layoutOublier);
-  charger();
+  // La recherche globale ouvre un écran PUIS une fiche : la grille doit être
+  // montée avant, sinon la modale s'ouvrirait sur un écran vide.
+  const suite=S.apresEcran;S.apresEcran=null;
+  if(suite){try{suite();}catch(e){charger();}}
+  else charger();
 }
 
 const ICO_POIGNEE='<svg class="th-poignee" width="10" height="14" viewBox="0 0 10 14" fill="currentColor" aria-hidden="true"><circle cx="2" cy="3" r="1.2"/><circle cx="8" cy="3" r="1.2"/><circle cx="2" cy="7" r="1.2"/><circle cx="8" cy="7" r="1.2"/><circle cx="2" cy="11" r="1.2"/><circle cx="8" cy="11" r="1.2"/></svg>';
@@ -1062,6 +1226,7 @@ function urlListe(){
   p.set('page',String(S.page));
   p.set('taille',String(S.taille));
   Object.keys(S.filtres).forEach(k=>{if(S.filtres[k])p.set('f_'+k,S.filtres[k]);});
+  if(S.ratt)p.set('ratt',S.ratt);
   // Ouverture depuis une pièce liée : on transmet l'origine, jamais un nom de
   // colonne — c'est le serveur qui reconstruit la jointure depuis le catalogue.
   if(S.contexte){
@@ -1109,7 +1274,15 @@ async function charger(){
     renderBandeau();
   }
   S.lignes=r.lignes;S.total=r.total;
-  appliquerLayout(r.colonnes);
+  // La colonne de rattachement n'est pas une colonne de RVGI : c'est ce que
+  // MySifa a accroché à cette ligne. Elle s'ajoute ici, et se déplace ou se
+  // fige comme les autres.
+  let cols=r.colonnes;
+  if(S.def&&S.def.rattachable){
+    cols=cols.concat([{nom:'_ratt',label:(S.ecran==='livraisons'?'Départ MyExpé':'Dossier de fab'),
+                       type:'ratt',largeur:150}]);
+  }
+  appliquerLayout(cols);
   renderTete();renderGrille();renderPied();
   activerGlisserDefiler();
 }
@@ -1230,15 +1403,22 @@ async function rendreDetail(){
   // puis toutes leurs lignes, puis la ligne ouverte, puis ce qui s'y rattache.
   const p=r.piece||null;
   h=enteteDetail(def?def.label:'Détail',sousTitreDetail(r.groupes,p));
-  h+='<div class="detail-corps">';
+  h+='<div class="detail-corps deux-col"><div class="detail-principal">';
   if(p)h+=blocPiece(p,cur.id);
-  h+='<div class="titre-bloc">'+ICO_FICHE+'<span>'+(p?'Détail de la ligne':'Détail')+'</span></div>';
+  h+='<div class="titre-bloc">'+ICO_FICHE+'<span>'+(p?'Détail de la ligne':'Détail')+'</span>'+
+     (p?'<span class="tb-num">'+esc(numeroDeLigne(r.groupes,p,cur.id))+'</span>':'')+'</div>';
   const res=resumeLigne(r.groupes);
   h+=res.html;
-  h+='<div class="sections" id="sec-detail">'+blocGroupes(r.groupes,res.pris)+'</div>';
+  // Dans une PIÈCE, le détail de la ligne est déjà le tableau au-dessus,
+  // ligne par ligne et colonne par colonne. Le répéter en blocs obligeait à
+  // faire la correspondance de tête et empêchait de comparer deux lignes.
+  // Hors pièce — un article, un client, un mouvement — il n'y a pas de
+  // tableau, donc les blocs restent : c'est la seule vue de l'objet.
+  h+=p?'':('<div class="sections" id="sec-detail">'+blocGroupes(r.groupes,res.pris)+'</div>');
+  h+='</div><div class="detail-rail">';
   h+='<div class="titre-bloc" id="t-liens">'+ICO_LIEN+'<span>Pièces liées</span></div>'+
      '<div class="liens" id="liens"><div class="liens-vide">Recherche des pièces rattachées…</div></div>';
-  h+='</div>';
+  h+='</div></div>';
   d.innerHTML=h;
   brancherEnteteDetail();
   d.querySelectorAll('.groupe-titre').forEach(t=>{
@@ -1255,8 +1435,19 @@ async function rendreDetail(){
       rendreDetail();
     });
   });
+  calerColonnesFigees(d);
   d.querySelector('.detail-corps').scrollTop=0;
   chargerLiens(cur,jeton);
+}
+
+// La 2e colonne figée se colle juste après la 1re — dont la largeur dépend du
+// contenu et ne se connaît qu'une fois le tableau posé. Sans cette mesure, la
+// colonne « Lg » recouvrait la référence article au premier défilement.
+function calerColonnesFigees(racine){
+  (racine||document).querySelectorAll('table.pl').forEach(t=>{
+    const p=t.querySelector('thead th.fx0');
+    if(p)t.style.setProperty('--fx1',Math.round(p.getBoundingClientRect().width)+'px');
+  });
 }
 
 function blocGroupes(groupes,pris){
@@ -1363,19 +1554,30 @@ function blocPiece(p,idCourant){
   // dans l'ordre où on lit une pièce : de quoi il s'agit d'abord (numéro,
   // ligne, article), le reste ensuite. Sur la grille, l'ordre est celui que
   // l'utilisateur s'est fabriqué ; ici, c'est le document qui commande.
-  const cols=ordonnerColonnesPiece(p.colonnes||[]).slice(0,9);
+  // TOUTES les colonnes de la ligne, pas les neuf premières. Le détail de la
+  // ligne se lisait auparavant en blocs sous le tableau, ce qui obligeait à
+  // faire la correspondance de tête entre « ligne 3 » et le bloc du bas — et
+  // interdisait de comparer deux lignes. Ici, une ligne du document est une
+  // ligne du tableau, point. Le prix : ça défile horizontalement, d'où les
+  // deux premières colonnes figées et les cellules tronquées à 20 caractères.
+  const cols=ordonnerColonnesPiece(p.colonnes||[]);
   h+='<div class="titre-bloc"><span>Lignes de la pièce</span>'+
-     '<span class="tb-num">'+fmtNb(p.total,0)+'</span></div>';
-  h+='<div class="pl-boite"><table class="pl"><thead><tr>';
-  cols.forEach(c=>{h+='<th class="'+(estNum(c)?'num':'')+'">'+esc(c.label)+'</th>';});
+     '<span class="tb-num">'+fmtNb(p.total,0)+'</span>'+
+     (cols.length>9?'<span class="pl-astuce">'+fmtNb(cols.length,0)+
+      ' colonnes — faire défiler vers la droite</span>':'')+'</div>';
+  h+='<div class="pl-boite pl-large"><table class="pl"><thead><tr>';
+  cols.forEach((c,i)=>{
+    h+='<th class="'+(estNum(c)?'num ':'')+fige(i)+'" title="'+esc(c.label)+'">'+
+       esc(c.label)+'</th>';
+  });
   h+='</tr></thead><tbody>';
   (p.lignes||[]).forEach(l=>{
     const ici=String(l._id)===String(idCourant);
     h+='<tr class="pl-ligne'+(ici?' ici':'')+'" data-id="'+esc(l._id)+'"'+
        (ici?' title="La ligne ouverte"':' title="Ouvrir cette ligne"')+'>';
-    cols.forEach(c=>{
-      const v=cellule(c,l[c.nom]);
-      h+='<td class="'+esc(v.cls)+'">'+v.html+'</td>';
+    cols.forEach((c,i)=>{
+      h+='<td class="'+esc(celluleCourte(c,l[c.nom]).cls)+' '+fige(i)+'"'+
+         celluleCourte(c,l[c.nom]).titre+'>'+celluleCourte(c,l[c.nom]).html+'</td>';
     });
     h+='</tr>';
   });
@@ -1385,6 +1587,43 @@ function blocPiece(p,idCourant){
        fmtNb(p.total,0)+' — la pièce est plus longue que ce que la fiche affiche.</p>';
   }
   return h;
+}
+
+// Les deux premières colonnes (numéro, ligne) restent visibles quand on
+// défile : sans elles on ne sait plus quelle ligne on lit dès la dixième
+// colonne, et le tableau devient inutilisable.
+function fige(i){return i===0?'fx fx0':(i===1?'fx fx1':'');}
+
+// Vingt caractères, et la valeur entière au survol. Une désignation RVGI fait
+// parfois cent caractères : elle écraserait à elle seule les vingt autres
+// colonnes. On coupe l'affichage, jamais la donnée.
+const PL_MAX=20;
+function celluleCourte(col,v){
+  const r=cellule(col,v);
+  const brut=(v==null||v==='')?'':String(v);
+  // Seul le texte simple se coupe : une date formatée, un badge d'énumération
+  // ou un montant n'ont pas de longueur à réduire, et les tronquer les
+  // rendrait faux.
+  const t=col.type||'texte';
+  const coupable=(t==='texte'||t==='client'||t==='ref'||t==='code'||t==='of');
+  if(!coupable||brut.length<=PL_MAX){
+    return {cls:r.cls,html:r.html,titre:brut&&brut.length>PL_MAX?' title="'+esc(brut)+'"':''};
+  }
+  return {cls:r.cls,html:esc(brut.slice(0,PL_MAX-1))+'…',titre:' title="'+esc(brut)+'"'};
+}
+
+// Quelle ligne du document est ouverte — « L3 sur 4 ». Le tableau la surligne
+// déjà, mais un document de quarante lignes se déroule : le titre le rappelle
+// sans qu'on ait à remonter.
+function numeroDeLigne(groupes,p,idCourant){
+  const rang=(p.lignes||[]).findIndex(l=>String(l._id)===String(idCourant));
+  const l=rang>=0?p.lignes[rang]:null;
+  let n=null;
+  if(l)for(const k of ['ligne','rang','lignecde']){ if(l[k]!=null&&l[k]!==''){n=l[k];break;} }
+  if(n==null&&rang>=0)n=rang+1;
+  const tot=p.total||(p.lignes||[]).length;
+  if(n==null)return tot>1?tot+' lignes':'';
+  return tot>1?('L'+n+' sur '+fmtNb(tot,0)):('L'+n);
 }
 
 // L'identité d'une ligne passe devant tout le reste : son numéro, son rang
@@ -1403,7 +1642,7 @@ function ordonnerColonnesPiece(cols){
 
 function estNum(col){
   const t=col.type||'';
-  return t==='qte'||t==='nombre'||t==='prix'||t==='montant'||t==='pct';
+  return t==='qte'||t==='nombre'||t==='prix'||t==='montant'||t==='pct'||t==='id';
 }
 
 function brancherEnteteDetail(){
@@ -1423,8 +1662,16 @@ async function chargerLiens(cur,jeton){
   }
   if(jeton!==S.jetonD)return;
   const liens=(r.liens||[]).filter(l=>l.erreur||l.total>0);
+  // Le titre du rail reste en place même à vide : une colonne qui disparaît
+  // déplace tout le reste, et « aucune pièce rattachée » est une réponse, pas
+  // une absence de réponse.
+  const t=document.getElementById('t-liens');
+  if(t){
+    const total=liens.reduce((s,l)=>s+(l.total||0),0);
+    const n=t.querySelector('.tb-num');if(n)n.remove();
+    if(total)t.insertAdjacentHTML('beforeend','<span class="tb-num">'+fmtNb(total,0)+'</span>');
+  }
   if(!liens.length){
-    const t=document.getElementById('t-liens');if(t)t.remove();
     z.innerHTML='<div class="liens-vide">Aucune pièce rattachée à cette ligne dans le miroir.</div>';
     return;
   }
@@ -1477,6 +1724,183 @@ function fermerDetail(){
   S.selection=null;renderGrille();
 }
 
+// ── Recherche globale ────────────────────────────────────────────────────────
+// Une seule chaîne, les vingt-sept écrans. Chaque écran déclare déjà sur quoi
+// il se cherche ; on ne réinvente pas une seconde règle côté serveur, et le
+// résultat trouve donc exactement ce que la recherche de l'écran trouverait.
+const RG={ouvert:false,jeton:0,q:'',lignes:[],vise:-1};
+
+function rgOuvrir(){
+  const f=document.getElementById('rg-fond');
+  if(f){f.classList.add('ouvert');RG.ouvert=true;}
+}
+function rgFermer(){
+  const f=document.getElementById('rg-fond');
+  if(f){f.classList.remove('ouvert');}
+  RG.ouvert=false;RG.vise=-1;
+}
+function rgPanneau(html){
+  const p=document.getElementById('rg-panneau');
+  if(p)p.innerHTML=html;
+}
+
+function rgSurligner(txt,q){
+  const s=String(txt==null?'':txt);
+  const i=s.toLowerCase().indexOf(String(q||'').toLowerCase());
+  if(i<0||!q)return esc(s);
+  return esc(s.slice(0,i))+'<mark>'+esc(s.slice(i,i+q.length))+'</mark>'+esc(s.slice(i+q.length));
+}
+
+async function rgChercher(q){
+  RG.q=q;
+  const jeton=++RG.jeton;
+  if(String(q||'').trim().length<2){
+    if(String(q||'').trim().length===0){rgFermer();return;}
+    rgOuvrir();rgPanneau('<div class="rg-msg">Au moins deux caractères.</div>');return;
+  }
+  rgOuvrir();
+  rgPanneau('<div class="rg-msg">Recherche dans les écrans…</div>');
+  let r;
+  try{ r=await api('/api/erp/recherche?q='+encodeURIComponent(q)); }
+  catch(e){
+    if(jeton!==RG.jeton)return;
+    rgPanneau('<div class="rg-msg">'+esc(e.message)+'</div>');return;
+  }
+  if(jeton!==RG.jeton)return;   // une frappe plus récente a déjà relancé
+  rgRendre(r);
+}
+
+// Chaque écran a ses propres colonnes ; le panneau, lui, n'a que quatre
+// emplacements — ce qui identifie, ce qui décrit, le chiffre, la date. On
+// range les colonnes dedans par TYPE, pas par position : sinon la même liste
+// s'alignerait différemment d'un écran à l'autre.
+function rgCasesLigne(colonnes,l){
+  const cases={c1:null,c2:null,c3:null,cn:null,cd:null};
+  colonnes.forEach(c=>{
+    const t=c.type||'texte';
+    // Un numéro de pièce identifie : il tient la première case, comme un n° d'OF
+    // ou une référence article — pas la case du chiffre, où on le lirait comme
+    // une quantité.
+    if(!cases.c1&&(t==='of'||t==='ref'||t==='code'||t==='id'))cases.c1=c;
+    else if(!cases.cd&&(t==='date'||t==='datetime'))cases.cd=c;
+    else if(!cases.cn&&(t==='qte'||t==='nombre'||t==='prix'||t==='montant'))cases.cn=c;
+    else if(!cases.c2)cases.c2=c;
+    else if(!cases.c3)cases.c3=c;
+  });
+  // Aucune colonne d'identité : le premier venu tient ce rôle, sinon la ligne
+  // commencerait par du vide.
+  if(!cases.c1){for(const k of ['c2','c3']){if(cases[k]){cases.c1=cases[k];cases[k]=null;break;}}}
+  let h='';
+  ['c1','c2','c3','cn','cd'].forEach(k=>{
+    const c=cases[k];
+    if(!c){ if(k==='c1'||k==='c2')h+='<span class="c '+k+'"></span>'; return; }
+    const v=cellule(c,l[c.nom]);
+    // On surligne ce qui a été tapé, mais seulement sur du texte simple :
+    // une date formatée ou un badge d'énumération ne se découpent pas.
+    const brut=l[c.nom];
+    const t=c.type||'texte';
+    const html=(t==='texte'||t==='client'||t==='ref'||t==='of'||t==='code')
+      ? rgSurligner(brut,RG.q)
+      : (t==='id' ? rgSurligner(fmtId(brut),RG.q) : v.html);
+    h+='<span class="c '+k+'" title="'+esc(c.label)+' : '+esc(brut==null?'—':brut)+'">'+html+'</span>';
+  });
+  return h;
+}
+
+function rgRendre(r){
+  const groupes=r.resultats||[];
+  const nb=groupes.reduce((n,g)=>n+(g.lignes||[]).length,0);
+  RG.lignes=[];
+  let h='<div class="rg-tete"><b>'+esc(r.q)+'</b>'+
+        '<span class="cpt">'+(nb?fmtNb(nb,0)+' résultat'+(nb>1?'s':'')+' dans '+
+        fmtNb(groupes.length,0)+' écran'+(groupes.length>1?'s':''):'aucun résultat')+'</span></div>';
+  if(r.tronque){
+    h+='<div class="rg-note">Recherche interrompue avant d\'avoir vu tous les écrans — '+
+       'affine la chaîne pour aller au bout.</div>';
+  }
+  if(!groupes.length){
+    h+='<div class="rg-msg">Rien qui contienne « '+esc(r.q)+' » dans le miroir.<br>'+
+       '<span class="mini">Le miroir a jusqu\'à douze heures de retard : une pièce saisie ce matin peut ne pas y être.</span></div>';
+    rgPanneau(h);return;
+  }
+  groupes.forEach(g=>{
+    h+='<div class="rg-groupe"><div class="rg-groupe-tete">'+iconeEcran(g.cle)+
+       '<span>'+esc(g.label)+'</span>'+
+       '<span class="n">'+fmtNb((g.lignes||[]).length,0)+(g.encore?'+':'')+'</span></div>';
+    (g.lignes||[]).forEach(l=>{
+      const i=RG.lignes.length;
+      RG.lignes.push({ecran:g.cle,id:l._id});
+      h+='<div class="rg-ligne" data-i="'+i+'">'+rgCasesLigne(g.colonnes||[],l)+'</div>';
+    });
+    if(g.encore){
+      h+='<div class="rg-plus" data-ecran="'+esc(g.cle)+'">Ouvrir '+esc(g.label)+
+         ' avec cette recherche →</div>';
+    }
+    h+='</div>';
+  });
+  rgPanneau(h);
+  const p=document.getElementById('rg-panneau');
+  p.querySelectorAll('.rg-ligne').forEach(el=>{
+    el.addEventListener('click',()=>rgAller(Number(el.getAttribute('data-i'))));
+  });
+  p.querySelectorAll('[data-ecran]').forEach(el=>{
+    el.addEventListener('click',()=>rgOuvrirEcran(el.getAttribute('data-ecran')));
+  });
+}
+
+// Ouvrir un résultat, c'est ouvrir sa fiche — pas seulement son écran. On passe
+// donc par l'écran (la grille doit exister derrière la modale), puis on
+// déplie la ligne trouvée.
+function rgAller(i){
+  const cible=RG.lignes[i];
+  if(!cible)return;
+  rgFermer();
+  const suite=()=>{
+    charger();      // la grille doit exister derrière la fiche
+    S.pile=[{ecran:cible.ecran,id:cible.id}];S.selection=cible.id;rendreDetail();
+  };
+  if(S.ecran===cible.ecran){suite();return;}
+  S.apresEcran=suite;
+  location.hash='#/'+cible.ecran;
+}
+
+function rgOuvrirEcran(cle){
+  const q=RG.q;
+  rgFermer();
+  S.apresEcran=()=>{
+    S.q=q;const c=document.getElementById('q');
+    if(c)c.value=q;
+    S.page=1;charger();
+  };
+  if(location.hash==='#/'+cle)appliquerHash();else location.hash='#/'+cle;
+}
+
+function initRecherche(){
+  const i=document.getElementById('rg-q'),f=document.getElementById('rg-fond');
+  if(!i)return;
+  let m=null;
+  i.addEventListener('input',()=>{clearTimeout(m);m=setTimeout(()=>rgChercher(i.value),260);});
+  i.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){i.value='';rgFermer();i.blur();return;}
+    if(e.key==='Enter'&&RG.vise>=0){e.preventDefault();rgAller(RG.vise);return;}
+    if(e.key!=='ArrowDown'&&e.key!=='ArrowUp')return;
+    e.preventDefault();
+    if(!RG.lignes.length)return;
+    RG.vise=(e.key==='ArrowDown')
+      ? Math.min(RG.lignes.length-1,RG.vise+1)
+      : Math.max(0,RG.vise-1);
+    const p=document.getElementById('rg-panneau');
+    p.querySelectorAll('.rg-ligne').forEach(el=>el.classList.remove('vise'));
+    const el=p.querySelector('.rg-ligne[data-i="'+RG.vise+'"]');
+    if(el){el.classList.add('vise');el.scrollIntoView({block:'nearest'});}
+  });
+  i.addEventListener('focus',()=>{if(RG.lignes.length&&i.value.trim().length>=2)rgOuvrir();});
+  if(f)f.addEventListener('click',ev=>{if(ev.target===f)rgFermer();});
+  document.addEventListener('keydown',e=>{
+    if((e.ctrlKey||e.metaKey)&&(e.key==='k'||e.key==='K')){e.preventDefault();i.focus();i.select();}
+  });
+}
+
 // ── Shell ────────────────────────────────────────────────────────
 function basculerSidebar(){document.body.classList.toggle('sb-open');}
 function fermerSidebar(){document.body.classList.remove('sb-open');}
@@ -1512,6 +1936,7 @@ function appliquerHash(){
 }
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'){
+    if(RG.ouvert){rgFermer();return;}
     if(document.body.classList.contains('sb-open')){fermerSidebar();return;}
     const f=document.getElementById('detail-fond');
     if(f&&f.classList.contains('ouvert')){
@@ -1562,7 +1987,7 @@ async function boot(){
     document.getElementById('corps').innerHTML='<div class="vide-msg">'+esc(e.message)+'</div>';
     return;
   }
-  renderFraicheur();renderNav();appliquerHash();
+  renderFraicheur();renderNav();initRecherche();appliquerHash();
   window.addEventListener('hashchange',appliquerHash);
   initGuides();
 }

@@ -284,7 +284,8 @@ body.light table.fab-table tr.fab-row-last td{
   padding:60px 20px;color:var(--muted);gap:10px;
   font-size:13px;text-align:center;
 }
-.fab-empty-icon{font-size:36px;opacity:.4}
+.fab-empty-icon{font-size:36px;opacity:.4;display:flex;justify-content:center;margin-bottom:6px}
+.fab-empty-icon svg{width:32px;height:32px}
 
 /* ── Footer ─────────────────────────────────────────────────── */
 .fab-footer{
@@ -292,7 +293,10 @@ body.light table.fab-table tr.fab-row-last td{
   background:var(--card);
   border-top:2px solid var(--border);
   display:grid;
-  grid-template-columns:1fr auto 1fr;
+  /* Colonne de gauche un peu plus large : c'est elle qui porte l'identite du
+     dossier sur une seule ligne, autant lui donner de quoi l'afficher sans
+     defilement dans le cas courant. */
+  grid-template-columns:1.2fr auto 1fr;
   gap:16px;
   padding:12px 16px;
   overflow:hidden;
@@ -302,44 +306,64 @@ body.light table.fab-table tr.fab-row-last td{
   grid-template-columns:unset;flex-wrap:wrap;
 }
 /* Left: dossier info */
+/* Deux lignes, et deux seulement : l'identite du dossier (reference, client,
+   laize, format, livraison, OF, machine, ref produit) sur une ligne qui defile
+   horizontalement, puis la consigne et les actions sur la suivante. La version
+   empilee faisait grimper l'entete a trois ou quatre lignes des que les metas
+   passaient a la ligne, et poussait hors de la bande la ligne d'actions — donc
+   le bouton Produit et le signalement « deja produit », c'est-a-dire tout ce
+   qui doit arreter le conducteur avant qu'il lance la machine. */
+/* Colonne d'identite du dossier. `align-items:flex-start` fait que chaque
+   bloc prend la largeur de son contenu et pas celle de la colonne : la
+   consigne « Bobine » occupe la place de « Bobine », pas un pave vide de
+   700 px de large. Seule l'entete est etiree, c'est elle qui defile. */
 .fab-footer-info{
-  display:flex;flex-direction:column;gap:4px;
-  overflow-x:hidden;overflow-y:auto;
+  display:flex;flex-direction:column;align-items:flex-start;
+  gap:5px;
+  overflow:hidden;
   min-width:0;
 }
 /* Le footer est une bande de hauteur fixe (--footer-h) en overflow:hidden :
-   tout ce qui depasse disparait sans bruit. La reference produit et l'alerte
-   « deja produit » etaient empilees a la suite de la consigne dossier et
-   passaient sous le bord -- justement le signal qui doit arreter le conducteur
-   avant qu'il lance la machine. Entete fixe, consigne compressible, actions
-   sur une seule ligne : tout tient dans la bande. */
-.fab-dossier-head{flex:0 0 auto;min-width:0}
-.fab-dossier-actions{
-  flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;
-  gap:6px;padding-top:4px;
+   tout ce qui depasse disparait sans bruit. D'ou l'entete sur une seule ligne
+   qui defile horizontalement plutot qu'un pave de metas qui repasse a la
+   ligne : la colonne garde une hauteur previsible, et rien ne se fait rogner
+   par le bas. */
+.fab-dossier-head{
+  flex:0 0 auto;min-width:0;align-self:stretch;
+  display:flex;align-items:center;flex-wrap:nowrap;gap:10px;
+  white-space:nowrap;
+  overflow-x:auto;overflow-y:hidden;
+  scrollbar-width:thin;padding-bottom:2px;
 }
-/* Version compacte du signalement memoire produit : dans 190 px de footer,
-   le bouton pleine taille de la fiche produit coute trop de hauteur. */
-.fab-dossier-actions .pmem-hist-btn{padding:5px 10px;gap:6px}
-.fab-dossier-actions .pmem-hist-titre{font-size:11px}
-.fab-dossier-actions .pmem-hist-detail{font-size:10px}
-.fab-dossier-actions .pmem-hist-pastille{min-width:18px;height:18px;font-size:10px}
-.fab-dossier-actions .pmem-hist-tag{font-size:9px}
-.fab-dossier-actions .fab-produit-btn{margin-top:0}
+.fab-dossier-head > *{flex:0 0 auto}
+.fab-dossier-head::-webkit-scrollbar{height:4px}
+.fab-dossier-head::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+/* Boutons du dossier EN COURS (aujourd'hui : les deux boutons FSC). Ce qui
+   concerne les dossiers passes est parti dans .fab-memoire-row, colonne de
+   droite. */
+.fab-dossier-actions{
+  min-width:0;
+  display:flex;flex-wrap:wrap;align-items:center;
+  gap:6px;padding-top:0;
+}
 .fab-dossier-ref{
-  font-size:13px;font-weight:800;color:var(--accent);
+  font-size:15px;font-weight:800;color:var(--accent);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .fab-dossier-client{
-  font-size:12px;font-weight:700;color:var(--text);
+  font-size:13px;font-weight:700;color:var(--text);
+  max-width:220px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
-.fab-dossier-meta{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:4px}
+.fab-dossier-meta{display:flex;flex-wrap:nowrap;gap:0 12px;margin-top:0}
+/* 12 px et non 10 : ces champs se lisent debout devant la machine, pas assis
+   devant l'ecran. Le libelle reste en capitales pour rester distinguable de la
+   valeur sans avoir besoin d'une couleur supplementaire. */
 .fab-meta-item{
-  font-size:10px;color:var(--muted);
-  display:flex;align-items:center;gap:4px;white-space:nowrap;
+  font-size:12px;color:var(--muted);
+  display:flex;align-items:center;gap:5px;white-space:nowrap;
 }
-.fab-meta-label{font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text2)}
+.fab-meta-label{font-weight:700;text-transform:uppercase;letter-spacing:.4px;font-size:11px;color:var(--text2)}
 /* Seul dans la colonne : marge auto = reste centre verticalement, alors que
    la colonne, elle, aligne son contenu en haut. */
 .fab-no-dossier{font-size:12px;color:var(--muted);font-style:italic;margin:auto 0}
@@ -361,17 +385,36 @@ body.light table.fab-table tr.fab-row-last td{
 /* La consigne dossier etait tronquee sur une ligne : « ATTENTION : SI PALETTE
    TROP HAUTE - Cartons du... » ne dit rien de ce qu'il faut faire. Elle
    s'affiche desormais sur trois lignes, et se deplie entierement au clic. */
+/* Taillee sur son texte, avec un plafond. Au-dela, le texte se termine par des
+   points de suspension et le survol en donne l'integralite (attribut title).
+   Le clic la rend defilante sur place, pour les ecrans tactiles ou le survol
+   n'existe pas. */
 .fab-dossier-consigne{
-  flex:0 1 auto;min-height:0;
-  font-size:11px;line-height:1.45;color:var(--text2);margin-top:5px;max-width:340px;
+  min-width:0;min-height:0;margin-top:0;
+  max-width:min(100%, 520px);
+  font-size:13px;line-height:1.45;color:var(--text2);
   background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--warn,#fbbf24);
   border-radius:8px;padding:6px 9px;cursor:pointer;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;
+  /* 4 lignes = ce que la bande laisse une fois l'entete et les actions posees,
+     au corps de 13 px. C'est `-webkit-line-clamp` qui dessine les points de
+     suspension ; sans nombre de lignes, le texte serait coupe net au bord. */
+  -webkit-line-clamp:4;
 }
-.fab-dossier-consigne.is-open{display:block;-webkit-line-clamp:none;max-height:180px;overflow-y:auto}
+/* Depliee au clic, elle defile a l'interieur de sa propre boite, bornee en
+   hauteur : elle ne peut donc pas pousser le reste hors de la bande. */
+.fab-dossier-consigne.is-open{-webkit-line-clamp:unset;max-height:130px;overflow-y:auto}
+/* Pas de consigne : la case reste, elle le dit, mais elle cesse de crier —
+   le liseré orange est reserve a une consigne qui existe vraiment. */
+.fab-dossier-consigne.is-vide{
+  border-left-color:var(--border);color:var(--muted);font-style:italic;cursor:default;
+}
+.fab-dossier-consigne.is-vide .fab-dossier-consigne-lbl{color:var(--muted)}
+/* Etiquette en ligne, pas en bloc : en bloc elle consommait a elle seule la
+   premiere des deux lignes visibles de la consigne. */
 .fab-dossier-consigne-lbl{
-  display:block;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
-  color:var(--warn,#fbbf24);margin-bottom:2px;
+  display:inline;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--warn,#fbbf24);margin-right:6px;
 }
 
 /* Center: action buttons */
@@ -407,7 +450,7 @@ body.light table.fab-table tr.fab-row-last td{
   display:flex;flex-direction:column;gap:8px;justify-content:center;
   min-width:0;
 }
-.fab-search-wrap{display:flex;gap:6px;align-items:center}
+.fab-search-wrap{display:flex;gap:6px;align-items:center;max-width:440px;width:100%}
 .fab-search-input{
   flex:1;background:var(--bg);border:1.5px solid var(--border);
   border-radius:8px;padding:8px 12px;font-size:12px;color:var(--text);
@@ -422,6 +465,16 @@ body.light table.fab-table tr.fab-row-last td{
 }
 .fab-search-btn:hover{filter:brightness(1.1)}
 .fab-comment-row{display:flex;gap:6px;align-items:center}
+/* Tout ce qui parle des dossiers PASSES vit ici, sous la saisie de code et le
+   bouton Commenter : la colonne de gauche ne dit plus que le dossier en cours. */
+.fab-memoire-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.fab-memoire-row:empty{display:none}
+.fab-memoire-row .fab-produit-btn{margin-top:0}
+.fab-memoire-row .pmem-hist-btn{padding:5px 10px;gap:6px}
+.fab-memoire-row .pmem-hist-titre{font-size:11px}
+.fab-memoire-row .pmem-hist-detail{font-size:10px}
+.fab-memoire-row .pmem-hist-pastille{min-width:18px;height:18px;font-size:10px}
+.fab-memoire-row .pmem-hist-tag{font-size:9px}
 .fab-comment-hint{font-size:10px;color:var(--muted);flex:1}
 .fab-footer-row2{
   display:flex;align-items:center;justify-content:center;gap:8px;
@@ -447,6 +500,7 @@ body.light table.fab-table tr.fab-row-last td{
 .fab-field{margin-bottom:14px}
 .fab-field label{font-size:11px;font-weight:700;color:var(--text2);display:block;
   margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
+.fab-field-hint{font-size:11px;color:var(--muted);margin:-2px 0 6px;line-height:1.4}
 .fab-field input,.fab-field textarea,.fab-field select{
   width:100%;background:var(--bg);border:1.5px solid var(--border);
   border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);
@@ -567,6 +621,7 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 .eb-production{background:rgba(52,211,153,.15);color:#34d399}
 .eb-arret{background:rgba(251,191,36,.15);color:#fbbf24}
 .eb-arrive{background:rgba(56,189,248,.15);color:#38bdf8}
+.eb-calage{background:var(--accent-bg);color:var(--accent)}
 .eb-fin{background:rgba(167,139,250,.15);color:#a78bfa}
 .eb-sans{background:rgba(148,163,184,.15);color:#94a3b8}
 
@@ -714,9 +769,12 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 
 /* ── Centrage sections footer ──────────────────────────────── */
 .fab-footer{align-items:center}
-.fab-footer-info{justify-content:flex-start}
+.fab-footer-info{justify-content:flex-start;align-self:stretch}
 .fab-footer-actions{align-items:center;justify-content:center;gap:6px}
-.fab-footer-tools{align-items:stretch;justify-content:center}
+/* Colonne de droite ancree en haut de la bande, comme la colonne de gauche :
+   centree, elle flottait plus bas que le selecteur de machine et que les
+   boutons du centre, et l'oeil ne trouvait plus de ligne d'horizon. */
+.fab-footer-tools{align-items:stretch;justify-content:flex-start;align-self:stretch}
 /* ── Onglet OF (import PDF) ─────────────────────────────────── */
 .fab-of-panel{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .fab-of-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap}
@@ -761,7 +819,8 @@ table.fab-of-table tr:last-child td{border-bottom:none}
   display:flex;flex-direction:column;align-items:center;gap:6px;
 }
 .fab-print-card:hover{border-color:var(--accent);background:var(--accent-bg);transform:translateY(-1px)}
-.fab-print-card-icon{font-size:24px;line-height:1}
+.fab-print-card-icon{font-size:24px;line-height:1;display:flex;justify-content:center;color:var(--accent)}
+.fab-print-card-icon svg{width:26px;height:26px}
 .fab-print-card-name{font-size:12px;font-weight:800;color:var(--text)}
 .fab-print-card-format{font-size:10px;color:var(--muted)}
 
@@ -1109,6 +1168,8 @@ body.has-topbar .fab-main{padding-top:74px}
   #mroot .fab-fsc-traca-no-print{display:none!important}
 }
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
@@ -1221,7 +1282,7 @@ let S = {
   saisies: [],
   saisiesAdmin: [],
   saisieViewMode: (localStorage.getItem('mysifa.fab.viewmode')||'operator'), // operator | admin
-  etat: 'loading',   // loading | sans_session | arrive | en_cours_production | en_arret | fin_dossier
+  etat: 'loading',   // loading | sans_session | arrive | en_calage | en_cours_production | en_arret | fin_dossier
   dossier: null,     // planning_entry actif
   historiqueProduit: null,  // apercu memoire produit (null = pas de bouton)
   dossiers: [],      // liste pour picker
@@ -1556,6 +1617,14 @@ function isFictifSaisieRow(s){
   return false;
 }
 
+// Libellé d'un code opération : toujours le référentiel (table
+// operation_codes / Paramètres › Opérations), jamais une chaîne en dur —
+// une instance qui renomme un code doit voir son mot sur le bouton.
+function opLabel(code, repli){
+  const op = OPS[String(code)];
+  return (op && op.label) ? op.label : (repli||'');
+}
+
 function isArretSaisie(s){
   if(!s) return false;
   if(String(s.operation_category||'').toLowerCase()==='arret') return true;
@@ -1581,6 +1650,7 @@ function etatLabel(e){
     loading:'Chargement…',
     sans_session:'Hors session',
     arrive:'Arrivé',
+    en_calage:'Calage',
     en_cours_production:'En production',
     en_arret:'Arrêt en cours',
     fin_dossier:'Dossier terminé',
@@ -1590,6 +1660,7 @@ function etatLabel(e){
 function etatClass(e){
   const m = {
     sans_session:'eb-sans',arrive:'eb-arrive',
+    en_calage:'eb-calage',
     en_cours_production:'eb-production',en_arret:'eb-arret',
     fin_dossier:'eb-fin',loading:'eb-sans',
   };
@@ -2142,7 +2213,9 @@ function renderSidebar(){
   });
 
   // Les opérations de la sidebar ne sont actives qu'en cours de production/arrêt
-  const opsEnabled = S.etat==='en_cours_production' || S.etat==='en_arret';
+  // 'en_calage' ouvre la grille au meme titre que la production : c'est
+  // pendant le calage que l'operateur pointe ses codes 02/10/11/58…
+  const opsEnabled = S.etat==='en_calage' || S.etat==='en_cours_production' || S.etat==='en_arret';
 
   const groups = [];
   CAT_ORDER.forEach(cat=>{
@@ -2188,10 +2261,10 @@ function renderSidebar(){
       h('div',{style:{padding:'10px 8px 8px',fontSize:'11px',color:'var(--muted)',
         background:'rgba(255,255,255,.03)',borderRadius:'6px',margin:'0 0 8px',
         borderLeft:'2px solid var(--border)',lineHeight:'1.5'}},
-        S.etat==='sans_session' ? '👋 Commencez par enregistrer votre arrivée'
-        : S.etat==='arrive' ? '📂 Sélectionnez un dossier pour commencer la saisie'
-        : S.etat==='fin_dossier' ? '✅ Dossier clôturé — démarrez un nouveau ou partez'
-        : '⏳ En attente…'
+        S.etat==='sans_session' ? 'Commencez par enregistrer votre arrivée.'
+        : S.etat==='arrive' ? 'Sélectionnez un dossier pour commencer la saisie.'
+        : S.etat==='fin_dossier' ? 'Dossier clôturé. Démarrez-en un autre, ou enregistrez votre départ.'
+        : 'En attente…'
       )
     );
   }
@@ -2249,7 +2322,7 @@ function fabSaisiesProd(){
 
 function fabAnnulationPossible(){
   if(isRepiquageMode()) return false;
-  if(S.etat!=='en_cours_production' && S.etat!=='en_arret') return false;
+  if(S.etat!=='en_calage' && S.etat!=='en_cours_production' && S.etat!=='en_arret') return false;
   const ref = (S.dossier && String(S.dossier.reference||'').trim()) || '';
   if(!ref) return false;
   const rows = fabSaisiesProd().filter(s=>!Number(s.est_annule||0));
@@ -3273,7 +3346,7 @@ function openFabPrint(type){
       +'<select id="fmt" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:6px;font-size:13px">'
       +'<option value="40x20">40×20 mm</option><option value="40x30">40×30 mm</option></select></div>'
       +_fabInp('etiq','Étiquettes / bobine','ex : 500','')
-      +'<button onclick="doPrint()" style="background:#0891b2;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;width:100%">🖨 Imprimer</button></div>'
+      +'<button onclick="doPrint()" style="background:#0891b2;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;width:100%">Imprimer</button></div>'
       +'<script>function doPrint(){'
       +'const ref=document.getElementById("ref").value.trim();'
       +'const client=document.getElementById("client").value.trim();'
@@ -3301,7 +3374,7 @@ function openFabPrint(type){
       +_fabInp('client','Client','ex : Acme',client)
       +_fabInp('bobs','Bobines / carton','ex : 12','')
       +_fabInp('etiq','Étiquettes / bobine','ex : 500','')
-      +'<button onclick="doPrint()" style="background:#0891b2;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;width:100%">🖨 Imprimer</button></div>'
+      +'<button onclick="doPrint()" style="background:#0891b2;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;width:100%">Imprimer</button></div>'
       +'<script>function doPrint(){'
       +'const ref=document.getElementById("ref").value.trim();'
       +'const client=document.getElementById("client").value.trim();'
@@ -3326,7 +3399,7 @@ function openFabPrint(type){
       +'<h3 style="margin:0 0 16px;font-size:15px">Compteur palette</h3>'
       +_fabInp('ref','Référence dossier','ex : 9931521',ref)
       +_fabInp('total','Nombre total de palettes','ex : 5','')
-      +'<button onclick="doPrint()" style="background:#0891b2;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;width:100%">🖨 Imprimer (1 étiquette / palette)</button></div>'
+      +'<button onclick="doPrint()" style="background:#0891b2;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;width:100%">Imprimer (1 étiquette / palette)</button></div>'
       +'<script>function doPrint(){'
       +'const ref=document.getElementById("ref").value.trim();'
       +'const n=parseInt(document.getElementById("total").value)||1;'
@@ -3350,11 +3423,11 @@ function renderPrintPanel(){
   const isCohesio = machineName.toLowerCase().includes('coh');
 
   const cards = [
-    {type:'id_bobine', icon:'🧻', name:'Identification bobine', format:'40×20 ou 40×30 mm'},
-    {type:'id_carton', icon:'📦', name:'Identification carton', format:'105×50 mm'},
+    {type:'id_bobine', icon:'scan', name:'Identification bobine', format:'40×20 ou 40×30 mm'},
+    {type:'id_carton', icon:'package', name:'Identification carton', format:'105×50 mm'},
   ];
   if(isCohesio || !machineName){
-    cards.push({type:'nb_palettes_c', icon:'🏷', name:'Compteur palette', format:'105×50 mm'});
+    cards.push({type:'nb_palettes_c', icon:'box', name:'Compteur palette', format:'105×50 mm'});
   }
 
   return h('div',{className:'fab-main'},
@@ -3364,7 +3437,7 @@ function renderPrintPanel(){
     ),
     h('div',{className:'fab-panel'},
       S.dossier ? h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'4px'}},
-        '📂 Dossier actif : ',
+        'Dossier actif : ',
         h('strong',{style:{color:(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))?'#a78bfa':'var(--accent)'}},
           fabDossierRefLabel(S.dossier)),
         (S.dossier.client && !(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))) ? (' — '+S.dossier.client) : ''
@@ -3373,7 +3446,7 @@ function renderPrintPanel(){
       ),
       h('div',{className:'fab-print-grid'},
         ...cards.map(c=>h('div',{className:'fab-print-card',onClick:()=>openFabPrint(c.type)},
-          h('div',{className:'fab-print-card-icon'},c.icon),
+          h('div',{className:'fab-print-card-icon'},svgIcon(c.icon,26)),
           h('div',{className:'fab-print-card-name'},c.name),
           h('div',{className:'fab-print-card-format'},c.format)
         ))
@@ -4483,7 +4556,7 @@ function _renderStockZ1List(){
               title: rEcart
                 ? 'Produit FSC — traçabilité matière incomplète ou en écart sur le dossier d\'origine'
                 : ('Produit certifié FSC' + (r.no_dossier ? ' — dossier ' + r.no_dossier : '')),
-            }, 'FSC', rEcart ? ' ⚠' : '') : null
+            }, 'FSC') : null
           ),
           h('div',{className:'fab-prod-z1-des'}, r.designation || ''),
           h('div',{className:'fab-prod-z1-meta'},
@@ -4665,7 +4738,7 @@ function renderMain(){
     : [h('tr',null,
         h('td',{colspan: isAdminView ? '7' : '7'},
           h('div',{className:'fab-empty'},
-            h('div',{className:'fab-empty-icon'},'📋'),
+            h('div',{className:'fab-empty-icon'},svgIcon('file',32)),
             S.etat==='sans_session'
               ? 'Commencez par enregistrer votre arrivée'
               : 'Aucune saisie aujourd\'hui'
@@ -4814,7 +4887,7 @@ function renderTracabiliteModal(data, noDossier){
             h('td',null, (l.quantite_restante ?? '—')+' '+(l.unite||'')),
             h('td',null, l.fsc
               ? h('span',{className:'fab-fsc-badge'+(l.fsc_ecart?' is-ecart':'')},
-                  'FSC', l.fsc_ecart ? ' ⚠' : '')
+                  'FSC')
               : h('span',{style:{color:'var(--muted)'}},'—'))
           )))
         )
@@ -4994,9 +5067,9 @@ function renderHistoriqueProduitBtn(){
   if(!ap || !ap.disponible) return null;
   if(!window.MySifaProduitMemoire) return null;
   const ref = (S.dossier && (S.dossier.reference || S.dossier.no_dossier)) || ap.no_dossier;
-  // Rendu nu : il prend place dans .fab-dossier-actions, aux cotes de la
-  // reference produit et des boutons FSC. Un wrapper a lui seul le poussait
-  // sur sa propre ligne, hors de la bande visible du footer.
+  // Rendu nu : il prend place dans .fab-memoire-row, colonne de droite, aux
+  // cotes de la reference produit. Un wrapper a lui seul le poussait sur sa
+  // propre ligne, hors de la bande visible du footer.
   return window.MySifaProduitMemoire.boutonHistorique(ap, ref) || null;
 }
 
@@ -5023,9 +5096,14 @@ function renderFooter(){
     if(d.laize) metas.push({label:'Laize',val:d.laize+' mm'});
     if(d.format_l&&d.format_h) metas.push({label:'Format',val:d.format_l+' × '+d.format_h+' mm'});
     if(d.date_livraison) metas.push({label:'Livraison',val:fmtDate(d.date_livraison)});
+    // Le numero d'OF est deja la grande reference affichee a gauche dans
+    // l'immense majorite des dossiers : le repeter en meta ne dit rien de
+    // plus. On ne le montre que quand il differe reellement de la reference —
+    // la seule fois ou l'information a une valeur.
     const fictifDos = d.fictif || isFictifDossierRef(d.reference);
-    if(d.numero_of && !fictifDos) metas.push({label:'N° OF',val:d.numero_of});
-    if(fictifDos) metas.push({label:'N° OF fictif',val:fictifOfDisplay(d.reference||d.numero_of||'')});
+    const refAffichee = String(d.reference||'').trim();
+    if(d.numero_of && !fictifDos && String(d.numero_of).trim() !== refAffichee)
+      metas.push({label:'N° OF',val:d.numero_of});
     if(d.machine_nom) metas.push({label:'Machine',val:d.machine_nom});
     const refProduit = fabRefProduit(d);
     if(refProduit) metas.push({label:'Réf. produit',val:refProduit});
@@ -5051,7 +5129,7 @@ function renderFooter(){
             title: fscEcart
               ? 'Certification FSC requise — traçabilité matière incomplète ou en écart'
               : ('Certification FSC requise'+(fscTypeLbl?' — '+fscTypeLbl:'')),
-          }, 'FSC', fscEcart ? ' ⚠' : '') : null
+          }, 'FSC') : null
         ),
         h('div',{className:'fab-dossier-client'},
           fictifDos ? 'Dossier hors planning' : (d.client||'Client non renseigné')),
@@ -5062,19 +5140,21 @@ function renderFooter(){
           ))
         )
       ),
-      d.commentaire ? h('div',{
-        className:'fab-dossier-consigne',
-        title:'Cliquer pour tout afficher',
-        onClick:function(e){ e.currentTarget.classList.toggle('is-open'); }
+      // La consigne se taille sur son texte, dans la limite de 520 px. Le
+      // `title` porte le texte integral : au survol on a tout, sans clic et
+      // sans deplier quoi que ce soit.
+      h('div',{
+        className:'fab-dossier-consigne'+(d.commentaire?'':' is-vide'),
+        title: d.commentaire || '',
+        onClick:function(e){ if(d.commentaire) e.currentTarget.classList.toggle('is-open'); }
       },
         h('span',{className:'fab-dossier-consigne-lbl'},'Consigne dossier'),
-        d.commentaire
-      ) : null,
-      // Une seule ligne d'actions : reference produit, signalement « deja
-      // produit », et les deux boutons FSC quand le dossier est certifie.
-      h('div',{className:'fab-dossier-actions'},
-        renderRefProduitBtn(),
-        renderHistoriqueProduitBtn(),
+        d.commentaire || 'Aucune consigne sur ce dossier.'
+      ),
+      // Ne restent ici que les boutons du dossier EN COURS. La reference
+      // produit et le signalement « deja produit » regardent les dossiers
+      // passes : ils sont partis dans la colonne de droite.
+      fscDossier ? h('div',{className:'fab-dossier-actions'},
         fscDossier ? h('button',{
           className:'fab-btn fab-btn-ghost fab-btn-sm',
           style:{fontSize:'11px'},
@@ -5086,11 +5166,11 @@ function renderFooter(){
           title:'Imprimer la consigne FSC à agrafer au dossier papier',
           onClick:imprimerAvertissementFsc,
         }, svgIcon('printer',12),' Avertissement FSC') : null
-      )
+      ) : null
     );
   } else {
     infoSection = h('div',{className:'fab-footer-info'},
-      h('div',{className:'fab-no-dossier'}, S.etat==='en_cours_production'||S.etat==='en_arret'
+      h('div',{className:'fab-no-dossier'}, S.etat==='en_calage'||S.etat==='en_cours_production'||S.etat==='en_arret'
         ? 'Dossier actif (données non trouvées dans le planning)'
         : 'Aucun dossier actif')
     );
@@ -5154,16 +5234,19 @@ function renderFooter(){
   else if(e==='arrive'){
     btns.push(h('button',{
       className:'fab-btn fab-btn-success',
-      onClick:()=>handleOpTrigger('01','Début de production','personnel')
-    }, svgIcon('plus-circle',16),' Début de production'));
+      onClick:()=>handleOpTrigger('01',opLabel('01','Démarrer un dossier'),'personnel')
+    }, svgIcon('plus-circle',16),' '+opLabel('01','Démarrer un dossier')));
     btns.push(h('button',{
       className:'fab-btn fab-btn-muted fab-btn-sm',
       onClick:()=>triggerOp('87','Départ personnel')
     }, svgIcon('log-out',14),' Départ personnel'));
   }
 
-  // ── État : en production (dossier actif, aucun arrêt) ──
-  else if(e==='en_cours_production'){
+  // ── État : dossier ouvert (calage en cours) ou machine en production ──
+  // Mêmes actions dans les deux cas : ce qui change, c'est le badge d'état,
+  // qui ne prétend plus que la machine produit tant qu'aucun code de
+  // catégorie `production` (03/88) n'a été pointé.
+  else if(e==='en_calage'||e==='en_cours_production'){
     btns.push(h('button',{
       className:'fab-btn fab-btn-warn',
       onClick:()=>handleOpTrigger('89','Fin de production','personnel')
@@ -5188,7 +5271,7 @@ function renderFooter(){
   else if(e==='fin_dossier'){
     btns.push(h('button',{
       className:'fab-btn fab-btn-success',
-      onClick:()=>handleOpTrigger('01','Début de production','personnel')
+      onClick:()=>handleOpTrigger('01',opLabel('01','Démarrer un dossier'),'personnel')
     }, svgIcon('plus-circle',16),' Nouveau dossier'));
     btns.push(h('button',{
       className:'fab-btn fab-btn-muted fab-btn-sm',
@@ -5229,6 +5312,13 @@ function renderFooter(){
     ),
     h('div',{className:'fab-comment-row'},
       commentBtn
+    ),
+    // Memoire produit : fiche produit et signalement « deja produit ». Ce sont
+    // les seuls elements du footer qui parlent d'autre chose que du dossier en
+    // cours — ils sont donc regroupes ici, a l'ecart de la colonne d'identite.
+    h('div',{className:'fab-memoire-row'},
+      renderRefProduitBtn(),
+      renderHistoriqueProduitBtn()
     )
   );
 
@@ -5601,7 +5691,7 @@ function renderDebutModal(){
     set({showDebutModal:false, loading:true});
     try{
       const body = {
-        operation:'01 - Début de production',
+        operation:'01 - '+opLabel('01','Démarrer un dossier'),
         date_operation: nowIsoLocal(),
         no_dossier: dos.reference,
         machine: dos.machine_nom||'',
@@ -5620,7 +5710,7 @@ function renderDebutModal(){
         body:JSON.stringify(body),
       });
       if(r&&r.success){
-        showToast('Début de production enregistré');
+        showToast('Dossier démarré.');
         // v2.2.67 : refresh alertes (code 01 = pas d'ack auto, mais on refresh
         // par cohérence avec les autres endpoints — pas de coût)
         try { if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh==='function') window.MysifaAlerts.refresh(); } catch(_){}
@@ -5636,7 +5726,7 @@ function renderDebutModal(){
 
   return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showDebutModal:false});}},
     h('div',{className:'fab-modal'},
-      h('div',{className:'fab-modal-title'},'📦 Début de production'),
+      h('div',{className:'fab-modal-title'},opLabel('01','Démarrer un dossier')),
       d ? h('div',{className:'fab-modal-sub'},
         'Dossier : ',
         h('strong',{className:(d.fictif||isFictifDossierRef(d.reference))?'fab-fictif-label':''},
@@ -5675,26 +5765,33 @@ function renderFinModal(){
   etiqInp.addEventListener('input',e=>{ S.nbEtiquettes=e.target.value; });
 
   // ── Sélecteur "Fin de dossier ?" ─────────────────────────────────────────
+  // Le code 89 recouvre deux gestes distincts : clôturer le dossier (il sort
+  // du planning et la série part en mémoire produit) ou seulement s'arrêter
+  // pour aujourd'hui (il reste au planning). Chaque option annonce donc sa
+  // conséquence plutôt qu'un « oui / non » qui laisse deviner.
   const finDossierVal = S.finDossierOui; // null | true | false
-  const mkFdBtn = (val, label, emoji, colorVar) => {
+  const mkFdBtn = (val, label, consequence, colorVar, rgb) => {
     const isActive = finDossierVal === val;
-    const btn = h('button',{
+    return h('button',{
       type:'button',
       style:{
-        flex:'1',padding:'14px 8px',borderRadius:'10px',border:'2px solid',
+        flex:'1',padding:'14px 10px',borderRadius:'10px',border:'2px solid',
         borderColor: isActive ? `var(${colorVar})` : 'var(--border2)',
-        background: isActive ? `rgba(${val?'52,211,153':'248,113,113'},.15)` : 'var(--bg)',
+        background: isActive ? `rgba(${rgb},.15)` : 'var(--bg)',
         color: isActive ? `var(${colorVar})` : 'var(--text2)',
-        fontWeight: isActive ? '800' : '500',
+        fontWeight: isActive ? '800' : '600',
         fontSize:'15px',cursor:'pointer',transition:'all .15s',fontFamily:'inherit',
-        display:'flex',flexDirection:'column',alignItems:'center',gap:'4px',
+        display:'flex',flexDirection:'column',alignItems:'center',gap:'5px',
+        textAlign:'center',
       },
       onClick:()=>{ set({finDossierOui:val}); }
     },
-      h('span',{style:{fontSize:'24px',lineHeight:'1'}},emoji),
-      h('span',null,label)
+      h('span',null,label),
+      h('span',{style:{
+        fontSize:'11px',fontWeight:'500',lineHeight:'1.3',
+        color: isActive ? 'inherit' : 'var(--muted)',
+      }},consequence)
     );
-    return btn;
   };
 
   const fdSelector = h('div',{style:{marginBottom:'0'}},
@@ -5702,21 +5799,19 @@ function renderFinModal(){
       fontWeight:'800',fontSize:'14px',color:'var(--text)',marginBottom:'10px',
       padding:'10px 14px',borderRadius:'10px',
       background:'rgba(251,191,36,.12)',border:'1px solid rgba(251,191,36,.4)',
-      display:'flex',alignItems:'center',gap:'8px',
     }},
-      h('span',{style:{fontSize:'20px'}},'❓'),
-      'Ce dossier est-il terminé ?'
+      'Que devient ce dossier ?'
     ),
     h('div',{style:{display:'flex',gap:'10px'}},
-      mkFdBtn(true,  'Oui, terminé',  '✅', '--success'),
-      mkFdBtn(false, 'Non, continue', '🔄', '--warn')
+      mkFdBtn(true,  'Dossier terminé',      'Il sort du planning',  '--success', '52,211,153'),
+      mkFdBtn(false, 'À reprendre plus tard', 'Il reste au planning', '--warn',    '251,191,36')
     )
   );
 
   const submit = async()=>{
     // Validation : fin_dossier obligatoire
     if(S.finDossierOui === null || S.finDossierOui === undefined){
-      showToast('Indiquez si le dossier est terminé (Oui / Non)','danger');
+      showToast('Indiquez ce que devient le dossier.','danger');
       return;
     }
 
@@ -5768,7 +5863,9 @@ function renderFinModal(){
         body:JSON.stringify(body),
       });
       if(r&&r.success){
-        showToast(S.finDossierOui ? 'Dossier clôturé ✅' : 'Fin de production enregistrée 🔄');
+        showToast(S.finDossierOui
+          ? 'Dossier clôturé.'
+          : 'Arrêt enregistré. Le dossier reste au planning.');
         // v2.2.67 : refresh alertes — code 89 déclenche l'ack auto backend v2.2.65
         try { if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh==='function') window.MysifaAlerts.refresh(); } catch(_){}
         fabPauseAutoRefresh(10000);
@@ -5783,7 +5880,7 @@ function renderFinModal(){
 
   return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showFinModal:false,finDossierOui:null});}},
     h('div',{className:'fab-modal'},
-      h('div',{className:'fab-modal-title'},'🏁 Fin de production'),
+      h('div',{className:'fab-modal-title'},opLabel('89','Fin de production')),
       S.dossier ? h('div',{className:'fab-modal-sub'},
         'Dossier ',
         h('strong',{className:(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))?'fab-fictif-label':''},
@@ -5791,15 +5888,17 @@ function renderFinModal(){
         (S.dossier.client && !(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))) ? (' — '+S.dossier.client) : ''
       ) : null,
       h('div',{className:'fab-field'},
-        h('label',null,(()=>{
+        h('label',null,'Compteur machine, en mètres'),
+        (()=>{
           const m = S.machine||(S.adminMachineId&&S.machines.find(x=>x.id===S.adminMachineId));
-          const dm = m&&m.dernier_metrage!=null?'  (dernier enregistré : '+Math.round(m.dernier_metrage).toLocaleString('fr-FR')+' m)':'';
-          return 'Métrage total de la machine — compteur en fin, en mètres'+dm;
-        })()),
+          if(!m || m.dernier_metrage==null) return null;
+          return h('div',{className:'fab-field-hint'},
+            'Dernier relevé : '+Math.round(m.dernier_metrage).toLocaleString('fr-FR')+' m');
+        })(),
         metInp
       ),
       h('div',{className:'fab-field'},
-        h('label',null,'Quantité d\'étiquettes produites'),
+        h('label',null,'Étiquettes produites'),
         etiqInp
       ),
       h('div',{className:'fab-field'},fdSelector),
@@ -5810,7 +5909,10 @@ function renderFinModal(){
           className:'fab-btn '+(S.finDossierOui===true?'fab-btn-danger':'fab-btn-warn'),
           style:{opacity: S.finDossierOui===null?'.55':'1'},
           onClick:submit},
-          svgIcon('flag',15),' '+(S.finDossierOui===true?'Clôturer le dossier':'Enregistrer la fin de production')
+          svgIcon('flag',15),' '+(
+            S.finDossierOui===true  ? 'Clôturer le dossier' :
+            S.finDossierOui===false ? 'Arrêter pour aujourd\'hui' :
+                                      'Enregistrer')
         )
       )
     )
@@ -6644,7 +6746,7 @@ function renderRepiquageGrid(){
             gap:'14px',
           }}, ...cards)
         : h('div',{className:'fab-empty'},
-            h('div',{className:'fab-empty-icon'},'📦'),
+            h('div',{className:'fab-empty-icon'},svgIcon('grid',32)),
             'Aucun dossier planifié sur la machine Repiquage'
           )
     )
@@ -7134,7 +7236,7 @@ function renderRepiquageHistoriqueView(){
     : [h('tr',null,
         h('td',{colspan: isAdminUser ? '7' : '6'},
           h('div',{className:'fab-empty'},
-            h('div',{className:'fab-empty-icon'},'📦'),
+            h('div',{className:'fab-empty-icon'},svgIcon('file',32)),
             'Aucune saisie pour ce dossier'
           )
         )
@@ -7193,7 +7295,7 @@ function renderRepiquageDiscussionView(){
     );
   } else if(!msgs.length){
     messageList = h('div',{className:'fab-empty'},
-      h('div',{className:'fab-empty-icon'},'💬'),
+      h('div',{className:'fab-empty-icon'},svgIcon('message-square',32)),
       'Aucun message pour ce dossier — soyez le premier à en poster un.'
     );
   } else {
@@ -7355,7 +7457,7 @@ function renderRepiquageHeadBanner(ref, dossierInfo, etiqParCarton){
           borderRadius:'8px', fontWeight:'700',
         }
       },
-        etiqParCarton ? (fmtNum(etiqParCarton)+' étiq./carton') : '⚠ Paramétrage manquant'
+        etiqParCarton ? (fmtNum(etiqParCarton)+' étiq./carton') : 'Paramétrage manquant'
       ),
       h('button',{
         className:'fab-btn fab-btn-ghost fab-btn-sm',
@@ -7786,12 +7888,11 @@ function showUpdatePopup(updates){
   const bodies=updates.map(u=>`<div class="upd-body">${u.message}</div>`).join("<hr style='border:none;border-top:1px solid var(--border);margin:16px 0'>");
   overlay.innerHTML=`
     <div class="upd-card">
-      <div style="font-size:28px;margin-bottom:8px;text-align:center">🎉</div>
       <h2 style="text-align:center">${firstTitle}</h2>
       <p class="upd-sub" style="text-align:center">Lisez les nouveautés ci-dessous, puis confirmez.</p>
       ${bodies}
       <button class="upd-ok-btn" onclick="acknowledgeUpdates([${ids.join(",")}],this.closest('.upd-overlay'))">
-        ✅ J'ai compris — C'est parti !
+        J'ai compris
       </button>
     </div>`;
   document.body.appendChild(overlay);

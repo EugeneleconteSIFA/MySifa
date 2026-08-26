@@ -3793,6 +3793,24 @@ async def create_reception(request: Request):
     user = require_stock(request)
     body = await request.json()
 
+    # ── Reception RVGI reprise, si elle l'a ete ──
+    # Le n° de BL du fournisseur n'avait pas de colonne : on le notait dans
+    # `note`, dont le texte d'aide disait « ex: BL fournisseur ». Il en a une
+    # maintenant, avec le n° de commande fournisseur et la quantite annoncee
+    # par l'ERP -- gardee telle quelle a cote du comptage reel, parce que les
+    # deux ne sont pas dans la meme unite.
+    def _txt_ou_rien(v, maxi=60):
+        s2 = str(v or "").strip()
+        return s2[:maxi] or None
+
+    rvgi_cde = _txt_ou_rien(body.get("rvgi_cde"), 30)
+    rvgi_bl = _txt_ou_rien(body.get("rvgi_bl"), 60)
+    try:
+        rvgi_qte_attendue = (float(body["rvgi_qte_attendue"])
+                             if body.get("rvgi_qte_attendue") not in (None, "") else None)
+    except (TypeError, ValueError):
+        rvgi_qte_attendue = None
+
     # ── Parsing du format items[] (nouveau) ou codes[] (retro-compat) ──
     items_raw = body.get("items")
     normalized_items: list[dict] = []
@@ -3948,9 +3966,17 @@ async def create_reception(request: Request):
             conn.execute(
                 """UPDATE stock_receptions
                    SET nb_bobines = COALESCE(nb_bobines, 0) + ?,
-                       note = COALESCE(?, note)
+                       note = COALESCE(?, note),
+                       -- Le lien RVGI se pose s'il manquait, il ne s'efface
+                       -- jamais : une deuxieme salve de scans sans reception
+                       -- reprise ne doit pas faire perdre celle de la
+                       -- premiere.
+                       rvgi_cde = COALESCE(rvgi_cde, ?),
+                       rvgi_bl = COALESCE(rvgi_bl, ?),
+                       rvgi_qte_attendue = COALESCE(rvgi_qte_attendue, ?)
                    WHERE id = ?""",
-                (nb_bobines_ajoutees, merged_note, reception_id),
+                (nb_bobines_ajoutees, merged_note,
+                 rvgi_cde, rvgi_bl, rvgi_qte_attendue, reception_id),
             )
             merged = True
             new_total = (existing["nb_bobines"] or 0) + nb_bobines_ajoutees
@@ -3960,8 +3986,8 @@ async def create_reception(request: Request):
                    (created_at, created_by, created_by_name, note, nb_bobines,
                     fournisseur, fournisseur_id, certificat_fsc, fsc_type_claim,
                     lot_numero, certificat_valide, certificat_expiration,
-                    certificat_note)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    certificat_note, rvgi_cde, rvgi_bl, rvgi_qte_attendue)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     now,
                     created_by,
@@ -3976,6 +4002,9 @@ async def create_reception(request: Request):
                     verdict.get("statut"),
                     verdict.get("expiration"),
                     verdict.get("libelle"),
+                    rvgi_cde,
+                    rvgi_bl,
+                    rvgi_qte_attendue,
                 ),
             )
             reception_id = cur.lastrowid

@@ -668,6 +668,8 @@ body.light #rh-toast.warn{background:#fffbeb;color:#92400e;border-color:#fcd34d}
   color:var(--muted);padding:0 10px 4px;margin-top:12px;
 }
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>

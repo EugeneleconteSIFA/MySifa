@@ -153,6 +153,28 @@ with dbmod.get_db() as conn:
 check("documents ordonnes et enrichis", len(docs) >= 2, True)
 check("machine remontee depuis l'OF", docs[0].get("machine"), "Cohesio 1")
 
+print("--- recherche de dossiers pour le rattachement manuel ---")
+# La file de rattachement propose des candidats au fil de la frappe : ce qui
+# compte est qu'on retrouve le dossier par TOUT ce que le scan peut porter
+# (numero de dossier, numero d'OF, reference produit, client) et que la
+# reference annoncee soit celle que le rattachement ecrira vraiment.
+pmr.get_current_user = lambda request: {"nom": "test"}
+
+
+def cherche(q):
+    return [d["no_dossier"] for d in pmr.rechercher_dossiers(request=None, q=q)["dossiers"]]
+
+
+check("trouve par le numero de dossier", cherche("D-9931987"), ["D-9931987"])
+check("trouve par le numero d'OF", cherche("9931987"), ["D-9931987"])
+check("trouve par la reference produit", cherche("965/0001"), ["D-9931987"])
+check("trouve par le client", cherche("ITM"), ["D-9931987"])
+check("une seule lettre ne cherche pas", cherche("D"), [])
+check("aucun resultat reste vide", cherche("zzzzz"), [])
+check("reference annoncee = celle qui sera ecrite",
+      pmr.rechercher_dossiers(request=None, q="9931987")["dossiers"][0]["ref_produit_norm"],
+      REF)
+
 print("--- parcours du dossier reseau (sous-dossiers par annee) ---")
 import of_scans_commun as osc
 

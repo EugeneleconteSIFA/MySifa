@@ -64,33 +64,92 @@ def _compute_duree_minutes_by_id(rows: List[dict]) -> Dict[int, float]:
     return out
 
 
+def _compteur(r: dict, *champs: str) -> Optional[float]:
+    """Premier compteur machine renseigne parmi `champs`, sinon None.
+
+    L'ordre des champs porte l'histoire du schema : les compteurs vivent dans
+    `metrage_total_debut` / `metrage_total_fin` depuis leur introduction,
+    `metrage_prevu` / `metrage_reel` restent le repli des lignes anterieures.
+    """
+    for champ in champs:
+        v = r.get(champ)
+        if v is None:
+            continue
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
 def _enrich_metrage(all_list: List[dict], dossier_times: List[dict]) -> List[dict]:
-    debut_entries: Dict[tuple, list] = {}
+    """Metrage produit par session = ecart de compteur machine fin - debut.
+
+    Trois regles, alignees sur le calcul affiche dans la liste des saisies de
+    MyProd — la reference que les operateurs relisent chaque jour, et dont
+    tout ecart se voit comme une incoherence entre deux ecrans :
+
+    1. **Les compteurs sont dans `metrage_total_debut` / `metrage_total_fin`.**
+       `metrage_prevu` / `metrage_reel` sont l'ancien emplacement, conserve en
+       repli. Ne lire que l'ancien couple rendait muette toute saisie qui ne
+       le remplit plus : metrage a 0, donc vitesse a 0, sur un dossier
+       pourtant produit.
+    2. **Le compteur de debut appartient au DOSSIER, pas a l'operateur.**
+       Quand une equipe prend la suite d'une autre, celle qui cloture n'a pas
+       pose le 01 : le chercher sous son seul nom ne le trouve pas.
+    3. **Sans compteur de debut connu, il n'y a pas de metrage** — on n'ecrit
+       rien plutot que de prendre 0 pour origine. Un 0 implicite sort le
+       compteur machine entier (4 324 644 m la ou le dossier en a produit
+       17 531), soit exactement l'erreur d'ordre de grandeur qui a deja
+       fausse les besoins matieres.
+    """
+    debut_par_dossier: Dict[str, list] = {}
     fin_data: Dict[tuple, dict] = {}
 
-    for r in all_list:
+    # Chronologique : le compteur de debut retenu est le dernier pose avant la
+    # cloture, et l'ordre d'arrivee des lignes ne doit pas y changer quoi que
+    # ce soit.
+    ordonne = sorted(
+        all_list,
+        key=lambda r: (_norm_dt(str(r.get("date_operation") or "")), int(r.get("id") or 0)),
+    )
+
+    for r in ordonne:
         code = str(r.get("operation_code") or "")
         dos = str(r.get("no_dossier") or "").strip()
         if not dos or dos == "0":
             continue
-        op = str(r.get("operateur") or "?")
         dt_op = str(r.get("date_operation") or "")
 
         if code == "01":
-            ctr = float(r["metrage_prevu"]) if r.get("metrage_prevu") is not None else 0.0
-            debut_entries.setdefault((op, dos), []).append((_norm_dt(dt_op), ctr))
-        elif code == "89" and r.get("metrage_reel") is not None:
-            fin_dt = _norm_dt(dt_op)
-            jour_iso = _norm_date(dt_op)
-            key = (op, jour_iso, dos)
-            entry = fin_data.setdefault(key, {"metrage_m": 0.0, "etiquettes": 0.0})
-            debuts = debut_entries.get((op, dos), [])
-            before = [(dt, m) for dt, m in debuts if dt <= fin_dt]
-            debut_ctr = sorted(before, reverse=True)[0][1] if before else 0.0
-            produit = max(0.0, float(r["metrage_reel"]) - debut_ctr)
-            entry["metrage_m"] += produit
-            if r.get("quantite_traitee") is not None:
-                entry["etiquettes"] = float(r["quantite_traitee"])
+            ctr = _compteur(r, "metrage_total_debut", "metrage_prevu")
+            if ctr is not None:
+                debut_par_dossier.setdefault(dos, []).append((_norm_dt(dt_op), ctr))
+            continue
+
+        # 90 (annulation) borne le cycle comme un 89 : le temps et la matiere
+        # ont ete consommes, seule la livraison n'a pas eu lieu. La ligne
+        # d'annulation porte elle-meme le compteur de debut de son cycle.
+        if code not in ("89", "90"):
+            continue
+
+        fin_ctr = _compteur(r, "metrage_total_fin", "metrage_reel")
+        if fin_ctr is None:
+            continue
+
+        fin_dt = _norm_dt(dt_op)
+        debut_ctr = _compteur(r, "metrage_total_debut", "metrage_prevu") if code == "90" else None
+        if debut_ctr is None:
+            avant = [c for d, c in debut_par_dossier.get(dos, []) if d <= fin_dt]
+            debut_ctr = avant[-1] if avant else None
+        if debut_ctr is None:
+            continue
+
+        key = (str(r.get("operateur") or "?"), _norm_date(dt_op), dos)
+        entry = fin_data.setdefault(key, {"metrage_m": 0.0, "etiquettes": 0.0})
+        entry["metrage_m"] += max(0.0, fin_ctr - debut_ctr)
+        if r.get("quantite_traitee") is not None:
+            entry["etiquettes"] = float(r["quantite_traitee"])
 
     enriched = []
     for d in dossier_times:
@@ -163,6 +222,7 @@ def build_dossier_production_stats(rows: List[dict], no_dossier: str) -> dict:
                 "calage_min": 0.0,
                 "production_min": 0.0,
                 "arret_min": 0.0,
+                "nettoyage_min": 0.0,
             },
             "quantites": {"etiquettes": 0.0, "metrage_m": 0.0},
             "vitesse_m_min": 0.0,
@@ -176,12 +236,15 @@ def build_dossier_production_stats(rows: List[dict], no_dossier: str) -> dict:
     calage = sum(float(d.get("temps_calage_min") or 0) for d in dossier_times)
     prod = sum(float(d.get("temps_prod_min") or 0) for d in dossier_times)
     arret = sum(float(d.get("temps_arret_min") or 0) for d in dossier_times)
+    nettoyage = sum(float(d.get("temps_nettoyage_min") or 0) for d in dossier_times)
     session = sum(
         float(d.get("temps_total_calage_min") or 0)
         for d in dossier_times
         if d.get("temps_total_calage_min") is not None
     )
-    duree_totale = round(session if session > 0 else calage + prod + arret, 1)
+    duree_totale = round(
+        session if session > 0 else calage + prod + arret + nettoyage, 1
+    )
 
     etiquettes = round(sum(float(d.get("etiquettes") or 0) for d in dossier_times), 1)
     metrage = round(sum(float(d.get("metrage_m") or 0) for d in dossier_times), 1)
@@ -196,6 +259,11 @@ def build_dossier_production_stats(rows: List[dict], no_dossier: str) -> dict:
             "minutes": round(prod, 1),
         },
         {"category": "arret", "label": "Arrêts", "minutes": round(arret, 1)},
+        # Poste distinct : le 67 (vidange four colle) etait compte en calage,
+        # les 61 et 77 nulle part. Ils gonflaient ou trouaient la repartition
+        # sans jamais apparaitre sous leur nom.
+        {"category": "nettoyage", "label": "Nettoyage",
+         "minutes": round(nettoyage, 1)},
     ]
 
     op_agg: Dict[str, dict] = {}
@@ -210,12 +278,14 @@ def build_dossier_production_stats(rows: List[dict], no_dossier: str) -> dict:
                 "calage_min": 0.0,
                 "prod_min": 0.0,
                 "arret_min": 0.0,
+                "nettoyage_min": 0.0,
                 "minutes": 0.0,
             },
         )
         acc["calage_min"] += float(d.get("temps_calage_min") or 0)
         acc["prod_min"] += float(d.get("temps_prod_min") or 0)
         acc["arret_min"] += float(d.get("temps_arret_min") or 0)
+        acc["nettoyage_min"] += float(d.get("temps_nettoyage_min") or 0)
 
     op_saisies: Dict[str, int] = defaultdict(int)
     for r in all_list:
@@ -227,8 +297,10 @@ def build_dossier_production_stats(rows: List[dict], no_dossier: str) -> dict:
         acc["calage_min"] = round(acc["calage_min"], 1)
         acc["prod_min"] = round(acc["prod_min"], 1)
         acc["arret_min"] = round(acc["arret_min"], 1)
+        acc["nettoyage_min"] = round(acc["nettoyage_min"], 1)
         acc["minutes"] = round(
-            acc["calage_min"] + acc["prod_min"] + acc["arret_min"], 1
+            acc["calage_min"] + acc["prod_min"] + acc["arret_min"]
+            + acc["nettoyage_min"], 1
         )
         operateurs.append(acc)
     operateurs.sort(key=lambda x: (-x["minutes"], x["operateur"]))
@@ -241,6 +313,7 @@ def build_dossier_production_stats(rows: List[dict], no_dossier: str) -> dict:
             "calage_min": round(calage, 1),
             "production_min": round(prod, 1),
             "arret_min": round(arret, 1),
+            "nettoyage_min": round(nettoyage, 1),
         },
         "quantites": {"etiquettes": etiquettes, "metrage_m": metrage},
         "vitesse_m_min": vitesse,
