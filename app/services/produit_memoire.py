@@ -47,6 +47,19 @@ def now_iso() -> str:
     return datetime.now(_PARIS).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%S")
 
 
+def _tables(conn) -> set:
+    """Tables presentes. Une lecture ne doit jamais tomber parce qu'une
+    migration recente n'est pas encore passee sur cette base."""
+    try:
+        return {
+            str(r[0]) for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+    except Exception:
+        return set()
+
+
 def _cols(conn, table: str) -> set:
     try:
         return {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
@@ -234,6 +247,91 @@ def contexte_dossier(conn, no_dossier: str) -> Dict[str, Any]:
                 except (TypeError, ValueError):
                     pass
     return out
+
+
+# ─── Info prod : le commentaire d'UN dossier ─────────────────────────────────
+#
+# Une note produit (`produit_savoirs`) vaut pour toutes les series de la
+# reference. L'info prod, elle, ne parle que de CE dossier : ce qui s'est passe
+# dessus, ce que le client a demande dessus. Les deux se lisent au meme endroit
+# mais ne se confondent pas — sinon « R.A.S. » finirait dans les consignes
+# permanentes du produit.
+
+def info_prod_dossier(conn, no_dossier: str) -> Optional[dict]:
+    """L'info prod d'un dossier, ou None s'il n'y en a pas."""
+    ref = (no_dossier or "").strip()
+    if not ref or "dossier_info_prod" not in _tables(conn):
+        return None
+    row = conn.execute(
+        "SELECT * FROM dossier_info_prod WHERE trim(no_dossier) = trim(?)", (ref,)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def infos_prod_dossiers(conn, no_dossiers: List[str]) -> Dict[str, dict]:
+    """Les infos prod de plusieurs dossiers d'un coup (liste Tracabilite).
+
+    Une requete par ligne de tableau sur 300 dossiers, c'est 300 allers-retours
+    pour afficher une colonne.
+    """
+    refs = [str(r or "").strip() for r in (no_dossiers or []) if str(r or "").strip()]
+    if not refs or "dossier_info_prod" not in _tables(conn):
+        return {}
+    out: Dict[str, dict] = {}
+    for i in range(0, len(refs), 400):  # SQLite plafonne le nombre de parametres
+        lot = refs[i:i + 400]
+        marks = ", ".join("?" * len(lot))
+        for row in conn.execute(
+            f"SELECT * FROM dossier_info_prod WHERE no_dossier IN ({marks})", lot
+        ).fetchall():
+            d = dict(row)
+            out[str(d.get("no_dossier") or "").strip()] = d
+    return out
+
+
+def enregistrer_info_prod(conn, no_dossier: str, texte: str,
+                          auteur: str) -> Optional[dict]:
+    """Ecrit (ou efface) l'info prod d'un dossier. Retourne la ligne, ou None.
+
+    Un texte vide EFFACE la ligne : « pas d'info » et « une info vide » sont la
+    meme chose, et une ligne fantome ferait croire a une colonne renseignee.
+    """
+    ref = (no_dossier or "").strip()
+    if not ref or "dossier_info_prod" not in _tables(conn):
+        return None
+    txt = (texte or "").strip()
+    now = now_iso()
+
+    if not txt:
+        conn.execute("DELETE FROM dossier_info_prod WHERE trim(no_dossier) = trim(?)", (ref,))
+        conn.commit()
+        return None
+
+    ancienne = info_prod_dossier(conn, ref)
+    ref_produit = (ancienne or {}).get("ref_produit_norm")
+    if not ref_produit:
+        try:
+            ref_produit = contexte_dossier(conn, ref).get("ref_produit_norm")
+        except Exception:
+            ref_produit = None
+
+    if ancienne:
+        conn.execute(
+            """UPDATE dossier_info_prod
+               SET texte=?, ref_produit_norm=COALESCE(?, ref_produit_norm),
+                   updated_at=?, updated_par=?
+               WHERE trim(no_dossier) = trim(?)""",
+            (txt, ref_produit, now, auteur or "", ref),
+        )
+    else:
+        conn.execute(
+            """INSERT INTO dossier_info_prod
+               (no_dossier, ref_produit_norm, texte, auteur, created_at)
+               VALUES (?,?,?,?,?)""",
+            (ref, ref_produit, txt, auteur or "", now),
+        )
+    conn.commit()
+    return info_prod_dossier(conn, ref)
 
 
 # ─── Materialisation d'une serie ──────────────────────────────────────────────
@@ -463,12 +561,24 @@ def _serie_dict(row) -> dict:
 
 def series_produit(conn, ref_produit_norm: str, limit: Optional[int] = None,
                    exclure_dossier: Optional[str] = None) -> List[dict]:
-    sql = "SELECT * FROM produit_series WHERE ref_produit_norm = ?"
+    # L'info prod se lit sur la carte de la serie : c'est le commentaire de CE
+    # dossier-la, il n'a de sens qu'a cote de ses chiffres. Jointure plutot que
+    # N lectures : une fiche produit affiche parfois trente series.
+    a_info = "dossier_info_prod" in _tables(conn)
+    if a_info:
+        sql = ("SELECT ps.*, dip.texte AS info_prod, "
+               "COALESCE(dip.updated_par, dip.auteur) AS info_prod_par, "
+               "COALESCE(dip.updated_at, dip.created_at) AS info_prod_le "
+               "FROM produit_series ps "
+               "LEFT JOIN dossier_info_prod dip ON trim(dip.no_dossier) = trim(ps.no_dossier) "
+               "WHERE ps.ref_produit_norm = ?")
+    else:
+        sql = "SELECT ps.* FROM produit_series ps WHERE ps.ref_produit_norm = ?"
     params: list = [ref_produit_norm]
     if exclure_dossier:
-        sql += " AND no_dossier != ?"
+        sql += " AND ps.no_dossier != ?"
         params.append(exclure_dossier)
-    sql += " ORDER BY COALESCE(date_fin, date_debut) DESC, id DESC"
+    sql += " ORDER BY COALESCE(ps.date_fin, ps.date_debut) DESC, ps.id DESC"
     if limit:
         sql += f" LIMIT {int(limit)}"
     return [_serie_dict(r) for r in conn.execute(sql, params).fetchall()]
@@ -661,6 +771,10 @@ def apercu_pour_dossier(conn, no_dossier: str, user_login: Optional[str] = None)
     """
     ctx = contexte_dossier(conn, no_dossier)
     ref = ctx.get("ref_produit_norm")
+    # L'info prod du dossier suffit a elle seule a justifier le bouton : une
+    # consigne ecrite en Tracabilite avant le lancement doit atteindre le
+    # conducteur meme si la reference n'a jamais tourne.
+    info = info_prod_dossier(conn, no_dossier)
     # L'historique doit etre la des l'ouverture du dossier. On materialise donc
     # a la volee les productions passees de CETTE seule reference : quelques
     # dossiers, instantane. Le rattrapage global reste un geste d'administration,
@@ -669,8 +783,9 @@ def apercu_pour_dossier(conn, no_dossier: str, user_login: Optional[str] = None)
     if ref:
         assurer_series_reference(conn, ref)
     vide = {
-        "disponible": False, "no_dossier": (no_dossier or "").strip(),
+        "disponible": bool(info), "no_dossier": (no_dossier or "").strip(),
         "ref_produit_norm": ref, "nb_series": 0, "nb_savoirs": 0, "nb_documents": 0,
+        "info_prod": info,
     }
     if not ref:
         return vide
@@ -687,12 +802,13 @@ def apercu_pour_dossier(conn, no_dossier: str, user_login: Optional[str] = None)
         (ref,),
     ).fetchone()["n"]
     return {
-        "disponible": bool(n_series or n_savoirs or n_docs),
+        "disponible": bool(n_series or n_savoirs or n_docs or info),
         "no_dossier": (no_dossier or "").strip(),
         "ref_produit_norm": ref,
         "nb_series": int(n_series or 0),
         "nb_savoirs": int(n_savoirs or 0),
         "nb_documents": int(n_docs or 0),
+        "info_prod": info,
     }
 
 

@@ -344,6 +344,10 @@ body.has-staging-bandeau .pr-savebar{top:44px}
 .check-title{display:block;font-size:13px;font-weight:700;color:var(--text)}
 .check-sub{display:block;font-size:11px;color:var(--muted);margin-top:3px;line-height:1.5}
 .import-fields{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+/* Propagation du transport aux autres matières du fournisseur : une action,
+   pas un champ — d'où le trait qui la détache des saisies au-dessus. */
+.transport-propage{margin-top:14px;padding-top:12px;border-top:1px dashed var(--border)}
+.transport-propage .field-hint{margin-top:7px;max-width:560px}
 
 /* Tableau récapitulatif horizontal du calcul */
 .recap-card{background:var(--card);border:1px solid var(--border);border-radius:12px;

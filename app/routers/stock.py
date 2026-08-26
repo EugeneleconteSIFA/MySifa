@@ -3661,6 +3661,102 @@ def list_receptions(request: Request, limit: int = 50):
     return {"receptions": result}
 
 
+@router.get("/api/stock/traca/bobines-recentes")
+def traca_bobines_recentes(request: Request, limit: int = 40):
+    """Lots de reception recents, reduits aux seuls champs qui figurent sur
+    l'etiquette d'identification bobine de MyPrint.
+
+    Volontairement ouvert a tout utilisateur connecte, la ou le reste de
+    /api/stock passe par `require_stock` : MyPrint est accessible au role
+    `fabrication` via /stock?tab=traca, et c'est justement au poste que l'on
+    reimprime l'etiquette d'une bobine entamee ou abimee. Rien n'est expose
+    de plus que ce qui est deja colle sur la bobine physique — ni prix, ni
+    quantite en stock, ni emplacement.
+    """
+    get_current_user(request)
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        limit = 40
+    limit = max(1, min(limit, 200))
+
+    with get_db() as conn:
+        lots = conn.execute(
+            """SELECT id, lot_numero, fournisseur, fsc_type_claim, certificat_fsc,
+                      created_at, nb_bobines
+                 FROM stock_receptions
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        lot_ids = [r["id"] for r in lots]
+        par_lot: dict[int, list] = {lid: [] for lid in lot_ids}
+        if lot_ids:
+            placeholders = ",".join("?" for _ in lot_ids)
+            rows = conn.execute(
+                f"""SELECT i.id, i.reception_id, i.code_barre,
+                           m.reference   AS matiere_reference,
+                           m.designation AS matiere_designation,
+                           l.valeur_mm   AS laize_valeur_mm,
+                           l.label       AS laize_label
+                      FROM stock_reception_items i
+                      LEFT JOIN matieres_premieres m ON m.id = i.matiere_id
+                      LEFT JOIN mp_laizes l          ON l.id = i.laize_id
+                     WHERE i.reception_id IN ({placeholders})
+                     ORDER BY i.id""",
+                lot_ids,
+            ).fetchall()
+            for b in rows:
+                par_lot.setdefault(b["reception_id"], []).append({
+                    "id": b["id"],
+                    "code_barre": b["code_barre"],
+                    "matiere_reference": b["matiere_reference"] or "",
+                    "matiere_designation": b["matiere_designation"] or "",
+                    "laize": _traca_laize_texte(b),
+                })
+
+    out = []
+    for lot in lots:
+        d = dict(lot)
+        out.append({
+            "id": d["id"],
+            "lot_numero": d.get("lot_numero") or "",
+            "fournisseur": d.get("fournisseur") or "",
+            "fsc_type_claim": d.get("fsc_type_claim") or "non_fsc",
+            "certificat_fsc": d.get("certificat_fsc") or "",
+            "date_reception": _traca_date_fr(d.get("created_at")),
+            "bobines": par_lot.get(d["id"], []),
+        })
+    return {"lots": out}
+
+
+def _traca_laize_texte(row) -> str:
+    """Laize d'une bobine en texte pret a imprimer. Meme regle que le front
+    (`recepFormatLaize`) : le label saisi prime, sinon la valeur en mm."""
+    label = row["laize_label"] if "laize_label" in row.keys() else None
+    if label:
+        return str(label)
+    valeur = row["laize_valeur_mm"] if "laize_valeur_mm" in row.keys() else None
+    if valeur is None or valeur == "":
+        return ""
+    try:
+        v = float(valeur)
+    except (TypeError, ValueError):
+        return str(valeur)
+    return (f"{int(v)}" if v.is_integer() else f"{v:.1f}") + " mm"
+
+
+def _traca_date_fr(iso: Optional[str]) -> str:
+    """created_at ISO -> JJ/MM/AAAA. Une date illisible vaut mieux vide que
+    fausse sur une etiquette de tracabilite."""
+    if not iso:
+        return ""
+    try:
+        return datetime.fromisoformat(str(iso).replace("Z", "+00:00")).strftime("%d/%m/%Y")
+    except (TypeError, ValueError):
+        return str(iso)[:10]
+
+
 def _check_codes_barres_uniques(conn, codes: list[str]) -> None:
     """Refuse un code-barre déjà enregistré sur une autre réception.
 

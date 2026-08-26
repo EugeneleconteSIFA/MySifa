@@ -1693,6 +1693,19 @@ async def create_saisie(request: Request):
         # Best-effort : une erreur ici ne doit jamais faire échouer la saisie
         # de l'opérateur — c'est un service, pas un contrôle.
         if cl["code"] == "89" and fin_dossier_flag and no_dossier:
+            # L'info prod exigee a la cloture s'ecrit AVANT la serie : elle est
+            # la reponse a « qu'est-ce qu'il faut savoir la prochaine fois ? »,
+            # et la serie figee la restitue ensuite sur sa carte.
+            # Un texte vide n'ecrase pas une info deja saisie en Tracabilite :
+            # l'operateur qui n'a rien a ajouter ne doit pas effacer ce qu'un
+            # autre a note avant lui.
+            info_prod_saisie = (body.get("info_prod") or "").strip()
+            if info_prod_saisie:
+                try:
+                    from app.services.produit_memoire import enregistrer_info_prod
+                    enregistrer_info_prod(conn, no_dossier, info_prod_saisie, operateur)
+                except Exception:
+                    pass
             try:
                 from app.services.produit_memoire import materialiser_serie
                 materialiser_serie(conn, no_dossier, cloture_par=operateur)
@@ -2748,6 +2761,47 @@ def delete_matiere(matiere_id: int, request: Request, tracabilite: bool = False)
     return {"success": True}
 
 
+@router.get("/api/fabrication/dossiers/{no_dossier}/info-prod")
+def get_info_prod_dossier(no_dossier: str, request: Request):
+    """L'info prod d'un dossier — le commentaire libre qui lui est attache."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    from app.services.produit_memoire import info_prod_dossier
+    with get_db() as conn:
+        return {"no_dossier": no_dossier, "info_prod": info_prod_dossier(conn, no_dossier)}
+
+
+@router.put("/api/fabrication/dossiers/{no_dossier}/info-prod")
+async def set_info_prod_dossier(no_dossier: str, request: Request):
+    """Ecrit l'info prod d'un dossier.
+
+    Pas de circuit de validation : qui voit la tracabilite ecrit, comme pour
+    les notes produit. Le garde-fou est la tracabilite de l'ecriture — auteur
+    et date sont conserves et affiches.
+    """
+    user = get_current_user(request)
+    _check_fab_access(user)
+
+    body = await request.json()
+    texte = (body.get("texte") or "").strip()
+
+    auteur = user.get("operateur_lie") or user.get("nom") or user.get("login") or ""
+
+    from app.services.produit_memoire import enregistrer_info_prod
+    with get_db() as conn:
+        info = enregistrer_info_prod(conn, no_dossier, texte, auteur)
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="fabrication",
+        objet=f"Info prod dossier {no_dossier}",
+        detail={"no_dossier": no_dossier, "efface": not texte},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "info_prod": info}
+
+
 @router.get("/api/fabrication/traceability")
 def get_traceability(request: Request, no_dossier: str = None, machine_id: int = None):
     """Vue traçabilité : dossiers avec matières utilisées + infos production."""
@@ -2780,10 +2834,17 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
                 (no_dossier,),
             ).fetchall()
 
+            try:
+                from app.services.produit_memoire import info_prod_dossier
+                info = info_prod_dossier(conn, no_dossier)
+            except Exception:
+                info = None
+
             return {
                 "dossier": dossier,
                 "matieres": [dict(r) for r in matieres],
                 "production": [dict(r) for r in prod_rows],
+                "info_prod": info,
             }
         else:
             # Liste des dossiers avec au moins une saisie ou matière
@@ -2813,7 +2874,24 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
                 params,
             ).fetchall()
 
-            return {"dossiers": [dict(r) for r in rows]}
+            dossiers = [dict(r) for r in rows]
+            # L'info prod se lit en colonne dans l'onglet Tracabilite. Une
+            # lecture groupee plutot qu'une par ligne : la liste depasse
+            # regulierement 250 dossiers.
+            try:
+                from app.services.produit_memoire import infos_prod_dossiers
+                infos = infos_prod_dossiers(
+                    conn, [d.get("reference") for d in dossiers]
+                )
+            except Exception:
+                infos = {}
+            for d in dossiers:
+                info = infos.get(str(d.get("reference") or "").strip())
+                d["info_prod"] = (info or {}).get("texte")
+                d["info_prod_par"] = (info or {}).get("updated_par") or (info or {}).get("auteur")
+                d["info_prod_le"] = (info or {}).get("updated_at") or (info or {}).get("created_at")
+
+            return {"dossiers": dossiers}
 
 
 @router.put("/api/fabrication/matieres/{matiere_id}/commentaire")

@@ -790,10 +790,22 @@ def historique_dossier(no_dossier: str, request: Request):
     with get_db() as conn:
         ctx = pm.contexte_dossier(conn, no_dossier)
         ref = ctx.get("ref_produit_norm")
+        # L'info prod du dossier ouvert se lit en tete du panneau : c'est la
+        # consigne qui concerne la production en cours, pas l'historique.
+        info = pm.info_prod_dossier(conn, no_dossier)
         if not ref:
-            return {"disponible": False, "ref_produit_norm": None}
+            if not info:
+                return {"disponible": False, "ref_produit_norm": None}
+            return {
+                "disponible": True, "ref_produit_norm": None,
+                "no_dossier": (no_dossier or "").strip(),
+                "info_prod": info, "series": [], "savoirs": [], "documents": [],
+                "contexte": ctx, "est_admin": is_admin(user),
+                "est_superadmin": is_superadmin(user), "moi": _auteur(user),
+            }
         data = pm.resume_produit(conn, ref, user_login=_user_login(user),
                                  exclure_dossier=(no_dossier or "").strip())
+        data["info_prod"] = info
     data["disponible"] = True
     data["no_dossier"] = (no_dossier or "").strip()
     data["contexte"] = ctx

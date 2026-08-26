@@ -91,6 +91,30 @@ check('chaque méthode n\'affiche que ses champs',
   modale.includes("if (mode === \"PCT\")") && modale.includes('TRANSPORT_CHAMPS[mode]'), true);
 check('avec l\'aide de la méthode choisie', modale.includes('transportAideHtml(mode)'), true);
 
+// Un transitaire ne change pas de méthode d'un frontal à l'autre : le réglage
+// doit pouvoir se poser une fois pour toute la catégorie, sans dix allers-retours.
+console.log('\n--- appliquer le transport aux autres matières du fournisseur ---');
+check('le bouton existe', app.includes('function transportPropagerHtml('), true);
+check('et son style', css.includes('.transport-propage{'), true);
+check('la modale tarif le pose', modale.includes('transportPropagerHtml("tf-prop"'), true);
+const fiche = app.slice(app.indexOf('function renderDeclinaisonForm('),
+                        app.indexOf('async function saveDeclinaisonForm('));
+check('la fiche déclinaison aussi', fiche.includes('transportPropagerHtml(\n                  "d-tprop"'), true);
+// Sans fournisseur identifié, il n'y a aucun tarif à propager : le bouton
+// disparaît plutôt que d'échouer au clic. Idem en lecture seule.
+check('pas de fournisseur (ni de droit d\'écrire), pas de bouton',
+  app.includes('if (!fournisseurNom || !S.canWrite) return "";'), true);
+// On annonce le nombre exact AVANT d'écrire : « appliquer à 7 matières ? » se
+// refuse en connaissance de cause, « appliquer partout ? » non.
+check('le périmètre est demandé avant', app.includes('perimetre = await api(url)'), true);
+check('et confirmé', app.includes('confirmerAction({'), true);
+// La confirmation s'ouvre par-dessus la modale tarif : écrire dans le même
+// conteneur effacerait la modale qui l'a demandée.
+check('la confirmation a son propre calque',
+  app.includes('document.body.appendChild(calque)'), true);
+check('seuls le transport et les taxes voyagent',
+  app.includes('function transportPayload(') && !/function transportPayload\([^]{0,600}price_basis/.test(app), true);
+
 console.log('\n--- l\'API ---');
 for (const route of [
   '/api/pricing/tarifs/fournisseurs',
@@ -98,6 +122,7 @@ for (const route of [
   '/api/pricing/tarifs/matiere/{matiere_id}',
   '/api/pricing/tarifs/fournisseur/{fournisseur_id}/devise',
   '/api/pricing/tarifs/{fournisseur_id}/{matiere_id}',
+  '/api/pricing/tarifs/{fournisseur_id}/{matiere_id}/propager',
 ]) {
   check('route ' + route, api.includes('"' + route + '"'), true);
 }
