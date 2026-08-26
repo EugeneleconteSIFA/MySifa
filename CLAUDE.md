@@ -1059,6 +1059,35 @@ MySifa en expose une lecture dans l'app `/erp`, ouverte à **`ROLES_ADMIN`** —
 direction, services administration et super administrateur. La documentation de la base elle-même est dans
 `docs/rvgi/data_rvgi.md` — la lire avant de toucher à quoi que ce soit ici.
 
+### MyERP est un MIROIR — rien d'autre
+
+**Sauf contre-indication explicite d'Eugène, on ne crée dans `/erp` RIEN qui ne
+soit pas un miroir de l'ERP** — ni donnée, ni outil de gestion.
+
+Cela veut dire, concrètement :
+
+- **Pas d'écran qui ne vienne pas du catalogue.** Les domaines et les écrans du
+  menu sont ceux de `erp_catalogue.py`, qui décrit les tables de RVGI. On
+  n'ajoute pas un domaine côté client, on n'invente pas d'écran de travail.
+- **Pas de liste de tâches, pas de tableau de bord, pas d'outil de contrôle.**
+  Une liste « à traiter », une comparaison entre les deux bases, un suivi
+  d'écarts : tout cela est du travail MySifa. Sa place est dans l'app métier
+  concernée — le monitoring de stock dans MyStock, les dossiers à rattacher
+  dans MyProd, les départs dans MyExpé. Pas ici.
+- **Pas de données saisies dans MyERP.** L'écran lit, il n'enregistre pas.
+
+Ce qui est autorisé, parce que ça reste de la lecture posée sur du RVGI :
+afficher, à côté d'une ligne de l'ERP, ce que MySifa en a fait — la colonne
+« Dossier de fab » sur les commandes en est l'exemple, demandée explicitement.
+La règle porte sur la création d'écrans et d'outils, pas sur l'enrichissement
+d'une ligne existante.
+
+**Historique de la règle.** Deux écrans avaient été ajoutés sans être demandés :
+« À rattacher » (les dossiers MySifa sans pièce RVGI) et « Stocks RVGI ↔
+MySifa ». Ils ont été retirés le 26/08/2026. Le premier n'avait rien à faire
+dans un miroir ; le second existait déjà, à sa vraie place, dans le monitoring
+de MyStock. En cas de doute sur un ajout à `/erp` : demander.
+
 ### Les trois règles absolues
 
 1. **Le sens d'écriture est unique.** RVGI est la source, MySifa lit. Aucun code
