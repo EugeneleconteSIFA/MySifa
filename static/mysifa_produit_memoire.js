@@ -415,15 +415,51 @@
     return el('div', { className: 'pmem-card' }, enfants);
   }
 
+  // Une serie n'existe qu'a la cloture du dossier. Voir quatre dossiers de la
+  // reference au planning et deux lignes ici passe pour une perte de donnees
+  // tant que personne ne dit ou sont les deux autres. On le dit.
+  function blocDossiersReference(d) {
+    var dr = d.dossiers_reference || null;
+    if (!dr || !dr.total) return null;
+    if (!dr.en_cours && !dr.a_venir) return null;
+
+    var restes = [];
+    if (dr.en_cours) restes.push(dr.en_cours + ' en cours de production');
+    if (dr.a_venir) restes.push(dr.a_venir + (dr.a_venir > 1 ? ' n\'ont' : ' n\'a') + ' pas encore tourne');
+
+    var produits = dr.produits
+      ? (dr.produits + (dr.produits > 1 ? ' ont produit et figurent ci-dessous' : ' a produit et figure ci-dessous'))
+      : 'aucun n\'a encore produit';
+
+    return el('div', { className: 'pmem-card' }, [
+      el('div', { className: 'pmem-card-hd' }, [
+        el('span', { className: 'pmem-card-date', text: 'Dossiers de cette reference' }),
+        el('span', { className: 'pmem-card-meta', text: dr.total + ' au planning' }),
+      ]),
+      el('div', {
+        style: 'font-size:13px;color:var(--text2);line-height:1.6',
+        text: produits.charAt(0).toUpperCase() + produits.slice(1) + ', ' + restes.join(', ') + '.',
+      }),
+      el('div', {
+        style: 'font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5',
+        text: 'Une production n\'entre dans l\'historique qu\'a la cloture du dossier (code 89). '
+            + 'Les dossiers en cours ou a venir n\'y sont donc pas encore.',
+      }),
+    ]);
+  }
+
   // ── Rendu : series ─────────────────────────────────────────────────
   function renderSeries(d) {
     var series = d.series || [];
+    var etatDossiers = blocDossiersReference(d);
     if (!series.length) {
       var diag = blocRattrapage(d, false);
-      if (diag) return [diag];
+      if (diag) return etatDossiers ? [etatDossiers, diag] : [diag];
+      if (etatDossiers) return [etatDossiers];
       return [el('div', { className: 'pmem-empty', text: 'Aucune production anterieure enregistree pour cette reference.' })];
     }
     var out = [];
+    if (etatDossiers) out.push(etatDossiers);
     var med = d.medianes || {};
     if (med.base_series) {
       out.push(el('div', { className: 'pmem-card' }, [
@@ -716,6 +752,8 @@
     var metas = [];
     if (d.nb_series) metas.push(d.nb_series + ' production' + (d.nb_series > 1 ? 's' : ''));
     if (d.derniere_production) metas.push('derniere le ' + fDate(d.derniere_production));
+    var dr = d.dossiers_reference || null;
+    if (dr && dr.total > (d.nb_series || 0)) metas.push(dr.total + ' dossiers au planning');
     if ((d.machines || []).length) metas.push((d.machines || []).join(', '));
     if ((d.clients || []).length) metas.push((d.clients || []).slice(0, 3).join(', '));
 

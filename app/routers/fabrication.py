@@ -323,8 +323,38 @@ def _resolve_date_operation(client_raw: Optional[str]) -> str:
     return now.strftime("%Y-%m-%dT%H:%M:%S")
 
 
-def _compute_etat(saisies: list) -> str:
-    """Calcule l'état machine à partir des saisies du jour (du plus récent au plus vieux)."""
+# Catégorie du référentiel opérations → état machine.
+#
+# Invariant : le SEUL chemin vers "en_cours_production" est un code de
+# catégorie `production` (03, 88). Avant août 2026, le code 01 renvoyait
+# directement "en_cours_production" : l'écran affichait "En production" à un
+# opérateur encore en calage, qui n'avait donc aucune raison de pointer son
+# passage en production. Le temps était imputé au code 01 (catégorie
+# `personnel`), que la rentabilité et le rapport hebdo ne comptent pas — du
+# temps machine disparaissait des indicateurs sans que rien ne le signale.
+#
+# L'état se lit désormais dans la CATÉGORIE du référentiel, pas dans une plage
+# numérique. L'ancienne plage 50–85 découpait les codes de calage en deux :
+# 02/10/11/12 tombaient en "en_cours_production", 58/59/60/74/75 en
+# "en_arret" — deux états pour un même geste d'atelier.
+_ETAT_PAR_CATEGORIE = {
+    "production": "en_cours_production",
+    "calage": "en_calage",
+    "arret": "en_arret",
+    "appro": "en_arret",
+    "nettoyage": "en_arret",
+    "technique": "en_arret",
+    "pause": "en_arret",
+}
+
+
+def _compute_etat(saisies: list, ops: Optional[dict] = None) -> str:
+    """Calcule l'état machine à partir des saisies du jour (du plus vieux au plus récent).
+
+    `ops` est le référentiel des codes opération (`load_operations_dict`). Sans
+    lui, on retombe sur l'ancienne règle par plage numérique — le calcul reste
+    correct mais moins fin sur les codes de calage.
+    """
     if not saisies:
         return "sans_session"
 
@@ -332,26 +362,34 @@ def _compute_etat(saisies: list) -> str:
     code = str(last.get("operation_code") or "").strip()
 
     if code == "90":  # Annulation saisie : on ignore et on regarde avant
-        return _compute_etat(saisies[:-1])
+        return _compute_etat(saisies[:-1], ops)
     if code == "87":  # Départ personnel
         return "sans_session"
     if code == "86":  # Arrivée personnel
         return "arrive"
-    if code in ("01",):  # Début dossier → production en cours
-        return "en_cours_production"
-    if code in ("03", "88"):  # Production / Reprise
-        return "en_cours_production"
+    if code == "01":  # Ouverture du dossier → calage, jamais production
+        return "en_calage"
     if code == "89":  # Fin dossier
         return "fin_dossier"
 
-    # Codes 50–85 → arrêt machine
+    categorie = ""
+    if ops:
+        entry = ops.get(code) or {}
+        categorie = str(entry.get("category") or "").strip().lower()
+    if categorie:
+        # Une catégorie inconnue ne peut pas déclarer la production.
+        return _ETAT_PAR_CATEGORIE.get(categorie, "en_calage")
+
+    # Repli sans référentiel : ancienne règle par plage numérique.
+    if code in ("03", "88"):
+        return "en_cours_production"
     try:
         if 50 <= int(code) <= 85:
             return "en_arret"
     except (ValueError, TypeError):
         pass
 
-    return "en_cours_production"
+    return "en_calage"
 
 
 def _get_active_dossier(saisies: list):
@@ -815,7 +853,15 @@ def get_session(request: Request, machine_id: int = None):
         # NON annulees. Les saisies annulees restent dans la timeline (barrees
         # cote UI) mais ne pilotent plus la machine a etats du footer.
         saisies_actives = _saisies_non_annulees(saisies)
-        etat = _compute_etat(saisies_actives)
+        # Le référentiel pilote l'état : la catégorie du dernier code dit si la
+        # machine produit, cale ou est arrêtée (cf. _ETAT_PAR_CATEGORIE).
+        try:
+            from app.services.operations_config import load_operations_dict
+
+            _ops_ref = load_operations_dict(conn)
+        except Exception:
+            _ops_ref = None
+        etat = _compute_etat(saisies_actives, _ops_ref)
         active_ref = _get_active_dossier(saisies_actives)
         # Mouvements stock du jour de l'operateur (EP/SP/EM/SM)
         user_email_scope = (user.get("email") or "").strip() or None

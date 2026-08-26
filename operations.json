@@ -1,5 +1,5 @@
 {
-  "01": { "severity": "info", "label": "Début de production", "category": "personnel", "required": true },
+  "01": { "severity": "info", "label": "Démarrer un dossier", "category": "personnel", "required": true },
   "02": { "severity": "info", "label": "Calage", "category": "calage", "required": false },
   "03": { "severity": "info", "label": "Production", "category": "production", "required": false },
   "10": { "severity": "info", "label": "Calage Errepi", "category": "calage", "required": false },
