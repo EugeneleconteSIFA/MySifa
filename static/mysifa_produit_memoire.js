@@ -182,6 +182,18 @@
       'font-weight:800}',
       '.pmem-btn-doc:hover{border-color:var(--accent);color:var(--accent)}',
       '.pmem-btn.is-on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}',
+      /* Les deux verdicts portes sur une note ne sont pas symetriques : l'un
+         confirme qu'elle sert, l'autre la retire. Une teinte au repos, l'aplat
+         au survol — `color:var(--bg)` sur l'aplat reste lisible dans les deux
+         themes puisque --bg bascule avec eux. Le bouton de remise en vigueur
+         reste neutre : remettre une note n'est pas un geste destructif. */
+      '.pmem-btn-ok{background:rgba(52,211,153,.14);border-color:rgba(52,211,153,.55);',
+      'color:var(--success)}',
+      '.pmem-btn-ok:hover{background:var(--success);border-color:var(--success);color:var(--bg)}',
+      '.pmem-btn-ok.is-on{background:var(--success);border-color:var(--success);color:var(--bg)}',
+      '.pmem-btn-ko{background:rgba(248,113,113,.14);border-color:rgba(248,113,113,.55);',
+      'color:var(--danger)}',
+      '.pmem-btn-ko:hover{background:var(--danger);border-color:var(--danger);color:#fff}',
       '.pmem-form{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px}',
       '.pmem-form textarea,.pmem-form select,.pmem-input{width:100%;box-sizing:border-box;background:var(--card);',
       'border:1px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-size:14px;',
@@ -690,7 +702,7 @@
 
     var voteBtn = el('button', {
       type: 'button',
-      className: 'pmem-btn pmem-btn-sm' + (s.vote_utilisateur ? ' is-on' : ''),
+      className: 'pmem-btn pmem-btn-sm pmem-btn-ok' + (s.vote_utilisateur ? ' is-on' : ''),
       text: 'Ca m\'a servi' + (s.utile_count ? ' (' + s.utile_count + ')' : ''),
     });
     voteBtn.addEventListener('click', async function () {
@@ -707,7 +719,8 @@
     var peutEditer = !!d.est_admin || (!!d.moi && s.auteur === d.moi);
     if (peutEditer) {
       var obs = el('button', {
-        type: 'button', className: 'pmem-btn pmem-btn-sm',
+        type: 'button',
+        className: 'pmem-btn pmem-btn-sm' + (s.obsolete ? '' : ' pmem-btn-ko'),
         text: s.obsolete ? 'Remettre en vigueur' : 'Marquer perimee',
       });
       obs.addEventListener('click', async function () {

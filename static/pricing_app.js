@@ -311,13 +311,17 @@
   function transportPropagerHtml(id, fournisseurNom, categorie) {
     if (!fournisseurNom || !S.canWrite) return "";
     const cat = String(categorie || "").trim();
-    return `<div class="transport-propage">
-      <button type="button" class="btn btn-soft btn-sm" id="${escAttr(id)}" style="width:auto">
-        ${icon("truck", 14)} Appliquer aux autres matières de ${escHtml(fournisseurNom)}
+    // Une cellule de `.field-row` comme les autres : la grille est en deux
+    // colonnes et celle d'à côté des taxes restait vide. L'action se pose là
+    // plutôt qu'en pied de bloc, où elle allongeait la fiche pour rien.
+    return `<div class="field transport-propage">
+      <label>Même transport ailleurs</label>
+      <button type="button" class="btn btn-sm btn-propage" id="${escAttr(id)}">
+        ${icon("truck", 14)} Appliquer aux autres matières
       </button>
       <div class="field-hint">Recopie « matière importée », la méthode de transport et les taxes
-        sur les matières ${cat ? escHtml(cat) : "de la même catégorie"} achetées à ce fournisseur.
-        La base de prix et la devise, elles, ne bougent pas.</div>
+        sur les matières ${cat ? escHtml(cat) : "de la même catégorie"} achetées à
+        ${escHtml(fournisseurNom)}. La base de prix et la devise, elles, ne bougent pas.</div>
     </div>`;
   }
 
@@ -1846,8 +1850,8 @@
                     <input type="number" step="0.01" id="tf-taxe" value="${escAttr(t.taxe_pct)}"/>
                     <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
                   </div>
+                  ${transportPropagerHtml("tf-prop", t.nom, data.categorie)}
                 </div>
-                ${transportPropagerHtml("tf-prop", t.nom, data.categorie)}
               </div>
             </div>
 
@@ -3563,12 +3567,12 @@
                     <input type="number" step="0.01" id="d-tax" value="${escAttr(f.taxe_pct)}"/>
                     <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
                   </div>
+                  ${transportPropagerHtml(
+                    "d-tprop",
+                    declPrincipal ? declPrincipal.fournisseur_nom : null,
+                    f.categorie
+                  )}
                 </div>
-                ${transportPropagerHtml(
-                  "d-tprop",
-                  declPrincipal ? declPrincipal.fournisseur_nom : null,
-                  f.categorie
-                )}
               </div>
             </div>
           </div>

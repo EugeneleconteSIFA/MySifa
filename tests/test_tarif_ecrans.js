@@ -99,7 +99,13 @@ check('et son style', css.includes('.transport-propage{'), true);
 check('la modale tarif le pose', modale.includes('transportPropagerHtml("tf-prop"'), true);
 const fiche = app.slice(app.indexOf('function renderDeclinaisonForm('),
                         app.indexOf('async function saveDeclinaisonForm('));
-check('la fiche déclinaison aussi', fiche.includes('transportPropagerHtml(\n                  "d-tprop"'), true);
+check('la fiche déclinaison aussi', fiche.includes('"d-tprop"'), true);
+// La grille est en deux colonnes : l'action se pose DANS la field-row, à côté
+// des taxes, plutôt qu'en pied de bloc où elle laissait une colonne vide.
+check('posée dans la grille, pas en dessous',
+  /transportPropagerHtml\([^]{0,200}\n\s*<\/div>\n\s*<\/div>\n\s*<\/div>/.test(fiche), true);
+check('et son bouton a son propre style lisible',
+  app.includes('btn-propage') && css.includes('.btn-propage{'), true);
 // Sans fournisseur identifié, il n'y a aucun tarif à propager : le bouton
 // disparaît plutôt que d'échouer au clic. Idem en lecture seule.
 check('pas de fournisseur (ni de droit d\'écrire), pas de bouton',

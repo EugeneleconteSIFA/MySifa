@@ -12296,6 +12296,50 @@ function buildIdBobineMatiereForm(taille) {
     el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
       el('label', { cls:'etiq-form-label' }, 'Bobine du lot'), bobSel));
 
+  // Retrouve une bobine dans les lots deja charges a partir de son code-barres.
+  // C'est ce qui fait l'interet du scan face a une saisie clavier : le code
+  // ramene avec lui le lot, le fournisseur, le claim FSC, la reference et la
+  // laize, donc l'etiquette est complete sans rien retaper.
+  function trouverBobineParCode(code) {
+    const c = String(code || '').trim().toLowerCase();
+    if (!c) return null;
+    for (const l of lots) {
+      const bs = l.bobines || [];
+      for (let i = 0; i < bs.length; i++) {
+        if (String(bs[i].code_barre || '').trim().toLowerCase() === c) {
+          return { lot: l, bobine: bs[i], index: i };
+        }
+      }
+    }
+    return null;
+  }
+
+  function appliquerCodeScanne(code) {
+    const c = String(code || '').trim();
+    if (!c) return;
+    codeInp.value = c;
+    // Une bobine scannee n'est plus « toutes les bobines » : ce qui doit
+    // sortir, c'est l'etiquette de la bobine qu'on vient de lire.
+    toutesBobines = false;
+    const t = trouverBobineParCode(c);
+    if (!t) {
+      showToast('Code ' + c + ' — bobine inconnue, complete les champs.', 'warn');
+      return;
+    }
+    lotCourant = t.lot;
+    lotSel.value  = String(t.lot.id);
+    lotInp.value  = t.lot.lot_numero || '';
+    fourInp.value = t.lot.fournisseur || '';
+    certInp.value = t.lot.certificat_fsc || '';
+    claimSel.value = t.lot.fsc_type_claim || 'non_fsc';
+    majBobSel();
+    bobSel.value = String(t.index);
+    toutesBobines = false;
+    remplirDepuisBobine(t.bobine);
+    codeInp.value = c;
+    showToast('Bobine trouvee — lot ' + (t.lot.lot_numero || '?'), 'success');
+  }
+
   function remplirDepuisBobine(b) {
     refInp.value   = (b && b.matiere_reference) || '';
     laizeInp.value = (b && b.laize) || '';
@@ -12546,6 +12590,27 @@ function buildIdBobineMatiereForm(taille) {
     if (w) w.document.close();
   }
 
+  // Scan camera du code bobine. On appelle le scanner de la reception matiere
+  // avec un callback plutot que d'en ecrire un second : c'est le meme geste,
+  // le meme materiel et les memes pieges (HTTPS obligatoire, autofocus
+  // Android, ZXing sur iOS) — un second scanner divergerait au premier
+  // correctif.
+  const scanBtn = el('button', {
+    cls: 'traca-print-btn',
+    type: 'button',
+    style: { flexShrink:'0', padding:'8px 12px' },
+  }, iconEl('scan', 14), ' Scanner');
+  scanBtn.addEventListener('click', () => {
+    if (typeof recepStartCamera !== 'function') {
+      showToast('Scanner indisponible sur cette page.', 'error');
+      return;
+    }
+    recepStartCamera({
+      hint: 'Pointez vers le code-barres de la bobine',
+      onCode: appliquerCodeScanne,
+    });
+  });
+
   const btn = el('button', { cls:'traca-print-btn',
     style:{ width:'100%', marginTop:'12px', justifyContent:'center' } },
     iconEl('printer', 15), ' Imprimer');
@@ -12572,7 +12637,8 @@ function buildIdBobineMatiereForm(taille) {
         el('label', { cls:'etiq-form-label' }, 'Certificat FSC'), certInp)),
     el('div', { cls:'etiq-form-row' },
       el('div', { cls:'etiq-form-field', style:{ flex:'1.6' } },
-        el('label', { cls:'etiq-form-label' }, 'Code-barres'), codeInp),
+        el('label', { cls:'etiq-form-label' }, 'Code-barres'),
+        el('div', { style:{ display:'flex', gap:'6px' } }, codeInp, scanBtn)),
       el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
         el('label', { cls:'etiq-form-label' }, 'Exemplaires'), copInp)),
     el('div', { cls:'etiq-form-row' },
@@ -16448,7 +16514,18 @@ async function getBackCameraDeviceId() {
   }
 }
 
-async function recepStartCamera() {
+// `opts` est optionnel : la fonction est aussi branchée directement comme
+// handler de clic (`on:{click: recepStartCamera}`), auquel cas le premier
+// argument est l'Event du DOM — d'où le test sur `onCode` plutôt qu'un test
+// de vérité. Sans paramètre, comportement historique inchangé : le code
+// scanné part dans la liste de la réception matière.
+//
+// Le paramétrage existe pour que MyPrint réutilise CE scanner (chemins iOS /
+// Android, ZXing + BarcodeDetector, délai anti-scan-parasite) au lieu d'en
+// faire vivre un second qui divergerait au premier correctif.
+async function recepStartCamera(opts) {
+  const o = (opts && typeof opts.onCode === 'function') ? opts : {};
+  const onFound = o.onCode || recepAddCode;
   if (S.recepScanning) return;
   S.recepScanning = true;
 
@@ -16458,7 +16535,7 @@ async function recepStartCamera() {
   const video = el('video', { cls: 'camera-video', autoplay: '', playsinline: '' });
   const frame = el('div', { cls: 'camera-frame' });
   wrap.append(video, frame);
-  const hint = el('p', { cls: 'camera-hint' }, 'Pointez vers le code-barres de la bobine');
+  const hint = el('p', { cls: 'camera-hint' }, o.hint || 'Pointez vers le code-barres de la bobine');
   const resultEl = el('div', { cls: 'camera-result' }, 'En attente…');
   const closeBtn = el('button', { cls: 'btn-close-cam', on: { click: () => recepStopCamera(overlay) } }, '✕ Fermer');
   overlay.append(wrap, hint, resultEl, closeBtn);
@@ -16500,7 +16577,7 @@ async function recepStartCamera() {
       resultEl.textContent = '✅ ' + code;
       resultEl.style.color = 'var(--success)';
       // Garder l'overlay 600ms pour l'animation, puis fermer et ajouter
-      setTimeout(() => { overlay.remove(); recepAddCode(code); }, 600);
+      setTimeout(() => { overlay.remove(); onFound(code); }, 600);
     };
 
     // ZXing nécessaire sur iOS et pour QR codes sur Android
