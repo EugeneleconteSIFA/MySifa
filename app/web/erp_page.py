@@ -243,7 +243,7 @@ td.vide{color:var(--muted)}
   background:rgba(2,6,23,.66)}
 body.light .detail-fond{background:rgba(15,23,42,.5)}
 .detail-fond.ouvert{display:flex}
-.detail{width:min(1100px,94vw);max-height:88vh;display:flex;flex-direction:column;
+.detail{width:min(1520px,96vw);max-height:90vh;display:flex;flex-direction:column;
   background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;
   box-shadow:0 28px 80px rgba(0,0,0,.5);animation:mo .16s ease-out}
 @keyframes mo{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
@@ -259,6 +259,24 @@ body.light .detail-fond{background:rgba(15,23,42,.5)}
   width:30px;height:30px;cursor:pointer;font-size:17px;line-height:1;flex-shrink:0}
 .detail-fermer:hover{background:var(--danger);border-color:var(--danger);color:#fff}
 .detail-corps{overflow-y:auto;padding:15px 16px 20px;background:var(--bg);flex:1}
+/* Deux colonnes : la pièce à gauche, ce qui s'y rattache à droite.
+   Les pièces liées étaient au bas d'une modale qu'il fallait dérouler pour
+   les voir — donc, en pratique, jamais vues. Elles tiennent maintenant leur
+   propre colonne, visible dès l'ouverture, et le rail reste collé en haut
+   pendant qu'on descend dans les champs de la ligne. */
+.detail-corps.deux-col{display:grid;grid-template-columns:minmax(0,1fr) 380px;
+  gap:0 18px;align-items:start}
+.detail-principal{min-width:0}
+.detail-rail{min-width:0;position:sticky;top:0;max-height:calc(90vh - 96px);
+  overflow-y:auto;padding-bottom:6px}
+.detail-rail::-webkit-scrollbar{width:6px}
+.detail-rail::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+/* Dans le rail, les cartes de liens s'empilent : 380 px n'en tiennent qu'une. */
+.detail-rail .liens{grid-template-columns:1fr}
+@media (max-width:1180px){
+  .detail-corps.deux-col{display:block}
+  .detail-rail{position:static;max-height:none;overflow:visible}
+}
 .sections{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;align-items:start}
 .groupe{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .groupe.pleine{grid-column:1/-1}
@@ -635,6 +653,13 @@ function fmtNb(v,dec){
   if(!isFinite(n))return esc(v);
   return n.toLocaleString('fr-FR',{minimumFractionDigits:dec||0,maximumFractionDigits:dec==null?2:dec});
 }
+// Un numéro de pièce, écrit comme RVGI l'écrit : sans séparateur de milliers,
+// et sans décimale parasite quand la colonne SQL est un réel (9938471.0).
+function fmtId(v){
+  const n=Number(v);
+  if(!isFinite(n))return String(v==null?'':v);
+  return String(Number.isInteger(n)?n:v);
+}
 function fmtDate(s){
   const m=String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
   if(!m)return esc(s);
@@ -662,6 +687,10 @@ function cellule(col,v){
   if(t==='date')     return {cls:'',     html:fmtDate(v)};
   if(t==='datetime') return {cls:'mono', html:fmtDateHeure(v)};
   if(t==='of')       return {cls:'of',   html:esc(v)};
+  // Un numéro de pièce s'écrit tel qu'il est tapé et recopié : « 26060187 »,
+  // jamais « 26 060 187 ». Il s'aligne à droite comme un nombre — deux numéros
+  // l'un sous l'autre se comparent alors chiffre à chiffre.
+  if(t==='id')       return {cls:'mono num', html:esc(fmtId(v))};
   if(t==='ref'||t==='code') return {cls:'mono',html:esc(v)};
   if(t==='bool')     return {cls:'',     html:(String(v)==='1'||v===true)?'Oui':'—'};
   if(t==='enum'){
@@ -1727,15 +1756,16 @@ async function rendreDetail(){
   // puis toutes leurs lignes, puis la ligne ouverte, puis ce qui s'y rattache.
   const p=r.piece||null;
   h=enteteDetail(def?def.label:'Détail',sousTitreDetail(r.groupes,p));
-  h+='<div class="detail-corps">';
+  h+='<div class="detail-corps deux-col"><div class="detail-principal">';
   if(p)h+=blocPiece(p,cur.id);
   h+='<div class="titre-bloc">'+ICO_FICHE+'<span>'+(p?'Détail de la ligne':'Détail')+'</span></div>';
   const res=resumeLigne(r.groupes);
   h+=res.html;
   h+='<div class="sections" id="sec-detail">'+blocGroupes(r.groupes,res.pris)+'</div>';
+  h+='</div><div class="detail-rail">';
   h+='<div class="titre-bloc" id="t-liens">'+ICO_LIEN+'<span>Pièces liées</span></div>'+
      '<div class="liens" id="liens"><div class="liens-vide">Recherche des pièces rattachées…</div></div>';
-  h+='</div>';
+  h+='</div></div>';
   d.innerHTML=h;
   brancherEnteteDetail();
   d.querySelectorAll('.groupe-titre').forEach(t=>{
@@ -1900,7 +1930,7 @@ function ordonnerColonnesPiece(cols){
 
 function estNum(col){
   const t=col.type||'';
-  return t==='qte'||t==='nombre'||t==='prix'||t==='montant'||t==='pct';
+  return t==='qte'||t==='nombre'||t==='prix'||t==='montant'||t==='pct'||t==='id';
 }
 
 function brancherEnteteDetail(){
@@ -1920,8 +1950,16 @@ async function chargerLiens(cur,jeton){
   }
   if(jeton!==S.jetonD)return;
   const liens=(r.liens||[]).filter(l=>l.erreur||l.total>0);
+  // Le titre du rail reste en place même à vide : une colonne qui disparaît
+  // déplace tout le reste, et « aucune pièce rattachée » est une réponse, pas
+  // une absence de réponse.
+  const t=document.getElementById('t-liens');
+  if(t){
+    const total=liens.reduce((s,l)=>s+(l.total||0),0);
+    const n=t.querySelector('.tb-num');if(n)n.remove();
+    if(total)t.insertAdjacentHTML('beforeend','<span class="tb-num">'+fmtNb(total,0)+'</span>');
+  }
   if(!liens.length){
-    const t=document.getElementById('t-liens');if(t)t.remove();
     z.innerHTML='<div class="liens-vide">Aucune pièce rattachée à cette ligne dans le miroir.</div>';
     return;
   }
@@ -2028,7 +2066,10 @@ function rgCasesLigne(colonnes,l){
   const cases={c1:null,c2:null,c3:null,cn:null,cd:null};
   colonnes.forEach(c=>{
     const t=c.type||'texte';
-    if(!cases.c1&&(t==='of'||t==='ref'||t==='code'))cases.c1=c;
+    // Un numéro de pièce identifie : il tient la première case, comme un n° d'OF
+    // ou une référence article — pas la case du chiffre, où on le lirait comme
+    // une quantité.
+    if(!cases.c1&&(t==='of'||t==='ref'||t==='code'||t==='id'))cases.c1=c;
     else if(!cases.cd&&(t==='date'||t==='datetime'))cases.cd=c;
     else if(!cases.cn&&(t==='qte'||t==='nombre'||t==='prix'||t==='montant'))cases.cn=c;
     else if(!cases.c2)cases.c2=c;
@@ -2047,7 +2088,8 @@ function rgCasesLigne(colonnes,l){
     const brut=l[c.nom];
     const t=c.type||'texte';
     const html=(t==='texte'||t==='client'||t==='ref'||t==='of'||t==='code')
-      ? rgSurligner(brut,RG.q) : v.html;
+      ? rgSurligner(brut,RG.q)
+      : (t==='id' ? rgSurligner(fmtId(brut),RG.q) : v.html);
     h+='<span class="c '+k+'" title="'+esc(c.label)+' : '+esc(brut==null?'—':brut)+'">'+html+'</span>';
   });
   return h;

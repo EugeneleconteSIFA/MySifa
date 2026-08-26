@@ -3574,6 +3574,7 @@ function rvgiBrancherChamp(){
     // de MySifa joint en texte.
     remplir:!champ.value.trim(),
     onChange:(res)=>{
+      rvgiInjecterProduit(res);
       if(res.enregistre){
         MysRvgiPicker.resume(document.getElementById('f-of-res'),'dossier',lireId());
       }else{
@@ -3583,6 +3584,42 @@ function rvgiBrancherChamp(){
     },
     onErreur:(e)=>showToast(e.message||"Rattachement impossible.","danger")
   });
+}
+
+// Ce que RVGI sait déjà du produit, versé dans la fiche.
+//
+// Deux règles, et elles ne se négocient pas :
+//
+// 1. **On ne remplit que le vide.** Ce qui a été tapé gagne toujours contre ce
+//    que l'ERP propose — un OF corrigé à la main l'a été pour une raison, et
+//    l'écraser en silence ferait produire le mauvais format.
+// 2. **On ne remplit que si le produit est unique.** Deux articles différents
+//    dans la sélection n'ont ni la même laize ni le même format : le sélecteur
+//    ne renvoie alors aucun produit, et on ne devine pas.
+//
+// Laize et machine viennent de la fiche de fabrication, qui n'existe que pour
+// un article commandé sur trois. Le champ reste vide dans ce cas : c'est
+// l'état réel de RVGI, pas un oubli de notre part.
+function rvgiInjecterProduit(res){
+  const p=res&&res.produit;
+  const remplis=[];
+  const poser=(id,val,label)=>{
+    const el=document.getElementById(id);
+    if(!el||val==null||val==='')return;
+    if(String(el.value||'').trim()!=='')return;   // jamais par-dessus une saisie
+    el.value=String(val);
+    remplis.push(label);
+  };
+  if(res&&res.client)poser('f-cli',res.client,'client');
+  if(p){
+    poser('f-rp',p.article,'réf produit');
+    poser('f-laize',p.laize,'laize');
+    poser('f-fl',p.largeur,'largeur');
+    poser('f-fh',p.hauteur,'hauteur');
+  }
+  if(remplis.length&&typeof showToast==='function'){
+    showToast('Repris de RVGI : '+remplis.join(', ')+'.','success');
+  }
 }
 
 function rvgiPeindreEnAttente(res){

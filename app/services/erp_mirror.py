@@ -163,7 +163,9 @@ def _propre_nombre(v, type_col):
         return None
     # Un prix à 0 dans RVGI veut dire « non renseigné », jamais « gratuit ».
     # Une quantité à 0, elle, est une vraie quantité.
-    if type_col == "prix" and f == 0:
+    # Un numéro de pièce à 0 veut dire « pas de pièce » : une ligne de BL sans
+    # facture porte `fac_no = 0`, ce qui n'est pas la facture numéro zéro.
+    if type_col in ("prix", "id") and f == 0:
         return None
     return v
 
@@ -174,7 +176,7 @@ def nettoyer(valeur, type_col):
         return None
     if type_col in ("date", "datetime"):
         return _propre_date(valeur)
-    if type_col in ("nombre", "qte", "prix", "montant", "pct"):
+    if type_col in ("nombre", "qte", "prix", "montant", "pct", "id"):
         return _propre_nombre(valeur, type_col)
     if isinstance(valeur, str):
         v = valeur.strip()

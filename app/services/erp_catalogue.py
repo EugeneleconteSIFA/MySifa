@@ -141,7 +141,30 @@ LABELS = {
 }
 
 
+# ── Les numéros qui identifient, et ceux qui comptent ────────────────────────
+#
+# Une facture « 26 060 187 » ne se lit pas : c'est un numéro, pas une quantité,
+# et le séparateur de milliers en fait un nombre qu'on essaie de comparer à un
+# autre. RVGI, WinDev et le client l'écrivent tous « 26060187 » — et c'est cette
+# chaîne-là qu'on recopie dans un mail ou qu'on tape dans une recherche.
+#
+# On ne peut pas le déduire du type SQL : les deux sont des entiers. C'est le
+# NOM de la colonne qui dit ce qu'elle est. La liste ci-dessous ne retient donc
+# que les numéros de pièce et de ligne — pas les codes de classement (`fam`,
+# `depot`, `reg`), qui restent en dessous du millier et n'ont jamais montré de
+# séparateur de toute façon.
+COLONNES_IDENTITE = {
+    "numero", "numcde", "numdev", "numfac", "nofac", "fac_no", "fac_lg",
+    "livno", "livbl", "livlg", "numclt", "numfou", "numfouclt", "numart",
+    "ligne", "lignecde", "ligneech", "rang", "dos",
+}
+
+
 def _c(ref, nom, label, type="texte", largeur=None, enum=None, aligne=None):
+    # Un numéro de pièce déclaré « nombre » est corrigé ici, une fois, plutôt
+    # qu'à la main dans les quarante endroits qui le déclarent.
+    if type == "nombre" and nom in COLONNES_IDENTITE:
+        type = "id"
     d = {"c": ref, "nom": nom, "label": label, "type": type}
     if largeur:
         d["largeur"] = largeur
