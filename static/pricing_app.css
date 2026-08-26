@@ -344,10 +344,22 @@ body.has-staging-bandeau .pr-savebar{top:44px}
 .check-title{display:block;font-size:13px;font-weight:700;color:var(--text)}
 .check-sub{display:block;font-size:11px;color:var(--muted);margin-top:3px;line-height:1.5}
 .import-fields{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
-/* Propagation du transport aux autres matières du fournisseur : une action,
-   pas un champ — d'où le trait qui la détache des saisies au-dessus. */
-.transport-propage{margin-top:14px;padding-top:12px;border-top:1px dashed var(--border)}
-.transport-propage .field-hint{margin-top:7px;max-width:560px}
+/* Propager le transport aux autres matières du fournisseur. L'action occupe
+   la colonne restée libre à côté des taxes : `.field-row` est une grille en
+   deux colonnes, la cellule était vide.
+
+   Le bouton ne peut pas être un `btn-soft` : posé sur le bloc import teinté,
+   fond clair sur fond clair et texte `--text2`, il devenait illisible. Contour
+   accent sur le même fond que les saisies d'à côté, il se lit et se voit. */
+.btn-propage{background:var(--filter-input-bg);border:1px solid var(--accent);
+  color:var(--accent);font-weight:700;width:100%;display:block;padding:12px 14px;
+  line-height:1.3;text-align:center}
+.btn-propage svg{margin-right:7px}
+.btn-propage:hover{background:var(--accent);color:var(--bg)}
+.btn-propage:disabled{opacity:.55;cursor:default}
+.btn-propage:disabled:hover{background:var(--filter-input-bg);color:var(--accent)}
+.transport-propage{margin-bottom:0}
+.transport-propage .field-hint{margin-top:7px}
 
 /* Tableau récapitulatif horizontal du calcul */
 .recap-card{background:var(--card);border:1px solid var(--border);border-radius:12px;
