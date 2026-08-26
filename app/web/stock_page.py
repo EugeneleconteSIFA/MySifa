@@ -15052,6 +15052,9 @@ function monEnsureState() {
       monPage: 'quantites',
       sortColumn: null,
       sortDirection: 'asc',
+      // Le miroir de RVGI comme source, à la place de l'export Excel manuel.
+      miroir: null,
+      miroirEnCours: false,
     };
   }
   return S.monitoring;
@@ -15494,13 +15497,6 @@ function buildMonitoring() {
     await monitoringImportFile(f);
   });
 
-  const importBtn = el('button', {
-    cls: 'btn btn-accent',
-    type: 'button',
-    disabled: m.importing ? true : null,
-    on: { click: () => fileInp.click() },
-  }, m.importing ? 'Import en cours…' : 'Importer l\'export ERP (.xlsx)');
-
   const snapSel = el('select', {
     cls: 'mon-snapshot-select',
     id: 'mon-snapshot-select',
@@ -15521,11 +15517,54 @@ function buildMonitoring() {
     if (id) loadMonitoringSnapshot(id);
   });
 
+  // Le miroir de RVGI est la source par défaut : il est relevé tout seul,
+  // plusieurs fois par jour, et porte la même information que l'export
+  // Table Stocks qu'il fallait sortir à la main. L'import .xlsx reste — c'est
+  // le recours quand la synchro est en panne.
+  const mir = m.miroir;
+  const mirPret = !!(mir && mir.disponible);
+  const miroirBtn = el('button', {
+    cls: 'btn btn-accent',
+    type: 'button',
+    disabled: (!mirPret || m.miroirEnCours || m.importing) ? true : null,
+    title: mirPret
+      ? ('Compare le stock MySifa au dernier relevé du miroir RVGI'
+         + (mir.releve_le ? ' (' + fDateTime(mir.releve_le) + ')' : '')
+         + '. Aucun fichier à sortir de RVGI.')
+      : ((mir && mir.raison) || 'Miroir RVGI indisponible.'),
+    on: { click: () => monitoringDepuisMiroir() },
+  }, m.miroirEnCours ? 'Comparaison en cours…' : 'Comparer avec RVGI');
+
+  const importBtnSec = el('button', {
+    cls: 'btn',
+    type: 'button',
+    disabled: (m.importing || m.miroirEnCours) ? true : null,
+    title: 'Recours si la synchro RVGI est en panne : l\'export Table Stocks (.xlsx).',
+    on: { click: () => fileInp.click() },
+  }, m.importing ? 'Import en cours…' : 'Importer un .xlsx');
+
   const actions = el('div', { cls: 'mon-actions', id: 'mon-actions-bar' },
-    importBtn,
+    miroirBtn,
+    importBtnSec,
     fileInp,
     snapSel,
   );
+
+  // Ce que le miroir porte, dit avant de cliquer plutôt qu'après : un relevé
+  // d'hier soir compare le stock d'hier soir, et ça change la lecture des
+  // écarts.
+  if (mir) {
+    actions.appendChild(el('span', {
+      cls: 'hist-subtitle',
+      style: { flexBasis: '100%', margin: '2px 0 0', fontSize: '12px' },
+    }, mirPret
+      ? ('Miroir RVGI relevé le ' + fDateTime(mir.releve_le)
+         + ' — ' + fN(mir.avec_stock || 0) + ' référence(s) avec du stock sur '
+         + fN(mir.references || 0)
+         + (mir.negatifs ? ', dont ' + fN(mir.negatifs) + ' en négatif' : '')
+         + '.')
+      : ('Miroir RVGI indisponible — ' + ((mir.raison) || 'synchro à lancer') + '.')));
+  }
 
   const kpisWrap = el('div', { id: 'mon-kpis-wrap' });
   if (m.current) kpisWrap.appendChild(buildMonitoringKpis(m.current, m.allLines));
@@ -15627,10 +15666,48 @@ async function loadMonitoringSnapshot(snapshotId) {
   renderMonitoringView(true);
 }
 
+// Une comparaison prise sur le miroir, sans fichier à sortir de RVGI.
+// Le snapshot produit est identique à celui d'un import Excel — même
+// comparaison, même historique — seule sa source diffère.
+async function monitoringDepuisMiroir() {
+  const m = monEnsureState();
+  if (m.miroirEnCours) return;
+  m.miroirEnCours = true;
+  renderMonitoringView(true);
+  try {
+    const r = await api('/api/reconciliation/miroir', { method: 'POST' });
+    showToast('Comparaison enregistrée — '
+      + (r.nb_ecarts != null
+          ? r.nb_ecarts + ' écart(s) sur ' + fN(r.nb_matched || 0) + ' référence(s) communes'
+          : 'snapshot pris')
+      + '.');
+    m.miroirEnCours = false;
+    await loadMonitoring(r.snapshot_id);
+    return;
+  } catch (e) {
+    const msg = (e && e.message) ? String(e.message) : 'Comparaison impossible.';
+    showToast(msg.length > 220 ? msg.slice(0, 217) + '…' : msg, 'error');
+  }
+  m.miroirEnCours = false;
+  renderMonitoringView(true);
+}
+
+async function loadMonitoringMiroir() {
+  const m = monEnsureState();
+  try {
+    m.miroir = await api('/api/reconciliation/miroir');
+  } catch (e) {
+    // Une route absente (serveur pas encore à jour) ne doit pas casser l'onglet :
+    // on retombe simplement sur l'import Excel.
+    m.miroir = { disponible: false, raison: (e && e.message) || 'indisponible' };
+  }
+}
+
 async function loadMonitoring(selectSnapshotId) {
   const m = monEnsureState();
   m.loading = true;
   renderMonitoringView(true);
+  loadMonitoringMiroir().then(() => renderMonitoringView(true));
   try {
     const snaps = await api('/api/reconciliation/snapshots');
     m.snapshots = snaps || [];

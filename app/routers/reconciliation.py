@@ -513,6 +513,152 @@ def _row_to_dict(row: sqlite3.Row) -> dict:
     return {k: row[k] for k in row.keys()}
 
 
+def _ecrire_snapshot(conn, erp_index: dict[str, dict], source: str, user: dict) -> dict:
+    """Confronte l'index ERP au stock MySifa et garde la trace.
+
+    Cette fonction est le seul endroit qui écrit un snapshot. L'index ERP peut
+    venir d'un export Excel ou du miroir de RVGI : la comparaison, le
+    classement des écarts et l'historique ne changent pas selon la source —
+    seule la ligne « source » du snapshot le dit.
+    """
+    mysifa_index = _load_mysifa_index(conn)
+    lines = _build_reconciliation_lines(erp_index, mysifa_index)
+    counts = _snapshot_counts(lines, erp_index, mysifa_index)
+    cur = conn.execute(
+        """
+        INSERT INTO reconciliation_snapshots (
+            created_at, created_by_name, source_filename,
+            nb_refs_erp, nb_refs_mysifa, nb_matched, nb_ecarts,
+            nb_sans_corresp, nb_negatifs
+        ) VALUES (?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            _now_paris_iso(),
+            _resolve_created_by_name(conn, user),
+            source,
+            counts["nb_refs_erp"],
+            counts["nb_refs_mysifa"],
+            counts["nb_matched"],
+            counts["nb_ecarts"],
+            counts["nb_sans_corresp"],
+            counts["nb_negatifs"],
+        ),
+    )
+    snapshot_id = cur.lastrowid
+    conn.executemany(
+        """
+        INSERT INTO reconciliation_lines (
+            snapshot_id, reference, designation, unite,
+            stock_erp, stock_mysifa, ecart, statut,
+            erp_dernier_mvt_libelle, erp_dernier_mvt_date, erp_dernier_mvt_qte,
+            mysifa_date_fifo
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        [
+            (
+                snapshot_id, ln["reference"], ln.get("designation"), ln.get("unite"),
+                ln.get("stock_erp"), ln.get("stock_mysifa"), ln.get("ecart"),
+                ln["statut"], ln.get("erp_dernier_mvt_libelle"),
+                ln.get("erp_dernier_mvt_date"), ln.get("erp_dernier_mvt_qte"),
+                ln.get("mysifa_date_fifo"),
+            )
+            for ln in lines
+        ],
+    )
+    return {
+        "snapshot_id": snapshot_id,
+        "source": source,
+        "nb_refs_erp": counts["nb_refs_erp"],
+        "nb_matched": counts["nb_matched"],
+        "nb_ecarts": counts["nb_ecarts"],
+        "nb_sans_corresp": counts["nb_sans_corresp"],
+        "nb_negatifs": counts["nb_negatifs"],
+    }
+
+
+# ── Le miroir de RVGI comme source ───────────────────────────────────────────
+#
+# Le monitoring vivait d'un export Excel qu'il fallait sortir de RVGI à la main
+# chaque semaine. Le miroir contient exactement la même information — le stock
+# d'un article est le `qte2` de son dernier mouvement dans `stk_hist` — et il
+# est relevé automatiquement. `erp_stock.index_stock()` rend d'ailleurs la
+# forme que `_parse_erp_workbook()` produisait déjà, ce qui permet de changer
+# la source sans toucher à la comparaison ni à l'historique.
+#
+# L'import Excel reste : c'est le recours si la synchro est en panne, et c'est
+# aussi ce qui permet de vérifier que les deux chemins disent la même chose.
+
+def _etat_miroir() -> dict:
+    """Ce que le miroir porte, et depuis quand — avant de lancer quoi que ce soit."""
+    try:
+        from app.services import erp_stock
+        from app.services import erp_mirror as miroir
+    except Exception as e:                       # pragma: no cover - import défensif
+        return {"disponible": False, "raison": str(e)}
+    try:
+        meta = miroir.meta()
+        if not meta.get("present"):
+            return {"disponible": False,
+                    "raison": "Le miroir de RVGI n'a pas encore été synchronisé."}
+        resume = erp_stock.resume("pf")
+    except FileNotFoundError as e:
+        return {"disponible": False, "raison": str(e)}
+    except Exception as e:
+        return {"disponible": False, "raison": "Miroir illisible : %s" % (e,)}
+    return {
+        "disponible": True,
+        "releve_le": meta.get("releve_le"),
+        "importe_le": meta.get("importe_le"),
+        "references": resume.get("references"),
+        "avec_stock": resume.get("avec_stock"),
+        "negatifs": resume.get("negatifs"),
+        "dernier_mouvement": resume.get("dernier_mouvement"),
+    }
+
+
+def _source_miroir(etat: dict) -> str:
+    """Le nom de source affiché dans la liste des snapshots.
+
+    On y met la date de RELEVÉ du miroir, pas celle du clic : deux snapshots
+    pris le même jour depuis le même relevé portent la même donnée, et il faut
+    que ça se voie.
+    """
+    quand = (etat.get("releve_le") or "")[:16].replace("T", " ")
+    return "Miroir RVGI — relevé du %s" % quand if quand else "Miroir RVGI"
+
+
+@router.get("/api/reconciliation/miroir")
+def etat_miroir(request: Request):
+    """Le miroir est-il exploitable, et de quand date-t-il ?"""
+    require_monitoring(request)
+    return _etat_miroir()
+
+
+@router.post("/api/reconciliation/miroir")
+def reconcilier_depuis_miroir(request: Request):
+    """Un snapshot pris directement sur le miroir, sans passer par Excel."""
+    user = require_monitoring(request)
+    etat = _etat_miroir()
+    if not etat.get("disponible"):
+        raise HTTPException(503, etat.get("raison") or "Miroir de RVGI indisponible.")
+    from app.services import erp_stock
+    try:
+        erp_index = erp_stock.index_stock("pf")
+    except FileNotFoundError as e:
+        raise HTTPException(503, str(e))
+    if not erp_index:
+        raise HTTPException(
+            503,
+            "Le miroir ne porte aucun mouvement de stock produits finis — "
+            "lancer la synchro RVGI avant de comparer.",
+        )
+    with get_db() as conn:
+        res = _ecrire_snapshot(conn, erp_index, _source_miroir(etat), user)
+        conn.commit()
+    res["releve_le"] = etat.get("releve_le")
+    return res
+
+
 @router.post("/api/reconciliation/import/preview")
 async def preview_reconciliation_import(
     request: Request, file: UploadFile = File(...)
@@ -555,73 +701,10 @@ async def import_reconciliation(
             "Fichier illisible — vérifiez qu'il s'agit bien de l'export Table Stocks (.xlsx).",
         ) from e
 
-    created_at = _now_paris_iso()
-
     with get_db() as conn:
-        mysifa_index = _load_mysifa_index(conn)
-        lines = _build_reconciliation_lines(erp_index, mysifa_index)
-        counts = _snapshot_counts(lines, erp_index, mysifa_index)
-        created_by_name = _resolve_created_by_name(conn, user)
-
-        cur = conn.execute(
-            """
-            INSERT INTO reconciliation_snapshots (
-                created_at, created_by_name, source_filename,
-                nb_refs_erp, nb_refs_mysifa, nb_matched, nb_ecarts,
-                nb_sans_corresp, nb_negatifs
-            ) VALUES (?,?,?,?,?,?,?,?,?)
-            """,
-            (
-                created_at,
-                created_by_name,
-                filename,
-                counts["nb_refs_erp"],
-                counts["nb_refs_mysifa"],
-                counts["nb_matched"],
-                counts["nb_ecarts"],
-                counts["nb_sans_corresp"],
-                counts["nb_negatifs"],
-            ),
-        )
-        snapshot_id = cur.lastrowid
-
-        conn.executemany(
-            """
-            INSERT INTO reconciliation_lines (
-                snapshot_id, reference, designation, unite,
-                stock_erp, stock_mysifa, ecart, statut,
-                erp_dernier_mvt_libelle, erp_dernier_mvt_date, erp_dernier_mvt_qte,
-                mysifa_date_fifo
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-            """,
-            [
-                (
-                    snapshot_id,
-                    ln["reference"],
-                    ln.get("designation"),
-                    ln.get("unite"),
-                    ln.get("stock_erp"),
-                    ln.get("stock_mysifa"),
-                    ln.get("ecart"),
-                    ln["statut"],
-                    ln.get("erp_dernier_mvt_libelle"),
-                    ln.get("erp_dernier_mvt_date"),
-                    ln.get("erp_dernier_mvt_qte"),
-                    ln.get("mysifa_date_fifo"),
-                )
-                for ln in lines
-            ],
-        )
+        res = _ecrire_snapshot(conn, erp_index, filename, user)
         conn.commit()
-
-    return {
-        "snapshot_id": snapshot_id,
-        "nb_refs_erp": counts["nb_refs_erp"],
-        "nb_matched": counts["nb_matched"],
-        "nb_ecarts": counts["nb_ecarts"],
-        "nb_sans_corresp": counts["nb_sans_corresp"],
-        "nb_negatifs": counts["nb_negatifs"],
-    }
+    return res
 
 
 @router.get("/api/reconciliation/snapshots")
