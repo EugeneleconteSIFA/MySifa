@@ -1941,6 +1941,8 @@ body.light .maint-codes-panel-embed .users-search select:focus {box-shadow:0 0 0
 .alert-modal-overlay .maint-doc-add-btn:hover{filter:brightness(1.06)}
 .alert-modal-overlay .maint-doc-add-btn:disabled{opacity:.55;cursor:not-allowed;filter:none}
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body data-maint-role="__MAINT_ROLE__">
 <div class="app">

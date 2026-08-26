@@ -153,6 +153,8 @@ PRICING_SHELL = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/pricing_app.css?v=__ASSETS__">
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body class="has-topbar mysifa-app-pricing">
 <div id="toast-root"></div>

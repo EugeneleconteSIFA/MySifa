@@ -500,6 +500,8 @@ body.sb-open .sidebar-overlay{display:block}
 }
 @media (min-width:901px){.mobile-topbar{display:none}}
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>

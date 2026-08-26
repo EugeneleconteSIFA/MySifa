@@ -8335,6 +8335,7 @@ Ressources :
             fiable         INTEGER NOT NULL DEFAULT 1,
             motif          TEXT,
             user_agent     TEXT,
+            ip             TEXT,
             meta           TEXT
         )
     """)

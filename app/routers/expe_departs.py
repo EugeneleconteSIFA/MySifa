@@ -27,6 +27,8 @@ from app.services.email_service import (
     send_email,
 )
 from config import (
+    EXPE_DEVIS_CC as EXPE_DEVIS_CC_SUPPL,
+    EXPE_DEVIS_FROM,
     EXPE_MOTIF_SANS_DOSSIER_NOTE_REQUISE,
     EXPE_MOTIFS_SANS_DOSSIER,
     public_base_url,
@@ -3527,7 +3529,31 @@ def comparateur(request: Request, body: dict = Body(...)):
 
 # ─── Demandes de devis (prospection parallèle) ─────────────────────
 
-EXPE_DEVIS_CC = "expeditions@sifa.pro"
+
+def _devis_cc(user: dict) -> list[str]:
+    """Copies d'un email de demande de tarif : le créateur, plus les fixes.
+
+    L'expéditeur est la boîte du service (`EXPE_DEVIS_FROM`) et non la
+    personne connectée : une demande d'appel d'offre engage SIFA, pas
+    l'utilisateur qui a cliqué. Le créateur passe donc en copie — il voit
+    partir son mail et reçoit les « répondre à tous » — sans jamais devenir
+    l'expéditeur. Remettre `EXPE_DEVIS_FROM` en copie serait un doublon : la
+    boîte garde déjà sa trace dans « Éléments envoyés ».
+    """
+    dedup: list[str] = []
+    for addr in [
+        (user.get("email") or user.get("identifiant") or ""),
+        EXPE_DEVIS_CC_SUPPL,
+    ]:
+        a = str(addr or "").strip()
+        if not a or "@" not in a:
+            continue
+        if a.lower() == (EXPE_DEVIS_FROM or "").strip().lower():
+            continue
+        if a.lower() in {x.lower() for x in dedup}:
+            continue
+        dedup.append(a)
+    return dedup
 
 
 _ALLOWED_TYPE_PALETTES = {"europe", "perdue", "autre", "vrac"}
@@ -3644,6 +3670,7 @@ _DEVIS_STATUT_LABELS = {
     "recue": "Reçue",
     "retenue": "Retenue",
     "refusee": "Refusée",
+    "sans_suite": "Sans suite",
     "echec": "Échec envoi",
 }
 
@@ -4236,7 +4263,8 @@ def list_demandes_devis(request: Request, statut: str = "ouverte"):
             counts = conn.execute(
                 """
                 SELECT
-                  SUM(CASE WHEN statut IN ('envoyee','ouvert','recue','retenue','refusee')
+                  SUM(CASE WHEN statut IN ('envoyee','ouvert','recue','retenue',
+                                           'refusee','sans_suite')
                       THEN 1 ELSE 0 END) AS envoyes,
                   SUM(CASE WHEN statut IN ('recue','retenue') THEN 1 ELSE 0 END) AS recues,
                   SUM(CASE WHEN statut='retenue' THEN 1 ELSE 0 END) AS retenues
@@ -4492,7 +4520,10 @@ footer{{margin-top:6mm;padding-top:3mm;border-top:1px solid #e2e8f0;font-size:7.
 def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
     user = _require_expe_write(request)
     now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
-    reply_to = (user.get("email") or user.get("identifiant") or "").strip() or None
+    # Reply-To sur la boîte du service : une réponse transporteur doit
+    # atterrir là où quelqu'un la lira même si le créateur est en congés.
+    reply_to = (EXPE_DEVIS_FROM or "").strip() or None
+    cc_devis = _devis_cc(user)
 
     with get_db() as conn:
         # Garde serveur : sans elle, un onglet resté ouvert renvoyait la
@@ -4649,7 +4680,8 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
                 subject=sujet,
                 html_body=corps_html,
                 reply_to=reply_to,
-                cc=EXPE_DEVIS_CC,
+                cc=cc_devis,
+                from_upn=EXPE_DEVIS_FROM,
             )
             statut_envoi = "envoyee" if ok else "echec"
             # Un transporteur qui a déjà chiffré ne repasse pas « envoyée »
@@ -4709,8 +4741,45 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
     }
 
 
+def _devis_champ_optionnel(body: dict, cle: str) -> object:
+    """Valeur d'un champ absent, vide ou nul — trois écritures d'un même vide.
+
+    Le front envoie `null` quand la case n'a pas été remplie, `""` quand elle
+    a été vidée, et n'envoie rien du tout depuis l'édition en ligne du
+    commentaire. Les trois veulent dire « non renseigné » et doivent se
+    comporter pareil, sinon vider un prix devient impossible.
+    """
+    if cle not in body:
+        return None
+    v = body.get(cle)
+    if v is None:
+        return None
+    if isinstance(v, str) and not v.strip():
+        return None
+    return v
+
+
 @router.put("/devis/reponses/{reponse_id}")
 def saisir_reponse_devis(request: Request, reponse_id: int, body: dict = Body(...)):
+    """Saisit ou corrige la réponse d'un transporteur arrivée hors portail.
+
+    Trois cas, et un seul endpoint — parce qu'un transporteur qui répond par
+    email ne se range pas toujours dans « il a chiffré » :
+
+    - **un prix** → la ligne passe `recue` et entre au comparatif ;
+    - **pas de prix, `sans_suite` coché** → la ligne passe `sans_suite` : il a
+      répondu qu'il ne prend pas. Enregistrer un prix à 0 pour l'exprimer
+      fausserait le « moins-disant », et laisser la ligne à `envoyée` la ferait
+      relancer indéfiniment ;
+    - **ni l'un ni l'autre** → seul le commentaire est mis à jour, le statut ne
+      bouge pas. C'est le cas « il a écrit qu'il attend le poids exact » : une
+      information à garder, pas un statut à changer.
+
+    La saisie reste ouverte quel que soit le statut : une offre reçue se
+    corrige, et un transporteur qui a consulté le portail sans y répondre
+    peut très bien envoyer son prix par mail — l'ancienne restriction aux
+    lignes `envoyée` / `échec` privait précisément ces lignes-là de saisie.
+    """
     user = _require_expe_write(request)
     now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
     with get_db() as conn:
@@ -4720,32 +4789,74 @@ def saisir_reponse_devis(request: Request, reponse_id: int, body: dict = Body(..
         if not rep:
             raise HTTPException(status_code=404, detail="Réponse introuvable")
         _require_demande_ouverte(conn, int(rep["demande_id"]))
+        statut_actuel = str(rep["statut"] or "")
+        sans_suite = bool(body.get("sans_suite"))
+
         # Validation alignée sur celle du portail. Sans elle, un prix « abc »
         # arrivait tel quel dans une colonne REAL de SQLite (typage souple) et
         # faisait ensuite planter le comparatif imprimable en 500.
-        try:
-            prix = float(body.get("prix"))
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=400, detail="Prix invalide.")
-        if prix < 0:
-            raise HTTPException(status_code=400, detail="Prix invalide.")
-        try:
-            delai = int(body.get("delai_jours"))
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=400, detail="Délai invalide.")
-        if delai < 0 or delai > 365:
-            raise HTTPException(status_code=400, detail="Délai invalide.")
+        prix_brut = None if sans_suite else _devis_champ_optionnel(body, "prix")
+        prix = None
+        if prix_brut is not None:
+            try:
+                prix = float(prix_brut)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="Prix invalide.")
+            if prix < 0:
+                raise HTTPException(status_code=400, detail="Prix invalide.")
+
+        delai_brut = None if sans_suite else _devis_champ_optionnel(body, "delai_jours")
+        delai = None
+        if delai_brut is not None:
+            try:
+                delai = int(delai_brut)
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="Délai invalide.")
+            if delai < 0 or delai > 365:
+                raise HTTPException(status_code=400, detail="Délai invalide.")
+
+        commentaire_fourni = "commentaire" in body
         commentaire = (body.get("commentaire") or "").strip() or None
         if commentaire and len(commentaire) > 2000:
             raise HTTPException(status_code=400, detail="Commentaire trop long.")
-        conn.execute(
-            """
-            UPDATE expe_devis_reponses
-            SET prix=?, delai_jours=?, commentaire=?, statut='recue', recu_at=?
-            WHERE id=?
-            """,
-            (prix, delai, commentaire, now, reponse_id),
-        )
+
+        if prix is None and not sans_suite and not commentaire_fourni:
+            raise HTTPException(
+                status_code=400,
+                detail="Renseigner un prix, un commentaire, ou cocher « sans suite ».",
+            )
+
+        if prix is not None:
+            # Une offre retenue reste retenue : corriger son prix ne doit pas
+            # la faire redescendre au rang des offres en attente d'arbitrage.
+            statut = "retenue" if statut_actuel == "retenue" else "recue"
+            conn.execute(
+                """
+                UPDATE expe_devis_reponses
+                SET prix=?, delai_jours=?, commentaire=?, statut=?, recu_at=?
+                WHERE id=?
+                """,
+                (prix, delai, commentaire, statut, now, reponse_id),
+            )
+        elif sans_suite:
+            conn.execute(
+                """
+                UPDATE expe_devis_reponses
+                SET prix=NULL, delai_jours=NULL, commentaire=?,
+                    statut='sans_suite', recu_at=?
+                WHERE id=?
+                """,
+                (commentaire, now, reponse_id),
+            )
+        else:
+            # Commentaire seul : le statut, le prix et le délai sont laissés
+            # tels quels. C'est ce qui permet d'annoter une ligne sans mentir
+            # sur ce que le transporteur a réellement dit.
+            conn.execute(
+                "UPDATE expe_devis_reponses SET commentaire=? WHERE id=?",
+                (commentaire, reponse_id),
+            )
+
         # Distinguer la saisie interne du dépôt portail : sur la timeline, « le
         # transporteur a répondu » et « on a saisi son mail à sa place » ne
         # racontent pas la même chose sur son engagement réel.
@@ -4756,7 +4867,7 @@ def saisir_reponse_devis(request: Request, reponse_id: int, body: dict = Body(..
             canal=expe_ev.CANAL_INTERNE,
             type_evenement=expe_ev.EV_REPONSE_SAISIE,
             date=now,
-            meta={"prix": prix, "delai_jours": delai},
+            meta={"prix": prix, "delai_jours": delai, "sans_suite": sans_suite},
         )
         conn.commit()
         updated = conn.execute(
@@ -4768,9 +4879,50 @@ def saisir_reponse_devis(request: Request, reponse_id: int, body: dict = Body(..
         request,
         user,
         "UPDATE",
-        f"Réponse saisie · {rep['nom_transporteur'] or reponse_id} · demande #{rep['demande_id']}",
+        f"Réponse saisie · {rep['nom_transporteur'] or reponse_id} · demande #{rep['demande_id']}"
+        + (
+            " · sans suite"
+            if sans_suite
+            else ("" if prix is not None else " · commentaire seul")
+        ),
     )
     return out
+
+
+@router.post("/devis/evenements/{evenement_id}/interne")
+def marquer_evenement_interne(
+    request: Request, evenement_id: int, body: dict = Body(default={})
+):
+    """Reclasse une ouverture d'email en « c'était nous » — ou revient dessus.
+
+    Le filtre par IP ne voit que ce qui part de nos locaux. Lue depuis Outlook
+    Web ou un téléphone, la même ouverture arrive par les serveurs Microsoft
+    et est indistinguable de celle d'un transporteur. Plutôt que d'inventer
+    une heuristique de plus, on donne le bouton à celui qui a le mail sous les
+    yeux.
+
+    L'événement n'est jamais supprimé : il reste dans la timeline, seul son
+    poids dans les compteurs change. Et l'opération est réversible, pour qu'un
+    clic de trop n'efface pas une vraie ouverture transporteur.
+    """
+    user = _require_expe_write(request)
+    interne = bool(body.get("interne", True))
+    with get_db() as conn:
+        ok = expe_ev.marquer_interne(conn, int(evenement_id), interne=interne)
+        if not ok:
+            raise HTTPException(
+                status_code=400,
+                detail="Événement introuvable ou non reclassable (seules les ouvertures d'email le sont).",
+            )
+        conn.commit()
+    _log_devis(
+        request,
+        user,
+        "UPDATE",
+        f"Ouverture email #{evenement_id} "
+        + ("marquée interne" if interne else "rendue au transporteur"),
+    )
+    return {"interne": interne}
 
 
 @router.post("/devis/reponses/{reponse_id}/retenir")
@@ -4837,7 +4989,8 @@ async def retenir_reponse_devis(
         conn.execute(
             """
             UPDATE expe_devis_reponses SET statut='refusee'
-            WHERE demande_id=? AND id!=? AND statut NOT IN ('retenue','refusee')
+            WHERE demande_id=? AND id!=?
+              AND statut NOT IN ('retenue','refusee','sans_suite')
             """,
             (demande_id, reponse_id),
         )
@@ -4938,9 +5091,10 @@ async def retenir_reponse_devis(
                 to=dest_email,
                 subject=subject,
                 html_body=body_html,
-                reply_to=email_user,
-                cc=EXPE_DEVIS_CC,
+                reply_to=(EXPE_DEVIS_FROM or "").strip() or email_user,
+                cc=_devis_cc(user),
                 attachments=atts,
+                from_upn=EXPE_DEVIS_FROM,
             ))
             if not email_sent:
                 email_error = "send_email_returned_false"
@@ -5229,7 +5383,8 @@ def relancer_destinataire_devis(request: Request, reponse_id: int, body: dict = 
     """
     user = _require_expe_write(request)
     now = datetime.now(_PARIS).strftime("%Y-%m-%dT%H:%M:%S")
-    reply_to = (user.get("email") or user.get("identifiant") or "").strip() or None
+    reply_to = (EXPE_DEVIS_FROM or "").strip() or None
+    cc_devis = _devis_cc(user)
     message = (body.get("message") or "").strip() or None
     with get_db() as conn:
         rep = conn.execute(
@@ -5277,7 +5432,8 @@ def relancer_destinataire_devis(request: Request, reponse_id: int, body: dict = 
             subject=sujet,
             html_body=corps,
             reply_to=reply_to,
-            cc=EXPE_DEVIS_CC,
+            cc=cc_devis,
+            from_upn=EXPE_DEVIS_FROM,
         )
         if ok:
             conn.execute(

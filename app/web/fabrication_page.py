@@ -1109,6 +1109,8 @@ body.has-topbar .fab-main{padding-top:74px}
   #mroot .fab-fsc-traca-no-print{display:none!important}
 }
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>

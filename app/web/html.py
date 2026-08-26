@@ -92,6 +92,11 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_cmdk.css">
 <link rel="stylesheet" href="/static/mysifa_landscape.css">
 <link rel="stylesheet" href="/static/motion.css">
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<!-- Chargé sans defer et avant tout le reste : sur un poste déjà connu comme lent,
+     le mode éco doit être posé avant le premier rendu, sinon la frame la plus
+     coûteuse de la visite est justement celle qu'on voulait éviter. -->
+<script src="/static/mysifa_perf.js"></script>
 __KERNSE_THEME_CSS__
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}

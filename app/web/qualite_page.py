@@ -356,6 +356,8 @@ body.light .toast.info{background:#f1f5f9;color:var(--text)}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--muted);border-top-color:var(--accent);border-radius:999px;animation:sp 0.8s linear infinite}
 @keyframes sp{to{transform:rotate(360deg)}}
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
 <div class="app">
