@@ -343,6 +343,22 @@ table.pl td.vide{color:var(--muted)}
 table.pl td.of{font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--accent);font-weight:600}
 table.pl td.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px}
 .pl-note{margin:6px 2px 0;font-size:11.5px;color:var(--muted)}
+/* Le tableau porte tout le détail de la ligne : il défile horizontalement, et
+   les deux colonnes d'identité restent visibles pendant qu'on défile. Sans
+   elles, à la dixième colonne on ne sait plus quelle ligne on lit. */
+.pl-boite.pl-large{max-height:340px}
+table.pl th.fx,table.pl td.fx{position:sticky;z-index:2;background:var(--card)}
+table.pl th.fx{z-index:3;background:var(--bg)}
+table.pl th.fx0,table.pl td.fx0{left:0}
+/* Le décalage de la 2e colonne figée est mesuré après le rendu : la largeur de
+   la 1re dépend du contenu, et une valeur en dur la faisait chevaucher. */
+table.pl th.fx1,table.pl td.fx1{left:var(--fx1,96px)}
+table.pl td.fx1{box-shadow:1px 0 0 var(--border)}
+table.pl th.fx1{box-shadow:1px 0 0 var(--border)}
+table.pl tbody tr:hover td.fx,table.pl tbody tr.ici td.fx{background:var(--accent-bg)}
+table.pl td{max-width:210px}
+.pl-astuce{order:3;font-size:10.5px;font-weight:600;letter-spacing:0;text-transform:none;
+  color:var(--muted);white-space:nowrap}
 
 /* Résumé de la ligne : l'article et les chiffres, lisibles de loin. */
 .resume{display:flex;flex-wrap:wrap;align-items:center;gap:16px 26px;margin-bottom:12px;
@@ -1758,10 +1774,16 @@ async function rendreDetail(){
   h=enteteDetail(def?def.label:'Détail',sousTitreDetail(r.groupes,p));
   h+='<div class="detail-corps deux-col"><div class="detail-principal">';
   if(p)h+=blocPiece(p,cur.id);
-  h+='<div class="titre-bloc">'+ICO_FICHE+'<span>'+(p?'Détail de la ligne':'Détail')+'</span></div>';
+  h+='<div class="titre-bloc">'+ICO_FICHE+'<span>'+(p?'Détail de la ligne':'Détail')+'</span>'+
+     (p?'<span class="tb-num">'+esc(numeroDeLigne(r.groupes,p,cur.id))+'</span>':'')+'</div>';
   const res=resumeLigne(r.groupes);
   h+=res.html;
-  h+='<div class="sections" id="sec-detail">'+blocGroupes(r.groupes,res.pris)+'</div>';
+  // Dans une PIÈCE, le détail de la ligne est déjà le tableau au-dessus,
+  // ligne par ligne et colonne par colonne. Le répéter en blocs obligeait à
+  // faire la correspondance de tête et empêchait de comparer deux lignes.
+  // Hors pièce — un article, un client, un mouvement — il n'y a pas de
+  // tableau, donc les blocs restent : c'est la seule vue de l'objet.
+  h+=p?'':('<div class="sections" id="sec-detail">'+blocGroupes(r.groupes,res.pris)+'</div>');
   h+='</div><div class="detail-rail">';
   h+='<div class="titre-bloc" id="t-liens">'+ICO_LIEN+'<span>Pièces liées</span></div>'+
      '<div class="liens" id="liens"><div class="liens-vide">Recherche des pièces rattachées…</div></div>';
@@ -1782,8 +1804,19 @@ async function rendreDetail(){
       rendreDetail();
     });
   });
+  calerColonnesFigees(d);
   d.querySelector('.detail-corps').scrollTop=0;
   chargerLiens(cur,jeton);
+}
+
+// La 2e colonne figée se colle juste après la 1re — dont la largeur dépend du
+// contenu et ne se connaît qu'une fois le tableau posé. Sans cette mesure, la
+// colonne « Lg » recouvrait la référence article au premier défilement.
+function calerColonnesFigees(racine){
+  (racine||document).querySelectorAll('table.pl').forEach(t=>{
+    const p=t.querySelector('thead th.fx0');
+    if(p)t.style.setProperty('--fx1',Math.round(p.getBoundingClientRect().width)+'px');
+  });
 }
 
 function blocGroupes(groupes,pris){
@@ -1890,19 +1923,30 @@ function blocPiece(p,idCourant){
   // dans l'ordre où on lit une pièce : de quoi il s'agit d'abord (numéro,
   // ligne, article), le reste ensuite. Sur la grille, l'ordre est celui que
   // l'utilisateur s'est fabriqué ; ici, c'est le document qui commande.
-  const cols=ordonnerColonnesPiece(p.colonnes||[]).slice(0,9);
+  // TOUTES les colonnes de la ligne, pas les neuf premières. Le détail de la
+  // ligne se lisait auparavant en blocs sous le tableau, ce qui obligeait à
+  // faire la correspondance de tête entre « ligne 3 » et le bloc du bas — et
+  // interdisait de comparer deux lignes. Ici, une ligne du document est une
+  // ligne du tableau, point. Le prix : ça défile horizontalement, d'où les
+  // deux premières colonnes figées et les cellules tronquées à 20 caractères.
+  const cols=ordonnerColonnesPiece(p.colonnes||[]);
   h+='<div class="titre-bloc"><span>Lignes de la pièce</span>'+
-     '<span class="tb-num">'+fmtNb(p.total,0)+'</span></div>';
-  h+='<div class="pl-boite"><table class="pl"><thead><tr>';
-  cols.forEach(c=>{h+='<th class="'+(estNum(c)?'num':'')+'">'+esc(c.label)+'</th>';});
+     '<span class="tb-num">'+fmtNb(p.total,0)+'</span>'+
+     (cols.length>9?'<span class="pl-astuce">'+fmtNb(cols.length,0)+
+      ' colonnes — faire défiler vers la droite</span>':'')+'</div>';
+  h+='<div class="pl-boite pl-large"><table class="pl"><thead><tr>';
+  cols.forEach((c,i)=>{
+    h+='<th class="'+(estNum(c)?'num ':'')+fige(i)+'" title="'+esc(c.label)+'">'+
+       esc(c.label)+'</th>';
+  });
   h+='</tr></thead><tbody>';
   (p.lignes||[]).forEach(l=>{
     const ici=String(l._id)===String(idCourant);
     h+='<tr class="pl-ligne'+(ici?' ici':'')+'" data-id="'+esc(l._id)+'"'+
        (ici?' title="La ligne ouverte"':' title="Ouvrir cette ligne"')+'>';
-    cols.forEach(c=>{
-      const v=cellule(c,l[c.nom]);
-      h+='<td class="'+esc(v.cls)+'">'+v.html+'</td>';
+    cols.forEach((c,i)=>{
+      h+='<td class="'+esc(celluleCourte(c,l[c.nom]).cls)+' '+fige(i)+'"'+
+         celluleCourte(c,l[c.nom]).titre+'>'+celluleCourte(c,l[c.nom]).html+'</td>';
     });
     h+='</tr>';
   });
@@ -1912,6 +1956,43 @@ function blocPiece(p,idCourant){
        fmtNb(p.total,0)+' — la pièce est plus longue que ce que la fiche affiche.</p>';
   }
   return h;
+}
+
+// Les deux premières colonnes (numéro, ligne) restent visibles quand on
+// défile : sans elles on ne sait plus quelle ligne on lit dès la dixième
+// colonne, et le tableau devient inutilisable.
+function fige(i){return i===0?'fx fx0':(i===1?'fx fx1':'');}
+
+// Vingt caractères, et la valeur entière au survol. Une désignation RVGI fait
+// parfois cent caractères : elle écraserait à elle seule les vingt autres
+// colonnes. On coupe l'affichage, jamais la donnée.
+const PL_MAX=20;
+function celluleCourte(col,v){
+  const r=cellule(col,v);
+  const brut=(v==null||v==='')?'':String(v);
+  // Seul le texte simple se coupe : une date formatée, un badge d'énumération
+  // ou un montant n'ont pas de longueur à réduire, et les tronquer les
+  // rendrait faux.
+  const t=col.type||'texte';
+  const coupable=(t==='texte'||t==='client'||t==='ref'||t==='code'||t==='of');
+  if(!coupable||brut.length<=PL_MAX){
+    return {cls:r.cls,html:r.html,titre:brut&&brut.length>PL_MAX?' title="'+esc(brut)+'"':''};
+  }
+  return {cls:r.cls,html:esc(brut.slice(0,PL_MAX-1))+'…',titre:' title="'+esc(brut)+'"'};
+}
+
+// Quelle ligne du document est ouverte — « L3 sur 4 ». Le tableau la surligne
+// déjà, mais un document de quarante lignes se déroule : le titre le rappelle
+// sans qu'on ait à remonter.
+function numeroDeLigne(groupes,p,idCourant){
+  const rang=(p.lignes||[]).findIndex(l=>String(l._id)===String(idCourant));
+  const l=rang>=0?p.lignes[rang]:null;
+  let n=null;
+  if(l)for(const k of ['ligne','rang','lignecde']){ if(l[k]!=null&&l[k]!==''){n=l[k];break;} }
+  if(n==null&&rang>=0)n=rang+1;
+  const tot=p.total||(p.lignes||[]).length;
+  if(n==null)return tot>1?tot+' lignes':'';
+  return tot>1?('L'+n+' sur '+fmtNb(tot,0)):('L'+n);
 }
 
 // L'identité d'une ligne passe devant tout le reste : son numéro, son rang

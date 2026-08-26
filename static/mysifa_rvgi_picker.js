@@ -126,18 +126,21 @@
     '.mrp-sug{position:fixed;z-index:9200;background:var(--card,#fff);border:1px solid var(--border,#dcdfe4);',
     '  border-radius:11px;box-shadow:0 14px 40px rgba(0,0,0,.22);overflow:hidden;max-height:340px;overflow-y:auto;',
     '  font:13px/1.4 inherit;color:var(--text,#111)}',
-    '.mrp-s-l{display:grid;grid-template-columns:110px minmax(0,1fr) auto;gap:2px 14px;align-items:baseline;',
-    '  padding:8px 13px;cursor:pointer;border-top:1px solid var(--border,#dcdfe4)}',
+    /* Une suggestion tient sur UNE ligne : numéro, client, article, machine,
+       nombre de lignes. Deux lignes par proposition faisaient une liste de
+       huit commandes haute comme la moitié de l'écran. */
+    '.mrp-s-l{display:flex;align-items:center;gap:10px;white-space:nowrap;',
+    '  padding:9px 13px;cursor:pointer;border-top:1px solid var(--border,#dcdfe4)}',
     '.mrp-s-l:first-child{border-top:none}',
     '.mrp-s-l:hover,.mrp-s-l.vise{background:rgba(37,99,235,.09)}',
-    '.mrp-s-l .n{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;color:var(--accent,#2563eb)}',
-    '.mrp-s-l .c{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
-    '.mrp-s-l .m{grid-column:2;font-size:11.5px;color:var(--muted,#6b7280);overflow:hidden;',
-    '  text-overflow:ellipsis;white-space:nowrap}',
-    '.mrp-s-l .k{grid-column:3;grid-row:1;font-size:11.5px;color:var(--muted,#6b7280);white-space:nowrap}',
-    '.mrp-s-l .pr{grid-column:2/4;display:flex;align-items:center;gap:7px;min-width:0;font-size:11.5px}',
-    '.mrp-s-l .pr .a{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;color:var(--text,#111)}',
-    '.mrp-s-l .pr .d{color:var(--muted,#6b7280);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '.mrp-s-l .n{flex:0 0 auto;font-family:ui-monospace,Menlo,Consolas,monospace;',
+    '  font-weight:700;color:var(--accent,#2563eb)}',
+    '.mrp-s-l .c{flex:1 1 auto;min-width:64px;font-weight:600;overflow:hidden;text-overflow:ellipsis}',
+    '.mrp-s-l .a{flex:0 0 auto;font-family:ui-monospace,Menlo,Consolas,monospace;',
+    '  font-weight:700;font-size:12px;color:var(--text,#111)}',
+    '.mrp-s-l .k{flex:0 0 auto;font-size:11.5px;color:var(--muted,#6b7280)}',
+    '.mrp-s-l .m{flex:0 0 auto;font-size:11px;color:#a16207;background:rgba(234,179,8,.16);',
+    '  border-radius:999px;padding:1px 8px;font-weight:700}',
     '.mrp-s-pied{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:9px 13px;',
     '  background:var(--bg,#f6f7f9);border-top:1px solid var(--border,#dcdfe4);font-size:12px}',
     '.mrp-s-pied .lien{color:var(--accent,#2563eb);cursor:pointer;font-weight:600;text-decoration:underline}',
@@ -191,10 +194,13 @@
   // affiche donc « machine inconnue » plutôt que rien : l'absence de fiche est
   // une information, et la deviner serait pire que l'avouer.
 
+  // Pas de machine dans RVGI ? On n'écrit rien. Une pastille « machine ? » sur
+  // deux lignes de commande sur trois n'apprend rien à personne et occupe la
+  // place de ce qui, lui, est renseigné.
   function etiqMachine(m) {
     return m
       ? '<span class="mrp-mac" title="Machine de la fiche de fabrication RVGI">' + esc(m) + '</span>'
-      : '<span class="mrp-mac vide" title="Aucune fiche de fabrication dans RVGI pour cet article">machine ?</span>';
+      : '';
   }
 
   // Un produit n'est injecté dans le formulaire que si TOUTES les lignes
@@ -601,9 +607,13 @@
     function placer() {
       if (!boite) return;
       var r = input.getBoundingClientRect();
-      boite.style.left = r.left + 'px';
+      // La liste est plus large que le champ : une suggestion porte cinq
+      // informations sur une ligne, et à 340 px le nom du client se réduisait
+      // à « SO… ». On déborde vers la droite, sans sortir de la fenêtre.
+      var large = Math.min(Math.max(560, r.width), window.innerWidth - 16);
+      boite.style.left = Math.max(8, Math.min(r.left, window.innerWidth - large - 8)) + 'px';
       boite.style.top = (r.bottom + 4) + 'px';
-      boite.style.width = Math.max(340, r.width) + 'px';
+      boite.style.width = large + 'px';
     }
     function ouvrirBoite(html) {
       if (!boite) {
@@ -647,21 +657,22 @@
         // reconnaître la bonne commande sans l'ouvrir. Plusieurs articles dans
         // la même commande → on le dit, on n'en choisit pas un au hasard.
         var pc = mode === 'commande' ? produitCommun(p.lignes) : null;
-        var ligne1 = (p.lignes || [])[0] || {};
+        // Tout sur une seule ligne, dans l'ordre où on reconnaît une commande :
+        // le numéro, le client, l'article, la machine. Le libellé du produit est
+        // laissé de côté — il est long, il est déjà dans la désignation de
+        // l'article, et il repousse la machine hors de vue.
         var prod = '';
         if (mode === 'commande') {
-          prod = '<span class="pr">' +
-                 (pc ? '<span class="a">' + esc(pc.article) + '</span>' + etiqMachine(pc.machine) +
-                       '<span class="d" title="' + esc(detailProduit(pc)) + '">' +
-                       esc(pc.libelle || ligne1.des1 || '') + '</span>'
-                     : '<span class="d">' + esc(p.nb_lignes) + ' articles différents</span>') +
-                 '</span>';
+          prod = pc
+            ? '<span class="a" title="' + esc(detailProduit(pc)) + '">' + esc(pc.article) + '</span>' +
+              etiqMachine(pc.machine)
+            : '<span class="k">' + esc(p.nb_lignes) + ' articles</span>';
         }
         h += '<div class="mrp-s-l" data-i="' + i + '">' +
              '<span class="n">' + esc(p.numero) + '</span>' +
              '<span class="c">' + esc(p.client || '—') + '</span>' +
-             '<span class="k">' + esc(p.nb_lignes) + ' ligne' + (p.nb_lignes > 1 ? 's' : '') + '</span>' +
              prod +
+             '<span class="k">' + esc(p.nb_lignes) + ' ligne' + (p.nb_lignes > 1 ? 's' : '') + '</span>' +
              (pris ? '<span class="m">' + pris + '</span>' : '') +
              '</div>';
       });

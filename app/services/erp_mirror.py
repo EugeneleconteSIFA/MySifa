@@ -756,6 +756,7 @@ def piece(ec, ident):
         extra=[("CAST(%s AS TEXT) = ?" % p["col_ligne"], str(numero).strip())],
         tri=p.get("tri") or "_id", sens="asc",
     )
+    cols, rangs = _etoffer_lignes_piece(ec, p, numero, lignes, libelles, types, absorbees)
 
     return {
         "numero": numero,
@@ -763,11 +764,90 @@ def piece(ec, ident):
         "entete": champs,
         "colonnes_entete": sorted(entete.keys()),
         "brut_entete": entete,
-        "colonnes": lignes["colonnes"],
-        "lignes": lignes["lignes"],
+        "colonnes": cols,
+        "lignes": rangs,
         "total": lignes["total"],
         "tronque": lignes["total"] > len(lignes["lignes"]),
     }
+
+
+def _etoffer_lignes_piece(ec, p, numero, lignes, libelles, types, absorbees):
+    """Toutes les colonnes de la ligne, pas seulement celles de la grille.
+
+    Pourquoi
+    --------
+    Le détail d'une ligne était rendu deux fois : une fois dans le tableau des
+    lignes du document, une fois en blocs de champs juste en dessous. Le
+    lecteur devait faire la correspondance de tête entre « ligne 3 » du tableau
+    et le bloc du bas — et les deux se contredisaient à l'œil dès qu'on
+    changeait de ligne.
+
+    Le tableau porte donc maintenant TOUT ce que la ligne sait, et le bloc du
+    bas disparaît. Un document se lit alors ligne par ligne, ce qui est la
+    seule façon de comparer deux lignes entre elles.
+
+    Ce qu'on écarte, et pourquoi
+    ----------------------------
+    Une colonne vide sur TOUTES les lignes du document n'apprend rien et
+    pousserait les utiles hors de l'écran. Ce n'est pas masquer : il n'y a rien
+    à montrer. Les colonnes techniques de RVGI (`corbeille`, `salm`, `bloq`,
+    `dtem`) sortent aussi — elles ne parlent de la ligne à personne.
+
+    Les colonnes nommées passent devant les autres : c'est ce qui rend le
+    défilement horizontal supportable.
+    """
+    base = list(lignes["colonnes"])
+    rangs = lignes["lignes"]
+    if not rangs:
+        return base, rangs
+
+    deja = {c["nom"] for c in base}
+    # On relit par les identifiants que `lister()` vient de rendre, pas par le
+    # numéro de pièce : la clé primaire est indexée, `CAST(numero AS TEXT)` ne
+    # l'est pas et forçait un balayage des 34 000 lignes de `cde_ligne` — 350 ms
+    # au lieu de 30 pour ouvrir une fiche.
+    pk = ec["cle_ligne"].split(".")[-1]
+    _ident(pk)
+    ids = [r.get("_id") for r in rangs if r.get("_id") is not None]
+    if not ids:
+        return base, rangs
+    sql = 'SELECT * FROM "%s" WHERE "%s" IN (%s)' % (
+        ec["table"], pk, ",".join("?" * len(ids)))
+    try:
+        with get_erp_db() as conn:
+            brutes = {r[pk]: dict(r) for r in conn.execute(sql, ids)}
+    except sqlite3.Error:
+        return base, rangs      # une lecture ratée ne doit pas vider le tableau
+    if not brutes:
+        return base, rangs
+
+    nommes, anonymes, valuees = [], [], set()
+    ordre = list(brutes[next(iter(brutes))].keys())
+    for court in ordre:
+        if court in deja or court in absorbees:
+            continue
+        if court in ("id", "corbeille", "salm", "bloq", "dtem"):
+            continue
+        (nommes if court in libelles else anonymes).append(court)
+
+    for r in rangs:
+        b = brutes.get(r.get("_id"))
+        if not b:
+            continue
+        for court in nommes + anonymes:
+            v = nettoyer(b.get(court), types.get(court))
+            if v is None or v == "":
+                continue
+            r[court] = v
+            valuees.add(court)
+
+    for court in nommes + anonymes:
+        if court not in valuees:
+            continue
+        base.append({"nom": court,
+                     "label": libelles.get(court, court),
+                     "type": types.get(court, "texte")})
+    return base, rangs
 
 
 def compter(ec):
