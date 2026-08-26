@@ -151,6 +151,16 @@
       'background:var(--card);border:1px solid var(--border);color:var(--text2)}',
       '.pmem-chip.is-warn{border-color:var(--warn);color:var(--warn)}',
       '.pmem-chip.is-accent{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}',
+      /* Info prod : le commentaire attache a UN dossier. Il se distingue des
+         notes produit (qui valent pour toute la reference) par le libelle et,
+         pour le dossier en cours, par la teinte d'alerte — c'est une consigne
+         a lire avant de lancer, pas un element d'historique. */
+      '.pmem-info{border-left:3px solid var(--accent)}',
+      '.pmem-info.is-courant{border-left-color:#fbbf24;background:rgba(251,191,36,.08)}',
+      '.pmem-info-txt{font-size:14px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-word}',
+      '.pmem-info-ft{font-size:11px;color:var(--muted);margin-top:7px}',
+      '.pmem-serie-info{margin-top:12px;padding-top:11px;border-top:1px solid var(--border)}',
+      '.pmem-serie-info .pmem-info-txt{font-size:13px}',
       '.pmem-note{background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--accent);',
       'border-radius:10px;padding:12px 14px;margin-bottom:10px}',
       '.pmem-note.is-epingle{border-left-color:var(--warn)}',
@@ -448,17 +458,55 @@
     ]);
   }
 
+  // Info prod du dossier ouvert : la consigne qui concerne la production en
+  // cours, pas l'historique. Elle passe donc avant tout le reste.
+  function blocInfoProdCourant(d) {
+    var info = d.info_prod || null;
+    if (!info || !info.texte) return null;
+    var qui = info.updated_par || info.auteur || '';
+    var quand = fDate(info.updated_at || info.created_at);
+    var pied = [];
+    if (qui) pied.push(qui);
+    if (quand && quand !== '—') pied.push(quand);
+    return el('div', { className: 'pmem-card pmem-info is-courant' }, [
+      el('div', { className: 'pmem-card-hd' }, [
+        el('span', { className: 'pmem-card-date', text: 'Info prod de ce dossier' }),
+        el('span', { className: 'pmem-card-meta', text: d.no_dossier || '' }),
+      ]),
+      el('div', { className: 'pmem-info-txt', text: info.texte }),
+      pied.length ? el('div', { className: 'pmem-info-ft', text: pied.join(' · ') }) : null,
+    ]);
+  }
+
+  // Info prod d'une serie passee : ce que le conducteur d'alors a note en
+  // cloturant son dossier. Elle se lit sous ses chiffres, dans sa carte.
+  function blocInfoProdSerie(s) {
+    var txt = (s && s.info_prod) ? String(s.info_prod).trim() : '';
+    if (!txt) return null;
+    var qui = s.info_prod_par || '';
+    return el('div', { className: 'pmem-serie-info' }, [
+      el('div', { className: 'pmem-col-lbl', text: 'Info prod' }),
+      el('div', { className: 'pmem-info-txt', text: txt }),
+      qui ? el('div', { className: 'pmem-info-ft', text: qui }) : null,
+    ]);
+  }
+
   // ── Rendu : series ─────────────────────────────────────────────────
   function renderSeries(d) {
     var series = d.series || [];
     var etatDossiers = blocDossiersReference(d);
+    var infoCourant = blocInfoProdCourant(d);
     if (!series.length) {
+      var tete = [];
+      if (infoCourant) tete.push(infoCourant);
+      if (etatDossiers) tete.push(etatDossiers);
       var diag = blocRattrapage(d, false);
-      if (diag) return etatDossiers ? [etatDossiers, diag] : [diag];
-      if (etatDossiers) return [etatDossiers];
+      if (diag) return tete.concat([diag]);
+      if (tete.length) return tete;
       return [el('div', { className: 'pmem-empty', text: 'Aucune production anterieure enregistree pour cette reference.' })];
     }
     var out = [];
+    if (infoCourant) out.push(infoCourant);
     if (etatDossiers) out.push(etatDossiers);
     var med = d.medianes || {};
     if (med.base_series) {
@@ -560,6 +608,7 @@
           el('div', {}, gauche),
           el('div', {}, droite),
         ]),
+        blocInfoProdSerie(s),
       ]));
     });
     return out;
@@ -586,6 +635,12 @@
   function renderSavoirs(d) {
     var out = [];
     var ref = d.ref_produit_norm;
+    // Sans cle produit, une note n'a nulle part ou s'accrocher : le dossier
+    // n'a que son info prod, qui se lit dans l'onglet Productions.
+    if (!ref) {
+      return [el('div', { className: 'pmem-empty',
+        text: 'Ce dossier n\'est rattache a aucune reference produit : les notes partagees ne sont pas disponibles.' })];
+    }
 
     var ta = el('textarea', { rows: '3', placeholder: 'Ce qu\'il faut savoir la prochaine fois que cette reference passe…' });
     var sel = el('select', {}, (window.__PMEM_TYPES__ || []).map(function (t) {
@@ -763,7 +818,7 @@
     else body = renderSeries(d);
 
     mount(panel(
-      header(d.ref_produit_norm || '—', ident.designation || '', metas),
+      header(d.ref_produit_norm || d.no_dossier || '—', ident.designation || '', metas),
       tabsBar([
         { key: 'series', label: 'Productions', count: (d.series || []).length },
         { key: 'savoirs', label: 'Notes', count: (d.savoirs || []).length },
@@ -1320,7 +1375,14 @@
   var HIST_VU_PREFIX = 'pmem_hist_vu_';
 
   function histCle(apercu, noDossier) {
-    return String(noDossier || (apercu && apercu.no_dossier) || '').trim().toUpperCase();
+    var base = String(noDossier || (apercu && apercu.no_dossier) || '').trim().toUpperCase();
+    // Une info prod ecrite (ou corrigee) APRES la premiere consultation doit
+    // resignaler : la cle porte donc sa date. Sans ca, une consigne ajoutee en
+    // Tracabilite pendant la production n'atteindrait jamais le conducteur qui
+    // a deja ouvert le panneau une fois.
+    var info = apercu && apercu.info_prod;
+    var stamp = info ? String(info.updated_at || info.created_at || '') : '';
+    return stamp ? base + '|' + stamp : base;
   }
 
   function histDejaConsulte(cle) {
@@ -1337,17 +1399,24 @@
     if (!apercu || !apercu.disponible) return null;
     ensureStyle();
     var parts = [];
+    // L'info prod passe en tete : elle parle de CE dossier, les autres
+    // comptages parlent de la reference.
+    var aInfo = !!(apercu.info_prod && apercu.info_prod.texte);
+    if (aInfo) parts.push('info prod');
     if (apercu.nb_series) parts.push(apercu.nb_series + ' production' + (apercu.nb_series > 1 ? 's' : ''));
     if (apercu.nb_savoirs) parts.push(apercu.nb_savoirs + ' note' + (apercu.nb_savoirs > 1 ? 's' : ''));
     if (apercu.nb_documents) parts.push(apercu.nb_documents + ' scan' + (apercu.nb_documents > 1 ? 's' : ''));
-    var total = (apercu.nb_series || 0) + (apercu.nb_savoirs || 0) + (apercu.nb_documents || 0);
+    var total = (aInfo ? 1 : 0) + (apercu.nb_series || 0) + (apercu.nb_savoirs || 0)
+              + (apercu.nb_documents || 0);
     var cle = histCle(apercu, noDossier);
     var consulte = histDejaConsulte(cle);
     // Une note d'atelier est une consigne tiree d'une production passee : c'est
     // ce qui doit arreter le conducteur avant qu'il lance la machine.
-    var titre = apercu.nb_savoirs
-      ? 'Deja produit \u2014 notes d\'atelier a lire'
-      : 'Deja produit \u2014 verifier les dossiers passes';
+    var titre = aInfo
+      ? 'Info prod sur ce dossier \u2014 a lire'
+      : (apercu.nb_savoirs
+          ? 'Deja produit \u2014 notes d\'atelier a lire'
+          : 'Deja produit \u2014 verifier les dossiers passes');
     var b = el('button', {
       type: 'button',
       className: 'pmem-hist-btn is-signal' + (consulte ? '' : ' is-neuf'),

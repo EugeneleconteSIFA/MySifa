@@ -188,6 +188,9 @@ def main():
     print("\n--- écrire un tarif ---")
     ecriture(mod)
 
+    print("\n--- propager un transport aux autres matières du fournisseur ---")
+    propagation(mod)
+
     print("\n" + ("TOUT EST VERT" if not ECHECS else "ECHECS : " + ", ".join(ECHECS)))
     return 0 if not ECHECS else 1
 
@@ -295,6 +298,119 @@ def ecriture(mod):
                         patch={"taxe_pct": 1}).get("ok"), False)
     check("et les vues restent vides", mpx.tarifs_du_fournisseur(vieille, 1), [])
 
+
+
+def propagation(mod):
+    """
+    « Appliquer aux autres matières » : un transitaire ne change pas de méthode
+    d'un frontal à l'autre.
+
+    Le périmètre est le sujet du test. Trop large, le forfait d'un adhésif finit
+    sur un frontal qui arrive par un autre camion ; trop étroit, le bouton ne
+    sert à rien. On vérifie donc autant ce qui bouge que ce qui ne bouge PAS :
+    les matières d'une autre catégorie, celles d'un autre fournisseur, et la
+    base de prix — qui décrit la matière, pas le transporteur.
+    """
+    if str(RACINE) not in sys.path:
+        sys.path.insert(0, str(RACINE))
+    from app.services import mystock_prix as mpx
+
+    c = base_jouet()
+    # Bostik vend trois frontaux et un adhésif. Il fait foi sur deux d'entre
+    # eux seulement : les autres voient leur coût bouger à l'écran sans rien
+    # pousser dans la valorisation.
+    c.executescript(
+        """
+        INSERT INTO matieres_premieres (id,reference,designation,categorie) VALUES
+          (12,'PE80T','Frontal PE transparent','frontal'),
+          (13,'PP90','Frontal PP blanc','frontal'),
+          (14,'COL1','Adhésif permanent','adhesif');
+        INSERT INTO mp_matiere_declinaison (id,matiere_id,price_basis) VALUES
+          (94,12,'PER_M2'), (95,13,'PER_M2'), (96,14,'PER_KG');
+        INSERT INTO mp_matiere_prix (declinaison_id,fournisseur_id,prix,principal) VALUES
+          (94,2,0.26,1), (95,2,0.31,0), (96,2,3.10,1);
+        """
+    )
+    touche = []
+    mpx.journaliser_prix = lambda conn, **kw: touche.append(kw)
+    mpx._mirror_principal = lambda conn, decl_id, **kw: {"ok": True}
+    appliquer(mod, c)
+
+    print("  · le périmètre, avant d'écrire")
+    per = mpx.cibles_propagation(c, fournisseur_id=2, matiere_id=11)
+    refs = sorted(m["reference"] for m in per["matieres"])
+    check("deux autres frontaux chez Bostik", refs, ["PE80T", "PP90"])
+    check("la matière d'origine n'y est pas", "PE80B" in refs, False)
+    check("l'adhésif du même fournisseur non plus", "COL1" in refs, False)
+    check("les déclinaisons où il fait foi sont comptées", per["nb_principal"], 1)
+    check("matière inconnue", mpx.cibles_propagation(c, fournisseur_id=2, matiere_id=999), None)
+
+    print("  · ce que la propagation écrit")
+    # PP90 se tarife au kilo chez Bostik : la base de prix ne doit pas suivre le
+    # transport, sinon on transforme un prix au kilo en prix au m².
+    c.execute(
+        "UPDATE mc_tarif_fournisseur SET price_basis='PER_KG' WHERE fournisseur_id=2 AND matiere_id=13"
+    )
+    touche.clear()
+    r = mpx.propager_transport(
+        c, fournisseur_id=2, matiere_id=11,
+        patch={"is_imported": True, "transport_mode": "PCT", "transport_pct": 9,
+               "taxe_pct": 2, "price_basis": "PER_M2"},
+        user_name="Eugene",
+    )
+    check("la propagation passe", r.get("ok"), True)
+    check("deux matières annoncées, hors origine", r["matieres"], 2)
+    lus = {
+        m: mpx.fetch_tarif(c, 2, m) for m in (11, 12, 13, 14)
+    }
+    check("l'origine prend le réglage affiché", lus[11]["transport_mode"], "PCT")
+    check("PE80T suit", (lus[12]["transport_mode"], lus[12]["transport_pct"]), ("PCT", 9.0))
+    check("PP90 suit", (lus[13]["transport_mode"], lus[13]["transport_pct"]), ("PCT", 9.0))
+    check("les taxes suivent", lus[12]["taxe_pct"], 2.0)
+    check("l'import suit", bool(lus[12]["is_imported"]), True)
+    check("la base de prix ne bouge PAS", lus[13]["price_basis"], "PER_KG")
+    check("l'adhésif du même fournisseur est épargné",
+          (lus[14]["transport_mode"], lus[14]["taxe_pct"]), ("AMOUNT", 0.0))
+    check("le tarif de Meltavis est épargné",
+          mpx.fetch_tarif(c, 1, 10)["transport_mode"], "FORFAIT")
+    check("l'auteur est tracé", lus[12]["updated_by_name"], "Eugene")
+
+    print("  · ce qui redescend dans MyStock")
+    # PE80B (93) et PE80T (94) : Bostik y fait foi. PP90 (95) non — son coût
+    # change à l'écran, mais rien ne part dans la valorisation.
+    check("deux déclinaisons poussées", r["declinaisons_touchees"], 2)
+    check("et autant de lignes d'historique", len(touche), 2)
+    check("l'historique dit d'où ça vient",
+          {k["origine"] for k in touche}, {"Coûts matières — tarif fournisseur"})
+
+    print("  · sans patch, c'est le tarif enregistré qui se propage")
+    c.execute(
+        """UPDATE mc_tarif_fournisseur
+              SET transport_mode='FORFAIT', transport_cout=150, transport_quantite=260
+            WHERE fournisseur_id=2 AND matiere_id=11"""
+    )
+    r2 = mpx.propager_transport(c, fournisseur_id=2, matiere_id=11)
+    check("propagation acceptée", r2.get("ok"), True)
+    check("les autres reprennent le forfait",
+          mpx.fetch_tarif(c, 2, 12)["transport_mode"], "FORFAIT")
+
+    print("  · ce qui est refusé")
+    check("méthode inconnue",
+          mpx.propager_transport(c, fournisseur_id=2, matiere_id=11,
+                                 patch={"transport_mode": "AVION"}).get("ok"), False)
+    check("le refus ne laisse rien à moitié écrit",
+          mpx.fetch_tarif(c, 2, 12)["transport_mode"], "FORFAIT")
+    check("fournisseur inconnu",
+          mpx.propager_transport(c, fournisseur_id=999, matiere_id=11).get("ok"), False)
+    check("matière inconnue",
+          mpx.propager_transport(c, fournisseur_id=2, matiere_id=999).get("ok"), False)
+    vieille = base_jouet()
+    check("base non migrée refusée proprement",
+          mpx.propager_transport(vieille, fournisseur_id=2, matiere_id=11).get("ok"), False)
+
+    print("  · un fournisseur seul sur sa catégorie n'a rien à propager")
+    seul = mpx.cibles_propagation(c, fournisseur_id=1, matiere_id=10)
+    check("aucune cible", seul["matieres"], [])
 
 def calcul(mod):
     """

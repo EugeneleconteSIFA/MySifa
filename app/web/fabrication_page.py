@@ -1329,6 +1329,8 @@ let S = {
   metrageFinVal: '',
   nbEtiquettes: '',
   finDossierOui: null,  // null | true | false — sélecteur fin de dossier dans renderFinModal
+  finNoteVal: '',       // info prod saisie à la clôture (obligatoire si dossier terminé)
+  finNoteChargee: false, // l'info prod déjà enregistrée a-t-elle été relue ?
   commentText: '',
   searchQuery: '',
 
@@ -2523,8 +2525,12 @@ function handleOpTrigger(code, label, cat){
     return;
   }
   if(code==='89'){
-    // Fin dossier → modal metrage + étiquettes
-    set({showFinModal:true, metrageFinVal:'', nbEtiquettes:''});
+    // Fin dossier → modal metrage + étiquettes + info prod
+    set({showFinModal:true, metrageFinVal:'', nbEtiquettes:'', finNoteVal:'', finNoteChargee:false});
+    // Une info prod peut déjà exister — saisie en Traçabilité avant le
+    // lancement, ou par le conducteur du poste précédent. On la relit pour
+    // que l'opérateur complète au lieu d'écraser sans le savoir.
+    loadInfoProdDossier();
     return;
   }
   if(code==='50'){
@@ -5753,6 +5759,19 @@ function renderDebutModal(){
   );
 }
 
+async function loadInfoProdDossier(){
+  const ref = S.dossier ? (S.dossier.reference||'') : '';
+  if(!ref){ S.finNoteChargee = true; return; }
+  try{
+    const d = await apiFetch('/api/fabrication/dossiers/'+encodeURIComponent(ref)+'/info-prod');
+    const txt = (d && d.info_prod && d.info_prod.texte) ? String(d.info_prod.texte) : '';
+    // Ne pas écraser ce que l'opérateur a commencé à taper pendant la requête.
+    if(!S.finNoteVal) S.finNoteVal = txt;
+  }catch(e){ /* l'absence d'info prod n'est pas une erreur */ }
+  S.finNoteChargee = true;
+  if(S.showFinModal) fabRenderPreserveUi({});
+}
+
 function renderFinModal(){
   const metInp = h('input',{type:'number',placeholder:'Ex: 14200',step:'1',min:'0',
     style:{textAlign:'right'}});
@@ -5794,6 +5813,36 @@ function renderFinModal(){
     );
   };
 
+  // ── Info prod : ce que le prochain doit savoir ────────────────────────────
+  // Un dossier qui se termine sans un mot laisse la production suivante
+  // redécouvrir seule ce qu'on vient d'apprendre. La note est donc exigée dès
+  // que le dossier est déclaré terminé — « R.A.S. » est une réponse valable,
+  // le silence n'en est pas une.
+  const noteInp = h('textarea',{
+    rows:'3',
+    placeholder:'Ce qu\'il faut savoir la prochaine fois que ce dossier passe…',
+    style:{width:'100%',fontFamily:'inherit',fontSize:'14px',padding:'10px 12px',
+           borderRadius:'8px',border:'1px solid var(--border2)',background:'var(--bg)',
+           color:'var(--text)',resize:'vertical'},
+  });
+  noteInp.value = S.finNoteVal||'';
+  noteInp.addEventListener('input',e=>{ S.finNoteVal=e.target.value; });
+
+  const rasBtn = h('button',{
+    type:'button',
+    className:'fab-btn fab-btn-muted fab-btn-sm',
+    style:{marginTop:'8px'},
+    onClick:()=>{ S.finNoteVal='R.A.S.'; noteInp.value='R.A.S.'; noteInp.focus(); }
+  },'R.A.S. — rien à signaler');
+
+  const noteBloc = h('div',{className:'fab-field'},
+    h('label',null,'Info prod — obligatoire'),
+    h('div',{className:'fab-field-hint'},
+      'Visible en Traçabilité et à la prochaine production de cette référence.'),
+    noteInp,
+    rasBtn
+  );
+
   const fdSelector = h('div',{style:{marginBottom:'0'}},
     h('div',{style:{
       fontWeight:'800',fontSize:'14px',color:'var(--text)',marginBottom:'10px',
@@ -5812,6 +5861,15 @@ function renderFinModal(){
     // Validation : fin_dossier obligatoire
     if(S.finDossierOui === null || S.finDossierOui === undefined){
       showToast('Indiquez ce que devient le dossier.','danger');
+      return;
+    }
+
+    // Validation : info prod obligatoire à la clôture. « À reprendre plus
+    // tard » n'exige rien — le dossier n'est pas fini, il n'y a pas encore de
+    // bilan à en tirer.
+    const noteTxt = String(S.finNoteVal||'').trim();
+    if(S.finDossierOui === true && !noteTxt){
+      showToast('Notez ce qu\'il faut savoir sur ce dossier — « R.A.S. » si rien à signaler.','danger');
       return;
     }
 
@@ -5855,6 +5913,7 @@ function renderFinModal(){
         designation: S.dossier ? (S.dossier.description||'') : '',
         fin_dossier: S.finDossierOui === true,
       };
+      if(S.finDossierOui === true && noteTxt) body.info_prod = noteTxt;
       if(mFin !== null) body.metrage_fin = mFin;
       if(S.nbEtiquettes) body.qte_etiquettes = parseFloat(String(S.nbEtiquettes).replace(',','.'));
       if(S.adminMachineId) body.machine_id = S.adminMachineId;
@@ -5874,11 +5933,12 @@ function renderFinModal(){
     }catch(e){
       showToast('Erreur : '+e.message,'danger');
     }finally{
-      fabRenderPreserveUi({loading:false, metrageFinVal:'', nbEtiquettes:'', finDossierOui:null});
+      fabRenderPreserveUi({loading:false, metrageFinVal:'', nbEtiquettes:'', finDossierOui:null,
+                           finNoteVal:'', finNoteChargee:false});
     }
   };
 
-  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showFinModal:false,finDossierOui:null});}},
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false});}},
     h('div',{className:'fab-modal'},
       h('div',{className:'fab-modal-title'},opLabel('89','Fin de production')),
       S.dossier ? h('div',{className:'fab-modal-sub'},
@@ -5902,9 +5962,10 @@ function renderFinModal(){
         etiqInp
       ),
       h('div',{className:'fab-field'},fdSelector),
+      S.finDossierOui===true ? noteBloc : null,
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
-          onClick:()=>set({showFinModal:false,finDossierOui:null})},'Annuler'),
+          onClick:()=>set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false})},'Annuler'),
         h('button',{
           className:'fab-btn '+(S.finDossierOui===true?'fab-btn-danger':'fab-btn-warn'),
           style:{opacity: S.finDossierOui===null?'.55':'1'},

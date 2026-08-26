@@ -11904,8 +11904,12 @@ const TRACA_FORMATS = [
   { id:'a4p',     label:'A4 paysage',   dims:'297×210 mm' },
   { id:'120x105', label:'120×105 mm',   dims:'120×105 mm' },
   { id:'105x50',  label:'105×50 mm',    dims:'105×50 mm'  },
-  { id:'40x20',   label:'40×20 mm',     dims:'40×20 mm'   },
-  { id:'40x30',   label:'40×30 mm',     dims:'40×30 mm'   },
+  // Etiquettes bobine. Les formats 40x20 et 40x30 de l'ancienne
+  // identification bobine ont ete retires avec elle : plus aucune etiquette
+  // ne les utilise, et un format orphelin dans la liste laisse croire qu'on
+  // peut encore imprimer dessus.
+  { id:'100x150', label:'100×150 mm',   dims:'100×150 mm' },
+  { id:'100x50',  label:'100×50 mm',    dims:'100×50 mm'  },
 ];
 
 const TRACA_ETIQUETTES = [
@@ -11918,7 +11922,30 @@ const TRACA_ETIQUETTES = [
   // Cohésio
   { id:'nb_palettes_c',   label:'Nombre de palettes',      format:'105x50', postes:['cohesio1','cohesio2']      },
   { id:'id_carton',       label:'Identification carton',   format:'105x50', postes:['cohesio1','cohesio2']      },
-  { id:'id_bobine',       label:'Identification bobine',   format:'40x20',  postes:['cohesio1','cohesio2']      },
+  // Identification bobine — section présente sur TOUS les postes.
+  //
+  // Elle remplace l'ancienne étiquette bobine 40×20 des Cohésio, qui ne
+  // portait que la référence produit et le nombre d'étiquettes par bobine :
+  // ni lot, ni claim FSC, ni laize. Une bobine entamée réétiquetée avec ça
+  // perdait sa traçabilité matière, ce qui n'est plus tenable sous
+  // certification.
+  //
+  // Le format n'est pas un choix de l'utilisateur mais une propriété du
+  // poste : la logistique étiquette des bobines qui partent en rack et doit
+  // les lire de loin (grand format), les Cohésio recollent une étiquette sur
+  // le mandrin d'une bobine en cours (petit format). Le bureau ADV dépanne
+  // les deux, donc lui seul voit les deux entrées.
+  { id:'id_bobine_grand', label:'Identification bobine — grand format', format:'100x150',
+    groupe:'bobines', postes:['logistique','bureaux'] },
+  { id:'id_bobine_petit', label:'Identification bobine — petit format',  format:'100x50',
+    groupe:'bobines', postes:['cohesio1','cohesio2','bureaux'] },
+];
+
+// Sections d'un poste. Une étiquette sans `groupe` reste dans la liste
+// principale ; celles qui en portent un sont rassemblées sous ce titre, sur
+// le modèle de la section « Communication » des Bureaux.
+const TRACA_GROUPES = [
+  { id:'bobines', label:'Identification bobines', icon:'layers' },
 ];
 
 // -- Affiches memo (poste Bureaux > Communication) --
@@ -12214,35 +12241,343 @@ function buildIdCartonForm() {
     btn);
 }
 
-// ── 7. Cohésio 1 & 2 — Identification bobine (40×20 ou 40×30) ────
-function buildIdBobineForm() {
-  let _ref='', _epb='', _fmt='40x20';
-  function doPrint() {
-    const ref=_ref.trim(), epb=_epb.trim();
-    if(!ref){showToast('Référence requise','error');return;}
-    const [pw, ph] = _fmt==='40x30' ? ['40mm','30mm'] : ['40mm','20mm'];
-    const fsRef = _fmt==='40x30' ? '10pt' : '8pt';
-    const fsCond = _fmt==='40x30' ? '9pt' : '7pt';
-    _printWin('Bobine — '+ref,`${pw} ${ph}`,
-      `.label{width:${pw};height:${ph};padding:1.5mm 2mm;display:flex;flex-direction:column;justify-content:space-between;page-break-after:always;page-break-inside:avoid}
-       .ref{font-size:${fsRef};font-weight:900;word-break:break-all;line-height:1.2}
-       .cond{font-size:${fsCond};font-weight:600;color:#333}`,
-      `<div class="label"><div class="ref">${ref}</div>${epb?`<div class="cond">${epb} étiq/bob</div>`:''}</div>`);
+// ── 7. Tous postes — Identification bobine matière (100×150 / 100×50) ──
+//
+// Remplace l'ancienne étiquette bobine 40×20. Le contenu est celui de
+// l'étiquette imprimée en réception matière (MyStock › Réception) : même
+// bandeau FSC, mêmes intitulés, même code-barres CODE128. Une bobine porte
+// ainsi la même étiquette qu'elle sorte à la réception, en logistique ou au
+// pied de la machine — c'est ce qui rend la traçabilité lisible d'un bout à
+// l'autre de la chaîne.
+//
+// `taille` vaut 'grand' (100×150, logistique) ou 'petit' (100×50, Cohésio).
+// Le bureau ADV a accès aux deux.
+//
+// Les champs sont pré-remplis depuis un lot de réception mais restent
+// éditables : une bobine peut avoir été reçue avant MySifa, ou son étiquette
+// être refaite pour une bobine qui n'a jamais été scannée. Si l'API n'est pas
+// joignable (opérateur hors ligne, rôle sans accès stock), le sélecteur reste
+// vide et le formulaire fonctionne en saisie manuelle — une étiquette de
+// traçabilité ne doit jamais être indisponible faute de réseau.
+function buildIdBobineMatiereForm(taille) {
+  const grand = (taille === 'grand');
+  const JSBARCODE_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js';
+  const esc = s => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const SEL_CSS = 'width:100%;background:var(--bg);border:1px solid var(--border);'
+    + 'border-radius:8px;padding:8px 10px;font-size:13px;color:var(--text);'
+    + 'font-family:inherit;cursor:pointer;outline:none';
+
+  let lots = [];              // lots de réception récents ; peut rester vide
+  let lotCourant = null;
+  let toutesBobines = false;
+
+  const refInp   = _inp('Référence matière — ex. 1077/0026');
+  const laizeInp = _inp('Laize — ex. 570 mm');
+  const lotInp   = _inp('N° de lot');
+  const fourInp  = _inp('Fournisseur');
+  const codeInp  = _inp('Code-barres de la bobine');
+  const certInp  = _inp('N° de certificat FSC du fournisseur');
+  const copInp   = _inp('1', { type:'number', attrs:{ min:'1', step:'1' } });
+  copInp.value = '1';
+
+  const claimSel = el('select', { style: SEL_CSS });
+  Object.entries(FSC_CLAIM_LABELS).forEach(([v, lbl]) => {
+    claimSel.appendChild(el('option', { attrs:{ value: v } }, lbl));
+  });
+  claimSel.value = 'non_fsc';
+
+  const lotSel = el('select', { style: SEL_CSS });
+  lotSel.appendChild(el('option', { attrs:{ value:'' } }, 'Saisie manuelle'));
+  lotSel.appendChild(el('option', { attrs:{ value:'', disabled:'disabled' } }, 'Chargement des réceptions…'));
+
+  const bobSel = el('select', { style: SEL_CSS });
+  const bobField = el('div', { cls:'etiq-form-row', style:{ display:'none' } },
+    el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+      el('label', { cls:'etiq-form-label' }, 'Bobine du lot'), bobSel));
+
+  function remplirDepuisBobine(b) {
+    refInp.value   = (b && b.matiere_reference) || '';
+    laizeInp.value = (b && b.laize) || '';
+    codeInp.value  = (b && b.code_barre) || '';
   }
-  const rInp=_inp('Référence — ex. 1077/0026'); rInp.addEventListener('input',e=>{_ref=e.target.value.toUpperCase();});
-  const eInp=_inp('Étiquettes/bobine — ex. 500',{type:'number',style:{width:'170px'}}); eInp.addEventListener('input',e=>{_epb=e.target.value;});
-  // Sélecteur format
-  const fmtSel = el('select',{cls:'field-input',style:{width:'140px'}},
-    el('option',{attrs:{value:'40x20',selected:'true'}},'40 × 20 mm'),
-    el('option',{attrs:{value:'40x30'}},'40 × 30 mm'));
-  fmtSel.addEventListener('change',e=>{_fmt=e.target.value;});
-  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
-  btn.addEventListener('click',doPrint);
-  return el('div',null,
-    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Référence produit *'),rInp),
-    el('div',{cls:'etiq-form-row'},
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Étiquettes / bobine'),eInp),
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Format'),fmtSel)),
+
+  function majBobSel() {
+    bobSel.innerHTML = '';
+    const bobines = (lotCourant && lotCourant.bobines) || [];
+    if (!lotCourant || !bobines.length) {
+      bobField.style.display = 'none';
+      toutesBobines = false;
+      return;
+    }
+    // « Toutes les bobines » n'a de sens qu'à partir de deux : sur un lot
+    // d'une seule bobine l'option ferait croire à un choix qui n'en est pas un.
+    if (bobines.length > 1) {
+      bobSel.appendChild(el('option', { attrs:{ value:'*' } },
+        'Toutes les bobines (' + bobines.length + ') — une étiquette chacune'));
+    }
+    bobines.forEach((b, i) => {
+      const parts = [b.code_barre || ('Bobine ' + (i + 1))];
+      if (b.matiere_reference) parts.push(b.matiere_reference);
+      if (b.laize) parts.push(b.laize);
+      bobSel.appendChild(el('option', { attrs:{ value: String(i) } }, parts.join(' · ')));
+    });
+    bobField.style.display = '';
+    bobSel.value = bobines.length > 1 ? '*' : '0';
+    toutesBobines = bobines.length > 1;
+    if (!toutesBobines) remplirDepuisBobine(bobines[0]);
+    else { refInp.value = ''; laizeInp.value = ''; codeInp.value = ''; }
+  }
+
+  bobSel.addEventListener('change', e => {
+    const v = e.target.value;
+    if (v === '*') {
+      toutesBobines = true;
+      refInp.value = ''; laizeInp.value = ''; codeInp.value = '';
+      return;
+    }
+    toutesBobines = false;
+    const bobines = (lotCourant && lotCourant.bobines) || [];
+    remplirDepuisBobine(bobines[parseInt(v, 10)]);
+  });
+
+  lotSel.addEventListener('change', e => {
+    const id = e.target.value;
+    lotCourant = id ? lots.find(l => String(l.id) === String(id)) || null : null;
+    if (!lotCourant) {
+      toutesBobines = false;
+      bobField.style.display = 'none';
+      return;
+    }
+    lotInp.value   = lotCourant.lot_numero || '';
+    fourInp.value  = lotCourant.fournisseur || '';
+    certInp.value  = lotCourant.certificat_fsc || '';
+    claimSel.value = lotCourant.fsc_type_claim || 'non_fsc';
+    majBobSel();
+  });
+
+  // Chargement asynchrone : le formulaire est utilisable immédiatement en
+  // saisie manuelle, la liste des lots se greffe quand elle arrive.
+  (async () => {
+    try {
+      const r = await api('/api/stock/traca/bobines-recentes?limit=40');
+      lots = (r && r.lots) || [];
+    } catch (e) {
+      lots = [];
+    }
+    lotSel.innerHTML = '';
+    lotSel.appendChild(el('option', { attrs:{ value:'' } }, 'Saisie manuelle'));
+    if (!lots.length) {
+      lotSel.appendChild(el('option', { attrs:{ value:'', disabled:'disabled' } },
+        'Aucune réception disponible'));
+      return;
+    }
+    lots.forEach(l => {
+      const parts = [l.lot_numero || ('Lot ' + l.id)];
+      if (l.fournisseur) parts.push(l.fournisseur);
+      if (l.date_reception) parts.push(l.date_reception);
+      const nb = (l.bobines || []).length;
+      if (nb) parts.push(nb + ' bob.');
+      lotSel.appendChild(el('option', { attrs:{ value: String(l.id) } }, parts.join(' · ')));
+    });
+  })();
+
+  // Une entrée = une étiquette imprimée.
+  function etiquettesAImprimer() {
+    const copies = Math.max(1, Math.min(parseInt(copInp.value, 10) || 1, 200));
+    const commun = {
+      lot: lotInp.value.trim(),
+      fournisseur: fourInp.value.trim(),
+      certificat: certInp.value.trim(),
+      claim: claimSel.value || 'non_fsc',
+    };
+    const out = [];
+    const bobines = (lotCourant && lotCourant.bobines) || [];
+    if (toutesBobines && bobines.length) {
+      bobines.forEach(b => {
+        for (let i = 0; i < copies; i++) out.push(Object.assign({
+          ref: b.matiere_reference || '',
+          laize: b.laize || '',
+          code: b.code_barre || commun.lot,
+        }, commun));
+      });
+      return out;
+    }
+    const un = Object.assign({
+      ref: refInp.value.trim(),
+      laize: laizeInp.value.trim(),
+      code: codeInp.value.trim() || commun.lot,
+    }, commun);
+    for (let i = 0; i < copies; i++) out.push(un);
+    return out;
+  }
+
+  // Gabarits — miroir HTML des deux templates ZPL de la réception matière
+  // (print_render.py : DEFAULT_TEMPLATE_RECEPTION_MATIERE_ZPL pour le grand,
+  // DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL pour le petit). Même ordre des
+  // blocs, mêmes intitulés, même hiérarchie de tailles.
+  //
+  // Strictement noir et blanc : ces étiquettes sortent sur thermique
+  // monochrome, où la couleur n'existe pas. Le bandeau FSC est un pavé plein
+  // inversé (l'équivalent HTML du ^GB rempli + ^FR du ZPL), pas un fond vert
+  // ou rouge — sinon la version navigateur ment sur ce que l'étiqueteuse
+  // produira.
+  function labelHtml(d) {
+    const bandeau = (d.claim || 'non_fsc') !== 'non_fsc' ? 'MATIÈRE FSC' : 'MATIÈRE NON FSC';
+    // Ce que porte le code-barres dépend du format, parce que les deux
+    // étiquettes ne sont pas scannées par les mêmes gestes :
+    //   - grand format (logistique) : le NUMÉRO DE LOT, comme le gabarit ZPL
+    //     d'origine — c'est le lot qui rattache la bobine à sa réception, et
+    //     le code bobine reste lisible en clair dans le bloc du bas ;
+    //   - petit format (Cohésio) : le CODE BOBINE, parce que c'est lui que
+    //     l'opérateur scanne dans la traçabilité matière au pied de la
+    //     machine. Un code-barres qu'on ne peut pas scanner là où il est
+    //     collé ne sert à rien.
+    const codeBarre = (grand ? (d.lot || d.code) : (d.code || d.lot)) || '';
+    const bar = codeBarre
+      ? '<div class="bar"><svg class="bc" data-code="' + esc(codeBarre) + '"></svg></div>'
+      : '<div class="bar nobar">Pas de code-barres</div>';
+    if (grand) {
+      return '<div class="label">'
+        + '<div class="brand">__APP_ORG_NAME__</div>'
+        + '<div class="band">' + bandeau + '</div>'
+        + '<div class="lot-big">' + esc(d.lot || '—') + '</div>'
+        + bar
+        + '<div class="lines">'
+        + '<div class="strong">Référence : ' + esc(d.ref || '—') + '</div>'
+        + '<div>' + esc(d.fournisseur || '—') + '</div>'
+        + '<div>FSC : ' + esc(d.certificat || '—') + '</div>'
+        + '<div>Laize : ' + esc(d.laize || '—') + '</div>'
+        + '<div>Réception : ' + esc(d.date) + '</div>'
+        + '</div>'
+        + '<div class="sep"></div>'
+        + '<div class="code-title">CODE BOBINE</div>'
+        + '<div class="code-val">' + esc(d.code || '—') + '</div>'
+        + '</div>';
+    }
+    return '<div class="label">'
+      + '<div class="band">' + bandeau + '</div>'
+      + '<div class="grid">'
+      + '<div class="cell"><div class="lab">Référence</div><div class="val">' + esc(d.ref || '—') + '</div></div>'
+      + '<div class="cell"><div class="lab">Laize</div><div class="val">' + esc(d.laize || '—') + '</div></div>'
+      + '</div>'
+      + '<div class="grid">'
+      + '<div class="cell"><div class="lab">Fournisseur</div><div class="val sm">' + esc(d.fournisseur || '—') + '</div></div>'
+      + '<div class="cell"><div class="lab">Réception</div><div class="val sm">' + esc(d.date) + '</div></div>'
+      + '<div class="cell"><div class="lab">Opérateur</div><div class="val sm">' + esc(d.operateur || '—') + '</div></div>'
+      + '</div>'
+      + '<div class="sep"></div>'
+      + '<div class="lot-title">NUMÉRO LOT</div>'
+      + '<div class="lot-big">' + esc(d.lot || '—') + '</div>'
+      + bar
+      + '</div>';
+  }
+
+  // `print-color-adjust` sur body : sans lui le navigateur « économise »
+  // l'aplat noir du bandeau à l'impression et le rend en gris clair, ce qui
+  // fait disparaître le texte blanc posé dessus.
+  const CSS_COMMUN =
+    'body{-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#000}'
+  + '.band{background:#000;color:#fff;text-align:center;font-weight:900;line-height:1.1}'
+  + '.bar{display:flex;justify-content:center}'
+  + '.bar.nobar{font-size:8pt;color:#555;font-style:italic}'
+  + '.sep{margin-top:auto;border-top:2px solid #000}';
+
+  const CSS_GRAND = CSS_COMMUN
+  + '.label{width:100mm;height:150mm;padding:4mm 5mm;display:flex;flex-direction:column;'
+  + '       overflow:hidden;page-break-after:always;page-break-inside:avoid}'
+  + '.brand{text-align:center;font-size:30pt;font-weight:900;letter-spacing:2pt;line-height:1}'
+  + '.band{margin-top:2.5mm;font-size:21pt;letter-spacing:1.5pt;padding:2.5mm 2mm}'
+  + '.lot-big{margin-top:3mm;text-align:center;font-size:22pt;font-weight:800;'
+  + '         word-break:break-all;line-height:1.1}'
+  + '.bar{margin-top:2mm}'
+  + '.bar svg{max-width:88mm;height:26mm}'
+  + '.lines{margin-top:3mm;text-align:center;font-size:12.5pt;font-weight:700;'
+  + '       line-height:1.5;word-break:break-word}'
+  + '.lines .strong{font-size:14.5pt}'
+  + '.code-title{text-align:center;font-size:12pt;font-weight:800;letter-spacing:1.5pt;margin-top:2.5mm}'
+  + '.code-val{text-align:center;font-size:15pt;font-weight:800;font-family:"Courier New",monospace;'
+  + '          word-break:break-all;margin-top:1mm}';
+
+  const CSS_PETIT = CSS_COMMUN
+  + '.label{width:100mm;height:50mm;padding:2mm 3mm;display:flex;flex-direction:column;'
+  + '       overflow:hidden;page-break-after:always;page-break-inside:avoid}'
+  + '.band{font-size:12pt;letter-spacing:1pt;padding:1.2mm 2mm}'
+  + '.grid{display:flex;gap:3mm;margin-top:1.5mm;min-width:0}'
+  + '.cell{flex:1;min-width:0;overflow:hidden}'
+  + '.lab{font-size:7pt;text-transform:uppercase;letter-spacing:.5pt;color:#333;'
+  + '     font-weight:700;line-height:1.1}'
+  + '.val{font-size:12pt;font-weight:800;line-height:1.15;word-break:break-word}'
+  + '.val.sm{font-size:9pt;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+  + '.lot-title{text-align:center;font-size:7.5pt;font-weight:800;letter-spacing:1.2pt;margin-top:1mm}'
+  + '.lot-big{text-align:center;font-size:14pt;font-weight:900;font-family:"Courier New",monospace;'
+  + '         line-height:1.1;word-break:break-all}'
+  + '.bar{margin-top:1mm}'
+  + '.bar svg{max-width:88mm;height:9mm}';
+
+  function doPrint() {
+    const items = etiquettesAImprimer();
+    if (!items.length) { showToast('Rien à imprimer', 'error'); return; }
+    if (!toutesBobines && !items[0].ref) { showToast('Référence matière requise', 'error'); return; }
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const dateStr = pad(now.getDate()) + '/' + pad(now.getMonth() + 1) + '/' + now.getFullYear();
+    const operateur = (S && S.user && S.user.nom) || '';
+    const html = items
+      .map(d => labelHtml(Object.assign({}, d, { date: dateStr, operateur: operateur })))
+      .join('');
+    // Le titre part dans <title> sans passer par _printWin : une référence
+    // matière contenant un chevron casserait la page d'impression.
+    const titre = esc('Bobine — ' + (items[0].ref || items[0].lot || 'sans référence'));
+    const w = _printWin(titre, grand ? '100mm 150mm' : '100mm 50mm',
+      grand ? CSS_GRAND : CSS_PETIT,
+      html
+      + '<script src="' + JSBARCODE_CDN + '"><\/script>'
+      + '<script>'
+      /* Génération synchrone, pas de window.onload : _printWin écrit son
+         propre window.onload = print() APRÈS ce bloc et écraserait notre
+         handler — les codes-barres sortiraient vides. Même contrainte que
+         recepPrintLabels. */
+      + '(function(){var n=document.querySelectorAll("svg.bc");'
+      + 'for(var i=0;i<n.length;i++){try{JsBarcode(n[i],n[i].getAttribute("data-code"),'
+      + '{format:"CODE128",displayValue:true,fontSize:' + (grand ? 15 : 9) + ','
+      + 'textMargin:0,margin:0,height:' + (grand ? 95 : 30) + '});}catch(e){}}})();'
+      + '<\/script>');
+    if (w) w.document.close();
+  }
+
+  const btn = el('button', { cls:'traca-print-btn',
+    style:{ width:'100%', marginTop:'12px', justifyContent:'center' } },
+    iconEl('printer', 15), ' Imprimer');
+  btn.addEventListener('click', doPrint);
+
+  return el('div', null,
+    el('div', { cls:'etiq-form-row' },
+      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+        el('label', { cls:'etiq-form-label' }, 'Lot de réception'), lotSel)),
+    bobField,
+    el('div', { cls:'etiq-form-row' },
+      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+        el('label', { cls:'etiq-form-label' }, 'Référence matière *'), refInp)),
+    el('div', { cls:'etiq-form-row' },
+      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+        el('label', { cls:'etiq-form-label' }, 'Laize'), laizeInp),
+      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+        el('label', { cls:'etiq-form-label' }, 'N° de lot'), lotInp)),
+    el('div', { cls:'etiq-form-row' },
+      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+        el('label', { cls:'etiq-form-label' }, 'Fournisseur'), fourInp)),
+    el('div', { cls:'etiq-form-row' },
+      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+        el('label', { cls:'etiq-form-label' }, 'Certificat FSC'), certInp)),
+    el('div', { cls:'etiq-form-row' },
+      el('div', { cls:'etiq-form-field', style:{ flex:'1.6' } },
+        el('label', { cls:'etiq-form-label' }, 'Code-barres'), codeInp),
+      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+        el('label', { cls:'etiq-form-label' }, 'Exemplaires'), copInp)),
+    el('div', { cls:'etiq-form-row' },
+      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+        el('label', { cls:'etiq-form-label' }, 'Statut FSC'), claimSel)),
     btn);
 }
 
@@ -12257,7 +12592,10 @@ function openTracaPrint(etiq) {
     id_cliche:        buildIdClicheForm,
     nb_palettes_c:    buildNbPalettesCForm,
     id_carton:        buildIdCartonForm,
-    id_bobine:        buildIdBobineForm,
+    // Même formulaire pour les deux tailles : seul le gabarit d'impression
+    // change, jamais les champs saisis.
+    id_bobine_grand:  () => buildIdBobineMatiereForm('grand'),
+    id_bobine_petit:  () => buildIdBobineMatiereForm('petit'),
   };
   const builder = formBuilders[etiq.id];
   const formContent = builder ? builder() : el('div',{cls:'traca-dev-banner'},iconEl('settings',14),' À venir.');
@@ -12280,31 +12618,47 @@ function buildTracaPosteView(poste) {
       iconEl('arrow-left',15), ' Postes'),
     el('span',{cls:'traca-poste-heading'}, poste.label)
   );
-  let listEl;
+  // Une carte d'étiquette. Extraite de la boucle parce que la vue poste rend
+  // désormais plusieurs listes : les étiquettes courantes du poste, puis une
+  // section par groupe (voir TRACA_GROUPES).
+  function mkEtiqCard(etiq){
+    const fmtObj = TRACA_FORMATS.find(f=>f.id===etiq.format)||{label:etiq.format,dims:''};
+    return el('div',{cls:'traca-etiq-card'},
+      el('div',{cls:'traca-etiq-icon-wrap',style:{background:poste.colorBg,color:poste.color}},
+        iconEl('tag',18)),
+      el('div',{cls:'traca-etiq-body'},
+        el('div',{cls:'traca-etiq-label'},etiq.label),
+        el('div',{cls:'traca-etiq-meta'},
+          el('span',{cls:'traca-format-badge'},fmtObj.label),
+          el('span',{cls:'traca-printer-badge'},
+            iconEl('printer',10),
+            '\u00a0'+(etiq.printer||'Non configurée'))
+        )
+      ),
+      el('button',{cls:'traca-print-btn',on:{click:()=>openTracaPrint(etiq)}},
+        iconEl('printer',13),' Imprimer')
+    );
+  }
+
+  const principales = etiquettes.filter(e=>!e.groupe);
+  let listEl = null;
   if (etiquettes.length===0) {
     listEl = el('div',{cls:'card'},el('div',{cls:'card-empty'},'Aucune étiquette configurée pour ce poste.'));
-  } else {
-    const cards = etiquettes.map(etiq=>{
-      const fmtObj = TRACA_FORMATS.find(f=>f.id===etiq.format)||{label:etiq.format,dims:''};
-      const card = el('div',{cls:'traca-etiq-card'},
-        el('div',{cls:'traca-etiq-icon-wrap',style:{background:poste.colorBg,color:poste.color}},
-          iconEl('tag',18)),
-        el('div',{cls:'traca-etiq-body'},
-          el('div',{cls:'traca-etiq-label'},etiq.label),
-          el('div',{cls:'traca-etiq-meta'},
-            el('span',{cls:'traca-format-badge'},fmtObj.label),
-            el('span',{cls:'traca-printer-badge'},
-              iconEl('printer',10),
-              '\u00a0'+(etiq.printer||'Non configurée'))
-          )
-        ),
-        el('button',{cls:'traca-print-btn',on:{click:()=>openTracaPrint(etiq)}},
-          iconEl('printer',13),' Imprimer')
-      );
-      return card;
-    });
-    listEl = el('div',{cls:'traca-etiq-list'},...cards);
+  } else if (principales.length) {
+    listEl = el('div',{cls:'traca-etiq-list'},...principales.map(mkEtiqCard));
   }
+
+  // Sections groupées — aujourd'hui « Identification bobines », présente sur
+  // les quatre postes. Un groupe sans étiquette pour ce poste ne rend rien :
+  // un titre de section vide se lit comme une fonctionnalité en panne.
+  const groupSections = TRACA_GROUPES.map(g=>{
+    const items = etiquettes.filter(e=>e.groupe===g.id);
+    if(!items.length) return null;
+    return el('div',null,
+      el('div',{cls:'traca-group-title'}, iconEl(g.icon||'folder',12), g.label),
+      el('div',{cls:'traca-etiq-list'}, ...items.map(mkEtiqCard))
+    );
+  }).filter(Boolean);
 
   // -- Dossier "Communication" - uniquement pour le poste Bureaux --
   let commSection = null;
@@ -12341,7 +12695,7 @@ function buildTracaPosteView(poste) {
     );
   }
 
-  return el('div',{cls:'content'}, backBar, listEl, commSection);
+  return el('div',{cls:'content'}, backBar, listEl, ...groupSections, commSection);
 }
 
 function buildTraca() {

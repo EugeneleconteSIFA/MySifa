@@ -631,7 +631,7 @@ const S = {
   resFiltreCertifs: [],       // ids de fiches mises en avant (multi-selection)
   resShowCats: false,         // afficher les categories sur les cartes
   resFiltrePanel: false,      // panneau de selection des certifications ouvert
-  resRangement: 'alpha',      // 'alpha' | 'categorie' — comment la liste est rangee
+  resRangement: 'categorie',  // 'alpha' | 'categorie' — comment la liste est rangee
   resCatsPliees: [],          // codes de rayons replies (persiste)
   resFiltreCats: [],          // codes de categories retenus ([] = toutes)
   currentRefFour: null,       // couverture fournisseurs de la fiche referentiel
@@ -4774,23 +4774,30 @@ document.addEventListener('keydown', function(ev){
       padding:1px 6px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;line-height:1.5;white-space:nowrap}
 
     /* ── Rangement par categorie ─────────────────────────────────────────
-       Le titre de rayon est une barre discrete, pas un titre de page : il
-       separe sans hurler, et reste lisible quand dix rayons se suivent.
+       Le titre de rayon ne porte plus de cadre : c'est le blanc au-dessus
+       (28px) qui separe les rayons, pas un trait. La lisibilite vient donc
+       de la typo seule — 14px, 800, capitales espacees, couleur de texte
+       pleine — et non d'une boite qui ferait concurrence aux cartes.
+       Chevron a droite du libelle : il suit le titre au lieu de le
+       preceder, et ne s'allume qu'au survol pour rester sobre.
        Cliquable pour replier — « Sans categorie » compte souvent la moitie
        du magasin, on doit pouvoir le ranger d'un geste. */
-    .res-rayon{margin:16px 0 4px}
-    .res-rayon-hd{display:flex;align-items:center;gap:9px;padding:7px 11px;background:var(--bg);
-      border:1px solid var(--border);border-radius:9px;cursor:pointer;user-select:none;
-      transition:border-color .15s,background .15s}
-    .res-rayon-hd:hover{border-color:var(--accent)}
-    .res-rayon-hd .chev{flex-shrink:0;color:var(--muted);transition:transform .15s}
+    .res-rayon{margin:28px 0 4px}
+    .res-rayon:first-child{margin-top:6px}
+    .res-rayon-hd{display:flex;align-items:center;gap:10px;padding:6px 6px 6px 2px;
+      background:transparent;border:0;border-radius:8px;cursor:pointer;user-select:none;
+      transition:background .15s}
+    .res-rayon-hd:hover{background:var(--bg)}
+    .res-rayon-hd .chev{flex-shrink:0;margin-left:-2px;color:var(--muted);
+      transition:transform .15s,color .15s}
+    .res-rayon-hd:hover .chev{color:var(--text2)}
     .res-rayon.plie .res-rayon-hd .chev{transform:rotate(-90deg)}
-    .res-rayon-ttl{font-size:12.5px;font-weight:700;color:var(--text);text-transform:uppercase;letter-spacing:.5px}
+    .res-rayon-ttl{font-size:14px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.7px}
     .res-rayon-cnt{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;
       background:var(--accent-bg);color:var(--accent)}
-    .res-rayon-hd.vide .res-rayon-ttl{color:var(--muted)}
+    .res-rayon-hd.vide .res-rayon-ttl{color:var(--text2)}
     .res-rayon-hd.vide .res-rayon-cnt{background:rgba(148,163,184,.18);color:var(--muted)}
-    .res-rayon-corps{margin-top:11px}
+    .res-rayon-corps{margin-top:12px}
     .res-rayon.plie .res-rayon-corps{display:none}
     /* Le segment de rangement, a cote de la recherche. */
     .res-seg{display:inline-flex;background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
@@ -6596,9 +6603,9 @@ function renderRessourcesList(){
           <div class="res-rayon-hd${vide}"${pliable?` onclick="toggleResRayon('${escAttr(r.code)}')" role="button" tabindex="0"
             onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleResRayon('${escAttr(r.code)}');}"
             title="${plie?'Déplier':'Replier'} ce rayon"`:' style="cursor:default"'}>
-            ${pliable?`<svg class="chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`:''}
             <span class="res-rayon-ttl">${escHtml(r.label)}</span>
             <span class="res-rayon-cnt">${r.items.length}</span>
+            ${pliable?`<svg class="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`:''}
           </div>
           <div class="res-rayon-corps"><div class="res-grid">${r.items.map(rend).join('')}</div></div>
         </div>`;
