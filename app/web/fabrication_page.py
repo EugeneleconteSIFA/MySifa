@@ -284,7 +284,8 @@ body.light table.fab-table tr.fab-row-last td{
   padding:60px 20px;color:var(--muted);gap:10px;
   font-size:13px;text-align:center;
 }
-.fab-empty-icon{font-size:36px;opacity:.4}
+.fab-empty-icon{font-size:36px;opacity:.4;display:flex;justify-content:center;margin-bottom:6px}
+.fab-empty-icon svg{width:32px;height:32px}
 
 /* ── Footer ─────────────────────────────────────────────────── */
 .fab-footer{
@@ -346,20 +347,23 @@ body.light table.fab-table tr.fab-row-last td{
   gap:6px;padding-top:0;
 }
 .fab-dossier-ref{
-  font-size:13px;font-weight:800;color:var(--accent);
+  font-size:15px;font-weight:800;color:var(--accent);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .fab-dossier-client{
-  font-size:12px;font-weight:700;color:var(--text);
+  font-size:13px;font-weight:700;color:var(--text);
   max-width:220px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .fab-dossier-meta{display:flex;flex-wrap:nowrap;gap:0 12px;margin-top:0}
+/* 12 px et non 10 : ces champs se lisent debout devant la machine, pas assis
+   devant l'ecran. Le libelle reste en capitales pour rester distinguable de la
+   valeur sans avoir besoin d'une couleur supplementaire. */
 .fab-meta-item{
-  font-size:10px;color:var(--muted);
-  display:flex;align-items:center;gap:4px;white-space:nowrap;
+  font-size:12px;color:var(--muted);
+  display:flex;align-items:center;gap:5px;white-space:nowrap;
 }
-.fab-meta-label{font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--text2)}
+.fab-meta-label{font-weight:700;text-transform:uppercase;letter-spacing:.4px;font-size:11px;color:var(--text2)}
 /* Seul dans la colonne : marge auto = reste centre verticalement, alors que
    la colonne, elle, aligne son contenu en haut. */
 .fab-no-dossier{font-size:12px;color:var(--muted);font-style:italic;margin:auto 0}
@@ -388,18 +392,18 @@ body.light table.fab-table tr.fab-row-last td{
 .fab-dossier-consigne{
   min-width:0;min-height:0;margin-top:0;
   max-width:min(100%, 520px);
-  font-size:11px;line-height:1.45;color:var(--text2);
+  font-size:13px;line-height:1.45;color:var(--text2);
   background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--warn,#fbbf24);
   border-radius:8px;padding:6px 9px;cursor:pointer;
   display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;
-  /* 5 lignes = ce que la bande laisse une fois l'entete et les actions posees.
-     C'est `-webkit-line-clamp` qui dessine les points de suspension ; sans
-     nombre de lignes, le texte serait coupe net au bord de la boite. */
-  -webkit-line-clamp:5;
+  /* 4 lignes = ce que la bande laisse une fois l'entete et les actions posees,
+     au corps de 13 px. C'est `-webkit-line-clamp` qui dessine les points de
+     suspension ; sans nombre de lignes, le texte serait coupe net au bord. */
+  -webkit-line-clamp:4;
 }
 /* Depliee au clic, elle defile a l'interieur de sa propre boite, bornee en
    hauteur : elle ne peut donc pas pousser le reste hors de la bande. */
-.fab-dossier-consigne.is-open{-webkit-line-clamp:unset;max-height:110px;overflow-y:auto}
+.fab-dossier-consigne.is-open{-webkit-line-clamp:unset;max-height:130px;overflow-y:auto}
 /* Pas de consigne : la case reste, elle le dit, mais elle cesse de crier —
    le liseré orange est reserve a une consigne qui existe vraiment. */
 .fab-dossier-consigne.is-vide{
@@ -409,7 +413,7 @@ body.light table.fab-table tr.fab-row-last td{
 /* Etiquette en ligne, pas en bloc : en bloc elle consommait a elle seule la
    premiere des deux lignes visibles de la consigne. */
 .fab-dossier-consigne-lbl{
-  display:inline;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
+  display:inline;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
   color:var(--warn,#fbbf24);margin-right:6px;
 }
 
@@ -496,6 +500,7 @@ body.light table.fab-table tr.fab-row-last td{
 .fab-field{margin-bottom:14px}
 .fab-field label{font-size:11px;font-weight:700;color:var(--text2);display:block;
   margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
+.fab-field-hint{font-size:11px;color:var(--muted);margin:-2px 0 6px;line-height:1.4}
 .fab-field input,.fab-field textarea,.fab-field select{
   width:100%;background:var(--bg);border:1.5px solid var(--border);
   border-radius:8px;padding:10px 12px;font-size:13px;color:var(--text);
@@ -764,7 +769,7 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 
 /* ── Centrage sections footer ──────────────────────────────── */
 .fab-footer{align-items:center}
-.fab-footer-info{justify-content:flex-start}
+.fab-footer-info{justify-content:flex-start;align-self:stretch}
 .fab-footer-actions{align-items:center;justify-content:center;gap:6px}
 /* Colonne de droite ancree en haut de la bande, comme la colonne de gauche :
    centree, elle flottait plus bas que le selecteur de machine et que les
@@ -814,7 +819,8 @@ table.fab-of-table tr:last-child td{border-bottom:none}
   display:flex;flex-direction:column;align-items:center;gap:6px;
 }
 .fab-print-card:hover{border-color:var(--accent);background:var(--accent-bg);transform:translateY(-1px)}
-.fab-print-card-icon{font-size:24px;line-height:1}
+.fab-print-card-icon{font-size:24px;line-height:1;display:flex;justify-content:center;color:var(--accent)}
+.fab-print-card-icon svg{width:26px;height:26px}
 .fab-print-card-name{font-size:12px;font-weight:800;color:var(--text)}
 .fab-print-card-format{font-size:10px;color:var(--muted)}
 
@@ -2255,10 +2261,10 @@ function renderSidebar(){
       h('div',{style:{padding:'10px 8px 8px',fontSize:'11px',color:'var(--muted)',
         background:'rgba(255,255,255,.03)',borderRadius:'6px',margin:'0 0 8px',
         borderLeft:'2px solid var(--border)',lineHeight:'1.5'}},
-        S.etat==='sans_session' ? '👋 Commencez par enregistrer votre arrivée'
-        : S.etat==='arrive' ? '📂 Sélectionnez un dossier pour commencer la saisie'
-        : S.etat==='fin_dossier' ? '✅ Dossier clôturé — démarrez un nouveau ou partez'
-        : '⏳ En attente…'
+        S.etat==='sans_session' ? 'Commencez par enregistrer votre arrivée.'
+        : S.etat==='arrive' ? 'Sélectionnez un dossier pour commencer la saisie.'
+        : S.etat==='fin_dossier' ? 'Dossier clôturé. Démarrez-en un autre, ou enregistrez votre départ.'
+        : 'En attente…'
       )
     );
   }
@@ -3340,7 +3346,7 @@ function openFabPrint(type){
       +'<select id="fmt" style="width:100%;padding:8px 10px;border:1.5px solid #ccc;border-radius:6px;font-size:13px">'
       +'<option value="40x20">40×20 mm</option><option value="40x30">40×30 mm</option></select></div>'
       +_fabInp('etiq','Étiquettes / bobine','ex : 500','')
-      +'<button onclick="doPrint()" style="background:#0891b2;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;width:100%">🖨 Imprimer</button></div>'
+      +'<button onclick="doPrint()" style="background:#0891b2;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;width:100%">Imprimer</button></div>'
       +'<script>function doPrint(){'
       +'const ref=document.getElementById("ref").value.trim();'
       +'const client=document.getElementById("client").value.trim();'
@@ -3368,7 +3374,7 @@ function openFabPrint(type){
       +_fabInp('client','Client','ex : Acme',client)
       +_fabInp('bobs','Bobines / carton','ex : 12','')
       +_fabInp('etiq','Étiquettes / bobine','ex : 500','')
-      +'<button onclick="doPrint()" style="background:#0891b2;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;width:100%">🖨 Imprimer</button></div>'
+      +'<button onclick="doPrint()" style="background:#0891b2;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;width:100%">Imprimer</button></div>'
       +'<script>function doPrint(){'
       +'const ref=document.getElementById("ref").value.trim();'
       +'const client=document.getElementById("client").value.trim();'
@@ -3393,7 +3399,7 @@ function openFabPrint(type){
       +'<h3 style="margin:0 0 16px;font-size:15px">Compteur palette</h3>'
       +_fabInp('ref','Référence dossier','ex : 9931521',ref)
       +_fabInp('total','Nombre total de palettes','ex : 5','')
-      +'<button onclick="doPrint()" style="background:#0891b2;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;width:100%">🖨 Imprimer (1 étiquette / palette)</button></div>'
+      +'<button onclick="doPrint()" style="background:#0891b2;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;width:100%">Imprimer (1 étiquette / palette)</button></div>'
       +'<script>function doPrint(){'
       +'const ref=document.getElementById("ref").value.trim();'
       +'const n=parseInt(document.getElementById("total").value)||1;'
@@ -3417,11 +3423,11 @@ function renderPrintPanel(){
   const isCohesio = machineName.toLowerCase().includes('coh');
 
   const cards = [
-    {type:'id_bobine', icon:'🧻', name:'Identification bobine', format:'40×20 ou 40×30 mm'},
-    {type:'id_carton', icon:'📦', name:'Identification carton', format:'105×50 mm'},
+    {type:'id_bobine', icon:'scan', name:'Identification bobine', format:'40×20 ou 40×30 mm'},
+    {type:'id_carton', icon:'package', name:'Identification carton', format:'105×50 mm'},
   ];
   if(isCohesio || !machineName){
-    cards.push({type:'nb_palettes_c', icon:'🏷', name:'Compteur palette', format:'105×50 mm'});
+    cards.push({type:'nb_palettes_c', icon:'box', name:'Compteur palette', format:'105×50 mm'});
   }
 
   return h('div',{className:'fab-main'},
@@ -3431,7 +3437,7 @@ function renderPrintPanel(){
     ),
     h('div',{className:'fab-panel'},
       S.dossier ? h('div',{style:{fontSize:'12px',color:'var(--muted)',marginBottom:'4px'}},
-        '📂 Dossier actif : ',
+        'Dossier actif : ',
         h('strong',{style:{color:(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))?'#a78bfa':'var(--accent)'}},
           fabDossierRefLabel(S.dossier)),
         (S.dossier.client && !(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))) ? (' — '+S.dossier.client) : ''
@@ -3440,7 +3446,7 @@ function renderPrintPanel(){
       ),
       h('div',{className:'fab-print-grid'},
         ...cards.map(c=>h('div',{className:'fab-print-card',onClick:()=>openFabPrint(c.type)},
-          h('div',{className:'fab-print-card-icon'},c.icon),
+          h('div',{className:'fab-print-card-icon'},svgIcon(c.icon,26)),
           h('div',{className:'fab-print-card-name'},c.name),
           h('div',{className:'fab-print-card-format'},c.format)
         ))
@@ -4550,7 +4556,7 @@ function _renderStockZ1List(){
               title: rEcart
                 ? 'Produit FSC — traçabilité matière incomplète ou en écart sur le dossier d\'origine'
                 : ('Produit certifié FSC' + (r.no_dossier ? ' — dossier ' + r.no_dossier : '')),
-            }, 'FSC', rEcart ? ' ⚠' : '') : null
+            }, 'FSC') : null
           ),
           h('div',{className:'fab-prod-z1-des'}, r.designation || ''),
           h('div',{className:'fab-prod-z1-meta'},
@@ -4732,7 +4738,7 @@ function renderMain(){
     : [h('tr',null,
         h('td',{colspan: isAdminView ? '7' : '7'},
           h('div',{className:'fab-empty'},
-            h('div',{className:'fab-empty-icon'},'📋'),
+            h('div',{className:'fab-empty-icon'},svgIcon('file',32)),
             S.etat==='sans_session'
               ? 'Commencez par enregistrer votre arrivée'
               : 'Aucune saisie aujourd\'hui'
@@ -4881,7 +4887,7 @@ function renderTracabiliteModal(data, noDossier){
             h('td',null, (l.quantite_restante ?? '—')+' '+(l.unite||'')),
             h('td',null, l.fsc
               ? h('span',{className:'fab-fsc-badge'+(l.fsc_ecart?' is-ecart':'')},
-                  'FSC', l.fsc_ecart ? ' ⚠' : '')
+                  'FSC')
               : h('span',{style:{color:'var(--muted)'}},'—'))
           )))
         )
@@ -5090,9 +5096,14 @@ function renderFooter(){
     if(d.laize) metas.push({label:'Laize',val:d.laize+' mm'});
     if(d.format_l&&d.format_h) metas.push({label:'Format',val:d.format_l+' × '+d.format_h+' mm'});
     if(d.date_livraison) metas.push({label:'Livraison',val:fmtDate(d.date_livraison)});
+    // Le numero d'OF est deja la grande reference affichee a gauche dans
+    // l'immense majorite des dossiers : le repeter en meta ne dit rien de
+    // plus. On ne le montre que quand il differe reellement de la reference —
+    // la seule fois ou l'information a une valeur.
     const fictifDos = d.fictif || isFictifDossierRef(d.reference);
-    if(d.numero_of && !fictifDos) metas.push({label:'N° OF',val:d.numero_of});
-    if(fictifDos) metas.push({label:'N° OF fictif',val:fictifOfDisplay(d.reference||d.numero_of||'')});
+    const refAffichee = String(d.reference||'').trim();
+    if(d.numero_of && !fictifDos && String(d.numero_of).trim() !== refAffichee)
+      metas.push({label:'N° OF',val:d.numero_of});
     if(d.machine_nom) metas.push({label:'Machine',val:d.machine_nom});
     const refProduit = fabRefProduit(d);
     if(refProduit) metas.push({label:'Réf. produit',val:refProduit});
@@ -5118,7 +5129,7 @@ function renderFooter(){
             title: fscEcart
               ? 'Certification FSC requise — traçabilité matière incomplète ou en écart'
               : ('Certification FSC requise'+(fscTypeLbl?' — '+fscTypeLbl:'')),
-          }, 'FSC', fscEcart ? ' ⚠' : '') : null
+          }, 'FSC') : null
         ),
         h('div',{className:'fab-dossier-client'},
           fictifDos ? 'Dossier hors planning' : (d.client||'Client non renseigné')),
@@ -5754,26 +5765,33 @@ function renderFinModal(){
   etiqInp.addEventListener('input',e=>{ S.nbEtiquettes=e.target.value; });
 
   // ── Sélecteur "Fin de dossier ?" ─────────────────────────────────────────
+  // Le code 89 recouvre deux gestes distincts : clôturer le dossier (il sort
+  // du planning et la série part en mémoire produit) ou seulement s'arrêter
+  // pour aujourd'hui (il reste au planning). Chaque option annonce donc sa
+  // conséquence plutôt qu'un « oui / non » qui laisse deviner.
   const finDossierVal = S.finDossierOui; // null | true | false
-  const mkFdBtn = (val, label, emoji, colorVar) => {
+  const mkFdBtn = (val, label, consequence, colorVar, rgb) => {
     const isActive = finDossierVal === val;
-    const btn = h('button',{
+    return h('button',{
       type:'button',
       style:{
-        flex:'1',padding:'14px 8px',borderRadius:'10px',border:'2px solid',
+        flex:'1',padding:'14px 10px',borderRadius:'10px',border:'2px solid',
         borderColor: isActive ? `var(${colorVar})` : 'var(--border2)',
-        background: isActive ? `rgba(${val?'52,211,153':'248,113,113'},.15)` : 'var(--bg)',
+        background: isActive ? `rgba(${rgb},.15)` : 'var(--bg)',
         color: isActive ? `var(${colorVar})` : 'var(--text2)',
-        fontWeight: isActive ? '800' : '500',
+        fontWeight: isActive ? '800' : '600',
         fontSize:'15px',cursor:'pointer',transition:'all .15s',fontFamily:'inherit',
-        display:'flex',flexDirection:'column',alignItems:'center',gap:'4px',
+        display:'flex',flexDirection:'column',alignItems:'center',gap:'5px',
+        textAlign:'center',
       },
       onClick:()=>{ set({finDossierOui:val}); }
     },
-      h('span',{style:{fontSize:'24px',lineHeight:'1'}},emoji),
-      h('span',null,label)
+      h('span',null,label),
+      h('span',{style:{
+        fontSize:'11px',fontWeight:'500',lineHeight:'1.3',
+        color: isActive ? 'inherit' : 'var(--muted)',
+      }},consequence)
     );
-    return btn;
   };
 
   const fdSelector = h('div',{style:{marginBottom:'0'}},
@@ -5781,21 +5799,19 @@ function renderFinModal(){
       fontWeight:'800',fontSize:'14px',color:'var(--text)',marginBottom:'10px',
       padding:'10px 14px',borderRadius:'10px',
       background:'rgba(251,191,36,.12)',border:'1px solid rgba(251,191,36,.4)',
-      display:'flex',alignItems:'center',gap:'8px',
     }},
-      h('span',{style:{fontSize:'20px'}},'❓'),
-      'Ce dossier est-il terminé ?'
+      'Que devient ce dossier ?'
     ),
     h('div',{style:{display:'flex',gap:'10px'}},
-      mkFdBtn(true,  'Oui, terminé',  '✅', '--success'),
-      mkFdBtn(false, 'Non, continue', '🔄', '--warn')
+      mkFdBtn(true,  'Terminé',     'Il sort du planning',   '--success', '52,211,153'),
+      mkFdBtn(false, 'À reprendre', 'Il reste au planning',  '--warn',    '251,191,36')
     )
   );
 
   const submit = async()=>{
     // Validation : fin_dossier obligatoire
     if(S.finDossierOui === null || S.finDossierOui === undefined){
-      showToast('Indiquez si le dossier est terminé (Oui / Non)','danger');
+      showToast('Indiquez ce que devient le dossier.','danger');
       return;
     }
 
@@ -5847,7 +5863,9 @@ function renderFinModal(){
         body:JSON.stringify(body),
       });
       if(r&&r.success){
-        showToast(S.finDossierOui ? 'Dossier clôturé ✅' : 'Fin de production enregistrée 🔄');
+        showToast(S.finDossierOui
+          ? 'Dossier clôturé.'
+          : 'Arrêt enregistré. Le dossier reste au planning.');
         // v2.2.67 : refresh alertes — code 89 déclenche l'ack auto backend v2.2.65
         try { if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh==='function') window.MysifaAlerts.refresh(); } catch(_){}
         fabPauseAutoRefresh(10000);
@@ -5862,7 +5880,7 @@ function renderFinModal(){
 
   return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showFinModal:false,finDossierOui:null});}},
     h('div',{className:'fab-modal'},
-      h('div',{className:'fab-modal-title'},'🏁 Fin de production'),
+      h('div',{className:'fab-modal-title'},opLabel('89','Fin de production')),
       S.dossier ? h('div',{className:'fab-modal-sub'},
         'Dossier ',
         h('strong',{className:(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))?'fab-fictif-label':''},
@@ -5870,15 +5888,17 @@ function renderFinModal(){
         (S.dossier.client && !(S.dossier.fictif||isFictifDossierRef(S.dossier.reference))) ? (' — '+S.dossier.client) : ''
       ) : null,
       h('div',{className:'fab-field'},
-        h('label',null,(()=>{
+        h('label',null,'Compteur machine, en mètres'),
+        (()=>{
           const m = S.machine||(S.adminMachineId&&S.machines.find(x=>x.id===S.adminMachineId));
-          const dm = m&&m.dernier_metrage!=null?'  (dernier enregistré : '+Math.round(m.dernier_metrage).toLocaleString('fr-FR')+' m)':'';
-          return 'Métrage total de la machine — compteur en fin, en mètres'+dm;
-        })()),
+          if(!m || m.dernier_metrage==null) return null;
+          return h('div',{className:'fab-field-hint'},
+            'Dernier relevé : '+Math.round(m.dernier_metrage).toLocaleString('fr-FR')+' m');
+        })(),
         metInp
       ),
       h('div',{className:'fab-field'},
-        h('label',null,'Quantité d\'étiquettes produites'),
+        h('label',null,'Étiquettes produites'),
         etiqInp
       ),
       h('div',{className:'fab-field'},fdSelector),
@@ -5889,7 +5909,10 @@ function renderFinModal(){
           className:'fab-btn '+(S.finDossierOui===true?'fab-btn-danger':'fab-btn-warn'),
           style:{opacity: S.finDossierOui===null?'.55':'1'},
           onClick:submit},
-          svgIcon('flag',15),' '+(S.finDossierOui===true?'Clôturer le dossier':'Enregistrer la fin de production')
+          svgIcon('flag',15),' '+(
+            S.finDossierOui===true  ? 'Clôturer le dossier' :
+            S.finDossierOui===false ? 'Arrêter pour aujourd\'hui' :
+                                      'Enregistrer')
         )
       )
     )
@@ -6723,7 +6746,7 @@ function renderRepiquageGrid(){
             gap:'14px',
           }}, ...cards)
         : h('div',{className:'fab-empty'},
-            h('div',{className:'fab-empty-icon'},'📦'),
+            h('div',{className:'fab-empty-icon'},svgIcon('grid',32)),
             'Aucun dossier planifié sur la machine Repiquage'
           )
     )
@@ -7213,7 +7236,7 @@ function renderRepiquageHistoriqueView(){
     : [h('tr',null,
         h('td',{colspan: isAdminUser ? '7' : '6'},
           h('div',{className:'fab-empty'},
-            h('div',{className:'fab-empty-icon'},'📦'),
+            h('div',{className:'fab-empty-icon'},svgIcon('file',32)),
             'Aucune saisie pour ce dossier'
           )
         )
@@ -7272,7 +7295,7 @@ function renderRepiquageDiscussionView(){
     );
   } else if(!msgs.length){
     messageList = h('div',{className:'fab-empty'},
-      h('div',{className:'fab-empty-icon'},'💬'),
+      h('div',{className:'fab-empty-icon'},svgIcon('message-square',32)),
       'Aucun message pour ce dossier — soyez le premier à en poster un.'
     );
   } else {
@@ -7434,7 +7457,7 @@ function renderRepiquageHeadBanner(ref, dossierInfo, etiqParCarton){
           borderRadius:'8px', fontWeight:'700',
         }
       },
-        etiqParCarton ? (fmtNum(etiqParCarton)+' étiq./carton') : '⚠ Paramétrage manquant'
+        etiqParCarton ? (fmtNum(etiqParCarton)+' étiq./carton') : 'Paramétrage manquant'
       ),
       h('button',{
         className:'fab-btn fab-btn-ghost fab-btn-sm',
@@ -7865,12 +7888,11 @@ function showUpdatePopup(updates){
   const bodies=updates.map(u=>`<div class="upd-body">${u.message}</div>`).join("<hr style='border:none;border-top:1px solid var(--border);margin:16px 0'>");
   overlay.innerHTML=`
     <div class="upd-card">
-      <div style="font-size:28px;margin-bottom:8px;text-align:center">🎉</div>
       <h2 style="text-align:center">${firstTitle}</h2>
       <p class="upd-sub" style="text-align:center">Lisez les nouveautés ci-dessous, puis confirmez.</p>
       ${bodies}
       <button class="upd-ok-btn" onclick="acknowledgeUpdates([${ids.join(",")}],this.closest('.upd-overlay'))">
-        ✅ J'ai compris — C'est parti !
+        J'ai compris
       </button>
     </div>`;
   document.body.appendChild(overlay);
