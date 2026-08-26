@@ -579,6 +579,12 @@ def list_fournisseurs(request: Request):
                       ff.telephone, ff.email, ff.fax,
                       ff.mode_reglement, ff.mode_livraison, ff.delai_expedition_jours,
                       ff.regime_tva, ff.rcs,
+                      -- Lien vers la fiche RVGI. Ce SELECT est explicite : une
+                      -- colonne absente d'ici n'atteint jamais l'écran, et c'est
+                      -- déjà arrivé deux fois (voir plus haut).
+                      ff.rvgi_numero, ff.rvgi_code, ff.rvgi_etat, ff.rvgi_motif,
+                      ff.rvgi_score, ff.rvgi_bloq, ff.rvgi_rs, ff.rvgi_groupe,
+                      ff.rvgi_lie_le, ff.rvgi_maj_le,
                       (SELECT COUNT(*) FROM fournisseur_contacts fc
                        WHERE fc.fournisseur_id = ff.id AND fc.actif=1) AS nb_contacts
                FROM fournisseurs_fsc ff
@@ -1909,6 +1915,27 @@ async def update_fournisseur(fournisseur_id: int, request: Request):
         if not ex:
             raise HTTPException(status_code=404, detail="Fournisseur non trouvé")
         ex_cols = ex.keys()
+
+        # RVGI prime. Sur une fiche liée, les champs que l'ERP pilote sont
+        # verrouillés dans l'interface — mais l'interface n'est pas une
+        # sécurité : un ancien onglet, un script, un rejeu de formulaire les
+        # renverraient quand même. On les retire du corps reçu, et `_pick`
+        # reprend alors la valeur en base. Le refus est silencieux parce qu'il
+        # n'y a rien à refuser : la valeur envoyée était déjà la bonne, ou
+        # elle n'aurait pas dû partir.
+        if ("rvgi_etat" in ex_cols) and ex["rvgi_etat"] == "lie":
+            try:
+                from app.services.rvgi_tiers import champs_pilotes
+                for _c in champs_pilotes("fournisseur"):
+                    body.pop(_c, None)
+            except Exception:
+                pass
+        # Le lien lui-même ne se change pas par cette route : /api/rvgi-tiers/lier
+        # est le seul endroit qui le pose, et il contrôle l'unicité.
+        for _c in ("rvgi_numero", "rvgi_code", "rvgi_etat", "rvgi_motif",
+                   "rvgi_score", "rvgi_bloq", "rvgi_rs", "rvgi_groupe",
+                   "rvgi_lie_le", "rvgi_maj_le"):
+            body.pop(_c, None)
 
         def _pick(field, default=None):
             if field in body:
