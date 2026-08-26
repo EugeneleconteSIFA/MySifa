@@ -522,7 +522,7 @@ ECRANS = [
         "cle": "stock_pf",
         "label": "Stock produits finis",
         "domaine": "stocks",
-        "resume": "Stock réel par article, avec ses seuils.",
+        "resume": "Fiche stock d'un article : suivi, seuils. La QUANTITÉ vit dans les mouvements.",
         "table": "fic_art", "alias": "a",
         "cle_ligne": "a.id",
         "tri_defaut": ("a.code1", "asc"),
@@ -531,7 +531,12 @@ ECRANS = [
             _c("a.code3", "code3", "Code 3", "code", 80),
             _c("a.numclt", "numclt", "Client", "nombre", 75),
             _c("a.libc1", "libc1", "Désignation", "texte", 260),
-            _c("a.stk", "stk", "Stock réel", "qte", 110),
+            # `stk` ne vaut que 1 ou 2 sur les 7 679 articles : c'est un
+            # indicateur de suivi, PAS une quantité. L'afficher en « Stock
+            # réel » faisait lire « 2 étiquettes » là où il y en a deux
+            # millions. La quantité réelle est `qte2` du dernier mouvement de
+            # `stk_hist` — voir `erp_stock.py`.
+            _c("a.stk", "stk", "Suivi en stock", "nombre", 110),
             _c("a.mini", "mini", "Minimum", "qte", 95),
             _c("a.maxi", "maxi", "Maximum", "qte", 95),
             _c("a.ftl", "ftl", "Format L", "nombre", 85),
