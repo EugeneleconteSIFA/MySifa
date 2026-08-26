@@ -669,9 +669,15 @@ CODE_REPRISE    = "88"
 CODE_ANNUL_DOS  = "90"
 
 # Ensemble complet des codes traités comme du temps de calage
-# (02 calage, 10-12 réglages, 58-60 préparations, 67 vidange, 74-75 essais)
+# (02 calage, 10-12 réglages, 58-60 préparations, 74-75 essais)
+#
+# Le 67 (vidange four colle) en a été retiré le 26/08/2026 : c'est un
+# nettoyage, sa catégorie dans `operations.json` le dit, et MyProd le range
+# déjà là (`_CODES_NETTOYAGE` dans app/routers/production.py). Le compter en
+# calage gonflait le calage de la modale planning et de la mémoire produit —
+# 2h36 sur un dossier relevé — pendant que MyProd affichait le bon chiffre.
 CODES_CALAGE: frozenset[str] = frozenset({
-    "02", "10", "11", "12", "58", "59", "60", "67", "74", "75"
+    "02", "10", "11", "12", "58", "59", "60", "74", "75"
 })
 
 # ─── Classification opérations ────────────────────────────────────

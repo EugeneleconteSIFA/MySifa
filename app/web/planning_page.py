@@ -498,6 +498,7 @@ body.light .btn-p{color:#fff}
 .ds-cat-calage{color:var(--warn)}
 .ds-cat-production{color:var(--success)}
 .ds-cat-arret{color:var(--danger)}
+.ds-cat-nettoyage{color:var(--accent)}
 .md h3{color:var(--text);font-size:18px;font-family:var(--mono);margin-bottom:24px}
 .fd{margin-bottom:14px}
 .fd label{display:block;margin-bottom:6px;color:var(--dim);font-size:12px;text-transform:uppercase;letter-spacing:1px}
@@ -1445,6 +1446,8 @@ function icon(name,size=16){
   const p={
     'menu': '<line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>',
     'bar-chart-2': '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+    'activity': '<polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>',
+    'droplet': '<path d="M12 2.7l5.7 5.7a8 8 0 1 1-11.4 0z"/>',
     'file-text': '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>',
     'scanner': '<rect x="3" y="13" width="18" height="7" rx="2"/><line x1="7" y1="16.5" x2="17" y2="16.5"/><path d="M6 10V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5"/>',
     'package': '<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
@@ -4930,12 +4933,17 @@ function dsCatCls(cat){
   if(c==="calage") return "ds-cat-calage";
   if(c==="production") return "ds-cat-production";
   if(c==="arret") return "ds-cat-arret";
+  if(c==="nettoyage") return "ds-cat-nettoyage";
   return "";
 }
 function renderDossierStatsBody(d){
   if(!d) return '<div class="ds-empty">Chargement…</div>';
   const tt=d.temps_totaux||{};
   const q=d.quantites||{};
+  // Temps machine engagee = production + arrets. C'est une grandeur utile,
+  // mais elle etait affichee sous le mot « Production », juste au-dessus d'un
+  // tableau ou le meme mot designait la production nette : deux chiffres, un
+  // seul nom, sur le meme ecran. Elle a desormais son propre libelle.
   const prodInclArrets=Number(tt.production_min||0)+Number(tt.arret_min||0);
   if(!d.nb_saisies){
     return '<div class="ds-empty">Aucune saisie de production trouvée pour ce dossier sur cette machine.</div>';
@@ -4950,8 +4958,10 @@ function renderDossierStatsBody(d){
   html+=`<div class="ds-section">${icon("clock",13)} Temps</div>
   <div class="ds-time-kpi">
     <div class="ds-time-card"><div class="ds-tc-lbl">${icon("wrench",12)} Calage</div><div class="ds-tc-val">${fMin(tt.calage_min)}</div></div>
-    <div class="ds-time-card"><div class="ds-tc-lbl">${icon("play",12)} Production</div><div class="ds-tc-val">${fMin(prodInclArrets)}</div></div>
+    <div class="ds-time-card"><div class="ds-tc-lbl">${icon("play",12)} Production</div><div class="ds-tc-val">${fMin(tt.production_min)}</div></div>
     <div class="ds-time-card"><div class="ds-tc-lbl">${icon("alert-triangle",12)} Arrêts</div><div class="ds-tc-val">${fMin(tt.arret_min)}</div></div>
+    ${Number(tt.nettoyage_min||0)>0?`<div class="ds-time-card"><div class="ds-tc-lbl">${icon("droplet",12)} Nettoyage</div><div class="ds-tc-val">${fMin(tt.nettoyage_min)}</div></div>`:""}
+    <div class="ds-time-card" title="Production + arrêts — le temps pendant lequel la machine était engagée sur le dossier"><div class="ds-tc-lbl">${icon("activity",12)} Machine engagée</div><div class="ds-tc-val">${fMin(prodInclArrets)}</div></div>
   </div>`;
   const cats=d.by_category||[];
   if(cats.length){
@@ -4981,7 +4991,7 @@ function renderDossierStatsBody(d){
   const ops2=d.operateurs||[];
   if(ops2.length){
     html+=`<div class="ds-section">${icon("users",13)} Opérateurs</div>
-    <div class="ds-tbl-wrap"><table class="ds-tbl"><thead><tr><th>Opérateur</th><th>Saisies</th><th>Calage</th><th>Prod</th><th>Arrêts</th><th>Total</th></tr></thead><tbody>`;
+    <div class="ds-tbl-wrap"><table class="ds-tbl"><thead><tr><th>Opérateur</th><th>Saisies</th><th>Calage</th><th>Prod</th><th>Arrêts</th><th>Nettoyage</th><th>Total</th></tr></thead><tbody>`;
     ops2.forEach(r=>{
       html+=`<tr>
         <td style="font-weight:600;color:var(--text)">${escHtml(r.operateur||"?")}</td>
@@ -4989,6 +4999,7 @@ function renderDossierStatsBody(d){
         <td>${fMin(r.calage_min)}</td>
         <td>${fMin(r.prod_min)}</td>
         <td>${fMin(r.arret_min)}</td>
+        <td>${fMin(r.nettoyage_min)}</td>
         <td>${fMin(r.minutes)}</td>
       </tr>`;
     });

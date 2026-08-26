@@ -4267,6 +4267,7 @@ def list_demandes_devis(request: Request, statut: str = "ouverte"):
                                            'refusee','sans_suite')
                       THEN 1 ELSE 0 END) AS envoyes,
                   SUM(CASE WHEN statut IN ('recue','retenue') THEN 1 ELSE 0 END) AS recues,
+                  SUM(CASE WHEN statut='sans_suite' THEN 1 ELSE 0 END) AS sans_suite,
                   SUM(CASE WHEN statut='retenue' THEN 1 ELSE 0 END) AS retenues
                 FROM expe_devis_reponses WHERE demande_id=?
                 """,
@@ -4274,6 +4275,10 @@ def list_demandes_devis(request: Request, statut: str = "ouverte"):
             ).fetchone()
             dd["nb_envoyes"] = counts["envoyes"] or 0
             dd["nb_recus"] = counts["recues"] or 0
+            # Distinct de `nb_recus` : trois transporteurs qui répondent tous
+            # « je ne prends pas » ne doivent pas s'afficher comme trois
+            # silences — c'est le moment d'en solliciter d'autres.
+            dd["nb_sans_suite"] = counts["sans_suite"] or 0
             dd["nb_retenus"] = counts["retenues"] or 0
             pj = conn.execute(
                 "SELECT COUNT(*) AS n FROM expe_devis_pieces_jointes WHERE demande_id=?",
@@ -4684,11 +4689,15 @@ def envoyer_rfq(request: Request, demande_id: int, body: dict = Body(...)):
                 from_upn=EXPE_DEVIS_FROM,
             )
             statut_envoi = "envoyee" if ok else "echec"
-            # Un transporteur qui a déjà chiffré ne repasse pas « envoyée »
+            # Un transporteur qui a déjà RÉPONDU ne repasse pas « envoyée »
             # parce qu'on lui renvoie la demande : sa réponse resterait
-            # affichée mais le statut mentirait.
+            # affichée mais le statut mentirait. `sans_suite` en fait partie —
+            # c'est une réponse, pas un silence. L'oublier était d'autant plus
+            # dangereux que le modal d'envoi coche tous les transporteurs par
+            # défaut : un second envoi effaçait sans bruit un « il ne prend
+            # pas ce trajet » et remettait la ligne dans la file des relances.
             keep_statut = statut_envoi
-            if statut_precedent in ("recue", "retenue"):
+            if statut_precedent in ("recue", "retenue", "sans_suite", "refusee"):
                 keep_statut = statut_precedent
             conn.execute(
                 """
@@ -4936,8 +4945,8 @@ async def retenir_reponse_devis(
       1. Marque la réponse `retenue` et les autres `refusee`, clôture la demande.
       2. Crée automatiquement un départ pré-rempli (date = aujourd'hui,
          transporteur / CP / poids / palettes issus du devis).
-      3. Envoie un email de confirmation au transporteur retenu, en CC service
-         expéditions et reply-to l'utilisateur qui valide.
+      3. Envoie un email de confirmation au transporteur retenu, depuis la
+         boîte du service expéditions, l'utilisateur qui valide en copie.
       4. Optionnel : joint un commentaire libre et une pièce jointe (bon de
          commande, instructions particulières…) à cet email et les archive en DB.
 
@@ -5394,7 +5403,7 @@ def relancer_destinataire_devis(request: Request, reponse_id: int, body: dict = 
             raise HTTPException(status_code=404, detail="Destinataire introuvable")
         rep = dict(rep)
         demande = _require_demande_ouverte(conn, int(rep["demande_id"]))
-        if (rep.get("statut") or "") in ("recue", "retenue"):
+        if (rep.get("statut") or "") in ("recue", "retenue", "sans_suite"):
             raise HTTPException(
                 status_code=409, detail="Ce transporteur a déjà répondu."
             )

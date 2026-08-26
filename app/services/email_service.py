@@ -11,6 +11,7 @@ import smtplib
 import ssl
 import time
 import json
+import urllib.error
 import urllib.parse
 import urllib.request
 from email.mime.base import MIMEBase
@@ -1185,9 +1186,27 @@ def send_email(
         req = urllib.request.Request(url, data=data, method="POST")
         req.add_header("Authorization", f"Bearer {token}")
         req.add_header("Content-Type", "application/json")
-        with urllib.request.urlopen(req, timeout=30) as r:
-            if getattr(r, "status", 202) not in (200, 201, 202):
-                raise RuntimeError("Graph sendMail refuse")
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                if getattr(r, "status", 202) not in (200, 201, 202):
+                    raise RuntimeError("Graph sendMail refuse")
+        except urllib.error.HTTPError as e:
+            # 403 (acces refuse) et 404 (boite inconnue) : Graph a REFUSE la
+            # requete, aucun message n'a ete depose. C'est un preflight, pas
+            # un "peut-etre parti" — le fallback SMTP est donc sur, et sans
+            # lui une permission Mail.Send manquante sur la boite du service
+            # ferait partir toutes les demandes de tarif en echec.
+            if e.code in (403, 404):
+                if from_upn:
+                    logger.error(
+                        "send_email: Graph refuse d'envoyer depuis '%s' (HTTP %s). "
+                        "Verifier la permission Mail.Send de l'application sur "
+                        "cette boite (et l'ApplicationAccessPolicy du tenant).",
+                        expediteur,
+                        e.code,
+                    )
+                raise _SendPreflightError(f"Graph HTTP {e.code} sur {expediteur}") from e
+            raise
 
     def _send_smtp() -> None:
         # Root multipart mixed pour supporter attachments + alternative HTML.

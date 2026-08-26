@@ -222,6 +222,7 @@ def build_dossier_production_stats(rows: List[dict], no_dossier: str) -> dict:
                 "calage_min": 0.0,
                 "production_min": 0.0,
                 "arret_min": 0.0,
+                "nettoyage_min": 0.0,
             },
             "quantites": {"etiquettes": 0.0, "metrage_m": 0.0},
             "vitesse_m_min": 0.0,
@@ -235,12 +236,15 @@ def build_dossier_production_stats(rows: List[dict], no_dossier: str) -> dict:
     calage = sum(float(d.get("temps_calage_min") or 0) for d in dossier_times)
     prod = sum(float(d.get("temps_prod_min") or 0) for d in dossier_times)
     arret = sum(float(d.get("temps_arret_min") or 0) for d in dossier_times)
+    nettoyage = sum(float(d.get("temps_nettoyage_min") or 0) for d in dossier_times)
     session = sum(
         float(d.get("temps_total_calage_min") or 0)
         for d in dossier_times
         if d.get("temps_total_calage_min") is not None
     )
-    duree_totale = round(session if session > 0 else calage + prod + arret, 1)
+    duree_totale = round(
+        session if session > 0 else calage + prod + arret + nettoyage, 1
+    )
 
     etiquettes = round(sum(float(d.get("etiquettes") or 0) for d in dossier_times), 1)
     metrage = round(sum(float(d.get("metrage_m") or 0) for d in dossier_times), 1)
@@ -255,6 +259,11 @@ def build_dossier_production_stats(rows: List[dict], no_dossier: str) -> dict:
             "minutes": round(prod, 1),
         },
         {"category": "arret", "label": "Arrêts", "minutes": round(arret, 1)},
+        # Poste distinct : le 67 (vidange four colle) etait compte en calage,
+        # les 61 et 77 nulle part. Ils gonflaient ou trouaient la repartition
+        # sans jamais apparaitre sous leur nom.
+        {"category": "nettoyage", "label": "Nettoyage",
+         "minutes": round(nettoyage, 1)},
     ]
 
     op_agg: Dict[str, dict] = {}
@@ -269,12 +278,14 @@ def build_dossier_production_stats(rows: List[dict], no_dossier: str) -> dict:
                 "calage_min": 0.0,
                 "prod_min": 0.0,
                 "arret_min": 0.0,
+                "nettoyage_min": 0.0,
                 "minutes": 0.0,
             },
         )
         acc["calage_min"] += float(d.get("temps_calage_min") or 0)
         acc["prod_min"] += float(d.get("temps_prod_min") or 0)
         acc["arret_min"] += float(d.get("temps_arret_min") or 0)
+        acc["nettoyage_min"] += float(d.get("temps_nettoyage_min") or 0)
 
     op_saisies: Dict[str, int] = defaultdict(int)
     for r in all_list:
@@ -286,8 +297,10 @@ def build_dossier_production_stats(rows: List[dict], no_dossier: str) -> dict:
         acc["calage_min"] = round(acc["calage_min"], 1)
         acc["prod_min"] = round(acc["prod_min"], 1)
         acc["arret_min"] = round(acc["arret_min"], 1)
+        acc["nettoyage_min"] = round(acc["nettoyage_min"], 1)
         acc["minutes"] = round(
-            acc["calage_min"] + acc["prod_min"] + acc["arret_min"], 1
+            acc["calage_min"] + acc["prod_min"] + acc["arret_min"]
+            + acc["nettoyage_min"], 1
         )
         operateurs.append(acc)
     operateurs.sort(key=lambda x: (-x["minutes"], x["operateur"]))
@@ -300,6 +313,7 @@ def build_dossier_production_stats(rows: List[dict], no_dossier: str) -> dict:
             "calage_min": round(calage, 1),
             "production_min": round(prod, 1),
             "arret_min": round(arret, 1),
+            "nettoyage_min": round(nettoyage, 1),
         },
         "quantites": {"etiquettes": etiquettes, "metrage_m": metrage},
         "vitesse_m_min": vitesse,

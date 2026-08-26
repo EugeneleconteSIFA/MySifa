@@ -7337,6 +7337,7 @@ const _FMT_GUIDES = {
   'taches-kanban': 'Gestionnaire de tâches — Kanban',
   'taches-liste': 'Gestionnaire de tâches — Liste',
   'erp-overview': 'ERP — Lecture de RVGI',
+  'expe-devis': 'MyExpé — Devis transporteurs',
 };
 
 function _fmtGuideLabel(key){ return _FMT_GUIDES[key] || key; }

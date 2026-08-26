@@ -33,6 +33,7 @@ def compute_dossier_times(rows):
         "temps_calage_min": 0.0,
         "temps_prod_min": 0.0,
         "temps_arret_min": 0.0,
+        "temps_nettoyage_min": 0.0,
         "temps_total_min": None,
         "temps_total_calage_min": None,
         "debut_ts": None,
@@ -102,15 +103,21 @@ def compute_dossier_times(rows):
             if delta_min < 0 or delta_min > 480:   # ignorer écarts > 8h (pause, fin de journée)
                 continue
 
+            cat = str(r.get("operation_category") or "")
             if code in CODES_CALAGE:
                 acc["temps_calage_min"] += delta_min
             elif code in (CODE_PRODUCTION, CODE_REPRISE):
                 acc["temps_prod_min"] += delta_min
-            else:
-                # Pour la vitesse : inclure les arrêts machine (catégorie 'arret') dans le temps "prod effectif"
-                # (les autres catégories : technique/nettoyage/etc ne sont pas ajoutées ici).
-                if str(r.get("operation_category") or "") == "arret":
-                    acc["temps_arret_min"] += delta_min
+            elif cat == "arret":
+                # Les arrêts machine entrent dans le temps "prod effectif" qui
+                # sert de dénominateur à la vitesse.
+                acc["temps_arret_min"] += delta_min
+            elif cat == "nettoyage":
+                # Poste à part entière depuis le 26/08/2026 : il était compté
+                # en calage pour le seul code 67, et nulle part pour les codes
+                # 61 et 77 — donc invisible dans la durée par catégorie alors
+                # qu'il pesait dans la durée totale.
+                acc["temps_nettoyage_min"] += delta_min
 
     # Calculer temps totaux à partir des bornes 01→89
     results = []
@@ -119,9 +126,10 @@ def compute_dossier_times(rows):
             total_avec_calage = (acc["fin_ts"] - acc["debut_ts"]).total_seconds() / 60.0
             acc["temps_total_calage_min"] = round(total_avec_calage, 1)
             acc["temps_total_min"]        = round(max(0, total_avec_calage - acc["temps_calage_min"]), 1)
-        acc["temps_calage_min"] = round(acc["temps_calage_min"], 1)
-        acc["temps_prod_min"]   = round(acc["temps_prod_min"],   1)
-        acc["temps_arret_min"]  = round(acc["temps_arret_min"],  1)
+        acc["temps_calage_min"]    = round(acc["temps_calage_min"],    1)
+        acc["temps_prod_min"]      = round(acc["temps_prod_min"],      1)
+        acc["temps_arret_min"]     = round(acc["temps_arret_min"],     1)
+        acc["temps_nettoyage_min"] = round(acc["temps_nettoyage_min"], 1)
         results.append(acc)
 
     return results

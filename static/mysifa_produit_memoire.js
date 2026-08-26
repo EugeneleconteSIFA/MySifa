@@ -191,16 +191,22 @@
       '.pmem-tbl tbody tr:hover td{background:var(--accent-bg);color:var(--text)}',
       '.pmem-tbl .pmem-chip{font-size:12px}',
       '.pmem-scroll{overflow-x:auto}',
-      // Onglets sobres (« Scans d'OF ») : le blanc porte la page, l'onglet
-      // actif se signale par un trait et du texte fonce. Un aplat colore par
-      // onglet ajoutait une deuxieme emphase la ou le tableau en dessous
-      // demande deja de l'attention.
-      '.pmem-tabs.is-sobre{gap:0;border-bottom:1px solid var(--border);padding-bottom:0}',
+      // Onglets sobres (« Scans d'OF ») : la barre est une SURFACE blanche et
+      // l'onglet actif se signale par un trait et du texte fonce. Deux essais
+      // ecartes avant celui-ci : un aplat colore par onglet, qui ajoutait une
+      // emphase la ou le tableau en dessous en demande deja ; puis des onglets
+      // transparents, qui laissaient passer le bleute de MyProd — trois
+      // teintes empilees pour une seule zone de lecture.
+      '.pmem-tabs.is-sobre{gap:0;background:var(--card);border:1px solid var(--border);',
+      'border-radius:12px;padding:3px 16px 0;margin-bottom:14px}',
       '.pmem-tabs.is-sobre .pmem-tab{background:transparent;border:none;border-radius:0;',
-      'border-bottom:2px solid transparent;color:var(--muted);padding:9px 2px;margin-right:22px}',
+      'border-bottom:2px solid transparent;color:var(--muted);padding:10px 2px;margin-right:24px}',
       '.pmem-tabs.is-sobre .pmem-tab:hover{color:var(--text);border-bottom-color:var(--border)}',
       '.pmem-tabs.is-sobre .pmem-tab.is-on{background:transparent;color:var(--text);',
       'border-bottom-color:var(--accent)}',
+      // En page, MyProd colle ses propres marges aux onglets : on rend a la
+      // barre son cadre complet.
+      '.pmem-panel.pmem-inline .pmem-tabs.is-sobre{padding:3px 16px 0;margin-top:4px}',
       // Tableau sobre : le survol et la ligne selectionnee restent des gris,
       // la couleur reste disponible pour ce qui alerte (« non lu »).
       '.pmem-tbl-sobre tbody tr:hover td{background:var(--bg);color:var(--text)}',
@@ -427,6 +433,7 @@
         ]),
         el('div', { className: 'pmem-kpis' }, [
           kpi('Calage', fMin(med.calage_min)),
+          kpi('Nettoyage', fMin(med.nettoyage_min)),
           kpi('Production', fMin(med.prod_min)),
           kpi('Arrets', fMin(med.arret_min)),
           kpi('Vitesse', med.vitesse_m_min != null ? fNum(med.vitesse_m_min, 1) + ' m/mn' : '—'),
@@ -481,6 +488,7 @@
         el('div', { className: 'pmem-col-lbl', text: 'Production' }),
         el('div', { className: 'pmem-stats' }, [
           kpi('Calage', fMin(s.temps_calage_min)),
+          kpi('Nettoyage', fMin(s.temps_nettoyage_min)),
           kpi('Production', fMin(s.temps_prod_min)),
           kpi('Arrets', fMin(s.temps_arret_min)),
           kpi('Metrage', s.metrage_m != null ? fNum(s.metrage_m) + ' m' : '—'),

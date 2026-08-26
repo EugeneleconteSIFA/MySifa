@@ -292,7 +292,10 @@ body.light table.fab-table tr.fab-row-last td{
   background:var(--card);
   border-top:2px solid var(--border);
   display:grid;
-  grid-template-columns:1fr auto 1fr;
+  /* Colonne de gauche un peu plus large : c'est elle qui porte l'identite du
+     dossier sur une seule ligne, autant lui donner de quoi l'afficher sans
+     defilement dans le cas courant. */
+  grid-template-columns:1.25fr auto 1fr;
   gap:16px;
   padding:12px 16px;
   overflow:hidden;
@@ -302,9 +305,16 @@ body.light table.fab-table tr.fab-row-last td{
   grid-template-columns:unset;flex-wrap:wrap;
 }
 /* Left: dossier info */
+/* Deux lignes, et deux seulement : l'identite du dossier (reference, client,
+   laize, format, livraison, OF, machine, ref produit) sur une ligne qui defile
+   horizontalement, puis la consigne et les actions sur la suivante. La version
+   empilee faisait grimper l'entete a trois ou quatre lignes des que les metas
+   passaient a la ligne, et poussait hors de la bande la ligne d'actions — donc
+   le bouton Produit et le signalement « deja produit », c'est-a-dire tout ce
+   qui doit arreter le conducteur avant qu'il lance la machine. */
 .fab-footer-info{
-  display:flex;flex-direction:column;gap:4px;
-  overflow-x:hidden;overflow-y:auto;
+  display:flex;flex-direction:column;gap:5px;
+  overflow:hidden;
   min-width:0;
 }
 /* Le footer est une bande de hauteur fixe (--footer-h) en overflow:hidden :
@@ -313,10 +323,22 @@ body.light table.fab-table tr.fab-row-last td{
    passaient sous le bord -- justement le signal qui doit arreter le conducteur
    avant qu'il lance la machine. Entete fixe, consigne compressible, actions
    sur une seule ligne : tout tient dans la bande. */
-.fab-dossier-head{flex:0 0 auto;min-width:0}
+.fab-dossier-head{
+  flex:0 0 auto;min-width:0;
+  display:flex;align-items:center;flex-wrap:nowrap;gap:10px;
+  white-space:nowrap;
+  overflow-x:auto;overflow-y:hidden;
+  scrollbar-width:thin;padding-bottom:2px;
+}
+.fab-dossier-head > *{flex:0 0 auto}
+.fab-dossier-head::-webkit-scrollbar{height:4px}
+.fab-dossier-head::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+/* Consigne et actions partagent la meme ligne : dans une bande de 190 px,
+   chaque ligne economisee est une ligne qui ne se fait pas rogner. */
 .fab-dossier-actions{
-  flex:0 0 auto;display:flex;flex-wrap:wrap;align-items:center;
-  gap:6px;padding-top:4px;
+  flex:1 1 auto;min-height:0;overflow-y:auto;
+  display:flex;flex-wrap:wrap;align-items:center;
+  gap:6px;padding-top:0;
 }
 /* Version compacte du signalement memoire produit : dans 190 px de footer,
    le bouton pleine taille de la fiche produit coute trop de hauteur. */
@@ -332,9 +354,10 @@ body.light table.fab-table tr.fab-row-last td{
 }
 .fab-dossier-client{
   font-size:12px;font-weight:700;color:var(--text);
+  max-width:220px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
-.fab-dossier-meta{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:4px}
+.fab-dossier-meta{display:flex;flex-wrap:nowrap;gap:0 12px;margin-top:0}
 .fab-meta-item{
   font-size:10px;color:var(--muted);
   display:flex;align-items:center;gap:4px;white-space:nowrap;
@@ -362,16 +385,20 @@ body.light table.fab-table tr.fab-row-last td{
    TROP HAUTE - Cartons du... » ne dit rien de ce qu'il faut faire. Elle
    s'affiche desormais sur trois lignes, et se deplie entierement au clic. */
 .fab-dossier-consigne{
-  flex:0 1 auto;min-height:0;
-  font-size:11px;line-height:1.45;color:var(--text2);margin-top:5px;max-width:340px;
+  flex:1 1 200px;min-width:150px;max-width:340px;margin-top:0;
+  font-size:11px;line-height:1.45;color:var(--text2);
   background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--warn,#fbbf24);
   border-radius:8px;padding:6px 9px;cursor:pointer;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
 }
-.fab-dossier-consigne.is-open{display:block;-webkit-line-clamp:none;max-height:180px;overflow-y:auto}
+/* Depliee, elle reste bornee : au-dela elle chasserait de la bande les boutons
+   poses a cote d'elle. */
+.fab-dossier-consigne.is-open{display:block;-webkit-line-clamp:none;max-height:96px;overflow-y:auto}
+/* Etiquette en ligne, pas en bloc : en bloc elle consommait a elle seule la
+   premiere des deux lignes visibles de la consigne. */
 .fab-dossier-consigne-lbl{
-  display:block;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
-  color:var(--warn,#fbbf24);margin-bottom:2px;
+  display:inline;font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--warn,#fbbf24);margin-right:6px;
 }
 
 /* Center: action buttons */
@@ -5064,17 +5091,19 @@ function renderFooter(){
           ))
         )
       ),
-      d.commentaire ? h('div',{
-        className:'fab-dossier-consigne',
-        title:'Cliquer pour tout afficher',
-        onClick:function(e){ e.currentTarget.classList.toggle('is-open'); }
-      },
-        h('span',{className:'fab-dossier-consigne-lbl'},'Consigne dossier'),
-        d.commentaire
-      ) : null,
-      // Une seule ligne d'actions : reference produit, signalement « deja
-      // produit », et les deux boutons FSC quand le dossier est certifie.
+      // Consigne et actions sur la meme ligne : reference produit, signalement
+      // « deja produit », et les deux boutons FSC quand le dossier est
+      // certifie. L'entete au-dessus tient sur une seule ligne, donc cette
+      // ligne-ci reste dans la bande quoi qu'il arrive.
       h('div',{className:'fab-dossier-actions'},
+        d.commentaire ? h('div',{
+          className:'fab-dossier-consigne',
+          title:'Cliquer pour tout afficher',
+          onClick:function(e){ e.currentTarget.classList.toggle('is-open'); }
+        },
+          h('span',{className:'fab-dossier-consigne-lbl'},'Consigne dossier'),
+          d.commentaire
+        ) : null,
         renderRefProduitBtn(),
         renderHistoriqueProduitBtn(),
         fscDossier ? h('button',{
