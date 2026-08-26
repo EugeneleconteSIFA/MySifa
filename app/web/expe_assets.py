@@ -503,11 +503,13 @@ function closeTransporteurModal(){
   T.modalTab='fiche';
   T.tarifs_lignes=[];
   T.tarifs_frais=[];
-  // Reprise du modal envoi devis si on est venu de la (bouton Nouveau transporteur).
+  // Reprise de l'ecran devis si on est venu de la (bouton Nouveau
+  // transporteur) : le modal d'envoi comme le wizard de creation sont remis
+  // en place tels quels, saisie comprise.
   if(S._resumeDevisEnvoi){
     const r=S._resumeDevisEnvoi;
     S._resumeDevisEnvoi=null;
-    S.expeDevisModal={type:'envoi',demandeId:r.demandeId,checks:r.checks||{}};
+    S.expeDevisModal=r.modal||{type:'envoi',demandeId:r.demandeId,checks:r.checks||{}};
   }
   render();
 }
@@ -789,9 +791,10 @@ async function saveTransporteur(){
     const newTrpId=saved&&saved.id?Number(saved.id):null;
     closeTransporteurModal();
     await loadTransporteurs();
-    if(wasFromDevis&&newTrpId&&S.expeDevisModal&&S.expeDevisModal.type==='envoi'){
-      if(!S.expeDevisModal.checks)S.expeDevisModal.checks={};
-      S.expeDevisModal.checks['t'+newTrpId]={checked:true,kind:'actif',id:newTrpId};
+    const md=S.expeDevisModal;
+    if(wasFromDevis&&newTrpId&&md&&(md.type==='envoi'||md.type==='nouvelle')){
+      if(!md.checks)md.checks={};
+      md.checks['t'+newTrpId]={checked:true,kind:'actif',id:newTrpId};
       render();
     }
   }catch(e){
@@ -2186,10 +2189,16 @@ function expeDevisStatutLabel(st){
 function expeDevisSuiviTag(d){
   const env=Number(d.nb_envoyes)||0;
   const rep=Number(d.nb_recus)||0;
-  if(!env&&!rep)return null;
+  // Compté à part : une demande dont tous les destinataires ont répondu
+  // « je ne prends pas » afficherait sinon « 3 envoyés » et rien d'autre,
+  // indiscernable d'un silence — alors que c'est le moment d'en solliciter
+  // d'autres, pas d'attendre.
+  const ss=Number(d.nb_sans_suite)||0;
+  if(!env&&!rep&&!ss)return null;
   const parts=[];
   if(env)parts.push(env+' envoyé'+(env>1?'s':''));
   if(rep)parts.push(rep+' réponse'+(rep>1?'s':''));
+  if(ss)parts.push(ss+' sans suite');
   return h('span',{className:'expe-devis-pill accent'},parts.join(' / '));
 }
 
@@ -2611,7 +2620,7 @@ async function ouvrirTimelineDevis(reponseId){
         // Reclassement manuel : le filtre par IP ne voit que ce qui part de
         // nos locaux, une lecture sur Outlook Web ou sur mobile arrive par
         // les serveurs Microsoft. Celui qui a le mail sous les yeux tranche.
-        if(ev.type==='email_ouvert'&&expeCanWrite()){
+        if(ev.type==='email_ouvert'&&expeCanWrite()&&(ev.fiable||ev.interne)){
           const versInterne=!ev.interne;
           const btn=h('button',{type:'button',className:'btn-ghost expe-tl-btn',
             title:versInterne
@@ -3033,12 +3042,6 @@ function renderExpeDevisModal(){
       h('table',{className:'table-std expe-devis-comp'},h('thead',null,head),h('tbody',null,...body))
     ));
   }else if(m.type==='envoi'){
-    const trps=(T.list||[]).filter(t=>{
-      if(!Number(t.actif))return false;
-      const ems=expeTrpReadEmails(t);
-      return ems.length>0;
-    });
-    const prospects=(S.prospects||[]).filter(p=>p.statut_demarchage!=='ecarte'&&p.contact_email&&String(p.contact_email).includes('@'));
     if(!m.checks)m.checks={};
     box.appendChild(h('div',{className:'expe-devis-modal-head'},
       h('span',{style:{fontWeight:'700',fontSize:'15px'}},'Envoyer les demandes de tarif'),closeBtn));
@@ -3047,84 +3050,15 @@ function renderExpeDevisModal(){
       h('strong',null,'le service expéditions'),
       ' · vous êtes en copie. Les réponses reviennent sur la boîte partagée.'
     ));
-    // Barre d'actions : maitre-checkbox (tout selectionner / tout deselectionner)
-    // + bouton "Nouveau transporteur" qui ouvre le modal d'ajout (le modal envoi
-    // reste ouvert derriere, l'utilisateur y revient apres avoir sauvegarde).
-    const allKeys=[];
-    trps.forEach(t=>allKeys.push('t'+t.id));
-    prospects.forEach(pp=>allKeys.push('p'+pp.id));
-    const allChecked=allKeys.length>0&&allKeys.every(k=>m.checks[k]&&m.checks[k].checked);
-    const noneChecked=allKeys.every(k=>!m.checks[k]||!m.checks[k].checked);
-    const masterCb=h('input',{type:'checkbox'});
-    masterCb.checked=allChecked;
-    masterCb.indeterminate=!allChecked&&!noneChecked;
-    masterCb.addEventListener('change',e=>{
-      const val=!!e.target.checked;
-      // Initialise les entrees manquantes puis force le nouvel etat.
-      trps.forEach(t=>{
-        const k='t'+t.id;
-        if(m.checks[k]==null)m.checks[k]={checked:val,kind:'actif',id:t.id};
-        else m.checks[k].checked=val;
-      });
-      prospects.forEach(pp=>{
-        const k='p'+pp.id;
-        if(m.checks[k]==null)m.checks[k]={checked:val,kind:'prospect',nom:pp.nom,email:pp.contact_email};
-        else m.checks[k].checked=val;
-      });
-      render();
-    });
-    const masterLbl=allChecked?'Tout desselectionner':'Tout selectionner';
-    const masterRow=h('label',{className:'expe-devis-envoi-row',style:{background:'var(--accent-bg)',borderRadius:'8px',fontWeight:'700'}},
-      masterCb,
-      h('span',{style:{fontSize:'13px',color:'var(--text)'}},masterLbl),
-      h('span',{style:{fontSize:'11px',color:'var(--muted)',marginLeft:'auto'}},allKeys.length+' destinataire'+(allKeys.length>1?'s':''))
-    );
-    const newTrpBtn=h('button',{type:'button',className:'btn-ghost',
-      style:{fontSize:'12px',color:'var(--accent)',padding:'6px 10px',border:'1px dashed var(--accent)',borderRadius:'8px',cursor:'pointer',background:'transparent'},
-      onClick:()=>{
+    box.appendChild(expeDevisListeDestinataires(m,{
+      onNouveau:()=>{
         // Le modal envoi (z=12100) masque le modal transporteur (z=12000) :
         // on ferme l'envoi mais on sauve l'etat pour reprise apres creation.
-        S._resumeDevisEnvoi={demandeId:m.demandeId,checks:m.checks};
+        S._resumeDevisEnvoi={modal:m};
         set({expeDevisModal:null});
         openTransporteurModal(null);
-      },
-      title:'Creer un nouveau transporteur — le modal d\'envoi se rouvrira apres creation'
-    },iconEl('plus',12),' Nouveau transporteur');
-    const actionsBar=h('div',{style:{display:'flex',justifyContent:'flex-end',margin:'8px 0'}},newTrpBtn);
-    box.appendChild(masterRow);
-    box.appendChild(actionsBar);
-    const list=h('div',{className:'expe-devis-envoi-list'});
-    trps.forEach(t=>{
-      const key='t'+t.id;
-      if(m.checks[key]==null)m.checks[key]={checked:true,kind:'actif',id:t.id};
-      const cb=h('input',{type:'checkbox'});
-      cb.checked=!!m.checks[key].checked;
-      cb.addEventListener('change',e=>{m.checks[key].checked=e.target.checked;render();});
-      const ems=expeTrpReadEmails(t);
-      const emailsLabel=ems.length<=1?ems[0]:ems[0]+' (+'+(ems.length-1)+')';
-      list.appendChild(h('label',{className:'expe-devis-envoi-row',title:ems.join(', ')},
-        cb,
-        h('span',{style:{fontWeight:'600',fontSize:'13px'}},escHtml(t.nom)),
-        h('span',{style:{fontSize:'12px',color:'var(--muted)'}},escHtml(emailsLabel))
-      ));
-    });
-    if(prospects.length){
-      list.appendChild(h('div',{className:'expe-devis-envoi-sep'},'Prospects'));
-      prospects.forEach(p=>{
-        const key='p'+p.id;
-        if(m.checks[key]==null)m.checks[key]={checked:false,kind:'prospect',nom:p.nom,email:p.contact_email};
-        const cb=h('input',{type:'checkbox'});
-        cb.checked=!!m.checks[key].checked;
-        cb.addEventListener('change',e=>{m.checks[key].checked=e.target.checked;render();});
-        list.appendChild(h('label',{className:'expe-devis-envoi-row'},
-          cb,
-          h('span',{style:{fontWeight:'600',fontSize:'13px'}},escHtml(p.nom)),
-          h('span',{style:{fontSize:'12px',color:'var(--muted)'}},escHtml(p.contact_email)),
-          h('span',{style:{fontSize:'11px',color:'var(--warn)'}},'prospect')
-        ));
-      });
-    }
-    box.appendChild(list);
+      }
+    }));
     const envAnnuler=h('button',{type:'button',className:'btn btn-ghost',onClick:fermerExpeDevisModal},'Annuler');
     const envBtn=h('button',{type:'button',className:'btn btn-accent',onClick:()=>void confirmerEnvoi(m.demandeId)},m._sending?'Envoi en cours…':'Envoyer');
     if(m._sending){
@@ -3277,8 +3211,15 @@ function renderExpeDevisSection(){
     ? 'Aucune demande clôturée.'
     : (filtre==='corbeille' ? 'La corbeille est vide.'
       : (filtre==='toutes' ? 'Aucune demande enregistrée.' : 'Aucune demande en cours.'));
+  // Le moteur de guide remplit ce créneau lui-même (`bookBtn`) : il décide
+  // seul de qui voit le bouton, on ne duplique pas cette règle ici.
+  const guideSlot=h('span',{id:'expe-devis-guide-slot'});
+  requestAnimationFrame(()=>{try{expeDevisInitGuide();}catch(_e){}});
   const head=h('div',{className:'expe-devis-page-head'},
-    expeCanWrite()?h('button',{type:'button',className:'btn btn-accent',onClick:()=>void ouvrirModalNouvelleDemande(null)},iconEl('plus',14),' Nouvelle demande'):null,
+    h('div',{style:{display:'flex',alignItems:'center',gap:'10px'}},
+      expeCanWrite()?h('button',{type:'button',className:'btn btn-accent',onClick:()=>void ouvrirModalNouvelleDemande(null)},iconEl('plus',14),' Nouvelle demande'):null,
+      guideSlot
+    ),
     h('div',{className:'expe-devis-filtre'},
       ...[['ouverte','Ouvertes'],['historique','Historique'],['toutes','Toutes'],['corbeille','Corbeille']]
         .map(([k,lbl])=>h('button',{type:'button',
@@ -3514,6 +3455,28 @@ EXPE_DEVIS_CSS = r"""
   transition:background .15s,border-color .15s,color .15s}
 .expe-tl-btn:hover{background:var(--card);border-color:var(--accent);color:var(--accent)}
 .expe-tl-btn:disabled{opacity:.5;cursor:wait}
+/* Fil des etapes du wizard de creation. Etat courant en accent, etapes
+   franchies en succes et cliquables pour revenir corriger. */
+.expe-wiz-steps{display:flex;align-items:center;gap:6px;margin:0 0 18px}
+.expe-wiz-step{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;
+  color:var(--muted);padding:6px 12px;border-radius:9px;border:1px solid var(--border);
+  background:var(--bg);white-space:nowrap}
+.expe-wiz-step .expe-wiz-num{display:inline-flex;align-items:center;justify-content:center;
+  width:19px;height:19px;border-radius:50%;background:var(--border);color:var(--text2);
+  font-size:11px;font-weight:700}
+.expe-wiz-step.actif{color:var(--accent);border-color:var(--accent);background:var(--accent-bg)}
+.expe-wiz-step.actif .expe-wiz-num{background:var(--accent);color:var(--bg)}
+.expe-wiz-step.fait{color:var(--text2)}
+.expe-wiz-step.fait .expe-wiz-num{background:var(--success);color:var(--bg)}
+.expe-wiz-step.fait:hover{border-color:var(--accent);color:var(--accent)}
+.expe-wiz-sep{flex:1;height:1px;background:var(--border);min-width:10px}
+.expe-wiz .expe-devis-envoi-list{max-height:46vh}
+@media(max-width:640px){
+  .expe-wiz-steps{gap:4px}
+  .expe-wiz-step{padding:5px 8px;font-size:11px}
+  .expe-wiz-step span:not(.expe-wiz-num){display:none}
+  .expe-wiz-step.actif span:not(.expe-wiz-num){display:inline}
+}
 .expe-tl-note{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;
   color:var(--muted);line-height:1.6}
 .expe-prospects-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--card)}
@@ -4452,6 +4415,7 @@ function renderExpeComparateur(){
 }
 __EXPE_COMPARATEUR_JS__
 __EXPE_DEVIS_JS__
+__EXPE_DEVIS_GUIDE_JS__
 __EXPE_TRANSPORTEURS_JS__
 __EXPE_CARTE_FRANCE_JS__
 function renderExpePoids(){

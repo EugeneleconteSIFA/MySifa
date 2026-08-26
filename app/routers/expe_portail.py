@@ -28,8 +28,10 @@ logger = logging.getLogger(__name__)
 
 # Notification interne quand un transporteur dépose une offre : la boîte du
 # service reste en copie du créateur, pour qu'une offre ne dorme pas dans une
-# boîte personnelle pendant une absence.
-EXPE_DEVIS_CC = EXPE_DEVIS_FROM
+# boîte personnelle pendant une absence. Nom distinct de `config.EXPE_DEVIS_CC`
+# (copie supplémentaire des demandes de tarif) : ce sont deux notions, les
+# confondre sous un même nom finirait par en écraser une.
+EXPE_NOTIF_INTERNE_CC = EXPE_DEVIS_FROM
 
 
 def _visiteur_interne(request: Request) -> bool:
@@ -113,13 +115,19 @@ def _account_email(acc: dict) -> str:
     return (acc.get("email") or "").strip().lower()
 
 
+# Ordre de préférence quand un même email porte plusieurs lignes sur une
+# demande. `sans_suite` passe avant `refusee` et `echec` : c'est une réponse
+# du transporteur, les deux autres sont des décisions ou des pannes de notre
+# côté. L'oublier de cette table le renvoyait en dernier, derrière un échec
+# d'envoi — et le portail affichait la mauvaise ligne.
 _REPONSE_STATUT_RANK = {
     "recue": 0,
     "retenue": 1,
     "ouvert": 2,
     "envoyee": 3,
-    "refusee": 4,
-    "echec": 5,
+    "sans_suite": 4,
+    "refusee": 5,
+    "echec": 6,
 }
 
 
@@ -199,6 +207,7 @@ def _mark_opened(conn, *, acc: dict, ip: str, user_agent: str | None = None) -> 
         type_evenement=expe_ev.EV_PORTAIL_OUVERT,
         date=now,
         user_agent=user_agent,
+        ip=ip,
         dedup_secondes=90,
     )
 
@@ -264,8 +273,9 @@ def _find_reponse_row(
           CASE WHEN prix IS NOT NULL THEN 0 ELSE 1 END,
           CASE statut
             WHEN 'recue' THEN 0 WHEN 'retenue' THEN 1 WHEN 'ouvert' THEN 2
-            WHEN 'envoyee' THEN 3 WHEN 'refusee' THEN 4 WHEN 'echec' THEN 5
-            ELSE 6
+            WHEN 'envoyee' THEN 3 WHEN 'sans_suite' THEN 4
+            WHEN 'refusee' THEN 5 WHEN 'echec' THEN 6
+            ELSE 7
           END,
           id DESC
         LIMIT 1
@@ -485,7 +495,7 @@ def portail_expe_repondre(
                         subject=subject,
                         html_body=html_body,
                         reply_to=to_email,
-                        cc=EXPE_DEVIS_CC,
+                        cc=EXPE_NOTIF_INTERNE_CC,
                     )
         except Exception:
             # Ne jamais bloquer la réponse transporteur pour un problème de notification
@@ -514,7 +524,8 @@ def _notifier_reponse_devis(conn, *, demande: dict, nom_transporteur: str, prix:
             return
         c = conn.execute(
             """SELECT SUM(CASE WHEN statut IN ('recue','retenue') THEN 1 ELSE 0 END) AS recues,
-                      SUM(CASE WHEN statut IN ('envoyee','ouvert','recue','retenue','refusee')
+                      SUM(CASE WHEN statut IN ('envoyee','ouvert','recue','retenue',
+                                               'refusee','sans_suite')
                           THEN 1 ELSE 0 END) AS envoyes
                FROM expe_devis_reponses WHERE demande_id=?""",
             (int(demande["id"]),),

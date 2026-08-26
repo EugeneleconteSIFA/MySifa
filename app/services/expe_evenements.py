@@ -99,11 +99,13 @@ MOTIF_INTERNE = "ouverture interne SIFA"
 
 
 def _prefixes_internes() -> tuple[str, ...]:
-    """Liste d'IP/préfixes internes, lue à chaque appel.
+    """Liste d'IP/préfixes internes, lue depuis `config` à chaque appel.
 
-    Relue à chaque appel et non figée à l'import : l'IP publique du site
-    change (bascule opérateur, secours 4G) et on doit pouvoir la corriger
-    dans le `.env` sans redéployer.
+    L'import est fait dans la fonction, pas en tête de module : ce service est
+    testé sur une base en mémoire, sans config chargée, et un import au
+    sommet le rendrait intestable. Changer la valeur reste une modification
+    du `.env` suivie d'un redémarrage — `config.py` fait son `os.getenv` à
+    l'import du processus.
     """
     try:
         from config import EXPE_IPS_INTERNES
@@ -513,7 +515,7 @@ def marquer_interne(conn, evenement_id: int, *, interne: bool = True) -> bool:
     """
     try:
         row = conn.execute(
-            "SELECT type_evenement, motif FROM expe_devis_evenements WHERE id=?",
+            "SELECT type_evenement, motif, fiable FROM expe_devis_evenements WHERE id=?",
             (int(evenement_id),),
         ).fetchone()
         if not row:
@@ -522,13 +524,22 @@ def marquer_interne(conn, evenement_id: int, *, interne: bool = True) -> bool:
             # Le portail, lui, se reconnaît tout seul (session MySifa) et le
             # reste des événements est émis par nous : rien à reclasser.
             return False
+        motif_actuel = str(row["motif"] or "")
+        deja_ecarte = int(row["fiable"] or 0) == 0
         if interne:
+            if deja_ecarte and motif_actuel != MOTIF_INTERNE:
+                # Hit déjà écarté pour une autre raison (préchargement Apple,
+                # robot antispam) : il ne compte déjà pas. Écraser son motif
+                # ferait perdre le vrai diagnostic, et le « Finalement non »
+                # qui suivrait le rendrait fiable — un aller-retour de clic
+                # promouvrait un faux signal en ouverture certaine.
+                return False
             conn.execute(
                 "UPDATE expe_devis_evenements SET fiable=0, motif=? WHERE id=?",
                 (MOTIF_INTERNE, int(evenement_id)),
             )
         else:
-            if str(row["motif"] or "") != MOTIF_INTERNE:
+            if motif_actuel != MOTIF_INTERNE:
                 return False
             conn.execute(
                 "UPDATE expe_devis_evenements SET fiable=1, motif=NULL WHERE id=?",

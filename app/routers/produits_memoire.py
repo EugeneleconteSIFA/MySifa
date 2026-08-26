@@ -868,6 +868,10 @@ def fiche_produit(ref: str, request: Request):
     user = get_current_user(request)
     r = _ref_ou_404(ref)
     with get_db() as conn:
+        # Ouvrir la fiche vaut demande explicite : on materialise d'abord les
+        # productions passees de cette reference, plafond large. La fiche n'a
+        # plus a s'excuser d'etre vide en renvoyant vers un rattrapage global.
+        pm.assurer_series_reference(conn, r, plafond=300)
         data = pm.resume_produit(conn, r, user_login=_user_login(user))
         # Une fiche vide a deux causes tres differentes : la reference n'a
         # jamais tourne, ou elle a tourne mais le rattrapage n'a pas encore ete

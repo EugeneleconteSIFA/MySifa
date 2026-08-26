@@ -360,6 +360,7 @@ def materialiser_serie(conn, no_dossier: str, cloture_par: Optional[str] = None)
         "temps_calage_min": temps.get("calage_min"),
         "temps_prod_min": temps.get("production_min"),
         "temps_arret_min": temps.get("arret_min"),
+        "temps_nettoyage_min": temps.get("nettoyage_min"),
         "duree_totale_min": temps.get("duree_totale_min"),
         "metrage_m": qtes.get("metrage_m"),
         "etiquettes": qtes.get("etiquettes"),
@@ -612,6 +613,7 @@ def resume_produit(conn, ref_produit_norm: str, user_login: Optional[str] = None
         "calage_min": mediane([s.get("temps_calage_min") for s in recentes]),
         "prod_min": mediane([s.get("temps_prod_min") for s in recentes]),
         "arret_min": mediane([s.get("temps_arret_min") for s in recentes]),
+        "nettoyage_min": mediane([s.get("temps_nettoyage_min") for s in recentes]),
         "vitesse_m_min": mediane([s.get("vitesse_m_min") for s in recentes]),
         "metrage_m": mediane([s.get("metrage_m") for s in recentes]),
         "base_series": len(recentes),
@@ -655,6 +657,13 @@ def apercu_pour_dossier(conn, no_dossier: str, user_login: Optional[str] = None)
     """
     ctx = contexte_dossier(conn, no_dossier)
     ref = ctx.get("ref_produit_norm")
+    # L'historique doit etre la des l'ouverture du dossier. On materialise donc
+    # a la volee les productions passees de CETTE seule reference : quelques
+    # dossiers, instantane. Le rattrapage global reste un geste d'administration,
+    # il n'a plus a etre lance pour qu'un conducteur voie que le produit devant
+    # lui a deja tourne.
+    if ref:
+        assurer_series_reference(conn, ref)
     vide = {
         "disponible": False, "no_dossier": (no_dossier or "").strip(),
         "ref_produit_norm": ref, "nb_series": 0, "nb_savoirs": 0, "nb_documents": 0,
@@ -699,15 +708,26 @@ def dossiers_non_materialises(conn, ref_produit_norm: str) -> List[str]:
     if "ref_produit_norm" not in pe_cols:
         return []
     pd_cols = _cols(conn, "production_data")
-    where_pd = "pd.no_dossier = pe.reference AND pd.operation_code = '89'"
+    # La cle des saisies est `numero_of or reference` (c'est ce que posent
+    # Saisieprod et le planning). Ne joindre que sur `reference` laissait
+    # invisible tout dossier dont les deux valeurs different : il a produit, il
+    # ne remonte nulle part, et rien ne le signale. On accepte donc les deux, et
+    # on renvoie la valeur reellement portee par les saisies — c'est elle qui
+    # sert de cle a `produit_series`.
+    cles = ["trim(pd.no_dossier) = trim(pe.reference)"]
+    if "numero_of" in pe_cols:
+        cles.append("(trim(COALESCE(pe.numero_of,'')) != ''"
+                    " AND trim(pd.no_dossier) = trim(pe.numero_of))")
+    where_pd = "(" + " OR ".join(cles) + ") AND pd.operation_code = '89'"
     if "est_annule" in pd_cols:
         where_pd += " AND COALESCE(pd.est_annule,0) = 0"
-    base = f"""SELECT DISTINCT pe.reference AS no_dossier
+
+    base = f"""SELECT DISTINCT trim(pd.no_dossier) AS no_dossier
                FROM planning_entries pe
+               JOIN production_data pd ON {where_pd}
                WHERE {{cle}}
-                 AND EXISTS (SELECT 1 FROM production_data pd WHERE {where_pd})
-                 AND pe.reference NOT IN (SELECT no_dossier FROM produit_series)
-               ORDER BY pe.reference"""
+                 AND trim(pd.no_dossier) NOT IN (SELECT no_dossier FROM produit_series)
+               ORDER BY 1"""
     try:
         # `norm_ref_produit` est enregistree sur chaque connexion (elle alimente
         # les triggers). L'inclure rattrape les dossiers dont la colonne
@@ -720,6 +740,49 @@ def dossiers_non_materialises(conn, ref_produit_norm: str) -> List[str]:
     except Exception:
         rows = conn.execute(base.format(cle="pe.ref_produit_norm = ?"), (ref,)).fetchall()
     return [r["no_dossier"] for r in rows]
+
+
+def assurer_series_reference(conn, ref_produit_norm: str, plafond: int = 40) -> int:
+    """Materialise les series manquantes d'UNE reference, silencieusement.
+
+    Le rattrapage global demande un compte superadmin et plusieurs minutes : le
+    demander a un conducteur pour qu'il voie l'historique du produit qu'il monte
+    revient a lui fermer la porte. Ici on ne traite que les dossiers de la
+    reference affichee, ils se comptent sur les doigts d'une main.
+
+    `plafond` borne le travail fait dans une requete d'affichage : au-dela, le
+    reste se materialise a l'ouverture suivante. Best-effort de bout en bout —
+    un echec de materialisation ne doit jamais empecher l'ecran de s'afficher.
+    """
+    try:
+        manquants = dossiers_non_materialises(conn, ref_produit_norm)
+    except Exception:
+        manquants = []
+    # Series figees avant que le nettoyage devienne un poste a part (26/08/2026) :
+    # leur temps de calage porte encore le code 67. La colonne vide les designe,
+    # et les rejouer suffit a les remettre d'aplomb — sans rattrapage global.
+    try:
+        if "temps_nettoyage_min" in _cols(conn, "produit_series"):
+            manquants += [
+                r["no_dossier"] for r in conn.execute(
+                    "SELECT no_dossier FROM produit_series "
+                    "WHERE ref_produit_norm = ? AND temps_nettoyage_min IS NULL "
+                    "ORDER BY COALESCE(date_fin, date_debut) DESC",
+                    (ref_produit_norm,),
+                ).fetchall()
+            ]
+    except Exception:
+        pass
+    if not manquants:
+        return 0
+    faits = 0
+    for no_dossier in manquants[:max(1, int(plafond))]:
+        try:
+            if materialiser_serie(conn, no_dossier, cloture_par="rattrapage"):
+                faits += 1
+        except Exception:
+            continue
+    return faits
 
 
 def taux_rattachement(conn) -> dict:

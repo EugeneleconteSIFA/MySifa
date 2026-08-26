@@ -39,6 +39,7 @@ from app.web.expe_assets import (
     EXPE_TRANSPORTEURS_CSS,
     EXPE_TRANSPORTEURS_JS,
 )
+from app.web.expe_guide import EXPE_DEVIS_GUIDE_JS
 from app.web.compta_assets import (
     COMPTA_MAIN_CSS,
     COMPTA_MAIN_JS,
@@ -1800,6 +1801,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/mysifa_cal_rappel.js?v=4"></script>
 <script src="/static/mysifa_ai_chat.js"></script>
 <script src="/static/mysifa_landscape.js?v=2"></script>
+<script src="/static/mysifa_guides.js"></script>
 <script src="/static/motion.js" defer></script>
 <script>
 const API=window.location.origin;
@@ -11423,6 +11425,7 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__EXPE_CARTE_FRANCE_CSS__", EXPE_CARTE_FRANCE_CSS)
         .replace("__EXPE_COMPARATEUR_JS__", EXPE_COMPARATEUR_JS)
         .replace("__EXPE_DEVIS_JS__", EXPE_DEVIS_JS)
+        .replace("__EXPE_DEVIS_GUIDE_JS__", EXPE_DEVIS_GUIDE_JS)
         .replace("__EXPE_TRANSPORTEURS_JS__", EXPE_TRANSPORTEURS_JS)
         .replace("__EXPE_CARTE_FRANCE_JS__", EXPE_CARTE_FRANCE_JS)
         # ─── Branding paramétrable (LAST : appliqué aux contenus injectés
