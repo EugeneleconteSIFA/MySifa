@@ -313,7 +313,14 @@ body.light table.fab-table tr.fab-row-last td{
    le bouton Produit et le signalement « deja produit », c'est-a-dire tout ce
    qui doit arreter le conducteur avant qu'il lance la machine. */
 .fab-footer-info{
-  display:flex;flex-direction:column;gap:5px;
+  display:grid;
+  /* Entete et actions a leur hauteur naturelle, la consigne prend tout le
+     reste : c'est la seule ligne du footer qu'un conducteur doit lire en
+     entier, autant lui donner la place laissee vide. Les actions restent en
+     derniere ligne de la grille, donc toujours visibles quoi qu'il arrive. */
+  grid-template-rows:auto minmax(0,1fr) auto;
+  gap:5px;
+  align-self:stretch;
   overflow:hidden;
   min-width:0;
 }
@@ -333,10 +340,8 @@ body.light table.fab-table tr.fab-row-last td{
 .fab-dossier-head > *{flex:0 0 auto}
 .fab-dossier-head::-webkit-scrollbar{height:4px}
 .fab-dossier-head::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
-/* Consigne et actions partagent la meme ligne : dans une bande de 190 px,
-   chaque ligne economisee est une ligne qui ne se fait pas rogner. */
 .fab-dossier-actions{
-  flex:1 1 auto;min-height:0;overflow-y:auto;
+  min-width:0;align-self:end;
   display:flex;flex-wrap:wrap;align-items:center;
   gap:6px;padding-top:0;
 }
@@ -384,16 +389,30 @@ body.light table.fab-table tr.fab-row-last td{
 /* La consigne dossier etait tronquee sur une ligne : « ATTENTION : SI PALETTE
    TROP HAUTE - Cartons du... » ne dit rien de ce qu'il faut faire. Elle
    s'affiche desormais sur trois lignes, et se deplie entierement au clic. */
+/* Elle prend toute la place disponible, en largeur comme en hauteur. Quand le
+   texte deborde, il se termine par des points de suspension et le survol en
+   donne l'integralite (attribut title). Le clic la rend defilante sur place,
+   pour les ecrans tactiles ou le survol n'existe pas. */
 .fab-dossier-consigne{
-  flex:1 1 200px;min-width:150px;max-width:340px;margin-top:0;
+  min-width:0;min-height:0;margin-top:0;
   font-size:11px;line-height:1.45;color:var(--text2);
   background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--warn,#fbbf24);
   border-radius:8px;padding:6px 9px;cursor:pointer;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;
+  /* 5 lignes = ce que la bande laisse une fois l'entete et les actions posees.
+     C'est `-webkit-line-clamp` qui dessine les points de suspension ; sans
+     nombre de lignes, le texte serait coupe net au bord de la boite. */
+  -webkit-line-clamp:5;
 }
-/* Depliee, elle reste bornee : au-dela elle chasserait de la bande les boutons
-   poses a cote d'elle. */
-.fab-dossier-consigne.is-open{display:block;-webkit-line-clamp:none;max-height:96px;overflow-y:auto}
+/* Depliee au clic, elle defile a l'interieur de sa case de grille : elle ne
+   peut donc pas chasser la ligne d'actions hors de la bande. */
+.fab-dossier-consigne.is-open{-webkit-line-clamp:unset;overflow-y:auto}
+/* Pas de consigne : la case reste, elle le dit, mais elle cesse de crier —
+   le liseré orange est reserve a une consigne qui existe vraiment. */
+.fab-dossier-consigne.is-vide{
+  border-left-color:var(--border);color:var(--muted);font-style:italic;cursor:default;
+}
+.fab-dossier-consigne.is-vide .fab-dossier-consigne-lbl{color:var(--muted)}
 /* Etiquette en ligne, pas en bloc : en bloc elle consommait a elle seule la
    premiere des deux lignes visibles de la consigne. */
 .fab-dossier-consigne-lbl{
@@ -5091,19 +5110,20 @@ function renderFooter(){
           ))
         )
       ),
-      // Consigne et actions sur la meme ligne : reference produit, signalement
-      // « deja produit », et les deux boutons FSC quand le dossier est
-      // certifie. L'entete au-dessus tient sur une seule ligne, donc cette
-      // ligne-ci reste dans la bande quoi qu'il arrive.
+      // La consigne occupe la place laissee libre entre l'entete et les
+      // actions. Le `title` porte le texte integral : au survol on a tout,
+      // sans clic et sans deplier quoi que ce soit.
+      h('div',{
+        className:'fab-dossier-consigne'+(d.commentaire?'':' is-vide'),
+        title: d.commentaire || '',
+        onClick:function(e){ if(d.commentaire) e.currentTarget.classList.toggle('is-open'); }
+      },
+        h('span',{className:'fab-dossier-consigne-lbl'},'Consigne dossier'),
+        d.commentaire || 'Aucune consigne sur ce dossier.'
+      ),
+      // Reference produit, signalement « deja produit », et les deux boutons
+      // FSC quand le dossier est certifie.
       h('div',{className:'fab-dossier-actions'},
-        d.commentaire ? h('div',{
-          className:'fab-dossier-consigne',
-          title:'Cliquer pour tout afficher',
-          onClick:function(e){ e.currentTarget.classList.toggle('is-open'); }
-        },
-          h('span',{className:'fab-dossier-consigne-lbl'},'Consigne dossier'),
-          d.commentaire
-        ) : null,
         renderRefProduitBtn(),
         renderHistoriqueProduitBtn(),
         fscDossier ? h('button',{

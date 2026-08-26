@@ -1090,33 +1090,62 @@ LIENS = {
         {"label": "L'article", "ecran": "articles", "sur": {"a.code1": "code1", "a.code2": "code2"}},
         {"label": "Prix négociés du client", "ecran": "prix_client",
          "sur": {"p.code1": "code1", "p.code2": "code2"}},
+        # Le retour au fichier : depuis n'importe quel maillon, la fiche du
+        # tiers concerné. C'est le geste qu'on fait le plus souvent et qui
+        # obligeait jusqu'ici à retourner à la grille des clients.
+        {"label": "Le client", "ecran": "clients", "sur": {"c.numero": "numclt"}},
     ],
     "livraisons": [
         {"label": "La commande", "ecran": "commandes", "sur": {"l.numero": "numcde"}},
         {"label": "Factures", "ecran": "factures", "sur": {"l.livbl": "numero"}},
         {"label": "Mouvements de stock", "ecran": "mouvements_pf", "sur": {"m.refbl": "numero"}},
         {"label": "Colisage", "ecran": "colisage", "sur": {"c.numbl": "numero"}},
+        # Le retour au fichier : depuis n'importe quel maillon, la fiche du
+        # tiers concerné. C'est le geste qu'on fait le plus souvent et qui
+        # obligeait jusqu'ici à retourner à la grille des clients.
+        {"label": "Le client", "ecran": "clients", "sur": {"c.numero": "numclt"}},
     ],
     "factures": [
         {"label": "La commande", "ecran": "commandes", "sur": {"l.numero": "livno"}},
         {"label": "Le bon de livraison", "ecran": "livraisons", "sur": {"l.numero": "livbl"}},
         {"label": "Échéances", "ecran": "echeances", "sur": {"l.nofac": "numero"}},
         {"label": "L'article", "ecran": "articles", "sur": {"a.code1": "code1", "a.code2": "code2"}},
+        # Le retour au fichier : depuis n'importe quel maillon, la fiche du
+        # tiers concerné. C'est le geste qu'on fait le plus souvent et qui
+        # obligeait jusqu'ici à retourner à la grille des clients.
+        {"label": "Le client", "ecran": "clients", "sur": {"c.numero": "numclt"}},
     ],
     "echeances": [
         {"label": "La facture", "ecran": "factures", "sur": {"l.numero": "nofac"}},
+        # Le retour au fichier : depuis n'importe quel maillon, la fiche du
+        # tiers concerné. C'est le geste qu'on fait le plus souvent et qui
+        # obligeait jusqu'ici à retourner à la grille des clients.
+        {"label": "Le client", "ecran": "clients", "sur": {"c.numero": "numclt"}},
     ],
     "devis": [
         {"label": "L'article", "ecran": "articles", "sur": {"a.code1": "code1", "a.code2": "code2"}},
+        # Le retour au fichier : depuis n'importe quel maillon, la fiche du
+        # tiers concerné. C'est le geste qu'on fait le plus souvent et qui
+        # obligeait jusqu'ici à retourner à la grille des clients.
+        {"label": "Le client", "ecran": "clients", "sur": {"c.numero": "numclt"}},
     ],
     "marches": [
         {"label": "L'article", "ecran": "articles", "sur": {"a.code1": "code1", "a.code2": "code2"}},
         {"label": "Commandes de l'article", "ecran": "commandes",
          "sur": {"l.code1": "code1", "l.code2": "code2"}},
+        # Le retour au fichier : depuis n'importe quel maillon, la fiche du
+        # tiers concerné. C'est le geste qu'on fait le plus souvent et qui
+        # obligeait jusqu'ici à retourner à la grille des clients.
+        {"label": "Le client", "ecran": "clients", "sur": {"c.numero": "numclt"}},
     ],
     "commandes_fournisseur": [
         {"label": "Réceptions", "ecran": "receptions", "sur": {"l.numero": "numero"}},
         {"label": "Factures fournisseurs", "ecran": "factures_fournisseur", "sur": {"l.livno": "numero"}},
+        {"label": "Le fournisseur", "ecran": "fournisseurs", "sur": {"f.numero": "numfou"}},
+        {"label": "L'article", "ecran": "articles",
+         "sur": {"a.code1": "code1", "a.code2": "code2"}},
+        {"label": "La matière", "ecran": "stock_matiere",
+         "sur": {"m.code1": "code1", "m.code2": "code2"}},
     ],
     "receptions": [
         {"label": "La commande fournisseur", "ecran": "commandes_fournisseur", "sur": {"l.numero": "numero"}},
@@ -1124,9 +1153,13 @@ LIENS = {
         # sert pas. Le rapprochement se fait par le n° de commande fournisseur,
         # que la réception porte dans `numero` et le mouvement dans `numcde`.
         {"label": "Mouvements matière", "ecran": "mouvements_matiere", "sur": {"m.numcde": "numero"}},
+        {"label": "Le fournisseur", "ecran": "fournisseurs", "sur": {"f.numero": "numfou"}},
     ],
     "factures_fournisseur": [
         {"label": "La commande fournisseur", "ecran": "commandes_fournisseur", "sur": {"l.numero": "livno"}},
+        {"label": "Le fournisseur", "ecran": "fournisseurs", "sur": {"f.numero": "numfou"}},
+        {"label": "L'article", "ecran": "articles",
+         "sur": {"a.code1": "code1", "a.code2": "code2"}},
     ],
     "stock_pf": [
         {"label": "Mouvements de stock", "ecran": "mouvements_pf",
@@ -1147,16 +1180,47 @@ LIENS = {
         {"label": "Prix négociés", "ecran": "prix_client", "sur": {"p.code1": "code1", "p.code2": "code2"}},
         {"label": "Fiche de fabrication", "ecran": "fiches_fabrication",
          "sur": {"f.code1": "code1", "f.code2": "code2"}},
+        # L'amont de la chaîne : ce qui a été chiffré avant d'être commandé.
+        {"label": "Devis", "ecran": "devis", "sur": {"l.code1": "code1", "l.code2": "code2"}},
+        {"label": "Marchés", "ecran": "marches", "sur": {"l.code1": "code1", "l.code2": "code2"}},
+        # Et le côté achat : le même code peut désigner une matière achetée.
+        {"label": "Commandes fournisseur", "ecran": "commandes_fournisseur",
+         "sur": {"l.code1": "code1", "l.code2": "code2"}},
+        {"label": "Factures fournisseur", "ecran": "factures_fournisseur",
+         "sur": {"l.code1": "code1", "l.code2": "code2"}},
+        {"label": "Appels d'offres", "ecran": "appels_offres",
+         "sur": {"l.code1": "code1", "l.code2": "code2"}},
+        {"label": "Stock matière", "ecran": "stock_matiere",
+         "sur": {"m.code1": "code1", "m.code2": "code2"}},
+        {"label": "Mouvements matière", "ecran": "mouvements_matiere",
+         "sur": {"m.code1": "code1", "m.code2": "code2"}},
+        {"label": "Sorties matière", "ecran": "sorties_matiere",
+         "sur": {"s.code1": "code1", "s.code2": "code2"}},
     ],
     "clients": [
         {"label": "Commandes", "ecran": "commandes", "sur": {"e.numclt": "numero"}},
         {"label": "Factures", "ecran": "factures", "sur": {"e.numclt": "numero"}},
         {"label": "Échéances", "ecran": "echeances", "sur": {"l.numclt": "numero"}},
         {"label": "Articles du client", "ecran": "articles", "sur": {"a.numclt": "numero"}},
+        # La chaîne complète, dans l'ordre où elle se déroule : devis, marché,
+        # commande, BL, facture, échéance. Les maillons manquants sont ici.
+        {"label": "Devis", "ecran": "devis", "sur": {"e.numclt": "numero"}},
+        {"label": "Marchés", "ecran": "marches", "sur": {"e.numclt": "numero"}},
+        {"label": "Bons de livraison", "ecran": "livraisons", "sur": {"e.numclt": "numero"}},
+        {"label": "Colisage", "ecran": "colisage", "sur": {"c.numclt": "numero"}},
+        {"label": "Dossiers de production", "ecran": "dossiers", "sur": {"d.numclt": "numero"}},
+        {"label": "Sorties matière", "ecran": "sorties_matiere", "sur": {"s.numclt": "numero"}},
     ],
     "fournisseurs": [
         {"label": "Commandes fournisseurs", "ecran": "commandes_fournisseur",
          "sur": {"e.numfou": "numero"}},
+        # `lif_ligne` ne porte pas le fournisseur : la réception le tient de la
+        # commande fournisseur, que l'écran joint déjà en `cdf_entete e`.
+        {"label": "Réceptions", "ecran": "receptions", "sur": {"e.numfou": "numero"}},
+        {"label": "Factures fournisseurs", "ecran": "factures_fournisseur",
+         "sur": {"e.numfou": "numero"}},
+        {"label": "Appels d'offres", "ecran": "appels_offres", "sur": {"e.numfou": "numero"}},
+        {"label": "Matières fournies", "ecran": "stock_matiere", "sur": {"m.numfou": "numero"}},
         {"label": "Prix d'achat", "ecran": "prix_achat", "sur": {"p.numfou": "numero"}},
     ],
     "outils": [
@@ -1181,10 +1245,21 @@ LIENS = {
     "stock_matiere": [
         {"label": "Mouvements matière", "ecran": "mouvements_matiere",
          "sur": {"m.code1": "code1", "m.code2": "code2"}},
+        {"label": "Le fournisseur", "ecran": "fournisseurs", "sur": {"f.numero": "numfou"}},
+        {"label": "L'article", "ecran": "articles",
+         "sur": {"a.code1": "code1", "a.code2": "code2"}},
+        {"label": "Commandes fournisseur", "ecran": "commandes_fournisseur",
+         "sur": {"l.code1": "code1", "l.code2": "code2"}},
+        {"label": "Sorties matière", "ecran": "sorties_matiere",
+         "sur": {"s.code1": "code1", "s.code2": "code2"}},
     ],
     "dossiers": [
         {"label": "Déclarations de production", "ecran": "declarations", "sur": {"g.dos": "numero"}},
         {"label": "Sorties matière", "ecran": "sorties_matiere", "sur": {"s.dos": "numero"}},
+        # Le retour au fichier : depuis n'importe quel maillon, la fiche du
+        # tiers concerné. C'est le geste qu'on fait le plus souvent et qui
+        # obligeait jusqu'ici à retourner à la grille des clients.
+        {"label": "Le client", "ecran": "clients", "sur": {"c.numero": "numclt"}},
     ],
     "declarations": [
         {"label": "Le dossier", "ecran": "dossiers", "sur": {"d.numero": "dos"}},
@@ -1193,12 +1268,27 @@ LIENS = {
     "sorties_matiere": [
         {"label": "Le dossier", "ecran": "dossiers", "sur": {"d.numero": "dos"}},
         {"label": "La matière", "ecran": "stock_matiere", "sur": {"m.code1": "code1", "m.code2": "code2"}},
+        # Le retour au fichier : depuis n'importe quel maillon, la fiche du
+        # tiers concerné. C'est le geste qu'on fait le plus souvent et qui
+        # obligeait jusqu'ici à retourner à la grille des clients.
+        {"label": "Le client", "ecran": "clients", "sur": {"c.numero": "numclt"}},
+    ],
+    "appels_offres": [
+        {"label": "Le fournisseur", "ecran": "fournisseurs", "sur": {"f.numero": "numfou"}},
+        {"label": "L'article", "ecran": "articles",
+         "sur": {"a.code1": "code1", "a.code2": "code2"}},
+        {"label": "Commandes fournisseur", "ecran": "commandes_fournisseur",
+         "sur": {"l.code1": "code1", "l.code2": "code2"}},
     ],
     "colisage": [
         # `col_ligne.numcde` vaut 0 partout : c'est `numero` qui porte le
         # numéro de commande (voir la note du lien inverse, écran commandes).
         {"label": "La commande", "ecran": "commandes", "sur": {"l.numero": "numero"}},
         {"label": "Le bon de livraison", "ecran": "livraisons", "sur": {"l.numero": "numbl"}},
+        # Le retour au fichier : depuis n'importe quel maillon, la fiche du
+        # tiers concerné. C'est le geste qu'on fait le plus souvent et qui
+        # obligeait jusqu'ici à retourner à la grille des clients.
+        {"label": "Le client", "ecran": "clients", "sur": {"c.numero": "numclt"}},
     ],
 }
 
