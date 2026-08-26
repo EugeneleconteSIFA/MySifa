@@ -618,6 +618,9 @@ def resume_produit(conn, ref_produit_norm: str, user_login: Optional[str] = None
         "metrage_m": mediane([s.get("metrage_m") for s in recentes]),
         "base_series": len(recentes),
     }
+    # Combien de dossiers portent cette reference, et ou ils en sont : c'est la
+    # reponse a « j'en vois quatre au planning et deux ici ».
+    couverture_dossiers = dossiers_reference(conn, ref_produit_norm)
 
     arrets: Dict[str, dict] = {}
     for s in series:
@@ -645,6 +648,7 @@ def resume_produit(conn, ref_produit_norm: str, user_login: Optional[str] = None
         "series": series,
         "savoirs": savoirs,
         "documents": documents,
+        "dossiers_reference": couverture_dossiers,
     }
 
 
@@ -783,6 +787,97 @@ def assurer_series_reference(conn, ref_produit_norm: str, plafond: int = 40) -> 
         except Exception:
             continue
     return faits
+
+
+def dossiers_reference(conn, ref_produit_norm: str) -> dict:
+    """Tous les dossiers du planning portant cette reference, et ou ils en sont.
+
+    La fiche ne liste que les productions terminees, et c'est normal : une
+    serie n'existe qu'a la cloture. Mais quelqu'un qui voit quatre dossiers de
+    la reference au planning et deux lignes ici en conclut que l'outil perd des
+    donnees. La difference se dit, elle ne se devine pas :
+
+    - `produit`  : le dossier a une serie, il est dans la liste ci-dessous
+    - `en_cours` : il a des saisies mais pas encore de cloture (code 89)
+    - `a_venir`  : il est au planning, il n'a pas encore tourne
+    """
+    ref = (ref_produit_norm or "").strip()
+    vide = {"total": 0, "produits": 0, "en_cours": 0, "a_venir": 0, "dossiers": []}
+    if not ref:
+        return vide
+    pe_cols = _cols(conn, "planning_entries")
+    if not pe_cols:
+        return vide
+
+    # La cle d'un dossier dans les saisies est tantot sa reference, tantot son
+    # numero d'OF. On teste les deux et on retient celle qui porte reellement
+    # quelque chose, plutot que d'en preferer une a l'aveugle : prendre l'OF
+    # par principe faisait passer pour « jamais produit » un dossier dont la
+    # serie etait rangee sous sa reference.
+    a_of = "numero_of" in pe_cols
+    col_of = "trim(COALESCE(pe.numero_of,''))" if a_of else "''"
+    pd_cols = _cols(conn, "production_data")
+    filtre_annule = " AND COALESCE(pd.est_annule,0)=0" if "est_annule" in pd_cols else ""
+
+    def _exists_serie(cle):
+        return f"EXISTS(SELECT 1 FROM produit_series ps WHERE ps.no_dossier = {cle} AND {cle} != '')"
+
+    def _exists_saisie(cle):
+        return (f"EXISTS(SELECT 1 FROM production_data pd WHERE trim(pd.no_dossier) = {cle}"
+                f" AND {cle} NOT IN ('','0'){filtre_annule})")
+
+    sql = f"""
+        SELECT trim(pe.reference) AS reference,
+               {col_of} AS numero_of,
+               pe.statut AS statut,
+               m.nom AS machine,
+               {_exists_serie('trim(pe.reference)')} AS serie_ref,
+               {_exists_serie(col_of)} AS serie_of,
+               {_exists_saisie('trim(pe.reference)')} AS saisie_ref,
+               {_exists_saisie(col_of)} AS saisie_of
+          FROM planning_entries pe
+          LEFT JOIN machines m ON m.id = pe.machine_id
+         WHERE {{filtre}}
+         ORDER BY pe.id DESC
+    """
+    try:
+        rows = conn.execute(
+            sql.format(filtre="(pe.ref_produit_norm = ? OR norm_ref_produit(pe.ref_produit) = ?)"),
+            (ref, ref),
+        ).fetchall()
+    except Exception:
+        try:
+            rows = conn.execute(sql.format(filtre="pe.ref_produit_norm = ?"), (ref,)).fetchall()
+        except Exception:
+            return vide
+
+    out = {"total": 0, "produits": 0, "en_cours": 0, "a_venir": 0, "dossiers": []}
+    compteur = {"produit": "produits", "en_cours": "en_cours", "a_venir": "a_venir"}
+    vus = set()
+    for r in rows:
+        d = dict(r)
+        r_ref = (d.get("reference") or "").strip()
+        r_of = (d.get("numero_of") or "").strip()
+        if d.get("serie_of"):
+            cle, etat = r_of, "produit"
+        elif d.get("serie_ref"):
+            cle, etat = r_ref, "produit"
+        elif d.get("saisie_of"):
+            cle, etat = r_of, "en_cours"
+        elif d.get("saisie_ref"):
+            cle, etat = r_ref, "en_cours"
+        else:
+            cle, etat = (r_of or r_ref), "a_venir"
+        if not cle or cle in vus:
+            continue
+        vus.add(cle)
+        out["total"] += 1
+        out[compteur[etat]] += 1
+        out["dossiers"].append({
+            "no_dossier": cle, "reference": r_ref, "numero_of": r_of or None,
+            "statut": d.get("statut"), "machine": d.get("machine"), "etat": etat,
+        })
+    return out
 
 
 def taux_rattachement(conn) -> dict:

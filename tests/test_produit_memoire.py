@@ -245,6 +245,39 @@ with dbmod.get_db() as conn:
           pm.assurer_series_reference(conn, REF), 1)
     check("plus rien a reprendre", pm.dossiers_non_materialises(conn, REF), [])
 
+print("--- ou en sont les autres dossiers de la reference ---")
+# Le doute a l'origine de ce bloc : quatre dossiers de la reference au
+# planning, deux lignes dans la fiche. Les deux autres n'ont simplement pas
+# encore cloture — encore faut-il que la fiche le dise.
+with dbmod.get_db() as conn:
+    conn.execute(
+        "INSERT INTO planning_entries (machine_id, position, reference, client, description, "
+        "duree_heures, statut, ref_produit, numero_of) "
+        "VALUES (991, 20, 'D-9100', 'CLIENT TEST', 'Etiquette logistique', 8, 'en_cours', ?, '')",
+        (REF + " - COHESIO 2",),
+    )
+    conn.execute(
+        "INSERT INTO planning_entries (machine_id, position, reference, client, description, "
+        "duree_heures, statut, ref_produit, numero_of) "
+        "VALUES (991, 21, 'D-9200', 'CLIENT TEST', 'Etiquette logistique', 8, 'attente', ?, '')",
+        (REF + " - COHESIO 2",),
+    )
+    conn.commit()
+    # D-9100 a demarre mais n'a pas cloture : ni 89, ni serie.
+    saisie(conn, "D-9100", "01", "Debut de production", "2026-04-01T06:00:00")
+    saisie(conn, "D-9100", "03", "Production", "2026-04-01T07:00:00")
+    conn.commit()
+with dbmod.get_db() as conn:
+    dr = pm.dossiers_reference(conn, REF)
+check("cinq dossiers portent la reference", dr["total"], 5)
+check("trois ont produit", dr["produits"], 3)
+check("un est en cours", dr["en_cours"], 1)
+check("un n'a pas encore tourne", dr["a_venir"], 1)
+check("le total se repartit sans reste",
+      dr["produits"] + dr["en_cours"] + dr["a_venir"], dr["total"])
+check("un dossier en cours ne cree pas de serie",
+      "D-9100" in [x["no_dossier"] for x in dr["dossiers"] if x["etat"] == "en_cours"], True)
+
 print("--- normalisation de reference ---")
 check("variante machine ignoree", pm._norm("1013/0068 - COHESIO 2 - L570"), "1013/0068")
 check("tiret tolere", pm._norm("1315-0004"), "1315/0004")

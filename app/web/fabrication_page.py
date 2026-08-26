@@ -616,6 +616,7 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 .eb-production{background:rgba(52,211,153,.15);color:#34d399}
 .eb-arret{background:rgba(251,191,36,.15);color:#fbbf24}
 .eb-arrive{background:rgba(56,189,248,.15);color:#38bdf8}
+.eb-calage{background:var(--accent-bg);color:var(--accent)}
 .eb-fin{background:rgba(167,139,250,.15);color:#a78bfa}
 .eb-sans{background:rgba(148,163,184,.15);color:#94a3b8}
 
@@ -765,7 +766,10 @@ body.light .fab-dossier-fictif,body.light .fab-fictif-label{color:#7c3aed}
 .fab-footer{align-items:center}
 .fab-footer-info{justify-content:flex-start}
 .fab-footer-actions{align-items:center;justify-content:center;gap:6px}
-.fab-footer-tools{align-items:stretch;justify-content:center}
+/* Colonne de droite ancree en haut de la bande, comme la colonne de gauche :
+   centree, elle flottait plus bas que le selecteur de machine et que les
+   boutons du centre, et l'oeil ne trouvait plus de ligne d'horizon. */
+.fab-footer-tools{align-items:stretch;justify-content:flex-start;align-self:stretch}
 /* ── Onglet OF (import PDF) ─────────────────────────────────── */
 .fab-of-panel{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .fab-of-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--border);flex-wrap:wrap}
@@ -1272,7 +1276,7 @@ let S = {
   saisies: [],
   saisiesAdmin: [],
   saisieViewMode: (localStorage.getItem('mysifa.fab.viewmode')||'operator'), // operator | admin
-  etat: 'loading',   // loading | sans_session | arrive | en_cours_production | en_arret | fin_dossier
+  etat: 'loading',   // loading | sans_session | arrive | en_calage | en_cours_production | en_arret | fin_dossier
   dossier: null,     // planning_entry actif
   historiqueProduit: null,  // apercu memoire produit (null = pas de bouton)
   dossiers: [],      // liste pour picker
@@ -1607,6 +1611,14 @@ function isFictifSaisieRow(s){
   return false;
 }
 
+// Libellé d'un code opération : toujours le référentiel (table
+// operation_codes / Paramètres › Opérations), jamais une chaîne en dur —
+// une instance qui renomme un code doit voir son mot sur le bouton.
+function opLabel(code, repli){
+  const op = OPS[String(code)];
+  return (op && op.label) ? op.label : (repli||'');
+}
+
 function isArretSaisie(s){
   if(!s) return false;
   if(String(s.operation_category||'').toLowerCase()==='arret') return true;
@@ -1632,6 +1644,7 @@ function etatLabel(e){
     loading:'Chargement…',
     sans_session:'Hors session',
     arrive:'Arrivé',
+    en_calage:'Calage',
     en_cours_production:'En production',
     en_arret:'Arrêt en cours',
     fin_dossier:'Dossier terminé',
@@ -1641,6 +1654,7 @@ function etatLabel(e){
 function etatClass(e){
   const m = {
     sans_session:'eb-sans',arrive:'eb-arrive',
+    en_calage:'eb-calage',
     en_cours_production:'eb-production',en_arret:'eb-arret',
     fin_dossier:'eb-fin',loading:'eb-sans',
   };
@@ -2193,7 +2207,9 @@ function renderSidebar(){
   });
 
   // Les opérations de la sidebar ne sont actives qu'en cours de production/arrêt
-  const opsEnabled = S.etat==='en_cours_production' || S.etat==='en_arret';
+  // 'en_calage' ouvre la grille au meme titre que la production : c'est
+  // pendant le calage que l'operateur pointe ses codes 02/10/11/58…
+  const opsEnabled = S.etat==='en_calage' || S.etat==='en_cours_production' || S.etat==='en_arret';
 
   const groups = [];
   CAT_ORDER.forEach(cat=>{
@@ -2300,7 +2316,7 @@ function fabSaisiesProd(){
 
 function fabAnnulationPossible(){
   if(isRepiquageMode()) return false;
-  if(S.etat!=='en_cours_production' && S.etat!=='en_arret') return false;
+  if(S.etat!=='en_calage' && S.etat!=='en_cours_production' && S.etat!=='en_arret') return false;
   const ref = (S.dossier && String(S.dossier.reference||'').trim()) || '';
   if(!ref) return false;
   const rows = fabSaisiesProd().filter(s=>!Number(s.est_annule||0));
@@ -5143,7 +5159,7 @@ function renderFooter(){
     );
   } else {
     infoSection = h('div',{className:'fab-footer-info'},
-      h('div',{className:'fab-no-dossier'}, S.etat==='en_cours_production'||S.etat==='en_arret'
+      h('div',{className:'fab-no-dossier'}, S.etat==='en_calage'||S.etat==='en_cours_production'||S.etat==='en_arret'
         ? 'Dossier actif (données non trouvées dans le planning)'
         : 'Aucun dossier actif')
     );
@@ -5207,16 +5223,19 @@ function renderFooter(){
   else if(e==='arrive'){
     btns.push(h('button',{
       className:'fab-btn fab-btn-success',
-      onClick:()=>handleOpTrigger('01','Début de production','personnel')
-    }, svgIcon('plus-circle',16),' Début de production'));
+      onClick:()=>handleOpTrigger('01',opLabel('01','Démarrer un dossier'),'personnel')
+    }, svgIcon('plus-circle',16),' '+opLabel('01','Démarrer un dossier')));
     btns.push(h('button',{
       className:'fab-btn fab-btn-muted fab-btn-sm',
       onClick:()=>triggerOp('87','Départ personnel')
     }, svgIcon('log-out',14),' Départ personnel'));
   }
 
-  // ── État : en production (dossier actif, aucun arrêt) ──
-  else if(e==='en_cours_production'){
+  // ── État : dossier ouvert (calage en cours) ou machine en production ──
+  // Mêmes actions dans les deux cas : ce qui change, c'est le badge d'état,
+  // qui ne prétend plus que la machine produit tant qu'aucun code de
+  // catégorie `production` (03/88) n'a été pointé.
+  else if(e==='en_calage'||e==='en_cours_production'){
     btns.push(h('button',{
       className:'fab-btn fab-btn-warn',
       onClick:()=>handleOpTrigger('89','Fin de production','personnel')
@@ -5241,7 +5260,7 @@ function renderFooter(){
   else if(e==='fin_dossier'){
     btns.push(h('button',{
       className:'fab-btn fab-btn-success',
-      onClick:()=>handleOpTrigger('01','Début de production','personnel')
+      onClick:()=>handleOpTrigger('01',opLabel('01','Démarrer un dossier'),'personnel')
     }, svgIcon('plus-circle',16),' Nouveau dossier'));
     btns.push(h('button',{
       className:'fab-btn fab-btn-muted fab-btn-sm',
@@ -5661,7 +5680,7 @@ function renderDebutModal(){
     set({showDebutModal:false, loading:true});
     try{
       const body = {
-        operation:'01 - Début de production',
+        operation:'01 - '+opLabel('01','Démarrer un dossier'),
         date_operation: nowIsoLocal(),
         no_dossier: dos.reference,
         machine: dos.machine_nom||'',
@@ -5680,7 +5699,7 @@ function renderDebutModal(){
         body:JSON.stringify(body),
       });
       if(r&&r.success){
-        showToast('Début de production enregistré');
+        showToast('Dossier démarré.');
         // v2.2.67 : refresh alertes (code 01 = pas d'ack auto, mais on refresh
         // par cohérence avec les autres endpoints — pas de coût)
         try { if(window.MysifaAlerts && typeof window.MysifaAlerts.refresh==='function') window.MysifaAlerts.refresh(); } catch(_){}
@@ -5696,7 +5715,7 @@ function renderDebutModal(){
 
   return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showDebutModal:false});}},
     h('div',{className:'fab-modal'},
-      h('div',{className:'fab-modal-title'},'📦 Début de production'),
+      h('div',{className:'fab-modal-title'},opLabel('01','Démarrer un dossier')),
       d ? h('div',{className:'fab-modal-sub'},
         'Dossier : ',
         h('strong',{className:(d.fictif||isFictifDossierRef(d.reference))?'fab-fictif-label':''},
