@@ -737,9 +737,19 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-btn-secondary{padding:7px 14px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;border-radius:8px;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:all .12s}
 .bes-btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
 .bes-section{margin-bottom:30px}
-.bes-section-head{display:flex;align-items:baseline;justify-content:space-between;margin:0 0 12px;padding:0 4px}
-.bes-section-title{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700}
-.bes-section-count{font-size:12px;color:var(--muted);font-weight:500}
+/* En-tete de section. Elle etait en 11px gris clair sur fond gris clair :
+   le titre disparaissait, et avec lui le seul reperage entre deux tableaux
+   qui se ressemblent. Le titre reprend la couleur du texte et la taille d'un
+   sous-titre ; un filet accent a gauche l'ancre sans ajouter de bruit. */
+.bes-section-head{display:flex;align-items:baseline;gap:10px;justify-content:space-between;
+  margin:22px 0 10px;padding:0 0 8px 10px;border-left:3px solid var(--accent);
+  border-bottom:1px solid var(--border)}
+.bes-section-head:first-child{margin-top:0}
+.bes-section-title{font-size:14px;letter-spacing:.2px;color:var(--text);font-weight:700}
+/* Le compteur reste secondaire, mais lisible : c'est une information, pas une
+   mention legale. */
+.bes-section-count{font-size:12px;color:var(--text2);font-weight:500;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
 .bes-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .bes-table{width:100%;border-collapse:collapse;font-size:13px}
 .bes-table thead th{padding:10px 14px;text-align:left;background:var(--surface-alt,rgba(0,0,0,.02));border-bottom:1px solid var(--border);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
@@ -957,6 +967,35 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
   .bes-tc-yaxis{font-size:9px}
   .bes-tc-xlbl{font-size:8px;letter-spacing:0}
 }
+/* ── Apercu d'un document dans une modale ────────────────────────────────
+   Le PDF occupe la place : c'est ce qu'on est venu voir. L'etat de validation
+   tient sur une ligne au-dessus, les actions sur une ligne en dessous. */
+.modal-sheet.bes-doc-apercu{max-width:920px;width:94vw;display:flex;
+  flex-direction:column;max-height:90vh}
+.bes-doc-frame{flex:1 1 auto;width:100%;min-height:52vh;border:1px solid var(--border);
+  border-radius:8px;background:var(--card);margin-top:10px}
+.bes-doc-etat{display:flex;align-items:center;gap:9px;margin-top:12px;padding:8px 11px;
+  border-radius:8px;font-size:12px;line-height:1.45;color:var(--text2);
+  background:color-mix(in srgb,var(--warn,#d97706) 10%,transparent);
+  border:1px solid color-mix(in srgb,var(--warn,#d97706) 28%,transparent)}
+.bes-doc-etat.ok{background:color-mix(in srgb,var(--success,#22c55e) 10%,transparent);
+  border-color:color-mix(in srgb,var(--success,#22c55e) 28%,transparent)}
+.bes-doc-etat.perime{background:color-mix(in srgb,var(--danger,#dc2626) 9%,transparent);
+  border-color:color-mix(in srgb,var(--danger,#dc2626) 26%,transparent)}
+.bes-doc-etat-pastille{flex:0 0 18px;width:18px;height:18px;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;font-size:11px;
+  font-weight:700;background:var(--card);color:var(--text2)}
+.bes-doc-etat.ok .bes-doc-etat-pastille{color:var(--success,#22c55e)}
+.bes-doc-etat.perime .bes-doc-etat-pastille{color:var(--danger,#dc2626)}
+.bes-doc-etat > span:nth-child(2){flex:1;min-width:0}
+/* `.modal-actions` est une grille 1fr/2fr pensee pour DEUX boutons
+   (annuler / valider). Ici il y en a trois : on repasse en flex, Fermer
+   pousse a gauche, la decision reste a droite -- meme hierarchie de lecture,
+   sans deformer les colonnes de la grille d'origine. */
+.bes-doc-apercu .modal-actions{display:flex;flex-wrap:wrap;gap:8px;
+  justify-content:flex-end;align-items:center}
+.bes-doc-apercu .modal-actions .btn-cancel{margin-right:auto}
+@media (max-width:720px){.bes-doc-frame{min-height:44vh}}
 .bes-destock-ok{color:var(--success,#22c55e);font-weight:700;font-size:12px}
 .bes-destock-todo{color:var(--warn,#d97706);font-weight:700;font-size:12px}
 /* Laize : une bobine ne se commande, ne se stocke et ne se destocke que dans sa laize */
@@ -1026,6 +1065,10 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-map-target .bes-mp-ref{font-weight:600;color:var(--text)}
 .bes-map-target .bes-mp-des{font-size:11px;color:var(--muted);margin-top:2px}
 .bes-map-count{color:var(--muted);font-size:12px}
+.bes-btn-creer{padding:4px 10px;border:1px solid var(--accent);background:transparent;
+  color:var(--accent);font-size:11px;font-weight:600;cursor:pointer;border-radius:4px;
+  font-family:inherit;white-space:nowrap}
+.bes-btn-creer:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}
 .bes-map-btn-danger{padding:4px 10px;border:1px solid var(--border);background:transparent;color:#dc2626;font-size:11px;font-weight:600;cursor:pointer;border-radius:4px;font-family:inherit}
 .bes-map-btn-danger:hover{border-color:#dc2626;background:color-mix(in srgb,#dc2626 8%,transparent)}
 .bes-map-h3{margin:20px 0 8px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
@@ -2080,8 +2123,6 @@ body.stock-embed .main-area { width:100% !important; }
 body.stock-embed { background: var(--bg, transparent) !important; }
 
 </style>
-<link rel="stylesheet" href="/static/mysifa_perf.css">
-<script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
@@ -2091,15 +2132,12 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='stock';</script>
-<link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=z1cond1">
-<script src="/static/mysifa_stock_modals.js?v=z1cond1"></script>
+<link rel="stylesheet" href="/static/mysifa_stock_modals.css">
+<script src="/static/mysifa_stock_modals.js"></script>
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
-<!-- Reprendre une réception de RVGI : fournisseur, BL, matière, laize.
-     Les bobines restent scannées une par une — voir le fichier. -->
-<script src="/static/mysifa_rvgi_reception.js"></script>
 <script src="/static/mysifa_guides.js"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
@@ -2194,10 +2232,6 @@ let S = {
   recepLaizeCustomMm: '',  // valeur saisie manuellement
   recepModalMode: false,   // true = modal simplifié depuis fiche matière
   recepModalMatiere: null, // matière verrouillée en mode modal
-  // La réception RVGI reprise, s'il y en a une. Elle ne remplace rien : elle
-  // préremplit l'entête et sert de point de comparaison au comptage.
-  recepRvgi: null,         // {cde, bl, fournisseur_id, qte_totale, lignes[]}
-  recepRvgiChamp: null,    // la poignée rendue par MysRvgiReception.champ()
   // Inventaire matière (par référence)
   matInvList: null,        // [{ id, reference, designation, categorie, statut, jours_depuis, ... }]
   matInvLoading: false,
@@ -2229,6 +2263,9 @@ let S = {
   matieresAdminFilterCat: 'tout',
   matieresAdminFilterQ: '',
   matieresAdminAddSeed: null,
+  // Association en attente : posée avant d'ouvrir le tiroir de création,
+  // consommée après la création réussie de la matière.
+  besoinAssocEnAttente: null,
   mpSousSections: null,
   // Produits finis (onglet dédié)
   pfStock: null,
@@ -10335,6 +10372,14 @@ function buildMatieresAdminAddForm() {
             await loadMatieresIncompleteCount();
           }
           showToast('Référence ajoutée.', 'success');
+          // Créée DEPUIS l'écran Besoins matières pour une valeur de fiche non
+          // associée : on enchaîne l'association sans la redemander. Créer une
+          // référence puis devoir la rechercher pour l'associer à la valeur
+          // qu'on venait de lire est une étape que personne n'oublie par
+          // hasard — on l'oublie parce qu'elle n'a pas lieu d'être.
+          if (S.besoinAssocEnAttente && created && created.id) {
+            await _besAssocierApresCreation(created);
+          }
           refInp.value = '';
           desInp.value = '';
           pppInp.value = '';
@@ -12541,29 +12586,27 @@ function buildBesoinsMatieres() {
 
   // ── Toolbar : segmented + actions ──
   const toolbar = el('div', { cls: 'bes-toolbar' },
+    // Trois vues, dans l'ordre du travail : on répare le dossier, puis on
+    // agrège par référence pour commander, puis on regarde venir.
+    // « Par échéance » et « Dossiers passés » ont été retirées de la barre —
+    // le code des deux vues reste en place et reste atteignable par l'URL
+    // (?vue=echeance), le temps de vérifier que personne ne s'en servait.
     el('div', { cls: 'bes-seg' },
       el('button', {
-        cls: 'bes-seg-btn' + (view === 'echeance' ? ' active' : ''),
-        on: { click: () => { _besSetVue('echeance'); } }
-      }, 'Par échéance'),
-      el('button', {
-        cls: 'bes-seg-btn' + (view === 'matiere' ? ' active' : ''),
-        on: { click: () => { _besSetVue('matiere'); } }
-      }, 'Par matière'),
-      el('button', {
         cls: 'bes-seg-btn' + (view === 'dossier' ? ' active' : ''),
+        title: 'Chaque dossier de production, ses documents et ses besoins',
         on: { click: () => { _besSetVue('dossier'); } }
       }, 'Par dossier'),
+      el('button', {
+        cls: 'bes-seg-btn' + (view === 'matiere' ? ' active' : ''),
+        title: 'Les besoins agrégés par référence — l\'unité de la commande',
+        on: { click: () => { _besSetVue('matiere'); } }
+      }, 'Par matière'),
       el('button', {
         cls: 'bes-seg-btn' + (view === 'tendance' ? ' active' : ''),
         title: 'Quand la matière sera nécessaire, mois par mois',
         on: { click: () => { _besSetVue('tendance'); } }
       }, 'Tendance'),
-      el('button', {
-        cls: 'bes-seg-btn' + (view === 'passes' ? ' active' : ''),
-        title: 'Productions terminées : ce qui reste à déstocker et ce qui l\'est déjà',
-        on: { click: () => { _besSetVue('passes'); } }
-      }, 'Dossiers passés'),
     ),
     (function () {
       const inp = el('input', {
@@ -13597,6 +13640,11 @@ function _buildBesoinsMatiereTable(ech) {
             cls: 'bes-btn-associate',
             on: { click: () => openBesoinAssocierModal(o.kind, o.source_value) },
           }, 'Associer'),
+          el('button', {
+            cls: 'bes-btn-creer',
+            title: 'Créer la référence puis l\'associer à cette valeur',
+            on: { click: () => openBesoinCreerMatiere(o.kind, o.source_value) },
+          }, 'Créer'),
         ),
       ));
     });
@@ -13837,11 +13885,12 @@ function _besKindCell(b) {
   return cell;
 }
 
-// Bouton d'ouverture d'un document (OF ou fiche technique) dans un nouvel
-// onglet. Sans document rattache, le bouton reste visible mais desactive :
-// l'absence est une information, la masquer laisserait croire a un oubli d'UI.
-function _besDocBtn(label, ico, url, titre) {
-  const dispo = !!url;
+// Bouton d'ouverture d'un document (OF ou fiche technique). Il ouvre la
+// modale d'apercu, pas un onglet : on lit et on valide au meme endroit.
+// Sans document rattache, le bouton reste visible mais desactive — l'absence
+// est une information, la masquer laisserait croire a un oubli d'UI.
+function _besDocBtn(label, ico, onClick, titre) {
+  const dispo = typeof onClick === 'function';
   const b = el('button', {
     cls: 'bes-act-btn' + (dispo ? '' : ' off'),
     type: 'button',
@@ -13849,10 +13898,7 @@ function _besDocBtn(label, ico, url, titre) {
     attrs: dispo ? {} : { disabled: 'disabled' },
   }, iconEl(ico, 13), el('span', {}, label));
   if (dispo) {
-    b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      window.open(url, '_blank', 'noopener');
-    });
+    b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
   }
   return b;
 }
@@ -13881,14 +13927,15 @@ function _besDocCell(d) {
   return el('td', { cls: 'bes-act-cell' },
     d.of_import_id
       ? el('span', { cls: 'bes-doc-pair' },
-          _besDocBtn('OF', 'file-text', '/api/of/' + d.of_import_id + '/pdf-preview', 'Ouvrir l\'OF'),
+          _besDocBtn('OF', 'file-text', () => openBesoinDocApercu(d, 'of'),
+            'Voir l\'OF, le valider ou le remplacer'),
           _besValidBtn('of', d.of_import_id, d.of_valide, d.of_valide_par,
             'OF', d.of_invalide_motif))
       : _besDocManquantBtn('OF', 'file-text', d, 'of'),
     d.ft_id
       ? el('span', { cls: 'bes-doc-pair' },
-          _besDocBtn('Fiche', 'clipboard', '/api/fiches-techniques/' + d.ft_id + '/pdf-preview',
-            'Ouvrir la fiche technique'),
+          _besDocBtn('Fiche', 'clipboard', () => openBesoinDocApercu(d, 'fiche'),
+            'Voir la fiche technique, la valider ou la remplacer'),
           _besValidBtn('fiche', d.ft_id, d.ft_valide, d.ft_valide_par,
             'Fiche technique', d.ft_invalide_motif))
       : _besDocManquantBtn('Fiche', 'clipboard', d, 'fiche'),
@@ -13943,6 +13990,94 @@ function _besValidBtn(type, docId, valide, quiValide, libelle, motifInvalidation
     openDocEtatModal(type, docId, libelle);
   });
   return b;
+}
+
+// ── Aperçu d'un document : le lire, le valider, le remplacer ─────────────
+// Avant, cliquer sur « OF » ouvrait un onglet. On sortait de MySifa pour
+// regarder, on revenait pour valider, on ressortait pour remplacer : trois
+// écrans pour un seul geste, et la validation se faisait de mémoire.
+//
+// Cette modale ne réinvente rien — elle assemble ce qui existait déjà :
+// l'aperçu PDF (`/api/of/{id}/pdf-preview`, servi en `inline` avec
+// `Cache-Control: no-store`, prévu pour l'iframe), la bascule de validation
+// (`basculerValidationDoc`), le rattachement d'un autre document
+// (`openBesoinDocModal`) et le détail des changements (`openDocEtatModal`).
+// On voit et on décide au même endroit.
+async function openBesoinDocApercu(dossier, type) {
+  closeMroot();
+  const estOf = (type === 'of');
+  const docId = estOf ? dossier.of_import_id : dossier.ft_id;
+  if (!docId) { openBesoinDocModal(dossier, type); return; }
+
+  const libelle = estOf ? 'OF' : 'Fiche technique';
+  const url = (estOf ? '/api/of/' : '/api/fiches-techniques/') + docId + '/pdf-preview';
+  const peut = isMatieresAdmin() && !S.stockReadOnly;
+  const valide = estOf ? !!dossier.of_valide : !!dossier.ft_valide;
+  const quiValide = estOf ? dossier.of_valide_par : dossier.ft_valide_par;
+  const motif = estOf ? dossier.of_invalide_motif : dossier.ft_invalide_motif;
+
+  const overlay = el('div', { cls: 'modal-overlay',
+    on: { click: e => { if (e.target === overlay) closeMroot(); } } });
+
+  // L'aperçu occupe la place : c'est ce qu'on est venu voir. Le reste tient
+  // sur une ligne au-dessus et une ligne d'actions en dessous.
+  const cadre = el('iframe', {
+    cls: 'bes-doc-frame',
+    attrs: { src: url, title: libelle + ' — aperçu' },
+  });
+
+  const etat = el('div', { cls: 'bes-doc-etat' + (valide ? ' ok' : (motif ? ' perime' : '')) },
+    el('span', { cls: 'bes-doc-etat-pastille' }, valide ? '✓' : (motif ? '⟳' : '!')),
+    el('span', {},
+      valide
+        ? (libelle + ' validé' + (quiValide ? ' par ' + quiValide : ''))
+        : (motif ? (libelle + ' — ' + motif)
+                 : (libelle + ' non validé : aucun déstockage ne partira de ses chiffres.'))),
+    // Le détail des changements reste à un clic : la modale d'état existante
+    // fait ce travail mieux qu'un résumé recopié ici.
+    el('button', { cls: 'btn-ghost-sm', type: 'button',
+                   title: 'Voir ce qui a changé depuis la dernière validation',
+                   on: { click: () => openDocEtatModal(type, docId, libelle) } },
+       'Historique'),
+    // Échappatoire assumée, mais rangée avec les liens secondaires : imprimer
+    // ou zoomer se fait mieux dans un vrai onglet. En bas, elle aurait pris la
+    // place d'une action de décision.
+    el('button', { cls: 'btn-ghost-sm', type: 'button',
+                   title: 'Ouvrir le PDF dans un onglet (impression, zoom)',
+                   on: { click: () => window.open(url, '_blank', 'noopener') } },
+       'Ouvrir à part'),
+  );
+
+  const actions = el('div', { cls: 'modal-actions', style: { marginTop: '12px' } },
+    el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Fermer'),
+    peut
+      ? el('button', { cls: 'btn btn-ghost', type: 'button',
+            title: 'Rattacher un autre document à ce dossier — il remplacera celui-ci',
+            on: { click: () => openBesoinDocModal(dossier, type) } },
+          iconEl('upload', 13), el('span', {}, ' Importer un autre document'))
+      : null,
+    peut
+      ? el('button', { cls: 'btn btn-accent', type: 'button',
+            on: { click: async () => {
+              closeMroot();
+              await basculerValidationDoc(type, docId, !valide);
+            } } },
+          valide ? 'Retirer la validation' : 'Valider le document')
+      : null,
+  );
+
+  const sheet = el('div', { cls: 'modal-sheet bes-doc-apercu' },
+    el('span', { cls: 'modal-handle' }),
+    el('div', { cls: 'modal-title' }, libelle + ' — ' + (dossier.reference || '—')),
+    el('div', { cls: 'modal-sub' },
+      [dossier.numero_of ? 'OF ' + dossier.numero_of : '',
+       dossier.ref_produit ? ' · ' + dossier.ref_produit : '',
+       dossier.machine_nom ? ' · ' + dossier.machine_nom : ''].join('')),
+    etat, cadre, actions,
+  );
+  sheet.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
 }
 
 // ── État d'un document : ce qui a changé, et depuis quand ─────────────────
@@ -14103,15 +14238,15 @@ function _buildBesoinsPassesTable(dos) {
       el('td', { cls: 'bes-act-cell' },
         d.of_import_id
           ? el('span', { cls: 'bes-doc-pair' },
-              _besDocBtn('OF', 'file-text', '/api/of/' + d.of_import_id + '/pdf-preview',
-                'Ouvrir l\'OF'),
+              _besDocBtn('OF', 'file-text', () => openBesoinDocApercu(d, 'of'),
+                'Voir l\'OF, le valider ou le remplacer'),
               _besValidBtn('of', d.of_import_id, d.of_valide, d.of_valide_par,
             'OF', d.of_invalide_motif))
           : el('span', { cls: 'bes-mp-none' }, 'Pas d\'OF'),
         d.ft_id
           ? el('span', { cls: 'bes-doc-pair' },
-              _besDocBtn('Fiche', 'clipboard', '/api/fiches-techniques/' + d.ft_id + '/pdf-preview',
-                'Ouvrir la fiche technique'),
+              _besDocBtn('Fiche', 'clipboard', () => openBesoinDocApercu(d, 'fiche'),
+                'Voir la fiche technique, la valider ou la remplacer'),
               _besValidBtn('fiche', d.ft_id, d.ft_valide, d.ft_valide_par,
             'Fiche technique', d.ft_invalide_motif))
           : el('span', { cls: 'bes-mp-none' }, 'Pas de fiche'),
@@ -14360,6 +14495,65 @@ async function openBesoinDocModal(dossier, ongletInitial) {
   charger('');
 }
 
+// ── Créer la matière manquante, puis l'associer ──────────────────────────
+// Le tiroir d'administration des matières sait déjà tout faire : catégories,
+// laizes, sous-sections, grammages. Le dupliquer dans une petite modale aurait
+// produit un second formulaire à maintenir, forcément en retard sur le premier.
+// On l'ouvre donc tel quel, pré-rempli, et on retient l'association à faire.
+async function openBesoinCreerMatiere(kind, sourceValue) {
+  if (!isMatieresAdmin() || S.stockReadOnly) {
+    showToast('Création de matière réservée à l\'administration du stock.', 'info');
+    return;
+  }
+  // La catégorie découle du type de besoin : un support n'est jamais un
+  // mandrin. Première de la liste, l'utilisateur corrige si besoin.
+  const cats = BESOINS_KIND_CATEGORIES[kind] || [];
+  S.besoinAssocEnAttente = { kind, source_value: sourceValue };
+  S.matieresAdminOpen = true;
+  S.matieresAdminEditId = null;
+  S.matieresAdminAddError = '';
+  S.matieresAdminAddSeed = {
+    categorie: cats[0] || '',
+    reference: '',
+    // La valeur lue dans la fiche technique sert de désignation : c'est le
+    // libellé que l'atelier reconnaît, et il évite une ressaisie à l'identique.
+    designation: sourceValue || '',
+    seuil_alerte: 0,
+    stock_par_laize: [],
+  };
+  closeMroot();
+  await Promise.all([loadMatieresAdminList(), loadMpSousSections()]);
+  renderMatieresAdminDrawer();
+  showToast('Nouvelle référence pour « ' + sourceValue + ' » — elle sera '
+            + 'associée automatiquement après création.', 'info');
+}
+
+// Appelée par le formulaire d'ajout juste après la création réussie.
+async function _besAssocierApresCreation(created) {
+  const att = S.besoinAssocEnAttente;
+  S.besoinAssocEnAttente = null;
+  if (!att || !created || !created.id) return;
+  try {
+    await api('/api/stock/besoins-matieres/mapping', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: att.kind, source_value: att.source_value,
+                             matiere_id: created.id }),
+    });
+    showToast('« ' + att.source_value +' » est maintenant associée à '
+              + (created.reference || 'la nouvelle référence') + '.', 'success');
+    // Le besoin se recalcule : la valeur quitte « à associer » et rejoint les
+    // références chiffrées, sans que l'écran soit rechargé à la main.
+    await loadBesoinsMatieres();
+  } catch (e) {
+    // La matière EXISTE — seule l'association a échoué. Le dire précisément
+    // évite qu'on la recrée en croyant que rien n'a marché.
+    showToast('Référence créée, mais l\'association a échoué : '
+              + (e.message || 'erreur') + '. À faire depuis « Correspondances ».',
+              'error');
+  }
+}
+
 function openBesoinAssocierModal(kind, sourceValue) {
   closeMroot();
   const label = BESOINS_KIND_LABELS[kind] || kind;
@@ -14379,6 +14573,13 @@ function openBesoinAssocierModal(kind, sourceValue) {
       'Valeur détectée dans les fiches techniques : ',
       el('strong', {}, sourceValue),
     ),
+    // Sortie de secours quand la recherche ne donne rien : la matière
+    // n'existe pas, et c'est ici qu'on s'en aperçoit.
+    el('div', { style: { marginTop: '10px' } },
+      el('button', { cls: 'bes-btn-creer',
+                     title: 'Aucune référence ne correspond ? La créer maintenant.',
+                     on: { click: () => openBesoinCreerMatiere(kind, sourceValue) } },
+         '+ Créer la matière')),
     el('div', { style: { marginTop: '14px', marginBottom: '8px', fontSize: '12px', fontWeight: '600', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '.4px' } },
       (cats && cats.length && filtered.length)
         ? `Matières premières · catégorie ${cats.join(' ou ')}`
@@ -14451,6 +14652,12 @@ async function openBesoinsMappingModal() {
         el('span', { cls: 'bes-map-source' }, nm.source_value),
         el('span', { cls: 'bes-map-count' }, `${nm.count} dossier${nm.count > 1 ? 's' : ''}`),
         el('button', { cls: 'bes-btn-associate', on: { click: () => openBesoinAssocierModal(nm.kind, nm.source_value) } }, 'Associer'),
+        // La matière n'existe pas encore dans MySifa : c'est le cas le plus
+        // fréquent derrière une valeur non associée, et jusqu'ici il obligeait
+        // à quitter l'écran pour la créer ailleurs.
+        el('button', { cls: 'bes-btn-creer', title: 'Créer la référence puis l\'associer à cette valeur',
+                       on: { click: () => openBesoinCreerMatiere(nm.kind, nm.source_value) } },
+           'Créer la matière'),
       ));
     });
     sheet.appendChild(box);
@@ -15061,9 +15268,6 @@ function monEnsureState() {
       monPage: 'quantites',
       sortColumn: null,
       sortDirection: 'asc',
-      // Le miroir de RVGI comme source, à la place de l'export Excel manuel.
-      miroir: null,
-      miroirEnCours: false,
     };
   }
   return S.monitoring;
@@ -15506,6 +15710,13 @@ function buildMonitoring() {
     await monitoringImportFile(f);
   });
 
+  const importBtn = el('button', {
+    cls: 'btn btn-accent',
+    type: 'button',
+    disabled: m.importing ? true : null,
+    on: { click: () => fileInp.click() },
+  }, m.importing ? 'Import en cours…' : 'Importer l\'export ERP (.xlsx)');
+
   const snapSel = el('select', {
     cls: 'mon-snapshot-select',
     id: 'mon-snapshot-select',
@@ -15526,54 +15737,11 @@ function buildMonitoring() {
     if (id) loadMonitoringSnapshot(id);
   });
 
-  // Le miroir de RVGI est la source par défaut : il est relevé tout seul,
-  // plusieurs fois par jour, et porte la même information que l'export
-  // Table Stocks qu'il fallait sortir à la main. L'import .xlsx reste — c'est
-  // le recours quand la synchro est en panne.
-  const mir = m.miroir;
-  const mirPret = !!(mir && mir.disponible);
-  const miroirBtn = el('button', {
-    cls: 'btn btn-accent',
-    type: 'button',
-    disabled: (!mirPret || m.miroirEnCours || m.importing) ? true : null,
-    title: mirPret
-      ? ('Compare le stock MySifa au dernier relevé du miroir RVGI'
-         + (mir.releve_le ? ' (' + fDateTime(mir.releve_le) + ')' : '')
-         + '. Aucun fichier à sortir de RVGI.')
-      : ((mir && mir.raison) || 'Miroir RVGI indisponible.'),
-    on: { click: () => monitoringDepuisMiroir() },
-  }, m.miroirEnCours ? 'Comparaison en cours…' : 'Comparer avec RVGI');
-
-  const importBtnSec = el('button', {
-    cls: 'btn',
-    type: 'button',
-    disabled: (m.importing || m.miroirEnCours) ? true : null,
-    title: 'Recours si la synchro RVGI est en panne : l\'export Table Stocks (.xlsx).',
-    on: { click: () => fileInp.click() },
-  }, m.importing ? 'Import en cours…' : 'Importer un .xlsx');
-
   const actions = el('div', { cls: 'mon-actions', id: 'mon-actions-bar' },
-    miroirBtn,
-    importBtnSec,
+    importBtn,
     fileInp,
     snapSel,
   );
-
-  // Ce que le miroir porte, dit avant de cliquer plutôt qu'après : un relevé
-  // d'hier soir compare le stock d'hier soir, et ça change la lecture des
-  // écarts.
-  if (mir) {
-    actions.appendChild(el('span', {
-      cls: 'hist-subtitle',
-      style: { flexBasis: '100%', margin: '2px 0 0', fontSize: '12px' },
-    }, mirPret
-      ? ('Miroir RVGI relevé le ' + fDateTime(mir.releve_le)
-         + ' — ' + fN(mir.avec_stock || 0) + ' référence(s) avec du stock sur '
-         + fN(mir.references || 0)
-         + (mir.negatifs ? ', dont ' + fN(mir.negatifs) + ' en négatif' : '')
-         + '.')
-      : ('Miroir RVGI indisponible — ' + ((mir.raison) || 'synchro à lancer') + '.')));
-  }
 
   const kpisWrap = el('div', { id: 'mon-kpis-wrap' });
   if (m.current) kpisWrap.appendChild(buildMonitoringKpis(m.current, m.allLines));
@@ -15675,48 +15843,10 @@ async function loadMonitoringSnapshot(snapshotId) {
   renderMonitoringView(true);
 }
 
-// Une comparaison prise sur le miroir, sans fichier à sortir de RVGI.
-// Le snapshot produit est identique à celui d'un import Excel — même
-// comparaison, même historique — seule sa source diffère.
-async function monitoringDepuisMiroir() {
-  const m = monEnsureState();
-  if (m.miroirEnCours) return;
-  m.miroirEnCours = true;
-  renderMonitoringView(true);
-  try {
-    const r = await api('/api/reconciliation/miroir', { method: 'POST' });
-    showToast('Comparaison enregistrée — '
-      + (r.nb_ecarts != null
-          ? r.nb_ecarts + ' écart(s) sur ' + fN(r.nb_matched || 0) + ' référence(s) communes'
-          : 'snapshot pris')
-      + '.');
-    m.miroirEnCours = false;
-    await loadMonitoring(r.snapshot_id);
-    return;
-  } catch (e) {
-    const msg = (e && e.message) ? String(e.message) : 'Comparaison impossible.';
-    showToast(msg.length > 220 ? msg.slice(0, 217) + '…' : msg, 'error');
-  }
-  m.miroirEnCours = false;
-  renderMonitoringView(true);
-}
-
-async function loadMonitoringMiroir() {
-  const m = monEnsureState();
-  try {
-    m.miroir = await api('/api/reconciliation/miroir');
-  } catch (e) {
-    // Une route absente (serveur pas encore à jour) ne doit pas casser l'onglet :
-    // on retombe simplement sur l'import Excel.
-    m.miroir = { disponible: false, raison: (e && e.message) || 'indisponible' };
-  }
-}
-
 async function loadMonitoring(selectSnapshotId) {
   const m = monEnsureState();
   m.loading = true;
   renderMonitoringView(true);
-  loadMonitoringMiroir().then(() => renderMonitoringView(true));
   try {
     const snaps = await api('/api/reconciliation/snapshots');
     m.snapshots = snaps || [];
@@ -15910,10 +16040,6 @@ function recepAddCode(code) {
     laize_valeur_mm: laizeValeurMm,
   };
   S.recepItems = [...S.recepItems, item];
-  // Le contrôle « scannés / annoncés par RVGI » suit le comptage en direct.
-  // Il ne bloque rien : les deux chiffres ne sont pas dans la même unité, et
-  // c'est celui qui reçoit qui juge.
-  if (S.recepRvgiChamp) S.recepRvgiChamp.controle(S.recepItems.length);
   // Effacer le flag "nouveau" après 600ms (animation CSS)
   setTimeout(() => {
     S.recepItems = S.recepItems.map(i => i.code === c ? { ...i, isNew: false } : i);
@@ -16143,12 +16269,6 @@ async function recepValider() {
         fournisseur_id: S.recepFournisseurId || null,
         certificat_fsc: recepFscTypeRequiresCert(claim) ? cert : '',
         fsc_type_claim: claim,
-        // La réception RVGI reprise, si elle l'a été. Le n° de BL avait sa
-        // place dans le placeholder de la note ; il a maintenant sa colonne,
-        // et la quantité annoncée par l'ERP reste à côté du comptage réel.
-        rvgi_cde: S.recepRvgi ? String(S.recepRvgi.cde || '') : null,
-        rvgi_bl: S.recepRvgi ? (S.recepRvgi.bl || null) : null,
-        rvgi_qte_attendue: S.recepRvgi ? (S.recepRvgi.qte_totale || null) : null,
       }),
     });
     if (d && d.success) {
@@ -16286,7 +16406,6 @@ function renderReceptionMiniModal() {
     }, '✕'),
   );
   modal.appendChild(head);
-  modal.appendChild(buildRecepRvgi());
 
   // ── Picker (matière verrouillée) ──
   modal.appendChild(buildReceptionPicker(true));
@@ -17101,68 +17220,6 @@ function buildReception() {
 // ── Sous-onglet : Faire une réception ─────────────────────────────
 // ── Picker Catégorie/Matière/Laize partagé entre onglet et modal simplifié ──
 // lockedMatiere = true → matière verrouillée (mode modal fiche matière)
-// ── Reprendre une réception de RVGI ─────────────────────────────────────────
-//
-// Le formulaire ne change pas de nature : on scanne toujours les bobines une
-// par une, et c'est ce comptage qui fait la traçabilité FSC. Ce bloc remplit
-// seulement ce que l'ERP sait déjà — le fournisseur, le n° de BL, la matière
-// et sa laize — et rappelle la quantité que RVGI annonce, comme point de
-// comparaison. Les deux chiffres sont dans des unités différentes : on les
-// montre côte à côte, on ne les soustrait pas.
-function buildRecepRvgi() {
-  const zone = el('div');
-  if (!window.MysRvgiReception) return zone;
-  setTimeout(() => {
-    S.recepRvgiChamp = MysRvgiReception.champ(zone, {
-      ecran: 'matiere',
-      // MyStock re-rend tout l'onglet à chaque scan : la réception reprise
-      // doit vivre dans `S`, pas dans le module, sinon elle disparaîtrait à
-      // la première bobine.
-      reception: () => S.recepRvgi,
-      onReception: (r) => {
-        S.recepRvgi = r;
-        if (!r) return;
-        // Le fournisseur : seulement s'il est relié dans MySifa. Écrire un nom
-        // que l'annuaire ne connaît pas rendrait la réception non certifiable.
-        if (r.fournisseur_id && !S.recepFournisseurId) {
-          S.recepFournisseurId = r.fournisseur_id;
-          S.recepFournisseur = r.fournisseur_mysifa || r.fournisseur || '';
-        }
-        // Le BL dans la note, seulement si elle est vide : ce que quelqu'un a
-        // écrit à la main vaut mieux que ce qu'on devine.
-        if (r.bl && !String(S.recepNote || '').trim()) {
-          S.recepNote = 'BL ' + r.bl;
-        }
-        renderContent();
-      },
-      appliquer: (r, ligne) => {
-        // La matière et la laize de la ligne choisie, pour la PROCHAINE bobine
-        // scannée. On ne touche pas aux bobines déjà saisies.
-        if (ligne.matiere_id) {
-          S.recepMatiereId = ligne.matiere_id;
-          S.recepMatiereRef = ligne.article || '';
-          S.recepMatiereDes = ligne.matiere_nom || ligne.designation || '';
-          S.recepCategorie = ligne.categorie || S.recepCategorie;
-          if (ligne.laize_mm) {
-            S.recepLaizeCustomOn = true;
-            S.recepLaizeCustomMm = String(ligne.laize_mm);
-            S.recepLaizeValeurMm = ligne.laize_mm;
-            S.recepLaizeLabel = ligne.laize_mm + ' mm';
-          }
-          showToast('Matière reprise de RVGI : ' + (ligne.article || ''));
-        } else {
-          showToast('RVGI connaît « ' + (ligne.article || '?') +
-                    ' » mais MySifa n\'a pas cette matière — à créer ou à saisir à la main.',
-                    'error');
-        }
-        renderContent();
-      },
-    });
-    if (S.recepRvgiChamp) S.recepRvgiChamp.controle((S.recepItems || []).length);
-  }, 0);
-  return zone;
-}
-
 function buildReceptionPicker(lockedMatiere) {
   const wrap = el('div', { cls: 'recep-picker-card' });
   wrap.appendChild(el('div', { cls: 'recep-picker-title' },
@@ -17310,7 +17367,6 @@ function buildReceptionNouvelle() {
     },
   }, iconEl('scan', 12), ' Quel code scanner ?');
   block.appendChild(tracaGuideBtn);
-  block.appendChild(buildRecepRvgi());
 
   // ── Picker Catégorie / Matière / Laize (mode structuré) ──
   if (!S.recepModalMode) {
