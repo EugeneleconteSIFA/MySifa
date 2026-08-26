@@ -254,6 +254,8 @@ body.light .toast.success{background:#d1fae5;color:#065f46}
 body.light .toast.danger{background:#fee2e2;color:#991b1b}
 body.light .toast.info{background:#f1f5f9;color:var(--text)}
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
 <div class="app">

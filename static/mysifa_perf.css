@@ -1,0 +1,103 @@
+/* ============================================================
+   MySifa — mysifa_perf.css
+   Mode éco : ce qu'on coupe quand un poste n'arrive pas à suivre.
+
+   Activé par la classe `perf-eco` posée sur <html> puis <body> par
+   mysifa_perf.js (automatiquement si la sonde mesure moins de ~35 images
+   par seconde, ou manuellement depuis Mon profil).
+
+   Le principe : on ne touche pas à la mise en page ni aux couleurs — un
+   poste en mode éco doit afficher exactement la même chose qu'un autre,
+   simplement sans les effets qui coûtent une frame entière à composer.
+   Ce qui est coupé, dans l'ordre du coût réel mesuré au profileur :
+
+     1. Le fond animé (feTurbulence + feDisplacementMap + blur en plein
+        écran, animé en boucle). C'est de loin le plus cher : un filtre SVG
+        plein écran est recalculé à chaque frame, et sans accélération
+        matérielle il occupe un cœur en continu.
+     2. Les backdrop-filter (verre dépoli) : chaque élément force une
+        recomposition de ce qu'il recouvre.
+     3. Les animations d'interface de motion.css, via la classe
+        `reduce-anim` déjà gérée par motion.js.
+     4. Les transitions, ramenées à une durée quasi nulle — assez pour que
+        les événements `transitionend` continuent de se déclencher.
+   ============================================================ */
+
+/* 1. Fond animé — même effet que la préférence « animations » de Mon profil,
+      mais décidé par la mesure et non par l'utilisateur. */
+html.perf-eco body::before,
+html.perf-eco body::after,
+body.perf-eco::before,
+body.perf-eco::after {
+  display: none !important;
+}
+
+/* 2. Verre dépoli : coûteux à composer, invisible une fois le fond fixe. */
+body.perf-eco *,
+body.perf-eco *::before,
+body.perf-eco *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
+/* 4. Transitions : .01ms et non 0s, pour que le code qui attend
+      `transitionend` (panneaux, tiroirs) continue de fonctionner. */
+body.perf-eco *,
+body.perf-eco *::before,
+body.perf-eco *::after {
+  transition-duration: 0.01ms !important;
+  animation-delay: 0s !important;
+}
+
+/* Le fond animé de la page de connexion (train d'icônes) suit la même règle. */
+body.perf-eco .login-train-layer { display: none !important; }
+
+/* ── Bandeau d'information, affiché une seule fois par poste ───────────── */
+.perf-note {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 9998;
+  max-width: min(560px, calc(100vw - 24px));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border, #1e293b);
+  background: var(--card, #111827);
+  color: var(--text, #f1f5f9);
+  font: 13px/1.45 'Segoe UI', system-ui, sans-serif;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+.perf-note b { font-weight: 600; }
+.perf-note-txt { flex: 1; }
+.perf-note-sub { color: var(--muted, #94a3b8); font-size: 12px; }
+.perf-note button {
+  flex-shrink: 0;
+  border: 1px solid var(--border, #1e293b);
+  background: transparent;
+  color: var(--text2, #cbd5e1);
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.perf-note button:hover { color: var(--text, #f1f5f9); border-color: var(--accent, #22d3ee); }
+
+/* ── Réglage 3 états dans Mon profil ───────────────────────────────────── */
+.perf-choice { display: flex; gap: 10px; flex-wrap: wrap; }
+.perf-card {
+  flex: 1 1 150px;
+  min-width: 140px;
+  padding: 12px 14px;
+  border: 1px solid var(--border, #1e293b);
+  border-radius: 10px;
+  background: var(--card, #111827);
+  cursor: pointer;
+}
+.perf-card.selected { border-color: var(--accent, #22d3ee); background: var(--accent-bg, rgba(34,211,238,.12)); }
+.perf-card-label { font-weight: 600; margin-bottom: 3px; }
+.perf-card-sub { font-size: 12px; color: var(--muted, #94a3b8); }
+.perf-measure { margin-top: 10px; font-size: 12px; color: var(--muted, #94a3b8); }

@@ -121,6 +121,8 @@ h1{font-size:22px;margin:0 0 6px}
   .main{padding:16px}
 }
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
 <div class="sidebar-overlay" id="sb-ov"></div>

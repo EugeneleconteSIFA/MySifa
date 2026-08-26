@@ -199,6 +199,23 @@ SMTP_FROM_NAME = os.getenv("SMTP_FROM_NAME", "MySifa")
 SMTP_TLS       = os.getenv("SMTP_TLS", "1") not in {"0", "false", "False", "no", "NO"}
 SUPPORT_EMAIL_DEBUG = os.getenv("SUPPORT_EMAIL_DEBUG", "0") in {"1", "true", "True", "yes", "YES"}
 
+# ─── MyExpé — devis transporteurs (envoi et suivi d'engagement) ────
+# Boîte partagée qui EXPÉDIE les demandes de tarif. Le transporteur doit
+# reconnaître le service expéditions, pas la personne qui a cliqué : le
+# créateur de la demande passe en copie, jamais en expéditeur. Laisser vide
+# retombe sur MS_SENDER_UPN (comportement historique).
+EXPE_DEVIS_FROM = os.getenv("EXPE_DEVIS_FROM", "expeditions@sifa.pro")
+# Copie systématique EN PLUS du créateur. Vide par défaut : depuis que la
+# boîte expéditions est l'expéditrice, elle garde déjà sa copie dans
+# « Éléments envoyés » — l'y remettre en copie ferait un doublon.
+EXPE_DEVIS_CC = os.getenv("EXPE_DEVIS_CC", "")
+# Adresses publiques depuis lesquelles une ouverture d'email ne peut être que
+# la nôtre (nos bureaux, le VPS). Liste séparée par des virgules : IP exacte
+# (« 92.154.13.4 ») ou préfixe terminé par un point (« 92.154.13. »).
+# Ce filtre ne couvre PAS les ouvertures via Outlook Web ou mobile, qui
+# partent des serveurs Microsoft : le reclassement manuel est là pour ça.
+EXPE_IPS_INTERNES = os.getenv("EXPE_IPS_INTERNES", "")
+
 # ─── Sécurité ─────────────────────────────────────────────────────
 SECRET_KEY    = os.getenv("SECRET_KEY", secrets.token_hex(32))
 SESSION_HOURS = 6

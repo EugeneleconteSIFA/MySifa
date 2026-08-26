@@ -341,6 +341,8 @@ hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 .humeur-item{display:flex;flex-direction:column;align-items:center;gap:2px}
 .humeur-none-label{font-size:11px;color:var(--muted);font-style:italic;margin-top:4px}
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>
@@ -1049,6 +1051,46 @@ function bgAnimToggleHtml(){
   </div>`;
 }
 
+// ── Fluidité de l'affichage ────────────────────────────────────────────────
+// Le mode « Automatique » laisse mysifa_perf.js trancher : il compte les images
+// réellement affichées pendant une seconde et allège si l'ordinateur ne suit
+// pas. Les deux autres modes court-circuitent la mesure, dans un sens ou dans
+// l'autre — un poste puissant peut vouloir l'allégé, et inversement.
+function perfMesureTxt(){
+  const P=window.MySifaPerf;
+  if(!P) return '';
+  const d=P.dernier();
+  if(!d||d.fps==null) return 'Pas encore de mesure sur cet ordinateur.';
+  // Nuance qui évite une phrase absurde : un poste déjà allégé mesure sans les
+  // effets, donc son chiffre est bon — ça ne veut pas dire qu'il l'était avant.
+  if(d.fps<30) return `Dernière mesure : ${d.fps} images par seconde — sous le seuil de 30, l'affichage est allégé.`;
+  if(P.actif()) return `Dernière mesure : ${d.fps} images par seconde, en affichage déjà allégé.`;
+  return `Dernière mesure : ${d.fps} images par seconde — cet ordinateur suit sans problème.`;
+}
+function perfCard(id,label,sub){
+  const cur=window.MySifaPerf?MySifaPerf.mode():'auto';
+  return `<div class="perf-card ${cur===id?'selected':''}" onclick="selectPerf('${id}')">
+    <div class="perf-card-label">${label}</div>
+    <div class="perf-card-sub">${sub}</div>
+  </div>`;
+}
+function perfChoiceHtml(){
+  return `<div class="perf-choice">
+    ${perfCard('auto','Automatique','MySifa mesure la fluidité et allège si cet ordinateur ne suit pas')}
+    ${perfCard('normal','Complet','Tous les effets, quelle que soit la mesure')}
+    ${perfCard('eco','Allégé','Sans fond animé ni transitions — le plus rapide')}
+  </div>
+  <div class="perf-measure">${perfMesureTxt()}
+    <button type="button" class="cal-color-reset" onclick="remesurerPerf(this)">Refaire la mesure</button>
+  </div>`;
+}
+function selectPerf(m){ if(window.MySifaPerf) MySifaPerf.setMode(m); renderPrefs(); }
+function remesurerPerf(btn){
+  if(!window.MySifaPerf) return;
+  btn.disabled=true; btn.textContent='Mesure en cours…';
+  MySifaPerf.remesurer(function(){ renderPrefs(); });
+}
+
 function calColorRow(c){
   const col=(window.MySifaCalendar?MySifaCalendar.loadColorsMap():{})[c.id]||c.color;
   return `<div class="cal-color-row" id="cal-row-${esc(c.id)}">
@@ -1137,6 +1179,10 @@ function renderPrefs(){
       <h2 style="margin-top:20px">Activer / désactiver les animations</h2>
       <div class="pref-section">
         ${bgAnimToggleHtml()}
+      </div>
+      <h2 style="margin-top:20px">Fluidité de l'affichage</h2>
+      <div class="pref-section">
+        ${perfChoiceHtml()}
       </div>
       <button class="btn-prefs-save" onclick="savePrefs()">Appliquer</button>
       <p class="pref-hint">Les préférences s'appliquent sur toutes les pages MySifa.</p>

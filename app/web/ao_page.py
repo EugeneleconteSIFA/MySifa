@@ -263,6 +263,8 @@ margin-left:6px;cursor:help;vertical-align:middle}
 .prod-list-table .prod-actions-cell{text-align:right;white-space:nowrap}
 """ + AO_PRODUIT_FORM_CSS + r"""
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
 <div class="app" id="root"></div>

@@ -673,6 +673,8 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 .of-mismatch-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;
   max-width:440px;width:100%;padding:28px 24px;display:flex;flex-direction:column;gap:16px}
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>

@@ -17,14 +17,38 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Body, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
 
+from config import EXPE_DEVIS_FROM
 from database import get_db
 from app.web.expe_portail_page import get_portail_404_html, get_portail_html
 from app.services.email_service import email_expe_reponse_recue, send_email
 from app.services import expe_evenements as expe_ev
+from app.services.auth_service import get_optional_user
 
 logger = logging.getLogger(__name__)
 
-EXPE_DEVIS_CC = "expeditions@sifa.pro"
+# Notification interne quand un transporteur dépose une offre : la boîte du
+# service reste en copie du créateur, pour qu'une offre ne dorme pas dans une
+# boîte personnelle pendant une absence.
+EXPE_DEVIS_CC = EXPE_DEVIS_FROM
+
+
+def _visiteur_interne(request: Request) -> bool:
+    """Vrai si la visite du portail vient d'un utilisateur MySifa connecté.
+
+    Le portail est servi par le même domaine que l'application : un
+    navigateur qui y arrive depuis nos bureaux porte encore son cookie de
+    session. C'est un signal certain, contrairement au pixel — et il évite le
+    dégât le plus visible : le créateur qui clique sur le lien du mail dont
+    il est en copie faisait basculer la ligne en « Ouverte », c'est-à-dire
+    affirmait que le transporteur avait consulté sa demande.
+
+    Un transporteur, lui, n'a jamais de session MySifa : il ne peut pas être
+    pris pour un interne par erreur.
+    """
+    try:
+        return get_optional_user(request) is not None
+    except Exception:
+        return False
 
 router_html = APIRouter(tags=["expe_portail"])
 router_api = APIRouter(prefix="/api/portail/expe", tags=["expe_portail_api"])
@@ -254,15 +278,17 @@ def _find_reponse_row(
 @router_html.get("/portail/expe/{token}", response_class=HTMLResponse)
 def portail_expe_page(request: Request, token: str):
     ip = _client_ip(request)
+    interne = _visiteur_interne(request)
     try:
         with get_db() as conn:
             acc = _lookup_token(conn, token, ip)
             if not acc:
                 return HTMLResponse(content=get_portail_404_html(), status_code=404)
-            _mark_opened(
-                conn, acc=acc, ip=ip, user_agent=request.headers.get("user-agent")
-            )
-            conn.commit()
+            if not interne:
+                _mark_opened(
+                    conn, acc=acc, ip=ip, user_agent=request.headers.get("user-agent")
+                )
+                conn.commit()
         lang = (request.query_params.get("lang") or "fr").strip().lower()
         if lang not in ("fr", "en"):
             lang = "fr"
@@ -276,12 +302,14 @@ def portail_expe_page(request: Request, token: str):
 @router_api.get("/{token}")
 def portail_expe_data(request: Request, token: str):
     ip = _client_ip(request)
+    interne = _visiteur_interne(request)
     with get_db() as conn:
         acc = _get_account_or_404(conn, token, ip=ip)
-        _mark_opened(
-            conn, acc=acc, ip=ip, user_agent=request.headers.get("user-agent")
-        )
-        conn.commit()
+        if not interne:
+            _mark_opened(
+                conn, acc=acc, ip=ip, user_agent=request.headers.get("user-agent")
+            )
+            conn.commit()
 
         email = _account_email(acc)
         tid = acc.get("transporteur_id")
@@ -676,6 +704,14 @@ def pixel_ouverture_email_expe(request: Request, token: str):
       n'est qu'un indice — voir `classer_ouverture()`.
     - **Le token ne donne accès à rien.** Il n'identifie que la ligne à
       journaliser ; il est distinct du token portail.
+
+    Quatrième règle depuis août 2026 : **un hit venu de chez nous est
+    enregistré, jamais compté.** Le créateur de la demande est en copie du
+    mail, donc son client de messagerie charge le même pixel que le
+    transporteur. L'IP source est journalisée et confrontée à
+    `EXPE_IPS_INTERNES` ; ce qui échappe au filtre (Outlook Web, mobile, qui
+    passent par les serveurs Microsoft) se corrige à la main depuis la
+    timeline.
     """
     try:
         with get_db() as conn:
@@ -686,6 +722,7 @@ def pixel_ouverture_email_expe(request: Request, token: str):
             ).fetchone()
             if row is not None:
                 ua = request.headers.get("user-agent")
+                ip = _client_ip(request)
                 maintenant = expe_ev.now_paris_iso()
                 # `?e=` dit QUEL email a été ouvert (demande, attribution).
                 # Absent ou inconnu : on journalise quand même sans préciser —
@@ -695,6 +732,11 @@ def pixel_ouverture_email_expe(request: Request, token: str):
                     conn, int(row["id"]), ctx, row["sent_at"]
                 )
                 fiable, motif = expe_ev.classer_ouverture(reference, ua, maintenant)
+                # L'origine interne prime sur toute autre classification :
+                # savoir que le hit vient de nous est plus utile que de savoir
+                # qu'il ressemble à un préchargement.
+                if expe_ev.est_ip_interne(ip):
+                    fiable, motif = False, expe_ev.MOTIF_INTERNE
                 expe_ev.log_evenement(
                     conn,
                     reponse_id=int(row["id"]),
@@ -707,6 +749,7 @@ def pixel_ouverture_email_expe(request: Request, token: str):
                     fiable=fiable,
                     motif=motif,
                     user_agent=ua,
+                    ip=ip,
                     meta={"email": ctx} if ctx in expe_ev.CONTEXTES else None,
                     dedup_secondes=expe_ev.DEDUP_SECONDES,
                 )

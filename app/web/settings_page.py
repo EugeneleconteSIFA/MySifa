@@ -836,6 +836,8 @@ body.light .f2-src{color:#7c3aed;background:rgba(124,58,237,.08);border-color:rg
 
 @media(max-width:900px){.f2-kv{grid-template-columns:1fr}.f2-form{grid-template-columns:1fr}.f2-form .span2{grid-column:span 1}}
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
 <script>
@@ -951,6 +953,12 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           <path d="M2 21c0-3 2.5-5 5-5"/>
         </svg>
         Registre FSC
+      </button>
+      <!-- Page à part (/perf-postes) et non un onglet : la vue ne lit pas les
+           réglages mais des relevés navigateur, et sert aussi de lien direct. -->
+      <button type="button" class="nav-btn" data-req-section="audit_full" onclick="location.href='/perf-postes'">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Fluidité des postes
       </button>
       <button type="button" class="nav-btn" data-req-section="audit_full" data-tab="api">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
@@ -1164,6 +1172,11 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <button type="button" class="menu-item" data-goto="formations">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Formations & guides</span><span class="mi-desc">Suivi des tutos in-app lus par utilisateur (reset possible).</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button type="button" class="menu-item" onclick="location.href='/perf-postes'">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Fluidité des postes</span><span class="mi-desc">Images par seconde mesurées sur chaque ordinateur, pages les plus lourdes.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
             <button type="button" class="menu-item" data-goto="api">

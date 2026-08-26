@@ -291,6 +291,8 @@ body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-s
   display:inline-block;margin-left:6px;
 }
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>

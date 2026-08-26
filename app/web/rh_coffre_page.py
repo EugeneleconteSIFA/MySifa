@@ -171,6 +171,8 @@ tr:hover td{background:var(--accent-bg)}
 @keyframes slideIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
 @media(max-width:768px){table{font-size:12px}th,td{padding:6px 8px}.row2{grid-template-columns:1fr}}
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>

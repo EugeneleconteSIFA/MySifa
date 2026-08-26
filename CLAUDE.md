@@ -378,6 +378,41 @@ background: var(--card); border: 1px solid var(--border); border-radius: 12px;
 
 ---
 
+## Fluidité des postes — mode éco automatique
+
+Tous les postes de l'atelier ne se valent pas. `static/mysifa_perf.js`, chargé
+dans le `<head>` de chaque page **sans `defer`**, compte les images réellement
+affichées pendant une seconde après le chargement. Sous 30 images par seconde
+(ou sur un faisceau d'indices : peu de cœurs, peu de RAM, rendu lent), il pose
+`perf-eco` sur `<html>` et `<body>` — plus `reduce-anim`, que `motion.js` lit
+déjà — et `static/mysifa_perf.css` coupe le fond animé, les `backdrop-filter`
+et les transitions.
+
+**Conséquences pour toute nouvelle page ou tout nouvel effet :**
+
+- Un nouveau document HTML complet (un `app/web/*_page.py` de plus) doit
+  inclure `mysifa_perf.css` **et** `mysifa_perf.js` dans son `<head>`, comme il
+  inclut déjà `mysifa_theme.js`. Sans ça, la page reste lourde sur les postes
+  lents alors que tout le reste de MySifa s'est allégé.
+- Un effet coûteux (filtre SVG, `backdrop-filter`, animation d'un `filter` ou
+  d'un `box-shadow`, animation plein écran) doit être écrit pour pouvoir
+  disparaître : soit il tombe déjà sous une règle de `mysifa_perf.css`, soit on
+  y ajoute la règle correspondante dans le même commit.
+- Le verdict est **collant** : un poste passé en éco n'en ressort pas tout
+  seul, puisqu'une nouvelle mesure se ferait effets coupés et serait bonne par
+  construction. Le retour se fait dans Mon profil → « Fluidité de l'affichage »,
+  bouton « Refaire la mesure ».
+- L'utilisateur garde la main : Automatique / Complet / Allégé dans Mon profil
+  (clé localStorage `mysifa_perf_mode`).
+
+Côté serveur, chaque session remonte un relevé (`POST /api/perf/releve`, table
+`perf_releves`). La vue `/perf-postes` (superadmin et direction, accessible depuis
+Paramètres → Audit & qualité) classe les postes du plus lent au plus fluide et liste les pages les plus lourdes. Piège
+de lecture : un poste déjà en éco mesure sans les effets, donc son FPS est bon
+— c'est son passage en éco qui est le signal, pas son chiffre.
+
+---
+
 ## Cohérence inter-applications — règle fondamentale
 
 **Toutes les pages de MySifa partagent exactement la même sidebar et le même footer.** Quand on crée un nouvel onglet ou une nouvelle application, copier fidèlement la structure de `app/web/html.py` :

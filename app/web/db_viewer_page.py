@@ -351,6 +351,8 @@ body.light .user-chip:hover{{background:rgba(8,145,178,.12)}}
   .main{{grid-column:1}}
 }}
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>

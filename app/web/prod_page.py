@@ -82,6 +82,8 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_print_modal.css?v=__V_LABEL__">
 <script src="/static/motion.js?v=__V_LABEL__" defer></script>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body class="__STAGING_BODY_CLASS__">
 <script>window.__MYSIFA_ENV__="__ENV_NAME_VALUE__";window.__APP_VERSION__="__V_LABEL__";</script>

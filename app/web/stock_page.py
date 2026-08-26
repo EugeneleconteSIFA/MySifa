@@ -2080,6 +2080,8 @@ body.stock-embed .main-area { width:100% !important; }
 body.stock-embed { background: var(--bg, transparent) !important; }
 
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>

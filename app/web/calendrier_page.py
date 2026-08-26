@@ -522,6 +522,8 @@ body.cal-dragging{user-select:none}
 .cal-extern-form .full{grid-column:1 / -1}
 .cal-extern-form input[type=color]{width:100%;height:38px;border:1px solid var(--border);border-radius:10px;background:var(--bg);padding:3px;cursor:pointer}
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>

@@ -164,6 +164,8 @@ tr:hover td{background:var(--accent-bg)}
 
 @media(max-width:640px){.container{max-width:100%}.row2{grid-template-columns:1fr}table{font-size:12px}th,td{padding:8px}.doc-list{grid-template-columns:1fr}}
 </style>
+<link rel="stylesheet" href="/static/mysifa_perf.css">
+<script src="/static/mysifa_perf.js"></script>
 </head>
 <body class="has-topbar">
 <script src="/static/mysifa_theme.js"></script>

@@ -1053,9 +1053,18 @@ def send_email(
     reply_to: str | None = None,
     cc: str | list[str] | None = None,
     attachments: list[dict] | None = None,
+    from_upn: str | None = None,
 ) -> bool:
     """
     Envoie un email HTML via Microsoft Graph (prod SIFA) ou SMTP.
+
+    `from_upn` : boite expeditrice a utiliser pour CE message, au lieu de la
+    boite globale `MS_SENDER_UPN`. Un module dont les mails engagent un
+    service (MyExpe : les demandes de tarif partent du service expeditions)
+    doit expedier depuis SA boite, pas depuis celle de la personne qui a
+    clique. Requiert que l'application Graph ait la permission d'envoyer
+    depuis cette boite ; si l'envoi Graph echoue, le fallback SMTP part avec
+    l'adresse SMTP_FROM habituelle.
     Retourne True si OK, False sinon — ne leve jamais d'exception.
 
     Les provides sont essayes dans l'ordre `SUPPORT_EMAIL_PROVIDER` puis l'autre.
@@ -1068,6 +1077,8 @@ def send_email(
 
     `attachments` : liste de {filename, content(bytes), mime?} — inline uniquement.
     """
+    expediteur = (from_upn or "").strip() or MS_SENDER_UPN
+
     recipients = [to] if isinstance(to, str) else [str(x) for x in to]
     recipients = [r.strip() for r in recipients if r and str(r).strip()]
     if not recipients:
@@ -1102,7 +1113,7 @@ def send_email(
         return bool(SMTP_HOST)
 
     def _can_graph() -> bool:
-        return bool(MS_TENANT_ID and MS_CLIENT_ID and MS_CLIENT_SECRET and MS_SENDER_UPN)
+        return bool(MS_TENANT_ID and MS_CLIENT_ID and MS_CLIENT_SECRET and expediteur)
 
     def _graph_get_token() -> str:
         now = time.time()
@@ -1144,7 +1155,7 @@ def send_email(
         except Exception as e:
             raise _SendPreflightError(str(e)) from e
 
-        url = f"https://graph.microsoft.com/v1.0/users/{urllib.parse.quote(MS_SENDER_UPN)}/sendMail"
+        url = f"https://graph.microsoft.com/v1.0/users/{urllib.parse.quote(expediteur)}/sendMail"
         payload: dict = {
             "message": {
                 "subject": subject,
