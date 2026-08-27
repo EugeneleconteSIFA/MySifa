@@ -149,3 +149,36 @@ une saisie libre (note de production, commentaire de tache, message) est une
 XSS stockee. Le hook avertit a chaque nouvel usage de `innerHTML` — l'avertissement
 ne bloque pas, mais il n'est pas decoratif : verifier que la donnee injectee
 est echappee ou qu'elle ne vient pas d'un utilisateur.
+
+## Le nom d'une palette dans l'UI n'est pas son identifiant CSS
+
+`profil_page.py` libelle les palettes, `static/mysifa_theme.css` les définit, et
+les deux ne coïncident pas :
+
+| Nom affiché | Classe CSS | Identifiant |
+|---|---|---|
+| (aucun — défaut) | *aucune classe* | `mysifa` |
+| Ambre | `body.palette-ambre` | `ambre` |
+| Pivoine | `body.palette-pivoine` | `pivoine` |
+| Forêt | `body.palette-foret` | `foret` |
+| **Pétrole** | **`body.palette-cendre`** | **`cendre`** |
+| Braise | `body.palette-braise` | `braise` |
+
+Avant de retoucher « le thème X », lire la table des libellés dans
+`profil_page.py` — sinon on corrige la mauvaise palette. C'est arrivé le 27 août :
+une correction de `--warn` appliquée à la palette par défaut alors que la plainte
+portait sur Pétrole, c'est-à-dire `cendre`.
+
+Le contrôle qui tranche en deux secondes, dans la console du navigateur :
+
+```js
+getComputedStyle(document.body).getPropertyValue('--warn')
+```
+
+**Pas de jaune assombri comme couleur d'alerte en mode clair.** Un jaune lisible
+sur blanc doit être assombri, et un jaune sombre EST un marron — c'est ce que
+donnaient `#8a6020` (Pétrole/Forêt clair) et `#c8a070` (Pétrole sombre, trop peu
+saturé : un beige). La sortie est de basculer la teinte vers l'orange franc
+(~20-27°, saturation haute), où l'assombrissement ne produit plus de brun :
+`#c2410c` en clair, `#fb923c` en sombre. Même logique pour `--c4`, sorti de la
+famille chaude (violet) puisqu'aucun jaune n'a d'équivalent lisible en clair.

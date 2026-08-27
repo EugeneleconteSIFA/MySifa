@@ -15,6 +15,8 @@ Ce qui est vérifié :
   - l'état du dossier distingue modifiés, non suivis et verrou git ;
   - la note sur 100 part de 100, plafonne chaque critère, ne descend jamais
     sous 0 et justifie chaque point retiré ;
+  - le rafraîchissement des références utilise --prune (sans quoi une branche
+    supprimée sur GitHub resterait comptée) et échoue proprement ;
   - aucune des commandes git utilisées n'écrit dans le dépôt.
 """
 
@@ -34,7 +36,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 FONCTIONS = ("_git_lire", "_jours_depuis", "_migrations_etat", "_branches_etat",
-             "_dossier_etat", "_note_sante")
+             "_dossier_etat", "_note_sante", "_git_rafraichir_refs")
 
 _ok = True
 
@@ -289,6 +291,30 @@ def main():
            all(c["detail"] for c in reel["criteres"] if c["perdu"]), True)
         ok("les points perdus totalisent l'écart à 100",
            sum(c["perdu"] for c in reel["criteres"]), 100 - reel["score"])
+
+        print("\n--- rafraîchissement des références ---")
+        src_r = io.open(ROOT / "app/routers/settings.py", encoding="utf-8").read()
+        arbre_r = ast.parse(src_r)
+        corps_r = next(
+            ast.get_source_segment(src_r, n) for n in arbre_r.body
+            if isinstance(n, ast.FunctionDef) and n.name == "_git_rafraichir_refs"
+        )
+        # Un fetch nu ajoute les nouvelles références mais ne retire jamais
+        # celles dont la branche a disparu : sans --prune, le compteur
+        # « à nettoyer » ne redescend jamais après un ménage.
+        ok("le fetch utilise --prune", '"--prune"' in corps_r, True)
+        ok("le fetch est silencieux", '"--quiet"' in corps_r, True)
+        ok("le fetch a un garde-fou de temps", "timeout=" in corps_r, True)
+        # Sur le dépôt jouet (aucun remote), git sort en 0 : « rien à fetcher »
+        # n'est pas une erreur. Ce qu'on garantit ici, c'est que la fonction rend
+        # toujours un booléen sans lever, et qu'elle laisse le dossier de travail
+        # exactement dans l'état où elle l'a trouvé.
+        avant = ns["_dossier_etat"]()
+        ok("le rafraîchissement rend un booléen sans lever",
+           isinstance(ns["_git_rafraichir_refs"](), bool), True)
+        ok("le dossier de travail n'a pas bougé", ns["_dossier_etat"](), avant)
+        ok("la branche courante n'a pas changé",
+           ns["_dossier_etat"]()["branche"], avant["branche"])
 
         print("\n--- consultation seule ---")
         src = io.open(ROOT / "app/routers/settings.py", encoding="utf-8").read()
