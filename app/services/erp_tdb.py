@@ -101,9 +101,9 @@ FORMULES = {
     "sans_dossier": "lignes en fabrication à venir ou en cours (expédition "
                     "des 30 derniers jours ou à venir) sans dossier MySifa rattaché",
     "hors_prod": "carnet dont l'origine est stock ou sous-traitance",
-    "rentre": "Σ (qte × pun ÷ coefficient de vente) des lignes de commande "
-              "créées ce jour-là, par cde_entete.amjc",
-    "facture": "Σ (qte × pun ÷ coefficient de vente) des lignes de facture, "
+    "rentre": "Σ (qte × pun ÷ unité de vente) des lignes de commande créées "
+              "ce jour-là, par cde_entete.amjc",
+    "facture": "Σ (qte × pun ÷ unité de vente) des lignes de facture, "
                "par mois de vte_entete.amjf",
     "facturable": "Σ (qte livrée − qte facturée) × pun ÷ coefficient de vente, "
                   "au prix de la ligne de commande d'origine",
@@ -547,6 +547,45 @@ def direction():
     return sortie
 
 
+# ── Unité de vente ───────────────────────────────────────────────────────────
+#
+# `pun` est un prix à l'unité de VENTE, pas à l'étiquette. SIFA vend au mille :
+# une ligne de 4 243 200 étiquettes à 4,82 vaut 20 452 €, pas 20 452 224 €.
+#
+# Deux colonnes décrivent cette unité, et une seule est fiable :
+#   `suv` — le code de l'unité (« M » pour mille, « U » pour unité) ;
+#   `vuv` — le coefficient chiffré, renseigné sur une partie des lignes seulement.
+#
+# Relevé le 27/08/2026 : sur `cde_ligne`, la moitié des lignes `suv = M` porte
+# `vuv = 1000` et l'autre moitié `vuv = 1`. Les deux moitiés ont les mêmes
+# quantités et les mêmes prix — c'est donc `vuv` qui est incomplet, pas les
+# lignes qui diffèrent. Se fier à lui seul faisait ressortir un mois à onze
+# milliards d'euros.
+#
+# La règle retenue : le code `suv` décide, `vuv` ne sert que de repli quand le
+# code est vide ou inconnu. Un code non répertorié est signalé par le
+# diagnostic — il n'est jamais deviné.
+DIVISEUR_UNITE = {
+    "M": 1000.0,   # au mille — le cas courant chez SIFA
+    "U": 1.0,      # à l'unité — frais de port, de cliché, d'outils
+}
+
+
+def _expr_diviseur(sch, table, alias):
+    """L'expression SQL qui ramène `pun` au prix d'une étiquette."""
+    a_suv = sch.a(table, "suv")
+    a_vuv = sch.a(table, "vuv")
+    if not a_suv and not a_vuv:
+        return "1"
+    repli = ("COALESCE(NULLIF(%s.vuv, 0), 1)" % alias) if a_vuv else "1"
+    if not a_suv:
+        return repli
+    cas = " ".join(
+        "WHEN UPPER(TRIM(COALESCE(%s.suv, ''))) = '%s' THEN %s"
+        % (alias, code, coef) for code, coef in sorted(DIVISEUR_UNITE.items()))
+    return "(CASE %s ELSE %s END)" % (cas, repli)
+
+
 def _expr_montant(sch, table, alias):
     """Le montant d'une ligne : quantité × prix unitaire, à l'unité de vente.
 
@@ -566,10 +605,8 @@ def _expr_montant(sch, table, alias):
     """
     if not sch.a(table, "qte", "pun"):
         return None
-    if sch.a(table, "vuv"):
-        return ("COALESCE(%s.qte, 0) * COALESCE(%s.pun, 0) "
-                "/ COALESCE(NULLIF(%s.vuv, 0), 1)" % (alias, alias, alias))
-    return "COALESCE(%s.qte, 0) * COALESCE(%s.pun, 0)" % (alias, alias)
+    return ("COALESCE(%s.qte, 0) * COALESCE(%s.pun, 0) / %s"
+            % (alias, alias, _expr_diviseur(sch, table, alias)))
 
 
 def _diagnostic_prix(conn, sch, table, alias):
@@ -608,8 +645,49 @@ def _diagnostic_prix(conn, sch, table, alias):
                         % (alias, table, alias, alias))
         net_plat = (distincts is not None and int(distincts) <= 2)
 
+    # Ce que `suv` et `vuv` contiennent RÉELLEMENT, par combinaison. C'est la
+    # question à laquelle personne n'a la réponse écrite : si `vuv` vaut 1 sur
+    # des lignes vendues au mille, le montant est multiplié par mille et un
+    # mois ressort à onze milliards d'euros.
+    unites = []
+    if sch.a(table, "suv") or sch.a(table, "vuv"):
+        cles = [c for c in ("suv", "vuv") if sch.a(table, c)]
+        sel = ", ".join("%s.%s AS %s" % (alias, c, c) for c in cles)
+        unites = _lignes(conn, """
+            SELECT %s, COUNT(*) AS lignes,
+                   MIN(%s.qte) AS qte_min, MAX(%s.qte) AS qte_max,
+                   MIN(%s.pun) AS pun_min, MAX(%s.pun) AS pun_max,
+                   SUM(%s) AS montant
+              FROM %s %s
+             WHERE %s.qte > 0
+          GROUP BY %s
+          ORDER BY lignes DESC
+             LIMIT 10
+        """ % (sel, alias, alias, alias, alias, montant, table, alias, alias,
+               ", ".join(cles)))
+
+    # Et les lignes qui pèsent le plus lourd : c'est là que se voit l'erreur.
+    lourdes = _lignes(conn, """
+        SELECT %s.numero AS numero, %s, (%s) AS montant_calcule
+          FROM %s %s
+         WHERE %s.qte > 0 AND %s.pun IS NOT NULL AND %s.pun <> 0
+      ORDER BY montant_calcule DESC
+         LIMIT 8
+    """ % (alias, champs, montant, table, alias, alias, alias, alias))
+
+    # Un code d'unité qu'on ne connaît pas retombe sur `vuv`, donc souvent
+    # sur 1 : c'est exactement le cas qui multiplie un montant par mille. Il
+    # doit se voir, pas se noyer.
+    inconnus = []
+    if sch.a(table, "suv"):
+        inconnus = [u for u in unites
+                    if str(u.get("suv") or "").strip().upper() not in DIVISEUR_UNITE
+                    and (u.get("qte_max") or 0) > 1000]
+
     return {"table": table, "colonnes": presentes, "echantillon": rows,
-            "net_plat": net_plat, "formule": montant}
+            "net_plat": net_plat, "formule": montant,
+            "diviseurs": DIVISEUR_UNITE,
+            "unites": unites, "unites_inconnues": inconnus, "lourdes": lourdes}
 
 
 def _rentre_du_jour(conn, sch, montant, jour):
@@ -722,7 +800,7 @@ def _facturable(conn, sch, sortie):
     # Même arithmétique que partout ailleurs : le prix de RVGI est à l'unité
     # de vente, pas à l'étiquette. Oublier le coefficient ici donnait un
     # facturable à 140 millions d'euros pour 18 bons de livraison.
-    coef = ("COALESCE(NULLIF(c.vuv, 0), 1)" if sch.a("cde_ligne", "vuv") else "1")
+    coef = _expr_diviseur(sch, "cde_ligne", "c")
     valeur = ("(l.qte - COALESCE(l.qtefac, 0)) * COALESCE(c.pun, 0) / %s" % coef)
     base = """
         FROM liv_ligne l
