@@ -3386,6 +3386,35 @@ def _dossier_etat() -> dict:
     }
 
 
+def _git_rafraichir_refs() -> bool:
+    """Met à jour les références distantes du dépôt lu. Renvoie True si ça a tenu.
+
+    Sans ça, la vue lit un miroir figé : `for-each-ref refs/remotes/origin` ne
+    connaît que ce que CE dépôt a fetché la dernière fois. Une branche supprimée
+    sur GitHub il y a une heure y figure encore, et le compteur « à nettoyer »
+    ne redescend jamais — c'est exactement ce qui s'est passé après le premier
+    grand ménage du 27 août : 46 branches supprimées, panneau toujours à 48.
+
+    `--prune` n'est pas décoratif : un fetch nu AJOUTE les nouvelles références
+    mais ne retire jamais celles dont la branche a disparu. C'est la seule
+    commande qui fait redescendre le compteur.
+
+    Ça reste sans effet sur le code : `fetch --prune` n'écrit que dans
+    refs/remotes/*, jamais dans l'index, le dossier de travail ou une branche
+    locale. `/api/promote/status` fait déjà le même fetch silencieux avant de
+    comparer les HEAD.
+    """
+    try:
+        r = _subprocess.run(
+            [_GIT_BIN, "-C", V2_REPO_PATH, "fetch", "--prune", "--quiet"],
+            check=False, capture_output=True, timeout=20,
+        )
+        return r.returncode == 0
+    except Exception as exc:  # noqa: BLE001 — vue de consultation
+        print(f"[MySifa] santé du dépôt — refs non rafraîchies : {exc}")
+        return False
+
+
 # ─── Note de santé du dépôt ────────────────────────────────────────────────────
 # Une note sur 100 pour lire l'état du dépôt sans dérouler les trois sections.
 # Elle part de 100 et retire des points par critère. Chaque critère annonce ce
@@ -3503,6 +3532,10 @@ def deploiement_sante(request: Request):
     """Migrations, branches et propreté du dossier — consultation seule."""
     require_settings(request)
 
+    # D'abord rafraîchir, ensuite lire : l'ordre inverse afficherait l'état du
+    # dernier fetch, pas l'état réel du dépôt distant.
+    refs_a_jour = _git_rafraichir_refs()
+
     def _sans_casser(fn, defaut):
         try:
             return fn()
@@ -3541,6 +3574,11 @@ def deploiement_sante(request: Request):
         alertes.append("Un verrou git traîne dans le dépôt (.git/index.lock).")
     if dossier["nb_modifies"]:
         alertes.append(f"{dossier['nb_modifies']} fichier(s) modifié(s) non commité(s).")
+    if not refs_a_jour:
+        alertes.append(
+            "Les références distantes n'ont pas pu être rafraîchies : la liste "
+            "des branches ci-dessous peut être périmée."
+        )
 
     try:
         note = _note_sante(migrations, branches, dossier)
@@ -3551,6 +3589,7 @@ def deploiement_sante(request: Request):
     return {
         "instance": ENV_NAME,
         "version_app": APP_VERSION,
+        "refs_a_jour": refs_a_jour,
         "note": note,
         "migrations": migrations,
         "branches": branches,

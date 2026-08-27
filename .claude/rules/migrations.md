@@ -93,8 +93,17 @@ rendu par `static/mysifa_promote.js`) affiche, pour l'instance qui répond :
 - la **propreté du dossier de travail** : fichiers modifiés, non suivis, verrou
   `.git/index.lock`.
 
-La vue est en **consultation seule** : elle ne lance que des commandes git en
-lecture (`for-each-ref`, `status`, `branch --merged`). Le ménage se fait au
+La vue est en **consultation seule** : les seules commandes git qu'elle lance
+sont `for-each-ref`, `status`, `branch --merged`, plus un
+`fetch --prune --quiet` en tête de requête (`_git_rafraichir_refs()`) qui n'écrit
+que dans `refs/remotes/*` — jamais l'index, jamais le dossier de travail. Ce
+fetch n'est pas optionnel : `for-each-ref` ne lit que le miroir local des
+références, donc sans lui une branche supprimée sur GitHub reste comptée
+indéfiniment — 46 branches supprimées le 27 août, panneau toujours bloqué à 48.
+Et `--prune` est la partie qui compte : un fetch nu ajoute les références
+neuves, il ne retire jamais les mortes. Si le fetch échoue, la réponse porte
+`refs_a_jour: false` et une alerte le dit, plutôt que d'afficher des chiffres
+périmés en silence. Le ménage se fait au
 terminal, avec `scripts/nettoyer_branches.sh` — simulation par défaut,
 `--appliquer` pour supprimer, `--local` pour purger aussi les branches locales.
 Il protège `main`, `staging` et la branche courante, ne propose jamais une
