@@ -99,12 +99,12 @@ body.palette-foret {
   --accent-bg: rgba(61, 214, 126, 0.13);
   --filter-input-bg: #08110a;
   --success: #34d399;
-  --warn: #c8a86a;
+  --warn: #fb923c;
   --danger: #f87171;
   --c1: #3dd67e;
-  --c2: #c8a86a;
+  --c2: #fb923c;
   --c3: #34d399;
-  --c4: #fbbf24;
+  --c4: #a78bfa;
   --c5: #f87171;
 }
 body.palette-foret.light {
@@ -118,12 +118,12 @@ body.palette-foret.light {
   --accent-bg: rgba(24, 122, 58, 0.10);
   --filter-input-bg: #ffffff;
   --success: #059669;
-  --warn: #8a6020;
+  --warn: #c2410c;
   --danger: #dc2626;
   --c1: #187a3a;
-  --c2: #8a6020;
+  --c2: #c2410c;
   --c3: #059669;
-  --c4: #b45309;
+  --c4: #7c3aed;
   --c5: #dc2626;
 }
 
@@ -139,12 +139,12 @@ body.palette-cendre {
   --accent-bg: rgba(100, 150, 200, 0.13);
   --filter-input-bg: #0b0e16;
   --success: #34d399;
-  --warn: #c8a070;
+  --warn: #fb923c;
   --danger: #f87171;
   --c1: #6496c8;
-  --c2: #c8a070;
+  --c2: #fb923c;
   --c3: #34d399;
-  --c4: #fbbf24;
+  --c4: #a78bfa;
   --c5: #f87171;
 }
 body.palette-cendre.light {
@@ -158,12 +158,12 @@ body.palette-cendre.light {
   --accent-bg: rgba(42, 92, 154, 0.10);
   --filter-input-bg: #ffffff;
   --success: #059669;
-  --warn: #8a6020;
+  --warn: #c2410c;
   --danger: #dc2626;
   --c1: #2a5c9a;
-  --c2: #8a6020;
+  --c2: #c2410c;
   --c3: #059669;
-  --c4: #b45309;
+  --c4: #7c3aed;
   --c5: #dc2626;
 }
 
