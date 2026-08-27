@@ -876,6 +876,10 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Opérations
       </button>
+      <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="seuils">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+        Seuils d'arrêt
+      </button>
       <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="maintenance">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="8" width="20" height="12" rx="2"/><path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         Maintenance
@@ -1042,6 +1046,11 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <button type="button" class="menu-item" data-goto="operations">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Opérations</span><span class="mi-desc">Référentiel des codes saisis en production.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button type="button" class="menu-item" data-goto="seuils">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Seuils d'arrêt</span><span class="mi-desc">À partir de quand la répétition d'un arrêt demande une explication.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
             <button type="button" class="menu-item" data-goto="maintenance">
@@ -1913,6 +1922,61 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           <input type="search" id="op-filter" class="op-filter" placeholder="Filtrer (code, libellé, catégorie…)" oninput="renderOpList()">
         </div>
         <div id="op-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+      </div>
+    </section>
+
+    <section id="panel-seuils" class="hidden">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+          <h2 style="margin:0">Seuils d'arrêt</h2>
+          <button type="button" class="btn" onclick="openSeuilForm()">+ Ajouter une règle</button>
+        </div>
+        <p class="sub" style="margin-top:-4px;margin-bottom:14px">
+          Un arrêt ne demande rien. Au-delà d'un seuil, la ligne part dans le rapport de prod — et une explication
+          n'est demandée au conducteur que s'il n'a pas déjà écrit un commentaire. La règle la plus précise gagne :
+          un code, puis une catégorie, puis la règle par défaut ; à égalité, une règle attachée à une machine
+          l'emporte sur la règle générale.
+        </p>
+
+        <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));margin-bottom:16px">
+          <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text2)">
+            Un seul arrêt dépasse (minutes)
+            <input type="number" id="seuil-unitaire" min="5" max="480" step="5">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text2)">
+            Cumul d'un même code sur la production (minutes)
+            <input type="number" id="seuil-cumul" min="5" max="960" step="5">
+          </label>
+          <div style="display:flex;align-items:flex-end">
+            <button type="button" class="btn btn-sec" onclick="saveSeuilParams()">Enregistrer les durées</button>
+          </div>
+        </div>
+
+        <div id="seuil-form-wrap" class="hidden op-form-panel">
+          <h3 id="seuil-form-title">Nouvelle règle</h3>
+          <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
+            <select id="seuil-cible-type" onchange="syncSeuilForm()">
+              <option value="code">Un code</option>
+              <option value="categorie">Une catégorie</option>
+              <option value="defaut">Par défaut</option>
+            </select>
+            <input type="text" id="seuil-cible" placeholder="Code (ex. 53) ou catégorie (ex. appro)" maxlength="32">
+            <input type="text" id="seuil-machine" placeholder="Machine (vide = toutes)" maxlength="60">
+            <select id="seuil-mode" onchange="syncSeuilForm()">
+              <option value="repetition">Au bout de N fois</option>
+              <option value="permanent">À chaque fois</option>
+            </select>
+            <input type="number" id="seuil-repetitions" placeholder="N (2 à 50)" min="2" max="50">
+            <input type="text" id="seuil-libelle" placeholder="Libellé (facultatif)" maxlength="80">
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)"><input type="checkbox" id="seuil-actif" checked> Active</label>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+            <button type="button" class="btn" onclick="saveSeuilForm()">Enregistrer</button>
+            <button type="button" class="btn btn-sec" onclick="closeSeuilForm()">Annuler</button>
+          </div>
+        </div>
+
+        <div id="seuil-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
       </div>
     </section>
 
@@ -3114,6 +3178,7 @@ function syncSettingsPageHead(tabId) {
     fournisseurs: { title: 'Fournisseurs',    sub: 'Fiche complète : FSC, certifications, contacts, réceptions, traçabilité' },
     clients:      { title: 'Clients',         sub: 'Référentiel ERP' },
     operations:   { title: 'Opérations',      sub: 'Codes saisis en production' },
+    seuils:       { title: "Seuils d'arrêt", sub: "Quand la répétition demande une explication" },
     maintenance:  { title: 'Maintenance',     sub: 'Codes opérations et alertes opérateurs' },
     machines:     { title: 'Machines',        sub: 'Horaires, capacité, rentabilité' },
     emplacements: { title: 'Emplacements',    sub: 'Plan du magasin' },
@@ -3141,7 +3206,7 @@ function syncSettingsPageHead(tabId) {
   }
 }
 
-const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','maintenance','machines','emplacements','laizes','mandrins','importations','bridge','updates','audit','fsc','dashboards','api','promote','printers','formations'];
+const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','emplacements','laizes','mandrins','importations','bridge','updates','audit','fsc','dashboards','api','promote','printers','formations'];
 
 function setTab(id, opts) {
   if (!VALID_TABS.includes(id)) id = 'menu';
@@ -3159,7 +3224,7 @@ function setTab(id, opts) {
       }
     } catch(e){}
   }
-  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'maintenance', 'machines', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations'].forEach(p => {
+  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -3169,6 +3234,7 @@ function setTab(id, opts) {
   if (id === 'fournisseurs') { loadFournisseurs(); loadFournisseursGroupes(); }
   if (id === 'clients') initClientsPanel();
   if (id === 'operations') loadOperationCodes();
+  if (id === 'seuils') loadSeuils();
   if (id === 'maintenance') { loadMaintCodes(); loadAlerts(); }
   if (id === 'machines') initMachinesPanel();
   if (id === 'emplacements') initEmplacementsPanel();
@@ -6568,6 +6634,142 @@ async function submitEditUpdate() {
 let _opItems = [];
 let _opCategories = [];
 let _opEditCode = null;
+
+/* ─── Seuils d'arrêt ────────────────────────────────────────────────────────
+   Le référentiel des seuils vit en base, comme les codes opération : rien
+   n'est écrit en dur côté serveur, tout se règle ici. */
+let _seuilRegles = [];
+let _seuilEditId = null;
+
+const SEUIL_CIBLES = { code: 'Code', categorie: 'Catégorie', defaut: 'Par défaut' };
+
+async function loadSeuils() {
+  const el = document.getElementById('seuil-list');
+  if (!el) return;
+  try {
+    const d = await api('/api/arret-seuils/config');
+    _seuilRegles = (d && d.regles) ? d.regles : [];
+    const p = (d && d.params) ? d.params : {};
+    const u = document.getElementById('seuil-unitaire');
+    const c = document.getElementById('seuil-cumul');
+    if (u) u.value = Math.round(p.duree_unitaire_min || 0);
+    if (c) c.value = Math.round(p.duree_cumul_min || 0);
+    renderSeuilList();
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--danger);font-size:13px">' + escHtml(e.message) + '</p>';
+  }
+}
+
+function _seuilCibleTxt(r) {
+  if (r.cible_type === 'defaut') return 'Tout autre code surveillé';
+  const t = SEUIL_CIBLES[r.cible_type] || r.cible_type;
+  return t + ' ' + escHtml(r.cible || '');
+}
+
+function renderSeuilList() {
+  const el = document.getElementById('seuil-list');
+  if (!el) return;
+  if (!_seuilRegles.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucune règle. La surveillance est inactive.</p>';
+    return;
+  }
+  const ordre = { code: 0, categorie: 1, defaut: 2 };
+  const rows = _seuilRegles.slice().sort((a, b) =>
+    (ordre[a.cible_type] - ordre[b.cible_type]) || String(a.cible).localeCompare(String(b.cible))
+  ).map(r => {
+    const decl = r.mode === 'permanent'
+      ? 'À chaque fois'
+      : (r.repetitions + 'e fois sur la production');
+    const mach = (r.machine || '').trim();
+    return '<tr' + (r.actif ? '' : ' style="opacity:.5"') + '>'
+      + '<td><b>' + _seuilCibleTxt(r) + '</b>'
+      + (r.libelle ? '<div style="font-size:11px;color:var(--muted)">' + escHtml(r.libelle) + '</div>' : '')
+      + '</td>'
+      + '<td>' + decl + '</td>'
+      + '<td>' + (mach ? escHtml(mach) : '<span style="color:var(--muted)">toutes</span>') + '</td>'
+      + '<td>' + (r.actif ? 'Active' : 'Inactive') + '</td>'
+      + '<td><div class="op-act">'
+      + '<button type="button" class="btn-sm btn-ghost" onclick="openSeuilForm(' + r.id + ')">Modifier</button>'
+      + (r.cible_type === 'defaut' ? ''
+         : '<button type="button" class="btn-sm btn-ghost danger" onclick="deleteSeuil(' + r.id + ')">Supprimer</button>')
+      + '</div></td></tr>';
+  }).join('');
+  el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
+    + '<th>Cible</th><th>Déclenchement</th><th>Machine</th><th>État</th><th>Actions</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function syncSeuilForm() {
+  const type = (document.getElementById('seuil-cible-type') || {}).value;
+  const mode = (document.getElementById('seuil-mode') || {}).value;
+  const cible = document.getElementById('seuil-cible');
+  const rep = document.getElementById('seuil-repetitions');
+  if (cible) { cible.disabled = (type === 'defaut'); if (type === 'defaut') cible.value = ''; }
+  if (rep) rep.disabled = (mode === 'permanent');
+}
+
+function openSeuilForm(id) {
+  _seuilEditId = id || null;
+  const r = id ? _seuilRegles.find(x => x.id === id) : null;
+  document.getElementById('seuil-form-title').textContent = r ? 'Modifier la règle' : 'Nouvelle règle';
+  document.getElementById('seuil-cible-type').value = r ? r.cible_type : 'code';
+  document.getElementById('seuil-cible').value = r ? (r.cible || '') : '';
+  document.getElementById('seuil-machine').value = r ? (r.machine || '') : '';
+  document.getElementById('seuil-mode').value = r ? r.mode : 'repetition';
+  document.getElementById('seuil-repetitions').value = r ? (r.repetitions || 3) : 3;
+  document.getElementById('seuil-libelle').value = r ? (r.libelle || '') : '';
+  document.getElementById('seuil-actif').checked = r ? !!r.actif : true;
+  document.getElementById('seuil-form-wrap').classList.remove('hidden');
+  syncSeuilForm();
+}
+
+function closeSeuilForm() {
+  _seuilEditId = null;
+  document.getElementById('seuil-form-wrap').classList.add('hidden');
+}
+
+async function saveSeuilForm() {
+  const body = {
+    cible_type: document.getElementById('seuil-cible-type').value,
+    cible: (document.getElementById('seuil-cible').value || '').trim(),
+    machine: (document.getElementById('seuil-machine').value || '').trim() || null,
+    mode: document.getElementById('seuil-mode').value,
+    repetitions: parseInt(document.getElementById('seuil-repetitions').value || '0', 10) || 0,
+    libelle: (document.getElementById('seuil-libelle').value || '').trim() || null,
+    actif: !!document.getElementById('seuil-actif').checked,
+  };
+  try {
+    if (_seuilEditId) {
+      await api('/api/arret-seuils/regles/' + _seuilEditId, { method: 'PUT', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
+    } else {
+      await api('/api/arret-seuils/regles', { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
+    }
+    toast('Règle enregistrée.');
+    closeSeuilForm();
+    loadSeuils();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function deleteSeuil(id) {
+  if (!confirm('Supprimer cette règle ? Les codes concernés retomberont sur la règle par défaut.')) return;
+  try {
+    await api('/api/arret-seuils/regles/' + id, { method: 'DELETE' });
+    toast('Règle supprimée.');
+    loadSeuils();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function saveSeuilParams() {
+  const body = {
+    duree_unitaire_min: parseFloat(document.getElementById('seuil-unitaire').value || '0'),
+    duree_cumul_min: parseFloat(document.getElementById('seuil-cumul').value || '0'),
+  };
+  try {
+    await api('/api/arret-seuils/params', { method: 'PUT', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
+    toast('Durées enregistrées.');
+    loadSeuils();
+  } catch (e) { toast(e.message, true); }
+}
 
 async function loadOperationCodes() {
   const el = document.getElementById('op-list');

@@ -201,7 +201,6 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 .maille button:hover{color:var(--text2)}
 .maille button.on{background:var(--accent-bg);color:var(--accent)}
 .maille button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-.maille-info{font-size:10.5px;color:var(--muted);line-height:1.5;margin:-6px 0 12px}
 
 .rail-info{font-size:11px;color:var(--muted);line-height:1.6;border-top:1px solid var(--border);margin-top:14px;padding-top:12px}
 
@@ -1202,6 +1201,7 @@ function renderFraicheur(){
 
 // ── Vue menu ─────────────────────────────────────────────────────
 function ouvrirMenu(){
+  tdbTipCacher();
   fermerSidebar();   // on a choisi sa destination : le tiroir n'a plus lieu d'etre
   S.ecran=null;S.def=null;S.selection=null;S.colonnes=[];
   document.getElementById('titre').textContent='ERP';
@@ -1246,6 +1246,7 @@ function ouvrirMenu(){
 
 // ── Vue écran : rail + grille ────────────────────────────────────
 function ouvrirEcran(cle,prefiltres){
+  tdbTipCacher();
   const def=((S.meta&&S.meta.ecrans)||[]).find(e=>e.cle===cle);
   if(!def){toast('Écran inconnu.','err');ouvrirMenu();return;}
   S.ecran=cle;S.def=def;S.page=1;S.tri=null;S.sens='asc';S.q='';S.filtres={};S.selection=null;S.colonnes=[];S.epingles=[];
@@ -1289,10 +1290,7 @@ function ouvrirEcran(cle,prefiltres){
         '<button type="button" data-vue="ligne"'+(S.vue!=='piece'?' class="on"':'')+'>Ligne</button>'+
         '<button type="button" data-vue="piece"'+(S.vue==='piece'?' class="on"':'')+'>'+
           esc(vueLabelPiece(def))+'</button>'+
-      '</div>'+
-      '<div class="maille-info">'+(S.vue==='piece'
-        ? 'Une ligne par pièce : quantités et montants sommés, dates au plus tôt.'
-        : 'Une ligne par ligne de pièce, comme dans RVGI.')+'</div>';
+      '</div>';
   }
   rail+='<div class="rail-titre">Recherche</div>'+
     '<div class="champ"><input type="text" id="q" placeholder="Rechercher..." autocomplete="off" value="'+esc(S.q||'')+'"></div>';
@@ -2327,6 +2325,7 @@ function tdbLibelleJour(iso){
 // Infobulle : une seule dans la page, déplacée. Le contenu vient d'attributs
 // de données, jamais de HTML stocké dans un attribut — on ne réinjecte pas du
 // balisage qu'on aurait échappé pour l'occasion.
+const TDB_TIP_SEL='[data-tip-titre],[data-tip-texte]';
 let TDB_TIP=null;
 function tdbTipEl(){
   if(!TDB_TIP){
@@ -2334,8 +2333,27 @@ function tdbTipEl(){
     TDB_TIP.className='tdb-tip';
     TDB_TIP.setAttribute('role','tooltip');
     document.body.appendChild(TDB_TIP);
+    tdbTipVeille();
   }
   return TDB_TIP;
+}
+
+// `mouseleave` ne part jamais si l'élément survolé disparaît du DOM sous le
+// curseur — et c'est exactement ce qui arrive quand une tuile du tableau de
+// bord ouvre un écran : la vue est remplacée, l'infobulle reste seule à
+// l'écran, indéboulonnable. Un garde au niveau du document ferme donc dès que
+// le curseur n'est plus sur une cible, quoi qu'il soit arrivé à l'ancienne.
+function tdbTipVeille(){
+  document.addEventListener('mouseover',ev=>{
+    if(!TDB_TIP||!TDB_TIP.classList.contains('on'))return;
+    const t=ev.target;
+    if(!t||!t.closest||!t.closest(TDB_TIP_SEL))tdbTipCacher();
+  },true);
+  // Défilement, changement d'onglet, sortie de la fenêtre : mêmes causes,
+  // même effet — l'infobulle n'a plus de raison d'être affichée.
+  window.addEventListener('scroll',tdbTipCacher,true);
+  window.addEventListener('blur',tdbTipCacher);
+  document.addEventListener('mouseleave',tdbTipCacher);
 }
 function tdbTipContenu(el){
   const d=el.dataset;
@@ -2361,6 +2379,7 @@ function tdbTipPlacer(ev){
   t.style.top=Math.max(8,y)+'px';
 }
 function tdbTipCacher(){if(TDB_TIP)TDB_TIP.classList.remove('on');}
+
 function tdbBrancherTip(racine){
   racine.querySelectorAll('[data-tip-titre],[data-tip-texte]').forEach(el=>{
     el.addEventListener('mouseenter',ev=>{
@@ -2396,6 +2415,7 @@ function ouvrirDetailTdb(cle,id){
 }
 
 async function ouvrirTdb(cle){
+  tdbTipCacher();
   const conf=TDB_DEFS[cle];
   if(!conf){ouvrirMenu();return;}
   fermerSidebar();
@@ -2622,32 +2642,78 @@ const TDB_LABEL_TABLE={cde_ligne:'Lignes de commande',vte_ligne:'Lignes de factu
 function tdbPanControlePrix(d){
   const diags=(d.diagnostic_prix||[]).filter(x=>x&&x.echantillon&&x.echantillon.length);
   if(!diags.length)return '';
+  const cell=(v,c)=>esc(v==null?'—':(typeof v==='number'
+    ? fmtNb(v,(c==='qte'||c==='vuv'||c==='lignes')?0:4) : String(v)));
   let corps='';
   diags.forEach(dg=>{
-    const cols=dg.colonnes||[];
+    const cols=(dg.colonnes||[]).filter(c=>c!=='des1');
     corps+='<div class="tdb-pan-h" style="border-top:1px solid var(--border)">'+
       '<h3>'+esc(TDB_LABEL_TABLE[dg.table]||dg.table)+'</h3>'+
-      '<span class="cpt">'+esc(cols.join(' · '))+'</span></div>';
-    corps+='<table class="tdb-t"><thead><tr>'+
-      cols.filter(c=>c!=='des1').map(c=>'<th class="n">'+esc(c)+'</th>').join('')+
-      '<th class="n">= montant</th></tr></thead><tbody>';
-    (dg.echantillon||[]).forEach(l=>{
-      corps+='<tr>'+cols.filter(c=>c!=='des1').map(c=>
-        '<td class="n">'+esc(l[c]==null?'—':fmtNb(l[c],
-          (c==='qte'||c==='vuv'||c==='suv')?0:4))+'</td>').join('')+
-        '<td class="n fort">'+esc(tdbEurExact(l.montant_calcule))+'</td></tr>';
-    });
-    corps+='</tbody></table>';
+      '<span class="cpt">'+esc((dg.colonnes||[]).join(' · '))+'</span></div>';
+
+    // 1. Ce que l'unité de vente contient vraiment. C'est LA question : si
+    //    `vuv` vaut 1 sur des lignes vendues au mille, tout est ×1000.
+    if((dg.unites_inconnues||[]).length){
+      corps+='<div class="tdb-alerte" style="margin:11px 13px">'+
+        '<span>⚠</span><span><b>Code d\'unité de vente inconnu.</b> '+
+        (dg.unites_inconnues||[]).map(u=>'« '+esc(u.suv||'(vide)')+' » sur '+
+          fmtNb(u.lignes,0)+' lignes').join(', ')+
+        '. Ces lignes retombent sur <code>vuv</code>, donc souvent sur 1 — leur montant est '+
+        'peut-être mille fois trop grand. À ajouter dans <code>erp_tdb.DIVISEUR_UNITE</code>.'+
+        '</span></div>';
+    }
+    if((dg.unites||[]).length){
+      const dv=dg.diviseurs||{};
+      corps+='<div class="tdb-note" style="border-top:none;color:var(--text2)">'+
+        '<b>Unités de vente rencontrées</b> — combien de lignes, quelles quantités, '+
+        'quel total elles produisent. Diviseurs connus : '+
+        Object.keys(dv).map(k=>'<code>'+esc(k)+'</code> ÷ '+fmtNb(dv[k],0)).join(', ')+
+        '.</div>';
+      corps+='<table class="tdb-t"><thead><tr><th>suv</th><th class="n">vuv</th>'+
+        '<th class="n">Lignes</th><th class="n">Qté min</th><th class="n">Qté max</th>'+
+        '<th class="n">PU min</th><th class="n">PU max</th>'+
+        '<th class="n">Σ calculée</th></tr></thead><tbody>';
+      (dg.unites||[]).forEach(u=>{
+        corps+='<tr><td class="fort">'+cell(u.suv,'suv')+'</td>'+
+          '<td class="n">'+cell(u.vuv,'vuv')+'</td>'+
+          '<td class="n">'+cell(u.lignes,'lignes')+'</td>'+
+          '<td class="n">'+cell(u.qte_min,'qte')+'</td>'+
+          '<td class="n">'+cell(u.qte_max,'qte')+'</td>'+
+          '<td class="n">'+cell(u.pun_min,'pun')+'</td>'+
+          '<td class="n">'+cell(u.pun_max,'pun')+'</td>'+
+          '<td class="n fort">'+esc(tdbEurExact(u.montant))+'</td></tr>';
+      });
+      corps+='</tbody></table>';
+    }
+
+    // 2. Les lignes les plus lourdes : l'erreur se voit à l'œil nu.
+    if((dg.lourdes||[]).length){
+      corps+='<div class="tdb-note" style="color:var(--text2)">'+
+        '<b>Les 8 lignes les plus lourdes</b> — celles qui font le total. '+
+        'Ouvrir la pièce dans RVGI et comparer le montant de la ligne.</div>';
+      corps+='<table class="tdb-t"><thead><tr><th>Pièce</th>'+
+        cols.map(c=>'<th class="n">'+esc(c)+'</th>').join('')+
+        '<th class="n">= montant</th></tr></thead><tbody>';
+      (dg.lourdes||[]).forEach(l=>{
+        corps+='<tr><td class="ref">'+esc(fmtId(l.numero))+'</td>'+
+          cols.map(c=>'<td class="n">'+cell(l[c],c)+'</td>').join('')+
+          '<td class="n fort">'+esc(tdbEurExact(l.montant_calcule))+'</td></tr>';
+      });
+      corps+='</tbody></table>';
+    }
+
     if(dg.net_plat){
       corps+='<div class="tdb-note">La colonne <code>net</code> ne prend qu\'une ou deux '+
         'valeurs sur toute la table : ce n\'est pas un montant, elle est écartée du calcul.</div>';
     }
   });
-  return tdbPan({titre:'Contrôle du calcul',cpt:'à valider dans RVGI',corps:corps,
-    note:'Montant = <code>qte × pun ÷ coefficient de vente</code>. Le prix unitaire de RVGI '+
-         'n\'est pas à l\'étiquette — SIFA vend au mille — et c\'est <code>vuv</code> qui porte '+
-         'le diviseur. Ouvrir une de ces pièces dans RVGI et comparer le total : si ça tombe '+
-         'juste, ce panneau peut disparaître.'});
+  const f=(diags[0]||{}).formule||'';
+  return tdbPan({titre:'Contrôle du calcul',cpt:'formule à confirmer',corps:corps,
+    note:'Formule appliquée : <code>'+esc(f)+'</code>. Elle suppose que <code>vuv</code> '+
+         'porte le diviseur de l\'unité de vente. Si le tableau ci-dessus montre <code>vuv</code> '+
+         'à 1 sur des lignes de plusieurs millions d\'étiquettes, c\'est cette hypothèse qui est '+
+         'fausse — et le montant est alors mille fois trop grand. Les chiffres de cet écran ne '+
+         'valent rien tant que ce point n\'est pas tranché.'});
 }
 
 function htmlTdbDirection(d){
@@ -2846,7 +2912,7 @@ function initMenuService(){
 
 function appliquerHash(){
   fermerDetail();   // on ne garde jamais une modale ouverte sur un autre écran
-  fermerMkPop();
+  fermerMkPop();tdbTipCacher();
   const m=String(location.hash||'').match(/^#\/([a-z_]+)(?:\?(.*))?$/);
   if(m&&estTdb(m[1])){ouvrirTdb(m[1]);return;}
   if(m&&S.meta&&S.meta.present){
