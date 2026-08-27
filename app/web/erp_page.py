@@ -59,6 +59,7 @@ ERP_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_mobile_topbar.css">
 <style>
+/* tokens : static/mysifa_theme.css — ici, seulement les écarts */
 :root{--serie2:#a78bfa;--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);--accent-bord:rgba(34,211,238,.45);--ok:#34d399;--success:#34d399;--danger:#f87171;--warn:#fbbf24}
 body.light{--serie2:#6d4ddb;--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);--accent-bord:rgba(8,145,178,.42);--ok:#059669;--success:#059669;--danger:#dc2626;--warn:#d24b00}
 *{box-sizing:border-box}
@@ -224,7 +225,8 @@ table.grille th.cible{box-shadow:inset 3px 0 0 var(--accent)}
 table.grille th.epingle{z-index:4}
 table.grille th.epingle,table.grille td.epingle{position:sticky;background:var(--card)}
 table.grille td.epingle{z-index:1;background:var(--bg)}
-table.grille tbody tr:hover td.epingle,table.grille tbody tr.sel td.epingle{background:var(--accent-bg)}
+table.grille tbody tr:hover td.epingle,table.grille tbody tr.sel td.epingle{
+  background:linear-gradient(var(--accent-bg),var(--accent-bg)),var(--bg)}
 table.grille th.bord-epingle,table.grille td.bord-epingle{border-right:1px solid var(--accent)}
 table.grille td{padding:7px 10px;border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
 table.grille tbody tr{cursor:pointer}
@@ -365,7 +367,8 @@ table.pl th.fx0,table.pl td.fx0{left:0}
 table.pl th.fx1,table.pl td.fx1{left:var(--fx1,96px)}
 table.pl td.fx1{box-shadow:1px 0 0 var(--border)}
 table.pl th.fx1{box-shadow:1px 0 0 var(--border)}
-table.pl tbody tr:hover td.fx,table.pl tbody tr.ici td.fx{background:var(--accent-bg)}
+table.pl tbody tr:hover td.fx,table.pl tbody tr.ici td.fx{
+  background:linear-gradient(var(--accent-bg),var(--accent-bg)),var(--card)}
 table.pl td{max-width:210px}
 .pl-astuce{order:3;font-size:10.5px;font-weight:600;letter-spacing:0;text-transform:none;
   color:var(--muted);white-space:nowrap}
@@ -487,13 +490,12 @@ body.sb-open .sidebar-overlay{display:block}
 /* Pont invisible : descendre la souris vers le menu ne doit pas le refermer. */
 .mk-pop::before{content:'';position:absolute;top:-9px;left:0;right:0;height:9px}
 .mk-groupe{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:9px 10px 5px}
-.mk-item{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;background:none;border:none;border-radius:9px;padding:8px 10px;cursor:pointer;color:var(--text2);font:inherit;transition:background .12s,color .12s}
+.mk-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:none;border-radius:9px;padding:8px 10px;cursor:pointer;color:var(--text2);font:inherit;transition:background .12s,color .12s}
 .mk-item:hover{background:var(--accent-bg)}
-.mk-item .mk-ico{flex-shrink:0;margin-top:2px;opacity:.8;color:var(--muted)}
+.mk-item .mk-ico{flex-shrink:0;opacity:.8;color:var(--muted)}
 .mk-item:hover .mk-ico{color:var(--accent);opacity:1}
 .mk-item b{display:block;font-size:12.5px;font-weight:600;color:var(--text)}
 .mk-item:hover b{color:var(--accent)}
-.mk-item em{display:block;font-style:normal;font-size:11px;color:var(--muted);line-height:1.42;margin-top:2px}
 .mk-item.tdb b{font-size:13.5px}
 .mk-item.active b{color:var(--accent)}
 .mk-sep{height:1px;background:var(--border);margin:6px 8px}
@@ -2188,7 +2190,7 @@ function renderMenuService(){
     h+='<div class="mk-groupe">Tableaux de bord</div>';
     (menu.tdb||[]).forEach(t=>{
       h+='<button type="button" role="menuitem" class="mk-item tdb'+(courant===t.cle?' active':'')+'" data-va="#/'+esc(t.cle)+'">'+
-         ICO_TDB+'<span><b>'+esc(t.label)+'</b><em>'+esc(t.resume||'')+'</em></span></button>';
+         ICO_TDB+'<span><b>'+esc(t.label)+'</b></span></button>';
     });
   }
   if((menu.ecrans||[]).length){
@@ -2196,11 +2198,11 @@ function renderMenuService(){
     (menu.ecrans||[]).forEach(e=>{
       h+='<button type="button" role="menuitem" class="mk-item'+(courant===e.cle?' active':'')+'" data-va="#/'+esc(e.cle)+'">'+
          (iconeEcran(e.cle)||ICO_GRILLE).replace('<svg','<svg class="mk-ico"')+
-         '<span><b>'+esc(e.label)+'</b><em>'+esc(e.resume||'')+'</em></span></button>';
+         '<span><b>'+esc(e.label)+'</b></span></button>';
     });
   }
   h+='<div class="mk-sep"></div><button type="button" role="menuitem" class="mk-item" data-va="#/">'+
-     ICO_GRILLE+'<span><b>Tous les écrans</b><em>Les 27 écrans de RVGI, par domaine.</em></span></button>';
+     ICO_GRILLE+'<span><b>Tous les écrans</b></span></button>';
   pop.innerHTML=h;
   pop.querySelectorAll('[data-va]').forEach(b=>{
     b.addEventListener('click',()=>{
@@ -2653,6 +2655,21 @@ function tdbPanControlePrix(d){
 
     // 1. Ce que l'unité de vente contient vraiment. C'est LA question : si
     //    `vuv` vaut 1 sur des lignes vendues au mille, tout est ×1000.
+    // Le comparatif : le même mois calculé avec chaque diviseur candidat.
+    // C'est la question à trancher, elle passe donc en tête du panneau.
+    if((dg.comparatif||[]).length){
+      corps+='<div class="tdb-note" style="border-top:none;color:var(--text2)">'+
+        '<b>Quel diviseur ?</b> Le mois en cours, calculé de quatre façons. '+
+        'Celui qui ressemble au chiffre d\'affaires réel désigne la bonne colonne.</div>';
+      corps+='<table class="tdb-t"><thead><tr><th>Diviseur</th><th>D\'où il vient</th>'+
+        '<th class="n">Total du mois</th></tr></thead><tbody>';
+      (dg.comparatif||[]).forEach(c=>{
+        corps+='<tr><td class="fort">'+esc(c.methode)+'</td>'+
+          '<td class="coupe" style="max-width:340px;white-space:normal">'+esc(c.quoi)+'</td>'+
+          '<td class="n fort">'+esc(tdbEurExact(c.montant))+'</td></tr>';
+      });
+      corps+='</tbody></table>';
+    }
     if((dg.unites_inconnues||[]).length){
       corps+='<div class="tdb-alerte" style="margin:11px 13px">'+
         '<span>⚠</span><span><b>Code d\'unité de vente inconnu.</b> '+

@@ -56,8 +56,18 @@ MAX_LIGNES_LISTE = 12
 # deux renseignés. C'est la seule marque structurelle disponible sur la ligne
 # elle-même ; le libellé (« Frais de port ») ne se filtre pas, il change.
 def _ligne_produit(alias="l"):
-    return ("COALESCE(%s.code1, 0) > 0 AND COALESCE(%s.code2, 0) > 0"
-            % (alias, alias))
+    # `code1`/`code2`/`code3` sont forcés en TEXTE à l'import, dans toutes les
+    # tables (`import_rvgi_csv.COLS_TEXTE_FORCE`) : sans ça, `code1` vaut 890
+    # en entier dans `cde_ligne` et « FR » en texte dans `fic_art`, et la
+    # jointure ne remonte rien sans lever d'erreur.
+    #
+    # Conséquence ici : `code1 > 0` compare du texte à un entier. En SQLite un
+    # TEXTE est TOUJOURS supérieur à un INTEGER, quel qu'il soit — le test
+    # était donc vrai pour « 0 » comme pour « 601 », et ne filtrait rien. La
+    # comparaison se fait sur la chaîne, pas sur une valeur numérique.
+    return (" AND ".join(
+        "TRIM(COALESCE(%s.%s, '')) NOT IN ('', '0')" % (alias, c)
+        for c in ("code1", "code2")))
 
 
 # Passé ce délai, une ligne en retard n'est plus un retard sur lequel agir :
@@ -463,8 +473,10 @@ def direction():
         montant_cde = _expr_montant(sch, "cde_ligne", "l")
         montant_fac = _expr_montant(sch, "vte_ligne", "l")
         sortie["diagnostic_prix"] = [
-            _diagnostic_prix(conn, sch, "cde_ligne", "l"),
-            _diagnostic_prix(conn, sch, "vte_ligne", "l"),
+            _diagnostic_complet(conn, sch, "cde_ligne", "l",
+                                "cde_entete", "amjc", b["debut_mois"]),
+            _diagnostic_complet(conn, sch, "vte_ligne", "l",
+                                "vte_entete", "amjf", b["debut_mois"]),
         ]
 
         # ── Le rentré : la veille, le mois, la série ─────────────────────
@@ -609,6 +621,49 @@ def _expr_montant(sch, table, alias):
             % (alias, alias, _expr_diviseur(sch, table, alias)))
 
 
+# Les trois pistes pour ramener `pun` au prix d'une étiquette, et d'où elles
+# viennent. Aucune n'est établie : l'écran les calcule toutes les trois sur le
+# mois en cours et montre les trois totaux. Celui qui ressemble au chiffre
+# d'affaires réel désigne la bonne.
+def _diviseurs_candidats(sch, table, alias, alias_art):
+    cands = []
+    if alias_art:
+        cands.append(("article.cuv", "NULLIF(%s.cuv, 0)" % alias_art,
+                      "coefficient d'unité de VENTE porté par la fiche article"))
+    if sch.a(table, "suv"):
+        cas = " ".join("WHEN UPPER(TRIM(COALESCE(%s.suv,''))) = '%s' THEN %s"
+                       % (alias, c, v) for c, v in sorted(DIVISEUR_UNITE.items()))
+        cands.append(("ligne.suv", "(CASE %s ELSE NULL END)" % cas,
+                      "code d'unité de la ligne : M = mille, U = unité"))
+    if sch.a(table, "vuv"):
+        cands.append(("ligne.vuv", "NULLIF(%s.vuv, 0)" % alias,
+                      "coefficient chiffré de la ligne — incomplet"))
+    cands.append(("aucun", "1", "qte × pun brut, sans correction"))
+    return cands
+
+
+def _comparatif_diviseurs(conn, sch, table, alias, entete, col_date, depuis):
+    """Le même mois, calculé avec chaque diviseur candidat."""
+    if not sch.a(table, "qte", "pun") or not sch.a(entete, "numero", col_date):
+        return []
+    art = "fic_art" if sch.a("fic_art", "code1", "code2", "cuv") else None
+    jointure = ("LEFT JOIN fic_art a ON a.code1 = %s.code1 AND a.code2 = %s.code2"
+                % (alias, alias)) if (art and sch.a(table, "code1", "code2")) else ""
+    out = []
+    for nom, expr, quoi in _diviseurs_candidats(sch, table, alias,
+                                                "a" if jointure else None):
+        montant = _un(conn, """
+            SELECT SUM(COALESCE(%s.qte,0) * COALESCE(%s.pun,0)
+                       / COALESCE(%s, 1))
+              FROM %s %s %s
+              JOIN %s e ON e.numero = %s.numero
+             WHERE substr(e.%s, 1, 10) >= ?
+        """ % (alias, alias, expr, table, alias, jointure, entete, alias, col_date),
+            (depuis,))
+        out.append({"methode": nom, "quoi": quoi, "montant": _nombre(montant)})
+    return out
+
+
 def _diagnostic_prix(conn, sch, table, alias):
     """Ce que la table porte vraiment comme prix, sur des lignes réelles.
 
@@ -688,6 +743,14 @@ def _diagnostic_prix(conn, sch, table, alias):
             "net_plat": net_plat, "formule": montant,
             "diviseurs": DIVISEUR_UNITE,
             "unites": unites, "unites_inconnues": inconnus, "lourdes": lourdes}
+
+
+def _diagnostic_complet(conn, sch, table, alias, entete, col_date, depuis):
+    d = _diagnostic_prix(conn, sch, table, alias)
+    d["comparatif"] = _comparatif_diviseurs(conn, sch, table, alias,
+                                            entete, col_date, depuis)
+    d["periode"] = depuis
+    return d
 
 
 def _rentre_du_jour(conn, sch, montant, jour):

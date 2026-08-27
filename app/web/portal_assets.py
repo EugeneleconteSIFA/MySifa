@@ -202,8 +202,6 @@ body.light .portal-erp-pop{box-shadow:0 18px 46px rgba(15,23,42,.14)}
 .portal-erp-item:hover{background:var(--accent-bg)}
 .portal-erp-item b{display:block;font-size:12.5px;font-weight:700;color:var(--text)}
 .portal-erp-item:hover b{color:var(--accent)}
-.portal-erp-item em{display:block;font-style:normal;font-size:10.5px;color:var(--muted);
-  line-height:1.4;margin-top:2px}
 .portal-erp-sep{height:1px;background:var(--border);margin:6px 8px}
 .portal-erp-vide{padding:12px 10px;font-size:11.5px;color:var(--muted)}
 @media (max-width:900px){.portal-erp-pop{display:none!important}}
@@ -1699,7 +1697,7 @@ function renderPortal(){
             html+='<div class="portal-erp-groupe">Tableaux de bord</div>';
             (m.tdb||[]).forEach(t=>{
               html+='<button type="button" role="menuitem" class="portal-erp-item" data-va="/erp#/'+
-                ech(t.cle)+'"><b>'+ech(t.label)+'</b><em>'+ech(t.resume||'')+'</em></button>';
+                ech(t.cle)+'"><b>'+ech(t.label)+'</b></button>';
             });
           }
           if((m.ecrans||[]).length){
@@ -1711,7 +1709,7 @@ function renderPortal(){
           }
           html+='<div class="portal-erp-sep"></div>'+
             '<button type="button" role="menuitem" class="portal-erp-item" data-va="/erp">'+
-            '<b>Ouvrir l\'ERP</b><em>Les 27 écrans de RVGI, en lecture seule.</em></button>';
+            '<b>Ouvrir l\'ERP</b></button>';
           pop.innerHTML=html;
           pop.querySelectorAll('[data-va]').forEach(b=>{
             b.addEventListener('click',ev=>{
