@@ -111,13 +111,13 @@ FORMULES = {
     "sans_dossier": "lignes en fabrication à venir ou en cours (expédition "
                     "des 30 derniers jours ou à venir) sans dossier MySifa rattaché",
     "hors_prod": "carnet dont l'origine est stock ou sous-traitance",
-    "rentre": "Σ (qte × pun ÷ unité de vente) des lignes de commande créées "
-              "ce jour-là, par cde_entete.amjc",
-    "facture": "Σ (qte × pun ÷ unité de vente) des lignes de facture, "
-               "par mois de vte_entete.amjf",
-    "facturable": "Σ (qte livrée − qte facturée) × pun ÷ coefficient de vente, "
-                  "au prix de la ligne de commande d'origine",
-    "encours": "Σ net du carnet restant à traiter",
+    "rentre": "Σ du total HT des lignes de commande créées ce jour-là, "
+              "par cde_entete.amjc",
+    "facture": "Σ du total HT des lignes de facture, par mois de "
+               "vte_entete.amjf",
+    "facturable": "part non facturée du total HT de la ligne de commande "
+                  "d'origine, au prorata de (qte livrée − qte facturée)",
+    "encours": "Σ du total HT du carnet, au prorata de ce qui reste à traiter",
 }
 
 
@@ -577,9 +577,14 @@ def direction():
 # La règle retenue : le code `suv` décide, `vuv` ne sert que de repli quand le
 # code est vide ou inconnu. Un code non répertorié est signalé par le
 # diagnostic — il n'est jamais deviné.
+# ATTENTION — `suv` n'est PAS toujours une lettre. Relevé sur `vte_ligne` :
+# il vaut « 3 ». La correspondance ci-dessous ne couvre donc qu'une partie des
+# cas, et c'est assumé : elle ne sert plus qu'au repli, quand aucune colonne
+# de total HT n'existe. Un code absent d'ici n'est jamais deviné — il ressort
+# dans le diagnostic, et le montant de ces lignes est à considérer comme faux.
 DIVISEUR_UNITE = {
-    "M": 1000.0,   # au mille — le cas courant chez SIFA
-    "U": 1.0,      # à l'unité — frais de port, de cliché, d'outils
+    "M": 1000.0,   # au mille
+    "U": 1.0,      # à l'unité
 }
 
 
@@ -598,8 +603,39 @@ def _expr_diviseur(sch, table, alias):
     return "(CASE %s ELSE %s END)" % (cas, repli)
 
 
+# Les colonnes de total HT de ligne, dans l'ordre de préférence. RVGI les
+# calcule lui-même — la modale de détail les affiche « Total HT net » et
+# « Total HT brut » — et un total lu vaut infiniment mieux qu'un total
+# reconstruit à partir de colonnes dont personne n'a la définition.
+COLS_TOTAL_HT = ("htn", "htb", "mtht", "totht")
+
+
 def _expr_montant(sch, table, alias):
-    """Le montant d'une ligne : quantité × prix unitaire, à l'unité de vente.
+    """Le montant d'une ligne : le total HT que RVGI a déjà calculé.
+
+    Relevé le 27/08/2026 sur les données réelles, et c'est ce qui a mis fin à
+    trois hypothèses successives :
+
+      commande — qte 70 200 000 × pun 0,1420 = 9 968 400, et la ligne porte
+                 « Total HT net » = 9 968,40. Le rapport est bien de mille.
+      facture  — qte 25 890 000, pun 8 802, et `htn` = 8 802 aussi. Le rapport
+                 n'est plus de mille du tout.
+
+    Autrement dit `pun` ne se rapporte pas à la même unité d'une table à
+    l'autre, et aucun coefficient unique ne raccommode les deux. Mais `htn`
+    est juste dans les deux cas. On le lit, on ne le recalcule pas.
+
+    La reconstruction `qte × pun ÷ unité` ne sert plus que de repli si aucune
+    colonne de total n'existe — et le diagnostic affiche alors les deux.
+    """
+    for col in COLS_TOTAL_HT:
+        if sch.a(table, col):
+            return "COALESCE(%s.%s, 0)" % (alias, col)
+    return _expr_montant_reconstruit(sch, table, alias)
+
+
+def _expr_montant_reconstruit(sch, table, alias):
+    """Repli : quantité × prix unitaire, ramené à l'unité de vente.
 
     `net` a été essayé et écarté. Relevé sur les données réelles le
     27/08/2026 : il vaut 1,00 sur toutes les lignes de facture, quantité et
@@ -627,6 +663,10 @@ def _expr_montant(sch, table, alias):
 # d'affaires réel désigne la bonne.
 def _diviseurs_candidats(sch, table, alias, alias_art):
     cands = []
+    for col in COLS_TOTAL_HT:
+        if sch.a(table, col):
+            cands.append(("colonne " + col, None,
+                          "total HT de la ligne, calculé par RVGI — lu, pas reconstruit"))
     if alias_art:
         cands.append(("article.cuv", "NULLIF(%s.cuv, 0)" % alias_art,
                       "coefficient d'unité de VENTE porté par la fiche article"))
@@ -652,14 +692,18 @@ def _comparatif_diviseurs(conn, sch, table, alias, entete, col_date, depuis):
     out = []
     for nom, expr, quoi in _diviseurs_candidats(sch, table, alias,
                                                 "a" if jointure else None):
+        if expr is None:
+            # Méthode « colonne de total » : rien à diviser, on somme la colonne.
+            valeur = "COALESCE(%s.%s, 0)" % (alias, nom.split(" ", 1)[1])
+        else:
+            valeur = ("COALESCE(%s.qte,0) * COALESCE(%s.pun,0) / COALESCE(%s, 1)"
+                      % (alias, alias, expr))
         montant = _un(conn, """
-            SELECT SUM(COALESCE(%s.qte,0) * COALESCE(%s.pun,0)
-                       / COALESCE(%s, 1))
+            SELECT SUM(%s)
               FROM %s %s %s
               JOIN %s e ON e.numero = %s.numero
              WHERE substr(e.%s, 1, 10) >= ?
-        """ % (alias, alias, expr, table, alias, jointure, entete, alias, col_date),
-            (depuis,))
+        """ % (valeur, table, alias, jointure, entete, alias, col_date), (depuis,))
         out.append({"methode": nom, "quoi": quoi, "montant": _nombre(montant)})
     return out
 
@@ -675,7 +719,8 @@ def _diagnostic_prix(conn, sch, table, alias):
 
     Le jour où c'est validé, ce bloc peut disparaître — pas avant.
     """
-    candidates = ("qte", "pub", "pun", "net", "suv", "vuv", "htn", "des1")
+    candidates = (("qte", "pub", "pun", "net", "suv", "vuv")
+                  + COLS_TOTAL_HT + ("des1",))
     presentes = [c for c in candidates if sch.a(table, c)]
     if not sch.a(table, "qte", "pun"):
         return {"table": table, "colonnes": presentes, "echantillon": [],
@@ -739,8 +784,16 @@ def _diagnostic_prix(conn, sch, table, alias):
                     if str(u.get("suv") or "").strip().upper() not in DIVISEUR_UNITE
                     and (u.get("qte_max") or 0) > 1000]
 
+    # Un code d'unité inconnu n'a d'importance que si le montant est
+    # reconstruit. Dès lors qu'on lit le total HT de la ligne, `suv` ne sert
+    # plus à rien — crier au loup à ce moment-là ferait ignorer l'alerte le
+    # jour où elle compte vraiment.
+    reconstruit = not any(sch.a(table, c) for c in COLS_TOTAL_HT)
+    if not reconstruit:
+        inconnus = []
+
     return {"table": table, "colonnes": presentes, "echantillon": rows,
-            "net_plat": net_plat, "formule": montant,
+            "net_plat": net_plat, "formule": montant, "reconstruit": reconstruit,
             "diviseurs": DIVISEUR_UNITE,
             "unites": unites, "unites_inconnues": inconnus, "lourdes": lourdes}
 
@@ -863,8 +916,20 @@ def _facturable(conn, sch, sortie):
     # Même arithmétique que partout ailleurs : le prix de RVGI est à l'unité
     # de vente, pas à l'étiquette. Oublier le coefficient ici donnait un
     # facturable à 140 millions d'euros pour 18 bons de livraison.
-    coef = _expr_diviseur(sch, "cde_ligne", "c")
-    valeur = ("(l.qte - COALESCE(l.qtefac, 0)) * COALESCE(c.pun, 0) / %s" % coef)
+    # La ligne de commande porte son total HT : le reste à facturer en est la
+    # fraction non encore facturée. Refaire le calcul de prix ici rejouerait
+    # les mêmes hypothèses douteuses sur `pun` et l'unité de vente.
+    total_cde = None
+    for col in COLS_TOTAL_HT:
+        if sch.a("cde_ligne", col):
+            total_cde = "COALESCE(c.%s, 0)" % col
+            break
+    if total_cde:
+        valeur = ("CASE WHEN COALESCE(c.qte, 0) > 0 THEN %s * "
+                  "((l.qte - COALESCE(l.qtefac, 0)) / c.qte) ELSE 0 END" % total_cde)
+    else:
+        coef = _expr_diviseur(sch, "cde_ligne", "c")
+        valeur = ("(l.qte - COALESCE(l.qtefac, 0)) * COALESCE(c.pun, 0) / %s" % coef)
     base = """
         FROM liv_ligne l
         LEFT JOIN cde_ligne c ON c.numero = l.numcde AND c.ligne = l.lignecde
