@@ -2659,9 +2659,9 @@ function tdbPanControlePrix(d){
     // C'est la question à trancher, elle passe donc en tête du panneau.
     if((dg.comparatif||[]).length){
       corps+='<div class="tdb-note" style="border-top:none;color:var(--text2)">'+
-        '<b>Quel diviseur ?</b> Le mois en cours, calculé de quatre façons. '+
-        'Celui qui ressemble au chiffre d\'affaires réel désigne la bonne colonne.</div>';
-      corps+='<table class="tdb-t"><thead><tr><th>Diviseur</th><th>D\'où il vient</th>'+
+        '<b>Quelle méthode ?</b> Le mois en cours, calculé de plusieurs façons. '+
+        'Celle qui ressemble au chiffre d\'affaires réel désigne la bonne.</div>';
+      corps+='<table class="tdb-t"><thead><tr><th>Méthode</th><th>Ce qu\'elle lit</th>'+
         '<th class="n">Total du mois</th></tr></thead><tbody>';
       (dg.comparatif||[]).forEach(c=>{
         corps+='<tr><td class="fort">'+esc(c.methode)+'</td>'+
@@ -2682,8 +2682,10 @@ function tdbPanControlePrix(d){
     if((dg.unites||[]).length){
       const dv=dg.diviseurs||{};
       corps+='<div class="tdb-note" style="border-top:none;color:var(--text2)">'+
-        '<b>Unités de vente rencontrées</b> — combien de lignes, quelles quantités, '+
-        'quel total elles produisent. Diviseurs connus : '+
+        '<b>Unités de vente rencontrées</b>'+
+        (dg.reconstruit?'':' — pour information : le montant vient du total HT de la ligne, '+
+          'ces colonnes n\'entrent plus dans le calcul')+
+        '. Diviseurs connus : '+
         Object.keys(dv).map(k=>'<code>'+esc(k)+'</code> ÷ '+fmtNb(dv[k],0)).join(', ')+
         '.</div>';
       corps+='<table class="tdb-t"><thead><tr><th>suv</th><th class="n">vuv</th>'+
@@ -2726,11 +2728,10 @@ function tdbPanControlePrix(d){
   });
   const f=(diags[0]||{}).formule||'';
   return tdbPan({titre:'Contrôle du calcul',cpt:'formule à confirmer',corps:corps,
-    note:'Formule appliquée : <code>'+esc(f)+'</code>. Elle suppose que <code>vuv</code> '+
-         'porte le diviseur de l\'unité de vente. Si le tableau ci-dessus montre <code>vuv</code> '+
-         'à 1 sur des lignes de plusieurs millions d\'étiquettes, c\'est cette hypothèse qui est '+
-         'fausse — et le montant est alors mille fois trop grand. Les chiffres de cet écran ne '+
-         'valent rien tant que ce point n\'est pas tranché.'});
+    note:'Formule appliquée : <code>'+esc(f)+'</code>. RVGI calcule déjà le total HT de '+
+         'chaque ligne : on le lit plutôt que de le reconstruire à partir de <code>pun</code>, '+
+         'dont l\'unité de référence change d\'une table à l\'autre. Le tableau des méthodes '+
+         'ci-dessus permet de vérifier que la colonne retenue est la bonne.'});
 }
 
 function htmlTdbDirection(d){

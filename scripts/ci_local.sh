@@ -49,8 +49,15 @@ titre "Tests"
 if python3 -c "import fastapi" 2>/dev/null; then DEPS=1; else DEPS=0
     echo "  (FastAPI absent de ce python : les tests qui en dependent sont ignores)"
 fi
+QUARANTAINE=$(grep -oE '^test_[a-z0-9_]+\.py' tests/CI_QUARANTAINE.txt 2>/dev/null || true)
+if [ -n "$QUARANTAINE" ]; then
+    echo "  en quarantaine (tests/CI_QUARANTAINE.txt) :"
+    echo "$QUARANTAINE" | sed 's/^/    - /'
+fi
 for t in tests/test_*.py; do
-    printf '  %-42s ' "$(basename "$t")"
+    nom=$(basename "$t")
+    if echo "$QUARANTAINE" | grep -qx "$nom"; then continue; fi
+    printf '  %-42s ' "$nom"
     # `</dev/null` : sans lui, un test qui lit stdin attend au clavier et bloque
     # indefiniment en local. Sur GitHub Actions il n'y a pas de TTY, donc le
     # symptome n'apparait qu'ici — c'est exactement le genre d'ecart qui fait

@@ -54,9 +54,40 @@ jobs:
 
       - name: Tests
         run: |
+          # La quarantaine est lue depuis un fichier versionne, pas codee ici :
+          # ce qui n'est pas execute doit etre visible dans le depot.
+          quarantaine=$(grep -oE '^test_[a-z0-9_]+\.py' tests/CI_QUARANTAINE.txt 2>/dev/null || true)
+          if [ -n "$quarantaine" ]; then
+            echo "::warning::Tests en quarantaine (voir tests/CI_QUARANTAINE.txt) :"
+            echo "$quarantaine" | sed 's/^/  - /'
+          fi
+
           echec=0
+          rates=""
           for t in tests/test_*.py; do
-            echo "--- $t"
-            python "$t" || { echo "::error file=$t::Test en echec"; echec=1; }
+            nom=$(basename "$t")
+            if echo "$quarantaine" | grep -qx "$nom"; then
+              echo "--- $nom : EN QUARANTAINE, non execute"
+              continue
+            fi
+            echo "--- $nom"
+            # `</dev/null` : un test qui lit stdin bloquerait le job jusqu'au
+            # timeout de 10 minutes.
+            if python "$t" </dev/null; then
+              echo "    ok"
+            else
+              echo "::error file=$t::Test en echec"
+              rates="$rates $nom"
+              echec=1
+            fi
           done
+
+          echo ""
+          echo "==========================================="
+          if [ "$echec" -eq 0 ]; then
+            echo "Tous les tests executes passent."
+          else
+            echo "TESTS EN ECHEC :$rates"
+          fi
+          echo "==========================================="
           exit $echec

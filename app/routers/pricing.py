@@ -613,7 +613,7 @@ def create_material(request: Request, body: McMaterialCreate):
                 applique_marge, transport_mode, transport_unit_price, transport_pct,
                 transport_cout, transport_quantite,
                 container_kg, container_cost_usd, is_active
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
             (
                 body.name.strip(),
                 body.appellation_code.strip(),

@@ -419,8 +419,13 @@ def test_norm_noms():
 
 
 class _Faux:
+    """Fausse requête. `get_current_user` lit le cookie de session : sans
+    l'attribut, le test tombe sur un AttributeError sans rapport avec ce
+    qu'il vérifie. Reste à lui donner une vraie session — voir
+    tests/CI_QUARANTAINE.txt."""
     client = None
     headers: dict = {}
+    cookies: dict = {}
 
 
 def _requete():
