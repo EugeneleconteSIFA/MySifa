@@ -516,7 +516,8 @@ body.sb-open .sidebar-overlay{display:block}
 .tdb-tuile.neu::after{background:var(--border);opacity:1}
 .tdb-tuile .k{display:block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;line-height:1.3}
 .tdb-tuile .v{display:block;font-size:25px;font-weight:800;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums;color:var(--text)}
-.tdb-tuile .v small{font-size:13px;font-weight:600;color:var(--text2);margin-left:2px}
+.tdb-tuile .v small{font-size:13px;font-weight:600;color:var(--text2);margin-left:3px}
+.tdb-tuile .v em{font-size:12.5px;font-weight:600;font-style:normal;color:var(--muted);margin-left:7px}
 .tdb-tuile .s{display:block;margin-top:7px;font-size:11px;color:var(--muted);line-height:1.4}
 .tdb-tuile .s.ok{color:var(--ok)}
 .tdb-tuile .s.warn{color:var(--warn)}
@@ -529,8 +530,7 @@ body.sb-open .sidebar-overlay{display:block}
 .tdb-pan-h{display:flex;align-items:center;gap:9px;padding:10px 13px;border-bottom:1px solid var(--border)}
 .tdb-pan-h h3{margin:0;font-size:12.5px;font-weight:700;color:var(--text)}
 .tdb-pan-h .cpt{font-size:11px;color:var(--muted)}
-.tdb-pan-h .plus{margin-left:auto;font-size:11.5px;color:var(--accent);background:none;border:none;cursor:pointer;font:inherit;padding:2px 4px;border-radius:6px;white-space:nowrap}
-.tdb-pan-h .plus:hover{background:var(--accent-bg)}
+.tdb-pan-h .plus{margin-left:auto;font-size:11px;padding:5px 10px;white-space:nowrap}
 .tdb-note{padding:9px 13px;border-top:1px solid var(--border);font-size:10.5px;color:var(--muted);line-height:1.5}
 .tdb-vide{padding:20px 13px;text-align:center;color:var(--muted);font-size:12px}
 
@@ -2187,8 +2187,20 @@ function tdbTuile(o){
 function tdbPan(o){
   return '<section class="tdb-pan"><div class="tdb-pan-h"><h3>'+esc(o.titre)+'</h3>'+
     (o.cpt?('<span class="cpt">'+esc(o.cpt)+'</span>'):'')+
-    (o.plus?('<button type="button" class="plus" data-va="'+esc(o.plusVa||'')+'">'+esc(o.plus)+' →</button>'):'')+
+    (o.plus?('<button type="button" class="btn plus" data-va="'+esc(o.plusVa||'')+'">'+esc(o.plus)+' →</button>'):'')+
     '</div>'+(o.corps||'')+(o.note?('<div class="tdb-note">'+o.note+'</div>'):'')+'</section>';
+}
+
+// Une commande porte plusieurs lignes. Les confondre, c'est annoncer
+// « 845 retards » à une direction qui en comprend 845 clients mécontents.
+// Partout où le chiffre compte, les deux unités sont écrites.
+function tdbLignesCdes(o){
+  if(!o)return null;
+  return fmtNb(o.commandes,0)+'<em>'+esc(o.commandes>1?'commandes':'commande')+'</em>';
+}
+function tdbSousLignes(o){
+  if(!o)return '';
+  return fmtNb(o.lignes,0)+(o.lignes>1?' lignes':' ligne');
 }
 
 function tdbVide(txt){return '<div class="tdb-vide">'+esc(txt)+'</div>';}
@@ -2284,35 +2296,53 @@ function htmlTdbAdv(d){
   const dos=d.dossiers||{},hp=d.hors_prod||{},af=d.a_facturer||{};
   let h=tdbIndispo(d);
 
+  const ret=c.retard||null,dor=c.dormant||null,sem=c.semaine||null,sd=d.sans_dossier||null;
   h+='<div class="tdb-tuiles">'+
-    tdbTuile({k:'Carnet ouvert',v:c.lignes==null?null:fmtNb(c.lignes,0),s:'lignes à traiter',
+    tdbTuile({k:'Commandes à traiter',v:tdbLignesCdes(c),
+      s:tdbSousLignes(c)+' non soldées',
       va:'#/commandes?position=0',titre:d.formules.carnet})+
-    tdbTuile({k:'À expédier sous 7 jours',v:c.semaine==null?null:fmtNb(c.semaine,0),
-      s:'date d\'expédition dans la semaine',va:'#/commandes?position=0&jusqua='+encodeURIComponent(d.bornes.fin_semaine),
+    tdbTuile({k:'À expédier sous 7 jours',v:tdbLignesCdes(sem),s:tdbSousLignes(sem),
+      va:'#/commandes?position=0&jusqua='+encodeURIComponent(d.bornes.fin_semaine),
       titre:d.formules.semaine})+
-    tdbTuile({k:'En retard',v:c.retard==null?null:fmtNb(c.retard,0),ton:c.retard?'dg':'ok',
-      s:c.retard?'date d\'expédition dépassée':'rien en retard',sTon:c.retard?'dg':'ok',
+    tdbTuile({k:'En retard',v:tdbLignesCdes(ret),ton:(ret&&ret.commandes)?'dg':'ok',
+      s:ret?(ret.commandes?(tdbSousLignes(ret)+' · expédition dépassée'):'rien en retard'):'',
+      sTon:(ret&&ret.commandes)?'dg':'ok',
       va:'#/commandes?position=0&jusqua='+encodeURIComponent(aujourdhui),titre:d.formules.retard})+
-    tdbTuile({k:'BL à facturer',v:af.bl==null?null:fmtNb(af.bl,0),ton:af.bl?'warn':'',
-      s:'livrés, pas encore facturés',sTon:af.bl?'warn':'',va:'#/livraisons',titre:d.formules.a_facturer})+
-    tdbTuile({k:'Sans dossier de prod',v:d.sans_dossier==null?null:fmtNb(d.sans_dossier,0),
-      ton:'neu',s:'lignes en fabrication, non rattachées',
+    tdbTuile({k:'BL à facturer',v:af.bl==null?null:fmtNb(af.bl,0)+'<em>BL</em>',ton:af.bl?'warn':'',
+      s:af.lignes!=null?(fmtNb(af.lignes,0)+' lignes livrées non facturées'):'',
+      sTon:af.bl?'warn':'',va:'#/livraisons',titre:d.formules.a_facturer})+
+    tdbTuile({k:'Sans dossier de prod',v:tdbLignesCdes(sd),ton:'neu',
+      s:sd?(tdbSousLignes(sd)+' en fabrication, à venir ou en cours'):'',
       va:'#/commandes?position=0&ratt=non',titre:d.formules.sans_dossier})+
     '</div>';
+
+  // Les lignes que RVGI ne solde jamais. Les laisser dans « en retard »
+  // faisait remonter des retards de 4 200 jours et rendait la tuile inutile.
+  if(dor&&dor.lignes){
+    h+='<div class="tdb-alerte" style="border-color:var(--border);background:var(--card)">'+
+      '<span>🕸</span><span><b>'+fmtNb(dor.commandes,0)+' commandes dormantes</b> ('+
+      fmtNb(dor.lignes,0)+' lignes) — expédition passée depuis plus de '+
+      fmtNb(c.jours_dormant||90,0)+' jours, jamais soldées dans RVGI. Elles sont '+
+      'hors du compte « en retard » : ce n\'est plus un retard, c\'est du ménage à faire '+
+      'dans le carnet. <button type="button" class="btn plus" style="margin-left:6px" '+
+      'data-va="#/commandes?position=0&jusqua='+encodeURIComponent(dor.avant||'')+'">Les voir →</button></span></div>';
+  }
 
   // ── En retard : la liste d'action ──
   let corps;
   const rt=d.retards||[];
   if(!rt.length){corps=tdbVide('Rien en retard. Le carnet est tenu.');}
   else{
-    corps='<table class="tdb-t"><thead><tr><th>Commande</th><th>Client</th><th>Désignation</th>'+
-      '<th class="n">Reste</th><th class="n">Expédition</th><th>Retard</th></tr></thead><tbody>';
+    corps='<table class="tdb-t"><thead><tr><th>Commande</th><th>Client</th><th>Réf.</th>'+
+      '<th>Désignation</th><th class="n">Reste</th><th class="n">Expédition</th>'+
+      '<th>Retard</th></tr></thead><tbody>';
     rt.forEach(l=>{
       const j=joursEcoules(l.expedition,aujourdhui);
       const ton=j>=5?'dg':(j>=2?'warn':'');
       corps+='<tr data-ouvre="commandes" data-id="'+esc(l.id)+'" title="Ouvrir la commande">'+
         '<td class="ref">'+esc(fmtId(l.numero))+(l.ligne!=null?(' · '+esc(fmtId(l.ligne))):'')+'</td>'+
         '<td class="fort coupe">'+esc(l.client||'—')+'</td>'+
+        '<td class="ref">'+esc(l.code1!=null&&l.code2!=null?(fmtId(l.code1)+'/'+fmtId(l.code2)):'—')+'</td>'+
         '<td class="coupe">'+esc(l.designation||'—')+'</td>'+
         '<td class="n">'+fmtNb(l.reste,0)+'</td>'+
         '<td class="n">'+esc(tdbJourCourt(l.expedition))+'</td>'+
@@ -2320,10 +2350,12 @@ function htmlTdbAdv(d){
     });
     corps+='</tbody></table>';
   }
-  const gauche=tdbPan({titre:'En retard de livraison',cpt:(c.retard||0)+' lignes',
-    plus:'Ouvrir le carnet filtré',plusVa:'#/commandes?position=0&jusqua='+encodeURIComponent(aujourdhui),
+  const gauche=tdbPan({titre:'En retard de livraison',
+    cpt:ret?(fmtNb(ret.commandes,0)+' commandes · '+fmtNb(ret.lignes,0)+' lignes'):'',
+    plus:'Ouvrir le carnet',plusVa:'#/commandes?position=0&jusqua='+encodeURIComponent(aujourdhui),
     corps:corps,
-    note:'Cliquer une ligne ouvre sa modale et ses pièces liées — BL, colisage, facture — '+
+    note:'Les plus récentes d\'abord : une ligne de la semaine dernière se rattrape. '+
+         'Cliquer une ligne ouvre sa modale et ses pièces liées — BL, colisage, facture — '+
          'sans quitter ce tableau de bord.'});
 
   // ── Livré, pas encore facturé ──
@@ -2395,8 +2427,24 @@ function htmlTdbAdv(d){
     note:'Seules les lignes en fabrication attendent un dossier. Compter les autres avec elles '+
          'ferait apparaître des retards de production qui n\'existent pas.'});
 
+  // Une règle de filtrage qu'on ne peut pas vérifier écarte tôt ou tard la
+  // mauvaise chose, en silence. Celle-ci montre ce qu'elle retire.
+  let droite4='';
+  if(d.ecartees&&d.ecartees.lignes){
+    let e='<table class="tdb-t"><tbody>';
+    (d.ecartees.libelles||[]).forEach(x=>{
+      e+='<tr><td class="coupe">'+esc(x.libelle)+'</td><td class="n">'+fmtNb(x.lignes,0)+'</td></tr>';
+    });
+    e+='</tbody></table>';
+    droite4=tdbPan({titre:'Écarté du carnet',cpt:fmtNb(d.ecartees.lignes,0)+' lignes',corps:e,
+      note:'Lignes ouvertes sans référence produit — frais de port, de cliché, d\'outils, '+
+           'créations de document. RVGI ne les solde jamais ; les compter donnerait des '+
+           'retards de plusieurs milliers de jours. Si l\'une d\'elles devrait compter, '+
+           'c\'est la règle qu\'il faut reprendre, pas le chiffre.'});
+  }
+
   h+='<div class="tdb-cols"><div class="tdb-pile">'+gauche+gauche2+'</div>'+
-     '<div class="tdb-pile">'+droite+droite2+droite3+'</div></div>';
+     '<div class="tdb-pile">'+droite+droite2+droite3+droite4+'</div></div>';
   return h;
 }
 

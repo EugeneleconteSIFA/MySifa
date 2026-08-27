@@ -42,7 +42,9 @@ jobs:
 
       - name: Marqueurs de conflit
         run: |
-          if git grep -nE '^(<<<<<<<|>>>>>>>|\|\|\|\|\|\|\|)' -- '*.py' '*.js' '*.css' '*.md'; then
+          # Pas de '*.md' : .claude/rules/git-conflits.md et l'archive du
+          # CLAUDE.md documentent ces marqueurs, c'est leur sujet.
+          if git grep -nE '^(<<<<<<<|>>>>>>>|\|\|\|\|\|\|\|)' -- '*.py' '*.js' '*.css'; then
             echo "::error::Marqueurs de conflit git non resolus"
             exit 1
           fi
