@@ -2287,6 +2287,10 @@ function tdbVide(txt){return '<div class="tdb-vide">'+esc(txt)+'</div>';}
 // Un montant se lit d'un coup d'œil ou ne se lit pas : au-delà du millier on
 // abrège, et le titre porte la valeur exacte.
 function tdbEurParts(v){
+  // `Number(null)` vaut 0, et `isFinite(0)` est vrai : sans ce garde, une
+  // valeur absente s'affichait « 0 € » — soit exactement le contraire de ce
+  // qu'on veut dire quand le montant n'est pas calculable.
+  if(v==null||v==='')return null;
   const n=Number(v);
   if(!isFinite(n))return null;
   const a=Math.abs(n);
@@ -2474,17 +2478,10 @@ function htmlTdbAdv(d){
       va:'#/commandes?position=0&ratt=non',titre:d.formules.sans_dossier})+
     '</div>';
 
-  // Les lignes que RVGI ne solde jamais. Les laisser dans « en retard »
-  // faisait remonter des retards de 4 200 jours et rendait la tuile inutile.
-  if(dor&&dor.lignes){
-    h+='<div class="tdb-alerte" style="border-color:var(--border);background:var(--card)">'+
-      '<span>🕸</span><span><b>'+fmtNb(dor.commandes,0)+' commandes dormantes</b> ('+
-      fmtNb(dor.lignes,0)+' lignes) — expédition passée depuis plus de '+
-      fmtNb(c.jours_dormant||90,0)+' jours, jamais soldées dans RVGI. Elles sont '+
-      'hors du compte « en retard » : ce n\'est plus un retard, c\'est du ménage à faire '+
-      'dans le carnet. <button type="button" class="btn plus" style="margin-left:6px" '+
-      'data-va="#/commandes?position=0&jusqua='+encodeURIComponent(dor.avant||'')+'">Les voir →</button></span></div>';
-  }
+  // Les lignes dormantes restent exclues du compte « en retard » — sans ça
+  // la tuile remontait des retards de 4 200 jours — mais on ne les affiche
+  // plus : leur nombre relève d'un doute sur le miroir, pas d'une action ADV.
+  // Le filtre du carnet reste accessible par l'écran Commandes.
 
   // ── En retard : la liste d'action ──
   let corps;
@@ -2655,6 +2652,29 @@ function tdbPanControlePrix(d){
 
     // 1. Ce que l'unité de vente contient vraiment. C'est LA question : si
     //    `vuv` vaut 1 sur des lignes vendues au mille, tout est ×1000.
+    // Aucune colonne de total connue : il faut trouver son vrai nom. On
+    // liste les colonnes numériques de la table avec leur ordre de grandeur —
+    // celle dont la moyenne ressemble à un montant de ligne est la bonne.
+    if((dg.candidates_total||[]).length){
+      corps+='<div class="tdb-alerte" style="margin:11px 13px"><span>⚠</span><span>'+
+        '<b>Pas de colonne de total HT sur '+esc(dg.table)+'.</b> Les montants tirés de '+
+        'cette table ne sont pas affichés — un chiffre faux d\'un facteur mille serait pire '+
+        'que pas de chiffre. Ci-dessous les colonnes numériques de la table : celle dont la '+
+        'moyenne ressemble à un montant de ligne est celle à ajouter dans '+
+        '<code>erp_tdb.COLS_TOTAL_HT</code>.</span></div>';
+      corps+='<table class="tdb-t"><thead><tr><th>Colonne</th><th class="n">Lignes</th>'+
+        '<th class="n">Moyenne</th><th class="n">Min</th><th class="n">Max</th>'+
+        '</tr></thead><tbody>';
+      (dg.candidates_total||[]).slice(0,18).forEach(x=>{
+        corps+='<tr><td class="fort">'+esc(x.colonne)+'</td>'+
+          '<td class="n">'+fmtNb(x.lignes,0)+'</td>'+
+          '<td class="n">'+fmtNb(x.moyenne,2)+'</td>'+
+          '<td class="n">'+fmtNb(x.mini,2)+'</td>'+
+          '<td class="n">'+fmtNb(x.maxi,2)+'</td></tr>';
+      });
+      corps+='</tbody></table>';
+    }
+
     // Le comparatif : le même mois calculé avec chaque diviseur candidat.
     // C'est la question à trancher, elle passe donc en tête du panneau.
     if((dg.comparatif||[]).length){
@@ -2766,7 +2786,10 @@ function htmlTdbDirection(d){
       s:pourcent(fa.mois,fa.mois_n1,'vs même mois l\'an dernier'),
       sTon:ton(fa.mois,fa.mois_n1),va:'#/factures',titre:d.formules.facture})+
     tdbTuile({k:'Carnet restant',v:tdbEur(ca.montant),ton:'neu',
-      s:ca.lignes!=null?(fmtNb(ca.lignes,0)+' lignes à livrer'):'',
+      s:(ca.montant==null&&ca.lignes!=null)
+        ? (fmtNb(ca.lignes,0)+' lignes — montant non calculable')
+        : (ca.lignes!=null?(fmtNb(ca.lignes,0)+' lignes à livrer'):''),
+      sTon:ca.montant==null?'warn':'',
       va:'#/commandes?position=0',titre:d.formules.encours})+
     '</div>';
 
@@ -2809,12 +2832,14 @@ function htmlTdbDirection(d){
         '<td class="ref">'+esc(fmtId(l.numero))+'</td>'+
         '<td class="fort coupe">'+esc(l.client||'—')+'</td>'+
         '<td class="n">'+fmtNb(l.lignes,0)+'</td>'+
-        '<td class="n" title="'+esc(tdbEurExact(l.montant))+'">'+fmtNb(l.montant,0)+' €</td>'+
+        '<td class="n" title="'+esc(tdbEurExact(l.montant))+'">'+
+          (l.montant==null?'—':(fmtNb(l.montant,0)+' €'))+'</td>'+
         '<td class="n">'+esc(tdbJourCourt(l.expedition))+'</td></tr>';
     });
     t+='<tr><td class="fort">'+fmtNb(hier.commandes,0)+' commandes</td><td></td>'+
        '<td class="n fort">'+fmtNb(hier.lignes,0)+'</td>'+
-       '<td class="n fort">'+fmtNb(hier.montant,0)+' €</td><td></td></tr>';
+       '<td class="n fort">'+(hier.montant==null?'—':(fmtNb(hier.montant,0)+' €'))+
+       '</td><td></td></tr>';
     t+='</tbody></table>';
   }
   const gauche2=tdbPan({titre:'Hier — commandes rentrées',cpt:esc(tdbJourCourt(hier.date)),
@@ -2838,8 +2863,8 @@ function htmlTdbDirection(d){
       '</span><span>'+esc(tdbJourCourt(jours[jours.length-1].jour))+'</span></div>';
   }
   const droite=tdbPan({titre:'Prise de commande',cpt:'30 jours',corps:j,
-    note:'Les jours creux — week-ends, fériés — restent à leur place : les masquer ferait croire '+
-         'à une activité continue.'});
+    note:'Jours ouvrés seulement. Un lundi sans commande reste à sa place, à zéro — c\'est '+
+         'une information ; vingt-deux samedis à zéro n\'en sont pas une.'});
 
   // ── Facturable par ancienneté ──
   let fbc;
@@ -2857,8 +2882,9 @@ function htmlTdbDirection(d){
   }
   const droite2=tdbPan({titre:'Facturable par ancienneté',
     cpt:tdbEurTxt(fb.montant),corps:fbc,
-    note:'Valorisé au prix unitaire de la commande d\'origine : le BL ne porte pas de prix. '+
-         'L\'écart avec la facture réelle — remises de pied, port — est normal.'});
+    note:'Part non facturée du total HT de la ligne de commande d\'origine, au prorata de '+
+         '(quantité livrée − quantité facturée) : le BL ne porte pas de montant. L\'écart '+
+         'avec la facture réelle — remises de pied, port — reste normal.'});
 
   // ── Top clients ──
   const tc=d.top_clients||[];

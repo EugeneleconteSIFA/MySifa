@@ -218,7 +218,8 @@ def _bornes(aujourdhui=None):
         "fin_mois": ((debut_mois + timedelta(days=32)).replace(day=1)
                      - timedelta(days=1)).isoformat(),
         "fin_semaine": (j + timedelta(days=7)).isoformat(),
-        "il_y_a_30j": (j - timedelta(days=29)).isoformat(),
+        # Trente jours ouvrés remontent à environ six semaines.
+        "il_y_a_30j": (j - timedelta(days=41)).isoformat(),
         "debut_mois_n1": debut_mois_n1.isoformat(),
         "fin_mois_n1": fin_mois_n1.isoformat(),
         "debut_serie": (debut_mois.replace(day=1) - timedelta(days=340)).replace(day=1).isoformat(),
@@ -472,6 +473,18 @@ def direction():
 
         montant_cde = _expr_montant(sch, "cde_ligne", "l")
         montant_fac = _expr_montant(sch, "vte_ligne", "l")
+        # `NULL` plutôt que rien : les requêtes tournent, les comptages
+        # restent justes, et seuls les montants ressortent vides.
+        m_cde = montant_cde or "NULL"
+        m_fac = montant_fac or "NULL"
+        if montant_cde is None:
+            sortie["indispo"].append(
+                "Montants des commandes : aucune colonne de total HT sur "
+                "cde_ligne — voir « Contrôle du calcul »")
+        if montant_fac is None:
+            sortie["indispo"].append(
+                "Montants des factures : aucune colonne de total HT sur "
+                "vte_ligne — voir « Contrôle du calcul »")
         sortie["diagnostic_prix"] = [
             _diagnostic_complet(conn, sch, "cde_ligne", "l",
                                 "cde_entete", "amjc", b["debut_mois"]),
@@ -480,24 +493,23 @@ def direction():
         ]
 
         # ── Le rentré : la veille, le mois, la série ─────────────────────
-        if montant_cde is None or not sch.a("cde_entete", "numero", "amjc"):
+        if not sch.a("cde_entete", "numero", "amjc"):
             sortie["indispo"].append(
-                "Rentré : " + (sch.manque("cde_entete", "numero", "amjc")
-                               or "aucune colonne de montant sur cde_ligne"))
+                "Rentré : " + sch.manque("cde_entete", "numero", "amjc"))
             sortie["hier"] = None
             sortie["rentre"] = None
             sortie["jours"] = []
         else:
-            sortie["hier"] = _rentre_du_jour(conn, sch, montant_cde, b["veille"])
+            sortie["hier"] = _rentre_du_jour(conn, sch, m_cde, b["veille"])
             sortie["rentre"] = {
                 "mois": _nombre(_un(conn, """
                     SELECT SUM(%s) FROM cde_ligne l
                       JOIN cde_entete e ON e.numero = l.numero
-                     WHERE substr(e.amjc,1,10) >= ?""" % montant_cde, (b["debut_mois"],))),
+                     WHERE substr(e.amjc,1,10) >= ?""" % m_cde, (b["debut_mois"],))),
                 "mois_n1": _nombre(_un(conn, """
                     SELECT SUM(%s) FROM cde_ligne l
                       JOIN cde_entete e ON e.numero = l.numero
-                     WHERE substr(e.amjc,1,10) >= ? AND substr(e.amjc,1,10) < ?""" % montant_cde,
+                     WHERE substr(e.amjc,1,10) >= ? AND substr(e.amjc,1,10) < ?""" % m_cde,
                     (b["debut_mois_n1"], b["fin_mois_n1"]))),
             }
             sortie["jours"] = _calendrier(
@@ -506,25 +518,24 @@ def direction():
                       FROM cde_ligne l JOIN cde_entete e ON e.numero = l.numero
                      WHERE substr(e.amjc,1,10) >= ? AND substr(e.amjc,1,10) <= ?
                   GROUP BY jour ORDER BY jour
-                """ % montant_cde, (b["il_y_a_30j"], b["aujourdhui"])),
+                """ % m_cde, (b["il_y_a_30j"], b["aujourdhui"])),
                 b["il_y_a_30j"], b["aujourdhui"])
 
         # ── Le facturé ───────────────────────────────────────────────────
-        if montant_fac is None or not sch.a("vte_entete", "numero", "amjf"):
+        if not sch.a("vte_entete", "numero", "amjf"):
             sortie["indispo"].append(
-                "Facturé : " + (sch.manque("vte_entete", "numero", "amjf")
-                                or "aucune colonne de montant sur vte_ligne"))
+                "Facturé : " + sch.manque("vte_entete", "numero", "amjf"))
             sortie["facture"] = None
         else:
             sortie["facture"] = {
                 "mois": _nombre(_un(conn, """
                     SELECT SUM(%s) FROM vte_ligne l
                       JOIN vte_entete e ON e.numero = l.numero
-                     WHERE substr(e.amjf,1,10) >= ?""" % montant_fac, (b["debut_mois"],))),
+                     WHERE substr(e.amjf,1,10) >= ?""" % m_fac, (b["debut_mois"],))),
                 "mois_n1": _nombre(_un(conn, """
                     SELECT SUM(%s) FROM vte_ligne l
                       JOIN vte_entete e ON e.numero = l.numero
-                     WHERE substr(e.amjf,1,10) >= ? AND substr(e.amjf,1,10) < ?""" % montant_fac,
+                     WHERE substr(e.amjf,1,10) >= ? AND substr(e.amjf,1,10) < ?""" % m_fac,
                     (b["debut_mois_n1"], b["fin_mois_n1"]))),
             }
             sortie["top_clients"] = _lignes(conn, """
@@ -532,23 +543,23 @@ def direction():
                   FROM vte_ligne l JOIN vte_entete e ON e.numero = l.numero
                  WHERE substr(e.amjf,1,10) >= ? AND COALESCE(e.rs,'') <> ''
               GROUP BY e.rs ORDER BY montant DESC LIMIT 6
-            """ % montant_fac, (b["debut_mois"],)) if sch.a("vte_entete", "rs") else []
+            """ % m_fac, (b["debut_mois"],)) if sch.a("vte_entete", "rs") else []
 
         # ── La série 12 mois, les deux courbes sur la même échelle ───────
-        sortie["serie"] = _serie_12_mois(conn, sch, montant_cde, montant_fac, b)
+        sortie["serie"] = _serie_12_mois(conn, sch, m_cde, m_fac, b)
 
         # ── Le facturable ────────────────────────────────────────────────
         sortie["facturable"] = _facturable(conn, sch, sortie)
 
         # ── L'encours du carnet ──────────────────────────────────────────
-        if montant_cde and sch.a("cde_ligne", "qtep", "lpos", "qte"):
+        if sch.a("cde_ligne", "qtep", "lpos", "qte"):
             sortie["carnet"] = {
                 "montant": _nombre(_un(conn, """
                     SELECT SUM(CASE WHEN l.qte > 0
-                                    THEN (%s) * (l.qtep * 1.0 / l.qte) ELSE 0 END)
+                                    THEN (%s) * (l.qtep * 1.0 / l.qte) ELSE NULL END)
                       FROM cde_ligne l
                      WHERE l.qtep > 0 AND COALESCE(l.lpos,0) <> ?
-                """ % montant_cde, (POS_SOLDEE,))),
+                """ % m_cde, (POS_SOLDEE,))),
                 "lignes": _entier(_un(conn,
                     "SELECT COUNT(*) FROM cde_ligne l WHERE l.qtep > 0 "
                     "AND COALESCE(l.lpos,0) <> ?", (POS_SOLDEE,))),
@@ -607,7 +618,7 @@ def _expr_diviseur(sch, table, alias):
 # calcule lui-même — la modale de détail les affiche « Total HT net » et
 # « Total HT brut » — et un total lu vaut infiniment mieux qu'un total
 # reconstruit à partir de colonnes dont personne n'a la définition.
-COLS_TOTAL_HT = ("htn", "htb", "mtht", "totht")
+COLS_TOTAL_HT = ("htn", "htb", "mtht", "totht", "mht", "htnet", "mtnet", "montht")
 
 
 def _expr_montant(sch, table, alias):
@@ -631,7 +642,12 @@ def _expr_montant(sch, table, alias):
     for col in COLS_TOTAL_HT:
         if sch.a(table, col):
             return "COALESCE(%s.%s, 0)" % (alias, col)
-    return _expr_montant_reconstruit(sch, table, alias)
+    # Aucune colonne de total : la reconstruction reste calculée pour le
+    # comparatif du diagnostic, mais elle ne remonte PAS aux tuiles. Un
+    # chiffre d'affaires faux d'un facteur mille est pire que pas de chiffre
+    # du tout — on le lit, on décide dessus, et personne ne voit passer
+    # l'erreur.
+    return None
 
 
 def _expr_montant_reconstruit(sch, table, alias):
@@ -792,7 +808,31 @@ def _diagnostic_prix(conn, sch, table, alias):
     if not reconstruit:
         inconnus = []
 
-    return {"table": table, "colonnes": presentes, "echantillon": rows,
+    # Toutes les colonnes numériques de la table, avec leur ordre de grandeur.
+    # Quand aucune colonne de total connue n'existe, c'est là-dedans qu'elle
+    # se cache sous un autre nom — et une moyenne parle plus qu'un nom.
+    candidates_total = []
+    if reconstruit:
+        for c in sorted(sch.cols(table)):
+            if c in ("id", "numero", "ligne", "corbeille") or c.startswith("code"):
+                continue
+            r = _lignes(conn, """
+                SELECT COUNT(*) AS n, AVG(%s.%s) AS moyenne,
+                       MIN(%s.%s) AS mini, MAX(%s.%s) AS maxi
+                  FROM %s %s
+                 WHERE typeof(%s.%s) IN ('integer','real') AND %s.%s <> 0
+            """ % (alias, c, alias, c, alias, c, table, alias, alias, c, alias, c))
+            if r and _entier(r[0]["n"]) > 0:
+                candidates_total.append({
+                    "colonne": c, "lignes": _entier(r[0]["n"]),
+                    "moyenne": _nombre(r[0]["moyenne"]),
+                    "mini": _nombre(r[0]["mini"]), "maxi": _nombre(r[0]["maxi"]),
+                })
+        candidates_total.sort(key=lambda x: -(x["lignes"] or 0))
+
+    return {"table": table, "colonnes": presentes,
+            "colonnes_toutes": sorted(sch.cols(table)),
+            "candidates_total": candidates_total, "echantillon": rows,
             "net_plat": net_plat, "formule": montant, "reconstruit": reconstruit,
             "diviseurs": DIVISEUR_UNITE,
             "unites": unites, "unites_inconnues": inconnus, "lourdes": lourdes}
@@ -847,24 +887,28 @@ def _rentre_du_jour(conn, sch, montant, jour):
 
 
 def _calendrier(rows, debut, fin):
-    """Trente jours de suite, y compris ceux où rien n'est rentré.
+    """Les jours OUVRÉS de la période, y compris ceux où rien n'est rentré.
 
-    Un jour sans commande vaut zéro, il ne vaut pas « rien » : la requête ne
-    rend que les jours peuplés, et une bande qui les recollerait montrerait
-    une activité continue là où il y a des week-ends.
+    Un lundi sans commande vaut zéro et doit se voir : la requête ne rend que
+    les jours peuplés, et recoller les trous montrerait une activité continue
+    là où il y a des creux. Les samedis et dimanches, eux, ne sont pas des
+    creux — personne ne prend de commande le week-end. Vingt-deux barres à
+    zéro par mois n'apprennent rien et écrasent l'échelle des autres.
     """
-    par_jour = {str(r.get("jour") or ""): _nombre(r.get("montant")) or 0.0 for r in rows}
+    par_jour = {str(r.get("jour") or "")[:10]: _nombre(r.get("montant")) or 0.0
+                for r in rows}
     j = date.fromisoformat(debut)
     stop = date.fromisoformat(fin)
     out = []
     while j <= stop:
-        cle = j.isoformat()
-        out.append({"jour": cle, "montant": par_jour.get(cle, 0.0)})
+        if j.weekday() < 5:          # 5 = samedi, 6 = dimanche
+            cle = j.isoformat()
+            out.append({"jour": cle, "montant": par_jour.get(cle, 0.0)})
         j += timedelta(days=1)
     return out
 
 
-def _serie_12_mois(conn, sch, montant_cde, montant_fac, b):
+def _serie_12_mois(conn, sch, m_cde, m_fac, b):
     """Rentré et facturé mois par mois — deux séries, une seule échelle."""
     par_mois = {}
 
@@ -876,21 +920,21 @@ def _serie_12_mois(conn, sch, montant_cde, montant_fac, b):
             par_mois.setdefault(mois, {"mois": mois, "rentre": None, "facture": None})
             par_mois[mois][cle] = _nombre(r.get("montant"))
 
-    if montant_cde and sch.a("cde_entete", "numero", "amjc"):
+    if sch.a("cde_entete", "numero", "amjc"):
         _verser(_lignes(conn, """
             SELECT substr(e.amjc, 1, 7) AS mois, SUM(%s) AS montant
               FROM cde_ligne l JOIN cde_entete e ON e.numero = l.numero
              WHERE substr(e.amjc,1,10) >= ? AND substr(e.amjc,1,10) <= ?
           GROUP BY mois ORDER BY mois
-        """ % montant_cde, (b["debut_serie"], b["fin_mois"])), "rentre")
+        """ % m_cde, (b["debut_serie"], b["fin_mois"])), "rentre")
 
-    if montant_fac and sch.a("vte_entete", "numero", "amjf"):
+    if sch.a("vte_entete", "numero", "amjf"):
         _verser(_lignes(conn, """
             SELECT substr(e.amjf, 1, 7) AS mois, SUM(%s) AS montant
               FROM vte_ligne l JOIN vte_entete e ON e.numero = l.numero
              WHERE substr(e.amjf,1,10) >= ? AND substr(e.amjf,1,10) <= ?
           GROUP BY mois ORDER BY mois
-        """ % montant_fac, (b["debut_serie"], b["fin_mois"])), "facture")
+        """ % m_fac, (b["debut_serie"], b["fin_mois"])), "facture")
 
     serie = sorted(par_mois.values(), key=lambda x: x["mois"])[-12:]
     for m in serie:
@@ -926,10 +970,14 @@ def _facturable(conn, sch, sortie):
             break
     if total_cde:
         valeur = ("CASE WHEN COALESCE(c.qte, 0) > 0 THEN %s * "
-                  "((l.qte - COALESCE(l.qtefac, 0)) / c.qte) ELSE 0 END" % total_cde)
+                  "((l.qte - COALESCE(l.qtefac, 0)) / c.qte) ELSE NULL END" % total_cde)
     else:
-        coef = _expr_diviseur(sch, "cde_ligne", "c")
-        valeur = ("(l.qte - COALESCE(l.qtefac, 0)) * COALESCE(c.pun, 0) / %s" % coef)
+        # Pas de total HT sur la ligne de commande : le facturable n'est pas
+        # chiffrable. Le reconstruire à partir de `pun` rejouerait l'erreur
+        # d'un facteur mille — on rend le nombre de BL, pas un faux montant.
+        valeur = "NULL"
+        sortie["indispo"].append(
+            "Facturable : aucune colonne de total HT sur cde_ligne")
     base = """
         FROM liv_ligne l
         LEFT JOIN cde_ligne c ON c.numero = l.numcde AND c.ligne = l.lignecde

@@ -6054,7 +6054,7 @@ function renderCommentModal(){
   let submitBtn;
 
   const ta = h('textarea',{
-    placeholder: seuil ? 'Ex. glassine du raccord fournisseur, échenillage à reprendre…' : 'Votre commentaire…',
+    placeholder: seuil ? 'En deux mots…' : 'Votre commentaire…',
     rows: seuil ? '4' : '3',
   });
   ta.value = S.commentText||'';
@@ -6074,14 +6074,12 @@ function renderCommentModal(){
   return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget && !seuil) fermer();}},
     h('div',{className:'fab-modal'},
       h('div',{className:'fab-modal-title'},
-        svgIcon(seuil?'alert':'message-square',18),
-        seuil ? ' Seuil atteint — expliquez en deux mots' : ' Commenter la saisie'),
-      h('div',{className:'fab-modal-sub'},
-        seuil ? (seuil.message||'') : 'Ce commentaire sera visible dans la fiche de production MyProd.'),
-      seuil ? h('div',{className:'fab-modal-sub'},
-        'La saisie est enregistrée. Ce que vous écrivez ici partira dans le rapport de prod.') : null,
+        svgIcon('message-square',18),
+        seuil ? " Que s'est-il passé ?" : ' Commenter la saisie'),
+      seuil ? null : h('div',{className:'fab-modal-sub'},
+        'Ce commentaire sera visible dans la fiche de production MyProd.'),
       h('div',{className:'fab-field'},
-        h('label',null, seuil ? "Qu'est-ce qui se passe ?" : 'Commentaire'),
+        seuil ? null : h('label',null,'Commentaire'),
         ta
       ),
       h('div',{className:'fab-modal-btns'},

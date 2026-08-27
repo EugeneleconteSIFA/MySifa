@@ -77,6 +77,49 @@ ROLE_SECTIONS: Dict[str, List[str]] = {
     ROLE_COMMERCIAL:     ["summary_light", "expes"],
 }
 
+# Libellés des sections — la page /reports/weekly s'en sert pour afficher le
+# sommaire du rapport. Une section ajoutée à ROLE_SECTIONS sans libellé ici
+# apparaît sous sa clé technique : c'est voulu, ça se voit tout de suite.
+SECTION_LABELS: Dict[str, str] = {
+    "summary":             "Résumé de la semaine",
+    "summary_light":       "Résumé de la semaine",
+    "prod_by_machine":     "Production par machine",
+    "arrets_expliques":    "Arrêts expliqués",
+    "dossiers_fab_detail": "Détail par dossier",
+    "top_dossiers":        "Top dossiers",
+    "flop_dossiers":       "Dossiers à améliorer",
+    "sanity_global":       "Sanity score global",
+    "sanity_by_operateur": "Sanity par opérateur",
+    "stock_freshness":     "Fraîcheur des stocks",
+    "stock_from_prod":     "Cohérence prod vers stock",
+    "repiquage":           "Repiquage",
+    "expes":               "Expéditions",
+    "alerts":              "Alertes",
+    "alerts_fab":          "Alertes",
+    "alerts_log":          "Alertes",
+}
+
+
+def sections_pour_role(role: str) -> Dict[str, Any]:
+    """Ce que ce rôle reçoit, et s'il tombe sur la vue par défaut.
+
+    Le sélecteur de rôle de /reports/weekly propose des rôles qui n'ont pas
+    d'entrée dans ROLE_SECTIONS — ils reçoivent la vue direction sans que rien
+    ne le dise. Autant l'afficher.
+    """
+    connu = role in ROLE_SECTIONS
+    cles = ROLE_SECTIONS.get(role, ROLE_SECTIONS[ROLE_DIRECTION])
+    vues: List[Dict[str, str]] = []
+    deja: set = set()
+    for c in cles:
+        lbl = SECTION_LABELS.get(c, c)
+        if lbl in deja:
+            continue
+        deja.add(lbl)
+        vues.append({"cle": c, "label": lbl})
+    return {"role": role, "connu": connu, "sections": vues}
+
+
 # Couleurs email (styles inline — pas de CSS vars)
 EMAIL_COLORS: Dict[str, str] = {
     "bg":     "#0a0e17",
