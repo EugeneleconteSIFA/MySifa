@@ -130,79 +130,113 @@ EOF
 echo "   Ces branches portent du travail jamais fusionné : à relire avant de décider."
 
 # ── Passage à l'acte ──────────────────────────────────────────────────────────
-echo
-if [ "$NB" -eq 0 ]; then
-  exit 0
-fi
+# Le distant et le local sont deux passes indépendantes : ne rien avoir à
+# supprimer côté distant ne doit PAS empêcher --local de tourner. (Première
+# version du script : un `exit 0` ici sautait tout le bloc local.)
 
-if [ "$APPLIQUER" -eq 0 ]; then
+DISTANT=1
+[ "$NB" -eq 0 ] && DISTANT=0
+
+if [ "$DISTANT" -eq 1 ] && [ "$APPLIQUER" -eq 0 ]; then
   echo "SIMULATION — rien n'a été supprimé."
-  echo "Relance avec --appliquer pour supprimer ces $NB branche(s)."
-  exit 0
+  echo "Relance avec --appliquer pour supprimer ces $NB branche(s) distante(s)."
+  DISTANT=0
 fi
 
-if [ "$FORCE" -eq 0 ]; then
+if [ "$DISTANT" -eq 1 ] && [ "$FORCE" -eq 0 ]; then
   printf 'Supprimer ces %s branche(s) sur %s ? [oui/non] ' "$NB" "$REMOTE"
   read -r reponse
   case "$reponse" in
     oui|OUI|o|O|y|yes) ;;
-    *) echo "Annulé."; exit 0 ;;
+    *) echo "Annulé côté distant."; DISTANT=0 ;;
   esac
 fi
 
-{
-  echo "# Branches supprimées le $(date '+%Y-%m-%d %H:%M:%S')"
-  echo "# Restauration : git push $REMOTE <sha>:refs/heads/<nom>"
-  echo "# nom<TAB>sha<TAB>date du dernier commit"
-  printf '%b' "$JOURNAL_LIGNES"
-} > "$JOURNAL"
-echo "Journal de restauration écrit dans $JOURNAL"
-echo
+if [ "$DISTANT" -eq 1 ]; then
+  {
+    echo "# Branches supprimées le $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "# Restauration : git push $REMOTE <sha>:refs/heads/<nom>"
+    echo "# nom<TAB>sha<TAB>date du dernier commit"
+    printf '%b' "$JOURNAL_LIGNES"
+  } > "$JOURNAL"
+  echo "Journal de restauration écrit dans $JOURNAL"
+  echo
 
-# Par paquets de 20 : une ligne de commande de 50 branches finit par gêner
-# certains serveurs, et un paquet qui échoue n'emporte pas les autres.
-LOT=""
-COMPTE=0
-for b in $A_SUPPRIMER; do
-  LOT="$LOT $b"
-  COMPTE=$((COMPTE + 1))
-  if [ "$COMPTE" -ge 20 ]; then
+  # Par paquets de 20 : une ligne de commande de 50 branches finit par gêner
+  # certains serveurs, et un paquet qui échoue n'emporte pas les autres.
+  LOT=""
+  COMPTE=0
+  for b in $A_SUPPRIMER; do
+    LOT="$LOT $b"
+    COMPTE=$((COMPTE + 1))
+    if [ "$COMPTE" -ge 20 ]; then
+      # shellcheck disable=SC2086
+      git push "$REMOTE" --delete $LOT
+      LOT=""
+      COMPTE=0
+    fi
+  done
+  if [ -n "$LOT" ]; then
     # shellcheck disable=SC2086
     git push "$REMOTE" --delete $LOT
-    LOT=""
-    COMPTE=0
   fi
-done
-if [ -n "$LOT" ]; then
-  # shellcheck disable=SC2086
-  git push "$REMOTE" --delete $LOT
+
+  if [ "$FETCH" -eq 1 ]; then
+    git fetch "$REMOTE" --prune --quiet
+  fi
+  echo
+  echo "$NB branche(s) distante(s) supprimée(s)."
 fi
 
-[ "$FETCH" -eq 1 ] && git fetch "$REMOTE" --prune --quiet
-echo
-echo "$NB branche(s) distante(s) supprimée(s)."
-
 # ── Branches locales ──────────────────────────────────────────────────────────
+# `git branch -d` (jamais -D) : git refuse de lui-même toute branche portant du
+# travail non fusionné. Ce refus est la sauvegarde, pas une erreur.
+
 if [ "$LOCAL" -eq 1 ]; then
   echo
-  echo "→ Branches locales fusionnées dans $BASE :"
+  echo "→ Branches locales entièrement fusionnées dans $BASE :"
   LOCALES=""
+  NB_LOC=0
   while read -r nom; do
     [ -z "${nom:-}" ] && continue
     est_protegee "$nom" && continue
     echo "   $nom"
     LOCALES="$LOCALES $nom"
+    NB_LOC=$((NB_LOC + 1))
   done <<EOF
 $(git branch --merged "$BASE" --format='%(refname:short)')
 EOF
-  if [ -n "$LOCALES" ]; then
-    # -d et non -D : git refuse toute branche qui porterait du travail non
-    # fusionné, même si la liste ci-dessus la croit propre.
+
+  if [ "$NB_LOC" -eq 0 ]; then
+    echo "   (aucune)"
+  elif [ "$APPLIQUER" -eq 0 ]; then
+    echo
+    echo "SIMULATION — ces $NB_LOC branche(s) locale(s) ne sont pas supprimées."
+    echo "Relance avec --local --appliquer pour les supprimer."
+  else
+    echo
     # shellcheck disable=SC2086
     git branch -d $LOCALES
-  else
-    echo "   (aucune)"
   fi
+
+  echo
+  echo "→ Branches locales NON fusionnées (laissées en place) :"
+  RESTE=0
+  while IFS='|' read -r nom amont; do
+    [ -z "${nom:-}" ] && continue
+    est_protegee "$nom" && continue
+    n=$(git rev-list --count "$BASE..$nom" 2>/dev/null || echo "?")
+    if [ -n "$amont" ] && git rev-parse --verify -q "$amont" >/dev/null 2>&1; then
+      etat="distante encore là"
+    else
+      etat="distante supprimée — seule copie"
+    fi
+    printf '   %-40s %s commit(s) hors staging · %s\n' "$nom" "$n" "$etat"
+    RESTE=$((RESTE + 1))
+  done <<EOF
+$(git branch --no-merged "$BASE" --format='%(refname:short)|%(upstream:short)')
+EOF
+  [ "$RESTE" -eq 0 ] && echo "   (aucune)"
 fi
 
 echo
