@@ -373,6 +373,130 @@
     return '<td style="padding:8px 12px;font-size:12px;color:var(--text2);vertical-align:top;' + (style || '') + '">' + html + '</td>';
   }
 
+  // ─ Note de santé ─
+  // Le score est calculé côté serveur ; la vue l'affiche ET affiche ce qui
+  // coûte des points. Une note qui baisse sans dire de quoi ne sert à rien.
+  function _dsNoteCouleur(lettre) {
+    if (lettre === 'A' || lettre === 'B') return 'var(--success, #16a34a)';
+    if (lettre === 'C') return 'var(--warn)';
+    return 'var(--danger)';
+  }
+
+  function _dsNoteHtml(note) {
+    if (!note) return '';
+    const couleur = _dsNoteCouleur(note.lettre);
+    const criteres = note.criteres || [];
+    const perdants = criteres.filter(function (c) { return c.perdu > 0; });
+    const sains = criteres.filter(function (c) { return !c.perdu; });
+
+    let out = '<div style="background:var(--card);border:1px solid var(--border);border-left:4px solid '
+        + couleur + ';border-radius:12px;padding:14px 16px;margin-bottom:14px">'
+      + '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">'
+        + '<div style="display:flex;align-items:baseline;gap:3px">'
+          + '<span style="font-size:34px;font-weight:800;line-height:1;color:' + couleur + '">'
+            + _prEsc(String(note.score)) + '</span>'
+          + '<span style="font-size:13px;font-weight:700;color:var(--muted)">/100</span>'
+        + '</div>'
+        + '<div style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;'
+          + 'border-radius:8px;background:' + couleur + ';color:var(--bg);font-size:15px;font-weight:800">'
+          + _prEsc(note.lettre) + '</div>'
+        + '<div style="flex:1;min-width:180px">'
+          + '<div style="font-size:13px;font-weight:700;color:var(--text)">Note de santé du dépôt — '
+            + _prEsc(note.libelle) + '</div>'
+          + '<div style="font-size:11px;color:var(--muted);margin-top:2px">'
+            + (perdants.length
+                ? perdants.length + ' critère' + (perdants.length > 1 ? 's' : '') + ' à corriger · '
+                  + note.perdu + ' point' + (note.perdu > 1 ? 's' : '') + ' perdu' + (note.perdu > 1 ? 's' : '')
+                : 'Aucun point perdu')
+          + '</div>'
+        + '</div>'
+      + '</div>'
+      + '<div style="height:6px;border-radius:4px;background:var(--bg);margin-top:12px;overflow:hidden">'
+        + '<div style="height:100%;width:' + Math.max(2, Math.min(100, note.score)) + '%;background:' + couleur + '"></div>'
+      + '</div>';
+
+    if (perdants.length) {
+      out += '<div style="margin-top:12px;display:flex;flex-direction:column;gap:9px">'
+        + perdants.map(function (c) {
+            return '<div style="display:flex;gap:10px;align-items:flex-start">'
+              + '<span style="flex:0 0 auto;min-width:48px;text-align:center;font-size:11px;font-weight:800;'
+                + 'color:var(--warn);background:rgba(251,191,36,.14);border-radius:6px;padding:3px 6px">&minus;'
+                + _prEsc(String(c.perdu)) + ' pt' + (c.perdu > 1 ? 's' : '') + '</span>'
+              + '<div style="flex:1;min-width:0">'
+                + '<div style="font-size:12.5px;font-weight:700;color:var(--text)">' + _prEsc(c.label) + '</div>'
+                + '<div style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-top:1px">'
+                  + _prEsc(c.detail) + '</div>'
+              + '</div></div>';
+          }).join('')
+        + '</div>';
+    }
+    if (sains.length) {
+      out += '<div style="margin-top:11px;padding-top:9px;border-top:1px solid var(--border);'
+        + 'font-size:11px;color:var(--muted);line-height:1.55">Sans reproche&nbsp;: '
+        + sains.map(function (c) { return _prEsc(c.label.toLowerCase()); }).join(', ') + '.</div>';
+    }
+    return out + '</div>';
+  }
+
+  // Commande de ménage — construite ici, jamais exécutée côté serveur : la
+  // suppression de branches appartient au terminal, pas à une page web.
+  function _dsCommandeMenage(branches) {
+    const mortes = (branches || [])
+      .filter(function (b) { return b.a_nettoyer; })
+      .map(function (b) { return b.nom; });
+    if (!mortes.length) return '';
+    return 'git fetch origin --prune\n'
+      + 'git push origin --delete ' + mortes.join(' ') + '\n'
+      + 'git remote prune origin';
+  }
+
+  function _dsMenageHtml(branches) {
+    const cmd = _dsCommandeMenage(branches);
+    if (!cmd) return '';
+    return '<div style="margin-top:10px">'
+      + '<button type="button" onclick="dsCopierMenage()"'
+        + ' onmouseover="this.style.background=\'var(--card)\'"'
+        + ' onmouseout="this.style.background=\'var(--bg)\'"'
+        + ' style="background:var(--bg);border:1px solid var(--border);border-radius:8px;'
+        + 'padding:7px 13px;font-family:inherit;font-size:12px;font-weight:700;'
+        + 'color:var(--text);cursor:pointer">Copier la commande de suppression</button>'
+      + '<div style="margin-top:8px;max-height:130px;overflow:auto;background:var(--bg);'
+        + 'border:1px solid var(--border);border-radius:8px;padding:9px 11px;'
+        + 'font-family:\'SFMono-Regular\',Menlo,monospace;font-size:11px;color:var(--text2);'
+        + 'white-space:pre-wrap;word-break:break-all;line-height:1.6">' + _prEsc(cmd) + '</div>'
+      + '</div>';
+  }
+
+  function dsCopierMenage() {
+    const cmd = _dsCommandeMenage((_dsData || {}).branches);
+    if (!cmd) return;
+    const fini = function (ok) {
+      if (typeof showToast === 'function') {
+        showToast(ok ? 'Commande copiée — à coller dans ton terminal.'
+                     : 'Copie impossible — sélectionne la commande à la main.',
+                  ok ? 'success' : 'danger');
+      }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(cmd).then(function () { fini(true); },
+                                             function () { fini(false); });
+      return;
+    }
+    try {
+      const zone = document.createElement('textarea');
+      zone.value = cmd;
+      zone.style.position = 'fixed';
+      zone.style.opacity = '0';
+      document.body.appendChild(zone);
+      zone.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(zone);
+      fini(ok);
+    } catch (e) {
+      fini(false);
+    }
+  }
+
   // ─ Migrations ─
   function _dsMigrationsHtml(mig) {
     let out = '';
@@ -442,8 +566,11 @@
           + '</tr>';
         }).join('')
       + '</tbody></table></div>'
-      + '<div style="padding:8px 14px;font-size:11px;color:var(--muted);border-top:1px solid var(--border)">'
+      + '<div style="padding:10px 14px;border-top:1px solid var(--border)">'
+      + '<div style="font-size:11px;color:var(--muted);line-height:1.6">'
       + 'Une branche est signalée « à supprimer » quand elle est déjà fusionnée dans staging et sans activité depuis plus de deux semaines. La suppression se fait depuis ton terminal.'
+      + '</div>'
+      + _dsMenageHtml(branches)
       + '</div>';
   }
 
@@ -487,7 +614,7 @@
     const nbNettoyer = branches.filter(function (b) { return b.a_nettoyer; }).length;
     const nbActives = branches.filter(function (b) { return !b.fusionnee && !b.protegee; }).length;
 
-    let html = '';
+    let html = _dsNoteHtml(d.note);
 
     if (d.alertes && d.alertes.length) {
       html += '<div style="background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.40);border-left:4px solid var(--warn);border-radius:10px;padding:11px 15px;margin-bottom:14px">'
@@ -562,4 +689,5 @@
   window.phToggle = phToggle;
   window.loadDeploiementSante = loadDeploiementSante;
   window.dsToggle = dsToggle;
+  window.dsCopierMenage = dsCopierMenage;
 })();

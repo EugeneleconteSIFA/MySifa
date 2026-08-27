@@ -13,6 +13,8 @@ Ce qui est vérifié :
   - les branches fusionnées et dormantes sont marquées « à nettoyer », jamais
     main ni staging ;
   - l'état du dossier distingue modifiés, non suivis et verrou git ;
+  - la note sur 100 part de 100, plafonne chaque critère, ne descend jamais
+    sous 0 et justifie chaque point retiré ;
   - aucune des commandes git utilisées n'écrit dans le dépôt.
 """
 
@@ -31,7 +33,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-FONCTIONS = ("_git_lire", "_jours_depuis", "_migrations_etat", "_branches_etat", "_dossier_etat")
+FONCTIONS = ("_git_lire", "_jours_depuis", "_migrations_etat", "_branches_etat",
+             "_dossier_etat", "_note_sante")
 
 _ok = True
 
@@ -110,6 +113,7 @@ def charger(depot, conn):
         "_dt": _dt,
         "Path": Path,
         "Optional": __import__("typing").Optional,
+        "NOTE_TOLERANCE_BRANCHES": 5,
     }
     for s in segments:
         exec(s, ns)
@@ -241,6 +245,50 @@ def main():
         (depot / ".git" / "index.lock").write_text("", encoding="utf-8")
         ok("le verrou git est détecté", ns["_dossier_etat"]()["verrou_git"], True)
         (depot / ".git" / "index.lock").unlink()
+
+        print("\n--- note de santé ---")
+        note = ns["_note_sante"]
+        mig_ok = {"doublons": [], "en_attente": []}
+        dossier_ok = {"verrou_git": False, "nb_modifies": 0, "nb_non_suivis": 0}
+
+        parfait = note(mig_ok, [], dossier_ok)
+        ok("un dépôt sans reproche vaut 100", parfait["score"], 100)
+        ok("et décroche la lettre A", parfait["lettre"], "A")
+        ok("aucun critère ne coûte de point",
+           [c["cle"] for c in parfait["criteres"] if c["perdu"]], [])
+
+        # Cinq branches dormantes sont tolérées : la note ne bouge qu'au-delà.
+        cinq = note(mig_ok, [{"a_nettoyer": True} for _ in range(5)], dossier_ok)
+        ok("cinq branches dormantes ne coûtent rien", cinq["score"], 100)
+        sept = note(mig_ok, [{"a_nettoyer": True} for _ in range(7)], dossier_ok)
+        ok("la sixième et la septième coûtent 1 pt chacune", sept["score"], 98)
+
+        # Chaque critère est plafonné : un seul défaut ne peut pas tout emporter.
+        noyee = note(mig_ok, [{"a_nettoyer": True} for _ in range(500)], dossier_ok)
+        ok("les branches sont plafonnées à 25 points", noyee["score"], 75)
+
+        double = note({"doublons": [{"cle": "195"}], "en_attente": []}, [], dossier_ok)
+        ok("un numéro de migration en double coûte 15 pts", double["score"], 85)
+        ok("et le critère est cité en tête", double["criteres"][0]["cle"], "doublons")
+
+        verrou = note(mig_ok, [], dict(dossier_ok, verrou_git=True))
+        ok("un verrou git coûte 20 pts", verrou["score"], 80)
+
+        pire = note(
+            {"doublons": [{}, {}, {}], "en_attente": [{}] * 9},
+            [{"a_nettoyer": True} for _ in range(400)],
+            {"verrou_git": True, "nb_modifies": 99, "nb_non_suivis": 999},
+        )
+        ok("la note ne descend jamais sous 0", pire["score"], 0)
+        ok("le pire cas est noté E", pire["lettre"], "E")
+
+        reel = note(mig_ok, [{"a_nettoyer": True} for _ in range(48)],
+                    dict(dossier_ok, nb_non_suivis=115))
+        ok("l'état constaté le 27/08/2026 note C", reel["lettre"], "C")
+        ok("chaque point perdu est justifié",
+           all(c["detail"] for c in reel["criteres"] if c["perdu"]), True)
+        ok("les points perdus totalisent l'écart à 100",
+           sum(c["perdu"] for c in reel["criteres"]), 100 - reel["score"])
 
         print("\n--- consultation seule ---")
         src = io.open(ROOT / "app/routers/settings.py", encoding="utf-8").read()

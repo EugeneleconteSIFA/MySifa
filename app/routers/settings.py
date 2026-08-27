@@ -3342,7 +3342,10 @@ def _branches_etat() -> list[dict]:
         if len(parts) != 4:
             continue
         nom = parts[0].replace("origin/", "", 1)
-        if nom in ("HEAD",):
+        # refs/remotes/origin/HEAD est un alias symbolique, pas une branche.
+        # Selon la version de git il ressort en « origin/HEAD » ou en « origin » :
+        # sans ce filtre, une ligne fantôme « origin » s'affiche dans le tableau.
+        if nom in ("HEAD", "origin", "") or nom.endswith("/HEAD"):
             continue
         jours = _jours_depuis(parts[1])
         est_fusionnee = nom in fusionnees
@@ -3380,6 +3383,118 @@ def _dossier_etat() -> dict:
         "non_suivis": non_suivis[:20],
         "verrou_git": verrou,
         "propre": not modifies and not non_suivis and not verrou,
+    }
+
+
+# ─── Note de santé du dépôt ────────────────────────────────────────────────────
+# Une note sur 100 pour lire l'état du dépôt sans dérouler les trois sections.
+# Elle part de 100 et retire des points par critère. Chaque critère annonce ce
+# qu'il coûte ET pourquoi : une note qui baisse sans dire de quoi ne sert à rien.
+#
+# Les poids traduisent le risque réel, pas la gêne visuelle :
+#   - un numéro de migration en double est un piège silencieux (la seconde ne
+#     s'exécute jamais, et rien ne le signale) — c'est le plus lourd ;
+#   - un verrou git bloque toute commande sur le dépôt ;
+#   - des branches mortes ne cassent rien, mais elles noient les branches vives.
+
+# Branches fusionnées et dormantes tolérées avant que la note ne bouge.
+NOTE_TOLERANCE_BRANCHES = 5
+
+
+def _note_sante(migrations: dict, branches: list, dossier: dict) -> dict:
+    """Score /100, lettre et détail des points perdus. Lecture seule."""
+    criteres: list[dict] = []
+
+    def _critere(cle, label, perdu, plafond, detail):
+        perdu = int(min(round(perdu), plafond))
+        criteres.append({
+            "cle": cle,
+            "label": label,
+            "perdu": perdu,
+            "plafond": plafond,
+            "detail": detail,
+            "ok": perdu == 0,
+        })
+
+    nb_doublons = len(migrations.get("doublons") or [])
+    _critere(
+        "doublons", "Numéros de migration en double", nb_doublons * 15, 30,
+        "Aucun doublon — chaque migration enregistrée s'est bien exécutée."
+        if not nb_doublons else
+        f"{nb_doublons} numéro(s) partagé(s) : la seconde migration de chaque "
+        "paire n'a jamais tourné, sans le moindre message.",
+    )
+
+    nb_attente = len(migrations.get("en_attente") or [])
+    _critere(
+        "migrations", "Migrations en attente", nb_attente * 8, 20,
+        "Schéma à jour sur cette instance."
+        if not nb_attente else
+        f"{nb_attente} migration(s) présente(s) dans le code et pas encore "
+        "appliquée(s) ici — elles passeront au prochain démarrage.",
+    )
+
+    nb_mortes = len([b for b in branches if b.get("a_nettoyer")])
+    _critere(
+        "branches", "Branches fusionnées dormantes",
+        max(0, nb_mortes - NOTE_TOLERANCE_BRANCHES), 25,
+        "Le dépôt distant est net."
+        if not nb_mortes else
+        f"{nb_mortes} branche(s) fusionnée(s) dans staging et sans activité "
+        f"depuis plus de deux semaines ({NOTE_TOLERANCE_BRANCHES} tolérée(s) "
+        "avant pénalité).",
+    )
+
+    verrou = bool(dossier.get("verrou_git"))
+    _critere(
+        "verrou", "Verrou git", 20 if verrou else 0, 20,
+        "Aucun verrou .git/index.lock."
+        if not verrou else
+        "Un .git/index.lock traîne : toute commande git reste bloquée "
+        "derrière lui tant qu'il n'est pas supprimé.",
+    )
+
+    nb_mod = dossier.get("nb_modifies") or 0
+    _critere(
+        "modifies", "Fichiers modifiés non commités", nb_mod * 2, 10,
+        "Rien en attente de commit."
+        if not nb_mod else
+        f"{nb_mod} fichier(s) modifié(s) dans le dossier de travail de "
+        "l'instance — une promotion partirait sans eux.",
+    )
+
+    nb_non_suivis = dossier.get("nb_non_suivis") or 0
+    _critere(
+        "non_suivis", "Fichiers non suivis", nb_non_suivis * 0.2, 10,
+        "Aucun fichier non suivi."
+        if not nb_non_suivis else
+        f"{nb_non_suivis} fichier(s) non suivi(s) — à ignorer via .gitignore "
+        "ou à ranger hors du dépôt.",
+    )
+
+    perdu = sum(c["perdu"] for c in criteres)
+    score = max(0, 100 - perdu)
+
+    lettre, libelle = "E", "Dépôt à reprendre"
+    for seuil, l, lib in (
+        (90, "A", "Dépôt sain"),
+        (75, "B", "Bon état"),
+        (60, "C", "Ménage à prévoir"),
+        (40, "D", "Ménage à faire"),
+    ):
+        if score >= seuil:
+            lettre, libelle = l, lib
+            break
+
+    # Les critères qui coûtent le plus cher en premier : c'est l'ordre dans
+    # lequel on veut lire la liste quand on cherche quoi corriger.
+    criteres.sort(key=lambda c: (-c["perdu"], c["label"]))
+    return {
+        "score": score,
+        "lettre": lettre,
+        "libelle": libelle,
+        "perdu": perdu,
+        "criteres": criteres,
     }
 
 
@@ -3427,9 +3542,16 @@ def deploiement_sante(request: Request):
     if dossier["nb_modifies"]:
         alertes.append(f"{dossier['nb_modifies']} fichier(s) modifié(s) non commité(s).")
 
+    try:
+        note = _note_sante(migrations, branches, dossier)
+    except Exception as exc:  # noqa: BLE001 — vue de consultation
+        print(f"[MySifa] santé du dépôt — note indisponible : {exc}")
+        note = None
+
     return {
         "instance": ENV_NAME,
         "version_app": APP_VERSION,
+        "note": note,
         "migrations": migrations,
         "branches": branches,
         "dossier": dossier,

@@ -676,6 +676,14 @@ de rejeu, reprise d'une base migrée par l'ancien mécanisme, respect de `DEPEND
 **Paramètres → Promouvoir → Déployer → « Santé du dépôt »** (`GET /api/deploiement/sante`,
 rendu par `static/mysifa_promote.js`) affiche, pour l'instance qui répond :
 
+- une **note sur 100** (lettre A→E) en tête de panneau, avec le détail des points
+  perdus par critère. Elle part de 100 et retire : 15 pts par numéro de migration
+  en double (plafond 30), 8 pts par migration en attente (plafond 20), 1 pt par
+  branche fusionnée dormante au-delà de 5 tolérées (plafond 25), 20 pts pour un
+  verrou git, 2 pts par fichier modifié non commité (plafond 10), 0,2 pt par
+  fichier non suivi (plafond 10). Les poids traduisent le risque réel : un
+  doublon de migration est un piège silencieux, une branche morte n'est que du
+  bruit. Le calcul vit dans `_note_sante()` (`app/routers/settings.py`) ;
 - les migrations **appliquées** (numérotées et fichiers confondus) et celles
   **présentes dans le code mais pas encore jouées** ;
 - les **numéros historiques en double** — deux migrations sur le même numéro : la
@@ -687,7 +695,13 @@ rendu par `static/mysifa_promote.js`) affiche, pour l'instance qui répond :
 
 La vue est en **consultation seule** : elle ne lance que des commandes git en
 lecture (`for-each-ref`, `status`, `branch --merged`). Le ménage se fait au
-terminal. Test associé : `python3 tests/test_deploiement_sante.py`.
+terminal, avec `scripts/nettoyer_branches.sh` — simulation par défaut,
+`--appliquer` pour supprimer, `--local` pour purger aussi les branches locales.
+Il protège `main`, `staging` et la branche courante, ne propose jamais une
+branche non fusionnée, et écrit le SHA de chaque branche supprimée dans
+`.git/nettoyage-branches-<date>.txt` (restauration :
+`git push origin <sha>:refs/heads/<nom>`). Le panneau propose la même commande
+prête à copier. Test associé : `python3 tests/test_deploiement_sante.py`.
 
 ### Ce qu'il ne faut plus faire
 
@@ -1274,6 +1288,22 @@ PYEOF
 `Edit` et `Write` restent acceptables pour les **petits fichiers de config**
 (< 1 Ko : `.env`, snippets dans `config.py`, etc.).
 
+**Conserver les fins de ligne du fichier d'origine.** `.gitattributes` force le
+LF sur `.sh`, `.py`, `.js` et `.css`, mais **pas sur les `.md`** : `CLAUDE.md`
+est en CRLF dans le dépôt. Un script Python qui réécrit un fichier avec
+`newline='\n'` convertit tout en LF et produit un diff de la totalité du
+fichier — 1 956 suppressions pour trois paragraphes ajoutés, illisible en
+review et prêt à entrer en conflit avec n'importe quel autre chantier. Lire et
+réécrire avec `newline=''` (Python conserve alors les fins de ligne telles
+quelles), et vérifier avant de commiter :
+
+```bash
+git --no-optional-locks diff --numstat <fichier>
+```
+
+Un nombre de suppressions proche du nombre total de lignes = conversion
+accidentelle, pas une vraie modification.
+
 **Vérification systématique après toute modif** :
 - `python3 -c "import ast; ast.parse(open('<path>').read())"` pour le Python
 - `node --check <path>` pour le JS
@@ -1320,6 +1350,20 @@ et re-taper `git checkout` retronque à nouveau.
   chantiers parallèles ne se disputent ni un numéro, ni ce fichier.
 - Si un fichier `database.py` en conflit contient encore une migration numérotée
   non partie en production, la déplacer vers un fichier plutôt que la renuméroter.
+
+**Jamais de commentaire `#` en fin de ligne dans un bloc à coller** :
+
+Le terminal d'Eugène sur Mac est **zsh en interactif**, où l'option
+`interactive_comments` est désactivée par défaut : un `#` n'ouvre PAS un
+commentaire, il est passé tel quel à la commande. Un bloc du type
+`./script.sh   # simulation` sort donc `Option inconnue : #`. Les annotations se
+mettent **au-dessus** de la commande, en texte hors du bloc, jamais à droite.
+Même prudence côté PowerShell, où le commentaire est bien `#` mais où le
+copier-coller multi-lignes exécute chaque ligne séparément.
+
+**`git update-index --chmod=+x` ne marche que sur un fichier déjà suivi** :
+faire `git add <fichier>` d'abord, sinon git répond
+`cannot add to the index - missing --add option?`.
 
 **PowerShell vs bash** :
 - Les blocs bash du CLAUDE.md (`if [[ ]]`, `&& \`, `if/then/fi`) ne fonctionnent
