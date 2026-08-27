@@ -580,6 +580,26 @@ table.tdb-t td.coupe{max-width:170px;overflow:hidden;text-overflow:ellipsis}
 .tdb-ctrl .ext{flex-shrink:0;opacity:.5}
 .tdb-ctrl:hover .ext{opacity:1;color:var(--accent)}
 
+/* ── Infobulle ────────────────────────────────────────────────────────────
+   L'infobulle native du navigateur arrive avec une seconde de retard, se
+   place où elle veut et ignore le thème : sur un graphique elle recouvrait
+   les barres qu'elle prétendait expliquer. Celle-ci suit le curseur, se
+   retourne au bord de l'écran, et ne capte jamais la souris. */
+.tdb-tip{position:fixed;z-index:200;pointer-events:none;opacity:0;transform:translateY(3px);
+  transition:opacity .12s ease,transform .12s ease;background:var(--card);
+  border:1px solid var(--border);border-radius:10px;padding:9px 11px;
+  box-shadow:0 12px 34px rgba(0,0,0,.34);font-size:11.5px;color:var(--text2);
+  max-width:280px;line-height:1.55;white-space:normal}
+body.light .tdb-tip{box-shadow:0 12px 34px rgba(15,23,42,.16)}
+.tdb-tip.on{opacity:1;transform:none}
+.tdb-tip b{display:block;color:var(--text);font-size:12px;font-weight:700;margin-bottom:5px}
+.tdb-tip .l{display:flex;align-items:center;gap:14px;justify-content:space-between;margin-top:3px}
+.tdb-tip .l>span{display:inline-flex;align-items:center;gap:7px;min-width:0}
+.tdb-tip .l i{width:9px;height:9px;border-radius:2px;display:block;flex-shrink:0}
+.tdb-tip .l em{font-style:normal;color:var(--text);font-weight:600;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+[data-tip-titre],[data-tip-texte]{cursor:default}
+
 /* Graphiques : deux séries, une seule échelle. Jamais deux axes. */
 .tdb-graph{padding:13px}
 .tdb-leg{display:flex;flex-wrap:wrap;gap:7px 17px;padding-bottom:11px;font-size:11px;color:var(--text2)}
@@ -587,13 +607,18 @@ table.tdb-t td.coupe{max-width:170px;overflow:hidden;text-overflow:ellipsis}
 .tdb-leg i{width:10px;height:10px;border-radius:2px;display:block}
 .tdb-barres{display:flex;align-items:flex-end;gap:8px;height:130px;padding-bottom:5px;border-bottom:1px solid var(--border)}
 .tdb-barres .grp{flex:1;display:flex;align-items:flex-end;justify-content:center;gap:2px;height:100%;position:relative;min-width:0}
-.tdb-barres .grp i{display:block;width:46%;border-radius:3px 3px 0 0;min-height:2px}
+.tdb-barres .grp i{display:block;width:46%;border-radius:3px 3px 0 0;min-height:2px;transition:filter .12s}
+.tdb-barres .grp:hover i{filter:brightness(1.18)}
+.tdb-barres .grp::after{content:'';position:absolute;inset:0;border-radius:4px;
+  background:var(--accent-bg);opacity:0;transition:opacity .12s;pointer-events:none}
+.tdb-barres .grp:hover::after{opacity:1}
 .tdb-barres .grp i.a{background:var(--serie2)}
 .tdb-barres .grp i.b{background:var(--accent)}
 .tdb-axe{display:flex;gap:8px;padding-top:6px}
 .tdb-axe span{flex:1;text-align:center;font-size:9.5px;color:var(--muted);overflow:hidden}
 .tdb-jours{display:flex;align-items:flex-end;gap:2px;height:64px;border-bottom:1px solid var(--border);padding:0 13px 4px}
-.tdb-jours i{flex:1;display:block;border-radius:2px 2px 0 0;background:var(--accent);opacity:.55;min-height:2px}
+.tdb-jours i{flex:1;display:block;border-radius:2px 2px 0 0;background:var(--accent);opacity:.55;min-height:2px;transition:opacity .12s}
+.tdb-jours i:hover{opacity:1}
 .tdb-jours i.dernier{opacity:1;background:var(--serie2)}
 .tdb-jours-pied{display:flex;justify-content:space-between;padding:6px 13px 0;font-size:10px;color:var(--muted)}
 
@@ -602,7 +627,9 @@ table.tdb-t td.coupe{max-width:170px;overflow:hidden;text-overflow:ellipsis}
 .tdb-hb .nom{font-size:11.5px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tdb-hb .val{font-size:11.5px;color:var(--text);font-variant-numeric:tabular-nums}
 .tdb-hb .piste{grid-column:1/-1;height:7px;border-radius:4px;background:var(--border);overflow:hidden}
-.tdb-hb .piste i{display:block;height:100%;border-radius:4px;background:var(--accent);min-width:2px}
+.tdb-hb .piste i{display:block;height:100%;border-radius:4px;background:var(--accent);min-width:2px;transition:filter .12s}
+.tdb-hb .l:hover .piste i{filter:brightness(1.18)}
+.tdb-hb .l[data-tip-titre]{cursor:default}
 
 </style>
 </head>
@@ -2230,7 +2257,8 @@ function tdbTuile(o){
   const val=(o.v==null)?'<span class="v" style="color:var(--muted)">—</span>'
     :('<span class="v">'+o.v+(o.unite?('<small>'+esc(o.unite)+'</small>'):'')+'</span>');
   return '<button type="button" class="tdb-tuile '+(o.ton||'')+'"'+inerte+
-    (o.va?(' data-va="'+esc(o.va)+'"'):'')+(o.titre?(' title="'+esc(o.titre)+'"'):'')+'>'+
+    (o.va?(' data-va="'+esc(o.va)+'"'):'')+
+    (o.titre?(' data-tip-texte="'+esc(o.titre)+'"'):'')+'>'+
     '<span class="k">'+esc(o.k)+'</span>'+val+
     (o.s?('<span class="s '+(o.sTon||'')+'">'+esc(o.s)+'</span>'):'')+'</button>';
 }
@@ -2281,6 +2309,13 @@ function tdbJourCourt(iso){
   const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m?(m[3]+'/'+m[2]):'—';
 }
+function tdbMoisLong(cle){
+  const m=String(cle||'').match(/^(\d{4})-(\d{2})$/);
+  if(!m)return String(cle||'');
+  const noms=['janvier','février','mars','avril','mai','juin','juillet',
+              'août','septembre','octobre','novembre','décembre'];
+  return (noms[Number(m[2])-1]||m[2])+' '+m[1];
+}
 function tdbLibelleJour(iso){
   const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if(!m)return '';
@@ -2289,7 +2324,58 @@ function tdbLibelleJour(iso){
   catch(e){return fmtDate(iso);}
 }
 
+// Infobulle : une seule dans la page, déplacée. Le contenu vient d'attributs
+// de données, jamais de HTML stocké dans un attribut — on ne réinjecte pas du
+// balisage qu'on aurait échappé pour l'occasion.
+let TDB_TIP=null;
+function tdbTipEl(){
+  if(!TDB_TIP){
+    TDB_TIP=document.createElement('div');
+    TDB_TIP.className='tdb-tip';
+    TDB_TIP.setAttribute('role','tooltip');
+    document.body.appendChild(TDB_TIP);
+  }
+  return TDB_TIP;
+}
+function tdbTipContenu(el){
+  const d=el.dataset;
+  if(d.tipTexte)return esc(d.tipTexte);
+  let h='';
+  if(d.tipTitre)h+='<b>'+esc(d.tipTitre)+'</b>';
+  for(let i=1;i<=3;i++){
+    const lab=d['tipL'+i],val=d['tipV'+i];
+    if(!lab&&!val)continue;
+    const c=d['tipC'+i];
+    h+='<div class="l"><span>'+
+       (c?('<i style="background:'+esc(c)+'"></i>'):'')+esc(lab||'')+'</span>'+
+       '<em>'+esc(val||'')+'</em></div>';
+  }
+  return h;
+}
+function tdbTipPlacer(ev){
+  const t=tdbTipEl(),r=t.getBoundingClientRect();
+  let x=ev.clientX+14,y=ev.clientY+16;
+  if(x+r.width>window.innerWidth-8)x=ev.clientX-r.width-14;
+  if(y+r.height>window.innerHeight-8)y=ev.clientY-r.height-16;
+  t.style.left=Math.max(8,x)+'px';
+  t.style.top=Math.max(8,y)+'px';
+}
+function tdbTipCacher(){if(TDB_TIP)TDB_TIP.classList.remove('on');}
+function tdbBrancherTip(racine){
+  racine.querySelectorAll('[data-tip-titre],[data-tip-texte]').forEach(el=>{
+    el.addEventListener('mouseenter',ev=>{
+      const t=tdbTipEl();
+      t.innerHTML=tdbTipContenu(el);
+      t.classList.add('on');
+      tdbTipPlacer(ev);
+    });
+    el.addEventListener('mousemove',tdbTipPlacer);
+    el.addEventListener('mouseleave',tdbTipCacher);
+  });
+}
+
 function tdbBrancher(racine){
+  tdbBrancherTip(racine);
   racine.querySelectorAll('[data-va]').forEach(el=>{
     el.addEventListener('click',ev=>{ev.stopPropagation();tdbNav(el.getAttribute('data-va'));});
   });
@@ -2526,26 +2612,47 @@ async function chargerControlesMySifa(hote){
 }
 
 // ── Direction ────────────────────────────────────────────────────
-// Le CA de tout l'écran repose sur une seule hypothèse : `net` est le
-// montant net de la ligne. Le service la vérifie sur les données ; si elle
-// ne tient pas, l'écran le dit AVANT d'afficher des millions d'euros faux.
-function tdbControleMontant(d){
-  const c=d.controle_montant||{};
-  const suspects=[];
-  Object.keys(c).forEach(k=>{
-    const v=c[k];
-    if(v&&v.verdict==='prix_unitaire')suspects.push(k);
+// Tout le chiffre d'affaires de l'écran est reconstruit à partir de colonnes
+// dont la définition n'est écrite nulle part. Tant que ce calcul n'a pas été
+// confronté à l'ERP, l'écran montre son arithmétique au lieu de l'affirmer :
+// six lignes réelles, leurs colonnes de prix, et le montant qu'on en tire.
+// Ouvrir la même pièce dans RVGI et comparer prend dix secondes.
+const TDB_LABEL_TABLE={cde_ligne:'Lignes de commande',vte_ligne:'Lignes de facture'};
+
+function tdbPanControlePrix(d){
+  const diags=(d.diagnostic_prix||[]).filter(x=>x&&x.echantillon&&x.echantillon.length);
+  if(!diags.length)return '';
+  let corps='';
+  diags.forEach(dg=>{
+    const cols=dg.colonnes||[];
+    corps+='<div class="tdb-pan-h" style="border-top:1px solid var(--border)">'+
+      '<h3>'+esc(TDB_LABEL_TABLE[dg.table]||dg.table)+'</h3>'+
+      '<span class="cpt">'+esc(cols.join(' · '))+'</span></div>';
+    corps+='<table class="tdb-t"><thead><tr>'+
+      cols.filter(c=>c!=='des1').map(c=>'<th class="n">'+esc(c)+'</th>').join('')+
+      '<th class="n">= montant</th></tr></thead><tbody>';
+    (dg.echantillon||[]).forEach(l=>{
+      corps+='<tr>'+cols.filter(c=>c!=='des1').map(c=>
+        '<td class="n">'+esc(l[c]==null?'—':fmtNb(l[c],
+          (c==='qte'||c==='vuv'||c==='suv')?0:4))+'</td>').join('')+
+        '<td class="n fort">'+esc(tdbEurExact(l.montant_calcule))+'</td></tr>';
+    });
+    corps+='</tbody></table>';
+    if(dg.net_plat){
+      corps+='<div class="tdb-note">La colonne <code>net</code> ne prend qu\'une ou deux '+
+        'valeurs sur toute la table : ce n\'est pas un montant, elle est écartée du calcul.</div>';
+    }
   });
-  if(!suspects.length)return '';
-  return '<div class="tdb-alerte"><span>⚠</span><span><b>Chiffres à ne pas utiliser tels quels.</b> '+
-    'Sur '+esc(suspects.join(' et '))+', la colonne <code>net</code> se comporte comme un prix '+
-    'unitaire, pas comme un montant de ligne : le chiffre d\'affaires affiché serait divisé par '+
-    'les quantités. À reprendre dans <code>erp_tdb._expr_montant</code> avant de s\'y fier.</span></div>';
+  return tdbPan({titre:'Contrôle du calcul',cpt:'à valider dans RVGI',corps:corps,
+    note:'Montant = <code>qte × pun ÷ coefficient de vente</code>. Le prix unitaire de RVGI '+
+         'n\'est pas à l\'étiquette — SIFA vend au mille — et c\'est <code>vuv</code> qui porte '+
+         'le diviseur. Ouvrir une de ces pièces dans RVGI et comparer le total : si ça tombe '+
+         'juste, ce panneau peut disparaître.'});
 }
 
 function htmlTdbDirection(d){
   const hier=d.hier||{},re=d.rentre||{},fa=d.facture||{},fb=d.facturable||{},ca=d.carnet||{};
-  let h=tdbControleMontant(d)+tdbIndispo(d);
+  let h=tdbIndispo(d);
 
   // Le bandeau : la question qu'on se pose en ouvrant l'écran.
   if(hier&&hier.date){
@@ -2556,7 +2663,7 @@ function htmlTdbDirection(d){
         '<span class="big" title="'+esc(tdbEurExact(hier.montant))+'">'+
         (tdbEur(hier.montant)||'—')+'</span></div>'+
       '<div class="txt"><b>'+fmtNb(hier.commandes,0)+' commandes</b> · '+fmtNb(hier.lignes,0)+' lignes<br>'+
-        fmtNb(hier.clients,0)+' clients</div>'+
+        fmtNb(hier.clients,0)+(hier.clients>1?' clients':' client')+'</div>'+
       '<div class="droite">'+
         (ecart==null?'':('<b style="color:var(--'+(ecart>=0?'ok':'danger')+')">'+
           (ecart>=0?'+':'')+ecart+' % vs la moyenne 30 j</b>'))+
@@ -2590,8 +2697,12 @@ function htmlTdbDirection(d){
       '<span><i style="background:var(--accent)"></i>Facturé</span></div><div class="tdb-barres">';
     serie.forEach(m=>{
       const a=Math.round(((m.rentre||0)/maxi)*100),b=Math.round(((m.facture||0)/maxi)*100);
-      g+='<div class="grp" title="'+esc(m.mois+' — rentré '+tdbEurExact(m.rentre)+
-          ', facturé '+tdbEurExact(m.facture))+'">'+
+      g+='<div class="grp"'+
+         ' data-tip-titre="'+esc(tdbMoisLong(m.mois))+'"'+
+         ' data-tip-l1="Rentré" data-tip-v1="'+esc(tdbEurExact(m.rentre))+'"'+
+         ' data-tip-c1="var(--serie2)"'+
+         ' data-tip-l2="Facturé" data-tip-v2="'+esc(tdbEurExact(m.facture))+'"'+
+         ' data-tip-c2="var(--accent)">'+
          '<i class="a" style="height:'+a+'%"></i><i class="b" style="height:'+b+'%"></i></div>';
     });
     g+='</div><div class="tdb-axe">'+serie.map(m=>'<span>'+esc(m.label||'')+'</span>').join('')+
@@ -2635,8 +2746,10 @@ function htmlTdbDirection(d){
     const maxj=Math.max(1,...jours.map(x=>Number(x.montant)||0));
     j='<div class="tdb-jours">'+jours.map((x,i)=>{
       const ha=Math.max(2,Math.round(((Number(x.montant)||0)/maxj)*100));
-      return '<i class="'+(i===jours.length-1?'dernier':'')+'" style="height:'+ha+'%" title="'+
-        esc(fmtDate(x.jour)+' — '+tdbEurExact(x.montant))+'"></i>';
+      return '<i class="'+(i===jours.length-1?'dernier':'')+'" style="height:'+ha+'%"'+
+        ' data-tip-titre="'+esc(tdbLibelleJour(x.jour))+'"'+
+        ' data-tip-l1="Rentré" data-tip-v1="'+esc(tdbEurExact(x.montant))+'"'+
+        ' data-tip-c1="var(--accent)"></i>';
     }).join('')+'</div><div class="tdb-jours-pied"><span>'+esc(tdbJourCourt(jours[0].jour))+
       '</span><span>'+esc(tdbJourCourt(jours[jours.length-1].jour))+'</span></div>';
   }
@@ -2651,7 +2764,9 @@ function htmlTdbDirection(d){
     const maxa=Math.max(1,...fb.ages.map(a=>Number(a.montant)||0));
     fbc='<div class="tdb-hb">'+fb.ages.map(a=>{
       const w=Math.max(2,Math.round(((Number(a.montant)||0)/maxa)*100));
-      return '<div class="l"><span class="nom">'+esc(a.label)+'</span>'+
+      return '<div class="l" data-tip-titre="'+esc(a.label)+'"'+
+        ' data-tip-l1="Facturable" data-tip-v1="'+esc(tdbEurExact(a.montant))+'"'+
+        ' data-tip-c1="var(--accent)"><span class="nom">'+esc(a.label)+'</span>'+
         '<span class="val">'+tdbEurTxt(a.montant)+'</span>'+
         '<span class="piste"><i style="width:'+w+'%"></i></span></div>';
     }).join('')+'</div>';
@@ -2669,7 +2784,9 @@ function htmlTdbDirection(d){
     const maxc=Math.max(1,...tc.map(x=>Number(x.montant)||0));
     tcc='<div class="tdb-hb">'+tc.map(x=>{
       const w=Math.max(2,Math.round(((Number(x.montant)||0)/maxc)*100));
-      return '<div class="l"><span class="nom">'+esc(x.client)+'</span>'+
+      return '<div class="l" data-tip-titre="'+esc(x.client)+'"'+
+        ' data-tip-l1="Facturé ce mois" data-tip-v1="'+esc(tdbEurExact(x.montant))+'"'+
+        ' data-tip-c1="var(--accent)"><span class="nom">'+esc(x.client)+'</span>'+
         '<span class="val">'+tdbEurTxt(x.montant)+'</span>'+
         '<span class="piste"><i style="width:'+w+'%"></i></span></div>';
     }).join('')+'</div>';
@@ -2678,7 +2795,8 @@ function htmlTdbDirection(d){
     plus:'Ouvrir les clients',plusVa:'#/clients',corps:tcc});
 
   h+='<div class="tdb-cols"><div class="tdb-pile">'+gauche+gauche2+'</div>'+
-     '<div class="tdb-pile">'+droite+droite2+droite3+'</div></div>';
+     '<div class="tdb-pile">'+droite+droite2+droite3+'</div></div>'+
+     '<div style="margin-top:11px">'+tdbPanControlePrix(d)+'</div>';
   return h;
 }
 

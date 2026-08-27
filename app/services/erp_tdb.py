@@ -73,6 +73,19 @@ JOURS_EN_COURS = 30
 # « non renseignée », `31/12/2099` pour « pas de fin »). Comparer sans ce
 # garde-fou fait passer toute ligne sans date promise pour une ligne en
 # retard — mesuré sur le jeu de test : 289 faux retards sur 384 lignes.
+# Les dates du miroir ne sont pas nues : `_propre_date` teste la sentinelle
+# avec `startswith`, parce que RVGI écrit « 2026-08-26 » suivi d'une heure.
+# Une égalité stricte sur la colonne ne rapproche donc jamais rien — c'est
+# ce qui affichait « rentré hier : 0 » un jour où sept commandes étaient
+# entrées. Les comparaisons de jour passent toutes par ici.
+def _jour(col):
+    return "substr(%s, 1, 10)" % col
+
+
+def _mois(col):
+    return "substr(%s, 1, 7)" % col
+
+
 def _date_reelle(col):
     return "%s IS NOT NULL AND %s > '2000-01-01' AND %s < '2090-01-01'" % (col, col, col)
 
@@ -88,11 +101,12 @@ FORMULES = {
     "sans_dossier": "lignes en fabrication à venir ou en cours (expédition "
                     "des 30 derniers jours ou à venir) sans dossier MySifa rattaché",
     "hors_prod": "carnet dont l'origine est stock ou sous-traitance",
-    "rentre": "Σ net (montant net de ligne) des lignes de commande créées "
-              "ce jour-là, par cde_entete.amjc",
-    "facture": "Σ net (montant net de ligne) des lignes de facture, "
+    "rentre": "Σ (qte × pun ÷ coefficient de vente) des lignes de commande "
+              "créées ce jour-là, par cde_entete.amjc",
+    "facture": "Σ (qte × pun ÷ coefficient de vente) des lignes de facture, "
                "par mois de vte_entete.amjf",
-    "facturable": "Σ (qte − qtefac) × pun de la commande, sur les BL non soldés",
+    "facturable": "Σ (qte livrée − qte facturée) × pun ÷ coefficient de vente, "
+                  "au prix de la ligne de commande d'origine",
     "encours": "Σ net du carnet restant à traiter",
 }
 
@@ -189,6 +203,10 @@ def _bornes(aujourdhui=None):
         "aujourdhui": j.isoformat(),
         "veille": veille.isoformat(),
         "debut_mois": debut_mois.isoformat(),
+        # Fin du mois courant : une pièce datée dans le futur — faute de
+        # frappe dans l'ERP — ne doit pas ajouter un mois à la série.
+        "fin_mois": ((debut_mois + timedelta(days=32)).replace(day=1)
+                     - timedelta(days=1)).isoformat(),
         "fin_semaine": (j + timedelta(days=7)).isoformat(),
         "il_y_a_30j": (j - timedelta(days=29)).isoformat(),
         "debut_mois_n1": debut_mois_n1.isoformat(),
@@ -245,7 +263,7 @@ def adv():
             produit = _ligne_produit("l") if sch.a("cde_ligne", "code1", "code2") else "1=1"
             ouvert = ("l.qtep > 0 AND COALESCE(l.lpos, 0) <> %d AND %s"
                       % (POS_SOLDEE, produit))
-            date_ok = _date_reelle("l.amje")
+            date_ok = _date_reelle(_jour("l.amje"))
             limite_dormant = (date.fromisoformat(b["aujourdhui"])
                               - timedelta(days=JOURS_DORMANT)).isoformat()
 
@@ -258,12 +276,12 @@ def adv():
 
             sortie["carnet"] = _compte(ouvert)
             sortie["carnet"]["retard"] = _compte(
-                ouvert + " AND " + date_ok + " AND l.amje < ? AND l.amje >= ?",
+                ouvert + " AND " + date_ok + " AND substr(l.amje,1,10) < ? AND substr(l.amje,1,10) >= ?",
                 (b["aujourdhui"], limite_dormant))
             sortie["carnet"]["dormant"] = _compte(
-                ouvert + " AND " + date_ok + " AND l.amje < ?", (limite_dormant,))
+                ouvert + " AND " + date_ok + " AND substr(l.amje,1,10) < ?", (limite_dormant,))
             sortie["carnet"]["semaine"] = _compte(
-                ouvert + " AND " + date_ok + " AND l.amje >= ? AND l.amje < ?",
+                ouvert + " AND " + date_ok + " AND substr(l.amje,1,10) >= ? AND substr(l.amje,1,10) < ?",
                 (b["aujourdhui"], b["fin_semaine"]))
             sortie["carnet"]["jours_dormant"] = JOURS_DORMANT
             # La date charnière, pour que le lien « les voir » ouvre le carnet
@@ -282,8 +300,8 @@ def adv():
                        l.code1 AS code1, l.code2 AS code2,
                        l.qtep AS reste, l.amje AS expedition, l.orig AS origine
                   FROM cde_ligne l %s
-                 WHERE %s AND %s AND l.amje < ? AND l.amje >= ?
-              ORDER BY l.amje DESC
+                 WHERE %s AND %s AND substr(l.amje,1,10) < ? AND substr(l.amje,1,10) >= ?
+              ORDER BY substr(l.amje,1,10) DESC
                  LIMIT %d
             """ % (champ_clt, joint_clt, ouvert, date_ok, MAX_LIGNES_LISTE),
                 (b["aujourdhui"], limite_dormant))
@@ -378,13 +396,13 @@ def _sans_dossier(conn, sch, sortie):
         SELECT COUNT(*) AS lignes, COUNT(DISTINCT l.numero) AS commandes
           FROM cde_ligne l
          WHERE l.qtep > 0 AND COALESCE(l.lpos, 0) <> ? AND l.orig = ? AND %s
-           AND %s AND l.amje >= ?
+           AND %s AND substr(l.amje,1,10) >= ?
            AND NOT EXISTS (
                  SELECT 1 FROM mysifa.rvgi_rattachements r
                   WHERE r.piece = 'commande'
                     AND r.numero = CAST(l.numero AS TEXT)
                     AND (r.ligne IS NULL OR r.ligne = l.ligne))
-    """ % (produit, _date_reelle("l.amje")), (POS_SOLDEE, ORIG_FABRICATION, depuis))
+    """ % (produit, _date_reelle(_jour("l.amje"))), (POS_SOLDEE, ORIG_FABRICATION, depuis))
     if not rows:
         sortie["indispo"].append("Lignes sans dossier : table rvgi_rattachements absente")
         return None
@@ -444,10 +462,10 @@ def direction():
 
         montant_cde = _expr_montant(sch, "cde_ligne", "l")
         montant_fac = _expr_montant(sch, "vte_ligne", "l")
-        sortie["controle_montant"] = {
-            "commandes": _controle_montant(conn, sch, "cde_ligne", "l"),
-            "factures": _controle_montant(conn, sch, "vte_ligne", "l"),
-        }
+        sortie["diagnostic_prix"] = [
+            _diagnostic_prix(conn, sch, "cde_ligne", "l"),
+            _diagnostic_prix(conn, sch, "vte_ligne", "l"),
+        ]
 
         # ── Le rentré : la veille, le mois, la série ─────────────────────
         if montant_cde is None or not sch.a("cde_entete", "numero", "amjc"):
@@ -463,19 +481,19 @@ def direction():
                 "mois": _nombre(_un(conn, """
                     SELECT SUM(%s) FROM cde_ligne l
                       JOIN cde_entete e ON e.numero = l.numero
-                     WHERE e.amjc >= ?""" % montant_cde, (b["debut_mois"],))),
+                     WHERE substr(e.amjc,1,10) >= ?""" % montant_cde, (b["debut_mois"],))),
                 "mois_n1": _nombre(_un(conn, """
                     SELECT SUM(%s) FROM cde_ligne l
                       JOIN cde_entete e ON e.numero = l.numero
-                     WHERE e.amjc >= ? AND e.amjc < ?""" % montant_cde,
+                     WHERE substr(e.amjc,1,10) >= ? AND substr(e.amjc,1,10) < ?""" % montant_cde,
                     (b["debut_mois_n1"], b["fin_mois_n1"]))),
             }
             sortie["jours"] = _calendrier(
                 _lignes(conn, """
-                    SELECT e.amjc AS jour, SUM(%s) AS montant
+                    SELECT substr(e.amjc,1,10) AS jour, SUM(%s) AS montant
                       FROM cde_ligne l JOIN cde_entete e ON e.numero = l.numero
-                     WHERE e.amjc >= ? AND e.amjc <= ?
-                  GROUP BY e.amjc ORDER BY e.amjc
+                     WHERE substr(e.amjc,1,10) >= ? AND substr(e.amjc,1,10) <= ?
+                  GROUP BY jour ORDER BY jour
                 """ % montant_cde, (b["il_y_a_30j"], b["aujourdhui"])),
                 b["il_y_a_30j"], b["aujourdhui"])
 
@@ -490,17 +508,17 @@ def direction():
                 "mois": _nombre(_un(conn, """
                     SELECT SUM(%s) FROM vte_ligne l
                       JOIN vte_entete e ON e.numero = l.numero
-                     WHERE e.amjf >= ?""" % montant_fac, (b["debut_mois"],))),
+                     WHERE substr(e.amjf,1,10) >= ?""" % montant_fac, (b["debut_mois"],))),
                 "mois_n1": _nombre(_un(conn, """
                     SELECT SUM(%s) FROM vte_ligne l
                       JOIN vte_entete e ON e.numero = l.numero
-                     WHERE e.amjf >= ? AND e.amjf < ?""" % montant_fac,
+                     WHERE substr(e.amjf,1,10) >= ? AND substr(e.amjf,1,10) < ?""" % montant_fac,
                     (b["debut_mois_n1"], b["fin_mois_n1"]))),
             }
             sortie["top_clients"] = _lignes(conn, """
                 SELECT e.rs AS client, SUM(%s) AS montant
                   FROM vte_ligne l JOIN vte_entete e ON e.numero = l.numero
-                 WHERE e.amjf >= ? AND COALESCE(e.rs,'') <> ''
+                 WHERE substr(e.amjf,1,10) >= ? AND COALESCE(e.rs,'') <> ''
               GROUP BY e.rs ORDER BY montant DESC LIMIT 6
             """ % montant_fac, (b["debut_mois"],)) if sch.a("vte_entete", "rs") else []
 
@@ -530,70 +548,68 @@ def direction():
 
 
 def _expr_montant(sch, table, alias):
-    """Le montant d'une ligne : `net`, le montant net de RVGI.
+    """Le montant d'une ligne : quantité × prix unitaire, à l'unité de vente.
 
-    Arbitré le 27/08/2026 : dans RVGI, `pub` est le prix unitaire brut, `pun`
-    le prix unitaire net, et `net` le montant net de la ligne — c'est `net`
-    qui fait foi. `htn` puis `qte × pun` ne servent que de repli si la colonne
-    manque dans le miroir ; la formule retenue remonte à l'écran, qui
-    l'affiche sous la tuile.
+    `net` a été essayé et écarté. Relevé sur les données réelles le
+    27/08/2026 : il vaut 1,00 sur toutes les lignes de facture, quantité et
+    prix quelconques. Ce n'est pas un montant, c'est un drapeau — et il
+    donnait un chiffre d'affaires mensuel à deux chiffres.
+
+    Reste `qte × pun`. Mais `pun` est un prix unitaire au sens de RVGI, pas à
+    l'étiquette : SIFA vend au mille. `vuv`, le coefficient de vente porté par
+    la ligne, tient ce diviseur — 1000 pour des étiquettes, 1 pour un frais de
+    port facturé à l'unité. Sans lui, 4 243 200 étiquettes à 4,82 ressortent à
+    20 millions d'euros au lieu de 20 452.
+
+    Le coefficient n'est appliqué que si la colonne existe. `_diagnostic_prix`
+    montre le calcul sur des lignes réelles, pour qu'on puisse le contredire.
     """
-    for col in ("net", "htn"):
-        if sch.a(table, col):
-            return "COALESCE(%s.%s, 0)" % (alias, col)
-    if sch.a(table, "qte", "pun"):
-        return "COALESCE(%s.qte,0) * COALESCE(%s.pun,0)" % (alias, alias)
-    return None
-
-
-def _controle_montant(conn, sch, table, alias):
-    """Mesure ce que `net` contient vraiment, au lieu de le supposer.
-
-    L'hypothèse « `net` est un montant de ligne » tient tout le chiffre
-    d'affaires de l'écran. Si elle était fausse — si `net` doublait `pun` —
-    le CA serait divisé par la quantité, en silence, et personne ne verrait
-    rien : les ordres de grandeur d'un mois n'alertent pas quand on ne les
-    connaît pas par cœur.
-
-    Alors on compare, sur un échantillon de lignes chiffrées, `net` à
-    `qte × pun` d'un côté et à `pun` de l'autre. Le verdict remonte à
-    l'écran, qui alerte s'il n'est pas celui attendu. Aucune correction
-    automatique : si RVGI dit autre chose que ce qu'on croit, c'est la
-    lecture qu'il faut reprendre, pas le chiffre qu'il faut rattraper.
-    """
-    if not sch.a(table, "net", "qte", "pun"):
+    if not sch.a(table, "qte", "pun"):
         return None
+    if sch.a(table, "vuv"):
+        return ("COALESCE(%s.qte, 0) * COALESCE(%s.pun, 0) "
+                "/ COALESCE(NULLIF(%s.vuv, 0), 1)" % (alias, alias, alias))
+    return "COALESCE(%s.qte, 0) * COALESCE(%s.pun, 0)" % (alias, alias)
+
+
+def _diagnostic_prix(conn, sch, table, alias):
+    """Ce que la table porte vraiment comme prix, sur des lignes réelles.
+
+    Un chiffre d'affaires reconstruit à partir de colonnes dont personne n'a
+    la définition écrite ne vaut rien tant qu'on ne l'a pas confronté à
+    l'ERP. Plutôt que d'affirmer, cet écran montre son arithmétique : quelles
+    colonnes de prix existent, et six lignes avec leur calcul détaillé.
+    Ouvrir la même commande dans RVGI et comparer prend dix secondes.
+
+    Le jour où c'est validé, ce bloc peut disparaître — pas avant.
+    """
+    candidates = ("qte", "pub", "pun", "net", "suv", "vuv", "htn", "des1")
+    presentes = [c for c in candidates if sch.a(table, c)]
+    if not sch.a(table, "qte", "pun"):
+        return {"table": table, "colonnes": presentes, "echantillon": [],
+                "note": "ni qte ni pun : aucun montant reconstructible"}
+
+    champs = ", ".join("%s.%s AS %s" % (alias, c, c) for c in presentes)
+    montant = _expr_montant(sch, table, alias)
     rows = _lignes(conn, """
-        SELECT %s.net AS net, %s.qte AS qte, %s.pun AS pun
+        SELECT %s, (%s) AS montant_calcule
           FROM %s %s
-         WHERE %s.net IS NOT NULL AND %s.net <> 0
-           AND %s.qte > 0 AND %s.pun IS NOT NULL AND %s.pun <> 0
-         LIMIT 500
-    """ % (alias, alias, alias, table, alias, alias, alias, alias, alias, alias))
-    if len(rows) < 20:
-        return {"verdict": "indetermine", "echantillon": len(rows),
-                "raison": "trop peu de lignes chiffrées pour conclure"}
+         WHERE %s.qte > 0 AND %s.pun IS NOT NULL AND %s.pun <> 0
+      ORDER BY %s.qte DESC
+         LIMIT 6
+    """ % (champs, montant, table, alias, alias, alias, alias, alias))
 
-    proche = lambda a, b: abs(a - b) <= 0.01 * max(abs(a), abs(b), 1.0)
-    sur_ligne = sur_unitaire = 0
-    for r in rows:
-        try:
-            net, qte, pun = float(r["net"]), float(r["qte"]), float(r["pun"])
-        except (TypeError, ValueError):
-            continue
-        if proche(net, qte * pun):
-            sur_ligne += 1
-        if proche(net, pun):
-            sur_unitaire += 1
+    # `net` constant sur tout un échantillon n'est pas un montant : le dire
+    # explicitement évite qu'on y revienne dans six mois.
+    net_plat = None
+    if sch.a(table, "net"):
+        distincts = _un(conn, "SELECT COUNT(DISTINCT %s.net) FROM %s %s "
+                              "WHERE %s.qte > 0 LIMIT 1"
+                        % (alias, table, alias, alias))
+        net_plat = (distincts is not None and int(distincts) <= 2)
 
-    n = len(rows)
-    verdict = "indetermine"
-    if sur_ligne >= 0.8 * n and sur_ligne > sur_unitaire:
-        verdict = "montant_de_ligne"
-    elif sur_unitaire >= 0.8 * n and sur_unitaire > sur_ligne:
-        verdict = "prix_unitaire"
-    return {"verdict": verdict, "echantillon": n,
-            "sur_ligne": sur_ligne, "sur_unitaire": sur_unitaire, "table": table}
+    return {"table": table, "colonnes": presentes, "echantillon": rows,
+            "net_plat": net_plat, "formule": montant}
 
 
 def _rentre_du_jour(conn, sch, montant, jour):
@@ -602,7 +618,7 @@ def _rentre_du_jour(conn, sch, montant, jour):
         SELECT COUNT(DISTINCT l.numero) AS commandes, COUNT(*) AS lignes,
                COUNT(DISTINCT e.numclt) AS clients, SUM(%s) AS montant
           FROM cde_ligne l JOIN cde_entete e ON e.numero = l.numero
-         WHERE e.amjc = ?
+         WHERE substr(e.amjc,1,10) = ?
     """ % montant, (jour,))
     tete = entete[0] if entete else {}
     champ_clt = "e.rs" if sch.a("cde_entete", "rs") else "''"
@@ -612,7 +628,7 @@ def _rentre_du_jour(conn, sch, montant, jour):
                SUM(%s) AS montant, MIN(NULLIF(l.amje,'')) AS expedition,
                MAX(%s) AS origine
           FROM cde_ligne l JOIN cde_entete e ON e.numero = l.numero
-         WHERE e.amjc = ?
+         WHERE substr(e.amjc,1,10) = ?
       GROUP BY l.numero, %s
       ORDER BY montant DESC
          LIMIT %d
@@ -623,7 +639,7 @@ def _rentre_du_jour(conn, sch, montant, jour):
     moyenne = _un(conn, """
         SELECT SUM(%s) / 30.0 FROM cde_ligne l
           JOIN cde_entete e ON e.numero = l.numero
-         WHERE e.amjc >= ? AND e.amjc <= ?
+         WHERE substr(e.amjc,1,10) >= ? AND substr(e.amjc,1,10) <= ?
     """ % montant, ((date.fromisoformat(jour) - timedelta(days=29)).isoformat(), jour))
     return {
         "date": jour,
@@ -668,17 +684,19 @@ def _serie_12_mois(conn, sch, montant_cde, montant_fac, b):
 
     if montant_cde and sch.a("cde_entete", "numero", "amjc"):
         _verser(_lignes(conn, """
-            SELECT substr(e.amjc,1,7) AS mois, SUM(%s) AS montant
+            SELECT substr(e.amjc, 1, 7) AS mois, SUM(%s) AS montant
               FROM cde_ligne l JOIN cde_entete e ON e.numero = l.numero
-             WHERE e.amjc >= ? GROUP BY mois ORDER BY mois
-        """ % montant_cde, (b["debut_serie"],)), "rentre")
+             WHERE substr(e.amjc,1,10) >= ? AND substr(e.amjc,1,10) <= ?
+          GROUP BY mois ORDER BY mois
+        """ % montant_cde, (b["debut_serie"], b["fin_mois"])), "rentre")
 
     if montant_fac and sch.a("vte_entete", "numero", "amjf"):
         _verser(_lignes(conn, """
-            SELECT substr(e.amjf,1,7) AS mois, SUM(%s) AS montant
+            SELECT substr(e.amjf, 1, 7) AS mois, SUM(%s) AS montant
               FROM vte_ligne l JOIN vte_entete e ON e.numero = l.numero
-             WHERE e.amjf >= ? GROUP BY mois ORDER BY mois
-        """ % montant_fac, (b["debut_serie"],)), "facture")
+             WHERE substr(e.amjf,1,10) >= ? AND substr(e.amjf,1,10) <= ?
+          GROUP BY mois ORDER BY mois
+        """ % montant_fac, (b["debut_serie"], b["fin_mois"])), "facture")
 
     serie = sorted(par_mois.values(), key=lambda x: x["mois"])[-12:]
     for m in serie:
@@ -701,7 +719,11 @@ def _facturable(conn, sch, sortie):
         sortie["indispo"].append("Facturable : pas de prix unitaire sur cde_ligne")
         return None
 
-    valeur = ("(l.qte - COALESCE(l.qtefac,0)) * COALESCE(c.pun, 0)")
+    # Même arithmétique que partout ailleurs : le prix de RVGI est à l'unité
+    # de vente, pas à l'étiquette. Oublier le coefficient ici donnait un
+    # facturable à 140 millions d'euros pour 18 bons de livraison.
+    coef = ("COALESCE(NULLIF(c.vuv, 0), 1)" if sch.a("cde_ligne", "vuv") else "1")
+    valeur = ("(l.qte - COALESCE(l.qtefac, 0)) * COALESCE(c.pun, 0) / %s" % coef)
     base = """
         FROM liv_ligne l
         LEFT JOIN cde_ligne c ON c.numero = l.numcde AND c.ligne = l.lignecde
@@ -722,8 +744,8 @@ def _facturable(conn, sch, sortie):
         haut = (date.fromisoformat(aujourdhui) - timedelta(days=mini)).isoformat()
         bas = ((date.fromisoformat(aujourdhui) - timedelta(days=maxi)).isoformat()
                if maxi is not None else None)
-        cond = (" AND " + _date_reelle("l.amje")
-                + " AND l.amje <= ?" + (" AND l.amje > ?" if bas else ""))
+        cond = (" AND " + _date_reelle(_jour("l.amje"))
+                + " AND substr(l.amje,1,10) <= ?" + (" AND substr(l.amje,1,10) > ?" if bas else ""))
         params = (haut,) + ((bas,) if bas else ())
         ages.append({
             "label": libelle,
