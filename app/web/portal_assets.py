@@ -184,6 +184,30 @@ body.light .portal-corner-stack{box-shadow:0 8px 32px rgba(15,23,42,.10)}
 .portal-corner-stack .portal-prof-ring.prof-ring svg{width:24px;height:24px}
 .portal-corner-stack .portal-humeur-badge{bottom:-2px;left:-2px}
 
+/* ── Volet ERP : au survol de la marque RVGI, les tableaux de bord ──────
+   La barre d'icônes est collée au bord droit : le volet s'ouvre donc vers
+   la gauche. Il tient au survol pour la souris et au clic pour le tactile,
+   et un pont invisible évite qu'il se referme entre le bouton et lui. */
+.portal-erp{position:relative;display:flex}
+.portal-erp-pop{position:absolute;right:calc(100% + 8px);top:-6px;min-width:270px;max-width:320px;
+  background:var(--card);border:1px solid var(--border);border-radius:14px;padding:6px;
+  box-shadow:0 18px 46px rgba(0,0,0,.28);z-index:60;display:none;text-align:left}
+body.light .portal-erp-pop{box-shadow:0 18px 46px rgba(15,23,42,.14)}
+.portal-erp:hover .portal-erp-pop,.portal-erp.ouvert .portal-erp-pop{display:block}
+.portal-erp-pop::after{content:'';position:absolute;left:100%;top:0;width:10px;height:100%}
+.portal-erp-groupe{font-size:9.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);padding:9px 10px 5px}
+.portal-erp-item{display:block;width:100%;text-align:left;background:none;border:none;border-radius:10px;
+  padding:8px 10px;cursor:pointer;color:var(--text2);font:inherit;transition:background .12s}
+.portal-erp-item:hover{background:var(--accent-bg)}
+.portal-erp-item b{display:block;font-size:12.5px;font-weight:700;color:var(--text)}
+.portal-erp-item:hover b{color:var(--accent)}
+.portal-erp-item em{display:block;font-style:normal;font-size:10.5px;color:var(--muted);
+  line-height:1.4;margin-top:2px}
+.portal-erp-sep{height:1px;background:var(--border);margin:6px 8px}
+.portal-erp-vide{padding:12px 10px;font-size:11.5px;color:var(--muted)}
+@media (max-width:900px){.portal-erp-pop{display:none!important}}
+
 /* ── ⌘K badge in the Google search input ── */
 .portal-search button.portal-search-cmdk-badge,
 .portal-search-cmdk-badge{
@@ -1632,21 +1656,76 @@ function renderPortal(){
       // superadmin — le meme perimetre que les autres fonctions d'administration.
       // Volontairement absent du sheet mobile : l'ecran est une grille dense,
       // il n'a pas de sens sur un telephone.
-      (isSuper||urole==='direction'||urole==='administration'||urole==='administration_ventes'||urole==='administration_technique')?h('button',{
-        type:'button',
-        className:'portal-settings-corner',
-        'aria-label':'ERP',
-        title:'ERP — lecture RVGI',
-        onClick:()=>{window.location.href='/erp';}
-      },
-        (function(){
-          const w=document.createElement('span');
-          w.className='rvgi-mark';
-          w.innerHTML='<img class="rvgi-sombre" src="/static/rvgi_mark_clair.png?v=3" alt="RVGI">'+
-                      '<img class="rvgi-clair" src="/static/rvgi_mark.png?v=3" alt="RVGI">';
-          return w;
-        })()
-      ):null,
+      (isSuper||urole==='direction'||urole==='administration'||urole==='administration_ventes'||urole==='administration_technique')?(function(){
+        // Survoler la marque RVGI donne accès aux tableaux de bord du
+        // service sans passer par l'accueil de l'ERP. Cliquer ouvre l'ERP,
+        // comme avant : le volet ajoute un raccourci, il n'en retire pas.
+        const wrap=document.createElement('div');
+        wrap.className='portal-erp';
+        const btn=document.createElement('button');
+        btn.type='button';
+        btn.className='portal-settings-corner';
+        btn.setAttribute('aria-label','ERP');
+        btn.title='ERP — lecture RVGI';
+        btn.innerHTML='<span class="rvgi-mark">'+
+          '<img class="rvgi-sombre" src="/static/rvgi_mark_clair.png?v=3" alt="RVGI">'+
+          '<img class="rvgi-clair" src="/static/rvgi_mark.png?v=3" alt="RVGI">'+
+          '</span>';
+        btn.onclick=()=>{window.location.href='/erp';};
+        const pop=document.createElement('div');
+        pop.className='portal-erp-pop';
+        pop.setAttribute('role','menu');
+        pop.innerHTML='<div class="portal-erp-vide">Chargement…</div>';
+        wrap.appendChild(btn); wrap.appendChild(pop);
+        // Le menu n'est chargé qu'au premier survol : le portail ne paie
+        // rien pour un volet que personne n'ouvre.
+        let charge=false;
+        const remplir=async()=>{
+          if(charge)return; charge=true;
+          const ech=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>
+            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+          let m={tdb:[],ecrans:[]};
+          try{
+            const r=await fetch('/api/erp/menu',{credentials:'include'});
+            if(!r.ok)throw new Error('menu indisponible');
+            m=(await r.json()).menu||m;
+          }catch(e){
+            pop.innerHTML='<div class="portal-erp-vide">Menu ERP indisponible.</div>';
+            charge=false;   // un échec réseau ne doit pas figer le volet
+            return;
+          }
+          let html='';
+          if((m.tdb||[]).length){
+            html+='<div class="portal-erp-groupe">Tableaux de bord</div>';
+            (m.tdb||[]).forEach(t=>{
+              html+='<button type="button" role="menuitem" class="portal-erp-item" data-va="/erp#/'+
+                ech(t.cle)+'"><b>'+ech(t.label)+'</b><em>'+ech(t.resume||'')+'</em></button>';
+            });
+          }
+          if((m.ecrans||[]).length){
+            html+='<div class="portal-erp-groupe">Mes écrans RVGI</div>';
+            (m.ecrans||[]).forEach(e=>{
+              html+='<button type="button" role="menuitem" class="portal-erp-item" data-va="/erp#/'+
+                ech(e.cle)+'"><b>'+ech(e.label)+'</b></button>';
+            });
+          }
+          html+='<div class="portal-erp-sep"></div>'+
+            '<button type="button" role="menuitem" class="portal-erp-item" data-va="/erp">'+
+            '<b>Ouvrir l\'ERP</b><em>Les 27 écrans de RVGI, en lecture seule.</em></button>';
+          pop.innerHTML=html;
+          pop.querySelectorAll('[data-va]').forEach(b=>{
+            b.addEventListener('click',ev=>{
+              ev.stopPropagation();
+              window.location.href=b.getAttribute('data-va');
+            });
+          });
+        };
+        wrap.addEventListener('mouseenter',remplir);
+        wrap.addEventListener('focusin',remplir);
+        // Tactile : un appui long n'existe pas, un clic sur la marque ouvre
+        // l'ERP. Le volet reste une commodité souris et clavier.
+        return wrap;
+      })():null,
       (function(){
         const btn=document.createElement('button');
         btn.type='button';

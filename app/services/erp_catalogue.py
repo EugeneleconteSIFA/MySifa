@@ -1507,3 +1507,89 @@ def menu_du_role(role, ecrans_disponibles=None):
         if ec:
             ecrans.append({"cle": cle, "label": ec["label"], "resume": ec.get("resume", "")})
     return {"tdb": tdb, "ecrans": ecrans}
+
+
+# ── Vue par pièce ────────────────────────────────────────────────────────────
+#
+# Une ligne de commande n'est pas une commande. « 845 lignes en retard », c'est
+# 312 commandes — et c'est la commande qu'on rappelle au client, pas la ligne.
+# Les écrans de RVGI sont tous au niveau ligne ; cette vue les regroupe sur le
+# numéro de pièce, sans changer d'écran ni de filtres.
+#
+# Ce qui est constant dans une pièce (client, date d'entête) est repris tel
+# quel. Les quantités et les montants sont sommés. Une date de ligne donne la
+# plus proche. Le reste — désignation, référence article, prix unitaire,
+# position — n'a pas de sens agrégé et disparaît : une colonne en moins vaut
+# mieux qu'une moyenne que personne n'a demandée.
+
+# Types de colonne qu'on peut sommer sans mentir.
+_SOMMABLES = ("qte", "montant")
+
+
+def groupable(ec):
+    """Cet écran a-t-il une pièce sur laquelle regrouper ?"""
+    return piece_de(ec) is not None
+
+
+def colonnes_groupees(ec):
+    """Les colonnes de la vue par pièce, dérivées de celles de l'écran.
+
+    Chaque colonne porte `expr` : l'expression SQL agrégée. Les références
+    sont celles du catalogue, jamais une saisie utilisateur.
+    """
+    p = piece_de(ec)
+    if not p:
+        return None
+    alias_piece = p["alias"]
+    col_numero = p["col_ligne"]          # ex. « l.numero »
+
+    colonnes = []
+    vus = set()
+
+    def ajouter(nom, label, type_, largeur, expr, aligne=None):
+        if nom in vus:
+            return
+        vus.add(nom)
+        c = {"nom": nom, "label": label, "type": type_,
+             "largeur": largeur, "expr": expr}
+        if aligne:
+            c["aligne"] = aligne
+        colonnes.append(c)
+
+    # 1. Le numéro de pièce — la clé du regroupement, en tête.
+    ref = next((c for c in ec["colonnes"]
+                if c.get("c") == col_numero), None)
+    ajouter(ref["nom"] if ref else "numero",
+            ref["label"] if ref else "N°",
+            ref.get("type") if ref else "nombre",
+            ref.get("largeur") if ref else 100,
+            col_numero)
+
+    # 2. Le nombre de lignes : c'est l'information que la vue apporte.
+    ajouter("_lignes", "Lignes", "nombre", 62, "COUNT(*)")
+
+    # 3. Ce que porte l'entête est constant dans la pièce : on le reprend.
+    for c in ec["colonnes"]:
+        if c.get("parts") or not c.get("c"):
+            continue
+        if c["c"] == col_numero:
+            continue
+        if c["c"].split(".")[0] == alias_piece:
+            ajouter(c["nom"], c["label"], c.get("type"), c.get("largeur"),
+                    "MIN(%s)" % c["c"], c.get("aligne"))
+
+    # 4. Les colonnes de ligne : sommes et dates au plus tôt, rien d'autre.
+    for c in ec["colonnes"]:
+        if c.get("parts") or not c.get("c"):
+            continue
+        if c["c"] == col_numero or c["c"].split(".")[0] == alias_piece:
+            continue
+        if c.get("type") in _SOMMABLES:
+            ajouter(c["nom"], "Σ " + c["label"], c.get("type"),
+                    c.get("largeur"), "SUM(%s)" % c["c"], c.get("aligne"))
+        elif c.get("type") == "date":
+            ajouter(c["nom"], c["label"], "date", c.get("largeur"),
+                    "MIN(%s)" % c["c"], c.get("aligne"))
+
+    return {"cle": col_numero, "colonnes": colonnes,
+            "label": PIECE_LABELS.get(ec["cle"], "La pièce")}

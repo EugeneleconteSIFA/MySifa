@@ -277,55 +277,18 @@ def _etat_rattachement(r, ratt, ligne):
     return {"etat": "oui", "n": n, "pris": pris, "total": total}
 
 
-def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
-           taille=TAILLE_PAGE_DEFAUT, extra=None, compter=True, rattachement=False,
-           filtre_ratt=""):
-    """Liste paginée d'un écran. Renvoie colonnes, lignes, total.
+def _ou_et_params(ec, q, filtres, extra, ratt, filtre_ratt):
+    """Le WHERE d'un écran, construit une seule fois pour les deux vues.
 
-    `extra` : conditions supplémentaires, sous forme de couples
-    (fragment SQL déjà validé, valeur). Sert aux pièces liées, qui joignent
-    sur des colonnes que l'utilisateur ne filtre pas lui-même.
+    La vue par ligne et la vue par pièce doivent filtrer exactement pareil :
+    deux constructions parallèles finiraient par diverger, et « 845 lignes »
+    ne correspondrait plus à « 312 commandes ». Une seule fonction, donc, et
+    les deux vues l'appellent.
 
-    `compter=False` : on renvoie `total = None` au lieu de compter. Le COUNT
-    est un balayage complet de la table ; sur une recherche qui interroge les
-    vingt-sept écrans d'un coup, il double le travail pour un chiffre que
-    personne ne lit.
+    Aucune valeur de l'utilisateur n'entre dans le SQL : les références de
+    colonne viennent du catalogue et passent par `_ref`, tout le reste part
+    en paramètre lié.
     """
-    filtres = filtres or {}
-    taille = max(1, min(int(taille or TAILLE_PAGE_DEFAUT), TAILLE_PAGE_MAX))
-    page = max(1, int(page or 1))
-
-    colonnes = ec["colonnes"]
-    select = []
-    for c in colonnes:
-        _ident(c["nom"])
-        # Colonne composite : `code1` + `code2` affichés « 890/0112 ». Les
-        # morceaux sont sélectionnés séparément et assemblés en Python — pas
-        # de concaténation SQL, donc pas d'expression à valider.
-        if c.get("parts"):
-            for i, p in enumerate(c["parts"]):
-                _ref(p)
-                select.append('%s AS "%s__%d"' % (p, c["nom"], i))
-        else:
-            _ref(c["c"])
-            select.append('%s AS "%s"' % (c["c"], c["nom"]))
-    _ref(ec["cle_ligne"])
-    select.append('%s AS "_id"' % ec["cle_ligne"])
-
-    ratt = _colonnes_rattachement(ec) if rattachement else None
-    if ratt:
-        _ref(ratt["numero"])
-        if ratt["ligne"] != "NULL":
-            _ref(ratt["ligne"])
-        if ratt["col_qte"]:
-            _ref(ratt["col_qte"])
-        n, somme, sans_qte, douteux = _sql_rattachement(
-            ratt["piece"], ratt["numero"], ratt["ligne"])
-        select.append('%s AS "_ratt_n"' % n)
-        select.append('%s AS "_ratt_qte"' % somme)
-        select.append('%s AS "_ratt_tout"' % sans_qte)
-        select.append('%s AS "_ratt_douteux"' % douteux)
-
     conditions = []
     params = []
 
@@ -391,6 +354,59 @@ def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
             params.append(valeur)
 
     ou = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+    return ou, params
+
+
+def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
+           taille=TAILLE_PAGE_DEFAUT, extra=None, compter=True, rattachement=False,
+           filtre_ratt=""):
+    """Liste paginée d'un écran. Renvoie colonnes, lignes, total.
+
+    `extra` : conditions supplémentaires, sous forme de couples
+    (fragment SQL déjà validé, valeur). Sert aux pièces liées, qui joignent
+    sur des colonnes que l'utilisateur ne filtre pas lui-même.
+
+    `compter=False` : on renvoie `total = None` au lieu de compter. Le COUNT
+    est un balayage complet de la table ; sur une recherche qui interroge les
+    vingt-sept écrans d'un coup, il double le travail pour un chiffre que
+    personne ne lit.
+    """
+    filtres = filtres or {}
+    taille = max(1, min(int(taille or TAILLE_PAGE_DEFAUT), TAILLE_PAGE_MAX))
+    page = max(1, int(page or 1))
+
+    colonnes = ec["colonnes"]
+    select = []
+    for c in colonnes:
+        _ident(c["nom"])
+        # Colonne composite : `code1` + `code2` affichés « 890/0112 ». Les
+        # morceaux sont sélectionnés séparément et assemblés en Python — pas
+        # de concaténation SQL, donc pas d'expression à valider.
+        if c.get("parts"):
+            for i, p in enumerate(c["parts"]):
+                _ref(p)
+                select.append('%s AS "%s__%d"' % (p, c["nom"], i))
+        else:
+            _ref(c["c"])
+            select.append('%s AS "%s"' % (c["c"], c["nom"]))
+    _ref(ec["cle_ligne"])
+    select.append('%s AS "_id"' % ec["cle_ligne"])
+
+    ratt = _colonnes_rattachement(ec) if rattachement else None
+    if ratt:
+        _ref(ratt["numero"])
+        if ratt["ligne"] != "NULL":
+            _ref(ratt["ligne"])
+        if ratt["col_qte"]:
+            _ref(ratt["col_qte"])
+        n, somme, sans_qte, douteux = _sql_rattachement(
+            ratt["piece"], ratt["numero"], ratt["ligne"])
+        select.append('%s AS "_ratt_n"' % n)
+        select.append('%s AS "_ratt_qte"' % somme)
+        select.append('%s AS "_ratt_tout"' % sans_qte)
+        select.append('%s AS "_ratt_douteux"' % douteux)
+
+    ou, params = _ou_et_params(ec, q, filtres, extra, ratt, filtre_ratt)
     depart = _from(ec)
 
     # Tri : la colonne doit appartenir à l'écran, sinon on retombe sur le tri
@@ -453,6 +469,83 @@ def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
         "page": page,
         "taille": taille,
         "tri": tri if (tri and tri in par_col) else None,
+        "sens": sens_sql.lower(),
+    }
+
+
+def lister_groupe(ec, groupe, q="", filtres=None, tri=None, sens="asc", page=1,
+                  taille=TAILLE_PAGE_DEFAUT, extra=None, compter=True,
+                  filtre_ratt=""):
+    """La même liste, mais une ligne par pièce.
+
+    Mêmes filtres, même recherche, même écran : seule la maille change. On
+    regroupe sur le numéro de pièce et on agrège ce qui s'agrège — le
+    catalogue a déjà décidé quoi, dans `colonnes_groupees`.
+
+    Le rattachement MySifa n'est pas proposé ici : il se raisonne ligne par
+    ligne (une commande peut être à moitié rattachée), et une pastille unique
+    au niveau de la pièce dirait quelque chose de faux. Le filtre reste donc
+    inopérant dans cette vue, et l'écran le dit.
+
+    `_id` de chaque ligne vaut `MIN(cle_ligne)` : cliquer une pièce ouvre la
+    modale, qui montre de toute façon la pièce entière.
+    """
+    filtres = filtres or {}
+    taille = max(1, min(int(taille or TAILLE_PAGE_DEFAUT), TAILLE_PAGE_MAX))
+    page = max(1, int(page or 1))
+
+    colonnes = groupe["colonnes"]
+    cle = groupe["cle"]
+    _ref(cle)
+
+    select = []
+    for c in colonnes:
+        _ident(c["nom"])
+        select.append('%s AS "%s"' % (c["expr"], c["nom"]))
+    _ref(ec["cle_ligne"])
+    select.append('MIN(%s) AS "_id"' % ec["cle_ligne"])
+
+    ou, params = _ou_et_params(ec, q, filtres, extra, None, "")
+    depart = _from(ec)
+
+    # Tri : sur une colonne de la vue, donc sur son expression agrégée. Un
+    # nom inconnu retombe sur la clé de pièce, jamais sur du SQL libre.
+    par_nom = {c["nom"]: c for c in colonnes}
+    if tri and tri in par_nom:
+        col_tri = par_nom[tri]["expr"]
+        tri_retenu = tri
+    else:
+        col_tri = cle
+        tri_retenu = None
+        sens = "desc"
+    sens_sql = "DESC" if str(sens).lower() == "desc" else "ASC"
+
+    sql = ("SELECT %s FROM %s%s GROUP BY %s ORDER BY %s %s LIMIT ? OFFSET ?"
+           % (", ".join(select), depart, ou, cle, col_tri, sens_sql))
+
+    with get_erp_db() as conn:
+        total = None
+        if compter:
+            total = conn.execute(
+                "SELECT COUNT(DISTINCT %s) FROM %s%s" % (cle, depart, ou), params
+            ).fetchone()[0]
+        brut = conn.execute(sql, params + [taille, (page - 1) * taille]).fetchall()
+
+    lignes = []
+    for r in brut:
+        d = {"_id": r["_id"]}
+        for c in colonnes:
+            d[c["nom"]] = nettoyer(r[c["nom"]], c.get("type"))
+        lignes.append(d)
+
+    return {
+        "vue": "piece",
+        "colonnes": [{k: v for k, v in c.items() if k != "expr"} for c in colonnes],
+        "lignes": lignes,
+        "total": total,
+        "page": page,
+        "taille": taille,
+        "tri": tri_retenu,
         "sens": sens_sql.lower(),
     }
 
