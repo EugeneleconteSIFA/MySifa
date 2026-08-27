@@ -140,19 +140,19 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 .version{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;color:var(--muted);padding:4px 12px}
 
 .main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column}
-.page-head{flex-shrink:0;padding:18px 22px 12px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;background:var(--bg)}
+.page-head{flex-shrink:0;padding:11px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-wrap:nowrap;background:var(--bg);min-width:0}
 .btn-menu{flex-shrink:0;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--card);color:var(--text2);border-radius:10px;padding:9px 13px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
 .btn-menu:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
 @media (max-width:900px){.btn-menu{display:none}}
-.page-head h1{margin:0;font-size:19px;font-weight:700}
-.head-titre-ligne{display:flex;align-items:center;gap:10px}
-.page-head .sous{font-size:12px;color:var(--muted);margin-top:4px;max-width:640px}
-.head-droite{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.page-head h1{margin:0;font-size:18px;font-weight:700;white-space:nowrap}
+.page-head>.tt{min-width:0;flex-shrink:1}
+.head-titre-ligne{display:flex;align-items:center;gap:9px;min-width:0}
+.head-droite{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:nowrap;flex-shrink:0}
 .head-mark{display:inline-flex;align-items:center;flex-shrink:0}
 .head-mark img{width:46px;height:auto;display:block}
 /* Les mêmes actions que dans le tiroir, mais toujours sous la main : le tiroir
    sert à naviguer entre les écrans, pas à se déconnecter. */
-.head-actions{display:flex;align-items:center;gap:6px;padding-left:10px;margin-left:4px;border-left:1px solid var(--border)}
+.head-actions{display:flex;align-items:center;gap:6px;padding-left:10px;margin-left:4px;border-left:1px solid var(--border);flex-shrink:0}
 .head-btn{width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--card);color:var(--text2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,color .15s,border-color .15s;flex-shrink:0}
 .head-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
 .head-btn.danger:hover{background:var(--danger);border-color:var(--danger);color:#fff}
@@ -192,6 +192,17 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 .btn:hover{background:var(--card);color:var(--text)}
 .btn-accent{background:var(--accent);border-color:var(--accent);color:var(--bg)}
 .btn-accent:hover{filter:brightness(1.05)}
+/* ── Maille de lecture : par ligne ou par pièce ──────────────────────────
+   Un écran de RVGI est toujours au niveau ligne. « 845 lignes en retard »
+   ne dit pas combien de clients rappeler ; « 312 commandes » si. Le même
+   écran, les mêmes filtres, deux mailles. */
+.maille{display:flex;gap:2px;padding:3px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:12px}
+.maille button{flex:1;min-width:0;border:none;background:transparent;color:var(--muted);font:inherit;font-size:11.5px;font-weight:700;padding:7px 4px;border-radius:7px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .15s,color .15s}
+.maille button:hover{color:var(--text2)}
+.maille button.on{background:var(--accent-bg);color:var(--accent)}
+.maille button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.maille-info{font-size:10.5px;color:var(--muted);line-height:1.5;margin:-6px 0 12px}
+
 .rail-info{font-size:11px;color:var(--muted);line-height:1.6;border-top:1px solid var(--border);margin-top:14px;padding-top:12px}
 
 .grille-zone{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column}
@@ -686,9 +697,8 @@ table.tdb-t td.coupe{max-width:170px;overflow:hidden;text-overflow:ellipsis}
         </button>
         <div class="mk-pop" id="mk-pop" role="menu"></div>
       </div>
-      <div>
+      <div class="tt">
         <div class="head-titre-ligne"><h1 id="titre">ERP</h1><span id="guide-btn-slot"></span></div>
-        <div class="sous" id="sous">Lecture du miroir de RVGI.</div>
       </div>
       <div class="rg">
         <svg class="rg-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
@@ -845,7 +855,24 @@ function celluleRatt(v){
 // confort d'affichage, pas une donnée : il n'a pas à voyager jusqu'au serveur,
 // et il ne suit pas l'utilisateur d'un poste à l'autre — dit une fois ici pour
 // que ce ne soit pas une surprise.
-function cleLayout(){return 'mysifa_erp_cols_'+(S.ecran||'');}
+function cleLayout(){
+  return 'mysifa_erp_cols_'+(S.ecran||'')+(S.vue==='piece'?'__piece':'');
+}
+// Le hash d'un écran avec son état : c'est l'adresse de ce qu'on regarde.
+function hashEcran(cle,params){
+  const p=[];
+  Object.keys(params||{}).forEach(k=>{
+    const v=params[k];
+    if(v==null||v==='')return;
+    p.push(encodeURIComponent(k)+'='+encodeURIComponent(v));
+  });
+  return '#/'+cle+(p.length?('?'+p.join('&')):'');
+}
+// « Commandes » → « Commande ». Le bouton nomme la pièce, pas la table.
+function vueLabelPiece(def){
+  const l=(def&&def.piece_label)||'';
+  return l?l.replace(/^(La|Le|L')\s*/i,'').replace(/^./,c=>c.toUpperCase()):'Pièce';
+}
 function layoutCharger(){
   try{const b=localStorage.getItem(cleLayout());if(b)return JSON.parse(b)||{};}catch(e){}
   return {ordre:[],epingles:[]};
@@ -1151,10 +1178,6 @@ function ouvrirMenu(){
   fermerSidebar();   // on a choisi sa destination : le tiroir n'a plus lieu d'etre
   S.ecran=null;S.def=null;S.selection=null;S.colonnes=[];
   document.getElementById('titre').textContent='ERP';
-  document.getElementById('sous').textContent=
-    (S.meta&&S.meta.present)
-      ? 'Lecture de l\'ERP RVGI.'
-      : 'Le miroir de l\'ERP n\'a pas encore été construit.';
   const ms=document.getElementById('mobile-sub');if(ms)ms.textContent='Menu';
   renderNav();renderMenuService();
   const corps=document.getElementById('corps');
@@ -1199,6 +1222,7 @@ function ouvrirEcran(cle,prefiltres){
   const def=((S.meta&&S.meta.ecrans)||[]).find(e=>e.cle===cle);
   if(!def){toast('Écran inconnu.','err');ouvrirMenu();return;}
   S.ecran=cle;S.def=def;S.page=1;S.tri=null;S.sens='asc';S.q='';S.filtres={};S.selection=null;S.colonnes=[];S.epingles=[];
+  S.vue='ligne';
   // Un contexte de pièce liée n'est valable que pour l'écran qu'il vise, et
   // pour une seule ouverture : on le consomme ici.
   S.contexte=(S.ctxAttente&&S.ctxAttente.cible===cle)?S.ctxAttente:null;
@@ -1220,20 +1244,32 @@ function ouvrirEcran(cle,prefiltres){
     Object.keys(prefiltres).forEach(k=>{
       const v=prefiltres[k];
       if(k==='q'){S.q=String(v||'');}
+      else if(k==='vue'){S.vue=(String(v||'')==='piece'&&def.groupable)?'piece':'ligne';}
       else if(k==='ratt'){S.ratt=String(v||'');}
       else{S.filtres[k]=String(v==null?'':v);}
     });
   }
   document.getElementById('titre').textContent=def.label;
-  document.getElementById('sous').textContent=def.resume||'';
   const ms=document.getElementById('mobile-sub');if(ms)ms.textContent=def.label;
   renderNav();renderMenuService();
 
   // Rail construit UNE fois par écran. Les rafraîchissements de liste ne le
   // touchent pas : le champ de recherche garde son focus et son curseur.
-  let rail='<div class="rail"><div class="rail-titre">Recherche</div>'+
+  let rail='<div class="rail">';
+  if(def.groupable){
+    rail+='<div class="rail-titre">Lire par</div>'+
+      '<div class="maille" role="group" aria-label="Maille de lecture">'+
+        '<button type="button" data-vue="ligne"'+(S.vue!=='piece'?' class="on"':'')+'>Ligne</button>'+
+        '<button type="button" data-vue="piece"'+(S.vue==='piece'?' class="on"':'')+'>'+
+          esc(vueLabelPiece(def))+'</button>'+
+      '</div>'+
+      '<div class="maille-info">'+(S.vue==='piece'
+        ? 'Une ligne par pièce : quantités et montants sommés, dates au plus tôt.'
+        : 'Une ligne par ligne de pièce, comme dans RVGI.')+'</div>';
+  }
+  rail+='<div class="rail-titre">Recherche</div>'+
     '<div class="champ"><input type="text" id="q" placeholder="Rechercher..." autocomplete="off" value="'+esc(S.q||'')+'"></div>';
-  if(def.rattachable){
+  if(def.rattachable&&S.vue!=='piece'){
     rail+='<div class="rail-titre">Rattachement MySifa</div>'+
       '<div class="champ"><label for="f-ratt">'+
       (cle==='livraisons'?'Départ MyExpé':'Dossier de fabrication')+'</label>'+
@@ -1275,6 +1311,20 @@ function ouvrirEcran(cle,prefiltres){
       '<div class="grille-scroll"><table class="grille"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>'+
       '<div class="pied" id="pied"></div></div></div>';
   renderBandeau();
+
+  document.querySelectorAll('.maille [data-vue]').forEach(bt=>{
+    bt.addEventListener('click',()=>{
+      const v=bt.getAttribute('data-vue');
+      if(v===S.vue)return;
+      // Changer de maille change les colonnes : le tri et la page n'ont plus
+      // de sens, on repart du début. Les filtres, eux, restent — c'est tout
+      // l'intérêt du bouton.
+      // Passer par le hash plutôt que par un appel direct : la maille
+      // devient partageable et survit à un rechargement, comme les filtres.
+      location.hash=hashEcran(S.ecran,Object.assign({},S.filtres,
+        {vue:v,q:S.q,ratt:(v==='piece'?'':S.ratt)}));
+    });
+  });
 
   const q=document.getElementById('q');
   let minuteur=null;
@@ -1385,7 +1435,8 @@ function urlListe(){
   p.set('page',String(S.page));
   p.set('taille',String(S.taille));
   Object.keys(S.filtres).forEach(k=>{if(S.filtres[k])p.set('f_'+k,S.filtres[k]);});
-  if(S.ratt)p.set('ratt',S.ratt);
+  if(S.ratt&&S.vue!=='piece')p.set('ratt',S.ratt);
+  if(S.vue==='piece')p.set('vue','piece');
   // Ouverture depuis une pièce liée : on transmet l'origine, jamais un nom de
   // colonne — c'est le serveur qui reconstruit la jointure depuis le catalogue.
   if(S.contexte){
@@ -1437,7 +1488,7 @@ async function charger(){
   // MySifa a accroché à cette ligne. Elle s'ajoute ici, et se déplace ou se
   // fige comme les autres.
   let cols=r.colonnes;
-  if(S.def&&S.def.rattachable){
+  if(S.def&&S.def.rattachable&&S.vue!=='piece'){
     cols=cols.concat([{nom:'_ratt',label:(S.ecran==='livraisons'?'Départ MyExpé':'Dossier de fab'),
                        type:'ratt',largeur:150}]);
   }
@@ -2264,7 +2315,6 @@ async function ouvrirTdb(cle){
   fermerSidebar();
   S.ecran=cle;S.def=null;S.selection=null;S.colonnes=[];S.filtres={};S.q='';S.ratt='';
   document.getElementById('titre').textContent=conf.titre;
-  document.getElementById('sous').textContent=conf.sous;
   const ms=document.getElementById('mobile-sub');if(ms)ms.textContent=conf.titre;
   renderNav();renderMenuService();
   const corps=document.getElementById('corps');

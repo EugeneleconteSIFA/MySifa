@@ -106,6 +106,9 @@ def erp_meta(request: Request):
                 {k: v for k, v in f.items() if k != "col"} for f in adapte["filtres"]
             ],
             "rattachable": bool(adapte.get("rattachable")),
+            "groupable": bool(catalogue.groupable(adapte)),
+            "piece_label": (catalogue.PIECE_LABELS.get(ec["cle"], "La pièce")
+                            if catalogue.groupable(adapte) else None),
         })
 
     # Les écrans sortent dans l'ordre d'affichage, pas dans celui du catalogue.
@@ -149,6 +152,28 @@ def erp_recherche(
         raise HTTPException(status_code=503, detail=str(e))
 
 
+@router.get("/menu")
+def erp_menu(request: Request):
+    """Le menu de service, seul — sans le catalogue des vingt-sept écrans.
+
+    Le portail d'accueil l'appelle au survol de la marque RVGI. `/meta` ferait
+    l'affaire mais coûte le relevé complet du miroir pour trois entrées de
+    menu ; ici on ne lit le miroir que pour savoir quels écrans existent, et
+    s'il est absent le menu sort quand même avec ses tableaux de bord.
+
+    Déclarée AVANT `/{cle}/...`, comme `/recherche` et `/tdb`.
+    """
+    user = _exiger_acces(request)
+    try:
+        cols = _colonnes_par_table()
+    except HTTPException:
+        return {"present": False,
+                "menu": catalogue.menu_du_role(user.get("role"), set())}
+    dispo = {ec["cle"] for ec in catalogue.ECRANS
+             if catalogue.adapter_ecran(ec, cols)}
+    return {"present": True, "menu": catalogue.menu_du_role(user.get("role"), dispo)}
+
+
 @router.get("/tdb/{cle}")
 def erp_tableau_de_bord(cle: str, request: Request):
     """Un tableau de bord monté sur le miroir.
@@ -183,6 +208,7 @@ def erp_lignes(
     depuis_id: str = Query("", max_length=40),
     lien: int = Query(-1, ge=-1, le=99),
     ratt: str = Query("", max_length=10),
+    vue: str = Query("ligne", max_length=6),
 ):
     _exiger_acces(request)
     ec = _ecran(cle)
@@ -204,12 +230,27 @@ def erp_lignes(
         if nom_param.startswith("f_"):
             filtres[nom_param[2:]] = valeur
 
+    if vue not in ("ligne", "piece"):
+        raise HTTPException(status_code=400, detail="Vue inconnue.")
+
     try:
-        res = miroir.lister(
-            ec, q=q, filtres=filtres, tri=tri or None, sens=sens,
-            page=page, taille=taille, extra=extra,
-            rattachement=bool(ec.get("rattachable")), filtre_ratt=ratt,
-        )
+        if vue == "piece":
+            groupe = catalogue.colonnes_groupees(ec)
+            if not groupe:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cet écran n'a pas de pièce sur laquelle regrouper.")
+            res = miroir.lister_groupe(
+                ec, groupe, q=q, filtres=filtres, tri=tri or None, sens=sens,
+                page=page, taille=taille, extra=extra,
+            )
+        else:
+            res = miroir.lister(
+                ec, q=q, filtres=filtres, tri=tri or None, sens=sens,
+                page=page, taille=taille, extra=extra,
+                rattachement=bool(ec.get("rattachable")), filtre_ratt=ratt,
+            )
+            res["vue"] = "ligne"
         if contexte:
             res["contexte"] = contexte
         return res
