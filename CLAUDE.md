@@ -1351,6 +1351,30 @@ et re-taper `git checkout` retronque à nouveau.
 - Si un fichier `database.py` en conflit contient encore une migration numérotée
   non partie en production, la déplacer vers un fichier plutôt que la renuméroter.
 
+**Toucher un fichier de `static/` oblige à bumper son `?v=`.** Le middleware
+`no_cache_planning` (`main.py`) sert tout `/static/` avec
+`Cache-Control: public, max-age=86400` : pendant 24 h, le navigateur d'un
+visiteur déjà venu ne redemande RIEN. La seule invalidation est le querystring
+de version dans la balise qui l'inclut. Trois conventions coexistent :
+
+| Bust | Fichiers | Se périme quand |
+|---|---|---|
+| `?v=<n>` figé | `mysifa_promote.js?v=4`, `chat_widget.js?v=11`… | **jamais** — à incrémenter à la main |
+| `?v=__V_LABEL__` | `mysifa_prod_core.css` | `APP_VERSION` change |
+| `?v=__ASSETS__` | `pricing_app.css/js` | le contenu du fichier change |
+
+Modifier un fichier à bust figé **sans incrémenter le nombre** produit le pire
+symptôme qui soit : « j'ai poussé, c'est déployé, et je vois toujours l'ancien ».
+Vérifier avant de commiter :
+
+```bash
+grep -rn "<le fichier modifié>" --include=*.py app/web/
+```
+
+Corollaire : un fichier en `?v=__V_LABEL__` ne se rafraîchit que si `APP_VERSION`
+bouge. Refuser le bump de version, c'est accepter que ce fichier reste périmé
+24 h chez chaque visiteur.
+
 **Jamais de commentaire `#` en fin de ligne dans un bloc à coller** :
 
 Le terminal d'Eugène sur Mac est **zsh en interactif**, où l'option
