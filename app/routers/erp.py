@@ -8,6 +8,7 @@ consommateur.
 Endpoints
 ---------
   GET /api/erp/meta                    → fraîcheur du miroir, écrans disponibles
+  GET /api/erp/tdb/{cle}               → un tableau de bord (adv | direction)
   GET /api/erp/{ecran}/lignes          → liste paginée, filtrée, triée
   GET /api/erp/{ecran}/detail/{id}     → toutes les colonnes d'une ligne
 
@@ -21,6 +22,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 
 from app.services import erp_catalogue as catalogue
 from app.services import erp_mirror as miroir
+from app.services import erp_tdb
 from app.services.auth_service import get_current_user
 from config import ROLES_ADMIN
 
@@ -70,11 +72,12 @@ def _ecran(cle):
 
 @router.get("/meta")
 def erp_meta(request: Request):
-    _exiger_acces(request)
+    user = _exiger_acces(request)
     infos = miroir.meta()
     if not infos["present"]:
         return {
             "present": False,
+            "menu": catalogue.menu_du_role(user.get("role"), set()),
             "domaines": catalogue.DOMAINES,
             "ecrans": [],
             "enums": catalogue.ENUMS,
@@ -110,6 +113,7 @@ def erp_meta(request: Request):
 
     return {
         "present": True,
+        "menu": catalogue.menu_du_role(user.get("role"), {e["cle"] for e in ecrans}),
         "importe_le": infos["importe_le"],
         "releve_le": infos["releve_le"],
         "lignes": infos["lignes"],
@@ -141,6 +145,27 @@ def erp_recherche(
     ecrans.sort(key=lambda e: catalogue.rang(e["cle"]))
     try:
         return miroir.recherche_globale(ecrans, q, par_ecran=par_ecran)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+
+
+@router.get("/tdb/{cle}")
+def erp_tableau_de_bord(cle: str, request: Request):
+    """Un tableau de bord monté sur le miroir.
+
+    Déclarée AVANT `/{cle}/...`, comme `/recherche` : sinon FastAPI lirait
+    « tdb » comme une clé d'écran.
+
+    Les compteurs qui vivent dans MySifa — OF, fiches techniques, mappings,
+    scans — ne passent PAS par ici. Le navigateur va les chercher à leur
+    propre route, celle-là même que le lien de la tuile ouvre : un compteur
+    et l'écran qu'il ouvre ne peuvent alors jamais diverger.
+    """
+    _exiger_acces(request)
+    if cle not in ("adv", "direction"):
+        raise HTTPException(status_code=404, detail="Tableau de bord inconnu.")
+    try:
+        return erp_tdb.adv() if cle == "adv" else erp_tdb.direction()
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e))
 

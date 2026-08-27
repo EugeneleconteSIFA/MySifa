@@ -1,0 +1,60 @@
+name: CI
+
+# Garde-fou minimal sur staging : la syntaxe et la suite de tests.
+# Rien de plus pour l'instant — un CI lent est un CI qu'on contourne.
+on:
+  push:
+    branches: [staging, main]
+  pull_request:
+    branches: [staging, main]
+
+jobs:
+  verifier:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Les tests s'appellent en `python tests/test_x.py` : sans PYTHONPATH, c'est
+    # `tests/` qui est sur sys.path, pas la racine, et `import app` echoue.
+    env:
+      PYTHONPATH: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Syntaxe Python
+        run: |
+          python -m compileall -q app config.py main.py database.py tests scripts tools \
+            || { echo "::error::Syntaxe Python invalide"; exit 1; }
+
+      - name: Syntaxe JavaScript
+        run: |
+          echec=0
+          while IFS= read -r f; do
+            node --check "$f" || { echo "::error file=$f::Syntaxe JS invalide"; echec=1; }
+          done < <(find static app -name '*.js' -not -path '*/node_modules/*' -not -name '*.min.js')
+          exit $echec
+
+      - name: Marqueurs de conflit
+        run: |
+          if git grep -nE '^(<<<<<<<|>>>>>>>|\|\|\|\|\|\|\|)' -- '*.py' '*.js' '*.css' '*.md'; then
+            echo "::error::Marqueurs de conflit git non resolus"
+            exit 1
+          fi
+
+      - name: Dependances
+        run: pip install -r requirements.txt
+
+      - name: Tests
+        run: |
+          echec=0
+          for t in tests/test_*.py; do
+            echo "--- $t"
+            python "$t" || { echo "::error file=$t::Test en echec"; echec=1; }
+          done
+          exit $echec

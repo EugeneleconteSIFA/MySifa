@@ -1440,3 +1440,70 @@ def _colonne_de_ligne(ec):
         if candidat in noms:
             return candidat
     return "_id"
+
+
+# ── Menu de service ──────────────────────────────────────────────────────────
+#
+# Le tiroir montre tout ; ce menu-ci montre le peu qu'on ouvre vraiment. Il se
+# déploie au survol de la marque RVGI, en tête de page, et sert de raccourci
+# permanent : deux tableaux de bord d'abord, puis les écrans que le service
+# consulte tous les jours.
+#
+# Un service n'a pas moins de DROITS que les autres — l'accès à /erp est le
+# même pour tous (`ROLES_ADMIN`). Il a moins d'habitudes. Ce menu range les
+# habitudes ; le tiroir reste la porte vers les 27 écrans.
+
+TABLEAUX_DE_BORD = [
+    {
+        "cle": "tdb_adv",
+        "label": "TDB ADV",
+        "resume": "Le fil commande → dossier de production → BL, "
+                  "et les documents qui attendent une vérification.",
+    },
+    {
+        "cle": "tdb_direction",
+        "label": "TDB Direction",
+        "resume": "Rentré, facturable, facturé — et le rentré de la veille, "
+                  "commande par commande.",
+    },
+]
+
+CLES_TDB = {t["cle"] for t in TABLEAUX_DE_BORD}
+
+# Écrans mis en avant, dans l'ordre où le service les ouvre.
+_MENU_ADV = ["commandes", "livraisons", "factures", "colisage", "clients", "articles"]
+_MENU_DIRECTION = ["commandes", "factures", "echeances", "clients", "marches", "prix_vente"]
+_MENU_TECHNIQUE = ["articles", "fiches_fabrication", "outils", "machines",
+                   "stock_matiere", "receptions"]
+
+MENU_SERVICE = {
+    "superadmin": {"tdb": ["tdb_adv", "tdb_direction"], "ecrans": _MENU_ADV},
+    "direction": {"tdb": ["tdb_direction", "tdb_adv"], "ecrans": _MENU_DIRECTION},
+    "administration_ventes": {"tdb": ["tdb_adv"], "ecrans": _MENU_ADV},
+    "administration": {"tdb": ["tdb_adv"], "ecrans": _MENU_ADV},
+    "administration_technique": {"tdb": ["tdb_adv"], "ecrans": _MENU_TECHNIQUE},
+}
+
+# Un rôle inconnu ne se retrouve pas devant un menu vide : il reçoit le carnet.
+MENU_DEFAUT = {"tdb": [], "ecrans": ["commandes", "livraisons", "factures"]}
+
+
+def menu_du_role(role, ecrans_disponibles=None):
+    """Le menu de survol pour ce rôle, réduit à ce que le miroir contient.
+
+    `ecrans_disponibles` est l'ensemble des clés d'écran réellement servies par
+    `/api/erp/meta` : un miroir partiel n'a pas à proposer une entrée qui
+    ouvrirait un écran vide.
+    """
+    conf = MENU_SERVICE.get(str(role or ""), MENU_DEFAUT)
+    par_cle = {t["cle"]: t for t in TABLEAUX_DE_BORD}
+    tdb = [par_cle[c] for c in conf.get("tdb", []) if c in par_cle]
+
+    ecrans = []
+    for cle in conf.get("ecrans", []):
+        if ecrans_disponibles is not None and cle not in ecrans_disponibles:
+            continue
+        ec = ecran(cle)
+        if ec:
+            ecrans.append({"cle": cle, "label": ec["label"], "resume": ec.get("resume", "")})
+    return {"tdb": tdb, "ecrans": ecrans}

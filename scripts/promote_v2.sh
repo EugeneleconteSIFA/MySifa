@@ -225,8 +225,31 @@ for i in $(seq 1 $HEALTHZ_TIMEOUT); do
     fi
 done
 
+# ─── 6b. Test de fumée : les pages répondent-elles vraiment ? ─────────
+# /healthz ne verifie que la base. Une erreur d'import dans un router ou une
+# fonction de rendu qui leve laisse l'application demarrer, /healthz dire "ok",
+# et chaque page renvoyer un 500 — sans que le rollback se declenche.
+if [[ "$HEALTHZ_OK" == "1" ]]; then
+    log "6b/7 Test de fumée sur les pages clés"
+    FUMEE="${V2_PATH}/scripts/fumee.sh"
+    if [[ -x "$FUMEE" ]]; then
+        # `log` ecrit sur stdout, que l'appelant capture deja : on laisse
+        # donc le detail du test de fumee suivre le meme chemin, en le
+        # prefixant pour qu'il reste lisible dans le journal de promotion.
+        if FUMEE_SORTIE=$(FUMEE_TIMEOUT=8 "$FUMEE" "http://localhost:8000" 2>&1); then
+            log "    OK — toutes les routes répondent"
+        else
+            log "    KO — une ou plusieurs pages renvoient une erreur serveur"
+            while IFS= read -r ligne; do log "      $ligne"; done <<< "$FUMEE_SORTIE"
+            HEALTHZ_OK=0
+        fi
+    else
+        log "    ignoré (scripts/fumee.sh absent ou non exécutable)"
+    fi
+fi
+
 if [[ "$HEALTHZ_OK" != "1" ]]; then
-    log "    KO après ${HEALTHZ_TIMEOUT}s — ROLLBACK AUTOMATIQUE"
+    log "    KO — ROLLBACK AUTOMATIQUE"
     log "    Restore DB depuis $(basename "$BACKUP_FILE")"
     cp "$BACKUP_FILE" "$DB_PATH"
     chown "${APP_USER}:${APP_USER}" "$DB_PATH"

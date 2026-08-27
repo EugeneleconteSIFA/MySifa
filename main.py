@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 import re
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
@@ -114,6 +115,17 @@ from app.web.erp_page import router as erp_page_router
 async def lifespan(app: FastAPI):
     """Startup / shutdown — remplace @app.on_event('startup') (déprécié)."""
     print(f"[MySifa] Boot — ENV_NAME={ENV_NAME} version={APP_VERSION} port={PORT}")
+
+    # Remontee des erreurs. Sans SENTRY_DSN, ne fait rien et n'importe rien.
+    try:
+        from config import SENTRY_DSN
+        from app.core.monitoring import init_monitoring
+
+        if init_monitoring(app, SENTRY_DSN, ENV_NAME, APP_VERSION):
+            print("[MySifa] Monitoring des erreurs actif.")
+    except Exception as e:
+        print(f"[MySifa] Monitoring non initialise ({e}) — sans effet sur le reste.")
+
     # v1 (staging) partage la DB avec la prod : aucune écriture au boot.
     # Les seeds (emplacements_plan, chat channels) sont la responsabilité exclusive de v2.
     if IS_STAGING:
@@ -142,6 +154,31 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=APP_TITLE, version=APP_VERSION, lifespan=lifespan)
+
+
+
+@app.exception_handler(Exception)
+async def _journaliser_erreur(request: Request, exc: Exception):
+    """Toute exception non rattrapee laisse une trace, quoi qu'il arrive.
+
+    Avant ce gestionnaire, une erreur inattendue produisait un 500 anonyme :
+    l'operateur voyait un ecran casse, et il ne restait rien pour comprendre.
+    Desormais elle est ecrite dans le journal avec sa trace, sa route et son
+    utilisateur — et envoyee a Sentry si un DSN est configure.
+
+    La reponse rendue reste volontairement muette : un message d'erreur
+    technique renseigne autant l'attaquant que l'utilisateur.
+
+    Note d'implementation : ce gestionnaire est appele par ServerErrorMiddleware,
+    qui attend une REPONSE. Re-lever ici ne redonnerait pas le comportement par
+    defaut — ca remonterait jusqu'au serveur ASGI et couperait la connexion sans
+    rien renvoyer au navigateur.
+    """
+    from app.core.monitoring import journaliser_exception
+
+    journaliser_exception(request, exc)
+    return JSONResponse(status_code=500, content={"detail": "Erreur interne."})
+
 
 # Static assets (chat widget, etc.)
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -179,9 +216,27 @@ async def no_cache_planning(request: Request, call_next):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
     elif p.startswith("/static/"):
-        # Assets statiques : cache navigateur 24h. Les fichiers qui changent
-        # utilisent un querystring de version (?v=N) pour invalider.
-        response.headers["Cache-Control"] = "public, max-age=86400"
+        # Assets statiques. Deux regimes, parce que tous n'ont pas le meme risque.
+        #
+        # Le code (JS/CSS) : `no-cache` — le navigateur garde le fichier mais
+        # REVALIDE avant de le servir. StaticFiles renvoie un ETag ; tant que le
+        # fichier n'a pas bouge, la reponse est un 304 de quelques octets. Le
+        # cout est un aller-retour conditionnel, le gain est qu'un utilisateur ne
+        # peut plus tourner 24h sur un JS perime apres une promotion.
+        #
+        # C'etait le regime precedent qui posait probleme : 24h de cache ferme,
+        # invalides a la main par un `?v=N` qu'il fallait penser a incrementer.
+        # Sur 485 balises, 110 seulement portaient ce marqueur — et rien ne
+        # signalait les 375 autres. Le bug qui en resulte est le pire genre :
+        # il n'existe que chez une personne, et disparait quand elle vide son
+        # cache.
+        #
+        # Les medias (images, polices, sons) gardent le cache ferme : leur
+        # contenu ne change pratiquement jamais, et ils pesent lourd.
+        if p.endswith((".js", ".css", ".json", ".map")):
+            response.headers["Cache-Control"] = "no-cache"
+        else:
+            response.headers["Cache-Control"] = "public, max-age=86400"
     return response
 
 

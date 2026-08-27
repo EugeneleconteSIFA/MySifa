@@ -9,3 +9,4 @@ Voir app/web/components/README.md.
 """
 
 from app.web.components.theme import T, TOKENS_CSS, bloc_tokens  # noqa: F401
+from app.web.components.assets import asset  # noqa: F401
