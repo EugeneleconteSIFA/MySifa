@@ -45,6 +45,30 @@ POS_SOLDEE = 2
 
 MAX_LIGNES_LISTE = 12
 
+# Une ligne de commande ne porte pas forcément un produit. RVGI y met aussi
+# les frais de port, les frais de cliché, les frais d'outils, les créations de
+# document : des lignes de refacturation, jamais « livrées », qui restent
+# ouvertes indéfiniment. Relevé sur les données réelles le 27/08/2026 : elles
+# remontaient dans « en retard » avec 4 200 jours d'ancienneté, depuis 2015,
+# et noyaient les vrais retards.
+#
+# Une référence produit SIFA s'écrit `famille/numéro` — `code1`/`code2`, les
+# deux renseignés. C'est la seule marque structurelle disponible sur la ligne
+# elle-même ; le libellé (« Frais de port ») ne se filtre pas, il change.
+def _ligne_produit(alias="l"):
+    return ("COALESCE(%s.code1, 0) > 0 AND COALESCE(%s.code2, 0) > 0"
+            % (alias, alias))
+
+
+# Passé ce délai, une ligne en retard n'est plus un retard sur lequel agir :
+# c'est une ligne que personne ne fermera. Comptée à part, pas cachée.
+JOURS_DORMANT = 90
+
+# « À venir ou en cours » : ce que la production a encore devant elle. Une
+# ligne dont la date d'expédition est passée depuis plus longtemps n'attend
+# plus de dossier, elle attend un ménage.
+JOURS_EN_COURS = 30
+
 # Une date réelle, par opposition aux sentinelles de RVGI (`30/11/1999` pour
 # « non renseignée », `31/12/2099` pour « pas de fin »). Comparer sans ce
 # garde-fou fait passer toute ligne sans date promise pour une ligne en
@@ -53,12 +77,16 @@ def _date_reelle(col):
     return "%s IS NOT NULL AND %s > '2000-01-01' AND %s < '2090-01-01'" % (col, col, col)
 
 FORMULES = {
-    "carnet": "cde_ligne : qtep > 0 et position ≠ soldée",
-    "retard": "carnet dont la date d'expédition est passée "
-              "(les lignes sans date promise n'en sont pas)",
+    "carnet": "lignes de commande à traiter : qtep > 0, position ≠ soldée, "
+              "et portant une référence produit (code1/code2)",
+    "retard": "carnet dont la date d'expédition est passée depuis moins de "
+              "90 jours ; au-delà la ligne est comptée comme dormante",
+    "dormant": "lignes ouvertes dont l'expédition est passée depuis plus de "
+               "90 jours — RVGI ne les solde jamais, elles ne se rattrapent plus",
     "semaine": "carnet dont amje tombe dans les 7 prochains jours",
     "a_facturer": "liv_ligne : qte livrée > qte facturée",
-    "sans_dossier": "carnet en fabrication sans rattachement à un dossier MySifa",
+    "sans_dossier": "lignes en fabrication à venir ou en cours (expédition "
+                    "des 30 derniers jours ou à venir) sans dossier MySifa rattaché",
     "hors_prod": "carnet dont l'origine est stock ou sous-traitance",
     "rentre": "Σ net (montant net de ligne) des lignes de commande créées "
               "ce jour-là, par cde_entete.amjc",
@@ -211,34 +239,59 @@ def adv():
             sortie["indispo"].append("Carnet : " + manque)
             sortie["carnet"] = None
         else:
-            ouvert = "l.qtep > 0 AND COALESCE(l.lpos, 0) <> %d" % POS_SOLDEE
-            sortie["carnet"] = {
-                "lignes": _entier(_un(conn, "SELECT COUNT(*) FROM cde_ligne l WHERE " + ouvert)),
-                "retard": _entier(_un(
-                    conn,
-                    "SELECT COUNT(*) FROM cde_ligne l WHERE " + ouvert
-                    + " AND " + _date_reelle("l.amje") + " AND l.amje < ?", (b["aujourdhui"],))),
-                "semaine": _entier(_un(
-                    conn,
-                    "SELECT COUNT(*) FROM cde_ligne l WHERE " + ouvert
-                    + " AND " + _date_reelle("l.amje")
-                    + " AND l.amje >= ? AND l.amje < ?", (b["aujourdhui"], b["fin_semaine"]))),
-            }
+            # Une commande porte plusieurs lignes : les deux comptes sont
+            # affichés partout. « 845 lignes » ne veut rien dire sans « sur
+            # 312 commandes », et c'est la commande qu'on rappelle au client.
+            produit = _ligne_produit("l") if sch.a("cde_ligne", "code1", "code2") else "1=1"
+            ouvert = ("l.qtep > 0 AND COALESCE(l.lpos, 0) <> %d AND %s"
+                      % (POS_SOLDEE, produit))
+            date_ok = _date_reelle("l.amje")
+            limite_dormant = (date.fromisoformat(b["aujourdhui"])
+                              - timedelta(days=JOURS_DORMANT)).isoformat()
 
-            # Les lignes en retard, avec leur client — la liste d'action.
+            def _compte(where, params=()):
+                r = _lignes(conn, "SELECT COUNT(*) AS lignes, "
+                            "COUNT(DISTINCT l.numero) AS commandes "
+                            "FROM cde_ligne l WHERE " + where, params)
+                return {"lignes": _entier(r[0]["lignes"]) if r else 0,
+                        "commandes": _entier(r[0]["commandes"]) if r else 0}
+
+            sortie["carnet"] = _compte(ouvert)
+            sortie["carnet"]["retard"] = _compte(
+                ouvert + " AND " + date_ok + " AND l.amje < ? AND l.amje >= ?",
+                (b["aujourdhui"], limite_dormant))
+            sortie["carnet"]["dormant"] = _compte(
+                ouvert + " AND " + date_ok + " AND l.amje < ?", (limite_dormant,))
+            sortie["carnet"]["semaine"] = _compte(
+                ouvert + " AND " + date_ok + " AND l.amje >= ? AND l.amje < ?",
+                (b["aujourdhui"], b["fin_semaine"]))
+            sortie["carnet"]["jours_dormant"] = JOURS_DORMANT
+            # La date charnière, pour que le lien « les voir » ouvre le carnet
+            # sur exactement les lignes que la tuile compte.
+            sortie["carnet"]["dormant"]["avant"] = limite_dormant
+
+            # Les lignes en retard, avec leur client — la liste d'action. On
+            # part des plus récentes : une ligne de la semaine dernière se
+            # rattrape, une ligne de l'an dernier ne se rattrape plus.
             joint_clt = ("LEFT JOIN cde_entete e ON e.numero = l.numero"
                          if sch.a("cde_entete", "numero", "rs") else "")
             champ_clt = "e.rs" if joint_clt else "''"
             sortie["retards"] = _lignes(conn, """
                 SELECT l.id AS id, l.numero AS numero, l.ligne AS ligne,
                        %s AS client, l.des1 AS designation,
+                       l.code1 AS code1, l.code2 AS code2,
                        l.qtep AS reste, l.amje AS expedition, l.orig AS origine
                   FROM cde_ligne l %s
-                 WHERE %s AND %s AND l.amje < ?
-              ORDER BY l.amje ASC
+                 WHERE %s AND %s AND l.amje < ? AND l.amje >= ?
+              ORDER BY l.amje DESC
                  LIMIT %d
-            """ % (champ_clt, joint_clt, ouvert, _date_reelle("l.amje"), MAX_LIGNES_LISTE),
-                (b["aujourdhui"],))
+            """ % (champ_clt, joint_clt, ouvert, date_ok, MAX_LIGNES_LISTE),
+                (b["aujourdhui"], limite_dormant))
+
+            # Ce que le filtre « ligne produit » a écarté, en clair. Une
+            # règle de filtrage qu'on ne peut pas vérifier d'un coup d'œil
+            # finit par écarter la mauvaise chose sans que personne ne le voie.
+            sortie["ecartees"] = _ecartees(conn, sch, b)
 
             # Origine : seules les lignes en fabrication attendent un dossier.
             if "orig" in sch.cols("cde_ligne"):
@@ -318,19 +371,52 @@ def _sans_dossier(conn, sch, sortie):
         return None
     if not sch.a("cde_ligne", "qtep", "lpos", "orig", "numero", "ligne"):
         return None
-    n = _un(conn, """
-        SELECT COUNT(*)
+    produit = _ligne_produit("l") if sch.a("cde_ligne", "code1", "code2") else "1=1"
+    depuis = (date.fromisoformat(sortie["bornes"]["aujourdhui"])
+              - timedelta(days=JOURS_EN_COURS)).isoformat()
+    rows = _lignes(conn, """
+        SELECT COUNT(*) AS lignes, COUNT(DISTINCT l.numero) AS commandes
           FROM cde_ligne l
-         WHERE l.qtep > 0 AND COALESCE(l.lpos, 0) <> ? AND l.orig = ?
+         WHERE l.qtep > 0 AND COALESCE(l.lpos, 0) <> ? AND l.orig = ? AND %s
+           AND %s AND l.amje >= ?
            AND NOT EXISTS (
                  SELECT 1 FROM mysifa.rvgi_rattachements r
                   WHERE r.piece = 'commande'
                     AND r.numero = CAST(l.numero AS TEXT)
                     AND (r.ligne IS NULL OR r.ligne = l.ligne))
-    """, (POS_SOLDEE, ORIG_FABRICATION))
-    if n is None:
+    """ % (produit, _date_reelle("l.amje")), (POS_SOLDEE, ORIG_FABRICATION, depuis))
+    if not rows:
         sortie["indispo"].append("Lignes sans dossier : table rvgi_rattachements absente")
-    return _entier(n)
+        return None
+    return {"lignes": _entier(rows[0]["lignes"]),
+            "commandes": _entier(rows[0]["commandes"]),
+            "depuis": depuis, "jours": JOURS_EN_COURS}
+
+
+def _ecartees(conn, sch, b):
+    """Ce que le filtre « ligne produit » retire du carnet, en clair.
+
+    Frais de port, frais de cliché, frais d'outils : RVGI les porte sur des
+    lignes de commande sans référence produit, et personne ne les solde
+    jamais. Le tableau de bord les écarte — mais il montre lesquelles, et
+    combien, pour qu'on puisse contredire la règle si elle se trompe.
+    """
+    if not sch.a("cde_ligne", "code1", "code2", "des1", "qtep", "lpos"):
+        return None
+    hors = ("l.qtep > 0 AND COALESCE(l.lpos,0) <> %d AND NOT (%s)"
+            % (POS_SOLDEE, _ligne_produit("l")))
+    total = _entier(_un(conn, "SELECT COUNT(*) FROM cde_ligne l WHERE " + hors))
+    if not total:
+        return {"lignes": 0, "libelles": []}
+    return {
+        "lignes": total,
+        "libelles": _lignes(conn, """
+            SELECT COALESCE(NULLIF(TRIM(l.des1), ''), '(sans libellé)') AS libelle,
+                   COUNT(*) AS lignes
+              FROM cde_ligne l WHERE %s
+          GROUP BY libelle ORDER BY lignes DESC LIMIT 8
+        """ % hors),
+    }
 
 
 # ── Tableau de bord direction ────────────────────────────────────────────────
