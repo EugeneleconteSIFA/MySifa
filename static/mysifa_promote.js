@@ -420,7 +420,7 @@
         + perdants.map(function (c) {
             return '<div style="display:flex;gap:10px;align-items:flex-start">'
               + '<span style="flex:0 0 auto;min-width:48px;text-align:center;font-size:11px;font-weight:800;'
-                + 'color:var(--warn);background:rgba(251,191,36,.14);border-radius:6px;padding:3px 6px">&minus;'
+                + 'color:var(--warn);background:color-mix(in srgb, var(--warn) 14%, transparent);border-radius:6px;padding:3px 6px">&minus;'
                 + _prEsc(String(c.perdu)) + ' pt' + (c.perdu > 1 ? 's' : '') + '</span>'
               + '<div style="flex:1;min-width:0">'
                 + '<div style="font-size:12.5px;font-weight:700;color:var(--text)">' + _prEsc(c.label) + '</div>'
@@ -501,7 +501,7 @@
   function _dsMigrationsHtml(mig) {
     let out = '';
     if (mig.en_attente && mig.en_attente.length) {
-      out += '<div style="padding:12px 14px;background:rgba(251,191,36,.10);border-bottom:1px solid var(--border)">'
+      out += '<div style="padding:12px 14px;background:color-mix(in srgb, var(--warn) 10%, transparent);border-bottom:1px solid var(--border)">'
         + '<div style="font-size:11px;font-weight:700;color:var(--warn);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">En attente sur cette instance</div>'
         + mig.en_attente.map(function (m) {
             return '<div style="font-size:12px;color:var(--text);font-family:\'SFMono-Regular\',Menlo,monospace">'
@@ -511,7 +511,7 @@
         + '</div>';
     }
     if (mig.doublons && mig.doublons.length) {
-      out += '<div style="padding:12px 14px;background:rgba(239,68,68,.10);border-bottom:1px solid var(--border)">'
+      out += '<div style="padding:12px 14px;background:color-mix(in srgb, var(--danger) 10%, transparent);border-bottom:1px solid var(--border)">'
         + '<div style="font-size:11px;font-weight:700;color:var(--danger);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Numéros en double</div>'
         + mig.doublons.map(function (d) {
             return '<div style="font-size:12px;color:var(--text)">v' + _prEsc(d.cle) + ' &rarr; ' + _prEsc((d.noms || []).join(', ')) + '</div>';
@@ -557,7 +557,7 @@
           else if (b.fusionnee) { etat = 'fusionnée'; couleur = 'var(--muted)'; }
           else { etat = 'en cours'; couleur = 'var(--accent)'; }
           const age = (b.jours == null) ? '' : (b.jours === 0 ? "aujourd'hui" : b.jours + ' j');
-          return '<tr style="border-bottom:1px solid var(--border)' + (b.a_nettoyer ? ';background:rgba(251,191,36,.07)' : '') + '">'
+          return '<tr style="border-bottom:1px solid var(--border)' + (b.a_nettoyer ? ';background:color-mix(in srgb, var(--warn) 7%, transparent)' : '') + '">'
             + _dsTd('<span style="font-family:\'SFMono-Regular\',Menlo,monospace;color:var(--text);font-weight:600">' + _prEsc(b.nom) + '</span>')
             + _dsTd('<span style="color:var(--text2)">' + _prEsc(b.dernier_commit || '') + '</span>')
             + _dsTd('<span style="font-size:11px;color:var(--muted)">' + _prEsc(b.auteur || '') + '</span>', 'white-space:nowrap')
@@ -590,7 +590,7 @@
       + '<div style="font-size:12px;color:var(--text2)">Branche courante&nbsp;: '
       + '<span style="font-family:\'SFMono-Regular\',Menlo,monospace;color:var(--text);font-weight:600">' + _prEsc(d.branche) + '</span></div>';
     if (d.verrou_git) {
-      out += '<div style="margin-top:10px;background:rgba(239,68,68,.10);border:1px solid rgba(239,68,68,.35);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--text)">'
+      out += '<div style="margin-top:10px;background:color-mix(in srgb, var(--danger) 10%, transparent);border:1px solid color-mix(in srgb, var(--danger) 35%, transparent);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--text)">'
         + 'Un verrou <span style="font-family:\'SFMono-Regular\',Menlo,monospace">.git/index.lock</span> traîne dans le dépôt. '
         + 'Il bloque toute commande git tant qu\'il n\'est pas supprimé.</div>';
     }
@@ -617,13 +617,13 @@
     let html = _dsNoteHtml(d.note);
 
     if (d.alertes && d.alertes.length) {
-      html += '<div style="background:rgba(251,191,36,.10);border:1px solid rgba(251,191,36,.40);border-left:4px solid var(--warn);border-radius:10px;padding:11px 15px;margin-bottom:14px">'
+      html += '<div style="background:color-mix(in srgb, var(--warn) 10%, transparent);border:1px solid color-mix(in srgb, var(--warn) 40%, transparent);border-left:4px solid var(--warn);border-radius:10px;padding:11px 15px;margin-bottom:14px">'
         + d.alertes.map(function (a) {
             return '<div style="font-size:12.5px;color:var(--text);line-height:1.55">• ' + _prEsc(a) + '</div>';
           }).join('')
         + '</div>';
     } else {
-      html += '<div style="background:rgba(22,163,74,.10);border:1px solid rgba(22,163,74,.35);border-left:4px solid var(--success, #16a34a);border-radius:10px;padding:11px 15px;margin-bottom:14px;font-size:12.5px;color:var(--text)">'
+      html += '<div style="background:color-mix(in srgb, var(--success, #16a34a) 10%, transparent);border:1px solid color-mix(in srgb, var(--success, #16a34a) 35%, transparent);border-left:4px solid var(--success, #16a34a);border-radius:10px;padding:11px 15px;margin-bottom:14px;font-size:12.5px;color:var(--text)">'
         + 'Rien à signaler : schéma à jour, pas de branche morte, dossier propre.</div>';
     }
 

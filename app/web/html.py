@@ -113,7 +113,7 @@ body.light{
   --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
   --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,0.10);
   --filter-input-bg:#ffffff;
-  --success:#059669;--warn:#d97706;--danger:#dc2626;
+  --success:#059669;--warn:#d24b00;--danger:#dc2626;
   --pf-entree:#047857;--pf-sortie:#b91c1c;
   --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626
 }

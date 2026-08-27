@@ -76,7 +76,7 @@ BAT_HTML = r"""<!DOCTYPE html>
 html.light-pre body,body.light{
   --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
   --muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.08);
-  --ok:#059669;--danger:#dc2626;--warn:#d97706;
+  --ok:#059669;--danger:#dc2626;--warn:#d24b00;
   --on-accent:#fff;
 }
 html,body{height:100%;overflow:hidden}

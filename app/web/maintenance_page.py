@@ -153,7 +153,7 @@ html.light-pre body,body.light{
   --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
   --muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.08);
   --accent-fg:#ffffff;
-  --ok:#059669;--danger:#dc2626;--warn:#d97706;
+  --ok:#059669;--danger:#dc2626;--warn:#d24b00;
 }
 html,body{height:100%;overflow:hidden}
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px}

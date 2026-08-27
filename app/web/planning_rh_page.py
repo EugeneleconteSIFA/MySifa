@@ -64,7 +64,7 @@ PLANNING_RH_HTML = r"""<!DOCTYPE html>
 body.light{
   --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
   --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);
-  --success:#059669;--warn:#d97706;--danger:#dc2626;--c2:#7c3aed;
+  --success:#059669;--warn:#d24b00;--danger:#dc2626;--c2:#7c3aed;
 }
 html,body{height:100%;overflow:hidden}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text)}

@@ -90,7 +90,7 @@ STOCK_HTML = r"""<!DOCTYPE html>
 body.light{
   --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
   --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);
-  --success:#059669;--warn:#d97706;--danger:#dc2626;--c2:#7c3aed;--violet:#8b5cf6;
+  --success:#059669;--warn:#d24b00;--danger:#dc2626;--c2:#7c3aed;--violet:#8b5cf6;
   --pf-entree:#047857;--pf-sortie:#b91c1c;
 }
 html,body{height:100%}

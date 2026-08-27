@@ -111,7 +111,7 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 body.light{
   --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
   --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,0.10);
-  --success:#059669;--warn:#d97706;--danger:#dc2626;
+  --success:#059669;--warn:#d24b00;--danger:#dc2626;
   --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626;
   --blue:#0ea5e9;--purple:#7c3aed;--bg-dark:#e2e8f0;--border2:#cbd5e1;--dim:#64748b;
   --slot-l1:#0f172a;--slot-l2:#1e293b;--slot-l3:#334155;
