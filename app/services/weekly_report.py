@@ -60,16 +60,16 @@ ROLE_SECTIONS: Dict[str, List[str]] = {
     # (retour utilisateur : trop de deep dive dossier par dossier dans le rapport hebdo).
     # Les données restent collectées dans data["top_dossiers"] / data["flop_dossiers"]
     # au cas où on veuille les réactiver plus tard.
-    ROLE_SUPERADMIN:     ["summary", "prod_by_machine",
+    ROLE_SUPERADMIN:     ["summary", "prod_by_machine", "arrets_expliques",
                           "sanity_global", "sanity_by_operateur", "stock_freshness",
                           "stock_from_prod", "repiquage", "expes", "alerts"],
-    ROLE_DIRECTION:      ["summary", "prod_by_machine",
+    ROLE_DIRECTION:      ["summary", "prod_by_machine", "arrets_expliques",
                           "sanity_global", "sanity_by_operateur", "stock_freshness",
                           "stock_from_prod", "repiquage", "expes", "alerts"],
-    ROLE_ADMINISTRATION: ["summary", "prod_by_machine",
+    ROLE_ADMINISTRATION: ["summary", "prod_by_machine", "arrets_expliques",
                           "sanity_global", "sanity_by_operateur", "stock_freshness",
                           "stock_from_prod", "repiquage", "expes", "alerts"],
-    ROLE_FABRICATION:    ["summary_light", "prod_by_machine", "dossiers_fab_detail",
+    ROLE_FABRICATION:    ["summary_light", "prod_by_machine", "arrets_expliques", "dossiers_fab_detail",
                           "sanity_global", "sanity_by_operateur", "repiquage", "alerts_fab"],
     ROLE_LOGISTIQUE:     ["summary_light", "stock_freshness", "stock_from_prod", "expes", "alerts_log"],
     ROLE_COMPTABILITE:   ["summary_light", "stock_freshness", "expes"],
@@ -794,6 +794,16 @@ def collect_week_data(year: int, week: int) -> Dict[str, Any]:
 
         # ────── Saisies détaillées de la semaine courante
         rows = _saisies_semaine(conn, wstart, wend)
+
+        # ────── Seuils d'arrêt franchis dans la semaine
+        # Un arrêt n'est pas un incident ; sa répétition en est un. Ce que
+        # cette section porte, ce sont les arrêts qui ont cessé d'être de la
+        # routine — et le mot que le conducteur a écrit à côté.
+        try:
+            from app.services.arret_seuils import franchissements as _franchissements
+            arrets_expliques = _franchissements(conn, wstart, wend + "T23:59:59")
+        except Exception:
+            arrets_expliques = []
         rows_no_repi = [r for r in rows
                         if norm_machine_canonical(r.get("machine") or "") != "Repiquage"]
 
@@ -1121,6 +1131,7 @@ def collect_week_data(year: int, week: int) -> Dict[str, Any]:
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "summary": summary,
         "prod_by_machine": prod_by_machine,
+        "arrets_expliques": arrets_expliques,
         "dossiers_fab_detail": dossiers_fab_detail,
         "top_dossiers": top_dossiers,
         "flop_dossiers": flop_dossiers,
@@ -1288,6 +1299,85 @@ def _render_prod_by_machine(data: Dict[str, Any], email: bool) -> str:
 
     grid = f'<div style="display:flex;flex-wrap:wrap;gap:12px">{"".join(cards)}</div>'
     return _section_title("Production par machine", email) + grid
+
+
+def _render_arrets_expliques(data: Dict[str, Any], email: bool) -> str:
+    """Les seuils d'arret franchis dans la semaine, et ce qui a ete ecrit.
+
+    Une ligne par franchissement — machine, dossier, regle, et le mot du
+    conducteur. Les lignes sans explication sont marquees : ce sont celles
+    qui restent a poser au point de production.
+    """
+    rows_data = data.get("arrets_expliques", []) or []
+    if not rows_data:
+        return ""
+    text = _color("text", email)
+    text2 = _color("text2", email)
+    muted = _color("muted", email)
+    border = _color("border", email)
+    card_bg = _color("card", email)
+    warn = _color("warn", email)
+    accent = _color("accent", email)
+
+    sans = sum(1 for r in rows_data if r.get("explication_exigee"))
+
+    lignes = []
+    for r in rows_data:
+        code = _esc(r.get("operation") or r.get("operation_code") or "")
+        machine = _esc(r.get("machine") or "—")
+        dossier = _esc(r.get("no_dossier") or "—")
+        qui = _esc(r.get("operateur_nom") or r.get("operateur") or "")
+        regle = _esc(r.get("regle_label") or "")
+        compteur = int(r.get("compteur") or 0)
+        cumul = _esc(r.get("duree_cumul_txt") or "")
+        unit = _esc(r.get("duree_saisie_txt") or "")
+
+        detail = []
+        if r.get("regle") == "repetition" and compteur:
+            detail.append(f"{compteur}e fois sur la production")
+        if unit:
+            detail.append(f"arret de {unit}")
+        if cumul:
+            detail.append(f"{cumul} cumulees")
+        detail_txt = _esc(" · ".join(detail)) if detail else regle
+
+        texte = (r.get("explication_texte") or "").strip()
+        if texte:
+            expl = (
+                f'<div style="margin-top:8px;padding:8px 10px;border-left:2px solid {accent};'
+                f'font-size:13px;color:{text2};line-height:1.5">{_esc(texte)}</div>'
+            )
+        else:
+            expl = (
+                f'<div style="margin-top:8px;font-size:12px;color:{warn};font-weight:600">'
+                f'Sans explication — a poser au point de production</div>'
+            )
+
+        lignes.append(
+            f'<div style="padding:12px 0;border-bottom:1px solid {border}">'
+            f'<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">'
+            f'<div style="font-size:14px;font-weight:700;color:{text}">{code}</div>'
+            f'<div style="font-size:12px;color:{muted}">{machine} · dossier {dossier}'
+            f'{" · " + qui if qui else ""}</div>'
+            f'</div>'
+            f'<div style="font-size:12px;color:{muted};margin-top:3px">{detail_txt}</div>'
+            f'{expl}'
+            f'</div>'
+        )
+
+    entete = (
+        f'<div style="font-size:13px;color:{text2};margin-bottom:6px">'
+        f'{len(rows_data)} seuil{"s" if len(rows_data) > 1 else ""} franchi'
+        f'{"s" if len(rows_data) > 1 else ""} cette semaine'
+        + (f' — <span style="color:{warn};font-weight:600">{sans} sans explication</span>'
+           if sans else " — tous expliques")
+        + '</div>'
+    )
+    body = (
+        f'<div style="background:{card_bg};border:1px solid {border};'
+        f'border-radius:10px;padding:14px 16px">{entete}{"".join(lignes)}</div>'
+    )
+    return _section_title("Arrets expliques", email) + body
 
 
 def _render_dossiers_fab_detail(rows_data: List[Dict[str, Any]], email: bool) -> str:
@@ -1701,6 +1791,8 @@ def render_report_html(data: Dict[str, Any], role: str,
             return _render_summary(data, email, light=True)
         if sec == "prod_by_machine":
             return _render_prod_by_machine(data, email)
+        if sec == "arrets_expliques":
+            return _render_arrets_expliques(data, email)
         if sec == "dossiers_fab_detail":
             return _render_dossiers_fab_detail(data.get("dossiers_fab_detail", []), email)
         if sec == "top_dossiers":

@@ -1306,6 +1306,7 @@ let S = {
   showDebutModal: false,
   showFinModal: false,
   showCommentModal: false,
+  explicationSeuil: null,
   commentSaisieId: null,
   showTracaCommentModal: false,
   tracaCommentId: null,
@@ -1999,6 +2000,17 @@ async function triggerOp(opCode, opLabel, extra={}){
     });
     if(d && d.success){
       showToast('Saisie enregistrée : '+opStr);
+      // Seuil d'arrêt franchi sans commentaire : la saisie est enregistrée,
+      // on demande l'explication juste après. Jamais bloquant.
+      if(d.explication_requise){
+        const ex = d.explication_requise;
+        Object.assign(S, {
+          explicationSeuil: ex,
+          showCommentModal: true,
+          commentSaisieId: ex.saisie_id,
+          commentText: '',
+        });
+      }
       // v2.2.66 : refresh immédiat des alertes — le backend a peut-être ack
       // automatiquement des périodiques (code non-productif ou fin_dossier).
       try {
@@ -2032,7 +2044,7 @@ async function saveComment(){
     });
     showToast('Commentaire enregistré');
     await loadSession({noRender:true, silent:true});
-    Object.assign(S, {showCommentModal:false, commentText:'', commentSaisieId:null, loading:false});
+    Object.assign(S, {showCommentModal:false, commentText:'', commentSaisieId:null, explicationSeuil:null, loading:false});
     render();
     _fabRestoreUiState(ui);
   }catch(e){
@@ -6043,25 +6055,48 @@ function renderArret50Modal(){
 }
 
 function renderCommentModal(){
-  const ta = h('textarea',{placeholder:'Votre commentaire…',rows:'3'});
+  // Deux usages pour une seule modale : le commentaire libre qu'un opérateur
+  // ajoute quand il veut, et l'explication demandée quand un seuil d'arrêt a
+  // été franchi sans qu'un mot ait été écrit. Dans le second cas la saisie est
+  // déjà enregistrée : on demande, on ne bloque pas.
+  const seuil = S.explicationSeuil || null;
+  let submitBtn;
+
+  const ta = h('textarea',{
+    placeholder: seuil ? 'Ex. glassine du raccord fournisseur, échenillage à reprendre…' : 'Votre commentaire…',
+    rows: seuil ? '4' : '3',
+  });
   ta.value = S.commentText||'';
-  ta.addEventListener('input',e=>{ S.commentText=e.target.value; });
+  const syncSubmit = ()=>{
+    if(submitBtn && seuil) submitBtn.disabled = !((ta.value||'').trim());
+  };
+  ta.addEventListener('input',e=>{ S.commentText=e.target.value; syncSubmit(); });
   setTimeout(()=>ta.focus(),50);
 
-  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showCommentModal:false});}},
+  const fermer = ()=>set({showCommentModal:false, explicationSeuil:null});
+
+  submitBtn = h('button',{className:'fab-btn fab-btn-primary',
+    disabled: !!seuil && !((S.commentText||'').trim()),
+    onClick:saveComment},
+    svgIcon('check',15),' Enregistrer');
+
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget && !seuil) fermer();}},
     h('div',{className:'fab-modal'},
-      h('div',{className:'fab-modal-title'},svgIcon('message-square',18),' Commenter la saisie'),
-      h('div',{className:'fab-modal-sub'},'Ce commentaire sera visible dans la fiche de production MyProd.'),
+      h('div',{className:'fab-modal-title'},
+        svgIcon(seuil?'alert':'message-square',18),
+        seuil ? ' Seuil atteint — expliquez en deux mots' : ' Commenter la saisie'),
+      h('div',{className:'fab-modal-sub'},
+        seuil ? (seuil.message||'') : 'Ce commentaire sera visible dans la fiche de production MyProd.'),
+      seuil ? h('div',{className:'fab-modal-sub'},
+        'La saisie est enregistrée. Ce que vous écrivez ici partira dans le rapport de prod.') : null,
       h('div',{className:'fab-field'},
-        h('label',null,'Commentaire'),
+        h('label',null, seuil ? "Qu'est-ce qui se passe ?" : 'Commentaire'),
         ta
       ),
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
-          onClick:()=>set({showCommentModal:false})},'Annuler'),
-        h('button',{className:'fab-btn fab-btn-primary',
-          onClick:saveComment},
-          svgIcon('check',15),' Enregistrer')
+          onClick:fermer}, seuil ? 'Plus tard' : 'Annuler'),
+        submitBtn
       )
     )
   );
