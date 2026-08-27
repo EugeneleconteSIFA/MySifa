@@ -12119,7 +12119,7 @@ function buildIdPlaqueForm() {
          <div class="head">Plaque N°</div>
          <div class="num">${num}</div>
          ${fmt?`<div class="fmt">${fmt}</div>`:''}
-         ${note?`<div class="note">${note}</div>`:''}
+         ${note?`<div class="note">${escHtml(note)}</div>`:''}
          <div class="bar"><svg id="bc"></svg></div>
        </div>
        <script src="${JSBARCODE_CDN}"><\/script>

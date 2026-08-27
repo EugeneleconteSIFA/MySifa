@@ -55,38 +55,47 @@ with dbmod.get_db() as conn:
         dbmod._migrate(conn)
 check("aucune migration rejouee", "appliquée" in buf2.getvalue(), False)
 
+def base_complete():
+    """Cree une base neuve avec le schema COMPLET, puis oublie les migrations fichiers.
+
+    Historique : ce test construisait ses bases de simulation a la main, avec une
+    poignee de CREATE TABLE. Chaque nouvelle migration fichier touchant une table
+    absente de cette liste faisait echouer le test pour une raison qui n'avait
+    rien a voir avec ce qu'il verifie (constate le 27/08/2026 sur
+    2026_08_06_expe_no_bl_controle, qui lit expe_departs — table creee par la
+    migration numerotee v13, jamais presente dans le fixture).
+
+    On part donc d'un init_db() reel : le schema est complet et il le reste, quoi
+    qu'on ajoute ensuite. On vide simplement la table de suivi des migrations
+    fichiers pour que le lanceur croie qu'aucune n'est passee. Effet de bord
+    utile : les migrations sont rejouees sur un schema reel, ce qui verifie leur
+    idempotence pour de vrai.
+    """
+    chemin = tempfile.NamedTemporaryFile(suffix=".db", delete=False).name
+    os.environ["DB_PATH"] = chemin
+    config.DB_PATH = chemin
+    dbmod.DB_PATH = chemin
+    with contextlib.redirect_stdout(io.StringIO()):
+        dbmod.init_db()
+    c = sqlite3.connect(chemin)
+    c.row_factory = sqlite3.Row
+    c.execute("DELETE FROM schema_migrations_fichiers")
+    c.commit()
+    return chemin, c
+
+
 print("\n--- base ou une migration est deja passee par l'ancien mecanisme ---")
-db2 = tempfile.NamedTemporaryFile(suffix=".db", delete=False).name
-conn2 = sqlite3.connect(db2)
-conn2.row_factory = sqlite3.Row
-conn2.execute("""CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY,
-                 name TEXT NOT NULL, applied_at TEXT NOT NULL)""")
-for _ddl in (
-    "CREATE TABLE matieres_premieres (id INTEGER PRIMARY KEY, categorie TEXT, prix_eur_m2 REAL, prix_par_laize INTEGER, mc_material_id INTEGER)",
-    "CREATE TABLE mp_valorisation (matiere_id INTEGER, prix_unitaire REAL)",
-    "CREATE TABLE mp_matiere_laizes (matiere_id INTEGER, laize_id INTEGER, prix_eur_m2 REAL)",
-    "CREATE TABLE matiere_laize_fournisseurs (matiere_id INTEGER, laize_id INTEGER, fournisseur_id INTEGER)",
-    "CREATE TABLE mp_laizes (id INTEGER PRIMARY KEY, valeur_mm REAL, label TEXT, ordre INTEGER, actif INTEGER)",
-    "CREATE TABLE mc_material (id INTEGER PRIMARY KEY, name TEXT, appellation_code TEXT,"
-    " supplier_id INTEGER, category_id INTEGER, is_active INTEGER, weight_per_m2 REAL,"
-    " weight_gsm INTEGER, price_currency TEXT, price_basis TEXT, tax_incidence REAL,"
-    " is_imported INTEGER)",
-    "CREATE TABLE mc_supplier (id INTEGER PRIMARY KEY, name TEXT)",
-    "CREATE TABLE fournisseurs_fsc (id INTEGER PRIMARY KEY, nom TEXT)",
-    "CREATE TABLE imprimantes (id INTEGER PRIMARY KEY)",
-    # La base pretend avoir deja joue mp_declinaisons_appairage : ses tables
-    # doivent donc exister, sinon la simulation est incoherente.
-    "CREATE TABLE mp_matiere_declinaison (id INTEGER PRIMARY KEY, matiere_id INTEGER,"
-    " laize_id INTEGER, grammage_id INTEGER, mc_material_id INTEGER)",
-    "CREATE TABLE mp_grammages (id INTEGER PRIMARY KEY, valeur_gsm REAL)",
-): conn2.execute(_ddl)
-conn2.execute("INSERT INTO schema_migrations VALUES (228,'mp_declinaisons_appairage','2026-01-01')")
+db2, conn2 = base_complete()
+# La base pretend avoir joue mp_declinaisons_appairage sous son ancien numero.
+conn2.execute("INSERT OR REPLACE INTO schema_migrations VALUES (228,'mp_declinaisons_appairage','2026-01-01')")
 conn2.commit()
 from app.core.migrations import appliquer_migrations
-faites = appliquer_migrations(conn2)
+with contextlib.redirect_stdout(io.StringIO()):
+    faites = appliquer_migrations(conn2)
 check("migration deja passee sous son ancien numero -> ignoree",
       "mp_declinaisons_appairage" in faites, False)
 check("les autres restent a appliquer", len(faites), len(FICHIERS) - 1)
+check("rejeu sur schema reel : aucune erreur", True, True)
 conn2.close(); os.unlink(db2)
 
 print("\n--- garde-fous du lanceur ---")
@@ -100,22 +109,14 @@ for f in mods:
 check("tous les fichiers portent un NOM", len(noms), len(mods))
 check("aucun nom en double", len(set(noms)), len(noms))
 check("ordre d'execution = ordre des noms de fichiers", mods, sorted(mods))
-# DEPEND : les declinaisons attendent la table des prix
-db3 = tempfile.NamedTemporaryFile(suffix=".db", delete=False).name
-c3 = sqlite3.connect(db3); c3.row_factory = sqlite3.Row
-c3.execute("CREATE TABLE matieres_premieres (id INTEGER PRIMARY KEY, categorie TEXT, prix_eur_m2 REAL, prix_par_laize INTEGER, mc_material_id INTEGER)")
-c3.execute("CREATE TABLE mp_valorisation (matiere_id INTEGER, prix_unitaire REAL)")
-c3.execute("CREATE TABLE mp_matiere_laizes (matiere_id INTEGER, laize_id INTEGER, prix_eur_m2 REAL)")
-c3.execute("CREATE TABLE matiere_laize_fournisseurs (matiere_id INTEGER, laize_id INTEGER, fournisseur_id INTEGER)")
-c3.execute("CREATE TABLE mp_laizes (id INTEGER PRIMARY KEY, valeur_mm REAL, label TEXT, ordre INTEGER, actif INTEGER)")
-c3.execute("CREATE TABLE mc_material (id INTEGER PRIMARY KEY, name TEXT, appellation_code TEXT, supplier_id INTEGER, category_id INTEGER, is_active INTEGER)")
-c3.execute("CREATE TABLE mc_supplier (id INTEGER PRIMARY KEY, name TEXT)")
-c3.execute("CREATE TABLE fournisseurs_fsc (id INTEGER PRIMARY KEY, nom TEXT)")
-c3.execute("CREATE TABLE imprimantes (id INTEGER PRIMARY KEY)")
-c3.commit()
-ordre = appliquer_migrations(c3)
+# DEPEND : les declinaisons attendent la table des prix. Meme base complete,
+# pour que l'ordre teste soit celui d'un vrai demarrage et pas celui d'un fixture.
+db3, c3 = base_complete()
+with contextlib.redirect_stdout(io.StringIO()):
+    ordre = appliquer_migrations(c3)
 check("prix_par_fournisseur passe avant declinaisons",
       ordre.index("mp_matiere_prix_par_fournisseur") < ordre.index("mp_declinaisons_appairage"), True)
+check("toutes les migrations rejouables sur un schema reel", len(ordre), len(FICHIERS))
 c3.close(); os.unlink(db3)
 
 os.unlink(db)

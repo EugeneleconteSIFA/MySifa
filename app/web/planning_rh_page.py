@@ -2269,7 +2269,7 @@ function buildCongesTab(){
         </div>
         <div class="rh-field" style="margin:0">
           <label>Note</label>
-          <input type="text" value="${S.congeForm.note||''}" placeholder="Optionnel" onchange="S.congeForm.note=this.value">
+          <input type="text" value="${escHtml(S.congeForm.note||'')}" placeholder="Optionnel" onchange="S.congeForm.note=this.value">
         </div>
       </div>
       <div style="padding:0 16px 16px;display:flex;justify-content:flex-end">
@@ -2310,7 +2310,7 @@ function buildCongesTab(){
         <td>${fmtDateFull(c.date_fin)}</td>
         <td><strong>${c.nb_jours}j</strong></td>
         <td><span class="rh-badge ${c.type_conge.toLowerCase()}">${TYPE_CONGE_LABELS[c.type_conge]||c.type_conge}</span></td>
-        <td style="color:var(--muted);font-size:12px">${c.note||'—'}</td>
+        <td style="color:var(--muted);font-size:12px">${escHtml(c.note)||'—'}</td>
         <td><span class="rh-badge ${c.statut}">${STATUT_CONGE_LABELS[c.statut]||c.statut}</span></td>
         ${S.isEditor?`<td style="white-space:nowrap">
           <button class="rh-act-btn" onclick="editConge(${c.id})">✏️</button>
@@ -2360,7 +2360,7 @@ function buildSoldeModal(){
     </div>
     <div class="rh-field">
       <label>Note</label>
-      <input type="text" value="${S.soldeForm.note||''}" placeholder="Optionnel"
+      <input type="text" value="${escHtml(S.soldeForm.note||'')}" placeholder="Optionnel"
         onchange="S.soldeForm.note=this.value">
     </div>
     <div class="rh-modal-acts">

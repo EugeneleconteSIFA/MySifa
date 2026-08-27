@@ -12022,7 +12022,7 @@ function opOpenSaisie(eventId){
                 <input type="number" min="0" step="1" data-fld="duree_reelle_min" value="${op.duree_reelle_min || ''}" placeholder="Optionnel">
               </div>
               <div class="op-form-row"><label>Commentaires</label>
-                <textarea data-fld="commentaire" rows="2" placeholder="Pièces changées, observations, remarques…">${prevCommentaire}</textarea>
+                <textarea data-fld="commentaire" rows="2" placeholder="Pièces changées, observations, remarques…">${escHtml(prevCommentaire)}</textarea>
               </div>
               <button type="button" class="btn op-btn-accent" style="width:100%;justify-content:center" onclick="opSubmitOpSaisie(${ev.id}, ${op.id}, this)">
                 ${isDone ? 'Mettre à jour' : 'Marquer comme terminée'}
