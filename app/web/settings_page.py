@@ -54,8 +54,9 @@ SETTINGS_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
-:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-fg:#0a0e17;--ok:#34d399;--warn:#fbbf24;--danger:#f87171;--danger-fg:#fff;}
-body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-fg:#fff;--ok:#059669;--warn:#d24b00;--danger:#dc2626;--danger-fg:#fff;}
+/* tokens : static/mysifa_theme.css — ici, seulement les écarts */
+:root{--accent-fg:#0a0e17;--ok:#34d399;--danger-fg:#fff;}
+body.light{--muted:#64748b;--accent-fg:#fff;--ok:#059669;--danger-fg:#fff;}
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
 .layout{display:flex;min-height:100vh}

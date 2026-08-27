@@ -81,18 +81,9 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
-  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);
-  --success:#34d399;--warn:#fbbf24;--danger:#f87171;--c2:#a78bfa;--violet:#8b5cf6;
-  --pf-entree:#059669;--pf-sortie:#dc2626;
-}
-body.light{
-  --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
-  --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);
-  --success:#059669;--warn:#d24b00;--danger:#dc2626;--c2:#7c3aed;--violet:#8b5cf6;
-  --pf-entree:#047857;--pf-sortie:#b91c1c;
-}
+/* tokens : static/mysifa_theme.css — ici, seulement les écarts */
+:root{--violet:#8b5cf6;}
+body.light{--violet:#8b5cf6;}
 html,body{height:100%}
 #root{display:flex;flex:1;flex-direction:column;min-height:0}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;min-height:100%;position:relative}

@@ -63,22 +63,9 @@ BAT_HTML = r"""<!DOCTYPE html>
 <script src="/static/mysifa_user_chip.js"></script>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
-  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.10);
-  --ok:#34d399;--danger:#f87171;--warn:#fbbf24;--success:#34d399;
-  --sidebar-w:220px;
-  /* Couleur du texte posé SUR un aplat --accent.
-     Thème sombre : les accents de palette sont clairs (ambre, cyan, vert vif)
-     → texte quasi-noir. Thème clair : ils sont foncés → texte blanc. */
-  --on-accent:#0a0e17;
-}
-html.light-pre body,body.light{
-  --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
-  --muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.08);
-  --ok:#059669;--danger:#dc2626;--warn:#d24b00;
-  --on-accent:#fff;
-}
+/* tokens : static/mysifa_theme.css — ici, seulement les écarts */
+:root{--accent-bg:rgba(34,211,238,.10);--ok:#34d399;--sidebar-w:220px;--on-accent:#0a0e17;}
+html.light-pre body,body.light{--muted:#64748b;--accent-bg:rgba(8,145,178,.08);--ok:#059669;--on-accent:#fff;}
 html,body{height:100%;overflow:hidden}
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px}
 ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}

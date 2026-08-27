@@ -142,19 +142,9 @@ tr:hover .ctrl-dossier-pill{border-color:var(--accent);cursor:pointer}
 .ack-di-k{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px}
 .ack-di-v{font-size:12px;color:var(--text);font-weight:600;word-break:break-word}
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
-  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.10);
-  --accent-fg:#0a0e17;
-  --ok:#34d399;--danger:#f87171;--warn:#fbbf24;--success:#34d399;
-  --sidebar-w:220px;
-}
-html.light-pre body,body.light{
-  --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
-  --muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.08);
-  --accent-fg:#ffffff;
-  --ok:#059669;--danger:#dc2626;--warn:#d24b00;
-}
+/* tokens : static/mysifa_theme.css — ici, seulement les écarts */
+:root{--accent-bg:rgba(34,211,238,.10);--accent-fg:#0a0e17;--ok:#34d399;--sidebar-w:220px;}
+html.light-pre body,body.light{--muted:#64748b;--accent-bg:rgba(8,145,178,.08);--accent-fg:#ffffff;--ok:#059669;}
 html,body{height:100%;overflow:hidden}
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px}
 ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
