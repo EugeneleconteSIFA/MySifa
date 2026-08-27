@@ -1341,6 +1341,8 @@ async def create_saisie(request: Request):
     if not op_str:
         raise HTTPException(status_code=400, detail="Opération manquante")
 
+    seuil_franchi = None
+
     cl = classify_operation(op_str)
 
     # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
@@ -1730,6 +1732,35 @@ async def create_saisie(request: Request):
         except Exception:
             pass  # ne jamais bloquer la saisie opérateur
 
+        # ── Seuils d'arret : la repetition qui cesse d'etre de la routine ───
+        # Un arret ne demande rien. Au-dela d'un seuil — repetition, duree, ou
+        # nature de l'arret — la ligne part au rapport de prod, et une
+        # explication n'est exigee que si le champ commentaire est vide.
+        # Deux evaluations : la saisie qu'on vient d'ecrire (permanent,
+        # repetition), puis l'arret que cette saisie vient de refermer, dont
+        # la duree n'etait pas connue avant (arret long, duree cumulee).
+        # Best-effort : un seuil n'est pas un controle, il ne bloque jamais.
+        try:
+            from app.services.arret_seuils import (
+                evaluer_saisie as _seuil_evaluer,
+                cloturer_precedent as _seuil_cloturer,
+            )
+            # Les deux evaluations tournent toujours : elles portent sur deux
+            # lignes differentes (l'arret referme et celui qu'on vient d'ecrire).
+            # Les court-circuiter ferait sauter un compteur en silence.
+            seuil_precedent = _seuil_cloturer(conn, new_id)
+            seuil_courant = _seuil_evaluer(conn, new_id)
+            # A l'ecran, une seule question : celle qui attend une reponse.
+            candidats = [c for c in (seuil_precedent, seuil_courant) if c]
+            seuil_franchi = next(
+                (c for c in candidats if c.get("explication_exigee")),
+                candidats[0] if candidats else None,
+            )
+            if candidats:
+                conn.commit()
+        except Exception:
+            seuil_franchi = None
+
         row = conn.execute(
             "SELECT * FROM production_data WHERE id=?", (new_id,)
         ).fetchone()
@@ -1742,7 +1773,10 @@ async def create_saisie(request: Request):
         detail={"duree_heures": None, "metrage_reel": m_fin, "metrage_prevu": m_debut},
         ip=request.client.host if request.client else None,
     )
-    return {"success": True, "id": new_id, "saisie": dict(row)}
+    reponse = {"success": True, "id": new_id, "saisie": dict(row)}
+    if seuil_franchi and seuil_franchi.get("explication_exigee"):
+        reponse["explication_requise"] = seuil_franchi
+    return reponse
 
 
 # ─── Annulation d'un dossier de production ────────────────────────────────────
@@ -2963,6 +2997,14 @@ async def update_commentaire(saisie_id: int, request: Request):
             """UPDATE production_data SET commentaire=? WHERE id=?""",
             (commentaire, saisie_id),
         )
+        # Si cette saisie avait franchi un seuil d'arret, le commentaire qu'on
+        # vient d'ecrire EST l'explication attendue : on la rattache pour que
+        # le rapport de prod la porte, et pour que la demande cesse.
+        try:
+            from app.services.arret_seuils import enregistrer_explication
+            enregistrer_explication(conn, saisie_id, commentaire or "")
+        except Exception:
+            pass
         conn.commit()
 
     log_action(

@@ -234,8 +234,13 @@ Ces fichiers étaient dans ce CLAUDE.md avant le 27 août 2026. Rien n'a été
 perdu : la version complète d'origine est dans
 `docs/archive/CLAUDE.md.avant-decoupage-2026-08-27.md`.
 
-**Règles chargées automatiquement** (`.claude/rules/`) — elles n'entrent en
-contexte que quand tu ouvres un fichier de leur périmètre :
+**Comment lire ces règles selon l'outil.** Eugène travaille dans Cowork, où
+rien ne se charge tout seul : commence par cet index, puis ouvre la règle du
+sujet que tu touches — c'est le même principe qu'un chargement automatique,
+fait à la main. Dans Claude Code, les règles se chargent seules quand tu ouvres
+un fichier de leur périmètre. Dans les deux cas, n'ouvre que celles qui servent.
+
+**Règles par sujet** (`.claude/rules/`) :
 
 | Fichier | Se charge quand tu touches à… |
 |---|---|
@@ -262,16 +267,23 @@ contexte que quand tu ouvres un fichier de leur périmètre :
 | `/guide-inapp` | créer ou mettre à jour un tuto par onglet |
 | `/promotion` | préparer une mise en production et son annonce |
 
-**Hooks** (`.claude/hooks/`) — ils bloquent, ils ne conseillent pas :
+**Garde-fous automatiques** — deux niveaux, et il faut savoir lequel s'applique.
 
-| Hook | Ce qu'il empêche |
-|---|---|
-| `proteger.py` (PreToolUse) | écrire dans `.env`, un `.db`, `data/production*` |
-| `apres_edition.py` (PostToolUse) | octets nuls, marqueurs de conflit, syntaxe cassée, fichier au-delà du plafond de lignes, couleur hex en dur dans `app/web/` |
+`.githooks/pre-commit` tourne **à chaque commit, quel que soit l'outil** — c'est
+le seul qui protège toujours. Il BLOQUE les marqueurs de conflit, les octets
+nuls (troncature d'écriture) et la syntaxe Python ou JS cassée ; il AVERTIT sur
+les couleurs en dur dans `app/web/` et les fichiers au-delà de 1 200 lignes.
+La distinction est volontaire : un hook qui bloque sur une couleur se fait
+contourner au `--no-verify`, et emporte la protection contre les vrais dégâts.
+Installation sur un nouveau clone : `git config core.hooksPath .githooks`.
 
-Installation sur un nouveau clone : `git config core.hooksPath .githooks`
-(hook git anti-conflit) — les hooks Claude sont lus depuis
-`.claude/settings.json`, rien à installer.
+`.claude/hooks/` ne se déclenche **que dans Claude Code** (`proteger.py` refuse
+d'écrire dans `.env` ou une base ; `garde_bash.py` refuse le git manuel en prod
+et le push sur `main` ; `apres_edition.py` contrôle après chaque édition). Rien
+à installer, mais rien ne s'exécute non plus hors de Claude Code.
+
+La CI (`.github/workflows/ci.yml`) rejoue syntaxe et tests à chaque push vers
+`staging`. Pour la relancer en local avant de pousser : `scripts/ci_local.sh`.
 
 **Périmètre exclu de la lecture de l'agent** : `kernse/`, `_base2/`,
 `_stg_base/`, `_to_delete/`, `_tmp_planning_v2/`, `docs/archive/`. Ces dossiers
