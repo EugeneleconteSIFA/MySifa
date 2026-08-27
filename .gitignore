@@ -57,3 +57,12 @@ erp_mirror.db
 data/erp_mirror.db
 data/logs/
 data/rvgi_export.zip
+
+# --- Decoupage du 27 aout 2026 ---
+# Cache des hooks Claude (instantanes avant/apres edition).
+.claude/.cache/
+# Reglages Claude propres a un poste (les hooks partages sont dans settings.json).
+.claude/settings.local.json
+# Copies mortes en attente de suppression manuelle (device_bash ne peut pas rm).
+_to_delete/
+_tmp_fresh*/
