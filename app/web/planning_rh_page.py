@@ -54,18 +54,9 @@ PLANNING_RH_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
-  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);
-  --success:#34d399;--warn:#fbbf24;--danger:#f87171;
-  --c1:#38bdf8;--c2:#a78bfa;--c3:#34d399;--c4:#fbbf24;--c5:#f87171;
-  --sidebar-w:220px;
-}
-body.light{
-  --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
-  --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);
-  --success:#059669;--warn:#d97706;--danger:#dc2626;--c2:#7c3aed;
-}
+/* tokens : static/mysifa_theme.css — ici, seulement les écarts */
+:root{--c1:#38bdf8;--sidebar-w:220px;}
+
 html,body{height:100%;overflow:hidden}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text)}
 ::-webkit-scrollbar{width:5px;height:5px}
@@ -2269,7 +2260,7 @@ function buildCongesTab(){
         </div>
         <div class="rh-field" style="margin:0">
           <label>Note</label>
-          <input type="text" value="${S.congeForm.note||''}" placeholder="Optionnel" onchange="S.congeForm.note=this.value">
+          <input type="text" value="${escHtml(S.congeForm.note||'')}" placeholder="Optionnel" onchange="S.congeForm.note=this.value">
         </div>
       </div>
       <div style="padding:0 16px 16px;display:flex;justify-content:flex-end">
@@ -2310,7 +2301,7 @@ function buildCongesTab(){
         <td>${fmtDateFull(c.date_fin)}</td>
         <td><strong>${c.nb_jours}j</strong></td>
         <td><span class="rh-badge ${c.type_conge.toLowerCase()}">${TYPE_CONGE_LABELS[c.type_conge]||c.type_conge}</span></td>
-        <td style="color:var(--muted);font-size:12px">${c.note||'—'}</td>
+        <td style="color:var(--muted);font-size:12px">${escHtml(c.note)||'—'}</td>
         <td><span class="rh-badge ${c.statut}">${STATUT_CONGE_LABELS[c.statut]||c.statut}</span></td>
         ${S.isEditor?`<td style="white-space:nowrap">
           <button class="rh-act-btn" onclick="editConge(${c.id})">✏️</button>
@@ -2360,7 +2351,7 @@ function buildSoldeModal(){
     </div>
     <div class="rh-field">
       <label>Note</label>
-      <input type="text" value="${S.soldeForm.note||''}" placeholder="Optionnel"
+      <input type="text" value="${escHtml(S.soldeForm.note||'')}" placeholder="Optionnel"
         onchange="S.soldeForm.note=this.value">
     </div>
     <div class="rh-modal-acts">

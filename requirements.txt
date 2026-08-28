@@ -15,3 +15,7 @@ python-docx>=1.0.0
 pywebpush>=2.0.0
 py-vapid>=1.9.0
 cryptography>=42.0.0
+
+# Optionnel — remontee des erreurs. N'installer que si SENTRY_DSN est renseigne ;
+# sans DSN le code ne l'importe pas.
+# sentry-sdk[fastapi]>=2.0.0

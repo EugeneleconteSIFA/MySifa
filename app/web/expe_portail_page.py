@@ -89,7 +89,7 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
     body.light{
       --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
       --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);
-      --success:#059669;--warn:#d97706;--danger:#dc2626;
+      --success:#059669;--warn:#d24b00;--danger:#dc2626;
     }
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}

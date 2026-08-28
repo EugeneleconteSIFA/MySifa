@@ -196,7 +196,8 @@ ECRANS = [
         "resume": "Lignes de devis et leur entête client.",
         "table": "dev_ligne", "alias": "l",
         "jointures": [{"table": "dev_entete", "alias": "e",
-                       "gauche": "e.numero", "droite": "l.numero"}],
+                       "gauche": "e.numero", "droite": "l.numero",
+                       "obligatoire": True}],
         "cle_ligne": "l.id",
         "tri_defaut": ("e.amjd", "desc"),
         "colonnes": [
@@ -230,7 +231,8 @@ ECRANS = [
         "resume": "Le carnet : une ligne par ligne de commande, avec sa date d'expédition et son avancement.",
         "table": "cde_ligne", "alias": "l",
         "jointures": [{"table": "cde_entete", "alias": "e",
-                       "gauche": "e.numero", "droite": "l.numero"}],
+                       "gauche": "e.numero", "droite": "l.numero",
+                       "obligatoire": True}],
         "cle_ligne": "l.id",
         "tri_defaut": ("l.amje", "desc"),
         "colonnes": [
@@ -254,8 +256,18 @@ ECRANS = [
             {"nom": "client", "label": "Client", "col": "e.rs", "type": "contient", "exemple": "LIDL"},
             # Un carnet s'ouvre sur ce qui est en cours, pas sur dix ans
             # d'archives : le filtre est posé d'entrée, et reste effaçable.
+            #
+            # « En cours » seul, et non « non soldée », après mesure le
+            # 28/08/2026 : les 91 lignes « Partielle » du miroir se lisent 10
+            # de 2026 — celles que l'écran de RVGI montre — et 81 de 2015 à
+            # 2024, sans le moindre BL, dont `orig` et `prod` valent 255, la
+            # sentinelle « non renseigné ». Ce sont des reliquats d'avant les
+            # champs que RVGI utilise aujourd'hui. Les faire entrer par défaut
+            # remplacerait un bruit par un autre. Le choix composé reste offert
+            # dans le rail pour qui veut les deux positions.
             {"nom": "position", "label": "Position", "col": "l.lpos", "type": "enum",
-             "enum": "position", "defaut": "0"},
+             "enum": "position", "defaut": "0",
+             "choix": [{"v": "0|1", "label": "Non soldée (en cours ou partielle)"}]},
             {"nom": "origine", "label": "Origine", "col": "l.orig", "type": "enum", "enum": "origine"},
             {"nom": "depuis", "label": "Expédition depuis", "col": "l.amje", "type": "date_min"},
             {"nom": "jusqua", "label": "Expédition jusqu'au", "col": "l.amje", "type": "date_max"},
@@ -275,7 +287,8 @@ ECRANS = [
         "resume": "Lignes de BL, rattachées à leur commande d'origine.",
         "table": "liv_ligne", "alias": "l",
         "jointures": [{"table": "liv_entete", "alias": "e",
-                       "gauche": "e.numero", "droite": "l.numero"}],
+                       "gauche": "e.numero", "droite": "l.numero",
+                       "obligatoire": True}],
         "cle_ligne": "l.id",
         "tri_defaut": ("l.amje", "desc"),
         "colonnes": [
@@ -311,7 +324,8 @@ ECRANS = [
         "resume": "Ce qui a réellement été vendu, par référence, depuis 2015.",
         "table": "vte_ligne", "alias": "l",
         "jointures": [{"table": "vte_entete", "alias": "e",
-                       "gauche": "e.numero", "droite": "l.numero"}],
+                       "gauche": "e.numero", "droite": "l.numero",
+                       "obligatoire": True}],
         "cle_ligne": "l.id",
         "tri_defaut": ("e.amjf", "desc"),
         "colonnes": [
@@ -379,7 +393,8 @@ ECRANS = [
         "resume": "Marchés et appels de livraison.",
         "table": "cdm_ligne", "alias": "l",
         "jointures": [{"table": "cdm_entete", "alias": "e",
-                       "gauche": "e.numero", "droite": "l.numero"}],
+                       "gauche": "e.numero", "droite": "l.numero",
+                       "obligatoire": True}],
         "cle_ligne": "l.id",
         "tri_defaut": ("e.amjc", "desc"),
         "colonnes": [
@@ -414,7 +429,8 @@ ECRANS = [
         "resume": "Achats matière, sous-traitance, clichés et fournitures.",
         "table": "cdf_ligne", "alias": "l",
         "jointures": [{"table": "cdf_entete", "alias": "e",
-                       "gauche": "e.numero", "droite": "l.numero"}],
+                       "gauche": "e.numero", "droite": "l.numero",
+                       "obligatoire": True}],
         "cle_ligne": "l.id",
         "tri_defaut": ("e.amjc", "desc"),
         "colonnes": [
@@ -434,7 +450,8 @@ ECRANS = [
         "filtres": [
             {"nom": "fournisseur", "label": "Fournisseur", "col": "e.rs", "type": "contient", "exemple": "QRT"},
             {"nom": "position", "label": "Position", "col": "l.lpos", "type": "enum",
-             "enum": "position", "defaut": "0"},
+             "enum": "position", "defaut": "0",
+             "choix": [{"v": "0|1", "label": "Non soldée (en cours ou partielle)"}]},
             {"nom": "depuis", "label": "Depuis le", "col": "e.amjc", "type": "date_min"},
         ],
         "detail": [
@@ -449,6 +466,9 @@ ECRANS = [
         "domaine": "achats",
         "resume": "Lignes de réception fournisseur, avec le n° de BL et le lot.",
         "table": "lif_ligne", "alias": "l",
+        # Facultative, et c'est voulu : `cdf_entete` n'est pas l'entête du bon
+        # de réception, c'est la commande fournisseur qui l'a déclenché. Une
+        # réception sans commande reste une réception.
         "jointures": [{"table": "cdf_entete", "alias": "e",
                        "gauche": "e.numero", "droite": "l.numero"}],
         "cle_ligne": "l.id",
@@ -486,7 +506,8 @@ ECRANS = [
         "resume": "Lignes de facture d'achat.",
         "table": "vtf_ligne", "alias": "l",
         "jointures": [{"table": "vtf_entete", "alias": "e",
-                       "gauche": "e.numero", "droite": "l.numero"}],
+                       "gauche": "e.numero", "droite": "l.numero",
+                       "obligatoire": True}],
         "cle_ligne": "l.id",
         "tri_defaut": ("e.amjf", "desc"),
         "colonnes": [
@@ -518,7 +539,8 @@ ECRANS = [
         "resume": "Consultations fournisseurs. Module arrêté depuis mars 2025.",
         "table": "aof_ligne", "alias": "l",
         "jointures": [{"table": "aof_entete", "alias": "e",
-                       "gauche": "e.numero", "droite": "l.numero"}],
+                       "gauche": "e.numero", "droite": "l.numero",
+                       "obligatoire": True}],
         "cle_ligne": "l.id",
         "tri_defaut": ("e.amjc", "desc"),
         "colonnes": [
@@ -1331,7 +1353,13 @@ def adapter_ecran(ec, colonnes_par_table):
     if not existe(ec["cle_ligne"]):
         return None
 
-    # Une jointure dont la colonne de rapprochement manque est abandonnée.
+    # Une jointure dont la colonne de rapprochement manque est abandonnée —
+    # sauf si elle est `obligatoire` : l'écran repose dessus pour ne pas montrer
+    # de lignes sans pièce. L'abandonner en silence rendrait l'écran faux, donc
+    # on préfère ne pas le proposer du tout.
+    perdues = [j for j in jointures if not (existe(j["gauche"]) and existe(j["droite"]))]
+    if any(j.get("obligatoire") for j in perdues):
+        return None
     jointures = [j for j in jointures if existe(j["gauche"]) and existe(j["droite"])]
     alias_gardes = {ec["alias"]} | {j["alias"] for j in jointures}
 
@@ -1440,3 +1468,156 @@ def _colonne_de_ligne(ec):
         if candidat in noms:
             return candidat
     return "_id"
+
+
+# ── Menu de service ──────────────────────────────────────────────────────────
+#
+# Le tiroir montre tout ; ce menu-ci montre le peu qu'on ouvre vraiment. Il se
+# déploie au survol de la marque RVGI, en tête de page, et sert de raccourci
+# permanent : deux tableaux de bord d'abord, puis les écrans que le service
+# consulte tous les jours.
+#
+# Un service n'a pas moins de DROITS que les autres — l'accès à /erp est le
+# même pour tous (`ROLES_ADMIN`). Il a moins d'habitudes. Ce menu range les
+# habitudes ; le tiroir reste la porte vers les 27 écrans.
+
+TABLEAUX_DE_BORD = [
+    {
+        "cle": "tdb_adv",
+        "label": "TDB ADV",
+        "resume": "Le fil commande → dossier de production → BL, "
+                  "et les documents qui attendent une vérification.",
+    },
+    {
+        "cle": "tdb_direction",
+        "label": "TDB Direction",
+        "resume": "Rentré, facturable, facturé — et le rentré de la veille, "
+                  "commande par commande.",
+    },
+]
+
+CLES_TDB = {t["cle"] for t in TABLEAUX_DE_BORD}
+
+# Écrans mis en avant, dans l'ordre où le service les ouvre.
+_MENU_ADV = ["commandes", "livraisons", "factures", "colisage", "clients", "articles"]
+_MENU_DIRECTION = ["commandes", "factures", "echeances", "clients", "marches", "prix_vente"]
+_MENU_TECHNIQUE = ["articles", "fiches_fabrication", "outils", "machines",
+                   "stock_matiere", "receptions"]
+
+MENU_SERVICE = {
+    "superadmin": {"tdb": ["tdb_adv", "tdb_direction"], "ecrans": _MENU_ADV},
+    "direction": {"tdb": ["tdb_direction", "tdb_adv"], "ecrans": _MENU_DIRECTION},
+    "administration_ventes": {"tdb": ["tdb_adv"], "ecrans": _MENU_ADV},
+    "administration": {"tdb": ["tdb_adv"], "ecrans": _MENU_ADV},
+    "administration_technique": {"tdb": ["tdb_adv"], "ecrans": _MENU_TECHNIQUE},
+}
+
+# Un rôle inconnu ne se retrouve pas devant un menu vide : il reçoit le carnet.
+MENU_DEFAUT = {"tdb": [], "ecrans": ["commandes", "livraisons", "factures"]}
+
+
+def menu_du_role(role, ecrans_disponibles=None):
+    """Le menu de survol pour ce rôle, réduit à ce que le miroir contient.
+
+    `ecrans_disponibles` est l'ensemble des clés d'écran réellement servies par
+    `/api/erp/meta` : un miroir partiel n'a pas à proposer une entrée qui
+    ouvrirait un écran vide.
+    """
+    conf = MENU_SERVICE.get(str(role or ""), MENU_DEFAUT)
+    par_cle = {t["cle"]: t for t in TABLEAUX_DE_BORD}
+    tdb = [par_cle[c] for c in conf.get("tdb", []) if c in par_cle]
+
+    ecrans = []
+    for cle in conf.get("ecrans", []):
+        if ecrans_disponibles is not None and cle not in ecrans_disponibles:
+            continue
+        ec = ecran(cle)
+        if ec:
+            ecrans.append({"cle": cle, "label": ec["label"], "resume": ec.get("resume", "")})
+    return {"tdb": tdb, "ecrans": ecrans}
+
+
+# ── Vue par pièce ────────────────────────────────────────────────────────────
+#
+# Une ligne de commande n'est pas une commande. « 845 lignes en retard », c'est
+# 312 commandes — et c'est la commande qu'on rappelle au client, pas la ligne.
+# Les écrans de RVGI sont tous au niveau ligne ; cette vue les regroupe sur le
+# numéro de pièce, sans changer d'écran ni de filtres.
+#
+# Ce qui est constant dans une pièce (client, date d'entête) est repris tel
+# quel. Les quantités et les montants sont sommés. Une date de ligne donne la
+# plus proche. Le reste — désignation, référence article, prix unitaire,
+# position — n'a pas de sens agrégé et disparaît : une colonne en moins vaut
+# mieux qu'une moyenne que personne n'a demandée.
+
+# Types de colonne qu'on peut sommer sans mentir.
+_SOMMABLES = ("qte", "montant")
+
+
+def groupable(ec):
+    """Cet écran a-t-il une pièce sur laquelle regrouper ?"""
+    return piece_de(ec) is not None
+
+
+def colonnes_groupees(ec):
+    """Les colonnes de la vue par pièce, dérivées de celles de l'écran.
+
+    Chaque colonne porte `expr` : l'expression SQL agrégée. Les références
+    sont celles du catalogue, jamais une saisie utilisateur.
+    """
+    p = piece_de(ec)
+    if not p:
+        return None
+    alias_piece = p["alias"]
+    col_numero = p["col_ligne"]          # ex. « l.numero »
+
+    colonnes = []
+    vus = set()
+
+    def ajouter(nom, label, type_, largeur, expr, aligne=None):
+        if nom in vus:
+            return
+        vus.add(nom)
+        c = {"nom": nom, "label": label, "type": type_,
+             "largeur": largeur, "expr": expr}
+        if aligne:
+            c["aligne"] = aligne
+        colonnes.append(c)
+
+    # 1. Le numéro de pièce — la clé du regroupement, en tête.
+    ref = next((c for c in ec["colonnes"]
+                if c.get("c") == col_numero), None)
+    ajouter(ref["nom"] if ref else "numero",
+            ref["label"] if ref else "N°",
+            ref.get("type") if ref else "nombre",
+            ref.get("largeur") if ref else 100,
+            col_numero)
+
+    # 2. Le nombre de lignes : c'est l'information que la vue apporte.
+    ajouter("_lignes", "Lignes", "nombre", 62, "COUNT(*)")
+
+    # 3. Ce que porte l'entête est constant dans la pièce : on le reprend.
+    for c in ec["colonnes"]:
+        if c.get("parts") or not c.get("c"):
+            continue
+        if c["c"] == col_numero:
+            continue
+        if c["c"].split(".")[0] == alias_piece:
+            ajouter(c["nom"], c["label"], c.get("type"), c.get("largeur"),
+                    "MIN(%s)" % c["c"], c.get("aligne"))
+
+    # 4. Les colonnes de ligne : sommes et dates au plus tôt, rien d'autre.
+    for c in ec["colonnes"]:
+        if c.get("parts") or not c.get("c"):
+            continue
+        if c["c"] == col_numero or c["c"].split(".")[0] == alias_piece:
+            continue
+        if c.get("type") in _SOMMABLES:
+            ajouter(c["nom"], "Σ " + c["label"], c.get("type"),
+                    c.get("largeur"), "SUM(%s)" % c["c"], c.get("aligne"))
+        elif c.get("type") == "date":
+            ajouter(c["nom"], c["label"], "date", c.get("largeur"),
+                    "MIN(%s)" % c["c"], c.get("aligne"))
+
+    return {"cle": col_numero, "colonnes": colonnes,
+            "label": PIECE_LABELS.get(ec["cle"], "La pièce")}

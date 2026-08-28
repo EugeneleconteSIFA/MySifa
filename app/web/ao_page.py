@@ -57,8 +57,8 @@ AO_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/support_widget.css">
 <style>
-:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);--success:#34d399;--warn:#fbbf24;--danger:#f87171;}
-body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.1);--success:#059669;--warn:#d97706;--danger:#dc2626;}
+/* tokens : static/mysifa_theme.css — ici, seulement les écarts */
+body.light{--muted:#64748b;--accent-bg:rgba(8,145,178,.1);}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text)}

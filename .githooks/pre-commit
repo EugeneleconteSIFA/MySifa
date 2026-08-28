@@ -1,42 +1,146 @@
 #!/bin/sh
 #
-# MySifa — garde-fou anti-conflit de merge.
-# Refuse tout commit dont le contenu STAGED contient des marqueurs de conflit
-# git non résolus. Objectif : ne plus jamais laisser partir en staging un
-# fichier avec « <<<<<<< », « >>>>>>> » ou « ||||||| » (cause réelle de bugs
-# : JS cassé, migrations perdues, page settings HS…).
+# MySifa — garde-fous avant commit.
 #
-# Installation (une fois par clone, chaque développeur) :
+# Ce hook est le SEUL point d'application qui fonctionne quel que soit l'outil
+# utilise pour ecrire le code : Cowork, Cursor, Windsurf, ou l'editeur a la
+# main. Les hooks de .claude/hooks/ ne se declenchent que dans Claude Code ;
+# celui-ci se declenche a chaque commit, pour tout le monde.
+#
+# Installation (une fois par clone) :
 #     git config core.hooksPath .githooks
 #     chmod +x .githooks/pre-commit
 #
-# Contourner en cas de besoin exceptionnel (déconseillé) :
+# Contourner en cas de besoin exceptionnel :
 #     git commit --no-verify
 #
-# On ne teste QUE les marqueurs à chevrons (<<<<<<<, >>>>>>>, |||||||),
-# jamais « ======= » seul : ça évite les faux positifs (soulignés Markdown/RST,
-# séparateurs décoratifs) tout en attrapant 100 % des vrais conflits, qui
-# contiennent toujours les chevrons.
-marker_re='^(<<<<<<<|>>>>>>>|\|\|\|\|\|\|\|)'
+# Deux niveaux, et la distinction compte :
+#   BLOQUANT  — ce qui est objectivement casse. Un commit qui passe ne doit
+#               jamais contenir ca.
+#   AVERTISSEMENT — les jugements de valeur (une couleur en dur, un fichier qui
+#               grossit). Ils s'affichent et laissent passer : un hook qui
+#               bloque sur une couleur se fait contourner au --no-verify, et
+#               emporte avec lui la protection contre les vrais degats.
 
-found=0
-# Fichiers ajoutés / copiés / modifiés dans l'index (pas le working tree).
-files=$(git diff --cached --name-only --diff-filter=ACM)
+BLOQUE=0
+
+# Fichiers ajoutes / copies / modifies dans l'index.
+FICHIERS=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$FICHIERS" ] && exit 0
+
 IFS='
 '
-for file in $files; do
-    # Contenu tel qu'il sera committé (blob de l'index), pas le fichier disque.
-    if git show ":$file" 2>/dev/null | grep -nE "$marker_re" >/dev/null 2>&1; then
-        echo "❌ Marqueur de conflit dans : $file"
-        git show ":$file" 2>/dev/null | grep -nE "$marker_re" | head -5 | sed 's/^/      ligne /'
-        found=1
+
+# ─── 1. BLOQUANT — marqueurs de conflit ──────────────────────────────
+# On ne teste QUE les chevrons, jamais « ======= » seul : ca evite les faux
+# positifs (soulignes Markdown, separateurs decoratifs) tout en attrapant
+# 100 % des vrais conflits.
+for f in $FICHIERS; do
+    case "$f" in
+        docs/archive/*|.claude/rules/git-conflits.md|.githooks/*) continue ;;
+    esac
+    if git show ":$f" 2>/dev/null | grep -nE '^(<<<<<<<|>>>>>>>|\|\|\|\|\|\|\|)' >/dev/null 2>&1; then
+        echo "BLOQUE  Marqueur de conflit non resolu : $f"
+        git show ":$f" 2>/dev/null | grep -nE '^(<<<<<<<|>>>>>>>|\|\|\|\|\|\|\|)' | head -3 | sed 's/^/          ligne /'
+        BLOQUE=1
     fi
 done
 
-if [ "$found" -ne 0 ]; then
+# ─── 2. BLOQUANT — octets nuls (ecriture tronquee) ───────────────────
+# Symptome connu du drive reseau Windows : le fichier parait ecrit, il est
+# coupe au milieu et bourre de zeros. Invisible a la relecture.
+# `grep` ne sait pas chercher un octet nul de facon portable (BSD vs GNU) :
+# on passe par python, deja requis plus bas.
+if command -v python3 >/dev/null 2>&1; then
+    for f in $FICHIERS; do
+        case "$f" in
+            *.png|*.jpg|*.jpeg|*.gif|*.pdf|*.docx|*.xlsx|*.pptx|*.db|*.ico|*.woff*|*.zip|*.mp4|*.svg) continue ;;
+        esac
+        n=$(git show ":$f" 2>/dev/null | python3 -c "import sys;print(sys.stdin.buffer.read().count(b'\x00'))" 2>/dev/null)
+        if [ -n "$n" ] && [ "$n" != "0" ]; then
+            echo "BLOQUE  $n octet(s) nul(s) dans $f — ecriture tronquee, reecrire le fichier."
+            BLOQUE=1
+        fi
+    done
+fi
+
+# ─── 3. BLOQUANT — syntaxe Python et JavaScript ──────────────────────
+TMP=$(mktemp -d 2>/dev/null || echo /tmp)
+for f in $FICHIERS; do
+    case "$f" in
+        *.py)
+            if command -v python3 >/dev/null 2>&1; then
+                git show ":$f" > "$TMP/verif.py" 2>/dev/null
+                if ! python3 -c "import ast,sys;ast.parse(open(sys.argv[1],encoding='utf-8').read())" "$TMP/verif.py" 2>"$TMP/err"; then
+                    echo "BLOQUE  Syntaxe Python invalide : $f"
+                    tail -2 "$TMP/err" | sed 's/^/          /'
+                    BLOQUE=1
+                fi
+            fi
+            ;;
+        *.js)
+            case "$f" in *.min.js|*/node_modules/*) continue ;; esac
+            if command -v node >/dev/null 2>&1; then
+                git show ":$f" > "$TMP/verif.js" 2>/dev/null
+                if ! node --check "$TMP/verif.js" 2>"$TMP/err"; then
+                    echo "BLOQUE  Syntaxe JavaScript invalide : $f"
+                    tail -2 "$TMP/err" | sed 's/^/          /'
+                    BLOQUE=1
+                fi
+            fi
+            ;;
+    esac
+done
+
+# ─── 4. AVERTISSEMENT — couleurs en dur, taille, innerHTML ───────────
+if command -v python3 >/dev/null 2>&1; then
+    for f in $FICHIERS; do
+        case "$f" in
+            app/web/*.py|static/*.css) ;;
+            *) continue ;;
+        esac
+        [ "$f" = "app/web/components/theme.py" ] && continue
+        git show ":$f" > "$TMP/verif.txt" 2>/dev/null || continue
+        # Etat precedent, pour ne signaler que ce qui MONTE. Un fichier qui
+        # traine des couleurs depuis des mois n'a pas besoin d'etre rappele a
+        # chaque commit : ce qui compte, c'est qu'on n'en ajoute pas.
+        git show "HEAD:$f" > "$TMP/avant.txt" 2>/dev/null || : > "$TMP/avant.txt"
+        python3 - "$TMP/verif.txt" "$TMP/avant.txt" "$f" <<'PYEOF'
+import re, sys
+
+def lire(chemin):
+    try:
+        lignes = open(chemin, encoding="utf-8", errors="replace").read().split("\n")
+    except Exception:
+        return set(), 0
+    return ({m for l in lignes if "hex-ok" not in l
+             for m in re.findall(r"#[0-9a-fA-F]{6}\b", l.lower())}, len(lignes))
+
+apres, n_apres = lire(sys.argv[1])
+avant, n_avant = lire(sys.argv[2])
+nom = sys.argv[3]
+
+neuves = sorted(apres - avant)
+if neuves:
+    print("        %s : %d nouvelle(s) couleur(s) en dur (%s%s)"
+          % (nom, len(neuves), ", ".join(neuves[:4]), "…" if len(neuves) > 4 else ""))
+    print("          -> tokens partages : static/mysifa_theme.css")
+    print("          -> dans le code : var(--card), var(--text), var(--accent)…")
+    print("          -> exception legitime (SVG, PDF, favicon) : commentaire `hex-ok`")
+if n_apres > 1200 and n_apres > n_avant:
+    print("        %s : %d lignes (+%d), au-dessus du plafond de 1200"
+          % (nom, n_apres, n_apres - n_avant))
+    print("          -> extraire dans app/web/components/ plutot que rallonger")
+PYEOF
+    done
+fi
+
+rm -rf "$TMP" 2>/dev/null
+
+if [ "$BLOQUE" -ne 0 ]; then
     echo ""
-    echo "Commit BLOQUÉ : résous les conflits de merge avant de committer."
-    echo "(forcer malgré tout, à éviter : git commit --no-verify)"
+    echo "Commit BLOQUE. Corrige ce qui precede avant de committer."
+    echo "(forcer malgre tout, a eviter : git commit --no-verify)"
     exit 1
 fi
 exit 0

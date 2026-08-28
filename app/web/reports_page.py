@@ -55,8 +55,9 @@ REPORTS_HTML = r"""<!DOCTYPE html>
 <script src="/static/mysifa_theme.js"></script>
 <script>try{ if(window.MySifaTheme){ MySifaTheme.initFromStorage(); } }catch(e){}</script>
 <style>
-:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);--ok:#34d399;--success:#34d399;--warn:#fbbf24;--danger:#f87171;}
-body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--ok:#059669;--success:#059669;--warn:#d97706;--danger:#dc2626;}
+/* tokens : static/mysifa_theme.css — ici, seulement les écarts */
+:root{--ok:#34d399;}
+body.light{--muted:#64748b;--ok:#059669;}
 *{box-sizing:border-box}
 body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
 .layout{display:flex;min-height:100vh}
@@ -120,6 +121,13 @@ h1{font-size:22px;margin:0 0 6px}
   .mobile-menu-btn{background:transparent;border:none;color:var(--text);cursor:pointer}
   .main{padding:16px}
 }
+
+.sommaire{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 14px}
+.sommaire .som-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--muted);font-weight:700;margin-right:4px}
+.sommaire .som-chip{font-size:11.5px;padding:3px 9px;border-radius:999px;
+  border:1px solid var(--border);color:var(--text2);white-space:nowrap}
+.sommaire .som-note{font-size:11.5px;color:var(--warn,#fbbf24);margin-left:4px}
 </style>
 <link rel="stylesheet" href="/static/mysifa_perf.css">
 <script src="/static/mysifa_perf.js"></script>
@@ -160,7 +168,7 @@ h1{font-size:22px;margin:0 0 6px}
       <div><b>Rapport hebdomadaire</b><div style="font-size:11px;color:var(--muted)">Semaine passée</div></div>
     </div>
     <h1>Rapport hebdomadaire</h1>
-    <div class="sub">Semaine passée — envoyée automatiquement chaque mercredi matin.</div>
+    <div class="sub" id="report-sub">Semaine passée.</div>
 
     <div id="tab-preview" class="tab-panel active">
       <div class="toolbar">
@@ -188,6 +196,7 @@ h1{font-size:22px;margin:0 0 6px}
         <button class="btn btn-ghost" id="btn-copy">Copier HTML</button>
         <button class="btn" id="btn-send" style="display:none">Envoyer maintenant</button>
       </div>
+      <div id="report-sommaire" class="sommaire"></div>
       <div id="preview"><div class="loading">Chargement de l'aperçu…</div></div>
     </div>
 
@@ -369,6 +378,41 @@ async function confirmSend(){
   }
 }
 
+async function loadSommaire(){
+  const box = document.getElementById('report-sommaire');
+  if (!box) return;
+  const role = (document.getElementById('role-select')||{}).value || ROLE;
+  try {
+    const r = await fetch('/api/reports/weekly/sections?role=' + encodeURIComponent(role),
+                          { credentials: 'include' });
+    if (!r.ok) { box.innerHTML = ''; return; }
+    const j = await r.json();
+    const chips = (j.sections||[]).map(s =>
+      '<span class="som-chip">' + (s.label||s.cle) + '</span>').join('');
+    const note = j.connu ? ''
+      : '<span class="som-note">ce rôle reçoit la vue direction</span>';
+    box.innerHTML = '<span class="som-lbl">Contenu</span>' + chips + note;
+  } catch(e){ box.innerHTML = ''; }
+}
+
+async function loadDernierEnvoi(){
+  const el = document.getElementById('report-sub');
+  if (!el) return;
+  try {
+    const r = await fetch('/api/reports/weekly/list', { credentials: 'include' });
+    if (!r.ok) return;
+    const list = await r.json();
+    if (!list || !list.length){
+      el.textContent = "Semaine passée. Jamais envoyé — l'envoi se fait depuis cette page.";
+      return;
+    }
+    const it = list[0];
+    const d = (it.generated_at||'').slice(0,10).split('-').reverse().join('/');
+    el.textContent = 'Semaine passée. Dernier envoi : semaine ' + it.week
+      + ' (' + it.year + ')' + (d ? ', le ' + d : '') + " — envoi manuel depuis cette page.";
+  } catch(e){}
+}
+
 document.getElementById('btn-refresh').onclick = loadPreview;
 document.getElementById('btn-copy').onclick = copyPreviewHtml;
 document.getElementById('wk-input').onchange = loadPreview;
@@ -383,7 +427,7 @@ if (CAN_SWITCH){
   document.getElementById('role-selector-wrap').style.display = 'block';
   const sel = document.getElementById('role-select');
   sel.value = ROLE;
-  sel.onchange = loadPreview;
+  sel.onchange = () => { loadPreview(); loadSommaire(); };
 }
 
 document.getElementById('theme-btn').onclick = () => {
@@ -416,6 +460,8 @@ document.getElementById('sb-ov').onclick = () => document.body.classList.remove(
 
 initDefaultWeek();
 loadPreview();
+loadSommaire();
+loadDernierEnvoi();
 try{switchTab(_readReportsTab(),{silent:true});}catch(e){}
 window.addEventListener('hashchange',function(){try{switchTab(_readReportsTab(),{silent:true});}catch(e){}});
 </script>

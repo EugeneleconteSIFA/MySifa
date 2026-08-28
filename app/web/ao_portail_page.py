@@ -139,7 +139,7 @@ def get_portail_html(
 body.light{{
   --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
   --muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.1);
-  --success:#059669;--warn:#d97706;--danger:#dc2626;
+  --success:#059669;--warn:#d24b00;--danger:#dc2626;
 }}
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{
@@ -937,7 +937,7 @@ def get_mes_demandes_html(
 body.light{{
   --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
   --muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.1);
-  --success:#059669;--warn:#d97706;--danger:#dc2626;
+  --success:#059669;--warn:#d24b00;--danger:#dc2626;
 }}
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{

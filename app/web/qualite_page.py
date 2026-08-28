@@ -67,19 +67,9 @@ QUALITE_HTML = r"""<!DOCTYPE html>
 <script src="/static/mysifa_user_chip.js"></script>
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
-  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.10);
-  --ok:#34d399;--danger:#f87171;--warn:#fbbf24;--success:#34d399;
-  --btn-fg:#0a0e17;
-  --sidebar-w:220px;
-}
-html.light-pre body,body.light{
-  --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
-  --muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.08);
-  --ok:#059669;--danger:#dc2626;--warn:#d97706;
-  --btn-fg:#ffffff;
-}
+/* tokens : static/mysifa_theme.css — ici, seulement les écarts */
+:root{--accent-bg:rgba(34,211,238,.10);--ok:#34d399;--btn-fg:#0a0e17;--sidebar-w:220px;}
+html.light-pre body,body.light{--muted:#64748b;--accent-bg:rgba(8,145,178,.08);--ok:#059669;--btn-fg:#ffffff;}
 html,body{height:100%;overflow:hidden}
 body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:14px}
 ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
@@ -631,6 +621,9 @@ const S = {
   resFiltreCertifs: [],       // ids de fiches mises en avant (multi-selection)
   resShowCats: false,         // afficher les categories sur les cartes
   resFiltrePanel: false,      // panneau de selection des certifications ouvert
+  resRangement: 'categorie',  // 'alpha' | 'categorie' — comment la liste est rangee
+  resCatsPliees: [],          // codes de rayons replies (persiste)
+  resFiltreCats: [],          // codes de categories retenus ([] = toutes)
   currentRefFour: null,       // couverture fournisseurs de la fiche referentiel
   // ── Audit matrice (v1.6) ────────────────────────────────────────
   auditMatrice: null,         // {fournisseurs, certifications, cells, resume}
@@ -4770,6 +4763,40 @@ document.addEventListener('keydown', function(ev){
     .res-cat-pill{background:transparent;border:1px solid var(--border);color:var(--muted);border-radius:4px;
       padding:1px 6px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;line-height:1.5;white-space:nowrap}
 
+    /* ── Rangement par categorie ─────────────────────────────────────────
+       Le titre de rayon ne porte plus de cadre : c'est le blanc au-dessus
+       (28px) qui separe les rayons, pas un trait. La lisibilite vient donc
+       de la typo seule — 14px, 800, capitales espacees, couleur de texte
+       pleine — et non d'une boite qui ferait concurrence aux cartes.
+       Chevron a droite du libelle : il suit le titre au lieu de le
+       preceder, et ne s'allume qu'au survol pour rester sobre.
+       Cliquable pour replier — « Sans categorie » compte souvent la moitie
+       du magasin, on doit pouvoir le ranger d'un geste. */
+    .res-rayon{margin:28px 0 4px}
+    .res-rayon:first-child{margin-top:6px}
+    .res-rayon-hd{display:flex;align-items:center;gap:10px;padding:6px 6px 6px 2px;
+      background:transparent;border:0;border-radius:8px;cursor:pointer;user-select:none;
+      transition:background .15s}
+    .res-rayon-hd:hover{background:var(--bg)}
+    .res-rayon-hd .chev{flex-shrink:0;margin-left:-2px;color:var(--muted);
+      transition:transform .15s,color .15s}
+    .res-rayon-hd:hover .chev{color:var(--text2)}
+    .res-rayon.plie .res-rayon-hd .chev{transform:rotate(-90deg)}
+    .res-rayon-ttl{font-size:14px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.7px}
+    .res-rayon-cnt{font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px;
+      background:var(--accent-bg);color:var(--accent)}
+    .res-rayon-hd.vide .res-rayon-ttl{color:var(--text2)}
+    .res-rayon-hd.vide .res-rayon-cnt{background:rgba(148,163,184,.18);color:var(--muted)}
+    .res-rayon-corps{margin-top:12px}
+    .res-rayon.plie .res-rayon-corps{display:none}
+    /* Le segment de rangement, a cote de la recherche. */
+    .res-seg{display:inline-flex;background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+    .res-seg button{background:transparent;border:0;padding:8px 13px;font-size:12.5px;font-weight:600;
+      color:var(--muted);cursor:pointer;transition:background .15s,color .15s;font-family:inherit}
+    .res-seg button:hover{color:var(--text)}
+    .res-seg button.on{background:var(--accent-bg);color:var(--accent)}
+    .res-seg button + button{border-left:1px solid var(--border)}
+
     /* ── Fiche referentiel : couverture fournisseurs ─────────────────────
        Deux sections cote a cote, chacune sur deux colonnes de fournisseurs :
        une trentaine de noms tiennent ainsi sans faire defiler la fiche. */
@@ -6278,6 +6305,11 @@ async function loadRessources(){
     }
     try{ S.resShowCats = localStorage.getItem('mysifa_res_cats')==='1'; }catch(e){}
     try{
+      const rng = localStorage.getItem('mysifa_res_rangement');
+      if(rng==='categorie'||rng==='alpha') S.resRangement = rng;
+      S.resCatsPliees = JSON.parse(localStorage.getItem('mysifa_res_plies')||'[]')||[];
+    }catch(e){ S.resCatsPliees = []; }
+    try{
       const r2 = await api('/api/qualite/ressources/expiration-alerts');
       if(r2.ok) S.resAlerts = await r2.json();
     }catch(e){}
@@ -6287,8 +6319,20 @@ async function loadRessources(){
 
 function ressourcesFiltered(){
   const q = (S.resSearch||'').trim().toLowerCase();
-  const groupes = S.resGroupes||[];
-  const list = S.resList||[];
+  let groupes = S.resGroupes||[];
+  let list = S.resList||[];
+  // Le filtre par categorie passe avant la recherche : il dit de quel rayon
+  // on parle, la recherche dit quoi y trouver.
+  const sel = S.resFiltreCats||[];
+  if(sel.length){
+    const garde = it => {
+      const cats = it.categories||[];
+      if(sel.includes(SANS_CAT)) { if(!cats.length) return true; }
+      return cats.some(c => sel.includes(c));
+    };
+    groupes = groupes.filter(garde);
+    list = list.filter(garde);
+  }
   if(!q) return {groupes, list};
   const cat = c => resCatLabel(c).toLowerCase();
   const fg = groupes.filter(g =>
@@ -6324,6 +6368,73 @@ function toggleResCats(on){
   S.resShowCats = !!on;
   try{ localStorage.setItem('mysifa_res_cats', on?'1':'0'); }catch(e){}
   renderRessourcesList();
+}
+
+// ── Rangement par categorie ────────────────────────────────────────────
+//
+// Le code reserve pour « aucune categorie ». Ce n'est pas une categorie du
+// catalogue : c'est un rayon de fin de liste, celui du travail qui reste.
+const SANS_CAT = '__sans__';
+
+function setResRangement(mode){
+  S.resRangement = (mode === 'categorie') ? 'categorie' : 'alpha';
+  try{ localStorage.setItem('mysifa_res_rangement', S.resRangement); }catch(e){}
+  renderRessourcesList();
+}
+function toggleResRayon(code){
+  const i = S.resCatsPliees.indexOf(code);
+  if(i>=0) S.resCatsPliees.splice(i,1); else S.resCatsPliees.push(code);
+  try{ localStorage.setItem('mysifa_res_plies', JSON.stringify(S.resCatsPliees)); }catch(e){}
+  renderRessourcesList();
+}
+function toggleResFiltreCat(code){
+  const i = S.resFiltreCats.indexOf(code);
+  if(i>=0) S.resFiltreCats.splice(i,1); else S.resFiltreCats.push(code);
+  renderRessourcesList();
+}
+function clearResFiltreCats(){ S.resFiltreCats = []; renderRessourcesList(); }
+
+// Compte, sur la liste NON filtree par categorie, combien de fiches tient
+// chaque rayon. Les compteurs des puces doivent rester stables quand on en
+// coche une : sinon on ne sait plus ce qu'on a devant soi.
+function resComptesCats(){
+  const n = {};
+  const compte = it => {
+    const cats = (it.categories||[]).filter(Boolean);
+    if(!cats.length){ n[SANS_CAT] = (n[SANS_CAT]||0)+1; return; }
+    for(const c of cats) n[c] = (n[c]||0)+1;
+  };
+  (S.resGroupes||[]).forEach(compte);
+  (S.resList||[]).forEach(compte);
+  return n;
+}
+
+// Range les cartes par rayon. Un fournisseur a deux casquettes apparait dans
+// les deux rayons — c'est voulu : on cherche « qui me fournit du carton »,
+// pas « a quoi ce fournisseur est-il assigne ».
+function resRayons(items){
+  const cat = (S.resCatsCatalogue||[]);
+  const ordre = cat.map(c=>c.code).concat([SANS_CAT]);
+  const par = {};
+  // Quand des categories sont cochees, on ne montre que ces rayons-la : un
+  // fournisseur a deux casquettes ferait sinon reapparaitre un rayon qu'on
+  // vient justement de decocher.
+  const sel = S.resFiltreCats||[];
+  for(const it of items){
+    const cats = ((it.data.categories)||[]).filter(Boolean);
+    let cles = cats.length ? cats : [SANS_CAT];
+    if(sel.length) cles = cles.filter(c => sel.includes(c));
+    for(const c of cles){
+      (par[c] = par[c] || []).push(it);
+      // Un code hors catalogue garde quand meme son rayon, en fin de liste.
+      if(!ordre.includes(c)) ordre.splice(ordre.length-1, 0, c);
+    }
+  }
+  return ordre.filter(c => (par[c]||[]).length).map(c => ({
+    code: c,
+    label: c===SANS_CAT ? 'Sans catégorie' : resCatLabel(c),
+    items: par[c],
+  }));
 }
 
 // Etat d une certification pour un item (fournisseur isole ou groupe).
@@ -6365,9 +6476,13 @@ function resPossedesHTML(item, nbBranches){
   return bits.length ? `<div class="res-miss">${bits.join('')}</div>` : '';
 }
 function resCatsHTML(item){
-  if(!S.resShowCats) return '';
   const cats = item.categories||[];
   if(!cats.length) return '';
+  // Une fiche rangee dans deux rayons y apparait deux fois. Sans ses
+  // etiquettes, on croit a un doublon : on les montre meme si la case
+  // « Catégories » est decochee.
+  const multi = S.resRangement==='categorie' && cats.length>1;
+  if(!S.resShowCats && !multi) return '';
   return `<span class="res-cats-inline">${cats.map(c=>`<span class="res-cat-pill">${escHtml(resCatLabel(c))}</span>`).join('')}</span>`;
 }
 
@@ -6436,8 +6551,15 @@ function renderRessourcesList(){
 
   let body = '';
   if(!groupes.length && !list.length){
-    body = `<div class="aud-emp"><div class="emp-title">${S.resSearch?'Aucun résultat pour « '+escHtml(S.resSearch)+' »':'Aucun fournisseur'}</div>
-      <div class="emp-sub">${S.resSearch?'':'Les fournisseurs sont gérés dans les paramètres.'}</div></div>`;
+    const catsChoisies = (S.resFiltreCats||[]).map(c => c===SANS_CAT?'Sans catégorie':resCatLabel(c)).join(' · ');
+    const titre = S.resSearch ? 'Aucun résultat pour « '+escHtml(S.resSearch)+' »'
+                : catsChoisies ? 'Aucun fournisseur en ' + escHtml(catsChoisies)
+                : 'Aucun fournisseur';
+    const sous = S.resSearch || catsChoisies
+                ? (catsChoisies ? 'Décochez une catégorie pour élargir.' : '')
+                : 'Les fournisseurs sont gérés dans les paramètres.';
+    body = `<div class="aud-emp"><div class="emp-title">${titre}</div>
+      <div class="emp-sub">${sous}</div></div>`;
   } else {
     // Fusionner groupes et fournisseurs isolés dans une seule liste triée alphabétiquement
     const items = [];
@@ -6449,8 +6571,39 @@ function renderRessourcesList(){
     }
     items.sort((a,b)=>a.key.localeCompare(b.key));
 
+    // Poser des cartes : soit une grille d'un seul tenant, soit un rayon par
+    // categorie. `pliable` n'est vrai qu'au premier niveau : replier un rayon
+    // qui existe en double (certifies / non certifies) replierait les deux.
+    const disposer = (arr, rend, pliable) => {
+      if(S.resRangement !== 'categorie'){
+        return `<div class="res-grid">${arr.map(rend).join('')}</div>`;
+      }
+      const rayons = resRayons(arr);
+      if(!rayons.length) return '<div class="ref-cov-empty">Aucun fournisseur.</div>';
+      // Un seul rayon, et c'est le fourre-tout : le classement n'a pas encore
+      // ete fait. On le dit plutot que de laisser croire a une panne.
+      const aRanger = pliable && rayons.length===1 && rayons[0].code===SANS_CAT
+        ? `<div class="ref-cov-empty" style="margin-bottom:12px">Aucun fournisseur n'a encore de
+             catégorie. Elles se posent dans <b>Paramètres → Fournisseurs</b>, sur la fiche de chacun.</div>`
+        : '';
+      return aRanger + rayons.map(r => {
+        const plie = pliable && S.resCatsPliees.includes(r.code);
+        const vide = r.code===SANS_CAT ? ' vide' : '';
+        return `<div class="res-rayon${plie?' plie':''}">
+          <div class="res-rayon-hd${vide}"${pliable?` onclick="toggleResRayon('${escAttr(r.code)}')" role="button" tabindex="0"
+            onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleResRayon('${escAttr(r.code)}');}"
+            title="${plie?'Déplier':'Replier'} ce rayon"`:' style="cursor:default"'}>
+            <span class="res-rayon-ttl">${escHtml(r.label)}</span>
+            <span class="res-rayon-cnt">${r.items.length}</span>
+            ${pliable?`<svg class="chev" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>`:''}
+          </div>
+          <div class="res-rayon-corps"><div class="res-grid">${r.items.map(rend).join('')}</div></div>
+        </div>`;
+      }).join('');
+    };
+
     if(!S.resFiltreCertifs.length){
-      body = `<div class="res-grid">${items.map(it=>carte(it,'','')).join('')}</div>`;
+      body = disposer(items, it=>carte(it,'',''), true);
     } else {
       // Deux sections : qui couvre TOUTES les certifications mises en avant,
       // et qui ne les couvre pas — avec le détail de ce qui manque.
@@ -6466,7 +6619,7 @@ function renderRessourcesList(){
             <span class="res-section-sub">${sub}</span>
           </div>
           ${arr.length
-            ? `<div class="res-grid">${arr.map(rend).join('')}</div>`
+            ? disposer(arr, rend, false)
             : '<div class="ref-cov-empty">Aucun fournisseur dans cette section.</div>'}
         </div>`;
       body =
@@ -6478,6 +6631,30 @@ function renderRessourcesList(){
              it => carte(it, resManquantsHTML(it.data) + resPossedesHTML(it.data, it.kind==='groupe'?(it.data.branches||[]).length:0), ' ko'));
     }
   }
+
+  // Barre des catégories : une puce par rayon, avec son effectif. Les
+  // effectifs sont ceux du magasin entier, pas de ce qui reste après
+  // filtrage — sinon cocher « Carton » ferait tomber tous les autres à zéro
+  // et on ne saurait plus quoi cocher ensuite.
+  const comptes = resComptesCats();
+  const rayonsCat = (S.resCatsCatalogue||[])
+    .filter(c => comptes[c.code])
+    .map(c => ({code: c.code, label: c.label, n: comptes[c.code]}));
+  if(comptes[SANS_CAT]) rayonsCat.push({code: SANS_CAT, label: 'Sans catégorie', n: comptes[SANS_CAT]});
+  const catsBarHtml = !rayonsCat.length ? '' : `
+    <div class="res-certpanel" style="padding:11px 14px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+        <span class="res-certpanel-hd" style="margin:0">Catégories</span>
+        ${rayonsCat.map(r=>{
+          const on = S.resFiltreCats.includes(r.code);
+          return `<span class="res-certchip${on?' on':''}" onclick="toggleResFiltreCat('${escAttr(r.code)}')"
+            role="checkbox" tabindex="0" aria-checked="${on?'true':'false'}"
+            onkeydown="if(event.key===' '||event.key==='Enter'){event.preventDefault();toggleResFiltreCat('${escAttr(r.code)}');}"
+            >${escHtml(r.label)} <span style="opacity:.65;font-weight:700">${r.n}</span></span>`;
+        }).join('')}
+        ${S.resFiltreCats.length?`<button type="button" class="res-toolbar-btn" style="padding:5px 11px" onclick="clearResFiltreCats()">Tout voir</button>`:''}
+      </div>
+    </div>`;
 
   // Panneau de sélection des certifications à mettre en avant
   const certs = S.resCertifs||[];
@@ -6519,11 +6696,18 @@ function renderRessourcesList(){
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
         Certifications${S.resFiltreCertifs.length?` <span class="cnt">${S.resFiltreCertifs.length}</span>`:''}
       </button>
+      <div class="res-seg" role="group" aria-label="Rangement de la liste">
+        <button type="button" class="${S.resRangement==='alpha'?'on':''}" onclick="setResRangement('alpha')"
+          title="Une seule grille, de A à Z">A → Z</button>
+        <button type="button" class="${S.resRangement==='categorie'?'on':''}" onclick="setResRangement('categorie')"
+          title="Un rayon par catégorie de fournisseur">Par catégorie</button>
+      </div>
       <label class="res-cbx" title="Afficher les catégories de chaque fournisseur sur les cartes">
         <input type="checkbox" ${S.resShowCats?'checked':''} onchange="toggleResCats(this.checked)">
         Catégories
       </label>
     </div>
+    ${catsBarHtml}
     ${panelHtml}
     ${body}
   `;

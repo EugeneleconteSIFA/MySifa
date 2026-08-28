@@ -2828,7 +2828,7 @@ function renderTracabiliteDossiersVue(){
   const showAttente = forceShowAttente || !!S.tracShowAttente;
   const hiddenAttenteCount = (!showAttente && !F.statut) ? attenteDossiers.length : 0;
 
-  const COL_KEY = {ref:'reference',client:'client',designation:'designation',machine:'machine_nom',statut:'statut',matieres:'nb_matieres'};
+  const COL_KEY = {ref:'reference',client:'client',designation:'designation',machine:'machine_nom',statut:'statut',matieres:'nb_matieres',info:'info_prod'};
   if(Srt.col){
     const key = COL_KEY[Srt.col]||Srt.col;
     dossiers = [...dossiers].sort((a,b)=>{
@@ -2964,6 +2964,23 @@ function renderTracabiliteDossiersVue(){
         hasMatieres
           ? h('span',{className:'badge badge-ok'}, (dos.nb_matieres||0)+' bobine'+(dos.nb_matieres>1?'s':''))
           : h('span',{className:'badge',style:{opacity:.5}},'Aucune')
+      ),
+      // Info prod — le commentaire libre du dossier. Il s'écrit ici et se
+      // relit en saisie de production, sur la carte de la série. La cellule
+      // arrête la propagation : ouvrir le détail du dossier et ouvrir
+      // l'éditeur sont deux gestes distincts.
+      h('td',{
+        style:{maxWidth:'280px',cursor:'text'},
+        title: dos.info_prod || 'Ajouter une info prod',
+        onClick:(e)=>{ e.stopPropagation(); openTracInfoProdModal(dos); }
+      },
+        dos.info_prod
+          ? h('div',{style:{
+              fontSize:'12.5px',lineHeight:'1.45',color:'var(--text2)',
+              display:'-webkit-box',WebkitLineClamp:'2',WebkitBoxOrient:'vertical',
+              overflow:'hidden',
+            }}, dos.info_prod)
+          : h('span',{style:{fontSize:'12px',color:'var(--muted)',fontStyle:'italic'}},'+ Ajouter')
       )
     );
   });
@@ -2988,7 +3005,8 @@ function renderTracabiliteDossiersVue(){
           thSort('designation','Désignation'),
           thSort('machine','Machine'),
           thSort('statut','Statut'),
-          thSort('matieres','Matières')
+          thSort('matieres','Matières'),
+          thSort('info','Info prod')
         )),
         h('tbody',null,...rows)
       )
@@ -3036,6 +3054,129 @@ function renderTracabiliteDossiersVue(){
     attenteToggleBar,
     h('div',{style:{overflowX:'auto',padding:'0 0 8px'}}, table)
   );
+}
+
+// ── Info prod : l'éditeur du commentaire d'un dossier ────────────────────────
+//
+// Deux endroits écrivent cette info : la clôture du dossier en saisie de
+// production (où elle est obligatoire) et cette fenêtre. Une seule ligne par
+// dossier — on complète un texte existant, on n'empile pas des versions.
+function closeTracInfoProdModal(){
+  document.getElementById('trac-info-prod-modal')?.remove();
+}
+
+function openTracInfoProdModal(dos){
+  closeTracInfoProdModal();
+  const ref = String((dos && dos.reference) || '').trim();
+  if(!ref){ showToast('Référence dossier manquante.','danger'); return; }
+
+  const overlay = document.createElement('div');
+  overlay.id = 'trac-info-prod-modal';
+  overlay.className = 'contact-modal-overlay';
+  overlay.style.zIndex = '9200';
+  overlay.onclick = (e)=>{ if(e.target===overlay) closeTracInfoProdModal(); };
+
+  const box = document.createElement('div');
+  box.className = 'contact-modal';
+  box.style.maxWidth = '560px';
+  box.onclick = (e)=> e.stopPropagation();
+
+  const head = document.createElement('div');
+  head.className = 'contact-modal-head';
+  const title = document.createElement('h3');
+  title.textContent = 'Info prod — '+ref;
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'contact-close-btn';
+  closeBtn.textContent = '\u2715';
+  closeBtn.onclick = closeTracInfoProdModal;
+  head.append(title, closeBtn);
+
+  const body = document.createElement('div');
+  body.className = 'contact-modal-body';
+  body.style.display = 'grid';
+  body.style.gap = '10px';
+
+  const hint = document.createElement('p');
+  hint.style.cssText = 'margin:0;font-size:12px;color:var(--muted);line-height:1.5';
+  hint.textContent = 'Ce que la prochaine production de ce dossier doit savoir : '
+    + 'particularités du produit, difficultés rencontrées, consignes client. '
+    + 'Visible en saisie de production, sur la carte de cette série.';
+  body.appendChild(hint);
+
+  const ta = document.createElement('textarea');
+  ta.rows = 6;
+  ta.value = dos.info_prod || '';
+  ta.placeholder = 'Ex : découpe sensible, ralentir à 90 m/mn sur la fin de bobine…';
+  ta.style.cssText = 'width:100%;font-family:inherit;font-size:14px;padding:10px 12px;'
+    + 'border-radius:8px;border:1px solid var(--border2);background:var(--bg);'
+    + 'color:var(--text);resize:vertical';
+  body.appendChild(ta);
+
+  if(dos.info_prod && (dos.info_prod_par || dos.info_prod_le)){
+    const sign = document.createElement('p');
+    sign.style.cssText = 'margin:0;font-size:11px;color:var(--muted)';
+    let quand = '';
+    if(dos.info_prod_le){
+      const d = new Date(dos.info_prod_le);
+      if(!isNaN(d)) quand = ' le '+d.toLocaleDateString('fr-FR');
+    }
+    sign.textContent = 'Dernière modification'+(dos.info_prod_par ? ' par '+dos.info_prod_par : '')+quand+'.';
+    body.appendChild(sign);
+  }
+
+  const btns = document.createElement('div');
+  btns.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;margin-top:4px';
+  const cancel = document.createElement('button');
+  cancel.className = 'btn btn-sm btn-ghost';
+  cancel.textContent = 'Annuler';
+  cancel.onclick = closeTracInfoProdModal;
+  const save = document.createElement('button');
+  save.className = 'btn btn-sm';
+  save.textContent = 'Enregistrer';
+  save.onclick = async ()=>{
+    const txt = String(ta.value||'').trim();
+    save.disabled = true;
+    try{
+      const r = await api('/api/fabrication/dossiers/'+encodeURIComponent(ref)+'/info-prod', {
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({texte: txt}),
+      });
+      const info = (r && r.info_prod) || null;
+      dos.info_prod = info ? info.texte : null;
+      dos.info_prod_par = info ? (info.updated_par || info.auteur) : null;
+      dos.info_prod_le = info ? (info.updated_at || info.created_at) : null;
+      // Les deux vues montrent la même info : la liste (colonne) et le détail
+      // du dossier. Mettre à jour la seule qu'on tient sous la main laisserait
+      // l'autre afficher le texte d'avant jusqu'au prochain chargement.
+      try{
+        const ligne = (S.traceabilite && S.traceabilite.dossiers || [])
+          .find(x => String(x.reference||'').trim() === ref);
+        if(ligne && ligne !== dos){
+          ligne.info_prod = dos.info_prod;
+          ligne.info_prod_par = dos.info_prod_par;
+          ligne.info_prod_le = dos.info_prod_le;
+        }
+        const det = S.traceabiliteDossier;
+        if(det && det.dossier && String(det.dossier.reference||'').trim() === ref){
+          det.info_prod = info;
+        }
+      }catch(e){ /* affichage seulement */ }
+      closeTracInfoProdModal();
+      showToast(txt ? 'Info prod enregistrée.' : 'Info prod effacée.');
+      render();
+    }catch(e){
+      save.disabled = false;
+      showToast('Erreur : '+(e.message||e),'danger');
+    }
+  };
+  btns.append(cancel, save);
+  body.appendChild(btns);
+
+  box.append(head, body);
+  overlay.appendChild(box);
+  document.body.appendChild(overlay);
+  ta.focus();
 }
 
 function closeTracMatieresEditModal(){
@@ -3363,6 +3504,38 @@ function renderTracabiliteDossierDetail(){
     ))
   );
 
+  // Info prod du dossier — même objet que la colonne de la liste et que la
+  // note exigée à la clôture. Éditable ici aussi : c'est souvent en regardant
+  // le détail qu'on se souvient de ce qu'il fallait noter.
+  const infoProdSrc = d.info_prod || null;
+  const infoProdRef = {
+    reference: dos.reference,
+    info_prod: infoProdSrc ? infoProdSrc.texte : null,
+    info_prod_par: infoProdSrc ? (infoProdSrc.updated_par || infoProdSrc.auteur) : null,
+    info_prod_le: infoProdSrc ? (infoProdSrc.updated_at || infoProdSrc.created_at) : null,
+  };
+  const infoProdCard = h('div',{
+    style:{background:'var(--bg2)',borderRadius:'8px',padding:'12px 14px',margin:'0 0 12px',
+           border:'1px solid var(--border)',cursor:'text'},
+    onClick:()=>openTracInfoProdModal(infoProdRef),
+  },
+    h('div',{style:{display:'flex',alignItems:'center',gap:'8px',marginBottom:'5px'}},
+      h('span',{style:{fontSize:'10px',color:'var(--muted)',fontWeight:'700',
+                       textTransform:'uppercase',letterSpacing:'.4px'}},'Info prod'),
+      h('span',{style:{fontSize:'11px',color:'var(--accent)',fontWeight:'700'}},
+        infoProdRef.info_prod ? 'Modifier' : 'Ajouter')
+    ),
+    infoProdRef.info_prod
+      ? h('div',{style:{fontSize:'13px',lineHeight:'1.55',color:'var(--text)',whiteSpace:'pre-wrap'}},
+          infoProdRef.info_prod)
+      : h('div',{style:{fontSize:'12.5px',color:'var(--muted)',fontStyle:'italic'}},
+          'Rien de noté sur ce dossier.'),
+    (infoProdRef.info_prod && infoProdRef.info_prod_par)
+      ? h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'6px'}},
+          'par '+infoProdRef.info_prod_par)
+      : null
+  );
+
   // Matières table
   const matiereRows = matieres.map(m=>{
     const dt = m.scanned_at ? new Date(m.scanned_at) : null;
@@ -3449,6 +3622,7 @@ function renderTracabiliteDossierDetail(){
         )
       ),
       infoGrid,
+      infoProdCard,
       h('div',{style:{padding:'0 20px 16px'}},
         h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'10px',marginBottom:'10px'}},
           h('div',{style:{fontWeight:'800',fontSize:'12px',color:'var(--text2)',

@@ -1191,6 +1191,17 @@ def search_dossiers(request: Request, q: str = "", limit: int = 20):
         return {"dossiers": [_hydrate_dossier_row(r, conn) for r in rows]}
 
 
+# Meme piege que la memoire produit : « 1068/0002 - Reliquat 2 » place dans le
+# chemin est redecode avant le routage, la route ne correspond plus et la fiche
+# dossier repond 404 sur la moitie des dossiers. Le numero passe donc aussi en
+# parametre de requete ; la route en chemin reste servie pour les appels deja
+# en vol et les dossiers sans slash.
+@router.get("/api/fabrication/dossier-stats")
+def get_dossier_stats_q(request: Request, no_dossier: str = ""):
+    """Statistiques d'un dossier — variante ou le numero est un parametre."""
+    return get_dossier_stats(no_dossier, request)
+
+
 @router.get("/api/fabrication/dossier/{no_dossier}/stats")
 def get_dossier_stats(no_dossier: str, request: Request):
     """Statistiques d'un dossier de production pour la fiche dossier.
@@ -1340,6 +1351,8 @@ async def create_saisie(request: Request):
     op_str = (body.get("operation") or "").strip()
     if not op_str:
         raise HTTPException(status_code=400, detail="Opération manquante")
+
+    seuil_franchi = None
 
     cl = classify_operation(op_str)
 
@@ -1693,6 +1706,19 @@ async def create_saisie(request: Request):
         # Best-effort : une erreur ici ne doit jamais faire échouer la saisie
         # de l'opérateur — c'est un service, pas un contrôle.
         if cl["code"] == "89" and fin_dossier_flag and no_dossier:
+            # L'info prod exigee a la cloture s'ecrit AVANT la serie : elle est
+            # la reponse a « qu'est-ce qu'il faut savoir la prochaine fois ? »,
+            # et la serie figee la restitue ensuite sur sa carte.
+            # Un texte vide n'ecrase pas une info deja saisie en Tracabilite :
+            # l'operateur qui n'a rien a ajouter ne doit pas effacer ce qu'un
+            # autre a note avant lui.
+            info_prod_saisie = (body.get("info_prod") or "").strip()
+            if info_prod_saisie:
+                try:
+                    from app.services.produit_memoire import enregistrer_info_prod
+                    enregistrer_info_prod(conn, no_dossier, info_prod_saisie, operateur)
+                except Exception:
+                    pass
             try:
                 from app.services.produit_memoire import materialiser_serie
                 materialiser_serie(conn, no_dossier, cloture_par=operateur)
@@ -1717,6 +1743,35 @@ async def create_saisie(request: Request):
         except Exception:
             pass  # ne jamais bloquer la saisie opérateur
 
+        # ── Seuils d'arret : la repetition qui cesse d'etre de la routine ───
+        # Un arret ne demande rien. Au-dela d'un seuil — repetition, duree, ou
+        # nature de l'arret — la ligne part au rapport de prod, et une
+        # explication n'est exigee que si le champ commentaire est vide.
+        # Deux evaluations : la saisie qu'on vient d'ecrire (permanent,
+        # repetition), puis l'arret que cette saisie vient de refermer, dont
+        # la duree n'etait pas connue avant (arret long, duree cumulee).
+        # Best-effort : un seuil n'est pas un controle, il ne bloque jamais.
+        try:
+            from app.services.arret_seuils import (
+                evaluer_saisie as _seuil_evaluer,
+                cloturer_precedent as _seuil_cloturer,
+            )
+            # Les deux evaluations tournent toujours : elles portent sur deux
+            # lignes differentes (l'arret referme et celui qu'on vient d'ecrire).
+            # Les court-circuiter ferait sauter un compteur en silence.
+            seuil_precedent = _seuil_cloturer(conn, new_id)
+            seuil_courant = _seuil_evaluer(conn, new_id)
+            # A l'ecran, une seule question : celle qui attend une reponse.
+            candidats = [c for c in (seuil_precedent, seuil_courant) if c]
+            seuil_franchi = next(
+                (c for c in candidats if c.get("explication_exigee")),
+                candidats[0] if candidats else None,
+            )
+            if candidats:
+                conn.commit()
+        except Exception:
+            seuil_franchi = None
+
         row = conn.execute(
             "SELECT * FROM production_data WHERE id=?", (new_id,)
         ).fetchone()
@@ -1729,7 +1784,10 @@ async def create_saisie(request: Request):
         detail={"duree_heures": None, "metrage_reel": m_fin, "metrage_prevu": m_debut},
         ip=request.client.host if request.client else None,
     )
-    return {"success": True, "id": new_id, "saisie": dict(row)}
+    reponse = {"success": True, "id": new_id, "saisie": dict(row)}
+    if seuil_franchi and seuil_franchi.get("explication_exigee"):
+        reponse["explication_requise"] = seuil_franchi
+    return reponse
 
 
 # ─── Annulation d'un dossier de production ────────────────────────────────────
@@ -2748,6 +2806,47 @@ def delete_matiere(matiere_id: int, request: Request, tracabilite: bool = False)
     return {"success": True}
 
 
+@router.get("/api/fabrication/dossiers/{no_dossier}/info-prod")
+def get_info_prod_dossier(no_dossier: str, request: Request):
+    """L'info prod d'un dossier — le commentaire libre qui lui est attache."""
+    user = get_current_user(request)
+    _check_fab_access(user)
+    from app.services.produit_memoire import info_prod_dossier
+    with get_db() as conn:
+        return {"no_dossier": no_dossier, "info_prod": info_prod_dossier(conn, no_dossier)}
+
+
+@router.put("/api/fabrication/dossiers/{no_dossier}/info-prod")
+async def set_info_prod_dossier(no_dossier: str, request: Request):
+    """Ecrit l'info prod d'un dossier.
+
+    Pas de circuit de validation : qui voit la tracabilite ecrit, comme pour
+    les notes produit. Le garde-fou est la tracabilite de l'ecriture — auteur
+    et date sont conserves et affiches.
+    """
+    user = get_current_user(request)
+    _check_fab_access(user)
+
+    body = await request.json()
+    texte = (body.get("texte") or "").strip()
+
+    auteur = user.get("operateur_lie") or user.get("nom") or user.get("login") or ""
+
+    from app.services.produit_memoire import enregistrer_info_prod
+    with get_db() as conn:
+        info = enregistrer_info_prod(conn, no_dossier, texte, auteur)
+
+    log_action(
+        user=user,
+        action="UPDATE",
+        module="fabrication",
+        objet=f"Info prod dossier {no_dossier}",
+        detail={"no_dossier": no_dossier, "efface": not texte},
+        ip=request.client.host if request.client else None,
+    )
+    return {"success": True, "info_prod": info}
+
+
 @router.get("/api/fabrication/traceability")
 def get_traceability(request: Request, no_dossier: str = None, machine_id: int = None):
     """Vue traçabilité : dossiers avec matières utilisées + infos production."""
@@ -2780,10 +2879,17 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
                 (no_dossier,),
             ).fetchall()
 
+            try:
+                from app.services.produit_memoire import info_prod_dossier
+                info = info_prod_dossier(conn, no_dossier)
+            except Exception:
+                info = None
+
             return {
                 "dossier": dossier,
                 "matieres": [dict(r) for r in matieres],
                 "production": [dict(r) for r in prod_rows],
+                "info_prod": info,
             }
         else:
             # Liste des dossiers avec au moins une saisie ou matière
@@ -2813,7 +2919,24 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
                 params,
             ).fetchall()
 
-            return {"dossiers": [dict(r) for r in rows]}
+            dossiers = [dict(r) for r in rows]
+            # L'info prod se lit en colonne dans l'onglet Tracabilite. Une
+            # lecture groupee plutot qu'une par ligne : la liste depasse
+            # regulierement 250 dossiers.
+            try:
+                from app.services.produit_memoire import infos_prod_dossiers
+                infos = infos_prod_dossiers(
+                    conn, [d.get("reference") for d in dossiers]
+                )
+            except Exception:
+                infos = {}
+            for d in dossiers:
+                info = infos.get(str(d.get("reference") or "").strip())
+                d["info_prod"] = (info or {}).get("texte")
+                d["info_prod_par"] = (info or {}).get("updated_par") or (info or {}).get("auteur")
+                d["info_prod_le"] = (info or {}).get("updated_at") or (info or {}).get("created_at")
+
+            return {"dossiers": dossiers}
 
 
 @router.put("/api/fabrication/matieres/{matiere_id}/commentaire")
@@ -2885,6 +3008,14 @@ async def update_commentaire(saisie_id: int, request: Request):
             """UPDATE production_data SET commentaire=? WHERE id=?""",
             (commentaire, saisie_id),
         )
+        # Si cette saisie avait franchi un seuil d'arret, le commentaire qu'on
+        # vient d'ecrire EST l'explication attendue : on la rattache pour que
+        # le rapport de prod la porte, et pour que la demande cesse.
+        try:
+            from app.services.arret_seuils import enregistrer_explication
+            enregistrer_explication(conn, saisie_id, commentaire or "")
+        except Exception:
+            pass
         conn.commit()
 
     log_action(

@@ -53,16 +53,9 @@ def db_viewer_page(request: Request):
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
 *,*::before,*::after{{margin:0;padding:0;box-sizing:border-box}}
-:root{{
-  --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
-  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.10);
-  --ok:#34d399;--danger:#f87171;--warn:#fbbf24;--success:#34d399;
-  --sidebar-w:260px;
-}}
-body.light{{
-  --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
-  --muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.09);
-}}
+/* tokens : static/mysifa_theme.css — ici, seulement les écarts */
+:root{{--accent-bg:rgba(34,211,238,.10);--ok:#34d399;--sidebar-w:260px;}}
+body.light{{--muted:#64748b;--accent-bg:rgba(8,145,178,.09);}}
 html,body{{height:100%;overflow:hidden}}
 body{{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;font-size:13px}}
 
@@ -939,8 +932,11 @@ function renderSchema() {{
     const pkMark = c.pk ? '<span class="pk-dot" title="Clé primaire"></span>' : '';
     const nnMark = c.notnull ? '<span class="nn-dot" title="NOT NULL"></span>' : '<span style="opacity:.2;display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--muted)"></span>';
     const dflt  = c.dflt_value != null ? `<code style="font-size:10px;color:var(--muted)">${{escHtml(String(c.dflt_value))}}</code>` : '<span style="color:var(--muted);font-size:11px">—</span>';
+    // Sans ce marqueur, une colonne masquée ressemble à une colonne vide et
+    // on cherche une donnée manquante qui ne manque pas.
+    const maskMark = c.masquee ? '<span title="Colonne masquée — revient toujours NULL" style="margin-left:7px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--warn);border:1px solid var(--warn);border-radius:5px;padding:1px 5px">masquée</span>' : '';
     return `<tr>
-      <td style="color:var(--text);font-weight:600">${{pkMark}}${{escHtml(c.name)}}</td>
+      <td style="color:var(--text);font-weight:600">${{pkMark}}${{escHtml(c.name)}}${{maskMark}}</td>
       <td><span class="type-badge">${{escHtml(c.type)}}</span></td>
       <td style="text-align:center">${{nnMark}}</td>
       <td>${{dflt}}</td>

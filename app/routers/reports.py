@@ -186,6 +186,18 @@ async def send_weekly_report(request: Request):
     }
 
 
+@router.get("/api/reports/weekly/sections")
+def sections_du_rapport(request: Request, role: str | None = None):
+    """Le sommaire du rapport pour un role — genere depuis ROLE_SECTIONS.
+
+    La page /reports/weekly decrivait son contenu en dur : elle a fini par
+    mentir. Elle lit maintenant la meme source que le rendu.
+    """
+    user = get_current_user(request)
+    from app.services.weekly_report import sections_pour_role
+    return sections_pour_role((role or user.get("role") or "").strip())
+
+
 @router.get("/api/reports/weekly/list")
 def list_weekly_reports(request: Request):
     """Liste des rapports archivés (fichiers HTML dans data/weekly_reports/)."""

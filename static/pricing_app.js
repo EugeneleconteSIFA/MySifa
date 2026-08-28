@@ -297,6 +297,115 @@
     </div>`;
   }
 
+  /**
+   * Bouton « appliquer aux autres matières de ce fournisseur ».
+   *
+   * Une méthode de transport décrit comment un fournisseur achemine, pas ce
+   * qu'il vend : quand on apprend qu'il facture 9 % du prix d'achat, ça vaut
+   * pour tout ce qu'on lui prend dans la même catégorie. Le recopier à la main
+   * sur dix fiches est une corvée qu'on fait mal une fois sur deux.
+   *
+   * Le bouton n'existe que si on sait DE QUI il s'agit : une déclinaison sans
+   * fournisseur principal n'a aucun tarif à propager.
+   */
+  function transportPropagerHtml(id, fournisseurNom, categorie) {
+    if (!fournisseurNom || !S.canWrite) return "";
+    const cat = String(categorie || "").trim();
+    // Une cellule de `.field-row` comme les autres : la grille est en deux
+    // colonnes et celle d'à côté des taxes restait vide. L'action se pose là
+    // plutôt qu'en pied de bloc, où elle allongeait la fiche pour rien.
+    return `<div class="field transport-propage">
+      <label>Même transport ailleurs</label>
+      <button type="button" class="btn btn-sm btn-propage" id="${escAttr(id)}">
+        ${icon("truck", 14)} Appliquer aux autres matières
+      </button>
+      <div class="field-hint">Recopie « matière importée », la méthode de transport et les taxes
+        sur les matières ${cat ? escHtml(cat) : "de la même catégorie"} achetées à
+        ${escHtml(fournisseurNom)}. La base de prix et la devise, elles, ne bougent pas.</div>
+    </div>`;
+  }
+
+  /** Le fournisseur qui fait foi sur une déclinaison, ou null. */
+  function declFournisseurPrincipal(f) {
+    return ((f && f.lignes_prix) || []).find((l) => l.principal && l.fournisseur_id) || null;
+  }
+
+  /** Les seuls réglages qui se propagent : le transport, et les taxes qui le suivent. */
+  function transportPayload(f) {
+    return {
+      is_imported: !!f.is_imported,
+      transport_mode: f.transport_mode || "AMOUNT",
+      transport_unit_price: parseFloat(f.transport_unit_price) || 0,
+      transport_pct: parseFloat(f.transport_pct) || 0,
+      transport_cout: parseFloat(f.transport_cout) || 0,
+      transport_quantite: parseFloat(f.transport_quantite) || 0,
+      taxe_pct: parseFloat(f.taxe_pct) || 0,
+    };
+  }
+
+  /**
+   * Câble le bouton de propagation.
+   *
+   * On demande d'abord le périmètre au serveur : « appliquer à 7 matières ? »
+   * se refuse en connaissance de cause, « appliquer partout ? » non.
+   */
+  function bindTransportPropager(o) {
+    const b = document.getElementById(o.btnId);
+    if (!b) return;
+    b.onclick = async () => {
+      const url = `/api/pricing/tarifs/${o.fournisseurId}/${o.matiereId}/propager`;
+      let perimetre;
+      b.disabled = true;
+      try {
+        perimetre = await api(url);
+      } catch (e) {
+        showToast(e.message, "danger");
+        return;
+      } finally {
+        b.disabled = false;
+      }
+      const n = (perimetre.matieres || []).length;
+      if (!n) {
+        showToast(
+          `Aucune autre matière ${perimetre.categorie || ""} n'est achetée à ${o.fournisseurNom}.`,
+          "info"
+        );
+        return;
+      }
+      // Les déclinaisons où ce fournisseur fait foi sont les seules dont le
+      // sous-total part dans la valorisation MyStock : autant le dire avant.
+      const foi = perimetre.nb_principal || 0;
+      const ok = await confirmerAction({
+        titre: "Appliquer le transport",
+        message:
+          `Recopier « matière importée », la méthode de transport et les taxes sur ` +
+          `${n} autre${n > 1 ? "s" : ""} matière${n > 1 ? "s" : ""} ` +
+          `${perimetre.categorie || ""} achetée${n > 1 ? "s" : ""} à ${o.fournisseurNom} ?` +
+          (foi
+            ? ` ${foi} déclinaison(s) y font foi : leur sous-total bougera dans la valorisation MyStock.`
+            : ""),
+        labelOk: `Appliquer à ${n} matière${n > 1 ? "s" : ""}`,
+      });
+      if (!ok) return;
+      b.disabled = true;
+      try {
+        const r = await api(url, { method: "POST", body: o.valeurs() });
+        showToast(
+          `Transport appliqué à ${r.matieres} autre${r.matieres > 1 ? "s" : ""} matière${r.matieres > 1 ? "s" : ""}` +
+            (r.declinaisons_touchees
+              ? ` — ${r.declinaisons_touchees} déclinaison(s) mise(s) à jour dans MyStock.`
+              : "."),
+          "success"
+        );
+        if (typeof o.apres === "function") await o.apres();
+      } catch (e) {
+        showToast(e.message, "danger");
+      } finally {
+        b.disabled = false;
+      }
+    };
+  }
+
   const BASIS_LABEL = {
     PER_KG: "Au kilo — le prix est saisi par kg, converti au m² via le poids",
     PER_M2: "Au mètre carré — le prix est déjà exprimé au m²",
@@ -365,30 +474,44 @@
     return '<span class="badge badge-fx-stale">À rafraîchir</span>';
   }
 
-  function confirmDelete(message) {
+  /**
+   * Boîte de confirmation, pour tout ce qui mérite un temps d'arrêt.
+   *
+   * Elle vit dans son propre calque, PAS dans `#modal-root` : une confirmation
+   * s'ouvre parfois par-dessus une modale (« appliquer ce tarif partout ? »
+   * depuis la modale tarif), et écrire dans le même conteneur effacerait la
+   * modale qui l'a demandée.
+   */
+  function confirmerAction(o) {
     return new Promise((resolve) => {
-      const root = document.getElementById("modal-root");
-      root.innerHTML = `
-        <div class="modal-backdrop" id="cfm-back">
-          <div class="modal" style="max-width:400px">
-            <h2>Confirmation</h2>
-            <p style="font-size:13px;color:var(--text2);line-height:1.6;margin:0 0 16px">${escHtml(message)}</p>
-            <div style="display:flex;gap:10px;justify-content:flex-end">
-              <button type="button" class="btn btn-soft" id="cfm-no">Annuler</button>
-              <button type="button" class="btn btn-danger" id="cfm-yes">Supprimer</button>
-            </div>
+      const calque = document.createElement("div");
+      calque.className = "modal-backdrop";
+      calque.style.zIndex = "320";
+      calque.innerHTML = `
+        <div class="modal" style="max-width:440px">
+          <h2>${escHtml(o.titre || "Confirmation")}</h2>
+          <p style="font-size:13px;color:var(--text2);line-height:1.6;margin:0 0 16px">${escHtml(o.message)}</p>
+          <div style="display:flex;gap:10px;justify-content:flex-end">
+            <button type="button" class="btn btn-soft" id="cfm-no">Annuler</button>
+            <button type="button" class="btn ${o.danger ? "btn-danger" : "btn-accent"}" id="cfm-yes"
+                    style="width:auto">${escHtml(o.labelOk || "Confirmer")}</button>
           </div>
         </div>`;
+      document.body.appendChild(calque);
       const close = (ok) => {
-        root.innerHTML = "";
+        calque.remove();
         resolve(ok);
       };
-      document.getElementById("cfm-no").onclick = () => close(false);
-      document.getElementById("cfm-yes").onclick = () => close(true);
-      document.getElementById("cfm-back").onclick = (e) => {
-        if (e.target.id === "cfm-back") close(false);
+      calque.querySelector("#cfm-no").onclick = () => close(false);
+      calque.querySelector("#cfm-yes").onclick = () => close(true);
+      calque.onclick = (e) => {
+        if (e.target === calque) close(false);
       };
     });
+  }
+
+  function confirmDelete(message) {
+    return confirmerAction({ message, labelOk: "Supprimer", danger: true });
   }
 
   function showToast(msg, type) {
@@ -1727,6 +1850,7 @@
                     <input type="number" step="0.01" id="tf-taxe" value="${escAttr(t.taxe_pct)}"/>
                     <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
                   </div>
+                  ${transportPropagerHtml("tf-prop", t.nom, data.categorie)}
                 </div>
               </div>
             </div>
@@ -1764,6 +1888,18 @@
       ["tf-imp", "tf-mode"].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.onchange = () => { relire(); dessiner(); };
+      });
+
+      bindTransportPropager({
+        btnId: "tf-prop",
+        fournisseurId: fournisseurId,
+        fournisseurNom: t.nom,
+        matiereId: matiereId,
+        valeurs: () => { relire(); return transportPayload(t); },
+        apres: async () => {
+          fermer();
+          if (typeof apres === "function") await apres();
+        },
       });
 
       document.getElementById("tf-save").onclick = async () => {
@@ -3355,6 +3491,9 @@
   function renderDeclinaisonForm() {
     const f = S.declForm;
     const unit = unitLabel(f.price_currency, f.price_basis);
+    // Le transport ne se propage que depuis un fournisseur identifié : c'est
+    // SON tarif qu'on recopie, pas un réglage flottant de la déclinaison.
+    const declPrincipal = declFournisseurPrincipal(f);
     const prixTxt = `${fmtNum(f.unit_price, 4, 4)} ${unit}`;
 
     setContent(`
@@ -3428,6 +3567,11 @@
                     <input type="number" step="0.01" id="d-tax" value="${escAttr(f.taxe_pct)}"/>
                     <div class="field-hint">6 = +6 % · 0 = neutre · −5 = remise de 5 %</div>
                   </div>
+                  ${transportPropagerHtml(
+                    "d-tprop",
+                    declPrincipal ? declPrincipal.fournisseur_nom : null,
+                    f.categorie
+                  )}
                 </div>
               </div>
             </div>
@@ -3488,6 +3632,27 @@
         refreshDeclPreview();
       };
     });
+
+    if (declPrincipal && S.canWrite) {
+      bindTransportPropager({
+        btnId: "d-tprop",
+        fournisseurId: declPrincipal.fournisseur_id,
+        fournisseurNom: declPrincipal.fournisseur_nom,
+        matiereId: f.matiere_id,
+        // On envoie ce que l'écran affiche, pas ce qui est enregistré : le
+        // réglage qu'on vient de saisir est justement celui qu'on veut poser
+        // partout, y compris sur cette matière-ci.
+        valeurs: () => {
+          syncDeclFormFromDom();
+          return transportPayload(S.declForm);
+        },
+        apres: async () => {
+          await loadDeclinaisonForm(f.declinaison_id);
+          renderDeclinaisonForm();
+          refreshDeclPreview();
+        },
+      });
+    }
 
     const save = document.getElementById("btn-save-decl");
     if (save) save.onclick = () => saveDeclinaisonForm();

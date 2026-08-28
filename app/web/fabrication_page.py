@@ -77,18 +77,9 @@ FABRICATION_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=z1cond1">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
-  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);
-  --success:#34d399;--warn:#fbbf24;--danger:#f87171;
-  --c1:#38bdf8;--c2:#a78bfa;--c3:#34d399;--c4:#fbbf24;--c5:#f87171;
-  --footer-h:190px;
-}
-body.light{
-  --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
-  --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);
-  --success:#059669;--warn:#d97706;--danger:#dc2626;--c2:#7c3aed;
-}
+/* tokens : static/mysifa_theme.css — ici, seulement les écarts */
+:root{--c1:#38bdf8;--footer-h:190px;}
+
 html,body{height:100%;overflow:hidden}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text)}
 ::-webkit-scrollbar{width:4px;height:4px}
@@ -321,8 +312,15 @@ body.light table.fab-table tr.fab-row-last td{
   display:flex;flex-direction:column;align-items:flex-start;
   gap:5px;
   overflow:hidden;
-  min-width:0;
+  min-width:0;min-height:0;
 }
+/* Regle de repartition de la colonne, et elle tient a une phrase : dans cette
+   bande de hauteur fixe, TOUT est incompressible sauf la consigne. Un dossier
+   avec dix lignes de consigne ne peut donc pas pousser le signalement « deja
+   produit » hors du cadre — c'est la consigne qui se replie sur ses points de
+   suspension (le survol et le clic en donnent l'integralite). */
+.fab-footer-info > *{flex:0 0 auto}
+.fab-footer-info > .fab-dossier-consigne{flex:0 1 auto;min-height:0}
 /* Le footer est une bande de hauteur fixe (--footer-h) en overflow:hidden :
    tout ce qui depasse disparait sans bruit. D'ou l'entete sur une seule ligne
    qui defile horizontalement plutot qu'un pave de metas qui repasse a la
@@ -339,8 +337,8 @@ body.light table.fab-table tr.fab-row-last td{
 .fab-dossier-head::-webkit-scrollbar{height:4px}
 .fab-dossier-head::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
 /* Boutons du dossier EN COURS (aujourd'hui : les deux boutons FSC). Ce qui
-   concerne les dossiers passes est parti dans .fab-memoire-row, colonne de
-   droite. */
+   concerne les dossiers passes vit dans .fab-memoire-row, juste au-dessus de
+   la consigne. */
 .fab-dossier-actions{
   min-width:0;
   display:flex;flex-wrap:wrap;align-items:center;
@@ -465,16 +463,21 @@ body.light table.fab-table tr.fab-row-last td{
 }
 .fab-search-btn:hover{filter:brightness(1.1)}
 .fab-comment-row{display:flex;gap:6px;align-items:center}
-/* Tout ce qui parle des dossiers PASSES vit ici, sous la saisie de code et le
-   bouton Commenter : la colonne de gauche ne dit plus que le dossier en cours. */
-.fab-memoire-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+/* Tout ce qui parle des dossiers PASSES vit dans la colonne de gauche, sous
+   l'identite du dossier et au-dessus de la consigne. `flex:0 0 auto` (pose
+   par la regle de repartition ci-dessus) le rend incompressible : c'est la
+   garantie qu'il reste entierement visible quelle que soit la consigne. */
+.fab-memoire-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:100%}
 .fab-memoire-row:empty{display:none}
 .fab-memoire-row .fab-produit-btn{margin-top:0}
-.fab-memoire-row .pmem-hist-btn{padding:5px 10px;gap:6px}
-.fab-memoire-row .pmem-hist-titre{font-size:11px}
-.fab-memoire-row .pmem-hist-detail{font-size:10px}
-.fab-memoire-row .pmem-hist-pastille{min-width:18px;height:18px;font-size:10px}
-.fab-memoire-row .pmem-hist-tag{font-size:9px}
+/* Un cran plus grand qu'a droite : la colonne de gauche a la place, et ce
+   bandeau se lit debout devant la machine. Il reste sur une seule ligne — le
+   corps du texte est ce qui garantit qu'on le voit, pas sa surface. */
+.fab-memoire-row .pmem-hist-btn{padding:6px 11px;gap:7px;max-width:100%}
+.fab-memoire-row .pmem-hist-titre{font-size:12px}
+.fab-memoire-row .pmem-hist-detail{font-size:11px}
+.fab-memoire-row .pmem-hist-pastille{min-width:19px;height:19px;font-size:11px}
+.fab-memoire-row .pmem-hist-tag{font-size:10px}
 .fab-comment-hint{font-size:10px;color:var(--muted);flex:1}
 .fab-footer-row2{
   display:flex;align-items:center;justify-content:center;gap:8px;
@@ -1007,7 +1010,13 @@ body.has-topbar .fab-main{padding-top:74px}
     border-top-width:1px;
   }
   .fab-footer-actions{min-width:0;width:100%}
-  .fab-footer-info{display:none}
+  /* La colonne d'identite ne tient pas sur un telephone — mais le signalement
+     « deja produit », si : c'est lui qui doit arreter le conducteur avant qu'il
+     lance la machine. On masque donc le contenu de la colonne, pas la colonne.
+     Sans signalement, `.fab-memoire-row:empty` s'efface et la colonne, sans
+     gouttiere ni contenu, ne prend aucune place. */
+  .fab-footer-info{display:flex;gap:0}
+  .fab-footer-info > *:not(.fab-memoire-row){display:none}
   /* Le bandeau FSC, lui, NE disparaît PAS sur mobile — c'est tout l'intérêt
      de l'avoir sorti du footer info. On le densifie seulement. */
   .fab-fsc-bandeau{margin:6px 8px;padding:7px 11px;font-size:11px;gap:7px}
@@ -1306,6 +1315,7 @@ let S = {
   showDebutModal: false,
   showFinModal: false,
   showCommentModal: false,
+  explicationSeuil: null,
   commentSaisieId: null,
   showTracaCommentModal: false,
   tracaCommentId: null,
@@ -1315,8 +1325,11 @@ let S = {
   repiquageEditCartons: '',
   repiquageEditEtiq: '',
   repiquageEditCommentaire: '',
-  showArret50Modal: false,
-  arret50Comment: '',
+  // Commentaire obligatoire : la modale sert tous les codes qui ne disent rien
+  // par leur seul libelle (voir CODES_COMMENTAIRE_OBLIGATOIRE).
+  showOpCommentModal: false,
+  opCommentOp: null,        // {code, label} de l'operation en attente
+  opCommentTxt: '',
   // Annulation de dossier (marche arriere avant production reelle)
   showAnnulModal: false,
   annulMotif: '',
@@ -1329,6 +1342,8 @@ let S = {
   metrageFinVal: '',
   nbEtiquettes: '',
   finDossierOui: null,  // null | true | false — sélecteur fin de dossier dans renderFinModal
+  finNoteVal: '',       // info prod saisie à la clôture (obligatoire si dossier terminé)
+  finNoteChargee: false, // l'info prod déjà enregistrée a-t-elle été relue ?
   commentText: '',
   searchQuery: '',
 
@@ -1497,7 +1512,7 @@ function fscTypeRequisLabel(t){
 }
 
 function fabIsModalOpen(){
-  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showAnnulModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showArret50Modal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
+  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showAnnulModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showOpCommentModal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
   try{
     const mr = document.getElementById('mroot');
     if(mr && mr.firstElementChild) return true;
@@ -1997,6 +2012,17 @@ async function triggerOp(opCode, opLabel, extra={}){
     });
     if(d && d.success){
       showToast('Saisie enregistrée : '+opStr);
+      // Seuil d'arrêt franchi sans commentaire : la saisie est enregistrée,
+      // on demande l'explication juste après. Jamais bloquant.
+      if(d.explication_requise){
+        const ex = d.explication_requise;
+        Object.assign(S, {
+          explicationSeuil: ex,
+          showCommentModal: true,
+          commentSaisieId: ex.saisie_id,
+          commentText: '',
+        });
+      }
       // v2.2.66 : refresh immédiat des alertes — le backend a peut-être ack
       // automatiquement des périodiques (code non-productif ou fin_dossier).
       try {
@@ -2030,7 +2056,7 @@ async function saveComment(){
     });
     showToast('Commentaire enregistré');
     await loadSession({noRender:true, silent:true});
-    Object.assign(S, {showCommentModal:false, commentText:'', commentSaisieId:null, loading:false});
+    Object.assign(S, {showCommentModal:false, commentText:'', commentSaisieId:null, explicationSeuil:null, loading:false});
     render();
     _fabRestoreUiState(ui);
   }catch(e){
@@ -2513,6 +2539,15 @@ function renderAnnulModal(){
 }
 
 /* ── Op trigger logic ────────────────────────────────────────── */
+/* Codes dont le libelle ne suffit pas : la saisie n'existe pas sans sa raison.
+ * `quoi` sert d'invite — une question fermee ramene une reponse utilisable,
+ * « Precisez » ramene « RAS ». */
+const CODES_COMMENTAIRE_OBLIGATOIRE = {
+  '50': {quoi:"Précisez la raison de l'arrêt", exemple:'Ex. panne moteur, bourrage…'},
+  '64': {quoi:"Qu'est-ce qui a été fait, et par qui ?",
+         exemple:'Ex. réglage tension bande par le service maintenance'},
+};
+
 function handleOpTrigger(code, label, cat){
   // Opérations nécessitant une action spéciale
   if(code==='01'){
@@ -2523,12 +2558,21 @@ function handleOpTrigger(code, label, cat){
     return;
   }
   if(code==='89'){
-    // Fin dossier → modal metrage + étiquettes
-    set({showFinModal:true, metrageFinVal:'', nbEtiquettes:''});
+    // Fin dossier → modal metrage + étiquettes + info prod
+    set({showFinModal:true, metrageFinVal:'', nbEtiquettes:'', finNoteVal:'', finNoteChargee:false});
+    // Une info prod peut déjà exister — saisie en Traçabilité avant le
+    // lancement, ou par le conducteur du poste précédent. On la relit pour
+    // que l'opérateur complète au lieu d'écraser sans le savoir.
+    loadInfoProdDossier();
     return;
   }
-  if(code==='50'){
-    set({showArret50Modal:true, arret50Comment:''});
+  // Sur les dix-neuf codes d'arret, dix-sept se decrivent tout seuls : « Casse
+  // bande », « Probleme UV1 » disent deja ce qui s'est passe. Deux ne disent
+  // rien sans une phrase — c'est a ceux-la, et a eux seuls, qu'on demande un
+  // commentaire. Exiger un texte partout ferait taper « RAS » partout, et on
+  // aurait perdu la seule chose que ce champ apporte.
+  if(CODES_COMMENTAIRE_OBLIGATOIRE[code]){
+    set({showOpCommentModal:true, opCommentOp:{code:code, label:label}, opCommentTxt:''});
     return;
   }
   if(code==='86'||code==='87'||code==='88'||code==='03'){
@@ -2579,7 +2623,9 @@ async function loadDossierStats(){
   }
   set({dossierStatsLoading:true});
   try{
-    const d = await apiFetch('/api/fabrication/dossier/'+encodeURIComponent(ref)+'/stats');
+    // Le numero de dossier porte un slash dans la moitie des cas : en
+    // parametre de requete, il ne peut pas casser le routage.
+    const d = await apiFetch('/api/fabrication/dossier-stats?no_dossier='+encodeURIComponent(ref));
     set({dossierStats:d, dossierStatsLoading:false});
   }catch(e){
     set({dossierStats:{_err: e.message || 'Erreur de chargement'}, dossierStatsLoading:false});
@@ -3240,7 +3286,7 @@ function renderOfImportModal(){
   if(!mr) return;
   const m = S.ofImportModal;
   if(!m){
-    if(!S.showArret50Modal && !S.ofEditModal && !S.ficheEditModal) mr.innerHTML = '';
+    if(!S.showOpCommentModal && !S.ofEditModal && !S.ficheEditModal) mr.innerHTML = '';
     return;
   }
   mr.innerHTML = '';
@@ -5042,10 +5088,16 @@ function fabRefProduit(d){
   return null;
 }
 
-/* Bouton reference produit — toujours present des qu'une reference existe.
- * Il ouvre la fiche produit meme vide : elle sait dire pourquoi elle l'est
- * (historique pas encore repris) plutot que de laisser croire que le produit
- * n'a jamais tourne. */
+/* Bouton reference produit — la porte permanente vers la fiche, quand rien
+ * d'autre ne la signale. Il ouvre la fiche produit meme vide : elle sait dire
+ * pourquoi elle l'est (historique pas encore repris) plutot que de laisser
+ * croire que le produit n'a jamais tourne.
+ *
+ * L'appelant ne le rend PAS quand le bandeau « Deja produit » est present : ce
+ * bandeau ouvre deja cette meme fiche, en disant en plus ce qu'on y trouvera.
+ * Deux portes pour une seule piece, et la plus discrete des deux vole
+ * l'attention destinee au signal. La reference produit reste lisible sans lui :
+ * elle est dans la ligne d'identite du dossier (« Ref. produit 1068/0001 »). */
 function renderRefProduitBtn(){
   const ref = fabRefProduit(S.dossier);
   if(!ref || !window.MySifaProduitMemoire) return null;
@@ -5067,9 +5119,9 @@ function renderHistoriqueProduitBtn(){
   if(!ap || !ap.disponible) return null;
   if(!window.MySifaProduitMemoire) return null;
   const ref = (S.dossier && (S.dossier.reference || S.dossier.no_dossier)) || ap.no_dossier;
-  // Rendu nu : il prend place dans .fab-memoire-row, colonne de droite, aux
-  // cotes de la reference produit. Un wrapper a lui seul le poussait sur sa
-  // propre ligne, hors de la bande visible du footer.
+  // Rendu nu : il prend place dans .fab-memoire-row, colonne de gauche, sous
+  // l'identite du dossier. Un wrapper a lui seul le poussait sur sa propre
+  // ligne, hors de la bande visible du footer.
   return window.MySifaProduitMemoire.boutonHistorique(ap, ref) || null;
 }
 
@@ -5119,6 +5171,20 @@ function renderFooter(){
     const fscTypeLbl = fscOn ? fscTypeRequisLabel(d.fsc_type_requis) : '';
 
     const fscDossier = (d.fsc_requis === 1 || d.fsc_requis === true);
+
+    // Memoire produit : le signalement « deja produit » et, a defaut, le bouton
+    // Produit. Le reagencement du footer a libere de la place a gauche : ce
+    // bloc revient donc sous l'identite du dossier, la ou le conducteur lit
+    // deja tout ce qui concerne ce qu'il s'apprete a lancer. Il est pose AVANT
+    // la consigne : la consigne est le seul element de la colonne qui puisse
+    // grandir, et c'est elle qui se comprime (voir .fab-dossier-consigne), pas
+    // le signalement.
+    const histBtn = renderHistoriqueProduitBtn();
+    const memoireRow = h('div',{className:'fab-memoire-row'},
+      histBtn ? null : renderRefProduitBtn(),
+      histBtn
+    );
+
     infoSection = h('div',{className:'fab-footer-info'},
       h('div',{className:'fab-dossier-head'},
         h('div',{className:'fab-dossier-ref-row'},
@@ -5140,6 +5206,7 @@ function renderFooter(){
           ))
         )
       ),
+      memoireRow,
       // La consigne se taille sur son texte, dans la limite de 520 px. Le
       // `title` porte le texte integral : au survol on a tout, sans clic et
       // sans deplier quoi que ce soit.
@@ -5151,9 +5218,8 @@ function renderFooter(){
         h('span',{className:'fab-dossier-consigne-lbl'},'Consigne dossier'),
         d.commentaire || 'Aucune consigne sur ce dossier.'
       ),
-      // Ne restent ici que les boutons du dossier EN COURS. La reference
-      // produit et le signalement « deja produit » regardent les dossiers
-      // passes : ils sont partis dans la colonne de droite.
+      // Les boutons FSC du dossier EN COURS, en dernier : ils s'impriment ou
+      // ouvrent un rapport, ils ne se lisent pas avant de lancer la machine.
       fscDossier ? h('div',{className:'fab-dossier-actions'},
         fscDossier ? h('button',{
           className:'fab-btn fab-btn-ghost fab-btn-sm',
@@ -5306,19 +5372,16 @@ function renderFooter(){
     onClick:()=>{ if(lastId) set({showCommentModal:true,commentSaisieId:lastId,commentText:(S.lastSaisie&&S.lastSaisie.commentaire)||''}); }
   }, svgIcon('message-square',14),' Commenter');
 
+  // La colonne de droite ne porte plus que la saisie d'operation et le bouton
+  // Commenter. La memoire produit est repartie a gauche, sous l'identite du
+  // dossier : c'est la meme lecture (« ce que je m'apprete a lancer »), elle
+  // n'avait pas a etre coupee en deux par toute la largeur de l'ecran.
   const toolsSection = h('div',{className:'fab-footer-tools'},
     h('div',{className:'fab-search-wrap'},
       searchInput,
     ),
     h('div',{className:'fab-comment-row'},
       commentBtn
-    ),
-    // Memoire produit : fiche produit et signalement « deja produit ». Ce sont
-    // les seuls elements du footer qui parlent d'autre chose que du dossier en
-    // cours — ils sont donc regroupes ici, a l'ecart de la colonne d'identite.
-    h('div',{className:'fab-memoire-row'},
-      renderRefProduitBtn(),
-      renderHistoriqueProduitBtn()
     )
   );
 
@@ -5753,6 +5816,19 @@ function renderDebutModal(){
   );
 }
 
+async function loadInfoProdDossier(){
+  const ref = S.dossier ? (S.dossier.reference||'') : '';
+  if(!ref){ S.finNoteChargee = true; return; }
+  try{
+    const d = await apiFetch('/api/fabrication/dossiers/'+encodeURIComponent(ref)+'/info-prod');
+    const txt = (d && d.info_prod && d.info_prod.texte) ? String(d.info_prod.texte) : '';
+    // Ne pas écraser ce que l'opérateur a commencé à taper pendant la requête.
+    if(!S.finNoteVal) S.finNoteVal = txt;
+  }catch(e){ /* l'absence d'info prod n'est pas une erreur */ }
+  S.finNoteChargee = true;
+  if(S.showFinModal) fabRenderPreserveUi({});
+}
+
 function renderFinModal(){
   const metInp = h('input',{type:'number',placeholder:'Ex: 14200',step:'1',min:'0',
     style:{textAlign:'right'}});
@@ -5794,6 +5870,36 @@ function renderFinModal(){
     );
   };
 
+  // ── Info prod : ce que le prochain doit savoir ────────────────────────────
+  // Un dossier qui se termine sans un mot laisse la production suivante
+  // redécouvrir seule ce qu'on vient d'apprendre. La note est donc exigée dès
+  // que le dossier est déclaré terminé — « R.A.S. » est une réponse valable,
+  // le silence n'en est pas une.
+  const noteInp = h('textarea',{
+    rows:'3',
+    placeholder:'Ce qu\'il faut savoir la prochaine fois que ce dossier passe…',
+    style:{width:'100%',fontFamily:'inherit',fontSize:'14px',padding:'10px 12px',
+           borderRadius:'8px',border:'1px solid var(--border2)',background:'var(--bg)',
+           color:'var(--text)',resize:'vertical'},
+  });
+  noteInp.value = S.finNoteVal||'';
+  noteInp.addEventListener('input',e=>{ S.finNoteVal=e.target.value; });
+
+  const rasBtn = h('button',{
+    type:'button',
+    className:'fab-btn fab-btn-muted fab-btn-sm',
+    style:{marginTop:'8px'},
+    onClick:()=>{ S.finNoteVal='R.A.S.'; noteInp.value='R.A.S.'; noteInp.focus(); }
+  },'R.A.S. — rien à signaler');
+
+  const noteBloc = h('div',{className:'fab-field'},
+    h('label',null,'Info prod — obligatoire'),
+    h('div',{className:'fab-field-hint'},
+      'Visible en Traçabilité et à la prochaine production de cette référence.'),
+    noteInp,
+    rasBtn
+  );
+
   const fdSelector = h('div',{style:{marginBottom:'0'}},
     h('div',{style:{
       fontWeight:'800',fontSize:'14px',color:'var(--text)',marginBottom:'10px',
@@ -5815,7 +5921,27 @@ function renderFinModal(){
       return;
     }
 
-    const mFin = S.metrageFinVal ? parseFloat(String(S.metrageFinVal).replace(',','.')) : null;
+    // Validation : info prod obligatoire à la clôture. « À reprendre plus
+    // tard » n'exige rien — le dossier n'est pas fini, il n'y a pas encore de
+    // bilan à en tirer.
+    const noteTxt = String(S.finNoteVal||'').trim();
+    if(S.finDossierOui === true && !noteTxt){
+      showToast('Notez ce qu\'il faut savoir sur ce dossier — « R.A.S. » si rien à signaler.','danger');
+      return;
+    }
+
+    let mFin = S.metrageFinVal ? parseFloat(String(S.metrageFinVal).replace(',','.')) : null;
+    if(mFin !== null && isNaN(mFin)) mFin = null;
+
+    // Le metrage n'est pas un champ de confort : sans lui la serie produit sort
+    // sans longueur ni vitesse, et le dossier ne pese rien dans Besoins
+    // matieres. Aucune sortie de secours ici — un compteur illisible se traite
+    // avec la maintenance, pas en cloturant un dossier vide.
+    if(mFin === null){
+      showToast('Relevez le compteur machine — sans métrage, ni la vitesse ni '
+               +'le besoin matière de ce dossier ne peuvent être calculés.','danger');
+      return;
+    }
 
     // Validation locale 1 : métrage fin < dernier_metrage machine
     const machine = S.machine || (S.adminMachineId && S.machines.find(m=>m.id===S.adminMachineId));
@@ -5855,7 +5981,8 @@ function renderFinModal(){
         designation: S.dossier ? (S.dossier.description||'') : '',
         fin_dossier: S.finDossierOui === true,
       };
-      if(mFin !== null) body.metrage_fin = mFin;
+      if(S.finDossierOui === true && noteTxt) body.info_prod = noteTxt;
+      body.metrage_fin = mFin;
       if(S.nbEtiquettes) body.qte_etiquettes = parseFloat(String(S.nbEtiquettes).replace(',','.'));
       if(S.adminMachineId) body.machine_id = S.adminMachineId;
       const r = await apiFetch('/api/fabrication/saisie',{
@@ -5874,11 +6001,12 @@ function renderFinModal(){
     }catch(e){
       showToast('Erreur : '+e.message,'danger');
     }finally{
-      fabRenderPreserveUi({loading:false, metrageFinVal:'', nbEtiquettes:'', finDossierOui:null});
+      fabRenderPreserveUi({loading:false, metrageFinVal:'', nbEtiquettes:'', finDossierOui:null,
+                           finNoteVal:'', finNoteChargee:false});
     }
   };
 
-  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showFinModal:false,finDossierOui:null});}},
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false});}},
     h('div',{className:'fab-modal'},
       h('div',{className:'fab-modal-title'},opLabel('89','Fin de production')),
       S.dossier ? h('div',{className:'fab-modal-sub'},
@@ -5902,9 +6030,10 @@ function renderFinModal(){
         etiqInp
       ),
       h('div',{className:'fab-field'},fdSelector),
+      S.finDossierOui===true ? noteBloc : null,
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
-          onClick:()=>set({showFinModal:false,finDossierOui:null})},'Annuler'),
+          onClick:()=>set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false})},'Annuler'),
         h('button',{
           className:'fab-btn '+(S.finDossierOui===true?'fab-btn-danger':'fab-btn-warn'),
           style:{opacity: S.finDossierOui===null?'.55':'1'},
@@ -5919,21 +6048,21 @@ function renderFinModal(){
   );
 }
 
-function renderArret50Modal(){
+function renderOpCommentModal(){
   const mr = document.getElementById('mroot');
   if(!mr) return;
-  if(!S.showArret50Modal){
+  if(!S.showOpCommentModal){
     if(!S.ofImportModal && !S.ofEditModal && !S.ficheEditModal) mr.innerHTML = '';
     return;
   }
   mr.innerHTML = '';
 
+  const op = S.opCommentOp || {code:'', label:''};
+  const reg = CODES_COMMENTAIRE_OBLIGATOIRE[op.code] || {};
+
   let submitBtn;
-  const ta = h('textarea',{
-    placeholder:'Ex. panne moteur, bourrage…',
-    rows:'4',
-  });
-  ta.value = S.arret50Comment || '';
+  const ta = h('textarea',{ placeholder: reg.exemple || 'Précisez…', rows:'4' });
+  ta.value = S.opCommentTxt || '';
 
   const syncSubmit = ()=>{
     const ok = !!(ta.value||'').trim();
@@ -5941,38 +6070,40 @@ function renderArret50Modal(){
   };
 
   ta.addEventListener('input',e=>{
-    S.arret50Comment = e.target.value;
+    S.opCommentTxt = e.target.value;
     syncSubmit();
   });
 
-  const closeArret50 = ()=>set({showArret50Modal:false, arret50Comment:''});
+  const fermer = ()=>set({showOpCommentModal:false, opCommentOp:null, opCommentTxt:''});
 
-  async function confirmArret50(){
+  async function confirmer(){
     const text = (ta.value||'').trim();
     if(!text) return;
-    set({showArret50Modal:false, arret50Comment:''});
-    await triggerOp('50','Arrêt machine',{commentaire:text});
+    set({showOpCommentModal:false, opCommentOp:null, opCommentTxt:''});
+    await triggerOp(op.code, op.label, {commentaire:text});
   }
 
   submitBtn = h('button',{
     className:'btn btn-accent',
-    disabled:!((S.arret50Comment||'').trim()),
-    onClick:confirmArret50,
+    disabled:!((S.opCommentTxt||'').trim()),
+    onClick:confirmer,
   },'Valider');
 
   mr.appendChild(
-    h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)closeArret50();}},
+    h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)fermer();}},
       h('div',{className:'fab-modal'},
-        h('div',{className:'fab-modal-title'},svgIcon('alert',18),' 50 — Arrêt machine'),
+        h('div',{className:'fab-modal-title'},svgIcon('alert',18),' '+op.code+' \u2014 '+op.label),
         h('div',{className:'fab-modal-sub'},
-          'Un commentaire est obligatoire pour enregistrer cet arrêt.'
+          "Sans commentaire, cette saisie ne dit que l'heure : le libell\u00e9 seul "
+          +"ne permet ni de comprendre l'intervention plus tard, ni de la compter "
+          +"avec ses semblables."
         ),
         h('div',{className:'fab-field'},
-          h('label',null,"Précisez la raison de l'arrêt"),
+          h('label',null, reg.quoi || 'Pr\u00e9cisez'),
           ta
         ),
         h('div',{className:'fab-modal-btns'},
-          h('button',{className:'btn btn-ghost',onClick:closeArret50},'Annuler'),
+          h('button',{className:'btn btn-ghost',onClick:fermer},'Annuler'),
           submitBtn
         )
       )
@@ -5982,25 +6113,46 @@ function renderArret50Modal(){
 }
 
 function renderCommentModal(){
-  const ta = h('textarea',{placeholder:'Votre commentaire…',rows:'3'});
+  // Deux usages pour une seule modale : le commentaire libre qu'un opérateur
+  // ajoute quand il veut, et l'explication demandée quand un seuil d'arrêt a
+  // été franchi sans qu'un mot ait été écrit. Dans le second cas la saisie est
+  // déjà enregistrée : on demande, on ne bloque pas.
+  const seuil = S.explicationSeuil || null;
+  let submitBtn;
+
+  const ta = h('textarea',{
+    placeholder: seuil ? 'En deux mots…' : 'Votre commentaire…',
+    rows: seuil ? '4' : '3',
+  });
   ta.value = S.commentText||'';
-  ta.addEventListener('input',e=>{ S.commentText=e.target.value; });
+  const syncSubmit = ()=>{
+    if(submitBtn && seuil) submitBtn.disabled = !((ta.value||'').trim());
+  };
+  ta.addEventListener('input',e=>{ S.commentText=e.target.value; syncSubmit(); });
   setTimeout(()=>ta.focus(),50);
 
-  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showCommentModal:false});}},
+  const fermer = ()=>set({showCommentModal:false, explicationSeuil:null});
+
+  submitBtn = h('button',{className:'fab-btn fab-btn-primary',
+    disabled: !!seuil && !((S.commentText||'').trim()),
+    onClick:saveComment},
+    svgIcon('check',15),' Enregistrer');
+
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget && !seuil) fermer();}},
     h('div',{className:'fab-modal'},
-      h('div',{className:'fab-modal-title'},svgIcon('message-square',18),' Commenter la saisie'),
-      h('div',{className:'fab-modal-sub'},'Ce commentaire sera visible dans la fiche de production MyProd.'),
+      h('div',{className:'fab-modal-title'},
+        svgIcon('message-square',18),
+        seuil ? " Que s'est-il passé ?" : ' Commenter la saisie'),
+      seuil ? null : h('div',{className:'fab-modal-sub'},
+        'Ce commentaire sera visible dans la fiche de production MyProd.'),
       h('div',{className:'fab-field'},
-        h('label',null,'Commentaire'),
+        seuil ? null : h('label',null,'Commentaire'),
         ta
       ),
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
-          onClick:()=>set({showCommentModal:false})},'Annuler'),
-        h('button',{className:'fab-btn fab-btn-primary',
-          onClick:saveComment},
-          svgIcon('check',15),' Enregistrer')
+          onClick:fermer}, seuil ? 'Plus tard' : 'Annuler'),
+        submitBtn
       )
     )
   );
@@ -7794,7 +7946,7 @@ function render(){
   }
 
   renderOfImportModal();
-  renderArret50Modal();
+  renderOpCommentModal();
 
   if(S.loading) root.appendChild(renderLoading());
 

@@ -613,7 +613,7 @@ def create_material(request: Request, body: McMaterialCreate):
                 applique_marge, transport_mode, transport_unit_price, transport_pct,
                 transport_cout, transport_quantite,
                 container_kg, container_cost_usd, is_active
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)""",
             (
                 body.name.strip(),
                 body.appellation_code.strip(),
@@ -1230,6 +1230,55 @@ async def maj_tarif(request: Request, fournisseur_id: int, matiere_id: int):
         )
         if not r.get("ok"):
             raise HTTPException(400, r.get("reason") or "Tarif refusé.")
+        conn.commit()
+    return r
+
+
+@router.get("/api/pricing/tarifs/{fournisseur_id}/{matiere_id}/propager")
+def perimetre_propagation(request: Request, fournisseur_id: int, matiere_id: int):
+    """
+    Ce qu'un « appliquer aux autres matières » toucherait, avant de le faire.
+
+    L'écran a besoin du chiffre pour poser une question honnête : « appliquer à
+    7 matières ? » se refuse en connaissance de cause, « appliquer partout ? »
+    non.
+    """
+    _require_read(request)
+    with get_db() as conn:
+        perimetre = mystock_prix.cibles_propagation(
+            conn, fournisseur_id=fournisseur_id, matiere_id=matiere_id
+        )
+        if perimetre is None:
+            raise HTTPException(404, "Matière introuvable.")
+        perimetre["tarifs_disponibles"] = mystock_prix.tarifs_disponibles(conn)
+    return perimetre
+
+
+@router.post("/api/pricing/tarifs/{fournisseur_id}/{matiere_id}/propager")
+async def propager_tarif_transport(request: Request, fournisseur_id: int, matiere_id: int):
+    """
+    Recopie le transport et les taxes de ce tarif sur les autres matières de la
+    même catégorie achetées à ce fournisseur.
+
+    Le corps peut porter les valeurs affichées à l'écran (elles viennent d'être
+    saisies) ; sans corps, c'est le tarif enregistré qui se propage.
+    """
+    user = _require_write(request)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    with get_db() as conn:
+        r = mystock_prix.propager_transport(
+            conn,
+            fournisseur_id=fournisseur_id,
+            matiere_id=matiere_id,
+            patch=body if isinstance(body, dict) else None,
+            user_id=user.get("id"),
+            user_name=(user.get("nom") or user.get("email") or "").strip() or None,
+        )
+        if not r.get("ok"):
+            raise HTTPException(400, r.get("reason") or "Propagation refusée.")
         conn.commit()
     return r
 

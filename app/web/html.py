@@ -94,6 +94,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_landscape.css">
 <link rel="stylesheet" href="/static/motion.css">
 <link rel="stylesheet" href="/static/mysifa_perf.css">
+<link rel="stylesheet" href="/static/mysifa_portail_tour.css?v=__V_LABEL__">
 <!-- Chargé sans defer et avant tout le reste : sur un poste déjà connu comme lent,
      le mode éco doit être posé avant le premier rendu, sinon la frame la plus
      coûteuse de la visite est justement celle qu'on voulait éviter. -->
@@ -101,22 +102,8 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 __KERNSE_THEME_CSS__
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
-  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,0.12);
-  --filter-input-bg:#1c2838;
-  --success:#34d399;--warn:#fbbf24;--danger:#f87171;
-  --pf-entree:#059669;--pf-sortie:#dc2626;
-  --c1:#22d3ee;--c2:#a78bfa;--c3:#34d399;--c4:#fbbf24;--c5:#f87171
-}
-body.light{
-  --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
-  --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,0.10);
-  --filter-input-bg:#ffffff;
-  --success:#059669;--warn:#d97706;--danger:#dc2626;
-  --pf-entree:#047857;--pf-sortie:#b91c1c;
-  --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626
-}
+/* tokens : static/mysifa_theme.css — ici, seulement les écarts */
+
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 /* ── Fond animé — points + nuages couleur fond qui dérivent ── */
 body::before{
@@ -1786,6 +1773,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <script src="/static/support_widget.js"></script>
 <script src="/static/mysifa_impersonate.js"></script>
 <script>window.__MYSIFA_APP__="__INITIAL_APP_VALUE__";</script>
+<script src="/static/mysifa_portail_tour.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_resize.js"></script>
 <script src="/static/mysifa_postit.js"></script>

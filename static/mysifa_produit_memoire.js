@@ -151,6 +151,16 @@
       'background:var(--card);border:1px solid var(--border);color:var(--text2)}',
       '.pmem-chip.is-warn{border-color:var(--warn);color:var(--warn)}',
       '.pmem-chip.is-accent{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}',
+      /* Info prod : le commentaire attache a UN dossier. Il se distingue des
+         notes produit (qui valent pour toute la reference) par le libelle et,
+         pour le dossier en cours, par la teinte d'alerte — c'est une consigne
+         a lire avant de lancer, pas un element d'historique. */
+      '.pmem-info{border-left:3px solid var(--accent)}',
+      '.pmem-info.is-courant{border-left-color:#fbbf24;background:rgba(251,191,36,.08)}',
+      '.pmem-info-txt{font-size:14px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-word}',
+      '.pmem-info-ft{font-size:11px;color:var(--muted);margin-top:7px}',
+      '.pmem-serie-info{margin-top:12px;padding-top:11px;border-top:1px solid var(--border)}',
+      '.pmem-serie-info .pmem-info-txt{font-size:13px}',
       '.pmem-note{background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--accent);',
       'border-radius:10px;padding:12px 14px;margin-bottom:10px}',
       '.pmem-note.is-epingle{border-left-color:var(--warn)}',
@@ -172,6 +182,18 @@
       'font-weight:800}',
       '.pmem-btn-doc:hover{border-color:var(--accent);color:var(--accent)}',
       '.pmem-btn.is-on{background:var(--accent-bg);border-color:var(--accent);color:var(--accent)}',
+      /* Les deux verdicts portes sur une note ne sont pas symetriques : l'un
+         confirme qu'elle sert, l'autre la retire. Une teinte au repos, l'aplat
+         au survol — `color:var(--bg)` sur l'aplat reste lisible dans les deux
+         themes puisque --bg bascule avec eux. Le bouton de remise en vigueur
+         reste neutre : remettre une note n'est pas un geste destructif. */
+      '.pmem-btn-ok{background:rgba(52,211,153,.14);border-color:rgba(52,211,153,.55);',
+      'color:var(--success)}',
+      '.pmem-btn-ok:hover{background:var(--success);border-color:var(--success);color:var(--bg)}',
+      '.pmem-btn-ok.is-on{background:var(--success);border-color:var(--success);color:var(--bg)}',
+      '.pmem-btn-ko{background:rgba(248,113,113,.14);border-color:rgba(248,113,113,.55);',
+      'color:var(--danger)}',
+      '.pmem-btn-ko:hover{background:var(--danger);border-color:var(--danger);color:#fff}',
       '.pmem-form{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px}',
       '.pmem-form textarea,.pmem-form select,.pmem-input{width:100%;box-sizing:border-box;background:var(--card);',
       'border:1px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-size:14px;',
@@ -275,6 +297,22 @@
       '@keyframes pmem-pulse{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,.45)}',
       '50%{box-shadow:0 0 0 7px rgba(251,191,36,0)}}',
       '@media (prefers-reduced-motion:reduce){.pmem-hist-btn.is-neuf{animation:none}}',
+      /* Apercu d'un scan. Il se pose PAR-DESSUS le panneau produit sans le
+         demonter : on referme, on est revenu exactement ou on en etait — la
+         production passee qu'on etait en train de lire. */
+      '.pmem-doc-ov{position:fixed;inset:0;background:rgba(0,0,0,.66);z-index:2300;',
+      'display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}',
+      '.pmem-doc-panel{background:var(--card);border:1px solid var(--border);border-radius:14px;',
+      'width:min(1100px,100%);height:100%;display:flex;flex-direction:column;overflow:hidden;',
+      'box-shadow:0 24px 64px rgba(0,0,0,.45)}',
+      '.pmem-doc-hd{display:flex;align-items:center;gap:12px;padding:11px 14px;',
+      'border-bottom:1px solid var(--border);flex-shrink:0}',
+      '.pmem-doc-t{font-size:14px;font-weight:800;color:var(--text);white-space:nowrap}',
+      '.pmem-doc-m{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;',
+      'white-space:nowrap;min-width:0}',
+      // Le PDF occupe toute la bande restante : c'est lui qu'on est venu voir.
+      '.pmem-doc-frame{flex:1;width:100%;border:none;background:var(--bg);min-height:0}',
+      '.pmem-doc-load{padding:26px 12px;text-align:center;font-size:13px;color:var(--muted)}',
     ].join('');
     document.head.appendChild(s);
   }
@@ -288,12 +326,19 @@
   var contenantInline = null;
 
   function close() {
+    fermerApercuScan();
     var ov = document.getElementById(OVERLAY_ID);
     if (ov) ov.remove();
     document.removeEventListener('keydown', onKey);
   }
 
-  function onKey(e) { if (e.key === 'Escape') close(); }
+  function onKey(e) {
+    if (e.key !== 'Escape') return;
+    // Un apercu de scan ouvert par-dessus se ferme en premier : Echap ne doit
+    // pas renvoyer le conducteur a la case depart en un seul appui.
+    if (document.getElementById('pmem-doc-overlay')) return;
+    close();
+  }
 
   function mount(node) {
     ensureStyle();
@@ -312,6 +357,104 @@
     ov.appendChild(node);
     document.body.appendChild(ov);
     document.addEventListener('keydown', onKey);
+  }
+
+  // ── Apercu d'un scan, dans MySifa ──────────────────────────────────
+  // Ouvrir le PDF dans un onglet coutait plusieurs secondes : Chrome monte une
+  // page neuve, charge son lecteur PDF, et l'operateur perd de vue le panneau
+  // qu'il lisait. L'apercu se pose ici par-dessus le panneau, dans la meme
+  // page ; on le referme et on est revenu ou on en etait.
+  var DOC_OV_ID = 'pmem-doc-overlay';
+  var docsPrecharges = {};
+
+  function docUrl(id) { return '/api/produits/documents/' + id + '/pdf'; }
+
+  // Le survol precede le clic de quelques centaines de millisecondes : de quoi
+  // avoir le fichier en cache avant meme que l'iframe le demande. Le serveur
+  // autorise desormais le cache navigateur sur ces scans (ils ne changent
+  // jamais), donc la requete n'est faite qu'une fois par document.
+  function prechargerScan(id) {
+    if (!id || docsPrecharges[id]) return;
+    docsPrecharges[id] = true;
+    try {
+      fetch(docUrl(id), { credentials: 'same-origin', cache: 'force-cache' })
+        // Le corps est lu et jete : c'est sa lecture complete qui fait entrer
+        // le fichier dans le cache du navigateur. Une reponse laissee en
+        // suspens n'y arrive pas.
+        .then(function (r) { return r.ok ? r.blob() : null; })
+        .then(function () {})
+        .catch(function () { docsPrecharges[id] = false; });
+    } catch (e) { docsPrecharges[id] = false; }
+  }
+
+  function fermerApercuScan() {
+    var ov = document.getElementById(DOC_OV_ID);
+    if (ov) ov.remove();
+    document.removeEventListener('keydown', onDocKey);
+  }
+
+  function onDocKey(e) {
+    if (e.key !== 'Escape') return;
+    // L'apercu se ferme seul : le panneau produit qui est dessous reste ouvert.
+    e.stopPropagation();
+    fermerApercuScan();
+  }
+
+  function apercuScan(doc) {
+    if (!doc || !doc.id) return;
+    ensureStyle();
+    fermerApercuScan();
+
+    var titre = 'OF ' + (doc.of_numero || '—');
+    var metas = [doc.no_dossier ? 'dossier ' + doc.no_dossier : null,
+                 doc.machine || null, doc.client || null,
+                 doc.fichier_origine || null].filter(Boolean).join(' \u00b7 ');
+
+    var frame = el('iframe', {
+      className: 'pmem-doc-frame',
+      // #view=FitH : la page arrive a la largeur du cadre, sans reglage manuel.
+      src: docUrl(doc.id) + '#view=FitH',
+      title: 'Scan ' + titre,
+    });
+
+    var panneau = el('div', { className: 'pmem-doc-panel' }, [
+      el('div', { className: 'pmem-doc-hd' }, [
+        el('span', { className: 'pmem-doc-t', text: titre }),
+        metas ? el('span', { className: 'pmem-doc-m', text: metas }) : null,
+        el('span', { style: 'flex:1' }),
+        // La porte de sortie vers l'onglet reste ouverte : impression, zoom au
+        // clavier, second ecran — l'apercu ne doit pas retirer ce qui existait.
+        el('button', {
+          type: 'button', className: 'pmem-btn pmem-btn-sm',
+          text: 'Ouvrir dans un onglet',
+          onclick: function () { window.open(docUrl(doc.id), '_blank'); },
+        }),
+        el('button', {
+          className: 'pmem-x', type: 'button', title: 'Fermer l\'apercu',
+          onclick: fermerApercuScan, text: '\u00d7',
+        }),
+      ]),
+      frame,
+    ]);
+
+    var ov = el('div', { className: 'pmem-doc-ov', id: DOC_OV_ID }, [panneau]);
+    ov.addEventListener('click', function (e) { if (e.target === ov) fermerApercuScan(); });
+    document.body.appendChild(ov);
+    document.addEventListener('keydown', onDocKey);
+  }
+
+  // Bouton d'ouverture d'un scan — un seul endroit, pour que les trois listes
+  // (productions, documents, file de scans) se comportent pareil.
+  function boutonScan(doc, label) {
+    var b = el('button', {
+      type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-doc',
+      title: 'Apercu du scan dans MySifa',
+      text: label || 'Ouvrir le scan',
+      onclick: function (e) { e.stopPropagation(); apercuScan(doc); },
+    });
+    b.addEventListener('mouseenter', function () { prechargerScan(doc.id); });
+    b.addEventListener('focus', function () { prechargerScan(doc.id); });
+    return b;
   }
 
   function panel(header, tabs, body) {
@@ -448,17 +591,55 @@
     ]);
   }
 
+  // Info prod du dossier ouvert : la consigne qui concerne la production en
+  // cours, pas l'historique. Elle passe donc avant tout le reste.
+  function blocInfoProdCourant(d) {
+    var info = d.info_prod || null;
+    if (!info || !info.texte) return null;
+    var qui = info.updated_par || info.auteur || '';
+    var quand = fDate(info.updated_at || info.created_at);
+    var pied = [];
+    if (qui) pied.push(qui);
+    if (quand && quand !== '—') pied.push(quand);
+    return el('div', { className: 'pmem-card pmem-info is-courant' }, [
+      el('div', { className: 'pmem-card-hd' }, [
+        el('span', { className: 'pmem-card-date', text: 'Info prod de ce dossier' }),
+        el('span', { className: 'pmem-card-meta', text: d.no_dossier || '' }),
+      ]),
+      el('div', { className: 'pmem-info-txt', text: info.texte }),
+      pied.length ? el('div', { className: 'pmem-info-ft', text: pied.join(' · ') }) : null,
+    ]);
+  }
+
+  // Info prod d'une serie passee : ce que le conducteur d'alors a note en
+  // cloturant son dossier. Elle se lit sous ses chiffres, dans sa carte.
+  function blocInfoProdSerie(s) {
+    var txt = (s && s.info_prod) ? String(s.info_prod).trim() : '';
+    if (!txt) return null;
+    var qui = s.info_prod_par || '';
+    return el('div', { className: 'pmem-serie-info' }, [
+      el('div', { className: 'pmem-col-lbl', text: 'Info prod' }),
+      el('div', { className: 'pmem-info-txt', text: txt }),
+      qui ? el('div', { className: 'pmem-info-ft', text: qui }) : null,
+    ]);
+  }
+
   // ── Rendu : series ─────────────────────────────────────────────────
   function renderSeries(d) {
     var series = d.series || [];
     var etatDossiers = blocDossiersReference(d);
+    var infoCourant = blocInfoProdCourant(d);
     if (!series.length) {
+      var tete = [];
+      if (infoCourant) tete.push(infoCourant);
+      if (etatDossiers) tete.push(etatDossiers);
       var diag = blocRattrapage(d, false);
-      if (diag) return etatDossiers ? [etatDossiers, diag] : [diag];
-      if (etatDossiers) return [etatDossiers];
+      if (diag) return tete.concat([diag]);
+      if (tete.length) return tete;
       return [el('div', { className: 'pmem-empty', text: 'Aucune production anterieure enregistree pour cette reference.' })];
     }
     var out = [];
+    if (infoCourant) out.push(infoCourant);
     if (etatDossiers) out.push(etatDossiers);
     var med = d.medianes || {};
     if (med.base_series) {
@@ -543,14 +724,11 @@
       if (docs.length) {
         entete.push(el('span', { style: 'flex:1' }));
         docs.forEach(function (doc) {
-          entete.push(el('button', {
-            type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-doc',
-            // L'en-tete aligne sur la ligne de base : un bouton s'y poserait
-            // de travers a cote du texte.
-            style: 'align-self:center',
-            onclick: function () { window.open('/api/produits/documents/' + doc.id + '/pdf', '_blank'); },
-            text: 'Ouvrir le scan' + (doc.of_numero ? ' ' + doc.of_numero : ''),
-          }));
+          var b = boutonScan(doc, 'Ouvrir le scan' + (doc.of_numero ? ' ' + doc.of_numero : ''));
+          // L'en-tete aligne sur la ligne de base : un bouton s'y poserait
+          // de travers a cote du texte.
+          b.style.alignSelf = 'center';
+          entete.push(b);
         });
       }
 
@@ -560,6 +738,7 @@
           el('div', {}, gauche),
           el('div', {}, droite),
         ]),
+        blocInfoProdSerie(s),
       ]));
     });
     return out;
@@ -586,6 +765,12 @@
   function renderSavoirs(d) {
     var out = [];
     var ref = d.ref_produit_norm;
+    // Sans cle produit, une note n'a nulle part ou s'accrocher : le dossier
+    // n'a que son info prod, qui se lit dans l'onglet Productions.
+    if (!ref) {
+      return [el('div', { className: 'pmem-empty',
+        text: 'Ce dossier n\'est rattache a aucune reference produit : les notes partagees ne sont pas disponibles.' })];
+    }
 
     var ta = el('textarea', { rows: '3', placeholder: 'Ce qu\'il faut savoir la prochaine fois que cette reference passe…' });
     var sel = el('select', {}, (window.__PMEM_TYPES__ || []).map(function (t) {
@@ -635,7 +820,7 @@
 
     var voteBtn = el('button', {
       type: 'button',
-      className: 'pmem-btn pmem-btn-sm' + (s.vote_utilisateur ? ' is-on' : ''),
+      className: 'pmem-btn pmem-btn-sm pmem-btn-ok' + (s.vote_utilisateur ? ' is-on' : ''),
       text: 'Ca m\'a servi' + (s.utile_count ? ' (' + s.utile_count + ')' : ''),
     });
     voteBtn.addEventListener('click', async function () {
@@ -652,7 +837,8 @@
     var peutEditer = !!d.est_admin || (!!d.moi && s.auteur === d.moi);
     if (peutEditer) {
       var obs = el('button', {
-        type: 'button', className: 'pmem-btn pmem-btn-sm',
+        type: 'button',
+        className: 'pmem-btn pmem-btn-sm' + (s.obsolete ? '' : ' pmem-btn-ko'),
         text: s.obsolete ? 'Remettre en vigueur' : 'Marquer perimee',
       });
       obs.addEventListener('click', async function () {
@@ -726,11 +912,7 @@
         }));
       }
       enfants.push(el('div', { className: 'pmem-chips' }, [
-        el('button', {
-          type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-doc',
-          onclick: function () { window.open('/api/produits/documents/' + doc.id + '/pdf', '_blank'); },
-          text: 'Ouvrir le scan',
-        }),
+        boutonScan(doc, 'Ouvrir le scan'),
         // Le fichier d'origine porte souvent une precision que la base n'a
         // pas (« marche 748 », « L1 », « Reliquat ») : on la garde visible.
         doc.fichier_origine
@@ -763,7 +945,7 @@
     else body = renderSeries(d);
 
     mount(panel(
-      header(d.ref_produit_norm || '—', ident.designation || '', metas),
+      header(d.ref_produit_norm || d.no_dossier || '—', ident.designation || '', metas),
       tabsBar([
         { key: 'series', label: 'Productions', count: (d.series || []).length },
         { key: 'savoirs', label: 'Notes', count: (d.savoirs || []).length },
@@ -773,11 +955,22 @@
     ));
   }
 
+  // Un numero de dossier porte un slash dans la moitie des cas (« 1068/0002 -
+  // Reliquat 2 »). Dans le chemin, meme encode en %2F, il est redecode avant le
+  // routage : l'appel tombait sur la route fourre-tout de la fiche produit, qui
+  // repondait « Aucun dossier de production rattache a la reference
+  // dossier/1068/0002 - .../historique ». En parametre de requete, aucun
+  // caractere du numero n'a de sens pour le routeur.
+  function urlHistorique(noDossier) {
+    return '/api/produits/dossier-historique?no_dossier='
+         + encodeURIComponent(noDossier || '');
+  }
+
   async function recharger() {
     if (state.mode === 'liste') { await chargerListe(); return; }
     if (state.mode === 'rattachement') { await chargerScans(); return; }
     if (state.mode === 'historique' && state.noDossier) {
-      state.data = await api('/api/produits/dossier/' + encodeURIComponent(state.noDossier) + '/historique');
+      state.data = await api(urlHistorique(state.noDossier));
     } else if (state.data && state.data.ref_produit_norm) {
       state.data = await api('/api/produits/' + encodeURI(state.data.ref_produit_norm));
     }
@@ -798,7 +991,7 @@
     await chargerTypes();
     state = { tab: 'series', data: null, mode: 'historique', noDossier: noDossier, docs: null, sel: null };
     try {
-      state.data = await api('/api/produits/dossier/' + encodeURIComponent(noDossier) + '/historique');
+      state.data = await api(urlHistorique(noDossier));
     } catch (e) { toast(e.message || 'Historique indisponible.', 'danger'); return; }
     if (!state.data || !state.data.disponible) { toast('Aucun historique pour ce produit.'); return; }
     renderCourant();
@@ -1089,13 +1282,7 @@
         el('td', { title: d.chemin_origine || '', text: d.fichier_origine || '—' }),
       ]);
       var tdAct = el('td', {});
-      tdAct.appendChild(el('button', {
-        type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-doc', text: 'Ouvrir',
-        onclick: function (e) {
-          e.stopPropagation();
-          window.open('/api/produits/documents/' + d.id + '/pdf', '_blank');
-        },
-      }));
+      tdAct.appendChild(boutonScan(d, 'Ouvrir'));
       tr.appendChild(tdAct);
       tr.style.cursor = 'default';
       return tr;
@@ -1320,7 +1507,14 @@
   var HIST_VU_PREFIX = 'pmem_hist_vu_';
 
   function histCle(apercu, noDossier) {
-    return String(noDossier || (apercu && apercu.no_dossier) || '').trim().toUpperCase();
+    var base = String(noDossier || (apercu && apercu.no_dossier) || '').trim().toUpperCase();
+    // Une info prod ecrite (ou corrigee) APRES la premiere consultation doit
+    // resignaler : la cle porte donc sa date. Sans ca, une consigne ajoutee en
+    // Tracabilite pendant la production n'atteindrait jamais le conducteur qui
+    // a deja ouvert le panneau une fois.
+    var info = apercu && apercu.info_prod;
+    var stamp = info ? String(info.updated_at || info.created_at || '') : '';
+    return stamp ? base + '|' + stamp : base;
   }
 
   function histDejaConsulte(cle) {
@@ -1337,17 +1531,24 @@
     if (!apercu || !apercu.disponible) return null;
     ensureStyle();
     var parts = [];
+    // L'info prod passe en tete : elle parle de CE dossier, les autres
+    // comptages parlent de la reference.
+    var aInfo = !!(apercu.info_prod && apercu.info_prod.texte);
+    if (aInfo) parts.push('info prod');
     if (apercu.nb_series) parts.push(apercu.nb_series + ' production' + (apercu.nb_series > 1 ? 's' : ''));
     if (apercu.nb_savoirs) parts.push(apercu.nb_savoirs + ' note' + (apercu.nb_savoirs > 1 ? 's' : ''));
     if (apercu.nb_documents) parts.push(apercu.nb_documents + ' scan' + (apercu.nb_documents > 1 ? 's' : ''));
-    var total = (apercu.nb_series || 0) + (apercu.nb_savoirs || 0) + (apercu.nb_documents || 0);
+    var total = (aInfo ? 1 : 0) + (apercu.nb_series || 0) + (apercu.nb_savoirs || 0)
+              + (apercu.nb_documents || 0);
     var cle = histCle(apercu, noDossier);
     var consulte = histDejaConsulte(cle);
     // Une note d'atelier est une consigne tiree d'une production passee : c'est
     // ce qui doit arreter le conducteur avant qu'il lance la machine.
-    var titre = apercu.nb_savoirs
-      ? 'Deja produit \u2014 notes d\'atelier a lire'
-      : 'Deja produit \u2014 verifier les dossiers passes';
+    var titre = aInfo
+      ? 'Info prod sur ce dossier \u2014 a lire'
+      : (apercu.nb_savoirs
+          ? 'Deja produit \u2014 notes d\'atelier a lire'
+          : 'Deja produit \u2014 verifier les dossiers passes');
     var b = el('button', {
       type: 'button',
       className: 'pmem-hist-btn is-signal' + (consulte ? '' : ' is-neuf'),

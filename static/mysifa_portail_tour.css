@@ -1,0 +1,51 @@
+/* MySifa — présentation du nouveau portail.
+   Une visite guidée de quatre étapes, jouée une fois par personne, qui éclaire
+   tour à tour la barre d'icônes, le menu d'une tuile, l'étoile des favoris et
+   la barre de reprise. Le fond s'assombrit autour de l'élément montré : c'est
+   ce qui fait qu'on regarde au bon endroit sans avoir à lire une légende. */
+
+.mpt-voile{position:fixed;inset:0;z-index:9500;pointer-events:auto}
+.mpt-trou{position:fixed;border-radius:16px;z-index:9501;pointer-events:none;
+  box-shadow:0 0 0 9999px rgba(2,6,23,.62),0 0 0 3px var(--accent);
+  transition:top .28s cubic-bezier(.22,.61,.36,1),left .28s cubic-bezier(.22,.61,.36,1),
+             width .28s cubic-bezier(.22,.61,.36,1),height .28s cubic-bezier(.22,.61,.36,1)}
+body.light .mpt-trou{box-shadow:0 0 0 9999px rgba(15,23,42,.45),0 0 0 3px var(--accent)}
+
+.mpt-carte{position:fixed;z-index:9502;width:320px;max-width:calc(100vw - 32px);
+  background:var(--card);border:1px solid var(--border);border-radius:16px;
+  box-shadow:0 24px 60px rgba(0,0,0,.45);padding:16px 18px 14px;
+  font-family:'Segoe UI',system-ui,sans-serif;
+  animation:mpt-entree .22s cubic-bezier(.22,.61,.36,1)}
+body.light .mpt-carte{box-shadow:0 24px 60px rgba(15,23,42,.22)}
+@keyframes mpt-entree{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.mpt-etiquette{display:inline-flex;align-items:center;gap:6px;margin-bottom:8px;
+  font-size:9.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--accent);background:var(--accent-bg);padding:3px 9px;border-radius:999px}
+.mpt-titre{font-size:15px;font-weight:800;color:var(--text);margin:0 0 6px;line-height:1.25}
+.mpt-texte{font-size:12.5px;line-height:1.55;color:var(--text2);margin:0}
+.mpt-pied{display:flex;align-items:center;gap:10px;margin-top:14px}
+.mpt-points{display:flex;gap:5px;flex:1}
+.mpt-point{width:6px;height:6px;border-radius:50%;background:var(--border)}
+.mpt-point.actif{background:var(--accent);width:16px;border-radius:99px}
+.mpt-passer{background:none;border:none;font:inherit;font-size:11.5px;font-weight:700;
+  color:var(--muted);cursor:pointer;padding:6px 4px}
+.mpt-passer:hover{color:var(--text2)}
+.mpt-suivant{background:var(--accent);color:var(--bg);border:none;border-radius:10px;
+  padding:8px 16px;font:inherit;font-size:12px;font-weight:800;cursor:pointer;
+  transition:filter .15s}
+.mpt-suivant:hover{filter:brightness(1.06)}
+
+/* Pendant la visite, les étoiles des tuiles restent visibles : l'étape qui les
+   présente ne peut pas dépendre du survol d'une tuile. */
+body.mpt-actif .portal-app-star{display:flex}
+
+/* Le bouton de rappel dans le pied du portail. */
+.portal-tour-btn{display:inline-flex;align-items:center;gap:6px}
+.portal-tour-btn .portal-tour-pastille{font-size:9px;font-weight:800;letter-spacing:.08em;
+  text-transform:uppercase;background:var(--accent-bg);color:var(--accent);
+  padding:2px 6px;border-radius:999px}
+
+@media (max-width:900px){
+  .mpt-carte{width:calc(100vw - 32px);left:16px!important;right:16px}
+}

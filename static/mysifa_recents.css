@@ -1,0 +1,75 @@
+/* MySifa — barre « Reprendre où j'en étais »
+   Une barre fine, fixée en haut de la fenêtre, qui rappelle les derniers écrans
+   ouverts. Elle est posée par static/mysifa_recents.js sur les pages qui
+   l'incluent ; tant que l'utilisateur n'a rien dans son historique, la barre
+   n'existe pas dans le DOM et rien ne bouge.
+
+   Le décalage suit le modèle du bandeau de staging (html.py) : une classe sur
+   <body> réserve la hauteur, et les éléments fixes des pages module (sidebar,
+   topbar mobile) descendent d'autant. Sans ça la barre recouvrirait le haut du
+   planning. */
+
+.msf-rec-bar{
+  position:fixed;top:0;left:0;right:0;height:38px;z-index:8000;
+  display:flex;align-items:center;gap:10px;padding:0 16px;
+  background:var(--card);border-bottom:1px solid var(--border);
+  font-family:'Segoe UI',system-ui,sans-serif;
+}
+body.has-staging-bandeau .msf-rec-bar{top:24px}
+
+.msf-rec-lab{
+  display:inline-flex;align-items:center;gap:6px;flex-shrink:0;
+  font-size:9.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--accent);background:var(--accent-bg);
+  padding:4px 10px 4px 8px;border-radius:999px;
+}
+.msf-rec-liste{
+  display:flex;align-items:center;gap:8px;flex:1;min-width:0;
+  overflow-x:auto;padding:2px 0;scrollbar-width:none;
+}
+.msf-rec-liste::-webkit-scrollbar{display:none}
+.msf-rec{
+  display:inline-flex;align-items:center;gap:7px;flex-shrink:0;white-space:nowrap;
+  background:var(--bg);border:1px solid var(--border);border-radius:999px;
+  padding:4px 11px 4px 5px;cursor:pointer;font:inherit;color:var(--text2);
+  transition:background .15s,border-color .15s;
+}
+.msf-rec:hover{background:var(--accent-bg);border-color:var(--accent)}
+.msf-rec-ico{
+  width:21px;height:21px;border-radius:6px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--accent-bg);color:var(--accent);
+}
+.msf-rec:hover .msf-rec-ico{background:var(--accent);color:var(--bg)}
+.msf-rec b{font-size:11px;font-weight:700;color:var(--text)}
+.msf-rec span{font-size:11px;color:var(--muted)}
+.msf-rec-vider{
+  flex-shrink:0;background:none;border:none;border-left:1px solid var(--border);
+  padding:2px 0 2px 10px;margin-left:2px;
+  font:inherit;font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;
+}
+.msf-rec-vider:hover{color:var(--accent)}
+
+/* Réservation de hauteur — même mécanique que le bandeau de staging. */
+body.has-msf-recents{padding-top:38px}
+body.has-msf-recents.has-staging-bandeau{padding-top:62px}
+body.has-msf-recents .sidebar{height:calc(100vh - 38px);top:38px}
+body.has-msf-recents.has-staging-bandeau .sidebar{height:calc(100vh - 62px);top:62px}
+body.has-msf-recents .mobile-topbar{top:38px}
+body.has-msf-recents.has-staging-bandeau .mobile-topbar{top:62px}
+/* Portail : la barre d'icônes glisse sous la barre de reprise. */
+body.has-msf-recents .portal-corner-stack{top:52px}
+body.has-msf-recents.has-staging-bandeau .portal-corner-stack{top:76px}
+
+/* Sous 900 px, l'écran appartient au contenu : la barre disparaît plutôt que
+   de manger 38 px de hauteur utile sur un téléphone. */
+@media (max-width:900px){
+  .msf-rec-bar{display:none}
+  body.has-msf-recents{padding-top:0}
+  body.has-msf-recents.has-staging-bandeau{padding-top:24px}
+  body.has-msf-recents .sidebar{height:100vh;top:0}
+  body.has-msf-recents.has-staging-bandeau .sidebar{height:calc(100vh - 24px);top:24px}
+  body.has-msf-recents .mobile-topbar{top:0}
+  body.has-msf-recents.has-staging-bandeau .mobile-topbar{top:24px}
+  body.has-msf-recents .portal-corner-stack{top:20px}
+}

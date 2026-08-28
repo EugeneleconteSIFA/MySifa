@@ -1428,6 +1428,150 @@ def set_tarif(
     }
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Propager un mode de transport d'un tarif aux autres matières du fournisseur
+# ─────────────────────────────────────────────────────────────────────────────
+# Un transitaire ne change pas de méthode d'un frontal à l'autre : quand on
+# apprend que Meltavis facture 9 % du prix d'achat, ça vaut pour tous ses
+# frontaux, pas seulement celui qu'on avait ouvert. Recopier le réglage à la
+# main sur dix fiches est le genre de corvée qu'on fait mal une fois sur deux.
+#
+# Ce qu'on recopie, et ce qu'on ne recopie pas :
+#   - transport (import, méthode, valeurs) et taxes → OUI, c'est la façon dont
+#     ce fournisseur facture l'acheminement, elle ne dépend pas de la matière ;
+#   - base de prix (au kilo / au m²) → NON, elle décrit la matière, pas le
+#     transporteur : un frontal se tarife au m², l'adhésif du même fournisseur
+#     au kilo ;
+#   - devise → NON, elle vit sur le fournisseur et vaut déjà partout.
+#
+# Le périmètre est volontairement étroit : même fournisseur, même catégorie.
+# Élargir à toutes ses matières mettrait le forfait d'un adhésif sur un frontal
+# qui arrive par un autre camion.
+
+CHAMPS_PROPAGES = (
+    "is_imported",
+    "transport_mode",
+    "transport_unit_price",
+    "transport_pct",
+    "transport_cout",
+    "transport_quantite",
+    "taxe_pct",
+)
+
+
+def cibles_propagation(
+    conn: sqlite3.Connection, *, fournisseur_id: int, matiere_id: int
+) -> Optional[dict]:
+    """
+    Les matières qui recevraient le tarif : celles de la même catégorie qu'on
+    achète à ce fournisseur, la matière d'origine exclue.
+
+    Sert d'abord à l'écran — annoncer « 7 matières » avant d'écrire vaut mieux
+    que de le découvrir dans le toast — puis à l'écriture elle-même.
+    """
+    source = conn.execute(
+        "SELECT id, reference, designation, categorie FROM matieres_premieres WHERE id=?",
+        (matiere_id,),
+    ).fetchone()
+    if not source:
+        return None
+    cat = _cat(source["categorie"])
+    autres = [
+        {
+            "matiere_id": int(m["matiere_id"]),
+            "reference": m["reference"],
+            "designation": m["designation"],
+            "a_tarif": bool(m["a_tarif"]),
+            "nb_declinaisons": int(m["nb_declinaisons"] or 0),
+            "nb_principal": int(m["nb_principal"] or 0),
+        }
+        for m in tarifs_du_fournisseur(conn, fournisseur_id)
+        if int(m["matiere_id"]) != int(source["id"]) and _cat(m["categorie"]) == cat
+    ]
+    return {
+        "matiere_id": int(source["id"]),
+        "reference": source["reference"],
+        "categorie": source["categorie"],
+        "matieres": autres,
+        # Là où ce fournisseur fait foi : ce sont ces déclinaisons-là dont le
+        # sous-total partira dans la valorisation MyStock.
+        "nb_principal": sum(m["nb_principal"] for m in autres),
+    }
+
+
+def propager_transport(
+    conn: sqlite3.Connection,
+    *,
+    fournisseur_id: int,
+    matiere_id: int,
+    patch: Optional[dict] = None,
+    user_id: Optional[int] = None,
+    user_name: Optional[str] = None,
+) -> dict:
+    """
+    Applique le transport et les taxes d'un tarif à toutes les matières de la
+    même catégorie achetées au même fournisseur.
+
+    `patch` permet à l'écran d'envoyer ce qu'il affiche plutôt que ce qui est
+    enregistré : on vient de saisir 9 %, on clique « appliquer », les autres
+    matières prennent 9 % — et la matière d'origine aussi, sinon elle serait la
+    seule à ne pas avoir le réglage qu'on regarde.
+
+    Rien n'est écrit à la main ici : chaque matière passe par `set_tarif`, donc
+    par les mêmes contrôles, le même historique et le même miroir MyStock.
+    """
+    if not tarifs_disponibles(conn):
+        return {"ok": False, "reason": "table des tarifs absente (base non migrée)"}
+    if not conn.execute(
+        "SELECT 1 FROM fournisseurs_fsc WHERE id=?", (fournisseur_id,)
+    ).fetchone():
+        return {"ok": False, "reason": "fournisseur introuvable"}
+    perimetre = cibles_propagation(
+        conn, fournisseur_id=fournisseur_id, matiere_id=matiere_id
+    )
+    if perimetre is None:
+        return {"ok": False, "reason": "matière introuvable"}
+
+    # Ce qu'on recopie : ce que l'écran envoie s'il envoie quelque chose, sinon
+    # le tarif déjà enregistré, sinon le défaut de la catégorie.
+    source = dict(patch or {})
+    if not any(c in source for c in CHAMPS_PROPAGES):
+        source = dict(
+            fetch_tarif(conn, fournisseur_id, matiere_id)
+            or tarif_defaut(perimetre["categorie"])
+        )
+    reglages = {c: source[c] for c in CHAMPS_PROPAGES if c in source}
+    if not reglages:
+        return {"ok": False, "reason": "aucun réglage de transport à propager"}
+
+    # La matière d'origine d'abord : si le patch est refusé, il l'est avant
+    # d'avoir touché quoi que ce soit d'autre.
+    ids = [perimetre["matiere_id"]] + [m["matiere_id"] for m in perimetre["matieres"]]
+    touchees = 0
+    for mid in ids:
+        r = set_tarif(
+            conn,
+            fournisseur_id=fournisseur_id,
+            matiere_id=mid,
+            patch=dict(reglages),
+            user_id=user_id,
+            user_name=user_name,
+        )
+        if not r.get("ok"):
+            return {"ok": False, "reason": r.get("reason") or "tarif refusé"}
+        touchees += int(r.get("declinaisons_touchees") or 0)
+
+    return {
+        "ok": True,
+        "categorie": perimetre["categorie"],
+        # Sans la matière d'origine : c'est le chiffre que l'écran annonce.
+        "matieres": len(perimetre["matieres"]),
+        "declinaisons_touchees": touchees,
+        "tarif": fetch_tarif(conn, fournisseur_id, matiere_id),
+    }
+
+
 def set_devise_fournisseur(
     conn: sqlite3.Connection, *, fournisseur_id: int, devise: str
 ) -> dict:

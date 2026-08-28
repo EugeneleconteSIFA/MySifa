@@ -43,7 +43,7 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(UPLOADS_ROOT, exist_ok=True)
 
 # ─── App ──────────────────────────────────────────────────────────
-APP_VERSION = "3.0.0"
+APP_VERSION = "3.2.0"
 
 # ─── Branding paramétrable — règle #1 CLAUDE.md (SIFA = défaut) ────
 # Ces variables permettent à une instance client Kernse de rebrander toute
@@ -147,6 +147,10 @@ PORT        = int(os.getenv("PORT", 8000))
 #
 # Toute valeur autre que "v1" est traitée comme prod (sécurité par défaut).
 ENV_NAME = os.getenv("ENV_NAME", "v2").strip().lower()
+
+# SENTRY_DSN : remontee des erreurs de production. Vide = desactive, et le code
+# ne tente meme pas l'import de sentry_sdk. Voir app/core/monitoring.py.
+SENTRY_DSN = os.getenv("SENTRY_DSN", "").strip()
 IS_STAGING = (ENV_NAME == "v1")
 
 # MIGRATIONS_DISABLED : désactive les migrations de schéma au boot.

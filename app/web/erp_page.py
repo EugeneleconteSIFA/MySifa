@@ -59,8 +59,9 @@ ERP_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_mobile_topbar.css">
 <style>
-:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);--accent-bord:rgba(34,211,238,.45);--ok:#34d399;--success:#34d399;--danger:#f87171;--warn:#fbbf24}
-body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);--accent-bord:rgba(8,145,178,.42);--ok:#059669;--success:#059669;--danger:#dc2626;--warn:#d97706}
+/* tokens : static/mysifa_theme.css — ici, seulement les écarts */
+:root{--serie2:#a78bfa;--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);--accent-bord:rgba(34,211,238,.45);--ok:#34d399;--success:#34d399;--danger:#f87171;--warn:#fbbf24}
+body.light{--serie2:#6d4ddb;--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);--accent-bord:rgba(8,145,178,.42);--ok:#059669;--success:#059669;--danger:#dc2626;--warn:#d24b00}
 *{box-sizing:border-box}
 /* La page ne défile pas : elle occupe l'écran, et c'est la grille qui roule
    sous son en-tête. Le bandeau de v1 ajoute 24 px de padding en haut du body —
@@ -117,6 +118,22 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 .nav-btn.active::before{content:'';position:absolute;left:-13px;top:5px;bottom:5px;width:2px;border-radius:2px;background:var(--accent)}
 /* « Menu » n'appartient à aucun domaine : il garde la forme pleine. */
 #nav-menu{border-radius:8px;padding:9px 12px;font-weight:600}
+
+/* « Menu » et les tableaux de bord sur la même ligne. Ce sont les deux façons
+   d'entrer dans MyERP — la liste complète des écrans, ou le chiffre du jour —
+   et jusqu'ici la seconde n'existait que derrière le survol de la marque RVGI :
+   invisible pour qui ne le sait pas. Le tiroir est déjà l'endroit où l'on va
+   chercher où aller ; les tableaux de bord y ont leur place, à côté de Menu et
+   non dessous, parce qu'ils ne sont pas un écran de plus dans la liste. */
+.nav-tete{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.nav-tete #nav-menu{width:auto;flex-shrink:0;font-weight:800;margin-bottom:0}
+.nav-tdb{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.nav-tdb::before{content:'';width:1px;align-self:stretch;background:var(--border);margin:3px 5px 3px 1px}
+.nav-tdb-btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border);background:transparent;color:var(--text2);border-radius:8px;padding:8px 13px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background .15s,color .15s,border-color .15s}
+.nav-tdb-btn:hover,.nav-tdb-btn.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.nav-tdb-btn.active{font-weight:700}
+.nav-tdb-btn .mk-ico{flex-shrink:0;opacity:.75;color:var(--muted)}
+.nav-tdb-btn:hover .mk-ico,.nav-tdb-btn.active .mk-ico{color:var(--accent);opacity:1}
 .back-mysifa{border:none!important;background:transparent!important;font-weight:400!important;color:var(--text2)!important;padding:8px 10px!important}
 .back-mysifa:hover{color:var(--text)!important;background:transparent!important}
 .back-mysifa .wm{font-weight:800;color:var(--text)}.back-mysifa .wm span{color:var(--accent)}
@@ -140,19 +157,19 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 .version{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:10px;color:var(--muted);padding:4px 12px}
 
 .main{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column}
-.page-head{flex-shrink:0;padding:18px 22px 12px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;background:var(--bg)}
+.page-head{flex-shrink:0;padding:11px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-wrap:nowrap;background:var(--bg);min-width:0}
 .btn-menu{flex-shrink:0;display:inline-flex;align-items:center;gap:8px;border:1px solid var(--border);background:var(--card);color:var(--text2);border-radius:10px;padding:9px 13px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;transition:background .15s,color .15s,border-color .15s}
 .btn-menu:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
 @media (max-width:900px){.btn-menu{display:none}}
-.page-head h1{margin:0;font-size:19px;font-weight:700}
-.head-titre-ligne{display:flex;align-items:center;gap:10px}
-.page-head .sous{font-size:12px;color:var(--muted);margin-top:4px;max-width:640px}
-.head-droite{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.page-head h1{margin:0;font-size:18px;font-weight:700;white-space:nowrap}
+.page-head>.tt{min-width:0;flex-shrink:1}
+.head-titre-ligne{display:flex;align-items:center;gap:9px;min-width:0}
+.head-droite{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:nowrap;flex-shrink:0}
 .head-mark{display:inline-flex;align-items:center;flex-shrink:0}
 .head-mark img{width:46px;height:auto;display:block}
 /* Les mêmes actions que dans le tiroir, mais toujours sous la main : le tiroir
    sert à naviguer entre les écrans, pas à se déconnecter. */
-.head-actions{display:flex;align-items:center;gap:6px;padding-left:10px;margin-left:4px;border-left:1px solid var(--border)}
+.head-actions{display:flex;align-items:center;gap:6px;padding-left:10px;margin-left:4px;border-left:1px solid var(--border);flex-shrink:0}
 .head-btn{width:34px;height:34px;border-radius:9px;border:1px solid var(--border);background:var(--card);color:var(--text2);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;transition:background .15s,color .15s,border-color .15s;flex-shrink:0}
 .head-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
 .head-btn.danger:hover{background:var(--danger);border-color:var(--danger);color:#fff}
@@ -192,6 +209,16 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 .btn:hover{background:var(--card);color:var(--text)}
 .btn-accent{background:var(--accent);border-color:var(--accent);color:var(--bg)}
 .btn-accent:hover{filter:brightness(1.05)}
+/* ── Maille de lecture : par ligne ou par pièce ──────────────────────────
+   Un écran de RVGI est toujours au niveau ligne. « 845 lignes en retard »
+   ne dit pas combien de clients rappeler ; « 312 commandes » si. Le même
+   écran, les mêmes filtres, deux mailles. */
+.maille{display:flex;gap:2px;padding:3px;background:var(--bg);border:1px solid var(--border);border-radius:10px;margin-bottom:12px}
+.maille button{flex:1;min-width:0;border:none;background:transparent;color:var(--muted);font:inherit;font-size:11.5px;font-weight:700;padding:7px 4px;border-radius:7px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .15s,color .15s}
+.maille button:hover{color:var(--text2)}
+.maille button.on{background:var(--accent-bg);color:var(--accent)}
+.maille button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
 .rail-info{font-size:11px;color:var(--muted);line-height:1.6;border-top:1px solid var(--border);margin-top:14px;padding-top:12px}
 
 .grille-zone{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column}
@@ -209,12 +236,44 @@ table.grille th.cible{box-shadow:inset 3px 0 0 var(--accent)}
 .th-cadenas{border:none;background:transparent;padding:0;margin-left:auto;color:var(--muted);opacity:.35;cursor:pointer;display:inline-flex;flex-shrink:0}
 .th-cadenas:hover{opacity:1;color:var(--accent)}
 .th-cadenas.on{opacity:1;color:var(--accent)}
+/* Entonnoir de filtre : le même geste que dans un tableur, mais posé sur la
+   colonne au lieu d'être enfermé dans une boîte de dialogue. Il ne s'allume
+   que lorsqu'un filtre porte réellement sur la colonne — une en-tête qui
+   clignote pour rien ne se lit plus. */
+.th-libelle{margin-right:auto}
+.th-boite .th-cadenas{margin-left:0}
+.th-filtre{border:none;background:transparent;padding:0;color:var(--muted);opacity:.32;cursor:pointer;display:inline-flex;flex-shrink:0}
+.th-filtre:hover{opacity:1;color:var(--accent)}
+.th-filtre.on{opacity:1;color:var(--accent)}
+table.grille th.filtree{color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
+
+/* Le panneau de filtre suit sa colonne : il s'ouvre sous l'en-tête cliquée,
+   assez près pour qu'on ne perde pas de vue à quoi il s'applique. */
+.fpop-fond{position:fixed;inset:0;z-index:88}
+.fpop{position:fixed;z-index:89;width:272px;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 18px 44px rgba(0,0,0,.42);padding:13px 13px 12px}
+.fpop .fp-titre{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--text);margin:0 0 9px;padding-bottom:7px;border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fpop select,.fpop input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:8px 10px;color:var(--text);font-size:13px;font-family:inherit;transition:border-color .15s}
+.fpop select:focus,.fpop input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.fpop .fp-vals{display:flex;gap:8px;margin-top:8px}
+.fpop .fp-act{display:flex;gap:8px;margin-top:11px}
+.fpop .fp-act .btn{flex:1;padding:8px 10px}
+.fpop .fp-aide{font-size:10.5px;color:var(--muted);line-height:1.5;margin-top:9px}
+
+/* Pied : l'export se prend là où l'on lit déjà « 1–100 sur 34 943 », c'est-à-
+   dire à l'endroit où l'on se demande combien il y en a. */
+.btn-xls{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.btn-xls:not(:disabled):hover{border-color:var(--success);color:var(--success)}
+.btn-xls:disabled{opacity:.55;cursor:default}
+.pied-fc{display:inline-flex;align-items:center;gap:8px;padding:3px 6px 3px 10px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-weight:700;font-size:11px}
+.pied-fc .x{border:none;background:transparent;color:var(--accent);font:inherit;font-weight:700;cursor:pointer;text-decoration:underline;padding:0 4px}
+.pied-fc .x:hover{color:var(--danger)}
 /* Colonnes épinglées : elles restent à gauche au défilement horizontal.
    Le décalage `left` est calculé après rendu, à la largeur réelle. */
 table.grille th.epingle{z-index:4}
 table.grille th.epingle,table.grille td.epingle{position:sticky;background:var(--card)}
 table.grille td.epingle{z-index:1;background:var(--bg)}
-table.grille tbody tr:hover td.epingle,table.grille tbody tr.sel td.epingle{background:var(--accent-bg)}
+table.grille tbody tr:hover td.epingle,table.grille tbody tr.sel td.epingle{
+  background:linear-gradient(var(--accent-bg),var(--accent-bg)),var(--bg)}
 table.grille th.bord-epingle,table.grille td.bord-epingle{border-right:1px solid var(--accent)}
 table.grille td{padding:7px 10px;border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
 table.grille tbody tr{cursor:pointer}
@@ -355,7 +414,8 @@ table.pl th.fx0,table.pl td.fx0{left:0}
 table.pl th.fx1,table.pl td.fx1{left:var(--fx1,96px)}
 table.pl td.fx1{box-shadow:1px 0 0 var(--border)}
 table.pl th.fx1{box-shadow:1px 0 0 var(--border)}
-table.pl tbody tr:hover td.fx,table.pl tbody tr.ici td.fx{background:var(--accent-bg)}
+table.pl tbody tr:hover td.fx,table.pl tbody tr.ici td.fx{
+  background:linear-gradient(var(--accent-bg),var(--accent-bg)),var(--card)}
 table.pl td{max-width:210px}
 .pl-astuce{order:3;font-size:10.5px;font-weight:600;letter-spacing:0;text-transform:none;
   color:var(--muted);white-space:nowrap}
@@ -462,6 +522,163 @@ body.sb-open .sidebar-overlay{display:block}
   .liens{grid-template-columns:1fr}
 }
 @media (min-width:901px){.mobile-topbar{display:none}}
+/* ── Menu de service : au survol de la marque RVGI ────────────────────────
+   Le tiroir montre les 27 écrans ; ce menu-ci montre les cinq qu'on ouvre
+   vraiment, plus les tableaux de bord. Il tient au survol ET au clic : la
+   souris pour l'habitude, le clic pour le tactile et le clavier. */
+.mk-svc{position:relative;flex-shrink:0;display:flex}
+.mk-btn{display:inline-flex;align-items:center;gap:5px;background:none;border:1px solid transparent;border-radius:10px;padding:3px 7px 3px 5px;cursor:pointer;color:var(--muted);font:inherit;transition:background .15s,border-color .15s}
+.mk-btn:hover,.mk-svc.ouvert .mk-btn{background:var(--accent-bg);border-color:var(--accent-bord)}
+.mk-btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mk-chev{font-size:9px;line-height:1;opacity:.75;transition:transform .15s}
+.mk-svc:hover .mk-chev,.mk-svc.ouvert .mk-chev{transform:translateY(1px);opacity:1;color:var(--accent)}
+.mk-pop{position:absolute;top:100%;left:0;margin-top:7px;min-width:300px;max-width:350px;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 18px 46px rgba(0,0,0,.45);padding:6px;z-index:90;display:none}
+.mk-svc:hover .mk-pop,.mk-svc:focus-within .mk-pop,.mk-svc.ouvert .mk-pop{display:block}
+/* Pont invisible : descendre la souris vers le menu ne doit pas le refermer. */
+.mk-pop::before{content:'';position:absolute;top:-9px;left:0;right:0;height:9px}
+.mk-groupe{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);padding:9px 10px 5px}
+.mk-item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:none;border:none;border-radius:9px;padding:8px 10px;cursor:pointer;color:var(--text2);font:inherit;transition:background .12s,color .12s}
+.mk-item:hover{background:var(--accent-bg)}
+.mk-item .mk-ico{flex-shrink:0;opacity:.8;color:var(--muted)}
+.mk-item:hover .mk-ico{color:var(--accent);opacity:1}
+.mk-item b{display:block;font-size:12.5px;font-weight:600;color:var(--text)}
+.mk-item:hover b{color:var(--accent)}
+.mk-item.tdb b{font-size:13.5px}
+.mk-item.active b{color:var(--accent)}
+.mk-sep{height:1px;background:var(--border);margin:6px 8px}
+
+/* ── Tableaux de bord ─────────────────────────────────────────────────────
+   Une vue de plus dans `#corps`, à côté du menu et de la grille. Le body ne
+   défile pas : c'est cette enveloppe qui roule. */
+.tdb-wrap{flex:1;min-height:0;overflow-y:auto;padding:15px 17px 30px}
+.tdb-charge{padding:40px;text-align:center;color:var(--muted);font-size:13px}
+.tdb-alerte{display:flex;align-items:flex-start;gap:9px;padding:10px 13px;border-radius:10px;border:1px solid rgba(251,191,36,.32);background:rgba(251,191,36,.08);color:var(--text2);font-size:12px;line-height:1.5;margin-bottom:12px}
+.tdb-alerte b{color:var(--text)}
+
+.tdb-bande{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;padding:14px 16px;border-radius:12px;border:1px solid var(--accent-bord);background:var(--accent-bg);margin-bottom:13px}
+.tdb-bande .lab{display:block;font-size:10.5px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:var(--accent);margin-bottom:7px}
+.tdb-bande .big{display:block;font-size:29px;font-weight:800;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums;color:var(--text)}
+.tdb-bande .txt{font-size:12.5px;color:var(--text2);line-height:1.45}
+.tdb-bande .txt b{color:var(--text)}
+.tdb-bande .droite{margin-left:auto;text-align:right;font-size:11.5px;color:var(--muted);line-height:1.5}
+.tdb-bande .droite b{display:block;font-size:12.5px;font-weight:700}
+
+.tdb-tuiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(186px,1fr));gap:11px;margin-bottom:13px}
+.tdb-tuile{position:relative;overflow:hidden;text-align:left;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 14px 14px;color:var(--text2);font:inherit;cursor:pointer;transition:border-color .15s,transform .12s}
+.tdb-tuile[data-inerte]{cursor:default}
+.tdb-tuile:not([data-inerte]):hover{border-color:var(--accent-bord);transform:translateY(-1px)}
+.tdb-tuile:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tdb-tuile::after{content:'';position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--accent);opacity:.5}
+.tdb-tuile.ok::after{background:var(--ok);opacity:.8}
+.tdb-tuile.warn::after{background:var(--warn);opacity:.9}
+.tdb-tuile.dg::after{background:var(--danger);opacity:.9}
+.tdb-tuile.neu::after{background:var(--border);opacity:1}
+.tdb-tuile .k{display:block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;line-height:1.3}
+.tdb-tuile .v{display:block;font-size:25px;font-weight:800;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums;color:var(--text)}
+.tdb-tuile .v small{font-size:13px;font-weight:600;color:var(--text2);margin-left:3px}
+.tdb-tuile .v em{font-size:12.5px;font-weight:600;font-style:normal;color:var(--muted);margin-left:7px}
+.tdb-tuile .s{display:block;margin-top:7px;font-size:11px;color:var(--muted);line-height:1.4}
+.tdb-tuile .s.ok{color:var(--ok)}
+.tdb-tuile .s.warn{color:var(--warn)}
+.tdb-tuile .s.dg{color:var(--danger)}
+
+.tdb-cols{display:grid;grid-template-columns:2fr 1fr;gap:11px;align-items:start}
+@media(max-width:1150px){.tdb-cols{grid-template-columns:1fr}}
+.tdb-pile{display:flex;flex-direction:column;gap:11px;min-width:0}
+.tdb-pan{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.tdb-pan-h{display:flex;align-items:center;gap:9px;padding:10px 13px;border-bottom:1px solid var(--border)}
+.tdb-pan-h h3{margin:0;font-size:12.5px;font-weight:700;color:var(--text)}
+.tdb-pan-h .cpt{font-size:11px;color:var(--muted)}
+.tdb-pan-h .plus{margin-left:auto;font-size:11px;padding:5px 10px;white-space:nowrap}
+.tdb-note{padding:9px 13px;border-top:1px solid var(--border);font-size:10.5px;color:var(--muted);line-height:1.5}
+.tdb-vide{padding:20px 13px;text-align:center;color:var(--muted);font-size:12px}
+
+table.tdb-t{width:100%;border-collapse:collapse;font-size:12px}
+table.tdb-t th{text-align:left;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:7px 11px;border-bottom:1px solid var(--border);white-space:nowrap}
+table.tdb-t td{padding:8px 11px;border-bottom:1px solid var(--border);color:var(--text2);white-space:nowrap}
+table.tdb-t tr:last-child td{border-bottom:none}
+table.tdb-t tr[data-ouvre]{cursor:pointer}
+table.tdb-t tr[data-ouvre]:hover td{background:var(--accent-bg);color:var(--accent)}
+table.tdb-t td.n,table.tdb-t th.n{text-align:right;font-variant-numeric:tabular-nums}
+table.tdb-t td.ref{color:var(--accent);font-weight:600}
+table.tdb-t td.fort{color:var(--text);font-weight:500}
+table.tdb-t td.coupe{max-width:170px;overflow:hidden;text-overflow:ellipsis}
+
+.tdb-etiq{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;white-space:nowrap;background:var(--border);color:var(--text2)}
+.tdb-etiq.ok{background:rgba(52,211,153,.14);color:var(--ok)}
+.tdb-etiq.warn{background:rgba(251,191,36,.15);color:var(--warn)}
+.tdb-etiq.dg{background:rgba(248,113,113,.15);color:var(--danger)}
+.tdb-etiq i{width:5px;height:5px;border-radius:50%;background:currentColor;display:block}
+
+/* Contrôles MySifa : chaque ligne est un compteur ET la porte de l'écran qui
+   le corrige. Les deux viennent de la même route — ils ne peuvent pas mentir
+   l'un sur l'autre. */
+.tdb-ctrl{display:flex;align-items:center;gap:11px;width:100%;text-align:left;padding:10px 13px;background:none;border:none;border-bottom:1px solid var(--border);color:var(--text2);font:inherit;cursor:pointer;transition:background .12s}
+.tdb-ctrl:last-child{border-bottom:none}
+.tdb-ctrl:hover{background:var(--accent-bg)}
+.tdb-ctrl .tt{min-width:0;flex:1}
+.tdb-ctrl b{display:block;font-size:12px;font-weight:600;color:var(--text)}
+.tdb-ctrl:hover b{color:var(--accent)}
+.tdb-ctrl em{display:block;font-style:normal;font-size:10.5px;color:var(--muted);line-height:1.4;margin-top:2px;white-space:normal}
+.tdb-ctrl .n{flex-shrink:0;font-size:17px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--text);min-width:34px;text-align:right}
+.tdb-ctrl .n.ok{color:var(--ok)}
+.tdb-ctrl .n.warn{color:var(--warn)}
+.tdb-ctrl .n.dg{color:var(--danger)}
+.tdb-ctrl .n.vide{color:var(--muted);font-size:14px;font-weight:600}
+.tdb-ctrl .ext{flex-shrink:0;opacity:.5}
+.tdb-ctrl:hover .ext{opacity:1;color:var(--accent)}
+
+/* ── Infobulle ────────────────────────────────────────────────────────────
+   L'infobulle native du navigateur arrive avec une seconde de retard, se
+   place où elle veut et ignore le thème : sur un graphique elle recouvrait
+   les barres qu'elle prétendait expliquer. Celle-ci suit le curseur, se
+   retourne au bord de l'écran, et ne capte jamais la souris. */
+.tdb-tip{position:fixed;z-index:200;pointer-events:none;opacity:0;transform:translateY(3px);
+  transition:opacity .12s ease,transform .12s ease;background:var(--card);
+  border:1px solid var(--border);border-radius:10px;padding:9px 11px;
+  box-shadow:0 12px 34px rgba(0,0,0,.34);font-size:11.5px;color:var(--text2);
+  max-width:280px;line-height:1.55;white-space:normal}
+body.light .tdb-tip{box-shadow:0 12px 34px rgba(15,23,42,.16)}
+.tdb-tip.on{opacity:1;transform:none}
+.tdb-tip b{display:block;color:var(--text);font-size:12px;font-weight:700;margin-bottom:5px}
+.tdb-tip .l{display:flex;align-items:center;gap:14px;justify-content:space-between;margin-top:3px}
+.tdb-tip .l>span{display:inline-flex;align-items:center;gap:7px;min-width:0}
+.tdb-tip .l i{width:9px;height:9px;border-radius:2px;display:block;flex-shrink:0}
+.tdb-tip .l em{font-style:normal;color:var(--text);font-weight:600;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+[data-tip-titre],[data-tip-texte]{cursor:default}
+
+/* Graphiques : deux séries, une seule échelle. Jamais deux axes. */
+.tdb-graph{padding:13px}
+.tdb-leg{display:flex;flex-wrap:wrap;gap:7px 17px;padding-bottom:11px;font-size:11px;color:var(--text2)}
+.tdb-leg span{display:inline-flex;align-items:center;gap:6px}
+.tdb-leg i{width:10px;height:10px;border-radius:2px;display:block}
+.tdb-barres{display:flex;align-items:flex-end;gap:8px;height:130px;padding-bottom:5px;border-bottom:1px solid var(--border)}
+.tdb-barres .grp{flex:1;display:flex;align-items:flex-end;justify-content:center;gap:2px;height:100%;position:relative;min-width:0}
+.tdb-barres .grp i{display:block;width:46%;border-radius:3px 3px 0 0;min-height:2px;transition:filter .12s}
+.tdb-barres .grp:hover i{filter:brightness(1.18)}
+.tdb-barres .grp::after{content:'';position:absolute;inset:0;border-radius:4px;
+  background:var(--accent-bg);opacity:0;transition:opacity .12s;pointer-events:none}
+.tdb-barres .grp:hover::after{opacity:1}
+.tdb-barres .grp i.a{background:var(--serie2)}
+.tdb-barres .grp i.b{background:var(--accent)}
+.tdb-axe{display:flex;gap:8px;padding-top:6px}
+.tdb-axe span{flex:1;text-align:center;font-size:9.5px;color:var(--muted);overflow:hidden}
+.tdb-jours{display:flex;align-items:flex-end;gap:2px;height:64px;border-bottom:1px solid var(--border);padding:0 13px 4px}
+.tdb-jours i{flex:1;display:block;border-radius:2px 2px 0 0;background:var(--accent);opacity:.55;min-height:2px;transition:opacity .12s}
+.tdb-jours i:hover{opacity:1}
+.tdb-jours i.dernier{opacity:1;background:var(--serie2)}
+.tdb-jours-pied{display:flex;justify-content:space-between;padding:6px 13px 0;font-size:10px;color:var(--muted)}
+
+.tdb-hb{display:flex;flex-direction:column;gap:10px;padding:12px 13px 14px}
+.tdb-hb .l{display:grid;grid-template-columns:1fr auto;gap:3px 10px;align-items:center}
+.tdb-hb .nom{font-size:11.5px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tdb-hb .val{font-size:11.5px;color:var(--text);font-variant-numeric:tabular-nums}
+.tdb-hb .piste{grid-column:1/-1;height:7px;border-radius:4px;background:var(--border);overflow:hidden}
+.tdb-hb .piste i{display:block;height:100%;border-radius:4px;background:var(--accent);min-width:2px;transition:filter .12s}
+.tdb-hb .l:hover .piste i{filter:brightness(1.18)}
+.tdb-hb .l[data-tip-titre]{cursor:default}
+
 </style>
 </head>
 <body class="has-topbar">
@@ -496,10 +713,13 @@ body.sb-open .sidebar-overlay{display:block}
         </div>
       </div>
     </div>
-    <button type="button" class="nav-btn" id="nav-menu" onclick="allerAuMenu()">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      Menu
-    </button>
+    <div class="nav-tete">
+      <button type="button" class="nav-btn" id="nav-menu" onclick="allerAuMenu()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Menu
+      </button>
+      <div class="nav-tdb" id="nav-tdb"></div>
+    </div>
     <div id="nav-ecrans"></div>
 
     <div class="sidebar-bottom">
@@ -545,13 +765,18 @@ body.sb-open .sidebar-overlay{display:block}
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         Menu
       </button>
-      <span class="head-mark rvgi-mark">
-        <img class="rvgi-sombre" src="/static/rvgi_mark_clair.png?v=3" alt="RVGI">
-        <img class="rvgi-clair" src="/static/rvgi_mark.png?v=3" alt="RVGI">
-      </span>
-      <div>
+      <div class="mk-svc" id="mk-svc">
+        <button type="button" class="head-mark rvgi-mark mk-btn" id="mk-btn"
+                aria-haspopup="true" aria-expanded="false"
+                title="Les écrans de mon service" aria-label="Les écrans de mon service">
+          <img class="rvgi-sombre" src="/static/rvgi_mark_clair.png?v=3" alt="RVGI">
+          <img class="rvgi-clair" src="/static/rvgi_mark.png?v=3" alt="RVGI">
+          <span class="mk-chev" aria-hidden="true">&#9662;</span>
+        </button>
+        <div class="mk-pop" id="mk-pop" role="menu"></div>
+      </div>
+      <div class="tt">
         <div class="head-titre-ligne"><h1 id="titre">ERP</h1><span id="guide-btn-slot"></span></div>
-        <div class="sous" id="sous">Lecture du miroir de RVGI.</div>
       </div>
       <div class="rg">
         <svg class="rg-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
@@ -602,6 +827,7 @@ const S = {
   sens: 'asc',
   q: '',
   filtres: {},
+  filtresCol: {},    // filtres d'en-tête : {colonne: "operateur:valeur"}
   selection: null,
   epingles: [],       // colonnes figées à gauche, dans l'ordre d'épinglage
   colDrag: null,      // colonne en cours de déplacement
@@ -708,7 +934,24 @@ function celluleRatt(v){
 // confort d'affichage, pas une donnée : il n'a pas à voyager jusqu'au serveur,
 // et il ne suit pas l'utilisateur d'un poste à l'autre — dit une fois ici pour
 // que ce ne soit pas une surprise.
-function cleLayout(){return 'mysifa_erp_cols_'+(S.ecran||'');}
+function cleLayout(){
+  return 'mysifa_erp_cols_'+(S.ecran||'')+(S.vue==='piece'?'__piece':'');
+}
+// Le hash d'un écran avec son état : c'est l'adresse de ce qu'on regarde.
+function hashEcran(cle,params){
+  const p=[];
+  Object.keys(params||{}).forEach(k=>{
+    const v=params[k];
+    if(v==null||v==='')return;
+    p.push(encodeURIComponent(k)+'='+encodeURIComponent(v));
+  });
+  return '#/'+cle+(p.length?('?'+p.join('&')):'');
+}
+// « Commandes » → « Commande ». Le bouton nomme la pièce, pas la table.
+function vueLabelPiece(def){
+  const l=(def&&def.piece_label)||'';
+  return l?l.replace(/^(La|Le|L')\s*/i,'').replace(/^./,c=>c.toUpperCase()):'Pièce';
+}
 function layoutCharger(){
   try{const b=localStorage.getItem(cleLayout());if(b)return JSON.parse(b)||{};}catch(e){}
   return {ordre:[],epingles:[]};
@@ -977,6 +1220,7 @@ function ecransDuDomaine(cle){
 }
 
 function renderNav(){
+  renderNavTdb();
   const hote=document.getElementById('nav-ecrans');
   if(!S.meta||!S.meta.present){hote.innerHTML='';return;}
   let h='<div class="nav-colonnes">';
@@ -998,6 +1242,28 @@ function renderNav(){
   if(nm)nm.classList.toggle('active',!S.ecran);
 }
 
+// Les tableaux de bord, à droite de « Menu ». Même liste que le menu de
+// service de la marque RVGI — `meta.menu.tdb`, servie selon le service de
+// l'utilisateur — donc rien à tenir à jour de ce côté : un tableau de bord
+// ajouté au serveur apparaît ici tout seul. Rendu séparément du reste du
+// tiroir pour rester debout même quand le miroir est absent : c'est
+// justement le moment où l'on veut pouvoir aller ailleurs.
+function renderNavTdb(){
+  const hote=document.getElementById('nav-tdb');
+  if(!hote)return;
+  const tdbs=(S.meta&&S.meta.menu&&S.meta.menu.tdb)||[];
+  if(!tdbs.length){hote.innerHTML='';hote.style.display='none';return;}
+  hote.style.display='';
+  hote.innerHTML=tdbs.map(t=>
+    '<button type="button" class="nav-tdb-btn'+(S.ecran===t.cle?' active':'')+'" '+
+    'data-tdb="'+esc(t.cle)+'">'+ICO_TDB+esc(t.label)+'</button>').join('');
+  hote.querySelectorAll('[data-tdb]').forEach(b=>{
+    // `ouvrirTdb` referme le tiroir et rappelle `renderNav` : on ne fait que
+    // poser le hash, comme les boutons d'écran juste au-dessus.
+    b.addEventListener('click',()=>{location.hash='#/'+b.getAttribute('data-tdb');});
+  });
+}
+
 function renderFraicheur(){
   const hote=document.getElementById('head-droite');
   if(!S.meta){hote.innerHTML='';return;}
@@ -1011,21 +1277,30 @@ function renderFraicheur(){
 
 // ── Vue menu ─────────────────────────────────────────────────────
 function ouvrirMenu(){
+  tdbTipCacher();
   fermerSidebar();   // on a choisi sa destination : le tiroir n'a plus lieu d'etre
   S.ecran=null;S.def=null;S.selection=null;S.colonnes=[];
   document.getElementById('titre').textContent='ERP';
-  document.getElementById('sous').textContent=
-    (S.meta&&S.meta.present)
-      ? 'Lecture de l\'ERP RVGI.'
-      : 'Le miroir de l\'ERP n\'a pas encore été construit.';
   const ms=document.getElementById('mobile-sub');if(ms)ms.textContent='Menu';
-  renderNav();
+  renderNav();renderMenuService();
   const corps=document.getElementById('corps');
   if(!S.meta||!S.meta.present){
     corps.innerHTML='<div class="vide-msg">'+esc((S.meta&&S.meta.message)||'Miroir indisponible.')+'</div>';
     return;
   }
-  let h='<div class="menu-wrap"><div class="colonnes">';
+  let h='<div class="menu-wrap">';
+  const tdb=((S.meta&&S.meta.menu)||{}).tdb||[];
+  if(tdb.length){
+    h+='<div class="colonnes" style="margin-bottom:4px"><div class="colonne parametres">'+
+       '<div class="domaine-titre">Tableaux de bord</div><div class="cartes">';
+    tdb.forEach(t=>{
+      h+='<div class="carte" data-ecran="'+esc(t.cle)+'" title="'+esc(t.resume||'')+'">'+
+         '<span class="carte-ico">'+ICO_TDB.replace(' class="mk-ico"','')+'</span>'+
+         '<span class="carte-titre">'+esc(t.label)+'</span></div>';
+    });
+    h+='</div></div></div>';
+  }
+  h+='<div class="colonnes">';
   domainesOrdonnes().forEach(d=>{
     const ecrans=ecransDuDomaine(d.cle);
     if(!ecrans.length)return;
@@ -1046,10 +1321,13 @@ function ouvrirMenu(){
 }
 
 // ── Vue écran : rail + grille ────────────────────────────────────
-function ouvrirEcran(cle){
+function ouvrirEcran(cle,prefiltres){
+  tdbTipCacher();
   const def=((S.meta&&S.meta.ecrans)||[]).find(e=>e.cle===cle);
   if(!def){toast('Écran inconnu.','err');ouvrirMenu();return;}
-  S.ecran=cle;S.def=def;S.page=1;S.tri=null;S.sens='asc';S.q='';S.filtres={};S.selection=null;S.colonnes=[];S.epingles=[];
+  S.ecran=cle;S.def=def;S.page=1;S.tri=null;S.sens='asc';S.q='';S.filtres={};S.filtresCol={};S.selection=null;S.colonnes=[];S.epingles=[];
+  S.vue='ligne';
+  fpopFermer();
   // Un contexte de pièce liée n'est valable que pour l'écran qu'il vise, et
   // pour une seule ouverture : on le consomme ici.
   S.contexte=(S.ctxAttente&&S.ctxAttente.cible===cle)?S.ctxAttente:null;
@@ -1063,25 +1341,44 @@ function ouvrirEcran(cle){
       if(f.defaut!=null&&f.defaut!=='')S.filtres[f.nom]=String(f.defaut);
     });
   }
+  // Les filtres venus du hash passent APRÈS les défauts du catalogue : une
+  // tuile qui vise « position = toutes » doit pouvoir effacer le défaut
+  // « En cours », pas s'y ajouter. `q` et `ratt` ne sont pas des filtres de
+  // colonne, ils ont leur propre état.
+  if(prefiltres){
+    Object.keys(prefiltres).forEach(k=>{
+      const v=prefiltres[k];
+      if(k==='q'){S.q=String(v||'');}
+      else if(k==='vue'){S.vue=(String(v||'')==='piece'&&def.groupable)?'piece':'ligne';}
+      else if(k==='ratt'){S.ratt=String(v||'');}
+      else{S.filtres[k]=String(v==null?'':v);}
+    });
+  }
   document.getElementById('titre').textContent=def.label;
-  document.getElementById('sous').textContent=def.resume||'';
   const ms=document.getElementById('mobile-sub');if(ms)ms.textContent=def.label;
-  renderNav();
+  renderNav();renderMenuService();
 
   // Rail construit UNE fois par écran. Les rafraîchissements de liste ne le
   // touchent pas : le champ de recherche garde son focus et son curseur.
-  let rail='<div class="rail"><div class="rail-titre">Recherche</div>'+
-    '<div class="champ"><input type="text" id="q" placeholder="Rechercher..." autocomplete="off"></div>';
-  if(def.rattachable){
+  let rail='<div class="rail">';
+  if(def.groupable){
+    rail+='<div class="rail-titre">Lire par</div>'+
+      '<div class="maille" role="group" aria-label="Maille de lecture">'+
+        '<button type="button" data-vue="ligne"'+(S.vue!=='piece'?' class="on"':'')+'>Ligne</button>'+
+        '<button type="button" data-vue="piece"'+(S.vue==='piece'?' class="on"':'')+'>'+
+          esc(vueLabelPiece(def))+'</button>'+
+      '</div>';
+  }
+  rail+='<div class="rail-titre">Recherche</div>'+
+    '<div class="champ"><input type="text" id="q" placeholder="Rechercher..." autocomplete="off" value="'+esc(S.q||'')+'"></div>';
+  if(def.rattachable&&S.vue!=='piece'){
     rail+='<div class="rail-titre">Rattachement MySifa</div>'+
       '<div class="champ"><label for="f-ratt">'+
       (cle==='livraisons'?'Départ MyExpé':'Dossier de fabrication')+'</label>'+
       '<select id="f-ratt">'+
-        '<option value="">Tous</option>'+
-        '<option value="non">Non rattaché</option>'+
-        '<option value="partiel">Partiellement</option>'+
-        '<option value="oui">Rattaché</option>'+
-        '<option value="douteux">À vérifier</option>'+
+        ['','non','partiel','oui','douteux'].map((v,i)=>
+          '<option value="'+v+'"'+((S.ratt||'')===v?' selected':'')+'>'+
+          ['Tous','Non rattaché','Partiellement','Rattaché','À vérifier'][i]+'</option>').join('')+
       '</select></div>';
   }
   if((def.filtres||[]).length){
@@ -1092,6 +1389,11 @@ function ouvrirEcran(cle){
       const val=S.filtres[f.nom]!=null?String(S.filtres[f.nom]):'';
       if(f.type==='enum'&&S.meta.enums&&S.meta.enums[f.enum]){
         let o='<option value=""'+(val===''?' selected':'')+'>Tous</option>';
+        // Choix composés déclarés au catalogue — « Non soldée » vaut 0 ou 1.
+        // Ils passent AVANT les codes bruts : c'est par eux que l'écran s'ouvre.
+        (f.choix||[]).forEach(ch=>{
+          o+='<option value="'+esc(ch.v)+'"'+(val===String(ch.v)?' selected':'')+'>'+esc(ch.label)+'</option>';
+        });
         Object.keys(S.meta.enums[f.enum]).forEach(k=>{
           o+='<option value="'+esc(k)+'"'+(val===String(k)?' selected':'')+'>'+esc(S.meta.enums[f.enum][k])+'</option>';
         });
@@ -1107,8 +1409,10 @@ function ouvrirEcran(cle){
   }
   rail+='<button type="button" class="btn" id="btn-reset" style="width:100%">Réinitialiser les filtres</button>'+
     '<button type="button" class="btn" id="btn-reset-cols" style="width:100%;margin-top:6px">Réinitialiser les colonnes</button>'+
-    '<div class="rail-info">Glisser une en-tête pour déplacer sa colonne, le cadenas pour la figer à gauche. '+
-    'Tirer la grille à la souris pour la faire défiler.</div></div>';
+    '<div class="rail-info">Glisser une en-tête pour déplacer sa colonne, le cadenas pour la figer à gauche, '+
+    'l\'entonnoir pour filtrer dessus (contient, supérieur à, entre…). '+
+    'Tirer la grille à la souris pour la faire défiler. '+
+    'Le bouton « Exporter en Excel », en bas, rend la vue telle qu\'elle est affichée.</div></div>';
 
   document.getElementById('corps').innerHTML='<div class="ecran">'+rail+
     '<div class="grille-zone">'+
@@ -1116,6 +1420,20 @@ function ouvrirEcran(cle){
       '<div class="grille-scroll"><table class="grille"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>'+
       '<div class="pied" id="pied"></div></div></div>';
   renderBandeau();
+
+  document.querySelectorAll('.maille [data-vue]').forEach(bt=>{
+    bt.addEventListener('click',()=>{
+      const v=bt.getAttribute('data-vue');
+      if(v===S.vue)return;
+      // Changer de maille change les colonnes : le tri et la page n'ont plus
+      // de sens, on repart du début. Les filtres, eux, restent — c'est tout
+      // l'intérêt du bouton.
+      // Passer par le hash plutôt que par un appel direct : la maille
+      // devient partageable et survit à un rechargement, comme les filtres.
+      location.hash=hashEcran(S.ecran,Object.assign({},S.filtres,
+        {vue:v,q:S.q,ratt:(v==='piece'?'':S.ratt)}));
+    });
+  });
 
   const q=document.getElementById('q');
   let minuteur=null;
@@ -1138,7 +1456,7 @@ function ouvrirEcran(cle){
     });
   });
   document.getElementById('btn-reset').addEventListener('click',()=>{
-    S.q='';S.filtres={};S.page=1;S.ratt='';
+    S.q='';S.filtres={};S.filtresCol={};S.page=1;S.ratt='';fpopFermer();
     const r=document.getElementById('f-ratt');if(r)r.value='';
     (def.filtres||[]).forEach(f=>{
       if(f.defaut!=null&&f.defaut!=='')S.filtres[f.nom]=String(f.defaut);
@@ -1165,6 +1483,218 @@ const ICO_POIGNEE='<svg class="th-poignee" width="10" height="14" viewBox="0 0 1
 const ICO_CADENAS_OUVERT='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>';
 const ICO_CADENAS_FERME='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
 
+// ── Filtres d'en-tête ────────────────────────────────────────────
+// Le rail de gauche pose les filtres métier de l'écran ; ceci pose une
+// condition libre sur n'importe quelle colonne affichée, avec l'opérateur
+// qu'on veut — contient, ne contient pas, supérieur à, entre, est vide…
+// Les deux se combinent en ET.
+//
+// Aucun opérateur n'est écrit ici : la table vient de `/api/erp/meta`, donc du
+// serveur, qui est aussi celui qui les traduit en SQL. Une liste recopiée des
+// deux côtés finit toujours par proposer un opérateur que le serveur refuse.
+const ICO_ENTONNOIR='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18l-7 8.2V21l-4-2.4v-6.4z"/></svg>';
+const ICO_XLS='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M4 20h16"/></svg>';
+
+function tableFiltres(){return (S.meta&&S.meta.filtres_colonne)||{familles:{},operateurs:{}};}
+function familleCol(c){const t=(c&&c.type)||'texte';return tableFiltres().familles[t]||'texte';}
+function opsCol(c){const o=tableFiltres().operateurs||{};return o[familleCol(c)]||o.texte||[];}
+function defOp(c,op){return opsCol(c).find(x=>x.cle===op)||null;}
+
+// « contient:LIDL » → {op:'contient', vals:['LIDL']}. On coupe au PREMIER
+// deux-points : une valeur peut en contenir, l'opérateur jamais.
+function lireFiltreCol(expr){
+  if(!expr)return{op:null,vals:[]};
+  const s=String(expr),i=s.indexOf(':');
+  if(i<0)return{op:s,vals:[]};
+  const reste=s.slice(i+1);
+  return {op:s.slice(0,i),vals:reste===''?[]:reste.split('|')};
+}
+function nbFiltresCol(){return Object.keys(S.filtresCol||{}).length;}
+
+// Ce que dit un filtre posé, en une ligne : sert d'infobulle sur l'entonnoir
+// allumé, pour lire la condition sans rouvrir le panneau.
+function resumeFiltreCol(col){
+  const f=lireFiltreCol(S.filtresCol[col.nom]);
+  const d=defOp(col,f.op);
+  if(!d)return '';
+  let vals=f.vals.slice();
+  if(familleCol(col)==='enum')vals=vals.map(v=>libelleEnum(col.enum,v));
+  else if(familleCol(col)==='date')vals=vals.map(fmtDate);
+  else if(familleCol(col)==='bool')vals=vals.map(v=>String(v)==='1'?'Oui':'Non');
+  return col.label+' : '+d.label+(vals.length?(' '+vals.join(' et ')):'');
+}
+
+let FPOP=null;
+function fpopFermer(){
+  if(FPOP){FPOP.remove();FPOP=null;}
+  const f=document.getElementById('fpop-fond');if(f)f.remove();
+}
+
+function champValeur(col,op,vals,rang){
+  const id='fpop-v'+rang;
+  const v=vals[rang-1]!=null?String(vals[rang-1]):'';
+  const fam=familleCol(col);
+  if(fam==='enum'){
+    const table=(S.meta.enums&&S.meta.enums[col.enum])||{};
+    let o='<option value="">—</option>';
+    Object.keys(table).forEach(k=>{
+      o+='<option value="'+esc(k)+'"'+(v===String(k)?' selected':'')+'>'+esc(table[k])+'</option>';
+    });
+    return '<select id="'+id+'">'+o+'</select>';
+  }
+  if(fam==='bool'){
+    return '<select id="'+id+'">'+
+      '<option value="1"'+(v==='1'?' selected':'')+'>Oui</option>'+
+      '<option value="0"'+(v==='0'?' selected':'')+'>Non</option></select>';
+  }
+  // Sur une date, l'opérateur de motif n'existe pas : le champ est toujours un
+  // calendrier. Sur un nombre, « contient » cherche dans les chiffres écrits,
+  // donc le champ reste du texte.
+  if(fam==='date')return '<input type="date" id="'+id+'" value="'+esc(v)+'">';
+  const ph=(fam==='nombre'&&op!=='contient'&&op!=='commence')?'ex. 1000':'Valeur…';
+  return '<input type="text" id="'+id+'" value="'+esc(v)+'" placeholder="'+ph+'" autocomplete="off" spellcheck="false">';
+}
+
+function fpopCorps(col,op){
+  const d=defOp(col,op)||{valeurs:1};
+  const f=lireFiltreCol(S.filtresCol[col.nom]);
+  const vals=(f.op===op)?f.vals:[];
+  let h='<select id="fpop-op">';
+  opsCol(col).forEach(o=>{
+    h+='<option value="'+esc(o.cle)+'"'+(o.cle===op?' selected':'')+'>'+esc(o.label)+'</option>';
+  });
+  h+='</select>';
+  if(d.valeurs>0){
+    h+='<div class="fp-vals">'+champValeur(col,op,vals,1)+
+       (d.valeurs>1?champValeur(col,op,vals,2):'')+'</div>';
+  }
+  return h;
+}
+
+function fpopOuvrir(nom,th){
+  const col=S.colonnes.find(c=>c.nom===nom);
+  if(!col||!opsCol(col).length)return;
+  const deja=FPOP&&FPOP.getAttribute('data-col')===nom;
+  fpopFermer();
+  if(deja)return;                       // second clic sur le même entonnoir : on referme
+
+  const f=lireFiltreCol(S.filtresCol[nom]);
+  const op=(f.op&&defOp(col,f.op))?f.op:opsCol(col)[0].cle;
+
+  const fond=document.createElement('div');
+  fond.className='fpop-fond';fond.id='fpop-fond';
+  fond.addEventListener('mousedown',fpopFermer);
+  document.body.appendChild(fond);
+
+  const pop=document.createElement('div');
+  pop.className='fpop';pop.setAttribute('data-col',nom);
+  pop.innerHTML='<div class="fp-titre">'+ICO_ENTONNOIR+' '+esc(col.label)+'</div>'+
+    '<div id="fpop-corps">'+fpopCorps(col,op)+'</div>'+
+    '<div class="fp-act">'+
+      '<button type="button" class="btn" id="fpop-clear">Effacer</button>'+
+      '<button type="button" class="btn btn-accent" id="fpop-ok">Filtrer</button>'+
+    '</div>'+
+    '<div class="fp-aide">Se combine avec les filtres de gauche et avec les autres colonnes.</div>';
+  document.body.appendChild(pop);
+  FPOP=pop;
+
+  // Le panneau se cale sous l'en-tête, et rentre dans la fenêtre : ouvert sur
+  // la dernière colonne à droite, il déborderait sinon.
+  const r=th.getBoundingClientRect();
+  const l=Math.max(8,Math.min(r.left,window.innerWidth-pop.offsetWidth-8));
+  const t=Math.min(r.bottom+4,window.innerHeight-pop.offsetHeight-8);
+  pop.style.left=l+'px';pop.style.top=Math.max(8,t)+'px';
+
+  fpopBrancher(col);
+  const v1=document.getElementById('fpop-v1');
+  if(v1)v1.focus();else document.getElementById('fpop-op').focus();
+  document.getElementById('fpop-ok').addEventListener('click',()=>fpopAppliquer(col));
+  document.getElementById('fpop-clear').addEventListener('click',()=>{
+    delete S.filtresCol[nom];fpopFermer();S.page=1;charger();
+  });
+}
+
+// Le `<select>` est remplacé à chaque changement d'opérateur : les écouteurs
+// se reposent après coup, sinon la seconde bascule ne ferait plus rien.
+function fpopBrancher(col){
+  const sel=document.getElementById('fpop-op');
+  if(sel&&!sel._branche){
+    sel._branche=true;
+    sel.addEventListener('change',()=>{
+      const corps=document.getElementById('fpop-corps');
+      corps.innerHTML=fpopCorps(col,sel.value);
+      fpopBrancher(col);
+      const v=document.getElementById('fpop-v1');if(v)v.focus();
+    });
+  }
+  ['fpop-v1','fpop-v2'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.addEventListener('keydown',ev=>{
+      if(ev.key==='Enter'){ev.preventDefault();fpopAppliquer(col);}
+    });
+  });
+}
+
+function fpopAppliquer(col){
+  const sel=document.getElementById('fpop-op');
+  if(!sel)return;
+  const op=sel.value,d=defOp(col,op)||{valeurs:1};
+  const lu=[];
+  for(let i=1;i<=d.valeurs;i++){
+    const el=document.getElementById('fpop-v'+i);
+    const v=el?String(el.value||'').trim():'';
+    if(!v){toast(d.valeurs>1?'Renseigner les deux bornes.':'Renseigner une valeur.','err');
+           if(el)el.focus();return;}
+    lu.push(v);
+  }
+  S.filtresCol[col.nom]=op+':'+lu.join('|');
+  fpopFermer();S.page=1;charger();
+}
+
+function effacerFiltresColonnes(){
+  S.filtresCol={};fpopFermer();S.page=1;charger();
+}
+
+// Un panneau ancré sur une en-tête n'a plus de sens dès que la grille bouge.
+window.addEventListener('resize',fpopFermer);
+document.addEventListener('keydown',ev=>{if(ev.key==='Escape'&&FPOP)fpopFermer();},true);
+
+// ── Export xlsx ──────────────────────────────────────────────────
+// Ce qu'on exporte est ce qu'on voit : mêmes filtres, même tri, mêmes colonnes
+// dans l'ordre où l'utilisateur les a rangées. La pagination, elle, ne suit
+// pas — un export d'une page sur trois cent quarante n'intéresse personne.
+async function exporterVue(){
+  const b=document.getElementById('btn-export');
+  if(b){b.disabled=true;b.innerHTML=ICO_XLS+' Export…';}
+  try{
+    const p=new URLSearchParams(urlListe().split('?')[1]||'');
+    p.delete('page');p.delete('taille');
+    p.set('cols',S.colonnes.map(c=>c.nom).join(','));
+    const r=await fetch('/api/erp/'+encodeURIComponent(S.ecran)+'/export?'+p.toString(),
+                        {credentials:'include'});
+    if(!r.ok){
+      let m='Export impossible.';
+      try{const j=await r.json();m=j.detail||m;}catch(e){}
+      throw new Error(m);
+    }
+    const n=Number(r.headers.get('X-Erp-Lignes')||0);
+    const tronque=r.headers.get('X-Erp-Tronque')==='1';
+    const cd=r.headers.get('Content-Disposition')||'';
+    const m=cd.match(/filename="([^"]+)"/);
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download=m?m[1]:('myerp_'+S.ecran+'.xlsx');
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),8000);
+    toast(tronque
+      ? ('Export arrêté à '+fmtNb(n,0)+' lignes : resserrer le filtre pour tout avoir.')
+      : (fmtNb(n,0)+' ligne'+(n>1?'s':'')+' exportée'+(n>1?'s':'')+'.'),
+      tronque?'err':null);
+  }catch(e){toast(e.message,'err');}
+  finally{renderPied();}
+}
+
 function renderTete(){
   const t=document.getElementById('thead');
   if(!t)return;
@@ -1173,9 +1703,16 @@ function renderTete(){
     const actif=S.tri===c.nom;
     const fl=actif?('<span class="fleche">'+(S.sens==='desc'?'▾':'▴')+'</span>'):'';
     const ep=S.epingles.indexOf(c.nom)>=0;
-    h+='<th data-col="'+esc(c.nom)+'" draggable="true" style="'+(c.largeur?('min-width:'+c.largeur+'px'):'')+'">'+
+    // L'entonnoir n'a de sens que sur une colonne de RVGI : la colonne de
+    // rattachement est du MySifa, elle a son propre filtre dans le rail.
+    const filtrable=opsCol(c).length>0&&(c.type||'')!=='ratt';
+    const posee=filtrable&&!!S.filtresCol[c.nom];
+    const infob=posee?resumeFiltreCol(c):'Filtrer sur cette colonne';
+    h+='<th data-col="'+esc(c.nom)+'" draggable="true" class="'+(posee?'filtree':'')+'" style="'+(c.largeur?('min-width:'+c.largeur+'px'):'')+'">'+
          '<span class="th-boite">'+ICO_POIGNEE+
            '<span class="th-libelle">'+esc(c.label)+fl+'</span>'+
+           (filtrable?('<button type="button" class="th-filtre'+(posee?' on':'')+'" data-filtrecol="'+esc(c.nom)+'" '+
+             'title="'+esc(infob)+'" aria-label="'+esc(infob)+'">'+ICO_ENTONNOIR+'</button>'):'')+
            '<button type="button" class="th-cadenas'+(ep?' on':'')+'" data-epingle="'+esc(c.nom)+'" '+
              'title="'+(ep?'Libérer la colonne':'Figer la colonne à gauche')+'" '+
              'aria-label="'+(ep?'Libérer la colonne':'Figer la colonne à gauche')+'">'+
@@ -1189,11 +1726,17 @@ function renderTete(){
   t.querySelectorAll('[data-epingle]').forEach(b=>{
     b.addEventListener('click',ev=>{ev.stopPropagation();basculerEpingle(b.getAttribute('data-epingle'));});
   });
+  t.querySelectorAll('[data-filtrecol]').forEach(b=>{
+    b.addEventListener('click',ev=>{
+      ev.stopPropagation();
+      fpopOuvrir(b.getAttribute('data-filtrecol'),b.closest('th'));
+    });
+  });
 
   t.querySelectorAll('[data-col]').forEach(th=>{
     const nom=th.getAttribute('data-col');
     th.addEventListener('click',ev=>{
-      if(ev.target.closest('.th-cadenas'))return;
+      if(ev.target.closest('.th-cadenas')||ev.target.closest('.th-filtre'))return;
       if(S.tri===nom){S.sens=(S.sens==='asc')?'desc':'asc';}else{S.tri=nom;S.sens='asc';}
       S.page=1;charger();
     });
@@ -1226,7 +1769,13 @@ function urlListe(){
   p.set('page',String(S.page));
   p.set('taille',String(S.taille));
   Object.keys(S.filtres).forEach(k=>{if(S.filtres[k])p.set('f_'+k,S.filtres[k]);});
-  if(S.ratt)p.set('ratt',S.ratt);
+  // Les filtres d'en-tête voyagent en `c_<colonne>` : le serveur résout le nom
+  // contre les colonnes de l'écran, jamais contre la table. Ils valent pour
+  // les deux vues — regrouper par pièce ne doit pas silencieusement rendre un
+  // filtre de colonne inopérant.
+  Object.keys(S.filtresCol).forEach(k=>{if(S.filtresCol[k])p.set('c_'+k,S.filtresCol[k]);});
+  if(S.ratt&&S.vue!=='piece')p.set('ratt',S.ratt);
+  if(S.vue==='piece')p.set('vue','piece');
   // Ouverture depuis une pièce liée : on transmet l'origine, jamais un nom de
   // colonne — c'est le serveur qui reconstruit la jointure depuis le catalogue.
   if(S.contexte){
@@ -1278,7 +1827,7 @@ async function charger(){
   // MySifa a accroché à cette ligne. Elle s'ajoute ici, et se déplace ou se
   // fige comme les autres.
   let cols=r.colonnes;
-  if(S.def&&S.def.rattachable){
+  if(S.def&&S.def.rattachable&&S.vue!=='piece'){
     cols=cols.concat([{nom:'_ratt',label:(S.ecran==='livraisons'?'Départ MyExpé':'Dossier de fab'),
                        type:'ratt',largeur:150}]);
   }
@@ -1320,7 +1869,13 @@ function renderPied(){
   const debut=S.total?((S.page-1)*S.taille+1):0;
   const fin=Math.min(S.page*S.taille,S.total);
   const pages=Math.max(1,Math.ceil(S.total/S.taille));
+  const nfc=nbFiltresCol();
   p.innerHTML='<span class="compte">'+fmtNb(debut,0)+'–'+fmtNb(fin,0)+' sur '+fmtNb(S.total,0)+'</span>'+
+    '<button type="button" class="btn btn-xls" id="btn-export"'+(S.total?'':' disabled')+
+      ' title="Télécharger cette vue — mêmes filtres, même tri, mêmes colonnes">'+
+      ICO_XLS+' Exporter en Excel</button>'+
+    (nfc?('<span class="pied-fc">'+nfc+' filtre'+(nfc>1?'s':'')+' de colonne'+
+          '<button type="button" class="x" id="fc-x">effacer</button></span>'):'')+
     '<span class="pager">'+
       '<button type="button" class="btn" id="prec"'+(S.page<=1?' disabled':'')+'>Précédent</button>'+
       '<span>page '+fmtNb(S.page,0)+' / '+fmtNb(pages,0)+'</span>'+
@@ -1328,6 +1883,10 @@ function renderPied(){
   const a=document.getElementById('prec'),b=document.getElementById('suiv');
   if(a)a.addEventListener('click',()=>{if(S.page>1){S.page--;charger();}});
   if(b)b.addEventListener('click',()=>{if(S.page<pages){S.page++;charger();}});
+  const x=document.getElementById('btn-export');
+  if(x)x.addEventListener('click',exporterVue);
+  const fx=document.getElementById('fc-x');
+  if(fx)fx.addEventListener('click',effacerFiltresColonnes);
 }
 
 // ── Détail : modale sectionnée + pièces liées ────────────────────
@@ -1928,10 +2487,803 @@ function allerAuMenu(){
   else{ouvrirMenu();}
 }
 
+
+// ── Menu de service ──────────────────────────────────────────────
+// Servi par /api/erp/meta selon le rôle. Ce n'est pas un droit d'accès —
+// tout le monde ouvre les mêmes 27 écrans par le tiroir — c'est une
+// habitude rangée : deux tableaux de bord, puis les écrans du service.
+const ICO_TDB='<svg class="mk-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="10" rx="1"/><rect x="13" y="3" width="8" height="6" rx="1"/><rect x="13" y="11" width="8" height="10" rx="1"/><rect x="3" y="15" width="8" height="6" rx="1"/></svg>';
+const ICO_EXT='<svg class="ext" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+const ICO_GRILLE='<svg class="mk-ico" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="9" y1="10" x2="9" y2="20"/></svg>';
+
+function fermerMkPop(){
+  const w=document.getElementById('mk-svc');if(!w)return;
+  w.classList.remove('ouvert');
+  const b=document.getElementById('mk-btn');if(b)b.setAttribute('aria-expanded','false');
+  if(b&&document.activeElement===b)b.blur();   // sinon :focus-within le rouvre
+}
+
+function renderMenuService(){
+  const pop=document.getElementById('mk-pop');if(!pop)return;
+  const menu=(S.meta&&S.meta.menu)||{tdb:[],ecrans:[]};
+  const courant=S.ecran||'';
+  let h='';
+  if((menu.tdb||[]).length){
+    h+='<div class="mk-groupe">Tableaux de bord</div>';
+    (menu.tdb||[]).forEach(t=>{
+      h+='<button type="button" role="menuitem" class="mk-item tdb'+(courant===t.cle?' active':'')+'" data-va="#/'+esc(t.cle)+'">'+
+         ICO_TDB+'<span><b>'+esc(t.label)+'</b></span></button>';
+    });
+  }
+  if((menu.ecrans||[]).length){
+    h+='<div class="mk-groupe">Mes écrans RVGI</div>';
+    (menu.ecrans||[]).forEach(e=>{
+      h+='<button type="button" role="menuitem" class="mk-item'+(courant===e.cle?' active':'')+'" data-va="#/'+esc(e.cle)+'">'+
+         (iconeEcran(e.cle)||ICO_GRILLE).replace('<svg','<svg class="mk-ico"')+
+         '<span><b>'+esc(e.label)+'</b></span></button>';
+    });
+  }
+  h+='<div class="mk-sep"></div><button type="button" role="menuitem" class="mk-item" data-va="#/">'+
+     ICO_GRILLE+'<span><b>Tous les écrans</b></span></button>';
+  pop.innerHTML=h;
+  pop.querySelectorAll('[data-va]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const va=b.getAttribute('data-va');
+      fermerMkPop();
+      if(va==='#/')allerAuMenu();else location.hash=va;
+    });
+  });
+}
+
+// ── Tableaux de bord ─────────────────────────────────────────────
+const TDB_DEFS={
+  tdb_adv:{api:'adv',titre:'TDB ADV',
+    sous:'Le fil commande → dossier de production → BL, et ce qui attend une vérification.'},
+  tdb_direction:{api:'direction',titre:'TDB Direction',
+    sous:'Rentré, facturable, facturé — et le rentré de la veille.'}
+};
+function estTdb(cle){return Object.prototype.hasOwnProperty.call(TDB_DEFS,cle);}
+
+// Les contrôles qui vivent dans MySifa, pas dans RVGI. Chaque ligne lit le
+// compteur à la MÊME route que l'écran qu'elle ouvre : le chiffre et la page
+// ne peuvent pas diverger. Un accès refusé n'efface pas la ligne, il le dit.
+const TDB_CONTROLES=[
+  {cle:'pending',titre:'Mappings à valider',
+   quoi:'Un OF que plusieurs commandes peuvent réclamer : personne ne tranche à la place de l\'ADV.',
+   url:'/api/admin/of-link-pending/count',lire:d=>d.count,va:'/prod?page=of#pending',seuil:1},
+  {cle:'sansof',titre:'Dossiers sans OF',
+   quoi:'Un dossier en cours qu\'aucun ordre de fabrication ne couvre.',
+   url:'/api/admin/dossiers-sans-of/count',lire:d=>d.count,va:'/prod?page=of#sansof',seuil:1},
+  {cle:'incoh',titre:'Fiches techniques incohérentes',
+   quoi:'Nombre de fronts en désaccord avec la géométrie : le besoin matière part faux.',
+   url:'/api/stock/besoins-matieres/fiches-incoherentes',lire:d=>d.incoherentes,
+   va:'/stock?tab=besoins-matieres',seuil:1,grave:true},
+  {cle:'orph',titre:'Fiches non reliées',
+   quoi:'Référence illisible, ou produit jamais fabriqué — les deux n\'appellent pas la même action.',
+   url:'/api/produits/fiches-non-reliees?limit=1',lire:d=>d.total,va:'/prod?page=fiches'},
+  {cle:'scans',titre:'Scans d\'OF à rattacher',
+   quoi:'OF scannés que rien ne relie encore à un produit.',
+   url:'/api/produits/documents/a-rattacher',lire:d=>d.total,va:'/prod?page=scans'}
+];
+
+function tdbNav(va){
+  if(!va)return;
+  if(va.charAt(0)==='#'){location.hash=va;return;}
+  // Un écran d'une autre app s'ouvre à côté : l'ADV revient au tableau de
+  // bord sans avoir perdu sa place ni son filtre.
+  window.open(va,'_blank','noopener');
+}
+
+function tdbTuile(o){
+  const inerte=o.va?'':' data-inerte="1"';
+  const val=(o.v==null)?'<span class="v" style="color:var(--muted)">—</span>'
+    :('<span class="v">'+o.v+(o.unite?('<small>'+esc(o.unite)+'</small>'):'')+'</span>');
+  return '<button type="button" class="tdb-tuile '+(o.ton||'')+'"'+inerte+
+    (o.va?(' data-va="'+esc(o.va)+'"'):'')+
+    (o.titre?(' data-tip-texte="'+esc(o.titre)+'"'):'')+'>'+
+    '<span class="k">'+esc(o.k)+'</span>'+val+
+    (o.s?('<span class="s '+(o.sTon||'')+'">'+esc(o.s)+'</span>'):'')+'</button>';
+}
+
+function tdbPan(o){
+  return '<section class="tdb-pan"><div class="tdb-pan-h"><h3>'+esc(o.titre)+'</h3>'+
+    (o.cpt?('<span class="cpt">'+esc(o.cpt)+'</span>'):'')+
+    (o.plus?('<button type="button" class="btn plus" data-va="'+esc(o.plusVa||'')+'">'+esc(o.plus)+' →</button>'):'')+
+    '</div>'+(o.corps||'')+(o.note?('<div class="tdb-note">'+o.note+'</div>'):'')+'</section>';
+}
+
+// Une commande porte plusieurs lignes. Les confondre, c'est annoncer
+// « 845 retards » à une direction qui en comprend 845 clients mécontents.
+// Partout où le chiffre compte, les deux unités sont écrites.
+function tdbLignesCdes(o){
+  if(!o)return null;
+  return fmtNb(o.commandes,0)+'<em>'+esc(o.commandes>1?'commandes':'commande')+'</em>';
+}
+function tdbSousLignes(o){
+  if(!o)return '';
+  return fmtNb(o.lignes,0)+(o.lignes>1?' lignes':' ligne');
+}
+
+function tdbVide(txt){return '<div class="tdb-vide">'+esc(txt)+'</div>';}
+
+// Un montant se lit d'un coup d'œil ou ne se lit pas : au-delà du millier on
+// abrège, et le titre porte la valeur exacte.
+function tdbEurParts(v){
+  // `Number(null)` vaut 0, et `isFinite(0)` est vrai : sans ce garde, une
+  // valeur absente s'affichait « 0 € » — soit exactement le contraire de ce
+  // qu'on veut dire quand le montant n'est pas calculable.
+  if(v==null||v==='')return null;
+  const n=Number(v);
+  if(!isFinite(n))return null;
+  const a=Math.abs(n);
+  if(a>=1e6)return [fmtNb(n/1e6,2),'M€'];
+  // Une décimale tant qu'on est sous 100 k€ : sans elle, quatre tranches de
+  // 1,9 · 1,7 · 4,6 · 6,3 s'affichent 2 · 2 · 5 · 6 et ne font plus le total.
+  if(a>=1000)return [fmtNb(n/1000,a<1e5?1:0),'k€'];
+  return [fmtNb(n,0),'€'];
+}
+function tdbEur(v){
+  const p=tdbEurParts(v);
+  return p?(p[0]+'<small> '+p[1]+'</small>'):null;
+}
+function tdbEurTxt(v){
+  const p=tdbEurParts(v);
+  return p?(p[0]+' '+p[1]):'—';
+}
+function tdbEurExact(v){const n=Number(v);return isFinite(n)?(fmtNb(n,2)+' €'):'—';}
+function tdbJourCourt(iso){
+  const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m?(m[3]+'/'+m[2]):'—';
+}
+function tdbMoisLong(cle){
+  const m=String(cle||'').match(/^(\d{4})-(\d{2})$/);
+  if(!m)return String(cle||'');
+  const noms=['janvier','février','mars','avril','mai','juin','juillet',
+              'août','septembre','octobre','novembre','décembre'];
+  return (noms[Number(m[2])-1]||m[2])+' '+m[1];
+}
+function tdbLibelleJour(iso){
+  const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m)return '';
+  const d=new Date(Number(m[1]),Number(m[2])-1,Number(m[3]));
+  try{return d.toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'});}
+  catch(e){return fmtDate(iso);}
+}
+
+// Infobulle : une seule dans la page, déplacée. Le contenu vient d'attributs
+// de données, jamais de HTML stocké dans un attribut — on ne réinjecte pas du
+// balisage qu'on aurait échappé pour l'occasion.
+const TDB_TIP_SEL='[data-tip-titre],[data-tip-texte]';
+let TDB_TIP=null;
+function tdbTipEl(){
+  if(!TDB_TIP){
+    TDB_TIP=document.createElement('div');
+    TDB_TIP.className='tdb-tip';
+    TDB_TIP.setAttribute('role','tooltip');
+    document.body.appendChild(TDB_TIP);
+    tdbTipVeille();
+  }
+  return TDB_TIP;
+}
+
+// `mouseleave` ne part jamais si l'élément survolé disparaît du DOM sous le
+// curseur — et c'est exactement ce qui arrive quand une tuile du tableau de
+// bord ouvre un écran : la vue est remplacée, l'infobulle reste seule à
+// l'écran, indéboulonnable. Un garde au niveau du document ferme donc dès que
+// le curseur n'est plus sur une cible, quoi qu'il soit arrivé à l'ancienne.
+function tdbTipVeille(){
+  document.addEventListener('mouseover',ev=>{
+    if(!TDB_TIP||!TDB_TIP.classList.contains('on'))return;
+    const t=ev.target;
+    if(!t||!t.closest||!t.closest(TDB_TIP_SEL))tdbTipCacher();
+  },true);
+  // Défilement, changement d'onglet, sortie de la fenêtre : mêmes causes,
+  // même effet — l'infobulle n'a plus de raison d'être affichée.
+  window.addEventListener('scroll',tdbTipCacher,true);
+  window.addEventListener('blur',tdbTipCacher);
+  document.addEventListener('mouseleave',tdbTipCacher);
+}
+function tdbTipContenu(el){
+  const d=el.dataset;
+  if(d.tipTexte)return esc(d.tipTexte);
+  let h='';
+  if(d.tipTitre)h+='<b>'+esc(d.tipTitre)+'</b>';
+  for(let i=1;i<=3;i++){
+    const lab=d['tipL'+i],val=d['tipV'+i];
+    if(!lab&&!val)continue;
+    const c=d['tipC'+i];
+    h+='<div class="l"><span>'+
+       (c?('<i style="background:'+esc(c)+'"></i>'):'')+esc(lab||'')+'</span>'+
+       '<em>'+esc(val||'')+'</em></div>';
+  }
+  return h;
+}
+function tdbTipPlacer(ev){
+  const t=tdbTipEl(),r=t.getBoundingClientRect();
+  let x=ev.clientX+14,y=ev.clientY+16;
+  if(x+r.width>window.innerWidth-8)x=ev.clientX-r.width-14;
+  if(y+r.height>window.innerHeight-8)y=ev.clientY-r.height-16;
+  t.style.left=Math.max(8,x)+'px';
+  t.style.top=Math.max(8,y)+'px';
+}
+function tdbTipCacher(){if(TDB_TIP)TDB_TIP.classList.remove('on');}
+
+function tdbBrancherTip(racine){
+  racine.querySelectorAll('[data-tip-titre],[data-tip-texte]').forEach(el=>{
+    el.addEventListener('mouseenter',ev=>{
+      const t=tdbTipEl();
+      t.innerHTML=tdbTipContenu(el);
+      t.classList.add('on');
+      tdbTipPlacer(ev);
+    });
+    el.addEventListener('mousemove',tdbTipPlacer);
+    el.addEventListener('mouseleave',tdbTipCacher);
+  });
+}
+
+function tdbBrancher(racine){
+  tdbBrancherTip(racine);
+  racine.querySelectorAll('[data-va]').forEach(el=>{
+    el.addEventListener('click',ev=>{ev.stopPropagation();tdbNav(el.getAttribute('data-va'));});
+  });
+  // Une ligne ouvre la modale du miroir, sans quitter le tableau de bord.
+  racine.querySelectorAll('[data-ouvre]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      ouvrirDetailTdb(el.getAttribute('data-ouvre'),el.getAttribute('data-id'));
+    });
+  });
+}
+
+// Ouvrir le détail depuis une vue qui n'a pas de grille : même modale, même
+// fil de pièces liées, sans passer par l'écran.
+function ouvrirDetailTdb(cle,id){
+  if(!cle||id==null||id==='')return;
+  S.pile=[{ecran:cle,id:id}];
+  rendreDetail();
+}
+
+async function ouvrirTdb(cle){
+  tdbTipCacher();
+  const conf=TDB_DEFS[cle];
+  if(!conf){ouvrirMenu();return;}
+  fermerSidebar();
+  S.ecran=cle;S.def=null;S.selection=null;S.colonnes=[];S.filtres={};S.q='';S.ratt='';
+  document.getElementById('titre').textContent=conf.titre;
+  const ms=document.getElementById('mobile-sub');if(ms)ms.textContent=conf.titre;
+  renderNav();renderMenuService();
+  const corps=document.getElementById('corps');
+  corps.innerHTML='<div class="tdb-wrap"><div class="tdb-charge">Chargement du tableau de bord…</div></div>';
+  if(!S.meta||!S.meta.present){
+    corps.innerHTML='<div class="vide-msg">'+esc((S.meta&&S.meta.message)||'Miroir indisponible.')+'</div>';
+    return;
+  }
+  let d;
+  try{d=await api('/api/erp/tdb/'+conf.api);}
+  catch(e){corps.innerHTML='<div class="vide-msg">'+esc(e.message)+'</div>';return;}
+  if(S.ecran!==cle)return;   // l'utilisateur est déjà parti ailleurs
+  const hote=corps.querySelector('.tdb-wrap');
+  if(!hote)return;
+  hote.innerHTML=(cle==='tdb_adv')?htmlTdbAdv(d):htmlTdbDirection(d);
+  tdbBrancher(hote);
+  if(cle==='tdb_adv')chargerControlesMySifa(hote);
+}
+
+function tdbIndispo(d){
+  if(!d.indispo||!d.indispo.length)return '';
+  return '<div class="tdb-alerte"><span>⚠</span><span><b>Certains blocs sont muets.</b> '+
+    esc(d.indispo.join(' · '))+'</span></div>';
+}
+
+// ── ADV ──────────────────────────────────────────────────────────
+function htmlTdbAdv(d){
+  const c=d.carnet||{},aujourdhui=(d.bornes||{}).aujourdhui||'';
+  const dos=d.dossiers||{},hp=d.hors_prod||{},af=d.a_facturer||{};
+  let h=tdbIndispo(d);
+
+  const ret=c.retard||null,dor=c.dormant||null,sem=c.semaine||null,sd=d.sans_dossier||null;
+  h+='<div class="tdb-tuiles">'+
+    tdbTuile({k:'Commandes à traiter',v:tdbLignesCdes(c),
+      s:tdbSousLignes(c)+' non soldées',
+      va:'#/commandes?position=0',titre:d.formules.carnet})+
+    tdbTuile({k:'À expédier sous 7 jours',v:tdbLignesCdes(sem),s:tdbSousLignes(sem),
+      va:'#/commandes?position=0&jusqua='+encodeURIComponent(d.bornes.fin_semaine),
+      titre:d.formules.semaine})+
+    tdbTuile({k:'En retard',v:tdbLignesCdes(ret),ton:(ret&&ret.commandes)?'dg':'ok',
+      s:ret?(ret.commandes?(tdbSousLignes(ret)+' · expédition dépassée'):'rien en retard'):'',
+      sTon:(ret&&ret.commandes)?'dg':'ok',
+      va:'#/commandes?position=0&jusqua='+encodeURIComponent(aujourdhui),titre:d.formules.retard})+
+    tdbTuile({k:'BL à facturer',v:af.bl==null?null:fmtNb(af.bl,0)+'<em>BL</em>',ton:af.bl?'warn':'',
+      s:af.lignes!=null?(fmtNb(af.lignes,0)+' lignes livrées non facturées'):'',
+      sTon:af.bl?'warn':'',va:'#/livraisons',titre:d.formules.a_facturer})+
+    tdbTuile({k:'Sans dossier de prod',v:tdbLignesCdes(sd),ton:'neu',
+      s:sd?(tdbSousLignes(sd)+' en fabrication, à venir ou en cours'):'',
+      va:'#/commandes?position=0&ratt=non',titre:d.formules.sans_dossier})+
+    '</div>';
+
+  // Les lignes dormantes restent exclues du compte « en retard » — sans ça
+  // la tuile remontait des retards de 4 200 jours — mais on ne les affiche
+  // plus : leur nombre relève d'un doute sur le miroir, pas d'une action ADV.
+  // Le filtre du carnet reste accessible par l'écran Commandes.
+
+  // ── En retard : la liste d'action ──
+  let corps;
+  const rt=d.retards||[];
+  if(!rt.length){corps=tdbVide('Rien en retard. Le carnet est tenu.');}
+  else{
+    corps='<table class="tdb-t"><thead><tr><th>Commande</th><th>Client</th><th>Réf.</th>'+
+      '<th>Désignation</th><th class="n">Reste</th><th class="n">Expédition</th>'+
+      '<th>Retard</th></tr></thead><tbody>';
+    rt.forEach(l=>{
+      const j=joursEcoules(l.expedition,aujourdhui);
+      const ton=j>=5?'dg':(j>=2?'warn':'');
+      corps+='<tr data-ouvre="commandes" data-id="'+esc(l.id)+'" title="Ouvrir la commande">'+
+        '<td class="ref">'+esc(fmtId(l.numero))+(l.ligne!=null?(' · '+esc(fmtId(l.ligne))):'')+'</td>'+
+        '<td class="fort coupe">'+esc(l.client||'—')+'</td>'+
+        '<td class="ref">'+esc(l.code1!=null&&l.code2!=null?(fmtId(l.code1)+'/'+fmtId(l.code2)):'—')+'</td>'+
+        '<td class="coupe">'+esc(l.designation||'—')+'</td>'+
+        '<td class="n">'+fmtNb(l.reste,0)+'</td>'+
+        '<td class="n">'+esc(tdbJourCourt(l.expedition))+'</td>'+
+        '<td><span class="tdb-etiq '+ton+'"><i></i>'+esc(j==null?'—':(j+' j'))+'</span></td></tr>';
+    });
+    corps+='</tbody></table>';
+  }
+  const gauche=tdbPan({titre:'En retard de livraison',
+    cpt:ret?(fmtNb(ret.commandes,0)+' commandes · '+fmtNb(ret.lignes,0)+' lignes'):'',
+    plus:'Ouvrir le carnet',plusVa:'#/commandes?position=0&jusqua='+encodeURIComponent(aujourdhui),
+    corps:corps,
+    note:'Les plus récentes d\'abord : une ligne de la semaine dernière se rattrape. '+
+         'Cliquer une ligne ouvre sa modale et ses pièces liées — BL, colisage, facture — '+
+         'sans quitter ce tableau de bord.'});
+
+  // ── Livré, pas encore facturé ──
+  let cf;
+  const items=d.a_facturer_items||[];
+  if(!items.length){cf=tdbVide('Tout ce qui est livré est facturé.');}
+  else{
+    cf='<table class="tdb-t"><thead><tr><th>BL</th><th class="n">Expédié</th><th>Client</th>'+
+       '<th class="n">Lignes</th><th class="n">Reste</th></tr></thead><tbody>';
+    items.forEach(l=>{
+      cf+='<tr data-ouvre="livraisons" data-id="'+esc(l.id)+'" title="Ouvrir le bon de livraison">'+
+        '<td class="ref">'+esc(fmtId(l.bl))+'</td>'+
+        '<td class="n">'+esc(tdbJourCourt(l.expedition))+'</td>'+
+        '<td class="fort coupe">'+esc(l.client||'—')+'</td>'+
+        '<td class="n">'+fmtNb(l.lignes,0)+'</td>'+
+        '<td class="n">'+fmtNb(l.reste,0)+'</td></tr>';
+    });
+    cf+='</tbody></table>';
+  }
+  const gauche2=tdbPan({titre:'Livré, pas encore facturé',cpt:(af.bl||0)+' BL',
+    plus:'Ouvrir les BL',plusVa:'#/livraisons',corps:cf,
+    note:'Reste = quantité livrée moins quantité déjà facturée, ligne par ligne ('+
+         '<code>qte − qtefac</code>).'});
+
+  // ── Les contrôles MySifa, remplis après coup ──
+  let ctrl='';
+  TDB_CONTROLES.forEach(k=>{
+    ctrl+='<button type="button" class="tdb-ctrl" data-va="'+esc(k.va)+'" data-ctrl="'+esc(k.cle)+'">'+
+      '<span class="n vide" data-n="'+esc(k.cle)+'">…</span>'+
+      '<span class="tt"><b>'+esc(k.titre)+'</b><em>'+esc(k.quoi)+'</em></span>'+ICO_EXT+'</button>';
+  });
+  const droite=tdbPan({titre:'OF et fiches techniques à vérifier',cpt:'MySifa',corps:ctrl,
+    note:'Ces chiffres viennent de MySifa, pas de RVGI, et chaque ligne lit le compteur à la '+
+         'même route que l\'écran qu\'elle ouvre — ils ne peuvent pas diverger. L\'écran s\'ouvre '+
+         'dans un onglet à côté.'});
+
+  // ── Dossiers vis-à-vis de RVGI ──
+  let dr;
+  if(!d.dossiers){dr=tdbVide('Base MySifa non attachée au miroir.');}
+  else{
+    const etats=[
+      ['lie','Rattachés','ok'],['partiel','Partiellement','warn'],
+      ['a_verifier','À vérifier','warn'],['a_rattacher','À rattacher','dg'],
+      ['hors_commande','Hors commande','']
+    ];
+    dr='<table class="tdb-t"><tbody>';
+    etats.forEach(e=>{
+      const n=dos[e[0]]||0;
+      if(!n&&e[0]==='hors_commande')return;
+      dr+='<tr><td class="fort">'+esc(e[1])+'</td>'+
+          '<td class="n"><span class="tdb-etiq '+e[2]+'"><i></i>'+fmtNb(n,0)+'</span></td></tr>';
+    });
+    dr+='</tbody></table>';
+  }
+  const droite2=tdbPan({titre:'Dossiers de production ↔ RVGI',cpt:'dossiers non terminés',corps:dr,
+    note:'Un numéro tapé au terminal avant la synchro reste « à vérifier » et se confirme tout '+
+         'seul au prochain import. Ce qui reste « à rattacher » demande un humain.'});
+
+  // ── Ce qui n'attend aucun dossier, et c'est normal ──
+  let hpc;
+  if(!d.hors_prod){hpc=tdbVide('Origine des lignes indisponible.');}
+  else{
+    hpc='<table class="tdb-t"><tbody>'+
+      '<tr data-va="#/commandes?position=0&origine=2"><td class="fort">Sur stock</td><td class="n">'+fmtNb(hp.stock,0)+'</td></tr>'+
+      '<tr data-va="#/commandes?position=0&origine=3"><td class="fort">Sous-traitance</td><td class="n">'+fmtNb(hp.sous_traitance,0)+'</td></tr>'+
+      '</tbody></table>';
+  }
+  const droite3=tdbPan({titre:'Sans dossier, et c\'est normal',corps:hpc,
+    note:'Seules les lignes en fabrication attendent un dossier. Compter les autres avec elles '+
+         'ferait apparaître des retards de production qui n\'existent pas.'});
+
+  // Une règle de filtrage qu'on ne peut pas vérifier écarte tôt ou tard la
+  // mauvaise chose, en silence. Celle-ci montre ce qu'elle retire.
+  let droite4='';
+  if(d.ecartees&&d.ecartees.lignes){
+    let e='<table class="tdb-t"><tbody>';
+    (d.ecartees.libelles||[]).forEach(x=>{
+      e+='<tr><td class="coupe">'+esc(x.libelle)+'</td><td class="n">'+fmtNb(x.lignes,0)+'</td></tr>';
+    });
+    e+='</tbody></table>';
+    droite4=tdbPan({titre:'Écarté du carnet',cpt:fmtNb(d.ecartees.lignes,0)+' lignes',corps:e,
+      note:'Lignes ouvertes sans référence produit — frais de port, de cliché, d\'outils, '+
+           'créations de document. RVGI ne les solde jamais ; les compter donnerait des '+
+           'retards de plusieurs milliers de jours. Si l\'une d\'elles devrait compter, '+
+           'c\'est la règle qu\'il faut reprendre, pas le chiffre.'});
+  }
+
+  h+='<div class="tdb-cols"><div class="tdb-pile">'+gauche+gauche2+'</div>'+
+     '<div class="tdb-pile">'+droite+droite2+droite3+droite4+'</div></div>';
+  return h;
+}
+
+function joursEcoules(depuis,jusqua){
+  const a=String(depuis||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const b=String(jusqua||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(!a||!b)return null;
+  const da=Date.UTC(+a[1],+a[2]-1,+a[3]),db=Date.UTC(+b[1],+b[2]-1,+b[3]);
+  return Math.round((db-da)/86400000);
+}
+
+// Les compteurs MySifa, chacun pour soi : une route en échec (droits, écran
+// en panne) laisse « — » sur SA ligne au lieu de vider le panneau.
+async function chargerControlesMySifa(hote){
+  TDB_CONTROLES.forEach(async k=>{
+    const cible=hote.querySelector('[data-n="'+k.cle+'"]');
+    if(!cible)return;
+    try{
+      const d=await api(k.url);
+      const n=Number(k.lire(d)||0);
+      cible.textContent=isFinite(n)?fmtNb(n,0):'—';
+      cible.className='n'+(n>=(k.seuil||1)?(k.grave?' dg':' warn'):' ok');
+      cible.title=n?(n+' à traiter'):'Rien à traiter';
+    }catch(e){
+      cible.textContent='—';cible.className='n vide';
+      cible.title='Indisponible : '+e.message;
+    }
+  });
+}
+
+// ── Direction ────────────────────────────────────────────────────
+// Tout le chiffre d'affaires de l'écran est reconstruit à partir de colonnes
+// dont la définition n'est écrite nulle part. Tant que ce calcul n'a pas été
+// confronté à l'ERP, l'écran montre son arithmétique au lieu de l'affirmer :
+// six lignes réelles, leurs colonnes de prix, et le montant qu'on en tire.
+// Ouvrir la même pièce dans RVGI et comparer prend dix secondes.
+const TDB_LABEL_TABLE={cde_ligne:'Lignes de commande',vte_ligne:'Lignes de facture'};
+
+function tdbPanControlePrix(d){
+  const diags=(d.diagnostic_prix||[]).filter(x=>x&&x.echantillon&&x.echantillon.length);
+  if(!diags.length)return '';
+  const cell=(v,c)=>esc(v==null?'—':(typeof v==='number'
+    ? fmtNb(v,(c==='qte'||c==='vuv'||c==='lignes')?0:4) : String(v)));
+  let corps='';
+  diags.forEach(dg=>{
+    const cols=(dg.colonnes||[]).filter(c=>c!=='des1');
+    corps+='<div class="tdb-pan-h" style="border-top:1px solid var(--border)">'+
+      '<h3>'+esc(TDB_LABEL_TABLE[dg.table]||dg.table)+'</h3>'+
+      '<span class="cpt">'+esc((dg.colonnes||[]).join(' · '))+'</span></div>';
+
+    // 1. Ce que l'unité de vente contient vraiment. C'est LA question : si
+    //    `vuv` vaut 1 sur des lignes vendues au mille, tout est ×1000.
+    // Aucune colonne de total connue : il faut trouver son vrai nom. On
+    // liste les colonnes numériques de la table avec leur ordre de grandeur —
+    // celle dont la moyenne ressemble à un montant de ligne est la bonne.
+    if((dg.candidates_total||[]).length){
+      corps+='<div class="tdb-alerte" style="margin:11px 13px"><span>⚠</span><span>'+
+        '<b>Pas de colonne de total HT sur '+esc(dg.table)+'.</b> Les montants tirés de '+
+        'cette table ne sont pas affichés — un chiffre faux d\'un facteur mille serait pire '+
+        'que pas de chiffre. Ci-dessous les colonnes numériques de la table : celle dont la '+
+        'moyenne ressemble à un montant de ligne est celle à ajouter dans '+
+        '<code>erp_tdb.COLS_TOTAL_HT</code>.</span></div>';
+      corps+='<table class="tdb-t"><thead><tr><th>Colonne</th><th class="n">Lignes</th>'+
+        '<th class="n">Moyenne</th><th class="n">Min</th><th class="n">Max</th>'+
+        '</tr></thead><tbody>';
+      (dg.candidates_total||[]).slice(0,18).forEach(x=>{
+        corps+='<tr><td class="fort">'+esc(x.colonne)+'</td>'+
+          '<td class="n">'+fmtNb(x.lignes,0)+'</td>'+
+          '<td class="n">'+fmtNb(x.moyenne,2)+'</td>'+
+          '<td class="n">'+fmtNb(x.mini,2)+'</td>'+
+          '<td class="n">'+fmtNb(x.maxi,2)+'</td></tr>';
+      });
+      corps+='</tbody></table>';
+    }
+
+    // Le comparatif : le même mois calculé avec chaque diviseur candidat.
+    // C'est la question à trancher, elle passe donc en tête du panneau.
+    if((dg.comparatif||[]).length){
+      corps+='<div class="tdb-note" style="border-top:none;color:var(--text2)">'+
+        '<b>Quelle méthode ?</b> Le mois en cours, calculé de plusieurs façons. '+
+        'Celle qui ressemble au chiffre d\'affaires réel désigne la bonne.</div>';
+      corps+='<table class="tdb-t"><thead><tr><th>Méthode</th><th>Ce qu\'elle lit</th>'+
+        '<th class="n">Total du mois</th></tr></thead><tbody>';
+      (dg.comparatif||[]).forEach(c=>{
+        corps+='<tr><td class="fort">'+esc(c.methode)+'</td>'+
+          '<td class="coupe" style="max-width:340px;white-space:normal">'+esc(c.quoi)+'</td>'+
+          '<td class="n fort">'+esc(tdbEurExact(c.montant))+'</td></tr>';
+      });
+      corps+='</tbody></table>';
+    }
+    if((dg.unites_inconnues||[]).length){
+      corps+='<div class="tdb-alerte" style="margin:11px 13px">'+
+        '<span>⚠</span><span><b>Code d\'unité de vente inconnu.</b> '+
+        (dg.unites_inconnues||[]).map(u=>'« '+esc(u.suv||'(vide)')+' » sur '+
+          fmtNb(u.lignes,0)+' lignes').join(', ')+
+        '. Ces lignes retombent sur <code>vuv</code>, donc souvent sur 1 — leur montant est '+
+        'peut-être mille fois trop grand. À ajouter dans <code>erp_tdb.DIVISEUR_UNITE</code>.'+
+        '</span></div>';
+    }
+    if((dg.unites||[]).length){
+      const dv=dg.diviseurs||{};
+      corps+='<div class="tdb-note" style="border-top:none;color:var(--text2)">'+
+        '<b>Unités de vente rencontrées</b>'+
+        (dg.reconstruit?'':' — pour information : le montant vient du total HT de la ligne, '+
+          'ces colonnes n\'entrent plus dans le calcul')+
+        '. Diviseurs connus : '+
+        Object.keys(dv).map(k=>'<code>'+esc(k)+'</code> ÷ '+fmtNb(dv[k],0)).join(', ')+
+        '.</div>';
+      corps+='<table class="tdb-t"><thead><tr><th>suv</th><th class="n">vuv</th>'+
+        '<th class="n">Lignes</th><th class="n">Qté min</th><th class="n">Qté max</th>'+
+        '<th class="n">PU min</th><th class="n">PU max</th>'+
+        '<th class="n">Σ calculée</th></tr></thead><tbody>';
+      (dg.unites||[]).forEach(u=>{
+        corps+='<tr><td class="fort">'+cell(u.suv,'suv')+'</td>'+
+          '<td class="n">'+cell(u.vuv,'vuv')+'</td>'+
+          '<td class="n">'+cell(u.lignes,'lignes')+'</td>'+
+          '<td class="n">'+cell(u.qte_min,'qte')+'</td>'+
+          '<td class="n">'+cell(u.qte_max,'qte')+'</td>'+
+          '<td class="n">'+cell(u.pun_min,'pun')+'</td>'+
+          '<td class="n">'+cell(u.pun_max,'pun')+'</td>'+
+          '<td class="n fort">'+esc(tdbEurExact(u.montant))+'</td></tr>';
+      });
+      corps+='</tbody></table>';
+    }
+
+    // 2. Les lignes les plus lourdes : l'erreur se voit à l'œil nu.
+    if((dg.lourdes||[]).length){
+      corps+='<div class="tdb-note" style="color:var(--text2)">'+
+        '<b>Les 8 lignes les plus lourdes</b> — celles qui font le total. '+
+        'Ouvrir la pièce dans RVGI et comparer le montant de la ligne.</div>';
+      corps+='<table class="tdb-t"><thead><tr><th>Pièce</th>'+
+        cols.map(c=>'<th class="n">'+esc(c)+'</th>').join('')+
+        '<th class="n">= montant</th></tr></thead><tbody>';
+      (dg.lourdes||[]).forEach(l=>{
+        corps+='<tr><td class="ref">'+esc(fmtId(l.numero))+'</td>'+
+          cols.map(c=>'<td class="n">'+cell(l[c],c)+'</td>').join('')+
+          '<td class="n fort">'+esc(tdbEurExact(l.montant_calcule))+'</td></tr>';
+      });
+      corps+='</tbody></table>';
+    }
+
+    if(dg.net_plat){
+      corps+='<div class="tdb-note">La colonne <code>net</code> ne prend qu\'une ou deux '+
+        'valeurs sur toute la table : ce n\'est pas un montant, elle est écartée du calcul.</div>';
+    }
+  });
+  const f=(diags[0]||{}).formule||'';
+  return tdbPan({titre:'Contrôle du calcul',cpt:'formule à confirmer',corps:corps,
+    note:'Formule appliquée : <code>'+esc(f)+'</code>. RVGI calcule déjà le total HT de '+
+         'chaque ligne : on le lit plutôt que de le reconstruire à partir de <code>pun</code>, '+
+         'dont l\'unité de référence change d\'une table à l\'autre. Le tableau des méthodes '+
+         'ci-dessus permet de vérifier que la colonne retenue est la bonne.'});
+}
+
+function htmlTdbDirection(d){
+  const hier=d.hier||{},re=d.rentre||{},fa=d.facture||{},fb=d.facturable||{},ca=d.carnet||{};
+  let h=tdbIndispo(d);
+
+  // Le bandeau : la question qu'on se pose en ouvrant l'écran.
+  if(hier&&hier.date){
+    const ecart=(hier.moyenne_30j&&hier.montant!=null)
+      ? Math.round((hier.montant/hier.moyenne_30j-1)*100):null;
+    h+='<div class="tdb-bande">'+
+      '<div><span class="lab">Rentré hier · '+esc(tdbLibelleJour(hier.date))+'</span>'+
+        '<span class="big" title="'+esc(tdbEurExact(hier.montant))+'">'+
+        (tdbEur(hier.montant)||'—')+'</span></div>'+
+      '<div class="txt"><b>'+fmtNb(hier.commandes,0)+' commandes</b> · '+fmtNb(hier.lignes,0)+' lignes<br>'+
+        fmtNb(hier.clients,0)+(hier.clients>1?' clients':' client')+'</div>'+
+      '<div class="droite">'+
+        (ecart==null?'':('<b style="color:var(--'+(ecart>=0?'ok':'danger')+')">'+
+          (ecart>=0?'+':'')+ecart+' % vs la moyenne 30 j</b>'))+
+        'moyenne quotidienne '+tdbEurTxt(hier.moyenne_30j)+
+      '</div></div>';
+  }
+
+  h+='<div class="tdb-tuiles">'+
+    tdbTuile({k:'Rentré — ce mois',v:tdbEur(re.mois),
+      s:pourcent(re.mois,re.mois_n1,'vs même mois l\'an dernier'),
+      sTon:ton(re.mois,re.mois_n1),va:'#/commandes',titre:d.formules.rentre})+
+    tdbTuile({k:'Facturable',v:tdbEur(fb.montant),ton:'warn',
+      s:fb.bl!=null?(fmtNb(fb.bl,0)+' BL livrés non facturés'):'',sTon:'warn',
+      va:'#/livraisons',titre:d.formules.facturable})+
+    tdbTuile({k:'Facturé — ce mois',v:tdbEur(fa.mois),
+      s:pourcent(fa.mois,fa.mois_n1,'vs même mois l\'an dernier'),
+      sTon:ton(fa.mois,fa.mois_n1),va:'#/factures',titre:d.formules.facture})+
+    tdbTuile({k:'Carnet restant',v:tdbEur(ca.montant),ton:'neu',
+      s:(ca.montant==null&&ca.lignes!=null)
+        ? (fmtNb(ca.lignes,0)+' lignes — montant non calculable')
+        : (ca.lignes!=null?(fmtNb(ca.lignes,0)+' lignes à livrer'):''),
+      sTon:ca.montant==null?'warn':'',
+      va:'#/commandes?position=0',titre:d.formules.encours})+
+    '</div>';
+
+  // ── La série 12 mois : deux séries, une seule échelle ──
+  const serie=d.serie||[];
+  let g;
+  if(!serie.length){g=tdbVide('Série indisponible.');}
+  else{
+    const maxi=Math.max(1,...serie.map(m=>Math.max(m.rentre||0,m.facture||0)));
+    g='<div class="tdb-graph"><div class="tdb-leg">'+
+      '<span><i style="background:var(--serie2)"></i>Rentré (prise de commande)</span>'+
+      '<span><i style="background:var(--accent)"></i>Facturé</span></div><div class="tdb-barres">';
+    serie.forEach(m=>{
+      const a=Math.round(((m.rentre||0)/maxi)*100),b=Math.round(((m.facture||0)/maxi)*100);
+      g+='<div class="grp"'+
+         ' data-tip-titre="'+esc(tdbMoisLong(m.mois))+'"'+
+         ' data-tip-l1="Rentré" data-tip-v1="'+esc(tdbEurExact(m.rentre))+'"'+
+         ' data-tip-c1="var(--serie2)"'+
+         ' data-tip-l2="Facturé" data-tip-v2="'+esc(tdbEurExact(m.facture))+'"'+
+         ' data-tip-c2="var(--accent)">'+
+         '<i class="a" style="height:'+a+'%"></i><i class="b" style="height:'+b+'%"></i></div>';
+    });
+    g+='</div><div class="tdb-axe">'+serie.map(m=>'<span>'+esc(m.label||'')+'</span>').join('')+
+       '</div></div>';
+  }
+  const gauche=tdbPan({titre:'Rentré et facturé — 12 mois',cpt:'même échelle',
+    plus:'Ouvrir les factures',plusVa:'#/factures',corps:g,
+    note:'Le mois courant est toujours partiel côté facturé : la facturation suit la livraison, '+
+         'elle ne la précède pas.'});
+
+  // ── Le détail de la veille ──
+  let t;
+  const it=hier.items||[];
+  if(!it.length){t=tdbVide('Aucune commande enregistrée ce jour-là.');}
+  else{
+    t='<table class="tdb-t"><thead><tr><th>Commande</th><th>Client</th><th class="n">Lignes</th>'+
+      '<th class="n">Montant</th><th class="n">Expédition</th></tr></thead><tbody>';
+    it.forEach(l=>{
+      t+='<tr data-ouvre="commandes" data-id="'+esc(l.id)+'" title="Ouvrir la commande">'+
+        '<td class="ref">'+esc(fmtId(l.numero))+'</td>'+
+        '<td class="fort coupe">'+esc(l.client||'—')+'</td>'+
+        '<td class="n">'+fmtNb(l.lignes,0)+'</td>'+
+        '<td class="n" title="'+esc(tdbEurExact(l.montant))+'">'+
+          (l.montant==null?'—':(fmtNb(l.montant,0)+' €'))+'</td>'+
+        '<td class="n">'+esc(tdbJourCourt(l.expedition))+'</td></tr>';
+    });
+    t+='<tr><td class="fort">'+fmtNb(hier.commandes,0)+' commandes</td><td></td>'+
+       '<td class="n fort">'+fmtNb(hier.lignes,0)+'</td>'+
+       '<td class="n fort">'+(hier.montant==null?'—':(fmtNb(hier.montant,0)+' €'))+
+       '</td><td></td></tr>';
+    t+='</tbody></table>';
+  }
+  const gauche2=tdbPan({titre:'Hier — commandes rentrées',cpt:esc(tdbJourCourt(hier.date)),
+    plus:'Ouvrir les commandes',plusVa:'#/commandes',corps:t,
+    note:'Une commande modifiée après coup fait bouger ce total : c\'est la photo de l\'ERP à '+
+         'la dernière synchro, pas un chiffre figé.'});
+
+  // ── 30 jours de prise de commande ──
+  const jours=d.jours||[];
+  let j;
+  if(!jours.length){j=tdbVide('Série quotidienne indisponible.');}
+  else{
+    const maxj=Math.max(1,...jours.map(x=>Number(x.montant)||0));
+    j='<div class="tdb-jours">'+jours.map((x,i)=>{
+      const ha=Math.max(2,Math.round(((Number(x.montant)||0)/maxj)*100));
+      return '<i class="'+(i===jours.length-1?'dernier':'')+'" style="height:'+ha+'%"'+
+        ' data-tip-titre="'+esc(tdbLibelleJour(x.jour))+'"'+
+        ' data-tip-l1="Rentré" data-tip-v1="'+esc(tdbEurExact(x.montant))+'"'+
+        ' data-tip-c1="var(--accent)"></i>';
+    }).join('')+'</div><div class="tdb-jours-pied"><span>'+esc(tdbJourCourt(jours[0].jour))+
+      '</span><span>'+esc(tdbJourCourt(jours[jours.length-1].jour))+'</span></div>';
+  }
+  const droite=tdbPan({titre:'Prise de commande',cpt:'30 jours',corps:j,
+    note:'Jours ouvrés seulement. Un lundi sans commande reste à sa place, à zéro — c\'est '+
+         'une information ; vingt-deux samedis à zéro n\'en sont pas une.'});
+
+  // ── Facturable par ancienneté ──
+  let fbc;
+  if(!fb||!fb.ages){fbc=tdbVide('Facturable indisponible.');}
+  else{
+    const maxa=Math.max(1,...fb.ages.map(a=>Number(a.montant)||0));
+    fbc='<div class="tdb-hb">'+fb.ages.map(a=>{
+      const w=Math.max(2,Math.round(((Number(a.montant)||0)/maxa)*100));
+      return '<div class="l" data-tip-titre="'+esc(a.label)+'"'+
+        ' data-tip-l1="Facturable" data-tip-v1="'+esc(tdbEurExact(a.montant))+'"'+
+        ' data-tip-c1="var(--accent)"><span class="nom">'+esc(a.label)+'</span>'+
+        '<span class="val">'+tdbEurTxt(a.montant)+'</span>'+
+        '<span class="piste"><i style="width:'+w+'%"></i></span></div>';
+    }).join('')+'</div>';
+  }
+  const droite2=tdbPan({titre:'Facturable par ancienneté',
+    cpt:tdbEurTxt(fb.montant),corps:fbc,
+    note:'Part non facturée du total HT de la ligne de commande d\'origine, au prorata de '+
+         '(quantité livrée − quantité facturée) : le BL ne porte pas de montant. L\'écart '+
+         'avec la facture réelle — remises de pied, port — reste normal.'});
+
+  // ── Top clients ──
+  const tc=d.top_clients||[];
+  let tcc;
+  if(!tc.length){tcc=tdbVide('Aucune facture ce mois-ci.');}
+  else{
+    const maxc=Math.max(1,...tc.map(x=>Number(x.montant)||0));
+    tcc='<div class="tdb-hb">'+tc.map(x=>{
+      const w=Math.max(2,Math.round(((Number(x.montant)||0)/maxc)*100));
+      return '<div class="l" data-tip-titre="'+esc(x.client)+'"'+
+        ' data-tip-l1="Facturé ce mois" data-tip-v1="'+esc(tdbEurExact(x.montant))+'"'+
+        ' data-tip-c1="var(--accent)"><span class="nom">'+esc(x.client)+'</span>'+
+        '<span class="val">'+tdbEurTxt(x.montant)+'</span>'+
+        '<span class="piste"><i style="width:'+w+'%"></i></span></div>';
+    }).join('')+'</div>';
+  }
+  const droite3=tdbPan({titre:'Top clients — ce mois',cpt:'facturé',
+    plus:'Ouvrir les clients',plusVa:'#/clients',corps:tcc});
+
+  h+='<div class="tdb-cols"><div class="tdb-pile">'+gauche+gauche2+'</div>'+
+     '<div class="tdb-pile">'+droite+droite2+droite3+'</div></div>'+
+     '<div style="margin-top:11px">'+tdbPanControlePrix(d)+'</div>';
+  return h;
+}
+
+function pourcent(a,b,suffixe){
+  const x=Number(a),y=Number(b);
+  if(!isFinite(x)||!isFinite(y)||!y)return '';
+  const p=Math.round((x/y-1)*100);
+  return (p>=0?'+':'')+p+' % '+suffixe;
+}
+function ton(a,b){
+  const x=Number(a),y=Number(b);
+  if(!isFinite(x)||!isFinite(y)||!y)return '';
+  return x>=y?'ok':'warn';
+}
+
+// Le hash porte désormais la destination ET son filtre :
+//   #/commandes                        l'écran, filtres par défaut
+//   #/commandes?position=0&ratt=non    l'écran, déjà filtré
+//   #/tdb_adv                          un tableau de bord
+// C'est ce qui rend une tuile cliquable utile : elle n'ouvre pas « l'écran
+// des commandes », elle ouvre les lignes qui composent son chiffre.
+function lireParamsHash(qs){
+  const out={};
+  String(qs||'').split('&').forEach(bout=>{
+    if(!bout)return;
+    const i=bout.indexOf('=');
+    const k=decodeURIComponent(i<0?bout:bout.slice(0,i));
+    const v=i<0?'':decodeURIComponent(bout.slice(i+1).replace(/\+/g,' '));
+    if(k)out[k]=v;
+  });
+  return out;
+}
+
+// Le survol suffit à la souris ; le clic est là pour le tactile et le
+// clavier, où « survoler » ne veut rien dire.
+function initMenuService(){
+  const w=document.getElementById('mk-svc'),b=document.getElementById('mk-btn');
+  if(!w||!b)return;
+  b.addEventListener('click',ev=>{
+    ev.stopPropagation();
+    const ouvert=w.classList.toggle('ouvert');
+    b.setAttribute('aria-expanded',ouvert?'true':'false');
+  });
+  document.addEventListener('click',ev=>{if(!w.contains(ev.target))fermerMkPop();});
+  document.addEventListener('keydown',ev=>{if(ev.key==='Escape')fermerMkPop();});
+}
+
 function appliquerHash(){
   fermerDetail();   // on ne garde jamais une modale ouverte sur un autre écran
-  const m=String(location.hash||'').match(/^#\/([a-z_]+)$/);
-  if(m&&S.meta&&S.meta.present){ouvrirEcran(m[1]);}else{ouvrirMenu();}
+  fermerMkPop();tdbTipCacher();
+  const m=String(location.hash||'').match(/^#\/([a-z_]+)(?:\?(.*))?$/);
+  if(m&&estTdb(m[1])){ouvrirTdb(m[1]);return;}
+  if(m&&S.meta&&S.meta.present){
+    ouvrirEcran(m[1],m[2]?lireParamsHash(m[2]):null);
+  }else{ouvrirMenu();}
   fermerSidebar();
 }
 document.addEventListener('keydown',e=>{
@@ -1987,7 +3339,7 @@ async function boot(){
     document.getElementById('corps').innerHTML='<div class="vide-msg">'+esc(e.message)+'</div>';
     return;
   }
-  renderFraicheur();renderNav();initRecherche();appliquerHash();
+  renderFraicheur();renderNav();renderMenuService();initRecherche();initMenuService();appliquerHash();
   window.addEventListener('hashchange',appliquerHash);
   initGuides();
 }

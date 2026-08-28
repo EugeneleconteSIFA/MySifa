@@ -328,7 +328,7 @@ def me(request: Request):
         return PlainResponse(content=b"null", media_type="application/json")
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id,email,identifiant,nom,role,operateur_lie,machine_id,telephone,adresse,date_naissance,avatar_url,access_overrides,portal_apps_order,theme_prefs,humeur_active,humeur_valeur,humeur_date FROM users WHERE id=?",
+            "SELECT id,email,identifiant,nom,role,operateur_lie,machine_id,telephone,adresse,date_naissance,avatar_url,access_overrides,portal_apps_order,portal_apps_favoris,theme_prefs,humeur_active,humeur_valeur,humeur_date FROM users WHERE id=?",
             (user["id"],)
         ).fetchone()
     if not row:
@@ -367,6 +367,10 @@ def me(request: Request):
     except Exception:
         d["access_map"] = {}
     d["portal_apps_order"] = _portal_order_list_from_db(d.get("portal_apps_order"))
+    # Favoris : mêmes ids de tuiles que l'ordre, donc même validation. Une
+    # tuile épinglée quitte la grille complète côté front — un id inconnu
+    # ferait disparaître une tuile sans que rien ne la remplace.
+    d["portal_apps_favoris"] = _portal_order_list_from_db(d.get("portal_apps_favoris"))
     return d
 
 
@@ -470,6 +474,10 @@ async def update_me(request: Request):
         if "portal_apps_order" in body:
             portal_val = _normalize_portal_order_for_db(body.get("portal_apps_order"))
 
+        favoris_val = exd.get("portal_apps_favoris")
+        if "portal_apps_favoris" in body:
+            favoris_val = _normalize_portal_order_for_db(body.get("portal_apps_favoris"))
+
         theme_prefs_val = exd.get("theme_prefs")
         if "theme_prefs" in body:
             import json as _json
@@ -482,8 +490,8 @@ async def update_me(request: Request):
                 theme_prefs_val = str(tp)
 
         conn.execute(
-            "UPDATE users SET nom=?,email=?,telephone=?,adresse=?,date_naissance=?,password_hash=?,portal_apps_order=?,theme_prefs=? WHERE id=?",
-            (nom, email, telephone, adresse or None, date_naissance or None, pwd_hash, portal_val, theme_prefs_val, user["id"]),
+            "UPDATE users SET nom=?,email=?,telephone=?,adresse=?,date_naissance=?,password_hash=?,portal_apps_order=?,portal_apps_favoris=?,theme_prefs=? WHERE id=?",
+            (nom, email, telephone, adresse or None, date_naissance or None, pwd_hash, portal_val, favoris_val, theme_prefs_val, user["id"]),
         )
         conn.commit()
 

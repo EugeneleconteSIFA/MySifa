@@ -54,8 +54,9 @@ SETTINGS_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_theme.css">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
-:root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-fg:#0a0e17;--ok:#34d399;--warn:#fbbf24;--danger:#f87171;--danger-fg:#fff;}
-body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-fg:#fff;--ok:#059669;--warn:#d97706;--danger:#dc2626;--danger-fg:#fff;}
+/* tokens : static/mysifa_theme.css — ici, seulement les écarts */
+:root{--accent-fg:#0a0e17;--ok:#34d399;--danger-fg:#fff;}
+body.light{--muted:#64748b;--accent-fg:#fff;--ok:#059669;--danger-fg:#fff;}
 *{box-sizing:border-box}
 body{margin:0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
 .layout{display:flex;min-height:100vh}
@@ -876,6 +877,10 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
         Opérations
       </button>
+      <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="seuils">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+        Seuils d'arrêt
+      </button>
       <button type="button" class="nav-btn" data-req-section="fabrication" data-tab="maintenance">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="8" width="20" height="12" rx="2"/><path d="M8 8V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="12" y1="12" x2="12" y2="16"/><line x1="10" y1="14" x2="14" y2="14"/></svg>
         Maintenance
@@ -974,6 +979,11 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
         Promouvoir v1 → v2
       </button>
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="diagnostic"><span>Diagnostic</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="diagnostic" data-tab="diagnostic">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>
+        Lecture SQL
+      </button>
       <div class="nav-group-label" style="margin-top:8px" data-req-section="tools_only"><span>Outils</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-req-section="tools_only" data-tab="printers">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
@@ -1042,6 +1052,11 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <button type="button" class="menu-item" data-goto="operations">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Opérations</span><span class="mi-desc">Référentiel des codes saisis en production.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <button type="button" class="menu-item" data-goto="seuils">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Seuils d'arrêt</span><span class="mi-desc">À partir de quand la répétition d'un arrêt demande une explication.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
             <button type="button" class="menu-item" data-goto="maintenance">
@@ -1221,6 +1236,20 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <button type="button" class="menu-item" data-goto="fsc">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 2.5-5 5-5"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Registre FSC</span><span class="mi-desc">Traçabilité des flux et audits certifiés.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="menu-group" data-req-section="diagnostic">
+          <div class="menu-group-head">
+            <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg></span>
+            <div><span class="mg-lbl">Diagnostic</span><span class="mg-desc">Regarder les données quand un bug l'exige.</span></div>
+          </div>
+          <div class="menu-items">
+            <button type="button" class="menu-item" data-goto="diagnostic">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Lecture SQL</span><span class="mi-desc">SELECT en lecture seule, encadré par le moteur.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </div>
@@ -1916,6 +1945,61 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
       </div>
     </section>
 
+    <section id="panel-seuils" class="hidden">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+          <h2 style="margin:0">Seuils d'arrêt</h2>
+          <button type="button" class="btn" onclick="openSeuilForm()">+ Ajouter une règle</button>
+        </div>
+        <p class="sub" style="margin-top:-4px;margin-bottom:14px">
+          Un arrêt ne demande rien. Au-delà d'un seuil, la ligne part dans le rapport de prod — et une explication
+          n'est demandée au conducteur que s'il n'a pas déjà écrit un commentaire. La règle la plus précise gagne :
+          un code, puis une catégorie, puis la règle par défaut ; à égalité, une règle attachée à une machine
+          l'emporte sur la règle générale.
+        </p>
+
+        <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr));margin-bottom:16px">
+          <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text2)">
+            Un seul arrêt dépasse (minutes)
+            <input type="number" id="seuil-unitaire" min="5" max="480" step="5">
+          </label>
+          <label style="display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--text2)">
+            Cumul d'un même code sur la production (minutes)
+            <input type="number" id="seuil-cumul" min="5" max="960" step="5">
+          </label>
+          <div style="display:flex;align-items:flex-end">
+            <button type="button" class="btn btn-sec" onclick="saveSeuilParams()">Enregistrer les durées</button>
+          </div>
+        </div>
+
+        <div id="seuil-form-wrap" class="hidden op-form-panel">
+          <h3 id="seuil-form-title">Nouvelle règle</h3>
+          <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))">
+            <select id="seuil-cible-type" onchange="syncSeuilForm()">
+              <option value="code">Un code</option>
+              <option value="categorie">Une catégorie</option>
+              <option value="defaut">Par défaut</option>
+            </select>
+            <input type="text" id="seuil-cible" placeholder="Code (ex. 53) ou catégorie (ex. appro)" maxlength="32">
+            <input type="text" id="seuil-machine" placeholder="Machine (vide = toutes)" maxlength="60">
+            <select id="seuil-mode" onchange="syncSeuilForm()">
+              <option value="repetition">Au bout de N fois</option>
+              <option value="permanent">À chaque fois</option>
+            </select>
+            <input type="number" id="seuil-repetitions" placeholder="N (2 à 50)" min="2" max="50">
+            <input type="text" id="seuil-libelle" placeholder="Libellé (facultatif)" maxlength="80">
+            <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text2)"><input type="checkbox" id="seuil-actif" checked> Active</label>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+            <button type="button" class="btn" onclick="saveSeuilForm()">Enregistrer</button>
+            <button type="button" class="btn btn-sec" onclick="closeSeuilForm()">Annuler</button>
+          </div>
+        </div>
+
+        <div id="seuil-list"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+      </div>
+    </section>
+
     <section id="panel-maintenance" class="hidden">
     <div class="tabs" style="margin-bottom:14px">
       <button type="button" class="btn btn-sec sub-tab-btn active" data-maintsub="maint-subtab-codes">
@@ -2350,6 +2434,72 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         </div>
       </div>
 
+    </section>
+
+
+    <!-- ── Diagnostic SQL ────────────────────────────────────────────────────
+         Le panneau ne décide rien : tout l'encadrement est dans
+         app/services/diagnostic_sql.py, appliqué par l'autoriseur SQLite.
+         Ici on saisit, on affiche, et on rend le refus lisible. -->
+    <section id="panel-diagnostic" class="hidden" data-req-section="diagnostic">
+      <div style="max-width:1100px">
+        <div style="margin-bottom:20px">
+          <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px">Lecture SQL de diagnostic</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.55">
+            SELECT en lecture seule sur la base de cette instance. Le refus est appliqué par le moteur, table par
+            table et colonne par colonne — pas par une relecture du texte de la requête. Une table hors liste reste
+            refusée quelle que soit la façon dont la requête est tournée.
+          </div>
+        </div>
+
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px">
+          <label for="diag-sql" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:8px">Requête</label>
+          <textarea id="diag-sql" rows="5" spellcheck="false" placeholder="SELECT no_dossier, operateur, metrage_reel FROM production_data WHERE no_dossier = 'REF-4521'"
+            style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;line-height:1.6;outline:none;resize:vertical"
+            onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:14px">
+            <button type="button" class="btn btn-accent" id="diag-run" onclick="runDiagnostic()">Exécuter</button>
+            <div style="display:flex;align-items:center;gap:8px">
+              <label for="diag-limite" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Lignes</label>
+              <select id="diag-limite"
+                style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;outline:none;font-family:inherit">
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="200" selected>200</option>
+              </select>
+            </div>
+            <span style="font-size:12px;color:var(--muted)">Ctrl + Entrée pour exécuter</span>
+            <span style="flex:1"></span>
+            <span id="diag-nb-tables" style="font-size:12px;color:var(--muted)"></span>
+          </div>
+        </div>
+
+        <!-- Refus : le message vient du moteur, il est montrable tel quel. -->
+        <div id="diag-refus" style="display:none;background:var(--card);border:1px solid var(--danger);border-left:4px solid var(--danger);border-radius:10px;padding:14px 18px;margin-bottom:16px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--danger);margin-bottom:6px">Requête refusée</div>
+          <div id="diag-refus-msg" style="font-size:13px;color:var(--text);line-height:1.55"></div>
+        </div>
+
+        <div id="diag-resultat" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px">
+          <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+            <span id="diag-meta" style="font-size:12px;color:var(--muted)"></span>
+            <span id="diag-tronque" style="display:none;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--warn)"></span>
+          </div>
+          <div style="overflow:auto;max-height:60vh">
+            <table id="diag-table" style="width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"></table>
+          </div>
+        </div>
+
+        <details style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 18px">
+          <summary style="font-size:13px;font-weight:600;color:var(--text);cursor:pointer">Tables lisibles</summary>
+          <div style="font-size:12px;color:var(--muted);margin:10px 0 12px;line-height:1.55">
+            Liste blanche. Une table absente d'ici est refusée, y compris à travers une jointure, une sous-requête,
+            une vue ou une CTE. Les tables créées après la construction de la liste sont refusées par défaut.
+          </div>
+          <div id="diag-tables" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+        </details>
+      </div>
     </section>
 
     <section id="panel-printers" class="hidden">
@@ -3114,6 +3264,7 @@ function syncSettingsPageHead(tabId) {
     fournisseurs: { title: 'Fournisseurs',    sub: 'Fiche complète : FSC, certifications, contacts, réceptions, traçabilité' },
     clients:      { title: 'Clients',         sub: 'Référentiel ERP' },
     operations:   { title: 'Opérations',      sub: 'Codes saisis en production' },
+    seuils:       { title: "Seuils d'arrêt", sub: "Quand la répétition demande une explication" },
     maintenance:  { title: 'Maintenance',     sub: 'Codes opérations et alertes opérateurs' },
     machines:     { title: 'Machines',        sub: 'Horaires, capacité, rentabilité' },
     emplacements: { title: 'Emplacements',    sub: 'Plan du magasin' },
@@ -3127,6 +3278,7 @@ function syncSettingsPageHead(tabId) {
     api:          { title: 'Clés API',        sub: 'Tokens d\'intégration' },
     printers:     { title: 'Imprimantes',     sub: 'Configuration et templates' },
     promote:      { title: 'Déploiement',     sub: 'Promouvoir v1 → v2' },
+    diagnostic:   { title: 'Lecture SQL',     sub: 'SELECT encadré sur la base de cette instance' },
   };
   const h = HEADS[tabId] || { title: 'Paramètres', sub: 'Gestion des comptes et des accès' };
   if (titleEl) titleEl.textContent = h.title;
@@ -3141,10 +3293,151 @@ function syncSettingsPageHead(tabId) {
   }
 }
 
-const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','maintenance','machines','emplacements','laizes','mandrins','importations','bridge','updates','audit','fsc','dashboards','api','promote','printers','formations'];
+/* ── Diagnostic SQL ─────────────────────────────────────────────────────────
+   Les valeurs rendues viennent de la base : elles sont écrites avec
+   textContent, jamais avec innerHTML. Une note de production qui contient
+   du HTML s'affiche alors comme du texte, pas comme du balisage. */
+let _diagTablesChargees = false;
+
+async function initDiagnosticPanel() {
+  if (_diagTablesChargees) return;
+  try {
+    const r = await api('/api/diagnostic/tables');
+    const tables = (r && r.tables) || [];
+    const hote = document.getElementById('diag-tables');
+    if (hote) {
+      hote.textContent = '';
+      tables.forEach(function (t) {
+        const puce = document.createElement('span');
+        puce.textContent = t;
+        puce.style.cssText = 'font-size:11.5px;font-family:ui-monospace,Menlo,Consolas,monospace;'
+          + 'background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:3px 8px;color:var(--text2)';
+        hote.appendChild(puce);
+      });
+    }
+    const cpt = document.getElementById('diag-nb-tables');
+    if (cpt) cpt.textContent = tables.length + ' tables lisibles · ' + (r.lignes_max || 200) + ' lignes au maximum';
+    _diagTablesChargees = true;
+  } catch (e) {
+    const cpt = document.getElementById('diag-nb-tables');
+    if (cpt) cpt.textContent = 'Liste des tables indisponible.';
+  }
+}
+
+function _diagCacher() {
+  const refus = document.getElementById('diag-refus');
+  const res = document.getElementById('diag-resultat');
+  if (refus) refus.style.display = 'none';
+  if (res) res.style.display = 'none';
+}
+
+function _diagRefus(message) {
+  const bloc = document.getElementById('diag-refus');
+  const msg = document.getElementById('diag-refus-msg');
+  if (msg) msg.textContent = message;
+  if (bloc) bloc.style.display = '';
+}
+
+function _diagRendre(r) {
+  const table = document.getElementById('diag-table');
+  if (!table) return;
+  table.textContent = '';
+
+  const thead = document.createElement('thead');
+  const trh = document.createElement('tr');
+  (r.colonnes || []).forEach(function (c) {
+    const th = document.createElement('th');
+    th.textContent = c;
+    // z-index et box-shadow plutot que border-bottom : avec border-collapse
+    // separate, c'est la seule bordure qui reste solidaire de l'en-tete collant.
+    th.style.cssText = 'position:sticky;top:0;z-index:2;background:var(--card);'
+      + 'box-shadow:inset 0 -1px 0 var(--border);'
+      + 'padding:9px 12px;text-align:left;font-weight:700;color:var(--text);white-space:nowrap';
+    trh.appendChild(th);
+  });
+  thead.appendChild(trh);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  (r.lignes || []).forEach(function (ligne) {
+    const tr = document.createElement('tr');
+    ligne.forEach(function (v) {
+      const td = document.createElement('td');
+      td.style.cssText = 'box-shadow:inset 0 -1px 0 var(--border);padding:8px 12px;'
+        + 'vertical-align:top;max-width:420px;overflow-wrap:anywhere';
+      if (v === null || v === undefined) {
+        // NULL affiché comme tel : une colonne masquée revient NULL, et
+        // confondre « vide » et « masqué » fait perdre du temps.
+        td.textContent = 'NULL';
+        td.style.color = 'var(--muted)';
+        td.style.fontStyle = 'italic';
+      } else {
+        td.textContent = String(v);
+        td.style.color = 'var(--text2)';
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  const meta = document.getElementById('diag-meta');
+  if (meta) {
+    meta.textContent = r.nb_lignes + (r.nb_lignes > 1 ? ' lignes' : ' ligne')
+      + ' · ' + (r.colonnes || []).length + ' colonnes · ' + r.duree_ms + ' ms';
+  }
+  const tr = document.getElementById('diag-tronque');
+  if (tr) {
+    if (r.tronque) {
+      tr.textContent = 'Réponse tronquée — ajoutez une clause LIMIT ou un filtre.';
+      tr.style.display = '';
+    } else {
+      tr.style.display = 'none';
+    }
+  }
+  const res = document.getElementById('diag-resultat');
+  if (res) res.style.display = '';
+}
+
+async function runDiagnostic() {
+  const champ = document.getElementById('diag-sql');
+  const bouton = document.getElementById('diag-run');
+  const sql = champ ? champ.value.trim() : '';
+  _diagCacher();
+  if (!sql) { _diagRefus('Requête vide.'); return; }
+
+  const limite = parseInt((document.getElementById('diag-limite') || {}).value, 10) || 200;
+  if (bouton) { bouton.disabled = true; bouton.textContent = 'Exécution…'; }
+  try {
+    const r = await api('/api/diagnostic/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sql: sql, lignes_max: limite }),
+    });
+    if (r) _diagRendre(r);
+  } catch (e) {
+    _diagRefus(e.message || 'Requête refusée.');
+  } finally {
+    if (bouton) { bouton.disabled = false; bouton.textContent = 'Exécuter'; }
+  }
+}
+
+document.addEventListener('keydown', function (ev) {
+  if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter'
+      && document.activeElement && document.activeElement.id === 'diag-sql') {
+    ev.preventDefault();
+    runDiagnostic();
+  }
+});
+
+const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','emplacements','laizes','mandrins','importations','bridge','updates','audit','fsc','dashboards','api','promote','printers','formations','diagnostic'];
 
 function setTab(id, opts) {
   if (!VALID_TABS.includes(id)) id = 'menu';
+  // #diagnostic tapé à la main par un compte qui n'y a pas droit : le panneau
+  // est déjà masqué par data-req-section, mais sans ce garde il resterait sur
+  // un écran vide sans comprendre pourquoi.
+  if (id === 'diagnostic' && !((window.__SETTINGS_VISIBILITY__ || {}).diagnostic)) id = 'menu';
   const silent = !!(opts && opts.silent);
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
@@ -3159,7 +3452,7 @@ function setTab(id, opts) {
       }
     } catch(e){}
   }
-  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'maintenance', 'machines', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations'].forEach(p => {
+  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -3169,6 +3462,7 @@ function setTab(id, opts) {
   if (id === 'fournisseurs') { loadFournisseurs(); loadFournisseursGroupes(); }
   if (id === 'clients') initClientsPanel();
   if (id === 'operations') loadOperationCodes();
+  if (id === 'seuils') loadSeuils();
   if (id === 'maintenance') { loadMaintCodes(); loadAlerts(); }
   if (id === 'machines') initMachinesPanel();
   if (id === 'emplacements') initEmplacementsPanel();
@@ -3184,6 +3478,7 @@ function setTab(id, opts) {
   if (id === 'dashboards') renderSettingsDashboards();
   if (id === 'api') loadApiKeys();
   if (id === 'promote') loadPromoteStatus();
+  if (id === 'diagnostic') initDiagnosticPanel();
 }
 
 document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
@@ -6569,6 +6864,142 @@ let _opItems = [];
 let _opCategories = [];
 let _opEditCode = null;
 
+/* ─── Seuils d'arrêt ────────────────────────────────────────────────────────
+   Le référentiel des seuils vit en base, comme les codes opération : rien
+   n'est écrit en dur côté serveur, tout se règle ici. */
+let _seuilRegles = [];
+let _seuilEditId = null;
+
+const SEUIL_CIBLES = { code: 'Code', categorie: 'Catégorie', defaut: 'Par défaut' };
+
+async function loadSeuils() {
+  const el = document.getElementById('seuil-list');
+  if (!el) return;
+  try {
+    const d = await api('/api/arret-seuils/config');
+    _seuilRegles = (d && d.regles) ? d.regles : [];
+    const p = (d && d.params) ? d.params : {};
+    const u = document.getElementById('seuil-unitaire');
+    const c = document.getElementById('seuil-cumul');
+    if (u) u.value = Math.round(p.duree_unitaire_min || 0);
+    if (c) c.value = Math.round(p.duree_cumul_min || 0);
+    renderSeuilList();
+  } catch (e) {
+    el.innerHTML = '<p style="color:var(--danger);font-size:13px">' + escHtml(e.message) + '</p>';
+  }
+}
+
+function _seuilCibleTxt(r) {
+  if (r.cible_type === 'defaut') return 'Tout autre code surveillé';
+  const t = SEUIL_CIBLES[r.cible_type] || r.cible_type;
+  return t + ' ' + escHtml(r.cible || '');
+}
+
+function renderSeuilList() {
+  const el = document.getElementById('seuil-list');
+  if (!el) return;
+  if (!_seuilRegles.length) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:13px">Aucune règle. La surveillance est inactive.</p>';
+    return;
+  }
+  const ordre = { code: 0, categorie: 1, defaut: 2 };
+  const rows = _seuilRegles.slice().sort((a, b) =>
+    (ordre[a.cible_type] - ordre[b.cible_type]) || String(a.cible).localeCompare(String(b.cible))
+  ).map(r => {
+    const decl = r.mode === 'permanent'
+      ? 'À chaque fois'
+      : (r.repetitions + 'e fois sur la production');
+    const mach = (r.machine || '').trim();
+    return '<tr' + (r.actif ? '' : ' style="opacity:.5"') + '>'
+      + '<td><b>' + _seuilCibleTxt(r) + '</b>'
+      + (r.libelle ? '<div style="font-size:11px;color:var(--muted)">' + escHtml(r.libelle) + '</div>' : '')
+      + '</td>'
+      + '<td>' + decl + '</td>'
+      + '<td>' + (mach ? escHtml(mach) : '<span style="color:var(--muted)">toutes</span>') + '</td>'
+      + '<td>' + (r.actif ? 'Active' : 'Inactive') + '</td>'
+      + '<td><div class="op-act">'
+      + '<button type="button" class="btn-sm btn-ghost" onclick="openSeuilForm(' + r.id + ')">Modifier</button>'
+      + (r.cible_type === 'defaut' ? ''
+         : '<button type="button" class="btn-sm btn-ghost danger" onclick="deleteSeuil(' + r.id + ')">Supprimer</button>')
+      + '</div></td></tr>';
+  }).join('');
+  el.innerHTML = '<div class="table-wrap op-table-wrap"><table class="op-table"><thead><tr>'
+    + '<th>Cible</th><th>Déclenchement</th><th>Machine</th><th>État</th><th>Actions</th>'
+    + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+function syncSeuilForm() {
+  const type = (document.getElementById('seuil-cible-type') || {}).value;
+  const mode = (document.getElementById('seuil-mode') || {}).value;
+  const cible = document.getElementById('seuil-cible');
+  const rep = document.getElementById('seuil-repetitions');
+  if (cible) { cible.disabled = (type === 'defaut'); if (type === 'defaut') cible.value = ''; }
+  if (rep) rep.disabled = (mode === 'permanent');
+}
+
+function openSeuilForm(id) {
+  _seuilEditId = id || null;
+  const r = id ? _seuilRegles.find(x => x.id === id) : null;
+  document.getElementById('seuil-form-title').textContent = r ? 'Modifier la règle' : 'Nouvelle règle';
+  document.getElementById('seuil-cible-type').value = r ? r.cible_type : 'code';
+  document.getElementById('seuil-cible').value = r ? (r.cible || '') : '';
+  document.getElementById('seuil-machine').value = r ? (r.machine || '') : '';
+  document.getElementById('seuil-mode').value = r ? r.mode : 'repetition';
+  document.getElementById('seuil-repetitions').value = r ? (r.repetitions || 3) : 3;
+  document.getElementById('seuil-libelle').value = r ? (r.libelle || '') : '';
+  document.getElementById('seuil-actif').checked = r ? !!r.actif : true;
+  document.getElementById('seuil-form-wrap').classList.remove('hidden');
+  syncSeuilForm();
+}
+
+function closeSeuilForm() {
+  _seuilEditId = null;
+  document.getElementById('seuil-form-wrap').classList.add('hidden');
+}
+
+async function saveSeuilForm() {
+  const body = {
+    cible_type: document.getElementById('seuil-cible-type').value,
+    cible: (document.getElementById('seuil-cible').value || '').trim(),
+    machine: (document.getElementById('seuil-machine').value || '').trim() || null,
+    mode: document.getElementById('seuil-mode').value,
+    repetitions: parseInt(document.getElementById('seuil-repetitions').value || '0', 10) || 0,
+    libelle: (document.getElementById('seuil-libelle').value || '').trim() || null,
+    actif: !!document.getElementById('seuil-actif').checked,
+  };
+  try {
+    if (_seuilEditId) {
+      await api('/api/arret-seuils/regles/' + _seuilEditId, { method: 'PUT', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
+    } else {
+      await api('/api/arret-seuils/regles', { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
+    }
+    toast('Règle enregistrée.');
+    closeSeuilForm();
+    loadSeuils();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function deleteSeuil(id) {
+  if (!confirm('Supprimer cette règle ? Les codes concernés retomberont sur la règle par défaut.')) return;
+  try {
+    await api('/api/arret-seuils/regles/' + id, { method: 'DELETE' });
+    toast('Règle supprimée.');
+    loadSeuils();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function saveSeuilParams() {
+  const body = {
+    duree_unitaire_min: parseFloat(document.getElementById('seuil-unitaire').value || '0'),
+    duree_cumul_min: parseFloat(document.getElementById('seuil-cumul').value || '0'),
+  };
+  try {
+    await api('/api/arret-seuils/params', { method: 'PUT', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } });
+    toast('Durées enregistrées.');
+    loadSeuils();
+  } catch (e) { toast(e.message, true); }
+}
+
 async function loadOperationCodes() {
   const el = document.getElementById('op-list');
   if (!el) return;
@@ -7746,7 +8177,7 @@ async function unlinkBridge(mp_id) {
 <script src="/static/mysifa_impersonate.js"></script>
 <!-- Panneau Déploiement (Promouvoir v1→v2 + Sync DB) — fonctions en fichier externe
      autonome pour éviter qu'un refacto du script inline ne les supprime à nouveau. -->
-<script src="/static/mysifa_promote.js?v=4"></script>
+<script src="/static/mysifa_promote.js?v=5"></script>
 <!-- Fonctions imprimantes/templates/agents restaurees : bloc inline autonome.
      NE PAS fusionner avec le <script src> ci-dessus (contenu ignore par le navigateur). -->
 <script>

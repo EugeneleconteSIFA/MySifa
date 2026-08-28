@@ -81,18 +81,9 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_fournisseur_picker.css?v=1.0">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
-  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);
-  --success:#34d399;--warn:#fbbf24;--danger:#f87171;--c2:#a78bfa;--violet:#8b5cf6;
-  --pf-entree:#059669;--pf-sortie:#dc2626;
-}
-body.light{
-  --bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
-  --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);
-  --success:#059669;--warn:#d97706;--danger:#dc2626;--c2:#7c3aed;--violet:#8b5cf6;
-  --pf-entree:#047857;--pf-sortie:#b91c1c;
-}
+/* tokens : static/mysifa_theme.css — ici, seulement les écarts */
+:root{--violet:#8b5cf6;}
+body.light{--violet:#8b5cf6;}
 html,body{height:100%}
 #root{display:flex;flex:1;flex-direction:column;min-height:0}
 body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column;min-height:100%;position:relative}
@@ -737,9 +728,19 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-btn-secondary{padding:7px 14px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;border-radius:8px;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:all .12s}
 .bes-btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
 .bes-section{margin-bottom:30px}
-.bes-section-head{display:flex;align-items:baseline;justify-content:space-between;margin:0 0 12px;padding:0 4px}
-.bes-section-title{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:700}
-.bes-section-count{font-size:12px;color:var(--muted);font-weight:500}
+/* En-tete de section. Elle etait en 11px gris clair sur fond gris clair :
+   le titre disparaissait, et avec lui le seul reperage entre deux tableaux
+   qui se ressemblent. Le titre reprend la couleur du texte et la taille d'un
+   sous-titre ; un filet accent a gauche l'ancre sans ajouter de bruit. */
+.bes-section-head{display:flex;align-items:baseline;gap:10px;justify-content:space-between;
+  margin:22px 0 10px;padding:0 0 8px 10px;border-left:3px solid var(--accent);
+  border-bottom:1px solid var(--border)}
+.bes-section-head:first-child{margin-top:0}
+.bes-section-title{font-size:14px;letter-spacing:.2px;color:var(--text);font-weight:700}
+/* Le compteur reste secondaire, mais lisible : c'est une information, pas une
+   mention legale. */
+.bes-section-count{font-size:12px;color:var(--text2);font-weight:500;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
 .bes-card{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .bes-table{width:100%;border-collapse:collapse;font-size:13px}
 .bes-table thead th{padding:10px 14px;text-align:left;background:var(--surface-alt,rgba(0,0,0,.02));border-bottom:1px solid var(--border);font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap}
@@ -826,12 +827,6 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-tend-note{font-size:12px;color:var(--muted);line-height:1.6;margin:0 0 12px;
   padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--accent) 7%,transparent);
   border:1px solid color-mix(in srgb,var(--accent) 22%,transparent)}
-/* Un seul controle de fenetre, au-dessus de tous les graphes : il les cadre
-   tous. Une fenetre par graphe donnerait des courbes qu'on croirait
-   comparables alors qu'elles ne couvriraient pas la meme periode. */
-.bes-tend-ctl{display:flex;align-items:center;gap:10px;margin:0 0 14px}
-.bes-tend-ctl-lbl{font-size:10px;font-weight:700;text-transform:uppercase;
-  letter-spacing:.5px;color:var(--muted)}
 /* La carte : fond plein, bordure fine. C'est la surface sur laquelle la
    palette a ete validee — un graphe pose sur le fond de page n'aurait pas le
    meme contraste que celui qu'on a mesure. */
@@ -957,6 +952,35 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
   .bes-tc-yaxis{font-size:9px}
   .bes-tc-xlbl{font-size:8px;letter-spacing:0}
 }
+/* ── Apercu d'un document dans une modale ────────────────────────────────
+   Le PDF occupe la place : c'est ce qu'on est venu voir. L'etat de validation
+   tient sur une ligne au-dessus, les actions sur une ligne en dessous. */
+.modal-sheet.bes-doc-apercu{max-width:920px;width:94vw;display:flex;
+  flex-direction:column;max-height:90vh}
+.bes-doc-frame{flex:1 1 auto;width:100%;min-height:52vh;border:1px solid var(--border);
+  border-radius:8px;background:var(--card);margin-top:10px}
+.bes-doc-etat{display:flex;align-items:center;gap:9px;margin-top:12px;padding:8px 11px;
+  border-radius:8px;font-size:12px;line-height:1.45;color:var(--text2);
+  background:color-mix(in srgb,var(--warn,#d97706) 10%,transparent);
+  border:1px solid color-mix(in srgb,var(--warn,#d97706) 28%,transparent)}
+.bes-doc-etat.ok{background:color-mix(in srgb,var(--success,#22c55e) 10%,transparent);
+  border-color:color-mix(in srgb,var(--success,#22c55e) 28%,transparent)}
+.bes-doc-etat.perime{background:color-mix(in srgb,var(--danger,#dc2626) 9%,transparent);
+  border-color:color-mix(in srgb,var(--danger,#dc2626) 26%,transparent)}
+.bes-doc-etat-pastille{flex:0 0 18px;width:18px;height:18px;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;font-size:11px;
+  font-weight:700;background:var(--card);color:var(--text2)}
+.bes-doc-etat.ok .bes-doc-etat-pastille{color:var(--success,#22c55e)}
+.bes-doc-etat.perime .bes-doc-etat-pastille{color:var(--danger,#dc2626)}
+.bes-doc-etat > span:nth-child(2){flex:1;min-width:0}
+/* `.modal-actions` est une grille 1fr/2fr pensee pour DEUX boutons
+   (annuler / valider). Ici il y en a trois : on repasse en flex, Fermer
+   pousse a gauche, la decision reste a droite -- meme hierarchie de lecture,
+   sans deformer les colonnes de la grille d'origine. */
+.bes-doc-apercu .modal-actions{display:flex;flex-wrap:wrap;gap:8px;
+  justify-content:flex-end;align-items:center}
+.bes-doc-apercu .modal-actions .btn-cancel{margin-right:auto}
+@media (max-width:720px){.bes-doc-frame{min-height:44vh}}
 .bes-destock-ok{color:var(--success,#22c55e);font-weight:700;font-size:12px}
 .bes-destock-todo{color:var(--warn,#d97706);font-weight:700;font-size:12px}
 /* Laize : une bobine ne se commande, ne se stocke et ne se destocke que dans sa laize */
@@ -1026,6 +1050,10 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-map-target .bes-mp-ref{font-weight:600;color:var(--text)}
 .bes-map-target .bes-mp-des{font-size:11px;color:var(--muted);margin-top:2px}
 .bes-map-count{color:var(--muted);font-size:12px}
+.bes-btn-creer{padding:4px 10px;border:1px solid var(--accent);background:transparent;
+  color:var(--accent);font-size:11px;font-weight:600;cursor:pointer;border-radius:4px;
+  font-family:inherit;white-space:nowrap}
+.bes-btn-creer:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}
 .bes-map-btn-danger{padding:4px 10px;border:1px solid var(--border);background:transparent;color:#dc2626;font-size:11px;font-weight:600;cursor:pointer;border-radius:4px;font-family:inherit}
 .bes-map-btn-danger:hover{border-color:#dc2626;background:color-mix(in srgb,#dc2626 8%,transparent)}
 .bes-map-h3{margin:20px 0 8px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
@@ -2080,8 +2108,6 @@ body.stock-embed .main-area { width:100% !important; }
 body.stock-embed { background: var(--bg, transparent) !important; }
 
 </style>
-<link rel="stylesheet" href="/static/mysifa_perf.css">
-<script src="/static/mysifa_perf.js"></script>
 </head>
 <body>
 <script src="/static/mysifa_theme.js"></script>
@@ -2091,15 +2117,12 @@ body.stock-embed { background: var(--bg, transparent) !important; }
 <div id="mroot"></div>
 <script src="/static/support_widget.js"></script>
 <script>window.__MYSIFA_APP__='stock';</script>
-<link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=z1cond1">
-<script src="/static/mysifa_stock_modals.js?v=z1cond1"></script>
+<link rel="stylesheet" href="/static/mysifa_stock_modals.css">
+<script src="/static/mysifa_stock_modals.js"></script>
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_postit.js"></script>
 <script src="/static/mysifa_cmdk.js"></script>
 <script src="/static/mysifa_fournisseur_picker.js?v=1.0"></script>
-<!-- Reprendre une réception de RVGI : fournisseur, BL, matière, laize.
-     Les bobines restent scannées une par une — voir le fichier. -->
-<script src="/static/mysifa_rvgi_reception.js"></script>
 <script src="/static/mysifa_guides.js"></script>
 <script src="/static/mysifa_calc.js"></script>
 <script src="/static/chat_mentions.js"></script>
@@ -2194,10 +2217,6 @@ let S = {
   recepLaizeCustomMm: '',  // valeur saisie manuellement
   recepModalMode: false,   // true = modal simplifié depuis fiche matière
   recepModalMatiere: null, // matière verrouillée en mode modal
-  // La réception RVGI reprise, s'il y en a une. Elle ne remplace rien : elle
-  // préremplit l'entête et sert de point de comparaison au comptage.
-  recepRvgi: null,         // {cde, bl, fournisseur_id, qte_totale, lignes[]}
-  recepRvgiChamp: null,    // la poignée rendue par MysRvgiReception.champ()
   // Inventaire matière (par référence)
   matInvList: null,        // [{ id, reference, designation, categorie, statut, jours_depuis, ... }]
   matInvLoading: false,
@@ -2229,6 +2248,9 @@ let S = {
   matieresAdminFilterCat: 'tout',
   matieresAdminFilterQ: '',
   matieresAdminAddSeed: null,
+  // Association en attente : posée avant d'ouvrir le tiroir de création,
+  // consommée après la création réussie de la matière.
+  besoinAssocEnAttente: null,
   mpSousSections: null,
   // Produits finis (onglet dédié)
   pfStock: null,
@@ -10335,6 +10357,14 @@ function buildMatieresAdminAddForm() {
             await loadMatieresIncompleteCount();
           }
           showToast('Référence ajoutée.', 'success');
+          // Créée DEPUIS l'écran Besoins matières pour une valeur de fiche non
+          // associée : on enchaîne l'association sans la redemander. Créer une
+          // référence puis devoir la rechercher pour l'associer à la valeur
+          // qu'on venait de lire est une étape que personne n'oublie par
+          // hasard — on l'oublie parce qu'elle n'a pas lieu d'être.
+          if (S.besoinAssocEnAttente && created && created.id) {
+            await _besAssocierApresCreation(created);
+          }
           refInp.value = '';
           desInp.value = '';
           pppInp.value = '';
@@ -11859,8 +11889,12 @@ const TRACA_FORMATS = [
   { id:'a4p',     label:'A4 paysage',   dims:'297×210 mm' },
   { id:'120x105', label:'120×105 mm',   dims:'120×105 mm' },
   { id:'105x50',  label:'105×50 mm',    dims:'105×50 mm'  },
-  { id:'40x20',   label:'40×20 mm',     dims:'40×20 mm'   },
-  { id:'40x30',   label:'40×30 mm',     dims:'40×30 mm'   },
+  // Etiquettes bobine. Les formats 40x20 et 40x30 de l'ancienne
+  // identification bobine ont ete retires avec elle : plus aucune etiquette
+  // ne les utilise, et un format orphelin dans la liste laisse croire qu'on
+  // peut encore imprimer dessus.
+  { id:'100x150', label:'100×150 mm',   dims:'100×150 mm' },
+  { id:'100x50',  label:'100×50 mm',    dims:'100×50 mm'  },
 ];
 
 const TRACA_ETIQUETTES = [
@@ -11873,7 +11907,30 @@ const TRACA_ETIQUETTES = [
   // Cohésio
   { id:'nb_palettes_c',   label:'Nombre de palettes',      format:'105x50', postes:['cohesio1','cohesio2']      },
   { id:'id_carton',       label:'Identification carton',   format:'105x50', postes:['cohesio1','cohesio2']      },
-  { id:'id_bobine',       label:'Identification bobine',   format:'40x20',  postes:['cohesio1','cohesio2']      },
+  // Identification bobine — section présente sur TOUS les postes.
+  //
+  // Elle remplace l'ancienne étiquette bobine 40×20 des Cohésio, qui ne
+  // portait que la référence produit et le nombre d'étiquettes par bobine :
+  // ni lot, ni claim FSC, ni laize. Une bobine entamée réétiquetée avec ça
+  // perdait sa traçabilité matière, ce qui n'est plus tenable sous
+  // certification.
+  //
+  // Le format n'est pas un choix de l'utilisateur mais une propriété du
+  // poste : la logistique étiquette des bobines qui partent en rack et doit
+  // les lire de loin (grand format), les Cohésio recollent une étiquette sur
+  // le mandrin d'une bobine en cours (petit format). Le bureau ADV dépanne
+  // les deux, donc lui seul voit les deux entrées.
+  { id:'id_bobine_grand', label:'Identification bobine — grand format', format:'100x150',
+    groupe:'bobines', postes:['logistique','bureaux'] },
+  { id:'id_bobine_petit', label:'Identification bobine — petit format',  format:'100x50',
+    groupe:'bobines', postes:['cohesio1','cohesio2','bureaux'] },
+];
+
+// Sections d'un poste. Une étiquette sans `groupe` reste dans la liste
+// principale ; celles qui en portent un sont rassemblées sous ce titre, sur
+// le modèle de la section « Communication » des Bureaux.
+const TRACA_GROUPES = [
+  { id:'bobines', label:'Identification bobines', icon:'layers' },
 ];
 
 // -- Affiches memo (poste Bureaux > Communication) --
@@ -12047,7 +12104,7 @@ function buildIdPlaqueForm() {
          <div class="head">Plaque N°</div>
          <div class="num">${num}</div>
          ${fmt?`<div class="fmt">${fmt}</div>`:''}
-         ${note?`<div class="note">${note}</div>`:''}
+         ${note?`<div class="note">${escHtml(note)}</div>`:''}
          <div class="bar"><svg id="bc"></svg></div>
        </div>
        <script src="${JSBARCODE_CDN}"><\/script>
@@ -12169,35 +12226,409 @@ function buildIdCartonForm() {
     btn);
 }
 
-// ── 7. Cohésio 1 & 2 — Identification bobine (40×20 ou 40×30) ────
-function buildIdBobineForm() {
-  let _ref='', _epb='', _fmt='40x20';
-  function doPrint() {
-    const ref=_ref.trim(), epb=_epb.trim();
-    if(!ref){showToast('Référence requise','error');return;}
-    const [pw, ph] = _fmt==='40x30' ? ['40mm','30mm'] : ['40mm','20mm'];
-    const fsRef = _fmt==='40x30' ? '10pt' : '8pt';
-    const fsCond = _fmt==='40x30' ? '9pt' : '7pt';
-    _printWin('Bobine — '+ref,`${pw} ${ph}`,
-      `.label{width:${pw};height:${ph};padding:1.5mm 2mm;display:flex;flex-direction:column;justify-content:space-between;page-break-after:always;page-break-inside:avoid}
-       .ref{font-size:${fsRef};font-weight:900;word-break:break-all;line-height:1.2}
-       .cond{font-size:${fsCond};font-weight:600;color:#333}`,
-      `<div class="label"><div class="ref">${ref}</div>${epb?`<div class="cond">${epb} étiq/bob</div>`:''}</div>`);
+// ── 7. Tous postes — Identification bobine matière (100×150 / 100×50) ──
+//
+// Remplace l'ancienne étiquette bobine 40×20. Le contenu est celui de
+// l'étiquette imprimée en réception matière (MyStock › Réception) : même
+// bandeau FSC, mêmes intitulés, même code-barres CODE128. Une bobine porte
+// ainsi la même étiquette qu'elle sorte à la réception, en logistique ou au
+// pied de la machine — c'est ce qui rend la traçabilité lisible d'un bout à
+// l'autre de la chaîne.
+//
+// `taille` vaut 'grand' (100×150, logistique) ou 'petit' (100×50, Cohésio).
+// Le bureau ADV a accès aux deux.
+//
+// Les champs sont pré-remplis depuis un lot de réception mais restent
+// éditables : une bobine peut avoir été reçue avant MySifa, ou son étiquette
+// être refaite pour une bobine qui n'a jamais été scannée. Si l'API n'est pas
+// joignable (opérateur hors ligne, rôle sans accès stock), le sélecteur reste
+// vide et le formulaire fonctionne en saisie manuelle — une étiquette de
+// traçabilité ne doit jamais être indisponible faute de réseau.
+function buildIdBobineMatiereForm(taille) {
+  const grand = (taille === 'grand');
+  const JSBARCODE_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js';
+  const esc = s => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const SEL_CSS = 'width:100%;background:var(--bg);border:1px solid var(--border);'
+    + 'border-radius:8px;padding:8px 10px;font-size:13px;color:var(--text);'
+    + 'font-family:inherit;cursor:pointer;outline:none';
+
+  let lots = [];              // lots de réception récents ; peut rester vide
+  let lotCourant = null;
+  let toutesBobines = false;
+
+  const refInp   = _inp('Référence matière — ex. 1077/0026');
+  const laizeInp = _inp('Laize — ex. 570 mm');
+  const lotInp   = _inp('N° de lot');
+  const fourInp  = _inp('Fournisseur');
+  const codeInp  = _inp('Code-barres de la bobine');
+  const certInp  = _inp('N° de certificat FSC du fournisseur');
+  const copInp   = _inp('1', { type:'number', attrs:{ min:'1', step:'1' } });
+  copInp.value = '1';
+
+  const claimSel = el('select', { style: SEL_CSS });
+  Object.entries(FSC_CLAIM_LABELS).forEach(([v, lbl]) => {
+    claimSel.appendChild(el('option', { attrs:{ value: v } }, lbl));
+  });
+  claimSel.value = 'non_fsc';
+
+  const lotSel = el('select', { style: SEL_CSS });
+  lotSel.appendChild(el('option', { attrs:{ value:'' } }, 'Saisie manuelle'));
+  lotSel.appendChild(el('option', { attrs:{ value:'', disabled:'disabled' } }, 'Chargement des réceptions…'));
+
+  const bobSel = el('select', { style: SEL_CSS });
+  const bobField = el('div', { cls:'etiq-form-row', style:{ display:'none' } },
+    el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+      el('label', { cls:'etiq-form-label' }, 'Bobine du lot'), bobSel));
+
+  // Retrouve une bobine dans les lots deja charges a partir de son code-barres.
+  // C'est ce qui fait l'interet du scan face a une saisie clavier : le code
+  // ramene avec lui le lot, le fournisseur, le claim FSC, la reference et la
+  // laize, donc l'etiquette est complete sans rien retaper.
+  function trouverBobineParCode(code) {
+    const c = String(code || '').trim().toLowerCase();
+    if (!c) return null;
+    for (const l of lots) {
+      const bs = l.bobines || [];
+      for (let i = 0; i < bs.length; i++) {
+        if (String(bs[i].code_barre || '').trim().toLowerCase() === c) {
+          return { lot: l, bobine: bs[i], index: i };
+        }
+      }
+    }
+    return null;
   }
-  const rInp=_inp('Référence — ex. 1077/0026'); rInp.addEventListener('input',e=>{_ref=e.target.value.toUpperCase();});
-  const eInp=_inp('Étiquettes/bobine — ex. 500',{type:'number',style:{width:'170px'}}); eInp.addEventListener('input',e=>{_epb=e.target.value;});
-  // Sélecteur format
-  const fmtSel = el('select',{cls:'field-input',style:{width:'140px'}},
-    el('option',{attrs:{value:'40x20',selected:'true'}},'40 × 20 mm'),
-    el('option',{attrs:{value:'40x30'}},'40 × 30 mm'));
-  fmtSel.addEventListener('change',e=>{_fmt=e.target.value;});
-  const btn=el('button',{cls:'traca-print-btn',style:{width:'100%',marginTop:'12px',justifyContent:'center'}},iconEl('printer',15),' Imprimer');
-  btn.addEventListener('click',doPrint);
-  return el('div',null,
-    el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Référence produit *'),rInp),
-    el('div',{cls:'etiq-form-row'},
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Étiquettes / bobine'),eInp),
-      el('div',{cls:'etiq-form-field'},el('label',{cls:'etiq-form-label'},'Format'),fmtSel)),
+
+  function appliquerCodeScanne(code) {
+    const c = String(code || '').trim();
+    if (!c) return;
+    codeInp.value = c;
+    // Une bobine scannee n'est plus « toutes les bobines » : ce qui doit
+    // sortir, c'est l'etiquette de la bobine qu'on vient de lire.
+    toutesBobines = false;
+    const t = trouverBobineParCode(c);
+    if (!t) {
+      showToast('Code ' + c + ' — bobine inconnue, complete les champs.', 'warn');
+      return;
+    }
+    lotCourant = t.lot;
+    lotSel.value  = String(t.lot.id);
+    lotInp.value  = t.lot.lot_numero || '';
+    fourInp.value = t.lot.fournisseur || '';
+    certInp.value = t.lot.certificat_fsc || '';
+    claimSel.value = t.lot.fsc_type_claim || 'non_fsc';
+    majBobSel();
+    bobSel.value = String(t.index);
+    toutesBobines = false;
+    remplirDepuisBobine(t.bobine);
+    codeInp.value = c;
+    showToast('Bobine trouvee — lot ' + (t.lot.lot_numero || '?'), 'success');
+  }
+
+  function remplirDepuisBobine(b) {
+    refInp.value   = (b && b.matiere_reference) || '';
+    laizeInp.value = (b && b.laize) || '';
+    codeInp.value  = (b && b.code_barre) || '';
+  }
+
+  function majBobSel() {
+    bobSel.innerHTML = '';
+    const bobines = (lotCourant && lotCourant.bobines) || [];
+    if (!lotCourant || !bobines.length) {
+      bobField.style.display = 'none';
+      toutesBobines = false;
+      return;
+    }
+    // « Toutes les bobines » n'a de sens qu'à partir de deux : sur un lot
+    // d'une seule bobine l'option ferait croire à un choix qui n'en est pas un.
+    if (bobines.length > 1) {
+      bobSel.appendChild(el('option', { attrs:{ value:'*' } },
+        'Toutes les bobines (' + bobines.length + ') — une étiquette chacune'));
+    }
+    bobines.forEach((b, i) => {
+      const parts = [b.code_barre || ('Bobine ' + (i + 1))];
+      if (b.matiere_reference) parts.push(b.matiere_reference);
+      if (b.laize) parts.push(b.laize);
+      bobSel.appendChild(el('option', { attrs:{ value: String(i) } }, parts.join(' · ')));
+    });
+    bobField.style.display = '';
+    bobSel.value = bobines.length > 1 ? '*' : '0';
+    toutesBobines = bobines.length > 1;
+    if (!toutesBobines) remplirDepuisBobine(bobines[0]);
+    else { refInp.value = ''; laizeInp.value = ''; codeInp.value = ''; }
+  }
+
+  bobSel.addEventListener('change', e => {
+    const v = e.target.value;
+    if (v === '*') {
+      toutesBobines = true;
+      refInp.value = ''; laizeInp.value = ''; codeInp.value = '';
+      return;
+    }
+    toutesBobines = false;
+    const bobines = (lotCourant && lotCourant.bobines) || [];
+    remplirDepuisBobine(bobines[parseInt(v, 10)]);
+  });
+
+  lotSel.addEventListener('change', e => {
+    const id = e.target.value;
+    lotCourant = id ? lots.find(l => String(l.id) === String(id)) || null : null;
+    if (!lotCourant) {
+      toutesBobines = false;
+      bobField.style.display = 'none';
+      return;
+    }
+    lotInp.value   = lotCourant.lot_numero || '';
+    fourInp.value  = lotCourant.fournisseur || '';
+    certInp.value  = lotCourant.certificat_fsc || '';
+    claimSel.value = lotCourant.fsc_type_claim || 'non_fsc';
+    majBobSel();
+  });
+
+  // Chargement asynchrone : le formulaire est utilisable immédiatement en
+  // saisie manuelle, la liste des lots se greffe quand elle arrive.
+  (async () => {
+    try {
+      const r = await api('/api/stock/traca/bobines-recentes?limit=40');
+      lots = (r && r.lots) || [];
+    } catch (e) {
+      lots = [];
+    }
+    lotSel.innerHTML = '';
+    lotSel.appendChild(el('option', { attrs:{ value:'' } }, 'Saisie manuelle'));
+    if (!lots.length) {
+      lotSel.appendChild(el('option', { attrs:{ value:'', disabled:'disabled' } },
+        'Aucune réception disponible'));
+      return;
+    }
+    lots.forEach(l => {
+      const parts = [l.lot_numero || ('Lot ' + l.id)];
+      if (l.fournisseur) parts.push(l.fournisseur);
+      if (l.date_reception) parts.push(l.date_reception);
+      const nb = (l.bobines || []).length;
+      if (nb) parts.push(nb + ' bob.');
+      lotSel.appendChild(el('option', { attrs:{ value: String(l.id) } }, parts.join(' · ')));
+    });
+  })();
+
+  // Une entrée = une étiquette imprimée.
+  function etiquettesAImprimer() {
+    const copies = Math.max(1, Math.min(parseInt(copInp.value, 10) || 1, 200));
+    const commun = {
+      lot: lotInp.value.trim(),
+      fournisseur: fourInp.value.trim(),
+      certificat: certInp.value.trim(),
+      claim: claimSel.value || 'non_fsc',
+    };
+    const out = [];
+    const bobines = (lotCourant && lotCourant.bobines) || [];
+    if (toutesBobines && bobines.length) {
+      bobines.forEach(b => {
+        for (let i = 0; i < copies; i++) out.push(Object.assign({
+          ref: b.matiere_reference || '',
+          laize: b.laize || '',
+          code: b.code_barre || commun.lot,
+        }, commun));
+      });
+      return out;
+    }
+    const un = Object.assign({
+      ref: refInp.value.trim(),
+      laize: laizeInp.value.trim(),
+      code: codeInp.value.trim() || commun.lot,
+    }, commun);
+    for (let i = 0; i < copies; i++) out.push(un);
+    return out;
+  }
+
+  // Gabarits — miroir HTML des deux templates ZPL de la réception matière
+  // (print_render.py : DEFAULT_TEMPLATE_RECEPTION_MATIERE_ZPL pour le grand,
+  // DEFAULT_TEMPLATE_RECEPTION_COMPACT_ZPL pour le petit). Même ordre des
+  // blocs, mêmes intitulés, même hiérarchie de tailles.
+  //
+  // Strictement noir et blanc : ces étiquettes sortent sur thermique
+  // monochrome, où la couleur n'existe pas. Le bandeau FSC est un pavé plein
+  // inversé (l'équivalent HTML du ^GB rempli + ^FR du ZPL), pas un fond vert
+  // ou rouge — sinon la version navigateur ment sur ce que l'étiqueteuse
+  // produira.
+  function labelHtml(d) {
+    const bandeau = (d.claim || 'non_fsc') !== 'non_fsc' ? 'MATIÈRE FSC' : 'MATIÈRE NON FSC';
+    // Ce que porte le code-barres dépend du format, parce que les deux
+    // étiquettes ne sont pas scannées par les mêmes gestes :
+    //   - grand format (logistique) : le NUMÉRO DE LOT, comme le gabarit ZPL
+    //     d'origine — c'est le lot qui rattache la bobine à sa réception, et
+    //     le code bobine reste lisible en clair dans le bloc du bas ;
+    //   - petit format (Cohésio) : le CODE BOBINE, parce que c'est lui que
+    //     l'opérateur scanne dans la traçabilité matière au pied de la
+    //     machine. Un code-barres qu'on ne peut pas scanner là où il est
+    //     collé ne sert à rien.
+    const codeBarre = (grand ? (d.lot || d.code) : (d.code || d.lot)) || '';
+    const bar = codeBarre
+      ? '<div class="bar"><svg class="bc" data-code="' + esc(codeBarre) + '"></svg></div>'
+      : '<div class="bar nobar">Pas de code-barres</div>';
+    if (grand) {
+      return '<div class="label">'
+        + '<div class="brand">__APP_ORG_NAME__</div>'
+        + '<div class="band">' + bandeau + '</div>'
+        + '<div class="lot-big">' + esc(d.lot || '—') + '</div>'
+        + bar
+        + '<div class="lines">'
+        + '<div class="strong">Référence : ' + esc(d.ref || '—') + '</div>'
+        + '<div>' + esc(d.fournisseur || '—') + '</div>'
+        + '<div>FSC : ' + esc(d.certificat || '—') + '</div>'
+        + '<div>Laize : ' + esc(d.laize || '—') + '</div>'
+        + '<div>Réception : ' + esc(d.date) + '</div>'
+        + '</div>'
+        + '<div class="sep"></div>'
+        + '<div class="code-title">CODE BOBINE</div>'
+        + '<div class="code-val">' + esc(d.code || '—') + '</div>'
+        + '</div>';
+    }
+    return '<div class="label">'
+      + '<div class="band">' + bandeau + '</div>'
+      + '<div class="grid">'
+      + '<div class="cell"><div class="lab">Référence</div><div class="val">' + esc(d.ref || '—') + '</div></div>'
+      + '<div class="cell"><div class="lab">Laize</div><div class="val">' + esc(d.laize || '—') + '</div></div>'
+      + '</div>'
+      + '<div class="grid">'
+      + '<div class="cell"><div class="lab">Fournisseur</div><div class="val sm">' + esc(d.fournisseur || '—') + '</div></div>'
+      + '<div class="cell"><div class="lab">Réception</div><div class="val sm">' + esc(d.date) + '</div></div>'
+      + '<div class="cell"><div class="lab">Opérateur</div><div class="val sm">' + esc(d.operateur || '—') + '</div></div>'
+      + '</div>'
+      + '<div class="sep"></div>'
+      + '<div class="lot-title">NUMÉRO LOT</div>'
+      + '<div class="lot-big">' + esc(d.lot || '—') + '</div>'
+      + bar
+      + '</div>';
+  }
+
+  // `print-color-adjust` sur body : sans lui le navigateur « économise »
+  // l'aplat noir du bandeau à l'impression et le rend en gris clair, ce qui
+  // fait disparaître le texte blanc posé dessus.
+  const CSS_COMMUN =
+    'body{-webkit-print-color-adjust:exact;print-color-adjust:exact;color:#000}'
+  + '.band{background:#000;color:#fff;text-align:center;font-weight:900;line-height:1.1}'
+  + '.bar{display:flex;justify-content:center}'
+  + '.bar.nobar{font-size:8pt;color:#555;font-style:italic}'
+  + '.sep{margin-top:auto;border-top:2px solid #000}';
+
+  const CSS_GRAND = CSS_COMMUN
+  + '.label{width:100mm;height:150mm;padding:4mm 5mm;display:flex;flex-direction:column;'
+  + '       overflow:hidden;page-break-after:always;page-break-inside:avoid}'
+  + '.brand{text-align:center;font-size:30pt;font-weight:900;letter-spacing:2pt;line-height:1}'
+  + '.band{margin-top:2.5mm;font-size:21pt;letter-spacing:1.5pt;padding:2.5mm 2mm}'
+  + '.lot-big{margin-top:3mm;text-align:center;font-size:22pt;font-weight:800;'
+  + '         word-break:break-all;line-height:1.1}'
+  + '.bar{margin-top:2mm}'
+  + '.bar svg{max-width:88mm;height:26mm}'
+  + '.lines{margin-top:3mm;text-align:center;font-size:12.5pt;font-weight:700;'
+  + '       line-height:1.5;word-break:break-word}'
+  + '.lines .strong{font-size:14.5pt}'
+  + '.code-title{text-align:center;font-size:12pt;font-weight:800;letter-spacing:1.5pt;margin-top:2.5mm}'
+  + '.code-val{text-align:center;font-size:15pt;font-weight:800;font-family:"Courier New",monospace;'
+  + '          word-break:break-all;margin-top:1mm}';
+
+  const CSS_PETIT = CSS_COMMUN
+  + '.label{width:100mm;height:50mm;padding:2mm 3mm;display:flex;flex-direction:column;'
+  + '       overflow:hidden;page-break-after:always;page-break-inside:avoid}'
+  + '.band{font-size:12pt;letter-spacing:1pt;padding:1.2mm 2mm}'
+  + '.grid{display:flex;gap:3mm;margin-top:1.5mm;min-width:0}'
+  + '.cell{flex:1;min-width:0;overflow:hidden}'
+  + '.lab{font-size:7pt;text-transform:uppercase;letter-spacing:.5pt;color:#333;'
+  + '     font-weight:700;line-height:1.1}'
+  + '.val{font-size:12pt;font-weight:800;line-height:1.15;word-break:break-word}'
+  + '.val.sm{font-size:9pt;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
+  + '.lot-title{text-align:center;font-size:7.5pt;font-weight:800;letter-spacing:1.2pt;margin-top:1mm}'
+  + '.lot-big{text-align:center;font-size:14pt;font-weight:900;font-family:"Courier New",monospace;'
+  + '         line-height:1.1;word-break:break-all}'
+  + '.bar{margin-top:1mm}'
+  + '.bar svg{max-width:88mm;height:9mm}';
+
+  function doPrint() {
+    const items = etiquettesAImprimer();
+    if (!items.length) { showToast('Rien à imprimer', 'error'); return; }
+    if (!toutesBobines && !items[0].ref) { showToast('Référence matière requise', 'error'); return; }
+    const now = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const dateStr = pad(now.getDate()) + '/' + pad(now.getMonth() + 1) + '/' + now.getFullYear();
+    const operateur = (S && S.user && S.user.nom) || '';
+    const html = items
+      .map(d => labelHtml(Object.assign({}, d, { date: dateStr, operateur: operateur })))
+      .join('');
+    // Le titre part dans <title> sans passer par _printWin : une référence
+    // matière contenant un chevron casserait la page d'impression.
+    const titre = esc('Bobine — ' + (items[0].ref || items[0].lot || 'sans référence'));
+    const w = _printWin(titre, grand ? '100mm 150mm' : '100mm 50mm',
+      grand ? CSS_GRAND : CSS_PETIT,
+      html
+      + '<script src="' + JSBARCODE_CDN + '"><\/script>'
+      + '<script>'
+      /* Génération synchrone, pas de window.onload : _printWin écrit son
+         propre window.onload = print() APRÈS ce bloc et écraserait notre
+         handler — les codes-barres sortiraient vides. Même contrainte que
+         recepPrintLabels. */
+      + '(function(){var n=document.querySelectorAll("svg.bc");'
+      + 'for(var i=0;i<n.length;i++){try{JsBarcode(n[i],n[i].getAttribute("data-code"),'
+      + '{format:"CODE128",displayValue:true,fontSize:' + (grand ? 15 : 9) + ','
+      + 'textMargin:0,margin:0,height:' + (grand ? 95 : 30) + '});}catch(e){}}})();'
+      + '<\/script>');
+    if (w) w.document.close();
+  }
+
+  // Scan camera du code bobine. On appelle le scanner de la reception matiere
+  // avec un callback plutot que d'en ecrire un second : c'est le meme geste,
+  // le meme materiel et les memes pieges (HTTPS obligatoire, autofocus
+  // Android, ZXing sur iOS) — un second scanner divergerait au premier
+  // correctif.
+  const scanBtn = el('button', {
+    cls: 'traca-print-btn',
+    type: 'button',
+    style: { flexShrink:'0', padding:'8px 12px' },
+  }, iconEl('scan', 14), ' Scanner');
+  scanBtn.addEventListener('click', () => {
+    if (typeof recepStartCamera !== 'function') {
+      showToast('Scanner indisponible sur cette page.', 'error');
+      return;
+    }
+    recepStartCamera({
+      hint: 'Pointez vers le code-barres de la bobine',
+      onCode: appliquerCodeScanne,
+    });
+  });
+
+  const btn = el('button', { cls:'traca-print-btn',
+    style:{ width:'100%', marginTop:'12px', justifyContent:'center' } },
+    iconEl('printer', 15), ' Imprimer');
+  btn.addEventListener('click', doPrint);
+
+  return el('div', null,
+    el('div', { cls:'etiq-form-row' },
+      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+        el('label', { cls:'etiq-form-label' }, 'Lot de réception'), lotSel)),
+    bobField,
+    el('div', { cls:'etiq-form-row' },
+      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+        el('label', { cls:'etiq-form-label' }, 'Référence matière *'), refInp)),
+    el('div', { cls:'etiq-form-row' },
+      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+        el('label', { cls:'etiq-form-label' }, 'Laize'), laizeInp),
+      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+        el('label', { cls:'etiq-form-label' }, 'N° de lot'), lotInp)),
+    el('div', { cls:'etiq-form-row' },
+      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+        el('label', { cls:'etiq-form-label' }, 'Fournisseur'), fourInp)),
+    el('div', { cls:'etiq-form-row' },
+      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+        el('label', { cls:'etiq-form-label' }, 'Certificat FSC'), certInp)),
+    el('div', { cls:'etiq-form-row' },
+      el('div', { cls:'etiq-form-field', style:{ flex:'1.6' } },
+        el('label', { cls:'etiq-form-label' }, 'Code-barres'),
+        el('div', { style:{ display:'flex', gap:'6px' } }, codeInp, scanBtn)),
+      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+        el('label', { cls:'etiq-form-label' }, 'Exemplaires'), copInp)),
+    el('div', { cls:'etiq-form-row' },
+      el('div', { cls:'etiq-form-field', style:{ flex:'1' } },
+        el('label', { cls:'etiq-form-label' }, 'Statut FSC'), claimSel)),
     btn);
 }
 
@@ -12212,7 +12643,10 @@ function openTracaPrint(etiq) {
     id_cliche:        buildIdClicheForm,
     nb_palettes_c:    buildNbPalettesCForm,
     id_carton:        buildIdCartonForm,
-    id_bobine:        buildIdBobineForm,
+    // Même formulaire pour les deux tailles : seul le gabarit d'impression
+    // change, jamais les champs saisis.
+    id_bobine_grand:  () => buildIdBobineMatiereForm('grand'),
+    id_bobine_petit:  () => buildIdBobineMatiereForm('petit'),
   };
   const builder = formBuilders[etiq.id];
   const formContent = builder ? builder() : el('div',{cls:'traca-dev-banner'},iconEl('settings',14),' À venir.');
@@ -12231,35 +12665,51 @@ function openTracaPrint(etiq) {
 function buildTracaPosteView(poste) {
   const etiquettes = TRACA_ETIQUETTES.filter(e=>e.postes.includes(poste.id));
   const backBar = el('div',{cls:'traca-back-bar'},
-    el('button',{cls:'traca-back-btn',on:{click:()=>{ S.tracaPoste=null; renderContent(); }}},
+    el('button',{cls:'traca-back-btn',on:{click:()=>{ S.tracaPoste=null; tracaSyncUrl(null); renderContent(); }}},
       iconEl('arrow-left',15), ' Postes'),
     el('span',{cls:'traca-poste-heading'}, poste.label)
   );
-  let listEl;
+  // Une carte d'étiquette. Extraite de la boucle parce que la vue poste rend
+  // désormais plusieurs listes : les étiquettes courantes du poste, puis une
+  // section par groupe (voir TRACA_GROUPES).
+  function mkEtiqCard(etiq){
+    const fmtObj = TRACA_FORMATS.find(f=>f.id===etiq.format)||{label:etiq.format,dims:''};
+    return el('div',{cls:'traca-etiq-card'},
+      el('div',{cls:'traca-etiq-icon-wrap',style:{background:poste.colorBg,color:poste.color}},
+        iconEl('tag',18)),
+      el('div',{cls:'traca-etiq-body'},
+        el('div',{cls:'traca-etiq-label'},etiq.label),
+        el('div',{cls:'traca-etiq-meta'},
+          el('span',{cls:'traca-format-badge'},fmtObj.label),
+          el('span',{cls:'traca-printer-badge'},
+            iconEl('printer',10),
+            '\u00a0'+(etiq.printer||'Non configurée'))
+        )
+      ),
+      el('button',{cls:'traca-print-btn',on:{click:()=>openTracaPrint(etiq)}},
+        iconEl('printer',13),' Imprimer')
+    );
+  }
+
+  const principales = etiquettes.filter(e=>!e.groupe);
+  let listEl = null;
   if (etiquettes.length===0) {
     listEl = el('div',{cls:'card'},el('div',{cls:'card-empty'},'Aucune étiquette configurée pour ce poste.'));
-  } else {
-    const cards = etiquettes.map(etiq=>{
-      const fmtObj = TRACA_FORMATS.find(f=>f.id===etiq.format)||{label:etiq.format,dims:''};
-      const card = el('div',{cls:'traca-etiq-card'},
-        el('div',{cls:'traca-etiq-icon-wrap',style:{background:poste.colorBg,color:poste.color}},
-          iconEl('tag',18)),
-        el('div',{cls:'traca-etiq-body'},
-          el('div',{cls:'traca-etiq-label'},etiq.label),
-          el('div',{cls:'traca-etiq-meta'},
-            el('span',{cls:'traca-format-badge'},fmtObj.label),
-            el('span',{cls:'traca-printer-badge'},
-              iconEl('printer',10),
-              '\u00a0'+(etiq.printer||'Non configurée'))
-          )
-        ),
-        el('button',{cls:'traca-print-btn',on:{click:()=>openTracaPrint(etiq)}},
-          iconEl('printer',13),' Imprimer')
-      );
-      return card;
-    });
-    listEl = el('div',{cls:'traca-etiq-list'},...cards);
+  } else if (principales.length) {
+    listEl = el('div',{cls:'traca-etiq-list'},...principales.map(mkEtiqCard));
   }
+
+  // Sections groupées — aujourd'hui « Identification bobines », présente sur
+  // les quatre postes. Un groupe sans étiquette pour ce poste ne rend rien :
+  // un titre de section vide se lit comme une fonctionnalité en panne.
+  const groupSections = TRACA_GROUPES.map(g=>{
+    const items = etiquettes.filter(e=>e.groupe===g.id);
+    if(!items.length) return null;
+    return el('div',null,
+      el('div',{cls:'traca-group-title'}, iconEl(g.icon||'folder',12), g.label),
+      el('div',{cls:'traca-etiq-list'}, ...items.map(mkEtiqCard))
+    );
+  }).filter(Boolean);
 
   // -- Dossier "Communication" - uniquement pour le poste Bureaux --
   let commSection = null;
@@ -12296,7 +12746,20 @@ function buildTracaPosteView(poste) {
     );
   }
 
-  return el('div',{cls:'content'}, backBar, listEl, commSection);
+  return el('div',{cls:'content'}, backBar, listEl, ...groupSections, commSection);
+}
+
+// L'URL suit la navigation entre postes, sans empiler d'entrée d'historique :
+// on remplace, on n'ajoute pas — sinon dix retours arrière pour sortir de la
+// page après avoir regardé quatre postes.
+function tracaSyncUrl(posteId) {
+  try {
+    const u = new URL(window.location.href);
+    u.searchParams.set('tab', 'traca');
+    if (posteId) u.searchParams.set('poste', posteId);
+    else u.searchParams.delete('poste');
+    history.replaceState(null, '', u.pathname + u.search + u.hash);
+  } catch (e) {}
 }
 
 function buildTraca() {
@@ -12307,7 +12770,7 @@ function buildTraca() {
   // Vue sélection poste
   const cards = TRACA_POSTES.map(poste=>{
     const count = TRACA_ETIQUETTES.filter(e=>e.postes.includes(poste.id)).length;
-    const card = el('div',{cls:'traca-poste-card',on:{click:()=>{ S.tracaPoste=poste.id; renderContent(); }}},
+    const card = el('div',{cls:'traca-poste-card',on:{click:()=>{ S.tracaPoste=poste.id; tracaSyncUrl(poste.id); renderContent(); }}},
       el('div',{cls:'traca-poste-icon',style:{background:poste.colorBg,color:poste.color}},
         iconEl(poste.icon,22)),
       el('div',{cls:'traca-poste-label'},poste.label),
@@ -12541,29 +13004,27 @@ function buildBesoinsMatieres() {
 
   // ── Toolbar : segmented + actions ──
   const toolbar = el('div', { cls: 'bes-toolbar' },
+    // Trois vues, dans l'ordre du travail : on répare le dossier, puis on
+    // agrège par référence pour commander, puis on regarde venir.
+    // « Par échéance » et « Dossiers passés » ont été retirées de la barre —
+    // le code des deux vues reste en place et reste atteignable par l'URL
+    // (?vue=echeance), le temps de vérifier que personne ne s'en servait.
     el('div', { cls: 'bes-seg' },
       el('button', {
-        cls: 'bes-seg-btn' + (view === 'echeance' ? ' active' : ''),
-        on: { click: () => { _besSetVue('echeance'); } }
-      }, 'Par échéance'),
-      el('button', {
-        cls: 'bes-seg-btn' + (view === 'matiere' ? ' active' : ''),
-        on: { click: () => { _besSetVue('matiere'); } }
-      }, 'Par matière'),
-      el('button', {
         cls: 'bes-seg-btn' + (view === 'dossier' ? ' active' : ''),
+        title: 'Chaque dossier de production, ses documents et ses besoins',
         on: { click: () => { _besSetVue('dossier'); } }
       }, 'Par dossier'),
+      el('button', {
+        cls: 'bes-seg-btn' + (view === 'matiere' ? ' active' : ''),
+        title: 'Les besoins agrégés par référence — l\'unité de la commande',
+        on: { click: () => { _besSetVue('matiere'); } }
+      }, 'Par matière'),
       el('button', {
         cls: 'bes-seg-btn' + (view === 'tendance' ? ' active' : ''),
         title: 'Quand la matière sera nécessaire, mois par mois',
         on: { click: () => { _besSetVue('tendance'); } }
       }, 'Tendance'),
-      el('button', {
-        cls: 'bes-seg-btn' + (view === 'passes' ? ' active' : ''),
-        title: 'Productions terminées : ce qui reste à déstocker et ce qui l\'est déjà',
-        on: { click: () => { _besSetVue('passes'); } }
-      }, 'Dossiers passés'),
     ),
     (function () {
       const inp = el('input', {
@@ -12626,46 +13087,31 @@ function buildBesoinsMatieres() {
 // l'échelle soit explicite. Vingt matières sur un graphe commun seraient
 // illisibles et exigeraient vingt teintes catégorielles dont aucune ne serait
 // distinguable ; une série par ligne rend la question sans objet.
-// Fenêtre par défaut : 12 mois révolus + le mois courant + 5 à venir. Le passé
-// n'est pas décoratif — c'est la seule référence disponible pour juger si un
-// mois à venir est plein ou creux. Sans lui, un carnet qui ne s'est pas encore
-// rempli et une baisse d'activité ont exactement la même allure.
-const BES_TEND_FENETRES = [
-  { cle: '18', passe: 12, futur: 5, lbl: '18 mois', title: '12 mois révolus + le mois courant + 5 à venir' },
-  { cle: '12', passe: 6, futur: 5, lbl: '12 mois', title: '6 mois révolus + le mois courant + 5 à venir' },
-  { cle: 'futur', passe: 0, futur: 7, lbl: 'À venir', title: 'Le mois courant et les 7 suivants' },
-];
-
-// Les deux axes de temps. Ils ne répondent pas à la même question, et l'écran
-// doit dire laquelle il traite — sans quoi on lit des courbes décalées d'un à
-// deux mois sans savoir pourquoi.
-const BES_TEND_AXES = [
-  { cle: 'production', lbl: 'Production',
-    title: 'Le mois où le dossier passe en machine — donc où la matière doit '
-           + 'être en stock. C\'est l\'axe sur lequel on commande.' },
-  { cle: 'livraison', lbl: 'Livraison',
-    title: 'Le mois promis au client. C\'est l\'engagement, pas la date à '
-           + 'laquelle la matière est nécessaire : elle sort du stock avant.' },
-];
-
-function _besTendAxe() {
-  return (S.besoinsTendAxe === 'livraison') ? 'livraison' : 'production';
-}
-
-function _besTendFenetre() {
-  return BES_TEND_FENETRES.find(f => f.cle === (S.besoinsTendFenetre || '18'))
-      || BES_TEND_FENETRES[0];
-}
+// Fenêtre et axe sont figés — ils ne sont plus réglables à l'écran.
+//
+// Fenêtre : 12 mois révolus + le mois courant + 5 à venir. Le passé n'est pas
+// décoratif — c'est la seule référence disponible pour juger si un mois à
+// venir est plein ou creux. Sans lui, un carnet qui ne s'est pas encore rempli
+// et une baisse d'activité ont exactement la même allure. Les fenêtres plus
+// courtes amputaient précisément cette référence.
+//
+// Axe : production, le mois où le dossier passe en machine — donc où la
+// matière doit être en stock. C'est le seul axe sur lequel on commande. L'axe
+// livraison décalait les courbes d'un à deux mois sans changer une seule
+// décision d'achat, et deux captures d'écran prises sur deux axes différents
+// se ressemblaient assez pour qu'on les croie comparables.
+const BES_TEND_PASSE = 12;
+const BES_TEND_FUTUR = 5;
+const BES_TEND_AXE = 'production';
 
 async function loadBesoinsTendance() {
   S.besoinsTendance = null;
   S.besoinsLoading = true;
   renderContent();
-  const f = _besTendFenetre();
   try {
     S.besoinsTendance = await api(
-      '/api/stock/besoins-matieres/tendance?passe=' + f.passe + '&futur=' + f.futur
-      + '&axe=' + _besTendAxe());
+      '/api/stock/besoins-matieres/tendance?passe=' + BES_TEND_PASSE
+      + '&futur=' + BES_TEND_FUTUR + '&axe=' + BES_TEND_AXE);
   } catch (e) {
     S.besoinsTendance = { erreur: e.message || 'chargement impossible' };
     showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
@@ -13165,27 +13611,6 @@ function _buildBesoinsTendance(data) {
       : null,
   ));
 
-  // ── Fenêtre ──
-  // Un seul contrôle, au-dessus de tous les graphes : il les cadre tous. Une
-  // fenêtre par graphe donnerait des courbes qu'on croirait comparables.
-  const axe = _besTendAxe();
-  cont.appendChild(el('div', { cls: 'bes-tend-ctl' },
-    el('span', { cls: 'bes-tend-ctl-lbl' }, 'Fenêtre'),
-    el('div', { cls: 'bes-seg' }, ...BES_TEND_FENETRES.map(f =>
-      el('button', {
-        cls: 'bes-seg-btn' + ((S.besoinsTendFenetre || '18') === f.cle ? ' active' : ''),
-        title: f.title,
-        on: { click: () => { S.besoinsTendFenetre = f.cle; loadBesoinsTendance(); } },
-      }, f.lbl))),
-    el('span', { cls: 'bes-tend-ctl-lbl', style: { marginLeft: '18px' } }, 'Daté sur'),
-    el('div', { cls: 'bes-seg' }, ...BES_TEND_AXES.map(a =>
-      el('button', {
-        cls: 'bes-seg-btn' + (axe === a.cle ? ' active' : ''),
-        title: a.title,
-        on: { click: () => { S.besoinsTendAxe = a.cle; loadBesoinsTendance(); } },
-      }, a.lbl))),
-  ));
-
   const categories = (data.categories || []).map(c => Object.assign({}, c, {
     lignes: (c.lignes || []).filter(l => _besMatchFiltre(
       { reference: l.libelle, designation: l.designation, matiere: l.libelle },
@@ -13597,6 +14022,11 @@ function _buildBesoinsMatiereTable(ech) {
             cls: 'bes-btn-associate',
             on: { click: () => openBesoinAssocierModal(o.kind, o.source_value) },
           }, 'Associer'),
+          el('button', {
+            cls: 'bes-btn-creer',
+            title: 'Créer la référence puis l\'associer à cette valeur',
+            on: { click: () => openBesoinCreerMatiere(o.kind, o.source_value) },
+          }, 'Créer'),
         ),
       ));
     });
@@ -13837,11 +14267,12 @@ function _besKindCell(b) {
   return cell;
 }
 
-// Bouton d'ouverture d'un document (OF ou fiche technique) dans un nouvel
-// onglet. Sans document rattache, le bouton reste visible mais desactive :
-// l'absence est une information, la masquer laisserait croire a un oubli d'UI.
-function _besDocBtn(label, ico, url, titre) {
-  const dispo = !!url;
+// Bouton d'ouverture d'un document (OF ou fiche technique). Il ouvre la
+// modale d'apercu, pas un onglet : on lit et on valide au meme endroit.
+// Sans document rattache, le bouton reste visible mais desactive — l'absence
+// est une information, la masquer laisserait croire a un oubli d'UI.
+function _besDocBtn(label, ico, onClick, titre) {
+  const dispo = typeof onClick === 'function';
   const b = el('button', {
     cls: 'bes-act-btn' + (dispo ? '' : ' off'),
     type: 'button',
@@ -13849,10 +14280,7 @@ function _besDocBtn(label, ico, url, titre) {
     attrs: dispo ? {} : { disabled: 'disabled' },
   }, iconEl(ico, 13), el('span', {}, label));
   if (dispo) {
-    b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      window.open(url, '_blank', 'noopener');
-    });
+    b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
   }
   return b;
 }
@@ -13881,14 +14309,15 @@ function _besDocCell(d) {
   return el('td', { cls: 'bes-act-cell' },
     d.of_import_id
       ? el('span', { cls: 'bes-doc-pair' },
-          _besDocBtn('OF', 'file-text', '/api/of/' + d.of_import_id + '/pdf-preview', 'Ouvrir l\'OF'),
+          _besDocBtn('OF', 'file-text', () => openBesoinDocApercu(d, 'of'),
+            'Voir l\'OF, le valider ou le remplacer'),
           _besValidBtn('of', d.of_import_id, d.of_valide, d.of_valide_par,
             'OF', d.of_invalide_motif))
       : _besDocManquantBtn('OF', 'file-text', d, 'of'),
     d.ft_id
       ? el('span', { cls: 'bes-doc-pair' },
-          _besDocBtn('Fiche', 'clipboard', '/api/fiches-techniques/' + d.ft_id + '/pdf-preview',
-            'Ouvrir la fiche technique'),
+          _besDocBtn('Fiche', 'clipboard', () => openBesoinDocApercu(d, 'fiche'),
+            'Voir la fiche technique, la valider ou la remplacer'),
           _besValidBtn('fiche', d.ft_id, d.ft_valide, d.ft_valide_par,
             'Fiche technique', d.ft_invalide_motif))
       : _besDocManquantBtn('Fiche', 'clipboard', d, 'fiche'),
@@ -13943,6 +14372,94 @@ function _besValidBtn(type, docId, valide, quiValide, libelle, motifInvalidation
     openDocEtatModal(type, docId, libelle);
   });
   return b;
+}
+
+// ── Aperçu d'un document : le lire, le valider, le remplacer ─────────────
+// Avant, cliquer sur « OF » ouvrait un onglet. On sortait de MySifa pour
+// regarder, on revenait pour valider, on ressortait pour remplacer : trois
+// écrans pour un seul geste, et la validation se faisait de mémoire.
+//
+// Cette modale ne réinvente rien — elle assemble ce qui existait déjà :
+// l'aperçu PDF (`/api/of/{id}/pdf-preview`, servi en `inline` avec
+// `Cache-Control: no-store`, prévu pour l'iframe), la bascule de validation
+// (`basculerValidationDoc`), le rattachement d'un autre document
+// (`openBesoinDocModal`) et le détail des changements (`openDocEtatModal`).
+// On voit et on décide au même endroit.
+async function openBesoinDocApercu(dossier, type) {
+  closeMroot();
+  const estOf = (type === 'of');
+  const docId = estOf ? dossier.of_import_id : dossier.ft_id;
+  if (!docId) { openBesoinDocModal(dossier, type); return; }
+
+  const libelle = estOf ? 'OF' : 'Fiche technique';
+  const url = (estOf ? '/api/of/' : '/api/fiches-techniques/') + docId + '/pdf-preview';
+  const peut = isMatieresAdmin() && !S.stockReadOnly;
+  const valide = estOf ? !!dossier.of_valide : !!dossier.ft_valide;
+  const quiValide = estOf ? dossier.of_valide_par : dossier.ft_valide_par;
+  const motif = estOf ? dossier.of_invalide_motif : dossier.ft_invalide_motif;
+
+  const overlay = el('div', { cls: 'modal-overlay',
+    on: { click: e => { if (e.target === overlay) closeMroot(); } } });
+
+  // L'aperçu occupe la place : c'est ce qu'on est venu voir. Le reste tient
+  // sur une ligne au-dessus et une ligne d'actions en dessous.
+  const cadre = el('iframe', {
+    cls: 'bes-doc-frame',
+    attrs: { src: url, title: libelle + ' — aperçu' },
+  });
+
+  const etat = el('div', { cls: 'bes-doc-etat' + (valide ? ' ok' : (motif ? ' perime' : '')) },
+    el('span', { cls: 'bes-doc-etat-pastille' }, valide ? '✓' : (motif ? '⟳' : '!')),
+    el('span', {},
+      valide
+        ? (libelle + ' validé' + (quiValide ? ' par ' + quiValide : ''))
+        : (motif ? (libelle + ' — ' + motif)
+                 : (libelle + ' non validé : aucun déstockage ne partira de ses chiffres.'))),
+    // Le détail des changements reste à un clic : la modale d'état existante
+    // fait ce travail mieux qu'un résumé recopié ici.
+    el('button', { cls: 'btn-ghost-sm', type: 'button',
+                   title: 'Voir ce qui a changé depuis la dernière validation',
+                   on: { click: () => openDocEtatModal(type, docId, libelle) } },
+       'Historique'),
+    // Échappatoire assumée, mais rangée avec les liens secondaires : imprimer
+    // ou zoomer se fait mieux dans un vrai onglet. En bas, elle aurait pris la
+    // place d'une action de décision.
+    el('button', { cls: 'btn-ghost-sm', type: 'button',
+                   title: 'Ouvrir le PDF dans un onglet (impression, zoom)',
+                   on: { click: () => window.open(url, '_blank', 'noopener') } },
+       'Ouvrir à part'),
+  );
+
+  const actions = el('div', { cls: 'modal-actions', style: { marginTop: '12px' } },
+    el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Fermer'),
+    peut
+      ? el('button', { cls: 'btn btn-ghost', type: 'button',
+            title: 'Rattacher un autre document à ce dossier — il remplacera celui-ci',
+            on: { click: () => openBesoinDocModal(dossier, type) } },
+          iconEl('upload', 13), el('span', {}, ' Importer un autre document'))
+      : null,
+    peut
+      ? el('button', { cls: 'btn btn-accent', type: 'button',
+            on: { click: async () => {
+              closeMroot();
+              await basculerValidationDoc(type, docId, !valide);
+            } } },
+          valide ? 'Retirer la validation' : 'Valider le document')
+      : null,
+  );
+
+  const sheet = el('div', { cls: 'modal-sheet bes-doc-apercu' },
+    el('span', { cls: 'modal-handle' }),
+    el('div', { cls: 'modal-title' }, libelle + ' — ' + (dossier.reference || '—')),
+    el('div', { cls: 'modal-sub' },
+      [dossier.numero_of ? 'OF ' + dossier.numero_of : '',
+       dossier.ref_produit ? ' · ' + dossier.ref_produit : '',
+       dossier.machine_nom ? ' · ' + dossier.machine_nom : ''].join('')),
+    etat, cadre, actions,
+  );
+  sheet.addEventListener('click', e => e.stopPropagation());
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
 }
 
 // ── État d'un document : ce qui a changé, et depuis quand ─────────────────
@@ -14103,15 +14620,15 @@ function _buildBesoinsPassesTable(dos) {
       el('td', { cls: 'bes-act-cell' },
         d.of_import_id
           ? el('span', { cls: 'bes-doc-pair' },
-              _besDocBtn('OF', 'file-text', '/api/of/' + d.of_import_id + '/pdf-preview',
-                'Ouvrir l\'OF'),
+              _besDocBtn('OF', 'file-text', () => openBesoinDocApercu(d, 'of'),
+                'Voir l\'OF, le valider ou le remplacer'),
               _besValidBtn('of', d.of_import_id, d.of_valide, d.of_valide_par,
             'OF', d.of_invalide_motif))
           : el('span', { cls: 'bes-mp-none' }, 'Pas d\'OF'),
         d.ft_id
           ? el('span', { cls: 'bes-doc-pair' },
-              _besDocBtn('Fiche', 'clipboard', '/api/fiches-techniques/' + d.ft_id + '/pdf-preview',
-                'Ouvrir la fiche technique'),
+              _besDocBtn('Fiche', 'clipboard', () => openBesoinDocApercu(d, 'fiche'),
+                'Voir la fiche technique, la valider ou la remplacer'),
               _besValidBtn('fiche', d.ft_id, d.ft_valide, d.ft_valide_par,
             'Fiche technique', d.ft_invalide_motif))
           : el('span', { cls: 'bes-mp-none' }, 'Pas de fiche'),
@@ -14360,6 +14877,65 @@ async function openBesoinDocModal(dossier, ongletInitial) {
   charger('');
 }
 
+// ── Créer la matière manquante, puis l'associer ──────────────────────────
+// Le tiroir d'administration des matières sait déjà tout faire : catégories,
+// laizes, sous-sections, grammages. Le dupliquer dans une petite modale aurait
+// produit un second formulaire à maintenir, forcément en retard sur le premier.
+// On l'ouvre donc tel quel, pré-rempli, et on retient l'association à faire.
+async function openBesoinCreerMatiere(kind, sourceValue) {
+  if (!isMatieresAdmin() || S.stockReadOnly) {
+    showToast('Création de matière réservée à l\'administration du stock.', 'info');
+    return;
+  }
+  // La catégorie découle du type de besoin : un support n'est jamais un
+  // mandrin. Première de la liste, l'utilisateur corrige si besoin.
+  const cats = BESOINS_KIND_CATEGORIES[kind] || [];
+  S.besoinAssocEnAttente = { kind, source_value: sourceValue };
+  S.matieresAdminOpen = true;
+  S.matieresAdminEditId = null;
+  S.matieresAdminAddError = '';
+  S.matieresAdminAddSeed = {
+    categorie: cats[0] || '',
+    reference: '',
+    // La valeur lue dans la fiche technique sert de désignation : c'est le
+    // libellé que l'atelier reconnaît, et il évite une ressaisie à l'identique.
+    designation: sourceValue || '',
+    seuil_alerte: 0,
+    stock_par_laize: [],
+  };
+  closeMroot();
+  await Promise.all([loadMatieresAdminList(), loadMpSousSections()]);
+  renderMatieresAdminDrawer();
+  showToast('Nouvelle référence pour « ' + sourceValue + ' » — elle sera '
+            + 'associée automatiquement après création.', 'info');
+}
+
+// Appelée par le formulaire d'ajout juste après la création réussie.
+async function _besAssocierApresCreation(created) {
+  const att = S.besoinAssocEnAttente;
+  S.besoinAssocEnAttente = null;
+  if (!att || !created || !created.id) return;
+  try {
+    await api('/api/stock/besoins-matieres/mapping', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: att.kind, source_value: att.source_value,
+                             matiere_id: created.id }),
+    });
+    showToast('« ' + att.source_value +' » est maintenant associée à '
+              + (created.reference || 'la nouvelle référence') + '.', 'success');
+    // Le besoin se recalcule : la valeur quitte « à associer » et rejoint les
+    // références chiffrées, sans que l'écran soit rechargé à la main.
+    await loadBesoinsMatieres();
+  } catch (e) {
+    // La matière EXISTE — seule l'association a échoué. Le dire précisément
+    // évite qu'on la recrée en croyant que rien n'a marché.
+    showToast('Référence créée, mais l\'association a échoué : '
+              + (e.message || 'erreur') + '. À faire depuis « Correspondances ».',
+              'error');
+  }
+}
+
 function openBesoinAssocierModal(kind, sourceValue) {
   closeMroot();
   const label = BESOINS_KIND_LABELS[kind] || kind;
@@ -14379,6 +14955,13 @@ function openBesoinAssocierModal(kind, sourceValue) {
       'Valeur détectée dans les fiches techniques : ',
       el('strong', {}, sourceValue),
     ),
+    // Sortie de secours quand la recherche ne donne rien : la matière
+    // n'existe pas, et c'est ici qu'on s'en aperçoit.
+    el('div', { style: { marginTop: '10px' } },
+      el('button', { cls: 'bes-btn-creer',
+                     title: 'Aucune référence ne correspond ? La créer maintenant.',
+                     on: { click: () => openBesoinCreerMatiere(kind, sourceValue) } },
+         '+ Créer la matière')),
     el('div', { style: { marginTop: '14px', marginBottom: '8px', fontSize: '12px', fontWeight: '600', color: 'var(--text)', textTransform: 'uppercase', letterSpacing: '.4px' } },
       (cats && cats.length && filtered.length)
         ? `Matières premières · catégorie ${cats.join(' ou ')}`
@@ -14451,6 +15034,12 @@ async function openBesoinsMappingModal() {
         el('span', { cls: 'bes-map-source' }, nm.source_value),
         el('span', { cls: 'bes-map-count' }, `${nm.count} dossier${nm.count > 1 ? 's' : ''}`),
         el('button', { cls: 'bes-btn-associate', on: { click: () => openBesoinAssocierModal(nm.kind, nm.source_value) } }, 'Associer'),
+        // La matière n'existe pas encore dans MySifa : c'est le cas le plus
+        // fréquent derrière une valeur non associée, et jusqu'ici il obligeait
+        // à quitter l'écran pour la créer ailleurs.
+        el('button', { cls: 'bes-btn-creer', title: 'Créer la référence puis l\'associer à cette valeur',
+                       on: { click: () => openBesoinCreerMatiere(nm.kind, nm.source_value) } },
+           'Créer la matière'),
       ));
     });
     sheet.appendChild(box);
@@ -15061,9 +15650,6 @@ function monEnsureState() {
       monPage: 'quantites',
       sortColumn: null,
       sortDirection: 'asc',
-      // Le miroir de RVGI comme source, à la place de l'export Excel manuel.
-      miroir: null,
-      miroirEnCours: false,
     };
   }
   return S.monitoring;
@@ -15506,6 +16092,13 @@ function buildMonitoring() {
     await monitoringImportFile(f);
   });
 
+  const importBtn = el('button', {
+    cls: 'btn btn-accent',
+    type: 'button',
+    disabled: m.importing ? true : null,
+    on: { click: () => fileInp.click() },
+  }, m.importing ? 'Import en cours…' : 'Importer l\'export ERP (.xlsx)');
+
   const snapSel = el('select', {
     cls: 'mon-snapshot-select',
     id: 'mon-snapshot-select',
@@ -15526,54 +16119,11 @@ function buildMonitoring() {
     if (id) loadMonitoringSnapshot(id);
   });
 
-  // Le miroir de RVGI est la source par défaut : il est relevé tout seul,
-  // plusieurs fois par jour, et porte la même information que l'export
-  // Table Stocks qu'il fallait sortir à la main. L'import .xlsx reste — c'est
-  // le recours quand la synchro est en panne.
-  const mir = m.miroir;
-  const mirPret = !!(mir && mir.disponible);
-  const miroirBtn = el('button', {
-    cls: 'btn btn-accent',
-    type: 'button',
-    disabled: (!mirPret || m.miroirEnCours || m.importing) ? true : null,
-    title: mirPret
-      ? ('Compare le stock MySifa au dernier relevé du miroir RVGI'
-         + (mir.releve_le ? ' (' + fDateTime(mir.releve_le) + ')' : '')
-         + '. Aucun fichier à sortir de RVGI.')
-      : ((mir && mir.raison) || 'Miroir RVGI indisponible.'),
-    on: { click: () => monitoringDepuisMiroir() },
-  }, m.miroirEnCours ? 'Comparaison en cours…' : 'Comparer avec RVGI');
-
-  const importBtnSec = el('button', {
-    cls: 'btn',
-    type: 'button',
-    disabled: (m.importing || m.miroirEnCours) ? true : null,
-    title: 'Recours si la synchro RVGI est en panne : l\'export Table Stocks (.xlsx).',
-    on: { click: () => fileInp.click() },
-  }, m.importing ? 'Import en cours…' : 'Importer un .xlsx');
-
   const actions = el('div', { cls: 'mon-actions', id: 'mon-actions-bar' },
-    miroirBtn,
-    importBtnSec,
+    importBtn,
     fileInp,
     snapSel,
   );
-
-  // Ce que le miroir porte, dit avant de cliquer plutôt qu'après : un relevé
-  // d'hier soir compare le stock d'hier soir, et ça change la lecture des
-  // écarts.
-  if (mir) {
-    actions.appendChild(el('span', {
-      cls: 'hist-subtitle',
-      style: { flexBasis: '100%', margin: '2px 0 0', fontSize: '12px' },
-    }, mirPret
-      ? ('Miroir RVGI relevé le ' + fDateTime(mir.releve_le)
-         + ' — ' + fN(mir.avec_stock || 0) + ' référence(s) avec du stock sur '
-         + fN(mir.references || 0)
-         + (mir.negatifs ? ', dont ' + fN(mir.negatifs) + ' en négatif' : '')
-         + '.')
-      : ('Miroir RVGI indisponible — ' + ((mir.raison) || 'synchro à lancer') + '.')));
-  }
 
   const kpisWrap = el('div', { id: 'mon-kpis-wrap' });
   if (m.current) kpisWrap.appendChild(buildMonitoringKpis(m.current, m.allLines));
@@ -15675,48 +16225,10 @@ async function loadMonitoringSnapshot(snapshotId) {
   renderMonitoringView(true);
 }
 
-// Une comparaison prise sur le miroir, sans fichier à sortir de RVGI.
-// Le snapshot produit est identique à celui d'un import Excel — même
-// comparaison, même historique — seule sa source diffère.
-async function monitoringDepuisMiroir() {
-  const m = monEnsureState();
-  if (m.miroirEnCours) return;
-  m.miroirEnCours = true;
-  renderMonitoringView(true);
-  try {
-    const r = await api('/api/reconciliation/miroir', { method: 'POST' });
-    showToast('Comparaison enregistrée — '
-      + (r.nb_ecarts != null
-          ? r.nb_ecarts + ' écart(s) sur ' + fN(r.nb_matched || 0) + ' référence(s) communes'
-          : 'snapshot pris')
-      + '.');
-    m.miroirEnCours = false;
-    await loadMonitoring(r.snapshot_id);
-    return;
-  } catch (e) {
-    const msg = (e && e.message) ? String(e.message) : 'Comparaison impossible.';
-    showToast(msg.length > 220 ? msg.slice(0, 217) + '…' : msg, 'error');
-  }
-  m.miroirEnCours = false;
-  renderMonitoringView(true);
-}
-
-async function loadMonitoringMiroir() {
-  const m = monEnsureState();
-  try {
-    m.miroir = await api('/api/reconciliation/miroir');
-  } catch (e) {
-    // Une route absente (serveur pas encore à jour) ne doit pas casser l'onglet :
-    // on retombe simplement sur l'import Excel.
-    m.miroir = { disponible: false, raison: (e && e.message) || 'indisponible' };
-  }
-}
-
 async function loadMonitoring(selectSnapshotId) {
   const m = monEnsureState();
   m.loading = true;
   renderMonitoringView(true);
-  loadMonitoringMiroir().then(() => renderMonitoringView(true));
   try {
     const snaps = await api('/api/reconciliation/snapshots');
     m.snapshots = snaps || [];
@@ -15910,10 +16422,6 @@ function recepAddCode(code) {
     laize_valeur_mm: laizeValeurMm,
   };
   S.recepItems = [...S.recepItems, item];
-  // Le contrôle « scannés / annoncés par RVGI » suit le comptage en direct.
-  // Il ne bloque rien : les deux chiffres ne sont pas dans la même unité, et
-  // c'est celui qui reçoit qui juge.
-  if (S.recepRvgiChamp) S.recepRvgiChamp.controle(S.recepItems.length);
   // Effacer le flag "nouveau" après 600ms (animation CSS)
   setTimeout(() => {
     S.recepItems = S.recepItems.map(i => i.code === c ? { ...i, isNew: false } : i);
@@ -15968,7 +16476,18 @@ async function getBackCameraDeviceId() {
   }
 }
 
-async function recepStartCamera() {
+// `opts` est optionnel : la fonction est aussi branchée directement comme
+// handler de clic (`on:{click: recepStartCamera}`), auquel cas le premier
+// argument est l'Event du DOM — d'où le test sur `onCode` plutôt qu'un test
+// de vérité. Sans paramètre, comportement historique inchangé : le code
+// scanné part dans la liste de la réception matière.
+//
+// Le paramétrage existe pour que MyPrint réutilise CE scanner (chemins iOS /
+// Android, ZXing + BarcodeDetector, délai anti-scan-parasite) au lieu d'en
+// faire vivre un second qui divergerait au premier correctif.
+async function recepStartCamera(opts) {
+  const o = (opts && typeof opts.onCode === 'function') ? opts : {};
+  const onFound = o.onCode || recepAddCode;
   if (S.recepScanning) return;
   S.recepScanning = true;
 
@@ -15978,7 +16497,7 @@ async function recepStartCamera() {
   const video = el('video', { cls: 'camera-video', autoplay: '', playsinline: '' });
   const frame = el('div', { cls: 'camera-frame' });
   wrap.append(video, frame);
-  const hint = el('p', { cls: 'camera-hint' }, 'Pointez vers le code-barres de la bobine');
+  const hint = el('p', { cls: 'camera-hint' }, o.hint || 'Pointez vers le code-barres de la bobine');
   const resultEl = el('div', { cls: 'camera-result' }, 'En attente…');
   const closeBtn = el('button', { cls: 'btn-close-cam', on: { click: () => recepStopCamera(overlay) } }, '✕ Fermer');
   overlay.append(wrap, hint, resultEl, closeBtn);
@@ -16020,7 +16539,7 @@ async function recepStartCamera() {
       resultEl.textContent = '✅ ' + code;
       resultEl.style.color = 'var(--success)';
       // Garder l'overlay 600ms pour l'animation, puis fermer et ajouter
-      setTimeout(() => { overlay.remove(); recepAddCode(code); }, 600);
+      setTimeout(() => { overlay.remove(); onFound(code); }, 600);
     };
 
     // ZXing nécessaire sur iOS et pour QR codes sur Android
@@ -16143,12 +16662,6 @@ async function recepValider() {
         fournisseur_id: S.recepFournisseurId || null,
         certificat_fsc: recepFscTypeRequiresCert(claim) ? cert : '',
         fsc_type_claim: claim,
-        // La réception RVGI reprise, si elle l'a été. Le n° de BL avait sa
-        // place dans le placeholder de la note ; il a maintenant sa colonne,
-        // et la quantité annoncée par l'ERP reste à côté du comptage réel.
-        rvgi_cde: S.recepRvgi ? String(S.recepRvgi.cde || '') : null,
-        rvgi_bl: S.recepRvgi ? (S.recepRvgi.bl || null) : null,
-        rvgi_qte_attendue: S.recepRvgi ? (S.recepRvgi.qte_totale || null) : null,
       }),
     });
     if (d && d.success) {
@@ -16286,7 +16799,6 @@ function renderReceptionMiniModal() {
     }, '✕'),
   );
   modal.appendChild(head);
-  modal.appendChild(buildRecepRvgi());
 
   // ── Picker (matière verrouillée) ──
   modal.appendChild(buildReceptionPicker(true));
@@ -17101,68 +17613,6 @@ function buildReception() {
 // ── Sous-onglet : Faire une réception ─────────────────────────────
 // ── Picker Catégorie/Matière/Laize partagé entre onglet et modal simplifié ──
 // lockedMatiere = true → matière verrouillée (mode modal fiche matière)
-// ── Reprendre une réception de RVGI ─────────────────────────────────────────
-//
-// Le formulaire ne change pas de nature : on scanne toujours les bobines une
-// par une, et c'est ce comptage qui fait la traçabilité FSC. Ce bloc remplit
-// seulement ce que l'ERP sait déjà — le fournisseur, le n° de BL, la matière
-// et sa laize — et rappelle la quantité que RVGI annonce, comme point de
-// comparaison. Les deux chiffres sont dans des unités différentes : on les
-// montre côte à côte, on ne les soustrait pas.
-function buildRecepRvgi() {
-  const zone = el('div');
-  if (!window.MysRvgiReception) return zone;
-  setTimeout(() => {
-    S.recepRvgiChamp = MysRvgiReception.champ(zone, {
-      ecran: 'matiere',
-      // MyStock re-rend tout l'onglet à chaque scan : la réception reprise
-      // doit vivre dans `S`, pas dans le module, sinon elle disparaîtrait à
-      // la première bobine.
-      reception: () => S.recepRvgi,
-      onReception: (r) => {
-        S.recepRvgi = r;
-        if (!r) return;
-        // Le fournisseur : seulement s'il est relié dans MySifa. Écrire un nom
-        // que l'annuaire ne connaît pas rendrait la réception non certifiable.
-        if (r.fournisseur_id && !S.recepFournisseurId) {
-          S.recepFournisseurId = r.fournisseur_id;
-          S.recepFournisseur = r.fournisseur_mysifa || r.fournisseur || '';
-        }
-        // Le BL dans la note, seulement si elle est vide : ce que quelqu'un a
-        // écrit à la main vaut mieux que ce qu'on devine.
-        if (r.bl && !String(S.recepNote || '').trim()) {
-          S.recepNote = 'BL ' + r.bl;
-        }
-        renderContent();
-      },
-      appliquer: (r, ligne) => {
-        // La matière et la laize de la ligne choisie, pour la PROCHAINE bobine
-        // scannée. On ne touche pas aux bobines déjà saisies.
-        if (ligne.matiere_id) {
-          S.recepMatiereId = ligne.matiere_id;
-          S.recepMatiereRef = ligne.article || '';
-          S.recepMatiereDes = ligne.matiere_nom || ligne.designation || '';
-          S.recepCategorie = ligne.categorie || S.recepCategorie;
-          if (ligne.laize_mm) {
-            S.recepLaizeCustomOn = true;
-            S.recepLaizeCustomMm = String(ligne.laize_mm);
-            S.recepLaizeValeurMm = ligne.laize_mm;
-            S.recepLaizeLabel = ligne.laize_mm + ' mm';
-          }
-          showToast('Matière reprise de RVGI : ' + (ligne.article || ''));
-        } else {
-          showToast('RVGI connaît « ' + (ligne.article || '?') +
-                    ' » mais MySifa n\'a pas cette matière — à créer ou à saisir à la main.',
-                    'error');
-        }
-        renderContent();
-      },
-    });
-    if (S.recepRvgiChamp) S.recepRvgiChamp.controle((S.recepItems || []).length);
-  }, 0);
-  return zone;
-}
-
 function buildReceptionPicker(lockedMatiere) {
   const wrap = el('div', { cls: 'recep-picker-card' });
   wrap.appendChild(el('div', { cls: 'recep-picker-title' },
@@ -17310,7 +17760,6 @@ function buildReceptionNouvelle() {
     },
   }, iconEl('scan', 12), ' Quel code scanner ?');
   block.appendChild(tracaGuideBtn);
-  block.appendChild(buildRecepRvgi());
 
   // ── Picker Catégorie / Matière / Laize (mode structuré) ──
   if (!S.recepModalMode) {
@@ -20964,7 +21413,18 @@ async function init() {
     if (!['menu','production','matieres','historique','traca','plan-entrepot'].includes(S.tab)) S.tab = 'production';
   }
   render();
-  if (S.tab === 'traca') { /* rien à charger */ }
+  if (S.tab === 'traca') {
+    // Poste d'étiquetage adressable par URL. Sans ça, le portail ne peut
+    // proposer que « les étiquettes » en bloc, alors que personne n'imprime
+    // « des étiquettes » : on imprime celles de Cohésio 1 ou de la logistique.
+    // render() est déjà passé au-dessus : il faut redessiner le contenu, sinon
+    // l'écran reste sur la grille des postes malgré l'URL.
+    const urlPoste = urlParams.get('poste');
+    if (urlPoste && TRACA_POSTES.some(p => p.id === urlPoste)) {
+      S.tracaPoste = urlPoste;
+      renderContent();
+    }
+  }
   else if (S.tab === 'reception') { await loadRecepHistory(); }
   else if (S.tab === 'inventaire') { await loadInventaireList(); }
   else if (S.tab === 'matieres-inventaire') { await loadInventaireMatieres(); }

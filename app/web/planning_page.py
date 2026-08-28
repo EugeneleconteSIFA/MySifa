@@ -95,30 +95,9 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
-:root{
-  --bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;
-  --muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,0.12);
-  --success:#34d399;--warn:#fbbf24;--danger:#f87171;
-  --c1:#22d3ee;--c2:#a78bfa;--c3:#34d399;--c4:#fbbf24;--c5:#f87171;
-  --blue:#38bdf8;--purple:#a78bfa;--mono:ui-monospace,'Cascadia Code',monospace;--sans:'Segoe UI',system-ui,sans-serif;
-  --bg-dark:#080c12;--border2:#334155;--dim:#cbd5e1;
-  --green:var(--success);--red:var(--danger);--amber:var(--warn);
-  --slot-l1:#1e293b;--slot-l2:#334155;--slot-l3:#475569;
-  --slot-l1-h:#020617;--slot-l2-h:#0f172a;--slot-l3-h:#1e293b;
-  --tip-k:#cbd5e1;--tip-v:#f1f5f9;--tip-lbl:#e2e8f0;
-  --fd-label:#e2e8f0;
-}
-body.light{
-  --bg:#f1f5f9;--card:#ffffff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;
-  --muted:#94a3b8;--accent:#0891b2;--accent-bg:rgba(8,145,178,0.10);
-  --success:#059669;--warn:#d97706;--danger:#dc2626;
-  --c1:#0891b2;--c2:#7c3aed;--c3:#059669;--c4:#d97706;--c5:#dc2626;
-  --blue:#0ea5e9;--purple:#7c3aed;--bg-dark:#e2e8f0;--border2:#cbd5e1;--dim:#64748b;
-  --slot-l1:#0f172a;--slot-l2:#1e293b;--slot-l3:#334155;
-  --slot-l1-h:#020617;--slot-l2-h:#0f172a;--slot-l3-h:#1e293b;
-  --tip-k:#475569;--tip-v:#0f172a;--tip-lbl:#334155;
-  --fd-label:#334155;
-}
+/* tokens : static/mysifa_theme.css — ici, seulement les écarts */
+:root{--blue:#38bdf8;--purple:#a78bfa;--mono:ui-monospace,'Cascadia Code',monospace;--sans:'Segoe UI',system-ui,sans-serif;--bg-dark:#080c12;--border2:#334155;--dim:#cbd5e1;--green:var(--success);--red:var(--danger);--amber:var(--warn);--slot-l1:#1e293b;--slot-l2:#334155;--slot-l3:#475569;--slot-l1-h:#020617;--slot-l2-h:#0f172a;--slot-l3-h:#1e293b;--tip-k:#cbd5e1;--tip-v:#f1f5f9;--tip-lbl:#e2e8f0;--fd-label:#e2e8f0;}
+body.light{--blue:#0ea5e9;--purple:#7c3aed;--bg-dark:#e2e8f0;--border2:#cbd5e1;--dim:#64748b;--slot-l1:#0f172a;--slot-l2:#1e293b;--slot-l3:#334155;--slot-l1-h:#020617;--slot-l2-h:#0f172a;--slot-l3-h:#1e293b;--tip-k:#475569;--tip-v:#0f172a;--tip-lbl:#334155;--fd-label:#334155;}
 body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:100vh}
 ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
 /* Sidebar / logo / nav-btn / topbar / responsive : déplacés dans mysifa_myprod_shell.css (PR 1 « unifier MyProd »). */
