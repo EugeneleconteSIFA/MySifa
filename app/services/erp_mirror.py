@@ -434,7 +434,19 @@ def conditions_colonnes(colonnes, filtres_col):
 # ── Moteur de liste générique ────────────────────────────────────────────────
 
 def _from(ec):
-    """Clause FROM + jointures de l'écran, validées."""
+    """Clause FROM + jointures de l'écran, validées.
+
+    Une jointure marquée `obligatoire` sort en `JOIN`, pas en `LEFT JOIN`. Ce
+    n'est pas une optimisation, c'est une règle de lecture : sur un écran de
+    lignes de document, une ligne dont l'entête a disparu de l'ERP n'est pas un
+    document. RVGI lit la pièce puis ses lignes — il ne peut pas montrer une
+    ligne sans pièce, et nous non plus.
+
+    Le cas est réel et massif : au 28/08/2026, 744 des 880 lignes de commande
+    « En cours » du miroir n'avaient plus d'entête, échouées là depuis 2019, et
+    neuf d'entre elles seulement avaient jamais produit un BL. En `LEFT JOIN`,
+    l'écran affichait 920 commandes à traiter là où RVGI en montrait 178.
+    """
     _ident(ec["table"])
     depart = '"%s" %s' % (ec["table"], _ident(ec["alias"]))
     for j in ec.get("jointures", []):
@@ -442,7 +454,8 @@ def _from(ec):
         _ident(j["alias"])
         _ref(j["gauche"])
         _ref(j["droite"])
-        depart += ' LEFT JOIN "%s" %s ON %s = %s' % (
+        depart += ' %s "%s" %s ON %s = %s' % (
+            "JOIN" if j.get("obligatoire") else "LEFT JOIN",
             j["table"], j["alias"], j["gauche"], j["droite"]
         )
     return depart
@@ -597,7 +610,18 @@ def _ou_et_params(ec, q, filtres, extra, ratt, filtre_ratt, filtres_col=None):
         if valeur == "":
             continue
         _ref(f["col"])
-        if f.get("type") == "date_min":
+        if f.get("type") == "enum" and "|" in valeur:
+            # Un filtre d'énumération peut viser plusieurs codes à la fois :
+            # « non soldée » vaut 0 ou 1. Les codes viennent du catalogue via
+            # `choix`, jamais du client — mais ils transitent par lui, donc on
+            # les recolle ici en paramètres liés, un par code.
+            codes = [v for v in valeur.split("|") if v != ""]
+            if not codes:
+                continue
+            conditions.append("CAST(%s AS TEXT) IN (%s)" % (
+                f["col"], ",".join("?" for _ in codes)))
+            params.extend(codes)
+        elif f.get("type") == "date_min":
             conditions.append("%s >= ?" % f["col"])
             params.append(valeur)
         elif f.get("type") == "date_max":

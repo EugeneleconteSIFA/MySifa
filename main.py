@@ -69,6 +69,7 @@ from app.routers.translate import router as translate_router
 from app.routers.chat import router as chat_router
 from app.routers.alerts import router as alerts_router
 from app.routers.perf import router as perf_router
+from app.routers.portail import router as portail_router
 from app.routers.postit import router as postit_router
 from app.routers.ao import router as ao_router
 from app.routers.ao_portail import router_api as ao_portail_api_router
@@ -526,6 +527,7 @@ app.include_router(translate_router)
 app.include_router(chat_router)
 app.include_router(alerts_router)
 app.include_router(perf_router)
+app.include_router(portail_router)
 app.include_router(postit_router)
 app.include_router(ao_router)
 app.include_router(ao_portail_html_router)

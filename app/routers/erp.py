@@ -439,7 +439,12 @@ def _criteres(ec, meta_miroir, q, filtres, filtres_col, ratt, tri, sens,
             continue
         v = str(valeur).strip()
         if f.get("type") == "enum":
-            v = (enums.get(f.get("enum")) or {}).get(v, v)
+            # Un choix composé (« 0|1 ») porte son propre libellé ; sinon on
+            # traduit le code par l'énumération. Écrire « 0|1 » dans la feuille
+            # des critères ne dirait rien à personne.
+            compose = next((c["label"] for c in (f.get("choix") or [])
+                            if str(c.get("v")) == v), None)
+            v = compose or (enums.get(f.get("enum")) or {}).get(v, v)
         elif f.get("type", "").startswith("date") and len(v) >= 10:
             v = "%s/%s/%s" % (v[8:10], v[5:7], v[0:4])
         lignes.append(("Filtre — " + f["label"], v))

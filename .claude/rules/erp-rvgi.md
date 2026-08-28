@@ -218,6 +218,51 @@ dans le `localStorage` du navigateur, par écran. C'est un confort d'affichage,
 pas une donnée : elle ne suit pas l'utilisateur d'un poste à l'autre. Si ça doit
 changer, c'est une table de préférences côté serveur.
 
+### Une ligne sans son entête n'est pas une pièce
+
+Sur les écrans de lignes de document, la jointure vers l'entête est marquée
+`"obligatoire": True` au catalogue, et `_from()` la sort alors en `JOIN`, pas en
+`LEFT JOIN`. Ce n'est pas un réglage de performance, c'est une règle de lecture :
+RVGI lit la pièce puis ses lignes, il ne peut pas montrer une ligne sans pièce,
+et l'écran MySifa non plus.
+
+Le motif du 28/08/2026, pour qu'on ne le redécouvre pas : l'écran Commandes
+annonçait **920 commandes à traiter** quand RVGI en montrait **178**. Sur les
+880 lignes `lpos = 0` du miroir, **744 n'avaient plus d'entête** — 493 numéros
+de commande, échoués là depuis 2019, dont neuf seulement avaient jamais produit
+un BL. `export_rvgi_csv.ps1` filtre `corbeille = 0` **table par table** : quand
+RVGI met une commande à la corbeille sans marquer ses lignes, l'entête ne sort
+pas de l'export et les lignes, elles, sortent. Le `LEFT JOIN` les affichait avec
+un client vide et une date de création vide — donc comme des commandes.
+
+Le défaut touchait neuf écrans : commandes 744, commandes fournisseur 500,
+livraisons 107, devis 79, marchés 36, appels d'offres 3 ; factures, factures
+fournisseur et réceptions étaient déjà propres. **`receptions` garde son
+`LEFT JOIN` volontairement** : sa jointure vise `cdf_entete`, la commande
+fournisseur d'origine, pas son propre entête — une réception sans commande
+reste une réception.
+
+Si la table d'une jointure obligatoire manque au miroir, `adapter_ecran()`
+renvoie `None` et l'écran n'est pas proposé. L'abandonner en silence rendrait
+l'écran faux, ce qui est pire que de ne pas l'avoir.
+
+**Le carnet s'ouvre sur « En cours » seul, pas sur « non soldée ».** Mesuré le
+même jour : les 91 lignes « Partielle » du miroir sont 10 de 2026 — celles que
+RVGI montre — et 81 de 2015 à 2024, sans le moindre BL, dont `orig` et `prod`
+valent 255, la sentinelle « non renseigné ». Ce sont des reliquats d'avant les
+champs que RVGI utilise aujourd'hui ; les faire entrer par défaut remplacerait
+un bruit par un autre. Le choix composé « Non soldée (en cours ou partielle) »
+reste offert dans le rail : un filtre `enum` accepte plusieurs codes séparés par
+`|`, déclarés au catalogue dans `choix`, et recollés en `IN (?, ?)` avec un
+paramètre lié par code.
+
+**Le contrôle qui retrouve le défaut**, sur n'importe quel écran à jointure :
+
+```sql
+SELECT COUNT(*) FROM "<table_ligne>" l
+ WHERE NOT EXISTS (SELECT 1 FROM "<table_entete>" e WHERE e.numero = l.numero);
+```
+
 ### Filtrer et exporter une vue
 
 Deux mécanismes de filtre cohabitent, volontairement.
