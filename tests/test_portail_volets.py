@@ -15,6 +15,7 @@ Ce test attrape trois erreurs qui, sans lui, ne se voient qu'à l'usage :
 
 import re
 import sys
+from urllib.parse import parse_qs
 from pathlib import Path
 
 RACINE = Path(__file__).resolve().parents[1]
@@ -47,9 +48,13 @@ fab = pv.volets_pour("fabrication")
 adv = pv.volets_pour("administration_ventes")
 
 check("superadmin voit les paramètres", "settings" in sup["rail"])
-check("superadmin voit la base", "db" in sup["rail"])
+# Calendrier, Messagerie et Base n'ont volontairement pas de volet : leurs
+# pages n'ont aucune vue adressable par URL, l'icône ouvre la page et c'est tout.
+check("pas de volet sur les icônes sans vue adressable",
+      [c for c in ("db", "messages", "calendrier") if c in sup["rail"]], [])
 check("fabrication ne voit pas les paramètres", "settings" not in fab["rail"], True)
-check("fabrication ne voit pas la base", "db" not in fab["rail"], True)
+check("le rail se limite aux volets utiles", sorted(sup["rail"]),
+      ["erp", "profil", "settings", "taches"])
 check("fabrication garde profil et tâches",
       "profil" in fab["rail"] and "taches" in fab["rail"])
 
@@ -134,27 +139,37 @@ check("toutes les ancres correspondent à un onglet existant", mauvaises, [])
 # par défaut : le raccourci a l'air de marcher et n'emmène pas au bon endroit.
 PARAMS = {
     ("/stock", "tab"): (RACINE / "app/web/stock_page.py",
-                        r"urlTab\s*&&\s*\[([^\]]*)\]\.includes\(urlTab\)"),
+                        r"urlTab\s*&&\s*\[([^\]]*)\]\.includes\(urlTab\)",
+                        r"'([a-z0-9_-]+)'"),
     ("/prod", "page"): (RACINE / "static/mysifa_prod_core.js",
-                        r"const allowed\s*=\s*new Set\(\[([^\]]*)\]\)"),
+                        r"const allowed\s*=\s*new Set\(\[([^\]]*)\]\)",
+                        r"'([a-z0-9_-]+)'"),
     ("/planning", "vue"): (RACINE / "app/web/planning_page.py",
-                           r"PLANNING_VUES\s*=\s*\[(.*?)\];"),
+                           r"PLANNING_VUES\s*=\s*\[(.*?)\];",
+                           r'key\s*:\s*"([a-z0-9_-]+)"'),
+    # Postes d'étiquetage de MyPrint : les identifiants vivent dans le JS de
+    # MyStock, le menu ne fait que les citer.
+    ("/stock", "poste"): (RACINE / "app/web/stock_page.py",
+                          r"TRACA_POSTES\s*=\s*\[(.*?)\];",
+                          r"id\s*:\s*'([a-z0-9_-]+)'"),
 }
 mauvais_params = []
-for (chemin, nom), (fichier, motif) in PARAMS.items():
+for (chemin, nom), (fichier, motif, motif_val) in PARAMS.items():
     m = re.search(motif, fichier.read_text(encoding="utf-8", errors="ignore"), re.S)
-    valides = set(re.findall(r"[\"']([a-z_-]+)[\"']", m.group(1))) if m else set()
+    valides = set(re.findall(motif_val, m.group(1))) if m else set()
     check(f"liste blanche {chemin}?{nom}= relevée ({len(valides)})", len(valides) >= 3)
     for v, e in entrees(sup):
         base = e["url"].split("#")[0]
         if "?" not in base:
             continue
         c, q = base.split("?", 1)
-        if c != chemin or not q.startswith(nom + "="):
+        if c != chemin:
             continue
-        val = q.split("=", 1)[1]
-        if valides and val not in valides:
-            mauvais_params.append((e["cle"], e["url"], sorted(valides)))
+        # Une URL peut porter plusieurs paramètres (?tab=traca&poste=cohesio1) :
+        # chacun est vérifié contre sa propre liste blanche.
+        for val in parse_qs(q).get(nom, []):
+            if valides and val not in valides:
+                mauvais_params.append((e["cle"], e["url"], sorted(valides)))
 check("toutes les valeurs de paramètre existent", mauvais_params, [])
 
 # ── 4. Les icônes existent dans le jeu SVG ──────────────────────────────────

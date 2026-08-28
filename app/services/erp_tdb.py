@@ -40,7 +40,17 @@ ORIG_FABRICATION = 1
 ORIG_STOCK = 2
 ORIG_SOUS_TRAITANCE = 3
 
-# Position d'une ligne (ENUMS["position"]) : 2 = soldée.
+# Position d'une ligne (ENUMS["position"]) : 0 = en cours, 1 = partielle,
+# 2 = soldée.
+#
+# Le carnet retient « en cours », pas « non soldée ». La nuance vaut 68 lignes :
+# sur les 91 lignes « partielle » du miroir au 28/08/2026, 10 datent de 2026 —
+# les seules que l'écran de RVGI montre — et 81 de 2015 à 2024, sans le moindre
+# BL, avec `orig` et `prod` à 255, la sentinelle « non renseigné ». Ce sont des
+# reliquats d'avant les champs que RVGI utilise aujourd'hui. `<> POS_SOLDEE`
+# les faisait toutes entrer ; `= POS_EN_COURS` aligne la tuile sur l'écran
+# Commandes, qui s'ouvre lui aussi sur « En cours ».
+POS_EN_COURS = 0
 POS_SOLDEE = 2
 
 MAX_LIGNES_LISTE = 12
@@ -121,12 +131,12 @@ def _date_reelle(col):
     return "%s IS NOT NULL AND %s > '2000-01-01' AND %s < '2090-01-01'" % (col, col, col)
 
 FORMULES = {
-    "carnet": "lignes de commande à traiter : qtep > 0, position ≠ soldée, "
+    "carnet": "lignes de commande à traiter : qtep > 0, position « en cours », "
               "portant une référence produit (code1/code2), et dont la "
               "commande existe encore (entête présente dans le miroir)",
     "retard": "carnet dont la date d'expédition est passée depuis moins de "
               "90 jours ; au-delà la ligne est comptée comme dormante",
-    "dormant": "lignes ouvertes dont l'expédition est passée depuis plus de "
+    "dormant": "lignes en cours dont l'expédition est passée depuis plus de "
                "90 jours — RVGI ne les solde jamais, elles ne se rattrapent plus",
     "semaine": "carnet dont amje tombe dans les 7 prochains jours",
     "a_facturer": "liv_ligne : qte livrée > qte facturée",
@@ -294,8 +304,8 @@ def adv():
             # affichés partout. « 845 lignes » ne veut rien dire sans « sur
             # 312 commandes », et c'est la commande qu'on rappelle au client.
             produit = _ligne_produit("l") if sch.a("cde_ligne", "code1", "code2") else "1=1"
-            ouvert = ("l.qtep > 0 AND COALESCE(l.lpos, 0) <> %d AND %s AND %s"
-                      % (POS_SOLDEE, produit, _existe_piece(sch)))
+            ouvert = ("l.qtep > 0 AND COALESCE(l.lpos, 0) = %d AND %s AND %s"
+                      % (POS_EN_COURS, produit, _existe_piece(sch)))
             date_ok = _date_reelle(_jour("l.amje"))
             limite_dormant = (date.fromisoformat(b["aujourdhui"])
                               - timedelta(days=JOURS_DORMANT)).isoformat()
@@ -429,7 +439,7 @@ def _sans_dossier(conn, sch, sortie):
     rows = _lignes(conn, """
         SELECT COUNT(*) AS lignes, COUNT(DISTINCT l.numero) AS commandes
           FROM cde_ligne l
-         WHERE l.qtep > 0 AND COALESCE(l.lpos, 0) <> ? AND l.orig = ? AND %s
+         WHERE l.qtep > 0 AND COALESCE(l.lpos, 0) = ? AND l.orig = ? AND %s
            AND %s AND %s AND substr(l.amje,1,10) >= ?
            AND NOT EXISTS (
                  SELECT 1 FROM mysifa.rvgi_rattachements r
@@ -437,7 +447,7 @@ def _sans_dossier(conn, sch, sortie):
                     AND r.numero = CAST(l.numero AS TEXT)
                     AND (r.ligne IS NULL OR r.ligne = l.ligne))
     """ % (produit, _existe_piece(sch), _date_reelle(_jour("l.amje"))),
-        (POS_SOLDEE, ORIG_FABRICATION, depuis))
+        (POS_EN_COURS, ORIG_FABRICATION, depuis))
     if not rows:
         sortie["indispo"].append("Lignes sans dossier : table rvgi_rattachements absente")
         return None
@@ -459,8 +469,8 @@ def _ecartees(conn, sch, b):
     # Même périmètre que le carnet, sinon la ligne « écartées » compterait des
     # frais de port de commandes qui n'existent plus, et le total ne se
     # raccorderait à rien.
-    hors = ("l.qtep > 0 AND COALESCE(l.lpos,0) <> %d AND %s AND NOT (%s)"
-            % (POS_SOLDEE, _existe_piece(sch), _ligne_produit("l")))
+    hors = ("l.qtep > 0 AND COALESCE(l.lpos,0) = %d AND %s AND NOT (%s)"
+            % (POS_EN_COURS, _existe_piece(sch), _ligne_produit("l")))
     total = _entier(_un(conn, "SELECT COUNT(*) FROM cde_ligne l WHERE " + hors))
     if not total:
         return {"lignes": 0, "libelles": []}
@@ -586,11 +596,11 @@ def direction():
                     SELECT SUM(CASE WHEN l.qte > 0
                                     THEN (%s) * (l.qtep * 1.0 / l.qte) ELSE NULL END)
                       FROM cde_ligne l
-                     WHERE l.qtep > 0 AND COALESCE(l.lpos,0) <> ? AND %s
-                """ % (m_cde, vivante), (POS_SOLDEE,))),
+                     WHERE l.qtep > 0 AND COALESCE(l.lpos,0) = ? AND %s
+                """ % (m_cde, vivante), (POS_EN_COURS,))),
                 "lignes": _entier(_un(conn,
                     "SELECT COUNT(*) FROM cde_ligne l WHERE l.qtep > 0 "
-                    "AND COALESCE(l.lpos,0) <> ? AND " + vivante, (POS_SOLDEE,))),
+                    "AND COALESCE(l.lpos,0) = ? AND " + vivante, (POS_EN_COURS,))),
             }
         else:
             sortie["carnet"] = None

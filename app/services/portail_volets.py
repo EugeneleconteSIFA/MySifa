@@ -124,58 +124,6 @@ VOLETS_RAIL = [
         "pied": {"label": "Ouvrir le gestionnaire", "url": "/taches"},
     },
     {
-        "cle": "messages",
-        "titre": "Messagerie",
-        "resume": "Conversations d'équipe",
-        "icone": "mail",
-        "roles": None,
-        "groupes": [
-            _groupe("Raccourcis", [
-                _entree("msg_ouvrir", "Mes conversations", "/messages", "mail",
-                        compteur="messages"),
-                _entree("msg_annonces", "Annonces diffusées", "/settings#updates", "alert-circle",
-                        roles=_ADMIN),
-            ]),
-        ],
-        "pied": {"label": "Ouvrir la messagerie", "url": "/messages"},
-    },
-    {
-        "cle": "calendrier",
-        "titre": "Calendrier",
-        "resume": "Événements et invitations",
-        "icone": "calendar",
-        "roles": None,
-        "groupes": [
-            _groupe("Mon agenda", [
-                _entree("cal_ouvrir", "Mes événements", "/calendrier", "calendar",
-                        compteur="calendrier"),
-                _entree("cal_couleurs", "Agendas & couleurs", "/profil#calendrier", "sliders"),
-            ]),
-            _groupe("Équipe", [
-                _entree("cal_prh", "Planning du personnel", "/planning-rh#planning", "users"),
-                _entree("cal_conges", "Congés", "/planning-rh#conges", "sun"),
-            ]),
-        ],
-        "pied": {"label": "Ouvrir le calendrier", "url": "/calendrier"},
-    },
-    {
-        "cle": "db",
-        "titre": "Base de données",
-        "resume": "Consultation et santé technique",
-        "icone": "database",
-        "roles": _ADMIN,
-        "groupes": [
-            _groupe("Consultation", [
-                _entree("db_explorer", "Explorateur de tables", "/db", "grid"),
-            ]),
-            _groupe("Technique", [
-                _entree("db_sante", "Santé du dépôt & migrations", "/settings#promote", "shield-check"),
-                _entree("db_perf", "Fluidité des postes", "/perf-postes", "trending-up"),
-            ]),
-        ],
-        "pied": {"label": "Ouvrir la base", "url": "/db"},
-    },
-    {
         # Seul volet dont le contenu ne vient pas d'ici : les écrans RVGI
         # dépendent de ce que le miroir contient réellement, et c'est
         # `/api/erp/menu` qui le sait (catalogue ERP + rôle + écrans servis).
@@ -243,13 +191,24 @@ VOLETS_TUILES = {
         "pied": {"label": "Ouvrir MyExpé", "url": "/expe"},
     },
     "print": {
+        # Un poste par entrée : personne n'imprime « des étiquettes », on
+        # imprime celles de Cohésio 1 ou de la logistique. Les identifiants
+        # viennent de TRACA_POSTES (app/web/stock_page.py) — le test vérifie
+        # qu'ils existent toujours.
         "titre": "MyPrint",
-        "groupes": [_groupe("Aller à", [
-            _entree("print_traca", "Étiquettes de traçabilité", "/stock?tab=traca", "printer"),
-            _entree("print_imprimantes", "Imprimantes", "/settings#printers", "sliders",
-                    roles=_ADMIN_LARGE),
-        ])],
-        "pied": {"label": "Ouvrir MyPrint", "url": "/stock?tab=traca"},
+        "groupes": [
+            _groupe("Postes d'étiquetage", [
+                _entree("print_cohesio1", "Cohésio 1", "/stock?tab=traca&poste=cohesio1", "printer"),
+                _entree("print_cohesio2", "Cohésio 2", "/stock?tab=traca&poste=cohesio2", "printer"),
+                _entree("print_logistique", "Logistique", "/stock?tab=traca&poste=logistique", "truck"),
+                _entree("print_bureaux", "Bureaux", "/stock?tab=traca&poste=bureaux", "printer"),
+            ]),
+            _groupe("Configuration", [
+                _entree("print_imprimantes", "Imprimantes", "/settings#printers", "sliders",
+                        roles=_ADMIN_LARGE),
+            ]),
+        ],
+        "pied": {"label": "Tous les postes", "url": "/stock?tab=traca"},
     },
     "pricing": {
         "titre": "Coûts matières",
