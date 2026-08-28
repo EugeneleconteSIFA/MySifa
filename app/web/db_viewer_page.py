@@ -932,8 +932,11 @@ function renderSchema() {{
     const pkMark = c.pk ? '<span class="pk-dot" title="Clé primaire"></span>' : '';
     const nnMark = c.notnull ? '<span class="nn-dot" title="NOT NULL"></span>' : '<span style="opacity:.2;display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--muted)"></span>';
     const dflt  = c.dflt_value != null ? `<code style="font-size:10px;color:var(--muted)">${{escHtml(String(c.dflt_value))}}</code>` : '<span style="color:var(--muted);font-size:11px">—</span>';
+    // Sans ce marqueur, une colonne masquée ressemble à une colonne vide et
+    // on cherche une donnée manquante qui ne manque pas.
+    const maskMark = c.masquee ? '<span title="Colonne masquée — revient toujours NULL" style="margin-left:7px;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--warn);border:1px solid var(--warn);border-radius:5px;padding:1px 5px">masquée</span>' : '';
     return `<tr>
-      <td style="color:var(--text);font-weight:600">${{pkMark}}${{escHtml(c.name)}}</td>
+      <td style="color:var(--text);font-weight:600">${{pkMark}}${{escHtml(c.name)}}${{maskMark}}</td>
       <td><span class="type-badge">${{escHtml(c.type)}}</span></td>
       <td style="text-align:center">${{nnMark}}</td>
       <td>${{dflt}}</td>

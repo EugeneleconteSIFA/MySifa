@@ -421,6 +421,12 @@ def settings_sections_visibility(user: dict) -> dict:
         "tools_only":    (role in ROLES_SETTINGS_PRINTERS or role in ROLES_SETTINGS_FSC)
                           and role not in ROLES_SETTINGS_AUDIT_FULL
                           and role not in ROLES_SETTINGS_PRINT_FULL,
+        # Lecture SQL de diagnostic : super-admin réel uniquement, et pas
+        # `role` — qui est le rôle *effectif*. Toutes les autres sections se
+        # lisent sur le rôle effectif ; celle-ci se lit sur le rôle en base,
+        # comme l'accès à /settings lui-même, pour rester le chemin de sortie
+        # d'une impersonation.
+        "diagnostic":    is_real_superadmin(user),
     }
 
 
