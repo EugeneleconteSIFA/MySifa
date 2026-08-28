@@ -1340,10 +1340,6 @@ let S = {
   // Form values
   metrageDebut: '',
   metrageFinVal: '',
-  // Compteur illisible : la cloture reste possible, mais le trou est declare
-  // et motive au lieu d'etre silencieux.
-  metrageIndispo: false,
-  metrageIndispoMotif: '',
   nbEtiquettes: '',
   finDossierOui: null,  // null | true | false — sélecteur fin de dossier dans renderFinModal
   finNoteVal: '',       // info prod saisie à la clôture (obligatoire si dossier terminé)
@@ -2563,8 +2559,7 @@ function handleOpTrigger(code, label, cat){
   }
   if(code==='89'){
     // Fin dossier → modal metrage + étiquettes + info prod
-    set({showFinModal:true, metrageFinVal:'', nbEtiquettes:'', finNoteVal:'', finNoteChargee:false,
-         metrageIndispo:false, metrageIndispoMotif:''});
+    set({showFinModal:true, metrageFinVal:'', nbEtiquettes:'', finNoteVal:'', finNoteChargee:false});
     // Une info prod peut déjà exister — saisie en Traçabilité avant le
     // lancement, ou par le conducteur du poste précédent. On la relit pour
     // que l'opérateur complète au lieu d'écraser sans le savoir.
@@ -5838,46 +5833,7 @@ function renderFinModal(){
   const metInp = h('input',{type:'number',placeholder:'Ex: 14200',step:'1',min:'0',
     style:{textAlign:'right'}});
   metInp.value = S.metrageFinVal||'';
-  metInp.disabled = !!S.metrageIndispo;
   metInp.addEventListener('input',e=>{ S.metrageFinVal=e.target.value; });
-
-  // Le compteur n'est pas toujours relevable : afficheur en panne, machine
-  // coupee, dossier repris sur un autre poste. Bloquer sec laisserait un
-  // conducteur devant un dossier qu'il ne peut pas clore. La case ouvre donc
-  // une sortie — mais elle demande un motif, et ce motif part dans le
-  // commentaire de la saisie : le trou est declare, daté et signé, au lieu
-  // d'etre un NULL de plus dont personne ne saura jamais la cause.
-  const indispoCase = h('input',{type:'checkbox'});
-  indispoCase.checked = !!S.metrageIndispo;
-  indispoCase.addEventListener('change',e=>{
-    S.metrageIndispo = e.target.checked;
-    if(S.metrageIndispo) S.metrageFinVal = '';
-    else S.metrageIndispoMotif = '';
-    fabRenderPreserveUi({});
-    // Cocher la case, c'est demander le champ suivant : on l'y amene, plutot
-    // que de le laisser chercher ou cliquer.
-    if(S.metrageIndispo) setTimeout(()=>{
-      const n = document.getElementById('fab-metrage-motif');
-      if(n) n.focus();
-    }, 0);
-  });
-
-  const motifInp = h('input',{type:'text', id:'fab-metrage-motif',
-    placeholder:'Ex. afficheur HS, relevé impossible'});
-  motifInp.value = S.metrageIndispoMotif||'';
-  motifInp.addEventListener('input',e=>{ S.metrageIndispoMotif=e.target.value; });
-
-  const blocIndispo = h('div',{className:'fab-field',style:{marginTop:'6px'}},
-    h('label',{style:{display:'flex',alignItems:'center',gap:'8px',
-                      textTransform:'none',letterSpacing:'0',fontWeight:'600',
-                      cursor:'pointer'}},
-      indispoCase,
-      'Compteur indisponible'
-    ),
-    S.metrageIndispo ? motifInp : null,
-    S.metrageIndispo ? h('div',{className:'fab-field-hint'},
-      'Le motif est enregistré avec la saisie.') : null
-  );
 
   const etiqInp = h('input',{type:'number',placeholder:'Ex: 50000',step:'1',min:'0',
     style:{textAlign:'right'}});
@@ -5979,18 +5935,12 @@ function renderFinModal(){
 
     // Le metrage n'est pas un champ de confort : sans lui la serie produit sort
     // sans longueur ni vitesse, et le dossier ne pese rien dans Besoins
-    // matieres. On le demande, ou on demande pourquoi il manque.
-    const motifIndispo = String(S.metrageIndispoMotif||'').trim();
+    // matieres. Aucune sortie de secours ici — un compteur illisible se traite
+    // avec la maintenance, pas en cloturant un dossier vide.
     if(mFin === null){
-      if(!S.metrageIndispo){
-        showToast('Relevez le compteur machine — sans métrage, ni la vitesse ni '
-                 +'le besoin matière de ce dossier ne peuvent être calculés.','danger');
-        return;
-      }
-      if(!motifIndispo){
-        showToast('Indiquez pourquoi le compteur n\'est pas relevable.','danger');
-        return;
-      }
+      showToast('Relevez le compteur machine — sans métrage, ni la vitesse ni '
+               +'le besoin matière de ce dossier ne peuvent être calculés.','danger');
+      return;
     }
 
     // Validation locale 1 : métrage fin < dernier_metrage machine
@@ -6032,11 +5982,7 @@ function renderFinModal(){
         fin_dossier: S.finDossierOui === true,
       };
       if(S.finDossierOui === true && noteTxt) body.info_prod = noteTxt;
-      if(mFin !== null) body.metrage_fin = mFin;
-      // Pas de metrage : la saisie porte la raison. Un NULL sans explication
-      // se lit comme un oubli six mois plus tard, et personne ne peut plus
-      // trancher entre « pas releve » et « pas relevable ».
-      else body.commentaire = 'Sans métrage — ' + motifIndispo;
+      body.metrage_fin = mFin;
       if(S.nbEtiquettes) body.qte_etiquettes = parseFloat(String(S.nbEtiquettes).replace(',','.'));
       if(S.adminMachineId) body.machine_id = S.adminMachineId;
       const r = await apiFetch('/api/fabrication/saisie',{
@@ -6056,12 +6002,11 @@ function renderFinModal(){
       showToast('Erreur : '+e.message,'danger');
     }finally{
       fabRenderPreserveUi({loading:false, metrageFinVal:'', nbEtiquettes:'', finDossierOui:null,
-                           finNoteVal:'', finNoteChargee:false,
-                           metrageIndispo:false, metrageIndispoMotif:''});
+                           finNoteVal:'', finNoteChargee:false});
     }
   };
 
-  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false,metrageIndispo:false,metrageIndispoMotif:''});}},
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false});}},
     h('div',{className:'fab-modal'},
       h('div',{className:'fab-modal-title'},opLabel('89','Fin de production')),
       S.dossier ? h('div',{className:'fab-modal-sub'},
@@ -6078,8 +6023,7 @@ function renderFinModal(){
           return h('div',{className:'fab-field-hint'},
             'Dernier relevé : '+Math.round(m.dernier_metrage).toLocaleString('fr-FR')+' m');
         })(),
-        metInp,
-        blocIndispo
+        metInp
       ),
       h('div',{className:'fab-field'},
         h('label',null,'Étiquettes produites'),
@@ -6089,7 +6033,7 @@ function renderFinModal(){
       S.finDossierOui===true ? noteBloc : null,
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
-          onClick:()=>set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false,metrageIndispo:false,metrageIndispoMotif:''})},'Annuler'),
+          onClick:()=>set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false})},'Annuler'),
         h('button',{
           className:'fab-btn '+(S.finDossierOui===true?'fab-btn-danger':'fab-btn-warn'),
           style:{opacity: S.finDossierOui===null?'.55':'1'},
