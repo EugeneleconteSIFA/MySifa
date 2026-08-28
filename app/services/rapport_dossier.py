@@ -483,9 +483,14 @@ def reperes_reference(conn, ref_produit_norm: Optional[str],
     arrets inclus, et ne se compare qu'a une cadence calculee de la meme
     facon — jamais a une vitesse de production seule, qui serait toujours
     superieure et ferait passer chaque semaine pour un progres.
+
+    UNITE : metres par MINUTE, sans conversion. C'est l'unite de la machine
+    (le conducteur regle une vitesse en m/min), celle de `produit_series`, et
+    celle qu'affiche tout le reste de MySifa. Convertir en m/h donnerait un
+    nombre exact et illisible a l'atelier.
     """
     vide = {"ref_produit_norm": ref_produit_norm, "series": 0,
-            "cadence_mediane_m_h": None, "calage_median_min": None,
+            "cadence_mediane_m_min": None, "calage_median_min": None,
             "arret_median_min": None}
     if not ref_produit_norm or not _table_existe(conn, "produit_series"):
         return vide
@@ -502,14 +507,14 @@ def reperes_reference(conn, ref_produit_norm: Optional[str],
     if not rows:
         return vide
 
-    cadences = [_f(r["vitesse_m_min"]) * 60.0 for r in rows if _f(r["vitesse_m_min"]) > 0]
+    cadences = [_f(r["vitesse_m_min"]) for r in rows if _f(r["vitesse_m_min"]) > 0]
     calages = [_f(r["temps_calage_min"]) for r in rows if _f(r["temps_calage_min"]) > 0]
     arrets = [_f(r["temps_arret_min"]) for r in rows if _f(r["temps_arret_min"]) > 0]
 
     return {
         "ref_produit_norm": ref_produit_norm,
         "series": len(rows),
-        "cadence_mediane_m_h": mediane(cadences),
+        "cadence_mediane_m_min": mediane(cadences),
         "calage_median_min": mediane(calages),
         "arret_median_min": mediane(arrets),
     }
@@ -538,11 +543,12 @@ def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
     temps = temps_par_categorie(saisies)
     metrage = metrage_dossier(saisies, code_fin)
     minutes_prod = _minutes_de(temps, CAT_PRODUCTION)
-    vitesse = (metrage["reel"] / (minutes_prod / 60.0)) if minutes_prod > 0 and metrage["reel"] > 0 else None
+    # m/min partout : unite de la machine et du reste de MySifa.
+    vitesse = (metrage["reel"] / minutes_prod) if minutes_prod > 0 and metrage["reel"] > 0 else None
     # Cadence : meme denominateur que `produit_series.vitesse_m_min`
     # (production + arret), seule base comparable au repere historique.
     minutes_cadence = minutes_prod + _minutes_de(temps, CAT_ARRET)
-    cadence = (metrage["reel"] / (minutes_cadence / 60.0)) if minutes_cadence > 0 and metrage["reel"] > 0 else None
+    cadence = (metrage["reel"] / minutes_cadence) if minutes_cadence > 0 and metrage["reel"] > 0 else None
 
     ref = _ref_produit(conn, no_dossier)
     reperes = reperes_reference(conn, ref, no_dossier)
@@ -571,11 +577,11 @@ def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
         },
         "temps": temps,
         "metrage": metrage,
-        "vitesse_m_h": round(vitesse, 1) if vitesse else None,
-        "cadence_m_h": round(cadence, 1) if cadence else None,
+        "vitesse_m_min": round(vitesse, 1) if vitesse else None,
+        "cadence_m_min": round(cadence, 1) if cadence else None,
         "reference": reperes,
         "ecarts": {
-            "cadence_pct": _ecart_pct(cadence, reperes.get("cadence_mediane_m_h")),
+            "cadence_pct": _ecart_pct(cadence, reperes.get("cadence_mediane_m_min")),
             "calage_pct": _ecart_pct(minutes_calage or None, reperes.get("calage_median_min")),
         },
         "ecrits": {
@@ -688,8 +694,8 @@ def resume(cr: Dict[str, Any]) -> Dict[str, Any]:
         "cloture": ident["cloture"],
         "conducteurs": ident["conducteurs"],
         "metrage_reel": cr["metrage"]["reel"],
-        "vitesse_m_h": cr["vitesse_m_h"],
-        "cadence_m_h": cr["cadence_m_h"],
+        "vitesse_m_min": cr["vitesse_m_min"],
+        "cadence_m_min": cr["cadence_m_min"],
         "ecart_cadence_pct": cr["ecarts"]["cadence_pct"],
         "minutes_total": cr["temps"]["total_minutes"],
         "info_prod": bool(info),
@@ -749,16 +755,16 @@ def retour_atelier(conn, machine: str, debut: str, fin: str,
     # References produites, avec l'ecart au repere historique.
     refs: List[Dict[str, Any]] = []
     for c in crs:
-        if c["cadence_m_h"] is None:
+        if c["cadence_m_min"] is None:
             continue
         refs.append({
             "no_dossier": c["no_dossier"],
             "ref_produit_norm": c["identite"]["ref_produit_norm"],
             "designation": c["identite"]["designation"],
             "metrage": c["metrage"]["reel"],
-            "vitesse_m_h": c["vitesse_m_h"],
-            "cadence_m_h": c["cadence_m_h"],
-            "cadence_reference_m_h": c["reference"].get("cadence_mediane_m_h"),
+            "vitesse_m_min": c["vitesse_m_min"],
+            "cadence_m_min": c["cadence_m_min"],
+            "cadence_reference_m_min": c["reference"].get("cadence_mediane_m_min"),
             "series_passees": c["reference"].get("series", 0),
             "ecart_pct": c["ecarts"]["cadence_pct"],
         })
@@ -827,7 +833,7 @@ def retour_atelier(conn, machine: str, debut: str, fin: str,
             "minutes_arret": round(minutes_arret, 1),
             "minutes_total": round(minutes_total, 1),
             "metrage": round(metrage, 1),
-            "vitesse_m_h": round(metrage / (minutes_prod / 60.0), 1) if minutes_prod > 0 else None,
+            "vitesse_m_min": round(metrage / minutes_prod, 1) if minutes_prod > 0 else None,
             "part_arret_pct": round(minutes_arret / minutes_total * 100.0, 1) if minutes_total > 0 else 0.0,
         },
         "references": refs,

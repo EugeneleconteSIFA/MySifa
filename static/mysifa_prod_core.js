@@ -6129,10 +6129,14 @@ async function applyF(){
   const needSais=S.page==='saisies' || (S.page==='production' && (S.subPage||'kpis')==='saisies');
   // Quand on change les filtres, repartir en haut (offset 0)
   S.saisiesOffset = 0;
+  const needRetour = S.page==='production' && (S.subPage||'kpis')==='retour';
   await Promise.all([
     loadHist(),
     loadProd(),
-    needSais?loadSaisies({noRender:true}):Promise.resolve()
+    needSais?loadSaisies({noRender:true}):Promise.resolve(),
+    // L'onglet Retour de prod lit la periode et les machines dans S.fv :
+    // changer les filtres doit le recharger comme les autres.
+    needRetour?loadRetourProd({}):Promise.resolve()
   ]);
   render();
 }
@@ -6922,29 +6926,26 @@ function buildParams(){
 async function loadHist(){const d=await api('/api/dashboard/historique?'+buildParams());if(d)S.historique=d;}
 async function loadProd(){const d=await api('/api/dashboard/production?'+buildParams());if(d)S.production=d;}
 async function loadRetourProd(patch){
-  // Retour de production — meme API que la page /rapports-prod, meme rendu
+  // Retour de production — meme API que le reste du module, meme rendu partage
   // (static/mysifa_retour_prod.js). Ne jamais reimplementer le rendu ici :
   // deux vues du meme dossier ne doivent pas donner deux chiffres.
+  //
+  // La PERIODE et les MACHINES viennent de la barre de filtres de la page
+  // Production (S.fv), pas de selecteurs propres a l'onglet : un ecran qui
+  // redemande ce que la page sait deja n'est pas emboite, il est pose a cote.
   const st = Object.assign({
-    mode:'jour', jour:rpHier(), year:null, week:null,
     machine:'', machines:[], periode:null, vue:'feuille',
-    feuille:null, lignes:null, q:'', resultats:null, dossier:null, cr:null
+    feuille:null, lignes:null, q:'', dossier:null, cr:null, erreur:null
   }, S.retourProd||{}, patch||{});
 
-  const qs = st.mode==='semaine'
-    ? 'mode=semaine&year='+encodeURIComponent(st.year)+'&week='+encodeURIComponent(st.week)
-    : 'mode=jour&jour='+encodeURIComponent(st.jour);
-
-  // `api()` leve sur toute reponse non-OK : un dossier sans saisie (404) ou une
-  // periode invalide casserait l'onglet entier. On isole chaque appel et on
-  // garde le message pour l'afficher a sa place, plutot que de perdre la vue.
+  const qs = rpQs();
   st.erreur = null;
   try {
     const p = await api('/api/rapports-prod/periode?'+qs);
     if(p){
       st.periode = p;
-      st.machines = p.machines||[];
-      if(st.machines.indexOf(st.machine)<0) st.machine = st.machines[0]||'';
+      st.machines = rpMachinesVisibles(p.machines||[]);
+      if(st.machines.indexOf(st.machine) < 0) st.machine = st.machines[0] || '';
     }
 
     if(st.dossier){
@@ -6954,10 +6955,13 @@ async function loadRetourProd(patch){
         ? await api('/api/rapports-prod/retour-atelier?machine='+encodeURIComponent(st.machine)+'&'+qs)
         : null;
     } else {
-      const d = await api('/api/rapports-prod/comptes-rendus?'+qs+'&machine='+encodeURIComponent(st.machine||''));
+      const d = await api('/api/rapports-prod/comptes-rendus?'+qs
+                          +'&machine='+encodeURIComponent(st.machine||''));
       st.lignes = (d&&d.lignes)||[];
     }
   } catch(e){
+    // `api()` leve sur toute reponse non-OK : un dossier sans saisie (404)
+    // casserait l'onglet entier. On garde le message pour l'afficher a sa place.
     st.erreur = (e && e.message) || 'Erreur de chargement';
     if(st.dossier) st.cr = null;
   }
@@ -6968,23 +6972,45 @@ function rpHier(){
   const d=new Date(); d.setDate(d.getDate()-1);
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
-function rpAujourdhui(){
-  const d=new Date();
-  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+
+// Periode = celle de la barre de filtres. A defaut (aucune date posee), la
+// veille : c'est la vue du point de production du matin.
+function rpQs(){
+  const f = S.fv || {};
+  const du = f.date_from || '', au = f.date_to || '';
+  if(du || au){
+    return 'mode=plage&du='+encodeURIComponent(du||au)+'&au='+encodeURIComponent(au||du);
+  }
+  return 'mode=jour&jour='+encodeURIComponent(rpHier());
 }
-function rpSemainePrecedente(){
-  const d=new Date(); d.setDate(d.getDate()-7);
-  const j=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
-  j.setUTCDate(j.getUTCDate()+4-(j.getUTCDay()||7));
-  const a=new Date(Date.UTC(j.getUTCFullYear(),0,1));
-  return {year:j.getUTCFullYear(), week:Math.ceil((((j-a)/86400000)+1)/7)};
+
+// Machines = celles du filtre, quand il en pose. Si l'intersection est vide
+// (nom canonique different de celui des saisies), on rend toutes celles de la
+// periode plutot qu'un ecran vide sans explication.
+function rpMachinesVisibles(dePeriode){
+  const choisies = (S.fv && S.fv.machines) || [];
+  if(!choisies.length) return dePeriode;
+  const bas = choisies.map(m=>String(m).trim().toLowerCase());
+  const garde = dePeriode.filter(m=>bas.indexOf(String(m).trim().toLowerCase())>=0);
+  return garde.length ? garde : dePeriode;
 }
+
 async function rpMaj(patch){
   S.retourProd = Object.assign({}, S.retourProd||{}, patch);
   render();
   try { await loadRetourProd(patch); }
   catch(e){ S.retourProd = Object.assign({}, S.retourProd||{}, {erreur:(e&&e.message)||'Erreur'}); }
   render();
+}
+
+// Impression de la feuille depuis MyProd : on masque tout sauf `.rp-feuille`
+// (voir static/mysifa_retour_prod.css), on imprime, on remet en etat.
+function rpImprimer(){
+  document.body.classList.add('rp-impression');
+  const fin = ()=>{ document.body.classList.remove('rp-impression');
+                    window.removeEventListener('afterprint', fin); };
+  window.addEventListener('afterprint', fin);
+  setTimeout(()=>{ window.print(); setTimeout(fin, 1500); }, 60);
 }
 async function loadMachineStatus(){
   try{
@@ -7120,10 +7146,6 @@ function renderRetourProd(){
   const st = S.retourProd;
   if(!RP) return h('div',{className:'card-empty'},"Module de rendu non charge (mysifa_retour_prod.js).");
   if(!st)  return h('div',{className:'card-empty'},'Chargement du retour de production...');
-  const messageErreur = st.erreur
-    ? h('div',{className:'card',style:{padding:'14px 16px',marginBottom:'14px',
-        borderColor:'var(--warn)',color:'var(--text2)',fontSize:'13px'}}, st.erreur)
-    : null;
 
   const champ = {background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'8px',
                  padding:'6px 10px',color:'var(--text)',fontSize:'13px',fontFamily:'inherit'};
@@ -7133,6 +7155,11 @@ function renderRetourProd(){
     border:'1px solid '+(actif?'var(--accent)':'var(--border)'),borderRadius:'999px',
     padding:'6px 12px',fontSize:'12px',fontWeight:'600',cursor:'pointer',
     fontFamily:'inherit',color:actif?'var(--accent)':'var(--text2)'});
+
+  const messageErreur = st.erreur
+    ? h('div',{className:'card',style:{padding:'14px 16px',marginBottom:'14px',
+        borderColor:'var(--warn)',color:'var(--text2)',fontSize:'13px'}}, st.erreur)
+    : null;
 
   // Detail d'un dossier : la liste laisse la place au compte-rendu, editable.
   if(st.dossier){
@@ -7154,36 +7181,18 @@ function renderRetourProd(){
       h('div',{style:{margin:'0 0 14px'}},
         h('button',{type:'button',style:puce(false),
           onClick:()=>rpMaj({dossier:null,cr:null})},'← Retour a la liste')),
-      messageErreur,
-      frag);
+      messageErreur, frag);
   }
 
-  const toolbar = h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap',
-                                  alignItems:'center',margin:'0 0 14px'}},
-    h('label',{style:lbl},'Periode'),
-    h('select',{value:st.mode,style:champ,onChange:async(e)=>{
-      const mode=e.target.value;
-      const sp=rpSemainePrecedente();
-      await rpMaj(mode==='semaine'?{mode:'semaine',year:sp.year,week:sp.week}
-                                  :{mode:'jour',jour:st.jour||rpHier()});
-    }},
-      h('option',{value:'jour',selected:st.mode==='jour'},'Jour'),
-      h('option',{value:'semaine',selected:st.mode==='semaine'},'Semaine')),
-    st.mode==='semaine'
-      ? h('input',{type:'week',style:champ,
-          defaultValue:(st.year&&st.week)?(st.year+'-W'+String(st.week).padStart(2,'0')):'',
-          onChange:async(e)=>{const m=/^(\d{4})-W(\d{1,2})$/.exec(e.target.value||'');
-            if(m) await rpMaj({year:parseInt(m[1],10),week:parseInt(m[2],10)});}})
-      : h('input',{type:'date',style:champ,defaultValue:st.jour||rpHier(),
-          onChange:async(e)=>{ if(e.target.value) await rpMaj({jour:e.target.value}); }}),
-    h('button',{type:'button',style:puce(st.mode==='jour'&&st.jour===rpHier()),
-      onClick:()=>rpMaj({mode:'jour',jour:rpHier()})},'Hier'),
-    h('button',{type:'button',style:puce(st.mode==='jour'&&st.jour===rpAujourdhui()),
-      onClick:()=>rpMaj({mode:'jour',jour:rpAujourdhui()})},"Aujourd'hui"),
-    h('button',{type:'button',style:puce(st.mode==='semaine'),onClick:()=>{
-      const sp=rpSemainePrecedente(); rpMaj({mode:'semaine',year:sp.year,week:sp.week});
-    }},'Semaine passee'),
-    h('label',{style:Object.assign({marginLeft:'8px'},lbl)},'Machine'),
+  // Barre de l'onglet : uniquement ce qui lui est propre. La periode et les
+  // machines restent celles de la barre de filtres au-dessus.
+  const per = st.periode || {};
+  const barre = h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap',
+                                alignItems:'center',margin:'0 0 14px'}},
+    h('span',{style:Object.assign({},lbl)}, per.label || 'Periode'),
+    h('span',{style:{fontSize:'12px',color:'var(--muted)'}},
+      'suit les filtres ci-dessus'),
+    h('label',{style:Object.assign({marginLeft:'8px'},lbl)},'Feuille de'),
     h('select',{value:st.machine,style:champ,
       onChange:async(e)=>{ await rpMaj({machine:e.target.value}); }},
       ...((st.machines||[]).length
@@ -7194,8 +7203,9 @@ function renderRetourProd(){
       onClick:()=>rpMaj({vue:'feuille'})},'Feuille atelier'),
     h('button',{type:'button',style:puce(st.vue==='liste'),
       onClick:()=>rpMaj({vue:'liste'})},'Comptes-rendus'),
-    h('button',{type:'button',style:puce(false),
-      onClick:()=>{window.location.href='/rapports-prod';}},'Plein ecran / impression')
+    ...(st.vue==='feuille' && st.feuille
+        ? [h('button',{type:'button',style:puce(false),onClick:rpImprimer},'Imprimer')]
+        : [])
   );
 
   if(st.vue==='feuille'){
@@ -7203,7 +7213,7 @@ function renderRetourProd(){
     frag.innerHTML = st.feuille
       ? RP.renderFeuille(st.feuille)
       : '<div class="rp-vide">Aucun dossier cloture sur cette periode.</div>';
-    return h('div',null, toolbar, messageErreur, frag);
+    return h('div',null, barre, messageErreur, frag);
   }
 
   // Vue liste : recherche libre (tout dossier) + dossiers clotures sur la periode.
@@ -7217,7 +7227,7 @@ function renderRetourProd(){
     + 'border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);'
     + 'font-size:14px;font-family:inherit">'
     + '<div class="rp-note" style="margin-top:7px">La liste ci-dessous ne montre que les dossiers '
-    + 'clotures sur la periode. La recherche atteint tous les dossiers ayant des saisies.</div>'
+    + 'clotures sur la periode filtree. La recherche atteint tous les dossiers ayant des saisies.</div>'
     + '<div id="rp-qres"></div>';
   const champQ = rech.querySelector('#rp-q');
   const boiteQ = rech.querySelector('#rp-qres');
@@ -7247,7 +7257,7 @@ function renderRetourProd(){
   tab.querySelectorAll('tr[data-dossier]').forEach(tr=>{
     tr.onclick = ()=>rpMaj({dossier:tr.getAttribute('data-dossier')});
   });
-  return h('div',null, toolbar, messageErreur, rech, tab);
+  return h('div',null, barre, messageErreur, rech, tab);
 }
 
 function formatJourLabel(j){

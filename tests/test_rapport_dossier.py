@@ -240,8 +240,8 @@ def test_reperes_reference():
 
     r = svc.reperes_reference(conn, "REF-A", "D-100")
     verifier("3 series retenues", r["series"], 3)
-    # vitesses en m/min -> m/h : 600, 720, 840 ; mediane 720. Le 2.0 (D-100) est exclu.
-    verifier("mediane des cadences passees", r["cadence_mediane_m_h"], 720.0)
+    # m/min, sans conversion : 10, 12, 14 -> mediane 12. Le 2.0 (D-100) est exclu.
+    verifier("mediane des cadences passees", r["cadence_mediane_m_min"], 12.0)
     verifier("reference inconnue", svc.reperes_reference(conn, None)["series"], 0)
 
 
@@ -284,12 +284,12 @@ def test_compte_rendu():
     verifier("conducteurs", cr["identite"]["conducteurs"], ["Marc"])
     verifier("metrage", cr["metrage"]["reel"], 20000.0)
     verifier("ecart au prevu", round(cr["metrage"]["ecart_pct"], 1), -20.0)
-    # production 60 + 60 = 120 min -> 20000 m / 2 h = 10000 m/h
-    verifier("vitesse de production (hors arrets)", cr["vitesse_m_h"], 10000.0)
-    # cadence : denominateur production + arret = 120 + 30 = 150 min = 2,5 h
-    # -> 8000 m/h. C'est la SEULE valeur comparable a produit_series.vitesse_m_min,
-    # calcule par dossier_stats.py sur ce meme denominateur.
-    verifier("cadence (arrets compris)", cr["cadence_m_h"], 8000.0)
+    # production 60 + 60 = 120 min -> 20000 m / 120 min = 166,7 m/min
+    verifier("vitesse de production (hors arrets)", cr["vitesse_m_min"], 166.7)
+    # cadence : denominateur production + arret = 120 + 30 = 150 min
+    # -> 133,3 m/min. C'est la SEULE valeur comparable a produit_series.vitesse_m_min,
+    # calcule par dossier_stats.py sur ce meme denominateur et dans la meme unite.
+    verifier("cadence (arrets compris)", cr["cadence_m_min"], 133.3)
     verifier("un seuil franchi", len(cr["seuils"]), 1)
     verifier("seuil explique", cr["seuils"][0]["sans_explication"], False)
     verifier("info prod presente", bool(cr["ecrits"]["info_prod"]), True)
@@ -303,8 +303,8 @@ def test_cadence_comparable_au_repere():
     print("\n8 bis. La cadence se compare a un repere calcule pareil")
     conn = base()
     dossier_complet(conn)
-    # Repere historique : 100 m/min = 6000 m/h, calcule par dossier_stats sur
-    # (production + arret). Le dossier courant fait 8000 m/h de cadence.
+    # Repere historique : 100 m/min, calcule par dossier_stats sur
+    # (production + arret). Le dossier courant fait 133,3 m/min de cadence.
     for i, d in enumerate(("D-201", "D-202", "D-203")):
         conn.execute(
             """INSERT INTO produit_series (ref_produit_norm, no_dossier, machine,
@@ -317,12 +317,16 @@ def test_cadence_comparable_au_repere():
     conn.commit()
 
     cr = svc.compte_rendu(conn, "D-100")
-    verifier("repere retrouve", cr["reference"]["cadence_mediane_m_h"], 6000.0)
-    # 8000 vs 6000 = +33,3 %. Sur la vitesse hors arrets (10000) l'ecart aurait
+    verifier("repere retrouve", cr["reference"]["cadence_mediane_m_min"], 100.0)
+    # 133,3 vs 100 = +33,3 %. Sur la vitesse hors arrets (166,7) l'ecart aurait
     # ete de +66 % : c'est exactement l'erreur que ce cas empeche.
     verifier_proche("ecart calcule sur la cadence", cr["ecarts"]["cadence_pct"], 33.3, 0.2)
     verifier("aucun ecart de vitesse expose",
              "vitesse_pct" in cr["ecarts"], False)
+    # L'unite est celle de la machine : jamais de m/h dans la sortie.
+    verifier("aucune cle en m/h",
+             [k for k in list(cr) + list(cr["ecarts"]) + list(cr["reference"])
+              if k.endswith("_m_h")], [])
 
 
 def test_vigilance():
@@ -372,6 +376,7 @@ def test_retour_atelier():
     verifier("metrage", r["production"]["metrage"], 20000.0)
     verifier("temps de production", r["production"]["minutes_production"], 120.0)
     verifier("temps d'arret", r["production"]["minutes_arret"], 30.0)
+    verifier("vitesse machine en m/min", r["production"]["vitesse_m_min"], 166.7)
     verifier("une reference produite", len(r["references"]), 1)
     verifier("code d'arret le plus couteux", r["arrets_couteux"][0]["code"], "53")
 
@@ -396,7 +401,7 @@ def test_machine_sans_donnee():
     verifier("aucune reference", r["references"], [])
     verifier("aucun arret", r["arrets_couteux"], [])
     verifier("aucun ecrit", r["ecrits"], [])
-    verifier("vitesse indeterminee, pas zero", r["production"]["vitesse_m_h"], None)
+    verifier("vitesse indeterminee, pas zero", r["production"]["vitesse_m_min"], None)
     verifier("aucune machine sur la periode",
              svc.machines_periode(conn, SEMAINE_DEBUT, SEMAINE_FIN), [])
     verifier("liste de comptes-rendus vide",

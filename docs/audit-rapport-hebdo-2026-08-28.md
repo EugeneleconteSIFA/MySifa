@@ -478,3 +478,76 @@ l'endpoint s'en charge.
 (module partagé, `mysifa_prod_core.js`, `mysifa_cmdk.js`, et les scripts
 extraits de `rapports_prod_page.py` et `html.py`) · 9 suites Python + la suite
 JS au vert. **Le boot reste à faire sur v1.**
+
+---
+
+## 7. Quatrième passe — emboîtement dans MyProd, unités, lisibilité
+
+### L'onglet devient le seul foyer
+
+La page autonome `/rapports-prod` est supprimée, ainsi que la tuile portail.
+Le module vit désormais dans **MyProd › Production › Retour de prod**
+(`/prod#retour`), et nulle part ailleurs. L'entrée de la palette de commandes
+pointe l'onglet.
+
+### Ce qui n'était pas emboîté
+
+L'onglet portait ses propres sélecteurs de période et de machine, alors que la
+page Production a déjà une barre de filtres (période avec ses raccourcis
+Aujourd'hui / Hier / 7 jours / 30 jours / mois, machines, opérateurs, dossier).
+Deux jeux de commandes pour la même chose : l'utilisateur ne sait plus lequel
+fait foi.
+
+L'onglet lit maintenant `S.fv.date_from` / `S.fv.date_to` et `S.fv.machines`.
+`applyF()` le recharge comme les autres onglets. Il ne garde que ce qui lui est
+propre : de quelle machine est la feuille, feuille ou comptes-rendus, imprimer.
+
+L'API a gagné un mode `plage` (deux dates libres) à côté de `jour` et
+`semaine` — sans lui, l'onglet aurait dû retraduire une plage quelconque en
+journée ou en semaine ISO, c'est-à-dire mentir sur ce qu'il affiche.
+
+Si le filtre machines ne recoupe aucune machine de la période (nom canonique
+différent de celui des saisies), l'onglet rend toutes celles de la période
+plutôt qu'un écran vide sans explication.
+
+### L'unité était fausse
+
+`vitesse_m_h` et `cadence_m_h` affichaient des mètres par **heure** : « 1 789
+m/h ». Or une machine se règle en **m/min**, `produit_series.vitesse_m_min` est
+en m/min, l'ancien rapport hebdo affichait « 57 m/min », et
+`app/web/html.py:7269` calcule déjà `métrage / (temps_prod + temps_arrêt)` en
+m/min — c'est-à-dire exactement la cadence, dans la bonne unité.
+
+Le service ne convertit plus rien : `vitesse_m_min` et `cadence_m_min`, la
+médiane de référence lue telle quelle dans `produit_series`. Un `×60` retiré,
+c'est une classe d'erreur en moins. 1 789 m/h se lit maintenant 29,8 m/min.
+
+### Texte au minimum, texte lisible
+
+Titres et libellés resserrés (« Ce qui est sorti de la machine » → « Production »,
+« Ce qui a coûté le plus de temps » → « Temps perdu », « À reprendre au point de
+production » → « À reprendre »), paragraphe explicatif de la cadence remplacé
+par une infobulle sur le titre, points de vigilance sans le mot « dossier »
+répété à chaque ligne.
+
+Une redondance visible sur la capture est corrigée : la colonne Code affichait
+`66` et la colonne Opération `66 - Attente matière`. `sansCode()` retire le
+préfixe quand le code est déjà à côté.
+
+Rien ne descend plus sous 12 px — la feuille se lit debout devant une machine.
+Valeurs de KPI à 32 px, corps de texte à 15 px, méta à 12,5 px.
+
+### Animation au survol
+
+Reprise des tokens de `static/motion.css` (`--mo-fast`, `--ease-out`) plutôt
+qu'inventer des durées : KPI qui se soulève, ligne de tableau qui prend un
+liseré d'accent, citation dont la barre s'épaissit, compteur de vigilance qui
+grossit légèrement, boutons et champs. Tout est neutralisé sous
+`prefers-reduced-motion: reduce` et `body.reduce-anim`, comme le reste.
+
+L'impression depuis MyProd masque la page par `visibility` et laisse sortir la
+seule `.rp-feuille` — le flux est conservé, donc la feuille ne se reconstruit
+pas.
+
+`tests/test_retour_prod_rendu.js` couvre désormais l'unité (aucun `m/h` dans la
+sortie), le retrait du code dupliqué et le formatage m/min.

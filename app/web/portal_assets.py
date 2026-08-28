@@ -1321,22 +1321,6 @@ function renderPortal(){
     )});
   }
 
-  // Retour de prod : ce que la machine a sorti, et ce que les conducteurs en
-  // ont écrit. Même périmètre que Saisie Prod, élargi à la production : la
-  // feuille atelier s'imprime pour être affichée à la machine.
-  if(isFab || isProd){
-    const id='retour-prod';
-    tileSpecs.push({id,el:h('div',{
-      className:'portal-app',
-      'data-portal-id':id,
-      draggable:'true',
-      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/rapports-prod';}
-    },
-      h('div',{className:'portal-app-icon'},iconEl('clipboard',28)),
-      h('div',{className:'portal-app-name'},'Retour de prod'),
-      h('div',{className:'portal-app-desc'},'Comptes-rendus dossier — feuille atelier')
-    )});
-  }
 
   if(isProd){
     const id='prod';
