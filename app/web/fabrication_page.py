@@ -1333,8 +1333,11 @@ let S = {
   repiquageEditCartons: '',
   repiquageEditEtiq: '',
   repiquageEditCommentaire: '',
-  showArret50Modal: false,
-  arret50Comment: '',
+  // Commentaire obligatoire : la modale sert tous les codes qui ne disent rien
+  // par leur seul libelle (voir CODES_COMMENTAIRE_OBLIGATOIRE).
+  showOpCommentModal: false,
+  opCommentOp: null,        // {code, label} de l'operation en attente
+  opCommentTxt: '',
   // Annulation de dossier (marche arriere avant production reelle)
   showAnnulModal: false,
   annulMotif: '',
@@ -1345,6 +1348,10 @@ let S = {
   // Form values
   metrageDebut: '',
   metrageFinVal: '',
+  // Compteur illisible : la cloture reste possible, mais le trou est declare
+  // et motive au lieu d'etre silencieux.
+  metrageIndispo: false,
+  metrageIndispoMotif: '',
   nbEtiquettes: '',
   finDossierOui: null,  // null | true | false — sélecteur fin de dossier dans renderFinModal
   finNoteVal: '',       // info prod saisie à la clôture (obligatoire si dossier terminé)
@@ -1517,7 +1524,7 @@ function fscTypeRequisLabel(t){
 }
 
 function fabIsModalOpen(){
-  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showAnnulModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showArret50Modal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
+  if(S.showDossierPicker || S.showFictifModal || S.showDebutModal || S.showFinModal || S.showCommentModal || S.showAnnulModal || S.showTracaCommentModal || S.showRepiquageEditModal || S.showOpCommentModal || S.repiquageAttentionOpen || S.repiquageEditParamOpen || S.repiquageAdjustOpen || S.repiquageTeteSortieOpen) return true;
   try{
     const mr = document.getElementById('mroot');
     if(mr && mr.firstElementChild) return true;
@@ -2533,6 +2540,15 @@ function renderAnnulModal(){
 }
 
 /* ── Op trigger logic ────────────────────────────────────────── */
+/* Codes dont le libelle ne suffit pas : la saisie n'existe pas sans sa raison.
+ * `quoi` sert d'invite — une question fermee ramene une reponse utilisable,
+ * « Precisez » ramene « RAS ». */
+const CODES_COMMENTAIRE_OBLIGATOIRE = {
+  '50': {quoi:"Précisez la raison de l'arrêt", exemple:'Ex. panne moteur, bourrage…'},
+  '64': {quoi:"Qu'est-ce qui a été fait, et par qui ?",
+         exemple:'Ex. réglage tension bande par le service maintenance'},
+};
+
 function handleOpTrigger(code, label, cat){
   // Opérations nécessitant une action spéciale
   if(code==='01'){
@@ -2544,15 +2560,21 @@ function handleOpTrigger(code, label, cat){
   }
   if(code==='89'){
     // Fin dossier → modal metrage + étiquettes + info prod
-    set({showFinModal:true, metrageFinVal:'', nbEtiquettes:'', finNoteVal:'', finNoteChargee:false});
+    set({showFinModal:true, metrageFinVal:'', nbEtiquettes:'', finNoteVal:'', finNoteChargee:false,
+         metrageIndispo:false, metrageIndispoMotif:''});
     // Une info prod peut déjà exister — saisie en Traçabilité avant le
     // lancement, ou par le conducteur du poste précédent. On la relit pour
     // que l'opérateur complète au lieu d'écraser sans le savoir.
     loadInfoProdDossier();
     return;
   }
-  if(code==='50'){
-    set({showArret50Modal:true, arret50Comment:''});
+  // Sur les dix-neuf codes d'arret, dix-sept se decrivent tout seuls : « Casse
+  // bande », « Probleme UV1 » disent deja ce qui s'est passe. Deux ne disent
+  // rien sans une phrase — c'est a ceux-la, et a eux seuls, qu'on demande un
+  // commentaire. Exiger un texte partout ferait taper « RAS » partout, et on
+  // aurait perdu la seule chose que ce champ apporte.
+  if(CODES_COMMENTAIRE_OBLIGATOIRE[code]){
+    set({showOpCommentModal:true, opCommentOp:{code:code, label:label}, opCommentTxt:''});
     return;
   }
   if(code==='86'||code==='87'||code==='88'||code==='03'){
@@ -3266,7 +3288,7 @@ function renderOfImportModal(){
   if(!mr) return;
   const m = S.ofImportModal;
   if(!m){
-    if(!S.showArret50Modal && !S.ofEditModal && !S.ficheEditModal) mr.innerHTML = '';
+    if(!S.showOpCommentModal && !S.ofEditModal && !S.ficheEditModal) mr.innerHTML = '';
     return;
   }
   mr.innerHTML = '';
@@ -5813,7 +5835,46 @@ function renderFinModal(){
   const metInp = h('input',{type:'number',placeholder:'Ex: 14200',step:'1',min:'0',
     style:{textAlign:'right'}});
   metInp.value = S.metrageFinVal||'';
+  metInp.disabled = !!S.metrageIndispo;
   metInp.addEventListener('input',e=>{ S.metrageFinVal=e.target.value; });
+
+  // Le compteur n'est pas toujours relevable : afficheur en panne, machine
+  // coupee, dossier repris sur un autre poste. Bloquer sec laisserait un
+  // conducteur devant un dossier qu'il ne peut pas clore. La case ouvre donc
+  // une sortie — mais elle demande un motif, et ce motif part dans le
+  // commentaire de la saisie : le trou est declare, daté et signé, au lieu
+  // d'etre un NULL de plus dont personne ne saura jamais la cause.
+  const indispoCase = h('input',{type:'checkbox'});
+  indispoCase.checked = !!S.metrageIndispo;
+  indispoCase.addEventListener('change',e=>{
+    S.metrageIndispo = e.target.checked;
+    if(S.metrageIndispo) S.metrageFinVal = '';
+    else S.metrageIndispoMotif = '';
+    fabRenderPreserveUi({});
+    // Cocher la case, c'est demander le champ suivant : on l'y amene, plutot
+    // que de le laisser chercher ou cliquer.
+    if(S.metrageIndispo) setTimeout(()=>{
+      const n = document.getElementById('fab-metrage-motif');
+      if(n) n.focus();
+    }, 0);
+  });
+
+  const motifInp = h('input',{type:'text', id:'fab-metrage-motif',
+    placeholder:'Ex. afficheur HS, relevé impossible'});
+  motifInp.value = S.metrageIndispoMotif||'';
+  motifInp.addEventListener('input',e=>{ S.metrageIndispoMotif=e.target.value; });
+
+  const blocIndispo = h('div',{className:'fab-field',style:{marginTop:'6px'}},
+    h('label',{style:{display:'flex',alignItems:'center',gap:'8px',
+                      textTransform:'none',letterSpacing:'0',fontWeight:'600',
+                      cursor:'pointer'}},
+      indispoCase,
+      'Compteur indisponible'
+    ),
+    S.metrageIndispo ? motifInp : null,
+    S.metrageIndispo ? h('div',{className:'fab-field-hint'},
+      'Le motif est enregistré avec la saisie.') : null
+  );
 
   const etiqInp = h('input',{type:'number',placeholder:'Ex: 50000',step:'1',min:'0',
     style:{textAlign:'right'}});
@@ -5910,7 +5971,24 @@ function renderFinModal(){
       return;
     }
 
-    const mFin = S.metrageFinVal ? parseFloat(String(S.metrageFinVal).replace(',','.')) : null;
+    let mFin = S.metrageFinVal ? parseFloat(String(S.metrageFinVal).replace(',','.')) : null;
+    if(mFin !== null && isNaN(mFin)) mFin = null;
+
+    // Le metrage n'est pas un champ de confort : sans lui la serie produit sort
+    // sans longueur ni vitesse, et le dossier ne pese rien dans Besoins
+    // matieres. On le demande, ou on demande pourquoi il manque.
+    const motifIndispo = String(S.metrageIndispoMotif||'').trim();
+    if(mFin === null){
+      if(!S.metrageIndispo){
+        showToast('Relevez le compteur machine — sans métrage, ni la vitesse ni '
+                 +'le besoin matière de ce dossier ne peuvent être calculés.','danger');
+        return;
+      }
+      if(!motifIndispo){
+        showToast('Indiquez pourquoi le compteur n\'est pas relevable.','danger');
+        return;
+      }
+    }
 
     // Validation locale 1 : métrage fin < dernier_metrage machine
     const machine = S.machine || (S.adminMachineId && S.machines.find(m=>m.id===S.adminMachineId));
@@ -5952,6 +6030,10 @@ function renderFinModal(){
       };
       if(S.finDossierOui === true && noteTxt) body.info_prod = noteTxt;
       if(mFin !== null) body.metrage_fin = mFin;
+      // Pas de metrage : la saisie porte la raison. Un NULL sans explication
+      // se lit comme un oubli six mois plus tard, et personne ne peut plus
+      // trancher entre « pas releve » et « pas relevable ».
+      else body.commentaire = 'Sans métrage — ' + motifIndispo;
       if(S.nbEtiquettes) body.qte_etiquettes = parseFloat(String(S.nbEtiquettes).replace(',','.'));
       if(S.adminMachineId) body.machine_id = S.adminMachineId;
       const r = await apiFetch('/api/fabrication/saisie',{
@@ -5971,11 +6053,12 @@ function renderFinModal(){
       showToast('Erreur : '+e.message,'danger');
     }finally{
       fabRenderPreserveUi({loading:false, metrageFinVal:'', nbEtiquettes:'', finDossierOui:null,
-                           finNoteVal:'', finNoteChargee:false});
+                           finNoteVal:'', finNoteChargee:false,
+                           metrageIndispo:false, metrageIndispoMotif:''});
     }
   };
 
-  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false});}},
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false,metrageIndispo:false,metrageIndispoMotif:''});}},
     h('div',{className:'fab-modal'},
       h('div',{className:'fab-modal-title'},opLabel('89','Fin de production')),
       S.dossier ? h('div',{className:'fab-modal-sub'},
@@ -5992,7 +6075,8 @@ function renderFinModal(){
           return h('div',{className:'fab-field-hint'},
             'Dernier relevé : '+Math.round(m.dernier_metrage).toLocaleString('fr-FR')+' m');
         })(),
-        metInp
+        metInp,
+        blocIndispo
       ),
       h('div',{className:'fab-field'},
         h('label',null,'Étiquettes produites'),
@@ -6002,7 +6086,7 @@ function renderFinModal(){
       S.finDossierOui===true ? noteBloc : null,
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
-          onClick:()=>set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false})},'Annuler'),
+          onClick:()=>set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false,metrageIndispo:false,metrageIndispoMotif:''})},'Annuler'),
         h('button',{
           className:'fab-btn '+(S.finDossierOui===true?'fab-btn-danger':'fab-btn-warn'),
           style:{opacity: S.finDossierOui===null?'.55':'1'},
@@ -6017,21 +6101,21 @@ function renderFinModal(){
   );
 }
 
-function renderArret50Modal(){
+function renderOpCommentModal(){
   const mr = document.getElementById('mroot');
   if(!mr) return;
-  if(!S.showArret50Modal){
+  if(!S.showOpCommentModal){
     if(!S.ofImportModal && !S.ofEditModal && !S.ficheEditModal) mr.innerHTML = '';
     return;
   }
   mr.innerHTML = '';
 
+  const op = S.opCommentOp || {code:'', label:''};
+  const reg = CODES_COMMENTAIRE_OBLIGATOIRE[op.code] || {};
+
   let submitBtn;
-  const ta = h('textarea',{
-    placeholder:'Ex. panne moteur, bourrage…',
-    rows:'4',
-  });
-  ta.value = S.arret50Comment || '';
+  const ta = h('textarea',{ placeholder: reg.exemple || 'Précisez…', rows:'4' });
+  ta.value = S.opCommentTxt || '';
 
   const syncSubmit = ()=>{
     const ok = !!(ta.value||'').trim();
@@ -6039,38 +6123,40 @@ function renderArret50Modal(){
   };
 
   ta.addEventListener('input',e=>{
-    S.arret50Comment = e.target.value;
+    S.opCommentTxt = e.target.value;
     syncSubmit();
   });
 
-  const closeArret50 = ()=>set({showArret50Modal:false, arret50Comment:''});
+  const fermer = ()=>set({showOpCommentModal:false, opCommentOp:null, opCommentTxt:''});
 
-  async function confirmArret50(){
+  async function confirmer(){
     const text = (ta.value||'').trim();
     if(!text) return;
-    set({showArret50Modal:false, arret50Comment:''});
-    await triggerOp('50','Arrêt machine',{commentaire:text});
+    set({showOpCommentModal:false, opCommentOp:null, opCommentTxt:''});
+    await triggerOp(op.code, op.label, {commentaire:text});
   }
 
   submitBtn = h('button',{
     className:'btn btn-accent',
-    disabled:!((S.arret50Comment||'').trim()),
-    onClick:confirmArret50,
+    disabled:!((S.opCommentTxt||'').trim()),
+    onClick:confirmer,
   },'Valider');
 
   mr.appendChild(
-    h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)closeArret50();}},
+    h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)fermer();}},
       h('div',{className:'fab-modal'},
-        h('div',{className:'fab-modal-title'},svgIcon('alert',18),' 50 — Arrêt machine'),
+        h('div',{className:'fab-modal-title'},svgIcon('alert',18),' '+op.code+' \u2014 '+op.label),
         h('div',{className:'fab-modal-sub'},
-          'Un commentaire est obligatoire pour enregistrer cet arrêt.'
+          "Sans commentaire, cette saisie ne dit que l'heure : le libell\u00e9 seul "
+          +"ne permet ni de comprendre l'intervention plus tard, ni de la compter "
+          +"avec ses semblables."
         ),
         h('div',{className:'fab-field'},
-          h('label',null,"Précisez la raison de l'arrêt"),
+          h('label',null, reg.quoi || 'Pr\u00e9cisez'),
           ta
         ),
         h('div',{className:'fab-modal-btns'},
-          h('button',{className:'btn btn-ghost',onClick:closeArret50},'Annuler'),
+          h('button',{className:'btn btn-ghost',onClick:fermer},'Annuler'),
           submitBtn
         )
       )
@@ -7892,7 +7978,7 @@ function render(){
   }
 
   renderOfImportModal();
-  renderArret50Modal();
+  renderOpCommentModal();
 
   if(S.loading) root.appendChild(renderLoading());
 
