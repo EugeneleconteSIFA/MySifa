@@ -151,6 +151,7 @@
       { type: 'app', title: 'MyCompta',        sub: 'Comptabilité',                        keywords: 'compta comptabilite finance',         url: '/compta',      icon: 'calculator',   roles: 'direction,comptabilite' },
       { type: 'app', title: 'MyExpé',     sub: 'Expédition & suivi',                  keywords: 'expedition livraison transporteur',   url: '/expe',        icon: 'truck',        roles: '*' },
       { type: 'app', title: 'Planning RH',     sub: 'Planning personnel & congés',         keywords: 'rh personnel conges',                 url: '/planning-rh', icon: 'users',        roles: 'direction,administration' },
+      { type: 'app', title: 'Retour de prod', sub: 'Comptes-rendus dossier, feuille atelier', keywords: 'retour prod compte rendu dossier atelier feuille conducteur', url: '/rapports-prod', icon: 'clipboard', roles: 'direction,fabrication,expedition,commercial' },
       { type: 'app', title: 'Coûts matières', sub: 'Matières, produits, €/m²', keywords: 'couts matieres prix pricing',         url: '/pricing',     icon: 'file-text',    roles: 'direction,commercial' },
       { type: 'app', title: 'MyAO',            sub: 'Appels d’offre fournisseurs',         keywords: 'ao appel offre fournisseur',          url: '/ao',          icon: 'clipboard',    roles: '*' },
       { type: 'app', title: 'MyBAT',           sub: 'Bons À Tirer — suivi client',    keywords: 'bat bon a tirer client',              url: '/bat',         icon: 'palette',      roles: '*' },

@@ -299,3 +299,182 @@ contrôle humain une saison de plus.
 4. Annonce hebdomadaire : option a, b ou c du rang 6 ?
 5. Automatisation : voie A, B ou C — et le mercredi 07:00 du pied de page
    est-il la bonne heure ?
+
+---
+
+## 5. Ajout du 28/08/2026 — module « Retour de prod » (`/rapports-prod`)
+
+Livré hors de la liste d'arbitrage ci-dessus, sur demande directe : rendre
+quelque chose aux opérateurs, et centraliser les comptes-rendus de dossier.
+
+**Fichiers**
+
+| Fichier | Rôle |
+|---|---|
+| `app/services/rapport_dossier.py` | Service pur (connexion sqlite seule, aucun import applicatif) : assemble le compte-rendu d'un dossier et l'agrège par machine et par semaine |
+| `app/routers/rapports_prod.py` | 4 endpoints : `/semaine`, `/comptes-rendus`, `/dossier/{no}`, `/retour-atelier` |
+| `app/web/rapports_prod_page.py` | Page `/rapports-prod`, deux onglets, feuille imprimable A4 |
+| `tests/test_rapport_dossier.py` | 13 cas, base sqlite en mémoire |
+
+Aucune migration : tout est lu dans les tables existantes.
+Entrées : tuile portail (rôles production) et palette de commandes.
+
+**Deux décisions de conception à connaître**
+
+1. **Le retour est par machine, jamais par personne.** Même raisonnement qu'au
+   §2.5 : la complétude d'une saisie mesure l'ergonomie et la charge autant que
+   le conducteur. La feuille crédite l'équipe (« Aux commandes cette semaine »)
+   sans jamais rattacher un chiffre à un nom, et les points de vigilance sont
+   comptés, pas attribués. Un cas de test verrouille cette propriété.
+2. **Le repère est la référence, pas l'atelier.** « Cette référence tourne
+   d'habitude à 15 000 m/h sur 3 productions » se discute à la machine ; une
+   moyenne d'atelier ne se discute pas.
+
+**Piège de définition rencontré, et corrigé**
+
+`produit_series.vitesse_m_min` est calculé par `app/services/dossier_stats.py`
+comme `métrage / (production + arrêt)`. Or `weekly_report.py` appelle
+« vitesse » `métrage / production`. Ce sont deux grandeurs différentes sous le
+même mot, et comparer l'une à l'autre — ce que faisait la première version de
+la feuille — surestimait systématiquement la semaine en cours : sur le jeu
+d'essai, +66 % au lieu de −42 %.
+
+Le module expose donc deux valeurs nommées séparément :
+
+- `vitesse_m_h` — métrage / production seule, alignée sur `weekly_report` ;
+- `cadence_m_h` — métrage / (production + arrêt), **seule** valeur comparée au
+  repère historique, calculée des deux côtés de la même façon.
+
+`tests/test_rapport_dossier.py::test_cadence_comparable_au_repere` verrouille
+ce point précis.
+
+**Trois constats sur l'existant, à arbitrer**
+
+1. `weekly_report._dossiers_fab_detail` intitule « calage » le seul code `02`,
+   alors que le référentiel compte 9 codes de catégorie `calage` (`10`, `11`,
+   `12`, `58` changement bobines, `59`, `60`, `74`, `75`). Un changement de
+   bobine ou de cliché n'est donc pas compté dans le calage du rapport hebdo.
+   Le nouveau module nomme sa ligne « calage et changements » et couvre toute
+   la catégorie — le nom diffère parce que la mesure diffère.
+2. Deux définitions de « vitesse » coexistent dans le dépôt (voir ci-dessus).
+   Tant qu'elles coexistent, tout écran qui les rapproche doit le dire.
+3. `weekly_report` ne plafonne pas l'écart entre deux saisies : une journée
+   terminée sans code `89` compte jusqu'à la première saisie du lendemain. Le
+   nouveau module conserve ce calcul pour ne pas contredire le rapport hebdo,
+   mais isole ces écarts (`minutes_douteuses`) et les remonte comme point de
+   vigilance sur la feuille atelier, là où c'est actionnable.
+
+**Reste à faire sur v1** : le boot. Le `.venv` du dépôt est un venv macOS et
+`data/production.db` fait 0 octet — ni FastAPI ni données réelles ici. Le
+service, ses calculs et le JS sont vérifiés (`compileall`, `node --check`,
+13 cas de test), le rendu réel des deux onglets ne l'est pas.
+
+### 5 bis. Deuxième passe — période jour et recherche libre
+
+Retour d'usage : le module était invisible depuis l'écran réellement utilisé
+(MyProd → Production → Rapport hebdo), la maille semaine ne couvrait pas le
+point de production du matin, et la liste ne donnait accès qu'aux dossiers
+clôturés dans la période.
+
+- **Sélecteur de période** `jour` / `semaine`, avec raccourcis Hier /
+  Aujourd'hui / Semaine passée. **Le jour « hier » est le défaut** : c'est la
+  vue du point de production du matin. La maille semaine reste à un clic pour
+  la feuille affichée à la machine.
+- **Recherche libre** (`/api/rapports-prod/recherche`) sur numéro de dossier,
+  client ou désignation. Elle atteint **tout dossier portant des saisies**,
+  sans condition de date ni de clôture — donc aussi un dossier en cours ou clos
+  il y a trois mois, ce qui est le cas le plus utile quand on reprend une
+  référence. La liste de période reste, elle, limitée aux dossiers clôturés :
+  les deux usages sont distincts et l'écran le dit.
+- **Lien direct** : `/rapports-prod?dossier=D-501` ouvre le compte-rendu.
+- **Accès depuis MyProd** : bouton « Comptes-rendus par dossier et retour
+  atelier → » dans la barre de l'onglet Rapport hebdo. Le rapport hebdo agrège,
+  le compte-rendu détaille : les deux se lisent ensemble.
+
+Un dossier non clôturé ne déclenche pas le point de vigilance « info prod
+absente » — la note n'est due qu'à la clôture. Cas de test dédié.
+
+`tests/test_rapport_dossier.py` couvre maintenant 14 cas.
+
+---
+
+## 6. Troisième passe — le rapport hebdo est remplacé
+
+Décision d'Eugène, 28/08/2026 : le retour de production devient le seul objet.
+Le rapport hebdomadaire disparaît entièrement — onglet, page, archive et envoi
+email compris. La liste d'arbitrage des §1 à §4 devient donc caduque sur ses
+rangs 1 à 6 : ils portaient sur un module qui n'existe plus.
+
+### Ce qui a été supprimé
+
+| Fichier | Contenu |
+|---|---|
+| `app/services/weekly_report.py` | 1904 lignes — collecte, `ROLE_SECTIONS`, 11 renderers |
+| `app/routers/reports.py` | `/preview`, `/sections`, `/list`, `/send` |
+| `app/web/reports_page.py` | page `/reports/weekly` |
+
+Plus le désenregistrement dans `main.py`, l'onglet « Rapport hebdo » de MyProd
+(dans les deux copies : `static/mysifa_prod_core.js`, servi, et `app/web/html.py`,
+monolithe de secours), et l'entrée `reports_page.py` du snapshot
+`tests/theme_resolu.json`.
+
+Les archives déjà écrites dans `data/weekly_reports/` sont laissées en place :
+c'est de l'historique, plus personne n'écrit dedans.
+
+**Conséquence assumée, à ne pas perdre de vue : plus aucun email de production
+ne part.** Direction, administration, fabrication, logistique, comptabilité,
+expédition et commercial recevaient un rapport hebdomadaire ; ils ne reçoivent
+plus rien. Rebâtir un envoi sur le nouveau module est le prochain chantier
+naturel — et il devra reprendre le garde-fou anti-double-envoi du rang 1, qui
+n'a jamais été implémenté.
+
+### Ce qui remplace
+
+L'onglet MyProd → Production s'appelle désormais **« Retour de prod »** et
+consomme `/api/rapports-prod`. Il n'est plus réservé au superadmin : il s'ouvre
+aux services de production, l'API filtrant sur `ROLES_PROD`.
+
+Le rendu ne vit ni dans la page ni dans l'onglet, mais dans
+`static/mysifa_retour_prod.js` + `static/mysifa_retour_prod.css`, chargés par
+les deux. C'était la seule façon de tenir la règle « deux écrans ne doivent
+jamais donner deux chiffres pour le même dossier » : tant que le rendu est
+écrit deux fois, il finit par diverger. La page `/rapports-prod` est passée de
+885 à 484 lignes en perdant sa copie.
+
+`brancher()` accepte une racine DOM, ce qui permet à MyProd de câbler les
+éditions **avant** insertion — son `render()` remplace l'arbre à chaque passe,
+un binding posé sur `document` ne survivrait pas.
+
+### Édition directe
+
+Deux écritures, sans migration, en réutilisant ce qui existait :
+
+| Ce qu'on corrige | Endpoint | Service réutilisé |
+|---|---|---|
+| Info prod d'un dossier | `POST /api/rapports-prod/dossier/{no}/info-prod` | `produit_memoire.enregistrer_info_prod` |
+| Explication d'un seuil d'arrêt | `POST /api/rapports-prod/seuil/{saisie_id}/explication` | `arret_seuils.enregistrer_explication` |
+
+Ce sont exactement les deux manques que l'écran signale (« info prod absente »,
+« sans explication — à poser au point de production »). Le compte-rendu est
+l'endroit où le trou se voit : c'est donc là qu'il doit se combler, sans
+renvoyer vers la Traçabilité. `enregistrer_explication` ne committait pas —
+l'endpoint s'en charge.
+
+### Deux pièges rencontrés
+
+1. **Un mot parasite invisible à `node --check`.** Une concaténation contenant
+   un identifiant égaré passait la vérification syntaxique : l'insertion
+   automatique de point-virgule coupait le `return` en deux, et la fonction ne
+   rendait plus que sa balise ouvrante. Seul un appel réel le montre — d'où
+   `tests/test_retour_prod_rendu.js`, qui exécute le module (rendu à vide,
+   lignes complètes, échappement, formats).
+2. **`api()` de MyProd lève sur toute réponse non-OK.** Un dossier sans saisie
+   (404) aurait cassé l'onglet entier. Chaque appel est isolé, le message est
+   gardé en état et affiché à sa place.
+
+### Vérification
+
+`compileall` sur `app/` et `main.py` · `node --check` sur les 5 blocs JS
+(module partagé, `mysifa_prod_core.js`, `mysifa_cmdk.js`, et les scripts
+extraits de `rapports_prod_page.py` et `html.py`) · 9 suites Python + la suite
+JS au vert. **Le boot reste à faire sur v1.**

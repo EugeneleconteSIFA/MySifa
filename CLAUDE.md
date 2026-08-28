@@ -26,6 +26,7 @@ MySifa est un outil interne de gestion de production industrielle développé po
 | MyExpé | `/expe` | Gestion des départs |
 | Planning RH | `/planning-rh` | Planning du personnel |
 | Paie | `/paie` | Module paie |
+| Retour de prod | `/rapports-prod` | Comptes-rendus de dossier et feuille atelier par machine |
 | Paramètres | `/settings` | Gestion comptes, rôles, annonces (super admin) |
 
 ---
