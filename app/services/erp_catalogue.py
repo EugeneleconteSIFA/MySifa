@@ -196,7 +196,8 @@ ECRANS = [
         "resume": "Lignes de devis et leur entête client.",
         "table": "dev_ligne", "alias": "l",
         "jointures": [{"table": "dev_entete", "alias": "e",
-                       "gauche": "e.numero", "droite": "l.numero"}],
+                       "gauche": "e.numero", "droite": "l.numero",
+                       "obligatoire": True}],
         "cle_ligne": "l.id",
         "tri_defaut": ("e.amjd", "desc"),
         "colonnes": [
@@ -230,7 +231,8 @@ ECRANS = [
         "resume": "Le carnet : une ligne par ligne de commande, avec sa date d'expédition et son avancement.",
         "table": "cde_ligne", "alias": "l",
         "jointures": [{"table": "cde_entete", "alias": "e",
-                       "gauche": "e.numero", "droite": "l.numero"}],
+                       "gauche": "e.numero", "droite": "l.numero",
+                       "obligatoire": True}],
         "cle_ligne": "l.id",
         "tri_defaut": ("l.amje", "desc"),
         "colonnes": [
@@ -254,8 +256,18 @@ ECRANS = [
             {"nom": "client", "label": "Client", "col": "e.rs", "type": "contient", "exemple": "LIDL"},
             # Un carnet s'ouvre sur ce qui est en cours, pas sur dix ans
             # d'archives : le filtre est posé d'entrée, et reste effaçable.
+            #
+            # « En cours » seul, et non « non soldée », après mesure le
+            # 28/08/2026 : les 91 lignes « Partielle » du miroir se lisent 10
+            # de 2026 — celles que l'écran de RVGI montre — et 81 de 2015 à
+            # 2024, sans le moindre BL, dont `orig` et `prod` valent 255, la
+            # sentinelle « non renseigné ». Ce sont des reliquats d'avant les
+            # champs que RVGI utilise aujourd'hui. Les faire entrer par défaut
+            # remplacerait un bruit par un autre. Le choix composé reste offert
+            # dans le rail pour qui veut les deux positions.
             {"nom": "position", "label": "Position", "col": "l.lpos", "type": "enum",
-             "enum": "position", "defaut": "0"},
+             "enum": "position", "defaut": "0",
+             "choix": [{"v": "0|1", "label": "Non soldée (en cours ou partielle)"}]},
             {"nom": "origine", "label": "Origine", "col": "l.orig", "type": "enum", "enum": "origine"},
             {"nom": "depuis", "label": "Expédition depuis", "col": "l.amje", "type": "date_min"},
             {"nom": "jusqua", "label": "Expédition jusqu'au", "col": "l.amje", "type": "date_max"},
@@ -275,7 +287,8 @@ ECRANS = [
         "resume": "Lignes de BL, rattachées à leur commande d'origine.",
         "table": "liv_ligne", "alias": "l",
         "jointures": [{"table": "liv_entete", "alias": "e",
-                       "gauche": "e.numero", "droite": "l.numero"}],
+                       "gauche": "e.numero", "droite": "l.numero",
+                       "obligatoire": True}],
         "cle_ligne": "l.id",
         "tri_defaut": ("l.amje", "desc"),
         "colonnes": [
@@ -311,7 +324,8 @@ ECRANS = [
         "resume": "Ce qui a réellement été vendu, par référence, depuis 2015.",
         "table": "vte_ligne", "alias": "l",
         "jointures": [{"table": "vte_entete", "alias": "e",
-                       "gauche": "e.numero", "droite": "l.numero"}],
+                       "gauche": "e.numero", "droite": "l.numero",
+                       "obligatoire": True}],
         "cle_ligne": "l.id",
         "tri_defaut": ("e.amjf", "desc"),
         "colonnes": [
@@ -379,7 +393,8 @@ ECRANS = [
         "resume": "Marchés et appels de livraison.",
         "table": "cdm_ligne", "alias": "l",
         "jointures": [{"table": "cdm_entete", "alias": "e",
-                       "gauche": "e.numero", "droite": "l.numero"}],
+                       "gauche": "e.numero", "droite": "l.numero",
+                       "obligatoire": True}],
         "cle_ligne": "l.id",
         "tri_defaut": ("e.amjc", "desc"),
         "colonnes": [
@@ -414,7 +429,8 @@ ECRANS = [
         "resume": "Achats matière, sous-traitance, clichés et fournitures.",
         "table": "cdf_ligne", "alias": "l",
         "jointures": [{"table": "cdf_entete", "alias": "e",
-                       "gauche": "e.numero", "droite": "l.numero"}],
+                       "gauche": "e.numero", "droite": "l.numero",
+                       "obligatoire": True}],
         "cle_ligne": "l.id",
         "tri_defaut": ("e.amjc", "desc"),
         "colonnes": [
@@ -434,7 +450,8 @@ ECRANS = [
         "filtres": [
             {"nom": "fournisseur", "label": "Fournisseur", "col": "e.rs", "type": "contient", "exemple": "QRT"},
             {"nom": "position", "label": "Position", "col": "l.lpos", "type": "enum",
-             "enum": "position", "defaut": "0"},
+             "enum": "position", "defaut": "0",
+             "choix": [{"v": "0|1", "label": "Non soldée (en cours ou partielle)"}]},
             {"nom": "depuis", "label": "Depuis le", "col": "e.amjc", "type": "date_min"},
         ],
         "detail": [
@@ -449,6 +466,9 @@ ECRANS = [
         "domaine": "achats",
         "resume": "Lignes de réception fournisseur, avec le n° de BL et le lot.",
         "table": "lif_ligne", "alias": "l",
+        # Facultative, et c'est voulu : `cdf_entete` n'est pas l'entête du bon
+        # de réception, c'est la commande fournisseur qui l'a déclenché. Une
+        # réception sans commande reste une réception.
         "jointures": [{"table": "cdf_entete", "alias": "e",
                        "gauche": "e.numero", "droite": "l.numero"}],
         "cle_ligne": "l.id",
@@ -486,7 +506,8 @@ ECRANS = [
         "resume": "Lignes de facture d'achat.",
         "table": "vtf_ligne", "alias": "l",
         "jointures": [{"table": "vtf_entete", "alias": "e",
-                       "gauche": "e.numero", "droite": "l.numero"}],
+                       "gauche": "e.numero", "droite": "l.numero",
+                       "obligatoire": True}],
         "cle_ligne": "l.id",
         "tri_defaut": ("e.amjf", "desc"),
         "colonnes": [
@@ -518,7 +539,8 @@ ECRANS = [
         "resume": "Consultations fournisseurs. Module arrêté depuis mars 2025.",
         "table": "aof_ligne", "alias": "l",
         "jointures": [{"table": "aof_entete", "alias": "e",
-                       "gauche": "e.numero", "droite": "l.numero"}],
+                       "gauche": "e.numero", "droite": "l.numero",
+                       "obligatoire": True}],
         "cle_ligne": "l.id",
         "tri_defaut": ("e.amjc", "desc"),
         "colonnes": [
@@ -1331,7 +1353,13 @@ def adapter_ecran(ec, colonnes_par_table):
     if not existe(ec["cle_ligne"]):
         return None
 
-    # Une jointure dont la colonne de rapprochement manque est abandonnée.
+    # Une jointure dont la colonne de rapprochement manque est abandonnée —
+    # sauf si elle est `obligatoire` : l'écran repose dessus pour ne pas montrer
+    # de lignes sans pièce. L'abandonner en silence rendrait l'écran faux, donc
+    # on préfère ne pas le proposer du tout.
+    perdues = [j for j in jointures if not (existe(j["gauche"]) and existe(j["droite"]))]
+    if any(j.get("obligatoire") for j in perdues):
+        return None
     jointures = [j for j in jointures if existe(j["gauche"]) and existe(j["droite"])]
     alias_gardes = {ec["alias"]} | {j["alias"] for j in jointures}
 

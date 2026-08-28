@@ -184,27 +184,79 @@ body.light .portal-corner-stack{box-shadow:0 8px 32px rgba(15,23,42,.10)}
 .portal-corner-stack .portal-prof-ring.prof-ring svg{width:24px;height:24px}
 .portal-corner-stack .portal-humeur-badge{bottom:-2px;left:-2px}
 
-/* ── Volet ERP : au survol de la marque RVGI, les tableaux de bord ──────
-   La barre d'icônes est collée au bord droit : le volet s'ouvre donc vers
-   la gauche. Il tient au survol pour la souris et au clic pour le tactile,
-   et un pont invisible évite qu'il se referme entre le bouton et lui. */
-.portal-erp{position:relative;display:flex}
-.portal-erp-pop{position:absolute;right:calc(100% + 8px);top:-6px;min-width:270px;max-width:320px;
-  background:var(--card);border:1px solid var(--border);border-radius:14px;padding:6px;
-  box-shadow:0 18px 46px rgba(0,0,0,.28);z-index:60;display:none;text-align:left}
-body.light .portal-erp-pop{box-shadow:0 18px 46px rgba(15,23,42,.14)}
-.portal-erp:hover .portal-erp-pop,.portal-erp.ouvert .portal-erp-pop{display:block}
-.portal-erp-pop::after{content:'';position:absolute;left:100%;top:0;width:10px;height:100%}
-.portal-erp-groupe{font-size:9.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;
-  color:var(--muted);padding:9px 10px 5px}
-.portal-erp-item{display:block;width:100%;text-align:left;background:none;border:none;border-radius:10px;
-  padding:8px 10px;cursor:pointer;color:var(--text2);font:inherit;transition:background .12s}
-.portal-erp-item:hover{background:var(--accent-bg)}
-.portal-erp-item b{display:block;font-size:12.5px;font-weight:700;color:var(--text)}
-.portal-erp-item:hover b{color:var(--accent)}
-.portal-erp-sep{height:1px;background:var(--border);margin:6px 8px}
-.portal-erp-vide{padding:12px 10px;font-size:11.5px;color:var(--muted)}
-@media (max-width:900px){.portal-erp-pop{display:none!important}}
+/* ── Volets du portail : un seul gabarit, deux emplacements ─────────────
+   La barre d'icônes (haut droite) et les tuiles d'application ouvrent le même
+   volet au survol. Le rail est collé au bord droit : son volet part vers la
+   gauche ; une tuile a de la place dessous : le sien descend. Un pont invisible
+   (::after / ::before) couvre l'espace entre le déclencheur et le volet, sinon
+   il se referme dès que la souris quitte le bouton.
+   Les couleurs restent celles du thème — accent, bordure, muted. Rien de
+   nouveau : un sous-menu n'est pas un endroit où introduire une palette. */
+.portal-vol{position:relative;display:flex}
+.portal-vol-pop{position:absolute;min-width:264px;max-width:320px;
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:0 0 6px;box-shadow:0 18px 46px rgba(0,0,0,.28);
+  z-index:200;display:none;text-align:left;overflow:hidden}
+body.light .portal-vol-pop{box-shadow:0 18px 46px rgba(15,23,42,.14)}
+.portal-vol:hover>.portal-vol-pop,.portal-vol.ouvert>.portal-vol-pop{display:block}
+.portal-vol--rail>.portal-vol-pop{right:calc(100% + 8px);top:-6px}
+.portal-vol--rail>.portal-vol-pop::after{content:'';position:absolute;left:100%;top:0;width:10px;height:100%}
+.portal-vol--tuile>.portal-vol-pop{top:calc(100% + 8px);left:50%;transform:translateX(-50%);cursor:default}
+.portal-vol--tuile>.portal-vol-pop::before{content:'';position:absolute;bottom:100%;left:0;width:100%;height:10px}
+.portal-vol-tete{display:flex;align-items:center;gap:9px;padding:11px 13px;
+  background:var(--accent-bg);border-bottom:1px solid var(--border)}
+.portal-vol-tete-ico{width:26px;height:26px;border-radius:8px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--accent);color:var(--bg)}
+.portal-vol-tete b{display:block;font-size:13px;font-weight:800;color:var(--text);line-height:1.2}
+.portal-vol-tete i{display:block;font-style:normal;font-size:10.5px;color:var(--muted);margin-top:1px}
+.portal-vol-groupe{font-size:9.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);padding:10px 12px 5px}
+.portal-vol-item{display:flex;align-items:center;gap:10px;width:calc(100% - 12px);margin:0 6px;
+  text-align:left;background:none;border:none;border-radius:10px;padding:7px 8px;
+  cursor:pointer;color:var(--text2);font:inherit;transition:background .12s}
+.portal-vol-item:hover{background:var(--accent-bg)}
+.portal-vol-item-ico{width:28px;height:28px;border-radius:9px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--accent-bg);color:var(--accent);transition:background .12s,color .12s}
+.portal-vol-item:hover .portal-vol-item-ico{background:var(--accent);color:var(--bg)}
+.portal-vol-item-txt{min-width:0;flex:1}
+.portal-vol-item b{display:block;font-size:12.5px;font-weight:700;color:var(--text);line-height:1.25}
+.portal-vol-item i{display:block;font-style:normal;font-size:10.5px;color:var(--muted);margin-top:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.portal-vol-item:hover b{color:var(--accent)}
+.portal-vol-tag{flex-shrink:0;font-size:10px;font-weight:800;font-family:ui-monospace,monospace;
+  padding:2px 7px;border-radius:999px;background:var(--accent-bg);color:var(--accent)}
+.portal-vol-sep{height:1px;background:var(--border);margin:7px 10px}
+.portal-vol-pied{display:flex;align-items:center;gap:8px;width:calc(100% - 12px);margin:2px 6px 0;
+  border:none;border-radius:10px;padding:9px 10px;cursor:pointer;font:inherit;
+  font-size:12px;font-weight:800;background:var(--accent-bg);color:var(--accent);
+  transition:background .15s,color .15s}
+.portal-vol-pied:hover{background:var(--accent);color:var(--bg)}
+.portal-vol-vide{padding:12px 10px;font-size:11.5px;color:var(--muted)}
+/* Le volet est une commodité souris et clavier : sur un écran tactile étroit,
+   un appui long n'existe pas et la tuile doit rester un simple bouton. */
+@media (max-width:900px){.portal-vol-pop{display:none!important}}
+
+/* ── Tuiles : volet, épinglage, sections ──────────────────────────────── */
+.portal-app{position:relative}
+.portal-app:hover,.portal-app.ouvert{z-index:5}
+.portal-app-chev,.portal-app-star{position:absolute;top:6px;width:22px;height:22px;
+  border-radius:7px;border:none;background:none;padding:0;cursor:pointer;
+  display:none;align-items:center;justify-content:center;color:var(--muted)}
+.portal-app-star{left:6px}
+.portal-app-chev{right:6px}
+.portal-app:hover .portal-app-chev,.portal-app:hover .portal-app-star,
+.portal-app.ouvert .portal-app-chev{display:flex}
+.portal-app-chev:hover{background:var(--accent-bg);color:var(--accent)}
+.portal-app-star:hover{background:var(--accent-bg);color:var(--warn)}
+.portal-app-star.on{display:flex;color:var(--warn)}
+.portal-apps-sec{display:flex;align-items:center;gap:10px;width:100%;margin:0 0 10px;padding:0 4px}
+.portal-apps-sec h3{margin:0;font-size:10px;font-weight:800;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted)}
+.portal-apps-sec .portal-apps-sec-trait{flex:1;height:1px;background:var(--border)}
+.portal-apps-sec .portal-apps-sec-aide{font-size:11px;color:var(--muted)}
+.portal-apps--favoris{margin-bottom:22px}
 
 /* ── ⌘K badge in the Google search input ── */
 .portal-search button.portal-search-cmdk-badge,
@@ -1139,9 +1191,9 @@ function attachPortalReorder(appsWrap){
     }
     if(ghost&&ghost.parentNode)ghost.parentNode.removeChild(ghost);
 
-    const ids=[...appsWrap.querySelectorAll('.portal-app')]
-      .filter(n=>!n.classList.contains('portal-app--placeholder'))
-      .map(n=>n.getAttribute('data-portal-id')).filter(Boolean);
+    // L'ordre enregistré est celui des DEUX rangées (favoris puis le reste) :
+    // ne remonter que le conteneur qu'on vient de manipuler effacerait l'autre.
+    const ids=portalOrdreComplet();
     const prev=(S.user&&S.user.portal_apps_order)?S.user.portal_apps_order:[];
     const same=prev.length===ids.length&&prev.every((v,i)=>v===ids[i]);
     if(!same){
@@ -1175,6 +1227,7 @@ function attachPortalReorder(appsWrap){
 
   appsWrap.addEventListener('pointerdown',e=>{
     if(e.button!==0)return;
+    if(e.target.closest('.portal-vol-pop,.portal-app-chev,.portal-app-star'))return;
     const tile=e.target.closest('.portal-app');
     if(!tile||!appsWrap.contains(tile))return;
     if(tile.classList.contains('portal-app--busy'))return;
@@ -1465,12 +1518,34 @@ function renderPortal(){
 
   const orderedTiles=portalOrderTileSpecs(tileSpecs,order);
   const apps=orderedTiles.map(s=>s.el);
-  const appsWrap=h('div',{className:'portal-apps portal-apps--reorderable'},...apps);
-  const appsBlock=h('div',{className:'portal-apps-block',style:{width:'100%',maxWidth:'900px',margin:'0 auto'}},
-    appsWrap,
-    apps.length?h('div',{className:'portal-apps-hint'},'Maintenir une tuile et la glisser pour réorganiser les accès (ordre enregistré pour votre compte).'):null
+  // Favoris : une tuile épinglée quitte la grille complète. Elle n'existe qu'à
+  // un seul endroit — sinon on la voit deux fois, et on ne sait plus laquelle
+  // on est en train de déplacer.
+  const favIds=(S.user&&Array.isArray(S.user.portal_apps_favoris))?S.user.portal_apps_favoris:[];
+  const favTiles=orderedTiles.filter(t=>favIds.indexOf(t.id)!==-1);
+  const restTiles=orderedTiles.filter(t=>favIds.indexOf(t.id)===-1);
+  const favWrap=h('div',{className:'portal-apps portal-apps--reorderable portal-apps--favoris'},...favTiles.map(t=>t.el));
+  const appsWrap=h('div',{className:'portal-apps portal-apps--reorderable'},...restTiles.map(t=>t.el));
+  const secTitre=(titre,aide)=>h('div',{className:'portal-apps-sec'},
+    h('h3',null,titre),
+    h('span',{className:'portal-apps-sec-trait'}),
+    aide?h('span',{className:'portal-apps-sec-aide'},aide):null
   );
-  setTimeout(()=>{if(apps.length)attachPortalReorder(appsWrap);},0);
+  const appsBlock=h('div',{className:'portal-apps-block',style:{width:'100%',maxWidth:'900px',margin:'0 auto'}},
+    favTiles.length?secTitre('Favoris'):null,
+    favTiles.length?favWrap:null,
+    (favTiles.length&&restTiles.length)?secTitre('Toutes les applications'):null,
+    appsWrap,
+    apps.length?h('div',{className:'portal-apps-hint'},
+      favTiles.length
+        ?'Maintenir une tuile et la glisser pour réorganiser les accès. L\'étoile épingle une application en favori (ordre et favoris enregistrés pour votre compte).'
+        :'Maintenir une tuile et la glisser pour réorganiser les accès. L\'étoile, au survol, épingle une application en favori.'):null
+  );
+  setTimeout(()=>{
+    if(restTiles.length)attachPortalReorder(appsWrap);
+    if(favTiles.length)attachPortalReorder(favWrap);
+    portalAttacherVolets();
+  },0);
   // Initialiser les dashboards flottants (post-its)
   setTimeout(() => { if (typeof dbInit === 'function') dbInit(); }, 100);
 
@@ -1595,6 +1670,7 @@ function renderPortal(){
         className:'portal-settings-corner',
         'aria-label':profTitle,
         title:profTitle,
+        'data-volet':'profil',
         onClick:()=>{window.location.href='/profil';}
       },profRingBadge,profHumeurBadge,iconEl('user',24)),
       isSettings?h('button',{
@@ -1602,6 +1678,7 @@ function renderPortal(){
         className:'portal-settings-corner',
         'aria-label':'Paramètres',
         title:'Paramètres',
+        'data-volet':'settings',
         onClick:()=>{window.location.href='/settings';}
       },iconEl('sliders',24)):null,
       isTaches?h('button',{
@@ -1609,6 +1686,7 @@ function renderPortal(){
         className:'portal-settings-corner',
         'aria-label':'Gestionnaire de tâches',
         title:'Gestionnaire de tâches',
+        'data-volet':'taches',
         onClick:()=>{window.location.href='/taches';}
       },
         (S.tachesCount>0)?h('span',{className:'portal-corner-badge'},S.tachesCount>9?'9+':String(S.tachesCount)):null,
@@ -1624,6 +1702,7 @@ function renderPortal(){
         className:'portal-settings-corner',
         'aria-label':'Messagerie',
         title:'Messagerie',
+        'data-volet':'messages',
         onClick:async()=>{
           set({app:'messages'});
           await loadMessagesUnread().catch(()=>{});
@@ -1638,6 +1717,7 @@ function renderPortal(){
         className:'portal-settings-corner',
         'aria-label':'Calendrier',
         title:'Calendrier',
+        'data-volet':'calendrier',
         onClick:()=>{window.location.href='/calendrier';}
       },
         (S.calInvitCount>0)?h('span',{className:'portal-corner-badge'},S.calInvitCount>9?'9+':String(S.calInvitCount)):null,
@@ -1648,82 +1728,33 @@ function renderPortal(){
         className:'portal-settings-corner',
         'aria-label':'Base de données',
         title:'Base de données',
+        'data-volet':'db',
         onClick:()=>{window.location.href='/db';}
       },iconEl('database',24)):null,
       // ERP : lecture seule du miroir de RVGI. Direction, administration et
       // superadmin — le meme perimetre que les autres fonctions d'administration.
       // Volontairement absent du sheet mobile : l'ecran est une grille dense,
       // il n'a pas de sens sur un telephone.
-      (isSuper||urole==='direction'||urole==='administration'||urole==='administration_ventes'||urole==='administration_technique')?(function(){
-        // Survoler la marque RVGI donne accès aux tableaux de bord du
-        // service sans passer par l'accueil de l'ERP. Cliquer ouvre l'ERP,
-        // comme avant : le volet ajoute un raccourci, il n'en retire pas.
-        const wrap=document.createElement('div');
-        wrap.className='portal-erp';
-        const btn=document.createElement('button');
-        btn.type='button';
-        btn.className='portal-settings-corner';
-        btn.setAttribute('aria-label','ERP');
-        btn.title='ERP — lecture RVGI';
-        btn.innerHTML='<span class="rvgi-mark">'+
-          '<img class="rvgi-sombre" src="/static/rvgi_mark_clair.png?v=3" alt="RVGI">'+
-          '<img class="rvgi-clair" src="/static/rvgi_mark.png?v=3" alt="RVGI">'+
-          '</span>';
-        btn.onclick=()=>{window.location.href='/erp';};
-        const pop=document.createElement('div');
-        pop.className='portal-erp-pop';
-        pop.setAttribute('role','menu');
-        pop.innerHTML='<div class="portal-erp-vide">Chargement…</div>';
-        wrap.appendChild(btn); wrap.appendChild(pop);
-        // Le menu n'est chargé qu'au premier survol : le portail ne paie
-        // rien pour un volet que personne n'ouvre.
-        let charge=false;
-        const remplir=async()=>{
-          if(charge)return; charge=true;
-          const ech=t=>String(t==null?'':t).replace(/[&<>"']/g,c=>
-            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-          let m={tdb:[],ecrans:[]};
-          try{
-            const r=await fetch('/api/erp/menu',{credentials:'include'});
-            if(!r.ok)throw new Error('menu indisponible');
-            m=(await r.json()).menu||m;
-          }catch(e){
-            pop.innerHTML='<div class="portal-erp-vide">Menu ERP indisponible.</div>';
-            charge=false;   // un échec réseau ne doit pas figer le volet
-            return;
-          }
-          let html='';
-          if((m.tdb||[]).length){
-            html+='<div class="portal-erp-groupe">Tableaux de bord</div>';
-            (m.tdb||[]).forEach(t=>{
-              html+='<button type="button" role="menuitem" class="portal-erp-item" data-va="/erp#/'+
-                ech(t.cle)+'"><b>'+ech(t.label)+'</b></button>';
-            });
-          }
-          if((m.ecrans||[]).length){
-            html+='<div class="portal-erp-groupe">Mes écrans RVGI</div>';
-            (m.ecrans||[]).forEach(e=>{
-              html+='<button type="button" role="menuitem" class="portal-erp-item" data-va="/erp#/'+
-                ech(e.cle)+'"><b>'+ech(e.label)+'</b></button>';
-            });
-          }
-          html+='<div class="portal-erp-sep"></div>'+
-            '<button type="button" role="menuitem" class="portal-erp-item" data-va="/erp">'+
-            '<b>Ouvrir l\'ERP</b></button>';
-          pop.innerHTML=html;
-          pop.querySelectorAll('[data-va]').forEach(b=>{
-            b.addEventListener('click',ev=>{
-              ev.stopPropagation();
-              window.location.href=b.getAttribute('data-va');
-            });
-          });
-        };
-        wrap.addEventListener('mouseenter',remplir);
-        wrap.addEventListener('focusin',remplir);
-        // Tactile : un appui long n'existe pas, un clic sur la marque ouvre
-        // l'ERP. Le volet reste une commodité souris et clavier.
-        return wrap;
-      })():null,
+      // Le volet de survol n'est plus construit ici : `portalAttacherVolets()`
+      // pose le meme gabarit que sur les autres icones, et remplit celui-ci
+      // depuis /api/erp/menu (les ecrans RVGI dependent du miroir, pas du
+      // catalogue des volets).
+      (isSuper||urole==='direction'||urole==='administration'||urole==='administration_ventes'||urole==='administration_technique')?h('button',{
+        type:'button',
+        className:'portal-settings-corner',
+        'aria-label':'ERP',
+        title:'ERP — lecture RVGI',
+        'data-volet':'erp',
+        onClick:()=>{window.location.href='/erp';}
+      },
+        (function(){
+          const w=document.createElement('span');
+          w.className='rvgi-mark';
+          w.innerHTML='<img class="rvgi-sombre" src="/static/rvgi_mark_clair.png?v=3" alt="RVGI">'+
+                      '<img class="rvgi-clair" src="/static/rvgi_mark.png?v=3" alt="RVGI">';
+          return w;
+        })()
+      ):null,
       (function(){
         const btn=document.createElement('button');
         btn.type='button';
@@ -1784,5 +1815,281 @@ function renderPortal(){
     )
   );
   return portalEl;
+}
+/* ── Volets du portail ───────────────────────────────────────────────────
+   Un volet est le sous-menu qui s'ouvre au survol : sur les icônes du rail
+   (il part vers la gauche, la barre est collée au bord droit) et sur les
+   tuiles (il descend). Le contenu vient du serveur — /api/portail/volets, déjà
+   filtré par rôle : le portail ne connaît aucun écran de SIFA, ce qui laisse
+   une instance Kernse recevoir les siens sans qu'une ligne de JS ne change.
+   L'ERP est l'exception, et pour une bonne raison : ses entrées dépendent de
+   ce que le miroir RVGI contient réellement, et c'est /api/erp/menu qui le
+   sait. Le catalogue n'en déclare que l'enveloppe. */
+let _portalVolets=null;
+let _portalVoletsProm=null;
+function portalChargerVolets(){
+  if(_portalVolets)return Promise.resolve(_portalVolets);
+  if(_portalVoletsProm)return _portalVoletsProm;
+  _portalVoletsProm=fetch('/api/portail/volets',{credentials:'include'})
+    .then(r=>r.ok?r.json():null)
+    .then(d=>{_portalVolets=(d&&d.volets)?d.volets:{rail:{},tuiles:{}};return _portalVolets;})
+    .catch(()=>{_portalVoletsProm=null;return {rail:{},tuiles:{}};});
+  return _portalVoletsProm;
+}
+/* Les compteurs affichés dans un volet sont ceux que le portail a DÉJÀ
+   chargés. Le catalogue nomme une source, il ne donne jamais de nombre : un
+   badge inventé est pire que pas de badge. Source inconnue = rien affiché. */
+function portalVoletCompteur(source){
+  if(source==='taches')return Number(S.tachesCount||0);
+  if(source==='messages')return Number(S.msgUnread||0);
+  if(source==='calendrier')return Number(S.calInvitCount||0);
+  return 0;
+}
+function portalRecentEnregistrer(entree,module){
+  if(!entree||!window.MySifaRecents)return;
+  try{
+    window.MySifaRecents.enregistrer({
+      cle:entree.cle,libelle:entree.label||entree.libelle||'',
+      module:module||'',url:entree.url});
+  }catch(e){}
+}
+function portalVoletItem(entree,module){
+  const b=document.createElement('button');
+  b.type='button';
+  b.className='portal-vol-item';
+  b.setAttribute('role','menuitem');
+
+  const ico=document.createElement('span');
+  ico.className='portal-vol-item-ico';
+  ico.appendChild(iconEl(entree.icone||'chevron-right',16));
+  b.appendChild(ico);
+
+  const txt=document.createElement('span');
+  txt.className='portal-vol-item-txt';
+  const t=document.createElement('b');
+  t.textContent=entree.label||'';
+  txt.appendChild(t);
+  if(entree.resume){
+    const r=document.createElement('i');
+    r.textContent=entree.resume;
+    txt.appendChild(r);
+  }
+  b.appendChild(txt);
+
+  const n=entree.compteur?portalVoletCompteur(entree.compteur):0;
+  if(n>0){
+    const tag=document.createElement('span');
+    tag.className='portal-vol-tag';
+    tag.textContent=n>99?'99+':String(n);
+    b.appendChild(tag);
+  }
+
+  b.addEventListener('click',ev=>{
+    ev.preventDefault();ev.stopPropagation();
+    portalRecentEnregistrer(entree,module);
+    window.location.href=entree.url;
+  });
+  return b;
+}
+function portalVoletPop(volet,variante){
+  const pop=document.createElement('div');
+  pop.className='portal-vol-pop';
+  pop.setAttribute('role','menu');
+  pop.addEventListener('click',ev=>ev.stopPropagation());
+
+  const tete=document.createElement('div');
+  tete.className='portal-vol-tete';
+  const ti=document.createElement('span');
+  ti.className='portal-vol-tete-ico';
+  ti.appendChild(iconEl(volet.icone||'grid',15));
+  tete.appendChild(ti);
+  const tt=document.createElement('span');
+  const tb=document.createElement('b');
+  tb.textContent=volet.titre||'';
+  tt.appendChild(tb);
+  if(volet.resume){
+    const ts=document.createElement('i');
+    ts.textContent=volet.resume;
+    tt.appendChild(ts);
+  }
+  tete.appendChild(tt);
+  pop.appendChild(tete);
+
+  const corps=document.createElement('div');
+  corps.className='portal-vol-corps';
+  pop.appendChild(corps);
+  portalVoletRemplirCorps(corps,volet);
+
+  if(volet.pied&&volet.pied.url){
+    const sep=document.createElement('div');
+    sep.className='portal-vol-sep';
+    pop.appendChild(sep);
+    const pied=document.createElement('button');
+    pied.type='button';
+    pied.className='portal-vol-pied';
+    pied.setAttribute('role','menuitem');
+    pied.appendChild(iconEl('external',15));
+    pied.appendChild(document.createTextNode(volet.pied.label||'Ouvrir'));
+    pied.addEventListener('click',ev=>{
+      ev.preventDefault();ev.stopPropagation();
+      portalRecentEnregistrer({cle:'volet_'+(volet.cle||variante||''),
+        label:volet.pied.label||volet.titre,url:volet.pied.url},volet.titre);
+      window.location.href=volet.pied.url;
+    });
+    pop.appendChild(pied);
+  }
+  return pop;
+}
+function portalVoletRemplirCorps(corps,volet){
+  corps.textContent='';
+  (volet.groupes||[]).forEach(g=>{
+    if(!g.entrees||!g.entrees.length)return;
+    const t=document.createElement('div');
+    t.className='portal-vol-groupe';
+    t.textContent=g.titre||'';
+    corps.appendChild(t);
+    g.entrees.forEach(e=>corps.appendChild(portalVoletItem(e,volet.titre)));
+  });
+}
+/* Le volet ERP est rempli au premier survol seulement : le portail ne paie
+   rien pour un volet que personne n'ouvre, et un miroir absent laisse une
+   phrase plutôt qu'un volet vide. */
+function portalVoletErpBrancher(wrap,pop,volet){
+  const corps=pop.querySelector('.portal-vol-corps');
+  let charge=false;
+  const remplir=async()=>{
+    if(charge)return;charge=true;
+    corps.textContent='';
+    const attente=document.createElement('div');
+    attente.className='portal-vol-vide';
+    attente.textContent='Chargement…';
+    corps.appendChild(attente);
+    let m={tdb:[],ecrans:[]};
+    try{
+      const r=await fetch('/api/erp/menu',{credentials:'include'});
+      if(!r.ok)throw new Error('menu indisponible');
+      m=(await r.json()).menu||m;
+    }catch(e){
+      corps.textContent='';
+      const ko=document.createElement('div');
+      ko.className='portal-vol-vide';
+      ko.textContent='Menu ERP indisponible.';
+      corps.appendChild(ko);
+      charge=false;   // un échec réseau ne doit pas figer le volet
+      return;
+    }
+    const groupes=[];
+    if((m.tdb||[]).length){
+      groupes.push({titre:'Tableaux de bord',entrees:(m.tdb||[]).map(t=>({
+        cle:'erp_'+t.cle,label:t.label,url:'/erp#/'+t.cle,icone:'trending-up'}))});
+    }
+    if((m.ecrans||[]).length){
+      groupes.push({titre:'Mes écrans RVGI',entrees:(m.ecrans||[]).map(e=>({
+        cle:'erp_'+e.cle,label:e.label,resume:e.resume||'',url:'/erp#/'+e.cle,icone:'grid'}))});
+    }
+    portalVoletRemplirCorps(corps,{groupes:groupes,titre:volet.titre});
+  };
+  wrap.addEventListener('mouseenter',remplir);
+  wrap.addEventListener('focusin',remplir);
+}
+function portalVoletChevron(tile){
+  const b=document.createElement('button');
+  b.type='button';
+  b.className='portal-app-chev';
+  b.title='Raccourcis du module';
+  b.setAttribute('aria-label','Raccourcis du module');
+  b.appendChild(iconEl('chevron-down',15));
+  b.addEventListener('pointerdown',ev=>ev.stopPropagation());
+  b.addEventListener('click',ev=>{
+    ev.preventDefault();ev.stopPropagation();
+    const ouvert=tile.classList.contains('ouvert');
+    document.querySelectorAll('.portal-app.ouvert').forEach(n=>n.classList.remove('ouvert'));
+    if(!ouvert)tile.classList.add('ouvert');
+  });
+  return b;
+}
+async function savePortalAppsFavoris(ids){
+  try{
+    await api('/api/auth/me',{method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({portal_apps_favoris:ids})});
+    S.user={...S.user,portal_apps_favoris:ids};
+    render();
+  }catch(e){toast(e.message||'Enregistrement impossible','danger');}
+}
+function portalVoletEtoile(tile,id){
+  const fav=(S.user&&Array.isArray(S.user.portal_apps_favoris))?S.user.portal_apps_favoris:[];
+  const actif=fav.indexOf(id)!==-1;
+  const b=document.createElement('button');
+  b.type='button';
+  b.className='portal-app-star'+(actif?' on':'');
+  b.title=actif?'Retirer des favoris':'Épingler aux favoris';
+  b.setAttribute('aria-label',b.title);
+  b.innerHTML='<svg width="15" height="15" viewBox="0 0 24 24" fill="'+(actif?'currentColor':'none')+
+    '" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">'+
+    '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9Z"/></svg>';
+  b.addEventListener('pointerdown',ev=>ev.stopPropagation());
+  b.addEventListener('click',ev=>{
+    ev.preventDefault();ev.stopPropagation();
+    const cur=(S.user&&Array.isArray(S.user.portal_apps_favoris))?S.user.portal_apps_favoris.slice():[];
+    const i=cur.indexOf(id);
+    if(i===-1)cur.push(id);else cur.splice(i,1);
+    savePortalAppsFavoris(cur);
+  });
+  return b;
+}
+/* L'ordre enregistré est celui des deux rangées, favoris d'abord, dans l'ordre
+   du DOM. C'est aussi celui que `portalOrderTileSpecs` relira au rendu
+   suivant : une tuile dépinglée revient donc là où elle était. */
+function portalOrdreComplet(){
+  const out=[];
+  document.querySelectorAll('.portal-apps--reorderable .portal-app').forEach(n=>{
+    if(n.classList.contains('portal-app--placeholder'))return;
+    const id=n.getAttribute('data-portal-id');
+    if(id&&out.indexOf(id)===-1)out.push(id);
+  });
+  return out;
+}
+function portalAttacherVolets(){
+  // Étoiles : elles ne dépendent pas du catalogue, elles sont posées tout de
+  // suite. Un module sans volet reste épinglable.
+  document.querySelectorAll('.portal-apps .portal-app[data-portal-id]').forEach(tile=>{
+    if(tile.querySelector(':scope > .portal-app-star'))return;
+    tile.appendChild(portalVoletEtoile(tile,tile.getAttribute('data-portal-id')));
+  });
+  portalChargerVolets().then(volets=>{
+    const rail=volets.rail||{};
+    document.querySelectorAll('.portal-settings-corner[data-volet]').forEach(btn=>{
+      const v=rail[btn.getAttribute('data-volet')];
+      if(!v)return;
+      if(btn.parentNode&&btn.parentNode.classList&&btn.parentNode.classList.contains('portal-vol'))return;
+      const wrap=document.createElement('div');
+      wrap.className='portal-vol portal-vol--rail';
+      btn.parentNode.insertBefore(wrap,btn);
+      wrap.appendChild(btn);
+      const pop=portalVoletPop(v,v.cle);
+      wrap.appendChild(pop);
+      if(v.source==='erp')portalVoletErpBrancher(wrap,pop,v);
+    });
+    const tuiles=volets.tuiles||{};
+    document.querySelectorAll('.portal-apps .portal-app[data-portal-id]').forEach(tile=>{
+      const v=tuiles[tile.getAttribute('data-portal-id')];
+      if(!v)return;
+      if(tile.querySelector(':scope > .portal-vol-pop'))return;
+      tile.classList.add('portal-vol','portal-vol--tuile');
+      tile.appendChild(portalVoletChevron(tile));
+      tile.appendChild(portalVoletPop(v,tile.getAttribute('data-portal-id')));
+      // Ouvrir le module par la tuile compte aussi comme une visite : sinon la
+      // barre de reprise ne connaîtrait que les entrées de volet, et l'écran le
+      // plus souvent ouvert serait justement celui qui n'y figure jamais.
+      // En capture, parce que le clic de la tuile navigue tout de suite.
+      tile.addEventListener('click',ev=>{
+        if(ev.target.closest('.portal-vol-pop,.portal-app-chev,.portal-app-star'))return;
+        if(_portalDragSuppressClick)return;
+        const pied=v.pied||{};
+        if(pied.url)portalRecentEnregistrer(
+          {cle:'tuile_'+tile.getAttribute('data-portal-id'),label:v.titre,url:pied.url},v.titre);
+      },true);
+    });
+  });
 }
 """

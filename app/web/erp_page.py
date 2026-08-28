@@ -1347,6 +1347,11 @@ function ouvrirEcran(cle,prefiltres){
       const val=S.filtres[f.nom]!=null?String(S.filtres[f.nom]):'';
       if(f.type==='enum'&&S.meta.enums&&S.meta.enums[f.enum]){
         let o='<option value=""'+(val===''?' selected':'')+'>Tous</option>';
+        // Choix composés déclarés au catalogue — « Non soldée » vaut 0 ou 1.
+        // Ils passent AVANT les codes bruts : c'est par eux que l'écran s'ouvre.
+        (f.choix||[]).forEach(ch=>{
+          o+='<option value="'+esc(ch.v)+'"'+(val===String(ch.v)?' selected':'')+'>'+esc(ch.label)+'</option>';
+        });
         Object.keys(S.meta.enums[f.enum]).forEach(k=>{
           o+='<option value="'+esc(k)+'"'+(val===String(k)?' selected':'')+'>'+esc(S.meta.enums[f.enum][k])+'</option>';
         });
