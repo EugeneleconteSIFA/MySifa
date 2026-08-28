@@ -118,6 +118,22 @@ body.light .rvgi-mark .rvgi-clair{display:block}
 .nav-btn.active::before{content:'';position:absolute;left:-13px;top:5px;bottom:5px;width:2px;border-radius:2px;background:var(--accent)}
 /* « Menu » n'appartient à aucun domaine : il garde la forme pleine. */
 #nav-menu{border-radius:8px;padding:9px 12px;font-weight:600}
+
+/* « Menu » et les tableaux de bord sur la même ligne. Ce sont les deux façons
+   d'entrer dans MyERP — la liste complète des écrans, ou le chiffre du jour —
+   et jusqu'ici la seconde n'existait que derrière le survol de la marque RVGI :
+   invisible pour qui ne le sait pas. Le tiroir est déjà l'endroit où l'on va
+   chercher où aller ; les tableaux de bord y ont leur place, à côté de Menu et
+   non dessous, parce qu'ils ne sont pas un écran de plus dans la liste. */
+.nav-tete{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+.nav-tete #nav-menu{width:auto;flex-shrink:0;font-weight:800;margin-bottom:0}
+.nav-tdb{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.nav-tdb::before{content:'';width:1px;align-self:stretch;background:var(--border);margin:3px 5px 3px 1px}
+.nav-tdb-btn{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border);background:transparent;color:var(--text2);border-radius:8px;padding:8px 13px;font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;white-space:nowrap;transition:background .15s,color .15s,border-color .15s}
+.nav-tdb-btn:hover,.nav-tdb-btn.active{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.nav-tdb-btn.active{font-weight:700}
+.nav-tdb-btn .mk-ico{flex-shrink:0;opacity:.75;color:var(--muted)}
+.nav-tdb-btn:hover .mk-ico,.nav-tdb-btn.active .mk-ico{color:var(--accent);opacity:1}
 .back-mysifa{border:none!important;background:transparent!important;font-weight:400!important;color:var(--text2)!important;padding:8px 10px!important}
 .back-mysifa:hover{color:var(--text)!important;background:transparent!important}
 .back-mysifa .wm{font-weight:800;color:var(--text)}.back-mysifa .wm span{color:var(--accent)}
@@ -697,10 +713,13 @@ body.light .tdb-tip{box-shadow:0 12px 34px rgba(15,23,42,.16)}
         </div>
       </div>
     </div>
-    <button type="button" class="nav-btn" id="nav-menu" onclick="allerAuMenu()">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-      Menu
-    </button>
+    <div class="nav-tete">
+      <button type="button" class="nav-btn" id="nav-menu" onclick="allerAuMenu()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        Menu
+      </button>
+      <div class="nav-tdb" id="nav-tdb"></div>
+    </div>
     <div id="nav-ecrans"></div>
 
     <div class="sidebar-bottom">
@@ -1201,6 +1220,7 @@ function ecransDuDomaine(cle){
 }
 
 function renderNav(){
+  renderNavTdb();
   const hote=document.getElementById('nav-ecrans');
   if(!S.meta||!S.meta.present){hote.innerHTML='';return;}
   let h='<div class="nav-colonnes">';
@@ -1220,6 +1240,28 @@ function renderNav(){
   });
   const nm=document.getElementById('nav-menu');
   if(nm)nm.classList.toggle('active',!S.ecran);
+}
+
+// Les tableaux de bord, à droite de « Menu ». Même liste que le menu de
+// service de la marque RVGI — `meta.menu.tdb`, servie selon le service de
+// l'utilisateur — donc rien à tenir à jour de ce côté : un tableau de bord
+// ajouté au serveur apparaît ici tout seul. Rendu séparément du reste du
+// tiroir pour rester debout même quand le miroir est absent : c'est
+// justement le moment où l'on veut pouvoir aller ailleurs.
+function renderNavTdb(){
+  const hote=document.getElementById('nav-tdb');
+  if(!hote)return;
+  const tdbs=(S.meta&&S.meta.menu&&S.meta.menu.tdb)||[];
+  if(!tdbs.length){hote.innerHTML='';hote.style.display='none';return;}
+  hote.style.display='';
+  hote.innerHTML=tdbs.map(t=>
+    '<button type="button" class="nav-tdb-btn'+(S.ecran===t.cle?' active':'')+'" '+
+    'data-tdb="'+esc(t.cle)+'">'+ICO_TDB+esc(t.label)+'</button>').join('');
+  hote.querySelectorAll('[data-tdb]').forEach(b=>{
+    // `ouvrirTdb` referme le tiroir et rappelle `renderNav` : on ne fait que
+    // poser le hash, comme les boutons d'écran juste au-dessus.
+    b.addEventListener('click',()=>{location.hash='#/'+b.getAttribute('data-tdb');});
+  });
 }
 
 function renderFraicheur(){

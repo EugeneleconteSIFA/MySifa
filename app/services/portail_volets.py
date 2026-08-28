@@ -202,19 +202,45 @@ VOLETS_TUILES = {
     "prod": {
         "titre": "MyProd",
         "groupes": [_groupe("Aller à", [
-            _entree("prod_suivi", "Suivi de production", "/prod", "wrench"),
-            _entree("prod_planning", "Planning atelier", "/planning", "calendar"),
+            _entree("prod_production", "Production", "/prod?page=production", "wrench"),
+            _entree("prod_plan", "Planning production", "/planning?vue=prod", "calendar"),
+            _entree("prod_traca", "Traçabilité", "/prod?page=traceabilite", "grid"),
+            _entree("prod_of", "Ordres de fabrication", "/prod?page=of", "file-text"),
         ])],
         "pied": {"label": "Ouvrir MyProd", "url": "/prod"},
     },
     "stock": {
         "titre": "MyStock",
-        "groupes": [_groupe("Aller à", [
-            _entree("stock_produits", "Stocks produits", "/stock", "package"),
-            _entree("stock_traca", "Traçabilité bobines", "/stock?tab=traca", "grid"),
-            _entree("stock_pricing", "Produits & coûts matières", "/pricing/mystock", "calculator"),
-        ])],
+        "groupes": [
+            _groupe("Produits", [
+                _entree("stock_dashboard", "Tableau de bord", "/stock?tab=dashboard", "trending-up"),
+                _entree("stock_inv", "Inventaire", "/stock?tab=inventaire", "clipboard"),
+                _entree("stock_hist", "Historique mouvements", "/stock?tab=historique", "clock"),
+            ]),
+            _groupe("Matières", [
+                _entree("stock_mp", "Matières premières", "/stock?tab=matieres", "layers"),
+                _entree("stock_reception", "Réception matière", "/stock?tab=reception", "truck"),
+                _entree("stock_besoins", "Besoins matières", "/stock?tab=besoins-matieres", "alert-circle"),
+            ]),
+        ],
         "pied": {"label": "Ouvrir MyStock", "url": "/stock"},
+    },
+    "expe": {
+        "titre": "MyExpé",
+        "groupes": [
+            _groupe("Opérations", [
+                _entree("exp_departs", "Suivi des départs", "/expe#suivi_departs", "truck"),
+            ]),
+            _groupe("Préparation d'envoi", [
+                _entree("exp_poids", "Calcul poids", "/expe#poids", "calculator"),
+                _entree("exp_compare", "Comparateur tarifs", "/expe#comparateur", "trending-up"),
+                _entree("exp_devis", "Devis transporteurs", "/expe#devis", "file-text"),
+            ]),
+            _groupe("Référentiel", [
+                _entree("exp_transporteurs", "Transporteurs", "/expe#transporteurs", "truck"),
+            ]),
+        ],
+        "pied": {"label": "Ouvrir MyExpé", "url": "/expe"},
     },
     "print": {
         "titre": "MyPrint",
@@ -227,26 +253,20 @@ VOLETS_TUILES = {
     },
     "pricing": {
         "titre": "Coûts matières",
-        "groupes": [
-            _groupe("Référentiel", [
-                _entree("pri_mystock", "Produits MyStock", "/pricing/mystock", "package"),
-                _entree("pri_materials", "Matières", "/pricing/materials", "grid"),
-                _entree("pri_products", "Produits devisés", "/pricing/products", "calculator"),
-            ]),
-            _groupe("Paramétrage", [
-                _entree("pri_fourn", "Fournisseurs", "/pricing/fournisseurs", "truck"),
-                _entree("pri_settings", "Marges & paramètres", "/pricing/settings", "sliders"),
-            ]),
-        ],
+        "groupes": [_groupe("Aller à", [
+            _entree("pri_materials", "Matières", "/pricing/materials", "grid"),
+            _entree("pri_products", "Produits", "/pricing/products", "calculator"),
+            _entree("pri_settings", "Marges & paramètres", "/pricing/settings", "sliders"),
+        ])],
         "pied": {"label": "Ouvrir Coûts matières", "url": "/pricing"},
     },
     "qualite": {
         "titre": "MyQualité",
         "groupes": [_groupe("Aller à", [
-            _entree("qua_nc", "Non-conformités", "/qualite#list", "shield-check", compteur="qualite"),
             _entree("qua_audits", "Audits client", "/qualite#audits-list", "check-circle"),
-            _entree("qua_ress", "Ressources & certificats", "/qualite#ressources-list", "folder"),
-            _entree("qua_ref", "Référentiel", "/qualite#ref-list", "file-text"),
+            _entree("qua_ress", "Ressources fournisseurs", "/qualite#ressources-list", "folder"),
+            _entree("qua_certifs", "Certifications SIFA", "/qualite#sifa-docs-list", "shield-check"),
+            _entree("qua_ref", "Référentiel RSE", "/qualite#ref-list", "file-text"),
         ])],
         "pied": {"label": "Ouvrir MyQualité", "url": "/qualite"},
     },
@@ -279,9 +299,10 @@ VOLETS_TUILES = {
     "maintenance": {
         "titre": "Maintenance",
         "groupes": [_groupe("Aller à", [
-            _entree("mai_planning", "Planning des interventions", "/maintenance#planning", "calendar"),
+            _entree("mai_suivi", "Suivi machine", "/maintenance#maintenance", "tool"),
+            _entree("mai_planning", "Planning", "/maintenance#planning", "calendar"),
             _entree("mai_ctrl", "Contrôles", "/maintenance#controles", "check-circle"),
-            _entree("mai_ops", "Opérations", "/maintenance#operations", "tool"),
+            _entree("mai_ops", "Opérations", "/maintenance#operations", "clipboard"),
         ])],
         "pied": {"label": "Ouvrir Maintenance", "url": "/maintenance"},
     },

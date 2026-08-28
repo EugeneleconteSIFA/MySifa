@@ -196,13 +196,28 @@ body.light .portal-corner-stack{box-shadow:0 8px 32px rgba(15,23,42,.10)}
 .portal-vol-pop{position:absolute;min-width:264px;max-width:320px;
   background:var(--card);border:1px solid var(--border);border-radius:14px;
   padding:0 0 6px;box-shadow:0 18px 46px rgba(0,0,0,.28);
-  z-index:200;display:none;text-align:left;overflow:hidden}
+  z-index:200;display:none;text-align:left;
+  /* Un menu de service en compte une quinzaine d'entrées : il doit pouvoir
+     défiler plutôt que sortir de l'écran par le bas. La hauteur exacte est
+     recalculée à l'ouverture (portalVoletPlacer) selon la place réelle. */
+  max-height:calc(100vh - 96px);overflow-y:auto;overscroll-behavior:contain}
 body.light .portal-vol-pop{box-shadow:0 18px 46px rgba(15,23,42,.14)}
-.portal-vol:hover>.portal-vol-pop,.portal-vol.ouvert>.portal-vol-pop{display:block}
+.portal-vol-pop::-webkit-scrollbar{width:8px}
+.portal-vol-pop::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+/* L'ouverture est pilotée par la classe, pas par :hover — il faut un délai de
+   fermeture pour laisser le temps d'atteindre le volet à la souris. */
+.portal-vol.ouvert>.portal-vol-pop{display:block}
 .portal-vol--rail>.portal-vol-pop{right:calc(100% + 8px);top:-6px}
-.portal-vol--rail>.portal-vol-pop::after{content:'';position:absolute;left:100%;top:0;width:10px;height:100%}
-.portal-vol--tuile>.portal-vol-pop{top:calc(100% + 8px);left:50%;transform:translateX(-50%);cursor:default}
-.portal-vol--tuile>.portal-vol-pop::before{content:'';position:absolute;bottom:100%;left:0;width:100%;height:10px}
+/* Le pont invisible couvre l'espace entre le déclencheur et le volet ; il est
+   posé sur le conteneur et non sur le volet, pour survivre au défilement
+   interne (un ::after dans une boîte qui défile s'en va avec le contenu). */
+.portal-vol--rail.ouvert::after{content:'';position:absolute;right:100%;top:-6px;
+  width:12px;height:calc(100% + 12px)}
+.portal-vol--tuile>.portal-vol-pop{top:calc(100% + 10px);left:50%;transform:translateX(-50%);cursor:default}
+.portal-vol--tuile.ouvert::after{content:'';position:absolute;top:100%;left:0;width:100%;height:12px}
+/* Pas la place dessous : le volet d'une tuile s'ouvre vers le haut. */
+.portal-vol--tuile.portal-vol--haut>.portal-vol-pop{top:auto;bottom:calc(100% + 10px)}
+.portal-vol--tuile.portal-vol--haut.ouvert::after{top:auto;bottom:100%}
 .portal-vol-tete{display:flex;align-items:center;gap:9px;padding:11px 13px;
   background:var(--accent-bg);border-bottom:1px solid var(--border)}
 .portal-vol-tete-ico{width:26px;height:26px;border-radius:8px;flex-shrink:0;
@@ -256,6 +271,12 @@ body.light .portal-vol-pop{box-shadow:0 18px 46px rgba(15,23,42,.14)}
   text-transform:uppercase;color:var(--muted)}
 .portal-apps-sec .portal-apps-sec-trait{flex:1;height:1px;background:var(--border)}
 .portal-apps-sec .portal-apps-sec-aide{font-size:11px;color:var(--muted)}
+.portal-apps-sec-btn{background:var(--card);border:1px solid var(--border);border-radius:8px;
+  padding:4px 10px;font:inherit;font-size:11px;font-weight:700;color:var(--text2);
+  cursor:pointer;display:inline-flex;align-items:center;gap:6px;
+  transition:background .15s,color .15s,border-color .15s}
+.portal-apps-sec-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.portal-apps--repliees{display:none}
 .portal-apps--favoris{margin-bottom:22px}
 
 /* ── ⌘K badge in the Google search input ── */
@@ -1526,21 +1547,46 @@ function renderPortal(){
   const restTiles=orderedTiles.filter(t=>favIds.indexOf(t.id)===-1);
   const favWrap=h('div',{className:'portal-apps portal-apps--reorderable portal-apps--favoris'},...favTiles.map(t=>t.el));
   const appsWrap=h('div',{className:'portal-apps portal-apps--reorderable'},...restTiles.map(t=>t.el));
-  const secTitre=(titre,aide)=>h('div',{className:'portal-apps-sec'},
+  const secTitre=(titre,fin)=>h('div',{className:'portal-apps-sec'},
     h('h3',null,titre),
     h('span',{className:'portal-apps-sec-trait'}),
-    aide?h('span',{className:'portal-apps-sec-aide'},aide):null
+    fin||null
   );
+  // Replier les applications non épinglées. Le choix reste sur le poste
+  // (localStorage) : c'est un confort d'affichage, pas une préférence de
+  // compte — un opérateur qui replie l'atelier ne le replie pas pour lui-même
+  // sur les autres machines, et personne n'a besoin de le retrouver ailleurs.
+  const CLE_REPLI='mysifa_portail_autres_repliees';
+  const lireRepli=()=>{try{return localStorage.getItem(CLE_REPLI)==='1';}catch(e){return false;}};
+  const ecrireRepli=(v)=>{try{localStorage.setItem(CLE_REPLI,v?'1':'0');}catch(e){}};
+  const btnRepli=h('button',{type:'button',className:'portal-apps-sec-btn'});
+  const majRepli=(replie)=>{
+    appsWrap.classList.toggle('portal-apps--repliees',replie);
+    btnRepli.textContent=replie
+      ?('Afficher les '+restTiles.length+' autres')
+      :'Masquer les autres';
+    btnRepli.setAttribute('aria-expanded',replie?'false':'true');
+    btnRepli.title=replie
+      ?'Réafficher les applications non épinglées'
+      :'Ne garder que les favoris à l\'écran';
+  };
+  btnRepli.addEventListener('click',()=>{
+    const replie=!appsWrap.classList.contains('portal-apps--repliees');
+    ecrireRepli(replie);majRepli(replie);
+  });
   const appsBlock=h('div',{className:'portal-apps-block',style:{width:'100%',maxWidth:'900px',margin:'0 auto'}},
     favTiles.length?secTitre('Favoris'):null,
     favTiles.length?favWrap:null,
-    (favTiles.length&&restTiles.length)?secTitre('Toutes les applications'):null,
+    (favTiles.length&&restTiles.length)?secTitre('Toutes les applications',btnRepli):null,
     appsWrap,
     apps.length?h('div',{className:'portal-apps-hint'},
       favTiles.length
         ?'Maintenir une tuile et la glisser pour réorganiser les accès. L\'étoile épingle une application en favori (ordre et favoris enregistrés pour votre compte).'
         :'Maintenir une tuile et la glisser pour réorganiser les accès. L\'étoile, au survol, épingle une application en favori.'):null
   );
+  // Le repli n'a de sens qu'avec des favoris : sans eux, tout masquer laisserait
+  // un portail vide.
+  if(favTiles.length&&restTiles.length)majRepli(lireRepli());
   setTimeout(()=>{
     if(restTiles.length)attachPortalReorder(appsWrap);
     if(favTiles.length)attachPortalReorder(favWrap);
@@ -1807,6 +1853,15 @@ function renderPortal(){
     appsBlock,
     h('div',{className:'portal-user'},
       h('span',{style:{display:'inline-flex',alignItems:'center',gap:'8px'}},iconEl('user',14),document.createTextNode(' '+((S.user&&S.user.nom)?S.user.nom:''))),
+      // Rejouer la présentation du portail. Visible en permanence : la visite
+      // automatique ne passe qu'une fois, et quelqu'un qui l'a fermée trop vite
+      // n'a sinon aucun moyen de la retrouver.
+      h('button',{className:'portal-logout portal-tour-btn',type:'button',
+        title:'Revoir la présentation du portail',
+        onClick:()=>{if(window.MySifaPortailTour)window.MySifaPortailTour.ouvrir();}},
+        h('span',{className:'portal-tour-pastille'},'Nouveau'),
+        document.createTextNode('Découvrir le portail')
+      ),
       h('button',{className:'portal-logout',onClick:()=>{MySifaTheme.toggleMode();render();}},
         h('span',{className:'theme-ico'},iconEl(isLight?'sun':'moon',16)),
         h('span',{className:'theme-label'},isLight?'Mode clair':'Mode sombre')
@@ -1992,6 +2047,72 @@ function portalVoletErpBrancher(wrap,pop,volet){
   wrap.addEventListener('mouseenter',remplir);
   wrap.addEventListener('focusin',remplir);
 }
+/* Placement : le volet doit tenir dans la fenêtre. Sur le rail il remonte
+   jusqu'à ce que son bas rentre ; sur une tuile il bascule au-dessus quand le
+   bas de page est trop près. Dans les deux cas, s'il reste trop grand, il
+   défile — c'est réglé par max-height, calculée ici sur la place réelle. */
+function portalVoletPlacer(wrap,pop){
+  const MARGE=14;
+  pop.style.top='';pop.style.maxHeight='';
+  wrap.classList.remove('portal-vol--haut');
+  const dispo=window.innerHeight;
+  if(wrap.classList.contains('portal-vol--tuile')){
+    const tuile=wrap.getBoundingClientRect();
+    const dessous=dispo-tuile.bottom-MARGE-10;
+    const dessus=tuile.top-MARGE-10;
+    if(dessous<220&&dessus>dessous)wrap.classList.add('portal-vol--haut');
+    pop.style.maxHeight=Math.max(180,Math.round(
+      wrap.classList.contains('portal-vol--haut')?dessus:dessous))+'px';
+    return;
+  }
+  pop.style.maxHeight=Math.max(180,Math.round(dispo-2*MARGE))+'px';
+  let r=pop.getBoundingClientRect();
+  if(r.bottom>dispo-MARGE){
+    const actuel=parseFloat(getComputedStyle(pop).top)||0;
+    pop.style.top=Math.round(actuel-(r.bottom-(dispo-MARGE)))+'px';
+    r=pop.getBoundingClientRect();
+  }
+  if(r.top<MARGE){
+    const actuel=parseFloat(pop.style.top||getComputedStyle(pop).top)||0;
+    pop.style.top=Math.round(actuel+(MARGE-r.top))+'px';
+  }
+}
+/* Survol : l'ouverture attend un court instant (on ne déclenche pas un volet
+   en traversant la barre), la fermeture aussi (on a le temps d'aller du bouton
+   au volet en passant par le vide). C'était le reproche fait au :hover pur :
+   le menu se refermait avant qu'on l'atteigne. */
+const PORTAL_VOL_OUVRIR=110;
+const PORTAL_VOL_FERMER=380;
+function portalVoletBrancherSurvol(wrap,pop){
+  let tOuvrir=null,tFermer=null;
+  const annuler=()=>{if(tOuvrir){clearTimeout(tOuvrir);tOuvrir=null;}
+                     if(tFermer){clearTimeout(tFermer);tFermer=null;}};
+  const ouvrir=(immediat)=>{
+    annuler();
+    const faire=()=>{
+      tOuvrir=null;
+      document.querySelectorAll('.portal-vol.ouvert').forEach(n=>{if(n!==wrap)n.classList.remove('ouvert');});
+      wrap.classList.add('ouvert');
+      portalVoletPlacer(wrap,pop);
+    };
+    if(immediat)faire();else tOuvrir=setTimeout(faire,PORTAL_VOL_OUVRIR);
+  };
+  const fermer=()=>{
+    annuler();
+    tFermer=setTimeout(()=>{tFermer=null;wrap.classList.remove('ouvert');},PORTAL_VOL_FERMER);
+  };
+  wrap.addEventListener('mouseenter',()=>ouvrir(false));
+  wrap.addEventListener('mouseleave',fermer);
+  // Le volet est un enfant du conteneur : y entrer annule la fermeture en
+  // cours, y compris quand le curseur a coupé par un coin.
+  pop.addEventListener('mouseenter',annuler);
+  wrap.addEventListener('focusin',()=>ouvrir(true));
+  wrap.addEventListener('focusout',ev=>{
+    if(!wrap.contains(ev.relatedTarget))fermer();
+  });
+  wrap._portalVoletOuvrir=()=>ouvrir(true);
+  wrap._portalVoletFermer=()=>{annuler();wrap.classList.remove('ouvert');};
+}
 function portalVoletChevron(tile){
   const b=document.createElement('button');
   b.type='button';
@@ -2003,8 +2124,10 @@ function portalVoletChevron(tile){
   b.addEventListener('click',ev=>{
     ev.preventDefault();ev.stopPropagation();
     const ouvert=tile.classList.contains('ouvert');
-    document.querySelectorAll('.portal-app.ouvert').forEach(n=>n.classList.remove('ouvert'));
-    if(!ouvert)tile.classList.add('ouvert');
+    document.querySelectorAll('.portal-vol.ouvert').forEach(n=>{
+      if(n._portalVoletFermer)n._portalVoletFermer();else n.classList.remove('ouvert');
+    });
+    if(!ouvert&&tile._portalVoletOuvrir)tile._portalVoletOuvrir();
   });
   return b;
 }
@@ -2068,6 +2191,7 @@ function portalAttacherVolets(){
       wrap.appendChild(btn);
       const pop=portalVoletPop(v,v.cle);
       wrap.appendChild(pop);
+      portalVoletBrancherSurvol(wrap,pop);
       if(v.source==='erp')portalVoletErpBrancher(wrap,pop,v);
     });
     const tuiles=volets.tuiles||{};
@@ -2077,7 +2201,9 @@ function portalAttacherVolets(){
       if(tile.querySelector(':scope > .portal-vol-pop'))return;
       tile.classList.add('portal-vol','portal-vol--tuile');
       tile.appendChild(portalVoletChevron(tile));
-      tile.appendChild(portalVoletPop(v,tile.getAttribute('data-portal-id')));
+      const popTuile=portalVoletPop(v,tile.getAttribute('data-portal-id'));
+      tile.appendChild(popTuile);
+      portalVoletBrancherSurvol(tile,popTuile);
       // Ouvrir le module par la tuile compte aussi comme une visite : sinon la
       // barre de reprise ne connaîtrait que les entrées de volet, et l'écran le
       // plus souvent ouvert serait justement celui qui n'y figure jamais.
