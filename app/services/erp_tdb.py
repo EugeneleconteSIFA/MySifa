@@ -70,6 +70,27 @@ def _ligne_produit(alias="l"):
         for c in ("code1", "code2")))
 
 
+# Une ligne de commande dont l'entête a disparu n'est pas une commande.
+#
+# `export_rvgi_csv.ps1` filtre `corbeille = 0` table par table : quand RVGI met
+# une commande à la corbeille sans marquer ses lignes, l'entête ne sort pas de
+# l'export et les lignes, elles, sortent. Elles arrivent dans le miroir sans
+# parent, leur position reste « en cours » pour l'éternité — personne ne les
+# soldera — et un compteur bâti sur la seule table des lignes les prend pour du
+# travail à faire. Mesuré le 28/08/2026 : 744 des 880 lignes `lpos = 0`, 493
+# numéros de commande, échoués là depuis 2019, dont neuf seulement avaient
+# jamais produit un BL. La tuile annonçait 683 commandes à traiter.
+#
+# Le prédicat est un EXISTS corrélé et non une jointure : il s'ajoute à un
+# `WHERE` déjà écrit, sans toucher au `FROM` ni risquer de collision d'alias
+# avec les jointures que certaines requêtes posent déjà.
+def _existe_piece(sch, entete="cde_entete", alias="l", cle="numero"):
+    if not sch.a(entete, cle):
+        return "1=1"          # entête absente du miroir : on ne filtre rien
+    return ("EXISTS (SELECT 1 FROM %s __p WHERE __p.%s = %s.%s)"
+            % (entete, cle, alias, cle))
+
+
 # Passé ce délai, une ligne en retard n'est plus un retard sur lequel agir :
 # c'est une ligne que personne ne fermera. Comptée à part, pas cachée.
 JOURS_DORMANT = 90
@@ -101,7 +122,8 @@ def _date_reelle(col):
 
 FORMULES = {
     "carnet": "lignes de commande à traiter : qtep > 0, position ≠ soldée, "
-              "et portant une référence produit (code1/code2)",
+              "portant une référence produit (code1/code2), et dont la "
+              "commande existe encore (entête présente dans le miroir)",
     "retard": "carnet dont la date d'expédition est passée depuis moins de "
               "90 jours ; au-delà la ligne est comptée comme dormante",
     "dormant": "lignes ouvertes dont l'expédition est passée depuis plus de "
@@ -272,8 +294,8 @@ def adv():
             # affichés partout. « 845 lignes » ne veut rien dire sans « sur
             # 312 commandes », et c'est la commande qu'on rappelle au client.
             produit = _ligne_produit("l") if sch.a("cde_ligne", "code1", "code2") else "1=1"
-            ouvert = ("l.qtep > 0 AND COALESCE(l.lpos, 0) <> %d AND %s"
-                      % (POS_SOLDEE, produit))
+            ouvert = ("l.qtep > 0 AND COALESCE(l.lpos, 0) <> %d AND %s AND %s"
+                      % (POS_SOLDEE, produit, _existe_piece(sch)))
             date_ok = _date_reelle(_jour("l.amje"))
             limite_dormant = (date.fromisoformat(b["aujourdhui"])
                               - timedelta(days=JOURS_DORMANT)).isoformat()
@@ -342,7 +364,8 @@ def adv():
             sortie["indispo"].append("À facturer : " + manque)
             sortie["a_facturer"] = None
         else:
-            reste = "l.qte > COALESCE(l.qtefac, 0)"
+            reste = ("l.qte > COALESCE(l.qtefac, 0) AND %s"
+                     % _existe_piece(sch, entete="liv_entete"))
             joint_bl = ("LEFT JOIN liv_entete e ON e.numero = l.numero"
                         if sch.a("liv_entete", "numero", "lrs") else "")
             champ_bl = "e.lrs" if joint_bl else "''"
@@ -407,13 +430,14 @@ def _sans_dossier(conn, sch, sortie):
         SELECT COUNT(*) AS lignes, COUNT(DISTINCT l.numero) AS commandes
           FROM cde_ligne l
          WHERE l.qtep > 0 AND COALESCE(l.lpos, 0) <> ? AND l.orig = ? AND %s
-           AND %s AND substr(l.amje,1,10) >= ?
+           AND %s AND %s AND substr(l.amje,1,10) >= ?
            AND NOT EXISTS (
                  SELECT 1 FROM mysifa.rvgi_rattachements r
                   WHERE r.piece = 'commande'
                     AND r.numero = CAST(l.numero AS TEXT)
                     AND (r.ligne IS NULL OR r.ligne = l.ligne))
-    """ % (produit, _date_reelle(_jour("l.amje"))), (POS_SOLDEE, ORIG_FABRICATION, depuis))
+    """ % (produit, _existe_piece(sch), _date_reelle(_jour("l.amje"))),
+        (POS_SOLDEE, ORIG_FABRICATION, depuis))
     if not rows:
         sortie["indispo"].append("Lignes sans dossier : table rvgi_rattachements absente")
         return None
@@ -432,8 +456,11 @@ def _ecartees(conn, sch, b):
     """
     if not sch.a("cde_ligne", "code1", "code2", "des1", "qtep", "lpos"):
         return None
-    hors = ("l.qtep > 0 AND COALESCE(l.lpos,0) <> %d AND NOT (%s)"
-            % (POS_SOLDEE, _ligne_produit("l")))
+    # Même périmètre que le carnet, sinon la ligne « écartées » compterait des
+    # frais de port de commandes qui n'existent plus, et le total ne se
+    # raccorderait à rien.
+    hors = ("l.qtep > 0 AND COALESCE(l.lpos,0) <> %d AND %s AND NOT (%s)"
+            % (POS_SOLDEE, _existe_piece(sch), _ligne_produit("l")))
     total = _entier(_un(conn, "SELECT COUNT(*) FROM cde_ligne l WHERE " + hors))
     if not total:
         return {"lignes": 0, "libelles": []}
@@ -553,16 +580,17 @@ def direction():
 
         # ── L'encours du carnet ──────────────────────────────────────────
         if sch.a("cde_ligne", "qtep", "lpos", "qte"):
+            vivante = _existe_piece(sch)
             sortie["carnet"] = {
                 "montant": _nombre(_un(conn, """
                     SELECT SUM(CASE WHEN l.qte > 0
                                     THEN (%s) * (l.qtep * 1.0 / l.qte) ELSE NULL END)
                       FROM cde_ligne l
-                     WHERE l.qtep > 0 AND COALESCE(l.lpos,0) <> ?
-                """ % m_cde, (POS_SOLDEE,))),
+                     WHERE l.qtep > 0 AND COALESCE(l.lpos,0) <> ? AND %s
+                """ % (m_cde, vivante), (POS_SOLDEE,))),
                 "lignes": _entier(_un(conn,
                     "SELECT COUNT(*) FROM cde_ligne l WHERE l.qtep > 0 "
-                    "AND COALESCE(l.lpos,0) <> ?", (POS_SOLDEE,))),
+                    "AND COALESCE(l.lpos,0) <> ? AND " + vivante, (POS_SOLDEE,))),
             }
         else:
             sortie["carnet"] = None

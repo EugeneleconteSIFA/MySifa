@@ -95,6 +95,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <link rel="stylesheet" href="/static/motion.css">
 <link rel="stylesheet" href="/static/mysifa_perf.css">
 <link rel="stylesheet" href="/static/mysifa_recents.css?v=__V_LABEL__">
+<link rel="stylesheet" href="/static/mysifa_portail_tour.css?v=__V_LABEL__">
 <!-- Chargé sans defer et avant tout le reste : sur un poste déjà connu comme lent,
      le mode éco doit être posé avant le premier rendu, sinon la frame la plus
      coûteuse de la visite est justement celle qu'on voulait éviter. -->
@@ -1776,6 +1777,7 @@ body.light .gsm-modal{box-shadow:0 24px 80px rgba(15,23,42,.18)}
 <!-- Barre « Reprendre où j'en étais » : se pose elle-même en haut de page,
      et seulement si l'utilisateur a un historique. -->
 <script src="/static/mysifa_recents.js?v=__V_LABEL__"></script>
+<script src="/static/mysifa_portail_tour.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_dock.js"></script>
 <script src="/static/mysifa_resize.js"></script>
 <script src="/static/mysifa_postit.js"></script>

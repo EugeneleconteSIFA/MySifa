@@ -92,6 +92,8 @@ check("toutes les URL du catalogue existent", manquantes, [])
 # silencieusement l'onglet par défaut.
 ANCRES = {
     "/profil": (RACINE / "app/web/profil_page.py", r"PROFIL_VALID_TABS\s*=\s*\[([^\]]*)\]"),
+    "/expe": (RACINE / "app/web/expe_assets.py", r"EXPE_VALID_TABS\s*=\s*\[([^\]]*)\]"),
+    "/fabrication": (RACINE / "app/web/fabrication_page.py", r"FAB_VALID_TABS\s*=\s*\[([^\]]*)\]"),
     "/taches": (RACINE / "app/web/taches_page.py", r"VALID_VIEWS\s*=\s*\[([^\]]*)\]"),
     "/coffre": (RACINE / "app/web/coffre_page.py", r"COFFRE_VALID_TABS\s*=\s*\[([^\]]*)\]"),
     "/rh/coffre": (RACINE / "app/web/rh_coffre_page.py", r"RH_COFFRE_VALID_TABS\s*=\s*\[([^\]]*)\]"),
@@ -126,6 +128,34 @@ for v, e in entrees(sup):
     if valides and ancre not in valides:
         mauvaises.append((e["cle"], e["url"], sorted(valides)))
 check("toutes les ancres correspondent à un onglet existant", mauvaises, [])
+
+# ── 3 bis. Les paramètres d'URL correspondent aux listes blanches des pages ──
+# Une valeur hors liste est ignorée en silence par la page, qui ouvre son onglet
+# par défaut : le raccourci a l'air de marcher et n'emmène pas au bon endroit.
+PARAMS = {
+    ("/stock", "tab"): (RACINE / "app/web/stock_page.py",
+                        r"urlTab\s*&&\s*\[([^\]]*)\]\.includes\(urlTab\)"),
+    ("/prod", "page"): (RACINE / "static/mysifa_prod_core.js",
+                        r"const allowed\s*=\s*new Set\(\[([^\]]*)\]\)"),
+    ("/planning", "vue"): (RACINE / "app/web/planning_page.py",
+                           r"PLANNING_VUES\s*=\s*\[(.*?)\];"),
+}
+mauvais_params = []
+for (chemin, nom), (fichier, motif) in PARAMS.items():
+    m = re.search(motif, fichier.read_text(encoding="utf-8", errors="ignore"), re.S)
+    valides = set(re.findall(r"[\"']([a-z_-]+)[\"']", m.group(1))) if m else set()
+    check(f"liste blanche {chemin}?{nom}= relevée ({len(valides)})", len(valides) >= 3)
+    for v, e in entrees(sup):
+        base = e["url"].split("#")[0]
+        if "?" not in base:
+            continue
+        c, q = base.split("?", 1)
+        if c != chemin or not q.startswith(nom + "="):
+            continue
+        val = q.split("=", 1)[1]
+        if valides and val not in valides:
+            mauvais_params.append((e["cle"], e["url"], sorted(valides)))
+check("toutes les valeurs de paramètre existent", mauvais_params, [])
 
 # ── 4. Les icônes existent dans le jeu SVG ──────────────────────────────────
 html = (RACINE / "app/web/html.py").read_text(encoding="utf-8", errors="ignore")

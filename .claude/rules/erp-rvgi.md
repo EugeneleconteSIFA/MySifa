@@ -256,6 +256,17 @@ reste offert dans le rail : un filtre `enum` accepte plusieurs codes séparés p
 `|`, déclarés au catalogue dans `choix`, et recollés en `IN (?, ?)` avec un
 paramètre lié par code.
 
+**Les tableaux de bord portent la même règle**, par un autre chemin.
+`erp_tdb.py` compte sur `cde_ligne` seule — pas de `FROM` à modifier — donc le
+prédicat s'ajoute au `WHERE` sous forme d'EXISTS corrélé, `_existe_piece()`.
+Il entre dans le carnet ADV (et par lui dans retard, dormant, semaine et la
+liste des lignes en retard), dans « lignes sans dossier », dans les « écartées »
+et dans l'encours du TDB Direction ; côté BL, `_existe_piece(sch,
+entete="liv_entete")` fait la même chose pour « à facturer ». La tuile
+« Commandes à traiter » annonçait 683 commandes sur 999 lignes ; elle en compte
+177 sur 225. **Tout nouveau compteur bâti sur une table `*_ligne` doit le
+porter** — sans lui il repart à 683.
+
 **Le contrôle qui retrouve le défaut**, sur n'importe quel écran à jointure :
 
 ```sql
