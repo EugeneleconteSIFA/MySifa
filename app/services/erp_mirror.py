@@ -42,6 +42,12 @@ RE_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 TAILLE_PAGE_DEFAUT = 100
 TAILLE_PAGE_MAX = 500
 
+# Un export n'est pas une page : il ramène tout le résultat du filtre. Le
+# plafond existe pour qu'un écran de 400 000 lignes exporté par distraction ne
+# tienne pas le serveur — au-delà, l'app demande de resserrer le filtre plutôt
+# que de rendre un fichier tronqué en silence.
+TAILLE_EXPORT_MAX = 20000
+
 
 def _ident(nom):
     """Valide un identifiant SQL. Refuse tout ce qui n'est pas un nom simple."""
@@ -184,6 +190,247 @@ def nettoyer(valeur, type_col):
     return valeur
 
 
+# ── Filtres par colonne (en-têtes de grille) ─────────────────────────────────
+# Le rail de gauche porte les filtres MÉTIER déclarés au catalogue — Position,
+# Client, plage de dates. Ceci répond à l'autre besoin, celui qu'on va chercher
+# dans Excel : poser une condition libre sur n'importe quelle colonne AFFICHÉE,
+# avec l'opérateur qu'on veut. Les deux se combinent en ET : un filtre
+# d'en-tête n'efface jamais un filtre de rail.
+#
+# Rien de ce qui vient du client n'entre dans le SQL. Le nom de colonne est
+# résolu contre les colonnes de l'écran (donc contre le catalogue),
+# l'opérateur contre la table ci-dessous, et la valeur passe en paramètre lié.
+
+# Un numéro de pièce (`id`, `of`) est rangé avec les nombres : « supérieur à
+# 9911600 » a un sens sur un carnet de commandes, et les opérateurs de motif
+# lui restent ouverts plus bas — c'est « contient 2606 » qu'on tape le plus.
+FAMILLE_PAR_TYPE = {
+    "nombre": "nombre", "qte": "nombre", "prix": "nombre",
+    "montant": "nombre", "pct": "nombre", "id": "nombre", "of": "nombre",
+    "date": "date", "datetime": "date",
+    "enum": "enum",
+    "bool": "bool",
+}
+
+# Un nombre garde « contient » et « commence par » : sur un numéro de pièce,
+# chercher « 2606 » est le geste le plus fréquent de tous.
+OPS_PAR_FAMILLE = {
+    "texte":  ["contient", "contient_pas", "egal", "different",
+               "commence", "finit", "vide", "non_vide"],
+    "nombre": ["egal", "different", "sup", "sup_egal", "inf", "inf_egal",
+               "entre", "contient", "commence", "vide", "non_vide"],
+    "date":   ["egal", "different", "sup", "sup_egal", "inf", "inf_egal",
+               "entre", "vide", "non_vide"],
+    "enum":   ["egal", "different", "vide", "non_vide"],
+    "bool":   ["egal", "different"],
+}
+
+# Les libellés sont ceux de l'écran, pas ceux de SQL — et ils changent avec la
+# famille : « supérieur à » sur une quantité se dit « après le » sur une date.
+LABELS_OPS = {
+    "contient": "Contient",
+    "contient_pas": "Ne contient pas",
+    "egal": "Est égal à",
+    "different": "Est différent de",
+    "commence": "Commence par",
+    "finit": "Finit par",
+    "sup": "Supérieur à",
+    "sup_egal": "Supérieur ou égal à",
+    "inf": "Inférieur à",
+    "inf_egal": "Inférieur ou égal à",
+    "entre": "Compris entre",
+    "vide": "Est vide",
+    "non_vide": "N’est pas vide",
+}
+
+LABELS_OPS_DATE = {
+    "egal": "Le",
+    "different": "Sauf le",
+    "sup": "Après le",
+    "sup_egal": "À partir du",
+    "inf": "Avant le",
+    "inf_egal": "Jusqu’au",
+    "entre": "Entre le",
+    "vide": "Non renseignée",
+    "non_vide": "Renseignée",
+}
+
+LABELS_OPS_LISTE = {
+    "egal": "Est",
+    "different": "N’est pas",
+    "vide": "Est vide",
+    "non_vide": "N’est pas vide",
+}
+
+# Combien de valeurs l'opérateur attend. Ce qui n'est pas ici en attend une.
+NB_VALEURS = {"vide": 0, "non_vide": 0, "entre": 2}
+
+
+def famille_de(type_col):
+    return FAMILLE_PAR_TYPE.get(str(type_col or "texte"), "texte")
+
+
+def operateurs_disponibles():
+    """Table servie au client : quels opérateurs pour quelle famille, et
+    comment les nommer. Une seule source de vérité — la page n'en redéfinit
+    aucun de son côté."""
+    out = {}
+    for fam, ops in OPS_PAR_FAMILLE.items():
+        if fam == "date":
+            libs = dict(LABELS_OPS, **LABELS_OPS_DATE)
+        elif fam in ("enum", "bool"):
+            libs = dict(LABELS_OPS, **LABELS_OPS_LISTE)
+        else:
+            libs = LABELS_OPS
+        out[fam] = [
+            {"cle": o, "label": libs[o], "valeurs": NB_VALEURS.get(o, 1)}
+            for o in ops
+        ]
+    return {"familles": FAMILLE_PAR_TYPE, "operateurs": out}
+
+
+def _expr_texte(col):
+    """La colonne telle qu'elle S'AFFICHE, en texte.
+
+    Sur une colonne composite (`code1`/`code2` montrés « 890/0112 »), filtrer
+    sur le premier morceau seulement ferait mentir la grille : on reconstruit
+    la valeur assemblée, avec le même séparateur.
+    """
+    if col.get("parts"):
+        bouts = ["COALESCE(CAST(%s AS TEXT),'')" % _ref(p) for p in col["parts"]]
+        joint = str(col.get("joint", "/")).replace("'", "''")
+        return "(" + (" || '%s' || " % joint).join(bouts) + ")"
+    return "CAST(%s AS TEXT)" % _ref(col["c"])
+
+
+def _ref_brute(col):
+    """La colonne SQL elle-même, pour ce qui se compare en nombre ou en date."""
+    return _ref(col["c"]) if col.get("c") else _ref(col["parts"][0])
+
+
+def _echapper_like(v):
+    """Un « % » tapé par l'utilisateur est un pourcentage, pas un joker."""
+    return str(v).replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _nombre(v):
+    """La virgule décimale française est acceptée : on tape « 1 250,50 »."""
+    s = str(v)
+    for c in (" ", " ", "\xa0"):
+        s = s.replace(c, "")
+    s = s.replace(",", ".")
+    try:
+        return float(s)
+    except (TypeError, ValueError):
+        raise ValueError("« %s » n’est pas un nombre." % v)
+
+
+def _condition_vide(col, fam, brut, txt):
+    """« Vide » au sens de l'écran, sentinelles RVGI comprises.
+
+    RVGI n'a pas de NULL : une date non renseignée vaut 30/11/1999, un prix non
+    renseigné vaut 0, « pas de maximum » vaut 99999999999.99. La grille les
+    affiche déjà comme « rien » (`nettoyer`) ; le filtre doit dire la même
+    chose, sinon « est vide » ne ramènerait aucune des lignes qui montrent un
+    tiret.
+    """
+    morceaux = ["%s IS NULL" % brut, "TRIM(%s) = ''" % txt]
+    if fam == "date":
+        morceaux.append("substr(%s,1,10) IN ('%s','%s')" % (txt, DATE_VIDE, DATE_INFINIE))
+    if fam == "nombre":
+        morceaux.append("ABS(CAST(%s AS REAL)) >= %r" % (brut, MAX_SENTINELLE))
+        if col.get("type") in ("prix", "id"):
+            morceaux.append("CAST(%s AS REAL) = 0" % brut)
+    return "(" + " OR ".join(morceaux) + ")"
+
+
+_CMP = {"egal": "=", "different": "<>", "sup": ">", "sup_egal": ">=",
+        "inf": "<", "inf_egal": "<="}
+
+
+def condition_colonne(col, op, valeurs):
+    """(fragment SQL, paramètres) pour un filtre d'en-tête.
+
+    « Est différent de » et « ne contient pas » ramènent AUSSI les cellules
+    vides : une case sans valeur ne contient pas la chaîne cherchée, et
+    l'écarter serait un piège — SQL, lui, laisse les NULL de côté tout seul.
+    """
+    fam = famille_de(col.get("type"))
+    if op not in OPS_PAR_FAMILLE.get(fam, OPS_PAR_FAMILLE["texte"]):
+        raise ValueError("Opérateur « %s » inapplicable à cette colonne." % op)
+    txt = _expr_texte(col)
+    brut = _ref_brute(col)
+
+    if op in ("vide", "non_vide"):
+        vide = _condition_vide(col, fam, brut, txt)
+        return (vide if op == "vide" else "NOT %s" % vide), []
+
+    if fam == "date":
+        # Les dates du miroir portent une heure : toute comparaison au jour se
+        # fait sur les dix premiers caractères, sinon « le 26/08 » ne trouve
+        # jamais « 2026-08-26 09:12 ».
+        cible = "substr(%s,1,10)" % txt
+        if op == "entre":
+            return "(%s BETWEEN ? AND ?)" % cible, [valeurs[0], valeurs[1]]
+        if op == "different":
+            return "(%s IS NULL OR %s <> ?)" % (cible, cible), [valeurs[0]]
+        return "(%s %s ?)" % (cible, _CMP[op]), [valeurs[0]]
+
+    if fam == "nombre" and op not in ("contient", "commence"):
+        num = "CAST(%s AS REAL)" % brut
+        if op == "entre":
+            a, b = _nombre(valeurs[0]), _nombre(valeurs[1])
+            if a > b:
+                a, b = b, a
+            return "(%s BETWEEN ? AND ?)" % num, [a, b]
+        if op == "different":
+            return "(%s IS NULL OR %s <> ?)" % (brut, num), [_nombre(valeurs[0])]
+        return "(%s %s ?)" % (num, _CMP[op]), [_nombre(valeurs[0])]
+
+    # Texte, énumération, booléen — et les recherches de motif sur un nombre.
+    # `UPPER` des deux côtés : chercher « lidl » doit trouver « LIDL ».
+    cible = "UPPER(%s)" % txt
+    v = str(valeurs[0])
+    motif = _echapper_like(v).upper()
+    if op == "contient":
+        return "(%s LIKE ? ESCAPE '\\')" % cible, ["%" + motif + "%"]
+    if op == "contient_pas":
+        return ("(%s IS NULL OR %s NOT LIKE ? ESCAPE '\\')" % (txt, cible),
+                ["%" + motif + "%"])
+    if op == "commence":
+        return "(%s LIKE ? ESCAPE '\\')" % cible, [motif + "%"]
+    if op == "finit":
+        return "(%s LIKE ? ESCAPE '\\')" % cible, ["%" + motif]
+    if op == "different":
+        return "(%s IS NULL OR %s <> ?)" % (txt, cible), [v.upper()]
+    return "(%s = ?)" % cible, [v.upper()]
+
+
+def conditions_colonnes(colonnes, filtres_col):
+    """Traduit les `c_<colonne>=<operateur>:<valeur>` en conditions.
+
+    Un filtre incomplet (opérateur posé, valeur pas encore tapée) est ignoré :
+    la grille ne doit pas se vider pendant qu'on remplit le champ.
+    """
+    par_nom = {c["nom"]: c for c in colonnes}
+    sortie = []
+    for nom, expr in (filtres_col or {}).items():
+        col = par_nom.get(nom)
+        if not col:
+            continue          # colonne inconnue de cet écran : ignorée sans bruit
+        op, _, reste = str(expr or "").partition(":")
+        op = op.strip()
+        if not op:
+            continue
+        attendu = NB_VALEURS.get(op, 1)
+        vals = [x.strip() for x in str(reste).split("|")] if attendu else []
+        vals = vals[:attendu]
+        if len(vals) < attendu or any(v == "" for v in vals):
+            continue
+        sortie.append(condition_colonne(col, op, vals))
+    return sortie
+
+
 # ── Moteur de liste générique ────────────────────────────────────────────────
 
 def _from(ec):
@@ -277,7 +524,7 @@ def _etat_rattachement(r, ratt, ligne):
     return {"etat": "oui", "n": n, "pris": pris, "total": total}
 
 
-def _ou_et_params(ec, q, filtres, extra, ratt, filtre_ratt):
+def _ou_et_params(ec, q, filtres, extra, ratt, filtre_ratt, filtres_col=None):
     """Le WHERE d'un écran, construit une seule fois pour les deux vues.
 
     La vue par ligne et la vue par pièce doivent filtrer exactement pareil :
@@ -288,7 +535,17 @@ def _ou_et_params(ec, q, filtres, extra, ratt, filtre_ratt):
     Aucune valeur de l'utilisateur n'entre dans le SQL : les références de
     colonne viennent du catalogue et passent par `_ref`, tout le reste part
     en paramètre lié.
+
+    `filtres_col` : les filtres d'en-tête, `{nom_de_colonne: "operateur:valeur"}`.
+    Ils s'ajoutent en ET aux filtres du rail, jamais à leur place. Ils sont
+    résolus contre les colonnes de l'ÉCRAN, donc contre les lignes — y compris
+    dans la vue par pièce, ou ils filtrent avant le regroupement. C'est la
+    seule lecture qui vaille dans les deux vues : « les commandes qui ont une
+    ligne comme ça ». Filtrer après agrégation demanderait un HAVING, et un
+    filtre posé sur « Lignes » (COUNT(*)) n'aurait pas le meme sens d'une vue
+    a l'autre.
     """
+    colonnes = ec["colonnes"]
     conditions = []
     params = []
 
@@ -353,13 +610,20 @@ def _ou_et_params(ec, q, filtres, extra, ratt, filtre_ratt):
             conditions.append("CAST(%s AS TEXT) = ?" % f["col"])
             params.append(valeur)
 
+    # Filtres d'en-tête : une condition libre par colonne AFFICHÉE, en ET avec
+    # tout le reste. La colonne est résolue contre `colonnes`, donc contre le
+    # catalogue — un nom inventé par le client ne désigne rien.
+    for fragment, valeurs in conditions_colonnes(colonnes, filtres_col):
+        conditions.append(fragment)
+        params.extend(valeurs)
+
     ou = (" WHERE " + " AND ".join(conditions)) if conditions else ""
     return ou, params
 
 
 def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
            taille=TAILLE_PAGE_DEFAUT, extra=None, compter=True, rattachement=False,
-           filtre_ratt=""):
+           filtre_ratt="", filtres_col=None, plafond=None):
     """Liste paginée d'un écran. Renvoie colonnes, lignes, total.
 
     `extra` : conditions supplémentaires, sous forme de couples
@@ -370,9 +634,16 @@ def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
     est un balayage complet de la table ; sur une recherche qui interroge les
     vingt-sept écrans d'un coup, il double le travail pour un chiffre que
     personne ne lit.
+
+    `filtres_col` : les filtres d'en-tête. Ils partent dans le WHERE commun aux
+    deux vues — voir `_ou_et_params`.
+
+    `plafond` : plafond de taille de page. Il vaut `TAILLE_PAGE_MAX` pour une
+    grille — au-delà elle devient illisible avant d'être lente — et
+    `TAILLE_EXPORT_MAX` pour un export, qui n'a pas à s'arrêter à un écran.
     """
     filtres = filtres or {}
-    taille = max(1, min(int(taille or TAILLE_PAGE_DEFAUT), TAILLE_PAGE_MAX))
+    taille = max(1, min(int(taille or TAILLE_PAGE_DEFAUT), int(plafond or TAILLE_PAGE_MAX)))
     page = max(1, int(page or 1))
 
     colonnes = ec["colonnes"]
@@ -406,7 +677,7 @@ def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
         select.append('%s AS "_ratt_tout"' % sans_qte)
         select.append('%s AS "_ratt_douteux"' % douteux)
 
-    ou, params = _ou_et_params(ec, q, filtres, extra, ratt, filtre_ratt)
+    ou, params = _ou_et_params(ec, q, filtres, extra, ratt, filtre_ratt, filtres_col)
     depart = _from(ec)
 
     # Tri : la colonne doit appartenir à l'écran, sinon on retombe sur le tri
@@ -434,7 +705,8 @@ def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
             # Sans la base de production, la colonne n'a pas de sens : on rend
             # l'écran sans elle plutôt qu'une erreur.
             return lister(ec, q=q, filtres=filtres, tri=tri, sens=sens, page=page,
-                          taille=taille, extra=extra, compter=compter)
+                          taille=taille, extra=extra, compter=compter,
+                          filtres_col=filtres_col, plafond=plafond)
         total = None
         if compter:
             total = conn.execute(
@@ -475,7 +747,7 @@ def lister(ec, q="", filtres=None, tri=None, sens="asc", page=1,
 
 def lister_groupe(ec, groupe, q="", filtres=None, tri=None, sens="asc", page=1,
                   taille=TAILLE_PAGE_DEFAUT, extra=None, compter=True,
-                  filtre_ratt=""):
+                  filtre_ratt="", filtres_col=None, plafond=None):
     """La même liste, mais une ligne par pièce.
 
     Mêmes filtres, même recherche, même écran : seule la maille change. On
@@ -491,7 +763,7 @@ def lister_groupe(ec, groupe, q="", filtres=None, tri=None, sens="asc", page=1,
     modale, qui montre de toute façon la pièce entière.
     """
     filtres = filtres or {}
-    taille = max(1, min(int(taille or TAILLE_PAGE_DEFAUT), TAILLE_PAGE_MAX))
+    taille = max(1, min(int(taille or TAILLE_PAGE_DEFAUT), int(plafond or TAILLE_PAGE_MAX)))
     page = max(1, int(page or 1))
 
     colonnes = groupe["colonnes"]
@@ -505,7 +777,7 @@ def lister_groupe(ec, groupe, q="", filtres=None, tri=None, sens="asc", page=1,
     _ref(ec["cle_ligne"])
     select.append('MIN(%s) AS "_id"' % ec["cle_ligne"])
 
-    ou, params = _ou_et_params(ec, q, filtres, extra, None, "")
+    ou, params = _ou_et_params(ec, q, filtres, extra, None, "", filtres_col)
     depart = _from(ec)
 
     # Tri : sur une colonne de la vue, donc sur son expression agrégée. Un

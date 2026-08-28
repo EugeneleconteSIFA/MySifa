@@ -312,8 +312,15 @@ body.light table.fab-table tr.fab-row-last td{
   display:flex;flex-direction:column;align-items:flex-start;
   gap:5px;
   overflow:hidden;
-  min-width:0;
+  min-width:0;min-height:0;
 }
+/* Regle de repartition de la colonne, et elle tient a une phrase : dans cette
+   bande de hauteur fixe, TOUT est incompressible sauf la consigne. Un dossier
+   avec dix lignes de consigne ne peut donc pas pousser le signalement « deja
+   produit » hors du cadre — c'est la consigne qui se replie sur ses points de
+   suspension (le survol et le clic en donnent l'integralite). */
+.fab-footer-info > *{flex:0 0 auto}
+.fab-footer-info > .fab-dossier-consigne{flex:0 1 auto;min-height:0}
 /* Le footer est une bande de hauteur fixe (--footer-h) en overflow:hidden :
    tout ce qui depasse disparait sans bruit. D'ou l'entete sur une seule ligne
    qui defile horizontalement plutot qu'un pave de metas qui repasse a la
@@ -330,8 +337,8 @@ body.light table.fab-table tr.fab-row-last td{
 .fab-dossier-head::-webkit-scrollbar{height:4px}
 .fab-dossier-head::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
 /* Boutons du dossier EN COURS (aujourd'hui : les deux boutons FSC). Ce qui
-   concerne les dossiers passes est parti dans .fab-memoire-row, colonne de
-   droite. */
+   concerne les dossiers passes vit dans .fab-memoire-row, juste au-dessus de
+   la consigne. */
 .fab-dossier-actions{
   min-width:0;
   display:flex;flex-wrap:wrap;align-items:center;
@@ -456,16 +463,21 @@ body.light table.fab-table tr.fab-row-last td{
 }
 .fab-search-btn:hover{filter:brightness(1.1)}
 .fab-comment-row{display:flex;gap:6px;align-items:center}
-/* Tout ce qui parle des dossiers PASSES vit ici, sous la saisie de code et le
-   bouton Commenter : la colonne de gauche ne dit plus que le dossier en cours. */
-.fab-memoire-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+/* Tout ce qui parle des dossiers PASSES vit dans la colonne de gauche, sous
+   l'identite du dossier et au-dessus de la consigne. `flex:0 0 auto` (pose
+   par la regle de repartition ci-dessus) le rend incompressible : c'est la
+   garantie qu'il reste entierement visible quelle que soit la consigne. */
+.fab-memoire-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:100%}
 .fab-memoire-row:empty{display:none}
 .fab-memoire-row .fab-produit-btn{margin-top:0}
-.fab-memoire-row .pmem-hist-btn{padding:5px 10px;gap:6px}
-.fab-memoire-row .pmem-hist-titre{font-size:11px}
-.fab-memoire-row .pmem-hist-detail{font-size:10px}
-.fab-memoire-row .pmem-hist-pastille{min-width:18px;height:18px;font-size:10px}
-.fab-memoire-row .pmem-hist-tag{font-size:9px}
+/* Un cran plus grand qu'a droite : la colonne de gauche a la place, et ce
+   bandeau se lit debout devant la machine. Il reste sur une seule ligne — le
+   corps du texte est ce qui garantit qu'on le voit, pas sa surface. */
+.fab-memoire-row .pmem-hist-btn{padding:6px 11px;gap:7px;max-width:100%}
+.fab-memoire-row .pmem-hist-titre{font-size:12px}
+.fab-memoire-row .pmem-hist-detail{font-size:11px}
+.fab-memoire-row .pmem-hist-pastille{min-width:19px;height:19px;font-size:11px}
+.fab-memoire-row .pmem-hist-tag{font-size:10px}
 .fab-comment-hint{font-size:10px;color:var(--muted);flex:1}
 .fab-footer-row2{
   display:flex;align-items:center;justify-content:center;gap:8px;
@@ -998,7 +1010,13 @@ body.has-topbar .fab-main{padding-top:74px}
     border-top-width:1px;
   }
   .fab-footer-actions{min-width:0;width:100%}
-  .fab-footer-info{display:none}
+  /* La colonne d'identite ne tient pas sur un telephone — mais le signalement
+     « deja produit », si : c'est lui qui doit arreter le conducteur avant qu'il
+     lance la machine. On masque donc le contenu de la colonne, pas la colonne.
+     Sans signalement, `.fab-memoire-row:empty` s'efface et la colonne, sans
+     gouttiere ni contenu, ne prend aucune place. */
+  .fab-footer-info{display:flex;gap:0}
+  .fab-footer-info > *:not(.fab-memoire-row){display:none}
   /* Le bandeau FSC, lui, NE disparaît PAS sur mobile — c'est tout l'intérêt
      de l'avoir sorti du footer info. On le densifie seulement. */
   .fab-fsc-bandeau{margin:6px 8px;padding:7px 11px;font-size:11px;gap:7px}
@@ -2588,7 +2606,9 @@ async function loadDossierStats(){
   }
   set({dossierStatsLoading:true});
   try{
-    const d = await apiFetch('/api/fabrication/dossier/'+encodeURIComponent(ref)+'/stats');
+    // Le numero de dossier porte un slash dans la moitie des cas : en
+    // parametre de requete, il ne peut pas casser le routage.
+    const d = await apiFetch('/api/fabrication/dossier-stats?no_dossier='+encodeURIComponent(ref));
     set({dossierStats:d, dossierStatsLoading:false});
   }catch(e){
     set({dossierStats:{_err: e.message || 'Erreur de chargement'}, dossierStatsLoading:false});
@@ -5051,10 +5071,16 @@ function fabRefProduit(d){
   return null;
 }
 
-/* Bouton reference produit — toujours present des qu'une reference existe.
- * Il ouvre la fiche produit meme vide : elle sait dire pourquoi elle l'est
- * (historique pas encore repris) plutot que de laisser croire que le produit
- * n'a jamais tourne. */
+/* Bouton reference produit — la porte permanente vers la fiche, quand rien
+ * d'autre ne la signale. Il ouvre la fiche produit meme vide : elle sait dire
+ * pourquoi elle l'est (historique pas encore repris) plutot que de laisser
+ * croire que le produit n'a jamais tourne.
+ *
+ * L'appelant ne le rend PAS quand le bandeau « Deja produit » est present : ce
+ * bandeau ouvre deja cette meme fiche, en disant en plus ce qu'on y trouvera.
+ * Deux portes pour une seule piece, et la plus discrete des deux vole
+ * l'attention destinee au signal. La reference produit reste lisible sans lui :
+ * elle est dans la ligne d'identite du dossier (« Ref. produit 1068/0001 »). */
 function renderRefProduitBtn(){
   const ref = fabRefProduit(S.dossier);
   if(!ref || !window.MySifaProduitMemoire) return null;
@@ -5076,9 +5102,9 @@ function renderHistoriqueProduitBtn(){
   if(!ap || !ap.disponible) return null;
   if(!window.MySifaProduitMemoire) return null;
   const ref = (S.dossier && (S.dossier.reference || S.dossier.no_dossier)) || ap.no_dossier;
-  // Rendu nu : il prend place dans .fab-memoire-row, colonne de droite, aux
-  // cotes de la reference produit. Un wrapper a lui seul le poussait sur sa
-  // propre ligne, hors de la bande visible du footer.
+  // Rendu nu : il prend place dans .fab-memoire-row, colonne de gauche, sous
+  // l'identite du dossier. Un wrapper a lui seul le poussait sur sa propre
+  // ligne, hors de la bande visible du footer.
   return window.MySifaProduitMemoire.boutonHistorique(ap, ref) || null;
 }
 
@@ -5128,6 +5154,20 @@ function renderFooter(){
     const fscTypeLbl = fscOn ? fscTypeRequisLabel(d.fsc_type_requis) : '';
 
     const fscDossier = (d.fsc_requis === 1 || d.fsc_requis === true);
+
+    // Memoire produit : le signalement « deja produit » et, a defaut, le bouton
+    // Produit. Le reagencement du footer a libere de la place a gauche : ce
+    // bloc revient donc sous l'identite du dossier, la ou le conducteur lit
+    // deja tout ce qui concerne ce qu'il s'apprete a lancer. Il est pose AVANT
+    // la consigne : la consigne est le seul element de la colonne qui puisse
+    // grandir, et c'est elle qui se comprime (voir .fab-dossier-consigne), pas
+    // le signalement.
+    const histBtn = renderHistoriqueProduitBtn();
+    const memoireRow = h('div',{className:'fab-memoire-row'},
+      histBtn ? null : renderRefProduitBtn(),
+      histBtn
+    );
+
     infoSection = h('div',{className:'fab-footer-info'},
       h('div',{className:'fab-dossier-head'},
         h('div',{className:'fab-dossier-ref-row'},
@@ -5149,6 +5189,7 @@ function renderFooter(){
           ))
         )
       ),
+      memoireRow,
       // La consigne se taille sur son texte, dans la limite de 520 px. Le
       // `title` porte le texte integral : au survol on a tout, sans clic et
       // sans deplier quoi que ce soit.
@@ -5160,9 +5201,8 @@ function renderFooter(){
         h('span',{className:'fab-dossier-consigne-lbl'},'Consigne dossier'),
         d.commentaire || 'Aucune consigne sur ce dossier.'
       ),
-      // Ne restent ici que les boutons du dossier EN COURS. La reference
-      // produit et le signalement « deja produit » regardent les dossiers
-      // passes : ils sont partis dans la colonne de droite.
+      // Les boutons FSC du dossier EN COURS, en dernier : ils s'impriment ou
+      // ouvrent un rapport, ils ne se lisent pas avant de lancer la machine.
       fscDossier ? h('div',{className:'fab-dossier-actions'},
         fscDossier ? h('button',{
           className:'fab-btn fab-btn-ghost fab-btn-sm',
@@ -5315,19 +5355,16 @@ function renderFooter(){
     onClick:()=>{ if(lastId) set({showCommentModal:true,commentSaisieId:lastId,commentText:(S.lastSaisie&&S.lastSaisie.commentaire)||''}); }
   }, svgIcon('message-square',14),' Commenter');
 
+  // La colonne de droite ne porte plus que la saisie d'operation et le bouton
+  // Commenter. La memoire produit est repartie a gauche, sous l'identite du
+  // dossier : c'est la meme lecture (« ce que je m'apprete a lancer »), elle
+  // n'avait pas a etre coupee en deux par toute la largeur de l'ecran.
   const toolsSection = h('div',{className:'fab-footer-tools'},
     h('div',{className:'fab-search-wrap'},
       searchInput,
     ),
     h('div',{className:'fab-comment-row'},
       commentBtn
-    ),
-    // Memoire produit : fiche produit et signalement « deja produit ». Ce sont
-    // les seuls elements du footer qui parlent d'autre chose que du dossier en
-    // cours — ils sont donc regroupes ici, a l'ecart de la colonne d'identite.
-    h('div',{className:'fab-memoire-row'},
-      renderRefProduitBtn(),
-      renderHistoriqueProduitBtn()
     )
   );
 

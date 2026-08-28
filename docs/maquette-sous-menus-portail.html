@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MySifa — Maquette sous-menus & tuiles</title>
+<style>
+:root{
+  --bg:#f1f5f9; --card:#ffffff; --border:#e2e8f0; --text:#0f172a; --text2:#475569;
+  --muted:#94a3b8; --accent:#0891b2; --accent-bg:rgba(8,145,178,.12);
+  --ok:#059669; --warn:#d97706; --danger:#dc2626;
+  --c-prod:var(--accent); --c-stock:var(--accent); --c-compta:var(--accent); --c-expe:var(--accent);
+  --c-rh:var(--accent); --c-qual:var(--accent); --c-admin:var(--accent); --c-erp:var(--accent);
+  --shadow-pop:0 18px 46px rgba(15,23,42,.14);
+  --shadow-card:0 8px 32px rgba(15,23,42,.10);
+}
+html[data-t="dark"]{
+  --bg:#0a0e17; --card:#111827; --border:#1e293b; --text:#f1f5f9; --text2:#cbd5e1;
+  --muted:#94a3b8; --accent:#22d3ee; --accent-bg:rgba(34,211,238,.12);
+  --ok:#34d399; --warn:#fbbf24; --danger:#f87171;
+  --c-prod:var(--accent); --c-stock:var(--accent); --c-compta:var(--accent); --c-expe:var(--accent);
+  --c-rh:var(--accent); --c-qual:var(--accent); --c-admin:var(--accent); --c-erp:var(--accent);
+  --shadow-pop:0 18px 46px rgba(0,0,0,.45);
+  --shadow-card:0 8px 32px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{margin:0;padding-top:88px;background:var(--bg);color:var(--text);
+  font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:13px;
+  transition:background .2s,color .2s}
+
+/* ── Bandeau de maquette ── */
+.mq-bar{position:fixed;top:0;left:0;right:0;z-index:400;display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:9px 16px;background:var(--card);border-bottom:1px solid var(--border)}
+.mq-bar b{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:800}
+.mq-bar .sep{flex:1}
+.mq-btn{background:var(--bg);border:1px solid var(--border);color:var(--text2);border-radius:9px;
+  padding:7px 13px;font:inherit;font-size:12px;font-weight:700;cursor:pointer;transition:.15s}
+.mq-btn:hover{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+.mq-btn.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
+
+/* ── Page portail ── */
+.portal{position:relative;min-height:calc(100vh - 88px);display:flex;flex-direction:column;
+  align-items:center;gap:28px;padding:44px 20px 40px}
+.brand{font-size:42px;font-weight:800;letter-spacing:-2px;text-align:center}
+.brand span{color:var(--accent)}
+.tagline{font-size:13px;color:var(--muted);margin-top:6px;letter-spacing:1px;text-align:center}
+.search{width:100%;max-width:720px;position:relative}
+.search input{width:100%;background:var(--card);border:1.5px solid var(--border);border-radius:14px;
+  padding:14px 16px 14px 46px;color:var(--text);font-size:14px;font-family:inherit;outline:none}
+.search input:focus{border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-bg)}
+.search .glogo{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:20px;height:20px}
+.search .cmdk{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:11px;
+  color:var(--muted);font-weight:700}
+
+/* ── Rail droite ── */
+.rail{position:fixed;top:108px;right:20px;z-index:120;display:flex;flex-direction:column;gap:2px;
+  padding:8px 6px;background:var(--card);border:1px solid var(--border);border-radius:20px;
+  box-shadow:var(--shadow-card)}
+.rail-item{position:relative;display:flex}
+.rail-btn{width:44px;height:44px;border-radius:12px;background:transparent;border:1px solid transparent;
+  color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:background .15s,color .15s;padding:0}
+.rail-btn:hover,.rail-item.open .rail-btn{background:var(--accent-bg);color:var(--accent)}
+.rail-item[data-c] .rail-btn:hover,.rail-item[data-c].open .rail-btn{
+  background:color-mix(in srgb,var(--rc) 14%,transparent);color:var(--rc)}
+.rail-badge{position:absolute;top:3px;left:3px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
+  background:var(--danger);color:#fff;font-size:10px;font-weight:800;font-family:ui-monospace,monospace;
+  display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--card)}
+.rvgi{width:34px;height:34px;border-radius:9px;background:color-mix(in srgb,var(--c-erp) 14%,transparent);
+  color:var(--c-erp);display:flex;align-items:center;justify-content:center;font-weight:900;
+  font-size:11px;letter-spacing:.02em}
+
+/* ── Pop (sous-menu commun) ── */
+.pop{position:absolute;right:calc(100% + 10px);top:-6px;width:296px;background:var(--card);
+  border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow-pop);z-index:60;
+  padding:0 0 6px;text-align:left;display:none;overflow:hidden}
+.pop::after{content:'';position:absolute;left:100%;top:0;width:14px;height:100%}
+.rail-item.open .pop{display:block;animation:popin .16s cubic-bezier(.22,.61,.36,1)}
+@keyframes popin{from{opacity:0;transform:translateX(6px)}to{opacity:1;transform:none}}
+.pop-head{display:flex;align-items:center;gap:9px;padding:11px 13px;
+  background:color-mix(in srgb,var(--pc) 12%,transparent);
+  border-bottom:1px solid color-mix(in srgb,var(--pc) 26%,transparent)}
+.pop-head .ph-ico{width:26px;height:26px;border-radius:8px;background:var(--pc);color:var(--card);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+html[data-t="dark"] .pop-head .ph-ico{color:var(--bg)}
+.pop-head b{font-size:13px;font-weight:800;color:var(--text);display:block;line-height:1.2}
+.pop-head i{font-style:normal;font-size:10.5px;color:var(--muted);display:block;margin-top:1px}
+.pop-grp{font-size:9.5px;font-weight:800;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--pc);padding:11px 12px 5px;opacity:.95}
+.pop-item{display:flex;align-items:center;gap:10px;width:calc(100% - 12px);margin:0 6px;text-align:left;
+  background:none;border:none;border-radius:10px;padding:7px 8px;cursor:pointer;font:inherit;
+  color:var(--text2);transition:background .12s}
+.pop-item:hover{background:color-mix(in srgb,var(--pc) 10%,transparent)}
+.pop-ico{width:28px;height:28px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;
+  justify-content:center;background:color-mix(in srgb,var(--ic,var(--pc)) 14%,transparent);
+  color:var(--ic,var(--pc));transition:background .12s,color .12s}
+.pop-item:hover .pop-ico{background:var(--ic,var(--pc));color:var(--card)}
+html[data-t="dark"] .pop-item:hover .pop-ico{color:var(--bg)}
+.pop-txt{min-width:0;flex:1}
+.pop-txt b{display:block;font-size:12.5px;font-weight:700;color:var(--text);line-height:1.25}
+.pop-txt i{font-style:normal;display:block;font-size:10.5px;color:var(--muted);margin-top:1px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pop-tag{font-size:10px;font-weight:800;font-family:ui-monospace,monospace;padding:2px 7px;border-radius:999px;
+  background:color-mix(in srgb,var(--tc,var(--pc)) 16%,transparent);color:var(--tc,var(--pc));flex-shrink:0}
+.pop-sep{height:1px;background:var(--border);margin:7px 10px}
+.pop-foot{display:flex;align-items:center;gap:8px;width:calc(100% - 12px);margin:2px 6px 0;
+  border:none;border-radius:10px;padding:9px 10px;cursor:pointer;font:inherit;font-size:12px;font-weight:800;
+  background:color-mix(in srgb,var(--pc) 12%,transparent);color:var(--pc);transition:.15s}
+.pop-foot:hover{background:var(--pc);color:var(--card)}
+html[data-t="dark"] .pop-foot:hover{color:var(--bg)}
+
+/* agenda mini (calendrier) */
+.ag{margin:2px 6px 4px;border-radius:10px;overflow:hidden}
+.ag-row{display:flex;gap:9px;align-items:center;padding:6px 8px;border-left:3px solid var(--ac);
+  background:color-mix(in srgb,var(--ac) 8%,transparent);border-radius:6px;margin-bottom:4px}
+.ag-h{font-family:ui-monospace,monospace;font-size:11px;font-weight:800;color:var(--ac)}
+.ag-t{font-size:11.5px;color:var(--text);font-weight:600}
+
+/* ── Zone tuiles ── */
+.apps-block{width:100%;max-width:900px;margin:0 auto}
+.sec-head{display:flex;align-items:center;gap:10px;margin:0 4px 10px}
+.sec-head h3{margin:0;font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--muted)}
+.sec-head .line{flex:1;height:1px;background:var(--border)}
+.sec-head .act{font-size:11px;color:var(--muted);cursor:pointer;font-weight:700}
+.sec-head .act:hover{color:var(--accent)}
+.apps{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;align-items:stretch;margin-bottom:26px}
+.app{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:6px;
+  background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 10px;
+  width:140px;height:140px;flex:0 0 140px;cursor:pointer;justify-content:flex-start;
+  transition:transform .28s cubic-bezier(.22,.61,.36,1),box-shadow .28s,border-color .28s}
+.app:hover{transform:translateY(-3px);border-color:color-mix(in srgb,var(--ac) 45%,var(--border));
+  box-shadow:0 12px 28px color-mix(in srgb,var(--ac) 18%,transparent)}
+.app-ico{width:50px;height:50px;border-radius:13px;display:flex;align-items:center;justify-content:center;
+  background:color-mix(in srgb,var(--ac) 13%,transparent);color:var(--ac);
+  transition:background .28s,color .28s;position:relative}
+.app:hover .app-ico{background:var(--ac);color:var(--card)}
+html[data-t="dark"] .app:hover .app-ico{color:var(--bg)}
+.app-name{font-size:14px;font-weight:800;color:var(--text);text-align:center;line-height:1.2}
+.app-desc{font-size:10px;color:var(--muted);text-align:center;line-height:1.3;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.app-badge{position:absolute;top:-6px;right:-12px;min-width:22px;height:20px;padding:0 7px;border-radius:999px;
+  background:var(--danger);color:#fff;font-size:11px;font-weight:800;font-family:ui-monospace,monospace;
+  display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--card)}
+.app-star{position:absolute;top:7px;left:7px;width:22px;height:22px;border-radius:7px;border:none;
+  background:transparent;color:var(--muted);display:none;align-items:center;justify-content:center;
+  cursor:pointer;padding:0}
+.app:hover .app-star{display:flex}
+.app-star:hover{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.app-star.on{display:flex;color:var(--warn)}
+.app-chev{position:absolute;top:7px;right:7px;width:22px;height:22px;border-radius:7px;border:none;
+  background:transparent;color:var(--muted);display:none;align-items:center;justify-content:center;
+  cursor:pointer;padding:0}
+.app:hover .app-chev{display:flex}
+.app-chev:hover{background:color-mix(in srgb,var(--ac) 16%,transparent);color:var(--ac)}
+.app-grip{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);color:var(--muted);
+  display:none;opacity:.7}
+body.reorder .app-grip{display:block}
+body.reorder .app{cursor:grab}
+body.reorder .app:hover{transform:none;box-shadow:none}
+.app.dragging{opacity:.9;transform:scale(1.03);box-shadow:0 14px 36px rgba(0,0,0,.28);cursor:grabbing}
+.app.ghost{border:2px dashed color-mix(in srgb,var(--accent) 55%,transparent);background:transparent}
+.app.ghost>*{visibility:hidden}
+
+/* sous-menu tuile */
+.app.open{z-index:200}
+.tile-pop{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);width:250px;
+  background:var(--card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow-pop);
+  z-index:200;display:none;padding:0 0 6px;overflow:hidden;cursor:default}
+.tile-pop::before{content:'';position:absolute;bottom:100%;left:0;width:100%;height:10px}
+.app.open .tile-pop{display:block;animation:tilein .16s cubic-bezier(.22,.61,.36,1)}
+@keyframes tilein{from{opacity:0;transform:translate(-50%,-6px)}to{opacity:1;transform:translate(-50%,0)}}
+
+/* header du site — reprise de navigation */
+.site-header{position:fixed;top:41px;left:0;right:0;z-index:300;display:flex;align-items:center;gap:12px;
+  padding:9px 20px 9px 20px;background:var(--card);border-bottom:1px solid var(--border);
+  box-shadow:0 6px 18px rgba(15,23,42,.06)}
+html[data-t="dark"] .site-header{box-shadow:0 6px 18px rgba(0,0,0,.35)}
+.sh-lab{display:inline-flex;align-items:center;gap:7px;font-size:9.5px;font-weight:800;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--accent);flex-shrink:0;padding:4px 10px 4px 8px;border-radius:999px;
+  background:var(--accent-bg)}
+.sh-clear{font-size:11px;color:var(--muted);cursor:pointer;font-weight:700;flex-shrink:0;
+  padding-left:10px;border-left:1px solid var(--border);margin-right:96px}
+.sh-clear:hover{color:var(--accent)}
+@media (max-width:1100px){.sh-clear{margin-right:0}}
+
+/* récents */
+.recents{display:flex;gap:8px;flex-wrap:nowrap;overflow-x:auto;padding:2px 0;min-width:0;flex:1;
+  scrollbar-width:none}
+.recents::-webkit-scrollbar{display:none}
+.rec{display:inline-flex;align-items:center;gap:7px;background:var(--bg);border:1px solid var(--border);
+  border-radius:999px;padding:4px 11px 4px 5px;cursor:pointer;transition:.15s;white-space:nowrap;flex-shrink:0}
+.rec:hover{border-color:var(--accent);background:var(--accent-bg)}
+.rec-ico{width:21px;height:21px;border-radius:6px;display:flex;align-items:center;justify-content:center;
+  background:var(--accent-bg);color:var(--accent);flex-shrink:0}
+.rec:hover .rec-ico{background:var(--accent);color:var(--card)}
+html[data-t="dark"] .rec:hover .rec-ico{color:var(--bg)}
+.rec b{font-size:11px;font-weight:700;color:var(--text)}
+.rec span{font-size:11px;color:var(--muted)}
+
+.foot{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:14px;margin-top:8px}
+.note{max-width:900px;margin:12px auto 0;background:var(--card);border:1px solid var(--border);
+  border-radius:14px;padding:16px 18px}
+.note h4{margin:0 0 8px;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.note ul{margin:0;padding-left:18px;line-height:1.65;color:var(--text2)}
+.note li{margin-bottom:5px}
+.note code{font-family:ui-monospace,monospace;font-size:11.5px;color:var(--accent)}
+@media (max-width:1100px){.rail{position:static;flex-direction:row;margin:0 auto;border-radius:16px}
+  .pop{right:auto;left:50%;top:calc(100% + 10px);transform:translateX(-50%)}}
+</style>
+</head>
+<body>
+
+<div class="mq-bar">
+  <b>Maquette — sous-menus portail</b>
+  <button class="mq-btn" id="bt-theme">Mode sombre</button>
+  <button class="mq-btn" id="bt-reorder">Réorganiser les tuiles</button>
+  <span class="sep"></span>
+  <span style="font-size:11.5px;color:var(--muted)">Survole les icônes de droite et les tuiles · glisse une tuile en mode réorganisation</span>
+</div>
+
+<div class="site-header">
+  <span class="sh-lab" id="sh-lab">Reprendre où j'en étais</span>
+  <div class="recents" id="rec"></div>
+  <span class="sh-clear" title="Effacer l'historique">Effacer</span>
+</div>
+
+<div class="portal">
+  <div>
+    <div class="brand">My<span>Sifa</span></div>
+    <div class="tagline">Gestion de production</div>
+  </div>
+
+  <div class="search">
+    <svg class="glogo" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+    <input placeholder="Rechercher sur Google ou dans MySifa (dossier, client, réf produit…)">
+    <span class="cmdk">Ctrl K</span>
+  </div>
+
+  <div class="apps-block">
+    <div class="sec-head">
+      <h3>Favoris</h3><span class="line"></span>
+      <span class="act">Épingler une application</span>
+    </div>
+    <div class="apps" id="fav"></div>
+
+    <div class="sec-head">
+      <h3>Toutes les applications</h3><span class="line"></span>
+      <span class="act" id="act-reorder">Réorganiser</span>
+    </div>
+    <div class="apps" id="all"></div>
+  </div>
+
+  <div class="foot">
+    <span>Eugène Leconte</span><span>·</span><span>Mode clair</span><span>·</span><span>Déconnexion</span>
+  </div>
+
+  <div class="note">
+    <h4>Ce que montre la maquette</h4>
+    <ul>
+      <li><b>Palette inchangée.</b> Aucune couleur nouvelle : les volets utilisent <code>--accent</code>, <code>--accent-bg</code>, <code>--border</code>, <code>--muted</code>. Seuls les compteurs gardent <code>--danger</code> / <code>--warn</code> / <code>--ok</code>, comme partout ailleurs dans MySifa.</li>
+      <li><b>Le sous-menu du rail est généralisé.</b> Mon profil, Paramètres et Calendrier d'abord, puis Tâches, Messagerie, Base de données et l'ERP existant, sur un gabarit unique : en-tête, groupes, entrées avec sous-titre et compteur, action « Ouvrir … » en pied.</li>
+      <li><b>Les tuiles centrales ont le même volet</b>, ouvert vers le bas au survol (chevron en haut à droite), avec les 3 à 5 destinations réelles du module et leurs compteurs.</li>
+      <li><b>Favoris exclusifs.</b> Une tuile épinglée quitte « Toutes les applications » — elle n'existe qu'à un seul endroit. L'étoile apparaît au survol, dans les deux rangées.</li>
+      <li><b>« Reprendre où j'en étais » est passé en header de site</b> : une barre fine en haut de page, les derniers <em>écrans</em> ouverts et non les modules (« MyStock · Besoins matières »), disponible depuis n'importe quelle page et pas seulement le portail.</li>
+      <li><b>Réorganisation</b> conservée telle qu'aujourd'hui (glisser-déposer, emplacement en pointillés), étendue à la rangée Favoris.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="rail" id="rail"></div>
+
+<script>
+/* ── icônes ── */
+const I={
+ user:'<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/>',
+ sliders:'<line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="17" r="2"/>',
+ check:'<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
+ mail:'<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 6 10-6"/>',
+ cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18"/>',
+ db:'<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>',
+ edit:'<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
+ wrench:'<path d="M14.7 6.3a4 4 0 0 1-5.4 5.4L4 17v3h3l5.3-5.3a4 4 0 0 1 5.4-5.4l-2.6 2.6-1.4-1.4Z"/>',
+ pack:'<path d="M21 8v8l-9 5-9-5V8l9-5Z"/><path d="m3 8 9 5 9-5"/><path d="M12 13v8"/>',
+ print:'<path d="M6 9V3h12v6"/><rect x="4" y="9" width="16" height="7" rx="2"/><rect x="7" y="14" width="10" height="7"/>',
+ calc:'<rect x="4" y="2" width="16" height="20" rx="2"/><path d="M8 6h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h8"/>',
+ truck:'<path d="M3 16V6h11v10"/><path d="M14 9h4l3 3v4h-7"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="18" r="2"/>',
+ users:'<circle cx="9" cy="8" r="3.2"/><path d="M2 20v-1a7 7 0 0 1 14 0v1"/><path d="M17 5.5a3.2 3.2 0 0 1 0 6"/><path d="M18 20v-1a6 6 0 0 0-2-4.4"/>',
+ euro:'<path d="M18 6a7 7 0 1 0 0 12"/><path d="M4 10h8M4 14h8"/>',
+ ao:'<path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/>',
+ bat:'<path d="M4 4h12l4 4v12H4z"/><path d="M16 4v4h4"/><path d="M8 13l2.5 2.5L16 10"/>',
+ shield:'<path d="M12 3 20 6v6c0 4.4-3.4 7.9-8 9-4.6-1.1-8-4.6-8-9V6Z"/><path d="m9 12 2 2 4-4"/>',
+ lock:'<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+ folder:'<path d="M3 7h6l2 2h10v10H3z"/>',
+ tool:'<rect x="3" y="9" width="18" height="11" rx="2"/><path d="M8 9V6a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v3"/><path d="M3 14h18"/>',
+ grid:'<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>',
+ chart:'<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+ bell:'<path d="M18 9a6 6 0 1 0-12 0c0 6-2 7-2 7h16s-2-1-2-7"/><path d="M10.5 20a2 2 0 0 0 3 0"/>',
+ key:'<circle cx="8" cy="12" r="4"/><path d="M12 12h9l-2 2 2 2"/>',
+ book:'<path d="M4 5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2Z"/><path d="M8 7h7"/>',
+ rocket:'<path d="M5 15c-1 3 0 5 0 5s2 1 5 0"/><path d="M13 4c4 1 7 5 7 9l-4 4-5-5Z"/><circle cx="15" cy="9" r="1.4"/>',
+ heart:'<path d="M12 20s-7-4.3-7-9a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 4.7-7 9-7 9Z"/>',
+ sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M19 5l-1.5 1.5M6.5 17.5 5 19"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>',
+ clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+ star:'<path d="m12 3 2.7 5.6 6.3.9-4.5 4.3 1 6.2L12 17l-5.5 3 1-6.2L3 9.5l6.3-.9Z"/>',
+ chev:'<path d="m6 9 6 6 6-6"/>',
+ arrow:'<path d="M5 12h13"/><path d="m12 6 6 6-6 6"/>',
+ grip:'<circle cx="9" cy="7" r="1.3"/><circle cx="15" cy="7" r="1.3"/><circle cx="9" cy="12" r="1.3"/><circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="17" r="1.3"/><circle cx="15" cy="17" r="1.3"/>',
+ out:'<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M20 13v7H4V4h7"/>',
+ logout:'<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+ img:'<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m4 18 5-4 4 3 3-2 4 3"/>'
+};
+const sv=(n,s)=>'<svg width="'+(s||18)+'" height="'+(s||18)+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">'+I[n]+'</svg>';
+
+/* ── contenu des volets du rail ── */
+const RAIL=[
+ {id:'profil',ico:'user',c:'var(--c-rh)',t:'Mon profil',sub:'Eugène Leconte — super admin',ring:1,
+  grp:[['Mon compte',[
+     ['user','Mes informations','Nom, poste, coordonnées'],
+     ['img','Photo & humeur du jour','Affichée dans le portail'],
+     ['key','Sécurité','Mot de passe, sessions actives']]],
+   ['Mes réglages',[
+     ['bell','Mes notifications','Alertes, annonces, messages'],
+     ['book','Mes guides & formations','7 guides suivis sur 9','7/9','var(--warn)'],
+     ['sun','Fluidité de l\'affichage','Automatique — poste rapide']]]],
+  foot:['out','Ouvrir mon profil'],
+  extra:['logout','Se déconnecter','var(--danger)']},
+
+ {id:'settings',ico:'sliders',c:'var(--c-admin)',t:'Paramètres',sub:'Administration de l\'instance',
+  grp:[['Utilisateurs',[
+     ['users','Comptes & rôles','32 comptes actifs'],
+     ['shield','Permissions par module',''],
+     ['bell','Annonces de mise à jour','1 annonce active','1','var(--ok)']]],
+   ['Référentiels atelier',[
+     ['tool','Machines & postes',''],
+     ['grid','Codes opérations',''],
+     ['truck','Transporteurs & tarifs','']]],
+   ['Audit & qualité',[
+     ['book','Formations & guides',''],
+     ['chart','Fluidité des postes','2 postes en mode éco','2','var(--warn)'],
+     ['rocket','Promouvoir v1 → v2','3 commits en attente','3','var(--accent)']]]],
+  foot:['out','Ouvrir les paramètres']},
+
+ {id:'taches',ico:'check',c:'var(--c-compta)',t:'Gestionnaire de tâches',sub:'4 tâches à traiter',badge:'4',
+  grp:[['À traiter aujourd\'hui',[
+     ['check','Valider les NC du lot 4412','Qualité — échéance ce soir','!','var(--danger)'],
+     ['check','Relancer Coquelle (tarifs)','Achats'],
+     ['check','Contrôler la fiche 99-1284','Fabrication']]],
+   ['Raccourcis',[
+     ['plus','Nouvelle tâche',''],
+     ['users','Tâches déléguées','3 en cours','3','var(--muted)']]]],
+  foot:['out','Ouvrir le gestionnaire']},
+
+ {id:'msg',ico:'mail',c:'var(--c-qual)',t:'Messagerie',sub:'2 conversations non lues',badge:'2',
+  grp:[['Non lus',[
+     ['user','Marie D. — Planning','« Le dossier 99-1288 est décalé… »','2','var(--c-qual)'],
+     ['users','Atelier Cohésio','« Bobine 1225 terminée »']]],
+   ['Raccourcis',[
+     ['plus','Nouveau message',''],
+     ['bell','Annonces diffusées','']]]],
+  foot:['out','Ouvrir la messagerie']},
+
+ {id:'cal',ico:'cal',c:'var(--c-expe)',t:'Calendrier',sub:'Vendredi 28 août — 3 événements',badge:'2',
+  agenda:[['08:30','Point production — atelier'],['11:00','Audit client Errepi'],['15:30','Revue planning semaine 36']],
+  grp:[['Raccourcis',[
+     ['plus','Nouvel événement',''],
+     ['bell','Invitations en attente','2 à confirmer','2','var(--danger)'],
+     ['users','Planning RH — congés','4 demandes','4','var(--c-rh)']]],
+   ['Vues',[
+     ['grid','Semaine',''],
+     ['cal','Mois','']]]],
+  foot:['out','Ouvrir le calendrier']},
+
+ {id:'db',ico:'db',c:'var(--c-stock)',t:'Base de données',sub:'production.db — v0.9.4',
+  grp:[['Consultation',[
+     ['grid','Explorateur de tables',''],
+     ['chart','Requêtes enregistrées',''],
+     ['clock','Migrations appliquées','225 + 41 fichiers']]],
+   ['Maintenance',[
+     ['shield','Santé du dépôt',''],
+     ['folder','Backups','7 rotations']]]],
+  foot:['out','Ouvrir la base']},
+
+ {id:'erp',ico:null,c:'var(--c-erp)',t:'ERP — lecture RVGI',sub:'Miroir en lecture seule',rvgi:1,
+  grp:[['Tableaux de bord',[
+     ['chart','TDB ADV','Commandes, livraisons, facturation'],
+     ['chart','TDB Direction','Chiffre d\'affaires et marges']]],
+   ['Mes écrans RVGI',[
+     ['ao','Commandes',''],
+     ['truck','Bons de livraison',''],
+     ['euro','Factures de vente',''],
+     ['pack','Colisage',''],
+     ['users','Clients',''],
+     ['grid','Articles','']]]],
+  foot:['out','Ouvrir l\'ERP']}
+];
+
+/* ── tuiles ── */
+const APPS=[
+ {id:'fabrication',n:'Saisie Prod',d:'Saisie opérateur — machine',i:'edit',c:'var(--c-prod)',
+  sub:[['Nouvelle saisie',''],['Mes saisies du jour','6 lignes'],['Reprendre le dossier en cours','99-1288']]},
+ {id:'prod',n:'MyProd',d:'Suivi de production & Planning',i:'wrench',c:'var(--c-prod)',fav:1,badge:'12',
+  sub:[['Planning atelier',''],['Saisie de production',''],['Dossiers en cours','12'],['Rentabilité dossier','']]},
+ {id:'stock',n:'MyStock',d:'Gestion des stocks produits',i:'pack',c:'var(--c-stock)',fav:1,badge:'3',
+  sub:[['Emplacements',''],['Matières premières',''],['Besoins matières','3 alertes'],['Traçabilité bobines',''],['Monitoring stock','']]},
+ {id:'expe',n:'MyExpé',d:'Gestion des départs',i:'truck',c:'var(--c-expe)',fav:1,badge:'7',
+  sub:[['Départs du jour','7'],['Transporteurs',''],['Grilles tarifaires',''],['Colisage','']]},
+ {id:'qualite',n:'MyQualité',d:'Non-conformités & audits',i:'shield',c:'var(--c-qual)',fav:1,badge:'4',
+  sub:[['Non-conformités','4 ouvertes'],['Audits client',''],['Certificats matière',''],['Fournisseurs','']]},
+ {id:'print',n:'MyPrint',d:'Étiquettes de traçabilité',i:'print',c:'var(--c-prod)',
+  sub:[['Étiquettes bobines',''],['Imprimantes',''],['Modèles d\'étiquette','']]},
+ {id:'compta',n:'MyCompta',d:'Comptabilité — accès réservé',i:'calc',c:'var(--c-compta)',
+  sub:[['Suivi comptable',''],['Factures fournisseurs',''],['Exports','']]},
+ {id:'rh',n:'Planning RH',d:'Planning personnel & Congés',i:'users',c:'var(--c-rh)',
+  sub:[['Planning du personnel',''],['Congés à valider','4'],['Affectation machines','']]},
+ {id:'cm',n:'Coûts matières',d:'Matières, produits, €/m²',i:'euro',c:'var(--c-compta)',
+  sub:[['Matières MyStock',''],['Produits devisés',''],['Historique des prix','']]},
+ {id:'ao',n:'MyAO',d:'Appels d\'offre fournisseurs',i:'ao',c:'var(--c-stock)',
+  sub:[['Appels d\'offre en cours','2'],['Fournisseurs',''],['Comparatif des offres','']]},
+ {id:'bat',n:'MyBAT',d:'Bons À Tirer — suivi client',i:'bat',c:'var(--c-qual)',badge:'3',
+  sub:[['BAT en attente','3'],['Historique client',''],['Modèles de BAT','']]},
+ {id:'coffre',n:'Mon coffre',d:'Bulletins & notes de frais',i:'lock',c:'var(--c-rh)',
+  sub:[['Mes bulletins de paie',''],['Mes notes de frais',''],['Nouvelle note de frais','']]},
+ {id:'rhcoffre',n:'Coffre RH',d:'Dépôt bulletins & NDF',i:'folder',c:'var(--c-rh)',badge:'2',
+  sub:[['Dépôt des bulletins',''],['Notes de frais à valider','2']]},
+ {id:'maint',n:'Maintenance',d:'Suivi et planification',i:'tool',c:'var(--c-expe)',
+  sub:[['Interventions',''],['Préventif planifié',''],['Machines','']]}
+];
+
+const RECENTS=[
+ ['MyProd','Planning atelier','wrench','var(--c-prod)'],
+ ['MyStock','Besoins matières','pack','var(--c-stock)'],
+ ['MyExpé','Départs du jour','truck','var(--c-expe)'],
+ ['ERP','Commandes','ao','var(--c-erp)'],
+ ['Paramètres','Comptes & rôles','users','var(--c-admin)']
+];
+
+/* ── rendu rail ── */
+function popHTML(m){
+  let h='<div class="pop" style="--pc:'+m.c+'">';
+  h+='<div class="pop-head"><span class="ph-ico">'+(m.rvgi?'<b style="font-size:9px">rv</b>':sv(m.ico,15))+
+     '</span><span><b>'+m.t+'</b><i>'+m.sub+'</i></span></div>';
+  if(m.agenda){
+    h+='<div class="pop-grp">Aujourd\'hui</div><div class="ag" style="--ac:'+m.c+'">';
+    m.agenda.forEach(a=>{h+='<div class="ag-row"><span class="ag-h">'+a[0]+'</span><span class="ag-t">'+a[1]+'</span></div>';});
+    h+='</div>';
+  }
+  m.grp.forEach(g=>{
+    h+='<div class="pop-grp">'+g[0]+'</div>';
+    g[1].forEach(it=>{
+      h+='<button class="pop-item"><span class="pop-ico">'+sv(it[0],16)+'</span>'+
+         '<span class="pop-txt"><b>'+it[1]+'</b>'+(it[2]?'<i>'+it[2]+'</i>':'')+'</span>'+
+         (it[3]?'<span class="pop-tag" style="--tc:'+(it[4]||'var(--accent)')+'">'+it[3]+'</span>':'')+'</button>';
+    });
+  });
+  h+='<div class="pop-sep"></div><button class="pop-foot">'+sv(m.foot[0],15)+m.foot[1]+'</button>';
+  if(m.extra) h+='<button class="pop-foot" style="--pc:'+m.extra[2]+';margin-top:6px">'+sv(m.extra[0],15)+m.extra[1]+'</button>';
+  return h+'</div>';
+}
+document.getElementById('rail').innerHTML=RAIL.map(m=>
+  '<div class="rail-item" data-c="1" style="--rc:'+m.c+'">'+
+  '<button class="rail-btn">'+(m.rvgi?'<span class="rvgi">rvgi</span>':sv(m.ico,22))+
+  (m.badge?'<span class="rail-badge">'+m.badge+'</span>':'')+'</button>'+popHTML(m)+'</div>').join('');
+
+let closeT=null;
+document.querySelectorAll('.rail-item').forEach(it=>{
+  it.addEventListener('mouseenter',()=>{clearTimeout(closeT);
+    document.querySelectorAll('.rail-item.open').forEach(o=>{if(o!==it)o.classList.remove('open')});
+    it.classList.add('open');});
+  it.addEventListener('mouseleave',()=>{closeT=setTimeout(()=>it.classList.remove('open'),160);});
+  it.querySelector('.rail-btn').addEventListener('click',()=>it.classList.toggle('open'));
+});
+
+/* ── rendu tuiles ── */
+function tileHTML(a){
+  let sub='<div class="tile-pop"><div class="pop-head" style="--pc:'+a.c+'"><span class="ph-ico">'+sv(a.i,15)+
+    '</span><span><b>'+a.n+'</b><i>'+a.d+'</i></span></div>';
+  a.sub.forEach(s=>{
+    sub+='<button class="pop-item"><span class="pop-ico">'+sv('arrow',14)+'</span><span class="pop-txt"><b>'+s[0]+'</b></span>'+
+      (s[1]?'<span class="pop-tag">'+s[1]+'</span>':'')+'</button>';
+  });
+  sub+='<div class="pop-sep"></div><button class="pop-foot">'+sv('out',15)+'Ouvrir '+a.n+'</button></div>';
+  return '<div class="app" draggable="true" data-id="'+a.id+'" style="--ac:'+a.c+';--pc:'+a.c+'">'+
+    '<button class="app-star'+(a.fav?' on':'')+'" title="Épingler aux favoris">'+sv('star',15)+'</button>'+
+    '<button class="app-chev" title="Raccourcis du module">'+sv('chev',15)+'</button>'+
+    '<div class="app-ico">'+sv(a.i,26)+(a.badge?'<span class="app-badge">'+a.badge+'</span>':'')+'</div>'+
+    '<div class="app-name">'+a.n+'</div><div class="app-desc">'+a.d+'</div>'+
+    '<span class="app-grip">'+sv('grip',16)+'</span>'+sub+'</div>';
+}
+function render(){
+  document.getElementById('fav').innerHTML=APPS.filter(a=>a.fav).map(tileHTML).join('')||
+    '<div style="color:var(--muted);font-size:12px;padding:20px">Aucun favori — clique l\'étoile d\'une tuile.</div>';
+  const rest=APPS.filter(a=>!a.fav);
+  document.getElementById('all').innerHTML=rest.map(tileHTML).join('')||
+    '<div style="color:var(--muted);font-size:12px;padding:20px">Toutes les applications sont en favoris.</div>';
+  wire();
+}
+document.getElementById('sh-lab').innerHTML=sv('clock',13)+'Reprendre où j\'en étais';
+document.getElementById('rec').innerHTML=RECENTS.map(r=>
+  '<div class="rec"><span class="rec-ico">'+sv(r[2],14)+'</span><b>'+r[0]+'</b><span>· '+r[1]+'</span></div>').join('');
+
+let tileT=null;
+function wire(){
+  document.querySelectorAll('.app').forEach(el=>{
+    el.addEventListener('mouseenter',()=>{if(document.body.classList.contains('reorder'))return;
+      clearTimeout(tileT);tileT=setTimeout(()=>{
+        document.querySelectorAll('.app.open').forEach(o=>{if(o!==el)o.classList.remove('open')});
+        el.classList.add('open');},260);});
+    el.addEventListener('mouseleave',()=>{clearTimeout(tileT);tileT=setTimeout(()=>el.classList.remove('open'),160);});
+    el.querySelector('.app-chev').addEventListener('click',e=>{e.stopPropagation();el.classList.toggle('open');});
+    el.querySelector('.app-star').addEventListener('click',e=>{e.stopPropagation();
+      const a=APPS.find(x=>x.id===el.dataset.id);a.fav=!a.fav;render();});
+    /* drag & drop */
+    el.addEventListener('dragstart',e=>{drag=el;el.classList.add('dragging');
+      setTimeout(()=>el.classList.add('ghost'),0);e.dataTransfer.effectAllowed='move';});
+    el.addEventListener('dragend',()=>{el.classList.remove('dragging','ghost');drag=null;syncOrder();});
+    el.addEventListener('dragover',e=>{e.preventDefault();
+      if(!drag||drag===el||drag.parentNode!==el.parentNode)return;
+      const r=el.getBoundingClientRect();
+      el.parentNode.insertBefore(drag,(e.clientX-r.left)>r.width/2?el.nextSibling:el);});
+  });
+}
+let drag=null;
+function syncOrder(){
+  const ids=[...document.getElementById('all').querySelectorAll('.app')].map(e=>e.dataset.id);
+  APPS.sort((a,b)=>ids.indexOf(a.id)-ids.indexOf(b.id));
+}
+render();
+
+/* ── contrôles maquette ── */
+const bt=document.getElementById('bt-theme');
+bt.onclick=()=>{const d=document.documentElement.getAttribute('data-t')==='dark';
+  document.documentElement.setAttribute('data-t',d?'light':'dark');bt.textContent=d?'Mode sombre':'Mode clair';};
+const br=document.getElementById('bt-reorder');
+function togR(){document.body.classList.toggle('reorder');
+  br.classList.toggle('on',document.body.classList.contains('reorder'));
+  document.querySelectorAll('.app.open').forEach(o=>o.classList.remove('open'));}
+br.onclick=togR;document.getElementById('act-reorder').onclick=togR;
+</script>
+</body>
+</html>

@@ -1191,6 +1191,17 @@ def search_dossiers(request: Request, q: str = "", limit: int = 20):
         return {"dossiers": [_hydrate_dossier_row(r, conn) for r in rows]}
 
 
+# Meme piege que la memoire produit : « 1068/0002 - Reliquat 2 » place dans le
+# chemin est redecode avant le routage, la route ne correspond plus et la fiche
+# dossier repond 404 sur la moitie des dossiers. Le numero passe donc aussi en
+# parametre de requete ; la route en chemin reste servie pour les appels deja
+# en vol et les dossiers sans slash.
+@router.get("/api/fabrication/dossier-stats")
+def get_dossier_stats_q(request: Request, no_dossier: str = ""):
+    """Statistiques d'un dossier — variante ou le numero est un parametre."""
+    return get_dossier_stats(no_dossier, request)
+
+
 @router.get("/api/fabrication/dossier/{no_dossier}/stats")
 def get_dossier_stats(no_dossier: str, request: Request):
     """Statistiques d'un dossier de production pour la fiche dossier.
