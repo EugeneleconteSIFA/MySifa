@@ -836,12 +836,6 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
 .bes-tend-note{font-size:12px;color:var(--muted);line-height:1.6;margin:0 0 12px;
   padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--accent) 7%,transparent);
   border:1px solid color-mix(in srgb,var(--accent) 22%,transparent)}
-/* Un seul controle de fenetre, au-dessus de tous les graphes : il les cadre
-   tous. Une fenetre par graphe donnerait des courbes qu'on croirait
-   comparables alors qu'elles ne couvriraient pas la meme periode. */
-.bes-tend-ctl{display:flex;align-items:center;gap:10px;margin:0 0 14px}
-.bes-tend-ctl-lbl{font-size:10px;font-weight:700;text-transform:uppercase;
-  letter-spacing:.5px;color:var(--muted)}
 /* La carte : fond plein, bordure fine. C'est la surface sur laquelle la
    palette a ete validee — un graphe pose sur le fond de page n'aurait pas le
    meme contraste que celui qu'on a mesure. */
@@ -13089,46 +13083,31 @@ function buildBesoinsMatieres() {
 // l'échelle soit explicite. Vingt matières sur un graphe commun seraient
 // illisibles et exigeraient vingt teintes catégorielles dont aucune ne serait
 // distinguable ; une série par ligne rend la question sans objet.
-// Fenêtre par défaut : 12 mois révolus + le mois courant + 5 à venir. Le passé
-// n'est pas décoratif — c'est la seule référence disponible pour juger si un
-// mois à venir est plein ou creux. Sans lui, un carnet qui ne s'est pas encore
-// rempli et une baisse d'activité ont exactement la même allure.
-const BES_TEND_FENETRES = [
-  { cle: '18', passe: 12, futur: 5, lbl: '18 mois', title: '12 mois révolus + le mois courant + 5 à venir' },
-  { cle: '12', passe: 6, futur: 5, lbl: '12 mois', title: '6 mois révolus + le mois courant + 5 à venir' },
-  { cle: 'futur', passe: 0, futur: 7, lbl: 'À venir', title: 'Le mois courant et les 7 suivants' },
-];
-
-// Les deux axes de temps. Ils ne répondent pas à la même question, et l'écran
-// doit dire laquelle il traite — sans quoi on lit des courbes décalées d'un à
-// deux mois sans savoir pourquoi.
-const BES_TEND_AXES = [
-  { cle: 'production', lbl: 'Production',
-    title: 'Le mois où le dossier passe en machine — donc où la matière doit '
-           + 'être en stock. C\'est l\'axe sur lequel on commande.' },
-  { cle: 'livraison', lbl: 'Livraison',
-    title: 'Le mois promis au client. C\'est l\'engagement, pas la date à '
-           + 'laquelle la matière est nécessaire : elle sort du stock avant.' },
-];
-
-function _besTendAxe() {
-  return (S.besoinsTendAxe === 'livraison') ? 'livraison' : 'production';
-}
-
-function _besTendFenetre() {
-  return BES_TEND_FENETRES.find(f => f.cle === (S.besoinsTendFenetre || '18'))
-      || BES_TEND_FENETRES[0];
-}
+// Fenêtre et axe sont figés — ils ne sont plus réglables à l'écran.
+//
+// Fenêtre : 12 mois révolus + le mois courant + 5 à venir. Le passé n'est pas
+// décoratif — c'est la seule référence disponible pour juger si un mois à
+// venir est plein ou creux. Sans lui, un carnet qui ne s'est pas encore rempli
+// et une baisse d'activité ont exactement la même allure. Les fenêtres plus
+// courtes amputaient précisément cette référence.
+//
+// Axe : production, le mois où le dossier passe en machine — donc où la
+// matière doit être en stock. C'est le seul axe sur lequel on commande. L'axe
+// livraison décalait les courbes d'un à deux mois sans changer une seule
+// décision d'achat, et deux captures d'écran prises sur deux axes différents
+// se ressemblaient assez pour qu'on les croie comparables.
+const BES_TEND_PASSE = 12;
+const BES_TEND_FUTUR = 5;
+const BES_TEND_AXE = 'production';
 
 async function loadBesoinsTendance() {
   S.besoinsTendance = null;
   S.besoinsLoading = true;
   renderContent();
-  const f = _besTendFenetre();
   try {
     S.besoinsTendance = await api(
-      '/api/stock/besoins-matieres/tendance?passe=' + f.passe + '&futur=' + f.futur
-      + '&axe=' + _besTendAxe());
+      '/api/stock/besoins-matieres/tendance?passe=' + BES_TEND_PASSE
+      + '&futur=' + BES_TEND_FUTUR + '&axe=' + BES_TEND_AXE);
   } catch (e) {
     S.besoinsTendance = { erreur: e.message || 'chargement impossible' };
     showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
@@ -13626,27 +13605,6 @@ function _buildBesoinsTendance(data) {
           'Attention : ' + _besFmtQte(data.reste_sur_mois_echus) +
           ' de besoin porte sur des mois déjà échus — dossiers en retard.')
       : null,
-  ));
-
-  // ── Fenêtre ──
-  // Un seul contrôle, au-dessus de tous les graphes : il les cadre tous. Une
-  // fenêtre par graphe donnerait des courbes qu'on croirait comparables.
-  const axe = _besTendAxe();
-  cont.appendChild(el('div', { cls: 'bes-tend-ctl' },
-    el('span', { cls: 'bes-tend-ctl-lbl' }, 'Fenêtre'),
-    el('div', { cls: 'bes-seg' }, ...BES_TEND_FENETRES.map(f =>
-      el('button', {
-        cls: 'bes-seg-btn' + ((S.besoinsTendFenetre || '18') === f.cle ? ' active' : ''),
-        title: f.title,
-        on: { click: () => { S.besoinsTendFenetre = f.cle; loadBesoinsTendance(); } },
-      }, f.lbl))),
-    el('span', { cls: 'bes-tend-ctl-lbl', style: { marginLeft: '18px' } }, 'Daté sur'),
-    el('div', { cls: 'bes-seg' }, ...BES_TEND_AXES.map(a =>
-      el('button', {
-        cls: 'bes-seg-btn' + (axe === a.cle ? ' active' : ''),
-        title: a.title,
-        on: { click: () => { S.besoinsTendAxe = a.cle; loadBesoinsTendance(); } },
-      }, a.lbl))),
   ));
 
   const categories = (data.categories || []).map(c => Object.assign({}, c, {
