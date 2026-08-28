@@ -348,7 +348,16 @@ def document_pdf(doc_id: int, request: Request):
     # Pas de `filename=` : FileResponse poserait alors un Content-Disposition
     # « attachment » et le scan se telechargerait au lieu de s'ouvrir dans
     # l'apercu cote a cote de la file de rattachement.
-    return FileResponse(path, media_type="application/pdf")
+    #
+    # Un scan ne change jamais : le fichier est ecrit une fois a l'import et
+    # l'identifiant ne se reattribue pas. On autorise donc le cache du
+    # navigateur — c'est ce qui rend la seconde ouverture d'un meme OF
+    # instantanee, la ou chaque clic repartait jusqu'ici du serveur. `private`
+    # parce que le document est derriere une session.
+    return FileResponse(
+        path, media_type="application/pdf",
+        headers={"Cache-Control": "private, max-age=86400"},
+    )
 
 
 @router.post("/api/produits/documents/{doc_id}/rattacher")
@@ -775,17 +784,46 @@ async def promouvoir_commentaire(saisie_id: int, request: Request):
 
 # ─── Historique vu depuis un dossier (Saisieprod) ────────────────────────────
 
+# Un numero de dossier porte souvent un slash (« 1068/0002 - Reliquat 2 »).
+# Place dans le chemin, meme encode en %2F, il est redecode avant le routage :
+# l'URL /api/produits/dossier/1068%2F0002/historique arrive comme trois
+# segments, ne correspond plus a cette route, et tombe sur la route fourre-tout
+# /api/produits/{ref:path} qui repondait « Aucun dossier de production rattache
+# a la reference dossier/1068/0002 - .../historique ». Le numero passe donc en
+# parametre de requete, ou aucun caractere n'a de sens pour le routeur. Les deux
+# routes en chemin restent servies : elles marchent pour les dossiers sans
+# slash, et un onglet ouvert avant la mise a jour ne doit pas casser.
+@router.get("/api/produits/dossier-apercu")
+def apercu_dossier_q(request: Request, no_dossier: str = ""):
+    """Le bouton « Historique » existe-t-il pour ce dossier ?"""
+    return _apercu_dossier(no_dossier, request)
+
+
+@router.get("/api/produits/dossier-historique")
+def historique_dossier_q(request: Request, no_dossier: str = ""):
+    """Le panneau ouvert par le bouton : les series des AUTRES dossiers."""
+    return _historique_dossier(no_dossier, request)
+
+
 @router.get("/api/produits/dossier/{no_dossier}/apercu")
 def apercu_dossier(no_dossier: str, request: Request):
     """Le bouton « Historique » existe-t-il pour ce dossier ?"""
-    user = get_current_user(request)
-    with get_db() as conn:
-        return pm.apercu_pour_dossier(conn, no_dossier, user_login=_user_login(user))
+    return _apercu_dossier(no_dossier, request)
 
 
 @router.get("/api/produits/dossier/{no_dossier}/historique")
 def historique_dossier(no_dossier: str, request: Request):
     """Le panneau ouvert par le bouton : les series des AUTRES dossiers."""
+    return _historique_dossier(no_dossier, request)
+
+
+def _apercu_dossier(no_dossier: str, request: Request):
+    user = get_current_user(request)
+    with get_db() as conn:
+        return pm.apercu_pour_dossier(conn, no_dossier, user_login=_user_login(user))
+
+
+def _historique_dossier(no_dossier: str, request: Request):
     user = get_current_user(request)
     with get_db() as conn:
         ctx = pm.contexte_dossier(conn, no_dossier)

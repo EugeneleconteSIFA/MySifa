@@ -209,6 +209,37 @@ table.grille th.cible{box-shadow:inset 3px 0 0 var(--accent)}
 .th-cadenas{border:none;background:transparent;padding:0;margin-left:auto;color:var(--muted);opacity:.35;cursor:pointer;display:inline-flex;flex-shrink:0}
 .th-cadenas:hover{opacity:1;color:var(--accent)}
 .th-cadenas.on{opacity:1;color:var(--accent)}
+/* Entonnoir de filtre : le même geste que dans un tableur, mais posé sur la
+   colonne au lieu d'être enfermé dans une boîte de dialogue. Il ne s'allume
+   que lorsqu'un filtre porte réellement sur la colonne — une en-tête qui
+   clignote pour rien ne se lit plus. */
+.th-libelle{margin-right:auto}
+.th-boite .th-cadenas{margin-left:0}
+.th-filtre{border:none;background:transparent;padding:0;color:var(--muted);opacity:.32;cursor:pointer;display:inline-flex;flex-shrink:0}
+.th-filtre:hover{opacity:1;color:var(--accent)}
+.th-filtre.on{opacity:1;color:var(--accent)}
+table.grille th.filtree{color:var(--accent);box-shadow:inset 0 -2px 0 var(--accent)}
+
+/* Le panneau de filtre suit sa colonne : il s'ouvre sous l'en-tête cliquée,
+   assez près pour qu'on ne perde pas de vue à quoi il s'applique. */
+.fpop-fond{position:fixed;inset:0;z-index:88}
+.fpop{position:fixed;z-index:89;width:272px;background:var(--card);border:1px solid var(--border);border-radius:12px;box-shadow:0 18px 44px rgba(0,0,0,.42);padding:13px 13px 12px}
+.fpop .fp-titre{font-size:11px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--text);margin:0 0 9px;padding-bottom:7px;border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fpop select,.fpop input{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:8px 10px;color:var(--text);font-size:13px;font-family:inherit;transition:border-color .15s}
+.fpop select:focus,.fpop input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-bg)}
+.fpop .fp-vals{display:flex;gap:8px;margin-top:8px}
+.fpop .fp-act{display:flex;gap:8px;margin-top:11px}
+.fpop .fp-act .btn{flex:1;padding:8px 10px}
+.fpop .fp-aide{font-size:10.5px;color:var(--muted);line-height:1.5;margin-top:9px}
+
+/* Pied : l'export se prend là où l'on lit déjà « 1–100 sur 34 943 », c'est-à-
+   dire à l'endroit où l'on se demande combien il y en a. */
+.btn-xls{display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.btn-xls:not(:disabled):hover{border-color:var(--success);color:var(--success)}
+.btn-xls:disabled{opacity:.55;cursor:default}
+.pied-fc{display:inline-flex;align-items:center;gap:8px;padding:3px 6px 3px 10px;border-radius:999px;background:var(--accent-bg);color:var(--accent);font-weight:700;font-size:11px}
+.pied-fc .x{border:none;background:transparent;color:var(--accent);font:inherit;font-weight:700;cursor:pointer;text-decoration:underline;padding:0 4px}
+.pied-fc .x:hover{color:var(--danger)}
 /* Colonnes épinglées : elles restent à gauche au défilement horizontal.
    Le décalage `left` est calculé après rendu, à la largeur réelle. */
 table.grille th.epingle{z-index:4}
@@ -602,6 +633,7 @@ const S = {
   sens: 'asc',
   q: '',
   filtres: {},
+  filtresCol: {},    // filtres d'en-tête : {colonne: "operateur:valeur"}
   selection: null,
   epingles: [],       // colonnes figées à gauche, dans l'ordre d'épinglage
   colDrag: null,      // colonne en cours de déplacement
@@ -1049,7 +1081,8 @@ function ouvrirMenu(){
 function ouvrirEcran(cle){
   const def=((S.meta&&S.meta.ecrans)||[]).find(e=>e.cle===cle);
   if(!def){toast('Écran inconnu.','err');ouvrirMenu();return;}
-  S.ecran=cle;S.def=def;S.page=1;S.tri=null;S.sens='asc';S.q='';S.filtres={};S.selection=null;S.colonnes=[];S.epingles=[];
+  S.ecran=cle;S.def=def;S.page=1;S.tri=null;S.sens='asc';S.q='';S.filtres={};S.filtresCol={};S.selection=null;S.colonnes=[];S.epingles=[];
+  fpopFermer();
   // Un contexte de pièce liée n'est valable que pour l'écran qu'il vise, et
   // pour une seule ouverture : on le consomme ici.
   S.contexte=(S.ctxAttente&&S.ctxAttente.cible===cle)?S.ctxAttente:null;
@@ -1107,8 +1140,10 @@ function ouvrirEcran(cle){
   }
   rail+='<button type="button" class="btn" id="btn-reset" style="width:100%">Réinitialiser les filtres</button>'+
     '<button type="button" class="btn" id="btn-reset-cols" style="width:100%;margin-top:6px">Réinitialiser les colonnes</button>'+
-    '<div class="rail-info">Glisser une en-tête pour déplacer sa colonne, le cadenas pour la figer à gauche. '+
-    'Tirer la grille à la souris pour la faire défiler.</div></div>';
+    '<div class="rail-info">Glisser une en-tête pour déplacer sa colonne, le cadenas pour la figer à gauche, '+
+    'l\'entonnoir pour filtrer dessus (contient, supérieur à, entre…). '+
+    'Tirer la grille à la souris pour la faire défiler. '+
+    'Le bouton « Exporter en Excel », en bas, rend la vue telle qu\'elle est affichée.</div></div>';
 
   document.getElementById('corps').innerHTML='<div class="ecran">'+rail+
     '<div class="grille-zone">'+
@@ -1138,7 +1173,7 @@ function ouvrirEcran(cle){
     });
   });
   document.getElementById('btn-reset').addEventListener('click',()=>{
-    S.q='';S.filtres={};S.page=1;S.ratt='';
+    S.q='';S.filtres={};S.filtresCol={};S.page=1;S.ratt='';fpopFermer();
     const r=document.getElementById('f-ratt');if(r)r.value='';
     (def.filtres||[]).forEach(f=>{
       if(f.defaut!=null&&f.defaut!=='')S.filtres[f.nom]=String(f.defaut);
@@ -1165,6 +1200,218 @@ const ICO_POIGNEE='<svg class="th-poignee" width="10" height="14" viewBox="0 0 1
 const ICO_CADENAS_OUVERT='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>';
 const ICO_CADENAS_FERME='<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
 
+// ── Filtres d'en-tête ────────────────────────────────────────────
+// Le rail de gauche pose les filtres métier de l'écran ; ceci pose une
+// condition libre sur n'importe quelle colonne affichée, avec l'opérateur
+// qu'on veut — contient, ne contient pas, supérieur à, entre, est vide…
+// Les deux se combinent en ET.
+//
+// Aucun opérateur n'est écrit ici : la table vient de `/api/erp/meta`, donc du
+// serveur, qui est aussi celui qui les traduit en SQL. Une liste recopiée des
+// deux côtés finit toujours par proposer un opérateur que le serveur refuse.
+const ICO_ENTONNOIR='<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h18l-7 8.2V21l-4-2.4v-6.4z"/></svg>';
+const ICO_XLS='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 10 12 15 17 10"/><path d="M4 20h16"/></svg>';
+
+function tableFiltres(){return (S.meta&&S.meta.filtres_colonne)||{familles:{},operateurs:{}};}
+function familleCol(c){const t=(c&&c.type)||'texte';return tableFiltres().familles[t]||'texte';}
+function opsCol(c){const o=tableFiltres().operateurs||{};return o[familleCol(c)]||o.texte||[];}
+function defOp(c,op){return opsCol(c).find(x=>x.cle===op)||null;}
+
+// « contient:LIDL » → {op:'contient', vals:['LIDL']}. On coupe au PREMIER
+// deux-points : une valeur peut en contenir, l'opérateur jamais.
+function lireFiltreCol(expr){
+  if(!expr)return{op:null,vals:[]};
+  const s=String(expr),i=s.indexOf(':');
+  if(i<0)return{op:s,vals:[]};
+  const reste=s.slice(i+1);
+  return {op:s.slice(0,i),vals:reste===''?[]:reste.split('|')};
+}
+function nbFiltresCol(){return Object.keys(S.filtresCol||{}).length;}
+
+// Ce que dit un filtre posé, en une ligne : sert d'infobulle sur l'entonnoir
+// allumé, pour lire la condition sans rouvrir le panneau.
+function resumeFiltreCol(col){
+  const f=lireFiltreCol(S.filtresCol[col.nom]);
+  const d=defOp(col,f.op);
+  if(!d)return '';
+  let vals=f.vals.slice();
+  if(familleCol(col)==='enum')vals=vals.map(v=>libelleEnum(col.enum,v));
+  else if(familleCol(col)==='date')vals=vals.map(fmtDate);
+  else if(familleCol(col)==='bool')vals=vals.map(v=>String(v)==='1'?'Oui':'Non');
+  return col.label+' : '+d.label+(vals.length?(' '+vals.join(' et ')):'');
+}
+
+let FPOP=null;
+function fpopFermer(){
+  if(FPOP){FPOP.remove();FPOP=null;}
+  const f=document.getElementById('fpop-fond');if(f)f.remove();
+}
+
+function champValeur(col,op,vals,rang){
+  const id='fpop-v'+rang;
+  const v=vals[rang-1]!=null?String(vals[rang-1]):'';
+  const fam=familleCol(col);
+  if(fam==='enum'){
+    const table=(S.meta.enums&&S.meta.enums[col.enum])||{};
+    let o='<option value="">—</option>';
+    Object.keys(table).forEach(k=>{
+      o+='<option value="'+esc(k)+'"'+(v===String(k)?' selected':'')+'>'+esc(table[k])+'</option>';
+    });
+    return '<select id="'+id+'">'+o+'</select>';
+  }
+  if(fam==='bool'){
+    return '<select id="'+id+'">'+
+      '<option value="1"'+(v==='1'?' selected':'')+'>Oui</option>'+
+      '<option value="0"'+(v==='0'?' selected':'')+'>Non</option></select>';
+  }
+  // Sur une date, l'opérateur de motif n'existe pas : le champ est toujours un
+  // calendrier. Sur un nombre, « contient » cherche dans les chiffres écrits,
+  // donc le champ reste du texte.
+  if(fam==='date')return '<input type="date" id="'+id+'" value="'+esc(v)+'">';
+  const ph=(fam==='nombre'&&op!=='contient'&&op!=='commence')?'ex. 1000':'Valeur…';
+  return '<input type="text" id="'+id+'" value="'+esc(v)+'" placeholder="'+ph+'" autocomplete="off" spellcheck="false">';
+}
+
+function fpopCorps(col,op){
+  const d=defOp(col,op)||{valeurs:1};
+  const f=lireFiltreCol(S.filtresCol[col.nom]);
+  const vals=(f.op===op)?f.vals:[];
+  let h='<select id="fpop-op">';
+  opsCol(col).forEach(o=>{
+    h+='<option value="'+esc(o.cle)+'"'+(o.cle===op?' selected':'')+'>'+esc(o.label)+'</option>';
+  });
+  h+='</select>';
+  if(d.valeurs>0){
+    h+='<div class="fp-vals">'+champValeur(col,op,vals,1)+
+       (d.valeurs>1?champValeur(col,op,vals,2):'')+'</div>';
+  }
+  return h;
+}
+
+function fpopOuvrir(nom,th){
+  const col=S.colonnes.find(c=>c.nom===nom);
+  if(!col||!opsCol(col).length)return;
+  const deja=FPOP&&FPOP.getAttribute('data-col')===nom;
+  fpopFermer();
+  if(deja)return;                       // second clic sur le même entonnoir : on referme
+
+  const f=lireFiltreCol(S.filtresCol[nom]);
+  const op=(f.op&&defOp(col,f.op))?f.op:opsCol(col)[0].cle;
+
+  const fond=document.createElement('div');
+  fond.className='fpop-fond';fond.id='fpop-fond';
+  fond.addEventListener('mousedown',fpopFermer);
+  document.body.appendChild(fond);
+
+  const pop=document.createElement('div');
+  pop.className='fpop';pop.setAttribute('data-col',nom);
+  pop.innerHTML='<div class="fp-titre">'+ICO_ENTONNOIR+' '+esc(col.label)+'</div>'+
+    '<div id="fpop-corps">'+fpopCorps(col,op)+'</div>'+
+    '<div class="fp-act">'+
+      '<button type="button" class="btn" id="fpop-clear">Effacer</button>'+
+      '<button type="button" class="btn btn-accent" id="fpop-ok">Filtrer</button>'+
+    '</div>'+
+    '<div class="fp-aide">Se combine avec les filtres de gauche et avec les autres colonnes.</div>';
+  document.body.appendChild(pop);
+  FPOP=pop;
+
+  // Le panneau se cale sous l'en-tête, et rentre dans la fenêtre : ouvert sur
+  // la dernière colonne à droite, il déborderait sinon.
+  const r=th.getBoundingClientRect();
+  const l=Math.max(8,Math.min(r.left,window.innerWidth-pop.offsetWidth-8));
+  const t=Math.min(r.bottom+4,window.innerHeight-pop.offsetHeight-8);
+  pop.style.left=l+'px';pop.style.top=Math.max(8,t)+'px';
+
+  fpopBrancher(col);
+  const v1=document.getElementById('fpop-v1');
+  if(v1)v1.focus();else document.getElementById('fpop-op').focus();
+  document.getElementById('fpop-ok').addEventListener('click',()=>fpopAppliquer(col));
+  document.getElementById('fpop-clear').addEventListener('click',()=>{
+    delete S.filtresCol[nom];fpopFermer();S.page=1;charger();
+  });
+}
+
+// Le `<select>` est remplacé à chaque changement d'opérateur : les écouteurs
+// se reposent après coup, sinon la seconde bascule ne ferait plus rien.
+function fpopBrancher(col){
+  const sel=document.getElementById('fpop-op');
+  if(sel&&!sel._branche){
+    sel._branche=true;
+    sel.addEventListener('change',()=>{
+      const corps=document.getElementById('fpop-corps');
+      corps.innerHTML=fpopCorps(col,sel.value);
+      fpopBrancher(col);
+      const v=document.getElementById('fpop-v1');if(v)v.focus();
+    });
+  }
+  ['fpop-v1','fpop-v2'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el)el.addEventListener('keydown',ev=>{
+      if(ev.key==='Enter'){ev.preventDefault();fpopAppliquer(col);}
+    });
+  });
+}
+
+function fpopAppliquer(col){
+  const sel=document.getElementById('fpop-op');
+  if(!sel)return;
+  const op=sel.value,d=defOp(col,op)||{valeurs:1};
+  const lu=[];
+  for(let i=1;i<=d.valeurs;i++){
+    const el=document.getElementById('fpop-v'+i);
+    const v=el?String(el.value||'').trim():'';
+    if(!v){toast(d.valeurs>1?'Renseigner les deux bornes.':'Renseigner une valeur.','err');
+           if(el)el.focus();return;}
+    lu.push(v);
+  }
+  S.filtresCol[col.nom]=op+':'+lu.join('|');
+  fpopFermer();S.page=1;charger();
+}
+
+function effacerFiltresColonnes(){
+  S.filtresCol={};fpopFermer();S.page=1;charger();
+}
+
+// Un panneau ancré sur une en-tête n'a plus de sens dès que la grille bouge.
+window.addEventListener('resize',fpopFermer);
+document.addEventListener('keydown',ev=>{if(ev.key==='Escape'&&FPOP)fpopFermer();},true);
+
+// ── Export xlsx ──────────────────────────────────────────────────
+// Ce qu'on exporte est ce qu'on voit : mêmes filtres, même tri, mêmes colonnes
+// dans l'ordre où l'utilisateur les a rangées. La pagination, elle, ne suit
+// pas — un export d'une page sur trois cent quarante n'intéresse personne.
+async function exporterVue(){
+  const b=document.getElementById('btn-export');
+  if(b){b.disabled=true;b.innerHTML=ICO_XLS+' Export…';}
+  try{
+    const p=new URLSearchParams(urlListe().split('?')[1]||'');
+    p.delete('page');p.delete('taille');
+    p.set('cols',S.colonnes.map(c=>c.nom).join(','));
+    const r=await fetch('/api/erp/'+encodeURIComponent(S.ecran)+'/export?'+p.toString(),
+                        {credentials:'include'});
+    if(!r.ok){
+      let m='Export impossible.';
+      try{const j=await r.json();m=j.detail||m;}catch(e){}
+      throw new Error(m);
+    }
+    const n=Number(r.headers.get('X-Erp-Lignes')||0);
+    const tronque=r.headers.get('X-Erp-Tronque')==='1';
+    const cd=r.headers.get('Content-Disposition')||'';
+    const m=cd.match(/filename="([^"]+)"/);
+    const blob=await r.blob();
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url;a.download=m?m[1]:('myerp_'+S.ecran+'.xlsx');
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),8000);
+    toast(tronque
+      ? ('Export arrêté à '+fmtNb(n,0)+' lignes : resserrer le filtre pour tout avoir.')
+      : (fmtNb(n,0)+' ligne'+(n>1?'s':'')+' exportée'+(n>1?'s':'')+'.'),
+      tronque?'err':null);
+  }catch(e){toast(e.message,'err');}
+  finally{renderPied();}
+}
+
 function renderTete(){
   const t=document.getElementById('thead');
   if(!t)return;
@@ -1173,9 +1420,16 @@ function renderTete(){
     const actif=S.tri===c.nom;
     const fl=actif?('<span class="fleche">'+(S.sens==='desc'?'▾':'▴')+'</span>'):'';
     const ep=S.epingles.indexOf(c.nom)>=0;
-    h+='<th data-col="'+esc(c.nom)+'" draggable="true" style="'+(c.largeur?('min-width:'+c.largeur+'px'):'')+'">'+
+    // L'entonnoir n'a de sens que sur une colonne de RVGI : la colonne de
+    // rattachement est du MySifa, elle a son propre filtre dans le rail.
+    const filtrable=opsCol(c).length>0&&(c.type||'')!=='ratt';
+    const posee=filtrable&&!!S.filtresCol[c.nom];
+    const infob=posee?resumeFiltreCol(c):'Filtrer sur cette colonne';
+    h+='<th data-col="'+esc(c.nom)+'" draggable="true" class="'+(posee?'filtree':'')+'" style="'+(c.largeur?('min-width:'+c.largeur+'px'):'')+'">'+
          '<span class="th-boite">'+ICO_POIGNEE+
            '<span class="th-libelle">'+esc(c.label)+fl+'</span>'+
+           (filtrable?('<button type="button" class="th-filtre'+(posee?' on':'')+'" data-filtrecol="'+esc(c.nom)+'" '+
+             'title="'+esc(infob)+'" aria-label="'+esc(infob)+'">'+ICO_ENTONNOIR+'</button>'):'')+
            '<button type="button" class="th-cadenas'+(ep?' on':'')+'" data-epingle="'+esc(c.nom)+'" '+
              'title="'+(ep?'Libérer la colonne':'Figer la colonne à gauche')+'" '+
              'aria-label="'+(ep?'Libérer la colonne':'Figer la colonne à gauche')+'">'+
@@ -1189,11 +1443,17 @@ function renderTete(){
   t.querySelectorAll('[data-epingle]').forEach(b=>{
     b.addEventListener('click',ev=>{ev.stopPropagation();basculerEpingle(b.getAttribute('data-epingle'));});
   });
+  t.querySelectorAll('[data-filtrecol]').forEach(b=>{
+    b.addEventListener('click',ev=>{
+      ev.stopPropagation();
+      fpopOuvrir(b.getAttribute('data-filtrecol'),b.closest('th'));
+    });
+  });
 
   t.querySelectorAll('[data-col]').forEach(th=>{
     const nom=th.getAttribute('data-col');
     th.addEventListener('click',ev=>{
-      if(ev.target.closest('.th-cadenas'))return;
+      if(ev.target.closest('.th-cadenas')||ev.target.closest('.th-filtre'))return;
       if(S.tri===nom){S.sens=(S.sens==='asc')?'desc':'asc';}else{S.tri=nom;S.sens='asc';}
       S.page=1;charger();
     });
@@ -1226,6 +1486,9 @@ function urlListe(){
   p.set('page',String(S.page));
   p.set('taille',String(S.taille));
   Object.keys(S.filtres).forEach(k=>{if(S.filtres[k])p.set('f_'+k,S.filtres[k]);});
+  // Les filtres d'en-tête voyagent en `c_<colonne>` : le serveur résout le nom
+  // contre les colonnes de l'écran, jamais contre la table.
+  Object.keys(S.filtresCol).forEach(k=>{if(S.filtresCol[k])p.set('c_'+k,S.filtresCol[k]);});
   if(S.ratt)p.set('ratt',S.ratt);
   // Ouverture depuis une pièce liée : on transmet l'origine, jamais un nom de
   // colonne — c'est le serveur qui reconstruit la jointure depuis le catalogue.
@@ -1320,7 +1583,13 @@ function renderPied(){
   const debut=S.total?((S.page-1)*S.taille+1):0;
   const fin=Math.min(S.page*S.taille,S.total);
   const pages=Math.max(1,Math.ceil(S.total/S.taille));
+  const nfc=nbFiltresCol();
   p.innerHTML='<span class="compte">'+fmtNb(debut,0)+'–'+fmtNb(fin,0)+' sur '+fmtNb(S.total,0)+'</span>'+
+    '<button type="button" class="btn btn-xls" id="btn-export"'+(S.total?'':' disabled')+
+      ' title="Télécharger cette vue — mêmes filtres, même tri, mêmes colonnes">'+
+      ICO_XLS+' Exporter en Excel</button>'+
+    (nfc?('<span class="pied-fc">'+nfc+' filtre'+(nfc>1?'s':'')+' de colonne'+
+          '<button type="button" class="x" id="fc-x">effacer</button></span>'):'')+
     '<span class="pager">'+
       '<button type="button" class="btn" id="prec"'+(S.page<=1?' disabled':'')+'>Précédent</button>'+
       '<span>page '+fmtNb(S.page,0)+' / '+fmtNb(pages,0)+'</span>'+
@@ -1328,6 +1597,10 @@ function renderPied(){
   const a=document.getElementById('prec'),b=document.getElementById('suiv');
   if(a)a.addEventListener('click',()=>{if(S.page>1){S.page--;charger();}});
   if(b)b.addEventListener('click',()=>{if(S.page<pages){S.page++;charger();}});
+  const x=document.getElementById('btn-export');
+  if(x)x.addEventListener('click',exporterVue);
+  const fx=document.getElementById('fc-x');
+  if(fx)fx.addEventListener('click',effacerFiltresColonnes);
 }
 
 // ── Détail : modale sectionnée + pièces liées ────────────────────

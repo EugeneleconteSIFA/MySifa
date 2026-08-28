@@ -9,6 +9,7 @@ Endpoints
 ---------
   GET /api/erp/meta                    → fraîcheur du miroir, écrans disponibles
   GET /api/erp/{ecran}/lignes          → liste paginée, filtrée, triée
+  GET /api/erp/{ecran}/export          → la vue courante en classeur xlsx
   GET /api/erp/{ecran}/detail/{id}     → toutes les colonnes d'une ligne
 
 Aucun POST, aucun PUT, aucun DELETE — et ce n'est pas une omission : le miroir
@@ -17,9 +18,13 @@ MySifa lit. Le jour où l'on voudra écrire, ce sera un autre chantier, avec
 l'accord de l'éditeur de l'ERP.
 """
 
+from datetime import datetime
+
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 
 from app.services import erp_catalogue as catalogue
+from app.services import erp_export as export
 from app.services import erp_mirror as miroir
 from app.services.auth_service import get_current_user
 from config import ROLES_ADMIN
@@ -78,6 +83,8 @@ def erp_meta(request: Request):
             "domaines": catalogue.DOMAINES,
             "ecrans": [],
             "enums": catalogue.ENUMS,
+            "filtres_colonne": miroir.operateurs_disponibles(),
+            "export_max": miroir.TAILLE_EXPORT_MAX,
             "message": (
                 "Le miroir de l'ERP n'a pas encore été construit. "
                 "Lancer l'export depuis un poste du réseau SIFA, puis l'import."
@@ -117,6 +124,12 @@ def erp_meta(request: Request):
         "domaines": catalogue.DOMAINES,
         "ecrans": ecrans,
         "enums": catalogue.ENUMS,
+        # Quels opérateurs de filtre pour quelle famille de colonne, et
+        # comment les nommer. La page n'en redéfinit aucun de son côté :
+        # ajouter un opérateur ici suffit à le faire apparaître dans toutes
+        # les en-têtes.
+        "filtres_colonne": miroir.operateurs_disponibles(),
+        "export_max": miroir.TAILLE_EXPORT_MAX,
     }
 
 
@@ -172,16 +185,15 @@ def erp_lignes(
     if depuis and depuis_id and lien >= 0:
         extra, contexte = _condition_de_lien(depuis, depuis_id, lien, cle)
 
-    # Les filtres arrivent en `f_<nom>` : seuls ceux que l'écran déclare sont
-    # retenus, les autres sont ignorés sans bruit.
-    filtres = {}
-    for nom_param, valeur in request.query_params.items():
-        if nom_param.startswith("f_"):
-            filtres[nom_param[2:]] = valeur
+    # Les filtres du rail arrivent en `f_<nom>` — seuls ceux que l'écran
+    # déclare sont retenus — et ceux des en-têtes en `c_<colonne>`, sous la
+    # forme `operateur:valeur`. Les autres paramètres sont ignorés sans bruit.
+    filtres, filtres_col = _parametres_vue(request)
 
     try:
         res = miroir.lister(
-            ec, q=q, filtres=filtres, tri=tri or None, sens=sens,
+            ec, q=q, filtres=filtres, filtres_col=filtres_col,
+            tri=tri or None, sens=sens,
             page=page, taille=taille, extra=extra,
             rattachement=bool(ec.get("rattachable")), filtre_ratt=ratt,
         )
@@ -283,3 +295,195 @@ def erp_detail(cle: str, ident: str, request: Request):
         piece.pop("brut_entete", None)
         res["piece"] = piece
     return res
+
+
+# ── Export xlsx ──────────────────────────────────────────────────────────────
+
+# Les paramètres d'une vue sont lus au même endroit pour la grille et pour
+# l'export : c'est la seule façon de garantir que le fichier contient
+# exactement ce que l'écran montrait. Deux lectures séparées finiraient par
+# diverger, et personne ne s'en apercevrait avant de compter deux totaux
+# différents.
+def _parametres_vue(request: Request):
+    filtres, filtres_col = {}, {}
+    for nom, valeur in request.query_params.items():
+        if nom.startswith("f_"):
+            filtres[nom[2:]] = valeur
+        elif nom.startswith("c_"):
+            filtres_col[nom[2:]] = valeur
+    return filtres, filtres_col
+
+
+def _libelle_filtre_colonne(ec, nom, expr, enums):
+    """« Quantité — Compris entre 1 000 et 5 000 », pour la feuille Critères."""
+    col = next((c for c in ec["colonnes"] if c["nom"] == nom), None)
+    if not col:
+        return None
+    op, _, reste = str(expr or "").partition(":")
+    op = op.strip()
+    fam = miroir.famille_de(col.get("type"))
+    libs = dict(miroir.LABELS_OPS)
+    if fam == "date":
+        libs.update(miroir.LABELS_OPS_DATE)
+    elif fam in ("enum", "bool"):
+        libs.update(miroir.LABELS_OPS_LISTE)
+    if op not in libs:
+        return None
+    attendu = miroir.NB_VALEURS.get(op, 1)
+    vals = [v.strip() for v in str(reste).split("|")][:attendu] if attendu else []
+    if len(vals) < attendu or any(v == "" for v in vals):
+        return None
+    if fam == "enum":
+        table = enums.get(col.get("enum")) or {}
+        vals = [table.get(v, v) for v in vals]
+    elif fam == "date":
+        vals = ["%s/%s/%s" % (v[8:10], v[5:7], v[0:4]) if len(v) >= 10 else v for v in vals]
+    return "%s — %s%s" % (
+        col.get("label") or nom, libs[op],
+        (" " + " et ".join(vals)) if vals else "")
+
+
+def _criteres(ec, meta_miroir, q, filtres, filtres_col, ratt, tri, sens,
+              contexte, total):
+    """Ce qui a produit ce fichier, en français, pour la seconde feuille."""
+    enums = catalogue.ENUMS
+    lignes = [
+        ("Écran", "%s — %s" % (ec["label"], ec.get("resume", ""))),
+        ("Table RVGI", ec["table"]),
+        ("Exporté le", datetime.now().strftime("%d/%m/%Y à %H:%M")),
+        ("Miroir importé le", _jolie_date(meta_miroir.get("importe_le"))),
+        ("Relevé RVGI du", _jolie_date(meta_miroir.get("releve_le"))),
+        ("Lignes exportées", total),
+    ]
+    if q:
+        lignes.append(("Recherche", q))
+    par_nom = {f["nom"]: f for f in ec.get("filtres", [])}
+    for nom, valeur in filtres.items():
+        f = par_nom.get(nom)
+        if not f or not str(valeur).strip():
+            continue
+        v = str(valeur).strip()
+        if f.get("type") == "enum":
+            v = (enums.get(f.get("enum")) or {}).get(v, v)
+        elif f.get("type", "").startswith("date") and len(v) >= 10:
+            v = "%s/%s/%s" % (v[8:10], v[5:7], v[0:4])
+        lignes.append(("Filtre — " + f["label"], v))
+    for nom, expr in filtres_col.items():
+        lib = _libelle_filtre_colonne(ec, nom, expr, enums)
+        if lib:
+            lignes.append(("Filtre de colonne", lib))
+    if ratt:
+        lignes.append(("Rattachement MySifa", {
+            "oui": "Rattaché", "non": "Non rattaché",
+            "partiel": "Partiellement", "douteux": "À vérifier"}.get(ratt, ratt)))
+    if contexte:
+        lignes.append(("Ouvert depuis", "%s · %s" % (
+            contexte.get("depuis_label", ""), contexte.get("lien", ""))))
+    if tri:
+        lignes.append(("Tri", "%s, %s" % (
+            tri, "décroissant" if sens == "desc" else "croissant")))
+    lignes.append(("Source", "Miroir de RVGI, lecture seule. MySifa n'écrit "
+                             "jamais dans l'ERP."))
+    return lignes
+
+
+def _jolie_date(s):
+    s = str(s or "").strip()
+    if len(s) >= 10:
+        return "%s/%s/%s%s" % (s[8:10], s[5:7], s[0:4], (" " + s[11:16]) if len(s) >= 16 else "")
+    return s or "—"
+
+
+@router.get("/{cle}/export")
+def erp_export(
+    cle: str,
+    request: Request,
+    q: str = Query("", max_length=120),
+    tri: str = Query("", max_length=60),
+    sens: str = Query("asc", max_length=4),
+    cols: str = Query("", max_length=2000),
+    depuis: str = Query("", max_length=40),
+    depuis_id: str = Query("", max_length=40),
+    lien: int = Query(-1, ge=-1, le=99),
+    ratt: str = Query("", max_length=10),
+):
+    """La vue courante, en classeur — pas la table, la VUE.
+
+    Mêmes filtres, même tri, mêmes colonnes dans le même ordre que l'écran au
+    moment du clic. `cols` porte l'ordre d'affichage tel que l'utilisateur l'a
+    arrangé : c'est la seule chose que le serveur ne peut pas deviner, puisque
+    déplacer une colonne est un réglage de navigateur.
+
+    L'export ne pagine pas : il ramène tout le résultat du filtre, plafonné à
+    `TAILLE_EXPORT_MAX`. Au-delà, le fichier est rendu quand même — tronqué au
+    plafond — et la feuille « Critères » le dit en toutes lettres. Un fichier
+    silencieusement incomplet serait pire qu'une erreur.
+    """
+    _exiger_acces(request)
+    ec = _ecran(cle)
+    if ratt and ratt not in ("oui", "non", "partiel", "douteux"):
+        raise HTTPException(status_code=400, detail="Filtre de rattachement inconnu.")
+
+    extra = contexte = None
+    if depuis and depuis_id and lien >= 0:
+        extra, contexte = _condition_de_lien(depuis, depuis_id, lien, cle)
+
+    filtres, filtres_col = _parametres_vue(request)
+
+    try:
+        res = miroir.lister(
+            ec, q=q, filtres=filtres, filtres_col=filtres_col,
+            tri=tri or None, sens=sens, page=1,
+            taille=miroir.TAILLE_EXPORT_MAX, plafond=miroir.TAILLE_EXPORT_MAX,
+            extra=extra, rattachement=bool(ec.get("rattachable")), filtre_ratt=ratt,
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    # Ordre des colonnes : celui de l'écran. Un nom que l'écran ne connaît pas
+    # est ignoré ; si rien ne reste, on retombe sur l'ordre du catalogue plutôt
+    # que de rendre un classeur vide.
+    dispo = {c["nom"]: c for c in res["colonnes"]}
+    if ec.get("rattachable"):
+        dispo["_ratt"] = {
+            "nom": "_ratt", "type": "ratt", "largeur": 150,
+            "label": "Départ MyExpé" if cle == "livraisons" else "Dossier de fab",
+        }
+    demandees = [n.strip() for n in cols.split(",") if n.strip()]
+    colonnes = [dispo[n] for n in demandees if n in dispo] or res["colonnes"]
+
+    lignes = res["lignes"]
+    total = res["total"] or 0
+    tronque = total > len(lignes)
+    note = None
+    if tronque:
+        note = (
+            "Le filtre retourne %s lignes ; l'export s'arrête à %s. "
+            "Resserrer le filtre — une date de début, un client — pour obtenir "
+            "le fichier complet." % (f"{total:,}".replace(",", " "),
+                                     f"{len(lignes):,}".replace(",", " "))
+        )
+
+    criteres = _criteres(ec, miroir.meta(), q, filtres, filtres_col, ratt,
+                         res.get("tri"), res.get("sens"), contexte, len(lignes))
+
+    buf = export.construire(
+        ec["label"], colonnes, lignes, enums=catalogue.ENUMS,
+        criteres=criteres, note=note, tronque=tronque,
+    )
+    nom = "myerp_%s_%s.xlsx" % (cle, datetime.now().strftime("%Y%m%d-%H%M"))
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": 'attachment; filename="%s"' % nom,
+            # Le nombre de lignes remonte au client, qui l'annonce dans un
+            # toast : sans lui, un export de 3 lignes et un de 3 000 se
+            # ressemblent.
+            "X-Erp-Lignes": str(len(lignes)),
+            "X-Erp-Tronque": "1" if tronque else "0",
+            "Access-Control-Expose-Headers": "X-Erp-Lignes, X-Erp-Tronque",
+        },
+    )

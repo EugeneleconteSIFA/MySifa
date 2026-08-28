@@ -297,6 +297,22 @@
       '@keyframes pmem-pulse{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,.45)}',
       '50%{box-shadow:0 0 0 7px rgba(251,191,36,0)}}',
       '@media (prefers-reduced-motion:reduce){.pmem-hist-btn.is-neuf{animation:none}}',
+      /* Apercu d'un scan. Il se pose PAR-DESSUS le panneau produit sans le
+         demonter : on referme, on est revenu exactement ou on en etait — la
+         production passee qu'on etait en train de lire. */
+      '.pmem-doc-ov{position:fixed;inset:0;background:rgba(0,0,0,.66);z-index:2300;',
+      'display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box}',
+      '.pmem-doc-panel{background:var(--card);border:1px solid var(--border);border-radius:14px;',
+      'width:min(1100px,100%);height:100%;display:flex;flex-direction:column;overflow:hidden;',
+      'box-shadow:0 24px 64px rgba(0,0,0,.45)}',
+      '.pmem-doc-hd{display:flex;align-items:center;gap:12px;padding:11px 14px;',
+      'border-bottom:1px solid var(--border);flex-shrink:0}',
+      '.pmem-doc-t{font-size:14px;font-weight:800;color:var(--text);white-space:nowrap}',
+      '.pmem-doc-m{font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;',
+      'white-space:nowrap;min-width:0}',
+      // Le PDF occupe toute la bande restante : c'est lui qu'on est venu voir.
+      '.pmem-doc-frame{flex:1;width:100%;border:none;background:var(--bg);min-height:0}',
+      '.pmem-doc-load{padding:26px 12px;text-align:center;font-size:13px;color:var(--muted)}',
     ].join('');
     document.head.appendChild(s);
   }
@@ -310,12 +326,19 @@
   var contenantInline = null;
 
   function close() {
+    fermerApercuScan();
     var ov = document.getElementById(OVERLAY_ID);
     if (ov) ov.remove();
     document.removeEventListener('keydown', onKey);
   }
 
-  function onKey(e) { if (e.key === 'Escape') close(); }
+  function onKey(e) {
+    if (e.key !== 'Escape') return;
+    // Un apercu de scan ouvert par-dessus se ferme en premier : Echap ne doit
+    // pas renvoyer le conducteur a la case depart en un seul appui.
+    if (document.getElementById('pmem-doc-overlay')) return;
+    close();
+  }
 
   function mount(node) {
     ensureStyle();
@@ -334,6 +357,104 @@
     ov.appendChild(node);
     document.body.appendChild(ov);
     document.addEventListener('keydown', onKey);
+  }
+
+  // ── Apercu d'un scan, dans MySifa ──────────────────────────────────
+  // Ouvrir le PDF dans un onglet coutait plusieurs secondes : Chrome monte une
+  // page neuve, charge son lecteur PDF, et l'operateur perd de vue le panneau
+  // qu'il lisait. L'apercu se pose ici par-dessus le panneau, dans la meme
+  // page ; on le referme et on est revenu ou on en etait.
+  var DOC_OV_ID = 'pmem-doc-overlay';
+  var docsPrecharges = {};
+
+  function docUrl(id) { return '/api/produits/documents/' + id + '/pdf'; }
+
+  // Le survol precede le clic de quelques centaines de millisecondes : de quoi
+  // avoir le fichier en cache avant meme que l'iframe le demande. Le serveur
+  // autorise desormais le cache navigateur sur ces scans (ils ne changent
+  // jamais), donc la requete n'est faite qu'une fois par document.
+  function prechargerScan(id) {
+    if (!id || docsPrecharges[id]) return;
+    docsPrecharges[id] = true;
+    try {
+      fetch(docUrl(id), { credentials: 'same-origin', cache: 'force-cache' })
+        // Le corps est lu et jete : c'est sa lecture complete qui fait entrer
+        // le fichier dans le cache du navigateur. Une reponse laissee en
+        // suspens n'y arrive pas.
+        .then(function (r) { return r.ok ? r.blob() : null; })
+        .then(function () {})
+        .catch(function () { docsPrecharges[id] = false; });
+    } catch (e) { docsPrecharges[id] = false; }
+  }
+
+  function fermerApercuScan() {
+    var ov = document.getElementById(DOC_OV_ID);
+    if (ov) ov.remove();
+    document.removeEventListener('keydown', onDocKey);
+  }
+
+  function onDocKey(e) {
+    if (e.key !== 'Escape') return;
+    // L'apercu se ferme seul : le panneau produit qui est dessous reste ouvert.
+    e.stopPropagation();
+    fermerApercuScan();
+  }
+
+  function apercuScan(doc) {
+    if (!doc || !doc.id) return;
+    ensureStyle();
+    fermerApercuScan();
+
+    var titre = 'OF ' + (doc.of_numero || '—');
+    var metas = [doc.no_dossier ? 'dossier ' + doc.no_dossier : null,
+                 doc.machine || null, doc.client || null,
+                 doc.fichier_origine || null].filter(Boolean).join(' \u00b7 ');
+
+    var frame = el('iframe', {
+      className: 'pmem-doc-frame',
+      // #view=FitH : la page arrive a la largeur du cadre, sans reglage manuel.
+      src: docUrl(doc.id) + '#view=FitH',
+      title: 'Scan ' + titre,
+    });
+
+    var panneau = el('div', { className: 'pmem-doc-panel' }, [
+      el('div', { className: 'pmem-doc-hd' }, [
+        el('span', { className: 'pmem-doc-t', text: titre }),
+        metas ? el('span', { className: 'pmem-doc-m', text: metas }) : null,
+        el('span', { style: 'flex:1' }),
+        // La porte de sortie vers l'onglet reste ouverte : impression, zoom au
+        // clavier, second ecran — l'apercu ne doit pas retirer ce qui existait.
+        el('button', {
+          type: 'button', className: 'pmem-btn pmem-btn-sm',
+          text: 'Ouvrir dans un onglet',
+          onclick: function () { window.open(docUrl(doc.id), '_blank'); },
+        }),
+        el('button', {
+          className: 'pmem-x', type: 'button', title: 'Fermer l\'apercu',
+          onclick: fermerApercuScan, text: '\u00d7',
+        }),
+      ]),
+      frame,
+    ]);
+
+    var ov = el('div', { className: 'pmem-doc-ov', id: DOC_OV_ID }, [panneau]);
+    ov.addEventListener('click', function (e) { if (e.target === ov) fermerApercuScan(); });
+    document.body.appendChild(ov);
+    document.addEventListener('keydown', onDocKey);
+  }
+
+  // Bouton d'ouverture d'un scan — un seul endroit, pour que les trois listes
+  // (productions, documents, file de scans) se comportent pareil.
+  function boutonScan(doc, label) {
+    var b = el('button', {
+      type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-doc',
+      title: 'Apercu du scan dans MySifa',
+      text: label || 'Ouvrir le scan',
+      onclick: function (e) { e.stopPropagation(); apercuScan(doc); },
+    });
+    b.addEventListener('mouseenter', function () { prechargerScan(doc.id); });
+    b.addEventListener('focus', function () { prechargerScan(doc.id); });
+    return b;
   }
 
   function panel(header, tabs, body) {
@@ -603,14 +724,11 @@
       if (docs.length) {
         entete.push(el('span', { style: 'flex:1' }));
         docs.forEach(function (doc) {
-          entete.push(el('button', {
-            type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-doc',
-            // L'en-tete aligne sur la ligne de base : un bouton s'y poserait
-            // de travers a cote du texte.
-            style: 'align-self:center',
-            onclick: function () { window.open('/api/produits/documents/' + doc.id + '/pdf', '_blank'); },
-            text: 'Ouvrir le scan' + (doc.of_numero ? ' ' + doc.of_numero : ''),
-          }));
+          var b = boutonScan(doc, 'Ouvrir le scan' + (doc.of_numero ? ' ' + doc.of_numero : ''));
+          // L'en-tete aligne sur la ligne de base : un bouton s'y poserait
+          // de travers a cote du texte.
+          b.style.alignSelf = 'center';
+          entete.push(b);
         });
       }
 
@@ -794,11 +912,7 @@
         }));
       }
       enfants.push(el('div', { className: 'pmem-chips' }, [
-        el('button', {
-          type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-doc',
-          onclick: function () { window.open('/api/produits/documents/' + doc.id + '/pdf', '_blank'); },
-          text: 'Ouvrir le scan',
-        }),
+        boutonScan(doc, 'Ouvrir le scan'),
         // Le fichier d'origine porte souvent une precision que la base n'a
         // pas (« marche 748 », « L1 », « Reliquat ») : on la garde visible.
         doc.fichier_origine
@@ -841,11 +955,22 @@
     ));
   }
 
+  // Un numero de dossier porte un slash dans la moitie des cas (« 1068/0002 -
+  // Reliquat 2 »). Dans le chemin, meme encode en %2F, il est redecode avant le
+  // routage : l'appel tombait sur la route fourre-tout de la fiche produit, qui
+  // repondait « Aucun dossier de production rattache a la reference
+  // dossier/1068/0002 - .../historique ». En parametre de requete, aucun
+  // caractere du numero n'a de sens pour le routeur.
+  function urlHistorique(noDossier) {
+    return '/api/produits/dossier-historique?no_dossier='
+         + encodeURIComponent(noDossier || '');
+  }
+
   async function recharger() {
     if (state.mode === 'liste') { await chargerListe(); return; }
     if (state.mode === 'rattachement') { await chargerScans(); return; }
     if (state.mode === 'historique' && state.noDossier) {
-      state.data = await api('/api/produits/dossier/' + encodeURIComponent(state.noDossier) + '/historique');
+      state.data = await api(urlHistorique(state.noDossier));
     } else if (state.data && state.data.ref_produit_norm) {
       state.data = await api('/api/produits/' + encodeURI(state.data.ref_produit_norm));
     }
@@ -866,7 +991,7 @@
     await chargerTypes();
     state = { tab: 'series', data: null, mode: 'historique', noDossier: noDossier, docs: null, sel: null };
     try {
-      state.data = await api('/api/produits/dossier/' + encodeURIComponent(noDossier) + '/historique');
+      state.data = await api(urlHistorique(noDossier));
     } catch (e) { toast(e.message || 'Historique indisponible.', 'danger'); return; }
     if (!state.data || !state.data.disponible) { toast('Aucun historique pour ce produit.'); return; }
     renderCourant();
@@ -1157,13 +1282,7 @@
         el('td', { title: d.chemin_origine || '', text: d.fichier_origine || '—' }),
       ]);
       var tdAct = el('td', {});
-      tdAct.appendChild(el('button', {
-        type: 'button', className: 'pmem-btn pmem-btn-sm pmem-btn-doc', text: 'Ouvrir',
-        onclick: function (e) {
-          e.stopPropagation();
-          window.open('/api/produits/documents/' + d.id + '/pdf', '_blank');
-        },
-      }));
+      tdAct.appendChild(boutonScan(d, 'Ouvrir'));
       tr.appendChild(tdAct);
       tr.style.cursor = 'default';
       return tr;

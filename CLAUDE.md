@@ -1114,6 +1114,7 @@ de MyStock. En cas de doute sur un ajout à `/erp` : demander.
 | `scripts/sync_rvgi.ps1` | Export + zip + envoi HTTPS. Tâche planifiée, 5 h et 12 h 30. |
 | `app/services/erp_mirror.py` | Connexion `mode=ro`, moteur de liste générique, sentinelles. |
 | `app/services/erp_catalogue.py` | Les 27 écrans, en déclaratif. |
+| `app/services/erp_export.py` | La vue courante en `.xlsx`. Ne décide rien, écrit. |
 | `app/routers/erp.py` | API lecture seule, `ROLES_ADMIN`. Aucun verbe d'écriture. |
 | `app/web/erp_page.py` | La page `/erp`. |
 | `app/routers/api_bridge.py` | `POST /api/bridge/erp/miroir` — réception des exports. |
@@ -1193,6 +1194,49 @@ raté laisse le précédent en place.
 dans le `localStorage` du navigateur, par écran. C'est un confort d'affichage,
 pas une donnée : elle ne suit pas l'utilisateur d'un poste à l'autre. Si ça doit
 changer, c'est une table de préférences côté serveur.
+
+### Filtrer et exporter une vue
+
+Deux mécanismes de filtre cohabitent, volontairement.
+
+**Le rail de gauche** porte les filtres MÉTIER déclarés au catalogue
+(`"filtres"` de l'écran) : Position, Client, plage de dates. Ce sont eux qui
+portent les valeurs par défaut — un carnet de commandes s'ouvre sur « En
+cours ». Ils voyagent en `f_<nom>`.
+
+**Les en-têtes de colonne** portent un filtre libre sur n'importe quelle
+colonne AFFICHÉE, avec un opérateur : contient, ne contient pas, est égal /
+différent, commence / finit par, supérieur, supérieur ou égal, inférieur,
+inférieur ou égal, compris entre, est vide, n'est pas vide. Ils voyagent en
+`c_<colonne>=<operateur>:<valeur>` (`entre` prend `v1|v2`). Les deux jeux se
+combinent en ET ; un filtre d'en-tête n'efface jamais un filtre de rail.
+
+Trois choses à ne pas défaire :
+
+- **Les opérateurs sont déclarés côté serveur** (`OPS_PAR_FAMILLE` dans
+  `erp_mirror.py`) et servis par `/api/erp/meta`. La page n'en redéfinit aucun.
+  Une liste recopiée des deux côtés finit par proposer un opérateur que le
+  serveur refuse.
+- **Rien du client n'entre dans le SQL.** Le nom de colonne est résolu contre
+  les colonnes de l'écran — donc contre le catalogue —, l'opérateur contre la
+  table, la valeur passe en paramètre lié, et un `%` tapé par l'utilisateur est
+  échappé au lieu de devenir un joker.
+- **« Est vide » connaît les sentinelles.** Une date à `30/11/1999`, un prix à
+  `0`, un maximum à `99999999999.99` s'affichent comme « rien » via
+  `nettoyer()` : le filtre dit la même chose, sinon « est vide » ne ramènerait
+  aucune des lignes qui montrent un tiret. Même logique pour les dates, toujours
+  comparées sur `substr(...,1,10)` — le miroir les stocke avec une heure.
+
+**L'export** (`GET /api/erp/{ecran}/export`, bouton dans le pied de grille)
+rejoue exactement la requête de la vue et rend un `.xlsx` : mêmes filtres, même
+tri, mêmes colonnes dans l'ordre où l'utilisateur les a rangées — c'est le
+paramètre `cols`, la seule chose que le serveur ne peut pas deviner puisque
+déplacer une colonne est un réglage de navigateur. Il ne pagine pas : il ramène
+tout le résultat, plafonné à `TAILLE_EXPORT_MAX` (20 000). Au-delà le fichier
+sort quand même, tronqué, et la feuille « Critères » le dit en toutes lettres —
+un fichier silencieusement incomplet serait pire qu'une erreur. Les nombres
+sortent en nombres et les dates en dates, avec leur format : une quantité
+écrite en texte ne se somme pas, et c'est tout l'intérêt du fichier.
 
 ---
 
