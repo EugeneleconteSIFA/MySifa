@@ -403,6 +403,40 @@ def test_machine_sans_donnee():
              svc.comptes_rendus_periode(conn, SEMAINE_DEBUT, SEMAINE_FIN), [])
 
 
+def test_recherche_tous_dossiers():
+    print("\n12 bis. La recherche atteint n'importe quel dossier")
+    conn = base()
+    # Un dossier cloture il y a trois mois, hors de toute periode courante.
+    saisie(conn, -130000, "03", "production", no_dossier="D-300", operateur="Marc")
+    saisie(conn, -129940, "89", "personnel", no_dossier="D-300", operateur="Marc",
+           metrage_reel=5000)
+    # Un dossier encore EN COURS : aucune saisie de fin.
+    saisie(conn, 0, "02", "calage", no_dossier="D-400", operateur="Sophie")
+    saisie(conn, 40, "03", "production", no_dossier="D-400", operateur="Sophie")
+    conn.commit()
+
+    verifier("terme trop court ignore", svc.rechercher_dossiers(conn, "D"), [])
+
+    r = {d["no_dossier"]: d for d in svc.rechercher_dossiers(conn, "D-")}
+    verifier("le dossier ancien est trouve", "D-300" in r, True)
+    verifier("le dossier en cours aussi", "D-400" in r, True)
+    verifier("etat de cloture correct (ancien)", r["D-300"]["cloture"], True)
+    verifier("etat de cloture correct (en cours)", r["D-400"]["cloture"], False)
+
+    # Recherche par client, pas seulement par numero.
+    verifier("recherche par client",
+             len(svc.rechercher_dossiers(conn, "Client Test")) >= 2, True)
+
+    # Et le compte-rendu s'ouvre sur les deux, cloture ou non.
+    verifier("compte-rendu d'un dossier ancien",
+             svc.compte_rendu(conn, "D-300")["existe"], True)
+    cr = svc.compte_rendu(conn, "D-400")
+    verifier("compte-rendu d'un dossier en cours", cr["existe"], True)
+    verifier("et il se sait non cloture", cr["identite"]["cloture"], False)
+    verifier("un dossier en cours n'exige pas d'info prod",
+             [v["cle"] for v in cr["vigilance"]], [])
+
+
 def test_minutes_txt():
     print("\n13. Format des durees")
     verifier("moins d'une heure", svc._minutes_txt(45), "45 min")
@@ -425,6 +459,7 @@ if __name__ == "__main__":
     test_ras_non_substantiel()
     test_retour_atelier()
     test_machine_sans_donnee()
+    test_recherche_tous_dossiers()
     test_minutes_txt()
 
     print("\n" + "=" * 60)
