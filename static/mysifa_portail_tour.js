@@ -37,12 +37,6 @@
       texte: 'L\'étoile met une application en favori : elle remonte en première ' +
              'rangée, et vous pouvez masquer toutes les autres.',
     },
-    {
-      cible: '.msf-rec-bar',
-      titre: 'Reprenez où vous en étiez',
-      texte: 'Les derniers écrans que vous avez ouverts restent à portée, ' +
-             'même depuis un autre poste.',
-    },
   ];
 
   var etat = { i: 0, etapes: [], voile: null, trou: null, carte: null };
