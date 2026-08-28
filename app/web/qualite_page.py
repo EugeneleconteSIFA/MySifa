@@ -60,7 +60,7 @@ QUALITE_HTML = r"""<!DOCTYPE html>
 <title>Qualité — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
-<link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <script>try{if(localStorage.getItem('mysifa_theme')==='light')document.documentElement.classList.add('light-pre');}catch(e){}</script>
 <script src="/static/mysifa_theme.js"></script>

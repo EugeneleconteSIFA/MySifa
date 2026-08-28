@@ -40,7 +40,7 @@ MESSAGES_HTML = r"""<!DOCTYPE html>
 <meta name="theme-color" content="#0a0e17">
 <title>Messages — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
-<link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_chat_nav.css">
 <link rel="stylesheet" href="/static/support_widget.css">

@@ -8,7 +8,7 @@ Fixes:
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from config import APP_ORG_NAME, STOCK_UNITE_VENTE_DEFAUT
+from config import APP_VERSION, APP_ORG_NAME, STOCK_UNITE_VENTE_DEFAUT
 from services.auth_service import get_current_user, user_has_app_access
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
@@ -72,7 +72,7 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="manifest" href="/manifest-stock.webmanifest">
 <meta name="apple-mobile-web-app-title" content="MyStock">
 <link rel="stylesheet" href="/static/support_widget.css">
-<link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css">
 <link rel="stylesheet" href="/static/mysifa_dock.css">
@@ -21458,3 +21458,9 @@ init();
 </html>"""
 
 STOCK_HTML = STOCK_HTML.replace("/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK)
+
+# Version des assets : le lien vers static/mysifa_theme.css doit changer
+# d'URL à chaque version, sinon un navigateur qui a le fichier en cache
+# depuis l'ancien régime (max-age=86400) continue de servir une feuille
+# de style sans les tokens de couleur — la page s'affiche en noir et blanc.
+STOCK_HTML = STOCK_HTML.replace("__V_LABEL__", "v" + APP_VERSION)

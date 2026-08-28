@@ -9,7 +9,7 @@ from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.services.auth_service import get_current_user
-from config import ROLES_PLANNING_RH_VIEW
+from config import APP_VERSION, ROLES_PLANNING_RH_VIEW
 
 router = APIRouter()
 
@@ -50,7 +50,7 @@ PLANNING_RH_HTML = r"""<!DOCTYPE html>
 <link rel="manifest" href="/manifest-planning-rh.webmanifest">
 <meta name="apple-mobile-web-app-title" content="Planning RH">
 <link rel="stylesheet" href="/static/support_widget.css">
-<link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -3368,3 +3368,9 @@ window.addEventListener('hashchange',function(){try{setTab(_readPrhTab(),{silent
 <script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>"""
+
+# Version des assets : le lien vers static/mysifa_theme.css doit changer
+# d'URL à chaque version, sinon un navigateur qui a le fichier en cache
+# depuis l'ancien régime (max-age=86400) continue de servir une feuille
+# de style sans les tokens de couleur — la page s'affiche en noir et blanc.
+PLANNING_RH_HTML = PLANNING_RH_HTML.replace("__V_LABEL__", "v" + APP_VERSION)

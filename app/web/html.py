@@ -84,7 +84,7 @@ _FRONTEND_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <meta name="mobile-web-app-capable" content="yes">
 <title>__PAGE_TITLE__</title>
 <link rel="stylesheet" href="/static/support_widget.css">
-<link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css">
 <link rel="stylesheet" href="/static/mysifa_dock.css">

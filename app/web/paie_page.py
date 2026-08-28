@@ -1,3 +1,4 @@
+from config import APP_VERSION
 """MySifa — Page Gestion des Paies
 Route : /paie
 Accès : superadmin + direction + administration
@@ -41,7 +42,7 @@ PAIE_HTML = r"""<!DOCTYPE html>
 <title>Gestion des Paies — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/support_widget.css">
-<link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
@@ -927,3 +928,9 @@ if (sessionStorage.getItem(PW_KEY) === '1') {
 <script src="/static/mysifa_impersonate.js"></script>
 </body>
 </html>"""
+
+# Version des assets : le lien vers static/mysifa_theme.css doit changer
+# d'URL à chaque version, sinon un navigateur qui a le fichier en cache
+# depuis l'ancien régime (max-age=86400) continue de servir une feuille
+# de style sans les tokens de couleur — la page s'affiche en noir et blanc.
+PAIE_HTML = PAIE_HTML.replace("__V_LABEL__", "v" + APP_VERSION)
