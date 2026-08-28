@@ -368,3 +368,113 @@ ce point précis.
 `data/production.db` fait 0 octet — ni FastAPI ni données réelles ici. Le
 service, ses calculs et le JS sont vérifiés (`compileall`, `node --check`,
 13 cas de test), le rendu réel des deux onglets ne l'est pas.
+
+### 5 bis. Deuxième passe — période jour et recherche libre
+
+Retour d'usage : le module était invisible depuis l'écran réellement utilisé
+(MyProd → Production → Rapport hebdo), la maille semaine ne couvrait pas le
+point de production du matin, et la liste ne donnait accès qu'aux dossiers
+clôturés dans la période.
+
+- **Sélecteur de période** `jour` / `semaine`, avec raccourcis Hier /
+  Aujourd'hui / Semaine passée. **Le jour « hier » est le défaut** : c'est la
+  vue du point de production du matin. La maille semaine reste à un clic pour
+  la feuille affichée à la machine.
+- **Recherche libre** (`/api/rapports-prod/recherche`) sur numéro de dossier,
+  client ou désignation. Elle atteint **tout dossier portant des saisies**,
+  sans condition de date ni de clôture — donc aussi un dossier en cours ou clos
+  il y a trois mois, ce qui est le cas le plus utile quand on reprend une
+  référence. La liste de période reste, elle, limitée aux dossiers clôturés :
+  les deux usages sont distincts et l'écran le dit.
+- **Lien direct** : `/rapports-prod?dossier=D-501` ouvre le compte-rendu.
+- **Accès depuis MyProd** : bouton « Comptes-rendus par dossier et retour
+  atelier → » dans la barre de l'onglet Rapport hebdo. Le rapport hebdo agrège,
+  le compte-rendu détaille : les deux se lisent ensemble.
+
+Un dossier non clôturé ne déclenche pas le point de vigilance « info prod
+absente » — la note n'est due qu'à la clôture. Cas de test dédié.
+
+`tests/test_rapport_dossier.py` couvre maintenant 14 cas.
+
+---
+
+## 6. Troisième passe — le rapport hebdo est remplacé
+
+Décision d'Eugène, 28/08/2026 : le retour de production devient le seul objet.
+Le rapport hebdomadaire disparaît entièrement — onglet, page, archive et envoi
+email compris. La liste d'arbitrage des §1 à §4 devient donc caduque sur ses
+rangs 1 à 6 : ils portaient sur un module qui n'existe plus.
+
+### Ce qui a été supprimé
+
+| Fichier | Contenu |
+|---|---|
+| `app/services/weekly_report.py` | 1904 lignes — collecte, `ROLE_SECTIONS`, 11 renderers |
+| `app/routers/reports.py` | `/preview`, `/sections`, `/list`, `/send` |
+| `app/web/reports_page.py` | page `/reports/weekly` |
+
+Plus le désenregistrement dans `main.py`, l'onglet « Rapport hebdo » de MyProd
+(dans les deux copies : `static/mysifa_prod_core.js`, servi, et `app/web/html.py`,
+monolithe de secours), et l'entrée `reports_page.py` du snapshot
+`tests/theme_resolu.json`.
+
+Les archives déjà écrites dans `data/weekly_reports/` sont laissées en place :
+c'est de l'historique, plus personne n'écrit dedans.
+
+**Conséquence assumée, à ne pas perdre de vue : plus aucun email de production
+ne part.** Direction, administration, fabrication, logistique, comptabilité,
+expédition et commercial recevaient un rapport hebdomadaire ; ils ne reçoivent
+plus rien. Rebâtir un envoi sur le nouveau module est le prochain chantier
+naturel — et il devra reprendre le garde-fou anti-double-envoi du rang 1, qui
+n'a jamais été implémenté.
+
+### Ce qui remplace
+
+L'onglet MyProd → Production s'appelle désormais **« Retour de prod »** et
+consomme `/api/rapports-prod`. Il n'est plus réservé au superadmin : il s'ouvre
+aux services de production, l'API filtrant sur `ROLES_PROD`.
+
+Le rendu ne vit ni dans la page ni dans l'onglet, mais dans
+`static/mysifa_retour_prod.js` + `static/mysifa_retour_prod.css`, chargés par
+les deux. C'était la seule façon de tenir la règle « deux écrans ne doivent
+jamais donner deux chiffres pour le même dossier » : tant que le rendu est
+écrit deux fois, il finit par diverger. La page `/rapports-prod` est passée de
+885 à 484 lignes en perdant sa copie.
+
+`brancher()` accepte une racine DOM, ce qui permet à MyProd de câbler les
+éditions **avant** insertion — son `render()` remplace l'arbre à chaque passe,
+un binding posé sur `document` ne survivrait pas.
+
+### Édition directe
+
+Deux écritures, sans migration, en réutilisant ce qui existait :
+
+| Ce qu'on corrige | Endpoint | Service réutilisé |
+|---|---|---|
+| Info prod d'un dossier | `POST /api/rapports-prod/dossier/{no}/info-prod` | `produit_memoire.enregistrer_info_prod` |
+| Explication d'un seuil d'arrêt | `POST /api/rapports-prod/seuil/{saisie_id}/explication` | `arret_seuils.enregistrer_explication` |
+
+Ce sont exactement les deux manques que l'écran signale (« info prod absente »,
+« sans explication — à poser au point de production »). Le compte-rendu est
+l'endroit où le trou se voit : c'est donc là qu'il doit se combler, sans
+renvoyer vers la Traçabilité. `enregistrer_explication` ne committait pas —
+l'endpoint s'en charge.
+
+### Deux pièges rencontrés
+
+1. **Un mot parasite invisible à `node --check`.** Une concaténation contenant
+   un identifiant égaré passait la vérification syntaxique : l'insertion
+   automatique de point-virgule coupait le `return` en deux, et la fonction ne
+   rendait plus que sa balise ouvrante. Seul un appel réel le montre — d'où
+   `tests/test_retour_prod_rendu.js`, qui exécute le module (rendu à vide,
+   lignes complètes, échappement, formats).
+2. **`api()` de MyProd lève sur toute réponse non-OK.** Un dossier sans saisie
+   (404) aurait cassé l'onglet entier. Chaque appel est isolé, le message est
+   gardé en état et affiché à sa place.
+
+### Vérification
+
+`compileall` sur `app/` et `main.py` · `node --check` sur les 5 blocs JS
+(module partagé, `mysifa_prod_core.js`, `mysifa_cmdk.js`, et les scripts
+extraits de `rapports_prod_page.py` et `html.py`) · 9 suites Python + la suite
+JS au vert. **Le boot reste à faire sur v1.**

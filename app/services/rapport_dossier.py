@@ -18,9 +18,10 @@ Deux principes de conception :
    `tests/test_rapport_dossier.py`) et les codes d'operation arrivent en
    parametres, jamais en dur.
 
-2. Les chiffres reprennent a l'identique les conventions de
-   `app/services/weekly_report.py` (`_dossiers_fab_detail`), pour qu'un dossier
-   n'affiche jamais deux valeurs selon l'ecran :
+2. Les chiffres reprennent les conventions du rapport hebdomadaire qui
+   precedait ce module (`app/services/weekly_report.py`, supprime le
+   28/08/2026 — voir l'historique git), pour qu'un dossier n'affiche jamais
+   deux valeurs selon l'ecran :
 
    - duree d'une saisie = ecart avec la saisie suivante DU MEME OPERATEUR,
      saisies annulees exclues (`est_annule`) ;
@@ -30,12 +31,12 @@ Deux principes de conception :
      une valeur unique n'est retenue que sous `SEUIL_COMPTEUR`.
 
    Une seule chose est calculee plus largement, et elle est nommee autrement :
-   `weekly_report` intitule « calage » le seul code 02, alors que le referentiel
-   compte plusieurs codes de calage et de changement. Ici la ligne s'appelle
-   « calage et changements » et couvre toute la categorie.
+   l'ancien rapport intitulait « calage » le seul code 02, alors que le
+   referentiel compte plusieurs codes de calage et de changement. Ici la ligne
+   s'appelle « calage et changements » et couvre toute la categorie.
 
-Sur le plafonnement : l'ecart entre deux saisies n'est pas plafonne, pour rester
-aligne sur le rapport hebdomadaire. Mais une journee terminee sans code de fin
+Sur le plafonnement : l'ecart entre deux saisies n'est pas plafonne, comme dans
+l'ancien rapport hebdomadaire. Mais une journee terminee sans code de fin
 laisse une saisie ouverte jusqu'au lendemain, et le temps qui en sort n'est pas
 du temps machine. Ces ecarts sont donc comptes dans `minutes` ET isoles dans
 `minutes_douteuses`, ce qui permet a l'ecran de le dire au lieu de le taire.
@@ -55,7 +56,7 @@ from typing import Any, Dict, List, Optional, Sequence
 ECART_MAX_MIN = 480.0
 
 # Au-dela de ce metrage, une valeur unique relevee en fin de dossier est un
-# compteur machine brut, pas une production. Meme seuil que weekly_report.
+# compteur machine brut, pas une production. Seuil repris de l'ancien rapport.
 SEUIL_COMPTEUR = 1_000_000.0
 
 # Categories du referentiel operations.json, telles qu'elles sont stockees sur
@@ -277,7 +278,7 @@ def _minutes_de(temps: Dict[str, Any], categorie: str) -> float:
 def metrage_dossier(saisies: List[Dict[str, Any]], code_fin: str) -> Dict[str, Any]:
     """Metrage produit, deduit des releves de compteur en fin de session.
 
-    Convention reprise de weekly_report : l'operateur releve un compteur
+    Convention reprise de l'ancien rapport : l'operateur releve un compteur
     machine, donc plusieurs sessions donnent plusieurs valeurs croissantes.
     Le metrage produit est leur ecart. Une valeur unique n'est retenue que si
     elle ressemble a une production et non a un compteur.
@@ -853,3 +854,60 @@ def machines_periode(conn, debut: str, fin: str, code_fin: str = "89") -> List[s
         (code_fin, debut, fin),
     ).fetchall()
     return [r["machine"] for r in rows]
+
+
+# ─── Recherche libre ─────────────────────────────────────────────────────────
+
+def rechercher_dossiers(conn, terme: str, limite: int = 20,
+                        code_fin: str = "89") -> List[Dict[str, Any]]:
+    """Dossiers portant des saisies, cherches sur numero, client ou designation.
+
+    La liste d'une periode ne montre que les dossiers CLOTURES pendant cette
+    periode. Or un compte-rendu se consulte aussi sur un dossier encore en
+    cours, ou clos il y a trois mois — c'est meme la le plus utile, quand on
+    reprend une reference. Cette recherche ouvre donc `compte_rendu` sur
+    n'importe quel dossier ayant au moins une saisie, sans condition de date
+    ni de cloture.
+    """
+    terme = _txt(terme)
+    if len(terme) < 2:
+        return []
+    cols = _colonnes(conn, "production_data")
+    if not cols:
+        return []
+    filtre_annule = " AND COALESCE(est_annule, 0) = 0" if "est_annule" in cols else ""
+    like = f"%{terme}%"
+    prefixe = f"{terme}%"
+    n = max(1, min(int(limite), 100))
+
+    rows = conn.execute(
+        f"""SELECT TRIM(no_dossier) AS no_dossier,
+                   MAX(client)      AS client,
+                   MAX(designation) AS designation,
+                   MAX(machine)     AS machine,
+                   MAX(date_operation) AS derniere_saisie,
+                   MIN(date_operation) AS premiere_saisie,
+                   COUNT(*)         AS nb_saisies,
+                   MAX(CASE WHEN operation_code = ? THEN 1 ELSE 0 END) AS cloture
+              FROM production_data
+             WHERE TRIM(COALESCE(no_dossier, '')) <> ''{filtre_annule}
+               AND (LOWER(COALESCE(no_dossier, ''))  LIKE LOWER(?)
+                 OR LOWER(COALESCE(client, ''))      LIKE LOWER(?)
+                 OR LOWER(COALESCE(designation, '')) LIKE LOWER(?))
+             GROUP BY TRIM(no_dossier)
+             ORDER BY CASE WHEN LOWER(TRIM(no_dossier)) LIKE LOWER(?) THEN 0 ELSE 1 END,
+                      derniere_saisie DESC
+             LIMIT ?""",
+        (code_fin, like, like, like, prefixe, n),
+    ).fetchall()
+
+    return [{
+        "no_dossier": r["no_dossier"],
+        "client": _txt(r["client"]),
+        "designation": _txt(r["designation"]),
+        "machine": _txt(r["machine"]),
+        "derniere_saisie": _txt(r["derniere_saisie"]),
+        "premiere_saisie": _txt(r["premiere_saisie"]),
+        "nb_saisies": int(r["nb_saisies"] or 0),
+        "cloture": bool(r["cloture"]),
+    } for r in rows]

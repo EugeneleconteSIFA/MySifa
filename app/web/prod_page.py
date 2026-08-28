@@ -80,6 +80,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
      ressert l'ancienne et la section s'affiche nue. -->
 <link rel="stylesheet" href="/static/mysifa_myprod_shell.css?v=__V_LABEL__-pmem13">
 <link rel="stylesheet" href="/static/mysifa_prod_core.css?v=__V_LABEL__">
+<link rel="stylesheet" href="/static/mysifa_retour_prod.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_print_modal.css?v=__V_LABEL__">
 <script src="/static/motion.js?v=__V_LABEL__" defer></script>
 <link rel="stylesheet" href="/static/mysifa_perf.css">
@@ -95,6 +96,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <script src="/static/mysifa_theme.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_user_chip.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
+<script src="/static/mysifa_retour_prod.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_prod_core.js?v=__V_LABEL__-pmem13"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>

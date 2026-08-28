@@ -242,7 +242,7 @@
     if(u.subPage!==undefined||u.ofSubTab!==undefined)_syncProdHash();
   }
 
-  var _PROD_SUB_TABS=['kpis','saisies','erreurs','rapport'];
+  var _PROD_SUB_TABS=['kpis','saisies','erreurs','retour'];
   var _OF_SUB_TABS=['of','fiche','pending','sansof'];
   function _readProdHash(){
     try{var h=(location.hash||'').replace(/^#/,'').trim();
@@ -6921,25 +6921,70 @@ function buildParams(){
 
 async function loadHist(){const d=await api('/api/dashboard/historique?'+buildParams());if(d)S.historique=d;}
 async function loadProd(){const d=await api('/api/dashboard/production?'+buildParams());if(d)S.production=d;}
-async function loadWeeklyReport(opts){
-  // Charge le rapport hebdomadaire (semaine ISO précédente par défaut).
-  // opts = {year, week, role}
-  const q = [];
-  if(opts && opts.year)  q.push('year=' +encodeURIComponent(opts.year));
-  if(opts && opts.week)  q.push('week=' +encodeURIComponent(opts.week));
-  if(opts && opts.role)  q.push('role=' +encodeURIComponent(opts.role));
-  const qs = q.length ? ('?'+q.join('&')) : '';
-  const d = await api('/api/reports/weekly/preview'+qs);
-  if(d){
-    S.weeklyReport = {
-      html: d.html || '',
-      data: d.data || null,
-      role: d.role || (opts&&opts.role) || 'superadmin',
-      year: (d.data&&d.data.week&&d.data.week.year) || (opts&&opts.year) || null,
-      week: (d.data&&d.data.week&&d.data.week.num)  || (opts&&opts.week) || null,
-      loading: false,
-    };
+async function loadRetourProd(patch){
+  // Retour de production — meme API que la page /rapports-prod, meme rendu
+  // (static/mysifa_retour_prod.js). Ne jamais reimplementer le rendu ici :
+  // deux vues du meme dossier ne doivent pas donner deux chiffres.
+  const st = Object.assign({
+    mode:'jour', jour:rpHier(), year:null, week:null,
+    machine:'', machines:[], periode:null, vue:'feuille',
+    feuille:null, lignes:null, q:'', resultats:null, dossier:null, cr:null
+  }, S.retourProd||{}, patch||{});
+
+  const qs = st.mode==='semaine'
+    ? 'mode=semaine&year='+encodeURIComponent(st.year)+'&week='+encodeURIComponent(st.week)
+    : 'mode=jour&jour='+encodeURIComponent(st.jour);
+
+  // `api()` leve sur toute reponse non-OK : un dossier sans saisie (404) ou une
+  // periode invalide casserait l'onglet entier. On isole chaque appel et on
+  // garde le message pour l'afficher a sa place, plutot que de perdre la vue.
+  st.erreur = null;
+  try {
+    const p = await api('/api/rapports-prod/periode?'+qs);
+    if(p){
+      st.periode = p;
+      st.machines = p.machines||[];
+      if(st.machines.indexOf(st.machine)<0) st.machine = st.machines[0]||'';
+    }
+
+    if(st.dossier){
+      st.cr = await api('/api/rapports-prod/dossier/'+encodeURIComponent(st.dossier));
+    } else if(st.vue==='feuille'){
+      st.feuille = st.machine
+        ? await api('/api/rapports-prod/retour-atelier?machine='+encodeURIComponent(st.machine)+'&'+qs)
+        : null;
+    } else {
+      const d = await api('/api/rapports-prod/comptes-rendus?'+qs+'&machine='+encodeURIComponent(st.machine||''));
+      st.lignes = (d&&d.lignes)||[];
+    }
+  } catch(e){
+    st.erreur = (e && e.message) || 'Erreur de chargement';
+    if(st.dossier) st.cr = null;
   }
+  S.retourProd = st;
+}
+
+function rpHier(){
+  const d=new Date(); d.setDate(d.getDate()-1);
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function rpAujourdhui(){
+  const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function rpSemainePrecedente(){
+  const d=new Date(); d.setDate(d.getDate()-7);
+  const j=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  j.setUTCDate(j.getUTCDate()+4-(j.getUTCDay()||7));
+  const a=new Date(Date.UTC(j.getUTCFullYear(),0,1));
+  return {year:j.getUTCFullYear(), week:Math.ceil((((j-a)/86400000)+1)/7)};
+}
+async function rpMaj(patch){
+  S.retourProd = Object.assign({}, S.retourProd||{}, patch);
+  render();
+  try { await loadRetourProd(patch); }
+  catch(e){ S.retourProd = Object.assign({}, S.retourProd||{}, {erreur:(e&&e.message)||'Erreur'}); }
+  render();
 }
 async function loadMachineStatus(){
   try{
@@ -7040,11 +7085,8 @@ function renderProdPage(){
     {key:'saisies', label:'Saisies', icon:'pencil'},
     {key:'erreurs', label:'Erreurs & Qualité', icon:'alert-triangle'},
   ];
-  // V1 : onglet Rapport hebdo réservé au super admin (phase de test).
-  const isSuper = !!(S.user && String(S.user.role||'').toLowerCase()==='superadmin');
-  if(isSuper){
-    allTabs.push({key:'rapport', label:'Rapport hebdo', icon:'bar-chart-2'});
-  }
+  // Retour de prod : ouvert aux services de production — l'API filtre (ROLES_PROD).
+  allTabs.push({key:'retour', label:'Retour de prod', icon:'clipboard'});
   const tabs = hideErreurs ? allTabs.filter(t=>t.key!=='erreurs') : allTabs;
   const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Production'},
     ...tabs.map(t=>h('button',{
@@ -7059,7 +7101,7 @@ function renderProdPage(){
         else{stopMachineStatusPolling();}
         if(t.key==='saisies'&&!S.saisies)  await loadSaisies();
         if(t.key==='erreurs'&&!S.historique) await loadHist();
-        if(t.key==='rapport'&&!S.weeklyReport) await loadWeeklyReport();
+        if(t.key==='retour'&&!S.retourProd) await loadRetourProd();
         render();
       }
     }, iconEl(t.icon,14),' '+t.label))
@@ -7067,60 +7109,145 @@ function renderProdPage(){
   let content;
   if(subPage==='saisies')  content = renderSaisiesWithImport();
   else if(subPage==='erreurs' && !hideErreurs) content = renderHist();
-  else if(subPage==='rapport') content = renderWeeklyReport();
+  else if(subPage==='retour') content = renderRetourProd();
   else content = renderProdKpis();
   return h('div',null, subNav, content);
 }
 
 // ── Rapport hebdomadaire ────────────────────────────────────────
-function renderWeeklyReport(){
-  const wr = S.weeklyReport;
-  if(!wr){
-    return h('div',{className:'card-empty'},'Chargement du rapport hebdomadaire...');
+function renderRetourProd(){
+  const RP = window.MySifaRetourProd;
+  const st = S.retourProd;
+  if(!RP) return h('div',{className:'card-empty'},"Module de rendu non charge (mysifa_retour_prod.js).");
+  if(!st)  return h('div',{className:'card-empty'},'Chargement du retour de production...');
+  const messageErreur = st.erreur
+    ? h('div',{className:'card',style:{padding:'14px 16px',marginBottom:'14px',
+        borderColor:'var(--warn)',color:'var(--text2)',fontSize:'13px'}}, st.erreur)
+    : null;
+
+  const champ = {background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'8px',
+                 padding:'6px 10px',color:'var(--text)',fontSize:'13px',fontFamily:'inherit'};
+  const lbl = {fontSize:'11px',fontWeight:'700',color:'var(--muted)',
+               textTransform:'uppercase',letterSpacing:'.5px'};
+  const puce = (actif)=>({background:actif?'var(--accent-bg)':'transparent',
+    border:'1px solid '+(actif?'var(--accent)':'var(--border)'),borderRadius:'999px',
+    padding:'6px 12px',fontSize:'12px',fontWeight:'600',cursor:'pointer',
+    fontFamily:'inherit',color:actif?'var(--accent)':'var(--text2)'});
+
+  // Detail d'un dossier : la liste laisse la place au compte-rendu, editable.
+  if(st.dossier){
+    const frag = h('div',{className:'card',style:{padding:'18px 20px'}});
+    frag.innerHTML = st.cr && st.cr.existe
+      ? RP.renderCR(st.cr,{fermer:false})
+      : '<div class="rp-vide">Aucune saisie pour ce dossier.</div>';
+    // Branchement AVANT insertion : h() rend un vrai noeud DOM, et le render()
+    // de MyProd remplace l'arbre a chaque passe — un binding pose sur document
+    // ne survivrait pas.
+    if(st.cr && st.cr.existe){
+      RP.brancher(st.dossier, {
+        racine: frag,
+        toast: (m,t)=>{ try{ showToast(m,t); }catch(e){} },
+        onSaved: ()=>rpMaj({})
+      });
+    }
+    return h('div',null,
+      h('div',{style:{margin:'0 0 14px'}},
+        h('button',{type:'button',style:puce(false),
+          onClick:()=>rpMaj({dossier:null,cr:null})},'← Retour a la liste')),
+      messageErreur,
+      frag);
   }
-  const isSuper = !!(S.user && String(S.user.role||'').toLowerCase()==='superadmin');
-  const weekVal = (wr.year && wr.week)
-    ? (wr.year + '-W' + String(wr.week).padStart(2,'0'))
-    : '';
-  const roles = ['superadmin','direction','administration','administration_ventes','administration_technique','fabrication','logistique','comptabilite','expedition','commercial'];
-  const changeWeek = async (e)=>{
-    const v = (e && e.target && e.target.value) || '';
-    const m = /^(\d{4})-W(\d{1,2})$/.exec(v);
-    if(!m) return;
-    S.weeklyReport = null; render();
-    await loadWeeklyReport({ year:parseInt(m[1],10), week:parseInt(m[2],10), role: wr.role });
-    render();
-  };
-  const changeRole = async (e)=>{
-    const role = (e && e.target && e.target.value) || wr.role;
-    S.weeklyReport = null; render();
-    await loadWeeklyReport({ year: wr.year, week: wr.week, role });
-    render();
-  };
-  const toolbar = h('div',{style:{display:'flex',gap:'12px',flexWrap:'wrap',alignItems:'center',margin:'0 0 14px'}},
-    h('label',{style:{fontSize:'11px',fontWeight:'700',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px'}},'Semaine'),
-    h('input',{
-      type:'week',
-      defaultValue: weekVal,
-      onChange: changeWeek,
-      style:{background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'8px',padding:'6px 10px',color:'var(--text)',fontSize:'13px',fontFamily:'inherit'}
-    }),
-    ...(isSuper ? [
-      h('label',{style:{fontSize:'11px',fontWeight:'700',color:'var(--muted)',textTransform:'uppercase',letterSpacing:'.5px',marginLeft:'8px'}},'Vue'),
-      h('select',{
-        value: wr.role,
-        onChange: changeRole,
-        style:{background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'8px',padding:'6px 10px',color:'var(--text)',fontSize:'13px',fontFamily:'inherit'}
-      }, ...roles.map(r=>h('option',{value:r,selected:r===wr.role}, r)))
-    ] : [])
+
+  const toolbar = h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap',
+                                  alignItems:'center',margin:'0 0 14px'}},
+    h('label',{style:lbl},'Periode'),
+    h('select',{value:st.mode,style:champ,onChange:async(e)=>{
+      const mode=e.target.value;
+      const sp=rpSemainePrecedente();
+      await rpMaj(mode==='semaine'?{mode:'semaine',year:sp.year,week:sp.week}
+                                  :{mode:'jour',jour:st.jour||rpHier()});
+    }},
+      h('option',{value:'jour',selected:st.mode==='jour'},'Jour'),
+      h('option',{value:'semaine',selected:st.mode==='semaine'},'Semaine')),
+    st.mode==='semaine'
+      ? h('input',{type:'week',style:champ,
+          defaultValue:(st.year&&st.week)?(st.year+'-W'+String(st.week).padStart(2,'0')):'',
+          onChange:async(e)=>{const m=/^(\d{4})-W(\d{1,2})$/.exec(e.target.value||'');
+            if(m) await rpMaj({year:parseInt(m[1],10),week:parseInt(m[2],10)});}})
+      : h('input',{type:'date',style:champ,defaultValue:st.jour||rpHier(),
+          onChange:async(e)=>{ if(e.target.value) await rpMaj({jour:e.target.value}); }}),
+    h('button',{type:'button',style:puce(st.mode==='jour'&&st.jour===rpHier()),
+      onClick:()=>rpMaj({mode:'jour',jour:rpHier()})},'Hier'),
+    h('button',{type:'button',style:puce(st.mode==='jour'&&st.jour===rpAujourdhui()),
+      onClick:()=>rpMaj({mode:'jour',jour:rpAujourdhui()})},"Aujourd'hui"),
+    h('button',{type:'button',style:puce(st.mode==='semaine'),onClick:()=>{
+      const sp=rpSemainePrecedente(); rpMaj({mode:'semaine',year:sp.year,week:sp.week});
+    }},'Semaine passee'),
+    h('label',{style:Object.assign({marginLeft:'8px'},lbl)},'Machine'),
+    h('select',{value:st.machine,style:champ,
+      onChange:async(e)=>{ await rpMaj({machine:e.target.value}); }},
+      ...((st.machines||[]).length
+          ? st.machines.map(m=>h('option',{value:m,selected:m===st.machine},m))
+          : [h('option',{value:''},'Aucune machine sur la periode')])),
+    h('div',{style:{flex:'1'}}),
+    h('button',{type:'button',style:puce(st.vue==='feuille'),
+      onClick:()=>rpMaj({vue:'feuille'})},'Feuille atelier'),
+    h('button',{type:'button',style:puce(st.vue==='liste'),
+      onClick:()=>rpMaj({vue:'liste'})},'Comptes-rendus'),
+    h('button',{type:'button',style:puce(false),
+      onClick:()=>{window.location.href='/rapports-prod';}},'Plein ecran / impression')
   );
-  // Fragment HTML retourné par le service — injecté via .innerHTML sur le noeud DOM
-  // (h() du projet est un vDOM custom, pas React → pas de dangerouslySetInnerHTML).
-  // Le fragment utilise déjà les CSS vars (--card, --text, --accent...)
-  // donc il hérite automatiquement du thème/palette parent.
-  const frag = h('div',{className:'card',style:{padding:'18px 20px'}});
-  frag.innerHTML = wr.html || '<div class="card-empty">Aucun contenu.</div>';
-  return h('div',null, toolbar, frag);
+
+  if(st.vue==='feuille'){
+    const frag = h('div',{className:'card',style:{padding:'18px 20px'}});
+    frag.innerHTML = st.feuille
+      ? RP.renderFeuille(st.feuille)
+      : '<div class="rp-vide">Aucun dossier cloture sur cette periode.</div>';
+    return h('div',null, toolbar, messageErreur, frag);
+  }
+
+  // Vue liste : recherche libre (tout dossier) + dossiers clotures sur la periode.
+  const rech = h('div',{className:'card',style:{padding:'14px 16px',marginBottom:'14px'}});
+  rech.innerHTML =
+      '<label style="display:block;font-size:11px;font-weight:600;color:var(--muted);'
+    + 'text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">'
+    + "Ouvrir le compte-rendu de n'importe quel dossier</label>"
+    + '<input type="search" id="rp-q" autocomplete="off" placeholder="N&deg; de dossier, client '
+    + 'ou designation &mdash; meme hors periode" style="width:100%;background:var(--bg);'
+    + 'border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);'
+    + 'font-size:14px;font-family:inherit">'
+    + '<div class="rp-note" style="margin-top:7px">La liste ci-dessous ne montre que les dossiers '
+    + 'clotures sur la periode. La recherche atteint tous les dossiers ayant des saisies.</div>'
+    + '<div id="rp-qres"></div>';
+  const champQ = rech.querySelector('#rp-q');
+  const boiteQ = rech.querySelector('#rp-qres');
+  champQ.value = st.q || '';
+  let minuteur = null;
+  champQ.addEventListener('input', ()=>{
+    clearTimeout(minuteur);
+    const terme = champQ.value.trim();
+    S.retourProd.q = terme;
+    minuteur = setTimeout(async ()=>{
+      if(terme.length < 2){ boiteQ.innerHTML=''; return; }
+      try {
+        const d = await api('/api/rapports-prod/recherche?q='+encodeURIComponent(terme));
+        boiteQ.innerHTML = RP.renderRecherche((d&&d.dossiers)||[], terme);
+        boiteQ.querySelectorAll('.rp-rech-item').forEach(el=>{
+          el.onclick = ()=>rpMaj({dossier:el.getAttribute('data-dossier')});
+        });
+      } catch(e){
+        boiteQ.innerHTML = '<div class="rp-note" style="margin-top:10px">'
+                         + RP.escHtml((e&&e.message)||'Erreur') + '</div>';
+      }
+    }, 250);
+  });
+
+  const tab = h('div',{className:'card',style:{padding:'0',overflow:'hidden'}});
+  tab.innerHTML = RP.renderListe(st.lignes||[]);
+  tab.querySelectorAll('tr[data-dossier]').forEach(tr=>{
+    tr.onclick = ()=>rpMaj({dossier:tr.getAttribute('data-dossier')});
+  });
+  return h('div',null, toolbar, messageErreur, rech, tab);
 }
 
 function formatJourLabel(j){
