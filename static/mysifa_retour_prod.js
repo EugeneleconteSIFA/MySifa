@@ -1,14 +1,16 @@
 /*
  * MySifa — Retour de production : rendu partage.
  *
- * Deux ecrans affichent la meme matiere : la page /rapports-prod et l'onglet
- * « Retour de prod » de MyProd. Ils consomment les memes endpoints
- * /api/rapports-prod, et ils partagent CE fichier pour le rendu — sinon les
- * deux vues divergent, et un dossier finit par afficher deux chiffres selon
- * l'endroit ou on le regarde.
+ * Rendu de l'onglet « Retour de prod » de MyProd (/prod#retour), qui consomme
+ * les endpoints /api/rapports-prod.
  *
- * Le module ne connait ni la page ni l'onglet : il rend des chaines HTML et
- * recoit ses effets de bord (toast, rafraichissement) en parametres.
+ * Le rendu vit ici, et pas dans l'onglet, pour deux raisons. D'abord parce
+ * qu'un rendu ecrit dans un ecran finit toujours par etre recopie dans le
+ * suivant, et les deux divergent : un dossier affiche alors deux chiffres
+ * selon l'endroit ou on le regarde. Ensuite parce que le module ne connait
+ * rien de son hote — il rend des chaines HTML et recoit ses effets de bord
+ * (toast, rafraichissement, racine DOM) en parametres, donc un second ecran
+ * s'en sert sans rien reecrire.
  *
  *   MySifaRetourProd.renderFeuille(data)      -> feuille atelier
  *   MySifaRetourProd.renderListe(lignes)      -> tableau des comptes-rendus
@@ -47,6 +49,20 @@
     return '<span class="rp-ecart ' + (v >= 0 ? "up" : "down") + '">'
          + (v >= 0 ? "+" : "") + v.toFixed(0).replace(".", ",") + ' %</span>';
   }
+  // La machine se regle en m/min : c'est l'unite du conducteur, celle de
+  // `produit_series.vitesse_m_min` et celle qu'affiche tout MySifa. Pas de m/h.
+  function vitesse(v) {
+    return (v === null || v === undefined || isNaN(v)) ? "—" : fnum(v, 1) + " m/min";
+  }
+
+  // « 66 » affiche a cote de « 66 - Attente matiere » : on ne repete pas le code.
+  function sansCode(operation, code) {
+    var op = String(operation || ""), c = String(code || "");
+    if (!c) return op;
+    var re = new RegExp("^\\s*" + c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*[-–]\\s*");
+    return op.replace(re, "");
+  }
+
   function dateFr(iso) {
     if (!iso) return "";
     var d = String(iso).slice(0, 10).split("-");
@@ -54,17 +70,17 @@
   }
 
   var LIB_VIGILANCE = {
-    info_prod_absente:       "dossier clôturé sans info prod",
-    seuils_sans_explication: "dossier avec un seuil d'arrêt non expliqué",
-    saisie_ouverte:          "dossier avec une saisie restée ouverte d'un jour à l'autre",
-    metrage_non_fiable:      "dossier sans métrage exploitable",
-    arrets_eleves:           "dossier passé à plus de 30 % d'arrêts"
+    info_prod_absente:       "clôturé sans info prod",
+    seuils_sans_explication: "seuil d'arrêt non expliqué",
+    saisie_ouverte:          "saisie restée ouverte",
+    metrage_non_fiable:      "métrage inexploitable",
+    arrets_eleves:           "plus de 30 % d'arrêts"
   };
   var LIB_ORIGINE = {
     info_prod:   "Info prod",
-    arret:       "Arrêt expliqué",
-    commentaire: "Commentaire de saisie",
-    annulation:  "Motif d'annulation"
+    arret:       "Arrêt",
+    commentaire: "Saisie",
+    annulation:  "Annulation"
   };
 
   function kpi(val, lbl, sub) {
@@ -82,7 +98,7 @@
       return '<div class="rp-feuille"><div class="rp-tete"><div>'
            + '<div class="rp-machine">' + escHtml(d.machine) + '</div>'
            + '<div class="rp-periode">' + escHtml(per.label) + '</div></div></div>'
-           + '<div class="rp-vide">Aucun dossier clôturé sur cette machine sur cette période.</div></div>';
+           + '<div class="rp-vide">Aucun dossier clôturé.</div></div>';
     }
 
     var h = '<div class="rp-feuille"><div class="rp-tete"><div>'
@@ -91,39 +107,37 @@
           + (per.mode === "semaine" ? ' — du ' + escHtml(per.du) + ' au ' + escHtml(per.au) : '')
           + '</div></div>';
     if ((d.conducteurs || []).length) {
-      h += '<div class="rp-equipe"><b>Aux commandes'
-         + (per.mode === "semaine" ? " cette semaine" : " ce jour-là") + '</b><br>'
+      h += '<div class="rp-equipe"><b>Aux commandes</b><br>'
          + d.conducteurs.map(escHtml).join(" · ") + '</div>';
     }
     h += '</div>';
 
-    h += '<div class="rp-bloc"><div class="rp-titre">Ce qui est sorti de la machine</div><div class="rp-kpis">'
-       + kpi(fnum(p.metrage) + ' m', "Métrage produit",
+    h += '<div class="rp-bloc"><div class="rp-titre">Production</div><div class="rp-kpis">'
+       + kpi(fnum(p.metrage) + ' m', "Métrage",
              d.dossiers + (d.dossiers > 1 ? " dossiers" : " dossier"))
-       + kpi(minutesTxt(p.minutes_production), "Temps de production",
-             p.vitesse_m_h ? fnum(p.vitesse_m_h) + " m/h" : "")
-       + kpi(minutesTxt(p.minutes_calage), "Calage et changements", "")
-       + kpi(minutesTxt(p.minutes_arret), "Arrêts et attentes",
-             p.part_arret_pct ? fnum(p.part_arret_pct, 1) + " % du temps passé" : "")
+       + kpi(minutesTxt(p.minutes_production), "Production",
+             p.vitesse_m_min ? vitesse(p.vitesse_m_min) : "")
+       + kpi(minutesTxt(p.minutes_calage), "Calage", "")
+       + kpi(minutesTxt(p.minutes_arret), "Arrêts",
+             p.part_arret_pct ? fnum(p.part_arret_pct, 1) + " % du temps" : "")
        + '</div></div>';
 
     if ((d.references || []).length) {
-      h += '<div class="rp-bloc"><div class="rp-titre">Cadence, comparée aux fois précédentes</div>'
-         + '<div class="rp-note">Cadence = métrage rapporté au temps de production et d\'arrêt, '
-         + 'arrêts compris — même calcul des deux côtés, pour que la comparaison ait un sens.</div>'
+      h += '<div class="rp-bloc"><div class="rp-titre" title="Cadence = m\u00e8tres par minute, '
+         + 'arr\u00eats compris. M\u00eame calcul des deux c\u00f4t\u00e9s.">Cadence</div>'
          + '<table class="rp-grille"><thead><tr><th>Dossier</th><th>Référence</th>'
          + '<th class="num">Métrage</th><th class="num">Cette fois</th>'
          + '<th class="num">D\'habitude</th><th class="num">Écart</th></tr></thead><tbody>';
       d.references.forEach(function (r) {
-        var hab = r.cadence_reference_m_h
-          ? fnum(r.cadence_reference_m_h) + ' m/h<div class="rp-sous">sur ' + r.series_passees
-            + (r.series_passees > 1 ? ' productions' : ' production') + '</div>'
-          : '<span class="rp-mut">1re production</span>';
+        var hab = r.cadence_reference_m_min
+          ? vitesse(r.cadence_reference_m_min) + '<div class="rp-sous">'
+            + r.series_passees + (r.series_passees > 1 ? ' prod.' : ' prod.') + '</div>'
+          : '<span class="rp-mut">1re fois</span>';
         h += '<tr><td><b>' + escHtml(r.no_dossier) + '</b></td>'
            + '<td>' + escHtml(r.ref_produit_norm || r.designation || "—") + '</td>'
            + '<td class="num">' + fnum(r.metrage) + ' m</td>'
-           + '<td class="num">' + fnum(r.cadence_m_h) + ' m/h'
-           + '<div class="rp-sous">' + fnum(r.vitesse_m_h) + ' m/h hors arrêts</div></td>'
+           + '<td class="num">' + vitesse(r.cadence_m_min)
+           + '<div class="rp-sous">' + vitesse(r.vitesse_m_min) + ' hors arrêts</div></td>'
            + '<td class="num">' + hab + '</td>'
            + '<td class="num">' + ecartHtml(r.ecart_pct) + '</td></tr>';
       });
@@ -131,12 +145,12 @@
     }
 
     if ((d.arrets_couteux || []).length) {
-      h += '<div class="rp-bloc"><div class="rp-titre">Ce qui a coûté le plus de temps</div>'
+      h += '<div class="rp-bloc"><div class="rp-titre">Temps perdu</div>'
          + '<table class="rp-grille"><thead><tr><th>Code</th><th>Opération</th>'
-         + '<th class="num">Occurrences</th><th class="num">Temps</th></tr></thead><tbody>';
+         + '<th class="num">Nb</th><th class="num">Temps</th></tr></thead><tbody>';
       d.arrets_couteux.forEach(function (a) {
         h += '<tr><td><b>' + escHtml(a.code) + '</b></td>'
-           + '<td>' + escHtml(a.operation || "—") + '</td>'
+           + '<td>' + escHtml(sansCode(a.operation, a.code) || "—") + '</td>'
            + '<td class="num">' + a.occurrences + '</td>'
            + '<td class="num">' + escHtml(a.minutes_txt) + '</td></tr>';
       });
@@ -144,12 +158,12 @@
     }
 
     if ((d.ecrits || []).length) {
-      h += '<div class="rp-bloc"><div class="rp-titre">Ce que vous avez écrit</div>';
+      h += '<div class="rp-bloc"><div class="rp-titre">Vos écrits</div>';
       d.ecrits.forEach(function (e) {
         h += '<div class="rp-mot"><div class="m-txt">' + escHtml(e.texte) + '</div>'
            + '<div class="m-meta"><span class="m-tag">'
            + escHtml(LIB_ORIGINE[e.origine] || e.origine) + '</span>'
-           + 'dossier ' + escHtml(e.no_dossier)
+           + escHtml(e.no_dossier)
            + (e.operation ? ' · ' + escHtml(e.operation) : '')
            + (e.auteur ? ' · ' + escHtml(e.auteur) : '')
            + (e.date ? ' · ' + escHtml(dateFr(e.date)) : '')
@@ -161,7 +175,7 @@
     var vig = d.vigilance || {};
     var cles = Object.keys(vig).filter(function (k) { return vig[k] > 0; });
     if (cles.length) {
-      h += '<div class="rp-bloc"><div class="rp-titre">À reprendre au point de production</div>';
+      h += '<div class="rp-bloc"><div class="rp-titre">À reprendre</div>';
       cles.forEach(function (k) {
         h += '<div class="rp-vig"><div class="v-nb">' + vig[k] + '</div><div>'
            + escHtml(LIB_VIGILANCE[k] || k) + (vig[k] > 1 ? " (×" + vig[k] + ")" : "")
@@ -172,12 +186,12 @@
 
     if (d.nb_nc) {
       h += '<div class="rp-bloc"><div class="rp-titre">Qualité</div><div class="rp-txt">'
-         + d.nb_nc + (d.nb_nc > 1 ? ' non-conformités rattachées' : ' non-conformité rattachée')
-         + ' aux dossiers de la période.</div></div>';
+         + d.nb_nc + (d.nb_nc > 1 ? ' non-conformités' : ' non-conformité')
+         + '</div></div>';
     }
 
-    return h + '<div class="rp-pied">MySifa · Retour de production · établi le '
-             + escHtml(new Date().toLocaleDateString("fr-FR")) + '</div></div>';
+    return h + '<div class="rp-pied">MySifa · ' + escHtml(new Date().toLocaleDateString("fr-FR"))
+             + '</div></div>';
   }
 
   /* ── Liste des comptes-rendus ───────────────────────────────── */
@@ -208,7 +222,7 @@
          + '<td>' + escHtml(r.client || "—") + '</td>'
          + '<td>' + escHtml(r.machine || "—") + '</td>'
          + '<td class="num">' + fnum(r.metrage_reel) + ' m</td>'
-         + '<td class="num">' + (r.cadence_m_h ? fnum(r.cadence_m_h) + ' m/h' : '—') + '</td>'
+         + '<td class="num">' + (r.cadence_m_min ? vitesse(r.cadence_m_min) : '—') + '</td>'
          + '<td class="num">' + ecartHtml(r.ecart_cadence_pct) + '</td>'
          + '<td>' + info + '</td>'
          + '<td class="num">' + (r.nb_commentaires || 0) + '</td>'
@@ -260,14 +274,14 @@
     h += '<div class="rp-bloc"><div class="rp-kpis">'
        + kpi(fnum(m.reel) + ' m', "Métrage",
              m.prevu ? "prévu " + fnum(m.prevu) + " m" : (m.fiable ? "" : "non exploitable"))
-       + kpi(cr.vitesse_m_h ? fnum(cr.vitesse_m_h) + ' m/h' : '—', "Vitesse de production", "hors arrêts")
-       + kpi(cr.cadence_m_h ? fnum(cr.cadence_m_h) + ' m/h' : '—', "Cadence", "arrêts compris")
-       + kpi(minutesTxt(t.total_minutes), "Temps passé", (id.nb_saisies || 0) + " saisies")
+       + kpi(vitesse(cr.vitesse_m_min), "Vitesse", "hors arrêts")
+       + kpi(vitesse(cr.cadence_m_min), "Cadence", "arrêts compris")
+       + kpi(minutesTxt(t.total_minutes), "Temps", (id.nb_saisies || 0) + " saisies")
        + kpi(escHtml((id.conducteurs || []).join(", ") || "—"), "Conducteurs", "")
        + '</div></div>';
 
     if ((t.categories || []).length) {
-      h += '<div class="rp-bloc"><div class="rp-titre">Répartition du temps</div>'
+      h += '<div class="rp-bloc"><div class="rp-titre">Temps</div>'
          + '<table class="rp-grille"><thead><tr><th>Poste</th><th class="num">Temps</th>'
          + '<th class="num">Part</th><th class="num">Occurrences</th></tr></thead><tbody>';
       t.categories.forEach(function (c) {
@@ -280,7 +294,7 @@
     }
 
     /* Info prod — toujours affichee, meme absente : c'est le manque qui compte. */
-    h += '<div class="rp-bloc"><div class="rp-titre">Info prod de clôture</div>'
+    h += '<div class="rp-bloc"><div class="rp-titre">Info prod</div>'
        + '<div id="rp-ip-vue">'
        + (info
            ? '<div class="rp-mot"><div class="m-txt">' + escHtml(info.texte) + '</div>'
@@ -302,7 +316,7 @@
        + '</div></div></div></div>';
 
     if ((cr.seuils || []).length) {
-      h += '<div class="rp-bloc"><div class="rp-titre">Seuils d\'arrêt franchis</div>';
+      h += '<div class="rp-bloc"><div class="rp-titre">Seuils franchis</div>';
       cr.seuils.forEach(function (s) {
         var sid = s.saisie_id;
         h += '<div class="rp-mot"><div class="m-txt" id="rp-sx-vue-' + sid + '">'
@@ -310,7 +324,7 @@
                ? escHtml(s.explication_texte)
                : '<span class="rp-attente">Sans explication — à poser au point de production</span>')
            + '</div><div class="m-meta"><span class="m-tag">' + escHtml(s.operation_code) + '</span>'
-           + escHtml(s.operation || "") + ' · ' + escHtml(s.duree_saisie_txt || "")
+           + escHtml(sansCode(s.operation, s.operation_code)) + ' · ' + escHtml(s.duree_saisie_txt || "")
            + (s.operateur ? ' · ' + escHtml(s.operateur) : '') + '</div>'
            + '<div class="rp-edit-actions"><button type="button" class="rp-btn-mini" data-seuil="'
            + sid + '">' + (s.explication_texte ? 'Compléter' : 'Expliquer') + '</button></div>'
@@ -327,7 +341,7 @@
 
     var coms = (cr.ecrits || {}).commentaires || [];
     if (coms.length) {
-      h += '<div class="rp-bloc"><div class="rp-titre">Commentaires de saisie</div>';
+      h += '<div class="rp-bloc"><div class="rp-titre">Commentaires</div>';
       coms.forEach(function (c) {
         h += '<div class="rp-mot"><div class="m-txt">' + escHtml(c.texte) + '</div>'
            + '<div class="m-meta"><span class="m-tag">'
@@ -452,7 +466,8 @@
   global.MySifaRetourProd = {
     escHtml: escHtml, escAttr: escAttr,
     fnum: fnum, minutesTxt: minutesTxt, ecartHtml: ecartHtml, dateFr: dateFr,
-    kpi: kpi, LIB_ORIGINE: LIB_ORIGINE, LIB_VIGILANCE: LIB_VIGILANCE,
+    kpi: kpi, vitesse: vitesse, sansCode: sansCode,
+    LIB_ORIGINE: LIB_ORIGINE, LIB_VIGILANCE: LIB_VIGILANCE,
     renderFeuille: renderFeuille,
     renderListe: renderListe,
     renderRecherche: renderRecherche,

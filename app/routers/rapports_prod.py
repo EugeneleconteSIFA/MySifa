@@ -23,18 +23,52 @@ def _autorise(request: Request) -> Dict[str, Any]:
     return user
 
 
+def _jour_ou_400(valeur: str, champ: str) -> date:
+    try:
+        return datetime.strptime(valeur.strip()[:10], "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400,
+                            detail=f"{champ} invalide (attendu AAAA-MM-JJ).")
+
+
 def _bornes(mode: str = "jour", jour: Optional[str] = None,
-            year: Optional[int] = None, week: Optional[int] = None) -> Dict[str, Any]:
+            year: Optional[int] = None, week: Optional[int] = None,
+            du: Optional[str] = None, au: Optional[str] = None) -> Dict[str, Any]:
     """Bornes '%Y-%m-%dT%H:%M:%S' de la periode demandee.
 
-    Deux modes, parce que les deux usages n'ont pas la meme maille :
-    - `jour`    : le point de production du matin regarde la veille ;
-    - `semaine` : la feuille affichee a la machine couvre la semaine ISO,
-      avec la meme definition que le rapport hebdomadaire (lundi -> dimanche).
+    Trois modes, parce que les usages n'ont pas la meme maille :
+    - `plage`   : deux dates libres. C'est ce que l'onglet MyProd envoie, parce
+      qu'il lit la barre de filtres de la page Production plutot que d'avoir
+      ses propres selecteurs — un ecran qui redemande ce que la page sait deja
+      n'est pas emboite, il est pose a cote ;
+    - `jour`    : une journee. Le point de production du matin regarde la veille ;
+    - `semaine` : la semaine ISO (lundi -> dimanche), maille de la feuille
+      affichee a la machine.
 
-    Defaut : la veille. C'est la vue qu'on ouvre le plus souvent.
+    Defaut : la veille.
     """
     mode = (mode or "jour").strip().lower()
+
+    if mode == "plage":
+        if not du and not au:
+            mode = "jour"
+        else:
+            debut_j = _jour_ou_400(du, "Date de debut") if du else _jour_ou_400(au, "Date de fin")
+            fin_j = _jour_ou_400(au, "Date de fin") if au else debut_j
+            if fin_j < debut_j:
+                debut_j, fin_j = fin_j, debut_j
+            y, w, _ = debut_j.isocalendar()
+            label = (f"{_JOURS[debut_j.weekday()].capitalize()} {debut_j.strftime('%d/%m/%Y')}"
+                     if debut_j == fin_j
+                     else f"Du {debut_j.strftime('%d/%m/%Y')} au {fin_j.strftime('%d/%m/%Y')}")
+            return {
+                "mode": "plage", "year": int(y), "week": int(w),
+                "jour": debut_j.isoformat(),
+                "debut": debut_j.strftime("%Y-%m-%dT00:00:00"),
+                "fin": fin_j.strftime("%Y-%m-%dT23:59:59"),
+                "label": label,
+                "du": debut_j.strftime("%d/%m/%Y"), "au": fin_j.strftime("%d/%m/%Y"),
+            }
 
     if mode == "semaine":
         if not year or not week:
@@ -74,10 +108,11 @@ def _bornes(mode: str = "jour", jour: Optional[str] = None,
 
 @router.get("/api/rapports-prod/periode")
 def periode(request: Request, mode: str = "jour", jour: str | None = None,
-            year: int | None = None, week: int | None = None):
+            year: int | None = None, week: int | None = None,
+            du: str | None = None, au: str | None = None):
     """Bornes de la periode visee et machines qui y ont cloture un dossier."""
     _autorise(request)
-    b = _bornes(mode, jour, year, week)
+    b = _bornes(mode, jour, year, week, du, au)
     with get_db() as conn:
         machines = rd.machines_periode(conn, b["debut"], b["fin"], CODE_FIN_DOS)
     return {**b, "machines": machines}
@@ -86,10 +121,11 @@ def periode(request: Request, mode: str = "jour", jour: str | None = None,
 @router.get("/api/rapports-prod/comptes-rendus")
 def liste_comptes_rendus(request: Request, mode: str = "jour", jour: str | None = None,
                          year: int | None = None, week: int | None = None,
+                         du: str | None = None, au: str | None = None,
                          machine: str = "", limite: int = 200):
     """Les comptes-rendus de la periode, en projection compacte."""
     _autorise(request)
-    b = _bornes(mode, jour, year, week)
+    b = _bornes(mode, jour, year, week, du, au)
     with get_db() as conn:
         lignes = rd.comptes_rendus_periode(
             conn, b["debut"], b["fin"], machine=machine or "",
@@ -113,12 +149,13 @@ def recherche(request: Request, q: str = "", limite: int = 20):
 @router.get("/api/rapports-prod/retour-atelier")
 def retour_atelier(request: Request, machine: str = "", mode: str = "jour",
                    jour: str | None = None, year: int | None = None,
-                   week: int | None = None):
+                   week: int | None = None, du: str | None = None,
+                   au: str | None = None):
     """Le retour d'une periode pour une machine — matiere de la feuille atelier."""
     _autorise(request)
     if not (machine or "").strip():
         raise HTTPException(status_code=400, detail="Machine non precisee.")
-    b = _bornes(mode, jour, year, week)
+    b = _bornes(mode, jour, year, week, du, au)
     with get_db() as conn:
         data = rd.retour_atelier(conn, machine.strip(), b["debut"], b["fin"],
                                  code_fin=CODE_FIN_DOS)

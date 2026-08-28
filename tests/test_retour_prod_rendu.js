@@ -1,10 +1,9 @@
 /*
  * Retour de production : ce que le rendu partage doit produire.
  *
- * `static/mysifa_retour_prod.js` est charge par DEUX ecrans (la page
- * /rapports-prod et l'onglet « Retour de prod » de MyProd). Une regression ici
- * casse les deux d'un coup, et silencieusement : le module rend des chaines,
- * personne ne leve d'exception si une moitie manque.
+ * `static/mysifa_retour_prod.js` porte tout le rendu de l'onglet « Retour de
+ * prod » de MyProd. Une regression y passe silencieusement : le module rend
+ * des chaines, personne ne leve d'exception si une moitie manque.
  *
  * Ce test existe parce que `node --check` ne suffit pas. Un mot parasite laisse
  * au milieu d'une concatenation a passe la verification syntaxique sans broncher
@@ -61,19 +60,22 @@ const feuille = M.renderFeuille({
   machine: "Cohesio 1", dossiers: 2, periode: { label: "Semaine 35", mode: "semaine", du: "24/08/2026", au: "30/08/2026" },
   conducteurs: ["Marc", "Sophie"],
   production: { metrage: 58500, minutes_production: 445, minutes_calage: 105,
-                minutes_arret: 130, vitesse_m_h: 7888, part_arret_pct: 19.1 },
+                minutes_arret: 130, vitesse_m_min: 131.5, part_arret_pct: 19.1 },
   references: [{ no_dossier: "D-501", ref_produit_norm: "REF-A", metrage: 40000,
-                 cadence_m_h: 8727, vitesse_m_h: 10000, cadence_reference_m_h: 15000,
+                 cadence_m_min: 33.2, vitesse_m_min: 41.6, cadence_reference_m_min: 57,
                  series_passees: 3, ecart_pct: -41.8 }],
-  arrets_couteux: [{ code: "66", operation: "Attente matiere", occurrences: 1, minutes_txt: "1 h 35" }],
+  arrets_couteux: [{ code: "66", operation: "66 - Attente matiere", occurrences: 1, minutes_txt: "1 h 35" }],
   ecrits: [{ origine: "info_prod", texte: "Tension a baisser", no_dossier: "D-501", auteur: "Marc" }],
   vigilance: { info_prod_absente: 1 }, nb_nc: 2
 });
 verifier("feuille : les 4 KPI", (feuille.match(/rp-kpi"/g) || []).length === 4);
 verifier("feuille : conducteurs credites", feuille.includes("Marc · Sophie"));
 verifier("feuille : cadence et vitesse distinguees",
-         feuille.includes("8 727 m/h") && feuille.includes("hors arrêts"));
-verifier("feuille : repere historique", feuille.includes("15 000 m/h") && feuille.includes("3 productions"));
+         feuille.includes("33,2 m/min") && feuille.includes("41,6 m/min") && feuille.includes("hors arrêts"));
+verifier("feuille : repere historique", feuille.includes("57,0 m/min") && feuille.includes("3 prod."));
+verifier("feuille : unite de la machine, jamais de m/h", !feuille.includes("m/h"));
+verifier("feuille : le code n'est pas repete dans l'operation",
+         feuille.includes(">Attente matiere<") && !feuille.includes(">66 - Attente matiere<"));
 verifier("feuille : ecart negatif signale", feuille.includes("-42 %"));
 verifier("feuille : code d'arret couteux", feuille.includes("Attente matiere"));
 verifier("feuille : le mot du conducteur remonte", feuille.includes("Tension a baisser"));
@@ -110,7 +112,7 @@ const crBase = {
   temps: { total_minutes: 400, categories: [
     { categorie: "production", label: "Production", minutes: 310, part_pct: 77.5, occurrences: 2 }] },
   metrage: { reel: 31500, prevu: 35000, fiable: true },
-  vitesse_m_h: 6096, cadence_m_h: 4725,
+  vitesse_m_min: 101.6, cadence_m_min: 78.8,
   ecrits: { info_prod: null, commentaires: [] },
   seuils: [{ saisie_id: 3, operation_code: "64", operation: "Intervention technique",
              duree_saisie_txt: "45 min", operateur: "Marc",
@@ -119,7 +121,9 @@ const crBase = {
 };
 const cr = M.renderCR(crBase);
 verifier("CR : les deux vitesses distinguees",
-         cr.includes("Vitesse de production") && cr.includes("Cadence"));
+         cr.includes("101,6 m/min") && cr.includes("78,8 m/min")
+         && cr.includes("hors arrêts") && cr.includes("arrêts compris"));
+verifier("CR : jamais de m/h", !cr.includes("m/h"));
 verifier("CR : info prod absente signalee", cr.includes("Aucune info prod"));
 verifier("CR : et due a la cloture", cr.includes("due à la clôture"));
 verifier("CR : bouton de saisie propose", cr.includes('id="rp-ip-edit"') && cr.includes("Renseigner"));
@@ -149,6 +153,11 @@ verifier("CR : info prod echappee",
          !M.renderCR(crXss).includes("<script>alert(1)</script>"));
 
 console.log("\n5. Formats");
+verifier("vitesse en m/min", M.vitesse(33.2) === "33,2 m/min");
+verifier("vitesse inconnue", M.vitesse(null) === "—");
+verifier("code retire de l'operation", M.sansCode("66 - Attente matiere", "66") === "Attente matiere");
+verifier("code absent : operation intacte", M.sansCode("Attente matiere", "66") === "Attente matiere");
+verifier("code non prefixe : rien retire", M.sansCode("166 - Autre", "66") === "166 - Autre");
 verifier("duree sous l'heure", M.minutesTxt(45) === "45 min");
 verifier("heure pleine", M.minutesTxt(120) === "2 h");
 verifier("heure et minutes", M.minutesTxt(95) === "1 h 35");
