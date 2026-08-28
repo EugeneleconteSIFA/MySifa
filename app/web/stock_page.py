@@ -12665,7 +12665,7 @@ function openTracaPrint(etiq) {
 function buildTracaPosteView(poste) {
   const etiquettes = TRACA_ETIQUETTES.filter(e=>e.postes.includes(poste.id));
   const backBar = el('div',{cls:'traca-back-bar'},
-    el('button',{cls:'traca-back-btn',on:{click:()=>{ S.tracaPoste=null; renderContent(); }}},
+    el('button',{cls:'traca-back-btn',on:{click:()=>{ S.tracaPoste=null; tracaSyncUrl(null); renderContent(); }}},
       iconEl('arrow-left',15), ' Postes'),
     el('span',{cls:'traca-poste-heading'}, poste.label)
   );
@@ -12749,6 +12749,19 @@ function buildTracaPosteView(poste) {
   return el('div',{cls:'content'}, backBar, listEl, ...groupSections, commSection);
 }
 
+// L'URL suit la navigation entre postes, sans empiler d'entrée d'historique :
+// on remplace, on n'ajoute pas — sinon dix retours arrière pour sortir de la
+// page après avoir regardé quatre postes.
+function tracaSyncUrl(posteId) {
+  try {
+    const u = new URL(window.location.href);
+    u.searchParams.set('tab', 'traca');
+    if (posteId) u.searchParams.set('poste', posteId);
+    else u.searchParams.delete('poste');
+    history.replaceState(null, '', u.pathname + u.search + u.hash);
+  } catch (e) {}
+}
+
 function buildTraca() {
   if (S.tracaPoste) {
     const poste = TRACA_POSTES.find(p=>p.id===S.tracaPoste);
@@ -12757,7 +12770,7 @@ function buildTraca() {
   // Vue sélection poste
   const cards = TRACA_POSTES.map(poste=>{
     const count = TRACA_ETIQUETTES.filter(e=>e.postes.includes(poste.id)).length;
-    const card = el('div',{cls:'traca-poste-card',on:{click:()=>{ S.tracaPoste=poste.id; renderContent(); }}},
+    const card = el('div',{cls:'traca-poste-card',on:{click:()=>{ S.tracaPoste=poste.id; tracaSyncUrl(poste.id); renderContent(); }}},
       el('div',{cls:'traca-poste-icon',style:{background:poste.colorBg,color:poste.color}},
         iconEl(poste.icon,22)),
       el('div',{cls:'traca-poste-label'},poste.label),
@@ -21400,7 +21413,18 @@ async function init() {
     if (!['menu','production','matieres','historique','traca','plan-entrepot'].includes(S.tab)) S.tab = 'production';
   }
   render();
-  if (S.tab === 'traca') { /* rien à charger */ }
+  if (S.tab === 'traca') {
+    // Poste d'étiquetage adressable par URL. Sans ça, le portail ne peut
+    // proposer que « les étiquettes » en bloc, alors que personne n'imprime
+    // « des étiquettes » : on imprime celles de Cohésio 1 ou de la logistique.
+    // render() est déjà passé au-dessus : il faut redessiner le contenu, sinon
+    // l'écran reste sur la grille des postes malgré l'URL.
+    const urlPoste = urlParams.get('poste');
+    if (urlPoste && TRACA_POSTES.some(p => p.id === urlPoste)) {
+      S.tracaPoste = urlPoste;
+      renderContent();
+    }
+  }
   else if (S.tab === 'reception') { await loadRecepHistory(); }
   else if (S.tab === 'inventaire') { await loadInventaireList(); }
   else if (S.tab === 'matieres-inventaire') { await loadInventaireMatieres(); }

@@ -27,9 +27,8 @@ adressables.
 
 ## MyProd — `/prod`
 
-**Au menu aujourd'hui** : Suivi de production, Traçabilité, Ordres de fabrication,
-Fiches techniques, Scans d'OF, Rentabilité *(admin)*, Planning production,
-Production + expédition.
+**Au menu** (choix du 28 août) : Production, Planning production, Traçabilité,
+Ordres de fabrication.
 
 | Disponible | URL |
 |---|---|
@@ -54,9 +53,8 @@ techniques » (liste / non reliées).
 
 ## MyStock — `/stock`
 
-**Au menu aujourd'hui** : Tableau de bord, Produits finis, Inventaire produit,
-Historique mouvements, Matières premières, Besoins matières, Réception matière,
-Étiquettes traçabilité, Plan entrepôt, Valorisation *(admin)*.
+**Au menu** (choix du 28 août) : Tableau de bord, Inventaire, Historique
+mouvements, Matières premières, Réception matière, Besoins matières.
 
 | Disponible | URL |
 |---|---|
@@ -81,8 +79,8 @@ Non adressable : le menu d'accueil MyStock.
 
 ## MyExpé — `/expe`
 
-**Au menu aujourd'hui** : Départs, Palettes Europe, Calcul poids, Comparateur
-tarifs, Devis transporteurs, Transporteurs, Prospects — soit la totalité.
+**Au menu** (choix du 28 août) : Suivi des départs, Calcul poids, Comparateur
+tarifs, Devis transporteurs, Transporteurs.
 
 | Disponible | URL |
 |---|---|
@@ -100,7 +98,8 @@ rendre adressables si tu veux « Historique départs » au menu.
 
 ## Saisie Prod — `/fabrication`
 
-**Au menu aujourd'hui** : Saisie opérateur, Traçabilité, Stock, Fiches et OF.
+**Pas de menu** (choix du 28 août) : la tuile ouvre directement la saisie.
+Les URL ci-dessous restent valides si on change d'avis.
 
 | Disponible | URL |
 |---|---|
@@ -112,8 +111,10 @@ rendre adressables si tu veux « Historique départs » au menu.
 
 ## MyQualité — `/qualite`
 
-**Au menu aujourd'hui** : Non-conformités, Audits client, Ressources
-fournisseurs, Certifications SIFA, Référentiel RSE — soit la totalité.
+**Au menu** (choix du 28 août) : Audits client, Ressources fournisseurs,
+Certifications SIFA, Référentiel RSE. Les non-conformités (`/qualite#list`)
+n'y sont volontairement pas — c'est l'écran par défaut du module, atteint par
+« Ouvrir MyQualité ».
 
 | Disponible | URL |
 |---|---|
@@ -126,7 +127,7 @@ fournisseurs, Certifications SIFA, Référentiel RSE — soit la totalité.
 
 ## Coûts matières — `/pricing`
 
-**Au menu aujourd'hui** : Matières, Produits, Fournisseurs, Marges & paramètres.
+**Au menu** (choix du 28 août) : Matières, Produits, Marges & paramètres.
 
 | Disponible | URL |
 |---|---|
@@ -142,7 +143,7 @@ faut d'abord donner une vue de liste à cette route.
 
 ## Maintenance — `/maintenance`
 
-**Au menu aujourd'hui** : Planning des interventions, Contrôles, Opérations.
+**Au menu** (choix du 28 août) : Suivi machine, Planning, Contrôles, Opérations.
 
 | Disponible | URL |
 |---|---|
@@ -165,12 +166,31 @@ faut d'abord donner une vue de liste à cette route.
 | Dépôt des bulletins | `/rh/coffre#bulletins` |
 | Notes de frais à valider | `/rh/coffre#ndf` |
 
-## MyPrint
+## MyPrint — `/stock?tab=traca`
 
-Pas de page propre : les étiquettes vivent dans `/stock?tab=traca`, les
-imprimantes dans `/settings#printers`. C'est ce que le menu propose.
+L'écran d'étiquettes est organisé par **poste de travail** (`TRACA_POSTES`,
+`app/web/stock_page.py`). Le poste est devenu adressable par URL le 28 août :
+le menu propose donc un poste par entrée, et l'URL suit quand on change de
+poste dans la page — un lien vers Cohésio 1 rouvre bien Cohésio 1.
+
+| Disponible | URL |
+|---|---|
+| Cohésio 1 | `/stock?tab=traca&poste=cohesio1` |
+| Cohésio 2 | `/stock?tab=traca&poste=cohesio2` |
+| Logistique | `/stock?tab=traca&poste=logistique` |
+| Bureaux | `/stock?tab=traca&poste=bureaux` |
+| Imprimantes (admin) | `/settings#printers` |
+
+Ajouter un poste se fait dans `TRACA_POSTES` puis dans le catalogue — le test
+refuse un `poste=` absent du JS.
 
 ---
+
+## La barre d'icônes
+
+Volets conservés : **Mon profil**, **Paramètres**, **Gestionnaire de tâches**,
+**ERP**. Le calendrier, la messagerie et l'explorateur de base n'en ont pas —
+leurs pages n'ont aucune vue adressable, l'icône ouvre la page et c'est tout.
 
 ## Les modules sans sous-menu possible aujourd'hui
 

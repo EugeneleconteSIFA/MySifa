@@ -262,10 +262,17 @@ prédicat s'ajoute au `WHERE` sous forme d'EXISTS corrélé, `_existe_piece()`.
 Il entre dans le carnet ADV (et par lui dans retard, dormant, semaine et la
 liste des lignes en retard), dans « lignes sans dossier », dans les « écartées »
 et dans l'encours du TDB Direction ; côté BL, `_existe_piece(sch,
-entete="liv_entete")` fait la même chose pour « à facturer ». La tuile
-« Commandes à traiter » annonçait 683 commandes sur 999 lignes ; elle en compte
-177 sur 225. **Tout nouveau compteur bâti sur une table `*_ligne` doit le
-porter** — sans lui il repart à 683.
+entete="liv_entete")` fait la même chose pour « à facturer ». **Tout nouveau
+compteur bâti sur une table `*_ligne` doit le porter.**
+
+Le carnet du tableau de bord retient `COALESCE(lpos,0) = POS_EN_COURS`, pas
+`<> POS_SOLDEE` — la même définition que le filtre par défaut de l'écran
+Commandes, pour la raison exposée plus haut : sur 91 lignes « partielle »,
+81 sont des reliquats de 2015-2024. Les deux corrections ensemble ont ramené
+la tuile « Commandes à traiter » de **683 commandes sur 999 lignes** à
+**100 sur 136**, et ce 136 est exactement le total que rend l'écran Commandes
+ouvert sur son filtre par défaut. C'est le point : deux écrans ne donnent
+jamais deux chiffres pour le même sujet.
 
 **Le contrôle qui retrouve le défaut**, sur n'importe quel écran à jointure :
 
