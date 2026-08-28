@@ -1900,15 +1900,7 @@ function portalVoletCompteur(source){
   if(source==='calendrier')return Number(S.calInvitCount||0);
   return 0;
 }
-function portalRecentEnregistrer(entree,module){
-  if(!entree||!window.MySifaRecents)return;
-  try{
-    window.MySifaRecents.enregistrer({
-      cle:entree.cle,libelle:entree.label||entree.libelle||'',
-      module:module||'',url:entree.url});
-  }catch(e){}
-}
-function portalVoletItem(entree,module){
+function portalVoletItem(entree){
   const b=document.createElement('button');
   b.type='button';
   b.className='portal-vol-item';
@@ -1941,7 +1933,6 @@ function portalVoletItem(entree,module){
 
   b.addEventListener('click',ev=>{
     ev.preventDefault();ev.stopPropagation();
-    portalRecentEnregistrer(entree,module);
     window.location.href=entree.url;
   });
   return b;
@@ -1987,8 +1978,6 @@ function portalVoletPop(volet,variante){
     pied.appendChild(document.createTextNode(volet.pied.label||'Ouvrir'));
     pied.addEventListener('click',ev=>{
       ev.preventDefault();ev.stopPropagation();
-      portalRecentEnregistrer({cle:'volet_'+(volet.cle||variante||''),
-        label:volet.pied.label||volet.titre,url:volet.pied.url},volet.titre);
       window.location.href=volet.pied.url;
     });
     pop.appendChild(pied);
@@ -2003,7 +1992,7 @@ function portalVoletRemplirCorps(corps,volet){
     t.className='portal-vol-groupe';
     t.textContent=g.titre||'';
     corps.appendChild(t);
-    g.entrees.forEach(e=>corps.appendChild(portalVoletItem(e,volet.titre)));
+    g.entrees.forEach(e=>corps.appendChild(portalVoletItem(e)));
   });
 }
 /* Le volet ERP est rempli au premier survol seulement : le portail ne paie
@@ -2060,9 +2049,12 @@ function portalVoletPlacer(wrap,pop){
     const tuile=wrap.getBoundingClientRect();
     const dessous=dispo-tuile.bottom-MARGE-10;
     const dessus=tuile.top-MARGE-10;
-    if(dessous<220&&dessus>dessous)wrap.classList.add('portal-vol--haut');
-    pop.style.maxHeight=Math.max(180,Math.round(
-      wrap.classList.contains('portal-vol--haut')?dessus:dessous))+'px';
+    // On bascule vers le haut seulement si le dessous est vraiment étroit ET
+    // que le dessus fait mieux : sinon le volet saute d'un côté à l'autre au
+    // moindre cran de molette, ce qui est pire que de le laisser défiler.
+    const versHaut=(dessous<200&&dessus>dessous+60);
+    wrap.classList.toggle('portal-vol--haut',versHaut);
+    pop.style.maxHeight=Math.max(160,Math.round(versHaut?dessus:dessous))+'px';
     return;
   }
   pop.style.maxHeight=Math.max(180,Math.round(dispo-2*MARGE))+'px';
@@ -2087,19 +2079,41 @@ function portalVoletBrancherSurvol(wrap,pop){
   let tOuvrir=null,tFermer=null;
   const annuler=()=>{if(tOuvrir){clearTimeout(tOuvrir);tOuvrir=null;}
                      if(tFermer){clearTimeout(tFermer);tFermer=null;}};
+  // Le volet est ancré à son déclencheur : il suit la page quand elle défile,
+  // mais sa hauteur et son sens d'ouverture ont été calculés pour la position
+  // d'avant. Sans ce recalcul, un défilement de quelques crans suffit à faire
+  // sortir la fin de la liste sous le bord de l'écran — l'entrée est là, on la
+  // voit, et elle n'est plus cliquable.
+  const replacer=()=>{
+    if(!wrap.classList.contains('ouvert'))return;
+    const r=wrap.getBoundingClientRect();
+    // Déclencheur sorti de l'écran : le volet n'a plus d'ancrage visible.
+    if(r.bottom<0||r.top>window.innerHeight){fermerNet();return;}
+    portalVoletPlacer(wrap,pop);
+  };
+  const ecouter=(actif)=>{
+    const m=actif?'addEventListener':'removeEventListener';
+    window[m]('scroll',replacer,true);
+    window[m]('resize',replacer);
+  };
+  const fermerNet=()=>{annuler();wrap.classList.remove('ouvert');ecouter(false);};
   const ouvrir=(immediat)=>{
     annuler();
     const faire=()=>{
       tOuvrir=null;
-      document.querySelectorAll('.portal-vol.ouvert').forEach(n=>{if(n!==wrap)n.classList.remove('ouvert');});
+      document.querySelectorAll('.portal-vol.ouvert').forEach(n=>{
+        if(n!==wrap&&n._portalVoletFermer)n._portalVoletFermer();
+        else if(n!==wrap)n.classList.remove('ouvert');
+      });
       wrap.classList.add('ouvert');
       portalVoletPlacer(wrap,pop);
+      ecouter(true);
     };
     if(immediat)faire();else tOuvrir=setTimeout(faire,PORTAL_VOL_OUVRIR);
   };
   const fermer=()=>{
     annuler();
-    tFermer=setTimeout(()=>{tFermer=null;wrap.classList.remove('ouvert');},PORTAL_VOL_FERMER);
+    tFermer=setTimeout(fermerNet,PORTAL_VOL_FERMER);
   };
   wrap.addEventListener('mouseenter',()=>ouvrir(false));
   wrap.addEventListener('mouseleave',fermer);
@@ -2111,7 +2125,7 @@ function portalVoletBrancherSurvol(wrap,pop){
     if(!wrap.contains(ev.relatedTarget))fermer();
   });
   wrap._portalVoletOuvrir=()=>ouvrir(true);
-  wrap._portalVoletFermer=()=>{annuler();wrap.classList.remove('ouvert');};
+  wrap._portalVoletFermer=fermerNet;
 }
 function portalVoletChevron(tile){
   const b=document.createElement('button');
@@ -2204,17 +2218,6 @@ function portalAttacherVolets(){
       const popTuile=portalVoletPop(v,tile.getAttribute('data-portal-id'));
       tile.appendChild(popTuile);
       portalVoletBrancherSurvol(tile,popTuile);
-      // Ouvrir le module par la tuile compte aussi comme une visite : sinon la
-      // barre de reprise ne connaîtrait que les entrées de volet, et l'écran le
-      // plus souvent ouvert serait justement celui qui n'y figure jamais.
-      // En capture, parce que le clic de la tuile navigue tout de suite.
-      tile.addEventListener('click',ev=>{
-        if(ev.target.closest('.portal-vol-pop,.portal-app-chev,.portal-app-star'))return;
-        if(_portalDragSuppressClick)return;
-        const pied=v.pied||{};
-        if(pied.url)portalRecentEnregistrer(
-          {cle:'tuile_'+tile.getAttribute('data-portal-id'),label:v.titre,url:pied.url},v.titre);
-      },true);
     });
   });
 }
