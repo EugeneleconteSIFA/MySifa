@@ -979,6 +979,11 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
         Promouvoir v1 → v2
       </button>
+      <div class="nav-group-label" style="margin-top:8px" data-req-section="diagnostic"><span>Diagnostic</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
+      <button type="button" class="nav-btn" data-req-section="diagnostic" data-tab="diagnostic">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg>
+        Lecture SQL
+      </button>
       <div class="nav-group-label" style="margin-top:8px" data-req-section="tools_only"><span>Outils</span><svg class="nav-group-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg></div>
       <button type="button" class="nav-btn" data-req-section="tools_only" data-tab="printers">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
@@ -1231,6 +1236,20 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <button type="button" class="menu-item" data-goto="fsc">
               <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10z"/><path d="M2 21c0-3 2.5-5 5-5"/></svg></span>
               <span class="mi-body"><span class="mi-lbl">Registre FSC</span><span class="mi-desc">Traçabilité des flux et audits certifiés.</span></span>
+              <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="menu-group" data-req-section="diagnostic">
+          <div class="menu-group-head">
+            <span class="mg-ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg></span>
+            <div><span class="mg-lbl">Diagnostic</span><span class="mg-desc">Regarder les données quand un bug l'exige.</span></div>
+          </div>
+          <div class="menu-items">
+            <button type="button" class="menu-item" data-goto="diagnostic">
+              <span class="mi-ico"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 12c0 1.66 4.03 3 9 3s9-1.34 9-3"/></svg></span>
+              <span class="mi-body"><span class="mi-lbl">Lecture SQL</span><span class="mi-desc">SELECT en lecture seule, encadré par le moteur.</span></span>
               <svg class="mi-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
             </button>
           </div>
@@ -2417,6 +2436,72 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
 
     </section>
 
+
+    <!-- ── Diagnostic SQL ────────────────────────────────────────────────────
+         Le panneau ne décide rien : tout l'encadrement est dans
+         app/services/diagnostic_sql.py, appliqué par l'autoriseur SQLite.
+         Ici on saisit, on affiche, et on rend le refus lisible. -->
+    <section id="panel-diagnostic" class="hidden" data-req-section="diagnostic">
+      <div style="max-width:1100px">
+        <div style="margin-bottom:20px">
+          <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px">Lecture SQL de diagnostic</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.55">
+            SELECT en lecture seule sur la base de cette instance. Le refus est appliqué par le moteur, table par
+            table et colonne par colonne — pas par une relecture du texte de la requête. Une table hors liste reste
+            refusée quelle que soit la façon dont la requête est tournée.
+          </div>
+        </div>
+
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px">
+          <label for="diag-sql" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:8px">Requête</label>
+          <textarea id="diag-sql" rows="5" spellcheck="false" placeholder="SELECT no_dossier, operateur, metrage_reel FROM production_data WHERE no_dossier = 'REF-4521'"
+            style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;line-height:1.6;outline:none;resize:vertical"
+            onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"></textarea>
+
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:14px">
+            <button type="button" class="btn btn-accent" id="diag-run" onclick="runDiagnostic()">Exécuter</button>
+            <div style="display:flex;align-items:center;gap:8px">
+              <label for="diag-limite" style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Lignes</label>
+              <select id="diag-limite"
+                style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:9px 12px;color:var(--text);font-size:13px;outline:none;font-family:inherit">
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="200" selected>200</option>
+              </select>
+            </div>
+            <span style="font-size:12px;color:var(--muted)">Ctrl + Entrée pour exécuter</span>
+            <span style="flex:1"></span>
+            <span id="diag-nb-tables" style="font-size:12px;color:var(--muted)"></span>
+          </div>
+        </div>
+
+        <!-- Refus : le message vient du moteur, il est montrable tel quel. -->
+        <div id="diag-refus" style="display:none;background:var(--card);border:1px solid var(--danger);border-left:4px solid var(--danger);border-radius:10px;padding:14px 18px;margin-bottom:16px">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--danger);margin-bottom:6px">Requête refusée</div>
+          <div id="diag-refus-msg" style="font-size:13px;color:var(--text);line-height:1.55"></div>
+        </div>
+
+        <div id="diag-resultat" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:16px">
+          <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+            <span id="diag-meta" style="font-size:12px;color:var(--muted)"></span>
+            <span id="diag-tronque" style="display:none;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--warn)"></span>
+          </div>
+          <div style="overflow:auto;max-height:60vh">
+            <table id="diag-table" style="width:100%;border-collapse:collapse;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"></table>
+          </div>
+        </div>
+
+        <details style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 18px">
+          <summary style="font-size:13px;font-weight:600;color:var(--text);cursor:pointer">Tables lisibles</summary>
+          <div style="font-size:12px;color:var(--muted);margin:10px 0 12px;line-height:1.55">
+            Liste blanche. Une table absente d'ici est refusée, y compris à travers une jointure, une sous-requête,
+            une vue ou une CTE. Les tables créées après la construction de la liste sont refusées par défaut.
+          </div>
+          <div id="diag-tables" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+        </details>
+      </div>
+    </section>
+
     <section id="panel-printers" class="hidden">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px">
         <div>
@@ -3193,6 +3278,7 @@ function syncSettingsPageHead(tabId) {
     api:          { title: 'Clés API',        sub: 'Tokens d\'intégration' },
     printers:     { title: 'Imprimantes',     sub: 'Configuration et templates' },
     promote:      { title: 'Déploiement',     sub: 'Promouvoir v1 → v2' },
+    diagnostic:   { title: 'Lecture SQL',     sub: 'SELECT encadré sur la base de cette instance' },
   };
   const h = HEADS[tabId] || { title: 'Paramètres', sub: 'Gestion des comptes et des accès' };
   if (titleEl) titleEl.textContent = h.title;
@@ -3207,10 +3293,148 @@ function syncSettingsPageHead(tabId) {
   }
 }
 
-const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','emplacements','laizes','mandrins','importations','bridge','updates','audit','fsc','dashboards','api','promote','printers','formations'];
+/* ── Diagnostic SQL ─────────────────────────────────────────────────────────
+   Les valeurs rendues viennent de la base : elles sont écrites avec
+   textContent, jamais avec innerHTML. Une note de production qui contient
+   du HTML s'affiche alors comme du texte, pas comme du balisage. */
+let _diagTablesChargees = false;
+
+async function initDiagnosticPanel() {
+  if (_diagTablesChargees) return;
+  try {
+    const r = await api('/api/diagnostic/tables');
+    const tables = (r && r.tables) || [];
+    const hote = document.getElementById('diag-tables');
+    if (hote) {
+      hote.textContent = '';
+      tables.forEach(function (t) {
+        const puce = document.createElement('span');
+        puce.textContent = t;
+        puce.style.cssText = 'font-size:11.5px;font-family:ui-monospace,Menlo,Consolas,monospace;'
+          + 'background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:3px 8px;color:var(--text2)';
+        hote.appendChild(puce);
+      });
+    }
+    const cpt = document.getElementById('diag-nb-tables');
+    if (cpt) cpt.textContent = tables.length + ' tables lisibles · ' + (r.lignes_max || 200) + ' lignes au maximum';
+    _diagTablesChargees = true;
+  } catch (e) {
+    const cpt = document.getElementById('diag-nb-tables');
+    if (cpt) cpt.textContent = 'Liste des tables indisponible.';
+  }
+}
+
+function _diagCacher() {
+  const refus = document.getElementById('diag-refus');
+  const res = document.getElementById('diag-resultat');
+  if (refus) refus.style.display = 'none';
+  if (res) res.style.display = 'none';
+}
+
+function _diagRefus(message) {
+  const bloc = document.getElementById('diag-refus');
+  const msg = document.getElementById('diag-refus-msg');
+  if (msg) msg.textContent = message;
+  if (bloc) bloc.style.display = '';
+}
+
+function _diagRendre(r) {
+  const table = document.getElementById('diag-table');
+  if (!table) return;
+  table.textContent = '';
+
+  const thead = document.createElement('thead');
+  const trh = document.createElement('tr');
+  (r.colonnes || []).forEach(function (c) {
+    const th = document.createElement('th');
+    th.textContent = c;
+    th.style.cssText = 'position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--border);'
+      + 'padding:9px 12px;text-align:left;font-weight:700;color:var(--text);white-space:nowrap';
+    trh.appendChild(th);
+  });
+  thead.appendChild(trh);
+  table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  (r.lignes || []).forEach(function (ligne) {
+    const tr = document.createElement('tr');
+    ligne.forEach(function (v) {
+      const td = document.createElement('td');
+      td.style.cssText = 'border-bottom:1px solid var(--border);padding:8px 12px;'
+        + 'vertical-align:top;max-width:420px;overflow-wrap:anywhere';
+      if (v === null || v === undefined) {
+        // NULL affiché comme tel : une colonne masquée revient NULL, et
+        // confondre « vide » et « masqué » fait perdre du temps.
+        td.textContent = 'NULL';
+        td.style.color = 'var(--muted)';
+        td.style.fontStyle = 'italic';
+      } else {
+        td.textContent = String(v);
+        td.style.color = 'var(--text2)';
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+
+  const meta = document.getElementById('diag-meta');
+  if (meta) {
+    meta.textContent = r.nb_lignes + (r.nb_lignes > 1 ? ' lignes' : ' ligne')
+      + ' · ' + (r.colonnes || []).length + ' colonnes · ' + r.duree_ms + ' ms';
+  }
+  const tr = document.getElementById('diag-tronque');
+  if (tr) {
+    if (r.tronque) {
+      tr.textContent = 'Réponse tronquée — ajoutez une clause LIMIT ou un filtre.';
+      tr.style.display = '';
+    } else {
+      tr.style.display = 'none';
+    }
+  }
+  const res = document.getElementById('diag-resultat');
+  if (res) res.style.display = '';
+}
+
+async function runDiagnostic() {
+  const champ = document.getElementById('diag-sql');
+  const bouton = document.getElementById('diag-run');
+  const sql = champ ? champ.value.trim() : '';
+  _diagCacher();
+  if (!sql) { _diagRefus('Requête vide.'); return; }
+
+  const limite = parseInt((document.getElementById('diag-limite') || {}).value, 10) || 200;
+  if (bouton) { bouton.disabled = true; bouton.textContent = 'Exécution…'; }
+  try {
+    const r = await api('/api/diagnostic/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sql: sql, lignes_max: limite }),
+    });
+    if (r) _diagRendre(r);
+  } catch (e) {
+    _diagRefus(e.message || 'Requête refusée.');
+  } finally {
+    if (bouton) { bouton.disabled = false; bouton.textContent = 'Exécuter'; }
+  }
+}
+
+document.addEventListener('keydown', function (ev) {
+  if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter'
+      && document.activeElement && document.activeElement.id === 'diag-sql') {
+    ev.preventDefault();
+    runDiagnostic();
+  }
+});
+
+const VALID_TABS = ['menu','users','matrix','defaults','fournisseurs','clients','operations','seuils','maintenance','machines','emplacements','laizes','mandrins','importations','bridge','updates','audit','fsc','dashboards','api','promote','printers','formations','diagnostic'];
 
 function setTab(id, opts) {
   if (!VALID_TABS.includes(id)) id = 'menu';
+  // #diagnostic tapé à la main par un compte qui n'y a pas droit : le panneau
+  // est déjà masqué par data-req-section, mais sans ce garde il resterait sur
+  // un écran vide sans comprendre pourquoi.
+  if (id === 'diagnostic' && !((window.__SETTINGS_VISIBILITY__ || {}).diagnostic)) id = 'menu';
   const silent = !!(opts && opts.silent);
   document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {
     b.classList.toggle('active', b.dataset.tab === id);
@@ -3225,7 +3449,7 @@ function setTab(id, opts) {
       }
     } catch(e){}
   }
-  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations'].forEach(p => {
+  ['menu', 'users', 'matrix', 'defaults', 'fournisseurs', 'clients', 'operations', 'seuils', 'maintenance', 'machines', 'emplacements', 'laizes', 'mandrins', 'importations', 'bridge', 'updates', 'audit', 'fsc', 'dashboards', 'api', 'promote', 'printers', 'formations', 'diagnostic'].forEach(p => {
     const el = document.getElementById('panel-' + p);
     if (el) el.classList.toggle('hidden', p !== id);
   });
@@ -3251,6 +3475,7 @@ function setTab(id, opts) {
   if (id === 'dashboards') renderSettingsDashboards();
   if (id === 'api') loadApiKeys();
   if (id === 'promote') loadPromoteStatus();
+  if (id === 'diagnostic') initDiagnosticPanel();
 }
 
 document.querySelectorAll('.nav-btn[data-tab]').forEach(b => {

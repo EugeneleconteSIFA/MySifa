@@ -34,11 +34,16 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from pathlib import Path
 from typing import Any, Optional
 
 # ─── Réglages ─────────────────────────────────────────────────────────────────
 
-# Tables lisibles — 158 des 221 tables de la base du 28 août 2026.
+# Tables lisibles — 162 des 224 tables de la base.
+#
+# Le socle est le classement du 28 août 2026 : 158 tables sur 221. Les quatre
+# suivantes sont apparues depuis, ont été refusées par défaut — c'est le
+# mécanisme qui fonctionne — puis ajoutées après examen de leurs colonnes.
 #
 # Construite par DIFFÉRENCE : chaque table de la base a été rangée dans un
 # groupe métier ou dans un motif d'exclusion, et le classement a été vérifié
@@ -48,6 +53,8 @@ from typing import Any, Optional
 # Les 63 exclusions, par motif :
 #   secret   (4)  api_keys, sessions, cal_feed_tokens, push_subscriptions
 #   identité (1)  users — à réintégrer avec masquage une fois ses colonnes vues
+#   (le décompte ci-dessous porte sur le cliché du 28/08 ; les tables créées
+#    depuis ne sont dans aucun groupe, donc refusées, sauf examen explicite)
 #   RH/paie  (8)  paie_*, rh_conges*, documents_rh*, notes_de_frais, user_habilitations
 #   finance  (3)  compta_banques, compta_comptes, compta_acheteurs
 #   privé   (23)  chat_*, messages, *_messages, postits, cal_* personnels
@@ -140,12 +147,35 @@ TABLES_LISIBLES: set[str] = {
     # ── Deploiement et schema (5 tables, 524 lignes)
     "promotion_history", "schema_migrations", "schema_migrations_fichiers",
     "update_acknowledgements", "update_announcements",
+
+    # ── Ajoutées après le cliché du 28/08/2026 (4 tables)
+    # `arret_seuils` et `arret_seuils_params` sont de la configuration,
+    # `dossier_info_prod` une note par dossier — même forme que le
+    # `commentaire` de `production_data`. `arret_seuils_franchis` est un cas
+    # limite : elle porte le contexte d'un dépassement (saisie_id, no_dossier,
+    # durées), utile au débogage, mais aussi le nom de l'opérateur et sa
+    # justification écrite — ces deux colonnes sont masquées plus bas.
+    "arret_seuils", "arret_seuils_franchis", "arret_seuils_params",
+    "dossier_info_prod",
 }
 
 # Colonnes rendues NULL même dans une table par ailleurs lisible.
 # Le masquage résiste à substr(), length(), group_concat() et aux filtres LIKE :
 # la colonne n'est jamais lue, donc il n'y a rien à reconstituer.
-COLONNES_MASQUEES: set[tuple[str, str]] = set()
+#
+# Ce qui est masqué, et pourquoi :
+#   arret_seuils_franchis.operateur / .explication_texte
+#       Un dépassement de seuil se débogue avec la saisie, la machine, la règle
+#       et les durées. Savoir QUI a dépassé et lire la justification qu'on lui a
+#       demandé d'écrire n'y ajoute rien, et n'a pas à sortir dans un panneau SQL.
+#   perf_releves.email
+#       La seule adresse en clair d'une table métier. Le poste, le navigateur et
+#       l'écran suffisent à diagnostiquer une lenteur.
+COLONNES_MASQUEES: set[tuple[str, str]] = {
+    ("arret_seuils_franchis", "operateur"),
+    ("arret_seuils_franchis", "explication_texte"),
+    ("perf_releves", "email"),
+}
 
 # Les fonctions SQL passent AUSSI par l'autoriseur. Sans cette liste, même
 # count() et LIKE sont refusés — piège vérifié.
@@ -171,7 +201,48 @@ class DiagnosticTropLong(Exception):
     """Requête avortée : elle dépassait le plafond d'opérations."""
 
 
+def _uri_lecture_seule(chemin_db: str) -> str:
+    """URI `mode=ro`, valable aussi sur un chemin absolu Windows.
+
+    `file:C:\\...\\production.db?mode=ro` n'est pas une URI : SQLite lit `C:`
+    comme un schéma et échoue. `Path.as_uri()` rend `file:///C:/...`, correct
+    sur les deux systèmes. Un chemin relatif — `data/production.db` en local —
+    est laissé tel quel, `as_uri()` le refuserait.
+    """
+    chemin = Path(chemin_db)
+    if chemin.is_absolute():
+        return f"{chemin.as_uri()}?mode=ro"
+    return f"file:{chemin_db}?mode=ro"
+
+
 # ─── Autoriseur ───────────────────────────────────────────────────────────────
+
+# Ce que SQLite a refusé, en français. Sans cette table, une requête bloquée
+# ailleurs que sur une table ou une fonction remonte « authorization denied » —
+# vrai, mais inexploitable par la personne qui débogue. Exemple concret :
+# `pragma_table_info('paie')` est refusé sur une écriture interne du schéma,
+# pas sur la table `paie`, et le message doit le dire.
+_ACTIONS_REFUSEES = {
+    sqlite3.SQLITE_INSERT: "écriture INSERT",
+    sqlite3.SQLITE_UPDATE: "écriture UPDATE",
+    sqlite3.SQLITE_DELETE: "écriture DELETE",
+    sqlite3.SQLITE_CREATE_TABLE: "création de table",
+    sqlite3.SQLITE_CREATE_TEMP_TABLE: "création de table temporaire",
+    sqlite3.SQLITE_CREATE_INDEX: "création d'index",
+    sqlite3.SQLITE_CREATE_VIEW: "création de vue",
+    sqlite3.SQLITE_CREATE_TRIGGER: "création de déclencheur",
+    sqlite3.SQLITE_DROP_TABLE: "suppression de table",
+    sqlite3.SQLITE_DROP_INDEX: "suppression d'index",
+    sqlite3.SQLITE_DROP_VIEW: "suppression de vue",
+    sqlite3.SQLITE_DROP_TRIGGER: "suppression de déclencheur",
+    sqlite3.SQLITE_ALTER_TABLE: "ALTER TABLE",
+    sqlite3.SQLITE_ATTACH: "ATTACH",
+    sqlite3.SQLITE_DETACH: "DETACH",
+    sqlite3.SQLITE_TRANSACTION: "transaction",
+    sqlite3.SQLITE_ANALYZE: "ANALYZE",
+    sqlite3.SQLITE_REINDEX: "REINDEX",
+}
+
 
 def _construire_autoriseur(refus: list[str]):
     """Fabrique la fonction que SQLite appelle avant chaque accès.
@@ -206,7 +277,21 @@ def _construire_autoriseur(refus: list[str]):
                 return sqlite3.SQLITE_DENY
             return sqlite3.SQLITE_OK
 
-        # Tout le reste — écriture, DDL, ATTACH, PRAGMA, transaction — refusé.
+        if action == sqlite3.SQLITE_PRAGMA:
+            # Nommer le pragma : sans ça, `pragma_table_info('paie')` remonte
+            # un « authorization denied » muet, illisible dans le panneau.
+            motif = f"pragma {arg1}"
+            if motif not in refus:
+                refus.append(motif)
+            return sqlite3.SQLITE_DENY
+
+        # Tout le reste — écriture, DDL, ATTACH, transaction — refusé,
+        # en nommant l'opération pour que le panneau ait quelque chose à dire.
+        motif = _ACTIONS_REFUSEES.get(action, "opération non autorisée")
+        if arg1:
+            motif = f"{motif} ({arg1})"
+        if motif not in refus:
+            refus.append(motif)
         return sqlite3.SQLITE_DENY
 
     return autoriseur
@@ -238,7 +323,7 @@ def executer(
     # mode=ro : le fichier est ouvert en lecture seule par le système. Aucune
     # écriture n'est possible même si l'autoriseur était contourné.
     con = sqlite3.connect(
-        f"file:{chemin_db}?mode=ro", uri=True, timeout=DELAI_OUVERTURE
+        _uri_lecture_seule(chemin_db), uri=True, timeout=DELAI_OUVERTURE
     )
     try:
         con.row_factory = sqlite3.Row
@@ -262,7 +347,8 @@ def executer(
             # is prohibited »), pas en OperationalError : attraper la classe
             # parente couvre les deux, l'erreur de syntaxe comprise.
             texte = str(exc)
-            if "prohibited" in texte or "not authorized" in texte:
+            if ("prohibited" in texte or "not authorized" in texte
+                    or "authorization denied" in texte):
                 detail = ", ".join(refus) if refus else texte
                 raise DiagnosticRefus(f"Accès refusé : {detail}") from exc
             if "interrupted" in texte.lower():
@@ -294,6 +380,61 @@ def executer(
         con.close()
 
 
+def geometrie_fichier(chemin_db: str) -> dict:
+    """Géométrie du fichier et version du moteur.
+
+    Hors encadrement, parce qu'il n'y a rien à encadrer : deux entiers sur la
+    forme du fichier SQLite et un numéro de version, aucune donnée de la base.
+    `sqlite_version()` est délibérément absente de FONCTIONS_AUTORISEES — la
+    liste blanche de fonctions sert à écrire des requêtes métier, pas à
+    interroger le moteur ; ce qui relève du moteur passe par ici.
+    """
+    con = sqlite3.connect(_uri_lecture_seule(chemin_db), uri=True, timeout=DELAI_OUVERTURE)
+    try:
+        return {
+            "page_size": con.execute("PRAGMA page_size").fetchone()[0],
+            "page_count": con.execute("PRAGMA page_count").fetchone()[0],
+            "sqlite_version": con.execute("SELECT sqlite_version()").fetchone()[0],
+        }
+    except sqlite3.Error:
+        return {"page_size": 0, "page_count": 0, "sqlite_version": "?"}
+    finally:
+        con.close()
+
+
+def colonnes_de_la_table(chemin_db: str, table: str) -> list[dict]:
+    """Colonnes d'une table de la liste blanche, chacune marquée si elle est masquée.
+
+    Hors encadrement, comme `tables_lisibles_du_schema()` : un PRAGMA ne passe
+    pas l'autoriseur, par construction. La liste blanche est donc vérifiée ici,
+    à la main, avant de lire quoi que ce soit — une table hors liste n'a pas de
+    schéma à montrer, pas plus qu'elle n'a de lignes à rendre.
+
+    L'interpolation du nom de table dans le PRAGMA est sûre parce que `table`
+    vient d'être comparé à `TABLES_LISIBLES`, un ensemble fermé d'identifiants
+    écrits dans ce fichier. Rien de ce que l'appelant envoie n'atteint le SQL.
+    """
+    if table not in TABLES_LISIBLES:
+        raise DiagnosticRefus(f"Accès refusé : table {table}")
+    con = sqlite3.connect(_uri_lecture_seule(chemin_db), uri=True, timeout=DELAI_OUVERTURE)
+    try:
+        lignes = con.execute(f'PRAGMA table_info("{table}")').fetchall()
+    finally:
+        con.close()
+    return [
+        {
+            "cid": r[0],
+            "name": r[1],
+            "type": (r[2] or "TEXT"),
+            "notnull": bool(r[3]),
+            "dflt_value": r[4],
+            "pk": bool(r[5]),
+            "masquee": (table, r[1]) in COLONNES_MASQUEES,
+        }
+        for r in lignes
+    ]
+
+
 def tables_lisibles_du_schema(chemin_db: str) -> list[str]:
     """Liste les tables du schéma, pour aider à composer la liste blanche.
 
@@ -301,7 +442,7 @@ def tables_lisibles_du_schema(chemin_db: str) -> list[str]:
     à répondre à une requête de diagnostic. À n'appeler que depuis un script
     d'administration, jamais depuis l'endpoint.
     """
-    con = sqlite3.connect(f"file:{chemin_db}?mode=ro", uri=True, timeout=DELAI_OUVERTURE)
+    con = sqlite3.connect(_uri_lecture_seule(chemin_db), uri=True, timeout=DELAI_OUVERTURE)
     try:
         return [
             r[0] for r in con.execute(

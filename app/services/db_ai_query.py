@@ -1,15 +1,23 @@
-"""Database Viewer — requêtes SQL via langage naturel (Anthropic Claude)."""
+"""Database Viewer — requêtes SQL via langage naturel (Anthropic Claude).
+
+Le SQL produit par le modèle est exécuté par `diagnostic_sql.executer()`, donc
+sous l'autoriseur SQLite. `validate_select_sql()` reste en amont, mais ce n'est
+plus la barrière de sécurité : c'est un contrôle de forme, qui rend une erreur
+lisible tout de suite et ajoute la LIMIT manquante. Un filtre par expression
+régulière ne sait pas ce qu'une requête va lire ; l'autoriseur, lui, refuse à
+la lecture, table par table et colonne par colonne.
+"""
 from __future__ import annotations
 
 import json
 import os
 import re
-import sqlite3
 from typing import Any
 
 from fastapi import HTTPException
 
-from config import ANTHROPIC_API_KEY
+from app.services import diagnostic_sql
+from config import ANTHROPIC_API_KEY, DB_PATH
 
 ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
 _MAX_ROWS = 200
@@ -26,7 +34,9 @@ Règles strictes :
 - Uniquement SELECT (pas de modification, pas de PRAGMA, pas de plusieurs requêtes).
 - SQLite : guillemets doubles pour les identifiants si besoin, pas de backticks MySQL.
 - Limite les résultats : ajoute LIMIT 200 si absent (max 200 lignes).
-- Utilise uniquement les tables et colonnes du schéma fourni.
+- Utilise uniquement les tables et colonnes du schéma fourni. Le schéma ne
+  contient pas toute la base : ce qui n'y est pas est refusé à la lecture, il
+  est donc inutile de le deviner.
 - Dates souvent stockées en TEXT ISO ou format français ; adapte les filtres.
 - Si la question est ambiguë, choisis l'interprétation la plus utile pour un admin métier.
 
@@ -35,31 +45,33 @@ Réponds UNIQUEMENT avec un objet JSON valide (sans markdown) :
 """
 
 
-def build_schema_snapshot(conn: sqlite3.Connection) -> str:
-    """Résumé compact du schéma pour le prompt Claude."""
-    tables = conn.execute(
-        "SELECT name FROM sqlite_master "
-        "WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
-    ).fetchall()
+def build_schema_snapshot() -> str:
+    """Résumé compact du schéma pour le prompt Claude.
+
+    Ne décrit que les tables de la liste blanche, et tait les colonnes
+    masquées : le modèle ne peut pas proposer de lire ce qu'il ne voit pas,
+    et n'écrit pas une requête vouée à revenir NULL.
+    """
     lines: list[str] = []
-    for t in tables:
-        name = t[0]
-        cols = conn.execute(f'PRAGMA table_info("{name}")').fetchall()
+    for name in sorted(diagnostic_sql.TABLES_LISIBLES):
+        try:
+            cols = diagnostic_sql.colonnes_de_la_table(DB_PATH, name)
+        except Exception:
+            continue
         parts = []
         for c in cols:
-            col = c[1]
-            typ = (c[2] or "TEXT").upper()
+            if c["masquee"]:
+                continue
             flags = []
-            if c[5]:
+            if c["pk"]:
                 flags.append("PK")
-            if c[3]:
+            if c["notnull"]:
                 flags.append("NOT NULL")
-            parts.append(f"{col} {typ}" + (f" ({','.join(flags)})" if flags else ""))
-        try:
-            n = conn.execute(f'SELECT COUNT(*) FROM "{name}"').fetchone()[0]
-        except Exception:
-            n = "?"
-        lines.append(f"- {name} (~{n} lignes): {', '.join(parts)}")
+            parts.append(f"{c['name']} {(c['type'] or 'TEXT').upper()}"
+                         + (f" ({','.join(flags)})" if flags else ""))
+        if not parts:
+            continue
+        lines.append(f"- {name}: {', '.join(parts)}")
     return "\n".join(lines)
 
 
@@ -125,20 +137,10 @@ def natural_language_to_sql(question: str, schema: str) -> dict[str, str]:
     return _parse_ai_json(raw)
 
 
-def execute_select(conn: sqlite3.Connection, sql: str) -> dict[str, Any]:
+def execute_select(sql: str) -> dict[str, Any]:
+    """Exécute le SQL produit par le modèle, sous encadrement."""
     sql = validate_select_sql(sql)
-    cur = conn.execute(sql)
-    if cur.description is None:
-        return {
-            "columns": [],
-            "rows": [],
-            "total": 0,
-            "truncated": False,
-        }
-    columns = [d[0] for d in cur.description]
-    rows_raw = cur.fetchmany(_MAX_ROWS + 1)
-    truncated = len(rows_raw) > _MAX_ROWS
-    rows_raw = rows_raw[:_MAX_ROWS]
+    r = diagnostic_sql.executer(DB_PATH, sql, lignes_max=_MAX_ROWS)
 
     def _safe(v: Any) -> Any:
         if isinstance(v, bytes):
@@ -148,26 +150,23 @@ def execute_select(conn: sqlite3.Connection, sql: str) -> dict[str, Any]:
                 return f"<BLOB {len(v)} bytes>"
         return v
 
-    rows = [[_safe(cell) for cell in r] for r in rows_raw]
     return {
-        "columns": columns,
-        "rows": rows,
-        "total": len(rows),
-        "truncated": truncated,
+        "columns": r["colonnes"],
+        "rows": [[_safe(cell) for cell in ligne] for ligne in r["lignes"]],
+        "total": r["nb_lignes"],
+        "truncated": r["tronque"],
     }
 
 
-def run_natural_language_query(
-    conn: sqlite3.Connection, question: str
-) -> dict[str, Any]:
+def run_natural_language_query(question: str) -> dict[str, Any]:
     q = (question or "").strip()
     if not q:
         raise HTTPException(status_code=400, detail="Question vide.")
     if len(q) > 2000:
         raise HTTPException(status_code=400, detail="Question trop longue (max 2000 caractères).")
-    schema = build_schema_snapshot(conn)
+    schema = build_schema_snapshot()
     generated = natural_language_to_sql(q, schema)
-    result = execute_select(conn, generated["sql"])
+    result = execute_select(generated["sql"])
     return {
         "question": q,
         "sql": validate_select_sql(generated["sql"]),
