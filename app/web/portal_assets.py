@@ -1275,7 +1275,11 @@ function renderPortal(){
   const isCompta = aa ? !!aa.compta : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','comptabilite'].includes(urole)));
   const isExpe = aa ? !!aa.expe : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','expedition','logistique','commercial'].includes(urole)));
   const isFab = aa ? !!aa.fabrication : (isSuper || urole==='fabrication' || !!(urole && ['direction','administration','administration_ventes','administration_technique'].includes(urole)));
-  const isPrint = isSuper || !!(urole && ['fabrication','logistique','expedition'].includes(urole));
+  // MyPrint : les étiquettes de traçabilité. La direction en était exclue par
+  // omission — elle a MyStock en entier, dont l'écran traça, mais pas la tuile
+  // qui y mène. L'administration suit la même logique que sur les autres
+  // modules d'atelier.
+  const isPrint = isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','fabrication','logistique','expedition'].includes(urole));
   const isCom = urole==='commercial';
   const isRH   = aa ? !!aa.planning_rh : (isSuper || !!(urole && ['direction','administration','administration_ventes','administration_technique','fabrication','logistique','expedition','comptabilite'].includes(urole)));
   const isComptaPlan = urole === 'comptabilite';
@@ -1314,6 +1318,23 @@ function renderPortal(){
       h('div',{className:'portal-app-icon'},iconEl('edit',28)),
       h('div',{className:'portal-app-name'},'Saisie Prod'),
       h('div',{className:'portal-app-desc'},'Saisie opérateur — machine')
+    )});
+  }
+
+  // Retour de prod : ce que la machine a sorti, et ce que les conducteurs en
+  // ont écrit. Même périmètre que Saisie Prod, élargi à la production : la
+  // feuille atelier s'imprime pour être affichée à la machine.
+  if(isFab || isProd){
+    const id='retour-prod';
+    tileSpecs.push({id,el:h('div',{
+      className:'portal-app',
+      'data-portal-id':id,
+      draggable:'true',
+      onClick:()=>{if(_portalDragSuppressClick)return;window.location.href='/rapports-prod';}
+    },
+      h('div',{className:'portal-app-icon'},iconEl('clipboard',28)),
+      h('div',{className:'portal-app-name'},'Retour de prod'),
+      h('div',{className:'portal-app-desc'},'Comptes-rendus dossier — feuille atelier')
     )});
   }
 

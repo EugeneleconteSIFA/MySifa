@@ -299,3 +299,72 @@ contrôle humain une saison de plus.
 4. Annonce hebdomadaire : option a, b ou c du rang 6 ?
 5. Automatisation : voie A, B ou C — et le mercredi 07:00 du pied de page
    est-il la bonne heure ?
+
+---
+
+## 5. Ajout du 28/08/2026 — module « Retour de prod » (`/rapports-prod`)
+
+Livré hors de la liste d'arbitrage ci-dessus, sur demande directe : rendre
+quelque chose aux opérateurs, et centraliser les comptes-rendus de dossier.
+
+**Fichiers**
+
+| Fichier | Rôle |
+|---|---|
+| `app/services/rapport_dossier.py` | Service pur (connexion sqlite seule, aucun import applicatif) : assemble le compte-rendu d'un dossier et l'agrège par machine et par semaine |
+| `app/routers/rapports_prod.py` | 4 endpoints : `/semaine`, `/comptes-rendus`, `/dossier/{no}`, `/retour-atelier` |
+| `app/web/rapports_prod_page.py` | Page `/rapports-prod`, deux onglets, feuille imprimable A4 |
+| `tests/test_rapport_dossier.py` | 13 cas, base sqlite en mémoire |
+
+Aucune migration : tout est lu dans les tables existantes.
+Entrées : tuile portail (rôles production) et palette de commandes.
+
+**Deux décisions de conception à connaître**
+
+1. **Le retour est par machine, jamais par personne.** Même raisonnement qu'au
+   §2.5 : la complétude d'une saisie mesure l'ergonomie et la charge autant que
+   le conducteur. La feuille crédite l'équipe (« Aux commandes cette semaine »)
+   sans jamais rattacher un chiffre à un nom, et les points de vigilance sont
+   comptés, pas attribués. Un cas de test verrouille cette propriété.
+2. **Le repère est la référence, pas l'atelier.** « Cette référence tourne
+   d'habitude à 15 000 m/h sur 3 productions » se discute à la machine ; une
+   moyenne d'atelier ne se discute pas.
+
+**Piège de définition rencontré, et corrigé**
+
+`produit_series.vitesse_m_min` est calculé par `app/services/dossier_stats.py`
+comme `métrage / (production + arrêt)`. Or `weekly_report.py` appelle
+« vitesse » `métrage / production`. Ce sont deux grandeurs différentes sous le
+même mot, et comparer l'une à l'autre — ce que faisait la première version de
+la feuille — surestimait systématiquement la semaine en cours : sur le jeu
+d'essai, +66 % au lieu de −42 %.
+
+Le module expose donc deux valeurs nommées séparément :
+
+- `vitesse_m_h` — métrage / production seule, alignée sur `weekly_report` ;
+- `cadence_m_h` — métrage / (production + arrêt), **seule** valeur comparée au
+  repère historique, calculée des deux côtés de la même façon.
+
+`tests/test_rapport_dossier.py::test_cadence_comparable_au_repere` verrouille
+ce point précis.
+
+**Trois constats sur l'existant, à arbitrer**
+
+1. `weekly_report._dossiers_fab_detail` intitule « calage » le seul code `02`,
+   alors que le référentiel compte 9 codes de catégorie `calage` (`10`, `11`,
+   `12`, `58` changement bobines, `59`, `60`, `74`, `75`). Un changement de
+   bobine ou de cliché n'est donc pas compté dans le calage du rapport hebdo.
+   Le nouveau module nomme sa ligne « calage et changements » et couvre toute
+   la catégorie — le nom diffère parce que la mesure diffère.
+2. Deux définitions de « vitesse » coexistent dans le dépôt (voir ci-dessus).
+   Tant qu'elles coexistent, tout écran qui les rapproche doit le dire.
+3. `weekly_report` ne plafonne pas l'écart entre deux saisies : une journée
+   terminée sans code `89` compte jusqu'à la première saisie du lendemain. Le
+   nouveau module conserve ce calcul pour ne pas contredire le rapport hebdo,
+   mais isole ces écarts (`minutes_douteuses`) et les remonte comme point de
+   vigilance sur la feuille atelier, là où c'est actionnable.
+
+**Reste à faire sur v1** : le boot. Le `.venv` du dépôt est un venv macOS et
+`data/production.db` fait 0 octet — ni FastAPI ni données réelles ici. Le
+service, ses calculs et le JS sont vérifiés (`compileall`, `node --check`,
+13 cas de test), le rendu réel des deux onglets ne l'est pas.
