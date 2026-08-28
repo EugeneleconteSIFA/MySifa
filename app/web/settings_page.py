@@ -2487,7 +2487,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
             <span id="diag-tronque" style="display:none;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--warn)"></span>
           </div>
           <div style="overflow:auto;max-height:60vh">
-            <table id="diag-table" style="width:100%;border-collapse:collapse;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"></table>
+            <table id="diag-table" style="width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"></table>
           </div>
         </div>
 
@@ -3348,7 +3348,10 @@ function _diagRendre(r) {
   (r.colonnes || []).forEach(function (c) {
     const th = document.createElement('th');
     th.textContent = c;
-    th.style.cssText = 'position:sticky;top:0;background:var(--card);border-bottom:1px solid var(--border);'
+    // z-index et box-shadow plutot que border-bottom : avec border-collapse
+    // separate, c'est la seule bordure qui reste solidaire de l'en-tete collant.
+    th.style.cssText = 'position:sticky;top:0;z-index:2;background:var(--card);'
+      + 'box-shadow:inset 0 -1px 0 var(--border);'
       + 'padding:9px 12px;text-align:left;font-weight:700;color:var(--text);white-space:nowrap';
     trh.appendChild(th);
   });
@@ -3360,7 +3363,7 @@ function _diagRendre(r) {
     const tr = document.createElement('tr');
     ligne.forEach(function (v) {
       const td = document.createElement('td');
-      td.style.cssText = 'border-bottom:1px solid var(--border);padding:8px 12px;'
+      td.style.cssText = 'box-shadow:inset 0 -1px 0 var(--border);padding:8px 12px;'
         + 'vertical-align:top;max-width:420px;overflow-wrap:anywhere';
       if (v === null || v === undefined) {
         // NULL affiché comme tel : une colonne masquée revient NULL, et
