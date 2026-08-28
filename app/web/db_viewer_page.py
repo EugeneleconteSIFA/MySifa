@@ -49,7 +49,7 @@ def db_viewer_page(request: Request):
 <meta name="theme-color" content="#0a0e17">
 <title>Database — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
-<link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css?v={version}">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
 *,*::before,*::after{{margin:0;padding:0;box-sizing:border-box}}

@@ -59,7 +59,7 @@ LEARNING_HTML = r"""<!DOCTYPE html>
 <meta name="theme-color" content="#0a0e17">
 <title>MyLearning — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
-<link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <style>
 /* tokens : static/mysifa_theme.css — ici, seulement les écarts */
 :root{--ok:#34d399;}
@@ -517,7 +517,7 @@ LEARNING_ADMIN_HTML = r"""<!DOCTYPE html>
 <meta name="theme-color" content="#0a0e17">
 <title>MyLearning Admin — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
-<link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <style>
 :root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--accent-bg:rgba(34,211,238,.12);--ok:#34d399;--warn:#fbbf24;--danger:#f87171}
 body.light{--bg:#f1f5f9;--card:#fff;--border:#e2e8f0;--text:#0f172a;--text2:#475569;--muted:#64748b;--accent:#0891b2;--accent-bg:rgba(8,145,178,.10);--ok:#059669;--warn:#d24b00;--danger:#dc2626}

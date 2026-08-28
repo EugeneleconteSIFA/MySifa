@@ -7,7 +7,7 @@ Page standalone (architecture identique à stock_page.py).
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from config import APP_ORG_NAME, FSC_WARNING_PROD, STOCK_UNITE_VENTE_DEFAUT
+from config import APP_VERSION, APP_ORG_NAME, FSC_WARNING_PROD, STOCK_UNITE_VENTE_DEFAUT
 from app.services.auth_service import get_current_user, is_fabrication, is_admin
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
@@ -72,7 +72,7 @@ FABRICATION_HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/png" sizes="512x512" href="/static/mys_icon_512.png">
 <link rel="apple-touch-icon" href="/static/mys_icon_180.png">
 <link rel="stylesheet" href="/static/support_widget.css">
-<link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_stock_modals.css?v=z1cond1">
 <style>
@@ -8078,3 +8078,9 @@ FABRICATION_HTML = FABRICATION_HTML.replace(
     PRINT_MODAL_JS + "\ninit();\n</script>",
     1,
 )
+
+# Version des assets : le lien vers static/mysifa_theme.css doit changer
+# d'URL à chaque version, sinon un navigateur qui a le fichier en cache
+# depuis l'ancien régime (max-age=86400) continue de servir une feuille
+# de style sans les tokens de couleur — la page s'affiche en noir et blanc.
+FABRICATION_HTML = FABRICATION_HTML.replace("__V_LABEL__", "v" + APP_VERSION)
