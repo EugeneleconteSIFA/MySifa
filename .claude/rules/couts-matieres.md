@@ -46,6 +46,16 @@ seul transport : on refuse plutôt que d'écrire un prix d'achat négatif.
 Changer transport ou taxes déplace le sous-total **sans toucher au prix d'achat** :
 `set_parametrage` pousse alors le nouveau sous-total vers la valorisation.
 
+**La valorisation peut dériver, et rien ne la rattrapait.** Le miroir ne part
+qu'au moment d'une écriture : `set_prix`, `set_tarif`, `set_parametrage`,
+`set_principal`. Une valeur écrite le jour où le transport valait 5 % y reste
+après le passage à 9 % si le chemin emprunté ne l'a pas déclenché — import en
+masse, écriture directe, migration, tarif créé avant que le fournisseur ne
+devienne principal. On lit alors 4,41 €/kg dans MyStock là où la fiche calcule
+4,578. `scripts/resync_valorisation.py --inventaire` liste les écarts,
+`--appliquer` repousse les bons sous-totaux en passant par `_mirror_principal`,
+donc avec trace dans `mp_valorisation_historique`.
+
 **Historique** — `mp_prix_historique`, au niveau de la déclinaison, avec la date,
 **l'écran d'origine**, l'auteur, le fournisseur, prix avant/après ET sous-total
 avant/après. Les deux valeurs, parce qu'un changement de paramétrage fait bouger
@@ -146,6 +156,14 @@ nuls omis. Le transport a aussi sa ligne « dont transport » dans le
 récapitulatif, sa colonne dans le détail déplié de la liste, et un lien vers le
 tarif du fournisseur : nommer un coût sans donner le chemin pour le corriger
 n'avance personne.
+
+**Dans les jauges**, il hachure la fin du segment de la matière qui le porte —
+jamais un segment à lui : il vit DANS le prix de cette matière, lui en donner un
+le compterait deux fois et suggérerait un composant de plus. On voit ainsi
+LAQUELLE des trois matières porte le transport, ce qu'aucun total global ne dit.
+La hachure est composée avec `--text`, donc elle bascule avec le thème : un noir
+fixe disparaissait en sombre, où le repère se confondait avec la piste vide et
+faisait paraître la matière plus légère qu'elle n'est.
 
 ### Fusion des déclinaisons : une matière, une ligne
 

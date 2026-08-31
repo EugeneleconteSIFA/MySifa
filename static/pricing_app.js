@@ -617,22 +617,46 @@
     if (!comps.length || total <= 0) {
       return '<div class="empty">Aucun composant</div>';
     }
+    /* Chaque segment porte SA part de transport, hachurée, à son extrémité
+       droite. Le transport n'est pas un composant de plus — ce serait faux, il
+       vit DANS le prix de chaque matière — donc il ne prend pas de segment à
+       lui : il assombrit la fin de celui auquel il appartient.
+
+       On voit alors d'un coup d'œil laquelle des trois matières porte le
+       transport, ce qu'aucun total global ne dit. Une hachure plutôt qu'une
+       couleur : elle se lit sur n'importe quel fond, clair ou sombre, sans
+       ajouter une teinte de plus à une barre qui en compte déjà trois. */
+    let aDuTransport = false;
     const segs = comps
       .map((c) => {
         const v = parseFloat(c.price_eur_per_m2 || 0);
         const pct = total > 0 ? (v / total) * 100 : 0;
         const col = CAT_BAR_COLOR[c.role] || "var(--accent)";
-        return `<div class="breakdown-seg" style="width:${pct.toFixed(1)}%;background:${col}" title="${escAttr(c.name)}"></div>`;
+        const t = parseFloat((c.breakdown && c.breakdown.transport_eur_m2) || 0);
+        const tpct = v > 0 ? Math.min(100, (t / v) * 100) : 0;
+        if (t) aDuTransport = true;
+        const titre = c.name + (t ? ` — dont ${fmtEurM2(t)} de transport` : " — sans transport");
+        return `<div class="breakdown-seg" style="width:${pct.toFixed(1)}%;background:${col}" title="${escAttr(titre)}">`
+          + (tpct > 0 ? `<span class="seg-transport" style="width:${tpct.toFixed(1)}%"></span>` : "")
+          + `</div>`;
       })
       .join("");
     const legend = comps
       .map((c) => {
         const v = parseFloat(c.price_eur_per_m2 || 0);
         const pct = total > 0 ? ((v / total) * 100).toFixed(1) : "0";
-        return `<div><span>${escHtml(c.name || c.role)}</span><span>${fmtEurM2(v)} · ${pct}%</span></div>`;
+        const t = parseFloat((c.breakdown && c.breakdown.transport_eur_m2) || 0);
+        return `<div><span>${escHtml(c.name || c.role)}${
+          t ? ` <span class="lg-transport" title="Part de transport comprise dans ce coût">dont ${escHtml(fmtEurM2(t))} transport</span>` : ""
+        }</span><span>${fmtEurM2(v)} · ${pct}%</span></div>`;
       })
       .join("");
-    return `<div class="breakdown-stack"><div class="breakdown-bar">${segs}</div><div class="breakdown-legend">${legend}</div></div>`;
+    // La hachure ne se devine pas : une ligne de légende, et seulement quand
+    // il y a effectivement du transport à expliquer.
+    const cle = aDuTransport
+      ? '<div class="breakdown-cle"><span class="cle-hachure"></span>part de transport, comprise dans le coût</div>'
+      : "";
+    return `<div class="breakdown-stack"><div class="breakdown-bar">${segs}</div>${cle}<div class="breakdown-legend">${legend}</div></div>`;
   }
 
   function updateChromeControls() {
@@ -4050,6 +4074,11 @@
       .map((x) => {
         const prix = parseFloat(x.price_eur_per_m2 || 0);
         const part = parseFloat(x.share_pct || 0);
+        // La part de transport DANS ce composant : elle hachure la fin de sa
+        // jauge plutôt que de s'ajouter à côté — le transport est déjà compris
+        // dans le coût, l'afficher en supplément le compterait deux fois.
+        const transp = parseFloat((x.breakdown && x.breakdown.transport_eur_m2) || 0);
+        const transpPart = prix > 0 ? Math.min(100, (transp / prix) * 100) : 0;
         return `<tr>
           <td class="msp-role">${escHtml(MSP_ROLE_LABEL[x.role] || x.role)}</td>
           <td><button type="button" class="msp-lien" data-msp-mat="${x.material_id}"
@@ -4061,7 +4090,11 @@
               : '<span class="muted">—</span>'
           }</td>
           <td class="msp-part">
-            <span class="msp-jauge"><i style="width:${Math.max(0, Math.min(100, part))}%"></i></span>
+            <span class="msp-jauge" title="${escAttr(
+              fmtPct(part) + " du prix de revient" + (transp ? ` — dont ${fmtEurM2(transp)} de transport` : "")
+            )}"><i style="width:${Math.max(0, Math.min(100, part))}%">${
+              transpPart > 0 ? `<b style="width:${transpPart.toFixed(1)}%"></b>` : ""
+            }</i></span>
             <span class="msp-part-val">${escHtml(fmtPct(part))}</span>
           </td>
         </tr>`;
