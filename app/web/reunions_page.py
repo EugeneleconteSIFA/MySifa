@@ -152,10 +152,49 @@ table.reu tbody tr:hover{background:var(--accent-bg);box-shadow:inset 3px 0 0 0 
 #toast.danger{background:var(--danger)}
 #toast.info{background:var(--accent);color:var(--bg)}
 @media (max-width:1100px){ .split{grid-template-columns:1fr} .colonne{position:static;max-height:none} }
+
+/* Le bloc d'impression n'existe qu'a l'impression : a l'ecran, l'information
+   est deja dans les champs, la repeter serait du bruit. */
+#impression{display:none}
+.imp-hdr{border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:16px}
+.imp-marque{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#555}
+.imp-hdr h2{font-size:24px;margin:6px 0 4px;color:#000}
+.imp-meta{font-size:12.5px;color:#444;line-height:1.6}
+.imp-bloc{margin-bottom:20px;break-inside:avoid}
+.imp-bloc h3{font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:#000;
+  border-bottom:1px solid #999;padding-bottom:3px;margin:0 0 8px}
+#imp-notes{font-size:13.5px;line-height:1.6;color:#000;white-space:pre-wrap}
+#imp-notes:empty::before{content:"Aucune note.";color:#777}
+
+/*
+ * Impression : un compte-rendu, pas une capture d'ecran. On sort la coquille
+ * de l'application, on remet le document dans l'ordre ou il se lit — identite,
+ * notes, actions, puis les chiffres — et on rend le texte au lieu des champs
+ * de saisie (un <textarea> imprime se coupe a sa hauteur visible).
+ */
 @media print{
-  .top,.colonne .act-form,#toast,.modal-ov{display:none !important}
-  .split{grid-template-columns:1fr}
-  .colonne{position:static;max-height:none;border:none}
+  @page{size:A4;margin:14mm}
+  body{background:#fff !important;color:#000 !important}
+  .top,#toast,.modal-ov,.reu-hdr,#vue-liste,
+  .colonne .act-form,.colonne h3+.sub,#notes,.sauve,
+  #participants,.act .a-sup{display:none !important}
+  .wrap{padding:0;max-width:none}
+  #impression{display:block}
+
+  /* L'ordre de lecture n'est pas l'ordre de l'ecran : les notes et les
+     decisions d'abord, les chiffres ensuite. */
+  .split{display:flex;flex-direction:column;gap:0}
+  .colonne{order:1;position:static;max-height:none;overflow:visible;
+    border:none;border-radius:0;padding:0;background:none;margin-bottom:18px}
+  #prod{order:2}
+  .colonne h3{font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:#000;
+    border-bottom:1px solid #999;padding-bottom:3px;margin:0 0 8px}
+  .colonne .bloc{border-top:none;padding-top:0;margin-top:0}
+  .act{padding:5px 0;border-bottom:1px solid #ddd;break-inside:avoid}
+  .act .a-txt{font-size:13.5px;color:#000}
+  .act.fait .a-txt{color:#555}
+  .act .a-meta{color:#444}
+  .card,.rp-feuille{box-shadow:none !important}
 }
 </style>
 <link rel="stylesheet" href="/static/mysifa_perf.css">
@@ -191,6 +230,15 @@ table.reu tbody tr:hover{background:var(--accent-bg);box-shadow:inset 3px 0 0 0 
         <button class="btn btn-ghost" id="btn-imprimer">Imprimer</button>
         <button class="btn" id="btn-clore">Clore la réunion</button>
       </div>
+    </div>
+
+    <div id="impression">
+      <div class="imp-hdr">
+        <div class="imp-marque">MySifa — Point de production</div>
+        <h2 id="imp-titre"></h2>
+        <div class="imp-meta" id="imp-meta"></div>
+      </div>
+      <div class="imp-bloc"><h3>Notes</h3><div id="imp-notes"></div></div>
     </div>
 
     <div class="split">
@@ -230,7 +278,6 @@ table.reu tbody tr:hover{background:var(--accent-bg);box-shadow:inset 3px 0 0 0 
   <div class="champ"><label for="n-titre">Titre</label><input id="n-titre"></div>
   <div class="champ"><label for="n-du">Période analysée — du</label><input type="date" id="n-du"></div>
   <div class="champ"><label for="n-au">au</label><input type="date" id="n-au"></div>
-  <div class="champ"><label>Participants</label><div class="chips" id="n-participants"></div></div>
   <div class="actions-fin">
     <button class="btn btn-ghost" id="n-annul">Annuler</button>
     <button class="btn" id="n-ok">Lancer</button>
@@ -342,7 +389,44 @@ function peindreReunion(){
 
   peindreActions();
   peindreParticipants();
+  peindreImpression();
   peindreProd();
+}
+
+/* Le compte-rendu imprime : l'identite de la reunion et les notes, rendues en
+   texte. Un <textarea> imprime se coupe a sa hauteur visible — il faut donc
+   sortir le contenu dans un bloc normal. */
+function peindreImpression(){
+  const r = S.reunion;
+  if(!r) return;
+  const periode = r.date_debut === r.date_fin
+    ? dateFr(r.date_debut)
+    : dateFr(r.date_debut) + " → " + dateFr(r.date_fin);
+  const noms = ((r.participants || []).map(p => p.nom));
+  document.getElementById("imp-titre").textContent = r.titre || "";
+  document.getElementById("imp-meta").innerHTML =
+      "<div><b>Période analysée</b> : " + esc(periode)
+    + (r.machine ? " · " + esc(r.machine) : " · toutes les machines") + "</div>"
+    + "<div><b>Participants</b> : " + esc(noms.join(", ") || "non renseignés") + "</div>"
+    + "<div><b>Ouverte par</b> " + esc(r.ouverte_par || "—")
+    + " le " + esc(dateFr(r.ouverte_le))
+    + (r.statut === "close"
+        ? " · <b>close</b> le " + esc(dateFr(r.close_le))
+        : " · <b>en cours</b>")
+    + "</div>";
+  // La valeur du champ, pas celle de l'etat : on imprime ce qui est a l'ecran,
+  // meme si la frappe des dernieres secondes n'est pas encore enregistree.
+  document.getElementById("imp-notes").textContent =
+    document.getElementById("notes").value || "";
+}
+
+/* Le navigateur nomme le PDF d'apres <title> : sans ca, le fichier s'appelle
+   « Points de production — MySifa » pour toutes les reunions. */
+function nomDocument(){
+  const r = S.reunion || {};
+  const j = String(r.date_debut || "").split("-");
+  const d = j.length === 3 ? j[2] + "-" + j[1] + "-" + j[0] : "";
+  return "MySifa - Point de production " + (d || r.titre || "");
 }
 
 function peindreProd(){
@@ -468,7 +552,14 @@ document.getElementById("btn-clore").onclick = async () => {
     if(!r.ouverte){ await chargerListe(); }
   } catch(e){ showToast(e.message, "danger"); }
 };
-document.getElementById("btn-imprimer").onclick = () => window.print();
+document.getElementById("btn-imprimer").onclick = () => {
+  peindreImpression();
+  const avant = document.title;
+  document.title = nomDocument();
+  const fin = () => { document.title = avant; window.removeEventListener("afterprint", fin); };
+  window.addEventListener("afterprint", fin);
+  setTimeout(() => { window.print(); setTimeout(fin, 1500); }, 60);
+};
 document.getElementById("btn-liste").onclick = () => { vue("liste"); chargerListe(); };
 
 /* ── Lancement ───────────────────────────────────────────── */
@@ -478,13 +569,8 @@ function ouvrirModale(){
   document.getElementById("n-titre").value = S.titrePropose || "";
   document.getElementById("n-du").value = S.jourPropose || "";
   document.getElementById("n-au").value = S.jourPropose || "";
-  const box = document.getElementById("n-participants");
-  box.innerHTML = S.personnes.map(p =>
-    '<button type="button" class="chip" data-nom="' + RP.escAttr(p.nom) + '">'
-    + esc(p.nom) + '</button>').join("");
-  box.querySelectorAll("[data-nom]").forEach(b => {
-    b.onclick = () => b.classList.toggle("actif");
-  });
+  // Les participants s'ajoutent pendant la reunion, pas avant : au moment de
+  // lancer, on ne sait pas encore qui sera la.
   mov.classList.add("open");
 }
 document.getElementById("btn-lancer").onclick = ouvrirModale;
@@ -493,14 +579,11 @@ document.getElementById("mov").onclick = (e) => {
   if(e.target.id === "mov") document.getElementById("mov").classList.remove("open");
 };
 document.getElementById("n-ok").onclick = async () => {
-  const noms = [...document.querySelectorAll("#n-participants .chip.actif")]
-    .map(b => b.getAttribute("data-nom"));
   try {
     const r = await poster("/api/reunions", {
       titre: document.getElementById("n-titre").value,
       date_debut: document.getElementById("n-du").value,
-      date_fin: document.getElementById("n-au").value,
-      participants: noms
+      date_fin: document.getElementById("n-au").value
     });
     document.getElementById("mov").classList.remove("open");
     await ouvrir(r.id);

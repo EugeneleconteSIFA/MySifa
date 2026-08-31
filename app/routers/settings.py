@@ -1,4 +1,4 @@
-"""Paramètres & matrice d'accès — super administrateur uniquement."""
+"""Paramètres & matrice d'accès — accès par section (config.ROLES_SETTINGS_*)."""
 
 import hashlib
 import re
@@ -37,7 +37,13 @@ from config import (
 )
 from app.services.audit_service import log_action
 from app.services.maint_op_merge import merge_op_rows
-from services.auth_service import get_current_user, require_settings, merged_app_access, parse_access_overrides_raw
+from services.auth_service import (
+    get_current_user,
+    require_settings,
+    is_real_superadmin,
+    merged_app_access,
+    parse_access_overrides_raw,
+)
 
 router = APIRouter(tags=["settings"])
 
@@ -144,7 +150,7 @@ def access_matrix(request: Request):
         module_id, level}] }.
     Le super admin apparaît en lecture seule côté UI.
     """
-    require_settings(request)
+    actor = require_settings(request)
     from database import get_db
 
     with get_db() as conn:
@@ -177,6 +183,15 @@ def access_matrix(request: Request):
         "levels": list(ACCESS_LEVELS),
         "level_labels": LEVEL_LABELS,
         "roles": sorted(ASSIGNABLE_ROLES | {ROLE_SUPERADMIN}),
+        # Rôles que CET utilisateur peut attribuer en créant / modifiant un
+        # compte. Un non super admin ne peut pas se fabriquer une direction :
+        # le back le refuse (auth._guard_role_attribuable), le select le
+        # reflète pour ne pas proposer un choix qui finirait en 403.
+        "roles_assignables": sorted(
+            (ASSIGNABLE_ROLES | {ROLE_SUPERADMIN})
+            if is_real_superadmin(actor)
+            else (ASSIGNABLE_ROLES - {ROLE_DIRECTION, ROLE_SUPERADMIN})
+        ),
         "role_labels": _ROLE_LABELS,
         "superadmin_email": SUPERADMIN_EMAIL,
         "users": users_out,

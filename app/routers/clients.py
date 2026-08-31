@@ -1,4 +1,4 @@
-"""Référentiel clients (ERP) — Paramètres super administrateur.
+"""Référentiel clients (ERP) — Paramètres, section Contacts.
 
 Gestion CRUD du référentiel clients utilisé par MyProd, MyExpé, MyCompta.
 Import par fichier xlsx (export ERP, en-tête colonne 1 = entêtes).
@@ -13,7 +13,7 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 
 from app.services.audit_service import log_action
-from services.auth_service import require_superadmin
+from services.auth_service import require_settings_contacts
 
 router = APIRouter(tags=["clients"])
 
@@ -214,7 +214,7 @@ def list_clients(
     offset: int = 0,
 ):
     """Liste paginée des clients avec recherche multi-champs."""
-    require_superadmin(request)
+    require_settings_contacts(request)
     from database import get_db
 
     with get_db() as conn:
@@ -256,7 +256,7 @@ def list_clients(
 
 @router.get("/api/clients/{client_id}")
 def get_client(client_id: int, request: Request):
-    require_superadmin(request)
+    require_settings_contacts(request)
     from database import get_db
     with get_db() as conn:
         row = conn.execute("SELECT * FROM clients WHERE id=?", (client_id,)).fetchone()
@@ -267,7 +267,7 @@ def get_client(client_id: int, request: Request):
 
 @router.post("/api/clients")
 def create_client(payload: ClientIn, request: Request):
-    user = require_superadmin(request)
+    user = require_settings_contacts(request)
     from database import get_db
 
     raison = (payload.raison_sociale or "").strip()
@@ -333,7 +333,7 @@ def create_client(payload: ClientIn, request: Request):
 
 @router.put("/api/clients/{client_id}")
 def update_client(client_id: int, payload: ClientIn, request: Request):
-    user = require_superadmin(request)
+    user = require_settings_contacts(request)
     from database import get_db
 
     raison = (payload.raison_sociale or "").strip()
@@ -412,7 +412,7 @@ def update_client(client_id: int, payload: ClientIn, request: Request):
 
 @router.delete("/api/clients/{client_id}")
 def delete_client(client_id: int, request: Request):
-    user = require_superadmin(request)
+    user = require_settings_contacts(request)
     from database import get_db
     with get_db() as conn:
         row = conn.execute("SELECT * FROM clients WHERE id=?", (client_id,)).fetchone()
@@ -448,7 +448,7 @@ async def import_clients_xlsx(
     mode: str = "merge",
 ):
     """Import xlsx — mode 'merge' (upsert par code) ou 'replace' (vide la table)."""
-    user = require_superadmin(request)
+    user = require_settings_contacts(request)
     if not (file.filename or "").lower().endswith((".xlsx", ".xlsm")):
         raise HTTPException(400, "Le fichier doit être au format Excel (.xlsx).")
     content = await file.read()

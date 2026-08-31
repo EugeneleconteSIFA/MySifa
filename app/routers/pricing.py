@@ -13,9 +13,9 @@ import httpx
 from fastapi import APIRouter, Body, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
-from config import ROLES_PRICING_WRITE
+from config import ROLES_PRICING_WRITE, ROLES_SETTINGS_LOGISTIQUE
 from database import get_db
-from app.services.auth_service import get_current_user, user_has_app_access
+from app.services.auth_service import get_current_user, effective_role, user_has_app_access
 from app.services.pricing import (
     PricingError,
     compute_material_price_per_m2,
@@ -88,6 +88,32 @@ def _require_write(request: Request) -> dict:
             detail="Écriture réservée à la Direction.",
         )
     return user
+
+
+# ─── Écrans Coûts matières pilotés depuis Paramètres ──────────────
+# « Appairage matières » et « Importations » vivent dans la section Logistique
+# de /settings, ouverte à l'administration technique. Ils règlent des
+# paramètres Coûts matières sans ouvrir l'application elle-même : le garde
+# accepte donc soit un utilisateur MyPricing (lecture ou écriture selon le
+# geste), soit un rôle qui voit déjà la section Logistique — sinon l'onglet
+# s'affiche et refuse de fonctionner.
+
+def _is_param_logistique(user: dict) -> bool:
+    return effective_role(user) in ROLES_SETTINGS_LOGISTIQUE
+
+
+def _require_param_logistique_read(request: Request) -> dict:
+    user = get_current_user(request)
+    if _is_param_logistique(user):
+        return user
+    return _require_read(request)
+
+
+def _require_param_logistique_write(request: Request) -> dict:
+    user = get_current_user(request)
+    if _is_param_logistique(user):
+        return user
+    return _require_write(request)
 
 
 def _pricing_error(exc: PricingError) -> HTTPException:
@@ -355,7 +381,7 @@ def preview_material_price(request: Request, body: MaterialPreviewIn):
 
 @router.get("/api/pricing/settings", response_model=PricingSettingsOut)
 def get_pricing_settings(request: Request):
-    _require_read(request)
+    _require_param_logistique_read(request)
     with get_db() as conn:
         data = load_settings_response(conn)
     return PricingSettingsOut(**data)
@@ -363,7 +389,7 @@ def get_pricing_settings(request: Request):
 
 @router.patch("/api/pricing/settings", response_model=PricingSettingsOut)
 def patch_pricing_settings(request: Request, body: PricingSettingsPatch):
-    user = _require_write(request)
+    user = _require_param_logistique_write(request)
     patch = body.model_dump(exclude_unset=True)
     if not patch:
         raise HTTPException(status_code=400, detail="Aucun champ à mettre à jour.")
@@ -1942,7 +1968,7 @@ def bridge_orphans(request: Request):
       - `mc` : matières mc_material actives non référencées par aucun mp.
     Utilisé par l'écran de rapprochement dans Paramètres.
     """
-    _require_read(request)
+    _require_param_logistique_read(request)
     with get_db() as conn:
         return {
             "mp": pricing_bridge.list_orphaned_mp(conn),
@@ -1956,7 +1982,7 @@ def bridge_suggest(request: Request, mp_id: int):
     Propositions de mc_material pour appairer une matière MyStock donnée.
     Trié par pertinence : match exact appellation, puis nom, puis catégorie.
     """
-    _require_read(request)
+    _require_param_logistique_read(request)
     with get_db() as conn:
         return {"suggestions": pricing_bridge.suggest_matches(conn, mp_id, limit=500)}
 
@@ -1971,7 +1997,7 @@ def bridge_link(request: Request, body: dict = Body(...)):
     container, taxe, import) depuis mc_material vers matieres_premieres
     sans écraser les valeurs déjà saisies côté MyStock.
     """
-    _require_write(request)
+    _require_param_logistique_write(request)
     try:
         mp_id = int(body.get("mp_id"))
         mc_id = int(body.get("mc_id"))
@@ -1993,7 +2019,7 @@ def bridge_link(request: Request, body: dict = Body(...)):
 @router.delete("/api/pricing/bridge/link/{mp_id}")
 def bridge_unlink(request: Request, mp_id: int):
     """Casse le lien d'une matière MyStock avec son mc_material."""
-    _require_write(request)
+    _require_param_logistique_write(request)
     with get_db() as conn:
         result = pricing_bridge.unlink_matiere(conn, mp_id)
         if not result.get("ok"):

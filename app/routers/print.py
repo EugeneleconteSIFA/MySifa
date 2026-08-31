@@ -56,7 +56,14 @@ from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db
-from app.services.auth_service import get_current_user, require_superadmin
+from app.services.auth_service import get_current_user, require_settings_printers
+
+# Administration impression : le garde suit la section Paramètres qui porte ces
+# écrans. ROLES_SETTINGS_PRINTERS (direction, super admin, comptabilité, famille
+# administration) couvre l'onglet « Imprimantes » des rôles techniques comme la
+# section « Impression & déploiement » de la direction — plus étroite et déjà
+# incluse. Un service qui voit l'écran peut donc s'en servir.
+require_print_admin = require_settings_printers
 from app.services.print_render import (
     LANGAGES,
     USAGES,
@@ -212,7 +219,7 @@ class AgentPatch(BaseModel):
 
 @router.get("/agents")
 def list_agents(request: Request):
-    require_superadmin(request)
+    require_print_admin(request)
     with get_db() as conn:
         rows = conn.execute(
             "SELECT id,nom,actif,last_heartbeat,last_ip,created_at,note FROM print_agents ORDER BY nom"
@@ -222,7 +229,7 @@ def list_agents(request: Request):
 
 @router.post("/agents")
 def create_agent(payload: AgentCreate, request: Request):
-    require_superadmin(request)
+    require_print_admin(request)
     token = secrets.token_urlsafe(32)
     h = _hash_token(token)
     now = _now()
@@ -241,7 +248,7 @@ def create_agent(payload: AgentCreate, request: Request):
 
 @router.patch("/agents/{agent_id}")
 def patch_agent(agent_id: int, payload: AgentPatch, request: Request):
-    require_superadmin(request)
+    require_print_admin(request)
     fields, values = [], []
     if payload.nom is not None:
         fields.append("nom=?"); values.append(payload.nom.strip())
@@ -262,7 +269,7 @@ def patch_agent(agent_id: int, payload: AgentPatch, request: Request):
 
 @router.delete("/agents/{agent_id}")
 def delete_agent(agent_id: int, request: Request):
-    require_superadmin(request)
+    require_print_admin(request)
     with get_db() as conn:
         cur = conn.execute("DELETE FROM print_agents WHERE id=?", (agent_id,))
         conn.commit()
@@ -334,7 +341,7 @@ def list_imprimantes(request: Request):
 
 @router.post("/imprimantes")
 def create_imprimante(payload: ImprimanteBase, request: Request):
-    u = require_superadmin(request)
+    u = require_print_admin(request)
     _validate_imprimante(payload)
     tc = (payload.type_connexion or "tcp_ip").strip()
     if tc not in TYPES_CONNEXION:
@@ -396,7 +403,7 @@ def create_imprimante(payload: ImprimanteBase, request: Request):
 
 @router.patch("/imprimantes/{imprimante_id}")
 def patch_imprimante(imprimante_id: int, payload: ImprimantePatch, request: Request):
-    require_superadmin(request)
+    require_print_admin(request)
     _validate_imprimante(payload)
     fields, values = [], []
     for f in ("nom", "poste", "agent_id", "type_connexion", "ip_locale", "port",
@@ -423,7 +430,7 @@ def patch_imprimante(imprimante_id: int, payload: ImprimantePatch, request: Requ
 
 @router.delete("/imprimantes/{imprimante_id}")
 def delete_imprimante(imprimante_id: int, request: Request):
-    require_superadmin(request)
+    require_print_admin(request)
     with get_db() as conn:
         cur = conn.execute("DELETE FROM imprimantes WHERE id=?", (imprimante_id,))
         conn.commit()
@@ -492,7 +499,7 @@ def _assert_slot_libre(conn, imprimante_id: int, usage_key: str, variante: str,
 
 @router.get("/templates")
 def list_templates(request: Request, imprimante_id: Optional[int] = None):
-    require_superadmin(request)
+    require_print_admin(request)
     with get_db() as conn:
         has_var = _variante_column_exists(conn)
         col = "variante," if has_var else ""
@@ -509,7 +516,7 @@ def list_templates(request: Request, imprimante_id: Optional[int] = None):
 
 @router.post("/templates")
 def create_template(payload: TemplateCreate, request: Request):
-    u = require_superadmin(request)
+    u = require_print_admin(request)
     now = _now()
     variante = _assert_variante(payload.variante)
     usage_key = payload.usage_key.strip()
@@ -537,7 +544,7 @@ def create_template(payload: TemplateCreate, request: Request):
 
 @router.patch("/templates/{template_id}")
 def patch_template(template_id: int, payload: TemplatePatch, request: Request):
-    u = require_superadmin(request)
+    u = require_print_admin(request)
     fields, values = [], []
     if payload.nom is not None:
         fields.append("nom=?"); values.append(payload.nom.strip())
@@ -571,7 +578,7 @@ def patch_template(template_id: int, payload: TemplatePatch, request: Request):
 
 @router.delete("/templates/{template_id}")
 def delete_template(template_id: int, request: Request):
-    require_superadmin(request)
+    require_print_admin(request)
     with get_db() as conn:
         cur = conn.execute("DELETE FROM imprimante_templates WHERE id=?", (template_id,))
         conn.commit()
@@ -1012,7 +1019,7 @@ def preview_template(payload: PreviewPayload, request: Request):
     """Rend un template en PNG (via labelary) pour aperçu dans l'UI editeur.
     Utilise des donnees mock pour les placeholders (lot demo, fournisseur demo, etc.).
     """
-    require_superadmin(request)
+    require_print_admin(request)
     if payload.langage != "zpl":
         raise HTTPException(status_code=400, detail="Apercu supporte uniquement le ZPL pour l'instant.")
     try:
@@ -1033,14 +1040,14 @@ def preview_template(payload: PreviewPayload, request: Request):
 def list_default_templates_gallery(request: Request):
     """Galerie de templates predefinis (bobine, colis, emplacement, etc.)
     utilisee dans le modal 'Nouveau template' pour demarrer depuis un modele."""
-    require_superadmin(request)
+    require_print_admin(request)
     return {"templates": list_default_templates()}
 
 
 @router.get("/templates/defaults/{key}")
 def get_default_template_content(key: str, request: Request):
     """Renvoie le contenu complet (avec ZPL) d'un template predefini."""
-    require_superadmin(request)
+    require_print_admin(request)
     t = get_default_template(key)
     if not t:
         raise HTTPException(status_code=404, detail="Template predefini introuvable.")
@@ -1068,7 +1075,7 @@ def download_windows_installer(request: Request):
     """Sert le script PowerShell d'install de l'agent MySifa pour PC Windows hote.
     Utilise par le wizard 'Comment connecter mon imprimante' cote UI.
     """
-    require_superadmin(request)
+    require_print_admin(request)
     # Le fichier vit dans le repo à tools/print_agent/install_agent_windows.ps1
     # Chemin resolu depuis app/routers/print.py : ../../../tools/print_agent/...
     ps1_path = Path(__file__).resolve().parent.parent.parent / "tools" / "print_agent" / "install_agent_windows.ps1"
@@ -1084,7 +1091,7 @@ def download_windows_installer(request: Request):
 @router.post("/test")
 def test_print(payload: TestPrintPayload, request: Request):
     """Impression de test : envoie une petite étiquette hardcodée à l'imprimante."""
-    u = require_superadmin(request)
+    u = require_print_admin(request)
     with get_db() as conn:
         imp = conn.execute(
             "SELECT id,nom,agent_id,langage,largeur_mm,hauteur_mm,dpi,actif FROM imprimantes WHERE id=?",
@@ -1133,7 +1140,7 @@ def test_print_template(payload: TestTemplatePayload, request: Request):
     contenu exact du champ editeur, resolu avec les memes donnees d'exemple
     que l'apercu labelary. Permet de comparer apercu ecran / rendu papier.
     """
-    u = require_superadmin(request)
+    u = require_print_admin(request)
     with get_db() as conn:
         imp = conn.execute(
             "SELECT id,nom,agent_id,langage,actif FROM imprimantes WHERE id=?",

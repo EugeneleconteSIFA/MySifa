@@ -62,7 +62,9 @@ def test_lancer():
     verifier("ouverte", r["ouverte"], True)
     verifier("plage d'un jour : fin = debut", (r["date_debut"], r["date_fin"]),
              ("2026-08-28", "2026-08-28"))
-    verifier("titre par defaut", r["titre"].startswith("Point de production du"), True)
+    import re as _re
+    verifier("titre par defaut : la date seule",
+             bool(_re.fullmatch(r"\d{2}/\d{2}/\d{4}", r["titre"])), True)
     verifier("aucune action", r["actions"], [])
 
     # Rouvrir la page ne doit pas empiler une seconde reunion.
