@@ -98,7 +98,8 @@ def base():
         );
         CREATE TABLE retour_prod_ecrits (
             cle TEXT PRIMARY KEY NOT NULL, no_dossier TEXT,
-            valide INTEGER NOT NULL DEFAULT 0, valide_par TEXT, valide_le TEXT
+            valide INTEGER NOT NULL DEFAULT 0, valide_par TEXT, valide_le TEXT,
+            masque INTEGER NOT NULL DEFAULT 0, masque_par TEXT, masque_le TEXT
         );
         CREATE TABLE retour_prod_notes (
             id INTEGER PRIMARY KEY AUTOINCREMENT, no_dossier TEXT NOT NULL,
@@ -541,8 +542,21 @@ def test_suivi_des_remontees():
     verifier("note creee", note["texte"], "Vu avec le chef d'atelier")
     verifier("note rattachee a la remontee", note["cle_ecrit"], cle)
     cr = svc.compte_rendu(conn, "D-100")
-    verifier("la note remonte dans le compte-rendu", len(cr["ecrits"]["notes"]), 1)
-    verifier("et elle porte sa cle", cr["ecrits"]["notes"][0]["cle"], "note:" + str(note["id"]))
+    # Une reponse se range SOUS la remontee qu'elle commente, en citation :
+    # ajoutee a la file, elle la noyait.
+    verifier("la reponse ne grossit pas la liste", len(cr["ecrits"]["notes"]), 0)
+    verifier("elle est rangee sous sa remontee",
+             len(cr["ecrits"]["info_prod"]["reponses"]), 1)
+    verifier("avec son texte",
+             cr["ecrits"]["info_prod"]["reponses"][0]["texte"], "Vu avec le chef d'atelier")
+    verifier("et sa cle", cr["ecrits"]["info_prod"]["reponses"][0]["cle"],
+             "note:" + str(note["id"]))
+
+    # Une note libre, elle, reste une remontee a part entiere.
+    libre = svc.ajouter_note(conn, "D-100", "Penser a commander des lames", "Eugene")
+    cr = svc.compte_rendu(conn, "D-100")
+    verifier("une note sans parent reste dans la liste", len(cr["ecrits"]["notes"]), 1)
+    svc.modifier_note(conn, libre["id"], "", "Eugene")
 
     svc.modifier_note(conn, note["id"], "Vu avec le chef d'atelier le 12", "Eugene")
     verifier("note corrigee",
@@ -561,6 +575,24 @@ def test_suivi_des_remontees():
     verifier("le nouveau texte remonte",
              cr["ecrits"]["commentaires"][0]["texte"], "Bobine lot 4412 — reprise")
 
+    # Masquer : hors sujet, ni traite ni efface.
+    cle_com = svc.compte_rendu(conn, "D-100")["ecrits"]["commentaires"][0]["cle"]
+    svc.masquer_ecrit(conn, cle_com, "D-100", True, "Eugene")
+    cr = svc.compte_rendu(conn, "D-100")
+    verifier("la remontee est marquee masquee",
+             cr["ecrits"]["commentaires"][0]["masque"], True)
+    verifier("masquer n'est pas valider",
+             cr["ecrits"]["commentaires"][0]["valide"], False)
+    r = svc.retour_atelier(conn, "Cohesio 1", SEMAINE_DEBUT, SEMAINE_FIN)
+    verifier("elle quitte la liste principale de la feuille",
+             any(e["cle"] == cle_com for e in r["ecrits"]), False)
+    verifier("mais reste consultable a part",
+             any(e["cle"] == cle_com for e in r["ecrits_masques"]), True)
+    svc.masquer_ecrit(conn, cle_com, "D-100", False, "Eugene")
+    r = svc.retour_atelier(conn, "Cohesio 1", SEMAINE_DEBUT, SEMAINE_FIN)
+    verifier("le demasquage la ramene",
+             any(e["cle"] == cle_com for e in r["ecrits"]), True)
+
     # La feuille atelier porte les memes etats.
     svc.valider_ecrit(conn, cle, "D-100", True, "Eugene")
     r = svc.retour_atelier(conn, "Cohesio 1", SEMAINE_DEBUT, SEMAINE_FIN)
@@ -568,6 +600,138 @@ def test_suivi_des_remontees():
     verifier("la feuille montre l'etat de validation", len(valides), 1)
     verifier("chaque ecrit de la feuille porte sa cle",
              all(e.get("cle") for e in r["ecrits"]), True)
+
+
+def test_dernier_jour_saisi():
+    print("\n12 quater. « Hier » = derniere journee reellement travaillee")
+    conn = base()
+    verifier("base vide : aucun jour", svc.dernier_jour_saisi(conn, "2026-06-14"), None)
+
+    # T0 est un lundi (8 juin 2026). On pose du vendredi et du samedi precedents.
+    saisie(conn, -3 * 24 * 60, "03", "production")        # vendredi 05/06
+    saisie(conn, -2 * 24 * 60, "03", "production")        # samedi 06/06
+    conn.commit()
+
+    # Un lundi matin, la veille est un dimanche vide : on doit remonter au samedi.
+    verifier("le dimanche vide renvoie au samedi",
+             svc.dernier_jour_saisi(conn, "2026-06-07"), "2026-06-06")
+    # Si la veille a bien tourne, c'est elle qu'on garde.
+    verifier("une veille travaillee reste la veille",
+             svc.dernier_jour_saisi(conn, "2026-06-06"), "2026-06-06")
+
+    # La journee en cours n'est jamais remontee : la borne l'exclut.
+    saisie(conn, 0, "03", "production")                   # lundi 08/06
+    conn.commit()
+    verifier("la journee en cours est exclue par la borne",
+             svc.dernier_jour_saisi(conn, "2026-06-07"), "2026-06-06")
+
+    # Une journee qui n'a que des saisies annulees n'a pas ete travaillee.
+    conn2 = base()
+    saisie(conn2, -2 * 24 * 60, "03", "production")        # samedi : reel
+    saisie(conn2, -1 * 24 * 60, "03", "production", est_annule=1)  # dimanche : annule
+    conn2.commit()
+    verifier("un jour entierement annule ne compte pas",
+             svc.dernier_jour_saisi(conn2, "2026-06-07"), "2026-06-06")
+
+
+def _s(conn, quand, code, cat, dos, machine="Cohesio 1", operateur="Marc", operation=None):
+    conn.execute(
+        """INSERT INTO production_data
+           (operateur, date_operation, operation, operation_code, operation_category,
+            machine, no_dossier, client, designation, est_annule)
+           VALUES (?,?,?,?,?,?,?,'NESTLE','Etiquette',0)""",
+        (operateur, quand, operation or code, code, cat, machine, dos))
+
+
+def test_frise():
+    print("\n12 quinquies. Frise : axe replie, phases, debordements")
+    conn = base()
+    # Jeudi 27 : un dossier de 06:00 a 14:00, avec calage, prod, arret, prod.
+    for q, c, cat in [("2026-08-27T06:00:00", "02", "calage"),
+                      ("2026-08-27T07:00:00", "03", "production"),
+                      ("2026-08-27T10:00:00", "53", "arret"),
+                      ("2026-08-27T10:30:00", "03", "production"),
+                      ("2026-08-27T14:00:00", "89", "personnel")]:
+        _s(conn, q, c, cat, "D-1")
+    # Vendredi 28 : rien. Samedi 29 : une demi-journee sur une autre machine.
+    _s(conn, "2026-08-29T06:00:00", "03", "production", "D-2", "Cohesio 2", "Sophie")
+    _s(conn, "2026-08-29T10:00:00", "89", "personnel", "D-2", "Cohesio 2", "Sophie")
+    conn.commit()
+
+    f = svc.frise(conn, "2026-08-27T00:00:00", "2026-08-29T23:59:59")
+    verifier("deux journees a l'axe (le vendredi vide est replie)", len(f["axe"]), 2)
+    verifier("jeudi : 8 h de saisie", f["axe"][0]["heures"], 8.0)
+    verifier("samedi : 4 h", f["axe"][1]["heures"], 4.0)
+    # Largeurs proportionnelles : 8 h contre 4 h -> deux tiers / un tiers.
+    verifier_proche("largeur du jeudi", f["axe"][0]["largeur"], 66.67, 0.1)
+    verifier_proche("largeur du samedi", f["axe"][1]["largeur"], 33.33, 0.1)
+    verifier("l'axe fait 100 %",
+             round(sum(a["largeur"] for a in f["axe"]), 2), 100.0)
+    verifier("le samedi porte la coupure", f["axe"][1]["coupure_avant"], True)
+    verifier("le jeudi n'en porte pas", f["axe"][0]["coupure_avant"], False)
+
+    verifier("une ligne par machine", [l["machine"] for l in f["lignes"]],
+             ["Cohesio 1", "Cohesio 2"])
+    d1 = f["lignes"][0]["slots"][0]
+    verifier("le dossier commence au debut de l'axe", d1["x"], 0.0)
+    verifier_proche("et occupe tout le jeudi", d1["largeur"], 66.67, 0.1)
+    verifier("aucun debordement", (d1["deborde_avant"], d1["deborde_apres"]), (False, False))
+    verifier("quatre phases", len(d1["segments"]), 4)
+    verifier("les phases dans l'ordre",
+             [g["categorie"] for g in d1["segments"]],
+             ["calage", "production", "arret", "production"])
+    verifier("les phases remplissent le slot",
+             round(sum(g["largeur"] for g in d1["segments"])), 100)
+    verifier("aucun chevauchement",
+             all(d1["segments"][i]["x"] + d1["segments"][i]["largeur"] <= d1["segments"][i+1]["x"] + 0.01
+                 for i in range(len(d1["segments"]) - 1)), True)
+
+
+def test_frise_debordements():
+    print("\n12 sexies. Frise : ce qui deborde de la periode")
+    conn = base()
+    # Dossier commence la veille de la periode et non termine a la fin.
+    _s(conn, "2026-08-26T14:00:00", "03", "production", "D-9")
+    _s(conn, "2026-08-27T08:00:00", "53", "arret", "D-9")
+    _s(conn, "2026-08-27T09:00:00", "03", "production", "D-9")
+    _s(conn, "2026-08-28T10:00:00", "89", "personnel", "D-9")
+    conn.commit()
+
+    f = svc.frise(conn, "2026-08-27T00:00:00", "2026-08-27T23:59:59")
+    sl = f["lignes"][0]["slots"][0]
+    verifier("commence avant la periode", sl["deborde_avant"], True)
+    verifier("et n'est pas fini a la fin", sl["deborde_apres"], True)
+    verifier("le slot est cale au debut de l'axe", sl["x"], 0.0)
+    verifier("le slot va jusqu'au bout", round(sl["x"] + sl["largeur"]), 100)
+    verifier("les dates reelles sont conservees", sl["debut"][:10], "2026-08-26")
+
+    # Une saisie restee ouverte ne doit pas deplier la nuit.
+    conn2 = base()
+    _s(conn2, "2026-08-27T06:00:00", "03", "production", "D-8")
+    _s(conn2, "2026-08-27T14:00:00", "03", "production", "D-8")   # ouverte jusqu'au lendemain
+    _s(conn2, "2026-08-28T09:00:00", "89", "personnel", "D-8")
+    conn2.commit()
+    f2 = svc.frise(conn2, "2026-08-27T00:00:00", "2026-08-28T23:59:59")
+    verifier("la nuit reste repliee malgre la saisie ouverte",
+             f2["axe"][0]["heures"], 8.0)
+
+    verifier("periode sans saisie : frise vide",
+             svc.frise(conn2, "2026-09-10T00:00:00", "2026-09-10T23:59:59")["vide"], True)
+
+
+def test_frise_dossier():
+    print("\n12 septies. Frise d'un seul dossier")
+    conn = base()
+    dossier_complet(conn)
+    conn.commit()
+    cr = svc.compte_rendu(conn, "D-100")
+    verifier("le compte-rendu porte sa frise", cr["frise"]["vide"], False)
+    verifier("une seule ligne", len(cr["frise"]["lignes"]), 1)
+    verifier("un seul slot", len(cr["frise"]["lignes"][0]["slots"]), 1)
+    verifier("qui occupe toute la largeur",
+             round(cr["frise"]["lignes"][0]["slots"][0]["largeur"]), 100)
+    verifier("dossier inconnu : frise vide",
+             svc.frise_dossier(conn, "D-INEXISTANT")["vide"], True)
 
 
 def test_minutes_txt():
@@ -594,6 +758,10 @@ if __name__ == "__main__":
     test_machine_sans_donnee()
     test_recherche_tous_dossiers()
     test_suivi_des_remontees()
+    test_dernier_jour_saisi()
+    test_frise()
+    test_frise_debordements()
+    test_frise_dossier()
     test_minutes_txt()
 
     print("\n" + "=" * 60)

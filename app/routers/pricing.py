@@ -1772,6 +1772,28 @@ def list_mystock_declinaisons(request: Request):
                     "parametre": d["parametre"],
                     "unit_price": d["unit_price"],
                     "cout_eur_m2": cout,
+                    # Les leviers du coût, exposés en clair.
+                    #
+                    # Le prix d'achat d'une matière ne dépend ni de la laize ni
+                    # du grammage : on l'achète au m² ou au kilo. Le COÛT D'UN
+                    # PRODUIT, lui, dépend du grammage — une matière payée au
+                    # kilo coûte au m² son prix multiplié par son poids au m²,
+                    # et ce poids EST le grammage majoré de la perte. Changer
+                    # de grammage change donc le prix de revient du produit
+                    # sans que le prix d'achat ait bougé d'un centime.
+                    #
+                    # La laize, elle, n'entre dans aucun de ces calculs : un m²
+                    # est un m². Ce qu'elle fait varier, c'est la QUANTITÉ
+                    # consommée par une commande, chiffrée par Besoins
+                    # matières. On l'expose quand même, pour que l'écran puisse
+                    # le dire au lieu de laisser chercher.
+                    "price_basis": d.get("price_basis"),
+                    "price_currency": d.get("price_currency"),
+                    "grammage_gsm": d.get("grammage_gsm"),
+                    "perte_pct": d.get("perte_pct"),
+                    "weight_per_m2": d.get("weight_per_m2"),
+                    "laize_mm": d.get("laize_mm"),
+                    "unite": m.get("unite"),
                 })
     return {"declinaisons": out}
 

@@ -227,6 +227,38 @@ async def valider_ecrit(request: Request):
     return etat
 
 
+@router.post("/api/rapports-prod/ecrit/masquer")
+async def masquer_ecrit(request: Request):
+    """Sort une remontee hors sujet de la liste, sans rien effacer.
+
+    Masquer n'est pas valider : « 10h » n'a pas ete traite, il n'y avait rien a
+    traiter.
+    """
+    user = _autorise(request)
+    body = await request.json()
+    cle = str(body.get("cle") or "").strip()
+    if not cle:
+        raise HTTPException(status_code=400, detail="Remontee non precisee.")
+    with get_db() as conn:
+        etat = rd.masquer_ecrit(conn, cle, str(body.get("no_dossier") or ""),
+                                bool(body.get("masque", True)), _auteur(user))
+    return etat
+
+
+@router.get("/api/rapports-prod/frise")
+def frise(request: Request, machine: str = "", mode: str = "jour",
+          jour: str | None = None, year: int | None = None,
+          week: int | None = None, du: str | None = None, au: str | None = None):
+    """La frise de production de la periode : une ligne par machine."""
+    _autorise(request)
+    b = _bornes(mode, jour, year, week, du, au)
+    with get_db() as conn:
+        data = rd.frise(conn, b["debut"], b["fin"], (machine or "").strip(),
+                        code_fin=CODE_FIN_DOS, code_debut=CODE_DEBUT_DOS,
+                        code_annul=CODE_ANNUL_DOS)
+    return {**data, "periode": b}
+
+
 @router.post("/api/rapports-prod/dossier/{no_dossier:path}/note")
 async def ajouter_note(no_dossier: str, request: Request):
     """Ajoute un commentaire sur le dossier, ou en reponse a une remontee."""

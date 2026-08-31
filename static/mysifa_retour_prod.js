@@ -90,7 +90,70 @@
   }
 
 
-  /* ── Une remontee, avec ses trois gestes ────────────────────── */
+
+  /* ── Frise de production ────────────────────────────────────── */
+
+  // Meme allure que le planning, mais posee sur de vraies dates. Les positions
+  // arrivent en pourcentage, calculees et testees cote serveur : l'ecran ne
+  // fait que poser des rectangles.
+  function renderFrise(f, opts) {
+    opts = opts || {};
+    if (!f || f.vide || !(f.lignes || []).length) return "";
+
+    var entetes = (f.axe || []).map(function (a) {
+      return '<div class="rp-fr-jour' + (a.coupure_avant ? ' coupe' : '') + '"'
+           + ' style="left:' + a.x + '%;width:' + a.largeur + '%"'
+           + ' title="' + escAttr(a.label + " — " + a.heures + " h de saisie") + '">'
+           + '<span>' + escHtml(a.label) + '</span></div>';
+    }).join("");
+
+    var lignes = f.lignes.map(function (l) {
+      var slots = (l.slots || []).map(function (sl) {
+        var segs = (sl.segments || []).map(function (g) {
+          return '<div class="rp-fr-seg cat-' + escAttr(g.categorie) + '"'
+               + ' style="left:' + g.x + '%;width:' + g.largeur + '%"'
+               + ' title="' + escAttr(g.label + " · " + minutesTxt(g.minutes)
+                                      + (g.operation ? " · " + g.operation : "")) + '"></div>';
+        }).join("");
+        var titre = sl.no_dossier + (sl.client ? " · " + sl.client : "")
+                  + " · " + minutesTxt(sl.minutes)
+                  + " · " + dateFr(sl.debut) + " → " + dateFr(sl.fin)
+                  + (sl.operateurs || []).length ? "" : "";
+        return '<div class="rp-fr-slot'
+             + (sl.deborde_avant ? ' deborde-avant' : '')
+             + (sl.deborde_apres ? ' deborde-apres' : '')
+             + '" data-dossier="' + escAttr(sl.no_dossier) + '"'
+             + ' style="left:' + sl.x + '%;width:' + sl.largeur + '%"'
+             + ' title="' + escAttr(sl.no_dossier + (sl.client ? " · " + sl.client : "")
+                                    + " · " + minutesTxt(sl.minutes)) + '">'
+             + segs
+             + '<div class="rp-fr-lbl">' + escHtml(sl.no_dossier)
+             + (sl.client ? ' <span>' + escHtml(sl.client) + '</span>' : '')
+             + '</div></div>';
+      }).join("");
+      return '<div class="rp-fr-ligne"><div class="rp-fr-machine">' + escHtml(l.machine) + '</div>'
+           + '<div class="rp-fr-piste">' + slots + '</div></div>';
+    }).join("");
+
+    var legende = [["calage", "Calage"], ["production", "Production"],
+                   ["arret", "Arrêt"], ["appro", "Appro"],
+                   ["technique", "Technique"], ["nettoyage", "Nettoyage"]]
+      .map(function (c) {
+        return '<span class="rp-fr-leg"><i class="cat-' + c[0] + '"></i>' + c[1] + '</span>';
+      }).join("");
+
+    return '<div class="rp-bloc rp-frise">'
+      + (opts.titre === false ? '' : '<div class="rp-titre">Frise de production</div>')
+      + '<div class="rp-fr-axe"><div class="rp-fr-machine"></div>'
+      + '<div class="rp-fr-piste">' + entetes + '</div></div>'
+      + lignes
+      + '<div class="rp-fr-legende">' + legende
+      + '<span class="rp-fr-note">Les journées sans saisie sont repliées. '
+      + 'Un dossier commencé avant ou non terminé déborde de la frise.</span></div>'
+      + '</div>';
+  }
+
+  /* ── Une remontee, avec ses gestes ────────────────────── */
 
   // Un id DOM ne peut pas porter les deux-points de la cle : on l'aplatit.
   function slug(cle) { return String(cle || "").replace(/[^A-Za-z0-9_-]/g, "_"); }
@@ -118,9 +181,23 @@
       }
       actions.push('<button type="button" class="rp-btn-mini" data-commenter="' + escAttr(e.cle)
         + '" data-dossier="' + escAttr(e.no_dossier || opts.no_dossier || "") + '">Commenter</button>');
+      actions.push('<button type="button" class="rp-btn-mini" data-masquer="' + escAttr(e.cle)
+        + '" data-dossier="' + escAttr(e.no_dossier || opts.no_dossier || "") + '"'
+        + ' data-etat="' + (e.masque ? "1" : "0") + '">'
+        + (e.masque ? "Réafficher" : "Masquer") + '</button>');
     }
 
-    return '<div class="rp-mot' + (e.valide ? ' est-valide' : '') + '">'
+    // Les reponses vivent DANS la remontee, en citation : ajoutees a la file,
+    // elles la noyaient.
+    var reponses = (e.reponses || []).map(function (r) {
+      return '<div class="rp-citation"><div class="c-txt">' + escHtml(r.texte) + '</div>'
+           + '<div class="c-meta">' + escHtml(r.auteur || "")
+           + (r.created_at ? ' · ' + escHtml(dateFr(r.updated_at || r.created_at)) : '')
+           + '</div></div>';
+    }).join("");
+
+    return '<div class="rp-mot' + (e.valide ? ' est-valide' : '')
+      + (e.masque ? ' est-masque' : '') + '">'
       + '<div class="m-txt" id="rp-e-vue-' + id + '">' + escHtml(e.texte) + '</div>'
       + '<div class="m-meta">'
       + (e.origine ? '<span class="m-tag">' + escHtml(LIB_ORIGINE[e.origine] || e.origine) + '</span>' : '')
@@ -131,6 +208,7 @@
       + (e.valide ? '<span class="rp-vu">traité' + (e.valide_par ? ' par ' + escHtml(e.valide_par) : '')
                     + (e.valide_le ? ' le ' + escHtml(dateFr(e.valide_le)) : '') + '</span>' : '')
       + '</div>'
+      + reponses
       + (actions.length ? '<div class="rp-edit-actions">' + actions.join("") + '</div>' : '')
       + '<div class="rp-edit" id="rp-e-form-' + id + '" style="display:none">'
       + '<textarea id="rp-e-txt-' + id + '">' + escHtml(e.texte || "") + '</textarea>'
@@ -153,7 +231,7 @@
 
   /* ── Feuille atelier ────────────────────────────────────────── */
 
-  function renderFeuille(d) {
+  function renderFeuille(d, frise) {
     var p = d.production || {}, per = d.periode || {};
 
     if (!d.dossiers) {
@@ -188,6 +266,8 @@
        + kpi(minutesTxt(p.minutes_arret), "Arrêts",
              p.part_arret_pct ? fnum(p.part_arret_pct, 1) + " % du temps" : "")
        + '</div></div>';
+
+    h += renderFrise(frise);
 
     if ((d.references || []).length) {
       h += '<div class="rp-bloc"><div class="rp-titre" title="Cadence = m\u00e8tres par minute, '
@@ -226,10 +306,23 @@
 
     if ((d.ecrits || []).length) {
       var restants = d.ecrits.filter(function (e) { return !e.valide; }).length;
-      h += '<div class="rp-bloc"><div class="rp-titre">Vos écrits'
+      var masques = d.ecrits_masques || [];
+      h += '<div class="rp-bloc"><div class="rp-titre rp-titre-ligne"><span>Vos écrits'
          + (restants ? ' <span class="rp-compte">' + restants + ' à traiter</span>' : '')
+         + '</span>'
+         + (masques.length
+             ? '<button type="button" class="rp-btn-mini" id="rp-masques-btn">'
+               + 'Commentaires masqués (' + masques.length + ')</button>'
+             : '')
          + '</div>';
       d.ecrits.forEach(function (e) { h += renderEcrit(e, { avecDossier: true }); });
+      if (masques.length) {
+        h += '<div id="rp-masques" style="display:none">'
+           + '<div class="rp-note">Remontées jugées hors sujet — elles ne parlent pas de la '
+           + 'qualité de la production. Rien n\'est effacé.</div>';
+        masques.forEach(function (e) { h += renderEcrit(e, { avecDossier: true }); });
+        h += '</div>';
+      }
       h += '</div>';
     }
 
@@ -537,6 +630,29 @@
       };
     });
 
+    Array.prototype.forEach.call(R.querySelectorAll("[data-masquer]"), function (b) {
+      b.onclick = function (e) {
+        agir(e.target, "/api/rapports-prod/ecrit/masquer", {
+          cle: b.getAttribute("data-masquer"),
+          no_dossier: b.getAttribute("data-dossier") || no || "",
+          masque: b.getAttribute("data-etat") !== "1"
+        }, b.getAttribute("data-etat") === "1" ? "Remis dans la liste." : "Masqué.");
+      };
+    });
+
+    // Bascule de la liste des remontees masquees. Purement local : rien a
+    // enregistrer, c'est un geste de consultation.
+    var btnMasques = R.querySelector("#rp-masques-btn");
+    if (btnMasques) {
+      btnMasques.onclick = function () {
+        var boite = R.querySelector("#rp-masques");
+        if (!boite) return;
+        var ouvert = boite.style.display !== "none";
+        boite.style.display = ouvert ? "none" : "";
+        btnMasques.classList.toggle("primaire", !ouvert);
+      };
+    }
+
     Array.prototype.forEach.call(R.querySelectorAll("[data-modif]"), function (b) {
       var id = slug(b.getAttribute("data-modif"));
       b.onclick = function () { ouvrirForm(R, "rp-e-vue-" + id, "rp-e-form-" + id, "rp-e-txt-" + id); };
@@ -616,6 +732,7 @@
     renderFeuille: renderFeuille,
     renderListe: renderListe,
     renderRecherche: renderRecherche,
+    renderFrise: renderFrise,
     renderCR: renderCR,
     renderEcrit: renderEcrit,
     slug: slug,

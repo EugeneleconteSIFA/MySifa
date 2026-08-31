@@ -3605,9 +3605,124 @@
             <input type="number" step="0.01" id="msp-margin" value="${escAttr(f.custom_margin_pct)}" placeholder="Défaut : ${escAttr(defMargin)} %"/>
             <div class="field-hint">Laisser vide pour appliquer la marge par défaut des paramètres.</div>
           </div>
+          <div class="form-section" style="margin-top:14px"><h3>Ce qui fait bouger ce coût</h3>
+            <div class="field-hint" style="margin:-6px 0 10px">
+              Le prix d'achat d'une matière ne dépend ni de sa laize ni de son grammage.
+              Le coût de ce produit, si : une matière payée au kilo coûte au m² son prix
+              multiplié par son poids au m², et ce poids est le grammage majoré de la perte.
+            </div>
+            <div id="msp-leviers">${msProductLeviersHtml()}</div>
+          </div>
         </div>
         <div class="side-panel" id="msp-recap">${productRecapHtml(S.msProdPreview)}</div>
       </div>`;
+  }
+
+  /* ── Ce qui fait bouger le coût de ce produit ────────────────────────────
+
+     Le prix d'achat d'une matière ne dépend ni de sa laize ni de son grammage :
+     on l'achète au m² ou au kilo. Le coût d'un PRODUIT, lui, dépend du
+     grammage — une matière payée au kilo coûte au m² son prix multiplié par
+     son poids au m², et ce poids EST le grammage majoré de la perte. Changer
+     de grammage change donc le prix de revient sans que le prix d'achat ait
+     bougé d'un centime.
+
+     La laize ne fait rien de tel : un m² est un m², quelle que soit la largeur
+     de la bobine. Ce qu'elle fait varier, c'est la QUANTITÉ consommée par une
+     commande — chiffrée par Besoins matières, pas ici. Le bloc le dit, plutôt
+     que de laisser chercher où elle est passée.
+
+     Les déclinaisons voisines sont affichées avec leur écart : c'est la seule
+     façon de VOIR qu'un 22 g/m² coûte deux centimes de plus qu'un 17 avant de
+     l'avoir choisi. Un clic bascule le sélecteur. */
+  function msLevierBlocHtml(d, cible, roleLabel) {
+    const perKg = (d.price_basis || "PER_KG") === "PER_KG";
+    const fleche = `<span class="muted">→</span> <strong>${escHtml(fmtEurM2(d.cout_eur_m2))}</strong>`;
+    const formule = d.cout_eur_m2 == null
+      ? '<span class="muted">coût non calculé — ouvrir la fiche de la déclinaison</span>'
+      : (perKg
+          ? `${escHtml(fmtNum(d.unit_price, 3, 3))} €/kg <span class="muted">×</span> `
+            + `${escHtml(fmtNum(d.weight_per_m2, 4, 4))} kg/m² ${fleche}`
+          : `${escHtml(fmtNum(d.unit_price, 4, 4))} €/m² ${fleche}`);
+
+    // `mentions` et non `notes` : ce sont des phrases que MySifa compose
+    // lui-même, jamais de la saisie utilisateur. Le detecteur de prose brute
+    // se fie au nom de la variable, et un nom mal choisi le ferait crier a
+    // tort — ou, l'inverse, taire un vrai trou ailleurs.
+    const mentions = [];
+    if (perKg && d.grammage_gsm) {
+      mentions.push(`Le poids au m² <strong>est</strong> le grammage : `
+        + `${escHtml(fmtNum(d.grammage_gsm, 0, 1))} g/m²`
+        + (d.perte_pct ? ` + ${escHtml(fmtNum(d.perte_pct, 0, 2))} % de perte` : "")
+        + `. C'est lui qui fait bouger ce coût.`);
+    } else if (!perKg) {
+      mentions.push("Prix au m² : le grammage n'entre pas dans ce coût.");
+    }
+    if (d.laize_mm) {
+      mentions.push(`Laize ${escHtml(fmtNum(d.laize_mm, 0, 0))} mm — <strong>sans effet</strong> sur le €/m². `
+        + "Elle joue sur les quantités consommées, chiffrées dans Besoins matières.");
+    }
+
+    // Les autres déclinaisons de la MÊME matière : même prix d'achat, autre
+    // coût au m². C'est exactement ce que le grammage fait varier.
+    const voisines = (S.msDecls || [])
+      .filter((x) => x.matiere_id === d.matiere_id && x.id !== d.id && x.cout_eur_m2 != null)
+      .sort((a, b) => (a.cout_eur_m2 || 0) - (b.cout_eur_m2 || 0));
+    const chips = voisines.map((v) => {
+      const ecart = (d.cout_eur_m2 != null) ? (v.cout_eur_m2 - d.cout_eur_m2) : null;
+      const signe = ecart == null ? "" : (ecart > 0 ? "+" : "");
+      return `<button type="button" class="msp-lev-chip" data-msp-switch="${escAttr(cible)}"
+        data-msp-decl="${v.id}" title="Basculer sur ${escAttr(v.libelle)}">
+        ${escHtml(v.libelle)} <span class="msp-lev-cout">${escHtml(fmtEurM2(v.cout_eur_m2))}</span>
+        ${ecart == null || Math.abs(ecart) < 1e-9 ? "" :
+          `<span class="msp-lev-ecart ${ecart > 0 ? "up" : "down"}">${signe}${escHtml(fmtEurM2(ecart))}</span>`}
+      </button>`;
+    }).join("");
+
+    return `<div class="msp-lev">
+      <div class="msp-lev-head">
+        <span class="msp-lev-role">${escHtml(roleLabel)}</span>
+        <strong>${escHtml(d.reference)}</strong>
+        <span class="muted">${escHtml(d.libelle)}</span>
+      </div>
+      <div class="msp-lev-formule">${formule}</div>
+      ${mentions.map((m) => `<div class="msp-lev-precision">${m}</div>`).join("")}
+      ${chips ? `<div class="msp-lev-chips">
+        <span class="msp-lev-chips-lbl">Autres déclinaisons</span>${chips}</div>` : ""}
+    </div>`;
+  }
+
+  function msProductLeviersHtml() {
+    const comps = msProductComposants();
+    if (!comps.length) {
+      return '<div class="empty" style="padding:8px 0">Sélectionnez au moins une matière.</div>';
+    }
+    let iAutre = -1;
+    return comps.map((c) => {
+      if (c.role === "AUTRE") iAutre++;
+      const cible = c.role === "AUTRE" ? "autre:" + iAutre : "role:" + c.role;
+      const d = (S.msDecls || []).find((x) => x.id === c.declinaison_id);
+      if (!d) return "";
+      const r = MSP_ROLES.find((x) => x.role === c.role);
+      return msLevierBlocHtml(d, cible, r ? r.label : "Autre matière");
+    }).join("");
+  }
+
+  function bindMsProductLeviers(onSwitch) {
+    document.querySelectorAll("[data-msp-switch]").forEach((btn) => {
+      btn.onclick = () => {
+        const cible = btn.getAttribute("data-msp-switch");
+        const id = btn.getAttribute("data-msp-decl");
+        if (cible.startsWith("role:")) {
+          const sel = document.getElementById("msp-" + cible.slice(5).toLowerCase());
+          if (sel) sel.value = id;
+        } else {
+          const sel = document.querySelector(`[data-msp-autre="${cible.slice(6)}"]`);
+          if (sel) sel.value = id;
+        }
+        if (onSwitch) onSwitch();
+      };
+    });
   }
 
   function syncMsProductFromDom() {
@@ -3689,6 +3804,13 @@
           ? '<div class="field-hint" style="color:var(--warn);margin-top:10px">Une matière n\'a pas encore de coût : ouvre sa fiche pour la paramétrer.</div>'
           : "");
     }
+    // Les leviers suivent la composition : changer de déclinaison doit se voir
+    // dans le total ET dans ce qui l'explique, sinon le bloc ment d'un clic.
+    const lev = document.getElementById("msp-leviers");
+    if (lev) {
+      lev.innerHTML = msProductLeviersHtml();
+      bindMsProductLeviers(() => { syncMsProductFromDom(); refreshMsProductPreview(); });
+    }
   }
 
   function renderMsProductForm(isNew) {
@@ -3707,6 +3829,9 @@
     document.querySelectorAll("[data-msp-role], [data-msp-autre]").forEach((sel) => {
       sel.onchange = majAperçu;
     });
+    // Les pastilles de déclinaison voisine posent la valeur dans le sélecteur
+    // puis relancent l'aperçu : le total et son explication bougent ensemble.
+    bindMsProductLeviers(majAperçu);
     const add = document.getElementById("msp-add-autre");
     if (add) {
       add.onclick = () => {

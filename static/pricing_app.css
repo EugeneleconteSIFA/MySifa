@@ -706,3 +706,30 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 .msl-prix-etat{font-size:11px;font-weight:700;white-space:nowrap;color:var(--muted)}
 .msl-prix-etat.ok{color:var(--success,#16a34a)}
 .msl-prix-etat.ko{color:var(--danger)}
+
+/* ── « Ce qui fait bouger ce coût » — fiche produit MyStock ─────────────────
+   Le grammage change le coût d'un produit sans que le prix d'achat ait bougé ;
+   la laize ne change rien au €/m². Le bloc montre la chaîne complète et les
+   déclinaisons voisines avec leur écart, pour qu'on VOIE le surcoût d'un
+   22 g/m² avant de l'avoir choisi. */
+.msp-lev{border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+  margin-bottom:8px;background:var(--bg)}
+.msp-lev-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:13px}
+.msp-lev-role{font-size:10px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.4px;color:var(--muted)}
+.msp-lev-formule{margin-top:6px;font-size:13px;font-variant-numeric:tabular-nums}
+.msp-lev-precision{margin-top:4px;font-size:11px;color:var(--muted);line-height:1.5}
+.msp-lev-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px;
+  padding-top:8px;border-top:1px dashed var(--border)}
+.msp-lev-chips-lbl{font-size:10px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.4px;color:var(--muted)}
+.msp-lev-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;
+  border-radius:999px;border:1px solid var(--border);background:var(--card);
+  color:var(--text);font-family:inherit;font-size:11px;cursor:pointer}
+.msp-lev-chip:hover{border-color:var(--accent);background:var(--accent-bg)}
+.msp-lev-cout{font-weight:700;font-variant-numeric:tabular-nums}
+/* L'écart suit le SENS, pas le jugement : un grammage plus lourd n'est ni bon
+   ni mauvais en soi, c'est le devis qui tranche. */
+.msp-lev-ecart{font-size:10px;font-weight:700;font-variant-numeric:tabular-nums;
+  padding:1px 5px;border-radius:4px;
+  background:color-mix(in srgb,var(--text2) 12%,transparent);color:var(--text2)}

@@ -212,6 +212,11 @@ def list_materials(
             {
                 "id": int(r["id"]),
                 "laize_id": int(r["laize_id"]) if r["laize_id"] is not None else None,
+                # La laize en clair, à côté de son identifiant. Elle n'entre
+                # dans AUCUN calcul de coût — un m² est un m², quelle que soit
+                # la largeur de la bobine — mais l'écran doit pouvoir le dire
+                # plutôt que laisser chercher où elle est passée.
+                "laize_mm": _f(r["valeur_mm"]) if r["laize_id"] is not None else None,
                 "grammage_id": int(r["grammage_id"]) if r["grammage_id"] is not None else None,
                 "libelle": libelle,
                 "mc_material_id": int(r["mc_material_id"])

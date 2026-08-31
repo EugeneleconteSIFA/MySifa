@@ -196,5 +196,91 @@ check('la cellule conteneur est protégée',
 check('les lignes du détail aussi',
   css.includes('tr.msp-detail-row table.msp-detail tr:hover td'), true);
 
+// ─── « Ce qui fait bouger ce coût » : laize et grammage ─────────────────────
+//
+// Le prix d'achat d'une matiere ne depend ni de sa laize ni de son grammage :
+// on l'achete au m² ou au kilo. Le cout d'un PRODUIT, lui, depend du grammage
+// — une matiere payee au kilo coute au m² son prix multiplie par son poids au
+// m², et ce poids EST le grammage majore de la perte. La laize, elle, ne
+// change rien au €/m² : elle joue sur les QUANTITES consommees, chiffrees
+// dans Besoins matieres.
+//
+// Ce bloc existe pour que la difference se lise a l'ecran plutot que de se
+// deviner. Ces cas verrouillent qu'il dise bien l'un ET l'autre.
+const api = fs.readFileSync('app/routers/pricing.py', 'utf8').replace(/\r\n/g, '\n');
+const svc = fs.readFileSync('app/services/mystock_prix.py', 'utf8').replace(/\r\n/g, '\n');
+
+console.log('\n--- le serveur expose les leviers ---');
+check('la laize voyage avec la declinaison', svc.includes('"laize_mm": _f(r["valeur_mm"])'), true);
+[['price_basis'], ['grammage_gsm'], ['perte_pct'], ['weight_per_m2'], ['laize_mm']].forEach(([champ]) => {
+  check('le selecteur de declinaisons porte ' + champ,
+    api.includes('"' + champ + '": d.get("' + champ + '")')
+    || api.includes('"' + champ + '": d.get("' + champ + '"),'), true);
+});
+
+console.log('\n--- ce que le bloc dit de chaque composant ---');
+const ctx2 = {
+  S: {}, console, Math, Number, JSON, parseFloat, parseInt,
+  document: { querySelectorAll: () => [], getElementById: () => null },
+};
+vm.createContext(ctx2);
+vm.runInContext([
+  extraire('escHtml'), extraire('escAttr'), extraire('fmtNum'), extraire('fmtEurM2'),
+  constante('MSP_ROLES'),
+  extraire('msLevierBlocHtml'),
+  'globalThis.MSP_ROLES = MSP_ROLES;',
+].join('\n'), ctx2);
+
+// Un adhesif paye au kilo : c'est le grammage qui fait le cout au m².
+const adh17 = { id: 90, matiere_id: 1, reference: '1408', libelle: '17 g/m²',
+  price_basis: 'PER_KG', unit_price: 4.2, weight_per_m2: 0.0185,
+  grammage_gsm: 17, perte_pct: 9, laize_mm: null, cout_eur_m2: 0.0885 };
+const adh22 = { id: 91, matiere_id: 1, reference: '1408', libelle: '22 g/m²',
+  price_basis: 'PER_KG', unit_price: 4.2, weight_per_m2: 0.0240,
+  grammage_gsm: 22, perte_pct: 9, laize_mm: null, cout_eur_m2: 0.1145 };
+// Un frontal paye au m² et decline en laizes : la laize ne change rien.
+const pp76 = { id: 92, matiere_id: 2, reference: 'PP90', libelle: '76 mm',
+  price_basis: 'PER_M2', unit_price: 0.08, weight_per_m2: null,
+  grammage_gsm: null, perte_pct: null, laize_mm: 76, cout_eur_m2: 0.08 };
+const pp102 = { id: 93, matiere_id: 2, reference: 'PP90', libelle: '102 mm',
+  price_basis: 'PER_M2', unit_price: 0.08, weight_per_m2: null,
+  grammage_gsm: null, perte_pct: null, laize_mm: 102, cout_eur_m2: 0.08 };
+ctx2.S.msDecls = [adh17, adh22, pp76, pp102];
+
+const bAdh = ctx2.msLevierBlocHtml(adh17, 'role:ADHESIF', 'Adhésif');
+const bPP = ctx2.msLevierBlocHtml(pp76, 'role:FRONTAL', 'Frontal');
+
+check('au kilo : la chaine complete est montree',
+  bAdh.includes('€/kg') && bAdh.includes('kg/m²') && bAdh.includes('0,0885'), true);
+check('et le grammage designe comme le levier',
+  bAdh.includes('est</strong> le grammage') && bAdh.includes('17 g/m²'), true);
+check('la perte y est comptee', bAdh.includes('9 % de perte'), true);
+check('au m² : le grammage est declare hors jeu',
+  bPP.includes("le grammage n'entre pas dans ce coût"), true);
+check('la laize est nommee sans effet',
+  bPP.includes('76 mm') && bPP.includes('sans effet</strong> sur le €/m²'), true);
+check('et renvoyee la ou elle compte vraiment',
+  bPP.includes('Besoins matières'), true);
+
+console.log('\n--- les declinaisons voisines, avec leur ecart ---');
+check('la voisine est proposee', bAdh.includes('22 g/m²'), true);
+check('avec son propre cout', bAdh.includes('0,1145'), true);
+check('et l\'ecart signe', bAdh.includes('msp-lev-ecart') && bAdh.includes('+'), true);
+check('elle bascule le selecteur du bon role',
+  bAdh.includes('data-msp-switch="role:ADHESIF"') && bAdh.includes('data-msp-decl="91"'), true);
+// Deux laizes au meme cout : aucun ecart a afficher, sinon on lirait « +0,0000 »
+// comme une difference.
+check('un ecart nul ne s\'affiche pas', bPP.includes('msp-lev-ecart'), false);
+// Une matiere n'est jamais sa propre voisine.
+check('la declinaison courante n\'est pas proposee',
+  (bAdh.match(/data-msp-decl="90"/g) || []).length, 0);
+
+console.log('\n--- cable des deux cotes ---');
+check('le bloc est pose dans le formulaire', src.includes('id="msp-leviers"'), true);
+check('il suit l\'apercu', src.includes('lev.innerHTML = msProductLeviersHtml();'), true);
+check('les pastilles sont branchees au rendu',
+  src.includes('bindMsProductLeviers(majAperçu);'), true);
+check('le bloc a son style', css.includes('.msp-lev-chip{'), true);
+
 console.log(ko === 0 ? '\nTOUT EST VERT' : '\n' + ko + ' ECHEC(S)');
 process.exit(ko === 0 ? 0 : 1);

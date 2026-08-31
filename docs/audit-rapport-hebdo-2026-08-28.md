@@ -616,3 +616,69 @@ le champ garde celui des cartes).
 `tests/test_rapport_dossier.py` : 14 cas dont le métrage canonique et le suivi.
 `tests/test_retour_prod_rendu.js` : les trois gestes, la remontée traitée, le
 motif d'annulation non corrigeable, la colonne client, la section Arrêts.
+
+---
+
+## 9. Sixième passe — « Hier », la frise, et la reprise des commentaires
+
+### « Hier » désigne la dernière journée travaillée
+
+Un lundi matin, le raccourci pointait un dimanche vide. Le navigateur sait quel
+jour on est, pas où se trouve la dernière saisie : le calcul est donc passé au
+serveur (`GET /api/production/dernier-jour-saisi`), qui renvoie le dernier jour
+portant une saisie non annulée **jusqu'à la veille incluse** — la journée en
+cours n'est jamais retenue.
+
+La puce garde son libellé « Hier » quand la dernière journée travaillée *est* la
+veille, et devient « Dernier jour » sinon, avec la date en infobulle. Une puce
+marquée « Hier » qui charge un vendredi serait un mensonge gratuit.
+
+Ça vaut pour toute la page Production, pas seulement le Retour de prod : c'est
+la barre de filtres qui est corrigée.
+
+### Frise de production
+
+Quatre arbitrages retenus : dans la feuille **et** dans le compte-rendu ;
+segments colorés par phase ; réel seul ; axe en heures ouvrées, nuits repliées.
+
+L'axe ne montre que les journées travaillées, chacune large à proportion de sa
+durée réelle — une demi-journée et une journée de douze heures ne doivent pas se
+ressembler. Les journées sans saisie se replient en un trait.
+
+**Les saisies restées ouvertes d'un jour à l'autre ne commandent pas l'axe.** Une
+ligne oubliée un soir couvre la nuit entière et déplierait précisément ce qu'on
+cherche à replier ; elle reste dessinée dans son slot, mais ne définit plus les
+heures travaillées. Sans cette règle, une seule saisie oubliée faisait passer le
+jeudi de 8 h à 18 h.
+
+Un dossier commencé avant la période ou non terminé porte un bord ouvert de
+chaque côté : le tronquer sans le dire ferait croire à une production plus
+courte qu'elle ne fut.
+
+**Les positions sont calculées côté serveur, en pourcentage.** Une géométrie
+calculée dans le navigateur serait invisible aux tests, et c'est exactement le
+genre de calcul qui dérape en silence. `intervalles()` est devenue la brique
+commune au calcul des temps et au tracé : les calculer deux fois, c'est se
+donner deux chronologies pour un même dossier.
+
+Un clic sur un slot ouvre le compte-rendu de son dossier.
+
+### Commentaires : citation, masquage
+
+« Commenter » ajoutait une remontée de plus, qui noyait celle qu'elle commentait.
+Une réponse se range désormais **sous** sa remontée, en citation ; seules les
+notes libres restent des entrées à part entière.
+
+Nouvel état **masqué**, distinct de validé (migration `retour_prod_masque`).
+Toutes les remontées ne parlent pas de la qualité de production : « 10h »,
+« 5h25 », un mot laissé à l'équipe suivante. Les valider serait mentir — elles
+n'ont pas été traitées, il n'y avait rien à traiter. Elles quittent la liste
+principale et restent derrière un bouton « Commentaires masqués (n) », en face
+de « Vos écrits ». Rien n'est effacé : une remontée jugée hors sujet un jour
+peut se révéler utile le lendemain.
+
+La migration est séparée de `retour_prod_suivi` : une migration déjà passée en
+production ne rejoue pas, et son NOM ne doit jamais changer.
+
+`tests/test_rapport_dossier.py` : 20 cas. `tests/test_retour_prod_rendu.js` :
+axe, débordements, phases, citations, masquage.

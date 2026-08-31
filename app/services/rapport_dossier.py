@@ -47,7 +47,7 @@ from __future__ import annotations
 import json
 import re
 import unicodedata
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 # Au-dela de cet ecart entre deux saisies d'un meme operateur, on ne regarde
@@ -180,19 +180,15 @@ def _saisies(conn, no_dossier: str) -> List[Dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-def temps_par_categorie(saisies: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Repartition du temps du dossier, par categorie d'operation.
+def intervalles(saisies: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Chaque saisie et le temps qui la separe de la suivante DU MEME OPERATEUR.
 
-    Chaque saisie porte le temps qui la separe de la suivante du meme
-    operateur. `minutes` ne plafonne rien, pour rester aligne sur le rapport
-    hebdomadaire ; `minutes_douteuses` isole les ecarts qui depassent
-    ECART_MAX_MIN, c'est-a-dire les saisies restees ouvertes d'un jour a
-    l'autre.
+    C'est la brique commune au calcul des temps et au trace de la frise : la
+    repartition par categorie n'est qu'une somme de ces intervalles, et la
+    frise n'est que leur mise en place sur un axe. Les calculer deux fois,
+    c'est se donner deux chronologies pour un meme dossier.
     """
-    par_cat: Dict[str, Dict[str, float]] = {}
-    par_code: Dict[str, Dict[str, Any]] = {}
-    ouvertes: List[Dict[str, Any]] = []
-
+    out: List[Dict[str, Any]] = []
     par_operateur: Dict[str, List[Dict[str, Any]]] = {}
     for s in saisies:
         par_operateur.setdefault(_txt(s.get("operateur")), []).append(s)
@@ -208,36 +204,56 @@ def temps_par_categorie(saisies: List[Dict[str, Any]]) -> Dict[str, Any]:
             minutes = (fin - debut).total_seconds() / 60.0
             if minutes <= 0:
                 continue
-            douteuse = minutes > ECART_MAX_MIN
-
-            cat = _txt(ligne.get("operation_category")).lower() or "autre"
-            bloc = par_cat.setdefault(cat, {"minutes": 0.0, "minutes_douteuses": 0.0,
-                                            "occurrences": 0.0})
-            bloc["minutes"] += minutes
-            bloc["occurrences"] += 1
-            if douteuse:
-                bloc["minutes_douteuses"] += minutes
-
-            code = _txt(ligne.get("operation_code"))
-            detail = par_code.setdefault(code, {
-                "code": code,
+            out.append({
+                "saisie_id": ligne.get("id"),
+                "operateur": _txt(ligne.get("operateur")),
+                "machine": _txt(ligne.get("machine")),
+                "no_dossier": _txt(ligne.get("no_dossier")),
+                "client": _txt(ligne.get("client")),
+                "designation": _txt(ligne.get("designation")),
+                "debut": debut, "fin": fin, "minutes": minutes,
+                "categorie": _txt(ligne.get("operation_category")).lower() or "autre",
+                "code": _txt(ligne.get("operation_code")),
                 "operation": _txt(ligne.get("operation")),
-                "categorie": cat,
-                "minutes": 0.0,
-                "occurrences": 0,
+                "douteuse": minutes > ECART_MAX_MIN,
             })
-            detail["minutes"] += minutes
-            detail["occurrences"] += 1
+    out.sort(key=lambda i: (i["debut"], i["saisie_id"] or 0))
+    return out
 
-            if douteuse:
-                ouvertes.append({
-                    "saisie_id": ligne.get("id"),
-                    "operateur": _txt(ligne.get("operateur")),
-                    "date_operation": _txt(ligne.get("date_operation")),
-                    "operation": _txt(ligne.get("operation")),
-                    "code": code,
-                    "minutes": minutes,
-                })
+
+def temps_par_categorie(saisies: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Repartition du temps du dossier, par categorie d'operation.
+
+    `minutes` ne plafonne rien, pour rester aligne sur le calcul historique ;
+    `minutes_douteuses` isole les ecarts qui depassent ECART_MAX_MIN,
+    c'est-a-dire les saisies restees ouvertes d'un jour a l'autre.
+    """
+    par_cat: Dict[str, Dict[str, float]] = {}
+    par_code: Dict[str, Dict[str, Any]] = {}
+    ouvertes: List[Dict[str, Any]] = []
+
+    for iv in intervalles(saisies):
+        bloc = par_cat.setdefault(iv["categorie"], {"minutes": 0.0, "minutes_douteuses": 0.0,
+                                                    "occurrences": 0.0})
+        bloc["minutes"] += iv["minutes"]
+        bloc["occurrences"] += 1
+        if iv["douteuse"]:
+            bloc["minutes_douteuses"] += iv["minutes"]
+
+        detail = par_code.setdefault(iv["code"], {
+            "code": iv["code"], "operation": iv["operation"],
+            "categorie": iv["categorie"], "minutes": 0.0, "occurrences": 0,
+        })
+        detail["minutes"] += iv["minutes"]
+        detail["occurrences"] += 1
+
+        if iv["douteuse"]:
+            ouvertes.append({
+                "saisie_id": iv["saisie_id"], "operateur": iv["operateur"],
+                "date_operation": iv["debut"].strftime("%Y-%m-%dT%H:%M:%S"),
+                "operation": iv["operation"], "code": iv["code"],
+                "minutes": iv["minutes"],
+            })
 
     total = sum(b["minutes"] for b in par_cat.values())
     categories = []
@@ -623,6 +639,8 @@ def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
         objet["valide"] = bool(etat.get("valide"))
         objet["valide_par"] = etat.get("valide_par", "")
         objet["valide_le"] = etat.get("valide_le", "")
+        objet["masque"] = bool(etat.get("masque"))
+        objet["masque_par"] = etat.get("masque_par", "")
         return objet
 
     if info:
@@ -639,6 +657,18 @@ def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
         sx["texte"] = sx.get("explication_texte") or ""
     for n in notes:
         _suivi(n, "note", n.get("id"), True)
+
+    # Une reponse n'est pas une remontee de plus : elle appartient a celle
+    # qu'elle commente. Ajoutee a la file, elle la noyait ; rangee dessous, elle
+    # se lit comme une conversation.
+    par_parent: Dict[str, List[Dict[str, Any]]] = {}
+    libres: List[Dict[str, Any]] = []
+    for n in notes:
+        parent = _txt(n.get("cle_ecrit"))
+        (par_parent.setdefault(parent, []) if parent else libres).append(n)
+    for porteur in ([info] if info else []) + coms + seuils + notes:
+        porteur["reponses"] = par_parent.get(porteur.get("cle", ""), [])
+    notes = libres
 
     minutes_calage = _minutes_de(temps, CAT_CALAGE)
     minutes_arret = sum(_minutes_de(temps, c) for c in CATEGORIES_COUTEUSES)
@@ -674,6 +704,7 @@ def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
         "seuils": seuils,
         "non_conformites": ncs,
     }
+    cr["frise"] = frise_dossier(conn, no_dossier)
     cr["vigilance"] = _vigilance(cr, minutes_arret)
     return cr
 
@@ -898,6 +929,9 @@ def retour_atelier(conn, machine: str, debut: str, fin: str,
             "valide": bool(source.get("valide")),
             "valide_par": source.get("valide_par", ""),
             "valide_le": source.get("valide_le", ""),
+            "masque": bool(source.get("masque")),
+            "masque_par": source.get("masque_par", ""),
+            "reponses": source.get("reponses") or [],
         })
 
     for c in crs:
@@ -917,6 +951,9 @@ def retour_atelier(conn, machine: str, debut: str, fin: str,
             _porter(n, no_d, n["texte"], _txt(n.get("auteur")),
                     _txt(n.get("updated_at") or n.get("created_at")))
     ecrits.sort(key=lambda e: e.get("date") or "")
+    # Les remontees hors sujet quittent la liste principale sans disparaitre.
+    ecrits_masques = [e for e in ecrits if e.get("masque")]
+    ecrits = [e for e in ecrits if not e.get("masque")]
 
     # Vigilance agregee — les memes cles, comptees, jamais rattachees a un nom.
     compte_vigilance: Dict[str, int] = {}
@@ -944,6 +981,7 @@ def retour_atelier(conn, machine: str, debut: str, fin: str,
         "references": refs,
         "arrets_couteux": couteux,
         "ecrits": ecrits,
+        "ecrits_masques": ecrits_masques,
         "vigilance": compte_vigilance,
         "nb_nc": sum(len(c["non_conformites"]) for c in crs),
     }
@@ -1040,15 +1078,47 @@ def cle_ecrit(origine: str, reference: Any) -> str:
 
 
 def _etats_ecrits(conn, no_dossier: str) -> Dict[str, Dict[str, Any]]:
-    if not _table_existe(conn, "retour_prod_ecrits"):
+    cols = _colonnes(conn, "retour_prod_ecrits")
+    if not cols:
         return {}
+    masque = "masque" in cols
+    champs = "cle, valide, valide_par, valide_le" + (", masque, masque_par" if masque else "")
     rows = conn.execute(
-        """SELECT cle, valide, valide_par, valide_le FROM retour_prod_ecrits
-            WHERE TRIM(COALESCE(no_dossier,'')) = TRIM(?)""",
+        f"""SELECT {champs} FROM retour_prod_ecrits
+             WHERE TRIM(COALESCE(no_dossier,'')) = TRIM(?)""",
         (no_dossier,),
     ).fetchall()
-    return {r["cle"]: {"valide": bool(r["valide"]), "valide_par": _txt(r["valide_par"]),
-                       "valide_le": _txt(r["valide_le"])} for r in rows}
+    return {r["cle"]: {
+        "valide": bool(r["valide"]), "valide_par": _txt(r["valide_par"]),
+        "valide_le": _txt(r["valide_le"]),
+        "masque": bool(r["masque"]) if masque else False,
+        "masque_par": _txt(r["masque_par"]) if masque else "",
+    } for r in rows}
+
+
+def masquer_ecrit(conn, cle: str, no_dossier: str, masque: bool, par: str) -> Dict[str, Any]:
+    """Sort une remontee de la liste principale, sans rien effacer.
+
+    Masquer n'est pas valider : une remontee masquee n'a pas ete traitee, elle
+    n'avait rien a traiter. Confondre les deux ferait passer « 10h » pour un
+    probleme resolu.
+    """
+    cols = _colonnes(conn, "retour_prod_ecrits")
+    if "masque" not in cols:
+        return {}
+    maintenant = datetime.now().isoformat(timespec="seconds")
+    conn.execute(
+        """INSERT INTO retour_prod_ecrits (cle, no_dossier, masque, masque_par, masque_le)
+           VALUES (?,?,?,?,?)
+           ON CONFLICT(cle) DO UPDATE SET
+             no_dossier=excluded.no_dossier, masque=excluded.masque,
+             masque_par=excluded.masque_par, masque_le=excluded.masque_le""",
+        (_txt(cle), _txt(no_dossier), 1 if masque else 0,
+         _txt(par) if masque else "", maintenant if masque else ""),
+    )
+    conn.commit()
+    return {"cle": _txt(cle), "masque": bool(masque),
+            "masque_par": _txt(par) if masque else ""}
 
 
 def valider_ecrit(conn, cle: str, no_dossier: str, valide: bool, par: str) -> Dict[str, Any]:
@@ -1138,3 +1208,310 @@ def modifier_commentaire_saisie(conn, saisie_id: int, texte: str) -> bool:
     )
     conn.commit()
     return bool(cur.rowcount)
+
+
+# ─── Dernier jour travaille ──────────────────────────────────────────────────
+
+def dernier_jour_saisi(conn, avant: str = "") -> Optional[str]:
+    """Dernier jour (AAAA-MM-JJ) portant au moins une saisie, jusqu'a `avant` inclus.
+
+    « Hier » est un mauvais repere dans un atelier qui ne tourne pas sept jours
+    sur sept : un lundi matin, il designe un dimanche vide. Ce qu'on veut voir
+    en ouvrant l'ecran, c'est la derniere journee REELLEMENT travaillee —
+    vendredi, ou samedi si l'equipe est venue.
+
+    Le calcul ne peut pas se faire dans le navigateur : lui seul sait quel jour
+    on est, mais pas ou se trouve la derniere saisie.
+
+    `avant` vide vaut la veille : on ne remonte jamais la journee en cours, meme
+    si quelqu'un a deja pointe ce matin.
+    """
+    cols = _colonnes(conn, "production_data")
+    if not cols:
+        return None
+    if not _txt(avant):
+        avant = (date.today() - timedelta(days=1)).isoformat()
+    borne = _txt(avant)[:10] + "T23:59:59"
+    filtre_annule = " AND COALESCE(est_annule, 0) = 0" if "est_annule" in cols else ""
+    row = conn.execute(
+        f"""SELECT SUBSTR(date_operation, 1, 10) AS jour
+              FROM production_data
+             WHERE date_operation <= ?
+               AND TRIM(COALESCE(date_operation, '')) <> ''{filtre_annule}
+             ORDER BY date_operation DESC
+             LIMIT 1""",
+        (borne,),
+    ).fetchone()
+    return _txt(row["jour"]) if row and _txt(row["jour"]) else None
+
+
+# ─── Frise de production ─────────────────────────────────────────────────────
+#
+# Meme allure que le planning, mais posee sur de VRAIES dates : le planning
+# range des creneaux par sequence dans la semaine avec une largeur tiree du
+# prevu (`planning_entries.duree_heures`), la frise pose ce qui s'est reellement
+# passe, d'apres les saisies.
+#
+# L'axe ne montre que les plages travaillees : une journee d'atelier tient dans
+# huit heures, et un axe minuit-minuit noierait les slots sous deux tiers de
+# vide. Les nuits et les jours chomes sont replies en un trait.
+#
+# Les positions sont calculees ici, en pourcentage : l'ecran n'a qu'a poser des
+# rectangles. Une geometrie calculee dans le navigateur serait invisible aux
+# tests, et c'est precisement le genre de calcul qui derape en silence.
+
+_JOURS_COURTS = ("Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim")
+
+
+def _bornes_jour(quand: datetime) -> Tuple[datetime, datetime]:
+    debut = quand.replace(hour=0, minute=0, second=0, microsecond=0)
+    return debut, debut + timedelta(days=1)
+
+
+def _axe_ouvre(intervalles_periode: List[Dict[str, Any]],
+               debut: datetime, fin: datetime) -> List[Dict[str, Any]]:
+    """Une plage par journee travaillee, large a proportion de sa duree reelle.
+
+    Une journee sans aucune saisie n'a pas de plage : elle se replie. Deux
+    journees de longueurs differentes gardent des largeurs differentes — sans
+    quoi une demi-journee et une journee de douze heures se ressembleraient.
+
+    Les saisies restees ouvertes d'un jour a l'autre ne definissent PAS l'axe :
+    une ligne oubliee un soir couvrirait la nuit entiere et deplierait ce qu'on
+    cherche justement a replier. Elles restent dessinees dans leur slot — c'est
+    l'axe qu'elles ne commandent pas. Faute de mieux, on retombe dessus.
+    """
+    fiables = [iv for iv in intervalles_periode if not iv.get("douteuse")]
+    retenus = fiables or intervalles_periode
+    par_jour: Dict[str, Dict[str, datetime]] = {}
+    for iv in retenus:
+        d = max(iv["debut"], debut)
+        f = min(iv["fin"], fin)
+        if f <= d:
+            continue
+        curseur = d
+        while curseur < f:
+            jour_debut, jour_fin = _bornes_jour(curseur)
+            tranche_fin = min(f, jour_fin)
+            cle = jour_debut.strftime("%Y-%m-%d")
+            plage = par_jour.get(cle)
+            if plage is None:
+                par_jour[cle] = {"debut": curseur, "fin": tranche_fin}
+            else:
+                plage["debut"] = min(plage["debut"], curseur)
+                plage["fin"] = max(plage["fin"], tranche_fin)
+            curseur = jour_fin
+
+    plages = [{"jour": cle, **v} for cle, v in sorted(par_jour.items())]
+    total = sum((p["fin"] - p["debut"]).total_seconds() for p in plages)
+    if total <= 0:
+        return []
+
+    axe: List[Dict[str, Any]] = []
+    curseur_x = 0.0
+    for i, p in enumerate(plages):
+        secondes = (p["fin"] - p["debut"]).total_seconds()
+        largeur = secondes / total * 100.0
+        precedent = plages[i - 1]["jour"] if i else None
+        replie = False
+        if precedent:
+            veille = datetime.strptime(p["jour"], "%Y-%m-%d") - timedelta(days=1)
+            replie = veille.strftime("%Y-%m-%d") != precedent
+        axe.append({
+            "jour": p["jour"],
+            "label": (_JOURS_COURTS[datetime.strptime(p["jour"], "%Y-%m-%d").weekday()]
+                      + " " + datetime.strptime(p["jour"], "%Y-%m-%d").strftime("%d/%m")),
+            "debut": p["debut"].strftime("%Y-%m-%dT%H:%M:%S"),
+            "fin": p["fin"].strftime("%Y-%m-%dT%H:%M:%S"),
+            "heures": round(secondes / 3600.0, 1),
+            "x": round(curseur_x, 4),
+            "largeur": round(largeur, 4),
+            # Vrai quand des journees entieres sans saisie separent celle-ci de
+            # la precedente : l'ecran y pose un trait, pas du vide.
+            "coupure_avant": replie,
+            "_d": p["debut"], "_f": p["fin"],
+        })
+        curseur_x += largeur
+    return axe
+
+
+def _position(axe: List[Dict[str, Any]], quand: datetime) -> float:
+    """Position en % d'un instant sur l'axe replie. Sature aux bornes."""
+    if not axe:
+        return 0.0
+    if quand <= axe[0]["_d"]:
+        return 0.0
+    for plage in axe:
+        if quand <= plage["_f"]:
+            if quand < plage["_d"]:
+                return plage["x"]          # tombe dans un repli : debut de plage
+            duree = (plage["_f"] - plage["_d"]).total_seconds()
+            if duree <= 0:
+                return plage["x"]
+            avance = (quand - plage["_d"]).total_seconds() / duree
+            return plage["x"] + avance * plage["largeur"]
+    return 100.0
+
+
+def frise(conn, debut: str, fin: str, machine: str = "", code_fin: str = "89",
+          code_debut: str = "01", code_annul: str = "90") -> Dict[str, Any]:
+    """Ce qui est passe sur les machines pendant la periode, pose sur un axe.
+
+    Un dossier commence souvent avant la periode et finit apres : son slot est
+    alors coupe, et porte un marqueur de debordement de chaque cote. Le tronquer
+    sans le dire ferait croire a une production plus courte qu'elle ne fut.
+    """
+    d_deb, d_fin = _dt(debut), _dt(fin)
+    if d_deb is None or d_fin is None or d_fin <= d_deb:
+        return {"vide": True, "axe": [], "lignes": []}
+
+    cols = _colonnes(conn, "production_data")
+    if not cols:
+        return {"vide": True, "axe": [], "lignes": []}
+    filtre_annule = " AND COALESCE(est_annule, 0) = 0" if "est_annule" in cols else ""
+    params: List[Any] = [debut, fin]
+    filtre_machine = ""
+    if _txt(machine):
+        filtre_machine = " AND TRIM(LOWER(COALESCE(machine,''))) = TRIM(LOWER(?))"
+        params.append(_txt(machine))
+
+    couples = conn.execute(
+        f"""SELECT DISTINCT TRIM(no_dossier) AS no_dossier, TRIM(machine) AS machine
+              FROM production_data
+             WHERE date_operation >= ? AND date_operation <= ?
+               AND TRIM(COALESCE(no_dossier, '')) <> ''{filtre_annule}{filtre_machine}""",
+        params,
+    ).fetchall()
+    if not couples:
+        return {"vide": True, "axe": [], "lignes": []}
+
+    # Toutes les saisies du dossier, pas seulement celles de la periode : sinon
+    # un dossier commence la veille perdrait son debut et sa premiere phase.
+    brut: Dict[str, List[Dict[str, Any]]] = {}
+    for c in couples:
+        no_d = c["no_dossier"]
+        if no_d not in brut:
+            brut[no_d] = intervalles(_saisies(conn, no_d))
+
+    dans_periode: List[Dict[str, Any]] = []
+    for ivs in brut.values():
+        for iv in ivs:
+            if iv["fin"] > d_deb and iv["debut"] < d_fin:
+                if not _txt(machine) or iv["machine"].strip().lower() == _txt(machine).lower():
+                    dans_periode.append(iv)
+    axe = _axe_ouvre(dans_periode, d_deb, d_fin)
+    if not axe:
+        return {"vide": True, "axe": [], "lignes": []}
+
+    par_machine: Dict[str, List[Dict[str, Any]]] = {}
+    for no_d, ivs in brut.items():
+        machines = {iv["machine"] for iv in ivs if iv["machine"]}
+        for m in sorted(machines):
+            if _txt(machine) and m.strip().lower() != _txt(machine).lower():
+                continue
+            propres = [iv for iv in ivs if iv["machine"] == m]
+            visibles = [iv for iv in propres if iv["fin"] > d_deb and iv["debut"] < d_fin]
+            if not visibles:
+                continue
+            slot = _slot(propres, visibles, axe, d_deb, d_fin, no_d)
+            if slot:
+                par_machine.setdefault(m, []).append(slot)
+
+    lignes = []
+    for m in sorted(par_machine):
+        slots = sorted(par_machine[m], key=lambda s: s["x"])
+        lignes.append({"machine": m, "slots": slots})
+
+    for plage in axe:
+        plage.pop("_d", None)
+        plage.pop("_f", None)
+
+    return {"vide": not lignes, "axe": axe, "lignes": lignes,
+            "periode": {"debut": debut, "fin": fin}}
+
+
+def _slot(tous: List[Dict[str, Any]], visibles: List[Dict[str, Any]],
+          axe: List[Dict[str, Any]], d_deb: datetime, d_fin: datetime,
+          no_dossier: str) -> Optional[Dict[str, Any]]:
+    """Un dossier sur une machine : sa barre, ses phases, ses debordements."""
+    debut_reel = min(iv["debut"] for iv in tous)
+    fin_reelle = max(iv["fin"] for iv in tous)
+    d0 = max(debut_reel, d_deb)
+    f0 = min(fin_reelle, d_fin)
+    x = _position(axe, d0)
+    fin_x = _position(axe, f0)
+    largeur = max(fin_x - x, 0.35)          # un slot tres court reste cliquable
+
+    # Les phases, dans l'ordre, sans chevauchement : deux conducteurs sur le
+    # meme dossier se relaient, mais leurs saisies peuvent se croiser d'une
+    # minute. On rabote plutot que de superposer deux rectangles.
+    segments: List[Dict[str, Any]] = []
+    borne = None
+    for iv in sorted(visibles, key=lambda i: i["debut"]):
+        s_deb = max(iv["debut"], d0)
+        s_fin = min(iv["fin"], f0)
+        if borne is not None and s_deb < borne:
+            s_deb = borne
+        if s_fin <= s_deb:
+            continue
+        borne = s_fin
+        sx = _position(axe, s_deb)
+        sf = _position(axe, s_fin)
+        if largeur <= 0:
+            continue
+        segments.append({
+            "categorie": iv["categorie"],
+            "label": LIBELLES_CATEGORIES.get(iv["categorie"],
+                                             iv["categorie"].capitalize() or "Autre"),
+            "operation": iv["operation"],
+            "code": iv["code"],
+            "minutes": round(iv["minutes"], 1),
+            "x": round(max(0.0, (sx - x) / largeur * 100.0), 3),
+            "largeur": round(max(0.0, (sf - sx) / largeur * 100.0), 3),
+        })
+
+    derniere = max(tous, key=lambda i: i["debut"])
+    return {
+        "no_dossier": no_dossier,
+        "client": _txt(derniere.get("client")),
+        "designation": _txt(derniere.get("designation")),
+        "operateurs": sorted({iv["operateur"] for iv in tous if iv["operateur"]}),
+        "debut": debut_reel.strftime("%Y-%m-%dT%H:%M:%S"),
+        "fin": fin_reelle.strftime("%Y-%m-%dT%H:%M:%S"),
+        "minutes": round(sum(iv["minutes"] for iv in tous), 1),
+        "x": round(x, 3),
+        "largeur": round(largeur, 3),
+        "deborde_avant": debut_reel < d_deb,
+        "deborde_apres": fin_reelle > d_fin,
+        "segments": segments,
+    }
+
+
+def frise_dossier(conn, no_dossier: str) -> Dict[str, Any]:
+    """La frise d'un seul dossier, sur sa propre etendue.
+
+    Meme composant que la frise machine, borne au dossier : dans son
+    compte-rendu, ce qui interesse n'est pas ce que la machine a fait autour,
+    c'est l'enchainement de ses propres phases.
+    """
+    ivs = intervalles(_saisies(conn, no_dossier))
+    if not ivs:
+        return {"vide": True, "axe": [], "lignes": []}
+    d_deb = min(iv["debut"] for iv in ivs)
+    d_fin = max(iv["fin"] for iv in ivs)
+    axe = _axe_ouvre(ivs, d_deb, d_fin)
+    if not axe:
+        return {"vide": True, "axe": [], "lignes": []}
+    par_machine: Dict[str, List[Dict[str, Any]]] = {}
+    for m in sorted({iv["machine"] for iv in ivs if iv["machine"]} or {""}):
+        propres = [iv for iv in ivs if iv["machine"] == m] or ivs
+        slot = _slot(propres, propres, axe, d_deb, d_fin, _txt(no_dossier))
+        if slot:
+            par_machine.setdefault(m or "—", []).append(slot)
+    for plage in axe:
+        plage.pop("_d", None)
+        plage.pop("_f", None)
+    lignes = [{"machine": m, "slots": par_machine[m]} for m in sorted(par_machine)]
+    return {"vide": not lignes, "axe": axe, "lignes": lignes,
+            "periode": {"debut": d_deb.strftime("%Y-%m-%dT%H:%M:%S"),
+                        "fin": d_fin.strftime("%Y-%m-%dT%H:%M:%S")}}
