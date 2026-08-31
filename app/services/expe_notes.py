@@ -4,6 +4,14 @@ MyExpé — note de confiance transporteur.
 La note est une moyenne pondérée des avis émis sur les expéditions, exprimée
 sur 10, puis traduite en lettre de A (à utiliser en priorité) à F (à éviter).
 
+Tout transporteur part de `NOTE_DEPART` (5/10, soit C), qui entre dans la
+moyenne comme un avis de poids 1. Deux conséquences voulues : un transporteur
+sur lequel personne n'a rien signalé est affiché comme neutre plutôt que comme
+une case vide, et le tout premier avis ne fait pas basculer la note d'un bout à
+l'autre de l'échelle — il la déplace de moitié. Cette note de départ s'efface
+d'elle-même : son poids reste 1 quand celui des avis s'accumule, donc son
+influence tombe à 1/(n+1).
+
 Trois pondérations, et une seule raison pour chacune :
 
 * **La thématique.** Un colis perdu ne pèse pas comme un retard d'une heure.
@@ -16,9 +24,9 @@ Trois pondérations, et une seule raison pour chacune :
 * **L'ajustement manuel.** Il s'ajoute en points à la moyenne, il ne l'écrase
   pas. Écraser la note ferait de tout le mécanisme d'avis une décoration.
 
-La note n'existe pas tant qu'aucun avis n'a été émis : afficher C par défaut
-reviendrait à affirmer quelque chose qu'on ne sait pas. En dessous de
-`SEUIL_FIABILITE` avis, elle est marquée provisoire.
+En dessous de `SEUIL_FIABILITE` avis, la note est marquée provisoire, et tant
+qu'aucun avis n'a été émis elle est marquée `par_defaut` : l'écran doit pouvoir
+dire « note de départ » plutôt que laisser croire à un jugement.
 """
 
 from __future__ import annotations
@@ -26,13 +34,23 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
+# Note attribuée à un transporteur sur lequel rien n'a encore été signalé, et
+# poids qu'elle garde dans la moyenne (celui d'un avis).
+NOTE_DEPART = 5.0
+POIDS_NOTE_DEPART = 1.0
+
 # Bornes basses de chaque lettre, sur 10. Lues de haut en bas.
+#
+# L'échelle est centrée sur NOTE_DEPART : C est la bande neutre et la plus
+# large, et 5/10 tombe dedans avec de la marge des deux côtés. Déplacer ces
+# bornes sans déplacer NOTE_DEPART ferait démarrer tout le monde à « À
+# surveiller » — le contraire de ce qu'une note de départ veut dire.
 SEUILS_LETTRE: list[tuple[float, str]] = [
-    (9.0, "A"),
-    (8.0, "B"),
-    (6.5, "C"),
-    (5.0, "D"),
-    (3.5, "E"),
+    (8.5, "A"),
+    (7.0, "B"),
+    (4.5, "C"),
+    (3.0, "D"),
+    (1.5, "E"),
 ]
 
 LETTRE_LIBELLE: dict[str, str] = {
@@ -120,8 +138,10 @@ def calculer_note(conn, transporteur_id: int) -> dict:
     ).fetchall()
 
     maintenant = datetime.now()
-    somme = 0.0
-    total_poids = 0.0
+    # La note de départ entre dans la moyenne comme un avis, et n'est jamais
+    # comptée dans `nb_avis` : elle n'est le jugement de personne.
+    somme = NOTE_DEPART * POIDS_NOTE_DEPART
+    total_poids = POIDS_NOTE_DEPART
     nb_avis = 0
     nb_alertes = 0
     ajustement_total = 0.0
@@ -146,19 +166,6 @@ def calculer_note(conn, transporteur_id: int) -> dict:
 
     ajustement_total = max(-AJUSTEMENT_MAX, min(AJUSTEMENT_MAX, ajustement_total))
 
-    if nb_avis == 0:
-        # Un ajustement seul ne fabrique pas une note : il n'y a rien à ajuster.
-        return {
-            "valeur": None,
-            "lettre": None,
-            "libelle": libelle_lettre(None),
-            "nb_avis": 0,
-            "nb_alertes": 0,
-            "ajustement": round(ajustement_total, 2),
-            "provisoire": False,
-            "moyenne_brute": None,
-        }
-
     moyenne = somme / total_poids
     valeur = _clamp(moyenne + ajustement_total)
     lettre = lettre_pour(valeur)
@@ -169,7 +176,9 @@ def calculer_note(conn, transporteur_id: int) -> dict:
         "nb_avis": nb_avis,
         "nb_alertes": nb_alertes,
         "ajustement": round(ajustement_total, 2),
-        "provisoire": nb_avis < SEUIL_FIABILITE,
+        # Aucun avis : la note affichée est la note de départ, pas un jugement.
+        "par_defaut": nb_avis == 0,
+        "provisoire": 0 < nb_avis < SEUIL_FIABILITE,
         "moyenne_brute": round(moyenne, 2),
     }
 
@@ -389,8 +398,10 @@ def _classer(
         dernier = usage["dernier"]
         note_valeur, note_lettre, nb_avis = _note_de(trp)
 
-        # Sans note, on ne suppose ni bien ni mal : score neutre.
-        score_note = 0.5 if note_valeur is None else float(note_valeur) / 10.0
+        # `note_valeur` est nulle seulement si le cache n'a jamais été calculé ;
+        # on retombe alors sur la note de départ, comme le calcul lui-même.
+        base = NOTE_DEPART if note_valeur is None else float(note_valeur)
+        score_note = base / 10.0
         score_usage = (nb / max_usage) if max_usage else 0.0
         score_recence = _score_recence(dernier, maintenant)
         score = score_note * 0.55 + score_usage * 0.30 + score_recence * 0.15

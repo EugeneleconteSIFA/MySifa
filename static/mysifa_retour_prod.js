@@ -120,7 +120,12 @@
                + ' style="left:' + g.x + '%;width:' + g.largeur + '%"></div>';
         }).join("");
         var fmt = sl.format || (sl.laize_mm ? sl.laize_mm + " mm" : "");
-        return '<div class="rp-fr-slot'
+        // Densite du libelle. Quatre lignes dans un slot etroit, ce sont quatre
+        // « … » : on en retire plutot que de tout tronquer. Le seuil est en
+        // pourcentage de la piste, comme la geometrie qui arrive du serveur.
+        var large = Number(sl.largeur) || 0;
+        var densite = large >= 16 ? '' : (large >= 9 ? ' moyen' : ' etroit');
+        return '<div class="rp-fr-slot' + densite
              + (sl.deborde_avant ? ' deborde-avant' : '')
              + (sl.deborde_apres ? ' deborde-apres' : '')
              + '" data-dossier="' + escAttr(sl.no_dossier) + '"'

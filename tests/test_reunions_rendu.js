@@ -80,6 +80,22 @@ verifier("liste : etat en cours", liste.includes(">en cours<"));
 verifier("liste : etat close", liste.includes(">close<"));
 verifier("liste : tableau ferme", liste.trim().endsWith("</table>"));
 
+console.log("\n2 bis. Chaque ligne porte sa corbeille");
+verifier("corbeille : bouton par ligne",
+         liste.split('data-suppr-reunion="').length === 3);
+verifier("corbeille : identifiant porte", liste.includes('data-suppr-reunion="12"'));
+verifier("corbeille : titre porte pour la confirmation",
+         liste.includes('data-suppr-titre="31/08/2026"'));
+verifier("corbeille : intitule accessible", liste.includes("aria-label=\"Supprimer"));
+verifier("corbeille : icone et non emoji",
+         liste.includes("<svg") && !/[\u{1F300}-\u{1FAFF}]/u.test(liste));
+verifier("corbeille : hors de la cellule d'etat",
+         liste.indexOf("reu-td-sup") > liste.indexOf("reu-pastille ouverte"));
+verifier("corbeille : titre echappe dans l'attribut",
+         !M.rendreListe([{ id: 1, titre: '" onfocus="alert(1)', date_debut: "2026-08-28",
+           date_fin: "2026-08-28", ouverte_par: "x", participants: [], nb_actions: 0,
+           ouverte: false }]).includes('data-suppr-titre="" onfocus='));
+
 console.log("\n3. La reunion rend l'ecran entier");
 const ecran = M.rendreReunion(REUNION, { machines: ["Cohesio 1", "Cohesio 2"] }, "Enregistre a 09:12");
 verifier("reunion : titre dans le champ", ecran.includes('value="31/08/2026"'));
@@ -131,6 +147,8 @@ const listeP = M.rendreListe([{ id: 1, titre: piege, date_debut: "2026-08-28",
 verifier("liste : titre echappe", !listeP.includes("<img src=x"));
 verifier("liste : auteur echappe", listeP.includes("&lt;img"));
 verifier("liste : machine echappee", listeP.split("&lt;img").length > 3);
+verifier("liste : titre echappe jusque dans la corbeille",
+         !listeP.includes('data-suppr-titre="<img'));
 const ecranP = M.rendreReunion(Object.assign({}, REUNION,
   { titre: '" onfocus="alert(1)', ouverte_par: piege }), { machines: [piege] }, "");
 verifier("reunion : titre echappe dans l'attribut", !ecranP.includes('" onfocus='));

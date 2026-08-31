@@ -118,6 +118,83 @@ check("il annonce que le code sera quand meme enregistre",
 check("et le fournisseur est marque obligatoire",
       "Fournisseur (obligatoire)" in js, True)
 
+print("\n5. La reponse remonte dans MyProd > Tracabilite")
+# Ecrire la reponse ne sert a rien si les ecrans de tracabilite continuent
+# d'afficher un dossier vide. Elle doit sortir partout ou l'absence de
+# bobine se lit : liste, detail, rapport FSC, traceur.
+import ast as _ast
+
+traca_src = open("app/routers/traca.py", encoding="utf-8").read()
+
+# La fonction s'execute pour de vrai, extraite de sa source : le test ne
+# peut pas valider une copie du SQL qui aurait diverge de l'originale.
+_fn = next(n for n in _ast.parse(traca_src).body
+           if isinstance(n, _ast.FunctionDef) and n.name == "motifs_absence_matiere")
+_ns = {"_MAX_NOEUDS": 50}
+exec(compile(_ast.Module(body=[_fn], type_ignores=[]), "traca", "exec"), _ns)
+motifs_absence_matiere = _ns["motifs_absence_matiere"]
+
+c = sqlite3.connect(":memory:")
+c.row_factory = sqlite3.Row
+c.execute("CREATE TABLE production_data (id INTEGER PRIMARY KEY, no_dossier TEXT,"
+          " operation_code TEXT, operateur TEXT, machine TEXT,"
+          " date_operation TEXT, matiere_absente_motif TEXT)")
+c.execute("INSERT INTO production_data (no_dossier, operation_code, operateur,"
+          " date_operation, matiere_absente_motif) VALUES"
+          " ('D1','89','LUC','2026-08-30T10:00','Poste sans matiere')")
+# Une saisie de debut, et une fin sans reponse : ni l'une ni l'autre ne doit
+# remonter — sinon la vue afficherait une explication qui n'existe pas.
+c.execute("INSERT INTO production_data (no_dossier, operation_code, operateur,"
+          " date_operation) VALUES ('D1','01','LUC','2026-08-30T08:00')")
+c.execute("INSERT INTO production_data (no_dossier, operation_code, operateur,"
+          " date_operation, matiere_absente_motif) VALUES"
+          " ('D2','89','LUC','2026-08-30T11:00','   ')")
+c.commit()
+check("la reponse du dossier remonte",
+      [r["motif"] for r in motifs_absence_matiere(c, "D1")],
+      ["Poste sans matiere"])
+check("une reponse blanche ne compte pas",
+      motifs_absence_matiere(c, "D2"), [])
+check("un dossier sans fin de production ne remonte rien",
+      motifs_absence_matiere(c, "D3"), [])
+
+# Base pas encore migree : la vue doit rester lisible, pas planter.
+c2 = sqlite3.connect(":memory:")
+c2.row_factory = sqlite3.Row
+c2.execute("CREATE TABLE production_data (id INTEGER PRIMARY KEY, no_dossier TEXT)")
+c2.commit()
+check("une base sans la colonne ne casse pas la tracabilite",
+      motifs_absence_matiere(c2, "D1"), [])
+
+check("le traceur expose la reponse dans la chaine",
+      '"motifs_absence": motifs_absence,' in traca_src, True)
+check("et la compte parmi ce que la chaine ne demontre pas",
+      "Réponse de l'opérateur" in traca_src, True)
+
+check("l'API Tracabilite la sert avec le detail du dossier",
+      '"motifs_absence_matiere": motifs_absence,' in api
+      and "motifs_absence_matiere(conn, no_dossier)" in api, True)
+check("et la liste distingue l'absence expliquee de l'absence muette",
+      "AS motif_absence_matiere" in api, True)
+
+core = open("static/mysifa_prod_core.js", encoding="utf-8").read()
+check("le detail du dossier l'affiche",
+      "function motifAbsenceMatiereBloc(" in core
+      and "motifBloc," in core, True)
+check("le rapport FSC l'affiche",
+      "motifAbsenceMatiereBloc(data && data.motifs_absence_matiere)" in core, True)
+check("le traceur en fait une etape de la chaine",
+      "(ch.motifs_absence || []).forEach" in core, True)
+check("la liste des dossiers le signale",
+      "'Aucune — expliqué'" in core, True)
+check("le rapport de l'atelier l'affiche aussi",
+      "motifsAbsenceBloc," in js, True)
+# Declaratif : la vue ne doit jamais le presenter comme une donnee tracee.
+check("et il est annonce comme declaratif",
+      "non vérifiable par la chaîne" in core
+      and "non vérifiable par la chaîne" in js, True)
+
+
 print()
 if ko:
     print(f"ECHEC — {ko} verification(s) en erreur.")

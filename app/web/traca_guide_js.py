@@ -111,7 +111,11 @@ async function startTracaExampleScan(onDone){
       var hints=new Map();
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.CODE_128,ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.QR_CODE,ZXing.BarcodeFormat.DATA_MATRIX]);
       hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
-      reader=new ZXing.BrowserMultiFormatReader(hints);
+      // MultiFormatReader.decodeWithState() et NON BrowserMultiFormatReader.decode() :
+      // cette derniere attend un element <video>/<img>, pas un BinaryBitmap. Elle levait
+      // un TypeError avale par le catch — le scan restait indefiniment « En attente… ».
+      reader=new ZXing.MultiFormatReader();
+      reader.setHints(hints);
       var loop=function(){
         if(!scanning)return;
         if(video.readyState<2||!video.videoWidth){setTimeout(loop,100);return}
@@ -119,9 +123,14 @@ async function startTracaExampleScan(onDone){
           canvas.width=video.videoWidth;canvas.height=video.videoHeight;
           ctx.drawImage(video,0,0);
           var img=ctx.getImageData(0,0,canvas.width,canvas.height);
-          var lum=new ZXing.RGBLuminanceSource(img.data,canvas.width,canvas.height);
+          // getImageData rend du RGBA ; RGBLuminanceSource ne convertit que les
+          // Int32Array. Sans cette conversion il lisait R,G,B,A comme 4 pixels gris.
+          var gray = new Uint8ClampedArray(canvas.width * canvas.height);
+          var px = img.data;
+          for (var i = 0, j = 0; i < gray.length; i++, j += 4) gray[i] = (px[j] * 77 + px[j + 1] * 150 + px[j + 2] * 29) >> 8;
+          var lum=new ZXing.RGBLuminanceSource(gray,canvas.width,canvas.height);
           var bmp=new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-          var res=reader.decode(bmp);
+          var res=reader.decodeWithState(bmp);
           if(res)onCode(res.getText());
         }catch(e){}
         if(scanning)setTimeout(loop,150);

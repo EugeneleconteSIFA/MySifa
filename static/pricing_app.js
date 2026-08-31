@@ -1060,6 +1060,61 @@
     return [...vus.entries()].map(([id, nom]) => ({ id: id, nom: nom }));
   }
 
+  /* Depuis quand ce prix n'a pas été revu.
+
+     Un prix d'achat ne se périme pas à date fixe, mais un prix qu'on n'a pas
+     regardé depuis dix-huit mois est presque sûrement faux, et rien à l'écran
+     ne le disait : on lisait « 4,20 €/kg » avec la même confiance qu'il ait
+     été saisi hier ou en 2024. La date seule ne suffit pas — personne ne
+     calcule mentalement l'écart en parcourant quarante lignes — donc l'âge est
+     écrit à côté, et c'est lui qui se colore.
+
+     Deux seuils, larges à dessein : au-delà d'un an on signale, au-delà de
+     deux ans on alerte. Ils ne bloquent rien et ne déclenchent aucun calcul :
+     c'est un rappel, pas une règle de gestion. */
+  const PRIX_VIEUX_JOURS = 365;
+  const PRIX_TRES_VIEUX_JOURS = 730;
+
+  function joursDepuis(raw) {
+    const m = String(raw || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return null;
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    if (Number.isNaN(d.getTime())) return null;
+    return Math.floor((Date.now() - d.getTime()) / 86400000);
+  }
+
+  /** « il y a 3 jours », « il y a 5 mois », « il y a 2 ans ». */
+  function ageTexte(jours) {
+    if (jours == null) return "";
+    if (jours <= 0) return "aujourd'hui";
+    if (jours === 1) return "hier";
+    if (jours < 31) return `il y a ${jours} j`;
+    const mois = Math.round(jours / 30.44);
+    if (mois < 24) return `il y a ${mois} mois`;
+    return `il y a ${Math.floor(jours / 365.25)} ans`;
+  }
+
+  /** « 2026-08-05T07:42:11 » → « 05/08/2026 ». */
+  function fmtJour(raw) {
+    const m = String(raw || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : "";
+  }
+
+  function dernierPrixCellHtml(m) {
+    const brut = m.prix_maj_le;
+    if (!brut) {
+      return `<span class="msl-maj-jamais" title="Aucune saisie de prix tracée pour ${escAttr(m.reference)}">jamais revu</span>`;
+    }
+    const j = joursDepuis(brut);
+    const cls = j == null ? "" : (j >= PRIX_TRES_VIEUX_JOURS ? " tres-vieux" : (j >= PRIX_VIEUX_JOURS ? " vieux" : ""));
+    const par = m.prix_maj_par ? ` par ${m.prix_maj_par}` : "";
+    return `<div class="msl-maj${cls}" title="${escAttr("Dernière saisie du prix de " + m.reference + " le " + fmtJour(brut) + par)}"
+        data-ms-maj="${m.id}">
+        <span class="msl-maj-date">${escHtml(fmtJour(brut))}</span>
+        <span class="msl-maj-age">${escHtml(ageTexte(j))}</span>
+      </div>`;
+  }
+
   function mystockMatiereRowHtml(m) {
     const decls = m.declinaisons || [];
     const fourns = msFournisseursPrincipaux(m);
@@ -1129,6 +1184,7 @@
         <td class="msl-des" title="${escAttr(m.designation || "")}">${escHtml(m.designation || "")}</td>
         <td class="msl-fourn">${fournCell} ${tarifBtn}</td>
         <td class="msl-prix">${prixCell}</td>
+        <td class="msl-majcell">${dernierPrixCellHtml(m)}</td>
         <td class="ms-actions" onclick="event.stopPropagation()">
           ${fiche}
           <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${m.id}" target="_blank" rel="noopener" title="Ouvrir la fiche dans MyStock">MyStock ↗</a>
@@ -1164,15 +1220,17 @@
         <div class="table-wrap">
           <table class="pr-table msl-table">
             <colgroup>
-              <col style="width:100px"><col style="width:180px"><col>
-              <col style="width:200px"><col style="width:250px"><col style="width:180px">
+              <col style="width:92px"><col style="width:150px"><col>
+              <col style="width:180px"><col style="width:215px">
+              <col style="width:120px"><col style="width:172px">
             </colgroup>
             <thead><tr>
               <th>Cat.</th><th>Référence</th><th>Désignation</th><th>Fournisseur principal</th>
               <th class="msl-th-prix">Prix d'achat <span class="msl-th-hint">${icon("edit", 11)} modifiable ici</span></th>
+              <th title="Date de la dernière saisie du prix — donc la dernière fois qu'il a été revu">Dernier prix</th>
               <th class="ms-actions"></th>
             </tr></thead>
-            <tbody>${lignes || '<tr><td colspan="6" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
+            <tbody>${lignes || '<tr><td colspan="7" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
           </table>
         </div>
       </div>
@@ -1289,7 +1347,18 @@
           // L'état local suit, pour qu'un filtre appliqué juste après ne
           // réaffiche pas l'ancien prix venu du dernier chargement.
           const m = (S.mystock || []).find((x) => x.id === id);
-          if (m) { m.prix_min = prix; m.prix_max = prix; }
+          const iso = new Date().toISOString().slice(0, 19);
+          if (m) { m.prix_min = prix; m.prix_max = prix; m.prix_maj_le = iso; m.prix_maj_par = (S.user && S.user.nom) || m.prix_maj_par; }
+          // « Dernier prix » passe à aujourd'hui sans reconstruire le tableau :
+          // on vient de le revoir, le dire ailleurs qu'à l'écran serait absurde.
+          const cell = document.querySelector(`[data-ms-maj="${id}"]`);
+          if (cell && m) {
+            const hote = cell.parentElement;
+            if (hote) hote.innerHTML = dernierPrixCellHtml(m);
+          } else if (m) {
+            const tr = document.querySelector(`tr[data-ms-mat="${id}"] .msl-majcell`);
+            if (tr) tr.innerHTML = dernierPrixCellHtml(m);
+          }
           setTimeout(() => dire("", ""), 2500);
         } catch (e) {
           dire(e.message || "refusé", "ko");

@@ -1075,7 +1075,7 @@ function renderExpeTranspList(){
       h('div',{className:'expe-note-cell'},
         expeNoteBadge(tr),
         h('span',{className:'expe-note-cell-txt'},
-          Number(tr.note_nb_avis||0)?(Number(tr.note_nb_avis)+' avis'):'aucun avis')
+          Number(tr.note_nb_avis||0)?(Number(tr.note_nb_avis)+' avis'):'note de départ')
       )
     );
     return h('tr',{className:inactive?'expe-trp-row-inactive':''},
@@ -1438,7 +1438,8 @@ body.light .expe-cmp-inp:focus{background:var(--card)}
 .expe-cmp-badge{position:absolute;top:12px;right:12px;background:var(--accent);color:var(--bg);font-size:11px;font-weight:700;padding:3px 8px;border-radius:6px}
 .expe-cmp-methode-badge{display:inline-block;background:var(--accent-bg);color:var(--accent);border-radius:6px;font-size:11px;font-weight:600;padding:2px 8px}
 .expe-cmp-card-header{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin-bottom:8px}
-.expe-cmp-card-name{font-size:15px;font-weight:700;color:var(--text);display:block}
+.expe-cmp-card-name{font-size:15px;font-weight:700;color:var(--text)}
+.expe-cmp-card-ident{display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap}
 .expe-cmp-card-price-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .expe-cmp-card-price{font-size:18px;font-weight:700;color:var(--text)}
 .expe-cmp-card.best .expe-cmp-card-price{color:var(--accent)}
@@ -1490,16 +1491,21 @@ function renderResultatsComparateur(data){
       const cardCls='expe-cmp-card'+(mc?' best':'')+(isCont?' expe-cmp-card-cont':'');
       let header='';
       if(!isCont){
+        // La note de confiance est posée à côté du nom : le prix seul ne suffit
+        // pas à choisir, et personne n'ira l'ouvrir dans le référentiel au
+        // moment de comparer.
+        let ident='';
         const couleur=getTrpColor(e.transporteur_id);
         if(couleur){
           const bg=couleur;
           const r2=parseInt(bg.slice(1,3),16),g2=parseInt(bg.slice(3,5),16),b2=parseInt(bg.slice(5,7),16);
           const lum=(0.299*r2+0.587*g2+0.114*b2)/255;
           const fg=lum>0.55?'#1e293b':'#f1f5f9';
-          header+='<span class="expe-trp-tag" style="background:'+escHtml(bg)+';color:'+fg+'">'+escHtml(e.transporteur)+'</span>';
+          ident+='<span class="expe-trp-tag" style="background:'+escHtml(bg)+';color:'+fg+'">'+escHtml(e.transporteur)+'</span>';
         }else{
-          header+='<span class="expe-cmp-card-name">'+escHtml(e.transporteur)+'</span>';
+          ident+='<span class="expe-cmp-card-name">'+escHtml(e.transporteur)+'</span>';
         }
+        header+='<span class="expe-cmp-card-ident">'+expeNoteBadgeHtml(e)+ident+'</span>';
       }
       if(methode){
         header+='<span class="expe-cmp-methode-badge">'+escHtml(methode)+'</span>';
@@ -1525,7 +1531,8 @@ function renderResultatsComparateur(data){
       +noelig.length+' transporteur'+(noelig.length>1?'s':'')+' non éligible'+(noelig.length>1?'s':'')+' — voir les raisons</summary>'
       +'<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">';
     noelig.forEach(ne=>{
-      html+='<div class="expe-cmp-ne-row"><span style="font-size:13px;color:var(--text2)">'+escHtml(ne.transporteur)+'</span>'
+      html+='<div class="expe-cmp-ne-row"><span class="expe-cmp-card-ident" style="font-size:13px;color:var(--text2)">'
+        +expeNoteBadgeHtml(ne)+escHtml(ne.transporteur)+'</span>'
         +'<span style="font-size:12px;color:var(--muted)">'+escHtml(ne.raison)+'</span></div>';
     });
     html+='</div></details>';

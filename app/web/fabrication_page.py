@@ -4251,7 +4251,11 @@ async function tracaScanLoop(video, stream){
     const hints = new Map();
     hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.DATA_MATRIX, ZXing.BarcodeFormat.CODE_39]);
     hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-    const reader = new ZXing.BrowserMultiFormatReader(hints);
+    // MultiFormatReader.decodeWithState() et NON BrowserMultiFormatReader.decode() :
+    // cette derniere attend un element <video>/<img>, pas un BinaryBitmap. Elle levait
+    // un TypeError avale par le catch — le scan restait indefiniment « En attente… ».
+    const reader = new ZXing.MultiFormatReader();
+    reader.setHints(hints);
     S.tracaBarcodeReader = reader;
     const loop = () => {
       if(!S.tracaScanning) return;
@@ -4260,9 +4264,14 @@ async function tracaScanLoop(video, stream){
         canvas.width = video.videoWidth; canvas.height = video.videoHeight;
         ctx.drawImage(video, 0, 0);
         const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const lum = new ZXing.RGBLuminanceSource(img.data, canvas.width, canvas.height);
+        // getImageData rend du RGBA ; RGBLuminanceSource ne convertit que les
+        // Int32Array. Sans cette conversion il lisait R,G,B,A comme 4 pixels gris.
+        const gray = new Uint8ClampedArray(canvas.width * canvas.height);
+        const px = img.data;
+        for (let i = 0, j = 0; i < gray.length; i++, j += 4) gray[i] = (px[j] * 77 + px[j + 1] * 150 + px[j + 2] * 29) >> 8;
+        const lum = new ZXing.RGBLuminanceSource(gray, canvas.width, canvas.height);
         const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-        const result = reader.decode(bmp);
+        const result = reader.decodeWithState(bmp);
         if(result) { onTracaCode(result.getText()); }
       }catch(e){}
       if(S.tracaScanning) setTimeout(loop, 150);
@@ -4994,6 +5003,32 @@ function renderTracabiliteModal(data, noDossier){
           'Aucune expédition rattachée à ce dossier.')
   );
 
+  // Cloture sans aucun code matiere scanne : ce que l'operateur a repondu.
+  // L'API le renvoyait deja (motifs_absence_matiere) sans que le rapport
+  // l'affiche — un dossier sans bobine sortait donc vide, sans dire si
+  // c'etait un oubli ou un poste sans matiere. C'est exactement la question
+  // que pose un audit FSC : elle ne peut pas rester en base.
+  const motifsAbs = (data.motifs_absence_matiere || [])
+    .filter(m => m && String(m.motif||'').trim());
+  const motifsAbsenceBloc = motifsAbs.length
+    ? h('div',{style:{border:'1px solid rgba(251,146,60,.45)',
+        background:'rgba(251,146,60,.09)',borderRadius:'8px',padding:'10px 13px',
+        margin:'12px 0 0',fontSize:'12.5px',color:'var(--text)'}},
+        h('div',{style:{fontWeight:'800',fontSize:'11px',textTransform:'uppercase',
+          letterSpacing:'.4px',color:'#c2410c',marginBottom:'6px'}},
+          'Aucun code matière scanné — réponse de l\'opérateur'),
+        ...motifsAbs.map(m => h('div',{style:{marginTop:'4px',lineHeight:'1.5'}},
+          h('div',{style:{whiteSpace:'pre-wrap'}}, '« ' + String(m.motif).trim() + ' »'),
+          h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'2px'}},
+            [m.operateur || null,
+             m.date_operation ? String(m.date_operation).replace('T',' ').slice(0,16) : null
+            ].filter(Boolean).join(' · '))
+        )),
+        h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'7px',fontStyle:'italic'}},
+          'Déclaratif : saisi à la clôture, non vérifiable par la chaîne.')
+      )
+    : null;
+
   const overlay = h('div',{className:'fab-fsc-traca-overlay fab-modal-overlay',onClick:(e)=>{
     if(e.target===e.currentTarget) closeTracabiliteModal();
   }},
@@ -5018,6 +5053,7 @@ function renderTracabiliteModal(data, noDossier){
         border:'1px solid '+statutColor,
         color:statutColor,
       }}, statutText),
+      motifsAbsenceBloc,
       h('div',{style:{
         fontSize:'12px',fontWeight:'800',textTransform:'uppercase',letterSpacing:'.5px',
         color:'var(--muted)',margin:'14px 0 8px'}}, 'Matière consommée'),

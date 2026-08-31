@@ -3242,7 +3242,11 @@ async function startCameraSearch() {
       const hints = new Map();
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8, ZXing.BarcodeFormat.QR_CODE, ZXing.BarcodeFormat.DATA_MATRIX, ZXing.BarcodeFormat.CODE_39]);
       hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
-      const reader = new ZXing.BrowserMultiFormatReader(hints);
+      // MultiFormatReader.decodeWithState() et NON BrowserMultiFormatReader.decode() :
+      // cette derniere attend un element <video>/<img>, pas un BinaryBitmap. Elle levait
+      // un TypeError avale par le catch — le scan restait indefiniment « En attente… ».
+      const reader = new ZXing.MultiFormatReader();
+      reader.setHints(hints);
       stockSearchState.barcodeReader = reader;
       const loop = () => {
         if (!stockSearchState.scanning) return;
@@ -3251,9 +3255,14 @@ async function startCameraSearch() {
           canvas.width = video.videoWidth; canvas.height = video.videoHeight;
           ctx.drawImage(video, 0, 0);
           const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const lum = new ZXing.RGBLuminanceSource(img.data, canvas.width, canvas.height);
+          // getImageData rend du RGBA ; RGBLuminanceSource ne convertit que les
+          // Int32Array. Sans cette conversion il lisait R,G,B,A comme 4 pixels gris.
+          const gray = new Uint8ClampedArray(canvas.width * canvas.height);
+          const px = img.data;
+          for (let i = 0, j = 0; i < gray.length; i++, j += 4) gray[i] = (px[j] * 77 + px[j + 1] * 150 + px[j + 2] * 29) >> 8;
+          const lum = new ZXing.RGBLuminanceSource(gray, canvas.width, canvas.height);
           const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
-          const result = reader.decode(bmp);
+          const result = reader.decodeWithState(bmp);
           if (result) { onCode(result.getText()); return; }
         } catch(e) {}
         if (stockSearchState.scanning) setTimeout(loop, 150);

@@ -38,6 +38,9 @@ vm.runInContext(
     extraire('fmtPrixUnite'), extraire('categorieBadge'),
     extraire('actionBtn'), extraire('mystockPrixResume'),
     extraire('msFournisseursPrincipaux'),
+    'const PRIX_VIEUX_JOURS = 365, PRIX_TRES_VIEUX_JOURS = 730;',
+    extraire('joursDepuis'), extraire('ageTexte'), extraire('fmtJour'),
+    extraire('dernierPrixCellHtml'),
     extraire('mystockMatiereRowHtml'),
   ].join('\n'),
   ctx
@@ -50,12 +53,18 @@ function check(label, got, attendu) {
   console.log((ok ? 'ok   ' : 'KO   ') + label.padEnd(56) + got + (ok ? '' : '   attendu ' + attendu));
 }
 
+// Dates relatives à aujourd'hui : un test qui code « 2026-08-30 » en dur vire
+// au rouge tout seul dans dix-huit mois, sans qu'une ligne de code ait bougé.
+const ilYA = (j) => new Date(Date.now() - j * 86400000).toISOString().slice(0, 19);
+const hier = ilYA(1), vieux = ilYA(400), tresVieux = ilYA(900);
+
 // Jeu d'essai : un adhésif à deux grammages au même prix (le cas normal), une
 // glassine dont les déclinaisons ont deux fournisseurs différents, une
 // référence orpheline, et une matière aux prix divergents.
 const adhesif = {
   id: 1, reference: '1408', designation: 'Adhésif enlevable fort', categorie: 'adhesif',
   unite: '€/kg', type_declinaison: 'GRAMMAGE', prix_min: 4.2, prix_max: 4.2,
+  prix_maj_le: hier, prix_maj_par: 'Eugene',
   declinaisons: [
     { id: 90, libelle: '17 g/m²', cout_eur_m2: 0.0885,
       lignes: [{ fournisseur_id: 7, fournisseur_nom: 'Meltavis', prix: 4.2, principal: true,
@@ -68,6 +77,7 @@ const adhesif = {
 const glassine = {
   id: 2, reference: 'GL80', designation: 'Glassine 80', categorie: 'glassine',
   unite: '€/m²', type_declinaison: 'LAIZE', prix_min: 0.08, prix_max: 0.09,
+  prix_maj_le: vieux, prix_maj_par: 'Eugene',
   declinaisons: [
     { id: 92, libelle: '76 mm', cout_eur_m2: 0.08,
       lignes: [{ fournisseur_id: 3, fournisseur_nom: 'Coquelle', prix: 0.08, principal: true,
@@ -84,6 +94,7 @@ const orpheline = {
 const diverge = {
   id: 4, reference: 'TH55', designation: 'Thermique 55', categorie: 'frontal',
   unite: '€/m²', type_declinaison: 'LAIZE', prix_min: 0.11, prix_max: 0.13,
+  prix_maj_le: tresVieux, prix_maj_par: 'Eugene',
   declinaisons: [
     { id: 94, libelle: '76 mm', cout_eur_m2: 0.11,
       lignes: [{ fournisseur_id: 9, fournisseur_nom: 'UPM', prix: 0.11, principal: true, cout_eur_m2: 0.11, a_tarif: true }] },
@@ -147,6 +158,25 @@ check('plus de + « déclinaison vierge »', lAdh.includes('data-ms-new'), false
 check('rien non plus sur une matière orpheline', lOrp.includes('data-ms-new'), false);
 check('les actions sont branchées', src.includes('function bindMsListeActions()')
   && src.includes('bindMsListeActions();'), true);
+
+console.log('\n--- « Dernier prix » : quand ce prix a-t-il ete revu ---');
+// Un prix d'achat ne se perime pas a date fixe, mais un prix qu'on n'a pas
+// regarde depuis deux ans est presque surement faux, et rien ne le disait.
+check('la date de derniere saisie', lAdh.includes(ctx.fmtJour(hier)), true);
+check('et son age en clair', lAdh.includes('hier'), true);
+check('un an : signale', lGla.includes('msl-maj vieux'), true);
+check('deux ans : alerte', lDiv.includes('msl-maj tres-vieux'), true);
+check('recent : rien de colore', /msl-maj"/.test(lAdh), true);
+check('aucune trace : dit franchement', lOrp.includes('jamais revu'), true);
+check('l\'auteur est dans l\'infobulle', lAdh.includes('par Eugene'), true);
+// La cellule se reecrit apres une saisie : dire « il y a 2 ans » d'un prix
+// qu'on vient de corriger serait le contraire de ce que la colonne promet.
+check('la cellule se rafraichit apres enregistrement',
+  /function bindMsPrixInline[^]{0,3000}dernierPrixCellHtml\(m\)/.test(src), true);
+check('le service date les prix',
+  svc.includes('def _dernier_prix_par_matiere(') && svc.includes('"prix_maj_le"'), true);
+check('le repli ne prend que le prix principal',
+  /_dernier_prix_par_matiere[^]{0,2500}p\.principal = 1/.test(svc), true);
 
 console.log('\n--- le champ se donne pour ce qu\'il est ---');
 // Le champ transparent au repos se lisait comme une colonne de chiffres :
