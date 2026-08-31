@@ -177,6 +177,48 @@ finally:
     bm.agreger_carnet = _vrai
 
 
+
+print("\n6. L'ecran : on choisit d'abord, on trace ensuite")
+# Quarante-deux references sur dix-huit mois, deux laizes chacune : tout
+# tracer d'entree donne un mur de courbes que personne ne lit. L'ecran attend
+# donc qu'on lui dise ce qu'on est en train d'acheter.
+_js = open("app/web/stock_page.py", encoding="utf-8").read()
+
+check("le detail par laize n'est plus une option",
+      "S.besoinsTendDetail" in _js, False)
+check("il est toujours demande au serveur",
+      "p.set('detail', 'laize');" in _js, True)
+check("le panneau s'ouvre a l'arrivee",
+      "if (S.besoinsTendSelOpen == null) S.besoinsTendSelOpen = true;" in _js, True)
+check("sans reference, aucune courbe",
+      "if (!st.besoinsTendRefs.length) {" in _js, True)
+check("et l'ecran dit quoi faire",
+      "Choisissez une ou plusieurs références ci-dessus" in _js, True)
+# Les laizes ne se proposent qu'une fois la matiere connue, et seulement si
+# elle est en bobine : un mandrin n'a pas de laize.
+check("les laizes viennent des seules references retenues",
+      "const retenues = cat.filter(r => sel.has(r.cle));" in _js, True)
+check("aucune laize proposee tant que rien n'est choisi",
+      "? [...new Set(retenues.flatMap(r => r.laizes || []))].sort((a, b) => a - b)"
+      in _js, True)
+check("une laize orpheline est oubliee",
+      "function _besTendNettoyerLaizes()" in _js, True)
+
+# Le pave d'explication est retire : trois paragraphes au-dessus d'un ecran
+# consulte chaque jour ouvre finissent par ne plus etre lus, et poussaient les
+# courbes sous la ligne de flottaison.
+# La chaine RENDUE, pas la phrase : le commentaire qui explique le retrait a
+# parfaitement le droit de nommer ce qu'il retire.
+check("plus de pave « Ce que montre cet ecran »",
+      "'Ce que montre cet écran : '" in _js, False)
+check("plus de style pour ce pave", "bes-tend-note" in _js, False)
+# Le retard, lui, survit : ce n'est pas une explication de l'ecran mais une
+# anomalie du carnet.
+check("le retard reste signale", "bes-tend-retard" in _js, True)
+check("et seulement s'il y en a un",
+      "if (data.reste_sur_mois_echus > 0) {" in _js, True)
+
+
 print()
 if ko:
     print(f"ECHEC — {ko} verification(s) en erreur.")

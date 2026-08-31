@@ -189,6 +189,68 @@ crXss.ecrits.info_prod = { texte: '<script>alert(1)</script>', auteur: '<b>' };
 verifier("CR : info prod echappee",
          !M.renderCR(crXss).includes("<script>alert(1)</script>"));
 
+console.log("\n3 bis. Frise de production");
+const friseVide = M.renderFrise(null);
+verifier("frise absente : rien rendu", friseVide === "");
+verifier("frise vide : rien rendu", M.renderFrise({ vide: true, lignes: [] }) === "");
+
+const frise = M.renderFrise({
+  vide: false,
+  axe: [{ jour: "2026-08-27", label: "Jeu 27/08", heures: 8, x: 0, largeur: 66.67, coupure_avant: false },
+        { jour: "2026-08-29", label: "Sam 29/08", heures: 4, x: 66.67, largeur: 33.33, coupure_avant: true }],
+  lignes: [{ machine: "Cohesio 1", slots: [{
+    no_dossier: "D-1", client: "NESTLE", minutes: 480,
+    debut: "2026-08-26T14:00:00", fin: "2026-08-28T10:00:00",
+    x: 0, largeur: 66.67, deborde_avant: true, deborde_apres: true,
+    segments: [{ categorie: "calage", label: "Calage", minutes: 60, x: 0, largeur: 12.5 },
+               { categorie: "production", label: "Production", minutes: 420, x: 12.5, largeur: 87.5 }]
+  }] }]
+});
+verifier("frise : les jours de l'axe", frise.includes("Jeu 27/08") && frise.includes("Sam 29/08"));
+verifier("frise : largeurs posees en %", frise.includes("width:66.67%"));
+verifier("frise : la coupure est marquee", frise.includes("rp-fr-jour coupe"));
+verifier("frise : debordements des deux cotes",
+         frise.includes("deborde-avant") && frise.includes("deborde-apres"));
+verifier("frise : une phase par categorie",
+         frise.includes("rp-fr-seg cat-calage") && frise.includes("rp-fr-seg cat-production"));
+verifier("frise : le slot porte son dossier", frise.includes('data-dossier="D-1"'));
+verifier("frise : legende presente", frise.includes("rp-fr-legende"));
+verifier("frise : donnee echappee",
+         !M.renderFrise({ vide:false, axe:[], lignes:[{ machine:'<b>x', slots:[] }] }).includes("<b>x"));
+
+console.log("\n3 ter. Citations, masquage");
+const avecReponse = M.renderEcrit({
+  cle: "saisie:12", origine: "commentaire", reference: 12, no_dossier: "D-1",
+  texte: "Casse a repetition", auteur: "Sophie", modifiable: true, valide: false,
+  reponses: [{ texte: "Vu avec la maintenance", auteur: "Eugene",
+               created_at: "2026-08-28T09:00:00" }]
+});
+verifier("la reponse est rendue en citation", avecReponse.includes("rp-citation"));
+verifier("avec son texte", avecReponse.includes("Vu avec la maintenance"));
+verifier("et son auteur", avecReponse.includes("Eugene"));
+verifier("bouton Masquer propose", avecReponse.includes('data-masquer="saisie:12"')
+         && avecReponse.includes(">Masquer</button>"));
+
+const masque = M.renderEcrit({ cle: "saisie:13", origine: "commentaire", reference: 13,
+  no_dossier: "D-1", texte: "10h", auteur: "Marc", modifiable: true, masque: true });
+verifier("une remontee masquee est marquee", masque.includes("est-masque"));
+verifier("et propose de la reafficher", masque.includes(">Réafficher</button>"));
+
+const feuilleMasques = M.renderFeuille({
+  machine: "Cohesio 1", dossiers: 1, periode: { label: "x" }, production: {},
+  conducteurs: [], references: [], arrets_couteux: [], vigilance: {},
+  ecrits: [{ cle: "saisie:1", texte: "Casse bande", origine: "commentaire",
+             no_dossier: "D-1", auteur: "Marc", modifiable: true }],
+  ecrits_masques: [{ cle: "saisie:9", texte: "10h", origine: "commentaire",
+                     no_dossier: "D-1", auteur: "Marc", modifiable: true, masque: true }]
+});
+verifier("feuille : bouton des commentaires masques",
+         feuilleMasques.includes("Commentaires masqués (1)"));
+verifier("feuille : la liste masquee est repliee",
+         feuilleMasques.includes('id="rp-masques" style="display:none"'));
+verifier("feuille : le compteur ne compte que les visibles",
+         feuilleMasques.includes("1 à traiter"));
+
 console.log("\n4 bis. Slug de cle");
 verifier("les deux-points ne peuvent pas etre un id DOM", M.slug("infoprod:D-501") === "infoprod_D-501");
 verifier("slug d'une note", M.slug("note:7") === "note_7");

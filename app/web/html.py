@@ -4530,7 +4530,7 @@ async function loadRetourProd(patch){
   // redemande ce que la page sait deja n'est pas emboite, il est pose a cote.
   const st = Object.assign({
     machine:'', machines:[], periode:null, vue:'feuille',
-    feuille:null, lignes:null, q:'', dossier:null, cr:null, erreur:null
+    feuille:null, frise:null, lignes:null, q:'', dossier:null, cr:null, erreur:null
   }, S.retourProd||{}, patch||{});
   // machine vide = toutes les machines. C'est un choix, pas une absence de
   // choix : on ne bascule donc jamais d'office sur la premiere de la liste.
@@ -4548,8 +4548,16 @@ async function loadRetourProd(patch){
     if(st.dossier){
       st.cr = await api('/api/rapports-prod/dossier/'+encodeURIComponent(st.dossier));
     } else if(st.vue==='feuille'){
-      st.feuille = await api('/api/rapports-prod/retour-atelier?machine='
-                             + encodeURIComponent(st.machine||'') + '&' + qs);
+      // Deux appels : la feuille (chiffres et remontees) et la frise
+      // (chronologie). Elles ne servent pas la meme lecture.
+      const [feuille, frise] = await Promise.all([
+        api('/api/rapports-prod/retour-atelier?machine='
+            + encodeURIComponent(st.machine||'') + '&' + qs),
+        api('/api/rapports-prod/frise?machine='
+            + encodeURIComponent(st.machine||'') + '&' + qs)
+      ]);
+      st.feuille = feuille;
+      st.frise = frise;
     } else {
       const d = await api('/api/rapports-prod/comptes-rendus?'+qs
                           +'&machine='+encodeURIComponent(st.machine||''));
@@ -6600,8 +6608,13 @@ function renderRetourProd(){
   if(st.vue==='feuille'){
     const frag = h('div',{className:'card',style:{padding:'18px 20px'}});
     frag.innerHTML = st.feuille
-      ? RP.renderFeuille(st.feuille)
+      ? RP.renderFeuille(st.feuille, st.frise)
       : '<div class="rp-vide">Aucun dossier cloture sur cette periode.</div>';
+    // Un slot de la frise ouvre le compte-rendu de son dossier : la frise sert
+    // a reperer, pas seulement a regarder.
+    frag.querySelectorAll('.rp-fr-slot[data-dossier]').forEach(el=>{
+      el.onclick = ()=>rpMaj({dossier:el.getAttribute('data-dossier')});
+    });
     // Les remontees de la feuille se valident, se corrigent et se commentent.
     // Chaque bouton porte son dossier : la feuille en melange plusieurs.
     RP.brancher(null, {

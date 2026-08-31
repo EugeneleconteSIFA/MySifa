@@ -6217,6 +6217,12 @@ function _datePresets(){
   };
   const today = new Date(now);
   const yesterday = new Date(now); yesterday.setDate(now.getDate()-1);
+  // « Hier » ne veut rien dire dans un atelier qui ne tourne pas sept jours sur
+  // sept : un lundi matin, il designe un dimanche vide. Le raccourci pointe la
+  // derniere journee REELLEMENT travaillee, resolue par le serveur (le
+  // navigateur sait quel jour on est, pas ou se trouve la derniere saisie).
+  const veille = fmt(yesterday);
+  const dernierJour = S.dernierJourSaisi || veille;
   const last7Start = new Date(now); last7Start.setDate(now.getDate()-6);
   const last30Start = new Date(now); last30Start.setDate(now.getDate()-29);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -6224,7 +6230,9 @@ function _datePresets(){
   const prevMonthStart = new Date(now.getFullYear(), now.getMonth()-1, 1);
   return [
     {key:'today',     label:"Aujourd'hui",       from:fmt(today),         to:fmt(today)},
-    {key:'yesterday', label:'Hier',              from:fmt(yesterday),     to:fmt(yesterday)},
+    {key:'yesterday',
+     label: dernierJour === veille ? 'Hier' : 'Dernier jour',
+     from: dernierJour, to: dernierJour},
     {key:'last7',     label:'7 derniers jours',  from:fmt(last7Start),    to:fmt(today)},
     {key:'last30',    label:'30 derniers jours', from:fmt(last30Start),   to:fmt(today)},
     {key:'thisMonth', label:'Mois en cours',     from:fmt(monthStart),    to:fmt(today)},
@@ -6232,7 +6240,23 @@ function _datePresets(){
   ];
 }
 
+
+// Derniere journee travaillee : resolue une fois, puis gardee en etat. Sans
+// elle, le raccourci « Hier » retombe sur la veille calendaire.
+async function chargerDernierJourSaisi(){
+  if(S._dernierJourEnCours) return;
+  S._dernierJourEnCours = true;
+  try{
+    const d = await api('/api/production/dernier-jour-saisi');
+    if(d && d.jour){
+      S.dernierJourSaisi = d.jour;
+      render();
+    }
+  }catch(e){ /* on reste sur la veille calendaire, c'est un repli acceptable */ }
+}
+
 function renderDatePresets(){
+  if(S.dernierJourSaisi === undefined) chargerDernierJourSaisi();
   const presets = _datePresets();
   const curFrom = S.fv.date_from || '';
   const curTo = S.fv.date_to || '';
@@ -6935,7 +6959,7 @@ async function loadRetourProd(patch){
   // redemande ce que la page sait deja n'est pas emboite, il est pose a cote.
   const st = Object.assign({
     machine:'', machines:[], periode:null, vue:'feuille',
-    feuille:null, lignes:null, q:'', dossier:null, cr:null, erreur:null
+    feuille:null, frise:null, lignes:null, q:'', dossier:null, cr:null, erreur:null
   }, S.retourProd||{}, patch||{});
   // machine vide = toutes les machines. C'est un choix, pas une absence de
   // choix : on ne bascule donc jamais d'office sur la premiere de la liste.
@@ -6953,8 +6977,16 @@ async function loadRetourProd(patch){
     if(st.dossier){
       st.cr = await api('/api/rapports-prod/dossier/'+encodeURIComponent(st.dossier));
     } else if(st.vue==='feuille'){
-      st.feuille = await api('/api/rapports-prod/retour-atelier?machine='
-                             + encodeURIComponent(st.machine||'') + '&' + qs);
+      // Deux appels : la feuille (chiffres et remontees) et la frise
+      // (chronologie). Elles ne servent pas la meme lecture.
+      const [feuille, frise] = await Promise.all([
+        api('/api/rapports-prod/retour-atelier?machine='
+            + encodeURIComponent(st.machine||'') + '&' + qs),
+        api('/api/rapports-prod/frise?machine='
+            + encodeURIComponent(st.machine||'') + '&' + qs)
+      ]);
+      st.feuille = feuille;
+      st.frise = frise;
     } else {
       const d = await api('/api/rapports-prod/comptes-rendus?'+qs
                           +'&machine='+encodeURIComponent(st.machine||''));
@@ -7206,8 +7238,13 @@ function renderRetourProd(){
   if(st.vue==='feuille'){
     const frag = h('div',{className:'card',style:{padding:'18px 20px'}});
     frag.innerHTML = st.feuille
-      ? RP.renderFeuille(st.feuille)
+      ? RP.renderFeuille(st.feuille, st.frise)
       : '<div class="rp-vide">Aucun dossier cloture sur cette periode.</div>';
+    // Un slot de la frise ouvre le compte-rendu de son dossier : la frise sert
+    // a reperer, pas seulement a regarder.
+    frag.querySelectorAll('.rp-fr-slot[data-dossier]').forEach(el=>{
+      el.onclick = ()=>rpMaj({dossier:el.getAttribute('data-dossier')});
+    });
     // Les remontees de la feuille se valident, se corrigent et se commentent.
     // Chaque bouton porte son dossier : la feuille en melange plusieurs.
     RP.brancher(null, {

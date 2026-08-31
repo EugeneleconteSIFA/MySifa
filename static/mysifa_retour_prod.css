@@ -226,3 +226,71 @@ body.reduce-anim .rp-btn-mini:hover,body.reduce-anim .rp-vig:hover .v-nb{transfo
   .rp-bloc{break-inside:avoid}
   .rp-kpi:hover,.rp-mot:hover,.rp-vig:hover{background:none !important;transform:none !important}
 }
+
+/* ── Frise de production ─────────────────────────────────────────
+   Meme allure que le planning, posee sur de vraies dates. Les positions
+   arrivent en pourcentage depuis le serveur : rien n'est calcule ici. */
+.rp-frise{overflow-x:auto}
+.rp-fr-axe,.rp-fr-ligne{display:flex;align-items:stretch;gap:10px;min-width:640px}
+.rp-fr-machine{flex:0 0 118px;font-size:12.5px;font-weight:700;color:var(--text2);
+  display:flex;align-items:center;padding-right:4px}
+.rp-fr-piste{position:relative;flex:1;min-height:46px}
+.rp-fr-axe .rp-fr-piste{min-height:24px;border-bottom:1px solid var(--border)}
+.rp-fr-jour{position:absolute;top:0;bottom:0;font-size:11.5px;color:var(--muted);
+  display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap}
+.rp-fr-jour span{padding:0 4px}
+.rp-fr-jour+.rp-fr-jour{border-left:1px solid var(--border)}
+/* Une coupure = des journees entieres sans saisie, repliees en un trait. */
+.rp-fr-jour.coupe{border-left:2px dashed var(--warn,#fbbf24)}
+.rp-fr-ligne{margin-top:6px}
+.rp-fr-ligne .rp-fr-piste{background:var(--bg);border-radius:8px}
+
+.rp-fr-slot{position:absolute;top:5px;bottom:5px;border-radius:6px;overflow:hidden;
+  border:1px solid var(--border);background:var(--card);cursor:pointer;
+  transition:top var(--mo-fast,.15s) var(--ease-out,ease),
+             bottom var(--mo-fast,.15s) var(--ease-out,ease),
+             box-shadow var(--mo-fast,.15s) var(--ease-out,ease)}
+.rp-fr-slot:hover{top:2px;bottom:2px;z-index:5;box-shadow:0 3px 12px rgba(0,0,0,.18)}
+/* Un dossier commence avant la periode ou non termine : le bord est ouvert. */
+.rp-fr-slot.deborde-avant{border-left:3px solid var(--accent);border-top-left-radius:0;
+  border-bottom-left-radius:0}
+.rp-fr-slot.deborde-apres{border-right:3px solid var(--accent);border-top-right-radius:0;
+  border-bottom-right-radius:0}
+.rp-fr-seg{position:absolute;top:0;bottom:0}
+.rp-fr-lbl{position:absolute;inset:0;display:flex;align-items:center;gap:6px;
+  padding:0 7px;font-size:11.5px;font-weight:700;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-shadow:0 1px 2px rgba(255,255,255,.55);
+  pointer-events:none}
+body.light .rp-fr-lbl{text-shadow:0 1px 2px rgba(255,255,255,.8)}
+.rp-fr-lbl span{font-weight:500;color:var(--text2);overflow:hidden;text-overflow:ellipsis}
+
+.rp-fr-seg.cat-production,.rp-fr-leg i.cat-production{background:var(--success,#34d399)}
+.rp-fr-seg.cat-calage,.rp-fr-leg i.cat-calage{background:var(--accent)}
+.rp-fr-seg.cat-arret,.rp-fr-leg i.cat-arret{background:var(--danger,#f87171)}
+.rp-fr-seg.cat-appro,.rp-fr-leg i.cat-appro{background:var(--warn,#fbbf24)}
+.rp-fr-seg.cat-technique,.rp-fr-leg i.cat-technique{background:#a78bfa}
+.rp-fr-seg.cat-nettoyage,.rp-fr-leg i.cat-nettoyage{background:#38bdf8}
+.rp-fr-seg.cat-pause,.rp-fr-seg.cat-personnel,.rp-fr-seg.cat-autre{background:var(--border)}
+.rp-fr-seg{opacity:.85}
+.rp-fr-slot:hover .rp-fr-seg{opacity:1}
+
+.rp-fr-legende{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-top:12px;
+  font-size:12px;color:var(--muted)}
+.rp-fr-leg{display:inline-flex;align-items:center;gap:6px}
+.rp-fr-leg i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.rp-fr-note{color:var(--muted);font-size:11.5px}
+
+/* ── Remontees : citations et masquage ───────────────────────── */
+.rp-titre-ligne{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.rp-citation{margin:10px 0 0 0;padding:9px 12px;border-left:3px solid var(--border);
+  background:var(--card);border-radius:0 8px 8px 0}
+.rp-citation .c-txt{font-size:14.5px;color:var(--text2);line-height:1.5}
+.rp-citation .c-meta{font-size:12px;color:var(--muted);margin-top:5px}
+.rp-mot.est-masque{opacity:.6;border-left-color:var(--muted)}
+.rp-mot.est-masque:hover{opacity:1}
+
+@media print{
+  .rp-fr-slot:hover{top:5px;bottom:5px;box-shadow:none}
+  .rp-fr-seg{opacity:1 !important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  #rp-masques{display:none !important}
+}

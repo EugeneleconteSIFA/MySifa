@@ -879,3 +879,21 @@ def dashboard_production(
                                key=lambda x: x.get("temps_total_calage_min") or 0, reverse=True),
         "by_day": by_day,
     }
+
+
+@router.get("/api/production/dernier-jour-saisi")
+def dernier_jour_saisi(request: Request, avant: Optional[str] = None):
+    """Derniere journee reellement travaillee, pour le raccourci « Hier ».
+
+    Un lundi matin, « hier » designe un dimanche vide. Le navigateur sait quel
+    jour on est, mais pas ou se trouve la derniere saisie : c'est donc au
+    serveur de repondre. Retourne aussi la veille calendaire, pour que l'ecran
+    puisse dire si les deux coincident.
+    """
+    get_current_user(request)
+    from app.services.rapport_dossier import dernier_jour_saisi as _dernier
+    veille = (date.today() - timedelta(days=1)).isoformat()
+    borne = (avant or "").strip()[:10] or veille
+    with get_db() as conn:
+        jour = _dernier(conn, borne)
+    return {"jour": jour or veille, "veille": veille, "trouve": bool(jour)}

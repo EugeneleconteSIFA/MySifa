@@ -869,9 +869,13 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
   font-weight:700;cursor:pointer;font-variant-numeric:tabular-nums}
 .bes-tsel-lzbtn.on{border-color:var(--accent);color:var(--accent);
   background:color-mix(in srgb,var(--accent) 12%,transparent)}
-.bes-tend-note{font-size:12px;color:var(--muted);line-height:1.6;margin:0 0 12px;
-  padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--accent) 7%,transparent);
-  border:1px solid color-mix(in srgb,var(--accent) 22%,transparent)}
+/* Le retard, seul rescape du pave d'explication retire le 28/08/2026. Ce
+   n'est pas un commentaire sur l'ecran mais une anomalie du carnet : il ne
+   s'affiche que s'il y en a un. */
+.bes-tend-retard{font-size:12px;line-height:1.6;margin:0 0 12px;
+  padding:8px 12px;border-radius:8px;color:var(--warn,#d97706);
+  background:color-mix(in srgb,var(--warn,#d97706) 10%,transparent);
+  border:1px solid color-mix(in srgb,var(--warn,#d97706) 30%,transparent)}
 /* La carte : fond plein, bordure fine. C'est la surface sur laquelle la
    palette a ete validee — un graphe pose sur le fond de page n'aurait pas le
    meme contraste que celui qu'on a mesure. */
@@ -13160,7 +13164,10 @@ async function loadBesoinsTendance() {
     });
     if (S.besoinsTendRefs.length) p.set('refs', S.besoinsTendRefs.join(','));
     if (S.besoinsTendLaizes.length) p.set('laizes', S.besoinsTendLaizes.join(','));
-    if (S.besoinsTendDetail) p.set('detail', 'laize');
+    // Toujours une courbe par laize : une bobine ne se commande pas hors de
+    // sa laize. Le serveur sait encore agréger toutes laizes confondues — le
+    // paramètre existe — mais cet écran ne le demande plus.
+    p.set('detail', 'laize');
     S.besoinsTendance = await api(
       '/api/stock/besoins-matieres/tendance?' + p.toString());
     if (S.besoinsTendance && Array.isArray(S.besoinsTendance.references)) {
@@ -13241,8 +13248,13 @@ function _besTendEtat() {
   // reviendrait sur les vingt courbes.
   if (!Array.isArray(S.besoinsTendRefs)) S.besoinsTendRefs = [];
   if (!Array.isArray(S.besoinsTendLaizes)) S.besoinsTendLaizes = [];
-  if (S.besoinsTendDetail == null) S.besoinsTendDetail = false;
-  if (S.besoinsTendSelOpen == null) S.besoinsTendSelOpen = false;
+  // Le detail par laize n'est plus une option : une bobine ne se commande pas
+  // hors de sa laize, et un total toutes laizes confondues est juste en metres
+  // et inutilisable pour passer commande. La bascule a ete retiree le
+  // 28/08/2026 — elle proposait une lecture que personne ne demande.
+  // Le panneau est ouvert a l'arrivee : sans reference choisie il n'y a rien a
+  // tracer, et un ecran vide avec un bouton ferme n'apprend pas quoi faire.
+  if (S.besoinsTendSelOpen == null) S.besoinsTendSelOpen = true;
   if (S.besoinsTendRefQ == null) S.besoinsTendRefQ = '';
   // Le catalogue memorise : pendant un rechargement la reponse est nulle, et
   // un selecteur qui se vide a chaque requete est inutilisable.
@@ -13676,6 +13688,28 @@ function _besTendRefsCat() {
   return [...par.values()].sort((a, b) => (b.total || 0) - (a.total || 0));
 }
 
+/* Une laize retenue qu'aucune reference selectionnee ne porte plus n'a plus
+   d'objet : elle filtrerait sur une bobine qu'on ne regarde pas, et l'ecran
+   afficherait vide sans dire pourquoi. */
+function _besTendNettoyerLaizes() {
+  const st = _besTendEtat();
+  if (!st.besoinsTendRefs.length) { S.besoinsTendLaizes = []; return; }
+  const sel = new Set(st.besoinsTendRefs);
+  const dispo = new Set(_besTendRefsCat()
+    .filter(r => sel.has(r.cle))
+    .flatMap(r => r.laizes || []));
+  S.besoinsTendLaizes = st.besoinsTendLaizes.filter(l => dispo.has(l));
+}
+
+/* Redessine la seule barre de selection, sans toucher au reste de l'ecran :
+   cocher une case ne doit pas faire disparaitre le panneau ouvert ni le texte
+   deja tape dans sa recherche. */
+function _besTendRedessinerBarre() {
+  const ancienne = document.querySelector('.bes-tsel');
+  if (!ancienne || !ancienne.parentNode) return;
+  ancienne.parentNode.replaceChild(_buildBesoinsTendSelect(), ancienne);
+}
+
 function _buildBesoinsTendSelect() {
   const st = _besTendEtat();
   const cat = _besTendRefsCat();
@@ -13695,7 +13729,7 @@ function _buildBesoinsTendSelect() {
 
   if (!sel.size) {
     bar.appendChild(el('span', { cls: 'bes-tsel-vide' },
-      'Toutes les matières — ' + cat.length + ' référence(s) sur la fenêtre.'));
+      cat.length + ' référence(s) sur la fenêtre — choisissez celles à tracer.'));
   }
 
   // Les references retenues, chacune retirable d'un clic. Une pastille par
@@ -13708,16 +13742,22 @@ function _buildBesoinsTendSelect() {
         type: 'button', title: 'Retirer ' + r.libelle,
         on: { click: () => {
           S.besoinsTendRefs = st.besoinsTendRefs.filter(x => x !== r.cle);
+          _besTendNettoyerLaizes();
           renderContent(); _besTendSelApply();
         } },
       }, '×')));
   });
 
-  // Les laizes proposees : celles des references retenues, ou toutes celles du
-  // catalogue tant que rien n'est retenu. Aucune laize inventee — la liste
-  // vient de ce que les dossiers demandent reellement.
-  const source = sel.size ? cat.filter(r => sel.has(r.cle)) : cat;
-  const laizes = [...new Set(source.flatMap(r => r.laizes || []))].sort((a, b) => a - b);
+  // Les laizes proposees sont celles des SEULES references retenues. Tant que
+  // rien n'est choisi il n'y a pas de laize a proposer : afficher les
+  // quarante laizes du catalogue avant de savoir de quelle matiere on parle
+  // ne serait pas un choix, ce serait une liste. Et une matiere qui n'est pas
+  // en bobine — mandrin, carton, palette — n'en a aucune : la rangee
+  // n'apparait tout simplement pas.
+  const retenues = cat.filter(r => sel.has(r.cle));
+  const laizes = sel.size
+    ? [...new Set(retenues.flatMap(r => r.laizes || []))].sort((a, b) => a - b)
+    : [];
 
   if (selLz.size) {
     [...selLz].sort((a, b) => a - b).forEach(l => {
@@ -13733,24 +13773,12 @@ function _buildBesoinsTendSelect() {
     });
   }
 
-  if (laizes.length) {
-    bar.appendChild(el('button', {
-      cls: 'bes-tsel-btn' + (st.besoinsTendDetail ? ' on' : ''),
-      type: 'button',
-      title: 'Une courbe par laize au lieu d\'une courbe par matière — '
-           + 'on ne commande pas un total, on commande une laize',
-      on: { click: () => {
-        S.besoinsTendDetail = !st.besoinsTendDetail;
-        renderContent(); _besTendSelApply();
-      } },
-    }, st.besoinsTendDetail ? 'Détail par laize : oui' : 'Détailler par laize'));
-  }
-
-  if (sel.size || selLz.size || st.besoinsTendDetail) {
+  if (sel.size || selLz.size) {
     bar.appendChild(el('button', {
       cls: 'bes-tsel-btn', type: 'button',
       on: { click: () => {
-        S.besoinsTendRefs = []; S.besoinsTendLaizes = []; S.besoinsTendDetail = false;
+        S.besoinsTendRefs = []; S.besoinsTendLaizes = [];
+        S.besoinsTendSelOpen = true;
         renderContent(); _besTendSelApply();
       } },
     }, 'Tout effacer'));
@@ -13782,6 +13810,11 @@ function _buildBesoinsTendSelect() {
         } else {
           S.besoinsTendRefs = st.besoinsTendRefs.filter(x => x !== r.cle);
         }
+        _besTendNettoyerLaizes();
+        // La barre du haut porte les pastilles et la rangee des laizes : elle
+        // doit suivre la case qu'on vient de cocher, sans attendre que la
+        // requete revienne.
+        _besTendRedessinerBarre();
         _besTendSelApply();
       });
       liste.appendChild(el('label', { cls: 'bes-tsel-opt' }, cb,
@@ -13807,7 +13840,8 @@ function _buildBesoinsTendSelect() {
 
   if (laizes.length) {
     const row = el('div', { cls: 'bes-tsel-lz' },
-      el('span', { cls: 'bes-tsel-lz-lbl' }, 'Laize (mm)'));
+      el('span', { cls: 'bes-tsel-lz-lbl' },
+        sel.size ? 'Laize (mm) — bobine' : 'Laize (mm)'));
     laizes.forEach(l => {
       row.appendChild(el('button', {
         cls: 'bes-tsel-lzbtn' + (selLz.has(l) ? ' on' : ''), type: 'button',
@@ -13846,44 +13880,32 @@ function _buildBesoinsTendance(data) {
   const documentes = new Set(Object.keys(data.origines || {}));
   const palette = _besTendPalette();
 
-  // ── Ce que montre l'écran ──
-  // Un mois à venir paraît creux parce qu'il n'est pas encore commandé, pas
-  // parce que l'activité baisse. C'est précisément ce que le passé sert à
-  // trancher : sans lui, les deux lectures sont indiscernables.
-  const jours = ((data.historique || {}).jours) || 0;
-  const nbPasses = (data.mois_passes || []).length;
-  cont.appendChild(el('div', { cls: 'bes-tend-note' },
-    el('div', {},
-      el('strong', {}, 'Ce que montre cet écran : '),
-      'le besoin matière par mois de ',
-      // L'axe affiché en toutes lettres. Deux lectures décalées d'un à deux
-      // mois se ressemblent trop pour qu'on devine laquelle on regarde.
-      el('strong', {}, (data.axe === 'livraison'
-                          ? 'LIVRAISON au client'
-                          : 'PRODUCTION — quand la matière doit être en stock')),
-      ', sur ' + cols.length + ' mois — ',
-      nbPasses + ' mois révolus à gauche du repère, le reste devant. ',
-      'À droite du repère, un mois bas signifie « pas encore commandé », pas ',
-      '« activité en baisse » : la comparaison au même mois de l\'an dernier, à ',
-      'gauche, est là pour trancher.'),
-    el('div', { style: { marginTop: '6px' } },
-      'Sources : les dossiers du planning, complétés — pour les mois que le ',
-      'planning ne porte plus — par les OF scannés et leurs fiches techniques. ',
-      'Un mois hachuré n\'est documenté par aucune des deux : c\'est un trou, ',
-      'pas un zéro.'),
-    jours >= 2
-      ? el('div', { style: { marginTop: '6px' } },
-          jours + ' jour(s) de photos du carnet accumulés' +
-          ((data.historique.horizons_calibrables || []).length
-            ? ' — horizons calibrables : M+' + data.historique.horizons_calibrables.join(', M+') + '.'
-            : ' — encore trop court pour extrapoler.'))
-      : null,
-    data.reste_sur_mois_echus > 0
-      ? el('div', { style: { marginTop: '6px', color: 'var(--warn,#d97706)', fontWeight: '600' } },
-          'Attention : ' + _besFmtQte(data.reste_sur_mois_echus) +
-          ' de besoin porte sur des mois déjà échus — dossiers en retard.')
-      : null,
-  ));
+  // Le pavé « Ce que montre cet écran » a été retiré le 28/08/2026 : trois
+  // paragraphes d'explication au-dessus de chaque consultation quotidienne
+  // finissent par ne plus être lus, et poussaient les courbes sous la ligne
+  // de flottaison. Ce qu'il disait d'essentiel — l'axe de temps, le repère du
+  // mois courant, les mois non documentés — se lit désormais sur le graphe
+  // lui-même et dans l'aide « ? » de l'en-tête.
+  //
+  // Une chose survit : le retard. Ce n'est pas une explication de l'écran,
+  // c'est une anomalie du carnet, et elle doit se voir quel que soit le
+  // sort du pavé qui l'hébergeait.
+  if (data.reste_sur_mois_echus > 0) {
+    cont.appendChild(el('div', { cls: 'bes-tend-retard' },
+      el('strong', {}, 'Retard : '),
+      _besFmtQte(data.reste_sur_mois_echus) +
+      ' de besoin porte sur des mois déjà échus.'));
+  }
+
+  // Rien de choisi, rien à tracer. Quarante-deux références sur dix-huit mois
+  // et deux laizes chacune font un mur de courbes qu'on ne lit pas : l'écran
+  // attend qu'on lui dise ce qu'on est en train d'acheter.
+  if (!st.besoinsTendRefs.length) {
+    cont.appendChild(el('div', { cls: 'bes-empty' },
+      'Choisissez une ou plusieurs références ci-dessus pour afficher leur '
+      + 'tendance. Sur une bobine, la laize se choisit juste en dessous.'));
+    return cont;
+  }
 
   const categories = (data.categories || []).map(c => Object.assign({}, c, {
     lignes: (c.lignes || []).filter(l => _besMatchFiltre(
