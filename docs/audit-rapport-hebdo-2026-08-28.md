@@ -861,3 +861,44 @@ premieres corrections.
 `tests/test_retour_prod_rendu.js` : 7 cas de plus sur les seuils de densite
 (bornes incluses, largeur absente traitee comme etroite, densite qui ne remplace
 pas la classe de debordement).
+
+### Participants : une recherche, pas un selecteur
+
+Le selecteur de participants avait ete retire du lancement — au moment d'ouvrir
+un point, on ne sait pas encore qui sera la. Il revient la ou il sert : dans la
+colonne, pendant la reunion.
+
+Le bloc ouvre la colonne, avant les notes et les actions. C'est l'ordre d'une
+reunion : qui est la, ce qu'on se dit, ce qu'on decide.
+
+L'annuaire (`personnes` de `/api/reunions/contexte`) est deja en memoire depuis
+l'ouverture de l'onglet : la recherche filtre en local, elle ne part pas au
+serveur a chaque touche. La comparaison se fait sans accent ni casse — dans un
+atelier francais, taper « gregory » doit trouver « Grégory », sinon la recherche
+ne sert a rien. La frappe est cherchee partout dans le nom — « lesaf » doit
+trouver « Lesaffre » meme si c'est le nom de famille — mais un nom qui COMMENCE
+par la frappe passe devant : taper « ma » propose Manuel et Marc avant
+Desreumaux, ou le « ma » est au milieu. Huit resultats au plus.
+
+Quand l'annuaire ne repond rien, la frappe est proposee telle quelle, marquee
+« hors annuaire » : un point de production reunit parfois quelqu'un qui n'a pas
+de compte, et la table `reunion_participants` stocke un nom, pas une cle
+etrangere. Tant qu'il reste des noms a choisir, cette proposition n'apparait pas
+— elle ne serait que du bruit sous la liste.
+
+Deux details qui font la difference a l'usage : la frappe ne repeint que le bloc
+participants et restaure la position du curseur — repeindre la colonne ferait
+perdre le curseur a chaque lettre ; et `Entree` valide la premiere suggestion,
+donc on tape trois lettres et on entre, sans toucher la souris. `Echap` vide la
+recherche.
+
+Cote serveur, rien de neuf : `POST /api/reunions/{id}` acceptait deja
+`participants` et remplace la liste entiere. On lui envoie donc celle d'apres.
+Les chiffres de production ne dependent pas des presents — le bloc se repeint
+seul, sans recharger la reunion.
+
+`tests/test_reunions_rendu.js` : 20 cas de plus (recherche au milieu du nom,
+accents, casse, debuts de mot en tete, trait d'union qui coupe les mots,
+exclusion des deja presents, plafond de huit, nom hors annuaire
+propose seulement quand l'annuaire est muet, echappement du nom et de la frappe,
+place du bloc avant les notes).

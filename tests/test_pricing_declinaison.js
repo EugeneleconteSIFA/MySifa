@@ -72,8 +72,14 @@ check('la fiche reste le chemin vers le paramétrage',
 const save = extraire('saveDeclinaisonForm');
 for (const champ of ['price_currency', 'price_basis', 'taxe_pct', 'is_imported',
                      'applique_marge', 'transport_mode', 'transport_unit_price',
-                     'transport_pct', 'grammage_gsm', 'perte_pct']) {
+                     'transport_pct']) {
   check('champ envoyé : ' + champ, save.includes(champ + ':'), true);
+}
+// Le grammage a quitté la matière le 31/08/2026 : il se saisit sur le composant
+// du produit. L'envoyer d'ici ne serait pas seulement inutile — sur un adhésif,
+// il DÉPLACE la déclinaison (set_declinaison_valeur).
+for (const champ of ['grammage_gsm', 'perte_pct']) {
+  check('champ retiré : ' + champ, save.includes(champ + ':'), false);
 }
 check('méthode PATCH', save.includes("method: \"PATCH\""), true);
 check('drapeau remis à zéro après enregistrement', save.includes('S.declDirty = false'), true);

@@ -6176,7 +6176,7 @@ async function openTracMatieresEditModal(dos, matieres){
         allowEmpty: false,
         // La bobine est une matière première : ces catégories d'abord, le
         // reste de l'annuaire ensuite.
-        categories: ['frontal', 'adhesif', 'glassine', 'complexe'],
+        categories: ['frontal', 'glassine', 'complexe'],
       })
     : null;
   // `fournSel` garde son nom et son interface : plus bas, le code lit

@@ -1852,6 +1852,38 @@ def get_mystock_produit(request: Request, produit_id: int):
     return p
 
 
+@router.post("/api/pricing/mystock/produits/preview")
+def preview_mystock_produit(request: Request, body: dict = Body(...)):
+    """
+    Coût d'une composition en cours de saisie, sans rien enregistrer.
+
+    L'aperçu était calculé dans le navigateur, en additionnant les coûts au m²
+    que l'API avait déjà chiffrés pour chaque matière. Ça ne tient plus depuis
+    que le grammage vit sur le PRODUIT : le coût d'un composant au kilo dépend
+    d'un poids que l'écran vient de saisir, et le refaire côté client
+    supposerait d'y réimplémenter transport, taxes et change — trois occasions
+    de diverger du moteur pour un chiffre qui doit être le même.
+    """
+    _require_read(request)
+    composants, err = mystock_produits.normaliser_composants(body.get("composants"))
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+    if not composants:
+        return {"cost": None}
+    with get_db() as conn:
+        manque = mystock_produits.composants_existent(conn, composants)
+        if manque:
+            raise HTTPException(status_code=400, detail=manque)
+        produit = {
+            "id": 0,
+            "code": "PREVIEW",
+            "designation": "Aperçu",
+            "custom_margin_pct": body.get("custom_margin_pct"),
+            "composants": composants,
+        }
+        return {"cost": _cout_produit_mystock(conn, produit, load_pricing_settings(conn))}
+
+
 @router.post("/api/pricing/mystock/produits")
 def create_mystock_produit(request: Request, body: dict = Body(...)):
     user = _require_write(request)

@@ -195,6 +195,50 @@ check("et il est annonce comme declaratif",
       and "non vérifiable par la chaîne" in js, True)
 
 
+print("\n6. Le fournisseur d'une bobine se choisit dans une liste courte")
+# Une bobine, c'est un frontal, une glassine ou un complexe. Proposer en plus
+# les fournisseurs de colle, de mandrins et de palettes, c'est demander a
+# l'operateur de trancher une question de nomenclature au poste, en pleine
+# production. Le filtre est donc DUR, et l'elargissement explicite.
+check("le filtre porte sur les categories bobine",
+      "const CATS_BOBINE = ['frontal', 'glassine', 'complexe'];" in js, True)
+check("et c'est un vrai filtre, pas un simple ordre d'affichage",
+      "filter: (f) => ficheElargi" in js, True)
+# L'adhesif seul (une colle) n'est pas une bobine : il ne doit plus figurer
+# dans les categories mises en avant, ici ni sur les ecrans voisins.
+check("l'adhesif seul ne figure plus dans les listes de bobines",
+      "'frontal', 'adhesif', 'glassine', 'complexe'" in js, False)
+for _f in ("app/web/html.py", "static/mysifa_prod_core.js"):
+    check(f"idem sur {_f}",
+          "'frontal', 'adhesif', 'glassine', 'complexe'"
+          in open(_f, encoding="utf-8").read(), False)
+
+# Deux paliers, pas un : l'annuaire complet d'abord, le hors-annuaire ensuite.
+# Un operateur qui ne trouve pas son fournisseur ne doit jamais se retrouver
+# bloque, mais il ne doit pas non plus sortir de l'annuaire par inadvertance.
+check("palier 1 : le bouton rend l'annuaire complet",
+      "ficheElargi = true;" in js and "Annuaire complet" in js, True)
+check("palier 2 : puis le champ libre",
+      "Vraiment pas dans la liste ?" in js and "ficheLibre = true;" in js, True)
+check("le champ libre annonce ce qu'il coute",
+      "aucun certificat FSC ne sera rattaché" in js, True)
+check("et l'ecran affiche « hors annuaire » a la place de la licence",
+      "'hors annuaire'" in js, True)
+check("l'envoi porte le nom libre quand il n'y a pas d'id",
+      "{fournisseur_libre: libre}" in js, True)
+
+# Cote serveur : la voie libre existe, elle ne fabrique pas de faux certificat,
+# et le refus 409 reste en place quand rien n'est fourni.
+check("le serveur accepte un nom hors annuaire",
+      'body.get("fournisseur_libre")' in api, True)
+check("un nom deja connu de l'annuaire rejoint sa fiche",
+      "_resolve_fournisseur_fsc_id(conn, None, libre)" in api, True)
+check("un nom libre n'invente jamais de certificat",
+      "fournisseur_manual=?, certificat_fsc_manual=NULL" in api, True)
+check("et sans fournisseur du tout, le refus tient toujours",
+      'detail="Fournisseur requis — liaison manuelle."' in api, True)
+
+
 print()
 if ko:
     print(f"ECHEC — {ko} verification(s) en erreur.")

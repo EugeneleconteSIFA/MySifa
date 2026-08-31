@@ -267,6 +267,21 @@ def _load_dossiers(conn, sql: Optional[str] = None, params: tuple = (),
         pes = [pe for pe in pes if filtre(pe)]
     if not pes:
         return []
+    return attacher_fiches(conn, pes)
+
+
+def attacher_fiches(conn, pes: list) -> list:
+    """Rapproche une fiche technique de chaque dossier et pose les champs ft_*.
+
+    Extrait de `_load_dossiers` pour que d'autres ecrans que Besoins matieres
+    (la Tracabilite, qui affiche le metrage du dossier) puissent calculer sur
+    la meme fiche que lui. Deux rapprochements ecrits deux fois divergent le
+    jour ou l'un des deux est corrige.
+
+    Les dossiers sont modifies sur place et retournes.
+    """
+    if not pes:
+        return pes
     fts = [dict(r) for r in conn.execute(_SQL_FT).fetchall()]
 
     by_key: dict = {}

@@ -49,10 +49,25 @@ check('prix au m² importé : inutile aussi',
   ctx.needsWeight({ price_basis: 'PER_M2', is_imported: true }), false);
 
 // ─── Ce que les deux fiches envoient au serveur ─────────────────────────────
+// Le grammage ne se saisit plus sur une matière (31/08/2026), mais les deux
+// fiches ne s'en séparent pas de la même façon :
+//
+//  - fiche MyStock : elle ne l'envoie PLUS DU TOUT. Sur un adhésif, le
+//    grammage envoyé DÉPLACE la déclinaison (`set_declinaison_valeur`) — le
+//    laisser partir avec une valeur d'écran devenue fantôme rebaptiserait la
+//    matière à chaque enregistrement.
+//  - fiche matière (base CM, l'ancêtre) : elle le renvoie tel quel, inchangé.
+//    Ses propres produits (`mc_product`) calculent encore en €/m² et ont besoin
+//    de ce poids ; le champ a disparu de l'écran, la valeur reste en base.
+check('fiche MyStock : grammage plus envoyé',
+  extraire('saveDeclinaisonForm').includes('grammage_gsm:'), false);
+check('fiche MyStock : perte plus envoyée',
+  extraire('saveDeclinaisonForm').includes('perte_pct:'), false);
+check('fiche matière : le grammage fait l\'aller-retour sans être saisi',
+  extraire('saveMaterialForm').includes('grammage_gsm:'), true);
+
 for (const [nom, fn] of [['fiche matière', 'saveMaterialForm'], ['fiche MyStock', 'saveDeclinaisonForm']]) {
   const code = extraire(fn);
-  check(nom + ' : grammage envoyé', code.includes('grammage_gsm:'), true);
-  check(nom + ' : perte envoyée', code.includes('perte_pct:'), true);
   check(nom + ' : taxe en pourcentage', code.includes('taxe_pct:'), true);
   check(nom + ' : choix de marge envoyé', code.includes('applique_marge:'), true);
   check(nom + ' : plus de multiplicateur', code.includes('tax_incidence'), false);
@@ -95,13 +110,17 @@ check('le panneau distingue les deux portées',
 check('le panneau ne s\'appelle plus « Paramètres globaux »',
   panneau.includes('Paramètres globaux'), false);
 check('plus de champ poids kg/m²', form.includes('id="f-wm2"'), false);
-check('un seul champ grammage', (form.match(/id="f-gsm"/g) || []).length, 1);
-check('champ perte présent', form.includes('id="f-perte"'), true);
-check('grammage retenu non saisissable', form.includes('id="f-gram-out"'), true);
-// .field-row est une grille à 2 colonnes : la suite en a 5, elle a sa grille.
-check('la ligne grammage a sa propre grille', form.includes('class="gram-row"'), true);
-check('les deux fiches utilisent la même grille',
-  (src.match(/class="gram-row"/g) || []).length, 2);
+// ─── Le grammage a quitté les fiches matière (31/08/2026) ───────────────────
+// Un adhésif ne s'achète pas plus cher en 22 g/m² qu'en 17 : le prix est au
+// kilo. Ce que le grammage fait varier, c'est la quantité posée — une décision
+// de produit — et elle se saisit sur le composant, dans la fiche produit.
+check('plus de champ grammage sur la fiche matière', form.includes('id="f-gsm"'), false);
+check('ni sur la fiche MyStock', src.includes('id="d-gsm"'), false);
+check('plus de perte non plus',
+  src.includes('id="f-perte"') || src.includes('id="d-perte"'), false);
+check('plus de section Caractéristiques', src.includes('<h3>Caractéristiques</h3>'), false);
+check('la grille du grammage a disparu avec elle',
+  (src.match(/class="gram-row"/g) || []).length, 0);
 
 // ─── Tableau récapitulatif ──────────────────────────────────────────────────
 const recap = extraire('recapTableHtml');

@@ -4,6 +4,9 @@ const path = require('path');
 process.chdir(path.join(__dirname, '..'));
 const fs = require('fs'), vm = require('vm');
 const src = fs.readFileSync('static/pricing_app.js', 'utf8').replace(/\r\n/g, '\n');
+const svcProd = fs.readFileSync('app/services/mystock_produits.py', 'utf8').replace(/\r\n/g, '\n');
+const api = fs.readFileSync('app/routers/pricing.py', 'utf8').replace(/\r\n/g, '\n');
+const svc = fs.readFileSync('app/services/mystock_prix.py', 'utf8').replace(/\r\n/g, '\n');
 
 function extraire(nom) {
   const i = src.indexOf('function ' + nom + '(');
@@ -39,7 +42,7 @@ vm.runInContext([
   constante('MSP_ROLES'),
   extraire('defaultMsProductForm'),
   extraire('msProductComposants'),
-  extraire('refreshMsProductPreview'),
+
   // `const` reste dans la portée du script : on l'expose pour pouvoir l'inspecter.
   'globalThis.MSP_ROLES = MSP_ROLES;',
 ].join('\n'), ctx);
@@ -53,48 +56,61 @@ check('sans identifiant on retombe sur la liste', route('/pricing/mystock/produi
 check('les produits de la base CM ne bougent pas', route('/pricing/products/3'), { name: 'product-edit', id: '3' });
 
 // ─── Composition envoyée à l'API ────────────────────────────────────────────
-ctx.S.formMsProduct = { code: 'X', designation: 'Y', roles: { FRONTAL: 5, GLASSINE: 9 }, autres: [11, 0], custom_margin_pct: '' };
+// Depuis le 31/08/2026, un emplacement porte la matière ET ce que le produit en
+// consomme : le grammage a quitté la matière, où il n'avait rien à faire — un
+// adhésif ne s'achète pas plus cher en 22 g/m² qu'en 17.
+const slot = (id, gram, perte) => ({
+  id: id,
+  gram: gram == null ? '' : String(gram),
+  perte: perte == null ? '' : String(perte),
+});
+
+ctx.S.formMsProduct = {
+  code: 'X', designation: 'Y',
+  roles: { FRONTAL: slot(5), GLASSINE: slot(9) },
+  autres: [slot(11, 22, 9), slot('')],
+  custom_margin_pct: '',
+};
 check("les rôles nommés sortent dans l'ordre", ctx.msProductComposants(), [
-  { declinaison_id: 5, role: 'FRONTAL' },
-  { declinaison_id: 9, role: 'GLASSINE' },
-  { declinaison_id: 11, role: 'AUTRE' },
+  { declinaison_id: 5, role: 'FRONTAL', grammage_gsm: null, perte_pct: null },
+  { declinaison_id: 9, role: 'GLASSINE', grammage_gsm: null, perte_pct: null },
+  { declinaison_id: 11, role: 'AUTRE', grammage_gsm: 22, perte_pct: 9 },
 ]);
 check("un emplacement vide n'est pas envoyé",
   ctx.msProductComposants().some((c) => c.role === 'ADHESIF'), false);
+check('la consommation voyage avec le composant',
+  ctx.msProductComposants().find((c) => c.declinaison_id === 11).grammage_gsm, 22);
+check('un composant sans grammage envoie null, pas zéro',
+  ctx.msProductComposants().find((c) => c.declinaison_id === 5).grammage_gsm, null);
 ctx.S.formMsProduct = ctx.defaultMsProductForm();
 check("un produit vierge n'a aucun composant", ctx.msProductComposants(), []);
 
-// ─── Aperçu du coût ─────────────────────────────────────────────────────────
-ctx.S.msDecls = [
-  { id: 5, reference: 'F70', libelle: '330 mm', cout_eur_m2: 1.5 },
-  { id: 9, reference: 'GL', libelle: '500 mm', cout_eur_m2: 0.5 },
-  { id: 11, reference: 'CX', libelle: '330 mm', cout_eur_m2: null },
-];
-ctx.S.settings = { default_margin_pct: 6 };
+// ─── L'aperçu passe par le moteur, plus par le navigateur ───────────────────
+// Il additionnait les coûts déjà chiffrés par l'API pour chaque matière. Ça ne
+// tient plus : le coût d'un composant au kilo dépend d'un poids qu'on vient de
+// taper, et le refaire ici supposerait d'y réimplémenter transport, taxes et
+// change — trois occasions de diverger du moteur.
+const apercu = extraire('demanderApercuMsProduct');
+check("l'aperçu appelle le serveur",
+  apercu.includes('/api/pricing/mystock/produits/preview'), true);
+check('il envoie la composition et la marge',
+  apercu.includes('composants: comps') && apercu.includes('custom_margin_pct'), true);
+check('une réponse en retard est jetée', apercu.includes('serie !== mspApercuSerie'), true);
+check('la frappe est différée',
+  extraire('refreshMsProductPreview').includes('setTimeout'), true);
+check("la route d'aperçu existe côté serveur",
+  api.includes('@router.post("/api/pricing/mystock/produits/preview")'), true);
+check("elle ne demande que le droit de lire",
+  /produits\/preview"\)[^]*?_require_read\(request\)/.test(api), true);
 
-ctx.S.formMsProduct = { code: '', designation: '', roles: { FRONTAL: 5, GLASSINE: 9 }, autres: [], custom_margin_pct: '' };
-ctx.refreshMsProductPreview();
-let p = ctx.S.msProdPreview;
-check('coût = somme des déclinaisons', p.total_eur_per_m2, 2);
-check('marge par défaut quand le champ est vide', p.margin_pct, 6);
-check('prix de vente', p.sell_price_eur_m2, 2.12);
-check('les parts font 100 %', p.components.reduce((a, c) => a + c.share_pct, 0), 100);
-check('composition complète', !!p.incomplet, false);
-
-ctx.S.formMsProduct.custom_margin_pct = '20';
-ctx.refreshMsProductPreview();
-check('la marge saisie prend le pas', ctx.S.msProdPreview.margin_pct, 20);
-check('prix de vente avec marge propre', ctx.S.msProdPreview.sell_price_eur_m2, 2.4);
-
-// Une matière sans coût ne doit pas passer pour gratuite en silence.
-ctx.S.formMsProduct = { code: '', designation: '', roles: { FRONTAL: 5 }, autres: [11], custom_margin_pct: '' };
-ctx.refreshMsProductPreview();
-check('une matière non paramétrée est signalée', ctx.S.msProdPreview.incomplet, true);
-check('et ne fausse pas le total affiché', ctx.S.msProdPreview.total_eur_per_m2, 1.5);
-
-ctx.S.formMsProduct = ctx.defaultMsProductForm();
-ctx.refreshMsProductPreview();
-check("sans composant, pas d'aperçu", ctx.S.msProdPreview, null);
+// Un composant au kilo sans grammage compte pour 0 : le total reste crédible,
+// et c'est exactement ce qui le rend dangereux. L'écran doit le dire.
+check('les composants sans grammage sont comptés',
+  extraire('peindreApercuMsProduct').includes('sans grammage'), true);
+check('le service met le poids du composant dans le moteur',
+  /def cout_produit[^]{0,1500}poids_retenu\(c\.get\("grammage_gsm"\)/.test(svcProd), true);
+check('et ne réutilise pas celui de la matière',
+  /def cout_produit[^]{0,1500}"weight_per_m2": poids_retenu/.test(svcProd), true);
 
 // ─── Cohérence avec le reste du fichier ─────────────────────────────────────
 check('onglets sur la page Produits', src.includes('data-ptab="mystock"'), true);
@@ -207,8 +223,6 @@ check('les lignes du détail aussi',
 //
 // Ce bloc existe pour que la difference se lise a l'ecran plutot que de se
 // deviner. Ces cas verrouillent qu'il dise bien l'un ET l'autre.
-const api = fs.readFileSync('app/routers/pricing.py', 'utf8').replace(/\r\n/g, '\n');
-const svc = fs.readFileSync('app/services/mystock_prix.py', 'utf8').replace(/\r\n/g, '\n');
 
 console.log('\n--- le serveur expose les leviers ---');
 check('la laize voyage avec la declinaison', svc.includes('"laize_mm": _f(r["valeur_mm"])'), true);
@@ -227,60 +241,72 @@ vm.createContext(ctx2);
 vm.runInContext([
   extraire('escHtml'), extraire('escAttr'), extraire('fmtNum'), extraire('fmtEurM2'),
   constante('MSP_ROLES'),
-  extraire('msLevierBlocHtml'),
+  extraire('grammageRetenu'), extraire('msLevierBlocHtml'),
   'globalThis.MSP_ROLES = MSP_ROLES;',
 ].join('\n'), ctx2);
 
-// Un adhesif paye au kilo : c'est le grammage qui fait le cout au m².
-const adh17 = { id: 90, matiere_id: 1, reference: '1408', libelle: '17 g/m²',
-  price_basis: 'PER_KG', unit_price: 4.2, weight_per_m2: 0.0185,
-  grammage_gsm: 17, perte_pct: 9, laize_mm: null, cout_eur_m2: 0.0885 };
-const adh22 = { id: 91, matiere_id: 1, reference: '1408', libelle: '22 g/m²',
-  price_basis: 'PER_KG', unit_price: 4.2, weight_per_m2: 0.0240,
-  grammage_gsm: 22, perte_pct: 9, laize_mm: null, cout_eur_m2: 0.1145 };
-// Un frontal paye au m² et decline en laizes : la laize ne change rien.
-const pp76 = { id: 92, matiere_id: 2, reference: 'PP90', libelle: '76 mm',
-  price_basis: 'PER_M2', unit_price: 0.08, weight_per_m2: null,
-  grammage_gsm: null, perte_pct: null, laize_mm: 76, cout_eur_m2: 0.08 };
-const pp102 = { id: 93, matiere_id: 2, reference: 'PP90', libelle: '102 mm',
-  price_basis: 'PER_M2', unit_price: 0.08, weight_per_m2: null,
-  grammage_gsm: null, perte_pct: null, laize_mm: 102, cout_eur_m2: 0.08 };
-ctx2.S.msDecls = [adh17, adh22, pp76, pp102];
+// Un adhesif paye au kilo : c'est le grammage POSE PAR LE PRODUIT qui fait le
+// cout au m². La matiere ne porte plus que son prix — 31/08/2026.
+const adh = { id: 90, matiere_id: 1, reference: '1408', designation: 'Adhesif enlevable',
+  price_basis: 'PER_KG', unit_price: 4.2 };
+// Un frontal paye au m² : la quantite posee ne change pas son cout au m².
+const pp = { id: 92, matiere_id: 2, reference: 'PP90', designation: 'PP blanc',
+  price_basis: 'PER_M2', unit_price: 0.08 };
+ctx2.S.msDecls = [adh, pp];
+ctx2.S.msProdPreview = { components: [
+  { material_id: 90, price_eur_per_m2: 0.0885 },
+  { material_id: 92, price_eur_per_m2: 0.08 },
+] };
 
-const bAdh = ctx2.msLevierBlocHtml(adh17, 'role:ADHESIF', 'Adhésif');
-const bPP = ctx2.msLevierBlocHtml(pp76, 'role:FRONTAL', 'Frontal');
+const bAdh = ctx2.msLevierBlocHtml(
+  { declinaison_id: 90, role: 'ADHESIF', grammage_gsm: 17, perte_pct: 9 }, 'Adhésif');
+const bPP = ctx2.msLevierBlocHtml(
+  { declinaison_id: 92, role: 'FRONTAL', grammage_gsm: null, perte_pct: null }, 'Frontal');
+const bVide = ctx2.msLevierBlocHtml(
+  { declinaison_id: 90, role: 'ADHESIF', grammage_gsm: null, perte_pct: null }, 'Adhésif');
 
 check('au kilo : la chaine complete est montree',
   bAdh.includes('€/kg') && bAdh.includes('kg/m²') && bAdh.includes('0,0885'), true);
-check('et le grammage designe comme le levier',
-  bAdh.includes('est</strong> le grammage') && bAdh.includes('17 g/m²'), true);
+check('le poids vient du grammage du PRODUIT',
+  bAdh.includes('le grammage de ce produit') && bAdh.includes('17 g/m²'), true);
 check('la perte y est comptee', bAdh.includes('9 % de perte'), true);
-check('au m² : le grammage est declare hors jeu',
-  bPP.includes("le grammage n'entre pas dans ce coût"), true);
-check('la laize est nommee sans effet',
-  bPP.includes('76 mm') && bPP.includes('sans effet</strong> sur le €/m²'), true);
-check('et renvoyee la ou elle compte vraiment',
-  bPP.includes('Besoins matières'), true);
+check('et le prix d\'achat est dit hors de cause',
+  bAdh.includes("sans toucher au prix d'achat"), true);
+check('au m² : la quantite posee est declaree hors jeu',
+  bPP.includes('ne change pas ce coût au m²'), true);
+check('sans grammage, le composant est annonce a zero',
+  bVide.includes('compte pour <strong>0</strong>'), true);
 
-console.log('\n--- les declinaisons voisines, avec leur ecart ---');
-check('la voisine est proposee', bAdh.includes('22 g/m²'), true);
-check('avec son propre cout', bAdh.includes('0,1145'), true);
-check('et l\'ecart signe', bAdh.includes('msp-lev-ecart') && bAdh.includes('+'), true);
-check('elle bascule le selecteur du bon role',
-  bAdh.includes('data-msp-switch="role:ADHESIF"') && bAdh.includes('data-msp-decl="91"'), true);
-// Deux laizes au meme cout : aucun ecart a afficher, sinon on lirait « +0,0000 »
-// comme une difference.
-check('un ecart nul ne s\'affiche pas', bPP.includes('msp-lev-ecart'), false);
-// Une matiere n'est jamais sa propre voisine.
-check('la declinaison courante n\'est pas proposee',
-  (bAdh.match(/data-msp-decl="90"/g) || []).length, 0);
+console.log('\n--- les declinaisons voisines ne sont plus proposees ---');
+// Comparer un 17 et un 22 g/m² se fait maintenant en changeant le grammage
+// dans le champ : le total suit a la frappe, sans changer de matiere.
+check('plus de pastille de bascule', bAdh.includes('data-msp-switch'), false);
+check('plus de notion de declinaison voisine', bAdh.includes('Autres déclinaisons'), false);
+check('la laize a disparu du bloc', bPP.includes('sans effet'), false);
+
 
 console.log('\n--- cable des deux cotes ---');
 check('le bloc est pose dans le formulaire', src.includes('id="msp-leviers"'), true);
 check('il suit l\'apercu', src.includes('lev.innerHTML = msProductLeviersHtml();'), true);
-check('les pastilles sont branchees au rendu',
-  src.includes('bindMsProductLeviers(majAperçu);'), true);
-check('le bloc a son style', css.includes('.msp-lev-chip{'), true);
+check('le bloc a son style', css.includes('.msp-lev{'), true);
+
+console.log('\n--- la consommation se saisit sur l\'emplacement ---');
+// Le grammage vit sous la matiere qui le concerne, dans la fiche produit.
+check('un emplacement porte ses champs de consommation',
+  src.includes('data-msp-gram=') && src.includes('data-msp-perte='), true);
+check('le poids retenu est affiche en clair', src.includes('Poids retenu'), true);
+check('les champs n\'apparaissent que sur un achat au kilo',
+  /function mspSlotHtml[^]*?perKg\s*\?/.test(src), true);
+check('taper un grammage ne redessine pas le formulaire',
+  src.includes('data-msp-gram], [data-msp-perte]') && src.includes('inp.oninput = majAperçu'), true);
+check('le style de l\'emplacement existe', css.includes('.msp-conso{'), true);
+
+console.log('\n--- les fiches matiere ne parlent plus de grammage ---');
+check('plus de section Caracteristiques', src.includes('<h3>Caractéristiques</h3>'), false);
+check('plus de champ grammage cote matiere',
+  src.includes('id="f-gsm"') || src.includes('id="d-gsm"'), false);
+check('la fiche declinaison n\'envoie plus de grammage',
+  extraire('saveDeclinaisonForm').includes('grammage_gsm'), false);
 
 console.log(ko === 0 ? '\nTOUT EST VERT' : '\n' + ko + ' ECHEC(S)');
 process.exit(ko === 0 ? 0 : 1);

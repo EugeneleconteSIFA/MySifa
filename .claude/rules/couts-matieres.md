@@ -104,6 +104,46 @@ ligne le dit.
 
 Test : `node tests/test_pricing_vue_liste.js`.
 
+### Le poids au m² appartient au PRODUIT, pas à la matière (31 août 2026)
+
+La matière porte **ce qu'on paie**. Le composant du produit porte **ce qu'on
+consomme**. Un adhésif ne s'achète pas plus cher en 22 g/m² qu'en 17 : le prix
+est au kilo, et c'est la quantité posée qui change — une décision de produit.
+
+- `mp_produit_composant.grammage_gsm` / `perte_pct` : les colonnes qui comptent.
+  Migration `mp_grammage_sur_composant`, qui recopie les valeurs des
+  déclinaisons pour qu'aucun coût ne bouge le jour du déploiement.
+- `cout_produit` surcharge le `weight_per_m2` du `PricingMaterial` avec
+  `poids_retenu(composant)`. Les colonnes côté déclinaison restent en base —
+  retour en arrière possible — mais **n'entrent plus dans aucun calcul**.
+- Un composant au kilo sans grammage coûte **0 €/m²**. On ne lève pas (une
+  composition incomplète ne doit pas faire tomber la liste des produits), mais
+  la fiche et le récapitulatif le disent : un total amputé passe sinon pour un
+  prix bas.
+
+Les fiches matière ont donc perdu la section « Caractéristiques » et tout
+affichage en €/m² — prix de revient, marge, prix de vente, « ramené au m² ».
+Un €/m² suppose de savoir quelle quantité on pose ; la matière ne le sait pas.
+Il lui reste son **sous-total d'achat** (prix + transport + taxes), dans sa
+devise et sa base d'achat. Exception : la fiche `mc_material` de la base
+historique renvoie encore `grammage_gsm` inchangé — ses propres produits
+calculent toujours en €/m² — mais le champ n'est plus saisissable.
+
+L'aperçu du coût sur la fiche produit passe désormais par
+`POST /api/pricing/mystock/produits/preview` : le refaire dans le navigateur
+supposerait d'y réimplémenter transport, taxes et change.
+
+### Fusion des déclinaisons : une matière, une ligne
+
+Le grammage parti sur le produit, la déclinaison n'a plus rien à porter que le
+prix — qui n'a jamais varié de l'une à l'autre.
+`scripts/fusion_declinaisons.py --inventaire`, puis `--simulation`, puis
+`--appliquer` ramène chaque matière à une seule ligne : prix déplacés (doublons
+de fournisseur écartés), composants repointés, historique conservé. **À sens
+unique — copier la base avant.** Les matières dont les déclinaisons portent des
+prix ou des fournisseurs principaux différents sont laissées de côté et listées :
+les fusionner reviendrait à choisir un prix à la place de quelqu'un.
+
 ### Comment un prix d'achat devient un coût au m²
 
     prix de revient €/m² = (prix d'achat + transport + taxes) × taux de change
