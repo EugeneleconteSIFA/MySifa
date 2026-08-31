@@ -60,15 +60,13 @@ check('lecture seule : pas de bouton enregistrer',
 // ─── L'appairage a bien disparu de l'interface ──────────────────────────────
 check('plus de bouton appairer', /data-ms-pair|data-ms-unpair/.test(src), false);
 check('plus de modale d\'appairage', src.includes('openAppairageModal'), false);
-check('le coût ouvre la fiche', src.includes('data-ms-open="${d.id}"'), true);
-// Une seule liste depuis le 28/08/2026 : la vue par référence à chevrons et la
-// vue à plat par déclinaison ont été retirées, avec le détail dépliable qui les
-// servait. On compte l'en-tête dans le rendu de cette liste-là, pas en vrac :
-// ajouter un affichage ailleurs ne doit pas faire échouer ce test.
+// Le 31/08/2026, le coût €/m² quitte la liste des matières : c'est un résultat
+// de paramétrage, il se lit et se règle sur la fiche. La liste ne sert plus
+// qu'à corriger un prix d'achat, et la fiche reste à un clic.
 const vueListe = src.slice(src.indexOf('function renderMystockList('), src.indexOf('function bindMsPrixInline('));
-check('colonne Coût €/m² dans la liste', (vueListe.match(/<th>Coût €\/m²<\/th>/g) || []).length, 1);
-check('la vue liste a aussi sa colonne coût',
-  src.slice(src.indexOf('function renderMystockList(')).includes('<th>Coût €/m²</th>'), true);
+check('plus de colonne Coût €/m² dans la liste', /Coût €\/m²/.test(vueListe), false);
+check('la fiche reste le chemin vers le paramétrage',
+  src.includes('href="/pricing/mystock/${decls[0].id}"'), true);
 
 // ─── Le formulaire envoie bien ce que l'API attend ──────────────────────────
 const save = extraire('saveDeclinaisonForm');

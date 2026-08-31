@@ -528,6 +528,7 @@ function closeTransporteurModal(){
 function setTransporteurModalTab(tab){
   T.modalTab=tab;
   if(tab==='tarifs'&&T.editId!=null)void loadTarifsTransporteur(T.editId);
+  else if(tab==='note'&&T.editId!=null)void expeChargerHistoriqueNote(T.editId);
   else render();
 }
 
@@ -1040,6 +1041,7 @@ function renderExpeTranspList(){
   }
   const head=h('tr',null,
     h('th',null,'Transporteur'),
+    h('th',null,'Note'),
     h('th',null,'Zones'),
     h('th',null,'Comparateur'),
     h('th',null,'Carburant'),
@@ -1069,8 +1071,16 @@ function renderExpeTranspList(){
           onClick:()=>toggleActif(tr.id,isActive?0:1)},iconEl('sliders',14))
       )
     ):null;
+    const noteCell=h('td',null,
+      h('div',{className:'expe-note-cell'},
+        expeNoteBadge(tr),
+        h('span',{className:'expe-note-cell-txt'},
+          Number(tr.note_nb_avis||0)?(Number(tr.note_nb_avis)+' avis'):'aucun avis')
+      )
+    );
     return h('tr',{className:inactive?'expe-trp-row-inactive':''},
       nameCell,
+      noteCell,
       h('td',null,expeTrpBadgesCell(zones,'expe-trp-zone')),
       h('td',null,expeTrpBadgesCell(services,'expe-trp-svc')),
       h('td',{className:'expe-trp-num'},escHtml(String(taxe))+' %'),
@@ -1141,11 +1151,14 @@ function renderExpeTransporteurModal(){
   if(isEdit){
     box.appendChild(h('div',{className:'expe-trp-tabs'},
       h('button',{type:'button',className:'expe-trp-tab'+(T.modalTab==='fiche'?' active':''),onClick:()=>setTransporteurModalTab('fiche')},'Fiche'),
-      h('button',{type:'button',className:'expe-trp-tab'+(T.modalTab==='tarifs'?' active':''),onClick:()=>setTransporteurModalTab('tarifs')},'Tarifs')
+      h('button',{type:'button',className:'expe-trp-tab'+(T.modalTab==='tarifs'?' active':''),onClick:()=>setTransporteurModalTab('tarifs')},'Tarifs'),
+      h('button',{type:'button',className:'expe-trp-tab'+(T.modalTab==='note'?' active':''),onClick:()=>setTransporteurModalTab('note')},'Suivi qualité')
     ));
   }
   if(isEdit&&T.modalTab==='tarifs'){
     box.appendChild(renderTarifsOnglet());
+  }else if(isEdit&&T.modalTab==='note'){
+    box.appendChild(renderExpeTrpNoteOnglet());
   }else{
     // Langue des emails. Le pack de traduction FR/EN existait déjà mais
     // n'était jamais utilisé faute de savoir à qui écrire dans quelle langue :
@@ -4227,7 +4240,7 @@ EXPE_MAIN_CSS = r"""
 """
 
 EXPE_MAIN_JS = r"""
-var EXPE_VALID_TABS=['suivi_departs','palettes_europe','comparateur','devis','poids','transporteurs','prospects'];
+var EXPE_VALID_TABS=['suivi_departs','palettes_europe','comparateur','devis','poids','transporteurs','zones','prospects'];
 var _expeHashRestored=false;
 function _readExpeHash(){
   try{var h=(location.hash||'').replace(/^#/,'').trim();
@@ -4449,6 +4462,8 @@ __EXPE_DEVIS_JS__
 __EXPE_DEVIS_GUIDE_JS__
 __EXPE_TRANSPORTEURS_JS__
 __EXPE_CARTE_FRANCE_JS__
+__EXPE_NOTES_JS__
+__EXPE_ZONES_JS__
 function renderExpePoids(){
   const rows=S.expePoidsRows||[];
   const fKg=v=>v.toFixed(3)+'\u00a0kg';
@@ -6234,6 +6249,7 @@ function renderExpeSuiviDeparts(){
       h('td',null,expeDossierCell(r)),
       expeCanWrite()?h('td',{className:'expe-dep-actions-td'},
         expeDepartActsGrid([
+          ...expeAvisBoutons(r),
           r.code_postal_destination?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
             title:'Ouvrir une demande de devis préremplie avec les données de ce départ',
             onClick:()=>ouvrirDevisDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeDevisIcon(14)):null,
@@ -6424,6 +6440,7 @@ function renderExpeHistoriqueDeparts(){
     h('td',null,expeDossierCell(r)),
     expeCanWrite()?h('td',{className:'expe-dep-actions-td'},
       expeDepartActsGrid([
+        ...expeAvisBoutons(r),
         h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Dupliquer ce départ en nouvelle saisie',
           onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',14)),
         h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Modifier les informations de ce départ',
@@ -6516,6 +6533,7 @@ function renderExpe(){
       if(sub==='jour')void loadExpeDepartJour();
       else void loadExpeDepartHistorique();
     }else if(tab==='comparateur'){if(!T.list.length&&!T.loading)void loadTransporteurs();}
+    else if(tab==='zones'){if(!T.list.length&&!T.loading)void loadTransporteurs();}
     // Les prospects sont chargés ici aussi : le modal d'envoi les propose
     // comme destinataires, mais sans ce chargement leur section restait vide
     // tant qu'on n'était pas passé par l'onglet Prospects dans la session.
@@ -6547,6 +6565,7 @@ function renderExpe(){
         ]},
         { key:'ref', label:'Référentiel', items:[
           {tab:'transporteurs',ico:'truck',label:'Transporteurs'},
+          {tab:'zones',        ico:'map-pin',label:'Zone géographique'},
           {tab:'prospects',    ico:'users',label:'Prospects'},
         ]},
       ];
@@ -6616,7 +6635,7 @@ function renderExpe(){
       h('div',{className:'mobile-topbar-sub'},
         tab==='suivi_departs'?(sub==='historique'?'Historique départs':'Départs programmés'):
         tab==='palettes_europe'?'Suivi des palettes Europe consignées':
-        tab==='transporteurs'?'Transporteurs':tab==='devis'?'Demandes de devis':tab==='prospects'?'Prospects transporteurs':tab==='poids'?'Calcul poids':'Comparateur tarifs')
+        tab==='transporteurs'?'Transporteurs':tab==='zones'?'Zone géographique':tab==='devis'?'Demandes de devis':tab==='prospects'?'Prospects transporteurs':tab==='poids'?'Calcul poids':'Comparateur tarifs')
     ),
     h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
@@ -6624,6 +6643,7 @@ function renderExpe(){
   const content=tab==='suivi_departs'?renderExpeSuiviDepartsWithSubtabs():
     tab==='palettes_europe'?renderExpePalettesEurope():
     tab==='transporteurs'?renderExpeTransporteurs():tab==='poids'?renderExpePoids():
+    tab==='zones'?renderExpeZones():
     tab==='devis'?renderExpeDevisSection():tab==='prospects'?renderExpeProspectsSection():
     renderExpeComparateur();
   // Motion : cascade d'entree au changement d'onglet uniquement. On pose
@@ -6656,6 +6676,7 @@ function renderExpe(){
             :tab==='devis'?'Prospection parallèle — demandes de tarif aux transporteurs'
             :tab==='prospects'?'Transporteurs hors référentiel — suivi de démarchage'
             :tab==='poids'?'Estimation du poids d\'un envoi d\'étiquettes'
+            :tab==='zones'?'Transporteurs à prioriser par destination, selon l\'historique et la note de confiance'
             :'Référentiel transporteurs, zones et tarifs'),
           contentWrap
         )
@@ -6664,6 +6685,7 @@ function renderExpe(){
     renderExpeTranspPanel(),
     renderExpeTransporteurModal(),
     renderExpeDevisModal(),
+    renderExpeAvisModal(),
     S.expeShowContacts?renderExpeContactModal():null
   );
 }

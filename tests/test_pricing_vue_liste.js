@@ -34,11 +34,10 @@ const ctx = { S: { canWrite: true, filters: {}, mystock: [] }, Intl };
 vm.createContext(ctx);
 vm.runInContext(
   [
-    'const DECL_LABEL = { LAIZE: "laize", GRAMMAGE: "grammage" };',
     extraire('icon'), extraire('escHtml'), extraire('escAttr'), extraire('fmtNum'),
-    extraire('fmtEurM2'), extraire('fmtPrixUnite'), extraire('categorieBadge'),
+    extraire('fmtPrixUnite'), extraire('categorieBadge'),
     extraire('actionBtn'), extraire('mystockPrixResume'),
-    extraire('msFournisseursPrincipaux'), extraire('msCoutResume'),
+    extraire('msFournisseursPrincipaux'),
     extraire('mystockMatiereRowHtml'),
   ].join('\n'),
   ctx
@@ -112,7 +111,11 @@ check('aucune laize non plus', lGla.includes('76 mm'), false);
 check('un champ de prix, pas un texte', lAdh.includes('data-ms-prix="1"'), true);
 check('avec la valeur en vigueur', lAdh.includes('value="4.2"'), true);
 check('et son unité', lAdh.includes('€/kg'), true);
-check('le nombre de déclinaisons reste visible', lAdh.includes('class="msl-decl-nb">2<'), true);
+// Le 31/08/2026 : la notion de déclinaison quitte cet écran. Le prix d'achat
+// est le même sur toutes, donc en compter deux n'apprenait rien à qui vient
+// corriger un prix, et laissait croire qu'il y en avait deux à corriger.
+check('plus de compteur de déclinaisons', lAdh.includes('msl-decl-nb'), false);
+check('plus de colonne coût €/m²', lAdh.includes('msl-coutcell'), false);
 
 console.log('\n--- ce qui se saisit et ce qui ne se saisit pas ---');
 // Deux fournisseurs selon la déclinaison : un prix unique en écraserait un des
@@ -130,17 +133,29 @@ ctx.S.canWrite = false;
 check('lecture seule : aucun champ', ctx.mystockMatiereRowHtml(adhesif).includes('data-ms-prix='), false);
 ctx.S.canWrite = true;
 
-console.log('\n--- ce que la ligne garde du détail dépliable ---');
-check('le coût ouvre la fiche', lAdh.includes('data-ms-open="90"'), true);
-check('une fourchette quand il varie', lAdh.includes('0,0885') && lAdh.includes('0,1145'), true);
+console.log('\n--- ce que la ligne garde, et ce qu\'elle a rendu ---');
+// Le paramétrage détaillé — poids, devise, taxes, transport, et le coût €/m²
+// qui en sort — vit sur la fiche. La liste y mène et ne le recopie plus.
+check('la fiche reste accessible', lAdh.includes('href="/pricing/mystock/90"'), true);
+check('aucun coût €/m² dans la ligne', lAdh.includes('0,0885') || lAdh.includes('0,1145'), false);
 check('le camion ouvre le tarif', lAdh.includes('data-ms-tarif="7|1"'), true);
 check('un fournisseur sans tarif propre se voit', lGla.includes('ms-tarif-manquant'), true);
-check('dériver une déclinaison', lAdh.includes('data-ms-deriver'), true);
-check('en créer une vierge', lAdh.includes('data-ms-new="1"'), true);
-check('une matière orpheline propose d\'en créer une', lOrp.includes('data-ms-new="3"'), true);
-check('mais rien à dériver', lOrp.includes('data-ms-deriver'), false);
+// Créer une laize ou un grammage est un geste de MyStock : il n'a plus sa
+// place sur un écran qui ne parle que de prix d'achat.
+check('plus de flèche « dériver »', lAdh.includes('data-ms-deriver'), false);
+check('plus de + « déclinaison vierge »', lAdh.includes('data-ms-new'), false);
+check('rien non plus sur une matière orpheline', lOrp.includes('data-ms-new'), false);
 check('les actions sont branchées', src.includes('function bindMsListeActions()')
   && src.includes('bindMsListeActions();'), true);
+
+console.log('\n--- le champ se donne pour ce qu\'il est ---');
+// Le champ transparent au repos se lisait comme une colonne de chiffres :
+// personne ne pensait à cliquer dedans. Bordure et crayon en permanence.
+check('un crayon devant le champ', lAdh.includes('msl-prix-ico'), true);
+check('le champ porte sa bordure au repos',
+  /\.msl-prix-inp\{[^}]*border:1px solid var\(--border\)/.test(css), true);
+check('l\'en-tête l\'annonce', src.includes('msl-th-hint'), true);
+check('et le sous-titre aussi', src.includes('cliquez sur un prix d\'achat pour le modifier'), true);
 
 console.log('\n--- la saisie en place ---');
 check('elle est branchée', src.includes('function bindMsPrixInline()')
@@ -185,7 +200,8 @@ check('une seule colonne élastique', (zoneListe.match(/<col>/g) || []).length, 
 const nbTh = (zoneListe.match(/<th[ >]/g) || []).length;
 check('en-tête et cellules comptent pareil', nbTh, (lAdh.match(/<td[ >]/g) || []).length);
 check('autant de <col> que d\'en-têtes', (zoneListe.match(/<col[ >]/g) || []).length, nbTh);
-check('la ligne vide occupe toute la largeur', zoneListe.includes('colspan="8"'), true);
+check('la ligne vide occupe toute la largeur',
+  zoneListe.includes('colspan="' + nbTh + '"'), true);
 check('le champ de prix a son style', css.includes('.msl-prix-inp{'), true);
 check('la divergence aussi', css.includes('.msl-prix-diverge .msl-prix-inp{'), true);
 

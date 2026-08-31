@@ -129,10 +129,12 @@ for (const [nom, fn] of [['fiche matière', 'saveMaterialForm'], ['fiche MyStock
   check(nom + ' : quantité envoyée', code.includes('transport_quantite:'), true);
 }
 
-// ─── Créer une déclinaison : dériver ou vierge ──────────────────────────────
-check('la flèche coudée existe', src.includes('"corner-down-right"'), true);
-check('dériver reprend les réglages', src.includes('data-ms-deriver'), true);
-check('le + crée une déclinaison vierge', src.includes('vierge'), true);
+// ─── Créer une déclinaison a quitté la liste des matières ───────────────────
+// Le 31/08/2026 : le prix d'achat ne varie pas d'une déclinaison à l'autre,
+// donc l'écran des prix n'a plus à en parler du tout. Créer une laize ou un
+// grammage reste un geste de MyStock, sur la fiche.
+check('plus de flèche « dériver » dans la liste', src.includes('data-ms-deriver'), false);
+check('plus de + « déclinaison vierge »', src.includes('data-ms-new'), false);
 check('plus de duplication de ligne fournisseur', src.includes('data-ms-dup"'), false);
 
 // ─── Bandeaux d'explication retirés ─────────────────────────────────────────

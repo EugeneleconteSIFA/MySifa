@@ -184,40 +184,42 @@ body.light .portal-corner-stack{box-shadow:0 8px 32px rgba(15,23,42,.10)}
 .portal-corner-stack .portal-prof-ring.prof-ring svg{width:24px;height:24px}
 .portal-corner-stack .portal-humeur-badge{bottom:-2px;left:-2px}
 
-/* ── Volets du portail : un seul gabarit, deux emplacements ─────────────
-   La barre d'icônes (haut droite) et les tuiles d'application ouvrent le même
-   volet au survol. Le rail est collé au bord droit : son volet part vers la
-   gauche ; une tuile a de la place dessous : le sien descend. Un pont invisible
-   (::after / ::before) couvre l'espace entre le déclencheur et le volet, sinon
-   il se referme dès que la souris quitte le bouton.
-   Les couleurs restent celles du thème — accent, bordure, muted. Rien de
-   nouveau : un sous-menu n'est pas un endroit où introduire une palette. */
+/* ── Volets du portail : un panneau flottant, jamais coupé ──────────────
+   Première version : le volet était un enfant de son déclencheur, en position
+   absolue. Conséquence, il héritait de sa place dans la page — une tuile en bas
+   d'écran ouvrait un volet qui sortait par le bas, et les dernières entrées
+   devenaient inatteignables. Le défilement interne ne réglait rien : encore
+   fallait-il que la souris tombe dessus.
+   Le volet vit donc maintenant dans le corps du document, en position fixe, et
+   c'est le JS qui le place dans la fenêtre (portalVoletPlacer). Il ne peut plus
+   déborder. Un enfant en `position:fixed` d'un élément transformé se
+   positionnerait par rapport à celui-ci — et les tuiles ont justement un
+   `transform` au survol : d'où le déplacement dans <body>, et non un simple
+   changement de position.
+   Les couleurs restent celles du thème : un sous-menu n'est pas un endroit où
+   introduire une palette. */
 .portal-vol{position:relative;display:flex}
-.portal-vol-pop{position:absolute;min-width:264px;max-width:320px;
+.portal-vol-pop{position:fixed;top:0;left:0;width:288px;max-width:calc(100vw - 24px);
   background:var(--card);border:1px solid var(--border);border-radius:14px;
   padding:0 0 6px;box-shadow:0 18px 46px rgba(0,0,0,.28);
-  z-index:200;display:none;text-align:left;
-  /* Un menu de service en compte une quinzaine d'entrées : il doit pouvoir
-     défiler plutôt que sortir de l'écran par le bas. La hauteur exacte est
-     recalculée à l'ouverture (portalVoletPlacer) selon la place réelle. */
-  max-height:calc(100vh - 96px);overflow-y:auto;overscroll-behavior:contain}
+  z-index:9000;display:none;text-align:left;
+  /* Filet de sécurité : une liste plus haute que l'écran défile, mais avec le
+     placement ci-dessous et deux colonnes, on n'y arrive quasiment jamais. */
+  overflow-y:auto;overscroll-behavior:contain}
 body.light .portal-vol-pop{box-shadow:0 18px 46px rgba(15,23,42,.14)}
+.portal-vol-pop.ouvert{display:block}
 .portal-vol-pop::-webkit-scrollbar{width:8px}
 .portal-vol-pop::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
-/* L'ouverture est pilotée par la classe, pas par :hover — il faut un délai de
-   fermeture pour laisser le temps d'atteindre le volet à la souris. */
-.portal-vol.ouvert>.portal-vol-pop{display:block}
-.portal-vol--rail>.portal-vol-pop{right:calc(100% + 8px);top:-6px}
-/* Le pont invisible couvre l'espace entre le déclencheur et le volet ; il est
-   posé sur le conteneur et non sur le volet, pour survivre au défilement
-   interne (un ::after dans une boîte qui défile s'en va avec le contenu). */
-.portal-vol--rail.ouvert::after{content:'';position:absolute;right:100%;top:-6px;
-  width:12px;height:calc(100% + 12px)}
-.portal-vol--tuile>.portal-vol-pop{top:calc(100% + 10px);left:50%;transform:translateX(-50%);cursor:default}
-.portal-vol--tuile.ouvert::after{content:'';position:absolute;top:100%;left:0;width:100%;height:12px}
-/* Pas la place dessous : le volet d'une tuile s'ouvre vers le haut. */
-.portal-vol--tuile.portal-vol--haut>.portal-vol-pop{top:auto;bottom:calc(100% + 10px)}
-.portal-vol--tuile.portal-vol--haut.ouvert::after{top:auto;bottom:100%}
+/* Liste longue : deux colonnes plutôt qu'un panneau qui descend jusqu'en bas.
+   Un groupe par colonne — on lit toujours « Produits » d'un côté et
+   « Matières » de l'autre, jamais une colonne coupée au milieu d'un groupe. */
+.portal-vol-pop--large{width:520px}
+.portal-vol-corps--2col{display:grid;grid-template-columns:1fr 1fr;gap:0 4px;align-items:start}
+/* Un groupe = un bloc insécable : en deux colonnes il bascule entier. */
+.portal-vol-bloc{min-width:0}
+.portal-vol-corps--colonnes .portal-vol-bloc{break-inside:avoid}
+.portal-vol-corps--colonnes{column-count:2;column-gap:4px}
+.portal-vol-corps--colonnes .portal-vol-item{break-inside:avoid}
 .portal-vol-tete{display:flex;align-items:center;gap:9px;padding:11px 13px;
   background:var(--accent-bg);border-bottom:1px solid var(--border)}
 .portal-vol-tete-ico{width:26px;height:26px;border-radius:8px;flex-shrink:0;
@@ -1970,6 +1972,18 @@ function portalVoletPop(volet,variante){
   corps.className='portal-vol-corps';
   pop.appendChild(corps);
   portalVoletRemplirCorps(corps,volet);
+  // Au-delà de six entrées réparties en plusieurs groupes : deux colonnes, un
+  // groupe par colonne — jamais un groupe coupé en deux.
+  const nbEntrees=(volet.groupes||[]).reduce((n,g)=>n+g.entrees.length,0);
+  if(nbEntrees>=6&&(volet.groupes||[]).length>1){
+    pop.classList.add('portal-vol-pop--large');
+    corps.classList.add('portal-vol-corps--2col');
+  }else if(nbEntrees>10){
+    // Un seul groupe, mais très long (le menu ERP d'un superadmin) : les
+    // entrées coulent sur deux colonnes plutôt que de faire défiler.
+    pop.classList.add('portal-vol-pop--large');
+    corps.classList.add('portal-vol-corps--colonnes');
+  }
 
   if(volet.pied&&volet.pied.url){
     const sep=document.createElement('div');
@@ -1993,11 +2007,14 @@ function portalVoletRemplirCorps(corps,volet){
   corps.textContent='';
   (volet.groupes||[]).forEach(g=>{
     if(!g.entrees||!g.entrees.length)return;
+    const bloc=document.createElement('div');
+    bloc.className='portal-vol-bloc';
     const t=document.createElement('div');
     t.className='portal-vol-groupe';
     t.textContent=g.titre||'';
-    corps.appendChild(t);
-    g.entrees.forEach(e=>corps.appendChild(portalVoletItem(e)));
+    bloc.appendChild(t);
+    g.entrees.forEach(e=>bloc.appendChild(portalVoletItem(e)));
+    corps.appendChild(bloc);
   });
 }
 /* Le volet ERP est rempli au premier survol seulement : le portail ne paie
@@ -2041,39 +2058,43 @@ function portalVoletErpBrancher(wrap,pop,volet){
   wrap.addEventListener('mouseenter',remplir);
   wrap.addEventListener('focusin',remplir);
 }
-/* Placement : le volet doit tenir dans la fenêtre. Sur le rail il remonte
-   jusqu'à ce que son bas rentre ; sur une tuile il bascule au-dessus quand le
-   bas de page est trop près. Dans les deux cas, s'il reste trop grand, il
-   défile — c'est réglé par max-height, calculée ici sur la place réelle. */
-function portalVoletPlacer(wrap,pop){
-  const MARGE=14;
-  pop.style.top='';pop.style.maxHeight='';
-  wrap.classList.remove('portal-vol--haut');
-  const dispo=window.innerHeight;
-  if(wrap.classList.contains('portal-vol--tuile')){
-    const tuile=wrap.getBoundingClientRect();
-    const dessous=dispo-tuile.bottom-MARGE-10;
-    const dessus=tuile.top-MARGE-10;
-    // On bascule vers le haut seulement si le dessous est vraiment étroit ET
-    // que le dessus fait mieux : sinon le volet saute d'un côté à l'autre au
-    // moindre cran de molette, ce qui est pire que de le laisser défiler.
-    const versHaut=(dessous<200&&dessus>dessous+60);
-    wrap.classList.toggle('portal-vol--haut',versHaut);
-    pop.style.maxHeight=Math.max(160,Math.round(versHaut?dessus:dessous))+'px';
-    return;
+/* Placement du panneau flottant. Deux règles, dans cet ordre :
+   1. le panneau ne sort jamais de la fenêtre — il se pose sous le déclencheur
+      s'il y a la place, au-dessus sinon, et se recale toujours horizontalement ;
+   2. il ne défile pas si on peut l'éviter — au-delà de six entrées il passe en
+      deux colonnes, ce qui divise sa hauteur par deux.
+   C'est la réponse au défaut de la première version : un volet ancré à sa tuile
+   héritait de la position de la tuile, et une tuile en bas de page ouvrait un
+   menu dont la fin était hors de l'écran, sans moyen d'y accéder. */
+function portalVoletPlacer(dec,pop){
+  const M=12;                       // marge minimale avec les bords
+  const ECART=8;                    // écart entre le déclencheur et le panneau
+  const vw=window.innerWidth, vh=window.innerHeight;
+  const d=dec.getBoundingClientRect();
+
+  pop.style.maxHeight=Math.round(vh-2*M)+'px';
+  const p=pop.getBoundingClientRect();   // mesuré panneau visible, donc réel
+  const rail=dec.classList.contains('portal-vol--rail');
+  let l,t;
+  if(rail){
+    // Barre d'icônes : le panneau part vers la gauche, aligné sur le bouton.
+    l=d.left-p.width-ECART;
+    if(l<M)l=Math.min(d.right+ECART,vw-p.width-M);
+    t=d.top-6;
+  }else{
+    // Tuile : dessous si la place suffit, sinon dessus, sinon au plus haut —
+    // dans tous les cas le panneau reste entier.
+    l=d.left+d.width/2-p.width/2;
+    const dessous=vh-d.bottom-ECART-M;
+    const dessus=d.top-ECART-M;
+    if(p.height<=dessous)t=d.bottom+ECART;
+    else if(p.height<=dessus)t=d.top-ECART-p.height;
+    else t=M;
   }
-  pop.style.maxHeight=Math.max(180,Math.round(dispo-2*MARGE))+'px';
-  let r=pop.getBoundingClientRect();
-  if(r.bottom>dispo-MARGE){
-    const actuel=parseFloat(getComputedStyle(pop).top)||0;
-    pop.style.top=Math.round(actuel-(r.bottom-(dispo-MARGE)))+'px';
-    r=pop.getBoundingClientRect();
-  }
-  if(r.top<MARGE){
-    const actuel=parseFloat(pop.style.top||getComputedStyle(pop).top)||0;
-    pop.style.top=Math.round(actuel+(MARGE-r.top))+'px';
-  }
+  pop.style.left=Math.round(Math.max(M,Math.min(l,vw-p.width-M)))+'px';
+  pop.style.top=Math.round(Math.max(M,Math.min(t,vh-p.height-M)))+'px';
 }
+
 /* Survol : l'ouverture attend un court instant (on ne déclenche pas un volet
    en traversant la barre), la fermeture aussi (on a le temps d'aller du bouton
    au volet en passant par le vide). C'était le reproche fait au :hover pur :
@@ -2081,6 +2102,10 @@ function portalVoletPlacer(wrap,pop){
 const PORTAL_VOL_OUVRIR=110;
 const PORTAL_VOL_FERMER=380;
 function portalVoletBrancherSurvol(wrap,pop){
+  // Le panneau est sorti de son déclencheur : les tuiles portent un `transform`
+  // au survol, et un enfant en position fixe s'ancrerait sur elles plutôt que
+  // sur la fenêtre.
+  if(pop.parentNode!==document.body)document.body.appendChild(pop);
   let tOuvrir=null,tFermer=null;
   const annuler=()=>{if(tOuvrir){clearTimeout(tOuvrir);tOuvrir=null;}
                      if(tFermer){clearTimeout(tFermer);tFermer=null;}};
@@ -2090,7 +2115,7 @@ function portalVoletBrancherSurvol(wrap,pop){
   // sortir la fin de la liste sous le bord de l'écran — l'entrée est là, on la
   // voit, et elle n'est plus cliquable.
   const replacer=()=>{
-    if(!wrap.classList.contains('ouvert'))return;
+    if(!pop.classList.contains('ouvert'))return;
     const r=wrap.getBoundingClientRect();
     // Déclencheur sorti de l'écran : le volet n'a plus d'ancrage visible.
     if(r.bottom<0||r.top>window.innerHeight){fermerNet();return;}
@@ -2101,7 +2126,8 @@ function portalVoletBrancherSurvol(wrap,pop){
     window[m]('scroll',replacer,true);
     window[m]('resize',replacer);
   };
-  const fermerNet=()=>{annuler();wrap.classList.remove('ouvert');ecouter(false);};
+  const fermerNet=()=>{annuler();wrap.classList.remove('ouvert');
+                       pop.classList.remove('ouvert');ecouter(false);};
   const ouvrir=(immediat)=>{
     annuler();
     const faire=()=>{
@@ -2111,6 +2137,7 @@ function portalVoletBrancherSurvol(wrap,pop){
         else if(n!==wrap)n.classList.remove('ouvert');
       });
       wrap.classList.add('ouvert');
+      pop.classList.add('ouvert');
       portalVoletPlacer(wrap,pop);
       ecouter(true);
     };
@@ -2125,6 +2152,7 @@ function portalVoletBrancherSurvol(wrap,pop){
   // Le volet est un enfant du conteneur : y entrer annule la fermeture en
   // cours, y compris quand le curseur a coupé par un coin.
   pop.addEventListener('mouseenter',annuler);
+  pop.addEventListener('mouseleave',fermer);
   wrap.addEventListener('focusin',()=>ouvrir(true));
   wrap.addEventListener('focusout',ev=>{
     if(!wrap.contains(ev.relatedTarget))fermer();
@@ -2192,6 +2220,9 @@ function portalOrdreComplet(){
   return out;
 }
 function portalAttacherVolets(){
+  // Les panneaux vivent dans <body>, hors de l'arbre que `render()` remplace :
+  // sans ce ménage, chaque rendu en laisserait une copie derrière lui.
+  document.querySelectorAll('body > .portal-vol-pop').forEach(n=>n.remove());
   // Étoiles : elles ne dépendent pas du catalogue, elles sont posées tout de
   // suite. Un module sans volet reste épinglable.
   document.querySelectorAll('.portal-apps .portal-app[data-portal-id]').forEach(tile=>{
