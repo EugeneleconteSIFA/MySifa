@@ -737,3 +737,67 @@ de celui qu'on regarde le reste du temps.
 
 `tests/test_reunion.py` : 6 familles de cas, base sqlite en mémoire, aucun
 import de l'app.
+
+
+## 11. Reunions : un onglet de MyProd, plus une page a part (31/08/2026)
+
+Demande : « il faudrait que /reunion soit une page tel qu'est vue d'ensemble,
+retour de prod, saisie... ».
+
+Ces trois ecrans ne sont pas des pages : ce sont les sous-onglets de
+MyProd > Production. /reunions, lui, etait une page HTML autonome avec sa
+propre barre du haut, sa propre feuille de style et son propre `<script>`. Il
+lui manquait donc tout ce qui fait une page de MyProd : la barre laterale, le
+titre, le sous-titre, la rangee de sous-onglets. Reponse : l'emboiter comme on
+l'a fait pour Retour de prod.
+
+### Ce qui change
+
+`static/mysifa_reunions.js` (nouveau) porte tout l'ecran : liste des reunions,
+reunion ouverte, notes, actions, impression. Il ne connait pas MyProd — il
+recoit un contenant et s'y installe (`MySifaReunions.monter(racine, opts)`),
+comme la memoire produit le fait pour les scans d'OF. Il garde son etat au
+niveau du module : MyProd reconstruit son DOM a chaque rendu, une reference
+gardee d'une passe a l'autre pointerait sur un noeud detache.
+
+`static/mysifa_reunions.css` (nouveau) reprend la feuille de l'ancienne page,
+integralement prefixee `reu-`. C'etait obligatoire : la page autonome utilisait
+`.btn`, `.chip`, `.card`, `.modal`, `.split`, `#notes`, `#toast` — des noms qui,
+dans la coquille MyProd, repeignent le reste de l'application.
+
+`static/mysifa_prod_core.js` : `reunions` devient un sous-onglet reel
+(`_PROD_SUB_TABS`, donc adressable par `#reunions`), plus une entree `lien` qui
+faisait quitter la page. La branche `if(t.lien)` du gestionnaire de clic
+disparait avec elle, plus aucun onglet ne navigue.
+
+`app/web/reunions_page.py` : /reunions redirige vers `/prod#reunions`. Les
+favoris et les liens existants continuent de fonctionner ; l'ancre est lue au
+demarrage par `_readProdHash()`.
+
+`app/web/html.py` (monolithe de repli, PROD_STANDALONE=0) recoit le meme
+traitement, pour que les deux rendus ne divergent pas.
+
+### Deux points de conception
+
+**La barre de filtres ne s'affiche pas sur cet onglet.** Une reunion porte sa
+propre periode analysee, celle qu'elle a enregistree et qu'on relit des mois
+plus tard. Une barre de filtres au-dessus la contredirait a chaque ouverture.
+
+**L'impression construit un document, elle ne masque pas la page.** Un onglet
+s'imprime avec toute l'application autour. `#reu-doc` est rempli au moment
+d'imprimer (identite de la reunion, notes en texte, actions, chiffres) et la
+feuille de style masque tout le reste par `visibility` — meme technique que la
+feuille d'atelier, pour que les deux impressions du module se comportent
+pareil. Le nom du document reste `MySifa - Point de production JJ-MM-AAAA`.
+
+### Verification
+
+`node --check` sur `mysifa_reunions.js`, `mysifa_prod_core.js` et les blocs JS
+de `html.py` ; `python3 -m compileall` et `pyflakes` sur les fichiers Python
+touches ; les neuf suites de `tests/` restent vertes. APP_VERSION inchangee.
+Le suffixe de cache `-reu1` est pose sur `mysifa_prod_core.js` : APP_VERSION ne
+bougeant pas, sans lui le navigateur resservirait l'ancien coeur et l'onglet
+resterait un lien mort.
+
+**Le demarrage de l'application reste a verifier sur v1** : rien n'a pu etre
+boote ici.
