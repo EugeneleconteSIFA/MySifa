@@ -84,7 +84,7 @@ EXPE_NOTES_CSS = r"""
 .expe-nq-ajust{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:16px}
 .expe-nq-ajust-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--text2);margin-bottom:4px}
 .expe-nq-ajust-help{font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:12px}
-.expe-nq-ajust-row{display:grid;grid-template-columns:140px 1fr auto;gap:10px;align-items:end}
+.expe-nq-ajust-row{display:grid;grid-template-columns:190px minmax(0,1fr) auto;gap:10px;align-items:end}
 @media(max-width:620px){.expe-nq-ajust-row{grid-template-columns:1fr}}
 .expe-nq-filtres{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
 .expe-nq-filtre{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 13px;
@@ -895,7 +895,7 @@ function renderExpeZones(){
           h('div',{className:'expe-zn-meta'},detail.join(' · '))
         ),
         h('span',{className:'expe-zn-score',title:'Score de priorité : note de confiance 55 %, expérience sur la zone 30 %, fraîcheur 15 %'},
-          expeNoteFmt(r.score/10).replace(',','.')==='0.0'?'—':(Math.round(r.score)+' pts'))
+          r.score>0?(Math.round(r.score)+' pts'):'—')
       ));
     });
     corps.appendChild(liste);

@@ -7161,6 +7161,10 @@ function renderProdPage(){
   ];
   // Retour de prod : ouvert aux services de production — l'API filtre (ROLES_PROD).
   allTabs.push({key:'retour', label:'Retour de prod', icon:'clipboard'});
+  // Points de production : c'est une page a part entiere, pas un onglet. Elle
+  // figure quand meme ici parce que c'est de la page Production qu'on part
+  // tenir un point — `lien` fait naviguer au lieu de changer de sous-onglet.
+  allTabs.push({key:'reunions', label:'Réunions', icon:'users', lien:'/reunions'});
   const tabs = hideErreurs ? allTabs.filter(t=>t.key!=='erreurs') : allTabs;
   const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Production'},
     ...tabs.map(t=>h('button',{
@@ -7169,6 +7173,7 @@ function renderProdPage(){
       'aria-selected': subPage===t.key ? 'true' : 'false',
       className:'nav-tab'+(subPage===t.key?' active':''),
       onClick:async()=>{
+        if(t.lien){ window.location.href = t.lien; return; }
         S.subPage=t.key;
         _syncProdHash();
         if(t.key==='kpis'){if(!S.production)await loadProd(); await loadMachineStatus(); startMachineStatusPolling();}

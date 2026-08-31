@@ -1399,9 +1399,11 @@ function renderExpeTransporteurs(){
     h('button',{type:'button',className:'btn btn-ghost',onClick:openExpeTranspPanel},iconEl('layers',14),' Panneau latéral'),
     expeCanWrite()?h('button',{type:'button',className:'btn btn-accent',onClick:()=>openTransporteurModal(null)},iconEl('plus',14),' Ajouter'):null
   ];
+  if(!N.thematiquesChargees&&!N.thematiquesEnCours)void expeChargerThematiques();
   return h('div',{className:'expe-trp-page'},
     h('div',{className:'expe-trp-page-head'},...headKids),
-    renderExpeTranspList()
+    renderExpeTranspList(),
+    renderExpeThematiquesSection()
   );
 }
 """
@@ -4463,6 +4465,7 @@ __EXPE_DEVIS_GUIDE_JS__
 __EXPE_TRANSPORTEURS_JS__
 __EXPE_CARTE_FRANCE_JS__
 __EXPE_NOTES_JS__
+__EXPE_THEMATIQUES_JS__
 __EXPE_ZONES_JS__
 function renderExpePoids(){
   const rows=S.expePoidsRows||[];
