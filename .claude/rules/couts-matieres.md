@@ -62,6 +62,31 @@ pour les écrans MyStock.
 
 Un prix à 0 côté MyStock veut dire « pas renseigné » : il n'écrase jamais un tarif.
 
+### La liste des matières est un écran de SAISIE, pas de lecture
+
+`/pricing` ouvre une ligne par matière, et le seul geste qu'on y fait est de
+corriger un prix d'achat : champ bordé et crayon visibles au repos, saisie
+enregistrée au `change`, tableau non reconstruit après coup pour ne pas perdre
+le focus.
+
+**La déclinaison n'y apparaît plus du tout** (31 août 2026). Le prix d'achat ne
+varie ni par laize ni par grammage — un compteur « 2 décl. », une flèche
+« dériver » et un « + » y laissaient croire le contraire. Créer une laize ou un
+grammage reste un geste de MyStock, sur la fiche.
+
+**Le coût €/m² non plus.** C'est un résultat de paramétrage (poids, devise,
+taxes, transport), pas une donnée qu'on lit en survolant une liste, et sa
+fourchette min–max poussait le prix — la vraie raison de venir ici — hors du
+regard. Il se lit et se règle sur `/pricing/mystock/<id>`, que le bouton
+**Fiche** ouvre depuis la ligne.
+
+Ce que la ligne garde : le camion (tarif du fournisseur pour cette matière),
+Fiche, et MyStock ↗. Le champ se verrouille quand la matière a plusieurs
+fournisseurs — un prix unique en écraserait un avec le tarif de l'autre — et la
+ligne le dit.
+
+Test : `node tests/test_pricing_vue_liste.js`.
+
 ### Comment un prix d'achat devient un coût au m²
 
     prix de revient €/m² = (prix d'achat + transport + taxes) × taux de change

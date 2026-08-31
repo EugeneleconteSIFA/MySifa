@@ -687,7 +687,7 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 .msl-prix-edit{display:flex;align-items:center;gap:6px}
 .msl-prix-ico{display:inline-flex;color:var(--muted);flex:0 0 auto;transition:color .12s}
 .msl-prix-inp{
-  width:104px;padding:5px 8px;border-radius:7px;font-family:inherit;font-size:13px;
+  width:120px;padding:5px 8px;border-radius:7px;font-family:inherit;font-size:13px;
   font-variant-numeric:tabular-nums;text-align:right;cursor:text;
   border:1px solid var(--border);background:var(--bg);color:var(--text)}
 .msl-prix-inp:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--border))}

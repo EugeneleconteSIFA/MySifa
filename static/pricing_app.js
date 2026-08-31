@@ -1165,7 +1165,7 @@
           <table class="pr-table msl-table">
             <colgroup>
               <col style="width:100px"><col style="width:180px"><col>
-              <col style="width:200px"><col style="width:230px"><col style="width:180px">
+              <col style="width:200px"><col style="width:250px"><col style="width:180px">
             </colgroup>
             <thead><tr>
               <th>Cat.</th><th>Référence</th><th>Désignation</th><th>Fournisseur principal</th>
@@ -1241,12 +1241,6 @@
           await loadMystockList();
           renderMystockList();
         });
-      };
-    });
-    document.querySelectorAll("[data-ms-open]").forEach((btn) => {
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        navigate("/pricing/mystock/" + btn.getAttribute("data-ms-open"));
       };
     });
   }
