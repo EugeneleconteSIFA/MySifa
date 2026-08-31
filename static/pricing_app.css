@@ -122,9 +122,35 @@ table.pr-table tr{cursor:pointer}
 .side-panel .big-label{font-size:11px;color:var(--muted);text-transform:uppercase;margin-bottom:4px}
 .breakdown-stack{margin-top:16px}
 .breakdown-bar{display:flex;height:28px;border-radius:8px;overflow:hidden;margin-bottom:10px;border:1px solid var(--border)}
-.breakdown-seg{height:100%;min-width:2px}
+.breakdown-seg{height:100%;min-width:2px;display:flex;justify-content:flex-end}
+/* ── La part de transport, dans la jauge de la matière qui la porte ─────────
+   Le transport n'est pas un composant de plus : il vit DANS le prix de chaque
+   matière. Lui donner un segment à lui l'aurait compté deux fois et aurait
+   suggéré une quatrième matière. Il assombrit donc la fin du segment auquel il
+   appartient — on voit alors LAQUELLE des matières le porte, ce qu'aucun total
+   global ne dit.
+
+   Une hachure plutôt qu'une couleur : elle se lit sur les trois teintes de la
+   barre comme sur le bleu de la jauge, en thème clair comme en sombre, sans
+   ajouter un ton de plus à une barre qui en compte déjà trois. */
+/* La hachure est faite avec `--text`, pas avec du noir : elle bascule alors
+   avec le thème — sombre sur fond clair, claire sur fond sombre — et reste
+   lisible aussi bien sur les trois teintes de la barre que sur la piste vide
+   d'une jauge. Un noir fixe disparaissait dans le thème sombre : le repère se
+   confondait avec le vide, et la matière semblait peser moins qu'elle ne pèse. */
+.seg-transport{display:block;height:100%;min-width:3px;
+  background:repeating-linear-gradient(135deg,
+    color-mix(in srgb, var(--text) 62%, transparent) 0 3px, transparent 3px 6px);
+  box-shadow:inset 1px 0 0 color-mix(in srgb, var(--text) 55%, transparent)}
+.breakdown-cle{display:flex;align-items:center;gap:6px;margin:-4px 0 10px;
+  font-size:10px;font-weight:600;color:var(--muted)}
+.cle-hachure{display:inline-block;width:16px;height:9px;border-radius:3px;
+  border:1px solid var(--border);
+  background:repeating-linear-gradient(135deg,
+    color-mix(in srgb, var(--text) 62%, transparent) 0 3px, transparent 3px 6px), var(--accent)}
 .breakdown-legend{font-size:12px;color:var(--text2)}
-.breakdown-legend div{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)}
+.breakdown-legend div{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--border)}
+.lg-transport{font-size:10px;font-weight:600;color:var(--accent);white-space:nowrap}
 .combobox-wrap{position:relative}
 .combobox-list{position:absolute;z-index:40;left:0;right:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--border);border-radius:10px;max-height:220px;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.35)}
 .combobox-item{padding:10px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)}
@@ -515,9 +541,20 @@ table.msp-table td:first-child,table.msp-table th:first-child{padding-left:16px}
   color:var(--muted);white-space:nowrap}
 .msp-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .msp-part{width:190px}
-.msp-jauge{display:inline-block;width:110px;height:8px;border-radius:4px;
+.msp-jauge{display:inline-block;width:110px;height:10px;border-radius:5px;
   background:var(--border);overflow:hidden;vertical-align:middle;margin-right:8px}
-.msp-jauge i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.msp-jauge i{display:flex;justify-content:flex-end;height:100%;
+  background:var(--accent);border-radius:4px;overflow:hidden}
+/* Même lecture que dans la barre empilée : la fin de la jauge est hachurée à
+   hauteur de ce que le transport pèse DANS ce composant. */
+/* Sur 110 px de jauge, la part de transport pèse souvent moins de quatre
+   pixels : une hachure y devient une bouillie. Aplat, largeur minimale
+   garantie — et une teinte mélangée à `--text`, donc claire en thème sombre et
+   sombre en thème clair. Elle tranche ainsi sur l'accent qui la précède ET sur
+   la piste vide qui la suit, dans les deux thèmes. */
+.msp-jauge i b{display:block;height:100%;min-width:4px;
+  background:color-mix(in srgb, var(--text) 68%, var(--accent));
+  box-shadow:inset 1px 0 0 color-mix(in srgb, var(--bg) 70%, transparent)}
 .msp-part-val{font-size:12px;font-variant-numeric:tabular-nums;color:var(--text2)}
 /* Le détail n'est pas cliquable : aucune ligne ne doit réagir au survol.
    Sans ça, la teinte de survol de .pr-table s'invite par-dessus le fond du

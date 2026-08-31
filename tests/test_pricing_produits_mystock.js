@@ -296,6 +296,26 @@ check('le serveur envoie la decomposition',
 check('la part de transport a sa ligne dans le recap',
   extraire('transportRecapHtml').includes('dont transport'), true);
 check('et sa colonne dans le detail deplie', src.includes('msp-transp'), true);
+
+console.log('\n--- la part de transport DANS chaque jauge ---');
+// Le transport n'est pas un composant de plus : il vit dans le prix de chaque
+// matiere. Il prend donc la fin du segment auquel il appartient, jamais un
+// segment a lui — sinon il serait compte deux fois et suggererait une
+// quatrieme matiere.
+const bk = extraire('priceBreakdownHtml');
+check('le segment porte sa part de transport', bk.includes('seg-transport'), true);
+check('calculee sur le cout de CE composant',
+  bk.includes('(t / v) * 100'), true);
+check('la hachure est expliquee', bk.includes('part de transport, comprise dans le co'), true);
+check('et seulement s\'il y a du transport', bk.includes('aDuTransport'), true);
+check('la jauge de la colonne Part fait pareil',
+  src.includes('transpPart') && src.includes('(transp / prix) * 100'), true);
+// La hachure est faite avec --text : elle bascule avec le theme. Un noir fixe
+// disparaissait en thème sombre, ou le repere se confondait avec la piste vide.
+check('la hachure suit le theme',
+  /\.seg-transport\{[^}]*var\(--text\)/.test(css), true);
+check('le repere de la jauge aussi',
+  /\.msp-jauge i b\{[^}]*var\(--text\)/.test(css), true);
 check('le poids vient du grammage du PRODUIT',
   bAdh.includes('le grammage de ce produit') && bAdh.includes('22 g/m²'), true);
 check('la perte y est comptee', bAdh.includes('9 % de perte'), true);

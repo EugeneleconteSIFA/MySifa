@@ -255,6 +255,7 @@ un fichier de leur périmètre. Dans les deux cas, n'ouvre que celles qui serven
 | `expe-notes-transporteurs.md` | note de confiance transporteur, zones géographiques, emails transporteur |
 | `structure-fichiers.md` | `main.py`, routers, pages |
 | `securite.md` | auth, `app/core/**`, `config.py` |
+| `journal-audit.md` | `audit_*.py`, tout router qui ecrit — journal des actions |
 | `cycle-vie-client.md` | settings, auth, RGPD |
 | `api-versioning.md` | `app/routers/**`, `main.py` |
 | `emails-transactionnels.md` | services mail, `weekly_report.py` |
