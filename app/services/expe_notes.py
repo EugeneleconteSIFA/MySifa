@@ -307,34 +307,19 @@ def _zone_colonne(type_envoi: str) -> str:
     }.get(type_envoi, "zone_france")
 
 
-def recommander_transporteurs(
-    conn,
-    departement: str,
-    type_envoi: str = "",
-    limite: int = 0,
-) -> list[dict]:
-    """Classe les transporteurs actifs pour une destination.
+def _usages_par_departement(conn) -> dict[str, dict[int, dict]]:
+    """Historique des départs, groupé par département puis par transporteur.
 
-    Le score mélange trois choses, dans cet ordre d'importance : la note de
-    confiance, l'expérience réelle sur la zone, et la fraîcheur de cette
-    expérience. Un transporteur jamais utilisé sur la zone n'est pas écarté —
-    il apparaît en bas, signalé comme piste non testée, sinon la liste ne
-    ferait que reconduire les habitudes.
+    Une seule passe sur `expe_departs` : la carte demande les 101 départements
+    d'un coup, et refaire un balayage par département coûterait cent fois le
+    même travail.
     """
-    dept = (departement or "").strip().upper()
-    if not dept:
-        return []
-
     transporteurs = conn.execute(
-        "SELECT * FROM expe_transporteurs WHERE actif = 1 ORDER BY nom"
+        "SELECT id, nom FROM expe_transporteurs"
     ).fetchall()
-    if not transporteurs:
-        return []
-
     par_nom = {_norm_texte(t["nom"]): t["id"] for t in transporteurs}
 
-    # Historique : tous les départs vers ce département, validés ou non.
-    usages: dict[int, dict] = {}
+    usages: dict[str, dict[int, dict]] = {}
     departs = conn.execute(
         """SELECT transporteur_id, transporteur, code_postal_destination,
                   date_enlevement
@@ -343,65 +328,76 @@ def recommander_transporteurs(
               AND code_postal_destination <> ''"""
     ).fetchall()
     for dep in departs:
-        if _norm_dept(dep["code_postal_destination"]) != dept:
+        dept = _norm_dept(dep["code_postal_destination"])
+        if not dept:
             continue
         trp_id = dep["transporteur_id"]
         if not trp_id:
             trp_id = par_nom.get(_norm_texte(dep["transporteur"]))
         if not trp_id:
             continue
-        entree = usages.setdefault(trp_id, {"nb": 0, "dernier": ""})
+        entree = usages.setdefault(dept, {}).setdefault(
+            trp_id, {"nb": 0, "dernier": ""}
+        )
         entree["nb"] += 1
         date_dep = str(dep["date_enlevement"] or "")[:10]
         if date_dep > entree["dernier"]:
             entree["dernier"] = date_dep
+    return usages
 
-    max_usage = max([u["nb"] for u in usages.values()], default=0)
-    maintenant = datetime.now()
-    zone_col = _zone_colonne(type_envoi) if type_envoi else ""
 
+def _score_recence(dernier: str, maintenant: datetime) -> float:
+    dt_dernier = _parse_iso(dernier)
+    if dt_dernier is None:
+        return 0.0
+    jours = max(0, (maintenant - dt_dernier).days)
+    if jours <= 90:
+        return 1.0
+    if jours <= 365:
+        return 0.6
+    if jours <= 730:
+        return 0.3
+    return 0.0
+
+
+def _note_de(trp) -> tuple[Optional[float], Optional[str], int]:
+    cles = trp.keys()
+    valeur = trp["note_valeur"] if "note_valeur" in cles else None
+    lettre = trp["note_lettre"] if "note_lettre" in cles else None
+    nb = (trp["note_nb_avis"] if "note_nb_avis" in cles else 0) or 0
+    return valeur, lettre, nb
+
+
+def _classer(
+    transporteurs: list,
+    usages_dept: dict[int, dict],
+    zone_col: str,
+    maintenant: datetime,
+) -> list[dict]:
+    """Score de priorité : note de confiance, expérience sur la zone, fraîcheur.
+
+    Un transporteur jamais utilisé sur la zone n'est pas écarté — il descend en
+    bas de liste, signalé comme piste non testée. Sinon le classement ne ferait
+    que reconduire les habitudes, et un bon transporteur n'aurait jamais sa
+    première chance.
+    """
+    max_usage = max([u["nb"] for u in usages_dept.values()], default=0)
     resultats: list[dict] = []
     for trp in transporteurs:
-        usage = usages.get(trp["id"], {"nb": 0, "dernier": ""})
+        usage = usages_dept.get(trp["id"], {"nb": 0, "dernier": ""})
         nb = usage["nb"]
         dernier = usage["dernier"]
-
-        note_valeur = trp["note_valeur"] if "note_valeur" in trp.keys() else None
-        note_lettre = trp["note_lettre"] if "note_lettre" in trp.keys() else None
-        nb_avis = (trp["note_nb_avis"] if "note_nb_avis" in trp.keys() else 0) or 0
+        note_valeur, note_lettre, nb_avis = _note_de(trp)
 
         # Sans note, on ne suppose ni bien ni mal : score neutre.
         score_note = 0.5 if note_valeur is None else float(note_valeur) / 10.0
         score_usage = (nb / max_usage) if max_usage else 0.0
-
-        score_recence = 0.0
-        dt_dernier = _parse_iso(dernier)
-        if dt_dernier is not None:
-            jours = max(0, (maintenant - dt_dernier).days)
-            if jours <= 90:
-                score_recence = 1.0
-            elif jours <= 365:
-                score_recence = 0.6
-            elif jours <= 730:
-                score_recence = 0.3
-
+        score_recence = _score_recence(dernier, maintenant)
         score = score_note * 0.55 + score_usage * 0.30 + score_recence * 0.15
 
-        eligible = True
-        if zone_col:
-            eligible = bool(trp[zone_col])
+        eligible = bool(trp[zone_col]) if zone_col else True
         if not eligible:
             score *= 0.4
-
-        # Grille tarifaire connue sur la zone : information, pas critère.
-        tarif = conn.execute(
-            """SELECT 1 FROM expe_tarifs
-                WHERE transporteur_id = ? AND actif = 1
-                  AND ((zone_type = 'departement' AND zone_valeur = ?)
-                    OR (zone_type = 'code_postal' AND zone_valeur LIKE ?))
-                LIMIT 1""",
-            (trp["id"], dept, dept + "%"),
-        ).fetchone()
 
         resultats.append(
             {
@@ -414,14 +410,82 @@ def recommander_transporteurs(
                 "nb_avis": nb_avis,
                 "nb_expeditions": nb,
                 "derniere_expedition": dernier or "",
-                "grille_tarifaire": bool(tarif),
                 "eligible_zone": eligible,
                 "jamais_utilise": nb == 0,
                 "score": round(score * 100, 1),
             }
         )
-
     resultats.sort(key=lambda r: (-r["score"], r["transporteur"]))
     for rang, item in enumerate(resultats, start=1):
         item["rang"] = rang
+    return resultats
+
+
+def recommander_transporteurs(
+    conn,
+    departement: str,
+    type_envoi: str = "",
+    limite: int = 0,
+) -> list[dict]:
+    """Classe les transporteurs actifs pour une destination."""
+    dept = (departement or "").strip().upper()
+    if not dept:
+        return []
+    transporteurs = conn.execute(
+        "SELECT * FROM expe_transporteurs WHERE actif = 1 ORDER BY nom"
+    ).fetchall()
+    if not transporteurs:
+        return []
+
+    usages = _usages_par_departement(conn).get(dept, {})
+    zone_col = _zone_colonne(type_envoi) if type_envoi else ""
+    resultats = _classer(transporteurs, usages, zone_col, datetime.now())
+
+    # Grille tarifaire connue sur la zone : information affichée, pas critère
+    # de classement — une grille absente ne dit rien de la qualité du service.
+    for item in resultats:
+        tarif = conn.execute(
+            """SELECT 1 FROM expe_tarifs
+                WHERE transporteur_id = ? AND actif = 1
+                  AND ((zone_type = 'departement' AND zone_valeur = ?)
+                    OR (zone_type = 'code_postal' AND zone_valeur LIKE ?))
+                LIMIT 1""",
+            (item["transporteur_id"], dept, dept + "%"),
+        ).fetchone()
+        item["grille_tarifaire"] = bool(tarif)
+
     return resultats[:limite] if limite else resultats
+
+
+def carte_zones(conn, type_envoi: str = "") -> dict:
+    """Pour chaque département, le transporteur à prioriser et l'historique.
+
+    Alimente la carte de France de l'écran Zone géographique : un département
+    se colore de la couleur du transporteur recommandé, et n'est colorié que
+    s'il a une histoire — un département jamais livré reste neutre plutôt que
+    d'afficher une recommandation fabriquée de toutes pièces.
+    """
+    transporteurs = conn.execute(
+        "SELECT * FROM expe_transporteurs WHERE actif = 1 ORDER BY nom"
+    ).fetchall()
+    if not transporteurs:
+        return {}
+    zone_col = _zone_colonne(type_envoi) if type_envoi else ""
+    maintenant = datetime.now()
+    usages = _usages_par_departement(conn)
+
+    carte: dict[str, dict] = {}
+    for dept, usages_dept in usages.items():
+        classement = _classer(transporteurs, usages_dept, zone_col, maintenant)
+        if not classement:
+            continue
+        premier = classement[0]
+        carte[dept] = {
+            "transporteur_id": premier["transporteur_id"],
+            "transporteur": premier["transporteur"],
+            "couleur": premier["couleur"],
+            "note_lettre": premier["note_lettre"],
+            "nb_expeditions": sum(u["nb"] for u in usages_dept.values()),
+            "nb_transporteurs": len([u for u in usages_dept.values() if u["nb"]]),
+        }
+    return carte

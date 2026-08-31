@@ -221,6 +221,29 @@ check("la pastille rappelle les laizes retenues", "bes-tsel-chip-lz" in _js, Tru
 check("et laisse les rouvrir", "Changer les laizes de " in _js, True)
 check("une laize orpheline est oubliee",
       "function _besTendNettoyerLaizes()" in _js, True)
+# Le bouton de validation suit le gabarit des modales de MyStock. `btn-primary`
+# n'existe pas dans cette page : il rendait un bouton gris.
+check("le bouton de validation est a l'accent",
+      "cls: 'btn btn-accent bes-lz-valider'" in _js, True)
+check("et sans style, il ne serait pas au gabarit",
+      ".bes-lz-valider{" in _js, True)
+
+# Les dernieres references consultees : un acheteur revient sur les memes
+# matieres toute la semaine, les retaper chaque matin se paie tous les jours.
+check("les recentes sont gardees", "BES_TEND_RECENTS_CLE" in _js, True)
+check("six au maximum", "const BES_TEND_RECENTS_MAX = 6;" in _js, True)
+check("avec leurs laizes",
+      "_besTendPousserRecent(ref, [...choisies].sort((a, b) => a - b));" in _js, True)
+check("elles se rejouent d'un clic", "function _besTendRejouerRecent(" in _js, True)
+check("sous le champ, et seulement quand il est vide",
+      "if (recents.length && !(S.besoinsTendRefQ || '').trim())" in _js, True)
+check("une reference deja tracee n'y figure plus",
+      "_besTendRecents().filter(r => !sel.has(r.cle))" in _js, True)
+# Navigation privee, site data bloque : la rangee disparait, rien d'autre.
+check("un stockage refuse ne casse pas la page (lecture)",
+      "function _besTendRecents()" in _js and "catch (e) {\n    return [];" in _js, True)
+check("ni a l'ecriture",
+      "function _besTendPousserRecent(ref, laizes) {\n  try {" in _js, True)
 
 # Le pave d'explication est retire : trois paragraphes au-dessus d'un ecran
 # consulte chaque jour ouvre finissent par ne plus etre lus, et poussaient les
