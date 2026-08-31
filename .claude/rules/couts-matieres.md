@@ -133,6 +133,20 @@ L'aperçu du coût sur la fiche produit passe désormais par
 `POST /api/pricing/mystock/produits/preview` : le refaire dans le navigateur
 supposerait d'y réimplémenter transport, taxes et change.
 
+**Le transport est nommé, plus fondu dans le résultat.** L'écran affichait
+« 4,200 €/kg × 0,0240 kg/m² → 0,1098 €/m² » — une multiplication qui ne tombe
+pas juste, parce que le transport (0,379 €/kg, 9 % ici) y entrait sans figurer
+nulle part. Un chiffre qu'on ne peut pas refaire de tête passe pour un chiffre
+faux, et il avait raison de le paraître : il manquait deux termes.
+
+`_cout_produit_mystock` renvoie donc la `breakdown` de chaque composant, comme
+le fait déjà la base CM. La chaîne s'écrit en entier —
+`(prix + transport + taxes) = sous-total × poids × change → coût` — les termes
+nuls omis. Le transport a aussi sa ligne « dont transport » dans le
+récapitulatif, sa colonne dans le détail déplié de la liste, et un lien vers le
+tarif du fournisseur : nommer un coût sans donner le chemin pour le corriger
+n'avance personne.
+
 ### Fusion des déclinaisons : une matière, une ligne
 
 Le grammage parti sur le produit, la déclinaison n'a plus rien à porter que le
