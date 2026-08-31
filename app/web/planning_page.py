@@ -87,7 +87,7 @@ PLANNING_HTML = r"""<!DOCTYPE html>
 <title>__PLANNING_TITLE__</title>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="/static/support_widget.css">
-<link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/motion.css">
 <!-- Cette feuille n'avait aucun cache-buster : une modification n'arrivait

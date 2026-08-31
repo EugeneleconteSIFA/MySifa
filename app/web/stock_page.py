@@ -8,7 +8,7 @@ Fixes:
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from config import APP_ORG_NAME, STOCK_UNITE_VENTE_DEFAUT
+from config import APP_VERSION, APP_ORG_NAME, STOCK_UNITE_VENTE_DEFAUT
 from services.auth_service import get_current_user, user_has_app_access
 from app.web.access_denied import access_denied_response
 from app.web.traca_guide_js import TRACA_GUIDE_SCRIPT_BLOCK
@@ -72,7 +72,7 @@ STOCK_HTML = r"""<!DOCTYPE html>
 <link rel="manifest" href="/manifest-stock.webmanifest">
 <meta name="apple-mobile-web-app-title" content="MyStock">
 <link rel="stylesheet" href="/static/support_widget.css">
-<link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/mysifa_ai_chat.css">
 <link rel="stylesheet" href="/static/mysifa_dock.css">
@@ -824,9 +824,58 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
    et une echelle commune sont donc legitimes, et deux courbes du meme graphe
    se comparent vraiment. Au-dela de huit series, le reste est agrege plutot
    que de recycler les teintes. */
-.bes-tend-note{font-size:12px;color:var(--muted);line-height:1.6;margin:0 0 12px;
-  padding:10px 12px;border-radius:8px;background:color-mix(in srgb,var(--accent) 7%,transparent);
-  border:1px solid color-mix(in srgb,var(--accent) 22%,transparent)}
+/* ── Selecteur de references de la vue Tendance ───────────────────────────
+   Vingt matieres sur dix-huit mois font vingt courbes : lisible pour
+   surveiller, inutilisable pour preparer UNE commande. Le selecteur restreint
+   ce qui est trace, jamais ce qui est calcule. */
+.bes-tsel{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px;
+  padding:10px 12px;border:1px solid var(--border);border-radius:10px;
+  background:var(--card)}
+.bes-tsel-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;
+  border-radius:8px;border:1px solid var(--border2,var(--border));
+  background:var(--bg);color:var(--text);font-family:inherit;font-size:12px;
+  font-weight:700;cursor:pointer}
+.bes-tsel-btn:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.bes-tsel-btn.on{border-color:var(--accent);color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.bes-tsel-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;
+  border-radius:6px;font-size:11px;font-weight:700;
+  background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--text)}
+.bes-tsel-chip button{background:none;border:none;cursor:pointer;color:var(--muted);
+  font-size:13px;line-height:1;padding:0 2px;font-family:inherit}
+.bes-tsel-chip button:hover{color:var(--danger)}
+.bes-tsel-vide{font-size:12px;color:var(--muted)}
+.bes-tsel-panel{width:100%;border-top:1px solid var(--border);margin-top:4px;
+  padding-top:10px}
+.bes-tsel-search{width:100%;max-width:320px;padding:7px 10px;border-radius:8px;
+  border:1px solid var(--border2,var(--border));background:var(--bg);
+  color:var(--text);font-family:inherit;font-size:12px;margin-bottom:8px}
+.bes-tsel-liste{max-height:230px;overflow-y:auto;display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:2px}
+.bes-tsel-opt{display:flex;align-items:center;gap:8px;padding:5px 8px;
+  border-radius:6px;cursor:pointer;font-size:12px;color:var(--text)}
+.bes-tsel-opt:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.bes-tsel-opt input{cursor:pointer;flex:0 0 auto}
+.bes-tsel-opt-lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.bes-tsel-opt-meta{font-size:10px;color:var(--muted);white-space:nowrap;
+  font-variant-numeric:tabular-nums}
+.bes-tsel-lz{display:flex;flex-wrap:wrap;align-items:center;gap:6px;width:100%;
+  margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)}
+.bes-tsel-lz-lbl{font-size:10px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.4px}
+.bes-tsel-lzbtn{padding:4px 10px;border-radius:999px;border:1px solid var(--border2,var(--border));
+  background:var(--bg);color:var(--text2);font-family:inherit;font-size:11px;
+  font-weight:700;cursor:pointer;font-variant-numeric:tabular-nums}
+.bes-tsel-lzbtn.on{border-color:var(--accent);color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 12%,transparent)}
+/* Le retard, seul rescape du pave d'explication retire le 28/08/2026. Ce
+   n'est pas un commentaire sur l'ecran mais une anomalie du carnet : il ne
+   s'affiche que s'il y en a un. */
+.bes-tend-retard{font-size:12px;line-height:1.6;margin:0 0 12px;
+  padding:8px 12px;border-radius:8px;color:var(--warn,#d97706);
+  background:color-mix(in srgb,var(--warn,#d97706) 10%,transparent);
+  border:1px solid color-mix(in srgb,var(--warn,#d97706) 30%,transparent)}
 /* La carte : fond plein, bordure fine. C'est la surface sur laquelle la
    palette a ete validee — un graphe pose sur le fond de page n'aurait pas le
    meme contraste que celui qu'on a mesure. */
@@ -13105,13 +13154,25 @@ const BES_TEND_FUTUR = 5;
 const BES_TEND_AXE = 'production';
 
 async function loadBesoinsTendance() {
+  _besTendEtat();
   S.besoinsTendance = null;
   S.besoinsLoading = true;
   renderContent();
   try {
+    const p = new URLSearchParams({
+      passe: String(BES_TEND_PASSE), futur: String(BES_TEND_FUTUR), axe: BES_TEND_AXE,
+    });
+    if (S.besoinsTendRefs.length) p.set('refs', S.besoinsTendRefs.join(','));
+    if (S.besoinsTendLaizes.length) p.set('laizes', S.besoinsTendLaizes.join(','));
+    // Toujours une courbe par laize : une bobine ne se commande pas hors de
+    // sa laize. Le serveur sait encore agréger toutes laizes confondues — le
+    // paramètre existe — mais cet écran ne le demande plus.
+    p.set('detail', 'laize');
     S.besoinsTendance = await api(
-      '/api/stock/besoins-matieres/tendance?passe=' + BES_TEND_PASSE
-      + '&futur=' + BES_TEND_FUTUR + '&axe=' + BES_TEND_AXE);
+      '/api/stock/besoins-matieres/tendance?' + p.toString());
+    if (S.besoinsTendance && Array.isArray(S.besoinsTendance.references)) {
+      S.besoinsTendCat = S.besoinsTendance.references;
+    }
   } catch (e) {
     S.besoinsTendance = { erreur: e.message || 'chargement impossible' };
     showToast('Erreur : ' + (e.message || 'inconnue'), 'error');
@@ -13163,7 +13224,11 @@ function _besTendPalette() {
 }
 
 function _besTendCle(l) {
-  return l.kind + '|' + (l.matiere_id != null ? 'm' + l.matiere_id : 's' + l.libelle);
+  // La laize entre dans la cle des que l'ecran trace une courbe par laize :
+  // sans elle, isoler ou masquer une laize eteindrait aussi ses soeurs, qui
+  // portent pourtant la meme matiere sous un autre numero de bobine.
+  return l.kind + '|' + (l.matiere_id != null ? 'm' + l.matiere_id : 's' + l.libelle)
+       + (l.laize_mm != null ? '|l' + l.laize_mm : '');
 }
 
 // '2026-09' → '2025-09'. null pour « au-delà », qui n'est pas un mois.
@@ -13177,6 +13242,23 @@ function _besMoisMoins12(cle) {
 // un état porté par le DOM serait perdu à chaque caractère tapé.
 function _besTendEtat() {
   if (!S.besoinsTendFerme) S.besoinsTendFerme = {};
+  // La selection : quelles references, quelles laizes, et si l'on trace une
+  // courbe par laize. Elle vit dans l'etat plutot que dans la reponse, parce
+  // qu'elle survit au rechargement de la vue — sans quoi chaque « Actualiser »
+  // reviendrait sur les vingt courbes.
+  if (!Array.isArray(S.besoinsTendRefs)) S.besoinsTendRefs = [];
+  if (!Array.isArray(S.besoinsTendLaizes)) S.besoinsTendLaizes = [];
+  // Le detail par laize n'est plus une option : une bobine ne se commande pas
+  // hors de sa laize, et un total toutes laizes confondues est juste en metres
+  // et inutilisable pour passer commande. La bascule a ete retiree le
+  // 28/08/2026 — elle proposait une lecture que personne ne demande.
+  // Le panneau est ouvert a l'arrivee : sans reference choisie il n'y a rien a
+  // tracer, et un ecran vide avec un bouton ferme n'apprend pas quoi faire.
+  if (S.besoinsTendSelOpen == null) S.besoinsTendSelOpen = true;
+  if (S.besoinsTendRefQ == null) S.besoinsTendRefQ = '';
+  // Le catalogue memorise : pendant un rechargement la reponse est nulle, et
+  // un selecteur qui se vide a chaque requete est inutilisable.
+  if (!Array.isArray(S.besoinsTendCat)) S.besoinsTendCat = [];
   if (!S.besoinsTendMasque) S.besoinsTendMasque = {};
   if (!S.besoinsTendTable) S.besoinsTendTable = {};
   if (!S.besoinsTendRefAn) S.besoinsTendRefAn = {};
@@ -13559,57 +13641,271 @@ function _besTendTableau(series, cols, moisCourant, documentes, unite) {
   return el('div', { cls: 'bes-tc-tablewrap' }, t);
 }
 
+/* ── Selecteur de references et de laizes ──────────────────────────────────
+
+   Le probleme : une categorie porte vingt matieres, chacune declinee en
+   plusieurs laizes. Tout tracer donne un mur de courbes ; n'en tracer aucune
+   par defaut donnerait un ecran vide. On garde donc la vue d'ensemble telle
+   quelle, et on ajoute de quoi la reduire a ce qu'on est en train d'acheter.
+
+   Trois gestes, et un seul aller-retour serveur chacun :
+     - cocher une ou plusieurs references ;
+     - cocher une ou plusieurs laizes (elles n'existent que pour les bobines) ;
+     - demander une courbe PAR laize plutot qu'une courbe par matiere.
+
+   La recherche dans la liste ne recharge rien : elle ne fait que reduire les
+   cases affichees, et se contente donc de reconstruire son propre conteneur —
+   c'est ce qui lui permet de garder le focus entre deux caracteres. */
+let _besTendSelT = null;
+function _besTendSelApply() {
+  clearTimeout(_besTendSelT);
+  _besTendSelT = setTimeout(() => { loadBesoinsTendance(); }, 350);
+}
+
+function _besTendRefCle(r) {
+  return r.matiere_id == null ? 'na' : String(r.matiere_id);
+}
+
+/** Le catalogue, dedoublonne par reference : une meme matiere peut servir de
+    frontal et de glassine, elle ne doit pas se cocher deux fois. */
+function _besTendRefsCat() {
+  const par = new Map();
+  (S.besoinsTendCat || []).forEach(r => {
+    const cle = _besTendRefCle(r);
+    const ex = par.get(cle);
+    if (ex) {
+      ex.total += (r.total || 0);
+      (r.laizes || []).forEach(l => { if (ex.laizes.indexOf(l) < 0) ex.laizes.push(l); });
+      if (ex.kinds.indexOf(r.kind) < 0) ex.kinds.push(r.kind);
+      return;
+    }
+    par.set(cle, {
+      cle: cle, libelle: r.libelle || 'Non associée', designation: r.designation,
+      unite: r.unite, total: r.total || 0, laizes: (r.laizes || []).slice(),
+      kinds: [r.kind],
+    });
+  });
+  return [...par.values()].sort((a, b) => (b.total || 0) - (a.total || 0));
+}
+
+/* Une laize retenue qu'aucune reference selectionnee ne porte plus n'a plus
+   d'objet : elle filtrerait sur une bobine qu'on ne regarde pas, et l'ecran
+   afficherait vide sans dire pourquoi. */
+function _besTendNettoyerLaizes() {
+  const st = _besTendEtat();
+  if (!st.besoinsTendRefs.length) { S.besoinsTendLaizes = []; return; }
+  const sel = new Set(st.besoinsTendRefs);
+  const dispo = new Set(_besTendRefsCat()
+    .filter(r => sel.has(r.cle))
+    .flatMap(r => r.laizes || []));
+  S.besoinsTendLaizes = st.besoinsTendLaizes.filter(l => dispo.has(l));
+}
+
+/* Redessine la seule barre de selection, sans toucher au reste de l'ecran :
+   cocher une case ne doit pas faire disparaitre le panneau ouvert ni le texte
+   deja tape dans sa recherche. */
+function _besTendRedessinerBarre() {
+  const ancienne = document.querySelector('.bes-tsel');
+  if (!ancienne || !ancienne.parentNode) return;
+  ancienne.parentNode.replaceChild(_buildBesoinsTendSelect(), ancienne);
+}
+
+function _buildBesoinsTendSelect() {
+  const st = _besTendEtat();
+  const cat = _besTendRefsCat();
+  const sel = new Set(st.besoinsTendRefs);
+  const selLz = new Set(st.besoinsTendLaizes);
+
+  const bar = el('div', { cls: 'bes-tsel' });
+
+  const btn = el('button', {
+    cls: 'bes-tsel-btn' + (st.besoinsTendSelOpen ? ' on' : ''),
+    type: 'button',
+    on: { click: () => { S.besoinsTendSelOpen = !S.besoinsTendSelOpen; renderContent(); } },
+  }, iconEl('search', 14), el('span', {},
+    sel.size ? ('Références · ' + sel.size + ' sélectionnée' + (sel.size > 1 ? 's' : ''))
+             : 'Choisir des références'));
+  bar.appendChild(btn);
+
+  if (!sel.size) {
+    bar.appendChild(el('span', { cls: 'bes-tsel-vide' },
+      cat.length + ' référence(s) sur la fenêtre — choisissez celles à tracer.'));
+  }
+
+  // Les references retenues, chacune retirable d'un clic. Une pastille par
+  // reference plutot qu'un compteur : sans elles, on ne sait plus ce qu'on
+  // regarde des qu'on referme le panneau.
+  cat.filter(r => sel.has(r.cle)).forEach(r => {
+    bar.appendChild(el('span', { cls: 'bes-tsel-chip' },
+      el('span', {}, r.libelle),
+      el('button', {
+        type: 'button', title: 'Retirer ' + r.libelle,
+        on: { click: () => {
+          S.besoinsTendRefs = st.besoinsTendRefs.filter(x => x !== r.cle);
+          _besTendNettoyerLaizes();
+          renderContent(); _besTendSelApply();
+        } },
+      }, '×')));
+  });
+
+  // Les laizes proposees sont celles des SEULES references retenues. Tant que
+  // rien n'est choisi il n'y a pas de laize a proposer : afficher les
+  // quarante laizes du catalogue avant de savoir de quelle matiere on parle
+  // ne serait pas un choix, ce serait une liste. Et une matiere qui n'est pas
+  // en bobine — mandrin, carton, palette — n'en a aucune : la rangee
+  // n'apparait tout simplement pas.
+  const retenues = cat.filter(r => sel.has(r.cle));
+  const laizes = sel.size
+    ? [...new Set(retenues.flatMap(r => r.laizes || []))].sort((a, b) => a - b)
+    : [];
+
+  if (selLz.size) {
+    [...selLz].sort((a, b) => a - b).forEach(l => {
+      bar.appendChild(el('span', { cls: 'bes-tsel-chip' },
+        el('span', {}, l + ' mm'),
+        el('button', {
+          type: 'button', title: 'Retirer la laize ' + l + ' mm',
+          on: { click: () => {
+            S.besoinsTendLaizes = st.besoinsTendLaizes.filter(x => x !== l);
+            renderContent(); _besTendSelApply();
+          } },
+        }, '×')));
+    });
+  }
+
+  if (sel.size || selLz.size) {
+    bar.appendChild(el('button', {
+      cls: 'bes-tsel-btn', type: 'button',
+      on: { click: () => {
+        S.besoinsTendRefs = []; S.besoinsTendLaizes = [];
+        S.besoinsTendSelOpen = true;
+        renderContent(); _besTendSelApply();
+      } },
+    }, 'Tout effacer'));
+  }
+
+  if (!st.besoinsTendSelOpen) return bar;
+
+  // ── Panneau ouvert ──
+  const panel = el('div', { cls: 'bes-tsel-panel' });
+  const liste = el('div', { cls: 'bes-tsel-liste' });
+
+  const remplir = () => {
+    liste.innerHTML = '';
+    const q = (S.besoinsTendRefQ || '').trim().toLowerCase();
+    const vus = cat.filter(r => !q
+      || String(r.libelle || '').toLowerCase().includes(q)
+      || String(r.designation || '').toLowerCase().includes(q));
+    if (!vus.length) {
+      liste.appendChild(el('div', { cls: 'bes-tsel-vide' },
+        'Aucun résultat pour « ' + (S.besoinsTendRefQ || '') + ' »'));
+      return;
+    }
+    vus.forEach(r => {
+      const cb = el('input', { type: 'checkbox' });
+      cb.checked = sel.has(r.cle);
+      cb.addEventListener('change', () => {
+        if (cb.checked) {
+          if (st.besoinsTendRefs.indexOf(r.cle) < 0) S.besoinsTendRefs = [...st.besoinsTendRefs, r.cle];
+        } else {
+          S.besoinsTendRefs = st.besoinsTendRefs.filter(x => x !== r.cle);
+        }
+        _besTendNettoyerLaizes();
+        // La barre du haut porte les pastilles et la rangee des laizes : elle
+        // doit suivre la case qu'on vient de cocher, sans attendre que la
+        // requete revienne.
+        _besTendRedessinerBarre();
+        _besTendSelApply();
+      });
+      liste.appendChild(el('label', { cls: 'bes-tsel-opt' }, cb,
+        el('span', { cls: 'bes-tsel-opt-lbl', title: r.designation || r.libelle }, r.libelle),
+        el('span', { cls: 'bes-tsel-opt-meta' },
+          (r.laizes && r.laizes.length ? r.laizes.length + ' laize(s) · ' : '')
+          + _besFmtQte(r.total) + (r.unite ? ' ' + r.unite : ''))));
+    });
+  };
+
+  const q = el('input', {
+    cls: 'bes-tsel-search', type: 'search', id: 'bes-tsel-q',
+    placeholder: 'Rechercher une référence (code, désignation…)',
+  });
+  q.value = S.besoinsTendRefQ || '';
+  q.addEventListener('input', () => { S.besoinsTendRefQ = q.value; remplir(); });
+  q.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { S.besoinsTendRefQ = ''; q.value = ''; remplir(); }
+  });
+  panel.appendChild(q);
+  remplir();
+  panel.appendChild(liste);
+
+  if (laizes.length) {
+    const row = el('div', { cls: 'bes-tsel-lz' },
+      el('span', { cls: 'bes-tsel-lz-lbl' },
+        sel.size ? 'Laize (mm) — bobine' : 'Laize (mm)'));
+    laizes.forEach(l => {
+      row.appendChild(el('button', {
+        cls: 'bes-tsel-lzbtn' + (selLz.has(l) ? ' on' : ''), type: 'button',
+        on: { click: () => {
+          S.besoinsTendLaizes = selLz.has(l)
+            ? st.besoinsTendLaizes.filter(x => x !== l)
+            : [...st.besoinsTendLaizes, l];
+          renderContent(); _besTendSelApply();
+        } },
+      }, String(l)));
+    });
+    panel.appendChild(row);
+  }
+
+  bar.appendChild(panel);
+  // Le champ vient d'entrer dans le DOM : il est pret au frame suivant.
+  requestAnimationFrame(() => { document.getElementById('bes-tsel-q')?.focus(); });
+  return bar;
+}
+
 function _buildBesoinsTendance(data) {
-  if (!data) return el('div', { cls: 'bes-empty' }, 'Chargement de la tendance…');
+  if (!data) {
+    return el('div', {}, _buildBesoinsTendSelect(),
+      el('div', { cls: 'bes-empty' }, 'Chargement de la tendance…'));
+  }
   if (data.erreur) {
-    return el('div', { cls: 'bes-empty', style: { color: 'var(--danger)' } },
-      'Erreur : ' + data.erreur);
+    return el('div', {}, _buildBesoinsTendSelect(),
+      el('div', { cls: 'bes-empty', style: { color: 'var(--danger)' } },
+        'Erreur : ' + data.erreur));
   }
   const st = _besTendEtat();
   const cont = el('div', {});
+  cont.appendChild(_buildBesoinsTendSelect());
   const cols = (data.colonnes || []).filter(c => c !== 'au-dela');
   const moisCourant = data.mois_courant || (data.mois || [])[0] || '';
   const documentes = new Set(Object.keys(data.origines || {}));
   const palette = _besTendPalette();
 
-  // ── Ce que montre l'écran ──
-  // Un mois à venir paraît creux parce qu'il n'est pas encore commandé, pas
-  // parce que l'activité baisse. C'est précisément ce que le passé sert à
-  // trancher : sans lui, les deux lectures sont indiscernables.
-  const jours = ((data.historique || {}).jours) || 0;
-  const nbPasses = (data.mois_passes || []).length;
-  cont.appendChild(el('div', { cls: 'bes-tend-note' },
-    el('div', {},
-      el('strong', {}, 'Ce que montre cet écran : '),
-      'le besoin matière par mois de ',
-      // L'axe affiché en toutes lettres. Deux lectures décalées d'un à deux
-      // mois se ressemblent trop pour qu'on devine laquelle on regarde.
-      el('strong', {}, (data.axe === 'livraison'
-                          ? 'LIVRAISON au client'
-                          : 'PRODUCTION — quand la matière doit être en stock')),
-      ', sur ' + cols.length + ' mois — ',
-      nbPasses + ' mois révolus à gauche du repère, le reste devant. ',
-      'À droite du repère, un mois bas signifie « pas encore commandé », pas ',
-      '« activité en baisse » : la comparaison au même mois de l\'an dernier, à ',
-      'gauche, est là pour trancher.'),
-    el('div', { style: { marginTop: '6px' } },
-      'Sources : les dossiers du planning, complétés — pour les mois que le ',
-      'planning ne porte plus — par les OF scannés et leurs fiches techniques. ',
-      'Un mois hachuré n\'est documenté par aucune des deux : c\'est un trou, ',
-      'pas un zéro.'),
-    jours >= 2
-      ? el('div', { style: { marginTop: '6px' } },
-          jours + ' jour(s) de photos du carnet accumulés' +
-          ((data.historique.horizons_calibrables || []).length
-            ? ' — horizons calibrables : M+' + data.historique.horizons_calibrables.join(', M+') + '.'
-            : ' — encore trop court pour extrapoler.'))
-      : null,
-    data.reste_sur_mois_echus > 0
-      ? el('div', { style: { marginTop: '6px', color: 'var(--warn,#d97706)', fontWeight: '600' } },
-          'Attention : ' + _besFmtQte(data.reste_sur_mois_echus) +
-          ' de besoin porte sur des mois déjà échus — dossiers en retard.')
-      : null,
-  ));
+  // Le pavé « Ce que montre cet écran » a été retiré le 28/08/2026 : trois
+  // paragraphes d'explication au-dessus de chaque consultation quotidienne
+  // finissent par ne plus être lus, et poussaient les courbes sous la ligne
+  // de flottaison. Ce qu'il disait d'essentiel — l'axe de temps, le repère du
+  // mois courant, les mois non documentés — se lit désormais sur le graphe
+  // lui-même et dans l'aide « ? » de l'en-tête.
+  //
+  // Une chose survit : le retard. Ce n'est pas une explication de l'écran,
+  // c'est une anomalie du carnet, et elle doit se voir quel que soit le
+  // sort du pavé qui l'hébergeait.
+  if (data.reste_sur_mois_echus > 0) {
+    cont.appendChild(el('div', { cls: 'bes-tend-retard' },
+      el('strong', {}, 'Retard : '),
+      _besFmtQte(data.reste_sur_mois_echus) +
+      ' de besoin porte sur des mois déjà échus.'));
+  }
+
+  // Rien de choisi, rien à tracer. Quarante-deux références sur dix-huit mois
+  // et deux laizes chacune font un mur de courbes qu'on ne lit pas : l'écran
+  // attend qu'on lui dise ce qu'on est en train d'acheter.
+  if (!st.besoinsTendRefs.length) {
+    cont.appendChild(el('div', { cls: 'bes-empty' },
+      'Choisissez une ou plusieurs références ci-dessus pour afficher leur '
+      + 'tendance. Sur une bobine, la laize se choisit juste en dessous.'));
+    return cont;
+  }
 
   const categories = (data.categories || []).map(c => Object.assign({}, c, {
     lignes: (c.lignes || []).filter(l => _besMatchFiltre(
@@ -21458,3 +21754,9 @@ init();
 </html>"""
 
 STOCK_HTML = STOCK_HTML.replace("/*__TRACA_GUIDE__*/", TRACA_GUIDE_SCRIPT_BLOCK)
+
+# Version des assets : le lien vers static/mysifa_theme.css doit changer
+# d'URL à chaque version, sinon un navigateur qui a le fichier en cache
+# depuis l'ancien régime (max-age=86400) continue de servir une feuille
+# de style sans les tokens de couleur — la page s'affiche en noir et blanc.
+STOCK_HTML = STOCK_HTML.replace("__V_LABEL__", "v" + APP_VERSION)

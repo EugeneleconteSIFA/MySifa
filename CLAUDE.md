@@ -19,14 +19,13 @@ MySifa est un outil interne de gestion de production industrielle développé po
 
 | Module | Route | Description |
 |---|---|---|
-| MyProd | `/prod` | Saisie de production opérateur |
+| MyProd | `/prod` | Saisie de production opérateur ; onglet Production › **Retour de prod** (`/prod#retour`) : feuille atelier par machine, comptes-rendus de dossier, édition de l'info prod et des explications d'arrêt |
 | Planning machine | `/planning` | Planning atelier multi-machines |
 | MyStock | `/stock` | Gestion des stocks et emplacements |
 | MyCompta | `/compta` | Suivi comptable |
 | MyExpé | `/expe` | Gestion des départs |
 | Planning RH | `/planning-rh` | Planning du personnel |
 | Paie | `/paie` | Module paie |
-| Retour de prod | `/rapports-prod` | Comptes-rendus de dossier et feuille atelier par machine |
 | Paramètres | `/settings` | Gestion comptes, rôles, annonces (super admin) |
 
 ---

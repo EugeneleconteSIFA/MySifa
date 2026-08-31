@@ -6129,10 +6129,14 @@ async function applyF(){
   const needSais=S.page==='saisies' || (S.page==='production' && (S.subPage||'kpis')==='saisies');
   // Quand on change les filtres, repartir en haut (offset 0)
   S.saisiesOffset = 0;
+  const needRetour = S.page==='production' && (S.subPage||'kpis')==='retour';
   await Promise.all([
     loadHist(),
     loadProd(),
-    needSais?loadSaisies({noRender:true}):Promise.resolve()
+    needSais?loadSaisies({noRender:true}):Promise.resolve(),
+    // L'onglet Retour de prod lit la periode et les machines dans S.fv :
+    // changer les filtres doit le recharger comme les autres.
+    needRetour?loadRetourProd({}):Promise.resolve()
   ]);
   render();
 }
@@ -6213,6 +6217,12 @@ function _datePresets(){
   };
   const today = new Date(now);
   const yesterday = new Date(now); yesterday.setDate(now.getDate()-1);
+  // « Hier » ne veut rien dire dans un atelier qui ne tourne pas sept jours sur
+  // sept : un lundi matin, il designe un dimanche vide. Le raccourci pointe la
+  // derniere journee REELLEMENT travaillee, resolue par le serveur (le
+  // navigateur sait quel jour on est, pas ou se trouve la derniere saisie).
+  const veille = fmt(yesterday);
+  const dernierJour = S.dernierJourSaisi || veille;
   const last7Start = new Date(now); last7Start.setDate(now.getDate()-6);
   const last30Start = new Date(now); last30Start.setDate(now.getDate()-29);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -6220,7 +6230,9 @@ function _datePresets(){
   const prevMonthStart = new Date(now.getFullYear(), now.getMonth()-1, 1);
   return [
     {key:'today',     label:"Aujourd'hui",       from:fmt(today),         to:fmt(today)},
-    {key:'yesterday', label:'Hier',              from:fmt(yesterday),     to:fmt(yesterday)},
+    {key:'yesterday',
+     label: dernierJour === veille ? 'Hier' : 'Dernier jour',
+     from: dernierJour, to: dernierJour},
     {key:'last7',     label:'7 derniers jours',  from:fmt(last7Start),    to:fmt(today)},
     {key:'last30',    label:'30 derniers jours', from:fmt(last30Start),   to:fmt(today)},
     {key:'thisMonth', label:'Mois en cours',     from:fmt(monthStart),    to:fmt(today)},
@@ -6228,7 +6240,32 @@ function _datePresets(){
   ];
 }
 
+
+// Derniere journee travaillee : resolue une fois, puis gardee en etat. Sans
+// elle, le raccourci « Hier » retombe sur la veille calendaire.
+async function chargerDernierJourSaisi(){
+  if(S._dernierJourEnCours) return;
+  S._dernierJourEnCours = true;
+  try{
+    const d = await api('/api/production/dernier-jour-saisi');
+    if(!d || !d.jour) return;
+    S.dernierJourSaisi = d.jour;
+    // L'etat initial pose la veille CALENDAIRE en dur. Tant que l'utilisateur
+    // n'y a pas touche, on la remplace par la derniere journee travaillee :
+    // ouvrir la page un lundi sur un dimanche vide n'apprend rien. Un filtre
+    // deja modifie n'est jamais ecrase.
+    if(S.fv.date_from === d.veille && S.fv.date_to === d.veille && d.jour !== d.veille){
+      S.fv.date_from = d.jour;
+      S.fv.date_to = d.jour;
+      await applyF();
+      return;
+    }
+    render();
+  }catch(e){ /* on reste sur la veille calendaire, c'est un repli acceptable */ }
+}
+
 function renderDatePresets(){
+  if(S.dernierJourSaisi === undefined) chargerDernierJourSaisi();
   const presets = _datePresets();
   const curFrom = S.fv.date_from || '';
   const curTo = S.fv.date_to || '';
@@ -6922,42 +6959,51 @@ function buildParams(){
 async function loadHist(){const d=await api('/api/dashboard/historique?'+buildParams());if(d)S.historique=d;}
 async function loadProd(){const d=await api('/api/dashboard/production?'+buildParams());if(d)S.production=d;}
 async function loadRetourProd(patch){
-  // Retour de production — meme API que la page /rapports-prod, meme rendu
+  // Retour de production — meme API que le reste du module, meme rendu partage
   // (static/mysifa_retour_prod.js). Ne jamais reimplementer le rendu ici :
   // deux vues du meme dossier ne doivent pas donner deux chiffres.
+  //
+  // La PERIODE et les MACHINES viennent de la barre de filtres de la page
+  // Production (S.fv), pas de selecteurs propres a l'onglet : un ecran qui
+  // redemande ce que la page sait deja n'est pas emboite, il est pose a cote.
   const st = Object.assign({
-    mode:'jour', jour:rpHier(), year:null, week:null,
     machine:'', machines:[], periode:null, vue:'feuille',
-    feuille:null, lignes:null, q:'', resultats:null, dossier:null, cr:null
+    feuille:null, frise:null, lignes:null, q:'', dossier:null, cr:null, erreur:null
   }, S.retourProd||{}, patch||{});
+  // machine vide = toutes les machines. C'est un choix, pas une absence de
+  // choix : on ne bascule donc jamais d'office sur la premiere de la liste.
 
-  const qs = st.mode==='semaine'
-    ? 'mode=semaine&year='+encodeURIComponent(st.year)+'&week='+encodeURIComponent(st.week)
-    : 'mode=jour&jour='+encodeURIComponent(st.jour);
-
-  // `api()` leve sur toute reponse non-OK : un dossier sans saisie (404) ou une
-  // periode invalide casserait l'onglet entier. On isole chaque appel et on
-  // garde le message pour l'afficher a sa place, plutot que de perdre la vue.
+  const qs = rpQs();
   st.erreur = null;
   try {
     const p = await api('/api/rapports-prod/periode?'+qs);
     if(p){
       st.periode = p;
-      st.machines = p.machines||[];
-      if(st.machines.indexOf(st.machine)<0) st.machine = st.machines[0]||'';
+      st.machines = rpMachinesVisibles(p.machines||[]);
+      if(st.machine && st.machines.indexOf(st.machine) < 0) st.machine = '';
     }
 
     if(st.dossier){
       st.cr = await api('/api/rapports-prod/dossier/'+encodeURIComponent(st.dossier));
     } else if(st.vue==='feuille'){
-      st.feuille = st.machine
-        ? await api('/api/rapports-prod/retour-atelier?machine='+encodeURIComponent(st.machine)+'&'+qs)
-        : null;
+      // Deux appels : la feuille (chiffres et remontees) et la frise
+      // (chronologie). Elles ne servent pas la meme lecture.
+      const [feuille, frise] = await Promise.all([
+        api('/api/rapports-prod/retour-atelier?machine='
+            + encodeURIComponent(st.machine||'') + '&' + qs),
+        api('/api/rapports-prod/frise?machine='
+            + encodeURIComponent(st.machine||'') + '&' + qs)
+      ]);
+      st.feuille = feuille;
+      st.frise = frise;
     } else {
-      const d = await api('/api/rapports-prod/comptes-rendus?'+qs+'&machine='+encodeURIComponent(st.machine||''));
+      const d = await api('/api/rapports-prod/comptes-rendus?'+qs
+                          +'&machine='+encodeURIComponent(st.machine||''));
       st.lignes = (d&&d.lignes)||[];
     }
   } catch(e){
+    // `api()` leve sur toute reponse non-OK : un dossier sans saisie (404)
+    // casserait l'onglet entier. On garde le message pour l'afficher a sa place.
     st.erreur = (e && e.message) || 'Erreur de chargement';
     if(st.dossier) st.cr = null;
   }
@@ -6968,23 +7014,45 @@ function rpHier(){
   const d=new Date(); d.setDate(d.getDate()-1);
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
-function rpAujourdhui(){
-  const d=new Date();
-  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+
+// Periode = celle de la barre de filtres. A defaut (aucune date posee), la
+// veille : c'est la vue du point de production du matin.
+function rpQs(){
+  const f = S.fv || {};
+  const du = f.date_from || '', au = f.date_to || '';
+  if(du || au){
+    return 'mode=plage&du='+encodeURIComponent(du||au)+'&au='+encodeURIComponent(au||du);
+  }
+  return 'mode=jour&jour='+encodeURIComponent(rpHier());
 }
-function rpSemainePrecedente(){
-  const d=new Date(); d.setDate(d.getDate()-7);
-  const j=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
-  j.setUTCDate(j.getUTCDate()+4-(j.getUTCDay()||7));
-  const a=new Date(Date.UTC(j.getUTCFullYear(),0,1));
-  return {year:j.getUTCFullYear(), week:Math.ceil((((j-a)/86400000)+1)/7)};
+
+// Machines = celles du filtre, quand il en pose. Si l'intersection est vide
+// (nom canonique different de celui des saisies), on rend toutes celles de la
+// periode plutot qu'un ecran vide sans explication.
+function rpMachinesVisibles(dePeriode){
+  const choisies = (S.fv && S.fv.machines) || [];
+  if(!choisies.length) return dePeriode;
+  const bas = choisies.map(m=>String(m).trim().toLowerCase());
+  const garde = dePeriode.filter(m=>bas.indexOf(String(m).trim().toLowerCase())>=0);
+  return garde.length ? garde : dePeriode;
 }
+
 async function rpMaj(patch){
   S.retourProd = Object.assign({}, S.retourProd||{}, patch);
   render();
   try { await loadRetourProd(patch); }
   catch(e){ S.retourProd = Object.assign({}, S.retourProd||{}, {erreur:(e&&e.message)||'Erreur'}); }
   render();
+}
+
+// Impression de la feuille depuis MyProd : on masque tout sauf `.rp-feuille`
+// (voir static/mysifa_retour_prod.css), on imprime, on remet en etat.
+function rpImprimer(){
+  document.body.classList.add('rp-impression');
+  const fin = ()=>{ document.body.classList.remove('rp-impression');
+                    window.removeEventListener('afterprint', fin); };
+  window.addEventListener('afterprint', fin);
+  setTimeout(()=>{ window.print(); setTimeout(fin, 1500); }, 60);
 }
 async function loadMachineStatus(){
   try{
@@ -7120,19 +7188,15 @@ function renderRetourProd(){
   const st = S.retourProd;
   if(!RP) return h('div',{className:'card-empty'},"Module de rendu non charge (mysifa_retour_prod.js).");
   if(!st)  return h('div',{className:'card-empty'},'Chargement du retour de production...');
+
+  const lbl = {fontSize:'11px',fontWeight:'700',color:'var(--muted)',
+               textTransform:'uppercase',letterSpacing:'.5px'};
+  const seg = (actif)=>'rp-seg'+(actif?' actif':'');
+
   const messageErreur = st.erreur
     ? h('div',{className:'card',style:{padding:'14px 16px',marginBottom:'14px',
         borderColor:'var(--warn)',color:'var(--text2)',fontSize:'13px'}}, st.erreur)
     : null;
-
-  const champ = {background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'8px',
-                 padding:'6px 10px',color:'var(--text)',fontSize:'13px',fontFamily:'inherit'};
-  const lbl = {fontSize:'11px',fontWeight:'700',color:'var(--muted)',
-               textTransform:'uppercase',letterSpacing:'.5px'};
-  const puce = (actif)=>({background:actif?'var(--accent-bg)':'transparent',
-    border:'1px solid '+(actif?'var(--accent)':'var(--border)'),borderRadius:'999px',
-    padding:'6px 12px',fontSize:'12px',fontWeight:'600',cursor:'pointer',
-    fontFamily:'inherit',color:actif?'var(--accent)':'var(--text2)'});
 
   // Detail d'un dossier : la liste laisse la place au compte-rendu, editable.
   if(st.dossier){
@@ -7152,72 +7216,61 @@ function renderRetourProd(){
     }
     return h('div',null,
       h('div',{style:{margin:'0 0 14px'}},
-        h('button',{type:'button',style:puce(false),
+        h('button',{type:'button',className:'rp-seg',
           onClick:()=>rpMaj({dossier:null,cr:null})},'← Retour a la liste')),
-      messageErreur,
-      frag);
+      messageErreur, frag);
   }
 
-  const toolbar = h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap',
-                                  alignItems:'center',margin:'0 0 14px'}},
-    h('label',{style:lbl},'Periode'),
-    h('select',{value:st.mode,style:champ,onChange:async(e)=>{
-      const mode=e.target.value;
-      const sp=rpSemainePrecedente();
-      await rpMaj(mode==='semaine'?{mode:'semaine',year:sp.year,week:sp.week}
-                                  :{mode:'jour',jour:st.jour||rpHier()});
-    }},
-      h('option',{value:'jour',selected:st.mode==='jour'},'Jour'),
-      h('option',{value:'semaine',selected:st.mode==='semaine'},'Semaine')),
-    st.mode==='semaine'
-      ? h('input',{type:'week',style:champ,
-          defaultValue:(st.year&&st.week)?(st.year+'-W'+String(st.week).padStart(2,'0')):'',
-          onChange:async(e)=>{const m=/^(\d{4})-W(\d{1,2})$/.exec(e.target.value||'');
-            if(m) await rpMaj({year:parseInt(m[1],10),week:parseInt(m[2],10)});}})
-      : h('input',{type:'date',style:champ,defaultValue:st.jour||rpHier(),
-          onChange:async(e)=>{ if(e.target.value) await rpMaj({jour:e.target.value}); }}),
-    h('button',{type:'button',style:puce(st.mode==='jour'&&st.jour===rpHier()),
-      onClick:()=>rpMaj({mode:'jour',jour:rpHier()})},'Hier'),
-    h('button',{type:'button',style:puce(st.mode==='jour'&&st.jour===rpAujourdhui()),
-      onClick:()=>rpMaj({mode:'jour',jour:rpAujourdhui()})},"Aujourd'hui"),
-    h('button',{type:'button',style:puce(st.mode==='semaine'),onClick:()=>{
-      const sp=rpSemainePrecedente(); rpMaj({mode:'semaine',year:sp.year,week:sp.week});
-    }},'Semaine passee'),
-    h('label',{style:Object.assign({marginLeft:'8px'},lbl)},'Machine'),
-    h('select',{value:st.machine,style:champ,
+  // Barre de l'onglet : uniquement ce qui lui est propre. La periode et les
+  // machines restent celles de la barre de filtres au-dessus.
+  const per = st.periode || {};
+  const barre = h('div',{style:{display:'flex',gap:'10px',flexWrap:'wrap',
+                                alignItems:'center',margin:'0 0 14px'}},
+    h('span',{style:Object.assign({},lbl)}, per.label || 'Periode'),
+    h('span',{style:{fontSize:'12px',color:'var(--muted)'}},
+      'suit les filtres ci-dessus'),
+    h('label',{style:Object.assign({marginLeft:'8px'},lbl)},'Feuille de'),
+    h('select',{value:st.machine,className:'rp-select',
       onChange:async(e)=>{ await rpMaj({machine:e.target.value}); }},
-      ...((st.machines||[]).length
-          ? st.machines.map(m=>h('option',{value:m,selected:m===st.machine},m))
-          : [h('option',{value:''},'Aucune machine sur la periode')])),
+      h('option',{value:'',selected:!st.machine},'Toutes les machines'),
+      ...(st.machines||[]).map(m=>h('option',{value:m,selected:m===st.machine},m))),
     h('div',{style:{flex:'1'}}),
-    h('button',{type:'button',style:puce(st.vue==='feuille'),
+    h('button',{type:'button',className:seg(st.vue==='feuille'),
       onClick:()=>rpMaj({vue:'feuille'})},'Feuille atelier'),
-    h('button',{type:'button',style:puce(st.vue==='liste'),
+    h('button',{type:'button',className:seg(st.vue==='liste'),
       onClick:()=>rpMaj({vue:'liste'})},'Comptes-rendus'),
-    h('button',{type:'button',style:puce(false),
-      onClick:()=>{window.location.href='/rapports-prod';}},'Plein ecran / impression')
+    ...(st.vue==='feuille' && st.feuille
+        ? [h('button',{type:'button',className:'rp-seg',onClick:rpImprimer},'Imprimer')]
+        : [])
   );
 
   if(st.vue==='feuille'){
     const frag = h('div',{className:'card',style:{padding:'18px 20px'}});
     frag.innerHTML = st.feuille
-      ? RP.renderFeuille(st.feuille)
+      ? RP.renderFeuille(st.feuille, st.frise)
       : '<div class="rp-vide">Aucun dossier cloture sur cette periode.</div>';
-    return h('div',null, toolbar, messageErreur, frag);
+    // Infobulle au survol et ouverture au clic : la frise sert a reperer, pas
+    // seulement a regarder. Branche avant insertion — le render() de MyProd
+    // remplace l'arbre a chaque passe.
+    RP.brancherFrise(frag, { onClic: (d)=>rpMaj({dossier:d}) });
+    // Les remontees de la feuille se valident, se corrigent et se commentent.
+    // Chaque bouton porte son dossier : la feuille en melange plusieurs.
+    RP.brancher(null, {
+      racine: frag,
+      toast: (m,t)=>{ try{ showToast(m,t); }catch(e){} },
+      onSaved: ()=>rpMaj({})
+    });
+    return h('div',null, barre, messageErreur, frag);
   }
 
   // Vue liste : recherche libre (tout dossier) + dossiers clotures sur la periode.
-  const rech = h('div',{className:'card',style:{padding:'14px 16px',marginBottom:'14px'}});
+  const rech = h('div',{className:'rp-recherche'});
   rech.innerHTML =
-      '<label style="display:block;font-size:11px;font-weight:600;color:var(--muted);'
-    + 'text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">'
-    + "Ouvrir le compte-rendu de n'importe quel dossier</label>"
+      "<label for=\"rp-q\">Ouvrir le compte-rendu de n'importe quel dossier</label>"
     + '<input type="search" id="rp-q" autocomplete="off" placeholder="N&deg; de dossier, client '
-    + 'ou designation &mdash; meme hors periode" style="width:100%;background:var(--bg);'
-    + 'border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);'
-    + 'font-size:14px;font-family:inherit">'
+    + 'ou designation &mdash; meme hors periode">'
     + '<div class="rp-note" style="margin-top:7px">La liste ci-dessous ne montre que les dossiers '
-    + 'clotures sur la periode. La recherche atteint tous les dossiers ayant des saisies.</div>'
+    + 'clotures sur la periode filtree. La recherche atteint tous les dossiers ayant des saisies.</div>'
     + '<div id="rp-qres"></div>';
   const champQ = rech.querySelector('#rp-q');
   const boiteQ = rech.querySelector('#rp-qres');
@@ -7247,7 +7300,7 @@ function renderRetourProd(){
   tab.querySelectorAll('tr[data-dossier]').forEach(tr=>{
     tr.onclick = ()=>rpMaj({dossier:tr.getAttribute('data-dossier')});
   });
-  return h('div',null, toolbar, messageErreur, rech, tab);
+  return h('div',null, barre, messageErreur, rech, tab);
 }
 
 function formatJourLabel(j){

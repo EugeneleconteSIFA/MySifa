@@ -478,3 +478,207 @@ l'endpoint s'en charge.
 (module partagé, `mysifa_prod_core.js`, `mysifa_cmdk.js`, et les scripts
 extraits de `rapports_prod_page.py` et `html.py`) · 9 suites Python + la suite
 JS au vert. **Le boot reste à faire sur v1.**
+
+---
+
+## 7. Quatrième passe — emboîtement dans MyProd, unités, lisibilité
+
+### L'onglet devient le seul foyer
+
+La page autonome `/rapports-prod` est supprimée, ainsi que la tuile portail.
+Le module vit désormais dans **MyProd › Production › Retour de prod**
+(`/prod#retour`), et nulle part ailleurs. L'entrée de la palette de commandes
+pointe l'onglet.
+
+### Ce qui n'était pas emboîté
+
+L'onglet portait ses propres sélecteurs de période et de machine, alors que la
+page Production a déjà une barre de filtres (période avec ses raccourcis
+Aujourd'hui / Hier / 7 jours / 30 jours / mois, machines, opérateurs, dossier).
+Deux jeux de commandes pour la même chose : l'utilisateur ne sait plus lequel
+fait foi.
+
+L'onglet lit maintenant `S.fv.date_from` / `S.fv.date_to` et `S.fv.machines`.
+`applyF()` le recharge comme les autres onglets. Il ne garde que ce qui lui est
+propre : de quelle machine est la feuille, feuille ou comptes-rendus, imprimer.
+
+L'API a gagné un mode `plage` (deux dates libres) à côté de `jour` et
+`semaine` — sans lui, l'onglet aurait dû retraduire une plage quelconque en
+journée ou en semaine ISO, c'est-à-dire mentir sur ce qu'il affiche.
+
+Si le filtre machines ne recoupe aucune machine de la période (nom canonique
+différent de celui des saisies), l'onglet rend toutes celles de la période
+plutôt qu'un écran vide sans explication.
+
+### L'unité était fausse
+
+`vitesse_m_h` et `cadence_m_h` affichaient des mètres par **heure** : « 1 789
+m/h ». Or une machine se règle en **m/min**, `produit_series.vitesse_m_min` est
+en m/min, l'ancien rapport hebdo affichait « 57 m/min », et
+`app/web/html.py:7269` calcule déjà `métrage / (temps_prod + temps_arrêt)` en
+m/min — c'est-à-dire exactement la cadence, dans la bonne unité.
+
+Le service ne convertit plus rien : `vitesse_m_min` et `cadence_m_min`, la
+médiane de référence lue telle quelle dans `produit_series`. Un `×60` retiré,
+c'est une classe d'erreur en moins. 1 789 m/h se lit maintenant 29,8 m/min.
+
+### Texte au minimum, texte lisible
+
+Titres et libellés resserrés (« Ce qui est sorti de la machine » → « Production »,
+« Ce qui a coûté le plus de temps » → « Temps perdu », « À reprendre au point de
+production » → « À reprendre »), paragraphe explicatif de la cadence remplacé
+par une infobulle sur le titre, points de vigilance sans le mot « dossier »
+répété à chaque ligne.
+
+Une redondance visible sur la capture est corrigée : la colonne Code affichait
+`66` et la colonne Opération `66 - Attente matière`. `sansCode()` retire le
+préfixe quand le code est déjà à côté.
+
+Rien ne descend plus sous 12 px — la feuille se lit debout devant une machine.
+Valeurs de KPI à 32 px, corps de texte à 15 px, méta à 12,5 px.
+
+### Animation au survol
+
+Reprise des tokens de `static/motion.css` (`--mo-fast`, `--ease-out`) plutôt
+qu'inventer des durées : KPI qui se soulève, ligne de tableau qui prend un
+liseré d'accent, citation dont la barre s'épaissit, compteur de vigilance qui
+grossit légèrement, boutons et champs. Tout est neutralisé sous
+`prefers-reduced-motion: reduce` et `body.reduce-anim`, comme le reste.
+
+L'impression depuis MyProd masque la page par `visibility` et laisse sortir la
+seule `.rp-feuille` — le flux est conservé, donc la feuille ne se reconstruit
+pas.
+
+`tests/test_retour_prod_rendu.js` couvre désormais l'unité (aucun `m/h` dans la
+sortie), le retrait du code dupliqué et le formatage m/min.
+
+---
+
+## 8. Cinquième passe — le métrage manquant, et le suivi des remontées
+
+### Pourquoi un dossier affichait 0 m
+
+Cohésio 2 du 27/08 : 4 h 17 de production, 0 m. Ce n'était pas un cas limite,
+c'était une reconstruction fausse.
+
+`app/services/dossier_stats.py::_enrich_metrage` — qui alimente
+`produit_series.metrage_m` et la liste des saisies que les opérateurs relisent
+chaque jour — pose trois règles, déjà corrigées une fois pour ce même genre de
+bug :
+
+1. Les compteurs vivent dans `metrage_total_debut` / `metrage_total_fin` ;
+   `metrage_prevu` / `metrage_reel` ne sont que **le repli** des lignes
+   antérieures.
+2. Le compteur de début appartient au **dossier**, pas à l'opérateur : l'équipe
+   qui clôture n'a pas forcément posé le code de début.
+3. Sans compteur de début connu, **il n'y a pas de métrage** — on ne prend pas 0
+   pour origine, sinon c'est le compteur machine entier qui sort.
+
+Le module lisait uniquement l'ancien couple, sur les seules lignes de fin, avec
+un `MAX − MIN` et un seuil à 1 000 000 pour écarter les compteurs bruts —
+héritage de l'ancien rapport hebdomadaire. Un dossier dont le compteur est dans
+les nouvelles colonnes sortait donc à 0, et `_saisies()` ne sélectionnait même
+pas ces colonnes.
+
+La règle canonique est désormais reproduite à l'identique, le seuil heuristique
+a disparu, et huit cas la verrouillent : repli, priorité des nouvelles colonnes,
+deux cycles, début posé par un autre conducteur, annulation bornant un cycle,
+clôture orpheline.
+
+**Effet de bord assumé :** la notion de « métrage prévu » est retirée. Elle
+lisait `metrage_prevu`, c'est-à-dire un compteur de début — un objectif
+reconstitué à partir d'une valeur qui n'en est pas un.
+
+### Suivi des remontées
+
+Migration `2026_08_28_retour_prod_suivi.py`, deux tables, aucune colonne ajoutée
+ailleurs. Une remontée peut venir de quatre sources ; une **clé stable** les
+réconcilie (`saisie:<id>`, `infoprod:<no>`, `seuil:<id>`, `note:<id>`), ce qui
+permet un seul mécanisme de suivi.
+
+Trois gestes sur chaque remontée : **valider** (c'est traité), **modifier** (le
+texte part vers sa source d'origine), **commenter** (une note rattachée à la
+clé). Plus un commentaire libre sur le dossier.
+
+Deux décisions : valider n'efface pas — ce qui disparaît de l'écran n'est jamais
+relu, donc la remontée reste affichée, marquée, et se dévalide. Et un motif
+d'annulation se valide mais ne se corrige pas : c'est la trace d'un geste, pas
+une remontée qu'on complète après coup.
+
+### Le reste
+
+Colonne **Client** dans la cadence · section « Temps perdu » renommée
+**Arrêts**, colonne Code retirée (elle répétait le libellé) · **Toutes les
+machines** dans le sélecteur de feuille · champs et boutons sortis du fond de
+page (`.rp-seg`, `.rp-select`, `.rp-recherche` : le bloc prend le fond de page,
+le champ garde celui des cartes).
+
+`tests/test_rapport_dossier.py` : 14 cas dont le métrage canonique et le suivi.
+`tests/test_retour_prod_rendu.js` : les trois gestes, la remontée traitée, le
+motif d'annulation non corrigeable, la colonne client, la section Arrêts.
+
+---
+
+## 9. Sixième passe — « Hier », la frise, et la reprise des commentaires
+
+### « Hier » désigne la dernière journée travaillée
+
+Un lundi matin, le raccourci pointait un dimanche vide. Le navigateur sait quel
+jour on est, pas où se trouve la dernière saisie : le calcul est donc passé au
+serveur (`GET /api/production/dernier-jour-saisi`), qui renvoie le dernier jour
+portant une saisie non annulée **jusqu'à la veille incluse** — la journée en
+cours n'est jamais retenue.
+
+La puce garde son libellé « Hier » quand la dernière journée travaillée *est* la
+veille, et devient « Dernier jour » sinon, avec la date en infobulle. Une puce
+marquée « Hier » qui charge un vendredi serait un mensonge gratuit.
+
+Ça vaut pour toute la page Production, pas seulement le Retour de prod : c'est
+la barre de filtres qui est corrigée.
+
+### Frise de production
+
+Quatre arbitrages retenus : dans la feuille **et** dans le compte-rendu ;
+segments colorés par phase ; réel seul ; axe en heures ouvrées, nuits repliées.
+
+L'axe ne montre que les journées travaillées, chacune large à proportion de sa
+durée réelle — une demi-journée et une journée de douze heures ne doivent pas se
+ressembler. Les journées sans saisie se replient en un trait.
+
+**Les saisies restées ouvertes d'un jour à l'autre ne commandent pas l'axe.** Une
+ligne oubliée un soir couvre la nuit entière et déplierait précisément ce qu'on
+cherche à replier ; elle reste dessinée dans son slot, mais ne définit plus les
+heures travaillées. Sans cette règle, une seule saisie oubliée faisait passer le
+jeudi de 8 h à 18 h.
+
+Un dossier commencé avant la période ou non terminé porte un bord ouvert de
+chaque côté : le tronquer sans le dire ferait croire à une production plus
+courte qu'elle ne fut.
+
+**Les positions sont calculées côté serveur, en pourcentage.** Une géométrie
+calculée dans le navigateur serait invisible aux tests, et c'est exactement le
+genre de calcul qui dérape en silence. `intervalles()` est devenue la brique
+commune au calcul des temps et au tracé : les calculer deux fois, c'est se
+donner deux chronologies pour un même dossier.
+
+Un clic sur un slot ouvre le compte-rendu de son dossier.
+
+### Commentaires : citation, masquage
+
+« Commenter » ajoutait une remontée de plus, qui noyait celle qu'elle commentait.
+Une réponse se range désormais **sous** sa remontée, en citation ; seules les
+notes libres restent des entrées à part entière.
+
+Nouvel état **masqué**, distinct de validé (migration `retour_prod_masque`).
+Toutes les remontées ne parlent pas de la qualité de production : « 10h »,
+« 5h25 », un mot laissé à l'équipe suivante. Les valider serait mentir — elles
+n'ont pas été traitées, il n'y avait rien à traiter. Elles quittent la liste
+principale et restent derrière un bouton « Commentaires masqués (n) », en face
+de « Vos écrits ». Rien n'est effacé : une remontée jugée hors sujet un jour
+peut se révéler utile le lendemain.
+
+La migration est séparée de `retour_prod_suivi` : une migration déjà passée en
+production ne rejoue pas, et son NOM ne doit jamais changer.
+
+`tests/test_rapport_dossier.py` : 20 cas. `tests/test_retour_prod_rendu.js` :
+axe, débordements, phases, citations, masquage.

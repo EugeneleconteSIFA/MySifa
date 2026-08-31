@@ -48,8 +48,6 @@
       msActive: "1",
       // Affichage des matières MyStock : "reference" (une ligne par référence,
       // déclinaisons dépliables) ou "liste" (une ligne par déclinaison).
-      // Relu du navigateur au démarrage — voir chargerVueMystock.
-      msVue: "reference",
       prodQ: "",
       // Onglet actif de la page Produits : base Coûts matières ou MyStock.
       prodTab: "mystock",
@@ -1020,18 +1018,6 @@
     return window.MysFournisseurPicker.fromSelect(el, opts || {});
   }
 
-  function fournisseurOptions(selectedId) {
-    return (
-      '<option value="">— Sans fournisseur —</option>' +
-      S.fournisseurs
-        .map(
-          (f) =>
-            `<option value="${f.id}" ${String(selectedId) === String(f.id) ? "selected" : ""}>${escHtml(f.nom)}</option>`
-        )
-        .join("")
-    );
-  }
-
   const DECL_LABEL = { LAIZE: "laize", GRAMMAGE: "grammage" };
 
   /** Bouton d'action en icône seule, avec bulle d'aide au survol. */
@@ -1039,239 +1025,156 @@
     return `<button type="button" class="ico-btn${danger ? " danger" : ""}" ${attr}="${escAttr(valeur)}" title="${escAttr(titre)}" aria-label="${escAttr(titre)}">${icon(nom, 15)}</button>`;
   }
 
-  /** Cellule de déclinaison : liste de laizes, ou grammage à saisir. */
-  function declinaisonCell(m, d) {
-    if (!S.canWrite) return escHtml(d.libelle);
-    if (m.type_declinaison === "LAIZE") {
-      const opts =
-        '<option value="">— à choisir —</option>' +
-        S.laizes
-          .map(
-            (l) =>
-              `<option value="${l.id}" ${String(d.laize_id) === String(l.id) ? "selected" : ""}>${escHtml(l.label)}</option>`
-          )
-          .join("");
-      return `<select class="ms-inline ms-decl-input" data-ms-decl-laize="${d.id}">${opts}</select>`;
-    }
-    if (m.type_declinaison === "GRAMMAGE") {
-      const v = d.grammage_id ? String(d.libelle).replace(/[^\d.,]/g, "").replace(",", ".") : "";
-      return `<input type="number" step="0.1" min="0" class="ms-inline ms-decl-input ms-gsm"
-                data-ms-decl-gsm="${d.id}" value="${escAttr(v)}" placeholder="g/m²"/>`;
-    }
-    return '<span class="muted">—</span>';
+  /* La vue par référence à chevrons et la vue à plat par déclinaison ont été
+     retirées le 28 août 2026, avec le détail dépliable qui les servait. Toutes
+     trois répondaient à la même question — quel prix pour cette matière — et
+     le prix se saisissait dans la plus cachée des trois. Une seule liste
+     reste : une ligne par matière, le prix modifiable dessus, la fiche de
+     déclinaison pour le paramétrage détaillé.
+
+     Le code des deux vues est dans git, pas ici : le garder aurait laissé
+     croire qu'un réglage pouvait les rallumer. */
+
+  /* ── Une ligne par MATIÈRE, le prix saisi sur place ─────────────────────
+
+     Le prix d'achat ne dépend ni de la laize ni du grammage : un frontal
+     s'achète au m², un adhésif au kilo, et le même papier en 76 et en 102 mm
+     est au même prix. Ce que la laize et le grammage font varier, c'est la
+     QUANTITÉ qu'un produit consomme — donc son coût, calculé sur la
+     déclinaison, ailleurs.
+
+     La liste montre donc ce qu'on paie, une ligne par référence, et le champ
+     de prix est le champ lui-même : ouvrir une fiche pour changer un chiffre
+     qu'on lit déjà était le geste le plus fréquent de cet écran.
+
+     Le détail par déclinaison n'a pas disparu : il vit sur la fiche, qu'on
+     ouvre depuis la ligne. Il redevient nécessaire dès qu'une matière a des
+     fournisseurs différents selon la déclinaison — cas où l'alignement d'un
+     prix unique donnerait un chiffre faux, et où la saisie en place se
+     verrouille en le disant. */
+
+  function msFournisseursPrincipaux(m) {
+    const vus = new Map();
+    (m.declinaisons || []).forEach((d) => {
+      const l = (d.lignes || []).find((x) => x.principal) || (d.lignes || [])[0];
+      if (l) vus.set(l.fournisseur_id == null ? "" : String(l.fournisseur_id), l.fournisseur_nom || null);
+    });
+    return [...vus.entries()].map(([id, nom]) => ({ id: id, nom: nom }));
   }
 
-  /**
-   * Coût au m² d'une ligne de prix.
-   *
-   * Le serveur le calcule ligne par ligne : même déclinaison, mêmes réglages,
-   * prix de la ligne. La ligne principale l'affiche en clair et ouvre la fiche
-   * de paramétrage — c'est elle qui fait foi. Les autres le donnent en retrait :
-   * ce sont des hypothèses, « voilà ce que ça coûterait chez celui-là ».
-   *
-   * Le calcul ne se refait pas côté client : avec un forfait de transport, le
-   * coût ne suit pas le prix proportionnellement.
-   */
-  function coutLigneHtml(d, l) {
-    const cout = l.cout_eur_m2;
-    if (l.principal) {
-      return cout != null && cout > 0
-        ? `<button type="button" class="link-btn" data-ms-open="${d.id}" title="Ouvrir le paramétrage de cette déclinaison">${escHtml(fmtEurM2(cout))}</button>`
-        : `<button type="button" class="link-btn muted" data-ms-open="${d.id}" title="Renseigner poids, devise, taxes et transport">à paramétrer</button>`;
-    }
-    if (cout == null || !(cout > 0)) return '<span class="muted">—</span>';
-    return `<span class="ms-cout-alt" title="Coût si ce fournisseur devenait le principal">${escHtml(fmtEurM2(cout))}</span>`;
-  }
+  /* Le coût au m² d'une matière : celui de ses déclinaisons.
 
-  /**
-   * Zone dépliée : une seule table à plat. Chaque ligne porte sa déclinaison,
-   * son fournisseur, son prix, sa fiche appairée et ses actions.
-   */
-  function mystockDetailHtml(m) {
+     Il n'est pas unique quand le grammage change — c'est précisément ce que le
+     grammage fait varier, là où il ne change pas le prix au kilo. Une
+     fourchette plutôt qu'une moyenne : la moyenne de deux coûts qu'on ne
+     commande jamais ensemble ne correspond à rien.
+
+     Le chiffre ouvre la fiche de paramétrage, seul endroit où poids, devise,
+     taxes et transport se règlent. */
+  function msCoutResume(m) {
     const decls = m.declinaisons || [];
-    const colonnes = m.type_declinaison
-      ? `<th style="width:34px"></th><th>${escHtml(DECL_LABEL[m.type_declinaison])}</th>`
-      : '<th style="width:34px"></th><th>Déclinaison</th>';
-    const lignes = [];
-    decls.forEach((d) => {
-      (d.lignes || []).forEach((l, i) => {
-        const fid = l.fournisseur_id == null ? "" : l.fournisseur_id;
-        const key = `${d.id}|${fid}`;
-        // Chaque ligne montre SON coût au m², calculé avec son prix et les
-        // réglages de la déclinaison. C'est la seule façon de comparer deux
-        // fournisseurs : le prix au kilo ne dit rien tant que le grammage, la
-        // perte, le transport et les taxes ne sont pas passés dessus.
-        // Seule la ligne principale ouvre la fiche — c'est elle qui fait foi ;
-        // les autres sont des hypothèses, affichées en retrait.
-        const cout = coutLigneHtml(d, l);
-        lignes.push(`<tr class="${l.principal ? "ms-principal" : ""}">
-          <td class="ms-statut">${l.principal
-              ? `<span class="badge badge-glassine" title="Ce prix fait foi">Principal</span>`
-              : (S.canWrite ? actionBtn("data-ms-principal", key, "star", "Faire de ce prix celui qui fait foi") : "")}</td>
-          <td class="ms-decl-cell">${i === 0 ? declinaisonCell(m, d) : '<span class="ms-decl-rappel">↳</span>'}</td>
-          <td>${S.canWrite
-              ? `<select class="ms-inline" data-ms-fourn="${escAttr(key)}" data-fourn-cats="${escAttr(fournCatsDepuisMatiere(m).join(","))}">${fournisseurOptions(l.fournisseur_id)}</select>`
-              : escHtml(l.fournisseur_nom || "— Sans fournisseur —")}
-            ${l.fournisseur_id
-              ? `<button type="button" class="ms-tarif-btn" data-ms-tarif="${l.fournisseur_id}|${m.id}"
-                   title="Tarif de ${escAttr(l.fournisseur_nom || "ce fournisseur")} pour ${escAttr(m.reference)} : transport, taxes, base de prix${l.a_tarif === false ? " — aucun tarif propre, réglages hérités" : ""}">${icon("truck", 13)}${l.a_tarif === false ? '<span class="ms-tarif-manquant" aria-hidden="true"></span>' : ""}</button>`
-              : ""}</td>
-          <td>${S.canWrite
-              ? `<input type="number" step="0.0001" class="ms-inline ms-prix" data-ms-prix="${escAttr(key)}" value="${escAttr(l.prix)}"/>`
-              : fmtPrixUnite(l.prix, m.unite)}</td>
-          <td class="ms-unite">${escHtml(m.unite)}</td>
-          <td class="ms-fiche">${cout}</td>
-          <td class="ms-meta">${escHtml(l.updated_at ? String(l.updated_at).replace("T", " ").slice(0, 16) : "—")}${l.updated_by_name ? " · " + escHtml(l.updated_by_name) : ""}</td>
-          <td class="ms-actions">${S.canWrite
-              ? actionBtn("data-ms-open", d.id, "edit", "Ouvrir le paramétrage de cette déclinaison") +
-                (m.type_declinaison
-                  ? actionBtn("data-ms-deriver", d.id, "corner-down-right",
-                      `Dériver : nouveau ${DECL_LABEL[m.type_declinaison]} avec les mêmes réglages`) +
-                    actionBtn("data-ms-new", m.id, "plus",
-                      `Créer un ${DECL_LABEL[m.type_declinaison]} vierge`)
-                  : "") +
-                actionBtn("data-ms-del", key, "trash", "Supprimer cette ligne", true)
-              : ""}</td>
-        </tr>`);
-      });
-    });
-    if (!lignes.length) {
-      return `<div class="ms-detail">
-        <table class="pr-table ms-table">
-          <thead><tr>${colonnes}<th>Fournisseur</th><th>Prix</th><th>Unité</th><th>Coût €/m²</th><th>Modifié</th><th class="ms-actions"></th></tr></thead>
-          <tbody><tr><td colspan="8" class="empty" style="padding:18px">Aucune déclinaison.
-            ${S.canWrite && m.type_declinaison
-              ? `<button type="button" class="btn btn-soft btn-sm" data-ms-new="${m.id}" style="margin-left:8px">Créer ${escHtml(DECL_LABEL[m.type_declinaison] === "laize" ? "une laize" : "un grammage")}</button>`
-              : ""}</td></tr></tbody>
-        </table></div>`;
+    const d = decls[0];
+    const couts = decls.map((x) => x.cout_eur_m2).filter((c) => c != null && c > 0);
+    if (!d) return '<span class="badge badge-silicone">aucune déclinaison</span>';
+    if (!couts.length) {
+      return `<button type="button" class="link-btn muted" data-ms-open="${d.id}"
+        title="Renseigner poids, devise, taxes et transport">à paramétrer</button>`;
     }
-    return `<div class="ms-detail">
-      <table class="pr-table ms-table">
-        <thead><tr>${colonnes}<th>Fournisseur</th><th>Prix</th><th>Unité</th><th>Coût €/m²</th><th>Modifié</th><th class="ms-actions"></th></tr></thead>
-        <tbody>${lignes.join("")}</tbody>
-      </table>
-    </div>`;
+    const mn = Math.min(...couts), mx = Math.max(...couts);
+    const txt = Math.abs(mx - mn) < 1e-9
+      ? escHtml(fmtEurM2(mn))
+      : `${escHtml(fmtEurM2(mn))} <span class="muted">à</span> ${escHtml(fmtEurM2(mx))}`;
+    return `<button type="button" class="link-btn msl-cout" data-ms-open="${d.id}"
+      title="Ouvrir le paramétrage${decls.length > 1 ? " (" + decls.length + " déclinaisons)" : ""}">${txt}</button>`;
   }
 
-  // ─── Deux façons de lire la même liste ─────────────────────────────────────
-  //
-  // La vue « référence » groupe : une ligne par référence MyStock, dépliable sur
-  // ses déclinaisons, avec la saisie en place (prix, fournisseur, laize…). C'est
-  // la vue d'entretien — celle où l'on corrige.
-  //
-  // La vue « liste » met tout à plat : une ligne par déclinaison, en lecture.
-  // C'est la vue de lecture — celle où l'on cherche un coût, où l'on compare
-  // deux grammages, où l'on repère ce qui n'est pas encore paramétré. Elle ne
-  // propose qu'une action, ouvrir la fiche, et c'est ce qui la rend rapide.
-  //
-  // Les deux partent des mêmes données (`S.mystock`) : aucun appel de plus.
+  function mystockMatiereRowHtml(m) {
+    const decls = m.declinaisons || [];
+    const fourns = msFournisseursPrincipaux(m);
+    const nomsF = fourns.map((f) => f.nom).filter(Boolean);
+    const fournCell = nomsF.length === 1
+      ? escHtml(nomsF[0])
+      : (nomsF.length > 1
+          ? `<span class="muted" title="${escAttr(nomsF.join(", "))}">${nomsF.length} fournisseurs</span>`
+          : '<span class="muted">sans fournisseur</span>');
 
-  const MS_VUE_CLE = "mysifa.pricing.msVue";
+    // Un prix unique sur toutes les déclinaisons : c'est le cas normal, et
+    // c'est celui qui s'édite. Deux prix différents pour la même matière sont
+    // un héritage de la saisie par déclinaison : le champ reste ouvert et la
+    // saisie les aligne, mais il ne prétend pas afficher « le » prix.
+    const memePrix = m.prix_min != null
+      && Math.abs((m.prix_max || 0) - (m.prix_min || 0)) < 1e-9;
+    const editable = S.canWrite && decls.length > 0 && fourns.length <= 1;
 
-  /** Le choix d'affichage survit au rechargement — c'est une habitude, pas un filtre. */
-  function chargerVueMystock() {
-    try {
-      const v = window.localStorage.getItem(MS_VUE_CLE);
-      if (v === "reference" || v === "liste") S.filters.msVue = v;
-    } catch (e) {
-      // Navigation privée, stockage refusé : on garde la vue par défaut.
+    let prixCell;
+    if (editable) {
+      const val = memePrix ? String(m.prix_min) : "";
+      const ph = memePrix ? "0" : (m.prix_min != null
+        ? `${fmtNum(m.prix_min, 3, 3)} à ${fmtNum(m.prix_max, 3, 3)}`
+        : "à compléter");
+      const titre = memePrix
+        ? `Prix d'achat de ${m.reference} — appliqué à ${decls.length} déclinaison(s)`
+        : "Prix différents selon la déclinaison — saisir ici les aligne tous";
+      prixCell = `<div class="msl-prix-edit${memePrix ? "" : " msl-prix-diverge"}">
+          <input type="number" class="msl-prix-inp" step="0.001" min="0"
+                 inputmode="decimal" data-ms-prix="${m.id}"
+                 value="${escAttr(val)}" placeholder="${escAttr(ph)}"
+                 title="${escAttr(titre)}" aria-label="${escAttr(titre)}"/>
+          <span class="msl-unite">${escHtml(m.unite || "")}</span>
+          <span class="msl-prix-etat" data-ms-prix-etat="${m.id}"></span>
+        </div>`;
+    } else {
+      const raison = !decls.length
+        ? "Aucune déclinaison — à créer dans MyStock"
+        : (fourns.length > 1
+            ? "Fournisseurs différents selon la déclinaison — à régler sur la fiche"
+            : "Lecture seule");
+      prixCell = `<span title="${escAttr(raison)}">${mystockPrixResume(m)}</span>`;
     }
-  }
 
-  function memoriserVueMystock(v) {
-    try {
-      window.localStorage.setItem(MS_VUE_CLE, v);
-    } catch (e) {
-      /* sans conséquence : la vue reste valable pour la session */
-    }
-  }
+    // Le camion ouvre le tarif du fournisseur POUR CETTE MATIÈRE — transport,
+    // taxes, base de prix. C'est la porte la plus directe depuis l'écart de
+    // coût qu'on cherche à expliquer. La pastille signale un fournisseur sans
+    // tarif propre : ses coûts sortent d'un repli, et personne n'irait le
+    // régler si rien ne le disait.
+    const principale = decls.length
+      ? ((decls[0].lignes || []).find((l) => l.principal) || (decls[0].lignes || [])[0])
+      : null;
+    const fid = principale && principale.fournisseur_id != null ? principale.fournisseur_id : null;
+    const tarifBtn = fid
+      ? `<button type="button" class="ms-tarif-btn" data-ms-tarif="${fid}|${m.id}"
+           title="Tarif de ${escAttr(principale.fournisseur_nom || "ce fournisseur")} pour ${escAttr(m.reference)} : transport, taxes, base de prix${principale.a_tarif === false ? " — aucun tarif propre, réglages hérités" : ""}">${icon("truck", 13)}${principale.a_tarif === false ? '<span class="ms-tarif-manquant" aria-hidden="true"></span>' : ""}</button>`
+      : "";
 
-  function msVueSwitchHtml() {
-    const v = S.filters.msVue;
-    const bouton = (val, nom, titre) =>
-      `<button type="button" class="vs-btn${v === val ? " on" : ""}" data-ms-vue="${val}"
-         title="${escAttr(titre)}" aria-label="${escAttr(titre)}"
-         aria-pressed="${v === val ? "true" : "false"}">${icon(nom, 15)}</button>`;
-    return `<div class="view-switch" role="group" aria-label="Affichage des matières">
-        ${bouton("reference", "layers", "Vue par référence — déclinaisons dépliables, saisie en place")}
-        ${bouton("liste", "list", "Vue liste — une ligne par déclinaison, lecture rapide")}
-      </div>`;
-  }
+    // Créer une déclinaison depuis la liste : dériver reprend les réglages de
+    // la première, le + en crée une vierge. Les deux gestes vivaient dans le
+    // détail dépliable ; ils ne devaient pas partir avec lui.
+    const creer = (S.canWrite && m.type_declinaison)
+      ? (decls.length
+          ? actionBtn("data-ms-deriver", decls[0].id, "corner-down-right",
+              `Dériver : nouveau ${DECL_LABEL[m.type_declinaison]} avec les mêmes réglages`)
+          : "") +
+        actionBtn("data-ms-new", m.id, "plus",
+          `Créer un ${DECL_LABEL[m.type_declinaison]} vierge`)
+      : "";
 
-  /**
-   * Aplatit les matières en une ligne par déclinaison.
-   *
-   * Une référence sans déclinaison produit quand même sa ligne : la faire
-   * disparaître de la liste à plat serait le meilleur moyen de l'oublier.
-   */
-  function mystockDeclinaisonsAPlat() {
-    const lignes = [];
-    (S.mystock || []).forEach((m) => {
-      const decls = m.declinaisons || [];
-      if (!decls.length) {
-        lignes.push({ m, d: null, lignes: [], principal: null });
-        return;
-      }
-      decls.forEach((d) => {
-        // Le prix qui fait foi en tête, les autres à la suite : la ligne montre
-        // tous les fournisseurs de la déclinaison, pas seulement le retenu.
-        // Sans eux, un deuxième fournisseur n'existait nulle part dans cette vue.
-        const prix = (d.lignes || []).slice().sort(
-          (a, b) => (b.principal ? 1 : 0) - (a.principal ? 1 : 0)
-        );
-        lignes.push({ m, d, lignes: prix, principal: prix[0] || null });
-      });
-    });
-    return lignes;
-  }
+    const fiche = decls.length
+      ? `<a class="btn btn-soft btn-sm" href="/pricing/mystock/${decls[0].id}" title="Ouvrir le paramétrage détaillé">Fiche</a>`
+      : "";
 
-  function mystockFlatRowHtml(entree) {
-    const { m, d } = entree;
-    const prix = entree.lignes || [];
-
-    const decl = d
-      ? (d.libelle
-          ? `<strong>${escHtml(d.libelle)}</strong>`
-          : `<span class="muted">${escHtml(DECL_LABEL[m.type_declinaison] || "valeur")} à définir</span>`)
-      : '<span class="muted">sans déclinaison</span>';
-
-    // Trois colonnes empilées en parallèle : une sous-ligne par fournisseur, le
-    // principal en tête. Une déclinaison à fournisseur unique — le cas courant —
-    // garde une ligne d'une seule hauteur.
-    const vide = '<span class="muted">—</span>';
-    const empiler = (rendu) =>
-      prix.length
-        ? prix.map((l) => `<div class="msl-l${l.principal ? " msl-l-main" : ""}">${rendu(l)}</div>`).join("")
-        : vide;
-
-    const fournisseurs = empiler((l) =>
-      l.fournisseur_nom ? escHtml(l.fournisseur_nom) : '<span class="muted">sans fournisseur</span>'
-    );
-    const prixCell = empiler((l) =>
-      l.prix != null ? escHtml(fmtPrixUnite(l.prix, m.unite)) : "—"
-    );
-    const coutCell = prix.length
-      ? empiler((l) =>
-          l.cout_eur_m2 != null && l.cout_eur_m2 > 0
-            ? `<span class="msl-cout">${escHtml(fmtEurM2(l.cout_eur_m2))}</span>`
-            : '<span class="badge badge-silicone">à paramétrer</span>'
-        )
-      : '<span class="badge badge-silicone">à paramétrer</span>';
-
-    const action = d
-      ? actionBtn("data-ms-open", d.id, "edit", "Ouvrir le paramétrage de cette déclinaison")
-      : (S.canWrite && m.type_declinaison
-          ? actionBtn("data-ms-new", m.id, "plus", `Créer un ${DECL_LABEL[m.type_declinaison]}`)
-          : "");
-
-    return `<tr class="msl-row${d ? "" : " msl-vide"}"${d ? ` data-ms-line="${d.id}"` : ""}>
+    return `<tr class="msl-row" data-ms-mat="${m.id}">
         <td>${categorieBadge(m.categorie)}</td>
-        <td class="msl-ref" title="${escAttr(m.designation || m.reference)}"><strong>${escHtml(m.reference)}</strong></td>
-        <td class="msl-decl"${d && d.libelle ? ` title="${escAttr(d.libelle)}"` : ""}>${decl}</td>
-        <td class="msl-fourn">${fournisseurs}</td>
+        <td class="msl-ref"><strong>${escHtml(m.reference)}</strong></td>
+        <td class="msl-des" title="${escAttr(m.designation || "")}">${escHtml(m.designation || "")}</td>
+        <td class="msl-fourn">${fournCell} ${tarifBtn}</td>
         <td class="msl-prix">${prixCell}</td>
-        <td class="msl-coutcell">${coutCell}</td>
-        <td class="ms-actions" onclick="event.stopPropagation()">${action}</td>
+        <td class="msl-coutcell">${msCoutResume(m)}</td>
+        <td class="msl-decl-nb">${decls.length || '<span class="muted">—</span>'}</td>
+        <td class="ms-actions" onclick="event.stopPropagation()">
+          ${creer}
+          ${fiche}
+          <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${m.id}" target="_blank" rel="noopener" title="Ouvrir la fiche dans MyStock">MyStock ↗</a>
+        </td>
       </tr>`;
   }
 
@@ -1285,81 +1188,12 @@
         )
         .join("");
 
-    const rows = S.mystock
-      .map((m) => {
-        const open = !!S.expanded[m.id];
-        const nb = m.nb_declinaisons || 0;
-        // « Réglée » = chiffrée, c'est-à-dire dont on sait sortir un coût au
-        // m². Le compteur d'avant (`nb_parametrees`) comptait les fiches
-        // ouvertes et enregistrées à la main : une déclinaison pouvait afficher
-        // son coût dans le tableau et être annoncée non réglée dans le badge.
-        const prets = m.nb_chiffrees != null ? m.nb_chiffrees : (m.nb_parametrees || 0);
-        // Le fournisseur dont le prix fait foi. Plusieurs déclinaisons peuvent
-        // en avoir des différents : on ne nomme que s'il n'y en a qu'un.
-        const principaux = [...new Set(
-          (m.declinaisons || [])
-            .map((d) => (d.lignes || []).find((l) => l.principal))
-            .filter((l) => l && l.fournisseur_nom)
-            .map((l) => l.fournisseur_nom)
-        )];
-        const fournPrincipal = principaux.length === 1
-          ? escHtml(principaux[0])
-          : (principaux.length
-              ? `<span class="muted">${principaux.length} fournisseurs</span>`
-              : '<span class="muted">—</span>');
-        const lien = nb
-          ? (prets === nb
-              ? `<span class="badge badge-frontal">${prets}/${nb} réglée${nb > 1 ? "s" : ""}</span>`
-              : `<span class="badge ${prets ? "badge-silicone" : "badge-autre"}">${prets}/${nb} réglée${nb > 1 ? "s" : ""}</span>`)
-          : '<span class="muted">—</span>';
-        return `<tr class="ms-row${open ? " open" : ""}" data-ms-row="${m.id}">
-            <td class="ms-caret">${open ? "▾" : "▸"}</td>
-            <td>${categorieBadge(m.categorie)}</td>
-            <td><strong>${escHtml(m.reference)}</strong></td>
-            <td>${escHtml(m.designation)}</td>
-            <td class="ms-mode">${m.type_declinaison
-                ? `<span class="badge badge-silicone">${escHtml(DECL_LABEL[m.type_declinaison])} · ${nb}</span>`
-                : '<span class="badge badge-autre">sans déclinaison</span>'}</td>
-            <td class="ms-prix-cell">${mystockPrixResume(m)}</td>
-            <td>${fournPrincipal}</td>
-            <td>${lien}</td>
-            <td class="row-actions" onclick="event.stopPropagation()">
-              <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${m.id}" target="_blank" rel="noopener" title="Ouvrir la fiche dans MyStock">MyStock ↗</a>
-            </td>
-          </tr>
-          ${open ? `<tr class="ms-detail-row"><td colspan="9">${mystockDetailHtml(m)}</td></tr>` : ""}`;
-      })
-      .join("");
-
-    const plat = S.filters.msVue === "liste";
-    const aPlat = plat ? mystockDeclinaisonsAPlat() : [];
-    const sousTitre = plat
-      ? `${aPlat.length} déclinaison(s) · ${S.mystock.length} matière(s) MyStock`
-      : `${S.mystock.length} matière(s) MyStock`;
-
-    const tableau = plat
-      ? `<div class="table-wrap">
-          <table class="pr-table msl-table">
-            <colgroup>
-              <col style="width:100px"><col>
-              <col style="width:180px"><col style="width:220px">
-              <col style="width:130px"><col style="width:136px"><col style="width:56px">
-            </colgroup>
-            <thead><tr><th>Cat.</th><th>Référence</th><th>Déclinaison</th><th>Fournisseur</th><th>Prix</th><th>Coût €/m²</th><th class="ms-actions"></th></tr></thead>
-            <tbody>${aPlat.map(mystockFlatRowHtml).join("")
-              || '<tr><td colspan="7" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
-          </table>
-        </div>`
-      : `<div class="table-wrap">
-          <table class="pr-table">
-            <thead><tr><th style="width:28px"></th><th>Cat.</th><th>Référence</th><th>Désignation</th><th>Déclinaisons</th><th>Prix en vigueur</th><th>Fournisseur principal</th><th>Réglées</th><th></th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="9" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
-          </table>
-        </div>`;
+    const lignes = S.mystock.map(mystockMatiereRowHtml).join("");
+    const sousTitre = `${S.mystock.length} matière(s) · prix d'achat modifiable en place`;
 
     setContent(`
       <div class="pr-narrow">
-        ${pageHead("Matières", sousTitre, materialsTabsHtml() + msVueSwitchHtml())}
+        ${pageHead("Matières", sousTitre)}
         <div class="filters">
           <input type="search" class="search-input" id="ms-q" placeholder="Rechercher (référence, désignation…)" value="${escAttr(S.filters.msQ)}"/>
           <select id="ms-cat">${catOpts}</select>
@@ -1369,12 +1203,22 @@
             <option value="all" ${S.filters.msActive==="all"?"selected":""}>Toutes</option>
           </select>
         </div>
-        ${tableau}
+        <div class="table-wrap">
+          <table class="pr-table msl-table">
+            <colgroup>
+              <col style="width:100px"><col style="width:180px"><col>
+              <col style="width:180px"><col style="width:190px">
+              <col style="width:140px"><col style="width:60px"><col style="width:170px">
+            </colgroup>
+            <thead><tr>
+              <th>Cat.</th><th>Référence</th><th>Désignation</th><th>Fournisseur principal</th>
+              <th>Prix d'achat</th><th>Coût €/m²</th><th title="Nombre de déclinaisons — laizes ou grammages">Décl.</th><th class="ms-actions"></th>
+            </tr></thead>
+            <tbody>${lignes || '<tr><td colspan="8" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
+          </table>
+        </div>
       </div>
     `);
-
-    bindMaterialsTabs();
-    bindMsVueSwitch();
 
     const qEl = document.getElementById("ms-q");
     let t;
@@ -1384,7 +1228,17 @@
         S.filters.msQ = qEl.value;
         await loadMystockList();
         renderMystockList();
+        // La liste vient d'être reconstruite : sans ça, on ne peut pas taper
+        // deux caractères de suite dans la recherche.
+        const n = document.getElementById("ms-q");
+        if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); }
       }, 300);
+    };
+    qEl.onkeydown = (e) => {
+      if (e.key === "Escape" && qEl.value) {
+        qEl.value = "";
+        qEl.dispatchEvent(new Event("input"));
+      }
     };
     document.getElementById("ms-cat").onchange = async (e) => {
       S.filters.msCat = e.target.value;
@@ -1396,45 +1250,13 @@
       await loadMystockList();
       renderMystockList();
     };
-    document.querySelectorAll("[data-ms-row]").forEach((tr) => {
-      tr.onclick = (e) => {
-        if (e.target.closest("input,select,button,a")) return;
-        const id = tr.getAttribute("data-ms-row");
-        S.expanded[id] = !S.expanded[id];
-        renderMystockList();
-      };
-    });
-    // Vue à plat : la ligne entière ouvre la fiche de paramétrage — c'est la
-    // seule action de cette vue, autant la rendre évidente.
-    document.querySelectorAll("[data-ms-line]").forEach((tr) => {
-      tr.onclick = (e) => {
-        if (e.target.closest("input,select,button,a")) return;
-        navigate("/pricing/mystock/" + tr.getAttribute("data-ms-line"));
-      };
-    });
-    bindMystockActions();
+    bindMsPrixInline();
+    bindMsListeActions();
   }
 
-  function bindMsVueSwitch() {
-    document.querySelectorAll("[data-ms-vue]").forEach((b) => {
-      b.onclick = () => {
-        const v = b.getAttribute("data-ms-vue");
-        if (v === S.filters.msVue) return;
-        S.filters.msVue = v;
-        memoriserVueMystock(v);
-        renderMystockList();
-      };
-    });
-  }
-
-  function parseMsKey(key) {
-    const [decl, fid] = String(key).split("|");
-    return {
-      declinaison_id: parseInt(decl, 10),
-      fournisseur_id: fid === "" || fid === undefined ? null : parseInt(fid, 10),
-    };
-  }
-
+  /* Les actions de la ligne : créer une déclinaison, ouvrir un tarif, ouvrir
+     la fiche de paramétrage. Toutes rechargent la liste après coup — sauf
+     l'ouverture de fiche, qui quitte l'écran. */
   async function msCall(path, body, method) {
     try {
       await api(path, { method: method || "POST", body });
@@ -1442,123 +1264,30 @@
       renderMystockList();
       return true;
     } catch (e) {
-      showToast(e.message, "danger");
+      showToast(e.message || "Enregistrement refusé.", "danger");
       return false;
     }
   }
 
-  function bindMystockActions() {
-    document.querySelectorAll("[data-ms-prix]").forEach((inp) => {
-      inp.onchange = async () => {
-        const k = parseMsKey(inp.getAttribute("data-ms-prix"));
-        const prix = parseFloat(inp.value);
-        if (Number.isNaN(prix)) {
-          showToast("Prix invalide.", "danger");
-          return;
-        }
-        if (await msCall("/api/pricing/mystock/prix", { ...k, prix })) {
-          showToast("Prix enregistré dans MyStock.", "success");
-        }
-      };
-    });
-    document.querySelectorAll("select[data-ms-fourn]").forEach((sel) => {
-      // Converti AVANT la pose du handler : après conversion, `sel` n'est plus
-      // dans le DOM et son onchange ne partirait jamais. On garde une
-      // référence au champ qui porte désormais la valeur.
-      const cats = (sel.getAttribute("data-fourn-cats") || "").split(",").filter(Boolean);
-      const cle = sel.getAttribute("data-ms-fourn");
-      const inst = pickerFournisseur(sel, {
-        categories: cats,
-        placeholder: "Fournisseur…",
-        className: "mys-fp-sm",
-        emptyLabel: "— Sans fournisseur —",
-      });
-      const champ = inst ? inst.hidden : sel;
-      champ.onchange = async () => {
-        const k = parseMsKey(cle);
-        const nouveau = champ.value === "" ? null : parseInt(champ.value, 10);
-        // On renomme le fournisseur de la ligne existante : la recréer lui ferait
-        // perdre son statut de principal.
-        if (
-          await msCall("/api/pricing/mystock/fournisseur", {
-            ...k,
-            nouveau_fournisseur_id: nouveau,
-          })
-        ) {
-          showToast("Fournisseur enregistré dans MyStock.", "success");
-        }
-      };
-    });
-    document.querySelectorAll("[data-ms-principal]").forEach((btn) => {
-      btn.onclick = async () => {
-        const k = parseMsKey(btn.getAttribute("data-ms-principal"));
-        if (await msCall("/api/pricing/mystock/principal", k)) {
-          showToast("Fournisseur principal mis à jour — prix poussé dans MyStock.", "success");
-        }
-      };
-    });
-    document.querySelectorAll("[data-ms-del]").forEach((btn) => {
-      btn.onclick = async () => {
-        const k = parseMsKey(btn.getAttribute("data-ms-del"));
-        const ok = await confirmDelete(
-          "Supprimer cette ligne ? Si c'est la dernière de la déclinaison, la déclinaison part avec."
-        );
-        if (!ok) return;
-        if (await msCall("/api/pricing/mystock/prix", k, "DELETE")) {
-          showToast("Ligne supprimée.", "success");
-        }
-      };
-    });
-    // Dériver : tout est repris sauf la valeur, qui reste à saisir.
+  function bindMsListeActions() {
     document.querySelectorAll("[data-ms-deriver]").forEach((btn) => {
-      btn.onclick = async () => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
         const id = parseInt(btn.getAttribute("data-ms-deriver"), 10);
         if (await msCall("/api/pricing/mystock/declinaisons/deriver", { declinaison_id: id })) {
-          showToast("Déclinaison dérivée — reste à saisir sa valeur.", "success");
+          showToast("Déclinaison dérivée — reste à saisir sa valeur sur la fiche.", "success");
         }
       };
     });
     document.querySelectorAll("[data-ms-new]").forEach((btn) => {
-      btn.onclick = async () => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
         const id = parseInt(btn.getAttribute("data-ms-new"), 10);
         if (await msCall("/api/pricing/mystock/declinaisons", { matiere_id: id })) {
-          showToast("Déclinaison créée — renseignez sa valeur dans la ligne.", "info");
+          showToast("Déclinaison créée — renseignez sa valeur sur la fiche.", "info");
         }
       };
     });
-    document.querySelectorAll("[data-ms-decl-gsm]").forEach((inp) => {
-      inp.onchange = async () => {
-        const v = parseFloat(inp.value);
-        if (!v || v <= 0) {
-          showToast("Grammage invalide.", "danger");
-          return;
-        }
-        if (
-          await msCall("/api/pricing/mystock/declinaisons/valeur", {
-            declinaison_id: parseInt(inp.getAttribute("data-ms-decl-gsm"), 10),
-            valeur_gsm: v,
-          })
-        ) {
-          showToast("Grammage enregistré.", "success");
-        }
-      };
-    });
-    document.querySelectorAll("[data-ms-decl-laize]").forEach((sel) => {
-      sel.onchange = async () => {
-        if (!sel.value) return;
-        if (
-          await msCall("/api/pricing/mystock/declinaisons/valeur", {
-            declinaison_id: parseInt(sel.getAttribute("data-ms-decl-laize"), 10),
-            laize_id: parseInt(sel.value, 10),
-          })
-        ) {
-          showToast("Laize enregistrée.", "success");
-        }
-      };
-    });
-    // Le camion d'une ligne ouvre le tarif de SON fournisseur pour CETTE
-    // matière. C'est la porte la plus directe : on est déjà devant l'écart de
-    // coût qu'on cherche à expliquer.
     document.querySelectorAll("[data-ms-tarif]").forEach((btn) => {
       btn.onclick = async (e) => {
         e.stopPropagation();
@@ -1569,20 +1298,68 @@
         });
       };
     });
-    // Ouverture de la fiche de paramétrage de la déclinaison.
     document.querySelectorAll("[data-ms-open]").forEach((btn) => {
-      btn.onclick = () => navigate("/pricing/mystock/" + btn.getAttribute("data-ms-open"));
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        navigate("/pricing/mystock/" + btn.getAttribute("data-ms-open"));
+      };
     });
   }
 
+  /* La saisie en place. Enregistre au `change` (donc quand le champ est
+     quitté ou validé par Entrée), jamais à la frappe : un prix à moitié tapé
+     ne doit pas partir en base et repartir en historique.
 
-  // ─── Tarifs fournisseurs ───────────────────────────────────────────────────
-  //
-  // Un tarif ne dépend ni de la laize ni du grammage : il dépend de chez qui on
-  // achète — la devise — et de ce qu'on lui achète — base de prix, transport,
-  // taxes. Deux fournisseurs sur la même déclinaison n'ont aucune raison de
-  // partager un mode de transport : Meltavis livre par conteneur depuis l'Asie,
-  // Bostik par forfait local. C'est ce que cet écran permet enfin de dire.
+     Le tableau n'est PAS reconstruit après un enregistrement réussi — seul
+     l'état de la ligne change. Reconstruire ferait perdre le focus et
+     rendrait impossible de corriger deux prix à la suite. */
+  function bindMsPrixInline() {
+    document.querySelectorAll("[data-ms-prix]").forEach((inp) => {
+      const id = parseInt(inp.getAttribute("data-ms-prix"), 10);
+      const etat = document.querySelector(`[data-ms-prix-etat="${id}"]`);
+      const initial = inp.value;
+      const dire = (txt, cls) => {
+        if (!etat) return;
+        etat.textContent = txt || "";
+        etat.className = "msl-prix-etat" + (cls ? " " + cls : "");
+      };
+      inp.onkeydown = (e) => {
+        if (e.key === "Enter") { e.preventDefault(); inp.blur(); }
+        if (e.key === "Escape") { inp.value = initial; inp.blur(); }
+      };
+      inp.onchange = async () => {
+        const brut = String(inp.value || "").trim().replace(",", ".");
+        if (brut === "") { inp.value = initial; return; }
+        const prix = parseFloat(brut);
+        if (!isFinite(prix) || prix < 0) {
+          dire("valeur invalide", "ko");
+          inp.value = initial;
+          return;
+        }
+        if (brut === initial) return;
+        dire("enregistrement…", "");
+        try {
+          const r = await api("/api/pricing/mystock/prix-matiere", {
+            method: "POST",
+            body: { matiere_id: id, prix: prix },
+          });
+          const n = (r && r.declinaisons_touchees) || 0;
+          dire("✓ " + n + " décl.", "ok");
+          inp.classList.remove("msl-prix-diverge");
+          const ligne = inp.closest(".msl-prix-edit");
+          if (ligne) ligne.classList.remove("msl-prix-diverge");
+          // L'état local suit, pour qu'un filtre appliqué juste après ne
+          // réaffiche pas l'ancien prix venu du dernier chargement.
+          const m = (S.mystock || []).find((x) => x.id === id);
+          if (m) { m.prix_min = prix; m.prix_max = prix; }
+          setTimeout(() => dire("", ""), 2500);
+        } catch (e) {
+          dire(e.message || "refusé", "ko");
+          inp.value = initial;
+        }
+      };
+    });
+  }
 
   async function loadTarifFournisseurs() {
     const d = await api("/api/pricing/tarifs/fournisseurs");
@@ -1949,30 +1726,32 @@
     return `<span class="badge ${map[c] || "badge-autre"}">${escHtml(cat || "—")}</span>`;
   }
 
-  /** Bascule entre la base Coûts matières et les matières MyStock. */
+  /** Le chemin du retour depuis la base historique.
+
+     L'onglet « Base Coûts matières » a été retiré le 28 août 2026 : deux
+     onglets côte à côte présentaient deux bases comme deux vérités
+     équivalentes, alors que MyStock est la source et que `mc_material` est
+     l'ancêtre destiné à disparaître. Les fiches historiques restent
+     atteignables par leur URL le temps de finir de vivre — d'où ce bandeau,
+     qui dit où l'on est et comment on en sort. */
   function materialsTabsHtml() {
-    const t = S.filters.matTab;
     return `<div class="tabs">
-      <button type="button" class="tab${t === "couts" ? " on" : ""}" data-tab="couts">Base Coûts matières</button>
-      <button type="button" class="tab${t === "mystock" ? " on" : ""}" data-tab="mystock">Matières MyStock</button>
+      <button type="button" class="tab" data-tab="mystock">← Matières MyStock</button>
+      <span class="tab on">Base Coûts matières (historique)</span>
     </div>`;
   }
 
   function bindMaterialsTabs() {
-    document.querySelectorAll("[data-tab]").forEach((b) => {
+    document.querySelectorAll("button[data-tab]").forEach((b) => {
       b.onclick = async () => {
-        const tab = b.getAttribute("data-tab");
-        if (tab === S.filters.matTab) return;
-        S.filters.matTab = tab;
+        // Un seul bouton subsiste, celui du retour. Pas de garde sur l'onglet
+        // courant : il vaut « mystock » par défaut, et une garde ferait du
+        // retour un bouton mort sur l'écran d'où l'on veut justement sortir.
+        S.filters.matTab = b.getAttribute("data-tab") || "mystock";
         showLoading();
         try {
-          if (tab === "mystock") {
-            await loadMystockList();
-            renderMystockList();
-          } else {
-            await loadMaterialsList();
-            renderMaterialsList();
-          }
+          await loadMystockList();
+          renderMystockList();
         } catch (e) {
           setContent(`<div class="empty" style="color:var(--danger);padding:24px">${escHtml(e.message)}</div>`);
         }
@@ -3826,9 +3605,124 @@
             <input type="number" step="0.01" id="msp-margin" value="${escAttr(f.custom_margin_pct)}" placeholder="Défaut : ${escAttr(defMargin)} %"/>
             <div class="field-hint">Laisser vide pour appliquer la marge par défaut des paramètres.</div>
           </div>
+          <div class="form-section" style="margin-top:14px"><h3>Ce qui fait bouger ce coût</h3>
+            <div class="field-hint" style="margin:-6px 0 10px">
+              Le prix d'achat d'une matière ne dépend ni de sa laize ni de son grammage.
+              Le coût de ce produit, si : une matière payée au kilo coûte au m² son prix
+              multiplié par son poids au m², et ce poids est le grammage majoré de la perte.
+            </div>
+            <div id="msp-leviers">${msProductLeviersHtml()}</div>
+          </div>
         </div>
         <div class="side-panel" id="msp-recap">${productRecapHtml(S.msProdPreview)}</div>
       </div>`;
+  }
+
+  /* ── Ce qui fait bouger le coût de ce produit ────────────────────────────
+
+     Le prix d'achat d'une matière ne dépend ni de sa laize ni de son grammage :
+     on l'achète au m² ou au kilo. Le coût d'un PRODUIT, lui, dépend du
+     grammage — une matière payée au kilo coûte au m² son prix multiplié par
+     son poids au m², et ce poids EST le grammage majoré de la perte. Changer
+     de grammage change donc le prix de revient sans que le prix d'achat ait
+     bougé d'un centime.
+
+     La laize ne fait rien de tel : un m² est un m², quelle que soit la largeur
+     de la bobine. Ce qu'elle fait varier, c'est la QUANTITÉ consommée par une
+     commande — chiffrée par Besoins matières, pas ici. Le bloc le dit, plutôt
+     que de laisser chercher où elle est passée.
+
+     Les déclinaisons voisines sont affichées avec leur écart : c'est la seule
+     façon de VOIR qu'un 22 g/m² coûte deux centimes de plus qu'un 17 avant de
+     l'avoir choisi. Un clic bascule le sélecteur. */
+  function msLevierBlocHtml(d, cible, roleLabel) {
+    const perKg = (d.price_basis || "PER_KG") === "PER_KG";
+    const fleche = `<span class="muted">→</span> <strong>${escHtml(fmtEurM2(d.cout_eur_m2))}</strong>`;
+    const formule = d.cout_eur_m2 == null
+      ? '<span class="muted">coût non calculé — ouvrir la fiche de la déclinaison</span>'
+      : (perKg
+          ? `${escHtml(fmtNum(d.unit_price, 3, 3))} €/kg <span class="muted">×</span> `
+            + `${escHtml(fmtNum(d.weight_per_m2, 4, 4))} kg/m² ${fleche}`
+          : `${escHtml(fmtNum(d.unit_price, 4, 4))} €/m² ${fleche}`);
+
+    // `mentions` et non `notes` : ce sont des phrases que MySifa compose
+    // lui-même, jamais de la saisie utilisateur. Le detecteur de prose brute
+    // se fie au nom de la variable, et un nom mal choisi le ferait crier a
+    // tort — ou, l'inverse, taire un vrai trou ailleurs.
+    const mentions = [];
+    if (perKg && d.grammage_gsm) {
+      mentions.push(`Le poids au m² <strong>est</strong> le grammage : `
+        + `${escHtml(fmtNum(d.grammage_gsm, 0, 1))} g/m²`
+        + (d.perte_pct ? ` + ${escHtml(fmtNum(d.perte_pct, 0, 2))} % de perte` : "")
+        + `. C'est lui qui fait bouger ce coût.`);
+    } else if (!perKg) {
+      mentions.push("Prix au m² : le grammage n'entre pas dans ce coût.");
+    }
+    if (d.laize_mm) {
+      mentions.push(`Laize ${escHtml(fmtNum(d.laize_mm, 0, 0))} mm — <strong>sans effet</strong> sur le €/m². `
+        + "Elle joue sur les quantités consommées, chiffrées dans Besoins matières.");
+    }
+
+    // Les autres déclinaisons de la MÊME matière : même prix d'achat, autre
+    // coût au m². C'est exactement ce que le grammage fait varier.
+    const voisines = (S.msDecls || [])
+      .filter((x) => x.matiere_id === d.matiere_id && x.id !== d.id && x.cout_eur_m2 != null)
+      .sort((a, b) => (a.cout_eur_m2 || 0) - (b.cout_eur_m2 || 0));
+    const chips = voisines.map((v) => {
+      const ecart = (d.cout_eur_m2 != null) ? (v.cout_eur_m2 - d.cout_eur_m2) : null;
+      const signe = ecart == null ? "" : (ecart > 0 ? "+" : "");
+      return `<button type="button" class="msp-lev-chip" data-msp-switch="${escAttr(cible)}"
+        data-msp-decl="${v.id}" title="Basculer sur ${escAttr(v.libelle)}">
+        ${escHtml(v.libelle)} <span class="msp-lev-cout">${escHtml(fmtEurM2(v.cout_eur_m2))}</span>
+        ${ecart == null || Math.abs(ecart) < 1e-9 ? "" :
+          `<span class="msp-lev-ecart ${ecart > 0 ? "up" : "down"}">${signe}${escHtml(fmtEurM2(ecart))}</span>`}
+      </button>`;
+    }).join("");
+
+    return `<div class="msp-lev">
+      <div class="msp-lev-head">
+        <span class="msp-lev-role">${escHtml(roleLabel)}</span>
+        <strong>${escHtml(d.reference)}</strong>
+        <span class="muted">${escHtml(d.libelle)}</span>
+      </div>
+      <div class="msp-lev-formule">${formule}</div>
+      ${mentions.map((m) => `<div class="msp-lev-precision">${m}</div>`).join("")}
+      ${chips ? `<div class="msp-lev-chips">
+        <span class="msp-lev-chips-lbl">Autres déclinaisons</span>${chips}</div>` : ""}
+    </div>`;
+  }
+
+  function msProductLeviersHtml() {
+    const comps = msProductComposants();
+    if (!comps.length) {
+      return '<div class="empty" style="padding:8px 0">Sélectionnez au moins une matière.</div>';
+    }
+    let iAutre = -1;
+    return comps.map((c) => {
+      if (c.role === "AUTRE") iAutre++;
+      const cible = c.role === "AUTRE" ? "autre:" + iAutre : "role:" + c.role;
+      const d = (S.msDecls || []).find((x) => x.id === c.declinaison_id);
+      if (!d) return "";
+      const r = MSP_ROLES.find((x) => x.role === c.role);
+      return msLevierBlocHtml(d, cible, r ? r.label : "Autre matière");
+    }).join("");
+  }
+
+  function bindMsProductLeviers(onSwitch) {
+    document.querySelectorAll("[data-msp-switch]").forEach((btn) => {
+      btn.onclick = () => {
+        const cible = btn.getAttribute("data-msp-switch");
+        const id = btn.getAttribute("data-msp-decl");
+        if (cible.startsWith("role:")) {
+          const sel = document.getElementById("msp-" + cible.slice(5).toLowerCase());
+          if (sel) sel.value = id;
+        } else {
+          const sel = document.querySelector(`[data-msp-autre="${cible.slice(6)}"]`);
+          if (sel) sel.value = id;
+        }
+        if (onSwitch) onSwitch();
+      };
+    });
   }
 
   function syncMsProductFromDom() {
@@ -3910,6 +3804,13 @@
           ? '<div class="field-hint" style="color:var(--warn);margin-top:10px">Une matière n\'a pas encore de coût : ouvre sa fiche pour la paramétrer.</div>'
           : "");
     }
+    // Les leviers suivent la composition : changer de déclinaison doit se voir
+    // dans le total ET dans ce qui l'explique, sinon le bloc ment d'un clic.
+    const lev = document.getElementById("msp-leviers");
+    if (lev) {
+      lev.innerHTML = msProductLeviersHtml();
+      bindMsProductLeviers(() => { syncMsProductFromDom(); refreshMsProductPreview(); });
+    }
   }
 
   function renderMsProductForm(isNew) {
@@ -3928,6 +3829,9 @@
     document.querySelectorAll("[data-msp-role], [data-msp-autre]").forEach((sel) => {
       sel.onchange = majAperçu;
     });
+    // Les pastilles de déclinaison voisine posent la valeur dans le sélecteur
+    // puis relancent l'aperçu : le total et son explication bougent ensemble.
+    bindMsProductLeviers(majAperçu);
     const add = document.getElementById("msp-add-autre");
     if (add) {
       add.onclick = () => {
@@ -4169,13 +4073,10 @@
 
       const r = S.route.name;
       if (r === "materials") {
-        if (S.filters.matTab === "mystock") {
-          await loadMystockList();
-          renderMystockList();
-        } else {
-          await loadMaterialsList();
-          renderMaterialsList();
-        }
+        // Une seule liste : les matières MyStock. La base historique reste
+        // servie par ses propres routes (/pricing/materials/<id>).
+        await loadMystockList();
+        renderMystockList();
       } else if (r === "material-new") {
         if (!S.canWrite) {
           navigate("/pricing/materials");
@@ -4233,12 +4134,14 @@
           return;
         }
         // Les paramètres sont une modale : elle s'ouvre par-dessus la liste.
-        await loadMaterialsList();
-        renderMaterialsList();
+        await loadMystockList();
+        renderMystockList();
         openSettingsModal();
       } else {
-        await loadMaterialsList();
-        renderMaterialsList();
+        // `/pricing` ouvre directement les matières MyStock : c'est la source
+        // des prix, et le module n'a plus de tableau de bord depuis le 4 août.
+        await loadMystockList();
+        renderMystockList();
       }
     } catch (e) {
       setContent(`<div class="empty" style="color:var(--danger);padding:24px">${escHtml(e.message)}</div>`);
@@ -4286,7 +4189,6 @@
       }
     }
     updateChromeControls();
-    chargerVueMystock();
     appliquerParamsUrl();
     S.route = parseRoute();
     await bootRoute();

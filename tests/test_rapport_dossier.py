@@ -71,7 +71,8 @@ def base():
             quantite_a_traiter REAL DEFAULT 0, quantite_traitee REAL DEFAULT 0,
             commentaire TEXT, est_annule INTEGER DEFAULT 0,
             annule_motif TEXT, annule_par TEXT, annule_le TEXT,
-            metrage_prevu REAL, metrage_reel REAL
+            metrage_prevu REAL, metrage_reel REAL,
+            metrage_total_debut REAL, metrage_total_fin REAL
         );
         CREATE TABLE dossier_info_prod (
             no_dossier TEXT PRIMARY KEY NOT NULL, ref_produit_norm TEXT,
@@ -95,6 +96,16 @@ def base():
             metrage_m REAL, vitesse_m_min REAL, commentaires TEXT,
             nb_nc INTEGER DEFAULT 0, cloture_le TEXT NOT NULL
         );
+        CREATE TABLE retour_prod_ecrits (
+            cle TEXT PRIMARY KEY NOT NULL, no_dossier TEXT,
+            valide INTEGER NOT NULL DEFAULT 0, valide_par TEXT, valide_le TEXT,
+            masque INTEGER NOT NULL DEFAULT 0, masque_par TEXT, masque_le TEXT
+        );
+        CREATE TABLE retour_prod_notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, no_dossier TEXT NOT NULL,
+            cle_ecrit TEXT, texte TEXT NOT NULL, auteur TEXT NOT NULL,
+            created_at TEXT NOT NULL, updated_at TEXT, updated_par TEXT
+        );
         CREATE TABLE nc_dossiers (
             id INTEGER PRIMARY KEY AUTOINCREMENT, numero TEXT NOT NULL UNIQUE,
             titre TEXT NOT NULL, gravite TEXT, statut TEXT, date_nc TEXT,
@@ -108,17 +119,18 @@ def base():
 def saisie(conn, minutes_apres, code, categorie, operateur="Marc",
            no_dossier="D-100", machine="Cohesio 1", operation=None,
            metrage_reel=None, metrage_prevu=None, commentaire=None,
-           est_annule=0, annule_motif=None):
+           est_annule=0, annule_motif=None, ctr_debut=None, ctr_fin=None):
     conn.execute(
         """INSERT INTO production_data
            (operateur, date_operation, operation, operation_code, operation_category,
             machine, no_dossier, client, designation, commentaire, est_annule,
-            annule_motif, metrage_prevu, metrage_reel)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            annule_motif, metrage_prevu, metrage_reel,
+            metrage_total_debut, metrage_total_fin)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (operateur, (T0 + timedelta(minutes=minutes_apres)).strftime("%Y-%m-%dT%H:%M:%S"),
          operation or code, code, categorie, machine, no_dossier,
          "Client Test", "Etiquette 100x50", commentaire, est_annule,
-         annule_motif, metrage_prevu, metrage_reel),
+         annule_motif, metrage_prevu, metrage_reel, ctr_debut, ctr_fin),
     )
     conn.commit()
     return conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
@@ -194,24 +206,68 @@ def test_saisie_restee_ouverte():
 # ─── 5. Metrage ──────────────────────────────────────────────────────────────
 
 def test_metrage():
-    print("\n5. Metrage : le compteur machine n'est pas un metrage")
+    print("\n5. Metrage : ecart de compteur, jamais le compteur brut")
+
+    def m(saisies):
+        return svc.metrage_dossier(saisies, "89", "01", "90")
+
+    # Cas nominal : 01 pose le compteur de debut, 89 celui de fin.
     conn = base()
-    saisies_deux = [
-        {"operation_code": "89", "metrage_reel": 91_994_681},
-        {"operation_code": "89", "metrage_reel": 92_006_681},
-    ]
-    m = svc.metrage_dossier(saisies_deux, "89")
-    verifier("deux releves : ecart de compteur", m["reel"], 12000.0)
-    verifier("fiable", m["fiable"], True)
+    saisie(conn, 0, "01", "personnel", ctr_debut=91_994_681)
+    saisie(conn, 200, "89", "personnel", ctr_fin=92_006_681)
+    r = m(svc._saisies(conn, "D-100"))
+    verifier("ecart de compteur", r["reel"], 12000.0)
+    verifier("fiable", r["fiable"], True)
 
-    m1 = svc.metrage_dossier([{"operation_code": "89", "metrage_reel": 12000}], "89")
-    verifier("un seul releve plausible : retenu", m1["reel"], 12000.0)
+    # Sans compteur de debut : PAS de metrage. Prendre 0 pour origine sortirait
+    # le compteur machine entier (91 994 681 m), l'erreur d'ordre de grandeur
+    # qui a deja fausse les besoins matieres.
+    conn = base()
+    saisie(conn, 0, "01", "personnel")
+    saisie(conn, 200, "89", "personnel", ctr_fin=92_006_681)
+    r = m(svc._saisies(conn, "D-100"))
+    verifier("sans compteur de debut : aucun metrage", r["reel"], 0.0)
+    verifier("et signale non fiable", r["fiable"], False)
+    verifier("la cloture orpheline est comptee", r["fins_sans_debut"], 1)
 
-    m2 = svc.metrage_dossier([{"operation_code": "89", "metrage_reel": 91_994_681}], "89")
-    verifier("un seul releve au-dela du seuil : ecarte", m2["reel"], 0.0)
-    verifier("et signale non fiable", m2["fiable"], False)
+    # Repli sur l'ancien couple de colonnes pour les lignes anterieures.
+    conn = base()
+    saisie(conn, 0, "01", "personnel", metrage_prevu=1000)
+    saisie(conn, 200, "89", "personnel", metrage_reel=4500)
+    verifier("repli metrage_prevu / metrage_reel", m(svc._saisies(conn, "D-100"))["reel"], 3500.0)
 
-    verifier("aucun releve", svc.metrage_dossier([], "89")["reel"], 0.0)
+    # Les nouvelles colonnes priment sur le repli.
+    conn = base()
+    saisie(conn, 0, "01", "personnel", ctr_debut=1000, metrage_prevu=99999)
+    saisie(conn, 200, "89", "personnel", ctr_fin=4000, metrage_reel=99999)
+    verifier("les colonnes compteur priment", m(svc._saisies(conn, "D-100"))["reel"], 3000.0)
+
+    # Deux cycles : les ecarts s'additionnent.
+    conn = base()
+    saisie(conn, 0, "01", "personnel", ctr_debut=1000)
+    saisie(conn, 100, "89", "personnel", ctr_fin=3000)
+    saisie(conn, 200, "01", "personnel", ctr_debut=3000)
+    saisie(conn, 300, "89", "personnel", ctr_fin=8000)
+    r = m(svc._saisies(conn, "D-100"))
+    verifier("deux cycles additionnes", r["reel"], 7000.0)
+    verifier("deux cycles comptes", r["cycles"], 2)
+
+    # Le compteur de debut appartient au DOSSIER : l'equipe qui cloture n'a pas
+    # forcement pose le code de debut.
+    conn = base()
+    saisie(conn, 0, "01", "personnel", operateur="Marc", ctr_debut=1000)
+    saisie(conn, 300, "89", "personnel", operateur="Sophie", ctr_fin=6000)
+    verifier("debut pose par un autre conducteur",
+             m(svc._saisies(conn, "D-100"))["reel"], 5000.0)
+
+    # L'annulation borne un cycle comme la fin, avec son propre compteur.
+    conn = base()
+    saisie(conn, 0, "01", "personnel", ctr_debut=1000)
+    saisie(conn, 200, "90", "annulation", ctr_debut=1000, ctr_fin=2500)
+    verifier("annulation bornee comme une fin",
+             m(svc._saisies(conn, "D-100"))["reel"], 1500.0)
+
+    verifier("aucune saisie", m([])["reel"], 0.0)
 
 
 def test_mediane():
@@ -240,20 +296,23 @@ def test_reperes_reference():
 
     r = svc.reperes_reference(conn, "REF-A", "D-100")
     verifier("3 series retenues", r["series"], 3)
-    # vitesses en m/min -> m/h : 600, 720, 840 ; mediane 720. Le 2.0 (D-100) est exclu.
-    verifier("mediane des cadences passees", r["cadence_mediane_m_h"], 720.0)
+    # m/min, sans conversion : 10, 12, 14 -> mediane 12. Le 2.0 (D-100) est exclu.
+    verifier("mediane des cadences passees", r["cadence_mediane_m_min"], 12.0)
     verifier("reference inconnue", svc.reperes_reference(conn, None)["series"], 0)
 
 
 # ─── 8. Compte-rendu complet ─────────────────────────────────────────────────
 
 def dossier_complet(conn):
+    # Compteur de debut sur le code 01 : sans lui, la regle canonique refuse
+    # d'inventer un metrage (et c'est le bug observe en production).
+    saisie(conn, -5, "01", "personnel", operation="Demarrer un dossier", ctr_debut=91_994_681)
     saisie(conn, 0, "02", "calage")
     saisie(conn, 30, "03", "production")
     saisie(conn, 90, "53", "arret", operation="Casse bande",
            commentaire="Bobine mal enroulee, changee")
     saisie(conn, 120, "03", "production")
-    saisie(conn, 180, "89", "personnel", metrage_reel=20000, metrage_prevu=25000)
+    saisie(conn, 180, "89", "personnel", ctr_fin=92_014_681)
     conn.execute(
         """INSERT INTO arret_seuils_franchis
            (saisie_id, no_dossier, machine, operation_code, operation, operateur,
@@ -283,13 +342,12 @@ def test_compte_rendu():
     verifier("cloture", cr["identite"]["cloture"], True)
     verifier("conducteurs", cr["identite"]["conducteurs"], ["Marc"])
     verifier("metrage", cr["metrage"]["reel"], 20000.0)
-    verifier("ecart au prevu", round(cr["metrage"]["ecart_pct"], 1), -20.0)
-    # production 60 + 60 = 120 min -> 20000 m / 2 h = 10000 m/h
-    verifier("vitesse de production (hors arrets)", cr["vitesse_m_h"], 10000.0)
-    # cadence : denominateur production + arret = 120 + 30 = 150 min = 2,5 h
-    # -> 8000 m/h. C'est la SEULE valeur comparable a produit_series.vitesse_m_min,
-    # calcule par dossier_stats.py sur ce meme denominateur.
-    verifier("cadence (arrets compris)", cr["cadence_m_h"], 8000.0)
+    # production 60 + 60 = 120 min -> 20000 m / 120 min = 166,7 m/min
+    verifier("vitesse de production (hors arrets)", cr["vitesse_m_min"], 166.7)
+    # cadence : denominateur production + arret = 120 + 30 = 150 min
+    # -> 133,3 m/min. C'est la SEULE valeur comparable a produit_series.vitesse_m_min,
+    # calcule par dossier_stats.py sur ce meme denominateur et dans la meme unite.
+    verifier("cadence (arrets compris)", cr["cadence_m_min"], 133.3)
     verifier("un seuil franchi", len(cr["seuils"]), 1)
     verifier("seuil explique", cr["seuils"][0]["sans_explication"], False)
     verifier("info prod presente", bool(cr["ecrits"]["info_prod"]), True)
@@ -303,8 +361,8 @@ def test_cadence_comparable_au_repere():
     print("\n8 bis. La cadence se compare a un repere calcule pareil")
     conn = base()
     dossier_complet(conn)
-    # Repere historique : 100 m/min = 6000 m/h, calcule par dossier_stats sur
-    # (production + arret). Le dossier courant fait 8000 m/h de cadence.
+    # Repere historique : 100 m/min, calcule par dossier_stats sur
+    # (production + arret). Le dossier courant fait 133,3 m/min de cadence.
     for i, d in enumerate(("D-201", "D-202", "D-203")):
         conn.execute(
             """INSERT INTO produit_series (ref_produit_norm, no_dossier, machine,
@@ -317,12 +375,16 @@ def test_cadence_comparable_au_repere():
     conn.commit()
 
     cr = svc.compte_rendu(conn, "D-100")
-    verifier("repere retrouve", cr["reference"]["cadence_mediane_m_h"], 6000.0)
-    # 8000 vs 6000 = +33,3 %. Sur la vitesse hors arrets (10000) l'ecart aurait
+    verifier("repere retrouve", cr["reference"]["cadence_mediane_m_min"], 100.0)
+    # 133,3 vs 100 = +33,3 %. Sur la vitesse hors arrets (166,7) l'ecart aurait
     # ete de +66 % : c'est exactement l'erreur que ce cas empeche.
     verifier_proche("ecart calcule sur la cadence", cr["ecarts"]["cadence_pct"], 33.3, 0.2)
     verifier("aucun ecart de vitesse expose",
              "vitesse_pct" in cr["ecarts"], False)
+    # L'unite est celle de la machine : jamais de m/h dans la sortie.
+    verifier("aucune cle en m/h",
+             [k for k in list(cr) + list(cr["ecarts"]) + list(cr["reference"])
+              if k.endswith("_m_h")], [])
 
 
 def test_vigilance():
@@ -372,6 +434,7 @@ def test_retour_atelier():
     verifier("metrage", r["production"]["metrage"], 20000.0)
     verifier("temps de production", r["production"]["minutes_production"], 120.0)
     verifier("temps d'arret", r["production"]["minutes_arret"], 30.0)
+    verifier("vitesse machine en m/min", r["production"]["vitesse_m_min"], 166.7)
     verifier("une reference produite", len(r["references"]), 1)
     verifier("code d'arret le plus couteux", r["arrets_couteux"][0]["code"], "53")
 
@@ -396,7 +459,7 @@ def test_machine_sans_donnee():
     verifier("aucune reference", r["references"], [])
     verifier("aucun arret", r["arrets_couteux"], [])
     verifier("aucun ecrit", r["ecrits"], [])
-    verifier("vitesse indeterminee, pas zero", r["production"]["vitesse_m_h"], None)
+    verifier("vitesse indeterminee, pas zero", r["production"]["vitesse_m_min"], None)
     verifier("aucune machine sur la periode",
              svc.machines_periode(conn, SEMAINE_DEBUT, SEMAINE_FIN), [])
     verifier("liste de comptes-rendus vide",
@@ -437,6 +500,264 @@ def test_recherche_tous_dossiers():
              [v["cle"] for v in cr["vigilance"]], [])
 
 
+def test_suivi_des_remontees():
+    print("\n12 ter. Suivi des remontees : valider, commenter, corriger")
+    conn = base()
+    dossier_complet(conn)
+    conn.execute(
+        """INSERT INTO dossier_info_prod (no_dossier, texte, auteur, created_at)
+           VALUES ('D-100','Tension a baisser','Marc','2026-06-08T11:05:00')""")
+    conn.commit()
+
+    # La cle doit etre stable et distinguer les sources.
+    verifier("cle d'un commentaire de saisie", svc.cle_ecrit("commentaire", 4), "saisie:4")
+    verifier("cle d'une info prod", svc.cle_ecrit("info_prod", "D-100"), "infoprod:D-100")
+    verifier("cle d'un seuil", svc.cle_ecrit("arret", 4), "seuil:4")
+    verifier("cle d'une note", svc.cle_ecrit("note", 7), "note:7")
+
+    cr = svc.compte_rendu(conn, "D-100")
+    verifier("rien n'est valide au depart",
+             any(e.get("valide") for e in cr["ecrits"]["commentaires"]), False)
+    verifier("l'info prod porte sa cle", cr["ecrits"]["info_prod"]["cle"], "infoprod:D-100")
+    verifier("un commentaire de saisie est modifiable",
+             cr["ecrits"]["commentaires"][0]["modifiable"], True)
+    verifier("un seuil porte sa cle", cr["seuils"][0]["cle"].startswith("seuil:"), True)
+
+    # Validation, puis retour en arriere.
+    cle = cr["ecrits"]["info_prod"]["cle"]
+    svc.valider_ecrit(conn, cle, "D-100", True, "Eugene")
+    cr = svc.compte_rendu(conn, "D-100")
+    verifier("info prod validee", cr["ecrits"]["info_prod"]["valide"], True)
+    verifier("et l'auteur est trace", cr["ecrits"]["info_prod"]["valide_par"], "Eugene")
+    verifier("valider n'efface pas la remontee",
+             cr["ecrits"]["info_prod"]["texte"], "Tension a baisser")
+
+    svc.valider_ecrit(conn, cle, "D-100", False, "Eugene")
+    cr = svc.compte_rendu(conn, "D-100")
+    verifier("devalidation possible", cr["ecrits"]["info_prod"]["valide"], False)
+    verifier("et l'auteur est efface", cr["ecrits"]["info_prod"]["valide_par"], "")
+
+    # Note ajoutee, puis corrigee, puis supprimee par un texte vide.
+    note = svc.ajouter_note(conn, "D-100", "Vu avec le chef d'atelier", "Eugene", cle)
+    verifier("note creee", note["texte"], "Vu avec le chef d'atelier")
+    verifier("note rattachee a la remontee", note["cle_ecrit"], cle)
+    cr = svc.compte_rendu(conn, "D-100")
+    # Une reponse se range SOUS la remontee qu'elle commente, en citation :
+    # ajoutee a la file, elle la noyait.
+    verifier("la reponse ne grossit pas la liste", len(cr["ecrits"]["notes"]), 0)
+    verifier("elle est rangee sous sa remontee",
+             len(cr["ecrits"]["info_prod"]["reponses"]), 1)
+    verifier("avec son texte",
+             cr["ecrits"]["info_prod"]["reponses"][0]["texte"], "Vu avec le chef d'atelier")
+    verifier("et sa cle", cr["ecrits"]["info_prod"]["reponses"][0]["cle"],
+             "note:" + str(note["id"]))
+
+    # Une note libre, elle, reste une remontee a part entiere.
+    libre = svc.ajouter_note(conn, "D-100", "Penser a commander des lames", "Eugene")
+    cr = svc.compte_rendu(conn, "D-100")
+    verifier("une note sans parent reste dans la liste", len(cr["ecrits"]["notes"]), 1)
+    svc.modifier_note(conn, libre["id"], "", "Eugene")
+
+    svc.modifier_note(conn, note["id"], "Vu avec le chef d'atelier le 12", "Eugene")
+    verifier("note corrigee",
+             svc.notes_dossier(conn, "D-100")[0]["texte"], "Vu avec le chef d'atelier le 12")
+    verifier("dernier correcteur trace",
+             svc.notes_dossier(conn, "D-100")[0]["updated_par"], "Eugene")
+    verifier("note vide = note supprimee",
+             svc.modifier_note(conn, note["id"], "   ", "Eugene"), None)
+    verifier("et elle a disparu", svc.notes_dossier(conn, "D-100"), [])
+
+    # Correction du texte d'une saisie.
+    sid = cr["ecrits"]["commentaires"][0]["saisie_id"]
+    verifier("commentaire de saisie corrige",
+             svc.modifier_commentaire_saisie(conn, sid, "Bobine lot 4412 — reprise"), True)
+    cr = svc.compte_rendu(conn, "D-100")
+    verifier("le nouveau texte remonte",
+             cr["ecrits"]["commentaires"][0]["texte"], "Bobine lot 4412 — reprise")
+
+    # Masquer : hors sujet, ni traite ni efface.
+    cle_com = svc.compte_rendu(conn, "D-100")["ecrits"]["commentaires"][0]["cle"]
+    svc.masquer_ecrit(conn, cle_com, "D-100", True, "Eugene")
+    cr = svc.compte_rendu(conn, "D-100")
+    verifier("la remontee est marquee masquee",
+             cr["ecrits"]["commentaires"][0]["masque"], True)
+    verifier("masquer n'est pas valider",
+             cr["ecrits"]["commentaires"][0]["valide"], False)
+    r = svc.retour_atelier(conn, "Cohesio 1", SEMAINE_DEBUT, SEMAINE_FIN)
+    verifier("elle quitte la liste principale de la feuille",
+             any(e["cle"] == cle_com for e in r["ecrits"]), False)
+    verifier("mais reste consultable a part",
+             any(e["cle"] == cle_com for e in r["ecrits_masques"]), True)
+    svc.masquer_ecrit(conn, cle_com, "D-100", False, "Eugene")
+    r = svc.retour_atelier(conn, "Cohesio 1", SEMAINE_DEBUT, SEMAINE_FIN)
+    verifier("le demasquage la ramene",
+             any(e["cle"] == cle_com for e in r["ecrits"]), True)
+
+    # La feuille atelier porte les memes etats.
+    svc.valider_ecrit(conn, cle, "D-100", True, "Eugene")
+    r = svc.retour_atelier(conn, "Cohesio 1", SEMAINE_DEBUT, SEMAINE_FIN)
+    valides = [e for e in r["ecrits"] if e.get("valide")]
+    verifier("la feuille montre l'etat de validation", len(valides), 1)
+    verifier("chaque ecrit de la feuille porte sa cle",
+             all(e.get("cle") for e in r["ecrits"]), True)
+
+
+def test_dernier_jour_saisi():
+    print("\n12 quater. « Hier » = derniere journee reellement travaillee")
+    conn = base()
+    verifier("base vide : aucun jour", svc.dernier_jour_saisi(conn, "2026-06-14"), None)
+
+    # T0 est un lundi (8 juin 2026). On pose du vendredi et du samedi precedents.
+    saisie(conn, -3 * 24 * 60, "03", "production")        # vendredi 05/06
+    saisie(conn, -2 * 24 * 60, "03", "production")        # samedi 06/06
+    conn.commit()
+
+    # Un lundi matin, la veille est un dimanche vide : on doit remonter au samedi.
+    verifier("le dimanche vide renvoie au samedi",
+             svc.dernier_jour_saisi(conn, "2026-06-07"), "2026-06-06")
+    # Si la veille a bien tourne, c'est elle qu'on garde.
+    verifier("une veille travaillee reste la veille",
+             svc.dernier_jour_saisi(conn, "2026-06-06"), "2026-06-06")
+
+    # La journee en cours n'est jamais remontee : la borne l'exclut.
+    saisie(conn, 0, "03", "production")                   # lundi 08/06
+    conn.commit()
+    verifier("la journee en cours est exclue par la borne",
+             svc.dernier_jour_saisi(conn, "2026-06-07"), "2026-06-06")
+
+    # Une journee qui n'a que des saisies annulees n'a pas ete travaillee.
+    conn2 = base()
+    saisie(conn2, -2 * 24 * 60, "03", "production")        # samedi : reel
+    saisie(conn2, -1 * 24 * 60, "03", "production", est_annule=1)  # dimanche : annule
+    conn2.commit()
+    verifier("un jour entierement annule ne compte pas",
+             svc.dernier_jour_saisi(conn2, "2026-06-07"), "2026-06-06")
+
+
+def _s(conn, quand, code, cat, dos, machine="Cohesio 1", operateur="Marc", operation=None):
+    conn.execute(
+        """INSERT INTO production_data
+           (operateur, date_operation, operation, operation_code, operation_category,
+            machine, no_dossier, client, designation, est_annule)
+           VALUES (?,?,?,?,?,?,?,'NESTLE','Etiquette',0)""",
+        (operateur, quand, operation or code, code, cat, machine, dos))
+
+
+def test_frise():
+    print("\n12 quinquies. Frise : axe replie, phases, debordements")
+    conn = base()
+    # Jeudi 27 : un dossier de 06:00 a 14:00, avec calage, prod, arret, prod.
+    for q, c, cat in [("2026-08-27T06:00:00", "02", "calage"),
+                      ("2026-08-27T07:00:00", "03", "production"),
+                      ("2026-08-27T10:00:00", "53", "arret"),
+                      ("2026-08-27T10:30:00", "03", "production"),
+                      ("2026-08-27T14:00:00", "89", "personnel")]:
+        _s(conn, q, c, cat, "D-1")
+    # Vendredi 28 : rien. Samedi 29 : une demi-journee sur une autre machine.
+    _s(conn, "2026-08-29T06:00:00", "03", "production", "D-2", "Cohesio 2", "Sophie")
+    _s(conn, "2026-08-29T10:00:00", "89", "personnel", "D-2", "Cohesio 2", "Sophie")
+    conn.commit()
+
+    f = svc.frise(conn, "2026-08-27T00:00:00", "2026-08-29T23:59:59")
+    verifier("deux journees a l'axe (le vendredi vide est replie)", len(f["axe"]), 2)
+    verifier("jeudi : 8 h de saisie", f["axe"][0]["heures"], 8.0)
+    verifier("samedi : 4 h", f["axe"][1]["heures"], 4.0)
+    # Largeurs proportionnelles : 8 h contre 4 h -> deux tiers / un tiers.
+    verifier_proche("largeur du jeudi", f["axe"][0]["largeur"], 66.67, 0.1)
+    verifier_proche("largeur du samedi", f["axe"][1]["largeur"], 33.33, 0.1)
+    verifier("l'axe fait 100 %",
+             round(sum(a["largeur"] for a in f["axe"]), 2), 100.0)
+    verifier("le samedi porte la coupure", f["axe"][1]["coupure_avant"], True)
+    verifier("le jeudi n'en porte pas", f["axe"][0]["coupure_avant"], False)
+
+    verifier("une ligne par machine", [l["machine"] for l in f["lignes"]],
+             ["Cohesio 1", "Cohesio 2"])
+    d1 = f["lignes"][0]["slots"][0]
+    verifier("le dossier commence au debut de l'axe", d1["x"], 0.0)
+    verifier_proche("et occupe tout le jeudi", d1["largeur"], 66.67, 0.1)
+    verifier("aucun debordement", (d1["deborde_avant"], d1["deborde_apres"]), (False, False))
+    verifier("quatre phases", len(d1["segments"]), 4)
+    verifier("les phases dans l'ordre",
+             [g["categorie"] for g in d1["segments"]],
+             ["calage", "production", "arret", "production"])
+    verifier("les phases remplissent le slot",
+             round(sum(g["largeur"] for g in d1["segments"])), 100)
+    verifier("aucun chevauchement",
+             all(d1["segments"][i]["x"] + d1["segments"][i]["largeur"] <= d1["segments"][i+1]["x"] + 0.01
+                 for i in range(len(d1["segments"]) - 1)), True)
+
+
+def test_frise_debordements():
+    print("\n12 sexies. Frise : ce qui deborde de la periode")
+    conn = base()
+    # Dossier commence la veille de la periode et non termine a la fin.
+    _s(conn, "2026-08-26T14:00:00", "03", "production", "D-9")
+    _s(conn, "2026-08-27T08:00:00", "53", "arret", "D-9")
+    _s(conn, "2026-08-27T09:00:00", "03", "production", "D-9")
+    _s(conn, "2026-08-28T10:00:00", "89", "personnel", "D-9")
+    conn.commit()
+
+    f = svc.frise(conn, "2026-08-27T00:00:00", "2026-08-27T23:59:59")
+    sl = f["lignes"][0]["slots"][0]
+    verifier("commence avant la periode", sl["deborde_avant"], True)
+    verifier("et n'est pas fini a la fin", sl["deborde_apres"], True)
+    verifier("le slot est cale au debut de l'axe", sl["x"], 0.0)
+    verifier("le slot va jusqu'au bout", round(sl["x"] + sl["largeur"]), 100)
+    verifier("les dates reelles sont conservees", sl["debut"][:10], "2026-08-26")
+
+    # Une saisie restee ouverte ne doit pas deplier la nuit.
+    conn2 = base()
+    _s(conn2, "2026-08-27T06:00:00", "03", "production", "D-8")
+    _s(conn2, "2026-08-27T14:00:00", "03", "production", "D-8")   # ouverte jusqu'au lendemain
+    _s(conn2, "2026-08-28T09:00:00", "89", "personnel", "D-8")
+    conn2.commit()
+    f2 = svc.frise(conn2, "2026-08-27T00:00:00", "2026-08-28T23:59:59")
+    verifier("la nuit reste repliee malgre la saisie ouverte",
+             f2["axe"][0]["heures"], 8.0)
+
+    verifier("periode sans saisie : frise vide",
+             svc.frise(conn2, "2026-09-10T00:00:00", "2026-09-10T23:59:59")["vide"], True)
+
+
+def test_statut_saisieprod():
+    print("\n12 octies. Les phases parlent la langue de Saisieprod")
+    # Cinq etats, pas plus : la frise reprend les couleurs de Saisieprod, donc
+    # elle doit en reprendre exactement le vocabulaire.
+    verifier("production", svc.statut_saisie("production"), "production")
+    verifier("calage", svc.statut_saisie("calage"), "calage")
+    verifier("arret", svc.statut_saisie("arret"), "arret")
+    verifier("appro compte comme un arret", svc.statut_saisie("appro"), "arret")
+    verifier("technique aussi", svc.statut_saisie("technique"), "arret")
+    verifier("nettoyage", svc.statut_saisie("nettoyage"), "nettoyage")
+    verifier("pause", svc.statut_saisie("pause"), "autre")
+    verifier("personnel", svc.statut_saisie("personnel"), "autre")
+    verifier("inconnu", svc.statut_saisie("zzz"), "autre")
+    verifier("cinq etats seulement",
+             sorted(set(svc.STATUT_SAISIE.values())),
+             ["arret", "autre", "calage", "nettoyage", "production"])
+
+    conn = base()
+    dossier_complet(conn)
+    conn.commit()
+    segs = svc.compte_rendu(conn, "D-100")["frise"]["lignes"][0]["slots"][0]["segments"]
+    verifier("chaque phase porte son statut", all(g.get("statut") for g in segs), True)
+
+
+def test_frise_dossier():
+    print("\n12 septies. Frise d'un seul dossier")
+    conn = base()
+    dossier_complet(conn)
+    conn.commit()
+    cr = svc.compte_rendu(conn, "D-100")
+    verifier("le compte-rendu porte sa frise", cr["frise"]["vide"], False)
+    verifier("une seule ligne", len(cr["frise"]["lignes"]), 1)
+    verifier("un seul slot", len(cr["frise"]["lignes"][0]["slots"]), 1)
+    verifier("qui occupe toute la largeur",
+             round(cr["frise"]["lignes"][0]["slots"][0]["largeur"]), 100)
+    verifier("dossier inconnu : frise vide",
+             svc.frise_dossier(conn, "D-INEXISTANT")["vide"], True)
+
+
 def test_minutes_txt():
     print("\n13. Format des durees")
     verifier("moins d'une heure", svc._minutes_txt(45), "45 min")
@@ -460,6 +781,12 @@ if __name__ == "__main__":
     test_retour_atelier()
     test_machine_sans_donnee()
     test_recherche_tous_dossiers()
+    test_suivi_des_remontees()
+    test_dernier_jour_saisi()
+    test_frise()
+    test_frise_debordements()
+    test_statut_saisieprod()
+    test_frise_dossier()
     test_minutes_txt()
 
     print("\n" + "=" * 60)

@@ -33,7 +33,7 @@ PROFIL_HTML = r"""<!DOCTYPE html>
 <title>Mon profil — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
 <link rel="stylesheet" href="/static/support_widget.css">
-<link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css?v=__V_LABEL__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <style>
 /* ── Variables MySifa (dark défaut) ── */

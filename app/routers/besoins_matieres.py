@@ -62,7 +62,7 @@ from fastapi import APIRouter, HTTPException, Request
 from app.core.database import get_db
 from app.services.carnet_snapshot import (
     agreger as agreger_carnet, capturer as capturer_carnet, capturer_si_besoin,
-    couverture as couverture_carnet,
+    couverture as couverture_carnet, laize_mm as _laize_mm,
 )
 from app.services.coherence_fiche import (
     alerte_courte, controler as controler_fiche, nb_fronts,
@@ -1999,14 +1999,19 @@ def _agreger_of_orphelins(conn, debut: Optional[str] = None,
             agg = cumul.setdefault(cle, {
                 "q": 0.0, "q_actif": 0.0, "unite": b.get("unite"), "inc": 0,
                 "ref": b.get("matiere_ref"), "designation": b.get("matiere_designation"),
-                "source_value": b.get("source_value"),
+                "source_value": b.get("source_value"), "laizes": {},
             })
             vus.setdefault(cle, set()).add(pe["id"])
+            sub = agg.setdefault("laizes", {}).setdefault(
+                _laize_mm(b), {"q": 0.0, "q_actif": 0.0, "inc": 0, "ids": set()})
+            sub["ids"].add(pe["id"])
             q = b.get("quantite")
             if q is None:
                 agg["inc"] += 1
+                sub["inc"] += 1
             else:
                 agg["q"] += float(q)
+                sub["q"] += float(q)
             if not agg["unite"]:
                 agg["unite"] = b.get("unite")
     return cumul, vus
@@ -2061,6 +2066,36 @@ def besoins_tendance(request: Request):
     horizon = futur + 1
     kind_filtre = (request.query_params.get("kind") or "").strip() or None
 
+    # ── Sélection : quelles références, quelles laizes ────────────────────────
+    # Vingt matières sur dix-huit mois font vingt courbes et six cartes. C'est
+    # lisible pour surveiller l'ensemble, inutilisable pour préparer UNE
+    # commande. La sélection ne change aucun calcul : elle restreint ce qui est
+    # rendu, et le catalogue renvoyé à côté reste, lui, complet — sinon
+    # l'écran ne saurait plus proposer ce qui a été désélectionné.
+    def _liste(nom):
+        brut = (request.query_params.get(nom) or "").strip()
+        return [x.strip() for x in brut.split(",") if x.strip()] if brut else []
+
+    refs_filtre = set()
+    for x in _liste("refs"):
+        if x.lower() in ("na", "none", "null", "0"):
+            refs_filtre.add(None)
+        else:
+            try:
+                refs_filtre.add(int(x))
+            except ValueError:
+                continue
+    laizes_filtre = set()
+    for x in _liste("laizes"):
+        try:
+            laizes_filtre.add(int(round(float(x.replace(",", ".")))))
+        except ValueError:
+            continue
+    # Une laize par courbe plutôt qu'une matière par courbe. Sans ce mode, deux
+    # laizes d'un même frontal restent additionnées : le total est juste, mais
+    # on ne commande pas un total, on commande une laize.
+    detail_laize = (request.query_params.get("detail") or "").strip().lower() == "laize"
+
     # Fenêtre glissante. Ce qui tombe avant est ignoré (trop vieux pour
     # éclairer une décision d'achat) ; ce qui tombe après est regroupé dans un
     # « au-delà » plutôt que tronqué en silence — un besoin oublié parce qu'il
@@ -2102,6 +2137,11 @@ def besoins_tendance(request: Request):
         for (mois, _mid, _kind) in c:
             origines.setdefault(mois, set()).add(src)
 
+    # Le catalogue de ce qu'on PEUT sélectionner, construit sur l'agrégat
+    # complet : il ne rétrécit pas quand l'utilisateur filtre, sinon
+    # désélectionner deviendrait impossible.
+    catalogue: dict = {}
+
     lignes: dict = {}
     passe_total = 0.0
     hors_fenetre = 0.0
@@ -2109,54 +2149,97 @@ def besoins_tendance(request: Request):
         for (mois, mid, kind), agg in src_cumul.items():
             if kind_filtre and kind != kind_filtre:
                 continue
-            if mois < debut_calcul:
-                # Trop vieux même pour servir de comparaison, mais un dossier
-                # encore actif sur un mois échu est un retard : il reste compté.
-                hors_fenetre += agg["q"]
-                passe_total += agg.get("q_actif", 0.0)
-                continue
-            # Le retard : ce qui reste à produire sur un mois déjà échu. Compté
-            # sur le planning seul — un OF sorti du planning n'a plus de reste.
-            if mois < mois_courant:
-                passe_total += agg.get("q_actif", 0.0)
-            # Les douze mois d'amorce ne sont ni une colonne ni un total : ils
-            # n'existent que pour être lus comme « l'an dernier ».
-            amorce = mois < debut
-            col = mois if mois <= borne else AU_DELA
-            cle = (mid, kind)
-            li = lignes.setdefault(cle, {
-                "matiere_id": mid,
-                "libelle": (agg.get("ref") or agg.get("designation")
-                            or agg.get("source_value") or "Non associée"),
-                "designation": agg.get("designation"),
-                "kind": kind,
-                "unite": agg.get("unite"),
-                "par_mois": {},
-                "total": 0.0,
-                "total_futur": 0.0,
-                "total_au_dela": 0.0,
-                "dossiers": set(),
-                "incalculables": 0,
+            libelle = (agg.get("ref") or agg.get("designation")
+                       or agg.get("source_value") or "Non associée")
+            # Un besoin sans laize connue tombe dans la clé `None` : c'est le
+            # cas normal des mandrins, cartons et palettes, et le cas anormal
+            # d'une bobine dont ni l'OF ni la fiche ne donnent la laize.
+            parts = agg.get("laizes") or {
+                None: {"q": agg["q"], "q_actif": agg.get("q_actif", 0.0),
+                       "inc": agg["inc"], "ids": set()}
+            }
+            cat = catalogue.setdefault((mid, kind), {
+                "cle": ("na" if mid is None else str(mid)) + "|" + kind,
+                "matiere_id": mid, "kind": kind, "libelle": libelle,
+                "designation": agg.get("designation"), "unite": agg.get("unite"),
+                "laizes": set(), "total": 0.0,
             })
-            cell = li["par_mois"].setdefault(col, {"q": 0.0, "dossiers": 0, "inc": 0})
-            cell["q"] += agg["q"]
-            cell["dossiers"] += len(src_vus.get((mois, mid, kind), ()))
-            cell["inc"] += agg["inc"]
-            if amorce:
-                # Lisible comme comparaison, invisible dans les totaux : ces
-                # mois sont hors de la période que l'écran prétend couvrir.
+            for lz in parts:
+                if lz is not None:
+                    cat["laizes"].add(lz)
+            if debut <= mois <= borne:
+                cat["total"] += agg["q"]
+
+            if refs_filtre and mid not in refs_filtre:
                 continue
-            li["total"] += agg["q"]
-            # `total_futur` s'arrête à la borne de la fenêtre, et le reste est
-            # compté à part. L'écran affiche les deux côte à côte : si le
-            # premier contenait le second, le lecteur additionnerait deux fois
-            # la même matière.
-            if col == AU_DELA:
-                li["total_au_dela"] += agg["q"]
-            elif mois >= mois_courant:
-                li["total_futur"] += agg["q"]
-            li["dossiers"] |= src_vus.get((mois, mid, kind), set())
-            li["incalculables"] += agg["inc"]
+
+            for lz, sub in parts.items():
+                # Filtrer sur une laize, c'est ne regarder que des bobines :
+                # ce qui n'en a pas sort de l'écran plutôt que de s'y ajouter
+                # sans rapport avec la sélection.
+                if laizes_filtre and lz not in laizes_filtre:
+                    continue
+                q_lz = float(sub.get("q") or 0.0)
+                if mois < debut_calcul:
+                    # Trop vieux même pour servir de comparaison, mais un
+                    # dossier encore actif sur un mois échu est un retard : il
+                    # reste compté.
+                    hors_fenetre += q_lz
+                    passe_total += float(sub.get("q_actif") or 0.0)
+                    continue
+                # Le retard : ce qui reste à produire sur un mois déjà échu.
+                # Compté sur le planning seul — un OF sorti du planning n'a
+                # plus de reste.
+                if mois < mois_courant:
+                    passe_total += float(sub.get("q_actif") or 0.0)
+                # Les douze mois d'amorce ne sont ni une colonne ni un total :
+                # ils n'existent que pour être lus comme « l'an dernier ».
+                amorce = mois < debut
+                col = mois if mois <= borne else AU_DELA
+                cle = (mid, kind, lz if detail_laize else None)
+                li = lignes.setdefault(cle, {
+                    "matiere_id": mid,
+                    "libelle": libelle + (
+                        f" · {lz} mm" if (detail_laize and lz is not None)
+                        else (" · laize inconnue" if detail_laize and kind in ("support", "glassine")
+                              else "")),
+                    "designation": agg.get("designation"),
+                    "kind": kind,
+                    "laize_mm": lz if detail_laize else None,
+                    "unite": agg.get("unite"),
+                    "par_mois": {},
+                    "total": 0.0,
+                    "total_futur": 0.0,
+                    "total_au_dela": 0.0,
+                    "dossiers": set(),
+                    "incalculables": 0,
+                })
+                ids = sub.get("ids") or src_vus.get((mois, mid, kind), set())
+                cell = li["par_mois"].setdefault(
+                    col, {"q": 0.0, "dossiers": 0, "inc": 0, "_ids": set()})
+                cell["q"] += q_lz
+                # Les identifiants, pas leur nombre : sans détail par laize, un
+                # dossier qui demande deux laizes du même frontal le même mois
+                # compterait deux fois. Le décompte se fait à la sortie, sur
+                # l'ensemble — c'est le même dossier.
+                cell.setdefault("_ids", set()).update(ids)
+                cell["dossiers"] = len(cell["_ids"])
+                cell["inc"] += int(sub.get("inc") or 0)
+                if amorce:
+                    # Lisible comme comparaison, invisible dans les totaux :
+                    # ces mois sont hors de la période que l'écran couvre.
+                    continue
+                li["total"] += q_lz
+                # `total_futur` s'arrête à la borne de la fenêtre, et le reste
+                # est compté à part. L'écran affiche les deux côte à côte : si
+                # le premier contenait le second, le lecteur additionnerait
+                # deux fois la même matière.
+                if col == AU_DELA:
+                    li["total_au_dela"] += q_lz
+                elif mois >= mois_courant:
+                    li["total_futur"] += q_lz
+                li["dossiers"] |= set(ids)
+                li["incalculables"] += int(sub.get("inc") or 0)
 
     colonnes = tous_mois + [AU_DELA]
     # Un mois est « documenté » dès qu'une source en parle. Un mois muet n'est
@@ -2166,8 +2249,13 @@ def besoins_tendance(request: Request):
     for li in lignes.values():
         serie = []
         for c in colonnes:
+            # `_ids` reste dans l'agrégat, jamais dans la réponse : c'est un
+            # ensemble d'identifiants, ni sérialisable en JSON ni utile à
+            # l'écran, qui n'a besoin que de leur nombre.
             p = {"mois": c, "passe": c < mois_courant and c != AU_DELA,
-                 **li["par_mois"].get(c, {"q": 0.0, "dossiers": 0, "inc": 0})}
+                 **{k: v for k, v in
+                    li["par_mois"].get(c, {"q": 0.0, "dossiers": 0, "inc": 0}).items()
+                    if k != "_ids"}}
             # Le même mois un an plus tôt. `None` — et non zéro — quand ce
             # mois-là n'est documenté par aucune source : l'écran doit pouvoir
             # taire la comparaison plutôt que d'afficher une chute de 100 %
@@ -2350,6 +2438,23 @@ def besoins_tendance(request: Request):
         # puisse expliquer un creux d'août par le calendrier plutôt que de
         # laisser croire à un effondrement d'activité.
         "axe": axe,
+        # Le catalogue des références sélectionnables et, pour chacune, les
+        # laizes réellement demandées sur la fenêtre. C'est ce que le
+        # sélecteur affiche — il n'invente aucune laize et n'en oublie aucune.
+        "references": sorted(
+            [
+                {**{k: v for k, v in c.items() if k != "laizes"},
+                 "laizes": sorted(c["laizes"]),
+                 "total": round(c["total"], 2)}
+                for c in catalogue.values()
+            ],
+            key=lambda c: (c["kind"], -c["total"], (c["libelle"] or "").lower()),
+        ),
+        "selection": {
+            "refs": sorted(("na" if r is None else str(r)) for r in refs_filtre),
+            "laizes": sorted(laizes_filtre),
+            "detail": "laize" if detail_laize else "",
+        },
         "jours_ouvres": jours_ouvres,
         "hors_fenetre": round(hors_fenetre, 2),
         "reste_sur_mois_echus": round(passe_total, 2),

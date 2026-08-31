@@ -150,7 +150,7 @@ PRICING_SHELL = r"""<!DOCTYPE html>
 <meta name="theme-color" content="#0a0e17">
 <title>Coûts matières — MySifa</title>
 <link rel="icon" type="image/png" sizes="192x192" href="/static/mys_icon_192.png">
-<link rel="stylesheet" href="/static/mysifa_theme.css">
+<link rel="stylesheet" href="/static/mysifa_theme.css?v=__V__">
 <link rel="stylesheet" href="/static/mysifa_user_chip.css">
 <link rel="stylesheet" href="/static/pricing_app.css?v=__ASSETS__">
 <link rel="stylesheet" href="/static/mysifa_perf.css">
