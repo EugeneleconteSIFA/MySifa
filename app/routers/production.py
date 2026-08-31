@@ -892,8 +892,12 @@ def dernier_jour_saisi(request: Request, avant: Optional[str] = None):
     """
     get_current_user(request)
     from app.services.rapport_dossier import dernier_jour_saisi as _dernier
-    veille = (date.today() - timedelta(days=1)).isoformat()
-    borne = (avant or "").strip()[:10] or veille
+    # `avant` vient du navigateur : le serveur peut tourner en UTC alors que le
+    # poste est a Paris, et un lundi matin les deux ne designent pas le meme
+    # jour. On ne retombe sur la date serveur que si le client ne dit rien.
+    veille_serveur = (date.today() - timedelta(days=1)).isoformat()
+    borne = (avant or "").strip()[:10] or veille_serveur
     with get_db() as conn:
         jour = _dernier(conn, borne)
-    return {"jour": jour or veille, "veille": veille, "trouve": bool(jour)}
+    return {"jour": jour or borne, "veille": borne,
+            "veille_serveur": veille_serveur, "trouve": bool(jour)}

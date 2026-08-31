@@ -188,19 +188,37 @@ check("le detail par laize n'est plus une option",
       "S.besoinsTendDetail" in _js, False)
 check("il est toujours demande au serveur",
       "p.set('detail', 'laize');" in _js, True)
-check("le panneau s'ouvre a l'arrivee",
-      "if (S.besoinsTendSelOpen == null) S.besoinsTendSelOpen = true;" in _js, True)
 check("sans reference, aucune courbe",
       "if (!st.besoinsTendRefs.length) {" in _js, True)
 check("et l'ecran dit quoi faire",
-      "Choisissez une ou plusieurs références ci-dessus" in _js, True)
-# Les laizes ne se proposent qu'une fois la matiere connue, et seulement si
-# elle est en bobine : un mandrin n'a pas de laize.
-check("les laizes viennent des seules references retenues",
-      "const retenues = cat.filter(r => sel.has(r.cle));" in _js, True)
-check("aucune laize proposee tant que rien n'est choisi",
-      "? [...new Set(retenues.flatMap(r => r.laizes || []))].sort((a, b) => a - b)"
-      in _js, True)
+      "Cherchez une matière ci-dessus" in _js, True)
+# La grille de cases a cocher est retiree : 42 references sur cinq colonnes,
+# quarante lignes a lire pour en cocher deux, et la moitie de l'ecran mangee
+# avant la premiere courbe. Un champ de recherche a la place.
+check("plus de grille de cases", "bes-tsel-liste" in _js, False)
+check("plus de panneau depliable", "bes-tsel-panel" in _js, False)
+check("un champ de recherche", "Rechercher une matière…" in _js, True)
+check("huit resultats au maximum", ".slice(0, 8);" in _js, True)
+# Les regles de searchbar de la maison : Escape vide, les fleches naviguent,
+# Entree valide sans soumettre.
+check("Echap vide le champ", "if (e.key === 'Escape')" in _js, True)
+check("les fleches naviguent",
+      "e.key === 'ArrowDown' || e.key === 'ArrowUp'" in _js, True)
+check("Entree retient le resultat surligne",
+      "if (e.key === 'Enter' && hi >= 0)" in _js, True)
+check("un resultat deja retenu ne se propose plus",
+      "vus = cat.filter(r => !sel.has(r.cle)" in _js, True)
+
+# Une bobine passe par la modale de laizes ; ce qui n'en est pas entre direct.
+check("la modale de laizes existe", "function _besTendModaleLaizes(" in _js, True)
+check("elle n'apparait que sur une bobine",
+      "if ((ref.laizes || []).length) { _besTendModaleLaizes(ref); return; }" in _js, True)
+check("rien n'y est preselectionne d'office",
+      "const choisies = new Set((ref.laizes || []).filter(l => dejaSel.has(l)));" in _js, True)
+check("mais tout se prend d'un clic", "Toutes les laizes" in _js, True)
+check("on ne valide pas sans laize", "valider.disabled = choisies.size === 0;" in _js, True)
+check("la pastille rappelle les laizes retenues", "bes-tsel-chip-lz" in _js, True)
+check("et laisse les rouvrir", "Changer les laizes de " in _js, True)
 check("une laize orpheline est oubliee",
       "function _besTendNettoyerLaizes()" in _js, True)
 
@@ -217,6 +235,45 @@ check("plus de style pour ce pave", "bes-tend-note" in _js, False)
 check("le retard reste signale", "bes-tend-retard" in _js, True)
 check("et seulement s'il y en a un",
       "if (data.reste_sur_mois_echus > 0) {" in _js, True)
+
+
+
+print("\n7. Le filtre de laize ne concerne que les bobines")
+# Choisir une laize pour le frontal ne doit pas faire disparaitre le mandrin
+# qu'on a retenu a cote : il n'a pas de laize, la question ne le concerne pas.
+_mois2 = _mois
+
+
+def _faux_mixte(*a, **k):
+    cumul = {
+        (_mois2, 7, "support"): {
+            "q": 8000.0, "q_actif": 8000.0, "unite": "ml", "inc": 0,
+            "ref": "PP90", "designation": None, "source_value": "PP",
+            "laizes": {102: {"q": 5000.0, "q_actif": 5000.0, "inc": 0, "ids": {1}},
+                       76: {"q": 3000.0, "q_actif": 3000.0, "inc": 0, "ids": {2}}},
+        },
+        (_mois2, 9, "mandrin"): {
+            "q": 400.0, "q_actif": 400.0, "unite": "u", "inc": 0,
+            "ref": "MANDRIN 76", "designation": None, "source_value": "76",
+            "laizes": {None: {"q": 400.0, "q_actif": 400.0, "inc": 0, "ids": {1}}},
+        },
+    }
+    vus = {(_mois2, 7, "support"): {1, 2}, (_mois2, 9, "mandrin"): {1}}
+    return cumul, vus, dict(vus), []
+
+
+_vrai2 = bm.agreger_carnet
+bm.agreger_carnet = _faux_mixte
+try:
+    d = bm.besoins_tendance(_Req({"refs": "7,9", "laizes": "102", "detail": "laize"}))
+    kinds = sorted({l["kind"] for l in d["lignes"]})
+    check("le mandrin survit au filtre de laize", kinds, ["mandrin", "support"])
+    check("le frontal est reduit a la laize demandee",
+          [l["total"] for l in d["lignes"] if l["kind"] == "support"], [5000.0])
+    check("le mandrin garde son volume",
+          [l["total"] for l in d["lignes"] if l["kind"] == "mandrin"], [400.0])
+finally:
+    bm.agreger_carnet = _vrai2
 
 
 print()

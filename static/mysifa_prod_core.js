@@ -6246,15 +6246,21 @@ function _datePresets(){
 async function chargerDernierJourSaisi(){
   if(S._dernierJourEnCours) return;
   S._dernierJourEnCours = true;
+  // La veille est calculee ICI et envoyee au serveur. Ne pas la laisser au
+  // serveur : il tourne en UTC, le poste est a Paris, et un lundi matin les
+  // deux ne designent pas le meme jour — la comparaison ne tombait jamais
+  // juste, et le filtre restait sur son dimanche vide.
+  const veille = getYesterday();
   try{
-    const d = await api('/api/production/dernier-jour-saisi');
+    const d = await api('/api/production/dernier-jour-saisi?avant='
+                        + encodeURIComponent(veille));
     if(!d || !d.jour) return;
     S.dernierJourSaisi = d.jour;
-    // L'etat initial pose la veille CALENDAIRE en dur. Tant que l'utilisateur
-    // n'y a pas touche, on la remplace par la derniere journee travaillee :
-    // ouvrir la page un lundi sur un dimanche vide n'apprend rien. Un filtre
-    // deja modifie n'est jamais ecrase.
-    if(S.fv.date_from === d.veille && S.fv.date_to === d.veille && d.jour !== d.veille){
+    // L'etat initial pose la veille en dur. Tant que l'utilisateur n'y a pas
+    // touche, on la remplace par la derniere journee travaillee : ouvrir la
+    // page un lundi sur un dimanche vide n'apprend rien. Un filtre deja
+    // modifie n'est jamais ecrase.
+    if(S.fv.date_from === veille && S.fv.date_to === veille && d.jour !== veille){
       S.fv.date_from = d.jour;
       S.fv.date_to = d.jour;
       await applyF();
