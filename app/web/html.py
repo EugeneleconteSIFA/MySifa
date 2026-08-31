@@ -42,6 +42,7 @@ from app.web.expe_assets import (
 from app.web.expe_notes_assets import (
     EXPE_NOTES_CSS,
     EXPE_NOTES_JS,
+    EXPE_THEMATIQUES_JS,
     EXPE_ZONES_CSS,
     EXPE_ZONES_JS,
 )
@@ -6526,6 +6527,8 @@ function renderProdPage(){
   ];
   // Retour de prod : ouvert aux services de production — l'API filtre (ROLES_PROD).
   tabs.push({key:'retour', label:'Retour de prod', icon:'clipboard'});
+  // Points de production : page a part entiere, atteinte depuis ce menu.
+  tabs.push({key:'reunions', label:'Réunions', icon:'users', lien:'/reunions'});
   const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Production'},
     ...tabs.map(t=>h('button',{
       type:'button',
@@ -6533,6 +6536,7 @@ function renderProdPage(){
       'aria-selected': subPage===t.key ? 'true' : 'false',
       className:'nav-tab'+(subPage===t.key?' active':''),
       onClick:async()=>{
+        if(t.lien){ window.location.href = t.lien; return; }
         S.subPage=t.key;
         if(t.key==='kpis'){if(!S.production)await loadProd(); await loadMachineStatus(); startMachineStatusPolling();}
         else{stopMachineStatusPolling();}
@@ -11573,6 +11577,7 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__EXPE_TRANSPORTEURS_JS__", EXPE_TRANSPORTEURS_JS)
         .replace("__EXPE_CARTE_FRANCE_JS__", EXPE_CARTE_FRANCE_JS)
         .replace("__EXPE_NOTES_JS__", EXPE_NOTES_JS)
+        .replace("__EXPE_THEMATIQUES_JS__", EXPE_THEMATIQUES_JS)
         .replace("__EXPE_ZONES_JS__", EXPE_ZONES_JS)
         # ─── Branding paramétrable (LAST : appliqué aux contenus injectés
         # au-dessus, notamment LOGIN_MAIN_JS et PORTAL_MAIN_JS). Défaut SIFA.
