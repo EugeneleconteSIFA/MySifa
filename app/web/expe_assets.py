@@ -349,7 +349,7 @@ function expeTrpFiltered(){
 
 async function loadTransporteurs(){
   T.loading=true;
-  render();
+  renderTransporteurs();
   try{
     const rows=await api('/api/expe/transporteurs');
     T.list=Array.isArray(rows)?rows:[];
@@ -361,9 +361,20 @@ async function loadTransporteurs(){
   renderTransporteurs();
 }
 
+// Re-render qui rend la main au champ en cours de saisie.
+//
+// Bug d'origine : la preservation ne couvrait que les deux searchbars du
+// referentiel, nommement listees. Or `loadTransporteurs()` declenche DEUX
+// render() — un au depart, un au retour de l'API — et le comparateur charge
+// la liste des transporteurs en arrivant sur l'onglet (il lui faut les
+// couleurs). Quiconque tapait son code postal avant la fin de cet appel
+// voyait ses quatre champs se vider et le curseur sauter : « le comparateur
+// ne marche pas quand j'ecris vite ». La liste blanche est donc remplacee par
+// une regle generale — tout champ focalise portant un id est restitue.
 function renderTransporteurs(){
   const ae=document.activeElement;
-  const focusId=ae&&ae.id&&(ae.id==='expe-trp-search'||ae.id==='expe-trp-page-search')?ae.id:null;
+  const estSaisie=ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'||ae.tagName==='SELECT');
+  const focusId=estSaisie&&ae.id?ae.id:null;
   const caretStart=ae&&typeof ae.selectionStart==='number'?ae.selectionStart:null;
   const caretEnd=ae&&typeof ae.selectionEnd==='number'?ae.selectionEnd:null;
   render();
@@ -1435,8 +1446,12 @@ function expeCompareIcon(size){
 }
 
 function renderResultatsComparateur(data){
+  // Memorise avant de dessiner : un render() global reconstruit le conteneur
+  // et ferait disparaitre la comparaison qu'on vient de lancer.
+  if(data!==undefined)S.comparateur_resultats=data;
   const el=document.getElementById('cmp-resultats');
   if(!el)return;
+  if(!data){el.innerHTML='';return;}
   const elig=data.eligibles||[];
   const noelig=data.non_eligibles||[];
   if(!elig.length&&!noelig.length){
@@ -1524,6 +1539,7 @@ async function lancerComparateur(){
     renderResultatsComparateur(data);
   }catch(e){
     showToast(e.message||'Erreur lors du calcul','danger');
+    S.comparateur_resultats=null;
     if(resEl)resEl.innerHTML='';
   }finally{
     if(btn){btn.disabled=false;btn.textContent='Comparer';}
@@ -1532,11 +1548,21 @@ async function lancerComparateur(){
 
 function renderExpeComparateurTarifs(){
   const f=S.comparateur_form||{};
+  // Chaque frappe est recopiee dans S.comparateur_form. Sans cela, la valeur
+  // ne vivait que dans le DOM : le moindre render() reconstruisait le
+  // formulaire depuis un S vide et effacait la saisie en cours.
+  const champKey={'cmp-poids':'poids_total_kg','cmp-pal':'nb_palette','cmp-cp':'code_postal_destination','cmp-type':'type_envoi'};
+  const memoriser=(id,valeur)=>{
+    if(!S.comparateur_form)S.comparateur_form={};
+    const k=champKey[id];
+    if(k)S.comparateur_form[k]=valeur;
+  };
   const mkInp=(id,type,val,placeholder,extra)=>{
     const o=extra||{};
     const inp=h('input',{id,type,value:val!=null&&val!==''?String(val):'',placeholder,className:'expe-cmp-inp'});
     if(o.step)inp.step=o.step;
     if(o.min!=null)inp.min=o.min;
+    inp.addEventListener('input',e=>memoriser(id,e.target.value));
     return inp;
   };
   const typeSel=h('select',{id:'cmp-type',className:'expe-cmp-inp'},
@@ -1553,6 +1579,7 @@ function renderExpeComparateurTarifs(){
     document.getElementById('cmp-cp').value='';
     document.getElementById('cmp-type').value='messagerie';
     document.getElementById('cmp-resultats').innerHTML='';
+    S.comparateur_resultats=null;
     S.comparateur_form={poids_total_kg:'',nb_palette:'',code_postal_destination:'',type_envoi:'messagerie'};
   });
   const grid=h('div',{className:'expe-cmp-grid'},
@@ -1565,6 +1592,7 @@ function renderExpeComparateurTarifs(){
     inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void lancerComparateur();}});
   });
   typeSel.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void lancerComparateur();}});
+  typeSel.addEventListener('change',e=>memoriser('cmp-type',e.target.value));
   const wrap=h('div',{id:'section-comparateur',className:'expe-cmp-wrap'},
     h('h2',{className:'expe-cmp-title'},'Comparer les transporteurs'),
     h('div',{className:'expe-cmp-form'},
@@ -1573,6 +1601,9 @@ function renderExpeComparateurTarifs(){
     ),
     h('div',{id:'cmp-resultats',className:'expe-cmp-results'})
   );
+  if(S.comparateur_resultats){
+    requestAnimationFrame(()=>renderResultatsComparateur(S.comparateur_resultats));
+  }
   return wrap;
 }
 

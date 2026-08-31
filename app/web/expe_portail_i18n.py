@@ -2,7 +2,7 @@
 
 PORTAIL_I18N = {
     "fr": {
-        "pageTitle": "Portail transporteur — MySifa",
+        "pageTitle": "Portail transporteur — SIFA",
         "subtitle": "Portail transporteur — demandes de tarif SIFA",
         "bannerTitle": "Vos demandes de tarif",
         "bannerText": (
@@ -37,7 +37,7 @@ PORTAIL_I18N = {
         "toastPrice": "Prix invalide.",
         "toastDelay": "Délai invalide.",
         "error": "Erreur",
-        "footNote": "Portail sécurisé MySifa",
+        "footNote": "Portail sécurisé SIFA",
         "type_messagerie": "Messagerie",
         "type_ramasse": "Ramasse",
         "type_affretement": "Affrètement",
@@ -67,7 +67,7 @@ PORTAIL_I18N = {
         "remove": "Retirer",
     },
     "en": {
-        "pageTitle": "Carrier portal — MySifa",
+        "pageTitle": "Carrier portal — SIFA",
         "subtitle": "Carrier portal — SIFA quote requests",
         "bannerTitle": "Your quote requests",
         "bannerText": (
@@ -102,7 +102,7 @@ PORTAIL_I18N = {
         "toastPrice": "Invalid price.",
         "toastDelay": "Invalid lead time.",
         "error": "Error",
-        "footNote": "MySifa secure portal",
+        "footNote": "SIFA secure portal",
         "type_messagerie": "Groupage",
         "type_ramasse": "Collection",
         "type_affretement": "Full truckload",

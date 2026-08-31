@@ -828,7 +828,7 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
    La grille de cases a cocher (42 references etalees sur cinq colonnes) a ete
    retiree le 28/08/2026 : elle demandait de lire quarante lignes pour en
    cocher deux, et occupait la moitie de l'ecran avant la premiere courbe. */
-.bes-tsel{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px}
+.bes-tsel{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .bes-tsel-champ{position:relative;flex:0 0 320px;max-width:100%}
 .bes-tsel-loupe{position:absolute;left:10px;top:50%;transform:translateY(-50%);
   color:var(--muted);pointer-events:none;display:inline-flex}
@@ -880,6 +880,24 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
   background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .bes-lz-tout{background:none;border:none;padding:0;cursor:pointer;font-family:inherit;
   font-size:12px;font-weight:700;color:var(--accent);text-decoration:underline}
+/* Le bouton de validation suit le gabarit des modales de MyStock : meme
+   hauteur que « Annuler », meme accent que partout ailleurs. */
+.bes-lz-valider{border-radius:12px;padding:13px;font-size:14px;font-weight:700;
+  cursor:pointer;font-family:inherit}
+.bes-lz-valider:disabled{opacity:.45;cursor:not-allowed}
+/* Les dernieres references consultees. Un acheteur revient sur les memes
+   matieres toute la semaine — les retaper chaque matin se paie tous les
+   jours. Discretes : c'est un raccourci, pas un menu. */
+.bes-tsel-wrap{margin:0 0 12px}
+.bes-tsel-recents{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}
+.bes-tsel-recents-lbl{font-size:10px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.4px;color:var(--muted)}
+.bes-tsel-recent{display:inline-flex;align-items:baseline;gap:6px;padding:4px 10px;
+  border-radius:999px;border:1px solid var(--border);background:transparent;
+  color:var(--text2);font-family:inherit;font-size:12px;cursor:pointer}
+.bes-tsel-recent:hover{border-color:var(--accent);color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.bes-tsel-recent-lz{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
 /* Le retard, seul rescape du pave d'explication retire le 28/08/2026. Ce
    n'est pas un commentaire sur l'ecran mais une anomalie du carnet : il ne
    s'affiche que s'il y en a un. */
@@ -13712,6 +13730,59 @@ function _besTendRefsCat() {
    Ce qui est retenu vit en pastilles a cote du champ, avec ses laizes. C'est
    la seule chose qui reste a l'ecran une fois le choix fait. */
 
+/* Les dernieres references consultees, gardees dans le navigateur.
+
+   Un acheteur revient sur les memes matieres toute la semaine : les retaper
+   chaque matin est un cout qui se paie tous les jours. On garde donc les six
+   dernieres, AVEC les laizes choisies — une bobine sans sa laize ne serait
+   qu'a moitie rappelee, et il faudrait rouvrir la modale pour rien.
+
+   Le stockage est une commodite, pas une donnee : un navigateur qui le refuse
+   (navigation privee, site data bloque) fait disparaitre la rangee, et rien
+   d'autre. D'ou le try/catch des deux cotes.
+
+   Six, et pas plus : au-dela ce n'est plus un rappel, c'est la liste de cases
+   qu'on vient de retirer. */
+const BES_TEND_RECENTS_CLE = 'mysifa.besoins.tendance.recents';
+const BES_TEND_RECENTS_MAX = 6;
+
+function _besTendRecents() {
+  try {
+    const brut = JSON.parse(window.localStorage.getItem(BES_TEND_RECENTS_CLE) || '[]');
+    return Array.isArray(brut) ? brut.filter(r => r && r.cle && r.libelle) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function _besTendPousserRecent(ref, laizes) {
+  try {
+    const reste = _besTendRecents().filter(r => r.cle !== ref.cle);
+    const item = { cle: ref.cle, libelle: ref.libelle, laizes: (laizes || []).slice() };
+    window.localStorage.setItem(BES_TEND_RECENTS_CLE,
+      JSON.stringify([item, ...reste].slice(0, BES_TEND_RECENTS_MAX)));
+  } catch (e) {
+    /* sans consequence : la rangee des recentes ne s'affichera pas */
+  }
+}
+
+/* Une reference recente se rejoue telle quelle, laizes comprises : c'est tout
+   l'interet du rappel. Le crayon de la pastille reste la pour en changer. */
+function _besTendRejouerRecent(rec) {
+  const st = _besTendEtat();
+  if (st.besoinsTendRefs.indexOf(rec.cle) < 0) {
+    S.besoinsTendRefs = [...st.besoinsTendRefs, rec.cle];
+  }
+  if ((rec.laizes || []).length) {
+    const lz = new Set(st.besoinsTendLaizes);
+    rec.laizes.forEach(l => lz.add(l));
+    S.besoinsTendLaizes = [...lz].sort((a, b) => a - b);
+  }
+  S.besoinsTendRefQ = '';
+  _besTendRedessinerBarre();
+  loadBesoinsTendance();
+}
+
 /* Une laize retenue qu'aucune reference selectionnee ne porte plus n'a plus
    d'objet : elle filtrerait sur une bobine qu'on ne regarde pas, et l'ecran
    afficherait vide sans dire pourquoi. */
@@ -13728,7 +13799,7 @@ function _besTendNettoyerLaizes() {
 /* Redessine la seule barre de selection, sans toucher au reste de l'ecran :
    ajouter une reference ne doit pas faire disparaitre ce qui est deja trace. */
 function _besTendRedessinerBarre() {
-  const ancienne = document.querySelector('.bes-tsel');
+  const ancienne = document.querySelector('.bes-tsel-wrap');
   if (!ancienne || !ancienne.parentNode) return;
   ancienne.parentNode.replaceChild(_buildBesoinsTendSelect(), ancienne);
 }
@@ -13753,7 +13824,7 @@ function _besTendModaleLaizes(ref) {
       + 'sa laize : chacune fait sa courbe.'));
 
   const grille = el('div', { cls: 'bes-lz-grille' });
-  const valider = el('button', { cls: 'btn-primary' }, 'Afficher');
+  const valider = el('button', { cls: 'btn btn-accent bes-lz-valider' }, 'Afficher');
   const majBtn = () => {
     valider.disabled = choisies.size === 0;
     valider.textContent = choisies.size
@@ -13789,6 +13860,7 @@ function _besTendModaleLaizes(ref) {
     const lz = new Set(s.besoinsTendLaizes);
     choisies.forEach(l => lz.add(l));
     S.besoinsTendLaizes = [...lz].sort((a, b) => a - b);
+    _besTendPousserRecent(ref, [...choisies].sort((a, b) => a - b));
     closeMroot();
     _besTendRedessinerBarre();
     loadBesoinsTendance();
@@ -13811,6 +13883,7 @@ function _besTendAjouterRef(ref) {
   if (st.besoinsTendRefs.indexOf(ref.cle) < 0) {
     S.besoinsTendRefs = [...st.besoinsTendRefs, ref.cle];
   }
+  _besTendPousserRecent(ref, []);
   _besTendRedessinerBarre();
   loadBesoinsTendance();
 }
@@ -13821,7 +13894,9 @@ function _buildBesoinsTendSelect() {
   const sel = new Set(st.besoinsTendRefs);
   const selLz = new Set(st.besoinsTendLaizes);
 
+  const wrap = el('div', { cls: 'bes-tsel-wrap' });
   const bar = el('div', { cls: 'bes-tsel' });
+  wrap.appendChild(bar);
 
   // ── Le champ, et rien d'autre tant qu'on n'a pas tape ──
   const champ = el('div', { cls: 'bes-tsel-champ' });
@@ -13924,11 +13999,34 @@ function _buildBesoinsTendSelect() {
       cat.length + ' référence(s) sur la fenêtre.'));
   }
 
+  // ── Les dernieres references consultees ──
+  // Sous le champ, et seulement quand il est vide : elles repondent a la meme
+  // question que la recherche, elles n'ont pas a lui disputer la place quand
+  // elle a commence a repondre elle-meme.
+  const recents = _besTendRecents().filter(r => !sel.has(r.cle));
+  if (recents.length && !(S.besoinsTendRefQ || '').trim()) {
+    const rangee = el('div', { cls: 'bes-tsel-recents' },
+      el('span', { cls: 'bes-tsel-recents-lbl' }, 'Récentes'));
+    recents.forEach(r => {
+      rangee.appendChild(el('button', {
+        cls: 'bes-tsel-recent', type: 'button',
+        title: 'Retracer ' + r.libelle
+             + ((r.laizes || []).length ? ' en ' + r.laizes.join(', ') + ' mm' : ''),
+        on: { click: () => _besTendRejouerRecent(r) },
+      },
+        el('span', {}, r.libelle),
+        (r.laizes || []).length
+          ? el('span', { cls: 'bes-tsel-recent-lz' }, r.laizes.join(' · ') + ' mm')
+          : null));
+    });
+    wrap.appendChild(rangee);
+  }
+
   requestAnimationFrame(() => {
     const n = document.getElementById('bes-tsel-q');
     if (n && document.activeElement !== n && !sel.size) n.focus();
   });
-  return bar;
+  return wrap;
 }
 
 function _buildBesoinsTendance(data) {
