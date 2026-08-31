@@ -723,11 +723,30 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 .msl-maj.tres-vieux .msl-maj-age{color:var(--danger);font-weight:700}
 .msl-maj-jamais{font-size:12px;font-style:italic;color:var(--muted)}
 
+/* ── Un emplacement de produit : la matière, puis ce qu'on en consomme ──────
+   Le grammage a quitté la matière le 31 août 2026 : il se saisit ici, sous la
+   matière qui le concerne, parce que c'est le produit qui décide de la
+   quantité posée. Les champs sont en retrait sous le sélecteur — ils
+   dépendent de lui, et ils disparaissent sur une matière achetée au m². */
+.msp-slot{border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+  margin-bottom:10px;background:var(--card)}
+.msp-slot-head{display:flex;align-items:flex-end;gap:8px}
+.msp-conso{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;
+  margin:10px 0 0;padding:10px 0 0;border-top:1px dashed var(--border)}
+.msp-conso .field{margin:0}
+.msp-conso .f-num input{width:92px}
+.msp-conso-out{display:flex;flex-direction:column;gap:1px;font-size:13px;
+  font-variant-numeric:tabular-nums;padding-bottom:5px}
+.msp-conso-lbl{font-size:10px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.4px;color:var(--muted)}
+/* Un composant au kilo sans grammage compte pour 0 : le total reste crédible,
+   et c'est précisément ce qui le rend dangereux. On le dit sur la ligne. */
+.msp-conso-manque{font-size:10px;font-weight:700;color:var(--warn,#d97706)}
+.msp-conso-nul{margin-top:8px;font-size:11px;color:var(--muted)}
+
 /* ── « Ce qui fait bouger ce coût » — fiche produit MyStock ─────────────────
-   Le grammage change le coût d'un produit sans que le prix d'achat ait bougé ;
-   la laize ne change rien au €/m². Le bloc montre la chaîne complète et les
-   déclinaisons voisines avec leur écart, pour qu'on VOIE le surcoût d'un
-   22 g/m² avant de l'avoir choisi. */
+   La multiplication en toutes lettres : prix au kilo × poids posé = coût. Le
+   poids vient du champ juste au-dessus, donc le bloc réagit à la frappe. */
 .msp-lev{border:1px solid var(--border);border-radius:10px;padding:10px 12px;
   margin-bottom:8px;background:var(--bg)}
 .msp-lev-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:13px}
@@ -735,17 +754,6 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
   letter-spacing:.4px;color:var(--muted)}
 .msp-lev-formule{margin-top:6px;font-size:13px;font-variant-numeric:tabular-nums}
 .msp-lev-precision{margin-top:4px;font-size:11px;color:var(--muted);line-height:1.5}
-.msp-lev-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px;
-  padding-top:8px;border-top:1px dashed var(--border)}
-.msp-lev-chips-lbl{font-size:10px;font-weight:800;text-transform:uppercase;
-  letter-spacing:.4px;color:var(--muted)}
-.msp-lev-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;
-  border-radius:999px;border:1px solid var(--border);background:var(--card);
-  color:var(--text);font-family:inherit;font-size:11px;cursor:pointer}
-.msp-lev-chip:hover{border-color:var(--accent);background:var(--accent-bg)}
-.msp-lev-cout{font-weight:700;font-variant-numeric:tabular-nums}
-/* L'écart suit le SENS, pas le jugement : un grammage plus lourd n'est ni bon
-   ni mauvais en soi, c'est le devis qui tranche. */
-.msp-lev-ecart{font-size:10px;font-weight:700;font-variant-numeric:tabular-nums;
-  padding:1px 5px;border-radius:4px;
-  background:color-mix(in srgb,var(--text2) 12%,transparent);color:var(--text2)}
+/* Les pastilles « autres déclinaisons » sont parties avec la notion elle-même :
+   comparer un 17 et un 22 g/m² se fait en changeant le grammage dans le champ,
+   et le total suit à la frappe. */

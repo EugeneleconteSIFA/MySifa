@@ -24,6 +24,8 @@
     reunions: null,                    // liste chargee
     reunion: null,                     // reunion ouverte
     prod: null,                        // chiffres de la periode analysee
+    personnes: [],                     // annuaire, charge une fois au contexte
+    rechercheP: '',                    // frappe dans la recherche de participants
     jourPropose: null,
     titrePropose: '',
     ouverteId: null,                   // reunion laissee ouverte au demarrage
@@ -82,6 +84,7 @@
   async function chargerContexte(){
     if(S.contexteCharge) return;
     var c = await appel('/api/reunions/contexte');
+    S.personnes = c.personnes || [];
     S.jourPropose = c.jour_propose;
     S.titrePropose = c.titre_propose || '';
     S.ouverteId = c.ouverte ? c.ouverte.id : null;
@@ -163,6 +166,13 @@
       + '</div></div>';
   }
 
+  function pli(t){
+    return String(t == null ? '' : t)
+      .normalize ? String(t == null ? '' : t).normalize('NFD')
+                     .replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+                 : String(t == null ? '' : t).toLowerCase().trim();
+  }
+
   /* Rendu : liste -----------------------------------------------
      Fonctions pures : elles recoivent leurs donnees, ne lisent pas S et ne
      touchent pas au DOM. Exportees pour etre testables. */
@@ -209,8 +219,9 @@
 
   /* Rendu : reunion --------------------------------------------- */
 
-  function rendreReunion(r, prod, notesEtat){
+  function rendreReunion(r, prod, etat){
     if(!r) return '<div class="reu-vide">Chargement&hellip;</div>';
+    etat = etat || {};
     var machines = (prod && prod.machines) || [];
     var sous = 'Ouverte par ' + esc(r.ouverte_par || '—') + ' le ' + esc(dateFr(r.ouverte_le))
              + (r.statut === 'close' ? ' · close le ' + esc(dateFr(r.close_le)) : '');
@@ -240,11 +251,18 @@
       + '<div class="reu-split">'
       +   '<div id="reu-prod"><div class="reu-vide">Chargement des donn&eacute;es de production&hellip;</div></div>'
       +   '<aside class="reu-colonne">'
-      +     '<h3>Notes</h3>'
-      +     '<div class="reu-hint">Ce qui est abord&eacute; pendant le point.</div>'
-      +     '<textarea class="reu-notes" id="reu-notes" '
-      +       'placeholder="Ce qu\'on se dit, ce qu\'on constate&hellip;"></textarea>'
-      +     '<div class="reu-sauve" id="reu-notes-etat">' + esc(notesEtat || '') + '</div>'
+      +     '<h3>Participants</h3>'
+      +     '<div class="reu-hint">Qui est autour de la table.</div>'
+      +     '<div id="reu-participants">'
+      +       rendreParticipants(r.participants, etat.personnes, etat.recherche)
+      +     '</div>'
+      +     '<div class="reu-bloc">'
+      +       '<h3>Notes</h3>'
+      +       '<div class="reu-hint">Ce qui est abord&eacute; pendant le point.</div>'
+      +       '<textarea class="reu-notes" id="reu-notes" '
+      +         'placeholder="Ce qu\'on se dit, ce qu\'on constate&hellip;"></textarea>'
+      +       '<div class="reu-sauve" id="reu-notes-etat">' + esc(etat.notes || '') + '</div>'
+      +     '</div>'
       +     '<div class="reu-bloc">'
       +       '<h3>Actions</h3>'
       +       '<div class="reu-hint">Ce qui a &eacute;t&eacute; d&eacute;cid&eacute;, et par qui.</div>'
@@ -257,6 +275,74 @@
       +       '</div>'
       +     '</div>'
       +   '</aside>'
+      + '</div>';
+  }
+
+  /* Participants : les presents en pastilles, et une recherche pour en ajouter.
+     L'annuaire est deja en memoire (charge avec le contexte) — la recherche ne
+     part donc pas au serveur a chaque touche. Un nom absent de l'annuaire reste
+     acceptable : un point de production reunit parfois quelqu'un qui n'a pas de
+     compte. */
+  function rendreParticipants(presents, personnes, recherche){
+    presents = presents || [];
+    personnes = personnes || [];
+    var q = String(recherche == null ? '' : recherche);
+    var deja = {};
+    presents.forEach(function(p){ deja[pli(p.nom)] = true; });
+
+    var pastilles = presents.length
+      ? presents.map(function(p){
+          return '<span class="reu-part">' + esc(p.nom)
+               + '<button type="button" class="reu-part-x" '
+               + 'data-part-sup="' + escA(p.nom) + '" '
+               + 'title="Retirer" aria-label="Retirer ' + escA(p.nom) + '">×</button></span>';
+        }).join('')
+      : '<div class="reu-sauve">Personne pour l\'instant.</div>';
+
+    var qp = pli(q);
+    // On cherche partout dans le nom — « lesaf » doit trouver « Lesaffre »
+    // meme si c'est le nom de famille. Mais un nom qui COMMENCE par la frappe
+    // passe devant : taper « ma » doit proposer Manuel et Marc avant
+    // Desreumaux, ou le « ma » est au milieu.
+    var trouves = [];
+    if(qp){
+      var debut = [], milieu = [];
+      personnes.forEach(function(pe){
+        var n = pli(pe.nom);
+        if(deja[n] || n.indexOf(qp) === -1) return;
+        var mots = n.split(/[\s-]+/);
+        var enTete = mots.some(function(m){ return m.indexOf(qp) === 0; });
+        (enTete ? debut : milieu).push(pe);
+      });
+      trouves = debut.concat(milieu).slice(0, 8);
+    }
+    // Le nom libre n'est propose que si l'annuaire ne repond rien : tant qu'il
+    // reste des noms a choisir, offrir « ajouter tel quel » n'ajoute que du
+    // bruit sous la liste.
+    var libre = qp && !trouves.length && !deja[qp];
+
+    var suggestions = '';
+    if(qp){
+      suggestions = trouves.map(function(pe){
+        return '<button type="button" class="reu-sugg" data-part-add="' + escA(pe.nom) + '">'
+             + esc(pe.nom) + '</button>';
+      }).join('');
+      if(libre){
+        suggestions += '<button type="button" class="reu-sugg hors" data-part-add="' + escA(q.trim()) + '">'
+                     + 'Ajouter &laquo; ' + esc(q.trim()) + ' &raquo;'
+                     + '<em>hors annuaire</em></button>';
+      }
+      if(!suggestions){
+        suggestions = '<div class="reu-sauve">D&eacute;j&agrave; dans la r&eacute;union.</div>';
+      }
+    }
+
+    return '<div class="reu-parts">' + pastilles + '</div>'
+      + '<div class="reu-cherche">'
+      +   '<input type="search" id="reu-p-q" autocomplete="off" '
+      +     'placeholder="Chercher un nom&hellip;" aria-label="Chercher un participant" '
+      +     'value="' + escA(q) + '">'
+      +   '<div class="reu-suggs">' + suggestions + '</div>'
       + '</div>';
   }
 
@@ -302,7 +388,9 @@
     var vue = rac.querySelector('#reu-vue');
     if(!vue) return;
     if(S.vue === 'reunion'){
-      vue.innerHTML = rendreReunion(S.reunion, S.prod, S.notesEtat);
+      vue.innerHTML = rendreReunion(S.reunion, S.prod, {
+        notes: S.notesEtat, personnes: S.personnes, recherche: S.rechercheP
+      });
       var ta = vue.querySelector('#reu-notes');
       if(ta) ta.value = (S.notesLocal !== null ? S.notesLocal
                                                : ((S.reunion && S.reunion.notes) || ''));
@@ -324,6 +412,46 @@
       + R.renderListe(S.prod.comptes_rendus || []) + '</div>';
     R.brancherFrise(box, {onClic: function(){}});
     R.brancher(null, {racine: box, toast: toast, onSaved: function(){ recharger(); }});
+  }
+
+  /* Le bloc se repeint seul : la colonne entiere se reconstruirait sinon, et
+     le champ de recherche perdrait le curseur a chaque lettre. */
+  function peindreParticipants(rac, garderFocus){
+    var box = rac.querySelector('#reu-participants');
+    if(!box) return;
+    var champ = box.querySelector('#reu-p-q');
+    var pos = champ ? champ.selectionStart : null;
+    box.innerHTML = rendreParticipants(
+      S.reunion && S.reunion.participants, S.personnes, S.rechercheP);
+    if(garderFocus){
+      var neuf = box.querySelector('#reu-p-q');
+      if(neuf){
+        neuf.focus();
+        try{ if(pos !== null) neuf.setSelectionRange(pos, pos); }catch(e){}
+      }
+    }
+  }
+
+  /* Ajouter ou retirer : le serveur remplace la liste entiere, on lui envoie
+     donc celle d'apres. Les chiffres de production ne dependent pas des
+     presents — inutile de recharger la reunion complete. */
+  async function majParticipants(rac, ajout, retrait){
+    if(!S.reunion) return;
+    var noms = ((S.reunion.participants || []).map(function(p){ return p.nom; }));
+    if(retrait !== null && retrait !== undefined){
+      noms = noms.filter(function(n){ return pli(n) !== pli(retrait); });
+    }
+    if(ajout){
+      var nom = String(ajout).trim();
+      if(nom && !noms.some(function(n){ return pli(n) === pli(nom); })) noms.push(nom);
+    }
+    try{
+      S.reunion = await poster('/api/reunions/' + encodeURIComponent(S.reunion.id),
+                               {participants: noms});
+      S.rechercheP = '';
+      peindreParticipants(rac, !!ajout);
+      try{ await chargerListe(); }catch(e){}
+    }catch(e){ toast(e.message, 'danger'); }
   }
 
   /* Enregistrement ---------------------------------------------- */
@@ -454,7 +582,8 @@
                                  corb.getAttribute('data-suppr-titre'));
         return;
       }
-      var el = ev.target.closest ? ev.target.closest('[data-r],[data-sup]') : null;
+      var el = ev.target.closest
+        ? ev.target.closest('[data-r],[data-sup],[data-part-add],[data-part-sup]') : null;
       if(el && rac.contains(el)){
         var act = el.getAttribute('data-r');
         if(act === 'liste'){
@@ -471,6 +600,10 @@
         if(act === 'clore'){ await clore(); return; }
         if(act === 'ajout-action'){ await ajouterAction(rac); return; }
         if(act === 'suppr-non'){ fermerSuppression(rac); return; }
+        var ajout = el.getAttribute('data-part-add');
+        if(ajout !== null){ await majParticipants(rac, ajout, null); return; }
+        var retrait = el.getAttribute('data-part-sup');
+        if(retrait !== null){ await majParticipants(rac, null, retrait); return; }
         if(act === 'suppr-oui'){ await confirmerSuppression(rac); return; }
         var sup = el.getAttribute('data-sup');
         if(sup){ await majAction(sup, {texte: ''}); return; }
@@ -491,6 +624,11 @@
     });
 
     rac.addEventListener('input', function(ev){
+      if(ev.target.id === 'reu-p-q'){
+        S.rechercheP = ev.target.value;
+        peindreParticipants(rac, true);
+        return;
+      }
       if(ev.target.id !== 'reu-notes') return;
       S.notesLocal = ev.target.value;
       S.notesEtat = 'Modifications non enregistrees…';
@@ -509,7 +647,19 @@
       }, 900);
     });
 
-    rac.addEventListener('keydown', function(ev){
+    rac.addEventListener('keydown', async function(ev){
+      // Entree valide la premiere suggestion : on tape trois lettres, on entre.
+      if(ev.target.id === 'reu-p-q' && ev.key === 'Enter'){
+        ev.preventDefault();
+        var premiere = rac.querySelector('[data-part-add]');
+        if(premiere) await majParticipants(rac, premiere.getAttribute('data-part-add'), null);
+        return;
+      }
+      if(ev.target.id === 'reu-p-q' && ev.key === 'Escape'){
+        S.rechercheP = '';
+        peindreParticipants(rac, true);
+        return;
+      }
       if(ev.target.id === 'reu-a-txt' && ev.key === 'Enter'){
         ev.preventDefault();
         var b = rac.querySelector('[data-r="ajout-action"]');
@@ -656,12 +806,14 @@
   function reset(){
     S.vue = 'liste'; S.reunion = null; S.prod = null;
     S.reunions = null; S.notesLocal = null; S.notesEtat = ''; S.erreur = null;
+    S.personnes = []; S.rechercheP = '';
     S.contexteCharge = false;
   }
 
   window.MySifaReunions = {
     monter: monter, reset: reset,
     rendreListe: rendreListe, rendreReunion: rendreReunion,
-    rendreActions: rendreActions, rendreDocument: rendreDocument
+    rendreActions: rendreActions, rendreParticipants: rendreParticipants,
+    rendreDocument: rendreDocument
   };
 })();
