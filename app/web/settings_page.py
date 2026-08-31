@@ -1028,7 +1028,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
     </div>
     <div class="desktop-head">
       <h1>Paramètres</h1>
-      <p class="sub">Gestion des comptes et visualisation des accès applications — réservé au super administrateur.</p>
+      <p class="sub">Gestion des comptes et visualisation des accès applications — chaque service voit et administre les sections qui lui sont ouvertes.</p>
     </div>
 
     <section id="panel-menu">
@@ -3120,6 +3120,7 @@ function toast(msg, err) {
   setTimeout(() => t.remove(), 3500);
 }
 let assignableRoles = [];
+let assignableRolesForActor = [];
 let roleLabels = {};
 let apps = [];
 let operators = [];
@@ -3833,7 +3834,10 @@ function initMachinesPanel() {
 
 function fillRoleSelect() {
   const s = document.getElementById('cu-role');
-  s.innerHTML = assignableRoles.map(r =>
+  // Rôles réellement attribuables par l'utilisateur courant (le back refuse
+  // direction / super admin à un non super admin — inutile de les proposer).
+  const opts = assignableRolesForActor.length ? assignableRolesForActor : assignableRoles;
+  s.innerHTML = opts.map(r =>
     '<option value="' + esc(r) + '">' + esc(roleLabels[r] || r) + '</option>'
   ).join('');
 }
@@ -4125,7 +4129,13 @@ async function openEdit(id) {
   const isDesignatedSup = superadminEmailRef && String(u.email || '').trim().toLowerCase() === superadminEmailRef && u.role === 'superadmin';
   const roleOpts = isDesignatedSup
     ? '<option value="superadmin" selected>Super admin</option>'
-    : assignableRoles.map(r => '<option value="' + esc(r) + '"' + (u.role === r ? ' selected' : '') + '>' + esc(roleLabels[r] || r) + '</option>').join('');
+    : (function(){
+        // Choix limités à ce que l'utilisateur courant peut attribuer, plus le
+        // rôle actuel du compte pour que le select reflète l'état réel.
+        const base = assignableRolesForActor.length ? assignableRolesForActor : assignableRoles;
+        const list = base.indexOf(u.role) === -1 ? base.concat([u.role]) : base;
+        return list.map(r => '<option value="' + esc(r) + '"' + (u.role === r ? ' selected' : '') + '>' + esc(roleLabels[r] || r) + '</option>').join('');
+      })();
 
   dlg.innerHTML = '<h3 style="margin:0 0 12px;font-size:16px">Modifier</h3>' +
     '<label class="sub">Nom</label><input id="ed-nom" value="' + esc(u.nom) + '" style="margin-bottom:10px">' +
@@ -6321,6 +6331,7 @@ function openContactSubModal(fournisseurId, contactId, onSaved) {
     const meta = await api('/api/settings/access-matrix');
     superadminEmailRef = String(meta.superadmin_email || '').trim().toLowerCase();
     assignableRoles = meta.roles || meta.assignable_roles || [];
+    assignableRolesForActor = meta.roles_assignables || assignableRoles;
     roleLabels = meta.role_labels || {};
     apps = meta.apps || [];
     fillRoleSelect();

@@ -27,7 +27,12 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.core.database import get_db
-from app.services.auth_service import get_current_user, require_superadmin
+from app.services.auth_service import get_current_user, require_settings_audit
+
+# Les tableaux de bord d'administration sont l'onglet « Tableaux de bord » de la
+# section Audit & qualité de /settings (direction + super admin). Le garde suit
+# cette section : la direction voyait l'onglet et se prenait un 403.
+require_dashboards_admin = require_settings_audit
 
 router = APIRouter(tags=["dashboards"])
 
@@ -56,7 +61,7 @@ class DashboardStateUpdate(BaseModel):
 # ─── SUPERADMIN : CRUD référentiel ───────────────────────────────────────────
 
 @router.get("/api/dashboards/admin")
-def admin_list_dashboards(request: Request, user=Depends(require_superadmin)):
+def admin_list_dashboards(request: Request, user=Depends(require_dashboards_admin)):
     with get_db() as conn:
         rows = conn.execute(
             "SELECT id, titre, description, widget_type, config_json, actif, created_at, updated_at "
@@ -73,7 +78,7 @@ def admin_list_dashboards(request: Request, user=Depends(require_superadmin)):
     return result
 
 @router.post("/api/dashboards/admin")
-def admin_create_dashboard(body: DashboardCreate, request: Request, user=Depends(require_superadmin)):
+def admin_create_dashboard(body: DashboardCreate, request: Request, user=Depends(require_dashboards_admin)):
     allowed = {"stock_alerts", "planning_summary", "expe_today"}
     if body.widget_type not in allowed:
         raise HTTPException(400, "widget_type invalide")
@@ -90,7 +95,7 @@ def admin_create_dashboard(body: DashboardCreate, request: Request, user=Depends
     return {"id": new_id, "ok": True}
 
 @router.patch("/api/dashboards/admin/{dashboard_id}")
-def admin_update_dashboard(dashboard_id: int, body: DashboardUpdate, request: Request, user=Depends(require_superadmin)):
+def admin_update_dashboard(dashboard_id: int, body: DashboardUpdate, request: Request, user=Depends(require_dashboards_admin)):
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
     fields, vals = [], []
     if body.titre is not None:
@@ -111,7 +116,7 @@ def admin_update_dashboard(dashboard_id: int, body: DashboardUpdate, request: Re
     return {"ok": True}
 
 @router.delete("/api/dashboards/admin/{dashboard_id}")
-def admin_delete_dashboard(dashboard_id: int, request: Request, user=Depends(require_superadmin)):
+def admin_delete_dashboard(dashboard_id: int, request: Request, user=Depends(require_dashboards_admin)):
     with get_db() as conn:
         conn.execute("DELETE FROM user_dashboards WHERE dashboard_id=?", (dashboard_id,))
         conn.execute("DELETE FROM dashboards WHERE id=?", (dashboard_id,))

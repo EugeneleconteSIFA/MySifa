@@ -41,9 +41,13 @@ def _table_existe(conn, nom: str) -> bool:
 
 
 def titre_par_defaut(quand: Optional[date] = None) -> str:
-    """« Point de production du lundi 31/08/2026 » — modifiable ensuite."""
-    d = quand or date.today()
-    return f"Point de production du {_JOURS[d.weekday()]} {d.strftime('%d/%m/%Y')}"
+    """La date du jour, et rien d'autre — « 31/08/2026 ».
+
+    Le titre sert a retrouver une reunion dans une liste : y repeter « Point de
+    production » sur chaque ligne n'apprend rien, la page le dit deja. Il reste
+    modifiable, pour les points qui meritent un nom.
+    """
+    return (quand or date.today()).strftime("%d/%m/%Y")
 
 
 def _jour(valeur: Any, defaut: str = "") -> str:
