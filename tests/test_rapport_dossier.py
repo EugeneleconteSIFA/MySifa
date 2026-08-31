@@ -71,7 +71,8 @@ def base():
             quantite_a_traiter REAL DEFAULT 0, quantite_traitee REAL DEFAULT 0,
             commentaire TEXT, est_annule INTEGER DEFAULT 0,
             annule_motif TEXT, annule_par TEXT, annule_le TEXT,
-            metrage_prevu REAL, metrage_reel REAL
+            metrage_prevu REAL, metrage_reel REAL,
+            metrage_total_debut REAL, metrage_total_fin REAL
         );
         CREATE TABLE dossier_info_prod (
             no_dossier TEXT PRIMARY KEY NOT NULL, ref_produit_norm TEXT,
@@ -95,6 +96,15 @@ def base():
             metrage_m REAL, vitesse_m_min REAL, commentaires TEXT,
             nb_nc INTEGER DEFAULT 0, cloture_le TEXT NOT NULL
         );
+        CREATE TABLE retour_prod_ecrits (
+            cle TEXT PRIMARY KEY NOT NULL, no_dossier TEXT,
+            valide INTEGER NOT NULL DEFAULT 0, valide_par TEXT, valide_le TEXT
+        );
+        CREATE TABLE retour_prod_notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, no_dossier TEXT NOT NULL,
+            cle_ecrit TEXT, texte TEXT NOT NULL, auteur TEXT NOT NULL,
+            created_at TEXT NOT NULL, updated_at TEXT, updated_par TEXT
+        );
         CREATE TABLE nc_dossiers (
             id INTEGER PRIMARY KEY AUTOINCREMENT, numero TEXT NOT NULL UNIQUE,
             titre TEXT NOT NULL, gravite TEXT, statut TEXT, date_nc TEXT,
@@ -108,17 +118,18 @@ def base():
 def saisie(conn, minutes_apres, code, categorie, operateur="Marc",
            no_dossier="D-100", machine="Cohesio 1", operation=None,
            metrage_reel=None, metrage_prevu=None, commentaire=None,
-           est_annule=0, annule_motif=None):
+           est_annule=0, annule_motif=None, ctr_debut=None, ctr_fin=None):
     conn.execute(
         """INSERT INTO production_data
            (operateur, date_operation, operation, operation_code, operation_category,
             machine, no_dossier, client, designation, commentaire, est_annule,
-            annule_motif, metrage_prevu, metrage_reel)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            annule_motif, metrage_prevu, metrage_reel,
+            metrage_total_debut, metrage_total_fin)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         (operateur, (T0 + timedelta(minutes=minutes_apres)).strftime("%Y-%m-%dT%H:%M:%S"),
          operation or code, code, categorie, machine, no_dossier,
          "Client Test", "Etiquette 100x50", commentaire, est_annule,
-         annule_motif, metrage_prevu, metrage_reel),
+         annule_motif, metrage_prevu, metrage_reel, ctr_debut, ctr_fin),
     )
     conn.commit()
     return conn.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
@@ -194,24 +205,68 @@ def test_saisie_restee_ouverte():
 # ─── 5. Metrage ──────────────────────────────────────────────────────────────
 
 def test_metrage():
-    print("\n5. Metrage : le compteur machine n'est pas un metrage")
+    print("\n5. Metrage : ecart de compteur, jamais le compteur brut")
+
+    def m(saisies):
+        return svc.metrage_dossier(saisies, "89", "01", "90")
+
+    # Cas nominal : 01 pose le compteur de debut, 89 celui de fin.
     conn = base()
-    saisies_deux = [
-        {"operation_code": "89", "metrage_reel": 91_994_681},
-        {"operation_code": "89", "metrage_reel": 92_006_681},
-    ]
-    m = svc.metrage_dossier(saisies_deux, "89")
-    verifier("deux releves : ecart de compteur", m["reel"], 12000.0)
-    verifier("fiable", m["fiable"], True)
+    saisie(conn, 0, "01", "personnel", ctr_debut=91_994_681)
+    saisie(conn, 200, "89", "personnel", ctr_fin=92_006_681)
+    r = m(svc._saisies(conn, "D-100"))
+    verifier("ecart de compteur", r["reel"], 12000.0)
+    verifier("fiable", r["fiable"], True)
 
-    m1 = svc.metrage_dossier([{"operation_code": "89", "metrage_reel": 12000}], "89")
-    verifier("un seul releve plausible : retenu", m1["reel"], 12000.0)
+    # Sans compteur de debut : PAS de metrage. Prendre 0 pour origine sortirait
+    # le compteur machine entier (91 994 681 m), l'erreur d'ordre de grandeur
+    # qui a deja fausse les besoins matieres.
+    conn = base()
+    saisie(conn, 0, "01", "personnel")
+    saisie(conn, 200, "89", "personnel", ctr_fin=92_006_681)
+    r = m(svc._saisies(conn, "D-100"))
+    verifier("sans compteur de debut : aucun metrage", r["reel"], 0.0)
+    verifier("et signale non fiable", r["fiable"], False)
+    verifier("la cloture orpheline est comptee", r["fins_sans_debut"], 1)
 
-    m2 = svc.metrage_dossier([{"operation_code": "89", "metrage_reel": 91_994_681}], "89")
-    verifier("un seul releve au-dela du seuil : ecarte", m2["reel"], 0.0)
-    verifier("et signale non fiable", m2["fiable"], False)
+    # Repli sur l'ancien couple de colonnes pour les lignes anterieures.
+    conn = base()
+    saisie(conn, 0, "01", "personnel", metrage_prevu=1000)
+    saisie(conn, 200, "89", "personnel", metrage_reel=4500)
+    verifier("repli metrage_prevu / metrage_reel", m(svc._saisies(conn, "D-100"))["reel"], 3500.0)
 
-    verifier("aucun releve", svc.metrage_dossier([], "89")["reel"], 0.0)
+    # Les nouvelles colonnes priment sur le repli.
+    conn = base()
+    saisie(conn, 0, "01", "personnel", ctr_debut=1000, metrage_prevu=99999)
+    saisie(conn, 200, "89", "personnel", ctr_fin=4000, metrage_reel=99999)
+    verifier("les colonnes compteur priment", m(svc._saisies(conn, "D-100"))["reel"], 3000.0)
+
+    # Deux cycles : les ecarts s'additionnent.
+    conn = base()
+    saisie(conn, 0, "01", "personnel", ctr_debut=1000)
+    saisie(conn, 100, "89", "personnel", ctr_fin=3000)
+    saisie(conn, 200, "01", "personnel", ctr_debut=3000)
+    saisie(conn, 300, "89", "personnel", ctr_fin=8000)
+    r = m(svc._saisies(conn, "D-100"))
+    verifier("deux cycles additionnes", r["reel"], 7000.0)
+    verifier("deux cycles comptes", r["cycles"], 2)
+
+    # Le compteur de debut appartient au DOSSIER : l'equipe qui cloture n'a pas
+    # forcement pose le code de debut.
+    conn = base()
+    saisie(conn, 0, "01", "personnel", operateur="Marc", ctr_debut=1000)
+    saisie(conn, 300, "89", "personnel", operateur="Sophie", ctr_fin=6000)
+    verifier("debut pose par un autre conducteur",
+             m(svc._saisies(conn, "D-100"))["reel"], 5000.0)
+
+    # L'annulation borne un cycle comme la fin, avec son propre compteur.
+    conn = base()
+    saisie(conn, 0, "01", "personnel", ctr_debut=1000)
+    saisie(conn, 200, "90", "annulation", ctr_debut=1000, ctr_fin=2500)
+    verifier("annulation bornee comme une fin",
+             m(svc._saisies(conn, "D-100"))["reel"], 1500.0)
+
+    verifier("aucune saisie", m([])["reel"], 0.0)
 
 
 def test_mediane():
@@ -248,12 +303,15 @@ def test_reperes_reference():
 # ─── 8. Compte-rendu complet ─────────────────────────────────────────────────
 
 def dossier_complet(conn):
+    # Compteur de debut sur le code 01 : sans lui, la regle canonique refuse
+    # d'inventer un metrage (et c'est le bug observe en production).
+    saisie(conn, -5, "01", "personnel", operation="Demarrer un dossier", ctr_debut=91_994_681)
     saisie(conn, 0, "02", "calage")
     saisie(conn, 30, "03", "production")
     saisie(conn, 90, "53", "arret", operation="Casse bande",
            commentaire="Bobine mal enroulee, changee")
     saisie(conn, 120, "03", "production")
-    saisie(conn, 180, "89", "personnel", metrage_reel=20000, metrage_prevu=25000)
+    saisie(conn, 180, "89", "personnel", ctr_fin=92_014_681)
     conn.execute(
         """INSERT INTO arret_seuils_franchis
            (saisie_id, no_dossier, machine, operation_code, operation, operateur,
@@ -283,7 +341,6 @@ def test_compte_rendu():
     verifier("cloture", cr["identite"]["cloture"], True)
     verifier("conducteurs", cr["identite"]["conducteurs"], ["Marc"])
     verifier("metrage", cr["metrage"]["reel"], 20000.0)
-    verifier("ecart au prevu", round(cr["metrage"]["ecart_pct"], 1), -20.0)
     # production 60 + 60 = 120 min -> 20000 m / 120 min = 166,7 m/min
     verifier("vitesse de production (hors arrets)", cr["vitesse_m_min"], 166.7)
     # cadence : denominateur production + arret = 120 + 30 = 150 min
@@ -442,6 +499,77 @@ def test_recherche_tous_dossiers():
              [v["cle"] for v in cr["vigilance"]], [])
 
 
+def test_suivi_des_remontees():
+    print("\n12 ter. Suivi des remontees : valider, commenter, corriger")
+    conn = base()
+    dossier_complet(conn)
+    conn.execute(
+        """INSERT INTO dossier_info_prod (no_dossier, texte, auteur, created_at)
+           VALUES ('D-100','Tension a baisser','Marc','2026-06-08T11:05:00')""")
+    conn.commit()
+
+    # La cle doit etre stable et distinguer les sources.
+    verifier("cle d'un commentaire de saisie", svc.cle_ecrit("commentaire", 4), "saisie:4")
+    verifier("cle d'une info prod", svc.cle_ecrit("info_prod", "D-100"), "infoprod:D-100")
+    verifier("cle d'un seuil", svc.cle_ecrit("arret", 4), "seuil:4")
+    verifier("cle d'une note", svc.cle_ecrit("note", 7), "note:7")
+
+    cr = svc.compte_rendu(conn, "D-100")
+    verifier("rien n'est valide au depart",
+             any(e.get("valide") for e in cr["ecrits"]["commentaires"]), False)
+    verifier("l'info prod porte sa cle", cr["ecrits"]["info_prod"]["cle"], "infoprod:D-100")
+    verifier("un commentaire de saisie est modifiable",
+             cr["ecrits"]["commentaires"][0]["modifiable"], True)
+    verifier("un seuil porte sa cle", cr["seuils"][0]["cle"].startswith("seuil:"), True)
+
+    # Validation, puis retour en arriere.
+    cle = cr["ecrits"]["info_prod"]["cle"]
+    svc.valider_ecrit(conn, cle, "D-100", True, "Eugene")
+    cr = svc.compte_rendu(conn, "D-100")
+    verifier("info prod validee", cr["ecrits"]["info_prod"]["valide"], True)
+    verifier("et l'auteur est trace", cr["ecrits"]["info_prod"]["valide_par"], "Eugene")
+    verifier("valider n'efface pas la remontee",
+             cr["ecrits"]["info_prod"]["texte"], "Tension a baisser")
+
+    svc.valider_ecrit(conn, cle, "D-100", False, "Eugene")
+    cr = svc.compte_rendu(conn, "D-100")
+    verifier("devalidation possible", cr["ecrits"]["info_prod"]["valide"], False)
+    verifier("et l'auteur est efface", cr["ecrits"]["info_prod"]["valide_par"], "")
+
+    # Note ajoutee, puis corrigee, puis supprimee par un texte vide.
+    note = svc.ajouter_note(conn, "D-100", "Vu avec le chef d'atelier", "Eugene", cle)
+    verifier("note creee", note["texte"], "Vu avec le chef d'atelier")
+    verifier("note rattachee a la remontee", note["cle_ecrit"], cle)
+    cr = svc.compte_rendu(conn, "D-100")
+    verifier("la note remonte dans le compte-rendu", len(cr["ecrits"]["notes"]), 1)
+    verifier("et elle porte sa cle", cr["ecrits"]["notes"][0]["cle"], "note:" + str(note["id"]))
+
+    svc.modifier_note(conn, note["id"], "Vu avec le chef d'atelier le 12", "Eugene")
+    verifier("note corrigee",
+             svc.notes_dossier(conn, "D-100")[0]["texte"], "Vu avec le chef d'atelier le 12")
+    verifier("dernier correcteur trace",
+             svc.notes_dossier(conn, "D-100")[0]["updated_par"], "Eugene")
+    verifier("note vide = note supprimee",
+             svc.modifier_note(conn, note["id"], "   ", "Eugene"), None)
+    verifier("et elle a disparu", svc.notes_dossier(conn, "D-100"), [])
+
+    # Correction du texte d'une saisie.
+    sid = cr["ecrits"]["commentaires"][0]["saisie_id"]
+    verifier("commentaire de saisie corrige",
+             svc.modifier_commentaire_saisie(conn, sid, "Bobine lot 4412 — reprise"), True)
+    cr = svc.compte_rendu(conn, "D-100")
+    verifier("le nouveau texte remonte",
+             cr["ecrits"]["commentaires"][0]["texte"], "Bobine lot 4412 — reprise")
+
+    # La feuille atelier porte les memes etats.
+    svc.valider_ecrit(conn, cle, "D-100", True, "Eugene")
+    r = svc.retour_atelier(conn, "Cohesio 1", SEMAINE_DEBUT, SEMAINE_FIN)
+    valides = [e for e in r["ecrits"] if e.get("valide")]
+    verifier("la feuille montre l'etat de validation", len(valides), 1)
+    verifier("chaque ecrit de la feuille porte sa cle",
+             all(e.get("cle") for e in r["ecrits"]), True)
+
+
 def test_minutes_txt():
     print("\n13. Format des durees")
     verifier("moins d'une heure", svc._minutes_txt(45), "45 min")
@@ -465,6 +593,7 @@ if __name__ == "__main__":
     test_retour_atelier()
     test_machine_sans_donnee()
     test_recherche_tous_dossiers()
+    test_suivi_des_remontees()
     test_minutes_txt()
 
     print("\n" + "=" * 60)

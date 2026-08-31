@@ -72,6 +72,21 @@ def _mois_livraison(pe: dict, axe: str = "livraison") -> Optional[str]:
     return None
 
 
+def laize_mm(besoin: dict):
+    """Laize d'un besoin, en millimètres entiers — `None` si la matière n'est pas laizée.
+
+    Arrondie à l'entier volontairement : 76 et 76.0 désignent la même bobine, et
+    deux clés pour une seule laize scinderaient la courbe en deux moitiés qui ne
+    veulent rien dire.
+    """
+    v = besoin.get("laize_mm")
+    try:
+        v = float(v)
+    except (TypeError, ValueError):
+        return None
+    return int(round(v)) if v > 0 else None
+
+
 def agreger(conn, axe: str = "livraison") -> tuple:
     """Besoin par (mois de livraison, matière, nature), sur tout le planning.
 
@@ -81,7 +96,14 @@ def agreger(conn, axe: str = "livraison") -> tuple:
     calibration ne racontent plus la même chose.
 
     Retourne (cumul, vus, vus_actifs, dossiers) où `cumul` est indexé par
-    (mois, matiere_id, kind) et porte { q, q_actif, unite, inc }.
+    (mois, matiere_id, kind) et porte { q, q_actif, unite, inc, laizes }.
+
+    `laizes` éclate le même total par laize (en mm, `None` pour ce qui n'est
+    pas laizé) : une bobine ne se commande ni ne se stocke hors de sa laize,
+    et un besoin de frontal agrégé toutes laizes confondues est juste en
+    mètres mais inutilisable pour passer commande. Le total de la clé reste
+    la somme de ses laizes — la photo quotidienne continue de n'écrire que
+    lui, et ne voit pas la différence.
     """
     # Import local : ce service est appelé DEPUIS le router besoins_matieres.
     # Au niveau module, l'import serait circulaire. Même parti pris que
@@ -114,17 +136,23 @@ def agreger(conn, axe: str = "livraison") -> tuple:
             agg = cumul.setdefault(
                 cle, {"q": 0.0, "q_actif": 0.0, "unite": b.get("unite"), "inc": 0,
                       "ref": b.get("matiere_ref"), "designation": b.get("matiere_designation"),
-                      "source_value": b.get("source_value")})
+                      "source_value": b.get("source_value"), "laizes": {}})
             vus.setdefault(cle, set()).add(pe["id"])
             if actif:
                 vus_actifs.setdefault(cle, set()).add(pe["id"])
+            sub = agg.setdefault("laizes", {}).setdefault(
+                laize_mm(b), {"q": 0.0, "q_actif": 0.0, "inc": 0, "ids": set()})
+            sub["ids"].add(pe["id"])
             q = b.get("quantite")
             if q is None:
                 agg["inc"] += 1
+                sub["inc"] += 1
             else:
                 agg["q"] += float(q)
+                sub["q"] += float(q)
                 if actif:
                     agg["q_actif"] += float(q)
+                    sub["q_actif"] += float(q)
             if not agg["unite"]:
                 agg["unite"] = b.get("unite")
     return cumul, vus, vus_actifs, dossiers

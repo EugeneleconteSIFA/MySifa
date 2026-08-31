@@ -6937,6 +6937,8 @@ async function loadRetourProd(patch){
     machine:'', machines:[], periode:null, vue:'feuille',
     feuille:null, lignes:null, q:'', dossier:null, cr:null, erreur:null
   }, S.retourProd||{}, patch||{});
+  // machine vide = toutes les machines. C'est un choix, pas une absence de
+  // choix : on ne bascule donc jamais d'office sur la premiere de la liste.
 
   const qs = rpQs();
   st.erreur = null;
@@ -6945,15 +6947,14 @@ async function loadRetourProd(patch){
     if(p){
       st.periode = p;
       st.machines = rpMachinesVisibles(p.machines||[]);
-      if(st.machines.indexOf(st.machine) < 0) st.machine = st.machines[0] || '';
+      if(st.machine && st.machines.indexOf(st.machine) < 0) st.machine = '';
     }
 
     if(st.dossier){
       st.cr = await api('/api/rapports-prod/dossier/'+encodeURIComponent(st.dossier));
     } else if(st.vue==='feuille'){
-      st.feuille = st.machine
-        ? await api('/api/rapports-prod/retour-atelier?machine='+encodeURIComponent(st.machine)+'&'+qs)
-        : null;
+      st.feuille = await api('/api/rapports-prod/retour-atelier?machine='
+                             + encodeURIComponent(st.machine||'') + '&' + qs);
     } else {
       const d = await api('/api/rapports-prod/comptes-rendus?'+qs
                           +'&machine='+encodeURIComponent(st.machine||''));
@@ -7147,14 +7148,9 @@ function renderRetourProd(){
   if(!RP) return h('div',{className:'card-empty'},"Module de rendu non charge (mysifa_retour_prod.js).");
   if(!st)  return h('div',{className:'card-empty'},'Chargement du retour de production...');
 
-  const champ = {background:'var(--bg)',border:'1px solid var(--border)',borderRadius:'8px',
-                 padding:'6px 10px',color:'var(--text)',fontSize:'13px',fontFamily:'inherit'};
   const lbl = {fontSize:'11px',fontWeight:'700',color:'var(--muted)',
                textTransform:'uppercase',letterSpacing:'.5px'};
-  const puce = (actif)=>({background:actif?'var(--accent-bg)':'transparent',
-    border:'1px solid '+(actif?'var(--accent)':'var(--border)'),borderRadius:'999px',
-    padding:'6px 12px',fontSize:'12px',fontWeight:'600',cursor:'pointer',
-    fontFamily:'inherit',color:actif?'var(--accent)':'var(--text2)'});
+  const seg = (actif)=>'rp-seg'+(actif?' actif':'');
 
   const messageErreur = st.erreur
     ? h('div',{className:'card',style:{padding:'14px 16px',marginBottom:'14px',
@@ -7179,7 +7175,7 @@ function renderRetourProd(){
     }
     return h('div',null,
       h('div',{style:{margin:'0 0 14px'}},
-        h('button',{type:'button',style:puce(false),
+        h('button',{type:'button',className:'rp-seg',
           onClick:()=>rpMaj({dossier:null,cr:null})},'← Retour a la liste')),
       messageErreur, frag);
   }
@@ -7193,18 +7189,17 @@ function renderRetourProd(){
     h('span',{style:{fontSize:'12px',color:'var(--muted)'}},
       'suit les filtres ci-dessus'),
     h('label',{style:Object.assign({marginLeft:'8px'},lbl)},'Feuille de'),
-    h('select',{value:st.machine,style:champ,
+    h('select',{value:st.machine,className:'rp-select',
       onChange:async(e)=>{ await rpMaj({machine:e.target.value}); }},
-      ...((st.machines||[]).length
-          ? st.machines.map(m=>h('option',{value:m,selected:m===st.machine},m))
-          : [h('option',{value:''},'Aucune machine sur la periode')])),
+      h('option',{value:'',selected:!st.machine},'Toutes les machines'),
+      ...(st.machines||[]).map(m=>h('option',{value:m,selected:m===st.machine},m))),
     h('div',{style:{flex:'1'}}),
-    h('button',{type:'button',style:puce(st.vue==='feuille'),
+    h('button',{type:'button',className:seg(st.vue==='feuille'),
       onClick:()=>rpMaj({vue:'feuille'})},'Feuille atelier'),
-    h('button',{type:'button',style:puce(st.vue==='liste'),
+    h('button',{type:'button',className:seg(st.vue==='liste'),
       onClick:()=>rpMaj({vue:'liste'})},'Comptes-rendus'),
     ...(st.vue==='feuille' && st.feuille
-        ? [h('button',{type:'button',style:puce(false),onClick:rpImprimer},'Imprimer')]
+        ? [h('button',{type:'button',className:'rp-seg',onClick:rpImprimer},'Imprimer')]
         : [])
   );
 
@@ -7213,19 +7208,22 @@ function renderRetourProd(){
     frag.innerHTML = st.feuille
       ? RP.renderFeuille(st.feuille)
       : '<div class="rp-vide">Aucun dossier cloture sur cette periode.</div>';
+    // Les remontees de la feuille se valident, se corrigent et se commentent.
+    // Chaque bouton porte son dossier : la feuille en melange plusieurs.
+    RP.brancher(null, {
+      racine: frag,
+      toast: (m,t)=>{ try{ showToast(m,t); }catch(e){} },
+      onSaved: ()=>rpMaj({})
+    });
     return h('div',null, barre, messageErreur, frag);
   }
 
   // Vue liste : recherche libre (tout dossier) + dossiers clotures sur la periode.
-  const rech = h('div',{className:'card',style:{padding:'14px 16px',marginBottom:'14px'}});
+  const rech = h('div',{className:'rp-recherche'});
   rech.innerHTML =
-      '<label style="display:block;font-size:11px;font-weight:600;color:var(--muted);'
-    + 'text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">'
-    + "Ouvrir le compte-rendu de n'importe quel dossier</label>"
+      "<label for=\"rp-q\">Ouvrir le compte-rendu de n'importe quel dossier</label>"
     + '<input type="search" id="rp-q" autocomplete="off" placeholder="N&deg; de dossier, client '
-    + 'ou designation &mdash; meme hors periode" style="width:100%;background:var(--bg);'
-    + 'border:1px solid var(--border);border-radius:10px;padding:10px 14px;color:var(--text);'
-    + 'font-size:14px;font-family:inherit">'
+    + 'ou designation &mdash; meme hors periode">'
     + '<div class="rp-note" style="margin-top:7px">La liste ci-dessous ne montre que les dossiers '
     + 'clotures sur la periode filtree. La recherche atteint tous les dossiers ayant des saisies.</div>'
     + '<div id="rp-qres"></div>';

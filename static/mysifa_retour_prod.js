@@ -89,6 +89,68 @@
          + (sub ? '<div class="k-sub">' + escHtml(sub) + '</div>' : '') + '</div>';
   }
 
+
+  /* ── Une remontee, avec ses trois gestes ────────────────────── */
+
+  // Un id DOM ne peut pas porter les deux-points de la cle : on l'aplatit.
+  function slug(cle) { return String(cle || "").replace(/[^A-Za-z0-9_-]/g, "_"); }
+
+  /*
+   * Rend une remontee : le texte, sa provenance, son etat, et les trois gestes
+   * qu'on peut poser dessus — valider (c'est traite), modifier (le texte est
+   * faux ou incomplet), commenter (on repond). Valider n'efface pas : ce qui
+   * disparait de l'ecran n'est jamais relu.
+   */
+  function renderEcrit(e, opts) {
+    opts = opts || {};
+    var id = slug(e.cle), actions = [];
+
+    if (e.cle) {
+      actions.push('<button type="button" class="rp-btn-mini" data-valider="' + escAttr(e.cle)
+        + '" data-dossier="' + escAttr(e.no_dossier || opts.no_dossier || "") + '"'
+        + ' data-etat="' + (e.valide ? "1" : "0") + '">'
+        + (e.valide ? "Dévalider" : "Valider") + '</button>');
+      if (e.modifiable) {
+        actions.push('<button type="button" class="rp-btn-mini" data-modif="' + escAttr(e.cle)
+          + '" data-origine="' + escAttr(e.origine || "") + '"'
+          + ' data-ref="' + escAttr(e.reference == null ? "" : e.reference) + '"'
+          + ' data-dossier="' + escAttr(e.no_dossier || opts.no_dossier || "") + '">Modifier</button>');
+      }
+      actions.push('<button type="button" class="rp-btn-mini" data-commenter="' + escAttr(e.cle)
+        + '" data-dossier="' + escAttr(e.no_dossier || opts.no_dossier || "") + '">Commenter</button>');
+    }
+
+    return '<div class="rp-mot' + (e.valide ? ' est-valide' : '') + '">'
+      + '<div class="m-txt" id="rp-e-vue-' + id + '">' + escHtml(e.texte) + '</div>'
+      + '<div class="m-meta">'
+      + (e.origine ? '<span class="m-tag">' + escHtml(LIB_ORIGINE[e.origine] || e.origine) + '</span>' : '')
+      + (opts.avecDossier && e.no_dossier ? escHtml(e.no_dossier) + ' · ' : '')
+      + (e.operation ? escHtml(sansCode(e.operation, e.operation_code)) + ' · ' : '')
+      + escHtml(e.auteur || "")
+      + (e.date ? ' · ' + escHtml(dateFr(e.date)) : '')
+      + (e.valide ? '<span class="rp-vu">traité' + (e.valide_par ? ' par ' + escHtml(e.valide_par) : '')
+                    + (e.valide_le ? ' le ' + escHtml(dateFr(e.valide_le)) : '') + '</span>' : '')
+      + '</div>'
+      + (actions.length ? '<div class="rp-edit-actions">' + actions.join("") + '</div>' : '')
+      + '<div class="rp-edit" id="rp-e-form-' + id + '" style="display:none">'
+      + '<textarea id="rp-e-txt-' + id + '">' + escHtml(e.texte || "") + '</textarea>'
+      + '<div class="rp-edit-actions">'
+      + '<button type="button" class="rp-btn-mini" data-annul="' + id + '" data-quoi="form">Annuler</button>'
+      + '<button type="button" class="rp-btn-mini primaire" data-modif-ok="' + escAttr(e.cle) + '"'
+      + ' data-origine="' + escAttr(e.origine || "") + '"'
+      + ' data-ref="' + escAttr(e.reference == null ? "" : e.reference) + '"'
+      + ' data-dossier="' + escAttr(e.no_dossier || opts.no_dossier || "") + '">Enregistrer</button>'
+      + '</div></div>'
+      + '<div class="rp-edit" id="rp-e-com-' + id + '" style="display:none">'
+      + '<textarea id="rp-e-comtxt-' + id + '" placeholder="Votre réponse"></textarea>'
+      + '<div class="rp-edit-actions">'
+      + '<button type="button" class="rp-btn-mini" data-annul="' + id + '" data-quoi="com">Annuler</button>'
+      + '<button type="button" class="rp-btn-mini primaire" data-com-ok="' + escAttr(e.cle) + '"'
+      + ' data-dossier="' + escAttr(e.no_dossier || opts.no_dossier || "") + '">Envoyer</button>'
+      + '</div></div>'
+      + '</div>';
+  }
+
   /* ── Feuille atelier ────────────────────────────────────────── */
 
   function renderFeuille(d) {
@@ -96,13 +158,18 @@
 
     if (!d.dossiers) {
       return '<div class="rp-feuille"><div class="rp-tete"><div>'
-           + '<div class="rp-machine">' + escHtml(d.machine) + '</div>'
+           + '<div class="rp-machine">'
+           + escHtml(d.toutes_machines ? "Toutes les machines" : d.machine) + '</div>'
            + '<div class="rp-periode">' + escHtml(per.label) + '</div></div></div>'
            + '<div class="rp-vide">Aucun dossier clôturé.</div></div>';
     }
 
     var h = '<div class="rp-feuille"><div class="rp-tete"><div>'
-          + '<div class="rp-machine">' + escHtml(d.machine) + '</div>'
+          + '<div class="rp-machine">'
+          + escHtml(d.toutes_machines ? "Toutes les machines" : d.machine) + '</div>'
+          + (d.toutes_machines && (d.machines_couvertes || []).length
+              ? '<div class="rp-sous">' + d.machines_couvertes.map(escHtml).join(" · ") + '</div>'
+              : '')
           + '<div class="rp-periode">' + escHtml(per.label)
           + (per.mode === "semaine" ? ' — du ' + escHtml(per.du) + ' au ' + escHtml(per.au) : '')
           + '</div></div>';
@@ -125,7 +192,7 @@
     if ((d.references || []).length) {
       h += '<div class="rp-bloc"><div class="rp-titre" title="Cadence = m\u00e8tres par minute, '
          + 'arr\u00eats compris. M\u00eame calcul des deux c\u00f4t\u00e9s.">Cadence</div>'
-         + '<table class="rp-grille"><thead><tr><th>Dossier</th><th>Référence</th>'
+         + '<table class="rp-grille"><thead><tr><th>Dossier</th><th>Client</th><th>Référence</th>'
          + '<th class="num">Métrage</th><th class="num">Cette fois</th>'
          + '<th class="num">D\'habitude</th><th class="num">Écart</th></tr></thead><tbody>';
       d.references.forEach(function (r) {
@@ -134,6 +201,7 @@
             + r.series_passees + (r.series_passees > 1 ? ' prod.' : ' prod.') + '</div>'
           : '<span class="rp-mut">1re fois</span>';
         h += '<tr><td><b>' + escHtml(r.no_dossier) + '</b></td>'
+           + '<td>' + escHtml(r.client || "—") + '</td>'
            + '<td>' + escHtml(r.ref_produit_norm || r.designation || "—") + '</td>'
            + '<td class="num">' + fnum(r.metrage) + ' m</td>'
            + '<td class="num">' + vitesse(r.cadence_m_min)
@@ -145,12 +213,11 @@
     }
 
     if ((d.arrets_couteux || []).length) {
-      h += '<div class="rp-bloc"><div class="rp-titre">Temps perdu</div>'
-         + '<table class="rp-grille"><thead><tr><th>Code</th><th>Opération</th>'
+      h += '<div class="rp-bloc"><div class="rp-titre">Arrêts</div>'
+         + '<table class="rp-grille"><thead><tr><th>Arrêt</th>'
          + '<th class="num">Nb</th><th class="num">Temps</th></tr></thead><tbody>';
       d.arrets_couteux.forEach(function (a) {
-        h += '<tr><td><b>' + escHtml(a.code) + '</b></td>'
-           + '<td>' + escHtml(sansCode(a.operation, a.code) || "—") + '</td>'
+        h += '<tr><td><b>' + escHtml(sansCode(a.operation, a.code) || a.code || "—") + '</b></td>'
            + '<td class="num">' + a.occurrences + '</td>'
            + '<td class="num">' + escHtml(a.minutes_txt) + '</td></tr>';
       });
@@ -158,17 +225,11 @@
     }
 
     if ((d.ecrits || []).length) {
-      h += '<div class="rp-bloc"><div class="rp-titre">Vos écrits</div>';
-      d.ecrits.forEach(function (e) {
-        h += '<div class="rp-mot"><div class="m-txt">' + escHtml(e.texte) + '</div>'
-           + '<div class="m-meta"><span class="m-tag">'
-           + escHtml(LIB_ORIGINE[e.origine] || e.origine) + '</span>'
-           + escHtml(e.no_dossier)
-           + (e.operation ? ' · ' + escHtml(e.operation) : '')
-           + (e.auteur ? ' · ' + escHtml(e.auteur) : '')
-           + (e.date ? ' · ' + escHtml(dateFr(e.date)) : '')
-           + '</div></div>';
-      });
+      var restants = d.ecrits.filter(function (e) { return !e.valide; }).length;
+      h += '<div class="rp-bloc"><div class="rp-titre">Vos écrits'
+         + (restants ? ' <span class="rp-compte">' + restants + ' à traiter</span>' : '')
+         + '</div>';
+      d.ecrits.forEach(function (e) { h += renderEcrit(e, { avecDossier: true }); });
       h += '</div>';
     }
 
@@ -294,19 +355,15 @@
     }
 
     /* Info prod — toujours affichee, meme absente : c'est le manque qui compte. */
-    h += '<div class="rp-bloc"><div class="rp-titre">Info prod</div>'
-       + '<div id="rp-ip-vue">'
+    h += '<div class="rp-bloc"><div class="rp-titre">Info prod</div><div id="rp-ip-vue">'
        + (info
-           ? '<div class="rp-mot"><div class="m-txt">' + escHtml(info.texte) + '</div>'
-             + '<div class="m-meta">' + escHtml(info.auteur || "")
-             + (info.updated_par && info.updated_par !== info.auteur
-                 ? ' · corrigée par ' + escHtml(info.updated_par) : '')
-             + ' · ' + escHtml(dateFr(info.updated_at || info.created_at)) + '</div></div>'
+           ? renderEcrit(info, { no_dossier: cr.no_dossier })
            : '<div class="rp-manque">Aucune info prod enregistrée pour ce dossier.'
              + (id.cloture ? ' Elle est pourtant due à la clôture.'
-                           : ' Le dossier n\'est pas encore clôturé.') + '</div>')
-       + '<div class="rp-edit-actions"><button type="button" class="rp-btn-mini" id="rp-ip-edit">'
-       + (info ? 'Modifier' : 'Renseigner') + '</button></div></div>'
+                           : ' Le dossier n\'est pas encore clôturé.') + '</div>'
+             + '<div class="rp-edit-actions"><button type="button" class="rp-btn-mini"'
+             + ' id="rp-ip-edit">Renseigner</button></div>')
+       + '</div>'
        + '<div id="rp-ip-form" style="display:none"><div class="rp-edit">'
        + '<textarea id="rp-ip-txt" placeholder="Ce qu\'il faut savoir pour la prochaine production de cette référence">'
        + escHtml(info ? info.texte : "") + '</textarea>'
@@ -317,20 +374,22 @@
 
     if ((cr.seuils || []).length) {
       h += '<div class="rp-bloc"><div class="rp-titre">Seuils franchis</div>';
-      cr.seuils.forEach(function (s) {
-        var sid = s.saisie_id;
+      cr.seuils.forEach(function (sx) {
+        if (sx.explication_texte) {
+          h += renderEcrit(sx, { no_dossier: cr.no_dossier });
+          return;
+        }
+        var sid = sx.saisie_id;
         h += '<div class="rp-mot"><div class="m-txt" id="rp-sx-vue-' + sid + '">'
-           + (s.explication_texte
-               ? escHtml(s.explication_texte)
-               : '<span class="rp-attente">Sans explication — à poser au point de production</span>')
-           + '</div><div class="m-meta"><span class="m-tag">' + escHtml(s.operation_code) + '</span>'
-           + escHtml(sansCode(s.operation, s.operation_code)) + ' · ' + escHtml(s.duree_saisie_txt || "")
-           + (s.operateur ? ' · ' + escHtml(s.operateur) : '') + '</div>'
+           + '<span class="rp-attente">Sans explication — à poser au point de production</span>'
+           + '</div><div class="m-meta"><span class="m-tag">' + escHtml(sx.operation_code) + '</span>'
+           + escHtml(sansCode(sx.operation, sx.operation_code)) + ' · '
+           + escHtml(sx.duree_saisie_txt || "")
+           + (sx.operateur ? ' · ' + escHtml(sx.operateur) : '') + '</div>'
            + '<div class="rp-edit-actions"><button type="button" class="rp-btn-mini" data-seuil="'
-           + sid + '">' + (s.explication_texte ? 'Compléter' : 'Expliquer') + '</button></div>'
+           + sid + '">Expliquer</button></div>'
            + '<div class="rp-edit" id="rp-sx-form-' + sid + '" style="display:none">'
-           + '<textarea id="rp-sx-txt-' + sid + '" placeholder="Ce qui s\'est passé, et ce qui a été fait">'
-           + escHtml(s.explication_texte || "") + '</textarea>'
+           + '<textarea id="rp-sx-txt-' + sid + '" placeholder="Ce qui s\'est passé, et ce qui a été fait"></textarea>'
            + '<div class="rp-edit-actions">'
            + '<button type="button" class="rp-btn-mini" data-seuil-annul="' + sid + '">Annuler</button>'
            + '<button type="button" class="rp-btn-mini primaire" data-seuil-ok="' + sid + '">Enregistrer</button>'
@@ -340,16 +399,21 @@
     }
 
     var coms = (cr.ecrits || {}).commentaires || [];
-    if (coms.length) {
-      h += '<div class="rp-bloc"><div class="rp-titre">Commentaires</div>';
-      coms.forEach(function (c) {
-        h += '<div class="rp-mot"><div class="m-txt">' + escHtml(c.texte) + '</div>'
-           + '<div class="m-meta"><span class="m-tag">'
-           + escHtml(LIB_ORIGINE[c.origine] || c.origine) + '</span>'
-           + escHtml(c.operateur || "") + ' · ' + escHtml(dateFr(c.date)) + '</div></div>';
-      });
-      h += '</div>';
+    var notes = (cr.ecrits || {}).notes || [];
+    h += '<div class="rp-bloc"><div class="rp-titre">Commentaires</div>';
+    if (!coms.length && !notes.length) {
+      h += '<div class="rp-manque">Aucun commentaire sur ce dossier.</div>';
     }
+    coms.forEach(function (c) { h += renderEcrit(c, { no_dossier: cr.no_dossier }); });
+    notes.forEach(function (n) { h += renderEcrit(n, { no_dossier: cr.no_dossier }); });
+    h += '<div class="rp-edit-actions"><button type="button" class="rp-btn-mini"'
+       + ' id="rp-note-add">Ajouter un commentaire</button></div>'
+       + '<div class="rp-edit" id="rp-note-form" style="display:none">'
+       + '<textarea id="rp-note-txt" placeholder="Votre commentaire sur ce dossier"></textarea>'
+       + '<div class="rp-edit-actions">'
+       + '<button type="button" class="rp-btn-mini" id="rp-note-annul">Annuler</button>'
+       + '<button type="button" class="rp-btn-mini primaire" id="rp-note-ok">Enregistrer</button>'
+       + '</div></div></div>';
 
     if ((cr.non_conformites || []).length) {
       h += '<div class="rp-bloc"><div class="rp-titre">Non-conformités</div>'
@@ -417,7 +481,16 @@
     opts = opts || {};
     var R = opts.racine || document;
     var dire = opts.toast || function () {};
+    var fini = opts.onSaved || function () {};
 
+    function agir(bouton, url, corps, silence) {
+      bouton.disabled = true;
+      return poster(url, corps)
+        .then(function () { if (!silence) dire(silence || "Enregistré.", "info"); fini(); })
+        .catch(function (err) { dire(err.message, "danger"); bouton.disabled = false; });
+    }
+
+    // ── Info prod : saisie ou correction depuis le compte-rendu
     var edit = R.querySelector("#rp-ip-edit");
     if (edit) {
       edit.onclick = function () { ouvrirForm(R, "rp-ip-vue", "rp-ip-form", "rp-ip-txt"); };
@@ -425,17 +498,12 @@
         fermerForm(R, "rp-ip-vue", "rp-ip-form");
       };
       R.querySelector("#rp-ip-ok").onclick = function (e) {
-        var b = e.target; b.disabled = true;
-        poster("/api/rapports-prod/dossier/" + encodeURIComponent(no) + "/info-prod",
-               { texte: R.querySelector("#rp-ip-txt").value })
-          .then(function () {
-            dire("Info prod enregistrée.", "info");
-            if (opts.onSaved) opts.onSaved();
-          })
-          .catch(function (err) { dire(err.message, "danger"); b.disabled = false; });
+        agir(e.target, "/api/rapports-prod/dossier/" + encodeURIComponent(no) + "/info-prod",
+             { texte: R.querySelector("#rp-ip-txt").value }, "Info prod enregistrée.");
       };
     }
 
+    // ── Seuils encore sans explication
     Array.prototype.forEach.call(R.querySelectorAll("[data-seuil]"), function (b) {
       var sid = b.getAttribute("data-seuil");
       b.onclick = function () {
@@ -451,16 +519,93 @@
       b.onclick = function (e) {
         var txt = (R.querySelector("#rp-sx-txt-" + sid).value || "").trim();
         if (!txt) { dire("Explication vide.", "danger"); return; }
-        var btn = e.target; btn.disabled = true;
-        poster("/api/rapports-prod/seuil/" + encodeURIComponent(sid) + "/explication",
-               { texte: txt })
-          .then(function () {
-            dire("Explication enregistrée.", "info");
-            if (opts.onSaved) opts.onSaved();
-          })
-          .catch(function (err) { dire(err.message, "danger"); btn.disabled = false; });
+        agir(e.target, "/api/rapports-prod/seuil/" + encodeURIComponent(sid) + "/explication",
+             { texte: txt }, "Explication enregistrée.");
       };
     });
+
+    // ── Les trois gestes sur une remontee ────────────────────────
+    // Chaque bouton porte son dossier : la feuille atelier melange plusieurs
+    // dossiers, il n'y a pas de « dossier courant » sur lequel se rabattre.
+    Array.prototype.forEach.call(R.querySelectorAll("[data-valider]"), function (b) {
+      b.onclick = function (e) {
+        agir(e.target, "/api/rapports-prod/ecrit/valider", {
+          cle: b.getAttribute("data-valider"),
+          no_dossier: b.getAttribute("data-dossier") || no || "",
+          valide: b.getAttribute("data-etat") !== "1"
+        }, b.getAttribute("data-etat") === "1" ? "Remis à traiter." : "Marqué comme traité.");
+      };
+    });
+
+    Array.prototype.forEach.call(R.querySelectorAll("[data-modif]"), function (b) {
+      var id = slug(b.getAttribute("data-modif"));
+      b.onclick = function () { ouvrirForm(R, "rp-e-vue-" + id, "rp-e-form-" + id, "rp-e-txt-" + id); };
+    });
+    Array.prototype.forEach.call(R.querySelectorAll("[data-commenter]"), function (b) {
+      var id = slug(b.getAttribute("data-commenter"));
+      b.onclick = function () { ouvrirForm(R, "rp-e-vue-" + id, "rp-e-com-" + id, "rp-e-comtxt-" + id); };
+    });
+    Array.prototype.forEach.call(R.querySelectorAll("[data-annul]"), function (b) {
+      var id = b.getAttribute("data-annul"), quoi = b.getAttribute("data-quoi");
+      b.onclick = function () {
+        fermerForm(R, "rp-e-vue-" + id, "rp-e-" + (quoi === "com" ? "com-" : "form-") + id);
+      };
+    });
+
+    // Corriger le texte : la destination depend de la source de la remontee.
+    Array.prototype.forEach.call(R.querySelectorAll("[data-modif-ok]"), function (b) {
+      b.onclick = function (e) {
+        var id = slug(b.getAttribute("data-modif-ok"));
+        var origine = b.getAttribute("data-origine");
+        var ref = b.getAttribute("data-ref");
+        var dossier = b.getAttribute("data-dossier") || no || "";
+        var txt = R.querySelector("#rp-e-txt-" + id).value;
+        var url = null;
+        if (origine === "commentaire") {
+          url = "/api/rapports-prod/saisie/" + encodeURIComponent(ref) + "/commentaire";
+        } else if (origine === "info_prod") {
+          url = "/api/rapports-prod/dossier/" + encodeURIComponent(dossier) + "/info-prod";
+        } else if (origine === "arret") {
+          url = "/api/rapports-prod/seuil/" + encodeURIComponent(ref) + "/explication";
+          if (!txt.trim()) { dire("Explication vide.", "danger"); return; }
+        } else if (origine === "note") {
+          url = "/api/rapports-prod/note/" + encodeURIComponent(ref);
+        }
+        if (!url) { dire("Cette remontée ne se corrige pas ici.", "danger"); return; }
+        agir(e.target, url, { texte: txt }, "Enregistré.");
+      };
+    });
+
+    // Repondre a une remontee : une note rattachee a sa cle.
+    Array.prototype.forEach.call(R.querySelectorAll("[data-com-ok]"), function (b) {
+      b.onclick = function (e) {
+        var id = slug(b.getAttribute("data-com-ok"));
+        var dossier = b.getAttribute("data-dossier") || no || "";
+        var txt = (R.querySelector("#rp-e-comtxt-" + id).value || "").trim();
+        if (!txt) { dire("Commentaire vide.", "danger"); return; }
+        agir(e.target, "/api/rapports-prod/dossier/" + encodeURIComponent(dossier) + "/note",
+             { texte: txt, cle_reponse: b.getAttribute("data-com-ok") }, "Commentaire ajouté.");
+      };
+    });
+
+    // ── Commentaire libre sur le dossier
+    var ajout = R.querySelector("#rp-note-add");
+    if (ajout) {
+      ajout.onclick = function () {
+        ouvrirForm(R, "rp-note-add", "rp-note-form", "rp-note-txt");
+        ajout.style.display = "none";
+      };
+      R.querySelector("#rp-note-annul").onclick = function () {
+        R.querySelector("#rp-note-form").style.display = "none";
+        ajout.style.display = "";
+      };
+      R.querySelector("#rp-note-ok").onclick = function (e) {
+        var txt = (R.querySelector("#rp-note-txt").value || "").trim();
+        if (!txt) { dire("Commentaire vide.", "danger"); return; }
+        agir(e.target, "/api/rapports-prod/dossier/" + encodeURIComponent(no) + "/note",
+             { texte: txt }, "Commentaire ajouté.");
+      };
+    }
   }
 
   global.MySifaRetourProd = {
@@ -472,6 +617,8 @@
     renderListe: renderListe,
     renderRecherche: renderRecherche,
     renderCR: renderCR,
+    renderEcrit: renderEcrit,
+    slug: slug,
     brancher: brancher
   };
 })(window);

@@ -26,9 +26,9 @@ Deux principes de conception :
    - duree d'une saisie = ecart avec la saisie suivante DU MEME OPERATEUR,
      saisies annulees exclues (`est_annule`) ;
    - temps de production = somme des saisies de categorie `production` ;
-   - metrage du dossier = MAX - MIN des `metrage_reel` releves sur le code de
-     fin, parce que l'operateur releve un compteur machine et non un delta ;
-     une valeur unique n'est retenue que sous `SEUIL_COMPTEUR`.
+   - metrage du dossier = somme des ecarts de compteur (fin - debut) par
+     cycle, exactement comme `dossier_stats._enrich_metrage` qui alimente
+     `produit_series.metrage_m` et la liste des saisies de MyProd.
 
    Une seule chose est calculee plus largement, et elle est nommee autrement :
    l'ancien rapport intitulait « calage » le seul code 02, alors que le
@@ -48,16 +48,13 @@ import json
 import re
 import unicodedata
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 # Au-dela de cet ecart entre deux saisies d'un meme operateur, on ne regarde
 # plus un arret machine mais une fin de journee. Meme valeur que
 # `app/services/arret_seuils.py`.
 ECART_MAX_MIN = 480.0
 
-# Au-dela de ce metrage, une valeur unique relevee en fin de dossier est un
-# compteur machine brut, pas une production. Seuil repris de l'ancien rapport.
-SEUIL_COMPTEUR = 1_000_000.0
 
 # Categories du referentiel operations.json, telles qu'elles sont stockees sur
 # chaque saisie (`production_data.operation_category`). Lire la colonne plutot
@@ -166,6 +163,7 @@ def _saisies(conn, no_dossier: str) -> List[Dict[str, Any]]:
     optionnelles = [c for c in (
         "commentaire", "est_annule", "annule_motif", "annule_par", "annule_le",
         "metrage_reel", "metrage_prevu", "nb_cartons",
+        "metrage_total_debut", "metrage_total_fin",
     ) if c in cols]
     champs = ["id", "operateur", "date_operation", "operation", "operation_code",
               "operation_category", "machine", "no_dossier", "client",
@@ -275,38 +273,89 @@ def _minutes_de(temps: Dict[str, Any], categorie: str) -> float:
 
 # ─── Metrage ─────────────────────────────────────────────────────────────────
 
-def metrage_dossier(saisies: List[Dict[str, Any]], code_fin: str) -> Dict[str, Any]:
-    """Metrage produit, deduit des releves de compteur en fin de session.
+def _compteur(saisie: Dict[str, Any], *champs: str) -> Optional[float]:
+    """Premier compteur machine renseigne parmi `champs`, sinon None.
 
-    Convention reprise de l'ancien rapport : l'operateur releve un compteur
-    machine, donc plusieurs sessions donnent plusieurs valeurs croissantes.
-    Le metrage produit est leur ecart. Une valeur unique n'est retenue que si
-    elle ressemble a une production et non a un compteur.
+    L'ordre porte l'histoire du schema : les compteurs vivent dans
+    `metrage_total_debut` / `metrage_total_fin` depuis leur introduction,
+    `metrage_prevu` / `metrage_reel` restent le repli des lignes anterieures.
     """
-    valeurs = [
-        _f(s.get("metrage_reel"))
-        for s in saisies
-        if _txt(s.get("operation_code")) == code_fin and _f(s.get("metrage_reel")) > 0
-    ]
-    if len(valeurs) >= 2:
-        reel = max(valeurs) - min(valeurs)
-        fiable = True
-    elif len(valeurs) == 1:
-        reel = valeurs[0] if valeurs[0] < SEUIL_COMPTEUR else 0.0
-        fiable = valeurs[0] < SEUIL_COMPTEUR
-    else:
-        reel = 0.0
-        fiable = False
+    for champ in champs:
+        v = saisie.get(champ)
+        if v is None:
+            continue
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            continue
+    return None
 
-    prevus = [_f(s.get("metrage_prevu")) for s in saisies if _f(s.get("metrage_prevu")) > 0]
-    prevu = max(prevus) if prevus else None
+
+def metrage_dossier(saisies: List[Dict[str, Any]], code_fin: str = "89",
+                    code_debut: str = "01", code_annul: str = "90") -> Dict[str, Any]:
+    """Metrage produit = somme des ecarts de compteur (fin - debut) par cycle.
+
+    Regle reprise TELLE QUELLE de `app/services/dossier_stats.py::_enrich_metrage`,
+    qui alimente `produit_series.metrage_m` et la liste des saisies de MyProd.
+    La reproduire a l'identique n'est pas du zele : c'est la seule facon que ce
+    dossier n'affiche pas ici un metrage different de celui qu'un operateur
+    relit ailleurs.
+
+    1. Les compteurs sont dans `metrage_total_debut` / `metrage_total_fin` ;
+       `metrage_prevu` / `metrage_reel` ne sont que le repli des lignes
+       anterieures. Ne lire que l'ancien couple rend muette toute saisie qui ne
+       le remplit plus — metrage a 0 sur un dossier pourtant produit.
+    2. Le compteur de debut appartient au DOSSIER, pas a l'operateur : quand
+       une equipe prend la suite d'une autre, celle qui cloture n'a pas pose le
+       code de debut.
+    3. Sans compteur de debut connu, il n'y a pas de metrage — on ne prend pas
+       0 pour origine, sinon c'est le compteur machine entier qui sort.
+    4. Le code d'annulation borne un cycle comme le code de fin : le temps et
+       la matiere ont ete consommes, seule la livraison n'a pas eu lieu. La
+       ligne d'annulation porte elle-meme son compteur de debut.
+    """
+    ordonnees = sorted(saisies, key=lambda r: (_txt(r.get("date_operation")), r.get("id") or 0))
+    debuts: List[Tuple[str, float]] = []
+    total = 0.0
+    cycles = 0
+    fins_sans_debut = 0
+
+    for r in ordonnees:
+        code = _txt(r.get("operation_code"))
+        quand = _txt(r.get("date_operation"))
+
+        if code == code_debut:
+            ctr = _compteur(r, "metrage_total_debut", "metrage_prevu")
+            if ctr is not None:
+                debuts.append((quand, ctr))
+            continue
+
+        if code not in (code_fin, code_annul):
+            continue
+
+        fin_ctr = _compteur(r, "metrage_total_fin", "metrage_reel")
+        if fin_ctr is None:
+            continue
+
+        debut_ctr = (_compteur(r, "metrage_total_debut", "metrage_prevu")
+                     if code == code_annul else None)
+        if debut_ctr is None:
+            avant = [c for q, c in debuts if q <= quand]
+            debut_ctr = avant[-1] if avant else None
+        if debut_ctr is None:
+            fins_sans_debut += 1
+            continue
+
+        total += max(0.0, fin_ctr - debut_ctr)
+        cycles += 1
 
     return {
-        "reel": round(reel, 1),
-        "prevu": round(prevu, 1) if prevu else None,
-        "fiable": fiable,
-        "ecart_pct": _ecart_pct(reel, prevu) if prevu else None,
-        "releves": len(valeurs),
+        "reel": round(total, 1),
+        "fiable": cycles > 0,
+        "cycles": cycles,
+        # Une cloture dont le compteur de debut manque : le metrage est
+        # incomplet, et l'ecran doit pouvoir le dire.
+        "fins_sans_debut": fins_sans_debut,
     }
 
 
@@ -523,7 +572,7 @@ def reperes_reference(conn, ref_produit_norm: Optional[str],
 # ─── Compte-rendu d'un dossier ───────────────────────────────────────────────
 
 def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
-                 code_debut: str = "01") -> Dict[str, Any]:
+                 code_debut: str = "01", code_annul: str = "90") -> Dict[str, Any]:
     """Tout ce que la production de ce dossier a produit comme information.
 
     Les codes de debut et de fin arrivent en parametres — ils vivent dans
@@ -541,7 +590,7 @@ def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
     conducteurs = sorted({_txt(s.get("operateur")) for s in saisies if _txt(s.get("operateur"))})
 
     temps = temps_par_categorie(saisies)
-    metrage = metrage_dossier(saisies, code_fin)
+    metrage = metrage_dossier(saisies, code_fin, code_debut, code_annul)
     minutes_prod = _minutes_de(temps, CAT_PRODUCTION)
     # m/min partout : unite de la machine et du reste de MySifa.
     vitesse = (metrage["reel"] / minutes_prod) if minutes_prod > 0 and metrage["reel"] > 0 else None
@@ -557,6 +606,39 @@ def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
     coms = commentaires(conn, no_dossier, saisies)
     seuils = seuils_franchis(conn, no_dossier)
     ncs = non_conformites(conn, no_dossier)
+    notes = notes_dossier(conn, no_dossier)
+
+    # Etat de suivi : chaque remontee porte sa cle, son etat de validation et
+    # de quoi savoir si son texte se corrige depuis l'ecran.
+    etats = _etats_ecrits(conn, no_dossier)
+
+    def _suivi(objet: Dict[str, Any], origine: str, reference: Any,
+               modifiable: bool) -> Dict[str, Any]:
+        cle = cle_ecrit(origine, reference)
+        etat = etats.get(cle, {})
+        objet["cle"] = cle
+        objet["origine"] = origine
+        objet["reference"] = reference
+        objet["modifiable"] = modifiable
+        objet["valide"] = bool(etat.get("valide"))
+        objet["valide_par"] = etat.get("valide_par", "")
+        objet["valide_le"] = etat.get("valide_le", "")
+        return objet
+
+    if info:
+        _suivi(info, "info_prod", no_dossier, True)
+    for c in coms:
+        # Un motif d'annulation est la trace d'un geste, pas une remontee que
+        # l'on complete apres coup : il se valide, il ne se corrige pas.
+        _suivi(c, c.get("origine") or "commentaire", c.get("saisie_id"),
+               (c.get("origine") or "commentaire") == "commentaire")
+    for sx in seuils:
+        _suivi(sx, "arret", sx.get("saisie_id"), True)
+        # Meme forme que les autres remontees : l'ecran n'a pas a savoir que
+        # celle-ci range son texte sous un autre nom.
+        sx["texte"] = sx.get("explication_texte") or ""
+    for n in notes:
+        _suivi(n, "note", n.get("id"), True)
 
     minutes_calage = _minutes_de(temps, CAT_CALAGE)
     minutes_arret = sum(_minutes_de(temps, c) for c in CATEGORIES_COUTEUSES)
@@ -587,6 +669,7 @@ def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
         "ecrits": {
             "info_prod": info,
             "commentaires": coms,
+            "notes": notes,
         },
         "seuils": seuils,
         "non_conformites": ncs,
@@ -633,7 +716,14 @@ def _vigilance(cr: Dict[str, Any], minutes_arret: float) -> List[Dict[str, str]]
     if ident["cloture"] and not cr["metrage"]["fiable"]:
         points.append({
             "cle": "metrage_non_fiable",
-            "texte": "Metrage non exploitable — un seul releve de compteur, pas d'ecart calculable.",
+            "texte": ("Metrage non calculable — aucun compteur de debut releve "
+                      "(code de debut sans metrage, ou dossier repris sans reprise du compteur)."),
+        })
+    elif cr["metrage"].get("fins_sans_debut"):
+        points.append({
+            "cle": "metrage_incomplet",
+            "texte": (f"{cr['metrage']['fins_sans_debut']} cloture sans compteur de debut : "
+                      "le metrage affiche est incomplet."),
         })
 
     total_min = cr["temps"]["total_minutes"]
@@ -700,7 +790,11 @@ def resume(cr: Dict[str, Any]) -> Dict[str, Any]:
         "minutes_total": cr["temps"]["total_minutes"],
         "info_prod": bool(info),
         "info_prod_substantielle": bool(info and info.get("substantiel")),
-        "nb_commentaires": len(cr["ecrits"]["commentaires"]),
+        "nb_commentaires": len(cr["ecrits"]["commentaires"]) + len(cr["ecrits"]["notes"]),
+        "nb_a_traiter": sum(
+            1 for e in ([cr["ecrits"]["info_prod"]] if cr["ecrits"]["info_prod"] else [])
+            + cr["ecrits"]["commentaires"] + cr["ecrits"]["notes"] + cr["seuils"]
+            if not e.get("valide")),
         "nb_seuils": len(cr["seuils"]),
         "nb_seuils_sans_explication": sum(1 for s in cr["seuils"] if s.get("sans_explication")),
         "nb_nc": len(cr["non_conformites"]),
@@ -759,6 +853,7 @@ def retour_atelier(conn, machine: str, debut: str, fin: str,
             continue
         refs.append({
             "no_dossier": c["no_dossier"],
+            "client": c["identite"]["client"],
             "ref_produit_norm": c["identite"]["ref_produit_norm"],
             "designation": c["identite"]["designation"],
             "metrage": c["metrage"]["reel"],
@@ -791,29 +886,36 @@ def retour_atelier(conn, machine: str, debut: str, fin: str,
 
     # Ce que les conducteurs ont ecrit cette semaine.
     ecrits: List[Dict[str, Any]] = []
+
+    def _porter(source: Dict[str, Any], no_d: str, texte: str, auteur: str,
+                date: str, operation: str = "") -> None:
+        ecrits.append({
+            "no_dossier": no_d, "texte": texte, "auteur": auteur, "date": date,
+            "operation": operation,
+            "origine": source.get("origine", ""), "cle": source.get("cle", ""),
+            "reference": source.get("reference"),
+            "modifiable": bool(source.get("modifiable")),
+            "valide": bool(source.get("valide")),
+            "valide_par": source.get("valide_par", ""),
+            "valide_le": source.get("valide_le", ""),
+        })
+
     for c in crs:
+        no_d = c["no_dossier"]
         info = c["ecrits"]["info_prod"]
         if info and info.get("substantiel"):
-            ecrits.append({
-                "no_dossier": c["no_dossier"], "origine": "info_prod",
-                "texte": info["texte"], "auteur": _txt(info.get("auteur")),
-                "date": _txt(info.get("created_at")),
-            })
-        for s in c["seuils"]:
-            if s.get("explication_texte"):
-                ecrits.append({
-                    "no_dossier": c["no_dossier"], "origine": "arret",
-                    "texte": s["explication_texte"],
-                    "auteur": _txt(s.get("operateur")),
-                    "date": _txt(s.get("created_at")),
-                    "operation": _txt(s.get("operation")),
-                })
+            _porter(info, no_d, info["texte"], _txt(info.get("auteur")),
+                    _txt(info.get("updated_at") or info.get("created_at")))
+        for sx in c["seuils"]:
+            if sx.get("explication_texte"):
+                _porter(sx, no_d, sx["explication_texte"], _txt(sx.get("operateur")),
+                        _txt(sx.get("created_at")), _txt(sx.get("operation")))
         for cm in c["ecrits"]["commentaires"]:
-            ecrits.append({
-                "no_dossier": c["no_dossier"], "origine": cm["origine"],
-                "texte": cm["texte"], "auteur": cm["operateur"], "date": cm["date"],
-                "operation": cm.get("operation", ""),
-            })
+            _porter(cm, no_d, cm["texte"], cm["operateur"], cm["date"],
+                    cm.get("operation", ""))
+        for n in c["ecrits"]["notes"]:
+            _porter(n, no_d, n["texte"], _txt(n.get("auteur")),
+                    _txt(n.get("updated_at") or n.get("created_at")))
     ecrits.sort(key=lambda e: e.get("date") or "")
 
     # Vigilance agregee — les memes cles, comptees, jamais rattachees a un nom.
@@ -824,6 +926,9 @@ def retour_atelier(conn, machine: str, debut: str, fin: str,
 
     return {
         "machine": _txt(machine),
+        "toutes_machines": not _txt(machine),
+        "machines_couvertes": sorted({c["identite"]["machine"] for c in crs
+                                      if c["identite"].get("machine")}),
         "periode": {"debut": debut, "fin": fin},
         "dossiers": len(crs),
         "conducteurs": conducteurs,
@@ -917,3 +1022,119 @@ def rechercher_dossiers(conn, terme: str, limite: int = 20,
         "nb_saisies": int(r["nb_saisies"] or 0),
         "cloture": bool(r["cloture"]),
     } for r in rows]
+
+
+# ─── Suivi des remontees : validation, notes ─────────────────────────────────
+#
+# Une remontee vient de trois tables differentes (commentaire de saisie, info
+# prod, explication d'arret) plus les notes ajoutees ici. Une CLE stable les
+# reconcilie, pour qu'un seul mecanisme de suivi les couvre toutes.
+# Voir app/core/migrations/2026_08_28_retour_prod_suivi.py.
+
+def cle_ecrit(origine: str, reference: Any) -> str:
+    prefixe = {
+        "commentaire": "saisie", "annulation": "saisie",
+        "info_prod": "infoprod", "arret": "seuil", "note": "note",
+    }.get(_txt(origine), _txt(origine) or "ecrit")
+    return f"{prefixe}:{_txt(reference)}"
+
+
+def _etats_ecrits(conn, no_dossier: str) -> Dict[str, Dict[str, Any]]:
+    if not _table_existe(conn, "retour_prod_ecrits"):
+        return {}
+    rows = conn.execute(
+        """SELECT cle, valide, valide_par, valide_le FROM retour_prod_ecrits
+            WHERE TRIM(COALESCE(no_dossier,'')) = TRIM(?)""",
+        (no_dossier,),
+    ).fetchall()
+    return {r["cle"]: {"valide": bool(r["valide"]), "valide_par": _txt(r["valide_par"]),
+                       "valide_le": _txt(r["valide_le"])} for r in rows}
+
+
+def valider_ecrit(conn, cle: str, no_dossier: str, valide: bool, par: str) -> Dict[str, Any]:
+    """Marque une remontee comme traitee, ou revient dessus.
+
+    Une remontee validee reste affichee : la valider ne l'efface pas, elle dit
+    seulement que quelqu'un l'a prise. Ce qui disparait de l'ecran n'est jamais
+    relu, et une remontee non traitee doit rester sous les yeux.
+    """
+    if not _table_existe(conn, "retour_prod_ecrits"):
+        return {}
+    maintenant = datetime.now().isoformat(timespec="seconds")
+    conn.execute(
+        """INSERT INTO retour_prod_ecrits (cle, no_dossier, valide, valide_par, valide_le)
+           VALUES (?,?,?,?,?)
+           ON CONFLICT(cle) DO UPDATE SET
+             no_dossier=excluded.no_dossier, valide=excluded.valide,
+             valide_par=excluded.valide_par, valide_le=excluded.valide_le""",
+        (_txt(cle), _txt(no_dossier), 1 if valide else 0,
+         _txt(par) if valide else "", maintenant if valide else ""),
+    )
+    conn.commit()
+    return {"cle": _txt(cle), "valide": bool(valide),
+            "valide_par": _txt(par) if valide else "",
+            "valide_le": maintenant if valide else ""}
+
+
+def notes_dossier(conn, no_dossier: str) -> List[Dict[str, Any]]:
+    if not _table_existe(conn, "retour_prod_notes"):
+        return []
+    rows = conn.execute(
+        """SELECT id, no_dossier, cle_ecrit, texte, auteur, created_at, updated_at, updated_par
+             FROM retour_prod_notes
+            WHERE TRIM(no_dossier) = TRIM(?)
+            ORDER BY created_at, id""",
+        (no_dossier,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def ajouter_note(conn, no_dossier: str, texte: str, auteur: str,
+                 cle_reponse: str = "") -> Optional[Dict[str, Any]]:
+    """Note ajoutee depuis la feuille. `cle_reponse` la rattache a une remontee."""
+    texte = _txt(texte)
+    if not texte or not _table_existe(conn, "retour_prod_notes"):
+        return None
+    cur = conn.execute(
+        """INSERT INTO retour_prod_notes (no_dossier, cle_ecrit, texte, auteur, created_at)
+           VALUES (?,?,?,?,?)""",
+        (_txt(no_dossier), _txt(cle_reponse) or None, texte, _txt(auteur),
+         datetime.now().isoformat(timespec="seconds")),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM retour_prod_notes WHERE id=?", (cur.lastrowid,)).fetchone()
+    return dict(row) if row else None
+
+
+def modifier_note(conn, note_id: int, texte: str, auteur: str) -> Optional[Dict[str, Any]]:
+    """Corrige une note. Un texte vide la supprime — une note vide n'est pas une note."""
+    if not _table_existe(conn, "retour_prod_notes"):
+        return None
+    texte = _txt(texte)
+    if not texte:
+        conn.execute("DELETE FROM retour_prod_notes WHERE id=?", (int(note_id),))
+        conn.commit()
+        return None
+    conn.execute(
+        """UPDATE retour_prod_notes SET texte=?, updated_at=?, updated_par=? WHERE id=?""",
+        (texte, datetime.now().isoformat(timespec="seconds"), _txt(auteur), int(note_id)),
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM retour_prod_notes WHERE id=?", (int(note_id),)).fetchone()
+    return dict(row) if row else None
+
+
+def modifier_commentaire_saisie(conn, saisie_id: int, texte: str) -> bool:
+    """Corrige le commentaire porte par une saisie de production.
+
+    On ne touche pas au motif d'annulation : c'est la trace d'un geste, pas une
+    remontee que l'on complete apres coup.
+    """
+    if "commentaire" not in _colonnes(conn, "production_data"):
+        return False
+    cur = conn.execute(
+        "UPDATE production_data SET commentaire=? WHERE id=?",
+        (_txt(texte) or None, int(saisie_id)),
+    )
+    conn.commit()
+    return bool(cur.rowcount)

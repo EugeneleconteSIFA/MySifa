@@ -551,3 +551,68 @@ pas.
 
 `tests/test_retour_prod_rendu.js` couvre désormais l'unité (aucun `m/h` dans la
 sortie), le retrait du code dupliqué et le formatage m/min.
+
+---
+
+## 8. Cinquième passe — le métrage manquant, et le suivi des remontées
+
+### Pourquoi un dossier affichait 0 m
+
+Cohésio 2 du 27/08 : 4 h 17 de production, 0 m. Ce n'était pas un cas limite,
+c'était une reconstruction fausse.
+
+`app/services/dossier_stats.py::_enrich_metrage` — qui alimente
+`produit_series.metrage_m` et la liste des saisies que les opérateurs relisent
+chaque jour — pose trois règles, déjà corrigées une fois pour ce même genre de
+bug :
+
+1. Les compteurs vivent dans `metrage_total_debut` / `metrage_total_fin` ;
+   `metrage_prevu` / `metrage_reel` ne sont que **le repli** des lignes
+   antérieures.
+2. Le compteur de début appartient au **dossier**, pas à l'opérateur : l'équipe
+   qui clôture n'a pas forcément posé le code de début.
+3. Sans compteur de début connu, **il n'y a pas de métrage** — on ne prend pas 0
+   pour origine, sinon c'est le compteur machine entier qui sort.
+
+Le module lisait uniquement l'ancien couple, sur les seules lignes de fin, avec
+un `MAX − MIN` et un seuil à 1 000 000 pour écarter les compteurs bruts —
+héritage de l'ancien rapport hebdomadaire. Un dossier dont le compteur est dans
+les nouvelles colonnes sortait donc à 0, et `_saisies()` ne sélectionnait même
+pas ces colonnes.
+
+La règle canonique est désormais reproduite à l'identique, le seuil heuristique
+a disparu, et huit cas la verrouillent : repli, priorité des nouvelles colonnes,
+deux cycles, début posé par un autre conducteur, annulation bornant un cycle,
+clôture orpheline.
+
+**Effet de bord assumé :** la notion de « métrage prévu » est retirée. Elle
+lisait `metrage_prevu`, c'est-à-dire un compteur de début — un objectif
+reconstitué à partir d'une valeur qui n'en est pas un.
+
+### Suivi des remontées
+
+Migration `2026_08_28_retour_prod_suivi.py`, deux tables, aucune colonne ajoutée
+ailleurs. Une remontée peut venir de quatre sources ; une **clé stable** les
+réconcilie (`saisie:<id>`, `infoprod:<no>`, `seuil:<id>`, `note:<id>`), ce qui
+permet un seul mécanisme de suivi.
+
+Trois gestes sur chaque remontée : **valider** (c'est traité), **modifier** (le
+texte part vers sa source d'origine), **commenter** (une note rattachée à la
+clé). Plus un commentaire libre sur le dossier.
+
+Deux décisions : valider n'efface pas — ce qui disparaît de l'écran n'est jamais
+relu, donc la remontée reste affichée, marquée, et se dévalide. Et un motif
+d'annulation se valide mais ne se corrige pas : c'est la trace d'un geste, pas
+une remontée qu'on complète après coup.
+
+### Le reste
+
+Colonne **Client** dans la cadence · section « Temps perdu » renommée
+**Arrêts**, colonne Code retirée (elle répétait le libellé) · **Toutes les
+machines** dans le sélecteur de feuille · champs et boutons sortis du fond de
+page (`.rp-seg`, `.rp-select`, `.rp-recherche` : le bloc prend le fond de page,
+le champ garde celui des cartes).
+
+`tests/test_rapport_dossier.py` : 14 cas dont le métrage canonique et le suivi.
+`tests/test_retour_prod_rendu.js` : les trois gestes, la remontée traitée, le
+motif d'annulation non corrigeable, la colonne client, la section Arrêts.
