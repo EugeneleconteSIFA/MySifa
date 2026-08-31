@@ -231,6 +231,27 @@ verifier("frise : legende presente", frise.includes("rp-fr-legende"));
 verifier("frise : legende alignee sur Saisieprod",
          frise.includes('class="mst-production"') && frise.includes('class="mst-arret"')
          && !frise.includes("cat-technique"));
+// Densite du libelle : quatre lignes dans un slot etroit, ce sont quatre « … ».
+function densite(largeur) {
+  return M.renderFrise({
+    vide: false, axe: [],
+    lignes: [{ machine: "C1", slots: [Object.assign({}, SLOT, { x: 0, largeur: largeur })] }]
+  });
+}
+verifier("frise : slot large garde ses quatre lignes",
+         densite(40).includes('class="rp-fr-slot deborde-avant'));
+verifier("frise : slot moyen marque",
+         densite(12).includes('class="rp-fr-slot moyen'));
+verifier("frise : slot etroit marque",
+         densite(4).includes('class="rp-fr-slot etroit'));
+verifier("frise : seuil haut exclusif", densite(16).indexOf(" moyen") === -1);
+verifier("frise : seuil bas exclusif", densite(9).includes(" moyen"));
+verifier("frise : largeur absente traitee comme etroite",
+         M.renderFrise({ vide: false, axe: [],
+           lignes: [{ machine: "C1", slots: [{ no_dossier: "D-9" }] }] }).includes(" etroit"));
+verifier("frise : la densite ne remplace pas le debordement",
+         densite(4).includes("etroit deborde-avant"));
+
 verifier("frise : donnee echappee",
          !M.renderFrise({ vide:false, axe:[], lignes:[{ machine:'<b>x', slots:[] }] }).includes("<b>x"));
 

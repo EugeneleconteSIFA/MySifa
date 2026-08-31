@@ -106,6 +106,63 @@ def fetch_declinaison(conn: sqlite3.Connection, declinaison_id: int) -> Optional
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _dernier_prix_par_matiere(conn: sqlite3.Connection) -> dict[int, dict]:
+    """
+    Par matière : la date du dernier prix saisi, et par qui.
+
+    Deux sources, dans cet ordre : l'historique des prix — le seul endroit qui
+    date une SAISIE — puis `mp_matiere_prix.updated_at` en repli, pour les
+    lignes antérieures à l'historique. `scripts/reprise_historique_prix.py`
+    fait remonter les secondes dans le premier ; tant qu'il n'a pas tourné, le
+    repli évite d'annoncer « jamais revu » sur des prix qui l'ont été.
+    """
+    out: dict[int, dict] = {}
+
+    def _garder(mid: Any, date: Any, auteur: Any) -> None:
+        if mid is None or not date:
+            return
+        mid = int(mid)
+        vu = out.get(mid)
+        if vu is None or str(date) > str(vu["date"]):
+            out[mid] = {"date": str(date), "auteur": auteur}
+
+    try:
+        for r in conn.execute(
+            """SELECT matiere_id, MAX(created_at) AS d,
+                      created_by_name AS auteur
+                 FROM mp_prix_historique
+                WHERE matiere_id IS NOT NULL AND prix_apres IS NOT NULL
+                GROUP BY matiere_id"""
+        ).fetchall():
+            _garder(_col(r, "matiere_id"), _col(r, "d"), _col(r, "auteur"))
+    except sqlite3.Error:
+        # Base non migrée : la colonne date reste vide, le reste de la liste
+        # s'affiche. Un écran de prix ne tombe pas pour une colonne d'info.
+        pass
+
+    try:
+        for r in conn.execute(
+            # `principal = 1` seulement : la colonne est collée au prix
+            # d'achat affiché, qui est celui du fournisseur principal. Dater la
+            # ligne d'un concurrent ferait dire à l'écran « revu en janvier »
+            # d'un prix saisi en 2024.
+            #
+            # Le `MAX()` avec une colonne nue est intentionnel : SQLite renvoie
+            # alors la valeur de la ligne qui a produit le maximum.
+            """SELECT d.matiere_id AS mid, MAX(p.updated_at) AS d,
+                      p.updated_by_name AS auteur
+                 FROM mp_matiere_prix p
+                 JOIN mp_matiere_declinaison d ON d.id = p.declinaison_id
+                WHERE p.updated_at IS NOT NULL AND p.principal = 1
+                GROUP BY d.matiere_id"""
+        ).fetchall():
+            _garder(_col(r, "mid"), _col(r, "d"), _col(r, "auteur"))
+    except sqlite3.Error:
+        pass
+
+    return out
+
+
 def list_materials(
     conn: sqlite3.Connection,
     *,
@@ -179,6 +236,15 @@ def list_materials(
                 "updated_by_name": r["updated_by_name"],
             }
         )
+
+    # Date du dernier prix saisi, par matière. Elle vient de l'historique — la
+    # seule table qui dise QUAND un prix a été rentré, par opposition à
+    # `updated_at`, que n'importe quelle écriture sur la ligne déplace.
+    #
+    # Repli sur `mp_matiere_prix.updated_at` pour les lignes qu'aucun mouvement
+    # ne couvre encore : sans lui, une base dont l'historique n'a pas été repris
+    # afficherait « jamais revu » partout, ce qui serait faux et alarmant.
+    maj_par_mat = _dernier_prix_par_matiere(conn)
 
     # Tarifs et devises chargés d'un coup : chaque ligne de prix en consulte un,
     # et une requête par ligne ferait des centaines d'allers-retours.
@@ -284,6 +350,11 @@ def list_materials(
                 else "€/unité",
                 "prix_min": min(prix) if prix else None,
                 "prix_max": max(prix) if prix else None,
+                # Quand ce prix a-t-il été rentré pour la dernière fois — donc
+                # revu. Une matière sans aucune trace renvoie None : l'écran dit
+                # « jamais », il n'invente pas une date de création.
+                "prix_maj_le": (maj_par_mat.get(mid) or {}).get("date"),
+                "prix_maj_par": (maj_par_mat.get(mid) or {}).get("auteur"),
                 "nb_declinaisons": len(decls),
                 "nb_appairees": sum(1 for d in decls if d["mc_material_id"]),
                 "nb_parametrees": sum(1 for d in decls if d["parametre"]),

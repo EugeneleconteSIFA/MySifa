@@ -4,14 +4,16 @@ Note de confiance transporteur : ce que le calcul doit garantir.
 Les cas verrouilles ici sont ceux ou une erreur produirait un ecran plausible
 — une lettre s'affiche, elle a l'air juste, et elle est fausse :
 
-- pas d'avis, pas de note : un C par defaut affirmerait quelque chose qu'on ne
-  sait pas, et ferait remonter dans les classements un transporteur inconnu ;
+- tout le monde part de NOTE_DEPART (5/10, soit C), et cette note de depart
+  pese comme un avis : le premier avis deplace la note de moitie, il ne la fait
+  pas basculer d'un bout a l'autre de l'echelle ;
+- la note de depart ne compte jamais comme un avis (nb_avis reste a 0) ;
 - une thematique lourde pese davantage qu'une thematique legere ;
 - un avis ancien pese moins qu'un avis recent ;
 - l'ajustement manuel s'AJOUTE a la moyenne, il ne l'ecrase pas — sinon le
   mecanisme d'avis devient decoratif ;
-- l'ajustement est borne, et seul il ne fabrique pas de note ;
-- les seuils de lettre ne bougent pas ;
+- l'ajustement est borne ;
+- les seuils de lettre ne bougent pas, et 5/10 tombe bien dans la bande C ;
 - la recommandation par zone n'ecarte pas un transporteur jamais utilise, et
   fait passer la note avant l'habitude.
 
@@ -117,23 +119,27 @@ def ajustement(conn, trp, valeur):
 def test_seuils():
     print("\n1. Seuils de lettre")
     for valeur, attendu in (
-        (10.0, "A"), (9.0, "A"), (8.99, "B"), (8.0, "B"), (7.9, "C"),
-        (6.5, "C"), (6.49, "D"), (5.0, "D"), (4.99, "E"), (3.5, "E"),
-        (3.49, "F"), (0.0, "F"),
+        (10.0, "A"), (8.5, "A"), (8.49, "B"), (7.0, "B"), (6.99, "C"),
+        (5.0, "C"), (4.5, "C"), (4.49, "D"), (3.0, "D"), (2.99, "E"),
+        (1.5, "E"), (1.49, "F"), (0.0, "F"),
     ):
         verifier(f"{valeur} -> {attendu}", svc.lettre_pour(valeur), attendu)
     verifier("pas de note -> pas de lettre", svc.lettre_pour(None), None)
+    # La note de depart doit tomber dans la bande neutre, avec de la marge des
+    # deux cotes : sinon tout le monde demarre a « A surveiller ».
+    verifier("la note de depart est un C", svc.lettre_pour(svc.NOTE_DEPART), "C")
 
 
 def test_sans_avis():
-    print("\n2. Aucun avis : pas de note inventee")
+    print("\n2. Aucun avis : note de depart")
     conn = base()
     trp = ajouter_transporteur(conn, "Coupe")
     note = svc.calculer_note(conn, trp)
-    verifier("valeur", note["valeur"], None)
-    verifier("lettre", note["lettre"], None)
-    verifier("libelle", note["libelle"], "Non noté")
+    verifier("valeur", note["valeur"], svc.NOTE_DEPART)
+    verifier("lettre", note["lettre"], "C")
+    verifier("par_defaut", note["par_defaut"], True)
     verifier("nb_avis", note["nb_avis"], 0)
+    verifier("pas marquee provisoire", note["provisoire"], False)
 
 
 def test_poids_thematique():
@@ -150,8 +156,10 @@ def test_poids_thematique():
     na = svc.calculer_note(conn, a)["valeur"]
     nb = svc.calculer_note(conn, b)["valeur"]
     verifier("A (mauvais avis lourd) sous B", na < nb, True)
-    verifier("B a la moyenne simple", nb, 6.0)
-    verifier("A tire vers le bas", na, round((2 * 2 + 10 * 1) / 3, 2))
+    # La note de depart entre dans la moyenne avec le poids d'un avis.
+    verifier("B", nb, round((2 * 1 + 10 * 1 + svc.NOTE_DEPART) / 3, 2))
+    verifier("A tire vers le bas", na, round((2 * 2 + 10 * 1 + svc.NOTE_DEPART) / 4, 2))
+    verifier("les avis ne comptent pas la note de depart", svc.calculer_note(conn, a)["nb_avis"], 2)
 
 
 def test_anciennete():
@@ -181,15 +189,20 @@ def test_ajustement():
     conn = base()
     trp = ajouter_transporteur(conn, "A")
     avis(conn, trp, 6)
-    verifier("moyenne seule", svc.calculer_note(conn, trp)["valeur"], 6.0)
+    moyenne_1 = round((6 + svc.NOTE_DEPART) / 2, 2)
+    verifier("moyenne seule", svc.calculer_note(conn, trp)["valeur"], moyenne_1)
     ajustement(conn, trp, 1.5)
     note = svc.calculer_note(conn, trp)
-    verifier("moyenne brute inchangee", note["moyenne_brute"], 6.0)
-    verifier("note ajustee", note["valeur"], 7.5)
+    verifier("moyenne brute inchangee", note["moyenne_brute"], moyenne_1)
+    verifier("note ajustee", note["valeur"], round(moyenne_1 + 1.5, 2))
     verifier("ajustement expose", note["ajustement"], 1.5)
     # Un nouvel avis continue de faire bouger la note malgre l'ajustement.
     avis(conn, trp, 2)
-    verifier("un avis apres ajustement compte", svc.calculer_note(conn, trp)["valeur"], 5.5)
+    verifier(
+        "un avis apres ajustement compte",
+        svc.calculer_note(conn, trp)["valeur"],
+        round((6 + 2 + svc.NOTE_DEPART) / 3 + 1.5, 2),
+    )
     # Bornage.
     ajustement(conn, trp, 5)
     verifier(
@@ -200,31 +213,37 @@ def test_ajustement():
 
 
 def test_ajustement_seul():
-    print("\n6. Un ajustement seul ne fabrique pas de note")
+    print("\n6. Un ajustement seul deplace la note de depart")
     conn = base()
     trp = ajouter_transporteur(conn, "A")
     ajustement(conn, trp, 3)
     note = svc.calculer_note(conn, trp)
-    verifier("valeur", note["valeur"], None)
-    verifier("lettre", note["lettre"], None)
+    verifier("valeur", note["valeur"], svc.NOTE_DEPART + 3)
+    verifier("toujours aucun avis", note["nb_avis"], 0)
+    verifier("toujours une note de depart", note["par_defaut"], True)
 
 
 def test_provisoire_et_cache():
     print("\n7. Note provisoire et mise en cache")
     conn = base()
     trp = ajouter_transporteur(conn, "A")
+    verifier("0 avis = pas provisoire, mais par defaut",
+             svc.calculer_note(conn, trp)["provisoire"], False)
     avis(conn, trp, 9, sens="appreciation")
     verifier("1 avis = provisoire", svc.calculer_note(conn, trp)["provisoire"], True)
     avis(conn, trp, 9, sens="appreciation")
     avis(conn, trp, 9, sens="appreciation")
-    verifier("3 avis = fiable", svc.calculer_note(conn, trp)["provisoire"], False)
+    note = svc.calculer_note(conn, trp)
+    verifier("3 avis = fiable", note["provisoire"], False)
+    verifier("plus une note de depart", note["par_defaut"], False)
     svc.recalculer_note(conn, trp)
     ligne = conn.execute(
         "SELECT note_valeur, note_lettre, note_nb_avis FROM expe_transporteurs WHERE id=?",
         (trp,),
     ).fetchone()
-    verifier("cache valeur", ligne["note_valeur"], 9.0)
-    verifier("cache lettre", ligne["note_lettre"], "A")
+    attendu = round((9 * 3 + svc.NOTE_DEPART) / 4, 2)
+    verifier("cache valeur", ligne["note_valeur"], attendu)
+    verifier("cache lettre", ligne["note_lettre"], svc.lettre_pour(attendu))
     verifier("cache nb", ligne["note_nb_avis"], 3)
 
 
@@ -273,6 +292,11 @@ def test_recommandation():
         "et il est signale comme tel",
         [r["jamais_utilise"] for r in classement if r["transporteur"] == "Jamais utilise"][0],
         True,
+    )
+    verifier(
+        "il porte la note de depart, pas un trou",
+        [r["note_lettre"] for r in classement if r["transporteur"] == "Jamais utilise"][0],
+        "C",
     )
     verifier("rangs numerotes", [r["rang"] for r in classement], [1, 2, 3])
 

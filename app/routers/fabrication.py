@@ -2439,21 +2439,14 @@ def get_tracabilite_dossier(no_dossier: str, request: Request):
     # Ce que l'opérateur a répondu quand il a clôturé sans avoir scanné le
     # moindre code. Sans cette remontée, le rapport présente un dossier vide
     # sans dire si c'est un oubli ou un poste qui ne consomme pas de matière.
+    # Definition unique, partagee avec le traceur (app/routers/traca.py) : le
+    # rapport et le traceur ne peuvent pas diverger sur ce que l'operateur a
+    # repondu. Import local : traca.py importe deja ce module.
     motifs_absence = []
     try:
+        from app.routers.traca import motifs_absence_matiere
         with get_db() as conn2:
-            motifs_absence = [
-                {"motif": r["matiere_absente_motif"], "operateur": r["operateur"],
-                 "date_operation": r["date_operation"]}
-                for r in conn2.execute(
-                    """SELECT matiere_absente_motif, operateur, date_operation
-                         FROM production_data
-                        WHERE no_dossier=? AND operation_code='89'
-                          AND COALESCE(TRIM(matiere_absente_motif),'') <> ''
-                        ORDER BY date_operation DESC""",
-                    (ref,),
-                ).fetchall()
-            ]
+            motifs_absence = motifs_absence_matiere(conn2, ref)
     except Exception:
         # Colonne absente (base pas encore migrée) : le rapport reste lisible.
         motifs_absence = []
@@ -2930,15 +2923,45 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
             except Exception:
                 info = None
 
+            # Cloture sans aucun code matiere scanne : la reponse de
+            # l'operateur appartient a la vue Tracabilite au meme titre que
+            # les bobines. Sans elle, le detail affiche « aucune bobine » sans
+            # dire si c'est un oubli ou un poste qui ne consomme pas de
+            # frontal -- exactement la question que pose un audit FSC.
+            try:
+                from app.routers.traca import motifs_absence_matiere
+                motifs_absence = motifs_absence_matiere(conn, no_dossier)
+            except Exception:
+                motifs_absence = []
+
             return {
                 "dossier": dossier,
                 "matieres": [dict(r) for r in matieres],
                 "production": [dict(r) for r in prod_rows],
                 "info_prod": info,
+                "motifs_absence_matiere": motifs_absence,
             }
         else:
             # Liste des dossiers avec au moins une saisie ou matière
             mid = _pick_machine_id_for_read(user, machine_id, conn)
+            # La colonne peut manquer sur une base pas encore migree : on la
+            # teste une fois plutot que de laisser la liste entiere echouer.
+            try:
+                _pd_cols = {r["name"] for r in conn.execute(
+                    "PRAGMA table_info(production_data)").fetchall()}
+            except Exception:
+                _pd_cols = set()
+            _sel_motif = (
+                """,
+                           (SELECT pd2.matiere_absente_motif FROM production_data pd2
+                             WHERE pd2.no_dossier = pe.reference
+                               AND pd2.operation_code='89'
+                               AND COALESCE(TRIM(pd2.matiere_absente_motif),'') <> ''
+                             ORDER BY pd2.date_operation DESC LIMIT 1)
+                             AS motif_absence_matiere"""
+                if "matiere_absente_motif" in _pd_cols else
+                ",\n                           NULL AS motif_absence_matiere"
+            )
             where = "1=1"
             params: list = []
             if mid and not is_admin(user):
@@ -2956,7 +2979,7 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
                             WHERE fmu.no_dossier = pe.reference) AS nb_matieres,
                            (SELECT COUNT(*) FROM production_data pd
                             WHERE pd.no_dossier = pe.reference AND pd.operation_code='89'
-                              AND COALESCE(pd.est_annule, 0) = 0) AS nb_fins
+                              AND COALESCE(pd.est_annule, 0) = 0) AS nb_fins{_sel_motif}
                     FROM planning_entries pe
                     LEFT JOIN machines m ON m.id = pe.machine_id
                     WHERE {where}

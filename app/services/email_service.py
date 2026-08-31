@@ -279,12 +279,6 @@ def _rfq_email_body_block(
       <p style="margin:2px 0 0;font-size:12px;color:#94a3b8;line-height:1.6">{_esc(s["hint"])}</p>
     </div>"""
 
-    exclusive_block = f"""
-    <div style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.35);border-radius:10px;
-                padding:12px 16px;margin:18px 0 0;font-size:13px;color:#475569;line-height:1.6">
-      {s["exclusive"]}
-    </div>"""
-
     return f"""
     <p style="margin:0 0 14px;font-size:15px;color:#0f172a;font-weight:600">{_esc(s["hello"])}</p>
     <p style="margin:0 0 22px;font-size:14px;color:#475569;line-height:1.65">{s["intro"]}</p>
@@ -293,7 +287,6 @@ def _rfq_email_body_block(
     <p style="margin:0 0 16px;font-size:14px;color:#475569;line-height:1.65">{s["ask"]}</p>
     {how_block}
     {cta}
-    {exclusive_block}
     <p style="margin:22px 0 0;font-size:13px;color:#64748b;line-height:1.65">
       {_esc(s["regards"])}<br>
       <strong style="color:#0f172a;font-size:14px">{_esc(user_nom)}</strong><br>

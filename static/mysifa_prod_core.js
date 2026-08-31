@@ -2232,6 +2232,38 @@ async function loadTracabiliteDossier(ref){
 //
 // Les lignes issues du backfill sont affichées en dégradé et étiquetées
 // « reconstitué » — une déduction ne doit jamais passer pour une saisie.
+// Clôture sans aucun code matière scanné : ce que l'opérateur a répondu.
+//
+// Un dossier sans bobine ne dit rien de la matière qui l'a produit, et le
+// silence a exactement la même allure qu'un oubli dans la base. La réponse
+// saisie à la fin de production est donc affichée partout où la traçabilité
+// du dossier se lit — sinon elle dort en base et la vue laisse croire à un
+// trou. Elle est déclarative : on le dit, on ne la présente pas comme une
+// donnée tracée.
+function motifAbsenceMatiereBloc(motifs){
+  const list = Array.isArray(motifs) ? motifs.filter(m => m && String(m.motif||'').trim()) : [];
+  if(!list.length) return null;
+  return h('div',{style:{border:'1px solid rgba(251,146,60,.45)',
+    background:'rgba(251,146,60,.09)',borderRadius:'10px',padding:'11px 14px',
+    margin:'12px 0',fontSize:'12.5px',color:'var(--text)'}},
+    h('div',{style:{fontWeight:'800',fontSize:'11px',textTransform:'uppercase',
+      letterSpacing:'.4px',color:'#c2410c',marginBottom:'6px',
+      display:'flex',alignItems:'center',gap:'6px'}},
+      iconEl('alert-triangle',12),
+      ' Aucun code matière scanné — réponse de l\'opérateur'),
+    ...list.map(m => h('div',{style:{marginTop:'4px',lineHeight:'1.5'}},
+      h('div',{style:{whiteSpace:'pre-wrap'}}, '« ' + String(m.motif).trim() + ' »'),
+      h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'2px'}},
+        [m.operateur || null,
+         m.date_operation ? String(m.date_operation).replace('T',' ').slice(0,16) : null
+        ].filter(Boolean).join(' · '))
+    )),
+    h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'7px',
+      fontStyle:'italic'}},
+      'Déclaratif : saisi à la clôture, non vérifiable par la chaîne.')
+  );
+}
+
 function fscRapportSection(titre){
   return h('div',{style:{fontSize:'11px',fontWeight:'800',textTransform:'uppercase',
     letterSpacing:'.5px',color:'var(--muted)',margin:'16px 0 7px'}}, titre);
@@ -2350,6 +2382,7 @@ function openFscRapportModal(data, ref){
         ),
         h('div',{style:{padding:'10px 14px',borderRadius:'8px',marginBottom:'14px',fontWeight:'800',fontSize:'13px',
           background:statutBg,border:'1px solid '+statutColor,color:statutColor}}, statutText),
+        motifAbsenceMatiereBloc(data && data.motifs_absence_matiere),
         h('div',{className:'table-wrap',style:{border:'1px solid var(--border)',borderRadius:'12px'}},
           h('table',{className:'table-std',style:{fontSize:'13px'}},
             h('thead',null,h('tr',null,
@@ -2526,6 +2559,23 @@ function traceurBranche(ch, idx){
                         + (m.operateur ? ' par ' + m.operateur : '')) : null,
       ],
       onClick: () => traceurOuvrir('bobine', m.code_barre),
+    }));
+  });
+
+  // 1 bis. Aucune bobine scannee : la reponse de l'operateur EST l'etape
+  // amont de cette chaine. Sans elle, le traceur affiche un dossier qui
+  // commence a la production, comme si la matiere n'avait jamais existe.
+  (ch.motifs_absence || []).forEach(m => {
+    if(!String(m && m.motif || '').trim()) return;
+    etapes.push(traceurNoeud({
+      icone:'alert-triangle', ton:'matiere',
+      titre: 'Aucun code matière scanné',
+      sousTitre: [m.operateur, m.machine].filter(Boolean).join(' · '),
+      lignes: [
+        '« ' + String(m.motif).trim() + ' »',
+        m.date_operation ? ('Saisi à la clôture le ' + traceurFmtDate(m.date_operation)) : null,
+        'Déclaratif : non vérifiable par la chaîne.',
+      ],
     }));
   });
 
@@ -2960,10 +3010,17 @@ function renderTracabiliteDossiersVue(){
             : null
         )
       ),
+      // « Aucune » sans autre mention laissait croire a un oubli meme quand
+      // l'operateur avait repondu a la cloture. Le motif remonte donc ici,
+      // en survol, et distingue l'absence expliquee de l'absence muette.
       h('td',null,
         hasMatieres
           ? h('span',{className:'badge badge-ok'}, (dos.nb_matieres||0)+' bobine'+(dos.nb_matieres>1?'s':''))
-          : h('span',{className:'badge',style:{opacity:.5}},'Aucune')
+          : (String(dos.motif_absence_matiere||'').trim()
+              ? h('span',{className:'badge badge-warn',
+                  title:'Réponse de l\'opérateur : '+String(dos.motif_absence_matiere).trim()},
+                  'Aucune — expliqué')
+              : h('span',{className:'badge',style:{opacity:.5}},'Aucune'))
       ),
       // Info prod — le commentaire libre du dossier. Il s'écrit ici et se
       // relit en saisie de production, sur la carte de la série. La cellule
@@ -3558,6 +3615,11 @@ function renderTracabiliteDossierDetail(){
     );
   });
 
+  const motifsAbsence = (d.motifs_absence_matiere
+    || (d.fsc_synthese && d.fsc_synthese.motif_absence_matiere
+        ? [{motif: d.fsc_synthese.motif_absence_matiere}] : []) || []);
+  const motifBloc = motifAbsenceMatiereBloc(motifsAbsence);
+
   const matiereTable = matieres.length
     ? h('table',{className:'table-std'},
         h('thead',null,h('tr',null,
@@ -3571,7 +3633,9 @@ function renderTracabiliteDossierDetail(){
         )),
         h('tbody',null,...matiereRows)
       )
-    : h('div',{className:'card-empty',style:{padding:'16px'}},'Aucune bobine matière scannée pour ce dossier');
+    : h('div',{className:'card-empty',style:{padding:'16px'}},
+        motifBloc ? 'Aucune bobine matière scannée — voir l\'explication ci-dessus.'
+                  : 'Aucune bobine matière scannée pour ce dossier');
 
   const fscBanner = fscSyn ? (()=>{
     const sg = fscSyn.statut_global || 'non_applicable';
@@ -3639,6 +3703,7 @@ function renderTracabiliteDossierDetail(){
           }, iconEl('sliders',14), ' Modifier')
         ),
         fscBanner,
+        motifBloc,
         h('div',{style:{overflowX:'auto'}}, matiereTable)
       )
     )
@@ -8842,11 +8907,16 @@ function renderProdKpis(){
       containerKids.push(renderFilters());
     }
     containerKids.push(pageContent);
+    // Le conteneur est a 1200px pour toute l'application. Les Points de
+    // production posent une frise et une colonne de notes cote a cote : c'est
+    // le seul ecran ou 1200px laissent la moitie de l'ecran vide.
+    const classeConteneur = (S.page === 'production' && S.subPage === 'reunions')
+      ? 'container reu-large' : 'container';
     root.appendChild(h('div', null,
       S.sidebarOpen ? h('div', {className: 'sidebar-overlay', onClick: closeSidebar}) : null,
       h('div', {className: 'app'},
         renderSidebar(),
-        h('main', {className: 'main'}, h('div', {className: 'container'}, ...containerKids))
+        h('main', {className: 'main'}, h('div', {className: classeConteneur}, ...containerKids))
       )
     ));
 

@@ -3455,10 +3455,21 @@ def _calculer_comparateur(
             raisons_ineligibilite.append("aucune grille tarifaire pour ce poids/zone")
 
         if raisons_ineligibilite:
+            cles_trp = trp.keys()
             non_eligibles.append(
                 {
                     "transporteur_id": trp["id"],
                     "transporteur": trp["nom"],
+                    "note_lettre": (
+                        trp["note_lettre"] if "note_lettre" in cles_trp else None
+                    ),
+                    "note_valeur": (
+                        trp["note_valeur"] if "note_valeur" in cles_trp else None
+                    ),
+                    "note_nb_avis": (
+                        trp["note_nb_avis"] if "note_nb_avis" in cles_trp else 0
+                    )
+                    or 0,
                     "raison": " · ".join(raisons_ineligibilite),
                 }
             )
@@ -3470,10 +3481,21 @@ def _calculer_comparateur(
             prix_total = prix_base + prix_frais
             base_calcul = ligne["base_calcul"] or ""
 
+            cles_trp = trp.keys()
             eligibles.append(
                 {
                     "transporteur_id": trp["id"],
                     "transporteur": trp["nom"],
+                    "note_valeur": (
+                        trp["note_valeur"] if "note_valeur" in cles_trp else None
+                    ),
+                    "note_lettre": (
+                        trp["note_lettre"] if "note_lettre" in cles_trp else None
+                    ),
+                    "note_nb_avis": (
+                        trp["note_nb_avis"] if "note_nb_avis" in cles_trp else 0
+                    )
+                    or 0,
                     "prix_ht": round(prix_total, 2),
                     "prix_base_ht": round(prix_base, 2),
                     "methode_tarification": _METHODE_TARIF_LIBELLE.get(
