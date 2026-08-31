@@ -61,11 +61,17 @@ const feuille = M.renderFeuille({
   conducteurs: ["Marc", "Sophie"],
   production: { metrage: 58500, minutes_production: 445, minutes_calage: 105,
                 minutes_arret: 130, vitesse_m_min: 131.5, part_arret_pct: 19.1 },
-  references: [{ no_dossier: "D-501", ref_produit_norm: "REF-A", metrage: 40000,
+  references: [{ no_dossier: "D-501", client: "NESTLE VEAUCHE", ref_produit_norm: "REF-A", metrage: 40000,
                  cadence_m_min: 33.2, vitesse_m_min: 41.6, cadence_reference_m_min: 57,
                  series_passees: 3, ecart_pct: -41.8 }],
   arrets_couteux: [{ code: "66", operation: "66 - Attente matiere", occurrences: 1, minutes_txt: "1 h 35" }],
-  ecrits: [{ origine: "info_prod", texte: "Tension a baisser", no_dossier: "D-501", auteur: "Marc" }],
+  ecrits: [{ origine: "info_prod", texte: "Tension a baisser", no_dossier: "D-501",
+             auteur: "Marc", cle: "infoprod:D-501", reference: "D-501", modifiable: true, valide: false },
+           { origine: "commentaire", texte: "Casse a repetition", no_dossier: "D-501",
+             auteur: "Sophie", cle: "saisie:12", reference: 12, modifiable: true,
+             valide: true, valide_par: "Eugene", valide_le: "2026-08-28T09:00:00" },
+           { origine: "annulation", texte: "Erreur de code", no_dossier: "D-501",
+             auteur: "Marc", cle: "saisie:13", reference: 13, modifiable: false, valide: false }],
   vigilance: { info_prod_absente: 1 }, nb_nc: 2
 });
 verifier("feuille : les 4 KPI", (feuille.match(/rp-kpi"/g) || []).length === 4);
@@ -77,8 +83,31 @@ verifier("feuille : unite de la machine, jamais de m/h", !feuille.includes("m/h"
 verifier("feuille : le code n'est pas repete dans l'operation",
          feuille.includes(">Attente matiere<") && !feuille.includes(">66 - Attente matiere<"));
 verifier("feuille : ecart negatif signale", feuille.includes("-42 %"));
-verifier("feuille : code d'arret couteux", feuille.includes("Attente matiere"));
+verifier("feuille : arret nomme", feuille.includes("Attente matiere"));
 verifier("feuille : le mot du conducteur remonte", feuille.includes("Tension a baisser"));
+verifier("feuille : client dans la cadence", feuille.includes("NESTLE VEAUCHE"));
+verifier("feuille : section Arrets", feuille.includes(">Arrêts</div>"));
+verifier("feuille : plus de colonne Code dans les arrets", !feuille.includes("<th>Code</th>"));
+verifier("feuille : les trois gestes sur une remontee",
+         feuille.includes('data-valider="infoprod:D-501"')
+         && feuille.includes('data-modif="infoprod:D-501"')
+         && feuille.includes('data-commenter="infoprod:D-501"'));
+verifier("feuille : une remontee traitee est marquee",
+         feuille.includes("est-valide") && feuille.includes("traité par Eugene"));
+verifier("feuille : bouton Devalider sur une remontee traitee", feuille.includes("Dévalider"));
+verifier("feuille : un motif d'annulation ne se corrige pas",
+         !feuille.includes('data-modif="saisie:13"'));
+verifier("feuille : mais il se valide", feuille.includes('data-valider="saisie:13"'));
+verifier("feuille : compteur de remontees a traiter", feuille.includes("2 à traiter"));
+
+const toutes = M.renderFeuille(Object.assign({}, {
+  toutes_machines: true, machines_couvertes: ["Cohesio 1", "Cohesio 2"],
+  dossiers: 1, periode: { label: "Jeudi 27/08/2026" }, production: {},
+  conducteurs: [], references: [], arrets_couteux: [], ecrits: [], vigilance: {}
+}));
+verifier("feuille : toutes les machines", toutes.includes("Toutes les machines"));
+verifier("feuille : machines couvertes listees",
+         toutes.includes("Cohesio 1 · Cohesio 2"));
 verifier("feuille : vigilance comptee", feuille.includes("clôturé sans info prod"));
 verifier("feuille : vigilance non nominative", !feuille.split("À reprendre")[1].includes("Marc"));
 verifier("feuille : NC", feuille.includes("2 non-conformités"));
@@ -139,18 +168,30 @@ verifier("CR : info prod pas reclamee avant cloture",
 
 const crRempli = JSON.parse(JSON.stringify(crBase));
 crRempli.ecrits.info_prod = { texte: "Tension a baisser", auteur: "Marc",
-                              created_at: "2026-08-27T11:00:00" };
+                              created_at: "2026-08-27T11:00:00",
+                              cle: "infoprod:D-745", origine: "info_prod",
+                              reference: "D-745", modifiable: true, valide: false };
 crRempli.seuils[0].explication_texte = "Cellule rereglee";
+crRempli.seuils[0].texte = "Cellule rereglee";
+crRempli.seuils[0].cle = "seuil:3";
+crRempli.seuils[0].origine = "arret";
+crRempli.seuils[0].reference = 3;
+crRempli.seuils[0].modifiable = true;
 const cf = M.renderCR(crRempli);
 verifier("CR : info prod affichee", cf.includes("Tension a baisser"));
-verifier("CR : bouton devient Modifier", cf.includes("Modifier"));
+verifier("CR : info prod actionnable", cf.includes('data-valider="infoprod:D-745"'));
 verifier("CR : explication affichee", cf.includes("Cellule rereglee"));
-verifier("CR : bouton devient Completer", cf.includes("Compléter"));
+verifier("CR : explication actionnable", cf.includes('data-modif="seuil:3"'));
+verifier("CR : ajout de commentaire propose", cf.includes('id="rp-note-add"'));
 
 const crXss = JSON.parse(JSON.stringify(crBase));
 crXss.ecrits.info_prod = { texte: '<script>alert(1)</script>', auteur: '<b>' };
 verifier("CR : info prod echappee",
          !M.renderCR(crXss).includes("<script>alert(1)</script>"));
+
+console.log("\n4 bis. Slug de cle");
+verifier("les deux-points ne peuvent pas etre un id DOM", M.slug("infoprod:D-501") === "infoprod_D-501");
+verifier("slug d'une note", M.slug("note:7") === "note_7");
 
 console.log("\n5. Formats");
 verifier("vitesse en m/min", M.vitesse(33.2) === "33,2 m/min");

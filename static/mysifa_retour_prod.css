@@ -105,17 +105,50 @@ table.rp-cr tbody tr:hover{background:var(--accent-bg);box-shadow:inset 3px 0 0 
 .rp-pastille.on{color:var(--success,#34d399);border-color:var(--success,#34d399)}
 .rp-pastille.att{color:var(--warn,#fbbf24);border-color:var(--warn,#fbbf24)}
 
+/* ── Remontee traitee ────────────────────────────────────────── */
+.rp-mot.est-valide{border-left-color:var(--success,#34d399);opacity:.82}
+.rp-mot.est-valide:hover{opacity:1}
+.rp-vu{display:inline-block;margin-left:8px;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.4px;color:var(--success,#34d399)}
+.rp-compte{margin-left:8px;font-size:11.5px;font-weight:700;padding:2px 9px;
+  border-radius:999px;background:var(--warn,#fbbf24);color:#0a0e17;
+  text-transform:none;letter-spacing:0}
+
+/* ── Segments et champs ──────────────────────────────────────────
+   Les commandes se posaient sur le fond de page, donc invisibles : un champ
+   et un bouton doivent avoir leur propre surface, pas celle du support. */
+.rp-seg{background:var(--card);border:1px solid var(--border);color:var(--text2);
+  border-radius:999px;padding:7px 14px;font-size:12.5px;font-weight:600;
+  cursor:pointer;font-family:inherit;
+  transition:border-color var(--mo-fast,.15s) var(--ease-out,ease),
+             background var(--mo-fast,.15s) var(--ease-out,ease),
+             color var(--mo-fast,.15s) var(--ease-out,ease),
+             transform var(--mo-fast,.15s) var(--ease-out,ease)}
+.rp-seg:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}
+.rp-seg:active{transform:translateY(0)}
+.rp-seg.actif{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.rp-seg.actif:hover{color:var(--bg);filter:brightness(1.07)}
+.rp-select{background:var(--card);border:1px solid var(--border);border-radius:9px;
+  padding:7px 11px;color:var(--text);font-size:13.5px;font-family:inherit;
+  transition:border-color var(--mo-fast,.15s) var(--ease-out,ease)}
+.rp-select:hover,.rp-select:focus{border-color:var(--accent);outline:none}
+
 /* ── Recherche ───────────────────────────────────────────────── */
+/* Le bloc prend le fond de page, le champ garde le fond des cartes : sans ce
+   contraste, la zone de saisie disparait dans son support. */
+.rp-recherche{background:var(--bg);border:1px solid var(--border);border-radius:12px;
+  padding:15px 17px;margin-bottom:16px}
 .rp-recherche label{display:block;font-size:12px;font-weight:600;color:var(--muted);
   text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px}
-.rp-recherche input{width:100%;background:var(--bg);border:1px solid var(--border);
+.rp-recherche input{width:100%;background:var(--card);border:1px solid var(--border);
   border-radius:10px;padding:11px 15px;color:var(--text);font-size:15px;font-family:inherit;
   transition:border-color var(--mo-fast,.15s) var(--ease-out,ease),
              box-shadow var(--mo-fast,.15s) var(--ease-out,ease)}
 .rp-recherche input:focus{border-color:var(--accent);outline:none;
   box-shadow:0 0 0 3px var(--accent-bg)}
 .rp-rech-item{display:flex;justify-content:space-between;align-items:center;gap:12px;
-  padding:11px 14px;border:1px solid var(--border);border-radius:10px;margin-top:9px;cursor:pointer;
+  padding:11px 14px;border:1px solid var(--border);border-radius:10px;margin-top:9px;
+  cursor:pointer;background:var(--card);
   transition:border-color var(--mo-fast,.15s) var(--ease-out,ease),
              background var(--mo-fast,.15s) var(--ease-out,ease),
              transform var(--mo-fast,.15s) var(--ease-out,ease)}
@@ -130,14 +163,14 @@ table.rp-cr tbody tr:hover{background:var(--accent-bg);box-shadow:inset 3px 0 0 
 
 /* ── Edition en place ────────────────────────────────────────── */
 .rp-edit{margin-top:10px}
-.rp-edit textarea{width:100%;min-height:82px;background:var(--bg);border:1px solid var(--border);
+.rp-edit textarea{width:100%;min-height:82px;background:var(--card);border:1px solid var(--border);
   border-radius:10px;padding:11px 13px;color:var(--text);font-size:15px;font-family:inherit;
   line-height:1.55;resize:vertical;
   transition:border-color var(--mo-fast,.15s) var(--ease-out,ease),
              box-shadow var(--mo-fast,.15s) var(--ease-out,ease)}
 .rp-edit textarea:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-bg)}
 .rp-edit-actions{display:flex;gap:9px;justify-content:flex-end;margin-top:9px}
-.rp-btn-mini{background:transparent;border:1px solid var(--border);color:var(--text2);
+.rp-btn-mini{background:var(--card);border:1px solid var(--border);color:var(--text2);
   border-radius:8px;padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;
   font-family:inherit;
   transition:border-color var(--mo-fast,.15s) var(--ease-out,ease),
@@ -159,14 +192,15 @@ table.rp-cr tbody tr:hover{background:var(--accent-bg);box-shadow:inset 3px 0 0 
 
 /* Animation neutralisee : meme regle que motion.css. */
 @media (prefers-reduced-motion: reduce){
-  .rp-kpi,.rp-mot,.rp-vig,.rp-vig .v-nb,.rp-rech-item,.rp-btn-mini,
+  .rp-kpi,.rp-mot,.rp-vig,.rp-vig .v-nb,.rp-rech-item,.rp-btn-mini,.rp-seg,.rp-select,
   table.rp-grille tbody tr,table.rp-cr tbody tr{transition:none !important}
-  .rp-kpi:hover,.rp-rech-item:hover,.rp-btn-mini:hover,
+  .rp-kpi:hover,.rp-rech-item:hover,.rp-btn-mini:hover,.rp-seg:hover,
   .rp-vig:hover .v-nb{transform:none !important}
 }
 body.reduce-anim .rp-kpi,body.reduce-anim .rp-mot,body.reduce-anim .rp-vig,
 body.reduce-anim .rp-rech-item,body.reduce-anim .rp-btn-mini,
-body.reduce-anim table.rp-grille tbody tr,body.reduce-anim table.rp-cr tbody tr{transition:none !important}
+body.reduce-anim table.rp-grille tbody tr,body.reduce-anim table.rp-cr tbody tr,
+body.reduce-anim .rp-seg,body.reduce-anim .rp-select{transition:none !important}
 body.reduce-anim .rp-kpi:hover,body.reduce-anim .rp-rech-item:hover,
 body.reduce-anim .rp-btn-mini:hover,body.reduce-anim .rp-vig:hover .v-nb{transform:none !important}
 
@@ -181,7 +215,7 @@ body.reduce-anim .rp-btn-mini:hover,body.reduce-anim .rp-vig:hover .v-nb{transfo
   body.rp-impression .rp-feuille,body.rp-impression .rp-feuille *{visibility:visible !important}
   body.rp-impression .rp-feuille{position:absolute;left:0;top:0;width:100%;
     border:none;border-radius:0;padding:0;background:#fff !important;color:#000 !important}
-  .rp-recherche,.rp-edit,.rp-edit-actions{display:none !important}
+  .rp-recherche,.rp-edit,.rp-edit-actions,.rp-compte{display:none !important}
   .rp-machine,.rp-kpi .k-val,.rp-mot .m-txt,table.rp-grille td,.rp-vig{color:#000 !important}
   .rp-titre{color:#000 !important;border-bottom:1px solid #000;padding-bottom:3px}
   .rp-periode,.rp-kpi .k-lbl,.rp-kpi .k-sub,.rp-mot .m-meta,table.rp-grille th,

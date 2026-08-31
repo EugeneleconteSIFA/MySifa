@@ -2009,6 +2009,72 @@ def set_prix(
     return result
 
 
+def set_prix_matiere(
+    conn: sqlite3.Connection,
+    *,
+    matiere_id: int,
+    prix: float,
+    user_id: Optional[int] = None,
+    user_name: Optional[str] = None,
+    origine: str = "Coûts matières — liste",
+) -> dict:
+    """Le prix d'achat d'une MATIÈRE, poussé sur toutes ses déclinaisons.
+
+    Ni la laize ni le grammage ne changent ce qu'on paie l'unité : une bobine
+    de frontal s'achète au m² et un adhésif au kilo, et le même papier en 76 et
+    en 102 mm est au même prix au m². Ce qu'ils changent, c'est la QUANTITÉ
+    consommée par un produit — donc son coût, calculé ailleurs, à partir de la
+    déclinaison.
+
+    Un prix par déclinaison était donc un prix saisi n fois, avec n occasions
+    de diverger sans que rien ne le signale. Cette fonction écrit la même
+    valeur partout, en respectant le fournisseur qui fait foi sur CHAQUE
+    déclinaison : on aligne des prix, on ne réattribue pas des fournisseurs.
+
+    Refus volontaire quand les déclinaisons ne suivent pas toutes le même
+    fournisseur principal : aligner des prix venant de deux tarifs différents
+    donnerait un chiffre faux sur au moins l'un des deux, et l'écran ne
+    saurait pas lequel. Ces matières se règlent sur leur fiche.
+    """
+    if prix < 0:
+        return {"ok": False, "reason": "prix négatif interdit"}
+    decls = conn.execute(
+        "SELECT id FROM mp_matiere_declinaison WHERE matiere_id=? ORDER BY id",
+        (int(matiere_id),),
+    ).fetchall()
+    if not decls:
+        return {"ok": False, "reason": "cette matière n'a aucune déclinaison — "
+                                       "créez-en une dans MyStock"}
+
+    fournisseurs = set()
+    cibles = []
+    for d in decls:
+        did = int(d["id"])
+        row = conn.execute(
+            """SELECT fournisseur_id FROM mp_matiere_prix
+                WHERE declinaison_id=? ORDER BY principal DESC, id ASC LIMIT 1""",
+            (did,),
+        ).fetchone()
+        fid = int(row["fournisseur_id"]) if row and row["fournisseur_id"] is not None else None
+        cibles.append((did, fid))
+        fournisseurs.add(fid)
+
+    if len(fournisseurs) > 1:
+        return {"ok": False, "reason": "plusieurs fournisseurs en vigueur sur "
+                                       "cette matière — à régler déclinaison "
+                                       "par déclinaison"}
+
+    touchees = 0
+    for did, fid in cibles:
+        res = set_prix(conn, declinaison_id=did, fournisseur_id=fid, prix=float(prix),
+                       user_id=user_id, user_name=user_name, origine=origine)
+        if not res.get("ok"):
+            return res
+        touchees += 1
+    return {"ok": True, "declinaisons_touchees": touchees,
+            "fournisseur_id": next(iter(fournisseurs))}
+
+
 def set_fournisseur(
     conn: sqlite3.Connection,
     *,

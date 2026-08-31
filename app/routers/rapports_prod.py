@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Request
 
-from config import CODE_DEBUT_DOS, CODE_FIN_DOS, ROLES_PROD
+from config import CODE_ANNUL_DOS, CODE_DEBUT_DOS, CODE_FIN_DOS, ROLES_PROD
 from database import get_db
 from services.auth_service import effective_role, get_current_user
 from app.services import rapport_dossier as rd
@@ -153,11 +153,11 @@ def retour_atelier(request: Request, machine: str = "", mode: str = "jour",
                    au: str | None = None):
     """Le retour d'une periode pour une machine — matiere de la feuille atelier."""
     _autorise(request)
-    if not (machine or "").strip():
-        raise HTTPException(status_code=400, detail="Machine non precisee.")
+    # machine vide = toutes les machines de la periode. Une feuille « atelier »
+    # a du sens meme sans machine : c'est la journee de l'atelier.
     b = _bornes(mode, jour, year, week, du, au)
     with get_db() as conn:
-        data = rd.retour_atelier(conn, machine.strip(), b["debut"], b["fin"],
+        data = rd.retour_atelier(conn, (machine or "").strip(), b["debut"], b["fin"],
                                  code_fin=CODE_FIN_DOS)
     return {**data, "periode": b}
 
@@ -209,13 +209,69 @@ async def ecrire_explication(saisie_id: int, request: Request):
     return {"saisie_id": int(saisie_id), "lignes": n, "par": _auteur(user)}
 
 
+@router.post("/api/rapports-prod/ecrit/valider")
+async def valider_ecrit(request: Request):
+    """Marque une remontee comme traitee, ou revient dessus.
+
+    Valider n'efface rien : la remontee reste affichee, marquee. Ce qui
+    disparait de l'ecran n'est jamais relu.
+    """
+    user = _autorise(request)
+    body = await request.json()
+    cle = str(body.get("cle") or "").strip()
+    if not cle:
+        raise HTTPException(status_code=400, detail="Remontee non precisee.")
+    with get_db() as conn:
+        etat = rd.valider_ecrit(conn, cle, str(body.get("no_dossier") or ""),
+                                bool(body.get("valide", True)), _auteur(user))
+    return etat
+
+
+@router.post("/api/rapports-prod/dossier/{no_dossier:path}/note")
+async def ajouter_note(no_dossier: str, request: Request):
+    """Ajoute un commentaire sur le dossier, ou en reponse a une remontee."""
+    user = _autorise(request)
+    body = await request.json()
+    texte = str(body.get("texte") or "").strip()
+    if not texte:
+        raise HTTPException(status_code=400, detail="Commentaire vide.")
+    with get_db() as conn:
+        note = rd.ajouter_note(conn, no_dossier, texte, _auteur(user),
+                               str(body.get("cle_reponse") or ""))
+    if not note:
+        raise HTTPException(status_code=400, detail="Commentaire non enregistre.")
+    return note
+
+
+@router.post("/api/rapports-prod/note/{note_id}")
+async def modifier_note(note_id: int, request: Request):
+    """Corrige un commentaire ajoute ici. Un texte vide le supprime."""
+    user = _autorise(request)
+    body = await request.json()
+    with get_db() as conn:
+        note = rd.modifier_note(conn, int(note_id), str(body.get("texte") or ""), _auteur(user))
+    return {"note": note, "supprimee": note is None}
+
+
+@router.post("/api/rapports-prod/saisie/{saisie_id}/commentaire")
+async def modifier_commentaire(saisie_id: int, request: Request):
+    """Corrige le commentaire porte par une saisie de production."""
+    _autorise(request)
+    body = await request.json()
+    with get_db() as conn:
+        ok = rd.modifier_commentaire_saisie(conn, int(saisie_id), str(body.get("texte") or ""))
+    if not ok:
+        raise HTTPException(status_code=404, detail="Saisie introuvable.")
+    return {"saisie_id": int(saisie_id), "ok": True}
+
+
 @router.get("/api/rapports-prod/dossier/{no_dossier:path}")
 def compte_rendu_dossier(no_dossier: str, request: Request):
     """Le compte-rendu complet d'un dossier, clot ou non, quelle que soit sa date."""
     _autorise(request)
     with get_db() as conn:
-        cr = rd.compte_rendu(conn, no_dossier,
-                             code_fin=CODE_FIN_DOS, code_debut=CODE_DEBUT_DOS)
+        cr = rd.compte_rendu(conn, no_dossier, code_fin=CODE_FIN_DOS,
+                             code_debut=CODE_DEBUT_DOS, code_annul=CODE_ANNUL_DOS)
     if not cr.get("existe"):
         raise HTTPException(status_code=404,
                             detail=f"Aucune saisie pour le dossier {no_dossier}.")

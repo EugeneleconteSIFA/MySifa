@@ -681,3 +681,28 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 /* Coût au m² d'un fournisseur qui n'est pas le principal : c'est une hypothèse
    — « voilà ce que ça coûterait si on prenait celui-là ». D'où le retrait. */
 .ms-cout-alt{color:var(--text2);font-variant-numeric:tabular-nums}
+
+/* ── Saisie du prix en place, dans la liste des matières ────────────────────
+   Le prix d'achat ne dépend ni de la laize ni du grammage : une seule valeur
+   par matière, et elle se corrige là où on la lit. Le champ reste discret au
+   repos — c'est un tableau, pas un formulaire — et ne se donne des airs de
+   champ qu'au survol et au focus. */
+.msl-des{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
+.msl-decl-nb{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.msl-prix-edit{display:flex;align-items:center;gap:6px}
+.msl-prix-inp{
+  width:96px;padding:5px 8px;border-radius:7px;font-family:inherit;font-size:13px;
+  font-variant-numeric:tabular-nums;text-align:right;
+  border:1px solid transparent;background:transparent;color:var(--text)}
+.msl-prix-inp:hover{border-color:var(--border);background:var(--bg)}
+.msl-prix-inp:focus{border-color:var(--accent);background:var(--bg);outline:none;
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
+.msl-prix-inp::placeholder{color:var(--muted);font-style:italic}
+.msl-unite{font-size:11px;color:var(--muted);white-space:nowrap}
+/* Deux prix différents pour une même matière : héritage de la saisie par
+   déclinaison. Le champ le signale plutôt que d'en afficher un des deux — la
+   première saisie les aligne. */
+.msl-prix-diverge .msl-prix-inp{border-color:color-mix(in srgb,var(--warn,#d97706) 55%,transparent)}
+.msl-prix-etat{font-size:11px;font-weight:700;white-space:nowrap;color:var(--muted)}
+.msl-prix-etat.ok{color:var(--success,#16a34a)}
+.msl-prix-etat.ko{color:var(--danger)}

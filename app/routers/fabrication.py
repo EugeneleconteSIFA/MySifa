@@ -3,12 +3,14 @@ Routes : /api/fabrication/*
 Accessible : fabrication, admin, superadmin
 """
 import json
+import logging
 from datetime import datetime, date, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Request, HTTPException
 
 _PARIS = ZoneInfo("Europe/Paris")
+logger = logging.getLogger(__name__)
 
 from app.services.audit_service import log_action
 from database import get_db, parse_datetime
@@ -1527,6 +1529,24 @@ async def create_saisie(request: Request):
         conn.commit()
         new_id = cursor.lastrowid
 
+        # ── Aucun code matière scanné : la raison, attachée à la saisie ───────
+        # Écrite après l'INSERT plutôt que dedans : la colonne n'est renseignée
+        # que sur une fin de production, et l'ajouter à un INSERT qui sert cinq
+        # autres codes ferait porter à tous une question qui n'est posée qu'ici.
+        motif_absence = (body.get("matiere_absente_motif") or "").strip()
+        if cl["code"] == "89" and motif_absence:
+            try:
+                conn.execute(
+                    "UPDATE production_data SET matiere_absente_motif=? WHERE id=?",
+                    (motif_absence[:500], new_id),
+                )
+                conn.commit()
+            except Exception:
+                # Base pas encore migrée : la saisie de l'opérateur passe quand
+                # même. Perdre la raison est regrettable, refuser la fin de
+                # production parce qu'une colonne manque ne l'est pas moins.
+                logger.exception("[fabrication] motif d'absence de matière non enregistré")
+
         # ── Mise à jour dernier_metrage machine ───────────────────────────────
         new_metrage = None
         if cl["code"] == "01" and m_debut is not None:
@@ -2415,6 +2435,29 @@ def get_tracabilite_dossier(no_dossier: str, request: Request):
         bobines.append(d)
 
     nb_total = len(bobines)
+
+    # Ce que l'opérateur a répondu quand il a clôturé sans avoir scanné le
+    # moindre code. Sans cette remontée, le rapport présente un dossier vide
+    # sans dire si c'est un oubli ou un poste qui ne consomme pas de matière.
+    motifs_absence = []
+    try:
+        with get_db() as conn2:
+            motifs_absence = [
+                {"motif": r["matiere_absente_motif"], "operateur": r["operateur"],
+                 "date_operation": r["date_operation"]}
+                for r in conn2.execute(
+                    """SELECT matiere_absente_motif, operateur, date_operation
+                         FROM production_data
+                        WHERE no_dossier=? AND operation_code='89'
+                          AND COALESCE(TRIM(matiere_absente_motif),'') <> ''
+                        ORDER BY date_operation DESC""",
+                    (ref,),
+                ).fetchall()
+            ]
+    except Exception:
+        # Colonne absente (base pas encore migrée) : le rapport reste lisible.
+        motifs_absence = []
+
     if fsc_requis and nb_total > 0:
         statut_global = "conforme" if nb_conformes == nb_total else "non_conforme"
     elif fsc_requis and nb_total == 0:
@@ -2489,8 +2532,10 @@ def get_tracabilite_dossier(no_dossier: str, request: Request):
         "dossier": dossier_out,
         "bobines": bobines,
         "parcours": parcours,
+        "motifs_absence_matiere": motifs_absence,
         "synthese": {
             "nb_bobines_total": nb_total,
+            "motif_absence_matiere": (motifs_absence[0]["motif"] if motifs_absence else None),
             "nb_bobines_fsc_conformes": nb_conformes if fsc_requis else None,
             "nb_bobines_non_conformes": (nb_total - nb_conformes) if fsc_requis else None,
             "nb_lots": len(parcours["lots"]),

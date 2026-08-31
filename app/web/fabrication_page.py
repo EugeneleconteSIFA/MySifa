@@ -1344,6 +1344,11 @@ let S = {
   finDossierOui: null,  // null | true | false — sélecteur fin de dossier dans renderFinModal
   finNoteVal: '',       // info prod saisie à la clôture (obligatoire si dossier terminé)
   finNoteChargee: false, // l'info prod déjà enregistrée a-t-elle été relue ?
+  // Combien de codes matiere ont ete scannes sur CE dossier. null tant
+  // qu'on ne sait pas : un compteur a 0 par defaut ferait apparaitre la
+  // question « pourquoi rien de scanne » avant meme d'avoir regarde.
+  finNbMatieres: null,
+  finMatiereMotif: '',
   commentText: '',
   searchQuery: '',
 
@@ -2559,11 +2564,13 @@ function handleOpTrigger(code, label, cat){
   }
   if(code==='89'){
     // Fin dossier → modal metrage + étiquettes + info prod
-    set({showFinModal:true, metrageFinVal:'', nbEtiquettes:'', finNoteVal:'', finNoteChargee:false});
+    set({showFinModal:true, metrageFinVal:'', nbEtiquettes:'', finNoteVal:'', finNoteChargee:false,
+         finNbMatieres:null, finMatiereMotif:''});
     // Une info prod peut déjà exister — saisie en Traçabilité avant le
     // lancement, ou par le conducteur du poste précédent. On la relit pour
     // que l'opérateur complète au lieu d'écraser sans le savoir.
     loadInfoProdDossier();
+    loadNbMatieresDossier();
     return;
   }
   // Sur les dix-neuf codes d'arret, dix-sept se decrivent tout seuls : « Casse
@@ -3809,13 +3816,17 @@ function tracaShowFicheManuelle(codeBarre){
         <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px">
           Bobine non réceptionnée
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:16px;font-family:monospace">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-family:monospace">
           ${escHtml(codeBarre)}
+        </div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.5;margin-bottom:14px">
+          Ce code n'est rattaché à aucune réception. Il sera quand même enregistré :
+          indiquez seulement de qui vient la bobine.
         </div>
 
         <label style="font-size:11px;font-weight:700;text-transform:uppercase;
                       letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px">
-          Rechercher le fournisseur
+          Fournisseur (obligatoire)
         </label>
         <input id="fiche-fournisseur-input" type="text" list="${dlId}"
                placeholder="Tapez pour rechercher…" autocomplete="off" spellcheck="false"
@@ -3841,7 +3852,8 @@ function tracaShowFicheManuelle(codeBarre){
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button type="button" class="btn btn-ghost" id="fiche-manual-cancel" style="font-size:13px">Annuler</button>
           <button type="button" class="btn btn-accent" id="fiche-manual-confirm"
-                  style="font-size:13px;opacity:.5" disabled>Enregistrer le scan</button>
+                  style="font-size:13px;opacity:.5" disabled
+                  title="Choisissez un fournisseur dans la liste pour enregistrer">Enregistrer le scan</button>
         </div>
       </div>`;
 
@@ -5816,6 +5828,26 @@ function renderDebutModal(){
   );
 }
 
+/* Combien de bobines ont ete scannees sur ce dossier.
+
+   On interroge l'API plutot que de compter S.tracaMatieres : ce tableau porte
+   les bobines de la MACHINE et n'est peuple que si l'operateur a ouvert
+   l'onglet Traca. S'en servir laisserait passer sans question un dossier dont
+   rien n'a ete scanne — exactement le cas qu'on cherche a attraper.
+
+   En cas d'echec reseau, on retombe sur -1 : « on ne sait pas ». La question
+   n'est alors pas posee, parce qu'exiger une justification sur la foi d'une
+   requete ratee bloquerait un operateur qui n'a rien a se reprocher. */
+async function loadNbMatieresDossier(){
+  const ref = S.dossier ? (S.dossier.reference||'') : '';
+  if(!ref){ S.finNbMatieres = -1; return; }
+  try{
+    const d = await apiFetch('/api/fabrication/matieres?no_dossier='+encodeURIComponent(ref));
+    S.finNbMatieres = Array.isArray(d && d.matieres) ? d.matieres.length : -1;
+  }catch(e){ S.finNbMatieres = -1; }
+  if(S.showFinModal) fabRenderPreserveUi({});
+}
+
 async function loadInfoProdDossier(){
   const ref = S.dossier ? (S.dossier.reference||'') : '';
   if(!ref){ S.finNoteChargee = true; return; }
@@ -5900,6 +5932,49 @@ function renderFinModal(){
     rasBtn
   );
 
+  // ── Aucun code matiere scanne : on demande pourquoi ──────────────────────
+  // Un dossier qui se termine sans une seule bobine scannee ne dit rien de la
+  // matiere qui l'a produit. Ce n'est pas toujours une faute — un poste de
+  // repiquage ne consomme pas de frontal, une bobine entamee la veille a pu
+  // etre scannee sur le dossier precedent — mais dans la base l'oubli et la
+  // raison legitime ont exactement la meme allure, et c'est precisement la
+  // difference qu'un audit FSC vient chercher.
+  //
+  // Les deux reponses courantes sont proposees d'un clic : sans elles, la
+  // question se ferait repondre « RAS » et on aurait perdu la seule chose
+  // qu'elle apporte.
+  const aucuneMatiere = (S.finNbMatieres === 0);
+
+  const motifInp = h('textarea',{
+    rows:'2',
+    placeholder:'Ex : bobine deja scannee sur le dossier precedent, poste sans matiere...',
+    style:{width:'100%',fontFamily:'inherit',fontSize:'14px',padding:'10px 12px',
+           borderRadius:'8px',border:'1px solid var(--border2)',background:'var(--bg)',
+           color:'var(--text)',resize:'vertical'},
+  });
+  motifInp.value = S.finMatiereMotif||'';
+  motifInp.addEventListener('input',e=>{ S.finMatiereMotif=e.target.value; });
+
+  const mkMotifBtn = (txt) => h('button',{
+    type:'button',
+    className:'fab-btn fab-btn-muted fab-btn-sm',
+    onClick:()=>{ S.finMatiereMotif=txt; motifInp.value=txt; motifInp.focus(); }
+  }, txt);
+
+  const matiereBloc = aucuneMatiere ? h('div',{className:'fab-field',
+    style:{padding:'12px 14px',borderRadius:'10px',
+           background:'rgba(251,191,36,.10)',border:'1px solid rgba(251,191,36,.4)'}},
+    h('label',null,'Aucun code matiere scanne \u2014 pourquoi ? (obligatoire)'),
+    h('div',{className:'fab-field-hint'},
+      'Ce dossier n\'a aucune bobine en tracabilite. Dites ce qui s\'est passe : '
+      +'la reponse est conservee avec la saisie.'),
+    motifInp,
+    h('div',{style:{display:'flex',gap:'8px',flexWrap:'wrap',marginTop:'8px'}},
+      mkMotifBtn('Bobine deja scannee sur un dossier precedent'),
+      mkMotifBtn('Poste sans matiere')
+    )
+  ) : null;
+
   const fdSelector = h('div',{style:{marginBottom:'0'}},
     h('div',{style:{
       fontWeight:'800',fontSize:'14px',color:'var(--text)',marginBottom:'10px',
@@ -5927,6 +6002,15 @@ function renderFinModal(){
     const noteTxt = String(S.finNoteVal||'').trim();
     if(S.finDossierOui === true && !noteTxt){
       showToast('Notez ce qu\'il faut savoir sur ce dossier — « R.A.S. » si rien à signaler.','danger');
+      return;
+    }
+
+    // Validation : la raison de l'absence de traca matiere. Exigee seulement
+    // quand on SAIT qu'aucun code n'a ete scanne — une requete ratee laisse
+    // `finNbMatieres` a -1 et ne bloque personne.
+    const motifTxt = String(S.finMatiereMotif||'').trim();
+    if(aucuneMatiere && !motifTxt){
+      showToast('Aucun code matiere scanne sur ce dossier — indiquez pourquoi.','danger');
       return;
     }
 
@@ -5982,6 +6066,7 @@ function renderFinModal(){
         fin_dossier: S.finDossierOui === true,
       };
       if(S.finDossierOui === true && noteTxt) body.info_prod = noteTxt;
+      if(aucuneMatiere && motifTxt) body.matiere_absente_motif = motifTxt;
       body.metrage_fin = mFin;
       if(S.nbEtiquettes) body.qte_etiquettes = parseFloat(String(S.nbEtiquettes).replace(',','.'));
       if(S.adminMachineId) body.machine_id = S.adminMachineId;
@@ -6002,11 +6087,12 @@ function renderFinModal(){
       showToast('Erreur : '+e.message,'danger');
     }finally{
       fabRenderPreserveUi({loading:false, metrageFinVal:'', nbEtiquettes:'', finDossierOui:null,
-                           finNoteVal:'', finNoteChargee:false});
+                           finNoteVal:'', finNoteChargee:false,
+                           finNbMatieres:null, finMatiereMotif:''});
     }
   };
 
-  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false});}},
+  return h('div',{className:'fab-modal-overlay',onClick:(e)=>{if(e.target===e.currentTarget)set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false,finNbMatieres:null,finMatiereMotif:''});}},
     h('div',{className:'fab-modal'},
       h('div',{className:'fab-modal-title'},opLabel('89','Fin de production')),
       S.dossier ? h('div',{className:'fab-modal-sub'},
@@ -6029,11 +6115,12 @@ function renderFinModal(){
         h('label',null,'Étiquettes produites'),
         etiqInp
       ),
+      matiereBloc,
       h('div',{className:'fab-field'},fdSelector),
       S.finDossierOui===true ? noteBloc : null,
       h('div',{className:'fab-modal-btns'},
         h('button',{className:'fab-btn fab-btn-muted fab-btn-sm',
-          onClick:()=>set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false})},'Annuler'),
+          onClick:()=>set({showFinModal:false,finDossierOui:null,finNoteVal:'',finNoteChargee:false,finNbMatieres:null,finMatiereMotif:''})},'Annuler'),
         h('button',{
           className:'fab-btn '+(S.finDossierOui===true?'fab-btn-danger':'fab-btn-warn'),
           style:{opacity: S.finDossierOui===null?'.55':'1'},

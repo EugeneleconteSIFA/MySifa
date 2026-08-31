@@ -1574,6 +1574,37 @@ def set_mystock_prix(request: Request, body: dict = Body(...)):
     return res
 
 
+@router.post("/api/pricing/mystock/prix-matiere")
+def set_mystock_prix_matiere(request: Request, body: dict = Body(...)):
+    """Fixe le prix d'achat d'une matière — donc de toutes ses déclinaisons.
+
+    C'est le geste de la liste des matières : ni la laize ni le grammage ne
+    changent le prix à l'unité, une seule saisie suffit. Le détail par
+    déclinaison reste accessible sur la fiche, pour les cas où un fournisseur
+    diffère d'une laize à l'autre.
+    """
+    user = _require_write(request)
+    try:
+        prix = float(body.get("prix"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="prix invalide") from None
+    matiere_id = _opt_int(body, "matiere_id")
+    if not matiere_id:
+        raise HTTPException(status_code=400, detail="matiere_id manquant")
+    with get_db() as conn:
+        res = mystock_prix.set_prix_matiere(
+            conn,
+            matiere_id=matiere_id,
+            prix=prix,
+            user_id=user.get("id"),
+            user_name=user.get("nom"),
+        )
+        if not res.get("ok"):
+            raise HTTPException(status_code=400, detail=res.get("reason", "Modification refusée"))
+        conn.commit()
+    return res
+
+
 @router.post("/api/pricing/mystock/fournisseur")
 def set_mystock_fournisseur(request: Request, body: dict = Body(...)):
     """Change le fournisseur d'une ligne de prix, sans lui faire perdre son statut."""
