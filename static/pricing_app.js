@@ -1018,8 +1018,6 @@
     return window.MysFournisseurPicker.fromSelect(el, opts || {});
   }
 
-  const DECL_LABEL = { LAIZE: "laize", GRAMMAGE: "grammage" };
-
   /** Bouton d'action en icône seule, avec bulle d'aide au survol. */
   function actionBtn(attr, valeur, nom, titre, danger) {
     return `<button type="button" class="ico-btn${danger ? " danger" : ""}" ${attr}="${escAttr(valeur)}" title="${escAttr(titre)}" aria-label="${escAttr(titre)}">${icon(nom, 15)}</button>`;
@@ -1062,32 +1060,6 @@
     return [...vus.entries()].map(([id, nom]) => ({ id: id, nom: nom }));
   }
 
-  /* Le coût au m² d'une matière : celui de ses déclinaisons.
-
-     Il n'est pas unique quand le grammage change — c'est précisément ce que le
-     grammage fait varier, là où il ne change pas le prix au kilo. Une
-     fourchette plutôt qu'une moyenne : la moyenne de deux coûts qu'on ne
-     commande jamais ensemble ne correspond à rien.
-
-     Le chiffre ouvre la fiche de paramétrage, seul endroit où poids, devise,
-     taxes et transport se règlent. */
-  function msCoutResume(m) {
-    const decls = m.declinaisons || [];
-    const d = decls[0];
-    const couts = decls.map((x) => x.cout_eur_m2).filter((c) => c != null && c > 0);
-    if (!d) return '<span class="badge badge-silicone">aucune déclinaison</span>';
-    if (!couts.length) {
-      return `<button type="button" class="link-btn muted" data-ms-open="${d.id}"
-        title="Renseigner poids, devise, taxes et transport">à paramétrer</button>`;
-    }
-    const mn = Math.min(...couts), mx = Math.max(...couts);
-    const txt = Math.abs(mx - mn) < 1e-9
-      ? escHtml(fmtEurM2(mn))
-      : `${escHtml(fmtEurM2(mn))} <span class="muted">à</span> ${escHtml(fmtEurM2(mx))}`;
-    return `<button type="button" class="link-btn msl-cout" data-ms-open="${d.id}"
-      title="Ouvrir le paramétrage${decls.length > 1 ? " (" + decls.length + " déclinaisons)" : ""}">${txt}</button>`;
-  }
-
   function mystockMatiereRowHtml(m) {
     const decls = m.declinaisons || [];
     const fourns = msFournisseursPrincipaux(m);
@@ -1113,9 +1085,10 @@
         ? `${fmtNum(m.prix_min, 3, 3)} à ${fmtNum(m.prix_max, 3, 3)}`
         : "à compléter");
       const titre = memePrix
-        ? `Prix d'achat de ${m.reference} — appliqué à ${decls.length} déclinaison(s)`
-        : "Prix différents selon la déclinaison — saisir ici les aligne tous";
+        ? `Prix d'achat de ${m.reference} — modifiable ici, Entrée pour enregistrer`
+        : `Prix d'achat de ${m.reference} — plusieurs valeurs en base, saisir ici les aligne`;
       prixCell = `<div class="msl-prix-edit${memePrix ? "" : " msl-prix-diverge"}">
+          <span class="msl-prix-ico" aria-hidden="true">${icon("edit", 12)}</span>
           <input type="number" class="msl-prix-inp" step="0.001" min="0"
                  inputmode="decimal" data-ms-prix="${m.id}"
                  value="${escAttr(val)}" placeholder="${escAttr(ph)}"
@@ -1125,9 +1098,9 @@
         </div>`;
     } else {
       const raison = !decls.length
-        ? "Aucune déclinaison — à créer dans MyStock"
+        ? "Matière sans ligne de prix — à compléter dans MyStock"
         : (fourns.length > 1
-            ? "Fournisseurs différents selon la déclinaison — à régler sur la fiche"
+            ? "Plusieurs fournisseurs sur cette matière — à régler sur la fiche"
             : "Lecture seule");
       prixCell = `<span title="${escAttr(raison)}">${mystockPrixResume(m)}</span>`;
     }
@@ -1146,18 +1119,6 @@
            title="Tarif de ${escAttr(principale.fournisseur_nom || "ce fournisseur")} pour ${escAttr(m.reference)} : transport, taxes, base de prix${principale.a_tarif === false ? " — aucun tarif propre, réglages hérités" : ""}">${icon("truck", 13)}${principale.a_tarif === false ? '<span class="ms-tarif-manquant" aria-hidden="true"></span>' : ""}</button>`
       : "";
 
-    // Créer une déclinaison depuis la liste : dériver reprend les réglages de
-    // la première, le + en crée une vierge. Les deux gestes vivaient dans le
-    // détail dépliable ; ils ne devaient pas partir avec lui.
-    const creer = (S.canWrite && m.type_declinaison)
-      ? (decls.length
-          ? actionBtn("data-ms-deriver", decls[0].id, "corner-down-right",
-              `Dériver : nouveau ${DECL_LABEL[m.type_declinaison]} avec les mêmes réglages`)
-          : "") +
-        actionBtn("data-ms-new", m.id, "plus",
-          `Créer un ${DECL_LABEL[m.type_declinaison]} vierge`)
-      : "";
-
     const fiche = decls.length
       ? `<a class="btn btn-soft btn-sm" href="/pricing/mystock/${decls[0].id}" title="Ouvrir le paramétrage détaillé">Fiche</a>`
       : "";
@@ -1168,10 +1129,7 @@
         <td class="msl-des" title="${escAttr(m.designation || "")}">${escHtml(m.designation || "")}</td>
         <td class="msl-fourn">${fournCell} ${tarifBtn}</td>
         <td class="msl-prix">${prixCell}</td>
-        <td class="msl-coutcell">${msCoutResume(m)}</td>
-        <td class="msl-decl-nb">${decls.length || '<span class="muted">—</span>'}</td>
         <td class="ms-actions" onclick="event.stopPropagation()">
-          ${creer}
           ${fiche}
           <a class="btn btn-soft btn-sm" href="/stock?tab=matieres&matiere=${m.id}" target="_blank" rel="noopener" title="Ouvrir la fiche dans MyStock">MyStock ↗</a>
         </td>
@@ -1189,7 +1147,7 @@
         .join("");
 
     const lignes = S.mystock.map(mystockMatiereRowHtml).join("");
-    const sousTitre = `${S.mystock.length} matière(s) · prix d'achat modifiable en place`;
+    const sousTitre = `${S.mystock.length} matière(s) · cliquez sur un prix d'achat pour le modifier`;
 
     setContent(`
       <div class="pr-narrow">
@@ -1207,14 +1165,14 @@
           <table class="pr-table msl-table">
             <colgroup>
               <col style="width:100px"><col style="width:180px"><col>
-              <col style="width:180px"><col style="width:190px">
-              <col style="width:140px"><col style="width:60px"><col style="width:170px">
+              <col style="width:200px"><col style="width:250px"><col style="width:180px">
             </colgroup>
             <thead><tr>
               <th>Cat.</th><th>Référence</th><th>Désignation</th><th>Fournisseur principal</th>
-              <th>Prix d'achat</th><th>Coût €/m²</th><th title="Nombre de déclinaisons — laizes ou grammages">Décl.</th><th class="ms-actions"></th>
+              <th class="msl-th-prix">Prix d'achat <span class="msl-th-hint">${icon("edit", 11)} modifiable ici</span></th>
+              <th class="ms-actions"></th>
             </tr></thead>
-            <tbody>${lignes || '<tr><td colspan="8" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
+            <tbody>${lignes || '<tr><td colspan="6" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
           </table>
         </div>
       </div>
@@ -1254,9 +1212,14 @@
     bindMsListeActions();
   }
 
-  /* Les actions de la ligne : créer une déclinaison, ouvrir un tarif, ouvrir
-     la fiche de paramétrage. Toutes rechargent la liste après coup — sauf
-     l'ouverture de fiche, qui quitte l'écran. */
+  /* Les actions de la ligne : ouvrir un tarif, ouvrir la fiche de
+     paramétrage. Elles rechargent la liste après coup — sauf l'ouverture de
+     fiche, qui quitte l'écran.
+
+     La création de déclinaison a quitté cette liste le 31 août 2026 : le prix
+     d'achat ne varie pas d'une déclinaison à l'autre, donc l'écran des prix
+     n'a plus à parler de déclinaisons du tout. Créer une laize ou un
+     grammage reste un geste de MyStock, sur la fiche. */
   async function msCall(path, body, method) {
     try {
       await api(path, { method: method || "POST", body });
@@ -1270,24 +1233,6 @@
   }
 
   function bindMsListeActions() {
-    document.querySelectorAll("[data-ms-deriver]").forEach((btn) => {
-      btn.onclick = async (e) => {
-        e.stopPropagation();
-        const id = parseInt(btn.getAttribute("data-ms-deriver"), 10);
-        if (await msCall("/api/pricing/mystock/declinaisons/deriver", { declinaison_id: id })) {
-          showToast("Déclinaison dérivée — reste à saisir sa valeur sur la fiche.", "success");
-        }
-      };
-    });
-    document.querySelectorAll("[data-ms-new]").forEach((btn) => {
-      btn.onclick = async (e) => {
-        e.stopPropagation();
-        const id = parseInt(btn.getAttribute("data-ms-new"), 10);
-        if (await msCall("/api/pricing/mystock/declinaisons", { matiere_id: id })) {
-          showToast("Déclinaison créée — renseignez sa valeur sur la fiche.", "info");
-        }
-      };
-    });
     document.querySelectorAll("[data-ms-tarif]").forEach((btn) => {
       btn.onclick = async (e) => {
         e.stopPropagation();
@@ -1296,12 +1241,6 @@
           await loadMystockList();
           renderMystockList();
         });
-      };
-    });
-    document.querySelectorAll("[data-ms-open]").forEach((btn) => {
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        navigate("/pricing/mystock/" + btn.getAttribute("data-ms-open"));
       };
     });
   }
@@ -1339,12 +1278,11 @@
         if (brut === initial) return;
         dire("enregistrement…", "");
         try {
-          const r = await api("/api/pricing/mystock/prix-matiere", {
+          await api("/api/pricing/mystock/prix-matiere", {
             method: "POST",
             body: { matiere_id: id, prix: prix },
           });
-          const n = (r && r.declinaisons_touchees) || 0;
-          dire("✓ " + n + " décl.", "ok");
+          dire("✓ enregistré", "ok");
           inp.classList.remove("msl-prix-diverge");
           const ligne = inp.closest(".msl-prix-edit");
           if (ligne) ligne.classList.remove("msl-prix-diverge");

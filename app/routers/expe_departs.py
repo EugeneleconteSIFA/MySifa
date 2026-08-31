@@ -34,6 +34,7 @@ from config import (
     public_base_url,
 )
 from app.services import expe_evenements as expe_ev
+from app.services import expe_notes
 from app.services.expe_transporteurs_seed import seed_expe_transporteurs_if_empty
 from database import get_db
 from services.auth_service import get_current_user, user_can_write_expe, user_has_app_access
@@ -5704,3 +5705,474 @@ def reset_delais(request: Request, body: dict = Body(default_factory=dict)):
         conn.commit()
 
     return {"reset": True, "type_envoi": type_envoi}
+
+
+# ─── Note de confiance transporteur (avis, ajustements, zones) ─────
+#
+# La note vit dans `app/services/expe_notes.py` : ces routes ne font
+# qu'écrire des avis et redemander un recalcul. Le cache porté par
+# `expe_transporteurs` est réécrit à chaque écriture, jamais à la lecture —
+# la note est lue partout (liste, comparateur, zones) et écrite rarement.
+
+
+def _avis_sens_valide(sens: str) -> str:
+    valeur = (sens or "").strip().lower()
+    if valeur not in ("alerte", "appreciation"):
+        raise HTTPException(
+            status_code=400, detail="Sens d'avis invalide (alerte ou appreciation)"
+        )
+    return valeur
+
+
+def _avis_note_valide(brut: Any) -> float:
+    try:
+        note = float(brut)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Note invalide — valeur entre 0 et 10.")
+    if note < 0 or note > 10:
+        raise HTTPException(status_code=400, detail="Note invalide — valeur entre 0 et 10.")
+    # Demi-étoiles : la saisie se fait par pas de 0,5.
+    return round(note * 2) / 2
+
+
+def _avis_depart_ref(conn, depart_id: Optional[int]) -> str:
+    """Libellé figé du départ, pour que l'historique reste lisible s'il est supprimé."""
+    if not depart_id:
+        return ""
+    row = conn.execute(
+        "SELECT date_enlevement, client, no_bl, code_postal_destination "
+        "FROM expe_departs WHERE id=?",
+        (depart_id,),
+    ).fetchone()
+    if not row:
+        return ""
+    morceaux = [
+        str(row["date_enlevement"] or "")[:10],
+        str(row["client"] or ""),
+        (f"BL {row['no_bl']}" if row["no_bl"] else ""),
+        str(row["code_postal_destination"] or ""),
+    ]
+    return " · ".join([m for m in morceaux if m])
+
+
+def _serialize_avis(row: Any) -> dict:
+    d = dict(row)
+    d["note"] = float(d["note"]) if d.get("note") is not None else None
+    d["ajustement"] = (
+        float(d["ajustement"]) if d.get("ajustement") is not None else None
+    )
+    return d
+
+
+@router.get("/avis/thematiques")
+def list_avis_thematiques(request: Request, toutes: int = 0):
+    _require_expe(request)
+    with get_db() as conn:
+        clause = "" if toutes else "WHERE actif=1"
+        rows = conn.execute(
+            f"SELECT * FROM expe_avis_thematiques {clause} ORDER BY ordre, libelle"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+@router.post("/avis/thematiques")
+def create_avis_thematique(request: Request, body: dict = Body(...)):
+    user = _require_expe_write(request)
+    libelle = (body.get("libelle") or "").strip()
+    if not libelle:
+        raise HTTPException(status_code=400, detail="Libellé de thématique obligatoire")
+    code = (body.get("code") or "").strip().lower()
+    if not code:
+        base = unicodedata.normalize("NFD", libelle.lower())
+        base = "".join(c for c in base if unicodedata.category(c) != "Mn")
+        code = re.sub(r"[^a-z0-9]+", "_", base).strip("_")[:40] or "thematique"
+    sens = (body.get("sens") or "les_deux").strip()
+    if sens not in ("alerte", "appreciation", "les_deux"):
+        sens = "les_deux"
+    try:
+        poids = float(body.get("poids") if body.get("poids") is not None else 1.0)
+    except (TypeError, ValueError):
+        poids = 1.0
+    poids = max(0.1, min(5.0, poids))
+    with get_db() as conn:
+        existe = conn.execute(
+            "SELECT id FROM expe_avis_thematiques WHERE code=?", (code,)
+        ).fetchone()
+        if existe:
+            raise HTTPException(status_code=400, detail="Ce code de thématique existe déjà")
+        cur = conn.execute(
+            """INSERT INTO expe_avis_thematiques
+               (code, libelle, sens, poids, ordre, actif, created_at)
+               VALUES (?,?,?,?,?,1,?)""",
+            (code, libelle, sens, poids, int(body.get("ordre") or 500), _now_paris_iso()),
+        )
+        conn.commit()
+        new_id = cur.lastrowid
+    log_action(
+        user=user,
+        action="creation",
+        module="expe",
+        objet="avis_thematique",
+        detail={"id": new_id, "code": code, "libelle": libelle},
+    )
+    return {"id": new_id, "code": code}
+
+
+@router.patch("/avis/thematiques/{thematique_id}")
+def update_avis_thematique(
+    request: Request, thematique_id: int, body: dict = Body(...)
+):
+    user = _require_expe_write(request)
+    sets: list[str] = []
+    args: list[Any] = []
+    if "libelle" in body:
+        libelle = (body.get("libelle") or "").strip()
+        if not libelle:
+            raise HTTPException(status_code=400, detail="Libellé de thématique obligatoire")
+        sets.append("libelle=?")
+        args.append(libelle)
+    if "sens" in body:
+        sens = (body.get("sens") or "les_deux").strip()
+        if sens not in ("alerte", "appreciation", "les_deux"):
+            sens = "les_deux"
+        sets.append("sens=?")
+        args.append(sens)
+    if "poids" in body:
+        try:
+            poids = float(body.get("poids"))
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Poids invalide — valeur entre 0.1 et 5.")
+        sets.append("poids=?")
+        args.append(max(0.1, min(5.0, poids)))
+    if "ordre" in body:
+        sets.append("ordre=?")
+        args.append(int(body.get("ordre") or 500))
+    if "actif" in body:
+        sets.append("actif=?")
+        args.append(1 if body.get("actif") else 0)
+    if not sets:
+        return {"updated": False}
+    sets.append("updated_at=?")
+    args.append(_now_paris_iso())
+    args.append(thematique_id)
+    with get_db() as conn:
+        conn.execute(
+            f"UPDATE expe_avis_thematiques SET {', '.join(sets)} WHERE id=?", args
+        )
+        conn.commit()
+        # Le poids d'une thématique change toutes les notes qui s'y appuient.
+        expe_notes.recalculer_toutes(conn)
+        conn.commit()
+    log_action(
+        user=user,
+        action="modification",
+        module="expe",
+        objet="avis_thematique",
+        detail={"id": thematique_id},
+    )
+    return {"updated": True}
+
+
+@router.delete("/avis/thematiques/{thematique_id}")
+def delete_avis_thematique(request: Request, thematique_id: int):
+    """Désactive la thématique — les avis déjà émis gardent leur libellé."""
+    user = _require_expe_write(request)
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE expe_avis_thematiques SET actif=0, updated_at=? WHERE id=?",
+            (_now_paris_iso(), thematique_id),
+        )
+        conn.commit()
+    log_action(
+        user=user,
+        action="desactivation",
+        module="expe",
+        objet="avis_thematique",
+        detail={"id": thematique_id},
+    )
+    return {"desactive": True}
+
+
+@router.get("/transporteurs/{transporteur_id}/avis")
+def list_transporteur_avis(request: Request, transporteur_id: int):
+    _require_expe(request)
+    with get_db() as conn:
+        trp = conn.execute(
+            "SELECT id, nom FROM expe_transporteurs WHERE id=?", (transporteur_id,)
+        ).fetchone()
+        if not trp:
+            raise HTTPException(status_code=404, detail="Transporteur introuvable")
+        rows = conn.execute(
+            """SELECT a.*, t.libelle AS thematique_libelle, t.code AS thematique_code
+                 FROM expe_transporteur_avis a
+                 LEFT JOIN expe_avis_thematiques t ON t.id = a.thematique_id
+                WHERE a.transporteur_id = ?
+                ORDER BY a.created_at DESC, a.id DESC""",
+            (transporteur_id,),
+        ).fetchall()
+        note = expe_notes.calculer_note(conn, transporteur_id)
+    return {
+        "transporteur_id": transporteur_id,
+        "transporteur": trp["nom"],
+        "note": note,
+        "avis": [_serialize_avis(r) for r in rows],
+    }
+
+
+@router.post("/transporteurs/{transporteur_id}/avis")
+def create_transporteur_avis(
+    request: Request, transporteur_id: int, body: dict = Body(...)
+):
+    user = _require_expe_write(request)
+    sens = _avis_sens_valide(body.get("sens"))
+    note = _avis_note_valide(body.get("note"))
+    thematique_id = body.get("thematique_id")
+    if not thematique_id:
+        raise HTTPException(status_code=400, detail="Thématique obligatoire")
+    commentaire = (body.get("commentaire") or "").strip()
+    depart_id = body.get("depart_id")
+    depart_id = int(depart_id) if depart_id else None
+    now = _now_paris_iso()
+    with get_db() as conn:
+        trp = conn.execute(
+            "SELECT id FROM expe_transporteurs WHERE id=?", (transporteur_id,)
+        ).fetchone()
+        if not trp:
+            raise HTTPException(status_code=404, detail="Transporteur introuvable")
+        them = conn.execute(
+            "SELECT id FROM expe_avis_thematiques WHERE id=?", (int(thematique_id),)
+        ).fetchone()
+        if not them:
+            raise HTTPException(status_code=400, detail="Thématique inconnue")
+        cur = conn.execute(
+            """INSERT INTO expe_transporteur_avis
+               (transporteur_id, depart_id, type, sens, note, thematique_id,
+                commentaire, depart_ref, auteur_email, auteur_nom, created_at)
+               VALUES (?,?,'avis',?,?,?,?,?,?,?,?)""",
+            (
+                transporteur_id,
+                depart_id,
+                sens,
+                note,
+                int(thematique_id),
+                commentaire,
+                _avis_depart_ref(conn, depart_id),
+                (user.get("email") or user.get("identifiant") or ""),
+                (user.get("nom") or ""),
+                now,
+            ),
+        )
+        avis_id = cur.lastrowid
+        note_maj = expe_notes.recalculer_note(conn, transporteur_id)
+        conn.commit()
+    log_action(
+        user=user,
+        action="creation",
+        module="expe",
+        objet="transporteur_avis",
+        detail={
+            "id": avis_id,
+            "transporteur_id": transporteur_id,
+            "sens": sens,
+            "note": note,
+            "depart_id": depart_id,
+        },
+    )
+    return {"id": avis_id, "note": note_maj}
+
+
+@router.patch("/avis/{avis_id}")
+def update_transporteur_avis(request: Request, avis_id: int, body: dict = Body(...)):
+    user = _require_expe_write(request)
+    with get_db() as conn:
+        avis = conn.execute(
+            "SELECT * FROM expe_transporteur_avis WHERE id=?", (avis_id,)
+        ).fetchone()
+        if not avis:
+            raise HTTPException(status_code=404, detail="Avis introuvable")
+        sets: list[str] = []
+        args: list[Any] = []
+        if "note" in body and (avis["type"] or "avis") == "avis":
+            sets.append("note=?")
+            args.append(_avis_note_valide(body.get("note")))
+        if "sens" in body:
+            sets.append("sens=?")
+            args.append(_avis_sens_valide(body.get("sens")))
+        if "thematique_id" in body and body.get("thematique_id"):
+            sets.append("thematique_id=?")
+            args.append(int(body.get("thematique_id")))
+        if "commentaire" in body:
+            sets.append("commentaire=?")
+            args.append((body.get("commentaire") or "").strip())
+        if not sets:
+            return {"updated": False}
+        sets.append("updated_at=?")
+        args.append(_now_paris_iso())
+        args.append(avis_id)
+        conn.execute(
+            f"UPDATE expe_transporteur_avis SET {', '.join(sets)} WHERE id=?", args
+        )
+        note_maj = expe_notes.recalculer_note(conn, avis["transporteur_id"])
+        conn.commit()
+    log_action(
+        user=user,
+        action="modification",
+        module="expe",
+        objet="transporteur_avis",
+        detail={"id": avis_id},
+    )
+    return {"updated": True, "note": note_maj}
+
+
+@router.delete("/avis/{avis_id}")
+def delete_transporteur_avis(request: Request, avis_id: int):
+    user = _require_expe_write(request)
+    with get_db() as conn:
+        avis = conn.execute(
+            "SELECT transporteur_id FROM expe_transporteur_avis WHERE id=?", (avis_id,)
+        ).fetchone()
+        if not avis:
+            raise HTTPException(status_code=404, detail="Avis introuvable")
+        conn.execute("DELETE FROM expe_transporteur_avis WHERE id=?", (avis_id,))
+        note_maj = expe_notes.recalculer_note(conn, avis["transporteur_id"])
+        conn.commit()
+    log_action(
+        user=user,
+        action="suppression",
+        module="expe",
+        objet="transporteur_avis",
+        detail={"id": avis_id},
+    )
+    return {"supprime": True, "note": note_maj}
+
+
+@router.post("/transporteurs/{transporteur_id}/ajustement")
+def create_transporteur_ajustement(
+    request: Request, transporteur_id: int, body: dict = Body(...)
+):
+    """Bonus/malus manuel en points, tracé dans le même historique que les avis."""
+    user = _require_expe_write(request)
+    try:
+        ajustement = float(body.get("ajustement"))
+    except (TypeError, ValueError):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ajustement invalide — valeur entre -{expe_notes.AJUSTEMENT_MAX:g} et +{expe_notes.AJUSTEMENT_MAX:g} points.",
+        )
+    borne = expe_notes.AJUSTEMENT_MAX
+    if ajustement < -borne or ajustement > borne:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ajustement invalide — valeur entre -{borne:g} et +{borne:g} points.",
+        )
+    commentaire = (body.get("commentaire") or "").strip()
+    if not commentaire:
+        raise HTTPException(
+            status_code=400, detail="Motif obligatoire pour un ajustement manuel."
+        )
+    with get_db() as conn:
+        trp = conn.execute(
+            "SELECT id FROM expe_transporteurs WHERE id=?", (transporteur_id,)
+        ).fetchone()
+        if not trp:
+            raise HTTPException(status_code=404, detail="Transporteur introuvable")
+        cur = conn.execute(
+            """INSERT INTO expe_transporteur_avis
+               (transporteur_id, type, sens, ajustement, commentaire,
+                auteur_email, auteur_nom, created_at)
+               VALUES (?, 'ajustement', ?, ?, ?, ?, ?, ?)""",
+            (
+                transporteur_id,
+                "appreciation" if ajustement >= 0 else "alerte",
+                round(ajustement * 2) / 2,
+                commentaire,
+                (user.get("email") or user.get("identifiant") or ""),
+                (user.get("nom") or ""),
+                _now_paris_iso(),
+            ),
+        )
+        ajust_id = cur.lastrowid
+        note_maj = expe_notes.recalculer_note(conn, transporteur_id)
+        conn.commit()
+    log_action(
+        user=user,
+        action="modification",
+        module="expe",
+        objet="transporteur_note_ajustement",
+        detail={
+            "id": ajust_id,
+            "transporteur_id": transporteur_id,
+            "ajustement": ajustement,
+            "motif": commentaire,
+        },
+    )
+    return {"id": ajust_id, "note": note_maj}
+
+
+@router.post("/transporteurs/notes/recalcul")
+def recalculer_notes_transporteurs(request: Request):
+    _require_expe_write(request)
+    with get_db() as conn:
+        nb = expe_notes.recalculer_toutes(conn)
+        conn.commit()
+    return {"recalcules": nb}
+
+
+@router.get("/zones/villes")
+def zones_villes(request: Request, q: str = ""):
+    _require_expe(request)
+    with get_db() as conn:
+        return expe_notes.chercher_villes(conn, q)
+
+
+@router.get("/zones/carte")
+def zones_carte(request: Request, type_envoi: str = ""):
+    """Transporteur recommandé par département — alimente la carte de France."""
+    _require_expe(request)
+    with get_db() as conn:
+        return expe_notes.carte_zones(conn, type_envoi=type_envoi)
+
+
+@router.get("/zones/recommandation")
+def zones_recommandation(
+    request: Request,
+    ville: str = "",
+    cp: str = "",
+    dept: str = "",
+    type_envoi: str = "",
+):
+    """Transporteurs à prioriser pour une destination."""
+    _require_expe(request)
+    with get_db() as conn:
+        if dept.strip():
+            # Clic direct sur la carte : le département est déjà connu, il n'y
+            # a pas de code postal à résoudre.
+            dest = {"cp": "", "ville": "", "departement": dept.strip().upper()}
+        else:
+            dest = expe_notes.resoudre_destination(conn, ville=ville, cp=cp)
+        dept = dest["departement"]
+        if not dept:
+            raise HTTPException(
+                status_code=400,
+                detail="Destination introuvable — saisir une ville connue ou un code postal.",
+            )
+        transporteurs = expe_notes.recommander_transporteurs(
+            conn, dept, type_envoi=type_envoi
+        )
+        delai_row = conn.execute(
+            """SELECT delai_texte, zone_label FROM expe_delais
+                WHERE departement=? AND transporteur_id IS NULL
+                ORDER BY CASE WHEN type_envoi=? THEN 0 ELSE 1 END LIMIT 1""",
+            (dept, type_envoi or "default"),
+        ).fetchone()
+        nb_departs = conn.execute(
+            "SELECT COUNT(*) AS n FROM expe_departs "
+            "WHERE code_postal_destination IS NOT NULL AND code_postal_destination <> ''"
+        ).fetchone()["n"]
+    return {
+        "destination": dest,
+        "departement": dept,
+        "delai": dict(delai_row) if delai_row else None,
+        "transporteurs": transporteurs,
+        "historique_global": nb_departs,
+    }

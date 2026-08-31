@@ -349,7 +349,7 @@ function expeTrpFiltered(){
 
 async function loadTransporteurs(){
   T.loading=true;
-  render();
+  renderTransporteurs();
   try{
     const rows=await api('/api/expe/transporteurs');
     T.list=Array.isArray(rows)?rows:[];
@@ -361,9 +361,20 @@ async function loadTransporteurs(){
   renderTransporteurs();
 }
 
+// Re-render qui rend la main au champ en cours de saisie.
+//
+// Bug d'origine : la preservation ne couvrait que les deux searchbars du
+// referentiel, nommement listees. Or `loadTransporteurs()` declenche DEUX
+// render() — un au depart, un au retour de l'API — et le comparateur charge
+// la liste des transporteurs en arrivant sur l'onglet (il lui faut les
+// couleurs). Quiconque tapait son code postal avant la fin de cet appel
+// voyait ses quatre champs se vider et le curseur sauter : « le comparateur
+// ne marche pas quand j'ecris vite ». La liste blanche est donc remplacee par
+// une regle generale — tout champ focalise portant un id est restitue.
 function renderTransporteurs(){
   const ae=document.activeElement;
-  const focusId=ae&&ae.id&&(ae.id==='expe-trp-search'||ae.id==='expe-trp-page-search')?ae.id:null;
+  const estSaisie=ae&&(ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'||ae.tagName==='SELECT');
+  const focusId=estSaisie&&ae.id?ae.id:null;
   const caretStart=ae&&typeof ae.selectionStart==='number'?ae.selectionStart:null;
   const caretEnd=ae&&typeof ae.selectionEnd==='number'?ae.selectionEnd:null;
   render();
@@ -517,6 +528,7 @@ function closeTransporteurModal(){
 function setTransporteurModalTab(tab){
   T.modalTab=tab;
   if(tab==='tarifs'&&T.editId!=null)void loadTarifsTransporteur(T.editId);
+  else if(tab==='note'&&T.editId!=null)void expeChargerHistoriqueNote(T.editId);
   else render();
 }
 
@@ -1029,6 +1041,7 @@ function renderExpeTranspList(){
   }
   const head=h('tr',null,
     h('th',null,'Transporteur'),
+    h('th',null,'Note'),
     h('th',null,'Zones'),
     h('th',null,'Comparateur'),
     h('th',null,'Carburant'),
@@ -1058,8 +1071,16 @@ function renderExpeTranspList(){
           onClick:()=>toggleActif(tr.id,isActive?0:1)},iconEl('sliders',14))
       )
     ):null;
+    const noteCell=h('td',null,
+      h('div',{className:'expe-note-cell'},
+        expeNoteBadge(tr),
+        h('span',{className:'expe-note-cell-txt'},
+          Number(tr.note_nb_avis||0)?(Number(tr.note_nb_avis)+' avis'):'aucun avis')
+      )
+    );
     return h('tr',{className:inactive?'expe-trp-row-inactive':''},
       nameCell,
+      noteCell,
       h('td',null,expeTrpBadgesCell(zones,'expe-trp-zone')),
       h('td',null,expeTrpBadgesCell(services,'expe-trp-svc')),
       h('td',{className:'expe-trp-num'},escHtml(String(taxe))+' %'),
@@ -1130,11 +1151,14 @@ function renderExpeTransporteurModal(){
   if(isEdit){
     box.appendChild(h('div',{className:'expe-trp-tabs'},
       h('button',{type:'button',className:'expe-trp-tab'+(T.modalTab==='fiche'?' active':''),onClick:()=>setTransporteurModalTab('fiche')},'Fiche'),
-      h('button',{type:'button',className:'expe-trp-tab'+(T.modalTab==='tarifs'?' active':''),onClick:()=>setTransporteurModalTab('tarifs')},'Tarifs')
+      h('button',{type:'button',className:'expe-trp-tab'+(T.modalTab==='tarifs'?' active':''),onClick:()=>setTransporteurModalTab('tarifs')},'Tarifs'),
+      h('button',{type:'button',className:'expe-trp-tab'+(T.modalTab==='note'?' active':''),onClick:()=>setTransporteurModalTab('note')},'Suivi qualité')
     ));
   }
   if(isEdit&&T.modalTab==='tarifs'){
     box.appendChild(renderTarifsOnglet());
+  }else if(isEdit&&T.modalTab==='note'){
+    box.appendChild(renderExpeTrpNoteOnglet());
   }else{
     // Langue des emails. Le pack de traduction FR/EN existait déjà mais
     // n'était jamais utilisé faute de savoir à qui écrire dans quelle langue :
@@ -1375,9 +1399,11 @@ function renderExpeTransporteurs(){
     h('button',{type:'button',className:'btn btn-ghost',onClick:openExpeTranspPanel},iconEl('layers',14),' Panneau latéral'),
     expeCanWrite()?h('button',{type:'button',className:'btn btn-accent',onClick:()=>openTransporteurModal(null)},iconEl('plus',14),' Ajouter'):null
   ];
+  if(!N.thematiquesChargees&&!N.thematiquesEnCours)void expeChargerThematiques();
   return h('div',{className:'expe-trp-page'},
     h('div',{className:'expe-trp-page-head'},...headKids),
-    renderExpeTranspList()
+    renderExpeTranspList(),
+    renderExpeThematiquesSection()
   );
 }
 """
@@ -1435,8 +1461,12 @@ function expeCompareIcon(size){
 }
 
 function renderResultatsComparateur(data){
+  // Memorise avant de dessiner : un render() global reconstruit le conteneur
+  // et ferait disparaitre la comparaison qu'on vient de lancer.
+  if(data!==undefined)S.comparateur_resultats=data;
   const el=document.getElementById('cmp-resultats');
   if(!el)return;
+  if(!data){el.innerHTML='';return;}
   const elig=data.eligibles||[];
   const noelig=data.non_eligibles||[];
   if(!elig.length&&!noelig.length){
@@ -1524,6 +1554,7 @@ async function lancerComparateur(){
     renderResultatsComparateur(data);
   }catch(e){
     showToast(e.message||'Erreur lors du calcul','danger');
+    S.comparateur_resultats=null;
     if(resEl)resEl.innerHTML='';
   }finally{
     if(btn){btn.disabled=false;btn.textContent='Comparer';}
@@ -1532,11 +1563,21 @@ async function lancerComparateur(){
 
 function renderExpeComparateurTarifs(){
   const f=S.comparateur_form||{};
+  // Chaque frappe est recopiee dans S.comparateur_form. Sans cela, la valeur
+  // ne vivait que dans le DOM : le moindre render() reconstruisait le
+  // formulaire depuis un S vide et effacait la saisie en cours.
+  const champKey={'cmp-poids':'poids_total_kg','cmp-pal':'nb_palette','cmp-cp':'code_postal_destination','cmp-type':'type_envoi'};
+  const memoriser=(id,valeur)=>{
+    if(!S.comparateur_form)S.comparateur_form={};
+    const k=champKey[id];
+    if(k)S.comparateur_form[k]=valeur;
+  };
   const mkInp=(id,type,val,placeholder,extra)=>{
     const o=extra||{};
     const inp=h('input',{id,type,value:val!=null&&val!==''?String(val):'',placeholder,className:'expe-cmp-inp'});
     if(o.step)inp.step=o.step;
     if(o.min!=null)inp.min=o.min;
+    inp.addEventListener('input',e=>memoriser(id,e.target.value));
     return inp;
   };
   const typeSel=h('select',{id:'cmp-type',className:'expe-cmp-inp'},
@@ -1553,6 +1594,7 @@ function renderExpeComparateurTarifs(){
     document.getElementById('cmp-cp').value='';
     document.getElementById('cmp-type').value='messagerie';
     document.getElementById('cmp-resultats').innerHTML='';
+    S.comparateur_resultats=null;
     S.comparateur_form={poids_total_kg:'',nb_palette:'',code_postal_destination:'',type_envoi:'messagerie'};
   });
   const grid=h('div',{className:'expe-cmp-grid'},
@@ -1565,6 +1607,7 @@ function renderExpeComparateurTarifs(){
     inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void lancerComparateur();}});
   });
   typeSel.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void lancerComparateur();}});
+  typeSel.addEventListener('change',e=>memoriser('cmp-type',e.target.value));
   const wrap=h('div',{id:'section-comparateur',className:'expe-cmp-wrap'},
     h('h2',{className:'expe-cmp-title'},'Comparer les transporteurs'),
     h('div',{className:'expe-cmp-form'},
@@ -1573,6 +1616,9 @@ function renderExpeComparateurTarifs(){
     ),
     h('div',{id:'cmp-resultats',className:'expe-cmp-results'})
   );
+  if(S.comparateur_resultats){
+    requestAnimationFrame(()=>renderResultatsComparateur(S.comparateur_resultats));
+  }
   return wrap;
 }
 
@@ -4196,7 +4242,7 @@ EXPE_MAIN_CSS = r"""
 """
 
 EXPE_MAIN_JS = r"""
-var EXPE_VALID_TABS=['suivi_departs','palettes_europe','comparateur','devis','poids','transporteurs','prospects'];
+var EXPE_VALID_TABS=['suivi_departs','palettes_europe','comparateur','devis','poids','transporteurs','zones','prospects'];
 var _expeHashRestored=false;
 function _readExpeHash(){
   try{var h=(location.hash||'').replace(/^#/,'').trim();
@@ -4418,6 +4464,9 @@ __EXPE_DEVIS_JS__
 __EXPE_DEVIS_GUIDE_JS__
 __EXPE_TRANSPORTEURS_JS__
 __EXPE_CARTE_FRANCE_JS__
+__EXPE_NOTES_JS__
+__EXPE_THEMATIQUES_JS__
+__EXPE_ZONES_JS__
 function renderExpePoids(){
   const rows=S.expePoidsRows||[];
   const fKg=v=>v.toFixed(3)+'\u00a0kg';
@@ -6203,6 +6252,7 @@ function renderExpeSuiviDeparts(){
       h('td',null,expeDossierCell(r)),
       expeCanWrite()?h('td',{className:'expe-dep-actions-td'},
         expeDepartActsGrid([
+          ...expeAvisBoutons(r),
           r.code_postal_destination?h('button',{className:'btn-ghost expe-dep-ab',type:'button',
             title:'Ouvrir une demande de devis préremplie avec les données de ce départ',
             onClick:()=>ouvrirDevisDepuisDepart(r.id,parseFloat(r.poids_total_kg)||0,parseFloat(r.nb_palette)||0,String(r.code_postal_destination||''))},expeDevisIcon(14)):null,
@@ -6393,6 +6443,7 @@ function renderExpeHistoriqueDeparts(){
     h('td',null,expeDossierCell(r)),
     expeCanWrite()?h('td',{className:'expe-dep-actions-td'},
       expeDepartActsGrid([
+        ...expeAvisBoutons(r),
         h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Dupliquer ce départ en nouvelle saisie',
           onClick:()=>expeOpenDepartModal(r,'new')},iconEl('copy',14)),
         h('button',{className:'btn-ghost expe-dep-ab',type:'button',title:'Modifier les informations de ce départ',
@@ -6485,6 +6536,7 @@ function renderExpe(){
       if(sub==='jour')void loadExpeDepartJour();
       else void loadExpeDepartHistorique();
     }else if(tab==='comparateur'){if(!T.list.length&&!T.loading)void loadTransporteurs();}
+    else if(tab==='zones'){if(!T.list.length&&!T.loading)void loadTransporteurs();}
     // Les prospects sont chargés ici aussi : le modal d'envoi les propose
     // comme destinataires, mais sans ce chargement leur section restait vide
     // tant qu'on n'était pas passé par l'onglet Prospects dans la session.
@@ -6516,6 +6568,7 @@ function renderExpe(){
         ]},
         { key:'ref', label:'Référentiel', items:[
           {tab:'transporteurs',ico:'truck',label:'Transporteurs'},
+          {tab:'zones',        ico:'map-pin',label:'Zone géographique'},
           {tab:'prospects',    ico:'users',label:'Prospects'},
         ]},
       ];
@@ -6585,7 +6638,7 @@ function renderExpe(){
       h('div',{className:'mobile-topbar-sub'},
         tab==='suivi_departs'?(sub==='historique'?'Historique départs':'Départs programmés'):
         tab==='palettes_europe'?'Suivi des palettes Europe consignées':
-        tab==='transporteurs'?'Transporteurs':tab==='devis'?'Demandes de devis':tab==='prospects'?'Prospects transporteurs':tab==='poids'?'Calcul poids':'Comparateur tarifs')
+        tab==='transporteurs'?'Transporteurs':tab==='zones'?'Zone géographique':tab==='devis'?'Demandes de devis':tab==='prospects'?'Prospects transporteurs':tab==='poids'?'Calcul poids':'Comparateur tarifs')
     ),
     h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
   );
@@ -6593,6 +6646,7 @@ function renderExpe(){
   const content=tab==='suivi_departs'?renderExpeSuiviDepartsWithSubtabs():
     tab==='palettes_europe'?renderExpePalettesEurope():
     tab==='transporteurs'?renderExpeTransporteurs():tab==='poids'?renderExpePoids():
+    tab==='zones'?renderExpeZones():
     tab==='devis'?renderExpeDevisSection():tab==='prospects'?renderExpeProspectsSection():
     renderExpeComparateur();
   // Motion : cascade d'entree au changement d'onglet uniquement. On pose
@@ -6625,6 +6679,7 @@ function renderExpe(){
             :tab==='devis'?'Prospection parallèle — demandes de tarif aux transporteurs'
             :tab==='prospects'?'Transporteurs hors référentiel — suivi de démarchage'
             :tab==='poids'?'Estimation du poids d\'un envoi d\'étiquettes'
+            :tab==='zones'?'Transporteurs à prioriser par destination, selon l\'historique et la note de confiance'
             :'Référentiel transporteurs, zones et tarifs'),
           contentWrap
         )
@@ -6633,6 +6688,7 @@ function renderExpe(){
     renderExpeTranspPanel(),
     renderExpeTransporteurModal(),
     renderExpeDevisModal(),
+    renderExpeAvisModal(),
     S.expeShowContacts?renderExpeContactModal():null
   );
 }

@@ -2174,10 +2174,11 @@ def besoins_tendance(request: Request):
                 continue
 
             for lz, sub in parts.items():
-                # Filtrer sur une laize, c'est ne regarder que des bobines :
-                # ce qui n'en a pas sort de l'écran plutôt que de s'y ajouter
-                # sans rapport avec la sélection.
-                if laizes_filtre and lz not in laizes_filtre:
+                # Le filtre de laize ne concerne QUE les bobines. Un mandrin
+                # ou un carton retenu explicitement doit rester à l'écran : il
+                # n'a pas de laize, et le faire disparaître parce qu'on a
+                # choisi une laize pour le frontal serait incompréhensible.
+                if laizes_filtre and kind in _KINDS_BOBINE and lz not in laizes_filtre:
                     continue
                 q_lz = float(sub.get("q") or 0.0)
                 if mois < debut_calcul:
@@ -2201,7 +2202,7 @@ def besoins_tendance(request: Request):
                     "matiere_id": mid,
                     "libelle": libelle + (
                         f" · {lz} mm" if (detail_laize and lz is not None)
-                        else (" · laize inconnue" if detail_laize and kind in ("support", "glassine")
+                        else (" · laize inconnue" if detail_laize and kind in _KINDS_BOBINE
                               else "")),
                     "designation": agg.get("designation"),
                     "kind": kind,

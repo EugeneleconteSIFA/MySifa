@@ -6246,15 +6246,21 @@ function _datePresets(){
 async function chargerDernierJourSaisi(){
   if(S._dernierJourEnCours) return;
   S._dernierJourEnCours = true;
+  // La veille est calculee ICI et envoyee au serveur. Ne pas la laisser au
+  // serveur : il tourne en UTC, le poste est a Paris, et un lundi matin les
+  // deux ne designent pas le meme jour — la comparaison ne tombait jamais
+  // juste, et le filtre restait sur son dimanche vide.
+  const veille = getYesterday();
   try{
-    const d = await api('/api/production/dernier-jour-saisi');
+    const d = await api('/api/production/dernier-jour-saisi?avant='
+                        + encodeURIComponent(veille));
     if(!d || !d.jour) return;
     S.dernierJourSaisi = d.jour;
-    // L'etat initial pose la veille CALENDAIRE en dur. Tant que l'utilisateur
-    // n'y a pas touche, on la remplace par la derniere journee travaillee :
-    // ouvrir la page un lundi sur un dimanche vide n'apprend rien. Un filtre
-    // deja modifie n'est jamais ecrase.
-    if(S.fv.date_from === d.veille && S.fv.date_to === d.veille && d.jour !== d.veille){
+    // L'etat initial pose la veille en dur. Tant que l'utilisateur n'y a pas
+    // touche, on la remplace par la derniere journee travaillee : ouvrir la
+    // page un lundi sur un dimanche vide n'apprend rien. Un filtre deja
+    // modifie n'est jamais ecrase.
+    if(S.fv.date_from === veille && S.fv.date_to === veille && d.jour !== veille){
       S.fv.date_from = d.jour;
       S.fv.date_to = d.jour;
       await applyF();
@@ -7155,6 +7161,10 @@ function renderProdPage(){
   ];
   // Retour de prod : ouvert aux services de production — l'API filtre (ROLES_PROD).
   allTabs.push({key:'retour', label:'Retour de prod', icon:'clipboard'});
+  // Points de production : c'est une page a part entiere, pas un onglet. Elle
+  // figure quand meme ici parce que c'est de la page Production qu'on part
+  // tenir un point — `lien` fait naviguer au lieu de changer de sous-onglet.
+  allTabs.push({key:'reunions', label:'Réunions', icon:'users', lien:'/reunions'});
   const tabs = hideErreurs ? allTabs.filter(t=>t.key!=='erreurs') : allTabs;
   const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Production'},
     ...tabs.map(t=>h('button',{
@@ -7163,6 +7173,7 @@ function renderProdPage(){
       'aria-selected': subPage===t.key ? 'true' : 'false',
       className:'nav-tab'+(subPage===t.key?' active':''),
       onClick:async()=>{
+        if(t.lien){ window.location.href = t.lien; return; }
         S.subPage=t.key;
         _syncProdHash();
         if(t.key==='kpis'){if(!S.production)await loadProd(); await loadMachineStatus(); startMachineStatusPolling();}

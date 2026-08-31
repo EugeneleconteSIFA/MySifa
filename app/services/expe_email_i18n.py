@@ -1,4 +1,13 @@
-"""MyExpé — textes email RFQ transporteur (FR / EN)."""
+"""MyExpé — textes email RFQ transporteur (FR / EN).
+
+Ce que le transporteur reçoit ne porte que la marque SIFA : c'est SIFA qui
+demande un tarif, pas un logiciel. Le nom de la plateforme reste interne.
+
+Le mail dit explicitement que la réponse se saisit sur le portail, en trois
+étapes numérotées, et que répondre par retour d'email ne suffit pas. Sans
+cette phrase, la moitié des transporteurs répondent dans le fil : le tarif
+n'entre jamais dans le comparateur et il faut le ressaisir à la main.
+"""
 
 from __future__ import annotations
 
@@ -59,15 +68,29 @@ def expe_rfq_email_strings(lang: str, *, cp: str, user_nom: str) -> dict[str, st
             "pallets_label": "Pallets",
             "pallet_type_label": "Pallet type",
             "constraints_label": "Constraints",
-            "cta": "Reply on the portal",
+            "how_title": "How to reply",
+            "step1": (
+                "Click the button below — it opens your personal page, "
+                "no account and no password required."
+            ),
+            "step2": (
+                "Enter your <strong style=\"color:#0f172a\">net price (excl. tax)</strong> "
+                "and your <strong style=\"color:#0f172a\">delivery lead time</strong>."
+            ),
+            "step3": "Submit. Your quote reaches our shipping department instantly.",
+            "exclusive": (
+                "Quotes are compared straight from the portal: "
+                "<strong style=\"color:#0f172a\">a reply sent by email cannot be processed</strong>."
+            ),
+            "cta": "Submit my quote on the portal",
             "ask": (
                 "Please submit your <strong style=\"color:#0f172a\">best net price (excl. tax)</strong> "
-                "and <strong style=\"color:#0f172a\">estimated delivery time</strong> via our secure portal."
+                "and <strong style=\"color:#0f172a\">estimated delivery time</strong> on the portal."
             ),
             "hint": "It takes less than a minute: price and lead time only.",
             "regards": "Kind regards,",
             "service": "SIFA — Shipping department",
-            "footer": "MySifa carrier portal — personal link, do not share.",
+            "footer": "SIFA carrier portal — personal link, do not share.",
             "subject": f"Transport quote request — SIFA Roubaix — {cp}",
             "switch_hint": "Language / Langue",
         }
@@ -84,15 +107,30 @@ def expe_rfq_email_strings(lang: str, *, cp: str, user_nom: str) -> dict[str, st
         "pallets_label": "Palettes",
         "pallet_type_label": "Type de palette",
         "constraints_label": "Contraintes",
-        "cta": "Répondre sur le portail",
+        "how_title": "Comment répondre",
+        "step1": (
+            "Cliquez sur le bouton ci-dessous — il ouvre votre page personnelle, "
+            "sans compte ni mot de passe."
+        ),
+        "step2": (
+            "Renseignez votre <strong style=\"color:#0f172a\">prix HT</strong> "
+            "et votre <strong style=\"color:#0f172a\">délai de livraison</strong>."
+        ),
+        "step3": "Validez. Votre tarif arrive immédiatement au service expéditions.",
+        "exclusive": (
+            "Les tarifs sont comparés directement depuis le portail : "
+            "<strong style=\"color:#0f172a\">une réponse envoyée par retour d'email "
+            "ne peut pas être traitée</strong>."
+        ),
+        "cta": "Saisir mon tarif sur le portail",
         "ask": (
             "Merci de nous transmettre votre <strong style=\"color:#0f172a\">meilleur tarif HT</strong> "
-            "et le <strong style=\"color:#0f172a\">délai de livraison estimé</strong> via le portail sécurisé."
+            "et le <strong style=\"color:#0f172a\">délai de livraison estimé</strong> sur le portail."
         ),
         "hint": "La saisie prend moins d'une minute : prix et délai uniquement.",
         "regards": "Cordialement,",
         "service": "SIFA — Service expéditions",
-        "footer": "Portail transporteur MySifa — lien personnel, ne pas partager.",
+        "footer": "Portail transporteur SIFA — lien personnel, ne pas partager.",
         "subject": f"Demande de tarif transport — SIFA Roubaix — {cp}",
         "switch_hint": "Langue / Language",
     }

@@ -1,7 +1,7 @@
 """SIFA — Production v0.9 — métrage produit = fin_machine - debut_machine"""
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Request, Query
-from datetime import datetime as _dt_cls
+from datetime import datetime as _dt_cls, timedelta as _timedelta
 from zoneinfo import ZoneInfo as _ZoneInfo
 _TZ_PARIS = _ZoneInfo('Europe/Paris')
 from database import get_db
@@ -892,8 +892,13 @@ def dernier_jour_saisi(request: Request, avant: Optional[str] = None):
     """
     get_current_user(request)
     from app.services.rapport_dossier import dernier_jour_saisi as _dernier
-    veille = (date.today() - timedelta(days=1)).isoformat()
-    borne = (avant or "").strip()[:10] or veille
+    # `avant` vient du navigateur : lui seul sait quel jour il est pour
+    # l'utilisateur. Le repli serveur se calcule en heure de Paris (_TZ_PARIS,
+    # deja utilise dans ce module) — `date.today()` prendrait l'heure du VPS,
+    # qui n'est pas la meme journee en fin de soiree.
+    veille_serveur = (_dt_cls.now(_TZ_PARIS).date() - _timedelta(days=1)).isoformat()
+    borne = (avant or "").strip()[:10] or veille_serveur
     with get_db() as conn:
         jour = _dernier(conn, borne)
-    return {"jour": jour or veille, "veille": veille, "trouve": bool(jour)}
+    return {"jour": jour or borne, "veille": borne,
+            "veille_serveur": veille_serveur, "trouve": bool(jour)}

@@ -86,8 +86,15 @@ def email_mysifa_layout(
     footer_contact: bool = False,
     pixel_url: str | None = None,
     lang: str = "fr",
+    marque: str = "MySifa",
 ) -> str:
-    """Enveloppe HTML email MySifa (dark header, typo Segoe UI)."""
+    """Enveloppe HTML email MySifa (dark header, typo Segoe UI).
+
+    `marque` est le nom affiche en tete et en pied. Il vaut « MySifa » pour
+    tout ce qui part vers un utilisateur interne, et « SIFA » pour ce qui part
+    vers un tiers — un transporteur repond a SIFA, pas a un logiciel dont il
+    n'a pas a connaitre le nom.
+    """
     cta_block = ""
     if cta_href and cta_label:
         cta_block = f"""
@@ -109,11 +116,11 @@ def email_mysifa_layout(
       &nbsp;·&nbsp;
       <a href="mailto:expeditions@sifa.pro" style="color:#0891b2;text-decoration:none">expeditions@sifa.pro</a>
     </p>"""
-    foot = footer_note or f"Notification automatique MySifa — {_esc(public_base_url())}"
+    foot = footer_note or f"Notification automatique {_esc(marque)} — {_esc(public_base_url())}"
     suivi_note, suivi_pixel = _suivi_blocs(pixel_url, lang)
     return f"""<div style="font-family:'Segoe UI',system-ui,sans-serif;max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden">
   <div style="background:#0a0e17;padding:24px 32px">
-    <div style="font-size:20px;font-weight:800;color:#22d3ee;letter-spacing:-.3px">MySifa</div>
+    <div style="font-size:20px;font-weight:800;color:#22d3ee;letter-spacing:-.3px">{_esc(marque)}</div>
     <div style="font-size:12px;color:#94a3b8;margin-top:6px;text-transform:uppercase;letter-spacing:.5px;font-weight:600">{_esc(subtitle)}</div>
   </div>
   <div style="padding:32px;font-size:14px;color:#334155;line-height:1.65">
@@ -169,19 +176,19 @@ _EMAIL_FLAG_GB = (
 def _email_lang_picker_html() -> str:
     """Sélecteur FR/EN (radios + CSS — clients mail modernes)."""
     return f"""
-    <input type="radio" name="mysifa-lang" id="mysifa-lang-fr" style="display:none!important">
-    <input type="radio" name="mysifa-lang" id="mysifa-lang-en" checked style="display:none!important">
+    <input type="radio" name="sifa-lang" id="sifa-lang-fr" style="display:none!important">
+    <input type="radio" name="sifa-lang" id="sifa-lang-en" checked style="display:none!important">
     <div style="text-align:center;margin:0 0 18px">
       <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px;font-weight:600">
         Langue / Language
       </div>
-      <label for="mysifa-lang-fr" style="cursor:pointer;margin:0 8px;display:inline-block;vertical-align:middle" title="Français">{_EMAIL_FLAG_FR}</label>
-      <label for="mysifa-lang-en" style="cursor:pointer;margin:0 8px;display:inline-block;vertical-align:middle" title="English">{_EMAIL_FLAG_GB}</label>
+      <label for="sifa-lang-fr" style="cursor:pointer;margin:0 8px;display:inline-block;vertical-align:middle" title="Français">{_EMAIL_FLAG_FR}</label>
+      <label for="sifa-lang-en" style="cursor:pointer;margin:0 8px;display:inline-block;vertical-align:middle" title="English">{_EMAIL_FLAG_GB}</label>
     </div>
     <style type="text/css">
-      .mysifa-em-fr {{ display:none !important; }}
-      #mysifa-lang-fr:checked ~ .mysifa-em-en {{ display:none !important; }}
-      #mysifa-lang-fr:checked ~ .mysifa-em-fr {{ display:block !important; }}
+      .sifa-em-fr {{ display:none !important; }}
+      #sifa-lang-fr:checked ~ .sifa-em-en {{ display:none !important; }}
+      #sifa-lang-fr:checked ~ .sifa-em-fr {{ display:block !important; }}
     </style>"""
 
 
@@ -242,14 +249,51 @@ def _rfq_email_body_block(
       </a>
     </div>"""
 
+    # Les trois etapes en table et non en <ol> : Outlook rend les listes avec
+    # des marges qu'il decide lui-meme, et la puce numerotee disparait sur
+    # certains clients. Une table avec pastille dessinee tient partout.
+    def _etape(num: str, texte: str) -> str:
+        return (
+            "<tr>"
+            "<td style=\"padding:0 12px 12px 0;vertical-align:top;width:26px\">"
+            "<div style=\"width:24px;height:24px;border-radius:12px;background:#0891b2;"
+            "color:#ffffff;font-size:12px;font-weight:800;text-align:center;line-height:24px\">"
+            f"{num}</div></td>"
+            "<td style=\"padding:0 0 12px;vertical-align:top;font-size:14px;color:#475569;"
+            f"line-height:1.6\">{texte}</td>"
+            "</tr>"
+        )
+
+    how_block = f"""
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:18px 20px;margin:0 0 4px">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.55px;color:#0891b2;font-weight:800;margin-bottom:14px">
+        {_esc(s["how_title"])}
+      </div>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;border-collapse:collapse">
+        <tbody>
+          {_etape("1", s["step1"])}
+          {_etape("2", s["step2"])}
+          {_etape("3", s["step3"])}
+        </tbody>
+      </table>
+      <p style="margin:2px 0 0;font-size:12px;color:#94a3b8;line-height:1.6">{_esc(s["hint"])}</p>
+    </div>"""
+
+    exclusive_block = f"""
+    <div style="background:rgba(251,191,36,.12);border:1px solid rgba(251,191,36,.35);border-radius:10px;
+                padding:12px 16px;margin:18px 0 0;font-size:13px;color:#475569;line-height:1.6">
+      {s["exclusive"]}
+    </div>"""
+
     return f"""
     <p style="margin:0 0 14px;font-size:15px;color:#0f172a;font-weight:600">{_esc(s["hello"])}</p>
     <p style="margin:0 0 22px;font-size:14px;color:#475569;line-height:1.65">{s["intro"]}</p>
     {cp_highlight}
     {detail_table}
-    <p style="margin:0 0 6px;font-size:14px;color:#475569;line-height:1.65">{s["ask"]}</p>
-    <p style="margin:0;font-size:13px;color:#94a3b8;line-height:1.6">{_esc(s["hint"])}</p>
+    <p style="margin:0 0 16px;font-size:14px;color:#475569;line-height:1.65">{s["ask"]}</p>
+    {how_block}
     {cta}
+    {exclusive_block}
     <p style="margin:22px 0 0;font-size:13px;color:#64748b;line-height:1.65">
       {_esc(s["regards"])}<br>
       <strong style="color:#0f172a;font-size:14px">{_esc(user_nom)}</strong><br>
@@ -329,8 +373,8 @@ def email_expe_rfq_transport(
         en_body = _rfq_email_body_block(demande=demande, user=user, lang="en", portail_lien=lien)
         inner = (
             f"{entete}{_email_lang_picker_html()}"
-            f'<div class="mysifa-em-fr">{fr_body}</div>'
-            f'<div class="mysifa-em-en">{en_body}</div>'
+            f'<div class="sifa-em-fr">{fr_body}</div>'
+            f'<div class="sifa-em-en">{en_body}</div>'
         )
         subtitle = "Demande de tarif / Transport quote"
         footer_note = f"{s_fr['footer']} / {s_en['footer']}"
@@ -346,6 +390,7 @@ def email_expe_rfq_transport(
         footer_note=footer_note,
         footer_contact=True,
         pixel_url=pixel_url,
+        marque="SIFA",
         # La mention d'ouverture RGPD suit la langue du mail. En bilingue elle
         # reste en français : il faut trancher, et c'est la langue par défaut.
         lang=mono or "fr",
@@ -890,8 +935,10 @@ def email_expe_devis_confirmation(
         body_html=inner,
         cta_href=None,
         cta_label=None,
+        footer_note="SIFA — Service expéditions",
         footer_contact=True,
         pixel_url=pixel_url,
+        marque="SIFA",
     )
     return subject, body
 

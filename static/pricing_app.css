@@ -471,35 +471,30 @@ table.recap-table td:last-child{border-right:none}
 .vs-btn.on{background:var(--accent);color:var(--bg)}
 .vs-btn.on:hover{background:var(--accent);color:var(--bg)}
 
-/* ─── Vue liste : une ligne par déclinaison ─── */
-/* Vue de lecture : on y cherche un coût, on y compare deux grammages. D'où des
-   lignes plus aérées, le coût €/m² mis en avant, et rien à saisir. */
-/* Largeurs fixées par le <colgroup> du tableau. Sans `table-layout:fixed`, le
-   navigateur répartit à sa guise et la colonne la plus bavarde pousse le coût
-   €/m² hors de l'écran — celle pour laquelle on ouvre cette vue.
-   Pas de colonne Désignation ici : sur une liste à plat, elle se répète à
-   chaque déclinaison de la même référence et mange la largeur pour ne rien
-   apprendre. Elle reste en infobulle sur la référence. */
-table.msl-table{table-layout:fixed;min-width:840px}
+/* ─── Liste des matières : une ligne par référence ─── */
+/* Un écran de saisie, pas de lecture : on y vient pour corriger un prix
+   d'achat. Le coût €/m² et le compte de déclinaisons en sont partis le
+   31 août 2026 — le premier se règle sur la fiche, le second ne veut rien
+   dire ici puisque le prix d'achat est le même sur toutes.
+   Largeurs fixées par le <colgroup>. Sans `table-layout:fixed`, la colonne la
+   plus bavarde pousse le prix hors de l'écran. */
+table.msl-table{table-layout:fixed;min-width:720px}
 table.msl-table th,table.msl-table td{padding:11px 12px}
-.msl-row{cursor:pointer}
+/* La ligne n'ouvre rien : le seul geste qu'elle propose est la saisie du prix,
+   et le curseur main promettait un clic qui n'existe plus. */
+.msl-row{cursor:default}
 .msl-ref{font-family:monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.msl-decl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .msl-prix{font-variant-numeric:tabular-nums;white-space:nowrap}
-.msl-coutcell{white-space:nowrap}
-
-.msl-cout{font-weight:700;font-size:14px;color:var(--accent);font-variant-numeric:tabular-nums}
-/* Plusieurs fournisseurs sur une même déclinaison : ils s'empilent dans les
-   trois colonnes concernées, alignés sous-ligne par sous-ligne. Le principal en
+/* Plusieurs fournisseurs sur une même matière : ils s'empilent dans les deux
+   colonnes concernées, alignés sous-ligne par sous-ligne. Le principal en
    tête, en clair ; les autres en retrait — ce sont des hypothèses, pas le prix
    retenu. Le cas courant (un seul fournisseur) reste une ligne simple. */
-.msl-fourn .msl-l,.msl-prix .msl-l,.msl-coutcell .msl-l{line-height:22px;min-height:22px}
+.msl-fourn .msl-l,.msl-prix .msl-l{line-height:22px;min-height:22px}
 .msl-l + .msl-l{margin-top:2px;padding-top:2px;border-top:1px dashed var(--border)}
 .msl-l:not(.msl-l-main){color:var(--muted);font-size:12px}
-.msl-l:not(.msl-l-main) .msl-cout{color:var(--muted);font-weight:600;font-size:12px}
 .msl-fourn{overflow:hidden}
 .msl-fourn .msl-l{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-/* Référence sans aucune déclinaison : elle reste dans la liste, sinon on
+/* Référence sans aucune ligne de prix : elle reste dans la liste, sinon on
    l'oublie — mais elle ne se donne pas des airs de ligne complète. */
 .msl-vide{cursor:default}
 .msl-vide td{opacity:.72}
@@ -683,25 +678,32 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 .ms-cout-alt{color:var(--text2);font-variant-numeric:tabular-nums}
 
 /* ── Saisie du prix en place, dans la liste des matières ────────────────────
-   Le prix d'achat ne dépend ni de la laize ni du grammage : une seule valeur
-   par matière, et elle se corrige là où on la lit. Le champ reste discret au
-   repos — c'est un tableau, pas un formulaire — et ne se donne des airs de
-   champ qu'au survol et au focus. */
+   C'est LA raison d'être de cet écran : une valeur par matière, corrigée là
+   où on la lit. Le champ discret au repos ne se voyait pas — on lisait une
+   colonne de chiffres et personne ne pensait à cliquer dessus. Il porte donc
+   maintenant sa bordure et son crayon en permanence, et le survol comme le
+   focus ne font que renforcer ce qui est déjà annoncé. */
 .msl-des{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}
-.msl-decl-nb{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
 .msl-prix-edit{display:flex;align-items:center;gap:6px}
+.msl-prix-ico{display:inline-flex;color:var(--muted);flex:0 0 auto;transition:color .12s}
 .msl-prix-inp{
-  width:96px;padding:5px 8px;border-radius:7px;font-family:inherit;font-size:13px;
-  font-variant-numeric:tabular-nums;text-align:right;
-  border:1px solid transparent;background:transparent;color:var(--text)}
-.msl-prix-inp:hover{border-color:var(--border);background:var(--bg)}
+  width:120px;padding:5px 8px;border-radius:7px;font-family:inherit;font-size:13px;
+  font-variant-numeric:tabular-nums;text-align:right;cursor:text;
+  border:1px solid var(--border);background:var(--bg);color:var(--text)}
+.msl-prix-inp:hover{border-color:color-mix(in srgb,var(--accent) 45%,var(--border))}
+.msl-prix-edit:hover .msl-prix-ico{color:var(--accent)}
 .msl-prix-inp:focus{border-color:var(--accent);background:var(--bg);outline:none;
   box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
 .msl-prix-inp::placeholder{color:var(--muted);font-style:italic}
 .msl-unite{font-size:11px;color:var(--muted);white-space:nowrap}
-/* Deux prix différents pour une même matière : héritage de la saisie par
-   déclinaison. Le champ le signale plutôt que d'en afficher un des deux — la
-   première saisie les aligne. */
+/* L'en-tête le dit une fois pour toute la colonne, en petit : le tableau se
+   modifie, on n'ouvre pas de fiche pour trois décimales. */
+.msl-th-prix{white-space:nowrap}
+.msl-th-hint{display:inline-flex;align-items:center;gap:3px;margin-left:6px;
+  font-size:10px;font-weight:600;letter-spacing:.02em;text-transform:none;color:var(--muted)}
+/* Plusieurs valeurs en base pour une même matière : héritage de la saisie
+   ligne à ligne. Le champ le signale plutôt que d'en afficher une des deux —
+   la première saisie les aligne. */
 .msl-prix-diverge .msl-prix-inp{border-color:color-mix(in srgb,var(--warn,#d97706) 55%,transparent)}
 .msl-prix-etat{font-size:11px;font-weight:700;white-space:nowrap;color:var(--muted)}
 .msl-prix-etat.ok{color:var(--success,#16a34a)}

@@ -26,7 +26,7 @@ _PORTAIL_FOOTER = """
         <span class="foot-sep">·</span>
         <a href="mailto:expeditions@sifa.pro">expeditions@sifa.pro</a>
       </div>
-      <div class="foot-note" id="i18n-foot-note">Portail sécurisé MySifa</div>
+      <div class="foot-note" id="i18n-foot-note">Portail sécurisé SIFA</div>
     </footer>
 """
 
@@ -38,7 +38,7 @@ def get_portail_404_html() -> str:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#0a0e17">
-  <title>Lien invalide — MySifa</title>
+  <title>Lien invalide — SIFA</title>
 """ + _PORTAIL_FAVICON_HEAD + """
   <style>
     :root{--bg:#0a0e17;--card:#111827;--border:#1e293b;--text:#f1f5f9;--text2:#cbd5e1;--muted:#94a3b8;--accent:#22d3ee;--danger:#f87171}
@@ -78,7 +78,7 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#0a0e17">
-  <title>Portail transporteur — MySifa</title>
+  <title>Portail transporteur — SIFA</title>
 """ + _PORTAIL_FAVICON_HEAD + """
   <style>
     :root{
@@ -240,7 +240,7 @@ def get_portail_html(token: str, lang: str = "fr") -> str:
   <div class="wrap">
     <header class="hdr">
       <div class="hdr-brand">
-        <strong>MySifa</strong>
+        <strong>SIFA</strong>
         <div id="i18n-subtitle">Portail transporteur — demandes de tarif SIFA</div>
       </div>
       <div class="hdr-actions">

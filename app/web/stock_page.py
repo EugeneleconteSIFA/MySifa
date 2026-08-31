@@ -824,51 +824,80 @@ body.light .dash-quick-btn:hover{box-shadow:0 4px 12px rgba(15,23,42,.08)}
    et une echelle commune sont donc legitimes, et deux courbes du meme graphe
    se comparent vraiment. Au-dela de huit series, le reste est agrege plutot
    que de recycler les teintes. */
-/* ── Selecteur de references de la vue Tendance ───────────────────────────
-   Vingt matieres sur dix-huit mois font vingt courbes : lisible pour
-   surveiller, inutilisable pour preparer UNE commande. Le selecteur restreint
-   ce qui est trace, jamais ce qui est calcule. */
-.bes-tsel{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 12px;
-  padding:10px 12px;border:1px solid var(--border);border-radius:10px;
-  background:var(--card)}
-.bes-tsel-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;
-  border-radius:8px;border:1px solid var(--border2,var(--border));
-  background:var(--bg);color:var(--text);font-family:inherit;font-size:12px;
-  font-weight:700;cursor:pointer}
-.bes-tsel-btn:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)}
-.bes-tsel-btn.on{border-color:var(--accent);color:var(--accent);
-  background:color-mix(in srgb,var(--accent) 10%,transparent)}
-.bes-tsel-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;
-  border-radius:6px;font-size:11px;font-weight:700;
-  background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--text)}
-.bes-tsel-chip button{background:none;border:none;cursor:pointer;color:var(--muted);
-  font-size:13px;line-height:1;padding:0 2px;font-family:inherit}
-.bes-tsel-chip button:hover{color:var(--danger)}
-.bes-tsel-vide{font-size:12px;color:var(--muted)}
-.bes-tsel-panel{width:100%;border-top:1px solid var(--border);margin-top:4px;
-  padding-top:10px}
-.bes-tsel-search{width:100%;max-width:320px;padding:7px 10px;border-radius:8px;
-  border:1px solid var(--border2,var(--border));background:var(--bg);
-  color:var(--text);font-family:inherit;font-size:12px;margin-bottom:8px}
-.bes-tsel-liste{max-height:230px;overflow-y:auto;display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:2px}
-.bes-tsel-opt{display:flex;align-items:center;gap:8px;padding:5px 8px;
-  border-radius:6px;cursor:pointer;font-size:12px;color:var(--text)}
-.bes-tsel-opt:hover{background:color-mix(in srgb,var(--accent) 7%,transparent)}
-.bes-tsel-opt input{cursor:pointer;flex:0 0 auto}
+/* ── Choisir ce qu'on trace : un champ, puis des pastilles ────────────────
+   La grille de cases a cocher (42 references etalees sur cinq colonnes) a ete
+   retiree le 28/08/2026 : elle demandait de lire quarante lignes pour en
+   cocher deux, et occupait la moitie de l'ecran avant la premiere courbe. */
+.bes-tsel{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.bes-tsel-champ{position:relative;flex:0 0 320px;max-width:100%}
+.bes-tsel-loupe{position:absolute;left:10px;top:50%;transform:translateY(-50%);
+  color:var(--muted);pointer-events:none;display:inline-flex}
+.bes-tsel-search{width:100%;padding:9px 12px 9px 34px;border-radius:9px;
+  border:1px solid var(--border);background:var(--card);color:var(--text);
+  font-family:inherit;font-size:13px;box-sizing:border-box}
+.bes-tsel-search:focus{outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 18%,transparent)}
+/* Le menu flotte : il ne pousse jamais les courbes vers le bas, sinon taper
+   un caractere ferait sauter l'ecran. */
+.bes-tsel-menu{position:absolute;z-index:40;top:calc(100% + 4px);left:0;right:0;
+  background:var(--card);border:1px solid var(--border);border-radius:10px;
+  box-shadow:0 10px 30px rgba(0,0,0,.18);overflow:hidden;max-height:320px;
+  overflow-y:auto}
+.bes-tsel-opt{display:flex;align-items:center;gap:10px;padding:8px 12px;
+  cursor:pointer;font-size:13px;color:var(--text)}
+.bes-tsel-opt.hi{background:color-mix(in srgb,var(--accent) 10%,transparent)}
 .bes-tsel-opt-lbl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;
   white-space:nowrap}
-.bes-tsel-opt-meta{font-size:10px;color:var(--muted);white-space:nowrap;
+.bes-tsel-opt-meta{font-size:11px;color:var(--muted);white-space:nowrap;
   font-variant-numeric:tabular-nums}
-.bes-tsel-lz{display:flex;flex-wrap:wrap;align-items:center;gap:6px;width:100%;
-  margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)}
-.bes-tsel-lz-lbl{font-size:10px;font-weight:700;color:var(--muted);
-  text-transform:uppercase;letter-spacing:.4px}
-.bes-tsel-lzbtn{padding:4px 10px;border-radius:999px;border:1px solid var(--border2,var(--border));
-  background:var(--bg);color:var(--text2);font-family:inherit;font-size:11px;
+.bes-tsel-vide2{padding:10px 12px;font-size:12px;color:var(--muted)}
+.bes-tsel-vide{font-size:12px;color:var(--muted)}
+.bes-tsel-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;
+  border-radius:8px;border:1px solid var(--border2,var(--border));
+  background:var(--card);color:var(--text2);font-family:inherit;font-size:12px;
+  font-weight:700;cursor:pointer}
+.bes-tsel-btn:hover{color:var(--danger);border-color:var(--danger)}
+/* La pastille porte la reference ET ses laizes : c'est tout ce qui reste a
+   l'ecran une fois le choix fait, elle doit se suffire. */
+.bes-tsel-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 8px 5px 10px;
+  border-radius:8px;font-size:12px;font-weight:700;color:var(--text);
+  background:color-mix(in srgb,var(--accent) 12%,transparent);
+  border:1px solid color-mix(in srgb,var(--accent) 28%,transparent)}
+.bes-tsel-chip-lz{font-weight:600;color:var(--text2);font-variant-numeric:tabular-nums}
+.bes-tsel-chip button{background:none;border:none;cursor:pointer;color:var(--muted);
+  font-size:13px;line-height:1;padding:0 2px;font-family:inherit;display:inline-flex}
+.bes-tsel-chip button:hover{color:var(--accent)}
+.bes-tsel-chip button:last-child:hover{color:var(--danger)}
+/* Modale des laizes : des pastilles, pas des cases. Rien n'est preselectionne,
+   « Toutes » est a un clic — sur seize laizes, cocher seize cases serait une
+   punition. */
+.bes-lz-grille{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 10px}
+.bes-lz-btn{padding:7px 14px;border-radius:999px;border:1px solid var(--border2,var(--border));
+  background:var(--bg);color:var(--text2);font-family:inherit;font-size:13px;
   font-weight:700;cursor:pointer;font-variant-numeric:tabular-nums}
-.bes-tsel-lzbtn.on{border-color:var(--accent);color:var(--accent);
-  background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.bes-lz-btn:hover{border-color:var(--accent)}
+.bes-lz-btn.on{border-color:var(--accent);color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 14%,transparent)}
+.bes-lz-tout{background:none;border:none;padding:0;cursor:pointer;font-family:inherit;
+  font-size:12px;font-weight:700;color:var(--accent);text-decoration:underline}
+/* Le bouton de validation suit le gabarit des modales de MyStock : meme
+   hauteur que « Annuler », meme accent que partout ailleurs. */
+.bes-lz-valider{border-radius:12px;padding:13px;font-size:14px;font-weight:700;
+  cursor:pointer;font-family:inherit}
+.bes-lz-valider:disabled{opacity:.45;cursor:not-allowed}
+/* Les dernieres references consultees. Un acheteur revient sur les memes
+   matieres toute la semaine — les retaper chaque matin se paie tous les
+   jours. Discretes : c'est un raccourci, pas un menu. */
+.bes-tsel-wrap{margin:0 0 12px}
+.bes-tsel-recents{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}
+.bes-tsel-recents-lbl{font-size:10px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.4px;color:var(--muted)}
+.bes-tsel-recent{display:inline-flex;align-items:baseline;gap:6px;padding:4px 10px;
+  border-radius:999px;border:1px solid var(--border);background:transparent;
+  color:var(--text2);font-family:inherit;font-size:12px;cursor:pointer}
+.bes-tsel-recent:hover{border-color:var(--accent);color:var(--accent);
+  background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.bes-tsel-recent-lz{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
 /* Le retard, seul rescape du pave d'explication retire le 28/08/2026. Ce
    n'est pas un commentaire sur l'ecran mais une anomalie du carnet : il ne
    s'affiche que s'il y en a un. */
@@ -13252,9 +13281,6 @@ function _besTendEtat() {
   // hors de sa laize, et un total toutes laizes confondues est juste en metres
   // et inutilisable pour passer commande. La bascule a ete retiree le
   // 28/08/2026 — elle proposait une lecture que personne ne demande.
-  // Le panneau est ouvert a l'arrivee : sans reference choisie il n'y a rien a
-  // tracer, et un ecran vide avec un bouton ferme n'apprend pas quoi faire.
-  if (S.besoinsTendSelOpen == null) S.besoinsTendSelOpen = true;
   if (S.besoinsTendRefQ == null) S.besoinsTendRefQ = '';
   // Le catalogue memorise : pendant un rechargement la reponse est nulle, et
   // un selecteur qui se vide a chaque requete est inutilisable.
@@ -13688,6 +13714,75 @@ function _besTendRefsCat() {
   return [...par.values()].sort((a, b) => (b.total || 0) - (a.total || 0));
 }
 
+/* ── Choisir ce qu'on trace ────────────────────────────────────────────────
+
+   Quarante-deux references, deux a seize laizes chacune. La premiere version
+   posait tout en cases a cocher : un pave de quarante lignes a lire avant de
+   pouvoir cliquer, pour une selection qui en compte deux ou trois. Le pave
+   coutait plus cher a parcourir que la matiere qu'on cherchait.
+
+   Ici : un champ, on tape, huit resultats au maximum. On en choisit un. Si
+   c'est une bobine, une modale demande la ou les laizes — parce qu'une bobine
+   ne se commande pas hors de sa laize, et que choisir « le frontal » sans dire
+   laquelle ne veut rien dire. Si ce n'est pas une bobine (mandrin, carton,
+   palette), il n'y a rien a demander : la reference entre directement.
+
+   Ce qui est retenu vit en pastilles a cote du champ, avec ses laizes. C'est
+   la seule chose qui reste a l'ecran une fois le choix fait. */
+
+/* Les dernieres references consultees, gardees dans le navigateur.
+
+   Un acheteur revient sur les memes matieres toute la semaine : les retaper
+   chaque matin est un cout qui se paie tous les jours. On garde donc les six
+   dernieres, AVEC les laizes choisies — une bobine sans sa laize ne serait
+   qu'a moitie rappelee, et il faudrait rouvrir la modale pour rien.
+
+   Le stockage est une commodite, pas une donnee : un navigateur qui le refuse
+   (navigation privee, site data bloque) fait disparaitre la rangee, et rien
+   d'autre. D'ou le try/catch des deux cotes.
+
+   Six, et pas plus : au-dela ce n'est plus un rappel, c'est la liste de cases
+   qu'on vient de retirer. */
+const BES_TEND_RECENTS_CLE = 'mysifa.besoins.tendance.recents';
+const BES_TEND_RECENTS_MAX = 6;
+
+function _besTendRecents() {
+  try {
+    const brut = JSON.parse(window.localStorage.getItem(BES_TEND_RECENTS_CLE) || '[]');
+    return Array.isArray(brut) ? brut.filter(r => r && r.cle && r.libelle) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function _besTendPousserRecent(ref, laizes) {
+  try {
+    const reste = _besTendRecents().filter(r => r.cle !== ref.cle);
+    const item = { cle: ref.cle, libelle: ref.libelle, laizes: (laizes || []).slice() };
+    window.localStorage.setItem(BES_TEND_RECENTS_CLE,
+      JSON.stringify([item, ...reste].slice(0, BES_TEND_RECENTS_MAX)));
+  } catch (e) {
+    /* sans consequence : la rangee des recentes ne s'affichera pas */
+  }
+}
+
+/* Une reference recente se rejoue telle quelle, laizes comprises : c'est tout
+   l'interet du rappel. Le crayon de la pastille reste la pour en changer. */
+function _besTendRejouerRecent(rec) {
+  const st = _besTendEtat();
+  if (st.besoinsTendRefs.indexOf(rec.cle) < 0) {
+    S.besoinsTendRefs = [...st.besoinsTendRefs, rec.cle];
+  }
+  if ((rec.laizes || []).length) {
+    const lz = new Set(st.besoinsTendLaizes);
+    rec.laizes.forEach(l => lz.add(l));
+    S.besoinsTendLaizes = [...lz].sort((a, b) => a - b);
+  }
+  S.besoinsTendRefQ = '';
+  _besTendRedessinerBarre();
+  loadBesoinsTendance();
+}
+
 /* Une laize retenue qu'aucune reference selectionnee ne porte plus n'a plus
    d'objet : elle filtrerait sur une bobine qu'on ne regarde pas, et l'ecran
    afficherait vide sans dire pourquoi. */
@@ -13702,12 +13797,95 @@ function _besTendNettoyerLaizes() {
 }
 
 /* Redessine la seule barre de selection, sans toucher au reste de l'ecran :
-   cocher une case ne doit pas faire disparaitre le panneau ouvert ni le texte
-   deja tape dans sa recherche. */
+   ajouter une reference ne doit pas faire disparaitre ce qui est deja trace. */
 function _besTendRedessinerBarre() {
-  const ancienne = document.querySelector('.bes-tsel');
+  const ancienne = document.querySelector('.bes-tsel-wrap');
   if (!ancienne || !ancienne.parentNode) return;
   ancienne.parentNode.replaceChild(_buildBesoinsTendSelect(), ancienne);
+}
+
+/* Les laizes d'une reference, en pastilles a basculer. Rien n'est preselectionne
+   et « Tout » est a un clic : sur une matiere a seize laizes, cocher seize
+   cases pour tout voir serait une punition. */
+function _besTendModaleLaizes(ref) {
+  const st = _besTendEtat();
+  closeMroot();
+  const dejaSel = new Set(st.besoinsTendLaizes);
+  const choisies = new Set((ref.laizes || []).filter(l => dejaSel.has(l)));
+
+  const overlay = el('div', { cls: 'modal-overlay',
+    on: { click: e => { if (e.target === overlay) closeMroot(); } } });
+  const sheet = el('div', { cls: 'modal-sheet', style: { maxWidth: '440px' },
+    on: { click: e => e.stopPropagation() } },
+    el('span', { cls: 'modal-handle' }),
+    el('div', { cls: 'modal-title' }, ref.libelle),
+    el('div', { cls: 'modal-sub' },
+      'Bobine — quelle laize tracer ? Une bobine ne se commande pas hors de '
+      + 'sa laize : chacune fait sa courbe.'));
+
+  const grille = el('div', { cls: 'bes-lz-grille' });
+  const valider = el('button', { cls: 'btn btn-accent bes-lz-valider' }, 'Afficher');
+  const majBtn = () => {
+    valider.disabled = choisies.size === 0;
+    valider.textContent = choisies.size
+      ? 'Afficher ' + choisies.size + ' laize' + (choisies.size > 1 ? 's' : '')
+      : 'Afficher';
+  };
+
+  (ref.laizes || []).forEach(l => {
+    const b = el('button', { cls: 'bes-lz-btn' + (choisies.has(l) ? ' on' : ''), type: 'button' },
+      l + ' mm');
+    b.addEventListener('click', () => {
+      if (choisies.has(l)) choisies.delete(l); else choisies.add(l);
+      b.classList.toggle('on', choisies.has(l));
+      majBtn();
+    });
+    grille.appendChild(b);
+  });
+  sheet.appendChild(grille);
+
+  const tout = el('button', { cls: 'bes-lz-tout', type: 'button' }, 'Toutes les laizes');
+  tout.addEventListener('click', () => {
+    (ref.laizes || []).forEach(l => choisies.add(l));
+    grille.querySelectorAll('.bes-lz-btn').forEach(b => b.classList.add('on'));
+    majBtn();
+  });
+  sheet.appendChild(tout);
+
+  valider.addEventListener('click', () => {
+    const s = _besTendEtat();
+    if (s.besoinsTendRefs.indexOf(ref.cle) < 0) {
+      S.besoinsTendRefs = [...s.besoinsTendRefs, ref.cle];
+    }
+    const lz = new Set(s.besoinsTendLaizes);
+    choisies.forEach(l => lz.add(l));
+    S.besoinsTendLaizes = [...lz].sort((a, b) => a - b);
+    _besTendPousserRecent(ref, [...choisies].sort((a, b) => a - b));
+    closeMroot();
+    _besTendRedessinerBarre();
+    loadBesoinsTendance();
+  });
+  majBtn();
+
+  sheet.appendChild(el('div', { cls: 'modal-actions', style: { marginTop: '16px' } },
+    el('button', { cls: 'btn-cancel', on: { click: closeMroot } }, 'Annuler'),
+    valider));
+  overlay.appendChild(sheet);
+  document.getElementById('mroot').appendChild(overlay);
+  requestAnimationFrame(() => { const b = grille.querySelector('.bes-lz-btn'); if (b) b.focus(); });
+}
+
+/** Retenir une reference : par la modale si c'est une bobine, direct sinon. */
+function _besTendAjouterRef(ref) {
+  const st = _besTendEtat();
+  S.besoinsTendRefQ = '';
+  if ((ref.laizes || []).length) { _besTendModaleLaizes(ref); return; }
+  if (st.besoinsTendRefs.indexOf(ref.cle) < 0) {
+    S.besoinsTendRefs = [...st.besoinsTendRefs, ref.cle];
+  }
+  _besTendPousserRecent(ref, []);
+  _besTendRedessinerBarre();
+  loadBesoinsTendance();
 }
 
 function _buildBesoinsTendSelect() {
@@ -13716,150 +13894,139 @@ function _buildBesoinsTendSelect() {
   const sel = new Set(st.besoinsTendRefs);
   const selLz = new Set(st.besoinsTendLaizes);
 
+  const wrap = el('div', { cls: 'bes-tsel-wrap' });
   const bar = el('div', { cls: 'bes-tsel' });
+  wrap.appendChild(bar);
 
-  const btn = el('button', {
-    cls: 'bes-tsel-btn' + (st.besoinsTendSelOpen ? ' on' : ''),
-    type: 'button',
-    on: { click: () => { S.besoinsTendSelOpen = !S.besoinsTendSelOpen; renderContent(); } },
-  }, iconEl('search', 14), el('span', {},
-    sel.size ? ('Références · ' + sel.size + ' sélectionnée' + (sel.size > 1 ? 's' : ''))
-             : 'Choisir des références'));
-  bar.appendChild(btn);
+  // ── Le champ, et rien d'autre tant qu'on n'a pas tape ──
+  const champ = el('div', { cls: 'bes-tsel-champ' });
+  const q = el('input', {
+    cls: 'bes-tsel-search', type: 'search', id: 'bes-tsel-q',
+    placeholder: 'Rechercher une matière…', autocomplete: 'off',
+  });
+  q.value = S.besoinsTendRefQ || '';
+  const menu = el('div', { cls: 'bes-tsel-menu', hidden: true });
+  champ.appendChild(el('span', { cls: 'bes-tsel-loupe' }, iconEl('search', 15)));
+  champ.appendChild(q);
+  champ.appendChild(menu);
+  bar.appendChild(champ);
 
-  if (!sel.size) {
-    bar.appendChild(el('span', { cls: 'bes-tsel-vide' },
-      cat.length + ' référence(s) sur la fenêtre — choisissez celles à tracer.'));
-  }
+  let hi = -1;
+  let vus = [];
+  const remplir = () => {
+    const texte = (S.besoinsTendRefQ || '').trim().toLowerCase();
+    if (!texte) { menu.hidden = true; menu.innerHTML = ''; vus = []; hi = -1; return; }
+    // Huit resultats au maximum. Au-dela, ce n'est plus une reponse a ce qu'on
+    // a tape, c'est la liste qu'on venait justement de fuir.
+    vus = cat.filter(r => !sel.has(r.cle)
+      && (String(r.libelle || '').toLowerCase().includes(texte)
+          || String(r.designation || '').toLowerCase().includes(texte)))
+      .slice(0, 8);
+    menu.innerHTML = '';
+    hi = vus.length ? 0 : -1;
+    if (!vus.length) {
+      menu.appendChild(el('div', { cls: 'bes-tsel-vide2' },
+        'Aucun résultat pour « ' + S.besoinsTendRefQ + ' »'));
+      menu.hidden = false;
+      return;
+    }
+    vus.forEach((r, i) => {
+      const nb = (r.laizes || []).length;
+      const opt = el('div', { cls: 'bes-tsel-opt' + (i === hi ? ' hi' : ''), role: 'option' },
+        el('span', { cls: 'bes-tsel-opt-lbl', title: r.designation || r.libelle }, r.libelle),
+        el('span', { cls: 'bes-tsel-opt-meta' },
+          (nb ? nb + ' laize' + (nb > 1 ? 's' : '') + ' · ' : '')
+          + _besFmtQte(r.total) + (r.unite ? ' ' + r.unite : '')));
+      opt.addEventListener('mousedown', e => { e.preventDefault(); _besTendAjouterRef(r); });
+      opt.addEventListener('mouseenter', () => {
+        hi = i;
+        [...menu.children].forEach((n, j) => n.classList.toggle('hi', j === hi));
+      });
+      menu.appendChild(opt);
+    });
+    menu.hidden = false;
+  };
 
-  // Les references retenues, chacune retirable d'un clic. Une pastille par
-  // reference plutot qu'un compteur : sans elles, on ne sait plus ce qu'on
-  // regarde des qu'on referme le panneau.
+  q.addEventListener('input', () => { S.besoinsTendRefQ = q.value; remplir(); });
+  q.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { S.besoinsTendRefQ = ''; q.value = ''; remplir(); return; }
+    if (!vus.length) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      hi = (hi + (e.key === 'ArrowDown' ? 1 : vus.length - 1)) % vus.length;
+      [...menu.children].forEach((n, j) => n.classList.toggle('hi', j === hi));
+      return;
+    }
+    if (e.key === 'Enter' && hi >= 0) { e.preventDefault(); _besTendAjouterRef(vus[hi]); }
+  });
+  q.addEventListener('blur', () => { setTimeout(() => { menu.hidden = true; }, 120); });
+
+  // ── Ce qui est retenu : une pastille par reference, ses laizes dessus ──
   cat.filter(r => sel.has(r.cle)).forEach(r => {
-    bar.appendChild(el('span', { cls: 'bes-tsel-chip' },
+    const lz = (r.laizes || []).filter(l => selLz.has(l));
+    const chip = el('span', { cls: 'bes-tsel-chip' },
       el('span', {}, r.libelle),
-      el('button', {
-        type: 'button', title: 'Retirer ' + r.libelle,
-        on: { click: () => {
-          S.besoinsTendRefs = st.besoinsTendRefs.filter(x => x !== r.cle);
-          _besTendNettoyerLaizes();
-          renderContent(); _besTendSelApply();
-        } },
-      }, '×')));
+      lz.length ? el('span', { cls: 'bes-tsel-chip-lz' }, lz.join(' · ') + ' mm') : null);
+    if ((r.laizes || []).length) {
+      chip.appendChild(el('button', {
+        type: 'button', title: 'Changer les laizes de ' + r.libelle,
+        on: { click: () => _besTendModaleLaizes(r) },
+      }, iconEl('edit', 12)));
+    }
+    chip.appendChild(el('button', {
+      type: 'button', title: 'Retirer ' + r.libelle,
+      on: { click: () => {
+        S.besoinsTendRefs = _besTendEtat().besoinsTendRefs.filter(x => x !== r.cle);
+        _besTendNettoyerLaizes();
+        _besTendRedessinerBarre();
+        loadBesoinsTendance();
+      } },
+    }, '×'));
+    bar.appendChild(chip);
   });
 
-  // Les laizes proposees sont celles des SEULES references retenues. Tant que
-  // rien n'est choisi il n'y a pas de laize a proposer : afficher les
-  // quarante laizes du catalogue avant de savoir de quelle matiere on parle
-  // ne serait pas un choix, ce serait une liste. Et une matiere qui n'est pas
-  // en bobine — mandrin, carton, palette — n'en a aucune : la rangee
-  // n'apparait tout simplement pas.
-  const retenues = cat.filter(r => sel.has(r.cle));
-  const laizes = sel.size
-    ? [...new Set(retenues.flatMap(r => r.laizes || []))].sort((a, b) => a - b)
-    : [];
-
-  if (selLz.size) {
-    [...selLz].sort((a, b) => a - b).forEach(l => {
-      bar.appendChild(el('span', { cls: 'bes-tsel-chip' },
-        el('span', {}, l + ' mm'),
-        el('button', {
-          type: 'button', title: 'Retirer la laize ' + l + ' mm',
-          on: { click: () => {
-            S.besoinsTendLaizes = st.besoinsTendLaizes.filter(x => x !== l);
-            renderContent(); _besTendSelApply();
-          } },
-        }, '×')));
-    });
-  }
-
-  if (sel.size || selLz.size) {
+  if (sel.size) {
     bar.appendChild(el('button', {
       cls: 'bes-tsel-btn', type: 'button',
       on: { click: () => {
-        S.besoinsTendRefs = []; S.besoinsTendLaizes = [];
-        S.besoinsTendSelOpen = true;
-        renderContent(); _besTendSelApply();
+        S.besoinsTendRefs = []; S.besoinsTendLaizes = []; S.besoinsTendRefQ = '';
+        _besTendRedessinerBarre();
+        loadBesoinsTendance();
       } },
     }, 'Tout effacer'));
+  } else {
+    bar.appendChild(el('span', { cls: 'bes-tsel-vide' },
+      cat.length + ' référence(s) sur la fenêtre.'));
   }
 
-  if (!st.besoinsTendSelOpen) return bar;
-
-  // ── Panneau ouvert ──
-  const panel = el('div', { cls: 'bes-tsel-panel' });
-  const liste = el('div', { cls: 'bes-tsel-liste' });
-
-  const remplir = () => {
-    liste.innerHTML = '';
-    const q = (S.besoinsTendRefQ || '').trim().toLowerCase();
-    const vus = cat.filter(r => !q
-      || String(r.libelle || '').toLowerCase().includes(q)
-      || String(r.designation || '').toLowerCase().includes(q));
-    if (!vus.length) {
-      liste.appendChild(el('div', { cls: 'bes-tsel-vide' },
-        'Aucun résultat pour « ' + (S.besoinsTendRefQ || '') + ' »'));
-      return;
-    }
-    vus.forEach(r => {
-      const cb = el('input', { type: 'checkbox' });
-      cb.checked = sel.has(r.cle);
-      cb.addEventListener('change', () => {
-        if (cb.checked) {
-          if (st.besoinsTendRefs.indexOf(r.cle) < 0) S.besoinsTendRefs = [...st.besoinsTendRefs, r.cle];
-        } else {
-          S.besoinsTendRefs = st.besoinsTendRefs.filter(x => x !== r.cle);
-        }
-        _besTendNettoyerLaizes();
-        // La barre du haut porte les pastilles et la rangee des laizes : elle
-        // doit suivre la case qu'on vient de cocher, sans attendre que la
-        // requete revienne.
-        _besTendRedessinerBarre();
-        _besTendSelApply();
-      });
-      liste.appendChild(el('label', { cls: 'bes-tsel-opt' }, cb,
-        el('span', { cls: 'bes-tsel-opt-lbl', title: r.designation || r.libelle }, r.libelle),
-        el('span', { cls: 'bes-tsel-opt-meta' },
-          (r.laizes && r.laizes.length ? r.laizes.length + ' laize(s) · ' : '')
-          + _besFmtQte(r.total) + (r.unite ? ' ' + r.unite : ''))));
+  // ── Les dernieres references consultees ──
+  // Sous le champ, et seulement quand il est vide : elles repondent a la meme
+  // question que la recherche, elles n'ont pas a lui disputer la place quand
+  // elle a commence a repondre elle-meme.
+  const recents = _besTendRecents().filter(r => !sel.has(r.cle));
+  if (recents.length && !(S.besoinsTendRefQ || '').trim()) {
+    const rangee = el('div', { cls: 'bes-tsel-recents' },
+      el('span', { cls: 'bes-tsel-recents-lbl' }, 'Récentes'));
+    recents.forEach(r => {
+      rangee.appendChild(el('button', {
+        cls: 'bes-tsel-recent', type: 'button',
+        title: 'Retracer ' + r.libelle
+             + ((r.laizes || []).length ? ' en ' + r.laizes.join(', ') + ' mm' : ''),
+        on: { click: () => _besTendRejouerRecent(r) },
+      },
+        el('span', {}, r.libelle),
+        (r.laizes || []).length
+          ? el('span', { cls: 'bes-tsel-recent-lz' }, r.laizes.join(' · ') + ' mm')
+          : null));
     });
-  };
-
-  const q = el('input', {
-    cls: 'bes-tsel-search', type: 'search', id: 'bes-tsel-q',
-    placeholder: 'Rechercher une référence (code, désignation…)',
-  });
-  q.value = S.besoinsTendRefQ || '';
-  q.addEventListener('input', () => { S.besoinsTendRefQ = q.value; remplir(); });
-  q.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { S.besoinsTendRefQ = ''; q.value = ''; remplir(); }
-  });
-  panel.appendChild(q);
-  remplir();
-  panel.appendChild(liste);
-
-  if (laizes.length) {
-    const row = el('div', { cls: 'bes-tsel-lz' },
-      el('span', { cls: 'bes-tsel-lz-lbl' },
-        sel.size ? 'Laize (mm) — bobine' : 'Laize (mm)'));
-    laizes.forEach(l => {
-      row.appendChild(el('button', {
-        cls: 'bes-tsel-lzbtn' + (selLz.has(l) ? ' on' : ''), type: 'button',
-        on: { click: () => {
-          S.besoinsTendLaizes = selLz.has(l)
-            ? st.besoinsTendLaizes.filter(x => x !== l)
-            : [...st.besoinsTendLaizes, l];
-          renderContent(); _besTendSelApply();
-        } },
-      }, String(l)));
-    });
-    panel.appendChild(row);
+    wrap.appendChild(rangee);
   }
 
-  bar.appendChild(panel);
-  // Le champ vient d'entrer dans le DOM : il est pret au frame suivant.
-  requestAnimationFrame(() => { document.getElementById('bes-tsel-q')?.focus(); });
-  return bar;
+  requestAnimationFrame(() => {
+    const n = document.getElementById('bes-tsel-q');
+    if (n && document.activeElement !== n && !sel.size) n.focus();
+  });
+  return wrap;
 }
 
 function _buildBesoinsTendance(data) {
@@ -13902,8 +14069,8 @@ function _buildBesoinsTendance(data) {
   // attend qu'on lui dise ce qu'on est en train d'acheter.
   if (!st.besoinsTendRefs.length) {
     cont.appendChild(el('div', { cls: 'bes-empty' },
-      'Choisissez une ou plusieurs références ci-dessus pour afficher leur '
-      + 'tendance. Sur une bobine, la laize se choisit juste en dessous.'));
+      'Cherchez une matière ci-dessus pour afficher sa tendance. '
+      + 'Sur une bobine, la laize se choisit à la sélection.'));
     return cont;
   }
 

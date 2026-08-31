@@ -26,9 +26,10 @@ from config import (
     STOCK_EMPLACEMENT_AU_SOL_LABEL,
     STOCK_EMPLACEMENT_SORTIE_PROD,
     STOCK_EMPLACEMENT_SORTIE_PROD_LABEL,
+    ROLES_SETTINGS_LOGISTIQUE,
 )
 from database import get_db, parse_file
-from services.auth_service import get_current_user, user_has_app_access
+from services.auth_service import get_current_user, effective_role, user_has_app_access
 
 router = APIRouter()
 
@@ -8456,9 +8457,16 @@ def export_valorisation_pf(request: Request):
 
 
 def _require_laizes_admin(request: Request) -> dict:
+    """Référentiel des laizes matières — onglet « Laizes matières » de /settings.
+
+    Le garde suit la section Logistique de Paramètres (config.ROLES_SETTINGS_
+    LOGISTIQUE) qui porte cet onglet : direction, super admin, administration
+    technique. Réserver l'écriture au seul super admin affichait l'écran à
+    l'administration technique tout en lui refusant chaque enregistrement.
+    """
     user = get_current_user(request)
-    if user.get("role") != "superadmin":
-        raise HTTPException(403, "Accès super admin requis.")
+    if effective_role(user) not in ROLES_SETTINGS_LOGISTIQUE:
+        raise HTTPException(403, "Accès réservé à la Direction, à l'administration technique et au super admin.")
     return user
 
 

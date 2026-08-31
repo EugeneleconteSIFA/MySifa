@@ -22,7 +22,7 @@ from services.auth_service import (
     verify_password,
     merged_app_access,
     parse_access_overrides_raw,
-    require_superadmin,
+    require_settings_contacts,
     is_real_superadmin,
     IMPERSONATE_COOKIE,
 )
@@ -30,6 +30,7 @@ from config import (
     ACCESS_OVERRIDABLE_APPS,
     ASSIGNABLE_ROLES,
     COOKIE_NAME,
+    ROLE_DIRECTION,
     ROLE_SUPERADMIN,
     SESSION_HOURS,
     SUPERADMIN_EMAIL,
@@ -608,10 +609,42 @@ async def update_humeur(request: Request):
     return {"ok": True, "humeur_active": humeur_active, "humeur_valeur": humeur_valeur, "humeur_date": humeur_date}
 
 
-# ─── Gestion utilisateurs (super admin uniquement) ──────────────
+# ─── Gestion utilisateurs ────────────────────────────────────────
+# L'onglet « Utilisateurs » de /settings appartient à la section Contacts
+# (config.ROLES_SETTINGS_CONTACTS : direction, comptabilité, administration
+# ventes / technique, super admin). Le garde de l'API suit exactement cette
+# liste : un service qui voit l'onglet doit pouvoir s'en servir — sinon la
+# page s'affiche vide et l'utilisateur croit à un bug.
+#
+# Ce que l'ouverture ne donne PAS : le droit de se fabriquer un accès plus
+# haut que le sien. Les deux règles ci-dessous ferment cette porte —
+# attribuer un rôle direction / super admin, ou toucher à un compte qui en
+# porte un, reste réservé au super administrateur réel.
+
+_ROLES_COMPTES_PROTEGES = frozenset({ROLE_DIRECTION, ROLE_SUPERADMIN})
+
+
+def _guard_role_attribuable(actor: dict, role: str) -> None:
+    """Interdit à un non super admin de créer ou promouvoir un rôle haut."""
+    if (role or "") in _ROLES_COMPTES_PROTEGES and not is_real_superadmin(actor):
+        raise HTTPException(
+            status_code=403,
+            detail="Seul le super administrateur peut attribuer le rôle direction ou super administrateur.",
+        )
+
+
+def _guard_compte_cible(actor: dict, role_existant: str) -> None:
+    """Interdit à un non super admin de modifier un compte direction / super admin."""
+    if (role_existant or "") in _ROLES_COMPTES_PROTEGES and not is_real_superadmin(actor):
+        raise HTTPException(
+            status_code=403,
+            detail="Ce compte ne peut être modifié que par le super administrateur.",
+        )
+
+
 @router.get("/api/users")
 def list_users(request: Request):
-    require_superadmin(request)
+    require_settings_contacts(request)
     with get_db() as conn:
         rows = conn.execute(
             """SELECT u.id,u.email,u.identifiant,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.adresse,u.date_naissance,u.machine_id,
@@ -633,8 +666,8 @@ def list_users(request: Request):
 
 @router.get("/api/users/{user_id}")
 def get_user(user_id: int, request: Request):
-    """Fiche détaillée d'un utilisateur — super admin uniquement."""
-    require_superadmin(request)
+    """Fiche détaillée d'un utilisateur — section Contacts de Paramètres."""
+    require_settings_contacts(request)
     with get_db() as conn:
         row = conn.execute(
             """SELECT u.id,u.email,u.identifiant,u.nom,u.role,u.operateur_lie,u.actif,u.telephone,u.adresse,u.date_naissance,u.machine_id,
@@ -656,7 +689,7 @@ def get_user(user_id: int, request: Request):
 
 @router.post("/api/users")
 async def create_user(request: Request):
-    actor = require_superadmin(request)
+    actor = require_settings_contacts(request)
     body = await request.json()
 
     email = (body.get("email") or "").strip().lower()
@@ -673,6 +706,7 @@ async def create_user(request: Request):
         raise HTTPException(status_code=400, detail="Email, nom et mot de passe requis")
     if role not in ASSIGNABLE_ROLES and role != ROLE_SUPERADMIN:
         raise HTTPException(status_code=400, detail="Rôle invalide")
+    _guard_role_attribuable(actor, role)
     if _norm_email(email) == _norm_email(SUPERADMIN_EMAIL) and role != ROLE_SUPERADMIN:
         raise HTTPException(
             status_code=400,
@@ -708,7 +742,7 @@ async def create_user(request: Request):
 
 @router.put("/api/users/{user_id}")
 async def update_user(user_id: int, request: Request):
-    actor = require_superadmin(request)
+    actor = require_settings_contacts(request)
     body = await request.json()
 
     with get_db() as conn:
@@ -716,6 +750,7 @@ async def update_user(user_id: int, request: Request):
         if not ex:
             raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
         exd = dict(ex)
+        _guard_compte_cible(actor, exd["role"])
 
         nom      = body.get("nom")           or exd["nom"]
         role_req = body.get("role")          or exd["role"]
@@ -740,6 +775,7 @@ async def update_user(user_id: int, request: Request):
         else:
             machine_id = exd.get("machine_id")
 
+        _guard_role_attribuable(actor, role_req)
         role_eff = _validate_user_role_write(
             target_email=email,
             target_role=role_req,
@@ -803,8 +839,8 @@ async def update_user(user_id: int, request: Request):
 
 @router.post("/api/users/{user_id}/reset-password")
 def reset_password(user_id: int, request: Request):
-    """Super admin génère un mot de passe temporaire pour un utilisateur."""
-    require_superadmin(request)
+    """Génère un mot de passe temporaire pour un utilisateur."""
+    actor = require_settings_contacts(request)
     import secrets, string
 
     # Génère un mdp lisible : 10 caractères alphanumériques
@@ -815,6 +851,7 @@ def reset_password(user_id: int, request: Request):
         ex = conn.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
         if not ex:
             raise HTTPException(status_code=404, detail="Utilisateur non trouvé")
+        _guard_compte_cible(actor, ex["role"])
 
         conn.execute(
             "UPDATE users SET password_hash=? WHERE id=?",
@@ -827,13 +864,15 @@ def reset_password(user_id: int, request: Request):
 
 @router.delete("/api/users/{user_id}")
 def deactivate_user(user_id: int, request: Request):
-    actor = require_superadmin(request)
+    actor = require_settings_contacts(request)
     if actor["id"] == user_id:
         raise HTTPException(status_code=400, detail="Impossible de désactiver votre propre compte")
     nom_audit = ""
     role_audit = ""
     with get_db() as conn:
         ex = conn.execute("SELECT email, nom, role FROM users WHERE id=?", (user_id,)).fetchone()
+        if ex:
+            _guard_compte_cible(actor, ex["role"])
         if ex and _is_designated_superadmin_row(ex["email"], ex["role"]):
             raise HTTPException(status_code=400, detail="Impossible de désactiver le compte super administrateur")
         if ex:

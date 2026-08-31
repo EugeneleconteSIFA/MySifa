@@ -19,6 +19,7 @@ MySifa est un outil interne de gestion de production industrielle développé po
 
 | Module | Route | Description |
 |---|---|---|
+| Points de production | `/reunions` | Réunions sur une plage de dates : notes, actions, participants ; chiffres de prod recalculés à la lecture |
 | MyProd | `/prod` | Saisie de production opérateur ; onglet Production › **Retour de prod** (`/prod#retour`) : feuille atelier par machine, comptes-rendus de dossier, édition de l'info prod et des explications d'arrêt |
 | Planning machine | `/planning` | Planning atelier multi-machines |
 | MyStock | `/stock` | Gestion des stocks et emplacements |
@@ -251,6 +252,7 @@ un fichier de leur périmètre. Dans les deux cas, n'ouvre que celles qui serven
 | `of-fiches-techniques.md` | OF, fabrication, fiches, nombre de fronts |
 | `besoins-matieres.md` | `besoins_matieres.py`, carnet |
 | `erp-rvgi.md` | tout ce qui touche `/erp` et le miroir RVGI |
+| `expe-notes-transporteurs.md` | note de confiance transporteur, zones géographiques, emails transporteur |
 | `structure-fichiers.md` | `main.py`, routers, pages |
 | `securite.md` | auth, `app/core/**`, `config.py` |
 | `cycle-vie-client.md` | settings, auth, RGPD |

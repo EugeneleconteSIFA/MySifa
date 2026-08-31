@@ -682,3 +682,58 @@ production ne rejoue pas, et son NOM ne doit jamais changer.
 
 `tests/test_rapport_dossier.py` : 20 cas. `tests/test_retour_prod_rendu.js` :
 axe, débordements, phases, citations, masquage.
+
+---
+
+## 10. Septième passe — « Hier » (la vraie cause) et les points de production
+
+### « Hier » : un piège de fuseau
+
+Le correctif précédent était bien déployé et ne pouvait pas marcher. Le serveur
+calculait sa propre veille avec `date.today()` et la renvoyait pour comparaison ;
+le VPS tourne en UTC, le poste est à Paris, et un lundi matin les deux ne
+désignent pas le même jour. La condition « le filtre est-il encore sur la
+veille ? » ne tombait donc jamais juste, et le filtre restait sur son dimanche
+vide.
+
+**La veille est maintenant calculée par le navigateur et envoyée au serveur**,
+qui ne répond plus qu'à une seule question : où est la dernière saisie avant
+cette date. Plus aucune comparaison entre deux horloges.
+
+Leçon générale : dès qu'un écran compare une date client à une date serveur,
+c'est le client qui doit fournir la sienne — lui seul sait quel jour il est pour
+l'utilisateur.
+
+### Points de production (`/reunions`)
+
+Migration `reunions_prod` : trois tables (`reunions`, `reunion_actions`,
+`reunion_participants`). Une action et un participant sont des lignes, pas du
+texte dans un champ — les compter, les cocher, les filtrer devient possible sans
+rien reparser.
+
+Le compte-rendu garde la plage de dates, le titre, les notes, les actions et les
+participants. **Il ne garde pas les chiffres** : ils se recalculent à chaque
+lecture depuis `rapport_dossier`. Choix assumé — plus léger, mais une réunion
+rouverte dans trois mois montrera l'atelier tel qu'il apparaît ce jour-là, pas
+tel qu'on le voyait pendant le point. Ce qui doit survivre intact, ce sont les
+notes et les décisions, et celles-là sont bien figées.
+
+Trois règles de comportement :
+
+- **Une seule réunion ouverte par personne.** Rouvrir la page rend celle qui
+  traîne plutôt que d'en empiler une seconde qui ferait perdre les notes de la
+  première. Une réunion qu'on oublie de clore n'est pas une erreur, c'est une
+  réunion qu'on reprend.
+- **Clore ne verrouille pas.** On corrige toujours un compte-rendu après coup ;
+  clore dit seulement que le point est passé, et se défait.
+- **La liste s'ordonne sur la plage analysée**, pas sur l'heure de création :
+  c'est la journée dont on a parlé qui situe une réunion.
+
+L'écran de réunion met les chiffres à gauche et la prise de notes en colonne
+fixe à droite — on parle en regardant, on ne bascule pas d'onglet pour noter.
+Les notes s'enregistrent seules après une pause de frappe. Le rendu des chiffres
+vient du module partagé : une réunion ne doit pas montrer un atelier différent
+de celui qu'on regarde le reste du temps.
+
+`tests/test_reunion.py` : 6 familles de cas, base sqlite en mémoire, aucun
+import de l'app.

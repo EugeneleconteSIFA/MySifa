@@ -39,6 +39,13 @@ from app.web.expe_assets import (
     EXPE_TRANSPORTEURS_CSS,
     EXPE_TRANSPORTEURS_JS,
 )
+from app.web.expe_notes_assets import (
+    EXPE_NOTES_CSS,
+    EXPE_NOTES_JS,
+    EXPE_THEMATIQUES_JS,
+    EXPE_ZONES_CSS,
+    EXPE_ZONES_JS,
+)
 from app.web.expe_guide import EXPE_DEVIS_GUIDE_JS
 from app.web.compta_assets import (
     COMPTA_MAIN_CSS,
@@ -1303,6 +1310,8 @@ __EXPE_TRANSPORTEURS_CSS__
 __EXPE_COMPARATEUR_CSS__
 __EXPE_DEVIS_CSS__
 __EXPE_CARTE_FRANCE_CSS__
+__EXPE_NOTES_CSS__
+__EXPE_ZONES_CSS__
 /* ── Paie (onglet MyCompta) ── */
 .paie-layout{display:flex;gap:14px;height:calc(100vh - 210px);overflow:hidden}
 .paie-emp-panel{width:252px;flex-shrink:0;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden}
@@ -6518,6 +6527,8 @@ function renderProdPage(){
   ];
   // Retour de prod : ouvert aux services de production — l'API filtre (ROLES_PROD).
   tabs.push({key:'retour', label:'Retour de prod', icon:'clipboard'});
+  // Points de production : page a part entiere, atteinte depuis ce menu.
+  tabs.push({key:'reunions', label:'Réunions', icon:'users', lien:'/reunions'});
   const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Production'},
     ...tabs.map(t=>h('button',{
       type:'button',
@@ -6525,6 +6536,7 @@ function renderProdPage(){
       'aria-selected': subPage===t.key ? 'true' : 'false',
       className:'nav-tab'+(subPage===t.key?' active':''),
       onClick:async()=>{
+        if(t.lien){ window.location.href = t.lien; return; }
         S.subPage=t.key;
         if(t.key==='kpis'){if(!S.production)await loadProd(); await loadMachineStatus(); startMachineStatusPolling();}
         else{stopMachineStatusPolling();}
@@ -11557,11 +11569,16 @@ def render_frontend_html(initial_app: str = "portal") -> str:
         .replace("__EXPE_COMPARATEUR_CSS__", EXPE_COMPARATEUR_CSS)
         .replace("__EXPE_DEVIS_CSS__", EXPE_DEVIS_CSS)
         .replace("__EXPE_CARTE_FRANCE_CSS__", EXPE_CARTE_FRANCE_CSS)
+        .replace("__EXPE_NOTES_CSS__", EXPE_NOTES_CSS)
+        .replace("__EXPE_ZONES_CSS__", EXPE_ZONES_CSS)
         .replace("__EXPE_COMPARATEUR_JS__", EXPE_COMPARATEUR_JS)
         .replace("__EXPE_DEVIS_JS__", EXPE_DEVIS_JS)
         .replace("__EXPE_DEVIS_GUIDE_JS__", EXPE_DEVIS_GUIDE_JS)
         .replace("__EXPE_TRANSPORTEURS_JS__", EXPE_TRANSPORTEURS_JS)
         .replace("__EXPE_CARTE_FRANCE_JS__", EXPE_CARTE_FRANCE_JS)
+        .replace("__EXPE_NOTES_JS__", EXPE_NOTES_JS)
+        .replace("__EXPE_THEMATIQUES_JS__", EXPE_THEMATIQUES_JS)
+        .replace("__EXPE_ZONES_JS__", EXPE_ZONES_JS)
         # ─── Branding paramétrable (LAST : appliqué aux contenus injectés
         # au-dessus, notamment LOGIN_MAIN_JS et PORTAL_MAIN_JS). Défaut SIFA.
         # Les valeurs sont escapées pour être sûres dans une chaîne JS
