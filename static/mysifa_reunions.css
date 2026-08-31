@@ -1,0 +1,167 @@
+/* MySifa - Points de production (onglet Reunions de MyProd)
+ *
+ * Ce module vit desormais DANS la coquille MyProd : sa feuille ne peut plus
+ * porter de selecteurs generiques (.btn, .chip, .card, .modal...) sans
+ * repeindre le reste de l'application. Tout est donc prefixe `reu-`.
+ *
+ * Les chiffres de production ne sont pas styles ici : ils viennent de
+ * mysifa_retour_prod.css, partagee avec l'onglet Retour de prod. Une reunion
+ * ne doit pas montrer un atelier different de celui qu'on regarde le reste
+ * du temps.
+ */
+
+/* ── Boutons et champs ───────────────────────────────────────── */
+.reu-btn{background:var(--accent);color:var(--bg);border:1px solid var(--accent);
+  border-radius:999px;padding:8px 16px;font-weight:700;font-size:12.5px;
+  cursor:pointer;font-family:inherit;
+  transition:filter var(--mo-fast,.15s) var(--ease-out,ease),
+             transform var(--mo-fast,.15s) var(--ease-out,ease),
+             border-color var(--mo-fast,.15s) var(--ease-out,ease),
+             color var(--mo-fast,.15s) var(--ease-out,ease)}
+.reu-btn:hover{filter:brightness(1.07);transform:translateY(-1px)}
+.reu-btn:active{transform:translateY(0)}
+.reu-btn.ghost{background:var(--card);color:var(--text2);border-color:var(--border);
+  font-weight:600}
+.reu-btn.ghost:hover{border-color:var(--accent);color:var(--accent);filter:none}
+
+.reu-champ label{display:block;font-size:11px;font-weight:700;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.reu-champ input,.reu-champ select{background:var(--card);border:1px solid var(--border);
+  border-radius:9px;padding:8px 11px;color:var(--text);font-size:13.5px;
+  font-family:inherit;
+  transition:border-color var(--mo-fast,.15s) var(--ease-out,ease)}
+.reu-champ input:hover,.reu-champ select:hover{border-color:var(--accent)}
+.reu-champ input:focus,.reu-champ select:focus{border-color:var(--accent);outline:none;
+  box-shadow:0 0 0 3px var(--accent-bg)}
+
+.reu-pastille{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;
+  border-radius:999px;border:1px solid var(--border);color:var(--muted)}
+.reu-pastille.ouverte{color:var(--warn,#fbbf24);border-color:var(--warn,#fbbf24)}
+.reu-pastille.close{color:var(--success,#34d399);border-color:var(--success,#34d399)}
+.reu-vide{color:var(--muted);font-size:14px;padding:30px 0;text-align:center;line-height:1.6}
+
+/* ── Barre de l'onglet ───────────────────────────────────────── */
+.reu-barre{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:0 0 14px}
+.reu-barre .reu-sep{flex:1}
+
+/* ── Liste des reunions ──────────────────────────────────────── */
+table.reu-tbl{width:100%;border-collapse:collapse;font-size:14.5px;background:var(--card);
+  border:1px solid var(--border);border-radius:12px;overflow:hidden}
+table.reu-tbl th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.5px;
+  color:var(--muted);font-weight:700;padding:11px 12px;background:var(--bg);
+  border-bottom:1px solid var(--border)}
+table.reu-tbl td{padding:12px;border-bottom:1px solid var(--border);color:var(--text2)}
+table.reu-tbl tbody tr:last-child td{border-bottom:none}
+table.reu-tbl tbody tr{cursor:pointer;
+  transition:background var(--mo-fast,.15s) var(--ease-out,ease),
+             box-shadow var(--mo-fast,.15s) var(--ease-out,ease)}
+table.reu-tbl tbody tr:hover{background:var(--accent-bg);box-shadow:inset 3px 0 0 0 var(--accent)}
+.reu-nom-cell{font-weight:700;color:var(--text)}
+.reu-sous{font-size:12px;color:var(--muted);margin-top:2px}
+
+/* ── Reunion ouverte ─────────────────────────────────────────── */
+.reu-hdr{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin:0 0 18px}
+.reu-hdr input.reu-nom{font-size:22px;font-weight:800;color:var(--text);background:transparent;
+  border:1px solid transparent;border-radius:8px;padding:4px 8px;font-family:inherit;
+  min-width:280px;
+  transition:border-color var(--mo-fast,.15s) var(--ease-out,ease)}
+.reu-hdr input.reu-nom:hover{border-color:var(--border)}
+.reu-hdr input.reu-nom:focus{border-color:var(--accent);outline:none;background:var(--card)}
+.reu-meta{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+
+.reu-split{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:20px;align-items:start}
+.reu-colonne{position:sticky;top:16px;background:var(--card);border:1px solid var(--border);
+  border-radius:12px;padding:16px 17px;max-height:calc(100vh - 40px);overflow-y:auto}
+.reu-colonne h3{font-size:13.5px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--accent);margin:0 0 10px}
+.reu-colonne .reu-hint{font-size:12px;color:var(--muted);margin:-6px 0 10px}
+.reu-notes{width:100%;min-height:260px;background:var(--bg);border:1px solid var(--border);
+  border-radius:10px;padding:12px 13px;color:var(--text);font-size:14.5px;
+  font-family:inherit;line-height:1.6;resize:vertical}
+.reu-notes:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px var(--accent-bg)}
+.reu-sauve{font-size:11.5px;color:var(--muted);margin-top:6px;min-height:16px}
+.reu-bloc{margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+
+.reu-act{display:flex;gap:9px;align-items:flex-start;padding:9px 0;
+  border-bottom:1px solid var(--border)}
+.reu-act:last-of-type{border-bottom:none}
+.reu-act input[type=checkbox]{margin-top:3px;width:16px;height:16px;
+  accent-color:var(--accent);cursor:pointer}
+.reu-act .reu-a-txt{flex:1;font-size:14px;color:var(--text);line-height:1.45}
+.reu-act.fait .reu-a-txt{text-decoration:line-through;color:var(--muted)}
+.reu-act .reu-a-meta{font-size:11.5px;color:var(--muted);margin-top:3px}
+.reu-act .reu-a-sup{background:transparent;border:none;color:var(--muted);cursor:pointer;
+  font-size:15px;line-height:1;padding:2px 4px;font-family:inherit;
+  transition:color var(--mo-fast,.15s) var(--ease-out,ease)}
+.reu-act .reu-a-sup:hover{color:var(--danger)}
+.reu-actform{display:flex;flex-direction:column;gap:7px;margin-top:10px}
+.reu-actform input{background:var(--bg);border:1px solid var(--border);border-radius:9px;
+  padding:9px 11px;color:var(--text);font-size:13.5px;font-family:inherit;
+  transition:border-color var(--mo-fast,.15s) var(--ease-out,ease)}
+.reu-actform input:focus{border-color:var(--accent);outline:none}
+.reu-actform .reu-duo{display:flex;gap:7px}
+.reu-actform .reu-duo input{flex:1;min-width:0}
+
+/* ── Modale de lancement ─────────────────────────────────────── */
+.reu-modal-ov{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;
+  align-items:flex-start;justify-content:center;padding:60px 16px;overflow:auto}
+.reu-modal-ov.open{display:flex}
+.reu-modal{background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:22px 24px;width:min(520px,96vw)}
+.reu-modal h3{margin:0 0 14px;font-size:17px;color:var(--text)}
+.reu-modal .reu-champ{margin-bottom:12px}
+.reu-modal .reu-champ input{width:100%}
+.reu-fin{display:flex;gap:9px;justify-content:flex-end;margin-top:18px}
+
+@media (max-width:1100px){
+  .reu-split{grid-template-columns:1fr}
+  .reu-colonne{position:static;max-height:none}
+}
+
+/* ── Animations reduites ─────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce){
+  .reu-btn,.reu-champ input,.reu-champ select,.reu-actform input,
+  .reu-hdr input.reu-nom,table.reu-tbl tbody tr,.reu-act .reu-a-sup{transition:none !important}
+  .reu-btn:hover{transform:none !important}
+}
+body.reduce-anim .reu-btn,body.reduce-anim .reu-champ input,
+body.reduce-anim .reu-champ select,body.reduce-anim .reu-actform input,
+body.reduce-anim .reu-hdr input.reu-nom,body.reduce-anim table.reu-tbl tbody tr,
+body.reduce-anim .reu-act .reu-a-sup{transition:none !important}
+body.reduce-anim .reu-btn:hover{transform:none !important}
+
+/*
+ * Impression : un compte-rendu, pas une capture d'ecran.
+ *
+ * Le module est maintenant un onglet : la barre laterale, les filtres et le
+ * titre de page sont a l'ecran au moment ou l'on imprime. On construit donc un
+ * document a part (#reu-doc, invisible a l'ecran) et on masque tout le reste
+ * par `visibility` — meme technique que la feuille d'atelier, pour que les
+ * deux impressions du module se comportent pareil.
+ *
+ * Les mises au noir des chiffres (.rp-*) viennent de mysifa_retour_prod.css :
+ * elles ne sont pas conditionnees a une classe et valent donc ici aussi.
+ */
+#reu-doc{display:none}
+@media print{
+  body.reu-impression *{visibility:hidden !important}
+  body.reu-impression #reu-doc,body.reu-impression #reu-doc *{visibility:visible !important}
+  body.reu-impression #reu-doc{display:block;position:absolute;left:0;top:0;width:100%;
+    background:#fff !important;color:#000 !important}
+  #reu-doc .reu-doc-hdr{border-bottom:2px solid #000;padding-bottom:10px;margin-bottom:16px}
+  #reu-doc .reu-doc-marque{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#555}
+  #reu-doc .reu-doc-hdr h2{font-size:24px;margin:6px 0 4px;color:#000}
+  #reu-doc .reu-doc-meta{font-size:12.5px;color:#444;line-height:1.6}
+  #reu-doc .reu-doc-bloc{margin-bottom:20px;break-inside:avoid}
+  #reu-doc .reu-doc-bloc h3{font-size:12px;text-transform:uppercase;letter-spacing:.8px;
+    color:#000;border-bottom:1px solid #999;padding-bottom:3px;margin:0 0 8px}
+  #reu-doc .reu-doc-notes{font-size:13.5px;line-height:1.6;color:#000;white-space:pre-wrap}
+  #reu-doc .reu-doc-notes:empty::before{content:"Aucune note.";color:#777}
+  #reu-doc .reu-doc-act{padding:5px 0;border-bottom:1px solid #ddd;break-inside:avoid;
+    font-size:13.5px;color:#000;line-height:1.45}
+  #reu-doc .reu-doc-act.fait{color:#555;text-decoration:line-through}
+  #reu-doc .reu-doc-act .reu-doc-act-meta{font-size:11.5px;color:#444;
+    text-decoration:none;display:block;margin-top:2px}
+  #reu-doc .card,#reu-doc .rp-feuille{box-shadow:none !important;border:none !important;
+    background:none !important;padding:0 !important}
+}

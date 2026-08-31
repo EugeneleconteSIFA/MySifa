@@ -6527,8 +6527,9 @@ function renderProdPage(){
   ];
   // Retour de prod : ouvert aux services de production — l'API filtre (ROLES_PROD).
   tabs.push({key:'retour', label:'Retour de prod', icon:'clipboard'});
-  // Points de production : page a part entiere, atteinte depuis ce menu.
-  tabs.push({key:'reunions', label:'Réunions', icon:'users', lien:'/reunions'});
+  // Points de production : un sous-onglet comme les autres, monte par
+  // mysifa_reunions.js dans le contenant que lui donne renderReunionsTab().
+  tabs.push({key:'reunions', label:'Réunions', icon:'users'});
   const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Production'},
     ...tabs.map(t=>h('button',{
       type:'button',
@@ -6536,7 +6537,6 @@ function renderProdPage(){
       'aria-selected': subPage===t.key ? 'true' : 'false',
       className:'nav-tab'+(subPage===t.key?' active':''),
       onClick:async()=>{
-        if(t.lien){ window.location.href = t.lien; return; }
         S.subPage=t.key;
         if(t.key==='kpis'){if(!S.production)await loadProd(); await loadMachineStatus(); startMachineStatusPolling();}
         else{stopMachineStatusPolling();}
@@ -6551,8 +6551,27 @@ function renderProdPage(){
   if(subPage==='saisies')  content = renderSaisiesWithImport();
   else if(subPage==='erreurs') content = renderHist();
   else if(subPage==='retour') content = renderRetourProd();
+  else if(subPage==='reunions') content = renderReunionsTab();
   else content = renderProdKpis();
   return h('div',null, subNav, content);
+}
+
+// Points de production : le module (mysifa_reunions.js) s'installe lui-meme
+// dans un contenant vide et garde son propre etat. Le DOM etant reconstruit a
+// chaque rendu, on lui passe le contenant du rendu courant.
+function renderReunionsTab(){
+  const hote = h('div',{className:'myprod-page-reunions'});
+  if(!window.MySifaReunions){
+    hote.appendChild(h('div',{className:'card-empty'},
+      'Module reunions non charge (mysifa_reunions.js).'));
+    return hote;
+  }
+  requestAnimationFrame(function(){
+    window.MySifaReunions.monter(hote, {
+      toast: (m,t)=>{ try{ showToast(m,t); }catch(e){} }
+    });
+  });
+  return hote;
 }
 
 // ── Rapport hebdomadaire ────────────────────────────────────────
@@ -11284,7 +11303,10 @@ function render(){
       h('button',{type:'button',className:'mobile-home-btn',onClick:()=>{window.location.href='/'},'aria-label':'Accueil'},iconEl('home',20))
     );
     const prodFilterPages=['production','historique','saisies'];
-    const hasProdFilters=prodFilterPages.includes(S.page);
+    // Reunions exceptee : une reunion porte sa propre periode analysee, celle
+    // qu'elle a enregistree. Une barre de filtres au-dessus la contredirait.
+    const hasProdFilters=prodFilterPages.includes(S.page)
+      && !(S.page==='production' && (S.subPage||'kpis')==='reunions');
     const prodPageContent=[];
     if(S.page==='production') prodPageContent.push(renderProdPage());
     if(S.page==='suivi') prodPageContent.push(renderSuivi());
