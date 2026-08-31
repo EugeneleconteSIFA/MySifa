@@ -719,6 +719,30 @@ def test_frise_debordements():
              svc.frise(conn2, "2026-09-10T00:00:00", "2026-09-10T23:59:59")["vide"], True)
 
 
+def test_statut_saisieprod():
+    print("\n12 octies. Les phases parlent la langue de Saisieprod")
+    # Cinq etats, pas plus : la frise reprend les couleurs de Saisieprod, donc
+    # elle doit en reprendre exactement le vocabulaire.
+    verifier("production", svc.statut_saisie("production"), "production")
+    verifier("calage", svc.statut_saisie("calage"), "calage")
+    verifier("arret", svc.statut_saisie("arret"), "arret")
+    verifier("appro compte comme un arret", svc.statut_saisie("appro"), "arret")
+    verifier("technique aussi", svc.statut_saisie("technique"), "arret")
+    verifier("nettoyage", svc.statut_saisie("nettoyage"), "nettoyage")
+    verifier("pause", svc.statut_saisie("pause"), "autre")
+    verifier("personnel", svc.statut_saisie("personnel"), "autre")
+    verifier("inconnu", svc.statut_saisie("zzz"), "autre")
+    verifier("cinq etats seulement",
+             sorted(set(svc.STATUT_SAISIE.values())),
+             ["arret", "autre", "calage", "nettoyage", "production"])
+
+    conn = base()
+    dossier_complet(conn)
+    conn.commit()
+    segs = svc.compte_rendu(conn, "D-100")["frise"]["lignes"][0]["slots"][0]["segments"]
+    verifier("chaque phase porte son statut", all(g.get("statut") for g in segs), True)
+
+
 def test_frise_dossier():
     print("\n12 septies. Frise d'un seul dossier")
     conn = base()
@@ -761,6 +785,7 @@ if __name__ == "__main__":
     test_dernier_jour_saisi()
     test_frise()
     test_frise_debordements()
+    test_statut_saisieprod()
     test_frise_dossier()
     test_minutes_txt()
 

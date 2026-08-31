@@ -76,6 +76,28 @@ LIBELLES_CATEGORIES: Dict[str, str] = {
     "personnel": "Entrees et sorties",
 }
 
+# Les cinq etats que Saisieprod affiche aux operateurs. La frise parle la meme
+# langue et reprend les memes couleurs (`.mst-*` de mysifa_prod_core.css) : une
+# seconde legende pour dire la meme chose serait une charge inutile a l'atelier.
+# Appro et intervention technique tombent dans « arret » — la machine est
+# arretee ; le detail exact reste dans l'infobulle et dans le tableau Arrets.
+STATUT_SAISIE = {
+    CAT_PRODUCTION: "production",
+    CAT_CALAGE: "calage",
+    CAT_ARRET: "arret",
+    "appro": "arret",
+    "technique": "arret",
+    CAT_NETTOYAGE: "nettoyage",
+    CAT_PAUSE: "autre",
+    "personnel": "autre",
+    "annulation": "autre",
+}
+
+
+def statut_saisie(categorie: str) -> str:
+    return STATUT_SAISIE.get(_txt(categorie).lower(), "autre")
+
+
 # Categories qui pesent sur la disponibilite machine — celles dont on parle a
 # l'atelier. `pause` et `personnel` en sont volontairement exclues : ce n'est
 # pas la machine qui s'arrete, c'est la journee qui s'organise.
@@ -1353,6 +1375,32 @@ def _position(axe: List[Dict[str, Any]], quand: datetime) -> float:
     return 100.0
 
 
+def _identite_slot(conn, no_dossier: str, saisies: List[Dict[str, Any]],
+                   code_fin: str) -> Dict[str, Any]:
+    """Reference, format et quantite d'un dossier, pour l'afficher sur son slot."""
+    out = {"ref_produit_norm": None, "format": "", "laize_mm": None, "quantite": None}
+    ref = _ref_produit(conn, no_dossier)
+    out["ref_produit_norm"] = ref
+    cols = _colonnes(conn, "produit_series")
+    if ref and {"format", "laize_mm"} <= cols:
+        row = conn.execute(
+            """SELECT format, laize_mm FROM produit_series
+                WHERE TRIM(no_dossier) = TRIM(?)
+                   OR ref_produit_norm = ?
+                ORDER BY CASE WHEN TRIM(no_dossier) = TRIM(?) THEN 0 ELSE 1 END,
+                         date_fin DESC LIMIT 1""",
+            (no_dossier, ref, no_dossier),
+        ).fetchone()
+        if row:
+            out["format"] = _txt(row["format"])
+            out["laize_mm"] = row["laize_mm"]
+    qtes = [_f(x.get("quantite_traitee")) for x in saisies
+            if _txt(x.get("operation_code")) == code_fin and _f(x.get("quantite_traitee")) > 0]
+    if qtes:
+        out["quantite"] = round(max(qtes), 0)
+    return out
+
+
 def frise(conn, debut: str, fin: str, machine: str = "", code_fin: str = "89",
           code_debut: str = "01", code_annul: str = "90") -> Dict[str, Any]:
     """Ce qui est passe sur les machines pendant la periode, pose sur un axe.
@@ -1415,6 +1463,7 @@ def frise(conn, debut: str, fin: str, machine: str = "", code_fin: str = "89",
                 continue
             slot = _slot(propres, visibles, axe, d_deb, d_fin, no_d)
             if slot:
+                slot.update(_identite_slot(conn, no_d, _saisies(conn, no_d), code_fin))
                 par_machine.setdefault(m, []).append(slot)
 
     lignes = []
@@ -1461,6 +1510,7 @@ def _slot(tous: List[Dict[str, Any]], visibles: List[Dict[str, Any]],
             continue
         segments.append({
             "categorie": iv["categorie"],
+            "statut": statut_saisie(iv["categorie"]),
             "label": LIBELLES_CATEGORIES.get(iv["categorie"],
                                              iv["categorie"].capitalize() or "Autre"),
             "operation": iv["operation"],
@@ -1502,11 +1552,13 @@ def frise_dossier(conn, no_dossier: str) -> Dict[str, Any]:
     axe = _axe_ouvre(ivs, d_deb, d_fin)
     if not axe:
         return {"vide": True, "axe": [], "lignes": []}
+    saisies = _saisies(conn, no_dossier)
     par_machine: Dict[str, List[Dict[str, Any]]] = {}
     for m in sorted({iv["machine"] for iv in ivs if iv["machine"]} or {""}):
         propres = [iv for iv in ivs if iv["machine"] == m] or ivs
         slot = _slot(propres, propres, axe, d_deb, d_fin, _txt(no_dossier))
         if slot:
+            slot.update(_identite_slot(conn, no_dossier, saisies, "89"))
             par_machine.setdefault(m or "—", []).append(slot)
     for plage in axe:
         plage.pop("_d", None)

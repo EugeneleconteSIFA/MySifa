@@ -229,56 +229,98 @@ body.reduce-anim .rp-btn-mini:hover,body.reduce-anim .rp-vig:hover .v-nb{transfo
 
 /* ── Frise de production ─────────────────────────────────────────
    Meme allure que le planning, posee sur de vraies dates. Les positions
-   arrivent en pourcentage depuis le serveur : rien n'est calcule ici. */
+   arrivent en pourcentage depuis le serveur : rien n'est calcule ici.
+   Les couleurs sont celles des etats de Saisieprod (.mst-* de
+   mysifa_prod_core.css) : l'atelier n'a pas a apprendre un second code. */
 .rp-frise{overflow-x:auto}
-.rp-fr-axe,.rp-fr-ligne{display:flex;align-items:stretch;gap:10px;min-width:640px}
+.rp-fr-cadre{min-width:660px;border:1px solid var(--border);border-radius:10px;
+  padding:8px 10px 10px;background:var(--card)}
+.rp-fr-axe,.rp-fr-ligne{display:flex;align-items:stretch;gap:10px}
 .rp-fr-machine{flex:0 0 118px;font-size:12.5px;font-weight:700;color:var(--text2);
   display:flex;align-items:center;padding-right:4px}
-.rp-fr-piste{position:relative;flex:1;min-height:46px}
-.rp-fr-axe .rp-fr-piste{min-height:24px;border-bottom:1px solid var(--border)}
-.rp-fr-jour{position:absolute;top:0;bottom:0;font-size:11.5px;color:var(--muted);
-  display:flex;align-items:center;justify-content:center;overflow:hidden;white-space:nowrap}
-.rp-fr-jour span{padding:0 4px}
-.rp-fr-jour+.rp-fr-jour{border-left:1px solid var(--border)}
-/* Une coupure = des journees entieres sans saisie, repliees en un trait. */
-.rp-fr-jour.coupe{border-left:2px dashed var(--warn,#fbbf24)}
-.rp-fr-ligne{margin-top:6px}
-.rp-fr-ligne .rp-fr-piste{background:var(--bg);border-radius:8px}
+.rp-fr-piste{position:relative;flex:1}
+.rp-fr-axe .rp-fr-piste{height:34px;border-bottom:2px solid var(--border)}
+.rp-fr-jour{position:absolute;top:0;bottom:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;overflow:hidden;white-space:nowrap;gap:1px}
+.rp-fr-jour span{font-size:12px;font-weight:700;color:var(--text2)}
+.rp-fr-jour em{font-size:10.5px;font-style:normal;color:var(--muted)}
 
-.rp-fr-slot{position:absolute;top:5px;bottom:5px;border-radius:6px;overflow:hidden;
+.rp-fr-ligne{margin-top:8px}
+.rp-fr-ligne .rp-fr-piste{background:var(--bg);border-radius:8px;height:74px}
+/* Separation des journees : elle traverse toutes les pistes, sinon on ne sait
+   plus ou finit un jour. Pointille quand des journees entieres sont repliees. */
+.rp-fr-sep{position:absolute;top:-6px;bottom:-6px;width:0;
+  border-left:1px solid var(--border)}
+.rp-fr-sep.coupe{border-left:2px dashed var(--warn,#fbbf24)}
+.rp-fr-axe .rp-fr-piste .rp-fr-jour+.rp-fr-jour{border-left:1px solid var(--border)}
+
+.rp-fr-slot{position:absolute;top:6px;bottom:6px;border-radius:7px;overflow:hidden;
   border:1px solid var(--border);background:var(--card);cursor:pointer;
   transition:top var(--mo-fast,.15s) var(--ease-out,ease),
              bottom var(--mo-fast,.15s) var(--ease-out,ease),
-             box-shadow var(--mo-fast,.15s) var(--ease-out,ease)}
-.rp-fr-slot:hover{top:2px;bottom:2px;z-index:5;box-shadow:0 3px 12px rgba(0,0,0,.18)}
-/* Un dossier commence avant la periode ou non termine : le bord est ouvert. */
-.rp-fr-slot.deborde-avant{border-left:3px solid var(--accent);border-top-left-radius:0;
-  border-bottom-left-radius:0}
-.rp-fr-slot.deborde-apres{border-right:3px solid var(--accent);border-top-right-radius:0;
-  border-bottom-right-radius:0}
-.rp-fr-seg{position:absolute;top:0;bottom:0}
-.rp-fr-lbl{position:absolute;inset:0;display:flex;align-items:center;gap:6px;
-  padding:0 7px;font-size:11.5px;font-weight:700;color:var(--text);
-  white-space:nowrap;overflow:hidden;text-shadow:0 1px 2px rgba(255,255,255,.55);
-  pointer-events:none}
-body.light .rp-fr-lbl{text-shadow:0 1px 2px rgba(255,255,255,.8)}
-.rp-fr-lbl span{font-weight:500;color:var(--text2);overflow:hidden;text-overflow:ellipsis}
+             box-shadow var(--mo-fast,.15s) var(--ease-out,ease),
+             border-color var(--mo-fast,.15s) var(--ease-out,ease)}
+.rp-fr-slot:hover{top:2px;bottom:2px;z-index:6;border-color:var(--accent);
+  box-shadow:0 6px 18px rgba(0,0,0,.22)}
+/* Bord ouvert : le dossier a commence avant la periode, ou n'est pas termine. */
+.rp-fr-slot.deborde-avant{border-left:3px solid var(--accent);
+  border-top-left-radius:0;border-bottom-left-radius:0}
+.rp-fr-slot.deborde-apres{border-right:3px solid var(--accent);
+  border-top-right-radius:0;border-bottom-right-radius:0}
 
-.rp-fr-seg.cat-production,.rp-fr-leg i.cat-production{background:var(--success,#34d399)}
-.rp-fr-seg.cat-calage,.rp-fr-leg i.cat-calage{background:var(--accent)}
-.rp-fr-seg.cat-arret,.rp-fr-leg i.cat-arret{background:var(--danger,#f87171)}
-.rp-fr-seg.cat-appro,.rp-fr-leg i.cat-appro{background:var(--warn,#fbbf24)}
-.rp-fr-seg.cat-technique,.rp-fr-leg i.cat-technique{background:#a78bfa}
-.rp-fr-seg.cat-nettoyage,.rp-fr-leg i.cat-nettoyage{background:#38bdf8}
-.rp-fr-seg.cat-pause,.rp-fr-seg.cat-personnel,.rp-fr-seg.cat-autre{background:var(--border)}
-.rp-fr-seg{opacity:.85}
-.rp-fr-slot:hover .rp-fr-seg{opacity:1}
+/* Le ruban des phases occupe le bas du slot, le texte reste lisible au-dessus. */
+.rp-fr-fond{position:absolute;left:0;right:0;bottom:0;height:9px}
+.rp-fr-seg{position:absolute;top:0;bottom:0}
+.rp-fr-lbl{position:absolute;left:0;right:0;top:0;bottom:9px;display:flex;
+  flex-direction:column;justify-content:center;gap:1px;padding:2px 8px;
+  overflow:hidden;pointer-events:none}
+.rp-fr-lbl b{font-size:12.5px;font-weight:800;color:var(--text);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rp-fr-lbl span{font-size:11.5px;color:var(--text2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rp-fr-lbl i{font-size:11px;font-style:normal;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rp-fr-lbl u{font-size:11px;text-decoration:none;font-weight:700;color:var(--text2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Palette des etats de Saisieprod, reprise a l'identique. */
+.rp-fr-seg.mst-production,.rp-fr-leg i.mst-production{background:#22c55e}
+.rp-fr-seg.mst-calage,.rp-fr-leg i.mst-calage{background:#f97316}
+.rp-fr-seg.mst-arret,.rp-fr-leg i.mst-arret{background:#ef4444}
+.rp-fr-seg.mst-nettoyage,.rp-fr-leg i.mst-nettoyage{background:#c084fc}
+.rp-fr-seg.mst-autre,.rp-fr-leg i.mst-autre{background:#94a3b8}
+.rp-tip-ph i.mst-production{background:#22c55e}
+.rp-tip-ph i.mst-calage{background:#f97316}
+.rp-tip-ph i.mst-arret{background:#ef4444}
+.rp-tip-ph i.mst-nettoyage{background:#c084fc}
+.rp-tip-ph i.mst-autre{background:#94a3b8}
 
 .rp-fr-legende{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin-top:12px;
   font-size:12px;color:var(--muted)}
 .rp-fr-leg{display:inline-flex;align-items:center;gap:6px}
 .rp-fr-leg i{width:12px;height:12px;border-radius:3px;display:inline-block}
 .rp-fr-note{color:var(--muted);font-size:11.5px}
+
+/* ── Infobulle : meme forme que celle du planning ───────────── */
+.rp-tip{position:absolute;z-index:900;background:var(--card);border:1px solid var(--border);
+  border-radius:12px;padding:13px 16px;min-width:230px;max-width:360px;
+  pointer-events:none;box-shadow:0 12px 40px rgba(0,0,0,.35);
+  animation:rpTipIn var(--mo-fast,.15s) var(--ease-out,ease)}
+@keyframes rpTipIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.rp-tip-hdr{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.rp-tip-bar{width:5px;height:30px;border-radius:3px;flex-shrink:0;background:var(--accent)}
+.rp-tip-ref{font-size:14px;font-weight:800;color:var(--text)}
+.rp-tip-sub{font-size:11px;color:var(--warn,#fbbf24);margin-top:2px}
+.rp-tip-l{display:flex;justify-content:space-between;gap:14px;font-size:12.5px;
+  padding:2px 0}
+.rp-tip-l span{color:var(--muted)}
+.rp-tip-l b{color:var(--text);font-weight:600;text-align:right}
+.rp-tip-sep{height:1px;background:var(--border);margin:9px 0 7px}
+.rp-tip-ph{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:2px 0}
+.rp-tip-ph i{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.rp-tip-ph span{flex:1;color:var(--text2)}
+.rp-tip-ph b{color:var(--text);font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion: reduce){ .rp-tip{animation:none} }
 
 /* ── Remontees : citations et masquage ───────────────────────── */
 .rp-titre-ligne{display:flex;align-items:center;justify-content:space-between;gap:12px}
@@ -290,7 +332,8 @@ body.light .rp-fr-lbl{text-shadow:0 1px 2px rgba(255,255,255,.8)}
 .rp-mot.est-masque:hover{opacity:1}
 
 @media print{
-  .rp-fr-slot:hover{top:5px;bottom:5px;box-shadow:none}
-  .rp-fr-seg{opacity:1 !important;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .rp-fr-slot:hover{top:6px;bottom:6px;box-shadow:none;border-color:var(--border)}
+  .rp-fr-seg{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .rp-tip{display:none !important}
   #rp-masques{display:none !important}
 }
