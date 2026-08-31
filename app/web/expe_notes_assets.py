@@ -33,6 +33,9 @@ EXPE_NOTES_CSS = r"""
 .expe-note-badge.n-f{background:var(--danger);color:#ffffff}
 .expe-note-badge.n-vide{background:var(--bg);border:1px dashed var(--border);color:var(--muted);font-weight:600}
 .expe-note-badge.provisoire{box-shadow:0 0 0 2px color-mix(in srgb,var(--muted) 45%,transparent)}
+/* Note de depart : aucun avis n'a encore ete emis. Le contour en pointilles la
+   distingue d'une note gagnee, sans la faire disparaitre de la colonne. */
+.expe-note-badge.depart{opacity:.72;outline:1px dashed color-mix(in srgb,var(--muted) 70%,transparent);outline-offset:1px}
 .expe-note-cell{display:flex;align-items:center;gap:8px}
 .expe-note-cell-txt{font-size:11px;color:var(--muted);line-height:1.3}
 
@@ -196,6 +199,9 @@ const EXPE_NOTE_LIBELLES={
 const EXPE_AJUST_MAX=3;
 // En dessous, la note s'affiche mais reste marquée provisoire (idem serveur).
 const EXPE_NOTE_SEUIL_FIABILITE=3;
+// Doit rester aligné sur expe_notes.NOTE_DEPART — sert aux libellés, pas au
+// calcul : la valeur affichée vient toujours du serveur.
+const EXPE_NOTE_DEPART=5;
 
 function expeNoteLibelle(lettre){
   return EXPE_NOTE_LIBELLES[String(lettre||'').toUpperCase()]||'Non noté';
@@ -218,20 +224,33 @@ function expeNoteBadge(source,opts){
   const el=document.createElement('span');
   el.className='expe-note-badge'+(o.grand?' grand':'');
   if(!lettre){
+    // Cache jamais calculé (transporteur créé avant la migration) : on ne
+    // fabrique pas une lettre côté écran, c'est le serveur qui la donne.
     el.classList.add('n-vide');
     el.textContent='—';
-    el.title='Non noté — aucun avis émis sur ce transporteur';
+    el.title='Note non calculée — elle apparaîtra au prochain enregistrement.';
     return el;
   }
   el.classList.add('n-'+lettre.toLowerCase());
   el.textContent=lettre;
-  if(nb>0&&nb<EXPE_NOTE_SEUIL_FIABILITE)el.classList.add('provisoire');
+  if(!nb)el.classList.add('depart');
+  else if(nb<EXPE_NOTE_SEUIL_FIABILITE)el.classList.add('provisoire');
   const bouts=[lettre+' — '+expeNoteLibelle(lettre)];
   if(valeur!=null)bouts.push(expeNoteFmt(valeur)+'/10');
-  bouts.push(nb+' avis');
-  if(nb>0&&nb<EXPE_NOTE_SEUIL_FIABILITE)bouts.push('note provisoire');
+  if(!nb){
+    bouts.push('note de départ, aucun avis émis');
+  }else{
+    bouts.push(nb+' avis');
+    if(nb<EXPE_NOTE_SEUIL_FIABILITE)bouts.push('note provisoire');
+  }
   el.title=bouts.join(' · ');
   return el;
+}
+
+// Même badge, en chaîne HTML — le comparateur construit ses cartes en
+// innerHTML et ne peut pas recevoir un noeud.
+function expeNoteBadgeHtml(source,opts){
+  return expeNoteBadge(source,opts).outerHTML;
 }
 
 function expeIconAlerte(size){
@@ -582,7 +601,7 @@ function renderExpeTrpNoteOnglet(){
 
   const meta=[];
   if(note.valeur!=null)meta.push(expeNoteFmt(note.valeur)+'/10');
-  meta.push((note.nb_avis||0)+' avis');
+  meta.push(note.nb_avis?((note.nb_avis)+' avis'):'note de départ, aucun avis');
   if(note.nb_alertes)meta.push(note.nb_alertes+' signalement'+(note.nb_alertes>1?'s':''));
   if(note.ajustement)meta.push('ajustement manuel '+(note.ajustement>0?'+':'')+expeNoteFmt(note.ajustement)+' pt');
   wrap.appendChild(h('div',{className:'expe-nq-entete'},
@@ -591,8 +610,10 @@ function renderExpeTrpNoteOnglet(){
       h('div',{className:'expe-nq-lib'},expeNoteLibelle(note.lettre)),
       h('div',{className:'expe-nq-meta'},meta.join(' · ')),
       note.provisoire?h('span',{className:'expe-nq-prov'},'Note provisoire — moins de '+EXPE_NOTE_SEUIL_FIABILITE+' avis'):null,
-      (note.valeur==null&&!(note.nb_avis||0))
-        ?h('div',{className:'expe-nq-meta'},'Aucun avis émis : la note apparaîtra dès le premier signalement ou la première appréciation.')
+      note.par_defaut
+        ?h('div',{className:'expe-nq-meta'},
+            'Tous les transporteurs partent de '+expeNoteFmt(EXPE_NOTE_DEPART)+'/10. '
+            +'Cette note de départ pèse comme un avis, et s\'efface à mesure que de vrais avis arrivent.')
         :null
     )
   ));
@@ -871,6 +892,11 @@ function renderExpeZones(){
       h('span',{className:'expe-zn-dest-cp'},'Département '+(d.departement||'—')),
       meta.length?h('span',{className:'expe-zn-dest-meta'},meta.join(' · ')):null
     ));
+    // Un nombre sans unite lisible ne veut rien dire : la legende est dans
+    // l'ecran, pas seulement dans l'infobulle du chiffre.
+    corps.appendChild(h('div',{className:'expe-zn-legende',style:{margin:'0 0 12px'}},
+      'Score de priorité sur 100 : note de confiance 55 %, expéditions déjà faites '
+      +'vers ce département 30 %, ancienneté de la dernière 15 %.'));
     const liste=h('div',{className:'expe-zn-liste'});
     const rows=d.transporteurs||[];
     if(!rows.length){
@@ -884,7 +910,7 @@ function renderExpeZones(){
       const detail=[];
       detail.push(r.nb_expeditions+' expédition'+(r.nb_expeditions>1?'s':'')+' sur ce département');
       if(r.derniere_expedition)detail.push('dernière le '+r.derniere_expedition);
-      detail.push(r.nb_avis+' avis');
+      detail.push(r.nb_avis?(r.nb_avis+' avis'):'note de départ');
       liste.appendChild(h('div',{className:'expe-zn-item'+(r.rang===1?' premier':'')+(r.eligible_zone?'':' hors-zone')},
         h('span',{className:'expe-zn-rang'},String(r.rang)),
         expeNoteBadge(r),
@@ -894,8 +920,8 @@ function renderExpeZones(){
             ...tags),
           h('div',{className:'expe-zn-meta'},detail.join(' · '))
         ),
-        h('span',{className:'expe-zn-score',title:'Score de priorité : note de confiance 55 %, expérience sur la zone 30 %, fraîcheur 15 %'},
-          r.score>0?(Math.round(r.score)+' pts'):'—')
+        h('span',{className:'expe-zn-score',title:'Score de priorité sur 100 : note de confiance 55 %, expéditions déjà faites vers ce département 30 %, ancienneté de la dernière 15 %'},
+          r.score>0?(Math.round(r.score)+' / 100'):'—')
       ));
     });
     corps.appendChild(liste);

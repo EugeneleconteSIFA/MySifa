@@ -250,6 +250,35 @@ def _saisies_du_dossier(conn, ref: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def motifs_absence_matiere(conn, ref: str) -> list[dict]:
+    """Ce que l'operateur a repondu en cloturant sans avoir scanne un code.
+
+    Definition unique, partagee par le traceur et par le rapport FSC par
+    dossier (app/routers/fabrication.py) : une chaine vide expliquee et une
+    chaine vide par oubli ont exactement la meme allure dans la base, et les
+    deux vues doivent trancher de la meme facon.
+
+    Renvoie une liste vide -- jamais une erreur -- si la base n'a pas encore
+    recu la migration `matiere_absente_motif` : une vue de tracabilite doit
+    rester lisible sur une base en retard.
+    """
+    try:
+        rows = conn.execute(
+            """SELECT matiere_absente_motif AS motif, operateur, date_operation,
+                      machine
+                 FROM production_data
+                WHERE TRIM(COALESCE(no_dossier,''))=?
+                  AND operation_code='89'
+                  AND COALESCE(TRIM(matiere_absente_motif),'') <> ''
+                ORDER BY date_operation DESC
+                LIMIT ?""",
+            (ref, _MAX_NOEUDS),
+        ).fetchall()
+    except Exception:
+        return []
+    return [dict(r) for r in rows]
+
+
 def _lots_du_dossier(conn, ref: str) -> list[dict]:
     """Lots de produit fini issus d'un dossier, avec leur emplacement actuel."""
     rows = conn.execute(
@@ -535,6 +564,7 @@ def _chaine_dossier(conn, ref: str) -> dict:
     ref_canon = (dossier or {}).get("reference") or ref
 
     matieres = _matieres_du_dossier(conn, ref_canon)
+    motifs_absence = motifs_absence_matiere(conn, ref_canon)
     saisies = _saisies_du_dossier(conn, ref_canon)
     lots = _lots_du_dossier(conn, ref_canon)
     mouvements = _mouvements_des_lots(conn, [l["id"] for l in lots], ref_canon)
@@ -553,8 +583,24 @@ def _chaine_dossier(conn, ref: str) -> dict:
     # Rupture de chaîne : ce que le traceur ne peut PAS démontrer. Une chaîne
     # incomplète affichée sans le dire vaut moins que pas de chaîne du tout.
     ruptures = []
-    if fsc_requis and not matieres:
-        ruptures.append("Aucune bobine tracée sur ce dossier certifié.")
+    if not matieres:
+        # Une chaine matiere vide ne dit pas la meme chose selon qu'elle est
+        # expliquee ou muette. L'explication de l'operateur, si elle existe,
+        # remonte ICI : c'est la premiere chose qu'un auditeur cherche quand
+        # il ouvre un dossier sans bobine.
+        if motifs_absence:
+            m0 = motifs_absence[0]
+            ruptures.append(
+                "Aucune bobine scannée sur ce dossier. Réponse de l'opérateur "
+                + (("« " + str(m0.get("motif") or "").strip() + " »") if m0.get("motif") else "—")
+                + (" (" + m0["operateur"] + ")" if m0.get("operateur") else "")
+                + " — déclaratif, non vérifiable par la chaîne."
+            )
+        elif fsc_requis:
+            ruptures.append(
+                "Aucune bobine tracée sur ce dossier certifié, et aucune "
+                "explication saisie à la clôture."
+            )
     if fsc_requis and matieres and nb_conformes < len(matieres):
         ruptures.append(
             f"{len(matieres) - nb_conformes} bobine(s) ne satisfont pas le claim exigé."
@@ -574,6 +620,7 @@ def _chaine_dossier(conn, ref: str) -> dict:
         "racine": {"type": "dossier", "id": ref_canon},
         "dossier": dossier,
         "matieres": matieres,
+        "motifs_absence": motifs_absence,
         "saisies": saisies,
         "lots": lots,
         "mouvements": mouvements,
@@ -582,6 +629,7 @@ def _chaine_dossier(conn, ref: str) -> dict:
             "fsc_requis": fsc_requis,
             "fsc_type_requis": (dossier or {}).get("fsc_type_requis") or "",
             "nb_bobines": len(matieres),
+            "matiere_absente_expliquee": bool(motifs_absence),
             "nb_bobines_conformes": nb_conformes if fsc_requis else None,
             "nb_lots": len(lots),
             "nb_lots_fsc": sum(1 for l in lots if int(l.get("fsc") or 0) == 1),

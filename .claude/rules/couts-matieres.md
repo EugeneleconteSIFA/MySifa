@@ -80,6 +80,23 @@ fourchette min–max poussait le prix — la vraie raison de venir ici — hors 
 regard. Il se lit et se règle sur `/pricing/mystock/<id>`, que le bouton
 **Fiche** ouvre depuis la ligne.
 
+**Colonne « Dernier prix »** — la date de la dernière saisie du prix, et l'âge
+en clair dessous (« il y a 4 mois »), parce que personne ne soustrait de tête
+sur quarante lignes. Au-delà d'un an l'âge s'ambre, au-delà de deux ans la
+ligne passe au rouge : un rappel, aucune règle de gestion derrière. La cellule
+se réécrit après une saisie en place, sans reconstruire le tableau.
+
+La date vient de `mp_prix_historique` (`_dernier_prix_par_matiere`), la seule
+table qui date une SAISIE, avec repli sur `mp_matiere_prix.updated_at` — et
+uniquement sur la ligne `principal = 1`, celle du prix affiché.
+
+**Reprise de l'historique** — `scripts/reprise_historique_prix.py --simulation`
+puis `--appliquer` pose les prix en vigueur comme première ligne d'historique
+(`origine = 'reprise'`, `prix_avant = NULL`, `created_at = updated_at`). Sans
+lui, une matière dont le prix n'a jamais bougé depuis la mise en service de
+l'historique affiche « jamais revu », ce qui est faux. Idempotent : ni les
+déclinaisons déjà reprises, ni celles qui ont un vrai mouvement.
+
 Ce que la ligne garde : le camion (tarif du fournisseur pour cette matière),
 Fiche, et MyStock ↗. Le champ se verrouille quand la matière a plusieurs
 fournisseurs — un prix unique en écraserait un avec le tarif de l'autre — et la

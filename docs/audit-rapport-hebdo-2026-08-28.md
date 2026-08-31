@@ -801,3 +801,63 @@ resterait un lien mort.
 
 **Le demarrage de l'application reste a verifier sur v1** : rien n'a pu etre
 boote ici.
+
+### Supprimer une reunion
+
+Une corbeille par ligne dans le tableau. Elle reste a 35 % d'opacite tant qu'on
+ne survole pas sa ligne : c'est une action destructrice, elle n'a pas a attirer
+le clic. Le clic dessus ne peut pas ouvrir la reunion — la corbeille est testee
+avant la ligne dans la delegation, et arrete la propagation.
+
+La confirmation passe par une fenetre du module, pas par un `confirm()` natif
+(qui n'a ni le theme ni la langue du reste), et elle nomme ce qu'on efface :
+le titre de la reunion, plus le rappel que ses notes et ses actions partent
+avec elle et que les remontees de production, elles, ne sont pas touchees.
+
+Si la reunion supprimee est celle qui est ouverte a l'ecran, on repasse a la
+liste : la laisser affichee avec un identifiant qui n'existe plus produirait une
+404 au premier enregistrement.
+
+L'endpoint `DELETE /api/reunions/{id}` existait deja (il supprime aussi
+`reunion_actions` et `reunion_participants`) — rien de neuf cote serveur.
+
+`tests/test_reunions_rendu.js` : 7 cas de plus (une corbeille par ligne,
+identifiant et titre portes, intitule accessible, icone SVG et non emoji,
+colonne distincte de l'etat, titre echappe dans l'attribut).
+
+### Frise : le texte etait coupe, et l'ecran a moitie vide
+
+Deux defauts signales sur la meme capture.
+
+**« Ce n'est pas net »** — ce n'etait pas un probleme de rendu mais de place.
+Le libelle d'un slot porte quatre lignes (dossier, client, reference + format,
+quantite) dans une piste de 74 px dont 9 px sont pris par le ruban des phases :
+61 px utiles. Aucune hauteur de ligne n'etait fixee, donc celle du theme
+s'appliquait — a 1,35 les quatre lignes reclament 65 px. Elles debordaient, et
+comme le bloc est centre verticalement, la coupe tombait en plein milieu des
+lettres, en haut comme en bas. D'ou l'impression de flou.
+
+Correction : hauteur de ligne fixee a 1,25 (elle decide de la mise en page, elle
+ne doit pas etre subie) et piste portee a 92 px. Le calcul est refait : 66 px de
+texte pour 75 px disponibles.
+
+**Les slots etroits** rendaient quatre « … » superposes, ce qui n'apprend rien.
+Le libelle a maintenant trois densites, posees selon la largeur du slot en
+pourcentage de la piste — la meme unite que la geometrie qui arrive du serveur :
+au-dela de 16 % les quatre lignes, entre 9 et 16 % la quantite tombe, en dessous
+il ne reste que le numero de dossier. Au survol le slot s'ouvre et tout revient.
+
+**La largeur** — le conteneur MyProd plafonne a 1200 px pour toute
+l'application. Les Points de production sont le seul ecran qui pose une frise et
+une colonne de notes cote a cote : a 1200 px la frise ecrase ses libelles alors
+que la moitie droite de l'ecran est vide. La classe `.container.reu-large`
+(1720 px) est posee par `render()` pour ce seul sous-onglet, et la colonne de
+notes passe de 380 px figes a `clamp(340px, 24%, 440px)` : elle respire sur un
+grand ecran sans manger la frise sur un petit.
+
+La frise etant partagee, l'onglet Retour de prod beneficie des memes deux
+premieres corrections.
+
+`tests/test_retour_prod_rendu.js` : 7 cas de plus sur les seuils de densite
+(bornes incluses, largeur absente traitee comme etroite, densite qui ne remplace
+pas la classe de debordement).

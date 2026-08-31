@@ -246,7 +246,7 @@ body.reduce-anim .rp-btn-mini:hover,body.reduce-anim .rp-vig:hover .v-nb{transfo
 .rp-fr-jour em{font-size:10.5px;font-style:normal;color:var(--muted)}
 
 .rp-fr-ligne{margin-top:8px}
-.rp-fr-ligne .rp-fr-piste{background:var(--bg);border-radius:8px;height:74px}
+.rp-fr-ligne .rp-fr-piste{background:var(--bg);border-radius:8px;height:92px}
 /* Separation des journees : elle traverse toutes les pistes, sinon on ne sait
    plus ou finit un jour. Pointille quand des journees entieres sont repliees. */
 .rp-fr-sep{position:absolute;top:-6px;bottom:-6px;width:0;
@@ -272,16 +272,31 @@ body.reduce-anim .rp-btn-mini:hover,body.reduce-anim .rp-vig:hover .v-nb{transfo
 .rp-fr-fond{position:absolute;left:0;right:0;bottom:0;height:9px}
 .rp-fr-seg{position:absolute;top:0;bottom:0}
 .rp-fr-lbl{position:absolute;left:0;right:0;top:0;bottom:9px;display:flex;
-  flex-direction:column;justify-content:center;gap:1px;padding:2px 8px;
+  flex-direction:column;justify-content:center;gap:2px;padding:4px 9px;
   overflow:hidden;pointer-events:none}
-.rp-fr-lbl b{font-size:12.5px;font-weight:800;color:var(--text);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rp-fr-lbl span{font-size:11.5px;color:var(--text2);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rp-fr-lbl i{font-size:11px;font-style:normal;color:var(--muted);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rp-fr-lbl u{font-size:11px;text-decoration:none;font-weight:700;color:var(--text2);
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Hauteur de ligne fixee et non heritee : c'est elle qui decide si les quatre
+   lignes tiennent. Heritee du theme, elle les faisait deborder et le texte
+   sortait coupe en deux au ras du ruban. */
+.rp-fr-lbl b,.rp-fr-lbl span,.rp-fr-lbl i,.rp-fr-lbl u{
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25}
+.rp-fr-lbl b{font-size:13px;font-weight:800;color:var(--text)}
+.rp-fr-lbl span{font-size:12px;color:var(--text2)}
+.rp-fr-lbl i{font-size:11.5px;font-style:normal;color:var(--muted)}
+.rp-fr-lbl u{font-size:11.5px;text-decoration:none;font-weight:700;color:var(--text2)}
+
+/* Un slot etroit ne peut pas porter quatre lignes : elles sortent toutes en
+   « … », ce qui n'apprend rien. On retire les moins utiles plutot que de
+   toutes les tronquer — le survol et l'infobulle donnent le reste. */
+.rp-fr-slot.moyen .rp-fr-lbl u{display:none}
+.rp-fr-slot.etroit .rp-fr-lbl span,
+.rp-fr-slot.etroit .rp-fr-lbl i,
+.rp-fr-slot.etroit .rp-fr-lbl u{display:none}
+.rp-fr-slot.etroit .rp-fr-lbl{padding:4px 6px}
+/* Au survol le slot s'ouvre : tout revient, il y a la place. */
+.rp-fr-slot.moyen:hover .rp-fr-lbl u,
+.rp-fr-slot.etroit:hover .rp-fr-lbl span,
+.rp-fr-slot.etroit:hover .rp-fr-lbl i,
+.rp-fr-slot.etroit:hover .rp-fr-lbl u{display:block}
 
 /* Palette des etats de Saisieprod, reprise a l'identique. */
 .rp-fr-seg.mst-production,.rp-fr-leg i.mst-production{background:#22c55e}

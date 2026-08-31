@@ -29,6 +29,7 @@
     ouverteId: null,                   // reunion laissee ouverte au demarrage
     notesLocal: null,                  // frappe non encore enregistree
     notesEtat: '',
+    aSupprimer: null,                  // reunion dont la suppression est demandee
     erreur: null,
     contexteCharge: false
   };
@@ -67,6 +68,9 @@
       throw new Error(msg);
     }
     return r.status === 204 ? null : r.json();
+  }
+  function supprimerA(path){
+    return appel(path, {method: 'DELETE'});
   }
   function poster(path, corps){
     return appel(path, {method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -117,6 +121,14 @@
 
   /* Squelette --------------------------------------------------- */
 
+  var ICONE_CORBEILLE =
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + '<polyline points="3 6 5 6 21 6"/>'
+    + '<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>'
+    + '<path d="M10 11v6"/><path d="M14 11v6"/>'
+    + '<path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
+
   function squelette(){
     return ''
       + '<div class="reu-barre">'
@@ -140,6 +152,14 @@
       +     '<button type="button" class="reu-btn ghost" data-r="annuler">Annuler</button>'
       +     '<button type="button" class="reu-btn" data-r="creer">Lancer</button>'
       +   '</div>'
+      + '</div></div>'
+      + '<div class="reu-modal-ov" id="reu-mov-sup"><div class="reu-modal">'
+      +   '<h3>Supprimer cette r&eacute;union ?</h3>'
+      +   '<div class="reu-confirme" id="reu-sup-quoi"></div>'
+      +   '<div class="reu-fin">'
+      +     '<button type="button" class="reu-btn ghost" data-r="suppr-non">Annuler</button>'
+      +     '<button type="button" class="reu-btn danger" data-r="suppr-oui">Supprimer</button>'
+      +   '</div>'
       + '</div></div>';
   }
 
@@ -156,7 +176,7 @@
     }
     return '<table class="reu-tbl"><thead><tr><th>R&eacute;union</th>'
       + '<th>P&eacute;riode analys&eacute;e</th><th>Participants</th>'
-      + '<th>Actions</th><th>&Eacute;tat</th></tr></thead><tbody>'
+      + '<th>Actions</th><th>&Eacute;tat</th><th></th></tr></thead><tbody>'
       + l.map(function(r){
           var periode = r.date_debut === r.date_fin
             ? dateFr(r.date_debut)
@@ -176,7 +196,13 @@
             + '<td>' + act + '</td>'
             + '<td>' + (r.ouverte
                 ? '<span class="reu-pastille ouverte">en cours</span>'
-                : '<span class="reu-pastille close">close</span>') + '</td></tr>';
+                : '<span class="reu-pastille close">close</span>') + '</td>'
+            + '<td class="reu-td-sup"><button type="button" class="reu-sup" '
+            + 'data-suppr-reunion="' + escA(r.id) + '" '
+            + 'data-suppr-titre="' + escA(r.titre || '') + '" '
+            + 'title="Supprimer la r&eacute;union" '
+            + 'aria-label="Supprimer la r&eacute;union">' + ICONE_CORBEILLE + '</button></td>'
+            + '</tr>';
         }).join('')
       + '</tbody></table>';
   }
@@ -421,6 +447,13 @@
 
   function brancher(rac){
     rac.addEventListener('click', async function(ev){
+      var corb = ev.target.closest ? ev.target.closest('[data-suppr-reunion]') : null;
+      if(corb && rac.contains(corb)){
+        ev.stopPropagation();
+        demanderSuppression(rac, corb.getAttribute('data-suppr-reunion'),
+                                 corb.getAttribute('data-suppr-titre'));
+        return;
+      }
       var el = ev.target.closest ? ev.target.closest('[data-r],[data-sup]') : null;
       if(el && rac.contains(el)){
         var act = el.getAttribute('data-r');
@@ -437,6 +470,8 @@
         if(act === 'imprimer'){ imprimer(); return; }
         if(act === 'clore'){ await clore(); return; }
         if(act === 'ajout-action'){ await ajouterAction(rac); return; }
+        if(act === 'suppr-non'){ fermerSuppression(rac); return; }
+        if(act === 'suppr-oui'){ await confirmerSuppression(rac); return; }
         var sup = el.getAttribute('data-sup');
         if(sup){ await majAction(sup, {texte: ''}); return; }
       }
@@ -486,6 +521,54 @@
     if(mov) mov.addEventListener('click', function(ev){
       if(ev.target === mov) fermerModale(rac);
     });
+    var movSup = rac.querySelector('#reu-mov-sup');
+    if(movSup) movSup.addEventListener('click', function(ev){
+      if(ev.target === movSup) fermerSuppression(rac);
+    });
+  }
+
+  /* Suppression -------------------------------------------------
+     Une reunion emporte ses notes et ses actions : la confirmation nomme ce
+     qu'on efface, et la fenetre reste dans la page (pas de confirm() natif,
+     qui n'a ni le theme ni la langue du reste). */
+
+  function demanderSuppression(rac, id, titre){
+    S.aSupprimer = {id: id, titre: titre || ''};
+    var quoi = rac.querySelector('#reu-sup-quoi');
+    if(quoi){
+      quoi.innerHTML = '<b>' + esc(S.aSupprimer.titre || 'Sans titre') + '</b><br>'
+        + 'Ses notes et ses actions sont supprim&eacute;es avec elle. '
+        + 'Les remont&eacute;es de production ne sont pas touch&eacute;es.';
+    }
+    var movSup = rac.querySelector('#reu-mov-sup');
+    if(movSup) movSup.classList.add('open');
+  }
+
+  function fermerSuppression(rac){
+    S.aSupprimer = null;
+    var movSup = rac.querySelector('#reu-mov-sup');
+    if(movSup) movSup.classList.remove('open');
+  }
+
+  async function confirmerSuppression(rac){
+    var cible = S.aSupprimer;
+    if(!cible) return;
+    try{
+      await supprimerA('/api/reunions/' + encodeURIComponent(cible.id));
+      fermerSuppression(rac);
+      // La reunion ouverte peut etre celle qu'on vient d'effacer : on ne la
+      // laisse pas a l'ecran avec un identifiant qui n'existe plus.
+      if(S.reunion && String(S.reunion.id) === String(cible.id)){
+        S.reunion = null; S.prod = null; S.notesLocal = null; S.vue = 'liste';
+      }
+      if(String(S.ouverteId) === String(cible.id)) S.ouverteId = null;
+      await chargerListe();
+      peindre();
+      toast('Reunion supprimee.', 'info');
+    }catch(e){
+      fermerSuppression(rac);
+      toast(e.message, 'danger');
+    }
   }
 
   async function ouvrir(id){

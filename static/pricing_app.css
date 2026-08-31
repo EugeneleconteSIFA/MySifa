@@ -478,7 +478,7 @@ table.recap-table td:last-child{border-right:none}
    dire ici puisque le prix d'achat est le même sur toutes.
    Largeurs fixées par le <colgroup>. Sans `table-layout:fixed`, la colonne la
    plus bavarde pousse le prix hors de l'écran. */
-table.msl-table{table-layout:fixed;min-width:720px}
+table.msl-table{table-layout:fixed;min-width:880px}
 table.msl-table th,table.msl-table td{padding:11px 12px}
 /* La ligne n'ouvre rien : le seul geste qu'elle propose est la saisie du prix,
    et le curseur main promettait un clic qui n'existe plus. */
@@ -708,6 +708,20 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 .msl-prix-etat{font-size:11px;font-weight:700;white-space:nowrap;color:var(--muted)}
 .msl-prix-etat.ok{color:var(--success,#16a34a)}
 .msl-prix-etat.ko{color:var(--danger)}
+
+/* ── « Dernier prix » : la date, et surtout l'âge ───────────────────────────
+   La date seule ne se lit pas sur quarante lignes — personne ne soustrait de
+   tête. L'âge est donc écrit dessous, et c'est lui qui porte la couleur :
+   au-delà d'un an on signale, au-delà de deux ans on alerte. Rien n'est
+   bloqué, c'est un rappel, pas une règle de gestion. */
+.msl-majcell{white-space:nowrap}
+.msl-maj{display:flex;flex-direction:column;gap:1px;line-height:1.25}
+.msl-maj-date{font-size:12px;font-variant-numeric:tabular-nums;color:var(--text2,var(--text))}
+.msl-maj-age{font-size:10px;font-weight:600;color:var(--muted)}
+.msl-maj.vieux .msl-maj-age{color:var(--warn,#d97706)}
+.msl-maj.tres-vieux .msl-maj-date{color:var(--danger)}
+.msl-maj.tres-vieux .msl-maj-age{color:var(--danger);font-weight:700}
+.msl-maj-jamais{font-size:12px;font-style:italic;color:var(--muted)}
 
 /* ── « Ce qui fait bouger ce coût » — fiche produit MyStock ─────────────────
    Le grammage change le coût d'un produit sans que le prix d'achat ait bougé ;
