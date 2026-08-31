@@ -2937,6 +2937,29 @@
     }
   }
 
+  /* La part de transport dans le coût, en euros et en pourcentage.
+
+     Elle était invisible : le transport entre bien dans chaque coût au m²,
+     mais aucun écran ne le nommait, et la multiplication affichée ne tombait
+     donc pas juste. Sur une matière importée, le transport peut représenter
+     un dixième du prix de revient — c'est le premier levier de négociation, et
+     il n'avait aucune ligne à lui. */
+  function transportRecapHtml(cost) {
+    const comps = (cost && cost.components) || [];
+    let total = 0;
+    comps.forEach((c) => {
+      const b = c.breakdown;
+      if (b) total += parseFloat(b.transport_eur_m2 || 0);
+    });
+    if (!total) return "";
+    const revient = parseFloat(cost.total_eur_per_m2 || 0);
+    const pct = revient ? (total / revient) * 100 : 0;
+    return `<div class="breakdown-legend msp-transport">
+      <div><span>dont transport</span>
+        <span><strong>${escHtml(fmtEurM2(total))}</strong> <span class="muted">${escHtml(fmtPct(pct))} du revient</span></span></div>
+    </div>`;
+  }
+
   function productRecapHtml(cost) {
     if (!cost) return '<div class="empty">Sélectionnez les composants</div>';
     const comps = cost.components.map((c) => ({ ...c, price_eur_per_m2: c.price_eur_per_m2 }));
@@ -2944,6 +2967,7 @@
       <div class="big-label">Coût total</div>
       <div class="big-price">${fmtEurM2(cost.total_eur_per_m2)}</div>
       ${priceBreakdownHtml({ components: comps, total: cost.total_eur_per_m2 })}
+      ${transportRecapHtml(cost)}
       <div class="breakdown-legend" style="margin-top:14px">
         <div><span>Marge (${fmtNum(cost.margin_pct || 0, 2, 2)} %)</span><span>${fmtEurM2(cost.margin_eur_m2)}</span></div>
         <div><span>Prix de vente</span><span><strong>${fmtEurM2(cost.sell_price_eur_m2)}</strong></span></div>
@@ -3660,25 +3684,70 @@
   function msLevierBlocHtml(comp, roleLabel) {
     const d = (S.msDecls || []).find((x) => x.id === comp.declinaison_id);
     if (!d) return "";
-    const perKg = (d.price_basis || "PER_KG") === "PER_KG";
     const poids = grammageRetenu(comp.grammage_gsm, comp.perte_pct) / 1000;
 
-    // Le coût de CE composant vient du serveur, avec le reste de l'aperçu :
-    // le recomposer ici rouvrirait la porte à deux chiffres différents.
+    // Le coût de CE composant vient du serveur, avec sa décomposition : le
+    // recomposer ici rouvrirait la porte à deux chiffres différents.
     const cc = ((S.msProdPreview && S.msProdPreview.components) || [])
       .find((x) => x.material_id === comp.declinaison_id);
+    const b = (cc && cc.breakdown) || null;
     const cout = cc ? fmtEurM2(cc.price_eur_per_m2) : "—";
 
-    const formule = perKg
-      ? `${escHtml(fmtNum(d.unit_price, 3, 3))} €/kg <span class="muted">×</span> `
-        + `${escHtml(fmtNum(poids, 4, 4))} kg/m² <span class="muted">→</span> <strong>${escHtml(cout)}</strong>`
-      : `${escHtml(fmtNum(d.unit_price, 4, 4))} €/m² <span class="muted">→</span> <strong>${escHtml(cout)}</strong>`;
+    const cur = ((b && b.currency) || "EUR").toUpperCase();
+    const perKg = ((b && b.price_basis) || d.price_basis || "PER_KG") === "PER_KG";
+    const sym = CUR_SYM[cur] || "€";
+    const unite = `${sym}/${perKg ? "kg" : "m²"}`;
+
+    const prix = b ? parseFloat(b.unit_price_src || 0) : parseFloat(d.unit_price || 0);
+    const transp = b ? parseFloat(b.transport_src || 0) : 0;
+    const taxes = b ? parseFloat(b.taxes_src || 0) : 0;
+    const sousTotal = prix + transp + taxes;
+    const taux = b ? parseFloat(b.fx_rate || 1) : 1;
+
+    /* La chaîne, terme à terme.
+
+       Elle affichait « 4,200 €/kg × 0,0240 kg/m² → 0,1098 €/m² » — une
+       multiplication qui ne tombe pas juste, parce que le transport et les
+       taxes étaient fondus dans le résultat sans être nommés. Un chiffre qu'on
+       ne peut pas refaire de tête passe pour un chiffre faux, et il avait
+       raison de le paraître : il manquait deux termes.
+
+       Les termes nuls sont omis — écrire « + 0,000 de taxes » sur une matière
+       française ajoute du bruit à une ligne qui doit se lire d'un coup. */
+    const termes = [`${escHtml(fmtNum(prix, 3, 3))} ${escHtml(unite)}`];
+    if (transp) termes.push(`<span class="msp-terme t-transport">+ ${escHtml(fmtNum(transp, 3, 3))} transport</span>`);
+    if (taxes) termes.push(`<span class="msp-terme t-taxe">+ ${escHtml(fmtNum(taxes, 3, 3))} taxes</span>`);
+
+    const gauche = termes.length > 1
+      ? `(${termes.join(" ")}) <span class="muted">=</span> <strong>${escHtml(fmtNum(sousTotal, 3, 3))} ${escHtml(unite)}</strong>`
+      : termes[0];
+
+    const chaine = perKg
+      ? `${gauche} <span class="muted">×</span> ${escHtml(fmtNum(poids, 4, 4))} kg/m²`
+        + (taux !== 1 ? ` <span class="muted">×</span> ${escHtml(fmtNum(taux, 4, 4))}` : "")
+        + ` <span class="muted">→</span> <strong class="msp-lev-total">${escHtml(cout)}</strong>`
+      : `${gauche}`
+        + (taux !== 1 ? ` <span class="muted">×</span> ${escHtml(fmtNum(taux, 4, 4))}` : "")
+        + ` <span class="muted">→</span> <strong class="msp-lev-total">${escHtml(cout)}</strong>`;
 
     // `mentions` et non `notes` : ce sont des phrases que MySifa compose
     // lui-même, jamais de la saisie utilisateur. Le detecteur de prose brute
     // se fie au nom de la variable, et un nom mal choisi le ferait crier a
     // tort — ou, l'inverse, taire un vrai trou ailleurs.
     const mentions = [];
+    if (transp) {
+      const pct = b ? parseFloat(b.transport_pct_effective || 0) : 0;
+      const eurM2 = b ? parseFloat(b.transport_eur_m2 || 0) : 0;
+      mentions.push(`Transport : <strong>${escHtml(fmtNum(transp, 3, 3))} ${escHtml(unite)}</strong>`
+        + (pct ? ` — ${escHtml(fmtPct(pct))} du prix d'achat` : "")
+        + (eurM2 ? `, soit ${escHtml(fmtEurM2(eurM2))} sur ce produit` : "")
+        + ". Il se règle sur le tarif du fournisseur.");
+    }
+    if (taxes) {
+      const tp = b ? parseFloat(b.taxe_pct || 0) : 0;
+      mentions.push(`Taxes d'importation : <strong>${escHtml(fmtNum(taxes, 3, 3))} ${escHtml(unite)}</strong>`
+        + (tp ? ` — ${escHtml(fmtPct(tp))} du sous-total` : "") + ".");
+    }
     if (perKg && comp.grammage_gsm) {
       mentions.push(`Le poids au m² <strong>est</strong> le grammage de ce produit : `
         + `${escHtml(fmtNum(comp.grammage_gsm, 0, 1))} g/m²`
@@ -3690,15 +3759,37 @@
       mentions.push("Achat au m² : la quantité posée ne change pas ce coût au m².");
     }
 
+    const tarifBtn = d.fournisseur_id
+      ? `<button type="button" class="link-btn msp-lev-tarif" data-msp-tarif="${d.fournisseur_id}|${d.matiere_id}"
+           title="Ouvrir le tarif de ce fournisseur pour cette matière">tarif fournisseur</button>`
+      : "";
+
     return `<div class="msp-lev">
       <div class="msp-lev-head">
         <span class="msp-lev-role">${escHtml(roleLabel)}</span>
         <strong>${escHtml(d.reference)}</strong>
         <span class="muted">${escHtml(d.designation || "")}</span>
+        ${tarifBtn}
       </div>
-      <div class="msp-lev-formule">${formule}</div>
+      <div class="msp-lev-formule">${chaine}</div>
       ${mentions.map((m) => `<div class="msp-lev-precision">${m}</div>`).join("")}
     </div>`;
+  }
+
+  /* Le transport nommé dans la chaîne renvoie à l'endroit où il se règle :
+     le tarif du fournisseur POUR CETTE MATIÈRE. Nommer un coût sans donner le
+     chemin pour le corriger n'avance personne. */
+  function bindMspTarif() {
+    document.querySelectorAll("[data-msp-tarif]").forEach((btn) => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const [fid, mid] = btn.getAttribute("data-msp-tarif").split("|");
+        await openTarifModal(parseInt(fid, 10), parseInt(mid, 10), async () => {
+          await loadMsDeclinaisons();
+          refreshMsProductPreview();
+        });
+      };
+    });
   }
 
   function msProductLeviersHtml() {
@@ -3827,7 +3918,10 @@
           : "");
     }
     const lev = document.getElementById("msp-leviers");
-    if (lev) lev.innerHTML = msProductLeviersHtml();
+    if (lev) {
+      lev.innerHTML = msProductLeviersHtml();
+      bindMspTarif();
+    }
   }
 
   function renderMsProductForm(isNew) {
@@ -3857,6 +3951,7 @@
     document.querySelectorAll("[data-msp-gram], [data-msp-perte]").forEach((inp) => {
       inp.oninput = majAperçu;
     });
+    bindMspTarif();
     const add = document.getElementById("msp-add-autre");
     if (add) {
       add.onclick = () => {
@@ -3960,6 +4055,11 @@
           <td><button type="button" class="msp-lien" data-msp-mat="${x.material_id}"
                 title="Ouvrir le paramétrage de cette matière">${escHtml(x.name)}</button></td>
           <td class="msp-num">${prix > 0 ? escHtml(fmtEurM2(prix)) : '<span class="muted">sans prix</span>'}</td>
+          <td class="msp-num msp-transp">${
+            x.breakdown && parseFloat(x.breakdown.transport_eur_m2 || 0)
+              ? escHtml(fmtEurM2(x.breakdown.transport_eur_m2))
+              : '<span class="muted">—</span>'
+          }</td>
           <td class="msp-part">
             <span class="msp-jauge"><i style="width:${Math.max(0, Math.min(100, part))}%"></i></span>
             <span class="msp-part-val">${escHtml(fmtPct(part))}</span>
@@ -3970,11 +4070,17 @@
     const manquants = c.components.filter((x) => !(parseFloat(x.price_eur_per_m2) > 0)).length;
     return `<div class="ms-detail">
       <table class="pr-table ms-table msp-detail">
-        <thead><tr><th>Rôle</th><th>Matière MyStock</th><th class="msp-num">Coût €/m²</th><th class="msp-part">Part</th></tr></thead>
+        <thead><tr><th>Rôle</th><th>Matière MyStock</th><th class="msp-num">Coût €/m²</th><th class="msp-num" title="Part de transport déjà comprise dans le coût — elle ne s'y ajoute pas">dont transport</th><th class="msp-part">Part</th></tr></thead>
         <tbody>${lignes}</tbody>
       </table>
       <div class="msp-totaux">
         <span>Prix de revient <strong>${escHtml(fmtEurM2(c.total_eur_per_m2))}</strong></span>
+        ${(() => {
+          const t = (c.components || []).reduce(
+            (a, x) => a + parseFloat((x.breakdown && x.breakdown.transport_eur_m2) || 0), 0);
+          const rev = parseFloat(c.total_eur_per_m2 || 0);
+          return t ? `<span class="msp-transport-tot">dont transport <strong>${escHtml(fmtEurM2(t))}</strong> ${escHtml(fmtPct(rev ? (t / rev) * 100 : 0))}</span>` : "";
+        })()}
         <span>Marge ${escHtml(fmtPct(c.margin_pct))} <strong>${escHtml(fmtEurM2(c.margin_eur_m2))}</strong></span>
         <span>Prix de vente <strong>${escHtml(fmtEurM2(c.sell_price_eur_m2))}</strong></span>
         ${manquants ? `<span class="msp-alerte">${manquants} matière(s) sans prix — le coût est sous-évalué</span>` : ""}

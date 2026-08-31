@@ -241,34 +241,63 @@ vm.createContext(ctx2);
 vm.runInContext([
   extraire('escHtml'), extraire('escAttr'), extraire('fmtNum'), extraire('fmtEurM2'),
   constante('MSP_ROLES'),
-  extraire('grammageRetenu'), extraire('msLevierBlocHtml'),
+  'const CUR_SYM = { EUR: "€", USD: "$" };',
+  extraire('fmtPct'), extraire('grammageRetenu'), extraire('msLevierBlocHtml'),
   'globalThis.MSP_ROLES = MSP_ROLES;',
 ].join('\n'), ctx2);
 
 // Un adhesif paye au kilo : c'est le grammage POSE PAR LE PRODUIT qui fait le
 // cout au m². La matiere ne porte plus que son prix — 31/08/2026.
 const adh = { id: 90, matiere_id: 1, reference: '1408', designation: 'Adhesif enlevable',
-  price_basis: 'PER_KG', unit_price: 4.2 };
+  price_basis: 'PER_KG', unit_price: 4.2, fournisseur_id: 7, fournisseur_nom: 'Meltavis' };
 // Un frontal paye au m² : la quantite posee ne change pas son cout au m².
 const pp = { id: 92, matiere_id: 2, reference: 'PP90', designation: 'PP blanc',
   price_basis: 'PER_M2', unit_price: 0.08 };
 ctx2.S.msDecls = [adh, pp];
+// La decomposition arrive avec le cout : sans elle, l'ecran affichait
+// « 4,200 EUR/kg x 0,0240 kg/m2 -> 0,1098 EUR/m2 », une multiplication qui ne
+// tombe pas juste parce que le transport y etait fondu sans etre nomme.
 ctx2.S.msProdPreview = { components: [
-  { material_id: 90, price_eur_per_m2: 0.0885 },
-  { material_id: 92, price_eur_per_m2: 0.08 },
+  { material_id: 90, price_eur_per_m2: 0.1098, breakdown: {
+      currency: 'EUR', price_basis: 'PER_KG', fx_rate: 1,
+      unit_price_src: 4.2, transport_src: 0.3788, taxes_src: 0,
+      subtotal_src: 4.5788, transport_eur_m2: 0.0091,
+      transport_pct_effective: 9.02, taxe_pct: 0 } },
+  { material_id: 92, price_eur_per_m2: 0.11, breakdown: {
+      currency: 'EUR', price_basis: 'PER_M2', fx_rate: 1,
+      unit_price_src: 0.11, transport_src: 0, taxes_src: 0,
+      subtotal_src: 0.11, transport_eur_m2: 0, transport_pct_effective: 0, taxe_pct: 0 } },
 ] };
 
 const bAdh = ctx2.msLevierBlocHtml(
-  { declinaison_id: 90, role: 'ADHESIF', grammage_gsm: 17, perte_pct: 9 }, 'Adhésif');
+  { declinaison_id: 90, role: 'ADHESIF', grammage_gsm: 22, perte_pct: 9 }, 'Adhésif');
 const bPP = ctx2.msLevierBlocHtml(
   { declinaison_id: 92, role: 'FRONTAL', grammage_gsm: null, perte_pct: null }, 'Frontal');
 const bVide = ctx2.msLevierBlocHtml(
   { declinaison_id: 90, role: 'ADHESIF', grammage_gsm: null, perte_pct: null }, 'Adhésif');
 
 check('au kilo : la chaine complete est montree',
-  bAdh.includes('€/kg') && bAdh.includes('kg/m²') && bAdh.includes('0,0885'), true);
+  bAdh.includes('€/kg') && bAdh.includes('kg/m²') && bAdh.includes('0,1098'), true);
+
+console.log('\n--- le transport est nomme, plus fondu dans le resultat ---');
+// 4,200 + 0,379 = 4,579 EUR/kg, x 0,0240 kg/m2 = 0,1098. La multiplication
+// tombe juste parce que TOUS ses termes sont a l'ecran.
+check('le prix nu est montre', bAdh.includes('4,200'), true);
+check('le transport aussi', bAdh.includes('0,379') && bAdh.includes('transport'), true);
+check('et le sous-total qui en resulte', bAdh.includes('4,579'), true);
+check('le transport a sa propre precision',
+  /9,02\s%/.test(bAdh) && bAdh.includes("du prix d'achat"), true);
+check('et sa part sur CE produit', bAdh.includes('0,0091'), true);
+check('avec le chemin pour le corriger', bAdh.includes('tarif fournisseur'), true);
+check('un composant sans transport ne l\'invente pas',
+  bPP.includes('transport'), false);
+check('le serveur envoie la decomposition',
+  /_cout_produit_mystock[^]*?breakdown=\(/.test(api), true);
+check('la part de transport a sa ligne dans le recap',
+  extraire('transportRecapHtml').includes('dont transport'), true);
+check('et sa colonne dans le detail deplie', src.includes('msp-transp'), true);
 check('le poids vient du grammage du PRODUIT',
-  bAdh.includes('le grammage de ce produit') && bAdh.includes('17 g/m²'), true);
+  bAdh.includes('le grammage de ce produit') && bAdh.includes('22 g/m²'), true);
 check('la perte y est comptee', bAdh.includes('9 % de perte'), true);
 check('et le prix d\'achat est dit hors de cause',
   bAdh.includes("sans toucher au prix d'achat"), true);

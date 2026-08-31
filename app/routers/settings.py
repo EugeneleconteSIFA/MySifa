@@ -251,7 +251,8 @@ def set_user_access(user_id: int, body: SetAccessBody, request: Request):
         conn.commit()
 
     log_action(
-        request,
+        user=admin_user,
+        request=request,
         module="settings",
         action="UPDATE",
         objet=f"access:user:{u['email']}",
@@ -343,7 +344,8 @@ def set_role_default(role: str, body: SetRoleDefaultBody, request: Request):
         conn.commit()
 
     log_action(
-        request,
+        user=admin_user,
+        request=request,
         module="settings",
         action="UPDATE",
         objet=f"role_default:{role}",
@@ -394,6 +396,49 @@ def get_audit_logs(
     return {
         "total": total,
         "logs": logs,
+    }
+
+
+@router.get("/api/settings/audit/facets")
+def get_audit_facets(request: Request):
+    """Modules et actions REELLEMENT presents dans le journal.
+
+    Les listes deroulantes du journal etaient ecrites en dur dans la page : 8
+    modules et 7 actions, quand le code en emettait deja 15 et 17. MyAO, la
+    memoire produit et toute la maintenance n'etaient donc filtrables nulle
+    part. On les construit desormais a partir des donnees, habillees par la
+    taxonomie — ajouter un module ne demande plus de toucher a la page.
+    """
+    require_settings(request)
+    from database import get_db
+    from app.core.audit_taxonomy import action_color, action_label, module_label
+
+    with get_db() as conn:
+        modules = [
+            r[0] for r in conn.execute(
+                "SELECT module FROM audit_logs WHERE module IS NOT NULL AND module <> '' "
+                "GROUP BY module"
+            ).fetchall()
+        ]
+        actions = [
+            r[0] for r in conn.execute(
+                "SELECT action FROM audit_logs WHERE action IS NOT NULL AND action <> '' "
+                "GROUP BY action"
+            ).fetchall()
+        ]
+
+    return {
+        "modules": sorted(
+            ({"value": m, "label": module_label(m)} for m in modules),
+            key=lambda d: d["label"].lower(),
+        ),
+        "actions": sorted(
+            (
+                {"value": a, "label": action_label(a), "color": action_color(a)}
+                for a in actions
+            ),
+            key=lambda d: d["label"].lower(),
+        ),
     }
 
 

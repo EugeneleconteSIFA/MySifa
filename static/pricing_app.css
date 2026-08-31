@@ -757,3 +757,21 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 /* Les pastilles « autres déclinaisons » sont parties avec la notion elle-même :
    comparer un 17 et un 22 g/m² se fait en changeant le grammage dans le champ,
    et le total suit à la frappe. */
+
+/* ── Le transport, enfin nommé ──────────────────────────────────────────────
+   Il entrait dans chaque coût au m² sans qu'aucun écran ne le dise : la
+   multiplication affichée ne tombait pas juste, et un chiffre qu'on ne peut
+   pas refaire de tête passe pour un chiffre faux. Il a maintenant sa couleur
+   dans la chaîne, sa ligne dans le récapitulatif et sa colonne dans le détail.
+
+   Teinté, pas alarmant : le transport n'est pas une anomalie, c'est un terme
+   du calcul — mais celui sur lequel on négocie. */
+.msp-terme{font-weight:600;white-space:nowrap}
+.msp-terme.t-transport{color:var(--accent)}
+.msp-terme.t-taxe{color:var(--warn,#d97706)}
+.msp-lev-total{font-variant-numeric:tabular-nums}
+.msp-lev-formule{line-height:1.9}
+.msp-lev-tarif{font-size:11px;margin-left:auto}
+.msp-transport{margin-top:6px;padding-top:6px;border-top:1px dashed var(--border)}
+.msp-transp{color:var(--accent);font-variant-numeric:tabular-nums}
+.msp-transport-tot{color:var(--accent)}

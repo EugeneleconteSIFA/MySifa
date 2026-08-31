@@ -2168,26 +2168,11 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
                     style="background:var(--bg);border:1px solid var(--border);border-radius:8px;
                            padding:7px 10px;color:var(--text);font-size:12px;font-family:inherit">
               <option value="">Tous les modules</option>
-              <option value="planning">Planning</option>
-              <option value="fabrication">Fabrication</option>
-              <option value="stock">Stock</option>
-              <option value="expe">Expéditions</option>
-              <option value="rh">RH</option>
-              <option value="settings">Paramètres</option>
-              <option value="auth">Auth</option>
-              <option value="portal">Portail</option>
             </select>
             <select id="audit-filter-action" onchange="loadAuditLogs()"
                     style="background:var(--bg);border:1px solid var(--border);border-radius:8px;
                            padding:7px 10px;color:var(--text);font-size:12px;font-family:inherit">
               <option value="">Toutes les actions</option>
-              <option value="CREATE">Création</option>
-              <option value="UPDATE">Modification</option>
-              <option value="DELETE">Suppression</option>
-              <option value="CLOSE">Clôture</option>
-              <option value="VALIDATE">Validation</option>
-              <option value="REORDER">Réorganisation</option>
-              <option value="SEARCH">Recherche</option>
             </select>
           </div>
         </div>
@@ -8575,27 +8560,44 @@ function debouncedAuditSearch() {
   _auditSearchTimer = setTimeout(() => { _auditOffset = 0; loadAuditLogs(); }, 300);
 }
 
-const ACTION_COLORS = {
-  CREATE:   'var(--ok)',
-  UPDATE:   'var(--accent)',
-  DELETE:   'var(--danger)',
-  CLOSE:    'var(--muted)',
-  VALIDATE: 'var(--warn)',
-  REORDER:  'var(--text2)',
-  SEARCH:   'var(--accent)',
-  LOGIN:    'var(--text2)',
-  LOGOUT:   'var(--muted)',
-};
-const ACTION_LABELS = {
-  CREATE:'Création', UPDATE:'Modification', DELETE:'Suppression',
-  CLOSE:'Clôture', VALIDATE:'Validation', REORDER:'Réorganisation',
-  SEARCH:'Recherche', LOGIN:'Connexion', LOGOUT:'Déconnexion',
-};
-const MODULE_LABELS = {
-  planning:'Planning', fabrication:'Fabrication', stock:'Stock',
-  expe:'Expéditions', rh:'RH', settings:'Paramètres', auth:'Auth',
-  portal:'Portail',
-};
+// Libellés, couleurs et listes déroulantes du journal : plus rien en dur ici.
+// Les trois tables étaient figées à 8 modules et 9 actions alors que le serveur
+// en émettait déjà bien plus — MyAO, la mémoire produit et la maintenance
+// n'apparaissaient dans aucun filtre et s'affichaient en brut. Tout vient
+// désormais de /api/settings/audit/facets, qui croise ce que contient vraiment
+// la base avec la taxonomie serveur (app/core/audit_taxonomy.py). Un nouveau
+// module se met à exister dans le filtre le jour de sa première action.
+let ACTION_COLORS = {};
+let ACTION_LABELS = {};
+let MODULE_LABELS = {};
+let _auditFacetsPretes = false;
+
+function _remplirFiltreAudit(id, libelleVide, items) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const courant = sel.value;
+  sel.innerHTML = '<option value="">' + libelleVide + '</option>'
+    + items.map(i => `<option value="${escAttr(i.value)}">${esc(i.label)}</option>`).join('');
+  // Un filtre actif doit survivre au rechargement de la liste.
+  if (courant && items.some(i => i.value === courant)) sel.value = courant;
+}
+
+async function loadAuditFacets(force) {
+  if (_auditFacetsPretes && !force) return;
+  try {
+    const r = await fetch('/api/settings/audit/facets', { credentials: 'include' });
+    if (!r.ok) return;
+    const f = await r.json();
+    ACTION_COLORS = {}; ACTION_LABELS = {}; MODULE_LABELS = {};
+    (f.modules || []).forEach(m => { MODULE_LABELS[m.value] = m.label; });
+    (f.actions || []).forEach(a => { ACTION_LABELS[a.value] = a.label; ACTION_COLORS[a.value] = a.color; });
+    _remplirFiltreAudit('audit-filter-module', 'Tous les modules', f.modules || []);
+    _remplirFiltreAudit('audit-filter-action', 'Toutes les actions', f.actions || []);
+    _auditFacetsPretes = true;
+  } catch (e) {
+    // Sans facettes, le journal reste lisible : les valeurs brutes s'affichent.
+  }
+}
 
 async function deleteCliFromModal() {
   if (_cliEditing == null) return;
@@ -8914,6 +8916,7 @@ async function loadApiKeys() {
 }
 
 async function loadAuditLogs() {
+  await loadAuditFacets();
   const wrap = document.getElementById('audit-table-wrap');
   const pag  = document.getElementById('audit-pagination');
   const search = (document.getElementById('audit-search')?.value || '').trim();
