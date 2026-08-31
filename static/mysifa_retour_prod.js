@@ -100,57 +100,148 @@
     opts = opts || {};
     if (!f || f.vide || !(f.lignes || []).length) return "";
 
+    // Les separations de journees traversent toutes les pistes : sans elles, on
+    // ne sait plus ou finit un jour et ou commence le suivant.
+    var separateurs = (f.axe || []).slice(1).map(function (a) {
+      return '<div class="rp-fr-sep' + (a.coupure_avant ? ' coupe' : '') + '"'
+           + ' style="left:' + a.x + '%"></div>';
+    }).join("");
+
     var entetes = (f.axe || []).map(function (a) {
-      return '<div class="rp-fr-jour' + (a.coupure_avant ? ' coupe' : '') + '"'
-           + ' style="left:' + a.x + '%;width:' + a.largeur + '%"'
-           + ' title="' + escAttr(a.label + " — " + a.heures + " h de saisie") + '">'
-           + '<span>' + escHtml(a.label) + '</span></div>';
+      return '<div class="rp-fr-jour" style="left:' + a.x + '%;width:' + a.largeur + '%">'
+           + '<span>' + escHtml(a.label) + '</span>'
+           + '<em>' + escHtml(a.heures) + ' h</em></div>';
     }).join("");
 
     var lignes = f.lignes.map(function (l) {
       var slots = (l.slots || []).map(function (sl) {
         var segs = (sl.segments || []).map(function (g) {
-          return '<div class="rp-fr-seg cat-' + escAttr(g.categorie) + '"'
-               + ' style="left:' + g.x + '%;width:' + g.largeur + '%"'
-               + ' title="' + escAttr(g.label + " · " + minutesTxt(g.minutes)
-                                      + (g.operation ? " · " + g.operation : "")) + '"></div>';
+          return '<div class="rp-fr-seg mst-' + escAttr(g.statut || "autre") + '"'
+               + ' style="left:' + g.x + '%;width:' + g.largeur + '%"></div>';
         }).join("");
-        var titre = sl.no_dossier + (sl.client ? " · " + sl.client : "")
-                  + " · " + minutesTxt(sl.minutes)
-                  + " · " + dateFr(sl.debut) + " → " + dateFr(sl.fin)
-                  + (sl.operateurs || []).length ? "" : "";
+        var fmt = sl.format || (sl.laize_mm ? sl.laize_mm + " mm" : "");
         return '<div class="rp-fr-slot'
              + (sl.deborde_avant ? ' deborde-avant' : '')
              + (sl.deborde_apres ? ' deborde-apres' : '')
              + '" data-dossier="' + escAttr(sl.no_dossier) + '"'
-             + ' style="left:' + sl.x + '%;width:' + sl.largeur + '%"'
-             + ' title="' + escAttr(sl.no_dossier + (sl.client ? " · " + sl.client : "")
-                                    + " · " + minutesTxt(sl.minutes)) + '">'
-             + segs
-             + '<div class="rp-fr-lbl">' + escHtml(sl.no_dossier)
-             + (sl.client ? ' <span>' + escHtml(sl.client) + '</span>' : '')
+             + ' data-tip="' + escAttr(JSON.stringify(sl)) + '"'
+             + ' style="left:' + sl.x + '%;width:' + sl.largeur + '%">'
+             + '<div class="rp-fr-fond">' + segs + '</div>'
+             + '<div class="rp-fr-lbl">'
+             + '<b>' + escHtml(sl.no_dossier) + '</b>'
+             + (sl.client ? '<span>' + escHtml(sl.client) + '</span>' : '')
+             + (sl.ref_produit_norm || fmt
+                 ? '<i>' + escHtml([sl.ref_produit_norm, fmt].filter(Boolean).join(" · ")) + '</i>'
+                 : '')
+             + (sl.quantite ? '<u>' + fnum(sl.quantite) + ' ét.</u>' : '')
              + '</div></div>';
       }).join("");
       return '<div class="rp-fr-ligne"><div class="rp-fr-machine">' + escHtml(l.machine) + '</div>'
-           + '<div class="rp-fr-piste">' + slots + '</div></div>';
+           + '<div class="rp-fr-piste">' + separateurs + slots + '</div></div>';
     }).join("");
 
-    var legende = [["calage", "Calage"], ["production", "Production"],
-                   ["arret", "Arrêt"], ["appro", "Appro"],
-                   ["technique", "Technique"], ["nettoyage", "Nettoyage"]]
+    // Meme legende que Saisieprod, memes couleurs : l'atelier n'a pas a
+    // apprendre un second code.
+    var legende = [["production", "Production"], ["calage", "Calage"],
+                   ["arret", "Arrêt"], ["nettoyage", "Nettoyage"], ["autre", "Autre"]]
       .map(function (c) {
-        return '<span class="rp-fr-leg"><i class="cat-' + c[0] + '"></i>' + c[1] + '</span>';
+        return '<span class="rp-fr-leg"><i class="mst-' + c[0] + '"></i>' + c[1] + '</span>';
       }).join("");
 
     return '<div class="rp-bloc rp-frise">'
       + (opts.titre === false ? '' : '<div class="rp-titre">Frise de production</div>')
+      + '<div class="rp-fr-cadre">'
       + '<div class="rp-fr-axe"><div class="rp-fr-machine"></div>'
       + '<div class="rp-fr-piste">' + entetes + '</div></div>'
-      + lignes
+      + lignes + '</div>'
       + '<div class="rp-fr-legende">' + legende
-      + '<span class="rp-fr-note">Les journées sans saisie sont repliées. '
+      + '<span class="rp-fr-note">Journées sans saisie repliées (trait pointillé). '
       + 'Un dossier commencé avant ou non terminé déborde de la frise.</span></div>'
       + '</div>';
+  }
+
+  /* ── Infobulle de la frise ──────────────────────────────────── */
+
+  // Meme forme que l'infobulle du planning. Posee sur <body> et non dans la
+  // frise : celle-ci defile horizontalement, une infobulle a l'interieur
+  // serait rognee par son propre conteneur.
+  var LIB_STATUT = { production: "Production", calage: "Calage", arret: "Arrêt",
+                     nettoyage: "Nettoyage", autre: "Autre" };
+
+  function _tipHtml(sl) {
+    var fmt = sl.format || (sl.laize_mm ? sl.laize_mm + " mm" : "");
+    var lignes = [
+      ["Client", sl.client],
+      ["Référence", sl.ref_produit_norm],
+      ["Format", fmt],
+      ["Quantité", sl.quantite ? fnum(sl.quantite) + " étiquettes" : ""],
+      ["Conducteurs", (sl.operateurs || []).join(", ")],
+      ["Début", sl.debut ? dateFr(sl.debut) + " " + String(sl.debut).slice(11, 16) : ""],
+      ["Fin", sl.fin ? dateFr(sl.fin) + " " + String(sl.fin).slice(11, 16) : ""],
+      ["Temps passé", minutesTxt(sl.minutes)]
+    ].filter(function (l) { return l[1]; })
+     .map(function (l) {
+       return '<div class="rp-tip-l"><span>' + escHtml(l[0]) + '</span><b>'
+            + escHtml(l[1]) + '</b></div>';
+     }).join("");
+
+    var phases = {};
+    (sl.segments || []).forEach(function (g) {
+      var k = g.statut || "autre";
+      phases[k] = (phases[k] || 0) + (g.minutes || 0);
+    });
+    var detail = Object.keys(phases).map(function (k) {
+      return '<div class="rp-tip-ph"><i class="mst-' + escAttr(k) + '"></i>'
+           + '<span>' + escHtml(LIB_STATUT[k] || k) + '</span>'
+           + '<b>' + escHtml(minutesTxt(phases[k])) + '</b></div>';
+    }).join("");
+
+    return '<div class="rp-tip-hdr"><div class="rp-tip-bar"></div>'
+      + '<div><div class="rp-tip-ref">' + escHtml(sl.no_dossier) + '</div>'
+      + (sl.deborde_avant || sl.deborde_apres
+          ? '<div class="rp-tip-sub">déborde de la période affichée</div>' : '')
+      + '</div></div>'
+      + lignes + (detail ? '<div class="rp-tip-sep"></div>' + detail : '');
+  }
+
+  function brancherFrise(racine, opts) {
+    opts = opts || {};
+    var R = racine || document;
+    var tip = null;
+    function fermer() { if (tip && tip.parentNode) tip.parentNode.removeChild(tip); tip = null; }
+
+    Array.prototype.forEach.call(R.querySelectorAll(".rp-fr-slot[data-tip]"), function (el) {
+      el.addEventListener("mouseenter", function () {
+        var sl;
+        try { sl = JSON.parse(el.getAttribute("data-tip")); } catch (e) { return; }
+        fermer();
+        tip = document.createElement("div");
+        tip.className = "rp-tip";
+        tip.innerHTML = _tipHtml(sl);
+        document.body.appendChild(tip);
+        placer(el);
+      });
+      el.addEventListener("mousemove", function () { if (tip) placer(el); });
+      el.addEventListener("mouseleave", fermer);
+      if (opts.onClic) {
+        el.addEventListener("click", function () {
+          fermer();
+          opts.onClic(el.getAttribute("data-dossier"));
+        });
+      }
+    });
+
+    function placer(el) {
+      if (!tip) return;
+      var r = el.getBoundingClientRect();
+      var largeur = tip.offsetWidth, hauteur = tip.offsetHeight;
+      var x = Math.min(Math.max(8, r.left + r.width / 2 - largeur / 2),
+                       window.innerWidth - largeur - 8);
+      var y = r.top - hauteur - 10;
+      if (y < 8) y = r.bottom + 10;          // pas de place au-dessus : on passe dessous
+      tip.style.left = (x + window.scrollX) + "px";
+      tip.style.top = (y + window.scrollY) + "px";
+    }
   }
 
   /* ── Une remontee, avec ses gestes ────────────────────── */
@@ -733,6 +824,7 @@
     renderListe: renderListe,
     renderRecherche: renderRecherche,
     renderFrise: renderFrise,
+    brancherFrise: brancherFrise,
     renderCR: renderCR,
     renderEcrit: renderEcrit,
     slug: slug,

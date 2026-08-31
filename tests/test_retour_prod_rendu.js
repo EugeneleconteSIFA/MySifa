@@ -194,27 +194,43 @@ const friseVide = M.renderFrise(null);
 verifier("frise absente : rien rendu", friseVide === "");
 verifier("frise vide : rien rendu", M.renderFrise({ vide: true, lignes: [] }) === "");
 
+const SLOT = {
+  no_dossier: "D-1", client: "NESTLE", minutes: 480,
+  ref_produit_norm: "931/0009", format: "100x50", laize_mm: 330, quantite: 42000,
+  operateurs: ["Marc", "Sophie"],
+  debut: "2026-08-26T14:00:00", fin: "2026-08-28T10:00:00",
+  x: 0, largeur: 66.67, deborde_avant: true, deborde_apres: true,
+  segments: [{ categorie: "calage", statut: "calage", minutes: 60, x: 0, largeur: 12.5 },
+             { categorie: "appro", statut: "arret", minutes: 30, x: 12.5, largeur: 6 },
+             { categorie: "production", statut: "production", minutes: 420, x: 18.5, largeur: 81.5 }]
+};
 const frise = M.renderFrise({
   vide: false,
   axe: [{ jour: "2026-08-27", label: "Jeu 27/08", heures: 8, x: 0, largeur: 66.67, coupure_avant: false },
         { jour: "2026-08-29", label: "Sam 29/08", heures: 4, x: 66.67, largeur: 33.33, coupure_avant: true }],
-  lignes: [{ machine: "Cohesio 1", slots: [{
-    no_dossier: "D-1", client: "NESTLE", minutes: 480,
-    debut: "2026-08-26T14:00:00", fin: "2026-08-28T10:00:00",
-    x: 0, largeur: 66.67, deborde_avant: true, deborde_apres: true,
-    segments: [{ categorie: "calage", label: "Calage", minutes: 60, x: 0, largeur: 12.5 },
-               { categorie: "production", label: "Production", minutes: 420, x: 12.5, largeur: 87.5 }]
-  }] }]
+  lignes: [{ machine: "Cohesio 1", slots: [SLOT] }]
 });
 verifier("frise : les jours de l'axe", frise.includes("Jeu 27/08") && frise.includes("Sam 29/08"));
+verifier("frise : les heures du jour", frise.includes("<em>8 h</em>"));
 verifier("frise : largeurs posees en %", frise.includes("width:66.67%"));
-verifier("frise : la coupure est marquee", frise.includes("rp-fr-jour coupe"));
+verifier("frise : separateur de journee", frise.includes("rp-fr-sep"));
+verifier("frise : la coupure est en pointille", frise.includes("rp-fr-sep coupe"));
 verifier("frise : debordements des deux cotes",
          frise.includes("deborde-avant") && frise.includes("deborde-apres"));
-verifier("frise : une phase par categorie",
-         frise.includes("rp-fr-seg cat-calage") && frise.includes("rp-fr-seg cat-production"));
+// Les couleurs sont celles de Saisieprod : appro et technique tombent dans arret.
+verifier("frise : couleurs Saisieprod",
+         frise.includes("rp-fr-seg mst-calage") && frise.includes("rp-fr-seg mst-production"));
+verifier("frise : appro est dessine comme un arret", frise.includes("rp-fr-seg mst-arret"));
+verifier("frise : pas d'ancienne classe cat-", !frise.includes("rp-fr-seg cat-"));
+verifier("frise : reference et format sur le slot",
+         frise.includes("931/0009") && frise.includes("100x50"));
+verifier("frise : quantite sur le slot", frise.includes("42 000 ét."));
 verifier("frise : le slot porte son dossier", frise.includes('data-dossier="D-1"'));
+verifier("frise : le slot porte ses donnees d'infobulle", frise.includes("data-tip="));
 verifier("frise : legende presente", frise.includes("rp-fr-legende"));
+verifier("frise : legende alignee sur Saisieprod",
+         frise.includes('class="mst-production"') && frise.includes('class="mst-arret"')
+         && !frise.includes("cat-technique"));
 verifier("frise : donnee echappee",
          !M.renderFrise({ vide:false, axe:[], lignes:[{ machine:'<b>x', slots:[] }] }).includes("<b>x"));
 

@@ -6248,10 +6248,19 @@ async function chargerDernierJourSaisi(){
   S._dernierJourEnCours = true;
   try{
     const d = await api('/api/production/dernier-jour-saisi');
-    if(d && d.jour){
-      S.dernierJourSaisi = d.jour;
-      render();
+    if(!d || !d.jour) return;
+    S.dernierJourSaisi = d.jour;
+    // L'etat initial pose la veille CALENDAIRE en dur. Tant que l'utilisateur
+    // n'y a pas touche, on la remplace par la derniere journee travaillee :
+    // ouvrir la page un lundi sur un dimanche vide n'apprend rien. Un filtre
+    // deja modifie n'est jamais ecrase.
+    if(S.fv.date_from === d.veille && S.fv.date_to === d.veille && d.jour !== d.veille){
+      S.fv.date_from = d.jour;
+      S.fv.date_to = d.jour;
+      await applyF();
+      return;
     }
+    render();
   }catch(e){ /* on reste sur la veille calendaire, c'est un repli acceptable */ }
 }
 
@@ -7240,11 +7249,10 @@ function renderRetourProd(){
     frag.innerHTML = st.feuille
       ? RP.renderFeuille(st.feuille, st.frise)
       : '<div class="rp-vide">Aucun dossier cloture sur cette periode.</div>';
-    // Un slot de la frise ouvre le compte-rendu de son dossier : la frise sert
-    // a reperer, pas seulement a regarder.
-    frag.querySelectorAll('.rp-fr-slot[data-dossier]').forEach(el=>{
-      el.onclick = ()=>rpMaj({dossier:el.getAttribute('data-dossier')});
-    });
+    // Infobulle au survol et ouverture au clic : la frise sert a reperer, pas
+    // seulement a regarder. Branche avant insertion — le render() de MyProd
+    // remplace l'arbre a chaque passe.
+    RP.brancherFrise(frag, { onClic: (d)=>rpMaj({dossier:d}) });
     // Les remontees de la feuille se valident, se corrigent et se commentent.
     // Chaque bouton porte son dossier : la feuille en melange plusieurs.
     RP.brancher(null, {
