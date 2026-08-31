@@ -242,7 +242,7 @@
     if(u.subPage!==undefined||u.ofSubTab!==undefined)_syncProdHash();
   }
 
-  var _PROD_SUB_TABS=['kpis','saisies','erreurs','retour'];
+  var _PROD_SUB_TABS=['kpis','saisies','erreurs','retour','reunions'];
   var _OF_SUB_TABS=['of','fiche','pending','sansof'];
   function _readProdHash(){
     try{var h=(location.hash||'').replace(/^#/,'').trim();
@@ -7161,10 +7161,10 @@ function renderProdPage(){
   ];
   // Retour de prod : ouvert aux services de production — l'API filtre (ROLES_PROD).
   allTabs.push({key:'retour', label:'Retour de prod', icon:'clipboard'});
-  // Points de production : c'est une page a part entiere, pas un onglet. Elle
-  // figure quand meme ici parce que c'est de la page Production qu'on part
-  // tenir un point — `lien` fait naviguer au lieu de changer de sous-onglet.
-  allTabs.push({key:'reunions', label:'Réunions', icon:'users', lien:'/reunions'});
+  // Points de production : un sous-onglet comme les autres. Le module se monte
+  // dans le contenant que lui donne renderReunionsTab() — la coquille MyProd
+  // (barre laterale, titre, sous-onglets) n'est pas dupliquee.
+  allTabs.push({key:'reunions', label:'Réunions', icon:'users'});
   const tabs = hideErreurs ? allTabs.filter(t=>t.key!=='erreurs') : allTabs;
   const subNav = h('div',{className:'nav-tabs',role:'tablist','aria-label':'Sous-onglets Production'},
     ...tabs.map(t=>h('button',{
@@ -7173,7 +7173,6 @@ function renderProdPage(){
       'aria-selected': subPage===t.key ? 'true' : 'false',
       className:'nav-tab'+(subPage===t.key?' active':''),
       onClick:async()=>{
-        if(t.lien){ window.location.href = t.lien; return; }
         S.subPage=t.key;
         _syncProdHash();
         if(t.key==='kpis'){if(!S.production)await loadProd(); await loadMachineStatus(); startMachineStatusPolling();}
@@ -7189,8 +7188,29 @@ function renderProdPage(){
   if(subPage==='saisies')  content = renderSaisiesWithImport();
   else if(subPage==='erreurs' && !hideErreurs) content = renderHist();
   else if(subPage==='retour') content = renderRetourProd();
+  else if(subPage==='reunions') content = renderReunionsTab();
   else content = renderProdKpis();
   return h('div',null, subNav, content);
+}
+
+// ── Points de production ──────────────────────────────
+// Le module s'installe lui-meme dans un contenant vide (mysifa_reunions.js) et
+// garde son propre etat. MyProd reconstruit son DOM a chaque rendu : on lui
+// passe le contenant du rendu courant, jamais une reference gardee d'une passe
+// a l'autre — elle pointerait sur un noeud detache.
+function renderReunionsTab(){
+  const hote = h('div',{className:'myprod-page-reunions'});
+  if(!window.MySifaReunions){
+    hote.appendChild(h('div',{className:'card-empty'},
+      'Module reunions non charge (mysifa_reunions.js).'));
+    return hote;
+  }
+  requestAnimationFrame(function(){
+    window.MySifaReunions.monter(hote, {
+      toast: (m,t)=>{ try{ showToast(m,t); }catch(e){} }
+    });
+  });
+  return hote;
 }
 
 // ── Rapport hebdomadaire ────────────────────────────────────────
@@ -8741,9 +8761,11 @@ function renderProdKpis(){
     }else if(S.page === 'production'){
       pageTitle = (S.subPage === 'saisies' ? 'Saisies' :
                    S.subPage === 'erreurs' ? 'Historique & Erreurs' :
+                   S.subPage === 'reunions' ? 'Points de production' :
                    'Production');
       pageSubtitle = (S.subPage === 'saisies' ? 'Consulter, corriger et importer des saisies' :
                       S.subPage === 'erreurs' ? 'Sanity Score, incidents et erreurs de saisie' :
+                      S.subPage === 'reunions' ? 'Tenir un point, prendre les notes et suivre les actions' :
                       'KPIs, temps, quantit\u00e9s et qualit\u00e9 de saisie');
       pageContent = renderProdPage();
     }else if(S.page === 'scans'){
@@ -8814,7 +8836,9 @@ function renderProdKpis(){
       h('div', {className: 'subtitle'}, pageSubtitle),
     ];
     // Filtres haut de page pour les sous-onglets Production qui consomment fv.*
-    if(S.page === 'production'){
+    // Reunions exceptee : une reunion porte sa propre periode analysee, celle
+    // qu'elle a enregistree. Une barre de filtres au-dessus la contredirait.
+    if(S.page === 'production' && S.subPage !== 'reunions'){
       containerKids.push(renderFilters());
     }
     containerKids.push(pageContent);

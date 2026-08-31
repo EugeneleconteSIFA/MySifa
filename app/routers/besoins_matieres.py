@@ -1751,10 +1751,11 @@ def _regression(points: list) -> Optional[tuple]:
     return pente, ordonnee, r2
 
 
-# Fenêtre du lissage, en mois. Impaire pour être centrable : une moyenne
-# mobile paire tombe entre deux mois et doit être recentrée, ce qui coûte un
-# demi-mois de décalage pour aucun gain de lisibilité.
-_TEND_FENETRE = 3
+# Nombre de mois révolus qui définissent le « niveau récent » — la base que la
+# saisonnalité vient ensuite moduler. Six : assez pour qu'un mois creux ou un
+# gros marché isolé ne fasse pas la projection à lui seul, assez court pour
+# qu'un changement de régime d'activité s'y voie en un semestre.
+_TEND_RECENTS_MOIS = 6
 
 # Fourchette plausible de jours ouvrés dans un mois complet. Sert de garde-fou :
 # en dessous, on considère que le mois a bien été amputé (fermeture d'usine) ;
@@ -1845,39 +1846,38 @@ def _jours_ouvres(conn, mois_liste: list) -> dict:
 
 def _tendance(par_mois: dict, tous_mois: list, mois_courant: str,
               documentes: set, jours: Optional[dict] = None) -> Optional[dict]:
-    """Courbe de tendance : lissage sur le passé, projection saisonnière ensuite.
+    """Prévision des mois À VENIR. Rien n'est tracé sur les mois révolus.
 
-    Une DROITE de régression a été essayée d'abord, et écartée. Sur douze
-    points, sa pente était surtout portée par le pic de juillet : elle imposait
-    une progression constante à une activité qui va par à-coups de marchés, et
-    elle jetait au passage le seul signal exploitable — la saisonnalité.
+    Une prévision ne se dessine que là où l'on ne sait pas encore. Sur un mois
+    passé, le chiffre est connu : la courbe pleine EST la réponse, et poser une
+    seconde courbe à côté ne fait qu'inviter à comparer une mesure à un lissage
+    de cette même mesure. C'est la question qu'on s'est posée le 31/08/2026
+    devant un écart sur un mois échu — écart qui n'était que la moyenne mobile
+    faisant son travail. On a retiré la moitié qui n'apprenait rien.
 
-    Ce qui la remplace tient en deux moitiés, chacune honnête sur ce qu'elle
-    est :
+    Ce qui reste : le **niveau récent** (médiane des six derniers mois mesurés)
+    multiplié par le **coefficient saisonnier** du mois visé. Le coefficient
+    vient de N-1 — ce que ce mois-là pesait, rapporté à la moyenne de son
+    année. Un mois qui valait 1,3 fois la moyenne l'an dernier est projeté à
+    1,3 fois le niveau d'aujourd'hui. La courbe ondule donc avec les saisons au
+    lieu de monter en ligne droite.
 
-    - **Sur les mois révolus**, une moyenne mobile centrée sur trois mois.
-      C'est une courbe, pas une droite : elle suit la forme réelle en filtrant
-      le bruit mensuel, et n'invente rien puisqu'elle ne fait que résumer des
-      mois mesurés.
+    Une DROITE de régression a été essayée avant tout ça, et écartée : sur
+    douze points sa pente était portée par le seul pic de juillet, elle
+    imposait une progression constante à une activité qui va par à-coups de
+    marchés, et elle jetait au passage la saisonnalité.
 
-    - **Sur les mois à venir**, le niveau récent multiplié par le coefficient
-      saisonnier du mois. Le coefficient vient de N-1 : ce que ce mois-là
-      pesait, rapporté à la moyenne de son année. Un mois qui valait 1,3 fois
-      la moyenne l'an dernier est projeté à 1,3 fois le niveau d'aujourd'hui.
-      La courbe ondule donc avec les saisons au lieu de monter en ligne droite.
-
-    Les mois à venir ne servent JAMAIS à construire la tendance : ils sont
+    Les mois à venir ne servent JAMAIS à construire la prévision : ils sont
     incomplets par construction — le carnet ne s'est pas encore rempli — et les
-    inclure ferait plonger la courbe pour une raison purement comptable.
-    L'écart entre la courbe pleine (engagé) et la tendance (attendu) reste donc
-    lisible pour ce qu'il est : ce qui reste à commander.
+    inclure la ferait plonger pour une raison purement comptable. L'écart entre
+    la courbe pleine (engagé) et la prévision (attendu) reste donc lisible pour
+    ce qu'il est : ce qui reste à commander.
 
     Limite à connaître : un seul cycle annuel ne permet pas de distinguer un
     coefficient saisonnier d'un accident de l'an dernier. Un mois exceptionnel
     en N-1 se rejoue en N. `saison_n` dit sur combien de mois le coefficient
     s'appuie, pour que l'écran puisse en tenir compte.
     """
-    idx = {m: i for i, m in enumerate(tous_mois)}
     mesures = {m: par_mois[m]["q"] for m in tous_mois
                if m < mois_courant and m in documentes and m in par_mois}
     if len(mesures) < _TEND_MIN_POINTS:
@@ -1885,8 +1885,8 @@ def _tendance(par_mois: dict, tous_mois: list, mois_courant: str,
 
     # ── Correction du calendrier ──
     # Tout le calcul se fait PAR JOUR OUVRÉ, puis se reconvertit en mois. Un
-    # août à 9 jours et un juillet à 22 deviennent alors comparables, la
-    # moyenne mobile cesse d'étaler la fermeture sur les mois voisins, et la
+    # août à 9 jours et un juillet à 22 deviennent alors comparables, le niveau
+    # récent cesse d'être tiré vers le bas par une fermeture d'usine, et la
     # projection d'un août à venir tient compte de SES jours à lui — pas de
     # ceux d'août dernier, si la fermeture a changé de durée.
     jours = jours or {}
@@ -1901,27 +1901,10 @@ def _tendance(par_mois: dict, tous_mois: list, mois_courant: str,
         n = _jn(m)
         return (v * n) if (corrige and n) else v
 
-    # ── Passé : moyenne mobile centrée ──
-    # Une fenêtre incomplète en bord de série est moyennée sur ce qu'elle a,
-    # plutôt que tronquée : mieux vaut un premier point un peu plus bruité que
-    # deux mois manquants au début de la courbe.
-    demi = _TEND_FENETRE // 2
-    lisse: dict = {}
-    for m, i in idx.items():
-        if m not in mesures:
-            continue
-        voisins = [_vers_jour(tous_mois[j], mesures[tous_mois[j]])
-                   for j in range(i - demi, i + demi + 1)
-                   if 0 <= j < len(tous_mois) and tous_mois[j] in mesures]
-        if voisins:
-            # Lissé par jour, puis reconverti avec les jours de CE mois-ci.
-            lisse[m] = _vers_mois(m, sum(voisins) / len(voisins))
-
-    # ── Futur : niveau récent × coefficient saisonnier ──
-    # Le niveau récent est une MÉDIANE des derniers mois mesurés, pas leur
-    # moyenne : un mois exceptionnel ne doit pas relever à lui seul toute la
-    # projection.
-    recents = [_vers_jour(m, mesures[m]) for m in sorted(mesures)[-_TEND_FENETRE * 2:]]
+    # ── Niveau récent : la base de la projection ──
+    # Une MÉDIANE des derniers mois mesurés, pas leur moyenne : un mois
+    # exceptionnel ne doit pas relever à lui seul toute la projection.
+    recents = [_vers_jour(m, mesures[m]) for m in sorted(mesures)[-_TEND_RECENTS_MOIS:]]
     niveau_jour = statistics.median(recents) if recents else 0.0
 
     # Base du coefficient saisonnier, elle aussi par jour ouvré : sinon le
@@ -1932,11 +1915,10 @@ def _tendance(par_mois: dict, tous_mois: list, mois_courant: str,
 
     valeurs, saison_n = [], 0
     for m in tous_mois:
-        if m in lisse:
-            valeurs.append(round(lisse[m], 2))
-            continue
+        # Un mois révolu ne reçoit rien. Son chiffre est connu et déjà tracé :
+        # une prévision par-dessus une mesure ne prévoit rien.
         if m < mois_courant:
-            valeurs.append(None)  # mois révolu mais non documenté : pas de trait
+            valeurs.append(None)
             continue
         an, mo = int(m[:4]), int(m[5:7])
         m12 = f"{an - 1:04d}-{mo:02d}"
@@ -1951,7 +1933,7 @@ def _tendance(par_mois: dict, tous_mois: list, mois_courant: str,
 
     return {"niveau": round(_vers_mois(mois_courant, niveau_jour), 2),
             "n": len(mesures), "saison_n": saison_n,
-            "fenetre": _TEND_FENETRE, "calendrier": bool(corrige),
+            "recents": _TEND_RECENTS_MOIS, "calendrier": bool(corrige),
             "valeurs": valeurs}
 
 

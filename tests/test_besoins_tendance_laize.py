@@ -299,6 +299,62 @@ finally:
     bm.agreger_carnet = _vrai2
 
 
+
+print("\n8. La prevision ne couvre que les mois a venir")
+# Sur un mois echu le chiffre est connu et deja trace : une prevision
+# par-dessus une mesure ne prevoit rien, et l'ecart entre les deux ne se lisait
+# que comme un defaut. Retire le 31/08/2026.
+from datetime import date as _date
+
+_auj2 = _date.today()
+
+
+def _mois_glissants(n_passes):
+    an, mo = _auj2.year, _auj2.month - n_passes
+    an += (mo - 1) // 12
+    mo = (mo - 1) % 12 + 1
+    out = []
+    for _ in range(n_passes + 7):
+        out.append(f"{an:04d}-{mo:02d}")
+        mo += 1
+        if mo > 12:
+            mo, an = 1, an + 1
+    return out
+
+
+_tous = _mois_glissants(14)
+_courant = f"{_auj2.year:04d}-{_auj2.month:02d}"
+_passes = [m for m in _tous if m < _courant]
+# Douze mois mesures, en dents de scie : une moyenne mobile aurait donne des
+# valeurs franchement differentes des mesures — c'est ce qu'on ne veut plus.
+_par_mois = {m: {"q": 100000.0 if i % 2 else 20000.0} for i, m in enumerate(_passes)}
+_doc = set(_passes)
+
+_t = bm._tendance(_par_mois, _tous, _courant, _doc, {})
+check("la prevision est calculee", _t is not None, True)
+_idx = {m: i for i, m in enumerate(_tous)}
+check("aucune valeur sur les mois revolus",
+      [v for m, v in zip(_tous, _t["valeurs"]) if m < _courant and v is not None], [])
+check("une valeur sur chaque mois a venir",
+      all(_t["valeurs"][_idx[m]] is not None for m in _tous if m >= _courant), True)
+# Le niveau reste la mediane des six derniers mois mesures : sur une dent de
+# scie 20/100, la mediane vaut 60 000 — une moyenne aurait donne pareil ici,
+# mais un seul gros marche ferait diverger les deux.
+check("le niveau vient des derniers mois mesures", _t["niveau"], 60000.0)
+check("il s'appuie sur six mois", _t["recents"], 6)
+check("et compte les mois mesures", _t["n"], len(_passes))
+# Sous cinq mois mesures, rien : deux ou trois points suffisent a dessiner
+# n'importe quelle prevision.
+_court = {m: {"q": 1000.0} for m in _passes[-3:]}
+check("trop peu de mesures, pas de prevision",
+      bm._tendance(_court, _tous, _courant, set(_passes[-3:]), {}), None)
+
+_js2 = open("app/web/stock_page.py", encoding="utf-8").read()
+check("l'ecran ne parle plus de courbe lissee",
+      "la courbe lissée sur 3 mois" in _js2, False)
+check("il annonce une prevision", "Masquer la prévision" in _js2, True)
+
+
 print()
 if ko:
     print(f"ECHEC — {ko} verification(s) en erreur.")
