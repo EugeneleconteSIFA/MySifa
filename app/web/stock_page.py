@@ -13468,10 +13468,12 @@ function _besTendGraphe(series, cols, moisCourant, documentes, unite, refAn, ten
     });
   }
 
-  // ── Droite de tendance ───────────────────────────────────────────────────
-  // Ajustée par le serveur sur les seuls mois RÉVOLUS, puis prolongée. Sur les
-  // mois à venir, l'écart entre elle et la courbe pleine se lit directement :
-  // c'est ce qui reste à commander si la tendance se confirme.
+  // ── Prévision ────────────────────────────────────────────────────────────
+  // Calculée par le serveur SUR les mois révolus, tracée seulement sur les
+  // mois à VENIR : sur un mois échu le chiffre est connu et déjà dessiné, une
+  // prévision par-dessus une mesure ne prévoit rien. L'écart entre elle et la
+  // courbe pleine se lit donc directement : c'est ce qui reste à commander si
+  // la saison se rejoue.
   //
   // Tiret long, pour ne pas se confondre avec le pointillé fin du repère N-1 :
   // deux lignes discontinues de la même teinte dans un même graphe doivent se
@@ -14308,9 +14310,10 @@ function _buildBesoinsTendance(data) {
         const saisonN = (series.find(s => s.tend_saison_n != null) || {}).tend_saison_n;
         leg.appendChild(el('button', {
           cls: 'bes-tc-lg tend' + (tendOn ? ' on' : ''),
-          title: 'Sur les mois révolus, la courbe lissée sur 3 mois. '
-                 + 'Sur les mois à venir, le niveau récent corrigé de la '
-                 + 'saison — ce que pesait ce mois-là l\'an dernier. '
+          title: 'Une prévision, sur les mois à VENIR uniquement : le niveau '
+                 + 'des derniers mois, corrigé de la saison — ce que pesait ce '
+                 + 'mois-là l\'an dernier. Rien n\'est tracé sur les mois '
+                 + 'révolus : leur chiffre est déjà là. '
                  + 'L\'écart avec la courbe pleine est ce qui reste à commander.'
                  + (cat.tend_calendrier
                      ? ' Corrigée des jours ouvrés : la fermeture d\'août ne '
@@ -14323,7 +14326,7 @@ function _buildBesoinsTendance(data) {
             st.besoinsTendDroite[cat.kind] = !tendOn;
             renderContent();
           } },
-        }, tendOn ? 'Masquer la tendance' : 'Tendance'));
+        }, tendOn ? 'Masquer la prévision' : 'Prévision'));
       }
       leg.appendChild(el('button', {
         cls: 'bes-tc-lg mode',
