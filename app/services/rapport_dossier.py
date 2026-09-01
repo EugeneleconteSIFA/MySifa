@@ -1077,11 +1077,105 @@ def retour_atelier(conn, machine: str, debut: str, fin: str,
         },
         "references": refs,
         "arrets_couteux": couteux,
+        "saisies": saisies_periode(conn, machine, debut, fin, code_fin),
         "ecrits": ecrits,
         "ecrits_masques": ecrits_masques,
         "vigilance": compte_vigilance,
         "nb_nc": sum(len(c["non_conformites"]) for c in crs),
     }
+
+
+# Machine Repiquage : les codes de debut et de fin de production n'y ont plus
+# de sens et sont masques partout ailleurs (app/routers/saisies.py). La liste
+# des saisies d'un point de production doit dire la meme chose que l'onglet
+# Saisies, sinon on compare deux verites.
+_REPIQUAGE_MASQUE = (
+    "NOT (operation_code IN ('01','89','86','87') AND "
+    "(lower(trim(COALESCE(machine,''))) LIKE 'repiquage%' "
+    " OR lower(trim(COALESCE(machine,''))) = 'rep' "
+    " OR lower(trim(COALESCE(machine,''))) LIKE 'rep %'))"
+)
+
+
+def saisies_periode(conn, machine: str, debut: str, fin: str,
+                    code_fin: str = "89", code_annul: str = "90",
+                    limite: int = 400) -> List[Dict[str, Any]]:
+    """Les saisies de production de la periode, dans l'ordre, avec leur duree.
+
+    UNIQUEMENT `production_data` : ni les mouvements de stock, ni les
+    validations d'alerte que `/api/saisies` fusionne dans sa liste. Un point de
+    production regarde ce que la machine a fait, pas ce qui a transite par le
+    magasin.
+
+    La duree d'une saisie est l'ecart avec la suivante DU MEME OPERATEUR sur la
+    machine — la meme regle que partout ailleurs, calculee par `intervalles`.
+    Les voisines d'un jour avant et d'un jour apres sont donc lues elles aussi :
+    sans la suivante, la derniere saisie de la periode n'aurait pas de duree.
+    """
+    cols = _colonnes(conn, "production_data")
+    if not cols:
+        return []
+    d_deb, d_fin = _dt(debut), _dt(fin)
+    if d_deb is None or d_fin is None:
+        return []
+    marge_deb = (d_deb - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S")
+    marge_fin = (d_fin + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S")
+
+    filtre_annule = " AND COALESCE(est_annule, 0) = 0" if "est_annule" in cols else ""
+    params: List[Any] = [marge_deb, marge_fin]
+    filtre_machine = ""
+    if _txt(machine):
+        filtre_machine = " AND TRIM(LOWER(COALESCE(machine,''))) = TRIM(LOWER(?))"
+        params.append(_txt(machine))
+    optionnelles = [c for c in ("commentaire", "est_annule") if c in cols]
+    champs = [c for c in ("id", "operateur", "date_operation", "operation",
+                          "operation_code", "operation_category", "machine",
+                          "no_dossier", "client") if c in cols] + optionnelles
+    rows = conn.execute(
+        f"""SELECT {', '.join(champs)}
+              FROM production_data
+             WHERE date_operation >= ? AND date_operation <= ?
+               AND {_REPIQUAGE_MASQUE}{filtre_annule}{filtre_machine}
+             ORDER BY date_operation, id""",
+        params,
+    ).fetchall()
+    lignes = [dict(r) for r in rows]
+    if not lignes:
+        return []
+
+    codes_fin = tuple(c for c in (code_fin, code_annul) if _txt(c))
+    duree = {iv["saisie_id"]: iv for iv in intervalles(lignes, debut, fin, codes_fin)}
+
+    out: List[Dict[str, Any]] = []
+    for r in lignes:
+        quand = _txt(r.get("date_operation"))
+        if not (debut <= quand <= fin):
+            continue                      # voisine lue pour la duree seulement
+        cat = _txt(r.get("operation_category")).lower() or "autre"
+        iv = duree.get(r.get("id"))
+        out.append({
+            "id": r.get("id"),
+            "date_operation": quand,
+            "heure": quand[11:16],
+            "operateur": _txt(r.get("operateur")),
+            "operation": _txt(r.get("operation")),
+            "code": _txt(r.get("operation_code")),
+            "categorie": cat,
+            "statut": statut_saisie(cat),
+            "label": LIBELLES_CATEGORIES.get(cat, cat.capitalize() or "Autre"),
+            "machine": _txt(r.get("machine")),
+            "no_dossier": _txt(r.get("no_dossier")),
+            "client": _txt(r.get("client")),
+            "commentaire": _txt(r.get("commentaire")),
+            "minutes": round(iv["minutes"], 1) if iv else None,
+            "minutes_txt": _minutes_txt(iv["minutes"]) if iv else "—",
+            "bornee": bool(iv and iv.get("bornee")),
+        })
+    # Trop de lignes tuent la lecture : on garde les plus recentes, et l'ecran
+    # dit combien il en manque.
+    if len(out) > limite:
+        out = out[-limite:]
+    return out
 
 
 def machines_periode(conn, debut: str, fin: str, code_fin: str = "89") -> List[str]:

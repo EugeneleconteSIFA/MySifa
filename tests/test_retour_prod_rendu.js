@@ -80,13 +80,10 @@ verifier("feuille : cadence et vitesse distinguees",
          feuille.includes("33,2 m/min") && feuille.includes("41,6 m/min") && feuille.includes("hors arrêts"));
 verifier("feuille : repere historique", feuille.includes("57,0 m/min") && feuille.includes("3 prod."));
 verifier("feuille : unite de la machine, jamais de m/h", !feuille.includes("m/h"));
-verifier("feuille : le code n'est pas repete dans l'operation",
-         feuille.includes(">Attente matiere<") && !feuille.includes(">66 - Attente matiere<"));
 verifier("feuille : ecart negatif signale", feuille.includes("-42 %"));
-verifier("feuille : arret nomme", feuille.includes("Attente matiere"));
 verifier("feuille : le mot du conducteur remonte", feuille.includes("Tension a baisser"));
 verifier("feuille : client dans la cadence", feuille.includes("NESTLE VEAUCHE"));
-verifier("feuille : section Arrets", feuille.includes(">Arrêts</div>"));
+verifier("feuille : le KPI Arrets reste", feuille.includes(">Arrêts</div>"));
 verifier("feuille : plus de colonne Code dans les arrets", !feuille.includes("<th>Code</th>"));
 verifier("feuille : les trois gestes sur une remontee",
          feuille.includes('data-valider="infoprod:D-501"')
@@ -291,6 +288,58 @@ verifier("feuille : le compteur ne compte que les visibles",
 console.log("\n4 ter. Slug de cle");
 verifier("les deux-points ne peuvent pas etre un id DOM", M.slug("infoprod:D-501") === "infoprod_D-501");
 verifier("slug d'une note", M.slug("note:7") === "note_7");
+
+console.log("\n3 bis. Le deroule des saisies remplace le classement des arrets");
+const SAISIES = [
+  { heure: "05:14", operateur: "Tony Cathelineau", operation: "86 - Arrivée personnel",
+    code: "86", statut: "autre", label: "Entrées et sorties", no_dossier: "",
+    client: "", commentaire: "", minutes_txt: "25 min" },
+  { heure: "07:00", operateur: "Tony Cathelineau", operation: "53 - Casse bande",
+    code: "53", statut: "arret", label: "Arrêts", no_dossier: "D-501",
+    client: "KIABI", commentaire: "bande cassée au raccord", minutes_txt: "14 min" }
+];
+const avecSaisies = M.renderFeuille({
+  machine: "Cohesio 1", dossiers: 2, periode: { label: "Lundi 31/08/2026" },
+  production: { metrage: 44309, minutes_production: 698.8 },
+  arrets_couteux: [{ code: "53", operation: "53 - Casse bande",
+                     occurrences: 2, minutes_txt: "18 min" }],
+  saisies: SAISIES
+});
+verifier("saisies : la section existe", avecSaisies.includes("rp-saisies"));
+verifier("saisies : le nombre est annonce",
+         avecSaisies.includes('<span class="rp-compte">2</span>'));
+verifier("saisies : plus de tableau des arrets",
+         avecSaisies.indexOf(">Arrêt</th>") === -1);
+verifier("saisies : heure", avecSaisies.includes(">05:14<"));
+verifier("saisies : le code est retire de l'operation",
+         avecSaisies.includes("<b>Casse bande</b>") && !avecSaisies.includes("53 - Casse bande"));
+verifier("saisies : ni dans l'arrivee personnel",
+         avecSaisies.includes("<b>Arrivée personnel</b>")
+         && !avecSaisies.includes("86 - Arrivée personnel"));
+verifier("saisies : dossier et client en sous-ligne",
+         avecSaisies.includes("D-501 · KIABI"));
+verifier("saisies : commentaire rendu", avecSaisies.includes("bande cassée au raccord"));
+verifier("saisies : operateur", avecSaisies.includes("Tony Cathelineau"));
+verifier("saisies : duree", avecSaisies.includes(">14 min<"));
+verifier("saisies : pastille aux couleurs de Saisieprod",
+         avecSaisies.includes('rp-sa-pt mst-arret') && avecSaisies.includes('rp-sa-pt mst-autre'));
+verifier("saisies : cadre defilant", avecSaisies.includes('id="rp-sa-cadre"'));
+verifier("saisies : bouton etendre accessible",
+         avecSaisies.includes('id="rp-sa-plus"') && avecSaisies.includes('aria-expanded="false"'));
+verifier("saisies : icone et non emoji",
+         avecSaisies.includes("<svg") && !/[\u{1F300}-\u{1FAFF}]/u.test(avecSaisies));
+verifier("saisies : liste vide, pas de section",
+         M.renderFeuille({ machine: "C1", dossiers: 1, periode: {}, saisies: [] })
+          .indexOf("rp-saisies") === -1);
+verifier("saisies : sans le champ, pas de section",
+         M.renderFeuille({ machine: "C1", dossiers: 1, periode: {} })
+          .indexOf("rp-saisies") === -1);
+verifier("saisies : prose echappee",
+         M.renderFeuille({ machine: "C1", dossiers: 1, periode: {}, saisies: [
+           { heure: "08:00", operateur: '<img src=x onerror="alert(1)">',
+             operation: "03 - Production", code: "03", statut: "production",
+             no_dossier: "<b>x", commentaire: "<script>", minutes_txt: "1 h" }] })
+          .indexOf("<img src=x") === -1);
 
 console.log("\n4 bis. Le compte-rendu dit ce que ses chiffres couvrent");
 const crVie = M.renderCR({ no_dossier: "D-501", identite: { client: "KIABI", cloture: true },

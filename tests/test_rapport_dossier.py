@@ -911,6 +911,89 @@ def test_intervalles_bornes():
              all(i["debut"].day == 9 for i in lendemain), True)
 
 
+# ─── 17. Le deroule des saisies d'une periode ────────────────────────────────
+
+def test_saisies_periode():
+    print("\n17. Le deroule des saisies d'une periode")
+    conn = base()
+
+    def pose(quand, code, cat, op="Marc", machine="Cohesio 1", dossier="D-100",
+             annule=0, commentaire=None):
+        conn.execute(
+            """INSERT INTO production_data
+               (operateur, date_operation, operation, operation_code,
+                operation_category, machine, no_dossier, client, commentaire,
+                est_annule)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (op, quand, code + " - x", code, cat, machine, dossier,
+             "Client Test", commentaire, annule))
+
+    pose("2026-06-07T22:00:00", "03", "production")          # la veille
+    pose("2026-06-08T08:00:00", "01", "personnel")
+    pose("2026-06-08T08:01:00", "03", "production", commentaire="bobine neuve")
+    pose("2026-06-08T09:01:00", "53", "arret")
+    pose("2026-06-08T09:11:00", "88", "production")
+    pose("2026-06-08T10:00:00", "63", "pause", annule=1)      # annulee
+    pose("2026-06-08T11:00:00", "03", "production", machine="Cohesio 2")
+    pose("2026-06-09T07:00:00", "89", "personnel")            # le lendemain
+    conn.commit()
+
+    DEB, FIN = "2026-06-08T00:00:00", "2026-06-08T23:59:59"
+    l = svc.saisies_periode(conn, "Cohesio 1", DEB, FIN)
+    codes = [r["code"] for r in l]
+    verifier("seules les saisies de la periode", codes, ["01", "03", "53", "88"])
+    verifier("l'annulee est ecartee", "63" in codes, False)
+    verifier("l'autre machine est ecartee",
+             all(r["machine"] == "Cohesio 1" for r in l), True)
+
+    par_code = {r["code"]: r for r in l}
+    verifier("heure lisible", par_code["03"]["heure"], "08:01")
+    verifier_proche("duree jusqu'a la suivante", par_code["03"]["minutes"], 60)
+    verifier("duree en clair", par_code["53"]["minutes_txt"], "10 min")
+    verifier("le commentaire suit", par_code["03"]["commentaire"], "bobine neuve")
+    verifier("statut Saisieprod", par_code["53"]["statut"], "arret")
+    verifier("libelle de categorie", par_code["01"]["label"], "Entrees et sorties")
+
+    # La derniere saisie de la journee tire sa duree de la suivante, qui est le
+    # lendemain : sans la lire, elle n'aurait pas de duree. Mais elle est bornee
+    # a la journee, pas comptee jusqu'au lendemain.
+    derniere = par_code["88"]
+    verifier_proche("bornee a la fin de la journee", derniere["minutes"], 60 * 14 + 49)
+    verifier("et elle le sait", derniere["bornee"], True)
+
+    # Toutes machines : la liste couvre l'atelier.
+    verifier("sans machine, tout l'atelier",
+             len(svc.saisies_periode(conn, "", DEB, FIN)), 5)
+
+    # Le plafond garde les plus recentes.
+    verifier("plafond respecte", len(svc.saisies_periode(conn, "", DEB, FIN, limite=2)), 2)
+    verifier("et garde la fin",
+             svc.saisies_periode(conn, "", DEB, FIN, limite=2)[-1]["heure"], "11:00")
+
+    # La feuille d'atelier la porte.
+    at = svc.retour_atelier(conn, "Cohesio 1", DEB, FIN)
+    verifier("la feuille porte les saisies", len(at["saisies"]), 4)
+
+
+def test_saisies_repiquage():
+    print("\n18. Repiquage : memes masquages que l'onglet Saisies")
+    conn = base()
+    for code, cat in [("01", "personnel"), ("89", "personnel"), ("86", "personnel"),
+                      ("87", "personnel"), ("03", "production"), ("53", "arret")]:
+        conn.execute(
+            """INSERT INTO production_data
+               (operateur, date_operation, operation, operation_code,
+                operation_category, machine, no_dossier)
+               VALUES (?,?,?,?,?,?,?)""",
+            ("Marc", "2026-06-08T08:%s:00" % code, code + " - x", code, cat,
+             "Repiquage", "D-100"))
+    conn.commit()
+    l = svc.saisies_periode(conn, "Repiquage",
+                            "2026-06-08T00:00:00", "2026-06-08T23:59:59")
+    codes = sorted(r["code"] for r in l)
+    verifier("debut, fin et pointages masques sur Repiquage", codes, ["03", "53"])
+
+
 if __name__ == "__main__":
     test_temps_par_categorie()
     test_deux_conducteurs_ne_se_chainent_pas()
@@ -936,6 +1019,8 @@ if __name__ == "__main__":
     test_periode_borne_les_chiffres()
     test_fin_de_cycle_ne_dure_pas()
     test_intervalles_bornes()
+    test_saisies_periode()
+    test_saisies_repiquage()
 
     print("\n" + "=" * 60)
     if FAIL:
