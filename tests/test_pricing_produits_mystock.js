@@ -145,7 +145,8 @@ vm.runInContext([
             src.indexOf('};', src.indexOf('const MSP_ROLE_LABEL =')) + 2),
   extraire('supportCle'), constanteObjet('SUPPORT_LABELS'),
   extraire('supportBadge'), extraire('msProductComp'),
-  extraire('msProductCompLabel'), extraire('msProductSupport'),
+  extraire('msProductCompLabel'), extraire('msProductGrammage'),
+  extraire('msProductSupport'),
   extraire('msProductSupportTexte'), extraire('msProductDetailHtml'),
   'globalThis.CUR_SYM = {EUR:"\u20ac",USD:"$"};',
 ].join('\n'), ctx);
@@ -166,15 +167,19 @@ const produit = {
   },
 };
 
-// Un frontal achete au m² ne pose pas de grammage : la colonne ne montre que
-// sa reference. L'adhesif, lui, affiche le grammage que CE produit pose — c'est
-// lui qui distingue deux lignes portant le meme adhesif.
-check('une matière sans grammage affiche sa seule référence',
+// La cellule d'un composant ne porte plus que sa reference : le grammage a sa
+// propre colonne, et l'ecrire aux deux endroits ferait chercher lequel des deux
+// fait foi le jour ou ils different.
+check('la cellule ne porte que la référence',
   ctx.msProductCompLabel(produit, 'FRONTAL'), '70gsm TOP Thermal');
-check('le grammage du produit est affiché',
-  ctx.msProductCompLabel(produit, 'ADHESIF').includes('22 g/m²'), true);
+check('plus de grammage dans la cellule adhésif',
+  ctx.msProductCompLabel(produit, 'ADHESIF').includes('g/m²'), false);
 check('un emplacement vide reste neutre',
   ctx.msProductCompLabel(produit, 'GLASSINE').includes('—'), true);
+// C'est LUI qui separe quatre produits portant le meme 2028Y.
+check('le grammage sort dans sa propre colonne', ctx.msProductGrammage(produit), 22);
+check('et vaut null quand il manque',
+  ctx.msProductGrammage({ composants: [{ role: 'ADHESIF', reference: 'X' }] }), null);
 
 console.log('\n--- le support remplace le code ---');
 // 886-0001 n'apprend rien qu'on cherche du regard ; le support, si. Le code
@@ -183,10 +188,20 @@ console.log('\n--- le support remplace le code ---');
 const liste = src.slice(src.indexOf('function renderMsProductsList('));
 const declProd = liste.slice(liste.indexOf('const COLS = ['), liste.indexOf('];'));
 check('plus de colonne Code', /cle: "code"/.test(declProd), false);
+// La designation recopiait en prose, sur trois lignes, ce que les colonnes
+// disent en un coup d'oeil : un produit fini EST sa composition.
+check('plus de colonne Désignation', /cle: "des"/.test(declProd), false);
 check('une colonne Support a la place', /cle: "support"/.test(declProd), true);
-check('le code reste filtrable dans la designation',
-  declProd.includes('p.code'), true);
-check('et lisible en infobulle', liste.includes('title="${escAttr(p.code'), true);
+check('et une colonne Grammage', /cle: "gram"/.test(declProd), true);
+check('le grammage se filtre par choix', /cle: "gram"[^]{0,300}filtre: "choix"/.test(declProd), true);
+check('avec son unité dans la liste', declProd.includes('g/m²'), true);
+// Ni le code ni la designation ne sont perdus : la recherche porte sur les
+// deux cote serveur, et la ligne les montre au survol.
+check('la recherche porte encore sur les deux',
+  api.includes('code LIKE ? OR designation LIKE ?')
+  || svcProd.includes('code LIKE ? OR designation LIKE ?'), true);
+check('la ligne les donne au survol',
+  liste.includes('title="${escAttr((p.code || "") + " — " + (p.designation || ""))}"'), true);
 // Le badge reprend les teintes de MyStock : deux applications qui parlent du
 // meme papier doivent lui donner la meme couleur.
 check('le support sort en badge',

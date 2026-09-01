@@ -500,7 +500,7 @@ window.submitQuiz = async function(module_id) {
 loadYtApi();
 route();
 </script>
-<script src="/static/mysifa_cal_rappel.js?v=5"></script>
+<script src="/static/mysifa_cal_rappel.js?v=6"></script>
 </body>
 </html>
 """
@@ -1077,7 +1077,7 @@ window.deleteQuestion = async function(qid) {
 
 loadFormations();
 </script>
-<script src="/static/mysifa_cal_rappel.js?v=5"></script>
+<script src="/static/mysifa_cal_rappel.js?v=6"></script>
 </body>
 </html>
 """

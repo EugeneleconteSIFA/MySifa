@@ -523,10 +523,10 @@ function expeAvisBoutons(r){
   return [
     h('button',{className:'expe-avis-btn expe-dep-ab alerte',type:'button',
       title:'Signaler un problème sur cette expédition',
-      onClick:()=>expeOuvrirAvis(r,'alerte')},expeIconAlerte(14)),
+      onClick:()=>expeOuvrirAvis(r,'alerte')},expeIconAlerte(16)),
     h('button',{className:'expe-avis-btn expe-dep-ab appreciation',type:'button',
       title:'Apprécier cette expédition',
-      onClick:()=>expeOuvrirAvis(r,'appreciation')},expeIconPouce(14))
+      onClick:()=>expeOuvrirAvis(r,'appreciation')},expeIconPouce(16))
   ];
 }
 
