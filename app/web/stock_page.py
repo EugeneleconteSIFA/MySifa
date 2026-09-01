@@ -4305,12 +4305,32 @@ async function startCamera() {
       const reader = new ZXing.MultiFormatReader();
       reader.setHints(hints);
       S.barcodeReader = reader;
+      // Passes alternees, une par tick : cadrage du viseur puis plus large, chacune
+      // dans les deux orientations. Un echec coute ~150 ms, une lecture ~10 ms.
+      const SCAN_PASSES = [
+        { zoom: 0.56, rot: 0 }, { zoom: 0.56, rot: 90 },
+        { zoom: 0.42, rot: 0 }, { zoom: 0.42, rot: 90 },
+        { zoom: 0.75, rot: 0 }, { zoom: 0.75, rot: 90 },
+      ];
+      let passIndex = 0;
       const loop = () => {
         if (!S.scanning) return;
         if (video.readyState < 2 || !video.videoWidth) { setTimeout(loop, 100); return; }
         try {
-          canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-          ctx.drawImage(video, 0, 0);
+          // Recadrage sur le viseur + rotation : deux faces d'un meme constat.
+          // (1) Le lecteur 1D binarise chaque ligne sur un histogramme GLOBAL. Une ligne qui
+          //     traverse l'etiquette ET le fond (bois clair, carton sombre) prend un seuil qui
+          //     noie les barres. Mesure sur une frame reelle en 720p : plein cadre -> echec,
+          //     recadre sur le viseur -> lu en 5 ms.
+          // (2) RGBLuminanceSource.isRotateSupported() vaut false : TRY_HARDER n'essaie donc
+          //     JAMAIS l'orientation a 90 degres. Un code tenu a la verticale — le cas normal
+          //     sur une bobine — etait illisible. On tourne nous-memes, canvas carre a l'appui.
+          const pass = SCAN_PASSES[passIndex++ % SCAN_PASSES.length];
+          const side = Math.min(Math.round(video.videoWidth * pass.zoom), video.videoHeight);
+          const sx = (video.videoWidth - side) / 2, sy = (video.videoHeight - side) / 2;
+          canvas.width = side; canvas.height = side;
+          if (pass.rot) { ctx.translate(side / 2, side / 2); ctx.rotate(Math.PI / 2); ctx.translate(-side / 2, -side / 2); }
+          ctx.drawImage(video, sx, sy, side, side, 0, 0, side, side);
           const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
           // getImageData rend du RGBA ; RGBLuminanceSource ne convertit que les
           // Int32Array. Sans cette conversion il lisait R,G,B,A comme 4 pixels gris.
@@ -4322,7 +4342,7 @@ async function startCamera() {
           const result = reader.decodeWithState(bmp);
           if (result) { onSearchCode(result.getText()); return; }
         } catch(e) {}
-        if (S.scanning) setTimeout(loop, 150);
+        if (S.scanning) setTimeout(loop, 60);
       };
       setTimeout(loop, 400);
     }
@@ -17075,12 +17095,32 @@ async function recepStartCamera(opts) {
       const reader = new ZXing.MultiFormatReader();
       reader.setHints(hints);
       S.recepBarcodeReader = reader;
+      // Passes alternees, une par tick : cadrage du viseur puis plus large, chacune
+      // dans les deux orientations. Un echec coute ~150 ms, une lecture ~10 ms.
+      const SCAN_PASSES = [
+        { zoom: 0.56, rot: 0 }, { zoom: 0.56, rot: 90 },
+        { zoom: 0.42, rot: 0 }, { zoom: 0.42, rot: 90 },
+        { zoom: 0.75, rot: 0 }, { zoom: 0.75, rot: 90 },
+      ];
+      let passIndex = 0;
       const loop = () => {
         if (!S.recepScanning) return;
         if (video.readyState < 2 || !video.videoWidth) { setTimeout(loop, 100); return; }
         try {
-          canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-          ctx.drawImage(video, 0, 0);
+          // Recadrage sur le viseur + rotation : deux faces d'un meme constat.
+          // (1) Le lecteur 1D binarise chaque ligne sur un histogramme GLOBAL. Une ligne qui
+          //     traverse l'etiquette ET le fond (bois clair, carton sombre) prend un seuil qui
+          //     noie les barres. Mesure sur une frame reelle en 720p : plein cadre -> echec,
+          //     recadre sur le viseur -> lu en 5 ms.
+          // (2) RGBLuminanceSource.isRotateSupported() vaut false : TRY_HARDER n'essaie donc
+          //     JAMAIS l'orientation a 90 degres. Un code tenu a la verticale — le cas normal
+          //     sur une bobine — etait illisible. On tourne nous-memes, canvas carre a l'appui.
+          const pass = SCAN_PASSES[passIndex++ % SCAN_PASSES.length];
+          const side = Math.min(Math.round(video.videoWidth * pass.zoom), video.videoHeight);
+          const sx = (video.videoWidth - side) / 2, sy = (video.videoHeight - side) / 2;
+          canvas.width = side; canvas.height = side;
+          if (pass.rot) { ctx.translate(side / 2, side / 2); ctx.rotate(Math.PI / 2); ctx.translate(-side / 2, -side / 2); }
+          ctx.drawImage(video, sx, sy, side, side, 0, 0, side, side);
           const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
           // getImageData rend du RGBA ; RGBLuminanceSource ne convertit que les
           // Int32Array. Sans cette conversion il lisait R,G,B,A comme 4 pixels gris.
@@ -17092,7 +17132,7 @@ async function recepStartCamera(opts) {
           const result = reader.decodeWithState(bmp);
           if (result) { onRecepCode(result.getText().trim()); return; }
         } catch(e) {}
-        if (S.recepScanning) setTimeout(loop, 150);
+        if (S.recepScanning) setTimeout(loop, 60);
       };
       setTimeout(loop, 400);
     }
