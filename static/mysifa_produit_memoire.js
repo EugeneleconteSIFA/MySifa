@@ -45,6 +45,23 @@
     return n;
   }
 
+  // Icones : trait de 1,75 px sur une grille de 24, `currentColor` — le meme
+  // vocabulaire que le reste de MySifa. Les emojis qui etaient ici ne suivaient
+  // ni la couleur du bouton, ni le theme clair, ni la taille du texte, et leur
+  // rendu changeait d'un poste d'atelier a l'autre.
+  var ICONES = {
+    trombone: '<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+    photo: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+  };
+
+  function ico(nom, taille) {
+    var t = taille || 15;
+    return '<svg class="pmem-ico" width="' + t + '" height="' + t + '"'
+      + ' viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"'
+      + ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+      + (ICONES[nom] || '') + '</svg>';
+  }
+
   function fNum(v, dec) {
     if (v == null || v === '') return '—';
     var n = parseFloat(v);
@@ -116,6 +133,7 @@
       '.pmem-desig{font-size:13px;color:var(--text2);margin-top:3px;overflow:hidden;text-overflow:ellipsis}',
       '.pmem-sub{font-size:12px;color:var(--muted);margin-top:6px;display:flex;flex-wrap:wrap;gap:4px 14px}',
       '.pmem-x{background:var(--bg);border:1px solid var(--border);color:var(--text2);border-radius:10px;',
+      'display:flex;align-items:center;justify-content:center;',
       'width:34px;height:34px;cursor:pointer;font-size:19px;line-height:1;font-family:inherit;flex-shrink:0}',
       '.pmem-x:hover{color:var(--text);border-color:var(--accent)}',
       '.pmem-tabs{display:flex;gap:6px;padding:12px 22px 0;flex-shrink:0;flex-wrap:wrap}',
@@ -156,7 +174,7 @@
          pour le dossier en cours, par la teinte d'alerte — c'est une consigne
          a lire avant de lancer, pas un element d'historique. */
       '.pmem-info{border-left:3px solid var(--accent)}',
-      '.pmem-info.is-courant{border-left-color:#fbbf24;background:rgba(251,191,36,.08)}',
+      '.pmem-info.is-courant{border-left-color:var(--warn);background:rgba(251,191,36,.08)}',
       '.pmem-info-txt{font-size:14px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-word}',
       '.pmem-info-ft{font-size:11px;color:var(--muted);margin-top:7px}',
       '.pmem-serie-info{margin-top:12px;padding-top:11px;border-top:1px solid var(--border)}',
@@ -179,17 +197,24 @@
       /* Pieces jointes : la vignette EST le contenu. Une liste de noms de
          fichiers obligerait a ouvrir chaque piece pour savoir laquelle
          montre le defaut. */
-      '.pmem-pj{display:flex;flex-wrap:wrap;gap:9px;margin-top:11px}',
-      '.pmem-pj-item{position:relative}',
+      /* Toutes les pieces sont des tuiles de 92 px : une vignette et un
+         document cote a cote alignaient deux hauteurs differentes, et la
+         rangee partait en escalier des qu'un nom de fichier etait long. */
+      '.pmem-pj{display:flex;flex-wrap:wrap;align-items:flex-start;gap:9px;margin-top:11px}',
+      '.pmem-pj-item{position:relative;width:92px;height:92px}',
       '.pmem-pj-img{display:block;width:92px;height:92px;object-fit:cover;border-radius:9px;',
       'border:1px solid var(--border);background:var(--card);cursor:zoom-in}',
       '.pmem-pj-img:hover{border-color:var(--accent)}',
-      '.pmem-pj-doc{display:flex;align-items:center;gap:7px;max-width:230px;text-decoration:none;',
-      'background:var(--card);border:1px solid var(--border);border-radius:9px;padding:9px 12px;',
-      'font-size:12px;font-weight:700;color:var(--text2);overflow:hidden}',
+      '.pmem-pj-doc{display:flex;flex-direction:column;align-items:center;justify-content:center;',
+      'gap:7px;width:92px;height:92px;box-sizing:border-box;text-decoration:none;',
+      'background:var(--card);border:1px solid var(--border);border-radius:9px;padding:8px;',
+      'font-size:11px;font-weight:700;color:var(--text2);overflow:hidden;text-align:center}',
       '.pmem-pj-doc:hover{border-color:var(--accent);color:var(--accent)}',
-      '.pmem-pj-nom{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+      '.pmem-pj-ico{display:flex;color:var(--muted)}',
+      '.pmem-pj-doc:hover .pmem-pj-ico{color:var(--accent)}',
+      '.pmem-pj-nom{width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
       '.pmem-pj-x{position:absolute;top:-7px;right:-7px;width:23px;height:23px;border-radius:50%;',
+      'display:flex;align-items:center;justify-content:center;',
       'background:var(--card);border:1px solid var(--border);color:var(--text2);cursor:pointer;',
       'font-size:14px;line-height:1;font-family:inherit;padding:0}',
       '.pmem-pj-x:hover{border-color:var(--danger,var(--warn));color:var(--danger,var(--warn))}',
@@ -213,8 +238,10 @@
       '.pmem-note-txt{font-size:14px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-word}',
       '.pmem-note-ft{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;',
       'font-size:12px;color:var(--muted)}',
-      '.pmem-btn{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:10px;',
+      '.pmem-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;',
+      'background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:10px;',
       'padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:filter .15s}',
+      '.pmem-ico{display:block;flex-shrink:0}',
       '.pmem-btn:hover{border-color:var(--accent);color:var(--accent)}',
       '.pmem-btn-sm{padding:6px 12px;font-size:12px;border-radius:8px}',
       '.pmem-btn-accent{background:var(--accent);border-color:var(--accent);color:var(--bg)}',
@@ -327,15 +354,15 @@
          a lire avant de demarrer. Un bouton gris parmi d'autres boutons gris ne
          se voit pas depuis un poste machine. */
       '.pmem-hist-btn.is-signal{border-color:rgba(251,191,36,.55);background:rgba(251,191,36,.12)}',
-      '.pmem-hist-btn.is-signal:hover{border-color:#fbbf24;color:var(--text);background:rgba(251,191,36,.18)}',
+      '.pmem-hist-btn.is-signal:hover{border-color:var(--warn);color:var(--text);background:rgba(251,191,36,.18)}',
       '.pmem-hist-pastille{display:inline-flex;align-items:center;justify-content:center;',
-      'min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:#fbbf24;',
+      'min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--warn);',
       'color:#1f2937;font-size:11px;font-weight:800;line-height:1;flex:none}',
       '.pmem-hist-corps{display:flex;flex-direction:column;gap:1px;min-width:0}',
       '.pmem-hist-titre{font-size:12px;font-weight:800}',
       '.pmem-hist-detail{font-size:11px;font-weight:600;color:var(--text2)}',
       '.pmem-hist-tag{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;',
-      'color:#fbbf24;flex:none}',
+      'color:var(--warn);flex:none}',
       /* La pulsation s'arrete des que le conducteur a ouvert l'historique de ce
          dossier : un signal qui clignote pour toujours devient du decor. */
       '.pmem-hist-btn.is-neuf{animation:pmem-pulse 2.2s ease-in-out infinite}',
@@ -1003,7 +1030,7 @@
       } else {
         vue = el('a', { className: 'pmem-pj-doc', href: url, target: '_blank',
                         rel: 'noopener', title: pj.fichier_origine || '' }, [
-          el('span', { text: '📎' }),
+          el('span', { className: 'pmem-pj-ico', html: ico('trombone', 14) }),
           el('span', { className: 'pmem-pj-nom', text: pj.fichier_origine || 'Document' }),
         ]);
       }
@@ -1088,7 +1115,7 @@
         var vue = pj.estImage
           ? el('img', { className: 'pmem-pj-img', src: pj.apercu, alt: pj.nom })
           : el('span', { className: 'pmem-pj-doc' }, [
-              el('span', { text: '📎' }),
+              el('span', { className: 'pmem-pj-ico', html: ico('trombone', 14) }),
               el('span', { className: 'pmem-pj-nom', text: pj.nom }),
             ]);
         var x = el('button', { type: 'button', className: 'pmem-pj-x', text: '×',
@@ -1127,9 +1154,11 @@
     inPhoto.addEventListener('change', function () { ajouter(inPhoto.files); inPhoto.value = ''; });
     inFichier.addEventListener('change', function () { ajouter(inFichier.files); inFichier.value = ''; });
 
-    var btnPhoto = el('button', { type: 'button', className: 'pmem-btn', text: '📷 Prendre une photo' });
+    var btnPhoto = el('button', { type: 'button', className: 'pmem-btn',
+      html: ico('photo') + '<span>Prendre une photo</span>' });
     btnPhoto.addEventListener('click', function () { inPhoto.click(); });
-    var btnFichier = el('button', { type: 'button', className: 'pmem-btn', text: '📎 Ajouter un fichier' });
+    var btnFichier = el('button', { type: 'button', className: 'pmem-btn',
+      html: ico('trombone') + '<span>Ajouter un fichier</span>' });
     btnFichier.addEventListener('click', function () { inFichier.click(); });
 
     var ov = el('div', { className: 'pmem-nov' });
