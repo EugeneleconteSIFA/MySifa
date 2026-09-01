@@ -114,7 +114,12 @@ curl -s https://v1.mysifa.com/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | python3 -m json.tool
 ```
 
-Une clé absente ou sans la portée `mcp:read` répond 401.
+Une clé absente ou sans la portée `mcp:read` répond **403**, pas 401. C'est
+délibéré : un 401 est le signal normalisé « ce serveur veut de l'OAuth ». Le
+client MCP part alors en découverte de métadonnées, tente un enregistrement
+dynamique de client, échoue, et affiche « impossible de s'inscrire auprès du
+service de connexion » — au lieu d'envoyer simplement l'en-tête. Ici l'appelant
+n'a pas d'autre moyen de s'authentifier : il présente une clé, ou rien.
 
 ---
 

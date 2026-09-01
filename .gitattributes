@@ -1,10 +1,44 @@
-# Les scripts shell doivent garder des fins de ligne LF même sur Windows.
+# Fins de ligne — pourquoi ce fichier compte plus qu'il n'en a l'air.
+#
+# Quelque chose reecrit les fichiers texte du depot en CRLF sur le poste
+# Windows apres chaque checkout. Tant que la regle ne couvrait que .sh, .py,
+# .js et .css, ces quatre extensions etaient normalisees a la comparaison et
+# ne bougeaient pas — mais tous les .md, .html, .json, .txt et .ps1
+# apparaissaient modifies sans l'etre. Le 01/09/2026, un `git status` annoncait
+# 172 fichiers et 51 332 lignes changees pour 7 fichiers reellement touches :
+# un `git add .` en aurait fait un commit illisible et un aimant a conflits.
+#
+# `* text=auto eol=lf` regle le probleme a la source : git stocke du LF (ce
+# qu'il fait deja), et surtout il NORMALISE A LA COMPARAISON. Le poste peut
+# reecrire en CRLF autant qu'il veut, git n'y voit plus de modification.
+# Aucun blob ne change : la ligne ne cree pas de commit de normalisation.
+* text=auto eol=lf
+
+# Le shell ne tolere pas le CR : un shebang suivi d'un \r n'est pas un shebang.
 *.sh text eol=lf
 
 *.py text eol=lf
 *.js text eol=lf
 *.css text eol=lf
 
+# Le CSV part vers Excel et des imports tiers : on n'y touche pas.
 *.csv -text
+
+# Binaires — sans ces lignes, git tente une detection et un PDF finit
+# diffe ligne a ligne.
 *.xlsx binary
+*.xlsm binary
 *.docx binary
+*.pptx binary
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.zip binary
+*.db binary
+*.sqlite binary

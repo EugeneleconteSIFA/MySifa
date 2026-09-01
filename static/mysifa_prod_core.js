@@ -5919,9 +5919,21 @@ function renderSaisies(){
     // Durée = écart avec la saisie suivante du même opérateur (en minutes)
     // v2.3.43 : les acks d'alertes n'ont pas de durée et ne rentrent pas
     // dans le calcul de la saisie précédente/suivante.
+    // 01/09/2026 : les mouvements de stock non plus. Une entrée Z1, une sortie
+    // matière, c'est un événement instantané — l'opérateur déclare ce qui sort
+    // de la machine, il ne s'arrête pas de produire pour le faire. Les compter
+    // coupait la production en deux : « 03 Production 1 h 08 » là où la machine
+    // avait tourné 1 h 18, les 10 minutes manquantes étant attribuées à
+    // l'entrée Z1. L'écran donnait donc un temps de production différent de
+    // celui du point de production, qui lit `production_data` seul.
+    // `kind` ou `operation_category` : la timeline unifiee remplit tantot l'un,
+    // tantot l'autre selon la route qui l'a servie. Le rendu teste deja les
+    // deux, le calcul de duree doit faire pareil.
+    const SANS_DUREE = new Set(['alert_ack', 'stock_pf', 'stock_mp']);
+    const sansDuree = r => SANS_DUREE.has(r.kind) || SANS_DUREE.has(r.operation_category);
     const byOp = new Map();
     rows.forEach(r=>{
-      if(r.kind === 'alert_ack') return;
+      if(sansDuree(r)) return;
       const k = String(r.operateur||'').trim();
       if(!byOp.has(k)) byOp.set(k, []);
       byOp.get(k).push(r);
