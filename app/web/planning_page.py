@@ -678,7 +678,7 @@ body.light .upd-card kbd{background:rgba(0,0,0,.1)}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=6"></script>
+<script src="/static/mysifa_cal_rappel.js?v=7"></script>
 <script src="/static/mysifa_landscape.js?v=2"></script>
 <script src="/static/mysifa_guides.js?v=__V_LABEL__"></script>
 <script>window.MySifaLandscape&&MySifaLandscape.enable();</script>

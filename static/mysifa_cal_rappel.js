@@ -62,25 +62,31 @@
       'align-items:center;justify-content:center;padding:18px;',
       'background:rgba(2,6,23,.55);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}',
       '#mysifa-cal-rappels.ouvert{display:flex}',
-      '#mysifa-cal-rappels .mcr-pile{display:flex;flex-direction:column;gap:12px;',
-      'width:100%;max-width:400px;max-height:92vh;overflow-y:auto}',
-      '.mcr-card{position:relative;background:var(--card,#111827);',
-      'border:1px solid var(--border,#1e293b);border-top:3px solid var(--accent,#22d3ee);',
-      'border-radius:14px;padding:18px 18px 16px;',
-      'box-shadow:0 24px 60px rgba(0,0,0,.5);animation:mcrIn .22s ease-out}',
-      '@keyframes mcrIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}',
+      /* padding + box-sizing : la pile est un conteneur de defilement, elle
+         rogne au ras de sa boite. Sans cette marge interieure, l'ombre portee
+         et le halo des cartes etaient coupes net — d'ou un cadre gris a coins
+         carres autour de la fenetre. */
+      '#mysifa-cal-rappels .mcr-pile{display:flex;flex-direction:column;gap:14px;',
+      'box-sizing:border-box;width:100%;max-width:436px;padding:18px;',
+      'max-height:92vh;overflow-y:auto}',
+      /* --mcr-ombre : l'ombre est reprise telle quelle dans les keyframes (une
+         animation de box-shadow remplace la declaration de base), et allegee
+         en theme clair ou une ombre noire a 50% fait sale. */
+      '.mcr-card{background:var(--card,#111827);border:1px solid var(--border,#1e293b);',
+      'border-top:3px solid var(--accent,#22d3ee);border-radius:14px;padding:18px 18px 16px;',
+      '--mcr-ombre:0 24px 60px rgba(0,0,0,.5);box-shadow:var(--mcr-ombre);',
       /* Le rappel arrive par-dessus une page deja chargee : le lisere accent
-         qui respire ramene l'oeil dessus. Un anneau en ::after plutot qu'une
-         animation de border-color sur la carte : la geometrie ne bouge pas,
-         seule l'opacite varie — pas de clignotement ni de saute de 1px. */
-      /* inset:0 et pas un anneau debordant : .mcr-pile est un conteneur de
-         defilement (overflow-y:auto), il rogne tout ce qui sort de la carte
-         — un halo en negatif disparaissait sur les cotes. */
-      '.mcr-card::after{content:"";position:absolute;inset:0;border-radius:14px;',
-      'pointer-events:none;border:2px solid var(--accent,#22d3ee);opacity:0;',
-      'animation:mcrHalo 2.2s ease-in-out .3s infinite}',
-      '@keyframes mcrHalo{0%,100%{opacity:.12}50%{opacity:.95}}',
-      '@media(prefers-reduced-motion:reduce){.mcr-card::after{animation:none;opacity:.5}}',
+         qui respire ramene l'oeil dessus. Anneaux en box-shadow plutot qu'un
+         ::after borde : un box-shadow epouse exactement le border-radius, donc
+         pas de double trait ni de coins decales, et rien ne bouge en geometrie. */
+      'animation:mcrIn .22s ease-out,mcrHalo 2.4s ease-in-out .3s infinite}',
+      'body.light .mcr-card{--mcr-ombre:0 18px 44px rgba(15,23,42,.22)}',
+      '@keyframes mcrIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}',
+      '@keyframes mcrHalo{0%,100%{box-shadow:var(--mcr-ombre),',
+      '0 0 0 0 var(--accent,#22d3ee),0 0 0 0 var(--accent-bg,rgba(34,211,238,.12))}',
+      '50%{box-shadow:var(--mcr-ombre),',
+      '0 0 0 2px var(--accent,#22d3ee),0 0 0 9px var(--accent-bg,rgba(34,211,238,.12))}}',
+      '@media(prefers-reduced-motion:reduce){.mcr-card{animation:mcrIn .22s ease-out}}',
       '.mcr-quand{font-size:11px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;',
       'color:var(--accent,#22d3ee)}',
       '.mcr-titre{font-size:17px;font-weight:800;color:var(--text,#f1f5f9);margin-top:5px;line-height:1.3}',
