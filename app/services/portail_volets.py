@@ -41,6 +41,9 @@ from typing import Any, Optional
 _ADMIN = ("superadmin", "direction")
 _ADMIN_LARGE = ("superadmin", "direction", "administration",
                 "administration_ventes", "administration_technique")
+# Le volet ERP est ouvert plus large que les autres : l'expédition lit le
+# miroir pour retrouver ses BL et ses commandes (`ROLES_ERP` dans config.py).
+_ERP_LARGE = _ADMIN_LARGE + ("expedition",)
 
 
 def _entree(cle, label, url, icone, resume="", roles=None, compteur=None):
@@ -132,7 +135,7 @@ VOLETS_RAIL = [
         "titre": "ERP — lecture RVGI",
         "resume": "Miroir en lecture seule",
         "icone": "database",
-        "roles": _ADMIN_LARGE,
+        "roles": _ERP_LARGE,
         "source": "erp",
         "groupes": [],
         "pied": {"label": "Ouvrir l'ERP", "url": "/erp"},

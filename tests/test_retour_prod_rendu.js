@@ -288,9 +288,23 @@ verifier("feuille : la liste masquee est repliee",
 verifier("feuille : le compteur ne compte que les visibles",
          feuilleMasques.includes("1 à traiter"));
 
-console.log("\n4 bis. Slug de cle");
+console.log("\n4 ter. Slug de cle");
 verifier("les deux-points ne peuvent pas etre un id DOM", M.slug("infoprod:D-501") === "infoprod_D-501");
 verifier("slug d'une note", M.slug("note:7") === "note_7");
+
+console.log("\n4 bis. Le compte-rendu dit ce que ses chiffres couvrent");
+const crVie = M.renderCR({ no_dossier: "D-501", identite: { client: "KIABI", cloture: true },
+  temps: {}, metrage: { reel: 4200 } }, { fermer: false });
+verifier("fiche sans periode : toute la vie du dossier",
+         crVie.includes("toute la vie du dossier"));
+const crPer = M.renderCR({ no_dossier: "D-501", identite: { client: "KIABI", cloture: true },
+  temps: {}, metrage: { reel: 1200 },
+  periode: { debut: "2026-08-31T00:00:00", fin: "2026-08-31T23:59:59" } }, { fermer: false });
+verifier("fiche bornee : la date de la periode", crPer.includes("Chiffres du 31/08/2026"));
+verifier("jour unique : pas de « au »", crPer.indexOf(" au 31/08/2026") === -1);
+const crPlage = M.renderCR({ no_dossier: "D-501", identite: {}, temps: {}, metrage: {},
+  periode: { debut: "2026-08-24T00:00:00", fin: "2026-08-30T23:59:59" } }, { fermer: false });
+verifier("plage : les deux bornes", crPlage.includes("du 24/08/2026 au 30/08/2026"));
 
 console.log("\n5. Formats");
 verifier("vitesse en m/min", M.vitesse(33.2) === "33,2 m/min");

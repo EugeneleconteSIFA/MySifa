@@ -902,3 +902,100 @@ accents, casse, debuts de mot en tete, trait d'union qui coupe les mots,
 exclusion des deja presents, plafond de huit, nom hors annuaire
 propose seulement quand l'annuaire est muet, echappement du nom et de la frappe,
 place du bloc avant les notes).
+
+## 12. Les chiffres d'un point de production ne parlaient pas de sa journee (01/09/2026)
+
+Signalement : « mes datas dans ma reunion du 1 septembre (analyse du 31/08) ne
+sont pas correctes : vitesse de production, saisies (pour le dossier reliquat,
+c'est essentiellement du "autre" alors que c'est faux) ».
+
+L'export des saisies du 31/08 sur Cohesio 1 (29 lignes) a servi de banc d'essai :
+le service passe dessus en base memoire, sans l'application.
+
+### La preuve etait dans la capture
+
+L'ecran annoncait 18 h 52 de production, 8 h 08 de calage et 1 h 16 d'arrets,
+soit 28 h 16 d'activite. Sur la meme capture, l'axe de la frise dit que la
+journee du lundi 31/08 dure 14,9 h. Une machine ne peut pas travailler 28 h en
+15 h : le total ne pouvait pas venir de la seule journee analysee.
+
+### Deux defauts, une racine
+
+**1. La periode n'atteignait pas le calcul.** `retour_atelier` recevait bien les
+bornes, les utilisait pour choisir les dossiers clotures dans la periode, puis
+appelait `compte_rendu(conn, n)` — sans bornes. Or `compte_rendu` lit
+`_saisies(conn, no_dossier)`, c'est-a-dire TOUTES les saisies du dossier, depuis
+toujours. Un « Reliquat + Stock » qui revient toutes les semaines versait donc
+chacune de ses passes dans le bilan d'une seule journee. Idem pour le metrage :
+27 536 m affiches contre 17 717 m reellement produits le 31.
+
+**2. Une saisie de fin de cycle durait.** La duree d'une saisie est l'ecart avec
+la suivante du meme operateur. `89 - Fin de production` a 12 h 55 le 31/08 se
+chainait donc a la saisie suivante du meme conducteur sur ce dossier — quatre
+jours plus tard. Resultat : un intervalle de 1 004 minutes dans la categorie
+`personnel`, dessine en gris sur la moitie de la frise. C'est le « essentiellement
+du autre » du signalement. Le meme intervalle nourrissait `saisies_ouvertes` et
+la vigilance, ce qui donnait une alerte permanente sur des dossiers sains.
+
+Un troisieme effet decoulait du deuxieme : le rabotage anti-chevauchement de
+`_slot` fixe une borne apres chaque segment. Un intervalle qui couvre toute la
+fenetre pose cette borne a la fin de la journee, et TOUS les segments suivants
+sont ecartes. Un long bloc gris pouvait donc effacer les vraies phases plutot que
+de se poser a cote.
+
+### Ce qui change
+
+`intervalles(saisies, debut, fin, codes_fin)` porte les deux corrections :
+
+- une saisie dont le code ferme un cycle (`89`, `90`) n'ouvre aucun intervalle.
+  Un dossier repris plus tard repart par un code de debut, pas par la fin du
+  cycle precedent ;
+- avec une fenetre, chaque intervalle est ramene a l'interieur et ceux qui n'y
+  mordent pas disparaissent. `minutes` est la duree retenue, `minutes_brutes` la
+  duree reelle, `debut_brut`/`fin_brut` les bornes reelles — c'est sur elles que
+  se jugent `douteuse` et les marqueurs de debordement de la frise, qui doivent
+  continuer de dire qu'un dossier a commence avant la periode.
+
+`temps_par_categorie`, `metrage_dossier` et `compte_rendu` acceptent la meme
+fenetre ; `retour_atelier`, `comptes_rendus_periode` et `frise` la transmettent.
+Pour le metrage, un cycle compte pour la periode ou il se CLOTURE : c'est la
+cloture qui releve le compteur de fin.
+
+**La fiche d'un dossier, elle, reste sur sa vie entiere** — c'est son role. Les
+deux lectures cohabitent donc, et le compte-rendu affiche desormais laquelle il
+montre (« Chiffres du 31/08/2026 » ou « Chiffres sur toute la vie du dossier »).
+Sans cette ligne, ouvrir un dossier depuis la liste d'une periode donnait deux
+metrages differents sans qu'on sache lequel repondait a quelle question.
+
+### Mesure avant / apres
+
+Meme jeu de saisies, dossiers ayant aussi tourne le 28/08 et le 01/09 :
+
+| | avant | apres |
+|---|---|---|
+| production | 18 h 57 | 11 h 39 |
+| calage | 7 h 00 | 2 h 00 |
+| metrage | 97 022 m | 44 309 m |
+| metrage du Reliquat | 27 536 m | 17 717 m |
+| total sur une journee de 14,9 h | 26 h 49 (impossible) | 14 h 31 |
+| ruban du Reliquat | 51 % de gris | 90 % de production, 9 % d'arret |
+
+Les 27 536 m et les ~18 h 55 de production reproduits ici sont exactement les
+chiffres de la capture : le scenario reconstitue bien ce qui se passait.
+
+### Ce qui reste ouvert
+
+`retour_atelier` ne retient que les dossiers CLOTURES dans la periode. Un dossier
+qui a tourne toute la journee du 31 mais n'a ete cloture que le 01/09 ne compte
+donc pas dans le point du 31 — il apparait sur la frise, pas dans les KPI. Le
+total ne peut plus etre trop grand, mais il peut etre trop petit. Retenir les
+dossiers ACTIFS dans la periode changerait le sens de « 2 dossiers » affiche en
+sous-titre du metrage : a arbitrer.
+
+### Verification
+
+`tests/test_rapport_dossier.py` : trois familles de cas ajoutees — une periode ne
+compte que ce qui s'y est passe (et le total tient dans la journee), une saisie
+de fin de cycle ne dure pas, un intervalle a cheval est borne des deux cotes sans
+perdre sa duree reelle. `tests/test_retour_prod_rendu.js` : 4 cas sur la portee
+affichee. Les 41 suites du depot restent vertes.

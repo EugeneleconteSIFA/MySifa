@@ -4131,6 +4131,16 @@ EXPE_MAIN_CSS = r"""
 .expe-form-tab:hover{color:var(--text2)}
 .expe-form-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
 
+/* Retour de la recherche ERP sous le champ ARC. Discret par defaut : c'est une
+   confirmation, pas une alerte — et « commande inconnue » est une reponse
+   normale quand on saisit un depart hors commande. */
+.expe-arc-res{font-size:11.5px;line-height:1.5;margin-top:5px;color:var(--muted);min-height:16px}
+.expe-arc-res.muet{color:var(--muted)}
+.expe-arc-res.trouve{color:var(--text2)}
+.expe-arc-res-tete{font-weight:600;color:var(--text2);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.expe-arc-res-pied{color:var(--accent);margin-top:2px}
+
 /* MyExpé — picker dossier */
 .expe-picker-wrap{display:flex;flex-direction:column;gap:10px}
 .expe-picker-hint{font-size:11px;color:var(--muted);line-height:1.5;padding:0 2px}
@@ -5064,6 +5074,94 @@ function renderExpeDepartModal(){
     }
   }
 
+  // ── ARC : le numero de commande va chercher le reste dans l'ERP ──────────
+  //
+  // La commande sait deja chez qui la marchandise part et quand elle est
+  // attendue. Le retaper est une source d'erreur, et une erreur de code postal
+  // se paie en livraison. Regle unique : on ne remplit QUE ce qui est vide.
+  // Ecraser une saisie manuelle serait pire que ne rien faire — l'expediteur a
+  // parfois une bonne raison de deroger a l'adresse de la commande.
+  const clientField=mk('Client','client');
+  const cpField=mk('Code postal / destination','code_postal_destination');
+  const livField=mk('Date livraison (prévue)','date_livraison','date');
+
+  function _arcRemplir(champ,cle,valeur){
+    const inp=champ.querySelector('input');
+    if(!inp||!valeur)return false;
+    if(String(inp.value||'').trim())return false;
+    inp.value=valeur;
+    S.expeDepartForm[cle]=valeur;
+    return true;
+  }
+  function _arcDateFr(iso){
+    const s=String(iso||'').slice(0,10);
+    if(s.length!==10)return s;
+    return s.slice(8,10)+'/'+s.slice(5,7)+'/'+s.slice(0,4);
+  }
+
+  const arcInput=h('input',{type:'text',name:'arc',
+    placeholder:'N° de commande — le reste se complète',
+    value:(f.arc!=null?String(f.arc):'')});
+  const arcResume=h('div',{className:'expe-arc-res'});
+  let _arcTimer=null;
+  let _arcDernier=null;
+
+  async function arcChercher(){
+    const num=String(S.expeDepartForm.arc||'').trim();
+    if(num===_arcDernier)return;
+    _arcDernier=num;
+    arcResume.className='expe-arc-res';
+    if(!/^[0-9]{3,}$/.test(num)){arcResume.textContent='';return;}
+    arcResume.textContent='Recherche dans l\'ERP…';
+    let d=null;
+    try{
+      d=await api('/api/rvgi/commande?numero='+encodeURIComponent(num));
+    }catch(e){
+      arcResume.className='expe-arc-res muet';
+      arcResume.textContent='ERP injoignable — saisie manuelle.';
+      return;
+    }
+    if(!d||!d.trouve||!d.commande){
+      arcResume.className='expe-arc-res muet';
+      arcResume.textContent=(d&&d.miroir===false)
+        ?'ERP indisponible — saisie manuelle.'
+        :'Commande inconnue dans l\'ERP — saisie manuelle.';
+      return;
+    }
+    const cde=d.commande;
+    const remplis=[];
+    if(_arcRemplir(clientField,'client',cde.client))remplis.push('client');
+    if(_arcRemplir(cpField,'code_postal_destination',cde.code_postal))remplis.push('code postal');
+    if(_arcRemplir(livField,'date_livraison',cde.date_livraison))remplis.push('date de livraison');
+    expeScheduleSaveLocal();
+    // Le resume ne repete pas ce qui est deja a l'ecran : le numero est dans le
+    // champ juste au-dessus, la date vient d'etre recopiee dans son champ. Il
+    // sert a confirmer qu'on a bien la bonne commande, pas a la recopier.
+    const tete=[cde.client].filter(Boolean);
+    if(cde.code_postal)tete.push(cde.code_postal+(cde.ville?(' '+cde.ville):''));
+    if(cde.soldee)tete.push('commande soldée');
+    arcResume.className='expe-arc-res trouve';
+    arcResume.innerHTML='';
+    arcResume.appendChild(h('div',{className:'expe-arc-res-tete'},tete.join(' · ')));
+    arcResume.appendChild(h('div',{className:'expe-arc-res-pied'},
+      remplis.length
+        ?('Complété automatiquement : '+remplis.join(', ')+'.')
+        :'Rien complété — les champs étaient déjà renseignés.'));
+  }
+
+  arcInput.addEventListener('input',e=>{
+    S.expeDepartForm.arc=e.target.value;
+    expeScheduleSaveLocal();
+    if(_arcTimer)clearTimeout(_arcTimer);
+    _arcTimer=setTimeout(()=>void arcChercher(),450);
+  });
+  arcInput.addEventListener('blur',()=>{
+    if(_arcTimer)clearTimeout(_arcTimer);
+    void arcChercher();
+  });
+  const arcField=h('div',{className:'expe-field'},
+    h('label',null,'ARC (n° de commande)'),arcInput,arcResume);
+
   const paletteItems=S.expePaletteTypes||[];
   const palSel=h('select',{name:'type_palette_matiere_id'});
   palSel.appendChild(h('option',{value:''},'— Sélectionner —'));
@@ -5323,27 +5421,32 @@ function renderExpeDepartModal(){
       h('div',{className:'expe-sec-title'},'Rattachement production'),
       h('div',{className:'expe-fields'},rattachField)
     ),
+    // L'ordre suit la saisie reelle : on part du transport, on donne les
+    // references de la commande — qui completent le client et la destination
+    // toutes seules — puis on verifie ce qui a ete rempli, et on finit par ce
+    // qu'il y a sur le camion. « References documentaires » remonte donc face a
+    // « Enlevement », avant « Client et livraison » qu'elle alimente.
     sec('Enlèvement et transport',
       mk("Date d'enlèvement",'date_enlevement','date'),
       mk('Transporteur','transporteur'),
       mk('Affréteurs','affreteurs'),
       mk('N° Récépissé','no_cde_transport')
     ),
+    sec('Références documentaires',
+      blField,
+      arcField,
+      mk('Réf. SIFA','ref_sifa')
+    ),
     sec('Client et livraison',
-      mk('Client','client'),
-      mk('Code postal / destination','code_postal_destination'),
-      mk('Date livraison (prévue)','date_livraison','date')
+      clientField,
+      cpField,
+      livField
     ),
     sec('Colisage',
       palField,
       mk('Nombre de palettes','nb_palette','number','ex: 2'),
       mk('Poids total (kg)','poids_total_kg','number','ex: 1325'),
       europeField
-    ),
-    sec('Références documentaires',
-      blField,
-      mk('ARC','arc'),
-      mk('Réf. SIFA','ref_sifa')
     )
   );
 

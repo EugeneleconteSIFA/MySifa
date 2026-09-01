@@ -157,6 +157,10 @@ table.rp-cr tbody tr:hover{background:var(--accent-bg);box-shadow:inset 3px 0 0 
 .rp-rech-item .r-meta{font-size:13px;color:var(--muted);margin-top:3px}
 
 /* ── Compte-rendu d'un dossier ───────────────────────────────── */
+/* Portee des chiffres : la fiche parle du dossier entier, une liste de periode
+   parle de la periode. Le dire evite de comparer deux metrages differents. */
+.rp-cr-portee{font-size:11.5px;color:var(--muted);margin-top:4px;
+  text-transform:uppercase;letter-spacing:.4px;font-weight:600}
 .rp-cr-titre{margin:0 0 5px;font-size:22px;color:var(--text);font-weight:800;letter-spacing:-.3px}
 .rp-cr-sous{font-size:14.5px;color:var(--muted);margin-bottom:20px}
 .rp-attente{color:var(--warn,#fbbf24);font-weight:600}

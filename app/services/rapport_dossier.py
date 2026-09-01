@@ -202,14 +202,44 @@ def _saisies(conn, no_dossier: str) -> List[Dict[str, Any]]:
     return [dict(r) for r in rows]
 
 
-def intervalles(saisies: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+# Codes qui FERMENT un cycle : apres eux, le dossier ne tourne plus. Valeurs
+# par defaut alignees sur le reste du module ; les vraies viennent de config.py
+# et sont passees en parametre par les appelants.
+CODES_FIN_DEFAUT: Tuple[str, ...] = ("89", "90")
+
+
+def intervalles(saisies: List[Dict[str, Any]],
+                debut: str = "", fin: str = "",
+                codes_fin: Sequence[str] = CODES_FIN_DEFAUT) -> List[Dict[str, Any]]:
     """Chaque saisie et le temps qui la separe de la suivante DU MEME OPERATEUR.
 
     C'est la brique commune au calcul des temps et au trace de la frise : la
     repartition par categorie n'est qu'une somme de ces intervalles, et la
     frise n'est que leur mise en place sur un axe. Les calculer deux fois,
     c'est se donner deux chronologies pour un meme dossier.
+
+    Deux bornes, apprises d'un point de production faux :
+
+    1. Une saisie de FIN de cycle ne dure pas. « 89 - Fin de production » dit
+       que le dossier s'arrete la. Le chainer a la saisie suivante du meme
+       operateur donnait, sur un dossier qui revient quelques jours plus tard,
+       un intervalle de seize heures dans la categorie de la saisie de fin —
+       un bloc gris qui mangeait la moitie de la frise et gonflait les temps.
+       Un dossier repris plus tard repart par un code de debut, pas par la
+       fin du cycle precedent.
+
+    2. `debut`/`fin` bornent la lecture. Sans fenetre on lit la vie entiere du
+       dossier — c'est ce que veut sa fiche. Avec une fenetre, chaque
+       intervalle est ramene a l'interieur et ceux qui n'y mordent pas
+       disparaissent : le point du 31/08 doit parler du 31/08, pas de tout ce
+       que le dossier a fait avant et apres.
+
+    `minutes` est la duree RETENUE (bornee) ; `minutes_brutes` la duree reelle,
+    et `douteuse` se juge sur elle — une saisie restee ouverte le reste, meme
+    ramenee a une journee.
     """
+    d_deb, d_fin = _dt(debut), _dt(fin)
+    fins = {_txt(c) for c in (codes_fin or ()) if _txt(c)}
     out: List[Dict[str, Any]] = []
     par_operateur: Dict[str, List[Dict[str, Any]]] = {}
     for s in saisies:
@@ -218,12 +248,23 @@ def intervalles(saisies: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     for _op, lignes in par_operateur.items():
         lignes = sorted(lignes, key=lambda r: (_txt(r.get("date_operation")), r.get("id") or 0))
         for i, ligne in enumerate(lignes):
-            debut = _dt(ligne.get("date_operation"))
-            suivante = lignes[i + 1] if i + 1 < len(lignes) else None
-            fin = _dt(suivante.get("date_operation")) if suivante else None
-            if debut is None or fin is None:
+            if _txt(ligne.get("operation_code")) in fins:
                 continue
-            minutes = (fin - debut).total_seconds() / 60.0
+            debut_iv = _dt(ligne.get("date_operation"))
+            suivante = lignes[i + 1] if i + 1 < len(lignes) else None
+            fin_iv = _dt(suivante.get("date_operation")) if suivante else None
+            if debut_iv is None or fin_iv is None:
+                continue
+            brutes = (fin_iv - debut_iv).total_seconds() / 60.0
+            if brutes <= 0:
+                continue
+            d0, f0 = debut_iv, fin_iv
+            if d_deb is not None and d_fin is not None:
+                if fin_iv <= d_deb or debut_iv >= d_fin:
+                    continue
+                d0 = max(debut_iv, d_deb)
+                f0 = min(fin_iv, d_fin)
+            minutes = (f0 - d0).total_seconds() / 60.0
             if minutes <= 0:
                 continue
             out.append({
@@ -233,28 +274,36 @@ def intervalles(saisies: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "no_dossier": _txt(ligne.get("no_dossier")),
                 "client": _txt(ligne.get("client")),
                 "designation": _txt(ligne.get("designation")),
-                "debut": debut, "fin": fin, "minutes": minutes,
+                "debut": d0, "fin": f0, "minutes": minutes,
+                "debut_brut": debut_iv, "fin_brut": fin_iv,
+                "minutes_brutes": brutes,
+                "bornee": minutes < brutes,
                 "categorie": _txt(ligne.get("operation_category")).lower() or "autre",
                 "code": _txt(ligne.get("operation_code")),
                 "operation": _txt(ligne.get("operation")),
-                "douteuse": minutes > ECART_MAX_MIN,
+                "douteuse": brutes > ECART_MAX_MIN,
             })
     out.sort(key=lambda i: (i["debut"], i["saisie_id"] or 0))
     return out
 
 
-def temps_par_categorie(saisies: List[Dict[str, Any]]) -> Dict[str, Any]:
+def temps_par_categorie(saisies: List[Dict[str, Any]],
+                        debut: str = "", fin: str = "",
+                        codes_fin: Sequence[str] = CODES_FIN_DEFAUT) -> Dict[str, Any]:
     """Repartition du temps du dossier, par categorie d'operation.
 
     `minutes` ne plafonne rien, pour rester aligne sur le calcul historique ;
     `minutes_douteuses` isole les ecarts qui depassent ECART_MAX_MIN,
     c'est-a-dire les saisies restees ouvertes d'un jour a l'autre.
+
+    `debut`/`fin` bornent la lecture a une periode : c'est ce qu'attend un
+    point de production, qui parle d'une journee et pas de la vie du dossier.
     """
     par_cat: Dict[str, Dict[str, float]] = {}
     par_code: Dict[str, Dict[str, Any]] = {}
     ouvertes: List[Dict[str, Any]] = []
 
-    for iv in intervalles(saisies):
+    for iv in intervalles(saisies, debut, fin, codes_fin):
         bloc = par_cat.setdefault(iv["categorie"], {"minutes": 0.0, "minutes_douteuses": 0.0,
                                                     "occurrences": 0.0})
         bloc["minutes"] += iv["minutes"]
@@ -330,7 +379,8 @@ def _compteur(saisie: Dict[str, Any], *champs: str) -> Optional[float]:
 
 
 def metrage_dossier(saisies: List[Dict[str, Any]], code_fin: str = "89",
-                    code_debut: str = "01", code_annul: str = "90") -> Dict[str, Any]:
+                    code_debut: str = "01", code_annul: str = "90",
+                    debut: str = "", fin: str = "") -> Dict[str, Any]:
     """Metrage produit = somme des ecarts de compteur (fin - debut) par cycle.
 
     Regle reprise TELLE QUELLE de `app/services/dossier_stats.py::_enrich_metrage`,
@@ -351,7 +401,12 @@ def metrage_dossier(saisies: List[Dict[str, Any]], code_fin: str = "89",
     4. Le code d'annulation borne un cycle comme le code de fin : le temps et
        la matiere ont ete consommes, seule la livraison n'a pas eu lieu. La
        ligne d'annulation porte elle-meme son compteur de debut.
+    5. `debut`/`fin` bornent la lecture : un cycle compte pour la periode ou il
+       se CLOTURE, puisque c'est la cloture qui releve le compteur de fin. Un
+       dossier qui revient plusieurs fois apportait sinon, sur un point du
+       31/08, le metrage de toutes ses autres passes.
     """
+    borne_deb, borne_fin = _txt(debut), _txt(fin)
     ordonnees = sorted(saisies, key=lambda r: (_txt(r.get("date_operation")), r.get("id") or 0))
     debuts: List[Tuple[str, float]] = []
     total = 0.0
@@ -369,6 +424,9 @@ def metrage_dossier(saisies: List[Dict[str, Any]], code_fin: str = "89",
             continue
 
         if code not in (code_fin, code_annul):
+            continue
+
+        if borne_deb and borne_fin and not (borne_deb <= quand <= borne_fin):
             continue
 
         fin_ctr = _compteur(r, "metrage_total_fin", "metrage_reel")
@@ -610,11 +668,20 @@ def reperes_reference(conn, ref_produit_norm: Optional[str],
 # ─── Compte-rendu d'un dossier ───────────────────────────────────────────────
 
 def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
-                 code_debut: str = "01", code_annul: str = "90") -> Dict[str, Any]:
+                 code_debut: str = "01", code_annul: str = "90",
+                 debut: str = "", fin: str = "") -> Dict[str, Any]:
     """Tout ce que la production de ce dossier a produit comme information.
 
     Les codes de debut et de fin arrivent en parametres — ils vivent dans
     `config.py`, pas ici.
+
+    `debut`/`fin` bornent les CHIFFRES a une periode. Sans fenetre, la fiche
+    d'un dossier raconte sa vie entiere, ce qui est son role. Avec une fenetre,
+    le point de production ne compte que ce qui s'est passe pendant la periode
+    analysee : un dossier qui a tourne trois jours n'a pas a verser ses trois
+    jours dans le bilan d'un seul. Ce qui a ete ECRIT (info prod, commentaires,
+    notes, seuils) reste attache au dossier, pas a la periode : une remontee
+    faite la veille se lit encore le lendemain.
     """
     no_dossier = _txt(no_dossier)
     saisies = _saisies(conn, no_dossier)
@@ -627,8 +694,9 @@ def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
 
     conducteurs = sorted({_txt(s.get("operateur")) for s in saisies if _txt(s.get("operateur"))})
 
-    temps = temps_par_categorie(saisies)
-    metrage = metrage_dossier(saisies, code_fin, code_debut, code_annul)
+    codes_fin = tuple(c for c in (code_fin, code_annul) if _txt(c))
+    temps = temps_par_categorie(saisies, debut, fin, codes_fin)
+    metrage = metrage_dossier(saisies, code_fin, code_debut, code_annul, debut, fin)
     minutes_prod = _minutes_de(temps, CAT_PRODUCTION)
     # m/min partout : unite de la machine et du reste de MySifa.
     vitesse = (metrage["reel"] / minutes_prod) if minutes_prod > 0 and metrage["reel"] > 0 else None
@@ -709,6 +777,9 @@ def compte_rendu(conn, no_dossier: str, code_fin: str = "89",
             "cloture": bool(fins),
             "nb_saisies": len(saisies),
         },
+        # Ce que couvrent les chiffres ci-dessous. Vide = la vie du dossier.
+        "periode": ({"debut": _txt(debut), "fin": _txt(fin)}
+                    if _txt(debut) and _txt(fin) else None),
         "temps": temps,
         "metrage": metrage,
         "vitesse_m_min": round(vitesse, 1) if vitesse else None,
@@ -861,7 +932,7 @@ def comptes_rendus_periode(conn, debut: str, fin: str, machine: str = "",
     numeros = dossiers_clotures(conn, debut, fin, machine, code_fin)[:max(0, limite)]
     out = []
     for no_d in numeros:
-        cr = compte_rendu(conn, no_d, code_fin=code_fin)
+        cr = compte_rendu(conn, no_d, code_fin=code_fin, debut=debut, fin=fin)
         if cr.get("existe"):
             out.append(resume(cr))
     out.sort(key=lambda r: r.get("date_fin") or "", reverse=True)
@@ -888,7 +959,11 @@ def retour_atelier(conn, machine: str, debut: str, fin: str,
        il devient une formalite et se remplit en « R.A.S. ».
     """
     numeros = dossiers_clotures(conn, debut, fin, machine, code_fin)
-    crs = [compte_rendu(conn, n, code_fin=code_fin) for n in numeros]
+    # La periode descend jusqu'au calcul : sans elle, chaque dossier versait sa
+    # vie entiere dans le bilan d'une journee. Un point du 31/08 affichait
+    # 28 h d'activite sur une machine dont la journee en compte 15.
+    crs = [compte_rendu(conn, n, code_fin=code_fin, debut=debut, fin=fin)
+           for n in numeros]
     crs = [c for c in crs if c.get("existe")]
 
     minutes_prod = sum(_minutes_de(c["temps"], CAT_PRODUCTION) for c in crs)
@@ -1439,7 +1514,8 @@ def frise(conn, debut: str, fin: str, machine: str = "", code_fin: str = "89",
     for c in couples:
         no_d = c["no_dossier"]
         if no_d not in brut:
-            brut[no_d] = intervalles(_saisies(conn, no_d))
+            brut[no_d] = intervalles(_saisies(conn, no_d), debut, fin,
+                                     tuple(c for c in (code_fin, code_annul) if _txt(c)))
 
     dans_periode: List[Dict[str, Any]] = []
     for ivs in brut.values():
@@ -1461,7 +1537,9 @@ def frise(conn, debut: str, fin: str, machine: str = "", code_fin: str = "89",
             visibles = [iv for iv in propres if iv["fin"] > d_deb and iv["debut"] < d_fin]
             if not visibles:
                 continue
-            slot = _slot(propres, visibles, axe, d_deb, d_fin, no_d)
+            etendue = (min(iv["debut_brut"] for iv in propres),
+                       max(iv["fin_brut"] for iv in propres))
+            slot = _slot(propres, visibles, axe, d_deb, d_fin, no_d, etendue)
             if slot:
                 slot.update(_identite_slot(conn, no_d, _saisies(conn, no_d), code_fin))
                 par_machine.setdefault(m, []).append(slot)
@@ -1481,10 +1559,17 @@ def frise(conn, debut: str, fin: str, machine: str = "", code_fin: str = "89",
 
 def _slot(tous: List[Dict[str, Any]], visibles: List[Dict[str, Any]],
           axe: List[Dict[str, Any]], d_deb: datetime, d_fin: datetime,
-          no_dossier: str) -> Optional[Dict[str, Any]]:
-    """Un dossier sur une machine : sa barre, ses phases, ses debordements."""
-    debut_reel = min(iv["debut"] for iv in tous)
-    fin_reelle = max(iv["fin"] for iv in tous)
+          no_dossier: str,
+          etendue: Optional[Tuple[datetime, datetime]] = None) -> Optional[Dict[str, Any]]:
+    """Un dossier sur une machine : sa barre, ses phases, ses debordements.
+
+    `etendue` est l'etendue REELLE du dossier, hors fenetre. Les intervalles
+    arrivent deja bornes a la periode ; s'y fier pour situer le dossier ferait
+    croire qu'il a commence et fini dedans, et les marqueurs de debordement ne
+    se leveraient jamais.
+    """
+    debut_reel = etendue[0] if etendue else min(iv["debut"] for iv in tous)
+    fin_reelle = etendue[1] if etendue else max(iv["fin"] for iv in tous)
     d0 = max(debut_reel, d_deb)
     f0 = min(fin_reelle, d_fin)
     x = _position(axe, d0)
