@@ -38,9 +38,19 @@ def _detail_prod(conn, r: Dict[str, Any]) -> Dict[str, Any]:
     ce jour-la.
     """
     b = _bornes(r["date_debut"], r["date_fin"])
-    # Une reunion peut regarder une machine, plusieurs, ou tout l'atelier. La
-    # liste vide veut dire « toutes » — c'est le seul sens qu'elle ait.
+    # Une reunion peut regarder une machine, plusieurs, ou tout l'atelier.
     machine = rd.machines_demandees(r.get("machines") or r.get("machine") or "")
+    dispo = rd.machines_periode(conn, b["debut"], b["fin"], CODE_FIN_DOS)
+    hors = rd.postes_hors_production(conn)
+    if not machine:
+        # « Toutes » veut dire toutes les machines de PRODUCTION : un poste
+        # marque hors production dans les Parametres n'a ni cycle ni compteur,
+        # et ses chiffres n'ont pas le meme sens. Il reste dans le selecteur —
+        # un clic le ramene — mais il n'entre pas par defaut. La liste est
+        # resolue ici et pas dans le service : rien n'est retire en silence,
+        # l'ecran affiche exactement le perimetre qu'il a demande.
+        exclus = {m.strip().lower() for m in hors}
+        machine = [m for m in dispo if m.strip().lower() not in exclus]
     return {
         "atelier": rd.retour_atelier(conn, machine, b["debut"], b["fin"],
                                      code_fin=CODE_FIN_DOS),
@@ -49,7 +59,8 @@ def _detail_prod(conn, r: Dict[str, Any]) -> Dict[str, Any]:
         "comptes_rendus": rd.comptes_rendus_periode(conn, b["debut"], b["fin"],
                                                     machine=machine,
                                                     code_fin=CODE_FIN_DOS),
-        "machines": rd.machines_periode(conn, b["debut"], b["fin"], CODE_FIN_DOS),
+        "machines": dispo,
+        "machines_hors_production": hors,
     }
 
 

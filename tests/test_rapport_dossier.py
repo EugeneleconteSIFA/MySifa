@@ -1067,6 +1067,56 @@ def test_plusieurs_machines():
              ["Cohesio 1", "Cohesio 2"])
 
 
+# ─── 20. Postes hors production ──────────────────────────────────────────────
+
+def test_postes_hors_production():
+    print("\n20. Postes hors production")
+    conn = base()
+    verifier("sans table machines, aucun poste", svc.postes_hors_production(conn), [])
+
+    conn.executescript(
+        """
+        CREATE TABLE machines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, nom TEXT UNIQUE NOT NULL,
+            code TEXT, actif INTEGER DEFAULT 1
+        );
+        """
+    )
+    conn.execute("INSERT INTO machines (nom, code) VALUES ('Cohesio 1','C1')")
+    conn.execute("INSERT INTO machines (nom, code) VALUES ('Repiquage','REP')")
+    conn.commit()
+    verifier("sans la colonne, aucun poste", svc.postes_hors_production(conn), [])
+
+    conn.execute("ALTER TABLE machines ADD COLUMN hors_production INTEGER NOT NULL DEFAULT 0")
+    conn.commit()
+    verifier("colonne vide, aucun poste", svc.postes_hors_production(conn), [])
+
+    conn.execute("UPDATE machines SET hors_production=1 WHERE nom='Repiquage'")
+    conn.commit()
+    verifier("le poste coche remonte", svc.postes_hors_production(conn), ["Repiquage"])
+
+    # Le service ne decide rien tout seul : demander explicitement le poste
+    # continue de le rendre. C'est l'appelant qui resout « toutes ».
+    for quand, code, cat, m in [("08:00:00", "01", "personnel", "Repiquage"),
+                                ("08:01:00", "03", "production", "Repiquage"),
+                                ("10:01:00", "89", "personnel", "Repiquage")]:
+        conn.execute(
+            """INSERT INTO production_data
+               (operateur, date_operation, operation, operation_code,
+                operation_category, machine, no_dossier)
+               VALUES (?,?,?,?,?,?,?)""",
+            ("Marc", "2026-06-08T" + quand, code + " - x", code, cat, m, "D-REP"))
+    conn.commit()
+    DEB, FIN = "2026-06-08T00:00:00", "2026-06-08T23:59:59"
+    verifier("demande explicite : le poste repond",
+             svc.retour_atelier(conn, ["Repiquage"], DEB, FIN)["dossiers"], 1)
+
+    # Le selecteur, lui, doit pouvoir le nommer : une machine affichee sur la
+    # frise et absente du filtre, c'est un filtre qui ment.
+    verifier("le poste figure dans les machines de la periode",
+             "Repiquage" in svc.machines_periode(conn, DEB, FIN), True)
+
+
 if __name__ == "__main__":
     test_temps_par_categorie()
     test_deux_conducteurs_ne_se_chainent_pas()
@@ -1095,6 +1145,7 @@ if __name__ == "__main__":
     test_saisies_periode()
     test_saisies_repiquage()
     test_plusieurs_machines()
+    test_postes_hors_production()
 
     print("\n" + "=" * 60)
     if FAIL:

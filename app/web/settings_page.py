@@ -1730,6 +1730,13 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
           <p id="mac-sbm-hint" class="sub" style="margin-top:0;margin-bottom:14px;font-size:11px;color:var(--muted)">
             Toutes les lignes du planning ne sont pas des machines de production : le repiquage est un atelier, on y surimprime des étiquettes déjà fabriquées. Le frontal, la glassine et l&rsquo;adhésif ont été consommés en amont &mdash; les recompter serait un doublon. Le conditionnement (mandrin, carton, palette) reste calculé normalement.
           </p>
+          <label id="mac-hp-row" style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;margin-bottom:6px;font-size:13px">
+            <input type="checkbox" id="mac-hp">
+            <span style="font-weight:600;color:var(--text)">Poste hors production</span>
+          </label>
+          <p id="mac-hp-hint" class="sub" style="margin-top:0;margin-bottom:14px;font-size:11px;color:var(--muted)">
+            Un point de production compte un m&eacute;trage, une cadence, des arr&ecirc;ts. Un atelier de repiquage n&rsquo;a rien de tout cela &mdash; pas de code de d&eacute;but ni de fin de dossier, donc pas de cycle ni de compteur. Un poste coch&eacute; ici est <b>d&eacute;coch&eacute; par d&eacute;faut</b> dans le p&eacute;rim&egrave;tre d&rsquo;une r&eacute;union : sa pastille reste dans le s&eacute;lecteur, un clic le ram&egrave;ne.
+          </p>
           <div id="mac-horaires-weekly"></div>
           <div id="mac-horaires-parity" class="hidden" style="margin-top:16px"></div>
           <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
@@ -3563,6 +3570,8 @@ function renderMacHorairesForm() {
   if (jeBox) jeBox.checked = !!(m && +m.journee_entiere === 1);
   const sbmBox = document.getElementById('mac-sbm');
   if (sbmBox) sbmBox.checked = !!(m && +m.sans_matiere_premiere === 1);
+  const hpBox = document.getElementById('mac-hp');
+  if (hpBox) hpBox.checked = !!(m && +m.hors_production === 1);
   if (!weekly || !m) return;
   const mk = macMachineKey(m);
   const isC2 = mk === 'C2';
@@ -3735,6 +3744,13 @@ async function saveMacHoraires() {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sans_matiere_premiere: sbmBox && sbmBox.checked ? 1 : 0 }),
+    });
+    // Hors production : propriete du poste, lue par les points de production.
+    const hpBox = document.getElementById('mac-hp');
+    await api('/api/planning/machines/' + id + '/hors-production', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ hors_production: hpBox && hpBox.checked ? 1 : 0 }),
     });
     toast('Horaires enregistrés.');
     await loadMacMachineDetail();

@@ -217,6 +217,15 @@ def _executer_outil(nom: str, args: dict[str, Any]) -> Any:
 
 # ── JSON-RPC ─────────────────────────────────────────────────────────────────
 
+# PowerShell 5.1 (et quelques autres clients) decodent en Latin-1 quand le
+# charset n'est pas annonce : les accents partent en charabia. On l'annonce.
+JSON_UTF8 = "application/json; charset=utf-8"
+
+
+def _json(contenu: Any, status_code: int = 200, headers: Optional[dict] = None) -> JSONResponse:
+    return JSONResponse(contenu, status_code=status_code, headers=headers, media_type=JSON_UTF8)
+
+
 def _resultat(rid: Any, valeur: Any) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": rid, "result": valeur}
 
@@ -291,35 +300,35 @@ def _traiter(message: dict[str, Any]) -> Optional[dict[str, Any]]:
 async def mcp_endpoint(request: Request):
     refus = _verifier_cle(request)
     if refus:
-        return JSONResponse({"error": refus}, status_code=401)
+        return _json({"error": refus}, 401)
 
     try:
         corps = await request.json()
     except Exception:
-        return JSONResponse(_erreur(None, -32700, "JSON invalide."), status_code=400)
+        return _json(_erreur(None, -32700, "JSON invalide."), 400)
 
     if isinstance(corps, list):
         reponses = [r for r in (_traiter(m) for m in corps if isinstance(m, dict)) if r]
         if not reponses:
             return Response(status_code=202)
-        return JSONResponse(reponses)
+        return _json(reponses)
 
     if not isinstance(corps, dict):
-        return JSONResponse(_erreur(None, -32600, "Requête JSON-RPC invalide."), status_code=400)
+        return _json(_erreur(None, -32600, "Requête JSON-RPC invalide."), 400)
 
     reponse = _traiter(corps)
     if reponse is None:
         return Response(status_code=202)
-    return JSONResponse(reponse)
+    return _json(reponse)
 
 
 @router.get("/mcp")
 async def mcp_sse_non_supporte():
     """Le serveur ne tient pas de flux SSE : chaque échange est un POST autonome."""
-    return JSONResponse(
+    return _json(
         {"error": "Ce serveur MCP ne gère que le POST (Streamable HTTP sans flux SSE)."},
-        status_code=405,
-        headers={"Allow": "POST, DELETE"},
+        405,
+        {"Allow": "POST, DELETE"},
     )
 
 

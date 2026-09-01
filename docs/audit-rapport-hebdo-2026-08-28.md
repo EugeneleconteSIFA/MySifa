@@ -1099,3 +1099,54 @@ fois par dossier distinct, pas une fois par ligne.
 Sous 1000 px on resserre au lieu de masquer : retirer une colonne ferait
 disparaitre une information sans que personne ne sache qu'elle a existe, alors
 qu'une ellipse se voit.
+
+### Le repiquage : trois definitions des « machines de la periode »
+
+Constat de depart : la frise donnait une ligne au Repiquage, mais le selecteur
+ne savait pas le nommer. Un filtre incapable de designer ce qu'on affiche.
+
+En cherchant pourquoi, on trouve trois definitions differentes du meme mot dans
+le meme ecran :
+
+| ou | ce qu'il appelait « les machines de la periode » |
+|---|---|
+| selecteur (`machines_periode`) | celles ayant CLOTURE un dossier (code `89`) |
+| KPI (`dossiers_clotures`) | idem — donc aveugles au Repiquage |
+| frise (`frise`) | toute machine ayant une saisie avec un dossier |
+
+Le Repiquage n'a ni code de debut ni code de fin de dossier — ils y sont deja
+masques dans l'onglet Saisies comme obsoletes. Pas de cycle, donc pas de
+compteur, donc pas de metrage ni de cadence, et un slot de frise qui s'etale sur
+toute la periode en un seul bloc. La capture le montre : cinq slots, « 4
+dossiers » — le Xerox du Repiquage ne comptait dans aucun chiffre tout en
+occupant une ligne entiere.
+
+**Correction obligatoire** : `machines_periode()` liste desormais les machines
+ayant TRAVAILLE sur la periode, cloture ou non. Le selecteur peut nommer ce que
+la frise affiche.
+
+**Choix arbitre** : une propriete `hors_production` sur la table `machines`,
+cochee dans Parametres -> Machines, sur le modele exact de
+`sans_matiere_premiere` que ce meme poste porte deja. Migration
+`postes_hors_production`, qui coche le repiquage d'office par un LIKE sur le nom
+— comme la migration de 2026-08-05.
+
+Ce que la propriete fait : le poste est **decoche par defaut** dans le perimetre
+d'une reunion. Sa pastille reste dans le selecteur, en pointille avec la mention
+« hors prod », et un clic le ramene. On ne cache pas une machine, on arrete de
+la compter par defaut.
+
+**Ou la regle est appliquee.** Dans le routeur, pas dans le service : quand une
+reunion n'a pas de perimetre explicite, le routeur resout « toutes » en la liste
+des machines de production de la periode et la passe telle quelle. Le service ne
+retire donc jamais rien en silence, et l'ecran affiche exactement le perimetre
+qu'il a demande — l'en-tete de la feuille nomme les machines comptees au lieu
+d'un « Toutes les machines » qui en cachait une.
+
+Le jour ou le repiquage aura un vrai cycle cote Saisieprod, il suffira de
+decocher la case.
+
+`tests/test_rapport_dossier.py` : 6 cas (absence de table, absence de colonne,
+colonne vide, poste coche, demande explicite qui repond quand meme, presence
+dans le selecteur). `tests/test_reunions_rendu.js` : 7 cas sur la pastille en
+retrait.
