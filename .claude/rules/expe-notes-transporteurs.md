@@ -120,28 +120,37 @@ le bon chemin.
 
 ### Cellule d'actions des tableaux de départs
 
-La cellule (`.expe-dep-actions-cell`) est une colonne de **deux rangées**, et
-chaque rangée porte des **groupes** séparés par un écart de 18 px :
+La cellule (`.expe-dep-actions-cell`) est une rangée de blocs, lue en
+**colonnes** à gauche et en ligne à droite :
 
 ```
-[signaler][valoriser]      [devis][comparateur][dupliquer][modifier]
-[supprimer]                                            [   Valider   ]
+[signaler] [dupliquer]     [comparateur][devis][supprimer]
+[valoriser][modifier]                     [   Valider   ]
 ```
 
-L'écart entre groupes fait le travail qu'une grille régulière ne faisait pas :
-dire ce qui va avec quoi. « Supprimer » et « Valider » sont sur la rangée du
-bas, aux deux extrémités — ce sont les deux gestes qu'on ne veut pas voir
-voisiner d'une icône.
+Les gestes qui vont par deux sont empilés l'un sous l'autre — signaler /
+valoriser, dupliquer / modifier : la pile les désigne comme une paire sans
+avoir besoin d'un séparateur. Le bloc de droite garde les actions isolées sur
+sa première ligne, et le bouton de validation dessous.
 
-La cellule est en `width:max-content; margin-left:auto` : elle se cale sur sa
-rangée la plus large, sans quoi le `space-between` de la rangée du bas envoyait
-« supprimer » se perdre sous la colonne Dossier. Les boutons font 32 × 32 avec
-une icône de 16 px, et la colonne « Actions » vaut 18 % au suivi, 17 % à
-l'historique — vérifié sans débordement de 1280 à 1920 px.
+La cellule est en `width:max-content; margin-left:auto` : elle se cale sur son
+contenu et reste collée à droite au lieu de s'étaler sur toute la colonne. Les
+boutons font 32 × 32 avec une icône de 16 px ; la colonne « Actions » vaut
+15 % au suivi, 12 % à l'historique — vérifié sans débordement de 1280 à
+1920 px, ligne à 83 px.
+
+**L'infobulle ne peut pas être un `::after`.** Le tableau vit dans
+`.expe-departs-tbl-wrap`, en `overflow-x:auto` : un pseudo-élément y est rogné
+dès qu'il dépasse un bord, et c'est exactement ce qui coupait les libellés à
+droite et sous la dernière ligne. `expeTipShow()` pose donc un nœud unique
+`.expe-tip` sur `<body>` en `position:fixed`, bascule au-dessus ou en dessous
+selon la place, et se recadre horizontalement dans la fenêtre. Le `title`
+natif est déplacé vers `data-tip` au premier survol pour ne pas faire doublon.
+Ne pas revenir à un `::after` : le conteneur le rognera de nouveau.
 
 Un bouton ajouté oblige à revérifier ces largeurs, et les boutons d'avis
-portent `expe-dep-ab` en plus de leur propre classe — c'est elle qui donne
-l'infobulle et la métrique commune.
+portent `expe-dep-ab` en plus de leur propre classe — c'est elle qui déclenche
+l'infobulle et donne la métrique commune.
 
 ### Comparateur — le piège déjà tombé une fois
 
