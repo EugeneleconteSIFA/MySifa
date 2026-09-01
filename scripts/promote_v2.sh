@@ -174,11 +174,42 @@ if [[ "$DIFF_COUNT" -gt 0 ]]; then
         fail "Conflit de merge staging → main. À résoudre en local."
     fi
 
-    if ! gits push origin main --quiet; then
+    # Le message d'erreur du push est capturé : « droits ? » a coûté vingt
+    # minutes de recherche le 1er septembre 2026 là où GitHub disait très
+    # exactement ce qui bloquait — une règle de branche, pas une permission.
+    PUSH_ERR=$(gits push origin main 2>&1)
+    if [[ $? -ne 0 ]]; then
         log "    git push origin main KO — rollback"
         gits reset --hard origin/main --quiet
+        echo "$PUSH_ERR" | sed 's/^/    | /'
+
+        if echo "$PUSH_ERR" | grep -q "Required status check"; then
+            # La règle de branche sur main exige un check vert. Elle le lit sur
+            # les commits promus — donc sur le sommet de staging, pas sur le
+            # commit de merge fabriqué ici. Traduction : la CI de staging est
+            # rouge, et la promotion refuse de porter en production du code que
+            # les tests recalent. Ce n'est pas un blocage à contourner, c'est le
+            # garde-fou qui fait son travail.
+            #
+            # Constaté le 1er septembre 2026 : `test_audit_journal.py` échouait
+            # sur staging (une route d'écriture sans module dans la taxonomie
+            # d'audit). Corrigé sur staging, la promotion est passée sans
+            # toucher à la règle.
+            record_promotion "failed" "CI de staging rouge — promotion refusee"
+            fail "Règle de branche sur main : un check obligatoire n'est pas vert.
+
+       Il est lu sur les commits promus, c'est-à-dire sur le sommet de staging.
+       Autrement dit : la CI de staging est en échec, et la promotion refuse de
+       porter en production du code que les tests recalent.
+
+       À faire : ouvrir l'onglet Actions sur la branche staging, lire le job
+       'verifier', corriger ce qui échoue, pousser sur staging, attendre le vert,
+       puis relancer ce script. Ne pas désactiver la règle pour passer outre.
+       https://github.com/EugeneleconteSIFA/MySifa/actions?query=branch%3Astaging"
+        fi
+
         record_promotion "failed" "Push origin/main refuse"
-        fail "Push origin/main refusé (droits ?)."
+        fail "Push origin/main refusé. Le message de GitHub est ci-dessus."
     fi
 
     log "    origin/main aligné avec origin/staging"

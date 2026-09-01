@@ -13,11 +13,29 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from config import ROLES_ERP
 from database import get_db
 from app.services import rvgi_rattachement as ratt
-from services.auth_service import require_admin
+from services.auth_service import get_current_user
 
 router = APIRouter(prefix="/api/rvgi", tags=["rvgi"])
+
+
+def require_admin(request: Request) -> dict:
+    """Lecture du miroir et rattachement — `ROLES_ERP`.
+
+    Le nom est conservé pour ne pas toucher aux quinze appels du fichier, mais
+    le périmètre est celui de l'ERP : l'expédition en fait partie depuis le
+    31/08/2026. Un expéditeur qui saisit un BL sans pouvoir le rattacher écrit
+    un numéro que rien ne relie à la commande — c'est le lien de traçabilité
+    qui se perd, pas juste un confort de saisie.
+    """
+    user = get_current_user(request)
+    if (user.get("role") or "") not in ROLES_ERP:
+        raise HTTPException(
+            status_code=403, detail="Accès réservé aux lecteurs de l'ERP"
+        )
+    return user
 
 
 # ── Modèles d'entrée ─────────────────────────────────────────────────────────
@@ -91,6 +109,25 @@ def rvgi_commandes(
     with get_db() as conn:
         groupes = ratt.enrichir_avec_rattachements(conn, "commande", groupes)
     return {"pieces": groupes, "miroir": _fraicheur()}
+
+
+@router.get("/commande")
+def rvgi_commande(request: Request, numero: str = Query("", max_length=40)):
+    """L'entête d'une commande, pour préremplir un départ depuis son ARC.
+
+    Renvoie toujours 200 : « pas trouvée » n'est pas une erreur mais une
+    réponse — l'écran continue de saisir à la main sans afficher de rouge.
+    """
+    require_admin(request)
+    num = str(numero or "").strip()
+    if not num:
+        return {"trouve": False, "commande": None}
+    try:
+        entete = ratt.entete_commande(num)
+    except Exception:
+        # Miroir absent ou illisible : l'écran doit rester utilisable.
+        return {"trouve": False, "commande": None, "miroir": False}
+    return {"trouve": entete is not None, "commande": entete}
 
 
 @router.get("/livraisons")

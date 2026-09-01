@@ -803,3 +803,76 @@ def _etat_du_groupe(lignes: List[Dict[str, Any]]) -> str:
     if "a_verifier" in etats:
         return "a_verifier"
     return "rattache"
+
+
+# ── Entête d'une commande, pour le préremplissage d'un départ ────────────────
+#
+# MyExpé demande ceci quand on saisit un numéro d'ARC : la commande sait déjà
+# chez qui la marchandise part et quand elle est attendue. Le retaper à la main
+# est une source d'erreur, et une erreur de code postal se paie en livraison.
+
+
+def _jour(valeur: Any) -> str:
+    """Les dates du miroir portent une heure : on ne garde que le jour."""
+    return str(valeur or "").strip()[:10]
+
+
+def entete_commande(numero: str) -> Optional[Dict[str, Any]]:
+    """L'entête d'une commande RVGI, réduite à ce qu'un départ sait utiliser.
+
+    L'adresse retenue est celle de LIVRAISON (`lrs`/`lcp`/`lville`) et non
+    celle de facturation : un départ va chez le destinataire. On retombe sur
+    l'adresse de facturation seulement si la commande n'en porte pas d'autre,
+    ce qui est le cas courant quand les deux sont confondues.
+    """
+    num = str(numero or "").strip()
+    if not num or not num.isdigit():
+        return None
+    with miroir.get_erp_db() as c:
+        if "cde_entete" not in miroir.tables_presentes(c):
+            return None
+        # Comparaison sur l'ENTIER : `numero` est un integer dans le miroir et
+        # porte un index. Un CAST en texte le rend inutilisable — 24 ms de
+        # balayage au lieu de 1 ms, sur une requete tapee a chaque frappe.
+        row = c.execute(
+            """SELECT * FROM cde_entete
+                WHERE corbeille = 0 AND numero = ?
+                LIMIT 1""",
+            (int(num),),
+        ).fetchone()
+        if row is None:
+            return None
+        d = dict(row)
+        nb_lignes = 0
+        soldee = False
+        if "cde_ligne" in miroir.tables_presentes(c):
+            lignes = c.execute(
+                """SELECT COUNT(*) AS n,
+                          SUM(CASE WHEN COALESCE(lpos,0) = 2 THEN 1 ELSE 0 END) AS soldees
+                     FROM cde_ligne
+                    WHERE corbeille = 0 AND numero = ?""",
+                (int(num),),
+            ).fetchone()
+            nb_lignes = int(lignes["n"] or 0)
+            # lpos = 2 : ligne soldée dans RVGI. Toutes soldées = commande livrée.
+            soldee = nb_lignes > 0 and int(lignes["soldees"] or 0) >= nb_lignes
+
+    livre = str(d.get("lrs") or "").strip()
+    facture = str(d.get("rs") or "").strip()
+    cp = str(d.get("lcp") or "").strip() or str(d.get("cp") or "").strip()
+    ville = str(d.get("lville") or "").strip() or str(d.get("ville") or "").strip()
+    return {
+        "numero": num,
+        "client": livre or facture,
+        "client_facture": facture,
+        "adresse_de_livraison": bool(livre),
+        "code_postal": cp,
+        "ville": ville,
+        "pays": str(d.get("lpays") or d.get("pays") or "").strip(),
+        "date_commande": _jour(d.get("amjc")),
+        "date_livraison": _jour(d.get("amjl")) or _jour(d.get("amje")),
+        "ref_client": str(d.get("vref") or "").strip(),
+        "interlocuteur": str(d.get("interlocuteur") or "").strip(),
+        "nb_lignes": nb_lignes,
+        "soldee": soldee,
+    }

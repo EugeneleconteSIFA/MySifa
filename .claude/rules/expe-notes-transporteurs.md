@@ -152,6 +152,42 @@ Un bouton ajouté oblige à revérifier ces largeurs, et les boutons d'avis
 portent `expe-dep-ab` en plus de leur propre classe — c'est elle qui déclenche
 l'infobulle et donne la métrique commune.
 
+### Accès ERP de l'expédition, et préremplissage par l'ARC
+
+`ROLES_ERP` (config.py) = `ROLES_ADMIN` + `expedition`. C'est le périmètre de
+`/erp`, de `/api/erp` et de `/api/rvgi` — y compris le `require_admin` local
+de `app/routers/rvgi.py`, qui porte ce nom pour ne pas toucher ses quinze
+appels mais applique bien `ROLES_ERP`. L'expédition y a été ajoutée le
+31/08/2026 : sans lecture du miroir, un expéditeur saisit un numéro de BL que
+rien ne rattache à sa commande — c'est le lien de traçabilité qui se perd.
+Le miroir est ouvert en `mode=ro`, donc élargir ce périmètre ne donne aucun
+droit d'écriture sur RVGI.
+
+Les trois endroits à tenir alignés quand ce périmètre bouge : `ROLES_ERP`,
+le volet `erp` de `portail_volets.py` (`_ERP_LARGE`), et le test de rôle en
+dur du bouton ERP dans `portal_assets.py`. Le menu par service vit dans
+`erp_catalogue.MENU_SERVICE` — l'expédition n'y voit que livraisons,
+commandes, colisage et clients : ni factures, ni prix, ni échéances.
+
+**Préremplissage par l'ARC** — `GET /api/rvgi/commande?numero=` renvoie
+l'entête de `cde_entete` réduite à ce qu'un départ sait utiliser. Trois règles
+qui ne se devinent pas :
+
+- l'adresse retenue est celle de **livraison** (`lrs`/`lcp`/`lville`), pas
+  celle de facturation — un départ va chez le destinataire ; on retombe sur
+  la facturation seulement si la commande n'a pas d'adresse de livraison ;
+- la recherche compare `numero` **en entier**, jamais avec un CAST en texte :
+  la colonne est un integer indexé, et le CAST fait passer la requête de 1 ms
+  à 24 ms — sur un appel émis à chaque frappe ;
+- côté écran, on ne remplit **que les champs vides**. Écraser une saisie
+  manuelle serait pire que ne rien faire : l'expéditeur a parfois une bonne
+  raison de déroger à l'adresse de la commande. Le résumé sous le champ dit
+  ce qui a été complété, et ne répète ni le numéro ni la date, déjà à
+  l'écran.
+
+« Commande inconnue » n'est pas une erreur : la route répond 200 avec
+`trouve: false`, et l'écran reste utilisable pour un départ hors commande.
+
 ### Comparateur — le piège déjà tombé une fois
 
 `renderTransporteurs()` préserve le focus et le curseur de **tout** champ

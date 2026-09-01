@@ -1786,15 +1786,17 @@ function renderPortal(){
         'data-volet':'db',
         onClick:()=>{window.location.href='/db';}
       },iconEl('database',24)):null,
-      // ERP : lecture seule du miroir de RVGI. Direction, administration et
-      // superadmin — le meme perimetre que les autres fonctions d'administration.
+      // ERP : lecture seule du miroir de RVGI. Direction, administration,
+      // expedition et superadmin — c'est `ROLES_ERP` (config.py). L'expedition
+      // y a ete ajoutee le 31/08/2026 : elle lit le miroir pour retrouver le BL
+      // qu'elle expedie et faire completer un depart par son numero de commande.
       // Volontairement absent du sheet mobile : l'ecran est une grille dense,
       // il n'a pas de sens sur un telephone.
       // Le volet de survol n'est plus construit ici : `portalAttacherVolets()`
       // pose le meme gabarit que sur les autres icones, et remplit celui-ci
       // depuis /api/erp/menu (les ecrans RVGI dependent du miroir, pas du
       // catalogue des volets).
-      (isSuper||urole==='direction'||urole==='administration'||urole==='administration_ventes'||urole==='administration_technique')?h('button',{
+      (isSuper||urole==='direction'||urole==='administration'||urole==='administration_ventes'||urole==='administration_technique'||urole==='expedition')?h('button',{
         type:'button',
         className:'portal-settings-corner',
         'aria-label':'ERP',

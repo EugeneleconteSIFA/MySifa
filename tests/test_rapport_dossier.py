@@ -766,6 +766,151 @@ def test_minutes_txt():
     verifier("inconnu", svc._minutes_txt(None), "—")
 
 
+# ─── 14. Une periode ne compte que ce qui s'y est passe ──────────────────────
+
+def _atelier_trois_jours():
+    """Un dossier qui tourne le 28, le 31 et le 01 — c'est le cas reel d'un
+    reliquat qui revient. Le point du 31 ne doit connaitre que le 31."""
+    conn = base()
+    D = "D-REL"
+    def ligne(jour, heure, minute, code, cat, ctr_deb=None, ctr_fin=None, op="Tony"):
+        conn.execute(
+            """INSERT INTO production_data
+               (operateur, date_operation, operation, operation_code,
+                operation_category, machine, no_dossier, client,
+                metrage_total_debut, metrage_total_fin)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (op, "2026-08-%02dT%02d:%02d:00" % (jour, heure, minute),
+             code + " - x", code, cat, "Cohesio 1", D, "KIABI", ctr_deb, ctr_fin))
+    # 28/08 : une passe entiere, 3 h de production, cloturee.
+    ligne(28, 13, 0, "01", "personnel", ctr_deb=1000)
+    ligne(28, 13, 1, "03", "production")
+    ligne(28, 16, 1, "89", "personnel", ctr_fin=4000)
+    # 31/08 : une passe de 2 h, cloturee.
+    ligne(31, 8, 0, "01", "personnel", ctr_deb=4000)
+    ligne(31, 8, 1, "03", "production")
+    ligne(31, 10, 1, "89", "personnel", ctr_fin=5200)
+    conn.commit()
+    return conn
+
+
+def test_periode_borne_les_chiffres():
+    print("\n14. Une periode ne compte que ce qui s'y est passe")
+    conn = _atelier_trois_jours()
+    DEB, FIN = "2026-08-31T00:00:00", "2026-08-31T23:59:59"
+
+    at = svc.retour_atelier(conn, "Cohesio 1", DEB, FIN)
+    p = at["production"]
+    verifier_proche("production du 31 seule (2 h)", p["minutes_production"], 120)
+    verifier_proche("metrage du 31 seul", p["metrage"], 1200)
+    verifier("un seul dossier", at["dossiers"], 1)
+    # 120 min pour 1200 m : la vitesse ne peut pas melanger les deux passes.
+    verifier_proche("vitesse du 31", p["vitesse_m_min"], 10.0)
+
+    # La fiche du dossier, elle, raconte sa vie entiere : c'est son role.
+    entier = svc.compte_rendu(conn, "D-REL")
+    verifier_proche("la fiche garde les deux passes",
+                    svc._minutes_de(entier["temps"], "production"), 300)
+    verifier_proche("et leur metrage cumule", entier["metrage"]["reel"], 4200)
+    verifier("sans fenetre, pas de periode annoncee", entier["periode"], None)
+
+    borne = svc.compte_rendu(conn, "D-REL", debut=DEB, fin=FIN)
+    verifier("avec fenetre, la periode est annoncee",
+             borne["periode"], {"debut": DEB, "fin": FIN})
+    verifier_proche("temps borne", svc._minutes_de(borne["temps"], "production"), 120)
+    verifier_proche("metrage borne", borne["metrage"]["reel"], 1200)
+
+    # Le total affiche ne peut pas depasser la journee : c'est le controle qui
+    # a fait tomber le defaut sur un vrai point de production.
+    f = svc.frise(conn, DEB, FIN, "Cohesio 1")
+    heures = sum(a["heures"] for a in f["axe"])
+    total = p["minutes_production"] + p["minutes_calage"] + p["minutes_arret"]
+    verifier("le total tient dans la journee", total <= heures * 60 + 1, True)
+
+
+def test_fin_de_cycle_ne_dure_pas():
+    print("\n15. Une saisie de fin de cycle ne dure pas")
+    conn = base()
+    # Fin de production a 10 h, le dossier repart quatre jours plus tard avec
+    # le MEME operateur : sans la regle, l'ecart devient un bloc « personnel »
+    # de plusieurs milliers de minutes, dessine en gris sur toute la frise.
+    for (jour, h, m, code, cat) in [(8, 8, 0, "01", "personnel"),
+                                    (8, 8, 1, "03", "production"),
+                                    (8, 10, 0, "89", "personnel"),
+                                    (12, 9, 0, "01", "personnel"),
+                                    (12, 9, 1, "03", "production"),
+                                    (12, 10, 0, "89", "personnel")]:
+        conn.execute(
+            """INSERT INTO production_data
+               (operateur, date_operation, operation, operation_code,
+                operation_category, machine, no_dossier)
+               VALUES (?,?,?,?,?,?,?)""",
+            ("Marc", "2026-06-%02dT%02d:%02d:00" % (jour, h, m),
+             code + " - x", code, cat, "Cohesio 1", "D-FIN"))
+    conn.commit()
+    sa = svc._saisies(conn, "D-FIN")
+
+    ivs = svc.intervalles(sa)
+    codes = sorted({i["code"] for i in ivs})
+    verifier("aucun intervalle ne part d'une fin de cycle", "89" in codes, False)
+    verifier("les autres restent", codes, ["01", "03"])
+
+    t = svc.temps_par_categorie(sa)
+    verifier_proche("production des deux passes (119 + 59)",
+                    svc._minutes_de(t, "production"), 178)
+    verifier_proche("personnel reduit aux amorces", svc._minutes_de(t, "personnel"), 2)
+    verifier("plus aucune saisie ouverte", len(t["saisies_ouvertes"]), 0)
+
+    # Sur la frise, le gris disparait : il ne restait que par cet intervalle.
+    fr = svc.frise(conn, "2026-06-08T00:00:00", "2026-06-08T23:59:59", "Cohesio 1")
+    parts = {}
+    for ligne in fr["lignes"]:
+        for sl in ligne["slots"]:
+            for g in sl["segments"]:
+                parts[g["statut"]] = parts.get(g["statut"], 0) + g["largeur"]
+    verifier("le ruban n'est plus gris", round(parts.get("autre", 0), 1) < 1.0, True)
+    verifier_proche("il est en production", parts.get("production", 0), 100, 1.0)
+
+
+def test_intervalles_bornes():
+    print("\n16. Bornage d'un intervalle a cheval sur la periode")
+    conn = base()
+    for (h, code, cat) in [(22, "01", "personnel"), (22, "03", "production")]:
+        conn.execute(
+            """INSERT INTO production_data
+               (operateur, date_operation, operation, operation_code,
+                operation_category, machine, no_dossier)
+               VALUES (?,?,?,?,?,?,?)""",
+            ("Marc", "2026-06-08T%02d:%02d:00" % (h, 0 if code == "01" else 30),
+             code + " - x", code, cat, "Cohesio 1", "D-CHEV"))
+    conn.execute(
+        """INSERT INTO production_data
+           (operateur, date_operation, operation, operation_code,
+            operation_category, machine, no_dossier)
+           VALUES (?,?,?,?,?,?,?)""",
+        ("Marc", "2026-06-09T02:00:00", "89 - x", "89", "personnel",
+         "Cohesio 1", "D-CHEV"))
+    conn.commit()
+    sa = svc._saisies(conn, "D-CHEV")
+
+    entier = [i for i in svc.intervalles(sa) if i["code"] == "03"][0]
+    verifier_proche("sans fenetre, la duree reelle", entier["minutes"], 210)
+
+    jour = svc.intervalles(sa, "2026-06-08T00:00:00", "2026-06-08T23:59:59")
+    coupe = [i for i in jour if i["code"] == "03"][0]
+    verifier_proche("borne a la fin de la journee", coupe["minutes"], 90)
+    verifier_proche("la duree reelle reste lisible", coupe["minutes_brutes"], 210)
+    verifier("l'intervalle se sait borne", coupe["bornee"], True)
+    verifier("ses bornes reelles sont conservees",
+             coupe["fin_brut"].strftime("%Y-%m-%dT%H:%M"), "2026-06-09T02:00")
+
+    lendemain = svc.intervalles(sa, "2026-06-09T00:00:00", "2026-06-09T23:59:59")
+    verifier_proche("le reste tombe le lendemain",
+                    [i for i in lendemain if i["code"] == "03"][0]["minutes"], 120)
+    verifier("aucun intervalle hors fenetre",
+             all(i["debut"].day == 9 for i in lendemain), True)
+
+
 if __name__ == "__main__":
     test_temps_par_categorie()
     test_deux_conducteurs_ne_se_chainent_pas()
@@ -788,6 +933,9 @@ if __name__ == "__main__":
     test_statut_saisieprod()
     test_frise_dossier()
     test_minutes_txt()
+    test_periode_borne_les_chiffres()
+    test_fin_de_cycle_ne_dure_pas()
+    test_intervalles_bornes()
 
     print("\n" + "=" * 60)
     if FAIL:

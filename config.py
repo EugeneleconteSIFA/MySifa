@@ -335,6 +335,13 @@ ROLES_PROD  = {ROLE_DIRECTION, ROLE_FABRICATION, ROLE_EXPEDITION, ROLE_COMMERCIA
 ROLES_COMPTA = {ROLE_DIRECTION, ROLE_COMPTABILITE, ROLE_SUPERADMIN}
 ROLES_EXPE = {ROLE_DIRECTION, ROLE_EXPEDITION, ROLE_LOGISTIQUE, ROLE_COMMERCIAL, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
 ROLES_EXPE_WRITE = {ROLE_DIRECTION, ROLE_EXPEDITION, ROLE_SUPERADMIN} | ROLES_ADMINISTRATION_ALL
+
+# Lecture de l'ERP (/erp, /api/erp, sélecteurs de rattachement /api/rvgi).
+# `ROLES_ADMIN` plus l'expédition : un expéditeur doit pouvoir retrouver le BL
+# et la commande qu'il expédie, sinon il saisit un numéro à la main sans que
+# rien ne le rattache. Le miroir est ouvert en lecture seule — élargir ce
+# périmètre ne donne aucun droit d'écriture sur RVGI.
+ROLES_ERP = ROLES_ADMIN | {ROLE_EXPEDITION}
 # Tuile portail « Coûts matières » (/pricing) — Direction et super admin uniquement
 ROLES_PRICING = {ROLE_DIRECTION, ROLE_SUPERADMIN}
 ROLES_PRICING_WRITE = ROLES_PRICING
