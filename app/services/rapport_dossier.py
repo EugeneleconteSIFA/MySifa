@@ -1222,8 +1222,36 @@ def saisies_periode(conn, machine: Any, debut: str, fin: str,
     return out
 
 
+def postes_hors_production(conn) -> List[str]:
+    """Postes marques « hors production » dans Parametres -> Machines.
+
+    Un atelier de repiquage n'a ni cycle ni compteur : ses chiffres n'ont pas
+    le meme sens que ceux d'une machine de production. La propriete vit en
+    base, jamais dans le code — un autre poste pourra la porter demain, et le
+    repiquage pourra la perdre le jour ou il aura un vrai cycle.
+    """
+    if "hors_production" not in _colonnes(conn, "machines"):
+        return []
+    rows = conn.execute(
+        "SELECT TRIM(nom) AS nom FROM machines "
+        " WHERE COALESCE(hors_production, 0) = 1 AND TRIM(COALESCE(nom,'')) <> ''"
+        " ORDER BY nom"
+    ).fetchall()
+    return [r["nom"] for r in rows]
+
+
 def machines_periode(conn, debut: str, fin: str, code_fin: str = "89") -> List[str]:
-    """Machines ayant cloture au moins un dossier sur la periode."""
+    """Machines ayant TRAVAILLE sur la periode, cloture ou non.
+
+    Le critere etait « a cloture au moins un dossier » — donc une saisie de
+    code `code_fin`. Un poste qui n'en pose pas, comme le repiquage ou une
+    machine dont le dossier court encore, n'apparaissait alors pas dans le
+    selecteur alors que la frise, elle, lui donnait une ligne. On proposait un
+    filtre incapable de nommer ce qu'on affichait.
+
+    `code_fin` reste dans la signature : les appelants le passent, et le
+    retirer casserait leur appel pour rien.
+    """
     cols = _colonnes(conn, "production_data")
     if not cols:
         return []
@@ -1231,11 +1259,10 @@ def machines_periode(conn, debut: str, fin: str, code_fin: str = "89") -> List[s
     rows = conn.execute(
         f"""SELECT DISTINCT TRIM(machine) AS machine
               FROM production_data
-             WHERE operation_code = ?
-               AND date_operation >= ? AND date_operation <= ?
+             WHERE date_operation >= ? AND date_operation <= ?
                AND TRIM(COALESCE(machine, '')) <> ''{filtre_annule}
              ORDER BY machine""",
-        (code_fin, debut, fin),
+        (debut, fin),
     ).fetchall()
     return [r["machine"] for r in rows]
 

@@ -102,7 +102,14 @@ table.reu-tbl tbody tr:hover .reu-sup{opacity:1}
              transform var(--mo-fast,.15s) var(--ease-out,ease)}
 .reu-mach-p:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px)}
 .reu-mach-p:active{transform:translateY(0)}
+/* Hors production : la pastille reste, en retrait. Elle n'entre pas dans
+   « Toutes » — on ne cache pas une machine, on arrete de la compter. */
+.reu-mach-p.hors{border-style:dashed;color:var(--muted);
+  display:inline-flex;align-items:baseline;gap:6px}
+.reu-mach-p.hors em{font-style:normal;font-size:10.5px;text-transform:uppercase;
+  letter-spacing:.4px;opacity:.75}
 .reu-mach-p.actif{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.reu-mach-p.hors.actif{border-style:solid;color:var(--bg)}
 .reu-mach-p.actif:hover{color:var(--bg);filter:brightness(1.07)}
 
 .reu-split{display:grid;grid-template-columns:minmax(0,1fr) clamp(340px,24%,440px);

@@ -243,7 +243,7 @@
       +     '<div class="reu-champ"><label for="reu-au">Au</label>'
       +       '<input type="date" id="reu-au" value="' + escA(r.date_fin || '') + '"></div>'
       +     '<div class="reu-champ reu-machines"><label>Machines</label>'
-      +       rendreMachines(machines, r.machines) + '</div>'
+      +       rendreMachines(machines, r.machines, etat.horsProd) + '</div>'
       +     '<button type="button" class="reu-btn ghost" data-r="imprimer">Imprimer</button>'
       +     '<button type="button" class="reu-btn" data-r="clore">'
       +       (r.ouverte ? 'Clore la r&eacute;union' : 'Rouvrir la r&eacute;union') + '</button>'
@@ -351,21 +351,28 @@
      « Toutes » n'est pas une machine de plus dans la liste — c'est l'absence de
      choix, et cocher tout revient au meme. On l'affiche donc comme l'etat par
      defaut, actif tant que rien n'est coche. */
-  function rendreMachines(disponibles, retenues){
+  function rendreMachines(disponibles, retenues, horsProd){
     disponibles = disponibles || [];
     retenues = retenues || [];
-    var prises = {};
+    var prises = {}, hors = {};
     retenues.forEach(function(m){ prises[pli(m)] = true; });
+    (horsProd || []).forEach(function(m){ hors[pli(m)] = true; });
     var toutes = !retenues.length;
     return '<div class="reu-mach">'
       + '<button type="button" class="reu-mach-p' + (toutes ? ' actif' : '') + '" '
-      + 'data-mach-tout="1" aria-pressed="' + (toutes ? 'true' : 'false') + '">'
-      + 'Toutes</button>'
+      + 'data-mach-tout="1" aria-pressed="' + (toutes ? 'true' : 'false') + '" '
+      + 'title="Toutes les machines de production">Toutes</button>'
       + disponibles.map(function(m){
           var actif = !!prises[pli(m)];
-          return '<button type="button" class="reu-mach-p' + (actif ? ' actif' : '') + '" '
+          // Un poste hors production n'entre pas dans « Toutes » : sa pastille
+          // reste la, en retrait, et un clic le ramene.
+          var dehors = !!hors[pli(m)];
+          return '<button type="button" class="reu-mach-p'
+               + (actif ? ' actif' : '') + (dehors ? ' hors' : '') + '" '
                + 'data-mach="' + escA(m) + '" '
-               + 'aria-pressed="' + (actif ? 'true' : 'false') + '">' + esc(m) + '</button>';
+               + (dehors ? 'title="Poste hors production : non compt&eacute; par d&eacute;faut" ' : '')
+               + 'aria-pressed="' + (actif ? 'true' : 'false') + '">' + esc(m)
+               + (dehors ? '<em>hors prod</em>' : '') + '</button>';
         }).join('')
       + '</div>';
   }
@@ -413,7 +420,8 @@
     if(!vue) return;
     if(S.vue === 'reunion'){
       vue.innerHTML = rendreReunion(S.reunion, S.prod, {
-        notes: S.notesEtat, personnes: S.personnes, recherche: S.rechercheP
+        notes: S.notesEtat, personnes: S.personnes, recherche: S.rechercheP,
+        horsProd: (S.prod && S.prod.machines_hors_production) || []
       });
       var ta = vue.querySelector('#reu-notes');
       if(ta) ta.value = (S.notesLocal !== null ? S.notesLocal

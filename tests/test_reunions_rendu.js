@@ -159,6 +159,25 @@ verifier("perimetre : sans machines disponibles, « Toutes » subsiste",
 verifier("perimetre : nom echappe",
          !M.rendreMachines(['<img src=x onerror="alert(1)">'], []).includes("<img src=x"));
 
+// Un poste hors production reste dans le selecteur, en retrait : on ne cache
+// pas une machine, on arrete de la compter par defaut.
+const mHors = M.rendreMachines(MACHINES, [], ["Repiquage"]);
+verifier("hors prod : la pastille reste", mHors.includes('data-mach="Repiquage"'));
+verifier("hors prod : elle est marquee",
+         mHors.includes('class="reu-mach-p hors"') && mHors.includes("<em>hors prod</em>"));
+verifier("hors prod : elle n'est pas cochee",
+         mHors.includes('data-mach="Repiquage" title="Poste hors production'
+                        + ' : non compt&eacute; par d&eacute;faut" aria-pressed="false"'));
+verifier("hors prod : les autres ne sont pas marquees",
+         mHors.split("reu-mach-p hors").length - 1 === 1);
+verifier("hors prod : cochee explicitement, elle reste marquee mais active",
+         M.rendreMachines(MACHINES, ["Repiquage"], ["Repiquage"])
+          .includes('class="reu-mach-p actif hors"'));
+verifier("hors prod : sans liste, rien n'est marque",
+         M.rendreMachines(MACHINES, []).indexOf("hors prod") === -1);
+verifier("hors prod : « Toutes » dit ce qu'elle couvre",
+         mHors.includes("Toutes les machines de production"));
+
 console.log("\n3 bis. Les participants s'ajoutent depuis une recherche");
 const ANNUAIRE = [{ id: 1, nom: "Grégory Desreumaux" }, { id: 2, nom: "Manuel Lesaffre" },
                   { id: 3, nom: "Marc Dubois" }, { id: 4, nom: "Sophie Leroy" }];
