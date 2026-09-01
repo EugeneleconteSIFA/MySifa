@@ -101,7 +101,7 @@ _PROD_HTML_TEMPLATE = r"""<!DOCTYPE html>
 <!-- Points de production : monte par l'onglet Reunions de MyProd. Charge
      AVANT le coeur, qui le cherche sur window au moment du rendu. -->
 <script src="/static/mysifa_reunions.js?v=__V_LABEL__-reu9"></script>
-<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-reu3-sais1"></script>
+<script src="/static/mysifa_prod_core.js?v=__V_LABEL__-reu3-sais2"></script>
 <script src="/static/mysifa_print_modal.js?v=__V_LABEL__"></script>
 <script src="/static/mysifa_impersonate.js?v=__V_LABEL__"></script>
 <!-- v2.3.42 : viewer partagé du détail d'un ack d'alerte (identique à Maintenance) -->
