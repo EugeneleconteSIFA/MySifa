@@ -1,9 +1,11 @@
 """API ERP — lecture seule du miroir RVGI.
 
-Ouvert à la direction et aux services administration, en plus du super
-administrateur — c'est `ROLES_ADMIN`, le même périmètre que les autres
-fonctions d'administration de MySifa. La page `/erp` en est le seul
-consommateur.
+Ouvert à la direction, aux services administration et à l'expédition, en plus
+du super administrateur — c'est `ROLES_ERP`. L'expédition y a été ajoutée le
+31/08/2026 : sans lecture du miroir, un expéditeur ne peut ni retrouver le BL
+qu'il expédie, ni faire compléter un départ par son numéro de commande. La
+page `/erp` et les sélecteurs de rattachement de MyExpé en sont les
+consommateurs.
 
 Endpoints
 ---------
@@ -29,17 +31,20 @@ from app.services import erp_export as export
 from app.services import erp_mirror as miroir
 from app.services import erp_tdb
 from app.services.auth_service import get_current_user
-from config import ROLES_ADMIN
+from config import ROLES_ERP
 
 router = APIRouter(prefix="/api/erp", tags=["erp"])
 
 
 def _exiger_acces(request: Request) -> dict:
     user = get_current_user(request)
-    if user.get("role") not in ROLES_ADMIN:
+    if user.get("role") not in ROLES_ERP:
         raise HTTPException(
             status_code=403,
-            detail="Accès réservé à la direction, aux services administration et au super administrateur.",
+            detail=(
+                "Accès réservé à la direction, aux services administration, "
+                "au service expédition et au super administrateur."
+            ),
         )
     return user
 

@@ -1503,6 +1503,9 @@ _MENU_ADV = ["commandes", "livraisons", "factures", "colisage", "clients", "arti
 _MENU_DIRECTION = ["commandes", "factures", "echeances", "clients", "marches", "prix_vente"]
 _MENU_TECHNIQUE = ["articles", "fiches_fabrication", "outils", "machines",
                    "stock_matiere", "receptions"]
+# L'expédition ne lit l'ERP que pour ce qu'elle expédie : le BL, la commande
+# qui le motive, et le colisage. Ni factures, ni prix, ni échéances.
+_MENU_EXPEDITION = ["livraisons", "commandes", "colisage", "clients"]
 
 MENU_SERVICE = {
     "superadmin": {"tdb": ["tdb_adv", "tdb_direction"], "ecrans": _MENU_ADV},
@@ -1510,6 +1513,7 @@ MENU_SERVICE = {
     "administration_ventes": {"tdb": ["tdb_adv"], "ecrans": _MENU_ADV},
     "administration": {"tdb": ["tdb_adv"], "ecrans": _MENU_ADV},
     "administration_technique": {"tdb": ["tdb_adv"], "ecrans": _MENU_TECHNIQUE},
+    "expedition": {"tdb": [], "ecrans": _MENU_EXPEDITION},
 }
 
 # Un rôle inconnu ne se retrouve pas devant un menu vide : il reçoit le carnet.

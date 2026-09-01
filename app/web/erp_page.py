@@ -16,7 +16,7 @@ Le catalogue d'écrans vit dans `app/services/erp_catalogue.py` : ajouter un
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
-from config import APP_VERSION, ROLES_ADMIN
+from config import APP_VERSION, ROLES_ERP
 from app.services.auth_service import get_current_user
 
 router = APIRouter()
@@ -30,13 +30,13 @@ def erp_page(request: Request):
         if e.status_code == 401:
             return RedirectResponse(url="/?next=/erp", status_code=302)
         raise
-    if user.get("role") not in ROLES_ADMIN:
+    if user.get("role") not in ROLES_ERP:
         from app.web.access_denied import access_denied_response
         return access_denied_response(
             "ERP",
             detail=(
                 "Cette application est réservée à la direction, aux services "
-                "administration et au super administrateur."
+                "administration, au service expédition et au super administrateur."
             ),
         )
     html = (

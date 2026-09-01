@@ -519,6 +519,17 @@
           + escHtml(id.designation || "—") + ' · ' + escHtml(id.machine || "—")
           + (id.ref_produit_norm ? ' · réf ' + escHtml(id.ref_produit_norm) : '')
           + (id.cloture ? '' : ' · <span class="rp-pastille att">en cours</span>')
+          + '</div>'
+          // Ce que couvrent les chiffres. Les listes d'une periode montrent la
+          // part de cette periode ; la fiche montre le dossier entier. Sans
+          // cette ligne, ouvrir un dossier depuis la liste donne deux metrages
+          // differents sans qu'on sache lequel repond a quelle question.
+          + '<div class="rp-cr-portee">'
+          + (cr.periode
+              ? 'Chiffres du ' + escHtml(dateFr(cr.periode.debut))
+                + (dateFr(cr.periode.fin) !== dateFr(cr.periode.debut)
+                    ? ' au ' + escHtml(dateFr(cr.periode.fin)) : '')
+              : 'Chiffres sur toute la vie du dossier')
           + '</div>';
 
     h += '<div class="rp-bloc"><div class="rp-kpis">'
