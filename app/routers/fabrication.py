@@ -2630,6 +2630,7 @@ async def add_matiere(request: Request):
         fournisseur_fsc_id = int(fournisseur_fsc_id) if fournisseur_fsc_id is not None else None
     except (ValueError, TypeError):
         fournisseur_fsc_id = None
+    fournisseur_libre = str(body.get("fournisseur_libre") or "").strip()
 
     # Opérateur : operateur_lie si défini, sinon nom de l'utilisateur
     operateur = user.get("operateur_lie") or ""
@@ -2656,7 +2657,9 @@ async def add_matiere(request: Request):
             )
             new_id = cursor.lastrowid
             fid = _resolve_fournisseur_fsc_id(conn, fournisseur_fsc_id, None)
-            _link_matiere_to_reception(conn, new_id, code_barre, fid)
+            _link_matiere_to_reception(
+                conn, new_id, code_barre, fid, fournisseur_libre
+            )
 
             fsc_warning = False
             fsc_warning_message = None
@@ -2697,8 +2700,23 @@ async def add_matiere(request: Request):
     }
 
 
-def _link_matiere_to_reception(conn, matiere_id: int, code_barre: str, fournisseur_fsc_id: int | None) -> None:
-    """Lie un scan matière à une réception stock ou à un fournisseur FSC (manuel)."""
+def _link_matiere_to_reception(
+    conn,
+    matiere_id: int,
+    code_barre: str,
+    fournisseur_fsc_id: int | None,
+    fournisseur_libre: str | None = None,
+) -> None:
+    """Lie un scan matière à une réception stock ou à un fournisseur (manuel).
+
+    `fournisseur_libre` est le dernier recours de l'atelier : un nom tapé à la
+    main, pour une bobine dont le fournisseur n'est pas dans l'annuaire. Il
+    n'apporte AUCUN certificat — c'est une origine déclarée, pas une origine
+    démontrée — et la bobine ressort donc en « non FSC », signalée en écart
+    sur un dossier certifié. C'est le comportement voulu : mieux vaut une
+    origine déclarée et visible comme telle qu'un scan refusé, qui laisserait
+    la bobine hors de toute traçabilité.
+    """
     rec = conn.execute(
         """
         SELECT r.id AS reception_id, r.fournisseur, r.certificat_fsc
@@ -2719,7 +2737,22 @@ def _link_matiere_to_reception(conn, matiere_id: int, code_barre: str, fournisse
             (int(rec["reception_id"]), matiere_id),
         )
         return
+    libre = (fournisseur_libre or "").strip()
+    if not fournisseur_fsc_id and libre:
+        # Un nom tape a la main qui existe DEJA dans l'annuaire doit rejoindre
+        # sa fiche, certificat compris : sinon un simple choix d'ecran ferait
+        # perdre une licence FSC que l'application connait.
+        fournisseur_fsc_id = _resolve_fournisseur_fsc_id(conn, None, libre)
     if not fournisseur_fsc_id:
+        if libre:
+            conn.execute(
+                """UPDATE fab_matieres_utilisees
+                   SET reception_id=NULL, liaison_mode='manual',
+                       fournisseur_manual=?, certificat_fsc_manual=NULL
+                   WHERE id=?""",
+                (libre[:120], matiere_id),
+            )
+            return
         raise HTTPException(
             status_code=409,
             detail="Fournisseur requis — liaison manuelle.",
@@ -2885,6 +2918,125 @@ async def set_info_prod_dossier(no_dossier: str, request: Request):
     return {"success": True, "info_prod": info}
 
 
+
+# ── Le dossier vu du produit (Traçabilité) ──────────────────────────────
+# La traçabilité disait ce qui a été CONSOMMÉ sans jamais dire ce qui était
+# PRÉVU. Or la question posée devant un dossier — en audit comme en atelier —
+# est l'écart entre les deux : « il fallait du 76 g glassine, qu'est-ce qui est
+# passé ? ». Le prévu se calcule à partir de la fiche technique du produit et
+# de l'OF, par les fonctions de Besoins matières. On ne recalcule rien ici :
+# deux écrans qui chiffrent séparément le même dossier finissent par en donner
+# deux chiffres, et personne ne sait lequel croire.
+_TRACA_KIND_LABEL = {
+    "support": "Support",
+    "glassine": "Glassine",
+    "adhesif": "Adhésif",
+    "mandrin": "Mandrin",
+    "carton": "Carton",
+    "palette": "Palette",
+}
+
+
+def _traca_contexte_produit(conn, dossier: Optional[dict]) -> dict:
+    """Métrage, produit, format et matières nécessaires d'un dossier."""
+    vide = {
+        "metrage": None, "metrage_source": None, "metrage_manque": [],
+        "produit_ref": None, "produit_designation": None,
+        "format": None, "laize": None, "fiche_id": None, "matieres": [],
+    }
+    if not dossier or not dossier.get("id"):
+        return vide
+
+    from app.routers.besoins_matieres import (
+        _SQL_PE_UN, _compute_besoins_dossier, _laize_dossier, _load_dossiers,
+        _load_mapping, _metrage_dossier,
+    )
+    from app.routers.stock import stock_config_float
+
+    rows = _load_dossiers(conn, _SQL_PE_UN, (dossier["id"],))
+    if not rows:
+        return vide
+    pe = rows[0]
+
+    met = _metrage_dossier(pe)
+    besoins = _compute_besoins_dossier(
+        pe, _load_mapping(conn), stock_config_float(conn, "mandrin_perte_coupe_pct")
+    )
+
+    # Format : celui du dossier d'abord (c'est lui qui part en production),
+    # celui de la fiche en repli.
+    def _fmt(v):
+        """« 100.0 » → « 100 » : format_l/h sont des REAL, pas des cotes."""
+        if v is None:
+            return ""
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return str(v).strip()
+        if not f:
+            return ""
+        return f"{f:g}"
+
+    fl, fh = _fmt(dossier.get("format_l")), _fmt(dossier.get("format_h"))
+    format_txt = (fl + " × " + fh) if (fl and fh) else (fl or fh) or None
+
+    ft_designation = None
+    if pe.get("ft_id"):
+        try:
+            r = conn.execute(
+                "SELECT designation, format FROM fiches_techniques WHERE id=?",
+                (pe["ft_id"],),
+            ).fetchone()
+            if r:
+                ft_designation = (r["designation"] or "").strip() or None
+                if not format_txt:
+                    format_txt = (r["format"] or "").strip() or None
+        except Exception:
+            pass
+
+    designation = ft_designation
+    ref_produit = (dossier.get("ref_produit") or "").strip() or None
+    if not designation and ref_produit:
+        try:
+            r = conn.execute(
+                "SELECT designation FROM produits "
+                "WHERE UPPER(TRIM(reference))=UPPER(?) LIMIT 1",
+                (ref_produit,),
+            ).fetchone()
+            if r:
+                designation = (r["designation"] or "").strip() or None
+        except Exception:
+            pass
+    if not designation:
+        designation = (dossier.get("description") or "").strip() or None
+
+    matieres = [{
+        "kind": b["kind"],
+        "kind_label": _TRACA_KIND_LABEL.get(b["kind"], b["kind"]),
+        "libelle": b["source_value"],
+        "matiere_ref": b["matiere_ref"],
+        "matiere_designation": b["matiere_designation"],
+        "quantite": b["quantite"],
+        "unite": b["unite"],
+        "calculable": b["calculable"],
+        "mapped": b["mapped"],
+        "laize_mm": b.get("laize_mm"),
+        "manque": b["manque"],
+    } for b in besoins]
+
+    return {
+        "metrage": met.get("metrage"),
+        "metrage_source": met.get("source"),
+        "metrage_manque": met.get("manque") or [],
+        "produit_ref": ref_produit,
+        "produit_designation": designation,
+        "format": format_txt,
+        "laize": _laize_dossier(pe).get("laize"),
+        "fiche_id": pe.get("ft_id"),
+        "matieres": matieres,
+    }
+
+
 @router.get("/api/fabrication/traceability")
 def get_traceability(request: Request, no_dossier: str = None, machine_id: int = None):
     """Vue traçabilité : dossiers avec matières utilisées + infos production."""
@@ -2934,12 +3086,22 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
             except Exception:
                 motifs_absence = []
 
+            # Ce que le dossier devait produire et avec quoi. Sans le prevu,
+            # la liste des bobines scannees ne se relit pas : on voit ce qui
+            # est passe, jamais ce qui manque.
+            try:
+                contexte = _traca_contexte_produit(conn, dossier)
+            except Exception:
+                logger.exception("contexte produit indisponible (%s)", no_dossier)
+                contexte = None
+
             return {
                 "dossier": dossier,
                 "matieres": [dict(r) for r in matieres],
                 "production": [dict(r) for r in prod_rows],
                 "info_prod": info,
                 "motifs_absence_matiere": motifs_absence,
+                "contexte_produit": contexte,
             }
         else:
             # Liste des dossiers avec au moins une saisie ou matière
@@ -2975,6 +3137,10 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
                 f"""SELECT pe.id, pe.reference, pe.client, pe.description AS designation, pe.statut,
                            pe.position, pe.date_livraison, m.nom AS machine_nom,
                            pe.fsc_requis, pe.fsc_type_requis,
+                           pe.ref_produit, pe.ref_produit_norm,
+                           oi.metrage        AS of_metrage,
+                           oi.qte_etiquettes AS qte_etiquettes,
+                           oi.laize          AS of_laize,
                            (SELECT COUNT(*) FROM fab_matieres_utilisees fmu
                             WHERE fmu.no_dossier = pe.reference) AS nb_matieres,
                            (SELECT COUNT(*) FROM production_data pd
@@ -2982,12 +3148,38 @@ def get_traceability(request: Request, no_dossier: str = None, machine_id: int =
                               AND COALESCE(pd.est_annule, 0) = 0) AS nb_fins{_sel_motif}
                     FROM planning_entries pe
                     LEFT JOIN machines m ON m.id = pe.machine_id
+                    LEFT JOIN of_imports oi ON oi.id = pe.of_import_id
                     WHERE {where}
                     ORDER BY pe.position DESC""",
                 params,
             ).fetchall()
 
             dossiers = [dict(r) for r in rows]
+
+            # Metrage du dossier : l'OF le porte quand il existe, sinon on le
+            # reconstitue depuis la geometrie de la fiche technique -- meme
+            # calcul que Besoins matieres, par ses propres fonctions. Un
+            # metrage recalcule ici finirait par contredire celui sur lequel
+            # les matieres sont commandees.
+            try:
+                from app.routers.besoins_matieres import (
+                    _metrage_dossier, attacher_fiches,
+                )
+                attacher_fiches(conn, dossiers)
+                for d in dossiers:
+                    met = _metrage_dossier(d)
+                    d["metrage"] = met.get("metrage")
+                    d["metrage_source"] = met.get("source")
+                    # Les champs de la fiche ont servi au calcul, ils n'ont
+                    # rien a faire dans une liste de 300 lignes.
+                    for k in [k for k in d if k.startswith("ft_")]:
+                        d.pop(k, None)
+            except Exception:
+                logger.exception("metrage tracabilite indisponible")
+                for d in dossiers:
+                    d.setdefault("metrage", None)
+                    d.setdefault("metrage_source", None)
+
             # L'info prod se lit en colonne dans l'onglet Tracabilite. Une
             # lecture groupee plutot qu'une par ligne : la liste depasse
             # regulierement 250 dossiers.

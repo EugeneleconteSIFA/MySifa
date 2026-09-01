@@ -9,6 +9,17 @@ et à appliquer la marge.
 Le calcul lui-même n'est pas réécrit : on habille les déclinaisons en
 `PricingMaterial` et on passe par `compute_product_cost`, le même moteur que la
 base « Coûts matières ». Une seule formule de prix de revient dans l'application.
+
+**Le poids au m² appartient au PRODUIT** (31 août 2026). Un adhésif ne coûte pas
+plus cher au kilo parce qu'on en pose 22 g/m² plutôt que 17 : le prix est au
+kilo, et c'est la quantité posée qui change — une décision de produit, pas une
+caractéristique de la matière. Le composant porte donc `grammage_gsm` et
+`perte_pct`, et c'est de là que sort le `weight_per_m2` passé au moteur.
+
+Conséquence directe : un composant au kilo sans grammage coûte 0 €/m². On ne
+lève pas — une composition incomplète ne doit pas faire tomber toute la liste des
+produits — mais l'interface le signale, faute de quoi un prix de revient
+silencieusement amputé passerait pour un prix bas.
 """
 
 from __future__ import annotations
@@ -18,7 +29,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Optional
 
-from app.services.mystock_prix import parametrage
+from app.services.mystock_prix import parametrage, poids_retenu
 from app.services.pricing import PricingError, PricingProduct, compute_product_cost
 from app.services.pricing.repository import declinaison_to_pricing_material
 
@@ -46,7 +57,7 @@ def _f(v: Any, defaut: Optional[float] = None) -> Optional[float]:
         return defaut
 
 
-def _normaliser_composants(composants: Any) -> tuple[list[dict], Optional[str]]:
+def normaliser_composants(composants: Any) -> tuple[list[dict], Optional[str]]:
     """
     Valide la composition envoyée par l'interface.
 
@@ -76,13 +87,33 @@ def _normaliser_composants(composants: Any) -> tuple[list[dict], Optional[str]]:
                 return [], f"deux matières pour le rôle {role.lower()}"
             vus_role.add(role)
         if decl_id in vus_decl:
-            return [], "la même déclinaison est présente deux fois"
+            return [], "la même matière est présente deux fois"
         vus_decl.add(decl_id)
-        propre.append({"declinaison_id": decl_id, "role": role, "ordre": i})
+
+        # Grammage et perte : ce que le produit CONSOMME. Facultatifs — une
+        # matière achetée au m² n'en a pas besoin — mais bornés quand ils sont
+        # là : un grammage négatif ou une perte de 400 % sont des fautes de
+        # frappe, et elles donneraient un prix de revient crédible mais faux.
+        gram = _f(c.get("grammage_gsm"))
+        perte = _f(c.get("perte_pct"))
+        if gram is not None and not (0 <= gram <= 99999):
+            return [], "grammage hors limites"
+        if perte is not None and not (0 <= perte <= 100):
+            return [], "perte hors limites (0 à 100 %)"
+
+        propre.append(
+            {
+                "declinaison_id": decl_id,
+                "role": role,
+                "ordre": i,
+                "grammage_gsm": gram,
+                "perte_pct": perte,
+            }
+        )
     return propre, None
 
 
-def _composants_existent(conn: sqlite3.Connection, composants: list[dict]) -> Optional[str]:
+def composants_existent(conn: sqlite3.Connection, composants: list[dict]) -> Optional[str]:
     for c in composants:
         if not conn.execute(
             "SELECT 1 FROM mp_matiere_declinaison WHERE id=?", (c["declinaison_id"],)
@@ -94,7 +125,8 @@ def _composants_existent(conn: sqlite3.Connection, composants: list[dict]) -> Op
 def _lire_composants(conn: sqlite3.Connection, produit_id: int) -> list[dict]:
     rows = conn.execute(
         """SELECT c.declinaison_id, c.role, c.ordre,
-                  mp.reference, mp.designation, mp.categorie,
+                  c.grammage_gsm, c.perte_pct, d.price_basis,
+                  mp.reference, mp.designation, mp.categorie, mp.sous_section,
                   l.valeur_mm, l.label AS laize_label,
                   g.valeur_gsm, g.label AS grammage_label
              FROM mp_produit_composant c
@@ -122,7 +154,20 @@ def _lire_composants(conn: sqlite3.Connection, produit_id: int) -> list[dict]:
                 "reference": r["reference"],
                 "designation": r["designation"],
                 "categorie": r["categorie"],
+                # Le support d'un frontal (thermique, couché, synthétique,
+                # vélin) : la liste des produits le montre en badge, c'est ce
+                # qui distingue deux étiquettes à l'œil.
+                "sous_section": r["sous_section"],
                 "libelle": libelle,
+                # Ce que le produit consomme, et le poids qui en découle. Le
+                # poids est calculé ici plutôt qu'à l'écran : deux endroits qui
+                # appliquent la perte finissent par ne plus le faire pareil.
+                "grammage_gsm": _f(r["grammage_gsm"]),
+                "perte_pct": _f(r["perte_pct"]),
+                "weight_per_m2": poids_retenu(r["grammage_gsm"], r["perte_pct"]),
+                # Une matière au m² n'a pas de grammage à saisir : l'interface a
+                # besoin de le savoir pour ne pas réclamer un chiffre inutile.
+                "price_basis": r["price_basis"] or "PER_KG",
             }
         )
     return out
@@ -132,9 +177,13 @@ def _ecrire_composants(conn: sqlite3.Connection, produit_id: int, composants: li
     conn.execute("DELETE FROM mp_produit_composant WHERE produit_id=?", (produit_id,))
     for c in composants:
         conn.execute(
-            """INSERT INTO mp_produit_composant (produit_id, declinaison_id, role, ordre)
-               VALUES (?,?,?,?)""",
-            (produit_id, c["declinaison_id"], c["role"], c["ordre"]),
+            """INSERT INTO mp_produit_composant
+                   (produit_id, declinaison_id, role, ordre, grammage_gsm, perte_pct)
+               VALUES (?,?,?,?,?,?)""",
+            (
+                produit_id, c["declinaison_id"], c["role"], c["ordre"],
+                c.get("grammage_gsm"), c.get("perte_pct"),
+            ),
         )
 
 
@@ -154,7 +203,15 @@ def cout_produit(conn: sqlite3.Connection, produit: dict, reglages) -> Any:
     for c in produit.get("composants", []):
         param = parametrage(conn, c["declinaison_id"])
         if not param:
-            raise PricingError(f"Déclinaison introuvable (id={c['declinaison_id']}).")
+            raise PricingError(f"Matière introuvable (id={c['declinaison_id']}).")
+        # Le poids vient du COMPOSANT, pas de la matière : c'est le produit qui
+        # décide de la quantité posée. `param` porte encore l'ancien poids —
+        # colonne conservée pour permettre le retour en arrière — et il ne doit
+        # surtout pas resservir, sinon la bascule n'aurait rien changé.
+        param = {
+            **param,
+            "weight_per_m2": poids_retenu(c.get("grammage_gsm"), c.get("perte_pct")),
+        }
         carte[c["declinaison_id"]] = declinaison_to_pricing_material(param)
         champ = _ROLE_VERS_CHAMP.get(c["role"])
         if champ:
@@ -240,10 +297,10 @@ def creer_produit(
         "SELECT 1 FROM mp_produit WHERE code=? COLLATE NOCASE", (code,)
     ).fetchone():
         return {"ok": False, "reason": f"le code « {code} » existe déjà"}
-    propres, err = _normaliser_composants(composants)
+    propres, err = normaliser_composants(composants)
     if err:
         return {"ok": False, "reason": err}
-    err = _composants_existent(conn, propres)
+    err = composants_existent(conn, propres)
     if err:
         return {"ok": False, "reason": err}
     marge = _f(custom_margin_pct)
@@ -308,10 +365,10 @@ def modifier_produit(
 
     composants = None
     if "composants" in patch:
-        composants, err = _normaliser_composants(patch["composants"])
+        composants, err = normaliser_composants(patch["composants"])
         if err:
             return {"ok": False, "reason": err}
-        err = _composants_existent(conn, composants)
+        err = composants_existent(conn, composants)
         if err:
             return {"ok": False, "reason": err}
 

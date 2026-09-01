@@ -792,9 +792,19 @@ with dbmod.get_db() as conn:
     print("\n--- produits devisés depuis MyStock ---")
     from app.services import mystock_produits as PROD  # noqa: E402
 
+    def _f0(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+
+    # Depuis le 31/08/2026, le poids au m² est porté par le COMPOSANT : c'est le
+    # produit qui décide de la quantité posée, pas la matière du prix au kilo.
+    # Le frontal s'achète au m² et n'a donc pas de grammage à porter.
     compo = [
         {"declinaison_id": dl["id"], "role": "FRONTAL"},
-        {"declinaison_id": d22["id"], "role": "ADHESIF"},
+        {"declinaison_id": d22["id"], "role": "ADHESIF",
+         "grammage_gsm": 22, "perte_pct": 0},
     ]
     r = PROD.creer_produit(conn, code="MS-1", designation="Étiquette test",
                            composants=compo, user_name="Test")
@@ -805,9 +815,15 @@ with dbmod.get_db() as conn:
     check("le libellé de la déclinaison suit",
           sorted(c["libelle"] for c in prod["composants"]), ["22 g/m²", "330 mm"])
 
+    check("le grammage est stocké sur le composant",
+          sorted(_f0(x.get("grammage_gsm")) for x in prod["composants"]), [0.0, 22.0])
+    check("et le poids au m² en découle",
+          sorted(round(_f0(x.get("weight_per_m2")), 6) for x in prod["composants"]),
+          [0.0, 0.022])
+
     c = PROD.cout_produit(conn, prod, reglages)
     attendu = round(1.62 + 2.95 * 0.022, 4)
-    check("coût = somme des déclinaisons", float(c.total_eur_per_m2), attendu)
+    check("coût = somme des composants", float(c.total_eur_per_m2), attendu)
     check("un composant par rôle", sorted(x.role for x in c.components), ["adhesif", "frontal"])
     check("les parts font 100 %", float(sum(x.share_pct for x in c.components)), 100.0)
     check("marge par défaut appliquée",
@@ -855,6 +871,53 @@ with dbmod.get_db() as conn:
     check("le coût suit la nouvelle composition",
           float(c2.total_eur_per_m2), round(attendu + 1.45, 4))
     check("la marge du produit prend le pas", float(c2.margin_pct), 12.0)
+
+    # Le cœur de la bascule : le grammage appartient au PRODUIT. Deux produits
+    # peuvent poser le même adhésif en 17 et en 22 g/m² sans que la matière —
+    # ni son prix au kilo — ne bouge d'un iota.
+    m3 = PROD.modifier_produit(conn, prod["id"], patch={
+        "composants": [
+            {"declinaison_id": dl["id"], "role": "FRONTAL"},
+            {"declinaison_id": d22["id"], "role": "ADHESIF",
+             "grammage_gsm": 17, "perte_pct": 0},
+        ],
+    }, user_name="Test")
+    conn.commit()
+    c3 = PROD.cout_produit(conn, m3["produit"], reglages)
+    check("changer le grammage du produit change son coût",
+          float(c3.total_eur_per_m2), round(1.62 + 2.95 * 0.017, 4))
+    check("sans toucher au prix d'achat de la matière",
+          _f0(MP.parametrage(conn, d22["id"])["unit_price"]), 2.95)
+
+    # La perte entre dans le poids, elle aussi : 22 g/m² + 9 % = 23,98 g/m².
+    m4 = PROD.modifier_produit(conn, prod["id"], patch={
+        "composants": [
+            {"declinaison_id": d22["id"], "role": "ADHESIF",
+             "grammage_gsm": 22, "perte_pct": 9},
+        ],
+    }, user_name="Test")
+    conn.commit()
+    check("la perte majore le poids retenu",
+          float(PROD.cout_produit(conn, m4["produit"], reglages).total_eur_per_m2),
+          round(2.95 * 0.02398, 4))
+
+    # Un composant au kilo sans grammage vaut 0 : on ne lève pas (une compo
+    # incomplète ne doit pas faire tomber la liste), mais l'écran doit le dire.
+    m5 = PROD.modifier_produit(conn, prod["id"], patch={
+        "composants": [{"declinaison_id": d22["id"], "role": "ADHESIF"}],
+    }, user_name="Test")
+    conn.commit()
+    check("sans grammage, le composant au kilo coûte 0",
+          float(PROD.cout_produit(conn, m5["produit"], reglages).total_eur_per_m2), 0.0)
+
+    check("grammage aberrant refusé",
+          PROD.modifier_produit(conn, prod["id"], patch={"composants": [
+              {"declinaison_id": d22["id"], "role": "ADHESIF", "grammage_gsm": -5},
+          ]})["ok"], False)
+    check("perte au-delà de 100 % refusée",
+          PROD.modifier_produit(conn, prod["id"], patch={"composants": [
+              {"declinaison_id": d22["id"], "role": "ADHESIF", "perte_pct": 400},
+          ]})["ok"], False)
     check("prix de vente = revient + marge", float(c2.sell_price_eur_m2),
           round(float(c2.total_eur_per_m2) * 1.12, 4))
 

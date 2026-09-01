@@ -62,12 +62,31 @@
       'align-items:center;justify-content:center;padding:18px;',
       'background:rgba(2,6,23,.55);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}',
       '#mysifa-cal-rappels.ouvert{display:flex}',
-      '#mysifa-cal-rappels .mcr-pile{display:flex;flex-direction:column;gap:12px;',
-      'width:100%;max-width:400px;max-height:92vh;overflow-y:auto}',
+      /* padding + box-sizing : la pile est un conteneur de defilement, elle
+         rogne au ras de sa boite. Sans cette marge interieure, l'ombre portee
+         et le halo des cartes etaient coupes net — d'ou un cadre gris a coins
+         carres autour de la fenetre. */
+      '#mysifa-cal-rappels .mcr-pile{display:flex;flex-direction:column;gap:14px;',
+      'box-sizing:border-box;width:100%;max-width:436px;padding:18px;',
+      'max-height:92vh;overflow-y:auto}',
+      /* --mcr-ombre : l'ombre est reprise telle quelle dans les keyframes (une
+         animation de box-shadow remplace la declaration de base), et allegee
+         en theme clair ou une ombre noire a 50% fait sale. */
       '.mcr-card{background:var(--card,#111827);border:1px solid var(--border,#1e293b);',
       'border-top:3px solid var(--accent,#22d3ee);border-radius:14px;padding:18px 18px 16px;',
-      'box-shadow:0 24px 60px rgba(0,0,0,.5);animation:mcrIn .22s ease-out}',
+      '--mcr-ombre:0 24px 60px rgba(0,0,0,.5);box-shadow:var(--mcr-ombre);',
+      /* Le rappel arrive par-dessus une page deja chargee : le lisere accent
+         qui respire ramene l'oeil dessus. Anneaux en box-shadow plutot qu'un
+         ::after borde : un box-shadow epouse exactement le border-radius, donc
+         pas de double trait ni de coins decales, et rien ne bouge en geometrie. */
+      'animation:mcrIn .22s ease-out,mcrHalo 2.4s ease-in-out .3s infinite}',
+      'body.light .mcr-card{--mcr-ombre:0 18px 44px rgba(15,23,42,.22)}',
       '@keyframes mcrIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}',
+      '@keyframes mcrHalo{0%,100%{box-shadow:var(--mcr-ombre),',
+      '0 0 0 0 var(--accent,#22d3ee),0 0 0 0 var(--accent-bg,rgba(34,211,238,.12))}',
+      '50%{box-shadow:var(--mcr-ombre),',
+      '0 0 0 2px var(--accent,#22d3ee),0 0 0 9px var(--accent-bg,rgba(34,211,238,.12))}}',
+      '@media(prefers-reduced-motion:reduce){.mcr-card{animation:mcrIn .22s ease-out}}',
       '.mcr-quand{font-size:11px;font-weight:800;letter-spacing:1.1px;text-transform:uppercase;',
       'color:var(--accent,#22d3ee)}',
       '.mcr-titre{font-size:17px;font-weight:800;color:var(--text,#f1f5f9);margin-top:5px;line-height:1.3}',
@@ -90,7 +109,13 @@
       'font-weight:600;cursor:pointer;transition:border-color .15s,color .15s}',
       '.mcr-btn:hover{border-color:var(--accent,#22d3ee);color:var(--accent,#22d3ee)}',
       '.mcr-btn.mcr-ouvrir{background:var(--accent,#22d3ee);border-color:var(--accent,#22d3ee);',
-      'color:var(--sur-accent,#0a0e17)}',
+      /* Le rappel s'affiche sur toutes les pages, dont celles qui ne
+         definissent pas --sur-accent : sans la regle body.light, le texte
+         tombait sur le fallback sombre sur fond accent bleu — illisible.
+         En theme sombre l'accent est cyan clair : le texte doit y rester
+         sombre, d'ou les deux regles plutot qu'un blanc en dur. */
+      'color:var(--sur-accent,#0a0e17);font-weight:700}',
+      'body.light .mcr-btn.mcr-ouvrir{color:#ffffff}',
       '@media(max-width:520px){#mysifa-cal-rappels{align-items:flex-end;padding:10px}',
       '#mysifa-cal-rappels .mcr-pile{max-width:none}}',
       '@media print{#mysifa-cal-rappels{display:none!important}}'
@@ -166,8 +191,8 @@
   function afficher(r) {
     if (etat.montres[r.id] || estMasque(r.id)) return;
     var mins = minutesAvant(r.debut);
-    var quand = mins == null ? 'Bientôt'
-      : (mins <= 0 ? 'Ça commence' : 'Dans ' + mins + ' min');
+    var quand = 'Rappel · ' + (mins == null ? 'bientôt'
+      : (mins <= 0 ? 'ça commence' : 'dans ' + mins + ' min'));
     var heure = String(r.debut || '').slice(11, 16);
     var sous = r.reunion
       ? (r.organisateur ? 'Réunion que vous organisez · ' + heure

@@ -46,6 +46,16 @@ seul transport : on refuse plutôt que d'écrire un prix d'achat négatif.
 Changer transport ou taxes déplace le sous-total **sans toucher au prix d'achat** :
 `set_parametrage` pousse alors le nouveau sous-total vers la valorisation.
 
+**La valorisation peut dériver, et rien ne la rattrapait.** Le miroir ne part
+qu'au moment d'une écriture : `set_prix`, `set_tarif`, `set_parametrage`,
+`set_principal`. Une valeur écrite le jour où le transport valait 5 % y reste
+après le passage à 9 % si le chemin emprunté ne l'a pas déclenché — import en
+masse, écriture directe, migration, tarif créé avant que le fournisseur ne
+devienne principal. On lit alors 4,41 €/kg dans MyStock là où la fiche calcule
+4,578. `scripts/resync_valorisation.py --inventaire` liste les écarts,
+`--appliquer` repousse les bons sous-totaux en passant par `_mirror_principal`,
+donc avec trace dans `mp_valorisation_historique`.
+
 **Historique** — `mp_prix_historique`, au niveau de la déclinaison, avec la date,
 **l'écran d'origine**, l'auteur, le fournisseur, prix avant/après ET sous-total
 avant/après. Les deux valeurs, parce qu'un changement de paramétrage fait bouger
@@ -102,7 +112,107 @@ Fiche, et MyStock ↗. Le champ se verrouille quand la matière a plusieurs
 fournisseurs — un prix unique en écraserait un avec le tarif de l'autre — et la
 ligne le dit.
 
+**En-têtes qui trient et qui filtrent** (31 août 2026), sur les deux listes —
+matières et produits. La recherche unique en haut de page répond bien à « où est
+1408 », jamais à « quels produits sont en thermique » ni à « quels prix n'ont pas
+été revus depuis deux ans ».
+
+Une colonne se déclare en une ligne dans un tableau `COLS` : sa clé, comment en
+tirer la valeur (`val`, pour le tri) et le type de filtre (`texte` ou `choix`).
+Le reste se déduit — flèches, ordre, valeurs distinctes d'un `choix`, prises
+dans les données réelles et non dans une liste figée qui finit toujours par
+proposer une catégorie que plus rien ne porte.
+
+Trois états de tri : croissant, décroissant, ordre naturel — sans le troisième,
+un tri posé par erreur ne se retire plus. Les valeurs manquantes vont toujours en
+bas, dans les deux sens. Les champs de filtre restent visibles plutôt que cachés
+dans un menu : un menu cache l'état, et on cherche longtemps pourquoi la liste
+est vide. Un filtre actif se teinte, et un bandeau sous le tableau dit combien de
+lignes sont masquées avec un bouton pour tout relâcher.
+
+**Liste des produits** — code et désignation ont quitté le tableau.
+`886-0001` n'apprend rien qu'on cherche du regard, et « Thermique Pro 70g ·
+Enlevable 22g, Jaune 60g standard » ne fait que recopier en prose, sur trois
+lignes, ce que les colonnes disent en un coup d'œil : un produit fini EST sa
+composition. Les deux restent cherchables (la recherche du haut porte sur
+`code LIKE ? OR designation LIKE ?`) et lisibles au survol de la ligne.
+
+À la place, deux colonnes qui font le travail :
+
+- **Support** — la sous-section du frontal (thermique, couché, synthétique,
+  vélin), en badge, avec **les teintes exactes de MyStock** recopiées depuis
+  `dash-mp-cat-*` (`app/web/stock_page.py`). Deux applications qui parlent du
+  même papier doivent lui donner la même couleur ; si la palette bouge là-bas,
+  elle doit bouger ici.
+- **Grammage** — celui de l'adhésif, porté par le composant. C'est lui qui
+  sépare quatre produits montés sur le même 2028Y, et le seul chiffre du tableau
+  qui se corrige à la main quand un coût surprend. La cellule Adhésif ne le
+  répète plus : l'écrire aux deux endroits ferait chercher lequel fait foi le
+  jour où ils diffèrent.
+
 Test : `node tests/test_pricing_vue_liste.js`.
+
+### Le poids au m² appartient au PRODUIT, pas à la matière (31 août 2026)
+
+La matière porte **ce qu'on paie**. Le composant du produit porte **ce qu'on
+consomme**. Un adhésif ne s'achète pas plus cher en 22 g/m² qu'en 17 : le prix
+est au kilo, et c'est la quantité posée qui change — une décision de produit.
+
+- `mp_produit_composant.grammage_gsm` / `perte_pct` : les colonnes qui comptent.
+  Migration `mp_grammage_sur_composant`, qui recopie les valeurs des
+  déclinaisons pour qu'aucun coût ne bouge le jour du déploiement.
+- `cout_produit` surcharge le `weight_per_m2` du `PricingMaterial` avec
+  `poids_retenu(composant)`. Les colonnes côté déclinaison restent en base —
+  retour en arrière possible — mais **n'entrent plus dans aucun calcul**.
+- Un composant au kilo sans grammage coûte **0 €/m²**. On ne lève pas (une
+  composition incomplète ne doit pas faire tomber la liste des produits), mais
+  la fiche et le récapitulatif le disent : un total amputé passe sinon pour un
+  prix bas.
+
+Les fiches matière ont donc perdu la section « Caractéristiques » et tout
+affichage en €/m² — prix de revient, marge, prix de vente, « ramené au m² ».
+Un €/m² suppose de savoir quelle quantité on pose ; la matière ne le sait pas.
+Il lui reste son **sous-total d'achat** (prix + transport + taxes), dans sa
+devise et sa base d'achat. Exception : la fiche `mc_material` de la base
+historique renvoie encore `grammage_gsm` inchangé — ses propres produits
+calculent toujours en €/m² — mais le champ n'est plus saisissable.
+
+L'aperçu du coût sur la fiche produit passe désormais par
+`POST /api/pricing/mystock/produits/preview` : le refaire dans le navigateur
+supposerait d'y réimplémenter transport, taxes et change.
+
+**Le transport est nommé, plus fondu dans le résultat.** L'écran affichait
+« 4,200 €/kg × 0,0240 kg/m² → 0,1098 €/m² » — une multiplication qui ne tombe
+pas juste, parce que le transport (0,379 €/kg, 9 % ici) y entrait sans figurer
+nulle part. Un chiffre qu'on ne peut pas refaire de tête passe pour un chiffre
+faux, et il avait raison de le paraître : il manquait deux termes.
+
+`_cout_produit_mystock` renvoie donc la `breakdown` de chaque composant, comme
+le fait déjà la base CM. La chaîne s'écrit en entier —
+`(prix + transport + taxes) = sous-total × poids × change → coût` — les termes
+nuls omis. Le transport a aussi sa ligne « dont transport » dans le
+récapitulatif, sa colonne dans le détail déplié de la liste, et un lien vers le
+tarif du fournisseur : nommer un coût sans donner le chemin pour le corriger
+n'avance personne.
+
+**Dans les jauges**, il hachure la fin du segment de la matière qui le porte —
+jamais un segment à lui : il vit DANS le prix de cette matière, lui en donner un
+le compterait deux fois et suggérerait un composant de plus. On voit ainsi
+LAQUELLE des trois matières porte le transport, ce qu'aucun total global ne dit.
+La hachure est composée avec `--text`, donc elle bascule avec le thème : un noir
+fixe disparaissait en sombre, où le repère se confondait avec la piste vide et
+faisait paraître la matière plus légère qu'elle n'est.
+
+### Fusion des déclinaisons : une matière, une ligne
+
+Le grammage parti sur le produit, la déclinaison n'a plus rien à porter que le
+prix — qui n'a jamais varié de l'une à l'autre.
+`scripts/fusion_declinaisons.py --inventaire`, puis `--simulation`, puis
+`--appliquer` ramène chaque matière à une seule ligne : prix déplacés (doublons
+de fournisseur écartés), composants repointés, historique conservé. **À sens
+unique — copier la base avant.** Les matières dont les déclinaisons portent des
+prix ou des fournisseurs principaux différents sont laissées de côté et listées :
+les fusionner reviendrait à choisir un prix à la place de quelqu'un.
 
 ### Comment un prix d'achat devient un coût au m²
 

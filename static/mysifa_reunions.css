@@ -102,6 +102,42 @@ table.reu-tbl tbody tr:hover .reu-sup{opacity:1}
 .reu-sauve{font-size:11.5px;color:var(--muted);margin-top:6px;min-height:16px}
 .reu-bloc{margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
 
+/* ── Participants ────────────────────────────────────────────── */
+.reu-parts{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px}
+.reu-part{display:inline-flex;align-items:center;gap:5px;background:var(--accent-bg);
+  border:1px solid var(--accent);color:var(--accent);border-radius:999px;
+  padding:4px 5px 4px 11px;font-size:12.5px;font-weight:600;line-height:1.3}
+.reu-part-x{background:transparent;border:none;color:inherit;cursor:pointer;
+  font-size:14px;line-height:1;padding:1px 4px;border-radius:999px;
+  font-family:inherit;opacity:.65;
+  transition:opacity var(--mo-fast,.15s) var(--ease-out,ease),
+             color var(--mo-fast,.15s) var(--ease-out,ease)}
+.reu-part-x:hover{opacity:1;color:var(--danger)}
+
+.reu-cherche{position:relative}
+.reu-cherche input{width:100%;background:var(--bg);border:1px solid var(--border);
+  border-radius:9px;padding:9px 11px;color:var(--text);font-size:13.5px;
+  font-family:inherit;
+  transition:border-color var(--mo-fast,.15s) var(--ease-out,ease),
+             box-shadow var(--mo-fast,.15s) var(--ease-out,ease)}
+.reu-cherche input:focus{border-color:var(--accent);outline:none;
+  box-shadow:0 0 0 3px var(--accent-bg)}
+/* La liste ne prend de la place que lorsqu'elle a quelque chose a dire :
+   vide, elle ne doit pas pousser les notes vers le bas. */
+.reu-suggs:not(:empty){display:flex;flex-direction:column;gap:4px;margin-top:7px;
+  max-height:210px;overflow-y:auto}
+.reu-sugg{display:flex;align-items:baseline;gap:8px;width:100%;text-align:left;
+  background:var(--card);border:1px solid var(--border);border-radius:9px;
+  padding:8px 11px;color:var(--text);font-size:13.5px;font-family:inherit;
+  cursor:pointer;
+  transition:border-color var(--mo-fast,.15s) var(--ease-out,ease),
+             background var(--mo-fast,.15s) var(--ease-out,ease)}
+.reu-sugg:hover,.reu-sugg:focus-visible{border-color:var(--accent);
+  background:var(--accent-bg);outline:none}
+.reu-sugg.hors{color:var(--text2)}
+.reu-sugg em{margin-left:auto;font-style:normal;font-size:11px;color:var(--muted);
+  white-space:nowrap}
+
 .reu-act{display:flex;gap:9px;align-items:flex-start;padding:9px 0;
   border-bottom:1px solid var(--border)}
 .reu-act:last-of-type{border-bottom:none}
@@ -146,14 +182,15 @@ table.reu-tbl tbody tr:hover .reu-sup{opacity:1}
 @media (prefers-reduced-motion: reduce){
   .reu-btn,.reu-champ input,.reu-champ select,.reu-actform input,
   .reu-hdr input.reu-nom,table.reu-tbl tbody tr,.reu-act .reu-a-sup,
-  .reu-sup{transition:none !important}
+  .reu-sup,.reu-part-x,.reu-sugg,.reu-cherche input{transition:none !important}
   .reu-btn:hover{transform:none !important}
 }
 body.reduce-anim .reu-btn,body.reduce-anim .reu-champ input,
 body.reduce-anim .reu-champ select,body.reduce-anim .reu-actform input,
 body.reduce-anim .reu-hdr input.reu-nom,body.reduce-anim table.reu-tbl tbody tr,
 body.reduce-anim .reu-act .reu-a-sup,
-body.reduce-anim .reu-sup{transition:none !important}
+body.reduce-anim .reu-sup,body.reduce-anim .reu-part-x,
+body.reduce-anim .reu-sugg,body.reduce-anim .reu-cherche input{transition:none !important}
 body.reduce-anim .reu-btn:hover{transform:none !important}
 
 /*
@@ -188,7 +225,7 @@ body.reduce-anim .reu-btn:hover{transform:none !important}
   #reu-doc .reu-doc-act.fait{color:#555;text-decoration:line-through}
   #reu-doc .reu-doc-act .reu-doc-act-meta{font-size:11.5px;color:#444;
     text-decoration:none;display:block;margin-top:2px}
-  .reu-sup{display:none !important}
+  .reu-sup,.reu-cherche,.reu-part-x{display:none !important}
   #reu-doc .card,#reu-doc .rp-feuille{box-shadow:none !important;border:none !important;
     background:none !important;padding:0 !important}
 }

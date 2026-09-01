@@ -1204,7 +1204,7 @@ body.has-topbar .fab-main{padding-top:74px}
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=4"></script>
+<script src="/static/mysifa_cal_rappel.js?v=7"></script>
 <script src="/static/mysifa_alert_runtime.js?v=2.4.5"></script>
 <!-- Memoire produit : fiche par reference produit, partagee avec MyProd -->
 <script src="/static/mysifa_produit_memoire.js?v=2.0"></script>
@@ -3834,6 +3834,31 @@ function tracaShowFicheManuelle(codeBarre){
                       background:var(--bg);color:var(--text);font-size:13px;margin-bottom:12px;font-family:inherit;box-sizing:border-box"/>
         <datalist id="${dlId}">${opts}</datalist>
 
+        <div id="fiche-portee" style="display:flex;align-items:center;justify-content:space-between;
+                    gap:8px;margin:-6px 0 12px;font-size:11px;color:var(--muted)">
+          <span id="fiche-portee-txt">Fournisseurs de bobines et complexes</span>
+          <button type="button" id="fiche-elargir"
+                  style="background:none;border:none;padding:0;font:inherit;font-weight:700;
+                         color:var(--accent);cursor:pointer;text-decoration:underline">
+            Autre fournisseur
+          </button>
+        </div>
+
+        <div id="fiche-libre-wrap" style="display:none;margin-bottom:12px">
+          <label style="font-size:11px;font-weight:700;text-transform:uppercase;
+                        letter-spacing:.5px;color:var(--muted);display:block;margin-bottom:6px">
+            Nom du fournisseur, à la main
+          </label>
+          <input id="fiche-fournisseur-libre" type="text" maxlength="120"
+                 placeholder="Nom du fournisseur" autocomplete="off" spellcheck="false"
+                 style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;
+                        background:var(--bg);color:var(--text);font-size:13px;font-family:inherit;box-sizing:border-box"/>
+          <div style="font-size:11px;color:#c2410c;line-height:1.5;margin-top:6px">
+            Hors annuaire : aucun certificat FSC ne sera rattaché. La bobine
+            ressortira en « non FSC » et sera signalée en écart sur un dossier certifié.
+          </div>
+        </div>
+
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
           <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:12px">
             <div style="font-size:10px;font-weight:700;text-transform:uppercase;
@@ -3864,6 +3889,21 @@ function tracaShowFicheManuelle(codeBarre){
     const licEl = overlay.querySelector('#fiche-fournisseur-licence');
     const btn = overlay.querySelector('#fiche-manual-confirm');
 
+    // Une bobine, c'est un frontal, une glassine ou un complexe. Les mettre
+    // en TETE de l'annuaire ne suffisait pas : l'operateur, au poste, voyait
+    // quand meme defiler les fournisseurs de colle, de mandrins et de
+    // palettes, et rien ne lui disait lesquels pouvaient etre la bonne
+    // reponse. On filtre donc pour de bon, et on ouvre en deux temps :
+    // « Autre fournisseur » rend l'annuaire complet, puis le champ libre.
+    const CATS_BOBINE = ['frontal', 'glassine', 'complexe'];
+    let ficheElargi = false;   // 1er palier : tout l'annuaire
+    let ficheLibre  = false;   // 2e palier : nom tape a la main
+
+    const porteeTxt = overlay.querySelector('#fiche-portee-txt');
+    const elargirBtn = overlay.querySelector('#fiche-elargir');
+    const libreWrap = overlay.querySelector('#fiche-libre-wrap');
+    const libreInp = overlay.querySelector('#fiche-fournisseur-libre');
+
     // `attach` remplace l'input dans le DOM : `inp` en sort, la référence à
     // garder est `fournPickerFiche.input`.
     const fournPickerFiche = (window.MysFournisseurPicker && inp)
@@ -3871,7 +3911,11 @@ function tracaShowFicheManuelle(codeBarre){
           valueMode: 'id',
           allowEmpty: false,
           placeholder: 'Nom, ville, licence\u2026',
-          categories: ['frontal', 'adhesif', 'glassine', 'complexe'],
+          categories: CATS_BOBINE,
+          // Lu a chaque frappe : basculer `ficheElargi` suffit a rouvrir
+          // l'annuaire, sans reconstruire le champ ni perdre le focus.
+          filter: (f) => ficheElargi
+            || (f.categories || []).some(c => CATS_BOBINE.indexOf(c) !== -1),
         })
       : null;
 
@@ -3883,17 +3927,58 @@ function tracaShowFicheManuelle(codeBarre){
       if(!val) return null;
       return list.find(x => String(x.nom||'').toLowerCase() === val) || null;
     }
+    function nomLibre(){
+      return ficheLibre ? String(libreInp?.value || '').trim() : '';
+    }
     function updateLicence(){
       const f = findFournisseur();
+      const libre = nomLibre();
       if(f){
         if(nomEl){ nomEl.textContent = f.nom; nomEl.style.color = 'var(--text)'; }
         if(licEl){ licEl.textContent = f.licence || '—'; licEl.style.color = 'var(--text)'; }
+        if(btn){ btn.disabled = false; btn.style.opacity = '1'; }
+      }else if(libre){
+        // Nom tape a la main : on affiche l'absence de licence au lieu de la
+        // laisser vide. L'operateur doit voir ce qu'il perd en choisissant
+        // cette voie, au moment ou il la choisit.
+        if(nomEl){ nomEl.textContent = libre; nomEl.style.color = 'var(--text)'; }
+        if(licEl){ licEl.textContent = 'hors annuaire'; licEl.style.color = '#c2410c'; }
         if(btn){ btn.disabled = false; btn.style.opacity = '1'; }
       }else{
         if(nomEl){ nomEl.textContent = '—'; nomEl.style.color = 'var(--muted)'; }
         if(licEl){ licEl.textContent = '—'; licEl.style.color = 'var(--muted)'; }
         if(btn){ btn.disabled = true; btn.style.opacity = '.5'; }
       }
+    }
+
+    // Palier 1 : tout l'annuaire. Palier 2 : le champ libre. Deux clics, et
+    // le second dit ce qu'il coute — l'operateur ne bascule pas hors
+    // annuaire sans le savoir.
+    if(elargirBtn){
+      elargirBtn.onclick = () => {
+        if(!ficheElargi){
+          ficheElargi = true;
+          if(porteeTxt) porteeTxt.textContent = 'Annuaire complet';
+          elargirBtn.textContent = 'Vraiment pas dans la liste ?';
+          // setCategories rejoue le rendu de la liste ouverte ; le focus la
+          // rouvre si elle s'etait refermee au clic sur le bouton.
+          if(fournPickerFiche){
+            fournPickerFiche.setCategories(CATS_BOBINE);
+            fournPickerFiche.focus();
+          }
+          return;
+        }
+        ficheLibre = true;
+        if(porteeTxt) porteeTxt.textContent = 'Fournisseur hors annuaire';
+        elargirBtn.style.display = 'none';
+        if(libreWrap) libreWrap.style.display = '';
+        if(fournPickerFiche) fournPickerFiche.clear(true);
+        updateLicence();
+        if(libreInp) requestAnimationFrame(() => libreInp.focus());
+      };
+    }
+    if(libreInp){
+      libreInp.addEventListener('input', updateLicence);
     }
     if (fournPickerFiche) {
       fournPickerFiche.opts.onSelect = updateLicence;
@@ -3914,15 +3999,20 @@ function tracaShowFicheManuelle(codeBarre){
 
     overlay.querySelector('#fiche-manual-confirm').onclick = async () => {
       const f = findFournisseur();
-      if(!f) return;
-      const fid = f.id;
+      const libre = nomLibre();
+      if(!f && !libre) return;
+      // Le serveur rattache un nom libre a sa fiche s'il en trouve une : la
+      // voie manuelle ne fait pas perdre une licence que l'annuaire connait.
+      const extra = f
+        ? {fournisseur_fsc_id: parseInt(f.id, 10)}
+        : {fournisseur_libre: libre};
       overlay.remove();
       set({tracaAutoSaving:true});
       try{
         const d = await apiFetch('/api/fabrication/matieres',{
           method:'POST',
           headers:{'Content-Type':'application/json'},
-          body:JSON.stringify(tracaBuildMatiereBody(codeBarre, {fournisseur_fsc_id: parseInt(fid, 10)})),
+          body:JSON.stringify(tracaBuildMatiereBody(codeBarre, extra)),
         });
         await tracaHandleMatiereResponse(d, codeBarre);
       }catch(e){
@@ -3978,7 +4068,7 @@ function tracaAskFournisseur(){
           valueMode: 'id',
           allowEmpty: false,
           placeholder: 'Nom, ville, licence\u2026',
-          categories: ['frontal', 'adhesif', 'glassine', 'complexe'],
+          categories: ['frontal', 'glassine', 'complexe'],
         })
       : null;
     function pick(){

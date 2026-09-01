@@ -1765,7 +1765,9 @@ function renderPortal(){
         (S.msgUnread>0)?h('span',{className:'portal-corner-badge'},S.msgUnread>9?'9+':String(S.msgUnread)):null,
         iconEl('mail',24)
       ):null,
-      (isSuper||urole==='direction'||urole==='administration'||urole==='administration_ventes'||urole==='administration_technique')?h('button',{
+      // Calendrier ouvert a tous les services : le filtrage se fait cote
+      // serveur (CALENDRIER_PAGE_ROLES), aucun role n'est exclu ici.
+      h('button',{
         type:'button',
         className:'portal-settings-corner',
         'aria-label':'Calendrier',
@@ -1775,7 +1777,7 @@ function renderPortal(){
       },
         (S.calInvitCount>0)?h('span',{className:'portal-corner-badge'},S.calInvitCount>9?'9+':String(S.calInvitCount)):null,
         iconEl('calendar',24)
-      ):null,
+      ),
       (isSuper||urole==='direction')?h('button',{
         type:'button',
         className:'portal-settings-corner',

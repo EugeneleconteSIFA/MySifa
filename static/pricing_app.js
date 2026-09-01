@@ -54,6 +54,11 @@
       msProdQ: "",
       tarifQ: "",
     },
+    // Tri et filtres de colonne, par tableau. Vivent dans l'état plutôt que
+    // dans le DOM : la liste se reconstruit à chaque enregistrement, et un tri
+    // qui saute au premier prix corrigé serait pire que pas de tri du tout.
+    tri: { matieres: null, produits: null },
+    colFiltres: { matieres: {}, produits: {} },
     msDecls: [],
     msProducts: [],
     expandedProd: {},
@@ -617,22 +622,46 @@
     if (!comps.length || total <= 0) {
       return '<div class="empty">Aucun composant</div>';
     }
+    /* Chaque segment porte SA part de transport, hachurée, à son extrémité
+       droite. Le transport n'est pas un composant de plus — ce serait faux, il
+       vit DANS le prix de chaque matière — donc il ne prend pas de segment à
+       lui : il assombrit la fin de celui auquel il appartient.
+
+       On voit alors d'un coup d'œil laquelle des trois matières porte le
+       transport, ce qu'aucun total global ne dit. Une hachure plutôt qu'une
+       couleur : elle se lit sur n'importe quel fond, clair ou sombre, sans
+       ajouter une teinte de plus à une barre qui en compte déjà trois. */
+    let aDuTransport = false;
     const segs = comps
       .map((c) => {
         const v = parseFloat(c.price_eur_per_m2 || 0);
         const pct = total > 0 ? (v / total) * 100 : 0;
         const col = CAT_BAR_COLOR[c.role] || "var(--accent)";
-        return `<div class="breakdown-seg" style="width:${pct.toFixed(1)}%;background:${col}" title="${escAttr(c.name)}"></div>`;
+        const t = parseFloat((c.breakdown && c.breakdown.transport_eur_m2) || 0);
+        const tpct = v > 0 ? Math.min(100, (t / v) * 100) : 0;
+        if (t) aDuTransport = true;
+        const titre = c.name + (t ? ` — dont ${fmtEurM2(t)} de transport` : " — sans transport");
+        return `<div class="breakdown-seg" style="width:${pct.toFixed(1)}%;background:${col}" title="${escAttr(titre)}">`
+          + (tpct > 0 ? `<span class="seg-transport" style="width:${tpct.toFixed(1)}%"></span>` : "")
+          + `</div>`;
       })
       .join("");
     const legend = comps
       .map((c) => {
         const v = parseFloat(c.price_eur_per_m2 || 0);
         const pct = total > 0 ? ((v / total) * 100).toFixed(1) : "0";
-        return `<div><span>${escHtml(c.name || c.role)}</span><span>${fmtEurM2(v)} · ${pct}%</span></div>`;
+        const t = parseFloat((c.breakdown && c.breakdown.transport_eur_m2) || 0);
+        return `<div><span>${escHtml(c.name || c.role)}${
+          t ? ` <span class="lg-transport" title="Part de transport comprise dans ce coût">dont ${escHtml(fmtEurM2(t))} transport</span>` : ""
+        }</span><span>${fmtEurM2(v)} · ${pct}%</span></div>`;
       })
       .join("");
-    return `<div class="breakdown-stack"><div class="breakdown-bar">${segs}</div><div class="breakdown-legend">${legend}</div></div>`;
+    // La hachure ne se devine pas : une ligne de légende, et seulement quand
+    // il y a effectivement du transport à expliquer.
+    const cle = aDuTransport
+      ? '<div class="breakdown-cle"><span class="cle-hachure"></span>part de transport, comprise dans le coût</div>'
+      : "";
+    return `<div class="breakdown-stack"><div class="breakdown-bar">${segs}</div>${cle}<div class="breakdown-legend">${legend}</div></div>`;
   }
 
   function updateChromeControls() {
@@ -1202,7 +1231,29 @@
         )
         .join("");
 
-    const lignes = S.mystock.map(mystockMatiereRowHtml).join("");
+    // Les colonnes déclarent comment se trier et se filtrer. Le prix se trie
+    // sur sa valeur numérique, pas sur son texte : « 10 » avant « 9 » est le
+    // classique d'un tri alphabétique sur des nombres.
+    const COLS = [
+      { cle: "cat", titre: "Cat.", style: "width:92px", filtre: "choix",
+        val: (m) => m.categorie },
+      { cle: "ref", titre: "Référence", filtre: "texte", val: (m) => m.reference },
+      { cle: "des", titre: "Désignation", filtre: "texte", val: (m) => m.designation || "" },
+      { cle: "fourn", titre: "Fournisseur principal", filtre: "choix",
+        val: (m) => {
+          const f = msFournisseursPrincipaux(m).map((x) => x.nom).filter(Boolean);
+          return f.length === 1 ? f[0] : (f.length > 1 ? f.length + " fournisseurs" : "");
+        } },
+      { cle: "prix", titre: "Prix d'achat", val: (m) => (m.prix_min == null ? null : m.prix_min),
+        suffixe: `<span class="msl-th-hint">${icon("edit", 11)} modifiable ici</span>` },
+      { cle: "maj", titre: "Dernier prix", val: (m) => m.prix_maj_le || null,
+        aide: "Date de la dernière saisie du prix — donc la dernière fois qu'il a été revu" },
+      { cle: "act", titre: "", style: "width:172px" },
+    ];
+
+    const filtrees = filtresAppliquer("matieres", S.mystock, COLS);
+    const triees = triAppliquer("matieres", filtrees, COLS);
+    const lignes = triees.map(mystockMatiereRowHtml).join("");
     const sousTitre = `${S.mystock.length} matière(s) · cliquez sur un prix d'achat pour le modifier`;
 
     setContent(`
@@ -1224,17 +1275,16 @@
               <col style="width:180px"><col style="width:215px">
               <col style="width:120px"><col style="width:172px">
             </colgroup>
-            <thead><tr>
-              <th>Cat.</th><th>Référence</th><th>Désignation</th><th>Fournisseur principal</th>
-              <th class="msl-th-prix">Prix d'achat <span class="msl-th-hint">${icon("edit", 11)} modifiable ici</span></th>
-              <th title="Date de la dernière saisie du prix — donc la dernière fois qu'il a été revu">Dernier prix</th>
-              <th class="ms-actions"></th>
-            </tr></thead>
+            ${enTetesTriables("matieres", COLS, S.mystock)}
             <tbody>${lignes || '<tr><td colspan="7" class="empty">Aucune matière pour ce filtre</td></tr>'}</tbody>
           </table>
         </div>
+        ${filtresActifsHtml("matieres", COLS, S.mystock.length, triees.length)}
       </div>
     `);
+
+    bindEnTetes("matieres", renderMystockList);
+    bindRaz("matieres", renderMystockList);
 
     const qEl = document.getElementById("ms-q");
     let t;
@@ -1722,6 +1772,212 @@
     dessiner();
   }
 
+  /* Le SUPPORT d'un frontal : thermique, couché, synthétique, vélin.
+
+     C'est ce qui distingue deux étiquettes à l'œil, bien avant leur code —
+     « Thermique Pro 70g » et « Eco Thermal 70g » se ressemblent en liste, leur
+     support non. MyStock classe déjà les frontaux ainsi (`sous_section`), avec
+     ses propres teintes ; on les reprend à l'identique plutôt que d'inventer
+     une seconde classification, sans quoi les deux applications diraient deux
+     choses du même papier.
+
+     Une matière sans sous-section retombe sur sa catégorie : mieux vaut
+     « ADHÉSIF » que rien du tout sur une ligne dont le frontal manque. */
+  const SUPPORT_LABELS = {
+    couche: "Couché", synthetique: "Synthétique",
+    thermiques: "Thermique", thermique: "Thermique", velin: "Vélin",
+  };
+
+  function supportCle(v) {
+    return String(v || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "");
+  }
+
+  function supportBadge(sousSection, categorie) {
+    const k = supportCle(sousSection);
+    if (k) {
+      return `<span class="mps-support mps-support-${escAttr(k)}">${escHtml(SUPPORT_LABELS[k] || sousSection)}</span>`;
+    }
+    const c = supportCle(categorie);
+    if (!c) return '<span class="muted">—</span>';
+    return `<span class="mps-support mps-support-cat-${escAttr(c)}">${escHtml(categorie)}</span>`;
+  }
+
+  /* ── Tri et filtre par colonne, partagés par les deux listes ─────────────
+
+     Les deux tableaux — matières et produits — servaient la même recherche
+     unique en haut de page. Elle répond bien à « où est 1408 », jamais à
+     « quels produits sont en thermique », ni à « quels prix n'ont pas été
+     revus depuis deux ans ». D'où des en-têtes qui trient et qui filtrent,
+     colonne par colonne.
+
+     La déclaration d'une colonne dit trois choses : sa clé, comment en tirer
+     la valeur d'une ligne (`val`, pour le tri) et le type de filtre
+     (`filtre: "texte" | "choix"`). Le reste — l'ordre, les flèches, la liste
+     des valeurs distinctes d'un `choix` — se déduit tout seul, pour que
+     déclarer une colonne reste une ligne et pas un formulaire.
+
+     Le filtre `choix` propose les valeurs RÉELLEMENT présentes dans les
+     données affichées : une liste figée finit toujours par proposer une
+     catégorie que plus rien ne porte, et par taire celle qu'on vient
+     d'ajouter. */
+  function triEtat(table) {
+    return (S.tri && S.tri[table]) || null;
+  }
+
+  function triBascule(table, cle) {
+    const t = triEtat(table);
+    // Trois états plutôt que deux : croissant, décroissant, puis retour à
+    // l'ordre naturel de la liste. Sans le troisième, un tri posé par erreur
+    // ne se retire plus qu'en rechargeant la page.
+    if (!t || t.cle !== cle) S.tri[table] = { cle: cle, sens: 1 };
+    else if (t.sens === 1) S.tri[table] = { cle: cle, sens: -1 };
+    else S.tri[table] = null;
+  }
+
+  function triAppliquer(table, lignes, colonnes) {
+    const t = triEtat(table);
+    if (!t) return lignes;
+    const col = colonnes.find((c) => c.cle === t.cle);
+    if (!col || !col.val) return lignes;
+    // Copie avant tri : `sort` trie en place, et réordonner S.mystock ferait
+    // dériver l'état par un simple clic d'en-tête.
+    return [...lignes].sort((a, b) => {
+      const va = col.val(a), vb = col.val(b);
+      const aVide = va == null || va === "";
+      const bVide = vb == null || vb === "";
+      // Les valeurs manquantes vont toujours en bas, dans les deux sens :
+      // remonter une colonne de tirets en tête d'un tri décroissant
+      // n'apprend rien et cache ce qu'on cherchait.
+      if (aVide && bVide) return 0;
+      if (aVide) return 1;
+      if (bVide) return -1;
+      if (typeof va === "number" && typeof vb === "number") return (va - vb) * t.sens;
+      return String(va).localeCompare(String(vb), "fr", { numeric: true }) * t.sens;
+    });
+  }
+
+  function colFiltre(table, cle) {
+    return ((S.colFiltres && S.colFiltres[table]) || {})[cle] || "";
+  }
+
+  function filtresAppliquer(table, lignes, colonnes) {
+    const actifs = colonnes.filter((c) => c.filtre && colFiltre(table, c.cle));
+    if (!actifs.length) return lignes;
+    return lignes.filter((l) =>
+      actifs.every((c) => {
+        const v = c.filtreVal ? c.filtreVal(l) : c.val(l);
+        const f = colFiltre(table, c.cle);
+        if (c.filtre === "choix") return String(v == null ? "" : v) === f;
+        return String(v == null ? "" : v).toLowerCase().includes(f.toLowerCase());
+      })
+    );
+  }
+
+  /** Les valeurs distinctes d'une colonne, telles qu'elles sont dans les données. */
+  function choixDeColonne(lignes, col) {
+    const vus = new Set();
+    lignes.forEach((l) => {
+      const v = col.filtreVal ? col.filtreVal(l) : col.val(l);
+      if (v != null && v !== "") vus.add(String(v));
+    });
+    return [...vus].sort((a, b) => a.localeCompare(b, "fr", { numeric: true }));
+  }
+
+  /* Deux rangées dans le `thead` : les libellés cliquables, puis les filtres.
+
+     Un menu par colonne aurait été plus compact, mais il cache l'état : on ne
+     voit plus qu'un filtre est posé, et on cherche longtemps pourquoi la liste
+     est vide. Les champs restent donc visibles, et un filtre actif se teinte. */
+  function enTetesTriables(table, colonnes, lignesSource) {
+    const t = triEtat(table);
+    const libelles = colonnes.map((c) => {
+      if (!c.val) return `<th${c.style ? ` style="${c.style}"` : ""}>${c.titre || ""}</th>`;
+      const actif = t && t.cle === c.cle;
+      const fleche = actif ? (t.sens === 1 ? "↑" : "↓") : "";
+      // `suffixe` : du HTML composé par MySifa lui-même, jamais de la saisie —
+      // l'indice « modifiable ici » de la colonne Prix, par exemple. Il vit à
+      // côté du bouton de tri et non dedans, sinon cliquer sur l'indice
+      // trierait, ce que personne n'a demandé.
+      return `<th${c.style ? ` style="${c.style}"` : ""} class="th-tri${actif ? " on" : ""}"${c.aide ? ` title="${escAttr(c.aide)}"` : ""}>
+        <button type="button" data-tri="${escAttr(table)}|${escAttr(c.cle)}"
+          title="Trier par ${escAttr(c.titre || c.cle)}">${escHtml(c.titre || "")}<span class="th-fleche">${fleche}</span></button>${c.suffixe || ""}
+      </th>`;
+    }).join("");
+
+    const filtres = colonnes.map((c) => {
+      if (!c.filtre) return "<th></th>";
+      const v = colFiltre(table, c.cle);
+      const attr = `data-colfiltre="${escAttr(table)}|${escAttr(c.cle)}"`;
+      if (c.filtre === "choix") {
+        const opts = choixDeColonne(lignesSource, c)
+          .map((o) => `<option value="${escAttr(o)}"${o === v ? " selected" : ""}>${escHtml(c.optLabel ? c.optLabel(o) : o)}</option>`)
+          .join("");
+        return `<th class="th-filtre"><select ${attr} class="${v ? "on" : ""}">
+          <option value="">Tous</option>${opts}</select></th>`;
+      }
+      return `<th class="th-filtre"><input type="search" ${attr} class="${v ? "on" : ""}"
+        value="${escAttr(v)}" placeholder="filtrer"/></th>`;
+    }).join("");
+
+    return `<thead><tr>${libelles}</tr><tr class="th-filtres">${filtres}</tr></thead>`;
+  }
+
+  /* Le tri se rejoue sur place : reconstruire la page entière ferait perdre le
+     focus du champ de filtre qu'on est en train de remplir. */
+  function bindEnTetes(table, redessiner) {
+    document.querySelectorAll(`[data-tri^="${table}|"]`).forEach((b) => {
+      b.onclick = () => {
+        triBascule(table, b.getAttribute("data-tri").split("|")[1]);
+        redessiner();
+      };
+    });
+    document.querySelectorAll(`[data-colfiltre^="${table}|"]`).forEach((el) => {
+      const cle = el.getAttribute("data-colfiltre").split("|")[1];
+      const poser = (v) => {
+        S.colFiltres[table][cle] = v;
+        redessiner();
+      };
+      if (el.tagName === "SELECT") el.onchange = () => poser(el.value);
+      else {
+        el.oninput = () => {
+          clearTimeout(el._deb);
+          el._deb = setTimeout(() => {
+            const pos = el.selectionStart;
+            poser(el.value);
+            // Le champ est recréé par le redessin : on lui rend le curseur,
+            // sinon taper trois lettres demande trois clics.
+            const neuf = document.querySelector(`[data-colfiltre="${table}|${cle}"]`);
+            if (neuf) { neuf.focus(); try { neuf.setSelectionRange(pos, pos); } catch (e) {} }
+          }, 250);
+        };
+      }
+    });
+  }
+
+  /** Bandeau « n lignes sur m » + bouton pour tout relâcher d'un coup. */
+  function filtresActifsHtml(table, colonnes, total, montrees) {
+    const actifs = colonnes.filter((c) => c.filtre && colFiltre(table, c.cle));
+    if (!actifs.length && !triEtat(table)) return "";
+    const bouts = actifs.map((c) => `${escHtml(c.titre)} : <strong>${escHtml(colFiltre(table, c.cle))}</strong>`);
+    return `<div class="th-actifs">
+      <span>${montrees} ligne(s) sur ${total}${bouts.length ? " — " + bouts.join(" · ") : ""}</span>
+      <button type="button" data-raz="${escAttr(table)}">Tout afficher</button>
+    </div>`;
+  }
+
+  function bindRaz(table, redessiner) {
+    const b = document.querySelector(`[data-raz="${table}"]`);
+    if (b) b.onclick = () => {
+      S.colFiltres[table] = {};
+      S.tri[table] = null;
+      redessiner();
+    };
+  }
+
   function categorieBadge(cat) {
     const c = String(cat || "").toUpperCase();
     const map = {
@@ -1908,42 +2164,27 @@
         unit: unit,
       },
     ];
-    if (!perM2) {
-      // Prix au kilo : on montre explicitement le passage au m² via le poids.
+    // Le tableau s'arrête au sous-total d'achat converti. « Ramené au m² »,
+    // prix de revient, marge et prix de vente sont partis le 31 août 2026 :
+    // tous les quatre supposent une quantité posée, que seul le produit
+    // connaît. La matière dit ce qu'elle coûte rendue, et rien de plus.
+    cells.push({
+      label: "Change",
+      value: cur === "USD" ? "× " + fmtNum(rate, 4, 4) : "—",
+      unit: cur === "USD" ? "USD → EUR" : "achat en €",
+      muted: cur !== "USD",
+    });
+    if (cur === "USD") {
       cells.push({
-        label: "Ramené au m²",
-        value: fmtCur(
-          parseFloat(b.raw || 0) + parseFloat(b.transport || 0) + taxesSrc * w,
-          cur
+        label: "Sous-total en euros",
+        value: fmtNum(
+          (parseFloat(b.unit_price_src || 0) + parseFloat(b.transport_src || 0) + taxesSrc) * rate,
+          4, 4
         ),
-        unit: `${CUR_SYM[cur] || "€"}/m² · × ${fmtNum(w * 1000, 1, 1)} g/m²`,
+        unit: perM2 ? "€/m² acheté" : "€/kg",
+        strong: true,
       });
     }
-    cells.push(
-      {
-        label: "Change",
-        value: cur === "USD" ? "× " + fmtNum(rate, 4, 4) : "—",
-        unit: cur === "USD" ? "USD → EUR" : "achat en €",
-        muted: cur !== "USD",
-      },
-      {
-        label: "Prix de revient",
-        value: fmtNum(computed.price_eur_per_m2, 4, 4),
-        unit: "€/m²",
-        strong: true,
-      },
-      {
-        label: `Marge (${fmtNum(computed.margin_pct || 0, 2, 2)} %)`,
-        value: fmtNum(computed.margin_eur_m2 || 0, 4, 4),
-        unit: "€/m²",
-      },
-      {
-        label: "Prix de vente",
-        value: fmtNum(computed.sell_price_eur_m2 || 0, 4, 4),
-        unit: "€/m²",
-        strong: true,
-      }
-    );
 
     const head = cells.map((c) => `<th>${escHtml(c.label)}</th>`).join("");
     const body = cells
@@ -2083,23 +2324,35 @@
   }
 
   /** Bandeau résumé en haut de la fiche matière : revient, marge, vente. */
+  /* Ce qu'une matière coûte : son SOUS-TOTAL D'ACHAT — prix + transport +
+     taxes, dans sa devise et sa base d'achat.
+
+     Le prix de revient au m², la marge et le prix de vente ont quitté les
+     fiches matière le 31 août 2026. Un €/m² suppose de savoir quelle quantité
+     on pose, et la matière ne le sait pas : c'est le produit qui le décide.
+     Les afficher ici revenait à chiffrer une étiquette qui n'existe pas. */
   function matSummaryHtml(computed) {
-    if (!computed) {
-      return `<div class="ms-item ms-main"><div class="ms-label">Prix de revient</div>
+    const vide = `<div class="ms-item ms-main"><div class="ms-label">Sous-total d'achat</div>
         <div class="ms-value">—</div></div>`;
-    }
+    if (!computed) return vide;
+    const b = computed.breakdown || {};
+    const cur = (b.currency || "EUR").toUpperCase();
+    const unit = unitLabel(cur, b.price_basis || "PER_KG");
+    const st = parseFloat(b.unit_price_src || 0)
+      + parseFloat(b.transport_src || 0)
+      + parseFloat(b.taxes_src || 0);
     return `
       <div class="ms-item ms-main">
-        <div class="ms-label">Prix de revient</div>
-        <div class="ms-value">${fmtEurM2(computed.price_eur_per_m2)}</div>
+        <div class="ms-label">Sous-total d'achat</div>
+        <div class="ms-value">${escHtml(fmtCur(st, cur))} <span class="ms-unit">${escHtml(unit)}</span></div>
       </div>
       <div class="ms-item">
-        <div class="ms-label">Marge ${fmtPct(computed.margin_pct || 0)}</div>
-        <div class="ms-value">${fmtEurM2(computed.margin_eur_m2 || 0)}</div>
+        <div class="ms-label">Prix d'achat</div>
+        <div class="ms-value">${escHtml(fmtCur(b.unit_price_src, cur))} <span class="ms-unit">${escHtml(unit)}</span></div>
       </div>
       <div class="ms-item">
-        <div class="ms-label">Prix de vente</div>
-        <div class="ms-value">${fmtEurM2(computed.sell_price_eur_m2 || 0)}</div>
+        <div class="ms-label">Change</div>
+        <div class="ms-value">${cur === "USD" ? "× " + escHtml(fmtNum(b.fx_rate, 4, 4)) : '<span class="muted">achat en €</span>'}</div>
       </div>`;
   }
 
@@ -2214,20 +2467,12 @@
             <div class="field f-mid"><label>Fournisseur</label><select id="f-sup" data-fourn-cats="${escAttr(fournCatsDepuisMatiere(f).join(","))}">${supOpts}</select>${supLegacy}</div>
           </div>
 
-          <div class="form-section" id="carac-section" style="${needsWeight(f)?"":"display:none"}"><h3>Caractéristiques</h3>
-            <div class="gram-row">
-              <div class="field f-num"><label>Grammage <span class="lbl-unit">g/m²</span></label>
-                <input type="number" step="0.01" id="f-gsm" value="${escAttr(f.grammage_gsm)}"/></div>
-              <div class="gram-arrow" aria-hidden="true">→</div>
-              <div class="field f-num"><label>Perte <span class="lbl-unit">%</span></label>
-                <input type="number" step="0.1" id="f-perte" value="${escAttr(f.perte_pct)}"/></div>
-              <div class="gram-arrow" aria-hidden="true">→</div>
-              <div class="field f-num"><label>Grammage dont perte <span class="lbl-unit">g/m²</span></label>
-                <div class="gram-out" id="f-gram-out">${escHtml(fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2))}</div>
-                <div class="field-hint">C'est lui qui entre dans le calcul.</div>
-              </div>
-            </div>
-          </div>
+          <!-- La section « Caractéristiques » (grammage + perte) a quitté les
+               fiches matière le 31 août 2026. Un adhésif ne s'achète pas plus
+               cher en 22 g/m² qu'en 17 : le prix est au kilo. Ce que le
+               grammage fait varier, c'est la quantité posée — une décision de
+               produit — et il se saisit désormais sur le composant, dans la
+               fiche produit MyStock. -->
 
           <div class="form-section"><h3>Prix d'achat</h3>
             ${ms ? `<div class="ms-locked">
@@ -2328,17 +2573,11 @@
       const bas = ms ? ms.price_basis : S.formMaterial.price_basis;
       alt.innerHTML = otherPriceHtml(S.formMaterial.unit_price, cur, bas);
     };
-    // Le grammage retenu n'est pas saisi : il se recalcule sous les yeux.
-    const majGrammage = () => {
-      const out = document.getElementById("f-gram-out");
-      if (out) out.textContent = fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2);
-    };
-    ["f-unit", "f-tax", "f-transport", "f-tcout", "f-tqte", "f-gsm", "f-perte"].forEach((id) => {
+    ["f-unit", "f-tax", "f-transport", "f-tcout", "f-tqte"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.oninput = () => {
         syncMaterialFormFromDom();
         refreshAltPrice();
-        majGrammage();
         bindPreview();
       };
     });
@@ -2422,8 +2661,6 @@
       f.unit_price = val("f-unit") ?? f.unit_price;
     }
     f.taxe_pct = val("f-tax") ?? f.taxe_pct;
-    f.grammage_gsm = val("f-gsm") ?? f.grammage_gsm;
-    f.perte_pct = val("f-perte") ?? f.perte_pct;
     const imp = document.getElementById("f-imp");
     if (imp) f.is_imported = imp.checked;
     const marge = document.getElementById("f-marge");
@@ -2956,6 +3193,29 @@
     }
   }
 
+  /* La part de transport dans le coût, en euros et en pourcentage.
+
+     Elle était invisible : le transport entre bien dans chaque coût au m²,
+     mais aucun écran ne le nommait, et la multiplication affichée ne tombait
+     donc pas juste. Sur une matière importée, le transport peut représenter
+     un dixième du prix de revient — c'est le premier levier de négociation, et
+     il n'avait aucune ligne à lui. */
+  function transportRecapHtml(cost) {
+    const comps = (cost && cost.components) || [];
+    let total = 0;
+    comps.forEach((c) => {
+      const b = c.breakdown;
+      if (b) total += parseFloat(b.transport_eur_m2 || 0);
+    });
+    if (!total) return "";
+    const revient = parseFloat(cost.total_eur_per_m2 || 0);
+    const pct = revient ? (total / revient) * 100 : 0;
+    return `<div class="breakdown-legend msp-transport">
+      <div><span>dont transport</span>
+        <span><strong>${escHtml(fmtEurM2(total))}</strong> <span class="muted">${escHtml(fmtPct(pct))} du revient</span></span></div>
+    </div>`;
+  }
+
   function productRecapHtml(cost) {
     if (!cost) return '<div class="empty">Sélectionnez les composants</div>';
     const comps = cost.components.map((c) => ({ ...c, price_eur_per_m2: c.price_eur_per_m2 }));
@@ -2963,6 +3223,7 @@
       <div class="big-label">Coût total</div>
       <div class="big-price">${fmtEurM2(cost.total_eur_per_m2)}</div>
       ${priceBreakdownHtml({ components: comps, total: cost.total_eur_per_m2 })}
+      ${transportRecapHtml(cost)}
       <div class="breakdown-legend" style="margin-top:14px">
         <div><span>Marge (${fmtNum(cost.margin_pct || 0, 2, 2)} %)</span><span>${fmtEurM2(cost.margin_eur_m2)}</span></div>
         <div><span>Prix de vente</span><span><strong>${fmtEurM2(cost.sell_price_eur_m2)}</strong></span></div>
@@ -3176,8 +3437,6 @@
     }
     if (g("d-tcout")) f.transport_cout = g("d-tcout").value;
     if (g("d-tqte")) f.transport_quantite = g("d-tqte").value;
-    if (g("d-gsm")) f.grammage_gsm = g("d-gsm").value;
-    if (g("d-perte")) f.perte_pct = g("d-perte").value;
   }
 
   /** Recalcule le coût sans rien enregistrer — même endpoint que la base CM. */
@@ -3306,20 +3565,12 @@
             </div>
           </div>
 
-          <div class="form-section" id="d-carac" style="${needsWeight(f)?"":"display:none"}"><h3>Caractéristiques</h3>
-            <div class="gram-row">
-              <div class="field f-num"><label>Grammage <span class="lbl-unit">g/m²</span></label>
-                <input type="number" step="0.01" id="d-gsm" value="${escAttr(f.grammage_gsm)}"/></div>
-              <div class="gram-arrow" aria-hidden="true">→</div>
-              <div class="field f-num"><label>Perte <span class="lbl-unit">%</span></label>
-                <input type="number" step="0.1" id="d-perte" value="${escAttr(f.perte_pct)}"/></div>
-              <div class="gram-arrow" aria-hidden="true">→</div>
-              <div class="field f-num"><label>Grammage dont perte <span class="lbl-unit">g/m²</span></label>
-                <div class="gram-out" id="d-gram-out">${escHtml(fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2))}</div>
-                <div class="field-hint">C'est lui qui entre dans le calcul.</div>
-              </div>
-            </div>
-          </div>
+          <!-- La section « Caractéristiques » (grammage + perte) a quitté les
+               fiches matière le 31 août 2026. Un adhésif ne s'achète pas plus
+               cher en 22 g/m² qu'en 17 : le prix est au kilo. Ce que le
+               grammage fait varier, c'est la quantité posée — une décision de
+               produit — et il se saisit désormais sur le composant, dans la
+               fiche produit MyStock. -->
 
           <div class="form-section"><h3>Prix d'achat</h3>
             <div class="field-row">
@@ -3388,16 +3639,11 @@
 
     // Saisie libre : on recalcule à la volée, sans re-render (le curseur reste
     // dans le champ).
-    const majGrammage = () => {
-      const out = document.getElementById("d-gram-out");
-      if (out) out.textContent = fmtNum(grammageRetenu(f.grammage_gsm, f.perte_pct), 2, 2);
-    };
-    ["d-tax", "d-transport", "d-tcout", "d-tqte", "d-gsm", "d-perte"].forEach((id) => {
+    ["d-tax", "d-transport", "d-tcout", "d-tqte"].forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.oninput = () => {
         marquer();
         syncDeclFormFromDom();
-        majGrammage();
         clearTimeout(S.debounceDecl);
         S.debounceDecl = setTimeout(refreshDeclPreview, 300);
       };
@@ -3463,8 +3709,6 @@
             transport_pct: parseFloat(f.transport_pct) || 0,
             transport_cout: parseFloat(f.transport_cout) || 0,
             transport_quantite: parseFloat(f.transport_quantite) || 0,
-            grammage_gsm: parseFloat(f.grammage_gsm) || 0,
-            perte_pct: parseFloat(f.perte_pct) || 0,
           },
         }
       );
@@ -3511,6 +3755,18 @@
     });
   }
 
+  /* Un emplacement du produit : la matière choisie, et ce que CE produit en
+     consomme. Le grammage a quitté la matière le 31 août 2026 — un adhésif ne
+     s'achète pas plus cher en 22 g/m² qu'en 17, c'est la quantité posée qui
+     change, et elle appartient au produit. */
+  function mspSlot(id, gram, perte) {
+    return {
+      id: id || "",
+      gram: gram == null || gram === "" ? "" : String(gram),
+      perte: perte == null || perte === "" ? "" : String(perte),
+    };
+  }
+
   function defaultMsProductForm() {
     return { code: "", designation: "", roles: {}, autres: [], custom_margin_pct: "" };
   }
@@ -3539,8 +3795,9 @@
     const roles = {};
     const autres = [];
     (p.composants || []).forEach((c) => {
-      if (MSP_ROLES.some((r) => r.role === c.role)) roles[c.role] = c.declinaison_id;
-      else autres.push(c.declinaison_id);
+      const slot = mspSlot(c.declinaison_id, c.grammage_gsm, c.perte_pct);
+      if (MSP_ROLES.some((r) => r.role === c.role)) roles[c.role] = slot;
+      else autres.push(slot);
     });
     S.formMsProduct = {
       code: p.code,
@@ -3552,9 +3809,55 @@
     S.msProdPreview = p.cost || null;
   }
 
+  /* Le libellé d'une matière dans le sélecteur : sa référence et son prix
+     d'achat. Plus de coût €/m² ici — il dépend désormais du grammage saisi sur
+     CE produit, donc l'afficher à côté d'une matière qu'on n'a pas encore
+     choisie annoncerait un chiffre qui ne s'appliquera pas. */
   function msDeclLabel(d) {
-    const cout = d.cout_eur_m2 != null ? ` — ${fmtEurM2(d.cout_eur_m2)}` : " — à paramétrer";
-    return `${d.reference} · ${d.libelle}${cout}`;
+    const u = (d.price_basis || "PER_KG") === "PER_KG" ? "€/kg" : "€/m²";
+    const prix = d.unit_price ? ` — ${fmtNum(d.unit_price, 3, 3)} ${u}` : " — sans prix";
+    // La désignation, pas le libellé de déclinaison : « 1408 · 22 g/m² » ne
+    // veut plus rien dire depuis que le grammage se saisit sur le produit.
+    return `${d.reference} · ${d.designation || ""}${prix}`;
+  }
+
+  /* Un emplacement : la matière, puis ce que le produit en consomme.
+
+     Les champs de consommation n'apparaissent QUE sur une matière payée au
+     kilo. Sur un frontal acheté au m², un grammage ne changerait rien au coût,
+     et le réclamer laisserait croire l'inverse. */
+  function mspSlotHtml(cle, libelle, categorie, slot, opts) {
+    const f = slot || mspSlot("");
+    const d = (S.msDecls || []).find((x) => String(x.id) === String(f.id));
+    const perKg = d && (d.price_basis || "PER_KG") === "PER_KG";
+    const poids = grammageRetenu(f.gram, f.perte) / 1000;
+    const conso = !d
+      ? ""
+      : (perKg
+          ? `<div class="msp-conso">
+              <div class="field f-num"><label>Grammage <span class="lbl-unit">g/m²</span></label>
+                <input type="number" step="0.01" min="0" data-msp-gram="${escAttr(cle)}"
+                       value="${escAttr(f.gram)}" placeholder="0"/></div>
+              <div class="field f-num"><label>Perte <span class="lbl-unit">%</span></label>
+                <input type="number" step="0.1" min="0" max="100" data-msp-perte="${escAttr(cle)}"
+                       value="${escAttr(f.perte)}" placeholder="0"/></div>
+              <div class="msp-conso-out">
+                <span class="msp-conso-lbl">Poids retenu</span>
+                <strong>${escHtml(fmtNum(poids, 4, 4))} kg/m²</strong>
+                ${f.gram ? "" : '<span class="msp-conso-manque">à renseigner — sans lui ce composant coûte 0</span>'}
+              </div>
+            </div>`
+          : '<div class="msp-conso-nul">Achat au m² : aucune quantité à renseigner, le prix est déjà au m².</div>');
+    return `<div class="msp-slot"${opts && opts.autre ? ` data-msp-autre-row="${escAttr(cle)}"` : ""}>
+        <div class="msp-slot-head">
+          <div class="field" style="flex:1"><label>${escHtml(libelle)}</label>
+            <select data-msp-sel="${escAttr(cle)}">${msDeclOptions(categorie, f.id)}</select></div>
+          ${opts && opts.del != null
+            ? `<button type="button" class="icon-btn" data-msp-del="${opts.del}" title="Retirer cette matière">${icon("trash", 15)}</button>`
+            : ""}
+        </div>
+        ${conso}
+      </div>`;
   }
 
   function msDeclOptions(categorie, selectedId) {
@@ -3574,17 +3877,10 @@
     const f = S.formMsProduct;
     const defMargin = S.settings ? fmtNum(S.settings.default_margin_pct, 2, 2) : "—";
     const slots = MSP_ROLES.map(
-      (r) => `<div class="field"><label>${escHtml(r.label)}</label>
-        <select id="msp-${r.role.toLowerCase()}" data-msp-role="${r.role}">${msDeclOptions(r.categorie, f.roles[r.role])}</select>
-      </div>`
+      (r) => mspSlotHtml("role:" + r.role, r.label, r.categorie, f.roles[r.role], null)
     ).join("");
     const autres = f.autres
-      .map(
-        (id, i) => `<div class="field-row msp-autre" data-msp-idx="${i}">
-          <div class="field" style="flex:1"><select data-msp-autre="${i}">${msDeclOptions(null, id)}</select></div>
-          <button type="button" class="icon-btn" data-msp-del="${i}" title="Retirer cette matière">${icon("trash", 15)}</button>
-        </div>`
-      )
+      .map((slot, i) => mspSlotHtml("autre:" + i, "Matière", null, slot, { del: i, autre: true }))
       .join("");
     return `
       <div class="savebar-spacer" aria-hidden="true"></div>
@@ -3614,9 +3910,10 @@
           </div>
           <div class="form-section" style="margin-top:14px"><h3>Ce qui fait bouger ce coût</h3>
             <div class="field-hint" style="margin:-6px 0 10px">
-              Le prix d'achat d'une matière ne dépend ni de sa laize ni de son grammage.
-              Le coût de ce produit, si : une matière payée au kilo coûte au m² son prix
-              multiplié par son poids au m², et ce poids est le grammage majoré de la perte.
+              Le prix d'achat d'une matière ne dépend pas de ce qu'on en fait : on l'achète
+              au m² ou au kilo. Le coût de ce produit, si : une matière payée au kilo coûte
+              au m² son prix multiplié par le poids posé — le grammage saisi ci-dessus,
+              majoré de la perte.
             </div>
             <div id="msp-leviers">${msProductLeviersHtml()}</div>
           </div>
@@ -3627,76 +3924,128 @@
 
   /* ── Ce qui fait bouger le coût de ce produit ────────────────────────────
 
-     Le prix d'achat d'une matière ne dépend ni de sa laize ni de son grammage :
-     on l'achète au m² ou au kilo. Le coût d'un PRODUIT, lui, dépend du
-     grammage — une matière payée au kilo coûte au m² son prix multiplié par
-     son poids au m², et ce poids EST le grammage majoré de la perte. Changer
-     de grammage change donc le prix de revient sans que le prix d'achat ait
-     bougé d'un centime.
+     Le prix d'achat d'une matière ne dépend pas de ce qu'on en fait : on
+     l'achète au m² ou au kilo, et c'est tout. Le coût d'un PRODUIT, lui, dépend
+     de la QUANTITÉ qu'il pose — et depuis le 31 août 2026 cette quantité est
+     saisie ici, sur le composant, pas sur la matière.
 
-     La laize ne fait rien de tel : un m² est un m², quelle que soit la largeur
-     de la bobine. Ce qu'elle fait varier, c'est la QUANTITÉ consommée par une
-     commande — chiffrée par Besoins matières, pas ici. Le bloc le dit, plutôt
-     que de laisser chercher où elle est passée.
+     Le bloc montre donc la multiplication en toutes lettres, avec le poids qui
+     vient d'être tapé juste au-dessus : prix au kilo × poids au m² = coût. Sur
+     une matière achetée au m², il le dit aussi — sinon on cherche longtemps le
+     grammage qui n'existe pas.
 
-     Les déclinaisons voisines sont affichées avec leur écart : c'est la seule
-     façon de VOIR qu'un 22 g/m² coûte deux centimes de plus qu'un 17 avant de
-     l'avoir choisi. Un clic bascule le sélecteur. */
-  function msLevierBlocHtml(d, cible, roleLabel) {
-    const perKg = (d.price_basis || "PER_KG") === "PER_KG";
-    const fleche = `<span class="muted">→</span> <strong>${escHtml(fmtEurM2(d.cout_eur_m2))}</strong>`;
-    const formule = d.cout_eur_m2 == null
-      ? '<span class="muted">coût non calculé — ouvrir la fiche de la déclinaison</span>'
-      : (perKg
-          ? `${escHtml(fmtNum(d.unit_price, 3, 3))} €/kg <span class="muted">×</span> `
-            + `${escHtml(fmtNum(d.weight_per_m2, 4, 4))} kg/m² ${fleche}`
-          : `${escHtml(fmtNum(d.unit_price, 4, 4))} €/m² ${fleche}`);
+     Les pastilles « autres déclinaisons » ont disparu avec la notion elle-même :
+     comparer un 17 et un 22 g/m² se fait maintenant en changeant le grammage,
+     dans le champ, et le total suit. */
+  function msLevierBlocHtml(comp, roleLabel) {
+    const d = (S.msDecls || []).find((x) => x.id === comp.declinaison_id);
+    if (!d) return "";
+    const poids = grammageRetenu(comp.grammage_gsm, comp.perte_pct) / 1000;
+
+    // Le coût de CE composant vient du serveur, avec sa décomposition : le
+    // recomposer ici rouvrirait la porte à deux chiffres différents.
+    const cc = ((S.msProdPreview && S.msProdPreview.components) || [])
+      .find((x) => x.material_id === comp.declinaison_id);
+    const b = (cc && cc.breakdown) || null;
+    const cout = cc ? fmtEurM2(cc.price_eur_per_m2) : "—";
+
+    const cur = ((b && b.currency) || "EUR").toUpperCase();
+    const perKg = ((b && b.price_basis) || d.price_basis || "PER_KG") === "PER_KG";
+    const sym = CUR_SYM[cur] || "€";
+    const unite = `${sym}/${perKg ? "kg" : "m²"}`;
+
+    const prix = b ? parseFloat(b.unit_price_src || 0) : parseFloat(d.unit_price || 0);
+    const transp = b ? parseFloat(b.transport_src || 0) : 0;
+    const taxes = b ? parseFloat(b.taxes_src || 0) : 0;
+    const sousTotal = prix + transp + taxes;
+    const taux = b ? parseFloat(b.fx_rate || 1) : 1;
+
+    /* La chaîne, terme à terme.
+
+       Elle affichait « 4,200 €/kg × 0,0240 kg/m² → 0,1098 €/m² » — une
+       multiplication qui ne tombe pas juste, parce que le transport et les
+       taxes étaient fondus dans le résultat sans être nommés. Un chiffre qu'on
+       ne peut pas refaire de tête passe pour un chiffre faux, et il avait
+       raison de le paraître : il manquait deux termes.
+
+       Les termes nuls sont omis — écrire « + 0,000 de taxes » sur une matière
+       française ajoute du bruit à une ligne qui doit se lire d'un coup. */
+    const termes = [`${escHtml(fmtNum(prix, 3, 3))} ${escHtml(unite)}`];
+    if (transp) termes.push(`<span class="msp-terme t-transport">+ ${escHtml(fmtNum(transp, 3, 3))} transport</span>`);
+    if (taxes) termes.push(`<span class="msp-terme t-taxe">+ ${escHtml(fmtNum(taxes, 3, 3))} taxes</span>`);
+
+    const gauche = termes.length > 1
+      ? `(${termes.join(" ")}) <span class="muted">=</span> <strong>${escHtml(fmtNum(sousTotal, 3, 3))} ${escHtml(unite)}</strong>`
+      : termes[0];
+
+    const chaine = perKg
+      ? `${gauche} <span class="muted">×</span> ${escHtml(fmtNum(poids, 4, 4))} kg/m²`
+        + (taux !== 1 ? ` <span class="muted">×</span> ${escHtml(fmtNum(taux, 4, 4))}` : "")
+        + ` <span class="muted">→</span> <strong class="msp-lev-total">${escHtml(cout)}</strong>`
+      : `${gauche}`
+        + (taux !== 1 ? ` <span class="muted">×</span> ${escHtml(fmtNum(taux, 4, 4))}` : "")
+        + ` <span class="muted">→</span> <strong class="msp-lev-total">${escHtml(cout)}</strong>`;
 
     // `mentions` et non `notes` : ce sont des phrases que MySifa compose
     // lui-même, jamais de la saisie utilisateur. Le detecteur de prose brute
     // se fie au nom de la variable, et un nom mal choisi le ferait crier a
     // tort — ou, l'inverse, taire un vrai trou ailleurs.
     const mentions = [];
-    if (perKg && d.grammage_gsm) {
-      mentions.push(`Le poids au m² <strong>est</strong> le grammage : `
-        + `${escHtml(fmtNum(d.grammage_gsm, 0, 1))} g/m²`
-        + (d.perte_pct ? ` + ${escHtml(fmtNum(d.perte_pct, 0, 2))} % de perte` : "")
-        + `. C'est lui qui fait bouger ce coût.`);
-    } else if (!perKg) {
-      mentions.push("Prix au m² : le grammage n'entre pas dans ce coût.");
+    if (transp) {
+      const pct = b ? parseFloat(b.transport_pct_effective || 0) : 0;
+      const eurM2 = b ? parseFloat(b.transport_eur_m2 || 0) : 0;
+      mentions.push(`Transport : <strong>${escHtml(fmtNum(transp, 3, 3))} ${escHtml(unite)}</strong>`
+        + (pct ? ` — ${escHtml(fmtPct(pct))} du prix d'achat` : "")
+        + (eurM2 ? `, soit ${escHtml(fmtEurM2(eurM2))} sur ce produit` : "")
+        + ". Il se règle sur le tarif du fournisseur.");
     }
-    if (d.laize_mm) {
-      mentions.push(`Laize ${escHtml(fmtNum(d.laize_mm, 0, 0))} mm — <strong>sans effet</strong> sur le €/m². `
-        + "Elle joue sur les quantités consommées, chiffrées dans Besoins matières.");
+    if (taxes) {
+      const tp = b ? parseFloat(b.taxe_pct || 0) : 0;
+      mentions.push(`Taxes d'importation : <strong>${escHtml(fmtNum(taxes, 3, 3))} ${escHtml(unite)}</strong>`
+        + (tp ? ` — ${escHtml(fmtPct(tp))} du sous-total` : "") + ".");
+    }
+    if (perKg && comp.grammage_gsm) {
+      mentions.push(`Le poids au m² <strong>est</strong> le grammage de ce produit : `
+        + `${escHtml(fmtNum(comp.grammage_gsm, 0, 1))} g/m²`
+        + (comp.perte_pct ? ` + ${escHtml(fmtNum(comp.perte_pct, 0, 2))} % de perte` : "")
+        + `. Le changer change ce coût, sans toucher au prix d'achat.`);
+    } else if (perKg) {
+      mentions.push("Achat au kilo sans grammage : ce composant compte pour <strong>0</strong>.");
+    } else {
+      mentions.push("Achat au m² : la quantité posée ne change pas ce coût au m².");
     }
 
-    // Les autres déclinaisons de la MÊME matière : même prix d'achat, autre
-    // coût au m². C'est exactement ce que le grammage fait varier.
-    const voisines = (S.msDecls || [])
-      .filter((x) => x.matiere_id === d.matiere_id && x.id !== d.id && x.cout_eur_m2 != null)
-      .sort((a, b) => (a.cout_eur_m2 || 0) - (b.cout_eur_m2 || 0));
-    const chips = voisines.map((v) => {
-      const ecart = (d.cout_eur_m2 != null) ? (v.cout_eur_m2 - d.cout_eur_m2) : null;
-      const signe = ecart == null ? "" : (ecart > 0 ? "+" : "");
-      return `<button type="button" class="msp-lev-chip" data-msp-switch="${escAttr(cible)}"
-        data-msp-decl="${v.id}" title="Basculer sur ${escAttr(v.libelle)}">
-        ${escHtml(v.libelle)} <span class="msp-lev-cout">${escHtml(fmtEurM2(v.cout_eur_m2))}</span>
-        ${ecart == null || Math.abs(ecart) < 1e-9 ? "" :
-          `<span class="msp-lev-ecart ${ecart > 0 ? "up" : "down"}">${signe}${escHtml(fmtEurM2(ecart))}</span>`}
-      </button>`;
-    }).join("");
+    const tarifBtn = d.fournisseur_id
+      ? `<button type="button" class="link-btn msp-lev-tarif" data-msp-tarif="${d.fournisseur_id}|${d.matiere_id}"
+           title="Ouvrir le tarif de ce fournisseur pour cette matière">tarif fournisseur</button>`
+      : "";
 
     return `<div class="msp-lev">
       <div class="msp-lev-head">
         <span class="msp-lev-role">${escHtml(roleLabel)}</span>
         <strong>${escHtml(d.reference)}</strong>
-        <span class="muted">${escHtml(d.libelle)}</span>
+        <span class="muted">${escHtml(d.designation || "")}</span>
+        ${tarifBtn}
       </div>
-      <div class="msp-lev-formule">${formule}</div>
+      <div class="msp-lev-formule">${chaine}</div>
       ${mentions.map((m) => `<div class="msp-lev-precision">${m}</div>`).join("")}
-      ${chips ? `<div class="msp-lev-chips">
-        <span class="msp-lev-chips-lbl">Autres déclinaisons</span>${chips}</div>` : ""}
     </div>`;
+  }
+
+  /* Le transport nommé dans la chaîne renvoie à l'endroit où il se règle :
+     le tarif du fournisseur POUR CETTE MATIÈRE. Nommer un coût sans donner le
+     chemin pour le corriger n'avance personne. */
+  function bindMspTarif() {
+    document.querySelectorAll("[data-msp-tarif]").forEach((btn) => {
+      btn.onclick = async (e) => {
+        e.stopPropagation();
+        const [fid, mid] = btn.getAttribute("data-msp-tarif").split("|");
+        await openTarifModal(parseInt(fid, 10), parseInt(mid, 10), async () => {
+          await loadMsDeclinaisons();
+          refreshMsProductPreview();
+        });
+      };
+    });
   }
 
   function msProductLeviersHtml() {
@@ -3704,32 +4053,10 @@
     if (!comps.length) {
       return '<div class="empty" style="padding:8px 0">Sélectionnez au moins une matière.</div>';
     }
-    let iAutre = -1;
     return comps.map((c) => {
-      if (c.role === "AUTRE") iAutre++;
-      const cible = c.role === "AUTRE" ? "autre:" + iAutre : "role:" + c.role;
-      const d = (S.msDecls || []).find((x) => x.id === c.declinaison_id);
-      if (!d) return "";
       const r = MSP_ROLES.find((x) => x.role === c.role);
-      return msLevierBlocHtml(d, cible, r ? r.label : "Autre matière");
+      return msLevierBlocHtml(c, r ? r.label : "Autre matière");
     }).join("");
-  }
-
-  function bindMsProductLeviers(onSwitch) {
-    document.querySelectorAll("[data-msp-switch]").forEach((btn) => {
-      btn.onclick = () => {
-        const cible = btn.getAttribute("data-msp-switch");
-        const id = btn.getAttribute("data-msp-decl");
-        if (cible.startsWith("role:")) {
-          const sel = document.getElementById("msp-" + cible.slice(5).toLowerCase());
-          if (sel) sel.value = id;
-        } else {
-          const sel = document.querySelector(`[data-msp-autre="${cible.slice(6)}"]`);
-          if (sel) sel.value = id;
-        }
-        if (onSwitch) onSwitch();
-      };
-    });
   }
 
   function syncMsProductFromDom() {
@@ -3737,86 +4064,119 @@
     f.code = document.getElementById("msp-code").value;
     f.designation = document.getElementById("msp-designation").value;
     f.custom_margin_pct = document.getElementById("msp-margin").value;
+    const lire = (cle) => {
+      const sel = document.querySelector(`[data-msp-sel="${cle}"]`);
+      const g = document.querySelector(`[data-msp-gram="${cle}"]`);
+      const pr = document.querySelector(`[data-msp-perte="${cle}"]`);
+      return mspSlot(
+        sel && sel.value ? parseInt(sel.value, 10) : "",
+        g ? g.value : "",
+        pr ? pr.value : ""
+      );
+    };
     f.roles = {};
     MSP_ROLES.forEach((r) => {
-      const el = document.getElementById("msp-" + r.role.toLowerCase());
-      if (el && el.value) f.roles[r.role] = parseInt(el.value, 10);
+      const s = lire("role:" + r.role);
+      if (s.id) f.roles[r.role] = s;
     });
+    // Les emplacements libres se relisent par index, y compris ceux encore
+    // vides : les retirer ici ferait disparaître une ligne qu'on vient
+    // d'ajouter et pas encore renseignée.
+    const n = document.querySelectorAll("[data-msp-autre-row]").length;
     f.autres = [];
-    document.querySelectorAll("[data-msp-autre]").forEach((sel) => {
-      if (sel.value) f.autres.push(parseInt(sel.value, 10));
-    });
+    for (let i = 0; i < n; i++) f.autres.push(lire("autre:" + i));
   }
 
-  /** Composition envoyée à l'API : un tableau {declinaison_id, role}. */
+  /** Composition envoyée à l'API : {declinaison_id, role, grammage_gsm, perte_pct}. */
   function msProductComposants() {
     const f = S.formMsProduct;
     const out = [];
-    MSP_ROLES.forEach((r) => {
-      if (f.roles[r.role]) out.push({ declinaison_id: f.roles[r.role], role: r.role });
-    });
-    f.autres.forEach((id) => {
-      if (id) out.push({ declinaison_id: id, role: "AUTRE" });
-    });
+    const pousse = (slot, role) => {
+      if (!slot || !slot.id) return;
+      const g = parseFloat(slot.gram), p = parseFloat(slot.perte);
+      out.push({
+        declinaison_id: slot.id,
+        role: role,
+        grammage_gsm: Number.isFinite(g) ? g : null,
+        perte_pct: Number.isFinite(p) ? p : null,
+      });
+    };
+    MSP_ROLES.forEach((r) => pousse(f.roles[r.role], r.role));
+    f.autres.forEach((slot) => pousse(slot, "AUTRE"));
     return out;
   }
 
-  /**
-   * Aperçu du coût sans enregistrer : on additionne les coûts déjà calculés par
-   * l'API pour chaque déclinaison. Pas d'aller-retour serveur à chaque clic, et
-   * la formule reste celle du moteur (somme des composants + marge en %).
-   */
+  /* Aperçu du coût sans enregistrer.
+
+     Il se calculait dans le navigateur, en additionnant les coûts au m² que
+     l'API avait chiffrés pour chaque matière. Ça ne tient plus depuis que le
+     grammage vit sur le produit : le coût d'un composant au kilo dépend d'un
+     poids qu'on vient de taper à l'écran, et le refaire ici supposerait d'y
+     réimplémenter transport, taxes et change — trois occasions de diverger du
+     moteur pour un chiffre qui doit être le même que celui enregistré.
+
+     C'est donc le serveur qui répond, sur `/produits/preview`. Différé de
+     250 ms : on tape « 22 » en deux frappes, et le « 2 » intermédiaire ne
+     mérite pas son aller-retour. Chaque appel porte un numéro de série et les
+     réponses en retard sont jetées — sans quoi une requête lente reposerait un
+     ancien total par-dessus le bon. */
+  let mspApercuTimer = null;
+  let mspApercuSerie = 0;
+
   function refreshMsProductPreview() {
+    if (mspApercuTimer) clearTimeout(mspApercuTimer);
+    mspApercuTimer = setTimeout(demanderApercuMsProduct, 250);
+  }
+
+  async function demanderApercuMsProduct() {
     const f = S.formMsProduct;
+    if (!f) return;
     const comps = msProductComposants();
+    const serie = ++mspApercuSerie;
     if (!comps.length) {
       S.msProdPreview = null;
-    } else {
-      let total = 0;
-      let complet = true;
-      const components = comps.map((c) => {
-        const d = S.msDecls.find((x) => x.id === c.declinaison_id);
-        const prix = d && d.cout_eur_m2 != null ? d.cout_eur_m2 : null;
-        if (prix == null) complet = false;
-        total += prix || 0;
-        return {
-          material_id: c.declinaison_id,
-          name: d ? `${d.reference} · ${d.libelle}` : "#" + c.declinaison_id,
-          role: c.role.toLowerCase(),
-          price_eur_per_m2: prix || 0,
-          share_pct: 0,
-        };
-      });
-      components.forEach((c) => {
-        c.share_pct = total ? Math.round((c.price_eur_per_m2 / total) * 10000) / 100 : 0;
-      });
-      const saisie = parseFloat(f.custom_margin_pct);
-      const marge = Number.isNaN(saisie)
-        ? parseFloat((S.settings && S.settings.default_margin_pct) || 0)
-        : saisie;
-      S.msProdPreview = {
-        total_eur_per_m2: total,
-        margin_pct: marge,
-        margin_eur_m2: (total * marge) / 100,
-        sell_price_eur_m2: total * (1 + marge / 100),
-        components,
-        incomplet: !complet,
-      };
+      peindreApercuMsProduct();
+      return;
     }
+    try {
+      const r = await api("/api/pricing/mystock/produits/preview", {
+        method: "POST",
+        body: {
+          composants: comps,
+          custom_margin_pct: f.custom_margin_pct === "" ? null : parseFloat(f.custom_margin_pct),
+        },
+      });
+      if (serie !== mspApercuSerie) return;
+      S.msProdPreview = r.cost || null;
+    } catch (e) {
+      if (serie !== mspApercuSerie) return;
+      // Une composition refusée (grammage aberrant, rôle en double) ne doit pas
+      // effacer l'écran : on garde le dernier total valide et on le dit.
+      S.msProdErreur = e.message || "composition incomplète";
+    }
+    peindreApercuMsProduct();
+  }
+
+  function peindreApercuMsProduct() {
+    // Un composant au kilo sans grammage vaut 0 €/m² : le total est alors
+    // exact mais amputé, et rien ne le distingue d'un produit bon marché.
+    const manquants = msProductComposants().filter((c) => {
+      const d = (S.msDecls || []).find((x) => x.id === c.declinaison_id);
+      return d && (d.price_basis || "PER_KG") === "PER_KG" && !c.grammage_gsm;
+    }).length;
+
     const rec = document.getElementById("msp-recap");
     if (rec) {
       rec.innerHTML =
         productRecapHtml(S.msProdPreview) +
-        (S.msProdPreview && S.msProdPreview.incomplet
-          ? '<div class="field-hint" style="color:var(--warn);margin-top:10px">Une matière n\'a pas encore de coût : ouvre sa fiche pour la paramétrer.</div>'
+        (manquants
+          ? `<div class="field-hint" style="color:var(--warn);margin-top:10px">${manquants} matière(s) au kilo sans grammage : elles comptent pour 0 dans ce total.</div>`
           : "");
     }
-    // Les leviers suivent la composition : changer de déclinaison doit se voir
-    // dans le total ET dans ce qui l'explique, sinon le bloc ment d'un clic.
     const lev = document.getElementById("msp-leviers");
     if (lev) {
       lev.innerHTML = msProductLeviersHtml();
-      bindMsProductLeviers(() => { syncMsProductFromDom(); refreshMsProductPreview(); });
+      bindMspTarif();
     }
   }
 
@@ -3833,12 +4193,21 @@
       const el = document.getElementById(id);
       if (el) el.oninput = majAperçu;
     });
-    document.querySelectorAll("[data-msp-role], [data-msp-autre]").forEach((sel) => {
-      sel.onchange = majAperçu;
+    // Changer de matière rouvre la question du grammage : le bloc de
+    // consommation apparaît, disparaît ou se vide selon la base d'achat, donc
+    // on redessine plutôt que de rafraîchir le seul total.
+    document.querySelectorAll("[data-msp-sel]").forEach((sel) => {
+      sel.onchange = () => {
+        syncMsProductFromDom();
+        renderMsProductForm(isNew);
+      };
     });
-    // Les pastilles de déclinaison voisine posent la valeur dans le sélecteur
-    // puis relancent l'aperçu : le total et son explication bougent ensemble.
-    bindMsProductLeviers(majAperçu);
+    // Le grammage et la perte, eux, ne changent que des chiffres : on garde le
+    // focus dans le champ et seul l'aperçu bouge.
+    document.querySelectorAll("[data-msp-gram], [data-msp-perte]").forEach((inp) => {
+      inp.oninput = majAperçu;
+    });
+    bindMspTarif();
     const add = document.getElementById("msp-add-autre");
     if (add) {
       add.onclick = () => {
@@ -3912,13 +4281,37 @@
    * « Toutes déclinaisons » n'apprend rien : quand la déclinaison n'a pas de
    * valeur, on n'affiche que la référence de la matière.
    */
+  function msProductComp(produit, role) {
+    return (produit.composants || []).find((x) => x.role === role) || null;
+  }
+
   function msProductCompLabel(produit, role) {
-    const c = (produit.composants || []).find((x) => x.role === role);
+    const c = msProductComp(produit, role);
     if (!c) return '<span style="color:var(--muted)">—</span>';
-    const val = c.libelle && c.libelle !== "Toutes déclinaisons"
-      ? ` <span class="msp-decl">${escHtml(c.libelle)}</span>`
-      : "";
-    return escHtml(c.reference) + val;
+    // La référence seule : le grammage a sa propre colonne depuis le
+    // 31 août 2026, et l'écrire aux deux endroits ferait chercher lequel des
+    // deux fait foi le jour où ils diffèrent.
+    return escHtml(c.reference);
+  }
+
+  /** Le grammage d'adhésif que ce produit pose. */
+  function msProductGrammage(produit) {
+    const c = msProductComp(produit, "ADHESIF");
+    return c && c.grammage_gsm ? parseFloat(c.grammage_gsm) : null;
+  }
+
+  /** Le support du produit : la sous-section de son frontal, en badge MyStock. */
+  function msProductSupport(produit) {
+    const f = msProductComp(produit, "FRONTAL");
+    return f ? supportBadge(f.sous_section, f.categorie) : "";
+  }
+
+  function msProductSupportTexte(produit) {
+    const f = msProductComp(produit, "FRONTAL");
+    if (!f) return "";
+    const k = supportCle(f.sous_section);
+    if (k) return SUPPORT_LABELS[k] || f.sous_section;
+    return f.categorie || "";
   }
 
   /**
@@ -3937,13 +4330,27 @@
       .map((x) => {
         const prix = parseFloat(x.price_eur_per_m2 || 0);
         const part = parseFloat(x.share_pct || 0);
+        // La part de transport DANS ce composant : elle hachure la fin de sa
+        // jauge plutôt que de s'ajouter à côté — le transport est déjà compris
+        // dans le coût, l'afficher en supplément le compterait deux fois.
+        const transp = parseFloat((x.breakdown && x.breakdown.transport_eur_m2) || 0);
+        const transpPart = prix > 0 ? Math.min(100, (transp / prix) * 100) : 0;
         return `<tr>
           <td class="msp-role">${escHtml(MSP_ROLE_LABEL[x.role] || x.role)}</td>
           <td><button type="button" class="msp-lien" data-msp-mat="${x.material_id}"
                 title="Ouvrir le paramétrage de cette matière">${escHtml(x.name)}</button></td>
           <td class="msp-num">${prix > 0 ? escHtml(fmtEurM2(prix)) : '<span class="muted">sans prix</span>'}</td>
+          <td class="msp-num msp-transp">${
+            x.breakdown && parseFloat(x.breakdown.transport_eur_m2 || 0)
+              ? escHtml(fmtEurM2(x.breakdown.transport_eur_m2))
+              : '<span class="muted">—</span>'
+          }</td>
           <td class="msp-part">
-            <span class="msp-jauge"><i style="width:${Math.max(0, Math.min(100, part))}%"></i></span>
+            <span class="msp-jauge" title="${escAttr(
+              fmtPct(part) + " du prix de revient" + (transp ? ` — dont ${fmtEurM2(transp)} de transport` : "")
+            )}"><i style="width:${Math.max(0, Math.min(100, part))}%">${
+              transpPart > 0 ? `<b style="width:${transpPart.toFixed(1)}%"></b>` : ""
+            }</i></span>
             <span class="msp-part-val">${escHtml(fmtPct(part))}</span>
           </td>
         </tr>`;
@@ -3952,11 +4359,17 @@
     const manquants = c.components.filter((x) => !(parseFloat(x.price_eur_per_m2) > 0)).length;
     return `<div class="ms-detail">
       <table class="pr-table ms-table msp-detail">
-        <thead><tr><th>Rôle</th><th>Matière MyStock</th><th class="msp-num">Coût €/m²</th><th class="msp-part">Part</th></tr></thead>
+        <thead><tr><th>Rôle</th><th>Matière MyStock</th><th class="msp-num">Coût €/m²</th><th class="msp-num" title="Part de transport déjà comprise dans le coût — elle ne s'y ajoute pas">dont transport</th><th class="msp-part">Part</th></tr></thead>
         <tbody>${lignes}</tbody>
       </table>
       <div class="msp-totaux">
         <span>Prix de revient <strong>${escHtml(fmtEurM2(c.total_eur_per_m2))}</strong></span>
+        ${(() => {
+          const t = (c.components || []).reduce(
+            (a, x) => a + parseFloat((x.breakdown && x.breakdown.transport_eur_m2) || 0), 0);
+          const rev = parseFloat(c.total_eur_per_m2 || 0);
+          return t ? `<span class="msp-transport-tot">dont transport <strong>${escHtml(fmtEurM2(t))}</strong> ${escHtml(fmtPct(rev ? (t / rev) * 100 : 0))}</span>` : "";
+        })()}
         <span>Marge ${escHtml(fmtPct(c.margin_pct))} <strong>${escHtml(fmtEurM2(c.margin_eur_m2))}</strong></span>
         <span>Prix de vente <strong>${escHtml(fmtEurM2(c.sell_price_eur_m2))}</strong></span>
         ${manquants ? `<span class="msp-alerte">${manquants} matière(s) sans prix — le coût est sous-évalué</span>` : ""}
@@ -3965,17 +4378,63 @@
   }
 
   function renderMsProductsList() {
-    const rows = S.msProducts
+    /* Code et désignation ont quitté le tableau (31 août 2026).
+
+       « 886-0001 » n'apprend rien qu'on cherche du regard. Et « Thermique
+       Pro 70g · Enlevable 22g, Jaune 60g standard » ne fait que recopier, en
+       prose et sur trois lignes, ce que les colonnes disent déjà en un coup
+       d'œil : c'est un produit fini, il EST sa composition. Les colonnes la
+       donnent mieux que sa phrase, et alignée d'une ligne à l'autre.
+
+       Ni l'un ni l'autre n'est perdu : la recherche en haut de page porte sur
+       le code ET la désignation, et la fiche montre les deux. */
+    const COLS = [
+      { cle: "caret", titre: "", style: "width:28px" },
+      { cle: "support", titre: "Support", style: "width:118px", filtre: "choix",
+        val: msProductSupportTexte },
+      { cle: "frontal", titre: "Frontal", filtre: "choix",
+        val: (p) => (msProductComp(p, "FRONTAL") || {}).reference || "" },
+      { cle: "adhesif", titre: "Adhésif", filtre: "choix",
+        val: (p) => (msProductComp(p, "ADHESIF") || {}).reference || "" },
+      // Le grammage d'adhésif a sa colonne : c'est LUI qui sépare quatre
+      // produits portant le même 2028Y, et le seul chiffre du tableau qui se
+      // corrige à la main quand un coût surprend. Filtre par choix — les
+      // grammages sont une poignée de valeurs discrètes, pas du texte libre.
+      { cle: "gram", titre: "Grammage", style: "width:104px", filtre: "choix",
+        val: msProductGrammage,
+        filtreVal: (p) => { const g = msProductGrammage(p); return g == null ? "" : String(g); },
+        optLabel: (o) => `${o} g/m²` },
+      { cle: "glassine", titre: "Glassine", filtre: "choix",
+        val: (p) => (msProductComp(p, "GLASSINE") || {}).reference || "" },
+      { cle: "autres", titre: "Autres", style: "width:70px",
+        val: (p) => (p.composants || []).filter((x) => x.role === "AUTRE").length },
+      { cle: "cout", titre: "Coût", val: (p) => (p.cost ? parseFloat(p.cost.total_eur_per_m2) : null) },
+      { cle: "vente", titre: "Vente", val: (p) => (p.cost ? parseFloat(p.cost.sell_price_eur_m2) : null) },
+      { cle: "marge", titre: "Marge", val: (p) => (p.cost ? parseFloat(p.cost.margin_pct) : null) },
+      { cle: "act", titre: "", style: "width:96px" },
+    ];
+
+    const filtres = filtresAppliquer("produits", S.msProducts, COLS);
+    const triees = triAppliquer("produits", filtres, COLS);
+
+    const rows = triees
       .map((p) => {
         const c = p.cost;
         const open = !!S.expandedProd[p.id];
         const autres = (p.composants || []).filter((x) => x.role === "AUTRE").length;
-        return `<tr class="ms-row${open ? " open" : ""}" data-msp-row="${p.id}">
+        // Code et désignation restent à portée de survol : ils ont quitté les
+        // colonnes, pas la ligne.
+        return `<tr class="ms-row${open ? " open" : ""}" data-msp-row="${p.id}"
+            title="${escAttr((p.code || "") + " — " + (p.designation || ""))}">
             <td class="ms-caret">${open ? "▾" : "▸"}</td>
-            <td><strong>${escHtml(p.code)}</strong></td>
-            <td>${escHtml(p.designation)}</td>
+            <td>${msProductSupport(p)}</td>
             <td>${msProductCompLabel(p, "FRONTAL")}</td>
             <td>${msProductCompLabel(p, "ADHESIF")}</td>
+            <td class="msp-gram">${
+              msProductGrammage(p) != null
+                ? `${escHtml(fmtNum(msProductGrammage(p), 0, 1))} <span class="lbl-unit">g/m²</span>`
+                : '<span class="muted" title="Adhésif au kilo sans grammage : ce composant compte pour 0">—</span>'
+            }</td>
             <td>${msProductCompLabel(p, "GLASSINE")}</td>
             <td>${autres || '<span style="color:var(--muted)">—</span>'}</td>
             <td class="ms-prix-cell">${c ? fmtEurM2(c.total_eur_per_m2) : '<span style="color:var(--muted)">—</span>'}</td>
@@ -3994,18 +4453,21 @@
       <div class="pr-narrow">
         ${pageHead("Produits", `${S.msProducts.length} produit(s) MyStock`, productsTabsHtml())}
         <div class="filters">
-          <input type="search" class="search-input" id="msp-q" placeholder="Rechercher (code, désignation…)" value="${escAttr(S.filters.msProdQ)}"/>
+          <input type="search" class="search-input" id="msp-q" placeholder="Rechercher (code, désignation…)" title="Le code et la désignation ont quitté les colonnes : ils se cherchent ici, et se lisent au survol d'une ligne." value="${escAttr(S.filters.msProdQ)}"/>
           ${S.canWrite ? '<button type="button" class="btn btn-accent" id="btn-new-msprod">+ Nouveau produit</button>' : ""}
         </div>
         <div class="table-wrap">
           <table class="pr-table msp-table">
-            <thead><tr><th style="width:28px"></th><th>Code</th><th>Désignation</th><th>Frontal</th><th>Adhésif</th><th>Glassine</th><th>Autres</th><th>Coût</th><th>Vente</th><th>Marge</th><th></th></tr></thead>
-            <tbody>${rows || '<tr><td colspan="11" class="empty">Aucun produit MyStock. Crée le premier avec le bouton ci-dessus.</td></tr>'}</tbody>
+            ${enTetesTriables("produits", COLS, S.msProducts)}
+            <tbody>${rows || '<tr><td colspan="11" class="empty">Aucun produit pour ce filtre.</td></tr>'}</tbody>
           </table>
         </div>
+        ${filtresActifsHtml("produits", COLS, S.msProducts.length, triees.length)}
       </div>
     `);
 
+    bindEnTetes("produits", renderMsProductsList);
+    bindRaz("produits", renderMsProductsList);
     bindProductsTabs();
     const q = document.getElementById("msp-q");
     if (q) {

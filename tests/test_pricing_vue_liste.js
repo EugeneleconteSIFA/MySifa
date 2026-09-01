@@ -225,13 +225,39 @@ const debutListe = src.indexOf('<table class="pr-table msl-table">');
 const zoneListe = src.slice(debutListe, src.indexOf('</table>', debutListe));
 check('un colgroup accompagne le tableau', zoneListe.includes('<colgroup>'), true);
 check('une seule colonne élastique', (zoneListe.match(/<col>/g) || []).length, 1);
-// Autant d'en-têtes que de cellules, autant de <col> que d'en-têtes : une
+// Les en-têtes sont engendrés depuis la déclaration COLS : c'est elle qui fait
+// foi. Autant de colonnes déclarées que de <col> et que de cellules — une
 // colonne retirée d'un seul des trois endroits décale tout le tableau.
-const nbTh = (zoneListe.match(/<th[ >]/g) || []).length;
-check('en-tête et cellules comptent pareil', nbTh, (lAdh.match(/<td[ >]/g) || []).length);
-check('autant de <col> que d\'en-têtes', (zoneListe.match(/<col[ >]/g) || []).length, nbTh);
+const rendu = src.slice(src.indexOf('function renderMystockList('));
+const decl = rendu.slice(rendu.indexOf('const COLS = ['), rendu.indexOf('];'));
+const nbCols = (decl.match(/\{ cle:/g) || []).length;
+check('les colonnes sont déclarées une fois', nbCols > 0, true);
+check('colonnes déclarées et cellules comptent pareil',
+  nbCols, (lAdh.match(/<td[ >]/g) || []).length);
+check('autant de <col> que de colonnes',
+  (zoneListe.match(/<col[ >]/g) || []).length, nbCols);
 check('la ligne vide occupe toute la largeur',
-  zoneListe.includes('colspan="' + nbTh + '"'), true);
+  zoneListe.includes('colspan="' + nbCols + '"'), true);
+
+console.log('\n--- trier et filtrer par colonne ---');
+// La recherche unique en haut de page repond a « ou est 1408 », jamais a
+// « quels prix n'ont pas ete revus depuis deux ans ».
+check('les en-tetes sont engendres', rendu.includes('enTetesTriables("matieres"'), true);
+check('et branches', rendu.includes('bindEnTetes("matieres"'), true);
+check('le prix se trie sur sa valeur, pas sur son texte',
+  decl.includes('m.prix_min'), true);
+check('la categorie se filtre par choix', /cle: "cat"[^]{0,120}filtre: "choix"/.test(decl), true);
+check('la reference se filtre au texte', /cle: "ref"[^]{0,120}filtre: "texte"/.test(decl), true);
+// Trois etats : croissant, decroissant, puis retour a l'ordre naturel. Sans le
+// troisieme, un tri pose par erreur ne se retire plus.
+check('le tri revient a l\'ordre naturel',
+  /function triBascule[^]{0,600}S\.tri\[table\] = null/.test(src), true);
+check('les valeurs manquantes restent en bas',
+  /function triAppliquer[^]{0,900}if \(aVide\) return 1/.test(src), true);
+check('la liste source n\'est pas triee en place',
+  /function triAppliquer[^]{0,900}\[\.\.\.lignes\]\.sort/.test(src), true);
+check('un filtre actif se voit et se relache',
+  src.includes('function filtresActifsHtml') && src.includes('data-raz='), true);
 check('le champ de prix a son style', css.includes('.msl-prix-inp{'), true);
 check('la divergence aussi', css.includes('.msl-prix-diverge .msl-prix-inp{'), true);
 

@@ -517,13 +517,16 @@ function renderExpeAvisModal(){
 function expeAvisBoutons(r){
   if(!expeCanWrite())return [];
   if(!r||!(r.transporteur||r.transporteur_id))return [];
+  // `expe-dep-ab` porte l'infobulle et la metrique communes aux icones de la
+  // cellule d'actions : sans elle les deux boutons d'avis se desalignent de la
+  // grille et perdent leur libelle au survol.
   return [
-    h('button',{className:'expe-avis-btn alerte',type:'button',
+    h('button',{className:'expe-avis-btn expe-dep-ab alerte',type:'button',
       title:'Signaler un problème sur cette expédition',
-      onClick:()=>expeOuvrirAvis(r,'alerte')},expeIconAlerte(14)),
-    h('button',{className:'expe-avis-btn appreciation',type:'button',
+      onClick:()=>expeOuvrirAvis(r,'alerte')},expeIconAlerte(16)),
+    h('button',{className:'expe-avis-btn expe-dep-ab appreciation',type:'button',
       title:'Apprécier cette expédition',
-      onClick:()=>expeOuvrirAvis(r,'appreciation')},expeIconPouce(14))
+      onClick:()=>expeOuvrirAvis(r,'appreciation')},expeIconPouce(16))
   ];
 }
 

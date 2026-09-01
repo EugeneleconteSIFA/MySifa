@@ -2878,7 +2878,7 @@ function renderTracabiliteDossiersVue(){
   const showAttente = forceShowAttente || !!S.tracShowAttente;
   const hiddenAttenteCount = (!showAttente && !F.statut) ? attenteDossiers.length : 0;
 
-  const COL_KEY = {ref:'reference',client:'client',designation:'designation',machine:'machine_nom',statut:'statut',matieres:'nb_matieres',info:'info_prod'};
+  const COL_KEY = {ref:'reference',client:'client',machine:'machine_nom',metrage:'metrage',statut:'statut',matieres:'nb_matieres',info:'info_prod'};
   if(Srt.col){
     const key = COL_KEY[Srt.col]||Srt.col;
     dossiers = [...dossiers].sort((a,b)=>{
@@ -2918,11 +2918,12 @@ function renderTracabiliteDossiersVue(){
   }
 
   // ── Header cliquable (tri) ──────────────────────────────────────
-  function thSort(colKey, label){
+  function thSort(colKey, label, align){
     const active = Srt.col===colKey;
     const arrow  = active ? (Srt.dir==='asc'?'↑':'↓') : '';
     return h('th',{
-      style:{cursor:'pointer',userSelect:'none',whiteSpace:'nowrap',color:active?'var(--accent)':''},
+      style:{cursor:'pointer',userSelect:'none',whiteSpace:'nowrap',color:active?'var(--accent)':'',
+             textAlign:align||''},
       onClick:()=>{
         S.tracPage = 0;
         if(Srt.col===colKey) S.tracSort={col:colKey,dir:Srt.dir==='asc'?'desc':'asc'};
@@ -2993,8 +2994,21 @@ function renderTracabiliteDossiersVue(){
     },
       h('td',null, h('span',{style:{fontWeight:'800',color:'var(--accent)'}}, dos.reference||'—')),
       h('td',null, dos.client||'—'),
-      h('td',null, dos.designation||'—'),
       h('td',null, dos.machine_nom||'—'),
+      // Metrage du dossier : ce qu'il y a a produire, pas ce qui l'a ete.
+      // La provenance voyage avec le chiffre — un metrage reconstitue depuis
+      // la fiche technique ne s'oppose pas a un fournisseur comme un metrage
+      // porte par l'OF.
+      h('td',{style:{textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'},
+              title: dos.metrage!=null
+                ? (dos.metrage_source==='of' ? 'Métrage de l\'OF' : 'Métrage calculé depuis la fiche technique')
+                : 'Métrage indisponible (ni OF, ni fiche technique exploitable)'},
+        dos.metrage!=null
+          ? h('span',{style:{fontWeight:'700',
+                             color: dos.metrage_source==='of' ? 'var(--text)' : 'var(--text2)'}},
+              fN(Math.round(dos.metrage))+' m')
+          : h('span',{style:{color:'var(--muted)'}},'—')
+      ),
       h('td', null,
         h('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' } },
           statutBadge(dos.statut || 'attente'),
@@ -3059,8 +3073,8 @@ function renderTracabiliteDossiersVue(){
         h('thead',null,h('tr',null,
           thSort('ref','Référence'),
           thSort('client','Client'),
-          thSort('designation','Désignation'),
           thSort('machine','Machine'),
+          thSort('metrage','Métrage','right'),
           thSort('statut','Statut'),
           thSort('matieres','Matières'),
           thSort('info','Info prod')
@@ -3322,7 +3336,7 @@ async function openTracMatieresEditModal(dos, matieres){
         allowEmpty: false,
         // La bobine est une matière première : ces catégories d'abord, le
         // reste de l'annuaire ensuite.
-        categories: ['frontal', 'adhesif', 'glassine', 'complexe'],
+        categories: ['frontal', 'glassine', 'complexe'],
       })
     : null;
   // `fournSel` garde son nom et son interface : plus bas, le code lit
@@ -3547,19 +3561,103 @@ function renderTracabiliteDossierDetail(){
   const metrageCalc  = (metrageDebut!=null&&metrageFin!=null) ? Math.max(0,metrageFin-metrageDebut) : null;
   const etiquettes   = finRow   ? finRow.quantite_traitee : null;
 
+  // Le dossier vu du produit : ce qu'il fallait faire, et avec quoi. Le
+  // detail ne montrait que le consomme ; sans le prevu, une bobine manquante
+  // ne se distingue pas d'un poste qui n'en consomme pas.
+  const ctx = d.contexte_produit || {};
+  const metragePrevu = ctx.metrage;
+  const metragePrevuTitre = metragePrevu!=null
+    ? (ctx.metrage_source==='of' ? 'Métrage porté par l\'OF'
+                                 : 'Métrage calculé depuis la fiche technique')
+    : ((ctx.metrage_manque||[]).join(' · ') || 'Métrage indisponible');
+
   const infoGrid = h('div',{style:{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:'8px',margin:'12px 0'}},
     ...[
       {label:'Référence',  val:dos.reference||'—'},
       {label:'Client',     val:dos.client||'—'},
       {label:'Machine',    val:dos.machine_nom||dos.machine||'—'},
       {label:'Opérateur(s)', val:operateurs.join(', ')||'—'},
-      {label:'Métrage produit', val:metrageCalc!=null ? fN(metrageCalc)+' m' : '—'},
+      {label:'Métrage dossier',
+       val:metragePrevu!=null ? fN(Math.round(metragePrevu))+' m' : '—',
+       title:metragePrevuTitre},
+      {label:'Produit',
+       val:ctx.produit_ref || ctx.produit_designation || dos.ref_produit || '—',
+       sub:(ctx.produit_ref && ctx.produit_designation) ? ctx.produit_designation : ''},
+      {label:'Format',     val:ctx.format||'—',
+       sub:ctx.laize!=null ? 'laize '+fN(ctx.laize)+' mm' : ''},
+      {label:'Métrage produit', val:metrageCalc!=null ? fN(metrageCalc)+' m' : '—',
+       title:'Compteur fin − compteur début'},
       {label:'Étiquettes', val:etiquettes!=null ? fN(etiquettes) : '—'},
-    ].map(item=>h('div',{style:{background:'var(--bg2)',borderRadius:'8px',padding:'10px 12px'}},
+    ].map(item=>h('div',{style:{background:'var(--bg2)',borderRadius:'8px',padding:'10px 12px'},
+                         title:item.title||''},
       h('div',{style:{fontSize:'10px',color:'var(--muted)',fontWeight:'700',textTransform:'uppercase',letterSpacing:'.4px',marginBottom:'3px'}},item.label),
-      h('div',{style:{fontSize:'13px',fontWeight:'800',color:'var(--text)'}},item.val)
+      h('div',{style:{fontSize:'13px',fontWeight:'800',color:'var(--text)'}},item.val),
+      item.sub ? h('div',{style:{fontSize:'11px',color:'var(--muted)',marginTop:'2px',
+                                 whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},item.sub) : null
     ))
   );
+
+  // Matieres necessaires — le prevu, lu sur la fiche technique du produit.
+  // Chaque ligne dit d'ou vient son chiffre : une quantite non calculable
+  // s'affiche comme telle plutot que de disparaitre, sinon la liste laisse
+  // croire que le produit ne demande que ce qui a pu etre chiffre.
+  const besoins = ctx.matieres || [];
+  const besoinsBloc = besoins.length
+    ? h('div',{style:{padding:'0 20px 16px'}},
+        h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',
+                        gap:'10px',marginBottom:'10px'}},
+          h('div',{style:{fontWeight:'800',fontSize:'12px',color:'var(--text2)',
+            textTransform:'uppercase',letterSpacing:'.4px',display:'flex',alignItems:'center',gap:'6px'}},
+            iconEl('layers',12),' Matières nécessaires ('+besoins.length+')'
+          ),
+          h('span',{className:'badge',
+                    title:'Calculé sur la fiche technique du produit et l\'OF'},
+            'fiche technique')
+        ),
+        h('div',{style:{overflowX:'auto'}},
+          h('table',{className:'table-std'},
+            h('thead',null,h('tr',null,
+              h('th',null,'Poste'),
+              h('th',null,'Matière'),
+              h('th',{style:{textAlign:'right'}},'Besoin')
+            )),
+            h('tbody',null,...besoins.map(b=>h('tr',null,
+              h('td',null,h('span',{className:'badge'},b.kind_label||b.kind)),
+              h('td',null,
+                h('div',{style:{fontWeight:'700'}},b.libelle||'—'),
+                b.matiere_ref
+                  ? h('div',{style:{fontSize:'11px',color:'var(--muted)'}},
+                      b.matiere_ref+(b.matiere_designation?' — '+b.matiere_designation:''))
+                  : h('div',{style:{fontSize:'11px',color:'var(--warn)'},
+                             title:'Cette matière de la fiche n\'est reliée à aucune référence du stock'},
+                      'non reliée au stock'),
+                b.laize_mm!=null
+                  ? h('div',{style:{fontSize:'11px',color:'var(--muted)'}},'laize '+fN(b.laize_mm)+' mm')
+                  : null
+              ),
+              h('td',{style:{textAlign:'right',whiteSpace:'nowrap',fontVariantNumeric:'tabular-nums'}},
+                b.calculable
+                  ? h('span',{style:{fontWeight:'800'}},
+                      fN(Math.round(b.quantite*10)/10)+' '+(b.unite||''))
+                  : h('span',{style:{color:'var(--muted)'},
+                              title:(b.manque||[]).join(' · ')||'Calcul impossible'},
+                      'non chiffré')
+              )
+            )))
+          )
+        )
+      )
+    : (d.contexte_produit
+        ? h('div',{style:{padding:'0 20px 16px'}},
+            h('div',{style:{fontWeight:'800',fontSize:'12px',color:'var(--text2)',
+              textTransform:'uppercase',letterSpacing:'.4px',display:'flex',alignItems:'center',
+              gap:'6px',marginBottom:'10px'}},
+              iconEl('layers',12),' Matières nécessaires'
+            ),
+            h('div',{className:'card-empty',style:{padding:'14px'}},
+              'Aucune fiche technique rapprochée de ce dossier — le besoin prévu ne peut pas être établi.')
+          )
+        : null);
 
   // Info prod du dossier — même objet que la colonne de la liste et que la
   // note exigée à la clôture. Éditable ici aussi : c'est souvent en regardant
@@ -3687,6 +3785,7 @@ function renderTracabiliteDossierDetail(){
       ),
       infoGrid,
       infoProdCard,
+      besoinsBloc,
       h('div',{style:{padding:'0 20px 16px'}},
         h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:'10px',marginBottom:'10px'}},
           h('div',{style:{fontWeight:'800',fontSize:'12px',color:'var(--text2)',
@@ -5560,9 +5659,65 @@ function makeEditable(row,field,displayVal){
   return td;
 }
 
+// ── Défilement à la souris du tableau des saisies ────────────────────────────
+// Même geste que la grille MyERP : on attrape le tableau et on le tire, dans
+// les deux axes. La barre horizontale est sous une liste haute, donc presque
+// toujours hors de vue. Un seul jeu d'écouteurs pour toute la page : le
+// tableau est reconstruit à chaque render(), les attacher dessus les
+// empilerait render après render.
+let __glisserSaisiesPret = false;
+function activerGlisserSaisies(){
+  if(__glisserSaisiesPret) return;
+  __glisserSaisiesPret = true;
+  let zone=null,botX=null,actif=false,bouge=false,avale=false,x0=0,y0=0,g0=0,h0=0;
+
+  document.addEventListener('mousedown',e=>{
+    if(e.button!==0) return;
+    const z = e.target.closest && e.target.closest('.saisies-bot');
+    if(!z) return;
+    // Un champ, une case à cocher ou un bouton garde son comportement propre
+    // (sélection du texte, clic) : on ne lui vole pas la souris.
+    if(e.target.closest('input, button, select, textarea, a')) return;
+    zone=z; botX=z.firstElementChild;   // l'enfant porte le défilement horizontal
+    actif=true; bouge=false;
+    x0=e.pageX; y0=e.pageY;
+    g0=botX?botX.scrollLeft:0; h0=z.scrollTop;
+  });
+
+  document.addEventListener('mousemove',e=>{
+    if(!actif||!zone) return;
+    const dx=e.pageX-x0, dy=e.pageY-y0;
+    if(!bouge){
+      if(Math.abs(dx)<5&&Math.abs(dy)<5) return;   // seuil : un clic reste un clic
+      bouge=true; zone.classList.add('attrape');
+      // Une selection de texte a pu demarrer avant le seuil : on la vide,
+      // sinon le tableau se surligne en bleu pendant tout le glisser.
+      const sel=window.getSelection&&window.getSelection();
+      if(sel&&sel.removeAllRanges) sel.removeAllRanges();
+    }
+    e.preventDefault();
+    if(botX) botX.scrollLeft = g0-dx;
+    zone.scrollTop = h0-dy;
+  });
+
+  // Un glisser se termine par un clic sur la ligne survolée. On l'avale en
+  // phase de capture, sinon chaque défilement ouvrirait le modal d'édition.
+  document.addEventListener('click',e=>{
+    if(!avale) return;
+    avale=false;
+    e.stopPropagation(); e.preventDefault();
+  },true);
+
+  window.addEventListener('mouseup',()=>{
+    if(bouge) avale=true;
+    if(zone) zone.classList.remove('attrape');
+    actif=false; bouge=false; zone=null; botX=null;
+  });
+}
+
 // Commentaire — éditable inline (spécifique pour éviter les modifs autres champs)
 function makeEditableComment(row){
-  const td=h('td',{className:'editable',style:{maxWidth:'220px',minWidth:'120px'}});
+  const td=h('td',{className:'editable td-commentaire',title:row.commentaire||'',style:{maxWidth:'460px',minWidth:'260px'}});
   const span=h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},row.commentaire||'—');
   td.appendChild(span);
   td.addEventListener('click',e=>{
@@ -5579,6 +5734,7 @@ function makeEditableComment(row){
       if(val!==old) saveSaisie(row.id,'commentaire',val);
       // Mettre à jour l'objet local pour que la prochaine édition reflète la valeur
       row.commentaire = val;
+      td.title = val;   // le texte tronqué reste lisible au survol
     };
     inp.addEventListener('blur',save);
     inp.addEventListener('keydown',e=>{
@@ -6003,12 +6159,14 @@ function renderSaisies(){
     if(annuleRow){
       const txt = (row.commentaire||'').trim();
       const motif = (row.annule_motif||'').trim();
-      tr.appendChild(h('td',{style:{maxWidth:'220px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:annuleTip},
+      tr.appendChild(h('td',{className:'td-commentaire',
+        style:{maxWidth:'460px',minWidth:'260px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:annuleTip},
         txt ? txt+(motif?' · ':'') : '',
         motif ? h('span',{style:{color:'#f87171',fontStyle:'italic'}},'Motif : '+motif) : null
       ));
     }else if(readOnly || isAlertAck){
-      tr.appendChild(h('td',{style:{maxWidth:'200px',overflow:'hidden',textOverflow:'ellipsis'}},row.commentaire||''));
+      tr.appendChild(h('td',{className:'td-commentaire',title:row.commentaire||'',
+        style:{maxWidth:'460px',minWidth:'260px',overflow:'hidden',textOverflow:'ellipsis'}},row.commentaire||''));
     }else{
       tr.appendChild(makeEditableComment(row));
     }
@@ -6083,7 +6241,7 @@ function renderSaisies(){
   }
  
   return h('div',null,
-    h('div',{className:'card'},
+    h('div',{className:'card card-saisies'},
       h('div',{className:'card-header'},
         h('h3',null,'Saisies'),
         h('div',{style:{display:'flex',gap:'12px',alignItems:'center'}},
@@ -6107,6 +6265,7 @@ function renderSaisies(){
         requestAnimationFrame(()=>{
           topInner.style.width = tableEl.offsetWidth+'px';
         });
+        activerGlisserSaisies();
         return h('div',{className:'saisies-table-wrap'},top,bot);
       })()
     )
@@ -6143,12 +6302,14 @@ function renderSaisiesWithImport(){
         e.preventDefault();zone.classList.remove('drag');
         const f=e.dataTransfer.files[0];if(f)upload(f);
       });
-      parts.push(h('div',{className:'card',style:{marginBottom:'16px'}},
+      // Meme largeur que la card Saisies (card-saisies) : les deux blocs de
+      // l'onglet restent alignes une fois le tableau elargi.
+      parts.push(h('div',{className:'card card-saisies',style:{marginBottom:'16px'}},
         header,
         h('div',{style:{padding:'0 20px 20px'}}, zone, inp)
       ));
     } else {
-      parts.push(h('div',{className:'card',style:{marginBottom:'16px'}}, header));
+      parts.push(h('div',{className:'card card-saisies',style:{marginBottom:'16px'}}, header));
     }
   }
 

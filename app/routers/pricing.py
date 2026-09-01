@@ -33,6 +33,7 @@ from app.services.pricing.repository import (
     load_pricing_settings,
     load_product_extra_ids,
     load_settings_response,
+    declinaison_to_pricing_material,
     material_row_to_dict,
     product_row_to_pricing_product,
     row_to_pricing_material,
@@ -1741,6 +1742,29 @@ def _cout_produit_mystock(conn, produit: dict, reglages) -> Optional[ProductCost
         # Une déclinaison mal réglée ne doit pas faire tomber la liste entière :
         # le produit s'affiche sans coût, la fiche dira pourquoi.
         return None
+    # La décomposition part avec chaque composant, comme sur la base CM.
+    # Sans elle, l'écran affichait « 4,200 €/kg × 0,0240 kg/m² → 0,1098 €/m² » :
+    # une multiplication qui ne tombe pas juste, parce que le transport et les
+    # taxes étaient fondus dans le résultat sans être nommés nulle part. Un
+    # chiffre qu'on ne peut pas refaire de tête passe pour un chiffre faux.
+    detail = {}
+    for c in produit.get("composants", []):
+        param = mystock_prix.parametrage(conn, c["declinaison_id"])
+        if not param:
+            continue
+        param = {
+            **param,
+            "weight_per_m2": mystock_prix.poids_retenu(
+                c.get("grammage_gsm"), c.get("perte_pct")
+            ),
+        }
+        try:
+            detail[c["declinaison_id"]] = compute_material_price_per_m2(
+                declinaison_to_pricing_material(param), reglages
+            ).breakdown
+        except PricingError:
+            continue
+
     return ProductCostOut(
         total_eur_per_m2=res.total_eur_per_m2,
         margin_pct=res.margin_pct,
@@ -1753,6 +1777,11 @@ def _cout_produit_mystock(conn, produit: dict, reglages) -> Optional[ProductCost
                 role=c.role,
                 price_eur_per_m2=c.price_eur_per_m2,
                 share_pct=c.share_pct,
+                breakdown=(
+                    _breakdown_out(detail[c.material_id])
+                    if c.material_id in detail
+                    else None
+                ),
             )
             for c in res.components
         ],
@@ -1792,6 +1821,7 @@ def list_mystock_declinaisons(request: Request):
                     "id": d["id"],
                     "matiere_id": m["id"],
                     "categorie": m["categorie"],
+                    "sous_section": m.get("sous_section"),
                     "reference": m["reference"],
                     "designation": m["designation"],
                     "libelle": d["libelle"],
@@ -1820,6 +1850,18 @@ def list_mystock_declinaisons(request: Request):
                     "weight_per_m2": d.get("weight_per_m2"),
                     "laize_mm": d.get("laize_mm"),
                     "unite": m.get("unite"),
+                    # Le fournisseur principal : la fiche produit renvoie vers
+                    # SON tarif, seul endroit où le transport se règle. Sans
+                    # lui, l'écran nomme un coût qu'on ne peut aller corriger
+                    # nulle part.
+                    "fournisseur_id": (
+                        (d.get("lignes") or [{}])[0].get("fournisseur_id")
+                        if d.get("lignes") else None
+                    ),
+                    "fournisseur_nom": (
+                        (d.get("lignes") or [{}])[0].get("fournisseur_nom")
+                        if d.get("lignes") else None
+                    ),
                 })
     return {"declinaisons": out}
 
@@ -1850,6 +1892,38 @@ def get_mystock_produit(request: Request, produit_id: int):
             raise HTTPException(status_code=404, detail="Produit introuvable.")
         p["cost"] = _cout_produit_mystock(conn, p, load_pricing_settings(conn))
     return p
+
+
+@router.post("/api/pricing/mystock/produits/preview")
+def preview_mystock_produit(request: Request, body: dict = Body(...)):
+    """
+    Coût d'une composition en cours de saisie, sans rien enregistrer.
+
+    L'aperçu était calculé dans le navigateur, en additionnant les coûts au m²
+    que l'API avait déjà chiffrés pour chaque matière. Ça ne tient plus depuis
+    que le grammage vit sur le PRODUIT : le coût d'un composant au kilo dépend
+    d'un poids que l'écran vient de saisir, et le refaire côté client
+    supposerait d'y réimplémenter transport, taxes et change — trois occasions
+    de diverger du moteur pour un chiffre qui doit être le même.
+    """
+    _require_read(request)
+    composants, err = mystock_produits.normaliser_composants(body.get("composants"))
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+    if not composants:
+        return {"cost": None}
+    with get_db() as conn:
+        manque = mystock_produits.composants_existent(conn, composants)
+        if manque:
+            raise HTTPException(status_code=400, detail=manque)
+        produit = {
+            "id": 0,
+            "code": "PREVIEW",
+            "designation": "Aperçu",
+            "custom_margin_pct": body.get("custom_margin_pct"),
+            "composants": composants,
+        }
+        return {"cost": _cout_produit_mystock(conn, produit, load_pricing_settings(conn))}
 
 
 @router.post("/api/pricing/mystock/produits")

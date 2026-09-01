@@ -577,7 +577,33 @@ body.light .prod-dossier-filter .search-bar:focus{box-shadow:0 0 0 3px rgba(8,14
 
 /* ── Table saisies (sticky header) ──────────────────────────────── */
 .saisies-table-wrap{border-radius:10px;border:1px solid var(--border);overflow:hidden}
-.saisies-table-wrap .saisies-bot{max-height:68vh;overflow:auto}
+.saisies-table-wrap .saisies-bot{max-height:68vh;overflow:auto;cursor:grab}
+.saisies-table-wrap .saisies-bot.attrape{cursor:grabbing;user-select:none}
+/* Les lignes portent cursor:pointer en style inline : sans ce forcage la
+   main ouverte ne s'affiche jamais pendant le glisser. */
+.saisies-table-wrap .saisies-bot.attrape *{cursor:grabbing !important}
+
+/* La card des saisies deborde volontairement de .container (1200px) : la
+   colonne Commentaire est la derniere et restait hors champ sur un ecran
+   large alors que la place existait a droite. Largeur utile = viewport
+   moins la sidebar (220px), le padding de .main (2 x 28px) et une marge
+   pour la barre de defilement verticale. Le max()/min() garde le
+   comportement d'origine quand la fenetre est plus etroite que 1200px :
+   la largeur retombe a 100% et la marge a 0. */
+.card-saisies{
+  --saisies-large:calc(100vw - 220px - 56px - 18px);
+  width:max(100%, var(--saisies-large));
+  margin-left:min(0px, calc((100% - var(--saisies-large)) / 2));
+}
+/* Sidebar hors flux sous 900px : plus rien a compenser. */
+@media (max-width:900px){
+  .card-saisies{width:auto;margin-left:0}
+}
+/* Commentaire : la colonne la plus utile de la liste, elle merite la place
+   gagnee ci-dessus. Au-dela on ellipse toujours, le texte entier est dans
+   le title. */
+.saisies-table-wrap td.td-commentaire{max-width:460px;min-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.saisies-table-wrap td.td-commentaire.editing{white-space:normal}
 .saisies-table-wrap table thead th{position:sticky;top:0;z-index:5;background:var(--card)}
 .login-page{position:relative;z-index:1;min-height:100vh;display:flex;align-items:center;justify-content:center}
 

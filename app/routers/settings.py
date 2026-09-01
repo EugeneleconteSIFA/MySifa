@@ -251,7 +251,8 @@ def set_user_access(user_id: int, body: SetAccessBody, request: Request):
         conn.commit()
 
     log_action(
-        request,
+        user=admin_user,
+        request=request,
         module="settings",
         action="UPDATE",
         objet=f"access:user:{u['email']}",
@@ -343,7 +344,8 @@ def set_role_default(role: str, body: SetRoleDefaultBody, request: Request):
         conn.commit()
 
     log_action(
-        request,
+        user=admin_user,
+        request=request,
         module="settings",
         action="UPDATE",
         objet=f"role_default:{role}",
@@ -394,6 +396,165 @@ def get_audit_logs(
     return {
         "total": total,
         "logs": logs,
+    }
+
+
+@router.get("/api/settings/audit/facets")
+def get_audit_facets(request: Request):
+    """Modules et actions REELLEMENT presents dans le journal.
+
+    Les listes deroulantes du journal etaient ecrites en dur dans la page : 8
+    modules et 7 actions, quand le code en emettait deja 15 et 17. MyAO, la
+    memoire produit et toute la maintenance n'etaient donc filtrables nulle
+    part. On les construit desormais a partir des donnees, habillees par la
+    taxonomie — ajouter un module ne demande plus de toucher a la page.
+    """
+    require_settings(request)
+    from database import get_db
+    from app.core.audit_taxonomy import action_color, action_label, module_label
+
+    with get_db() as conn:
+        modules = [
+            r[0] for r in conn.execute(
+                "SELECT module FROM audit_logs WHERE module IS NOT NULL AND module <> '' "
+                "GROUP BY module"
+            ).fetchall()
+        ]
+        actions = [
+            r[0] for r in conn.execute(
+                "SELECT action FROM audit_logs WHERE action IS NOT NULL AND action <> '' "
+                "GROUP BY action"
+            ).fetchall()
+        ]
+
+    return {
+        "modules": sorted(
+            ({"value": m, "label": module_label(m)} for m in modules),
+            key=lambda d: d["label"].lower(),
+        ),
+        "actions": sorted(
+            (
+                {"value": a, "label": action_label(a), "color": action_color(a)}
+                for a in actions
+            ),
+            key=lambda d: d["label"].lower(),
+        ),
+    }
+
+
+@router.get("/api/settings/audit/couverture")
+def get_audit_couverture(request: Request):
+    """Ce que le journal couvre, appli par appli.
+
+    La question « qu'est-ce qui alimente le journal ? » n'avait aucune reponse
+    consultable : il fallait ouvrir les routers. Cet endpoint la donne depuis
+    l'application VIVANTE — il parcourt les routes reellement enregistrees par
+    FastAPI, pas une liste tenue a la main. Ajouter un endpoint le fait
+    apparaitre ici au redemarrage suivant, sans que personne ait rien a mettre
+    a jour.
+
+    Trois choses sont renvoyees :
+
+    - `applis` : par module, les verbes d'action journalisables, le nombre de
+      routes d'ecriture derriere chaque verbe, et ce qui a REELLEMENT ete
+      enregistre (nombre d'entrees, derniere en date) ;
+    - `exclues` : les routes volontairement hors journal (battements de coeur,
+      agent d'impression, releves de fluidite, abonnements push). Les montrer
+      evite la question « pourquoi celle-la n'apparait jamais ? » ;
+    - les totaux, pour situer d'un coup d'oeil.
+
+    Un module present en base mais sans route (module renomme, endpoint retire)
+    reste liste : son historique existe et doit rester filtrable.
+    """
+    require_settings(request)
+    from database import get_db
+    from app.core.audit_taxonomy import (
+        action_color,
+        action_label,
+        is_skipped,
+        module_label,
+        resolve_action,
+        resolve_module,
+        routes_ecriture,
+    )
+
+    applis: dict = {}
+
+    def _appli(module: str) -> dict:
+        return applis.setdefault(
+            module,
+            {
+                "module": module,
+                "label": module_label(module),
+                "routes": 0,
+                "entrees": 0,
+                "derniere": None,
+                "actions": {},
+            },
+        )
+
+    def _action(appli: dict, code: str) -> dict:
+        return appli["actions"].setdefault(
+            code,
+            {
+                "action": code,
+                "label": action_label(code),
+                "color": action_color(code),
+                "routes": 0,
+                "entrees": 0,
+                "derniere": None,
+            },
+        )
+
+    hors_journal: dict = {}
+    for methode, chemin in routes_ecriture(request.app):
+        if is_skipped(chemin):
+            hors_journal.setdefault(chemin, set()).add(methode)
+            continue
+        appli = _appli(resolve_module(chemin))
+        appli["routes"] += 1
+        _action(appli, resolve_action(methode, chemin))["routes"] += 1
+    exclues = [
+        {"chemin": c, "methodes": sorted(m)} for c, m in hors_journal.items()
+    ]
+
+    # Ce qui a ete reellement enregistre, module par module et verbe par verbe.
+    with get_db() as conn:
+        lignes = conn.execute(
+            """SELECT module, action, COUNT(*) AS n, MAX(created_at) AS derniere
+                 FROM audit_logs
+                WHERE module IS NOT NULL AND module <> ''
+                GROUP BY module, action"""
+        ).fetchall()
+
+    for ligne in lignes:
+        appli = _appli(ligne["module"])
+        act = _action(appli, (ligne["action"] or "").upper())
+        brut = ligne["derniere"] or ""
+        act["entrees"] = ligne["n"]
+        act["derniere"] = _audit_created_at_display_paris(brut) if brut else None
+        appli["entrees"] += ligne["n"]
+        # Les horodatages sont en ISO : la comparaison de chaines suffit a
+        # trouver le plus recent, sans repasser par un parse de date.
+        if brut > appli.get("_brut", ""):
+            appli["_brut"] = brut
+            appli["derniere"] = act["derniere"]
+
+    sortie = []
+    for appli in applis.values():
+        appli.pop("_brut", None)
+        appli["actions"] = sorted(
+            appli["actions"].values(), key=lambda a: a["label"].lower()
+        )
+        sortie.append(appli)
+    sortie.sort(key=lambda a: a["label"].lower())
+
+    exclues.sort(key=lambda e: e["chemin"])
+    return {
+        "applis": sortie,
+        "exclues": exclues,
+        "total_routes": sum(a["routes"] for a in sortie),
+        "total_entrees": sum(a["entrees"] for a in sortie),
     }
 
 

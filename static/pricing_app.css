@@ -92,6 +92,47 @@ table.pr-table{width:100%;border-collapse:collapse;font-size:13px}
 table.pr-table th,table.pr-table td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border)}
 table.pr-table th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);font-weight:600;background:var(--bg)}
 table.pr-table tr:hover td{background:var(--accent-bg)}
+
+/* ── En-têtes qui trient et qui filtrent ────────────────────────────────────
+   Une recherche unique en haut de page repond bien a « ou est 1408 », jamais a
+   « quels produits sont en thermique » ni a « quels prix n'ont pas ete revus
+   depuis deux ans ». D'ou deux rangees dans le thead : les libelles, puis les
+   filtres.
+
+   Les champs restent VISIBLES plutot que caches dans un menu par colonne. Un
+   menu est plus compact mais il cache l'etat : on ne voit plus qu'un filtre est
+   pose, et on cherche longtemps pourquoi la liste est vide. Un filtre actif se
+   teinte, et un bandeau sous le tableau dit combien de lignes sont masquees. */
+.th-tri{padding:0 !important}
+.th-tri button{display:flex;align-items:center;gap:4px;width:100%;
+  padding:10px 12px;background:none;border:none;cursor:pointer;font:inherit;
+  font-size:11px;text-transform:uppercase;letter-spacing:.4px;font-weight:600;
+  color:var(--muted);text-align:left}
+.th-tri button:hover{color:var(--accent)}
+.th-tri.on button{color:var(--accent)}
+.th-fleche{font-size:10px;line-height:1}
+/* L'indice « modifiable ici » vit a cote du bouton, pas dedans : cliquer sur
+   un indice ne doit pas trier. */
+.th-tri > .msl-th-hint{display:inline-flex;padding:0 12px 8px}
+table.pr-table tr.th-filtres th{padding:0 8px 8px;background:var(--bg);
+  border-bottom:1px solid var(--border)}
+.th-filtre input,.th-filtre select{width:100%;box-sizing:border-box;
+  padding:4px 6px;border-radius:6px;border:1px solid transparent;
+  background:var(--card);color:var(--text);font-family:inherit;font-size:11px}
+.th-filtre input::placeholder{color:var(--muted);font-style:italic}
+.th-filtre input:hover,.th-filtre select:hover{border-color:var(--border)}
+.th-filtre input:focus,.th-filtre select:focus{outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 16%,transparent)}
+/* Un filtre pose se voit de loin : sinon on cherche pourquoi il manque des
+   lignes, et on accuse les donnees avant de penser au filtre. */
+.th-filtre input.on,.th-filtre select.on{border-color:var(--accent);
+  background:var(--accent-bg);color:var(--accent);font-weight:700}
+.th-actifs{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  margin-top:10px;font-size:12px;color:var(--text2)}
+.th-actifs button{background:none;border:1px solid var(--border);border-radius:7px;
+  padding:4px 10px;font:inherit;font-size:11px;font-weight:600;
+  color:var(--text2);cursor:pointer}
+.th-actifs button:hover{border-color:var(--accent);color:var(--accent)}
 table.pr-table tr{cursor:pointer}
 .row-actions{display:flex;gap:6px;flex-wrap:wrap}
 .row-actions button{cursor:pointer}
@@ -102,6 +143,28 @@ table.pr-table tr{cursor:pointer}
 .badge-glassine{background:rgba(52,211,153,.15);color:var(--cat-glassine)}
 .badge-autre{background:rgba(148,163,184,.15);color:var(--cat-autre)}
 .badge-inactive{opacity:.55}
+
+/* ── Support d'un frontal : les teintes de MyStock, à l'identique ───────────
+   Reprises de `dash-mp-cat-*` (app/web/stock_page.py). Les recopier plutôt que
+   de les recalculer est un choix : deux applications qui parlent du même
+   papier doivent lui donner la même couleur, et une nuance « presque pareille »
+   se remarque plus qu'une franche différence. Si la palette bouge là-bas, elle
+   doit bouger ici — d'où le rappel du fichier d'origine. */
+.mps-support{display:inline-block;padding:3px 8px;border-radius:6px;
+  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
+.mps-support-couche{background:rgba(125,211,252,.22);color:#0284c7}
+.mps-support-synthetique{background:rgba(34,211,238,.18);color:#0891b2}
+.mps-support-thermiques,.mps-support-thermique{background:rgba(99,102,241,.20);color:#4f46e5}
+.mps-support-velin{background:rgba(30,58,138,.22);color:#1e3a8a}
+/* Repli sur la catégorie quand la sous-section manque. */
+.mps-support-cat-frontal{background:rgba(14,165,233,.15);color:#0ea5e9}
+.mps-support-cat-glassine{background:rgba(236,72,153,.15);color:#ec4899}
+.mps-support-cat-adhesif{background:rgba(217,119,6,.15);color:#d97706}
+.mps-support-cat-complexe{background:rgba(99,102,241,.15);color:#6366f1}
+.mps-support-cat-mandrin{background:rgba(124,58,237,.15);color:#7c3aed}
+.mps-support-cat-carton{background:rgba(5,150,105,.15);color:#059669}
+.mps-support-cat-palette{background:rgba(8,145,178,.15);color:#0891b2}
+.mps-support-cat-autre{background:rgba(148,163,184,.18);color:#64748b}
 .currency-badge{font-size:10px;font-weight:700;padding:2px 6px;border-radius:4px;background:var(--accent-bg);color:var(--accent)}
 .currency-badge.usd{color:var(--warn);background:rgba(251,191,36,.12)}
 .badge-fx-stale{background:rgba(251,191,36,.18);color:var(--warn);margin-left:6px;font-size:9px;vertical-align:middle}
@@ -122,9 +185,35 @@ table.pr-table tr{cursor:pointer}
 .side-panel .big-label{font-size:11px;color:var(--muted);text-transform:uppercase;margin-bottom:4px}
 .breakdown-stack{margin-top:16px}
 .breakdown-bar{display:flex;height:28px;border-radius:8px;overflow:hidden;margin-bottom:10px;border:1px solid var(--border)}
-.breakdown-seg{height:100%;min-width:2px}
+.breakdown-seg{height:100%;min-width:2px;display:flex;justify-content:flex-end}
+/* ── La part de transport, dans la jauge de la matière qui la porte ─────────
+   Le transport n'est pas un composant de plus : il vit DANS le prix de chaque
+   matière. Lui donner un segment à lui l'aurait compté deux fois et aurait
+   suggéré une quatrième matière. Il assombrit donc la fin du segment auquel il
+   appartient — on voit alors LAQUELLE des matières le porte, ce qu'aucun total
+   global ne dit.
+
+   Une hachure plutôt qu'une couleur : elle se lit sur les trois teintes de la
+   barre comme sur le bleu de la jauge, en thème clair comme en sombre, sans
+   ajouter un ton de plus à une barre qui en compte déjà trois. */
+/* La hachure est faite avec `--text`, pas avec du noir : elle bascule alors
+   avec le thème — sombre sur fond clair, claire sur fond sombre — et reste
+   lisible aussi bien sur les trois teintes de la barre que sur la piste vide
+   d'une jauge. Un noir fixe disparaissait dans le thème sombre : le repère se
+   confondait avec le vide, et la matière semblait peser moins qu'elle ne pèse. */
+.seg-transport{display:block;height:100%;min-width:3px;
+  background:repeating-linear-gradient(135deg,
+    color-mix(in srgb, var(--text) 62%, transparent) 0 3px, transparent 3px 6px);
+  box-shadow:inset 1px 0 0 color-mix(in srgb, var(--text) 55%, transparent)}
+.breakdown-cle{display:flex;align-items:center;gap:6px;margin:-4px 0 10px;
+  font-size:10px;font-weight:600;color:var(--muted)}
+.cle-hachure{display:inline-block;width:16px;height:9px;border-radius:3px;
+  border:1px solid var(--border);
+  background:repeating-linear-gradient(135deg,
+    color-mix(in srgb, var(--text) 62%, transparent) 0 3px, transparent 3px 6px), var(--accent)}
 .breakdown-legend{font-size:12px;color:var(--text2)}
-.breakdown-legend div{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)}
+.breakdown-legend div{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px solid var(--border)}
+.lg-transport{font-size:10px;font-weight:600;color:var(--accent);white-space:nowrap}
 .combobox-wrap{position:relative}
 .combobox-list{position:absolute;z-index:40;left:0;right:0;top:100%;margin-top:4px;background:var(--card);border:1px solid var(--border);border-radius:10px;max-height:220px;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.35)}
 .combobox-item{padding:10px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border)}
@@ -514,10 +603,26 @@ table.msp-table td:first-child,table.msp-table th:first-child{padding-left:16px}
 .msp-role{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
   color:var(--muted);white-space:nowrap}
 .msp-num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+/* Le grammage d'adhésif : le seul chiffre du tableau qui se corrige à la main.
+   Chiffres tabulaires et unité en retrait — on compare une colonne de 17, 19,
+   22, 25 d'un coup d'œil, pas en lisant « g/m² » quatre fois. */
+.msp-gram{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:600}
+.msp-gram .lbl-unit{font-weight:400}
 .msp-part{width:190px}
-.msp-jauge{display:inline-block;width:110px;height:8px;border-radius:4px;
+.msp-jauge{display:inline-block;width:110px;height:10px;border-radius:5px;
   background:var(--border);overflow:hidden;vertical-align:middle;margin-right:8px}
-.msp-jauge i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.msp-jauge i{display:flex;justify-content:flex-end;height:100%;
+  background:var(--accent);border-radius:4px;overflow:hidden}
+/* Même lecture que dans la barre empilée : la fin de la jauge est hachurée à
+   hauteur de ce que le transport pèse DANS ce composant. */
+/* Sur 110 px de jauge, la part de transport pèse souvent moins de quatre
+   pixels : une hachure y devient une bouillie. Aplat, largeur minimale
+   garantie — et une teinte mélangée à `--text`, donc claire en thème sombre et
+   sombre en thème clair. Elle tranche ainsi sur l'accent qui la précède ET sur
+   la piste vide qui la suit, dans les deux thèmes. */
+.msp-jauge i b{display:block;height:100%;min-width:4px;
+  background:color-mix(in srgb, var(--text) 68%, var(--accent));
+  box-shadow:inset 1px 0 0 color-mix(in srgb, var(--bg) 70%, transparent)}
 .msp-part-val{font-size:12px;font-variant-numeric:tabular-nums;color:var(--text2)}
 /* Le détail n'est pas cliquable : aucune ligne ne doit réagir au survol.
    Sans ça, la teinte de survol de .pr-table s'invite par-dessus le fond du
@@ -723,11 +828,30 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
 .msl-maj.tres-vieux .msl-maj-age{color:var(--danger);font-weight:700}
 .msl-maj-jamais{font-size:12px;font-style:italic;color:var(--muted)}
 
+/* ── Un emplacement de produit : la matière, puis ce qu'on en consomme ──────
+   Le grammage a quitté la matière le 31 août 2026 : il se saisit ici, sous la
+   matière qui le concerne, parce que c'est le produit qui décide de la
+   quantité posée. Les champs sont en retrait sous le sélecteur — ils
+   dépendent de lui, et ils disparaissent sur une matière achetée au m². */
+.msp-slot{border:1px solid var(--border);border-radius:10px;padding:10px 12px;
+  margin-bottom:10px;background:var(--card)}
+.msp-slot-head{display:flex;align-items:flex-end;gap:8px}
+.msp-conso{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;
+  margin:10px 0 0;padding:10px 0 0;border-top:1px dashed var(--border)}
+.msp-conso .field{margin:0}
+.msp-conso .f-num input{width:92px}
+.msp-conso-out{display:flex;flex-direction:column;gap:1px;font-size:13px;
+  font-variant-numeric:tabular-nums;padding-bottom:5px}
+.msp-conso-lbl{font-size:10px;font-weight:800;text-transform:uppercase;
+  letter-spacing:.4px;color:var(--muted)}
+/* Un composant au kilo sans grammage compte pour 0 : le total reste crédible,
+   et c'est précisément ce qui le rend dangereux. On le dit sur la ligne. */
+.msp-conso-manque{font-size:10px;font-weight:700;color:var(--warn,#d97706)}
+.msp-conso-nul{margin-top:8px;font-size:11px;color:var(--muted)}
+
 /* ── « Ce qui fait bouger ce coût » — fiche produit MyStock ─────────────────
-   Le grammage change le coût d'un produit sans que le prix d'achat ait bougé ;
-   la laize ne change rien au €/m². Le bloc montre la chaîne complète et les
-   déclinaisons voisines avec leur écart, pour qu'on VOIE le surcoût d'un
-   22 g/m² avant de l'avoir choisi. */
+   La multiplication en toutes lettres : prix au kilo × poids posé = coût. Le
+   poids vient du champ juste au-dessus, donc le bloc réagit à la frappe. */
 .msp-lev{border:1px solid var(--border);border-radius:10px;padding:10px 12px;
   margin-bottom:8px;background:var(--bg)}
 .msp-lev-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:13px}
@@ -735,17 +859,24 @@ input.ms-gsm{max-width:110px;text-align:right;font-variant-numeric:tabular-nums}
   letter-spacing:.4px;color:var(--muted)}
 .msp-lev-formule{margin-top:6px;font-size:13px;font-variant-numeric:tabular-nums}
 .msp-lev-precision{margin-top:4px;font-size:11px;color:var(--muted);line-height:1.5}
-.msp-lev-chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px;
-  padding-top:8px;border-top:1px dashed var(--border)}
-.msp-lev-chips-lbl{font-size:10px;font-weight:800;text-transform:uppercase;
-  letter-spacing:.4px;color:var(--muted)}
-.msp-lev-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;
-  border-radius:999px;border:1px solid var(--border);background:var(--card);
-  color:var(--text);font-family:inherit;font-size:11px;cursor:pointer}
-.msp-lev-chip:hover{border-color:var(--accent);background:var(--accent-bg)}
-.msp-lev-cout{font-weight:700;font-variant-numeric:tabular-nums}
-/* L'écart suit le SENS, pas le jugement : un grammage plus lourd n'est ni bon
-   ni mauvais en soi, c'est le devis qui tranche. */
-.msp-lev-ecart{font-size:10px;font-weight:700;font-variant-numeric:tabular-nums;
-  padding:1px 5px;border-radius:4px;
-  background:color-mix(in srgb,var(--text2) 12%,transparent);color:var(--text2)}
+/* Les pastilles « autres déclinaisons » sont parties avec la notion elle-même :
+   comparer un 17 et un 22 g/m² se fait en changeant le grammage dans le champ,
+   et le total suit à la frappe. */
+
+/* ── Le transport, enfin nommé ──────────────────────────────────────────────
+   Il entrait dans chaque coût au m² sans qu'aucun écran ne le dise : la
+   multiplication affichée ne tombait pas juste, et un chiffre qu'on ne peut
+   pas refaire de tête passe pour un chiffre faux. Il a maintenant sa couleur
+   dans la chaîne, sa ligne dans le récapitulatif et sa colonne dans le détail.
+
+   Teinté, pas alarmant : le transport n'est pas une anomalie, c'est un terme
+   du calcul — mais celui sur lequel on négocie. */
+.msp-terme{font-weight:600;white-space:nowrap}
+.msp-terme.t-transport{color:var(--accent)}
+.msp-terme.t-taxe{color:var(--warn,#d97706)}
+.msp-lev-total{font-variant-numeric:tabular-nums}
+.msp-lev-formule{line-height:1.9}
+.msp-lev-tarif{font-size:11px;margin-left:auto}
+.msp-transport{margin-top:6px;padding-top:6px;border-top:1px dashed var(--border)}
+.msp-transp{color:var(--accent);font-variant-numeric:tabular-nums}
+.msp-transport-tot{color:var(--accent)}

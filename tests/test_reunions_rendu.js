@@ -32,6 +32,8 @@ function verifier(cas, cond) {
   else { ECHECS.push(cas); console.log("  ECHEC  " + cas); }
 }
 
+const piegeNom = '<img src=x onerror="alert(1)">';
+
 const REUNION = {
   id: 12, titre: "31/08/2026", statut: "ouverte", ouverte: true,
   ouverte_par: "Marc", ouverte_le: "2026-08-31T08:05:00",
@@ -50,7 +52,7 @@ verifier("liste non chargee : chargement", M.rendreListe(null).includes("Chargem
 verifier("liste vide : message explicite",
          M.rendreListe([]).includes("Aucune r&eacute;union enregistr&eacute;e"));
 verifier("liste vide : aucun tableau", !M.rendreListe([]).includes("<table"));
-verifier("reunion absente : chargement", M.rendreReunion(null, null, "").includes("Chargement"));
+verifier("reunion absente : chargement", M.rendreReunion(null, null, {}).includes("Chargement"));
 verifier("aucune action : message", M.rendreActions([]).includes("Aucune action"));
 verifier("actions indefinies : message", M.rendreActions(undefined).includes("Aucune action"));
 verifier("document sans reunion : vide", M.rendreDocument(null, null, "") === "");
@@ -97,7 +99,8 @@ verifier("corbeille : titre echappe dans l'attribut",
            ouverte: false }]).includes('data-suppr-titre="" onfocus='));
 
 console.log("\n3. La reunion rend l'ecran entier");
-const ecran = M.rendreReunion(REUNION, { machines: ["Cohesio 1", "Cohesio 2"] }, "Enregistre a 09:12");
+const ecran = M.rendreReunion(REUNION, { machines: ["Cohesio 1", "Cohesio 2"] },
+                              { notes: "Enregistre a 09:12" });
 verifier("reunion : titre dans le champ", ecran.includes('value="31/08/2026"'));
 verifier("reunion : auteur et date d'ouverture",
          ecran.includes("Ouverte par Marc") && ecran.includes("31/08/2026"));
@@ -113,18 +116,84 @@ verifier("reunion : bouton imprimer", ecran.includes('data-r="imprimer"'));
 verifier("reunion : clore quand ouverte", ecran.includes("Clore la r&eacute;union"));
 verifier("reunion : rouvrir quand close",
          M.rendreReunion(Object.assign({}, REUNION, { ouverte: false, statut: "close",
-           close_le: "2026-08-31T10:00:00" }), null, "")
+           close_le: "2026-08-31T10:00:00" }), null, {})
           .includes("Rouvrir la r&eacute;union"));
 verifier("reunion : date de cloture affichee",
          M.rendreReunion(Object.assign({}, REUNION, { ouverte: false, statut: "close",
-           close_le: "2026-08-31T10:00:00" }), null, "").includes("close le 31/08/2026"));
+           close_le: "2026-08-31T10:00:00" }), null, {}).includes("close le 31/08/2026"));
 verifier("reunion : contenant des chiffres", ecran.includes('id="reu-prod"'));
 verifier("reunion : colonne de notes", ecran.includes('id="reu-notes"'));
 verifier("reunion : etat d'enregistrement", ecran.includes("Enregistre a 09:12"));
 verifier("reunion : formulaire d'action", ecran.includes('data-r="ajout-action"'));
 verifier("reunion : bloc ferme", ecran.trim().endsWith("</div>"));
 verifier("reunion : machines absentes ne cassent rien",
-         M.rendreReunion(REUNION, null, "").includes("Toutes les machines"));
+         M.rendreReunion(REUNION, null, {}).includes("Toutes les machines"));
+
+console.log("\n3 bis. Les participants s'ajoutent depuis une recherche");
+const ANNUAIRE = [{ id: 1, nom: "Grégory Desreumaux" }, { id: 2, nom: "Manuel Lesaffre" },
+                  { id: 3, nom: "Marc Dubois" }, { id: 4, nom: "Sophie Leroy" }];
+const PRESENTS = [{ nom: "Marc Dubois" }];
+
+const pVide = M.rendreParticipants([], ANNUAIRE, "");
+verifier("participants : aucun present", pVide.includes("Personne pour l'instant"));
+verifier("participants : champ de recherche", pVide.includes('id="reu-p-q"'));
+verifier("participants : aucune suggestion sans frappe",
+         pVide.indexOf("data-part-add") === -1);
+
+const pAvec = M.rendreParticipants(PRESENTS, ANNUAIRE, "");
+verifier("participants : pastille du present", pAvec.includes("Marc Dubois"));
+verifier("participants : retrait possible", pAvec.includes('data-part-sup="Marc Dubois"'));
+
+const pRech = M.rendreParticipants(PRESENTS, ANNUAIRE, "man");
+verifier("recherche : trouve au milieu du nom",
+         pRech.includes('data-part-add="Manuel Lesaffre"'));
+verifier("recherche : ecarte ce qui ne correspond pas",
+         pRech.indexOf("Sophie Leroy") === -1);
+verifier("recherche : ecarte les deja presents",
+         M.rendreParticipants(PRESENTS, ANNUAIRE, "marc")
+          .indexOf('data-part-add="Marc Dubois"') === -1);
+verifier("recherche : sans accent trouve avec accent",
+         M.rendreParticipants([], ANNUAIRE, "gregory")
+          .includes('data-part-add="Grégory Desreumaux"'));
+verifier("recherche : casse ignoree",
+         M.rendreParticipants([], ANNUAIRE, "SOPHIE").includes("Sophie Leroy"));
+verifier("recherche : nom hors annuaire proposable",
+         M.rendreParticipants([], ANNUAIRE, "Client Nestle").includes("hors annuaire"));
+verifier("recherche : pas de doublon hors annuaire quand le nom existe",
+         M.rendreParticipants([], ANNUAIRE, "Marc Dubois").indexOf("hors annuaire") === -1);
+verifier("recherche : deja present, rien a proposer",
+         M.rendreParticipants(PRESENTS, ANNUAIRE, "Marc Dubois")
+          .includes("D&eacute;j&agrave; dans la r&eacute;union"));
+verifier("recherche : au plus huit suggestions",
+         M.rendreParticipants([], Array.from({ length: 20 },
+           (_, i) => ({ id: i, nom: "Dupont " + i })), "dupont")
+          .split("data-part-add").length - 1 === 8);
+verifier("recherche : les debuts de mot passent devant",
+         (function(){
+           var h = M.rendreParticipants([], ANNUAIRE.concat([{ id: 5, nom: "Jean-Marie Petit" }]), "ma");
+           return h.indexOf('data-part-add="Manuel Lesaffre"')
+                < h.indexOf('data-part-add="Grégory Desreumaux"');
+         })());
+verifier("recherche : trait d'union coupe les mots",
+         M.rendreParticipants([], [{ id: 1, nom: "Jean-Marie Petit" }], "marie")
+          .includes('data-part-add="Jean-Marie Petit"'));
+verifier("recherche : nom de famille atteignable",
+         M.rendreParticipants([], ANNUAIRE, "lesaf")
+          .includes('data-part-add="Manuel Lesaffre"'));
+verifier("recherche : annuaire absent ne casse rien",
+         M.rendreParticipants(PRESENTS, null, "man").includes("Marc Dubois"));
+verifier("recherche : la frappe est reaffichee dans le champ",
+         M.rendreParticipants([], ANNUAIRE, "man").includes('value="man"'));
+verifier("participants : nom echappe dans la pastille",
+         !M.rendreParticipants([{ nom: piegeNom }], [], "").includes("<img src=x"));
+verifier("participants : nom echappe dans l'attribut de retrait",
+         !M.rendreParticipants([{ nom: '" onfocus="x' }], [], "")
+           .includes('data-part-sup="" onfocus='));
+verifier("recherche : frappe echappee dans la proposition hors annuaire",
+         !M.rendreParticipants([], [], piegeNom).includes("<img src=x"));
+verifier("reunion : le bloc participants est dans la colonne",
+         ecran.includes('id="reu-participants"') &&
+         ecran.indexOf('id="reu-participants"') < ecran.indexOf('id="reu-notes"'));
 
 console.log("\n4. Les actions rendent la ligne entiere");
 const actions = M.rendreActions(REUNION.actions);
@@ -150,7 +219,7 @@ verifier("liste : machine echappee", listeP.split("&lt;img").length > 3);
 verifier("liste : titre echappe jusque dans la corbeille",
          !listeP.includes('data-suppr-titre="<img'));
 const ecranP = M.rendreReunion(Object.assign({}, REUNION,
-  { titre: '" onfocus="alert(1)', ouverte_par: piege }), { machines: [piege] }, "");
+  { titre: '" onfocus="alert(1)', ouverte_par: piege }), { machines: [piege] }, {});
 verifier("reunion : titre echappe dans l'attribut", !ecranP.includes('" onfocus='));
 verifier("reunion : auteur echappe", !ecranP.includes("<img src=x"));
 verifier("reunion : machine echappee dans l'option", !ecranP.includes('value="<img'));

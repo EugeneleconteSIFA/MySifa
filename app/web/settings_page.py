@@ -2175,7 +2175,12 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
       <div class="card">
         <div style="display:flex;align-items:center;justify-content:space-between;
                 gap:12px;margin-bottom:16px;flex-wrap:wrap">
-          <div style="font-size:15px;font-weight:700;color:var(--text)">Journal des actions</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="font-size:15px;font-weight:700;color:var(--text)">Journal des actions</div>
+            <button type="button" class="btn btn-ghost"
+                    style="padding:5px 11px;font-size:12px;border:1px solid var(--border)"
+                    onclick="openAuditCouverture()">Ce qui est journalisé</button>
+          </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <input type="text" id="audit-search"
                    placeholder="Rechercher (utilisateur, objet, requête Google…)"
@@ -2187,26 +2192,11 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
                     style="background:var(--bg);border:1px solid var(--border);border-radius:8px;
                            padding:7px 10px;color:var(--text);font-size:12px;font-family:inherit">
               <option value="">Tous les modules</option>
-              <option value="planning">Planning</option>
-              <option value="fabrication">Fabrication</option>
-              <option value="stock">Stock</option>
-              <option value="expe">Expéditions</option>
-              <option value="rh">RH</option>
-              <option value="settings">Paramètres</option>
-              <option value="auth">Auth</option>
-              <option value="portal">Portail</option>
             </select>
             <select id="audit-filter-action" onchange="loadAuditLogs()"
                     style="background:var(--bg);border:1px solid var(--border);border-radius:8px;
                            padding:7px 10px;color:var(--text);font-size:12px;font-family:inherit">
               <option value="">Toutes les actions</option>
-              <option value="CREATE">Création</option>
-              <option value="UPDATE">Modification</option>
-              <option value="DELETE">Suppression</option>
-              <option value="CLOSE">Clôture</option>
-              <option value="VALIDATE">Validation</option>
-              <option value="REORDER">Réorganisation</option>
-              <option value="SEARCH">Recherche</option>
             </select>
           </div>
         </div>
@@ -2220,6 +2210,27 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
                     margin-top:12px;font-size:12px;color:var(--muted)"></div>
       </div>
     </section>
+
+    <!-- Couverture du journal : quelles actions alimentent le log, appli par appli -->
+    <div id="audit-couv-overlay" class="hidden"
+         style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:800;
+                align-items:center;justify-content:center;padding:20px"
+         onclick="if(event.target===this)closeAuditCouverture()">
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:16px;
+                  width:min(880px,96vw);max-height:88vh;display:flex;flex-direction:column">
+        <div style="padding:22px 26px 14px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+            <div>
+              <h2 style="margin:0 0 4px;font-size:17px">Ce qui est journalisé</h2>
+              <div id="audit-couv-resume" style="font-size:12px;color:var(--muted)">Chargement…</div>
+            </div>
+            <button type="button" class="btn btn-sec" style="padding:6px 12px;font-size:12px"
+                    onclick="closeAuditCouverture()">Fermer</button>
+          </div>
+        </div>
+        <div id="audit-couv-corps" style="padding:8px 26px 22px;overflow:auto"></div>
+      </div>
+    </div>
 
     <section id="panel-fsc" class="hidden">
       <div class="fsc-toolbar">
@@ -3176,7 +3187,7 @@ window.__SETTINGS_VISIBILITY__ = __SETTINGS_VISIBILITY_JSON__;
 <script src="/static/chat_mentions.js"></script>
 <script src="/static/chat_widget.js?v=11"></script>
 <script src="/static/chat_widget_v2.js?v=9"></script>
-<script src="/static/mysifa_cal_rappel.js?v=4"></script>
+<script src="/static/mysifa_cal_rappel.js?v=7"></script>
 <script>
 /*__TRACA_GUIDE__*/
 const API = window.location.origin;
@@ -8803,27 +8814,44 @@ function debouncedAuditSearch() {
   _auditSearchTimer = setTimeout(() => { _auditOffset = 0; loadAuditLogs(); }, 300);
 }
 
-const ACTION_COLORS = {
-  CREATE:   'var(--ok)',
-  UPDATE:   'var(--accent)',
-  DELETE:   'var(--danger)',
-  CLOSE:    'var(--muted)',
-  VALIDATE: 'var(--warn)',
-  REORDER:  'var(--text2)',
-  SEARCH:   'var(--accent)',
-  LOGIN:    'var(--text2)',
-  LOGOUT:   'var(--muted)',
-};
-const ACTION_LABELS = {
-  CREATE:'Création', UPDATE:'Modification', DELETE:'Suppression',
-  CLOSE:'Clôture', VALIDATE:'Validation', REORDER:'Réorganisation',
-  SEARCH:'Recherche', LOGIN:'Connexion', LOGOUT:'Déconnexion',
-};
-const MODULE_LABELS = {
-  planning:'Planning', fabrication:'Fabrication', stock:'Stock',
-  expe:'Expéditions', rh:'RH', settings:'Paramètres', auth:'Auth',
-  portal:'Portail',
-};
+// Libellés, couleurs et listes déroulantes du journal : plus rien en dur ici.
+// Les trois tables étaient figées à 8 modules et 9 actions alors que le serveur
+// en émettait déjà bien plus — MyAO, la mémoire produit et la maintenance
+// n'apparaissaient dans aucun filtre et s'affichaient en brut. Tout vient
+// désormais de /api/settings/audit/facets, qui croise ce que contient vraiment
+// la base avec la taxonomie serveur (app/core/audit_taxonomy.py). Un nouveau
+// module se met à exister dans le filtre le jour de sa première action.
+let ACTION_COLORS = {};
+let ACTION_LABELS = {};
+let MODULE_LABELS = {};
+let _auditFacetsPretes = false;
+
+function _remplirFiltreAudit(id, libelleVide, items) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const courant = sel.value;
+  sel.innerHTML = '<option value="">' + libelleVide + '</option>'
+    + items.map(i => `<option value="${escAttr(i.value)}">${esc(i.label)}</option>`).join('');
+  // Un filtre actif doit survivre au rechargement de la liste.
+  if (courant && items.some(i => i.value === courant)) sel.value = courant;
+}
+
+async function loadAuditFacets(force) {
+  if (_auditFacetsPretes && !force) return;
+  try {
+    const r = await fetch('/api/settings/audit/facets', { credentials: 'include' });
+    if (!r.ok) return;
+    const f = await r.json();
+    ACTION_COLORS = {}; ACTION_LABELS = {}; MODULE_LABELS = {};
+    (f.modules || []).forEach(m => { MODULE_LABELS[m.value] = m.label; });
+    (f.actions || []).forEach(a => { ACTION_LABELS[a.value] = a.label; ACTION_COLORS[a.value] = a.color; });
+    _remplirFiltreAudit('audit-filter-module', 'Tous les modules', f.modules || []);
+    _remplirFiltreAudit('audit-filter-action', 'Toutes les actions', f.actions || []);
+    _auditFacetsPretes = true;
+  } catch (e) {
+    // Sans facettes, le journal reste lisible : les valeurs brutes s'affichent.
+  }
+}
 
 async function deleteCliFromModal() {
   if (_cliEditing == null) return;
@@ -9141,7 +9169,114 @@ async function loadApiKeys() {
   `).join('');
 }
 
+// ── Couverture du journal ────────────────────────────────────
+// « Qu'est-ce qui alimente le log, et pour quelle appli ? » n'avait aucune
+// reponse consultable : il fallait ouvrir les routers. La modale la donne, et
+// elle la tient de l'application vivante — /api/settings/audit/couverture
+// parcourt les routes reellement enregistrees, pas une liste ecrite a la main.
+// Chaque verbe est cliquable : il filtre le journal dessous, ce qui evite
+// d'avoir a retenir un vocabulaire de trente actions.
+let _auditCouvChargee = false;
+
+function openAuditCouverture() {
+  const ov = document.getElementById('audit-couv-overlay');
+  if (!ov) return;
+  ov.style.display = 'flex';
+  ov.classList.remove('hidden');
+  if (!_auditCouvChargee) loadAuditCouverture();
+}
+
+function closeAuditCouverture() {
+  const ov = document.getElementById('audit-couv-overlay');
+  if (ov) { ov.style.display = 'none'; ov.classList.add('hidden'); }
+}
+
+function filtrerJournalDepuisCouverture(module, action) {
+  const selM = document.getElementById('audit-filter-module');
+  const selA = document.getElementById('audit-filter-action');
+  if (selM) selM.value = module || '';
+  if (selA) selA.value = action || '';
+  _auditOffset = 0;
+  closeAuditCouverture();
+  loadAuditLogs();
+}
+
+async function loadAuditCouverture() {
+  const corps  = document.getElementById('audit-couv-corps');
+  const resume = document.getElementById('audit-couv-resume');
+  if (!corps) return;
+  corps.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px 0">Chargement…</div>';
+  let d;
+  try {
+    const r = await fetch('/api/settings/audit/couverture', { credentials: 'include' });
+    if (!r.ok) throw new Error('erreur');
+    d = await r.json();
+  } catch (e) {
+    corps.innerHTML = '<div style="color:var(--danger);font-size:13px;padding:20px 0">Erreur de chargement.</div>';
+    return;
+  }
+  _auditCouvChargee = true;
+
+  if (resume) {
+    resume.textContent = `${d.total_routes} action${d.total_routes > 1 ? 's' : ''} d'écriture `
+      + `réparties sur ${(d.applis || []).length} applications · `
+      + `${d.total_entrees.toLocaleString('fr-FR')} entrée${d.total_entrees > 1 ? 's' : ''} enregistrée${d.total_entrees > 1 ? 's' : ''} à ce jour. `
+      + `Cliquez une action pour filtrer le journal.`;
+  }
+
+  const applis = (d.applis || []).map(a => {
+    const verbes = (a.actions || []).map(act => `
+      <button type="button"
+              onclick="filtrerJournalDepuisCouverture('${escAttr(a.module)}','${escAttr(act.action)}')"
+              title="${escAttr(act.entrees ? act.entrees + ' entrée(s) · dernière le ' + (act.derniere || '—') : 'Aucune entrée pour le moment')}"
+              style="display:inline-flex;align-items:center;gap:6px;background:var(--bg);
+                     border:1px solid var(--border);border-radius:20px;padding:3px 10px;
+                     font-family:inherit;font-size:11px;color:var(--text2);cursor:pointer">
+        <span style="width:7px;height:7px;border-radius:50%;background:${act.color};
+                     ${act.entrees ? '' : 'opacity:.35'}"></span>
+        ${esc(act.label)}
+        <span style="color:var(--muted)">${act.routes}</span>
+      </button>`).join(' ');
+    return `
+      <div style="padding:14px 0;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:8px">
+          <button type="button"
+                  onclick="filtrerJournalDepuisCouverture('${escAttr(a.module)}','')"
+                  style="background:none;border:none;padding:0;font-family:inherit;font-size:13px;
+                         font-weight:700;color:var(--text);cursor:pointer;text-align:left">
+            ${esc(a.label)}
+          </button>
+          <div style="font-size:11px;color:var(--muted);white-space:nowrap">
+            ${a.routes} action${a.routes > 1 ? 's' : ''} ·
+            ${a.entrees ? a.entrees.toLocaleString('fr-FR') + ' entrée' + (a.entrees > 1 ? 's' : '')
+                        : 'aucune entrée'}${a.derniere ? ' · ' + esc(a.derniere) : ''}
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">${verbes}</div>
+      </div>`;
+  }).join('');
+
+  const exclues = (d.exclues || []).length ? `
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:4px">
+        Volontairement hors journal
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+        Appels émis par la machine, pas par une personne : les journaliser noierait
+        le journal sous des milliers de lignes sans auteur ni intention.
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${d.exclues.map(e => `<span style="font-family:monospace;font-size:10px;color:var(--muted);
+                 background:var(--bg);border:1px solid var(--border);border-radius:6px;
+                 padding:2px 7px">${esc(e.methodes.join('/'))} ${esc(e.chemin)}</span>`).join('')}
+      </div>
+    </div>` : '';
+
+  corps.innerHTML = applis + exclues;
+}
+
 async function loadAuditLogs() {
+  await loadAuditFacets();
   const wrap = document.getElementById('audit-table-wrap');
   const pag  = document.getElementById('audit-pagination');
   const search = (document.getElementById('audit-search')?.value || '').trim();
