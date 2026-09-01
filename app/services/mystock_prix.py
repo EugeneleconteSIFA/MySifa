@@ -175,6 +175,7 @@ def list_materials(
     placeholders = ",".join("?" for _ in CATEGORIES_VISIBLES)
     sql = f"""
         SELECT mp.id, mp.categorie, mp.reference, mp.designation, mp.actif,
+               mp.sous_section,
                COALESCE(mp.prix_eur_m2, 0)    AS prix_eur_m2,
                COALESCE(mp.prix_par_laize, 0) AS prix_par_laize,
                COALESCE(v.prix_unitaire, 0)   AS prix_unitaire
@@ -341,6 +342,12 @@ def list_materials(
             {
                 "id": mid,
                 "categorie": r["categorie"],
+                # Le SUPPORT d'un frontal : thermique, couché, synthétique,
+                # vélin. C'est ce qui distingue deux frontaux à l'œil, bien
+                # avant leur référence, et c'est la classification que MyStock
+                # utilise déjà — on la reprend telle quelle plutôt que d'en
+                # inventer une deuxième.
+                "sous_section": _col(r, "sous_section") or None,
                 "reference": r["reference"],
                 "designation": r["designation"],
                 "actif": bool(r["actif"]),

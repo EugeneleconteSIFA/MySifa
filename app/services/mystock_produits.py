@@ -126,7 +126,7 @@ def _lire_composants(conn: sqlite3.Connection, produit_id: int) -> list[dict]:
     rows = conn.execute(
         """SELECT c.declinaison_id, c.role, c.ordre,
                   c.grammage_gsm, c.perte_pct, d.price_basis,
-                  mp.reference, mp.designation, mp.categorie,
+                  mp.reference, mp.designation, mp.categorie, mp.sous_section,
                   l.valeur_mm, l.label AS laize_label,
                   g.valeur_gsm, g.label AS grammage_label
              FROM mp_produit_composant c
@@ -154,6 +154,10 @@ def _lire_composants(conn: sqlite3.Connection, produit_id: int) -> list[dict]:
                 "reference": r["reference"],
                 "designation": r["designation"],
                 "categorie": r["categorie"],
+                # Le support d'un frontal (thermique, couché, synthétique,
+                # vélin) : la liste des produits le montre en badge, c'est ce
+                # qui distingue deux étiquettes à l'œil.
+                "sous_section": r["sous_section"],
                 "libelle": libelle,
                 # Ce que le produit consomme, et le poids qui en découle. Le
                 # poids est calculé ici plutôt qu'à l'écran : deux endroits qui

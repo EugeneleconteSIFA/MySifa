@@ -48,6 +48,21 @@ Une clé de module déjà partie en production **ne se renomme pas** : l'histori
 serait rangé sous un nom que plus personne ne filtre. On ajoute, on ne rebaptise
 pas.
 
+**Le bouton « Ce qui est journalisé »** (page Journal) ouvre la couverture
+appli par appli : pour chaque module, les verbes journalisables, le nombre de
+routes derrière chaque verbe, ce qui a réellement été enregistré, et la liste
+des routes volontairement exclues. Elle est servie par
+`/api/settings/audit/couverture`, qui interroge l'**application vivante** via
+`routes_ecriture()` — pas une liste tenue à la main. Un endpoint ajouté y
+apparaît au redémarrage suivant.
+
+`routes_ecriture()` descend à travers `include_router` sous ses deux formes :
+FastAPI ≤ 0.115 (la version épinglée) aplatit les routes dans `app.routes`, les
+versions ≥ 0.140 posent un routeur paresseux qui les garde dans
+`original_router`. Ne pas simplifier ce parcours en un `for route in
+app.routes` : sur la mauvaise version, l'écran annoncerait 4 routes au lieu de
+605.
+
 **Le test `tests/test_audit_journal.py` verrouille l'essentiel** : aucune route
 d'écriture du dépôt ne tombe dans le module fourre-tout `autre`, chaque module
 et chaque action ont un libellé français, et un endpoint qui journalise

@@ -4058,8 +4058,10 @@ EXPE_MAIN_CSS = r"""
 .expe-departs-table .expe-dep-acts,.expe-hist-table .expe-dep-acts{gap:3px}
 .expe-departs-table .expe-dep-acts .btn-ghost,
 .expe-departs-table .expe-dep-acts .btn-danger,
+.expe-departs-table .expe-dep-acts .expe-avis-btn,
 .expe-hist-table .expe-dep-acts .btn-ghost,
-.expe-hist-table .expe-dep-acts .btn-danger{width:26px;height:26px;border-radius:5px}
+.expe-hist-table .expe-dep-acts .btn-danger,
+.expe-hist-table .expe-dep-acts .expe-avis-btn{width:26px;height:26px;border-radius:5px}
 .expe-departs-table .expe-dep-valider-btn,
 .expe-departs-table .expe-dep-invalider-btn,
 .expe-hist-table .expe-dep-valider-btn,
@@ -4080,8 +4082,8 @@ EXPE_MAIN_CSS = r"""
   color: var(--text2);
 }
 .expe-dep-actions-cell{display:flex;flex-direction:row;align-items:center;justify-content:flex-end;gap:10px}
-.expe-dep-acts{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;flex-shrink:0}
-.expe-dep-acts .btn-ghost,.expe-dep-acts .btn-danger{width:32px;height:30px;padding:0;margin:0;
+.expe-dep-acts{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;flex-shrink:0}
+.expe-dep-acts .btn-ghost,.expe-dep-acts .btn-danger,.expe-dep-acts .expe-avis-btn{width:32px;height:30px;padding:0;margin:0;
   display:flex;align-items:center;justify-content:center;border-radius:6px}
 .expe-dep-valider-btn{margin:0;padding:8px 12px;font-size:11px;font-weight:700;border-radius:10px;
   white-space:nowrap;flex-shrink:0}
@@ -6289,8 +6291,8 @@ function renderExpeSuiviDeparts(){
   // Colgroup : force la répartition des largeurs (table-layout:fixed). Toutes en % pour
   // s'adapter à la largeur du conteneur sans jamais dépasser.
   const departsCols=[
-    ['chev','3%'],['date','10%'],['transp','13%'],['client','18%'],['dest','9%'],
-    ['bl','13%'],['pal','10%'],['dossier','12%'],['acts','12%']
+    ['chev','3%'],['date','9%'],['transp','12%'],['client','19%'],['dest','8%'],
+    ['bl','12%'],['pal','9%'],['dossier','13%'],['acts','15%']
   ];
   const colgroup=h('colgroup',null,...departsCols.map(([c,w])=>h('col',{className:'expe-col-'+c,style:{width:w}})));
   const listCard=h('div',{className:'card'},
@@ -6490,14 +6492,14 @@ function renderExpeHistoriqueDeparts(){
       h('div',{className:'expe-departs-tbl-wrap'},h('table',{className:'table-std expe-hist-table'},
         h('colgroup',null,
           h('col',{style:{width:'3%'}}),   // chevron
-          h('col',{style:{width:'13%'}}),  // Validé le
-          h('col',{style:{width:'10%'}}),  // Date enl.
-          h('col',{style:{width:'20%'}}),  // Client
-          h('col',{style:{width:'13%'}}),  // N° BL
-          h('col',{style:{width:'13%'}}),  // Transporteur
-          h('col',{style:{width:'10%'}}),  // Pal.
-          h('col',{style:{width:'11%'}}),  // Dossier
-          h('col',{style:{width:'7%'}})    // Actions
+          h('col',{style:{width:'12%'}}),  // Validé le
+          h('col',{style:{width:'9%'}}),   // Date enl.
+          h('col',{style:{width:'19%'}}),  // Client
+          h('col',{style:{width:'12%'}}),  // N° BL
+          h('col',{style:{width:'12%'}}),  // Transporteur
+          h('col',{style:{width:'9%'}}),   // Pal.
+          h('col',{style:{width:'10%'}}),  // Dossier
+          h('col',{style:{width:'14%'}})   // Actions
         ),
         h('thead',null,head),h('tbody',null,...body))),
       pager

@@ -5659,9 +5659,65 @@ function makeEditable(row,field,displayVal){
   return td;
 }
 
+// ── Défilement à la souris du tableau des saisies ────────────────────────────
+// Même geste que la grille MyERP : on attrape le tableau et on le tire, dans
+// les deux axes. La barre horizontale est sous une liste haute, donc presque
+// toujours hors de vue. Un seul jeu d'écouteurs pour toute la page : le
+// tableau est reconstruit à chaque render(), les attacher dessus les
+// empilerait render après render.
+let __glisserSaisiesPret = false;
+function activerGlisserSaisies(){
+  if(__glisserSaisiesPret) return;
+  __glisserSaisiesPret = true;
+  let zone=null,botX=null,actif=false,bouge=false,avale=false,x0=0,y0=0,g0=0,h0=0;
+
+  document.addEventListener('mousedown',e=>{
+    if(e.button!==0) return;
+    const z = e.target.closest && e.target.closest('.saisies-bot');
+    if(!z) return;
+    // Un champ, une case à cocher ou un bouton garde son comportement propre
+    // (sélection du texte, clic) : on ne lui vole pas la souris.
+    if(e.target.closest('input, button, select, textarea, a')) return;
+    zone=z; botX=z.firstElementChild;   // l'enfant porte le défilement horizontal
+    actif=true; bouge=false;
+    x0=e.pageX; y0=e.pageY;
+    g0=botX?botX.scrollLeft:0; h0=z.scrollTop;
+  });
+
+  document.addEventListener('mousemove',e=>{
+    if(!actif||!zone) return;
+    const dx=e.pageX-x0, dy=e.pageY-y0;
+    if(!bouge){
+      if(Math.abs(dx)<5&&Math.abs(dy)<5) return;   // seuil : un clic reste un clic
+      bouge=true; zone.classList.add('attrape');
+      // Une selection de texte a pu demarrer avant le seuil : on la vide,
+      // sinon le tableau se surligne en bleu pendant tout le glisser.
+      const sel=window.getSelection&&window.getSelection();
+      if(sel&&sel.removeAllRanges) sel.removeAllRanges();
+    }
+    e.preventDefault();
+    if(botX) botX.scrollLeft = g0-dx;
+    zone.scrollTop = h0-dy;
+  });
+
+  // Un glisser se termine par un clic sur la ligne survolée. On l'avale en
+  // phase de capture, sinon chaque défilement ouvrirait le modal d'édition.
+  document.addEventListener('click',e=>{
+    if(!avale) return;
+    avale=false;
+    e.stopPropagation(); e.preventDefault();
+  },true);
+
+  window.addEventListener('mouseup',()=>{
+    if(bouge) avale=true;
+    if(zone) zone.classList.remove('attrape');
+    actif=false; bouge=false; zone=null; botX=null;
+  });
+}
+
 // Commentaire — éditable inline (spécifique pour éviter les modifs autres champs)
 function makeEditableComment(row){
-  const td=h('td',{className:'editable',style:{maxWidth:'220px',minWidth:'120px'}});
+  const td=h('td',{className:'editable td-commentaire',title:row.commentaire||'',style:{maxWidth:'460px',minWidth:'260px'}});
   const span=h('span',{style:{color:'var(--muted)',fontStyle:'italic'}},row.commentaire||'—');
   td.appendChild(span);
   td.addEventListener('click',e=>{
@@ -5678,6 +5734,7 @@ function makeEditableComment(row){
       if(val!==old) saveSaisie(row.id,'commentaire',val);
       // Mettre à jour l'objet local pour que la prochaine édition reflète la valeur
       row.commentaire = val;
+      td.title = val;   // le texte tronqué reste lisible au survol
     };
     inp.addEventListener('blur',save);
     inp.addEventListener('keydown',e=>{
@@ -6102,12 +6159,14 @@ function renderSaisies(){
     if(annuleRow){
       const txt = (row.commentaire||'').trim();
       const motif = (row.annule_motif||'').trim();
-      tr.appendChild(h('td',{style:{maxWidth:'220px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:annuleTip},
+      tr.appendChild(h('td',{className:'td-commentaire',
+        style:{maxWidth:'460px',minWidth:'260px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'},title:annuleTip},
         txt ? txt+(motif?' · ':'') : '',
         motif ? h('span',{style:{color:'#f87171',fontStyle:'italic'}},'Motif : '+motif) : null
       ));
     }else if(readOnly || isAlertAck){
-      tr.appendChild(h('td',{style:{maxWidth:'200px',overflow:'hidden',textOverflow:'ellipsis'}},row.commentaire||''));
+      tr.appendChild(h('td',{className:'td-commentaire',title:row.commentaire||'',
+        style:{maxWidth:'460px',minWidth:'260px',overflow:'hidden',textOverflow:'ellipsis'}},row.commentaire||''));
     }else{
       tr.appendChild(makeEditableComment(row));
     }
@@ -6182,7 +6241,7 @@ function renderSaisies(){
   }
  
   return h('div',null,
-    h('div',{className:'card'},
+    h('div',{className:'card card-saisies'},
       h('div',{className:'card-header'},
         h('h3',null,'Saisies'),
         h('div',{style:{display:'flex',gap:'12px',alignItems:'center'}},
@@ -6206,6 +6265,7 @@ function renderSaisies(){
         requestAnimationFrame(()=>{
           topInner.style.width = tableEl.offsetWidth+'px';
         });
+        activerGlisserSaisies();
         return h('div',{className:'saisies-table-wrap'},top,bot);
       })()
     )
@@ -6242,12 +6302,14 @@ function renderSaisiesWithImport(){
         e.preventDefault();zone.classList.remove('drag');
         const f=e.dataTransfer.files[0];if(f)upload(f);
       });
-      parts.push(h('div',{className:'card',style:{marginBottom:'16px'}},
+      // Meme largeur que la card Saisies (card-saisies) : les deux blocs de
+      // l'onglet restent alignes une fois le tableau elargi.
+      parts.push(h('div',{className:'card card-saisies',style:{marginBottom:'16px'}},
         header,
         h('div',{style:{padding:'0 20px 20px'}}, zone, inp)
       ));
     } else {
-      parts.push(h('div',{className:'card',style:{marginBottom:'16px'}}, header));
+      parts.push(h('div',{className:'card card-saisies',style:{marginBottom:'16px'}}, header));
     }
   }
 

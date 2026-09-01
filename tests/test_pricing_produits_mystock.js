@@ -7,6 +7,7 @@ const src = fs.readFileSync('static/pricing_app.js', 'utf8').replace(/\r\n/g, '\
 const svcProd = fs.readFileSync('app/services/mystock_produits.py', 'utf8').replace(/\r\n/g, '\n');
 const api = fs.readFileSync('app/routers/pricing.py', 'utf8').replace(/\r\n/g, '\n');
 const svc = fs.readFileSync('app/services/mystock_prix.py', 'utf8').replace(/\r\n/g, '\n');
+const css = fs.readFileSync('static/pricing_app.css', 'utf8');
 
 function extraire(nom) {
   const i = src.indexOf('function ' + nom + '(');
@@ -22,6 +23,19 @@ function constante(nom) {
   const i = src.indexOf('const ' + nom + ' =');
   if (i < 0) throw new Error('introuvable : ' + nom);
   return src.slice(i, src.indexOf('\n  ];', i) + 5);
+}
+
+/** Constante objet : on suit les accolades plutôt que de deviner la fin. */
+function constanteObjet(nom) {
+  const i = src.indexOf('const ' + nom + ' =');
+  if (i < 0) throw new Error('introuvable : ' + nom);
+  let prof = 0;
+  const debut = src.indexOf('{', i);
+  for (let j = debut; j < src.length; j++) {
+    if (src[j] === '{') prof++;
+    else if (src[j] === '}') { prof--; if (!prof) return src.slice(i, j + 2); }
+  }
+  throw new Error('accolades non fermées : ' + nom);
 }
 
 let ko = 0;
@@ -129,7 +143,10 @@ vm.runInContext([
   extraire('fmtEurM2'), extraire('fmtPct'),
   src.slice(src.indexOf('const MSP_ROLE_LABEL ='),
             src.indexOf('};', src.indexOf('const MSP_ROLE_LABEL =')) + 2),
-  extraire('msProductCompLabel'), extraire('msProductDetailHtml'),
+  extraire('supportCle'), constanteObjet('SUPPORT_LABELS'),
+  extraire('supportBadge'), extraire('msProductComp'),
+  extraire('msProductCompLabel'), extraire('msProductSupport'),
+  extraire('msProductSupportTexte'), extraire('msProductDetailHtml'),
   'globalThis.CUR_SYM = {EUR:"\u20ac",USD:"$"};',
 ].join('\n'), ctx);
 
@@ -137,7 +154,7 @@ const produit = {
   id: 1, code: '886-0001', designation: 'Thermique Pro 70g',
   composants: [
     { role: 'FRONTAL', reference: '70gsm TOP Thermal', libelle: 'Toutes déclinaisons' },
-    { role: 'ADHESIF', reference: '1408', libelle: '22 g/m²' },
+    { role: 'ADHESIF', reference: '1408', libelle: '22 g/m²', grammage_gsm: 22, perte_pct: 9 },
   ],
   cost: {
     total_eur_per_m2: 0.2993, margin_pct: 6, margin_eur_m2: 0.018,
@@ -149,13 +166,55 @@ const produit = {
   },
 };
 
-// « Toutes déclinaisons » n'apprend rien : la colonne ne montre que la référence.
-check('une matière sans déclinaison affiche sa seule référence',
+// Un frontal achete au m² ne pose pas de grammage : la colonne ne montre que
+// sa reference. L'adhesif, lui, affiche le grammage que CE produit pose — c'est
+// lui qui distingue deux lignes portant le meme adhesif.
+check('une matière sans grammage affiche sa seule référence',
   ctx.msProductCompLabel(produit, 'FRONTAL'), '70gsm TOP Thermal');
-check('une déclinaison porteuse de sens est affichée',
+check('le grammage du produit est affiché',
   ctx.msProductCompLabel(produit, 'ADHESIF').includes('22 g/m²'), true);
 check('un emplacement vide reste neutre',
   ctx.msProductCompLabel(produit, 'GLASSINE').includes('—'), true);
+
+console.log('\n--- le support remplace le code ---');
+// 886-0001 n'apprend rien qu'on cherche du regard ; le support, si. Le code
+// reste dans la recherche, sur la fiche et en infobulle — il quitte
+// l'affichage, pas l'usage.
+const liste = src.slice(src.indexOf('function renderMsProductsList('));
+const declProd = liste.slice(liste.indexOf('const COLS = ['), liste.indexOf('];'));
+check('plus de colonne Code', /cle: "code"/.test(declProd), false);
+check('une colonne Support a la place', /cle: "support"/.test(declProd), true);
+check('le code reste filtrable dans la designation',
+  declProd.includes('p.code'), true);
+check('et lisible en infobulle', liste.includes('title="${escAttr(p.code'), true);
+// Le badge reprend les teintes de MyStock : deux applications qui parlent du
+// meme papier doivent lui donner la meme couleur.
+check('le support sort en badge',
+  ctx.msProductSupport({ composants: [{ role: 'FRONTAL', sous_section: 'thermiques',
+    categorie: 'frontal' }] }).includes('mps-support-thermiques'), true);
+check('avec le libelle lisible',
+  ctx.msProductSupport({ composants: [{ role: 'FRONTAL', sous_section: 'thermiques',
+    categorie: 'frontal' }] }).includes('Thermique'), true);
+check('les accents ne cassent pas la classe',
+  ctx.supportCle('Synthétique'), 'synthetique');
+// Sans sous-section, on retombe sur la categorie : mieux vaut « frontal » que
+// rien du tout sur une ligne dont le support n'est pas renseigne.
+check('repli sur la categorie',
+  ctx.msProductSupport({ composants: [{ role: 'FRONTAL', categorie: 'frontal' }] })
+    .includes('mps-support-cat-frontal'), true);
+check('aucun frontal : rien a afficher',
+  ctx.msProductSupport({ composants: [] }), '');
+check('les teintes sont celles de MyStock',
+  css.includes('.mps-support-thermiques') && css.includes('#4f46e5'), true);
+check('le serveur envoie la sous-section',
+  svcProd.includes('mp.sous_section') && svcProd.includes('"sous_section": r["sous_section"]'), true);
+
+console.log('\n--- trier et filtrer la liste des produits ---');
+check('les en-tetes sont engendres', liste.includes('enTetesTriables("produits"'), true);
+check('et branches', liste.includes('bindEnTetes("produits"'), true);
+check('le support se filtre par choix', /cle: "support"[^]{0,140}filtre: "choix"/.test(declProd), true);
+check('le cout se trie sur sa valeur', declProd.includes('total_eur_per_m2'), true);
+check('un produit sans cout ne remonte pas en tete', declProd.includes(': null'), true);
 
 const detail = ctx.msProductDetailHtml(produit);
 for (const attendu of ['Frontal', 'Adhésif', '0,1512', '50,52', 'Prix de revient',
@@ -204,7 +263,6 @@ for (const champ of ['code:', 'designation:', 'roles', 'autres', 'custom_margin_
 check('le code copié est signalé', dup.includes('"-copie"'), true);
 
 // ─── Aucun survol coloré dans la zone dépliée ───────────────────────────────
-const css = fs.readFileSync('static/pricing_app.css', 'utf8');
 // La cellule qui CONTIENT le détail doit être couverte, sinon la règle
 // générique `table.pr-table tr:hover td` la teinte au passage de la souris.
 check('la cellule conteneur est protégée',
