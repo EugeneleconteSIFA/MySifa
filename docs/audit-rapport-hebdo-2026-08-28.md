@@ -1177,3 +1177,48 @@ page possible, mais le texte entier doit rester atteignable.
 elle-meme (colgroup present, cinq colonnes declarees, flex a l'interieur de la
 cellule et non sur elle). Ils ne remplacent pas un oeil sur l'ecran, mais ils
 empechent la regression silencieuse.
+
+### Filtrer et trier le deroule
+
+Quatre-vingt-quinze lignes sur une journee a trois machines : la liste ne se
+parcourt plus a l'oeil.
+
+**Tout se joue dans le navigateur.** La liste est deja entiere dans la page (le
+service la renvoie d'un bloc, plafonnee a 400) : un aller-retour serveur
+n'apporterait qu'une attente. `filtrerTrier(liste, opts)` est une fonction pure
+— elle ne lit pas l'etat du module — donc testable sans DOM ni reseau.
+
+**Le filtre** : un champ libre qui cherche dans tout ce que la ligne montre,
+commentaire compris — c'est souvent lui qu'on cherche. Sans accent ni casse :
+« arret machine » trouve « Arrêt machine ». Plus cinq pastilles d'etat
+(Production, Calage, Arrêt, Nettoyage, Autre) qui s'eteignent au clic ; la
+pastille de couleur passe en gris quand son etat est retire, sinon on ne sait
+plus lequel des cinq manque.
+
+**Le tri** : les cinq entetes sont cliquables. Recliquer la meme colonne inverse
+le sens, changer de colonne repart du sens naturel. Le tri est **stable** : a
+valeur egale, l'ordre chronologique reprend la main, donc trier par conducteur
+ne melange pas ses saisies entre elles. L'operation se trie sur son intitule,
+pas sur son code — « Arrêt machine » (50) avant « Casse Echenillage » (51), pas
+l'inverse. Une duree inconnue (saisie de fin de cycle) part en tete du
+croissant, jamais au milieu.
+
+**Le compteur** de l'entete passe a « 43 / 95 » des qu'un filtre mord.
+
+Deux points de mise en oeuvre qui comptent a l'usage : l'etat du filtre vit au
+niveau du module, pas dans le DOM — MyProd reconstruit son arbre a chaque passe,
+une selection perdue a chaque toast serait inutilisable ; et le clic ne repeint
+que le corps du tableau, les entetes et le compteur, jamais le champ de
+recherche, qui garderait sinon un curseur perdu a chaque lettre.
+
+A l'impression, la barre de filtre et les fleches de tri disparaissent — mais
+l'ordre choisi reste, puisque c'est celui qu'on lit.
+
+**Un defaut trouve en ecrivant ces tests** : `verifier(cas, cond)` de
+`tests/test_retour_prod_rendu.js` prend DEUX arguments. Vingt-deux assertions
+ecrites a trois arguments passaient la valeur obtenue comme condition — non
+vide, donc toujours vraie. Elles ne verifiaient rien. Toutes reecrites en
+comparaison explicite ; deux defauts reels sont tombes avec (le tri par
+operation et une attente de duree inconnue).
+
+`tests/test_retour_prod_rendu.js` : 31 cas sur le filtre, le tri et la barre.

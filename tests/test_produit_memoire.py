@@ -180,6 +180,58 @@ with dbmod.get_db() as conn:
     check("savoir perime masque par defaut", len(pm.savoirs_produit(conn, REF)), 0)
     check("savoir perime toujours lisible", len(pm.savoirs_produit(conn, REF, True)), 1)
 
+print("--- notes de dossier : encart, contexte et pieces jointes ---")
+# Deux notes ecrites sur la meme production doivent se lire ensemble, sous la
+# date, la machine et l'operateur de CETTE production. C'est le contexte qui
+# permet de decider si le conseil s'applique encore.
+with dbmod.get_db() as conn:
+    check("table produit_savoirs_pieces",
+          "produit_savoirs_pieces" in {r[0] for r in conn.execute(
+              "SELECT name FROM sqlite_master WHERE type='table'")}, True)
+    for texte in ("Echenillage casse en fin de bobine.", "Contre-lame a 2/10e."):
+        conn.execute(
+            "INSERT INTO produit_savoirs (ref_produit_norm, type, texte, auteur, "
+            "no_dossier_source, created_at) VALUES (?,?,?,?,?,?)",
+            (REF, "piege", texte, "MARTIN", "D-1001", pm.now_iso()),
+        )
+    conn.commit()
+    notes = [n for n in pm.savoirs_produit(conn, REF) if n["no_dossier_source"] == "D-1001"]
+check("deux notes sur le meme dossier", len(notes), 2)
+check("la machine de la production remonte", notes[0]["dossier_machine"], "Cohesio 2")
+check("l'operateur de la production remonte",
+      "DUPONT" in (notes[0]["dossier_operateurs"] or []), True)
+check("la date de production remonte", bool(notes[0]["dossier_date"]), True)
+check("aucune piece jointe au depart", notes[0]["pieces"], [])
+
+with dbmod.get_db() as conn:
+    conn.execute(
+        "INSERT INTO produit_savoirs_pieces (savoir_id, fichier, fichier_origine, mime, "
+        "taille_octets, est_image, auteur, created_at) VALUES (?,?,?,?,?,?,?,?)",
+        (notes[0]["id"], "note_x.jpg", "defaut rive gauche.jpg", "image/jpeg",
+         120000, 1, "MARTIN", pm.now_iso()),
+    )
+    conn.commit()
+    pieces = pm.pieces_savoirs(conn, [notes[0]["id"], notes[1]["id"]])
+    relu = [n for n in pm.savoirs_produit(conn, REF) if n["id"] == notes[0]["id"]][0]
+check("la piece se rattache a sa note", len(pieces.get(notes[0]["id"], [])), 1)
+check("l'autre note reste sans piece", pieces.get(notes[1]["id"], []), [])
+check("la piece est portee par la note relue", len(relu["pieces"]), 1)
+check("photo reconnue comme image", relu["pieces"][0]["est_image"], True)
+
+# Un dossier jamais materialise (en cours) doit quand meme titrer son encart :
+# c'est celui sur lequel on est en train d'ecrire.
+with dbmod.get_db() as conn:
+    conn.execute(
+        "INSERT INTO planning_entries (machine_id, position, reference, client, description, "
+        "duree_heures, statut, ref_produit, numero_of) "
+        "VALUES (991, 30, 'D-2003', 'CLIENT TEST', 'Autre produit', 8, 'en_cours', ?, '')",
+        ("9999/0001 - COHESIO 2",),
+    )
+    conn.commit()
+    ctx = pm.contexte_notes_dossiers(conn, ["D-1001", "D-2003"])
+check("contexte d'un dossier clos", ctx["D-1001"]["machine"], "Cohesio 2")
+check("contexte d'un dossier en cours", ctx["D-2003"]["machine"], "Cohesio 2")
+
 print("--- taux de rattachement ---")
 with dbmod.get_db() as conn:
     taux = pm.taux_rattachement(conn)

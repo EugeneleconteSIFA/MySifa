@@ -3029,9 +3029,49 @@ async def update_operation_code(code: str, request: Request):
                 code_key,
             ),
         )
+
+        # Le referentiel fait foi, y compris sur l'historique.
+        #
+        # `production_data.operation_category` et `operation_severity` sont des
+        # copies figees au moment de la saisie. Sans cette propagation, passer
+        # « 58 - Changement bobines » de calage a arret dans Parametres ne
+        # changeait RIEN : les 13 saisies existantes gardaient leur categorie
+        # d'origine (9 en calage, 4 en appro selon le mois de saisie), et les
+        # ecrans qui lisent la colonne continuaient a compter ces minutes en
+        # calage. Le geste d'administration promettait un reclassement qu'il ne
+        # faisait pas.
+        #
+        # Le libelle, lui, n'est PAS propage : renommer un code ne doit avoir
+        # aucune consequence sur l'historique — c'est une identite, pas une
+        # classification.
+        maj = conn.execute(
+            """UPDATE production_data
+                  SET operation_category=?, operation_severity=?
+                WHERE operation_code=?
+                  AND (COALESCE(operation_category,'') <> ?
+                       OR COALESCE(operation_severity,'') <> ?)""",
+            (payload["category"], payload["severity"], code_key,
+             payload["category"], payload["severity"]),
+        )
+        saisies_reclassees = maj.rowcount or 0
         conn.commit()
+
+    if saisies_reclassees:
+        log_action(
+            user=get_current_user(request),
+            action="UPDATE",
+            module="settings",
+            objet=f"Code opération {code_key} · {payload['label']}",
+            detail={
+                "categorie": payload["category"],
+                "severite": payload["severity"],
+                "saisies_reclassees": saisies_reclassees,
+            },
+            request=request,
+        )
+
     refresh_operations_cache()
-    return {"success": True}
+    return {"success": True, "saisies_reclassees": saisies_reclassees}
 
 
 @router.delete("/api/settings/operation-codes/{code}")

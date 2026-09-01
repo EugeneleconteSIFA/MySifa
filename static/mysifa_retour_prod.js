@@ -503,10 +503,68 @@
      La liste est haute par nature — une journee fait vite trente lignes. Elle
      defile donc dans sa propre fenetre, et le bouton d'entete l'ouvre en grand
      pour ceux qui veulent tout voir d'un coup. */
-  function renderSaisies(liste) {
+  /* Filtre et tri du deroule. Tout se joue dans le navigateur : la liste est
+     deja entiere dans la page, un aller-retour serveur n'apporterait qu'une
+     attente. La fonction est PURE — elle ne lit pas l'etat du module — pour
+     etre appelable dans un test sans DOM. */
+  var SA_CHAMPS = {
+    heure: function (r) { return _t(r.date_operation) || _t(r.heure); },
+    operation: function (r) { return _pli(sansCode(r.operation, r.code) || r.code); },
+    dossier: function (r) { return _pli(r.no_dossier); },
+    operateur: function (r) { return _pli(r.operateur); },
+    duree: function (r) { return typeof r.minutes === "number" ? r.minutes : -1; }
+  };
+
+  function _t(v) { return v == null ? "" : String(v); }
+  function _pli(v) {
+    v = _t(v);
+    return v.normalize
+      ? v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+      : v.toLowerCase();
+  }
+
+  function filtrerTrier(liste, opts) {
     liste = liste || [];
-    if (!liste.length) return "";
-    var lignes = liste.map(function (r) {
+    opts = opts || {};
+    var q = _pli(opts.q).trim();
+    var exclus = opts.exclus || {};
+    var champ = SA_CHAMPS[opts.champ] ? opts.champ : "heure";
+    var sens = opts.sens === -1 ? -1 : 1;
+
+    var gardees = liste.filter(function (r) {
+      if (exclus[r.statut || "autre"]) return false;
+      if (!q) return true;
+      // La recherche porte sur tout ce que la ligne montre — y compris le
+      // commentaire, qui est souvent la seule chose qu'on cherche.
+      return _pli([r.operation, r.code, r.no_dossier, r.client,
+                   r.ref_produit_norm, r.operateur, r.commentaire, r.heure]
+                  .filter(Boolean).join(" ")).indexOf(q) !== -1;
+    });
+
+    // Tri stable : a valeur egale, l'ordre chronologique reprend la main.
+    var lu = SA_CHAMPS[champ];
+    return gardees.map(function (r, i) { return { r: r, i: i }; })
+      .sort(function (a, b) {
+        var va = lu(a.r), vb = lu(b.r);
+        if (va < vb) return -1 * sens;
+        if (va > vb) return 1 * sens;
+        return a.i - b.i;
+      })
+      .map(function (x) { return x.r; });
+  }
+
+  var SA_STATUTS = [["production", "Production"], ["calage", "Calage"],
+                    ["arret", "Arrêt"], ["nettoyage", "Nettoyage"], ["autre", "Autre"]];
+  var SA_COLONNES = [["heure", "Heure", ""], ["operation", "Opération", ""],
+                     ["dossier", "Dossier", ""], ["operateur", "Opérateur", ""],
+                     ["duree", "Durée", "num"]];
+
+  // Etat du filtre, garde entre deux rendus : MyProd reconstruit son DOM a
+  // chaque passe, une selection perdue a chaque toast serait inutilisable.
+  var _sa = { q: "", exclus: {}, champ: "heure", sens: 1, liste: [] };
+
+  function _saLignes(liste) {
+    return liste.map(function (r) {
       // Le dossier a sa propre colonne : porte sous l'operation, son numero
       // etait tronque a mi-mot alors que la moitie de la ligne restait vide.
       var repere = [r.ref_produit_norm, r.client].filter(Boolean).map(escHtml).join(" · ");
@@ -528,20 +586,57 @@
         + '<td class="rp-sa-qui">' + escHtml(r.operateur || "—") + '</td>'
         + '<td class="num rp-sa-d">' + escHtml(r.minutes_txt || "—") + '</td>'
         + '</tr>';
+    }).join("")
+      || '<tr><td colspan="5" class="rp-sa-rien">Aucune saisie ne correspond '
+         + 'au filtre.</td></tr>';
+  }
+
+  function _saEntetes() {
+    return SA_COLONNES.map(function (c) {
+      var actif = _sa.champ === c[0];
+      return '<th class="rp-sa-tri' + (actif ? " actif" : "")
+        + (c[2] ? " " + c[2] : '') + '" data-sa-tri="' + c[0] + '" '
+        + 'aria-sort="' + (actif ? (_sa.sens === 1 ? "ascending" : "descending") : "none")
+        + '" title="Trier par ' + escAttr(c[1].toLowerCase()) + '">'
+        + escHtml(c[1]) + '<span class="rp-sa-fl">'
+        + (actif ? (_sa.sens === 1 ? "↑" : "↓") : "") + '</span></th>';
     }).join("");
-    return '<div class="rp-bloc rp-saisies">'
+  }
+
+  function _saCompte(total, vues) {
+    return vues === total ? String(total) : vues + " / " + total;
+  }
+
+  function renderSaisies(liste) {
+    liste = liste || [];
+    if (!liste.length) return "";
+    _sa.liste = liste;
+    var vues = filtrerTrier(liste, _sa);
+    return '<div class="rp-bloc rp-saisies" id="rp-saisies">'
       + '<div class="rp-titre rp-titre-ligne"><span>Saisies '
-      + '<span class="rp-compte">' + liste.length + '</span></span>'
+      + '<span class="rp-compte" id="rp-sa-nb">' + _saCompte(liste.length, vues.length)
+      + '</span></span>'
       + '<button type="button" class="rp-sa-plus" id="rp-sa-plus" '
       + 'aria-expanded="false" title="Afficher plus de lignes" '
       + 'aria-label="Afficher plus de lignes">' + ICONE_ETENDRE + '</button></div>'
+      + '<div class="rp-sa-barre">'
+      + '<input type="search" id="rp-sa-q" autocomplete="off" '
+      + 'placeholder="Filtrer : op&eacute;ration, dossier, client, conducteur, commentaire&hellip;" '
+      + 'aria-label="Filtrer les saisies" value="' + escAttr(_sa.q) + '">'
+      + '<div class="rp-sa-st">'
+      + SA_STATUTS.map(function (c) {
+          var on = !_sa.exclus[c[0]];
+          return '<button type="button" class="rp-sa-stp' + (on ? " actif" : "") + '" '
+            + 'data-sa-st="' + c[0] + '" aria-pressed="' + (on ? "true" : "false") + '">'
+            + '<i class="rp-sa-pt mst-' + c[0] + '"></i>' + escHtml(c[1]) + '</button>';
+        }).join("")
+      + '</div></div>'
       + '<div class="rp-sa-cadre" id="rp-sa-cadre">'
       + '<table class="rp-grille rp-sa-tbl">'
       + '<colgroup><col class="c-h"><col class="c-op"><col class="c-dos">'
       + '<col class="c-qui"><col class="c-d"></colgroup>'
-      + '<thead><tr><th>Heure</th><th>Op&eacute;ration</th>'
-      + '<th>Dossier</th><th>Op&eacute;rateur</th><th class="num">Dur&eacute;e</th></tr></thead>'
-      + '<tbody>' + lignes + '</tbody></table></div></div>';
+      + '<thead><tr>' + _saEntetes() + '</tr></thead>'
+      + '<tbody id="rp-sa-corps">' + _saLignes(vues) + '</tbody></table></div></div>';
   }
 
   var ICONE_ETENDRE =
@@ -746,6 +841,51 @@
       };
     }
 
+    // ── Saisies : filtre et tri.
+    // On ne repeint QUE le corps du tableau, les entetes et le compteur : le
+    // champ de recherche garde son curseur, ce qu'un rendu complet lui
+    // retirerait a chaque lettre.
+    var bloc = R.querySelector("#rp-saisies");
+    if (bloc) {
+      var repeindre = function () {
+        var vues = filtrerTrier(_sa.liste, _sa);
+        var corps = bloc.querySelector("#rp-sa-corps");
+        if (corps) corps.innerHTML = _saLignes(vues);
+        var nb = bloc.querySelector("#rp-sa-nb");
+        if (nb) nb.textContent = _saCompte(_sa.liste.length, vues.length);
+        var tete = bloc.querySelector("thead tr");
+        if (tete) tete.innerHTML = _saEntetes();
+        bloc.querySelectorAll("[data-sa-st]").forEach(function (b) {
+          var on = !_sa.exclus[b.getAttribute("data-sa-st")];
+          b.classList.toggle("actif", on);
+          b.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+      };
+      bloc.addEventListener("input", function (ev) {
+        if (ev.target.id !== "rp-sa-q") return;
+        _sa.q = ev.target.value;
+        repeindre();
+      });
+      bloc.addEventListener("click", function (ev) {
+        var st = ev.target.closest ? ev.target.closest("[data-sa-st]") : null;
+        if (st && bloc.contains(st)) {
+          var cle = st.getAttribute("data-sa-st");
+          if (_sa.exclus[cle]) delete _sa.exclus[cle]; else _sa.exclus[cle] = true;
+          repeindre();
+          return;
+        }
+        var tri = ev.target.closest ? ev.target.closest("[data-sa-tri]") : null;
+        if (tri && bloc.contains(tri)) {
+          var champ = tri.getAttribute("data-sa-tri");
+          // Recliquer la meme colonne inverse le sens ; changer de colonne
+          // repart du sens naturel de lecture.
+          if (_sa.champ === champ) _sa.sens = _sa.sens === 1 ? -1 : 1;
+          else { _sa.champ = champ; _sa.sens = 1; }
+          repeindre();
+        }
+      });
+    }
+
     // ── Info prod : saisie ou correction depuis le compte-rendu
     var edit = R.querySelector("#rp-ip-edit");
     if (edit) {
@@ -892,7 +1032,7 @@
     fnum: fnum, minutesTxt: minutesTxt, ecartHtml: ecartHtml, dateFr: dateFr,
     kpi: kpi, vitesse: vitesse, sansCode: sansCode,
     LIB_ORIGINE: LIB_ORIGINE, LIB_VIGILANCE: LIB_VIGILANCE,
-    renderFeuille: renderFeuille,
+    renderFeuille: renderFeuille, filtrerTrier: filtrerTrier,
     renderListe: renderListe,
     renderRecherche: renderRecherche,
     renderFrise: renderFrise,
