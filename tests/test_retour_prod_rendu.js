@@ -296,7 +296,8 @@ const SAISIES = [
     client: "", commentaire: "", minutes_txt: "25 min" },
   { heure: "07:00", operateur: "Tony Cathelineau", operation: "53 - Casse bande",
     code: "53", statut: "arret", label: "Arrêts", no_dossier: "D-501",
-    client: "KIABI", commentaire: "bande cassée au raccord", minutes_txt: "14 min" }
+    client: "KIABI", ref_produit_norm: "382/0001",
+    commentaire: "bande cassée au raccord", minutes_txt: "14 min" }
 ];
 const avecSaisies = M.renderFeuille({
   machine: "Cohesio 1", dossiers: 2, periode: { label: "Lundi 31/08/2026" },
@@ -316,8 +317,22 @@ verifier("saisies : le code est retire de l'operation",
 verifier("saisies : ni dans l'arrivee personnel",
          avecSaisies.includes("<b>Arrivée personnel</b>")
          && !avecSaisies.includes("86 - Arrivée personnel"));
-verifier("saisies : dossier et client en sous-ligne",
-         avecSaisies.includes("D-501 · KIABI"));
+verifier("saisies : le dossier a sa colonne",
+         avecSaisies.includes('<th>Dossier</th>') && avecSaisies.includes('rp-sa-dos'));
+verifier("saisies : le numero de dossier y est seul sur sa ligne",
+         avecSaisies.includes('<b title="D-501">D-501</b>'));
+verifier("saisies : reference produit et client dessous",
+         avecSaisies.includes("382/0001 · KIABI"));
+verifier("saisies : sans dossier, la cellule le dit",
+         avecSaisies.includes('<span class="rp-mut">—</span>'));
+verifier("saisies : le dossier n'est plus sous l'operation",
+         avecSaisies.indexOf("D-501 · KIABI") === -1);
+verifier("saisies : numero long conserve en entier au survol",
+         M.renderFeuille({ machine: "C1", dossiers: 1, periode: {}, saisies: [
+           { heure: "07:23", operateur: "Alan", operation: "03 - Production", code: "03",
+             statut: "production", no_dossier: "Marché 745 - Reliqua 3 - Maitre Coq",
+             client: "MAITRE COQ", ref_produit_norm: "1068/0001", minutes_txt: "31 min" }] })
+          .includes('title="Marché 745 - Reliqua 3 - Maitre Coq"'));
 verifier("saisies : commentaire rendu", avecSaisies.includes("bande cassée au raccord"));
 verifier("saisies : operateur", avecSaisies.includes("Tony Cathelineau"));
 verifier("saisies : duree", avecSaisies.includes(">14 min<"));
@@ -338,8 +353,14 @@ verifier("saisies : prose echappee",
          M.renderFeuille({ machine: "C1", dossiers: 1, periode: {}, saisies: [
            { heure: "08:00", operateur: '<img src=x onerror="alert(1)">',
              operation: "03 - Production", code: "03", statut: "production",
-             no_dossier: "<b>x", commentaire: "<script>", minutes_txt: "1 h" }] })
+             no_dossier: "<b>x", ref_produit_norm: '"><img src=y>',
+             commentaire: "<script>", minutes_txt: "1 h" }] })
           .indexOf("<img src=x") === -1);
+verifier("saisies : reference echappee dans l'attribut",
+         M.renderFeuille({ machine: "C1", dossiers: 1, periode: {}, saisies: [
+           { heure: "08:00", operateur: "M", operation: "03 - x", code: "03",
+             statut: "production", no_dossier: '" onmouseover="alert(1)',
+             minutes_txt: "1 h" }] }).indexOf('" onmouseover=') === -1);
 
 console.log("\n4 bis. Le compte-rendu dit ce que ses chiffres couvrent");
 const crVie = M.renderCR({ no_dossier: "D-501", identite: { client: "KIABI", cloture: true },

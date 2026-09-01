@@ -928,6 +928,12 @@ def test_saisies_periode():
             (op, quand, code + " - x", code, cat, machine, dossier,
              "Client Test", commentaire, annule))
 
+    conn.execute(
+        """INSERT INTO produit_series
+           (ref_produit_norm, no_dossier, machine, cloture_le)
+           VALUES (?,?,?,?)""",
+        ("REF-A", "D-100", "Cohesio 1", "2026-06-08T12:00:00"))
+
     pose("2026-06-07T22:00:00", "03", "production")          # la veille
     pose("2026-06-08T08:00:00", "01", "personnel")
     pose("2026-06-08T08:01:00", "03", "production", commentaire="bobine neuve")
@@ -952,6 +958,9 @@ def test_saisies_periode():
     verifier("duree en clair", par_code["53"]["minutes_txt"], "10 min")
     verifier("le commentaire suit", par_code["03"]["commentaire"], "bobine neuve")
     verifier("statut Saisieprod", par_code["53"]["statut"], "arret")
+    verifier("le dossier suit", par_code["53"]["no_dossier"], "D-100")
+    verifier("la reference produit est jointe",
+             par_code["53"]["ref_produit_norm"], "REF-A")
     verifier("libelle de categorie", par_code["01"]["label"], "Entrees et sorties")
 
     # La derniere saisie de la journee tire sa duree de la suivante, qui est le

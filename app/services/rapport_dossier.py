@@ -1183,6 +1183,12 @@ def saisies_periode(conn, machine: Any, debut: str, fin: str,
     codes_fin = tuple(c for c in (code_fin, code_annul) if _txt(c))
     duree = {iv["saisie_id"]: iv for iv in intervalles(lignes, debut, fin, codes_fin)}
 
+    # La reference produit ne vit pas dans `production_data` : elle se lit par
+    # dossier. Un seul passage par dossier distinct, pas un par ligne.
+    refs: Dict[str, str] = {}
+    for no_d in {_txt(r.get("no_dossier")) for r in lignes if _txt(r.get("no_dossier"))}:
+        refs[no_d] = _ref_produit(conn, no_d) or ""
+
     out: List[Dict[str, Any]] = []
     for r in lignes:
         quand = _txt(r.get("date_operation"))
@@ -1203,6 +1209,7 @@ def saisies_periode(conn, machine: Any, debut: str, fin: str,
             "machine": _txt(r.get("machine")),
             "no_dossier": _txt(r.get("no_dossier")),
             "client": _txt(r.get("client")),
+            "ref_produit_norm": refs.get(_txt(r.get("no_dossier")), ""),
             "commentaire": _txt(r.get("commentaire")),
             "minutes": round(iv["minutes"], 1) if iv else None,
             "minutes_txt": _minutes_txt(iv["minutes"]) if iv else "—",
