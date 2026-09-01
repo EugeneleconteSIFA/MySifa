@@ -994,6 +994,70 @@ def test_saisies_repiquage():
     verifier("debut, fin et pointages masques sur Repiquage", codes, ["03", "53"])
 
 
+# ─── 19. Une, plusieurs ou toutes les machines ───────────────────────────────
+
+def test_plusieurs_machines():
+    print("\n19. Une, plusieurs ou toutes les machines")
+    conn = base()
+
+    def journee(machine, dossier, metrage):
+        for quand, code, cat, cd, cf in [
+                ("08:00:00", "01", "personnel", 1000, None),
+                ("08:01:00", "03", "production", None, None),
+                ("10:01:00", "89", "personnel", None, 1000 + metrage)]:
+            conn.execute(
+                """INSERT INTO production_data
+                   (operateur, date_operation, operation, operation_code,
+                    operation_category, machine, no_dossier, client,
+                    metrage_total_debut, metrage_total_fin)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                ("Marc", "2026-06-08T" + quand, code + " - x", code, cat,
+                 machine, dossier, "Client Test", cd, cf))
+
+    journee("Cohesio 1", "D-C1", 1000)
+    journee("Cohesio 2", "D-C2", 2000)
+    journee("Repiquage", "D-RP", 4000)
+    conn.commit()
+    DEB, FIN = "2026-06-08T00:00:00", "2026-06-08T23:59:59"
+
+    verifier("normalisation d'une chaine",
+             svc.machines_demandees("Cohesio 1"), ["Cohesio 1"])
+    verifier("normalisation d'une liste",
+             svc.machines_demandees(["Cohesio 1", "Cohesio 2"]), ["Cohesio 1", "Cohesio 2"])
+    verifier("les doublons et les vides tombent",
+             svc.machines_demandees(["Cohesio 1", " cohesio 1 ", "", None]), ["Cohesio 1"])
+    verifier("rien demande = tout l'atelier", svc.machines_demandees(None), [])
+
+    un = svc.retour_atelier(conn, "Cohesio 1", DEB, FIN)
+    verifier_proche("une machine : son metrage", un["production"]["metrage"], 1000)
+    verifier("une machine : nommee", un["machine"], "Cohesio 1")
+    verifier("une machine : pas 'toutes'", un["toutes_machines"], False)
+
+    deux = svc.retour_atelier(conn, ["Cohesio 1", "Cohesio 2"], DEB, FIN)
+    verifier_proche("deux machines : la somme", deux["production"]["metrage"], 3000)
+    verifier("deux machines : deux dossiers", deux["dossiers"], 2)
+    verifier("deux machines : les deux nommees", deux["machines"], ["Cohesio 1", "Cohesio 2"])
+    verifier("deux machines : pas 'toutes'", deux["toutes_machines"], False)
+
+    tout = svc.retour_atelier(conn, [], DEB, FIN)
+    verifier_proche("toutes : la somme entiere", tout["production"]["metrage"], 7000)
+    verifier("toutes : le drapeau", tout["toutes_machines"], True)
+
+    verifier("la casse et les blancs n'empechent rien",
+             svc.retour_atelier(conn, ["  cohesio 2  "], DEB, FIN)["dossiers"], 1)
+
+    # La frise, les comptes-rendus et le deroule suivent le meme perimetre.
+    fr = svc.frise(conn, DEB, FIN, ["Cohesio 1", "Repiquage"])
+    verifier("frise : deux lignes machine", sorted(l["machine"] for l in fr["lignes"]),
+             ["Cohesio 1", "Repiquage"])
+    verifier("comptes-rendus : deux dossiers",
+             len(svc.comptes_rendus_periode(conn, DEB, FIN, ["Cohesio 1", "Cohesio 2"])), 2)
+    verifier("saisies : deux machines",
+             sorted({r["machine"] for r in
+                     svc.saisies_periode(conn, ["Cohesio 1", "Cohesio 2"], DEB, FIN)}),
+             ["Cohesio 1", "Cohesio 2"])
+
+
 if __name__ == "__main__":
     test_temps_par_categorie()
     test_deux_conducteurs_ne_se_chainent_pas()
@@ -1021,6 +1085,7 @@ if __name__ == "__main__":
     test_intervalles_bornes()
     test_saisies_periode()
     test_saisies_repiquage()
+    test_plusieurs_machines()
 
     print("\n" + "=" * 60)
     if FAIL:

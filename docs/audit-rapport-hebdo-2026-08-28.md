@@ -1036,3 +1036,43 @@ coute qu'un bloc de rendu.
 `tests/test_rapport_dossier.py` : deux familles de cas (le deroule d'une periode
 et son bornage, les masquages Repiquage). `tests/test_retour_prod_rendu.js` :
 16 cas sur le rendu de la section.
+
+### Une reunion peut regarder plusieurs machines
+
+L'en-tete n'offrait qu'un choix : une machine, ou toutes. Un point du matin
+regarde souvent deux machines sur trois — il fallait alors ouvrir deux reunions,
+ou tout regarder.
+
+**Le stockage.** `reunions.machine` ne portait qu'un nom. Migration
+`2026_09_01_reunion_machines` : une table `reunion_machines(reunion_id, machine)`,
+meme forme que `reunion_participants`, qui se filtre et se compte sans reparser
+un champ texte. Les perimetres des reunions deja tenues sont repris par un
+`INSERT OR IGNORE` depuis l'ancienne colonne, qui reste en place et n'est plus
+lue — sqlite ne retire pas une colonne sans reconstruire la table, et une
+reunion ancienne n'a rien a perdre a garder la trace de ce qu'elle disait.
+
+**Une reunion SANS ligne regarde tout l'atelier.** C'est le seul sens que
+l'absence ait jamais eu, et c'est ce qui evite de stocker la liste complete des
+machines — laquelle changerait a chaque machine ajoutee dans les Parametres.
+
+**Le service.** `machines_demandees()` normalise une chaine, une liste ou rien
+en une liste de noms, et `_filtre_machines()` rend le `IN (...)` correspondant,
+insensible a la casse et aux blancs. `retour_atelier`, `frise`,
+`saisies_periode`, `dossiers_clotures` et `comptes_rendus_periode` acceptent
+donc indifferemment une machine, plusieurs ou rien. Les appelants qui n'en
+passaient qu'une continuent de marcher sans changement.
+
+**L'ecran.** Le menu deroulant devient une rangee de pastilles a cocher : un
+menu ne sait dire qu'un choix. « Toutes » n'est pas une machine de plus dans la
+liste — c'est l'etat par defaut, actif tant que rien n'est coche, et cocher tout
+revient au meme. Decocher la derniere machine ramene a « Toutes » plutot que de
+laisser un perimetre vide, qui ne montrerait rien.
+
+L'onglet Retour de prod garde son selecteur unique : sa barre suit les filtres
+de MyProd, qui ne parlent que d'une machine a la fois. Le service, lui, sait
+deja faire les deux.
+
+`tests/test_rapport_dossier.py` : 17 cas (normalisation, une/deux/toutes, casse
+et blancs, propagation a la frise, aux comptes-rendus et au deroule des
+saisies). `tests/test_reunion.py` : 9 cas sur la persistance du perimetre.
+`tests/test_reunions_rendu.js` : 10 cas sur les pastilles.
