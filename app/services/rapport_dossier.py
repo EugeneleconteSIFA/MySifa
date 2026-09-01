@@ -106,6 +106,45 @@ CATEGORIES_COUTEUSES = (CAT_ARRET, "appro", "technique")
 
 # ─── Utilitaires ─────────────────────────────────────────────────────────────
 
+def machines_demandees(valeur: Any) -> List[str]:
+    """Normalise une demande de machines : chaine, liste ou rien.
+
+    Un point de production regarde parfois une machine, parfois deux, parfois
+    tout l'atelier. Les trois cas passent par la meme brique — une liste vide
+    veut dire « toutes », et c'est le seul sens qu'elle ait jamais.
+    """
+    if valeur is None:
+        return []
+    if isinstance(valeur, str):
+        valeur = [valeur]
+    vues, out = set(), []
+    for v in valeur:
+        nom = _txt(v)
+        if not nom:
+            continue
+        cle = nom.strip().lower()
+        if cle in vues:
+            continue
+        vues.add(cle)
+        out.append(nom)
+    return out
+
+
+def _filtre_machines(machines: List[str], params: List[Any]) -> str:
+    """Fragment SQL `AND machine IN (...)`, insensible a la casse et aux blancs."""
+    if not machines:
+        return ""
+    params.extend(m.strip().lower() for m in machines)
+    trous = ",".join("?" * len(machines))
+    return f" AND TRIM(LOWER(COALESCE(machine,''))) IN ({trous})"
+
+
+def _est_demandee(machine: str, machines: List[str]) -> bool:
+    if not machines:
+        return True
+    return _txt(machine).strip().lower() in {m.strip().lower() for m in machines}
+
+
 def _table_existe(conn, nom: str) -> bool:
     return conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (nom,)
@@ -863,7 +902,7 @@ def _vigilance(cr: Dict[str, Any], minutes_arret: float) -> List[Dict[str, str]]
 
 # ─── Centralisation : les comptes-rendus d'une periode ───────────────────────
 
-def dossiers_clotures(conn, debut: str, fin: str, machine: str = "",
+def dossiers_clotures(conn, debut: str, fin: str, machine: Any = "",
                       code_fin: str = "89") -> List[str]:
     """Numeros des dossiers ayant au moins une saisie de fin dans la periode.
 
@@ -875,10 +914,7 @@ def dossiers_clotures(conn, debut: str, fin: str, machine: str = "",
         return []
     filtre_annule = " AND COALESCE(est_annule, 0) = 0" if "est_annule" in cols else ""
     params: List[Any] = [code_fin, debut, fin]
-    filtre_machine = ""
-    if _txt(machine):
-        filtre_machine = " AND TRIM(LOWER(COALESCE(machine,''))) = TRIM(LOWER(?))"
-        params.append(_txt(machine))
+    filtre_machine = _filtre_machines(machines_demandees(machine), params)
     rows = conn.execute(
         f"""SELECT DISTINCT TRIM(no_dossier) AS no_dossier
               FROM production_data
@@ -926,7 +962,7 @@ def resume(cr: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def comptes_rendus_periode(conn, debut: str, fin: str, machine: str = "",
+def comptes_rendus_periode(conn, debut: str, fin: str, machine: Any = "",
                            code_fin: str = "89", limite: int = 200) -> List[Dict[str, Any]]:
     """Les comptes-rendus d'une periode, en projection compacte."""
     numeros = dossiers_clotures(conn, debut, fin, machine, code_fin)[:max(0, limite)]
@@ -941,7 +977,7 @@ def comptes_rendus_periode(conn, debut: str, fin: str, machine: str = "",
 
 # ─── Retour a l'atelier ──────────────────────────────────────────────────────
 
-def retour_atelier(conn, machine: str, debut: str, fin: str,
+def retour_atelier(conn, machine: Any, debut: str, fin: str,
                    code_fin: str = "89") -> Dict[str, Any]:
     """Ce qu'on rend aux conducteurs d'une machine, pour une semaine.
 
@@ -1058,9 +1094,13 @@ def retour_atelier(conn, machine: str, debut: str, fin: str,
         for v in c["vigilance"]:
             compte_vigilance[v["cle"]] = compte_vigilance.get(v["cle"], 0) + 1
 
+    demandees = machines_demandees(machine)
     return {
-        "machine": _txt(machine),
-        "toutes_machines": not _txt(machine),
+        # `machine` reste une chaine pour l'affichage ; `machines` porte la
+        # demande exacte, qui peut viser plusieurs machines a la fois.
+        "machine": " · ".join(demandees),
+        "machines": demandees,
+        "toutes_machines": not demandees,
         "machines_couvertes": sorted({c["identite"]["machine"] for c in crs
                                       if c["identite"].get("machine")}),
         "periode": {"debut": debut, "fin": fin},
@@ -1077,6 +1117,7 @@ def retour_atelier(conn, machine: str, debut: str, fin: str,
         },
         "references": refs,
         "arrets_couteux": couteux,
+        "saisies": saisies_periode(conn, machine, debut, fin, code_fin),
         "ecrits": ecrits,
         "ecrits_masques": ecrits_masques,
         "vigilance": compte_vigilance,
@@ -1084,8 +1125,133 @@ def retour_atelier(conn, machine: str, debut: str, fin: str,
     }
 
 
+# Machine Repiquage : les codes de debut et de fin de production n'y ont plus
+# de sens et sont masques partout ailleurs (app/routers/saisies.py). La liste
+# des saisies d'un point de production doit dire la meme chose que l'onglet
+# Saisies, sinon on compare deux verites.
+_REPIQUAGE_MASQUE = (
+    "NOT (operation_code IN ('01','89','86','87') AND "
+    "(lower(trim(COALESCE(machine,''))) LIKE 'repiquage%' "
+    " OR lower(trim(COALESCE(machine,''))) = 'rep' "
+    " OR lower(trim(COALESCE(machine,''))) LIKE 'rep %'))"
+)
+
+
+def saisies_periode(conn, machine: Any, debut: str, fin: str,
+                    code_fin: str = "89", code_annul: str = "90",
+                    limite: int = 400) -> List[Dict[str, Any]]:
+    """Les saisies de production de la periode, dans l'ordre, avec leur duree.
+
+    UNIQUEMENT `production_data` : ni les mouvements de stock, ni les
+    validations d'alerte que `/api/saisies` fusionne dans sa liste. Un point de
+    production regarde ce que la machine a fait, pas ce qui a transite par le
+    magasin.
+
+    La duree d'une saisie est l'ecart avec la suivante DU MEME OPERATEUR sur la
+    machine — la meme regle que partout ailleurs, calculee par `intervalles`.
+    Les voisines d'un jour avant et d'un jour apres sont donc lues elles aussi :
+    sans la suivante, la derniere saisie de la periode n'aurait pas de duree.
+    """
+    cols = _colonnes(conn, "production_data")
+    if not cols:
+        return []
+    d_deb, d_fin = _dt(debut), _dt(fin)
+    if d_deb is None or d_fin is None:
+        return []
+    marge_deb = (d_deb - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S")
+    marge_fin = (d_fin + timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S")
+
+    filtre_annule = " AND COALESCE(est_annule, 0) = 0" if "est_annule" in cols else ""
+    params: List[Any] = [marge_deb, marge_fin]
+    filtre_machine = _filtre_machines(machines_demandees(machine), params)
+    optionnelles = [c for c in ("commentaire", "est_annule") if c in cols]
+    champs = [c for c in ("id", "operateur", "date_operation", "operation",
+                          "operation_code", "operation_category", "machine",
+                          "no_dossier", "client") if c in cols] + optionnelles
+    rows = conn.execute(
+        f"""SELECT {', '.join(champs)}
+              FROM production_data
+             WHERE date_operation >= ? AND date_operation <= ?
+               AND {_REPIQUAGE_MASQUE}{filtre_annule}{filtre_machine}
+             ORDER BY date_operation, id""",
+        params,
+    ).fetchall()
+    lignes = [dict(r) for r in rows]
+    if not lignes:
+        return []
+
+    codes_fin = tuple(c for c in (code_fin, code_annul) if _txt(c))
+    duree = {iv["saisie_id"]: iv for iv in intervalles(lignes, debut, fin, codes_fin)}
+
+    # La reference produit ne vit pas dans `production_data` : elle se lit par
+    # dossier. Un seul passage par dossier distinct, pas un par ligne.
+    refs: Dict[str, str] = {}
+    for no_d in {_txt(r.get("no_dossier")) for r in lignes if _txt(r.get("no_dossier"))}:
+        refs[no_d] = _ref_produit(conn, no_d) or ""
+
+    out: List[Dict[str, Any]] = []
+    for r in lignes:
+        quand = _txt(r.get("date_operation"))
+        if not (debut <= quand <= fin):
+            continue                      # voisine lue pour la duree seulement
+        cat = _txt(r.get("operation_category")).lower() or "autre"
+        iv = duree.get(r.get("id"))
+        out.append({
+            "id": r.get("id"),
+            "date_operation": quand,
+            "heure": quand[11:16],
+            "operateur": _txt(r.get("operateur")),
+            "operation": _txt(r.get("operation")),
+            "code": _txt(r.get("operation_code")),
+            "categorie": cat,
+            "statut": statut_saisie(cat),
+            "label": LIBELLES_CATEGORIES.get(cat, cat.capitalize() or "Autre"),
+            "machine": _txt(r.get("machine")),
+            "no_dossier": _txt(r.get("no_dossier")),
+            "client": _txt(r.get("client")),
+            "ref_produit_norm": refs.get(_txt(r.get("no_dossier")), ""),
+            "commentaire": _txt(r.get("commentaire")),
+            "minutes": round(iv["minutes"], 1) if iv else None,
+            "minutes_txt": _minutes_txt(iv["minutes"]) if iv else "—",
+            "bornee": bool(iv and iv.get("bornee")),
+        })
+    # Trop de lignes tuent la lecture : on garde les plus recentes, et l'ecran
+    # dit combien il en manque.
+    if len(out) > limite:
+        out = out[-limite:]
+    return out
+
+
+def postes_hors_production(conn) -> List[str]:
+    """Postes marques « hors production » dans Parametres -> Machines.
+
+    Un atelier de repiquage n'a ni cycle ni compteur : ses chiffres n'ont pas
+    le meme sens que ceux d'une machine de production. La propriete vit en
+    base, jamais dans le code — un autre poste pourra la porter demain, et le
+    repiquage pourra la perdre le jour ou il aura un vrai cycle.
+    """
+    if "hors_production" not in _colonnes(conn, "machines"):
+        return []
+    rows = conn.execute(
+        "SELECT TRIM(nom) AS nom FROM machines "
+        " WHERE COALESCE(hors_production, 0) = 1 AND TRIM(COALESCE(nom,'')) <> ''"
+        " ORDER BY nom"
+    ).fetchall()
+    return [r["nom"] for r in rows]
+
+
 def machines_periode(conn, debut: str, fin: str, code_fin: str = "89") -> List[str]:
-    """Machines ayant cloture au moins un dossier sur la periode."""
+    """Machines ayant TRAVAILLE sur la periode, cloture ou non.
+
+    Le critere etait « a cloture au moins un dossier » — donc une saisie de
+    code `code_fin`. Un poste qui n'en pose pas, comme le repiquage ou une
+    machine dont le dossier court encore, n'apparaissait alors pas dans le
+    selecteur alors que la frise, elle, lui donnait une ligne. On proposait un
+    filtre incapable de nommer ce qu'on affichait.
+
+    `code_fin` reste dans la signature : les appelants le passent, et le
+    retirer casserait leur appel pour rien.
+    """
     cols = _colonnes(conn, "production_data")
     if not cols:
         return []
@@ -1093,11 +1259,10 @@ def machines_periode(conn, debut: str, fin: str, code_fin: str = "89") -> List[s
     rows = conn.execute(
         f"""SELECT DISTINCT TRIM(machine) AS machine
               FROM production_data
-             WHERE operation_code = ?
-               AND date_operation >= ? AND date_operation <= ?
+             WHERE date_operation >= ? AND date_operation <= ?
                AND TRIM(COALESCE(machine, '')) <> ''{filtre_annule}
              ORDER BY machine""",
-        (code_fin, debut, fin),
+        (debut, fin),
     ).fetchall()
     return [r["machine"] for r in rows]
 
@@ -1476,7 +1641,7 @@ def _identite_slot(conn, no_dossier: str, saisies: List[Dict[str, Any]],
     return out
 
 
-def frise(conn, debut: str, fin: str, machine: str = "", code_fin: str = "89",
+def frise(conn, debut: str, fin: str, machine: Any = "", code_fin: str = "89",
           code_debut: str = "01", code_annul: str = "90") -> Dict[str, Any]:
     """Ce qui est passe sur les machines pendant la periode, pose sur un axe.
 
@@ -1493,10 +1658,8 @@ def frise(conn, debut: str, fin: str, machine: str = "", code_fin: str = "89",
         return {"vide": True, "axe": [], "lignes": []}
     filtre_annule = " AND COALESCE(est_annule, 0) = 0" if "est_annule" in cols else ""
     params: List[Any] = [debut, fin]
-    filtre_machine = ""
-    if _txt(machine):
-        filtre_machine = " AND TRIM(LOWER(COALESCE(machine,''))) = TRIM(LOWER(?))"
-        params.append(_txt(machine))
+    demandees = machines_demandees(machine)
+    filtre_machine = _filtre_machines(demandees, params)
 
     couples = conn.execute(
         f"""SELECT DISTINCT TRIM(no_dossier) AS no_dossier, TRIM(machine) AS machine
@@ -1521,7 +1684,7 @@ def frise(conn, debut: str, fin: str, machine: str = "", code_fin: str = "89",
     for ivs in brut.values():
         for iv in ivs:
             if iv["fin"] > d_deb and iv["debut"] < d_fin:
-                if not _txt(machine) or iv["machine"].strip().lower() == _txt(machine).lower():
+                if _est_demandee(iv["machine"], demandees):
                     dans_periode.append(iv)
     axe = _axe_ouvre(dans_periode, d_deb, d_fin)
     if not axe:
@@ -1531,7 +1694,7 @@ def frise(conn, debut: str, fin: str, machine: str = "", code_fin: str = "89",
     for no_d, ivs in brut.items():
         machines = {iv["machine"] for iv in ivs if iv["machine"]}
         for m in sorted(machines):
-            if _txt(machine) and m.strip().lower() != _txt(machine).lower():
+            if not _est_demandee(m, demandees):
                 continue
             propres = [iv for iv in ivs if iv["machine"] == m]
             visibles = [iv for iv in propres if iv["fin"] > d_deb and iv["debut"] < d_fin]

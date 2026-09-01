@@ -911,6 +911,212 @@ def test_intervalles_bornes():
              all(i["debut"].day == 9 for i in lendemain), True)
 
 
+# ─── 17. Le deroule des saisies d'une periode ────────────────────────────────
+
+def test_saisies_periode():
+    print("\n17. Le deroule des saisies d'une periode")
+    conn = base()
+
+    def pose(quand, code, cat, op="Marc", machine="Cohesio 1", dossier="D-100",
+             annule=0, commentaire=None):
+        conn.execute(
+            """INSERT INTO production_data
+               (operateur, date_operation, operation, operation_code,
+                operation_category, machine, no_dossier, client, commentaire,
+                est_annule)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (op, quand, code + " - x", code, cat, machine, dossier,
+             "Client Test", commentaire, annule))
+
+    conn.execute(
+        """INSERT INTO produit_series
+           (ref_produit_norm, no_dossier, machine, cloture_le)
+           VALUES (?,?,?,?)""",
+        ("REF-A", "D-100", "Cohesio 1", "2026-06-08T12:00:00"))
+
+    pose("2026-06-07T22:00:00", "03", "production")          # la veille
+    pose("2026-06-08T08:00:00", "01", "personnel")
+    pose("2026-06-08T08:01:00", "03", "production", commentaire="bobine neuve")
+    pose("2026-06-08T09:01:00", "53", "arret")
+    pose("2026-06-08T09:11:00", "88", "production")
+    pose("2026-06-08T10:00:00", "63", "pause", annule=1)      # annulee
+    pose("2026-06-08T11:00:00", "03", "production", machine="Cohesio 2")
+    pose("2026-06-09T07:00:00", "89", "personnel")            # le lendemain
+    conn.commit()
+
+    DEB, FIN = "2026-06-08T00:00:00", "2026-06-08T23:59:59"
+    l = svc.saisies_periode(conn, "Cohesio 1", DEB, FIN)
+    codes = [r["code"] for r in l]
+    verifier("seules les saisies de la periode", codes, ["01", "03", "53", "88"])
+    verifier("l'annulee est ecartee", "63" in codes, False)
+    verifier("l'autre machine est ecartee",
+             all(r["machine"] == "Cohesio 1" for r in l), True)
+
+    par_code = {r["code"]: r for r in l}
+    verifier("heure lisible", par_code["03"]["heure"], "08:01")
+    verifier_proche("duree jusqu'a la suivante", par_code["03"]["minutes"], 60)
+    verifier("duree en clair", par_code["53"]["minutes_txt"], "10 min")
+    verifier("le commentaire suit", par_code["03"]["commentaire"], "bobine neuve")
+    verifier("statut Saisieprod", par_code["53"]["statut"], "arret")
+    verifier("le dossier suit", par_code["53"]["no_dossier"], "D-100")
+    verifier("la reference produit est jointe",
+             par_code["53"]["ref_produit_norm"], "REF-A")
+    verifier("libelle de categorie", par_code["01"]["label"], "Entrees et sorties")
+
+    # La derniere saisie de la journee tire sa duree de la suivante, qui est le
+    # lendemain : sans la lire, elle n'aurait pas de duree. Mais elle est bornee
+    # a la journee, pas comptee jusqu'au lendemain.
+    derniere = par_code["88"]
+    verifier_proche("bornee a la fin de la journee", derniere["minutes"], 60 * 14 + 49)
+    verifier("et elle le sait", derniere["bornee"], True)
+
+    # Toutes machines : la liste couvre l'atelier.
+    verifier("sans machine, tout l'atelier",
+             len(svc.saisies_periode(conn, "", DEB, FIN)), 5)
+
+    # Le plafond garde les plus recentes.
+    verifier("plafond respecte", len(svc.saisies_periode(conn, "", DEB, FIN, limite=2)), 2)
+    verifier("et garde la fin",
+             svc.saisies_periode(conn, "", DEB, FIN, limite=2)[-1]["heure"], "11:00")
+
+    # La feuille d'atelier la porte.
+    at = svc.retour_atelier(conn, "Cohesio 1", DEB, FIN)
+    verifier("la feuille porte les saisies", len(at["saisies"]), 4)
+
+
+def test_saisies_repiquage():
+    print("\n18. Repiquage : memes masquages que l'onglet Saisies")
+    conn = base()
+    for code, cat in [("01", "personnel"), ("89", "personnel"), ("86", "personnel"),
+                      ("87", "personnel"), ("03", "production"), ("53", "arret")]:
+        conn.execute(
+            """INSERT INTO production_data
+               (operateur, date_operation, operation, operation_code,
+                operation_category, machine, no_dossier)
+               VALUES (?,?,?,?,?,?,?)""",
+            ("Marc", "2026-06-08T08:%s:00" % code, code + " - x", code, cat,
+             "Repiquage", "D-100"))
+    conn.commit()
+    l = svc.saisies_periode(conn, "Repiquage",
+                            "2026-06-08T00:00:00", "2026-06-08T23:59:59")
+    codes = sorted(r["code"] for r in l)
+    verifier("debut, fin et pointages masques sur Repiquage", codes, ["03", "53"])
+
+
+# ─── 19. Une, plusieurs ou toutes les machines ───────────────────────────────
+
+def test_plusieurs_machines():
+    print("\n19. Une, plusieurs ou toutes les machines")
+    conn = base()
+
+    def journee(machine, dossier, metrage):
+        for quand, code, cat, cd, cf in [
+                ("08:00:00", "01", "personnel", 1000, None),
+                ("08:01:00", "03", "production", None, None),
+                ("10:01:00", "89", "personnel", None, 1000 + metrage)]:
+            conn.execute(
+                """INSERT INTO production_data
+                   (operateur, date_operation, operation, operation_code,
+                    operation_category, machine, no_dossier, client,
+                    metrage_total_debut, metrage_total_fin)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                ("Marc", "2026-06-08T" + quand, code + " - x", code, cat,
+                 machine, dossier, "Client Test", cd, cf))
+
+    journee("Cohesio 1", "D-C1", 1000)
+    journee("Cohesio 2", "D-C2", 2000)
+    journee("Repiquage", "D-RP", 4000)
+    conn.commit()
+    DEB, FIN = "2026-06-08T00:00:00", "2026-06-08T23:59:59"
+
+    verifier("normalisation d'une chaine",
+             svc.machines_demandees("Cohesio 1"), ["Cohesio 1"])
+    verifier("normalisation d'une liste",
+             svc.machines_demandees(["Cohesio 1", "Cohesio 2"]), ["Cohesio 1", "Cohesio 2"])
+    verifier("les doublons et les vides tombent",
+             svc.machines_demandees(["Cohesio 1", " cohesio 1 ", "", None]), ["Cohesio 1"])
+    verifier("rien demande = tout l'atelier", svc.machines_demandees(None), [])
+
+    un = svc.retour_atelier(conn, "Cohesio 1", DEB, FIN)
+    verifier_proche("une machine : son metrage", un["production"]["metrage"], 1000)
+    verifier("une machine : nommee", un["machine"], "Cohesio 1")
+    verifier("une machine : pas 'toutes'", un["toutes_machines"], False)
+
+    deux = svc.retour_atelier(conn, ["Cohesio 1", "Cohesio 2"], DEB, FIN)
+    verifier_proche("deux machines : la somme", deux["production"]["metrage"], 3000)
+    verifier("deux machines : deux dossiers", deux["dossiers"], 2)
+    verifier("deux machines : les deux nommees", deux["machines"], ["Cohesio 1", "Cohesio 2"])
+    verifier("deux machines : pas 'toutes'", deux["toutes_machines"], False)
+
+    tout = svc.retour_atelier(conn, [], DEB, FIN)
+    verifier_proche("toutes : la somme entiere", tout["production"]["metrage"], 7000)
+    verifier("toutes : le drapeau", tout["toutes_machines"], True)
+
+    verifier("la casse et les blancs n'empechent rien",
+             svc.retour_atelier(conn, ["  cohesio 2  "], DEB, FIN)["dossiers"], 1)
+
+    # La frise, les comptes-rendus et le deroule suivent le meme perimetre.
+    fr = svc.frise(conn, DEB, FIN, ["Cohesio 1", "Repiquage"])
+    verifier("frise : deux lignes machine", sorted(l["machine"] for l in fr["lignes"]),
+             ["Cohesio 1", "Repiquage"])
+    verifier("comptes-rendus : deux dossiers",
+             len(svc.comptes_rendus_periode(conn, DEB, FIN, ["Cohesio 1", "Cohesio 2"])), 2)
+    verifier("saisies : deux machines",
+             sorted({r["machine"] for r in
+                     svc.saisies_periode(conn, ["Cohesio 1", "Cohesio 2"], DEB, FIN)}),
+             ["Cohesio 1", "Cohesio 2"])
+
+
+# ─── 20. Postes hors production ──────────────────────────────────────────────
+
+def test_postes_hors_production():
+    print("\n20. Postes hors production")
+    conn = base()
+    verifier("sans table machines, aucun poste", svc.postes_hors_production(conn), [])
+
+    conn.executescript(
+        """
+        CREATE TABLE machines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, nom TEXT UNIQUE NOT NULL,
+            code TEXT, actif INTEGER DEFAULT 1
+        );
+        """
+    )
+    conn.execute("INSERT INTO machines (nom, code) VALUES ('Cohesio 1','C1')")
+    conn.execute("INSERT INTO machines (nom, code) VALUES ('Repiquage','REP')")
+    conn.commit()
+    verifier("sans la colonne, aucun poste", svc.postes_hors_production(conn), [])
+
+    conn.execute("ALTER TABLE machines ADD COLUMN hors_production INTEGER NOT NULL DEFAULT 0")
+    conn.commit()
+    verifier("colonne vide, aucun poste", svc.postes_hors_production(conn), [])
+
+    conn.execute("UPDATE machines SET hors_production=1 WHERE nom='Repiquage'")
+    conn.commit()
+    verifier("le poste coche remonte", svc.postes_hors_production(conn), ["Repiquage"])
+
+    # Le service ne decide rien tout seul : demander explicitement le poste
+    # continue de le rendre. C'est l'appelant qui resout « toutes ».
+    for quand, code, cat, m in [("08:00:00", "01", "personnel", "Repiquage"),
+                                ("08:01:00", "03", "production", "Repiquage"),
+                                ("10:01:00", "89", "personnel", "Repiquage")]:
+        conn.execute(
+            """INSERT INTO production_data
+               (operateur, date_operation, operation, operation_code,
+                operation_category, machine, no_dossier)
+               VALUES (?,?,?,?,?,?,?)""",
+            ("Marc", "2026-06-08T" + quand, code + " - x", code, cat, m, "D-REP"))
+    conn.commit()
+    DEB, FIN = "2026-06-08T00:00:00", "2026-06-08T23:59:59"
+    verifier("demande explicite : le poste repond",
+             svc.retour_atelier(conn, ["Repiquage"], DEB, FIN)["dossiers"], 1)
+
+    # Le selecteur, lui, doit pouvoir le nommer : une machine affichee sur la
+    # frise et absente du filtre, c'est un filtre qui ment.
+    verifier("le poste figure dans les machines de la periode",
+             "Repiquage" in svc.machines_periode(conn, DEB, FIN), True)
+
+
 if __name__ == "__main__":
     test_temps_par_categorie()
     test_deux_conducteurs_ne_se_chainent_pas()
@@ -936,6 +1142,10 @@ if __name__ == "__main__":
     test_periode_borne_les_chiffres()
     test_fin_de_cycle_ne_dure_pas()
     test_intervalles_bornes()
+    test_saisies_periode()
+    test_saisies_repiquage()
+    test_plusieurs_machines()
+    test_postes_hors_production()
 
     print("\n" + "=" * 60)
     if FAIL:

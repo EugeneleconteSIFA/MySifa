@@ -37,7 +37,8 @@ const piegeNom = '<img src=x onerror="alert(1)">';
 const REUNION = {
   id: 12, titre: "31/08/2026", statut: "ouverte", ouverte: true,
   ouverte_par: "Marc", ouverte_le: "2026-08-31T08:05:00",
-  date_debut: "2026-08-28", date_fin: "2026-08-28", machine: "Cohesio 1",
+  date_debut: "2026-08-28", date_fin: "2026-08-28",
+  machine: "Cohesio 1", machines: ["Cohesio 1"],
   notes: "Tension a baisser sur D-501",
   participants: [{ nom: "Marc" }, { nom: "Sophie" }],
   actions: [
@@ -72,7 +73,9 @@ verifier("liste : titre", liste.includes("31/08/2026"));
 verifier("liste : jour unique sans fleche",
          liste.includes(">28/08/2026<") && !liste.includes("28/08/2026 → 28/08/2026"));
 verifier("liste : plage avec fleche", liste.includes("25/08/2026 → 26/08/2026"));
-verifier("liste : machine en sous-titre", liste.includes("Cohesio 1"));
+verifier("liste : perimetre en sous-titre", liste.includes("Cohesio 1"));
+verifier("liste : sans machine, tout l'atelier est dit",
+         liste.includes("Toutes les machines"));
 verifier("liste : presence de notes", liste.includes("notes") && liste.includes("sans notes"));
 verifier("liste : participants", liste.includes("Marc, Sophie"));
 verifier("liste : participants absents", liste.includes("—"));
@@ -107,11 +110,11 @@ verifier("reunion : auteur et date d'ouverture",
 verifier("reunion : bornes de periode",
          ecran.includes('id="reu-du" value="2026-08-28"') &&
          ecran.includes('id="reu-au" value="2026-08-28"'));
-verifier("reunion : machine selectionnee",
-         ecran.includes('<option value="Cohesio 1" selected>'));
-verifier("reunion : autre machine non selectionnee",
-         ecran.includes('<option value="Cohesio 2">'));
-verifier("reunion : toutes les machines proposees", ecran.includes("Toutes les machines"));
+verifier("reunion : le perimetre est dans l'en-tete", ecran.includes("reu-mach"));
+verifier("reunion : la machine retenue est cochee",
+         ecran.includes('data-mach="Cohesio 1" aria-pressed="true"'));
+verifier("reunion : l'autre ne l'est pas",
+         ecran.includes('data-mach="Cohesio 2" aria-pressed="false"'));
 verifier("reunion : bouton imprimer", ecran.includes('data-r="imprimer"'));
 verifier("reunion : clore quand ouverte", ecran.includes("Clore la r&eacute;union"));
 verifier("reunion : rouvrir quand close",
@@ -127,7 +130,53 @@ verifier("reunion : etat d'enregistrement", ecran.includes("Enregistre a 09:12")
 verifier("reunion : formulaire d'action", ecran.includes('data-r="ajout-action"'));
 verifier("reunion : bloc ferme", ecran.trim().endsWith("</div>"));
 verifier("reunion : machines absentes ne cassent rien",
-         M.rendreReunion(REUNION, null, {}).includes("Toutes les machines"));
+         M.rendreReunion(REUNION, null, {}).includes("data-mach-tout"));
+
+console.log("\n3 ter. Le perimetre : une, plusieurs ou toutes les machines");
+const MACHINES = ["Cohésio 1", "Cohésio 2", "Repiquage"];
+const mTout = M.rendreMachines(MACHINES, []);
+verifier("perimetre : « Toutes » actif quand rien n'est retenu",
+         mTout.includes('data-mach-tout="1" aria-pressed="true"'));
+verifier("perimetre : les trois machines proposees",
+         mTout.split("data-mach=").length - 1 === 3);
+verifier("perimetre : aucune cochee", mTout.indexOf('data-mach="Cohésio 1" aria-pressed="true"') === -1);
+const mDeux = M.rendreMachines(MACHINES, ["Cohésio 1", "Repiquage"]);
+verifier("perimetre : deux cochees",
+         mDeux.split('aria-pressed="true"').length - 1 === 2);
+verifier("perimetre : la bonne paire",
+         mDeux.includes('data-mach="Cohésio 1" aria-pressed="true"')
+         && mDeux.includes('data-mach="Repiquage" aria-pressed="true"'));
+verifier("perimetre : « Toutes » s'eteint",
+         mDeux.includes('data-mach-tout="1" aria-pressed="false"'));
+verifier("perimetre : classe active posee", mDeux.includes('class="reu-mach-p actif"'));
+verifier("perimetre : casse et accent ignores a la comparaison",
+         M.rendreMachines(MACHINES, ["cohésio 1"])
+          .includes('data-mach="Cohésio 1" aria-pressed="true"'));
+verifier("perimetre : machine inconnue n'invente rien",
+         M.rendreMachines(MACHINES, ["Bunsch"]).split("data-mach=").length - 1 === 3);
+verifier("perimetre : sans machines disponibles, « Toutes » subsiste",
+         M.rendreMachines([], []).includes("data-mach-tout"));
+verifier("perimetre : nom echappe",
+         !M.rendreMachines(['<img src=x onerror="alert(1)">'], []).includes("<img src=x"));
+
+// Un poste hors production reste dans le selecteur, en retrait : on ne cache
+// pas une machine, on arrete de la compter par defaut.
+const mHors = M.rendreMachines(MACHINES, [], ["Repiquage"]);
+verifier("hors prod : la pastille reste", mHors.includes('data-mach="Repiquage"'));
+verifier("hors prod : elle est marquee",
+         mHors.includes('class="reu-mach-p hors"') && mHors.includes("<em>hors prod</em>"));
+verifier("hors prod : elle n'est pas cochee",
+         mHors.includes('data-mach="Repiquage" title="Poste hors production'
+                        + ' : non compt&eacute; par d&eacute;faut" aria-pressed="false"'));
+verifier("hors prod : les autres ne sont pas marquees",
+         mHors.split("reu-mach-p hors").length - 1 === 1);
+verifier("hors prod : cochee explicitement, elle reste marquee mais active",
+         M.rendreMachines(MACHINES, ["Repiquage"], ["Repiquage"])
+          .includes('class="reu-mach-p actif hors"'));
+verifier("hors prod : sans liste, rien n'est marque",
+         M.rendreMachines(MACHINES, []).indexOf("hors prod") === -1);
+verifier("hors prod : « Toutes » dit ce qu'elle couvre",
+         mHors.includes("Toutes les machines de production"));
 
 console.log("\n3 bis. Les participants s'ajoutent depuis une recherche");
 const ANNUAIRE = [{ id: 1, nom: "Grégory Desreumaux" }, { id: 2, nom: "Manuel Lesaffre" },
@@ -234,7 +283,11 @@ const doc = M.rendreDocument(REUNION, null, "Tension a baisser sur D-501");
 verifier("document : marque", doc.includes("MySifa &mdash; Point de production"));
 verifier("document : titre", doc.includes("<h2>31/08/2026</h2>"));
 verifier("document : periode analysee", doc.includes("28/08/2026"));
-verifier("document : machine", doc.includes("Cohesio 1"));
+verifier("document : perimetre", doc.includes("Cohesio 1"));
+verifier("document : plusieurs machines listees",
+         M.rendreDocument(Object.assign({}, REUNION,
+           { machines: ["Cohesio 1", "Repiquage"] }), null, "")
+          .includes("Cohesio 1 · Repiquage"));
 verifier("document : participants", doc.includes("Marc, Sophie"));
 verifier("document : ouverte par", doc.includes("Ouverte par</b> Marc"));
 verifier("document : etat en cours", doc.includes("<b>en cours</b>"));
@@ -249,7 +302,7 @@ verifier("document : sans participants",
          M.rendreDocument(Object.assign({}, REUNION, { participants: [] }), null, "")
           .includes("non renseign"));
 verifier("document : toutes les machines",
-         M.rendreDocument(Object.assign({}, REUNION, { machine: "" }), null, "")
+         M.rendreDocument(Object.assign({}, REUNION, { machine: "", machines: [] }), null, "")
           .includes("toutes les machines"));
 verifier("document : notes echappees",
          !M.rendreDocument(REUNION, null, piege).includes("<img src=x"));

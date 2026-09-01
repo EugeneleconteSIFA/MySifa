@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>MySifa — ce que le MCP fait gagner au produit</title>
+<style>
+  @page { size: A4 portrait; margin: 0; }
+  :root{
+    --ink:#0f172a; --ink2:#334155; --mute:#64748b; --line:#e2e8f0;
+    --accent:#0891b2;
+    --p1:#7c3aed; --p1bg:#f5f3ff;
+    --p2:#dc2626; --p2bg:#fef2f2;
+    --p3:#d97706; --p3bg:#fffbeb;
+    --p4:#0891b2; --p4bg:#ecfeff;
+    --ok:#059669; --okbg:#ecfdf5;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#94a3b8;font-family:"Segoe UI",-apple-system,system-ui,Arial,sans-serif;
+    color:var(--ink);-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .page{width:210mm;height:296mm;background:#fff;margin:0 auto;padding:8mm 12mm 5mm;
+    display:flex;flex-direction:column}
+
+  header{border-bottom:2px solid var(--ink);padding-bottom:2.6mm;margin-bottom:2.6mm}
+  .brand{font-size:8.5pt;font-weight:800;letter-spacing:1.6px;text-transform:uppercase;color:var(--accent)}
+  h1{font-size:16.5pt;font-weight:800;letter-spacing:-.4px;margin-top:1.4mm;line-height:1.1}
+  .sub{font-size:8.2pt;color:var(--mute);margin-top:1.4mm;line-height:1.35;max-width:176mm}
+  .sub b{color:var(--ink2)}
+
+  .grid{display:flex;flex-direction:column;gap:2mm;flex:1}
+
+  .block{border:1px solid var(--line);border-radius:2.5mm;overflow:hidden}
+  .bhead{display:flex;align-items:center;gap:3mm;padding:1.5mm 4mm;border-bottom:1px solid var(--line)}
+  .tag{font-size:7.3pt;font-weight:800;letter-spacing:.7px;text-transform:uppercase;
+    padding:.8mm 2.4mm;border-radius:1.5mm;color:#fff;white-space:nowrap}
+  .btitle{font-size:9.8pt;font-weight:800}
+  .bwhen{margin-left:auto;font-size:7.8pt;color:var(--mute);font-weight:600}
+
+  .p1 .bhead{background:var(--p1bg)} .p1 .tag{background:var(--p1)} .p1 .btitle{color:var(--p1)}
+  .p2 .bhead{background:var(--p2bg)} .p2 .tag{background:var(--p2)} .p2 .btitle{color:var(--p2)}
+  .p3 .bhead{background:var(--p3bg)} .p3 .tag{background:var(--p3)} .p3 .btitle{color:var(--p3)}
+  .p4 .bhead{background:var(--p4bg)} .p4 .tag{background:var(--p4)} .p4 .btitle{color:var(--p4)}
+
+  ul{list-style:none;padding:1mm 4mm 1.5mm}
+  li{display:flex;gap:3mm;padding:.7mm 0;border-bottom:1px dotted var(--line);align-items:baseline}
+  li:last-child{border-bottom:none}
+  .where{font-size:7.4pt;font-weight:800;text-transform:uppercase;letter-spacing:.4px;
+    width:24mm;flex-shrink:0;color:var(--mute);line-height:1.25}
+  .what{font-size:8.6pt;font-weight:700;width:47mm;flex-shrink:0;line-height:1.22}
+  .why{font-size:7.9pt;color:var(--ink2);line-height:1.3}
+  .why b{color:var(--ink)}
+
+  .warn{border:1px solid var(--p2);border-radius:2.5mm;background:var(--p2bg);
+    padding:1.8mm 4mm;font-size:7.9pt;color:var(--ink2);line-height:1.4}
+  .warn b{color:var(--p2);text-transform:uppercase;letter-spacing:.5px;font-size:7.4pt}
+
+  footer{margin-top:auto;padding-top:2mm;border-top:1px solid var(--line);
+    display:flex;justify-content:space-between;font-size:7.4pt;color:var(--mute)}
+
+  @media print{ body{background:#fff} .page{margin:0;box-shadow:none} }
+  @media screen{ .page{box-shadow:0 4px 24px rgba(0,0,0,.25);margin:14px auto} }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="brand">MySifa · Serveur MCP</div>
+    <h1>Ce que le MCP doit faire gagner au produit</h1>
+    <p class="sub">Un MCP qui ne fait que lire la base est un tuyau. Ce qui rend MySifa puissant,
+    c'est <b>ce qu'il permet de construire dedans</b> : des fonctions qui s'affichent dans les
+    écrans que les équipes ouvrent déjà. Quatre axes, du plus proche de l'atelier au plus
+    structurant.</p>
+  </header>
+
+  <div class="grid">
+
+    <section class="block p1">
+      <div class="bhead">
+        <span class="tag">Axe 1</span>
+        <span class="btitle">Des fonctions dans les écrans que les équipes ouvrent déjà</span>
+        <span class="bwhen">valeur immédiate</span>
+      </div>
+      <ul>
+        <li>
+          <span class="where">Saisieprod</span>
+          <span class="what">Info prod assistée à la clôture</span>
+          <span class="why">La note est obligatoire, donc elle sera « R.A.S. ». Un brouillon
+          construit sur les saisies réelles — arrêts, seuils franchis, matières scannées — que
+          l'opérateur corrige en dix secondes. <b>On récupère de la donnée au lieu d'un mot.</b></span>
+        </li>
+        <li>
+          <span class="where">Retour de prod</span>
+          <span class="what">Le compte-rendu déjà écrit</span>
+          <span class="why">Le point de production arrive rédigé sur la plage de dates, avec les
+          actions sorties structurées — quoi, qui, pour quand. L'humain arbitre au lieu de
+          saisir.</span>
+        </li>
+        <li>
+          <span class="where">Mémoire produit</span>
+          <span class="what">La synthèse au calage</span>
+          <span class="why">Pas la liste brute des savoirs de la référence : les trois choses qui
+          comptent pour <b>cette série-là</b>, machine et laize comprises.</span>
+        </li>
+        <li>
+          <span class="where">Partout</span>
+          <span class="what">Une recherche en langage naturel</span>
+          <span class="why">Une barre unique qui répond sur toute la base, plutôt que de choisir
+          le bon écran puis les bons filtres parmi vingt-sept.</span>
+        </li>
+        <li>
+          <span class="where">MyQualité</span>
+          <span class="what">Les documents qui se lisent seuls</span>
+          <span class="why">Certificats fournisseurs et fiches déposés en GED : le type, la portée
+          et la date d'expiration se déduisent du document au lieu d'être ressaisis.</span>
+        </li>
+      </ul>
+    </section>
+
+    <section class="block p2">
+      <div class="bhead">
+        <span class="tag">Axe 2</span>
+        <span class="btitle">Piloter MySifa en conversation</span>
+        <span class="bwhen">le gain pour toi</span>
+      </div>
+      <ul>
+        <li>
+          <span class="where">Écriture</span>
+          <span class="what">La demande devient un objet</span>
+          <span class="why">Une phrase se transforme en tâche dans <code>/taches</code>, en NC, en
+          créneau de maintenance ou en relance fournisseur — pré-remplie, jamais envoyée sans
+          validation.</span>
+        </li>
+        <li>
+          <span class="where">Documents</span>
+          <span class="what">Produire le livrable</span>
+          <span class="why">BAT étiquette, étiquette d'identification, feuille atelier, export
+          d'une vue filtrée : demandés à l'oral, rendus au format attendu.</span>
+        </li>
+        <li>
+          <span class="where">Arbitrage</span>
+          <span class="what">Trancher les files d'attente</span>
+          <span class="why">Mappings dossier ↔ OF à valider, scans à rattacher, fiches à vérifier :
+          la machine propose, tu valides en lot au lieu d'ouvrir chaque ligne.</span>
+        </li>
+      </ul>
+    </section>
+
+    <section class="block p3">
+      <div class="bhead">
+        <span class="tag">Axe 3</span>
+        <span class="btitle">L'intelligence qui tourne sans qu'on la sollicite</span>
+        <span class="bwhen">ce qui différencie vraiment</span>
+      </div>
+      <ul>
+        <li>
+          <span class="where">Production</span>
+          <span class="what">La dérive de temps</span>
+          <span class="why">Une série qui sort de l'historique de sa référence se signale toute
+          seule. La mémoire produit rend enfin ce calcul possible.</span>
+        </li>
+        <li>
+          <span class="where">Matières</span>
+          <span class="what">La rupture avant qu'elle arrive</span>
+          <span class="why">Besoins matières croisés au planning et au stock par laize : l'alerte
+          tombe avant le manque, pas au moment du calage.</span>
+        </li>
+        <li>
+          <span class="where">ERP</span>
+          <span class="what">La véracité en continu</span>
+          <span class="why">Commande → dossier → BL → facture contrôlé à chaque synchro. <b>Les 744
+          lignes orphelines se seraient signalées seules</b> au lieu de fausser un écran.</span>
+        </li>
+        <li>
+          <span class="where">Saisies</span>
+          <span class="what">Les incohérences de saisie</span>
+          <span class="why">Un 01 sans 03, une clôture sans code matière scanné, une durée
+          aberrante : détecté le jour même, tant que l'opérateur s'en souvient.</span>
+        </li>
+        <li>
+          <span class="where">Atelier</span>
+          <span class="what">Le point du matin, envoyé</span>
+          <span class="why">Un digest court au chef d'atelier : ce qui a dérivé hier, ce qui bloque
+          aujourd'hui, ce qui expire cette semaine.</span>
+        </li>
+      </ul>
+    </section>
+
+    <section class="block p4">
+      <div class="bhead">
+        <span class="tag">Axe 4</span>
+        <span class="btitle">Ouvrir MySifa sans l'ouvrir en grand</span>
+        <span class="bwhen">structurant</span>
+      </div>
+      <ul>
+        <li>
+          <span class="where">Existant</span>
+          <span class="what">Les clés scopées sont déjà là</span>
+          <span class="why">Le mécanisme qui porte la synchro RVGI porte l'ouverture : une clé, une
+          portée, une trace. Rien de neuf à inventer côté sécurité.</span>
+        </li>
+        <li>
+          <span class="where">Partenaires</span>
+          <span class="what">Le portail devient une interface</span>
+          <span class="why">Transporteurs et fournisseurs déposent devis, certificats et réponses
+          d'appel d'offres sur le même noyau d'actions que les écrans internes.</span>
+        </li>
+        <li>
+          <span class="where">ERP</span>
+          <span class="what">Le miroir comme contrat</span>
+          <span class="why">RVGI reste la source et MySifa lit : le sens d'écriture unique est ce
+          qui rend l'ouverture sûre.</span>
+        </li>
+      </ul>
+    </section>
+
+    <div class="warn">
+      <b>Les trois garde-fous</b> &nbsp;·&nbsp; l'IA n'écrit jamais sans trace au journal des
+      actions, ni sans validation humaine sur ce qui engage &nbsp;·&nbsp; elle appelle les routes
+      existantes, jamais une seconde logique métier &nbsp;·&nbsp; elle hérite des droits de
+      l'utilisateur, paie et documents RH hors périmètre.
+    </div>
+
+  </div>
+
+  <footer>
+    <span>MySifa · le MCP au service du produit — le socle technique fait l'objet d'une fiche à part</span>
+    <span>1<sup>er</sup> septembre 2026</span>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -3068,6 +3068,47 @@ async def set_machine_sans_matiere_premiere(machine_id: int, request: Request):
     return {"success": True, "sans_matiere_premiere": smp}
 
 
+@router.put("/machines/{machine_id}/hors-production")
+async def set_machine_hors_production(machine_id: int, request: Request):
+    """Marque un poste comme n'etant pas une machine de production.
+
+    Body: {"hors_production": 0|1}
+    Un point de production compte un metrage, une cadence, des arrets. Le
+    repiquage n'a rien de tout cela : pas de code de debut ni de fin de
+    dossier, donc pas de cycle et pas de compteur. Un poste marque ici est
+    DECOCHE par defaut dans le perimetre d'une reunion — sa pastille reste
+    dans le selecteur, un clic le ramene. On ne cache pas une machine, on
+    arrete de la compter par defaut.
+    """
+    user = require_admin(request)
+    body = await request.json()
+    try:
+        hp = 1 if int(body.get("hors_production", 0) or 0) == 1 else 0
+    except (TypeError, ValueError):
+        hp = 0
+    with get_db() as conn:
+        ex = conn.execute("SELECT id, nom FROM machines WHERE id=?", (machine_id,)).fetchone()
+        if not ex:
+            raise HTTPException(404, "Machine non trouvée")
+        conn.execute(
+            "UPDATE machines SET hors_production=? WHERE id=?",
+            (hp, machine_id),
+        )
+        conn.commit()
+    try:
+        log_action(
+            user=user,
+            action="UPDATE",
+            module="planning",
+            objet=f"Hors production poste {ex['nom']}",
+            detail={"hors_production": hp},
+            ip=request.client.host if request.client else None,
+        )
+    except Exception:
+        pass
+    return {"success": True, "hors_production": hp}
+
+
 @router.put("/machines/{machine_id}/journee-entiere")
 async def set_machine_journee_entiere(machine_id: int, request: Request):
     """Active/désactive la journée entière par défaut sur une machine.

@@ -38,7 +38,19 @@ def _detail_prod(conn, r: Dict[str, Any]) -> Dict[str, Any]:
     ce jour-la.
     """
     b = _bornes(r["date_debut"], r["date_fin"])
-    machine = (r.get("machine") or "").strip()
+    # Une reunion peut regarder une machine, plusieurs, ou tout l'atelier.
+    machine = rd.machines_demandees(r.get("machines") or r.get("machine") or "")
+    dispo = rd.machines_periode(conn, b["debut"], b["fin"], CODE_FIN_DOS)
+    hors = rd.postes_hors_production(conn)
+    if not machine:
+        # « Toutes » veut dire toutes les machines de PRODUCTION : un poste
+        # marque hors production dans les Parametres n'a ni cycle ni compteur,
+        # et ses chiffres n'ont pas le meme sens. Il reste dans le selecteur —
+        # un clic le ramene — mais il n'entre pas par defaut. La liste est
+        # resolue ici et pas dans le service : rien n'est retire en silence,
+        # l'ecran affiche exactement le perimetre qu'il a demande.
+        exclus = {m.strip().lower() for m in hors}
+        machine = [m for m in dispo if m.strip().lower() not in exclus]
     return {
         "atelier": rd.retour_atelier(conn, machine, b["debut"], b["fin"],
                                      code_fin=CODE_FIN_DOS),
@@ -47,7 +59,8 @@ def _detail_prod(conn, r: Dict[str, Any]) -> Dict[str, Any]:
         "comptes_rendus": rd.comptes_rendus_periode(conn, b["debut"], b["fin"],
                                                     machine=machine,
                                                     code_fin=CODE_FIN_DOS),
-        "machines": rd.machines_periode(conn, b["debut"], b["fin"], CODE_FIN_DOS),
+        "machines": dispo,
+        "machines_hors_production": hors,
     }
 
 
@@ -91,6 +104,7 @@ async def lancer_reunion(request: Request):
             str(body.get("date_debut") or ""), str(body.get("date_fin") or ""),
             str(body.get("titre") or ""), str(body.get("machine") or ""),
             [str(x) for x in (body.get("participants") or [])],
+            [str(x) for x in (body.get("machines") or [])],
         )
     if not r:
         raise HTTPException(status_code=400, detail="Reunion non creee.")
@@ -115,12 +129,14 @@ async def enregistrer_reunion(reunion_id: int, request: Request):
     user = _autorise(request)
     body = await request.json()
     parts = body.get("participants")
+    machs = body.get("machines")
     with get_db() as conn:
         r = rn.enregistrer(
             conn, reunion_id, _auteur(user),
             titre=body.get("titre"), notes=body.get("notes"),
             date_debut=body.get("date_debut"), date_fin=body.get("date_fin"),
             machine=body.get("machine"),
+            noms_machines=[str(x) for x in machs] if machs is not None else None,
             noms_participants=[str(x) for x in parts] if parts is not None else None,
         )
     if not r:

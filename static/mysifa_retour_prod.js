@@ -388,17 +388,7 @@
       h += '</tbody></table></div>';
     }
 
-    if ((d.arrets_couteux || []).length) {
-      h += '<div class="rp-bloc"><div class="rp-titre">Arrêts</div>'
-         + '<table class="rp-grille"><thead><tr><th>Arrêt</th>'
-         + '<th class="num">Nb</th><th class="num">Temps</th></tr></thead><tbody>';
-      d.arrets_couteux.forEach(function (a) {
-        h += '<tr><td><b>' + escHtml(sansCode(a.operation, a.code) || a.code || "—") + '</b></td>'
-           + '<td class="num">' + a.occurrences + '</td>'
-           + '<td class="num">' + escHtml(a.minutes_txt) + '</td></tr>';
-      });
-      h += '</tbody></table></div>';
-    }
+    h += renderSaisies(d.saisies);
 
     if ((d.ecrits || []).length) {
       var restants = d.ecrits.filter(function (e) { return !e.valide; }).length;
@@ -505,6 +495,59 @@
 
 
   /* ── Compte-rendu complet d'un dossier ──────────────────────── */
+
+  /* Le deroule des saisies de la periode. Uniquement les saisies de production :
+     ni les mouvements de stock ni les validations d'alerte, que l'onglet
+     Saisies fusionne dans sa liste mais qui n'apprennent rien sur la machine.
+
+     La liste est haute par nature — une journee fait vite trente lignes. Elle
+     defile donc dans sa propre fenetre, et le bouton d'entete l'ouvre en grand
+     pour ceux qui veulent tout voir d'un coup. */
+  function renderSaisies(liste) {
+    liste = liste || [];
+    if (!liste.length) return "";
+    var lignes = liste.map(function (r) {
+      // Le dossier a sa propre colonne : porte sous l'operation, son numero
+      // etait tronque a mi-mot alors que la moitie de la ligne restait vide.
+      var repere = [r.ref_produit_norm, r.client].filter(Boolean).map(escHtml).join(" · ");
+      return '<tr class="rp-sa-l">'
+        + '<td class="rp-sa-h">' + escHtml(r.heure) + '</td>'
+        + '<td class="rp-sa-op"><div class="rp-sa-opin">'
+        + '<i class="rp-sa-pt mst-' + escAttr(r.statut || "autre") + '"'
+        + ' title="' + escAttr(r.label || "") + '"></i>'
+        + '<span><b title="' + escAttr(sansCode(r.operation, r.code) || r.code || "") + '">'
+        + escHtml(sansCode(r.operation, r.code) || r.code || "—") + '</b>'
+        + (r.commentaire ? '<span class="rp-sa-com">' + escHtml(r.commentaire) + '</span>' : '')
+        + '</span></div></td>'
+        + '<td class="rp-sa-dos">'
+        + (r.no_dossier
+            ? '<b title="' + escAttr(r.no_dossier) + '">' + escHtml(r.no_dossier) + '</b>'
+              + (repere ? '<span class="rp-sous">' + repere + '</span>' : '')
+            : '<span class="rp-mut">—</span>')
+        + '</td>'
+        + '<td class="rp-sa-qui">' + escHtml(r.operateur || "—") + '</td>'
+        + '<td class="num rp-sa-d">' + escHtml(r.minutes_txt || "—") + '</td>'
+        + '</tr>';
+    }).join("");
+    return '<div class="rp-bloc rp-saisies">'
+      + '<div class="rp-titre rp-titre-ligne"><span>Saisies '
+      + '<span class="rp-compte">' + liste.length + '</span></span>'
+      + '<button type="button" class="rp-sa-plus" id="rp-sa-plus" '
+      + 'aria-expanded="false" title="Afficher plus de lignes" '
+      + 'aria-label="Afficher plus de lignes">' + ICONE_ETENDRE + '</button></div>'
+      + '<div class="rp-sa-cadre" id="rp-sa-cadre">'
+      + '<table class="rp-grille rp-sa-tbl">'
+      + '<colgroup><col class="c-h"><col class="c-op"><col class="c-dos">'
+      + '<col class="c-qui"><col class="c-d"></colgroup>'
+      + '<thead><tr><th>Heure</th><th>Op&eacute;ration</th>'
+      + '<th>Dossier</th><th>Op&eacute;rateur</th><th class="num">Dur&eacute;e</th></tr></thead>'
+      + '<tbody>' + lignes + '</tbody></table></div></div>';
+  }
+
+  var ICONE_ETENDRE =
+      '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    + '<polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg>';
 
   function renderCR(cr, opts) {
     opts = opts || {};
@@ -688,6 +731,19 @@
       return poster(url, corps)
         .then(function () { if (!silence) dire(silence || "Enregistré.", "info"); fini(); })
         .catch(function (err) { dire(err.message, "danger"); bouton.disabled = false; });
+    }
+
+    // ── Saisies : ouvrir la liste en grand, et la refermer.
+    var plus = R.querySelector("#rp-sa-plus");
+    var cadre = R.querySelector("#rp-sa-cadre");
+    if (plus && cadre) {
+      plus.onclick = function () {
+        var ouvert = cadre.classList.toggle("ouvert");
+        plus.classList.toggle("ouvert", ouvert);
+        plus.setAttribute("aria-expanded", ouvert ? "true" : "false");
+        plus.title = ouvert ? "Réduire la liste" : "Afficher plus de lignes";
+        plus.setAttribute("aria-label", plus.title);
+      };
     }
 
     // ── Info prod : saisie ou correction depuis le compte-rendu

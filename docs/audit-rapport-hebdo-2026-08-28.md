@@ -999,3 +999,181 @@ compte que ce qui s'y est passe (et le total tient dans la journee), une saisie
 de fin de cycle ne dure pas, un intervalle a cheval est borne des deux cotes sans
 perdre sa duree reelle. `tests/test_retour_prod_rendu.js` : 4 cas sur la portee
 affichee. Les 41 suites du depot restent vertes.
+
+### La section « Arrets » devient « Saisies »
+
+Le classement des cinq arrets les plus couteux se lisait deja ailleurs : le KPI
+« Arrets » donne le total et sa part du temps, la frise montre ou ils tombent.
+Ce qui manquait, c'est le deroule de la journee — impossible a lire depuis un
+point de production sans changer d'onglet.
+
+La section liste donc les saisies de la periode : heure, pastille de statut aux
+couleurs de Saisieprod, operation (sans son code), dossier et client en
+sous-ligne, commentaire s'il y en a un, operateur, duree.
+
+**Uniquement les saisies de production.** `/api/saisies` fusionne dans sa liste
+les mouvements de stock (`kind: "stock"`) et les validations d'alerte
+(`kind: "ack"`) ; `saisies_periode()` ne lit que `production_data`. Un point de
+production regarde ce que la machine a fait, pas ce qui a transite par le
+magasin. Les saisies annulees sont ecartees, et les codes de debut, de fin et de
+pointage sont masques sur Repiquage — le meme masquage que l'onglet Saisies,
+sinon les deux ecrans ne diraient pas la meme chose.
+
+La duree est celle de partout ailleurs : l'ecart avec la saisie suivante du meme
+operateur, bornee a la periode. Les voisines d'un jour avant et d'un jour apres
+sont lues pour cela — sans la suivante, la derniere saisie de la journee n'aurait
+pas de duree — mais elles ne figurent pas dans la liste.
+
+Une journee fait vite trente lignes : la liste defile dans sa propre fenetre
+(280 px) plutot que de repousser le reste de la feuille, et le bouton d'entete
+l'ouvre a 72 % de la hauteur d'ecran. A l'impression, elle sort en entier, sans
+ascenseur ni bouton. Plafond a 400 lignes, les plus recentes gardees.
+
+`arrets_couteux` reste calcule et renvoye par l'API : l'information n'a rien
+perdu de sa valeur, elle n'a simplement plus de section a elle. La remettre ne
+coute qu'un bloc de rendu.
+
+`tests/test_rapport_dossier.py` : deux familles de cas (le deroule d'une periode
+et son bornage, les masquages Repiquage). `tests/test_retour_prod_rendu.js` :
+16 cas sur le rendu de la section.
+
+### Une reunion peut regarder plusieurs machines
+
+L'en-tete n'offrait qu'un choix : une machine, ou toutes. Un point du matin
+regarde souvent deux machines sur trois — il fallait alors ouvrir deux reunions,
+ou tout regarder.
+
+**Le stockage.** `reunions.machine` ne portait qu'un nom. Migration
+`2026_09_01_reunion_machines` : une table `reunion_machines(reunion_id, machine)`,
+meme forme que `reunion_participants`, qui se filtre et se compte sans reparser
+un champ texte. Les perimetres des reunions deja tenues sont repris par un
+`INSERT OR IGNORE` depuis l'ancienne colonne, qui reste en place et n'est plus
+lue — sqlite ne retire pas une colonne sans reconstruire la table, et une
+reunion ancienne n'a rien a perdre a garder la trace de ce qu'elle disait.
+
+**Une reunion SANS ligne regarde tout l'atelier.** C'est le seul sens que
+l'absence ait jamais eu, et c'est ce qui evite de stocker la liste complete des
+machines — laquelle changerait a chaque machine ajoutee dans les Parametres.
+
+**Le service.** `machines_demandees()` normalise une chaine, une liste ou rien
+en une liste de noms, et `_filtre_machines()` rend le `IN (...)` correspondant,
+insensible a la casse et aux blancs. `retour_atelier`, `frise`,
+`saisies_periode`, `dossiers_clotures` et `comptes_rendus_periode` acceptent
+donc indifferemment une machine, plusieurs ou rien. Les appelants qui n'en
+passaient qu'une continuent de marcher sans changement.
+
+**L'ecran.** Le menu deroulant devient une rangee de pastilles a cocher : un
+menu ne sait dire qu'un choix. « Toutes » n'est pas une machine de plus dans la
+liste — c'est l'etat par defaut, actif tant que rien n'est coche, et cocher tout
+revient au meme. Decocher la derniere machine ramene a « Toutes » plutot que de
+laisser un perimetre vide, qui ne montrerait rien.
+
+L'onglet Retour de prod garde son selecteur unique : sa barre suit les filtres
+de MyProd, qui ne parlent que d'une machine a la fois. Le service, lui, sait
+deja faire les deux.
+
+`tests/test_rapport_dossier.py` : 17 cas (normalisation, une/deux/toutes, casse
+et blancs, propagation a la frise, aux comptes-rendus et au deroule des
+saisies). `tests/test_reunion.py` : 9 cas sur la persistance du perimetre.
+`tests/test_reunions_rendu.js` : 10 cas sur les pastilles.
+
+### Le dossier prend sa propre colonne
+
+Le tableau des saisies tenait en quatre colonnes, dossier et client glisses en
+sous-ligne de l'operation. Resultat a l'ecran : « Marche 745 - Reliqua 3 -
+Maitre C… » coupe a mi-mot, et une bande blanche de trois cents pixels entre
+l'operation et l'operateur. La colonne Operation prenait toute la place restante
+sans pouvoir la donner a son contenu.
+
+Cinq colonnes maintenant — Heure, Operation, Dossier, Operateur, Duree — avec
+`table-layout:fixed` et des largeurs posees : 56 px pour l'heure, 36 % pour
+l'operation, 23 % pour l'operateur, 74 px pour la duree, le reste au dossier.
+Le numero de dossier occupe sa premiere ligne, la reference produit et le client
+la seconde. Le numero garde son `title` : certains font quarante caracteres et
+l'ellipse est alors la seule mise en page possible.
+
+La reference produit ne vit pas dans `production_data` — elle se lit par dossier
+via `produit_series` ou `dossier_info_prod`. `saisies_periode()` la resout une
+fois par dossier distinct, pas une fois par ligne.
+
+Sous 1000 px on resserre au lieu de masquer : retirer une colonne ferait
+disparaitre une information sans que personne ne sache qu'elle a existe, alors
+qu'une ellipse se voit.
+
+### Le repiquage : trois definitions des « machines de la periode »
+
+Constat de depart : la frise donnait une ligne au Repiquage, mais le selecteur
+ne savait pas le nommer. Un filtre incapable de designer ce qu'on affiche.
+
+En cherchant pourquoi, on trouve trois definitions differentes du meme mot dans
+le meme ecran :
+
+| ou | ce qu'il appelait « les machines de la periode » |
+|---|---|
+| selecteur (`machines_periode`) | celles ayant CLOTURE un dossier (code `89`) |
+| KPI (`dossiers_clotures`) | idem — donc aveugles au Repiquage |
+| frise (`frise`) | toute machine ayant une saisie avec un dossier |
+
+Le Repiquage n'a ni code de debut ni code de fin de dossier — ils y sont deja
+masques dans l'onglet Saisies comme obsoletes. Pas de cycle, donc pas de
+compteur, donc pas de metrage ni de cadence, et un slot de frise qui s'etale sur
+toute la periode en un seul bloc. La capture le montre : cinq slots, « 4
+dossiers » — le Xerox du Repiquage ne comptait dans aucun chiffre tout en
+occupant une ligne entiere.
+
+**Correction obligatoire** : `machines_periode()` liste desormais les machines
+ayant TRAVAILLE sur la periode, cloture ou non. Le selecteur peut nommer ce que
+la frise affiche.
+
+**Choix arbitre** : une propriete `hors_production` sur la table `machines`,
+cochee dans Parametres -> Machines, sur le modele exact de
+`sans_matiere_premiere` que ce meme poste porte deja. Migration
+`postes_hors_production`, qui coche le repiquage d'office par un LIKE sur le nom
+— comme la migration de 2026-08-05.
+
+Ce que la propriete fait : le poste est **decoche par defaut** dans le perimetre
+d'une reunion. Sa pastille reste dans le selecteur, en pointille avec la mention
+« hors prod », et un clic le ramene. On ne cache pas une machine, on arrete de
+la compter par defaut.
+
+**Ou la regle est appliquee.** Dans le routeur, pas dans le service : quand une
+reunion n'a pas de perimetre explicite, le routeur resout « toutes » en la liste
+des machines de production de la periode et la passe telle quelle. Le service ne
+retire donc jamais rien en silence, et l'ecran affiche exactement le perimetre
+qu'il a demande — l'en-tete de la feuille nomme les machines comptees au lieu
+d'un « Toutes les machines » qui en cachait une.
+
+Le jour ou le repiquage aura un vrai cycle cote Saisieprod, il suffira de
+decocher la case.
+
+`tests/test_rapport_dossier.py` : 6 cas (absence de table, absence de colonne,
+colonne vide, poste coche, demande explicite qui repond quand meme, presence
+dans le selecteur). `tests/test_reunions_rendu.js` : 7 cas sur la pastille en
+retrait.
+
+### Deux pieges de tableau, corriges ensemble
+
+La colonne Operation s'est retrouvee ecrasee a cinquante pixels (« Arrive… »,
+« Netto… », « Repris… ») avec un large vide a sa droite. Deux causes qui se
+combinaient, toutes deux invisibles au test de rendu tant qu'on ne regarde que
+la chaine produite :
+
+1. **Un `<td>` en `display:flex` n'est plus une cellule de tableau.** Il sort de
+   l'algorithme de mise en page, et plus aucune largeur ne le tient. La regle
+   existait deja avant `table-layout:fixed` — elle passait inapercue parce que
+   l'algorithme automatique repartissait quand meme. Le flex vit maintenant dans
+   un conteneur INTERNE (`.rp-sa-opin`), la cellule reste une cellule.
+
+2. **En `table-layout:fixed`, les largeurs se lisent sur la premiere rangee ou
+   sur les `<col>`.** Les miennes etaient posees sur les `<td>` du corps : elles
+   etaient purement et simplement ignorees. Un `<colgroup>` de cinq `<col>`
+   nomme desormais chaque colonne, et c'est lui qui porte les largeurs.
+
+L'intitule de l'operation gagne au passage son `title` au survol, comme le
+numero de dossier : quand la colonne est etroite, l'ellipse est la seule mise en
+page possible, mais le texte entier doit rester atteignable.
+
+`tests/test_retour_prod_rendu.js` : 3 cas de plus qui verrouillent la structure
+elle-meme (colgroup present, cinq colonnes declarees, flex a l'interieur de la
+cellule et non sur elle). Ils ne remplacent pas un oeil sur l'ecran, mais ils
+empechent la regression silencieuse.
